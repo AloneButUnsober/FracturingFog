@@ -11,8 +11,9 @@
 //   1. FogFreeForFroxel3D: when on, the calculator shades with the in-surface fog
 //      / volumetric in-scatter / background fog switched off (the froxel volume
 //      replaces them, as relief does), and the shading fx keeps Froxel3D = true so
-//      WantsGBuffer captures depth and ForcesCpuTrace skips the GPU fast path
-//      (the GPU kernels have no depth pass yet — #1070).
+//      WantsGBuffer captures depth on the CPU trace. #1070: the GPU fast path
+//      still runs (GpuTraceAllowed) — its kernels write per-pixel ray distance and
+//      the volume is composited over the GPU frame.
 //   2. ApplyFroxel3D: after SSAO, before the HDR DoF / tone map, frame a froxel
 //      camera on the fractal's orbit camera (near 0.05, far = past the escape
 //      distance), populate + integrate, and composite over the byte buffer and the
@@ -65,6 +66,19 @@ public static partial class ScreenSpacePost
     /// the frame, or the 3D froxel pass needs the depth G-buffer.</summary>
     public static bool ForcesCpuTrace(in LightingFxData fx)
         => WantsDepthOutput(in fx) || fx.Froxel3D;
+
+    /// <summary>#1070 — true when a Froxel3D frame may still take the GPU trace: the
+    /// ILGPU kernels write the per-pixel ray distance the froxel composite needs, so
+    /// the GPU traces and the CPU populates + composites the volume. Not when depth is
+    /// also wanted after the frame (the GPU path has no full G-buffer) or with thin-lens
+    /// DoF (its averaged taps have no single depth).</summary>
+    public static bool GpuFroxel3DHybrid(in LightingFxData fx)
+        => fx.Froxel3D && !WantsDepthOutput(in fx) && !ThinLensDof.IsActive(in fx);
+
+    /// <summary>The 3D calculators' GPU-trace gate: no CPU-only need, or the only one is
+    /// the froxel pass and <see cref="GpuFroxel3DHybrid"/> covers it.</summary>
+    public static bool GpuTraceAllowed(in LightingFxData fx)
+        => !ForcesCpuTrace(in fx) || GpuFroxel3DHybrid(in fx);
 
     /// <summary>The froxel camera for a 3D fractal's orbit camera (the same
     /// <c>d·(sinφ cosθ, cosφ, sinφ sinθ)</c> placement the calculators use, looking

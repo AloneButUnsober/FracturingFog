@@ -159,8 +159,11 @@ public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera,
         // !HasPositionalLight gate is lifted (#485). #492 taught the kernel a
         // per-light area-capped shadow hardness (sp.ShadowK1/2/3), so the area gate
         // is lifted too — punctual lights stay byte-identical.
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !ScreenSpacePost.ForcesCpuTrace(in fx))
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && ScreenSpacePost.GpuTraceAllowed(in fx))
         {
+            // #1070 — Froxel3D on the GPU trace: the kernel also writes per-pixel
+            // ray distance, and the CPU froxel pass composites over the GPU frame.
+            float[]? gpuDepth = ScreenSpacePost.GpuFroxel3DHybrid(in fx) ? new float[width * height] : null;
             double lightX = Math.Sin(fx.Light1.Phi) * Math.Cos(fx.Light1.Theta);
             double lightY = Math.Cos(fx.Light1.Phi);
             double lightZ = Math.Sin(fx.Light1.Phi) * Math.Sin(fx.Light1.Theta);
@@ -192,8 +195,10 @@ public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera,
             };
             var sp = GpuShadingParams.Build(in fx);
             _gpu ??= new MandelbulbGpuCalculator();
-            if (_gpu.Render(renderBuffer, rp, sp, bp, fx.VolumePalette))
+            if (_gpu.Render(renderBuffer, rp, sp, bp, fx.VolumePalette, gpuDepth))
             {
+                ScreenSpacePost.ApplyFroxel3D(renderBuffer, null, gpuDepth, width, height,
+                    FractalParameters, FractalType.Mandelbulb, fovScale, in froxelFx, in deStruct);   // #1070 — GPU trace + CPU froxel
                 // #84 — GPU raymarch skips the CPU post stack; draw the debug
                 // HUD directly so the light compass still appears on GPU frames.
                 ScreenSpacePost.ApplyDebugHud(renderBuffer, width, height, in fx);

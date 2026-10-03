@@ -33,7 +33,7 @@ public struct QJuliaGpuParams
 
 public sealed class QJuliaGpuCalculator : IDisposable
 {
-    private Action<Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, QJuliaGpuParams, ArrayView<uint>>? _kernel;
+    private Action<Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, QJuliaGpuParams, ArrayView<uint>, ArrayView<float>>? _kernel;
     private bool _initFailed;
     public string LastError { get; private set; } = string.Empty;
 
@@ -50,7 +50,7 @@ public sealed class QJuliaGpuCalculator : IDisposable
         try
         {
             _kernel = acc.LoadAutoGroupedStreamKernel<
-                Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, QJuliaGpuParams, ArrayView<uint>>(QJuliaKernel);
+                Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, QJuliaGpuParams, ArrayView<uint>, ArrayView<float>>(QJuliaKernel);
             return true;
         }
         catch (Exception ex)
@@ -61,7 +61,7 @@ public sealed class QJuliaGpuCalculator : IDisposable
         }
     }
 
-    public bool Render(uint[] outBuffer, GpuRaymarchParams r, GpuShadingParams sp, QJuliaGpuParams p, uint[]? palette = null)
+    public bool Render(uint[] outBuffer, GpuRaymarchParams r, GpuShadingParams sp, QJuliaGpuParams p, uint[]? palette = null, float[]? depthOut = null)
     {
         if (!TryInit() || _kernel == null) return false;
         if (!GpuAcceleratorHost.TryAcquire(out var acc)) return false;
@@ -75,9 +75,15 @@ public sealed class QJuliaGpuCalculator : IDisposable
             uint[] lut = palette is { Length: >= 2 } ? palette : GpuKernelUtils.PaletteOff;
             using var devLut = acc.Allocate1D<uint>(lut.Length);
             devLut.CopyFromCPU(lut);
-            _kernel(total, dev.View, r, sp, p, devLut.View);
+            // #1070 — optional per-pixel ray distance (+Inf = miss), the CPU
+            // depth G-buffer contract, for the froxel composite. Off → a
+            // length-1 dummy so the kernel arity stays fixed.
+            bool wantDepth = depthOut != null && depthOut.Length == total;
+            using var devDepth = acc.Allocate1D<float>(wantDepth ? total : 1);
+            _kernel(total, dev.View, r, sp, p, devLut.View, devDepth.View);
             acc.Synchronize();
             dev.CopyToCPU(outBuffer);
+            if (wantDepth) devDepth.CopyToCPU(depthOut!);
             return true;
         }
         catch (Exception ex)
@@ -88,11 +94,17 @@ public sealed class QJuliaGpuCalculator : IDisposable
     }
 
     private static void QJuliaKernel(
-        Index1D idx, ArrayView<uint> output, GpuRaymarchParams r, GpuShadingParams sp, QJuliaGpuParams p, ArrayView<uint> palette)
+        Index1D idx, ArrayView<uint> output, GpuRaymarchParams r, GpuShadingParams sp, QJuliaGpuParams p, ArrayView<uint> palette, ArrayView<float> depth)
     {
         int x = idx % r.Width;
         int y = idx / r.Width;
         if (y >= r.Height) return;
+        // #1070 — depth wanted when the view covers the frame (else the
+        // length-1 dummy). Pre-fill the miss value; a pinhole hit overwrites
+        // it with the ray distance. Thin-lens taps leave the miss.
+        bool wantDepth = depth.Length >= output.Length;
+        if (wantDepth) depth[idx] = float.PositiveInfinity;
+        int dIdx = wantDepth ? idx.X : -1;
 
         var (cdx, cdy, cdz) = GpuKernelUtils.BuildPrimaryRay(x, y, in r);
 
@@ -100,7 +112,7 @@ public sealed class QJuliaGpuCalculator : IDisposable
         // ray (byte-identical). Otherwise average DofSamples taps whose origin is
         // jittered across the aperture disc, re-aimed through the focal point.
         int dofN = (r.DofSamples > 1 && r.DofAperture > 0.0) ? r.DofSamples : 1;
-        if (dofN <= 1) { output[idx] = ShadeRay(r.CamX, r.CamY, r.CamZ, cdx, cdy, cdz, in r, in sp, in p, palette); return; }
+        if (dofN <= 1) { output[idx] = ShadeRay(r.CamX, r.CamY, r.CamZ, cdx, cdy, cdz, in r, in sp, in p, palette, depth, dIdx); return; }
         double fpx = r.CamX + cdx * r.DofFocus, fpy = r.CamY + cdy * r.DofFocus, fpz = r.CamZ + cdz * r.DofFocus;
         double aR = 0, aG = 0, aB = 0, aA = 0;
         for (int k = 0; k < dofN; k++)
@@ -113,7 +125,7 @@ public sealed class QJuliaGpuCalculator : IDisposable
             double loz = r.CamZ + r.RightZ * lx + r.UpZ * ly;
             double ddx = fpx - lox, ddy = fpy - loy, ddz = fpz - loz;
             double il = 1.0 / Math.Sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
-            uint c = ShadeRay(lox, loy, loz, ddx * il, ddy * il, ddz * il, in r, in sp, in p, palette);
+            uint c = ShadeRay(lox, loy, loz, ddx * il, ddy * il, ddz * il, in r, in sp, in p, palette, depth, -1);
             aR += (c >> 16) & 0xFF; aG += (c >> 8) & 0xFF; aB += c & 0xFF; aA += (c >> 24) & 0xFF;
         }
         double inv = 1.0 / dofN;
@@ -126,7 +138,8 @@ public sealed class QJuliaGpuCalculator : IDisposable
     // passes the camera position + centre ray -> byte-identical.
     private static uint ShadeRay(
         double rox, double roy, double roz, double rdx, double rdy, double rdz,
-        in GpuRaymarchParams r, in GpuShadingParams sp, in QJuliaGpuParams p, ArrayView<uint> palette)
+        in GpuRaymarchParams r, in GpuShadingParams sp, in QJuliaGpuParams p, ArrayView<uint> palette,
+        ArrayView<float> depth, int depthIdx)
     {
         var (sphereHit, tEn, _) = GpuKernelUtils.SphereClipFrom(rox, roy, roz, rdx, rdy, rdz, in r);
         if (!sphereHit) return GpuKernelUtils.MissColor(rdy, in r, in sp);
@@ -149,6 +162,7 @@ public sealed class QJuliaGpuCalculator : IDisposable
         }
 
         if (!hit) return GpuKernelUtils.MissColor(rdy, in r, in sp);
+        if (depthIdx >= 0) depth[depthIdx] = (float)tT;   // #1070 — ray distance to the hit
 
         double h = r.Eps * 2;
         double n0 = QJuliaDE(px + h, py, pz, p.SliceW, p.CX, p.CY, p.CZ, p.CW, p.Bailout2, p.DEIter)

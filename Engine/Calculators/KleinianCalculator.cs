@@ -202,8 +202,11 @@ public sealed class KleinianCalculator : IFractalCalculator, IStereoEyeCamera, I
                            && !group.HasRotation                              // #877 — rotation fold is CPU-only
                            && colorSrc == KleinianColorSource.Smooth           // #878 — word colouring is CPU-only
                            && deFactor == 1.0;                                 // #881 — under-relaxed stepping is CPU-only
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !ScreenSpacePost.ForcesCpuTrace(in fx) && gpuEligible)
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && ScreenSpacePost.GpuTraceAllowed(in fx) && gpuEligible)
         {
+            // #1070 — Froxel3D on the GPU trace: the kernel also writes per-pixel
+            // ray distance, and the CPU froxel pass composites over the GPU frame.
+            float[]? gpuDepth = ScreenSpacePost.GpuFroxel3DHybrid(in fx) ? new float[width * height] : null;
             var rp = new GpuRaymarchParams
             {
                 Width = width, Height = height,
@@ -237,8 +240,10 @@ public sealed class KleinianCalculator : IFractalCalculator, IStereoEyeCamera, I
             };
             var sp = GpuShadingParams.Build(in fx);
             _gpu ??= new KleinianGpuCalculator();
-            if (_gpu.Render(renderBuffer, rp, sp, kp, fx.VolumePalette))
+            if (_gpu.Render(renderBuffer, rp, sp, kp, fx.VolumePalette, gpuDepth))
             {
+                ScreenSpacePost.ApplyFroxel3D(renderBuffer, null, gpuDepth, width, height,
+                    FractalParameters, FractalType.Kleinian, fovScale, in froxelFx, in deStruct);   // #1070 — GPU trace + CPU froxel
                 // #84 — GPU raymarch skips the CPU post stack; draw the debug
                 // HUD directly so the light compass still appears on GPU frames.
                 ScreenSpacePost.ApplyDebugHud(renderBuffer, width, height, in fx);

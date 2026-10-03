@@ -162,8 +162,11 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, 
         // S8 (#404/#486) — the Mandelbox kernel now resolves point/spot lights on
         // the GPU (GpuKernelUtils.ResolveLight), so the !HasPositionalLight gate is
         // lifted. #492 added a per-light area-capped shadow hardness, so area lights render on the GPU now too.
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !ScreenSpacePost.ForcesCpuTrace(in fx))
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && ScreenSpacePost.GpuTraceAllowed(in fx))
         {
+            // #1070 — Froxel3D on the GPU trace: the kernel also writes per-pixel
+            // ray distance, and the CPU froxel pass composites over the GPU frame.
+            float[]? gpuDepth = ScreenSpacePost.GpuFroxel3DHybrid(in fx) ? new float[width * height] : null;
             var rp = new GpuRaymarchParams
             {
                 Width = width, Height = height,
@@ -193,8 +196,10 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, 
             };
             var sp = GpuShadingParams.Build(in fx);
             _gpu ??= new MandelboxGpuCalculator();
-            if (_gpu.Render(renderBuffer, rp, sp, bp, fx.VolumePalette))
+            if (_gpu.Render(renderBuffer, rp, sp, bp, fx.VolumePalette, gpuDepth))
             {
+                ScreenSpacePost.ApplyFroxel3D(renderBuffer, null, gpuDepth, width, height,
+                    FractalParameters, FractalType.Mandelbox, fovScale, in froxelFx, in deStruct);   // #1070 — GPU trace + CPU froxel
                 // #84 — GPU raymarch skips the CPU post stack; draw the debug
                 // HUD directly so the light compass still appears on GPU frames.
                 ScreenSpacePost.ApplyDebugHud(renderBuffer, width, height, in fx);
