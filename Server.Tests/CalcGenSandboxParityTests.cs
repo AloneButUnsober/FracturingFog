@@ -76,8 +76,8 @@ public sealed class CalcGenSandboxParityTests
         { "fract_c",        "z*z + fract(c)" },
         { "floor_c",        "z*z + floor(c) * 0.15" },
         { "percomp_zeroed", "z*z + c + (floor(z) + round(z) + ceil(z) + trunc(z) + fract(z) + sign(z)) * 0.0" },
-        // #1085 — CalcGen `if … then … else` now runs on the interpreter too, with
-        // CalcGen's condition meaning: `abs(x)` compared in a condition is |x|².
+        // #1085 — CalcGen `if … then … else` runs on the interpreter too. Since
+        // #1088 a condition abs(x) is |x| on both engines and norm(x) is |x|².
         // Branching on the per-pixel c (not the iterate) keeps the dynamics
         // non-chaotic; the threshold 0.5 puts the ring 0.5 < |c| < 0.707 on
         // opposite branches under |c| vs |c|², so a meaning mismatch fails the mask.

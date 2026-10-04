@@ -243,7 +243,8 @@ public sealed class SandboxViewModel : ViewModelBase
                 {
                     Name = eq.Name,
                     Source = eq.Source,
-                    Promoted = eq.Promoted
+                    Promoted = eq.Promoted,
+                    LanguageVersion = eq.LanguageVersion,   // #1088
                 });
             var opts = new JsonSerializerOptions { WriteIndented = true };
             File.WriteAllText(path, JsonSerializer.Serialize(snapshot, opts));
@@ -306,12 +307,17 @@ public sealed class SandboxViewModel : ViewModelBase
             {
                 Name = eq.Name,
                 Source = eq.Source ?? string.Empty,
-                Promoted = eq.Promoted
+                Promoted = eq.Promoted,
+                LanguageVersion = eq.LanguageVersion,   // #1088 — an old export is version 1
             });
             added++;
         }
 
-        if (added > 0) SandboxEquationStore.Instance.Save();
+        if (added > 0)
+        {
+            SandboxEquationStore.Instance.UpgradeLegacyEntries(persist: false);   // #1088
+            SandboxEquationStore.Instance.Save();
+        }
 
         RefreshSavedList(_params.SandboxName);
         if (added > 0) PromotionChanged?.Invoke();

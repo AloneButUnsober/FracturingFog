@@ -53,11 +53,14 @@ public sealed class EquationIfThenElse1085Tests
     }
 
     [Fact]
-    public void ConditionAbs_IsSquaredMagnitude_LikeCalcGen_ElsewhereMagnitude()
+    public void ConditionAbs_IsMagnitude_NormIsSquared_SinceTheMigration()
     {
+        // #1088 retired the #1085 condition rule: abs is |x| everywhere now.
         var z = new Complex(1.5, 0);                                   // |z| = 1.5, |z|² = 2.25
-        Assert.Equal(1.0, Eval("if abs(z) > 2 then 1 else 0", z, 0).Real);    // |z|² > 2
-        Assert.Equal(1.0, Eval("if norm(z) > 2 then 1 else 0", z, 0).Real);
+        Assert.Equal(0.0, Eval("if abs(z) > 2 then 1 else 0", z, 0).Real);    // |z| > 2 is false
+        Assert.Equal(1.0, Eval("if norm(z) > 2 then 1 else 0", z, 0).Real);   // |z|² > 2
+        var legacy = SandboxExpression.ParseLegacy("if abs(z) > 2 then 1 else 0");   // version 1: |z|²
+        Assert.Equal(1.0, legacy.EvalStep(z, 0, 3, legacy.NewEnv()).Real);
         Assert.Equal(0.0, Eval("abs(z) > 2 ? 1 : 0", z, 0).Real);              // ternary: |z| (unchanged)
         Assert.Equal(1.5, Eval("abs(z)", z, 0).Real);                          // expression: |z|
         Assert.Equal(2.25, Eval("norm(z)", z, 0).Real);
@@ -107,10 +110,10 @@ public sealed class EquationIfThenElse1085Tests
     [Fact]
     public void DslTabIfEquation_RendersHeadless_LikeItsTernaryTwin()
     {
-        const string ite = "if abs(c) > 0.5 then z*z*z + c else z*z + c";
+        const string ite = "if norm(c) > 0.5 then z*z*z + c else z*z + c";
         var frame = HeadlessDslTab(ite);
         Assert.True(frame.Distinct().Count() > 10, "DSL-tab if/then/else equation rendered blank headless");
-        // Same pixels as the hand-written ternary with the explicit |c|² meaning.
+        // Same pixels as the hand-written ternary.
         Assert.Equal(HeadlessDslTab("norm(c) > 0.5 ? z*z*z + c : z*z + c"), frame);
     }
 }

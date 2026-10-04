@@ -23,12 +23,10 @@
 //
 // #1085 — `if <cond> then <a> else <b>` is the CalcGen DSL's conditional; it is
 // sugar for `cond ? a : b`, so a DSL-tab equation runs on the interpreter (the
-// poster / batch path) instead of failing to parse. CalcGen gives a condition
-// operand `abs(x)` the meaning |x|² (squared magnitude); to keep that text's
-// meaning identical on both engines, a comparison operand that is directly
-// `abs(x)` inside an `if … then` condition evaluates as `norm(x)`. Everywhere
-// else `abs` stays |x|. (#1088 migrates saved sources to `norm` and retires
-// this rule.)
+// poster / batch path) instead of failing to parse. Language version 1 read a
+// comparison operand `abs(x)` in such a condition as |x|² (CalcGen's old
+// meaning); since #1088 `abs` is |x| everywhere and saved sources were
+// rewritten to `norm(x)` (ParseLegacy / EquationMigration).
 //
 // Statement blocks (#27 Phase 5b): a saved C# equation may be a sequence of
 // statements — typed / `var` declarations, reassignments (`z = z*z + c;`), a
@@ -46,9 +44,11 @@
 //   not_expr := "!" not_expr | cmp_expr
 //   cmp_expr := add_expr ((<|>|<=|>=|==|!=) add_expr)?
 //   add_expr := mul_expr (("+"|"-") mul_expr)*
-//   mul_expr := pow_expr (("*"|"/") pow_expr)*
-//   pow_expr := unary ("^" pow_expr)?         ; right-assoc
-//   unary    := "-" unary | primary
+//   mul_expr := unary (("*"|"/") unary)*
+//   unary    := ("-"|"+") unary | pow_expr     ; #1088: -z^2 = -(z^2)
+//   pow_expr := primary ("^" unary)?           ; right-assoc
+//   (Language version 1, before #1088: pow_expr := unary ("^" pow_expr)?, so
+//   -z^2 was (-z)^2; ParseLegacy keeps that reading for EquationMigration.)
 //   primary  := NUMBER | IDENT | IDENT "(" args ")" | "(" expr ")"
 //
 // Comments: `//` to end-of-line and `/* */` blocks are skipped (a lone `/`
@@ -476,7 +476,20 @@ namespace FracturingFog.Models
 
         public static SandboxExpression Parse(string source)
         {
-            var parser = new Parser(source);
+            var parser = new Parser(source, legacy: false, edits: null);
+            var root = parser.ParseProgram();
+            return new SandboxExpression(root, parser.EnvSize);
+        }
+
+        /// <summary>#1088 — parse with the PRE-#1088 (language version 1) rules:
+        /// unary minus binds tighter than <c>^</c> (<c>-x^y</c> = <c>(-x)^y</c>),
+        /// and a comparison operand that is directly <c>abs(x)</c> inside an
+        /// <c>if … then</c> condition means |x|². When <paramref name="edits"/> is
+        /// given, it collects the text edits that make the source mean the same
+        /// thing under the current rules (EquationMigration applies them).</summary>
+        public static SandboxExpression ParseLegacy(string source, List<(int Pos, int Len, string Text)>? edits = null)
+        {
+            var parser = new Parser(source, legacy: true, edits: edits);
             var root = parser.ParseProgram();
             return new SandboxExpression(root, parser.EnvSize);
         }
@@ -533,8 +546,15 @@ namespace FracturingFog.Models
             private readonly Dictionary<string, int> _scope = new(StringComparer.Ordinal);
             public int EnvSize;
 
-            public Parser(string src)
+            // #1088 — language-version-1 rules + migration edit recorder.
+            private readonly bool _legacy;
+            private readonly List<(int Pos, int Len, string Text)>? _edits;
+            private readonly Dictionary<SbxNode, int> _callStart = new(ReferenceEqualityComparer.Instance);
+
+            public Parser(string src, bool legacy, List<(int Pos, int Len, string Text)>? edits)
             {
+                _legacy = legacy;
+                _edits = edits;
                 _src = src ?? string.Empty;
                 _pos = 0;
                 _scope["z"] = SlotZ;
@@ -743,12 +763,14 @@ namespace FracturingFog.Models
                 SkipWs();
                 if (!MatchKeyword("else")) throw new FormatException($"Expected 'else' after the 'then' branch at {At(_pos)}.");
                 var elseN = ParseExpr();
-                return new SbxTernary(CalcGenCondition(cond), thenN, elseN);
+                return new SbxTernary(_legacy ? CalcGenCondition(cond) : cond, thenN, elseN);
             }
 
-            // A comparison operand that is directly abs(x) means |x|² in a CalcGen
-            // condition: rewrite it to norm(x). Recurses through && / || / !.
-            private static SbxNode CalcGenCondition(SbxNode n) => n switch
+            // Language version 1 (#1085, retired by #1088): a comparison operand
+            // that is directly abs(x) meant |x|² in an `if … then` condition —
+            // read as norm(x), and migrated by rewriting the `abs` to `norm`.
+            // Recurses through && / || / !.
+            private SbxNode CalcGenCondition(SbxNode n) => n switch
             {
                 SbxBinary b when b.Op is "&&" or "||"
                     => new SbxBinary(b.Op, CalcGenCondition(b.A), CalcGenCondition(b.B)),
@@ -758,8 +780,12 @@ namespace FracturingFog.Models
                 _ => n,
             };
 
-            private static SbxNode AbsToNorm(SbxNode n)
-                => n is SbxCall { Name: "abs" } c ? new SbxCall("norm", c.Args) : n;
+            private SbxNode AbsToNorm(SbxNode n)
+            {
+                if (n is not SbxCall { Name: "abs" } c) return n;
+                if (_edits != null && _callStart.TryGetValue(c, out int at)) _edits.Add((at, 3, "norm"));
+                return new SbxCall("norm", c.Args);
+            }
 
             private SbxNode ParseTernary()
             {
@@ -842,30 +868,67 @@ namespace FracturingFog.Models
 
             private SbxNode ParseMul()
             {
-                var left = ParsePow();
+                var left = ParseFactor();
                 while (true)
                 {
                     SkipWs();
                     char p = Peek();
-                    if (p == '*' || p == '/') { _pos++; left = new SbxBinary(p.ToString(), left, ParsePow()); }
+                    if (p == '*' || p == '/') { _pos++; left = new SbxBinary(p.ToString(), left, ParseFactor()); }
                     else break;
                 }
                 return left;
             }
 
-            private SbxNode ParsePow()
-            {
-                var left = ParseUnary();
-                SkipWs();
-                if (Peek() == '^') { _pos++; return new SbxBinary("^", left, ParsePow()); }
-                return left;
-            }
+            private SbxNode ParseFactor() => _legacy ? ParsePowLegacy() : ParseUnary();
 
+            // Current rules (#1088): unary minus is looser than ^, so -z^2 = -(z^2);
+            // ^ is right-associative and its exponent may carry a sign (z^-2).
+            //   unary := ("-" | "+") unary | pow ;  pow := primary ("^" unary)?
             private SbxNode ParseUnary()
             {
                 SkipWs();
                 if (Peek() == '-') { _pos++; return new SbxUnary('-', ParseUnary()); }
                 if (Peek() == '+') { _pos++; return ParseUnary(); }
+                return ParsePow();
+            }
+
+            private SbxNode ParsePow()
+            {
+                var left = ParsePrimary();
+                SkipWs();
+                if (Peek() == '^') { _pos++; return new SbxBinary("^", left, ParseUnary()); }
+                return left;
+            }
+
+            // Language version 1: pow := unary ("^" pow)?, so -x^y = (-x)^y. The
+            // migration wraps such a signed base in parentheses, "(-x)^y", which
+            // reads the same under both rule sets.
+            private SbxNode ParsePowLegacy()
+            {
+                SkipWs();
+                int start = _pos;
+                char first = Peek();
+                var left = ParseUnaryLegacy();
+                int end = _pos;
+                SkipWs();
+                if (Peek() == '^')
+                {
+                    if (_edits != null && (first == '-' || first == '+'))
+                    {
+                        _edits.Add((start, 0, "("));
+                        _edits.Add((end, 0, ")"));
+                    }
+                    _pos++;
+                    return new SbxBinary("^", left, ParsePowLegacy());
+                }
+                return left;
+            }
+
+            private SbxNode ParseUnaryLegacy()
+            {
+                SkipWs();
+                if (Peek() == '-') { _pos++; return new SbxUnary('-', ParseUnaryLegacy()); }
+                if (Peek() == '+') { _pos++; return ParseUnaryLegacy(); }
                 return ParsePrimary();
             }
 
@@ -938,7 +1001,9 @@ namespace FracturingFog.Models
                 if (args.Count != expected)
                     throw new FormatException(
                         $"Function '{name}' at {At(nameStart)} takes {expected} arg(s), got {args.Count}.");
-                return new SbxCall(lname, args.ToArray());
+                var call = new SbxCall(lname, args.ToArray());
+                if (_legacy) _callStart[call] = nameStart;   // #1088 — migration edit positions
+                return call;
             }
 
             private SbxNode ParseNumber()

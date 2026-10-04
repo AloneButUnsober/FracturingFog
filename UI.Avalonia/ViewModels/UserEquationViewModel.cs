@@ -993,6 +993,8 @@ public sealed class UserEquationViewModel : ViewModelBase
 
         if (added > 0)
         {
+            // #1088 — an export made before #1088 has no version: upgrade its text.
+            UserEquationStore.Instance.UpgradeLegacyEntries(persist: false);
             UserEquationStore.Instance.Save();
             RefreshSavedList(_selectedSavedName);
             PromotionChanged?.Invoke();

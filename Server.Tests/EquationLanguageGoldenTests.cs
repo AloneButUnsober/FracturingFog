@@ -8,6 +8,12 @@
 // before any #1086 change, then frozen. It hashes, for every source in every
 // corpus: whether it parses, and the exact bits of EvalStep (and, for holomorphic
 // trees, EvalStepD) over a (z, c, n, prev) grid.
+//
+// #1088 changed two rules (-x^y now -(x^y); a condition abs(x) now |x|) and
+// rewrites saved text so it keeps its meaning (EquationMigration). The SAME
+// frozen fingerprint now proves that: every source is upgraded, then parsed
+// with the current rules — it must still evaluate exactly as the original did
+// under the old parser.
 
 using System;
 using System.Collections.Generic;
@@ -76,7 +82,8 @@ public sealed class EquationLanguageGoldenTests
         {
             foreach (char ch in src) Mix(ch);
             SandboxExpression? e;
-            try { e = SandboxExpression.Parse(src); parsed++; Mix(1); }
+            string upgraded = EquationMigration.UpgradeFromVersion1(src).Source;   // #1088
+            try { e = SandboxExpression.Parse(upgraded); parsed++; Mix(1); }
             catch (FormatException) { failed++; Mix(2); continue; }
             var env = e.NewEnv();
             foreach (var z in Zs) foreach (var c in Cs) foreach (var n in Ns)

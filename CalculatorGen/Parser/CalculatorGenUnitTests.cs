@@ -207,7 +207,7 @@ public static class CalculatorGenUnitTests
         Check("parser: if re(z)>0 then z*z+c else z*z*z+c round-trips",
             () => PrintSimplified("if re(z) > 0 then z*z + c else z*z*z + c")
                 == "if re(z) > 0 then z*z + c else z*z*z + c");
-        Check("parser: if abs(z)>4 supports abs (squared mag)",
+        Check("parser: if abs(z)>4 supports abs (|z|, #1088)",
             () => PrintSimplified("if abs(z) > 4 then z else z*z + c")
                 == "if abs(z) > 4 then z else z*z + c");
         Check("parser: if im(z) <= 0 then ... else",

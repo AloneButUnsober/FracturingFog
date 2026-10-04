@@ -231,6 +231,10 @@ public static class CalculatorGenHotLoad
             metaPath = Path.Combine(dir, gen.ClassName + ".meta.txt");
             File.WriteAllText(srcPath, gen.Source, new UTF8Encoding(false));
             File.WriteAllText(metaPath, equation, new UTF8Encoding(false));
+            // #1088 — the equation-language version the .meta.txt text is written in.
+            File.WriteAllText(Path.Combine(dir, gen.ClassName + LangSuffix),
+                FracturingFog.Models.EquationMigration.CurrentLanguageVersion.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                new UTF8Encoding(false));
         }
         catch (Exception ex)
         {
@@ -242,6 +246,39 @@ public static class CalculatorGenHotLoad
         if (!load.Ok)
             return new PersistResult(null, srcPath, equation, gen.ClassName, load.Error);
         return new PersistResult(load.CalculatorType, srcPath, equation, gen.ClassName, null);
+    }
+
+    /// <summary>#1088 — marker next to a persisted calculator's .meta.txt holding
+    /// the equation-language version of its text. Missing = saved before #1088
+    /// (version 1).</summary>
+    public const string LangSuffix = ".lang";
+
+    // #1088 — a persisted equation without a version marker is language version 1:
+    // upgrade its text so the regenerated calculator renders the same (the old
+    // .meta.txt is kept as a timestamped .bak), then stamp the marker.
+    private static string UpgradePersistedEquation(string dir, string className, string metaPath, string equation)
+    {
+        string langPath = Path.Combine(dir, className + LangSuffix);
+        if (File.Exists(langPath)) return equation;
+        try
+        {
+            var r = FracturingFog.Models.EquationMigration.UpgradeFromVersion1(equation);
+            if (r.Changed)
+            {
+                string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmssfff", System.Globalization.CultureInfo.InvariantCulture);
+                File.Copy(metaPath, metaPath + "." + stamp + ".equation-language-v2.bak", overwrite: false);
+                File.WriteAllText(metaPath, r.Source, new UTF8Encoding(false));
+                equation = r.Source;
+            }
+            File.WriteAllText(langPath,
+                FracturingFog.Models.EquationMigration.CurrentLanguageVersion.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                new UTF8Encoding(false));
+        }
+        catch
+        {
+            // Non-fatal: load the text as is (it is also what a failed upgrade keeps).
+        }
+        return equation;
     }
 
     public readonly record struct PersistedEntry(
@@ -279,6 +316,8 @@ public static class CalculatorGenHotLoad
                     "No matching .meta.txt — cannot reconstruct source equation."));
                 continue;
             }
+
+            equation = UpgradePersistedEquation(dir, className, metaPath, equation);   // #1088
 
             string baseName = className.EndsWith("Calculator", StringComparison.Ordinal)
                 ? className.Substring(0, className.Length - "Calculator".Length)

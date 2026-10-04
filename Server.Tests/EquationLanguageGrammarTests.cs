@@ -25,10 +25,12 @@ public sealed class EquationLanguageGrammarTests
     [InlineData("z / c * n",               "(* (/ z c) n)")]
     [InlineData("2*z^3",                   "(* 2 (^ z 3))")]
     [InlineData("z + c > 2*n",             "(> (+ z c) (* 2 n))")]
-    // ^ is right-associative over a full exponent; unary minus binds tighter than
-    // ^ TODAY (both engines read -x^y as (-x)^y) — #1088 switches to -(x^y).
+    // ^ is right-associative; unary minus is looser than ^ (#1088): -z^2 = -(z^2).
     [InlineData("z^2^3",                   "(^ z (^ 2 3))")]
-    [InlineData("-z^2",                    "(^ (neg z) 2)")]
+    [InlineData("-z^2",                    "(neg (^ z 2))")]
+    [InlineData("(-z)^2",                  "(^ (neg z) 2)")]
+    [InlineData("2*-z^2",                  "(* 2 (neg (^ z 2)))")]
+    [InlineData("-z^-2",                   "(neg (^ z (neg 2)))")]
     [InlineData("z^-2",                    "(^ z (neg 2))")]
     [InlineData("-(z^2)",                  "(neg (^ z 2))")]
     [InlineData("+z",                      "z")]
@@ -36,9 +38,10 @@ public sealed class EquationLanguageGrammarTests
     [InlineData("re(z) > 0 && im(z) < 0 || n == 3", "(|| (&& (> (re z) 0) (< (im z) 0)) (== n 3))")]
     [InlineData("!(re(z) > 0)",            "(! (> (re z) 0))")]
     [InlineData("re(z) > 0 ? z : im(z) > 0 ? c : n", "(? (> (re z) 0) z (? (> (im z) 0) c n))")]
-    // CalcGen conditional = ternary; condition-operand abs means |x|² (#1085).
+    // CalcGen conditional = ternary; abs is |x| in conditions too (#1088).
     [InlineData("if re(z) > 0 then z else c", "(? (> (re z) 0) z c)")]
-    [InlineData("if abs(z) > 2 then z else c", "(? (> (norm z) 2) z c)")]
+    [InlineData("if abs(z) > 2 then z else c", "(? (> (abs z) 2) z c)")]
+    [InlineData("if norm(z) > 2 then z else c", "(? (> (norm z) 2) z c)")]
     [InlineData("if abs(z) + 0 > 2 then z else c", "(? (> (+ (abs z) 0) 2) z c)")]
     [InlineData("if re(z) > 0 then z else if im(z) > 0 then c else n", "(? (> (re z) 0) z (? (> (im z) 0) c n))")]
     // Bindings: let, C# declarations, reassignment shadowing, if-seed, if-return.
@@ -59,6 +62,19 @@ public sealed class EquationLanguageGrammarTests
     public void ParsesToTheSpecifiedTree(string source, string expected)
     {
         Assert.Equal(expected, Tree(source));
+    }
+
+    // Language version 1 (before #1088), kept by ParseLegacy for the migration.
+    [Theory]
+    [InlineData("-z^2",                    "(^ (neg z) 2)")]
+    [InlineData("2*-z^2",                  "(* 2 (^ (neg z) 2))")]
+    [InlineData("z^-2",                    "(^ z (neg 2))")]
+    [InlineData("if abs(z) > 2 then z else c", "(? (> (norm z) 2) z c)")]
+    [InlineData("if abs(z) + 0 > 2 then z else c", "(? (> (+ (abs z) 0) 2) z c)")]
+    [InlineData("abs(z) > 2 ? z : c",      "(? (> (abs z) 2) z c)")]
+    public void LegacyRules_ParseToTheVersion1Tree(string source, string expected)
+    {
+        Assert.Equal(expected, EquationLanguage.ToSExpression(SandboxExpression.ParseLegacy(source)));
     }
 
     [Theory]

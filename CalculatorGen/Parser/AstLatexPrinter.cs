@@ -174,6 +174,7 @@ public static class AstLatexPrinter
     {
         switch (t)
         {
+            case CondRe { Of: AbsOp } r: WriteExpr(sb, r.Of, 0); break;   // #1088 — condition |x|
             case CondRe r:    OpFunc(sb, "Re", r.Of); break;
             case CondIm im:   OpFunc(sb, "Im", im.Of); break;
             case CondAbs2 a:  sb.Append("{\\left|"); WriteExpr(sb, a.Of, 0); sb.Append("\\right|}^{2}"); break;

@@ -683,9 +683,9 @@ on the current iterate.
 
 ### 9.1 Branch by magnitude
 ```
-if abs(z) > 1 then z*z + c else z*z*z + c
+if norm(z) > 1 then z*z + c else z*z*z + c
 ```
-`abs(z)` here is `|z|²` (the DSL's squared-magnitude convention).
+`norm(z)` is `|z|²`, the squared magnitude (`abs(z)` would be `|z|`).
 Quadratic step when the orbit is inside `|z|² ≤ 1`; cubic step
 outside. The silhouette is the union of the classical Mandelbrot
 (inside the unit disk) and a Multibrot-cubic shell (outside).
@@ -715,7 +715,7 @@ boundary along the real axis.
 
 ### 9.5 Bailout-band switch
 ```
-if abs(z) > 100 then z + c else z*z + c
+if norm(z) > 100 then z + c else z*z + c
 ```
 Switches to a linear (slow-escape) step once the orbit gets far from
 the origin. Effectively raises the bailout radius without raising it
@@ -933,7 +933,7 @@ in a chosen direction.
 | Smooth boundary              | Multiply transcendental argument by `n`:  |
 |                              | `sin(z) + c` → `sin(z*n) + c`.            |
 | Boundary too smooth          | Mix two laws via `if`:                    |
-|                              | `if abs(z) > 1 then z^3 + c else z^2 + c` |
+|                              | `if norm(z) > 1 then z^3 + c else z^2 + c`|
 | Want feathering              | Mix `exp` + `sin`: `exp(z) + sin(c) + z`. |
 
 ### "I want slower escape (more bounded points)"
