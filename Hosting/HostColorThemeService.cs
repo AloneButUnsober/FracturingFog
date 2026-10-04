@@ -328,8 +328,7 @@ namespace FracturingFog.Hosting
                 var entry = UserEquationStore.Instance.GetByName(region.UserEquationName);
                 if (entry != null)
                 {
-                    p.UserEquationSource = entry.Source;
-                    p.UserEquationName = entry.Name;
+                    entry.ApplyTo(p);   // #1088 — source, name, CalcGen flag
                     p.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive; // local library = trusted
                     host?.CompileUserEquation(entry.Source);
                 }

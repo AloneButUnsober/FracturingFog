@@ -181,19 +181,14 @@ namespace FracturingFog.Models
         public double UserEquationRotationDegrees { get; set; } = 0.0;
 
         /// <summary>
-        /// Bare CalcGen DSL source bound to the User Equation editor's "DSL" tab.
-        /// Independent of <see cref="UserEquationSource"/> (the C#-style tab) so
-        /// switching tabs does not destroy the other tab's content.
-        /// Routed straight to CalculatorGen without C#→DSL preprocessing.
+        /// #1088 — the equation in <see cref="UserEquationSource"/> is meant for
+        /// CalcGen (Compile &amp; Load / Generate) rather than only the live
+        /// interpreter. Replaces the old DSL-tab source + active-tab pair: there is
+        /// one source in one language, and the interpreter renders it either way
+        /// (live, headless, relief twins), so this flag never changes the image;
+        /// it routes the editor.
         /// </summary>
-        public string? UserEquationDslSource { get; set; }
-
-        /// <summary>
-        /// Last-active tab index in the User Equation editor. 0 = User Equation,
-        /// 1 = DSL. Persisted so the modal reopens to the tab the user was last
-        /// editing. Compile / Generate buttons route by this value.
-        /// </summary>
-        public int UserEquationActiveTab { get; set; } = 0;
+        public bool UserEquationUseCalcGen { get; set; }
 
         /// <summary>
         /// When true, the UserEquation calculator skips its parallel-perturbation
@@ -1649,8 +1644,7 @@ namespace FracturingFog.Models
                 UserEquationSource = UserEquationSource,
                 UserEquationName = UserEquationName,
                 UserEquationRotationDegrees = UserEquationRotationDegrees,
-                UserEquationDslSource = UserEquationDslSource,
-                UserEquationActiveTab = UserEquationActiveTab,
+                UserEquationUseCalcGen = UserEquationUseCalcGen,
                 UserEquationSkipJacobian = UserEquationSkipJacobian,
                 UserEquationSeed = UserEquationSeed,
                 UserEquationBailoutCondition = UserEquationBailoutCondition,

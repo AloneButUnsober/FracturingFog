@@ -1,6 +1,6 @@
 # Equation Language — Specification
 
-Status: **Phases 1–3 of #937** (#1086, #1087, #1088). This is the one 2D equation
+Status: **Phases 1–3 of #937** (#1086, #1087, #1088 parts A and B). This is the one 2D equation
 language behind the User Equation editor (both tabs), the Sandbox editor, the
 z0-seed and bailout-condition fields, and (since #1087) CalcGen's Compile &
 Load / Generate, which lower this language's AST into CalcGen's.
@@ -258,3 +258,35 @@ as `(-z)²`.
 - `EquationLanguageGoldenTests`: every corpus source, upgraded and then read
   with the version-2 rules, still matches the fingerprint frozen from the
   pre-#1086 parser.
+
+## One source, one flag (#1088 part B)
+
+A User Equation is **one source** in this language plus a **"use CalcGen"
+flag**. That replaces the old pair of sources (C#-style tab, DSL tab) and the
+active-tab index.
+
+| Where | Field |
+|---|---|
+| Saved entry (`UserEquationEntry`) | `Source`, `UseCalcGen` |
+| Live / batch parameters (`FractalParameters`) | `UserEquationSource`, `UserEquationUseCalcGen` |
+| Promoted type (`RegisteredFractal`) | `Source`, `UseCalcGen` |
+
+- **The flag never changes the image.** The interpreter renders the source either
+  way (live, poster, batch, relief twins). The flag routes the editor and
+  Compile & Load / Generate. Batch and the Command builder need nothing new: an
+  equation travels by region name (`--region`), and the region recall
+  (`FractalRegion.ApplyHeadlessParams` → `UserEquationEntry.ApplyTo`) now carries
+  the source and the flag together.
+- **Old files:** an entry's legacy `"Kind": 1` (DSL tab) reads as
+  `UseCalcGen: true`, and `0` or a missing field as `false`. `Kind` is never
+  written again. Old parameter state was never persisted (regions store the
+  equation name only), so nothing else needs mapping.
+- **C#-style sources** stay accepted. They are translated when compiled, and
+  the startup translation (`UserEquationDslMigration`) still rewrites the
+  translatable ones on non-CalcGen entries.
+- **The editor (until #1089)** keeps its two tabs as local buffers. The active
+  tab's text is the source; the DSL tab means the flag is on.
+
+Tests: `UserEquationSingleSource1088Tests`, covering legacy `Kind` mapping and
+rewrite, region recall, image independence, clone and promotion, and the
+editor's mapping of tabs onto the single source.

@@ -101,7 +101,7 @@ public sealed class EquationIfThenElse1085Tests
         var calc = new UserEquationCalculator(64, 48)
         {
             ColorMap = ColorPalette.BuiltIns[0], CenterX = -0.5, CenterY = 0, Zoom = 1.0, MaxIterations = 120,
-            FractalParameters = new FractalParameters { UserEquationActiveTab = 1, UserEquationDslSource = dsl },
+            FractalParameters = new FractalParameters { UserEquationUseCalcGen = true, UserEquationSource = dsl },
         };
         calc.Calculate(default);
         return (uint[])calc.ColorBuffer.Clone();

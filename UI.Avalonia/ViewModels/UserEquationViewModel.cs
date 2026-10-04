@@ -44,8 +44,11 @@ namespace FracturingFog.UI.Avalonia.ViewModels;
 /// window cuts CPU spent on partial-source parses.
 ///
 /// Save/Delete/Promote/Compile/Generate sit ABOVE the TabControl and route to
-/// the active tab. Saved entries carry a <see cref="UserEquationKind"/> so they
-/// restore into the tab they were authored in.
+/// the active tab. #1088 — the parameters carry ONE source plus a "use CalcGen"
+/// flag (<see cref="FractalParameters.UserEquationUseCalcGen"/>); the two tab
+/// buffers are editor-local until the single editor (#1089). The DSL tab is the
+/// flag on; the active tab's text is the source. Saved entries carry the flag
+/// (<see cref="UserEquationEntry.UseCalcGen"/>) so they restore into their tab.
 ///
 /// Host wires the same five callbacks as before:
 ///   <see cref="CompileRequested"/>   — recompile current source (interpreter)
@@ -66,13 +69,14 @@ public sealed class UserEquationViewModel : ViewModelBase
         ArgumentNullException.ThrowIfNull(parameters);
         _params = parameters;
 
-        _source = string.IsNullOrWhiteSpace(parameters.UserEquationSource)
-            ? "return z*z + c;"
-            : parameters.UserEquationSource;
-        _dslSource = string.IsNullOrWhiteSpace(parameters.UserEquationDslSource)
-            ? "z*z + c"
-            : parameters.UserEquationDslSource;
-        _activeTabIndex = parameters.UserEquationActiveTab is 0 or 1 ? parameters.UserEquationActiveTab : 0;
+        // #1088 — one source + flag: the flag picks the tab, the source fills it.
+        // The other tab starts from the same equation when it is plain equation
+        // language (both tabs read it), else from its default.
+        _activeTabIndex = parameters.UserEquationUseCalcGen ? 1 : 0;
+        string? src = string.IsNullOrWhiteSpace(parameters.UserEquationSource) ? null : parameters.UserEquationSource;
+        string? shared = src is not null && EquationLanguage.TryParse(src, out _, out _) ? src : null;
+        _source = _activeTabIndex == 0 ? src ?? "return z*z + c;" : shared ?? "return z*z + c;";
+        _dslSource = _activeTabIndex == 1 ? src ?? "z*z + c" : shared ?? "z*z + c";
         _rotationDegrees = Math.Clamp(parameters.UserEquationRotationDegrees, -360, 360);
 
         SavedNames = new ObservableCollection<string>();
@@ -111,9 +115,7 @@ public sealed class UserEquationViewModel : ViewModelBase
         OpenCookbookCommand = ReactiveCommand.Create(OnOpenCookbook);
         OpenMorphCommand = ReactiveCommand.Create(OnOpenMorph);
 
-        _params.UserEquationSource = _source;
-        _params.UserEquationDslSource = _dslSource;
-        _params.UserEquationActiveTab = _activeTabIndex;
+        PushActiveSource();
 
         // Seed the live-preview panel from current source so the user sees
         // AST + dz/dc + flags as soon as the dialog opens, without waiting
@@ -256,9 +258,20 @@ public sealed class UserEquationViewModel : ViewModelBase
         {
             this.RaiseAndSetIfChanged(ref _dslSource, value);
             if (!_loadingNamedEquation) _params.UserEquationName = null;
-            _params.UserEquationDslSource = _dslSource;
-            if (_activeTabIndex == 1) ScheduleDslValidate();
+            if (_activeTabIndex == 1)
+            {
+                _params.UserEquationSource = _dslSource;   // #1088 — the DSL tab's text is the source
+                ScheduleDslValidate();
+            }
         }
+    }
+
+    /// <summary>#1088 — publish the active tab as the parameters' single source
+    /// and its CalcGen flag (DSL tab = on).</summary>
+    private void PushActiveSource()
+    {
+        _params.UserEquationUseCalcGen = _activeTabIndex == 1;
+        _params.UserEquationSource = _activeTabIndex == 1 ? _dslSource : _source;
     }
 
     // ── Active tab ──
@@ -270,7 +283,7 @@ public sealed class UserEquationViewModel : ViewModelBase
         {
             int clamped = value is 0 or 1 ? value : 0;
             this.RaiseAndSetIfChanged(ref _activeTabIndex, clamped);
-            _params.UserEquationActiveTab = clamped;
+            PushActiveSource();
             // Clear any tab-specific status when switching; trigger the new
             // tab's validation path so the user sees a fresh state.
             _debounce.Disposable = null;
@@ -687,7 +700,7 @@ public sealed class UserEquationViewModel : ViewModelBase
     }
 
     /// <summary>Select+load a saved equation by name. No-op if absent.
-    /// Switches to the tab matching the entry's <see cref="UserEquationKind"/>.</summary>
+    /// Switches to the tab matching the entry's <see cref="UserEquationEntry.UseCalcGen"/>.</summary>
     public void LoadEquationByName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name)) return;
@@ -697,13 +710,13 @@ public sealed class UserEquationViewModel : ViewModelBase
         _loadingNamedEquation = true;
         try
         {
-            if (entry.Kind == UserEquationKind.Dsl) DslSource = entry.Source;
+            if (entry.UseCalcGen) DslSource = entry.Source;
             else Source = entry.Source;
         }
         finally { _loadingNamedEquation = false; }
         _params.UserEquationName = entry.Name;
         SelectedSavedName = entry.Name;
-        ActiveTabIndex = entry.Kind == UserEquationKind.Dsl ? 1 : 0;
+        ActiveTabIndex = entry.UseCalcGen ? 1 : 0;
         _debounce.Disposable = null;
     }
 
@@ -876,16 +889,10 @@ public sealed class UserEquationViewModel : ViewModelBase
         _loadingNamedEquation = true;
         try
         {
-            if (entry.Kind == UserEquationKind.Dsl)
-            {
-                DslSource = entry.Source;
-                _params.UserEquationDslSource = entry.Source;
-            }
-            else
-            {
-                Source = entry.Source;
-                _params.UserEquationSource = entry.Source;
-            }
+            if (entry.UseCalcGen) DslSource = entry.Source;
+            else Source = entry.Source;
+            _params.UserEquationSource = entry.Source;
+            _params.UserEquationUseCalcGen = entry.UseCalcGen;
         }
         finally { _loadingNamedEquation = false; }
         _params.UserEquationName = entry.Name;
@@ -896,9 +903,9 @@ public sealed class UserEquationViewModel : ViewModelBase
         _promote = entry.Promoted;
         this.RaisePropertyChanged(nameof(Promote));
 
-        ActiveTabIndex = entry.Kind == UserEquationKind.Dsl ? 1 : 0;
+        ActiveTabIndex = entry.UseCalcGen ? 1 : 0;
         _debounce.Disposable = null;
-        if (entry.Kind == UserEquationKind.Dsl) ValidateDslNow();
+        if (entry.UseCalcGen) ValidateDslNow();
         else CompileRequested?.Invoke();
     }
 
@@ -939,11 +946,11 @@ public sealed class UserEquationViewModel : ViewModelBase
             && !await confirm(trimmed))
             return;
 
-        var (kind, source) = ActiveSource();
+        var (useCalcGen, source) = ActiveSource();
         // Persist the per-equation render settings alongside the source so a Save
         // captures them and a later selection restores them.
         var entry = UserEquationStore.Instance.SaveEquation(
-            trimmed, source, kind,
+            trimmed, source, useCalcGen,
             escapeRadius: _params.EscapeRadius,
             seed: _params.UserEquationSeed,
             bailoutCondition: _params.UserEquationBailoutCondition,
@@ -1166,10 +1173,10 @@ public sealed class UserEquationViewModel : ViewModelBase
         return true;
     }
 
-    private (UserEquationKind Kind, string Source) ActiveSource() =>
+    private (bool UseCalcGen, string Source) ActiveSource() =>
         _activeTabIndex == 1
-            ? (UserEquationKind.Dsl, _dslSource ?? string.Empty)
-            : (UserEquationKind.UserEquation, _source ?? string.Empty);
+            ? (true, _dslSource ?? string.Empty)
+            : (false, _source ?? string.Empty);
 
     private async Task OnDeleteAsync()
     {
