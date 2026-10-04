@@ -70,6 +70,9 @@ public static class AstHelpers
     private static bool CondContains<T>(CondNode c) where T : AstNode => c switch
     {
         Cmp cmp => CondTermContains<T>(cmp.Left) || CondTermContains<T>(cmp.Right),
+        CondAnd a => CondContains<T>(a.Left) || CondContains<T>(a.Right),   // #1087
+        CondOr o => CondContains<T>(o.Left) || CondContains<T>(o.Right),
+        CondNot n => CondContains<T>(n.Operand),
         _ => false,
     };
 

@@ -1,9 +1,9 @@
 # Equation Language — Specification
 
-Status: **Phase 1 of #937** (#1086). This is the one 2D equation language behind
-the User Equation editor (both tabs), the Sandbox editor, and the z0-seed and
-bailout-condition fields. CalcGen (Compile & Load / Generate) still parses its
-own stricter subset until #1087 lowers this language into it.
+Status: **Phases 1–2 of #937** (#1086, #1087). This is the one 2D equation
+language behind the User Equation editor (both tabs), the Sandbox editor, the
+z0-seed and bailout-condition fields, and (since #1087) CalcGen's Compile &
+Load / Generate, which lower this language's AST into CalcGen's.
 
 | Issue | Slice |
 |---|---|
@@ -150,7 +150,58 @@ format.
 | Engine | Accepts | Notes |
 |---|---|---|
 | Interpreter (live view, poster, batch, Sandbox, seed and bailout) | The whole language | `double` precision; exact `dz/dc` for holomorphic trees |
-| CalcGen (Compile & Load / Generate) | A subset today: no `let`, `?:`, `&& \|\| !`, statements, comments, or non-integer `^` | #1087 lowers the full AST. Parity target is defined there. |
+| CalcGen (Compile & Load / Generate) | The whole language, lowered by `CalcGenLowering` (#1087), except the refusals below | SIMD, deep zoom (DD/QD), perturbation / SA where the maths allows |
+
+The compile-time source generator (`[GeneratedCalculator("…")]` built-ins)
+still uses CalcGen's own parser. That dialect is a subset of this language and
+lowers to the identical CalcGen tree (`CalcGenLoweringTests`).
+
+### Lowering to CalcGen (#1087)
+
+**Bindings and conditions:**
+- **`let` and statement bindings** are inlined; a bound value is shared by
+  reference.
+- **Expanded-size cap:** the expanded tree is capped at
+  `CalcGenLowering.MaxNodes` (4000) terms, because the distance-estimate
+  derivative grows with it. Over the cap, CalcGen refuses with a reason and the
+  interpreter still renders the equation.
+- **`?:`, `if … then … else`, `&&`, `||`, `!` and comparisons** become CalcGen
+  `If` over `Cmp` / `CondAnd` / `CondOr` / `CondNot`.
+  - Scalar code emits C# `&&` / `||` / `!`; SIMD code combines the per-lane
+    masks with `&` / `|` / `~`.
+  - A comparison used as a value is `If(cond, 1, 0)`.
+  - A value used as a condition is `norm(x) != 0`.
+
+**Powers:** `^` with a literal integer exponent from 0 to 64 is CalcGen's
+integer `Pow`; any other exponent, and `pow()`, is `PowC`.
+
+**Real and complex values:** the interpreter reads a value through *AsReal*: the
+value itself when real, its **magnitude** when complex. The lowering tracks each
+value's kind, so:
+- **Comparisons, `min` / `max` / `clamp` / `atan2` and the `mod` period** read a
+  complex operand through `abs()`.
+- **`mod`** is the interpreter's centred, per-component modulo
+  `x − p·floor(x/p + ½)`.
+- **Meaning change:** CalcGen's old `Mod` was a truncated real remainder, and
+  its old `min` / `max` / `clamp` / `atan2` read the real part of a complex
+  operand. Compile & Load now matches the live view for these.
+- **Refused when the kind depends on the value:** for example `log` / `sqrt` /
+  `pow` / `asin` / `acos` / `acosh` / `atanh` of a real, or a `?:` mixing
+  kinds, when such a value is read as a real. Wrap it in `re()`, `im()`,
+  `abs()` or `norm()` to say which you mean.
+
+### Parity: what "the same rendered result" means
+
+The two engines differ in smooth colouring, the bailout loop's floating-point
+association, SIMD rounding and DD/QD precision. Bit-exact output is therefore
+not the target. Instead, at shallow zoom with the same bailout radius:
+- the **in-set mask** agrees on ≥ 98 % of pixels;
+- the **escape iteration count** agrees exactly on ≥ 95 % of the pixels both
+  engines escape.
+
+This is checked on a corpus covering every construct, on both the AVX2 and the
+scalar CalcGen paths (`CalcGenLoweringTests`). Deep zoom differs by design,
+because the interpreter is `double`-only.
 
 ## Verification
 

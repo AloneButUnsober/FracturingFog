@@ -184,6 +184,10 @@ public static class AstMathmlPrinter
                 WriteCondTerm(sb, cmp.Right);
                 sb.Append("</mrow>");
                 break;
+            // #1087 — compound conditions.
+            case CondAnd a: sb.Append("<mrow>"); WriteCond(sb, a.Left); Mo(sb, "∧"); WriteCond(sb, a.Right); sb.Append("</mrow>"); break;
+            case CondOr o:  sb.Append("<mrow><mo>(</mo>"); WriteCond(sb, o.Left); Mo(sb, "∨"); WriteCond(sb, o.Right); sb.Append("<mo>)</mo></mrow>"); break;
+            case CondNot n: sb.Append("<mrow>"); Mo(sb, "¬"); sb.Append("<mo>(</mo>"); WriteCond(sb, n.Operand); sb.Append("<mo>)</mo></mrow>"); break;
             default:
                 Mi(sb, "?");
                 break;

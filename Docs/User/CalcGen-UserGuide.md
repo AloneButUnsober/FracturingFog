@@ -89,10 +89,12 @@ render is.
 | Surface normals / distance estimate | **Yes** — exact analytic `dz/dc` for holomorphic maps (numeric for the rest) | **Yes**, where the math allows |
 | Language | The DSL (this document) | The DSL (this document) |
 
-Both engines speak **the same DSL**, with small dialect differences noted
-throughout. Both understand `if … then … else`. The live interpreter
-additionally understands `let … in`, `?:`, `&& || !` and multi-statement
-blocks. CalcGen's `^` takes an integer exponent only; use `pow()` for others.
+Both engines speak **the same language**: `if … then … else`, `let … in`,
+`?:`, `&& || !`, multi-statement blocks, any `^` exponent and comments all work
+in both. Compile & Load lowers your equation to CalcGen's form. In a few cases
+it can't keep the live view's meaning; it then says why and the live view
+still renders the equation. Those cases are a real-or-complex value depending
+on its value, or a very large inlined expansion.
 Unifying the two dialects is tracked in #937; the grammar is specified in
 [Equation Language](../Technical/Equation-Language.md). Everything in the [function catalogue](#6-language-reference--the-function-catalogue)
 works in both.
@@ -237,24 +239,24 @@ descriptive name.
 | `-` | `z - c`, `-z` | Complex subtraction; unary negation |
 | `*` | `z*z`, `2*c` | Complex multiplication |
 | `/` | `z / (z + 1)` | Complex division (see gating in [§10](#10-execution-paths-and-what-gates-them)) |
-| `^` | `z^2`, `z^3` | Power. CalcGen: integer 0–64. Live: any exponent, right-assoc. Prefer `pow()` for non-integer. |
+| `^` | `z^2`, `z^3`, `z^2.5` | Power, right-associative, any exponent. A literal integer 0–64 compiles to CalcGen's fast integer power; others use the general `pow()`. Note `-z^2` means `(-z)^2` today (see the spec). |
 | `(` `)` | `(z + c)*(z - c)` | Grouping |
 
-Comparisons — only inside a condition (`if …` in CalcGen, `?:`/`&&`/`||` live):
+Comparisons (in `if … then`, `?:`, `&&` / `||`, or as a value: 1 when true, 0 when false):
 
 | Operator | Meaning |
 |---|---|
-| `<`  `<=`  `>`  `>=` | ordered comparison of real scalars |
+| `<`  `<=`  `>`  `>=` | ordered comparison of real scalars (a complex value compares by its magnitude) |
 | `==`  `!=` | equality / inequality |
 
-Boolean operators (**live interpreter only**): `&&` (and), `||` (or), `!` (not).
+Boolean operators: `&&` (and), `||` (or), `!` (not).
 
-Ternary (**live interpreter only**): `cond ? a : b`.
+Ternary: `cond ? a : b` (the same as `if cond then a else b`).
 
 > [!WARNING]
 > A bare `=` is **not** an operator in an expression — use `==` to compare. In
 > the live interpreter, `=` only appears in a statement block or a `let` binding
-> (`let k = … in …`). In CalcGen, use `if cond then … else …`.
+> (`let k = … in …`).
 
 ---
 
@@ -360,10 +362,10 @@ These return a real scalar lifted to `(value, 0)`.
 | `norm(x)` | Squared magnitude `|x|² = Re² + Im²` |
 | `arg(x)` | Principal argument (angle) in `(−π, π]` |
 | `conj(x)` | Complex conjugate `(Re, −Im)` — this one stays complex |
-| `min(a, b)` `max(a, b)` | Min / max of the real parts |
-| `mod(x, p)` | Real modulo, centered, per component |
-| `clamp(x, lo, hi)` | Clamp the real part to `[lo, hi]` |
-| `atan2(y, x)` | Two-argument arctangent of the real parts |
+| `min(a, b)` `max(a, b)` | Min / max of real values (a complex operand counts as its magnitude) |
+| `mod(x, p)` | Centred modulo `x − p·floor(x/p + ½)`, per component (a complex period counts as its magnitude) |
+| `clamp(x, lo, hi)` | Clamp a real value to `[lo, hi]` (a complex operand counts as its magnitude) |
+| `atan2(y, x)` | Two-argument arctangent of real values (a complex operand counts as its magnitude) |
 
 ```text
 conj(z)*conj(z) + c           # Tricorn

@@ -45,6 +45,9 @@
 
     <!-- No default Compile glob — we hand-pick. -->
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <!-- #1087 — CalculatorGenApi parses with CalcGen's own EquationParser in the
+         generator (compile-time built-ins); the app parses the unified language. -->
+    <DefineConstants>$(DefineConstants);CALCGEN_SOURCEGEN</DefineConstants>
     <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
     <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
   </PropertyGroup>
