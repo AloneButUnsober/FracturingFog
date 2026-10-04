@@ -126,3 +126,5 @@ The current data needs no rewrite; the migration is a safety net for shared and 
 | #1102 | User Bulb editor and help alignment: quick fix (Ctrl+.), shared grammar help plus a 3D supplement | #1100 |
 
 Parent: #937. Related: #211 (C#→DSL translation of saved bulbs, deferred).
+
+> **Compile path (#1104):** a CalcGen-like path for User Bulb was studied and declined in favour of three runtime slices (#1110 typed CPU compile, #1111 emitter `let` locals, #1112 GPU DE coverage) — see [UserBulb-CalcGen-Feasibility.md](UserBulb-CalcGen-Feasibility.md).
