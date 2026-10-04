@@ -111,6 +111,7 @@ public sealed class EquationParser
         TokenKind.Re     => "re(...)",
         TokenKind.Im     => "im(...)",
         TokenKind.Abs    => "abs(...)",
+        TokenKind.Norm   => "norm(...)",
         TokenKind.Clamp  => "clamp(...)",
         TokenKind.Gt     => "'>'",
         TokenKind.Lt     => "'<'",
@@ -244,6 +245,14 @@ public sealed class EquationParser
                 var absArg = ParseExpr();
                 Expect(TokenKind.RParen);
                 return new CondAbs2(absArg);
+            case TokenKind.Norm:
+                // #1085 — norm(x) = |x|², the unambiguous spelling of the
+                // condition-position `abs` (same CondAbs2 node).
+                Advance();
+                Expect(TokenKind.LParen);
+                var normArg = ParseExpr();
+                Expect(TokenKind.RParen);
+                return new CondAbs2(normArg);
             case TokenKind.Arg:
                 // arg(x) inside a condition — real-scalar principal angle.
                 // Same syntax as the AstNode-level arg(...) operator; the
@@ -264,7 +273,7 @@ public sealed class EquationParser
                 return new CondConst(-negTok.NumberValue);
             default:
                 throw new FormatException(
-                    $"Expected condition term (re(...), im(...), abs(...), arg(...), or number) at " +
+                    $"Expected condition term (re(...), im(...), abs(...), norm(...), arg(...), or number) at " +
                     $"{t.Where}, got {Describe(t.Kind)} ('{t.Lexeme}').");
         }
     }
@@ -453,6 +462,20 @@ public sealed class EquationParser
                 var absArg2 = ParseExpr();
                 Expect(TokenKind.RParen);
                 return new AbsOp(absArg2);
+            case TokenKind.Norm:
+            {
+                // #1085 — expression-position norm(x) = |x|² = re(x)² + im(x)²,
+                // lowered onto existing real-lift nodes (ReOp/ImOp gate SA,
+                // perturbation and analytic DE like abs/re/im do), so every
+                // emitter handles it with no new node. Matches the interpreter's
+                // norm (SandboxExpression).
+                Advance();
+                Expect(TokenKind.LParen);
+                var nArg = ParseExpr();
+                Expect(TokenKind.RParen);
+                return new Add(new Mul(new ReOp(nArg), new ReOp(nArg)),
+                               new Mul(new ImOp(nArg), new ImOp(nArg)));
+            }
             case TokenKind.Clamp:
                 // clamp(x, lo, hi) — real-valued, matches SandboxExpression.
                 Advance();

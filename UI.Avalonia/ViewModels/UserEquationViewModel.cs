@@ -23,11 +23,13 @@ namespace FracturingFog.UI.Avalonia.ViewModels;
 /// <summary>
 /// Avalonia port of <c>UserEquationDialog</c>. The editor surface is split into
 /// two tabs:
-///   Tab 0 "User Equation" — C#-style body (Roslyn live-compile via
-///                           UserEquationCalculator; debounced 1200 ms).
-///   Tab 1 "DSL"           — bare CalcGen DSL fed straight to CalculatorGen.
-///                           Live-validated through EquationParser; no Roslyn,
-///                           no auto-render. Compile/Generate must be clicked.
+///   Tab 0 "User Equation" — C#-style body, translated to the DSL and run on
+///                           the safe interpreter by UserEquationCalculator
+///                           (no Roslyn since #27 Phase 3; debounced 1200 ms).
+///   Tab 1 "DSL"           — bare CalcGen DSL. Live-validated through
+///                           EquationParser; headless / poster renders run it on
+///                           the interpreter (#745, #1085); Compile & Load swaps
+///                           in the CalcGen-compiled calculator.
 ///
 /// Debounce was 500 ms → 1200 ms → 1800 ms. The error span used to be
 /// applied to the TextBox's <c>SelectionStart/End</c> as soon as it was
@@ -46,7 +48,7 @@ namespace FracturingFog.UI.Avalonia.ViewModels;
 /// restore into the tab they were authored in.
 ///
 /// Host wires the same five callbacks as before:
-///   <see cref="CompileRequested"/>   — recompile current source (Roslyn path)
+///   <see cref="CompileRequested"/>   — recompile current source (interpreter)
 ///   <see cref="RenderRequested"/>    — re-render only (rotation changed)
 ///   <see cref="PromotionChanged"/>   — refresh main fractal-type dropdown
 ///   <see cref="NamePromptRequested"/>— ask user for a name on Save…
@@ -655,8 +657,8 @@ public sealed class UserEquationViewModel : ViewModelBase
     }
 
     /// <summary>Force an immediate compile (cancel pending debounce).
-    /// Only meaningful on the User Equation tab — DSL tab does not feed
-    /// the Roslyn pipeline.</summary>
+    /// Only meaningful on the User Equation tab — the DSL tab renders via
+    /// Compile &amp; Load.</summary>
     public void TriggerCompile()
     {
         _debounce.Disposable = null;
@@ -715,10 +717,10 @@ public sealed class UserEquationViewModel : ViewModelBase
                 _params.UserEquationSource = _source;
                 _params.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive;
                 CompileRequested?.Invoke();
-                // After Roslyn compile, also surface CalcGen-compatibility
-                // problems if the user opted in. Roslyn won't catch them
-                // because the C# source compiles fine; CalcGen's stricter
-                // DSL is what trips on Complex.ImaginaryOne / Abs / etc.
+                // After the (interpreter) compile, also surface CalcGen-
+                // compatibility problems if the user opted in: the interpreter
+                // accepts more than CalcGen's stricter DSL, which trips on
+                // Complex.ImaginaryOne / Abs / etc.
                 if (_validateForCalcGen) ValidateCalcGenForCurrentSource();
             });
     }

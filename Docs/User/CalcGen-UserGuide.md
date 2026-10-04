@@ -89,10 +89,11 @@ render is.
 | Surface normals / distance estimate | **Yes** — exact analytic `dz/dc` for holomorphic maps (numeric for the rest) | **Yes**, where the math allows |
 | Language | The DSL (this document) | The DSL (this document) |
 
-Both engines speak **the same DSL**, with two small dialect differences noted
-throughout (the live interpreter additionally understands `let … in`, `?:`,
-`&& || !`, and multi-statement blocks; CalcGen understands `if … then … else`
-and integer-only `^`). Everything in the [function catalogue](#6-language-reference--the-function-catalogue)
+Both engines speak **the same DSL**, with small dialect differences noted
+throughout. Both understand `if … then … else`. The live interpreter
+additionally understands `let … in`, `?:`, `&& || !` and multi-statement
+blocks. CalcGen's `^` takes an integer exponent only; use `pow()` for others.
+Unifying the two dialects is tracked in #937. Everything in the [function catalogue](#6-language-reference--the-function-catalogue)
 works in both.
 
 The practical workflow: **author in the live editor** (instant feedback), then,
@@ -355,6 +356,7 @@ These return a real scalar lifted to `(value, 0)`.
 | `re(x)` | Real part |
 | `im(x)` | Imaginary part |
 | `abs(x)` | Magnitude `|x| = √(Re² + Im²)` |
+| `norm(x)` | Squared magnitude `|x|² = Re² + Im²` |
 | `arg(x)` | Principal argument (angle) in `(−π, π]` |
 | `conj(x)` | Complex conjugate `(Re, −Im)` — this one stays complex |
 | `min(a, b)` `max(a, b)` | Min / max of the real parts |
@@ -375,8 +377,10 @@ clamp(z, -2.0, 2.0) + c       # bounded feedback
 > expression, `abs(x)` is the magnitude `|x|`. **Inside an `if` condition**, the
 > shorthand `abs(x)` means the *squared* magnitude `|x|²` — it saves a square
 > root and matches the bailout-threshold form (`if abs(z) > 4 …` is really
-> `|z|² > 4`). If you need the true magnitude inside a condition, compare against
-> the squared threshold, or use `re`/`im` explicitly.
+> `|z|² > 4`). This holds on both engines, so the same text renders the same way
+> live and after Compile & Load. To say what you mean, write `norm(x)` for `|x|²`.
+> If you need the true magnitude inside a condition, compare `norm(x)` against
+> the squared threshold.
 
 ---
 

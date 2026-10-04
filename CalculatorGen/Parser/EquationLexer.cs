@@ -72,6 +72,7 @@ public enum TokenKind
     Re,
     Im,
     Abs,
+    Norm,   // #1085 — norm(x) = |x|² (squared magnitude)
     Clamp,
     Gt,
     Lt,
@@ -227,6 +228,8 @@ public static class EquationLexer
                     tokens.Add(new Token(TokenKind.Im, name, start, startLine, startCol));
                 else if (name.Equals("abs", StringComparison.OrdinalIgnoreCase))
                     tokens.Add(new Token(TokenKind.Abs, name, start, startLine, startCol));
+                else if (name.Equals("norm", StringComparison.OrdinalIgnoreCase))
+                    tokens.Add(new Token(TokenKind.Norm, name, start, startLine, startCol));
                 else if (name.Equals("clamp", StringComparison.OrdinalIgnoreCase))
                     tokens.Add(new Token(TokenKind.Clamp, name, start, startLine, startCol));
                 else if (name.Equals("prev", StringComparison.OrdinalIgnoreCase))
@@ -247,7 +250,7 @@ public static class EquationLexer
                                           "asin", "acos", "atan", "asinh", "acosh", "atanh",
                                           "min", "max", "mod", "pow", "clamp", "pi", "e", "i",
                                           "floor", "round", "ceil", "trunc", "fract", "sign",
-                                          "if", "then", "else", "re", "im", "abs", "prev", "iter", "n" };
+                                          "if", "then", "else", "re", "im", "abs", "norm", "prev", "iter", "n" };
                     string? best = null;
                     int bestD = int.MaxValue;
                     foreach (var kw in keywords)
