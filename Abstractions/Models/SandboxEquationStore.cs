@@ -16,10 +16,30 @@ using FracturingFog.Abstractions;
 
 namespace FracturingFog.Models
 {
-    public sealed class SandboxEquationEntry
+    public sealed class SandboxEquationEntry : System.Text.Json.Serialization.IJsonOnDeserialized
     {
         public string Name { get; set; } = string.Empty;
         public string Source { get; set; } = string.Empty;
+
+        // #1088 — equation-language version of this entry's text. Entries made in
+        // code are the current version; a JSON entry WITHOUT the field was saved
+        // before #1088 and is version 1 (the store upgrades it on Load / import).
+        private bool _languageVersionRead;
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public int LanguageVersion { get; set; } = EquationMigration.CurrentLanguageVersion;
+
+        [System.Text.Json.Serialization.JsonPropertyName("LanguageVersion")]
+        public int? LanguageVersionJson
+        {
+            get => LanguageVersion;
+            set { _languageVersionRead = true; LanguageVersion = value ?? 1; }
+        }
+
+        void System.Text.Json.Serialization.IJsonOnDeserialized.OnDeserialized()
+        {
+            if (!_languageVersionRead) LanguageVersion = 1;
+        }
 
         /// <summary>
         /// When true, this entry is surfaced as a first-class fractal type in
@@ -54,6 +74,28 @@ namespace FracturingFog.Models
             Equations.Clear();
             foreach (var e in _persisted.LoadFile(EquationsFile, BuildJsonOptions()))
                 if (!string.IsNullOrWhiteSpace(e.Name)) Equations.Add(e);
+            UpgradeLegacyEntries(persist: true);   // #1088
+        }
+
+        /// <summary>#1088 — upgrade entries saved under equation-language version 1
+        /// so they render the same under the current rules (EquationMigration).
+        /// With <paramref name="persist"/>, snapshots the file first
+        /// (UserDataBackup) and saves. Returns the number of texts rewritten;
+        /// entries are stamped current either way, so a second run is a no-op.</summary>
+        public int UpgradeLegacyEntries(bool persist)
+        {
+            var legacy = Equations.FindAll(x => x.LanguageVersion < EquationMigration.CurrentLanguageVersion);
+            if (legacy.Count == 0) return 0;
+            if (persist) UserDataBackup.SnapshotBeforeMigration(EquationsFile, "equation-language-v2");
+            int changed = 0;
+            foreach (var e in legacy)
+            {
+                var r0 = EquationMigration.UpgradeFromVersion1(e.Source);
+                if (r0.Changed) { e.Source = r0.Source; changed++; }
+                e.LanguageVersion = EquationMigration.CurrentLanguageVersion;
+            }
+            if (persist) Save();
+            return changed;
         }
 
         // #966 — preserves entries this build could not read across Load/Save.
@@ -85,6 +127,7 @@ namespace FracturingFog.Models
                 if (Equations[i].Name.Equals(name, StringComparison.OrdinalIgnoreCase))
                 {
                     Equations[i].Source = source ?? string.Empty;
+                    Equations[i].LanguageVersion = EquationMigration.CurrentLanguageVersion;   // #1088
                     Save();
                     return Equations[i];
                 }

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    #1088 (#937) — the unified 2D equation language: parser, AST, interpreter
+    (SandboxExpression), the EquationLanguage entry point and the saved-source
+    migration (EquationMigration). Dependency-free so the stores in
+    Abstractions can upgrade legacy equation text on load, and CalcGen
+    (CalculatorGen.Lib) can lower the same AST. Spec:
+    Docs/Technical/Equation-Language.md.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>FracturingFog.Models</RootNamespace>
+    <AssemblyName>FracturingFog.Equations</AssemblyName>
+  </PropertyGroup>
+
+</Project>

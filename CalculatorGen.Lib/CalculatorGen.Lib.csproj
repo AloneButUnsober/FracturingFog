@@ -42,12 +42,11 @@
       Templates / SampleOutput dirs (Templates land as EmbeddedResource
       below; SampleOutput is non-compile artefacts).
     -->
-    <Compile Include="..\CalculatorGen\**\*.cs"
-             Exclude="..\CalculatorGen\Program.cs;..\CalculatorGen\Templates\**;..\CalculatorGen\SampleOutput\**;..\CalculatorGen\bin\**;..\CalculatorGen\obj\**" />
+    <Compile Include="..\CalculatorGen\**\*.cs" Exclude="..\CalculatorGen\Program.cs;..\CalculatorGen\Templates\**;..\CalculatorGen\SampleOutput\**;..\CalculatorGen\bin\**;..\CalculatorGen\obj\**" />
     <None Include="..\CalculatorGen\Templates\Calculator.template.cs" Link="Templates\Calculator.template.cs" />
-    <None Include="..\CalculatorGen\Templates\SelfTest.template.cs"   Link="Templates\SelfTest.template.cs" />
+    <None Include="..\CalculatorGen\Templates\SelfTest.template.cs" Link="Templates\SelfTest.template.cs" />
     <EmbeddedResource Include="..\CalculatorGen\Templates\Calculator.template.cs" Link="Templates\Calculator.template.cs" />
-    <EmbeddedResource Include="..\CalculatorGen\Templates\SelfTest.template.cs"   Link="Templates\SelfTest.template.cs" />
+    <EmbeddedResource Include="..\CalculatorGen\Templates\SelfTest.template.cs" Link="Templates\SelfTest.template.cs" />
   </ItemGroup>
 
   <!--
@@ -58,6 +57,9 @@
   -->
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Equations\FracturingFog.Equations.csproj" />
   </ItemGroup>
 
 </Project>

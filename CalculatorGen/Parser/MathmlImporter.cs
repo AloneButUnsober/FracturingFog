@@ -416,7 +416,7 @@ public static class MathmlImporter
         if (els.Count == 1)
         {
             var e = els[0];
-            // |x|^2  →  abs(x)   (DSL condition-abs is squared magnitude)
+            // |x|^2  →  norm(x)   (#1088: abs is |x| everywhere)
             if (LN(e) == "msup")
             {
                 var k = Meaningful(e.Elements());
@@ -425,7 +425,7 @@ public static class MathmlImporter
                 {
                     var kk = Meaningful(k[0].Elements());
                     if (kk.Count >= 2 && LN(kk[0]) == "mo" && Txt(kk[0]) == "|")
-                        return $"abs({ConvertRow(kk.GetRange(1, kk.Count - 2))})";
+                        return $"norm({ConvertRow(kk.GetRange(1, kk.Count - 2))})";
                 }
             }
         }

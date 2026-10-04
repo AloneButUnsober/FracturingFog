@@ -3509,7 +3509,7 @@ Transcendental
     0.5*z + sin(z) + c                   Damped oscillator
 
 Conditional / iteration aware
-    if abs(z) < 1 then z*z + c else z*z - c
+    if norm(z) < 1 then z*z + c else z*z - c
     if re(z) > 0 then z*z + c else conj(z)*conj(z) + c
     if (iter % 4) < 2 then z*z + c else z*z - c
     sin(z + 0.01*iter) + c               Iter-driven phase

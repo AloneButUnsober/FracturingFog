@@ -198,6 +198,7 @@ public static class AstMathmlPrinter
     {
         switch (t)
         {
+            case CondRe { Of: AbsOp } r: WriteExpr(sb, r.Of, 0); break;   // #1088 — condition |x|
             case CondRe r:    Func(sb, "Re", r.Of); break;
             case CondIm im:   Func(sb, "Im", im.Of); break;
             case CondArg ag:  Func(sb, "arg", ag.Of); break;

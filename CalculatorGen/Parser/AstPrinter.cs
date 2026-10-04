@@ -219,9 +219,11 @@ public static class AstPrinter
     {
         switch (t)
         {
+            // #1088 — a condition abs(x) is CondRe(AbsOp x); print it as written.
+            case CondRe { Of: AbsOp ab }: sb.Append("abs("); WriteExpr(sb, ab.Operand, 0); sb.Append(')'); break;
             case CondRe r:    sb.Append("re("); WriteExpr(sb, r.Of, 0); sb.Append(')'); break;
             case CondIm im:   sb.Append("im("); WriteExpr(sb, im.Of, 0); sb.Append(')'); break;
-            case CondAbs2 a:  sb.Append("abs("); WriteExpr(sb, a.Of, 0); sb.Append(')'); break;
+            case CondAbs2 a:  sb.Append("norm("); WriteExpr(sb, a.Of, 0); sb.Append(')'); break;   // #1088 — |x|²
             case CondArg ag:  sb.Append("arg("); WriteExpr(sb, ag.Of, 0); sb.Append(')'); break;
             case CondConst k: sb.Append(k.Value.ToString("R", CultureInfo.InvariantCulture)); break;
             default:

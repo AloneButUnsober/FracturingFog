@@ -30,7 +30,8 @@ using FracturingFog.CalculatorGen;
 [assembly: GeneratedCalculator("fold(z)*fold(z) + c", "BurningShip",         IncludeSelfTest = true)]
 
 // ── Conditional / recurrence / sample DSL ────────────────────────────
-[assembly: GeneratedCalculator("if abs(z) > 4 then z else z*z + c",
+// #1088 — was "if abs(z) > 4 …" when a condition abs meant |z|²; same calculator.
+[assembly: GeneratedCalculator("if norm(z) > 4 then z else z*z + c",
                                                       "MandelbrotBurningShip", IncludeSelfTest = true)]
 [assembly: GeneratedCalculator("z*z + c + 0.5*prev",  "MandelbrotPhoenix",   IncludeSelfTest = true)]
 [assembly: GeneratedCalculator("z*z + c * i",         "UserDslEquation",     IncludeSelfTest = true)]

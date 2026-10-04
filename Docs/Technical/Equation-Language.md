@@ -1,6 +1,6 @@
 # Equation Language — Specification
 
-Status: **Phases 1–2 of #937** (#1086, #1087). This is the one 2D equation
+Status: **Phases 1–3 of #937** (#1086, #1087, #1088). This is the one 2D equation
 language behind the User Equation editor (both tabs), the Sandbox editor, the
 z0-seed and bailout-condition fields, and (since #1087) CalcGen's Compile &
 Load / Generate, which lower this language's AST into CalcGen's.
@@ -15,15 +15,22 @@ Load / Generate, which lower this language's AST into CalcGen's.
 | #1089 | Single User Equation editor |
 | #1090 | Documentation sweep |
 
+**Language version 2** (#1088): `-x^y` means `-(x^y)`, and `abs` means \|x\|
+everywhere. Saved text is upgraded automatically; see
+[Versions and migration](#versions-and-migration).
+
 ## Where it lives
 
 | What | Where |
 |---|---|
-| Parser, AST, interpreter | `CalculatorGen/Language/SandboxExpression.cs` |
-| Entry point | `CalculatorGen/Language/EquationLanguage.cs` |
+| Parser, AST, interpreter | `Equations/SandboxExpression.cs` |
+| Entry point | `Equations/EquationLanguage.cs` |
+| Saved-text upgrade | `Equations/EquationMigration.cs` |
+| Lowering to CalcGen | `CalculatorGen/Language/CalcGenLowering.cs` |
 
-Both compile into **CalculatorGen.Lib**, below Engine, so CalcGen and Engine
-share one tree. The namespace stays `FracturingFog.Models`.
+The language lives in the dependency-free **FracturingFog.Equations** project
+(#1088). Abstractions (the equation stores) and CalculatorGen.Lib (the lowering)
+both reference it. The namespace stays `FracturingFog.Models`.
 
 **Entry point (`EquationLanguage`):**
 - `Parse`
@@ -56,9 +63,9 @@ and_expr  := not_expr ("&&" not_expr)*
 not_expr  := "!" not_expr | cmp_expr
 cmp_expr  := add_expr (("<"|">"|"<="|">="|"=="|"!=") add_expr)?   ; non-assoc
 add_expr  := mul_expr (("+"|"-") mul_expr)*
-mul_expr  := pow_expr (("*"|"/") pow_expr)*
-pow_expr  := unary ("^" pow_expr)?                            ; right-assoc
-unary     := "-" unary | "+" unary | primary
+mul_expr  := unary (("*"|"/") unary)*
+unary     := "-" unary | "+" unary | pow_expr
+pow_expr  := primary ("^" unary)?                             ; right-assoc
 primary   := NUMBER | IDENT | IDENT "(" args ")" | "(" expr ")"
 TYPE      := var | Complex | double | int | float | long | decimal  (ignored)
 ```
@@ -76,8 +83,8 @@ TYPE      := var | Complex | double | int | float | long | decimal  (ignored)
 
 | Level | Operators | Associativity |
 |---|---|---|
-| 1 | unary `-` `+` | prefix |
-| 2 | `^` | right |
+| 1 | `^` | right (its exponent may carry a sign: `z^-2`) |
+| 2 | unary `-` `+` | prefix |
 | 3 | `*` `/` | left |
 | 4 | `+` `-` | left |
 | 5 | `<` `>` `<=` `>=` `==` `!=` | none (one per operand pair) |
@@ -86,11 +93,9 @@ TYPE      := var | Complex | double | int | float | long | decimal  (ignored)
 | 8 | `\|\|` | left |
 | 9 | `?:`, `if … then … else`, `let … in` | right |
 
-> **`-x^y` today means `(-x)^y`.** Unary minus binds tighter than `^`, which is
-> what both engines have always done. The conventional reading, `-(x^y)`, will
-> arrive with #1088, together with a backed-up rewrite of saved sources
-> (`-x^y` → `(-x)^y`) so no artwork changes. Until then, write `-(x^y)` when you
-> mean it.
+> **`-x^y` means `-(x^y)`** (#1088), the conventional reading: `-z^2 + c` is
+> `−z² + c`. Language version 1 read it as `(-x)^y`; saved text was rewritten to
+> `(-x)^y` so it renders the same.
 
 ## Values, identifiers, constants
 
@@ -123,13 +128,16 @@ Let and statement locals shadow everything, including the constants.
 - `atan2`, `min`, `max` and `clamp` are real-valued.
 - The per-component functions (`floor`, `round`, …) apply to Re and Im independently.
 
-### `abs` inside an `if … then` condition
+### `abs` and `norm`
 
-CalcGen reads a condition operand `abs(x)` as **\|x\|²**. So that the same text
-renders the same on both engines (#1085), a comparison operand that **is**
-`abs(x)` in an `if … then` condition evaluates as `norm(x)`. Everywhere else,
-including `?:`, `abs` is \|x\|. Write `norm(x)` to be explicit. #1088 migrates
-saved sources and retires this rule.
+`abs(x)` is the magnitude \|x\| everywhere, conditions included. `norm(x)` is
+the squared magnitude \|x\|², the cheap bailout-style threshold
+(`if norm(z) > 4 …` is \|z\| > 2).
+
+Language version 1 read a comparison operand that was directly `abs(x)`,
+inside an `if … then` condition, as \|x\|². That was CalcGen's old condition
+shorthand, adopted by #1085. #1088 retired the rule and rewrote saved text to
+`norm(x)`.
 
 ## Errors
 
@@ -211,3 +219,42 @@ because the interpreter is `double`-only.
   both parity corpora and grammar coverage.
 - **`EquationLanguageGrammarTests`:** parse trees for the precedence table
   above, plus error messages and positions.
+
+## Versions and migration
+
+| Version | Saved | `-x^y` | Condition `abs(x)` in `if … then` |
+|---|---|---|---|
+| 1 | before #1088 (no version recorded) | `(-x)^y` | \|x\|² |
+| 2 (current) | #1088 on | `-(x^y)` | \|x\| (\|x\|² is `norm`) |
+
+`EquationMigration.UpgradeFromVersion1` reads text with the version-1 rules
+(`SandboxExpression.ParseLegacy`), which records the edits that keep its
+meaning:
+- a signed base before `^` is wrapped: `-x^y` → `(-x)^y`;
+- that condition `abs` is renamed to `norm`.
+
+**Self-check:** the version-1 tree of the original must equal the version-2 tree
+of the result, or the text is left unchanged and the reason reported. Text that
+doesn't parse is left as is: C#-style sources awaiting translation, and typos.
+
+**Where it runs:**
+
+| Data | How |
+|---|---|
+| `userequations.json`, `sandboxequations.json` | Each entry carries `LanguageVersion`; entries without it are version 1. The store upgrades them on `Load`, after a timestamped `*.equation-language-v2.bak` snapshot (`UserDataBackup`), and stamps them. A second load is a no-op. Entries made in code are always the current version. |
+| Imported equations and region-export bundles | Carry the file's version; legacy entries are upgraded before they are saved. |
+| Persisted hot-loaded calculators (`UserCalculators/*.meta.txt`) | A `<Class>.lang` marker records the version. An unmarked `.meta.txt` is upgraded on startup (the old text kept as a `.bak`), then marked. |
+| Regions and scenes | Reference equations by name, so they follow the store. |
+| CalcGen's own parser (`EquationParser`: built-in `[GeneratedCalculator]` equations, importers) | Uses the same rules. The one built-in `if abs(z) > 4 …` became `if norm(z) > 4 …`. |
+
+C#-style sources are translated at use time. The translator writes `(x)^k`, so
+`-Complex.Pow(z, 2)` now reads as its C# meaning, `-(z²)`; version 1 misread it
+as `(-z)²`.
+
+**Verification:**
+- `EquationMigrationTests`: rewrite cases, and meaning preserved against the
+  version-1 parser on a grid; store, import and persisted upgrades, with
+  backups, idempotence, and current-version text left untouched.
+- `EquationLanguageGoldenTests`: every corpus source, upgraded and then read
+  with the version-2 rules, still matches the fingerprint frozen from the
+  pre-#1086 parser.

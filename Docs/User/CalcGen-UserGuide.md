@@ -239,7 +239,7 @@ descriptive name.
 | `-` | `z - c`, `-z` | Complex subtraction; unary negation |
 | `*` | `z*z`, `2*c` | Complex multiplication |
 | `/` | `z / (z + 1)` | Complex division (see gating in [§10](#10-execution-paths-and-what-gates-them)) |
-| `^` | `z^2`, `z^3`, `z^2.5` | Power, right-associative, any exponent. A literal integer 0–64 compiles to CalcGen's fast integer power; others use the general `pow()`. Note `-z^2` means `(-z)^2` today (see the spec). |
+| `^` | `z^2`, `z^3`, `z^2.5` | Power, right-associative, any exponent. A literal integer 0–64 compiles to CalcGen's fast integer power; others use the general `pow()`. `-z^2` is `-(z^2)`; write `(-z)^2` for the other. |
 | `(` `)` | `(z + c)*(z - c)` | Grouping |
 
 Comparisons (in `if … then`, `?:`, `&&` / `||`, or as a value: 1 when true, 0 when false):
@@ -375,15 +375,12 @@ z*z + mod(z, 1.0) + c         # periodic wrap
 clamp(z, -2.0, 2.0) + c       # bounded feedback
 ```
 
-> [!WARNING]
-> **`abs` has two meanings depending on where it appears.** As a value in an
-> expression, `abs(x)` is the magnitude `|x|`. **Inside an `if` condition**, the
-> shorthand `abs(x)` means the *squared* magnitude `|x|²` — it saves a square
-> root and matches the bailout-threshold form (`if abs(z) > 4 …` is really
-> `|z|² > 4`). This holds on both engines, so the same text renders the same way
-> live and after Compile & Load. To say what you mean, write `norm(x)` for `|x|²`.
-> If you need the true magnitude inside a condition, compare `norm(x)` against
-> the squared threshold.
+> [!NOTE]
+> **`abs(x)` is the magnitude `|x|` everywhere, conditions included.** For the
+> squared magnitude `|x|²` — the cheap bailout-style threshold — write `norm(x)`
+> (`if norm(z) > 4 …` is `|z|² > 4`, i.e. `|z| > 2`). Before #1088 an `abs` inside
+> an `if` condition meant `|x|²`; saved equations were rewritten to `norm`
+> automatically (a backup of the file was kept), so they render the same.
 
 ---
 
@@ -424,7 +421,7 @@ sin(pi*z) + e*c               # π and e as literals
 a value:
 
 ```text
-if abs(z) < 1 then z*z + c else z*z - c
+if norm(z) < 1 then z*z + c else z*z - c
 if re(z) > 0 then z*z + c else conj(z)*conj(z) + c
 if im(z) > 0 then z^3 + c else z^2 + c
 ```
@@ -827,7 +824,7 @@ z*z + clamp(re(z), -1.0, 1.0)*i + c   # clamp only the real drive
 ### 13.11 Conditional / piecewise
 
 ```text
-if abs(z) < 1 then z*z + c else z*z - c
+if norm(z) < 1 then z*z + c else z*z - c
 if re(z) > 0 then z*z + c else conj(z)*conj(z) + c
 if im(z) > 0 then z^3 + c else z^2 + c
 ```

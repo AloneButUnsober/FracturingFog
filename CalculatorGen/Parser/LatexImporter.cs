@@ -426,12 +426,12 @@ public static class LatexImporter
         return cell.GetRange(i, cell.Count - i);
     }
 
-    // |x|^2 in a condition -> abs(x) (DSL condition-abs is squared magnitude),
+    // |x|^2 in a condition -> norm(x) (#1088: abs is |x| everywhere),
     // matching AstLatexPrinter's CondAbs2 = {\left|x\right|}^{2}. Anything else
     // (re/im/arg/const/expr) parses normally.
     private static string CondTerm(List<Tok> c)
     {
-        // Match the exporter's CondAbs2:  {\left|X\right|}^{2}  or  |X|^2  ->  abs(X).
+        // Match the exporter's CondAbs2:  {\left|X\right|}^{2}  or  |X|^2  ->  norm(X).
         bool brace = c.Count > 0 && c[0].Kind == TT.LBrace;
         int barOpen = brace ? 1 : 0;
         if (barOpen < c.Count && c[barOpen].Kind == TT.Bar)
@@ -461,7 +461,7 @@ public static class LatexImporter
                 {
                     var inner = c.GetRange(barOpen + 1, j - barOpen - 1);
                     int ip = 0;
-                    return $"abs({ParseExpr(inner, ref ip)})";
+                    return $"norm({ParseExpr(inner, ref ip)})";   // #1088 — |x|² is norm
                 }
             }
         }

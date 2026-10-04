@@ -8,11 +8,11 @@
 //
 // Grammar (left-associative, conventional precedence):
 //   expr   := term  (('+'|'-') term)*
-//   term   := factor (('*'|'/') factor)*    // '/' is currently rejected
+//   term   := unary (('*'|'/') unary)*    // '/' is currently rejected
 //                                            //   — kept in grammar for forward
 //                                            //   compatibility with rational maps
-//   factor := unary ('^' Int)?
-//   unary  := '-' unary | atom
+//   unary  := '-' unary | factor          // #1088: -z^2 = -(z^2)
+//   factor := atom ('^' Int)?
 //   atom   := Number | 'z' | 'c' | '(' expr ')'
 //
 // Important deviation from a generic expression parser
@@ -144,11 +144,11 @@ public sealed class EquationParser
 
     private AstNode ParseTerm()
     {
-        var left = ParseFactor();
+        var left = ParseUnary();
         while (Match(TokenKind.Star, TokenKind.Slash))
         {
             var op = Advance();
-            var right = ParseFactor();
+            var right = ParseUnary();
             left = op.Kind == TokenKind.Slash
                 ? new Div(left, right)
                 : new Mul(left, right);
@@ -156,9 +156,11 @@ public sealed class EquationParser
         return left;
     }
 
+    // #1088 — unary minus binds looser than ^ (-z^2 = -(z^2)), the equation
+    // language's rule; before #1088 it read (-z)^2.
     private AstNode ParseFactor()
     {
-        var node = ParseUnary();
+        var node = ParseAtom();
         if (Match(TokenKind.Caret))
         {
             var caret = Advance();
@@ -178,18 +180,20 @@ public sealed class EquationParser
             Advance();
             return new Neg(ParseUnary());
         }
-        return ParseAtom();
+        return ParseFactor();
     }
+
 
     // If-expression. Grammar:
     //   if_expr ::= 'if' cond 'then' expr 'else' expr
     //   cond    ::= cond_term cmp_op cond_term
     //   cmp_op  ::= '>' | '<' | '>=' | '<=' | '==' | '!='
     //   cond_term ::= 're' '(' expr ')' | 'im' '(' expr ')'
-    //              | 'abs' '(' expr ')' | number | '-' number
-    // 'abs' is shorthand for |x|² (squared magnitude); the underlying
-    // CondTerm is CondAbs2. Saves a sqrt and matches the natural
-    // bailout-style threshold form users think in.
+    //              | 'abs' '(' expr ')' | 'norm' '(' expr ')' | 'arg' '(' expr ')'
+    //              | number | '-' number
+    // #1088: 'abs' is |x| (CondRe(AbsOp)) like everywhere else; 'norm' is the
+    // squared magnitude |x|² (CondAbs2), the cheap bailout-style threshold.
+    // (Before #1088 a condition 'abs' meant |x|²; saved text was migrated.)
     private AstNode ParseIf()
     {
         Expect(TokenKind.If);
@@ -244,10 +248,12 @@ public sealed class EquationParser
                 Expect(TokenKind.LParen);
                 var absArg = ParseExpr();
                 Expect(TokenKind.RParen);
-                return new CondAbs2(absArg);
+                // #1088 — abs(x) is |x| in conditions too (|x|² is norm(x)): the
+                // real part of the magnitude, exactly what the unified language's
+                // lowering produces for the same text.
+                return new CondRe(new AbsOp(absArg));
             case TokenKind.Norm:
-                // #1085 — norm(x) = |x|², the unambiguous spelling of the
-                // condition-position `abs` (same CondAbs2 node).
+                // #1085 — norm(x) = |x|² (CondAbs2).
                 Advance();
                 Expect(TokenKind.LParen);
                 var normArg = ParseExpr();

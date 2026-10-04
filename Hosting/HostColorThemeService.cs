@@ -979,6 +979,7 @@ namespace FracturingFog.Hosting
                             Name = entry.Name,
                             Source = entry.Source,
                             Promoted = entry.Promoted,
+                            LanguageVersion = entry.LanguageVersion,   // #1088
                         });
                 }
 
@@ -1046,10 +1047,15 @@ namespace FracturingFog.Hosting
                         Name = eq.Name,
                         Source = eq.Source ?? string.Empty,
                         Promoted = eq.Promoted,
+                        LanguageVersion = eq.LanguageVersion,   // #1088 — an old bundle is version 1
                     });
                     sandboxAdded++;
                 }
-                if (sandboxAdded > 0) SandboxEquationStore.Instance.Save();
+                if (sandboxAdded > 0)
+                {
+                    SandboxEquationStore.Instance.UpgradeLegacyEntries(persist: false);   // #1088
+                    SandboxEquationStore.Instance.Save();
+                }
             }
 
             int added = 0, skipped = 0;

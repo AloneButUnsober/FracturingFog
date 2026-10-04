@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <ItemGroup>
+    <ProjectReference Include="..\Equations\FracturingFog.Equations.csproj" />
+  </ItemGroup>
+
   <PropertyGroup>
     <!--
       Tiny shared-contracts library. Holds only the interfaces both the

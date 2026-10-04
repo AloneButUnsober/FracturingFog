@@ -349,6 +349,7 @@ public static class MathImageRenderer
 
         private Box CondTerm(CondTerm t, float size) => t switch
         {
+            CondRe { Of: AbsOp } r => Build(r.Of, size, 0),   // #1088 — condition |x|
             CondRe r => Func("Re", r.Of, size),
             CondIm im => Func("Im", im.Of, size),
             CondArg ag => Func("arg", ag.Of, size),
