@@ -3082,12 +3082,14 @@ namespace FracturingFog.Hosting
             vm.OpenFilePromptRequested += () =>
                 PickOpenAsync("Import User Equations", "JSON (*.json)|*.json|All files (*.*)|*.*");
             vm.MessageRequested += (title, body, isErr) => ShowInfo(title, body, isErr);
-            vm.HotLoadRequested += (eq, baseName) =>
+            // #1089 — the Roslyn compile runs off the UI thread (the editor shows
+            // "Compiling…"); the calculator is installed back on the UI thread.
+            vm.HotLoadRequested += async (eq, baseName) =>
             {
                 try
                 {
-                    var result = FracturingFog.CalculatorGen.CalculatorGenHotLoad
-                        .TryCompileAndLoad(eq, baseName);
+                    var result = await System.Threading.Tasks.Task.Run(() =>
+                        FracturingFog.CalculatorGen.CalculatorGenHotLoad.TryCompileAndLoad(eq, baseName));
                     if (!result.Ok) return result.Error;
                     int w = s_renderHost!.Mandelbrot.Width;
                     int h = s_renderHost.Mandelbrot.Height;
@@ -3241,12 +3243,12 @@ namespace FracturingFog.Hosting
             };
 
             // Wave 2.3 — Persist + Hot-Load.
-            vm.HotLoadAndPersistRequested += (eq, baseName) =>
+            vm.HotLoadAndPersistRequested += async (eq, baseName) =>
             {
                 try
                 {
-                    var result = FracturingFog.CalculatorGen.CalculatorGenHotLoad
-                        .PersistAndLoad(eq, baseName);
+                    var result = await System.Threading.Tasks.Task.Run(() =>
+                        FracturingFog.CalculatorGen.CalculatorGenHotLoad.PersistAndLoad(eq, baseName));
                     if (!result.Ok) return (result.Error, result.SourcePath);
                     int w = s_renderHost!.Mandelbrot.Width;
                     int h = s_renderHost.Mandelbrot.Height;

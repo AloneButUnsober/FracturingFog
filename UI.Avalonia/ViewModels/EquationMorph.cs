@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
 using System;
-using FracturingFog.CalculatorGen.Parser;
+using FracturingFog.CalculatorGen;
 
 namespace FracturingFog.UI.Avalonia.ViewModels;
 
@@ -53,19 +53,22 @@ public static class EquationMorph
     /// <summary>
     /// Quick sanity check on a pair of source strings before kicking off a
     /// frame sweep. Returns the first error message or null on success.
+    /// #1089 — checks with the equation language lowered to CalcGen
+    /// (<see cref="CalculatorGenApi.ParseEquation"/>), exactly what each
+    /// frame's Compile &amp; Load runs, not CalcGen's own older dialect.
     /// </summary>
     public static string? Validate(string dslA, string dslB)
     {
         if (string.IsNullOrWhiteSpace(dslA)) return "Equation A is empty.";
         if (string.IsNullOrWhiteSpace(dslB)) return "Equation B is empty.";
-        try { EquationParser.Parse(dslA.Trim()); }
+        try { CalculatorGenApi.ParseEquation(dslA.Trim()); }
         catch (Exception ex) { return $"Equation A: {ex.Message}"; }
-        try { EquationParser.Parse(dslB.Trim()); }
+        try { CalculatorGenApi.ParseEquation(dslB.Trim()); }
         catch (Exception ex) { return $"Equation B: {ex.Message}"; }
         // Also confirm the synth at t=0.5 parses — catches cases where
         // both sides parse individually but the wrapped form trips a
         // limit (rare; defensive).
-        try { EquationParser.Parse(Synthesize(dslA, dslB, 0.5)); }
+        try { CalculatorGenApi.ParseEquation(Synthesize(dslA, dslB, 0.5)); }
         catch (Exception ex) { return $"Mid-morph parse failed: {ex.Message}"; }
         return null;
     }

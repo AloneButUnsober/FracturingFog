@@ -9,6 +9,7 @@
 
 using FracturingFog.CalculatorGen;
 using FracturingFog.CalculatorGen.Parser;
+using FracturingFog.Models;
 using Xunit;
 
 namespace FracturingFog.Server.Tests;
@@ -31,11 +32,14 @@ public sealed class MathmlImporterTests
     [InlineData("min(z, c) + c")]
     [InlineData("clamp(z, 0, 1) + c")]
     [InlineData("if abs(z) > 2 then z^2 + c else z*z - c")]
+    [InlineData("if norm(z) > 4 then z^2 + c else z*z - c")]
     public void Roundtrips_through_exporter(string dsl)
     {
         string mathml = AstMathmlPrinter.Print(EquationParser.Parse(dsl));
         var r = MathmlImporter.Import(mathml);
         Assert.True(r.Ok, r.Error);
+        // #1089 — the editor takes the import as-is: it must be unified syntax.
+        Assert.True(EquationLanguage.TryParse(r.Dsl, out _, out string? langErr), langErr);
         Assert.Equal(Canon(dsl), Canon(r.Dsl));
     }
 
@@ -47,6 +51,8 @@ public sealed class MathmlImporterTests
             "<math><mn>2</mn><mo>&InvisibleTimes;</mo><mi>z</mi><mo>+</mo><mi>c</mi></math>";
         var r = MathmlImporter.Import(mathml);
         Assert.True(r.Ok, r.Error);
+        // #1089 — the editor takes the import as-is: it must be unified syntax.
+        Assert.True(EquationLanguage.TryParse(r.Dsl, out _, out string? langErr), langErr);
         Assert.Equal(Canon("2*z + c"), Canon(r.Dsl));
     }
 

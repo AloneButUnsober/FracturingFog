@@ -524,14 +524,12 @@ Three authoring engines for one-off custom fractals.
 
 ### User Equation (CalcGen)
 
-The User Equation modal is now split into two tabs:
+The User Equation modal has **one equation box** and a **CalcGen** toggle (#1089):
 
-- **User Equation** — Roslyn-compiled per-pixel `Complex Step(Complex z, Complex c, int n)`. Full access to System.Numerics.Complex + System.Math. Auto-recompile 1200 ms after the last keystroke. Optional **Validate for CalcGen** checkbox flags C# constructs the CalcGen DSL can't accept (`Complex.ImaginaryOne`, `Complex.Abs`, `new Complex(a, b)`, unsupported `Complex.*` members) and offers in-place fixes via a status-bar **Apply fix** button (shortcut **Ctrl+.**).
-- **DSL** — bare CalcGen DSL: `z*z + c`, `sin(z)`, etc. Live-validated against the parser; bad tokens are selected and a fix is suggested when the lexer can guess one.
+- **The equation** — the equation language: `z*z + c`, `sin(z)`, `if norm(z) > 4 then z else z*z + c`. The safe interpreter renders it live about two seconds after the last keystroke. A typo is selected and a fix suggested (**Apply fix**, shortcut **Ctrl+.**). C#-style text (`return Complex.Pow(z, 2) + c;`) is still accepted and translated; **Ctrl+.** converts it.
+- **CalcGen** toggle — on: **Compile & Load**, **Compile + Save** and **Generate via CalcGen** appear, with the compile state (*Not compiled* → *Compiling…* → *Compiled* / *Compile failed*; the compile runs in the background) and a line saying what CalcGen will and won't accelerate. The toggle is saved with the equation and restored when you select it.
 
-Both tabs share the header row (Saved combo / Save / Delete / Promote / Compile & Load / Generate via CalcGen). The active tab decides which source feeds CalcGen — Save respects the tab, so a DSL-tab entry reopens into the DSL tab and a User Equation entry reopens into the User Equation tab.
-
-Each tab carries a `?` button that opens the in-app Help viewer to the relevant section; a **CalcGen Help** button on the header opens the full CalcGen User Guide.
+The header row (Saved combo / Save / Import / Delete / Promote) applies to the equation. The `?` button opens the in-app Help viewer at the editor section; **CalcGen Help** opens the full CalcGen User Guide.
 
 ```csharp
 return z*z + c;                          // classic Mandelbrot
