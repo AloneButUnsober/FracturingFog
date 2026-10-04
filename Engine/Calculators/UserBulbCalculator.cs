@@ -80,6 +80,8 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
     public int LastErrorPosition { get; private set; } = -1;
     /// <summary>Length of the offending substring at <see cref="LastErrorPosition"/>.</summary>
     public int LastErrorLength { get; private set; } = 0;
+    /// <summary>#1102 — chain step of the last parse error; -1 = the single source.</summary>
+    public int LastErrorStep { get; private set; } = -1;
     public bool IsCompiled => _compiled != null || _compiledQuat != null;
 
     /// <summary>Closed-form DE pattern detected for the currently-compiled
@@ -258,6 +260,7 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
     {
         LastErrorPosition = -1;
         LastErrorLength = 0;
+        LastErrorStep = -1;
         var chain = FractalParameters.UserBulbChain;
         bool useChain = chain != null && chain.Count > 0;
 
@@ -388,7 +391,7 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         catch (Exception ex)
         {
             LastError = ex.Message;
-            if (ex is SbxParseException spe) { LastErrorPosition = spe.Position; LastErrorLength = spe.Length; }
+            if (ex is SbxParseException spe) { LastErrorPosition = spe.Position; LastErrorLength = spe.Length; LastErrorStep = spe.StepIndex; }
             _compiled = null;
             _compiledQuat = null;
         }
@@ -432,7 +435,7 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         catch (Exception ex)
         {
             LastError = ex.Message;
-            if (ex is SbxParseException spe) { LastErrorPosition = spe.Position; LastErrorLength = spe.Length; }
+            if (ex is SbxParseException spe) { LastErrorPosition = spe.Position; LastErrorLength = spe.Length; LastErrorStep = spe.StepIndex; }
             _compiled = null;
             _compiledQuat = null;
         }
@@ -471,7 +474,7 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         catch (Exception ex)
         {
             LastError = ex.Message;
-            if (ex is SbxParseException spe) { LastErrorPosition = spe.Position; LastErrorLength = spe.Length; }
+            if (ex is SbxParseException spe) { LastErrorPosition = spe.Position; LastErrorLength = spe.Length; LastErrorStep = spe.StepIndex; }
             _compiled = null;
             _compiledQuat = null;
         }
@@ -515,7 +518,7 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         catch (Exception ex)
         {
             LastError = ex.Message;
-            if (ex is SbxParseException spe) { LastErrorPosition = spe.Position; LastErrorLength = spe.Length; }
+            if (ex is SbxParseException spe) { LastErrorPosition = spe.Position; LastErrorLength = spe.Length; LastErrorStep = spe.StepIndex; }
             _compiled = null;
             _compiledQuat = null;
         }

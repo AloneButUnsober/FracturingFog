@@ -87,6 +87,9 @@ namespace FracturingFog.Models
     {
         public int Position { get; }
         public int Length { get; }
+        /// <summary>#1102 — 0-based chain step the error is in; -1 for the
+        /// single source. <see cref="Position"/> is within that step's text.</summary>
+        public int StepIndex { get; init; } = -1;
         public SbxParseException(string message, int position, int length = 1)
             : base(message) { Position = position; Length = Math.Max(1, length); }
     }

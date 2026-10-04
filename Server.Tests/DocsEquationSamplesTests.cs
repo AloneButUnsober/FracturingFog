@@ -133,14 +133,47 @@ public sealed class DocsEquationSamplesTests
     public void EveryBulbDocSample_Parses()
     {
         var samples = BulbDocSamples().ToList();
-        Assert.True(samples.Count >= 2, $"only {samples.Count} tagged bulb samples found");
+        Assert.True(samples.Count >= 20, $"only {samples.Count} tagged bulb samples found");
         var bad = new List<string>();
         foreach (var (where, text) in samples)
         {
-            try { SandboxBulbExpression.Parse(text, new[] { "t" }); }
+            // Lenient identifiers: samples use params and chain-step names.
+            // Functions, operators and members are still checked.
+            try { SandboxBulbExpression.ParseLenient(text); }
             catch (FormatException ex) { bad.Add($"{where}: {text.Trim()}  →  {ex.Message}"); }
         }
         Assert.True(bad.Count == 0, "Bulb doc samples that don't parse:\n" + string.Join("\n", bad));
+    }
+
+    /// <summary>#1102 — the "Source:" blocks of the in-app User Bulb help.</summary>
+    public static IEnumerable<(string Where, string Text)> BulbHelpSamples()
+    {
+        var lines = HelpTextBundle.MathUserBulbText.Replace("\r\n", "\n").Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (!Regex.IsMatch(lines[i], @"^\s*Source[^:]*:\s*$")) continue;
+            int j = i + 1;
+            while (j < lines.Length && lines[j].Trim().Length > 0) j++;
+            yield return ($"MathUserBulbText line {i + 2}", string.Join("\n", lines[(i + 1)..j]));
+            i = j;
+        }
+    }
+
+    [Fact]
+    public void EveryBulbHelpSource_Parses()
+    {
+        var samples = BulbHelpSamples().ToList();
+        Assert.True(samples.Count >= 14, $"only {samples.Count} bulb help sources found");
+        var bad = new List<string>();
+        foreach (var (where, text) in samples)
+        {
+            try { SandboxBulbExpression.ParseLenient(text); }
+            catch (FormatException ex) { bad.Add($"{where}: {text.Trim()}  →  {ex.Message}"); }
+        }
+        Assert.True(bad.Count == 0, "Bulb help sources that don't parse:\n" + string.Join("\n", bad));
+        Assert.Contains(HelpTextBundle.EquationGrammarText, HelpTextBundle.MathUserBulbText);
+        Assert.Contains("COMPONENTWISE on vectors", HelpTextBundle.MathUserBulbText);
+        Assert.DoesNotContain("Roslyn", HelpTextBundle.MathUserBulbText);
     }
 
     [Fact]

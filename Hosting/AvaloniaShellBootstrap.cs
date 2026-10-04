@@ -3352,7 +3352,8 @@ namespace FracturingFog.Hosting
                 vm.SetAnalyticBadge(FormatAnalyticBadge(pat.Kind, pat.Power));
                 vm.SetErrorSpan(
                     ok ? -1 : s_renderHost.UserBulbLastErrorPosition,
-                    ok ? 0  : s_renderHost.UserBulbLastErrorLength);
+                    ok ? 0  : s_renderHost.UserBulbLastErrorLength,
+                    ok ? -1 : s_renderHost.UserBulbLastErrorStep);   // #1102
                 if (ok) s_renderHost.Trigger();
             };
             vm.RenderRequested += (_, _) => s_renderHost!.Trigger();

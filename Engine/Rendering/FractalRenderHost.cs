@@ -951,6 +951,9 @@ namespace FracturingFog.Rendering
         /// <see cref="UserBulbLastErrorPosition"/>.</summary>
         public int UserBulbLastErrorLength => _userBulbCalculator.LastErrorLength;
 
+        /// <summary>#1102 — chain step of the last parse error (-1 = single source).</summary>
+        public int UserBulbLastErrorStep => _userBulbCalculator.LastErrorStep;
+
         /// <summary>Distance-estimator sampler for UserBulb mesh export.</summary>
         public double SampleUserBulbDE(double x, double y, double z) => _userBulbCalculator.SampleDE(x, y, z);
 

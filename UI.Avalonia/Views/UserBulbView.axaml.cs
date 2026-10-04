@@ -67,6 +67,9 @@ public sealed partial class UserBulbView : UserControl
     private void OnErrorSpanChanged(object? sender, EventArgs e)
     {
         if (_vm == null || _sourceEditor == null) return;
+        // #1102 — a chain-step error has no span in the source box; the status
+        // line names the step and Apply fix edits it.
+        if (_vm.ErrorSpanStep >= 0) { _pendingStart = _pendingEnd = -1; return; }
         int start = _vm.ErrorSpanStart;
         int len = _vm.ErrorSpanLength;
         int textLen = _sourceEditor.Text?.Length ?? 0;
