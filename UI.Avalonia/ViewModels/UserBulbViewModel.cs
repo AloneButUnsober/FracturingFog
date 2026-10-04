@@ -130,13 +130,11 @@ public sealed class UserBulbViewModel : ViewModelBase
             this.WhenAnyValue(x => x.IsExporting, busy => !busy));
         AutoRangeCommand = ReactiveCommand.Create(OnAutoRange,
             this.WhenAnyValue(x => x.IsExporting, busy => !busy));
+        // #1102 — the language chapter (the C#/Roslyn compiler choice is gone).
         OpenHelpCommand = ReactiveCommand.Create(() =>
-        {
-            // Jump directly to the Sandbox DSL chapter when the Sandbox
-            // compiler is active — otherwise show the whole guide from top.
-            string? anchor = IsSandbox ? "Sandbox DSL Compiler" : null;
-            HelpRequested?.Invoke(this, ("User/UserBulb-Guide.md", anchor, "User Bulb 3D — Help"));
-        });
+            HelpRequested?.Invoke(this, ("User/UserBulb-Guide.md", "Step Language", "User Bulb 3D — Help")));
+        ApplyFixCommand = ReactiveCommand.Create(OnApplyFix,
+            this.WhenAnyValue(x => x.SuggestedFix).Select(f => !string.IsNullOrEmpty(f)));
     }
 
     // ── Source + debounce ──────────────────────────────────────────────
@@ -202,16 +200,80 @@ public sealed class UserBulbViewModel : ViewModelBase
     /// span to the source TextBox.</summary>
     public event EventHandler? ErrorSpanChanged;
 
-    /// <summary>Host calls this with the parser-reported position + length.
-    /// Pass (-1, 0) to clear.</summary>
-    public void SetErrorSpan(int position, int length)
+    /// <summary>#1102 — chain step the error span is in; -1 = the source box.</summary>
+    public int ErrorSpanStep { get; private set; } = -1;
+
+    /// <summary>Host calls this with the parser-reported position + length
+    /// (and, for a chain, the step index). Pass (-1, 0) to clear. Call after
+    /// <see cref="ShowError"/>: a "Did you mean 'x'?" in the message becomes the
+    /// <see cref="SuggestedFix"/> for the span (#1102).</summary>
+    public void SetErrorSpan(int position, int length, int stepIndex = -1)
     {
         int clampedStart = Math.Max(0, position);
         int clampedLen = position < 0 ? 0 : Math.Max(0, length);
-        bool changed = clampedStart != _errorSpanStart || clampedLen != _errorSpanLength;
+        bool changed = clampedStart != _errorSpanStart || clampedLen != _errorSpanLength || stepIndex != ErrorSpanStep;
+        ErrorSpanStep = clampedLen > 0 ? stepIndex : -1;
         ErrorSpanStart = clampedStart;
         ErrorSpanLength = clampedLen;
+
+        string? fix = null;
+        if (clampedLen > 0 && StatusIsError && _statusMessage != null)
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(_statusMessage, @"Did you mean '([^']+)'\?");
+            if (m.Success) fix = m.Groups[1].Value;
+        }
+        SuggestedFix = fix;
         if (changed) ErrorSpanChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    // ── Quick fix (#1102) — Apply fix / Ctrl+. ────────────────────────────
+
+    private string? _suggestedFix;
+    /// <summary>Replacement for the error span (the parser's Did-you-mean),
+    /// or null. Applies to the source box or to chain step
+    /// <see cref="ErrorSpanStep"/>.</summary>
+    public string? SuggestedFix
+    {
+        get => _suggestedFix;
+        private set { this.RaiseAndSetIfChanged(ref _suggestedFix, value); this.RaisePropertyChanged(nameof(HasSuggestedFix)); }
+    }
+    public bool HasSuggestedFix => !string.IsNullOrEmpty(_suggestedFix);
+
+    public ReactiveCommand<Unit, Unit> ApplyFixCommand { get; }
+
+    private static string? Splice(string? text, int start, int length, string fix)
+    {
+        if (text == null || start < 0 || start + length > text.Length) return null;
+        return text.Substring(0, start) + fix + text.Substring(start + length);
+    }
+
+    private void OnApplyFix()
+    {
+        if (string.IsNullOrEmpty(_suggestedFix) || _errorSpanLength <= 0) return;
+        if (ErrorSpanStep >= 0)
+        {
+            if (ErrorSpanStep >= _params.UserBulbChain.Count) return;
+            var step = _params.UserBulbChain[ErrorSpanStep];
+            var next = Splice(step.Source, _errorSpanStart, _errorSpanLength, _suggestedFix);
+            if (next == null) return;
+            // The step is a plain model object: replace it so the bound row refreshes.
+            var updated = new UserBulbChainStep { OutputName = step.OutputName, Source = next };
+            int i = ErrorSpanStep;
+            _params.UserBulbChain[i] = updated;
+            if (i < Chain.Count) Chain[i] = updated;
+        }
+        else
+        {
+            var next = Splice(_source, _errorSpanStart, _errorSpanLength, _suggestedFix);
+            if (next == null) return;
+            Source = next;
+        }
+        SuggestedFix = null;
+        // Recompile now rather than after the typing debounce.
+        _debounce.Disposable = null;
+        _params.UserBulbSource = _source;
+        _params.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive;
+        CompileRequested?.Invoke(this, EventArgs.Empty);
     }
 
     public string HintText => HintFor((UserBulbAxisModeKind)_axisModeIndex);

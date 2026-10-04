@@ -1,6 +1,6 @@
 # User Bulb 3D and the equation language: scope (#1091)
 
-Status: **decision recorded** (#1091); **#1100 implemented** (parser surface, `norm`, migration). This follows on from #937, which unified the
+Status: **decision recorded** (#1091); **#1100 implemented** (parser surface, `norm`, migration); **#1102 implemented** (editor quick fix, help, guide). This follows on from #937, which unified the
 **2D** equation language (spec: [Equation-Language.md](Equation-Language.md)). This
 note decides how the **User Bulb 3D** language relates to it. The agreed work is filed as #1100, #1101 and #1102 ([Follow-ups](#follow-ups)).
 

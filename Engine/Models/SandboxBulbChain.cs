@@ -71,7 +71,13 @@ namespace FracturingFog.Models
                 if (outName is "z" or "c" or "n" or "pi" or "e" or "let" or "in")
                     throw new FormatException($"Step {i} output name '{outName}' is reserved.");
 
-                var expr = SandboxBulbExpression.ParseWithScope(steps[i].Source ?? "z", scope, envSize);
+                SandboxBulbExpression expr;
+                try { expr = SandboxBulbExpression.ParseWithScope(steps[i].Source ?? "z", scope, envSize); }
+                catch (SbxParseException ex)
+                {
+                    // #1102 — name the step so the editor can point at it.
+                    throw new SbxParseException($"Step {i + 1} ({outName}): {ex.Message}", ex.Position, ex.Length) { StepIndex = i };
+                }
                 roots[i] = expr.Root;
                 envSize = expr.EnvSize;
 

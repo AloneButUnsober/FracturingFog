@@ -6,6 +6,10 @@
              x:DataType="vm:UserBulbViewModel"
              Foreground="White">
 
+    <UserControl.KeyBindings>
+        <KeyBinding Gesture="Ctrl+OemPeriod" Command="{Binding ApplyFixCommand}" />
+    </UserControl.KeyBindings>
+
     <UserControl.Styles>
         <Style Selector="TextBlock.header">
             <Setter Property="Foreground" Value="#C8C8FF" />
@@ -116,7 +120,16 @@
                 </StackPanel>
                 <TextBlock Classes="error"
                            Text="{Binding StatusMessage}"
+                           TextWrapping="Wrap"
                            IsVisible="{Binding StatusIsError}" />
+                <!-- #1102 — the parser's Did-you-mean as a one-click fix (Ctrl+.). -->
+                <Button Content="{Binding SuggestedFix, StringFormat='Apply fix: {0}  (Ctrl+.)'}"
+                        Command="{Binding ApplyFixCommand}"
+                        IsVisible="{Binding HasSuggestedFix}"
+                        HorizontalAlignment="Left"
+                        ToolTip.Tip="Replace the highlighted name with the suggestion. Shortcut: Ctrl+."
+                        Margin="0,4,0,0"
+                        Padding="10,4" />
                 <TextBlock Classes="ok"
                            Text="{Binding StatusMessage}"
                            IsVisible="{Binding !StatusIsError}" />
