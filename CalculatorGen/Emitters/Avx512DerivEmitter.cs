@@ -226,6 +226,14 @@ public sealed class Avx512DerivEmitter : EmitterBase
 
     private string EmitMask(CondNode c)
     {
+        // #1087 — compound conditions: combine the per-lane masks bitwise
+        // (all-ones = true lane), so && / || / ! stay branch-free.
+        switch (c)
+        {
+            case CondAnd a: return NewBoundRe($"({EmitMask(a.Left)} & {EmitMask(a.Right)})");
+            case CondOr o: return NewBoundRe($"({EmitMask(o.Left)} | {EmitMask(o.Right)})");
+            case CondNot x: return NewBoundRe($"(~{EmitMask(x.Operand)})");
+        }
         if (c is not Cmp cmp)
             throw new InvalidOperationException($"Avx512DerivEmitter: unhandled CondNode {c.GetType().Name}");
         string l = EmitCondTermVec(cmp.Left);

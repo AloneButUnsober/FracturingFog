@@ -296,6 +296,15 @@ public enum CmpOp { Gt, Lt, Ge, Le, Eq, Ne }
 /// </summary>
 public sealed record Cmp(CmpOp Op, CondTerm Left, CondTerm Right) : CondNode;
 
+/// <summary>#1087 — logical AND / OR / NOT of conditions, so the unified
+/// language's `&&` / `||` / `!` (and compound if-conditions) lower to CalcGen.
+/// Scalar emitters render C# `&&` / `||` / `!`; the SIMD emitters combine the
+/// per-lane masks with `&` / `|` / `~`. Like <see cref="Cmp"/>, they never feed
+/// the differentiator (If differentiates its branches, not its condition).</summary>
+public sealed record CondAnd(CondNode Left, CondNode Right) : CondNode;
+public sealed record CondOr(CondNode Left, CondNode Right) : CondNode;
+public sealed record CondNot(CondNode Operand) : CondNode;
+
 /// <summary>Real-scalar leaf used inside <see cref="Cmp"/>. Kept as a
 /// separate hierarchy from <see cref="AstNode"/> so the differentiator
 /// never sees Re/Im/Abs2 nodes (non-holomorphic) — they live only

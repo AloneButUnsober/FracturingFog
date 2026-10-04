@@ -308,6 +308,9 @@ public sealed class ScalarEmitter : EmitterBase
     private string RenderCond(CondNode c) => c switch
     {
         Cmp cmp => $"({RenderCondTerm(cmp.Left)} {CmpOpString(cmp.Op)} {RenderCondTerm(cmp.Right)})",
+        CondAnd a => $"({RenderCond(a.Left)} && {RenderCond(a.Right)})",   // #1087
+        CondOr o => $"({RenderCond(o.Left)} || {RenderCond(o.Right)})",
+        CondNot x => $"(!{RenderCond(x.Operand)})",
         _ => throw new InvalidOperationException($"ScalarEmitter: unhandled CondNode {c.GetType().Name}"),
     };
 

@@ -760,7 +760,7 @@ public sealed class UserEquationViewModel : ViewModelBase
         }
         try
         {
-            EquationParser.Parse(equation);
+            CalculatorGenApi.ParseEquation(equation);   // #1087 — the unified language, lowered
             // CalcGen accepts it. Don't stomp on Roslyn's "✓ Compiled" — only
             // overwrite if the status is currently a CalcGen complaint we
             // raised on a previous tick.
@@ -808,7 +808,7 @@ public sealed class UserEquationViewModel : ViewModelBase
         }
         try
         {
-            EquationParser.Parse(raw);
+            CalculatorGenApi.ParseEquation(raw);   // #1087 — the unified language, lowered
             StatusText = "✓ DSL parses";
             StatusIsError = false;
             ClearErrorSpan();

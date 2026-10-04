@@ -65,7 +65,7 @@ public static class Program
             }
             try
             {
-                var root = EquationParser.Parse(equation);
+                var root = CalculatorGenApi.ParseEquation(equation);   // #1087
                 var dpdz = AstDifferentiator.DpDz(root);
                 var dpdc = AstDifferentiator.DpDc(root);
                 var deriv = AstDifferentiator.BuildDerivativeUpdate(root);

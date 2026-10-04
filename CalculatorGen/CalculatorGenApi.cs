@@ -60,6 +60,21 @@ public readonly record struct PreviewResult(
 
 public static class CalculatorGenApi
 {
+    /// <summary>#1087 — the CalcGen front end. In the app, an equation is parsed
+    /// with the unified equation language (EquationLanguage) and lowered to
+    /// CalcGen's AST (CalcGenLowering), so Compile &amp; Load / Generate accept
+    /// everything the live interpreter renders, with its meaning. The compile-time
+    /// source generator keeps CalcGen's own parser for the built-in equations.
+    /// Throws FormatException with the parse error or the lowering refusal.</summary>
+    public static AstNode ParseEquation(string equation)
+    {
+#if CALCGEN_SOURCEGEN
+        return EquationParser.Parse(equation);
+#else
+        return FracturingFog.Models.CalcGenLowering.ParseAndLower(equation);
+#endif
+    }
+
     /// <summary>
     /// Render a calculator from an equation string. No file I/O — returns
     /// the source as a string so callers can write, compile, hash, or
@@ -83,7 +98,7 @@ public static class CalculatorGenApi
         AstNode root;
         try
         {
-            root = EquationParser.Parse(equation);
+            root = ParseEquation(equation);
         }
         catch (Exception ex)
         {
@@ -474,7 +489,7 @@ public static class CalculatorGenApi
         AstNode root;
         try
         {
-            root = EquationParser.Parse(equation);
+            root = ParseEquation(equation);
         }
         catch (Exception ex)
         {

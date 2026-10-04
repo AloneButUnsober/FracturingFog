@@ -69,7 +69,7 @@ public static class MathImageRenderer
         if (string.IsNullOrWhiteSpace(equation)) return null;
         try
         {
-            AstNode root = EquationParser.Parse(equation);
+            AstNode root = FracturingFog.CalculatorGen.CalculatorGenApi.ParseEquation(equation);   // #1087
             using var ctx = new Ctx(new SKColor(fg));
             Box box = ctx.Build(root, BaseSize);
 
@@ -334,6 +334,10 @@ public static class MathImageRenderer
         private Box Cond(CondNode c, float size) => c switch
         {
             Cmp cmp => Row(CondTerm(cmp.Left, size), Text(CmpSym(cmp.Op), size, false), CondTerm(cmp.Right, size)),
+            // #1087 — compound conditions.
+            CondAnd a => Row(Cond(a.Left, size), Text(" ∧ ", size, false), Cond(a.Right, size)),
+            CondOr o => Row(Text("(", size, false), Cond(o.Left, size), Text(" ∨ ", size, false), Cond(o.Right, size), Text(")", size, false)),
+            CondNot n => Row(Text("¬(", size, false), Cond(n.Operand, size), Text(")", size, false)),
             _ => Text("?", size, false),
         };
 

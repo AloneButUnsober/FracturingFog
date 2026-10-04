@@ -206,6 +206,10 @@ public static class AstPrinter
                 });
                 WriteCondTerm(sb, cmp.Right);
                 break;
+            // #1087 — compound conditions.
+            case CondAnd a: sb.Append('('); WriteCond(sb, a.Left); sb.Append(" && "); WriteCond(sb, a.Right); sb.Append(')'); break;
+            case CondOr o:  sb.Append('('); WriteCond(sb, o.Left); sb.Append(" || "); WriteCond(sb, o.Right); sb.Append(')'); break;
+            case CondNot n: sb.Append("!("); WriteCond(sb, n.Operand); sb.Append(')'); break;
             default:
                 throw new InvalidOperationException($"AstPrinter: unhandled CondNode {c.GetType().Name}");
         }

@@ -161,6 +161,10 @@ public static class AstLatexPrinter
                 });
                 WriteCondTerm(sb, cmp.Right);
                 break;
+            // #1087 — compound conditions.
+            case CondAnd a: WriteCond(sb, a.Left); sb.Append(" \\land "); WriteCond(sb, a.Right); break;
+            case CondOr o:  sb.Append("\\left("); WriteCond(sb, o.Left); sb.Append(" \\lor "); WriteCond(sb, o.Right); sb.Append("\\right)"); break;
+            case CondNot n: sb.Append("\\lnot\\left("); WriteCond(sb, n.Operand); sb.Append("\\right)"); break;
             default:
                 throw new InvalidOperationException($"AstLatexPrinter: unhandled CondNode {c.GetType().Name}");
         }
