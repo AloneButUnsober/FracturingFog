@@ -15,19 +15,30 @@
 // Comments: `// line` and `/* block */` are skipped anywhere whitespace is
 // (a lone `/` is still division).
 //
-// Grammar (right-recursive descent) — superset of SandboxExpression:
+// Grammar (right-recursive descent). #1100 — the same surface rules as the 2D
+// equation language (Docs/Technical/Equation-Language.md), plus member access:
+//   program  := block
+//   block    := "return" expr ";"?
+//             | "if" "(" expr ")" "return" expr ";"? block      ; guard
+//             | "if" "(" expr ")" IDENT "=" expr ";"? block     ; conditional reassign
+//             | TYPE? IDENT "=" expr ";"? block                 ; declare / reassign
+//             | expr ";"?
 //   expr     := let_expr
-//   let_expr := "let" IDENT "=" expr "in" expr | ternary
+//   let_expr := "let" IDENT "=" expr "in" expr
+//             | "if" or_expr "then" expr "else" expr | ternary
 //   ternary  := or_expr ("?" expr ":" expr)?
 //   or_expr  := and_expr ("||" and_expr)*
 //   and_expr := not_expr ("&&" not_expr)*
 //   not_expr := "!" not_expr | cmp_expr
 //   cmp_expr := add_expr ((<|>|<=|>=|==|!=) add_expr)?
 //   add_expr := mul_expr (("+"|"-") mul_expr)*
-//   mul_expr := pow_expr (("*"|"/") pow_expr)*
-//   pow_expr := unary ("^" pow_expr)?         ; right-assoc
-//   unary    := "-" unary | primary
+//   mul_expr := unary (("*"|"/") unary)*
+//   unary    := ("-"|"+") unary | pow_expr      ; #1100: -z^2 = -(z^2)
+//   pow_expr := primary ("^" unary)?           ; right-assoc
 //   primary  := NUMBER | IDENT member* | IDENT "(" args ")" member* | "(" expr ")" member*
+//   TYPE     := var | Vec3 | Quat | double | int | float   (ignored)
+//   (Language version 1, before #1100: pow_expr := unary ("^" pow_expr)?, so
+//   -z^2 was (-z)^2; ParseLegacy keeps that reading for BulbLanguageMigration.)
 //   member   := "." ("x"|"y"|"z")
 //
 // Built-in identifiers:
@@ -43,7 +54,10 @@
 //   scalar ^ scalar                           real Math.Pow
 // Functions (overload by arg kind unless noted):
 //   sin cos tan sinh cosh tanh exp log sqrt abs        scalar OR componentwise
+//                                                       (abs is componentwise on
+//                                                       vec/quat — the fold idiom)
 //   length(vec)                                         vec3 -> real
+//   norm(x)                                             squared length -> real (#1100)
 //   dot(vec, vec)                                       -> real
 //   cross(vec, vec)                                     -> vec3
 //   normalize(vec)                                      -> vec3
@@ -62,6 +76,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 
 namespace FracturingFog.Models
 {
@@ -113,6 +128,8 @@ namespace FracturingFog.Models
         QSin, QCos, QTan, QSinh, QCosh, QTanh,
         QAsin, QAcos, QAtan, QAsinh, QAcosh, QAtanh,
         QCsc, QSec, QCot, QCsch, QSech, QCoth,
+        // #1100 — appended so every existing id keeps its value.
+        Norm,
     }
 
     /// <summary>Tagged value: scalar real, 3-vector, or quaternion. W is
@@ -396,6 +413,7 @@ namespace FracturingFog.Models
             "log"        => SbxFuncId.Log,
             "sqrt"       => SbxFuncId.Sqrt,
             "abs"        => SbxFuncId.Abs,
+            "norm"       => SbxFuncId.Norm,
             _ => throw new InvalidOperationException("Unknown function " + name),
         };
 
@@ -488,6 +506,13 @@ namespace FracturingFog.Models
                 case SbxFuncId.Sqrt: return ApplyScalar(a0, Math.Sqrt, "sqrt");
                 // abs is well-defined componentwise on Quat (per-axis fold).
                 case SbxFuncId.Abs:  return ApplyAll(a0, Math.Abs);
+                // #1100 — squared length: x² / dot(v, v) / |q|² (2D's norm).
+                case SbxFuncId.Norm: return SbxVal3.R(a0.Kind switch
+                {
+                    SbxKind.Quat => a0.W * a0.W + a0.X * a0.X + a0.Y * a0.Y + a0.Z * a0.Z,
+                    SbxKind.Vec  => a0.X * a0.X + a0.Y * a0.Y + a0.Z * a0.Z,
+                    _            => a0.X * a0.X,
+                });
             }
             throw new InvalidOperationException("Unknown function id " + func);
         }
@@ -588,6 +613,86 @@ namespace FracturingFog.Models
             return new SandboxBulbExpression(root, p.EnvSize, Array.Empty<int>());
         }
 
+        /// <summary>#1100 — function names, for Did-you-mean and help.</summary>
+        public static readonly IReadOnlyList<string> FunctionNames = new[]
+        {
+            "sin", "cos", "tan", "sinh", "cosh", "tanh", "exp", "log", "sqrt", "abs", "norm",
+            "length", "normalize", "absx", "absy", "absz", "floor", "sign",
+            "dot", "cross", "triplex", "boxfold", "mod", "pow", "min", "max",
+            "vec", "rot", "spherefold", "smin", "clamp", "qvec",
+            "qmul", "qpow", "qconj", "qexp", "qlog", "qsqrt", "qinv",
+            "qsin", "qcos", "qtan", "qsinh", "qcosh", "qtanh",
+            "qasin", "qacos", "qatan", "qasinh", "qacosh", "qatanh",
+            "qcsc", "qsec", "qcot", "qcsch", "qsech", "qcoth",
+        };
+
+        /// <summary>#1100 — parse with the PRE-#1100 (language version 1) rules:
+        /// unary minus binds tighter than <c>^</c> (<c>-x^y</c> = <c>(-x)^y</c>).
+        /// When <paramref name="edits"/> is given it collects the text edits that
+        /// make the source mean the same under the current rules
+        /// (BulbLanguageMigration applies them). Identifiers are lenient: an
+        /// unknown name (a chain step output, a param) gets a fresh slot, so the
+        /// migration needs no scope.</summary>
+        public static SandboxBulbExpression ParseLegacy(string source, List<(int Pos, int Len, string Text)>? edits = null)
+        {
+            var p = new Parser(source, Array.Empty<string>()) { Legacy = true, Lenient = true, Edits = edits };
+            var root = p.ParseProgram();
+            return new SandboxBulbExpression(root, p.EnvSize, p.ExtraSlots);
+        }
+
+        /// <summary>#1100 — current rules with lenient identifiers (see
+        /// <see cref="ParseLegacy"/>); the migration's self-check parses with it.</summary>
+        public static SandboxBulbExpression ParseLenient(string source)
+        {
+            var p = new Parser(source, Array.Empty<string>()) { Lenient = true };
+            var root = p.ParseProgram();
+            return new SandboxBulbExpression(root, p.EnvSize, p.ExtraSlots);
+        }
+
+        /// <summary>#1100 — the tree as an S-expression (slots as <c>$k</c>), for
+        /// the migration self-check and grammar tests.</summary>
+        public static string ToSExpression(Sbx3Node node)
+        {
+            var sb = new System.Text.StringBuilder();
+            Write(node, sb);
+            return sb.ToString();
+
+            static void Write(Sbx3Node n, System.Text.StringBuilder sb)
+            {
+                switch (n)
+                {
+                    case Sbx3Const k:
+                        sb.Append(k.V.Kind == SbxKind.Real
+                            ? k.V.X.ToString("R", CultureInfo.InvariantCulture)
+                            : $"<{k.V.Kind} {k.V.W.ToString("R", CultureInfo.InvariantCulture)} {k.V.X.ToString("R", CultureInfo.InvariantCulture)} {k.V.Y.ToString("R", CultureInfo.InvariantCulture)} {k.V.Z.ToString("R", CultureInfo.InvariantCulture)}>");
+                        break;
+                    case Sbx3Slot sl: sb.Append('$').Append(sl.Slot); break;
+                    case Sbx3Let l:
+                        sb.Append("(let $").Append(l.Slot).Append(' ');
+                        Write(l.Value, sb); sb.Append(' '); Write(l.Body, sb); sb.Append(')');
+                        break;
+                    case Sbx3Unary u:
+                        sb.Append(u.Op == '-' ? "(neg " : "(not "); Write(u.A, sb); sb.Append(')');
+                        break;
+                    case Sbx3Binary b:
+                        sb.Append('(').Append(b.Op).Append(' '); Write(b.A, sb); sb.Append(' '); Write(b.B, sb); sb.Append(')');
+                        break;
+                    case Sbx3Ternary t:
+                        sb.Append("(? "); Write(t.Cond, sb); sb.Append(' '); Write(t.Then, sb); sb.Append(' '); Write(t.Else, sb); sb.Append(')');
+                        break;
+                    case Sbx3Member m:
+                        sb.Append("(.").Append(m.Axis).Append(' '); Write(m.Target, sb); sb.Append(')');
+                        break;
+                    case Sbx3Call c:
+                        sb.Append('(').Append(c.Name);
+                        foreach (var a in c.Args) { sb.Append(' '); Write(a, sb); }
+                        sb.Append(')');
+                        break;
+                    default: sb.Append('?').Append(n.GetType().Name); break;
+                }
+            }
+        }
+
         public SbxVal3[] NewEnv() => new SbxVal3[EnvSize];
 
         // #283 — optional Expression-tree-compiled root. Null until TryCompile
@@ -649,6 +754,12 @@ namespace FracturingFog.Models
             public int EnvSize;
             public readonly List<int> ExtraSlots = new();
 
+            // #1100 — language-version-1 rules, migration edit recorder, and
+            // lenient identifiers (unknown names get a fresh slot).
+            public bool Legacy;
+            public bool Lenient;
+            public List<(int Pos, int Len, string Text)>? Edits;
+
             public Parser(string src) : this(src, Array.Empty<string>()) { }
 
             /// <summary>Adopt an externally-built scope table (shared across
@@ -675,8 +786,8 @@ namespace FracturingFog.Models
                     foreach (var name in extraScalarNames)
                     {
                         if (string.IsNullOrEmpty(name)) { ExtraSlots.Add(-1); continue; }
-                        if (IsReservedName(name)) throw new SbxParseException($"Reserved name '{name}' cannot be a param", 0);
-                        if (_scope.ContainsKey(name)) throw new SbxParseException($"Duplicate param '{name}'", 0);
+                        if (IsReservedName(name)) throw new SbxParseException($"Reserved name '{name}' cannot be a param.", 0);
+                        if (_scope.ContainsKey(name)) throw new SbxParseException($"Duplicate param '{name}'.", 0);
                         int slot = EnvSize++;
                         _scope[name] = slot;
                         ExtraSlots.Add(slot);
@@ -687,11 +798,153 @@ namespace FracturingFog.Models
             public Sbx3Node ParseProgram()
             {
                 SkipWs();
-                var node = ParseExpr();
+                var node = ParseBlock();
                 SkipWs();
+                // Tolerate a single trailing `;` (possibly before a comment).
+                if (Peek() == ';') { _pos++; SkipWs(); }
                 if (_pos < _src.Length)
-                    throw new SbxParseException($"Unexpected '{_src[_pos]}' at position {_pos}", _pos);
+                    throw Error($"Unexpected '{_src[_pos]}'", _pos);
                 return node;
+            }
+
+            // #1100 — statement-block front end (the 2D language's #27 Phase 5b
+            // form): desugars to let / ternary, so the AST is unchanged.
+            private Sbx3Node ParseBlock()
+            {
+                SkipWs();
+
+                if (MatchKeyword("return"))
+                {
+                    var e = ParseExpr();
+                    SkipWs();
+                    if (Peek() == ';') _pos++;
+                    return e;
+                }
+
+                int ifAt = _pos;
+                if (MatchKeyword("if"))
+                {
+                    SkipWs();
+                    // Expression form `if <cond> then a else b` unless a
+                    // parenthesised condition is followed by `return` or an
+                    // assignment (the statement forms).
+                    if (!IsStatementIfAhead())
+                    {
+                        var ite = ParseIfThenElse(ParseOr());
+                        SkipWs();
+                        if (Peek() == ';') _pos++;
+                        return ite;
+                    }
+                    Expect('(');
+                    var cond = ParseExpr();
+                    Expect(')');
+                    SkipWs();
+
+                    if (MatchKeyword("return"))
+                    {
+                        var thenE = ParseExpr();
+                        SkipWs();
+                        if (Peek() == ';') _pos++;
+                        var elseE = ParseBlock();
+                        return new Sbx3Ternary(cond, thenE, elseE);
+                    }
+
+                    int nameAt = _pos;
+                    string ifName = ReadIdent();
+                    if (string.IsNullOrEmpty(ifName))
+                        throw Error("Expected an assignment or 'return' after 'if (...)'", _pos);
+                    SkipWs();
+                    Expect('=');
+                    var ifRhs = ParseExpr();
+                    SkipWs();
+                    if (Peek() == ';') _pos++;
+                    if (!_scope.TryGetValue(ifName, out int priorSlot))
+                        throw Error($"'if' assigns to unbound '{ifName}'", nameAt, ifName.Length);
+                    return BindBlock(ifName, new Sbx3Ternary(cond, ifRhs, new Sbx3Slot(priorSlot)));
+                }
+                _pos = ifAt;
+
+                var assign = TryParseAssignment();
+                if (assign != null) return assign;
+
+                var expr = ParseExpr();
+                SkipWs();
+                if (Peek() == ';') _pos++;
+                return expr;
+            }
+
+            // Bind <name> to a fresh slot for the rest of the block (shadowing,
+            // restored on exit): `let name = value in <rest>`.
+            private Sbx3Node BindBlock(string name, Sbx3Node valueExpr)
+            {
+                bool hadPrior = _scope.TryGetValue(name, out int prior);
+                int slot = EnvSize++;
+                _scope[name] = slot;
+                try
+                {
+                    var body = ParseBlock();
+                    return new Sbx3Let(slot, valueExpr, body);
+                }
+                finally
+                {
+                    if (hadPrior) _scope[name] = prior;
+                    else _scope.Remove(name);
+                }
+            }
+
+            // `[type] ident = expr ;` — on no match the position is restored.
+            private Sbx3Node? TryParseAssignment()
+            {
+                int save = _pos;
+                SkipWs();
+                string first = ReadIdent();
+                if (first.Length == 0 || IsKeyword(first)) { _pos = save; return null; }
+                string name = first;
+                if (IsTypeKeyword(first))
+                {
+                    SkipWs();
+                    name = ReadIdent();
+                    if (name.Length == 0) { _pos = save; return null; }
+                }
+                SkipWs();
+                if (!(Peek() == '=' && Peek(1) != '=')) { _pos = save; return null; }
+                _pos++;
+                if (name is "pi" or "e") throw Error($"Cannot assign to the constant '{name}'", save);
+                var rhs = ParseExpr();
+                SkipWs();
+                if (Peek() == ';') _pos++;
+                return BindBlock(name, rhs);
+            }
+
+            private static bool IsTypeKeyword(string w) =>
+                w is "var" or "Vec3" or "Quat" or "double" or "int" or "float";
+
+            private static bool IsKeyword(string w) =>
+                w is "let" or "in" or "return" or "if" or "then" or "else";
+
+            // Lookahead (no net consumption): `( expr )` followed by `return` or
+            // `ident =` (not `==`) marks a statement-form `if`.
+            private bool IsStatementIfAhead()
+            {
+                int save = _pos, envSave = EnvSize;
+                var edits = Edits; Edits = null;   // lookahead must not record edits
+                try
+                {
+                    SkipWs();
+                    if (Peek() != '(') return false;
+                    _pos++;
+                    ParseExpr();
+                    SkipWs();
+                    if (Peek() != ')') return false;
+                    _pos++;
+                    if (MatchKeyword("return")) return true;
+                    SkipWs();
+                    if (ReadIdent().Length == 0) return false;
+                    SkipWs();
+                    return Peek() == '=' && Peek(1) != '=';
+                }
+                catch (FormatException) { return false; }
+                finally { _pos = save; EnvSize = envSave; Edits = edits; }
             }
 
             private Sbx3Node ParseExpr() => ParseLet();
@@ -702,14 +955,15 @@ namespace FracturingFog.Models
                 if (MatchKeyword("let"))
                 {
                     SkipWs();
+                    int nameAt = _pos;
                     string name = ReadIdent();
-                    if (string.IsNullOrEmpty(name)) throw new SbxParseException("Expected identifier after 'let'", _pos);
-                    if (IsReservedName(name)) throw new SbxParseException($"Cannot rebind reserved name '{name}'", _pos - name.Length, name.Length);
+                    if (string.IsNullOrEmpty(name)) throw Error("Expected an identifier after 'let'", _pos);
+                    if (IsReservedName(name)) throw Error($"Cannot rebind reserved name '{name}'", nameAt, name.Length);
                     SkipWs();
                     Expect('=');
                     var valueExpr = ParseExpr();
                     SkipWs();
-                    if (!MatchKeyword("in")) throw new SbxParseException("Expected 'in' in let-expression", _pos);
+                    if (!MatchKeyword("in")) throw Error("Expected 'in' in let-expression", _pos);
 
                     bool hadPrior = _scope.TryGetValue(name, out int prior);
                     int slot = EnvSize++;
@@ -725,7 +979,21 @@ namespace FracturingFog.Models
                         else _scope.Remove(name);
                     }
                 }
+                if (MatchKeyword("if"))
+                    return ParseIfThenElse(ParseOr());
                 return ParseTernary();
+            }
+
+            // #1100 — `if <cond> then <a> else <b>` (the `if` consumed): a ternary.
+            private Sbx3Node ParseIfThenElse(Sbx3Node cond)
+            {
+                SkipWs();
+                if (!MatchKeyword("then")) throw Error("Expected 'then' after the 'if' condition", _pos);
+                var thenN = ParseExpr();
+                SkipWs();
+                if (!MatchKeyword("else")) throw Error("Expected 'else' after the 'then' branch", _pos);
+                var elseN = ParseExpr();
+                return new Sbx3Ternary(cond, thenN, elseN);
             }
 
             private Sbx3Node ParseTernary()
@@ -809,37 +1077,73 @@ namespace FracturingFog.Models
 
             private Sbx3Node ParseMul()
             {
-                var left = ParsePow();
+                var left = ParseFactor();
                 while (true)
                 {
                     SkipWs();
                     char p = Peek();
-                    if (p == '*' || p == '/') { _pos++; left = new Sbx3Binary(p.ToString(), left, ParsePow()); }
+                    if (p == '*' || p == '/') { _pos++; left = new Sbx3Binary(p.ToString(), left, ParseFactor()); }
                     else break;
                 }
                 return left;
             }
 
-            private Sbx3Node ParsePow()
-            {
-                var left = ParseUnary();
-                SkipWs();
-                if (Peek() == '^') { _pos++; return new Sbx3Binary("^", left, ParsePow()); }
-                return left;
-            }
+            private Sbx3Node ParseFactor() => Legacy ? ParsePowLegacy() : ParseUnary();
 
+            // Current rules (#1100): unary minus is looser than ^, so -z^2 =
+            // -(z^2); ^ is right-associative and its exponent may carry a sign.
             private Sbx3Node ParseUnary()
             {
                 SkipWs();
                 if (Peek() == '-') { _pos++; return new Sbx3Unary('-', ParseUnary()); }
                 if (Peek() == '+') { _pos++; return ParseUnary(); }
+                return ParsePow();
+            }
+
+            private Sbx3Node ParsePow()
+            {
+                var left = ParsePrimary();
+                SkipWs();
+                if (Peek() == '^') { _pos++; return new Sbx3Binary("^", left, ParseUnary()); }
+                return left;
+            }
+
+            // Language version 1: pow := unary ("^" pow)?, so -x^y = (-x)^y. The
+            // migration wraps such a signed base in parentheses, "(-x)^y", which
+            // reads the same under both rule sets.
+            private Sbx3Node ParsePowLegacy()
+            {
+                SkipWs();
+                int start = _pos;
+                char first = Peek();
+                var left = ParseUnaryLegacy();
+                int end = _pos;
+                SkipWs();
+                if (Peek() == '^')
+                {
+                    if (Edits != null && (first == '-' || first == '+'))
+                    {
+                        Edits.Add((start, 0, "("));
+                        Edits.Add((end, 0, ")"));
+                    }
+                    _pos++;
+                    return new Sbx3Binary("^", left, ParsePowLegacy());
+                }
+                return left;
+            }
+
+            private Sbx3Node ParseUnaryLegacy()
+            {
+                SkipWs();
+                if (Peek() == '-') { _pos++; return new Sbx3Unary('-', ParseUnaryLegacy()); }
+                if (Peek() == '+') { _pos++; return ParseUnaryLegacy(); }
                 return ParsePrimary();
             }
 
             private Sbx3Node ParsePrimary()
             {
                 SkipWs();
-                if (_pos >= _src.Length) throw new SbxParseException("Unexpected end of expression", Math.Max(0, _src.Length - 1));
+                if (_pos >= _src.Length) throw Error("Unexpected end of expression", Math.Max(0, _src.Length - 1));
                 char p = Peek();
                 Sbx3Node node;
                 if (p == '(')
@@ -858,15 +1162,17 @@ namespace FracturingFog.Models
                     int identStart = _pos;
                     string name = ReadIdent();
                     SkipWs();
-                    if (Peek() == '(') { node = ParseCall(name); }
+                    if (Peek() == '(') { node = ParseCall(name, identStart); }
                     else if (name == "pi") { node = new Sbx3Const(SbxVal3.R(Math.PI)); }
                     else if (name == "e")  { node = new Sbx3Const(SbxVal3.R(Math.E)); }
                     else if (_scope.TryGetValue(name, out int slot)) { node = new Sbx3Slot(slot); }
-                    else throw new SbxParseException($"Unknown identifier '{name}'", identStart, name.Length);
+                    else if (Lenient && !IsKeyword(name)) { int s2 = EnvSize++; _scope[name] = s2; node = new Sbx3Slot(s2); }
+                    else throw Error($"Unknown identifier '{name}'", identStart, name.Length,
+                        DidYouMean(name, _scope.Keys.Concat(new[] { "pi", "e" }).Concat(FunctionNames)));
                 }
                 else
                 {
-                    throw new SbxParseException($"Unexpected character '{p}' at {_pos}", _pos);
+                    throw Error($"Unexpected character '{p}'", _pos);
                 }
 
                 // Member access chain: foo.x.y etc — .x .y .z (Vec/Quat) or .w (Quat).
@@ -879,14 +1185,14 @@ namespace FracturingFog.Models
                     SkipWs();
                     char ax = Peek();
                     if (ax != 'x' && ax != 'y' && ax != 'z' && ax != 'w')
-                        throw new SbxParseException($"Expected .x/.y/.z/.w at {_pos}", _pos);
+                        throw Error("Expected .x/.y/.z/.w", _pos);
                     _pos++;
                     node = new Sbx3Member(node, ax);
                 }
                 return node;
             }
 
-            private Sbx3Node ParseCall(string name)
+            private Sbx3Node ParseCall(string name, int nameStart)
             {
                 _pos++; // consume '('
                 var args = new List<Sbx3Node>();
@@ -901,16 +1207,16 @@ namespace FracturingFog.Models
 
                 string lname = name.ToLowerInvariant();
                 int expected = ArityOf(lname);
-                if (expected < 0) throw new SbxParseException($"Unknown function '{name}'", _pos - name.Length - 1, name.Length);
+                if (expected < 0) throw Error($"Unknown function '{name}'", nameStart, name.Length, DidYouMean(lname, FunctionNames));
                 if (expected != int.MaxValue && args.Count != expected)
-                    throw new SbxParseException($"Function '{name}' takes {expected} arg(s), got {args.Count}", _pos - 1, 1);
+                    throw Error($"Function '{name}' takes {expected} arg(s), got {args.Count}", nameStart, name.Length);
                 return new Sbx3Call(lname, args.ToArray());
             }
 
             private static int ArityOf(string name) => name switch
             {
                 "sin" or "cos" or "tan" or "sinh" or "cosh" or "tanh"
-                    or "exp" or "log" or "sqrt" or "abs"
+                    or "exp" or "log" or "sqrt" or "abs" or "norm"
                     or "length" or "normalize"
                     or "absx" or "absy" or "absz"
                     or "floor" or "sign"
@@ -942,7 +1248,7 @@ namespace FracturingFog.Models
                 }
                 string tok = _src.Substring(start, _pos - start);
                 if (!double.TryParse(tok, NumberStyles.Float, CultureInfo.InvariantCulture, out double d))
-                    throw new SbxParseException($"Invalid number '{tok}' at {start}", start, tok.Length);
+                    throw Error($"Invalid number '{tok}'", start, tok.Length);
                 return new Sbx3Const(SbxVal3.R(d));
             }
 
@@ -983,7 +1289,7 @@ namespace FracturingFog.Models
             {
                 SkipWs();
                 if (_pos >= _src.Length || _src[_pos] != c)
-                    throw new SbxParseException($"Expected '{c}' at position {_pos}", _pos);
+                    throw Error($"Expected '{c}'", _pos);
                 _pos++;
             }
 
@@ -1008,7 +1314,51 @@ namespace FracturingFog.Models
             }
 
             private static bool IsReservedName(string name) =>
-                name is "z" or "c" or "n" or "pi" or "e" or "let" or "in";
+                name is "z" or "c" or "n" or "pi" or "e" or "let" or "in"
+                    or "if" or "then" or "else" or "return";
+
+            // #1100 — errors in the 2D language's format: "… at line L, col C.
+            // Did you mean 'x'?", keeping the span for the editor.
+            private SbxParseException Error(string what, int pos, int len = 1, string didYouMean = "")
+                => new($"{what} at {At(pos)}.{didYouMean}", pos, len);
+
+            private string At(int pos)
+            {
+                int line = 1, col = 1;
+                for (int k = 0; k < pos && k < _src.Length; k++)
+                {
+                    if (_src[k] == '\n') { line++; col = 1; } else col++;
+                }
+                return $"line {line}, col {col}";
+            }
+
+            private static string DidYouMean(string name, IEnumerable<string> candidates)
+            {
+                string? best = null;
+                int bestD = int.MaxValue;
+                string lower = name.ToLowerInvariant();
+                foreach (var cand in candidates)
+                {
+                    int d = Levenshtein(lower, cand.ToLowerInvariant());
+                    if (d < bestD) { bestD = d; best = cand; }
+                }
+                return best != null && bestD > 0 && bestD <= 2 ? $" Did you mean '{best}'?" : string.Empty;
+            }
+
+            private static int Levenshtein(string a, string b)
+            {
+                var prev = new int[b.Length + 1];
+                var cur = new int[b.Length + 1];
+                for (int j = 0; j <= b.Length; j++) prev[j] = j;
+                for (int i = 1; i <= a.Length; i++)
+                {
+                    cur[0] = i;
+                    for (int j = 1; j <= b.Length; j++)
+                        cur[j] = Math.Min(Math.Min(cur[j - 1] + 1, prev[j] + 1), prev[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1));
+                    (prev, cur) = (cur, prev);
+                }
+                return prev[b.Length];
+            }
             private static bool IsDigit(char c) => c >= '0' && c <= '9';
             private static bool IsIdentStart(char c) => (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
             private static bool IsIdentCont(char c) => IsIdentStart(c) || IsDigit(c);

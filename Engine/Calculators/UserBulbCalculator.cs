@@ -424,7 +424,9 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
             _compiledAxisMode = UserBulbAxisModeKind.Quat;
             _compiledCompiler = UserBulbCompilerKind.Sandbox;
             _compiledParamNames = paramNames;
-            _analyticPattern = new AnalyticDEPattern(AnalyticDEKind.None, 0);
+            // #1100 — detect q² + c so DE Mode = Analytic reaches the exact
+            // quaternion DE (#115) again.
+            _analyticPattern = UserBulbAnalyticDE.DetectSandboxQuat(expr.Root);
             LastError = string.Empty;
         }
         catch (Exception ex)

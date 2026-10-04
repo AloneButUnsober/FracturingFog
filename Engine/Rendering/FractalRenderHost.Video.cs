@@ -1632,8 +1632,8 @@ namespace FracturingFog.Rendering
                 }
                 else if (!string.IsNullOrWhiteSpace(region.UserBulbSource))
                 {
-                    source = region.UserBulbSource;
-                    p.UserBulbSource = region.UserBulbSource;
+                    source = region.EffectiveUserBulbSource();   // #1100
+                    p.UserBulbSource = source;
                     p.UserBulbName = region.UserBulbName;
                 }
                 if (region.UserBulbCameraDistance > 0)

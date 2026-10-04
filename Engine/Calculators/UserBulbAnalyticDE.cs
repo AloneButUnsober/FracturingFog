@@ -55,6 +55,34 @@ public static class UserBulbAnalyticDE
         return new(AnalyticDEKind.None, 0);
     }
 
+    /// <summary>#1100 — Quat-mode detection for the exact quaternion-square DE
+    /// (#115): <c>z*z + c</c> (Hamilton product in Quat mode), <c>qmul(z, z) + c</c>,
+    /// <c>qpow(z, 2) + c</c> and <c>z^2 + c</c>, either operand order. Before
+    /// the raw-C# path was removed this matched the C# text
+    /// <c>return z*z + c;</c>; the DSL compile never set it, so the exact DE
+    /// was unreachable.</summary>
+    public static AnalyticDEPattern DetectSandboxQuat(Sbx3Node? root)
+    {
+        if (root is not Sbx3Binary { Op: "+" } add) return new(AnalyticDEKind.None, 0);
+        if ((IsQuatSquareOfZ(add.A) && add.B is Sbx3Slot { Slot: SandboxBulbExpression.SlotC })
+            || (IsQuatSquareOfZ(add.B) && add.A is Sbx3Slot { Slot: SandboxBulbExpression.SlotC }))
+            return new(AnalyticDEKind.Square, 2);
+        return new(AnalyticDEKind.None, 0);
+    }
+
+    private static bool IsZ(Sbx3Node n) => n is Sbx3Slot { Slot: SandboxBulbExpression.SlotZ };
+
+    private static bool IsTwo(Sbx3Node n) => n is Sbx3Const { V.IsVecOrQuat: false } k && k.V.X == 2.0;
+
+    private static bool IsQuatSquareOfZ(Sbx3Node n) => n switch
+    {
+        Sbx3Binary { Op: "*" } m => IsZ(m.A) && IsZ(m.B),
+        Sbx3Binary { Op: "^" } p => IsZ(p.A) && IsTwo(p.B),
+        Sbx3Call { Name: "qmul", Args.Length: 2 } c => IsZ(c.Args[0]) && IsZ(c.Args[1]),
+        Sbx3Call { Name: "qpow", Args.Length: 2 } c => IsZ(c.Args[0]) && IsTwo(c.Args[1]),
+        _ => false,
+    };
+
     /// <summary>Match the operator form `z ^ K + c`. `^` on a Vec slot is
     /// triplex by Sandbox semantics, so this aliases MandelbulbN(K).</summary>
     private static bool TryMatchPowOpPlusC(Sbx3Node lhs, Sbx3Node rhs, out double power)

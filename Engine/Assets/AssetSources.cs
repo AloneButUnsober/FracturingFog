@@ -207,7 +207,10 @@ namespace FracturingFog.Assets
             var e = AssetSizing.Parse<UserEquationEntry>(json);
             if (e == null) return AssetImportResult.Fail;
             var store = UserEquationStore.Instance;
-            return AssetSizing.Upsert(store.Equations, e, e.Name, x => x.Name, store.Save, overwrite);
+            // #1088 / #1100 — an export made before the language change carries no
+            // version: upgrade its text before it is saved.
+            return AssetSizing.Upsert(store.Equations, e, e.Name, x => x.Name,
+                () => { store.UpgradeLegacyEntries(persist: false); store.Save(); }, overwrite);
         }
     }
 
@@ -231,7 +234,10 @@ namespace FracturingFog.Assets
             var e = AssetSizing.Parse<SandboxEquationEntry>(json);
             if (e == null) return AssetImportResult.Fail;
             var store = SandboxEquationStore.Instance;
-            return AssetSizing.Upsert(store.Equations, e, e.Name, x => x.Name, store.Save, overwrite);
+            // #1088 / #1100 — an export made before the language change carries no
+            // version: upgrade its text before it is saved.
+            return AssetSizing.Upsert(store.Equations, e, e.Name, x => x.Name,
+                () => { store.UpgradeLegacyEntries(persist: false); store.Save(); }, overwrite);
         }
     }
 
@@ -252,10 +258,14 @@ namespace FracturingFog.Assets
 
         public AssetImportResult ImportJson(string json, bool overwrite)
         {
+            FracturingFog.Models.BulbLanguageMigration.Register();   // #1100
             var e = AssetSizing.Parse<UserBulbEntry>(json);
             if (e == null) return AssetImportResult.Fail;
             var store = UserBulbStore.Instance;
-            return AssetSizing.Upsert(store.Equations, e, e.Name, x => x.Name, store.Save, overwrite);
+            // #1088 / #1100 — an export made before the language change carries no
+            // version: upgrade its text before it is saved.
+            return AssetSizing.Upsert(store.Equations, e, e.Name, x => x.Name,
+                () => { store.UpgradeLegacyEntries(persist: false); store.Save(); }, overwrite);
         }
     }
 

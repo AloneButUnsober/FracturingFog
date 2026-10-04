@@ -302,6 +302,8 @@ region recall, image independence, clone and promotion) and
 Equation samples in the Markdown docs are tagged so a test can parse them:
 a ```` ```equation ```` block is one equation (statements allowed), and an
 ```` ```equations ```` block lists one equation per line. Notes go in `//`
-comments, which are part of the language. `DocsEquationSamplesTests` parses
+comments, which are part of the language. User Bulb 3D samples use
+```` ```bulb ```` / ```` ```bulbs ```` and parse with the bulb language (#1100).
+`DocsEquationSamplesTests` parses
 every tagged sample, and every `--- Title ---` snippet in the in-app help
 (`HelpTextBundle`), with this language.

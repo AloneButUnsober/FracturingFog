@@ -183,6 +183,19 @@ namespace FracturingFog.Models
         /// </summary>
         public string? UserBulbSource { get; set; }
 
+        /// <summary>#1100 — bulb-language version of <see cref="UserBulbSource"/>.
+        /// Null on regions saved before #1100 (version 1: -x^y meant (-x)^y).</summary>
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public int? UserBulbLanguageVersion { get; set; }
+
+        /// <summary>#1100 — <see cref="UserBulbSource"/> under the current rules:
+        /// upgraded from version 1 when the region predates #1100. Use this, not
+        /// the raw property, when recalling the source.</summary>
+        public string? EffectiveUserBulbSource()
+            => string.IsNullOrWhiteSpace(UserBulbSource) || (UserBulbLanguageVersion ?? 1) >= BulbLanguageMigration.CurrentLanguageVersion
+                ? UserBulbSource
+                : BulbLanguageMigration.UpgradeFromVersion1(UserBulbSource).Source;
+
         /// <summary>UserBulb camera distance (radial). 0 = use parameter default on recall.</summary>
         public double UserBulbCameraDistance { get; set; }
         /// <summary>UserBulb camera theta (azimuth, radians).</summary>
@@ -374,7 +387,7 @@ namespace FracturingFog.Models
                 if (entry != null) { p.UserBulbSource = entry.Source; p.UserBulbName = entry.Name; p.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive; }
                 else if (!string.IsNullOrWhiteSpace(UserBulbSource))
                 {
-                    p.UserBulbSource = UserBulbSource;
+                    p.UserBulbSource = EffectiveUserBulbSource();   // #1100
                     p.UserBulbName = UserBulbName;
                 }
                 if (UserBulbCameraDistance > 0)
