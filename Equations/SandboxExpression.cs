@@ -339,7 +339,7 @@ namespace FracturingFog.Models
                 case "acosh": return x.IsReal && x.R >= 1 ? SbxVal.Real(Math.Acosh(x.R)) : SbxVal.Cx(ComplexAcosh(x.AsComplex()));
                 case "atanh": return x.IsReal && x.R > -1 && x.R < 1 ? SbxVal.Real(Math.Atanh(x.R)) : SbxVal.Cx(ComplexAtanh(x.AsComplex()));
                 case "abs":  return SbxVal.Real(x.IsReal ? Math.Abs(x.R) : Math.Sqrt(x.R * x.R + x.I * x.I));
-                // #1085 — squared magnitude |x|² (CalcGen's condition `abs`).
+                // #1085 — squared magnitude |x|² (a condition `abs` meant this before #1088).
                 case "norm": return SbxVal.Real(x.IsReal ? x.R * x.R : x.R * x.R + x.I * x.I);
                 case "conj": return x.IsReal ? x : new SbxVal(x.R, -x.I);
                 case "re":   return SbxVal.Real(x.R);

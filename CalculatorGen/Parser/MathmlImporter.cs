@@ -409,8 +409,8 @@ public static class MathmlImporter
 
     private static bool IsCmp(string t) => t is ">" or "<" or ">=" or "<=" or "==" or "!=" or "=";
 
-    // A condition term is re(x)/im(x)/arg(x), a constant, or |x|² (→ abs, which
-    // in a DSL condition means squared magnitude), or a plain sub-expression.
+    // A condition term is re(x)/im(x)/arg(x), a constant, or |x|² (→ norm,
+    // #1088), or a plain sub-expression.
     private static string ConvertCondTerm(List<XElement> els)
     {
         if (els.Count == 1)

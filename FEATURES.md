@@ -563,16 +563,17 @@ Three authoring engines for one-off custom fractals.
 
 ### 16.1 User Equation (DSL + CalcGen)
 
-- Runs on a **safe expression DSL** — no .NET BCL access, no reflection, no I/O — so equations are safe to save, share, and open from other users' files. (Legacy C#-style input is auto-translated to the DSL; the old raw-Roslyn path was retired for safety.)
-- Live interpreter with auto-render ~500 ms after the last keystroke.
-- **CalcGen** additionally code-generates a full 5-path calculator (scalar + AVX2 + perturbation + BLA/SA + ILGPU GPU, plus DD/QD deep zoom and analytic surface normals / distance estimate) from the same one-line equation via **Compile & Load** — Roslyn compiles the *generated typed C#*, never raw user text.
-- Function set: `sqr pow sqrt exp log sin cos tan sinh cosh tanh asin acos atan asinh acosh atanh floor round ceil trunc fract sign fold re im abs arg conj min max mod clamp atan2`; constants `pi e i`; state `z c n prev`.
+- **One equation language** for User Equation, Sandbox, the z₀ seed / Bail if fields and CalcGen (#937): one parser, positioned errors with *Did you mean* fixes. Spec: [Docs/Technical/Equation-Language.md](Docs/Technical/Equation-Language.md).
+- Runs on a **safe interpreter** — no .NET BCL access, no reflection, no I/O — so equations are safe to save, share, and open from other users' files. (C#-style input is still accepted and translated; **Ctrl+.** converts it. The old raw-Roslyn path was retired for safety.)
+- **One editor** (#1089): the interpreter renders each edit live (~2 s after the last keystroke). The **CalcGen** toggle (saved with the equation) adds **Compile & Load / Compile + Save / Generate**, compiled in the background with a visible state, plus a report line on what CalcGen accelerates for the equation. CalcGen code-generates a full 5-path calculator (scalar + AVX2 + perturbation + BLA/SA + ILGPU GPU, plus DD/QD deep zoom and analytic surface normals / distance estimate) — Roslyn compiles the *generated typed C#*, never raw user text.
+- Function set: `sqr pow sqrt exp log sin cos tan sinh cosh tanh asin acos atan asinh acosh atanh floor round ceil trunc fract sign fold re im abs norm arg conj min max mod clamp atan2`; constants `pi e i`; state `z c n prev`; `let`, `if … then … else`, `?:`, `&& || !`, statement blocks.
+- **Language version 2 (#1088):** `-z^2` means `-(z^2)`, and `abs(x)` is `|x|` everywhere, conditions included (`norm(x)` is `|x|²`). Equations saved earlier were **rewritten automatically** to keep their meaning (`-x^y` → `(-x)^y`, a condition `abs` → `norm`). The original files are kept beside them: `userequations.json.<timestamp>.equation-language-v2.bak` and `sandboxequations.json.<timestamp>.equation-language-v2.bak` in `%APPDATA%\FracturingFog\`, and each persisted compiled calculator's `<Name>.meta.txt.<timestamp>.equation-language-v2.bak` in `%LOCALAPPDATA%\FracturingFog\UserCalculators\`.
 - Saved to `%APPDATA%\FracturingFog\userequations.json`.
 - See [Docs/User/CalcGen-UserGuide.md](Docs/User/CalcGen-UserGuide.md).
 
 ### 16.2 Sandbox
 
-- The same safe DSL as a dedicated fractal type — no .NET BCL access, safe to share.
+- The light editor for the same equation language (no CalcGen toggle, seed or Bail if) — no .NET BCL access, safe to share.
 - `z*z + c`, `let x = expr in body`, ternary `?:`, boolean `&& || !`, multi-statement blocks, plus the full function catalogue above.
 - Saved to `%APPDATA%\FracturingFog\sandboxequations.json`.
 

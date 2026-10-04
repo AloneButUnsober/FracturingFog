@@ -214,8 +214,7 @@ public static class EquationPreprocessor
             }
             diagnostic = new PreprocessDiagnostic(
                 "Complex.Abs(x) returns |x|. In the DSL write `abs(x)` (|x|) — or `norm(x)` " +
-                "for the squared magnitude |x|². Note: inside a CalcGen `if … then` condition, " +
-                "`abs(x)` compared against a value means |x|²; write `norm(x)` there to be explicit.",
+                "for the squared magnitude |x|².",
                 mAbs.Index + lead, spanLen, SuggestionCSharp: csFix, SuggestionDsl: dslFix);
             return s;
         }

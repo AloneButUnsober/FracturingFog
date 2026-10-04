@@ -4,15 +4,15 @@
 // Language/EquationLanguage.cs
 //
 // #1086 (#937 Phase 1) — the single entry point of the unified 2D equation
-// language shared by the User Equation editor, the DSL tab, the Sandbox editor,
-// the z0-seed / bailout-condition fields, and (from #1087) CalcGen's lowering.
+// language shared by the User Equation editor (#1089: one editor), the Sandbox
+// editor, the z0-seed / bailout-condition fields, and CalcGen's lowering (#1087).
 //
 // One parser, one AST: the language IS SandboxExpression's grammar (see the
 // spec, Docs/Technical/Equation-Language.md). This facade names it, exposes the
 // parse with errors in the shared "at line L, col C … Did you mean 'x'?" form,
 // and prints the AST as an S-expression for tests, diagnostics and the coming
-// lowering. It lives in CalculatorGen.Lib (below Engine) so CalcGen can consume
-// the same tree without referencing Engine.
+// lowering. It lives in the dependency-free FracturingFog.Equations project
+// (#1088), below Engine, so CalcGen and the stores share the same tree.
 
 using System;
 using System.Globalization;

@@ -531,20 +531,20 @@ The User Equation modal has **one equation box** and a **CalcGen** toggle (#1089
 
 The header row (Saved combo / Save / Import / Delete / Promote) applies to the equation. The `?` button opens the in-app Help viewer at the editor section; **CalcGen Help** opens the full CalcGen User Guide.
 
-```csharp
-return z*z + c;                          // classic Mandelbrot
-if (n == 0) z = c; return z*z + new Complex(-0.7, 0.27015);   // Julia
-var w = new Complex(Math.Abs(z.Real), Math.Abs(z.Imaginary));
-return w*w + c;                          // Burning Ship
+```equations
+z*z + c                                  // classic Mandelbrot
+z*z + (-0.7 + 0.27015*i)                 // Julia: set z₀ seed = c
+fold(z)^2 + c                            // Burning Ship
+z*z + c + 0.56667*prev                   // Phoenix
 ```
 
 CalcGen can also **code-generate** a full 5-path calculator (scalar + AVX2 + perturbation + BLA + ILGPU GPU) from a one-line equation. See [CalcGen-UserGuide.md](CalcGen-UserGuide.md).
 
 ### Sandbox
 
-A restricted DSL (no .NET BCL access — safe to share). `z*z + c`, `let x = expr in body`, `if cond ? a : b`, `sin / cos / sqrt / exp / log / conj`, `abs / re / im / arg`.
+The light editor for the same equation language (no .NET access — safe to share), without the CalcGen toggle or the seed / Bail if fields. `z*z + c`, `let x = expr in body`, `cond ? a : b`, `if … then … else`, `sin / cos / sqrt / exp / log / conj`, `abs / norm / re / im / arg`.
 
-```
+```equations
 z*z + c
 let w = abs(re(z)) + abs(im(z)) * i in w*w + c
 n < 8 ? z*z + c : z^3 + c

@@ -1,7 +1,7 @@
 # Equation Language — Specification
 
-Status: **Phases 1–3 of #937** (#1086, #1087, #1088 parts A and B). This is the one 2D equation
-language behind the User Equation editor (both tabs), the Sandbox editor, the
+Status: **#937 complete** (#1086 – #1090). This is the one 2D equation
+language behind the User Equation editor, the Sandbox editor, the
 z0-seed and bailout-condition fields, and (since #1087) CalcGen's Compile &
 Load / Generate, which lower this language's AST into CalcGen's.
 
@@ -284,9 +284,18 @@ active-tab index.
 - **C#-style sources** stay accepted. They are translated when compiled, and
   the startup translation (`UserEquationDslMigration`) still rewrites the
   translatable ones on non-CalcGen entries.
-- **The editor (until #1089)** keeps its two tabs as local buffers. The active
-  tab's text is the source; the DSL tab means the flag is on.
+- **The editor** (#1089) has one source box and a CalcGen toggle bound to the
+  flag (`UserEquationViewModel.UseCalcGen`).
 
-Tests: `UserEquationSingleSource1088Tests`, covering legacy `Kind` mapping and
-rewrite, region recall, image independence, clone and promotion, and the
-editor's mapping of tabs onto the single source.
+Tests: `UserEquationSingleSource1088Tests` (legacy `Kind` mapping and rewrite,
+region recall, image independence, clone and promotion) and
+`UserEquationEditor1089Tests` (the editor).
+
+## Samples in the docs (#1090)
+
+Equation samples in the Markdown docs are tagged so a test can parse them:
+a ```` ```equation ```` block is one equation (statements allowed), and an
+```` ```equations ```` block lists one equation per line. Notes go in `//`
+comments, which are part of the language. `DocsEquationSamplesTests` parses
+every tagged sample, and every `--- Title ---` snippet in the in-app help
+(`HelpTextBundle`), with this language.

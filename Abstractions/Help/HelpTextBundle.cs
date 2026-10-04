@@ -41,10 +41,10 @@ view-state, color pipeline, and capture suite.
               distance estimation, orbit traps, domain coloring, …)
               plus an algorithmic ColorGen DSL and a live-preview
               theme editor. JSON import / export for sharing.
-• Equations:  Roslyn-compiled User Equation (per-pixel C#) + sandboxed
-              DSL for untrusted sources + CalcGen for code-generated
-              calculators with full scalar / AVX2 / GPU / perturbation
-              parity.
+• Equations:  one safe equation language (User Equation + Sandbox),
+              rendered live by an interpreter; User Equation's
+              CalcGen toggle compiles it to scalar / AVX2 / GPU /
+              perturbation calculators for speed and deep zoom.
 • 3D:         Mandelbulb plus User Bulb 3D — Vec3 / Quat raymarched
               escape-time engine with analytic + numerical DE,
               animated time parameter, OBJ mesh export.
@@ -1084,7 +1084,7 @@ produce.  Each subtab covers one family:
   • L-System      String-rewriting + turtle graphics
   • Attractor     Strange attractors (Clifford, De Jong, Lorenz)
   • Mandelbulb    3D triplex-power distance-estimation render
-  • User Equation Roslyn-compiled per-pixel C# step function
+  • User Equation Your own escape-time map in the equation language
 
 === Categories ===
 
@@ -1154,11 +1154,11 @@ Notable features:
   • Antenna spike along the negative real axis past −1.94
   • Mini-ship at c ≈ (−1.7568, −0.0381)
 
-=== C# Equation ===
+=== As a User Equation ===
 
-  // Burning Ship: |Re z| + i|Im z|, then square, then + c
-  var w = new Complex(Math.Abs(z.Real), Math.Abs(z.Imaginary));
-  return w*w + c;
+  --- Burning Ship ---
+  // fold(z) = |Re z| + i|Im z|; square it, then + c
+  fold(z)^2 + c
 ";
 
         public const string MathTricornText =
@@ -1192,11 +1192,11 @@ fc(z) = conj(z)² + c, and is the parameter plane of the
 ""anti-quadratic"" maps.  Period-2 bulbs are PARABOLIC (semi-stable),
 giving sharp cusp boundaries instead of smooth bulbs.
 
-=== C# Equation ===
+=== As a User Equation ===
 
-  // Tricorn: conjugate before squaring
-  var zb = Complex.Conjugate(z);
-  return zb*zb + c;
+  --- Tricorn ---
+  // conjugate before squaring
+  conj(z)^2 + c
 ";
 
         public const string MathMultibrotText =
@@ -1236,11 +1236,11 @@ Real (non-integer) exponents are mathematically defined via
 z^d = exp(d·log z), but produce branch-cut artifacts.  Fracturing
 Fog uses integer d to avoid this.
 
-=== C# Equation ===
+=== As a User Equation ===
 
-  // Multibrot of integer power d.  d = 3 below.
-  int d = 3;
-  return Complex.Pow(z, d) + c;
+  --- Multibrot (d = 3) ---
+  // any power works, e.g. z^2.5 + c
+  z^3 + c
 ";
 
         public const string MathPhoenixText =
@@ -1278,14 +1278,11 @@ State carried per pixel: (zr, zi, prevZr, prevZi).
 
   PhoenixP : Complex   Coupling constant p.  Default (0.56667, 0).
 
-=== C# Equation ===
+=== As a User Equation ===
 
-  // User Equation can't carry prev-z between steps via the signature
-  // (z, c, n) → z.  A simplified single-step approximation drops the
-  // memory term; for true Phoenix select FractalType = Phoenix instead.
-  // Approximation:
-  var p = new Complex(0.56667, 0.0);
-  return z*z + c + p * z;     // closes the loop in one step
+  --- Phoenix (p = 0.56667) ---
+  // prev is the previous iterate z_(n−1): the same recurrence
+  z*z + c + 0.56667*prev
 ";
 
         public const string MathNovaText =
@@ -1318,14 +1315,12 @@ as Newton.  Selecting Nova in the UI uses the Newton kernel with
 the user's exponent and relaxation; full Nova c-offset support is
 on the roadmap.
 
-=== C# Equation ===
+=== As a User Equation ===
 
-  // Nova for f(z) = z^3 − 1, with c parameter offset.
-  if (n == 0) z = Complex.One;
-  var z2 = z*z;
-  var f  = z*z2 - Complex.One;
-  var fp = 3 * z2;
-  return z - f / fp + c;
+  --- Nova (z³ − 1, c offset) ---
+  // start from z = 1 (or set z₀ seed = 1)
+  if (n == 0) z = 1;
+  z - (z^3 - 1) / (3*z^2) + c
 ";
 
         public const string MathBuddhabrotText =
@@ -1371,7 +1366,7 @@ Two runs at the same view produce slightly different images
 because samples are random.  Higher sample counts converge toward
 the underlying density distribution.
 
-=== C# Equation ===
+=== As a User Equation ===
 
 Buddhabrot is a HISTOGRAM render, not an escape-time recurrence —
 it can't be expressed in the User Equation kernel.  Choose
@@ -1428,7 +1423,7 @@ Koch curve         (N=4, r=1/3):  log 4 / log 3 ≈ 1.262
                            weighted by Weight; the first 50
                            settle iterations are discarded.
 
-=== C# Equation ===
+=== As a User Equation ===
 
 IFS uses the chaos game, not per-pixel iteration — it cannot be
 expressed through the User Equation kernel.
@@ -1487,7 +1482,7 @@ the plane in the limit.
                                Clamped to [0, 12]; strings grow
                                exponentially with depth.
 
-=== C# Equation ===
+=== As a User Equation ===
 
 L-Systems use string-rewriting + turtle graphics — they cannot be
 expressed through the User Equation per-pixel kernel.
@@ -1543,248 +1538,188 @@ accumulating a per-pixel hit density.
   AttractorIterations  : int     Points to plot.  Default 2 000 000.
   AttractorA/B/C/D     : double  Per-attractor parameters.
 
-=== C# Equation ===
+=== As a User Equation ===
 
 Strange attractors are point-density renders, not per-pixel
 escape time — they cannot be expressed through User Equation.
 ";
 
+        // #1090 — the equation language (#937) shared by the User Equation and
+        // Sandbox help panels. Spec: Docs/Technical/Equation-Language.md.
+        public const string EquationGrammarText =
+@"=== The equation language ===
+
+One language for the User Equation editor, the Sandbox editor,
+the z₀ seed and the Bail if condition, and CalcGen (#937).  You
+write the NEXT iterate, z_(n+1), as an expression.
+
+  Variables   z      the current iterate (starts at z₀; 0 by default)
+              c      the pixel (constant per pixel)
+              n      iteration index, a real (alias: iter)
+              prev   the previous iterate z_(n−1); 0 before step 1
+  Constants   pi  e  i
+
+=== Operators (loosest first) ===
+
+  let x = a in b          local name (also: x = a; on its own line)
+  if cond then a else b   conditional (also: cond ? a : b)
+  ||   &&   !             logic; 0 is false, anything else true
+  <  >  <=  >=  ==  !=    compare REAL values; project a complex
+                          value first with re/im/abs/norm/arg
+  +  −                    add, subtract
+  *  /                    multiply, divide
+  unary −                 −z^2 means −(z^2); write (−z)^2 for the other
+  ^                       any exponent, right-associative: z^2.5, z^−1
+
+  Comments:  // to end of line,  /* block */.  One trailing ; is fine.
+
+=== Functions ===
+
+  sin cos tan  sinh cosh tanh  asin acos atan  asinh acosh atanh
+  exp  log  sqrt  sqr  pow(a, b)  conj
+  re(x)  im(x)  arg(x)  atan2(y, x)           real-valued
+  abs(x)    the magnitude |x|  (everywhere, conditions included)
+  norm(x)   the squared magnitude |x|² — the cheap bailout-style test:
+            if norm(z) > 4 … is |z| > 2
+  fold(x)   (|Re x|, |Im x|)  — the Burning Ship fold
+  floor ceil round trunc fract sign    per component
+  min(a, b)  max(a, b)  mod(x, p)  clamp(x, lo, hi)
+
+  Before #1088, -x^y meant (-x)^y and a condition abs(x) meant |x|².
+  Saved equations were rewritten automatically so they look the same;
+  the old files were kept beside them as *.equation-language-v2.bak.
+
+=== Statements ===
+
+Longer equations can use statements; the last line is the value:
+
+    var w = fold(z);
+    return w*w + c;
+
+  if (n == 0) z = c;      seeds z on the first step
+  if (cond) return a;     early value
+
+Errors name the spot:  Unknown function 'sni' at line 1, col 7.
+Did you mean 'sin'?  — the editor highlights it and Ctrl+. fixes it.
+";
+
         public const string MathUserEquationText =
 @"=== User Equations — Overview ===
 
-The User Equation engine compiles a C# expression / statement
-block at runtime (via Roslyn scripting) into a per-pixel step
-function
+Type your own escape-time map as an equation; Fracturing Fog
+iterates it per pixel:
 
-        Complex Step(Complex z, Complex c, int n)
-
-The renderer then iterates the standard escape-time loop:
-
-        z = 0
+        z = z₀                           (z₀ seed; blank = 0)
         for n in 0 … MaxIterations:
-            if |z|² ≥ 1024: break
-            z = Step(z, c, n)
+            if |z| ≥ Escape r or ""Bail if"" is true: stop
+            z = <your equation>
 
-The smoothing function, bailout, and color pipeline mirror the
-Mandelbrot path.
+The safe interpreter renders every edit live (about two seconds
+after you stop typing).  It has no access to files, the network
+or .NET — equations are safe to share and import.
 
-Open via:  Floating Menu → ""Equation…"" button
-           Fractal Type → ""UserEquation""
+Open via:  Type → User Equation, then Params.
 
-The dialog is modeless and auto-compiles 500 ms after the last
-keystroke.  Errors render in red below the editor.  Saved
-equations live in:
+=== CalcGen toggle ===
 
-    %APPDATA%\FracturingFog\userequations.json
+Turn on CalcGen to compile the equation to a native calculator:
 
-=== Available Variables ===
+  Compile & Load        compile in the background and swap it onto
+                        the live render (SIMD, GPU, deep zoom)
+  Compile + Save        the same, and reload it on the next launch
+  Generate via CalcGen  write Calculators\Generated\{Name}Calculator.cs
 
-  z   : System.Numerics.Complex
-        The CURRENT iterate.  Starts at 0 on iteration 0.
-        Access components:  z.Real, z.Imaginary, z.Magnitude,
-                            z.Phase, Complex.Conjugate(z), …
+The state line reads Not compiled → Compiling… → Compiled (or
+Compile failed).  The report line says what CalcGen accelerates for
+THIS equation: perturbation (deep zoom), series approximation and
+DE / normals — or why it can't compile it.  The z₀ seed and Bail if
+are interpreter-only.  An edit returns the view to the interpreter.
 
-  c   : System.Numerics.Complex
-        The PIXEL coordinate in complex plane.  Constant per
-        pixel.  c.Real = world X, c.Imaginary = world Y.
+C#-style text (return Complex.Pow(z, 2) + c;) is still accepted and
+translated; Ctrl+. converts it to the equation language.
 
-  n   : int
-        Iteration index (0-based).  Useful for time-varying
-        recurrences, e.g. mixing two maps.
+" + EquationGrammarText + @"
+=== Orbit controls ===
 
-=== Available APIs ===
-
-  System.Numerics.Complex (full surface):
-      operators       +  −  *  /
-      static methods  Complex.Abs, Complex.Pow, Complex.Sin,
-                      Complex.Cos, Complex.Tan, Complex.Exp,
-                      Complex.Log, Complex.Sqrt, Complex.Conjugate,
-                      Complex.Reciprocal, Complex.FromPolarCoordinates,
-                      Complex.One, Complex.ImaginaryOne, Complex.Zero
-      properties      .Real, .Imaginary, .Magnitude, .Phase
-
-  System.Math (full surface, scalar):
-      Abs, Sin, Cos, Tan, Atan2, Sinh, Cosh, Tanh, Exp, Log, Log2,
-      Log10, Pow, Sqrt, Cbrt, Floor, Ceiling, Round, Min, Max,
-      Math.PI, Math.E, Math.Tau
-
-  Imports already in scope:
-      using System;
-      using System.Numerics;
-      using static System.Math;     // (Sin/Cos etc. unqualified)
-
-  References:
-      System.Runtime, System.Numerics — no extra usings needed.
-
-=== Syntax Rules ===
-
-  • The body must RETURN a Complex.  Either:
-        return z*z + c;          // single expression, no semicolon
-                                  // before ""return"" needed
-    or
-        var w = z*z + c;
-        return w + Complex.ImaginaryOne;
-  • If you omit ""return"", the dialog wraps the body with one for
-    a single expression — i.e. ""z*z + c"" is shorthand for
-    ""return z*z + c;"".
-  • Standard C# 12 syntax: ternary, switch expressions, pattern
-    matching, local functions all work.
-  • new Complex(re, im) and Complex.ImaginaryOne both available.
-
-=== Seeding z₀ ===
-
-The engine ALWAYS starts the orbit at z = 0.  Maps that have 0 as
-a fixed point (z·sin(z), z·cos(z) − z, z² + 0·z, …) or that need a
-pixel-dependent starting point (Julia, Heron, lambda) will produce
-an all-in-set image with z₀ = 0.
-
-The fix is to overwrite z on iteration 0 using the int parameter n:
-
-        if (n == 0) z = c;                    // pixel as z₀ (Julia)
-        if (n == 0) z = new Complex(0.5, 0);  // critical-point start
-
-Because z is passed by VALUE the reassignment is local to the step
-and does not interfere with the calculator's accumulator — the
-returned value becomes the next iterate as normal.
-
-=== Bailout and Smoothing ===
-
-The runtime uses |z|² ≥ 1024 as the bailout (radius 32) — chosen
-to give smooth coloring room across most maps.  Smoothed escape:
-
-        smooth = n + 1 − log₂(log₂(max(|z|, 1+ε)))
-
-If |z| stays bounded for MaxIterations, the pixel is treated as
-in-set (theme's InSetColor).
-
-=== Performance Notes ===
-
-  • Scalar only — no SIMD.  Per-pixel delegate call overhead.
-  • Interactive at 800 × 600 with ~256 iterations on a modern CPU.
-  • Use Math.Abs over Complex.Abs when only the magnitude is
-    needed (Complex.Abs allocates).
-  • Avoid allocating new Complex instances inside the hot path —
-    let the compiler fold them into temporaries.
+  Escape r   bailout radius; 0 = auto (interpreter 32, CalcGen 512)
+  z₀ seed    start value, e.g. c for a Julia-style seed
+  Bail if    stop early when true, e.g. abs(z - prev) < 0.0001
+             (converge: Newton / Magnet / Nova)
 
 === Examples — Drop-in Snippets ===
 
-Each block below is a complete equation body — paste it into the
-editor and the renderer compiles + previews.
+Each block below is a complete equation — paste it into the editor.
 
   --- Mandelbrot ---
-  return z*z + c;
+  z*z + c
 
-  --- Julia (constant baked) ---
-  // Julia uses pixel as z₀.  Engine seeds z = 0, so on n = 0 we
-  // load z from c, then iterate z² + jc normally.
-  if (n == 0) z = c;
-  return z*z + new Complex(-0.7, 0.27015);
+  --- Julia (constant baked; set z₀ seed = c) ---
+  z*z + (-0.7 + 0.27015*i)
 
   --- Burning Ship ---
-  var w = new Complex(Math.Abs(z.Real), Math.Abs(z.Imaginary));
-  return w*w + c;
+  fold(z)^2 + c
 
   --- Tricorn / Mandelbar ---
-  var zb = Complex.Conjugate(z);
-  return zb*zb + c;
+  conj(z)^2 + c
 
-  --- Multibrot (cubic) ---
-  return Complex.Pow(z, 3) + c;
+  --- Multibrot (any power) ---
+  z^5 + c
 
-  --- Multibrot (degree d, runtime constant) ---
-  int d = 5;
-  return Complex.Pow(z, d) + c;
+  --- Phoenix (uses the previous iterate) ---
+  z*z + c + 0.56667*prev
 
-  --- Phoenix-flavoured single-step ---
-  var p = new Complex(0.56667, 0.0);
-  return z*z + c + p*z;
+  --- Newton (z³ − 1; set z₀ seed = c) ---
+  z - (z^3 - 1) / (3*z^2)
 
-  --- Newton (z^3 − 1) ---
-  if (n == 0) z = c;
-  var z2 = z*z;
-  var f  = z*z2 - Complex.One;
-  var fp = 3 * z2;
-  return z - f / fp;
+  --- Nova (z³ − 1 with c offset; set z₀ seed = 1) ---
+  z - (z^3 - 1) / (3*z^2) + c
 
-  --- Nova (z^3 − 1, with c offset) ---
-  if (n == 0) z = Complex.One;
-  var z2 = z*z;
-  var f  = z*z2 - Complex.One;
-  var fp = 3 * z2;
-  return z - f / fp + c;
-
-  --- z² + c with sine perturbation ---
-  return z*z + c + 0.1 * Complex.Sin(z);
-
-  --- ""Magnet-1"" map (Lord Kelvin's magnet fractal) ---
-  var num = z*z + c - Complex.One;
-  var den = 2*z + c - 2;
-  return (num / den) * (num / den);
+  --- Magnet-1 (Lord Kelvin) ---
+  ((z*z + c - 1) / (2*z + c - 2))^2
 
   --- Exponential map ---
-  return Complex.Exp(z) + c;
+  exp(z) + c
 
-  --- Sine map (Devaney) ---
-  // Sin(0) = 0, so z must start non-zero — seed z = c on n = 0.
-  if (n == 0) z = c;
-  return c * Complex.Sin(z);
+  --- Sine map (Devaney; set z₀ seed = c) ---
+  c * sin(z)
 
-  --- Cosine map ---
-  // Cos(0) = 1 → fine to start at z = 0, but seeding from c gives
-  // a more interesting first iterate.
-  if (n == 0) z = c;
-  return c * Complex.Cos(z);
-
-  --- Lambda map (λ·z·(1 − z)) ---
-  // Critical point z = 1/2 is the canonical start for the logistic
-  // family.  Without seeding, z = 0 is a fixed point.
-  if (n == 0) z = new Complex(0.5, 0.0);
-  return c * z * (Complex.One - z);
-
-  --- Bird-of-prey (perturbed Burning Ship) ---
-  var w = new Complex(Math.Abs(z.Real), Math.Abs(z.Imaginary));
-  return w*w*w + c;
+  --- Lambda map (set z₀ seed = 0.5) ---
+  c * z * (1 - z)
 
   --- Celtic Mandelbrot ---
-  var zr2 = z.Real * z.Real - z.Imaginary * z.Imaginary;
-  var zi2 = 2 * z.Real * z.Imaginary;
-  return new Complex(Math.Abs(zr2) + c.Real, zi2 + c.Imaginary);
+  abs(re(z*z)) + im(z*z)*i + c
 
-  --- Buffalo fractal ---
-  var w = new Complex(Math.Abs(z.Real), Math.Abs(z.Imaginary));
-  return w*w - w + c;
+  --- Buffalo ---
+  let w = fold(z) in w*w - w + c
 
-  --- z² + c with time-varying twist ---
-  double k = 0.005 * n;
-  var rot = new Complex(Math.Cos(k), Math.Sin(k));
-  return rot * (z*z) + c;
+  --- Branch on the iterate ---
+  if norm(z) < 1 then z*z + c else z*z - c
 
-  --- Heron-step iteration ---
-  // c / z at z = 0 is NaN — seed z = c (skip the singularity).
-  if (n == 0) z = c;
-  return 0.5 * (z + c / z);
+  --- Time-varying twist ---
+  var k = 0.005 * n;
+  (cos(k) + sin(k)*i) * z*z + c
+
+  --- Heron step (set z₀ seed = c) ---
+  0.5 * (z + c / z)
 
 === Save / Load ===
 
-  Save…    Prompts for a name; persists Source under that key.
-           Re-saving an existing name replaces.
-  Delete   Removes the currently-selected saved equation.
-  Combo    Picking a saved entry loads it into the editor and
-           recompiles immediately.
+  Save…    Name + persist.  The CalcGen toggle, Escape r, z₀ seed,
+           Bail if and Colour interior are saved with it.
+  Import…  Add equations from a JSON file (one or many).
+  Delete   Remove the selected saved equation.
+  Combo    Pick a saved equation to load it (and its settings).
 
-Saved entries round-trip through the JSON file by hand-edit; the
-dialog reloads from disk on next launch.
+Saved equations live in %APPDATA%\FracturingFog\userequations.json.
+Regions refer to them by name, so editing one updates every region.
 
 === Limitations ===
 
-  • No high-precision (DD/QD) path — User Equation is double only.
-    Zoom usefully cap ≈ 1e13.
-  • No perturbation theory acceleration.
-  • The signature does NOT expose the previous iterate, so true
-    multi-step memory recurrences (Phoenix, recurrence relations
-    with z_(n−1), z_(n−2)) can only be approximated.
-  • Per-pixel delegate call overhead — slower than the typed
-    kernels by ~3-5×.
+  • The interpreter is double precision — useful to about 1e13.
+    Turn on CalcGen and Compile & Load for deep zoom.
+  • CalcGen ignores the z₀ seed and Bail if (#860).
+  • An equation whose value is real on some pixels and complex on
+    others can't be compiled; wrap it in re(), im(), abs() or norm().
 ";
 
         public const string MathUserBulbText =
@@ -2782,21 +2717,16 @@ Config:
         public const string MathSandboxText =
 @"=== Sandbox — Overview ===
 
-The Sandbox fractal type runs a USER-SUPPLIED EXPRESSION through
-a restricted, in-process parser.  Unlike the User Equation
-engine — which compiles arbitrary C# via Roslyn and therefore has
-access to the full .NET BCL (File.IO, reflection, Process.Start) —
-the Sandbox evaluator is built from a hand-written grammar with
-NO access to the runtime or filesystem.
-
-That makes Sandbox safe to share, import from JSON, paste from a
-web page, or run on equations from untrusted sources.  The trade
-is expressiveness: there are no statements, no loops, no method
-calls outside the built-in function list below.
+The Sandbox is the light editor for the SAME equation language as
+the User Equation editor (#937): one expression, rendered live by
+the safe interpreter.  It has no CalcGen toggle and no z₀ seed or
+Bail if fields — use User Equation for those.  The interpreter has
+no access to files, the network or .NET, so Sandbox equations are
+safe to share, import from JSON, or paste from a web page.
 
 Open via:  Fractal Type → ""Sandbox""  →  Params button
-The dialog auto-compiles 500 ms after each keystroke.  Errors
-appear in red below the editor.
+The editor re-renders shortly after each keystroke.  Errors show
+in yellow below the editor.
 
 Saved equations are persisted to:
 
@@ -2814,56 +2744,12 @@ The runtime drives the standard escape-time loop:
         z = 0
         for n in 0 … MaxIterations:
             if |z|² ≥ 1024: break
-            z = Step(z, c, n)        // <-- your expression
+            z = <your expression>
 
-The expression you write IS the body of Step.  It must evaluate
-to a Complex value.  Bailout (radius 32), smoothing, and color
-mapping mirror the Mandelbrot path.
+Bailout (radius 32), smoothing, and color mapping mirror the
+Mandelbrot path.
 
-=== Available Variables ===
-
-  z   Complex — the CURRENT iterate.  Starts at 0 on iteration 0.
-  c   Complex — the PIXEL coordinate (constant per pixel).
-  n   Real    — iteration index (0-based).
-
-=== Constants ===
-
-  pi   3.14159265358979…
-  e    2.71828182845904…
-  i    Imaginary unit (Complex 0 + 1i)
-
-=== Operators ===
-
-  Arithmetic   +  −  *  /          Both real and complex operands
-  Power        ^                   z^2, z^n; right-associative
-  Unary minus  −                   −z, −(re(z) + im(z))
-  Comparison   <  >  <=  >=  ==  != Real operands only.  Use abs(),
-                                   re(), im(), arg() to project a
-                                   Complex value to a scalar first.
-  Logical      &&  ||  !           Short-circuit.  0 = false, any
-                                   non-zero magnitude = true.
-  Ternary      cond ? a : b        Branches may differ in type;
-                                   real promotes to complex if
-                                   the other branch is complex.
-  Let          let x = expr in body  Introduces a local binding;
-                                   bindings nest and may be chained.
-  Grouping     ( … )
-
-=== Built-in Functions ===
-
-  Complex-returning (operate on real or complex):
-      sin(z)   cos(z)   tan(z)
-      sinh(z)  cosh(z)  tanh(z)
-      exp(z)   log(z)   sqrt(z)
-      conj(z)                // complex conjugate
-      pow(a, b)              // a raised to b — same as a ^ b
-
-  Real-returning (project Complex → scalar):
-      abs(z)                 // magnitude |z|
-      re(z)                  // real part
-      im(z)                  // imaginary part
-      arg(z)                 // argument (atan2(im, re))
-
+" + EquationGrammarText + @"
 === Type Rules ===
 
 The parser tracks two value kinds — Real and Complex — and
@@ -2879,7 +2765,8 @@ them.  A few consequences:
 
 === Reserved Names ===
 
-You may not rebind:  z, c, n, pi, e, i, let, in.
+You may not rebind:  z, c, n, iter, prev, pi, e, i, let, in, if,
+then, else.
 
 User let-bindings get their own slot — shadow-rebinding an outer
 let with the same name in an inner let is allowed and follows
@@ -2924,8 +2811,8 @@ semicolons; the expression IS the body.
   // Build w with absolute-valued real + imaginary parts.
   let w = abs(re(z)) + abs(im(z)) * i in w*w + c
 
-  --- Phoenix-flavoured single-step ---
-  z*z + c + 0.56667 * z
+  --- Phoenix (uses the previous iterate) ---
+  z*z + c + 0.56667 * prev
 
   --- z² + c with sine perturbation ---
   z*z + c + 0.1 * sin(z)
@@ -3006,11 +2893,14 @@ semicolons; the expression IS the body.
   // Diverge faster for pixels far from origin.
   abs(c) > 0.5 ? z*z + 2*c : z*z + c
 
+  --- Squared-magnitude test (no square root) ---
+  if norm(z) < 1 then z*z + c else z*z - c
+
 === Performance Notes ===
 
-  • Pure-managed interpreter — no SIMD, no JIT-emitted IL.
-    Roughly the same order of magnitude as User Equation but
-    without the per-pixel delegate dispatch.
+  • Pure-managed interpreter — no SIMD, no JIT-emitted IL.  The
+    same interpreter renders User Equation; for speed and deep zoom
+    use User Equation's CalcGen toggle.
   • Each render thread allocates one environment array once
     (slots for z, c, n + every let-binding) and reuses it for
     every pixel.  No per-pixel allocation in the hot loop.
@@ -3038,22 +2928,18 @@ The only side effects an expression can have are:
     log of 0, sqrt of negative real), which the calculator
     catches per pixel and treats as ""escaped"".
 
-Compared to User Equation:  Sandbox is roughly 2-3× more
-restrictive but is safe to share, import, or run from untrusted
-JSON.
+User Equation runs the same interpreter with the same safety; only
+its optional CalcGen compile generates code, from equations you
+compile yourself.
 
 === Limitations ===
 
   • No high-precision (DD/QD) path — Sandbox is double only.
-    Zoom usefully caps around ≈ 1e13.
+    Zoom usefully caps around ≈ 1e13.  For deep zoom use User
+    Equation with CalcGen on.
   • No perturbation theory acceleration.
-  • No statements:  every expression is a single value.  Use
-    let-bindings for intermediate names.
   • No user-defined functions yet.  Repeat sub-expressions stay
-    expanded.
-  • No multi-step memory:  the signature exposes z, c, n only —
-    not z_(n−1).  True Phoenix-style recurrences cannot be
-    expressed directly.
+    expanded (or name them with let / statements).
 ";
 
         public const string ClientServerText =
@@ -3433,12 +3319,18 @@ ILGPU GPU). Open via:
   Toolbar → Type → User Equation
   Then:    Params  (or the per-region default)
 
-The editor's two action buttons:
+Turn on the editor's CalcGen toggle for its three actions:
 
-  Compile & Load        Roslyn-compile, swap onto the live render.
-                        Lives until app close.
+  Compile & Load        Compile in the background, swap onto the live
+                        render.  Lives until app close (or an edit).
+  Compile + Save        The same, and reload it on the next launch.
   Generate via CalcGen  Write Calculators\Generated\{Name}Calculator.cs.
                         Rebuild the app to pick it up.
+
+The report line beside them says what CalcGen accelerates for the
+current equation.  CalcGen reads the same equation language as the
+live view (see the User Equation help); the table below is the
+quick reference.
 
 === Grammar ===
 
@@ -3452,7 +3344,7 @@ The editor's two action buttons:
   Add / Sub        z + c   z - c
   Multiply         z*z   2*c
   Divide           z / (z + 1)                  Disables PT / BLA
-  Power            z^2   z^3                    Integer exponent 0..16
+  Power            z^2   z^2.5   z^-1           Any exponent; -z^2 = -(z^2)
   Parens           (z + c) * (z - c)
   Unary minus      -z
   Conjugate        conj(z)                      Disables PT / BLA / DE
@@ -3460,11 +3352,13 @@ The editor's two action buttons:
   Square shortcut  sqr(z)                       = z*z
   Real / imag      re(z), im(z)                 Lifts real scalar
   Magnitude        abs(z)                       Lifts |z|
+  Squared mag.     norm(z)                      |z|², cheap bailout test
   Trig / exp / log sin cos exp log              Holomorphic; DE kept
   Previous iter    prev                         z_{n-1} (Phoenix)
   Iter index       iter (or n)                  Real scalar
-  Conditional      if cond then a else b
-  Comparisons      < <= > >= == !=
+  Conditional      if cond then a else b        Also cond ? a : b
+  Comparisons      < <= > >= == !=              Combine with && || !
+  Local name       let w = z*z in w + c
 
 === Execution-path gating ===
 
@@ -3523,9 +3417,10 @@ Conditional / iteration aware
   Rotation°   Visual post-rotation of the iteration plane.
               +90 / -90 / Reset for quick adjustments.
 
-Status line shows ""✓ Compiled"" (green) or the parse / Roslyn error
-with line + col (red). Auto-recompile debounces 500 ms after typing
-stops.
+The status line shows ""✓ Equation parses"" (green) or the error with
+line + col (yellow); the live view re-renders about two seconds after
+typing stops.  The CalcGen state line shows Compiling… / Compiled /
+Compile failed.
 
 === CLI ===
 
@@ -3539,18 +3434,21 @@ Flags: --equation ""..."", --name <Name>, --out <dir>, --selftest,
 
 === Troubleshooting ===
 
-  Unknown identifier 'X'    Typo. Allowed: z, c, conj, fold, sqr, sin,
-                            cos, exp, log, if/then/else, re, im, abs,
-                            prev, iter/n.
-  Exponent must be 0..16    Factor manually or use z*z*…
+  Unknown function 'X'      Typo; the message suggests the closest name
+                            and Ctrl+. applies it.
+  ""real or complex         The value's kind depends on the pixel; wrap
+   depending on …""          it in re(), im(), abs() or norm().
   Deep zoom drops to scalar Construct disables PT/BLA — see gating table.
   Black past 1e13           Conj/Fold/Prev gate DD/QD HpDirect off.
                             Switch to a polynomial form.
-  Hot-load error            Roslyn diagnostic with line + col follows.
+  Compile failed            The generated-code diagnostic follows.
 
 === Full guide ===
 
-  Docs\CalcGen-UserGuide.md    User-facing reference + 30 examples.
+  Docs\User\CalcGen-UserGuide.md
+                               User-facing reference + 30 examples.
+  Docs\Technical\Equation-Language.md
+                               The language specification.
   Docs\CalculatorGen-Architecture.md
                                Generator internals (for modifiers).
 ";
@@ -4234,7 +4132,7 @@ Fracturing Fog is structured as a layered .NET 10 solution:
     • IFractalCalculator implementations: Mandelbrot, Julia, Burning
       Ship, Tricorn, Multibrot, Phoenix, Newton, Buddhabrot, IFS,
       L-System, Strange Attractor, Mandelbulb, User Equation
-      (Roslyn), Sandbox (DSL), User Bulb 3D (Roslyn + raymarch),
+      (equation language), Sandbox (equation language), User Bulb 3D (raymarch),
       Tear Drop, plus the CalculatorGen-emitted Generated family.
 
   CalculatorGen (compile-time code generator)
@@ -4335,13 +4233,10 @@ Default frame: centre (1.5, 0), Zoom 0.6.
 None beyond the pixel coordinate.  No tunables in the Params
 dialog.
 
-=== C# Equation ===
+=== As a User Equation ===
 
-  // Magnet 1.
-  var num = z*z + c - Complex.One;
-  var den = 2*z + c - 2;
-  var g   = num / den;
-  return g*g;
+  --- Magnet 1 ---
+  ((z*z + c - 1) / (2*z + c - 2))^2
 ";
 
         public const string MathMagnetTwoText =
@@ -4374,17 +4269,14 @@ into several disconnected components, giving the structure a
 
 None beyond the pixel coordinate.
 
-=== C# Equation ===
+=== As a User Equation ===
 
-  // Magnet 2.
-  var cm1 = c - Complex.One;
+  --- Magnet 2 ---
+  var cm1 = c - 1;
   var cm2 = c - 2;
-  var z2  = z*z;
-  var z3  = z2*z;
-  var num = z3 + 3*cm1*z + cm1*cm2;
-  var den = 3*z2 + 3*cm2*z + c*c - 3*c + 3;
-  var g   = num / den;
-  return g*g;
+  var num = z^3 + 3*cm1*z + cm1*cm2;
+  var den = 3*z^2 + 3*cm2*z + c*c - 3*c + 3;
+  (num / den)^2
 ";
 
         public const string MathGlynnText =
@@ -4429,10 +4321,10 @@ principal sheet — sufficient for this canonical c.
                      tweaks deform it asymmetrically.  Clamped
                      to |Re|, |Im| ≤ 2 in the Params dialog.
 
-=== C# Equation ===
+=== As a User Equation ===
 
-  // Glynn: z → z^1.5 + c.
-  return Complex.Pow(z, 1.5) + c;
+  --- Glynn ---
+  z^1.5 + c
 ";
 
         public const string MathLogisticText =
@@ -4546,17 +4438,14 @@ colouring lands in an outer band — the picture often looks
                               R = 1 is canonical Halley; R ≠ 1
                               speeds up or slows convergence.
 
-=== C# Equation ===
+=== As a User Equation ===
 
-  // Halley basins of z^d − 1, d = 3.
-  int d = 3;
-  var zd  = Complex.Pow(z, d);
-  var zd1 = Complex.Pow(z, d - 1);
-  var zd2 = Complex.Pow(z, d - 2);
-  var f   = zd - Complex.One;
-  var fp  = d * zd1;
-  var fpp = d * (d - 1) * zd2;
-  return z - 2 * f * fp / (2 * fp * fp - f * fpp);
+  --- Halley (z³ − 1) ---
+  // basins: set z₀ seed = c
+  var f   = z^3 - 1;
+  var fp  = 3*z^2;
+  var fpp = 6*z;
+  z - 2*f*fp / (2*fp*fp - f*fpp)
 ";
 
         public const string MathSecantText =
@@ -4615,12 +4504,14 @@ is the chord-step pattern showing through the basin filaments.
                                  floored at 1e-6 to avoid degenerate
                                  first-step chord.
 
-=== C# Equation ===
+=== As a User Equation ===
 
-  // Secant basins of z^d − 1, d = 3. User Equation cannot carry
-  // prev-z between steps via the (z, c, n) → z signature, so use
-  // FractalType = Secant for the real thing. Approximation:
-  return Complex.Pow(z, 3) - Complex.One;
+  --- Secant step (z³ − 1) ---
+  // the chord through prev and z; set z₀ seed = c.  FractalType =
+  // Secant seeds its two starting points differently.
+  var f = z^3 - 1;
+  var g = prev^3 - 1;
+  z - f*(z - prev) / (f - g)
 ";
 
         public const string MathMandelboxText =
@@ -5436,12 +5327,11 @@ the flat-exterior branch in FillAuxAndColor.
                          Range [0, 1]; values outside the
                          range are clamped at the kernel level.
 
-=== C# Equation ===
+=== As a User Equation ===
 
-  // User Equation can't mutate c between steps via the
-  // (z, c, n) → z signature.  Approximation that ignores
-  // the c carry:
-  return z*z + c;       // → Mandelbrot
+The Spider changes c every step as well as z; a User Equation's c
+is fixed per pixel, so it can't be expressed exactly.  Use
+FractalType = Spider.
 ";
     }
 }
