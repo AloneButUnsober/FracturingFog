@@ -2079,9 +2079,10 @@ surface + a faithful mesh.  To get the best result:
 
   GPU (experimental)    ILGPU kernel.  z^N + c uses a pre-baked
                         triplex kernel; other equations are emitted
-                        and compiled for the GPU where the emitter
-                        can express them (#1105 lists the gaps),
-                        else the CPU runs them silently.  5–20×
+                        and compiled for the GPU (a product or
+                        quotient mixing a vector and a quaternion,
+                        and Vec3 Julia / numerical-DE renders, stay
+                        on the CPU, silently).  5–20×
                         faster on stock z^N + c renders.
 
 === Cull Radius ===
@@ -2321,10 +2322,9 @@ with the 256-entry triangulation table is a follow-up.
     bounding sphere clips silhouettes.  Mandelbox needs 4–8;
     canonical bulbs are happy with 2.
 
-  • GPU BACKEND FALLBACK.  An equation the GPU emitter can't
-    express falls back to CPU silently (#1105 lists the known
-    cases).  If GPU was expected and you don't see a speedup,
-    that's why.
+  • GPU BACKEND FALLBACK.  A render the GPU route can't take
+    (see Backend) falls back to CPU silently.  If GPU was
+    expected and you don't see a speedup, that's why.
 
   • PERF.  The interpreter is compiled to an expression tree;
     transcendental calls dominate.  Prefer x*x*x over pow(x, 3)
@@ -2359,8 +2359,9 @@ Render is unbearably slow:
 
 === Limitations ===
 
-  • GPU: equations the emitter can't express run on the CPU
-    (#1105).
+  • GPU: a product or quotient mixing a vector and a quaternion,
+    a ternary whose branches have different kinds, and Vec3 Julia /
+    numerical-DE renders run on the CPU.
   • Mesh exporter is voxel-cube (blocky).  Real marching cubes
     with the 256-entry triangulation table is a follow-up.
   • Numerical DE uses max column norm — a conservative spectral-
