@@ -11,10 +11,9 @@ namespace FracturingFog.UI.Avalonia.ViewModels;
 // interesting structure for that equation (chosen by inspection — the
 // classical Mandelbrot's (-0.5, 0, 1.5) doesn't suit Newton or Burning Ship).
 //
-// Equations are deliberately DSL-form (lowercase, no `return`, no `Complex.`
-// prefix) so the cookbook dialog can drop them straight into the DSL tab.
-// The User Equation tab is the C# variant; users who paste a cookbook entry
-// there will hit the validator until they wrap the body in `return ... ;`.
+// Equations are in the equation language (lowercase, no `return`, no
+// `Complex.` prefix) and drop straight into the User Equation editor (#1089).
+// Entries without a bailout condition turn the CalcGen toggle on.
 //
 // Adding entries: keep the source short and parser-clean. The preview panel
 // gates SA / perturbation / DE off as soon as ops like conj/sin/cos/fold/div
@@ -125,7 +124,7 @@ public static class EquationCookbook
 
         // #859 — non-modulus bailout demonstrators. Entire transcendental maps
         // have no escape radius, so they set a per-axis bailout condition and
-        // "replaces modulus". These drop into the live User Equation tab.
+        // "replaces modulus". These load with CalcGen off (interpreter-only, #860).
         new CookbookEntry(
             "Transcendental — sin(z) + c",
             "λ·sin z family. No escape radius: bails on |Im z| > 50 (replaces modulus). Cantor-bouquet hairs.",

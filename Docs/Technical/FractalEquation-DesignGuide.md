@@ -194,7 +194,7 @@ External reading on the mathematical foundations:
 
 Take the simplest equation, the classical Mandelbrot:
 
-```
+```equation
 z*z + c
 ```
 
@@ -235,7 +235,7 @@ automatically in the renderer.
 ## 3. Quadratic family — the Mandelbrot baseline
 
 ### 3.1 Classical Mandelbrot
-```
+```equation
 z*z + c
 ```
 The most-iterated equation in mathematics. Cardioid + bulb structure.
@@ -243,11 +243,11 @@ Symmetric across the real axis. All other quadratic Julia sets are
 slices of this fractal's parameter space.
 
 ### 3.2 Higher-degree Multibrot
-```
-z*z*z + c          (degree 3 — 2-fold rotational symmetry)
-z*z*z*z + c        (degree 4 — 3-fold)
-z^5 + c            (degree 5 — 4-fold)
-z^d + c            (general — (d−1)-fold symmetry)
+```equations
+z*z*z + c          // degree 3 — 2-fold rotational symmetry
+z*z*z*z + c        // degree 4 — 3-fold
+z^5 + c            // degree 5 — 4-fold
+// in general z^d + c has (d−1)-fold symmetry
 ```
 
 Each increment of the exponent adds another symmetry lobe. The body
@@ -256,7 +256,7 @@ becomes more star-shaped; the boundary acquires more arms.
 External: [Wikipedia: Multibrot](https://en.wikipedia.org/wiki/Multibrot_set).
 
 ### 3.3 Quadratic with linear coupling
-```
+```equation
 z*z + 0.5*z + c
 ```
 Adds a linear pull-back. Distorts the cardioid; can rotate the whole
@@ -265,7 +265,7 @@ attractor away from 0. Negative coefficients pull the silhouette in
 the opposite direction.
 
 ### 3.4 Mixed-degree polynomial
-```
+```equation
 z*z*z - 0.5*z + c
 ```
 A cubic plus a linear suppression term. Produces twisted figure-8
@@ -273,7 +273,7 @@ silhouettes. Mixed coefficients on different powers of `z` are how to
 break the rigid `d`-fold symmetry of pure `z^d + c` shapes.
 
 ### 3.5 Try this: scaled feedback
-```
+```equation
 0.7*z*z + c
 ```
 Shrinks the feedback. The cardioid shrinks; the boundary becomes
@@ -289,7 +289,7 @@ real or imaginary components. The result is dramatically different
 silhouettes that look more like landscapes than the round Mandelbrot.
 
 ### 4.1 Tricorn (Mandelbar)
-```
+```equation
 conj(z)*conj(z) + c
 ```
 `conj(z)` is `(re(z), −im(z))`. Squaring the conjugate produces 3-fold
@@ -299,7 +299,7 @@ becomes a deltoid; bulbs are arranged threefold.
 External: [Wikipedia: Tricorn](https://en.wikipedia.org/wiki/Tricorn_(mathematics)).
 
 ### 4.2 Burning Ship
-```
+```equation
 fold(z)*fold(z) + c
 ```
 `fold(z)` is `(|re|, |im|)` — each component absolute-valued. The
@@ -310,7 +310,7 @@ edge.
 External: [Wikipedia: Burning Ship](https://en.wikipedia.org/wiki/Burning_Ship_fractal).
 
 ### 4.3 Burning Tricorn hybrid
-```
+```equation
 conj(fold(z))*conj(fold(z)) + c
 ```
 Combines both anti-holomorphic ops. `fold(z) = (|re|, |im|)`, then
@@ -338,7 +338,7 @@ the smooth-iter colour gradient to compensate.
 Division enables Newton-shaped, Cassini-oval, and rational-pole maps.
 
 ### 5.1 Rational forcing with a fixed pole
-```
+```equation
 z*z + c/(z + 2)
 ```
 Quadratic feedback plus a rational forcing term. The denominator
@@ -352,7 +352,7 @@ point, no fractal). Keep the polynomial feedback separate from the
 rational term to avoid the algebraic cancellation.
 
 ### 5.2 Mandelbrot-on-a-shell
-```
+```equation
 z*z + c/(1 + z*z)
 ```
 The forcing is now a rational function of `z`. Suppresses the forcing
@@ -361,7 +361,7 @@ more concentrated near the origin and develops a thin shell of
 boundary at larger radii.
 
 ### 5.3 Feedback with a c-dependent pole pair
-```
+```equation
 z*z + 1/(z*z + c)
 ```
 Standard quadratic feedback plus a reciprocal whose poles sit at
@@ -395,7 +395,7 @@ transcendentals. They produce **periodic** structures in the imaginary
 axis (sin / cos) or **exponential** asymmetry (exp / log).
 
 ### 6.1 Exponential
-```
+```equation
 exp(z) + c
 ```
 The exponential map: `exp(a+bi) = e^a · (cos b + i sin b)`. The
@@ -407,7 +407,7 @@ External: Devaney's papers on exponential dynamics —
 [search "Devaney exponential dynamics"](https://www.google.com/search?q=Devaney+exponential+dynamics+fractal).
 
 ### 6.2 Sinusoidal
-```
+```equation
 sin(z) + c
 ```
 `sin(a+bi) = sin(a)·cosh(b) + i cos(a)·sinh(b)`. The cosh factor blows
@@ -415,7 +415,7 @@ up in the imaginary axis. Silhouette has narrow horizontal bands of
 bounded behaviour separated by escape strips at multiples of π.
 
 ### 6.3 Logarithmic shell
-```
+```equation
 log(1 + z) + c
 ```
 `log` has a branch cut along the negative real axis. The `1 +` offset
@@ -434,7 +434,7 @@ the complex branch (`log(-5) = ln5 + iπ`), so only the value-at-`0`
 singularity needs guarding.
 
 ### 6.4 Mixed trig — "petal" pattern
-```
+```equation
 sin(z) + cos(c)
 ```
 Constant `c` enters through `cos`, periodic in `Re(c)`. Result is a
@@ -442,7 +442,7 @@ quasi-periodic mosaic of bounded regions repeating with period 2π
 horizontally and Cassini-like vertically.
 
 ### 6.5 Damped oscillator
-```
+```equation
 0.5*sin(z*z) + c
 ```
 Squares `z` inside the sin, then halves the magnitude. Produces a
@@ -450,7 +450,7 @@ dampened oscillation around the classical Mandelbrot silhouette —
 fine ripples ride on top of the cardioid boundary.
 
 ### 6.6 Tangent map
-```
+```equation
 tan(z) + c
 ```
 `tan(z) = sin(z)/cos(z)`. Poles at `cos(z) = 0` (every odd multiple
@@ -458,7 +458,7 @@ of π/2 on the real axis). The silhouette has periodic vertical lines
 of singularities; bounded regions appear as ovals between them.
 
 ### 6.7 Hyperbolic family
-```
+```equations
 sinh(z) + c
 cosh(z) + c
 tanh(z) + c
@@ -469,7 +469,7 @@ the right). `tanh` saturates to ±1 and produces nearly-flat bounded
 regions with sharp transitions.
 
 ### 6.8 Square root principal branch
-```
+```equation
 sqrt(z) + c
 ```
 Desugars to `exp(0.5*log(z))`. The principal branch of √z. Bounded
@@ -478,26 +478,26 @@ the imaginary axis (where the branch cut is approached from above and
 below).
 
 ### 6.9 Constants pi and e
-```
-sin(pi*z) + c             — sin with period 2 on the real axis
-exp(z) + e                — exp shifted by Euler's constant
-z*z + pi*c                — quadratic with π-scaled forcing
+```equations
+sin(pi*z) + c             // sin with period 2 on the real axis
+exp(z) + e                // exp shifted by Euler's constant
+z*z + pi*c                // quadratic with π-scaled forcing
 ```
 `pi` and `e` parse as their numeric values (`Math.PI`, `Math.E`)
 respectively, exactly like writing `3.14159...`.
 
 ### 6.10 General power — `pow(base, exp)`
 
-```
-pow(z, 3) + c             — cubic Multibrot, general-power form
-pow(z, -2) + c            — inverse ("Donut") map, finite at the z=0 seed
-pow(z, 2.5) + c           — fractional Multibrot
-z*pow(z, -3) + c*pow(c, -2)   — "Movie Reel" mixed inverse powers
+```equations
+pow(z, 3) + c             // cubic Multibrot, general-power form
+pow(z, -2) + c            // inverse ("Donut") map, finite at the z=0 seed
+pow(z, 2.5) + c           // fractional Multibrot
+z*pow(z, -3) + c*pow(c, -2)   // "Movie Reel" mixed inverse powers
 ```
 
-`pow` is distinct from the `^` operator. `^` takes a **non-negative integer**
-exponent ≤ 64 and stays a polynomial (fully deep-zoomable). `pow(base, exp)`
-accepts **any** exponent — negative, fractional, or complex — and evaluates it
+`^` with a literal non-negative integer exponent ≤ 64 stays a polynomial (fully
+deep-zoomable); with any other exponent (`z^2.5`, `z^-2`) it is the same as
+`pow`. `pow(base, exp)` accepts **any** exponent — negative, fractional, or complex — and evaluates it
 as the principal complex power, matching the `SandboxExpression` runtime and
 `System.Numerics.Complex.Pow`. It is **zero-guarded**: `pow(0, 0) = 1` and
 `pow(0, k) = 0`, so a negative-power map is finite at the `z = 0` Mandelbrot
@@ -507,11 +507,11 @@ disables perturbation / BLA / SA **and** the distance estimate.
 
 ### 6.11 Inverse trigonometric / hyperbolic family
 
-```
-atan(z) + c               — bounded inverse-tangent map
-asin(z) + c               — bounded; all-inside is the correct render
-z*z + asin(c) + c         — escaping driver + inverse-trig, with normals
-asinh(z*z) + c            — chain rule exercised in the dz/dc derivative
+```equations
+atan(z) + c               // bounded inverse-tangent map
+asin(z) + c               // bounded; all-inside is the correct render
+z*z + asin(c) + c         // escaping driver + inverse-trig, with normals
+asinh(z*z) + c            // chain rule exercised in the dz/dc derivative
 ```
 
 `asin acos atan asinh acosh atanh` are the holomorphic inverse functions
@@ -538,10 +538,10 @@ correct imaginary derivative.
 
 ### 6.12 Per-component functions — `floor round ceil trunc fract sign`
 
-```
-z*z + fract(z) + c        — domain-warped / tiled Mandelbrot
-z*z + 0.1*floor(z*4) + c  — quantised feedback ("pixelated" bands)
-z*z + 0.2*sign(re(z)) + c — sign-driven asymmetry
+```equations
+z*z + fract(z) + c        // domain-warped / tiled Mandelbrot
+z*z + 0.1*floor(z*4) + c  // quantised feedback ("pixelated" bands)
+z*z + 0.2*sign(re(z)) + c // sign-driven asymmetry
 ```
 
 Each applies its real function to the real and imaginary parts independently
@@ -578,7 +578,7 @@ The Phoenix family extends `z_{n+1} = f(z_n, c)` to
 new feedback term. CalcGen exposes this as `prev`.
 
 ### 7.1 Classical Phoenix
-```
+```equation
 z*z + c + 0.56667*prev
 ```
 The classical Shigehiro Ushiki construction. The `0.56667` coefficient
@@ -588,21 +588,21 @@ to see the silhouette deform.
 External: [Wikipedia: Phoenix fractal](https://en.wikipedia.org/wiki/Phoenix_set).
 
 ### 7.2 Phoenix with negative feedback
-```
+```equation
 z*z + c - 0.4*prev
 ```
 Negative `prev` coefficient. The silhouette becomes more concentrated;
 arms shrink back into the body.
 
 ### 7.3 Cubic Phoenix
-```
+```equation
 z*z*z + c + 0.5*prev
 ```
 Phoenix coupling on a degree-3 polynomial. Combines the 3-fold
 Multibrot symmetry with the prev-step feedback.
 
 ### 7.4 Two-tap Phoenix
-```
+```equation
 z*z + 0.3*z*prev + c
 ```
 Phoenix coupling via a product term. The previous iterate now scales
@@ -633,14 +633,14 @@ This breaks the classical theory but produces interesting visual
 results — the rule itself drifts over time.
 
 ### 8.1 Iter-dependent drift
-```
+```equation
 z*z + c + 0.001*n
 ```
 Adds a tiny constant push proportional to the iteration count. The
 silhouette gradually shifts off-axis as orbits accumulate the drift.
 
 ### 8.2 Iter-modulated phase
-```
+```equation
 sin(z*n) + exp(c + z) + z
 ```
 The argument to `sin` is multiplied by `n`. As `n` grows the "frequency"
@@ -651,7 +651,7 @@ adds an exponential right-side asymmetry; replace with `cosh(c + z)`
 to mirror it.
 
 ### 8.3 Iter-decaying coefficient
-```
+```equation
 z*z + c/(1 + 0.01*n)
 ```
 Forcing weakens as iteration progresses. Late-iter pixels rely on
@@ -659,7 +659,7 @@ pure feedback. Boundary fattens because forcing can't push out late
 orbits.
 
 ### 8.4 Quadrant by iter parity
-```
+```equation
 if mod(n, 2) > 0.5 then z*z + c else z*z - c
 ```
 Alternates between adding and subtracting `c` based on `n`'s parity.
@@ -682,7 +682,7 @@ functions together at a boundary defined by a real-valued comparison
 on the current iterate.
 
 ### 9.1 Branch by magnitude
-```
+```equation
 if norm(z) > 1 then z*z + c else z*z*z + c
 ```
 `norm(z)` is `|z|²`, the squared magnitude (`abs(z)` would be `|z|`).
@@ -691,7 +691,7 @@ outside. The silhouette is the union of the classical Mandelbrot
 (inside the unit disk) and a Multibrot-cubic shell (outside).
 
 ### 9.2 Branch by component sign
-```
+```equation
 if re(z) > 0 then z*z + c else conj(z)*conj(z) + c
 ```
 Holomorphic Mandelbrot on the right half-plane; Tricorn-like on the
@@ -699,14 +699,14 @@ left. Produces a literal left-right mirror with different boundary
 characters on each side.
 
 ### 9.3 Quadrant switch
-```
+```equation
 if im(z) > 0 then z*z + c else z*z*z + c
 ```
 Mandelbrot above the real axis, Multibrot-cubic below. Sharp
 asymmetric silhouette.
 
 ### 9.4 Branch by phase
-```
+```equation
 if arg(z) > 0 then z*z + c else z*z - c
 ```
 `arg(z)` is the polar angle. Upper half-plane (`arg > 0`) adds `c`;
@@ -714,7 +714,7 @@ lower half subtracts. Produces a Mandelbrot silhouette with a folded
 boundary along the real axis.
 
 ### 9.5 Bailout-band switch
-```
+```equation
 if norm(z) > 100 then z + c else z*z + c
 ```
 Switches to a linear (slow-escape) step once the orbit gets far from
@@ -739,14 +739,14 @@ scalar lifted back to complex as `(arg, 0)`. Lets you encode
 phase-dependent dynamics.
 
 ### 10.1 Spiral by angle
-```
+```equation
 z*z + 0.1*arg(z) + c
 ```
 Adds a small angle-proportional drift. Produces spiral arms in the
 boundary structure.
 
 ### 10.2 Phase-modulated forcing
-```
+```equation
 z*z + c*exp(arg(z))
 ```
 The forcing magnitude is scaled by the orbit's current phase. Pixels
@@ -754,7 +754,7 @@ whose orbits spin produce different forcing than pixels whose orbits
 stay near the real axis. Strong asymmetric spiral structure.
 
 ### 10.3 Binary atan2
-```
+```equation
 z*z + 0.05*atan2(z, c) + c
 ```
 `atan2(y, x)` is the two-argument arctangent: `atan2(y, x) =
@@ -779,7 +779,7 @@ These act on the real parts of their operands only. Produce piecewise-
 linear envelopes, periodic wraps, and clamping behaviour.
 
 ### 11.1 Clamp by min/max
-```
+```equation
 min(z*z, max(z, -1.0)) + c
 ```
 Clamps the feedback to the range `[max(z, −1), z²]`. Produces a
@@ -787,7 +787,7 @@ silhouette that follows the Mandelbrot at high magnitudes but flattens
 near the origin.
 
 ### 11.2 Periodic wrap via mod
-```
+```equation
 z*z + mod(z, 1.0) + c
 ```
 Wraps `Re(z)` to the interval `[0, 1)` and adds the residual to the
@@ -795,7 +795,7 @@ feedback. Produces a quasi-periodic horizontal texture in the
 silhouette.
 
 ### 11.3 Hybrid step
-```
+```equation
 max(z*z, sqr(z)) + c
 ```
 Tautological in pure z (both branches equal) but a useful template
@@ -803,7 +803,7 @@ when you want to combine two different step laws and take the larger
 magnitude winner.
 
 ### 11.4 Saw-tooth periodicity
-```
+```equation
 z*z + mod(z*z + c, 2.0)
 ```
 Adds a horizontal saw-tooth wave to the feedback. Boundary develops
@@ -824,7 +824,7 @@ The DSL's `i` is the imaginary unit literal `(0, 1)`. Lets you inject
 complex coefficients without the awkward `re/im` decomposition.
 
 ### 12.1 Translated Mandelbrot
-```
+```equation
 z*z + c + i
 ```
 Adds the imaginary unit as a literal constant translation. Equivalent
@@ -840,7 +840,7 @@ uniform "in set" colour. You need at least a quadratic in `z` to get
 a fractal silhouette — see 12.2.
 
 ### 12.2 Complex coefficient on the quadratic
-```
+```equation
 i*z*z + c
 ```
 The quadratic feedback is rotated by 90° each step. Produces a
@@ -848,7 +848,7 @@ silhouette with twisted lobes rotated relative to the classical
 Mandelbrot.
 
 ### 12.3 Mixed real + imaginary coefficients
-```
+```equation
 0.5*z*z + 0.3*i*z + c
 ```
 A quadratic with both real and imaginary coefficients on different

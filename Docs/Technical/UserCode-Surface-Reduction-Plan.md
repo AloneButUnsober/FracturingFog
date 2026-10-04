@@ -10,6 +10,14 @@ blocks in the equation DSL); Phase 4 complete (ColorGen runs on the interpreter,
 outstanding.
 Tracking issues: #27 (umbrella) + per-phase children (see [Tracking](#tracking)).
 
+> **Superseded for 2D equations by #937.** This plan ends with two grammars
+> brought to parity: the interpreter's DSL and CalcGen's own dialect (Phase 6).
+> #937 replaced that pair with **one** equation language — one parser and AST
+> (`Equations/`), which CalcGen lowers (#1086, #1087) — then migrated saved
+> text (#1088) and merged the editor's two tabs (#1089). See
+> [Equation-Language.md](Equation-Language.md). User Bulb 3D and ColorGen are
+> scoped separately (#1091, #1092).
+
 ## Problem
 
 Three runtime surfaces accept user-authored text, compile it to a live .NET

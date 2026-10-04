@@ -253,9 +253,9 @@ public sealed record ImOp(AstNode Operand) : AstNode;
 /// <summary>Magnitude lifted to complex: (|x|, 0) = (sqrt(Re²+Im²), 0).
 /// Non-holomorphic; same gating. #27 Phase 6 — SEMANTIC RECONCILIATION: the
 /// expression `abs(x)` is |x| (matches the SandboxExpression runtime and
-/// Complex.Abs). This is DISTINCT from the condition-only `abs` shorthand
-/// (<see cref="CondAbs2"/>) which is |x|² (squared magnitude) — a different
-/// grammar position (inside `if`), kept for its bailout-threshold convenience.</summary>
+/// Complex.Abs). Since #1088 that holds in conditions too: a condition
+/// `abs(x)` is <c>CondRe(AbsOp x)</c>, and the squared magnitude |x|² is
+/// <c>norm(x)</c> (<see cref="CondAbs2"/>).</summary>
 public sealed record AbsOp(AstNode Operand) : AstNode;
 
 /// <summary>Real-valued clamp lifted to complex: (clamp(Re(x), Re(lo), Re(hi)), 0).

@@ -13,7 +13,7 @@
     <Grid Margin="12" RowDefinitions="Auto,*,Auto,Auto">
 
         <TextBlock Grid.Row="0"
-                   Text="Curated CalcGen DSL equations. Pick one to populate the DSL editor and re-centre the view."
+                   Text="Curated equations. Pick one to load it into the User Equation editor and re-centre the view."
                    Foreground="#B4B4B4"
                    TextWrapping="Wrap"
                    Margin="0,0,0,8" />
@@ -84,7 +84,7 @@
 
         <Grid Grid.Row="3" ColumnDefinitions="*,Auto,Auto" RowDefinitions="Auto,Auto">
             <TextBlock Grid.Column="0" Grid.Row="0" Grid.ColumnSpan="2"
-                       Text="Selected equation replaces the DSL editor source and re-centres the view."
+                       Text="The selected equation replaces the editor's equation and re-centres the view."
                        Foreground="#808080"
                        VerticalAlignment="Center" />
             <Button Grid.Column="1" Grid.Row="1"

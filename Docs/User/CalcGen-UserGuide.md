@@ -57,7 +57,7 @@ That is the whole idea behind every escape-time fractal.
 The **User Equation** type lets you replace that one line with *anything the DSL
 can express*. In the DSL, the Mandelbrot recipe is simply:
 
-```text
+```equation
 z*z + c
 ```
 
@@ -95,7 +95,7 @@ in both. Compile & Load lowers your equation to CalcGen's form. In a few cases
 it can't keep the live view's meaning; it then says why and the live view
 still renders the equation. Those cases are a real-or-complex value depending
 on its value, or a very large inlined expansion.
-Unifying the two dialects is tracked in #937; the grammar is specified in
+The two engines share one parser since #937; the grammar is specified in
 [Equation Language](../Technical/Equation-Language.md). Everything in the [function catalogue](#6-language-reference--the-function-catalogue)
 works in both.
 
@@ -219,11 +219,11 @@ sign rules, but be explicit with parentheses when in doubt. `a - b - c` is
 
 Start from the Mandelbrot baseline and layer ideas:
 
-```text
-z*z + c                       # 1. Mandelbrot
-z*z*z + c                     # 2. raise the power → Multibrot
-z*z*z - z + c                 # 3. add a linear term → a new critical structure
-z*z*z - z + 0.5*conj(z) + c   # 4. mix in a conjugate → break the symmetry
+```equations
+z*z + c                       // 1. Mandelbrot
+z*z*z + c                     // 2. raise the power → Multibrot
+z*z*z - z + c                 // 3. add a linear term → a new critical structure
+z*z*z - z + 0.5*conj(z) + c   // 4. mix in a conjugate → break the symmetry
 ```
 
 Each change is a hypothesis; **Compile & Load** (or just watch the live render)
@@ -274,13 +274,13 @@ fixed; names are case-insensitive.
 | `pow(x, y)` | 2-arg | General power `x^y`. If both operands are real, real `Math.Pow` (so `pow(-2, 3) = -8`); otherwise the principal complex power, **zero-guarded** so `pow(0, 0) = 1` and `pow(0, k) = 0` (no `NaN` at the `z = 0` seed). Use for **negative or fractional** exponents. |
 | `sqrt(x)` | 1-arg | Principal square root. In CalcGen it desugars to `exp(0.5*log(x))`, matching `Complex.Sqrt`'s branch. |
 
-```text
-sqr(z) + c                    # = z*z + c
-pow(z, 3) + c                 # cubic Multibrot, general-power form
-pow(z, -2) + c                # negative power — a "Donut"/inverse map (finite at z=0)
-z*pow(z, -3) + c*pow(c, -2)   # "Movie Reel" — mixed inverse powers
-pow(z, 2.5) + c               # fractional power (live: z^2.5 also works)
-sqrt(z*z - 1) + c             # square-root shell
+```equations
+sqr(z) + c                    // = z*z + c
+pow(z, 3) + c                 // cubic Multibrot, general-power form
+pow(z, -2) + c                // negative power — a "Donut"/inverse map (finite at z=0)
+z*pow(z, -3) + c*pow(c, -2)   // "Movie Reel" — mixed inverse powers
+pow(z, 2.5) + c               // fractional power (live: z^2.5 also works)
+sqrt(z*z - 1) + c             // square-root shell
 ```
 
 > [!NOTE]
@@ -298,13 +298,13 @@ sqrt(z*z - 1) + c             # square-root shell
 | `sin(x)` `cos(x)` `tan(x)` | Circular trig (`tan` = `sin/cos`) |
 | `sinh(x)` `cosh(x)` `tanh(x)` | Hyperbolic (built from `exp`) |
 
-```text
-exp(z) + c                    # exponential map
-sin(z) + c                    # sinusoidal
-log(z*z) + c                  # logarithmic shell
-sin(z)*cos(c) + c             # mixed trig "petals"
-tanh(z*z) + c                 # hyperbolic
-sin(pi*z) + c                 # constants in action
+```equations
+exp(z) + c                    // exponential map
+sin(z) + c                    // sinusoidal
+log(z*z) + c                  // logarithmic shell
+sin(z)*cos(c) + c             // mixed trig "petals"
+tanh(z*z) + c                 // hyperbolic
+sin(pi*z) + c                 // constants in action
 ```
 
 ### 6.3 Inverse trigonometry and hyperbolics
@@ -319,10 +319,10 @@ them** — their analytic derivative rules are built in (e.g.
 `d/dz asin(u) = u'/√(1 − u²)`). They still run on the shallow direct paths (no
 deep-zoom perturbation), which is where their parity holds.
 
-```text
-atan(z) + c                   # bounded inverse-tangent map
-asinh(z*z) + c                # chain rule exercised in the normals
-z*z + asin(c) + c             # inverse-trig term with full distance estimate
+```equations
+atan(z) + c                   // bounded inverse-tangent map
+asinh(z*z) + c                // chain rule exercised in the normals
+z*z + asin(c) + c             // inverse-trig term with full distance estimate
 ```
 
 > [!NOTE]
@@ -345,10 +345,10 @@ Applied to the real and imaginary parts independently: `f(a + b·i) = f(a) + f(b
 | `sign(x)` | −1 / 0 / +1 per component |
 | `fold(x)` | `(|Re|, |Im|)` — the Burning-Ship absolute-value fold |
 
-```text
-fold(z)*fold(z) + c           # Burning Ship
-z*z + fract(z) + c            # domain-warped / tiled Mandelbrot
-z*z + 0.1*floor(z*4) + c      # quantised feedback ("pixelated" bands)
+```equations
+fold(z)*fold(z) + c           // Burning Ship
+z*z + fract(z) + c            // domain-warped / tiled Mandelbrot
+z*z + 0.1*floor(z*4) + c      // quantised feedback ("pixelated" bands)
 ```
 
 ### 6.5 Real-valued extractors and reducers
@@ -368,12 +368,12 @@ These return a real scalar lifted to `(value, 0)`.
 | `clamp(x, lo, hi)` | Clamp a real value to `[lo, hi]` (a complex operand counts as its magnitude) |
 | `atan2(y, x)` | Two-argument arctangent of real values (a complex operand counts as its magnitude) |
 
-```text
-conj(z)*conj(z) + c           # Tricorn
-z*z + 0.1*arg(z) + c          # spiral biased by orbit angle
-min(z*z, max(z, -1.0)) + c    # clamp-like feedback
-z*z + mod(z, 1.0) + c         # periodic wrap
-clamp(z, -2.0, 2.0) + c       # bounded feedback
+```equations
+conj(z)*conj(z) + c           // Tricorn
+z*z + 0.1*arg(z) + c          // spiral biased by orbit angle
+min(z*z, max(z, -1.0)) + c    // clamp-like feedback
+z*z + mod(z, 1.0) + c         // periodic wrap
+clamp(z, -2.0, 2.0) + c       // bounded feedback
 ```
 
 > [!NOTE]
@@ -397,11 +397,11 @@ clamp(z, -2.0, 2.0) + c       # bounded feedback
 | `e` | Euler's number | both |
 | `i` | Imaginary unit `(0, 1)` | both |
 
-```text
-z*z + c + 0.5*prev            # Phoenix (CalcGen)
-z*z + c + 0.001*n             # slow iteration drift
-i*z + c                       # 90° rotation via the imaginary unit
-sin(pi*z) + e*c               # π and e as literals
+```equations
+z*z + c + 0.5*prev            // Phoenix (CalcGen)
+z*z + c + 0.001*n             // slow iteration drift
+i*z + c                       // 90° rotation via the imaginary unit
+sin(pi*z) + e*c               // π and e as literals
 ```
 
 > [!NOTE]
@@ -418,58 +418,66 @@ sin(pi*z) + e*c               # π and e as literals
 
 ### 8.1 Conditionals
 
-**CalcGen** uses an `if … then … else` *expression* — both branches must produce
-a value:
+Both engines read the same conditionals (#937). The `if … then … else` form and
+the C-style ternary are the same thing:
 
-```text
+```equations
 if norm(z) < 1 then z*z + c else z*z - c
+norm(z) < 1 ? z*z + c : z*z - c
 if re(z) > 0 then z*z + c else conj(z)*conj(z) + c
 if im(z) > 0 then z^3 + c else z^2 + c
 ```
 
-Each side of the comparison is a **single** condition term: `re(…)`, `im(…)`,
-`abs(…)` (remember: `|x|²` here), `arg(…)`, or a numeric literal. You cannot
-combine terms inside a CalcGen condition (`re(z)*im(z) > 0` is not valid there,
-and there is no `&&`/`||`). For compound conditions, use the live interpreter's
-ternary (next section).
+A comparison takes **real** values on both sides: project a complex value first
+with `re`, `im`, `abs` (`|x|`), `norm` (`|x|²`) or `arg`. Combine comparisons with
+`&&`, `||` and `!`, and compare any real expression, not just a single term:
 
-The **live interpreter** additionally supports C-style ternary and boolean
-operators:
-
-```text
-abs(z) < 1 ? z*z + c : z*z - c
+```equations
 (re(z) > 0 && im(z) > 0) ? z^3 + c : z*z + c
+re(z)*im(z) > 0 ? z^3 + c : z^2 + c
+if !(abs(z) < 0.5) then z*z + c else z*z*z + c
 ```
 
-### 8.2 `let` bindings (live interpreter)
+> [!NOTE]
+> **`abs` vs `norm` in a condition.** `abs(z) > 2` and `norm(z) > 4` draw the
+> same boundary; `norm` skips the square root. Before #1088 a condition `abs(x)`
+> meant `|x|²` (CalcGen's old shorthand); saved equations were rewritten to
+> `norm(x)` automatically.
+
+CalcGen compiles conditionals on its scalar, AVX2 and GPU paths, with the
+distance estimate per branch; deep-zoom perturbation, BLA / SA and DD/QD are off
+for them (see [§10](#10-execution-paths-and-what-gates-them)).
+
+### 8.2 `let` bindings
 
 Name a sub-expression and reuse it:
 
-```text
-let w = z*z in w*w + c        # z^4 + c, computed once
-let r = abs(z) in z*z + r*c   # magnitude-weighted forcing
+```equations
+let w = z*z in w*w + c        // z^4 + c, computed once
+let r = abs(z) in z*z + r*c   // magnitude-weighted forcing
 ```
 
-### 8.3 Statement blocks (live interpreter)
+### 8.3 Statement blocks
 
 A saved C#-style equation can be a short sequence of statements — declarations,
 reassignments, an early guard, and a final `return`. Each desugars to a `let`;
 reassignment shadows the previous binding. There are still no loops, no braces,
 and no side effects.
 
-```text
+```equation
 var w = z*z;
 var d = w - 1;
 return w*w + d + c;
 ```
 
-```text
+```equation
 if (n == 0) z = c;            // seed on the first iteration
 return z*z + c;
 ```
 
-Blocks are how legacy multi-line C# equations keep working; when authoring fresh,
-a single DSL expression (optionally with `let`) is usually clearer.
+Blocks are how legacy multi-line C# equations keep working, and both engines
+read them (CalcGen inlines each name). When authoring fresh, a single expression
+(optionally with `let`) is usually clearer.
 
 ---
 
@@ -523,7 +531,7 @@ Some constructs switch specific paths off:
 | `pow` | ✓ | ✓ | ✗ | ✗ | ✗ | ✓ (degraded) | ✓ |
 | `re` `im` `abs` `arg` `atan2` `min` `max` `mod` `clamp` | ✓ | ✓ | ✗ | ✗ | ✗ | ✓ | ✓ |
 | `floor` `round` `ceil` `trunc` `fract` `sign` | ✓ | ✓ | ✗ | ✗ | ✗ | ✓ | ✓ |
-| `if … then … else` | ✓ | ✓ | ✗ | ✗ | ✓ per branch | ✗ | ✓ |
+| `if … then … else` / `?:`, `&&` `\|\|` `!` | ✓ | ✓ | ✗ | ✗ | ✓ per branch | ✗ | ✓ |
 | `prev` (Phoenix) | ✓ | ✓ | ✗ | ✗ | ✗ | ✓ | ✓ |
 | `n` / `iter` | ✓ | ✓ | ✗ | ✗ | ✗ | ✓ | ✓ |
 
@@ -537,6 +545,10 @@ Rules of thumb:
 - **Inverse trig** is the sweet spot for lit non-polynomial art: normals on,
   perturbation off.
 - The status bar shows the active path (`SP` / `AVX2` / `PT` / `DD-HP` / `QD-PT`).
+- With the editor's **CalcGen** toggle on, the report line under the buttons
+  states this per equation: perturbation, series approximation and DE on or
+  off, or why CalcGen can't compile it. `let` names and statements cost
+  nothing; they are inlined.
 
 ---
 
@@ -611,7 +623,7 @@ The canonical trio needs all three controls together — a seed at the pixel, th
 step, and a convergence test on successive iterates:
 
 ```text
-# Newton for z³ − 1
+// Newton for z³ − 1
 Equation:    z - (z*z*z - 1)/(3*z*z)
 z₀ seed:     c
 Converge-if: abs(z - prev) < 0.0001
@@ -691,7 +703,7 @@ understand what the translator did. **Write new equations in DSL directly.**
 
 Worked conversions:
 
-```text
+```equations
 // Tricorn — C#:  var zb = Complex.Conjugate(z); return zb*zb + c;
 conj(z)*conj(z) + c
 
@@ -716,56 +728,56 @@ family; every one is DSL (no C#).
 
 ### 13.1 The Mandelbrot / Multibrot family (deep-zoomable)
 
-```text
-z*z + c                       # classic Mandelbrot
-z^3 + c                       # cubic Multibrot
+```equations
+z*z + c                       // classic Mandelbrot
+z^3 + c                       // cubic Multibrot
 z^4 + c
 z^5 + c
 z^6 + c
-z^3 - z + c                   # cubic with a linear term
-z*z + 0.5*z + c               # quadratic with linear coupling
-(z^4 + z^2)/2 + c             # mixed-degree (division → shallow only)
-i*z*z + c                     # complex leading coefficient
-0.5*z*z + 0.3*i*z + c         # mixed real/imaginary coefficients
+z^3 - z + c                   // cubic with a linear term
+z*z + 0.5*z + c               // quadratic with linear coupling
+(z^4 + z^2)/2 + c             // mixed-degree (division → shallow only)
+i*z*z + c                     // complex leading coefficient
+0.5*z*z + 0.3*i*z + c         // mixed real/imaginary coefficients
 ```
 
 ### 13.2 Anti-holomorphic — Burning Ship, Tricorn, hybrids
 
-```text
-fold(z)*fold(z) + c           # Burning Ship
-conj(z)*conj(z) + c           # Tricorn (Mandelbar)
-conj(fold(z))^2 + c           # Burning-Tricorn hybrid
-fold(z)^3 + c                 # cubic Burning Ship
-z*z + c + 0.25*conj(z)        # Mandelbrot / Tricorn blend
+```equations
+fold(z)*fold(z) + c           // Burning Ship
+conj(z)*conj(z) + c           // Tricorn (Mandelbar)
+conj(fold(z))^2 + c           // Burning-Tricorn hybrid
+fold(z)^3 + c                 // cubic Burning Ship
+z*z + c + 0.25*conj(z)        // Mandelbrot / Tricorn blend
 ```
 
 ### 13.3 Rational maps (division; shallow-but-deep via DD/QD)
 
-```text
-(z*z - 1)/(z + 1) + c         # Mandelbrot-on-a-shell
-z - (z*z*z - 1)/(3*z*z)       # Newton-shaped iteration
-(z*z + c)/(1 + 0.1*z)         # damped feedback with a c-independent pole
-1/(z*z) + c                   # inverse-square (prefer pow(z,-2)+c)
+```equations
+(z*z - 1)/(z + 1) + c         // Mandelbrot-on-a-shell
+z - (z*z*z - 1)/(3*z*z)       // Newton-shaped iteration
+(z*z + c)/(1 + 0.1*z)         // damped feedback with a c-independent pole
+1/(z*z) + c                   // inverse-square (prefer pow(z,-2)+c)
 ```
 
 ### 13.4 Powers via `pow` (negative / fractional)
 
-```text
-pow(z, -2) + c                # "Donut" inverse map (finite at z=0)
-z*pow(z, -3) + c*pow(c, -2)   # "Movie Reel"
-pow(z, 2.5) + c               # fractional Multibrot
-pow(z, 3) + pow(z, -1) + c    # mixed positive/negative powers
+```equations
+pow(z, -2) + c                // "Donut" inverse map (finite at z=0)
+z*pow(z, -3) + c*pow(c, -2)   // "Movie Reel"
+pow(z, 2.5) + c               // fractional Multibrot
+pow(z, 3) + pow(z, -1) + c    // mixed positive/negative powers
 ```
 
 ### 13.5 Transcendental — exp / log / trig (lit relief works)
 
-```text
+```equations
 exp(z) + c
 sin(z) + c
 cos(z)*z + c
 log(z*z) + c
 sin(z)*cos(c) + c
-0.5*z + sin(z) + c            # damped oscillator
+0.5*z + sin(z) + c            // damped oscillator
 tan(z) + c
 sinh(z) + c
 cosh(z) - 0.5*c
@@ -778,62 +790,62 @@ e*z*z + c
 
 ### 13.6 Inverse trig / hyperbolic (normals on)
 
-```text
-atan(z) + c                   # bounded; drive harder for banding
-z*z + asin(c) + c             # escaping term + inverse-trig, with normals
+```equations
+atan(z) + c                   // bounded; drive harder for banding
+z*z + asin(c) + c             // escaping term + inverse-trig, with normals
 asinh(z*z) + c
-z*z + 0.3*atan(z) + c         # gentle inverse-tangent forcing
+z*z + 0.3*atan(z) + c         // gentle inverse-tangent forcing
 acosh(z) + c
 ```
 
 ### 13.7 Phoenix family (`prev`; Compile & Load)
 
-```text
-z*z + c + 0.5*prev            # classic Phoenix
-z*z - 0.5*prev + c            # negative feedback
-z^3 + 0.4*prev + c            # cubic Phoenix
-z*z + 0.3*prev - 0.1*prev*prev + c   # two-tap Phoenix
+```equations
+z*z + c + 0.5*prev            // classic Phoenix
+z*z - 0.5*prev + c            // negative feedback
+z^3 + 0.4*prev + c            // cubic Phoenix
+z*z + 0.3*prev - 0.1*prev*prev + c   // two-tap Phoenix
 ```
 
 ### 13.8 Component / rounding (domain warps, quantisation)
 
-```text
-z*z + fract(z) + c            # tiled / Kali-style warp
-z*z + 0.1*floor(z*4) + c      # quantised bands
-z*z + 0.2*sign(re(z)) + c     # sign-driven asymmetry
-z*z + round(z) - z + c        # snap-to-lattice feedback
+```equations
+z*z + fract(z) + c            // tiled / Kali-style warp
+z*z + 0.1*floor(z*4) + c      // quantised bands
+z*z + 0.2*sign(re(z)) + c     // sign-driven asymmetry
+z*z + round(z) - z + c        // snap-to-lattice feedback
 ```
 
 ### 13.9 Argument / angle driven
 
-```text
-z*z + 0.1*arg(z) + c          # spiral bias by orbit angle
-z*z + 0.05*atan2(z, c) + c    # branch by relative angle
-if arg(z) > 0 then z*z + c else z*z - c   # phase-split map
+```equations
+z*z + 0.1*arg(z) + c          // spiral bias by orbit angle
+z*z + 0.05*atan2(z, c) + c    // branch by relative angle
+if arg(z) > 0 then z*z + c else z*z - c   // phase-split map
 ```
 
 ### 13.10 Real reducers — min / max / mod / clamp
 
-```text
-min(z*z, max(z, -1.0)) + c    # clamped feedback
-z*z + mod(z, 1.0) + c         # periodic wrap
-max(z*z, sqr(z)) + c          # hybrid step
-clamp(z, -2.0, 2.0) + c       # bounded orbit
-z*z + clamp(re(z), -1.0, 1.0)*i + c   # clamp only the real drive
+```equations
+min(z*z, max(z, -1.0)) + c    // clamped feedback
+z*z + mod(z, 1.0) + c         // periodic wrap
+max(z*z, sqr(z)) + c          // hybrid step
+clamp(z, -2.0, 2.0) + c       // bounded orbit
+z*z + clamp(re(z), -1.0, 1.0)*i + c   // clamp only the real drive
 ```
 
 ### 13.11 Conditional / piecewise
 
-```text
+```equations
 if norm(z) < 1 then z*z + c else z*z - c
 if re(z) > 0 then z*z + c else conj(z)*conj(z) + c
 if im(z) > 0 then z^3 + c else z^2 + c
 ```
 
-Live-interpreter ternary equivalents — and compound conditions the CalcGen `if`
-cannot express (a product of terms, `&&`/`||`):
+The ternary form, and compound conditions (`&&` / `||`, a product of terms);
+both engines read them:
 
-```text
+```equations
 abs(z) < 1 ? z*z + c : z*z - c
 (re(z) > 0 && im(z) > 0) ? z^3 + c : z*z + c
 re(z)*im(z) > 0 ? z^3 + c : z^2 + c
@@ -841,21 +853,21 @@ re(z)*im(z) > 0 ? z^3 + c : z^2 + c
 
 ### 13.12 Iteration-aware (`n` / `iter`)
 
-```text
-z*z + c + 0.001*n             # slow drift (breaks scale invariance — by design)
-sin(z + 0.01*n) + c           # phase that winds with depth
-(1 - n*0.001)*(z*z) + n*0.001*(z^3) + c   # crossfade quadratic→cubic
-if (n mod 4) < 2 then z*z + c else z*z - c   # alternate every few iters
+```equations
+z*z + c + 0.001*n             // slow drift (breaks scale invariance — by design)
+sin(z + 0.01*n) + c           // phase that winds with depth
+(1 - n*0.001)*(z*z) + n*0.001*(z^3) + c   // crossfade quadratic→cubic
+if mod(n, 4) < 2 then z*z + c else z*z - c   // alternate every few iters
 ```
 
-### 13.13 `let` and blocks (live interpreter)
+### 13.13 `let` and blocks
 
-```text
-let w = z*z in w*w + c        # z^4, computed once
+```equations
+let w = z*z in w*w + c        // z^4, computed once
 let r = abs(z) in z*z + 0.2*r*c
 ```
 
-```text
+```equation
 var w = z*z;
 var d = w*w - w;
 return d + c;
@@ -866,12 +878,12 @@ return d + c;
 Each pairs an **equation** (a fixed constant where `+ c` used to be) with the
 **z₀ seed** control set to `c` — see [§11.2](#112-z-seed--julia-sets-and-critical-point-seeding).
 
-```text
-z*z + (-0.8 + 0.156*i)        # Douady rabbit           (seed: c)
-z*z + (-0.70176 - 0.3842*i)   # spiral Julia            (seed: c)
-z*z + (0.285 + 0.01*i)        # dendrite                (seed: c)
-z*z*z + (-0.4 + 0.6*i)        # cubic Julia             (seed: c)
-sin(z) + (1 + 0.2*i)          # transcendental Julia    (seed: c, Escape r: 4)
+```equations
+z*z + (-0.8 + 0.156*i)        // Douady rabbit           (seed: c)
+z*z + (-0.70176 - 0.3842*i)   // spiral Julia            (seed: c)
+z*z + (0.285 + 0.01*i)        // dendrite                (seed: c)
+z*z*z + (-0.4 + 0.6*i)        // cubic Julia             (seed: c)
+sin(z) + (1 + 0.2*i)          // transcendental Julia    (seed: c, Escape r: 4)
 ```
 
 ### 13.15 Convergence maps — Newton / Nova (`Converge-if` + `z₀ seed = c`)
@@ -879,14 +891,14 @@ sin(z) + (1 + 0.2*i)          # transcendental Julia    (seed: c, Escape r: 4)
 Each needs **z₀ seed = `c`** and a **Converge-if** condition — see
 [§11.3](#113-convergence-bailout--newton--magnet--nova).
 
-```text
-# Newton z³ − 1        Converge-if: abs(z - prev) < 0.0001
+```equations
+// Newton z³ − 1        Converge-if: abs(z - prev) < 0.0001
 z - (z*z*z - 1)/(3*z*z)
 
-# Newton z⁴ − 1        Converge-if: abs(z - prev) < 0.0001
+// Newton z⁴ − 1        Converge-if: abs(z - prev) < 0.0001
 z - (z*z*z*z - 1)/(4*z*z*z)
 
-# Nova (relaxed Newton + c)   Converge-if: abs(z - prev) < 0.0001   seed: c
+// Nova (relaxed Newton + c)   Converge-if: abs(z - prev) < 0.0001   seed: c
 z - (z*z*z - 1)/(3*z*z) + c
 ```
 
@@ -896,11 +908,11 @@ Maps with a pole at the origin or a tiny dynamic range — the "renders blank by
 default" family. Set **Escape r = 2** and **z₀ seed = c**; full walkthrough in
 [§11.4](#114-reproducing-a-fractalforumsorg-map-local-smoke-test).
 
-```text
-log(sin(abs(1/z))) + c        # forum map, Mandelbrot form   (seed: c, Escape r: 2)
-log(sin(abs(1/z))) - 1.55*i   # forum map, Julia c=(0,−1.55) (seed: c, Escape r: 2)
-sin(1/z) + c                  # simpler pole map             (seed: c, Escape r: 2)
-1/(z*z) + c                   # inverse-square               (seed: c, Escape r: 2)
+```equations
+log(sin(abs(1/z))) + c        // forum map, Mandelbrot form   (seed: c, Escape r: 2)
+log(sin(abs(1/z))) - 1.55*i   // forum map, Julia c=(0,−1.55) (seed: c, Escape r: 2)
+sin(1/z) + c                  // simpler pole map             (seed: c, Escape r: 2)
+1/(z*z) + c                   // inverse-square               (seed: c, Escape r: 2)
 ```
 
 ---
