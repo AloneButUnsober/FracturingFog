@@ -59,9 +59,13 @@
       Pull CalcGen Parser/Emitters/Api source from the sibling CalculatorGen/
       tree. Mirrors CalculatorGen.Lib but excludes HotLoad (Roslyn Scripting
       runtime dep) since the generator only needs the codegen pipeline.
+      #1086 — also excludes Language/ (the unified equation language: parser,
+      AST, interpreter). It targets net10.0 APIs (Math.Clamp / Asinh …) and the
+      generator does not consume it; if #1087's unified->CalcGen lowering must
+      run inside the generator, it needs a netstandard2.0-safe split.
     -->
     <Compile Include="..\CalculatorGen\**\*.cs"
-             Exclude="..\CalculatorGen\Program.cs;..\CalculatorGen\CalculatorGenHotLoad.cs;..\CalculatorGen\Templates\**;..\CalculatorGen\SampleOutput\**;..\CalculatorGen\bin\**;..\CalculatorGen\obj\**" />
+             Exclude="..\CalculatorGen\Program.cs;..\CalculatorGen\CalculatorGenHotLoad.cs;..\CalculatorGen\Language\**;..\CalculatorGen\Templates\**;..\CalculatorGen\SampleOutput\**;..\CalculatorGen\bin\**;..\CalculatorGen\obj\**" />
 
     <EmbeddedResource Include="..\CalculatorGen\Templates\Calculator.template.cs" Link="Templates\Calculator.template.cs" />
     <EmbeddedResource Include="..\CalculatorGen\Templates\SelfTest.template.cs"   Link="Templates\SelfTest.template.cs" />

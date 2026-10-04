@@ -93,7 +93,8 @@ Both engines speak **the same DSL**, with small dialect differences noted
 throughout. Both understand `if … then … else`. The live interpreter
 additionally understands `let … in`, `?:`, `&& || !` and multi-statement
 blocks. CalcGen's `^` takes an integer exponent only; use `pow()` for others.
-Unifying the two dialects is tracked in #937. Everything in the [function catalogue](#6-language-reference--the-function-catalogue)
+Unifying the two dialects is tracked in #937; the grammar is specified in
+[Equation Language](../Technical/Equation-Language.md). Everything in the [function catalogue](#6-language-reference--the-function-catalogue)
 works in both.
 
 The practical workflow: **author in the live editor** (instant feedback), then,

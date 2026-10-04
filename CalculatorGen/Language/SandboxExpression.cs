@@ -441,6 +441,37 @@ namespace FracturingFog.Models
         public const int SlotIter = 4;
         public const int ReservedSlots = 5;
 
+        /// <summary>#1086 — the language's built-in identifiers (input slots and
+        /// constants). Statement / let locals are added per source.</summary>
+        public static readonly IReadOnlyList<string> BuiltInIdentifiers =
+            new[] { "z", "c", "n", "prev", "iter", "pi", "e", "i" };
+
+        /// <summary>#1086 — every built-in function, lower-case.</summary>
+        public static readonly IReadOnlyList<string> FunctionNames = new[]
+        {
+            "sin", "cos", "tan", "sinh", "cosh", "tanh", "exp", "log", "sqrt", "sqr",
+            "abs", "norm", "conj", "re", "im", "arg",
+            "asin", "acos", "atan", "asinh", "acosh", "atanh",
+            "floor", "sign", "fold", "fract", "round", "ceil", "trunc",
+            "pow", "atan2", "min", "max", "mod", "clamp",
+        };
+
+        /// <summary>#1086 — argument count of a built-in function (lower-case
+        /// name), or -1 when the name is not a function.</summary>
+        public static int FunctionArity(string name) => name switch
+        {
+            "sin" or "cos" or "tan" or "sinh" or "cosh" or "tanh"
+                or "exp" or "log" or "sqrt" or "sqr"
+                or "abs" or "norm" or "conj" or "re" or "im" or "arg"
+                or "asin" or "acos" or "atan"
+                or "asinh" or "acosh" or "atanh"
+                or "floor" or "sign" or "fold" or "fract"
+                or "round" or "ceil" or "trunc" => 1,
+            "pow" or "atan2" or "min" or "max" or "mod" => 2,
+            "clamp" => 3,
+            _ => -1
+        };
+
         private SandboxExpression(SbxNode root, int envSize) { Root = root; EnvSize = envSize; }
 
         public static SandboxExpression Parse(string source)
@@ -523,7 +554,7 @@ namespace FracturingFog.Models
                 // semicolon survived, possibly followed by a trailing comment).
                 if (Peek() == ';') { _pos++; SkipWs(); }
                 if (_pos < _src.Length)
-                    throw new FormatException($"Unexpected '{_src[_pos]}' at position {_pos}");
+                    throw new FormatException($"Unexpected '{_src[_pos]}' at {At(_pos)}.");
                 return node;
             }
 
@@ -579,7 +610,7 @@ namespace FracturingFog.Models
 
                     string ifName = ReadIdent();
                     if (string.IsNullOrEmpty(ifName))
-                        throw new FormatException($"Expected assignment or 'return' after 'if (...)' at {_pos}");
+                        throw new FormatException($"Expected assignment or 'return' after 'if (...)' at {At(_pos)}.");
                     SkipWs();
                     Expect('=');
                     var ifRhs = ParseExpr();
@@ -588,7 +619,7 @@ namespace FracturingFog.Models
                     // The else branch keeps the variable's prior value, so it must
                     // already be bound (`z`/`c`/`n` or an earlier decl).
                     if (!_scope.TryGetValue(ifName, out int priorSlot))
-                        throw new FormatException($"'if' assigns to unbound '{ifName}' at {_pos}");
+                        throw new FormatException($"'if' assigns to unbound '{ifName}' at {At(_pos)}.");
                     var seeded = new SbxTernary(cond, ifRhs, new SbxSlot(priorSlot));
                     return BindBlock(ifName, seeded);
                 }
@@ -673,13 +704,13 @@ namespace FracturingFog.Models
                 {
                     SkipWs();
                     string name = ReadIdent();
-                    if (string.IsNullOrEmpty(name)) throw new FormatException("Expected identifier after 'let'");
-                    if (IsReservedName(name)) throw new FormatException($"Cannot rebind reserved name '{name}'");
+                    if (string.IsNullOrEmpty(name)) throw new FormatException($"Expected identifier after 'let' at {At(_pos)}.");
+                    if (IsReservedName(name)) throw new FormatException($"Cannot rebind reserved name '{name}' at {At(_pos - name.Length)}.");
                     SkipWs();
                     Expect('=');
                     var valueExpr = ParseExpr();
                     SkipWs();
-                    if (!MatchKeyword("in")) throw new FormatException("Expected 'in' in let-expression");
+                    if (!MatchKeyword("in")) throw new FormatException($"Expected 'in' in let-expression at {At(_pos)}.");
 
                     // Bind name to a fresh slot for the body; restore prior binding on exit.
                     bool hadPrior = _scope.TryGetValue(name, out int prior);
@@ -707,10 +738,10 @@ namespace FracturingFog.Models
             private SbxNode ParseIfThenElse(SbxNode cond)
             {
                 SkipWs();
-                if (!MatchKeyword("then")) throw new FormatException($"Expected 'then' after the 'if' condition at position {_pos}");
+                if (!MatchKeyword("then")) throw new FormatException($"Expected 'then' after the 'if' condition at {At(_pos)}.");
                 var thenN = ParseExpr();
                 SkipWs();
-                if (!MatchKeyword("else")) throw new FormatException($"Expected 'else' after the 'then' branch at position {_pos}");
+                if (!MatchKeyword("else")) throw new FormatException($"Expected 'else' after the 'then' branch at {At(_pos)}.");
                 var elseN = ParseExpr();
                 return new SbxTernary(CalcGenCondition(cond), thenN, elseN);
             }
@@ -841,7 +872,7 @@ namespace FracturingFog.Models
             private SbxNode ParsePrimary()
             {
                 SkipWs();
-                if (_pos >= _src.Length) throw new FormatException("Unexpected end of expression");
+                if (_pos >= _src.Length) throw new FormatException($"Unexpected end of expression at {At(_pos)}.");
                 char p = Peek();
                 if (p == '(')
                 {
@@ -855,9 +886,10 @@ namespace FracturingFog.Models
                     return ParseNumber();
                 if (IsIdentStart(p))
                 {
+                    int identStart = _pos;
                     string name = ReadIdent();
                     SkipWs();
-                    if (Peek() == '(') return ParseCall(name);
+                    if (Peek() == '(') return ParseCall(name, identStart);
 
                     // Scope wins over the built-in constants so a statement-block
                     // local named `e`/`i`/`pi` (#27 Phase 5b lets a block bind any
@@ -879,12 +911,13 @@ namespace FracturingFog.Models
                         case "e":  return new SbxConst(SbxVal.Real(Math.E));
                         case "i":  return new SbxConst(SbxVal.Cx(0.0, 1.0));
                     }
-                    throw new FormatException($"Unknown identifier '{name}' at {_pos}");
+                    throw new FormatException(
+                        $"Unknown identifier '{name}' at {At(identStart)}.{DidYouMean(name, IdentifierCandidates())}");
                 }
-                throw new FormatException($"Unexpected character '{p}' at {_pos}");
+                throw new FormatException($"Unexpected character '{p}' at {At(_pos)}.");
             }
 
-            private SbxNode ParseCall(string name)
+            private SbxNode ParseCall(string name, int nameStart)
             {
                 _pos++; // consume '('
                 var args = new List<SbxNode>();
@@ -898,26 +931,15 @@ namespace FracturingFog.Models
                 Expect(')');
 
                 string lname = name.ToLowerInvariant();
-                int expected = ArityOf(lname);
-                if (expected < 0) throw new FormatException($"Unknown function '{name}'");
+                int expected = FunctionArity(lname);
+                if (expected < 0)
+                    throw new FormatException(
+                        $"Unknown function '{name}' at {At(nameStart)}.{DidYouMean(lname, FunctionNames)}");
                 if (args.Count != expected)
-                    throw new FormatException($"Function '{name}' takes {expected} arg(s), got {args.Count}");
+                    throw new FormatException(
+                        $"Function '{name}' at {At(nameStart)} takes {expected} arg(s), got {args.Count}.");
                 return new SbxCall(lname, args.ToArray());
             }
-
-            private static int ArityOf(string name) => name switch
-            {
-                "sin" or "cos" or "tan" or "sinh" or "cosh" or "tanh"
-                    or "exp" or "log" or "sqrt" or "sqr"
-                    or "abs" or "norm" or "conj" or "re" or "im" or "arg"
-                    or "asin" or "acos" or "atan"
-                    or "asinh" or "acosh" or "atanh"
-                    or "floor" or "sign" or "fold" or "fract"
-                    or "round" or "ceil" or "trunc" => 1,
-                "pow" or "atan2" or "min" or "max" or "mod" => 2,
-                "clamp" => 3,
-                _ => -1
-            };
 
             private SbxNode ParseNumber()
             {
@@ -932,11 +954,60 @@ namespace FracturingFog.Models
                 }
                 string tok = _src.Substring(start, _pos - start);
                 if (!double.TryParse(tok, NumberStyles.Float, CultureInfo.InvariantCulture, out double d))
-                    throw new FormatException($"Invalid number '{tok}' at {start}");
+                    throw new FormatException($"Invalid number '{tok}' at {At(start)}.");
                 return new SbxConst(SbxVal.Real(d));
             }
 
             // ── Helpers ───────────────────────────────────────────────────────
+
+            // #1086 — error positions in the CalcGen DSL's format ("line L, col C",
+            // 1-based) so the editor's error-span / quick-fix code reads both.
+            private string At(int pos)
+            {
+                int line = 1, col = 1;
+                for (int k = 0; k < pos && k < _src.Length; k++)
+                {
+                    if (_src[k] == '\n') { line++; col = 1; } else col++;
+                }
+                return $"line {line}, col {col}";
+            }
+
+            private IEnumerable<string> IdentifierCandidates()
+            {
+                foreach (var b in BuiltInIdentifiers) yield return b;
+                foreach (var k in _scope.Keys) yield return k;
+                foreach (var f in FunctionNames) yield return f;
+            }
+
+            // " Did you mean 'x'?" for the closest candidate within edit distance
+            // 2 (CalcGen's lexer uses the same rule), else empty.
+            private static string DidYouMean(string name, IEnumerable<string> candidates)
+            {
+                string? best = null;
+                int bestD = int.MaxValue;
+                string lower = name.ToLowerInvariant();
+                foreach (var cand in candidates)
+                {
+                    int d = Levenshtein(lower, cand.ToLowerInvariant());
+                    if (d < bestD) { bestD = d; best = cand; }
+                }
+                return best != null && bestD > 0 && bestD <= 2 ? $" Did you mean '{best}'?" : string.Empty;
+            }
+
+            private static int Levenshtein(string a, string b)
+            {
+                var prev = new int[b.Length + 1];
+                var cur = new int[b.Length + 1];
+                for (int j = 0; j <= b.Length; j++) prev[j] = j;
+                for (int i = 1; i <= a.Length; i++)
+                {
+                    cur[0] = i;
+                    for (int j = 1; j <= b.Length; j++)
+                        cur[j] = Math.Min(Math.Min(cur[j - 1] + 1, prev[j] + 1), prev[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1));
+                    (prev, cur) = (cur, prev);
+                }
+                return prev[b.Length];
+            }
 
             private char Peek(int offset = 0)
                 => (_pos + offset < _src.Length) ? _src[_pos + offset] : '\0';
@@ -976,7 +1047,7 @@ namespace FracturingFog.Models
             {
                 SkipWs();
                 if (_pos >= _src.Length || _src[_pos] != c)
-                    throw new FormatException($"Expected '{c}' at position {_pos}");
+                    throw new FormatException($"Expected '{c}' at {At(_pos)}.");
                 _pos++;
             }
 
