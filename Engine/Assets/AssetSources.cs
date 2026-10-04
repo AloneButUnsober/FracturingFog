@@ -258,6 +258,7 @@ namespace FracturingFog.Assets
 
         public AssetImportResult ImportJson(string json, bool overwrite)
         {
+            FracturingFog.Models.BulbLanguageMigration.Register();   // #1100
             var e = AssetSizing.Parse<UserBulbEntry>(json);
             if (e == null) return AssetImportResult.Fail;
             var store = UserBulbStore.Instance;

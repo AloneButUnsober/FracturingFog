@@ -122,7 +122,6 @@ public sealed class BulbLanguageGoldenTests
             }
         }
         Assert.True(parsed >= total - 1, $"only {parsed}/{total} corpus sources parse: " + string.Join(" | ", unparsed));
-        Assert.True(GoldenFingerprint == 0UL || h == GoldenFingerprint, $"fingerprint {h}UL != frozen {GoldenFingerprint}UL");
-        if (GoldenFingerprint == 0UL) Assert.Fail($"freeze GoldenFingerprint = {h}UL ({parsed}/{total} parsed)");
+        Assert.True(h == GoldenFingerprint, $"fingerprint {h}UL != frozen {GoldenFingerprint}UL");
     }
 }

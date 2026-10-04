@@ -21,7 +21,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace FracturingFog.Models
@@ -75,11 +74,10 @@ namespace FracturingFog.Models
             return r.Changed ? r.Source : null;
         }
 
-        /// <summary>Give the UI-free store (Abstractions) the upgrader. Runs when
-        /// Engine loads; hosts also call it before the first store Load.</summary>
-        [ModuleInitializer]
-        internal static void RegisterOnLoad() => Register();
-
+        /// <summary>Give the UI-free store (Abstractions) the upgrader. Called
+        /// before the first store load (shell bootstrap, <c>--batch</c>) and by
+        /// the Engine paths that write the store (asset import, the DSL
+        /// migration). Idempotent.</summary>
         public static void Register() => UserBulbStore.LanguageUpgrader ??= UpgradeOrNull;
     }
 }

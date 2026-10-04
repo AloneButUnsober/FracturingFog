@@ -41,6 +41,7 @@ public static class UserBulbDslMigration
     public static int Run(UserBulbStore store)
     {
         if (store == null) return 0;
+        FracturingFog.Models.BulbLanguageMigration.Register();   // #1100
         return store.MigrateUserBulbsToDsl(TranslateBody, TranslateChain);
     }
 
