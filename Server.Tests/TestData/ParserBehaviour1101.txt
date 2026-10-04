@@ -1,0 +1,1521 @@
+2D  P || ERR FormatException: Unexpected end of expression at line 1, col 1.
+2D  L || ERR FormatException: Unexpected end of expression at line 1, col 1.
+3D  P || ERR SbxParseException @0+1 step-1: Unexpected end of expression at line 1, col 1.
+3D  L || ERR SbxParseException @0+1 step-1: Unexpected end of expression at line 1, col 1.
+3D  N || ERR SbxParseException @0+1 step-1: Unexpected end of expression at line 1, col 1.
+2D  P |   | ERR FormatException: Unexpected end of expression at line 1, col 4.
+2D  L |   | ERR FormatException: Unexpected end of expression at line 1, col 4.
+3D  P |   | ERR SbxParseException @3+1 step-1: Unexpected end of expression at line 1, col 4.
+3D  L |   | ERR SbxParseException @3+1 step-1: Unexpected end of expression at line 1, col 4.
+3D  N |   | ERR SbxParseException @3+1 step-1: Unexpected end of expression at line 1, col 4.
+2D  P |z +| ERR FormatException: Unexpected end of expression at line 1, col 4.
+2D  L |z +| ERR FormatException: Unexpected end of expression at line 1, col 4.
+3D  P |z +| ERR SbxParseException @3+1 step-1: Unexpected end of expression at line 1, col 4.
+3D  L |z +| ERR SbxParseException @3+1 step-1: Unexpected end of expression at line 1, col 4.
+3D  N |z +| ERR SbxParseException @3+1 step-1: Unexpected end of expression at line 1, col 4.
+2D  P |(z| ERR FormatException: Expected ')' at line 1, col 3.
+2D  L |(z| ERR FormatException: Expected ')' at line 1, col 3.
+3D  P |(z| ERR SbxParseException @2+1 step-1: Expected ')' at line 1, col 3.
+3D  L |(z| ERR SbxParseException @2+1 step-1: Expected ')' at line 1, col 3.
+3D  N |(z| ERR SbxParseException @2+1 step-1: Expected ')' at line 1, col 3.
+2D  P |z)| ERR FormatException: Unexpected ')' at line 1, col 2.
+2D  L |z)| ERR FormatException: Unexpected ')' at line 1, col 2.
+3D  P |z)| ERR SbxParseException @1+1 step-1: Unexpected ')' at line 1, col 2.
+3D  L |z)| ERR SbxParseException @1+1 step-1: Unexpected ')' at line 1, col 2.
+3D  N |z)| ERR SbxParseException @1+1 step-1: Unexpected ')' at line 1, col 2.
+2D  P |z ? c| ERR FormatException: Expected ':' at line 1, col 6.
+2D  L |z ? c| ERR FormatException: Expected ':' at line 1, col 6.
+3D  P |z ? c| ERR SbxParseException @5+1 step-1: Expected ':' at line 1, col 6.
+3D  L |z ? c| ERR SbxParseException @5+1 step-1: Expected ':' at line 1, col 6.
+3D  N |z ? c| ERR SbxParseException @5+1 step-1: Expected ':' at line 1, col 6.
+2D  P |z ? c :| ERR FormatException: Unexpected end of expression at line 1, col 8.
+2D  L |z ? c :| ERR FormatException: Unexpected end of expression at line 1, col 8.
+3D  P |z ? c :| ERR SbxParseException @7+1 step-1: Unexpected end of expression at line 1, col 8.
+3D  L |z ? c :| ERR SbxParseException @7+1 step-1: Unexpected end of expression at line 1, col 8.
+3D  N |z ? c :| ERR SbxParseException @7+1 step-1: Unexpected end of expression at line 1, col 8.
+2D  P |let| ERR FormatException: Expected an identifier after 'let' at line 1, col 4.
+2D  L |let| ERR FormatException: Expected an identifier after 'let' at line 1, col 4.
+3D  P |let| ERR SbxParseException @3+1 step-1: Expected an identifier after 'let' at line 1, col 4.
+3D  L |let| ERR SbxParseException @3+1 step-1: Expected an identifier after 'let' at line 1, col 4.
+3D  N |let| ERR SbxParseException @3+1 step-1: Expected an identifier after 'let' at line 1, col 4.
+2D  P |let = 3 in z| ERR FormatException: Expected an identifier after 'let' at line 1, col 5.
+2D  L |let = 3 in z| ERR FormatException: Expected an identifier after 'let' at line 1, col 5.
+3D  P |let = 3 in z| ERR SbxParseException @4+1 step-1: Expected an identifier after 'let' at line 1, col 5.
+3D  L |let = 3 in z| ERR SbxParseException @4+1 step-1: Expected an identifier after 'let' at line 1, col 5.
+3D  N |let = 3 in z| ERR SbxParseException @4+1 step-1: Expected an identifier after 'let' at line 1, col 5.
+2D  P |let w = z| ERR FormatException: Expected 'in' in let-expression at line 1, col 10.
+2D  L |let w = z| ERR FormatException: Expected 'in' in let-expression at line 1, col 10.
+3D  P |let w = z| ERR SbxParseException @9+1 step-1: Expected 'in' in let-expression at line 1, col 10.
+3D  L |let w = z| ERR SbxParseException @9+1 step-1: Expected 'in' in let-expression at line 1, col 10.
+3D  N |let w = z| ERR SbxParseException @9+1 step-1: Expected 'in' in let-expression at line 1, col 10.
+2D  P |let w = z in| ERR FormatException: Unexpected end of expression at line 1, col 13.
+2D  L |let w = z in| ERR FormatException: Unexpected end of expression at line 1, col 13.
+3D  P |let w = z in| ERR SbxParseException @12+1 step-1: Unexpected end of expression at line 1, col 13.
+3D  L |let w = z in| ERR SbxParseException @12+1 step-1: Unexpected end of expression at line 1, col 13.
+3D  N |let w = z in| ERR SbxParseException @12+1 step-1: Unexpected end of expression at line 1, col 13.
+2D  P |let z = 1 in z| ERR FormatException: Cannot rebind reserved name 'z' at line 1, col 5.
+2D  L |let z = 1 in z| ERR FormatException: Cannot rebind reserved name 'z' at line 1, col 5.
+3D  P |let z = 1 in z| ERR SbxParseException @4+1 step-1: Cannot rebind reserved name 'z' at line 1, col 5.
+3D  L |let z = 1 in z| ERR SbxParseException @4+1 step-1: Cannot rebind reserved name 'z' at line 1, col 5.
+3D  N |let z = 1 in z| ERR SbxParseException @4+1 step-1: Cannot rebind reserved name 'z' at line 1, col 5.
+2D  P |let pi = 1 in pi| ERR FormatException: Cannot rebind reserved name 'pi' at line 1, col 5.
+2D  L |let pi = 1 in pi| ERR FormatException: Cannot rebind reserved name 'pi' at line 1, col 5.
+3D  P |let pi = 1 in pi| ERR SbxParseException @4+2 step-1: Cannot rebind reserved name 'pi' at line 1, col 5.
+3D  L |let pi = 1 in pi| ERR SbxParseException @4+2 step-1: Cannot rebind reserved name 'pi' at line 1, col 5.
+3D  N |let pi = 1 in pi| ERR SbxParseException @4+2 step-1: Cannot rebind reserved name 'pi' at line 1, col 5.
+2D  P |let then = 1 in z| (let $5 1 z)
+2D  L |let then = 1 in z| (let $5 1 z)
+3D  P |let then = 1 in z| ERR SbxParseException @4+4 step-1: Cannot rebind reserved name 'then' at line 1, col 5.
+3D  L |let then = 1 in z| ERR SbxParseException @4+4 step-1: Cannot rebind reserved name 'then' at line 1, col 5.
+3D  N |let then = 1 in z| ERR SbxParseException @4+4 step-1: Cannot rebind reserved name 'then' at line 1, col 5.
+2D  P |if z then c| ERR FormatException: Expected 'else' after the 'then' branch at line 1, col 12.
+2D  L |if z then c| ERR FormatException: Expected 'else' after the 'then' branch at line 1, col 12.
+3D  P |if z then c| ERR SbxParseException @11+1 step-1: Expected 'else' after the 'then' branch at line 1, col 12.
+3D  L |if z then c| ERR SbxParseException @11+1 step-1: Expected 'else' after the 'then' branch at line 1, col 12.
+3D  N |if z then c| ERR SbxParseException @11+1 step-1: Expected 'else' after the 'then' branch at line 1, col 12.
+2D  P |if re(z) > 0 then z| ERR FormatException: Expected 'else' after the 'then' branch at line 1, col 20.
+2D  L |if re(z) > 0 then z| ERR FormatException: Expected 'else' after the 'then' branch at line 1, col 20.
+3D  P |if re(z) > 0 then z| ERR SbxParseException @3+2 step-1: Unknown function 're' at line 1, col 4. Did you mean 'vec'?
+3D  L |if re(z) > 0 then z| ERR SbxParseException @3+2 step-1: Unknown function 're' at line 1, col 4. Did you mean 'vec'?
+3D  N |if re(z) > 0 then z| ERR SbxParseException @3+2 step-1: Unknown function 're' at line 1, col 4. Did you mean 'vec'?
+2D  P |if z.x > 0 then z| ERR FormatException: Expected 'then' after the 'if' condition at line 1, col 5.
+2D  L |if z.x > 0 then z| ERR FormatException: Expected 'then' after the 'if' condition at line 1, col 5.
+3D  P |if z.x > 0 then z| ERR SbxParseException @17+1 step-1: Expected 'else' after the 'then' branch at line 1, col 18.
+3D  L |if z.x > 0 then z| ERR SbxParseException @17+1 step-1: Expected 'else' after the 'then' branch at line 1, col 18.
+3D  N |if z.x > 0 then z| ERR SbxParseException @17+1 step-1: Expected 'else' after the 'then' branch at line 1, col 18.
+2D  P |if (z > 0) w = 1; z| ERR FormatException: 'if' assigns to unbound 'w' at line 1, col 12.
+2D  L |if (z > 0) w = 1; z| ERR FormatException: 'if' assigns to unbound 'w' at line 1, col 12.
+3D  P |if (z > 0) w = 1; z| ERR SbxParseException @11+1 step-1: 'if' assigns to unbound 'w' at line 1, col 12.
+3D  L |if (z > 0) w = 1; z| ERR SbxParseException @11+1 step-1: 'if' assigns to unbound 'w' at line 1, col 12.
+3D  N |if (z > 0) w = 1; z| ERR SbxParseException @11+1 step-1: 'if' assigns to unbound 'w' at line 1, col 12.
+2D  P |if (z > 0)| ERR FormatException: Expected 'then' after the 'if' condition at line 1, col 11.
+2D  L |if (z > 0)| ERR FormatException: Expected 'then' after the 'if' condition at line 1, col 11.
+3D  P |if (z > 0)| ERR SbxParseException @10+1 step-1: Expected 'then' after the 'if' condition at line 1, col 11.
+3D  L |if (z > 0)| ERR SbxParseException @10+1 step-1: Expected 'then' after the 'if' condition at line 1, col 11.
+3D  N |if (z > 0)| ERR SbxParseException @10+1 step-1: Expected 'then' after the 'if' condition at line 1, col 11.
+2D  P |if (z > 0) ;| ERR FormatException: Expected 'then' after the 'if' condition at line 1, col 12.
+2D  L |if (z > 0) ;| ERR FormatException: Expected 'then' after the 'if' condition at line 1, col 12.
+3D  P |if (z > 0) ;| ERR SbxParseException @11+1 step-1: Expected 'then' after the 'if' condition at line 1, col 12.
+3D  L |if (z > 0) ;| ERR SbxParseException @11+1 step-1: Expected 'then' after the 'if' condition at line 1, col 12.
+3D  N |if (z > 0) ;| ERR SbxParseException @11+1 step-1: Expected 'then' after the 'if' condition at line 1, col 12.
+2D  P |if (n > 0) z = c; z*z| (let $5 (? (> n 0) c z) (* $5 $5))
+2D  L |if (n > 0) z = c; z*z| (let $5 (? (> n 0) c z) (* $5 $5))
+3D  P |if (n > 0) z = c; z*z| (let $5 (? (> $2 0) $1 $0) (* $5 $5))
+3D  L |if (n > 0) z = c; z*z| (let $3 (? (> $2 0) $1 $0) (* $3 $3))
+3D  N |if (n > 0) z = c; z*z| (let $3 (? (> $2 0) $1 $0) (* $3 $3))
+2D  P |if (n > 0) return c; z*z| (? (> n 0) c (* z z))
+2D  L |if (n > 0) return c; z*z| (? (> n 0) c (* z z))
+3D  P |if (n > 0) return c; z*z| (? (> $2 0) $1 (* $0 $0))
+3D  L |if (n > 0) return c; z*z| (? (> $2 0) $1 (* $0 $0))
+3D  N |if (n > 0) return c; z*z| (? (> $2 0) $1 (* $0 $0))
+2D  P |var = 3; z| ERR FormatException: Unknown identifier 'var' at line 1, col 1. Did you mean 'tan'?
+2D  L |var = 3; z| ERR FormatException: Unknown identifier 'var' at line 1, col 1. Did you mean 'tan'?
+3D  P |var = 3; z| ERR SbxParseException @0+3 step-1: Unknown identifier 'var' at line 1, col 1. Did you mean 'tan'?
+3D  L |var = 3; z| ERR SbxParseException @4+1 step-1: Unexpected '=' at line 1, col 5.
+3D  N |var = 3; z| ERR SbxParseException @4+1 step-1: Unexpected '=' at line 1, col 5.
+2D  P |var w = ; z| ERR FormatException: Unexpected character ';' at line 1, col 9.
+2D  L |var w = ; z| ERR FormatException: Unexpected character ';' at line 1, col 9.
+3D  P |var w = ; z| ERR SbxParseException @8+1 step-1: Unexpected character ';' at line 1, col 9.
+3D  L |var w = ; z| ERR SbxParseException @8+1 step-1: Unexpected character ';' at line 1, col 9.
+3D  N |var w = ; z| ERR SbxParseException @8+1 step-1: Unexpected character ';' at line 1, col 9.
+2D  P |return| ERR FormatException: Unexpected end of expression at line 1, col 7.
+2D  L |return| ERR FormatException: Unexpected end of expression at line 1, col 7.
+3D  P |return| ERR SbxParseException @6+1 step-1: Unexpected end of expression at line 1, col 7.
+3D  L |return| ERR SbxParseException @6+1 step-1: Unexpected end of expression at line 1, col 7.
+3D  N |return| ERR SbxParseException @6+1 step-1: Unexpected end of expression at line 1, col 7.
+2D  P |return z; z| ERR FormatException: Unexpected 'z' at line 1, col 11.
+2D  L |return z; z| ERR FormatException: Unexpected 'z' at line 1, col 11.
+3D  P |return z; z| ERR SbxParseException @10+1 step-1: Unexpected 'z' at line 1, col 11.
+3D  L |return z; z| ERR SbxParseException @10+1 step-1: Unexpected 'z' at line 1, col 11.
+3D  N |return z; z| ERR SbxParseException @10+1 step-1: Unexpected 'z' at line 1, col 11.
+2D  P |z;;| z
+2D  L |z;;| z
+3D  P |z;;| $0
+3D  L |z;;| $0
+3D  N |z;;| $0
+2D  P |z;| z
+2D  L |z;| z
+3D  P |z;| $0
+3D  L |z;| $0
+3D  N |z;| $0
+2D  P |1e| ERR FormatException: Invalid number '1e' at line 1, col 1.
+2D  L |1e| ERR FormatException: Invalid number '1e' at line 1, col 1.
+3D  P |1e| ERR SbxParseException @0+2 step-1: Invalid number '1e' at line 1, col 1.
+3D  L |1e| ERR SbxParseException @0+2 step-1: Invalid number '1e' at line 1, col 1.
+3D  N |1e| ERR SbxParseException @0+2 step-1: Invalid number '1e' at line 1, col 1.
+2D  P |1.2.3| ERR FormatException: Invalid number '1.2.3' at line 1, col 1.
+2D  L |1.2.3| ERR FormatException: Invalid number '1.2.3' at line 1, col 1.
+3D  P |1.2.3| ERR SbxParseException @0+5 step-1: Invalid number '1.2.3' at line 1, col 1.
+3D  L |1.2.3| ERR SbxParseException @0+5 step-1: Invalid number '1.2.3' at line 1, col 1.
+3D  N |1.2.3| ERR SbxParseException @0+5 step-1: Invalid number '1.2.3' at line 1, col 1.
+2D  P |..5| ERR FormatException: Unexpected character '.' at line 1, col 1.
+2D  L |..5| ERR FormatException: Unexpected character '.' at line 1, col 1.
+3D  P |..5| ERR SbxParseException @0+1 step-1: Unexpected character '.' at line 1, col 1.
+3D  L |..5| ERR SbxParseException @0+1 step-1: Unexpected character '.' at line 1, col 1.
+3D  N |..5| ERR SbxParseException @0+1 step-1: Unexpected character '.' at line 1, col 1.
+2D  P |.5 + z| (+ 0.5 z)
+2D  L |.5 + z| (+ 0.5 z)
+3D  P |.5 + z| (+ 0.5 $0)
+3D  L |.5 + z| (+ 0.5 $0)
+3D  N |.5 + z| (+ 0.5 $0)
+2D  P |1e3*z| (* 1000 z)
+2D  L |1e3*z| (* 1000 z)
+3D  P |1e3*z| (* 1000 $0)
+3D  L |1e3*z| (* 1000 $0)
+3D  N |1e3*z| (* 1000 $0)
+2D  P |2.5e-2 + z| (+ 0.025 z)
+2D  L |2.5e-2 + z| (+ 0.025 z)
+3D  P |2.5e-2 + z| (+ 0.025 $0)
+3D  L |2.5e-2 + z| (+ 0.025 $0)
+3D  N |2.5e-2 + z| (+ 0.025 $0)
+2D  P |z @ c| ERR FormatException: Unexpected '@' at line 1, col 3.
+2D  L |z @ c| ERR FormatException: Unexpected '@' at line 1, col 3.
+3D  P |z @ c| ERR SbxParseException @2+1 step-1: Unexpected '@' at line 1, col 3.
+3D  L |z @ c| ERR SbxParseException @2+1 step-1: Unexpected '@' at line 1, col 3.
+3D  N |z @ c| ERR SbxParseException @2+1 step-1: Unexpected '@' at line 1, col 3.
+2D  P |sin(| ERR FormatException: Unexpected end of expression at line 1, col 5.
+2D  L |sin(| ERR FormatException: Unexpected end of expression at line 1, col 5.
+3D  P |sin(| ERR SbxParseException @4+1 step-1: Unexpected end of expression at line 1, col 5.
+3D  L |sin(| ERR SbxParseException @4+1 step-1: Unexpected end of expression at line 1, col 5.
+3D  N |sin(| ERR SbxParseException @4+1 step-1: Unexpected end of expression at line 1, col 5.
+2D  P |sin(z| ERR FormatException: Expected ')' at line 1, col 6.
+2D  L |sin(z| ERR FormatException: Expected ')' at line 1, col 6.
+3D  P |sin(z| ERR SbxParseException @5+1 step-1: Expected ')' at line 1, col 6.
+3D  L |sin(z| ERR SbxParseException @5+1 step-1: Expected ')' at line 1, col 6.
+3D  N |sin(z| ERR SbxParseException @5+1 step-1: Expected ')' at line 1, col 6.
+2D  P |sin(z,| ERR FormatException: Unexpected end of expression at line 1, col 7.
+2D  L |sin(z,| ERR FormatException: Unexpected end of expression at line 1, col 7.
+3D  P |sin(z,| ERR SbxParseException @6+1 step-1: Unexpected end of expression at line 1, col 7.
+3D  L |sin(z,| ERR SbxParseException @6+1 step-1: Unexpected end of expression at line 1, col 7.
+3D  N |sin(z,| ERR SbxParseException @6+1 step-1: Unexpected end of expression at line 1, col 7.
+2D  P |sin(z,)| ERR FormatException: Unexpected character ')' at line 1, col 7.
+2D  L |sin(z,)| ERR FormatException: Unexpected character ')' at line 1, col 7.
+3D  P |sin(z,)| ERR SbxParseException @6+1 step-1: Unexpected character ')' at line 1, col 7.
+3D  L |sin(z,)| ERR SbxParseException @6+1 step-1: Unexpected character ')' at line 1, col 7.
+3D  N |sin(z,)| ERR SbxParseException @6+1 step-1: Unexpected character ')' at line 1, col 7.
+2D  P |sni(z)| ERR FormatException: Unknown function 'sni' at line 1, col 1. Did you mean 'sin'?
+2D  L |sni(z)| ERR FormatException: Unknown function 'sni' at line 1, col 1. Did you mean 'sin'?
+3D  P |sni(z)| ERR SbxParseException @0+3 step-1: Unknown function 'sni' at line 1, col 1. Did you mean 'sin'?
+3D  L |sni(z)| ERR SbxParseException @0+3 step-1: Unknown function 'sni' at line 1, col 1. Did you mean 'sin'?
+3D  N |sni(z)| ERR SbxParseException @0+3 step-1: Unknown function 'sni' at line 1, col 1. Did you mean 'sin'?
+2D  P |zz| ERR FormatException: Unknown identifier 'zz' at line 1, col 1. Did you mean 'z'?
+2D  L |zz| ERR FormatException: Unknown identifier 'zz' at line 1, col 1. Did you mean 'z'?
+3D  P |zz| ERR SbxParseException @0+2 step-1: Unknown identifier 'zz' at line 1, col 1. Did you mean 'z'?
+3D  L |zz| $3
+3D  N |zz| $3
+2D  P |Sin(z)| (sin z)
+2D  L |Sin(z)| (sin z)
+3D  P |Sin(z)| (sin $0)
+3D  L |Sin(z)| (sin $0)
+3D  N |Sin(z)| (sin $0)
+2D  P |SIN(z)| (sin z)
+2D  L |SIN(z)| (sin z)
+3D  P |SIN(z)| (sin $0)
+3D  L |SIN(z)| (sin $0)
+3D  N |SIN(z)| (sin $0)
+2D  P |PI| 3.141592653589793
+2D  L |PI| 3.141592653589793
+3D  P |PI| ERR SbxParseException @0+2 step-1: Unknown identifier 'PI' at line 1, col 1.
+3D  L |PI| $3
+3D  N |PI| $3
+2D  P |Pi| 3.141592653589793
+2D  L |Pi| 3.141592653589793
+3D  P |Pi| ERR SbxParseException @0+2 step-1: Unknown identifier 'Pi' at line 1, col 1.
+3D  L |Pi| $3
+3D  N |Pi| $3
+2D  P |E| 2.718281828459045
+2D  L |E| 2.718281828459045
+3D  P |E| ERR SbxParseException @0+1 step-1: Unknown identifier 'E' at line 1, col 1.
+3D  L |E| $3
+3D  N |E| $3
+2D  P |I| (cx 0 1)
+2D  L |I| (cx 0 1)
+3D  P |I| ERR SbxParseException @0+1 step-1: Unknown identifier 'I' at line 1, col 1. Did you mean 'z'?
+3D  L |I| $3
+3D  N |I| $3
+2D  P |pi| 3.141592653589793
+2D  L |pi| 3.141592653589793
+3D  P |pi| 3.141592653589793
+3D  L |pi| 3.141592653589793
+3D  N |pi| 3.141592653589793
+2D  P |e| 2.718281828459045
+2D  L |e| 2.718281828459045
+3D  P |e| 2.718281828459045
+3D  L |e| 2.718281828459045
+3D  N |e| 2.718281828459045
+2D  P |i| (cx 0 1)
+2D  L |i| (cx 0 1)
+3D  P |i| ERR SbxParseException @0+1 step-1: Unknown identifier 'i' at line 1, col 1. Did you mean 'z'?
+3D  L |i| $3
+3D  N |i| $3
+2D  P |z.x| ERR FormatException: Unexpected '.' at line 1, col 2.
+2D  L |z.x| ERR FormatException: Unexpected '.' at line 1, col 2.
+3D  P |z.x| (.x $0)
+3D  L |z.x| (.x $0)
+3D  N |z.x| (.x $0)
+2D  P |z.| ERR FormatException: Unexpected '.' at line 1, col 2.
+2D  L |z.| ERR FormatException: Unexpected '.' at line 1, col 2.
+3D  P |z.| ERR SbxParseException @2+1 step-1: Expected .x/.y/.z/.w at line 1, col 3.
+3D  L |z.| ERR SbxParseException @2+1 step-1: Expected .x/.y/.z/.w at line 1, col 3.
+3D  N |z.| ERR SbxParseException @2+1 step-1: Expected .x/.y/.z/.w at line 1, col 3.
+2D  P |z.q| ERR FormatException: Unexpected '.' at line 1, col 2.
+2D  L |z.q| ERR FormatException: Unexpected '.' at line 1, col 2.
+3D  P |z.q| ERR SbxParseException @2+1 step-1: Expected .x/.y/.z/.w at line 1, col 3.
+3D  L |z.q| ERR SbxParseException @2+1 step-1: Expected .x/.y/.z/.w at line 1, col 3.
+3D  N |z.q| ERR SbxParseException @2+1 step-1: Expected .x/.y/.z/.w at line 1, col 3.
+2D  P |z.Real| ERR FormatException: Unexpected '.' at line 1, col 2.
+2D  L |z.Real| ERR FormatException: Unexpected '.' at line 1, col 2.
+3D  P |z.Real| ERR SbxParseException @2+1 step-1: Expected .x/.y/.z/.w at line 1, col 3.
+3D  L |z.Real| ERR SbxParseException @2+1 step-1: Expected .x/.y/.z/.w at line 1, col 3.
+3D  N |z.Real| ERR SbxParseException @2+1 step-1: Expected .x/.y/.z/.w at line 1, col 3.
+2D  P |z . x| ERR FormatException: Unexpected '.' at line 1, col 3.
+2D  L |z . x| ERR FormatException: Unexpected '.' at line 1, col 3.
+3D  P |z . x| (.x $0)
+3D  L |z . x| (.x $0)
+3D  N |z . x| (.x $0)
+2D  P |(z).y| ERR FormatException: Unexpected '.' at line 1, col 4.
+2D  L |(z).y| ERR FormatException: Unexpected '.' at line 1, col 4.
+3D  P |(z).y| (.y $0)
+3D  L |(z).y| (.y $0)
+3D  N |(z).y| (.y $0)
+2D  P |c.x.y| ERR FormatException: Unexpected '.' at line 1, col 2.
+2D  L |c.x.y| ERR FormatException: Unexpected '.' at line 1, col 2.
+3D  P |c.x.y| (.y (.x $1))
+3D  L |c.x.y| (.y (.x $1))
+3D  N |c.x.y| (.y (.x $1))
+2D  P |z.w| ERR FormatException: Unexpected '.' at line 1, col 2.
+2D  L |z.w| ERR FormatException: Unexpected '.' at line 1, col 2.
+3D  P |z.w| (.w $0)
+3D  L |z.w| (.w $0)
+3D  N |z.w| (.w $0)
+2D  P |Complex.Pow(z,2)| ERR FormatException: Unknown identifier 'Complex' at line 1, col 1.
+2D  L |Complex.Pow(z,2)| ERR FormatException: Unknown identifier 'Complex' at line 1, col 1.
+3D  P |Complex.Pow(z,2)| ERR SbxParseException @0+7 step-1: Unknown identifier 'Complex' at line 1, col 1.
+3D  L |Complex.Pow(z,2)| ERR SbxParseException @8+1 step-1: Expected .x/.y/.z/.w at line 1, col 9.
+3D  N |Complex.Pow(z,2)| ERR SbxParseException @8+1 step-1: Expected .x/.y/.z/.w at line 1, col 9.
+2D  P |return z*z + c;| (+ (* z z) c)
+2D  L |return z*z + c;| (+ (* z z) c)
+3D  P |return z*z + c;| (+ (* $0 $0) $1)
+3D  L |return z*z + c;| (+ (* $0 $0) $1)
+3D  N |return z*z + c;| (+ (* $0 $0) $1)
+2D  P |z^| ERR FormatException: Unexpected end of expression at line 1, col 3.
+2D  L |z^| ERR FormatException: Unexpected end of expression at line 1, col 3.
+3D  P |z^| ERR SbxParseException @2+1 step-1: Unexpected end of expression at line 1, col 3.
+3D  L |z^| ERR SbxParseException @2+1 step-1: Unexpected end of expression at line 1, col 3.
+3D  N |z^| ERR SbxParseException @2+1 step-1: Unexpected end of expression at line 1, col 3.
+2D  P |^z| ERR FormatException: Unexpected character '^' at line 1, col 1.
+2D  L |^z| ERR FormatException: Unexpected character '^' at line 1, col 1.
+3D  P |^z| ERR SbxParseException @0+1 step-1: Unexpected character '^' at line 1, col 1.
+3D  L |^z| ERR SbxParseException @0+1 step-1: Unexpected character '^' at line 1, col 1.
+3D  N |^z| ERR SbxParseException @0+1 step-1: Unexpected character '^' at line 1, col 1.
+2D  P |z^^2| ERR FormatException: Unexpected character '^' at line 1, col 3.
+2D  L |z^^2| ERR FormatException: Unexpected character '^' at line 1, col 3.
+3D  P |z^^2| ERR SbxParseException @2+1 step-1: Unexpected character '^' at line 1, col 3.
+3D  L |z^^2| ERR SbxParseException @2+1 step-1: Unexpected character '^' at line 1, col 3.
+3D  N |z^^2| ERR SbxParseException @2+1 step-1: Unexpected character '^' at line 1, col 3.
+2D  P |-| ERR FormatException: Unexpected end of expression at line 1, col 2.
+2D  L |-| ERR FormatException: Unexpected end of expression at line 1, col 2.
+3D  P |-| ERR SbxParseException @1+1 step-1: Unexpected end of expression at line 1, col 2.
+3D  L |-| ERR SbxParseException @1+1 step-1: Unexpected end of expression at line 1, col 2.
+3D  N |-| ERR SbxParseException @1+1 step-1: Unexpected end of expression at line 1, col 2.
+2D  P |--z| (neg (neg z))
+2D  L |--z| (neg (neg z))
+3D  P |--z| (neg (neg $0))
+3D  L |--z| (neg (neg $0))
+3D  N |--z| (neg (neg $0))
+2D  P |!z| (! z)
+2D  L |!z| (! z)
+3D  P |!z| (not $0)
+3D  L |!z| (not $0)
+3D  N |!z| (not $0)
+2D  P |!| ERR FormatException: Unexpected end of expression at line 1, col 2.
+2D  L |!| ERR FormatException: Unexpected end of expression at line 1, col 2.
+3D  P |!| ERR SbxParseException @1+1 step-1: Unexpected end of expression at line 1, col 2.
+3D  L |!| ERR SbxParseException @1+1 step-1: Unexpected end of expression at line 1, col 2.
+3D  N |!| ERR SbxParseException @1+1 step-1: Unexpected end of expression at line 1, col 2.
+2D  P |z == | ERR FormatException: Unexpected end of expression at line 1, col 6.
+2D  L |z == | ERR FormatException: Unexpected end of expression at line 1, col 6.
+3D  P |z == | ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
+3D  L |z == | ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
+3D  N |z == | ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
+2D  P |z = c| ERR FormatException: Unexpected end of expression at line 1, col 6.
+2D  L |z = c| ERR FormatException: Unexpected end of expression at line 1, col 6.
+3D  P |z = c| ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
+3D  L |z = c| ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
+3D  N |z = c| ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
+2D  P |z =| ERR FormatException: Unexpected end of expression at line 1, col 4.
+2D  L |z =| ERR FormatException: Unexpected end of expression at line 1, col 4.
+3D  P |z =| ERR SbxParseException @3+1 step-1: Unexpected end of expression at line 1, col 4.
+3D  L |z =| ERR SbxParseException @3+1 step-1: Unexpected end of expression at line 1, col 4.
+3D  N |z =| ERR SbxParseException @3+1 step-1: Unexpected end of expression at line 1, col 4.
+2D  P |a = 1; b = a; b + z| (let $5 1 (let $6 $5 (+ $6 z)))
+2D  L |a = 1; b = a; b + z| (let $5 1 (let $6 $5 (+ $6 z)))
+3D  P |a = 1; b = a; b + z| (let $5 1 (let $6 $5 (+ $6 $0)))
+3D  L |a = 1; b = a; b + z| (let $3 1 (let $4 $3 (+ $4 $0)))
+3D  N |a = 1; b = a; b + z| (let $3 1 (let $4 $3 (+ $4 $0)))
+2D  P |x = 1; z| (let $5 1 z)
+2D  L |x = 1; z| (let $5 1 z)
+3D  P |x = 1; z| (let $5 1 $0)
+3D  L |x = 1; z| (let $3 1 $0)
+3D  N |x = 1; z| (let $3 1 $0)
+2D  P |then = 1; z| (let $5 1 z)
+2D  L |then = 1; z| (let $5 1 z)
+3D  P |then = 1; z| ERR SbxParseException @0+4 step-1: Unknown identifier 'then' at line 1, col 1. Did you mean 'tan'?
+3D  L |then = 1; z| ERR SbxParseException @0+4 step-1: Unknown identifier 'then' at line 1, col 1. Did you mean 'tan'?
+3D  N |then = 1; z| ERR SbxParseException @0+4 step-1: Unknown identifier 'then' at line 1, col 1. Did you mean 'tan'?
+2D  P |e = 2; e*z| (let $5 2 (* $5 z))
+2D  L |e = 2; e*z| (let $5 2 (* $5 z))
+3D  P |e = 2; e*z| ERR SbxParseException @0+1 step-1: Cannot assign to the constant 'e' at line 1, col 1.
+3D  L |e = 2; e*z| ERR SbxParseException @0+1 step-1: Cannot assign to the constant 'e' at line 1, col 1.
+3D  N |e = 2; e*z| ERR SbxParseException @0+1 step-1: Cannot assign to the constant 'e' at line 1, col 1.
+2D  P |i = 3; i| (let $5 3 $5)
+2D  L |i = 3; i| (let $5 3 $5)
+3D  P |i = 3; i| (let $5 3 $5)
+3D  L |i = 3; i| (let $3 3 $3)
+3D  N |i = 3; i| (let $3 3 $3)
+2D  P |pi = 3; pi| (let $5 3 $5)
+2D  L |pi = 3; pi| (let $5 3 $5)
+3D  P |pi = 3; pi| ERR SbxParseException @0+1 step-1: Cannot assign to the constant 'pi' at line 1, col 1.
+3D  L |pi = 3; pi| ERR SbxParseException @0+1 step-1: Cannot assign to the constant 'pi' at line 1, col 1.
+3D  N |pi = 3; pi| ERR SbxParseException @0+1 step-1: Cannot assign to the constant 'pi' at line 1, col 1.
+2D  P |w = 1;| ERR FormatException: Unexpected end of expression at line 1, col 7.
+2D  L |w = 1;| ERR FormatException: Unexpected end of expression at line 1, col 7.
+3D  P |w = 1;| ERR SbxParseException @6+1 step-1: Unexpected end of expression at line 1, col 7.
+3D  L |w = 1;| ERR SbxParseException @6+1 step-1: Unexpected end of expression at line 1, col 7.
+3D  N |w = 1;| ERR SbxParseException @6+1 step-1: Unexpected end of expression at line 1, col 7.
+2D  P |/* unterminated| ERR FormatException: Unexpected end of expression at line 1, col 16.
+2D  L |/* unterminated| ERR FormatException: Unexpected end of expression at line 1, col 16.
+3D  P |/* unterminated| ERR SbxParseException @15+1 step-1: Unexpected end of expression at line 1, col 16.
+3D  L |/* unterminated| ERR SbxParseException @15+1 step-1: Unexpected end of expression at line 1, col 16.
+3D  N |/* unterminated| ERR SbxParseException @15+1 step-1: Unexpected end of expression at line 1, col 16.
+2D  P |// only comment| ERR FormatException: Unexpected end of expression at line 1, col 16.
+2D  L |// only comment| ERR FormatException: Unexpected end of expression at line 1, col 16.
+3D  P |// only comment| ERR SbxParseException @15+1 step-1: Unexpected end of expression at line 1, col 16.
+3D  L |// only comment| ERR SbxParseException @15+1 step-1: Unexpected end of expression at line 1, col 16.
+3D  N |// only comment| ERR SbxParseException @15+1 step-1: Unexpected end of expression at line 1, col 16.
+2D  P |z /* c */ + c| (+ z c)
+2D  L |z /* c */ + c| (+ z c)
+3D  P |z /* c */ + c| (+ $0 $1)
+3D  L |z /* c */ + c| (+ $0 $1)
+3D  N |z /* c */ + c| (+ $0 $1)
+2D  P |z // c\n+ c| (+ z c)
+2D  L |z // c\n+ c| (+ z c)
+3D  P |z // c\n+ c| (+ $0 $1)
+3D  L |z // c\n+ c| (+ $0 $1)
+3D  N |z // c\n+ c| (+ $0 $1)
+2D  P |z\n+\nsni(c)| ERR FormatException: Unknown function 'sni' at line 3, col 1. Did you mean 'sin'?
+2D  L |z\n+\nsni(c)| ERR FormatException: Unknown function 'sni' at line 3, col 1. Did you mean 'sin'?
+3D  P |z\n+\nsni(c)| ERR SbxParseException @4+3 step-1: Unknown function 'sni' at line 3, col 1. Did you mean 'sin'?
+3D  L |z\n+\nsni(c)| ERR SbxParseException @4+3 step-1: Unknown function 'sni' at line 3, col 1. Did you mean 'sin'?
+3D  N |z\n+\nsni(c)| ERR SbxParseException @4+3 step-1: Unknown function 'sni' at line 3, col 1. Did you mean 'sin'?
+2D  P |\n\nfoo| ERR FormatException: Unknown identifier 'foo' at line 3, col 1. Did you mean 'cos'?
+2D  L |\n\nfoo| ERR FormatException: Unknown identifier 'foo' at line 3, col 1. Did you mean 'cos'?
+3D  P |\n\nfoo| ERR SbxParseException @2+3 step-1: Unknown identifier 'foo' at line 3, col 1. Did you mean 'cos'?
+3D  L |\n\nfoo| $3
+3D  N |\n\nfoo| $3
+2D  P |min(z)| ERR FormatException: Function 'min' at line 1, col 1 takes 2 arg(s), got 1.
+2D  L |min(z)| ERR FormatException: Function 'min' at line 1, col 1 takes 2 arg(s), got 1.
+3D  P |min(z)| ERR SbxParseException @0+3 step-1: Function 'min' takes 2 arg(s), got 1 at line 1, col 1.
+3D  L |min(z)| ERR SbxParseException @0+3 step-1: Function 'min' takes 2 arg(s), got 1 at line 1, col 1.
+3D  N |min(z)| ERR SbxParseException @0+3 step-1: Function 'min' takes 2 arg(s), got 1 at line 1, col 1.
+2D  P |min(z,c,z)| ERR FormatException: Function 'min' at line 1, col 1 takes 2 arg(s), got 3.
+2D  L |min(z,c,z)| ERR FormatException: Function 'min' at line 1, col 1 takes 2 arg(s), got 3.
+3D  P |min(z,c,z)| ERR SbxParseException @0+3 step-1: Function 'min' takes 2 arg(s), got 3 at line 1, col 1.
+3D  L |min(z,c,z)| ERR SbxParseException @0+3 step-1: Function 'min' takes 2 arg(s), got 3 at line 1, col 1.
+3D  N |min(z,c,z)| ERR SbxParseException @0+3 step-1: Function 'min' takes 2 arg(s), got 3 at line 1, col 1.
+2D  P |clamp(z,1)| ERR FormatException: Function 'clamp' at line 1, col 1 takes 3 arg(s), got 2.
+2D  L |clamp(z,1)| ERR FormatException: Function 'clamp' at line 1, col 1 takes 3 arg(s), got 2.
+3D  P |clamp(z,1)| ERR SbxParseException @0+5 step-1: Function 'clamp' takes 3 arg(s), got 2 at line 1, col 1.
+3D  L |clamp(z,1)| ERR SbxParseException @0+5 step-1: Function 'clamp' takes 3 arg(s), got 2 at line 1, col 1.
+3D  N |clamp(z,1)| ERR SbxParseException @0+5 step-1: Function 'clamp' takes 3 arg(s), got 2 at line 1, col 1.
+2D  P |vec(1,2)| ERR FormatException: Unknown function 'vec' at line 1, col 1. Did you mean 're'?
+2D  L |vec(1,2)| ERR FormatException: Unknown function 'vec' at line 1, col 1. Did you mean 're'?
+3D  P |vec(1,2)| ERR SbxParseException @0+3 step-1: Function 'vec' takes 3 arg(s), got 2 at line 1, col 1.
+3D  L |vec(1,2)| ERR SbxParseException @0+3 step-1: Function 'vec' takes 3 arg(s), got 2 at line 1, col 1.
+3D  N |vec(1,2)| ERR SbxParseException @0+3 step-1: Function 'vec' takes 3 arg(s), got 2 at line 1, col 1.
+2D  P |qvec(1,2,3)| ERR FormatException: Unknown function 'qvec' at line 1, col 1.
+2D  L |qvec(1,2,3)| ERR FormatException: Unknown function 'qvec' at line 1, col 1.
+3D  P |qvec(1,2,3)| ERR SbxParseException @0+4 step-1: Function 'qvec' takes 4 arg(s), got 3 at line 1, col 1.
+3D  L |qvec(1,2,3)| ERR SbxParseException @0+4 step-1: Function 'qvec' takes 4 arg(s), got 3 at line 1, col 1.
+3D  N |qvec(1,2,3)| ERR SbxParseException @0+4 step-1: Function 'qvec' takes 4 arg(s), got 3 at line 1, col 1.
+2D  P |dot(z)| ERR FormatException: Unknown function 'dot' at line 1, col 1. Did you mean 'cos'?
+2D  L |dot(z)| ERR FormatException: Unknown function 'dot' at line 1, col 1. Did you mean 'cos'?
+3D  P |dot(z)| ERR SbxParseException @0+3 step-1: Function 'dot' takes 2 arg(s), got 1 at line 1, col 1.
+3D  L |dot(z)| ERR SbxParseException @0+3 step-1: Function 'dot' takes 2 arg(s), got 1 at line 1, col 1.
+3D  N |dot(z)| ERR SbxParseException @0+3 step-1: Function 'dot' takes 2 arg(s), got 1 at line 1, col 1.
+2D  P |norm()| ERR FormatException: Function 'norm' at line 1, col 1 takes 1 arg(s), got 0.
+2D  L |norm()| ERR FormatException: Function 'norm' at line 1, col 1 takes 1 arg(s), got 0.
+3D  P |norm()| ERR SbxParseException @0+4 step-1: Function 'norm' takes 1 arg(s), got 0 at line 1, col 1.
+3D  L |norm()| ERR SbxParseException @0+4 step-1: Function 'norm' takes 1 arg(s), got 0 at line 1, col 1.
+3D  N |norm()| ERR SbxParseException @0+4 step-1: Function 'norm' takes 1 arg(s), got 0 at line 1, col 1.
+2D  P |norm(z,z)| ERR FormatException: Function 'norm' at line 1, col 1 takes 1 arg(s), got 2.
+2D  L |norm(z,z)| ERR FormatException: Function 'norm' at line 1, col 1 takes 1 arg(s), got 2.
+3D  P |norm(z,z)| ERR SbxParseException @0+4 step-1: Function 'norm' takes 1 arg(s), got 2 at line 1, col 1.
+3D  L |norm(z,z)| ERR SbxParseException @0+4 step-1: Function 'norm' takes 1 arg(s), got 2 at line 1, col 1.
+3D  N |norm(z,z)| ERR SbxParseException @0+4 step-1: Function 'norm' takes 1 arg(s), got 2 at line 1, col 1.
+2D  P |norm(z)| (norm z)
+2D  L |norm(z)| (norm z)
+3D  P |norm(z)| (norm $0)
+3D  L |norm(z)| (norm $0)
+3D  N |norm(z)| (norm $0)
+2D  P |length(z)| ERR FormatException: Unknown function 'length' at line 1, col 1.
+2D  L |length(z)| ERR FormatException: Unknown function 'length' at line 1, col 1.
+3D  P |length(z)| (length $0)
+3D  L |length(z)| (length $0)
+3D  N |length(z)| (length $0)
+2D  P |abs(z) > 2 ? z : c| (? (> (abs z) 2) z c)
+2D  L |abs(z) > 2 ? z : c| (? (> (abs z) 2) z c)
+3D  P |abs(z) > 2 ? z : c| (? (> (abs $0) 2) $0 $1)
+3D  L |abs(z) > 2 ? z : c| (? (> (abs $0) 2) $0 $1)
+3D  N |abs(z) > 2 ? z : c| (? (> (abs $0) 2) $0 $1)
+2D  P |if abs(z) > 2 then z else c| (? (> (abs z) 2) z c)
+2D  L |if abs(z) > 2 then z else c| (? (> (norm z) 2) z c) edits[3,3,norm]
+3D  P |if abs(z) > 2 then z else c| (? (> (abs $0) 2) $0 $1)
+3D  L |if abs(z) > 2 then z else c| (? (> (abs $0) 2) $0 $1)
+3D  N |if abs(z) > 2 then z else c| (? (> (abs $0) 2) $0 $1)
+2D  P |if (abs(z) > 2) return z; z| (? (> (abs z) 2) z z)
+2D  L |if (abs(z) > 2) return z; z| (? (> (abs z) 2) z z)
+3D  P |if (abs(z) > 2) return z; z| (? (> (abs $0) 2) $0 $0)
+3D  L |if (abs(z) > 2) return z; z| (? (> (abs $0) 2) $0 $0)
+3D  N |if (abs(z) > 2) return z; z| (? (> (abs $0) 2) $0 $0)
+2D  P |if abs(z) > 2 && abs(c) < 1 then z else c| (? (&& (> (abs z) 2) (< (abs c) 1)) z c)
+2D  L |if abs(z) > 2 && abs(c) < 1 then z else c| (? (&& (> (norm z) 2) (< (norm c) 1)) z c) edits[3,3,norm;17,3,norm]
+3D  P |if abs(z) > 2 && abs(c) < 1 then z else c| (? (&& (> (abs $0) 2) (< (abs $1) 1)) $0 $1)
+3D  L |if abs(z) > 2 && abs(c) < 1 then z else c| (? (&& (> (abs $0) 2) (< (abs $1) 1)) $0 $1)
+3D  N |if abs(z) > 2 && abs(c) < 1 then z else c| (? (&& (> (abs $0) 2) (< (abs $1) 1)) $0 $1)
+2D  P |if !(abs(z) > 2) then z else c| (? (! (> (abs z) 2)) z c)
+2D  L |if !(abs(z) > 2) then z else c| (? (! (> (norm z) 2)) z c) edits[5,3,norm]
+3D  P |if !(abs(z) > 2) then z else c| (? (not (> (abs $0) 2)) $0 $1)
+3D  L |if !(abs(z) > 2) then z else c| (? (not (> (abs $0) 2)) $0 $1)
+3D  N |if !(abs(z) > 2) then z else c| (? (not (> (abs $0) 2)) $0 $1)
+2D  P |-z^2| (neg (^ z 2))
+2D  L |-z^2| (^ (neg z) 2) edits[0,0,(;2,0,)]
+3D  P |-z^2| (neg (^ $0 2))
+3D  L |-z^2| (^ (neg $0) 2) edits[0,0,(;2,0,)]
+3D  N |-z^2| (neg (^ $0 2))
+2D  P |2*-z^2| (* 2 (neg (^ z 2)))
+2D  L |2*-z^2| (* 2 (^ (neg z) 2)) edits[2,0,(;4,0,)]
+3D  P |2*-z^2| (* 2 (neg (^ $0 2)))
+3D  L |2*-z^2| (* 2 (^ (neg $0) 2)) edits[2,0,(;4,0,)]
+3D  N |2*-z^2| (* 2 (neg (^ $0 2)))
+2D  P |- -z^2| (neg (neg (^ z 2)))
+2D  L |- -z^2| (^ (neg (neg z)) 2) edits[0,0,(;4,0,)]
+3D  P |- -z^2| (neg (neg (^ $0 2)))
+3D  L |- -z^2| (^ (neg (neg $0)) 2) edits[0,0,(;4,0,)]
+3D  N |- -z^2| (neg (neg (^ $0 2)))
+2D  P |+z^2| (^ z 2)
+2D  L |+z^2| (^ z 2) edits[0,0,(;2,0,)]
+3D  P |+z^2| (^ $0 2)
+3D  L |+z^2| (^ $0 2) edits[0,0,(;2,0,)]
+3D  N |+z^2| (^ $0 2)
+2D  P |z^-z^2| (^ z (neg (^ z 2)))
+2D  L |z^-z^2| (^ z (^ (neg z) 2)) edits[2,0,(;4,0,)]
+3D  P |z^-z^2| (^ $0 (neg (^ $0 2)))
+3D  L |z^-z^2| (^ $0 (^ (neg $0) 2)) edits[2,0,(;4,0,)]
+3D  N |z^-z^2| (^ $0 (neg (^ $0 2)))
+2D  P |(-z)^2| (^ (neg z) 2)
+2D  L |(-z)^2| (^ (neg z) 2)
+3D  P |(-z)^2| (^ (neg $0) 2)
+3D  L |(-z)^2| (^ (neg $0) 2)
+3D  N |(-z)^2| (^ (neg $0) 2)
+2D  P |-z.x^2| ERR FormatException: Unexpected '.' at line 1, col 3.
+2D  L |-z.x^2| ERR FormatException: Unexpected '.' at line 1, col 3.
+3D  P |-z.x^2| (neg (^ (.x $0) 2))
+3D  L |-z.x^2| (^ (neg (.x $0)) 2) edits[0,0,(;4,0,)]
+3D  N |-z.x^2| (neg (^ (.x $0) 2))
+2D  P |z^2^3| (^ z (^ 2 3))
+2D  L |z^2^3| (^ z (^ 2 3))
+3D  P |z^2^3| (^ $0 (^ 2 3))
+3D  L |z^2^3| (^ $0 (^ 2 3))
+3D  N |z^2^3| (^ $0 (^ 2 3))
+2D  P |2^-1| (^ 2 (neg 1))
+2D  L |2^-1| (^ 2 (neg 1))
+3D  P |2^-1| (^ 2 (neg 1))
+3D  L |2^-1| (^ 2 (neg 1))
+3D  N |2^-1| (^ 2 (neg 1))
+2D  P |-2^2| (neg (^ 2 2))
+2D  L |-2^2| (^ (neg 2) 2) edits[0,0,(;2,0,)]
+3D  P |-2^2| (neg (^ 2 2))
+3D  L |-2^2| (^ (neg 2) 2) edits[0,0,(;2,0,)]
+3D  N |-2^2| (neg (^ 2 2))
+2D  P |a^b| ERR FormatException: Unknown identifier 'a' at line 1, col 1. Did you mean 'z'?
+2D  L |a^b| ERR FormatException: Unknown identifier 'a' at line 1, col 1. Did you mean 'z'?
+3D  P |a^b| ERR SbxParseException @0+1 step-1: Unknown identifier 'a' at line 1, col 1. Did you mean 'z'?
+3D  L |a^b| (^ $3 $4)
+3D  N |a^b| (^ $3 $4)
+2D  P |z^-2| (^ z (neg 2))
+2D  L |z^-2| (^ z (neg 2))
+3D  P |z^-2| (^ $0 (neg 2))
+3D  L |z^-2| (^ $0 (neg 2))
+3D  N |z^-2| (^ $0 (neg 2))
+2D  P |z*z + c| (+ (* z z) c)
+2D  L |z*z + c| (+ (* z z) c)
+3D  P |z*z + c| (+ (* $0 $0) $1)
+3D  L |z*z + c| (+ (* $0 $0) $1)
+3D  N |z*z + c| (+ (* $0 $0) $1)
+2D  P |z^8 + c| (+ (^ z 8) c)
+2D  L |z^8 + c| (+ (^ z 8) c)
+3D  P |z^8 + c| (+ (^ $0 8) $1)
+3D  L |z^8 + c| (+ (^ $0 8) $1)
+3D  N |z^8 + c| (+ (^ $0 8) $1)
+2D  P |triplex(z, 8) + c| ERR FormatException: Unknown function 'triplex' at line 1, col 1.
+2D  L |triplex(z, 8) + c| ERR FormatException: Unknown function 'triplex' at line 1, col 1.
+3D  P |triplex(z, 8) + c| (+ (triplex $0 8) $1)
+3D  L |triplex(z, 8) + c| (+ (triplex $0 8) $1)
+3D  N |triplex(z, 8) + c| (+ (triplex $0 8) $1)
+2D  P |abs(z)^8 + c| (+ (^ (abs z) 8) c)
+2D  L |abs(z)^8 + c| (+ (^ (abs z) 8) c)
+3D  P |abs(z)^8 + c| (+ (^ (abs $0) 8) $1)
+3D  L |abs(z)^8 + c| (+ (^ (abs $0) 8) $1)
+3D  N |abs(z)^8 + c| (+ (^ (abs $0) 8) $1)
+2D  P |let v = abs(z) in v.x - v.y < 0 ? vec(v.y, v.x, v.z) : v| ERR FormatException: Unexpected '.' at line 1, col 20.
+2D  L |let v = abs(z) in v.x - v.y < 0 ? vec(v.y, v.x, v.z) : v| ERR FormatException: Unexpected '.' at line 1, col 20.
+3D  P |let v = abs(z) in v.x - v.y < 0 ? vec(v.y, v.x, v.z) : v| (let $5 (abs $0) (? (< (- (.x $5) (.y $5)) 0) (vec (.y $5) (.x $5) (.z $5)) $5))
+3D  L |let v = abs(z) in v.x - v.y < 0 ? vec(v.y, v.x, v.z) : v| (let $3 (abs $0) (? (< (- (.x $3) (.y $3)) 0) (vec (.y $3) (.x $3) (.z $3)) $3))
+3D  N |let v = abs(z) in v.x - v.y < 0 ? vec(v.y, v.x, v.z) : v| (let $3 (abs $0) (? (< (- (.x $3) (.y $3)) 0) (vec (.y $3) (.x $3) (.z $3)) $3))
+2D  P |qmul(z, z) + c| ERR FormatException: Unknown function 'qmul' at line 1, col 1.
+2D  L |qmul(z, z) + c| ERR FormatException: Unknown function 'qmul' at line 1, col 1.
+3D  P |qmul(z, z) + c| (+ (qmul $0 $0) $1)
+3D  L |qmul(z, z) + c| (+ (qmul $0 $0) $1)
+3D  N |qmul(z, z) + c| (+ (qmul $0 $0) $1)
+2D  P |-qmul(z,z)^2 + c| ERR FormatException: Unknown function 'qmul' at line 1, col 2.
+2D  L |-qmul(z,z)^2 + c| ERR FormatException: Unknown function 'qmul' at line 1, col 2.
+3D  P |-qmul(z,z)^2 + c| (+ (neg (^ (qmul $0 $0) 2)) $1)
+3D  L |-qmul(z,z)^2 + c| (+ (^ (neg (qmul $0 $0)) 2) $1) edits[0,0,(;10,0,)]
+3D  N |-qmul(z,z)^2 + c| (+ (neg (^ (qmul $0 $0) 2)) $1)
+2D  P |z > c && c < z \p\p !(z == c) ? z : c| (? (|| (&& (> z c) (< c z)) (! (== z c))) z c)
+2D  L |z > c && c < z \p\p !(z == c) ? z : c| (? (|| (&& (> z c) (< c z)) (! (== z c))) z c)
+3D  P |z > c && c < z \p\p !(z == c) ? z : c| (? (|| (&& (> $0 $1) (< $1 $0)) (not (== $0 $1))) $0 $1)
+3D  L |z > c && c < z \p\p !(z == c) ? z : c| (? (|| (&& (> $0 $1) (< $1 $0)) (not (== $0 $1))) $0 $1)
+3D  N |z > c && c < z \p\p !(z == c) ? z : c| (? (|| (&& (> $0 $1) (< $1 $0)) (not (== $0 $1))) $0 $1)
+2D  P |z ? z : c| (? z z c)
+2D  L |z ? z : c| (? z z c)
+3D  P |z ? z : c| (? $0 $0 $1)
+3D  L |z ? z : c| (? $0 $0 $1)
+3D  N |z ? z : c| (? $0 $0 $1)
+2D  P |if if z then c else z then z else c| ERR FormatException: Unknown identifier 'if' at line 1, col 4. Did you mean 'i'?
+2D  L |if if z then c else z then z else c| ERR FormatException: Unknown identifier 'if' at line 1, col 4. Did you mean 'i'?
+3D  P |if if z then c else z then z else c| ERR SbxParseException @3+2 step-1: Unknown identifier 'if' at line 1, col 4. Did you mean 'z'?
+3D  L |if if z then c else z then z else c| ERR SbxParseException @3+2 step-1: Unknown identifier 'if' at line 1, col 4. Did you mean 'z'?
+3D  N |if if z then c else z then z else c| ERR SbxParseException @3+2 step-1: Unknown identifier 'if' at line 1, col 4. Did you mean 'z'?
+2D  P |let w = (let v = z in v*v) in w + c| (let $6 (let $5 z (* $5 $5)) (+ $6 c))
+2D  L |let w = (let v = z in v*v) in w + c| (let $6 (let $5 z (* $5 $5)) (+ $6 c))
+3D  P |let w = (let v = z in v*v) in w + c| (let $6 (let $5 $0 (* $5 $5)) (+ $6 $1))
+3D  L |let w = (let v = z in v*v) in w + c| (let $4 (let $3 $0 (* $3 $3)) (+ $4 $1))
+3D  N |let w = (let v = z in v*v) in w + c| (let $4 (let $3 $0 (* $3 $3)) (+ $4 $1))
+2D  P |var w = z; var w = w*w; w + c| (let $5 z (let $6 (* $5 $5) (+ $6 c)))
+2D  L |var w = z; var w = w*w; w + c| (let $5 z (let $6 (* $5 $5) (+ $6 c)))
+3D  P |var w = z; var w = w*w; w + c| (let $5 $0 (let $6 (* $5 $5) (+ $6 $1)))
+3D  L |var w = z; var w = w*w; w + c| (let $3 $0 (let $4 (* $3 $3) (+ $4 $1)))
+3D  N |var w = z; var w = w*w; w + c| (let $3 $0 (let $4 (* $3 $3) (+ $4 $1)))
+2D  P |Vec3 v = z; v + c| ERR FormatException: Unknown identifier 'Vec3' at line 1, col 1.
+2D  L |Vec3 v = z; v + c| ERR FormatException: Unknown identifier 'Vec3' at line 1, col 1.
+3D  P |Vec3 v = z; v + c| (let $5 $0 (+ $5 $1))
+3D  L |Vec3 v = z; v + c| (let $3 $0 (+ $3 $1))
+3D  N |Vec3 v = z; v + c| (let $3 $0 (+ $3 $1))
+2D  P |Quat q = z; q| ERR FormatException: Unknown identifier 'Quat' at line 1, col 1.
+2D  L |Quat q = z; q| ERR FormatException: Unknown identifier 'Quat' at line 1, col 1.
+3D  P |Quat q = z; q| (let $5 $0 $5)
+3D  L |Quat q = z; q| (let $3 $0 $3)
+3D  N |Quat q = z; q| (let $3 $0 $3)
+2D  P |double k = 2; z*k| (let $5 2 (* z $5))
+2D  L |double k = 2; z*k| (let $5 2 (* z $5))
+3D  P |double k = 2; z*k| (let $5 2 (* $0 $5))
+3D  L |double k = 2; z*k| (let $3 2 (* $0 $3))
+3D  N |double k = 2; z*k| (let $3 2 (* $0 $3))
+2D  P |Complex w = z; w| (let $5 z $5)
+2D  L |Complex w = z; w| (let $5 z $5)
+3D  P |Complex w = z; w| ERR SbxParseException @0+7 step-1: Unknown identifier 'Complex' at line 1, col 1.
+3D  L |Complex w = z; w| ERR SbxParseException @8+1 step-1: Unexpected 'w' at line 1, col 9.
+3D  N |Complex w = z; w| ERR SbxParseException @8+1 step-1: Unexpected 'w' at line 1, col 9.
+2D  P |int k = 2; z^k| (let $5 2 (^ z $5))
+2D  L |int k = 2; z^k| (let $5 2 (^ z $5))
+3D  P |int k = 2; z^k| (let $5 2 (^ $0 $5))
+3D  L |int k = 2; z^k| (let $3 2 (^ $0 $3))
+3D  N |int k = 2; z^k| (let $3 2 (^ $0 $3))
+2D  P |decimal d = 1; z| (let $5 1 z)
+2D  L |decimal d = 1; z| (let $5 1 z)
+3D  P |decimal d = 1; z| ERR SbxParseException @0+7 step-1: Unknown identifier 'decimal' at line 1, col 1.
+3D  L |decimal d = 1; z| ERR SbxParseException @8+1 step-1: Unexpected 'd' at line 1, col 9.
+3D  N |decimal d = 1; z| ERR SbxParseException @8+1 step-1: Unexpected 'd' at line 1, col 9.
+2D  P |long d = 1; z| (let $5 1 z)
+2D  L |long d = 1; z| (let $5 1 z)
+3D  P |long d = 1; z| ERR SbxParseException @0+4 step-1: Unknown identifier 'long' at line 1, col 1. Did you mean 'log'?
+3D  L |long d = 1; z| ERR SbxParseException @5+1 step-1: Unexpected 'd' at line 1, col 6.
+3D  N |long d = 1; z| ERR SbxParseException @5+1 step-1: Unexpected 'd' at line 1, col 6.
+2D  P |float f = 1; z*f| (let $5 1 (* z $5))
+2D  L |float f = 1; z*f| (let $5 1 (* z $5))
+3D  P |float f = 1; z*f| (let $5 1 (* $0 $5))
+3D  L |float f = 1; z*f| (let $3 1 (* $0 $3))
+3D  N |float f = 1; z*f| (let $3 1 (* $0 $3))
+2D  P |t*z| ERR FormatException: Unknown identifier 't' at line 1, col 1. Did you mean 'z'?
+2D  L |t*z| ERR FormatException: Unknown identifier 't' at line 1, col 1. Did you mean 'z'?
+3D  P |t*z| (* $3 $0)
+3D  L |t*z| (* $3 $0)
+3D  N |t*z| (* $3 $0)
+2D  P |k*z + t| ERR FormatException: Unknown identifier 'k' at line 1, col 1. Did you mean 'z'?
+2D  L |k*z + t| ERR FormatException: Unknown identifier 'k' at line 1, col 1. Did you mean 'z'?
+3D  P |k*z + t| (+ (* $4 $0) $3)
+3D  L |k*z + t| (+ (* $3 $0) $4)
+3D  N |k*z + t| (+ (* $3 $0) $4)
+2D  P |prev + iter + z| (+ (+ prev iter) z)
+2D  L |prev + iter + z| (+ (+ prev iter) z)
+3D  P |prev + iter + z| ERR SbxParseException @0+4 step-1: Unknown identifier 'prev' at line 1, col 1.
+3D  L |prev + iter + z| (+ (+ $3 $4) $0)
+3D  N |prev + iter + z| (+ (+ $3 $4) $0)
+2D  P |z*z + c + 0.5*prev| (+ (+ (* z z) c) (* 0.5 prev))
+2D  L |z*z + c + 0.5*prev| (+ (+ (* z z) c) (* 0.5 prev))
+3D  P |z*z + c + 0.5*prev| ERR SbxParseException @14+4 step-1: Unknown identifier 'prev' at line 1, col 15.
+3D  L |z*z + c + 0.5*prev| (+ (+ (* $0 $0) $1) (* 0.5 $3))
+3D  N |z*z + c + 0.5*prev| (+ (+ (* $0 $0) $1) (* 0.5 $3))
+2D  P |z^2 + c| (+ (^ z 2) c)
+2D  L |z^2 + c| (+ (^ z 2) c)
+3D  P |z^2 + c| (+ (^ $0 2) $1)
+3D  L |z^2 + c| (+ (^ $0 2) $1)
+3D  N |z^2 + c| (+ (^ $0 2) $1)
+2D  P |z^2^2 + c| (+ (^ z (^ 2 2)) c)
+2D  L |z^2^2 + c| (+ (^ z (^ 2 2)) c)
+3D  P |z^2^2 + c| (+ (^ $0 (^ 2 2)) $1)
+3D  L |z^2^2 + c| (+ (^ $0 (^ 2 2)) $1)
+3D  N |z^2^2 + c| (+ (^ $0 (^ 2 2)) $1)
+2D  P |-z^2 + c| (+ (neg (^ z 2)) c)
+2D  L |-z^2 + c| (+ (^ (neg z) 2) c) edits[0,0,(;2,0,)]
+3D  P |-z^2 + c| (+ (neg (^ $0 2)) $1)
+3D  L |-z^2 + c| (+ (^ (neg $0) 2) $1) edits[0,0,(;2,0,)]
+3D  N |-z^2 + c| (+ (neg (^ $0 2)) $1)
+2D  P |z^-2 + c| (+ (^ z (neg 2)) c)
+2D  L |z^-2 + c| (+ (^ z (neg 2)) c)
+3D  P |z^-2 + c| (+ (^ $0 (neg 2)) $1)
+3D  L |z^-2 + c| (+ (^ $0 (neg 2)) $1)
+3D  N |z^-2 + c| (+ (^ $0 (neg 2)) $1)
+2D  P |-(z^2) + c| (+ (neg (^ z 2)) c)
+2D  L |-(z^2) + c| (+ (neg (^ z 2)) c)
+3D  P |-(z^2) + c| (+ (neg (^ $0 2)) $1)
+3D  L |-(z^2) + c| (+ (neg (^ $0 2)) $1)
+3D  N |-(z^2) + c| (+ (neg (^ $0 2)) $1)
+2D  P |2*z^3 - z + c| (+ (- (* 2 (^ z 3)) z) c)
+2D  L |2*z^3 - z + c| (+ (- (* 2 (^ z 3)) z) c)
+3D  P |2*z^3 - z + c| (+ (- (* 2 (^ $0 3)) $0) $1)
+3D  L |2*z^3 - z + c| (+ (- (* 2 (^ $0 3)) $0) $1)
+3D  N |2*z^3 - z + c| (+ (- (* 2 (^ $0 3)) $0) $1)
+2D  P |z^(1+i) + c| (+ (^ z (+ 1 (cx 0 1))) c)
+2D  L |z^(1+i) + c| (+ (^ z (+ 1 (cx 0 1))) c)
+3D  P |z^(1+i) + c| ERR SbxParseException @5+1 step-1: Unknown identifier 'i' at line 1, col 6. Did you mean 'z'?
+3D  L |z^(1+i) + c| (+ (^ $0 (+ 1 $3)) $1)
+3D  N |z^(1+i) + c| (+ (^ $0 (+ 1 $3)) $1)
+2D  P |z^2.5 + c| (+ (^ z 2.5) c)
+2D  L |z^2.5 + c| (+ (^ z 2.5) c)
+3D  P |z^2.5 + c| (+ (^ $0 2.5) $1)
+3D  L |z^2.5 + c| (+ (^ $0 2.5) $1)
+3D  N |z^2.5 + c| (+ (^ $0 2.5) $1)
+2D  P |pow(z, 3) + c| (+ (pow z 3) c)
+2D  L |pow(z, 3) + c| (+ (pow z 3) c)
+3D  P |pow(z, 3) + c| (+ (pow $0 3) $1)
+3D  L |pow(z, 3) + c| (+ (pow $0 3) $1)
+3D  N |pow(z, 3) + c| (+ (pow $0 3) $1)
+2D  P |pow(-2, 3) + z*c| (+ (pow (neg 2) 3) (* z c))
+2D  L |pow(-2, 3) + z*c| (+ (pow (neg 2) 3) (* z c))
+3D  P |pow(-2, 3) + z*c| (+ (pow (neg 2) 3) (* $0 $1))
+3D  L |pow(-2, 3) + z*c| (+ (pow (neg 2) 3) (* $0 $1))
+3D  N |pow(-2, 3) + z*c| (+ (pow (neg 2) 3) (* $0 $1))
+2D  P |let w = z*z in w + c| (let $5 (* z z) (+ $5 c))
+2D  L |let w = z*z in w + c| (let $5 (* z z) (+ $5 c))
+3D  P |let w = z*z in w + c| (let $5 (* $0 $0) (+ $5 $1))
+3D  L |let w = z*z in w + c| (let $3 (* $0 $0) (+ $3 $1))
+3D  N |let w = z*z in w + c| (let $3 (* $0 $0) (+ $3 $1))
+2D  P |let w = z*z in let v = w*w in v + c| (let $5 (* z z) (let $6 (* $5 $5) (+ $6 c)))
+2D  L |let w = z*z in let v = w*w in v + c| (let $5 (* z z) (let $6 (* $5 $5) (+ $6 c)))
+3D  P |let w = z*z in let v = w*w in v + c| (let $5 (* $0 $0) (let $6 (* $5 $5) (+ $6 $1)))
+3D  L |let w = z*z in let v = w*w in v + c| (let $3 (* $0 $0) (let $4 (* $3 $3) (+ $4 $1)))
+3D  N |let w = z*z in let v = w*w in v + c| (let $3 (* $0 $0) (let $4 (* $3 $3) (+ $4 $1)))
+2D  P |re(z) > 0 ? z*z + c : conj(z)*conj(z) + c| (? (> (re z) 0) (+ (* z z) c) (+ (* (conj z) (conj z)) c))
+2D  L |re(z) > 0 ? z*z + c : conj(z)*conj(z) + c| (? (> (re z) 0) (+ (* z z) c) (+ (* (conj z) (conj z)) c))
+3D  P |re(z) > 0 ? z*z + c : conj(z)*conj(z) + c| ERR SbxParseException @0+2 step-1: Unknown function 're' at line 1, col 1. Did you mean 'vec'?
+3D  L |re(z) > 0 ? z*z + c : conj(z)*conj(z) + c| ERR SbxParseException @0+2 step-1: Unknown function 're' at line 1, col 1. Did you mean 'vec'?
+3D  N |re(z) > 0 ? z*z + c : conj(z)*conj(z) + c| ERR SbxParseException @0+2 step-1: Unknown function 're' at line 1, col 1. Did you mean 'vec'?
+2D  P |re(z) > 0 && im(z) < 0 \p\p n == 3 ? z*z + c : z + c| (? (|| (&& (> (re z) 0) (< (im z) 0)) (== n 3)) (+ (* z z) c) (+ z c))
+2D  L |re(z) > 0 && im(z) < 0 \p\p n == 3 ? z*z + c : z + c| (? (|| (&& (> (re z) 0) (< (im z) 0)) (== n 3)) (+ (* z z) c) (+ z c))
+3D  P |re(z) > 0 && im(z) < 0 \p\p n == 3 ? z*z + c : z + c| ERR SbxParseException @0+2 step-1: Unknown function 're' at line 1, col 1. Did you mean 'vec'?
+3D  L |re(z) > 0 && im(z) < 0 \p\p n == 3 ? z*z + c : z + c| ERR SbxParseException @0+2 step-1: Unknown function 're' at line 1, col 1. Did you mean 'vec'?
+3D  N |re(z) > 0 && im(z) < 0 \p\p n == 3 ? z*z + c : z + c| ERR SbxParseException @0+2 step-1: Unknown function 're' at line 1, col 1. Did you mean 'vec'?
+2D  P |!(re(z) > 0) ? z : c| (? (! (> (re z) 0)) z c)
+2D  L |!(re(z) > 0) ? z : c| (? (! (> (re z) 0)) z c)
+3D  P |!(re(z) > 0) ? z : c| ERR SbxParseException @2+2 step-1: Unknown function 're' at line 1, col 3. Did you mean 'vec'?
+3D  L |!(re(z) > 0) ? z : c| ERR SbxParseException @2+2 step-1: Unknown function 're' at line 1, col 3. Did you mean 'vec'?
+3D  N |!(re(z) > 0) ? z : c| ERR SbxParseException @2+2 step-1: Unknown function 're' at line 1, col 3. Did you mean 'vec'?
+2D  P |abs(z) >= 1 ? z*z + c : z*z*z + c| (? (>= (abs z) 1) (+ (* z z) c) (+ (* (* z z) z) c))
+2D  L |abs(z) >= 1 ? z*z + c : z*z*z + c| (? (>= (abs z) 1) (+ (* z z) c) (+ (* (* z z) z) c))
+3D  P |abs(z) >= 1 ? z*z + c : z*z*z + c| (? (>= (abs $0) 1) (+ (* $0 $0) $1) (+ (* (* $0 $0) $0) $1))
+3D  L |abs(z) >= 1 ? z*z + c : z*z*z + c| (? (>= (abs $0) 1) (+ (* $0 $0) $1) (+ (* (* $0 $0) $0) $1))
+3D  N |abs(z) >= 1 ? z*z + c : z*z*z + c| (? (>= (abs $0) 1) (+ (* $0 $0) $1) (+ (* (* $0 $0) $0) $1))
+2D  P |if re(z) > 0 then z*z + c else conj(z)*conj(z) + c| (? (> (re z) 0) (+ (* z z) c) (+ (* (conj z) (conj z)) c))
+2D  L |if re(z) > 0 then z*z + c else conj(z)*conj(z) + c| (? (> (re z) 0) (+ (* z z) c) (+ (* (conj z) (conj z)) c))
+3D  P |if re(z) > 0 then z*z + c else conj(z)*conj(z) + c| ERR SbxParseException @3+2 step-1: Unknown function 're' at line 1, col 4. Did you mean 'vec'?
+3D  L |if re(z) > 0 then z*z + c else conj(z)*conj(z) + c| ERR SbxParseException @3+2 step-1: Unknown function 're' at line 1, col 4. Did you mean 'vec'?
+3D  N |if re(z) > 0 then z*z + c else conj(z)*conj(z) + c| ERR SbxParseException @3+2 step-1: Unknown function 're' at line 1, col 4. Did you mean 'vec'?
+2D  P |if (re(z)) > 0 then z else c| (? (> (re z) 0) z c)
+2D  L |if (re(z)) > 0 then z else c| (? (> (re z) 0) z c)
+3D  P |if (re(z)) > 0 then z else c| ERR SbxParseException @4+2 step-1: Unknown function 're' at line 1, col 5. Did you mean 'vec'?
+3D  L |if (re(z)) > 0 then z else c| ERR SbxParseException @4+2 step-1: Unknown function 're' at line 1, col 5. Did you mean 'vec'?
+3D  N |if (re(z)) > 0 then z else c| ERR SbxParseException @4+2 step-1: Unknown function 're' at line 1, col 5. Did you mean 'vec'?
+2D  P |if abs(z) > 2 then z*z + c else z| (? (> (abs z) 2) (+ (* z z) c) z)
+2D  L |if abs(z) > 2 then z*z + c else z| (? (> (norm z) 2) (+ (* z z) c) z) edits[3,3,norm]
+3D  P |if abs(z) > 2 then z*z + c else z| (? (> (abs $0) 2) (+ (* $0 $0) $1) $0)
+3D  L |if abs(z) > 2 then z*z + c else z| (? (> (abs $0) 2) (+ (* $0 $0) $1) $0)
+3D  N |if abs(z) > 2 then z*z + c else z| (? (> (abs $0) 2) (+ (* $0 $0) $1) $0)
+2D  P |if norm(z) > 2 then z*z + c else z| (? (> (norm z) 2) (+ (* z z) c) z)
+2D  L |if norm(z) > 2 then z*z + c else z| (? (> (norm z) 2) (+ (* z z) c) z)
+3D  P |if norm(z) > 2 then z*z + c else z| (? (> (norm $0) 2) (+ (* $0 $0) $1) $0)
+3D  L |if norm(z) > 2 then z*z + c else z| (? (> (norm $0) 2) (+ (* $0 $0) $1) $0)
+3D  N |if norm(z) > 2 then z*z + c else z| (? (> (norm $0) 2) (+ (* $0 $0) $1) $0)
+2D  P |z + (if re(z) > 0 then c else -c)| (+ z (? (> (re z) 0) c (neg c)))
+2D  L |z + (if re(z) > 0 then c else -c)| (+ z (? (> (re z) 0) c (neg c)))
+3D  P |z + (if re(z) > 0 then c else -c)| ERR SbxParseException @8+2 step-1: Unknown function 're' at line 1, col 9. Did you mean 'vec'?
+3D  L |z + (if re(z) > 0 then c else -c)| ERR SbxParseException @8+2 step-1: Unknown function 're' at line 1, col 9. Did you mean 'vec'?
+3D  N |z + (if re(z) > 0 then c else -c)| ERR SbxParseException @8+2 step-1: Unknown function 're' at line 1, col 9. Did you mean 'vec'?
+2D  P |var w = z*z; return w + c;| (let $5 (* z z) (+ $5 c))
+2D  L |var w = z*z; return w + c;| (let $5 (* z z) (+ $5 c))
+3D  P |var w = z*z; return w + c;| (let $5 (* $0 $0) (+ $5 $1))
+3D  L |var w = z*z; return w + c;| (let $3 (* $0 $0) (+ $3 $1))
+3D  N |var w = z*z; return w + c;| (let $3 (* $0 $0) (+ $3 $1))
+2D  P |Complex w = z*z; w = w + c; return w;| (let $5 (* z z) (let $6 (+ $5 c) $6))
+2D  L |Complex w = z*z; w = w + c; return w;| (let $5 (* z z) (let $6 (+ $5 c) $6))
+3D  P |Complex w = z*z; w = w + c; return w;| ERR SbxParseException @0+7 step-1: Unknown identifier 'Complex' at line 1, col 1.
+3D  L |Complex w = z*z; w = w + c; return w;| ERR SbxParseException @8+1 step-1: Unexpected 'w' at line 1, col 9.
+3D  N |Complex w = z*z; w = w + c; return w;| ERR SbxParseException @8+1 step-1: Unexpected 'w' at line 1, col 9.
+2D  P |if (n == 0) z = c; return z*z + c;| (let $5 (? (== n 0) c z) (+ (* $5 $5) c))
+2D  L |if (n == 0) z = c; return z*z + c;| (let $5 (? (== n 0) c z) (+ (* $5 $5) c))
+3D  P |if (n == 0) z = c; return z*z + c;| (let $5 (? (== $2 0) $1 $0) (+ (* $5 $5) $1))
+3D  L |if (n == 0) z = c; return z*z + c;| (let $3 (? (== $2 0) $1 $0) (+ (* $3 $3) $1))
+3D  N |if (n == 0) z = c; return z*z + c;| (let $3 (? (== $2 0) $1 $0) (+ (* $3 $3) $1))
+2D  P |if (re(z) > 1) return z; return z*z + c;| (? (> (re z) 1) z (+ (* z z) c))
+2D  L |if (re(z) > 1) return z; return z*z + c;| (? (> (re z) 1) z (+ (* z z) c))
+3D  P |if (re(z) > 1) return z; return z*z + c;| ERR SbxParseException @4+2 step-1: Unknown function 're' at line 1, col 5. Did you mean 'vec'?
+3D  L |if (re(z) > 1) return z; return z*z + c;| ERR SbxParseException @4+2 step-1: Unknown function 're' at line 1, col 5. Did you mean 'vec'?
+3D  N |if (re(z) > 1) return z; return z*z + c;| ERR SbxParseException @4+2 step-1: Unknown function 're' at line 1, col 5. Did you mean 'vec'?
+2D  P |z*z + c; // comment| (+ (* z z) c)
+2D  L |z*z + c; // comment| (+ (* z z) c)
+3D  P |z*z + c; // comment| (+ (* $0 $0) $1)
+3D  L |z*z + c; // comment| (+ (* $0 $0) $1)
+3D  N |z*z + c; // comment| (+ (* $0 $0) $1)
+2D  P |/* block */ z*z + c| (+ (* z z) c)
+2D  L |/* block */ z*z + c| (+ (* z z) c)
+3D  P |/* block */ z*z + c| (+ (* $0 $0) $1)
+3D  L |/* block */ z*z + c| (+ (* $0 $0) $1)
+3D  N |/* block */ z*z + c| (+ (* $0 $0) $1)
+2D  P |z*z + prev*0.5 + c| (+ (+ (* z z) (* prev 0.5)) c)
+2D  L |z*z + prev*0.5 + c| (+ (+ (* z z) (* prev 0.5)) c)
+3D  P |z*z + prev*0.5 + c| ERR SbxParseException @6+4 step-1: Unknown identifier 'prev' at line 1, col 7.
+3D  L |z*z + prev*0.5 + c| (+ (+ (* $0 $0) (* $3 0.5)) $1)
+3D  N |z*z + prev*0.5 + c| (+ (+ (* $0 $0) (* $3 0.5)) $1)
+2D  P |z*z + iter*0.01 + c| (+ (+ (* z z) (* iter 0.01)) c)
+2D  L |z*z + iter*0.01 + c| (+ (+ (* z z) (* iter 0.01)) c)
+3D  P |z*z + iter*0.01 + c| ERR SbxParseException @6+4 step-1: Unknown identifier 'iter' at line 1, col 7.
+3D  L |z*z + iter*0.01 + c| (+ (+ (* $0 $0) (* $3 0.01)) $1)
+3D  N |z*z + iter*0.01 + c| (+ (+ (* $0 $0) (* $3 0.01)) $1)
+2D  P |z*z + n*0.01*i + c| (+ (+ (* z z) (* (* n 0.01) (cx 0 1))) c)
+2D  L |z*z + n*0.01*i + c| (+ (+ (* z z) (* (* n 0.01) (cx 0 1))) c)
+3D  P |z*z + n*0.01*i + c| ERR SbxParseException @13+1 step-1: Unknown identifier 'i' at line 1, col 14. Did you mean 'z'?
+3D  L |z*z + n*0.01*i + c| (+ (+ (* $0 $0) (* (* $2 0.01) $3)) $1)
+3D  N |z*z + n*0.01*i + c| (+ (+ (* $0 $0) (* (* $2 0.01) $3)) $1)
+2D  P |PI*z + E + c| (+ (+ (* 3.141592653589793 z) 2.718281828459045) c)
+2D  L |PI*z + E + c| (+ (+ (* 3.141592653589793 z) 2.718281828459045) c)
+3D  P |PI*z + E + c| ERR SbxParseException @0+2 step-1: Unknown identifier 'PI' at line 1, col 1.
+3D  L |PI*z + E + c| (+ (+ (* $3 $0) $4) $1)
+3D  N |PI*z + E + c| (+ (+ (* $3 $0) $4) $1)
+2D  P |pi*z + e*i + c| (+ (+ (* 3.141592653589793 z) (* 2.718281828459045 (cx 0 1))) c)
+2D  L |pi*z + e*i + c| (+ (+ (* 3.141592653589793 z) (* 2.718281828459045 (cx 0 1))) c)
+3D  P |pi*z + e*i + c| ERR SbxParseException @9+1 step-1: Unknown identifier 'i' at line 1, col 10. Did you mean 'z'?
+3D  L |pi*z + e*i + c| (+ (+ (* 3.141592653589793 $0) (* 2.718281828459045 $3)) $1)
+3D  N |pi*z + e*i + c| (+ (+ (* 3.141592653589793 $0) (* 2.718281828459045 $3)) $1)
+2D  P |sin(z) + cos(z) + tan(z) + sinh(z) + cosh(z) + tanh(z) + c| (+ (+ (+ (+ (+ (+ (sin z) (cos z)) (tan z)) (sinh z)) (cosh z)) (tanh z)) c)
+2D  L |sin(z) + cos(z) + tan(z) + sinh(z) + cosh(z) + tanh(z) + c| (+ (+ (+ (+ (+ (+ (sin z) (cos z)) (tan z)) (sinh z)) (cosh z)) (tanh z)) c)
+3D  P |sin(z) + cos(z) + tan(z) + sinh(z) + cosh(z) + tanh(z) + c| (+ (+ (+ (+ (+ (+ (sin $0) (cos $0)) (tan $0)) (sinh $0)) (cosh $0)) (tanh $0)) $1)
+3D  L |sin(z) + cos(z) + tan(z) + sinh(z) + cosh(z) + tanh(z) + c| (+ (+ (+ (+ (+ (+ (sin $0) (cos $0)) (tan $0)) (sinh $0)) (cosh $0)) (tanh $0)) $1)
+3D  N |sin(z) + cos(z) + tan(z) + sinh(z) + cosh(z) + tanh(z) + c| (+ (+ (+ (+ (+ (+ (sin $0) (cos $0)) (tan $0)) (sinh $0)) (cosh $0)) (tanh $0)) $1)
+2D  P |exp(z) + log(z) + sqrt(z) + sqr(z) + c| (+ (+ (+ (+ (exp z) (log z)) (sqrt z)) (sqr z)) c)
+2D  L |exp(z) + log(z) + sqrt(z) + sqr(z) + c| (+ (+ (+ (+ (exp z) (log z)) (sqrt z)) (sqr z)) c)
+3D  P |exp(z) + log(z) + sqrt(z) + sqr(z) + c| ERR SbxParseException @28+3 step-1: Unknown function 'sqr' at line 1, col 29. Did you mean 'sqrt'?
+3D  L |exp(z) + log(z) + sqrt(z) + sqr(z) + c| ERR SbxParseException @28+3 step-1: Unknown function 'sqr' at line 1, col 29. Did you mean 'sqrt'?
+3D  N |exp(z) + log(z) + sqrt(z) + sqr(z) + c| ERR SbxParseException @28+3 step-1: Unknown function 'sqr' at line 1, col 29. Did you mean 'sqrt'?
+2D  P |asin(z) + acos(z) + atan(z) + asinh(z) + acosh(z) + atanh(z) + c| (+ (+ (+ (+ (+ (+ (asin z) (acos z)) (atan z)) (asinh z)) (acosh z)) (atanh z)) c)
+2D  L |asin(z) + acos(z) + atan(z) + asinh(z) + acosh(z) + atanh(z) + c| (+ (+ (+ (+ (+ (+ (asin z) (acos z)) (atan z)) (asinh z)) (acosh z)) (atanh z)) c)
+3D  P |asin(z) + acos(z) + atan(z) + asinh(z) + acosh(z) + atanh(z) + c| ERR SbxParseException @0+4 step-1: Unknown function 'asin' at line 1, col 1. Did you mean 'sin'?
+3D  L |asin(z) + acos(z) + atan(z) + asinh(z) + acosh(z) + atanh(z) + c| ERR SbxParseException @0+4 step-1: Unknown function 'asin' at line 1, col 1. Did you mean 'sin'?
+3D  N |asin(z) + acos(z) + atan(z) + asinh(z) + acosh(z) + atanh(z) + c| ERR SbxParseException @0+4 step-1: Unknown function 'asin' at line 1, col 1. Did you mean 'sin'?
+2D  P |floor(z) + round(z) + ceil(z) + trunc(z) + fract(z) + sign(z) + fold(z) + c| (+ (+ (+ (+ (+ (+ (+ (floor z) (round z)) (ceil z)) (trunc z)) (fract z)) (sign z)) (fold z)) c)
+2D  L |floor(z) + round(z) + ceil(z) + trunc(z) + fract(z) + sign(z) + fold(z) + c| (+ (+ (+ (+ (+ (+ (+ (floor z) (round z)) (ceil z)) (trunc z)) (fract z)) (sign z)) (fold z)) c)
+3D  P |floor(z) + round(z) + ceil(z) + trunc(z) + fract(z) + sign(z) + fold(z) + c| ERR SbxParseException @11+5 step-1: Unknown function 'round' at line 1, col 12.
+3D  L |floor(z) + round(z) + ceil(z) + trunc(z) + fract(z) + sign(z) + fold(z) + c| ERR SbxParseException @11+5 step-1: Unknown function 'round' at line 1, col 12.
+3D  N |floor(z) + round(z) + ceil(z) + trunc(z) + fract(z) + sign(z) + fold(z) + c| ERR SbxParseException @11+5 step-1: Unknown function 'round' at line 1, col 12.
+2D  P |abs(z) + norm(z) + conj(z) + re(z) + im(z) + arg(z) + c| (+ (+ (+ (+ (+ (+ (abs z) (norm z)) (conj z)) (re z)) (im z)) (arg z)) c)
+2D  L |abs(z) + norm(z) + conj(z) + re(z) + im(z) + arg(z) + c| (+ (+ (+ (+ (+ (+ (abs z) (norm z)) (conj z)) (re z)) (im z)) (arg z)) c)
+3D  P |abs(z) + norm(z) + conj(z) + re(z) + im(z) + arg(z) + c| ERR SbxParseException @19+4 step-1: Unknown function 'conj' at line 1, col 20. Did you mean 'qconj'?
+3D  L |abs(z) + norm(z) + conj(z) + re(z) + im(z) + arg(z) + c| ERR SbxParseException @19+4 step-1: Unknown function 'conj' at line 1, col 20. Did you mean 'qconj'?
+3D  N |abs(z) + norm(z) + conj(z) + re(z) + im(z) + arg(z) + c| ERR SbxParseException @19+4 step-1: Unknown function 'conj' at line 1, col 20. Did you mean 'qconj'?
+2D  P |atan2(im(z), re(z)) + min(z, c) + max(z, c) + mod(z, 1.5) + clamp(z, -1, 1) + c| (+ (+ (+ (+ (+ (atan2 (im z) (re z)) (min z c)) (max z c)) (mod z 1.5)) (clamp z (neg 1) 1)) c)
+2D  L |atan2(im(z), re(z)) + min(z, c) + max(z, c) + mod(z, 1.5) + clamp(z, -1, 1) + c| (+ (+ (+ (+ (+ (atan2 (im z) (re z)) (min z c)) (max z c)) (mod z 1.5)) (clamp z (neg 1) 1)) c)
+3D  P |atan2(im(z), re(z)) + min(z, c) + max(z, c) + mod(z, 1.5) + clamp(z, -1, 1) + c| ERR SbxParseException @6+2 step-1: Unknown function 'im' at line 1, col 7. Did you mean 'sin'?
+3D  L |atan2(im(z), re(z)) + min(z, c) + max(z, c) + mod(z, 1.5) + clamp(z, -1, 1) + c| ERR SbxParseException @6+2 step-1: Unknown function 'im' at line 1, col 7. Did you mean 'sin'?
+3D  N |atan2(im(z), re(z)) + min(z, c) + max(z, c) + mod(z, 1.5) + clamp(z, -1, 1) + c| ERR SbxParseException @6+2 step-1: Unknown function 'im' at line 1, col 7. Did you mean 'sin'?
+2D  P |z*z + 1.5e-3 + .25 + c| (+ (+ (+ (* z z) 0.0015) 0.25) c)
+2D  L |z*z + 1.5e-3 + .25 + c| (+ (+ (+ (* z z) 0.0015) 0.25) c)
+3D  P |z*z + 1.5e-3 + .25 + c| (+ (+ (+ (* $0 $0) 0.0015) 0.25) $1)
+3D  L |z*z + 1.5e-3 + .25 + c| (+ (+ (+ (* $0 $0) 0.0015) 0.25) $1)
+3D  N |z*z + 1.5e-3 + .25 + c| (+ (+ (+ (* $0 $0) 0.0015) 0.25) $1)
+2D  P |(z - 1) / (z + 1) + c| (+ (/ (- z 1) (+ z 1)) c)
+2D  L |(z - 1) / (z + 1) + c| (+ (/ (- z 1) (+ z 1)) c)
+3D  P |(z - 1) / (z + 1) + c| (+ (/ (- $0 1) (+ $0 1)) $1)
+3D  L |(z - 1) / (z + 1) + c| (+ (/ (- $0 1) (+ $0 1)) $1)
+3D  N |(z - 1) / (z + 1) + c| (+ (/ (- $0 1) (+ $0 1)) $1)
+2D  P |z*z + c / (z + 0.001)| (+ (* z z) (/ c (+ z 0.001)))
+2D  L |z*z + c / (z + 0.001)| (+ (* z z) (/ c (+ z 0.001)))
+3D  P |z*z + c / (z + 0.001)| (+ (* $0 $0) (/ $1 (+ $0 0.001)))
+3D  L |z*z + c / (z + 0.001)| (+ (* $0 $0) (/ $1 (+ $0 0.001)))
+3D  N |z*z + c / (z + 0.001)| (+ (* $0 $0) (/ $1 (+ $0 0.001)))
+2D  P |z*z +| ERR FormatException: Unexpected end of expression at line 1, col 6.
+2D  L |z*z +| ERR FormatException: Unexpected end of expression at line 1, col 6.
+3D  P |z*z +| ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
+3D  L |z*z +| ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
+3D  N |z*z +| ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
+2D  P |foo(z)| ERR FormatException: Unknown function 'foo' at line 1, col 1. Did you mean 'cos'?
+2D  L |foo(z)| ERR FormatException: Unknown function 'foo' at line 1, col 1. Did you mean 'cos'?
+3D  P |foo(z)| ERR SbxParseException @0+3 step-1: Unknown function 'foo' at line 1, col 1. Did you mean 'cos'?
+3D  L |foo(z)| ERR SbxParseException @0+3 step-1: Unknown function 'foo' at line 1, col 1. Did you mean 'cos'?
+3D  N |foo(z)| ERR SbxParseException @0+3 step-1: Unknown function 'foo' at line 1, col 1. Did you mean 'cos'?
+2D  P |if re(z) > 0 z else c| ERR FormatException: Expected 'then' after the 'if' condition at line 1, col 14.
+2D  L |if re(z) > 0 z else c| ERR FormatException: Expected 'then' after the 'if' condition at line 1, col 14.
+3D  P |if re(z) > 0 z else c| ERR SbxParseException @3+2 step-1: Unknown function 're' at line 1, col 4. Did you mean 'vec'?
+3D  L |if re(z) > 0 z else c| ERR SbxParseException @3+2 step-1: Unknown function 're' at line 1, col 4. Did you mean 'vec'?
+3D  N |if re(z) > 0 z else c| ERR SbxParseException @3+2 step-1: Unknown function 're' at line 1, col 4. Did you mean 'vec'?
+2D  P |z*z + c)| ERR FormatException: Unexpected ')' at line 1, col 8.
+2D  L |z*z + c)| ERR FormatException: Unexpected ')' at line 1, col 8.
+3D  P |z*z + c)| ERR SbxParseException @7+1 step-1: Unexpected ')' at line 1, col 8.
+3D  L |z*z + c)| ERR SbxParseException @7+1 step-1: Unexpected ')' at line 1, col 8.
+3D  N |z*z + c)| ERR SbxParseException @7+1 step-1: Unexpected ')' at line 1, col 8.
+2D  P |sin()| ERR FormatException: Function 'sin' at line 1, col 1 takes 1 arg(s), got 0.
+2D  L |sin()| ERR FormatException: Function 'sin' at line 1, col 1 takes 1 arg(s), got 0.
+3D  P |sin()| ERR SbxParseException @0+3 step-1: Function 'sin' takes 1 arg(s), got 0 at line 1, col 1.
+3D  L |sin()| ERR SbxParseException @0+3 step-1: Function 'sin' takes 1 arg(s), got 0 at line 1, col 1.
+3D  N |sin()| ERR SbxParseException @0+3 step-1: Function 'sin' takes 1 arg(s), got 0 at line 1, col 1.
+2D  P |z*z*z + c| (+ (* (* z z) z) c)
+2D  L |z*z*z + c| (+ (* (* z z) z) c)
+3D  P |z*z*z + c| (+ (* (* $0 $0) $0) $1)
+3D  L |z*z*z + c| (+ (* (* $0 $0) $0) $1)
+3D  N |z*z*z + c| (+ (* (* $0 $0) $0) $1)
+2D  P |z^4 + c| (+ (^ z 4) c)
+2D  L |z^4 + c| (+ (^ z 4) c)
+3D  P |z^4 + c| (+ (^ $0 4) $1)
+3D  L |z^4 + c| (+ (^ $0 4) $1)
+3D  N |z^4 + c| (+ (^ $0 4) $1)
+2D  P |z^5 + c| (+ (^ z 5) c)
+2D  L |z^5 + c| (+ (^ z 5) c)
+3D  P |z^5 + c| (+ (^ $0 5) $1)
+3D  L |z^5 + c| (+ (^ $0 5) $1)
+3D  N |z^5 + c| (+ (^ $0 5) $1)
+2D  P |conj(z)*conj(z) + c| (+ (* (conj z) (conj z)) c)
+2D  L |conj(z)*conj(z) + c| (+ (* (conj z) (conj z)) c)
+3D  P |conj(z)*conj(z) + c| ERR SbxParseException @0+4 step-1: Unknown function 'conj' at line 1, col 1. Did you mean 'qconj'?
+3D  L |conj(z)*conj(z) + c| ERR SbxParseException @0+4 step-1: Unknown function 'conj' at line 1, col 1. Did you mean 'qconj'?
+3D  N |conj(z)*conj(z) + c| ERR SbxParseException @0+4 step-1: Unknown function 'conj' at line 1, col 1. Did you mean 'qconj'?
+2D  P |fold(z)*fold(z) + c| (+ (* (fold z) (fold z)) c)
+2D  L |fold(z)*fold(z) + c| (+ (* (fold z) (fold z)) c)
+3D  P |fold(z)*fold(z) + c| ERR SbxParseException @0+4 step-1: Unknown function 'fold' at line 1, col 1. Did you mean 'mod'?
+3D  L |fold(z)*fold(z) + c| ERR SbxParseException @0+4 step-1: Unknown function 'fold' at line 1, col 1. Did you mean 'mod'?
+3D  N |fold(z)*fold(z) + c| ERR SbxParseException @0+4 step-1: Unknown function 'fold' at line 1, col 1. Did you mean 'mod'?
+2D  P |z*z + c + 0.5667 * prev| (+ (+ (* z z) c) (* 0.5667 prev))
+2D  L |z*z + c + 0.5667 * prev| (+ (+ (* z z) c) (* 0.5667 prev))
+3D  P |z*z + c + 0.5667 * prev| ERR SbxParseException @19+4 step-1: Unknown identifier 'prev' at line 1, col 20.
+3D  L |z*z + c + 0.5667 * prev| (+ (+ (* $0 $0) $1) (* 0.5667 $3))
+3D  N |z*z + c + 0.5667 * prev| (+ (+ (* $0 $0) $1) (* 0.5667 $3))
+2D  P |sin(z) + c| (+ (sin z) c)
+2D  L |sin(z) + c| (+ (sin z) c)
+3D  P |sin(z) + c| (+ (sin $0) $1)
+3D  L |sin(z) + c| (+ (sin $0) $1)
+3D  N |sin(z) + c| (+ (sin $0) $1)
+2D  P |cos(z) + c| (+ (cos z) c)
+2D  L |cos(z) + c| (+ (cos z) c)
+3D  P |cos(z) + c| (+ (cos $0) $1)
+3D  L |cos(z) + c| (+ (cos $0) $1)
+3D  N |cos(z) + c| (+ (cos $0) $1)
+2D  P |exp(z) + c| (+ (exp z) c)
+2D  L |exp(z) + c| (+ (exp z) c)
+3D  P |exp(z) + c| (+ (exp $0) $1)
+3D  L |exp(z) + c| (+ (exp $0) $1)
+3D  N |exp(z) + c| (+ (exp $0) $1)
+2D  P |c * z * (1 - z)| (* (* c z) (- 1 z))
+2D  L |c * z * (1 - z)| (* (* c z) (- 1 z))
+3D  P |c * z * (1 - z)| (* (* $1 $0) (- 1 $0))
+3D  L |c * z * (1 - z)| (* (* $1 $0) (- 1 $0))
+3D  N |c * z * (1 - z)| (* (* $1 $0) (- 1 $0))
+2D  P |z - (z*z*z - 1) / (3*z*z)| (- z (/ (- (* (* z z) z) 1) (* (* 3 z) z)))
+2D  L |z - (z*z*z - 1) / (3*z*z)| (- z (/ (- (* (* z z) z) 1) (* (* 3 z) z)))
+3D  P |z - (z*z*z - 1) / (3*z*z)| (- $0 (/ (- (* (* $0 $0) $0) 1) (* (* 3 $0) $0)))
+3D  L |z - (z*z*z - 1) / (3*z*z)| (- $0 (/ (- (* (* $0 $0) $0) 1) (* (* 3 $0) $0)))
+3D  N |z - (z*z*z - 1) / (3*z*z)| (- $0 (/ (- (* (* $0 $0) $0) 1) (* (* 3 $0) $0)))
+2D  P |((z*z + c - 1) / (2*z + c - 2))^2| (^ (/ (- (+ (* z z) c) 1) (- (+ (* 2 z) c) 2)) 2)
+2D  L |((z*z + c - 1) / (2*z + c - 2))^2| (^ (/ (- (+ (* z z) c) 1) (- (+ (* 2 z) c) 2)) 2)
+3D  P |((z*z + c - 1) / (2*z + c - 2))^2| (^ (/ (- (+ (* $0 $0) $1) 1) (- (+ (* 2 $0) $1) 2)) 2)
+3D  L |((z*z + c - 1) / (2*z + c - 2))^2| (^ (/ (- (+ (* $0 $0) $1) 1) (- (+ (* 2 $0) $1) 2)) 2)
+3D  N |((z*z + c - 1) / (2*z + c - 2))^2| (^ (/ (- (+ (* $0 $0) $1) 1) (- (+ (* 2 $0) $1) 2)) 2)
+2D  P |z*z + c*c| (+ (* z z) (* c c))
+2D  L |z*z + c*c| (+ (* z z) (* c c))
+3D  P |z*z + c*c| (+ (* $0 $0) (* $1 $1))
+3D  L |z*z + c*c| (+ (* $0 $0) (* $1 $1))
+3D  N |z*z + c*c| (+ (* $0 $0) (* $1 $1))
+2D  P |abs(im(z)) > 50| (> (abs (im z)) 50)
+2D  L |abs(im(z)) > 50| (> (abs (im z)) 50)
+3D  P |abs(im(z)) > 50| ERR SbxParseException @4+2 step-1: Unknown function 'im' at line 1, col 5. Did you mean 'sin'?
+3D  L |abs(im(z)) > 50| ERR SbxParseException @4+2 step-1: Unknown function 'im' at line 1, col 5. Did you mean 'sin'?
+3D  N |abs(im(z)) > 50| ERR SbxParseException @4+2 step-1: Unknown function 'im' at line 1, col 5. Did you mean 'sin'?
+2D  P |re(z) > 50| (> (re z) 50)
+2D  L |re(z) > 50| (> (re z) 50)
+3D  P |re(z) > 50| ERR SbxParseException @0+2 step-1: Unknown function 're' at line 1, col 1. Did you mean 'vec'?
+3D  L |re(z) > 50| ERR SbxParseException @0+2 step-1: Unknown function 're' at line 1, col 1. Did you mean 'vec'?
+3D  N |re(z) > 50| ERR SbxParseException @0+2 step-1: Unknown function 're' at line 1, col 1. Did you mean 'vec'?
+2D  P |z*z + abs(c)| (+ (* z z) (abs c))
+2D  L |z*z + abs(c)| (+ (* z z) (abs c))
+3D  P |z*z + abs(c)| (+ (* $0 $0) (abs $1))
+3D  L |z*z + abs(c)| (+ (* $0 $0) (abs $1))
+3D  N |z*z + abs(c)| (+ (* $0 $0) (abs $1))
+2D  P |z*z + re(c) + im(c)| (+ (+ (* z z) (re c)) (im c))
+2D  L |z*z + re(c) + im(c)| (+ (+ (* z z) (re c)) (im c))
+3D  P |z*z + re(c) + im(c)| ERR SbxParseException @6+2 step-1: Unknown function 're' at line 1, col 7. Did you mean 'vec'?
+3D  L |z*z + re(c) + im(c)| ERR SbxParseException @6+2 step-1: Unknown function 're' at line 1, col 7. Did you mean 'vec'?
+3D  N |z*z + re(c) + im(c)| ERR SbxParseException @6+2 step-1: Unknown function 're' at line 1, col 7. Did you mean 'vec'?
+2D  P |z*z + clamp(re(c), -2.0, 2.0)| (+ (* z z) (clamp (re c) (neg 2) 2))
+2D  L |z*z + clamp(re(c), -2.0, 2.0)| (+ (* z z) (clamp (re c) (neg 2) 2))
+3D  P |z*z + clamp(re(c), -2.0, 2.0)| ERR SbxParseException @12+2 step-1: Unknown function 're' at line 1, col 13. Did you mean 'vec'?
+3D  L |z*z + clamp(re(c), -2.0, 2.0)| ERR SbxParseException @12+2 step-1: Unknown function 're' at line 1, col 13. Did you mean 'vec'?
+3D  N |z*z + clamp(re(c), -2.0, 2.0)| ERR SbxParseException @12+2 step-1: Unknown function 're' at line 1, col 13. Did you mean 'vec'?
+2D  P |z*z + c + (abs(z) + re(z) + clamp(im(z), -1.0, 1.0)) * 0.0| (+ (+ (* z z) c) (* (+ (+ (abs z) (re z)) (clamp (im z) (neg 1) 1)) 0))
+2D  L |z*z + c + (abs(z) + re(z) + clamp(im(z), -1.0, 1.0)) * 0.0| (+ (+ (* z z) c) (* (+ (+ (abs z) (re z)) (clamp (im z) (neg 1) 1)) 0))
+3D  P |z*z + c + (abs(z) + re(z) + clamp(im(z), -1.0, 1.0)) * 0.0| ERR SbxParseException @20+2 step-1: Unknown function 're' at line 1, col 21. Did you mean 'vec'?
+3D  L |z*z + c + (abs(z) + re(z) + clamp(im(z), -1.0, 1.0)) * 0.0| ERR SbxParseException @20+2 step-1: Unknown function 're' at line 1, col 21. Did you mean 'vec'?
+3D  N |z*z + c + (abs(z) + re(z) + clamp(im(z), -1.0, 1.0)) * 0.0| ERR SbxParseException @20+2 step-1: Unknown function 're' at line 1, col 21. Did you mean 'vec'?
+2D  P |sqr(z) + abs(c) + clamp(re(c), -1.5, 1.5)| (+ (+ (sqr z) (abs c)) (clamp (re c) (neg 1.5) 1.5))
+2D  L |sqr(z) + abs(c) + clamp(re(c), -1.5, 1.5)| (+ (+ (sqr z) (abs c)) (clamp (re c) (neg 1.5) 1.5))
+3D  P |sqr(z) + abs(c) + clamp(re(c), -1.5, 1.5)| ERR SbxParseException @0+3 step-1: Unknown function 'sqr' at line 1, col 1. Did you mean 'sqrt'?
+3D  L |sqr(z) + abs(c) + clamp(re(c), -1.5, 1.5)| ERR SbxParseException @0+3 step-1: Unknown function 'sqr' at line 1, col 1. Did you mean 'sqrt'?
+3D  N |sqr(z) + abs(c) + clamp(re(c), -1.5, 1.5)| ERR SbxParseException @0+3 step-1: Unknown function 'sqr' at line 1, col 1. Did you mean 'sqrt'?
+2D  P |pow(z, 2) + c| (+ (pow z 2) c)
+2D  L |pow(z, 2) + c| (+ (pow z 2) c)
+3D  P |pow(z, 2) + c| (+ (pow $0 2) $1)
+3D  L |pow(z, 2) + c| (+ (pow $0 2) $1)
+3D  N |pow(z, 2) + c| (+ (pow $0 2) $1)
+2D  P |z*z + pow(re(c), 2.0)| (+ (* z z) (pow (re c) 2))
+2D  L |z*z + pow(re(c), 2.0)| (+ (* z z) (pow (re c) 2))
+3D  P |z*z + pow(re(c), 2.0)| ERR SbxParseException @10+2 step-1: Unknown function 're' at line 1, col 11. Did you mean 'vec'?
+3D  L |z*z + pow(re(c), 2.0)| ERR SbxParseException @10+2 step-1: Unknown function 're' at line 1, col 11. Did you mean 'vec'?
+3D  N |z*z + pow(re(c), 2.0)| ERR SbxParseException @10+2 step-1: Unknown function 're' at line 1, col 11. Did you mean 'vec'?
+2D  P |z*z + c + (pow(z, -2.0) + pow(c, 0.5)) * 0.0| (+ (+ (* z z) c) (* (+ (pow z (neg 2)) (pow c 0.5)) 0))
+2D  L |z*z + c + (pow(z, -2.0) + pow(c, 0.5)) * 0.0| (+ (+ (* z z) c) (* (+ (pow z (neg 2)) (pow c 0.5)) 0))
+3D  P |z*z + c + (pow(z, -2.0) + pow(c, 0.5)) * 0.0| (+ (+ (* $0 $0) $1) (* (+ (pow $0 (neg 2)) (pow $1 0.5)) 0))
+3D  L |z*z + c + (pow(z, -2.0) + pow(c, 0.5)) * 0.0| (+ (+ (* $0 $0) $1) (* (+ (pow $0 (neg 2)) (pow $1 0.5)) 0))
+3D  N |z*z + c + (pow(z, -2.0) + pow(c, 0.5)) * 0.0| (+ (+ (* $0 $0) $1) (* (+ (pow $0 (neg 2)) (pow $1 0.5)) 0))
+2D  P |z*z + atan(c)| (+ (* z z) (atan c))
+2D  L |z*z + atan(c)| (+ (* z z) (atan c))
+3D  P |z*z + atan(c)| ERR SbxParseException @6+4 step-1: Unknown function 'atan' at line 1, col 7. Did you mean 'tan'?
+3D  L |z*z + atan(c)| ERR SbxParseException @6+4 step-1: Unknown function 'atan' at line 1, col 7. Did you mean 'tan'?
+3D  N |z*z + atan(c)| ERR SbxParseException @6+4 step-1: Unknown function 'atan' at line 1, col 7. Did you mean 'tan'?
+2D  P |z*z + asinh(c) * 0.3| (+ (* z z) (* (asinh c) 0.3))
+2D  L |z*z + asinh(c) * 0.3| (+ (* z z) (* (asinh c) 0.3))
+3D  P |z*z + asinh(c) * 0.3| ERR SbxParseException @6+5 step-1: Unknown function 'asinh' at line 1, col 7. Did you mean 'sinh'?
+3D  L |z*z + asinh(c) * 0.3| ERR SbxParseException @6+5 step-1: Unknown function 'asinh' at line 1, col 7. Did you mean 'sinh'?
+3D  N |z*z + asinh(c) * 0.3| ERR SbxParseException @6+5 step-1: Unknown function 'asinh' at line 1, col 7. Did you mean 'sinh'?
+2D  P |z*z + c + (asin(c) + acos(c) + atan(c) + asinh(c) + acosh(c) + atanh(c)) * 0.0| (+ (+ (* z z) c) (* (+ (+ (+ (+ (+ (asin c) (acos c)) (atan c)) (asinh c)) (acosh c)) (atanh c)) 0))
+2D  L |z*z + c + (asin(c) + acos(c) + atan(c) + asinh(c) + acosh(c) + atanh(c)) * 0.0| (+ (+ (* z z) c) (* (+ (+ (+ (+ (+ (asin c) (acos c)) (atan c)) (asinh c)) (acosh c)) (atanh c)) 0))
+3D  P |z*z + c + (asin(c) + acos(c) + atan(c) + asinh(c) + acosh(c) + atanh(c)) * 0.0| ERR SbxParseException @11+4 step-1: Unknown function 'asin' at line 1, col 12. Did you mean 'sin'?
+3D  L |z*z + c + (asin(c) + acos(c) + atan(c) + asinh(c) + acosh(c) + atanh(c)) * 0.0| ERR SbxParseException @11+4 step-1: Unknown function 'asin' at line 1, col 12. Did you mean 'sin'?
+3D  N |z*z + c + (asin(c) + acos(c) + atan(c) + asinh(c) + acosh(c) + atanh(c)) * 0.0| ERR SbxParseException @11+4 step-1: Unknown function 'asin' at line 1, col 12. Did you mean 'sin'?
+2D  P |z*z + fract(c)| (+ (* z z) (fract c))
+2D  L |z*z + fract(c)| (+ (* z z) (fract c))
+3D  P |z*z + fract(c)| ERR SbxParseException @6+5 step-1: Unknown function 'fract' at line 1, col 7.
+3D  L |z*z + fract(c)| ERR SbxParseException @6+5 step-1: Unknown function 'fract' at line 1, col 7.
+3D  N |z*z + fract(c)| ERR SbxParseException @6+5 step-1: Unknown function 'fract' at line 1, col 7.
+2D  P |z*z + floor(c) * 0.15| (+ (* z z) (* (floor c) 0.15))
+2D  L |z*z + floor(c) * 0.15| (+ (* z z) (* (floor c) 0.15))
+3D  P |z*z + floor(c) * 0.15| (+ (* $0 $0) (* (floor $1) 0.15))
+3D  L |z*z + floor(c) * 0.15| (+ (* $0 $0) (* (floor $1) 0.15))
+3D  N |z*z + floor(c) * 0.15| (+ (* $0 $0) (* (floor $1) 0.15))
+2D  P |z*z + c + (floor(z) + round(z) + ceil(z) + trunc(z) + fract(z) + sign(z)) * 0.0| (+ (+ (* z z) c) (* (+ (+ (+ (+ (+ (floor z) (round z)) (ceil z)) (trunc z)) (fract z)) (sign z)) 0))
+2D  L |z*z + c + (floor(z) + round(z) + ceil(z) + trunc(z) + fract(z) + sign(z)) * 0.0| (+ (+ (* z z) c) (* (+ (+ (+ (+ (+ (floor z) (round z)) (ceil z)) (trunc z)) (fract z)) (sign z)) 0))
+3D  P |z*z + c + (floor(z) + round(z) + ceil(z) + trunc(z) + fract(z) + sign(z)) * 0.0| ERR SbxParseException @22+5 step-1: Unknown function 'round' at line 1, col 23.
+3D  L |z*z + c + (floor(z) + round(z) + ceil(z) + trunc(z) + fract(z) + sign(z)) * 0.0| ERR SbxParseException @22+5 step-1: Unknown function 'round' at line 1, col 23.
+3D  N |z*z + c + (floor(z) + round(z) + ceil(z) + trunc(z) + fract(z) + sign(z)) * 0.0| ERR SbxParseException @22+5 step-1: Unknown function 'round' at line 1, col 23.
+2D  P |if abs(c) > 0.5 then z*z*z + c else z*z + c| (? (> (abs c) 0.5) (+ (* (* z z) z) c) (+ (* z z) c))
+2D  L |if abs(c) > 0.5 then z*z*z + c else z*z + c| (? (> (norm c) 0.5) (+ (* (* z z) z) c) (+ (* z z) c)) edits[3,3,norm]
+3D  P |if abs(c) > 0.5 then z*z*z + c else z*z + c| (? (> (abs $1) 0.5) (+ (* (* $0 $0) $0) $1) (+ (* $0 $0) $1))
+3D  L |if abs(c) > 0.5 then z*z*z + c else z*z + c| (? (> (abs $1) 0.5) (+ (* (* $0 $0) $0) $1) (+ (* $0 $0) $1))
+3D  N |if abs(c) > 0.5 then z*z*z + c else z*z + c| (? (> (abs $1) 0.5) (+ (* (* $0 $0) $0) $1) (+ (* $0 $0) $1))
+2D  P |if norm(c) > 0.5 then z*z*z + c else z*z + c| (? (> (norm c) 0.5) (+ (* (* z z) z) c) (+ (* z z) c))
+2D  L |if norm(c) > 0.5 then z*z*z + c else z*z + c| (? (> (norm c) 0.5) (+ (* (* z z) z) c) (+ (* z z) c))
+3D  P |if norm(c) > 0.5 then z*z*z + c else z*z + c| (? (> (norm $1) 0.5) (+ (* (* $0 $0) $0) $1) (+ (* $0 $0) $1))
+3D  L |if norm(c) > 0.5 then z*z*z + c else z*z + c| (? (> (norm $1) 0.5) (+ (* (* $0 $0) $0) $1) (+ (* $0 $0) $1))
+3D  N |if norm(c) > 0.5 then z*z*z + c else z*z + c| (? (> (norm $1) 0.5) (+ (* (* $0 $0) $0) $1) (+ (* $0 $0) $1))
+2D  P |if re(c) < -0.75 then z*z*z + c else z*z + c| (? (< (re c) (neg 0.75)) (+ (* (* z z) z) c) (+ (* z z) c))
+2D  L |if re(c) < -0.75 then z*z*z + c else z*z + c| (? (< (re c) (neg 0.75)) (+ (* (* z z) z) c) (+ (* z z) c))
+3D  P |if re(c) < -0.75 then z*z*z + c else z*z + c| ERR SbxParseException @3+2 step-1: Unknown function 're' at line 1, col 4. Did you mean 'vec'?
+3D  L |if re(c) < -0.75 then z*z*z + c else z*z + c| ERR SbxParseException @3+2 step-1: Unknown function 're' at line 1, col 4. Did you mean 'vec'?
+3D  N |if re(c) < -0.75 then z*z*z + c else z*z + c| ERR SbxParseException @3+2 step-1: Unknown function 're' at line 1, col 4. Did you mean 'vec'?
+2D  P |z*z + norm(c) * 0.2 + c| (+ (+ (* z z) (* (norm c) 0.2)) c)
+2D  L |z*z + norm(c) * 0.2 + c| (+ (+ (* z z) (* (norm c) 0.2)) c)
+3D  P |z*z + norm(c) * 0.2 + c| (+ (+ (* $0 $0) (* (norm $1) 0.2)) $1)
+3D  L |z*z + norm(c) * 0.2 + c| (+ (+ (* $0 $0) (* (norm $1) 0.2)) $1)
+3D  N |z*z + norm(c) * 0.2 + c| (+ (+ (* $0 $0) (* (norm $1) 0.2)) $1)
+2D  P |(z)^4 + c| (+ (^ z 4) c)
+2D  L |(z)^4 + c| (+ (^ z 4) c)
+3D  P |(z)^4 + c| (+ (^ $0 4) $1)
+3D  L |(z)^4 + c| (+ (^ $0 4) $1)
+3D  N |(z)^4 + c| (+ (^ $0 4) $1)
+2D  P |pow(z, 2.5) + c| (+ (pow z 2.5) c)
+2D  L |pow(z, 2.5) + c| (+ (pow z 2.5) c)
+3D  P |pow(z, 2.5) + c| (+ (pow $0 2.5) $1)
+3D  L |pow(z, 2.5) + c| (+ (pow $0 2.5) $1)
+3D  N |pow(z, 2.5) + c| (+ (pow $0 2.5) $1)
+2D  P |sinh(z) + c| (+ (sinh z) c)
+2D  L |sinh(z) + c| (+ (sinh z) c)
+3D  P |sinh(z) + c| (+ (sinh $0) $1)
+3D  L |sinh(z) + c| (+ (sinh $0) $1)
+3D  N |sinh(z) + c| (+ (sinh $0) $1)
+2D  P |cosh(z) + c| (+ (cosh z) c)
+2D  L |cosh(z) + c| (+ (cosh z) c)
+3D  P |cosh(z) + c| (+ (cosh $0) $1)
+3D  L |cosh(z) + c| (+ (cosh $0) $1)
+3D  N |cosh(z) + c| (+ (cosh $0) $1)
+2D  P |tanh(z) + c| (+ (tanh z) c)
+2D  L |tanh(z) + c| (+ (tanh z) c)
+3D  P |tanh(z) + c| (+ (tanh $0) $1)
+3D  L |tanh(z) + c| (+ (tanh $0) $1)
+3D  N |tanh(z) + c| (+ (tanh $0) $1)
+2D  P |log(z) + c| (+ (log z) c)
+2D  L |log(z) + c| (+ (log z) c)
+3D  P |log(z) + c| (+ (log $0) $1)
+3D  L |log(z) + c| (+ (log $0) $1)
+3D  N |log(z) + c| (+ (log $0) $1)
+2D  P |conj(z) + c| (+ (conj z) c)
+2D  L |conj(z) + c| (+ (conj z) c)
+3D  P |conj(z) + c| ERR SbxParseException @0+4 step-1: Unknown function 'conj' at line 1, col 1. Did you mean 'qconj'?
+3D  L |conj(z) + c| ERR SbxParseException @0+4 step-1: Unknown function 'conj' at line 1, col 1. Did you mean 'qconj'?
+3D  N |conj(z) + c| ERR SbxParseException @0+4 step-1: Unknown function 'conj' at line 1, col 1. Did you mean 'qconj'?
+2D  P |z*z + ((-0.4) + (0.6)*i)| (+ (* z z) (+ (neg 0.4) (* 0.6 (cx 0 1))))
+2D  L |z*z + ((-0.4) + (0.6)*i)| (+ (* z z) (+ (neg 0.4) (* 0.6 (cx 0 1))))
+3D  P |z*z + ((-0.4) + (0.6)*i)| ERR SbxParseException @22+1 step-1: Unknown identifier 'i' at line 1, col 23. Did you mean 'z'?
+3D  L |z*z + ((-0.4) + (0.6)*i)| (+ (* $0 $0) (+ (neg 0.4) (* 0.6 $3)))
+3D  N |z*z + ((-0.4) + (0.6)*i)| (+ (* $0 $0) (+ (neg 0.4) (* 0.6 $3)))
+2D  P |sin(z*z) + c| (+ (sin (* z z)) c)
+2D  L |sin(z*z) + c| (+ (sin (* z z)) c)
+3D  P |sin(z*z) + c| (+ (sin (* $0 $0)) $1)
+3D  L |sin(z*z) + c| (+ (sin (* $0 $0)) $1)
+3D  N |sin(z*z) + c| (+ (sin (* $0 $0)) $1)
+2D  P |z*z + c*n| (+ (* z z) (* c n))
+2D  L |z*z + c*n| (+ (* z z) (* c n))
+3D  P |z*z + c*n| (+ (* $0 $0) (* $1 $2))
+3D  L |z*z + c*n| (+ (* $0 $0) (* $1 $2))
+3D  N |z*z + c*n| (+ (* $0 $0) (* $1 $2))
+2D  P |((z)^2)^3 + c| (+ (^ (^ z 2) 3) c)
+2D  L |((z)^2)^3 + c| (+ (^ (^ z 2) 3) c)
+3D  P |((z)^2)^3 + c| (+ (^ (^ $0 2) 3) $1)
+3D  L |((z)^2)^3 + c| (+ (^ (^ $0 2) 3) $1)
+3D  N |((z)^2)^3 + c| (+ (^ (^ $0 2) 3) $1)
+2D  P |re(z) + c| (+ (re z) c)
+2D  L |re(z) + c| (+ (re z) c)
+3D  P |re(z) + c| ERR SbxParseException @0+2 step-1: Unknown function 're' at line 1, col 1. Did you mean 'vec'?
+3D  L |re(z) + c| ERR SbxParseException @0+2 step-1: Unknown function 're' at line 1, col 1. Did you mean 'vec'?
+3D  N |re(z) + c| ERR SbxParseException @0+2 step-1: Unknown function 're' at line 1, col 1. Did you mean 'vec'?
+2D  P |im(z) + c| (+ (im z) c)
+2D  L |im(z) + c| (+ (im z) c)
+3D  P |im(z) + c| ERR SbxParseException @0+2 step-1: Unknown function 'im' at line 1, col 1. Did you mean 'sin'?
+3D  L |im(z) + c| ERR SbxParseException @0+2 step-1: Unknown function 'im' at line 1, col 1. Did you mean 'sin'?
+3D  N |im(z) + c| ERR SbxParseException @0+2 step-1: Unknown function 'im' at line 1, col 1. Did you mean 'sin'?
+2D  P |sqrt((z)*conj(z)) + c| (+ (sqrt (* z (conj z))) c)
+2D  L |sqrt((z)*conj(z)) + c| (+ (sqrt (* z (conj z))) c)
+3D  P |sqrt((z)*conj(z)) + c| ERR SbxParseException @9+4 step-1: Unknown function 'conj' at line 1, col 10. Did you mean 'qconj'?
+3D  L |sqrt((z)*conj(z)) + c| ERR SbxParseException @9+4 step-1: Unknown function 'conj' at line 1, col 10. Did you mean 'qconj'?
+3D  N |sqrt((z)*conj(z)) + c| ERR SbxParseException @9+4 step-1: Unknown function 'conj' at line 1, col 10. Did you mean 'qconj'?
+2D  P |arg(z) + c| (+ (arg z) c)
+2D  L |arg(z) + c| (+ (arg z) c)
+3D  P |arg(z) + c| ERR SbxParseException @0+3 step-1: Unknown function 'arg' at line 1, col 1. Did you mean 'log'?
+3D  L |arg(z) + c| ERR SbxParseException @0+3 step-1: Unknown function 'arg' at line 1, col 1. Did you mean 'log'?
+3D  N |arg(z) + c| ERR SbxParseException @0+3 step-1: Unknown function 'arg' at line 1, col 1. Did you mean 'log'?
+2D  P |re((z*z)) + c| (+ (re (* z z)) c)
+2D  L |re((z*z)) + c| (+ (re (* z z)) c)
+3D  P |re((z*z)) + c| ERR SbxParseException @0+2 step-1: Unknown function 're' at line 1, col 1. Did you mean 'vec'?
+3D  L |re((z*z)) + c| ERR SbxParseException @0+2 step-1: Unknown function 're' at line 1, col 1. Did you mean 'vec'?
+3D  N |re((z*z)) + c| ERR SbxParseException @0+2 step-1: Unknown function 're' at line 1, col 1. Did you mean 'vec'?
+2D  P |re(sin(z)) + c| (+ (re (sin z)) c)
+2D  L |re(sin(z)) + c| (+ (re (sin z)) c)
+3D  P |re(sin(z)) + c| ERR SbxParseException @0+2 step-1: Unknown function 're' at line 1, col 1. Did you mean 'vec'?
+3D  L |re(sin(z)) + c| ERR SbxParseException @0+2 step-1: Unknown function 're' at line 1, col 1. Did you mean 'vec'?
+3D  N |re(sin(z)) + c| ERR SbxParseException @0+2 step-1: Unknown function 're' at line 1, col 1. Did you mean 'vec'?
+2D  P |re(z)*re(z) - im(z)*im(z) + c| (+ (- (* (re z) (re z)) (* (im z) (im z))) c)
+2D  L |re(z)*re(z) - im(z)*im(z) + c| (+ (- (* (re z) (re z)) (* (im z) (im z))) c)
+3D  P |re(z)*re(z) - im(z)*im(z) + c| ERR SbxParseException @0+2 step-1: Unknown function 're' at line 1, col 1. Did you mean 'vec'?
+3D  L |re(z)*re(z) - im(z)*im(z) + c| ERR SbxParseException @0+2 step-1: Unknown function 're' at line 1, col 1. Did you mean 'vec'?
+3D  N |re(z)*re(z) - im(z)*im(z) + c| ERR SbxParseException @0+2 step-1: Unknown function 're' at line 1, col 1. Did you mean 'vec'?
+2D  P |((z)/(5)) + c| (+ (/ z 5) c)
+2D  L |((z)/(5)) + c| (+ (/ z 5) c)
+3D  P |((z)/(5)) + c| (+ (/ $0 5) $1)
+3D  L |((z)/(5)) + c| (+ (/ $0 5) $1)
+3D  N |((z)/(5)) + c| (+ (/ $0 5) $1)
+2D  P |z + E| (+ z 2.718281828459045)
+2D  L |z + E| (+ z 2.718281828459045)
+3D  P |z + E| ERR SbxParseException @4+1 step-1: Unknown identifier 'E' at line 1, col 5.
+3D  L |z + E| (+ $0 $3)
+3D  N |z + E| (+ $0 $3)
+2D  P |z*PI + c| (+ (* z 3.141592653589793) c)
+2D  L |z*PI + c| (+ (* z 3.141592653589793) c)
+3D  P |z*PI + c| ERR SbxParseException @2+2 step-1: Unknown identifier 'PI' at line 1, col 3.
+3D  L |z*PI + c| (+ (* $0 $3) $1)
+3D  N |z*PI + c| (+ (* $0 $3) $1)
+2D  P |Pow(z, 3) + c| (+ (pow z 3) c)
+2D  L |Pow(z, 3) + c| (+ (pow z 3) c)
+3D  P |Pow(z, 3) + c| (+ (pow $0 3) $1)
+3D  L |Pow(z, 3) + c| (+ (pow $0 3) $1)
+3D  N |Pow(z, 3) + c| (+ (pow $0 3) $1)
+2D  P |z*z + c; // classic| (+ (* z z) c)
+2D  L |z*z + c; // classic| (+ (* z z) c)
+3D  P |z*z + c; // classic| (+ (* $0 $0) $1)
+3D  L |z*z + c; // classic| (+ (* $0 $0) $1)
+3D  N |z*z + c; // classic| (+ (* $0 $0) $1)
+2D  P |z*z /* squared */ + c| (+ (* z z) c)
+2D  L |z*z /* squared */ + c| (+ (* z z) c)
+3D  P |z*z /* squared */ + c| (+ (* $0 $0) $1)
+3D  L |z*z /* squared */ + c| (+ (* $0 $0) $1)
+3D  N |z*z /* squared */ + c| (+ (* $0 $0) $1)
+2D  P |z * pow(z, -3) + c| (+ (* z (pow z (neg 3))) c)
+2D  L |z * pow(z, -3) + c| (+ (* z (pow z (neg 3))) c)
+3D  P |z * pow(z, -3) + c| (+ (* $0 (pow $0 (neg 3))) $1)
+3D  L |z * pow(z, -3) + c| (+ (* $0 (pow $0 (neg 3))) $1)
+3D  N |z * pow(z, -3) + c| (+ (* $0 (pow $0 (neg 3))) $1)
+2D  P |z + c * pow(c, -2)| (+ z (* c (pow c (neg 2))))
+2D  L |z + c * pow(c, -2)| (+ z (* c (pow c (neg 2))))
+3D  P |z + c * pow(c, -2)| (+ $0 (* $1 (pow $1 (neg 2))))
+3D  L |z + c * pow(c, -2)| (+ $0 (* $1 (pow $1 (neg 2))))
+3D  N |z + c * pow(c, -2)| (+ $0 (* $1 (pow $1 (neg 2))))
+2D  P |Complex z2 = (z)^2; return z2 + c| (let $5 (^ z 2) (+ $5 c))
+2D  L |Complex z2 = (z)^2; return z2 + c| (let $5 (^ z 2) (+ $5 c))
+3D  P |Complex z2 = (z)^2; return z2 + c| ERR SbxParseException @0+7 step-1: Unknown identifier 'Complex' at line 1, col 1.
+3D  L |Complex z2 = (z)^2; return z2 + c| ERR SbxParseException @8+1 step-1: Unexpected 'z' at line 1, col 9.
+3D  N |Complex z2 = (z)^2; return z2 + c| ERR SbxParseException @8+1 step-1: Unexpected 'z' at line 1, col 9.
+2D  P |var t = z*z + c; return t| (let $5 (+ (* z z) c) $5)
+2D  L |var t = z*z + c; return t| (let $5 (+ (* z z) c) $5)
+3D  P |var t = z*z + c; return t| (let $5 (+ (* $0 $0) $1) $5)
+3D  L |var t = z*z + c; return t| (let $3 (+ (* $0 $0) $1) $3)
+3D  N |var t = z*z + c; return t| (let $3 (+ (* $0 $0) $1) $3)
+2D  P |double k = 2; return z*k + c| (let $5 2 (+ (* z $5) c))
+2D  L |double k = 2; return z*k + c| (let $5 2 (+ (* z $5) c))
+3D  P |double k = 2; return z*k + c| (let $5 2 (+ (* $0 $5) $1))
+3D  L |double k = 2; return z*k + c| (let $3 2 (+ (* $0 $3) $1))
+3D  N |double k = 2; return z*k + c| (let $3 2 (+ (* $0 $3) $1))
+2D  P |Complex t = z*z; t = t + c; return t| (let $5 (* z z) (let $6 (+ $5 c) $6))
+2D  L |Complex t = z*z; t = t + c; return t| (let $5 (* z z) (let $6 (+ $5 c) $6))
+3D  P |Complex t = z*z; t = t + c; return t| ERR SbxParseException @0+7 step-1: Unknown identifier 'Complex' at line 1, col 1.
+3D  L |Complex t = z*z; t = t + c; return t| ERR SbxParseException @8+1 step-1: Unexpected 't' at line 1, col 9.
+3D  N |Complex t = z*z; t = t + c; return t| ERR SbxParseException @8+1 step-1: Unexpected 't' at line 1, col 9.
+2D  P |Complex f = z*z*z - 1; Complex d = 3*z*z; return z - f/d| (let $5 (- (* (* z z) z) 1) (let $6 (* (* 3 z) z) (- z (/ $5 $6))))
+2D  L |Complex f = z*z*z - 1; Complex d = 3*z*z; return z - f/d| (let $5 (- (* (* z z) z) 1) (let $6 (* (* 3 z) z) (- z (/ $5 $6))))
+3D  P |Complex f = z*z*z - 1; Complex d = 3*z*z; return z - f/d| ERR SbxParseException @0+7 step-1: Unknown identifier 'Complex' at line 1, col 1.
+3D  L |Complex f = z*z*z - 1; Complex d = 3*z*z; return z - f/d| ERR SbxParseException @8+1 step-1: Unexpected 'f' at line 1, col 9.
+3D  N |Complex f = z*z*z - 1; Complex d = 3*z*z; return z - f/d| ERR SbxParseException @8+1 step-1: Unexpected 'f' at line 1, col 9.
+2D  P |Complex f = (z)^3 - 1; Complex fp = 3*(z)^2; return z - f/fp + c| (let $5 (- (^ z 3) 1) (let $6 (* 3 (^ z 2)) (+ (- z (/ $5 $6)) c)))
+2D  L |Complex f = (z)^3 - 1; Complex fp = 3*(z)^2; return z - f/fp + c| (let $5 (- (^ z 3) 1) (let $6 (* 3 (^ z 2)) (+ (- z (/ $5 $6)) c)))
+3D  P |Complex f = (z)^3 - 1; Complex fp = 3*(z)^2; return z - f/fp + c| ERR SbxParseException @0+7 step-1: Unknown identifier 'Complex' at line 1, col 1.
+3D  L |Complex f = (z)^3 - 1; Complex fp = 3*(z)^2; return z - f/fp + c| ERR SbxParseException @8+1 step-1: Unexpected 'f' at line 1, col 9.
+3D  N |Complex f = (z)^3 - 1; Complex fp = 3*(z)^2; return z - f/fp + c| ERR SbxParseException @8+1 step-1: Unexpected 'f' at line 1, col 9.
+2D  P |Complex w = conj(z); return w*w + c| (let $5 (conj z) (+ (* $5 $5) c))
+2D  L |Complex w = conj(z); return w*w + c| (let $5 (conj z) (+ (* $5 $5) c))
+3D  P |Complex w = conj(z); return w*w + c| ERR SbxParseException @0+7 step-1: Unknown identifier 'Complex' at line 1, col 1.
+3D  L |Complex w = conj(z); return w*w + c| ERR SbxParseException @8+1 step-1: Unexpected 'w' at line 1, col 9.
+3D  N |Complex w = conj(z); return w*w + c| ERR SbxParseException @8+1 step-1: Unexpected 'w' at line 1, col 9.
+2D  P |if (n == 0) z = c; return z*z + c| (let $5 (? (== n 0) c z) (+ (* $5 $5) c))
+2D  L |if (n == 0) z = c; return z*z + c| (let $5 (? (== n 0) c z) (+ (* $5 $5) c))
+3D  P |if (n == 0) z = c; return z*z + c| (let $5 (? (== $2 0) $1 $0) (+ (* $5 $5) $1))
+3D  L |if (n == 0) z = c; return z*z + c| (let $3 (? (== $2 0) $1 $0) (+ (* $3 $3) $1))
+3D  N |if (n == 0) z = c; return z*z + c| (let $3 (? (== $2 0) $1 $0) (+ (* $3 $3) $1))
+2D  P |if (n == 0) return c; return z*z + c| (? (== n 0) c (+ (* z z) c))
+2D  L |if (n == 0) return c; return z*z + c| (? (== n 0) c (+ (* z z) c))
+3D  P |if (n == 0) return c; return z*z + c| (? (== $2 0) $1 (+ (* $0 $0) $1))
+3D  L |if (n == 0) return c; return z*z + c| (? (== $2 0) $1 (+ (* $0 $0) $1))
+3D  N |if (n == 0) return c; return z*z + c| (? (== $2 0) $1 (+ (* $0 $0) $1))
+2D  P |Complex zf = ((abs(re(z))) + (abs(im(z)))*i); return zf*zf + c| (let $5 (+ (abs (re z)) (* (abs (im z)) (cx 0 1))) (+ (* $5 $5) c))
+2D  L |Complex zf = ((abs(re(z))) + (abs(im(z)))*i); return zf*zf + c| (let $5 (+ (abs (re z)) (* (abs (im z)) (cx 0 1))) (+ (* $5 $5) c))
+3D  P |Complex zf = ((abs(re(z))) + (abs(im(z)))*i); return zf*zf + c| ERR SbxParseException @0+7 step-1: Unknown identifier 'Complex' at line 1, col 1.
+3D  L |Complex zf = ((abs(re(z))) + (abs(im(z)))*i); return zf*zf + c| ERR SbxParseException @8+1 step-1: Unexpected 'z' at line 1, col 9.
+3D  N |Complex zf = ((abs(re(z))) + (abs(im(z)))*i); return zf*zf + c| ERR SbxParseException @8+1 step-1: Unexpected 'z' at line 1, col 9.
+2D  P |Complex t = z*z; // square\n return t + c| (let $5 (* z z) (+ $5 c))
+2D  L |Complex t = z*z; // square\n return t + c| (let $5 (* z z) (+ $5 c))
+3D  P |Complex t = z*z; // square\n return t + c| ERR SbxParseException @0+7 step-1: Unknown identifier 'Complex' at line 1, col 1.
+3D  L |Complex t = z*z; // square\n return t + c| ERR SbxParseException @8+1 step-1: Unexpected 't' at line 1, col 9.
+3D  N |Complex t = z*z; // square\n return t + c| ERR SbxParseException @8+1 step-1: Unexpected 't' at line 1, col 9.
+2D  P |let ez = exp(z.z) in let s = max(StretchMax, StretchScale*sqrt(0.5*(ez*ez + 1/(ez*ez)))) in drScale*s*dr + drOffset| ERR FormatException: Expected ')' at line 1, col 15.
+2D  L |let ez = exp(z.z) in let s = max(StretchMax, StretchScale*sqrt(0.5*(ez*ez + 1/(ez*ez)))) in drScale*s*dr + drOffset| ERR FormatException: Expected ')' at line 1, col 15.
+3D  P |let ez = exp(z.z) in let s = max(StretchMax, StretchScale*sqrt(0.5*(ez*ez + 1/(ez*ez)))) in drScale*s*dr + drOffset| ERR SbxParseException @33+10 step-1: Unknown identifier 'StretchMax' at line 1, col 34.
+3D  L |let ez = exp(z.z) in let s = max(StretchMax, StretchScale*sqrt(0.5*(ez*ez + 1/(ez*ez)))) in drScale*s*dr + drOffset| (let $3 (exp (.z $0)) (let $6 (max $4 (* $5 (sqrt (* 0.5 (+ (* $3 $3) (/ 1 (* $3 $3))))))) (+ (* (* $7 $6) $8) $9)))
+3D  N |let ez = exp(z.z) in let s = max(StretchMax, StretchScale*sqrt(0.5*(ez*ez + 1/(ez*ez)))) in drScale*s*dr + drOffset| (let $3 (exp (.z $0)) (let $6 (max $4 (* $5 (sqrt (* 0.5 (+ (* $3 $3) (/ 1 (* $3 $3))))))) (+ (* (* $7 $6) $8) $9)))
+2D  P |vec(sin(z.x)*cosh(z.y), cos(z.x)*cos(z.z)*sinh(z.y), sin(z.z)*cosh(z.y)) + c| ERR FormatException: Expected ')' at line 1, col 10.
+2D  L |vec(sin(z.x)*cosh(z.y), cos(z.x)*cos(z.z)*sinh(z.y), sin(z.z)*cosh(z.y)) + c| ERR FormatException: Expected ')' at line 1, col 10.
+3D  P |vec(sin(z.x)*cosh(z.y), cos(z.x)*cos(z.z)*sinh(z.y), sin(z.z)*cosh(z.y)) + c| (+ (vec (* (sin (.x $0)) (cosh (.y $0))) (* (* (cos (.x $0)) (cos (.z $0))) (sinh (.y $0))) (* (sin (.z $0)) (cosh (.y $0)))) $1)
+3D  L |vec(sin(z.x)*cosh(z.y), cos(z.x)*cos(z.z)*sinh(z.y), sin(z.z)*cosh(z.y)) + c| (+ (vec (* (sin (.x $0)) (cosh (.y $0))) (* (* (cos (.x $0)) (cos (.z $0))) (sinh (.y $0))) (* (sin (.z $0)) (cosh (.y $0)))) $1)
+3D  N |vec(sin(z.x)*cosh(z.y), cos(z.x)*cos(z.z)*sinh(z.y), sin(z.z)*cosh(z.y)) + c| (+ (vec (* (sin (.x $0)) (cosh (.y $0))) (* (* (cos (.x $0)) (cos (.z $0))) (sinh (.y $0))) (* (sin (.z $0)) (cosh (.y $0)))) $1)
+2D  P |z^(4 + 2*sin(t)) + c| ERR FormatException: Unknown identifier 't' at line 1, col 14. Did you mean 'z'?
+2D  L |z^(4 + 2*sin(t)) + c| ERR FormatException: Unknown identifier 't' at line 1, col 14. Did you mean 'z'?
+3D  P |z^(4 + 2*sin(t)) + c| (+ (^ $0 (+ 4 (* 2 (sin $3)))) $1)
+3D  L |z^(4 + 2*sin(t)) + c| (+ (^ $0 (+ 4 (* 2 (sin $3)))) $1)
+3D  N |z^(4 + 2*sin(t)) + c| (+ (^ $0 (+ 4 (* 2 (sin $3)))) $1)
+2D  P |sin(z)*cosh(z) + c| (+ (* (sin z) (cosh z)) c)
+2D  L |sin(z)*cosh(z) + c| (+ (* (sin z) (cosh z)) c)
+3D  P |sin(z)*cosh(z) + c| (+ (* (sin $0) (cosh $0)) $1)
+3D  L |sin(z)*cosh(z) + c| (+ (* (sin $0) (cosh $0)) $1)
+3D  N |sin(z)*cosh(z) + c| (+ (* (sin $0) (cosh $0)) $1)
+2D  P |absy(z)^8 + c| ERR FormatException: Unknown function 'absy' at line 1, col 1. Did you mean 'abs'?
+2D  L |absy(z)^8 + c| ERR FormatException: Unknown function 'absy' at line 1, col 1. Did you mean 'abs'?
+3D  P |absy(z)^8 + c| (+ (^ (absy $0) 8) $1)
+3D  L |absy(z)^8 + c| (+ (^ (absy $0) 8) $1)
+3D  N |absy(z)^8 + c| (+ (^ (absy $0) 8) $1)
+2D  P |(spherefold(boxfold(z, 1.0), 0.5, 1.0)*2.0 + c)^8.0 + c| ERR FormatException: Unknown function 'boxfold' at line 1, col 13.
+2D  L |(spherefold(boxfold(z, 1.0), 0.5, 1.0)*2.0 + c)^8.0 + c| ERR FormatException: Unknown function 'boxfold' at line 1, col 13.
+3D  P |(spherefold(boxfold(z, 1.0), 0.5, 1.0)*2.0 + c)^8.0 + c| (+ (^ (+ (* (spherefold (boxfold $0 1) 0.5 1) 2) $1) 8) $1)
+3D  L |(spherefold(boxfold(z, 1.0), 0.5, 1.0)*2.0 + c)^8.0 + c| (+ (^ (+ (* (spherefold (boxfold $0 1) 0.5 1) 2) $1) 8) $1)
+3D  N |(spherefold(boxfold(z, 1.0), 0.5, 1.0)*2.0 + c)^8.0 + c| (+ (^ (+ (* (spherefold (boxfold $0 1) 0.5 1) 2) $1) 8) $1)
+2D  P |z^8.0 + c| (+ (^ z 8) c)
+2D  L |z^8.0 + c| (+ (^ z 8) c)
+3D  P |z^8.0 + c| (+ (^ $0 8) $1)
+3D  L |z^8.0 + c| (+ (^ $0 8) $1)
+3D  N |z^8.0 + c| (+ (^ $0 8) $1)
+2D  P |// Single-pass fallback — chain form below carries fold/rot/scale.\n// Needs DE Mode = Scalar KIFS (scale 3): the per-iteration rotation\n// defeats the numerical-Jacobian DE.\nlet v0 = abs(z) in\nlet v1 = (v0.x - v0.y < 0 ? vec(v0.y, v0.x, v0.z) : v0) in\nlet v2 = (v1.x - v1.z < 0 ? vec(v1.z, v1.y, v1.x) : v1) in\nlet v3 = (v2.y - v2.z < 0 ? vec(v2.x, v2.z, v2.y) : v2) in\nrot(v3, vec(0, 1, 0), 0.3) * 3.0 - vec(2, 2, 0)| ERR FormatException: Expected ')' at line 5, col 13.
+2D  L |// Single-pass fallback — chain form below carries fold/rot/scale.\n// Needs DE Mode = Scalar KIFS (scale 3): the per-iteration rotation\n// defeats the numerical-Jacobian DE.\nlet v0 = abs(z) in\nlet v1 = (v0.x - v0.y < 0 ? vec(v0.y, v0.x, v0.z) : v0) in\nlet v2 = (v1.x - v1.z < 0 ? vec(v1.z, v1.y, v1.x) : v1) in\nlet v3 = (v2.y - v2.z < 0 ? vec(v2.x, v2.z, v2.y) : v2) in\nrot(v3, vec(0, 1, 0), 0.3) * 3.0 - vec(2, 2, 0)| ERR FormatException: Expected ')' at line 5, col 13.
+3D  P |// Single-pass fallback — chain form below carries fold/rot/scale.\n// Needs DE Mode = Scalar KIFS (scale 3): the per-iteration rotation\n// defeats the numerical-Jacobian DE.\nlet v0 = abs(z) in\nlet v1 = (v0.x - v0.y < 0 ? vec(v0.y, v0.x, v0.z) : v0) in\nlet v2 = (v1.x - v1.z < 0 ? vec(v1.z, v1.y, v1.x) : v1) in\nlet v3 = (v2.y - v2.z < 0 ? vec(v2.x, v2.z, v2.y) : v2) in\nrot(v3, vec(0, 1, 0), 0.3) * 3.0 - vec(2, 2, 0)| (let $5 (abs $0) (let $6 (? (< (- (.x $5) (.y $5)) 0) (vec (.y $5) (.x $5) (.z $5)) $5) (let $7 (? (< (- (.x $6) (.z $6)) 0) (vec (.z $6) (.y $6) (.x $6)) $6) (let $8 (? (< (- (.y $7) (.z $7)) 0) (vec (.x $7) (.z $7) (.y $7)) $7) (- (* (rot $8 (vec 0 1 0) 0.3) 3) (vec 2 2 0))))))
+3D  L |// Single-pass fallback — chain form below carries fold/rot/scale.\n// Needs DE Mode = Scalar KIFS (scale 3): the per-iteration rotation\n// defeats the numerical-Jacobian DE.\nlet v0 = abs(z) in\nlet v1 = (v0.x - v0.y < 0 ? vec(v0.y, v0.x, v0.z) : v0) in\nlet v2 = (v1.x - v1.z < 0 ? vec(v1.z, v1.y, v1.x) : v1) in\nlet v3 = (v2.y - v2.z < 0 ? vec(v2.x, v2.z, v2.y) : v2) in\nrot(v3, vec(0, 1, 0), 0.3) * 3.0 - vec(2, 2, 0)| (let $3 (abs $0) (let $4 (? (< (- (.x $3) (.y $3)) 0) (vec (.y $3) (.x $3) (.z $3)) $3) (let $5 (? (< (- (.x $4) (.z $4)) 0) (vec (.z $4) (.y $4) (.x $4)) $4) (let $6 (? (< (- (.y $5) (.z $5)) 0) (vec (.x $5) (.z $5) (.y $5)) $5) (- (* (rot $6 (vec 0 1 0) 0.3) 3) (vec 2 2 0))))))
+3D  N |// Single-pass fallback — chain form below carries fold/rot/scale.\n// Needs DE Mode = Scalar KIFS (scale 3): the per-iteration rotation\n// defeats the numerical-Jacobian DE.\nlet v0 = abs(z) in\nlet v1 = (v0.x - v0.y < 0 ? vec(v0.y, v0.x, v0.z) : v0) in\nlet v2 = (v1.x - v1.z < 0 ? vec(v1.z, v1.y, v1.x) : v1) in\nlet v3 = (v2.y - v2.z < 0 ? vec(v2.x, v2.z, v2.y) : v2) in\nrot(v3, vec(0, 1, 0), 0.3) * 3.0 - vec(2, 2, 0)| (let $3 (abs $0) (let $4 (? (< (- (.x $3) (.y $3)) 0) (vec (.y $3) (.x $3) (.z $3)) $3) (let $5 (? (< (- (.x $4) (.z $4)) 0) (vec (.z $4) (.y $4) (.x $4)) $4) (let $6 (? (< (- (.y $5) (.z $5)) 0) (vec (.x $5) (.z $5) (.y $5)) $5) (- (* (rot $6 (vec 0 1 0) 0.3) 3) (vec 2 2 0))))))
+2D  P |spherefold(boxfold(z, 1.0), 0.5, 1.0)*2.0 + c| ERR FormatException: Unknown function 'boxfold' at line 1, col 12.
+2D  L |spherefold(boxfold(z, 1.0), 0.5, 1.0)*2.0 + c| ERR FormatException: Unknown function 'boxfold' at line 1, col 12.
+3D  P |spherefold(boxfold(z, 1.0), 0.5, 1.0)*2.0 + c| (+ (* (spherefold (boxfold $0 1) 0.5 1) 2) $1)
+3D  L |spherefold(boxfold(z, 1.0), 0.5, 1.0)*2.0 + c| (+ (* (spherefold (boxfold $0 1) 0.5 1) 2) $1)
+3D  N |spherefold(boxfold(z, 1.0), 0.5, 1.0)*2.0 + c| (+ (* (spherefold (boxfold $0 1) 0.5 1) 2) $1)
+2D  P |// Switch Axis Mode -> Quat + Julia Mode on in the editor.\n// Triplex squared map; c held constant by Julia mode.\nvec(z.x*z.x - z.y*z.y - z.z*z.z, 2*z.x*z.y, 2*z.x*z.z) + c| ERR FormatException: Expected ')' at line 3, col 6.
+2D  L |// Switch Axis Mode -> Quat + Julia Mode on in the editor.\n// Triplex squared map; c held constant by Julia mode.\nvec(z.x*z.x - z.y*z.y - z.z*z.z, 2*z.x*z.y, 2*z.x*z.z) + c| ERR FormatException: Expected ')' at line 3, col 6.
+3D  P |// Switch Axis Mode -> Quat + Julia Mode on in the editor.\n// Triplex squared map; c held constant by Julia mode.\nvec(z.x*z.x - z.y*z.y - z.z*z.z, 2*z.x*z.y, 2*z.x*z.z) + c| (+ (vec (- (- (* (.x $0) (.x $0)) (* (.y $0) (.y $0))) (* (.z $0) (.z $0))) (* (* 2 (.x $0)) (.y $0)) (* (* 2 (.x $0)) (.z $0))) $1)
+3D  L |// Switch Axis Mode -> Quat + Julia Mode on in the editor.\n// Triplex squared map; c held constant by Julia mode.\nvec(z.x*z.x - z.y*z.y - z.z*z.z, 2*z.x*z.y, 2*z.x*z.z) + c| (+ (vec (- (- (* (.x $0) (.x $0)) (* (.y $0) (.y $0))) (* (.z $0) (.z $0))) (* (* 2 (.x $0)) (.y $0)) (* (* 2 (.x $0)) (.z $0))) $1)
+3D  N |// Switch Axis Mode -> Quat + Julia Mode on in the editor.\n// Triplex squared map; c held constant by Julia mode.\nvec(z.x*z.x - z.y*z.y - z.z*z.z, 2*z.x*z.y, 2*z.x*z.z) + c| (+ (vec (- (- (* (.x $0) (.x $0)) (* (.y $0) (.y $0))) (* (.z $0) (.z $0))) (* (* 2 (.x $0)) (.y $0)) (* (* 2 (.x $0)) (.z $0))) $1)
+2D  P |let w = vec(abs(z.x), abs(z.y), z.z) in vec(w.x*w.x - w.y*w.y - w.z*w.z, 2*w.x*w.y, 2*w.x*w.z) + c| ERR FormatException: Expected ')' at line 1, col 18.
+2D  L |let w = vec(abs(z.x), abs(z.y), z.z) in vec(w.x*w.x - w.y*w.y - w.z*w.z, 2*w.x*w.y, 2*w.x*w.z) + c| ERR FormatException: Expected ')' at line 1, col 18.
+3D  P |let w = vec(abs(z.x), abs(z.y), z.z) in vec(w.x*w.x - w.y*w.y - w.z*w.z, 2*w.x*w.y, 2*w.x*w.z) + c| (let $5 (vec (abs (.x $0)) (abs (.y $0)) (.z $0)) (+ (vec (- (- (* (.x $5) (.x $5)) (* (.y $5) (.y $5))) (* (.z $5) (.z $5))) (* (* 2 (.x $5)) (.y $5)) (* (* 2 (.x $5)) (.z $5))) $1))
+3D  L |let w = vec(abs(z.x), abs(z.y), z.z) in vec(w.x*w.x - w.y*w.y - w.z*w.z, 2*w.x*w.y, 2*w.x*w.z) + c| (let $3 (vec (abs (.x $0)) (abs (.y $0)) (.z $0)) (+ (vec (- (- (* (.x $3) (.x $3)) (* (.y $3) (.y $3))) (* (.z $3) (.z $3))) (* (* 2 (.x $3)) (.y $3)) (* (* 2 (.x $3)) (.z $3))) $1))
+3D  N |let w = vec(abs(z.x), abs(z.y), z.z) in vec(w.x*w.x - w.y*w.y - w.z*w.z, 2*w.x*w.y, 2*w.x*w.z) + c| (let $3 (vec (abs (.x $0)) (abs (.y $0)) (.z $0)) (+ (vec (- (- (* (.x $3) (.x $3)) (* (.y $3) (.y $3))) (* (.z $3) (.z $3))) (* (* 2 (.x $3)) (.y $3)) (* (* 2 (.x $3)) (.z $3))) $1))
+2D  P |sin(z)*1.5 + c| (+ (* (sin z) 1.5) c)
+2D  L |sin(z)*1.5 + c| (+ (* (sin z) 1.5) c)
+3D  P |sin(z)*1.5 + c| (+ (* (sin $0) 1.5) $1)
+3D  L |sin(z)*1.5 + c| (+ (* (sin $0) 1.5) $1)
+3D  N |sin(z)*1.5 + c| (+ (* (sin $0) 1.5) $1)
+2D  P |vec(z.x*z.x - z.y*z.y - z.z*z.z, 2*z.x*z.y, 2*z.x*z.z) + c| ERR FormatException: Expected ')' at line 1, col 6.
+2D  L |vec(z.x*z.x - z.y*z.y - z.z*z.z, 2*z.x*z.y, 2*z.x*z.z) + c| ERR FormatException: Expected ')' at line 1, col 6.
+3D  P |vec(z.x*z.x - z.y*z.y - z.z*z.z, 2*z.x*z.y, 2*z.x*z.z) + c| (+ (vec (- (- (* (.x $0) (.x $0)) (* (.y $0) (.y $0))) (* (.z $0) (.z $0))) (* (* 2 (.x $0)) (.y $0)) (* (* 2 (.x $0)) (.z $0))) $1)
+3D  L |vec(z.x*z.x - z.y*z.y - z.z*z.z, 2*z.x*z.y, 2*z.x*z.z) + c| (+ (vec (- (- (* (.x $0) (.x $0)) (* (.y $0) (.y $0))) (* (.z $0) (.z $0))) (* (* 2 (.x $0)) (.y $0)) (* (* 2 (.x $0)) (.z $0))) $1)
+3D  N |vec(z.x*z.x - z.y*z.y - z.z*z.z, 2*z.x*z.y, 2*z.x*z.z) + c| (+ (vec (- (- (* (.x $0) (.x $0)) (* (.y $0) (.y $0))) (* (.z $0) (.z $0))) (* (* 2 (.x $0)) (.y $0)) (* (* 2 (.x $0)) (.z $0))) $1)
+2D  P |// Classic Mandelbox fold step. scale ~ 2, fixedRadius 1, minRadius 0.5.\nspherefold(boxfold(z, 1.0), 0.5, 1.0) * 2.0 + c| ERR FormatException: Unknown function 'boxfold' at line 2, col 12.
+2D  L |// Classic Mandelbox fold step. scale ~ 2, fixedRadius 1, minRadius 0.5.\nspherefold(boxfold(z, 1.0), 0.5, 1.0) * 2.0 + c| ERR FormatException: Unknown function 'boxfold' at line 2, col 12.
+3D  P |// Classic Mandelbox fold step. scale ~ 2, fixedRadius 1, minRadius 0.5.\nspherefold(boxfold(z, 1.0), 0.5, 1.0) * 2.0 + c| (+ (* (spherefold (boxfold $0 1) 0.5 1) 2) $1)
+3D  L |// Classic Mandelbox fold step. scale ~ 2, fixedRadius 1, minRadius 0.5.\nspherefold(boxfold(z, 1.0), 0.5, 1.0) * 2.0 + c| (+ (* (spherefold (boxfold $0 1) 0.5 1) 2) $1)
+3D  N |// Classic Mandelbox fold step. scale ~ 2, fixedRadius 1, minRadius 0.5.\nspherefold(boxfold(z, 1.0), 0.5, 1.0) * 2.0 + c| (+ (* (spherefold (boxfold $0 1) 0.5 1) 2) $1)
+2D  P |// Menger-sponge fold: \px\p,\py\p,\pz\p then scale-3 from (1,1,1).\n// if (cond) v = A;  becomes  v = (cond ? A : v) via nested lets.\nlet v0 = abs(z) in\nlet v1 = (v0.x - v0.y < 0 ? vec(v0.y, v0.x, v0.z) : v0) in\nlet v2 = (v1.x - v1.z < 0 ? vec(v1.z, v1.y, v1.x) : v1) in\nlet v3 = (v2.y - v2.z < 0 ? vec(v2.x, v2.z, v2.y) : v2) in\nvec(v3.x * 3.0 - 2.0, v3.y * 3.0 - 2.0, v3.z * 3.0)| ERR FormatException: Expected ')' at line 4, col 13.
+2D  L |// Menger-sponge fold: \px\p,\py\p,\pz\p then scale-3 from (1,1,1).\n// if (cond) v = A;  becomes  v = (cond ? A : v) via nested lets.\nlet v0 = abs(z) in\nlet v1 = (v0.x - v0.y < 0 ? vec(v0.y, v0.x, v0.z) : v0) in\nlet v2 = (v1.x - v1.z < 0 ? vec(v1.z, v1.y, v1.x) : v1) in\nlet v3 = (v2.y - v2.z < 0 ? vec(v2.x, v2.z, v2.y) : v2) in\nvec(v3.x * 3.0 - 2.0, v3.y * 3.0 - 2.0, v3.z * 3.0)| ERR FormatException: Expected ')' at line 4, col 13.
+3D  P |// Menger-sponge fold: \px\p,\py\p,\pz\p then scale-3 from (1,1,1).\n// if (cond) v = A;  becomes  v = (cond ? A : v) via nested lets.\nlet v0 = abs(z) in\nlet v1 = (v0.x - v0.y < 0 ? vec(v0.y, v0.x, v0.z) : v0) in\nlet v2 = (v1.x - v1.z < 0 ? vec(v1.z, v1.y, v1.x) : v1) in\nlet v3 = (v2.y - v2.z < 0 ? vec(v2.x, v2.z, v2.y) : v2) in\nvec(v3.x * 3.0 - 2.0, v3.y * 3.0 - 2.0, v3.z * 3.0)| (let $5 (abs $0) (let $6 (? (< (- (.x $5) (.y $5)) 0) (vec (.y $5) (.x $5) (.z $5)) $5) (let $7 (? (< (- (.x $6) (.z $6)) 0) (vec (.z $6) (.y $6) (.x $6)) $6) (let $8 (? (< (- (.y $7) (.z $7)) 0) (vec (.x $7) (.z $7) (.y $7)) $7) (vec (- (* (.x $8) 3) 2) (- (* (.y $8) 3) 2) (* (.z $8) 3))))))
+3D  L |// Menger-sponge fold: \px\p,\py\p,\pz\p then scale-3 from (1,1,1).\n// if (cond) v = A;  becomes  v = (cond ? A : v) via nested lets.\nlet v0 = abs(z) in\nlet v1 = (v0.x - v0.y < 0 ? vec(v0.y, v0.x, v0.z) : v0) in\nlet v2 = (v1.x - v1.z < 0 ? vec(v1.z, v1.y, v1.x) : v1) in\nlet v3 = (v2.y - v2.z < 0 ? vec(v2.x, v2.z, v2.y) : v2) in\nvec(v3.x * 3.0 - 2.0, v3.y * 3.0 - 2.0, v3.z * 3.0)| (let $3 (abs $0) (let $4 (? (< (- (.x $3) (.y $3)) 0) (vec (.y $3) (.x $3) (.z $3)) $3) (let $5 (? (< (- (.x $4) (.z $4)) 0) (vec (.z $4) (.y $4) (.x $4)) $4) (let $6 (? (< (- (.y $5) (.z $5)) 0) (vec (.x $5) (.z $5) (.y $5)) $5) (vec (- (* (.x $6) 3) 2) (- (* (.y $6) 3) 2) (* (.z $6) 3))))))
+3D  N |// Menger-sponge fold: \px\p,\py\p,\pz\p then scale-3 from (1,1,1).\n// if (cond) v = A;  becomes  v = (cond ? A : v) via nested lets.\nlet v0 = abs(z) in\nlet v1 = (v0.x - v0.y < 0 ? vec(v0.y, v0.x, v0.z) : v0) in\nlet v2 = (v1.x - v1.z < 0 ? vec(v1.z, v1.y, v1.x) : v1) in\nlet v3 = (v2.y - v2.z < 0 ? vec(v2.x, v2.z, v2.y) : v2) in\nvec(v3.x * 3.0 - 2.0, v3.y * 3.0 - 2.0, v3.z * 3.0)| (let $3 (abs $0) (let $4 (? (< (- (.x $3) (.y $3)) 0) (vec (.y $3) (.x $3) (.z $3)) $3) (let $5 (? (< (- (.x $4) (.z $4)) 0) (vec (.z $4) (.y $4) (.x $4)) $4) (let $6 (? (< (- (.y $5) (.z $5)) 0) (vec (.x $5) (.z $5) (.y $5)) $5) (vec (- (* (.x $6) 3) 2) (- (* (.y $6) 3) 2) (* (.z $6) 3))))))
+2D  P |// Sierpinski tetrahedron fold: 3 vertex reflections, scale-2 from (1,1,1).\nlet v0 = z in\nlet v1 = (v0.x + v0.y < 0 ? vec(-v0.y, -v0.x,  v0.z) : v0) in\nlet v2 = (v1.x + v1.z < 0 ? vec(-v1.z,  v1.y, -v1.x) : v1) in\nlet v3 = (v2.y + v2.z < 0 ? vec( v2.x, -v2.z, -v2.y) : v2) in\nvec(v3.x * 2.0 - 1.0, v3.y * 2.0 - 1.0, v3.z * 2.0 - 1.0)| ERR FormatException: Expected ')' at line 3, col 13.
+2D  L |// Sierpinski tetrahedron fold: 3 vertex reflections, scale-2 from (1,1,1).\nlet v0 = z in\nlet v1 = (v0.x + v0.y < 0 ? vec(-v0.y, -v0.x,  v0.z) : v0) in\nlet v2 = (v1.x + v1.z < 0 ? vec(-v1.z,  v1.y, -v1.x) : v1) in\nlet v3 = (v2.y + v2.z < 0 ? vec( v2.x, -v2.z, -v2.y) : v2) in\nvec(v3.x * 2.0 - 1.0, v3.y * 2.0 - 1.0, v3.z * 2.0 - 1.0)| ERR FormatException: Expected ')' at line 3, col 13.
+3D  P |// Sierpinski tetrahedron fold: 3 vertex reflections, scale-2 from (1,1,1).\nlet v0 = z in\nlet v1 = (v0.x + v0.y < 0 ? vec(-v0.y, -v0.x,  v0.z) : v0) in\nlet v2 = (v1.x + v1.z < 0 ? vec(-v1.z,  v1.y, -v1.x) : v1) in\nlet v3 = (v2.y + v2.z < 0 ? vec( v2.x, -v2.z, -v2.y) : v2) in\nvec(v3.x * 2.0 - 1.0, v3.y * 2.0 - 1.0, v3.z * 2.0 - 1.0)| (let $5 $0 (let $6 (? (< (+ (.x $5) (.y $5)) 0) (vec (neg (.y $5)) (neg (.x $5)) (.z $5)) $5) (let $7 (? (< (+ (.x $6) (.z $6)) 0) (vec (neg (.z $6)) (.y $6) (neg (.x $6))) $6) (let $8 (? (< (+ (.y $7) (.z $7)) 0) (vec (.x $7) (neg (.z $7)) (neg (.y $7))) $7) (vec (- (* (.x $8) 2) 1) (- (* (.y $8) 2) 1) (- (* (.z $8) 2) 1))))))
+3D  L |// Sierpinski tetrahedron fold: 3 vertex reflections, scale-2 from (1,1,1).\nlet v0 = z in\nlet v1 = (v0.x + v0.y < 0 ? vec(-v0.y, -v0.x,  v0.z) : v0) in\nlet v2 = (v1.x + v1.z < 0 ? vec(-v1.z,  v1.y, -v1.x) : v1) in\nlet v3 = (v2.y + v2.z < 0 ? vec( v2.x, -v2.z, -v2.y) : v2) in\nvec(v3.x * 2.0 - 1.0, v3.y * 2.0 - 1.0, v3.z * 2.0 - 1.0)| (let $3 $0 (let $4 (? (< (+ (.x $3) (.y $3)) 0) (vec (neg (.y $3)) (neg (.x $3)) (.z $3)) $3) (let $5 (? (< (+ (.x $4) (.z $4)) 0) (vec (neg (.z $4)) (.y $4) (neg (.x $4))) $4) (let $6 (? (< (+ (.y $5) (.z $5)) 0) (vec (.x $5) (neg (.z $5)) (neg (.y $5))) $5) (vec (- (* (.x $6) 2) 1) (- (* (.y $6) 2) 1) (- (* (.z $6) 2) 1))))))
+3D  N |// Sierpinski tetrahedron fold: 3 vertex reflections, scale-2 from (1,1,1).\nlet v0 = z in\nlet v1 = (v0.x + v0.y < 0 ? vec(-v0.y, -v0.x,  v0.z) : v0) in\nlet v2 = (v1.x + v1.z < 0 ? vec(-v1.z,  v1.y, -v1.x) : v1) in\nlet v3 = (v2.y + v2.z < 0 ? vec( v2.x, -v2.z, -v2.y) : v2) in\nvec(v3.x * 2.0 - 1.0, v3.y * 2.0 - 1.0, v3.z * 2.0 - 1.0)| (let $3 $0 (let $4 (? (< (+ (.x $3) (.y $3)) 0) (vec (neg (.y $3)) (neg (.x $3)) (.z $3)) $3) (let $5 (? (< (+ (.x $4) (.z $4)) 0) (vec (neg (.z $4)) (.y $4) (neg (.x $4))) $4) (let $6 (? (< (+ (.y $5) (.z $5)) 0) (vec (.x $5) (neg (.z $5)) (neg (.y $5))) $5) (vec (- (* (.x $6) 2) 1) (- (* (.y $6) 2) 1) (- (* (.z $6) 2) 1))))))
+2D  P |// Triplex spherical-power Mandelbulb step. Power 8 is canonical.\nz^8.0 + c| (+ (^ z 8) c)
+2D  L |// Triplex spherical-power Mandelbulb step. Power 8 is canonical.\nz^8.0 + c| (+ (^ z 8) c)
+3D  P |// Triplex spherical-power Mandelbulb step. Power 8 is canonical.\nz^8.0 + c| (+ (^ $0 8) $1)
+3D  L |// Triplex spherical-power Mandelbulb step. Power 8 is canonical.\nz^8.0 + c| (+ (^ $0 8) $1)
+3D  N |// Triplex spherical-power Mandelbulb step. Power 8 is canonical.\nz^8.0 + c| (+ (^ $0 8) $1)
+2D  P |-z + c| (+ (neg z) c)
+2D  L |-z + c| (+ (neg z) c)
+3D  P |-z + c| (+ (neg $0) $1)
+3D  L |-z + c| (+ (neg $0) $1)
+3D  N |-z + c| (+ (neg $0) $1)
+2D  P |(-z)^2 + c| (+ (^ (neg z) 2) c)
+2D  L |(-z)^2 + c| (+ (^ (neg z) 2) c)
+3D  P |(-z)^2 + c| (+ (^ (neg $0) 2) $1)
+3D  L |(-z)^2 + c| (+ (^ (neg $0) 2) $1)
+3D  N |(-z)^2 + c| (+ (^ (neg $0) 2) $1)
+2D  P |-z^3*2 + c| (+ (* (neg (^ z 3)) 2) c)
+2D  L |-z^3*2 + c| (+ (* (^ (neg z) 3) 2) c) edits[0,0,(;2,0,)]
+3D  P |-z^3*2 + c| (+ (* (neg (^ $0 3)) 2) $1)
+3D  L |-z^3*2 + c| (+ (* (^ (neg $0) 3) 2) $1) edits[0,0,(;2,0,)]
+3D  N |-z^3*2 + c| (+ (* (neg (^ $0 3)) 2) $1)
+2D  P |2*-z^2 + c| (+ (* 2 (neg (^ z 2))) c)
+2D  L |2*-z^2 + c| (+ (* 2 (^ (neg z) 2)) c) edits[2,0,(;4,0,)]
+3D  P |2*-z^2 + c| (+ (* 2 (neg (^ $0 2))) $1)
+3D  L |2*-z^2 + c| (+ (* 2 (^ (neg $0) 2)) $1) edits[2,0,(;4,0,)]
+3D  N |2*-z^2 + c| (+ (* 2 (neg (^ $0 2))) $1)
+2D  P |c - z^2| (- c (^ z 2))
+2D  L |c - z^2| (- c (^ z 2))
+3D  P |c - z^2| (- $1 (^ $0 2))
+3D  L |c - z^2| (- $1 (^ $0 2))
+3D  N |c - z^2| (- $1 (^ $0 2))
+2D  P |z^-1 + c| (+ (^ z (neg 1)) c)
+2D  L |z^-1 + c| (+ (^ z (neg 1)) c)
+3D  P |z^-1 + c| (+ (^ $0 (neg 1)) $1)
+3D  L |z^-1 + c| (+ (^ $0 (neg 1)) $1)
+3D  N |z^-1 + c| (+ (^ $0 (neg 1)) $1)
+2D  P |-z.x^2 + c| ERR FormatException: Unexpected '.' at line 1, col 3.
+2D  L |-z.x^2 + c| ERR FormatException: Unexpected '.' at line 1, col 3.
+3D  P |-z.x^2 + c| (+ (neg (^ (.x $0) 2)) $1)
+3D  L |-z.x^2 + c| (+ (^ (neg (.x $0)) 2) $1) edits[0,0,(;4,0,)]
+3D  N |-z.x^2 + c| (+ (neg (^ (.x $0) 2)) $1)
+2D  P |vec(-z.x^2, z.y, z.z) + c| ERR FormatException: Expected ')' at line 1, col 7.
+2D  L |vec(-z.x^2, z.y, z.z) + c| ERR FormatException: Expected ')' at line 1, col 7.
+3D  P |vec(-z.x^2, z.y, z.z) + c| (+ (vec (neg (^ (.x $0) 2)) (.y $0) (.z $0)) $1)
+3D  L |vec(-z.x^2, z.y, z.z) + c| (+ (vec (^ (neg (.x $0)) 2) (.y $0) (.z $0)) $1) edits[4,0,(;8,0,)]
+3D  N |vec(-z.x^2, z.y, z.z) + c| (+ (vec (neg (^ (.x $0) 2)) (.y $0) (.z $0)) $1)
+2D  P |let w = -z in w^2 + c| (let $5 (neg z) (+ (^ $5 2) c))
+2D  L |let w = -z in w^2 + c| (let $5 (neg z) (+ (^ $5 2) c))
+3D  P |let w = -z in w^2 + c| (let $5 (neg $0) (+ (^ $5 2) $1))
+3D  L |let w = -z in w^2 + c| (let $3 (neg $0) (+ (^ $3 2) $1))
+3D  N |let w = -z in w^2 + c| (let $3 (neg $0) (+ (^ $3 2) $1))
+2D  P |z.x > 0 ? z^2 + c : -z^2 + c| ERR FormatException: Unexpected '.' at line 1, col 2.
+2D  L |z.x > 0 ? z^2 + c : -z^2 + c| ERR FormatException: Unexpected '.' at line 1, col 2.
+3D  P |z.x > 0 ? z^2 + c : -z^2 + c| (? (> (.x $0) 0) (+ (^ $0 2) $1) (+ (neg (^ $0 2)) $1))
+3D  L |z.x > 0 ? z^2 + c : -z^2 + c| (? (> (.x $0) 0) (+ (^ $0 2) $1) (+ (^ (neg $0) 2) $1)) edits[20,0,(;22,0,)]
+3D  N |z.x > 0 ? z^2 + c : -z^2 + c| (? (> (.x $0) 0) (+ (^ $0 2) $1) (+ (neg (^ $0 2)) $1))
+2D  P |z.x > 0 && z.y < 1 ? z + c : c| ERR FormatException: Unexpected '.' at line 1, col 2.
+2D  L |z.x > 0 && z.y < 1 ? z + c : c| ERR FormatException: Unexpected '.' at line 1, col 2.
+3D  P |z.x > 0 && z.y < 1 ? z + c : c| (? (&& (> (.x $0) 0) (< (.y $0) 1)) (+ $0 $1) $1)
+3D  L |z.x > 0 && z.y < 1 ? z + c : c| (? (&& (> (.x $0) 0) (< (.y $0) 1)) (+ $0 $1) $1)
+3D  N |z.x > 0 && z.y < 1 ? z + c : c| (? (&& (> (.x $0) 0) (< (.y $0) 1)) (+ $0 $1) $1)
+2D  P |!(z.x > 0) ? z : c| ERR FormatException: Expected ')' at line 1, col 4.
+2D  L |!(z.x > 0) ? z : c| ERR FormatException: Expected ')' at line 1, col 4.
+3D  P |!(z.x > 0) ? z : c| (? (not (> (.x $0) 0)) $0 $1)
+3D  L |!(z.x > 0) ? z : c| (? (not (> (.x $0) 0)) $0 $1)
+3D  N |!(z.x > 0) ? z : c| (? (not (> (.x $0) 0)) $0 $1)
+2D  P |length(z) < 2 ? z^8 + c : z| ERR FormatException: Unknown function 'length' at line 1, col 1.
+2D  L |length(z) < 2 ? z^8 + c : z| ERR FormatException: Unknown function 'length' at line 1, col 1.
+3D  P |length(z) < 2 ? z^8 + c : z| (? (< (length $0) 2) (+ (^ $0 8) $1) $0)
+3D  L |length(z) < 2 ? z^8 + c : z| (? (< (length $0) 2) (+ (^ $0 8) $1) $0)
+3D  N |length(z) < 2 ? z^8 + c : z| (? (< (length $0) 2) (+ (^ $0 8) $1) $0)
+2D  P |dot(z, z)*z + c| ERR FormatException: Unknown function 'dot' at line 1, col 1. Did you mean 'cos'?
+2D  L |dot(z, z)*z + c| ERR FormatException: Unknown function 'dot' at line 1, col 1. Did you mean 'cos'?
+3D  P |dot(z, z)*z + c| (+ (* (dot $0 $0) $0) $1)
+3D  L |dot(z, z)*z + c| (+ (* (dot $0 $0) $0) $1)
+3D  N |dot(z, z)*z + c| (+ (* (dot $0 $0) $0) $1)
+2D  P |cross(z, c) + c| ERR FormatException: Unknown function 'cross' at line 1, col 1. Did you mean 'cos'?
+2D  L |cross(z, c) + c| ERR FormatException: Unknown function 'cross' at line 1, col 1. Did you mean 'cos'?
+3D  P |cross(z, c) + c| (+ (cross $0 $1) $1)
+3D  L |cross(z, c) + c| (+ (cross $0 $1) $1)
+3D  N |cross(z, c) + c| (+ (cross $0 $1) $1)
+2D  P |normalize(z) + c| ERR FormatException: Unknown function 'normalize' at line 1, col 1.
+2D  L |normalize(z) + c| ERR FormatException: Unknown function 'normalize' at line 1, col 1.
+3D  P |normalize(z) + c| (+ (normalize $0) $1)
+3D  L |normalize(z) + c| (+ (normalize $0) $1)
+3D  N |normalize(z) + c| (+ (normalize $0) $1)
+2D  P |rot(z, vec(0, 0, 1), 0.3) + c| ERR FormatException: Unknown function 'vec' at line 1, col 8. Did you mean 're'?
+2D  L |rot(z, vec(0, 0, 1), 0.3) + c| ERR FormatException: Unknown function 'vec' at line 1, col 8. Did you mean 're'?
+3D  P |rot(z, vec(0, 0, 1), 0.3) + c| (+ (rot $0 (vec 0 0 1) 0.3) $1)
+3D  L |rot(z, vec(0, 0, 1), 0.3) + c| (+ (rot $0 (vec 0 0 1) 0.3) $1)
+3D  N |rot(z, vec(0, 0, 1), 0.3) + c| (+ (rot $0 (vec 0 0 1) 0.3) $1)
+2D  P |triplex(z, 3) + c| ERR FormatException: Unknown function 'triplex' at line 1, col 1.
+2D  L |triplex(z, 3) + c| ERR FormatException: Unknown function 'triplex' at line 1, col 1.
+3D  P |triplex(z, 3) + c| (+ (triplex $0 3) $1)
+3D  L |triplex(z, 3) + c| (+ (triplex $0 3) $1)
+3D  N |triplex(z, 3) + c| (+ (triplex $0 3) $1)
+2D  P |mod(z, 2.0) + c| (+ (mod z 2) c)
+2D  L |mod(z, 2.0) + c| (+ (mod z 2) c)
+3D  P |mod(z, 2.0) + c| (+ (mod $0 2) $1)
+3D  L |mod(z, 2.0) + c| (+ (mod $0 2) $1)
+3D  N |mod(z, 2.0) + c| (+ (mod $0 2) $1)
+2D  P |vec(smin(z.x, z.y, 0.2), floor(z.y), sign(z.z)) + c| ERR FormatException: Expected ')' at line 1, col 11.
+2D  L |vec(smin(z.x, z.y, 0.2), floor(z.y), sign(z.z)) + c| ERR FormatException: Expected ')' at line 1, col 11.
+3D  P |vec(smin(z.x, z.y, 0.2), floor(z.y), sign(z.z)) + c| (+ (vec (smin (.x $0) (.y $0) 0.2) (floor (.y $0)) (sign (.z $0))) $1)
+3D  L |vec(smin(z.x, z.y, 0.2), floor(z.y), sign(z.z)) + c| (+ (vec (smin (.x $0) (.y $0) 0.2) (floor (.y $0)) (sign (.z $0))) $1)
+3D  N |vec(smin(z.x, z.y, 0.2), floor(z.y), sign(z.z)) + c| (+ (vec (smin (.x $0) (.y $0) 0.2) (floor (.y $0)) (sign (.z $0))) $1)
+2D  P |vec(min(z.x, z.y), max(z.y, z.z), clamp(z.x, -1, 1)) + c| ERR FormatException: Expected ')' at line 1, col 10.
+2D  L |vec(min(z.x, z.y), max(z.y, z.z), clamp(z.x, -1, 1)) + c| ERR FormatException: Expected ')' at line 1, col 10.
+3D  P |vec(min(z.x, z.y), max(z.y, z.z), clamp(z.x, -1, 1)) + c| (+ (vec (min (.x $0) (.y $0)) (max (.y $0) (.z $0)) (clamp (.x $0) (neg 1) 1)) $1)
+3D  L |vec(min(z.x, z.y), max(z.y, z.z), clamp(z.x, -1, 1)) + c| (+ (vec (min (.x $0) (.y $0)) (max (.y $0) (.z $0)) (clamp (.x $0) (neg 1) 1)) $1)
+3D  N |vec(min(z.x, z.y), max(z.y, z.z), clamp(z.x, -1, 1)) + c| (+ (vec (min (.x $0) (.y $0)) (max (.y $0) (.z $0)) (clamp (.x $0) (neg 1) 1)) $1)
+2D  P |absx(z)^2 + absz(c)| ERR FormatException: Unknown function 'absx' at line 1, col 1. Did you mean 'abs'?
+2D  L |absx(z)^2 + absz(c)| ERR FormatException: Unknown function 'absx' at line 1, col 1. Did you mean 'abs'?
+3D  P |absx(z)^2 + absz(c)| (+ (^ (absx $0) 2) (absz $1))
+3D  L |absx(z)^2 + absz(c)| (+ (^ (absx $0) 2) (absz $1))
+3D  N |absx(z)^2 + absz(c)| (+ (^ (absx $0) 2) (absz $1))
+2D  P |exp(z*0.1) + log(abs(z) + 1) + sqrt(abs(c))| (+ (+ (exp (* z 0.1)) (log (+ (abs z) 1))) (sqrt (abs c)))
+2D  L |exp(z*0.1) + log(abs(z) + 1) + sqrt(abs(c))| (+ (+ (exp (* z 0.1)) (log (+ (abs z) 1))) (sqrt (abs c)))
+3D  P |exp(z*0.1) + log(abs(z) + 1) + sqrt(abs(c))| (+ (+ (exp (* $0 0.1)) (log (+ (abs $0) 1))) (sqrt (abs $1)))
+3D  L |exp(z*0.1) + log(abs(z) + 1) + sqrt(abs(c))| (+ (+ (exp (* $0 0.1)) (log (+ (abs $0) 1))) (sqrt (abs $1)))
+3D  N |exp(z*0.1) + log(abs(z) + 1) + sqrt(abs(c))| (+ (+ (exp (* $0 0.1)) (log (+ (abs $0) 1))) (sqrt (abs $1)))
+2D  P |tan(z*0.2) + sinh(z*0.1) + tanh(c)| (+ (+ (tan (* z 0.2)) (sinh (* z 0.1))) (tanh c))
+2D  L |tan(z*0.2) + sinh(z*0.1) + tanh(c)| (+ (+ (tan (* z 0.2)) (sinh (* z 0.1))) (tanh c))
+3D  P |tan(z*0.2) + sinh(z*0.1) + tanh(c)| (+ (+ (tan (* $0 0.2)) (sinh (* $0 0.1))) (tanh $1))
+3D  L |tan(z*0.2) + sinh(z*0.1) + tanh(c)| (+ (+ (tan (* $0 0.2)) (sinh (* $0 0.1))) (tanh $1))
+3D  N |tan(z*0.2) + sinh(z*0.1) + tanh(c)| (+ (+ (tan (* $0 0.2)) (sinh (* $0 0.1))) (tanh $1))
+2D  P |/* note */ z^2 + c // trailing| (+ (^ z 2) c)
+2D  L |/* note */ z^2 + c // trailing| (+ (^ z 2) c)
+3D  P |/* note */ z^2 + c // trailing| (+ (^ $0 2) $1)
+3D  L |/* note */ z^2 + c // trailing| (+ (^ $0 2) $1)
+3D  N |/* note */ z^2 + c // trailing| (+ (^ $0 2) $1)
+2D  P |z^(2 + 0.5*sin(t)) + c| ERR FormatException: Unknown identifier 't' at line 1, col 16. Did you mean 'z'?
+2D  L |z^(2 + 0.5*sin(t)) + c| ERR FormatException: Unknown identifier 't' at line 1, col 16. Did you mean 'z'?
+3D  P |z^(2 + 0.5*sin(t)) + c| (+ (^ $0 (+ 2 (* 0.5 (sin $3)))) $1)
+3D  L |z^(2 + 0.5*sin(t)) + c| (+ (^ $0 (+ 2 (* 0.5 (sin $3)))) $1)
+3D  N |z^(2 + 0.5*sin(t)) + c| (+ (^ $0 (+ 2 (* 0.5 (sin $3)))) $1)
+2D  P |z^2^1 + c| (+ (^ z (^ 2 1)) c)
+2D  L |z^2^1 + c| (+ (^ z (^ 2 1)) c)
+3D  P |z^2^1 + c| (+ (^ $0 (^ 2 1)) $1)
+3D  L |z^2^1 + c| (+ (^ $0 (^ 2 1)) $1)
+3D  N |z^2^1 + c| (+ (^ $0 (^ 2 1)) $1)
+2D  P |+z^2 + c| (+ (^ z 2) c)
+2D  L |+z^2 + c| (+ (^ z 2) c) edits[0,0,(;2,0,)]
+3D  P |+z^2 + c| (+ (^ $0 2) $1)
+3D  L |+z^2 + c| (+ (^ $0 2) $1) edits[0,0,(;2,0,)]
+3D  N |+z^2 + c| (+ (^ $0 2) $1)
+2D  P |- -z^2 + c| (+ (neg (neg (^ z 2))) c)
+2D  L |- -z^2 + c| (+ (^ (neg (neg z)) 2) c) edits[0,0,(;4,0,)]
+3D  P |- -z^2 + c| (+ (neg (neg (^ $0 2))) $1)
+3D  L |- -z^2 + c| (+ (^ (neg (neg $0)) 2) $1) edits[0,0,(;4,0,)]
+3D  N |- -z^2 + c| (+ (neg (neg (^ $0 2))) $1)
+2D  P |qpow(z, 3) + c| ERR FormatException: Unknown function 'qpow' at line 1, col 1. Did you mean 'pow'?
+2D  L |qpow(z, 3) + c| ERR FormatException: Unknown function 'qpow' at line 1, col 1. Did you mean 'pow'?
+3D  P |qpow(z, 3) + c| (+ (qpow $0 3) $1)
+3D  L |qpow(z, 3) + c| (+ (qpow $0 3) $1)
+3D  N |qpow(z, 3) + c| (+ (qpow $0 3) $1)
+2D  P |-qmul(z, z) + c| ERR FormatException: Unknown function 'qmul' at line 1, col 2.
+2D  L |-qmul(z, z) + c| ERR FormatException: Unknown function 'qmul' at line 1, col 2.
+3D  P |-qmul(z, z) + c| (+ (neg (qmul $0 $0)) $1)
+3D  L |-qmul(z, z) + c| (+ (neg (qmul $0 $0)) $1)
+3D  N |-qmul(z, z) + c| (+ (neg (qmul $0 $0)) $1)
+2D  P |qexp(z*0.1) + qlog(c + 2) + qsqrt(c + 3)| ERR FormatException: Unknown function 'qexp' at line 1, col 1. Did you mean 'exp'?
+2D  L |qexp(z*0.1) + qlog(c + 2) + qsqrt(c + 3)| ERR FormatException: Unknown function 'qexp' at line 1, col 1. Did you mean 'exp'?
+3D  P |qexp(z*0.1) + qlog(c + 2) + qsqrt(c + 3)| (+ (+ (qexp (* $0 0.1)) (qlog (+ $1 2))) (qsqrt (+ $1 3)))
+3D  L |qexp(z*0.1) + qlog(c + 2) + qsqrt(c + 3)| (+ (+ (qexp (* $0 0.1)) (qlog (+ $1 2))) (qsqrt (+ $1 3)))
+3D  N |qexp(z*0.1) + qlog(c + 2) + qsqrt(c + 3)| (+ (+ (qexp (* $0 0.1)) (qlog (+ $1 2))) (qsqrt (+ $1 3)))
+2D  P |qinv(z + 2) + qconj(c)| ERR FormatException: Unknown function 'qinv' at line 1, col 1. Did you mean 'sin'?
+2D  L |qinv(z + 2) + qconj(c)| ERR FormatException: Unknown function 'qinv' at line 1, col 1. Did you mean 'sin'?
+3D  P |qinv(z + 2) + qconj(c)| (+ (qinv (+ $0 2)) (qconj $1))
+3D  L |qinv(z + 2) + qconj(c)| (+ (qinv (+ $0 2)) (qconj $1))
+3D  N |qinv(z + 2) + qconj(c)| (+ (qinv (+ $0 2)) (qconj $1))
+2D  P |qsin(z*0.2) + qcos(c*0.1) + qtanh(z*0.1)| ERR FormatException: Unknown function 'qsin' at line 1, col 1. Did you mean 'sin'?
+2D  L |qsin(z*0.2) + qcos(c*0.1) + qtanh(z*0.1)| ERR FormatException: Unknown function 'qsin' at line 1, col 1. Did you mean 'sin'?
+3D  P |qsin(z*0.2) + qcos(c*0.1) + qtanh(z*0.1)| (+ (+ (qsin (* $0 0.2)) (qcos (* $1 0.1))) (qtanh (* $0 0.1)))
+3D  L |qsin(z*0.2) + qcos(c*0.1) + qtanh(z*0.1)| (+ (+ (qsin (* $0 0.2)) (qcos (* $1 0.1))) (qtanh (* $0 0.1)))
+3D  N |qsin(z*0.2) + qcos(c*0.1) + qtanh(z*0.1)| (+ (+ (qsin (* $0 0.2)) (qcos (* $1 0.1))) (qtanh (* $0 0.1)))
+2D  P |qvec(z.x, z.y, z.z, -z.w^2) + c| ERR FormatException: Expected ')' at line 1, col 7.
+2D  L |qvec(z.x, z.y, z.z, -z.w^2) + c| ERR FormatException: Expected ')' at line 1, col 7.
+3D  P |qvec(z.x, z.y, z.z, -z.w^2) + c| (+ (qvec (.x $0) (.y $0) (.z $0) (neg (^ (.w $0) 2))) $1)
+3D  L |qvec(z.x, z.y, z.z, -z.w^2) + c| (+ (qvec (.x $0) (.y $0) (.z $0) (^ (neg (.w $0)) 2)) $1) edits[20,0,(;24,0,)]
+3D  N |qvec(z.x, z.y, z.z, -z.w^2) + c| (+ (qvec (.x $0) (.y $0) (.z $0) (neg (^ (.w $0) 2))) $1)
+2D  P |qasinh(z*0.1) + qatan(c*0.1) + qcot(c + 2)| ERR FormatException: Unknown function 'qasinh' at line 1, col 1. Did you mean 'asinh'?
+2D  L |qasinh(z*0.1) + qatan(c*0.1) + qcot(c + 2)| ERR FormatException: Unknown function 'qasinh' at line 1, col 1. Did you mean 'asinh'?
+3D  P |qasinh(z*0.1) + qatan(c*0.1) + qcot(c + 2)| (+ (+ (qasinh (* $0 0.1)) (qatan (* $1 0.1))) (qcot (+ $1 2)))
+3D  L |qasinh(z*0.1) + qatan(c*0.1) + qcot(c + 2)| (+ (+ (qasinh (* $0 0.1)) (qatan (* $1 0.1))) (qcot (+ $1 2)))
+3D  N |qasinh(z*0.1) + qatan(c*0.1) + qcot(c + 2)| (+ (+ (qasinh (* $0 0.1)) (qatan (* $1 0.1))) (qcot (+ $1 2)))
+3D  C |a:z^8 + c ## b:a^4 + c| (+ (^ $0 8) $1) ; (+ (^ $4 4) $1) out[4,5] env6
+3D  C |a:z^8 + c ## b:aa^4 + c| ERR SbxParseException @0+2 step1: Step 2 (b): Unknown identifier 'aa' at line 1, col 1. Did you mean 'a'?
+3D  C |a:let w = z in w*w ## b:w + a| ERR SbxParseException @0+1 step1: Step 2 (b): Unknown identifier 'w' at line 1, col 1. Did you mean 'z'?
+3D  C |z:z*z| ERR FormatException: Step 0 output name 'z' is reserved.
+3D  C |a:var v = boxfold(z, 1.0); v * 2.0 + c ## b:if a.x > 0 then a else -a| (let $4 (boxfold $0 1) (+ (* $4 2) $1)) ; (? (> (.x $5) 0) $5 (neg $5)) out[5,6] env7
+3D  C |a:z*z ## a:a + c| ERR FormatException: Duplicate step output name 'a'.

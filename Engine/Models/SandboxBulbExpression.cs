@@ -15,7 +15,8 @@
 // Comments: `// line` and `/* block */` are skipped anywhere whitespace is
 // (a lone `/` is still division).
 //
-// Grammar (right-recursive descent). #1100 — the same surface rules as the 2D
+// Grammar (#1101: parsed by the shared EquationFrontEnd; this file supplies the
+// 3D builder). #1100 — the same surface rules as the 2D
 // equation language (Docs/Technical/Equation-Language.md), plus member access:
 //   program  := block
 //   block    := "return" expr ";"?
@@ -599,9 +600,7 @@ namespace FracturingFog.Models
         /// per Step call via <see cref="EvalStep"/>.</summary>
         public static SandboxBulbExpression Parse(string source, IReadOnlyList<string> extraScalarNames)
         {
-            var p = new Parser(source, extraScalarNames);
-            var root = p.ParseProgram();
-            return new SandboxBulbExpression(root, p.EnvSize, p.ExtraSlots);
+            return Run(new Builder(source, extraScalarNames), source);
         }
 
         /// <summary>Parse with a pre-built binding table — used by chain to
@@ -611,9 +610,7 @@ namespace FracturingFog.Models
             IDictionary<string, int> bindings,
             int startEnvSize)
         {
-            var p = new Parser(source, bindings, startEnvSize);
-            var root = p.ParseProgram();
-            return new SandboxBulbExpression(root, p.EnvSize, Array.Empty<int>());
+            return Run(new Builder(source, bindings, startEnvSize), source, extras: Array.Empty<int>());
         }
 
         /// <summary>#1100 — function names, for Did-you-mean and help.</summary>
@@ -638,18 +635,14 @@ namespace FracturingFog.Models
         /// migration needs no scope.</summary>
         public static SandboxBulbExpression ParseLegacy(string source, List<(int Pos, int Len, string Text)>? edits = null)
         {
-            var p = new Parser(source, Array.Empty<string>()) { Legacy = true, Lenient = true, Edits = edits };
-            var root = p.ParseProgram();
-            return new SandboxBulbExpression(root, p.EnvSize, p.ExtraSlots);
+            return Run(new Builder(source, Array.Empty<string>()) { Lenient = true }, source, legacy: true, edits: edits);
         }
 
         /// <summary>#1100 — current rules with lenient identifiers (see
         /// <see cref="ParseLegacy"/>); the migration's self-check parses with it.</summary>
         public static SandboxBulbExpression ParseLenient(string source)
         {
-            var p = new Parser(source, Array.Empty<string>()) { Lenient = true };
-            var root = p.ParseProgram();
-            return new SandboxBulbExpression(root, p.EnvSize, p.ExtraSlots);
+            return Run(new Builder(source, Array.Empty<string>()) { Lenient = true }, source);
         }
 
         /// <summary>#1100 — the tree as an S-expression (slots as <c>$k</c>), for
@@ -748,38 +741,43 @@ namespace FracturingFog.Models
         }
 
         // ── Parser ────────────────────────────────────────────────────────────
+        // #1101 — the syntax lives in EquationFrontEnd (shared with the 2D
+        // language); this builder supplies the 3D language: real / vec / quat
+        // values, member access, the bulb function table, params and chain scope.
 
-        private sealed class Parser
+        private static readonly EquationSyntax Syntax = new(
+            AllowMembers: true,
+            TypeKeywords: new HashSet<string>(StringComparer.Ordinal) { "var", "Vec3", "Quat", "double", "int", "float" },
+            NonAssignableWords: new HashSet<string>(StringComparer.Ordinal) { "let", "in", "return", "if", "then", "else" });
+
+        private static SandboxBulbExpression Run(Builder b, string source, bool legacy = false,
+            List<(int Pos, int Len, string Text)>? edits = null, IReadOnlyList<int>? extras = null)
+        {
+            var root = new EquationFrontEnd<Sbx3Node>(source ?? string.Empty, b, Syntax, legacy, edits).ParseProgram();
+            return new SandboxBulbExpression(root, b.EnvSize, extras ?? b.ExtraSlots);
+        }
+
+        private sealed class Builder : IEquationBuilder<Sbx3Node>
         {
             private readonly string _src;
-            private int _pos;
             private readonly Dictionary<string, int> _scope = new(StringComparer.Ordinal);
             public int EnvSize;
             public readonly List<int> ExtraSlots = new();
-
-            // #1100 — language-version-1 rules, migration edit recorder, and
-            // lenient identifiers (unknown names get a fresh slot).
-            public bool Legacy;
+            /// <summary>#1100 — unknown names get a fresh slot (migration parses).</summary>
             public bool Lenient;
-            public List<(int Pos, int Len, string Text)>? Edits;
 
-            public Parser(string src) : this(src, Array.Empty<string>()) { }
-
-            /// <summary>Adopt an externally-built scope table (shared across
-            /// chain steps). Bindings are taken as-is; EnvSize starts at the
-            /// supplied value and grows for let-bindings.</summary>
-            public Parser(string src, IDictionary<string, int> bindings, int startEnvSize)
+            /// <summary>Adopt an externally-built scope table (shared across chain
+            /// steps). EnvSize starts at the supplied value and grows for lets.</summary>
+            public Builder(string src, IDictionary<string, int> bindings, int startEnvSize)
             {
                 _src = src ?? string.Empty;
-                _pos = 0;
                 foreach (var kv in bindings) _scope[kv.Key] = kv.Value;
                 EnvSize = startEnvSize;
             }
 
-            public Parser(string src, IReadOnlyList<string> extraScalarNames)
+            public Builder(string src, IReadOnlyList<string> extraScalarNames)
             {
                 _src = src ?? string.Empty;
-                _pos = 0;
                 _scope["z"] = SlotZ;
                 _scope["c"] = SlotC;
                 _scope["n"] = SlotN;
@@ -798,421 +796,41 @@ namespace FracturingFog.Models
                 }
             }
 
-            public Sbx3Node ParseProgram()
-            {
-                SkipWs();
-                var node = ParseBlock();
-                SkipWs();
-                // Tolerate a single trailing `;` (possibly before a comment).
-                if (Peek() == ';') { _pos++; SkipWs(); }
-                if (_pos < _src.Length)
-                    throw Error($"Unexpected '{_src[_pos]}'", _pos);
-                return node;
-            }
-
-            // #1100 — statement-block front end (the 2D language's #27 Phase 5b
-            // form): desugars to let / ternary, so the AST is unchanged.
-            private Sbx3Node ParseBlock()
-            {
-                SkipWs();
-
-                if (MatchKeyword("return"))
-                {
-                    var e = ParseExpr();
-                    SkipWs();
-                    if (Peek() == ';') _pos++;
-                    return e;
-                }
-
-                int ifAt = _pos;
-                if (MatchKeyword("if"))
-                {
-                    SkipWs();
-                    // Expression form `if <cond> then a else b` unless a
-                    // parenthesised condition is followed by `return` or an
-                    // assignment (the statement forms).
-                    if (!IsStatementIfAhead())
-                    {
-                        var ite = ParseIfThenElse(ParseOr());
-                        SkipWs();
-                        if (Peek() == ';') _pos++;
-                        return ite;
-                    }
-                    Expect('(');
-                    var cond = ParseExpr();
-                    Expect(')');
-                    SkipWs();
-
-                    if (MatchKeyword("return"))
-                    {
-                        var thenE = ParseExpr();
-                        SkipWs();
-                        if (Peek() == ';') _pos++;
-                        var elseE = ParseBlock();
-                        return new Sbx3Ternary(cond, thenE, elseE);
-                    }
-
-                    int nameAt = _pos;
-                    string ifName = ReadIdent();
-                    if (string.IsNullOrEmpty(ifName))
-                        throw Error("Expected an assignment or 'return' after 'if (...)'", _pos);
-                    SkipWs();
-                    Expect('=');
-                    var ifRhs = ParseExpr();
-                    SkipWs();
-                    if (Peek() == ';') _pos++;
-                    if (!_scope.TryGetValue(ifName, out int priorSlot))
-                        throw Error($"'if' assigns to unbound '{ifName}'", nameAt, ifName.Length);
-                    return BindBlock(ifName, new Sbx3Ternary(cond, ifRhs, new Sbx3Slot(priorSlot)));
-                }
-                _pos = ifAt;
-
-                var assign = TryParseAssignment();
-                if (assign != null) return assign;
-
-                var expr = ParseExpr();
-                SkipWs();
-                if (Peek() == ';') _pos++;
-                return expr;
-            }
-
-            // Bind <name> to a fresh slot for the rest of the block (shadowing,
-            // restored on exit): `let name = value in <rest>`.
-            private Sbx3Node BindBlock(string name, Sbx3Node valueExpr)
-            {
-                bool hadPrior = _scope.TryGetValue(name, out int prior);
-                int slot = EnvSize++;
-                _scope[name] = slot;
-                try
-                {
-                    var body = ParseBlock();
-                    return new Sbx3Let(slot, valueExpr, body);
-                }
-                finally
-                {
-                    if (hadPrior) _scope[name] = prior;
-                    else _scope.Remove(name);
-                }
-            }
-
-            // `[type] ident = expr ;` — on no match the position is restored.
-            private Sbx3Node? TryParseAssignment()
-            {
-                int save = _pos;
-                SkipWs();
-                string first = ReadIdent();
-                if (first.Length == 0 || IsKeyword(first)) { _pos = save; return null; }
-                string name = first;
-                if (IsTypeKeyword(first))
-                {
-                    SkipWs();
-                    name = ReadIdent();
-                    if (name.Length == 0) { _pos = save; return null; }
-                }
-                SkipWs();
-                if (!(Peek() == '=' && Peek(1) != '=')) { _pos = save; return null; }
-                _pos++;
-                if (name is "pi" or "e") throw Error($"Cannot assign to the constant '{name}'", save);
-                var rhs = ParseExpr();
-                SkipWs();
-                if (Peek() == ';') _pos++;
-                return BindBlock(name, rhs);
-            }
-
-            private static bool IsTypeKeyword(string w) =>
-                w is "var" or "Vec3" or "Quat" or "double" or "int" or "float";
+            private static bool IsReservedName(string name) =>
+                name is "z" or "c" or "n" or "pi" or "e" or "let" or "in"
+                    or "if" or "then" or "else" or "return";
 
             private static bool IsKeyword(string w) =>
                 w is "let" or "in" or "return" or "if" or "then" or "else";
 
-            // Lookahead (no net consumption): `( expr )` followed by `return` or
-            // `ident =` (not `==`) marks a statement-form `if`.
-            private bool IsStatementIfAhead()
+            // Errors in the 2D language's format: "… at line L, col C. Did you
+            // mean 'x'?", keeping the span for the editor.
+            private SbxParseException Fail(string what, int pos, int len = 1, string didYouMean = "")
+                => new($"{what} at {EquationSyntax.At(_src, pos)}.{didYouMean}", pos, len);
+
+            public Exception Error(string message, int position, int length = 1)
+                => new SbxParseException(message, position, length);
+
+            public Sbx3Node Number(double value) => new Sbx3Const(SbxVal3.R(value));
+
+            public Sbx3Node Identifier(string name, int position)
             {
-                int save = _pos, envSave = EnvSize;
-                var edits = Edits; Edits = null;   // lookahead must not record edits
-                try
-                {
-                    SkipWs();
-                    if (Peek() != '(') return false;
-                    _pos++;
-                    ParseExpr();
-                    SkipWs();
-                    if (Peek() != ')') return false;
-                    _pos++;
-                    if (MatchKeyword("return")) return true;
-                    SkipWs();
-                    if (ReadIdent().Length == 0) return false;
-                    SkipWs();
-                    return Peek() == '=' && Peek(1) != '=';
-                }
-                catch (FormatException) { return false; }
-                finally { _pos = save; EnvSize = envSave; Edits = edits; }
+                if (name == "pi") return new Sbx3Const(SbxVal3.R(Math.PI));
+                if (name == "e")  return new Sbx3Const(SbxVal3.R(Math.E));
+                if (_scope.TryGetValue(name, out int slot)) return new Sbx3Slot(slot);
+                if (Lenient && !IsKeyword(name)) { int s2 = EnvSize++; _scope[name] = s2; return new Sbx3Slot(s2); }
+                throw Fail($"Unknown identifier '{name}'", position, name.Length,
+                    EquationSyntax.DidYouMean(name, _scope.Keys.Concat(new[] { "pi", "e" }).Concat(FunctionNames)));
             }
 
-            private Sbx3Node ParseExpr() => ParseLet();
-
-            private Sbx3Node ParseLet()
+            public Sbx3Node Call(string name, int nameStart, IReadOnlyList<Sbx3Node> args)
             {
-                SkipWs();
-                if (MatchKeyword("let"))
-                {
-                    SkipWs();
-                    int nameAt = _pos;
-                    string name = ReadIdent();
-                    if (string.IsNullOrEmpty(name)) throw Error("Expected an identifier after 'let'", _pos);
-                    if (IsReservedName(name)) throw Error($"Cannot rebind reserved name '{name}'", nameAt, name.Length);
-                    SkipWs();
-                    Expect('=');
-                    var valueExpr = ParseExpr();
-                    SkipWs();
-                    if (!MatchKeyword("in")) throw Error("Expected 'in' in let-expression", _pos);
-
-                    bool hadPrior = _scope.TryGetValue(name, out int prior);
-                    int slot = EnvSize++;
-                    _scope[name] = slot;
-                    try
-                    {
-                        var body = ParseExpr();
-                        return new Sbx3Let(slot, valueExpr, body);
-                    }
-                    finally
-                    {
-                        if (hadPrior) _scope[name] = prior;
-                        else _scope.Remove(name);
-                    }
-                }
-                if (MatchKeyword("if"))
-                    return ParseIfThenElse(ParseOr());
-                return ParseTernary();
-            }
-
-            // #1100 — `if <cond> then <a> else <b>` (the `if` consumed): a ternary.
-            private Sbx3Node ParseIfThenElse(Sbx3Node cond)
-            {
-                SkipWs();
-                if (!MatchKeyword("then")) throw Error("Expected 'then' after the 'if' condition", _pos);
-                var thenN = ParseExpr();
-                SkipWs();
-                if (!MatchKeyword("else")) throw Error("Expected 'else' after the 'then' branch", _pos);
-                var elseN = ParseExpr();
-                return new Sbx3Ternary(cond, thenN, elseN);
-            }
-
-            private Sbx3Node ParseTernary()
-            {
-                var cond = ParseOr();
-                SkipWs();
-                if (Peek() == '?')
-                {
-                    _pos++;
-                    var thenN = ParseExpr();
-                    SkipWs();
-                    Expect(':');
-                    var elseN = ParseExpr();
-                    return new Sbx3Ternary(cond, thenN, elseN);
-                }
-                return cond;
-            }
-
-            private Sbx3Node ParseOr()
-            {
-                var left = ParseAnd();
-                while (true)
-                {
-                    SkipWs();
-                    if (Peek() == '|' && Peek(1) == '|') { _pos += 2; left = new Sbx3Binary("||", left, ParseAnd()); }
-                    else break;
-                }
-                return left;
-            }
-
-            private Sbx3Node ParseAnd()
-            {
-                var left = ParseNot();
-                while (true)
-                {
-                    SkipWs();
-                    if (Peek() == '&' && Peek(1) == '&') { _pos += 2; left = new Sbx3Binary("&&", left, ParseNot()); }
-                    else break;
-                }
-                return left;
-            }
-
-            private Sbx3Node ParseNot()
-            {
-                SkipWs();
-                if (Peek() == '!' && Peek(1) != '=')
-                {
-                    _pos++;
-                    return new Sbx3Unary('!', ParseNot());
-                }
-                return ParseCmp();
-            }
-
-            private Sbx3Node ParseCmp()
-            {
-                var left = ParseAdd();
-                SkipWs();
-                string? op = null;
-                if (Peek() == '<')      op = Peek(1) == '=' ? "<=" : "<";
-                else if (Peek() == '>') op = Peek(1) == '=' ? ">=" : ">";
-                else if (Peek() == '=' && Peek(1) == '=') op = "==";
-                else if (Peek() == '!' && Peek(1) == '=') op = "!=";
-                if (op == null) return left;
-                _pos += op.Length;
-                var right = ParseAdd();
-                return new Sbx3Binary(op, left, right);
-            }
-
-            private Sbx3Node ParseAdd()
-            {
-                var left = ParseMul();
-                while (true)
-                {
-                    SkipWs();
-                    char p = Peek();
-                    if (p == '+' || p == '-') { _pos++; left = new Sbx3Binary(p.ToString(), left, ParseMul()); }
-                    else break;
-                }
-                return left;
-            }
-
-            private Sbx3Node ParseMul()
-            {
-                var left = ParseFactor();
-                while (true)
-                {
-                    SkipWs();
-                    char p = Peek();
-                    if (p == '*' || p == '/') { _pos++; left = new Sbx3Binary(p.ToString(), left, ParseFactor()); }
-                    else break;
-                }
-                return left;
-            }
-
-            private Sbx3Node ParseFactor() => Legacy ? ParsePowLegacy() : ParseUnary();
-
-            // Current rules (#1100): unary minus is looser than ^, so -z^2 =
-            // -(z^2); ^ is right-associative and its exponent may carry a sign.
-            private Sbx3Node ParseUnary()
-            {
-                SkipWs();
-                if (Peek() == '-') { _pos++; return new Sbx3Unary('-', ParseUnary()); }
-                if (Peek() == '+') { _pos++; return ParseUnary(); }
-                return ParsePow();
-            }
-
-            private Sbx3Node ParsePow()
-            {
-                var left = ParsePrimary();
-                SkipWs();
-                if (Peek() == '^') { _pos++; return new Sbx3Binary("^", left, ParseUnary()); }
-                return left;
-            }
-
-            // Language version 1: pow := unary ("^" pow)?, so -x^y = (-x)^y. The
-            // migration wraps such a signed base in parentheses, "(-x)^y", which
-            // reads the same under both rule sets.
-            private Sbx3Node ParsePowLegacy()
-            {
-                SkipWs();
-                int start = _pos;
-                char first = Peek();
-                var left = ParseUnaryLegacy();
-                int end = _pos;
-                SkipWs();
-                if (Peek() == '^')
-                {
-                    if (Edits != null && (first == '-' || first == '+'))
-                    {
-                        Edits.Add((start, 0, "("));
-                        Edits.Add((end, 0, ")"));
-                    }
-                    _pos++;
-                    return new Sbx3Binary("^", left, ParsePowLegacy());
-                }
-                return left;
-            }
-
-            private Sbx3Node ParseUnaryLegacy()
-            {
-                SkipWs();
-                if (Peek() == '-') { _pos++; return new Sbx3Unary('-', ParseUnaryLegacy()); }
-                if (Peek() == '+') { _pos++; return ParseUnaryLegacy(); }
-                return ParsePrimary();
-            }
-
-            private Sbx3Node ParsePrimary()
-            {
-                SkipWs();
-                if (_pos >= _src.Length) throw Error("Unexpected end of expression", Math.Max(0, _src.Length - 1));
-                char p = Peek();
-                Sbx3Node node;
-                if (p == '(')
-                {
-                    _pos++;
-                    node = ParseExpr();
-                    SkipWs();
-                    Expect(')');
-                }
-                else if (IsDigit(p) || (p == '.' && _pos + 1 < _src.Length && IsDigit(_src[_pos + 1])))
-                {
-                    node = ParseNumber();
-                }
-                else if (IsIdentStart(p))
-                {
-                    int identStart = _pos;
-                    string name = ReadIdent();
-                    SkipWs();
-                    if (Peek() == '(') { node = ParseCall(name, identStart); }
-                    else if (name == "pi") { node = new Sbx3Const(SbxVal3.R(Math.PI)); }
-                    else if (name == "e")  { node = new Sbx3Const(SbxVal3.R(Math.E)); }
-                    else if (_scope.TryGetValue(name, out int slot)) { node = new Sbx3Slot(slot); }
-                    else if (Lenient && !IsKeyword(name)) { int s2 = EnvSize++; _scope[name] = s2; node = new Sbx3Slot(s2); }
-                    else throw Error($"Unknown identifier '{name}'", identStart, name.Length,
-                        DidYouMean(name, _scope.Keys.Concat(new[] { "pi", "e" }).Concat(FunctionNames)));
-                }
-                else
-                {
-                    throw Error($"Unexpected character '{p}'", _pos);
-                }
-
-                // Member access chain: foo.x.y etc — .x .y .z (Vec/Quat) or .w (Quat).
-                while (true)
-                {
-                    SkipWs();
-                    if (Peek() != '.') break;
-                    if (_pos + 1 < _src.Length && IsDigit(_src[_pos + 1])) break;
-                    _pos++;
-                    SkipWs();
-                    char ax = Peek();
-                    if (ax != 'x' && ax != 'y' && ax != 'z' && ax != 'w')
-                        throw Error("Expected .x/.y/.z/.w", _pos);
-                    _pos++;
-                    node = new Sbx3Member(node, ax);
-                }
-                return node;
-            }
-
-            private Sbx3Node ParseCall(string name, int nameStart)
-            {
-                _pos++; // consume '('
-                var args = new List<Sbx3Node>();
-                SkipWs();
-                if (Peek() != ')')
-                {
-                    args.Add(ParseExpr());
-                    SkipWs();
-                    while (Peek() == ',') { _pos++; args.Add(ParseExpr()); SkipWs(); }
-                }
-                Expect(')');
-
                 string lname = name.ToLowerInvariant();
                 int expected = ArityOf(lname);
-                if (expected < 0) throw Error($"Unknown function '{name}'", nameStart, name.Length, DidYouMean(lname, FunctionNames));
+                if (expected < 0)
+                    throw Fail($"Unknown function '{name}'", nameStart, name.Length, EquationSyntax.DidYouMean(lname, FunctionNames));
                 if (expected != int.MaxValue && args.Count != expected)
-                    throw Error($"Function '{name}' takes {expected} arg(s), got {args.Count}", nameStart, name.Length);
+                    throw Fail($"Function '{name}' takes {expected} arg(s), got {args.Count}", nameStart, name.Length);
                 return new Sbx3Call(lname, args.ToArray());
             }
 
@@ -1239,132 +857,46 @@ namespace FracturingFog.Models
                 _ => -1
             };
 
-            private Sbx3Node ParseNumber()
+            public Sbx3Node Unary(char op, Sbx3Node operand) => new Sbx3Unary(op, operand);
+            public Sbx3Node Binary(string op, Sbx3Node a, Sbx3Node b) => new Sbx3Binary(op, a, b);
+            public Sbx3Node Ternary(Sbx3Node cond, Sbx3Node then, Sbx3Node otherwise) => new Sbx3Ternary(cond, then, otherwise);
+            public Sbx3Node Member(Sbx3Node target, char axis) => new Sbx3Member(target, axis);
+            public Sbx3Node Let(int slot, Sbx3Node value, Sbx3Node body) => new Sbx3Let(slot, value, body);
+            public Sbx3Node IfThenCondition(Sbx3Node cond, List<(int Pos, int Len, string Text)>? edits) => cond;
+
+            public void CheckLetName(string name, int position)
             {
-                int start = _pos;
-                while (_pos < _src.Length && (IsDigit(_src[_pos]) || _src[_pos] == '.')) _pos++;
-                if (_pos < _src.Length && (_src[_pos] == 'e' || _src[_pos] == 'E'))
-                {
-                    _pos++;
-                    if (_pos < _src.Length && (_src[_pos] == '+' || _src[_pos] == '-')) _pos++;
-                    while (_pos < _src.Length && IsDigit(_src[_pos])) _pos++;
-                }
-                string tok = _src.Substring(start, _pos - start);
-                if (!double.TryParse(tok, NumberStyles.Float, CultureInfo.InvariantCulture, out double d))
-                    throw Error($"Invalid number '{tok}'", start, tok.Length);
-                return new Sbx3Const(SbxVal3.R(d));
+                if (IsReservedName(name)) throw Fail($"Cannot rebind reserved name '{name}'", position, name.Length);
             }
 
-            // ── Helpers ───────────────────────────────────────────────────────
-
-            private char Peek(int offset = 0)
-                => (_pos + offset < _src.Length) ? _src[_pos + offset] : '\0';
-
-            private void SkipWs()
+            public void CheckAssignName(string name, int position)
             {
-                // Skips whitespace and comments. `//` runs to end-of-line;
-                // `/* */` spans lines. A lone `/` is left for the division
-                // operator. #27 Phase 2a — the built-in bulb presets carry
-                // explanatory `//` comments; the DSL must accept them so the
-                // migrated presets (and hand-authored bulbs) keep their notes.
-                while (_pos < _src.Length)
-                {
-                    char ch = _src[_pos];
-                    if (char.IsWhiteSpace(ch)) { _pos++; continue; }
-                    if (ch == '/' && _pos + 1 < _src.Length && _src[_pos + 1] == '/')
-                    {
-                        _pos += 2;
-                        while (_pos < _src.Length && _src[_pos] != '\n') _pos++;
-                        continue;
-                    }
-                    if (ch == '/' && _pos + 1 < _src.Length && _src[_pos + 1] == '*')
-                    {
-                        _pos += 2;
-                        while (_pos + 1 < _src.Length && !(_src[_pos] == '*' && _src[_pos + 1] == '/')) _pos++;
-                        _pos = Math.Min(_src.Length, _pos + 2);
-                        continue;
-                    }
-                    break;
-                }
+                if (name is "pi" or "e") throw Fail($"Cannot assign to the constant '{name}'", position);
             }
 
-            private void Expect(char c)
+            public (int Slot, int Prior, bool HadPrior) Bind(string name)
             {
-                SkipWs();
-                if (_pos >= _src.Length || _src[_pos] != c)
-                    throw Error($"Expected '{c}'", _pos);
-                _pos++;
+                bool hadPrior = _scope.TryGetValue(name, out int prior);
+                int slot = EnvSize++;
+                _scope[name] = slot;
+                return (slot, prior, hadPrior);
             }
 
-            private string ReadIdent()
+            public void Unbind(string name, int prior, bool hadPrior)
             {
-                int start = _pos;
-                if (_pos >= _src.Length || !IsIdentStart(_src[_pos])) return string.Empty;
-                _pos++;
-                while (_pos < _src.Length && IsIdentCont(_src[_pos])) _pos++;
-                return _src.Substring(start, _pos - start);
+                if (hadPrior) _scope[name] = prior;
+                else _scope.Remove(name);
             }
 
-            private bool MatchKeyword(string kw)
+            public bool TryGetBound(string name, out Sbx3Node node)
             {
-                SkipWs();
-                if (_pos + kw.Length > _src.Length) return false;
-                if (string.CompareOrdinal(_src, _pos, kw, 0, kw.Length) != 0) return false;
-                int next = _pos + kw.Length;
-                if (next < _src.Length && IsIdentCont(_src[next])) return false;
-                _pos = next;
-                return true;
+                if (_scope.TryGetValue(name, out int slot)) { node = new Sbx3Slot(slot); return true; }
+                node = null!;
+                return false;
             }
 
-            private static bool IsReservedName(string name) =>
-                name is "z" or "c" or "n" or "pi" or "e" or "let" or "in"
-                    or "if" or "then" or "else" or "return";
-
-            // #1100 — errors in the 2D language's format: "… at line L, col C.
-            // Did you mean 'x'?", keeping the span for the editor.
-            private SbxParseException Error(string what, int pos, int len = 1, string didYouMean = "")
-                => new($"{what} at {At(pos)}.{didYouMean}", pos, len);
-
-            private string At(int pos)
-            {
-                int line = 1, col = 1;
-                for (int k = 0; k < pos && k < _src.Length; k++)
-                {
-                    if (_src[k] == '\n') { line++; col = 1; } else col++;
-                }
-                return $"line {line}, col {col}";
-            }
-
-            private static string DidYouMean(string name, IEnumerable<string> candidates)
-            {
-                string? best = null;
-                int bestD = int.MaxValue;
-                string lower = name.ToLowerInvariant();
-                foreach (var cand in candidates)
-                {
-                    int d = Levenshtein(lower, cand.ToLowerInvariant());
-                    if (d < bestD) { bestD = d; best = cand; }
-                }
-                return best != null && bestD > 0 && bestD <= 2 ? $" Did you mean '{best}'?" : string.Empty;
-            }
-
-            private static int Levenshtein(string a, string b)
-            {
-                var prev = new int[b.Length + 1];
-                var cur = new int[b.Length + 1];
-                for (int j = 0; j <= b.Length; j++) prev[j] = j;
-                for (int i = 1; i <= a.Length; i++)
-                {
-                    cur[0] = i;
-                    for (int j = 1; j <= b.Length; j++)
-                        cur[j] = Math.Min(Math.Min(cur[j - 1] + 1, prev[j] + 1), prev[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1));
-                    (prev, cur) = (cur, prev);
-                }
-                return prev[b.Length];
-            }
-            private static bool IsDigit(char c) => c >= '0' && c <= '9';
-            private static bool IsIdentStart(char c) => (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
-            private static bool IsIdentCont(char c) => IsIdentStart(c) || IsDigit(c);
+            public int Mark() => EnvSize;
+            public void Reset(int mark) => EnvSize = mark;
         }
     }
 }

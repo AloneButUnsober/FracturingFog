@@ -55,7 +55,7 @@ public sealed class EquationLanguageGoldenTests
         "z*z +", "foo(z)", "let = 3 in z", "if re(z) > 0 z else c", "z*z + c)", "sin()",
     };
 
-    private static IEnumerable<string> AllSources()
+    internal static IEnumerable<string> AllSources()
     {
         foreach (var s in Coverage) yield return s;
         foreach (var e in EquationCookbook.Entries)
