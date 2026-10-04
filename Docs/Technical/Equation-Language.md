@@ -139,6 +139,12 @@ inside an `if … then` condition, as \|x\|². That was CalcGen's old condition
 shorthand, adopted by #1085. #1088 retired the rule and rewrote saved text to
 `norm(x)`.
 
+**User Bulb 3D** uses its own value types (real / vec3 / quat). There, `abs` is
+**componentwise** on vectors, as in GLSL; it is the idiom every fold is written
+in. `length` is the magnitude, and `norm` (#1100) is the squared length. The
+3D parser is being aligned to this grammar's surface rules: see
+[UserBulb-Language-Alignment.md](UserBulb-Language-Alignment.md) (#1091).
+
 ## Errors
 
 Every parse error names the construct and its position in CalcGen's format:
