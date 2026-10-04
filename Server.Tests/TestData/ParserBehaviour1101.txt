@@ -5,14 +5,14 @@
 3D  N || ERR SbxParseException @0+1 step-1: Unexpected end of expression at line 1, col 1.
 2D  P |   | ERR FormatException: Unexpected end of expression at line 1, col 4.
 2D  L |   | ERR FormatException: Unexpected end of expression at line 1, col 4.
-3D  P |   | ERR SbxParseException @2+1 step-1: Unexpected end of expression at line 1, col 3.
-3D  L |   | ERR SbxParseException @2+1 step-1: Unexpected end of expression at line 1, col 3.
-3D  N |   | ERR SbxParseException @2+1 step-1: Unexpected end of expression at line 1, col 3.
+3D  P |   | ERR SbxParseException @3+1 step-1: Unexpected end of expression at line 1, col 4.
+3D  L |   | ERR SbxParseException @3+1 step-1: Unexpected end of expression at line 1, col 4.
+3D  N |   | ERR SbxParseException @3+1 step-1: Unexpected end of expression at line 1, col 4.
 2D  P |z +| ERR FormatException: Unexpected end of expression at line 1, col 4.
 2D  L |z +| ERR FormatException: Unexpected end of expression at line 1, col 4.
-3D  P |z +| ERR SbxParseException @2+1 step-1: Unexpected end of expression at line 1, col 3.
-3D  L |z +| ERR SbxParseException @2+1 step-1: Unexpected end of expression at line 1, col 3.
-3D  N |z +| ERR SbxParseException @2+1 step-1: Unexpected end of expression at line 1, col 3.
+3D  P |z +| ERR SbxParseException @3+1 step-1: Unexpected end of expression at line 1, col 4.
+3D  L |z +| ERR SbxParseException @3+1 step-1: Unexpected end of expression at line 1, col 4.
+3D  N |z +| ERR SbxParseException @3+1 step-1: Unexpected end of expression at line 1, col 4.
 2D  P |(z| ERR FormatException: Expected ')' at line 1, col 3.
 2D  L |(z| ERR FormatException: Expected ')' at line 1, col 3.
 3D  P |(z| ERR SbxParseException @2+1 step-1: Expected ')' at line 1, col 3.
@@ -30,16 +30,16 @@
 3D  N |z ? c| ERR SbxParseException @5+1 step-1: Expected ':' at line 1, col 6.
 2D  P |z ? c :| ERR FormatException: Unexpected end of expression at line 1, col 8.
 2D  L |z ? c :| ERR FormatException: Unexpected end of expression at line 1, col 8.
-3D  P |z ? c :| ERR SbxParseException @6+1 step-1: Unexpected end of expression at line 1, col 7.
-3D  L |z ? c :| ERR SbxParseException @6+1 step-1: Unexpected end of expression at line 1, col 7.
-3D  N |z ? c :| ERR SbxParseException @6+1 step-1: Unexpected end of expression at line 1, col 7.
-2D  P |let| ERR FormatException: Expected identifier after 'let' at line 1, col 4.
-2D  L |let| ERR FormatException: Expected identifier after 'let' at line 1, col 4.
+3D  P |z ? c :| ERR SbxParseException @7+1 step-1: Unexpected end of expression at line 1, col 8.
+3D  L |z ? c :| ERR SbxParseException @7+1 step-1: Unexpected end of expression at line 1, col 8.
+3D  N |z ? c :| ERR SbxParseException @7+1 step-1: Unexpected end of expression at line 1, col 8.
+2D  P |let| ERR FormatException: Expected an identifier after 'let' at line 1, col 4.
+2D  L |let| ERR FormatException: Expected an identifier after 'let' at line 1, col 4.
 3D  P |let| ERR SbxParseException @3+1 step-1: Expected an identifier after 'let' at line 1, col 4.
 3D  L |let| ERR SbxParseException @3+1 step-1: Expected an identifier after 'let' at line 1, col 4.
 3D  N |let| ERR SbxParseException @3+1 step-1: Expected an identifier after 'let' at line 1, col 4.
-2D  P |let = 3 in z| ERR FormatException: Expected identifier after 'let' at line 1, col 5.
-2D  L |let = 3 in z| ERR FormatException: Expected identifier after 'let' at line 1, col 5.
+2D  P |let = 3 in z| ERR FormatException: Expected an identifier after 'let' at line 1, col 5.
+2D  L |let = 3 in z| ERR FormatException: Expected an identifier after 'let' at line 1, col 5.
 3D  P |let = 3 in z| ERR SbxParseException @4+1 step-1: Expected an identifier after 'let' at line 1, col 5.
 3D  L |let = 3 in z| ERR SbxParseException @4+1 step-1: Expected an identifier after 'let' at line 1, col 5.
 3D  N |let = 3 in z| ERR SbxParseException @4+1 step-1: Expected an identifier after 'let' at line 1, col 5.
@@ -50,9 +50,9 @@
 3D  N |let w = z| ERR SbxParseException @9+1 step-1: Expected 'in' in let-expression at line 1, col 10.
 2D  P |let w = z in| ERR FormatException: Unexpected end of expression at line 1, col 13.
 2D  L |let w = z in| ERR FormatException: Unexpected end of expression at line 1, col 13.
-3D  P |let w = z in| ERR SbxParseException @11+1 step-1: Unexpected end of expression at line 1, col 12.
-3D  L |let w = z in| ERR SbxParseException @11+1 step-1: Unexpected end of expression at line 1, col 12.
-3D  N |let w = z in| ERR SbxParseException @11+1 step-1: Unexpected end of expression at line 1, col 12.
+3D  P |let w = z in| ERR SbxParseException @12+1 step-1: Unexpected end of expression at line 1, col 13.
+3D  L |let w = z in| ERR SbxParseException @12+1 step-1: Unexpected end of expression at line 1, col 13.
+3D  N |let w = z in| ERR SbxParseException @12+1 step-1: Unexpected end of expression at line 1, col 13.
 2D  P |let z = 1 in z| ERR FormatException: Cannot rebind reserved name 'z' at line 1, col 5.
 2D  L |let z = 1 in z| ERR FormatException: Cannot rebind reserved name 'z' at line 1, col 5.
 3D  P |let z = 1 in z| ERR SbxParseException @4+1 step-1: Cannot rebind reserved name 'z' at line 1, col 5.
@@ -83,8 +83,8 @@
 3D  P |if z.x > 0 then z| ERR SbxParseException @17+1 step-1: Expected 'else' after the 'then' branch at line 1, col 18.
 3D  L |if z.x > 0 then z| ERR SbxParseException @17+1 step-1: Expected 'else' after the 'then' branch at line 1, col 18.
 3D  N |if z.x > 0 then z| ERR SbxParseException @17+1 step-1: Expected 'else' after the 'then' branch at line 1, col 18.
-2D  P |if (z > 0) w = 1; z| ERR FormatException: 'if' assigns to unbound 'w' at line 1, col 18.
-2D  L |if (z > 0) w = 1; z| ERR FormatException: 'if' assigns to unbound 'w' at line 1, col 18.
+2D  P |if (z > 0) w = 1; z| ERR FormatException: 'if' assigns to unbound 'w' at line 1, col 12.
+2D  L |if (z > 0) w = 1; z| ERR FormatException: 'if' assigns to unbound 'w' at line 1, col 12.
 3D  P |if (z > 0) w = 1; z| ERR SbxParseException @11+1 step-1: 'if' assigns to unbound 'w' at line 1, col 12.
 3D  L |if (z > 0) w = 1; z| ERR SbxParseException @11+1 step-1: 'if' assigns to unbound 'w' at line 1, col 12.
 3D  N |if (z > 0) w = 1; z| ERR SbxParseException @11+1 step-1: 'if' assigns to unbound 'w' at line 1, col 12.
@@ -120,9 +120,9 @@
 3D  N |var w = ; z| ERR SbxParseException @8+1 step-1: Unexpected character ';' at line 1, col 9.
 2D  P |return| ERR FormatException: Unexpected end of expression at line 1, col 7.
 2D  L |return| ERR FormatException: Unexpected end of expression at line 1, col 7.
-3D  P |return| ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
-3D  L |return| ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
-3D  N |return| ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
+3D  P |return| ERR SbxParseException @6+1 step-1: Unexpected end of expression at line 1, col 7.
+3D  L |return| ERR SbxParseException @6+1 step-1: Unexpected end of expression at line 1, col 7.
+3D  N |return| ERR SbxParseException @6+1 step-1: Unexpected end of expression at line 1, col 7.
 2D  P |return z; z| ERR FormatException: Unexpected 'z' at line 1, col 11.
 2D  L |return z; z| ERR FormatException: Unexpected 'z' at line 1, col 11.
 3D  P |return z; z| ERR SbxParseException @10+1 step-1: Unexpected 'z' at line 1, col 11.
@@ -175,9 +175,9 @@
 3D  N |z @ c| ERR SbxParseException @2+1 step-1: Unexpected '@' at line 1, col 3.
 2D  P |sin(| ERR FormatException: Unexpected end of expression at line 1, col 5.
 2D  L |sin(| ERR FormatException: Unexpected end of expression at line 1, col 5.
-3D  P |sin(| ERR SbxParseException @3+1 step-1: Unexpected end of expression at line 1, col 4.
-3D  L |sin(| ERR SbxParseException @3+1 step-1: Unexpected end of expression at line 1, col 4.
-3D  N |sin(| ERR SbxParseException @3+1 step-1: Unexpected end of expression at line 1, col 4.
+3D  P |sin(| ERR SbxParseException @4+1 step-1: Unexpected end of expression at line 1, col 5.
+3D  L |sin(| ERR SbxParseException @4+1 step-1: Unexpected end of expression at line 1, col 5.
+3D  N |sin(| ERR SbxParseException @4+1 step-1: Unexpected end of expression at line 1, col 5.
 2D  P |sin(z| ERR FormatException: Expected ')' at line 1, col 6.
 2D  L |sin(z| ERR FormatException: Expected ')' at line 1, col 6.
 3D  P |sin(z| ERR SbxParseException @5+1 step-1: Expected ')' at line 1, col 6.
@@ -185,9 +185,9 @@
 3D  N |sin(z| ERR SbxParseException @5+1 step-1: Expected ')' at line 1, col 6.
 2D  P |sin(z,| ERR FormatException: Unexpected end of expression at line 1, col 7.
 2D  L |sin(z,| ERR FormatException: Unexpected end of expression at line 1, col 7.
-3D  P |sin(z,| ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
-3D  L |sin(z,| ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
-3D  N |sin(z,| ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
+3D  P |sin(z,| ERR SbxParseException @6+1 step-1: Unexpected end of expression at line 1, col 7.
+3D  L |sin(z,| ERR SbxParseException @6+1 step-1: Unexpected end of expression at line 1, col 7.
+3D  N |sin(z,| ERR SbxParseException @6+1 step-1: Unexpected end of expression at line 1, col 7.
 2D  P |sin(z,)| ERR FormatException: Unexpected character ')' at line 1, col 7.
 2D  L |sin(z,)| ERR FormatException: Unexpected character ')' at line 1, col 7.
 3D  P |sin(z,)| ERR SbxParseException @6+1 step-1: Unexpected character ')' at line 1, col 7.
@@ -300,9 +300,9 @@
 3D  N |return z*z + c;| (+ (* $0 $0) $1)
 2D  P |z^| ERR FormatException: Unexpected end of expression at line 1, col 3.
 2D  L |z^| ERR FormatException: Unexpected end of expression at line 1, col 3.
-3D  P |z^| ERR SbxParseException @1+1 step-1: Unexpected end of expression at line 1, col 2.
-3D  L |z^| ERR SbxParseException @1+1 step-1: Unexpected end of expression at line 1, col 2.
-3D  N |z^| ERR SbxParseException @1+1 step-1: Unexpected end of expression at line 1, col 2.
+3D  P |z^| ERR SbxParseException @2+1 step-1: Unexpected end of expression at line 1, col 3.
+3D  L |z^| ERR SbxParseException @2+1 step-1: Unexpected end of expression at line 1, col 3.
+3D  N |z^| ERR SbxParseException @2+1 step-1: Unexpected end of expression at line 1, col 3.
 2D  P |^z| ERR FormatException: Unexpected character '^' at line 1, col 1.
 2D  L |^z| ERR FormatException: Unexpected character '^' at line 1, col 1.
 3D  P |^z| ERR SbxParseException @0+1 step-1: Unexpected character '^' at line 1, col 1.
@@ -315,9 +315,9 @@
 3D  N |z^^2| ERR SbxParseException @2+1 step-1: Unexpected character '^' at line 1, col 3.
 2D  P |-| ERR FormatException: Unexpected end of expression at line 1, col 2.
 2D  L |-| ERR FormatException: Unexpected end of expression at line 1, col 2.
-3D  P |-| ERR SbxParseException @0+1 step-1: Unexpected end of expression at line 1, col 1.
-3D  L |-| ERR SbxParseException @0+1 step-1: Unexpected end of expression at line 1, col 1.
-3D  N |-| ERR SbxParseException @0+1 step-1: Unexpected end of expression at line 1, col 1.
+3D  P |-| ERR SbxParseException @1+1 step-1: Unexpected end of expression at line 1, col 2.
+3D  L |-| ERR SbxParseException @1+1 step-1: Unexpected end of expression at line 1, col 2.
+3D  N |-| ERR SbxParseException @1+1 step-1: Unexpected end of expression at line 1, col 2.
 2D  P |--z| (neg (neg z))
 2D  L |--z| (neg (neg z))
 3D  P |--z| (neg (neg $0))
@@ -330,24 +330,24 @@
 3D  N |!z| (not $0)
 2D  P |!| ERR FormatException: Unexpected end of expression at line 1, col 2.
 2D  L |!| ERR FormatException: Unexpected end of expression at line 1, col 2.
-3D  P |!| ERR SbxParseException @0+1 step-1: Unexpected end of expression at line 1, col 1.
-3D  L |!| ERR SbxParseException @0+1 step-1: Unexpected end of expression at line 1, col 1.
-3D  N |!| ERR SbxParseException @0+1 step-1: Unexpected end of expression at line 1, col 1.
+3D  P |!| ERR SbxParseException @1+1 step-1: Unexpected end of expression at line 1, col 2.
+3D  L |!| ERR SbxParseException @1+1 step-1: Unexpected end of expression at line 1, col 2.
+3D  N |!| ERR SbxParseException @1+1 step-1: Unexpected end of expression at line 1, col 2.
 2D  P |z == | ERR FormatException: Unexpected end of expression at line 1, col 6.
 2D  L |z == | ERR FormatException: Unexpected end of expression at line 1, col 6.
-3D  P |z == | ERR SbxParseException @4+1 step-1: Unexpected end of expression at line 1, col 5.
-3D  L |z == | ERR SbxParseException @4+1 step-1: Unexpected end of expression at line 1, col 5.
-3D  N |z == | ERR SbxParseException @4+1 step-1: Unexpected end of expression at line 1, col 5.
+3D  P |z == | ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
+3D  L |z == | ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
+3D  N |z == | ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
 2D  P |z = c| ERR FormatException: Unexpected end of expression at line 1, col 6.
 2D  L |z = c| ERR FormatException: Unexpected end of expression at line 1, col 6.
-3D  P |z = c| ERR SbxParseException @4+1 step-1: Unexpected end of expression at line 1, col 5.
-3D  L |z = c| ERR SbxParseException @4+1 step-1: Unexpected end of expression at line 1, col 5.
-3D  N |z = c| ERR SbxParseException @4+1 step-1: Unexpected end of expression at line 1, col 5.
+3D  P |z = c| ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
+3D  L |z = c| ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
+3D  N |z = c| ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
 2D  P |z =| ERR FormatException: Unexpected end of expression at line 1, col 4.
 2D  L |z =| ERR FormatException: Unexpected end of expression at line 1, col 4.
-3D  P |z =| ERR SbxParseException @2+1 step-1: Unexpected end of expression at line 1, col 3.
-3D  L |z =| ERR SbxParseException @2+1 step-1: Unexpected end of expression at line 1, col 3.
-3D  N |z =| ERR SbxParseException @2+1 step-1: Unexpected end of expression at line 1, col 3.
+3D  P |z =| ERR SbxParseException @3+1 step-1: Unexpected end of expression at line 1, col 4.
+3D  L |z =| ERR SbxParseException @3+1 step-1: Unexpected end of expression at line 1, col 4.
+3D  N |z =| ERR SbxParseException @3+1 step-1: Unexpected end of expression at line 1, col 4.
 2D  P |a = 1; b = a; b + z| (let $5 1 (let $6 $5 (+ $6 z)))
 2D  L |a = 1; b = a; b + z| (let $5 1 (let $6 $5 (+ $6 z)))
 3D  P |a = 1; b = a; b + z| (let $5 1 (let $6 $5 (+ $6 $0)))
@@ -380,19 +380,19 @@
 3D  N |pi = 3; pi| ERR SbxParseException @0+1 step-1: Cannot assign to the constant 'pi' at line 1, col 1.
 2D  P |w = 1;| ERR FormatException: Unexpected end of expression at line 1, col 7.
 2D  L |w = 1;| ERR FormatException: Unexpected end of expression at line 1, col 7.
-3D  P |w = 1;| ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
-3D  L |w = 1;| ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
-3D  N |w = 1;| ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
+3D  P |w = 1;| ERR SbxParseException @6+1 step-1: Unexpected end of expression at line 1, col 7.
+3D  L |w = 1;| ERR SbxParseException @6+1 step-1: Unexpected end of expression at line 1, col 7.
+3D  N |w = 1;| ERR SbxParseException @6+1 step-1: Unexpected end of expression at line 1, col 7.
 2D  P |/* unterminated| ERR FormatException: Unexpected end of expression at line 1, col 16.
 2D  L |/* unterminated| ERR FormatException: Unexpected end of expression at line 1, col 16.
-3D  P |/* unterminated| ERR SbxParseException @14+1 step-1: Unexpected end of expression at line 1, col 15.
-3D  L |/* unterminated| ERR SbxParseException @14+1 step-1: Unexpected end of expression at line 1, col 15.
-3D  N |/* unterminated| ERR SbxParseException @14+1 step-1: Unexpected end of expression at line 1, col 15.
+3D  P |/* unterminated| ERR SbxParseException @15+1 step-1: Unexpected end of expression at line 1, col 16.
+3D  L |/* unterminated| ERR SbxParseException @15+1 step-1: Unexpected end of expression at line 1, col 16.
+3D  N |/* unterminated| ERR SbxParseException @15+1 step-1: Unexpected end of expression at line 1, col 16.
 2D  P |// only comment| ERR FormatException: Unexpected end of expression at line 1, col 16.
 2D  L |// only comment| ERR FormatException: Unexpected end of expression at line 1, col 16.
-3D  P |// only comment| ERR SbxParseException @14+1 step-1: Unexpected end of expression at line 1, col 15.
-3D  L |// only comment| ERR SbxParseException @14+1 step-1: Unexpected end of expression at line 1, col 15.
-3D  N |// only comment| ERR SbxParseException @14+1 step-1: Unexpected end of expression at line 1, col 15.
+3D  P |// only comment| ERR SbxParseException @15+1 step-1: Unexpected end of expression at line 1, col 16.
+3D  L |// only comment| ERR SbxParseException @15+1 step-1: Unexpected end of expression at line 1, col 16.
+3D  N |// only comment| ERR SbxParseException @15+1 step-1: Unexpected end of expression at line 1, col 16.
 2D  P |z /* c */ + c| (+ z c)
 2D  L |z /* c */ + c| (+ z c)
 3D  P |z /* c */ + c| (+ $0 $1)
@@ -875,9 +875,9 @@
 3D  N |z*z + c / (z + 0.001)| (+ (* $0 $0) (/ $1 (+ $0 0.001)))
 2D  P |z*z +| ERR FormatException: Unexpected end of expression at line 1, col 6.
 2D  L |z*z +| ERR FormatException: Unexpected end of expression at line 1, col 6.
-3D  P |z*z +| ERR SbxParseException @4+1 step-1: Unexpected end of expression at line 1, col 5.
-3D  L |z*z +| ERR SbxParseException @4+1 step-1: Unexpected end of expression at line 1, col 5.
-3D  N |z*z +| ERR SbxParseException @4+1 step-1: Unexpected end of expression at line 1, col 5.
+3D  P |z*z +| ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
+3D  L |z*z +| ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
+3D  N |z*z +| ERR SbxParseException @5+1 step-1: Unexpected end of expression at line 1, col 6.
 2D  P |foo(z)| ERR FormatException: Unknown function 'foo' at line 1, col 1. Did you mean 'cos'?
 2D  L |foo(z)| ERR FormatException: Unknown function 'foo' at line 1, col 1. Did you mean 'cos'?
 3D  P |foo(z)| ERR SbxParseException @0+3 step-1: Unknown function 'foo' at line 1, col 1. Did you mean 'cos'?

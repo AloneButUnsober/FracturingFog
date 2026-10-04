@@ -9,7 +9,8 @@
 // the operators, functions, and constants enumerated below. No file IO, no
 // reflection, no P/Invoke, no allocation beyond AST + per-thread env array.
 //
-// Grammar (right-recursive descent):
+// Grammar (#1101: parsed by the shared EquationFrontEnd; this file supplies
+// the 2D builder — slots, constants, functions — plus the AST and interpreter):
 //   program  := block
 //   block    := "return" expr ";"?                              ; block value
 //             | "if" "(" expr ")" "return" expr ";"? block       ; guard -> ternary
@@ -476,9 +477,8 @@ namespace FracturingFog.Models
 
         public static SandboxExpression Parse(string source)
         {
-            var parser = new Parser(source, legacy: false, edits: null);
-            var root = parser.ParseProgram();
-            return new SandboxExpression(root, parser.EnvSize);
+            var (root, envSize) = ParseWith(source, legacy: false, edits: null);
+            return new SandboxExpression(root, envSize);
         }
 
         /// <summary>#1088 — parse with the PRE-#1088 (language version 1) rules:
@@ -489,9 +489,8 @@ namespace FracturingFog.Models
         /// thing under the current rules (EquationMigration applies them).</summary>
         public static SandboxExpression ParseLegacy(string source, List<(int Pos, int Len, string Text)>? edits = null)
         {
-            var parser = new Parser(source, legacy: true, edits: edits);
-            var root = parser.ParseProgram();
-            return new SandboxExpression(root, parser.EnvSize);
+            var (root, envSize) = ParseWith(source, legacy: true, edits: edits);
+            return new SandboxExpression(root, envSize);
         }
 
         public SbxVal[] NewEnv() => new SbxVal[EnvSize];
@@ -538,25 +537,35 @@ namespace FracturingFog.Models
         }
 
         // ── Parser ────────────────────────────────────────────────────────────
+        // #1101 — the syntax lives in EquationFrontEnd (shared with the User Bulb
+        // 3D language); this builder supplies the 2D language: complex values,
+        // the input slots, constants, functions and the version-1 condition rule.
 
-        private sealed class Parser
+        private static readonly EquationSyntax Syntax = new(
+            AllowMembers: false,
+            TypeKeywords: new HashSet<string>(StringComparer.Ordinal) { "var", "Complex", "double", "int", "float", "long", "decimal" },
+            NonAssignableWords: new HashSet<string>(StringComparer.Ordinal) { "let", "in", "return", "if" });
+
+        private static (SbxNode Root, int EnvSize) ParseWith(string source, bool legacy, List<(int Pos, int Len, string Text)>? edits)
+        {
+            var b = new Builder(source ?? string.Empty, legacy);
+            var root = new EquationFrontEnd<SbxNode>(source ?? string.Empty, b, Syntax, legacy, edits).ParseProgram();
+            return (root, b.EnvSize);
+        }
+
+        private sealed class Builder : IEquationBuilder<SbxNode>
         {
             private readonly string _src;
-            private int _pos;
+            private readonly bool _legacy;
             private readonly Dictionary<string, int> _scope = new(StringComparer.Ordinal);
+            // #1088 — call positions for the version-1 condition `abs` → `norm` edit.
+            private readonly Dictionary<SbxNode, int> _callStart = new(ReferenceEqualityComparer.Instance);
             public int EnvSize;
 
-            // #1088 — language-version-1 rules + migration edit recorder.
-            private readonly bool _legacy;
-            private readonly List<(int Pos, int Len, string Text)>? _edits;
-            private readonly Dictionary<SbxNode, int> _callStart = new(ReferenceEqualityComparer.Instance);
-
-            public Parser(string src, bool legacy, List<(int Pos, int Len, string Text)>? edits)
+            public Builder(string src, bool legacy)
             {
+                _src = src;
                 _legacy = legacy;
-                _edits = edits;
-                _src = src ?? string.Empty;
-                _pos = 0;
                 _scope["z"] = SlotZ;
                 _scope["c"] = SlotC;
                 _scope["n"] = SlotN;
@@ -565,476 +574,30 @@ namespace FracturingFog.Models
                 EnvSize = ReservedSlots;
             }
 
-            public SbxNode ParseProgram()
-            {
-                SkipWs();
-                var node = ParseBlock();
-                SkipWs();
-                // Tolerate a single trailing `;` (a pasted `return expr;` whose
-                // semicolon survived, possibly followed by a trailing comment).
-                if (Peek() == ';') { _pos++; SkipWs(); }
-                if (_pos < _src.Length)
-                    throw new FormatException($"Unexpected '{_src[_pos]}' at {At(_pos)}.");
-                return node;
-            }
+            private string At(int pos) => EquationSyntax.At(_src, pos);
 
-            // #27 Phase 5b — statement-block front-end. Parses a sequence of
-            // statements and returns the desugared expression (let/ternary AST).
-            // See the grammar block at the top of the file.
-            private SbxNode ParseBlock()
-            {
-                SkipWs();
+            public Exception Error(string message, int position, int length = 1) => new FormatException(message);
 
-                // return <expr> ;   — the block's value. Anything after it is
-                // dead code and rejected by ParseProgram's trailing check.
-                if (MatchKeyword("return"))
+            public SbxNode Number(double value) => new SbxConst(SbxVal.Real(value));
+
+            public SbxNode Identifier(string name, int position)
+            {
+                // Scope wins over the built-in constants so a statement-block local
+                // named `e`/`i`/`pi` (#27 Phase 5b) shadows the constant, as in C#.
+                if (_scope.TryGetValue(name, out int slot)) return new SbxSlot(slot);
+                if (name == "pi") return new SbxConst(SbxVal.Real(Math.PI));
+                if (name == "e")  return new SbxConst(SbxVal.Real(Math.E));
+                if (name == "i")  return new SbxConst(SbxVal.Cx(0.0, 1.0));
+                // #27 Phase 5a — the C# Math spellings `E` / `PI` (and any case
+                // variant of the constants), after scope.
+                switch (name.ToLowerInvariant())
                 {
-                    var e = ParseExpr();
-                    SkipWs();
-                    if (Peek() == ';') _pos++;
-                    return e;
+                    case "pi": return new SbxConst(SbxVal.Real(Math.PI));
+                    case "e":  return new SbxConst(SbxVal.Real(Math.E));
+                    case "i":  return new SbxConst(SbxVal.Cx(0.0, 1.0));
                 }
-
-                // if ( cond ) ...   — two shapes:
-                //   if (cond) return X;  -> cond ? X : <rest-of-block>
-                //   if (cond) v = X;     -> let v = (cond ? X : v) in <rest-of-block>
-                if (MatchKeyword("if"))
-                {
-                    SkipWs();
-                    // #1085 — the CalcGen expression form `if <cond> then a else b`
-                    // (cond with or without parens, e.g. `if (re(z)) > 0 then …`) vs
-                    // the C# statement forms `if (cond) return …;` / `if (cond) v = …;`.
-                    // Statement form only when a parenthesised condition is followed
-                    // by `return` or an assignment; otherwise the expression form.
-                    if (!IsStatementIfAhead())
-                    {
-                        var ite = ParseIfThenElse(ParseOr());
-                        SkipWs();
-                        if (Peek() == ';') _pos++;
-                        return ite;
-                    }
-                    Expect('(');
-                    var cond = ParseExpr();
-                    SkipWs();
-                    Expect(')');
-                    SkipWs();
-
-                    if (MatchKeyword("return"))
-                    {
-                        var thenE = ParseExpr();
-                        SkipWs();
-                        if (Peek() == ';') _pos++;
-                        var elseE = ParseBlock();          // rest of the block
-                        return new SbxTernary(cond, thenE, elseE);
-                    }
-
-                    string ifName = ReadIdent();
-                    if (string.IsNullOrEmpty(ifName))
-                        throw new FormatException($"Expected assignment or 'return' after 'if (...)' at {At(_pos)}.");
-                    SkipWs();
-                    Expect('=');
-                    var ifRhs = ParseExpr();
-                    SkipWs();
-                    if (Peek() == ';') _pos++;
-                    // The else branch keeps the variable's prior value, so it must
-                    // already be bound (`z`/`c`/`n` or an earlier decl).
-                    if (!_scope.TryGetValue(ifName, out int priorSlot))
-                        throw new FormatException($"'if' assigns to unbound '{ifName}' at {At(_pos)}.");
-                    var seeded = new SbxTernary(cond, ifRhs, new SbxSlot(priorSlot));
-                    return BindBlock(ifName, seeded);
-                }
-
-                // [type] ident = expr ;   (declaration or reassignment)
-                var assign = TryParseAssignment();
-                if (assign != null) return assign;
-
-                // Terminal: a let-expression, ternary, or plain expression, with
-                // an optional trailing ';' so a lone `expr;` statement parses.
-                var expr = ParseExpr();
-                SkipWs();
-                if (Peek() == ';') _pos++;
-                return expr;
-            }
-
-            // Bind <name> to a fresh slot for the remainder of the block and
-            // desugar to `let name = value in <rest>`. Reassignment shadows the
-            // prior binding (restored on exit), so the sandbox stays pure.
-            private SbxNode BindBlock(string name, SbxNode valueExpr)
-            {
-                bool hadPrior = _scope.TryGetValue(name, out int prior);
-                int slot = EnvSize++;
-                _scope[name] = slot;
-                try
-                {
-                    var body = ParseBlock();
-                    return new SbxLet(slot, valueExpr, body);
-                }
-                finally
-                {
-                    if (hadPrior) _scope[name] = prior;
-                    else _scope.Remove(name);
-                }
-            }
-
-            // Lookahead for `[type] ident = expr ;`. On success the value is
-            // parsed, the rest of the block recursed, and the desugared let-node
-            // returned. On no-match the position is fully restored and null
-            // returned — so a comparison (`a == b`), a call (`f(x)`), or a
-            // `let`/`in`/`return`/`if` expression falls through to ParseExpr.
-            private SbxNode? TryParseAssignment()
-            {
-                int save = _pos;
-                SkipWs();
-                string first = ReadIdent();
-                if (first.Length == 0) { _pos = save; return null; }
-                if (first is "let" or "in" or "return" or "if") { _pos = save; return null; }
-
-                string name;
-                if (IsTypeKeyword(first))
-                {
-                    SkipWs();
-                    name = ReadIdent();
-                    if (name.Length == 0) { _pos = save; return null; }
-                }
-                else name = first;
-
-                SkipWs();
-                // A single '=' (not '==') marks an assignment statement.
-                if (!(Peek() == '=' && Peek(1) != '=')) { _pos = save; return null; }
-                _pos++; // consume '='
-
-                var rhs = ParseExpr();
-                SkipWs();
-                if (Peek() == ';') _pos++;
-                return BindBlock(name, rhs);
-            }
-
-            // C# local-declaration type tokens accepted before a variable name.
-            // The DSL is dynamically typed (SbxVal), so the type is discarded —
-            // it only tells the parser this is a declaration, not an expression.
-            private static bool IsTypeKeyword(string w) =>
-                w is "var" or "Complex" or "double" or "int" or "float" or "long" or "decimal";
-
-            private SbxNode ParseExpr() => ParseLet();
-
-            private SbxNode ParseLet()
-            {
-                SkipWs();
-                if (MatchKeyword("let"))
-                {
-                    SkipWs();
-                    string name = ReadIdent();
-                    if (string.IsNullOrEmpty(name)) throw new FormatException($"Expected identifier after 'let' at {At(_pos)}.");
-                    if (IsReservedName(name)) throw new FormatException($"Cannot rebind reserved name '{name}' at {At(_pos - name.Length)}.");
-                    SkipWs();
-                    Expect('=');
-                    var valueExpr = ParseExpr();
-                    SkipWs();
-                    if (!MatchKeyword("in")) throw new FormatException($"Expected 'in' in let-expression at {At(_pos)}.");
-
-                    // Bind name to a fresh slot for the body; restore prior binding on exit.
-                    bool hadPrior = _scope.TryGetValue(name, out int prior);
-                    int slot = EnvSize++;
-                    _scope[name] = slot;
-                    try
-                    {
-                        var body = ParseExpr();
-                        return new SbxLet(slot, valueExpr, body);
-                    }
-                    finally
-                    {
-                        if (hadPrior) _scope[name] = prior;
-                        else _scope.Remove(name);
-                    }
-                }
-                if (MatchKeyword("if"))
-                    return ParseIfThenElse(ParseOr());
-                return ParseTernary();
-            }
-
-            // #1085 — CalcGen `if <cond> then <a> else <b>` (cond already parsed;
-            // `if` consumed). Desugars to a ternary; see the grammar note on the
-            // condition-operand `abs` rule.
-            private SbxNode ParseIfThenElse(SbxNode cond)
-            {
-                SkipWs();
-                if (!MatchKeyword("then")) throw new FormatException($"Expected 'then' after the 'if' condition at {At(_pos)}.");
-                var thenN = ParseExpr();
-                SkipWs();
-                if (!MatchKeyword("else")) throw new FormatException($"Expected 'else' after the 'then' branch at {At(_pos)}.");
-                var elseN = ParseExpr();
-                return new SbxTernary(_legacy ? CalcGenCondition(cond) : cond, thenN, elseN);
-            }
-
-            // Language version 1 (#1085, retired by #1088): a comparison operand
-            // that is directly abs(x) meant |x|² in an `if … then` condition —
-            // read as norm(x), and migrated by rewriting the `abs` to `norm`.
-            // Recurses through && / || / !.
-            private SbxNode CalcGenCondition(SbxNode n) => n switch
-            {
-                SbxBinary b when b.Op is "&&" or "||"
-                    => new SbxBinary(b.Op, CalcGenCondition(b.A), CalcGenCondition(b.B)),
-                SbxBinary b when b.Op is "<" or ">" or "<=" or ">=" or "==" or "!="
-                    => new SbxBinary(b.Op, AbsToNorm(b.A), AbsToNorm(b.B)),
-                SbxUnary u when u.Op == '!' => new SbxUnary('!', CalcGenCondition(u.A)),
-                _ => n,
-            };
-
-            private SbxNode AbsToNorm(SbxNode n)
-            {
-                if (n is not SbxCall { Name: "abs" } c) return n;
-                if (_edits != null && _callStart.TryGetValue(c, out int at)) _edits.Add((at, 3, "norm"));
-                return new SbxCall("norm", c.Args);
-            }
-
-            private SbxNode ParseTernary()
-            {
-                var cond = ParseOr();
-                SkipWs();
-                if (Peek() == '?')
-                {
-                    _pos++;
-                    var thenN = ParseExpr();
-                    SkipWs();
-                    Expect(':');
-                    var elseN = ParseExpr();
-                    return new SbxTernary(cond, thenN, elseN);
-                }
-                return cond;
-            }
-
-            private SbxNode ParseOr()
-            {
-                var left = ParseAnd();
-                while (true)
-                {
-                    SkipWs();
-                    if (Peek() == '|' && Peek(1) == '|') { _pos += 2; left = new SbxBinary("||", left, ParseAnd()); }
-                    else break;
-                }
-                return left;
-            }
-
-            private SbxNode ParseAnd()
-            {
-                var left = ParseNot();
-                while (true)
-                {
-                    SkipWs();
-                    if (Peek() == '&' && Peek(1) == '&') { _pos += 2; left = new SbxBinary("&&", left, ParseNot()); }
-                    else break;
-                }
-                return left;
-            }
-
-            private SbxNode ParseNot()
-            {
-                SkipWs();
-                if (Peek() == '!' && Peek(1) != '=')
-                {
-                    _pos++;
-                    return new SbxUnary('!', ParseNot());
-                }
-                return ParseCmp();
-            }
-
-            private SbxNode ParseCmp()
-            {
-                var left = ParseAdd();
-                SkipWs();
-                string? op = null;
-                if (Peek() == '<')      op = Peek(1) == '=' ? "<=" : "<";
-                else if (Peek() == '>') op = Peek(1) == '=' ? ">=" : ">";
-                else if (Peek() == '=' && Peek(1) == '=') op = "==";
-                else if (Peek() == '!' && Peek(1) == '=') op = "!=";
-                if (op == null) return left;
-                _pos += op.Length;
-                var right = ParseAdd();
-                return new SbxBinary(op, left, right);
-            }
-
-            private SbxNode ParseAdd()
-            {
-                var left = ParseMul();
-                while (true)
-                {
-                    SkipWs();
-                    char p = Peek();
-                    if (p == '+' || p == '-') { _pos++; left = new SbxBinary(p.ToString(), left, ParseMul()); }
-                    else break;
-                }
-                return left;
-            }
-
-            private SbxNode ParseMul()
-            {
-                var left = ParseFactor();
-                while (true)
-                {
-                    SkipWs();
-                    char p = Peek();
-                    if (p == '*' || p == '/') { _pos++; left = new SbxBinary(p.ToString(), left, ParseFactor()); }
-                    else break;
-                }
-                return left;
-            }
-
-            private SbxNode ParseFactor() => _legacy ? ParsePowLegacy() : ParseUnary();
-
-            // Current rules (#1088): unary minus is looser than ^, so -z^2 = -(z^2);
-            // ^ is right-associative and its exponent may carry a sign (z^-2).
-            //   unary := ("-" | "+") unary | pow ;  pow := primary ("^" unary)?
-            private SbxNode ParseUnary()
-            {
-                SkipWs();
-                if (Peek() == '-') { _pos++; return new SbxUnary('-', ParseUnary()); }
-                if (Peek() == '+') { _pos++; return ParseUnary(); }
-                return ParsePow();
-            }
-
-            private SbxNode ParsePow()
-            {
-                var left = ParsePrimary();
-                SkipWs();
-                if (Peek() == '^') { _pos++; return new SbxBinary("^", left, ParseUnary()); }
-                return left;
-            }
-
-            // Language version 1: pow := unary ("^" pow)?, so -x^y = (-x)^y. The
-            // migration wraps such a signed base in parentheses, "(-x)^y", which
-            // reads the same under both rule sets.
-            private SbxNode ParsePowLegacy()
-            {
-                SkipWs();
-                int start = _pos;
-                char first = Peek();
-                var left = ParseUnaryLegacy();
-                int end = _pos;
-                SkipWs();
-                if (Peek() == '^')
-                {
-                    if (_edits != null && (first == '-' || first == '+'))
-                    {
-                        _edits.Add((start, 0, "("));
-                        _edits.Add((end, 0, ")"));
-                    }
-                    _pos++;
-                    return new SbxBinary("^", left, ParsePowLegacy());
-                }
-                return left;
-            }
-
-            private SbxNode ParseUnaryLegacy()
-            {
-                SkipWs();
-                if (Peek() == '-') { _pos++; return new SbxUnary('-', ParseUnaryLegacy()); }
-                if (Peek() == '+') { _pos++; return ParseUnaryLegacy(); }
-                return ParsePrimary();
-            }
-
-            private SbxNode ParsePrimary()
-            {
-                SkipWs();
-                if (_pos >= _src.Length) throw new FormatException($"Unexpected end of expression at {At(_pos)}.");
-                char p = Peek();
-                if (p == '(')
-                {
-                    _pos++;
-                    var inner = ParseExpr();
-                    SkipWs();
-                    Expect(')');
-                    return inner;
-                }
-                if (IsDigit(p) || (p == '.' && _pos + 1 < _src.Length && IsDigit(_src[_pos + 1])))
-                    return ParseNumber();
-                if (IsIdentStart(p))
-                {
-                    int identStart = _pos;
-                    string name = ReadIdent();
-                    SkipWs();
-                    if (Peek() == '(') return ParseCall(name, identStart);
-
-                    // Scope wins over the built-in constants so a statement-block
-                    // local named `e`/`i`/`pi` (#27 Phase 5b lets a block bind any
-                    // name) shadows the constant, matching C# scoping.
-                    if (_scope.TryGetValue(name, out int slot)) return new SbxSlot(slot);
-
-                    // Reserved single-letter constants
-                    if (name == "pi") return new SbxConst(SbxVal.Real(Math.PI));
-                    if (name == "e")  return new SbxConst(SbxVal.Real(Math.E));
-                    if (name == "i")  return new SbxConst(SbxVal.Cx(0.0, 1.0));
-
-                    // #27 Phase 5a — accept the C# Math spellings `E` / `PI` (and
-                    // any case variant of the built-in constants) so translated
-                    // equations using them resolve. Checked AFTER scope so a
-                    // let-bound name of the same spelling still wins.
-                    switch (name.ToLowerInvariant())
-                    {
-                        case "pi": return new SbxConst(SbxVal.Real(Math.PI));
-                        case "e":  return new SbxConst(SbxVal.Real(Math.E));
-                        case "i":  return new SbxConst(SbxVal.Cx(0.0, 1.0));
-                    }
-                    throw new FormatException(
-                        $"Unknown identifier '{name}' at {At(identStart)}.{DidYouMean(name, IdentifierCandidates())}");
-                }
-                throw new FormatException($"Unexpected character '{p}' at {At(_pos)}.");
-            }
-
-            private SbxNode ParseCall(string name, int nameStart)
-            {
-                _pos++; // consume '('
-                var args = new List<SbxNode>();
-                SkipWs();
-                if (Peek() != ')')
-                {
-                    args.Add(ParseExpr());
-                    SkipWs();
-                    while (Peek() == ',') { _pos++; args.Add(ParseExpr()); SkipWs(); }
-                }
-                Expect(')');
-
-                string lname = name.ToLowerInvariant();
-                int expected = FunctionArity(lname);
-                if (expected < 0)
-                    throw new FormatException(
-                        $"Unknown function '{name}' at {At(nameStart)}.{DidYouMean(lname, FunctionNames)}");
-                if (args.Count != expected)
-                    throw new FormatException(
-                        $"Function '{name}' at {At(nameStart)} takes {expected} arg(s), got {args.Count}.");
-                var call = new SbxCall(lname, args.ToArray());
-                if (_legacy) _callStart[call] = nameStart;   // #1088 — migration edit positions
-                return call;
-            }
-
-            private SbxNode ParseNumber()
-            {
-                int start = _pos;
-                while (_pos < _src.Length && (IsDigit(_src[_pos]) || _src[_pos] == '.')) _pos++;
-                // Optional exponent.
-                if (_pos < _src.Length && (_src[_pos] == 'e' || _src[_pos] == 'E'))
-                {
-                    _pos++;
-                    if (_pos < _src.Length && (_src[_pos] == '+' || _src[_pos] == '-')) _pos++;
-                    while (_pos < _src.Length && IsDigit(_src[_pos])) _pos++;
-                }
-                string tok = _src.Substring(start, _pos - start);
-                if (!double.TryParse(tok, NumberStyles.Float, CultureInfo.InvariantCulture, out double d))
-                    throw new FormatException($"Invalid number '{tok}' at {At(start)}.");
-                return new SbxConst(SbxVal.Real(d));
-            }
-
-            // ── Helpers ───────────────────────────────────────────────────────
-
-            // #1086 — error positions in the CalcGen DSL's format ("line L, col C",
-            // 1-based) so the editor's error-span / quick-fix code reads both.
-            private string At(int pos)
-            {
-                int line = 1, col = 1;
-                for (int k = 0; k < pos && k < _src.Length; k++)
-                {
-                    if (_src[k] == '\n') { line++; col = 1; } else col++;
-                }
-                return $"line {line}, col {col}";
+                throw new FormatException(
+                    $"Unknown identifier '{name}' at {At(position)}.{EquationSyntax.DidYouMean(name, IdentifierCandidates())}");
             }
 
             private IEnumerable<string> IdentifierCandidates()
@@ -1044,127 +607,82 @@ namespace FracturingFog.Models
                 foreach (var f in FunctionNames) yield return f;
             }
 
-            // " Did you mean 'x'?" for the closest candidate within edit distance
-            // 2 (CalcGen's lexer uses the same rule), else empty.
-            private static string DidYouMean(string name, IEnumerable<string> candidates)
+            public SbxNode Call(string name, int nameStart, IReadOnlyList<SbxNode> args)
             {
-                string? best = null;
-                int bestD = int.MaxValue;
-                string lower = name.ToLowerInvariant();
-                foreach (var cand in candidates)
-                {
-                    int d = Levenshtein(lower, cand.ToLowerInvariant());
-                    if (d < bestD) { bestD = d; best = cand; }
-                }
-                return best != null && bestD > 0 && bestD <= 2 ? $" Did you mean '{best}'?" : string.Empty;
+                string lname = name.ToLowerInvariant();
+                int expected = FunctionArity(lname);
+                if (expected < 0)
+                    throw new FormatException(
+                        $"Unknown function '{name}' at {At(nameStart)}.{EquationSyntax.DidYouMean(lname, FunctionNames)}");
+                if (args.Count != expected)
+                    throw new FormatException(
+                        $"Function '{name}' at {At(nameStart)} takes {expected} arg(s), got {args.Count}.");
+                var call = new SbxCall(lname, System.Linq.Enumerable.ToArray(args));
+                if (_legacy) _callStart[call] = nameStart;   // #1088 — migration edit positions
+                return call;
             }
 
-            private static int Levenshtein(string a, string b)
+            public SbxNode Unary(char op, SbxNode operand) => new SbxUnary(op, operand);
+            public SbxNode Binary(string op, SbxNode a, SbxNode b) => new SbxBinary(op, a, b);
+            public SbxNode Ternary(SbxNode cond, SbxNode then, SbxNode otherwise) => new SbxTernary(cond, then, otherwise);
+            public SbxNode Member(SbxNode target, char axis) => throw new FormatException("Member access is not part of the 2D language.");
+            public SbxNode Let(int slot, SbxNode value, SbxNode body) => new SbxLet(slot, value, body);
+
+            // Language version 1 (#1085, retired by #1088): a comparison operand
+            // that is directly abs(x) meant |x|² in an `if … then` condition —
+            // read as norm(x), and migrated by rewriting the `abs` to `norm`.
+            // Recurses through && / || / !.
+            public SbxNode IfThenCondition(SbxNode cond, List<(int Pos, int Len, string Text)>? edits)
+                => _legacy ? CalcGenCondition(cond, edits) : cond;
+
+            private SbxNode CalcGenCondition(SbxNode n, List<(int Pos, int Len, string Text)>? edits) => n switch
             {
-                var prev = new int[b.Length + 1];
-                var cur = new int[b.Length + 1];
-                for (int j = 0; j <= b.Length; j++) prev[j] = j;
-                for (int i = 1; i <= a.Length; i++)
-                {
-                    cur[0] = i;
-                    for (int j = 1; j <= b.Length; j++)
-                        cur[j] = Math.Min(Math.Min(cur[j - 1] + 1, prev[j] + 1), prev[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1));
-                    (prev, cur) = (cur, prev);
-                }
-                return prev[b.Length];
+                SbxBinary b when b.Op is "&&" or "||"
+                    => new SbxBinary(b.Op, CalcGenCondition(b.A, edits), CalcGenCondition(b.B, edits)),
+                SbxBinary b when b.Op is "<" or ">" or "<=" or ">=" or "==" or "!="
+                    => new SbxBinary(b.Op, AbsToNorm(b.A, edits), AbsToNorm(b.B, edits)),
+                SbxUnary u when u.Op == '!' => new SbxUnary('!', CalcGenCondition(u.A, edits)),
+                _ => n,
+            };
+
+            private SbxNode AbsToNorm(SbxNode n, List<(int Pos, int Len, string Text)>? edits)
+            {
+                if (n is not SbxCall { Name: "abs" } c) return n;
+                if (edits != null && _callStart.TryGetValue(c, out int at)) edits.Add((at, 3, "norm"));
+                return new SbxCall("norm", c.Args);
             }
 
-            private char Peek(int offset = 0)
-                => (_pos + offset < _src.Length) ? _src[_pos + offset] : '\0';
-
-            private void SkipWs()
+            public void CheckLetName(string name, int position)
             {
-                // #27 Phase 5a — skip whitespace and comments (`//` to EOL,
-                // `/* */` block). A lone `/` is left for the division operator.
-                // Mirrors SandboxBulbExpression so saved C# equations carrying
-                // comments translate + parse.
-                while (_pos < _src.Length)
-                {
-                    char c = _src[_pos];
-                    if (char.IsWhiteSpace(c)) { _pos++; continue; }
-                    if (c == '/' && _pos + 1 < _src.Length)
-                    {
-                        char d = _src[_pos + 1];
-                        if (d == '/')
-                        {
-                            _pos += 2;
-                            while (_pos < _src.Length && _src[_pos] != '\n') _pos++;
-                            continue;
-                        }
-                        if (d == '*')
-                        {
-                            _pos += 2;
-                            while (_pos + 1 < _src.Length && !(_src[_pos] == '*' && _src[_pos + 1] == '/')) _pos++;
-                            _pos = Math.Min(_src.Length, _pos + 2);
-                            continue;
-                        }
-                    }
-                    break;
-                }
+                if (name is "z" or "c" or "n" or "prev" or "iter" or "pi" or "e" or "i" or "let" or "in")
+                    throw new FormatException($"Cannot rebind reserved name '{name}' at {At(position)}.");
             }
 
-            private void Expect(char c)
+            public void CheckAssignName(string name, int position) { }
+
+            public (int Slot, int Prior, bool HadPrior) Bind(string name)
             {
-                SkipWs();
-                if (_pos >= _src.Length || _src[_pos] != c)
-                    throw new FormatException($"Expected '{c}' at {At(_pos)}.");
-                _pos++;
+                bool hadPrior = _scope.TryGetValue(name, out int prior);
+                int slot = EnvSize++;
+                _scope[name] = slot;
+                return (slot, prior, hadPrior);
             }
 
-            private string ReadIdent()
+            public void Unbind(string name, int prior, bool hadPrior)
             {
-                int start = _pos;
-                if (_pos >= _src.Length || !IsIdentStart(_src[_pos])) return string.Empty;
-                _pos++;
-                while (_pos < _src.Length && IsIdentCont(_src[_pos])) _pos++;
-                return _src.Substring(start, _pos - start);
+                if (hadPrior) _scope[name] = prior;
+                else _scope.Remove(name);
             }
 
-            // #1085 — lookahead (no net consumption): `( expr )` followed by
-            // `return` or `ident =` (not `==`) marks a C# statement-form `if`.
-            private bool IsStatementIfAhead()
+            public bool TryGetBound(string name, out SbxNode node)
             {
-                int save = _pos, envSave = EnvSize;
-                try
-                {
-                    SkipWs();
-                    if (Peek() != '(') return false;
-                    _pos++;
-                    ParseExpr();
-                    SkipWs();
-                    if (Peek() != ')') return false;
-                    _pos++;
-                    if (MatchKeyword("return")) return true;
-                    SkipWs();
-                    if (ReadIdent().Length == 0) return false;
-                    SkipWs();
-                    return Peek() == '=' && Peek(1) != '=';
-                }
-                catch (FormatException) { return false; }
-                finally { _pos = save; EnvSize = envSave; }
+                if (_scope.TryGetValue(name, out int slot)) { node = new SbxSlot(slot); return true; }
+                node = null!;
+                return false;
             }
 
-            private bool MatchKeyword(string kw)
-            {
-                SkipWs();
-                if (_pos + kw.Length > _src.Length) return false;
-                if (string.CompareOrdinal(_src, _pos, kw, 0, kw.Length) != 0) return false;
-                int next = _pos + kw.Length;
-                if (next < _src.Length && IsIdentCont(_src[next])) return false;
-                _pos = next;
-                return true;
-            }
-
-            private static bool IsReservedName(string name) =>
-                name is "z" or "c" or "n" or "prev" or "iter" or "pi" or "e" or "i" or "let" or "in";
-            private static bool IsDigit(char c) => c >= '0' && c <= '9';
-            private static bool IsIdentStart(char c) => (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
-            private static bool IsIdentCont(char c) => IsIdentStart(c) || IsDigit(c);
+            public int Mark() => EnvSize;
+            public void Reset(int mark) => EnvSize = mark;
         }
     }
 }

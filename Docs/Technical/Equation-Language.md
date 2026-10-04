@@ -23,7 +23,8 @@ everywhere. Saved text is upgraded automatically; see
 
 | What | Where |
 |---|---|
-| Parser, AST, interpreter | `Equations/SandboxExpression.cs` |
+| Syntax (shared with User Bulb 3D, #1101) | `Equations/EquationFrontEnd.cs` |
+| 2D builder, AST, interpreter | `Equations/SandboxExpression.cs` |
 | Entry point | `Equations/EquationLanguage.cs` |
 | Saved-text upgrade | `Equations/EquationMigration.cs` |
 | Lowering to CalcGen | `CalculatorGen/Language/CalcGenLowering.cs` |
@@ -31,6 +32,23 @@ everywhere. Saved text is upgraded automatically; see
 The language lives in the dependency-free **FracturingFog.Equations** project
 (#1088). Abstractions (the equation stores) and CalculatorGen.Lib (the lowering)
 both reference it. The namespace stays `FracturingFog.Models`.
+
+**One parser for both languages (#1101).** `EquationFrontEnd<T>` owns the syntax:
+tokens, comments, precedence (current and version 1, with the migration's edit
+recorder), statements, `let`, `if … then … else`, the ternary, member access
+where the language allows it, and the syntax errors. It builds each engine's own
+AST through an `IEquationBuilder<T>`:
+- the 2D builder (in `SandboxExpression`) supplies complex values, the slots
+  `z c n prev iter`, the constants `pi e i`, the function table and the
+  version-1 condition rule;
+- the 3D builder (in `Engine/Models/SandboxBulbExpression.cs`) supplies real /
+  vec / quat values, `.x .y .z .w`, the bulb function table, params and chain
+  scope.
+
+There is no intermediate tree, so errors come in the same order as before and the
+trees are unchanged; `ParserBehaviourSnapshotTests` pins both languages' trees,
+migration edits and error messages against a baseline taken from the old
+hand-written parsers.
 
 **Entry point (`EquationLanguage`):**
 - `Parse`
