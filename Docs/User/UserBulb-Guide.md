@@ -362,7 +362,7 @@ Scale*g*dr + 1.0
 | **Quat mode** | Quaternion equations. Runs the analytic power DE when a pattern is detected and Julia is off; otherwise a 5-trajectory numerical-Jacobian DE. **Julia mode is supported.** |
 | **Vec3 mode** | Analytic-power equations (`z^K + c`, `triplex(z, K) + c` and the square triplex). Vec3 Julia / Vec3 numerical stay on CPU for now. |
 
-Chains compile on the GPU too (each step is emitted and inlined). Scalar-KIFS distance fields are **CPU-only**. A few constructs the GPU emitter can't express yet (a real added to a vector, `&&`/`||`, `pow(vec, k)`) also run on the CPU — see #1105.
+Chains compile on the GPU too (each step is emitted and inlined). Scalar-KIFS distance fields are **CPU-only**. The GPU emitter matches the CPU interpreter's arithmetic exactly (checked by `BulbEmitterParityTests`, #1105); the only expressions it declines are a product or quotient mixing a vector and a quaternion, and a ternary whose branches have different kinds — those run on the CPU.
 
 To check whether GPU translation succeeded: render at a known-fast resolution; if the frame time matches CPU at the same resolution, you fell back. The status line also surfaces the last GPU compile/JIT error when a fallback happens.
 

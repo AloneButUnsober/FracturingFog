@@ -205,13 +205,28 @@ public static class UserBulbSandboxEmitter
             }
         }
 
-        private SbxEmitKind EmitUnary(Sbx3Unary u, StringBuilder sb)
+        // #1105 — every rule below mirrors the interpreter (SbxVal3 / SbxFuncEval)
+        // exactly, so emitted C# and the interpreter agree bit for bit:
+        //   truthiness / comparisons read AsReal (the magnitude of a vec/quat);
+        //   + and - treat a real as (r, 0, 0) / quat (0, r, 0, 0) and a vec as
+        //   the quat (0, x, y, z);  ^ and pow are the triplex power (vec), the
+        //   quaternion power (quat) or Math.Pow (real), exponent AsReal.
+        // Mixed vec/quat products and quotients have odd interpreter semantics
+        // and stay NotSupported (the GPU path falls back to the CPU).
+
+        /// <summary>Emit <paramref name="n"/> reduced to a real (AsReal).</summary>
+        private string RealText(Sbx3Node n)
+        {
+            var sb = new StringBuilder();
+            EmitAsReal(n, sb);
+            return sb.ToString();
+        }
+
+                private SbxEmitKind EmitUnary(Sbx3Unary u, StringBuilder sb)
         {
             if (u.Op == '!')
             {
-                sb.Append('(');
-                Emit(u.A, sb);
-                sb.Append(" == 0.0 ? 1.0 : 0.0)");
+                sb.Append("((").Append(RealText(u.A)).Append(") == 0.0 ? 1.0 : 0.0)");
                 return SbxEmitKind.Real;
             }
             sb.Append("-(");
@@ -222,16 +237,21 @@ public static class UserBulbSandboxEmitter
 
         private SbxEmitKind EmitBinary(Sbx3Binary b, StringBuilder sb)
         {
-            // Short-circuit + comparisons reduce to real.
-            if (b.Op is "&&" or "||" or "<" or ">" or "<=" or ">=" or "==" or "!=")
+            if (b.Op is "&&" or "||")
             {
-                sb.Append("((");
-                Emit(b.A, sb);
-                sb.Append(") ").Append(b.Op).Append(" (");
-                Emit(b.B, sb);
-                sb.Append(") ? 1.0 : 0.0)");
+                sb.Append("(((").Append(RealText(b.A)).Append(") != 0.0) ").Append(b.Op)
+                  .Append(" ((").Append(RealText(b.B)).Append(") != 0.0) ? 1.0 : 0.0)");
                 return SbxEmitKind.Real;
             }
+            if (b.Op is "<" or ">" or "<=" or ">=" or "==" or "!=")
+            {
+                sb.Append("((").Append(RealText(b.A)).Append(") ").Append(b.Op)
+                  .Append(" (").Append(RealText(b.B)).Append(") ? 1.0 : 0.0)");
+                return SbxEmitKind.Real;
+            }
+
+            if (b.Op == "^")
+                return EmitPow(b.A, b.B, sb);
 
             // Buffer each side so we can choose the operator form by inferred kind.
             var sbA = new StringBuilder();
@@ -239,31 +259,97 @@ public static class UserBulbSandboxEmitter
             var sbB = new StringBuilder();
             var bk = Emit(b.B, sbB);
 
-            if (b.Op == "^")
-            {
-                if (ak == SbxEmitKind.Vec)
-                {
-                    sb.Append(V3).Append(".Pow(").Append(sbA).Append(", ").Append(sbB).Append(')');
-                    return SbxEmitKind.Vec;
-                }
-                if (ak == SbxEmitKind.Quat)
-                    throw new NotSupportedException("Emit: '^' on Quat not supported in emitter (use qpow).");
-                sb.Append("Math.Pow(").Append(sbA).Append(", ").Append(sbB).Append(')');
-                return SbxEmitKind.Real;
-            }
-
             if (b.Op == "*")
                 return EmitMul(ak, bk, sbA, sbB, sb);
+            if (b.Op == "/")
+                return EmitDiv(ak, bk, sbA.ToString(), sbB.ToString(), sb);
 
-            // +, -, /  — operator-overloaded for Vec3/Quat, scalar broadcast OK.
+            // + and -: promote both sides to the wider kind the way the
+            // interpreter's Add/Sub read them, then use the overloaded operator.
             var rk = Widen(ak, bk);
-            sb.Append('(').Append(sbA).Append(' ').Append(b.Op).Append(' ').Append(sbB).Append(')');
+            sb.Append('(').Append(Promote(sbA.ToString(), ak, rk)).Append(' ').Append(b.Op).Append(' ')
+              .Append(Promote(sbB.ToString(), bk, rk)).Append(')');
             return rk;
+        }
+
+        /// <summary>A value of kind <paramref name="from"/> as the +/- operand of
+        /// kind <paramref name="to"/> (SbxVal3.Add/Sub: a real is (r, 0, 0) or
+        /// the quat (0, r, 0, 0); a vec is the quat (0, x, y, z)).</summary>
+        private static string Promote(string text, SbxEmitKind from, SbxEmitKind to)
+        {
+            if (from == to) return text;
+            if (to == SbxEmitKind.Vec)   // from Real
+                return "new Vec3(" + text + ", 0.0, 0.0)";
+            if (from == SbxEmitKind.Real)  // to Quat
+                return "new Quat(0.0, " + text + ", 0.0, 0.0)";
+            return "Quat.FromVec3(" + text + ")";   // Vec to Quat
+        }
+
+        // SbxVal3.Pow: quat base → Quat.Pow, vec base → triplex Vec3.Pow,
+        // real base → Math.Pow; the exponent is read AsReal.
+        private SbxEmitKind EmitPow(Sbx3Node a, Sbx3Node e, StringBuilder sb)
+        {
+            var sbA = new StringBuilder();
+            var ak = Emit(a, sbA);
+            string exp = RealText(e);
+            switch (ak)
+            {
+                case SbxEmitKind.Vec:
+                    sb.Append(V3).Append(".Pow(").Append(sbA).Append(", ").Append(exp).Append(')');
+                    return SbxEmitKind.Vec;
+                case SbxEmitKind.Quat:
+                    sb.Append(_gpu ? "QuatGpuOps.Pow(" : "Quat.Pow(").Append(sbA).Append(", ").Append(exp).Append(')');
+                    return SbxEmitKind.Quat;
+                default:
+                    sb.Append("Math.Pow(").Append(sbA).Append(", ").Append(exp).Append(')');
+                    return SbxEmitKind.Real;
+            }
+        }
+
+        // SbxVal3.Div. Quat/vec mixes (and quat/quat) take an odd branch in the
+        // interpreter; they are left NotSupported so the GPU path falls back.
+        private static SbxEmitKind EmitDiv(SbxEmitKind ak, SbxEmitKind bk, string a, string b, StringBuilder sb)
+        {
+            string A = "(" + a + ")", B = "(" + b + ")";
+            if (ak == SbxEmitKind.Real && bk == SbxEmitKind.Real)
+            {
+                sb.Append('(').Append(A).Append(" / ").Append(B).Append(')');
+                return SbxEmitKind.Real;
+            }
+            if (ak == SbxEmitKind.Quat && bk == SbxEmitKind.Real)
+            {
+                sb.Append("new Quat(").Append(A).Append(".W / ").Append(B).Append(", ")
+                  .Append(A).Append(".X / ").Append(B).Append(", ")
+                  .Append(A).Append(".Y / ").Append(B).Append(", ")
+                  .Append(A).Append(".Z / ").Append(B).Append(')');
+                return SbxEmitKind.Quat;
+            }
+            if (ak == SbxEmitKind.Vec && bk == SbxEmitKind.Vec)
+            {
+                sb.Append("new Vec3(").Append(A).Append(".X / ").Append(B).Append(".X, ")
+                  .Append(A).Append(".Y / ").Append(B).Append(".Y, ")
+                  .Append(A).Append(".Z / ").Append(B).Append(".Z)");
+                return SbxEmitKind.Vec;
+            }
+            if (ak == SbxEmitKind.Vec && bk == SbxEmitKind.Real)
+            {
+                sb.Append('(').Append(A).Append(" / ").Append(B).Append(')');
+                return SbxEmitKind.Vec;
+            }
+            if (ak == SbxEmitKind.Real && (bk == SbxEmitKind.Vec || bk == SbxEmitKind.Quat))
+            {
+                // Interpreter: (a / b.X, a / b.Y, a / b.Z) — a vec, even for a quat b.
+                sb.Append("new Vec3(").Append(A).Append(" / ").Append(B).Append(".X, ")
+                  .Append(A).Append(" / ").Append(B).Append(".Y, ")
+                  .Append(A).Append(" / ").Append(B).Append(".Z)");
+                return SbxEmitKind.Vec;
+            }
+            throw new NotSupportedException($"Emit: '/' between {ak} and {bk} is not supported.");
         }
 
         private static SbxEmitKind EmitMul(SbxEmitKind ak, SbxEmitKind bk, StringBuilder sbA, StringBuilder sbB, StringBuilder sb)
         {
-            // Vec3 has no `Vec3 * Vec3` — Hadamard via Vec3.Mul (added below if missing).
+            // Vec3 has no `Vec3 * Vec3` — Hadamard written out.
             if (ak == SbxEmitKind.Vec && bk == SbxEmitKind.Vec)
             {
                 sb.Append("new Vec3(")
@@ -272,12 +358,9 @@ public static class UserBulbSandboxEmitter
                   .Append('(').Append(sbA).Append(").Z * (").Append(sbB).Append(").Z)");
                 return SbxEmitKind.Vec;
             }
-            if (ak == SbxEmitKind.Quat && bk == SbxEmitKind.Quat)
-            {
-                sb.Append('(').Append(sbA).Append(") * (").Append(sbB).Append(')');
-                return SbxEmitKind.Quat;
-            }
-            // Mixed — operator-overloads cover Vec*double, Quat*double, double*Vec, double*Quat.
+            if ((ak == SbxEmitKind.Vec && bk == SbxEmitKind.Quat) || (ak == SbxEmitKind.Quat && bk == SbxEmitKind.Vec))
+                throw new NotSupportedException("Emit: '*' between a vec and a quat is not supported.");
+            // Quat*Quat (Hamilton) and the real broadcasts are operator overloads.
             sb.Append('(').Append(sbA).Append(") * (").Append(sbB).Append(')');
             return Widen(ak, bk);
         }
@@ -287,9 +370,7 @@ public static class UserBulbSandboxEmitter
             var sbT = new StringBuilder(); var tk = Emit(t.Then, sbT);
             var sbE = new StringBuilder(); var ek = Emit(t.Else, sbE);
             if (tk != ek) throw new NotSupportedException("Emit: ternary branches must agree on kind.");
-            sb.Append("((");
-            Emit(t.Cond, sb);
-            sb.Append(") != 0.0 ? ").Append(sbT).Append(" : ").Append(sbE).Append(')');
+            sb.Append("((").Append(RealText(t.Cond)).Append(") != 0.0 ? ").Append(sbT).Append(" : ").Append(sbE).Append(')');
             return tk;
         }
 
@@ -401,10 +482,9 @@ public static class UserBulbSandboxEmitter
                     EmitAsReal(call.Args[2], sb); sb.Append(')');
                     return SbxEmitKind.Real;
                 case "pow":
-                    sb.Append("Math.Pow(");
-                    EmitAsReal(call.Args[0], sb); sb.Append(", ");
-                    EmitAsReal(call.Args[1], sb); sb.Append(')');
-                    return SbxEmitKind.Real;
+                    // #1105 — pow is SbxVal3.Pow, the same as ^ (it was a real
+                    // power of the length).
+                    return EmitPow(call.Args[0], call.Args[1], sb);
                 case "floor": return EmitMath1(call.Args[0], sb, "Floor");
                 case "sign":  return EmitMath1(call.Args[0], sb, "Sign");
                 case "min":   return EmitMath2(call.Args[0], call.Args[1], sb, "Min");

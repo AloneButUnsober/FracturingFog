@@ -65,55 +65,96 @@ public sealed class BulbEmitterParityTests
         => (double.IsNaN(a) && double.IsNaN(b)) || a == b
            || Math.Abs(a - b) <= 1e-9 * Math.Max(1.0, Math.Max(Math.Abs(a), Math.Abs(b)));
 
-    // Sources whose emitted C# doesn't compile today (the GPU path falls back
-    // to the CPU interpreter for them).
-    // Filed as #1105. Each is a real-plus-vector / real-plus-quat broadcast,
-    // a logical && / || on comparison results, or pow(vec, k) (emitted as a
-    // scalar power of the length instead of the triplex power).
-    private static readonly string[] KnownEmitterGaps =
+    // Sources whose emitted C# doesn't compile (the GPU path would fall back
+    // to the CPU interpreter for them). #1105 closed every gap the corpus and
+    // the cases below showed; a NEW gap fails the test.
+    private static readonly string[] KnownEmitterGaps = { };
+
+    // #1105 — one case per construct the emitter used to get wrong, plus the
+    // neighbouring rules (division forms, !, comparisons on vectors).
+    private static readonly string[] GapCases =
     {
-        "-z.x^2 + c",
-        "z.x > 0 && z.y < 1 ? z + c : c",
-        "pow(z, 3) + c",
-        "exp(z*0.1) + log(abs(z) + 1) + sqrt(abs(c))",
-        "qexp(z*0.1) + qlog(c + 2) + qsqrt(c + 3)",
-        "qinv(z + 2) + qconj(c)",
-        "qasinh(z*0.1) + qatan(c*0.1) + qcot(c + 2)",
+        "-z.x^2 + c", "z + 1", "1 - z", "abs(z) + 1", "z.y + c", "z - c.x",
+        "z.x > 0 && z.y < 1 ? z + c : c", "z.x > 0 || length(z) > 1 ? z*z : c",
+        "!(z.x > 0) ? z : c", "z > c ? z : c", "z ? z*z : c",
+        "pow(z, 3) + c", "pow(z, 2.5) + c", "z^length(c) + c", "pow(z.x, 2) + c",
+        "z / c + c", "1 / z.x + c", "2 / z + c", "z / 2.0 + c", "c / z + z",
+        // quaternion mode
+        "qexp(z*0.1) + qlog(c + 2)", "qinv(z + 2) + qconj(c)", "z + 1", "2 - z",
+        "z^2 + c", "z^2.5 + c", "pow(z, 3) + c", "qmul(z, z) / 2.0 + c", "z.w > 0 && z.x > 0 ? z*z + c : z",
+        "z + vec(1, 2, 3)", "1 / z + c",
     };
+
+    // Quat-mode cases are the ones after "qexp…" in GapCases.
+    private static IEnumerable<(string Src, bool Quat)> GapCaseModes()
+    {
+        bool quat = false;
+        foreach (var g in GapCases)
+        {
+            if (g.StartsWith("qexp")) quat = true;
+            yield return (g, quat);
+        }
+    }
 
     [Fact]
     public void EmittedCSharp_MatchesTheInterpreter_OnTheCorpus()
+        => RunParity(BulbLanguageGoldenTests.Corpus().Distinct().Select(s => (s, IsQuat(s))), gpu: false, minCompiled: 50);
+
+    [Fact]
+    public void GpuTargetCSharp_MatchesTheInterpreter_OnTheCorpus()
+        => RunParity(BulbLanguageGoldenTests.Corpus().Distinct().Select(s => (s, IsQuat(s))), gpu: true, minCompiled: 50);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FormerGaps_EmitCompileAndMatch(bool gpu)
+        => RunParity(GapCaseModes(), gpu, minCompiled: GapCases.Length);
+
+    // The real GPU path: emitted body → kernel source → Roslyn → ILGPU kernel
+    // load (JIT) on the preferred device (the CPU accelerator where no GPU).
+    // Before #1105 every one of these failed the Roslyn step and fell back.
+    [Fact]
+    public void FormerGaps_CompileAndLoadAsGpuKernels()
+    {
+        using var gpu = new FracturingFog.Calculators.UserBulbSandboxGpuCompiler();
+        var bad = new List<string>();
+        foreach (var (src, quat) in GapCaseModes().Distinct())
+            if (!gpu.TryCompile(src, Array.Empty<string>(), quat))
+                bad.Add($"{(quat ? "quat" : "vec")} {src}: {gpu.LastError}");
+        Assert.True(bad.Count == 0, "GPU kernel compile failed:\n" + string.Join("\n", bad));
+    }
+
+    private static void RunParity(IEnumerable<(string Src, bool Quat)> sources, bool gpu, int minCompiled)
     {
         var items = new List<(int Id, string Src, SandboxBulbExpression Expr, string Body, bool Quat)>();
         var skipped = new List<string>();
         int id = 0;
-        foreach (string src in BulbLanguageGoldenTests.Corpus().Distinct())
+        foreach (var (src, quat) in sources)
         {
             SandboxBulbExpression e;
             try { e = SandboxBulbExpression.Parse(src, Extras); } catch (FormatException) { continue; }
-            bool quat = IsQuat(src);
-            var r = Emitter.Emit(e.Root, Extras, quat);
+            var r = Emitter.Emit(e.Root, Extras, quat, gpu);
             if (!r.Ok) { skipped.Add($"{src}: {r.Error}"); continue; }
             items.Add((id++, src, e, r.Body!, quat));
         }
-        Assert.True(items.Count >= 45, $"only {items.Count} emitted; skipped: {string.Join(" | ", skipped)}");
 
-        // Compile each body on its own: a body the C# side rejects makes the
-        // GPU path fall back to the CPU interpreter (safe, just slower). Those
-        // are pinned in KnownEmitterGaps so a NEW gap fails the test.
+        // Compile each body on its own so one gap can't hide behind another.
         var compiled = new List<(int Id, string Src, SandboxBulbExpression Expr, string Body, bool Quat, MethodInfo M)>();
         var gaps = new List<string>();
-        var gapDetail = new List<string>();
         foreach (var it in items)
         {
             var errors = new List<string>();
             var t = Compile(new List<(int, string, bool)> { (it.Id, it.Body, it.Quat) }, errors);
-            if (t == null) { gaps.Add(it.Src); gapDetail.Add($"{it.Src}  =>  {it.Body}  :: {errors.FirstOrDefault()}"); continue; }
+            if (t == null)
+            {
+                if (!KnownEmitterGaps.Contains(it.Src)) gaps.Add($"{it.Src}  =>  {it.Body}  :: {errors.FirstOrDefault()}");
+                continue;
+            }
             compiled.Add((it.Id, it.Src, it.Expr, it.Body, it.Quat, t.GetMethod("S" + it.Id)!));
         }
-        var newGaps = gaps.Except(KnownEmitterGaps).ToList();
-        Assert.True(newGaps.Count == 0, "New emitter gaps:\n" + string.Join("\n", gapDetail.Where(d => newGaps.Any(g => d.StartsWith(g)))));
-        Assert.True(compiled.Count >= 35, $"only {compiled.Count} bodies compiled");
+        Assert.True(skipped.Count == 0, "Emitter refused:\n" + string.Join("\n", skipped));
+        Assert.True(gaps.Count == 0, "Emitted C# doesn't compile:\n" + string.Join("\n", gaps));
+        Assert.True(compiled.Count >= minCompiled, $"only {compiled.Count} bodies compiled");
 
         var zs = new[] { new Vec3(0.3, -0.2, 0.1), new Vec3(-0.7, 0.4, 0.25), new Vec3(1.1, 0.5, -0.6) };
         var cs = new[] { new Vec3(-0.5, 0.1, 0.2), new Vec3(0.3, -0.6, 0.45) };
