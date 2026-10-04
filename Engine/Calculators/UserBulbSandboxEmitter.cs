@@ -385,7 +385,8 @@ public static class UserBulbSandboxEmitter
                     EmitAsReal(call.Args[2], sb); sb.Append(')');
                     return SbxEmitKind.Vec;
                 case "absx": case "absy": case "absz":
-                    sb.Append(V3).Append('.').Append(char.ToUpper(call.Name[0])).Append(call.Name.AsSpan(1)).Append('(');
+                    // #1100 — Vec3.AbsX/AbsY/AbsZ (was "Absx": didn't compile, so the GPU path fell back).
+                    sb.Append(V3).Append(".Abs").Append(char.ToUpperInvariant(call.Name[3])).Append('(');
                     EmitAsVec(call.Args[0], sb); sb.Append(')');
                     return SbxEmitKind.Vec;
                 case "mod":
@@ -469,6 +470,27 @@ public static class UserBulbSandboxEmitter
                     return EmitMathOrCompwise(call.Args[0], sb, ToProperCase(call.Name), allowQuat: false);
                 case "abs":
                     return EmitMathOrCompwise(call.Args[0], sb, "Abs", allowQuat: true);
+                case "norm":
+                {
+                    // #1100 — squared length, in the interpreter's operation order
+                    // (x², dot(v, v), W²+X²+Y²+Z²). The argument text is reused,
+                    // which is safe: emitted expressions have no side effects.
+                    var arg = new StringBuilder();
+                    var k = Emit(call.Args[0], arg);
+                    string a0 = "(" + arg + ")";
+                    if (k == SbxEmitKind.Quat)
+                        sb.Append("(").Append(a0).Append(".W*").Append(a0).Append(".W + ")
+                          .Append(a0).Append(".X*").Append(a0).Append(".X + ")
+                          .Append(a0).Append(".Y*").Append(a0).Append(".Y + ")
+                          .Append(a0).Append(".Z*").Append(a0).Append(".Z)");
+                    else if (k == SbxEmitKind.Vec)
+                        sb.Append("(").Append(a0).Append(".X*").Append(a0).Append(".X + ")
+                          .Append(a0).Append(".Y*").Append(a0).Append(".Y + ")
+                          .Append(a0).Append(".Z*").Append(a0).Append(".Z)");
+                    else
+                        sb.Append("(").Append(a0).Append('*').Append(a0).Append(')');
+                    return SbxEmitKind.Real;
+                }
                 default:
                     throw new NotSupportedException($"Emit: unknown function '{call.Name}'");
             }

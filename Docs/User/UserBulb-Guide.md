@@ -72,7 +72,7 @@ absolute-value step makes the map non-smooth.
 ## Table of Contents
 
 1. [Open the Editor](#1-open-the-editor)
-2. [Step Signature](#2-step-signature)
+2. [Step Language](#2-step-language)
 3. [Vec3 API](#3-vec3-api)
 4. [Quat API (4D mode)](#4-quat-api-4d-mode)
 5. [Algebra Mode](#5-algebra-mode)
@@ -102,39 +102,64 @@ absolute-value step makes the map non-smooth.
 
 Fractal Type → **User Bulb (3D)** → Floating Menu → **Params** button (or click the gear icon in the toolbar).
 
-Modeless dialog. Auto-compiles ~500 ms after the last keystroke. Errors render in red below the editor. Camera, lighting, iter count, epsilon, bailout, Jacobian h, params, animation, color driver, lighting weights, and view knobs update without recompiling — only changes to source body / algebra / chain steps / param names trigger a fresh compile.
+Modeless dialog. Auto-compiles shortly after the last keystroke. Errors show in yellow below the editor, with the bad token selected. Camera, lighting, iter count, epsilon, bailout, Jacobian h, params, animation, color driver, lighting weights, and view knobs update without recompiling — only changes to source body / algebra / chain steps / param names trigger a fresh compile.
 
 ---
 
-## 2. Step Signature
+## 2. Step Language
 
-The compiled body is wrapped as:
+You write **one step** of the iteration: the next `z` as an expression. The
+language is the safe User Bulb DSL. Since #1100 it follows the same rules as the
+2D equation language ([Equation-Language.md](../Technical/Equation-Language.md));
+the value types are real, vec3 and quaternion.
 
-```csharp
-// Vec3 mode
-Vec3 Step(Vec3 z, Vec3 c, int n, double[] p)
-
-// Quat mode
-Quat Step(Quat z, Quat c, int n, double[] p)
-```
-
-| Param | Description |
+| Name | Meaning |
 |---|---|
-| `z` | Previous iterate. Starts at Zero on iter 0. |
+| `z` | Previous iterate (vec3, or quaternion in Quat mode). Starts at zero on iteration 0. |
 | `c` | Per-pixel constant. Vec3 in 3D mode; (px.X, px.Y, px.Z, SliceW) in Quat mode. Replaced with JuliaC in Julia mode. |
-| `n` | 0-based iteration index. |
-| `p` | Named param vector. Trailing slot reserved for global animation `t`. Each Params row exposes a bare local `double <name>`. |
+| `n` | 0-based iteration index (real). |
+| `t` | Global animation time (real). |
+| param names | Each Params row is a real variable with its name. |
+| `pi`, `e` | Constants. |
+| `.x .y .z .w` | Components (`.w` in Quat mode). |
 
-Body must `return` a Vec3 (or Quat in Quat mode):
-
-```csharp
-// Single expression form
-Vec3.Pow(z, 8) + c
-
-// Multi-statement form
-var v = Vec3.Pow(z, 8);
-return v + c;
+```bulb
+z^8 + c
 ```
+
+**Rules shared with the 2D language:**
+- `-z^2` means `-(z^2)`; write `(-z)^2` for the other reading. Bulbs saved
+  before #1100 were rewritten automatically to keep their meaning (backup:
+  `userbulbs.json.<timestamp>.bulb-language-v2.bak`).
+- `if … then … else` and the ternary `cond ? a : b`; `&& || !`; comparisons on
+  reals (`z.x > 0`, `length(z) < 2`).
+- `let name = value in body`, and statements:
+
+```bulb
+var v = boxfold(z, 1.0);
+if (length(v) < 0.5) v = v * 4.0;
+return v * 2.0 + c;
+```
+
+- Comments `//` and `/* */`; one trailing `;` is fine.
+- Errors name the spot: `Unknown function 'sni' at line 1, col 7. Did you mean 'sin'?`
+
+**3D differences:**
+- `^` on a vector is the **triplex** (Mandelbulb) power; on a quaternion it is the
+  quaternion power.
+- `abs(v)` is **componentwise** on vectors and quaternions — the fold idiom
+  (`let v = abs(z) in …`). The magnitude is `length(v)`, and `norm(v)` is the
+  squared length `dot(v, v)` (on a real, `norm(x)` = `x²`).
+- Functions: `vec triplex length norm dot cross normalize rot boxfold spherefold
+  absx absy absz mod smin pow min max clamp floor sign sin cos tan sinh cosh tanh
+  exp log sqrt abs`, and in Quat mode `qvec qmul qpow qconj qinv qexp qlog qsqrt
+  qsin qcos qtan qsinh qcosh qtanh qasin qacos qatan qasinh qacosh qatanh qcsc
+  qsec qcot qcsch qsech qcoth`.
+
+Saved bulbs from the C# era that the startup migration couldn't translate stay
+editable but don't render until rewritten in the language (#211). Sections 3–4
+below still list the C# `Vec3` / `Quat` API those bodies used; each has a
+lowercase DSL function above (`Vec3.BoxFold` → `boxfold`, `Quat.Exp` → `qexp`, …).
 
 ---
 

@@ -20,8 +20,33 @@ using FracturingFog.Abstractions.Assets;
 
 namespace FracturingFog.Models
 {
-    public sealed class UserBulbEntry
+    public sealed class UserBulbEntry : IJsonOnDeserialized
     {
+        /// <summary>#1100 — the bulb language this entry is written in. 1 =
+        /// before #1100 (-x^y meant (-x)^y); 2 = current. Entries made in code are
+        /// current; a JSON entry WITHOUT the field is version 1, and the store
+        /// upgrades it (BulbLanguageMigration, injected from Engine).</summary>
+        [JsonIgnore]
+        public int LanguageVersion { get; set; } = CurrentBulbLanguageVersion;
+
+        /// <summary>Mirror of BulbLanguageMigration.CurrentLanguageVersion (the
+        /// store can't reference Engine).</summary>
+        public const int CurrentBulbLanguageVersion = 2;
+
+        private bool _languageVersionRead;
+
+        [JsonPropertyName("LanguageVersion")]
+        public int? LanguageVersionJson
+        {
+            get => LanguageVersion;
+            set { _languageVersionRead = true; LanguageVersion = value ?? 1; }
+        }
+
+        void IJsonOnDeserialized.OnDeserialized()
+        {
+            if (!_languageVersionRead) LanguageVersion = 1;
+        }
+
         public string Name { get; set; } = string.Empty;
         public string Source { get; set; } = string.Empty;
 
@@ -71,6 +96,37 @@ namespace FracturingFog.Models
         private UserBulbStore() { }
 
         public List<UserBulbEntry> Equations { get; } = new();
+
+        /// <summary>#1100 — bulb-language upgrader (version 1 → current): returns
+        /// the rewritten text, or null when unchanged. Set by Engine
+        /// (BulbLanguageMigration.Register); while unset, legacy entries are left
+        /// unstamped so a later load still upgrades them.</summary>
+        public static Func<string?, string?>? LanguageUpgrader { get; set; }
+
+        /// <summary>#1100 — upgrade entries (source and chain steps) saved under
+        /// bulb-language version 1 so they render the same under the current
+        /// rules. With <paramref name="persist"/>, snapshots the file first
+        /// (UserDataBackup) and saves. Returns the number of texts rewritten;
+        /// entries are stamped current either way, so a second run is a no-op.</summary>
+        public int UpgradeLegacyEntries(bool persist)
+        {
+            var upgrade = LanguageUpgrader;
+            if (upgrade == null) return 0;
+            var legacy = Equations.FindAll(x => x.LanguageVersion < UserBulbEntry.CurrentBulbLanguageVersion);
+            if (legacy.Count == 0) return 0;
+            if (persist) UserDataBackup.SnapshotBeforeMigration(EquationsFile, "bulb-language-v2");
+            int changed = 0;
+            foreach (var e in legacy)
+            {
+                if (upgrade(e.Source) is { } src) { e.Source = src; changed++; }
+                if (e.Chain != null)
+                    foreach (var st in e.Chain)
+                        if (upgrade(st.Source) is { } s2) { st.Source = s2; changed++; }
+                e.LanguageVersion = UserBulbEntry.CurrentBulbLanguageVersion;
+            }
+            if (persist) Save();
+            return changed;
+        }
 
         private static string SettingsDir => AppDataPaths.Root;
 
@@ -124,6 +180,7 @@ namespace FracturingFog.Models
                 }
                 else
                 {
+                    UpgradeLegacyEntries(persist: true);   // #1100
                     // Pre-existing userbulbs.json may be missing newly-shipped
                     // built-ins (Phase B.3 hybrids) and/or still hold the
                     // pre-Phase-2b raw-C# built-in bodies. Merge/repair, then
@@ -612,6 +669,7 @@ namespace FracturingFog.Models
                     Equations[i].Source = source ?? string.Empty;
                     Equations[i].Chain = chainCopy;
                     Equations[i].Settings = settings;
+                    Equations[i].LanguageVersion = UserBulbEntry.CurrentBulbLanguageVersion;   // #1100
                     Save();
                     return Equations[i];
                 }

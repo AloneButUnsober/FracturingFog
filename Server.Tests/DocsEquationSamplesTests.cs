@@ -104,6 +104,45 @@ public sealed class DocsEquationSamplesTests
         Assert.True(bad.Count == 0, "Doc samples that don't parse:\n" + string.Join("\n", bad));
     }
 
+    /// <summary>#1100 — User Bulb 3D samples: ```bulb (one step, statements
+    /// allowed) and ```bulbs (one per line), parsed with the bulb language.</summary>
+    public static IEnumerable<(string Where, string Text)> BulbDocSamples()
+    {
+        string root = RepoRoot();
+        foreach (string file in Directory.GetFiles(Path.Combine(root, "Docs"), "*.md", SearchOption.AllDirectories))
+        {
+            string rel = Path.GetRelativePath(root, file);
+            var lines = File.ReadAllLines(file);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var m = Regex.Match(lines[i], @"^\s*```(bulbs?)\s*$");
+                if (!m.Success) continue;
+                int start = i + 1, j = start;
+                while (j < lines.Length && !Regex.IsMatch(lines[j], @"^\s*```\s*$")) j++;
+                if (m.Groups[1].Value == "bulb")
+                    yield return ($"{rel}:{start}", string.Join("\n", lines[start..j]));
+                else
+                    for (int k = start; k < j; k++)
+                        if (lines[k].Trim().Length > 0 && !lines[k].Trim().StartsWith("//")) yield return ($"{rel}:{k + 1}", lines[k]);
+                i = j;
+            }
+        }
+    }
+
+    [Fact]
+    public void EveryBulbDocSample_Parses()
+    {
+        var samples = BulbDocSamples().ToList();
+        Assert.True(samples.Count >= 2, $"only {samples.Count} tagged bulb samples found");
+        var bad = new List<string>();
+        foreach (var (where, text) in samples)
+        {
+            try { SandboxBulbExpression.Parse(text, new[] { "t" }); }
+            catch (FormatException ex) { bad.Add($"{where}: {text.Trim()}  →  {ex.Message}"); }
+        }
+        Assert.True(bad.Count == 0, "Bulb doc samples that don't parse:\n" + string.Join("\n", bad));
+    }
+
     [Fact]
     public void EveryHelpEquationSnippet_Parses()
     {

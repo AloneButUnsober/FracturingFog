@@ -1,6 +1,6 @@
 # User Bulb 3D and the equation language: scope (#1091)
 
-Status: **decision recorded** (#1091). This follows on from #937, which unified the
+Status: **decision recorded** (#1091); **#1100 implemented** (parser surface, `norm`, migration). This follows on from #937, which unified the
 **2D** equation language (spec: [Equation-Language.md](Equation-Language.md)). This
 note decides how the **User Bulb 3D** language relates to it. The agreed work is filed as #1100, #1101 and #1102 ([Follow-ups](#follow-ups)).
 
@@ -26,7 +26,7 @@ Saved bulbs are protected by the same version-stamp-and-rewrite migration as #10
 | Parser | `Equations/SandboxExpression.cs` | `Engine/Models/SandboxBulbExpression.cs` (≈1000 lines), plus `SandboxBulbChain` |
 | Value kinds | real, complex | real, vec3, quat |
 | `-x^y` | `-(x^y)` (language version 2) | `(-x)^y`: `pow_expr := unary ("^" pow_expr)?`, the 2D version-1 rule |
-| Unary `+` | yes | no |
+| Unary `+` | yes | yes |
 | `if … then … else` | yes | no (ternary only) |
 | `let`, `?:`, `&& \|\| !`, comments | yes | yes |
 | Statements (`var x = …;`, guards, `return`) | parsed natively | **not accepted in the editor.** Only the one-time startup migration (`UserBulbDslMigration` → `UserBulbSourcePreprocessor`) desugars saved C#-style bodies to `let` / ternary |
@@ -53,7 +53,6 @@ The built-in examples and the bulb test corpus contain no `-x^y` either.
 `SandboxBulbExpression`'s grammar is the 2D version-1 grammar plus member access.
 Their parsing differs only in:
 - the `^` / unary-minus rule;
-- unary `+`;
 - `if … then … else`;
 - native statements;
 - the error format.
@@ -122,7 +121,7 @@ The current data needs no rewrite; the migration is a safety net for shared and 
 
 | Issue | Work | Depends on |
 |---|---|---|
-| #1100 | Bulb parser surface alignment: `-x^y` = `-(x^y)` with the versioned migration; unary `+`; `if … then … else`; native statements; `norm`; line/col errors with *Did you mean*. Golden fingerprint and emitter tests in `Server.Tests` first | — |
+| #1100 | Bulb parser surface alignment: `-x^y` = `-(x^y)` with the versioned migration; `if … then … else`; native statements; `norm`; line/col errors with *Did you mean*. Golden fingerprint and emitter tests in `Server.Tests` first | — |
 | #1101 | *(optional)* Shared equation front end in `Equations/`: one syntax tree, 2D and 3D binders, `Sbx3Node` unchanged | #1100 |
 | #1102 | User Bulb editor and help alignment: quick fix (Ctrl+.), shared grammar help plus a 3D supplement | #1100 |
 

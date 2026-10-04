@@ -639,6 +639,7 @@ namespace FracturingFog.Hosting
             // persisted as DSL; untranslatable ones are left editable.
             try { FracturingFog.UserEquationDslMigration.Run(UserEquationStore.Instance); } catch { }
             try { SandboxEquationStore.Instance.Load(); }  catch { }
+            FracturingFog.Models.BulbLanguageMigration.Register();   // #1100 — before the first bulb load
             try { UserBulbStore.Instance.Load(); }         catch { }
             // #27 / #211 — convert saved C# Vec3/Quat bulbs to the safe DSL once
             // the store is loaded (backup-guarded, idempotent). Mirrors the

@@ -361,8 +361,8 @@ namespace FracturingFog.Hosting
                 }
                 else if (!string.IsNullOrWhiteSpace(region.UserBulbSource))
                 {
-                    source = region.UserBulbSource;
-                    p.UserBulbSource = region.UserBulbSource;
+                    source = region.EffectiveUserBulbSource();   // #1100
+                    p.UserBulbSource = source;
                     p.UserBulbName = region.UserBulbName;
                 }
 
@@ -752,6 +752,8 @@ namespace FracturingFog.Hosting
                 SandboxName      = state.FractalType == FractalType.Sandbox      ? p?.SandboxName      : null,
                 UserBulbName     = state.FractalType == FractalType.UserBulb     ? p?.UserBulbName     : null,
                 UserBulbSource   = state.FractalType == FractalType.UserBulb     ? p?.UserBulbSource   : null,
+                UserBulbLanguageVersion = state.FractalType == FractalType.UserBulb && !string.IsNullOrWhiteSpace(p?.UserBulbSource)
+                    ? BulbLanguageMigration.CurrentLanguageVersion : null,   // #1100
                 UserBulbCameraDistance = state.FractalType == FractalType.UserBulb ? p?.UserBulbCameraDistance ?? 0 : 0,
                 UserBulbCameraTheta    = state.FractalType == FractalType.UserBulb ? p?.UserBulbCameraTheta    ?? 0 : 0,
                 UserBulbCameraPhi      = state.FractalType == FractalType.UserBulb ? p?.UserBulbCameraPhi      ?? 0 : 0,
@@ -931,6 +933,7 @@ namespace FracturingFog.Hosting
             SandboxName      = src.SandboxName,
             UserBulbName     = src.UserBulbName,
             UserBulbSource   = src.UserBulbSource,
+            UserBulbLanguageVersion = src.UserBulbLanguageVersion,   // #1100
             UserBulbCameraDistance = src.UserBulbCameraDistance,
             UserBulbCameraTheta    = src.UserBulbCameraTheta,
             UserBulbCameraPhi      = src.UserBulbCameraPhi,

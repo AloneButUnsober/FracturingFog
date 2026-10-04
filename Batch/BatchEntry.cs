@@ -73,6 +73,7 @@ namespace FracturingFog.Batch
             // startup's DSL migrations (which write) are deliberately not run.
             try { UserEquationStore.Instance.Load(); } catch { }
             try { SandboxEquationStore.Instance.Load(); } catch { }
+            FracturingFog.Models.BulbLanguageMigration.Register();   // #1100 — before the first bulb load
             try { UserBulbStore.Instance.Load(); } catch { }
             // Scene mode also needs the scene + animation libraries so --scene
             // names and shot-attached animations resolve.
