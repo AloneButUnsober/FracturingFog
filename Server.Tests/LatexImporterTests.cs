@@ -8,6 +8,7 @@
 
 using FracturingFog.CalculatorGen;
 using FracturingFog.CalculatorGen.Parser;
+using FracturingFog.Models;
 using Xunit;
 
 namespace FracturingFog.Server.Tests;
@@ -30,11 +31,14 @@ public sealed class LatexImporterTests
     [InlineData("min(z, c) + c")]
     [InlineData("clamp(z, 0, 1) + c")]
     [InlineData("if abs(z) > 2 then z^2 + c else z*z - c")]
+    [InlineData("if norm(z) > 4 then z^2 + c else z*z - c")]
     public void Roundtrips_through_exporter(string dsl)
     {
         string latex = AstLatexPrinter.Print(EquationParser.Parse(dsl));
         var r = LatexImporter.Import(latex);
         Assert.True(r.Ok, r.Error);
+        // #1089 — the editor takes the import as-is: it must be unified syntax.
+        Assert.True(EquationLanguage.TryParse(r.Dsl, out _, out string? langErr), langErr);
         Assert.Equal(Canon(dsl), Canon(r.Dsl));
     }
 
@@ -50,6 +54,8 @@ public sealed class LatexImporterTests
     {
         var r = LatexImporter.Import(latex);
         Assert.True(r.Ok, r.Error);
+        // #1089 — the editor takes the import as-is: it must be unified syntax.
+        Assert.True(EquationLanguage.TryParse(r.Dsl, out _, out string? langErr), langErr);
         Assert.Equal(Canon(equivalentDsl), Canon(r.Dsl));
     }
 

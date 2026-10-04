@@ -9,8 +9,8 @@
 //     UseCalcGen only;
 //   - a recalled region (live, batch, scene, video: ApplyHeadlessParams /
 //     UserEquationEntry.ApplyTo) carries source AND flag, replacing stale state;
-//   - the flag never changes the interpreted image;
-//   - the two-tab editor (until #1089) maps its tabs onto the single source.
+//   - the flag never changes the interpreted image.
+// The editor on top of this model is tested in UserEquationEditor1089Tests.
 // Runs under the test data-root redirect (FractalRegionLibraryCollection).
 
 using System.IO;
@@ -19,7 +19,6 @@ using FracturingFog;
 using FracturingFog.Abstractions;
 using FracturingFog.Models;
 using FracturingFog.Security;
-using FracturingFog.UI.Avalonia.ViewModels;
 using Xunit;
 
 namespace FracturingFog.Server.Tests;
@@ -146,86 +145,5 @@ public sealed class UserEquationSingleSource1088Tests
             Assert.True(r.UseCalcGen);
         }
         finally { store.Remove(name); }
-    }
-
-    // ── Two-tab editor (until #1089) on the single source ──
-
-    private static readonly object s_rxLock = new();
-    private static bool s_rxReady;
-
-    // The view-model uses WhenAnyValue; the app initialises ReactiveUI through
-    // Avalonia, a test has to do it itself (once per process).
-    private static UserEquationViewModel NewEditor(FractalParameters p)
-    {
-        lock (s_rxLock)
-        {
-            if (!s_rxReady)
-            {
-                try { ReactiveUI.Builder.RxAppBuilder.CreateReactiveUIBuilder().BuildApp(); }
-                catch (System.InvalidOperationException) { /* already initialised elsewhere */ }
-                s_rxReady = true;
-            }
-        }
-        return new UserEquationViewModel(p);
-    }
-
-    [Fact]
-    public void Editor_OpensOnTheFlagsTab_WithTheSource()
-    {
-        var p = new FractalParameters { UserEquationSource = "z^3 + c", UserEquationUseCalcGen = true };
-        var vm = NewEditor(p);
-        Assert.Equal(1, vm.ActiveTabIndex);
-        Assert.Equal("z^3 + c", vm.DslSource);
-        Assert.Equal("z^3 + c", vm.Source);   // equation language: both tabs read it
-
-        var q = new FractalParameters { UserEquationSource = "return Complex.Pow(z, 2) + c;" };
-        var vm2 = NewEditor(q);
-        Assert.Equal(0, vm2.ActiveTabIndex);
-        Assert.Equal("return Complex.Pow(z, 2) + c;", vm2.Source);
-        Assert.Equal("z*z + c", vm2.DslSource);   // C#-style text stays off the CalcGen tab
-        Assert.False(q.UserEquationUseCalcGen);
-    }
-
-    [Fact]
-    public void Editor_TabSwitch_PublishesThatTabAsTheSource()
-    {
-        var p = new FractalParameters { UserEquationSource = "z*z + c" };
-        var vm = NewEditor(p);
-        vm.DslSource = "z^3 + c";                 // inactive tab: source unchanged
-        Assert.Equal("z*z + c", p.UserEquationSource);
-        Assert.False(p.UserEquationUseCalcGen);
-
-        vm.ActiveTabIndex = 1;
-        Assert.Equal("z^3 + c", p.UserEquationSource);
-        Assert.True(p.UserEquationUseCalcGen);
-
-        vm.DslSource = "z^4 + c";                 // active tab: source follows
-        Assert.Equal("z^4 + c", p.UserEquationSource);
-
-        vm.ActiveTabIndex = 0;
-        Assert.Equal("z*z + c", p.UserEquationSource);
-        Assert.False(p.UserEquationUseCalcGen);
-    }
-
-    [Fact]
-    public void Editor_SelectingALegacyDslEntry_LoadsIntoTheCalcGenTab()
-    {
-        var store = LoadLegacy();
-        try
-        {
-            var p = new FractalParameters { UserEquationSource = "z*z + c" };
-            var vm = NewEditor(p);
-            vm.SelectedSavedName = "SS1088_Dsl";
-            Assert.Equal(1, vm.ActiveTabIndex);
-            Assert.Equal("z^3 + c", vm.DslSource);
-            Assert.Equal("z^3 + c", p.UserEquationSource);
-            Assert.True(p.UserEquationUseCalcGen);
-
-            vm.SelectedSavedName = "SS1088_Live";
-            Assert.Equal(0, vm.ActiveTabIndex);
-            Assert.Equal("z*z + c", p.UserEquationSource);
-            Assert.False(p.UserEquationUseCalcGen);
-        }
-        finally { foreach (var n in new[] { "SS1088_Dsl", "SS1088_Live", "SS1088_NoKind" }) store.Remove(n); }
     }
 }

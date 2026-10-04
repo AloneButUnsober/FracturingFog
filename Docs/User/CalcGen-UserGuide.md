@@ -82,7 +82,7 @@ render is.
 
 | | **Live interpreter** | **CalcGen compiler** |
 |---|---|---|
-| Where | The editor's live preview + the `User Equation` fractal type | The **DSL** tab → **Compile & Load** / **Generate via CalcGen** |
+| Where | The editor's live preview + the `User Equation` fractal type | The **CalcGen** toggle → **Compile & Load** / **Generate via CalcGen** |
 | How it runs | Interprets the equation directly, one pixel at a time | Generates typed C#, compiles it, and hot-loads a real calculator |
 | Speed | Good for authoring; scalar only | Fast: scalar **+ AVX2 SIMD + GPU** |
 | Deep zoom | Shallow (roughly to the limit of `double`) | **Deep** — perturbation, BLA, Series Approximation, DD/QD high precision |
@@ -104,26 +104,27 @@ when you want speed or a deep dive, **Compile & Load** through CalcGen.
 
 > [!NOTE]
 > Older versions accepted raw C# that was compiled with full .NET access. That
-> path has been retired for safety. The `User Equation` tab still *accepts*
-> C#-style text (`return z*z + c;`) and automatically translates it to the DSL
-> for you (see [§12](#12-migrating-c-equations-to-the-dsl)), but the DSL is now
-> the real language underneath. New equations should be written directly in DSL.
+> path has been retired for safety. The editor still *accepts* C#-style text
+> (`return Complex.Pow(z, 2) + c;`), translates it for rendering, and offers the
+> converted form as a quick fix (**Ctrl+.**; see
+> [§12](#12-migrating-c-equations-to-the-dsl)). The DSL is the real language
+> underneath; write new equations in it directly.
 
 ---
 
 ## 3. The editor at a glance
 
 Open it with toolbar **Type → User Equation**, then **Params**. The editor has
-two input tabs and a live analysis panel.
+**one equation box**, a **CalcGen** toggle and a live analysis panel (#1089).
 
 | Control | What it does |
 |---|---|
-| **User Equation** tab | Accepts DSL *or* C#-style (`return z*z + c;`). Runs live on the interpreter and auto-renders as you type. C# is translated to DSL automatically. |
-| **DSL** tab | Bare DSL (`z*z + c`). Feeds the CalcGen buttons. |
-| **Compile & Load** | CalcGen-compiles the DSL and swaps it onto the live render (unlocks SIMD / GPU / deep zoom / normals). |
-| **Compile + Save** | The same, and stores the equation in your library. |
+| **Equation box** | The equation (`z*z + c`). The interpreter renders it live as you type (after a short pause). A typo is highlighted with a *Did you mean* fix; C#-style text is accepted and **Ctrl+.** converts it. Errors show in yellow. |
+| **CalcGen** toggle | Off: the interpreter only. On: shows the CalcGen actions below, their compile state (*Not compiled* → *Compiling…* → *Compiled* / *Compile failed*), and what CalcGen will and won't accelerate for this equation (perturbation, series approximation, DE; seed and *Bail if* are interpreter-only). Saved with the equation. The interpreter keeps rendering every edit either way. |
+| **Compile & Load** | CalcGen-compiles the equation in the background and swaps it onto the live render when done (unlocks SIMD / GPU / deep zoom / normals). An edit afterwards returns to the interpreter. |
+| **Compile + Save** | The same, and keeps the generated calculator so it reloads on the next launch. |
 | **Generate via CalcGen** | Writes `Calculators/Generated/{Name}Calculator.cs` for a permanent, build-time calculator. |
-| **Validate for CalcGen** | Parses without rendering — tells you whether the DSL compiles and what paths it will support. |
+| **Paste LaTeX… / Paste MathML…** | Converts math from the clipboard into an equation. |
 | **Equation Guide** | Opens this document. |
 | **Rotation°** | Rotates the sampling plane for display only; the equation is unchanged. |
 | **Escape r** | The bailout radius the orbit must exceed to count as escaped (`0` = automatic default). Lower it for transcendental maps whose orbits stay small — see [§11](#11-orbit-controls--escape-radius-z-seeding-julia-convergence). |
@@ -654,7 +655,7 @@ and the normals come from the numeric path — expected for this map.
 
 > [!TIP]
 > **Smoke-test drill for any pasted forum equation:** (1) paste the step into the
-> **DSL** tab; (2) if it renders solid, set `Escape r = 2`; (3) if it uses `1/z`,
+> equation box; (2) if it renders solid, set `Escape r = 2`; (3) if it uses `1/z`,
 > `1/…`, or `log`/`sqrt` near the origin, set `z₀ seed = c` to move off the pole;
 > (4) if it is a Newton/root map, add `Converge-if: abs(z - prev) < 0.0001` with
 > `z₀ seed = c`. Those four steps recover the large majority of forum maps.
@@ -663,8 +664,8 @@ and the normals come from the numeric path — expected for this map.
 
 ## 12. Migrating C# equations to the DSL
 
-The `User Equation` tab still accepts C#-style text and translates it
-automatically; the table below is the exact mapping so you can convert by hand or
+The editor still accepts C#-style text, translates it automatically, and offers
+the converted form as a quick fix (**Ctrl+.**); the table below is the exact mapping so you can convert by hand or
 understand what the translator did. **Write new equations in DSL directly.**
 
 | C# form | DSL form |
@@ -710,7 +711,7 @@ z - (z*z*z - 1)/(3*z*z)
 
 ## 13. The Cookbook
 
-Each recipe is a complete equation you can paste into the **DSL** tab. Grouped by
+Each recipe is a complete equation you can paste into the equation box. Grouped by
 family; every one is DSL (no C#).
 
 ### 13.1 The Mandelbrot / Multibrot family (deep-zoomable)
@@ -909,10 +910,10 @@ sin(1/z) + c                  # simpler pole map             (seed: c, Escape r:
 ### Authoring loop
 
 1. **Type → User Equation**, then **Params**.
-2. Type in the **User Equation** tab (DSL or C#-style) — it renders live.
-3. When you like it, switch to the **DSL** tab, click **Validate for CalcGen** to
-   confirm it compiles and see which paths it supports, then **Compile & Load**
-   for the fast/deep engine.
+2. Type the equation (DSL, or C#-style that **Ctrl+.** converts) — it renders live.
+3. When you like it, turn on **CalcGen**: the report line says whether it
+   compiles and which paths it supports. Then **Compile & Load** for the
+   fast/deep engine.
 4. **Compile + Save** (or **Save…**) to store it in your library
    (`%APPDATA%\FracturingFog\userequations.json`).
 5. **Promote to fractal list** to surface it in the *Type* dropdown next launch.

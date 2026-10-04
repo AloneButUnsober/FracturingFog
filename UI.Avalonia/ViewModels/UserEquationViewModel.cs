@@ -21,45 +21,42 @@ using ReactiveUI;
 namespace FracturingFog.UI.Avalonia.ViewModels;
 
 /// <summary>
-/// Avalonia port of <c>UserEquationDialog</c>. The editor surface is split into
-/// two tabs:
-///   Tab 0 "User Equation" — C#-style body, translated to the DSL and run on
-///                           the safe interpreter by UserEquationCalculator
-///                           (no Roslyn since #27 Phase 3; debounced 1200 ms).
-///   Tab 1 "DSL"           — bare CalcGen DSL. Live-validated through
-///                           EquationParser; headless / poster renders run it on
-///                           the interpreter (#745, #1085); Compile & Load swaps
-///                           in the CalcGen-compiled calculator.
+/// The User Equation editor (#1089): ONE source box in the equation language
+/// plus a <b>CalcGen</b> toggle. Replaces the two-tab notebook (C#-style "User
+/// Equation" + "DSL"); #1088 already collapsed the data model to one source
+/// (<see cref="FractalParameters.UserEquationSource"/>) and a flag
+/// (<see cref="FractalParameters.UserEquationUseCalcGen"/>).
 ///
-/// Debounce was 500 ms → 1200 ms → 1800 ms. The error span used to be
-/// applied to the TextBox's <c>SelectionStart/End</c> as soon as it was
-/// produced; if validation fired while the user was still typing, the next
-/// keystroke replaced the selected text. Two fixes are now in place:
-///   1) The view defers applying the selection until the editor loses focus
-///      (see <c>UserEquationView.ApplyErrorSpan</c> / <c>FlushPending</c>).
-///      Status-bar text still updates immediately for live feedback.
-///   2) Debounce raised to 1800 ms so the validator does less work during
-///      bursts of typing.
-/// With (1) in place (2) is no longer strictly necessary, but the longer
-/// window cuts CPU spent on partial-source parses.
+///   CalcGen off — the safe interpreter renders the source live on edit.
+///   CalcGen on  — the interpreter still renders every edit (the flag never
+///                 changes the image), and Compile &amp; Load / Compile + Save /
+///                 Generate accelerate it. The Roslyn compile runs off the UI
+///                 thread with a visible state (<see cref="CompileState"/>:
+///                 idle → compiling → compiled / failed) so it never looks like
+///                 a hang; <see cref="CalcGenReport"/> says what CalcGen will
+///                 and won't accelerate.
 ///
-/// Save/Delete/Promote/Compile/Generate sit ABOVE the TabControl and route to
-/// the active tab. #1088 — the parameters carry ONE source plus a "use CalcGen"
-/// flag (<see cref="FractalParameters.UserEquationUseCalcGen"/>); the two tab
-/// buffers are editor-local until the single editor (#1089). The DSL tab is the
-/// flag on; the active tab's text is the source. Saved entries carry the flag
-/// (<see cref="UserEquationEntry.UseCalcGen"/>) so they restore into their tab.
+/// C#-style text (<c>return Complex.Pow(z, 2) + c;</c>) is no longer a mode but
+/// is still accepted, e.g. on paste: it is translated for rendering, and the
+/// Ctrl+. quick fix (<see cref="SuggestedFix"/>) offers the converted form.
 ///
-/// Host wires the same five callbacks as before:
+/// Edits are debounced (1800 ms) before they render / validate. An error span
+/// is applied to the editor's selection only when it is not focused (see
+/// <c>UserEquationView.ApplyErrorSpan</c>), so typing is never clobbered.
+///
+/// Host callbacks:
 ///   <see cref="CompileRequested"/>   — recompile current source (interpreter)
 ///   <see cref="RenderRequested"/>    — re-render only (rotation changed)
 ///   <see cref="PromotionChanged"/>   — refresh main fractal-type dropdown
 ///   <see cref="NamePromptRequested"/>— ask user for a name on Save…
 ///   <see cref="ConfirmDeleteRequested"/>— confirm before deleting
-///   <see cref="HotLoadRequested"/>   — run CalcGen → Roslyn → swap onto pipeline
+///   <see cref="HotLoadRequested"/>   — CalcGen → Roslyn → swap onto pipeline (async)
 /// </summary>
 public sealed class UserEquationViewModel : ViewModelBase
 {
+    /// <summary>#1089 — state of the CalcGen compile, shown next to its buttons.</summary>
+    public enum CalcGenCompileState { Idle, Compiling, Compiled, Failed }
+
     private readonly FractalParameters _params;
     private readonly System.Reactive.Disposables.SerialDisposable _debounce = new();
     private bool _loadingNamedEquation;
@@ -69,14 +66,10 @@ public sealed class UserEquationViewModel : ViewModelBase
         ArgumentNullException.ThrowIfNull(parameters);
         _params = parameters;
 
-        // #1088 — one source + flag: the flag picks the tab, the source fills it.
-        // The other tab starts from the same equation when it is plain equation
-        // language (both tabs read it), else from its default.
-        _activeTabIndex = parameters.UserEquationUseCalcGen ? 1 : 0;
-        string? src = string.IsNullOrWhiteSpace(parameters.UserEquationSource) ? null : parameters.UserEquationSource;
-        string? shared = src is not null && EquationLanguage.TryParse(src, out _, out _) ? src : null;
-        _source = _activeTabIndex == 0 ? src ?? "return z*z + c;" : shared ?? "return z*z + c;";
-        _dslSource = _activeTabIndex == 1 ? src ?? "z*z + c" : shared ?? "z*z + c";
+        _useCalcGen = parameters.UserEquationUseCalcGen;
+        _source = string.IsNullOrWhiteSpace(parameters.UserEquationSource)
+            ? "z*z + c"
+            : parameters.UserEquationSource;
         _rotationDegrees = Math.Clamp(parameters.UserEquationRotationDegrees, -360, 360);
 
         SavedNames = new ObservableCollection<string>();
@@ -91,22 +84,21 @@ public sealed class UserEquationViewModel : ViewModelBase
         RotPlus90Command = ReactiveCommand.Create(() => BumpRotation(90.0));
         RotMinus90Command = ReactiveCommand.Create(() => BumpRotation(-90.0));
         RotResetCommand = ReactiveCommand.Create(() => SetRotation(0.0));
-        GenerateViaCalcGenCommand = ReactiveCommand.Create(OnGenerateViaCalcGen);
-        HotLoadViaCalcGenCommand = ReactiveCommand.Create(OnHotLoadViaCalcGen);
+        // #1089 — the CalcGen actions need the toggle on and no compile in flight.
+        var canCalcGen = this.WhenAnyValue(x => x.UseCalcGen, x => x.IsCompiling, (on, busy) => on && !busy);
+        GenerateViaCalcGenCommand = ReactiveCommand.Create(OnGenerateViaCalcGen, canCalcGen);
+        HotLoadViaCalcGenCommand = ReactiveCommand.CreateFromTask(OnHotLoadViaCalcGenAsync, canCalcGen);
         // Wave 2.3 — Persist + Hot-Load: writes generated source under
         // %LOCALAPPDATA%/FracturingFog/UserCalculators/, then hot-loads it.
         // Host scans the dir at startup so persisted calculators survive
         // a restart with no rebuild.
-        HotLoadAndPersistCommand = ReactiveCommand.Create(OnHotLoadAndPersist);
+        HotLoadAndPersistCommand = ReactiveCommand.CreateFromTask(OnHotLoadAndPersistAsync, canCalcGen);
         ApplyFixCommand = ReactiveCommand.Create(OnApplyFix,
             this.WhenAnyValue(x => x.SuggestedFix).Select(f => !string.IsNullOrEmpty(f)));
         // Docs were re-rooted under User/ + Technical/ — see Docs/Documentation-Plan.md.
-        OpenUserEquationHelpCommand = ReactiveCommand.Create(() =>
-            HelpRequested?.Invoke("User/CalcGen-UserGuide.md", "User Equation editor",
-                                  "CalcGen Help — User Equation tab"));
-        OpenDslHelpCommand = ReactiveCommand.Create(() =>
-            HelpRequested?.Invoke("User/CalcGen-UserGuide.md", "Grammar at a glance",
-                                  "CalcGen Help — DSL grammar"));
+        OpenEditorHelpCommand = ReactiveCommand.Create(() =>
+            HelpRequested?.Invoke("User/CalcGen-UserGuide.md", "The editor at a glance",
+                                  "CalcGen Help — User Equation editor"));
         OpenCalcGenHelpCommand = ReactiveCommand.Create(() =>
             HelpRequested?.Invoke("User/CalcGen-UserGuide.md", null, "CalcGen — User Guide"));
         OpenEquationGuideCommand = ReactiveCommand.Create(() =>
@@ -115,43 +107,13 @@ public sealed class UserEquationViewModel : ViewModelBase
         OpenCookbookCommand = ReactiveCommand.Create(OnOpenCookbook);
         OpenMorphCommand = ReactiveCommand.Create(OnOpenMorph);
 
-        PushActiveSource();
+        _params.UserEquationSource = _source;
+        _params.UserEquationUseCalcGen = _useCalcGen;
 
-        // Seed the live-preview panel from current source so the user sees
-        // AST + dz/dc + flags as soon as the dialog opens, without waiting
-        // 1.8 s for the typing debounce. UE tab pipes through the C#→DSL
-        // preprocessor first; failures stay silent (debounce path will
-        // surface the parse error in the status bar).
-        SeedPreviewFromCurrentTab();
-    }
-
-    private void SeedPreviewFromCurrentTab()
-    {
-        try
-        {
-            string raw = _activeTabIndex == 1 ? (_dslSource ?? string.Empty) : (_source ?? string.Empty);
-            if (string.IsNullOrWhiteSpace(raw)) return;
-            string equation = _activeTabIndex == 1
-                ? raw.Trim()
-                : EquationPreprocessor.Preprocess(raw, out PreprocessDiagnostic? _);
-            if (!string.IsNullOrWhiteSpace(equation)) UpdatePreview(equation);
-        }
-        catch { /* preview is best-effort */ }
-    }
-
-    // ── Validation (Tab 0 only) ──
-    private bool _validateForCalcGen = true;
-    public bool ValidateForCalcGen
-    {
-        get => _validateForCalcGen;
-        set
-        {
-            this.RaiseAndSetIfChanged(ref _validateForCalcGen, value);
-            // Re-run whatever is current — when turning OFF, clear any
-            // stale error span; when turning ON, immediately validate.
-            if (!value) ClearErrorSpan();
-            if (_activeTabIndex == 0) ValidateCalcGenForCurrentSource();
-        }
+        // Validate now (no render) so the status, quick fix, CalcGen report and
+        // live preview show as soon as the dialog opens, without waiting for
+        // the typing debounce.
+        Validate();
     }
 
     // ── Suggested fix (one-click / Ctrl+. replacement for the error span) ──
@@ -166,26 +128,25 @@ public sealed class UserEquationViewModel : ViewModelBase
     // ── Error span (consumed by code-behind to set TextBox.Selection) ──
     private int _errorSpanStart;
     private int _errorSpanLength;
-    /// <summary>Start of the offending substring in the active tab's source.
+    /// <summary>Start of the offending substring in <see cref="Source"/>.
     /// Combined with <see cref="ErrorSpanLength"/> for selection-based
     /// highlight. 0 / 0 means "no error span" — code-behind should clear
     /// any prior selection.</summary>
     public int ErrorSpanStart { get => _errorSpanStart; private set => this.RaiseAndSetIfChanged(ref _errorSpanStart, value); }
     public int ErrorSpanLength { get => _errorSpanLength; private set => this.RaiseAndSetIfChanged(ref _errorSpanLength, value); }
 
-    /// <summary>Raised after error-span changes so the view can apply the
-    /// span to the correct TextBox for the active tab. Argument is the
-    /// tab the span applies to (0 = UserEquation, 1 = Dsl). Span values
-    /// are read from <see cref="ErrorSpanStart"/> / <see cref="ErrorSpanLength"/>.</summary>
-    public event Action<int>? ErrorSpanChanged;
+    /// <summary>Raised after the error span changes so the view can apply it
+    /// to the editor. Span values are read from <see cref="ErrorSpanStart"/> /
+    /// <see cref="ErrorSpanLength"/>.</summary>
+    public event Action? ErrorSpanChanged;
 
-    private void SetErrorSpan(int tab, int start, int length, string? fix = null)
+    private void SetErrorSpan(int start, int length, string? fix = null)
     {
         ErrorSpanStart = Math.Max(0, start);
         ErrorSpanLength = Math.Max(0, length);
         SuggestedFix = fix;
         this.RaisePropertyChanged(nameof(HasSuggestedFix));
-        ErrorSpanChanged?.Invoke(tab);
+        ErrorSpanChanged?.Invoke();
     }
 
     private void ClearErrorSpan()
@@ -197,101 +158,111 @@ public sealed class UserEquationViewModel : ViewModelBase
         ErrorSpanLength = 0;
         SuggestedFix = null;
         this.RaisePropertyChanged(nameof(HasSuggestedFix));
-        ErrorSpanChanged?.Invoke(_activeTabIndex);
+        ErrorSpanChanged?.Invoke();
     }
 
-    // Splice the current SuggestedFix into the active tab's source at the
-    // tracked ErrorSpan. Re-validates immediately so the status flips
-    // green/red without waiting for the debounce. No-op when no fix or
-    // when the span is zero-length (defensive — UI hides the button in
-    // that case anyway).
+    // Splice the current SuggestedFix into the source at the tracked
+    // ErrorSpan, then commit immediately (render + validate) so the status
+    // flips without waiting for the debounce. For C#-style text the span is
+    // the whole source and the fix is its converted form.
     private void OnApplyFix()
     {
         if (string.IsNullOrEmpty(_suggestedFix)) return;
         if (_errorSpanLength <= 0) return;
-        if (_activeTabIndex == 1)
-        {
-            string src = _dslSource ?? string.Empty;
-            if (_errorSpanStart < 0 || _errorSpanStart + _errorSpanLength > src.Length) return;
-            string next = src.Substring(0, _errorSpanStart) + _suggestedFix +
-                          src.Substring(_errorSpanStart + _errorSpanLength);
-            DslSource = next;
-            _debounce.Disposable = null;
-            ValidateDslNow();
-        }
-        else
-        {
-            string src = _source ?? string.Empty;
-            if (_errorSpanStart < 0 || _errorSpanStart + _errorSpanLength > src.Length) return;
-            string next = src.Substring(0, _errorSpanStart) + _suggestedFix +
-                          src.Substring(_errorSpanStart + _errorSpanLength);
-            Source = next;
-            _debounce.Disposable = null;
-            _params.UserEquationSource = next;
-            _params.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive;
-            CompileRequested?.Invoke();
-            if (_validateForCalcGen) ValidateCalcGenForCurrentSource();
-        }
+        string src = _source ?? string.Empty;
+        if (_errorSpanStart < 0 || _errorSpanStart + _errorSpanLength > src.Length) return;
+        string next = src.Substring(0, _errorSpanStart) + _suggestedFix +
+                      src.Substring(_errorSpanStart + _errorSpanLength);
+        Source = next;
+        CommitSourceNow();
     }
 
     public ObservableCollection<string> SavedNames { get; }
 
-    // ── User Equation editor (Tab 0) ──
+    // ── The equation ──
     private string _source;
     public string Source
     {
         get => _source;
         set
         {
+            if (_source == value) return;
             this.RaiseAndSetIfChanged(ref _source, value);
             if (!_loadingNamedEquation) _params.UserEquationName = null;
-            if (_activeTabIndex == 0) ScheduleCompile();
+            // A loaded CalcGen calculator no longer matches the text.
+            if (_compileState == CalcGenCompileState.Compiled) CompileState = CalcGenCompileState.Idle;
+            ScheduleCommit();
         }
     }
 
-    // ── DSL editor (Tab 1) ──
-    private string _dslSource;
-    public string DslSource
+    // ── CalcGen toggle (#1089) ──
+    private bool _useCalcGen;
+    /// <summary>The equation is meant for CalcGen: shows Compile &amp; Load /
+    /// Compile + Save / Generate and the eligibility report. Persisted as
+    /// <see cref="FractalParameters.UserEquationUseCalcGen"/> and with a saved
+    /// entry. Turning it off returns the view to the live interpreter.</summary>
+    public bool UseCalcGen
     {
-        get => _dslSource;
+        get => _useCalcGen;
         set
         {
-            this.RaiseAndSetIfChanged(ref _dslSource, value);
-            if (!_loadingNamedEquation) _params.UserEquationName = null;
-            if (_activeTabIndex == 1)
-            {
-                _params.UserEquationSource = _dslSource;   // #1088 — the DSL tab's text is the source
-                ScheduleDslValidate();
-            }
+            if (_useCalcGen == value) return;
+            this.RaiseAndSetIfChanged(ref _useCalcGen, value);
+            _params.UserEquationUseCalcGen = value;
+            CompileState = CalcGenCompileState.Idle;
+            if (!value) CommitSourceNow();   // drop any loaded CalcGen calc: back to the interpreter
+            else Validate();
         }
     }
 
-    /// <summary>#1088 — publish the active tab as the parameters' single source
-    /// and its CalcGen flag (DSL tab = on).</summary>
-    private void PushActiveSource()
+    // ── Compile state (#1089) ──
+    private CalcGenCompileState _compileState = CalcGenCompileState.Idle;
+    public CalcGenCompileState CompileState
     {
-        _params.UserEquationUseCalcGen = _activeTabIndex == 1;
-        _params.UserEquationSource = _activeTabIndex == 1 ? _dslSource : _source;
-    }
-
-    // ── Active tab ──
-    private int _activeTabIndex;
-    public int ActiveTabIndex
-    {
-        get => _activeTabIndex;
-        set
+        get => _compileState;
+        private set
         {
-            int clamped = value is 0 or 1 ? value : 0;
-            this.RaiseAndSetIfChanged(ref _activeTabIndex, clamped);
-            PushActiveSource();
-            // Clear any tab-specific status when switching; trigger the new
-            // tab's validation path so the user sees a fresh state.
-            _debounce.Disposable = null;
-            StatusText = string.Empty;
-            StatusIsError = false;
-            if (clamped == 0) ScheduleCompile();
-            else ScheduleDslValidate();
+            this.RaiseAndSetIfChanged(ref _compileState, value);
+            this.RaisePropertyChanged(nameof(IsCompiling));
+            this.RaisePropertyChanged(nameof(CompileStateText));
+            this.RaisePropertyChanged(nameof(CompileFailed));
+            this.RaisePropertyChanged(nameof(CompileSucceeded));
         }
+    }
+    public bool IsCompiling => _compileState == CalcGenCompileState.Compiling;
+    public bool CompileFailed => _compileState == CalcGenCompileState.Failed;
+    public bool CompileSucceeded => _compileState == CalcGenCompileState.Compiled;
+    public string CompileStateText => _compileState switch
+    {
+        CalcGenCompileState.Compiling => "Compiling… (Roslyn, a few seconds)",
+        CalcGenCompileState.Compiled  => "✓ Compiled — the CalcGen calculator is rendering",
+        CalcGenCompileState.Failed    => "Compile failed — see the status line",
+        _                             => "Not compiled — the interpreter is rendering",
+    };
+
+    // ── What CalcGen will / won't accelerate (#1087 lowering + preview flags) ──
+    private PreviewResult? _lastPreview;
+    private string _calcGenReport = string.Empty;
+    public string CalcGenReport { get => _calcGenReport; private set => this.RaiseAndSetIfChanged(ref _calcGenReport, value); }
+
+    private void RefreshCalcGenReport()
+    {
+        if (_lastPreview is not { } p) { CalcGenReport = string.Empty; return; }
+        if (!p.Ok)
+        {
+            string why = (p.Error ?? string.Empty).Replace("Parse error: ", string.Empty);
+            CalcGenReport = $"CalcGen can't compile this: {why} The interpreter still renders it.";
+            return;
+        }
+        string sa = p.SaFastDegree >= 2 || p.SaGenericDegree >= 2 ? "on" : "off";
+        var sb = new StringBuilder("CalcGen compiles this to a native calculator. ");
+        sb.Append($"Perturbation (deep zoom): {(p.SupportsPerturbation ? "on" : "off")} · ");
+        sb.Append($"series approximation: {sa} · DE / normals: {(p.SupportsDe ? "on" : "off")}.");
+        if (!string.IsNullOrWhiteSpace(_params.UserEquationSeed))
+            sb.Append(" The z₀ seed is interpreter-only.");
+        if (!string.IsNullOrWhiteSpace(_params.UserEquationBailoutCondition))
+            sb.Append(" 'Bail if' is interpreter-only (#860).");
+        CalcGenReport = sb.ToString();
     }
 
     // ── Saved selection ──
@@ -365,6 +336,7 @@ public sealed class UserEquationViewModel : ViewModelBase
             if (_params.UserEquationSeed == next) return;
             _params.UserEquationSeed = next;
             this.RaisePropertyChanged();
+            RefreshCalcGenReport();
             RenderRequested?.Invoke();
         }
     }
@@ -380,6 +352,7 @@ public sealed class UserEquationViewModel : ViewModelBase
             if (_params.UserEquationBailoutCondition == next) return;
             _params.UserEquationBailoutCondition = next;
             this.RaisePropertyChanged();
+            RefreshCalcGenReport();
             RenderRequested?.Invoke();
         }
     }
@@ -431,7 +404,7 @@ public sealed class UserEquationViewModel : ViewModelBase
 
     // ── Live preview (Wave 2.4 / D-6.24) ───────────────────────────────
     //
-    // After every successful parse on either tab we re-run CalcGen's
+    // After every successful parse we re-run CalcGen's
     // Preview pass — same AST + feature-flag logic the generator uses —
     // and project the result into observable properties bound by the
     // Expander in UserEquationView.axaml. When parsing fails the panel
@@ -489,21 +462,26 @@ public sealed class UserEquationViewModel : ViewModelBase
     public bool HasPreview { get => _hasPreview; private set => this.RaiseAndSetIfChanged(ref _hasPreview, value); }
 
     // Run CalcGen's analysis pass and project flags into the preview pane.
-    // Caller passes the post-preprocess DSL string (UE tab pipes its C#
-    // body through EquationPreprocessor before getting here). Silent on
+    // Caller passes the equation-language text (C#-style input is translated
+    // through EquationPreprocessor before getting here). Silent on
     // parse failure — leaves the last valid preview frozen so transient
     // typing errors don't blank the panel.
     private void UpdatePreview(string equation)
     {
         if (string.IsNullOrWhiteSpace(equation)) return;
         var p = CalculatorGenApi.Preview(equation);
+        _lastPreview = p;            // #1089 — the CalcGen report reads it
+        RefreshCalcGenReport();
         if (!p.Ok) return;
         PreviewAstText = p.AstText;
         PreviewLatexText = p.LatexText;
         PreviewMathmlText = p.MathmlText;
         // #755 — typeset the interpreted equation. 0xFFDCDCDC matches the
         // preview panel's foreground; renderer returns null on any failure.
-        MathImage = Latex.MathImageRenderer.TryRender(equation, 0xFFDCDCDCu);
+        // Best-effort: with no Avalonia platform (headless tests) the bitmap
+        // can't be created; the text preview still updates.
+        try { MathImage = Latex.MathImageRenderer.TryRender(equation, 0xFFDCDCDCu); }
+        catch (InvalidOperationException) { MathImage = null; }
         PreviewDpDzText = p.DpDzText;
         PreviewDpDcText = p.DpDcText;
         PreviewSaText = p.SaFastDegree >= 2
@@ -543,8 +521,7 @@ public sealed class UserEquationViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> HotLoadViaCalcGenCommand { get; }
     public ReactiveCommand<Unit, Unit> HotLoadAndPersistCommand { get; }
     public ReactiveCommand<Unit, Unit> ApplyFixCommand { get; }
-    public ReactiveCommand<Unit, Unit> OpenUserEquationHelpCommand { get; }
-    public ReactiveCommand<Unit, Unit> OpenDslHelpCommand { get; }
+    public ReactiveCommand<Unit, Unit> OpenEditorHelpCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenCalcGenHelpCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenEquationGuideCommand { get; }
     /// <summary>Wave 2.8 — open the equation cookbook dialog.</summary>
@@ -579,14 +556,16 @@ public sealed class UserEquationViewModel : ViewModelBase
 
     /// <summary>Host compiles + loads the equation via CalcGen and swaps
     /// the result onto the render pipeline. Args: (equation, className).
-    /// Return value: null on success, error message on failure.</summary>
-    public event Func<string, string, string?>? HotLoadRequested;
+    /// Completes with null on success, an error message on failure. #1089 —
+    /// asynchronous: the host compiles off the UI thread so the editor can show
+    /// <see cref="CalcGenCompileState.Compiling"/>.</summary>
+    public event Func<string, string, Task<string?>>? HotLoadRequested;
 
     /// <summary>Host persists + compiles + loads the equation. Args: (equation, className).
     /// Return value: (error, savedPath). error == null → success; savedPath
     /// is the on-disk source path even on compile failure so the editor can
     /// surface where the .cs landed.</summary>
-    public event Func<string, string, (string? error, string? savedPath)>? HotLoadAndPersistRequested;
+    public event Func<string, string, Task<(string? error, string? savedPath)>>? HotLoadAndPersistRequested;
 
     /// <summary>Wave 2.8 — host opens the cookbook picker dialog (modeless).
     /// The dialog calls back into <see cref="ApplyCookbookEntry"/> on accept;
@@ -599,42 +578,40 @@ public sealed class UserEquationViewModel : ViewModelBase
     public event Action? MorphRequested;
 
     /// <summary>Wave 2.8 — host applies (centre X, centre Y, zoom) from the
-    /// accepted cookbook entry to the active view. Editor source is mutated
-    /// directly via DslSource so the existing tab-switch + validate path
-    /// handles the visual update.</summary>
+    /// accepted cookbook entry to the active view. The editor source is set
+    /// via <see cref="ApplyCookbookEntry"/>.</summary>
     public event Action<double, double, double>? CookbookCentreRequested;
 
     /// <summary>Wave 2.8 — host calls this on accept (from the cookbook
-    /// dialog). Replaces DSL editor source, snaps to the DSL tab, and asks
-    /// the host to re-centre.</summary>
+    /// dialog). Replaces the equation, sets the CalcGen toggle, and asks the
+    /// host to re-centre.</summary>
     public void ApplyCookbookEntry(CookbookEntry entry)
     {
         // #859 — entries carrying a bailout condition (non-modulus / transcendental
-        // maps) run on the live interpreter, which honours the condition; CalcGen
-        // codegen (the DSL "Compile & Load" tab) does not yet (#860). Drop those
-        // into the live User Equation tab with the bailout settings applied.
+        // maps) need the interpreter, which honours the condition; CalcGen codegen
+        // does not yet (#860). Those load with CalcGen off and the bailout
+        // settings applied; the rest load with CalcGen on.
         if (!string.IsNullOrWhiteSpace(entry.BailoutCondition))
         {
             EscapeRadius = entry.EscapeRadius;
             BailoutCondition = entry.BailoutCondition;
             BailoutReplacesModulus = entry.BailoutReplacesModulus;
-            Source = entry.DslSource;   // triggers the live compile + render
-            ActiveTabIndex = 0;
         }
-        else
-        {
-            DslSource = entry.DslSource;
-            ActiveTabIndex = 1;
-        }
+        _useCalcGen = string.IsNullOrWhiteSpace(entry.BailoutCondition);
+        _params.UserEquationUseCalcGen = _useCalcGen;
+        this.RaisePropertyChanged(nameof(UseCalcGen));
+        CompileState = CalcGenCompileState.Idle;
+        Source = entry.DslSource;
+        CommitSourceNow();
         CookbookCentreRequested?.Invoke(entry.CenterX, entry.CenterY, entry.Zoom);
         StatusText = $"Loaded \"{entry.Name}\" from cookbook.";
         StatusIsError = false;
     }
 
-    /// <summary>#764 — import pasted presentation MathML into the DSL editor.
-    /// On success replaces the DSL source (which drives validate + the #754-#756
-    /// preview so the user immediately sees the interpreted result), switches to
-    /// the DSL tab, and confirms. On failure the reason goes to the status bar,
+    /// <summary>#764 — import pasted presentation MathML into the editor.
+    /// On success replaces the source (which drives validate + the #754-#756
+    /// preview so the user immediately sees the interpreted result) and
+    /// confirms. On failure the reason goes to the status bar,
     /// same channel as parse errors. The view supplies the clipboard text.</summary>
     public void ImportMathmlFromText(string? mathml)
     {
@@ -644,14 +621,12 @@ public sealed class UserEquationViewModel : ViewModelBase
             ShowStatus($"MathML import: {r.Error}", isError: true);
             return;
         }
-        DslSource = r.Dsl;
-        ActiveTabIndex = 1;
-        _debounce.Disposable = null;
-        ValidateDslNow();               // update preview now, don't wait for debounce
+        Source = r.Dsl;
+        CommitSourceNow();              // render + preview now, don't wait for the debounce
         ShowStatus("✓ Imported MathML");
     }
 
-    /// <summary>#765 — import pasted LaTeX (constrained subset) into the DSL
+    /// <summary>#765 — import pasted LaTeX (constrained subset) into the
     /// editor. Same flow as <see cref="ImportMathmlFromText"/>; best-effort — the
     /// importer reports a specific reason for anything outside the subset.</summary>
     public void ImportLatexFromText(string? latex)
@@ -662,26 +637,14 @@ public sealed class UserEquationViewModel : ViewModelBase
             ShowStatus($"LaTeX import: {r.Error}", isError: true);
             return;
         }
-        DslSource = r.Dsl;
-        ActiveTabIndex = 1;
-        _debounce.Disposable = null;
-        ValidateDslNow();
+        Source = r.Dsl;
+        CommitSourceNow();              // render + preview now, don't wait for the debounce
         ShowStatus("✓ Imported LaTeX");
     }
 
-    /// <summary>Force an immediate compile (cancel pending debounce).
-    /// Only meaningful on the User Equation tab — the DSL tab renders via
-    /// Compile &amp; Load.</summary>
-    public void TriggerCompile()
-    {
-        _debounce.Disposable = null;
-        if (_activeTabIndex != 0) return;
-        _params.UserEquationSource = _source;
-        // #27 Phase 0 — editor content is interactive/trusted; clear any
-        // ExternalFile stamp left by a previously-viewed imported region.
-        _params.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive;
-        CompileRequested?.Invoke();
-    }
+    /// <summary>Force an immediate render of the current source (cancel the
+    /// pending debounce).</summary>
+    public void TriggerCompile() => CommitSourceNow();
 
     /// <summary>Set a transient status-bar message (e.g. copy confirmation from
     /// the view code-behind, which owns the clipboard call).</summary>
@@ -700,167 +663,170 @@ public sealed class UserEquationViewModel : ViewModelBase
     }
 
     /// <summary>Select+load a saved equation by name. No-op if absent.
-    /// Switches to the tab matching the entry's <see cref="UserEquationEntry.UseCalcGen"/>.</summary>
+    /// Restores its <see cref="UserEquationEntry.UseCalcGen"/> toggle.</summary>
     public void LoadEquationByName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name)) return;
         var entry = UserEquationStore.Instance.GetByName(name);
         if (entry is null) return;
 
+        LoadEntry(entry);
+        SelectedSavedNameSilently(entry.Name);
+        _debounce.Disposable = null;   // the caller renders (as before)
+        Validate();
+    }
+
+    // Put a saved entry's equation + CalcGen flag into the editor without the
+    // edit side effects (name reset), then render + validate once.
+    private void LoadEntry(UserEquationEntry entry)
+    {
         _loadingNamedEquation = true;
         try
         {
-            if (entry.UseCalcGen) DslSource = entry.Source;
-            else Source = entry.Source;
+            _useCalcGen = entry.UseCalcGen;
+            _params.UserEquationUseCalcGen = entry.UseCalcGen;
+            this.RaisePropertyChanged(nameof(UseCalcGen));
+            CompileState = CalcGenCompileState.Idle;
+            Source = entry.Source;
+            _params.UserEquationSource = entry.Source;
         }
         finally { _loadingNamedEquation = false; }
         _params.UserEquationName = entry.Name;
-        SelectedSavedName = entry.Name;
-        ActiveTabIndex = entry.UseCalcGen ? 1 : 0;
+    }
+
+    private void SelectedSavedNameSilently(string name)
+    {
+        _selectedSavedName = name;
+        this.RaisePropertyChanged(nameof(SelectedSavedName));
+        this.RaisePropertyChanged(nameof(PromoteEnabled));
+        _promote = UserEquationStore.Instance.GetByName(name)?.Promoted ?? false;
+        this.RaisePropertyChanged(nameof(Promote));
+    }
+
+    private void ScheduleCommit()
+    {
+        _debounce.Disposable = Observable
+            .Timer(TimeSpan.FromMilliseconds(1800))
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(_ => CommitSourceNow());
+    }
+
+    /// <summary>Publish the source to the parameters, render it on the
+    /// interpreter (the host drops a loaded CalcGen calculator), and validate.
+    /// Cancels a pending debounce.</summary>
+    private void CommitSourceNow()
+    {
         _debounce.Disposable = null;
+        _params.UserEquationSource = _source;
+        _params.UserEquationUseCalcGen = _useCalcGen;
+        // #27 Phase 0 — editor content is interactive/trusted; clear any
+        // ExternalFile stamp left by a previously-viewed imported region.
+        _params.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive;
+        CompileRequested?.Invoke();
+        Validate();
     }
 
-    private void ScheduleCompile()
+    /// <summary>The C#-style test: text the equation language doesn't parse but
+    /// <see cref="EquationPreprocessor"/> translates into text it does.</summary>
+    private static bool TryConvertCSharp(string raw, out string converted, out PreprocessDiagnostic? diag)
     {
-        _debounce.Disposable = Observable
-            .Timer(TimeSpan.FromMilliseconds(1800))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(_ =>
-            {
-                _params.UserEquationSource = _source;
-                _params.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive;
-                CompileRequested?.Invoke();
-                // After the (interpreter) compile, also surface CalcGen-
-                // compatibility problems if the user opted in: the interpreter
-                // accepts more than CalcGen's stricter DSL, which trips on
-                // Complex.ImaginaryOne / Abs / etc.
-                if (_validateForCalcGen) ValidateCalcGenForCurrentSource();
-            });
+        converted = EquationPreprocessor.Preprocess(raw, out diag);
+        return diag == null && !string.IsNullOrWhiteSpace(converted)
+               && EquationLanguage.TryParse(converted, out _, out _);
     }
 
-    // Run the CalcGen preprocessor + parser over the UE-tab source. Surfaces
-    // the FIRST blocker in the status bar with a span the view can highlight.
-    // Called from Source setter (via ScheduleCompile when the checkbox is on)
-    // and directly when toggling ValidateForCalcGen on. Roslyn compile errors
-    // already shown by the host take precedence — only overrides status when
-    // Roslyn was happy or this surfaced an error.
-    private void ValidateCalcGenForCurrentSource()
+    /// <summary>#1089 — validate the one source: status line, error span with a
+    /// quick fix, live preview and the CalcGen report. No render.
+    ///   - Equation-language text: a parse error is positioned ("at line L, col
+    ///     C") with a Did-you-mean fix; with CalcGen on, a lowering refusal is
+    ///     an error too (Compile &amp; Load would fail).
+    ///   - C#-style text: translated for rendering; the quick fix (Ctrl+.)
+    ///     offers the converted form for the whole source. A construct with no
+    ///     equation-language form is flagged at its span.</summary>
+    private void Validate()
     {
-        if (_activeTabIndex != 0 || !_validateForCalcGen)
-        {
-            ClearErrorSpan();
-            return;
-        }
         string raw = _source ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(raw)) { ClearErrorSpan(); return; }
-
-        string equation = EquationPreprocessor.Preprocess(raw, out PreprocessDiagnostic? diag);
-        if (diag != null)
-        {
-            StatusText = $"CalcGen: {diag.Message}";
-            StatusIsError = true;
-            // UE tab is Roslyn-compiled C#: pick the C# form. Applying the
-            // DSL form here would either fail Roslyn compile (`abs(z)` is
-            // not a C# function) or, worse, look like a typo to the user
-            // who explicitly wrote `Complex.*`.
-            SetErrorSpan(tab: 0, diag.Start, diag.Length, diag.SuggestionCSharp);
-            return;
-        }
-        if (string.IsNullOrWhiteSpace(equation))
-        {
-            ClearErrorSpan();
-            return;
-        }
-        try
-        {
-            CalculatorGenApi.ParseEquation(equation);   // #1087 — the unified language, lowered
-            // CalcGen accepts it. Don't stomp on Roslyn's "✓ Compiled" — only
-            // overwrite if the status is currently a CalcGen complaint we
-            // raised on a previous tick.
-            if (StatusIsError && StatusText.StartsWith("CalcGen:", StringComparison.Ordinal))
-            {
-                StatusText = "✓ Compiled (CalcGen OK)";
-                StatusIsError = false;
-            }
-            ClearErrorSpan();
-            UpdatePreview(equation);
-        }
-        catch (Exception ex)
-        {
-            // Parser errors carry col (and sometimes line) in the message
-            // but they're measured against the PREPROCESSED string, not the
-            // user's typed source. Can't reliably map back — show the
-            // message only and clear the span so we don't highlight wrong.
-            StatusText = $"CalcGen: {ex.Message}";
-            StatusIsError = true;
-            ClearErrorSpan();
-        }
-    }
-
-    // Live-validate the DSL tab's source by running the lexer + parser only.
-    // No render, no Roslyn — just surface parse errors in the status bar so
-    // the user sees red/green as they type. Mirrors the 500 ms debounce of
-    // the User Equation tab so the feel is consistent.
-    private void ScheduleDslValidate()
-    {
-        _debounce.Disposable = Observable
-            .Timer(TimeSpan.FromMilliseconds(1800))
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(_ => ValidateDslNow());
-    }
-
-    private void ValidateDslNow()
-    {
-        string raw = _dslSource ?? string.Empty;
         if (string.IsNullOrWhiteSpace(raw))
         {
             StatusText = string.Empty;
             StatusIsError = false;
             ClearErrorSpan();
+            _lastPreview = null;
+            RefreshCalcGenReport();
             return;
         }
-        try
+
+        if (EquationLanguage.TryParse(raw, out _, out string? parseError))
         {
-            CalculatorGenApi.ParseEquation(raw);   // #1087 — the unified language, lowered
-            StatusText = "✓ DSL parses";
-            StatusIsError = false;
             ClearErrorSpan();
             UpdatePreview(raw);
-        }
-        catch (Exception ex)
-        {
-            StatusText = ex.Message;
-            StatusIsError = true;
-            // Lexer / parser format errors carry their position as
-            //   "... at line L, col C." or "... at col C."
-            // Map back to a char offset in the DSL source so the view can
-            // select the bad token. Length = 1 (caret) — token boundary
-            // recovery would require re-tokenising; out of scope here.
-            var m = Regex.Match(ex.Message, @"\bcol\s+(\d+)");
-            if (m.Success && int.TryParse(m.Groups[1].Value, out int col))
+            if (_useCalcGen && _lastPreview is { Ok: false } refused)
             {
-                int line = 1;
-                var lm = Regex.Match(ex.Message, @"\bline\s+(\d+)");
-                if (lm.Success) int.TryParse(lm.Groups[1].Value, out line);
-                int offset = ColToOffset(raw, line, col);
-                // Lexer "Unknown identifier 'foo' at col N. Did you mean 'prev'?"
-                // — extract the bad identifier's length so the span covers
-                // the whole token, and pull the suggested replacement so
-                // Apply Fix can splice it in.
-                int spanLen = 1;
-                string? fix = null;
-                var idM = Regex.Match(ex.Message, @"Unknown identifier '([^']+)'");
-                if (idM.Success) spanLen = idM.Groups[1].Value.Length;
-                var hintM = Regex.Match(ex.Message, @"Did you mean '([^']+)'");
-                if (hintM.Success) fix = hintM.Groups[1].Value;
-                SetErrorSpan(tab: 1, offset, spanLen, fix);
+                StatusText = $"CalcGen: {(refused.Error ?? string.Empty).Replace("Parse error: ", string.Empty)}";
+                StatusIsError = true;
             }
             else
             {
-                ClearErrorSpan();
+                StatusText = "✓ Equation parses";
+                StatusIsError = false;
             }
+            return;
+        }
+
+        if (TryConvertCSharp(raw, out string converted, out _))
+        {
+            UpdatePreview(converted);
+            StatusText = $"C#-style equation, translated for rendering. Ctrl+. converts it to: {converted}";
+            StatusIsError = false;
+            SetErrorSpan(0, raw.Length, converted);
+            return;
+        }
+
+        // Neither form. Prefer a C#-specific diagnostic when the text is C#-ish
+        // (its span points into the original text), else the language's own.
+        EquationPreprocessor.Preprocess(raw, out PreprocessDiagnostic? diag);
+        if (diag != null && LooksLikeCSharp(raw))
+        {
+            StatusText = diag.Message;
+            StatusIsError = true;
+            SetErrorSpan(diag.Start, diag.Length, diag.SuggestionDsl);
+            _lastPreview = null;
+            RefreshCalcGenReport();
+            return;
+        }
+
+        string message = parseError ?? "The equation doesn't parse.";
+        StatusText = message;
+        StatusIsError = true;
+        _lastPreview = null;
+        RefreshCalcGenReport();
+        // Parse errors carry their position as "... at line L, col C." Map
+        // back to a char offset so the view can select the bad token, covering
+        // a whole unknown name, with its Did-you-mean as the quick fix.
+        var m = Regex.Match(message, @"\bcol\s+(\d+)");
+        if (m.Success && int.TryParse(m.Groups[1].Value, out int col))
+        {
+            int line = 1;
+            var lm = Regex.Match(message, @"\bline\s+(\d+)");
+            if (lm.Success) int.TryParse(lm.Groups[1].Value, out line);
+            int offset = ColToOffset(raw, line, col);
+            int spanLen = 1;
+            string? fix = null;
+            var idM = Regex.Match(message, @"Unknown (?:identifier|function) '([^']+)'");
+            if (idM.Success) spanLen = idM.Groups[1].Value.Length;
+            var hintM = Regex.Match(message, @"Did you mean '([^']+)'");
+            if (hintM.Success) fix = hintM.Groups[1].Value;
+            SetErrorSpan(offset, spanLen, fix);
+        }
+        else
+        {
+            ClearErrorSpan();
         }
     }
+
+    private static bool LooksLikeCSharp(string s)
+        => s.Contains("Complex.") || s.Contains("Math.") || s.Contains("new Complex")
+           || Regex.IsMatch(s, @"\.(Real|Imaginary|Magnitude|Phase)\b");
 
     // Walk source line-by-line until the target line, then add (col-1) for
     // the character offset. Clamps to source length so a stale span past
@@ -886,16 +852,7 @@ public sealed class UserEquationViewModel : ViewModelBase
         var entry = UserEquationStore.Instance.GetByName(_selectedSavedName);
         if (entry is null) return;
 
-        _loadingNamedEquation = true;
-        try
-        {
-            if (entry.UseCalcGen) DslSource = entry.Source;
-            else Source = entry.Source;
-            _params.UserEquationSource = entry.Source;
-            _params.UserEquationUseCalcGen = entry.UseCalcGen;
-        }
-        finally { _loadingNamedEquation = false; }
-        _params.UserEquationName = entry.Name;
+        LoadEntry(entry);
 
         // Restore (and reset) the per-equation render settings from the entry.
         ApplyEntryRenderSettings(entry);
@@ -903,10 +860,7 @@ public sealed class UserEquationViewModel : ViewModelBase
         _promote = entry.Promoted;
         this.RaisePropertyChanged(nameof(Promote));
 
-        ActiveTabIndex = entry.UseCalcGen ? 1 : 0;
-        _debounce.Disposable = null;
-        if (entry.UseCalcGen) ValidateDslNow();
-        else CompileRequested?.Invoke();
+        CommitSourceNow();
     }
 
     /// <summary>Apply a saved entry's per-equation render settings (Escape r, z0
@@ -946,11 +900,11 @@ public sealed class UserEquationViewModel : ViewModelBase
             && !await confirm(trimmed))
             return;
 
-        var (useCalcGen, source) = ActiveSource();
+        string source = _source ?? string.Empty;
         // Persist the per-equation render settings alongside the source so a Save
         // captures them and a later selection restores them.
         var entry = UserEquationStore.Instance.SaveEquation(
-            trimmed, source, useCalcGen,
+            trimmed, source, _useCalcGen,
             escapeRadius: _params.EscapeRadius,
             seed: _params.UserEquationSeed,
             bailoutCondition: _params.UserEquationBailoutCondition,
@@ -966,7 +920,7 @@ public sealed class UserEquationViewModel : ViewModelBase
     /// an array of them (what the Asset Manager's bundle holds per entry, and
     /// what a hand-assembled share file looks like). Same-name entries are
     /// skipped rather than replaced, mirroring the Sandbox importer. Entries are
-    /// added whole so Kind / Promoted round-trip.</summary>
+    /// added whole so UseCalcGen / Promoted round-trip.</summary>
     private async Task OnImportAsync()
     {
         string? path = OpenFilePromptRequested is { } pick ? await pick() : null;
@@ -1038,11 +992,8 @@ public sealed class UserEquationViewModel : ViewModelBase
 
     // ── CalcGen pipeline ─────────────────────────────────────────────────
     //
-    // Both Generate and HotLoad route by the currently active tab:
-    //   Tab 0 (User Equation): run source through EquationPreprocessor to
-    //                          rewrite C# Complex.* calls into DSL.
-    //   Tab 1 (DSL):           feed source straight to CalculatorGen with
-    //                          no preprocessing (lexer/parser handle errors).
+    // Generate and Compile & Load take the one source; C#-style text is
+    // translated first (TryGetCalcGenSource).
     private void OnGenerateViaCalcGen()
     {
         if (!TryGetCalcGenSource(out string equation, out string baseName)) return;
@@ -1077,106 +1028,101 @@ public sealed class UserEquationViewModel : ViewModelBase
         }
     }
 
-    private void OnHotLoadViaCalcGen()
+    private async Task OnHotLoadViaCalcGenAsync()
     {
-        if (!TryGetCalcGenSource(out string equation, out string baseName)) return;
+        if (!TryGetCalcGenSource(out string equation, out string baseName)) { CompileState = CalcGenCompileState.Failed; return; }
 
         var handler = HotLoadRequested;
         if (handler == null)
         {
             ShowError("Hot-load not wired by host.");
+            CompileState = CalcGenCompileState.Failed;
             return;
         }
 
-        string? err = handler.Invoke(equation, baseName);
+        _debounce.Disposable = null;
+        CompileState = CalcGenCompileState.Compiling;
+        ShowStatus($"Compiling {baseName}Calculator…");
+        string? err;
+        try { err = await handler.Invoke(equation, baseName); }
+        catch (Exception ex) { err = $"Hot-load failed: {ex.GetType().Name}: {ex.Message}"; }
+
         if (err == null)
         {
-            StatusText = $"✓ Hot-loaded {baseName}Calculator";
-            StatusIsError = false;
+            CompileState = CalcGenCompileState.Compiled;
+            ShowStatus($"✓ Hot-loaded {baseName}Calculator");
         }
         else
         {
+            CompileState = CalcGenCompileState.Failed;
             ShowError(err);
         }
     }
 
-    private void OnHotLoadAndPersist()
+    private async Task OnHotLoadAndPersistAsync()
     {
-        if (!TryGetCalcGenSource(out string equation, out string baseName)) return;
+        if (!TryGetCalcGenSource(out string equation, out string baseName)) { CompileState = CalcGenCompileState.Failed; return; }
 
         var handler = HotLoadAndPersistRequested;
         if (handler == null)
         {
             ShowError("Persist + Hot-load not wired by host.");
+            CompileState = CalcGenCompileState.Failed;
             return;
         }
 
-        var (err, savedPath) = handler.Invoke(equation, baseName);
+        _debounce.Disposable = null;
+        CompileState = CalcGenCompileState.Compiling;
+        ShowStatus($"Compiling {baseName}Calculator…");
+        string? err, savedPath;
+        try { (err, savedPath) = await handler.Invoke(equation, baseName); }
+        catch (Exception ex) { (err, savedPath) = ($"Persist + Hot-load failed: {ex.GetType().Name}: {ex.Message}", null); }
+
         if (err == null)
         {
-            StatusText = savedPath == null
+            CompileState = CalcGenCompileState.Compiled;
+            ShowStatus(savedPath == null
                 ? $"✓ Hot-loaded {baseName}Calculator (no path)"
-                : $"✓ Hot-loaded + saved → {savedPath}";
-            StatusIsError = false;
+                : $"✓ Hot-loaded + saved → {savedPath}");
         }
         else
         {
+            CompileState = CalcGenCompileState.Failed;
             ShowError(savedPath == null ? err : $"{err}\n(source saved to {savedPath})");
         }
     }
 
-    // Produce the (DSL string, base class name) pair to hand to CalcGen for
-    // the currently active tab. Writes any error to the status bar and
-    // returns false. Tab 0 runs the C#→DSL preprocessor; Tab 1 trims the
-    // raw source — the parser already gives crisp diagnostics.
+    // Produce the (equation-language text, base class name) pair to hand to
+    // CalcGen. C#-style text is translated first. Writes any error to the
+    // status bar and returns false.
     private bool TryGetCalcGenSource(out string equation, out string baseName)
     {
         equation = string.Empty;
         baseName = string.Empty;
 
-        string raw;
-        string fallbackBase;
-        if (_activeTabIndex == 1)
+        string raw = (_source ?? string.Empty).Trim();
+        if (raw.Length == 0)
         {
-            raw = _dslSource ?? string.Empty;
-            fallbackBase = "UserDslEquation";
-            string trimmed = raw.Trim();
-            if (trimmed.Length == 0)
-            {
-                ShowError("Equation is empty.");
-                return false;
-            }
-            equation = trimmed;
+            ShowError("Equation is empty.");
+            return false;
         }
+        if (EquationLanguage.TryParse(raw, out _, out _)) equation = raw;
+        else if (TryConvertCSharp(raw, out string converted, out _)) equation = converted;
         else
         {
-            raw = _source ?? string.Empty;
-            fallbackBase = "UserHotLoaded";
-            string preProcessed = EquationPreprocessor.Preprocess(raw, out string? preErr);
-            if (preErr != null)
-            {
-                ShowError(preErr);
-                return false;
-            }
-            if (string.IsNullOrWhiteSpace(preProcessed))
-            {
-                ShowError("Equation is empty.");
-                return false;
-            }
-            equation = preProcessed;
+            EquationPreprocessor.Preprocess(raw, out PreprocessDiagnostic? diag);
+            EquationLanguage.TryParse(raw, out _, out string? parseError);
+            ShowError(diag != null && LooksLikeCSharp(raw) ? diag.Message : parseError ?? "The equation doesn't parse.");
+            return false;
         }
 
+        const string fallbackBase = "UserEquation";
         baseName = string.IsNullOrWhiteSpace(_params.UserEquationName)
             ? fallbackBase
             : Regex.Replace(_params.UserEquationName, @"[^A-Za-z0-9_]", "");
         if (string.IsNullOrEmpty(baseName)) baseName = fallbackBase;
         return true;
     }
-
-    private (bool UseCalcGen, string Source) ActiveSource() =>
-        _activeTabIndex == 1
-            ? (true, _dslSource ?? string.Empty)
-            : (false, _source ?? string.Empty);
 
     private async Task OnDeleteAsync()
     {

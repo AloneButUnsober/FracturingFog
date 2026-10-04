@@ -13,13 +13,10 @@
     </UserControl.KeyBindings>
 
     <!--
-      Header (saved/save/delete/promote/compile/generate + rotation) sits
-      ABOVE a TabControl that splits the two equation editors:
-        Tab 0  User Equation  — C#-style source, translated to the DSL and run on
-                                the safe interpreter (no Roslyn since #27 Phase 3)
-        Tab 1  DSL            — bare CalcGen DSL; the interpreter renders it live and
-                                Compile & Load swaps in the CalcGen-compiled calculator
-      Save/Compile/Generate route by the currently active tab via the VM.
+      #1089 — one equation editor. Header (saved/save/delete/promote + rotation,
+      seed, bailout) sits above the editor; a CalcGen toggle shows the Compile &
+      Load / Compile + Save / Generate actions with their compile state and what
+      CalcGen accelerates. The interpreter renders every edit either way.
     -->
     <!-- Whole form scrolls when the window is too short to show it all (e.g.
          the Live preview expander open on a non-maximised window). Binding the
@@ -72,7 +69,7 @@
             <Button Grid.Column="1"
                     Content="Cookbook…"
                     Command="{Binding OpenCookbookCommand}"
-                    ToolTip.Tip="Pick a curated equation from the cookbook. Replaces the DSL editor and re-centres the view."
+                    ToolTip.Tip="Pick a curated equation from the cookbook. Replaces the equation and re-centres the view."
                     Margin="0,0,6,0"
                     Padding="10,4" />
             <Button Grid.Column="2"
@@ -160,149 +157,110 @@
             </Grid>
         </Grid>
 
-        <!-- Row 3: tab control (fills). MinHeight keeps the editor usable even
-             when the form is scrolling on a short window. -->
-        <TabControl Grid.Row="4"
-                    MinHeight="180"
-                    SelectedIndex="{Binding ActiveTabIndex, Mode=TwoWay}"
-                    Background="Transparent"
-                    Margin="0,0,8,0">
+        <!-- Row 4: the equation (#1089 — one editor; fills). MinHeight keeps it
+             usable even when the form is scrolling on a short window. -->
+        <Grid Grid.Row="4"
+              MinHeight="180"
+              RowDefinitions="Auto,Auto,*"
+              Margin="0,0,8,0">
 
-            <!-- Tab 1: User Equation (C# style, translated + interpreted) -->
-            <TabItem Header="User Equation">
-                <Grid RowDefinitions="Auto,*,*">
-                    <!-- <Grid Grid.Row="0" ColumnDefinitions="400,Auto" Margin="0,6,0,6"> -->
-                        <!--<TextBlock Grid.Column="0"
-                                   Foreground="#B4B4B4"
-                                   TextWrapping="Wrap">
-                            <Run Text="C# expression body. Roslyn-compiled. Use System.Numerics.Complex syntax (Complex.Sin, Complex.Pow, etc.)." />
-                            <LineBreak />
-                            <Run Text="Example:  return z*z + c;" />
-                        </TextBlock>-->
-                        <Button Grid.Column="1"
-                                Content="?"
-                                Command="{Binding OpenUserEquationHelpCommand}"
-                                ToolTip.Tip="Help for the User Equation tab"
-                                Margin="8,0,8,0"
-                                Width="28" Height="28"
-                                VerticalAlignment="Top"
-                                HorizontalAlignment="Right"/>
-                    <!-- </Grid> -->
-                    <CheckBox Grid.Row="0"
-                              Content="Validate for CalcGen"
-                              IsChecked="{Binding ValidateForCalcGen, Mode=TwoWay}"
-                              ToolTip.Tip="Flag C# constructs the CalcGen DSL can't accept (Complex.ImaginaryOne, Complex.Abs, new Complex(...), unsupported Complex.* members). The equation itself is translated and run on the interpreter either way — leave on if you plan to Generate or hot-load via CalcGen."
-                              Margin="0,0,0,6" />
-                    <Border Grid.Row="1"
-                            BorderBrush="#505050"
-                            BorderThickness="1"
-                            Background="#1C1C1C"
-                            Classes.error="{Binding StatusIsError}">
-                        <Border.Styles>
-                            <Style Selector="Border.error">
-                                <Setter Property="BorderBrush" Value="#FFCC00" />
-                            </Style>
-                        </Border.Styles>
-                        <TextBox x:Name="UserEquationEditor"
-                                 Text="{Binding Source, Mode=TwoWay}"
-                                 AcceptsReturn="True"
-                                 AcceptsTab="True"
-                                 TextWrapping="NoWrap"
-                                 FontFamily="Consolas, monospace"
-                                 FontSize="14"
-                                 Background="#1C1C1C"
-                                 Foreground="White"
-                                 BorderThickness="0"
-                                 Margin="0,0,8,0"
-                                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                                 ScrollViewer.VerticalScrollBarVisibility="Auto" />
-                    </Border>
-                </Grid>
-            </TabItem>
+            <!-- Toggle + importers + help -->
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="0,0,0,6">
+                <CheckBox Grid.Column="0"
+                          x:Name="CalcGenToggle"
+                          Content="CalcGen"
+                          IsChecked="{Binding UseCalcGen, Mode=TwoWay}"
+                          VerticalAlignment="Center"
+                          ToolTip.Tip="Off: the interpreter renders the equation live as you edit. On: also compile it with CalcGen (Compile &amp; Load / Compile + Save / Generate) for SIMD speed and deep zoom. The interpreter keeps rendering every edit either way." />
+                <Button Grid.Column="2"
+                        Content="Paste LaTeX…"
+                        Click="OnPasteLatex"
+                        ToolTip.Tip="Convert LaTeX math on the clipboard into an equation (best-effort subset) (#765)."
+                        Margin="8,0,0,0"
+                        Padding="10,4" />
+                <Button Grid.Column="3"
+                        Content="Paste MathML…"
+                        Click="OnPasteMathml"
+                        ToolTip.Tip="Convert presentation MathML on the clipboard (e.g. from Word / LibreOffice) into an equation (#764)."
+                        Margin="8,0,0,0"
+                        Padding="10,4" />
+                <Button Grid.Column="4"
+                        Content="?"
+                        Command="{Binding OpenEditorHelpCommand}"
+                        ToolTip.Tip="Help for the User Equation editor"
+                        Margin="8,0,0,0"
+                        Width="28" Height="28" />
+            </Grid>
 
-            <!-- Tab 2: DSL (bare CalcGen DSL, validate-on-type) -->
-            <TabItem Header="DSL">
-                <Grid RowDefinitions="Auto,*">
-                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto"
-                          RowDefinitions="Auto,Auto" Margin="0,0,0,6">
-                        <!--<TextBlock Grid.Column="0"
-                                   Foreground="#B4B4B4"
-                                   TextWrapping="Wrap"
-                                   Width="400">
-                            <Run Text="Bare CalcGen DSL — lowercase keywords, no 'Complex.' prefix, no 'return'. Allowed: z c sin cos tan sinh cosh tanh exp log sqrt arg atan2 min max mod conj fold sqr abs re im prev iter pi e i, + - * / ^Int." />
-                            <LineBreak />
-                            <Run Text="Example:  z*z + c" />
-                        </TextBlock>-->
-                        <!-- Row 1.5: promote toggle + Cookbook + Morph + Compile & Load + Compile + Save + Generate via CalcGen + Equation Guide + CalcGen Help -->
-                        <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto">
-                            <Button Grid.Column="0"
-                                    Content="Compile &amp; Load"
-                                    Command="{Binding HotLoadViaCalcGenCommand}"
-                                    ToolTip.Tip="Generate, Roslyn-compile, and load the active tab's equation as a hot calculator. No rebuild required — replaces the active calc immediately."
-                                    Margin="0,0,6,0"
-                                    Padding="14,4" />
-                            <Button Grid.Column="1"
-                                    Content="Compile + Save"
-                                    Command="{Binding HotLoadAndPersistCommand}"
-                                    ToolTip.Tip="Same as Compile &amp; Load, but also writes the generated source under %LOCALAPPDATA%/FracturingFog/UserCalculators/. The calculator is re-loaded automatically on next launch."
-                                    Margin="0,0,6,0"
-                                    Padding="14,4" />
-                            <Button Grid.Column="2"
-                                    Content="Generate via CalcGen"
-                                    Command="{Binding GenerateViaCalcGenCommand}"
-                                    ToolTip.Tip="Run the active tab's equation through CalculatorGen and write a generated calculator to Calculators/Generated/. Rebuild the app to pick it up."
-                                    Padding="14,4" />
-                        </Grid>
-                        <Button Grid.Column="1"
-                                Content="Paste LaTeX…"
-                                Click="OnPasteLatex"
-                                ToolTip.Tip="Convert LaTeX math on the clipboard into the DSL (best-effort subset) (#765)."
-                                Margin="8,0,0,0"
-                                Padding="10,4"
-                                VerticalAlignment="Top" />
-                        <Button Grid.Column="2"
-                                Content="Paste MathML…"
-                                Click="OnPasteMathml"
-                                ToolTip.Tip="Convert presentation MathML on the clipboard (e.g. from Word / LibreOffice) into the DSL (#764)."
-                                Margin="8,0,0,0"
-                                Padding="10,4"
-                                VerticalAlignment="Top" />
-                        <Button Grid.Column="3"
-                                Content="?"
-                                Command="{Binding OpenDslHelpCommand}"
-                                ToolTip.Tip="Help for the DSL tab — grammar at a glance"
-                                Margin="8,0,8,0"
-                                Width="28" Height="28"
-                                VerticalAlignment="Top" />
-                    </Grid>
-                    <Border Grid.Row="1"
-                            BorderBrush="#505050"
-                            BorderThickness="1"
-                            Background="#1C1C1C"
-                            Classes.error="{Binding StatusIsError}" >
-                        <Border.Styles>
-                            <Style Selector="Border.error">
-                                <Setter Property="BorderBrush" Value="#FFCC00" />
-                            </Style>
-                        </Border.Styles>
-                        <TextBox x:Name="DslEditor"
-                                 Text="{Binding DslSource, Mode=TwoWay}"
-                                 AcceptsReturn="True"
-                                 AcceptsTab="True"
-                                 TextWrapping="NoWrap"
-                                 FontFamily="Consolas, monospace"
-                                 FontSize="14"
-                                 Background="#1C1C1C"
-                                 Foreground="White"
-                                 BorderThickness="0"
-                                 Margin="0,0,8,0"
-                                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                                 ScrollViewer.VerticalScrollBarVisibility="Auto" />
-                    </Border>
-                </Grid>
-            </TabItem>
+            <!-- CalcGen actions, compile state and what CalcGen accelerates
+                 (only while the toggle is on). -->
+            <StackPanel Grid.Row="1"
+                        IsVisible="{Binding UseCalcGen}"
+                        Orientation="Vertical"
+                        Margin="0,0,0,6">
+                <StackPanel Orientation="Horizontal">
+                    <Button Content="Compile &amp; Load"
+                            Command="{Binding HotLoadViaCalcGenCommand}"
+                            ToolTip.Tip="Generate, Roslyn-compile, and load the equation as a hot calculator. No rebuild required — replaces the active calc when the compile finishes."
+                            Margin="0,0,6,0"
+                            Padding="14,4" />
+                    <Button Content="Compile + Save"
+                            Command="{Binding HotLoadAndPersistCommand}"
+                            ToolTip.Tip="Same as Compile &amp; Load, but also writes the generated source under %LOCALAPPDATA%/FracturingFog/UserCalculators/. The calculator is re-loaded automatically on next launch."
+                            Margin="0,0,6,0"
+                            Padding="14,4" />
+                    <Button Content="Generate via CalcGen"
+                            Command="{Binding GenerateViaCalcGenCommand}"
+                            ToolTip.Tip="Run the equation through CalculatorGen and write a generated calculator to Calculators/Generated/. Rebuild the app to pick it up."
+                            Padding="14,4" />
+                </StackPanel>
+                <TextBlock Text="{Binding CompileStateText}"
+                           Margin="0,4,0,0"
+                           Foreground="#B4B4B4"
+                           Classes.failed="{Binding CompileFailed}"
+                           Classes.ok="{Binding CompileSucceeded}">
+                    <TextBlock.Styles>
+                        <Style Selector="TextBlock.failed">
+                            <Setter Property="Foreground" Value="#FFCC00" />
+                        </Style>
+                        <Style Selector="TextBlock.ok">
+                            <Setter Property="Foreground" Value="#64FF64" />
+                        </Style>
+                    </TextBlock.Styles>
+                </TextBlock>
+                <TextBlock Text="{Binding CalcGenReport}"
+                           TextWrapping="Wrap"
+                           Foreground="#B4B4B4"
+                           FontSize="12"
+                           Margin="0,4,0,0" />
+            </StackPanel>
 
-        </TabControl>
+            <Border Grid.Row="2"
+                    BorderBrush="#505050"
+                    BorderThickness="1"
+                    Background="#1C1C1C"
+                    Classes.error="{Binding StatusIsError}">
+                <Border.Styles>
+                    <Style Selector="Border.error">
+                        <Setter Property="BorderBrush" Value="#FFCC00" />
+                    </Style>
+                </Border.Styles>
+                <TextBox x:Name="EquationEditor"
+                         Text="{Binding Source, Mode=TwoWay}"
+                         AcceptsReturn="True"
+                         AcceptsTab="True"
+                         TextWrapping="NoWrap"
+                         FontFamily="Consolas, monospace"
+                         FontSize="14"
+                         Background="#1C1C1C"
+                         Foreground="White"
+                         BorderThickness="0"
+                         Margin="0,0,8,0"
+                         PlaceholderText="z*z + c   (C#-style text is accepted too: Ctrl+. converts it)"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto" />
+            </Border>
+        </Grid>
 
         <!-- Row 4: Live equation preview (Wave 2.4 / D-6.24) — collapsible.
              Updates after every successful CalcGen parse. AST + dz/dc come

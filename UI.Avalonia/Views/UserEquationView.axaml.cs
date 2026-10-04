@@ -19,15 +19,14 @@ namespace FracturingFog.UI.Avalonia.Views;
 /// PromotionChanged, NamePromptRequested, ConfirmDeleteRequested, HotLoadRequested).
 ///
 /// The one piece the view DOES own: applying the VM's <c>ErrorSpan*</c> to the
-/// correct TextBox's <c>SelectionStart/End</c>. Avalonia's TextBox uses
+/// editor's <c>SelectionStart/End</c> (#1089: one editor). Avalonia's TextBox uses
 /// SelectionStart/End as the canonical highlight mechanism; binding both
 /// two-way fights the user's own caret moves, so we listen to an event from
 /// the VM and apply once per validation cycle.
 /// </summary>
 public sealed partial class UserEquationView : UserControl
 {
-    private TextBox? _userEqEditor;
-    private TextBox? _dslEditor;
+    private TextBox? _editor;
     private UserEquationViewModel? _vm;
 
     // Pending span — applied only when the relevant editor is NOT focused.
@@ -38,19 +37,15 @@ public sealed partial class UserEquationView : UserControl
     // still updates immediately so the user sees the error.
     //
     // -1 sentinel means "no pending span".
-    private int _pendingTab = -1;
     private int _pendingStart = -1;
     private int _pendingEnd = -1;
 
     public UserEquationView()
     {
         AvaloniaXamlLoader.Load(this);
-        _userEqEditor = this.FindControl<TextBox>("UserEquationEditor");
-        _dslEditor    = this.FindControl<TextBox>("DslEditor");
-        if (_userEqEditor != null)
-            _userEqEditor.LostFocus += (_, _) => { if (_pendingTab == 0) FlushPending(_userEqEditor); };
-        if (_dslEditor != null)
-            _dslEditor.LostFocus    += (_, _) => { if (_pendingTab == 1) FlushPending(_dslEditor); };
+        _editor = this.FindControl<TextBox>("EquationEditor");
+        if (_editor != null)
+            _editor.LostFocus += (_, _) => FlushPending(_editor);
         DataContextChanged += OnDataContextChanged;
     }
 
@@ -77,10 +72,10 @@ public sealed partial class UserEquationView : UserControl
     // way the user's typing never gets clobbered by a selection sweep.
     // When the editor later loses focus (Alt+Tab, click elsewhere, focus
     // the Apply Fix button, etc.) the LostFocus handler flushes the stash.
-    private void ApplyErrorSpan(int tab)
+    private void ApplyErrorSpan()
     {
         if (_vm == null) return;
-        var editor = tab == 1 ? _dslEditor : _userEqEditor;
+        var editor = _editor;
         if (editor == null) return;
 
         int start = _vm.ErrorSpanStart;
@@ -92,12 +87,10 @@ public sealed partial class UserEquationView : UserControl
         if (len == 0)
         {
             // Clear request — no highlight to apply; drop any pending one.
-            _pendingTab = -1;
             _pendingStart = _pendingEnd = -1;
             return;
         }
 
-        _pendingTab = tab;
         _pendingStart = start;
         _pendingEnd = end;
         if (!editor.IsFocused) FlushPending(editor);
@@ -131,7 +124,7 @@ public sealed partial class UserEquationView : UserControl
     }
 
     // #764 / #765 — read MathML / LaTeX off the clipboard and import it into the
-    // DSL editor. The view owns the clipboard read (UI-layer accessor); the VM
+    // editor. The view owns the clipboard read (UI-layer accessor); the VM
     // owns the conversion and status reporting.
     private async void OnPasteMathml(object? sender, RoutedEventArgs e)
     {
@@ -166,7 +159,6 @@ public sealed partial class UserEquationView : UserControl
         if (_pendingStart < 0) return;
         editor.SelectionStart = _pendingStart;
         editor.SelectionEnd = _pendingEnd;
-        _pendingTab = -1;
         _pendingStart = _pendingEnd = -1;
     }
 }
