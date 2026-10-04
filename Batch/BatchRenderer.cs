@@ -234,7 +234,7 @@ namespace FracturingFog.Batch
         {
             string? src = type switch
             {
-                FractalType.UserEquation => fp.UserEquationActiveTab == 1 ? fp.UserEquationDslSource : fp.UserEquationSource,
+                FractalType.UserEquation => fp.UserEquationSource,
                 FractalType.Sandbox => fp.SandboxSource,
                 FractalType.UserBulb => fp.UserBulbSource,
                 _ => "n/a",

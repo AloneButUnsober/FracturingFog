@@ -48,9 +48,9 @@ public sealed class UserEquationDslMigrationTests
         // A translatable C# body (Complex.* + a member access) and one with no
         // DSL form (an unsupported member the preprocessor can't take).
         SeedFile(
-            new UserEquationEntry { Name = "TransA", Source = "return Complex.Pow(z, 2) + c;", Kind = UserEquationKind.UserEquation },
-            new UserEquationEntry { Name = "TransB", Source = "return z.Real + c;",             Kind = UserEquationKind.UserEquation },
-            new UserEquationEntry { Name = "NoDsl",  Source = "return z.GetType().ToString().Length + c;", Kind = UserEquationKind.UserEquation });
+            new UserEquationEntry { Name = "TransA", Source = "return Complex.Pow(z, 2) + c;", UseCalcGen = false },
+            new UserEquationEntry { Name = "TransB", Source = "return z.Real + c;",             UseCalcGen = false },
+            new UserEquationEntry { Name = "NoDsl",  Source = "return z.GetType().ToString().Length + c;", UseCalcGen = false });
 
         var store = UserEquationStore.Instance;
         store.Load();
@@ -61,15 +61,15 @@ public sealed class UserEquationDslMigrationTests
         // #27 Phase 5a fix — converted entries stay on the live-rendering
         // UserEquation tab; only the source is rewritten to DSL text.
         var a = store.GetByName("TransA")!;
-        Assert.Equal(UserEquationKind.UserEquation, a.Kind);
+        Assert.False(a.UseCalcGen);
         Assert.DoesNotContain("Complex.", a.Source);   // now DSL text
 
         var b = store.GetByName("TransB")!;
-        Assert.Equal(UserEquationKind.UserEquation, b.Kind);
+        Assert.False(b.UseCalcGen);
         Assert.Contains("re(", b.Source);              // z.Real -> re(z)
 
         var noDsl = store.GetByName("NoDsl")!;
-        Assert.Equal(UserEquationKind.UserEquation, noDsl.Kind);   // left editable
+        Assert.False(noDsl.UseCalcGen);   // left editable
         Assert.Equal("return z.GetType().ToString().Length + c;", noDsl.Source);
 
         // A timestamped snapshot of the pre-migration file exists.
@@ -88,7 +88,7 @@ public sealed class UserEquationDslMigrationTests
         {
             Name = "Renders",
             Source = "return Complex.Sin(z) + c;",
-            Kind = UserEquationKind.UserEquation,
+            UseCalcGen = false,
         });
 
         var store = UserEquationStore.Instance;
@@ -96,7 +96,7 @@ public sealed class UserEquationDslMigrationTests
         Assert.Equal(1, UserEquationDslMigration.Run(store));
 
         var entry = store.GetByName("Renders")!;
-        Assert.Equal(UserEquationKind.UserEquation, entry.Kind); // stays on the live tab
+        Assert.False(entry.UseCalcGen); // stays on the live tab
         Assert.DoesNotContain("Complex.", entry.Source);         // source is DSL now
 
         // The persisted DSL text compiles + runs on the live calculator.
@@ -122,12 +122,12 @@ public sealed class UserEquationDslMigrationTests
         string backup = Path.Combine(dir, "userequations.json.20260101-000000.dslmigration.bak");
         File.WriteAllText(backup, JsonSerializer.Serialize(new[]
         {
-            new UserEquationEntry { Name = "NegPow", Source = "return z * Complex.Pow(z,-3) + c;", Kind = UserEquationKind.UserEquation },
+            new UserEquationEntry { Name = "NegPow", Source = "return z * Complex.Pow(z,-3) + c;", UseCalcGen = false },
         }, new JsonSerializerOptions { WriteIndented = true }));
 
         // Current store carries the BAD migrated DSL a prior build produced
         // (1/(z)^3 — NaN at z=0, renders blank).
-        SeedFile(new UserEquationEntry { Name = "NegPow", Source = "z * (1/(z)^3) + c", Kind = UserEquationKind.UserEquation });
+        SeedFile(new UserEquationEntry { Name = "NegPow", Source = "z * (1/(z)^3) + c", UseCalcGen = false });
 
         var store = UserEquationStore.Instance;
         store.Load();
@@ -154,7 +154,7 @@ public sealed class UserEquationDslMigrationTests
         {
             Name = "NewtonBlock",
             Source = "Complex f = z*z*z - 1; Complex d = 3*z*z; return z - f/d;",
-            Kind = UserEquationKind.UserEquation,
+            UseCalcGen = false,
         });
 
         var store = UserEquationStore.Instance;
@@ -162,7 +162,7 @@ public sealed class UserEquationDslMigrationTests
         Assert.Equal(1, UserEquationDslMigration.Run(store));
 
         var e = store.GetByName("NewtonBlock")!;
-        Assert.Equal(UserEquationKind.UserEquation, e.Kind); // stays on the live tab
+        Assert.False(e.UseCalcGen); // stays on the live tab
         Assert.DoesNotContain("Complex.", e.Source);         // Complex.* translated out
         Assert.Contains("return", e.Source);                 // block structure preserved
 
@@ -189,7 +189,7 @@ public sealed class UserEquationDslMigrationTests
         {
             Name = "WasFlipped",
             Source = "sin(z) + c",
-            Kind = UserEquationKind.Dsl,
+            UseCalcGen = true,
         });
 
         var store = UserEquationStore.Instance;
@@ -197,7 +197,7 @@ public sealed class UserEquationDslMigrationTests
         UserEquationDslMigration.Run(store);
 
         var e = store.GetByName("WasFlipped")!;
-        Assert.Equal(UserEquationKind.UserEquation, e.Kind); // moved to the live tab
+        Assert.False(e.UseCalcGen); // moved to the live tab
         Assert.Equal("sin(z) + c", e.Source);                // DSL source preserved
         Assert.True(File.Exists(marker));                    // one-time marker set
 

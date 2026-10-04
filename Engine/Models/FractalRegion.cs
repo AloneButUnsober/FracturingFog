@@ -358,7 +358,7 @@ namespace FracturingFog.Models
                 && !string.IsNullOrWhiteSpace(UserEquationName))
             {
                 var entry = UserEquationStore.Instance.GetByName(UserEquationName);
-                if (entry != null) { p.UserEquationSource = entry.Source; p.UserEquationName = entry.Name; p.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive; }
+                if (entry != null) { entry.ApplyTo(p); p.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive; }
             }
             if (FractalType == FractalType.Sandbox
                 && !string.IsNullOrWhiteSpace(SandboxName))

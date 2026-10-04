@@ -18,16 +18,6 @@ using FracturingFog.Abstractions;
 
 namespace FracturingFog.Models
 {
-    /// <summary>Which editor tab produced this entry's <see cref="UserEquationEntry.Source"/>.
-    /// UserEquation = C#-style body fed through Roslyn / CalcGen preprocessor.
-    /// Dsl = bare CalcGen DSL fed straight to CalculatorGen. Legacy entries
-    /// (no Kind field) deserialise to UserEquation.</summary>
-    public enum UserEquationKind
-    {
-        UserEquation = 0,
-        Dsl = 1,
-    }
-
     public sealed class UserEquationEntry : System.Text.Json.Serialization.IJsonOnDeserialized
     {
 
@@ -61,10 +51,32 @@ namespace FracturingFog.Models
         /// </summary>
         public bool Promoted { get; set; }
 
-        /// <summary>Which editor tab this source was authored in. Drives
-        /// which tab a Load restores into. Defaults to UserEquation so
-        /// pre-existing JSON entries remain valid.</summary>
-        public UserEquationKind Kind { get; set; } = UserEquationKind.UserEquation;
+        /// <summary>#1088 — the equation is meant for CalcGen (Compile &amp; Load
+        /// / Generate) rather than only the live interpreter. One source, one
+        /// language either way; this only routes the editor. Both engines render
+        /// the same text (headless always interprets it).</summary>
+        public bool UseCalcGen { get; set; }
+
+        /// <summary>#1088 — reads the pre-#1088 <c>Kind</c> field (0 = User
+        /// Equation tab, 1 = DSL tab) into <see cref="UseCalcGen"/>. Never
+        /// written: new files carry <c>UseCalcGen</c> only.</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("Kind")]
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public int? LegacyKindJson
+        {
+            get => null;
+            set { if (value == 1) UseCalcGen = true; }
+        }
+
+        /// <summary>#1088 — copy this entry's equation onto <paramref name="p"/>
+        /// (source, name, CalcGen flag). The one place a recalled region or a
+        /// video slide loads a saved equation.</summary>
+        public void ApplyTo(FractalParameters p)
+        {
+            p.UserEquationSource = Source;
+            p.UserEquationName = Name;
+            p.UserEquationUseCalcGen = UseCalcGen;
+        }
 
         // ── Per-equation render settings (persisted with the equation so a Save
         // captures them and a Load/selection restores — and resets — them). All
@@ -166,7 +178,7 @@ namespace FracturingFog.Models
         /// Inserts or replaces an entry by Name (case-insensitive). Returns the
         /// stored entry, or null if name is blank.
         /// </summary>
-        public UserEquationEntry? SaveEquation(string name, string source, UserEquationKind kind = UserEquationKind.UserEquation,
+        public UserEquationEntry? SaveEquation(string name, string source, bool useCalcGen = false,
             double escapeRadius = 0.0, string? seed = null, string? bailoutCondition = null, bool colorInterior = false,
             bool bailoutReplacesModulus = false)
         {
@@ -177,7 +189,7 @@ namespace FracturingFog.Models
                 if (Equations[i].Name.Equals(name, StringComparison.OrdinalIgnoreCase))
                 {
                     Equations[i].Source = source ?? string.Empty;
-                    Equations[i].Kind = kind;
+                    Equations[i].UseCalcGen = useCalcGen;
                     Equations[i].EscapeRadius = escapeRadius;
                     Equations[i].Seed = seed;
                     Equations[i].BailoutCondition = bailoutCondition;
@@ -191,7 +203,7 @@ namespace FracturingFog.Models
 
             var entry = new UserEquationEntry
             {
-                Name = name, Source = source ?? string.Empty, Kind = kind,
+                Name = name, Source = source ?? string.Empty, UseCalcGen = useCalcGen,
                 EscapeRadius = escapeRadius, Seed = seed,
                 BailoutCondition = bailoutCondition, ColorInterior = colorInterior,
                 BailoutReplacesModulus = bailoutReplacesModulus,
@@ -244,8 +256,7 @@ namespace FracturingFog.Models
 
         /// <summary>
         /// #27 Phase 5a — normalise saved equations onto the safe DSL while
-        /// keeping them on the live-rendering <see cref="UserEquationKind.UserEquation"/>
-        /// path. The store is UI-free, so the translation (EquationPreprocessor →
+        /// keeping them on the live-rendering path (<see cref="UserEquationEntry.UseCalcGen"/> off). The store is UI-free, so the translation (EquationPreprocessor →
         /// SandboxExpression, which live in higher layers) is injected:
         /// <paramref name="translate"/> returns the DSL text when a C# source
         /// translates and validates, or null to leave it as-is (no DSL form — it
@@ -253,12 +264,13 @@ namespace FracturingFog.Models
         ///
         /// Two operations:
         /// <list type="bullet">
-        /// <item>Rewrite a <c>UserEquation</c> entry's C# source to its DSL form
-        ///   (Kind kept). Idempotent — an entry already stored as its own DSL is
+        /// <item>Rewrite a live (non-CalcGen) entry's C# source to its DSL form
+        ///   (flag kept). Idempotent — an entry already stored as its own DSL is
         ///   skipped (the translation equals the source).</item>
         /// <item>When <paramref name="flipDslEntriesToUserEquation"/> is set (a
-        ///   one-time corrective), move every <c>Dsl</c>-tagged entry back to the
-        ///   <c>UserEquation</c> tab. A prior migration wrongly flipped entries to
+        ///   one-time corrective), turn <see cref="UserEquationEntry.UseCalcGen"/>
+        ///   off on every entry (pre-#1088: move <c>Kind=Dsl</c> back to the
+        ///   User Equation tab). A prior migration wrongly flipped entries to
         ///   <c>Dsl</c>, which routed them to an editor tab that does not render
         ///   live (only the CalcGen "Compile &amp; Load" codegen path) — the
         ///   safe interpreter renders the same DSL directly on the UserEquation
@@ -279,13 +291,13 @@ namespace FracturingFog.Models
 
             foreach (var e in Equations)
             {
-                if (flipDslEntriesToUserEquation && e.Kind == UserEquationKind.Dsl)
+                if (flipDslEntriesToUserEquation && e.UseCalcGen)
                 {
                     // Source is already DSL; just move it back to the live tab.
                     flips.Add(e);
                     continue;
                 }
-                if (e.Kind != UserEquationKind.UserEquation) continue;
+                if (e.UseCalcGen) continue;
                 if (string.IsNullOrWhiteSpace(e.Source)) continue;
                 string? dsl = translate(e.Source);
                 if (string.IsNullOrWhiteSpace(dsl)) continue;   // no DSL form — leave it
@@ -298,8 +310,8 @@ namespace FracturingFog.Models
             // Snapshot the original file before the destructive change.
             UserDataBackup.SnapshotBeforeMigration(EquationsFile, "dslmigration");
 
-            foreach (var e in flips) e.Kind = UserEquationKind.UserEquation;
-            foreach (var (entry, dsl) in rewrites) entry.Source = dsl; // Kind stays UserEquation
+            foreach (var e in flips) e.UseCalcGen = false;
+            foreach (var (entry, dsl) in rewrites) entry.Source = dsl; // flag stays off
             Save();
             return flips.Count + rewrites.Count;
         }

@@ -2,12 +2,13 @@
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
 // #745 — headless (poster / batch) rendering of a DSL-tab "Compile & Load" User Equation.
-// The DSL tab stores its equation in UserEquationDslSource and previously had NO
-// interpreted path (nothing fed it to UserEquationCalculator), so it rendered only via
+// (#1088: the DSL tab is now the UserEquationUseCalcGen flag on the single
+// UserEquationSource.) The DSL tab's equation previously had NO interpreted path
+// (nothing fed it to UserEquationCalculator), so it rendered only via
 // the interactive CalcGen hot-load calc. PosterRenderer / BatchRenderer build a plain
 // UserEquationCalculator, which read UserEquationSource (the C# tab) → wrong/empty for a
-// DSL equation → no colour / no relief field. UserEquationCalculator now picks the ACTIVE
-// tab's source, so the interpreter renders the DSL equation headlessly (colour + the
+// DSL equation → no colour / no relief field. UserEquationCalculator now reads the one
+// source, so the interpreter renders the DSL equation headlessly (colour + the
 // SmoothBuffer relief field), no Roslyn / hot-load needed.
 
 using System.Linq;
@@ -33,51 +34,49 @@ public sealed class S745UserEquationDslHeadlessTests
         return c;
     }
 
-    // DSL tab (ActiveTab = 1) with the equation ONLY in UserEquationDslSource renders —
+    // A CalcGen equation (#1088: UserEquationUseCalcGen, the old DSL tab) renders —
     // colour + a non-empty relief height field — as poster/batch build it.
     [Fact]
-    public void DslTab_Equation_Renders_Headless_With_Field()
+    public void CalcGenEquation_Renders_Headless_With_Field()
     {
         var c = Build(new FractalParameters
         {
-            UserEquationActiveTab = 1,
-            UserEquationDslSource = "z^2 + c",
+            UserEquationUseCalcGen = true,
+            UserEquationSource = "z^2 + c",
             UserCodeOrigin = UserCodeOrigin.Interactive,
         });
         Assert.True(c.IsCompiled, c.LastError);
         Assert.IsAssignableFrom<IHeightFieldSource>(c);
-        Assert.True(c.SmoothBuffer.Any(v => v > 0f), "DSL-tab relief field is empty");
-        Assert.True(c.ColorBuffer.Distinct().Count() > 4, "DSL-tab colour is flat");
+        Assert.True(c.SmoothBuffer.Any(v => v > 0f), "CalcGen equation relief field is empty");
+        Assert.True(c.ColorBuffer.Distinct().Count() > 4, "CalcGen equation colour is flat");
     }
 
-    // A stale C# UserEquationSource must NOT hijack a DSL-tab render — the active tab wins.
+    // #1088 — one source: the CalcGen flag routes the editor and never changes the
+    // interpreted image (before #1088 a stale C#-tab source could be drawn instead).
     [Fact]
-    public void DslTab_Ignores_Stale_CSharp_Source()
+    public void CalcGenFlag_DoesNotChange_TheImage()
     {
-        var dslOnly = Build(new FractalParameters
+        var on = Build(new FractalParameters
         {
-            UserEquationActiveTab = 1, UserEquationDslSource = "z^2 + c",
+            UserEquationUseCalcGen = true, UserEquationSource = "z^2 + c",
             UserCodeOrigin = UserCodeOrigin.Interactive,
         });
-        var dslWithStale = Build(new FractalParameters
+        var off = Build(new FractalParameters
         {
-            UserEquationActiveTab = 1, UserEquationDslSource = "z^2 + c",
-            UserEquationSource = "z*z*z*z + c",   // stale leftover from the C# tab
+            UserEquationUseCalcGen = false, UserEquationSource = "z^2 + c",
             UserCodeOrigin = UserCodeOrigin.Interactive,
         });
-        // The DSL equation is what renders in both → identical field (stale C# ignored).
-        Assert.Equal(dslOnly.SmoothBuffer, dslWithStale.SmoothBuffer);
+        Assert.Equal(on.SmoothBuffer, off.SmoothBuffer);
+        Assert.Equal(on.ColorBuffer, off.ColorBuffer);
     }
 
-    // C# tab (ActiveTab = 0, default) still uses UserEquationSource — unchanged.
+    // A C#-style source (flag off) is still translated and rendered.
     [Fact]
-    public void CSharpTab_Still_Uses_UserEquationSource()
+    public void CSharpStyleSource_Still_Renders()
     {
         var c = Build(new FractalParameters
         {
-            UserEquationActiveTab = 0,
-            UserEquationSource = "z*z + c",
-            UserEquationDslSource = "z^2 + c",   // present but not the active tab
+            UserEquationSource = "return Complex.Pow(z, 2) + c;",
             UserCodeOrigin = UserCodeOrigin.Interactive,
         });
         Assert.True(c.IsCompiled, c.LastError);

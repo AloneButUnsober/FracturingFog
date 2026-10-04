@@ -45,8 +45,8 @@ public sealed class DslHistogramEqTests
                 ColorMap = map,
                 FractalParameters = new FractalParameters
                 {
-                    UserEquationActiveTab = 1,
-                    UserEquationDslSource = "z^2 + c",
+                    UserEquationUseCalcGen = true,
+                    UserEquationSource = "z^2 + c",
                     UserCodeOrigin = UserCodeOrigin.Interactive,
                 },
             };

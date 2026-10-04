@@ -39,6 +39,8 @@ namespace FracturingFog.Models
         public string Name { get; init; } = string.Empty;
         public EquationEngine Engine { get; init; }
         public string Source { get; init; } = string.Empty;
+        /// <summary>#1088 — UserEquation entries: meant for CalcGen.</summary>
+        public bool UseCalcGen { get; init; }
 
         public FractalType Type => Engine switch
         {
@@ -76,6 +78,7 @@ namespace FracturingFog.Models
                             Name = e.Name,
                             Engine = EquationEngine.UserEquation,
                             Source = e.Source,
+                            UseCalcGen = e.UseCalcGen,
                         };
 
                 foreach (var e in UserBulbStore.Instance.Equations)

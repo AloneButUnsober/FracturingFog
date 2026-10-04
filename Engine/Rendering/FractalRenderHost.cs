@@ -2281,9 +2281,9 @@ namespace FracturingFog.Rendering
         /// type, and NOT the UserEquation hot-load (Compile &amp; Load) path (#738): a
         /// hot-loaded equation's field must come from the COMPILED calc itself
         /// (<see cref="_dynamicAltCalculator"/>), not a fresh interpreted UserEquationCalculator
-        /// twin — the twin reads <c>UserEquationSource</c> (C# form), which is stale/empty for
-        /// a DSL Compile &amp; Load (its source lives in <c>UserEquationDslSource</c>), so it
-        /// renders the wrong equation or nothing. Hot-load falls back to the display-res
+        /// twin — the twin reads <c>UserEquationSource</c>, which need not be the equation
+        /// that was compiled (a persisted or earlier hot-load), so it can render the wrong
+        /// equation. Hot-load falls back to the display-res
         /// field off the compiled calc (below).
         /// When false the alt render keeps its existing single full-res path
         /// (byte-identical) — this only ADDS a preview for relief-eligible alt types.</summary>
@@ -2362,8 +2362,8 @@ namespace FracturingFog.Rendering
             if (dispW <= 2 || dispH <= 2) return false;
             if (!SupportsHiResReliefField(type)) return false;
             // #745 — a UserEquation hot-load (Compile & Load) can't use the interpreted
-            // CreateReliefFieldCalc twin (it reads UserEquationSource / C# form, wrong for a
-            // DSL or CalcGen hot-load — #738). Instead the alt branch builds a hi-res twin of
+            // CreateReliefFieldCalc twin (it reads UserEquationSource, which need not be the
+            // compiled equation — #738). Instead the alt branch builds a hi-res twin of
             // the COMPILED hot-load type itself (EnsureReliefHotLoadTwin); if that can't be
             // instantiated it returns false and the caller falls back to the compiled calc's
             // display-res SmoothBuffer (the correct #738 behaviour).

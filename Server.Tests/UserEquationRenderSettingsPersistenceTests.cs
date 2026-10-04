@@ -27,7 +27,7 @@ public sealed class UserEquationRenderSettingsPersistenceTests
         try
         {
             var saved = store.SaveEquation(
-                name, "z*z + c", UserEquationKind.UserEquation,
+                name, "z*z + c", false,
                 escapeRadius: 128.0, seed: "c", bailoutCondition: "prev == z", colorInterior: true);
             Assert.NotNull(saved);
 
@@ -52,9 +52,9 @@ public sealed class UserEquationRenderSettingsPersistenceTests
         const string name = "RenderSettingsOverwrite_UEBUG";
         try
         {
-            store.SaveEquation(name, "z*z + c", UserEquationKind.UserEquation,
+            store.SaveEquation(name, "z*z + c", false,
                 escapeRadius: 32.0, seed: null, bailoutCondition: null, colorInterior: false);
-            store.SaveEquation(name, "z*z + c", UserEquationKind.UserEquation,
+            store.SaveEquation(name, "z*z + c", false,
                 escapeRadius: 999.0, seed: "2*c", bailoutCondition: "n > 5", colorInterior: true);
 
             var e = store.GetByName(name);

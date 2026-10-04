@@ -117,7 +117,7 @@ public static class UserEquationDslMigration
                     foreach (var (entry, dsl) in rewrites)
                     {
                         entry.Source = dsl;
-                        entry.Kind = UserEquationKind.UserEquation;
+                        entry.UseCalcGen = false;
                     }
                     store.Save();
                 }
