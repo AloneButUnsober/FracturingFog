@@ -37,6 +37,7 @@ system. The codebase is a single .NET 10 solution.
 |------------------------------------------------------------|-------------------------------------------------------------|
 | New to the codebase                                        | [Architecture Overview](Architecture-Overview.md)           |
 | Adding a new fractal family                                | [Fractal Equation Design Guide](FractalEquation-DesignGuide.md) |
+| The 2D equation language (grammar, precedence, errors)     | [Equation Language Specification](Equation-Language.md) |
 | Touching the calculator generator                          | [CalculatorGen Architecture](CalculatorGen-Architecture.md) and [Authoring](CalculatorGen-Authoring.md) |
 | Tracking the GPU JIT / perturbation roadmap                | [Performance Development Plan](Performance-DevelopmentPlan.md) |
 | Measuring perf — running/reading the benchmark harness     | [Benchmark Subsystem](Benchmark-Subsystem.md)               |

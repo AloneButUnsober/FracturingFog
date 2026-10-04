@@ -56,6 +56,7 @@ Highlights (full menu on the index page):
 |-------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------|
 | [Architecture Overview](Technical/Architecture-Overview.md)                                           | One-page tour of the whole solution. Read first.                                |
 | [Fractal Equation Design Guide](Technical/FractalEquation-DesignGuide.md)                             | How to add a new fractal family end-to-end.                                     |
+| [Equation Language Specification](Technical/Equation-Language.md)                                      | The unified 2D equation grammar, precedence, functions and errors (#937).      |
 | [CalculatorGen Architecture](Technical/CalculatorGen-Architecture.md) + [Authoring](Technical/CalculatorGen-Authoring.md) | Roslyn source-gen of perturbation calculators from DSL equations.   |
 | [Performance Development Plan](Technical/Performance-DevelopmentPlan.md)                              | SIMD + DD/QD/OD precision + BLA + GPU JIT roadmap.                              |
 | [Cross-Platform Roadmap](Technical/CrossPlatform-Roadmap.md) + [Implementation Plan](Technical/CrossPlatform-ImplementationPlan.md) | Linux / macOS port plan + per-RID smoke tests.                |
