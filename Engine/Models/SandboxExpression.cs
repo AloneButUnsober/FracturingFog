@@ -17,7 +17,18 @@
 //             | (TYPE? IDENT "=" expr ";"?) block                ; decl/assign -> let
 //             | expr ";"?                                        ; terminal expression
 //   expr     := let_expr
-//   let_expr := "let" IDENT "=" expr "in" expr | ternary
+//   let_expr := "let" IDENT "=" expr "in" expr | if_expr | ternary
+//   if_expr  := "if" or_expr "then" expr "else" expr          ; #1085 CalcGen form
+//             | "if" "(" expr ")" "then" expr "else" expr
+//
+// #1085 — `if <cond> then <a> else <b>` is the CalcGen DSL's conditional; it is
+// sugar for `cond ? a : b`, so a DSL-tab equation runs on the interpreter (the
+// poster / batch path) instead of failing to parse. CalcGen gives a condition
+// operand `abs(x)` the meaning |x|² (squared magnitude); to keep that text's
+// meaning identical on both engines, a comparison operand that is directly
+// `abs(x)` inside an `if … then` condition evaluates as `norm(x)`. Everywhere
+// else `abs` stays |x|. (#1088 migrates saved sources to `norm` and retires
+// this rule.)
 //
 // Statement blocks (#27 Phase 5b): a saved C# equation may be a sequence of
 // statements — typed / `var` declarations, reassignments (`z = z*z + c;`), a
@@ -51,6 +62,7 @@
 //                          PI / E / I so translated C# equations resolve)
 // Functions:
 //   sin cos tan sinh cosh tanh exp log sqrt sqr abs conj re im arg
+//   norm                                      (|x|², squared magnitude; #1085)
 //   asin acos atan asinh acosh atanh          (1-arg; complex outside real domain)
 //   floor sign fract round ceil trunc         (1-arg; per-component)
 //   fold                                      (1-arg; (|Re|,|Im|) burning-ship fold)
@@ -327,6 +339,8 @@ namespace FracturingFog.Models
                 case "acosh": return x.IsReal && x.R >= 1 ? SbxVal.Real(Math.Acosh(x.R)) : SbxVal.Cx(ComplexAcosh(x.AsComplex()));
                 case "atanh": return x.IsReal && x.R > -1 && x.R < 1 ? SbxVal.Real(Math.Atanh(x.R)) : SbxVal.Cx(ComplexAtanh(x.AsComplex()));
                 case "abs":  return SbxVal.Real(x.IsReal ? Math.Abs(x.R) : Math.Sqrt(x.R * x.R + x.I * x.I));
+                // #1085 — squared magnitude |x|² (CalcGen's condition `abs`).
+                case "norm": return SbxVal.Real(x.IsReal ? x.R * x.R : x.R * x.R + x.I * x.I);
                 case "conj": return x.IsReal ? x : new SbxVal(x.R, -x.I);
                 case "re":   return SbxVal.Real(x.R);
                 case "im":   return SbxVal.Real(x.IsReal ? 0.0 : x.I);
@@ -536,6 +550,18 @@ namespace FracturingFog.Models
                 if (MatchKeyword("if"))
                 {
                     SkipWs();
+                    // #1085 — the CalcGen expression form `if <cond> then a else b`
+                    // (cond with or without parens, e.g. `if (re(z)) > 0 then …`) vs
+                    // the C# statement forms `if (cond) return …;` / `if (cond) v = …;`.
+                    // Statement form only when a parenthesised condition is followed
+                    // by `return` or an assignment; otherwise the expression form.
+                    if (!IsStatementIfAhead())
+                    {
+                        var ite = ParseIfThenElse(ParseOr());
+                        SkipWs();
+                        if (Peek() == ';') _pos++;
+                        return ite;
+                    }
                     Expect('(');
                     var cond = ParseExpr();
                     SkipWs();
@@ -670,8 +696,39 @@ namespace FracturingFog.Models
                         else _scope.Remove(name);
                     }
                 }
+                if (MatchKeyword("if"))
+                    return ParseIfThenElse(ParseOr());
                 return ParseTernary();
             }
+
+            // #1085 — CalcGen `if <cond> then <a> else <b>` (cond already parsed;
+            // `if` consumed). Desugars to a ternary; see the grammar note on the
+            // condition-operand `abs` rule.
+            private SbxNode ParseIfThenElse(SbxNode cond)
+            {
+                SkipWs();
+                if (!MatchKeyword("then")) throw new FormatException($"Expected 'then' after the 'if' condition at position {_pos}");
+                var thenN = ParseExpr();
+                SkipWs();
+                if (!MatchKeyword("else")) throw new FormatException($"Expected 'else' after the 'then' branch at position {_pos}");
+                var elseN = ParseExpr();
+                return new SbxTernary(CalcGenCondition(cond), thenN, elseN);
+            }
+
+            // A comparison operand that is directly abs(x) means |x|² in a CalcGen
+            // condition: rewrite it to norm(x). Recurses through && / || / !.
+            private static SbxNode CalcGenCondition(SbxNode n) => n switch
+            {
+                SbxBinary b when b.Op is "&&" or "||"
+                    => new SbxBinary(b.Op, CalcGenCondition(b.A), CalcGenCondition(b.B)),
+                SbxBinary b when b.Op is "<" or ">" or "<=" or ">=" or "==" or "!="
+                    => new SbxBinary(b.Op, AbsToNorm(b.A), AbsToNorm(b.B)),
+                SbxUnary u when u.Op == '!' => new SbxUnary('!', CalcGenCondition(u.A)),
+                _ => n,
+            };
+
+            private static SbxNode AbsToNorm(SbxNode n)
+                => n is SbxCall { Name: "abs" } c ? new SbxCall("norm", c.Args) : n;
 
             private SbxNode ParseTernary()
             {
@@ -852,7 +909,7 @@ namespace FracturingFog.Models
             {
                 "sin" or "cos" or "tan" or "sinh" or "cosh" or "tanh"
                     or "exp" or "log" or "sqrt" or "sqr"
-                    or "abs" or "conj" or "re" or "im" or "arg"
+                    or "abs" or "norm" or "conj" or "re" or "im" or "arg"
                     or "asin" or "acos" or "atan"
                     or "asinh" or "acosh" or "atanh"
                     or "floor" or "sign" or "fold" or "fract"
@@ -930,6 +987,30 @@ namespace FracturingFog.Models
                 _pos++;
                 while (_pos < _src.Length && IsIdentCont(_src[_pos])) _pos++;
                 return _src.Substring(start, _pos - start);
+            }
+
+            // #1085 — lookahead (no net consumption): `( expr )` followed by
+            // `return` or `ident =` (not `==`) marks a C# statement-form `if`.
+            private bool IsStatementIfAhead()
+            {
+                int save = _pos, envSave = EnvSize;
+                try
+                {
+                    SkipWs();
+                    if (Peek() != '(') return false;
+                    _pos++;
+                    ParseExpr();
+                    SkipWs();
+                    if (Peek() != ')') return false;
+                    _pos++;
+                    if (MatchKeyword("return")) return true;
+                    SkipWs();
+                    if (ReadIdent().Length == 0) return false;
+                    SkipWs();
+                    return Peek() == '=' && Peek(1) != '=';
+                }
+                catch (FormatException) { return false; }
+                finally { _pos = save; EnvSize = envSave; }
             }
 
             private bool MatchKeyword(string kw)

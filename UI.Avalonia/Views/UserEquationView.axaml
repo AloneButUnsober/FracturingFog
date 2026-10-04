@@ -15,8 +15,10 @@
     <!--
       Header (saved/save/delete/promote/compile/generate + rotation) sits
       ABOVE a TabControl that splits the two equation editors:
-        Tab 0  User Equation  — C#-style source (Roslyn live-compile)
-        Tab 1  DSL            — bare CalcGen DSL (validate-on-type, no live render)
+        Tab 0  User Equation  — C#-style source, translated to the DSL and run on
+                                the safe interpreter (no Roslyn since #27 Phase 3)
+        Tab 1  DSL            — bare CalcGen DSL; the interpreter renders it live and
+                                Compile & Load swaps in the CalcGen-compiled calculator
       Save/Compile/Generate route by the currently active tab via the VM.
     -->
     <!-- Whole form scrolls when the window is too short to show it all (e.g.
@@ -166,7 +168,7 @@
                     Background="Transparent"
                     Margin="0,0,8,0">
 
-            <!-- Tab 1: User Equation (C# style, Roslyn live-compile) -->
+            <!-- Tab 1: User Equation (C# style, translated + interpreted) -->
             <TabItem Header="User Equation">
                 <Grid RowDefinitions="Auto,*,*">
                     <!-- <Grid Grid.Row="0" ColumnDefinitions="400,Auto" Margin="0,6,0,6"> -->
@@ -189,7 +191,7 @@
                     <CheckBox Grid.Row="0"
                               Content="Validate for CalcGen"
                               IsChecked="{Binding ValidateForCalcGen, Mode=TwoWay}"
-                              ToolTip.Tip="Flag C# constructs the CalcGen DSL can't accept (Complex.ImaginaryOne, Complex.Abs, new Complex(...), unsupported Complex.* members). Roslyn-compiles independently — leave on if you plan to Generate or hot-load via CalcGen."
+                              ToolTip.Tip="Flag C# constructs the CalcGen DSL can't accept (Complex.ImaginaryOne, Complex.Abs, new Complex(...), unsupported Complex.* members). The equation itself is translated and run on the interpreter either way — leave on if you plan to Generate or hot-load via CalcGen."
                               Margin="0,0,0,6" />
                     <Border Grid.Row="1"
                             BorderBrush="#505050"

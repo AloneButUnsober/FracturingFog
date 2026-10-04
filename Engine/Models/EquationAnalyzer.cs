@@ -201,6 +201,7 @@ namespace FracturingFog.Models
                     if (ContainsZ(call.Args[0])) acc.Antiholomorphic = true;
                     break;
                 case "abs":
+                case "norm":   // #1085 — |x|², same non-holomorphic family
                     if (ContainsZ(call.Args[0])) acc.HasAbs = true;
                     break;
                 case "sin": case "cos": case "tan": case "exp": case "log":

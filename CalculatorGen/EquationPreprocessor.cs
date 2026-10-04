@@ -48,12 +48,12 @@
 //   x.Imaginary           → im(x)
 //   x.Phase               → arg(x)
 //   x.Magnitude           → sqrt(x*conj(x))   (|x|; avoids `abs`, whose meaning
-//                           differs between the CalcGen DSL (|x|²) and the
-//                           SandboxExpression runtime (|x|) — x*conj(x) = |x|²
-//                           and sqrt of that = |x| under both)
+//                           differs inside a CalcGen `if` condition (|x|²) from
+//                           everywhere else (|x|) — x*conj(x) = |x|² and sqrt of
+//                           that = |x| in every position, #1085)
 //
 // Explicit reject (with crisp error messages)
-//   Complex.Abs(x)        — DSL `abs(x)` is |x|² (squared mag), not |x|
+//   Complex.Abs(x)        — suggest DSL `abs(x)` (|x|) / `norm(x)` (|x|²) (#1085)
 //   Any other Complex.X   — falls through, reported on second pass
 //
 // Operator precedence and structure of the surrounding expression are
@@ -203,7 +203,8 @@ public static class EquationPreprocessor
             if (close > 0)
             {
                 string innerExpr = s.Substring(mAbs.Index + mAbs.Length, close - (mAbs.Index + mAbs.Length)).Trim();
-                // DSL form: `abs(x)` (squared magnitude, |x|²).
+                // #1085 — DSL form: `abs(x)` is |x| in expressions on both
+                // engines (CalcGen since #215), the same meaning as Complex.Abs.
                 dslFix = $"abs({innerExpr})";
                 // C# form: x * Complex.Conjugate(x). Yields |x|² as a Complex
                 // (real part = |x|², imag = 0). Compiles under Roslyn AND
@@ -212,10 +213,9 @@ public static class EquationPreprocessor
                 csFix = $"({innerExpr} * Complex.Conjugate({innerExpr}))";
             }
             diagnostic = new PreprocessDiagnostic(
-                "Complex.Abs(x) returns |x| (square root of |x|²). " +
-                "The CalcGen DSL has only `abs(x)` which means |x|² (squared magnitude). " +
-                "If you can use the squared form, rewrite as `abs(x)`. " +
-                "If you genuinely need the sqrt, it's not available.",
+                "Complex.Abs(x) returns |x|. In the DSL write `abs(x)` (|x|) — or `norm(x)` " +
+                "for the squared magnitude |x|². Note: inside a CalcGen `if … then` condition, " +
+                "`abs(x)` compared against a value means |x|²; write `norm(x)` there to be explicit.",
                 mAbs.Index + lead, spanLen, SuggestionCSharp: csFix, SuggestionDsl: dslFix);
             return s;
         }
