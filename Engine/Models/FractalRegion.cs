@@ -633,6 +633,10 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public bool? DualOrbitDomainMarkCuts { get; set; }
         // #1121 — interior phase-lag / period colouring.
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitLagColors { get; set; }
+        // #1117 — per-orbit traps / stripes.
+        [JsonIgnore(Condition = OmitNull)] public int? DualOrbitTrapShape { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DualOrbitTrapScale { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DualOrbitStripeDensity { get; set; }
         // #971 — slice axes + fixed s when s is not an image axis.
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitSliceAxes { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitSX { get; set; }
@@ -1018,6 +1022,9 @@ namespace FracturingFog.Models
                     DualOrbitDomainPalette = p.DualOrbitDomainPalette != D.DualOrbitDomainPalette ? (int)p.DualOrbitDomainPalette : (int?)null,
                     DualOrbitDomainMarkCuts = p.DualOrbitDomainMarkCuts ? (bool?)null : false,
                     DualOrbitLagColors = p.DualOrbitLagColors != D.DualOrbitLagColors ? (int)p.DualOrbitLagColors : (int?)null,
+                    DualOrbitTrapShape = p.DualOrbitTrapShape != D.DualOrbitTrapShape ? (int)p.DualOrbitTrapShape : (int?)null,
+                    DualOrbitTrapScale = p.DualOrbitTrapScale != D.DualOrbitTrapScale ? p.DualOrbitTrapScale : (double?)null,
+                    DualOrbitStripeDensity = p.DualOrbitStripeDensity != D.DualOrbitStripeDensity ? p.DualOrbitStripeDensity : (double?)null,
                     DualOrbitSliceAxes = p.DualOrbitSliceAxes != FracturingFog.DualOrbitSliceAxes.SxSy ? (int)p.DualOrbitSliceAxes : (int?)null,
                     DualOrbitSX = p.DualOrbitSX != -0.78 ? p.DualOrbitSX : (double?)null,
                     DualOrbitSY = p.DualOrbitSY != 0.15 ? p.DualOrbitSY : (double?)null,
@@ -1511,6 +1518,9 @@ namespace FracturingFog.Models
             if (this.DualOrbitDomainPalette.HasValue) p.DualOrbitDomainPalette = (FracturingFog.DualOrbitDomainPalette)this.DualOrbitDomainPalette.Value;
             if (DualOrbitDomainMarkCuts.HasValue) p.DualOrbitDomainMarkCuts = DualOrbitDomainMarkCuts.Value;
             if (this.DualOrbitLagColors.HasValue) p.DualOrbitLagColors = (FracturingFog.DualOrbitCategoricalColors)this.DualOrbitLagColors.Value;
+            if (this.DualOrbitTrapShape.HasValue) p.DualOrbitTrapShape = (FracturingFog.Models.OrbitTrapShapeDef)this.DualOrbitTrapShape.Value;
+            if (DualOrbitTrapScale.HasValue) p.DualOrbitTrapScale = DualOrbitTrapScale.Value;
+            if (DualOrbitStripeDensity.HasValue) p.DualOrbitStripeDensity = DualOrbitStripeDensity.Value;
             if (this.DualOrbitSliceAxes.HasValue) p.DualOrbitSliceAxes = (FracturingFog.DualOrbitSliceAxes)this.DualOrbitSliceAxes.Value;
             if (DualOrbitSX.HasValue) p.DualOrbitSX = DualOrbitSX.Value;
             if (DualOrbitSY.HasValue) p.DualOrbitSY = DualOrbitSY.Value;

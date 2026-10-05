@@ -1258,6 +1258,13 @@ namespace FracturingFog.Models
         /// <summary>PhaseLag / CyclePeriod colouring: categorical palette (default) or
         /// the active theme (#1121).</summary>
         public DualOrbitCategoricalColors DualOrbitLagColors { get; set; } = DualOrbitCategoricalColors.Categorical;
+        /// <summary>Trap shape for TrapZ / TrapC / TrapDelta — FF's built-in trap
+        /// SDFs (#1117).</summary>
+        public OrbitTrapShapeDef DualOrbitTrapShape { get; set; } = OrbitTrapShapeDef.Point;
+        /// <summary>Trap distance scale k: a trap distance d maps to d/(d + k) (#1117).</summary>
+        public double DualOrbitTrapScale { get; set; } = 0.25;
+        /// <summary>Stripe density for StripeZ / StripeC / StripeInterference (#1117).</summary>
+        public double DualOrbitStripeDensity { get; set; } = 5.0;
         /// <summary>Which two of (c.x, c.y, s.x, s.y) the image spans (#971).
         /// Default SxSy = the parameter plane (shipped view, byte-identical).</summary>
         public DualOrbitSliceAxes DualOrbitSliceAxes { get; set; } = DualOrbitSliceAxes.SxSy;
@@ -1922,6 +1929,9 @@ namespace FracturingFog.Models
                 DualOrbitDomainPalette = DualOrbitDomainPalette,
                 DualOrbitDomainMarkCuts = DualOrbitDomainMarkCuts,
                 DualOrbitLagColors = DualOrbitLagColors,
+                DualOrbitTrapShape = DualOrbitTrapShape,
+                DualOrbitTrapScale = DualOrbitTrapScale,
+                DualOrbitStripeDensity = DualOrbitStripeDensity,
                 DualOrbitSliceAxes = DualOrbitSliceAxes,
                 DualOrbitSX = DualOrbitSX,
                 DualOrbitSY = DualOrbitSY,
