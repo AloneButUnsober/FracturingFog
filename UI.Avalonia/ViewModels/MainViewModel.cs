@@ -206,6 +206,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.Nebulabrot,       "Nebulabrot"),
         (FractalType.AntiBuddhabrot,   "Anti-Buddhabrot"),
         (FractalType.AntiNebulabrot,   "Anti-Nebulabrot"),
+        (FractalType.DualBuddhabrot,   "Dual Buddhabrot"),
         (FractalType.IFS,              "IFS"),
         (FractalType.LSystem,          "L-System"),
         (FractalType.StrangeAttractor, "Strange Attractor"),

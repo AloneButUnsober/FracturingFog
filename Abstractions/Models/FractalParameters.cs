@@ -474,6 +474,30 @@ namespace FracturingFog.Models
         /// algorithm-inherent and unaffected.</summary>
         public bool BuddhaZoomCompensation { get; set; } = true;
 
+        // ── Dual Buddhabrot (#1124, epic #1114 S10) ─────────────────────────
+        /// <summary>Default per-channel colours — colour-blind-safe blue / amber /
+        /// near-white (no red↔green coding).</summary>
+        public const uint DualBuddhaDefaultColorZ = 0xFF2659F2u, DualBuddhaDefaultColorCB = 0xFFFFB81Au,
+                          DualBuddhaDefaultColorCE = 0xFFE6E6F2u;
+        /// <summary>c-orbit seed (real). Sweeping it re-textures the CB / CE channels
+        /// while the Z channel (classic Buddhabrot) stays fixed.</summary>
+        public double DualBuddhaCSeedX { get; set; } = 0.5;
+        /// <summary>c-orbit seed (imaginary). Off-axis seeds break the real-axis
+        /// symmetry of the c channels (HD mirror sampling is turned off for them).</summary>
+        public double DualBuddhaCSeedY { get; set; } = 0.0;
+        /// <summary>Minimum escape count for an orbit to be deposited (all channels).
+        /// Drops fast escapers that otherwise wash the |s| ≤ 2 disc. 0 = classic.</summary>
+        public int DualBuddhaMinIter { get; set; } = 12;
+        /// <summary>Channel composite: per-channel colours (default) or theme.</summary>
+        public DualBuddhaComposite DualBuddhaComposite { get; set; } = DualBuddhaComposite.Channels;
+        public uint DualBuddhaColorZ { get; set; } = DualBuddhaDefaultColorZ;
+        public uint DualBuddhaColorCB { get; set; } = DualBuddhaDefaultColorCB;
+        public uint DualBuddhaColorCE { get; set; } = DualBuddhaDefaultColorCE;
+        /// <summary>Per-channel gain (0 hides the channel).</summary>
+        public double DualBuddhaGainZ { get; set; } = 1.0;
+        public double DualBuddhaGainCB { get; set; } = 1.0;
+        public double DualBuddhaGainCE { get; set; } = 0.35;
+
         // Mandelbox (Tom Lowe, 2010). Box-fold + sphere-fold + scale DE.
         /// <summary>Mandelbox scale parameter. Per iter:
         /// z = scale · sphereFold(boxFold(z)) + c. Default 2.0;
@@ -1700,6 +1724,16 @@ namespace FracturingFog.Models
                 BuddhaProgressive = BuddhaProgressive,
                 BuddhaSeed = BuddhaSeed,
                 BuddhaZoomCompensation = BuddhaZoomCompensation,
+                DualBuddhaCSeedX = DualBuddhaCSeedX,
+                DualBuddhaCSeedY = DualBuddhaCSeedY,
+                DualBuddhaMinIter = DualBuddhaMinIter,
+                DualBuddhaComposite = DualBuddhaComposite,
+                DualBuddhaColorZ = DualBuddhaColorZ,
+                DualBuddhaColorCB = DualBuddhaColorCB,
+                DualBuddhaColorCE = DualBuddhaColorCE,
+                DualBuddhaGainZ = DualBuddhaGainZ,
+                DualBuddhaGainCB = DualBuddhaGainCB,
+                DualBuddhaGainCE = DualBuddhaGainCE,
                 MandelboxScale = MandelboxScale,
                 MandelboxFixedRadius = MandelboxFixedRadius,
                 MandelboxMinRadius = MandelboxMinRadius,

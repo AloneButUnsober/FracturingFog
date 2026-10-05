@@ -117,6 +117,7 @@ namespace FracturingFog.Models
             FractalType.Nebulabrot => FractalMotionClass.NonSpatial,
             FractalType.AntiBuddhabrot => FractalMotionClass.NonSpatial,
             FractalType.AntiNebulabrot => FractalMotionClass.NonSpatial,
+            FractalType.DualBuddhabrot => FractalMotionClass.NonSpatial,
             FractalType.IFS => FractalMotionClass.NonSpatial,
             FractalType.LSystem => FractalMotionClass.NonSpatial,
             FractalType.StrangeAttractor => FractalMotionClass.NonSpatial,
@@ -208,6 +209,7 @@ namespace FracturingFog.Models
             FractalType.Nebulabrot => true,
             FractalType.AntiBuddhabrot => true,
             FractalType.AntiNebulabrot => true,
+            FractalType.DualBuddhabrot => true,
             _ => false,
         };
 

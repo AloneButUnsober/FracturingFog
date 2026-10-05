@@ -112,6 +112,7 @@ namespace FracturingFog.Models
             {FractalType.Nebulabrot, "Nebulabrot" },
             {FractalType.AntiBuddhabrot, "AntiBuddhabrot" },
             {FractalType.AntiNebulabrot, "AntiNebulabrot" },
+            {FractalType.DualBuddhabrot, "DualBuddhabrot" },
             {FractalType.BurningShip, "BurningShip" },
             {FractalType.IFS, "IFS" },
             {FractalType.Julia, "Julia" },

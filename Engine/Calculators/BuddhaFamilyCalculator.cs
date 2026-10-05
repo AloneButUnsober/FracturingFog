@@ -53,7 +53,7 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
     // Per-thread orbit buffer size limit. At 200K × 8 bytes × 2 arrays × 32
     // threads ≈ 100 MB — high but manageable; without the cap a 1M iteration
     // in-set render would allocate ~512 MB just for orbit scratch.
-    private const int MaxOrbitCap = 200_000;
+    protected const int MaxOrbitCap = 200_000;
 
     // #837 — zoom-detail compensation thresholds. Below the threshold zoom the
     // compensation is a no-op (byte-identical to before the feature); at/above
@@ -118,6 +118,13 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
     private uint[] _hitsG = Array.Empty<uint>();
     private uint[] _hitsB = Array.Empty<uint>();
 
+    /// <summary>#1124 — the three accumulated hit histograms (classic: the Low /
+    /// Mid / High iteration bands; Dual Buddhabrot: the Z / CB / CE outcome
+    /// channels). Retained after Calculate for Recolor / diagnostics.</summary>
+    public uint[] HitsR => _hitsR;
+    public uint[] HitsG => _hitsG;
+    public uint[] HitsB => _hitsB;
+
     protected BuddhaFamilyCalculator(int width, int height) => Resize(width, height);
 
     public void Resize(int width, int height)
@@ -134,7 +141,7 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
 
     /// <summary>Per-thread Metropolis-Hastings chain state. Persists across
     /// progressive batches so the chain keeps exploring without restart.</summary>
-    private sealed class MhState
+    protected sealed class MhState
     {
         public double Cx, Cy;
         public double[] OrbitR = Array.Empty<double>();
@@ -145,8 +152,33 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
         public bool HasSeed;
     }
 
+    /// <summary>#1124 — a subclass may skip the sample pass when nothing that
+    /// affects sampling changed since the last completed Calculate (colour-only
+    /// edit): Calculate then only re-composites. Default false = classic types
+    /// always re-sample.</summary>
+    protected virtual bool CanReuseSamples() => false;
+
+    /// <summary>#1124 — called at the end of Calculate; <paramref name="completed"/>
+    /// is false when the sample pass was cancelled (cache must not be trusted).</summary>
+    protected virtual void OnSamplingFinished(bool completed) { }
+
+    /// <summary>#1124 — called once per Calculate before any batch, so a subclass
+    /// can allocate per-thread sampler state.</summary>
+    protected virtual void PrepareSampling(int threads, int maxOrbit, bool mh) { }
+
+    /// <summary>True when the last Calculate re-composited cached samples instead
+    /// of re-sampling (diagnostics / tests).</summary>
+    public bool LastCalculateReusedSamples { get; private set; }
+
     public void Calculate(CancellationToken ct = default)
     {
+        LastCalculateReusedSamples = CanReuseSamples();
+        if (LastCalculateReusedSamples)
+        {
+            Composite();
+            return;
+        }
+
         Array.Clear(_hitsR);
         Array.Clear(_hitsG);
         Array.Clear(_hitsB);
@@ -215,6 +247,7 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
 
         bool inSet = IsInSet;
         bool skipBulbs = !inSet;
+        PrepareSampling(threads, maxOrbit, mh);
 
         // #193 — deterministic seed. Derive per-(thread, batch) seeds from the
         // user-set BuddhaSeed instead of the wall clock so identical params
@@ -234,20 +267,10 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
                 int seed = unchecked(baseSeed * 73856093 + t * 19349663 + batch * 83492791);
                 var rng = new Random(seed);
 
-                if (mh)
-                {
-                    RunMhBatch(mhStates![t], rng, perThreadPerBatch,
-                               localR[t], localG[t], localB[t],
-                               maxOrbit, inSet, skipBulbs, hd,
-                               scale, midX, midY, width, height, low, mid);
-                }
-                else
-                {
-                    RunUniformBatch(rng, perThreadPerBatch,
-                                    localR[t], localG[t], localB[t],
-                                    maxOrbit, inSet, skipBulbs, hd,
-                                    scale, midX, midY, width, height, low, mid);
-                }
+                SampleBatch(t, batch, mh ? mhStates![t] : null, rng, perThreadPerBatch,
+                            localR[t], localG[t], localB[t],
+                            maxOrbit, inSet, skipBulbs, hd,
+                            scale, midX, midY, width, height, low, mid);
             });
 
             if (ct.IsCancellationRequested && !progressive) break;
@@ -280,6 +303,27 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
             if (progressive)
                 OnBatchComposited?.Invoke(batch + 1, batches);
         }
+        OnSamplingFinished(!ct.IsCancellationRequested);
+    }
+
+    /// <summary>#1124 — one thread's share of one batch. Classic: Metropolis-
+    /// Hastings when <paramref name="mhState"/> is non-null, else uniform.
+    /// Dual Buddhabrot overrides it with its two-orbit samplers.</summary>
+    protected virtual void SampleBatch(
+        int threadIndex, int batch, MhState? mhState, Random rng, int sampleCount,
+        uint[] tR, uint[] tG, uint[] tB,
+        int maxOrbit, bool inSet, bool skipBulbs, bool hd,
+        double scale, double midX, double midY, int width, int height,
+        int low, int mid)
+    {
+        if (mhState != null)
+            RunMhBatch(mhState, rng, sampleCount, tR, tG, tB,
+                       maxOrbit, inSet, skipBulbs, hd,
+                       scale, midX, midY, width, height, low, mid);
+        else
+            RunUniformBatch(rng, sampleCount, tR, tG, tB,
+                            maxOrbit, inSet, skipBulbs, hd,
+                            scale, midX, midY, width, height, low, mid);
     }
 
     /// <summary>#194 — recomposite <see cref="ColorBuffer"/> from the retained
@@ -293,7 +337,7 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
     /// <summary>Composite the accumulated hit histograms into ColorBuffer per
     /// the active BuddhaColorMode, then refresh the relief height field. Shared
     /// by Calculate() (per batch) and Recolor().</summary>
-    private void Composite()
+    protected virtual void Composite()
     {
         // #836 — the type's mandated composite wins over the shared param so
         // Buddhabrot ≠ Nebulabrot (and Anti pair) regardless of the UI toggle.
@@ -308,7 +352,7 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
 
     /// <summary>#139 — build the Relief 3D height field from the orbit-density
     /// histogram: log-normalised total hits (0 on empty pixels = base plane).</summary>
-    private void UpdateHeightField()
+    protected void UpdateHeightField()
     {
         int n = _hitsR.Length;
         if (SmoothBuffer.Length < n) SmoothBuffer = new float[n];
@@ -467,7 +511,7 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
     /// <summary>Standard-normal sample via Box-Muller. One transcendental
     /// per call — fine for the once-per-MH-step rate; not hot enough to
     /// warrant Marsaglia polar.</summary>
-    private static double Gaussian(Random rng)
+    protected static double Gaussian(Random rng)
     {
         double u1 = 1.0 - rng.NextDouble();
         double u2 = 1.0 - rng.NextDouble();
@@ -550,7 +594,7 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
     /// <summary>True when (cx, cy) is inside the main cardioid or the
     /// period-2 bulb. These regions of the parameter plane are provably part
     /// of the Mandelbrot set; their orbits never escape.</summary>
-    private static bool InCardioidOrBulb(double cx, double cy)
+    protected static bool InCardioidOrBulb(double cx, double cy)
     {
         // Period-2 bulb: (cx + 1)² + cy² < 1/16
         double dx = cx + 1.0;
@@ -565,7 +609,7 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
 
     /// <summary>Classic nearest-pixel splat. Splats the orbit to the target
     /// hit buffer using integer pixel snapping.</summary>
-    private static void SplatOrbitStd(
+    protected static void SplatOrbitStd(
         uint[] target, double[] orbitR, double[] orbitI, int recLen,
         double scale, double midX, double midY, int width, int height)
     {
@@ -588,10 +632,14 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
     ///      mirrored to (ozr, -ozi) and splatted there too. Mandelbrot is
     ///      symmetric about the real axis, so this is free 2× effective
     ///      sample count at the cost of one extra pixel write per step.
+    ///      Only valid when the deposited orbit family is itself real-axis
+    ///      symmetric — <paramref name="mirror"/> = false turns it off (#1124:
+    ///      Dual Buddhabrot c channels with an off-axis c-seed).
     /// </summary>
-    private static void SplatOrbitHD(
+    protected static void SplatOrbitHD(
         uint[] target, double[] orbitR, double[] orbitI, int recLen,
-        double scale, double midX, double midY, int width, int height, Random rng)
+        double scale, double midX, double midY, int width, int height, Random rng,
+        bool mirror = true)
     {
         for (int k = 0; k < recLen; k++)
         {
@@ -602,6 +650,7 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
             SplatBilinearOne(target, fx, fy, width, height, rng);
 
             // Mirror about real axis: y → -y (i.e. distance from midY flips).
+            if (!mirror) continue;
             double fyMirror = (-ozi - midY) / scale + height * 0.5;
             SplatBilinearOne(target, fx, fyMirror, width, height, rng);
         }
