@@ -330,6 +330,13 @@ namespace FracturingFog
         /// <summary>arg E_c − arg E_z of the raw escape points, in turns.
         /// Bailout-dependent (the intrinsic version is ExternalAngleDelta).</summary>
         FinalAngleDelta,
+        /// <summary>Two-path interference intensity of the orbits' Böttcher phases
+        /// Φ = G + 2πiθ: I/2 with I = 1 + cos(κ·ΔG)/cosh(2πγκ·Δθ) (#1126).
+        /// κ = <c>DualOrbitInterferenceK</c> (animatable), γ =
+        /// <c>DualOrbitInterferenceGamma</c>. Both orbits must escape.</summary>
+        PathInterference,
+        /// <summary>Phase (turns) of the summed two-path amplitude (#1126).</summary>
+        PathInterferencePhase,
     }
 
     /// <summary>Which two of the four dual-orbit coordinates (c-seed x/y, parameter

@@ -418,6 +418,48 @@ by `ExternalAngleDelta`, or the per-orbit layer composite on a `GreenRatio` reli
 height, then with `SecantLyapunov` height. Bottom: PerOrbitLayers with the z-layer height, then
 with `GreenRatio` height.*
 
+**S12 as shipped (#1126).** Path interference: each orbit is a path with complex phase
+Φ = G + 2πiθ, the log of its level-1 Böttcher coordinate (S6). The two paths interfere with
+amplitude e^{iκΦ}, where κ (`DualOrbitInterferenceK`, animatable) is the "ħ" knob.
+- **Fields:** `PathInterference` and `PathInterferencePhase`.
+- **Normalised, not raw, intensity.** e^{iκΦ} = e^{iκG}·e^{−2πκθ}, and the raw amplitude is
+  not single-valued (θ → θ + 1 rescales it by e^{−2πκ}), so the raw |a + b|² has a seam wherever θ
+  wraps. FF uses the normalised two-path intensity with amplitudes symmetric about their mean
+  (θ_z = −Δθ/2, θ_c = +Δθ/2, Δθ wrapped to [−½, ½)):
+  **I = |a + b|²/(|a|² + |b|²) = 1 + cos(κ·ΔG)/cosh(2πγκ·Δθ)** ∈ [0, 2].
+  - It is continuous across the wrap (cosh is even).
+  - κ = 0 gives I = 2, the normalised form of the issue's "constant 4".
+  - `PathInterference` = I/2; `PathInterferencePhase` = arg(a + b)/2π.
+- **γ (`DualOrbitInterferenceGamma`) weights the angle part of Φ:**
+  - γ = 1 is Φ as written. Fringes keep full visibility only near the curves where the two external
+    angles agree, and they wash out elsewhere ("decoherence").
+  - **The default is γ = 0, set from the smoke render.** Δθ inherits S6's branch cuts below the
+    critical level, so any γ > 0 shows them as straight seams and flattens large regions. γ = 0
+    reads only ΔG (the Green functions, no cuts): clean fringes along the equipotential-difference
+    curves.
+- **Colour-only:** κ and γ never iterate. The scalar is rebuilt in the colour pass from the cached
+  smooth counts and lifted angles, so a κ sweep recolours (the fringes shimmer). The S9 split-height
+  twin rebuilds it too.
+- **Live only where both orbits escape:** a single path has nothing to interfere with. The
+  quaternion map gives interior.
+- **Found by the oracle:** the first phase implementation gave the e^{+x} amplitude to the wrong
+  path. Intensity is symmetric and hid it; the direct-sum phase test caught it.
+- **Tests:**
+  - intensity (three κ/γ pairs) and phase against a **direct complex sum** of e^{iκΦ}, built from
+    independent sources: the EscapeTime fields' smooth counts give G per orbit, and the S6 domain
+    pass gives Δθ;
+  - κ = 0 constant;
+  - continuity at the wrap, and periodicity in Δθ;
+  - bailout invariance (128 against 10⁴; ≤ 1 % of pixels may differ at lift flips);
+  - κ and γ recolour from the cache (`Calculate` reuses the orbits, and `Recolor` matches a fresh
+    render);
+  - single path and quaternion map → interior; the split height follows κ; κ animatable; CLI
+    round trip.
+
+![Path interference](../Images/dualorbit-coloring/s12-path-interference.png)
+*Headless `--batch`, default c-seed, Cividis. κ = 20 (default, γ = 0); κ = 45; γ = 1 (the angle
+damping, S6 cuts visible as seams); phase at κ = 6.*
+
 ---
 
 ## 4. Architecture (S1 #1115)

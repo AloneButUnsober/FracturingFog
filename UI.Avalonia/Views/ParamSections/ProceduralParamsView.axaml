@@ -509,7 +509,7 @@
         <!-- Dual-Orbit Escape (#864 / #866) -->
         <Grid IsVisible="{Binding IsDualOrbitEscape}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Map:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding DualOrbitMaps}"
@@ -777,6 +777,20 @@
                       SelectedItem="{Binding DualOrbitHeightField, Mode=TwoWay}" Margin="0,2"
                       IsVisible="{Binding DualOrbitSplitHeight}"
                       ToolTip.Tip="The field the Relief height is built from (its own settings — trap shape, spans, scales — are shared with the colour field). Changing it does not re-run the colour orbits." />
+            <TextBlock Grid.Row="43" Grid.Column="0" Text="Interference κ:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitInterferenceField}" />
+            <NumericUpDown Grid.Row="43" Grid.Column="1"
+                           Minimum="-1000" Maximum="1000" Increment="1" FormatString="F2"
+                           Value="{Binding DualOrbitInterferenceK, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsDualOrbitInterferenceField}"
+                           ToolTip.Tip="Path interference: how fast the phase turns with escape potential — more fringes as κ grows. Animatable (the fringes shimmer); recolours without re-iterating." />
+            <TextBlock Grid.Row="44" Grid.Column="0" Text="Angle damping γ:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitInterferenceField}" />
+            <NumericUpDown Grid.Row="44" Grid.Column="1"
+                           Minimum="0" Maximum="100" Increment="0.1" FormatString="F2"
+                           Value="{Binding DualOrbitInterferenceGamma, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsDualOrbitInterferenceField}"
+                           ToolTip.Tip="How strongly a difference in the two orbits' external angles washes the fringes out. 0 = full fringes everywhere (default); 1 = the complex phase as defined — fringes strongest where the angles agree, and the angle's branch cuts show as straight seams." />
             <TextBlock Grid.Row="24" Grid.Column="0" Grid.ColumnSpan="2"
                        Text="Böttcher domain colouring: inside the Mandelbrot set (critical orbit bounded) it shows the c-orbit's own angle and potential. ComplexPlane map only."
                        IsVisible="{Binding IsDualOrbitDomain}"

@@ -81,6 +81,7 @@ public sealed class DualOrbitRecolorTests
         nameof(FractalParameters.DualOrbitPhaseK),
         // #1123 — the split height has its own cache; the colour orbits never re-iterate.
         nameof(FractalParameters.DualOrbitSplitHeight), nameof(FractalParameters.DualOrbitHeightField),
+        nameof(FractalParameters.DualOrbitInterferenceK), nameof(FractalParameters.DualOrbitInterferenceGamma),   // #1126
     };
 
     private static object? Mutate(object? v) => v switch

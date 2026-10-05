@@ -1286,6 +1286,12 @@ namespace FracturingFog.Models
         public bool DualOrbitSplitHeight { get; set; } = false;
         /// <summary>Relief split: the field the height comes from (#1123).</summary>
         public DualOrbitField DualOrbitHeightField { get; set; } = DualOrbitField.SecantLyapunov;
+        /// <summary>Path interference κ (the "ħ" knob, animatable; colour-only) (#1126).</summary>
+        public double DualOrbitInterferenceK { get; set; } = 20.0;
+        /// <summary>Path interference γ: weight of the external-angle damping (0 = pure
+        /// fringes, the default; 1 = Φ as written, which brings in the S6 angle branch
+        /// cuts as seams; colour-only) (#1126).</summary>
+        public double DualOrbitInterferenceGamma { get; set; } = 0.0;
         /// <summary>Stripe density for StripeZ / StripeC / StripeInterference (#1117).</summary>
         public double DualOrbitStripeDensity { get; set; } = 5.0;
         /// <summary>DistanceZ / DistanceC: a distance of d pixels maps to d/(d + scale)
@@ -1978,6 +1984,8 @@ namespace FracturingFog.Models
                 DualOrbitTrapAngle = DualOrbitTrapAngle,
                 DualOrbitSplitHeight = DualOrbitSplitHeight,
                 DualOrbitHeightField = DualOrbitHeightField,
+                DualOrbitInterferenceK = DualOrbitInterferenceK,
+                DualOrbitInterferenceGamma = DualOrbitInterferenceGamma,
                 DualOrbitStripeDensity = DualOrbitStripeDensity,
                 DualOrbitDEScale = DualOrbitDEScale,
                 DualOrbitOutlineWidth = DualOrbitOutlineWidth,

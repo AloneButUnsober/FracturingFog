@@ -295,6 +295,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
             _cacheKey = key;
         }
         if (!_heightOnly) Colorize(key, ct);
+        else if (!key.Layers && !key.Domain && IsInterferenceField(key.Field)) RefreshInterference(key);   // #1126
         // #1117 — an orbit-aware theme's accumulator is not cached: re-iterate
         // on every Calculate (Recolor then falls back to Calculate too).
         if (_usedOrbitThemes) _cacheKey = null;
@@ -333,10 +334,12 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         int width = Width, height = Height;
         double centerX = CenterX, centerY = CenterY;
         bool quat = map == DualOrbitMap.Quaternion;
-        bool angles = !quat && (domain || (!fieldOff && field == DualOrbitField.ExternalAngleDelta));
+        bool interfField = !fieldOff && IsInterferenceField(field);   // #1126
+        bool storeAngles = domain || interfField;
+        bool angles = !quat && (storeAngles || (!fieldOff && field == DualOrbitField.ExternalAngleDelta));
         float[] smZArr = _smZ, smCArr = _smC; byte[] flagArr = _flags;
         // #1120 — level-1 external angles per orbit (turns; NaN = bounded).
-        if (domain && _thZ.Length != n) { _thZ = new float[n]; _thC = new float[n]; }
+        if (storeAngles && _thZ.Length != n) { _thZ = new float[n]; _thC = new float[n]; }
         float[] thZArr = _thZ, thCArr = _thC;
         var pairCh = key.Pair;
         double pairEps = key.PairRatio;
@@ -395,7 +398,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         bool deadable = pairField || interiorField
             || (!fieldOff && (field == DualOrbitField.DistanceZ || field == DualOrbitField.DistanceC))
             || (!fieldOff && quat && (IsOrbitScalarField(field) || IsOrbitThemeField(field)
-                                      || IsDistanceField(field) || IsDecompField(field)));
+                                      || IsDistanceField(field) || IsDecompField(field) || IsInterferenceField(field)));
         TrapBuffer = trapOut ? (TrapBuffer.Length == n ? TrapBuffer : new float[n]) : Array.Empty<float>();
         float[] trapBuf = TrapBuffer;
         DualOrbitPairPlanes? planes = pairCh == DualOrbitPairChannels.None ? null
@@ -454,8 +457,8 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                     scalar = fieldOff ? 0.0 : pairField ? pairScalar : ScalarQ(field, oz, oc, sx, sy, sZ, maxIter, bail, ratioSpan);
                     // Interior (#1121) and S3 orbit (#1117) fields are complex-only.
                     if (interiorField || IsOrbitScalarField(field) || IsOrbitThemeField(field)
-                        || IsDistanceField(field) || IsDecompField(field)) { scalar = 0.0; pairLive = false; }
-                    if (domain) { thZArr[rowBase + x] = float.NaN; thCArr[rowBase + x] = float.NaN; }
+                        || IsDistanceField(field) || IsDecompField(field) || IsInterferenceField(field)) { scalar = 0.0; pairLive = false; }
+                    if (storeAngles) { thZArr[rowBase + x] = float.NaN; thCArr[rowBase + x] = float.NaN; }
                     zEsc = oz.Escaped; cEsc = oc.Escaped; nZ = oz.N; nC = oc.N;
                     smZ = oz.SmoothN; smC = oc.SmoothN;
                 }
@@ -554,13 +557,14 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                         lcolZ[pix] = oz.Escaped || layerThemeZ.WantsInteriorColor ? OrbitThemeColor(layerThemeZ, oz, accZ, maxIter, 0u) : 0u;
                     if (layerThemeC != null)
                         lcolC[pix] = oc.Escaped || layerThemeC.WantsInteriorColor ? OrbitThemeColor(layerThemeC, oc, accC, maxIter, 0u) : 0u;
-                    if (domain)
+                    if (storeAngles)
                     {
                         thZArr[rowBase + x] = nZ >= 0 ? (float)LiftToLevel1(argsZ, nZ) : float.NaN;
                         thCArr[rowBase + x] = nC >= 0 ? (float)LiftToLevel1(argsC, nC) : float.NaN;
                     }
                     if (interiorField) pairScalar = InteriorScalar(field, oz, oc, sx, sy, maxIter, out pairLive);
                     scalar = fieldOff ? 0.0
+                        : interfField ? LiveFloor   // #1126 — rebuilt per colour pass (κ, γ colour-only)
                         : pairField || interiorField || orbitScalar || orbitThemeField || distField || decompField ? pairScalar
                         : angles
                         ? AngleDeltaScalar(argsZ, nZ, argsC, nC, maxIter)
@@ -644,6 +648,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
             ColorizeDomain(key, interiorColor, oobColor, ct);
             return;
         }
+        if (!key.Layers && IsInterferenceField(field)) RefreshInterference(key);   // #1126
         if (key.Layers && IsBivariateMode(FractalParameters.DualOrbitColorMode))   // #1122
         {
             ColorizeBivariate(FractalParameters.DualOrbitColorMode, maxIter, interiorColor, oobColor);
