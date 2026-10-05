@@ -1095,6 +1095,25 @@ namespace FracturingFog.Models
                     DualOrbitOpacityZ = p.DualOrbitOpacityZ != 1.0 ? p.DualOrbitOpacityZ : (double?)null,
                     DualOrbitOpacityC = p.DualOrbitOpacityC != 0.6 ? p.DualOrbitOpacityC : (double?)null,
                 },
+                // #1134 — the classic Buddhabrot family: the shared Monte Carlo sampler
+                // settings (seed, sample budget, HD / Metropolis / progressive, zoom
+                // compensation, iteration windows), each omitted at default. Iter low /
+                // mid band the 3-channel types; harmless (ignored) on the single-channel
+                // ones. BuddhaColorMode is not carried: every classic type forces its
+                // composition (ForcedColorMode), so it has no effect here.
+                FractalType.BuddhaBrot or FractalType.Nebulabrot
+                    or FractalType.AntiBuddhabrot or FractalType.AntiNebulabrot => new RegionFractalParams
+                {
+                    BuddhaSamples = p.BuddhaSamples != D.BuddhaSamples ? p.BuddhaSamples : (int?)null,
+                    BuddhaIterHigh = p.BuddhaIterHigh != D.BuddhaIterHigh ? p.BuddhaIterHigh : (int?)null,
+                    BuddhaIterLow = p.BuddhaIterLow != D.BuddhaIterLow ? p.BuddhaIterLow : (int?)null,
+                    BuddhaIterMid = p.BuddhaIterMid != D.BuddhaIterMid ? p.BuddhaIterMid : (int?)null,
+                    BuddhaQualityMode = p.BuddhaQualityMode != D.BuddhaQualityMode ? (int)p.BuddhaQualityMode : (int?)null,
+                    BuddhaMetropolis = p.BuddhaMetropolis != D.BuddhaMetropolis ? p.BuddhaMetropolis : (bool?)null,
+                    BuddhaProgressive = p.BuddhaProgressive != D.BuddhaProgressive ? p.BuddhaProgressive : (bool?)null,
+                    BuddhaSeed = p.BuddhaSeed != D.BuddhaSeed ? p.BuddhaSeed : (int?)null,
+                    BuddhaZoomCompensation = p.BuddhaZoomCompensation != D.BuddhaZoomCompensation ? p.BuddhaZoomCompensation : (bool?)null,
+                },
                 // #1124 — Dual Buddhabrot: sampler + dual knobs, each omitted at default.
                 FractalType.DualBuddhabrot => new RegionFractalParams
                 {
@@ -1559,7 +1578,7 @@ namespace FracturingFog.Models
             if (DualOrbitBailout.HasValue) p.DualOrbitBailout = DualOrbitBailout.Value;
             if (DualOrbitRatioSpan.HasValue) p.DualOrbitRatioSpan = DualOrbitRatioSpan.Value;
             if (DualOrbitLyapunovSpan.HasValue) p.DualOrbitLyapunovSpan = DualOrbitLyapunovSpan.Value;
-            // #1124 — Dual Buddhabrot.
+            // #1124 — Dual Buddhabrot; #1134 — the sampler keys are shared with the classic family.
             if (BuddhaSamples.HasValue) p.BuddhaSamples = BuddhaSamples.Value;
             if (BuddhaIterHigh.HasValue) p.BuddhaIterHigh = BuddhaIterHigh.Value;
             if (BuddhaIterLow.HasValue) p.BuddhaIterLow = BuddhaIterLow.Value;
