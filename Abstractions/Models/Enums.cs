@@ -317,6 +317,23 @@ namespace FracturingFog
         /// out-of-bounds surround — then the two layers are blended
         /// (<c>DualOrbitLayerBlend</c>, per-layer opacity) (#939).</summary>
         PerOrbitLayers,
+        /// <summary>Böttcher-ratio domain colouring (#1120, epic #1114 S6). The
+        /// complex invariant log(φ_s(c₁) / φ_s(z₁)) = (G_c − G_z) + 2πi·Δθ: hue from
+        /// the external-angle difference Δθ, contour bands from the Green-potential
+        /// difference. Bailout-independent. Where the critical orbit is bounded
+        /// (s ∈ M) it falls back to φ_s(c₁) alone. ComplexPlane only.</summary>
+        BoettcherDomain,
+    }
+
+    /// <summary>Hue source for <see cref="DualOrbitColorMode.BoettcherDomain"/>
+    /// (#1120). Append only.</summary>
+    public enum DualOrbitDomainPalette
+    {
+        /// <summary>Built-in cyclic map on OkLab lightness × the blue↔yellow axis
+        /// (a = 0: no red↔green coding — colour-blind safe).</summary>
+        BlueAmberCycle,
+        /// <summary>The active colour theme, indexed by Δθ (use a cyclic theme).</summary>
+        Theme,
     }
 
     /// <summary>How the c-orbit layer combines with the z-orbit layer in

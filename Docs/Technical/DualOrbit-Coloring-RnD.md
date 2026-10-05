@@ -176,6 +176,30 @@ Prototype findings that fix design decisions (S10 #1124):
 *Headless `--batch`, 4M samples, HD. Top: c = 0.5, composite and the CB channel alone. Bottom:
 c = −0.3+0.6i. The CB lace follows the M_c boundary and re-textures with c.*
 
+**S6 as shipped (#1120).** `DualOrbitColorMode.BoettcherDomain` colours the complex invariant
+w = (G_c − G_z) + 2πi·Δθ.
+- **Data:** Δθ comes from the cached level-1 external angles of both orbits (two float planes).
+  ΔG comes straight from the cached smooth counts, as G = 2·ln R·2^(−smooth). Both are
+  bailout-independent.
+- **Rendering:** hue = Δθ, a sawtooth lightness contour every 1/`DualOrbitContourDensity` of ΔG,
+  and an optional angular grid. Inside M it falls back to w = log φ_s(c₁).
+- **Default palette:** a cyclic OkLab path with **a = 0** (lightness × blue↔yellow), so nothing is
+  coded on red↔green. A test round-trips every rendered pixel to OkLab and asserts |a| < 0.02.
+  `Theme` uses the active theme instead.
+- **Speed:** density, grid, palette and cut-marking are colour-only, so changing them recolours
+  from the cache.
+- **Branch cuts (found in the smoke render):** φ_s is analytic only where G > G_s(0) = G(z₁)/2.
+  Where c₁ sits below the critical level, the lifted angle crosses branch cuts and shows
+  straight-looking seams. A probe confirmed every seam lies in G(c₁) ≤ G(0).
+  `DualOrbitDomainMarkCuts` (default on) dims those pixels; turn it off to see the raw lift.
+- **Tests:** checked against the **Böttcher product formula** (independent of the lifting code),
+  inside-M fallback, bailout invariance, the critical-level test via direct Green-function
+  iteration, a = 0, theme mapping, quaternion → interior, cache behaviour and the CLI round trip.
+
+![Böttcher-ratio domain colouring](../Images/dualorbit-coloring/s6-boettcher-domain.png)
+*Headless `--batch`. Top: c = 0.5 with the cut region dimmed, then the raw lift (seams visible).
+Bottom: the Theme palette (Cividis is not cyclic, hence its wrap line), then c = −0.3+0.6i.*
+
 ---
 
 ## 4. Architecture (S1 #1115)

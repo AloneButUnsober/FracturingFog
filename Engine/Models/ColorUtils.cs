@@ -781,7 +781,7 @@ namespace FracturingFog.Models
 
         // ── OkLab (Björn Ottosson); RGB bytes ⇄ OkLab, sRGB-encoded output ────
 
-        private static void RgbToOkLab(byte r8, byte g8, byte b8, out float L, out float A, out float B)
+        internal static void RgbToOkLab(byte r8, byte g8, byte b8, out float L, out float A, out float B)
         {
             float r = SrgbToLinear(r8 / 255f);
             float g = SrgbToLinear(g8 / 255f);
@@ -800,7 +800,7 @@ namespace FracturingFog.Models
             B = 0.0259040371f * l_ + 0.7827717662f * m_ - 0.8086757660f * s_;
         }
 
-        private static void OkLabToRgb(float L, float A, float B, out float r255, out float g255, out float b255)
+        internal static void OkLabToRgb(float L, float A, float B, out float r255, out float g255, out float b255)
         {
             float l_ = L + 0.3963377774f * A + 0.2158037573f * B;
             float m_ = L - 0.1055613458f * A - 0.0638541728f * B;

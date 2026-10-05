@@ -2014,6 +2014,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsDualOrbitFieldMode));
             this.RaisePropertyChanged(nameof(IsDualOrbitLyapunovField));
             this.RaisePropertyChanged(nameof(IsDualOrbitDivergenceField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitDomain));
             RaiseDualThemeWarning();
             Fire();
         }
@@ -2022,6 +2023,14 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     private static readonly System.Array s_DualOrbitColorModes = System.Enum.GetValues(typeof(DualOrbitColorMode));
     public bool IsDualOrbitLayers => IsDualOrbitEscape && _dualColorMode == DualOrbitColorMode.PerOrbitLayers;
     public bool IsDualOrbitFieldMode => _dualColorMode == DualOrbitColorMode.Field;
+    /// <summary>#1120 — Böttcher-ratio domain colouring rows.</summary>
+    public bool IsDualOrbitDomain => IsDualOrbitEscape && _dualColorMode == DualOrbitColorMode.BoettcherDomain;
+    public double DualOrbitContourDensity { get => _p.DualOrbitContourDensity; set { var v = Clamp(value, 0, 64); if (v == _p.DualOrbitContourDensity) return; _p.DualOrbitContourDensity = v; this.RaisePropertyChanged(); Fire(); } }
+    public bool DualOrbitDomainGrid { get => _p.DualOrbitDomainGrid; set { if (value == _p.DualOrbitDomainGrid) return; _p.DualOrbitDomainGrid = value; this.RaisePropertyChanged(); Fire(); } }
+    public DualOrbitDomainPalette DualOrbitDomainPalette { get => _p.DualOrbitDomainPalette; set { if (value == _p.DualOrbitDomainPalette) return; _p.DualOrbitDomainPalette = value; this.RaisePropertyChanged(); Fire(); } }
+    public bool DualOrbitDomainMarkCuts { get => _p.DualOrbitDomainMarkCuts; set { if (value == _p.DualOrbitDomainMarkCuts) return; _p.DualOrbitDomainMarkCuts = value; this.RaisePropertyChanged(); Fire(); } }
+    public System.Array DualOrbitDomainPalettes => s_DualOrbitDomainPalettes;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_DualOrbitDomainPalettes = System.Enum.GetValues(typeof(DualOrbitDomainPalette));
 
     private IReadOnlyList<string>? _layerThemeNames;
     /// <summary>Theme combo items: the main-theme entry, then the host's themes
