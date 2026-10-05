@@ -1271,6 +1271,15 @@ namespace FracturingFog.Models
         public OrbitTrapShapeDef DualOrbitTrapShape { get; set; } = OrbitTrapShapeDef.Point;
         /// <summary>Trap distance scale k: a trap distance d maps to d/(d + k) (#1117).</summary>
         public double DualOrbitTrapScale { get; set; } = 0.25;
+        /// <summary>Trap frame for TrapZ / TrapC / TrapDelta: Fixed or co-moving with
+        /// the other orbit (#1119).</summary>
+        public DualOrbitTrapFrame DualOrbitTrapFrame { get; set; } = DualOrbitTrapFrame.Fixed;
+        /// <summary>Co-moving trap: turn the trap with arg of the frame orbit (#1119).</summary>
+        public bool DualOrbitTrapRotate { get; set; } = true;
+        /// <summary>Co-moving trap: scale the trap by |frame orbit| (#1119).</summary>
+        public bool DualOrbitTrapScaleByOrbit { get; set; } = false;
+        /// <summary>Trap angle in degrees, any frame (animatable) (#1119).</summary>
+        public double DualOrbitTrapAngle { get; set; } = 0.0;
         /// <summary>Stripe density for StripeZ / StripeC / StripeInterference (#1117).</summary>
         public double DualOrbitStripeDensity { get; set; } = 5.0;
         /// <summary>DistanceZ / DistanceC: a distance of d pixels maps to d/(d + scale)
@@ -1957,6 +1966,10 @@ namespace FracturingFog.Models
                 DualOrbitLagColors = DualOrbitLagColors,
                 DualOrbitTrapShape = DualOrbitTrapShape,
                 DualOrbitTrapScale = DualOrbitTrapScale,
+                DualOrbitTrapFrame = DualOrbitTrapFrame,
+                DualOrbitTrapRotate = DualOrbitTrapRotate,
+                DualOrbitTrapScaleByOrbit = DualOrbitTrapScaleByOrbit,
+                DualOrbitTrapAngle = DualOrbitTrapAngle,
                 DualOrbitStripeDensity = DualOrbitStripeDensity,
                 DualOrbitDEScale = DualOrbitDEScale,
                 DualOrbitOutlineWidth = DualOrbitOutlineWidth,

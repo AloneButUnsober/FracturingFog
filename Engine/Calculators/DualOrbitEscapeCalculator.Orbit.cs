@@ -13,6 +13,8 @@
 //                      (DataDrivenOrbitTrap.ShapeImpl — one source of truth).
 //                      Mapped d / (d + DualOrbitTrapScale).
 //    TrapDelta       — trap_c − trap_z, centred (0 = mid-palette).
+//                      #1119: DualOrbitTrapFrame = CoMoving measures each orbit
+//                      in a trap riding the other (.Frame.cs).
 //    StripeZ / C     — stripe average 0.5 + 0.5·sin(density·arg u_k), smoothed
 //                      across the escape step (Härkönen), DualOrbitStripeDensity.
 //    StripeInterference — StripeZ × StripeC: the two stripe families multiplied

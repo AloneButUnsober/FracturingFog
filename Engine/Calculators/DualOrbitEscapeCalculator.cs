@@ -232,7 +232,8 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         DualOrbitSliceAxes Axes, double CSeedZ, double SZ, double Bailout,
         bool Layers, DualOrbitField Field, double RatioSpan,
         DualOrbitPairChannels Pair, double PairRatio, double LyapunovSpan, bool Domain,
-        int TrapShape, double TrapScale, double StripeDensity, double DEScale);
+        int TrapShape, double TrapScale, double StripeDensity, double DEScale,
+        DualOrbitTrapFrame TrapFrame, bool TrapRotate, bool TrapScaleByOrbit, double TrapAngle);
 
     private GeometryKey? _cacheKey;
     private float[] _smZ = Array.Empty<float>(), _smC = Array.Empty<float>();
@@ -275,7 +276,9 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
             domain,
             // #1117 — always keyed (reflection guard: geometry).
             (int)fp.DualOrbitTrapShape, Math.Max(1e-6, fp.DualOrbitTrapScale), fp.DualOrbitStripeDensity,
-            Math.Max(1e-6, fp.DualOrbitDEScale));   // #1118
+            Math.Max(1e-6, fp.DualOrbitDEScale),   // #1118
+            // #1119 — always keyed (reflection guard: geometry).
+            fp.DualOrbitTrapFrame, fp.DualOrbitTrapRotate, fp.DualOrbitTrapScaleByOrbit, fp.DualOrbitTrapAngle);
     }
 
     public void Calculate(CancellationToken ct = default)
@@ -356,8 +359,12 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
             if (layerThemeZ != null) layerThemeZ.MaxIterations = maxIter;
             if (layerThemeC != null) layerThemeC.MaxIterations = maxIter;
         }
-        IOrbitAwareColorMap? samplerZ = layers ? layerThemeZ : readZ ? (fieldTheme ?? trapSampler) : null;
-        IOrbitAwareColorMap? samplerC = layers ? layerThemeC : readC ? (fieldTheme ?? trapSampler) : null;
+        // #1119 — a co-moving (or turned) trap runs both orbits in lockstep instead.
+        IOrbitAwareColorMap? framedTrap = trapSampler != null && NeedsFrame(key.TrapFrame, key.TrapAngle) ? trapSampler : null;
+        var trapFrame = FrameFor(key.TrapFrame, key.TrapRotate, key.TrapScaleByOrbit, key.TrapAngle);
+        IOrbitAwareColorMap? unframedTrap = framedTrap == null ? trapSampler : null;
+        IOrbitAwareColorMap? samplerZ = layers ? layerThemeZ : readZ ? (fieldTheme ?? unframedTrap) : null;
+        IOrbitAwareColorMap? samplerC = layers ? layerThemeC : readC ? (fieldTheme ?? unframedTrap) : null;
         bool sampleZ = samplerZ != null || (stats && readZ);
         bool sampleC = samplerC != null || (stats && readC);
         _usedOrbitThemes = fieldTheme != null || layerThemeZ != null || layerThemeC != null;
@@ -483,6 +490,12 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                         oc = cEqualsS
                             ? RunSampled(sx, sy, sx, sy, maxIter, bail, Span<double>.Empty, samplerC, stats && readC, stripeDensity, ref accC, ref stC, out _)
                             : RunSampled(cSeedX, cSeedY, sx, sy, maxIter, bail, Span<double>.Empty, samplerC, stats && readC, stripeDensity, ref accC, ref stC, out _);
+                    }
+                    if (framedTrap != null)
+                    {
+                        framedTrap.InitOrbit(out accZ); framedTrap.InitOrbit(out accC);
+                        RunFramed(cEqualsS ? sx : cSeedX, cEqualsS ? sy : cSeedY, sx, sy, maxIter, bail,
+                            framedTrap, trapFrame, readZ, readC, ref accZ, ref accC);
                     }
                     int pix = rowBase + x;
                     if (orbitScalar)

@@ -351,6 +351,40 @@ Details:
 *Headless `--batch`, c = 0.5: Bivariate2D, JointEqualised, PerceptualSplit, PhaseModulated
 (κ = 1.5, Cividis).*
 
+**S5 as shipped (#1119).** `DualOrbitTrapFrame.CoMoving` makes the trap ride the *other* orbit.
+Each step the measured point is put in a frame centred on the frame orbit's point f_k:
+w_k = (m_k − f_k)·e^{−i·arg f_k} / |f_k| · e^{−iα}, and w_k goes to the unchanged trap sampler, so
+all 19 built-in shapes work as they are.
+- **Fields:** `TrapC` = the c-orbit in the z-orbit's frame; `TrapZ` = the z-orbit in the c-orbit's
+  frame; `TrapDelta` = their difference. This replaces the issue's three-valued
+  {Fixed, CoMovingZ, CoMovingC}: which orbit rides is already chosen by the field.
+- **Knobs:** `DualOrbitTrapRotate` (default on: turn by arg f_k), `DualOrbitTrapScaleByOrbit`
+  (divide by |f_k|), and `DualOrbitTrapAngle` α in degrees. α works in the Fixed frame too and is
+  animatable (spin the trap). All four are geometry (in the `GeometryKey`).
+- **Starts at k = 2 (found in the smoke render).** c₁ − z₁ = c₀² for *every* s
+  (D₁ = D₀·σ₀ = c₀·c₀), so the first relative point carries no dynamics. Sampling it made the
+  unrotated Cross trap flat (a real c₀ puts D₁ on the axis: distance 0 everywhere) and the rotated
+  exterior pure radial rays (a function of arg s alone). The Fixed frame keeps S3's k ≥ 1.
+- **Sampling stops** when either orbit escapes: past its escape the frame orbit has no frame.
+- **Inside M_c the co-moving trap goes to 0.** Both orbits fall into the same attracting cycle at
+  phase lag 0 (S7), so D_k → 0 and w_k → 0.
+- **Fixed frame, α = 0** never enters the lockstep path, so it is byte-identical to S3.
+- **Tests:**
+  - point and Cross traps, all four rotate / scale combinations, `TrapZ` and `TrapC`, against a
+    test-side lockstep loop with the textbook frame;
+  - α in both frames against the loop;
+  - **c₀ = 0 degeneracy:** the c-orbit is the z-orbit, so w ≡ 0 and the image is one constant,
+    the shape's own value at the origin (six shapes, against the public trap classes);
+  - **rotation covariance:** Cross turned 45° equals the independent DiagonalCross sampler
+    (Fixed, CoMoving, CoMoving + scale);
+  - unrotated point trap: TrapZ ≡ TrapC (|c − z| = |z − c|), and rotation leaves it unchanged;
+  - Fixed frame: toggles byte-identical to S3; α = 360° (lockstep path) reproduces S3;
+  - the k = 2 regression (real c₀, unrotated Cross is not flat); animatable α; CLI round trip.
+
+![Co-moving trap](../Images/dualorbit-coloring/s5-comoving-trap.png)
+*Headless `--batch`, default c-seed, Cividis. TrapC with the Cross trap, Fixed (S3) against
+CoMoving; the Star trap co-moving with rotate + scale; TrapDelta co-moving at α = 30°.*
+
 ---
 
 ## 4. Architecture (S1 #1115)
