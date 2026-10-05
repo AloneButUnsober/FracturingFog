@@ -51,6 +51,7 @@ system. The codebase is a single .NET 10 solution.
 | Understanding why a lighting/FX knob works on a 3D fractal but not Relief 3D | [Lighting & FX — 3D vs Relief 3D](Lighting-FX-3D-vs-Relief3D.md) |
 | Fog / volumetrics around 3D fractals (background fog, froxel port plan) | [Froxel / environment volumetrics for 3D — spike](Froxel-3D-Spike-1061.md) |
 | Why Relief 3D height changes with the view, camera or window size, and the fixes (#1025) | [Relief 3D consistency](Relief3D-Consistency.md) |
+| Colouring the dual-orbit family (pair-native fields, Dual Buddhabrot) | [Dual-Orbit Colouring R&D](DualOrbit-Coloring-RnD.md) (epic #1114) |
 | Growing PaletteBuilder into a perceptual, colorblind-first color assistant | [PaletteBuilder Design](PaletteBuilder-Design.md) (roadmap S10, issue #392) |
 | Adding the Acid Warp palette-cycling mode + color-motion ideas | [Acid Warp Mode Design](AcidWarp-Mode-Design.md) |
 | Building the distributed master/worker rendering cluster   | [Distributed Rendering Development Plan](DistributedRendering-DevelopmentPlan.md) — phase notes: [D-1](D-1-Session-Notes.md), [D-2](D-2-Session-Notes.md) |

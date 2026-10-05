@@ -736,3 +736,11 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   full 158–173 ms vs recolour 4–10 ms; 1920×1080 @ 1000 iter 641–689 ms vs 3–9 ms. Cache = 9 bytes/px
   (~19 MB at 1080p). A reflection guard classifies every `DualOrbit*` param as geometry or colour-only and
   checks reuse against a fresh render, so a new param cannot silently serve stale orbits.
+- **2026-10-05** — **Dual-orbit colouring R&D → epic #1114** ([DualOrbit-Coloring-RnD.md](DualOrbit-Coloring-RnD.md)).
+  Verified (independent invariants): the dual-orbit pair is exactly one orbit of the **bicomplex** quadratic
+  map (split-complex form m' = m² + e² + s, e' = 2me; Rochon 2000), and D_{n+1} = D_n·(z_n + c_n). New
+  pair-native fields (secant Lyapunov — live in every region; = log|μ|/p at phase lag 0, = 0 at lag ≠ 0),
+  Böttcher-ratio domain colouring (real part = G_c − G_z, not GreenRatio), interior phase lag, co-moving
+  traps, bivariate/copula palettes, path interference, basin entropy, FTLE/LIC, and a **Dual Buddhabrot**
+  (joint-outcome channels; the c-escaped / z-bounded channel is new structure). Slices #1115–#1129;
+  novelty research deferred to #1130. Supersedes #867's deposition scope.
