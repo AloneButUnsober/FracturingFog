@@ -550,6 +550,59 @@ expected).*
 *Headless `--batch`, Cividis. Ftle; JacobianAnisotropy; GreenRatio with LIC along its level sets;
 ExternalAngleDelta with LIC along the separation direction.*
 
+**S15 as shipped (#1129).** Volume colour sources and quaternion parity.
+- **Volume:** `DualOrbitVolumeColor` gains `SecantLyapunov`, `PhaseLag` and `PairWinding`
+  (appended). Each surface point (c = X + iZ, s = (Y + s.x-centre) + i·s.y) is coloured by the 2D
+  field at that (c, s).
+  - The new `DualOrbitEscapeCalculator.TryFieldAt` runs the 2D pixel pass's own helpers (RunPair →
+    PairScalar, Run → InteriorScalar), so **the volume and the 2D slice agree by construction**.
+    Tested on a grid, and against the 2D render through `SurfaceFieldValue`.
+  - **PhaseLag probes inward.** It lives where both orbits are bounded, just *inside* the surface,
+    and a hit point is within ε outside. So a dead value is re-probed along −normal at
+    2ε … 256ε (the Fatou component the surface bounds), and the categorical class colour is kept.
+  - **SecantLyapunov and PairWinding** are sampled *on* the Julia boundary, where both genuinely
+    fluctuate from point to point. The render is speckled, and that is the field, not noise in the
+    method.
+- **Quaternion parity audit.** In the complex subalgebra C_i (s = s_x·i, c = c_x·i) the Hamilton
+  map *is* the complex map, so every field with a quaternion value must equal its complex value
+  at s = i·s_x, c = i·c_x. Every `DualOrbitField` is classified, and a guard test fails if a new one
+  isn't:
+
+| Quaternion value | Fields |
+|---|---|
+| **= complex in C_i** (tested) | EscapeSeparation, MidpointResidual, DualOrbitAngle, DeltaN, GreenRatio, EscapeTimeZ/C, SecantLyapunov, DivergenceTime, ClosestApproach(+Index), MidpointPerturbation |
+| **none** (interior) — planar angle or orientation | ExternalAngleDelta, PairWinding, ItineraryAgreement, FinalAngleDelta, BinaryXor, PathInterference(+Phase) |
+| **none** — per-orbit sampling / image-plane derivatives | Trap*, Stripe*, Tia*, OrbitTheme*, Distance*, DualOutline, Ftle, JacobianAnisotropy |
+| **none** — interior cycle / ensemble (complex-only so far) | PhaseLag(+Fraction), CyclePeriod, BasinEntropy, UncertaintyExponent |
+
+- **Two bugs fixed by the audit:**
+  1. **The quaternion SecantLyapunov read the round-off floor on bounded pairs.** It took
+     ln|D_N| − ln|D_0| with D_N = c_N − z_N differenced, and once both orbits land on the same
+     floating-point cycle the difference is exactly 0. The fix uses the symmetrised identity
+     **c² − z² = ½(D·σ + σ·D)**, which is exact for quaternions because the cross terms cancel, to
+     carry D explicitly (normalised, Σ ln|D'|/|D|). In C_i it is |σ|, matching the complex sum.
+     λ now reaches ln|μ| (test: −0.6051 against −0.6047). The old S1 test, which pinned the
+     telescoped value, is replaced by a full-Hamilton-product reference (bounded pair) and the
+     telescoped value (escaping pair, where it is still accurate).
+  2. **ExternalAngleDelta returned a live 0** under the quaternion map. It is now interior: there is
+     no Böttcher angle in 4D.
+- **Rotation covariance** (#970): conjugating s and c by a rotation about the i-axis rotates every
+  orbit, so every norm-built field (SecantLyapunov, GreenRatio, EscapeSeparation, ClosestApproach,
+  MidpointPerturbation) is invariant. Tested at two angles. These fields depend only on rotation
+  invariants of (s, c) — the "radially trivial" reading: on the quaternion map they vary only with
+  |s|, |c| and the angle between them.
+- **Tests:**
+  - `TryFieldAt` ≡ the 2D pixel on a rabbit Julia-plane grid (six fields);
+  - the volume surface value ≡ the 2D render at 40 random points;
+  - the PhaseLag inward probe takes the first live class;
+  - each new source renders deterministically;
+  - the parity classification of every field, with ln|μ| for the quaternion λ;
+  - rotation covariance; CLI round trip.
+
+![Volume colour sources](../Images/dualorbit-coloring/s15-volume-sources.png)
+*Headless `--batch` DualOrbitVolume, Cividis: ExternalAngle (existing), SecantLyapunov, PhaseLag
+(categorical: lag-0 amber on the layers whose s is in M), PairWinding.*
+
 ---
 
 ## 4. Architecture (S1 #1115)

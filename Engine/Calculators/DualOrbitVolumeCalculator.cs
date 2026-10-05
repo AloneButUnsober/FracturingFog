@@ -207,6 +207,16 @@ public sealed class DualOrbitVolumeCalculator : IFractalCalculator, IStereoEyeCa
                     v = double.IsNaN(t) ? 255f : (float)(t * 255.0);
                     break;
                 }
+                case DualOrbitVolumeColor.SecantLyapunov:
+                case DualOrbitVolumeColor.PhaseLag:
+                case DualOrbitVolumeColor.PairWinding:
+                {
+                    // #1129 — the 2D field at this (c, s); categorical lag classes keep their colours.
+                    double val = SurfaceFieldValue(colorSource, px, py, pz, nrm[0], nrm[1], nrm[2], eps, fp, out uint? classColor);
+                    if (classColor is uint cc) return cc;
+                    v = double.IsNaN(val) ? 255f : (float)val;
+                    break;
+                }
                 default:
                     v = (float)hitStep * (192f / Math.Max(1, maxSteps)) + (float)(tTotal * 0.5);
                     break;
@@ -439,5 +449,53 @@ public sealed class DualOrbitVolumeCalculator : IFractalCalculator, IStereoEyeCa
         double len = Math.Sqrt(x * x + y * y + z * z);
         if (len < 1e-10) return new[] { 0.0, 0.0, 0.0 };
         return new[] { x / len, y / len, z / len };
+    }
+
+    /// <summary>#1129 — iterations for the per-point 2D fields on the surface.</summary>
+    public const int SurfaceFieldIterations = 400;
+
+    /// <summary>#1129 — the surface colour value (palette position 0..255, NaN = no
+    /// value) of a 2D-field source at world point (px, py, pz): the 2D field at
+    /// c = px + i·pz, s = (py + DualOrbitVolumeSXCenter) + i·DualOrbitVolumeSY —
+    /// exactly what the 2D calculator stores for that (c, s) (slice agreement).
+    /// PhaseLag lives where both orbits are bounded, i.e. just INSIDE the surface;
+    /// the hit point sits within ε outside it, so a dead value is re-probed
+    /// inward along −normal at 2ε, 4ε, … 256ε (the Fatou component the surface
+    /// bounds). With categorical lag colours the class colour is returned in
+    /// <paramref name="classColor"/>.</summary>
+    public static double SurfaceFieldValue(DualOrbitVolumeColor source, double px, double py, double pz,
+        double nx, double ny, double nz, double eps, FractalParameters fp, out uint? classColor)
+    {
+        classColor = null;
+        var field = source switch
+        {
+            DualOrbitVolumeColor.SecantLyapunov => DualOrbitField.SecantLyapunov,
+            DualOrbitVolumeColor.PhaseLag => DualOrbitField.PhaseLag,
+            DualOrbitVolumeColor.PairWinding => DualOrbitField.PairWinding,
+            _ => throw new ArgumentOutOfRangeException(nameof(source)),
+        };
+        double sy = fp.DualOrbitVolumeSY, sxc = fp.DualOrbitVolumeSXCenter;
+        const int it = SurfaceFieldIterations;
+        bool At(double x, double y, double z, out double s)
+            => DualOrbitEscapeCalculator.TryFieldAt(field, x, z, y + sxc, sy, it,
+                fp.DualOrbitBailout, fp.DualOrbitLyapunovSpan, fp.DualOrbitDivergenceRatio, out s);
+
+        bool live = At(px, py, pz, out double scalar);
+        if (!live && field == DualOrbitField.PhaseLag)
+            for (double k = 2; k <= 256 && !live; k *= 2)
+                live = At(px - nx * eps * k, py - ny * eps * k, pz - nz * eps * k, out scalar);
+        if (!live) return double.NaN;
+
+        switch (field)
+        {
+            case DualOrbitField.SecantLyapunov:
+                return scalar / it * 255.0;
+            case DualOrbitField.PairWinding:
+                return Math.Clamp(128.0 + 16.0 * (scalar - 0.5 * it), 0.0, 255.0);   // 16 steps per turn
+            default:   // PhaseLag: class k
+                if (fp.DualOrbitLagColors == DualOrbitCategoricalColors.Categorical)
+                    classColor = DualOrbitEscapeCalculator.ClassColor(field, scalar);
+                return Math.Clamp(scalar * 32.0, 0.0, 255.0);
+        }
     }
 }

@@ -298,7 +298,7 @@
             <ComboBox Grid.Row="3" Grid.Column="1"
                       ItemsSource="{Binding DualOrbitVolumeColors}"
                       SelectedItem="{Binding DualOrbitVolumeColor, Mode=TwoWay}" Margin="0,2"
-                      ToolTip.Tip="ExternalAngle: ray bands of each layer's Julia set. CriticalLayer: the seed-0 (critical) orbit's escape at that layer; bands mark where the sweep crosses the Mandelbrot line. Steps: generic depth shading." />
+                      ToolTip.Tip="ExternalAngle: ray bands of each layer's Julia set. CriticalLayer: the seed-0 (critical) orbit's escape at that layer; bands mark where the sweep crosses the Mandelbrot line. Steps: generic depth shading. SecantLyapunov / PhaseLag / PairWinding: the same values as those 2D Dual-Orbit fields at each surface point (PhaseLag is read just inside the surface, where both orbits are bounded)." />
             <TextBlock Grid.Row="4" Grid.Column="0" Text="DE iterations:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="4" Grid.Column="1"
                            Minimum="4" Maximum="256" Increment="4" FormatString="F0"

@@ -413,7 +413,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         float[] distBuf = DistanceBuffer;
         double deScale = key.DEScale;
         bool deadable = pairField || interiorField || (!fieldOff && IsEnsembleField(field))
-            || (!fieldOff && quat && IsJacobianField(field))
+            || (!fieldOff && quat && (IsJacobianField(field) || field == DualOrbitField.ExternalAngleDelta))
             || (!fieldOff && (field == DualOrbitField.DistanceZ || field == DualOrbitField.DistanceC))
             || (!fieldOff && quat && (IsOrbitScalarField(field) || IsOrbitThemeField(field)
                                       || IsDistanceField(field) || IsDecompField(field) || IsInterferenceField(field)));
@@ -480,7 +480,8 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                     // Interior (#1121) and S3 orbit (#1117) fields are complex-only.
                     if (interiorField || IsOrbitScalarField(field) || IsOrbitThemeField(field)
                         || IsDistanceField(field) || IsDecompField(field) || IsInterferenceField(field)
-                        || IsEnsembleField(field) || IsJacobianField(field)) { scalar = 0.0; pairLive = false; }
+                        || IsEnsembleField(field) || IsJacobianField(field)
+                        || field == DualOrbitField.ExternalAngleDelta) { scalar = 0.0; pairLive = false; }   // #1129: no Böttcher angle in 4D
                     if (licSep) sepArr[rowBase + x] = float.NaN;
                     if (storeAngles) { thZArr[rowBase + x] = float.NaN; thCArr[rowBase + x] = float.NaN; }
                     zEsc = oz.Escaped; cEsc = oc.Escaped; nZ = oz.N; nC = oc.N;
