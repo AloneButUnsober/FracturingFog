@@ -1956,6 +1956,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             Set(ref _dualField, value); _p.DualOrbitField = value;
             this.RaisePropertyChanged(nameof(IsDualOrbitLyapunovField));
             this.RaisePropertyChanged(nameof(IsDualOrbitDivergenceField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitCategoricalField));
             Fire();
         }
     }
@@ -1963,6 +1964,12 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsDualOrbitLyapunovField => IsDualOrbitFieldMode && _dualField == DualOrbitField.SecantLyapunov;
     /// <summary>#1116 — show the DivergenceTime ratio row.</summary>
     public bool IsDualOrbitDivergenceField => IsDualOrbitFieldMode && _dualField == DualOrbitField.DivergenceTime;
+    /// <summary>#1121 — show the categorical-colour row (PhaseLag / CyclePeriod).</summary>
+    public bool IsDualOrbitCategoricalField => IsDualOrbitFieldMode
+        && (_dualField == DualOrbitField.PhaseLag || _dualField == DualOrbitField.CyclePeriod);
+    public DualOrbitCategoricalColors DualOrbitLagColors { get => _p.DualOrbitLagColors; set { if (value == _p.DualOrbitLagColors) return; _p.DualOrbitLagColors = value; this.RaisePropertyChanged(); Fire(); } }
+    public System.Array DualOrbitLagColorModes => s_DualOrbitLagColorModes;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_DualOrbitLagColorModes = System.Enum.GetValues(typeof(DualOrbitCategoricalColors));
     public System.Array DualOrbitFields => s_DualOrbitFields;   // cached: a new array per read resets the ComboBox selection on Refresh()
     private static readonly System.Array s_DualOrbitFields = System.Enum.GetValues(typeof(DualOrbitField));
     private double _dualCSeedX;
@@ -2015,6 +2022,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsDualOrbitLyapunovField));
             this.RaisePropertyChanged(nameof(IsDualOrbitDivergenceField));
             this.RaisePropertyChanged(nameof(IsDualOrbitDomain));
+            this.RaisePropertyChanged(nameof(IsDualOrbitCategoricalField));
             RaiseDualThemeWarning();
             Fire();
         }

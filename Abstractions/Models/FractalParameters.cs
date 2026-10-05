@@ -1255,6 +1255,9 @@ namespace FracturingFog.Models
         /// defined — G(c₁) ≤ G(0), below the critical point's level — where the
         /// lifted angle has branch cuts (visible seams) (#1120). Default on.</summary>
         public bool DualOrbitDomainMarkCuts { get; set; } = true;
+        /// <summary>PhaseLag / CyclePeriod colouring: categorical palette (default) or
+        /// the active theme (#1121).</summary>
+        public DualOrbitCategoricalColors DualOrbitLagColors { get; set; } = DualOrbitCategoricalColors.Categorical;
         /// <summary>Which two of (c.x, c.y, s.x, s.y) the image spans (#971).
         /// Default SxSy = the parameter plane (shipped view, byte-identical).</summary>
         public DualOrbitSliceAxes DualOrbitSliceAxes { get; set; } = DualOrbitSliceAxes.SxSy;
@@ -1918,6 +1921,7 @@ namespace FracturingFog.Models
                 DualOrbitDomainGrid = DualOrbitDomainGrid,
                 DualOrbitDomainPalette = DualOrbitDomainPalette,
                 DualOrbitDomainMarkCuts = DualOrbitDomainMarkCuts,
+                DualOrbitLagColors = DualOrbitLagColors,
                 DualOrbitSliceAxes = DualOrbitSliceAxes,
                 DualOrbitSX = DualOrbitSX,
                 DualOrbitSY = DualOrbitSY,

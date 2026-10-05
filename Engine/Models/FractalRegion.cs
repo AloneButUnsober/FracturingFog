@@ -631,6 +631,8 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public bool? DualOrbitDomainGrid { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitDomainPalette { get; set; }
         [JsonIgnore(Condition = OmitNull)] public bool? DualOrbitDomainMarkCuts { get; set; }
+        // #1121 — interior phase-lag / period colouring.
+        [JsonIgnore(Condition = OmitNull)] public int? DualOrbitLagColors { get; set; }
         // #971 — slice axes + fixed s when s is not an image axis.
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitSliceAxes { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitSX { get; set; }
@@ -1015,6 +1017,7 @@ namespace FracturingFog.Models
                     DualOrbitDomainGrid = p.DualOrbitDomainGrid ? true : (bool?)null,
                     DualOrbitDomainPalette = p.DualOrbitDomainPalette != D.DualOrbitDomainPalette ? (int)p.DualOrbitDomainPalette : (int?)null,
                     DualOrbitDomainMarkCuts = p.DualOrbitDomainMarkCuts ? (bool?)null : false,
+                    DualOrbitLagColors = p.DualOrbitLagColors != D.DualOrbitLagColors ? (int)p.DualOrbitLagColors : (int?)null,
                     DualOrbitSliceAxes = p.DualOrbitSliceAxes != FracturingFog.DualOrbitSliceAxes.SxSy ? (int)p.DualOrbitSliceAxes : (int?)null,
                     DualOrbitSX = p.DualOrbitSX != -0.78 ? p.DualOrbitSX : (double?)null,
                     DualOrbitSY = p.DualOrbitSY != 0.15 ? p.DualOrbitSY : (double?)null,
@@ -1507,6 +1510,7 @@ namespace FracturingFog.Models
             if (DualOrbitDomainGrid.HasValue) p.DualOrbitDomainGrid = DualOrbitDomainGrid.Value;
             if (this.DualOrbitDomainPalette.HasValue) p.DualOrbitDomainPalette = (FracturingFog.DualOrbitDomainPalette)this.DualOrbitDomainPalette.Value;
             if (DualOrbitDomainMarkCuts.HasValue) p.DualOrbitDomainMarkCuts = DualOrbitDomainMarkCuts.Value;
+            if (this.DualOrbitLagColors.HasValue) p.DualOrbitLagColors = (FracturingFog.DualOrbitCategoricalColors)this.DualOrbitLagColors.Value;
             if (this.DualOrbitSliceAxes.HasValue) p.DualOrbitSliceAxes = (FracturingFog.DualOrbitSliceAxes)this.DualOrbitSliceAxes.Value;
             if (DualOrbitSX.HasValue) p.DualOrbitSX = DualOrbitSX.Value;
             if (DualOrbitSY.HasValue) p.DualOrbitSY = DualOrbitSY.Value;

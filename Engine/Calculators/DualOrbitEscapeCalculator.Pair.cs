@@ -167,7 +167,8 @@ public sealed partial class DualOrbitEscapeCalculator
 
     /// <summary>True for the pair-native fields (#1116): their scalar comes from
     /// the pair accumulator, and their liveness from it (not the escape flags).</summary>
-    internal static bool IsPairField(DualOrbitField f) => f >= DualOrbitField.SecantLyapunov;
+    internal static bool IsPairField(DualOrbitField f)
+        => f >= DualOrbitField.SecantLyapunov && f <= DualOrbitField.ItineraryAgreement;
 
     private const double LogFloor = 1e-300;
 

@@ -200,6 +200,36 @@ w = (G_c − G_z) + 2πi·Δθ.
 *Headless `--batch`. Top: c = 0.5 with the cut region dimmed, then the raw lift (seams visible).
 Bottom: the Theme palette (Cividis is not cyclic, hence its wrap line), then c = −0.3+0.6i.*
 
+**S7 as shipped (#1121).** Three interior `DualOrbitField` values:
+- `PhaseLag` (k);
+- `PhaseLagFraction` ((k+½)/p across the palette);
+- `CyclePeriod` (p of the critical cycle; it doesn't need the c-orbit).
+
+How they're computed: from the cached end states, the critical orbit is iterated on (up to 1024
+steps) until it first returns within 1e-8; then k minimises |c_N − z_{N+k}|. A pixel is only live
+if the c-orbit has converged onto the cycle (within 1e-5). Otherwise the field has no value
+(escaping, near-parabolic slow convergence, or a period above the cap) and the pixel gets the
+interior colour.
+
+**Found in the smoke render:** cycling themes alias small evenly spaced class values. For p = 4,
+(k+½)/4 × 2000 = 250 / 750 / 1250 / 1750 all landed on one colour in HSV, Cividis *and* a
+"Gradient" theme. So `PhaseLag` / `CyclePeriod` now default to `DualOrbitLagColors = Categorical`:
+Okabe–Ito reordered blue / amber first, one fixed colour per class whatever the theme. `Theme` is
+still available, and `PhaseLagFraction` stays theme-mapped (best with a non-cycling gradient).
+
+**Tests:**
+- c = s ⇒ lag 1 exactly; a seed near 0 ⇒ lag 0.
+- The period matches a test-side critical-cycle search.
+- The Julia plane has exactly p lag classes (p = 1..4), stable from maxIter N to N + p.
+- Lag agrees with the S2 secant Lyapunov exponent (lag 0 ⇔ λ ≈ ln|μ|/p, else 0).
+- Categorical colours are one-per-class.
+- Outside M, when only c escapes, and under the quaternion map, the fields are interior.
+
+![Phase lag](../Images/dualorbit-coloring/s7-phase-lag.png)
+*Headless `--batch`, categorical colours. Top: Julia (CxCy) slices — the rabbit's three lag classes
+and a period-4 basin's four. Bottom: the parameter plane at c = 0.5 (mostly lag 0, lagged lobes in
+the 2-bulb) and `CyclePeriod`.*
+
 ---
 
 ## 4. Architecture (S1 #1115)
