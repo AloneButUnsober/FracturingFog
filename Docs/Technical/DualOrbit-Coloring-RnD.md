@@ -486,8 +486,8 @@ radius ρ round c (`DualOrbitEnsembleN` = 32, `DualOrbitEnsembleRadius` = 0.02 i
 - **Budget:** N·(1 + L) orbits per pixel (defaults: 160). A Brent cycle check stops bounded seeds
   once they settle, so interior seeds in hyperbolic components are cheap. BasinEntropy skips the
   partners. The smoke renders at 640×480 took 0.4–1.0 s.
-- **No progressive refinement:** the host's ¼ → ½ → full chain is Mandelbrot-only, so this is filed
-  as #1146 (the §7 open question).
+- **Progressive refinement:** the host's ¼ → ½ → full chain was Mandelbrot-only. #1146 extends it
+  to Dual-Orbit Escape (below).
 - All four params are geometry (`GeometryKey`). The quaternion map gives interior.
 - **Tests:**
   - the layout is deterministic, in the unit disc, and area-uniform (P(r ≤ ½) = ¼);
@@ -630,6 +630,26 @@ byte-identical) removes the escape-band terraces from the two step-additive pair
 *Headless `--batch --relief`, the S9 split (colour ExternalAngleDelta, height SecantLyapunov).
 Raw: escape-band terraces. Smoothed: continuous.*
 
+**Progressive preview (#1146).** Dual-Orbit Escape now gets the host's Wave 2.5 progressive chain
+(¼ → ½ → full) during interaction, like Mandelbrot. Previously that chain covered the canonical
+Mandelbrot path and, since #327, only *relief-eligible* alt types.
+- **How:** `FractalRenderHost.AlwaysProgressiveAlt(type)` names alt types that are expensive per
+  pixel. For those, `AltPreviewEligible` is true whether or not relief is on. The S13 ensemble fields
+  cost N·(1 + L) orbits per pixel, and the orbit-theme and Jacobian fields re-iterate.
+- **Reuses the #327 machinery:** the low-res twin comes from `CreateReliefFieldCalc`, configured by
+  `SyncAltStateFromMandel`. The upload tail applies relief only when relief is on. The final stage is
+  the unchanged full render, so the settled frame is **byte-identical** to a single pass (tested).
+  Extra cost ≈ 1/16 + 1/4 ≈ 31 % of a frame, paid only on interactive (progressive) triggers.
+- **Headless renders** (`--batch`, export, video) stay single-pass by design.
+- **Not done:** the tile-level budget (cap orbits per frame, continue on the next frame). A finer
+  ensemble pre-pass (N/8 first) is also possible later; the resolution chain already makes heavy
+  views responsive.
+- **Tests:** through a real `FractalRenderHost` with a recording renderer:
+  - Dual-Orbit Escape uploads the quarter, then half, then full frame, and the final frame equals a
+    non-progressive render;
+  - a non-relief Julia keeps its single full render;
+  - Mandelbrot's chain is unchanged.
+
 ---
 
 ## 4. Architecture (S1 #1115)
@@ -770,7 +790,7 @@ Scripts: [`dualorbit_previews.py`](DualOrbit-Coloring-Prototypes/dualorbit_previ
   (#392 tails).
 - **S10:** Should the c-seed in the Dual Buddhabrot also be samplable (4D (c, s) sampling — a density
   over all Julia sets) as a mode, or stay fixed? Fixed first, because it makes c an animation knob.
-- **S13:** Per-pixel ensemble cost (×N). Progressive refinement only, or also a tile-level budget? → S13 shipped single-pass with a Brent early-out; host progressive refinement filed as #1146.
+- **S13:** Per-pixel ensemble cost (×N). Progressive refinement only, or also a tile-level budget? → S13 shipped single-pass with a Brent early-out; host progressive refinement filed as #1146. #1146 shipped the ¼ → ½ → full preview chain; the tile-level budget is still open.
 
 ---
 
