@@ -410,6 +410,8 @@ public static class FractalAnimatableParamsMap
         new("DualOrbitTrapAngle", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 360.0,
             Cost: AnimatableParamCost.Expensive,
             Notes: "Trap fields: turns the trap shape (degrees), fixed or co-moving frame — spin the trap (#1119)."),
+        new("DualOrbitInterferenceK", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 60.0,
+            Notes: "Path interference κ (the 'ħ' knob) — sweeping it makes the fringes shimmer (#1126). Recolour only."),
     };
 
     // Dual Buddhabrot (#1124). Sweeping the c-seed re-textures the c channels on

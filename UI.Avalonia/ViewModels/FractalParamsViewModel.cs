@@ -1965,6 +1965,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsDualOrbitDivergenceField));
             this.RaisePropertyChanged(nameof(IsDualOrbitCategoricalField));
             this.RaisePropertyChanged(nameof(IsDualOrbitTrapField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceField));
             this.RaisePropertyChanged(nameof(IsDualOrbitCoMovingTrap));
             this.RaisePropertyChanged(nameof(IsDualOrbitStripeField));
             this.RaisePropertyChanged(nameof(IsDualOrbitDistanceField));
@@ -2010,6 +2011,11 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public OrbitTrapShapeDef DualOrbitTrapShape { get => _p.DualOrbitTrapShape; set { if (value == _p.DualOrbitTrapShape) return; _p.DualOrbitTrapShape = value; this.RaisePropertyChanged(); Fire(); } }
     public System.Array DualOrbitTrapShapes => s_DualOrbitTrapShapes;   // cached: a new array per read resets the ComboBox selection on Refresh()
     private static readonly System.Array s_DualOrbitTrapShapes = System.Enum.GetValues(typeof(OrbitTrapShapeDef));
+    /// <summary>#1126 — path-interference rows.</summary>
+    public bool IsDualOrbitInterferenceField => IsDualOrbitFieldMode
+        && _dualField is DualOrbitField.PathInterference or DualOrbitField.PathInterferencePhase;
+    public double DualOrbitInterferenceK { get => _p.DualOrbitInterferenceK; set { var v = Clamp(value, -1000, 1000); if (v == _p.DualOrbitInterferenceK) return; _p.DualOrbitInterferenceK = v; this.RaisePropertyChanged(); Fire(); } }
+    public double DualOrbitInterferenceGamma { get => _p.DualOrbitInterferenceGamma; set { var v = Clamp(value, 0, 100); if (v == _p.DualOrbitInterferenceGamma) return; _p.DualOrbitInterferenceGamma = v; this.RaisePropertyChanged(); Fire(); } }
     // #1123 — Relief split: height from its own field.
     public bool DualOrbitSplitHeight { get => _p.DualOrbitSplitHeight; set { if (value == _p.DualOrbitSplitHeight) return; _p.DualOrbitSplitHeight = value; this.RaisePropertyChanged(); Fire(); } }
     public DualOrbitField DualOrbitHeightField { get => _p.DualOrbitHeightField; set { if (value == _p.DualOrbitHeightField) return; _p.DualOrbitHeightField = value; this.RaisePropertyChanged(); Fire(); } }
@@ -2080,6 +2086,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsDualOrbitDomain));
             this.RaisePropertyChanged(nameof(IsDualOrbitCategoricalField));
             this.RaisePropertyChanged(nameof(IsDualOrbitTrapField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceField));
             this.RaisePropertyChanged(nameof(IsDualOrbitCoMovingTrap));
             this.RaisePropertyChanged(nameof(IsDualOrbitStripeField));
             this.RaisePropertyChanged(nameof(IsDualOrbitDistanceField));
