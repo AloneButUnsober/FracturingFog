@@ -3,7 +3,9 @@
 
 // DualOrbitEscapeCalculator.cs (#863 / #864, epic #850)
 //
-// Dual-orbit escape-geometry field — an FF-original construction (session notes
+// Dual-orbit escape-geometry field (#1130: the two orbits are two points of the
+// Julibrot (z₀, c) space sharing their parameter; FF's contribution is colouring
+// their RELATION, not the sets — Docs/Technical/DualOrbit-Coloring-RnD.md §8) (session notes
 // 2026-09-17; Docs/Technical/Theoretical-Fractal-RnD.md §3.6). Per parameter-
 // space sample s = (sx, sy), run TWO orbits under one shared complex-square map
 // u_{n+1} = u_n² + s, differing only in initial condition:
