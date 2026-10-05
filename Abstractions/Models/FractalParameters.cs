@@ -1312,6 +1312,10 @@ namespace FracturingFog.Models
         public int DualOrbitLicLength { get; set; } = 12;
         /// <summary>LIC texture strength 0..1 (colour-only) (#1128).</summary>
         public double DualOrbitLicStrength { get; set; } = 0.8;
+        /// <summary>#1144 — smooth SecantLyapunov / PairWinding across the escape step
+        /// (blend the N- and (N−1)-step window values by the fractional escape
+        /// count), removing the escape-band terraces. Off = the original values.</summary>
+        public bool DualOrbitLyapunovSmooth { get; set; } = false;
         /// <summary>Stripe density for StripeZ / StripeC / StripeInterference (#1117).</summary>
         public double DualOrbitStripeDensity { get; set; } = 5.0;
         /// <summary>DistanceZ / DistanceC: a distance of d pixels maps to d/(d + scale)
@@ -2015,6 +2019,7 @@ namespace FracturingFog.Models
                 DualOrbitLicSource = DualOrbitLicSource,
                 DualOrbitLicLength = DualOrbitLicLength,
                 DualOrbitLicStrength = DualOrbitLicStrength,
+                DualOrbitLyapunovSmooth = DualOrbitLyapunovSmooth,
                 DualOrbitStripeDensity = DualOrbitStripeDensity,
                 DualOrbitDEScale = DualOrbitDEScale,
                 DualOrbitOutlineWidth = DualOrbitOutlineWidth,

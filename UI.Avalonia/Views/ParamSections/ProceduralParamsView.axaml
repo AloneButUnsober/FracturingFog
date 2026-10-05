@@ -509,7 +509,7 @@
         <!-- Dual-Orbit Escape (#864 / #866) -->
         <Grid IsVisible="{Binding IsDualOrbitEscape}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Map:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding DualOrbitMaps}"
@@ -852,6 +852,11 @@
                            Value="{Binding DualOrbitLicStrength, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsDualOrbitLicOn}"
                            ToolTip.Tip="0 = no texture, 1 = full light/dark streaks over the colour. Recolours without re-iterating." />
+            <CheckBox Grid.Row="54" Grid.Column="0" Grid.ColumnSpan="2"
+                      Content="Smooth across escape bands"
+                      IsChecked="{Binding DualOrbitLyapunovSmooth, Mode=TwoWay}" Margin="0,2"
+                      IsVisible="{Binding IsDualOrbitSmoothableField}"
+                      ToolTip.Tip="The value is an average (or total) over the steps before the first escape, so it jumps wherever that step count changes — visible as thin terrace lines, especially as Relief height. On = blend across each jump using the fractional escape count, so the field is continuous." />
             <TextBlock Grid.Row="24" Grid.Column="0" Grid.ColumnSpan="2"
                        Text="Böttcher domain colouring: inside the Mandelbrot set (critical orbit bounded) it shows the c-orbit's own angle and potential. ComplexPlane map only."
                        IsVisible="{Binding IsDualOrbitDomain}"

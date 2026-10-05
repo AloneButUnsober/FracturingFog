@@ -237,7 +237,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         int TrapShape, double TrapScale, double StripeDensity, double DEScale,
         DualOrbitTrapFrame TrapFrame, bool TrapRotate, bool TrapScaleByOrbit, double TrapAngle,
         int EnsembleN, double EnsembleRadius, int EnsembleSectors, int UncertaintyLevels,
-        double FtleSpan, double AnisotropyScale, bool LicSeparation);
+        double FtleSpan, double AnisotropyScale, bool LicSeparation, bool LyapunovSmooth);
 
     private GeometryKey? _cacheKey;
     private float[] _smZ = Array.Empty<float>(), _smC = Array.Empty<float>();
@@ -289,7 +289,8 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
             // #1128 — Jacobian palette mapping happens in Iterate; only the LIC
             // separation source needs iteration data (gradient sources recolour).
             Math.Max(1e-6, fp.DualOrbitFtleSpan), Math.Max(1e-6, fp.DualOrbitAnisotropyScale),
-            fp.DualOrbitLicSource == DualOrbitLicSource.SeparationDirection);
+            fp.DualOrbitLicSource == DualOrbitLicSource.SeparationDirection,
+            fp.DualOrbitLyapunovSmooth);   // #1144 — always keyed (geometry)
     }
 
     public void Calculate(CancellationToken ct = default)
@@ -361,6 +362,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         var pairCh = key.Pair;
         double pairEps = key.PairRatio;
         double lyapSpan = key.LyapunovSpan;
+        bool lyapSmooth = key.LyapunovSmooth;   // #1144
         bool pairField = !fieldOff && IsPairField(field);
         bool interiorField = !fieldOff && IsInteriorField(field);   // #1121
 
@@ -467,7 +469,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                         if (cEqualsS) RunQuatPair(0, sx, sy, sZ, 0, sx, sy, sZ, maxIter, bail, ref acc, out oz, out oc);
                         else RunQuatPair(0, cSeedX, cSeedY, cSeedZ, 0, sx, sy, sZ, maxIter, bail, ref acc, out oz, out oc);
                         WritePlanes(planes, rowBase + x, acc, quat: true);
-                        if (pairField) pairScalar = PairScalar(field, acc, maxIter, lyapSpan, quat: true, out pairLive);
+                        if (pairField) pairScalar = PairScalar(field, acc, maxIter, lyapSpan, quat: true, out pairLive, lyapSmooth);
                     }
                     else
                     {
@@ -496,7 +498,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                         if (cEqualsS) RunPair(0.0, 0.0, sx, sy, sx, sy, maxIter, bail, argsZ, argsC, true, ref acc, out oz, out nZ, out oc, out nC);
                         else RunPair(0.0, 0.0, cSeedX, cSeedY, sx, sy, maxIter, bail, argsZ, argsC, false, ref acc, out oz, out nZ, out oc, out nC);
                         WritePlanes(planes, rowBase + x, acc, quat: false);
-                        if (pairField) pairScalar = PairScalar(field, acc, maxIter, lyapSpan, quat: false, out pairLive);
+                        if (pairField) pairScalar = PairScalar(field, acc, maxIter, lyapSpan, quat: false, out pairLive, lyapSmooth);
                     }
                     else
                     {

@@ -1965,6 +1965,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsDualOrbitDivergenceField));
             this.RaisePropertyChanged(nameof(IsDualOrbitCategoricalField));
             this.RaisePropertyChanged(nameof(IsDualOrbitTrapField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitSmoothableField));
             this.RaisePropertyChanged(nameof(IsDualOrbitFtleField));
             this.RaisePropertyChanged(nameof(IsDualOrbitAnisotropyField));
             this.RaisePropertyChanged(nameof(IsDualOrbitEnsembleField));
@@ -2039,6 +2040,10 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsDualOrbitLicOn => _p.DualOrbitLicSource != DualOrbitLicSource.Off;
     public int DualOrbitLicLength { get => _p.DualOrbitLicLength; set { var v = (int)Clamp(value, 1, 256); if (v == _p.DualOrbitLicLength) return; _p.DualOrbitLicLength = v; this.RaisePropertyChanged(); Fire(); } }
     public double DualOrbitLicStrength { get => _p.DualOrbitLicStrength; set { var v = Clamp(value, 0, 1); if (v == _p.DualOrbitLicStrength) return; _p.DualOrbitLicStrength = v; this.RaisePropertyChanged(); Fire(); } }
+    /// <summary>#1144 — escape-step smoothing row (SecantLyapunov / PairWinding).</summary>
+    public bool IsDualOrbitSmoothableField => IsDualOrbitFieldMode
+        && _dualField is DualOrbitField.SecantLyapunov or DualOrbitField.PairWinding;
+    public bool DualOrbitLyapunovSmooth { get => _p.DualOrbitLyapunovSmooth; set { if (value == _p.DualOrbitLyapunovSmooth) return; _p.DualOrbitLyapunovSmooth = value; this.RaisePropertyChanged(); Fire(); } }
     // #1123 — Relief split: height from its own field.
     public bool DualOrbitSplitHeight { get => _p.DualOrbitSplitHeight; set { if (value == _p.DualOrbitSplitHeight) return; _p.DualOrbitSplitHeight = value; this.RaisePropertyChanged(); Fire(); } }
     public DualOrbitField DualOrbitHeightField { get => _p.DualOrbitHeightField; set { if (value == _p.DualOrbitHeightField) return; _p.DualOrbitHeightField = value; this.RaisePropertyChanged(); Fire(); } }
@@ -2109,6 +2114,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsDualOrbitDomain));
             this.RaisePropertyChanged(nameof(IsDualOrbitCategoricalField));
             this.RaisePropertyChanged(nameof(IsDualOrbitTrapField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitSmoothableField));
             this.RaisePropertyChanged(nameof(IsDualOrbitFtleField));
             this.RaisePropertyChanged(nameof(IsDualOrbitAnisotropyField));
             this.RaisePropertyChanged(nameof(IsDualOrbitEnsembleField));
