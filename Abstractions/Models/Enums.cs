@@ -545,6 +545,17 @@ namespace FracturingFog
         CriticalLayer,
         /// <summary>Raymarch step / depth shading (the generic 3D default).</summary>
         Steps,
+        /// <summary>The 2D <c>SecantLyapunov</c> field at the surface point's (c, s)
+        /// (#1129): how fast the two orbits separate (span: DualOrbitLyapunovSpan).</summary>
+        SecantLyapunov,
+        /// <summary>The 2D <c>PhaseLag</c> field (#1129): which step of the shared
+        /// attracting cycle the c-orbit trails the critical orbit by — sampled just
+        /// inside the surface, where both orbits are bounded. Class colours follow
+        /// DualOrbitLagColors.</summary>
+        PhaseLag,
+        /// <summary>The 2D <c>PairWinding</c> field (#1129): net turns of z − c about
+        /// each other, 16 palette steps per turn.</summary>
+        PairWinding,
     }
 
     public enum FractalType

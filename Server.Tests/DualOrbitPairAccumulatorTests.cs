@@ -300,21 +300,26 @@ public sealed class DualOrbitPairAccumulatorTests
         Assert.Equal(68, DualOrbitPairPlanes.BytesPerPixel(DualOrbitPairChannels.All));
     }
 
-    // Quaternion: the product identity fails (non-commutative), so the secant
-    // sum is the telescoped log|D_N| − log|D_0| — checked against a direct
-    // double-precision Hamilton-square re-iteration. Complex-only channels are NaN.
-    [Fact]
-    public void Quaternion_SecantSumIsTelescopedSeparation_ComplexOnlyChannelsNaN()
+    // Quaternion: the product identity D' = D·σ fails (non-commutative), but its
+    // symmetrised form D' = ½(D·σ + σ·D) is exact, so the secant sum carries D
+    // explicitly (#1129). Checked against (a) a test-side recurrence built from a
+    // full Hamilton product, at a BOUNDED pair where the differenced c_N − z_N
+    // cancels to round-off, and (b) the telescoped log|D_N| − log|D_0| of a direct
+    // re-iteration at an ESCAPING pair, where the difference is still accurate.
+    // Complex-only channels are NaN.
+    [Theory]
+    [InlineData(-0.3, 0.5, 0.0, 200, false)]   // s = −0.3i: bounded, orbits coalesce
+    [InlineData(0.9, 0.5, 0.3, 200, true)]     // escaping pair, off the C_i subalgebra
+    public void Quaternion_SecantSumCarriesDExplicitly_ComplexOnlyChannelsNaN(double sx, double cx, double cy, int maxIter, bool escapes)
     {
-        var s = new Complex(-0.3, 0.6); var c = new Complex(0.5, 0.2);
         var p = new FractalParameters
         {
             DualOrbitMap = DualOrbitMap.Quaternion, DualOrbitBailout = Bail,
-            DualOrbitCSeedX = c.Real, DualOrbitCSeedY = 0, DualOrbitCSeedZ = 0, DualOrbitSZ = 0,
+            DualOrbitCSeedX = cx, DualOrbitCSeedY = cy, DualOrbitCSeedZ = 0, DualOrbitSZ = 0,
         };
         var calc = new DualOrbitEscapeCalculator(2, 2)
         {
-            CenterX = s.Real, CenterY = 0, Zoom = 1e9, MaxIterations = 200,
+            CenterX = sx, CenterY = 0, Zoom = 1e9, MaxIterations = maxIter,
             FractalParameters = p, ColorMap = new RampMap(), PairChannels = DualOrbitPairChannels.All,
         };
         calc.Calculate();
@@ -324,24 +329,45 @@ public sealed class DualOrbitPairAccumulatorTests
         Assert.True(float.IsNaN(pl.LogDzDs[Px]));
         Assert.True(float.IsFinite(pl.MidpointPerturbation[Px]));
 
-        var (n, logD) = QuatReference(s.Real, c.Real, 200);
+        var (n, sumExplicit, telescoped) = QuatReference(sx, cx, cy, maxIter);
         Assert.Equal(n, pl.PairSteps[Px]);
-        double expect = logD - Math.Log(Math.Abs(c.Real));
-        Assert.True(Math.Abs(pl.SecantLogSum[Px] - expect) < 1e-4 * Math.Max(1, Math.Abs(expect)), $"{pl.SecantLogSum[Px]} vs {expect}");
+        Assert.True(Math.Abs(pl.SecantLogSum[Px] - sumExplicit) < 1e-4 * Math.Max(1, Math.Abs(sumExplicit)), $"{pl.SecantLogSum[Px]} vs {sumExplicit}");
+        if (escapes)
+            Assert.True(Math.Abs(pl.SecantLogSum[Px] - telescoped) < 1e-6 * Math.Max(1, Math.Abs(telescoped)), $"{pl.SecantLogSum[Px]} vs telescoped {telescoped}");
+        else
+            Assert.True(pl.SecantLogSum[Px] < telescoped - 10, "bounded: the differenced D_N is round-off limited, the explicit D is not");
 
-        static (int n, double logD) QuatReference(double sx, double cx, int maxIter)
+        static (int n, double sum, double telescoped) QuatReference(double sx, double cx, double cy, int maxIter)
         {
-            double[] a = { 0, 0, 0, 0 }, q = { 0, cx, 0, 0 }, k = { 0, sx, 0, 0 };
+            double[] a = { 0, 0, 0, 0 }, q = { 0, cx, cy, 0 }, k = { 0, sx, 0, 0 };
+            double[] d = { 0, cx, cy, 0 };
+            double sum = 0;
             int n = 0;
             for (; n < maxIter; n++)
             {
                 if (Norm(a) > Bail || Norm(q) > Bail) break;
+                double[] sg = { a[0] + q[0], a[1] + q[1], a[2] + q[2], a[3] + q[3] };
+                double[] ds = Mul(d, sg), sd = Mul(sg, d);
+                double[] nd = { 0.5 * (ds[0] + sd[0]), 0.5 * (ds[1] + sd[1]), 0.5 * (ds[2] + sd[2]), 0.5 * (ds[3] + sd[3]) };
+                double g = Norm(nd) / Norm(d);
+                sum += Math.Log(Math.Max(g, 1e-150));
+                double nn = Norm(nd);
+                d = new[] { nd[0] / nn, nd[1] / nn, nd[2] / nn, nd[3] / nn };   // keep unit length (no underflow)
                 a = Sq(a, k); q = Sq(q, k);
             }
-            double[] d = { q[0] - a[0], q[1] - a[1], q[2] - a[2], q[3] - a[3] };
-            return (n, Math.Log(Norm(d)));
+            double[] diff = { q[0] - a[0], q[1] - a[1], q[2] - a[2], q[3] - a[3] };
+            double tel = Math.Log(Math.Max(Norm(diff), 1e-300)) - Math.Log(Math.Sqrt(cx * cx + cy * cy));
+            return (n, sum, tel);
         }
         static double Norm(double[] v) => Math.Sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2] + v[3] * v[3]);
+        // Full Hamilton product.
+        static double[] Mul(double[] x, double[] y) => new[]
+        {
+            x[0] * y[0] - x[1] * y[1] - x[2] * y[2] - x[3] * y[3],
+            x[0] * y[1] + x[1] * y[0] + x[2] * y[3] - x[3] * y[2],
+            x[0] * y[2] - x[1] * y[3] + x[2] * y[0] + x[3] * y[1],
+            x[0] * y[3] + x[1] * y[2] - x[2] * y[1] + x[3] * y[0],
+        };
         // Hamilton square q² = (w² − |v|², 2w·v) plus C.
         static double[] Sq(double[] v, double[] k) => new[]
         {

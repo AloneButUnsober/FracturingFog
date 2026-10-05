@@ -22,9 +22,14 @@
 // Σ arg σ_k ≡ arg D_N − arg c (mod 2π). Accumulating σ instead of reading D_N
 // keeps the secant sum finite when the orbits contract onto one cycle (D_N would
 // underflow). The quaternion square does not commute, so that identity fails
-// there: the quaternion secant sum is the telescoped log|D_N| − log|D_0| read
-// directly (it saturates at round-off), and winding / itinerary / derivatives
-// are NaN.
+// there as a PRODUCT — but its symmetrised form is exact (the cross terms
+// cancel): c² − z² = ½(D·σ + σ·D). #1129: the quaternion secant sum carries D
+// explicitly through that recurrence (normalised each step, Σ ln|D'|/|D|), so
+// it never differences c_N − z_N. The old telescoped log|D_N| − log|D_0| read
+// the DIFFERENCE, which cancels to exactly 0 once both bounded orbits land on
+// the same floating-point cycle (λ pinned at the floor instead of ln|μ|/p). In
+// a complex subalgebra Dσ = σD and the step is |σ|, matching the complex sum.
+// Winding / itinerary / derivatives are NaN (no quaternion definition).
 //
 // Accumulation window: steps n = 0 … N−1 where N is the first step at which
 // EITHER orbit is past the bailout (or maxIter). Midpoint perturbation is read at
@@ -367,7 +372,11 @@ public sealed partial class DualOrbitEscapeCalculator
         double qx = c0x, qy = c0y, qz = c0z, qw = c0w;         // c-orbit
         bool zAlive = true, cAlive = true;
         oz = default; oc = default;
-        double logD0 = Math.Log(Math.Max(Norm4(qx, qy, qz, qw), LogFloor));
+        // #1129 — explicit D (unit quaternion; its log-length lives in LogSigmaSum).
+        double d0n = Norm4(qx, qy, qz, qw);
+        double ds = 1, di = 0, dj = 0, dk = 0;
+        if (d0n > 0) { ds = qx / d0n; di = qy / d0n; dj = qz / d0n; dk = qw / d0n; }
+        bool secant = (acc.Ch & DualOrbitPairChannels.SecantLogSum) != 0;
 
         for (int n = 0; n < maxIter && (zAlive || cAlive); n++)
         {
@@ -378,8 +387,21 @@ public sealed partial class DualOrbitEscapeCalculator
                 RoundOffRel * Math.Sqrt(zr2 + cr2));
             if (!acc.Stopped)
             {
-                if (zEsc || cEsc || !zAlive || !cAlive) StopQ(ref acc, n, d, logD0, ax, ay, az, aw, qx, qy, qz, qw);
-                else acc.Separation(n, d);
+                if (zEsc || cEsc || !zAlive || !cAlive) StopQ(ref acc, n, ax, ay, az, aw, qx, qy, qz, qw);
+                else
+                {
+                    acc.Separation(n, d);
+                    if (secant)
+                    {
+                        // D' = ½(D·σ + σ·D): scalar Ds·σs − Dv·σv, vector Ds·σv + σs·Dv.
+                        double ss = ax + qx, si = ay + qy, sj = az + qz, sk = aw + qw;
+                        double ns = ds * ss - (di * si + dj * sj + dk * sk);
+                        double ni = ds * si + ss * di, nj = ds * sj + ss * dj, nk = ds * sk + ss * dk;
+                        double g = Norm4(ns, ni, nj, nk);
+                        acc.LogSigmaSum += Math.Log(Math.Max(g, 1e-150));   // the complex path's |σ| floor
+                        if (g > 0) { ds = ns / g; di = ni / g; dj = nj / g; dk = nk / g; }
+                    }
+                }
             }
             if (zEsc)
             {
@@ -409,17 +431,16 @@ public sealed partial class DualOrbitEscapeCalculator
         if (zAlive) oz = new QOrbit(false, ax, ay, az, aw, maxIter, -1);
         if (cAlive) oc = new QOrbit(false, qx, qy, qz, qw, maxIter, -1);
         if (!acc.Stopped)
-            StopQ(ref acc, maxIter, Norm4(qx - ax, qy - ay, qz - az, qw - aw), logD0, ax, ay, az, aw, qx, qy, qz, qw);
+            StopQ(ref acc, maxIter, ax, ay, az, aw, qx, qy, qz, qw);
 
         static double Norm4(double x, double y, double z, double w) => Math.Sqrt(x * x + y * y + z * z + w * w);
     }
 
-    private static void StopQ(ref PairAccum acc, int n, double d, double logD0,
+    private static void StopQ(ref PairAccum acc, int n,
         double ax, double ay, double az, double aw, double qx, double qy, double qz, double qw)
     {
         acc.Stopped = true;
-        acc.Steps = n;
-        acc.LogSigmaSum = Math.Log(Math.Max(d, LogFloor)) - logD0;
+        acc.Steps = n;   // LogSigmaSum is accumulated step by step (explicit D, #1129)
         acc.Winding = double.NaN;
         double mx = 0.5 * (ax + qx), my = 0.5 * (ay + qy), mz = 0.5 * (az + qz), mw = 0.5 * (aw + qw);
         double ex = 0.5 * (ax - qx), ey = 0.5 * (ay - qy), ez = 0.5 * (az - qz), ew = 0.5 * (aw - qw);
