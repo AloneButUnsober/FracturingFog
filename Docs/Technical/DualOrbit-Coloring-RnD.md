@@ -160,6 +160,25 @@ Prototype findings that fix design decisions (S10 #1124):
   sources work.
 - **Dual Buddhabrot** is a new `FractalType` on `BuddhaFamilyCalculator`, reusing its Metropolis,
   progressive, HD and zoom-compensation machinery. Channel buffers replace the iteration bands.
+- **S1 as shipped (#1115).** `DualOrbitPairChannels` flags (`SecantLogSum`, `Winding`, `Separation`,
+  `MidpointPerturbation`, `Itinerary`, `Derivatives`) live on the calculator (`PairChannels`) and are
+  merged with what the selected field needs (`ChannelsFor`; every shipped field needs none).
+  `None` keeps the original `Run` path, so output is byte-identical with no allocation. Otherwise
+  `RunPair` / `RunQuatPair` iterate in lockstep with `Run`'s exact arithmetic; tests prove the cached
+  render is byte-identical with or without channels.
+  - **Accumulation window:** steps `0 … N−1`, where N is the first step at which *either* orbit is
+    past the bailout.
+  - **Derivatives** are stored as `(ln|d|, arg d)` floats at each orbit's own escape step, so they
+    don't overflow float.
+  - **Quaternion:** the secant sum is the telescoped `log|D_N| − log|D_0|`; winding, itinerary and
+    derivatives are NaN.
+  - **Cost** (1280×720 @ 500 iterations, this machine): default 47–53 ms (unchanged); single
+    channels 75–165 ms (winding, with atan2 per step, is the most expensive); all channels about
+    300 ms. Planes cost 40 B/px without derivatives and 64 B/px with them.
+  - **Deferred to the slices that consume them:** trap / stripe sub-accumulators and
+    `ITrapFieldSource` (S3), and `IDistanceFieldSource` (S4).
+  - **Finding:** the direct `|c_N − z_N|` hits round-off (~1e-16) once the orbits converge, but
+    the σ-sum keeps tracking the true contraction. That's why the secant fields accumulate σ.
 - **Batch parity** (CLAUDE.md): new params flow through `RegionFractalParams` → `--param`.
   `BuildFractalParameters`, the Command-builder live seed and a round-trip test go in the same change,
   per slice.
