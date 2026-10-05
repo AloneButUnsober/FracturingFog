@@ -1957,6 +1957,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsDualOrbitLyapunovField));
             this.RaisePropertyChanged(nameof(IsDualOrbitDivergenceField));
             this.RaisePropertyChanged(nameof(IsDualOrbitCategoricalField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitTrapField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitStripeField));
             Fire();
         }
     }
@@ -1967,6 +1969,17 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     /// <summary>#1121 — show the categorical-colour row (PhaseLag / CyclePeriod).</summary>
     public bool IsDualOrbitCategoricalField => IsDualOrbitFieldMode
         && (_dualField == DualOrbitField.PhaseLag || _dualField == DualOrbitField.CyclePeriod);
+    /// <summary>#1117 — trap-shape / scale rows (TrapZ / TrapC / TrapDelta).</summary>
+    public bool IsDualOrbitTrapField => IsDualOrbitFieldMode
+        && _dualField is DualOrbitField.TrapZ or DualOrbitField.TrapC or DualOrbitField.TrapDelta;
+    /// <summary>#1117 — stripe-density row (StripeZ / StripeC / StripeInterference).</summary>
+    public bool IsDualOrbitStripeField => IsDualOrbitFieldMode
+        && _dualField is DualOrbitField.StripeZ or DualOrbitField.StripeC or DualOrbitField.StripeInterference;
+    public OrbitTrapShapeDef DualOrbitTrapShape { get => _p.DualOrbitTrapShape; set { if (value == _p.DualOrbitTrapShape) return; _p.DualOrbitTrapShape = value; this.RaisePropertyChanged(); Fire(); } }
+    public System.Array DualOrbitTrapShapes => s_DualOrbitTrapShapes;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_DualOrbitTrapShapes = System.Enum.GetValues(typeof(OrbitTrapShapeDef));
+    public double DualOrbitTrapScale { get => _p.DualOrbitTrapScale; set { var v = Clamp(value, 1e-4, 10); if (v == _p.DualOrbitTrapScale) return; _p.DualOrbitTrapScale = v; this.RaisePropertyChanged(); Fire(); } }
+    public double DualOrbitStripeDensity { get => _p.DualOrbitStripeDensity; set { var v = Clamp(value, 0.5, 64); if (v == _p.DualOrbitStripeDensity) return; _p.DualOrbitStripeDensity = v; this.RaisePropertyChanged(); Fire(); } }
     public DualOrbitCategoricalColors DualOrbitLagColors { get => _p.DualOrbitLagColors; set { if (value == _p.DualOrbitLagColors) return; _p.DualOrbitLagColors = value; this.RaisePropertyChanged(); Fire(); } }
     public System.Array DualOrbitLagColorModes => s_DualOrbitLagColorModes;   // cached: a new array per read resets the ComboBox selection on Refresh()
     private static readonly System.Array s_DualOrbitLagColorModes = System.Enum.GetValues(typeof(DualOrbitCategoricalColors));
@@ -2023,6 +2036,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsDualOrbitDivergenceField));
             this.RaisePropertyChanged(nameof(IsDualOrbitDomain));
             this.RaisePropertyChanged(nameof(IsDualOrbitCategoricalField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitTrapField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitStripeField));
             RaiseDualThemeWarning();
             Fire();
         }

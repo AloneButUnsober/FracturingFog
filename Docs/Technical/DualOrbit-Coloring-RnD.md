@@ -230,6 +230,34 @@ still available, and `PhaseLagFraction` stays theme-mapped (best with a non-cycl
 and a period-4 basin's four. Bottom: the parameter plane at c = 0.5 (mostly lag 0, lagged lobes in
 the 2-bulb) and `CyclePeriod`.*
 
+**S3 as shipped (#1117).** FF's orbit colourings run on each orbit, by two routes:
+- **Scalar fields**, palette-driven and cached: `TrapZ` / `TrapC` / `TrapDelta`, `StripeZ` /
+  `StripeC` / `StripeInterference`, and `TiaZ` / `TiaC`.
+  - Traps use FF's own 19 trap-shape samplers (`DataDrivenOrbitTrap.ShapeImpl`) via
+    `DualOrbitTrapShape`, mapped d/(d + `DualOrbitTrapScale`).
+  - Stripes use the Härkönen average with escape-step smoothing (`DualOrbitStripeDensity`).
+    `StripeInterference` is StripeZ × StripeC.
+  - All are defined for bounded orbits too, so there's **no interior hole**.
+  - Trap fields fill `TrapBuffer` (`ITrapFieldSource`), so the Relief "Trap" height source works.
+- **Orbit-aware themes:** fields `OrbitThemeZ` / `OrbitThemeC` let any `IOrbitAwareColorMap` (trap,
+  stripe, TIA, curvature …) sample one orbit and colour with `MapWithOrbit`; themes that want it
+  get interior colour via `MapInteriorWithOrbit`. In `PerOrbitLayers` mode each orbit-aware layer
+  theme samples its own orbit. A plain theme on `OrbitTheme*` behaves as `EscapeTime*`.
+- **Caching:** the theme accumulator can't be cached, so when one is active every Calculate
+  re-iterates. The host already treats orbit-aware themes as needing a full render.
+- **Conventions:** sampling follows the Mandelbrot / User-Equation calculators (after the escape
+  test, k ≥ 1). ComplexPlane only; the quaternion map gives interior.
+- **Tests:**
+  - point trap, Cross trap, stripe and TIA against test-side re-iteration with the textbook
+    definitions;
+  - the orbit-theme field and the orbit-aware layer theme against the same theme driven by a
+    test loop;
+  - live everywhere, `TrapBuffer`, no caching with a theme, quaternion → interior, CLI round trip.
+
+![Traps and stripes](../Images/dualorbit-coloring/s3-traps-stripes.png)
+*Headless `--batch`, c = 0.5. TrapDelta (point trap), StripeInterference, TiaC (Cividis), and
+FF's "Orbit Trap - Point" theme sampling the c-orbit (`OrbitThemeC`).*
+
 ---
 
 ## 4. Architecture (S1 #1115)

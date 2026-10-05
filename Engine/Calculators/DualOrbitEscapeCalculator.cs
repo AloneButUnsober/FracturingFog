@@ -231,11 +231,15 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         DualOrbitMap Map, bool CEqualsS, double CX, double CY, double SX, double SY,
         DualOrbitSliceAxes Axes, double CSeedZ, double SZ, double Bailout,
         bool Layers, DualOrbitField Field, double RatioSpan,
-        DualOrbitPairChannels Pair, double PairRatio, double LyapunovSpan, bool Domain);
+        DualOrbitPairChannels Pair, double PairRatio, double LyapunovSpan, bool Domain,
+        int TrapShape, double TrapScale, double StripeDensity);
 
     private GeometryKey? _cacheKey;
     private float[] _smZ = Array.Empty<float>(), _smC = Array.Empty<float>();
     private float[] _thZ = Array.Empty<float>(), _thC = Array.Empty<float>();
+    // #1117 — orbit-theme colours (field / per layer); 0 = use the default path.
+    private uint[] _ocol = Array.Empty<uint>(), _lcolZ = Array.Empty<uint>(), _lcolC = Array.Empty<uint>();
+    private bool _usedOrbitThemes;
     private byte[] _flags = Array.Empty<byte>();
     private const byte FlagZEsc = 1, FlagCEsc = 2, FlagZFirst = 4, FlagCFirst = 8;
     // #1116 / #1121 — a pair-native or interior field has no value here (interior colour).
@@ -264,7 +268,9 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
             // classify them as geometry regardless of the selected field.
             Math.Max(1.0 + 1e-9, PairDivergenceRatio ?? fp.DualOrbitDivergenceRatio),
             Math.Max(1e-3, fp.DualOrbitLyapunovSpan),
-            domain);
+            domain,
+            // #1117 — always keyed (reflection guard: geometry).
+            (int)fp.DualOrbitTrapShape, Math.Max(1e-6, fp.DualOrbitTrapScale), fp.DualOrbitStripeDensity);
     }
 
     public void Calculate(CancellationToken ct = default)
@@ -279,6 +285,9 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
             _cacheKey = key;
         }
         Colorize(key, ct);
+        // #1117 — an orbit-aware theme's accumulator is not cached: re-iterate
+        // on every Calculate (Recolor then falls back to Calculate too).
+        if (_usedOrbitThemes) _cacheKey = null;
     }
 
     /// <summary>#981 — rebuild ColorBuffer from the cached orbits with the current
@@ -323,6 +332,44 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         double lyapSpan = key.LyapunovSpan;
         bool pairField = !fieldOff && IsPairField(field);
         bool interiorField = !fieldOff && IsInteriorField(field);   // #1121
+
+        // #1117 — per-orbit sampling: scalar trap / stripe / TIA fields, the
+        // orbit-theme fields, and orbit-aware layer themes (complex map only).
+        bool orbitScalar = !fieldOff && !quat && IsOrbitScalarField(field);
+        bool orbitThemeField = !fieldOff && !quat && IsOrbitThemeField(field);
+        var (readZ, readC) = orbitScalar || orbitThemeField ? OrbitsRead(field) : (false, false);
+        IOrbitAwareColorMap? fieldTheme = orbitThemeField ? ColorMap as IOrbitAwareColorMap : null;
+        if (fieldTheme != null) fieldTheme.MaxIterations = maxIter;
+        IOrbitAwareColorMap? trapSampler = orbitScalar && IsTrapField(field) ? TrapSampler(key.TrapShape) : null;
+        bool stats = orbitScalar && (IsStripeField(field) || IsTiaField(field));
+        IOrbitAwareColorMap? layerThemeZ = null, layerThemeC = null;
+        if (layers && !quat)
+        {
+            var ignored = new List<string>();
+            layerThemeZ = ResolveLayerTheme(LayerThemeZ, FractalParameters.DualOrbitThemeZ, ignored) as IOrbitAwareColorMap;
+            layerThemeC = ResolveLayerTheme(LayerThemeC, FractalParameters.DualOrbitThemeC, ignored) as IOrbitAwareColorMap;
+            if (layerThemeZ != null) layerThemeZ.MaxIterations = maxIter;
+            if (layerThemeC != null) layerThemeC.MaxIterations = maxIter;
+        }
+        IOrbitAwareColorMap? samplerZ = layers ? layerThemeZ : readZ ? (fieldTheme ?? trapSampler) : null;
+        IOrbitAwareColorMap? samplerC = layers ? layerThemeC : readC ? (fieldTheme ?? trapSampler) : null;
+        bool sampleZ = samplerZ != null || (stats && readZ);
+        bool sampleC = samplerC != null || (stats && readC);
+        _usedOrbitThemes = fieldTheme != null || layerThemeZ != null || layerThemeC != null;
+        double stripeDensity = key.StripeDensity, trapScale = key.TrapScale;
+        uint orbitInterior = InteriorAlphaStamp.ScaleArgbAlpha(ColorMap.InSetColor, FractalParameters.InteriorAlpha);
+        // Orbit-theme colours (0 = "no orbit colour here": the default path).
+        if (fieldTheme != null && _ocol.Length != n) _ocol = new uint[n];
+        if (layerThemeZ != null && _lcolZ.Length != n) _lcolZ = new uint[n];
+        if (layerThemeC != null && _lcolC.Length != n) _lcolC = new uint[n];
+        uint[] ocol = _ocol, lcolZ = _lcolZ, lcolC = _lcolC;
+        bool trapOut = orbitScalar && IsTrapField(field);
+        // Fields that can have "no value" (FlagPairDead): pair / interior fields,
+        // and the S3 orbit fields under the quaternion map (complex-only).
+        bool deadable = pairField || interiorField
+            || (!fieldOff && quat && (IsOrbitScalarField(field) || IsOrbitThemeField(field)));
+        TrapBuffer = trapOut ? (TrapBuffer.Length == n ? TrapBuffer : new float[n]) : Array.Empty<float>();
+        float[] trapBuf = TrapBuffer;
         DualOrbitPairPlanes? planes = pairCh == DualOrbitPairChannels.None ? null
             : PairPlanes is { } old && old.Channels == pairCh && old.Length == n ? old
             : new DualOrbitPairPlanes(pairCh, n);
@@ -377,7 +424,8 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                             : RunQuat(0, cSeedX, cSeedY, cSeedZ, 0, sx, sy, sZ, maxIter, bail);
                     }
                     scalar = fieldOff ? 0.0 : pairField ? pairScalar : ScalarQ(field, oz, oc, sx, sy, sZ, maxIter, bail, ratioSpan);
-                    if (interiorField) { scalar = 0.0; pairLive = false; }   // complex-only
+                    // Interior (#1121) and S3 orbit (#1117) fields are complex-only.
+                    if (interiorField || IsOrbitScalarField(field) || IsOrbitThemeField(field)) { scalar = 0.0; pairLive = false; }
                     if (domain) { thZArr[rowBase + x] = float.NaN; thCArr[rowBase + x] = float.NaN; }
                     zEsc = oz.Escaped; cEsc = oc.Escaped; nZ = oz.N; nC = oc.N;
                     smZ = oz.SmoothN; smC = oc.SmoothN;
@@ -400,6 +448,48 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                             ? Run(sx, sy, sx, sy, maxIter, bail, argsC, out nC)
                             : Run(cSeedX, cSeedY, sx, sy, maxIter, bail, argsC, out nC);
                     }
+                    // #1117 — per-orbit sampling (re-runs only the sampled orbit
+                    // with identical arithmetic, so oz / oc are unchanged).
+                    OrbitAccumulator accZ = default, accC = default;
+                    OrbitStats stZ = default, stC = default;
+                    if (sampleZ)
+                    {
+                        if (samplerZ != null) samplerZ.InitOrbit(out accZ);
+                        oz = RunSampled(0.0, 0.0, sx, sy, maxIter, bail, Span<double>.Empty, samplerZ,
+                            stats && readZ, stripeDensity, ref accZ, ref stZ, out _);
+                    }
+                    if (sampleC)
+                    {
+                        if (samplerC != null) samplerC.InitOrbit(out accC);
+                        oc = cEqualsS
+                            ? RunSampled(sx, sy, sx, sy, maxIter, bail, Span<double>.Empty, samplerC, stats && readC, stripeDensity, ref accC, ref stC, out _)
+                            : RunSampled(cSeedX, cSeedY, sx, sy, maxIter, bail, Span<double>.Empty, samplerC, stats && readC, stripeDensity, ref accC, ref stC, out _);
+                    }
+                    int pix = rowBase + x;
+                    if (orbitScalar)
+                    {
+                        pairScalar = OrbitScalar(field, accZ, accC, stZ, stC, oz, oc, trapScale, maxIter);
+                        if (trapOut)
+                        {
+                            float tm = field == DualOrbitField.TrapC ? accC.TrapMin : accZ.TrapMin;
+                            trapBuf[pix] = tm == float.MaxValue ? 0f : tm;
+                        }
+                    }
+                    else if (orbitThemeField)
+                    {
+                        var o = readZ ? oz : oc;
+                        if (fieldTheme != null)
+                        {
+                            var acc = readZ ? accZ : accC;
+                            ocol[pix] = o.Escaped || fieldTheme.WantsInteriorColor
+                                ? OrbitThemeColor(fieldTheme, o, acc, maxIter, 0u) : 0u;
+                        }
+                        pairScalar = o.Escaped ? Math.Max(LiveFloor, o.SmoothN) : 0.0;
+                    }
+                    if (layerThemeZ != null)
+                        lcolZ[pix] = oz.Escaped || layerThemeZ.WantsInteriorColor ? OrbitThemeColor(layerThemeZ, oz, accZ, maxIter, 0u) : 0u;
+                    if (layerThemeC != null)
+                        lcolC[pix] = oc.Escaped || layerThemeC.WantsInteriorColor ? OrbitThemeColor(layerThemeC, oc, accC, maxIter, 0u) : 0u;
                     if (domain)
                     {
                         thZArr[rowBase + x] = nZ >= 0 ? (float)LiftToLevel1(argsZ, nZ) : float.NaN;
@@ -407,7 +497,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                     }
                     if (interiorField) pairScalar = InteriorScalar(field, oz, oc, sx, sy, maxIter, out pairLive);
                     scalar = fieldOff ? 0.0
-                        : pairField || interiorField ? pairScalar
+                        : pairField || interiorField || orbitScalar || orbitThemeField ? pairScalar
                         : angles
                         ? AngleDeltaScalar(argsZ, nZ, argsC, nC, maxIter)
                         : Scalar(field, oz, oc, sx, sy, maxIter, bail, ratioSpan);
@@ -422,14 +512,14 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                 smCArr[idx] = (float)Math.Max(LiveFloor, smC);
                 flagArr[idx] = (byte)((zEsc ? FlagZEsc : 0) | (cEsc ? FlagCEsc : 0)
                     | (nZ >= 0 && nZ <= 1 ? FlagZFirst : 0) | (nC >= 0 && nC <= 1 ? FlagCFirst : 0)
-                    | ((pairField || interiorField) && !pairLive ? FlagPairDead : 0));
+                    | (deadable && !pairLive ? FlagPairDead : 0));
                 // Relief height / histogram: the field scalar, or the z layer in
                 // layer mode (0 = bounded).
                 // Domain mode: the c-orbit's escape count (live wherever the
                 // domain colour is).
                 SmoothBuffer[idx] = layers ? (zEsc ? smZArr[idx] : 0f)
                     : domain ? (cEsc ? smCArr[idx] : 0f)
-                    : (pairField || interiorField) && !pairLive ? 0f : (float)scalar;
+                    : deadable && !pairLive ? 0f : (float)scalar;
             }
         });
     }
@@ -466,6 +556,14 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         int width = Width, height = Height;
         float[] smZArr = _smZ, smCArr = _smC; byte[] flagArr = _flags;
         if (flagArr.Length < width * height) return;   // nothing cached yet
+        // #1117 — orbit-theme colours computed during Iterate.
+        int interiorAlpha = FractalParameters.InteriorAlpha;
+        bool fieldOrbit = !layers && IsOrbitThemeField(field) && ColorMap is IOrbitAwareColorMap
+            && key.Map == DualOrbitMap.ComplexPlane && _ocol.Length == width * height;
+        bool lzOrbit = layers && key.Map == DualOrbitMap.ComplexPlane && _lcolZ.Length == width * height
+            && ResolveLayerTheme(LayerThemeZ, FractalParameters.DualOrbitThemeZ, new List<string>()) is IOrbitAwareColorMap;
+        bool lcOrbit = layers && key.Map == DualOrbitMap.ComplexPlane && _lcolC.Length == width * height
+            && ResolveLayerTheme(LayerThemeC, FractalParameters.DualOrbitThemeC, new List<string>()) is IOrbitAwareColorMap;
         // #1121 — categorical colours for PhaseLag / CyclePeriod (theme-independent).
         bool categorical = !layers && FractalParameters.DualOrbitLagColors == DualOrbitCategoricalColors.Categorical
             && (field == DualOrbitField.PhaseLag || field == DualOrbitField.CyclePeriod);
@@ -488,8 +586,10 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                 bool zFirst = (f & FlagZFirst) != 0, cFirst = (f & FlagCFirst) != 0;
                 if (layers)
                 {
-                    uint lz = styleZ.Color(zEsc, zFirst, smZArr[idx], maxIter);
-                    uint lc = styleC.Color(cEsc, cFirst, smCArr[idx], maxIter);
+                    uint lz = lzOrbit ? styleZ.OrbitColor(zEsc, zFirst, _lcolZ[idx], interiorAlpha)
+                                      : styleZ.Color(zEsc, zFirst, smZArr[idx], maxIter);
+                    uint lc = lcOrbit ? styleC.OrbitColor(cEsc, cFirst, _lcolC[idx], interiorAlpha)
+                                      : styleC.Color(cEsc, cFirst, smCArr[idx], maxIter);
                     ColorBuffer[idx] = BlendLayers(lz, styleZ.Opacity, lc, styleC.Opacity, blend);
                     continue;
                 }
@@ -497,14 +597,22 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                 // smooth == 0: legacy fields can be a legitimate 0, e.g. the c = s
                 // control's separation). Surround = every orbit the field reads
                 // escaped by step 1 (#615's "no structure develops", seed-agnostic).
-                bool live = IsPairField(field) || IsInteriorField(field)
-                    ? (f & FlagPairDead) == 0 : FieldLive(field, zEsc, cEsc);
+                bool live = (f & FlagPairDead) == 0
+                    && (IsPairField(field) || IsInteriorField(field) || FieldLive(field, zEsc, cEsc));
+                // #1117 — an orbit theme that colours the interior paints bounded pixels.
+                if (!live && fieldOrbit && _ocol[idx] != 0u)
+                {
+                    ColorBuffer[idx] = InteriorAlphaStamp.ScaleArgbAlpha(_ocol[idx], interiorAlpha);
+                    continue;
+                }
                 if (!live)
                     ColorBuffer[idx] = interiorColor;
                 else if (oobColor is uint oob && FieldOutOfBounds(field, zFirst, cFirst))
                     ColorBuffer[idx] = oob;
                 else if (categorical)
                     ColorBuffer[idx] = CategoricalColor(field, SmoothBuffer[idx])!.Value;
+                else if (fieldOrbit)
+                    ColorBuffer[idx] = _ocol[idx];
                 else
                     ColorBuffer[idx] = unchecked((uint)ColorMap.Map(SmoothBuffer[idx], 0f, maxIter));
             }
@@ -631,6 +739,16 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
             Opacity = Math.Clamp(opacity, 0.0, 1.0);
         }
 
+        // #1117 — orbit-aware layer theme: the colour computed during Iterate
+        // (0 = none: bounded without theme interior → the layer interior).
+        public uint OrbitColor(bool escaped, bool escapedByStep1, uint orbitColor, int interiorAlpha)
+        {
+            if (!escaped)
+                return orbitColor == 0u ? Interior : InteriorAlphaStamp.ScaleArgbAlpha(orbitColor, interiorAlpha);
+            if (Surround is uint oob && escapedByStep1) return oob;
+            return orbitColor;
+        }
+
         // Bounded -> the theme's interior (x global interior alpha); escaped by
         // step 1 -> the theme's surround when it sets one; else the gradient.
         public uint Color(bool escaped, bool escapedByStep1, float smooth, int maxIter)
@@ -718,6 +836,10 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
     {
         DualOrbitField.EscapeTimeZ => zEscaped,
         DualOrbitField.EscapeTimeC => cEscaped,
+        // #1117 — traps / stripes / TIA are defined for bounded orbits too.
+        >= DualOrbitField.TrapZ and <= DualOrbitField.TiaC => true,
+        DualOrbitField.OrbitThemeZ => zEscaped,
+        DualOrbitField.OrbitThemeC => cEscaped,
         _ => zEscaped && cEscaped,
     };
 
@@ -730,6 +852,8 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         {
             DualOrbitField.EscapeTimeZ => z,
             DualOrbitField.EscapeTimeC => c,
+            DualOrbitField.TrapZ or DualOrbitField.StripeZ or DualOrbitField.TiaZ or DualOrbitField.OrbitThemeZ => z,
+            DualOrbitField.TrapC or DualOrbitField.StripeC or DualOrbitField.TiaC or DualOrbitField.OrbitThemeC => c,
             _ => z && c,
         };
     }

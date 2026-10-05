@@ -281,6 +281,34 @@ namespace FracturingFog
         /// <summary>Period p of the attracting cycle of the critical orbit (live in
         /// the hyperbolic interior of M; the c-orbit is not needed).</summary>
         CyclePeriod,
+        // ── Orbit colourings per orbit (#1117, epic #1114 S3). Live everywhere:
+        // bounded orbits use the minimum / average over the whole orbit.
+        /// <summary>Minimum distance of the z-orbit to the trap shape
+        /// (<c>DualOrbitTrapShape</c>, FF's built-in trap SDFs), d/(d + scale).</summary>
+        TrapZ,
+        /// <summary>Trap distance of the c-orbit.</summary>
+        TrapC,
+        /// <summary>trap_c − trap_z, centred: mid-palette where the orbits come
+        /// equally close to the trap.</summary>
+        TrapDelta,
+        /// <summary>Stripe average 0.5 + 0.5·sin(density·arg u) along the z-orbit
+        /// (<c>DualOrbitStripeDensity</c>), smoothed across the escape step.</summary>
+        StripeZ,
+        /// <summary>Stripe average along the c-orbit.</summary>
+        StripeC,
+        /// <summary>StripeZ × StripeC — the two stripe families multiplied (moiré
+        /// where they disagree).</summary>
+        StripeInterference,
+        /// <summary>Triangle-inequality average along the z-orbit.</summary>
+        TiaZ,
+        /// <summary>Triangle-inequality average along the c-orbit.</summary>
+        TiaC,
+        /// <summary>The active theme samples the z-orbit: any orbit-aware theme
+        /// (orbit trap, stripe, TIA, curvature …) colours from that orbit. A plain
+        /// theme gets the z-orbit's escape count.</summary>
+        OrbitThemeZ,
+        /// <summary>The active theme samples the c-orbit.</summary>
+        OrbitThemeC,
     }
 
     /// <summary>Which two of the four dual-orbit coordinates (c-seed x/y, parameter

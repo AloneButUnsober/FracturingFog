@@ -495,7 +495,7 @@
         <!-- Dual-Orbit Escape (#864 / #866) -->
         <Grid IsVisible="{Binding IsDualOrbitEscape}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Map:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding DualOrbitMaps}"
@@ -508,7 +508,7 @@
                       SelectedItem="{Binding DualOrbitField, Mode=TwoWay}"
                       IsEnabled="{Binding IsDualOrbitFieldMode}"
                       Margin="0,2"
-                      ToolTip.Tip="Derived scalar. Intrinsic (same at any bailout): GreenRatio = log2 of the two orbits' escape-potential ratio; ExternalAngleDelta = difference of their external angles (ComplexPlane only). Bailout-dependent (artistic): EscapeSeparation |E_c−E_z|, MidpointResidual |M−s|, DualOrbitAngle. ΔN = n_c − n_z. Pair fields (read every step of both orbits): SecantLyapunov = mean ln|z+c| (defined everywhere, inside M_c too); DivergenceTime = steps until the pair separates by the divergence ratio; ClosestApproach / ClosestApproachIndex = how close the orbits get, and when; PairWinding = turns of the separation vector; MidpointPerturbation = how far the pair is from moving as one orbit; ItineraryAgreement = steps both orbits stay on the same side of the real axis. PairWinding and ItineraryAgreement are ComplexPlane only. Interior fields (live inside the set, where the orbits settle on a cycle): PhaseLag = how many steps ahead the c-orbit runs on the shared cycle (try the CxCy slice); PhaseLagFraction = the same, spread evenly across the palette; CyclePeriod = the cycle length. ComplexPlane only." />
+                      ToolTip.Tip="Derived scalar. Intrinsic (same at any bailout): GreenRatio = log2 of the two orbits' escape-potential ratio; ExternalAngleDelta = difference of their external angles (ComplexPlane only). Bailout-dependent (artistic): EscapeSeparation |E_c−E_z|, MidpointResidual |M−s|, DualOrbitAngle. ΔN = n_c − n_z. Pair fields (read every step of both orbits): SecantLyapunov = mean ln|z+c| (defined everywhere, inside M_c too); DivergenceTime = steps until the pair separates by the divergence ratio; ClosestApproach / ClosestApproachIndex = how close the orbits get, and when; PairWinding = turns of the separation vector; MidpointPerturbation = how far the pair is from moving as one orbit; ItineraryAgreement = steps both orbits stay on the same side of the real axis. PairWinding and ItineraryAgreement are ComplexPlane only. Interior fields (live inside the set, where the orbits settle on a cycle): PhaseLag = how many steps ahead the c-orbit runs on the shared cycle (try the CxCy slice); PhaseLagFraction = the same, spread evenly across the palette; CyclePeriod = the cycle length. ComplexPlane only. Per-orbit colourings (ComplexPlane only, live inside the set too): TrapZ / TrapC / TrapDelta = closest approach of each orbit to a trap shape; StripeZ / StripeC / StripeInterference = stripe averages and their product; TiaZ / TiaC = triangle-inequality averages; OrbitThemeZ / OrbitThemeC = pick an orbit-trap / stripe / curvature theme and it colours from that one orbit." />
             <TextBlock Grid.Row="2" Grid.Column="0" Text="c-seed real:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="2" Grid.Column="1"
                            Minimum="-2" Maximum="2" Increment="0.02" FormatString="F3"
@@ -660,6 +660,27 @@
                       SelectedItem="{Binding DualOrbitLagColors, Mode=TwoWay}" Margin="0,2"
                       IsVisible="{Binding IsDualOrbitCategoricalField}"
                       ToolTip.Tip="Categorical = one fixed colour-blind-safe colour per lag / period class, whatever the theme. Theme = the active theme (a cycling theme can give several classes the same colour)." />
+            <TextBlock Grid.Row="27" Grid.Column="0" Text="Trap shape:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitTrapField}" />
+            <ComboBox Grid.Row="27" Grid.Column="1"
+                      ItemsSource="{Binding DualOrbitTrapShapes}"
+                      SelectedItem="{Binding DualOrbitTrapShape, Mode=TwoWay}" Margin="0,2"
+                      IsVisible="{Binding IsDualOrbitTrapField}"
+                      ToolTip.Tip="The shape each orbit's closest approach is measured to — the same shapes as the orbit-trap themes." />
+            <TextBlock Grid.Row="28" Grid.Column="0" Text="Trap scale:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitTrapField}" />
+            <NumericUpDown Grid.Row="28" Grid.Column="1"
+                           Minimum="0.0001" Maximum="10" Increment="0.05" FormatString="F3"
+                           Value="{Binding DualOrbitTrapScale, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsDualOrbitTrapField}"
+                           ToolTip.Tip="Distance at which the palette is half-way: a trap distance d maps to d / (d + scale)." />
+            <TextBlock Grid.Row="29" Grid.Column="0" Text="Stripe density:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitStripeField}" />
+            <NumericUpDown Grid.Row="29" Grid.Column="1"
+                           Minimum="0.5" Maximum="64" Increment="0.5" FormatString="F1"
+                           Value="{Binding DualOrbitStripeDensity, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsDualOrbitStripeField}"
+                           ToolTip.Tip="Number of stripes per turn of the orbit's angle (stripe average colouring)." />
             <TextBlock Grid.Row="24" Grid.Column="0" Grid.ColumnSpan="2"
                        Text="Böttcher domain colouring: inside the Mandelbrot set (critical orbit bounded) it shows the c-orbit's own angle and potential. ComplexPlane map only."
                        IsVisible="{Binding IsDualOrbitDomain}"
