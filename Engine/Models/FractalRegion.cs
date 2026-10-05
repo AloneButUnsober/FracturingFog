@@ -626,6 +626,11 @@ namespace FracturingFog.Models
         // #1116 — pair-native field scales.
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitLyapunovSpan { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitDivergenceRatio { get; set; }
+        // #1120 — Böttcher-ratio domain colouring.
+        [JsonIgnore(Condition = OmitNull)] public double? DualOrbitContourDensity { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? DualOrbitDomainGrid { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? DualOrbitDomainPalette { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? DualOrbitDomainMarkCuts { get; set; }
         // #971 — slice axes + fixed s when s is not an image axis.
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitSliceAxes { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitSX { get; set; }
@@ -1006,6 +1011,10 @@ namespace FracturingFog.Models
                     DualOrbitRatioSpan = p.DualOrbitRatioSpan != 8.0 ? p.DualOrbitRatioSpan : (double?)null,
                     DualOrbitLyapunovSpan = p.DualOrbitLyapunovSpan != 2.0 ? p.DualOrbitLyapunovSpan : (double?)null,
                     DualOrbitDivergenceRatio = p.DualOrbitDivergenceRatio != 4.0 ? p.DualOrbitDivergenceRatio : (double?)null,
+                    DualOrbitContourDensity = p.DualOrbitContourDensity != D.DualOrbitContourDensity ? p.DualOrbitContourDensity : (double?)null,
+                    DualOrbitDomainGrid = p.DualOrbitDomainGrid ? true : (bool?)null,
+                    DualOrbitDomainPalette = p.DualOrbitDomainPalette != D.DualOrbitDomainPalette ? (int)p.DualOrbitDomainPalette : (int?)null,
+                    DualOrbitDomainMarkCuts = p.DualOrbitDomainMarkCuts ? (bool?)null : false,
                     DualOrbitSliceAxes = p.DualOrbitSliceAxes != FracturingFog.DualOrbitSliceAxes.SxSy ? (int)p.DualOrbitSliceAxes : (int?)null,
                     DualOrbitSX = p.DualOrbitSX != -0.78 ? p.DualOrbitSX : (double?)null,
                     DualOrbitSY = p.DualOrbitSY != 0.15 ? p.DualOrbitSY : (double?)null,
@@ -1494,6 +1503,10 @@ namespace FracturingFog.Models
             if (DualBuddhaGainCB.HasValue) p.DualBuddhaGainCB = DualBuddhaGainCB.Value;
             if (DualBuddhaGainCE.HasValue) p.DualBuddhaGainCE = DualBuddhaGainCE.Value;
             if (DualOrbitDivergenceRatio.HasValue) p.DualOrbitDivergenceRatio = DualOrbitDivergenceRatio.Value;
+            if (DualOrbitContourDensity.HasValue) p.DualOrbitContourDensity = DualOrbitContourDensity.Value;
+            if (DualOrbitDomainGrid.HasValue) p.DualOrbitDomainGrid = DualOrbitDomainGrid.Value;
+            if (this.DualOrbitDomainPalette.HasValue) p.DualOrbitDomainPalette = (FracturingFog.DualOrbitDomainPalette)this.DualOrbitDomainPalette.Value;
+            if (DualOrbitDomainMarkCuts.HasValue) p.DualOrbitDomainMarkCuts = DualOrbitDomainMarkCuts.Value;
             if (this.DualOrbitSliceAxes.HasValue) p.DualOrbitSliceAxes = (FracturingFog.DualOrbitSliceAxes)this.DualOrbitSliceAxes.Value;
             if (DualOrbitSX.HasValue) p.DualOrbitSX = DualOrbitSX.Value;
             if (DualOrbitSY.HasValue) p.DualOrbitSY = DualOrbitSY.Value;

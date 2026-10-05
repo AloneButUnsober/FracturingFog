@@ -1243,6 +1243,18 @@ namespace FracturingFog.Models
         /// <summary>DivergenceTime amplification ratio ρ: the field is the time for
         /// the pair separation to first exceed ρ·|D_0| (#1116). Must be &gt; 1.</summary>
         public double DualOrbitDivergenceRatio { get; set; } = 4.0;
+        /// <summary>BoettcherDomain: contour bands per unit of Green-potential
+        /// difference (0 = no contours) (#1120).</summary>
+        public double DualOrbitContourDensity { get; set; } = 6.0;
+        /// <summary>BoettcherDomain: also draw angular grid lines (Δθ multiples of
+        /// 1/density) (#1120).</summary>
+        public bool DualOrbitDomainGrid { get; set; } = false;
+        /// <summary>BoettcherDomain hue source (#1120).</summary>
+        public DualOrbitDomainPalette DualOrbitDomainPalette { get; set; } = DualOrbitDomainPalette.BlueAmberCycle;
+        /// <summary>BoettcherDomain: dim pixels where φ_s(c₁) is not analytically
+        /// defined — G(c₁) ≤ G(0), below the critical point's level — where the
+        /// lifted angle has branch cuts (visible seams) (#1120). Default on.</summary>
+        public bool DualOrbitDomainMarkCuts { get; set; } = true;
         /// <summary>Which two of (c.x, c.y, s.x, s.y) the image spans (#971).
         /// Default SxSy = the parameter plane (shipped view, byte-identical).</summary>
         public DualOrbitSliceAxes DualOrbitSliceAxes { get; set; } = DualOrbitSliceAxes.SxSy;
@@ -1902,6 +1914,10 @@ namespace FracturingFog.Models
                 DualOrbitRatioSpan = DualOrbitRatioSpan,
                 DualOrbitLyapunovSpan = DualOrbitLyapunovSpan,
                 DualOrbitDivergenceRatio = DualOrbitDivergenceRatio,
+                DualOrbitContourDensity = DualOrbitContourDensity,
+                DualOrbitDomainGrid = DualOrbitDomainGrid,
+                DualOrbitDomainPalette = DualOrbitDomainPalette,
+                DualOrbitDomainMarkCuts = DualOrbitDomainMarkCuts,
                 DualOrbitSliceAxes = DualOrbitSliceAxes,
                 DualOrbitSX = DualOrbitSX,
                 DualOrbitSY = DualOrbitSY,

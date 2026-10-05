@@ -71,6 +71,9 @@ public sealed class DualOrbitRecolorTests
         nameof(FractalParameters.DualOrbitThemeZ), nameof(FractalParameters.DualOrbitThemeC),
         nameof(FractalParameters.DualOrbitLayerBlend),
         nameof(FractalParameters.DualOrbitOpacityZ), nameof(FractalParameters.DualOrbitOpacityC),
+        // #1120 — Böttcher domain colouring: contours / grid / hue source.
+        nameof(FractalParameters.DualOrbitContourDensity), nameof(FractalParameters.DualOrbitDomainGrid),
+        nameof(FractalParameters.DualOrbitDomainPalette), nameof(FractalParameters.DualOrbitDomainMarkCuts),
     };
 
     private static object? Mutate(object? v) => v switch
