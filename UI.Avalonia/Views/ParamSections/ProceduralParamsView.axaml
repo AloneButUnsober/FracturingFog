@@ -171,7 +171,7 @@
         <!-- Dual Buddhabrot (#1124) — extra rows under the shared sampler rows -->
         <Grid IsVisible="{Binding IsDualBuddhabrot}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="c-seed real:" VerticalAlignment="Center" Margin="0,8,0,2" />
             <NumericUpDown Grid.Row="0" Grid.Column="1"
                            Minimum="-2" Maximum="2" Increment="0.02" FormatString="F3"
@@ -224,8 +224,22 @@
                            Minimum="0" Maximum="4" Increment="0.1" FormatString="F2"
                            Value="{Binding DualBuddhaGainCE, Mode=TwoWay}" Margin="0,2" />
             <TextBlock Grid.Row="10" Grid.Column="0" Grid.ColumnSpan="2"
-                       Text="Iter low / mid are not used here — the channels are outcomes (which orbit escaped), not iteration bands. Iter high is the orbit cap."
+                       Text="Iter high is the orbit cap. Iter low / mid only matter for the outcome Nebulabrot below (they split one outcome into three bands)."
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4,0,0" />
+            <TextBlock Grid.Row="11" Grid.Column="0" Text="c deposit:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="11" Grid.Column="1"
+                      ItemsSource="{Binding DualBuddhaDeposits}"
+                      SelectedItem="{Binding DualBuddhaDeposit, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="What the c channels draw. Orbits = the c-orbit's path. Midpoint = the point half-way between the two orbits each step. PairChord = a random point on the line joining them each step (string art). EscapeLocation = only where each orbit leaves the radius-2 disc — zoom out to see it." />
+            <TextBlock Grid.Row="12" Grid.Column="0" Text="Outcome Nebulabrot:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="12" Grid.Column="1"
+                      ItemsSource="{Binding DualBuddhaNebulas}"
+                      SelectedItem="{Binding DualBuddhaNebula, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Off = the three outcome channels. Z / CB / CE = draw only that outcome, split by how many steps the orbit took to escape into three bands (below Iter low, below Iter mid, the rest), shown in the three channel colours." />
+            <CheckBox Grid.Row="13" Grid.Column="0" Grid.ColumnSpan="2"
+                      Content="Anti (bounded orbits)"
+                      IsChecked="{Binding DualBuddhaAnti, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Draw the orbits that never escape instead: channel 1 = the z-orbit where only the c-orbit escapes, channel 2 = the c-orbit where both stay bounded, channel 3 = the z-orbit there. Slow (bounded orbits run to Iter high). Overrides the deposit and Nebulabrot choices." />
         </Grid>
 
         <!-- Plasma -->

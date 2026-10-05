@@ -191,6 +191,10 @@ namespace FracturingFog.Models
             }
         }
 
+        /// <summary>The built-in presets, freshly built (no library / disk access) —
+        /// for inspection and tests (#1125).</summary>
+        public static IReadOnlyList<AnimationData> BuiltInPresets() => new List<AnimationData>(BuiltInAnimations());
+
         /// <summary>Seed animations that ship with the app. Currently a single
         /// preset that reproduces the legacy Julia C orbit so the bus has a
         /// shipping demonstration. Phase 3 editor lets users build more.</summary>
@@ -260,6 +264,46 @@ namespace FracturingFog.Models
                     },
                 },
                 Tags = new List<string> { "experimental", "2D", "precision" },
+            };
+
+            // #1125 — Dual Buddhabrot c-sweep. Walk the c-seed round a small loop
+            // (real part Triangle, imaginary part Sine, incommensurate rates) so
+            // the CB / CE filaments re-texture while the classic Z body stays
+            // fixed. The sampler seed is a constant param, so every frame draws
+            // the SAME s samples — only c moves, and the sweep does not flicker.
+            yield return new AnimationData
+            {
+                Name = "Dual Buddhabrot c-sweep",
+                Category = "Built-in",
+                Description = "Loops the second orbit's seed c round 0.5 ± 0.35 — the "
+                            + "c-escaped filaments re-texture on a fixed Buddhabrot body. "
+                            + "Fixed sampler seed = flicker-free. Raise Samples for video.",
+                TargetFractalTypes = new List<FracturingFog.FractalType>
+                {
+                    FracturingFog.FractalType.DualBuddhabrot,
+                },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack
+                    {
+                        ParamName = "DualBuddhaCSeedX",
+                        Mode = AnimationMode.Triangle,
+                        Min = 0.15,
+                        Max = 0.85,
+                        FrequencyHz = 0.025,
+                        Enabled = true,
+                    },
+                    new AnimationTrack
+                    {
+                        ParamName = "DualBuddhaCSeedY",
+                        Mode = AnimationMode.Sine,
+                        Min = -0.35,
+                        Max = 0.35,
+                        FrequencyHz = 0.0317,
+                        Enabled = true,
+                    },
+                },
+                Tags = new List<string> { "experimental", "2D", "buddhabrot" },
             };
 
             // #895 — the Indra's Pearls marquee. Walk the Maskit parameter μ along

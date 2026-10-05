@@ -1185,6 +1185,13 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public string DualBuddhaColorZHex { get => Hex(_p.DualBuddhaColorZ); set { if (TryParseHexColor(value, out uint u) && u != _p.DualBuddhaColorZ) { _p.DualBuddhaColorZ = u; this.RaisePropertyChanged(); Fire(); } } }
     public string DualBuddhaColorCBHex { get => Hex(_p.DualBuddhaColorCB); set { if (TryParseHexColor(value, out uint u) && u != _p.DualBuddhaColorCB) { _p.DualBuddhaColorCB = u; this.RaisePropertyChanged(); Fire(); } } }
     public string DualBuddhaColorCEHex { get => Hex(_p.DualBuddhaColorCE); set { if (TryParseHexColor(value, out uint u) && u != _p.DualBuddhaColorCE) { _p.DualBuddhaColorCE = u; this.RaisePropertyChanged(); Fire(); } } }
+    public DualBuddhaDeposit DualBuddhaDeposit { get => _p.DualBuddhaDeposit; set { if (value == _p.DualBuddhaDeposit) return; _p.DualBuddhaDeposit = value; this.RaisePropertyChanged(); Fire(); } }
+    public System.Array DualBuddhaDeposits => s_DualBuddhaDeposits;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_DualBuddhaDeposits = System.Enum.GetValues(typeof(DualBuddhaDeposit));
+    public DualBuddhaNebula DualBuddhaNebula { get => _p.DualBuddhaNebula; set { if (value == _p.DualBuddhaNebula) return; _p.DualBuddhaNebula = value; this.RaisePropertyChanged(); Fire(); } }
+    public System.Array DualBuddhaNebulas => s_DualBuddhaNebulas;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_DualBuddhaNebulas = System.Enum.GetValues(typeof(DualBuddhaNebula));
+    public bool DualBuddhaAnti { get => _p.DualBuddhaAnti; set { if (value == _p.DualBuddhaAnti) return; _p.DualBuddhaAnti = value; this.RaisePropertyChanged(); Fire(); } }
     public double DualBuddhaGainZ { get => _p.DualBuddhaGainZ; set { var v = Clamp(value, 0, 4); if (v == _p.DualBuddhaGainZ) return; _p.DualBuddhaGainZ = v; this.RaisePropertyChanged(); Fire(); } }
     public double DualBuddhaGainCB { get => _p.DualBuddhaGainCB; set { var v = Clamp(value, 0, 4); if (v == _p.DualBuddhaGainCB) return; _p.DualBuddhaGainCB = v; this.RaisePropertyChanged(); Fire(); } }
     public double DualBuddhaGainCE { get => _p.DualBuddhaGainCE; set { var v = Clamp(value, 0, 4); if (v == _p.DualBuddhaGainCE) return; _p.DualBuddhaGainCE = v; this.RaisePropertyChanged(); Fire(); } }

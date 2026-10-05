@@ -356,6 +356,37 @@ namespace FracturingFog
         CySy,
     }
 
+    /// <summary>What the Dual Buddhabrot deposits for the c channels (#1125).
+    /// Append only.</summary>
+    public enum DualBuddhaDeposit
+    {
+        /// <summary>The c-orbit's trajectory (the S10 default).</summary>
+        Orbits,
+        /// <summary>The midpoint (z_k + c_k)/2 of the two orbits each step — the
+        /// split-complex real part of the pair.</summary>
+        Midpoint,
+        /// <summary>One random point per step on the chord z_k → c_k (string-art
+        /// density of the segment joining the two orbits).</summary>
+        PairChord,
+        /// <summary>Only the escape point (first point past |u| = 2) of each kept
+        /// orbit — escape-space deposition. Zoom out to see it.</summary>
+        EscapeLocation,
+    }
+
+    /// <summary>Outcome Nebulabrot for the Dual Buddhabrot (#1125): one outcome,
+    /// split by escape count into the Low / Mid / High iteration bands. Append only.</summary>
+    public enum DualBuddhaNebula
+    {
+        /// <summary>Off — the three outcome channels.</summary>
+        Off,
+        /// <summary>z-orbits that escape (the classic Nebulabrot).</summary>
+        Z,
+        /// <summary>c-orbits that escape while the z-orbit stays bounded.</summary>
+        CB,
+        /// <summary>c-orbits where both escape.</summary>
+        CE,
+    }
+
     /// <summary>How the Dual Buddhabrot composites its outcome channels (#1124).
     /// Append only.</summary>
     public enum DualBuddhaComposite
