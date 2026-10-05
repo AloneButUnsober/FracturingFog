@@ -309,6 +309,27 @@ namespace FracturingFog
         OrbitThemeZ,
         /// <summary>The active theme samples the c-orbit.</summary>
         OrbitThemeC,
+        // ── Distance estimates + final-z decomposition (#1118, epic #1114 S4).
+        // ComplexPlane only.
+        /// <summary>Exterior distance estimate of the z-orbit's boundary in the
+        /// image plane (the Mandelbrot set on the parameter plane), in pixels,
+        /// d/(d + <c>DualOrbitDEScale</c>). No value on the c-plane slice (the
+        /// z-orbit does not depend on c).</summary>
+        DistanceZ,
+        /// <summary>Distance estimate of the c-orbit's boundary (M_c on the
+        /// parameter plane, the Julia set on the c-plane slice).</summary>
+        DistanceC,
+        /// <summary>Ink outlines on BOTH boundaries — the z-orbit's (M) and the
+        /// c-orbit's (M_c) — over the z escape time, each with its own colour
+        /// (<c>DualOrbitOutlineColorZ / C</c>, width <c>DualOrbitOutlineWidth</c>).</summary>
+        DualOutline,
+        /// <summary>Binary decomposition (sign of Im at escape) of each orbit,
+        /// XOR-ed — the two decomposition grids interfere. Two classes (0 / 1),
+        /// coloured by <c>DualOrbitLagColors</c> (categorical by default).</summary>
+        BinaryXor,
+        /// <summary>arg E_c − arg E_z of the raw escape points, in turns.
+        /// Bailout-dependent (the intrinsic version is ExternalAngleDelta).</summary>
+        FinalAngleDelta,
     }
 
     /// <summary>Which two of the four dual-orbit coordinates (c-seed x/y, parameter

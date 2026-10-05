@@ -1959,6 +1959,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsDualOrbitCategoricalField));
             this.RaisePropertyChanged(nameof(IsDualOrbitTrapField));
             this.RaisePropertyChanged(nameof(IsDualOrbitStripeField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitDistanceField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitOutline));
             Fire();
         }
     }
@@ -1968,13 +1970,23 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsDualOrbitDivergenceField => IsDualOrbitFieldMode && _dualField == DualOrbitField.DivergenceTime;
     /// <summary>#1121 — show the categorical-colour row (PhaseLag / CyclePeriod).</summary>
     public bool IsDualOrbitCategoricalField => IsDualOrbitFieldMode
-        && (_dualField == DualOrbitField.PhaseLag || _dualField == DualOrbitField.CyclePeriod);
+        && (_dualField == DualOrbitField.PhaseLag || _dualField == DualOrbitField.CyclePeriod
+            || _dualField == DualOrbitField.BinaryXor);
     /// <summary>#1117 — trap-shape / scale rows (TrapZ / TrapC / TrapDelta).</summary>
     public bool IsDualOrbitTrapField => IsDualOrbitFieldMode
         && _dualField is DualOrbitField.TrapZ or DualOrbitField.TrapC or DualOrbitField.TrapDelta;
     /// <summary>#1117 — stripe-density row (StripeZ / StripeC / StripeInterference).</summary>
     public bool IsDualOrbitStripeField => IsDualOrbitFieldMode
         && _dualField is DualOrbitField.StripeZ or DualOrbitField.StripeC or DualOrbitField.StripeInterference;
+    /// <summary>#1118 — DE scale row (DistanceZ / DistanceC).</summary>
+    public bool IsDualOrbitDistanceField => IsDualOrbitFieldMode
+        && _dualField is DualOrbitField.DistanceZ or DualOrbitField.DistanceC;
+    /// <summary>#1118 — outline rows (DualOutline).</summary>
+    public bool IsDualOrbitOutline => IsDualOrbitFieldMode && _dualField == DualOrbitField.DualOutline;
+    public double DualOrbitDEScale { get => _p.DualOrbitDEScale; set { var v = Clamp(value, 0.01, 1000); if (v == _p.DualOrbitDEScale) return; _p.DualOrbitDEScale = v; this.RaisePropertyChanged(); Fire(); } }
+    public double DualOrbitOutlineWidth { get => _p.DualOrbitOutlineWidth; set { var v = Clamp(value, 0.1, 50); if (v == _p.DualOrbitOutlineWidth) return; _p.DualOrbitOutlineWidth = v; this.RaisePropertyChanged(); Fire(); } }
+    public string DualOrbitOutlineColorZHex { get => Hex(_p.DualOrbitOutlineColorZ); set { if (TryParseHexColor(value, out uint u) && u != _p.DualOrbitOutlineColorZ) { _p.DualOrbitOutlineColorZ = u; this.RaisePropertyChanged(); Fire(); } } }
+    public string DualOrbitOutlineColorCHex { get => Hex(_p.DualOrbitOutlineColorC); set { if (TryParseHexColor(value, out uint u) && u != _p.DualOrbitOutlineColorC) { _p.DualOrbitOutlineColorC = u; this.RaisePropertyChanged(); Fire(); } } }
     public OrbitTrapShapeDef DualOrbitTrapShape { get => _p.DualOrbitTrapShape; set { if (value == _p.DualOrbitTrapShape) return; _p.DualOrbitTrapShape = value; this.RaisePropertyChanged(); Fire(); } }
     public System.Array DualOrbitTrapShapes => s_DualOrbitTrapShapes;   // cached: a new array per read resets the ComboBox selection on Refresh()
     private static readonly System.Array s_DualOrbitTrapShapes = System.Enum.GetValues(typeof(OrbitTrapShapeDef));
@@ -2038,6 +2050,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsDualOrbitCategoricalField));
             this.RaisePropertyChanged(nameof(IsDualOrbitTrapField));
             this.RaisePropertyChanged(nameof(IsDualOrbitStripeField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitDistanceField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitOutline));
             RaiseDualThemeWarning();
             Fire();
         }

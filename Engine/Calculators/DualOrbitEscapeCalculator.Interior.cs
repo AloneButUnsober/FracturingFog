@@ -44,7 +44,7 @@ public sealed partial class DualOrbitEscapeCalculator
     /// p − 1) scalar; null for other fields.</summary>
     internal static uint? CategoricalColor(DualOrbitField field, float scalar)
     {
-        if (field == DualOrbitField.PhaseLag)
+        if (field == DualOrbitField.PhaseLag || field == DualOrbitField.BinaryXor)   // #1118: XOR bit
             return LagPalette[(int)MathF.Round(scalar) % LagPalette.Length];   // LiveFloor rounds to 0
         if (field == DualOrbitField.CyclePeriod)
             return LagPalette[((int)MathF.Round(scalar) - 1) % LagPalette.Length];
