@@ -641,6 +641,11 @@ namespace FracturingFog.Models
         // #1117 — per-orbit traps / stripes.
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitTrapShape { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitTrapScale { get; set; }
+        // #1119 — co-moving trap frame.
+        [JsonIgnore(Condition = OmitNull)] public int? DualOrbitTrapFrame { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? DualOrbitTrapRotate { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? DualOrbitTrapScaleByOrbit { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DualOrbitTrapAngle { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitStripeDensity { get; set; }
         // #1118 — distance estimates / dual outline.
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitDEScale { get; set; }
@@ -1038,6 +1043,10 @@ namespace FracturingFog.Models
                     DualOrbitLagColors = p.DualOrbitLagColors != D.DualOrbitLagColors ? (int)p.DualOrbitLagColors : (int?)null,
                     DualOrbitTrapShape = p.DualOrbitTrapShape != D.DualOrbitTrapShape ? (int)p.DualOrbitTrapShape : (int?)null,
                     DualOrbitTrapScale = p.DualOrbitTrapScale != D.DualOrbitTrapScale ? p.DualOrbitTrapScale : (double?)null,
+                    DualOrbitTrapFrame = p.DualOrbitTrapFrame != D.DualOrbitTrapFrame ? (int)p.DualOrbitTrapFrame : (int?)null,
+                    DualOrbitTrapRotate = p.DualOrbitTrapRotate ? (bool?)null : false,
+                    DualOrbitTrapScaleByOrbit = p.DualOrbitTrapScaleByOrbit ? true : (bool?)null,
+                    DualOrbitTrapAngle = p.DualOrbitTrapAngle != D.DualOrbitTrapAngle ? p.DualOrbitTrapAngle : (double?)null,
                     DualOrbitStripeDensity = p.DualOrbitStripeDensity != D.DualOrbitStripeDensity ? p.DualOrbitStripeDensity : (double?)null,
                     DualOrbitDEScale = p.DualOrbitDEScale != D.DualOrbitDEScale ? p.DualOrbitDEScale : (double?)null,
                     DualOrbitOutlineWidth = p.DualOrbitOutlineWidth != D.DualOrbitOutlineWidth ? p.DualOrbitOutlineWidth : (double?)null,
@@ -1551,6 +1560,10 @@ namespace FracturingFog.Models
             if (this.DualOrbitLagColors.HasValue) p.DualOrbitLagColors = (FracturingFog.DualOrbitCategoricalColors)this.DualOrbitLagColors.Value;
             if (this.DualOrbitTrapShape.HasValue) p.DualOrbitTrapShape = (FracturingFog.Models.OrbitTrapShapeDef)this.DualOrbitTrapShape.Value;
             if (DualOrbitTrapScale.HasValue) p.DualOrbitTrapScale = DualOrbitTrapScale.Value;
+            if (this.DualOrbitTrapFrame.HasValue) p.DualOrbitTrapFrame = (FracturingFog.DualOrbitTrapFrame)this.DualOrbitTrapFrame.Value;
+            if (DualOrbitTrapRotate.HasValue) p.DualOrbitTrapRotate = DualOrbitTrapRotate.Value;
+            if (DualOrbitTrapScaleByOrbit.HasValue) p.DualOrbitTrapScaleByOrbit = DualOrbitTrapScaleByOrbit.Value;
+            if (DualOrbitTrapAngle.HasValue) p.DualOrbitTrapAngle = DualOrbitTrapAngle.Value;
             if (DualOrbitStripeDensity.HasValue) p.DualOrbitStripeDensity = DualOrbitStripeDensity.Value;
             if (DualOrbitDEScale.HasValue) p.DualOrbitDEScale = DualOrbitDEScale.Value;
             if (DualOrbitOutlineWidth.HasValue) p.DualOrbitOutlineWidth = DualOrbitOutlineWidth.Value;

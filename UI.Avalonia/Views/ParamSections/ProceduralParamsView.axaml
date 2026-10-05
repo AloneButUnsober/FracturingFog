@@ -509,7 +509,7 @@
         <!-- Dual-Orbit Escape (#864 / #866) -->
         <Grid IsVisible="{Binding IsDualOrbitEscape}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Map:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding DualOrbitMaps}"
@@ -742,6 +742,30 @@
                            Value="{Binding DualOrbitPhaseK, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsDualOrbitPhaseMod}"
                            ToolTip.Tip="PhaseModulated: colour = theme at (z escape count + κ × c escape count). Animatable — sweeping κ slides the c-orbit's pattern through the z palette." />
+            <TextBlock Grid.Row="37" Grid.Column="0" Text="Trap frame:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitTrapField}" />
+            <ComboBox Grid.Row="37" Grid.Column="1"
+                      ItemsSource="{Binding DualOrbitTrapFrames}"
+                      SelectedItem="{Binding DualOrbitTrapFrame, Mode=TwoWay}" Margin="0,2"
+                      IsVisible="{Binding IsDualOrbitTrapField}"
+                      ToolTip.Tip="Fixed = the trap sits still at the origin. CoMoving = the trap rides the other orbit: TrapC measures the c-orbit against a trap centred on the z-orbit's current point (and TrapZ the z-orbit against one riding the c-orbit), so the trap motifs follow the dynamics." />
+            <CheckBox Grid.Row="38" Grid.Column="0" Grid.ColumnSpan="2"
+                      Content="Turn trap with the orbit"
+                      IsChecked="{Binding DualOrbitTrapRotate, Mode=TwoWay}" Margin="0,2"
+                      IsVisible="{Binding IsDualOrbitCoMovingTrap}"
+                      ToolTip.Tip="Co-moving trap: rotate the trap shape by the angle of the orbit point it rides. Off = the trap keeps its orientation and only moves." />
+            <CheckBox Grid.Row="39" Grid.Column="0" Grid.ColumnSpan="2"
+                      Content="Scale trap with the orbit"
+                      IsChecked="{Binding DualOrbitTrapScaleByOrbit, Mode=TwoWay}" Margin="0,2"
+                      IsVisible="{Binding IsDualOrbitCoMovingTrap}"
+                      ToolTip.Tip="Co-moving trap: grow the trap with the distance of the orbit point it rides from the origin (distances become relative)." />
+            <TextBlock Grid.Row="40" Grid.Column="0" Text="Trap angle (°):" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitTrapField}" />
+            <NumericUpDown Grid.Row="40" Grid.Column="1"
+                           Minimum="-3600" Maximum="3600" Increment="5" FormatString="F1"
+                           Value="{Binding DualOrbitTrapAngle, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsDualOrbitTrapField}"
+                           ToolTip.Tip="Turns the trap shape by this many degrees, in either frame. Animatable — spin the trap." />
             <TextBlock Grid.Row="24" Grid.Column="0" Grid.ColumnSpan="2"
                        Text="Böttcher domain colouring: inside the Mandelbrot set (critical orbit bounded) it shows the c-orbit's own angle and potential. ComplexPlane map only."
                        IsVisible="{Binding IsDualOrbitDomain}"

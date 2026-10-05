@@ -433,6 +433,17 @@ namespace FracturingFog
         PhaseModulated,
     }
 
+    /// <summary>Trap frame for the dual-orbit trap fields (#1119). Append only.</summary>
+    public enum DualOrbitTrapFrame
+    {
+        /// <summary>The trap sits still at the origin (the S3 behaviour).</summary>
+        Fixed,
+        /// <summary>The trap rides the other orbit: TrapC measures the c-orbit in a
+        /// frame centred on z_k (turned by arg z_k, optionally scaled by |z_k|);
+        /// TrapZ measures the z-orbit in the c-orbit's frame.</summary>
+        CoMoving,
+    }
+
     /// <summary>Built-in 2D palettes for the bivariate modes (#1122). Append only.</summary>
     public enum DualOrbitPalette2D
     {
