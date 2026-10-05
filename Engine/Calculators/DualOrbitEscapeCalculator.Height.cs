@@ -44,6 +44,7 @@ public sealed partial class DualOrbitEscapeCalculator
         hp.DualOrbitSplitHeight = false;
         hp.DualOrbitColorMode = DualOrbitColorMode.Field;
         hp.DualOrbitField = fp.DualOrbitHeightField;
+        hp.DualOrbitLicSource = DualOrbitLicSource.Off;   // #1128 — colour post-process only
         var h = _heightCalc ??= new DualOrbitEscapeCalculator(Width, Height) { _heightOnly = true };
         if (h.Width != Width || h.Height != Height) h.Resize(Width, Height);
         h.CenterX = CenterX; h.CenterY = CenterY; h.Zoom = Zoom;

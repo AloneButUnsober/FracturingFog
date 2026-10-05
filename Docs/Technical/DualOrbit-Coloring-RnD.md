@@ -505,6 +505,51 @@ the basilica's Julia plane with 3 sectors (the θ = 0, ⅓, ⅔ rays appear as s
 boundaries); UncertaintyExponent on the parameter plane and on the rabbit (N = 64: speckled, as
 expected).*
 
+**S14 as shipped (#1128).** FTLE, Jacobian anisotropy and an LIC flow texture.
+- **The Jacobian:** the pair map (s, c₀) ↦ (z_N, c_N) is holomorphic, and z doesn't depend on c₀,
+  so J = [[a, 0], [b, d]] is complex lower-triangular. a = ∂z/∂s, b = ∂c/∂s, d = ∂c/∂c₀, with
+  a' = 2za + 1, b' = 2cb + 1, d' = 2cd.
+  - N is the lockstep count until either orbit escapes (maxIter if both are bounded).
+  - **The singular values are formed in logs:** σ₁² = (T + √(T² − 4|ad|²))/2 and σ₂ = |a||d|/σ₁.
+- **Fields:**
+  - `Ftle` = ln σ₁ / N, centred with `DualOrbitFtleSpan` (1.5);
+  - `JacobianAnisotropy` = ln(σ₁/σ₂), scaled A/(A + `DualOrbitAnisotropyScale`) (20).
+- **Found by the tests, scale per entry:** the derivatives grow at different rates. At the
+  Misiurewicz point s = −2, |a| ~ 4^N (the z-orbit lands on the repelling β = 2, multiplier 4) while
+  |d| ~ 2^N (the c-orbit is a Chebyshev orbit). A common log-scale underflowed d entirely, so each
+  entry carries its own. |d|² also underflowed in the interior (d ~ μ^N), fixed by working in logs.
+- **LIC** (Cabral & Leedom) is a colour-only post-process for every colour mode. Fixed white noise
+  is averaged along streamlines of an orientation field with a ±`DualOrbitLicLength` px box kernel,
+  contrast-normalised by the kernel's own σ, and mixed in by `DualOrbitLicStrength`.
+  - **Sources:**
+    - `SeparationDirection`: arg(c_N − z_N), recorded in the Jacobian pass. Geometry; it has no
+      value inside M_c, where D_N → 0.
+    - `FieldGradient` / `FieldContour`: ∇ of, or ⊥ to, the coloured scalar (∇GreenRatio when the
+      field is GreenRatio). Colour-only: switching between them, the length and the strength all
+      recolour.
+  - **The issue's "dominant singular vector" source is not offered.** The SxSy and CxCy slices are
+    holomorphic in their image coordinate, so the image-plane Jacobian block is conformal and has no
+    stretching direction to follow.
+  - Streamlines are orientation-based (sign-agnostic) and stop at the border or at pixels with no
+    orientation.
+- **Tests:**
+  - a, b, d against central finite differences (three points, plus the imaginary-step check:
+    holomorphic);
+  - σ₁, σ₂ against power iteration on JᴴJ;
+  - **interior limit** ln σ₂/N → ln|μ|/p, for a fixed point (μ = 2α) and a 2-cycle
+    (μ = 4(s + 1)), with FTLE → 0;
+  - **Misiurewicz s = −2:** ln σ₁/N = ln 4 and ln σ₂/N = ln 2 over 4000 steps (no overflow);
+  - fields live everywhere, quaternion → interior;
+  - **LIC of a constant field = a 1D box blur** of the noise (0, π and π/2), and it stops at NaN;
+  - the escape-time gradient is radial far out (within 0.2 rad over > 500 pixels);
+  - LIC length / strength / gradient sources recolour (strength 0 = no texture); the separation
+    source follows arg(c_N − z_N) and re-iterates;
+  - CLI round trip.
+
+![FTLE and LIC](../Images/dualorbit-coloring/s14-ftle-lic.png)
+*Headless `--batch`, Cividis. Ftle; JacobianAnisotropy; GreenRatio with LIC along its level sets;
+ExternalAngleDelta with LIC along the separation direction.*
+
 ---
 
 ## 4. Architecture (S1 #1115)

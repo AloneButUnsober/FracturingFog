@@ -236,7 +236,8 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         DualOrbitPairChannels Pair, double PairRatio, double LyapunovSpan, bool Domain,
         int TrapShape, double TrapScale, double StripeDensity, double DEScale,
         DualOrbitTrapFrame TrapFrame, bool TrapRotate, bool TrapScaleByOrbit, double TrapAngle,
-        int EnsembleN, double EnsembleRadius, int EnsembleSectors, int UncertaintyLevels);
+        int EnsembleN, double EnsembleRadius, int EnsembleSectors, int UncertaintyLevels,
+        double FtleSpan, double AnisotropyScale, bool LicSeparation);
 
     private GeometryKey? _cacheKey;
     private float[] _smZ = Array.Empty<float>(), _smC = Array.Empty<float>();
@@ -284,7 +285,11 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
             fp.DualOrbitTrapFrame, fp.DualOrbitTrapRotate, fp.DualOrbitTrapScaleByOrbit, fp.DualOrbitTrapAngle,
             // #1127 — always keyed (reflection guard: geometry).
             Math.Clamp(fp.DualOrbitEnsembleN, 1, 4096), Math.Max(1e-12, fp.DualOrbitEnsembleRadius),
-            Math.Clamp(fp.DualOrbitEnsembleSectors, 0, 64), Math.Clamp(fp.DualOrbitUncertaintyLevels, 2, 12));
+            Math.Clamp(fp.DualOrbitEnsembleSectors, 0, 64), Math.Clamp(fp.DualOrbitUncertaintyLevels, 2, 12),
+            // #1128 — Jacobian palette mapping happens in Iterate; only the LIC
+            // separation source needs iteration data (gradient sources recolour).
+            Math.Max(1e-6, fp.DualOrbitFtleSpan), Math.Max(1e-6, fp.DualOrbitAnisotropyScale),
+            fp.DualOrbitLicSource == DualOrbitLicSource.SeparationDirection);
     }
 
     public void Calculate(CancellationToken ct = default)
@@ -298,7 +303,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
             if (ct.IsCancellationRequested) return;
             _cacheKey = key;
         }
-        if (!_heightOnly) Colorize(key, ct);
+        if (!_heightOnly) { Colorize(key, ct); if (!ct.IsCancellationRequested) ApplyLic(key); }   // #1128
         else if (!key.Layers && !key.Domain && IsInterferenceField(key.Field)) RefreshInterference(key);   // #1126
         // #1117 — an orbit-aware theme's accumulator is not cached: re-iterate
         // on every Calculate (Recolor then falls back to Calculate too).
@@ -312,7 +317,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
     public void Recolor()
     {
         var key = CurrentKey();
-        if (_cacheKey is GeometryKey k && k.Equals(key)) { Colorize(key, CancellationToken.None); UpdateHeight(CancellationToken.None); }
+        if (_cacheKey is GeometryKey k && k.Equals(key)) { Colorize(key, CancellationToken.None); ApplyLic(key); UpdateHeight(CancellationToken.None); }
         else Calculate();
     }
 
@@ -342,6 +347,11 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         bool ensembleField = !fieldOff && !quat && IsEnsembleField(field);   // #1127
         int ensN = key.EnsembleN, ensSectors = key.EnsembleSectors, ensLevels = key.UncertaintyLevels;
         double ensRho = key.EnsembleRadius;
+        bool jacField = !fieldOff && !quat && IsJacobianField(field);   // #1128
+        bool licSep = key.LicSeparation;
+        if (licSep && _sepDir.Length != n) _sepDir = new float[n];
+        float[] sepArr = _sepDir;
+        double ftleSpan = key.FtleSpan, anisoScale = key.AnisotropyScale;
         bool storeAngles = domain || interfField;
         bool angles = !quat && (storeAngles || (!fieldOff && field == DualOrbitField.ExternalAngleDelta));
         float[] smZArr = _smZ, smCArr = _smC; byte[] flagArr = _flags;
@@ -403,6 +413,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         float[] distBuf = DistanceBuffer;
         double deScale = key.DEScale;
         bool deadable = pairField || interiorField || (!fieldOff && IsEnsembleField(field))
+            || (!fieldOff && quat && IsJacobianField(field))
             || (!fieldOff && (field == DualOrbitField.DistanceZ || field == DualOrbitField.DistanceC))
             || (!fieldOff && quat && (IsOrbitScalarField(field) || IsOrbitThemeField(field)
                                       || IsDistanceField(field) || IsDecompField(field) || IsInterferenceField(field)));
@@ -469,7 +480,8 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                     // Interior (#1121) and S3 orbit (#1117) fields are complex-only.
                     if (interiorField || IsOrbitScalarField(field) || IsOrbitThemeField(field)
                         || IsDistanceField(field) || IsDecompField(field) || IsInterferenceField(field)
-                        || IsEnsembleField(field)) { scalar = 0.0; pairLive = false; }
+                        || IsEnsembleField(field) || IsJacobianField(field)) { scalar = 0.0; pairLive = false; }
+                    if (licSep) sepArr[rowBase + x] = float.NaN;
                     if (storeAngles) { thZArr[rowBase + x] = float.NaN; thCArr[rowBase + x] = float.NaN; }
                     zEsc = oz.Escaped; cEsc = oc.Escaped; nZ = oz.N; nC = oc.N;
                     smZ = oz.SmoothN; smC = oc.SmoothN;
@@ -575,12 +587,19 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                         thCArr[rowBase + x] = nC >= 0 ? (float)LiftToLevel1(argsC, nC) : float.NaN;
                     }
                     if (interiorField) pairScalar = InteriorScalar(field, oz, oc, sx, sy, maxIter, out pairLive);
+                    if (jacField || licSep)   // #1128
+                    {
+                        var jac = RunJacobian(cEqualsS ? sx : cSeedX, cEqualsS ? sy : cSeedY, sx, sy, maxIter, bail);
+                        if (jacField) pairScalar = JacobianScalar(field, jac, ftleSpan, anisoScale, maxIter);
+                        if (licSep)
+                            sepArr[rowBase + x] = jac.SepX == 0 && jac.SepY == 0 ? float.NaN : (float)Math.Atan2(jac.SepY, jac.SepX);
+                    }
                     if (ensembleField)
                         pairScalar = EnsembleScalar(field, cEqualsS ? sx : cSeedX, cEqualsS ? sy : cSeedY, sx, sy,
                             maxIter, bail, ensN, ensRho, ensSectors, ensLevels, ensClasses, ensCounts, ensArgs, out pairLive);
                     scalar = fieldOff ? 0.0
                         : interfField ? LiveFloor   // #1126 — rebuilt per colour pass (κ, γ colour-only)
-                        : pairField || interiorField || ensembleField || orbitScalar || orbitThemeField || distField || decompField ? pairScalar
+                        : pairField || interiorField || ensembleField || jacField || orbitScalar || orbitThemeField || distField || decompField ? pairScalar
                         : angles
                         ? AngleDeltaScalar(argsZ, nZ, argsC, nC, maxIter)
                         : Scalar(field, oz, oc, sx, sy, maxIter, bail, ratioSpan);
@@ -951,6 +970,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         DualOrbitField.DistanceC => cEscaped,
         DualOrbitField.DualOutline => true,
         DualOrbitField.BasinEntropy or DualOrbitField.UncertaintyExponent => true,   // #1127 (dead via FlagPairDead)
+        DualOrbitField.Ftle or DualOrbitField.JacobianAnisotropy => true,           // #1128 (defined for bounded pairs too)
         _ => zEscaped && cEscaped,
     };
 

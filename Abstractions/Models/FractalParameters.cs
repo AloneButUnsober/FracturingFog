@@ -1302,6 +1302,16 @@ namespace FracturingFog.Models
         /// <summary>UncertaintyExponent: number of ε levels ε_k = ρ·2^−(k+1) (#1127).
         /// Cost ×(1 + levels).</summary>
         public int DualOrbitUncertaintyLevels { get; set; } = 4;
+        /// <summary>Ftle: ±span (nats per step) maps to the palette ends (#1128).</summary>
+        public double DualOrbitFtleSpan { get; set; } = 1.5;
+        /// <summary>JacobianAnisotropy: A = ln(σ₁/σ₂) maps to A/(A + scale) (#1128).</summary>
+        public double DualOrbitAnisotropyScale { get; set; } = 20.0;
+        /// <summary>LIC flow-texture orientation source (#1128). Off = none.</summary>
+        public DualOrbitLicSource DualOrbitLicSource { get; set; } = DualOrbitLicSource.Off;
+        /// <summary>LIC streamline half-length in pixels (colour-only) (#1128).</summary>
+        public int DualOrbitLicLength { get; set; } = 12;
+        /// <summary>LIC texture strength 0..1 (colour-only) (#1128).</summary>
+        public double DualOrbitLicStrength { get; set; } = 0.8;
         /// <summary>Stripe density for StripeZ / StripeC / StripeInterference (#1117).</summary>
         public double DualOrbitStripeDensity { get; set; } = 5.0;
         /// <summary>DistanceZ / DistanceC: a distance of d pixels maps to d/(d + scale)
@@ -2000,6 +2010,11 @@ namespace FracturingFog.Models
                 DualOrbitEnsembleRadius = DualOrbitEnsembleRadius,
                 DualOrbitEnsembleSectors = DualOrbitEnsembleSectors,
                 DualOrbitUncertaintyLevels = DualOrbitUncertaintyLevels,
+                DualOrbitFtleSpan = DualOrbitFtleSpan,
+                DualOrbitAnisotropyScale = DualOrbitAnisotropyScale,
+                DualOrbitLicSource = DualOrbitLicSource,
+                DualOrbitLicLength = DualOrbitLicLength,
+                DualOrbitLicStrength = DualOrbitLicStrength,
                 DualOrbitStripeDensity = DualOrbitStripeDensity,
                 DualOrbitDEScale = DualOrbitDEScale,
                 DualOrbitOutlineWidth = DualOrbitOutlineWidth,
