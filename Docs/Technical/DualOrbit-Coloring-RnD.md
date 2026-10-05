@@ -91,8 +91,8 @@ Novelty is the session's *guess*, not established; #1130 checks it properly.
 | Field | Definition | Live in | Cost | Slice |
 |---|---|---|---|---|
 | **SecantLyapunov** | `λ = (1/N) Σ log|z_k + c_k|` | **every region** | L | S2 #1116 |
-| SecantDistance | normalised `log|D_N|` (finite-seed analogue of `|dz/dz₀|`; seed 0 is critical so the true derivative vanishes) | both escaped | L | S2 |
-| DivergenceTime | first `n` with `|D_n| > ε` (FSLE / predictability horizon) | all | L | S2 |
+| ~~SecantDistance~~ | **dropped in S2**: λ already equals `log|D_N/c|/N`, and a 2^-N normalisation just reproduces the first escaper's escape time. True DE is S4 | — | — | — |
+| DivergenceTime | time for `|D_n|` to first exceed **ρ·|D_0|** (ρ = `DualOrbitDivergenceRatio`, default 4), log-interpolated. *An absolute ε was unusable: D_0 = |c| ≫ ε* | where it diverges | L | S2 |
 | ClosestApproach (+Index) | `min_n |D_n|` and its `n` | all | L | S2 |
 | PairWinding | unwrapped `Σ arg σ_k / 2π` — how many times the pair winds | all | L | S2 |
 | MidpointPerturbation | `|e²| / |m²|` (split-complex coordinates) | all | L | S2 |
@@ -179,6 +179,32 @@ Prototype findings that fix design decisions (S10 #1124):
     `ITrapFieldSource` (S3), and `IDistanceFieldSource` (S4).
   - **Finding:** the direct `|c_N − z_N|` hits round-off (~1e-16) once the orbits converge, but
     the σ-sum keeps tracking the true contraction. That's why the secant fields accumulate σ.
+- **S2 as shipped (#1116).** Seven fields were appended to `DualOrbitField`: `SecantLyapunov`,
+  `DivergenceTime`, `ClosestApproach`, `ClosestApproachIndex`, `PairWinding`, `MidpointPerturbation`,
+  `ItineraryAgreement`. Each one requests its channel through `ChannelsFor`. The scalars follow the
+  shipped fields' `[0, maxIter]` contract:
+  - `SecantLyapunov` uses a diverging ±`DualOrbitLyapunovSpan` (default 2 nats/step).
+  - `ClosestApproach` uses `1 − e^(−depth/8)`.
+  - `MidpointPerturbation` uses log10 over ±6 decades.
+  - `PairWinding` gives one palette unit per turn, centred.
+  - The count-like fields (`DivergenceTime`, `ClosestApproachIndex`, `ItineraryAgreement`) are used raw.
+
+  Liveness comes from the accumulator, not from the escape flags (cache bit `FlagPairDead`):
+  `DivergenceTime` is interior where the pair never diverges, and `PairWinding` /
+  `ItineraryAgreement` are interior under the quaternion map. New params `DualOrbitLyapunovSpan` and
+  `DualOrbitDivergenceRatio` are always in `GeometryKey`, so the #981 guard classifies them as
+  geometry.
+  - **Round-off floor (found in the smoke render):** the separation is read as at least
+    `1e-14·|(z, c)|`, and the closest-approach index keeps the *first* step that reaches the minimum
+    (to 1e-9 relative). Without this, converged pairs speckled `ClosestApproach` / `Index` under
+    cycling themes.
+  - **Seams:** `PairWinding` has sharp seams by construction. It's a sum of principal args, a
+    topological label rather than a smooth field.
+
+  ![S2 pair fields](../Images/dualorbit-coloring/s2-pair-fields.png)
+  *All seven S2 fields rendered headless via `--batch` at app defaults (c = 0.5). The exteriors of
+  ClosestApproach / Index are flat there because the minimum separation is at step 0; the structure
+  is inside M.*
 - **Batch parity** (CLAUDE.md): new params flow through `RegionFractalParams` → `--param`.
   `BuildFractalParameters`, the Command-builder live seed and a round-trip test go in the same change,
   per slice.

@@ -240,6 +240,34 @@ namespace FracturingFog
         /// to escape, so it stays live where the critical orbit is bounded (s in
         /// the Mandelbrot set) — the field for Julia-plane and volume slices (#971).</summary>
         EscapeTimeC,
+        // ── Pair-native fields (#1116, epic #1114 S2). Read per-iteration pair data
+        // (D_n = c_n − z_n, σ_n = z_n + c_n) over the window before either orbit
+        // escapes. Docs/Technical/DualOrbit-Coloring-RnD.md §3.B.
+        /// <summary>Secant Lyapunov exponent λ = (1/N) Σ ln|z_k + c_k| — the finite-seed
+        /// Lyapunov exponent of the pair. Live in EVERY region (no interior hole):
+        /// inside M_c it tends to ln|μ|/p where the orbits share cycle phase and to 0
+        /// where they lag. Diverging scale ±<c>DualOrbitLyapunovSpan</c>.</summary>
+        SecantLyapunov,
+        /// <summary>Time for the pair's separation to grow by the ratio
+        /// <c>DualOrbitDivergenceRatio</c> (finite-size-Lyapunov / predictability
+        /// horizon). Continuous (log-interpolated). Interior where it never does.</summary>
+        DivergenceTime,
+        /// <summary>Approach depth ln(|D_0| / min|D_n|) — how much closer than they
+        /// started the two orbits ever get. Compressed 1 − e^(−depth/8).</summary>
+        ClosestApproach,
+        /// <summary>The step at which the closest approach happens (banded).</summary>
+        ClosestApproachIndex,
+        /// <summary>Unwrapped winding Σ arg(z_k + c_k) / 2π — how many turns the
+        /// separation vector makes. One palette unit per turn, 0 = mid-palette.
+        /// ComplexPlane only.</summary>
+        PairWinding,
+        /// <summary>|e|² / |m|² at the end of the window, m = (z + c)/2, e = (z − c)/2
+        /// (the split-complex / bicomplex coordinates): how far the pair is from
+        /// behaving as one orbit. log10, ±6 decades.</summary>
+        MidpointPerturbation,
+        /// <summary>Length of the shared binary itinerary (sign of Im) of the two
+        /// orbits from step 1. ComplexPlane only.</summary>
+        ItineraryAgreement,
     }
 
     /// <summary>Which two of the four dual-orbit coordinates (c-seed x/y, parameter

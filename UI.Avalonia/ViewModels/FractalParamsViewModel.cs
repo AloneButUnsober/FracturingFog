@@ -225,6 +225,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _dualCEqualsS = _p.DualOrbitCEqualsS;
         _dualBailout = _p.DualOrbitBailout;
         _dualRatioSpan = _p.DualOrbitRatioSpan;
+        _dualLyapSpan = _p.DualOrbitLyapunovSpan;
+        _dualDivRatio = _p.DualOrbitDivergenceRatio;
         _dualSliceAxes = _p.DualOrbitSliceAxes;
         _dualSX = _p.DualOrbitSX;
         _dualSY = _p.DualOrbitSY;
@@ -1926,7 +1928,21 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsDualOrbitQuat => IsDualOrbitEscape && _dualMap == DualOrbitMap.Quaternion;
     private DualOrbitField _dualField;
     /// <summary>Which derived escape-space scalar the field renders.</summary>
-    public DualOrbitField DualOrbitField { get => _dualField; set { Set(ref _dualField, value); _p.DualOrbitField = value; Fire(); } }
+    public DualOrbitField DualOrbitField
+    {
+        get => _dualField;
+        set
+        {
+            Set(ref _dualField, value); _p.DualOrbitField = value;
+            this.RaisePropertyChanged(nameof(IsDualOrbitLyapunovField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitDivergenceField));
+            Fire();
+        }
+    }
+    /// <summary>#1116 — show the SecantLyapunov span row.</summary>
+    public bool IsDualOrbitLyapunovField => IsDualOrbitFieldMode && _dualField == DualOrbitField.SecantLyapunov;
+    /// <summary>#1116 — show the DivergenceTime ratio row.</summary>
+    public bool IsDualOrbitDivergenceField => IsDualOrbitFieldMode && _dualField == DualOrbitField.DivergenceTime;
     public System.Array DualOrbitFields => s_DualOrbitFields;   // cached: a new array per read resets the ComboBox selection on Refresh()
     private static readonly System.Array s_DualOrbitFields = System.Enum.GetValues(typeof(DualOrbitField));
     private double _dualCSeedX;
@@ -1976,6 +1992,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             Set(ref _dualColorMode, value); _p.DualOrbitColorMode = value;
             this.RaisePropertyChanged(nameof(IsDualOrbitLayers));
             this.RaisePropertyChanged(nameof(IsDualOrbitFieldMode));
+            this.RaisePropertyChanged(nameof(IsDualOrbitLyapunovField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitDivergenceField));
             RaiseDualThemeWarning();
             Fire();
         }
@@ -2078,6 +2096,12 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     private double _dualRatioSpan;
     /// <summary>GreenRatio half-range in octaves (#970).</summary>
     public double DualOrbitRatioSpan { get => _dualRatioSpan; set { Set(ref _dualRatioSpan, Clamp(value, 0.25, 64.0)); _p.DualOrbitRatioSpan = _dualRatioSpan; Fire(); } }
+    private double _dualLyapSpan;
+    /// <summary>SecantLyapunov half-range in nats per step (#1116).</summary>
+    public double DualOrbitLyapunovSpan { get => _dualLyapSpan; set { Set(ref _dualLyapSpan, Clamp(value, 0.05, 20.0)); _p.DualOrbitLyapunovSpan = _dualLyapSpan; Fire(); } }
+    private double _dualDivRatio;
+    /// <summary>DivergenceTime amplification ratio ρ (#1116).</summary>
+    public double DualOrbitDivergenceRatio { get => _dualDivRatio; set { Set(ref _dualDivRatio, Clamp(value, 1.01, 1e6)); _p.DualOrbitDivergenceRatio = _dualDivRatio; Fire(); } }
 
     // ── Indra's Pearls 2D (#893) ──
     private IndrasGroupFamily _indrasFamily;

@@ -231,12 +231,14 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         DualOrbitMap Map, bool CEqualsS, double CX, double CY, double SX, double SY,
         DualOrbitSliceAxes Axes, double CSeedZ, double SZ, double Bailout,
         bool Layers, DualOrbitField Field, double RatioSpan,
-        DualOrbitPairChannels Pair, double PairEps);
+        DualOrbitPairChannels Pair, double PairRatio, double LyapunovSpan);
 
     private GeometryKey? _cacheKey;
     private float[] _smZ = Array.Empty<float>(), _smC = Array.Empty<float>();
     private byte[] _flags = Array.Empty<byte>();
     private const byte FlagZEsc = 1, FlagCEsc = 2, FlagZFirst = 4, FlagCFirst = 8;
+    // #1116 — a pair-native field has no value here (interior colour).
+    private const byte FlagPairDead = 16;
 
     /// <summary>True when the last Calculate() reused the cached orbits instead of
     /// iterating (diagnostics / tests).</summary>
@@ -255,7 +257,11 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
             layers,
             layers ? default : fp.DualOrbitField,
             layers ? 0.0 : Math.Max(1e-3, fp.DualOrbitRatioSpan),
-            pair, pair.HasFlag(DualOrbitPairChannels.Separation) ? PairDivergenceEpsilon : 0.0);
+            pair,
+            // Always in the key (like RatioSpan) so the #981 reflection guard can
+            // classify them as geometry regardless of the selected field.
+            Math.Max(1.0 + 1e-9, PairDivergenceRatio ?? fp.DualOrbitDivergenceRatio),
+            Math.Max(1e-3, fp.DualOrbitLyapunovSpan));
     }
 
     public void Calculate(CancellationToken ct = default)
@@ -305,7 +311,9 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         bool angles = !layers && !quat && field == DualOrbitField.ExternalAngleDelta;
         float[] smZArr = _smZ, smCArr = _smC; byte[] flagArr = _flags;
         var pairCh = key.Pair;
-        double pairEps = key.PairEps;
+        double pairEps = key.PairRatio;
+        double lyapSpan = key.LyapunovSpan;
+        bool pairField = !layers && IsPairField(field);
         DualOrbitPairPlanes? planes = pairCh == DualOrbitPairChannels.None ? null
             : PairPlanes is { } old && old.Channels == pairCh && old.Length == n ? old
             : new DualOrbitPairPlanes(pairCh, n);
@@ -337,6 +345,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
 
                 double scalar;
                 bool zEsc, cEsc; int nZ, nC; double smZ, smC;
+                double pairScalar = 0.0; bool pairLive = true;
                 if (quat)
                 {
                     // C = (0, s_x, s_y, s_z) pure-imaginary. z-orbit seed 0; c-orbit
@@ -349,6 +358,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                         if (cEqualsS) RunQuatPair(0, sx, sy, sZ, 0, sx, sy, sZ, maxIter, bail, ref acc, out oz, out oc);
                         else RunQuatPair(0, cSeedX, cSeedY, cSeedZ, 0, sx, sy, sZ, maxIter, bail, ref acc, out oz, out oc);
                         WritePlanes(planes, rowBase + x, acc, quat: true);
+                        if (pairField) pairScalar = PairScalar(field, acc, maxIter, lyapSpan, quat: true, out pairLive);
                     }
                     else
                     {
@@ -357,7 +367,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                             ? RunQuat(0, sx, sy, sZ, 0, sx, sy, sZ, maxIter, bail)
                             : RunQuat(0, cSeedX, cSeedY, cSeedZ, 0, sx, sy, sZ, maxIter, bail);
                     }
-                    scalar = layers ? 0.0 : ScalarQ(field, oz, oc, sx, sy, sZ, maxIter, bail, ratioSpan);
+                    scalar = layers ? 0.0 : pairField ? pairScalar : ScalarQ(field, oz, oc, sx, sy, sZ, maxIter, bail, ratioSpan);
                     zEsc = oz.Escaped; cEsc = oc.Escaped; nZ = oz.N; nC = oc.N;
                     smZ = oz.SmoothN; smC = oc.SmoothN;
                 }
@@ -370,6 +380,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                         if (cEqualsS) RunPair(0.0, 0.0, sx, sy, sx, sy, maxIter, bail, argsZ, argsC, true, ref acc, out oz, out nZ, out oc, out nC);
                         else RunPair(0.0, 0.0, cSeedX, cSeedY, sx, sy, maxIter, bail, argsZ, argsC, false, ref acc, out oz, out nZ, out oc, out nC);
                         WritePlanes(planes, rowBase + x, acc, quat: false);
+                        if (pairField) pairScalar = PairScalar(field, acc, maxIter, lyapSpan, quat: false, out pairLive);
                     }
                     else
                     {
@@ -379,6 +390,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                             : Run(cSeedX, cSeedY, sx, sy, maxIter, bail, argsC, out nC);
                     }
                     scalar = layers ? 0.0
+                        : pairField ? pairScalar
                         : angles
                         ? AngleDeltaScalar(argsZ, nZ, argsC, nC, maxIter)
                         : Scalar(field, oz, oc, sx, sy, maxIter, bail, ratioSpan);
@@ -392,10 +404,12 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                 smZArr[idx] = (float)Math.Max(LiveFloor, smZ);
                 smCArr[idx] = (float)Math.Max(LiveFloor, smC);
                 flagArr[idx] = (byte)((zEsc ? FlagZEsc : 0) | (cEsc ? FlagCEsc : 0)
-                    | (nZ >= 0 && nZ <= 1 ? FlagZFirst : 0) | (nC >= 0 && nC <= 1 ? FlagCFirst : 0));
+                    | (nZ >= 0 && nZ <= 1 ? FlagZFirst : 0) | (nC >= 0 && nC <= 1 ? FlagCFirst : 0)
+                    | (pairField && !pairLive ? FlagPairDead : 0));
                 // Relief height / histogram: the field scalar, or the z layer in
                 // layer mode (0 = bounded).
-                SmoothBuffer[idx] = layers ? (zEsc ? smZArr[idx] : 0f) : (float)scalar;
+                SmoothBuffer[idx] = layers ? (zEsc ? smZArr[idx] : 0f)
+                    : pairField && !pairLive ? 0f : (float)scalar;
             }
         });
     }
@@ -454,7 +468,8 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                 // smooth == 0: legacy fields can be a legitimate 0, e.g. the c = s
                 // control's separation). Surround = every orbit the field reads
                 // escaped by step 1 (#615's "no structure develops", seed-agnostic).
-                if (!FieldLive(field, zEsc, cEsc))
+                bool live = IsPairField(field) ? (f & FlagPairDead) == 0 : FieldLive(field, zEsc, cEsc);
+                if (!live)
                     ColorBuffer[idx] = interiorColor;
                 else if (oobColor is uint oob && FieldOutOfBounds(field, zFirst, cFirst))
                     ColorBuffer[idx] = oob;

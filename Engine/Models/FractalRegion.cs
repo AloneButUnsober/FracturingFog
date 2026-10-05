@@ -604,6 +604,9 @@ namespace FracturingFog.Models
         // #970 — bailout radius + GreenRatio span.
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitBailout { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitRatioSpan { get; set; }
+        // #1116 — pair-native field scales.
+        [JsonIgnore(Condition = OmitNull)] public double? DualOrbitLyapunovSpan { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DualOrbitDivergenceRatio { get; set; }
         // #971 — slice axes + fixed s when s is not an image axis.
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitSliceAxes { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitSX { get; set; }
@@ -982,6 +985,8 @@ namespace FracturingFog.Models
                     DualOrbitCEqualsS = p.DualOrbitCEqualsS ? true : (bool?)null,
                     DualOrbitBailout = p.DualOrbitBailout != 128.0 ? p.DualOrbitBailout : (double?)null,
                     DualOrbitRatioSpan = p.DualOrbitRatioSpan != 8.0 ? p.DualOrbitRatioSpan : (double?)null,
+                    DualOrbitLyapunovSpan = p.DualOrbitLyapunovSpan != 2.0 ? p.DualOrbitLyapunovSpan : (double?)null,
+                    DualOrbitDivergenceRatio = p.DualOrbitDivergenceRatio != 4.0 ? p.DualOrbitDivergenceRatio : (double?)null,
                     DualOrbitSliceAxes = p.DualOrbitSliceAxes != FracturingFog.DualOrbitSliceAxes.SxSy ? (int)p.DualOrbitSliceAxes : (int?)null,
                     DualOrbitSX = p.DualOrbitSX != -0.78 ? p.DualOrbitSX : (double?)null,
                     DualOrbitSY = p.DualOrbitSY != 0.15 ? p.DualOrbitSY : (double?)null,
@@ -1429,6 +1434,8 @@ namespace FracturingFog.Models
             if (DualOrbitCEqualsS.HasValue) p.DualOrbitCEqualsS = DualOrbitCEqualsS.Value;
             if (DualOrbitBailout.HasValue) p.DualOrbitBailout = DualOrbitBailout.Value;
             if (DualOrbitRatioSpan.HasValue) p.DualOrbitRatioSpan = DualOrbitRatioSpan.Value;
+            if (DualOrbitLyapunovSpan.HasValue) p.DualOrbitLyapunovSpan = DualOrbitLyapunovSpan.Value;
+            if (DualOrbitDivergenceRatio.HasValue) p.DualOrbitDivergenceRatio = DualOrbitDivergenceRatio.Value;
             if (this.DualOrbitSliceAxes.HasValue) p.DualOrbitSliceAxes = (FracturingFog.DualOrbitSliceAxes)this.DualOrbitSliceAxes.Value;
             if (DualOrbitSX.HasValue) p.DualOrbitSX = DualOrbitSX.Value;
             if (DualOrbitSY.HasValue) p.DualOrbitSY = DualOrbitSY.Value;
