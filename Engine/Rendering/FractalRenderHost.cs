@@ -1488,10 +1488,11 @@ namespace FracturingFog.Rendering
 
             // Wave 2.5 — progressive on the canonical Mandelbrot path (dynamic alt
             // slot empty), plus (#327) relief-eligible ALT height-field types so they
-            // get the same low-res 3D preview during interaction. Non-relief alt calcs
-            // still run a single full render as before. Tiny windows (W*H < 256 px)
+            // get the same low-res 3D preview during interaction, plus (#1146) the
+            // always-progressive expensive alt types (Dual-Orbit Escape). Other alt
+            // calcs still run a single full render as before. Tiny windows (W*H < 256 px)
             // skip progressive — overhead exceeds the win.
-            bool altReliefPreview = AltReliefPreviewEligible(useAlt);
+            bool altReliefPreview = AltPreviewEligible(useAlt);
             int progressiveStage = (progressive && calcW * calcH >= 256 * 256
                                      && ((!useAlt && _dynamicAltCalculator == null) || altReliefPreview))
                 ? 4
@@ -2283,9 +2284,10 @@ namespace FracturingFog.Rendering
         /// twin mirrors the active view via the same state-sync the main render
         /// uses (Mandelbrot: view + precision incl. deep-zoom limbs; alt types:
         /// view + FractalParameters via <see cref="SyncAltStateFromMandel"/>).</summary>
-        /// <summary>#327 — should the active ALT render get the low-res 3D relief
-        /// preview? Gated on relief enabled + raymarch + a supersamplable height-field
-        /// type, and NOT the UserEquation hot-load (Compile &amp; Load) path (#738): a
+        /// <summary>#327 / #1146 — should the active ALT render get the low-res
+        /// progressive preview? Always for <see cref="AlwaysProgressiveAlt"/> types
+        /// (#1146); otherwise gated on relief enabled + raymarch + a supersamplable
+        /// height-field type (#327, the 3D relief preview). Never the UserEquation hot-load (Compile &amp; Load) path (#738): a
         /// hot-loaded equation's field must come from the COMPILED calc itself
         /// (<see cref="_dynamicAltCalculator"/>), not a fresh interpreted UserEquationCalculator
         /// twin — the twin reads <c>UserEquationSource</c>, which need not be the equation
@@ -2293,15 +2295,32 @@ namespace FracturingFog.Rendering
         /// equation. Hot-load falls back to the display-res
         /// field off the compiled calc (below).
         /// When false the alt render keeps its existing single full-res path
-        /// (byte-identical) — this only ADDS a preview for relief-eligible alt types.</summary>
-        private bool AltReliefPreviewEligible(bool useAlt)
+        /// (byte-identical) — this only ADDS a preview stage before the unchanged final.</summary>
+        private bool AltPreviewEligible(bool useAlt)
         {
             if (!useAlt) return false;
             var type = ViewState.FractalType;
             if (type == FractalType.UserEquation && _dynamicAltCalculator != null) return false;
+            // #1146 — expensive per-pixel alt types preview progressively whether or
+            // not relief is on (the upload tail only applies relief when it is).
+            if (AlwaysProgressiveAlt(type)) return true;
             var rp = ViewState.FractalParameters;
             return rp.Relief2DEnabled && rp.Relief2DRaymarch && SupportsHiResReliefField(type);
         }
+
+        /// <summary>#1146 — ALT types that always get the Wave 2.5 ¼ → ½ → full
+        /// progressive chain during interaction (not only under relief, #327): their
+        /// per-pixel cost can be orders of magnitude above a plain escape-time pixel
+        /// (Dual-Orbit Escape's S13 ensemble fields cost N·(1 + L) orbits per pixel,
+        /// orbit-theme / Jacobian fields re-iterate), so a single full-res pass shows
+        /// nothing until it is done. Each must have a <see cref="CreateReliefFieldCalc"/>
+        /// twin (the preview calc) and be configured by <see cref="SyncAltStateFromMandel"/>.
+        /// The final stage is the unchanged full render.</summary>
+        public static bool AlwaysProgressiveAlt(FractalType type) => type switch
+        {
+            FractalType.DualOrbitEscape => true,
+            _ => false,
+        };
 
         /// <summary>#327 — resolve (create / resize / rebuild-on-type-change) the alt
         /// relief-preview sidecar for the current <see cref="ViewState.FractalType"/> at
