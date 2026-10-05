@@ -13,6 +13,10 @@
 // The solid is { (c, s.x) : the c-orbit of u → u² + s stays bounded } — a 3D slice
 // of the 4D (z0, s) space of quadratic dynamics. Every horizontal layer is the
 // filled Julia set K_s; the c = 0 column is the Mandelbrot line at Im s = s.y.
+// #1130: that 4D space is the classic Julibrot (z₀, c) space, and this solid is a
+// Julibrot 3D slice (cf. Fractint's julibrot type, stacked Julia layers) — the
+// SHAPE is known; the per-layer critical-orbit and relational-field colourings
+// are FF's (DualOrbit-Coloring-RnD.md §8).
 // The critical orbit (seed 0) does not depend on c, so it is constant per layer:
 // it colours the layer (connected vs Cantor Julia set / critical escape level)
 // while the c-orbit shapes the surface — the dual-orbit reading in 3D.

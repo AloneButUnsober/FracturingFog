@@ -129,8 +129,11 @@ because frontier claims cannot be sanity-checked against existing renders.
 
 <a id="escape-geometry-scattering"></a>
 
-The dual-orbit escape-geometry map (`Docs/Technical/Theoretical-Fractal-RnD.md` §3.6, epic #863) is an
-FF-original construction with no proper name; it sits in the chaotic-scattering / fractal-basin-boundary /
+The dual-orbit escape-geometry map (`Docs/Technical/Theoretical-Fractal-RnD.md` §3.6, epic #863) reads two
+points of the Julibrot (z₀, c) space that share their parameter — the critical orbit and a second seed — and
+colours their *relation*. The sets themselves are known (Mandelbrot, perturbed-z₀ Mandelbrot, Julibrot
+slices, the bicomplex quadratic); the relational colourings are what FF adds (novelty research #1130:
+`Docs/Technical/DualOrbit-Coloring-RnD.md` §8). It sits in the chaotic-scattering / fractal-basin-boundary /
 finite-size-Lyapunov literature, which these entries anchor.
 
 - **Edward Ott, Tamás Tél.** *Chaotic scattering: an introduction.* Chaos 3(4), 1993. Scattering

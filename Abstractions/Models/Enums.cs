@@ -833,8 +833,9 @@ namespace FracturingFog
         /// theme and Relief-3D height path works unchanged. Handled by a dedicated
         /// <c>PrecisionFieldCalculator</c>.</summary>
         PrecisionField,
-        /// <summary>Dual-orbit escape-geometry field (#863/#864, epic #850) — an
-        /// FF-original construction. Per parameter-space sample <c>s</c>, two
+        /// <summary>Dual-orbit escape-geometry field (#863/#864, epic #850) — two
+        /// points of the Julibrot (z₀, c) space sharing their parameter, coloured by
+        /// their relation (#1130 novelty: DualOrbit-Coloring-RnD §8). Per parameter-space sample <c>s</c>, two
         /// orbits run under one shared map <c>u→u²+s</c> from decoupled seeds
         /// (the critical seed 0 and a fixed, independent <c>c</c>); the escape
         /// geometry of the pair — separation, midpoint residual, dual-orbit angle

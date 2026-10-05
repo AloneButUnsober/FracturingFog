@@ -3,7 +3,7 @@
 **Epic:** [#1114](https://github.com/AloneButUnsober/FracturingFog/issues/1114) ·
 **Parents:** R&D epic #850, dual-orbit family #863 ·
 **Background:** [Theoretical-Fractal-RnD.md §3.6](Theoretical-Fractal-RnD.md) ·
-**Novelty follow-up (deferred):** [#1130](https://github.com/AloneButUnsober/FracturingFog/issues/1130) ·
+**Novelty research:** [#1130](https://github.com/AloneButUnsober/FracturingFog/issues/1130) → §8 ·
 **Session:** 2026-10-05
 
 The dual-orbit construction (`DualOrbitEscapeCalculator`, `DualOrbitVolumeCalculator`) iterates
@@ -74,7 +74,7 @@ per-iteration data path at all.
 ## 3. Catalogue
 
 Cost: **L** = cheap, rides S1's accumulator · **M** = new maths or a new mode · **H** = new render path / ×N work.
-Novelty is the session's *guess*, not established; #1130 checks it properly.
+Novelty was the session's *guess*; §8 now has the researched verdicts (#1130).
 
 ### 3.A Ported FF colourings (gaps)
 
@@ -794,13 +794,96 @@ Scripts: [`dualorbit_previews.py`](DualOrbit-Coloring-Prototypes/dualorbit_previ
 
 ---
 
-## 8. Novelty status
+## 8. Novelty status (#1130, researched 2026-10-05)
 
-These are candidate "FF-first" methods: secant Lyapunov colouring, co-moving traps, Böttcher-ratio
-domain colouring, interior phase lag, path interference, Dual Buddhabrot joint-outcome channels,
-copula-equalised bivariate fractal palettes, and pair-chord deposition. All are **unverified**: the
-session judged them from recall, with no literature search. **Do not claim innovation** in
-user-facing docs until #1130 lands its novelty table here.
+**Method.** Targeted web and literature search (arXiv, Wikipedia, vendor docs, Ultra Fractal formula
+reference, Gnofract4D manual, Fractint material, Paul Bourke, Jos Leys, Melinda Green, Wolfram
+reference, the Daza / GMOY basin literature) for each candidate and for dual-seed features in
+shipping software.
+- **Coverage limits:** not exhaustive. The Ultra Fractal public formula database (thousands of
+  user formulas) and the Fractal Forums archive could only be searched through the web index
+  (forum fetches were rate-limited, HTTP 429). Fractint's own julibrot help page was offline
+  (spanky.fractint.org); its description here comes from secondary sources.
+- **What "apparently new" means:** *no prior art found* in this search, not *proven first*.
+- **Not a reason to claim invention:** general formula languages (Ultra Fractal, ChaosPro,
+  Gnofract4D, FF's own DSL) can express any of these colourings in a few lines. FF's defensible
+  claim is a *shipped, named, tested and documented* feature set, not a mathematical invention.
+
+**Headline.**
+- **The objects are known.** Each orbit alone is a classic set:
+  - the z-orbit is the Mandelbrot set;
+  - the c-orbit is a "perturbed" Mandelbrot set (z₀ ≠ 0, Fractint's initial-orbit / perturbation
+    parameter);
+  - the pair is two fibres of the 4D **Julibrot** space (z₀, c) that share their parameter;
+  - the 3D Dual-Orbit Volume is a 3D slice of that same Julibrot space.
+- **The pair algebra is known:** D_{n+1} = D_n·(z_n + c_n) is the perturbation-theory recurrence
+  δ_{n+1} = δ_n(2Z_n + δ_n) behind every modern deep-zoom renderer. The bicomplex equivalence is
+  Rochon (2000).
+- **What no source showed: relational colouring.** That is, colouring one pixel by the
+  *relationship* between two seeds' orbits under a shared parameter: their phase lag, secant growth,
+  joint escape outcome, co-moving traps, Böttcher ratio or joint palette. That, as a packaged
+  feature family, is where FF's contribution lies.
+
+### 8.1 Method verdicts
+
+| # | Method | Closest prior art found | Verdict |
+|---|---|---|---|
+| 9 | **The construction** (two seeds, shared s) | Julibrot (z₀, c) space: Fractint julibrot type; Gnofract4D's 4D (c, z₀) view; perturbed-z₀ Mandelbrot sets; bicomplex quadratic (Rochon 2000; product of two complex orbits in idempotent coordinates) | **Known object.** FF reads *two* Julibrot points per pixel and colours their relation; no software found doing that |
+| 1 | Secant Lyapunov Σ ln\|z_k + c_k\| | D' = D·σ *is* the perturbation recurrence (deep-zoom renderers); Lyapunov-exponent colouring of M / J (SFU / Corless notes; generalised M–J Lyapunov papers); FSLE (Aurell 1997) | **Variant of known.** The quantity is a finite-difference Lyapunov exponent of a seed pair. The lag-0 / lag ≠ 0 interior dichotomy (λ → ln\|μ\|/p against → 0) is FF's analysis; not found published |
+| 2 | Co-moving orbit traps | Orbit traps (Pickover; UF Standard / DMJ traps with a *fixed* "Trap Position" transform) | **Apparently new as a feature.** No trap riding another iterated orbit found; trivially expressible in UF |
+| 3 | Böttcher-ratio domain colouring | Böttcher coordinate (Wolfram `MandelbrotSetBoettcher`), external angles / binary decomposition (mrob), and φ_s(z₁) = Φ_M(s) (Douady–Hubbard) | **Variant of known.** Domain colouring of a ratio of two standard invariants. The colouring, and FF's branch-cut finding (G(c₁) ≤ G(z₁)/2), weren't found published |
+| 4 | Interior phase lag | Colouring Julia interiors by which cycle component / point an orbit lands in (standard Fatou-basin pictures) | **Variant of known.** FF measures the lag *relative to the critical orbit*, in the parameter plane |
+| 5 | Path interference | None specific. At FF's default γ = 0 it is a sinusoidal contouring of ΔG (a standard palette-on-scalar technique applied to S6's Green difference) | **Apparently new framing, low depth.** Present it as a physics-motivated mapping, not a new invariant |
+| 6 | Dual Buddhabrot joint-outcome channels | Buddhabrot / Anti / Nebulabrot (Green); nonzero-z₀ Buddhabrots (Rosenman's plug-in 2015 "variable mutation"; Lobo); 4D Buddhagram over all of (z₀, c) (Green). *Conceptual* analogue: cubic-family parameter space classified by which critical orbits escape (Branner–Hubbard, Milnor) | **Apparently new as a render mode** (condition one seed's deposit on the other seed's outcome). No such channel split found |
+| 7 | Copula / joint-equalised bivariate palettes | 1D histogram colouring (standard); bivariate colour maps (general visualisation) | **Combination of known techniques.** No fractal-specific 2D equalisation found |
+| 8 | Pair-chord deposition | Buddhabrot deposition variants | **Apparently new, low depth.** A one-line deposition variant |
+| — | S13 basin entropy / uncertainty exponent | Daza et al. 2016; Grebogi–McDonald–Ott–Yorke 1983; `Basins.jl` computes both for dynamical systems | **Known metrics,** applied per pixel to a c-seed ensemble. Application, not method |
+| — | S14 FTLE / anisotropy, LIC | FTLE (Haller; FTLE field renderers); Lyapunov colouring of M; LIC (Cabral & Leedom 1993) | **Known tools.** The pair-map Jacobian [[a, 0], [b, d]] and its anisotropy as a colouring weren't found |
+| — | S15 quaternion parity / explicit-D | The quaternion Mandelbrot / Julia sets are long-standing | The symmetrised identity c² − z² = ½(Dσ + σD) is elementary. It is an implementation note, not a claim |
+
+### 8.2 Dual-orbit-escape-like features in shipping software
+
+| Software | What it offers that overlaps | What it does not do (as found) |
+|---|---|---|
+| **Fractint** (Tyler, Wegner, Peterson, Branderhorst; 1989–) | Initial-orbit (z₀) **perturbation** of the Mandelbrot set; the **julibrot** type, a 3D slice of (z₀, c) space built from layered 2D Julia sets | One orbit per pixel; no relational colouring |
+| **Gnofract4D** | Treats any two-parameter fractal as a 4D object (x, y, z, w) = (c.re, c.im, z₀.re, z₀.im) and views 2D slices at **arbitrary 4D rotation** | One orbit per pixel; 2D slices only |
+| **Ultra Fractal** | Start-value / perturbation parameters; Mandelbrot ↔ Julia switch; orbit traps with a trap-position transform; perturbation deep zoom (a reference orbit plus a delta, internally the pair recurrence); a general formula language | No shipped dual-seed colouring found (the formula DB could only be searched through the web index). Anything here is *scriptable* there |
+| **Kalles Fraktaler / Mandel Machine / mathr's tools** | Perturbation reference-orbit pairs (internal); atom domains, interior coordinates, external angles (Heiland-Allen) | The pair is a numerical device, not a colouring |
+| **Rosenman Buddhabrot plug-in** (2015), Lobo's gallery | Nonzero-z₀ ("variable mutation") Buddhabrots; **4D projection planes**; Anti / Nebulabrot | No conditioning on a second seed's outcome |
+| **Melinda Green's 4D Buddhagram** | Buddhabrot sampled over **all of (z₀, c)**, projected to any 2D plane | No pair / outcome channels |
+| **Jos Leys; Fractal Forums "juliabrots 3d"; POV-Ray** | **3D Julibrot renders** (slices of (z₀, c)); POV-Ray `julia_fractal` (quaternion / hypercomplex Julia) | Shape renders; per-layer critical-orbit colouring not found |
+| **Paul Bourke** | Volumetric fractal ray casting; higher-dimensional Julia sets | Not the (c, s.x) Julibrot slice specifically |
+| **Wolfram Language** | `MandelbrotSetBoettcher` (the Böttcher coordinate) | No two-point ratio |
+| **Basins.jl (Julia)** | Basin entropy, uncertainty exponent, fractal-boundary tests for dynamical systems | Not a fractal colouring |
+| **Bicomplex / tricomplex research code** (Rochon group: Tetrabrot, tricomplex slices) | 3D slices of bicomplex / tricomplex Mandelbrot sets | Shapes; relational colouring not found |
+
+**The 3D Dual-Orbit Volume in particular.** World (X, Z) = c and Y = s.x at a fixed s.y. That is a
+3D slice of the Julibrot space, so every horizontal layer is a filled Julia set, which is what
+Fractint's julibrot type and the 3D Julibrot renders show. The *object* is therefore known (since
+at least Fractint). Where no prior was found:
+- colouring each layer by the critical orbit (`CriticalLayer`), which marks where the sweep crosses
+  the Mandelbrot line;
+- the S15 surface colours taken from 2D relational fields (secant λ, phase lag, winding);
+- an analytic Hubbard–Douady-style DE with ∂u/∂s along the sweep axis.
+
+The earlier description of the construction as "FF-original" overstated it, and has been corrected
+(below).
+
+### 8.3 How to describe it (user-facing)
+
+- **Do say:** "colours the *relationship* between the critical orbit and a second seed's orbit under
+  the same parameter: a 2D slice through Julibrot (z₀, c) space, read two points at a time"; "a
+  family of relational colourings (secant Lyapunov, phase lag, Böttcher ratio, co-moving traps,
+  joint-outcome Buddhabrot …) not found in other shipping fractal software as of 2026-10".
+- **Do not say:** "new fractal", "new set", "first 3D …", or that the identities or metrics are new.
+  The volume is a Julibrot slice; basin entropy, the uncertainty exponent, FTLE and LIC are
+  established tools.
+- **Claims corrected in this change:**
+  - the `DualOrbitEscapeCalculator` header;
+  - the `FractalType.DualOrbitEscape` doc comment;
+  - Resources-Bibliography;
+  - Theoretical-Fractal-RnD §3.6;
+  - the Indra's Pearls design plan's aside.
 
 ---
 
@@ -817,4 +900,22 @@ user-facing docs until #1130 lands its novelty table here.
 - P. Blanchard, R. Devaney, L. Keen, "The dynamics of complex polynomials and automorphisms of the
   shift," *Invent. Math.* 104, 1991 (monodromy).
 - M. Green, "The Buddhabrot" (1993); see also Theoretical-Fractal-RnD §7.
+- M. Green, "The 4D Mandel/Juli/Buddhabrot Hologram," superliminal.com/fractals/bgram/bgram.html.
+- Fractint (B. Tyler, T. Wegner, M. Peterson, P. Branderhorst), 1989–: julibrot type, initial-orbit
+  perturbation. See en.wikipedia.org/wiki/Fractint.
+- Gnofract 4D manual, "About the maths," gnofract4d.sourceforge.net/manual/maths.html (the 4D
+  (c, z₀) object and slices).
+- J. Leys, 3D Fractals gallery (Julibrots), josleys.com/show_gallery.php?galid=329.
+- R. Rosenman, Buddhabrot plug-in (2015): 4D projection, initial-value mutation,
+  richardrosenman.com/shop/buddhabrot/.
+- Wikipedia, "Plotting algorithms for the Mandelbrot set" (perturbation recurrence, histogram
+  colouring).
+- Wolfram Language, `MandelbrotSetBoettcher`; R. Munafo, *Mu-Ency*: binary decomposition, external
+  angle (mrob.com).
+- Ultra Fractal help: Orbit Traps / DMJ OrbitTrapsColoring (trap-position transform),
+  ultrafractal.com.
+- J. Milnor, "Cubic polynomial maps with periodic critical orbit," arXiv:0910.1866 (escape regions
+  of the two-critical-point family).
+- Basins.jl documentation (basin entropy, uncertainty exponent), docs.juliahub.com/General/Basins.
+- P. Bourke, "Visualising volumetric fractals," *GSTF J. Computing* 5(2), 2017.
 - See also: [Theoretical-Fractal-RnD.md §7](Theoretical-Fractal-RnD.md).

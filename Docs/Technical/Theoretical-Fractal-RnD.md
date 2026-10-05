@@ -304,9 +304,15 @@ integration for SLE). No DSL reach. *ColorGen:* density/measure themes (Buddhabr
 
 ---
 
-### 3.6 Dual-orbit escape-geometry map (parameter→escape-space scattering) — **original construction**
+### 3.6 Dual-orbit escape-geometry map (parameter→escape-space scattering)
 
-**Math.** FF-original construction (session notes 2026-09-17), *not* a named-literature set — treat
+> **#1130 novelty correction (2026-10-05):** the two orbits are two points of the **Julibrot** (z₀, c)
+> space sharing their parameter (z₀ = 0 and z₀ = c); the c-orbit alone is a perturbed-z₀ Mandelbrot
+> set, the pair is the bicomplex quadratic (Rochon 2000), and the 3D volume is a Julibrot slice
+> (Fractint's julibrot type). Not an original *set*; FF's contribution is the *relational colouring*.
+> See `DualOrbit-Coloring-RnD.md` §8.
+
+**Math.** Construction from session notes 2026-09-17 (see the correction above) — treat
 validation as the risk (Bucket II). Per parameter-space sample `s=(s_x,s_y[,s_z])`, iterate **two**
 orbits under one shared nonlinear map, differing only in initial condition:
 
@@ -383,8 +389,8 @@ deposition (#867) after MVP, glyph (#868) gated.
   `escapeAngleZ/C`, `deltaN`. First cut maps one onto `SmoothBuffer` (every 2D theme + Relief free);
   follow-up ColorGen inputs enable diverging scattering-angle themes. Register in `FractalCapabilities`.
 
-**Research context (what this relates to — no proper name of its own).** The construction is a novel
-*combination*, but it sits in known territory and should be described that way (Rule B):
+**Research context (what this relates to).** The construction is a *combination* in known territory
+— a two-point reading of the Julibrot space (#1130) — and should be described that way (Rule B):
 - **Chaotic scattering** (Ott & Tél 1993) — the closest fit. A *scattering function* maps an input
   parameter → an output observable (deflection angle, dwell time); `dualOrbitAngle`, `scatteringAngle`,
   `Δn` **are** scattering observables, with fractal exit-basin boundaries + sensitive dependence. This is

@@ -270,7 +270,7 @@ optional p/q solver follow-up (#904) remains, deferred by decision.
   termination (cusp detection); getting it right is S3's main risk — hence S1 ships
   the robust BFS point cloud first, and S3 layers the curve tracer.
 - **Validation (Bucket II mitigation).** Grandma's recipe + Maskit slice have
-  **abundant reference imagery** (MSW plates) — unlike the FF-original dual-orbit
+  **abundant reference imagery** (MSW plates) — unlike the dual-orbit
   map, validation here is *easy*: match the book's pictures.
 
 ---
