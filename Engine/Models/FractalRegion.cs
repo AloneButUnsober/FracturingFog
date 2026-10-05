@@ -608,6 +608,11 @@ namespace FracturingFog.Models
         // family to persist them — the classic four still do not) + dual knobs.
         [JsonIgnore(Condition = OmitNull)] public int? BuddhaSamples { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? BuddhaIterHigh { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? BuddhaIterLow { get; set; }    // #1125 — outcome Nebulabrot bands
+        [JsonIgnore(Condition = OmitNull)] public int? BuddhaIterMid { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? DualBuddhaDeposit { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? DualBuddhaNebula { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? DualBuddhaAnti { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? BuddhaQualityMode { get; set; }
         [JsonIgnore(Condition = OmitNull)] public bool? BuddhaMetropolis { get; set; }
         [JsonIgnore(Condition = OmitNull)] public bool? BuddhaProgressive { get; set; }
@@ -1056,6 +1061,11 @@ namespace FracturingFog.Models
                 {
                     BuddhaSamples = p.BuddhaSamples != D.BuddhaSamples ? p.BuddhaSamples : (int?)null,
                     BuddhaIterHigh = p.BuddhaIterHigh != D.BuddhaIterHigh ? p.BuddhaIterHigh : (int?)null,
+                    BuddhaIterLow = p.BuddhaIterLow != D.BuddhaIterLow ? p.BuddhaIterLow : (int?)null,
+                    BuddhaIterMid = p.BuddhaIterMid != D.BuddhaIterMid ? p.BuddhaIterMid : (int?)null,
+                    DualBuddhaDeposit = p.DualBuddhaDeposit != D.DualBuddhaDeposit ? (int)p.DualBuddhaDeposit : (int?)null,
+                    DualBuddhaNebula = p.DualBuddhaNebula != D.DualBuddhaNebula ? (int)p.DualBuddhaNebula : (int?)null,
+                    DualBuddhaAnti = p.DualBuddhaAnti ? true : (bool?)null,
                     BuddhaQualityMode = p.BuddhaQualityMode != D.BuddhaQualityMode ? (int)p.BuddhaQualityMode : (int?)null,
                     BuddhaMetropolis = p.BuddhaMetropolis != D.BuddhaMetropolis ? p.BuddhaMetropolis : (bool?)null,
                     BuddhaProgressive = p.BuddhaProgressive != D.BuddhaProgressive ? p.BuddhaProgressive : (bool?)null,
@@ -1513,6 +1523,11 @@ namespace FracturingFog.Models
             // #1124 — Dual Buddhabrot.
             if (BuddhaSamples.HasValue) p.BuddhaSamples = BuddhaSamples.Value;
             if (BuddhaIterHigh.HasValue) p.BuddhaIterHigh = BuddhaIterHigh.Value;
+            if (BuddhaIterLow.HasValue) p.BuddhaIterLow = BuddhaIterLow.Value;
+            if (BuddhaIterMid.HasValue) p.BuddhaIterMid = BuddhaIterMid.Value;
+            if (this.DualBuddhaDeposit.HasValue) p.DualBuddhaDeposit = (FracturingFog.DualBuddhaDeposit)this.DualBuddhaDeposit.Value;
+            if (this.DualBuddhaNebula.HasValue) p.DualBuddhaNebula = (FracturingFog.DualBuddhaNebula)this.DualBuddhaNebula.Value;
+            if (DualBuddhaAnti.HasValue) p.DualBuddhaAnti = DualBuddhaAnti.Value;
             if (this.BuddhaQualityMode.HasValue) p.BuddhaQualityMode = (FracturingFog.Models.BuddhaQualityMode)this.BuddhaQualityMode.Value;
             if (BuddhaMetropolis.HasValue) p.BuddhaMetropolis = BuddhaMetropolis.Value;
             if (BuddhaProgressive.HasValue) p.BuddhaProgressive = BuddhaProgressive.Value;

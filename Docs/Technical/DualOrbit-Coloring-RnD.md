@@ -173,6 +173,39 @@ Prototype findings that fix design decisions (S10 #1124):
 - **Cost:** about 0.9 s for 4M HD samples at 640×480.
 
 ![Dual Buddhabrot](../Images/dualorbit-coloring/s10-dual-buddhabrot.png)
+
+**S11 as shipped (#1125, also #867).** Variants of the Dual Buddhabrot. Each one transforms the
+recorded orbits in place, so the Metropolis-Hastings scoring / acceptance and the splats stay
+generic.
+- **`DualBuddhaDeposit`:**
+  - `Midpoint`: (z_k + c_k)/2. The z-orbit is recorded up to the c-orbit's escape even in the
+    bulbs.
+  - `PairChord`: one uniform random point per step on z_k → c_k. t comes from the c RNG stream, so
+    the Z channel stays classic, and memory stays bounded.
+  - `EscapeLocation`: each kept orbit's first point past |u| = 2. This is #867's escape-space
+    render; zoom out to see it.
+- **Pair deposits start at step 1:** the seed pair (0, c) is identical for every sample. The smoke
+  render showed it as a bright fixed chord.
+- **`DualBuddhaNebula`** (Z / CB / CE): one outcome split by escape count into the
+  `BuddhaIterLow/Mid` bands. `BuddhaIterLow/Mid` are now persisted for this type.
+- **`DualBuddhaAnti`:** bounded orbits — R = z for s ∈ M \ M_c, G = c for s ∈ M_c, B = z for
+  s ∈ M_c. No bulb skip and no periodicity exit, so it's as slow as the classic Anti-Buddhabrot.
+- **Built-in animation "Dual Buddhabrot c-sweep":** c loops round 0.5 ± 0.35. The sampler seed is
+  a fixed param, so every frame draws the same s samples and the sweep doesn't flicker. The video
+  path already handles the Buddha family.
+- **Tests:**
+  - c = 0 ⇒ midpoint / chord ≡ Z (except the z₀ origin pixel);
+  - midpoint / chord hits inside the radius-2 disc, escape hits outside it;
+  - midpoint and chord deposit the same number of points;
+  - outcome-Nebulabrot bands **sum exactly** to the outcome channel;
+  - anti R + B **equals the classic AntiBuddhabrot calculator**, and G − B equals the counted
+    finite-cap exceptions;
+  - the default mode is unchanged (Z = classic);
+  - the preset targets animatable params; CLI round trip.
+
+![Dual Buddhabrot variants](../Images/dualorbit-coloring/s11-dual-buddhabrot-variants.png)
+*Headless `--batch`, HD: Midpoint, PairChord, EscapeLocation (zoom 0.35); outcome Nebulabrot (CB,
+bands 20/80), Anti (1M samples, cap 2000), PairChord at c = −0.3+0.6i.*
 *Headless `--batch`, 4M samples, HD. Top: c = 0.5, composite and the CB channel alone. Bottom:
 c = −0.3+0.6i. The CB lace follows the M_c boundary and re-textures with c.*
 

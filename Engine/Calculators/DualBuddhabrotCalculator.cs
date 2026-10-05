@@ -29,6 +29,24 @@
 // conjugation-symmetric) but for the c channels only when c is real — conj(s)
 // carries the orbit of conj(c), not of c. Forced off for c channels otherwise.
 //
+// Variants (#1125, S11) — all transform the recorded orbits in place, so MH
+// scoring / acceptance / splatting stay generic:
+//   DualBuddhaDeposit.Midpoint       c channels get m_k = (z_k + c_k)/2, k ≥ 1 (the
+//                                    split-complex real part); the z-orbit is
+//                                    recorded up to the c-orbit's escape even in
+//                                    the bulbs.
+//   DualBuddhaDeposit.PairChord      c channels get one point per step at a
+//                                    uniform random t on the chord z_k → c_k
+//                                    (string-art density; t from the c stream).
+//   DualBuddhaDeposit.EscapeLocation each kept orbit deposits only its first point
+//                                    past the bailout (|u| > 2) — escape space.
+//   DualBuddhaNebula Z / CB / CE     one outcome only, split by its escape count
+//                                    into the Low / Mid / High iteration bands
+//                                    (R / G / B) — an outcome Nebulabrot.
+//   DualBuddhaAnti                   bounded orbits: R = z-orbit for s ∈ M \ M_c,
+//                                    G = c-orbit for s ∈ M_c, B = z-orbit for
+//                                    s ∈ M_c (no bulb skip, no periodicity exit).
+//
 // Colour: DualBuddhaComposite.Channels (each channel log-normalised on its own,
 // tinted by its colour × gain, added — the sparse CB channel stays visible) or
 // Theme (gain-weighted total through the active colour map, like Buddhabrot).
@@ -49,9 +67,9 @@ public sealed class DualBuddhabrotCalculator : BuddhaFamilyCalculator
 
     // ── Diagnostics ─────────────────────────────────────────────────────────
 
-    /// <summary>Kept-orbit outcome counts of the last full sample pass:
-    /// [0] Z deposits, [1] CB deposits, [2] CE deposits, [3] "z escaped, c
-    /// bounded" samples (should be ~0: M_c ⊂ M).</summary>
+    /// <summary>Deposit counts of the last full sample pass per hit buffer:
+    /// [0] R (Z), [1] G (CB), [2] B (CE) in the default mode, and [3] "z escaped,
+    /// c bounded" samples (should be ~0: M_c ⊂ M).</summary>
     public long[] OutcomeCounts { get; } = new long[4];
 
     // ── Sample reuse (colour-only edits) ────────────────────────────────────
@@ -60,7 +78,8 @@ public sealed class DualBuddhabrotCalculator : BuddhaFamilyCalculator
         int Width, int Height, double CenterX, double CenterY, double Zoom,
         int Samples, int IterLow, int IterMid, int IterHigh,
         BuddhaQualityMode Quality, bool Metropolis, bool Progressive, int Seed, bool ZoomComp,
-        int? BatchOverride, double CX, double CY, int MinIter, int Threads);
+        int? BatchOverride, double CX, double CY, int MinIter, int Threads,
+        DualBuddhaDeposit Deposit, DualBuddhaNebula Nebula, bool Anti);
 
     private SampleKey? _lastKey;
 
@@ -71,7 +90,8 @@ public sealed class DualBuddhabrotCalculator : BuddhaFamilyCalculator
             p.BuddhaSamples, p.BuddhaIterLow, p.BuddhaIterMid, p.BuddhaIterHigh,
             p.BuddhaQualityMode, p.BuddhaMetropolis, p.BuddhaProgressive, p.BuddhaSeed, p.BuddhaZoomCompensation,
             ProgressiveBatchesOverride, p.DualBuddhaCSeedX, p.DualBuddhaCSeedY, Math.Max(0, p.DualBuddhaMinIter),
-            Environment.ProcessorCount);
+            Environment.ProcessorCount,
+            p.DualBuddhaDeposit, p.DualBuddhaNebula, p.DualBuddhaAnti);
     }
 
     // The video accumulation leg relies on the per-batch callbacks of a real
@@ -88,8 +108,8 @@ public sealed class DualBuddhabrotCalculator : BuddhaFamilyCalculator
         public double Sx, Sy;
         public double[] ZR = Array.Empty<double>(), ZI = Array.Empty<double>();
         public double[] CR = Array.Empty<double>(), CI = Array.Empty<double>();
-        public int ZLen, CLen;      // 0 = that orbit not deposited
-        public int CChannel;        // 1 = CB, 2 = CE
+        public int ZLen, CLen;      // 0 = that set not deposited
+        public int ZTarget, CTarget; // hit buffer index (0 = R, 1 = G, 2 = B)
         public int Score;
         public bool HasSeed;
     }
@@ -98,6 +118,10 @@ public sealed class DualBuddhabrotCalculator : BuddhaFamilyCalculator
     private double _cx, _cy;
     private int _minIter;
     private bool _mirrorC;
+    private DualBuddhaDeposit _deposit;
+    private DualBuddhaNebula _nebula;
+    private bool _anti;
+    private int _low, _mid;
 
     protected override void PrepareSampling(int threads, int maxOrbit, bool mh)
     {
@@ -106,6 +130,10 @@ public sealed class DualBuddhabrotCalculator : BuddhaFamilyCalculator
         _cy = p.DualBuddhaCSeedY;
         _minIter = Math.Max(0, p.DualBuddhaMinIter);
         _mirrorC = _cy == 0.0;
+        _deposit = p.DualBuddhaDeposit;
+        _nebula = p.DualBuddhaNebula;
+        _anti = p.DualBuddhaAnti;
+        _low = p.BuddhaIterLow; _mid = p.BuddhaIterMid;
         Array.Clear(OutcomeCounts);
         _mh = new DualMh[mh ? threads : 0];
         for (int t = 0; t < _mh.Length; t++)
@@ -116,23 +144,77 @@ public sealed class DualBuddhabrotCalculator : BuddhaFamilyCalculator
             };
     }
 
-    // One sample's two orbits, classified. Returns the kept-orbit lengths (0 =
-    // not deposited) and the c channel (1 = CB, 2 = CE).
+    // One sample's two orbits, classified and transformed into the two deposit
+    // sets: the z set (zr/zi, zLen, target zTarget) and the c set (cr/ci, cLen,
+    // target cTarget). Length 0 = not deposited. Targets index the hit buffers
+    // (0 = R / Z, 1 = G / CB, 2 = B / CE).
     private void IteratePair(double sx, double sy, double[] zr, double[] zi, double[] cr, double[] ci,
-        int maxOrbit, out int zLen, out int cLen, out int cChannel)
+        int maxOrbit, Random rngC, out int zLen, out int zTarget, out int cLen, out int cTarget)
     {
+        zLen = cLen = 0; zTarget = 0; cTarget = 1;
+        // c-orbit first. Bounded c-orbits stop on periodicity (never deposited) —
+        // except in anti mode, which deposits them.
+        int cN = Record(_cx, _cy, sx, sy, cr, ci, maxOrbit, out bool cEsc, periodicity: !_anti);
+
         // z-orbit: the classic recording (orbit[n] stored before the escape test).
         // Main cardioid / period-2 bulb: z provably bounded — skip it (classic
-        // early-reject), but the c-orbit still runs (that is the CB channel).
+        // early-reject) unless anti mode needs the bounded orbit, or a pair
+        // deposit needs z up to the c-orbit's escape.
+        bool pair = _deposit is DualBuddhaDeposit.Midpoint or DualBuddhaDeposit.PairChord;
         bool zEsc = false; int zN = maxOrbit;
-        if (!InCardioidOrBulb(sx, sy))
+        if (!InCardioidOrBulb(sx, sy) || _anti)
             zN = Record(0.0, 0.0, sx, sy, zr, zi, maxOrbit, out zEsc);
-        int cN = Record(_cx, _cy, sx, sy, cr, ci, maxOrbit, out bool cEsc, periodicity: true);
+        else if (pair && cEsc && _nebula == DualBuddhaNebula.Off)
+            Record(0.0, 0.0, sx, sy, zr, zi, Math.Min(maxOrbit, cN + 1), out _);   // bounded: recorded to cN
+        if (zEsc && !cEsc) Interlocked.Increment(ref OutcomeCounts[3]);
 
-        zLen = zEsc && zN >= _minIter ? zN : 0;
-        cLen = cEsc && cN >= _minIter ? cN : 0;
-        cChannel = zEsc ? 2 : 1;
-        if (zEsc && !cEsc) System.Threading.Interlocked.Increment(ref OutcomeCounts[3]);
+        if (_anti)
+        {
+            if (!zEsc) { zLen = maxOrbit; zTarget = cEsc ? 0 : 2; }   // z for s ∈ M \ M_c → R, s ∈ M_c → B
+            if (!cEsc) { cLen = maxOrbit; cTarget = 1; }              // c for s ∈ M_c → G
+            return;
+        }
+
+        bool zKeep = zEsc && zN >= _minIter, cKeep = cEsc && cN >= _minIter;
+        if (_nebula != DualBuddhaNebula.Off)
+        {
+            // Outcome Nebulabrot: one outcome, banded by its escape count.
+            if (_nebula == DualBuddhaNebula.Z) { if (zKeep) { zLen = zN; zTarget = Band(zN); } }
+            else if (cKeep && (_nebula == DualBuddhaNebula.CE) == zEsc) { cLen = cN; cTarget = Band(cN); }
+            return;
+        }
+
+        zLen = zKeep ? zN : 0;
+        cLen = cKeep ? cN : 0;
+        cTarget = zEsc ? 2 : 1;
+        switch (_deposit)
+        {
+            case DualBuddhaDeposit.Midpoint:
+            case DualBuddhaDeposit.PairChord:
+                if (cLen > 0)
+                {
+                    // From step 1: the seed step's pair (0, c) is the same for every
+                    // sample, so it would pile one fixed point / segment into the
+                    // image (smoke render: a bright straight chord 0 → c).
+                    int L = zEsc ? Math.Min(zN, cN) : cN;
+                    bool chord = _deposit == DualBuddhaDeposit.PairChord;
+                    for (int k = 1; k < L; k++)
+                    {
+                        double t = chord ? rngC.NextDouble() : 0.5;
+                        cr[k - 1] = zr[k] + t * (cr[k] - zr[k]);
+                        ci[k - 1] = zi[k] + t * (ci[k] - zi[k]);
+                    }
+                    cLen = Math.Max(0, L - 1);
+                }
+                break;
+            case DualBuddhaDeposit.EscapeLocation:
+                // Record stores the escaping point at index N (before its test).
+                if (zLen > 0) { zr[0] = zr[zN]; zi[0] = zi[zN]; zLen = 1; }
+                if (cLen > 0) { cr[0] = cr[cN]; ci[0] = ci[cN]; cLen = 1; }
+                break;
+        }
+
+        int Band(int n) => n < _low ? 0 : n < _mid ? 1 : 2;
     }
 
     // Iterate u² + s from u0, storing u_n before the |u|² > 4 test (the classic
@@ -182,19 +264,20 @@ public sealed class DualBuddhabrotCalculator : BuddhaFamilyCalculator
         return s;
     }
 
-    private void Deposit(uint[] tZ, uint[] tCB, uint[] tCE,
-        double[] zr, double[] zi, int zLen, double[] cr, double[] ci, int cLen, int cChannel,
+    private void Deposit(uint[] tR, uint[] tG, uint[] tB,
+        double[] zr, double[] zi, int zLen, int zTarget, double[] cr, double[] ci, int cLen, int cTarget,
         bool hd, Random rng, Random rngC,
         double scale, double midX, double midY, int width, int height)
     {
         if (zLen > 0)
         {
-            if (hd) SplatOrbitHD(tZ, zr, zi, zLen, scale, midX, midY, width, height, rng);
-            else SplatOrbitStd(tZ, zr, zi, zLen, scale, midX, midY, width, height);
+            uint[] tz = zTarget == 0 ? tR : zTarget == 1 ? tG : tB;
+            if (hd) SplatOrbitHD(tz, zr, zi, zLen, scale, midX, midY, width, height, rng);
+            else SplatOrbitStd(tz, zr, zi, zLen, scale, midX, midY, width, height);
         }
         if (cLen > 0)
         {
-            uint[] tc = cChannel == 1 ? tCB : tCE;
+            uint[] tc = cTarget == 0 ? tR : cTarget == 1 ? tG : tB;
             if (hd) SplatOrbitHD(tc, cr, ci, cLen, scale, midX, midY, width, height, rngC, _mirrorC);
             else SplatOrbitStd(tc, cr, ci, cLen, scale, midX, midY, width, height);
         }
@@ -224,10 +307,9 @@ public sealed class DualBuddhabrotCalculator : BuddhaFamilyCalculator
         {
             double sx = -2.5 + rng.NextDouble() * 4.0;    // classic sampling domain
             double sy = -1.5 + rng.NextDouble() * 3.0;
-            IteratePair(sx, sy, zr, zi, cr, ci, maxOrbit, out int zLen, out int cLen, out int cCh);
-            if (zLen > 0) nz++;
-            if (cLen > 0) { if (cCh == 1) ncb++; else nce++; }
-            Deposit(tZ, tCB, tCE, zr, zi, zLen, cr, ci, cLen, cCh, hd, rng, rngC, scale, midX, midY, width, height);
+            IteratePair(sx, sy, zr, zi, cr, ci, maxOrbit, rngC, out int zLen, out int zT, out int cLen, out int cT);
+            Count(zLen, zT, cLen, cT, ref nz, ref ncb, ref nce);
+            Deposit(tZ, tCB, tCE, zr, zi, zLen, zT, cr, ci, cLen, cT, hd, rng, rngC, scale, midX, midY, width, height);
         }
         AddCounts(nz, ncb, nce);
     }
@@ -245,11 +327,11 @@ public sealed class DualBuddhabrotCalculator : BuddhaFamilyCalculator
             for (int w = 0; w < 4096 && !st.HasSeed; w++)
             {
                 double sx = -2.5 + rng.NextDouble() * 4.0, sy = -1.5 + rng.NextDouble() * 3.0;
-                IteratePair(sx, sy, pzr, pzi, pcr, pci, maxOrbit, out int zLen, out int cLen, out int cCh);
+                IteratePair(sx, sy, pzr, pzi, pcr, pci, maxOrbit, rngC, out int zLen, out int zT, out int cLen, out int cT);
                 int score = Score(pzr, pzi, zLen, scale, midX, midY, width, height)
                           + Score(pcr, pci, cLen, scale, midX, midY, width, height);
                 if (score == 0) continue;
-                Accept(st, sx, sy, pzr, pzi, zLen, pcr, pci, cLen, cCh, score);
+                Accept(st, sx, sy, pzr, pzi, zLen, zT, pcr, pci, cLen, cT, score);
                 st.HasSeed = true;
             }
             if (!st.HasSeed)
@@ -274,26 +356,33 @@ public sealed class DualBuddhabrotCalculator : BuddhaFamilyCalculator
                 nsx = -2.5 + rng.NextDouble() * 4.0;
                 nsy = -1.5 + rng.NextDouble() * 3.0;
             }
-            IteratePair(nsx, nsy, pzr, pzi, pcr, pci, maxOrbit, out int zLen, out int cLen, out int cCh);
+            IteratePair(nsx, nsy, pzr, pzi, pcr, pci, maxOrbit, rngC, out int zLen, out int zT, out int cLen, out int cT);
             int score = Score(pzr, pzi, zLen, scale, midX, midY, width, height)
                       + Score(pcr, pci, cLen, scale, midX, midY, width, height);
             if (score > 0 && (st.Score == 0 || rng.NextDouble() < (double)score / st.Score))
-                Accept(st, nsx, nsy, pzr, pzi, zLen, pcr, pci, cLen, cCh, score);
+                Accept(st, nsx, nsy, pzr, pzi, zLen, zT, pcr, pci, cLen, cT, score);
 
-            if (st.ZLen > 0) nz++;
-            if (st.CLen > 0) { if (st.CChannel == 1) ncb++; else nce++; }
-            Deposit(tZ, tCB, tCE, st.ZR, st.ZI, st.ZLen, st.CR, st.CI, st.CLen, st.CChannel,
+            Count(st.ZLen, st.ZTarget, st.CLen, st.CTarget, ref nz, ref ncb, ref nce);
+            Deposit(tZ, tCB, tCE, st.ZR, st.ZI, st.ZLen, st.ZTarget, st.CR, st.CI, st.CLen, st.CTarget,
                     hd, rng, rngC, scale, midX, midY, width, height);
         }
         AddCounts(nz, ncb, nce);
     }
 
     private static void Accept(DualMh st, double sx, double sy,
-        double[] zr, double[] zi, int zLen, double[] cr, double[] ci, int cLen, int cCh, int score)
+        double[] zr, double[] zi, int zLen, int zT, double[] cr, double[] ci, int cLen, int cT, int score)
     {
         Array.Copy(zr, st.ZR, zLen); Array.Copy(zi, st.ZI, zLen);
         Array.Copy(cr, st.CR, cLen); Array.Copy(ci, st.CI, cLen);
-        st.Sx = sx; st.Sy = sy; st.ZLen = zLen; st.CLen = cLen; st.CChannel = cCh; st.Score = score;
+        st.Sx = sx; st.Sy = sy; st.ZLen = zLen; st.CLen = cLen; st.ZTarget = zT; st.CTarget = cT; st.Score = score;
+    }
+
+    // Per-buffer deposit counts (OutcomeCounts[0..2] = R / G / B; Z / CB / CE in
+    // the default mode).
+    private static void Count(int zLen, int zT, int cLen, int cT, ref long r, ref long g, ref long b)
+    {
+        if (zLen > 0) { if (zT == 0) r++; else if (zT == 1) g++; else b++; }
+        if (cLen > 0) { if (cT == 0) r++; else if (cT == 1) g++; else b++; }
     }
 
     private void AddCounts(long nz, long ncb, long nce)

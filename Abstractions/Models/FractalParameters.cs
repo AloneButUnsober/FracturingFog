@@ -497,6 +497,14 @@ namespace FracturingFog.Models
         public double DualBuddhaGainZ { get; set; } = 1.0;
         public double DualBuddhaGainCB { get; set; } = 1.0;
         public double DualBuddhaGainCE { get; set; } = 0.35;
+        /// <summary>Dual Buddhabrot c-channel deposition (#1125).</summary>
+        public DualBuddhaDeposit DualBuddhaDeposit { get; set; } = DualBuddhaDeposit.Orbits;
+        /// <summary>Dual Buddhabrot outcome Nebulabrot (#1125): Off, or one outcome
+        /// banded by BuddhaIterLow / BuddhaIterMid.</summary>
+        public DualBuddhaNebula DualBuddhaNebula { get; set; } = DualBuddhaNebula.Off;
+        /// <summary>Dual Buddhabrot anti mode (#1125): deposit bounded orbits —
+        /// R = z for s ∈ M \ M_c, G = c for s ∈ M_c, B = z for s ∈ M_c.</summary>
+        public bool DualBuddhaAnti { get; set; } = false;
 
         // Mandelbox (Tom Lowe, 2010). Box-fold + sphere-fold + scale DE.
         /// <summary>Mandelbox scale parameter. Per iter:
@@ -1771,6 +1779,9 @@ namespace FracturingFog.Models
                 DualBuddhaGainZ = DualBuddhaGainZ,
                 DualBuddhaGainCB = DualBuddhaGainCB,
                 DualBuddhaGainCE = DualBuddhaGainCE,
+                DualBuddhaDeposit = DualBuddhaDeposit,
+                DualBuddhaNebula = DualBuddhaNebula,
+                DualBuddhaAnti = DualBuddhaAnti,
                 MandelboxScale = MandelboxScale,
                 MandelboxFixedRadius = MandelboxFixedRadius,
                 MandelboxMinRadius = MandelboxMinRadius,
