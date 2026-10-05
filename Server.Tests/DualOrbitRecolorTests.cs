@@ -77,6 +77,8 @@ public sealed class DualOrbitRecolorTests
         nameof(FractalParameters.DualOrbitLagColors),   // #1121
         nameof(FractalParameters.DualOrbitOutlineWidth),   // #1118
         nameof(FractalParameters.DualOrbitOutlineColorZ), nameof(FractalParameters.DualOrbitOutlineColorC),
+        nameof(FractalParameters.DualOrbitPalette2D), nameof(FractalParameters.DualOrbitBivariateScale),   // #1122
+        nameof(FractalParameters.DualOrbitPhaseK),
     };
 
     private static object? Mutate(object? v) => v switch

@@ -405,6 +405,8 @@ public static class FractalAnimatableParamsMap
         new("DualOrbitOpacityC", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 1.0,
             Cost: AnimatableParamCost.Expensive,
             Notes: "Per-orbit layers: c-orbit layer opacity — cross-fade the c-seed's 'disc' against the z layer (#980)."),
+        new("DualOrbitPhaseK", AnimatableParamKind.ScalarDouble, Min: -4.0, Max: 4.0,
+            Notes: "PhaseModulated: κ in n_z + κ·n_c — the c-orbit sweeps the z palette's phase (#1122). Recolour only."),
     };
 
     // Dual Buddhabrot (#1124). Sweeping the c-seed re-textures the c channels on

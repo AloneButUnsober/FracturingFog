@@ -385,6 +385,31 @@ namespace FracturingFog
         /// difference. Bailout-independent. Where the critical orbit is bounded
         /// (s ∈ M) it falls back to φ_s(c₁) alone. ComplexPlane only.</summary>
         BoettcherDomain,
+        // ── Bivariate modes (#1122, epic #1114 S8): the two escape counts mapped
+        // jointly. Colour-only (recolour from the orbit cache).
+        /// <summary>2D palette lookup at (u, v) = (n_z, n_c) each mapped
+        /// n/(n + <c>DualOrbitBivariateScale</c>) (<c>DualOrbitPalette2D</c>).</summary>
+        Bivariate2D,
+        /// <summary>As Bivariate2D after a copula transform: each channel replaced
+        /// by its empirical rank, so both marginals are uniform and the whole
+        /// palette is used.</summary>
+        JointEqualised,
+        /// <summary>n_z → OkLab lightness, n_c → OkLab b (blue↔yellow), a = 0 — the
+        /// two channels on perceptually separate axes, nothing on red↔green.</summary>
+        PerceptualSplit,
+        /// <summary>The active theme at n_z + κ·n_c (<c>DualOrbitPhaseK</c>) — the c
+        /// orbit phase-modulates the z palette (FM-synthesis analogy).</summary>
+        PhaseModulated,
+    }
+
+    /// <summary>Built-in 2D palettes for the bivariate modes (#1122). Append only.</summary>
+    public enum DualOrbitPalette2D
+    {
+        /// <summary>Bilinear in OkLab: near-black (0,0), blue (1,0), amber (0,1),
+        /// near-white (1,1). Colour-blind safe.</summary>
+        BlueAmberSquare,
+        /// <summary>Hue from the active theme at u, brightness from v.</summary>
+        ThemeByLightness,
     }
 
     /// <summary>How the categorical interior fields (<c>PhaseLag</c>, <c>CyclePeriod</c>)

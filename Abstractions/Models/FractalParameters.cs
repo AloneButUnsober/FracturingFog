@@ -1274,6 +1274,12 @@ namespace FracturingFog.Models
         public uint DualOrbitOutlineColorZ { get; set; } = 0xFF0072B2u;
         /// <summary>DualOutline colour of the c-orbit's boundary (M_c): amber.</summary>
         public uint DualOrbitOutlineColorC { get; set; } = 0xFFE69F00u;
+        /// <summary>Bivariate modes: 2D palette (#1122).</summary>
+        public DualOrbitPalette2D DualOrbitPalette2D { get; set; } = DualOrbitPalette2D.BlueAmberSquare;
+        /// <summary>Bivariate modes: an escape count n maps to n/(n + scale) (#1122).</summary>
+        public double DualOrbitBivariateScale { get; set; } = 6.0;
+        /// <summary>PhaseModulated: κ in n_z + κ·n_c (animatable) (#1122).</summary>
+        public double DualOrbitPhaseK { get; set; } = 0.5;
         /// <summary>Which two of (c.x, c.y, s.x, s.y) the image spans (#971).
         /// Default SxSy = the parameter plane (shipped view, byte-identical).</summary>
         public DualOrbitSliceAxes DualOrbitSliceAxes { get; set; } = DualOrbitSliceAxes.SxSy;
@@ -1945,6 +1951,9 @@ namespace FracturingFog.Models
                 DualOrbitOutlineWidth = DualOrbitOutlineWidth,
                 DualOrbitOutlineColorZ = DualOrbitOutlineColorZ,
                 DualOrbitOutlineColorC = DualOrbitOutlineColorC,
+                DualOrbitPalette2D = DualOrbitPalette2D,
+                DualOrbitBivariateScale = DualOrbitBivariateScale,
+                DualOrbitPhaseK = DualOrbitPhaseK,
                 DualOrbitSliceAxes = DualOrbitSliceAxes,
                 DualOrbitSX = DualOrbitSX,
                 DualOrbitSY = DualOrbitSY,
