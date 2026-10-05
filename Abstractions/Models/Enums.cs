@@ -268,6 +268,19 @@ namespace FracturingFog
         /// <summary>Length of the shared binary itinerary (sign of Im) of the two
         /// orbits from step 1. ComplexPlane only.</summary>
         ItineraryAgreement,
+        // ── Interior fields (#1121, epic #1114 S7): live where the critical orbit
+        // has converged to an attracting cycle. ComplexPlane only.
+        /// <summary>Phase lag k ∈ {0 … p−1}: the c-orbit tracks the critical orbit
+        /// k steps ahead on the shared attracting p-cycle (c_N ≈ z_{N+k}). Raw k
+        /// (use a cycling / categorical theme). Live where both orbits are bounded
+        /// and on the cycle (M_c); the showcase is the CxCy (Julia) slice.</summary>
+        PhaseLag,
+        /// <summary>Phase lag as (k + ½)/p across the palette — the p classes get
+        /// evenly spaced colours whatever the period.</summary>
+        PhaseLagFraction,
+        /// <summary>Period p of the attracting cycle of the critical orbit (live in
+        /// the hyperbolic interior of M; the c-orbit is not needed).</summary>
+        CyclePeriod,
     }
 
     /// <summary>Which two of the four dual-orbit coordinates (c-seed x/y, parameter
@@ -323,6 +336,18 @@ namespace FracturingFog
         /// difference. Bailout-independent. Where the critical orbit is bounded
         /// (s ∈ M) it falls back to φ_s(c₁) alone. ComplexPlane only.</summary>
         BoettcherDomain,
+    }
+
+    /// <summary>How the categorical interior fields (<c>PhaseLag</c>, <c>CyclePeriod</c>)
+    /// are coloured (#1121). Append only.</summary>
+    public enum DualOrbitCategoricalColors
+    {
+        /// <summary>A fixed colour-blind-safe qualitative palette (Okabe–Ito, blue /
+        /// amber first) indexed by the class — distinct whatever the theme.</summary>
+        Categorical,
+        /// <summary>The active theme. Small integers through a cycling theme can
+        /// alias to one colour.</summary>
+        Theme,
     }
 
     /// <summary>Hue source for <see cref="DualOrbitColorMode.BoettcherDomain"/>

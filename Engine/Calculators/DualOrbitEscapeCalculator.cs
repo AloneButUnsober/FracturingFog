@@ -238,7 +238,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
     private float[] _thZ = Array.Empty<float>(), _thC = Array.Empty<float>();
     private byte[] _flags = Array.Empty<byte>();
     private const byte FlagZEsc = 1, FlagCEsc = 2, FlagZFirst = 4, FlagCFirst = 8;
-    // #1116 — a pair-native field has no value here (interior colour).
+    // #1116 / #1121 — a pair-native or interior field has no value here (interior colour).
     private const byte FlagPairDead = 16;
 
     /// <summary>True when the last Calculate() reused the cached orbits instead of
@@ -322,6 +322,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         double pairEps = key.PairRatio;
         double lyapSpan = key.LyapunovSpan;
         bool pairField = !fieldOff && IsPairField(field);
+        bool interiorField = !fieldOff && IsInteriorField(field);   // #1121
         DualOrbitPairPlanes? planes = pairCh == DualOrbitPairChannels.None ? null
             : PairPlanes is { } old && old.Channels == pairCh && old.Length == n ? old
             : new DualOrbitPairPlanes(pairCh, n);
@@ -376,6 +377,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                             : RunQuat(0, cSeedX, cSeedY, cSeedZ, 0, sx, sy, sZ, maxIter, bail);
                     }
                     scalar = fieldOff ? 0.0 : pairField ? pairScalar : ScalarQ(field, oz, oc, sx, sy, sZ, maxIter, bail, ratioSpan);
+                    if (interiorField) { scalar = 0.0; pairLive = false; }   // complex-only
                     if (domain) { thZArr[rowBase + x] = float.NaN; thCArr[rowBase + x] = float.NaN; }
                     zEsc = oz.Escaped; cEsc = oc.Escaped; nZ = oz.N; nC = oc.N;
                     smZ = oz.SmoothN; smC = oc.SmoothN;
@@ -403,8 +405,9 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                         thZArr[rowBase + x] = nZ >= 0 ? (float)LiftToLevel1(argsZ, nZ) : float.NaN;
                         thCArr[rowBase + x] = nC >= 0 ? (float)LiftToLevel1(argsC, nC) : float.NaN;
                     }
+                    if (interiorField) pairScalar = InteriorScalar(field, oz, oc, sx, sy, maxIter, out pairLive);
                     scalar = fieldOff ? 0.0
-                        : pairField ? pairScalar
+                        : pairField || interiorField ? pairScalar
                         : angles
                         ? AngleDeltaScalar(argsZ, nZ, argsC, nC, maxIter)
                         : Scalar(field, oz, oc, sx, sy, maxIter, bail, ratioSpan);
@@ -419,14 +422,14 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                 smCArr[idx] = (float)Math.Max(LiveFloor, smC);
                 flagArr[idx] = (byte)((zEsc ? FlagZEsc : 0) | (cEsc ? FlagCEsc : 0)
                     | (nZ >= 0 && nZ <= 1 ? FlagZFirst : 0) | (nC >= 0 && nC <= 1 ? FlagCFirst : 0)
-                    | (pairField && !pairLive ? FlagPairDead : 0));
+                    | ((pairField || interiorField) && !pairLive ? FlagPairDead : 0));
                 // Relief height / histogram: the field scalar, or the z layer in
                 // layer mode (0 = bounded).
                 // Domain mode: the c-orbit's escape count (live wherever the
                 // domain colour is).
                 SmoothBuffer[idx] = layers ? (zEsc ? smZArr[idx] : 0f)
                     : domain ? (cEsc ? smCArr[idx] : 0f)
-                    : pairField && !pairLive ? 0f : (float)scalar;
+                    : (pairField || interiorField) && !pairLive ? 0f : (float)scalar;
             }
         });
     }
@@ -463,6 +466,9 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         int width = Width, height = Height;
         float[] smZArr = _smZ, smCArr = _smC; byte[] flagArr = _flags;
         if (flagArr.Length < width * height) return;   // nothing cached yet
+        // #1121 — categorical colours for PhaseLag / CyclePeriod (theme-independent).
+        bool categorical = !layers && FractalParameters.DualOrbitLagColors == DualOrbitCategoricalColors.Categorical
+            && (field == DualOrbitField.PhaseLag || field == DualOrbitField.CyclePeriod);
 
         if (key.Domain)
         {
@@ -491,11 +497,14 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                 // smooth == 0: legacy fields can be a legitimate 0, e.g. the c = s
                 // control's separation). Surround = every orbit the field reads
                 // escaped by step 1 (#615's "no structure develops", seed-agnostic).
-                bool live = IsPairField(field) ? (f & FlagPairDead) == 0 : FieldLive(field, zEsc, cEsc);
+                bool live = IsPairField(field) || IsInteriorField(field)
+                    ? (f & FlagPairDead) == 0 : FieldLive(field, zEsc, cEsc);
                 if (!live)
                     ColorBuffer[idx] = interiorColor;
                 else if (oobColor is uint oob && FieldOutOfBounds(field, zFirst, cFirst))
                     ColorBuffer[idx] = oob;
+                else if (categorical)
+                    ColorBuffer[idx] = CategoricalColor(field, SmoothBuffer[idx])!.Value;
                 else
                     ColorBuffer[idx] = unchecked((uint)ColorMap.Map(SmoothBuffer[idx], 0f, maxIter));
             }
