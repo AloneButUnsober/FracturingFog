@@ -345,6 +345,27 @@ namespace FracturingFog
         /// fraction of disagreeing ε-pairs vs ε; α = 2 − D_boundary (1 = smooth
         /// boundary). α/2 on the palette; no value where &lt; 2 levels disagree (#1127).</summary>
         UncertaintyExponent,
+        /// <summary>Finite-time Lyapunov exponent ln σ₁ / N of the pair map
+        /// (s, c₀) ↦ (z_N, c_N) — ridges are coherent-structure analogues (#1128).
+        /// Centred on <c>DualOrbitFtleSpan</c>.</summary>
+        Ftle,
+        /// <summary>ln(σ₁/σ₂) of the pair-map Jacobian — how unequally it stretches
+        /// (#1128). Scaled by <c>DualOrbitAnisotropyScale</c>.</summary>
+        JacobianAnisotropy,
+    }
+
+    /// <summary>Orientation field the Dual-Orbit LIC flow texture follows (#1128).
+    /// Append only.</summary>
+    public enum DualOrbitLicSource
+    {
+        /// <summary>No flow texture.</summary>
+        Off,
+        /// <summary>arg(c_N − z_N): the direction of the orbit separation.</summary>
+        SeparationDirection,
+        /// <summary>The gradient of the coloured value.</summary>
+        FieldGradient,
+        /// <summary>Along the coloured value's level sets (⊥ the gradient).</summary>
+        FieldContour,
     }
 
     /// <summary>Which two of the four dual-orbit coordinates (c-seed x/y, parameter

@@ -509,7 +509,7 @@
         <!-- Dual-Orbit Escape (#864 / #866) -->
         <Grid IsVisible="{Binding IsDualOrbitEscape}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Map:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding DualOrbitMaps}"
@@ -819,6 +819,39 @@
                            Value="{Binding DualOrbitUncertaintyLevels, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsDualOrbitUncertaintyField}"
                            ToolTip.Tip="How many pair distances (each half the last) the exponent is fitted over. Each level costs another N orbits per pixel." />
+            <TextBlock Grid.Row="49" Grid.Column="0" Text="FTLE span:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitFtleField}" />
+            <NumericUpDown Grid.Row="49" Grid.Column="1"
+                           Minimum="0.01" Maximum="100" Increment="0.1" FormatString="F2"
+                           Value="{Binding DualOrbitFtleSpan, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsDualOrbitFtleField}"
+                           ToolTip.Tip="Stretching rate (per step) that maps to the palette ends: ±span, with 0 at mid-palette. Ridges mark where nearby pairs separate fastest." />
+            <TextBlock Grid.Row="50" Grid.Column="0" Text="Anisotropy scale:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitAnisotropyField}" />
+            <NumericUpDown Grid.Row="50" Grid.Column="1"
+                           Minimum="0.01" Maximum="10000" Increment="1" FormatString="F2"
+                           Value="{Binding DualOrbitAnisotropyScale, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsDualOrbitAnisotropyField}"
+                           ToolTip.Tip="Log stretch ratio at which the palette is half-way: A maps to A / (A + scale)." />
+            <TextBlock Grid.Row="51" Grid.Column="0" Text="Flow texture (LIC):" VerticalAlignment="Center" Margin="0,8,0,2" />
+            <ComboBox Grid.Row="51" Grid.Column="1"
+                      ItemsSource="{Binding DualOrbitLicSources}"
+                      SelectedItem="{Binding DualOrbitLicSource, Mode=TwoWay}" Margin="0,8,0,2"
+                      ToolTip.Tip="Overlay a streaky flow texture that follows a direction field. SeparationDirection = the direction from the z-orbit to the c-orbit at the end. FieldGradient = up the coloured value's slope. FieldContour = along its level lines. Works in every colour mode." />
+            <TextBlock Grid.Row="52" Grid.Column="0" Text="Streak length (px):" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitLicOn}" />
+            <NumericUpDown Grid.Row="52" Grid.Column="1"
+                           Minimum="1" Maximum="256" Increment="2" FormatString="F0"
+                           Value="{Binding DualOrbitLicLength, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsDualOrbitLicOn}"
+                           ToolTip.Tip="How far each streak runs either way. Recolours without re-iterating." />
+            <TextBlock Grid.Row="53" Grid.Column="0" Text="Texture strength:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitLicOn}" />
+            <NumericUpDown Grid.Row="53" Grid.Column="1"
+                           Minimum="0" Maximum="1" Increment="0.05" FormatString="F2"
+                           Value="{Binding DualOrbitLicStrength, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsDualOrbitLicOn}"
+                           ToolTip.Tip="0 = no texture, 1 = full light/dark streaks over the colour. Recolours without re-iterating." />
             <TextBlock Grid.Row="24" Grid.Column="0" Grid.ColumnSpan="2"
                        Text="Böttcher domain colouring: inside the Mandelbrot set (critical orbit bounded) it shows the c-orbit's own angle and potential. ComplexPlane map only."
                        IsVisible="{Binding IsDualOrbitDomain}"

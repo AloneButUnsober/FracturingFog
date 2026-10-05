@@ -1965,6 +1965,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsDualOrbitDivergenceField));
             this.RaisePropertyChanged(nameof(IsDualOrbitCategoricalField));
             this.RaisePropertyChanged(nameof(IsDualOrbitTrapField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitFtleField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitAnisotropyField));
             this.RaisePropertyChanged(nameof(IsDualOrbitEnsembleField));
             this.RaisePropertyChanged(nameof(IsDualOrbitUncertaintyField));
             this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceField));
@@ -2026,6 +2028,17 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double DualOrbitEnsembleRadius { get => _p.DualOrbitEnsembleRadius; set { var v = Clamp(value, 1e-9, 4); if (v == _p.DualOrbitEnsembleRadius) return; _p.DualOrbitEnsembleRadius = v; this.RaisePropertyChanged(); Fire(); } }
     public int DualOrbitEnsembleSectors { get => _p.DualOrbitEnsembleSectors; set { var v = (int)Clamp(value, 0, 64); if (v == _p.DualOrbitEnsembleSectors) return; _p.DualOrbitEnsembleSectors = v; this.RaisePropertyChanged(); Fire(); } }
     public int DualOrbitUncertaintyLevels { get => _p.DualOrbitUncertaintyLevels; set { var v = (int)Clamp(value, 2, 12); if (v == _p.DualOrbitUncertaintyLevels) return; _p.DualOrbitUncertaintyLevels = v; this.RaisePropertyChanged(); Fire(); } }
+    /// <summary>#1128 — FTLE / anisotropy rows.</summary>
+    public bool IsDualOrbitFtleField => IsDualOrbitFieldMode && _dualField == DualOrbitField.Ftle;
+    public bool IsDualOrbitAnisotropyField => IsDualOrbitFieldMode && _dualField == DualOrbitField.JacobianAnisotropy;
+    public double DualOrbitFtleSpan { get => _p.DualOrbitFtleSpan; set { var v = Clamp(value, 0.01, 100); if (v == _p.DualOrbitFtleSpan) return; _p.DualOrbitFtleSpan = v; this.RaisePropertyChanged(); Fire(); } }
+    public double DualOrbitAnisotropyScale { get => _p.DualOrbitAnisotropyScale; set { var v = Clamp(value, 0.01, 10_000); if (v == _p.DualOrbitAnisotropyScale) return; _p.DualOrbitAnisotropyScale = v; this.RaisePropertyChanged(); Fire(); } }
+    public DualOrbitLicSource DualOrbitLicSource { get => _p.DualOrbitLicSource; set { if (value == _p.DualOrbitLicSource) return; _p.DualOrbitLicSource = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(IsDualOrbitLicOn)); Fire(); } }
+    public System.Array DualOrbitLicSources => s_DualOrbitLicSources;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_DualOrbitLicSources = System.Enum.GetValues(typeof(DualOrbitLicSource));
+    public bool IsDualOrbitLicOn => _p.DualOrbitLicSource != DualOrbitLicSource.Off;
+    public int DualOrbitLicLength { get => _p.DualOrbitLicLength; set { var v = (int)Clamp(value, 1, 256); if (v == _p.DualOrbitLicLength) return; _p.DualOrbitLicLength = v; this.RaisePropertyChanged(); Fire(); } }
+    public double DualOrbitLicStrength { get => _p.DualOrbitLicStrength; set { var v = Clamp(value, 0, 1); if (v == _p.DualOrbitLicStrength) return; _p.DualOrbitLicStrength = v; this.RaisePropertyChanged(); Fire(); } }
     // #1123 — Relief split: height from its own field.
     public bool DualOrbitSplitHeight { get => _p.DualOrbitSplitHeight; set { if (value == _p.DualOrbitSplitHeight) return; _p.DualOrbitSplitHeight = value; this.RaisePropertyChanged(); Fire(); } }
     public DualOrbitField DualOrbitHeightField { get => _p.DualOrbitHeightField; set { if (value == _p.DualOrbitHeightField) return; _p.DualOrbitHeightField = value; this.RaisePropertyChanged(); Fire(); } }
@@ -2096,6 +2109,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsDualOrbitDomain));
             this.RaisePropertyChanged(nameof(IsDualOrbitCategoricalField));
             this.RaisePropertyChanged(nameof(IsDualOrbitTrapField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitFtleField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitAnisotropyField));
             this.RaisePropertyChanged(nameof(IsDualOrbitEnsembleField));
             this.RaisePropertyChanged(nameof(IsDualOrbitUncertaintyField));
             this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceField));
