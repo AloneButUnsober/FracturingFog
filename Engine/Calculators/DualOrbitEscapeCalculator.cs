@@ -21,6 +21,11 @@
 // bailout radius. GreenRatio (log2 G_c/G_z = n_z − n_c) and ExternalAngleDelta
 // (Böttcher angles by backward lifting) are bailout-independent.
 //
+// Pair accumulator (#1115, epic #1114): when pair channels are requested
+// (PairChannels / a field that needs them) both orbits iterate in lockstep and
+// per-iteration pair data lands in PairPlanes — see DualOrbitEscapeCalculator.Pair.cs.
+// None (the default) keeps the original per-orbit path below byte-for-byte.
+//
 // Per-orbit layers (#979, #939): DualOrbitColorMode.PerOrbitLayers colours each
 // orbit as its own layer — its own theme (DualOrbitThemeZ / DualOrbitThemeC by
 // name, or injected), that theme's interior colour × InteriorAlpha and #615
@@ -49,7 +54,7 @@ using FracturingFog.Models;
 
 namespace FracturingFog;
 
-public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightFieldSource, ISupportsCheapRecolor
+public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHeightFieldSource, ISupportsCheapRecolor
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -225,7 +230,8 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
         int Width, int Height, double CenterX, double CenterY, double Zoom, int MaxIter,
         DualOrbitMap Map, bool CEqualsS, double CX, double CY, double SX, double SY,
         DualOrbitSliceAxes Axes, double CSeedZ, double SZ, double Bailout,
-        bool Layers, DualOrbitField Field, double RatioSpan);
+        bool Layers, DualOrbitField Field, double RatioSpan,
+        DualOrbitPairChannels Pair, double PairEps);
 
     private GeometryKey? _cacheKey;
     private float[] _smZ = Array.Empty<float>(), _smC = Array.Empty<float>();
@@ -240,6 +246,7 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
     {
         var fp = FractalParameters;
         bool layers = fp.DualOrbitColorMode == DualOrbitColorMode.PerOrbitLayers;
+        var pair = PairChannels | ChannelsFor(fp.DualOrbitField, layers);
         return new GeometryKey(
             Width, Height, CenterX, CenterY, Zoom, Math.Max(16, MaxIterations),
             fp.DualOrbitMap, fp.DualOrbitCEqualsS, fp.DualOrbitCSeedX, fp.DualOrbitCSeedY,
@@ -247,7 +254,8 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
             Math.Clamp(fp.DualOrbitBailout, 2.0, 1e6),
             layers,
             layers ? default : fp.DualOrbitField,
-            layers ? 0.0 : Math.Max(1e-3, fp.DualOrbitRatioSpan));
+            layers ? 0.0 : Math.Max(1e-3, fp.DualOrbitRatioSpan),
+            pair, pair.HasFlag(DualOrbitPairChannels.Separation) ? PairDivergenceEpsilon : 0.0);
     }
 
     public void Calculate(CancellationToken ct = default)
@@ -296,6 +304,12 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
         bool quat = map == DualOrbitMap.Quaternion;
         bool angles = !layers && !quat && field == DualOrbitField.ExternalAngleDelta;
         float[] smZArr = _smZ, smCArr = _smC; byte[] flagArr = _flags;
+        var pairCh = key.Pair;
+        double pairEps = key.PairEps;
+        DualOrbitPairPlanes? planes = pairCh == DualOrbitPairChannels.None ? null
+            : PairPlanes is { } old && old.Channels == pairCh && old.Length == n ? old
+            : new DualOrbitPairPlanes(pairCh, n);
+        PairPlanes = planes;
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
@@ -328,20 +342,42 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
                     // C = (0, s_x, s_y, s_z) pure-imaginary. z-orbit seed 0; c-orbit
                     // seed the decoupled pure-imaginary (cx, cy, cz) — a different
                     // plane, so the pair diverges in 4D (non-degenerate).
-                    QOrbit oz = RunQuat(0, 0, 0, 0, 0, sx, sy, sZ, maxIter, bail);
-                    QOrbit oc = cEqualsS
-                        ? RunQuat(0, sx, sy, sZ, 0, sx, sy, sZ, maxIter, bail)
-                        : RunQuat(0, cSeedX, cSeedY, cSeedZ, 0, sx, sy, sZ, maxIter, bail);
+                    QOrbit oz, oc;
+                    if (planes != null)
+                    {
+                        var acc = PairAccum.Create(pairCh, pairEps);
+                        if (cEqualsS) RunQuatPair(0, sx, sy, sZ, 0, sx, sy, sZ, maxIter, bail, ref acc, out oz, out oc);
+                        else RunQuatPair(0, cSeedX, cSeedY, cSeedZ, 0, sx, sy, sZ, maxIter, bail, ref acc, out oz, out oc);
+                        WritePlanes(planes, rowBase + x, acc, quat: true);
+                    }
+                    else
+                    {
+                        oz = RunQuat(0, 0, 0, 0, 0, sx, sy, sZ, maxIter, bail);
+                        oc = cEqualsS
+                            ? RunQuat(0, sx, sy, sZ, 0, sx, sy, sZ, maxIter, bail)
+                            : RunQuat(0, cSeedX, cSeedY, cSeedZ, 0, sx, sy, sZ, maxIter, bail);
+                    }
                     scalar = layers ? 0.0 : ScalarQ(field, oz, oc, sx, sy, sZ, maxIter, bail, ratioSpan);
                     zEsc = oz.Escaped; cEsc = oc.Escaped; nZ = oz.N; nC = oc.N;
                     smZ = oz.SmoothN; smC = oc.SmoothN;
                 }
                 else
                 {
-                    Orbit oz = Run(0.0, 0.0, sx, sy, maxIter, bail, argsZ, out nZ);
-                    Orbit oc = cEqualsS
-                        ? Run(sx, sy, sx, sy, maxIter, bail, argsC, out nC)
-                        : Run(cSeedX, cSeedY, sx, sy, maxIter, bail, argsC, out nC);
+                    Orbit oz, oc;
+                    if (planes != null)
+                    {
+                        var acc = PairAccum.Create(pairCh, pairEps);
+                        if (cEqualsS) RunPair(0.0, 0.0, sx, sy, sx, sy, maxIter, bail, argsZ, argsC, true, ref acc, out oz, out nZ, out oc, out nC);
+                        else RunPair(0.0, 0.0, cSeedX, cSeedY, sx, sy, maxIter, bail, argsZ, argsC, false, ref acc, out oz, out nZ, out oc, out nC);
+                        WritePlanes(planes, rowBase + x, acc, quat: false);
+                    }
+                    else
+                    {
+                        oz = Run(0.0, 0.0, sx, sy, maxIter, bail, argsZ, out nZ);
+                        oc = cEqualsS
+                            ? Run(sx, sy, sx, sy, maxIter, bail, argsC, out nC)
+                            : Run(cSeedX, cSeedY, sx, sy, maxIter, bail, argsC, out nC);
+                    }
                     scalar = layers ? 0.0
                         : angles
                         ? AngleDeltaScalar(argsZ, nZ, argsC, nC, maxIter)
