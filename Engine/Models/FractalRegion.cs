@@ -646,6 +646,9 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public bool? DualOrbitTrapRotate { get; set; }
         [JsonIgnore(Condition = OmitNull)] public bool? DualOrbitTrapScaleByOrbit { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitTrapAngle { get; set; }
+        // #1123 — Relief split.
+        [JsonIgnore(Condition = OmitNull)] public bool? DualOrbitSplitHeight { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? DualOrbitHeightField { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitStripeDensity { get; set; }
         // #1118 — distance estimates / dual outline.
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitDEScale { get; set; }
@@ -1047,6 +1050,8 @@ namespace FracturingFog.Models
                     DualOrbitTrapRotate = p.DualOrbitTrapRotate ? (bool?)null : false,
                     DualOrbitTrapScaleByOrbit = p.DualOrbitTrapScaleByOrbit ? true : (bool?)null,
                     DualOrbitTrapAngle = p.DualOrbitTrapAngle != D.DualOrbitTrapAngle ? p.DualOrbitTrapAngle : (double?)null,
+                    DualOrbitSplitHeight = p.DualOrbitSplitHeight ? true : (bool?)null,
+                    DualOrbitHeightField = p.DualOrbitHeightField != D.DualOrbitHeightField ? (int)p.DualOrbitHeightField : (int?)null,
                     DualOrbitStripeDensity = p.DualOrbitStripeDensity != D.DualOrbitStripeDensity ? p.DualOrbitStripeDensity : (double?)null,
                     DualOrbitDEScale = p.DualOrbitDEScale != D.DualOrbitDEScale ? p.DualOrbitDEScale : (double?)null,
                     DualOrbitOutlineWidth = p.DualOrbitOutlineWidth != D.DualOrbitOutlineWidth ? p.DualOrbitOutlineWidth : (double?)null,
@@ -1564,6 +1569,8 @@ namespace FracturingFog.Models
             if (DualOrbitTrapRotate.HasValue) p.DualOrbitTrapRotate = DualOrbitTrapRotate.Value;
             if (DualOrbitTrapScaleByOrbit.HasValue) p.DualOrbitTrapScaleByOrbit = DualOrbitTrapScaleByOrbit.Value;
             if (DualOrbitTrapAngle.HasValue) p.DualOrbitTrapAngle = DualOrbitTrapAngle.Value;
+            if (DualOrbitSplitHeight.HasValue) p.DualOrbitSplitHeight = DualOrbitSplitHeight.Value;
+            if (this.DualOrbitHeightField.HasValue) p.DualOrbitHeightField = (FracturingFog.DualOrbitField)this.DualOrbitHeightField.Value;
             if (DualOrbitStripeDensity.HasValue) p.DualOrbitStripeDensity = DualOrbitStripeDensity.Value;
             if (DualOrbitDEScale.HasValue) p.DualOrbitDEScale = DualOrbitDEScale.Value;
             if (DualOrbitOutlineWidth.HasValue) p.DualOrbitOutlineWidth = DualOrbitOutlineWidth.Value;

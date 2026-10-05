@@ -2010,6 +2010,9 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public OrbitTrapShapeDef DualOrbitTrapShape { get => _p.DualOrbitTrapShape; set { if (value == _p.DualOrbitTrapShape) return; _p.DualOrbitTrapShape = value; this.RaisePropertyChanged(); Fire(); } }
     public System.Array DualOrbitTrapShapes => s_DualOrbitTrapShapes;   // cached: a new array per read resets the ComboBox selection on Refresh()
     private static readonly System.Array s_DualOrbitTrapShapes = System.Enum.GetValues(typeof(OrbitTrapShapeDef));
+    // #1123 — Relief split: height from its own field.
+    public bool DualOrbitSplitHeight { get => _p.DualOrbitSplitHeight; set { if (value == _p.DualOrbitSplitHeight) return; _p.DualOrbitSplitHeight = value; this.RaisePropertyChanged(); Fire(); } }
+    public DualOrbitField DualOrbitHeightField { get => _p.DualOrbitHeightField; set { if (value == _p.DualOrbitHeightField) return; _p.DualOrbitHeightField = value; this.RaisePropertyChanged(); Fire(); } }
     public DualOrbitTrapFrame DualOrbitTrapFrame { get => _p.DualOrbitTrapFrame; set { if (value == _p.DualOrbitTrapFrame) return; _p.DualOrbitTrapFrame = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(IsDualOrbitCoMovingTrap)); Fire(); } }
     public System.Array DualOrbitTrapFrames => s_DualOrbitTrapFrames;   // cached: a new array per read resets the ComboBox selection on Refresh()
     private static readonly System.Array s_DualOrbitTrapFrames = System.Enum.GetValues(typeof(DualOrbitTrapFrame));

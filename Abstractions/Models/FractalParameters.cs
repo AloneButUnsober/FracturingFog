@@ -1280,6 +1280,12 @@ namespace FracturingFog.Models
         public bool DualOrbitTrapScaleByOrbit { get; set; } = false;
         /// <summary>Trap angle in degrees, any frame (animatable) (#1119).</summary>
         public double DualOrbitTrapAngle { get; set; } = 0.0;
+        /// <summary>Relief split (#1123): publish the height (SmoothBuffer — Relief,
+        /// SSAO) from <see cref="DualOrbitHeightField"/> instead of the coloured
+        /// scalar. Off = height is the colour scalar (the original behaviour).</summary>
+        public bool DualOrbitSplitHeight { get; set; } = false;
+        /// <summary>Relief split: the field the height comes from (#1123).</summary>
+        public DualOrbitField DualOrbitHeightField { get; set; } = DualOrbitField.SecantLyapunov;
         /// <summary>Stripe density for StripeZ / StripeC / StripeInterference (#1117).</summary>
         public double DualOrbitStripeDensity { get; set; } = 5.0;
         /// <summary>DistanceZ / DistanceC: a distance of d pixels maps to d/(d + scale)
@@ -1970,6 +1976,8 @@ namespace FracturingFog.Models
                 DualOrbitTrapRotate = DualOrbitTrapRotate,
                 DualOrbitTrapScaleByOrbit = DualOrbitTrapScaleByOrbit,
                 DualOrbitTrapAngle = DualOrbitTrapAngle,
+                DualOrbitSplitHeight = DualOrbitSplitHeight,
+                DualOrbitHeightField = DualOrbitHeightField,
                 DualOrbitStripeDensity = DualOrbitStripeDensity,
                 DualOrbitDEScale = DualOrbitDEScale,
                 DualOrbitOutlineWidth = DualOrbitOutlineWidth,

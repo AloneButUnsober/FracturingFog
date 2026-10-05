@@ -61,8 +61,10 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
 
     // The derived escape-space scalar (scaled to [0, maxIter]) doubles as the
-    // Relief-3D height field.
-    public float[] SmoothBuffer { get; private set; } = Array.Empty<float>();
+    // Relief-3D height field — unless the height is split onto its own channel
+    // (#1123, DualOrbitSplitHeight; .Height.cs).
+    public float[] SmoothBuffer => _heightBuf ?? _scalar;
+    private float[] _scalar = Array.Empty<float>();
 
     public double CenterX { get; set; } = -0.5;
     public double CenterY { get; set; } = 0.0;
@@ -103,7 +105,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         Width = width;
         Height = height;
         ColorBuffer = new uint[width * height];
-        SmoothBuffer = new float[width * height];
+        _scalar = new float[width * height];
         _cacheKey = null;   // #981 — the orbit cache is per frame size
     }
 
@@ -292,10 +294,11 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
             if (ct.IsCancellationRequested) return;
             _cacheKey = key;
         }
-        Colorize(key, ct);
+        if (!_heightOnly) Colorize(key, ct);
         // #1117 — an orbit-aware theme's accumulator is not cached: re-iterate
         // on every Calculate (Recolor then falls back to Calculate too).
         if (_usedOrbitThemes) _cacheKey = null;
+        UpdateHeight(ct);   // #1123
     }
 
     /// <summary>#981 — rebuild ColorBuffer from the cached orbits with the current
@@ -304,7 +307,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
     public void Recolor()
     {
         var key = CurrentKey();
-        if (_cacheKey is GeometryKey k && k.Equals(key)) Colorize(key, CancellationToken.None);
+        if (_cacheKey is GeometryKey k && k.Equals(key)) { Colorize(key, CancellationToken.None); UpdateHeight(CancellationToken.None); }
         else Calculate();
     }
 
@@ -578,7 +581,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                 // layer mode (0 = bounded).
                 // Domain mode: the c-orbit's escape count (live wherever the
                 // domain colour is).
-                SmoothBuffer[idx] = layers ? (zEsc ? smZArr[idx] : 0f)
+                _scalar[idx] = layers ? (zEsc ? smZArr[idx] : 0f)
                     : domain ? (cEsc ? smCArr[idx] : 0f)
                     : deadable && !pairLive ? 0f : (float)scalar;
             }
@@ -692,11 +695,11 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                 else if (oobColor is uint oob && FieldOutOfBounds(field, zFirst, cFirst))
                     ColorBuffer[idx] = oob;
                 else if (categorical)
-                    ColorBuffer[idx] = CategoricalColor(field, SmoothBuffer[idx])!.Value;
+                    ColorBuffer[idx] = CategoricalColor(field, _scalar[idx])!.Value;
                 else if (fieldOrbit)
                     ColorBuffer[idx] = _ocol[idx];
                 else
-                    ColorBuffer[idx] = unchecked((uint)ColorMap.Map(SmoothBuffer[idx], 0f, maxIter));
+                    ColorBuffer[idx] = unchecked((uint)ColorMap.Map(_scalar[idx], 0f, maxIter));
             }
         });
     }

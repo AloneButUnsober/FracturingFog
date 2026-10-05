@@ -385,6 +385,39 @@ all 19 built-in shapes work as they are.
 *Headless `--batch`, default c-seed, Cividis. TrapC with the Cross trap, Fixed (S3) against
 CoMoving; the Star trap co-moving with rotate + scale; TrapDelta co-moving at α = 30°.*
 
+**S9 as shipped (#1123).** Relief split: `DualOrbitSplitHeight` + `DualOrbitHeightField` publish the
+height (`SmoothBuffer`, which Relief, SSAO and every other height consumer read) from a different
+field than the one the theme colours. For example, hills from the secant Lyapunov exponent painted
+by `ExternalAngleDelta`, or the per-orbit layer composite on a `GreenRatio` relief.
+- **How:** the colour scalar moved to a private buffer (`ColorScalarBuffer`). With split on, a
+  private height-only twin of the calculator (Field mode, the height field selected, no colour
+  pass) fills `SmoothBuffer`. Every colour mode works: Field, PerOrbitLayers, BoettcherDomain and
+  the bivariate modes.
+- **Caching:** the twin keeps its own #981 orbit cache. The colour orbits never re-iterate for a
+  height change, so both params are colour-only in the recolour guard, and `Recolor()` refreshes the
+  height from the twin's cache.
+- **Shared settings:** the height field shares the colour field's settings (trap shape, spans,
+  scales).
+- **Split off is byte-identical:** `SmoothBuffer` is the colour scalar. `--batch` Relief at app
+  defaults (emboss, raymarch, layers) is pixel-identical to the pre-change build.
+- **Observation:** a `SecantLyapunov` relief shows terrace lines. λ = (1/N)Σ ln|σ| is not smoothed
+  across the escape step, so it jumps where N changes. That's a property of the field (S2), not of
+  the split.
+- **Tests:**
+  - split height ≡ the `SmoothBuffer` of an independent render that colours that field, and
+    `ColorBuffer` ≡ the unsplit render (five mode / field combinations);
+  - a height change reuses the colour orbits and only moves the height; `Recolor` follows it;
+    switching split off restores the original;
+  - resize;
+  - through `PosterRenderer`: the relief field of (colour A, height B) ≡ the field of colour B; the
+    flat image is unchanged by the split, the emboss image is changed;
+  - CLI round trip.
+
+![Relief split](../Images/dualorbit-coloring/s9-relief-split.png)
+*Headless `--batch --relief --relief-height 3`, Cividis. Top: `ExternalAngleDelta` with its own
+height, then with `SecantLyapunov` height. Bottom: PerOrbitLayers with the z-layer height, then
+with `GreenRatio` height.*
+
 ---
 
 ## 4. Architecture (S1 #1115)

@@ -79,6 +79,8 @@ public sealed class DualOrbitRecolorTests
         nameof(FractalParameters.DualOrbitOutlineColorZ), nameof(FractalParameters.DualOrbitOutlineColorC),
         nameof(FractalParameters.DualOrbitPalette2D), nameof(FractalParameters.DualOrbitBivariateScale),   // #1122
         nameof(FractalParameters.DualOrbitPhaseK),
+        // #1123 — the split height has its own cache; the colour orbits never re-iterate.
+        nameof(FractalParameters.DualOrbitSplitHeight), nameof(FractalParameters.DualOrbitHeightField),
     };
 
     private static object? Mutate(object? v) => v switch
