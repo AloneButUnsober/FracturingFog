@@ -287,6 +287,37 @@ FF's "Orbit Trap - Point" theme sampling the c-orbit (`OrbitThemeC`).*
 *Headless `--batch`. DualOutline (M blue, M_c amber) at zoom 1 and ×6 near −0.75+0.15i;
 DistanceC (Cividis); BinaryXor (categorical).*
 
+**S8 as shipped (#1122).** Four `DualOrbitColorMode` values map the two escape counts *jointly*:
+- `Bivariate2D`: 2D palette at u = n_z/(n_z + k), v = n_c/(n_c + k).
+- `JointEqualised`: the copula transform. Each channel becomes its empirical mid-rank, so both
+  marginals are uniform.
+- `PerceptualSplit`: u → OkLab L, v → OkLab b, a = 0.
+- `PhaseModulated`: the theme at n_z + κ·n_c, with κ animatable.
+
+Details:
+- **Built-in 2D palettes:** `BlueAmberSquare` (bilinear in OkLab: near-black, blue #0072B2,
+  amber #E69F00, near-white) and `ThemeByLightness`.
+- **No extra iteration data:** the channels are the cached n_z / n_c, so the four modes share the
+  layer cache key. Switching between layers and the bivariate modes, and every knob, recolours
+  without iterating.
+- **Bounded orbits:** a bounded channel saturates, so only M_c is interior.
+- **Default count scale is 6:** at 20 the exterior read near-black in the smoke render.
+- **Not done:** the issue's "separation → chroma" third channel. With a = 0 and b already carrying
+  v, there's no free colour-blind-safe axis left for it.
+- **Tests** (all using test-side OkLab):
+  - Bivariate2D against the bilinear OkLab square at the test's own smooth counts;
+  - the ThemeByLightness formula;
+  - **KS < 0.02** on both equalised marginals;
+  - PerceptualSplit round trip: a ≈ 0, L and b within 0.02;
+  - κ = 0 ⇔ the EscapeTimeZ field, and the general κ formula;
+  - only M_c is interior;
+  - mode switching recolours from the cache;
+  - CLI round trip.
+
+![Bivariate modes](../Images/dualorbit-coloring/s8-bivariate.png)
+*Headless `--batch`, c = 0.5: Bivariate2D, JointEqualised, PerceptualSplit, PhaseModulated
+(κ = 1.5, Cividis).*
+
 ---
 
 ## 4. Architecture (S1 #1115)

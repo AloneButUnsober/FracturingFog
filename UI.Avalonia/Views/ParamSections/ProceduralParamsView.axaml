@@ -495,7 +495,7 @@
         <!-- Dual-Orbit Escape (#864 / #866) -->
         <Grid IsVisible="{Binding IsDualOrbitEscape}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Map:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding DualOrbitMaps}"
@@ -707,6 +707,27 @@
                      Text="{Binding DualOrbitOutlineColorCHex, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                      IsVisible="{Binding IsDualOrbitOutline}"
                      ToolTip.Tip="AARRGGBB hex — line on the c-orbit's boundary (the region where the c-orbit stays bounded)." />
+            <TextBlock Grid.Row="34" Grid.Column="0" Text="2D palette:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitPalette2DMode}" />
+            <ComboBox Grid.Row="34" Grid.Column="1"
+                      ItemsSource="{Binding DualOrbitPalettes2D}"
+                      SelectedItem="{Binding DualOrbitPalette2D, Mode=TwoWay}" Margin="0,2"
+                      IsVisible="{Binding IsDualOrbitPalette2DMode}"
+                      ToolTip.Tip="BlueAmberSquare = dark → blue along the z-orbit's escape count, dark → amber along the c-orbit's, white where both are high (colour-blind safe). ThemeByLightness = the active theme's colour from the z count, brightness from the c count." />
+            <TextBlock Grid.Row="35" Grid.Column="0" Text="Count scale:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitBivariateScaled}" />
+            <NumericUpDown Grid.Row="35" Grid.Column="1"
+                           Minimum="0.01" Maximum="10000" Increment="1" FormatString="F2"
+                           Value="{Binding DualOrbitBivariateScale, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsDualOrbitBivariateScaled}"
+                           ToolTip.Tip="Escape count at which a channel is half-way: n maps to n / (n + scale). (JointEqualised uses ranks instead.)" />
+            <TextBlock Grid.Row="36" Grid.Column="0" Text="Phase κ:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitPhaseMod}" />
+            <NumericUpDown Grid.Row="36" Grid.Column="1"
+                           Minimum="-100" Maximum="100" Increment="0.05" FormatString="F2"
+                           Value="{Binding DualOrbitPhaseK, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsDualOrbitPhaseMod}"
+                           ToolTip.Tip="PhaseModulated: colour = theme at (z escape count + κ × c escape count). Animatable — sweeping κ slides the c-orbit's pattern through the z palette." />
             <TextBlock Grid.Row="24" Grid.Column="0" Grid.ColumnSpan="2"
                        Text="Böttcher domain colouring: inside the Mandelbrot set (critical orbit bounded) it shows the c-orbit's own angle and potential. ComplexPlane map only."
                        IsVisible="{Binding IsDualOrbitDomain}"

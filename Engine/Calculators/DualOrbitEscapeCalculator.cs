@@ -254,7 +254,9 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
     private GeometryKey CurrentKey()
     {
         var fp = FractalParameters;
-        bool layers = fp.DualOrbitColorMode == DualOrbitColorMode.PerOrbitLayers;
+        // Bivariate modes (#1122) read exactly what layer mode caches (n_z, n_c,
+        // flags), so they share its key: switching between them recolours.
+        bool layers = fp.DualOrbitColorMode == DualOrbitColorMode.PerOrbitLayers || IsBivariateMode(fp.DualOrbitColorMode);
         bool domain = fp.DualOrbitColorMode == DualOrbitColorMode.BoettcherDomain;
         var pair = PairChannels | ChannelsFor(fp.DualOrbitField, layers || domain);
         return new GeometryKey(
@@ -346,7 +348,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         IOrbitAwareColorMap? trapSampler = orbitScalar && IsTrapField(field) ? TrapSampler(key.TrapShape) : null;
         bool stats = orbitScalar && (IsStripeField(field) || IsTiaField(field));
         IOrbitAwareColorMap? layerThemeZ = null, layerThemeC = null;
-        if (layers && !quat)
+        if (layers && !quat && FractalParameters.DualOrbitColorMode == DualOrbitColorMode.PerOrbitLayers)
         {
             var ignored = new List<string>();
             layerThemeZ = ResolveLayerTheme(LayerThemeZ, FractalParameters.DualOrbitThemeZ, ignored) as IOrbitAwareColorMap;
@@ -575,7 +577,8 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         int maxIter = key.MaxIter;
         ColorMap.MaxIterations = maxIter;
         var field = key.Field;
-        bool layers = key.Layers;
+        // Layer styles only in true PerOrbitLayers (bivariate modes share the key).
+        bool layers = key.Layers && FractalParameters.DualOrbitColorMode == DualOrbitColorMode.PerOrbitLayers;
 
         // #978 — theme interior colour × global interior alpha (the #96/#97 knob,
         // same scaling as InteriorAlphaStamp), and the #615 out-of-bounds surround.
@@ -623,6 +626,11 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         if (key.Domain)
         {
             ColorizeDomain(key, interiorColor, oobColor, ct);
+            return;
+        }
+        if (key.Layers && IsBivariateMode(FractalParameters.DualOrbitColorMode))   // #1122
+        {
+            ColorizeBivariate(FractalParameters.DualOrbitColorMode, maxIter, interiorColor, oobColor);
             return;
         }
 

@@ -642,6 +642,10 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitOutlineWidth { get; set; }
         [JsonIgnore(Condition = OmitNull)] public uint? DualOrbitOutlineColorZ { get; set; }
         [JsonIgnore(Condition = OmitNull)] public uint? DualOrbitOutlineColorC { get; set; }
+        // #1122 — bivariate modes.
+        [JsonIgnore(Condition = OmitNull)] public int? DualOrbitPalette2D { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DualOrbitBivariateScale { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DualOrbitPhaseK { get; set; }
         // #971 — slice axes + fixed s when s is not an image axis.
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitSliceAxes { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitSX { get; set; }
@@ -1034,6 +1038,9 @@ namespace FracturingFog.Models
                     DualOrbitOutlineWidth = p.DualOrbitOutlineWidth != D.DualOrbitOutlineWidth ? p.DualOrbitOutlineWidth : (double?)null,
                     DualOrbitOutlineColorZ = p.DualOrbitOutlineColorZ != D.DualOrbitOutlineColorZ ? p.DualOrbitOutlineColorZ : (uint?)null,
                     DualOrbitOutlineColorC = p.DualOrbitOutlineColorC != D.DualOrbitOutlineColorC ? p.DualOrbitOutlineColorC : (uint?)null,
+                    DualOrbitPalette2D = p.DualOrbitPalette2D != D.DualOrbitPalette2D ? (int)p.DualOrbitPalette2D : (int?)null,
+                    DualOrbitBivariateScale = p.DualOrbitBivariateScale != D.DualOrbitBivariateScale ? p.DualOrbitBivariateScale : (double?)null,
+                    DualOrbitPhaseK = p.DualOrbitPhaseK != D.DualOrbitPhaseK ? p.DualOrbitPhaseK : (double?)null,
                     DualOrbitSliceAxes = p.DualOrbitSliceAxes != FracturingFog.DualOrbitSliceAxes.SxSy ? (int)p.DualOrbitSliceAxes : (int?)null,
                     DualOrbitSX = p.DualOrbitSX != -0.78 ? p.DualOrbitSX : (double?)null,
                     DualOrbitSY = p.DualOrbitSY != 0.15 ? p.DualOrbitSY : (double?)null,
@@ -1534,6 +1541,9 @@ namespace FracturingFog.Models
             if (DualOrbitOutlineWidth.HasValue) p.DualOrbitOutlineWidth = DualOrbitOutlineWidth.Value;
             if (DualOrbitOutlineColorZ.HasValue) p.DualOrbitOutlineColorZ = DualOrbitOutlineColorZ.Value;
             if (DualOrbitOutlineColorC.HasValue) p.DualOrbitOutlineColorC = DualOrbitOutlineColorC.Value;
+            if (this.DualOrbitPalette2D.HasValue) p.DualOrbitPalette2D = (FracturingFog.DualOrbitPalette2D)this.DualOrbitPalette2D.Value;
+            if (DualOrbitBivariateScale.HasValue) p.DualOrbitBivariateScale = DualOrbitBivariateScale.Value;
+            if (DualOrbitPhaseK.HasValue) p.DualOrbitPhaseK = DualOrbitPhaseK.Value;
             if (this.DualOrbitSliceAxes.HasValue) p.DualOrbitSliceAxes = (FracturingFog.DualOrbitSliceAxes)this.DualOrbitSliceAxes.Value;
             if (DualOrbitSX.HasValue) p.DualOrbitSX = DualOrbitSX.Value;
             if (DualOrbitSY.HasValue) p.DualOrbitSY = DualOrbitSY.Value;

@@ -1978,6 +1978,18 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     /// <summary>#1117 — stripe-density row (StripeZ / StripeC / StripeInterference).</summary>
     public bool IsDualOrbitStripeField => IsDualOrbitFieldMode
         && _dualField is DualOrbitField.StripeZ or DualOrbitField.StripeC or DualOrbitField.StripeInterference;
+    /// <summary>#1122 — bivariate rows.</summary>
+    public bool IsDualOrbitPalette2DMode => IsDualOrbitEscape
+        && _dualColorMode is DualOrbitColorMode.Bivariate2D or DualOrbitColorMode.JointEqualised;
+    public bool IsDualOrbitBivariateScaled => IsDualOrbitEscape
+        && _dualColorMode is DualOrbitColorMode.Bivariate2D or DualOrbitColorMode.PerceptualSplit;
+    public bool IsDualOrbitPhaseMod => IsDualOrbitEscape && _dualColorMode == DualOrbitColorMode.PhaseModulated;
+    public DualOrbitPalette2D DualOrbitPalette2D { get => _p.DualOrbitPalette2D; set { if (value == _p.DualOrbitPalette2D) return; _p.DualOrbitPalette2D = value; this.RaisePropertyChanged(); Fire(); } }
+    public System.Array DualOrbitPalettes2D => s_DualOrbitPalettes2D;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_DualOrbitPalettes2D = System.Enum.GetValues(typeof(DualOrbitPalette2D));
+    public double DualOrbitBivariateScale { get => _p.DualOrbitBivariateScale; set { var v = Clamp(value, 0.01, 10_000); if (v == _p.DualOrbitBivariateScale) return; _p.DualOrbitBivariateScale = v; this.RaisePropertyChanged(); Fire(); } }
+    public double DualOrbitPhaseK { get => _p.DualOrbitPhaseK; set { var v = Clamp(value, -100, 100); if (v == _p.DualOrbitPhaseK) return; _p.DualOrbitPhaseK = v; this.RaisePropertyChanged(); Fire(); } }
+
     /// <summary>#1118 — DE scale row (DistanceZ / DistanceC).</summary>
     public bool IsDualOrbitDistanceField => IsDualOrbitFieldMode
         && _dualField is DualOrbitField.DistanceZ or DualOrbitField.DistanceC;
@@ -2052,6 +2064,9 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsDualOrbitStripeField));
             this.RaisePropertyChanged(nameof(IsDualOrbitDistanceField));
             this.RaisePropertyChanged(nameof(IsDualOrbitOutline));
+            this.RaisePropertyChanged(nameof(IsDualOrbitPalette2DMode));
+            this.RaisePropertyChanged(nameof(IsDualOrbitBivariateScaled));
+            this.RaisePropertyChanged(nameof(IsDualOrbitPhaseMod));
             RaiseDualThemeWarning();
             Fire();
         }
