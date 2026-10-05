@@ -652,6 +652,11 @@ namespace FracturingFog.Models
         // #1126 — path interference.
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitInterferenceK { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitInterferenceGamma { get; set; }
+        // #1127 — ensemble fields.
+        [JsonIgnore(Condition = OmitNull)] public int? DualOrbitEnsembleN { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DualOrbitEnsembleRadius { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? DualOrbitEnsembleSectors { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? DualOrbitUncertaintyLevels { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitStripeDensity { get; set; }
         // #1118 — distance estimates / dual outline.
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitDEScale { get; set; }
@@ -1057,6 +1062,10 @@ namespace FracturingFog.Models
                     DualOrbitHeightField = p.DualOrbitHeightField != D.DualOrbitHeightField ? (int)p.DualOrbitHeightField : (int?)null,
                     DualOrbitInterferenceK = p.DualOrbitInterferenceK != D.DualOrbitInterferenceK ? p.DualOrbitInterferenceK : (double?)null,
                     DualOrbitInterferenceGamma = p.DualOrbitInterferenceGamma != D.DualOrbitInterferenceGamma ? p.DualOrbitInterferenceGamma : (double?)null,
+                    DualOrbitEnsembleN = p.DualOrbitEnsembleN != D.DualOrbitEnsembleN ? p.DualOrbitEnsembleN : (int?)null,
+                    DualOrbitEnsembleRadius = p.DualOrbitEnsembleRadius != D.DualOrbitEnsembleRadius ? p.DualOrbitEnsembleRadius : (double?)null,
+                    DualOrbitEnsembleSectors = p.DualOrbitEnsembleSectors != D.DualOrbitEnsembleSectors ? p.DualOrbitEnsembleSectors : (int?)null,
+                    DualOrbitUncertaintyLevels = p.DualOrbitUncertaintyLevels != D.DualOrbitUncertaintyLevels ? p.DualOrbitUncertaintyLevels : (int?)null,
                     DualOrbitStripeDensity = p.DualOrbitStripeDensity != D.DualOrbitStripeDensity ? p.DualOrbitStripeDensity : (double?)null,
                     DualOrbitDEScale = p.DualOrbitDEScale != D.DualOrbitDEScale ? p.DualOrbitDEScale : (double?)null,
                     DualOrbitOutlineWidth = p.DualOrbitOutlineWidth != D.DualOrbitOutlineWidth ? p.DualOrbitOutlineWidth : (double?)null,
@@ -1578,6 +1587,10 @@ namespace FracturingFog.Models
             if (this.DualOrbitHeightField.HasValue) p.DualOrbitHeightField = (FracturingFog.DualOrbitField)this.DualOrbitHeightField.Value;
             if (DualOrbitInterferenceK.HasValue) p.DualOrbitInterferenceK = DualOrbitInterferenceK.Value;
             if (DualOrbitInterferenceGamma.HasValue) p.DualOrbitInterferenceGamma = DualOrbitInterferenceGamma.Value;
+            if (DualOrbitEnsembleN.HasValue) p.DualOrbitEnsembleN = DualOrbitEnsembleN.Value;
+            if (DualOrbitEnsembleRadius.HasValue) p.DualOrbitEnsembleRadius = DualOrbitEnsembleRadius.Value;
+            if (DualOrbitEnsembleSectors.HasValue) p.DualOrbitEnsembleSectors = DualOrbitEnsembleSectors.Value;
+            if (DualOrbitUncertaintyLevels.HasValue) p.DualOrbitUncertaintyLevels = DualOrbitUncertaintyLevels.Value;
             if (DualOrbitStripeDensity.HasValue) p.DualOrbitStripeDensity = DualOrbitStripeDensity.Value;
             if (DualOrbitDEScale.HasValue) p.DualOrbitDEScale = DualOrbitDEScale.Value;
             if (DualOrbitOutlineWidth.HasValue) p.DualOrbitOutlineWidth = DualOrbitOutlineWidth.Value;

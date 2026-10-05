@@ -1965,6 +1965,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsDualOrbitDivergenceField));
             this.RaisePropertyChanged(nameof(IsDualOrbitCategoricalField));
             this.RaisePropertyChanged(nameof(IsDualOrbitTrapField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitEnsembleField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitUncertaintyField));
             this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceField));
             this.RaisePropertyChanged(nameof(IsDualOrbitCoMovingTrap));
             this.RaisePropertyChanged(nameof(IsDualOrbitStripeField));
@@ -2016,6 +2018,14 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         && _dualField is DualOrbitField.PathInterference or DualOrbitField.PathInterferencePhase;
     public double DualOrbitInterferenceK { get => _p.DualOrbitInterferenceK; set { var v = Clamp(value, -1000, 1000); if (v == _p.DualOrbitInterferenceK) return; _p.DualOrbitInterferenceK = v; this.RaisePropertyChanged(); Fire(); } }
     public double DualOrbitInterferenceGamma { get => _p.DualOrbitInterferenceGamma; set { var v = Clamp(value, 0, 100); if (v == _p.DualOrbitInterferenceGamma) return; _p.DualOrbitInterferenceGamma = v; this.RaisePropertyChanged(); Fire(); } }
+    /// <summary>#1127 — ensemble rows (BasinEntropy / UncertaintyExponent).</summary>
+    public bool IsDualOrbitEnsembleField => IsDualOrbitFieldMode
+        && _dualField is DualOrbitField.BasinEntropy or DualOrbitField.UncertaintyExponent;
+    public bool IsDualOrbitUncertaintyField => IsDualOrbitFieldMode && _dualField == DualOrbitField.UncertaintyExponent;
+    public int DualOrbitEnsembleN { get => _p.DualOrbitEnsembleN; set { var v = (int)Clamp(value, 1, 4096); if (v == _p.DualOrbitEnsembleN) return; _p.DualOrbitEnsembleN = v; this.RaisePropertyChanged(); Fire(); } }
+    public double DualOrbitEnsembleRadius { get => _p.DualOrbitEnsembleRadius; set { var v = Clamp(value, 1e-9, 4); if (v == _p.DualOrbitEnsembleRadius) return; _p.DualOrbitEnsembleRadius = v; this.RaisePropertyChanged(); Fire(); } }
+    public int DualOrbitEnsembleSectors { get => _p.DualOrbitEnsembleSectors; set { var v = (int)Clamp(value, 0, 64); if (v == _p.DualOrbitEnsembleSectors) return; _p.DualOrbitEnsembleSectors = v; this.RaisePropertyChanged(); Fire(); } }
+    public int DualOrbitUncertaintyLevels { get => _p.DualOrbitUncertaintyLevels; set { var v = (int)Clamp(value, 2, 12); if (v == _p.DualOrbitUncertaintyLevels) return; _p.DualOrbitUncertaintyLevels = v; this.RaisePropertyChanged(); Fire(); } }
     // #1123 — Relief split: height from its own field.
     public bool DualOrbitSplitHeight { get => _p.DualOrbitSplitHeight; set { if (value == _p.DualOrbitSplitHeight) return; _p.DualOrbitSplitHeight = value; this.RaisePropertyChanged(); Fire(); } }
     public DualOrbitField DualOrbitHeightField { get => _p.DualOrbitHeightField; set { if (value == _p.DualOrbitHeightField) return; _p.DualOrbitHeightField = value; this.RaisePropertyChanged(); Fire(); } }
@@ -2086,6 +2096,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsDualOrbitDomain));
             this.RaisePropertyChanged(nameof(IsDualOrbitCategoricalField));
             this.RaisePropertyChanged(nameof(IsDualOrbitTrapField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitEnsembleField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitUncertaintyField));
             this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceField));
             this.RaisePropertyChanged(nameof(IsDualOrbitCoMovingTrap));
             this.RaisePropertyChanged(nameof(IsDualOrbitStripeField));

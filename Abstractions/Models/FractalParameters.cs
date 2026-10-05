@@ -1292,6 +1292,16 @@ namespace FracturingFog.Models
         /// fringes, the default; 1 = Φ as written, which brings in the S6 angle branch
         /// cuts as seams; colour-only) (#1126).</summary>
         public double DualOrbitInterferenceGamma { get; set; } = 0.0;
+        /// <summary>Ensemble fields: number of c-seeds per pixel (#1127). Cost ×N.</summary>
+        public int DualOrbitEnsembleN { get; set; } = 32;
+        /// <summary>Ensemble fields: radius ρ of the seed disc round c (#1127).</summary>
+        public double DualOrbitEnsembleRadius { get; set; } = 0.02;
+        /// <summary>Ensemble outcome classes: 0 = bounded / escaped; K ≥ 1 = bounded +
+        /// K external-angle sectors (#1127).</summary>
+        public int DualOrbitEnsembleSectors { get; set; } = 0;
+        /// <summary>UncertaintyExponent: number of ε levels ε_k = ρ·2^−(k+1) (#1127).
+        /// Cost ×(1 + levels).</summary>
+        public int DualOrbitUncertaintyLevels { get; set; } = 4;
         /// <summary>Stripe density for StripeZ / StripeC / StripeInterference (#1117).</summary>
         public double DualOrbitStripeDensity { get; set; } = 5.0;
         /// <summary>DistanceZ / DistanceC: a distance of d pixels maps to d/(d + scale)
@@ -1986,6 +1996,10 @@ namespace FracturingFog.Models
                 DualOrbitHeightField = DualOrbitHeightField,
                 DualOrbitInterferenceK = DualOrbitInterferenceK,
                 DualOrbitInterferenceGamma = DualOrbitInterferenceGamma,
+                DualOrbitEnsembleN = DualOrbitEnsembleN,
+                DualOrbitEnsembleRadius = DualOrbitEnsembleRadius,
+                DualOrbitEnsembleSectors = DualOrbitEnsembleSectors,
+                DualOrbitUncertaintyLevels = DualOrbitUncertaintyLevels,
                 DualOrbitStripeDensity = DualOrbitStripeDensity,
                 DualOrbitDEScale = DualOrbitDEScale,
                 DualOrbitOutlineWidth = DualOrbitOutlineWidth,

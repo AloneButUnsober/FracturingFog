@@ -509,7 +509,7 @@
         <!-- Dual-Orbit Escape (#864 / #866) -->
         <Grid IsVisible="{Binding IsDualOrbitEscape}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Map:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding DualOrbitMaps}"
@@ -791,6 +791,34 @@
                            Value="{Binding DualOrbitInterferenceGamma, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsDualOrbitInterferenceField}"
                            ToolTip.Tip="How strongly a difference in the two orbits' external angles washes the fringes out. 0 = full fringes everywhere (default); 1 = the complex phase as defined — fringes strongest where the angles agree, and the angle's branch cuts show as straight seams." />
+            <TextBlock Grid.Row="45" Grid.Column="0" Text="Ensemble seeds (N):" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitEnsembleField}" />
+            <NumericUpDown Grid.Row="45" Grid.Column="1"
+                           Minimum="1" Maximum="4096" Increment="8" FormatString="F0"
+                           Value="{Binding DualOrbitEnsembleN, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsDualOrbitEnsembleField}"
+                           ToolTip.Tip="How many c-orbit seeds are spread over a small disc round c for every pixel. Render time grows with N — keep it low while exploring, raise it for export." />
+            <TextBlock Grid.Row="46" Grid.Column="0" Text="Seed disc radius:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitEnsembleField}" />
+            <NumericUpDown Grid.Row="46" Grid.Column="1"
+                           Minimum="0.000000001" Maximum="4" Increment="0.005" FormatString="G4"
+                           Value="{Binding DualOrbitEnsembleRadius, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsDualOrbitEnsembleField}"
+                           ToolTip.Tip="Radius of the seed disc round c, in c units (not pixels). Shrink it when you zoom in, or the boundary band gets wide." />
+            <TextBlock Grid.Row="47" Grid.Column="0" Text="Angle sectors:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitEnsembleField}" />
+            <NumericUpDown Grid.Row="47" Grid.Column="1"
+                           Minimum="0" Maximum="64" Increment="1" FormatString="F0"
+                           Value="{Binding DualOrbitEnsembleSectors, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsDualOrbitEnsembleField}"
+                           ToolTip.Tip="Outcome classes. 0 = bounded or escaped. K = bounded, or escaped through one of K equal external-angle sectors (more classes; ray boundaries appear)." />
+            <TextBlock Grid.Row="48" Grid.Column="0" Text="Uncertainty levels:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitUncertaintyField}" />
+            <NumericUpDown Grid.Row="48" Grid.Column="1"
+                           Minimum="2" Maximum="12" Increment="1" FormatString="F0"
+                           Value="{Binding DualOrbitUncertaintyLevels, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsDualOrbitUncertaintyField}"
+                           ToolTip.Tip="How many pair distances (each half the last) the exponent is fitted over. Each level costs another N orbits per pixel." />
             <TextBlock Grid.Row="24" Grid.Column="0" Grid.ColumnSpan="2"
                        Text="Böttcher domain colouring: inside the Mandelbrot set (critical orbit bounded) it shows the c-orbit's own angle and potential. ComplexPlane map only."
                        IsVisible="{Binding IsDualOrbitDomain}"
