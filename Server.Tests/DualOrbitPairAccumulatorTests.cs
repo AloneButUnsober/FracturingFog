@@ -30,7 +30,7 @@ public sealed class DualOrbitPairAccumulatorTests
     // One sample at (s, c): a 2×2 SxSy frame whose pixel (1, 1) sits exactly on
     // the frame centre.
     private static DualOrbitEscapeCalculator Point(Complex s, Complex c, int maxIter,
-        DualOrbitPairChannels ch = DualOrbitPairChannels.All, double eps = 1e-3)
+        DualOrbitPairChannels ch = DualOrbitPairChannels.All, double ratio = 4.0)
     {
         var p = new FractalParameters
         {
@@ -39,7 +39,7 @@ public sealed class DualOrbitPairAccumulatorTests
         var calc = new DualOrbitEscapeCalculator(2, 2)
         {
             CenterX = s.Real, CenterY = s.Imaginary, Zoom = 1e9, MaxIterations = maxIter,
-            FractalParameters = p, ColorMap = new RampMap(), PairChannels = ch, PairDivergenceEpsilon = eps,
+            FractalParameters = p, ColorMap = new RampMap(), PairChannels = ch, PairDivergenceRatio = ratio,
         };
         calc.Calculate();
         return calc;
@@ -62,6 +62,10 @@ public sealed class DualOrbitPairAccumulatorTests
         zs[n] = z; cs[n] = c;
         return (zs, cs, n);
     }
+
+    // The documented separation: |c − z| floored at 1e-14·|(z, c)| (round-off).
+    private static double Sep(Complex z, Complex c)
+        => Math.Max((c - z).Magnitude, 1e-14 * Math.Sqrt(z.Magnitude * z.Magnitude + c.Magnitude * c.Magnitude));
 
     private static Complex Rand(Random r, double x0, double x1, double y0, double y1)
         => new(x0 + r.NextDouble() * (x1 - x0), y0 + r.NextDouble() * (y1 - y0));
@@ -149,20 +153,21 @@ public sealed class DualOrbitPairAccumulatorTests
     public void SeparationMidpointAndItinerary_MatchDirectIteration()
     {
         var r = new Random(7);
-        const double eps = 0.05;
+        const double ratio = 3.0;   // #1116: divergence = first |D_n| > ρ·|D_0|
         for (int t = 0; t < 150; t++)
         {
             var s = Rand(r, -2.2, 0.8, -1.3, 1.3);
             var c = Rand(r, -1.5, 1.5, -1.5, 1.5);
             const int maxIter = 150;
             var (zs, cs, n) = Reference(s, c, maxIter);
-            var pl = Point(s, c, maxIter, eps: eps).PairPlanes!;
+            var pl = Point(s, c, maxIter, ratio: ratio).PairPlanes!;
+            double eps = n > 0 ? ratio * (cs[0] - zs[0]).Magnitude : double.PositiveInfinity;
 
             double min = double.PositiveInfinity; int minIdx = -1, div = -1, agree = 0; bool broken = false;
             for (int k = 0; k < n; k++)
             {
-                double dk = (cs[k] - zs[k]).Magnitude;
-                if (dk < min) { min = dk; minIdx = k; }
+                double dk = Sep(zs[k], cs[k]);
+                if (dk < min * (1 - 1e-9)) { min = dk; minIdx = k; }
                 if (div < 0 && dk > eps) div = k;
                 if (k >= 1 && !broken)
                 {
@@ -174,7 +179,9 @@ public sealed class DualOrbitPairAccumulatorTests
                 Assert.Equal(minIdx, pl.MinSeparationIndex[Px]);
                 Assert.True(Math.Abs(Math.Log(Math.Max(min, 1e-300)) - pl.MinSeparationLog[Px]) < 1e-4, "min |D|");
             }
-            Assert.Equal(div, pl.DivergenceIndex[Px]);
+            // Continuous divergence time: crossing step n ⇒ n − 1 < T ≤ n.
+            if (div < 0) Assert.Equal(-1f, pl.DivergenceTime[Px]);
+            else Assert.Equal(div, (int)Math.Ceiling(pl.DivergenceTime[Px] - 1e-6));
             Assert.Equal(agree, pl.ItineraryAgreement[Px]);
 
             var m = (zs[n] + cs[n]) / 2; var e = (zs[n] - cs[n]) / 2;
@@ -184,14 +191,14 @@ public sealed class DualOrbitPairAccumulatorTests
     }
 
     [Fact]
-    public void DivergenceIndex_IsMonotoneInEpsilon()
+    public void DivergenceTime_IsMonotoneInRatio()
     {
         var s = new Complex(-0.75, 0.12); var c = new Complex(0.3, 0.05);
         double prev = -1;
-        foreach (double eps in new[] { 1e-6, 1e-3, 0.1, 0.5 })
+        foreach (double ratio in new[] { 1.5, 3.0, 10.0, 100.0 })
         {
-            double v = Point(s, c, 300, eps: eps).PairPlanes!.DivergenceIndex[Px];
-            if (v >= 0) Assert.True(v >= prev, $"eps {eps}: {v} < {prev}");
+            double v = Point(s, c, 300, ratio: ratio).PairPlanes!.DivergenceTime[Px];
+            if (v >= 0) Assert.True(v >= prev, $"ratio {ratio}: {v} < {prev}");
             prev = Math.Max(prev, v);
         }
     }
@@ -272,12 +279,9 @@ public sealed class DualOrbitPairAccumulatorTests
         calc.Calculate();
         Assert.False(calc.LastCalculateReusedOrbits);
         Assert.NotEmpty(calc.PairPlanes!.MinSeparationLog);
-        calc.PairDivergenceEpsilon = 0.5;   // Separation requested ⇒ ε is geometry
+        calc.PairDivergenceRatio = 6.0;   // ρ is geometry (always keyed, #1116)
         calc.Calculate();
         Assert.False(calc.LastCalculateReusedOrbits);
-        calc.PairChannels = DualOrbitPairChannels.Winding;
-        calc.Calculate();
-        calc.PairDivergenceEpsilon = 0.25;  // not requested ⇒ ε is inert
         calc.Calculate();
         Assert.True(calc.LastCalculateReusedOrbits);
         calc.PairChannels = DualOrbitPairChannels.None;
@@ -293,7 +297,7 @@ public sealed class DualOrbitPairAccumulatorTests
         Assert.Empty(pl.SecantLogSum);
         Assert.Empty(pl.LogDzDs);
         Assert.True(DualOrbitPairPlanes.BytesPerPixel(DualOrbitPairChannels.All & ~DualOrbitPairChannels.Derivatives) <= 40);
-        Assert.Equal(64, DualOrbitPairPlanes.BytesPerPixel(DualOrbitPairChannels.All));
+        Assert.Equal(68, DualOrbitPairPlanes.BytesPerPixel(DualOrbitPairChannels.All));
     }
 
     // Quaternion: the product identity fails (non-commutative), so the secant

@@ -46,8 +46,8 @@ public enum DualOrbitPairChannels
     SecantLogSum = 1 << 0,
     /// <summary>Σ arg(z_k + c_k) / 2π — unwrapped winding of D (complex map only).</summary>
     Winding = 1 << 1,
-    /// <summary>min_n |D_n| (natural log) and its step index; first step with
-    /// |D_n| &gt; ε (−1 if never).</summary>
+    /// <summary>min_n |D_n| (natural log) and its step index; continuous
+    /// divergence time — when |D_n| first exceeds ρ·|D_0| (−1 if never).</summary>
     Separation = 1 << 2,
     /// <summary>|e|² / |m|² at step N, m = (z+c)/2, e = (z−c)/2 (split-complex
     /// coordinates).</summary>
@@ -78,7 +78,12 @@ public sealed class DualOrbitPairPlanes
     // Separation
     public float[] MinSeparationLog { get; } = Array.Empty<float>();
     public float[] MinSeparationIndex { get; } = Array.Empty<float>();
-    public float[] DivergenceIndex { get; } = Array.Empty<float>();
+    /// <summary>Continuous divergence time T (n−1 &lt; T ≤ n at the crossing step n,
+    /// log-interpolated); −1 if |D| never exceeded ρ·|D_0| in the window.</summary>
+    public float[] DivergenceTime { get; } = Array.Empty<float>();
+    /// <summary>|D_0| = |c-seed| (Separation channel) — the normaliser for
+    /// closest-approach depth.</summary>
+    public float[] InitialSeparationLog { get; } = Array.Empty<float>();
     // MidpointPerturbation
     public float[] MidpointPerturbation { get; } = Array.Empty<float>();
     // Itinerary
@@ -102,7 +107,8 @@ public sealed class DualOrbitPairPlanes
         SecantLogSum = A(sec, length); PairSteps = A(sec, length);
         WindingTurns = A(channels.HasFlag(DualOrbitPairChannels.Winding), length);
         bool sep = channels.HasFlag(DualOrbitPairChannels.Separation);
-        MinSeparationLog = A(sep, length); MinSeparationIndex = A(sep, length); DivergenceIndex = A(sep, length);
+        MinSeparationLog = A(sep, length); MinSeparationIndex = A(sep, length); DivergenceTime = A(sep, length);
+        InitialSeparationLog = A(sep, length);
         MidpointPerturbation = A(channels.HasFlag(DualOrbitPairChannels.MidpointPerturbation), length);
         ItineraryAgreement = A(channels.HasFlag(DualOrbitPairChannels.Itinerary), length);
         bool der = channels.HasFlag(DualOrbitPairChannels.Derivatives);
@@ -118,7 +124,7 @@ public sealed class DualOrbitPairPlanes
         int floats = 0;
         if (ch.HasFlag(DualOrbitPairChannels.SecantLogSum)) floats += 2;
         if (ch.HasFlag(DualOrbitPairChannels.Winding)) floats += 1;
-        if (ch.HasFlag(DualOrbitPairChannels.Separation)) floats += 3;
+        if (ch.HasFlag(DualOrbitPairChannels.Separation)) floats += 4;
         if (ch.HasFlag(DualOrbitPairChannels.MidpointPerturbation)) floats += 1;
         if (ch.HasFlag(DualOrbitPairChannels.Itinerary)) floats += 1;
         if (ch.HasFlag(DualOrbitPairChannels.Derivatives)) floats += 8;
@@ -134,25 +140,54 @@ public sealed partial class DualOrbitEscapeCalculator
     /// key).</summary>
     public DualOrbitPairChannels PairChannels { get; set; }
 
-    /// <summary>#1115 — ε for <see cref="DualOrbitPairPlanes.DivergenceIndex"/>
-    /// (first step with |D_n| &gt; ε). Part of the geometry key.</summary>
-    public double PairDivergenceEpsilon { get; set; } = 1e-3;
+    /// <summary>#1116 — override for the divergence amplification ratio ρ
+    /// (<see cref="DualOrbitPairPlanes.DivergenceTime"/>: first time |D_n| &gt;
+    /// ρ·|D_0|). Null = <c>FractalParameters.DualOrbitDivergenceRatio</c>. Part
+    /// of the geometry key.</summary>
+    public double? PairDivergenceRatio { get; set; }
 
     /// <summary>Planes from the last iteration that gathered pair channels; null
     /// when none were requested.</summary>
     public DualOrbitPairPlanes? PairPlanes { get; private set; }
 
-    /// <summary>Channels a field / colour mode needs. No shipped field needs any
-    /// (S1 is infrastructure); S2+ map their new fields here.</summary>
-    internal static DualOrbitPairChannels ChannelsFor(DualOrbitField field, bool layers) => DualOrbitPairChannels.None;
+    /// <summary>Channels a field / colour mode needs (#1116). Layer mode reads no
+    /// field, so it needs none.</summary>
+    internal static DualOrbitPairChannels ChannelsFor(DualOrbitField field, bool layers) => layers
+        ? DualOrbitPairChannels.None
+        : field switch
+        {
+            DualOrbitField.SecantLyapunov => DualOrbitPairChannels.SecantLogSum,
+            DualOrbitField.DivergenceTime or DualOrbitField.ClosestApproach
+                or DualOrbitField.ClosestApproachIndex => DualOrbitPairChannels.Separation,
+            DualOrbitField.PairWinding => DualOrbitPairChannels.Winding,
+            DualOrbitField.MidpointPerturbation => DualOrbitPairChannels.MidpointPerturbation,
+            DualOrbitField.ItineraryAgreement => DualOrbitPairChannels.Itinerary,
+            _ => DualOrbitPairChannels.None,
+        };
+
+    /// <summary>True for the pair-native fields (#1116): their scalar comes from
+    /// the pair accumulator, and their liveness from it (not the escape flags).</summary>
+    internal static bool IsPairField(DualOrbitField f) => f >= DualOrbitField.SecantLyapunov;
 
     private const double LogFloor = 1e-300;
+
+    /// <summary>#1116 — the separation |c_n − z_n| is read as at least
+    /// RoundOffRel·|(z_n, c_n)|: below that the difference of two doubles is
+    /// noise, and converged pairs would otherwise speckle (ClosestApproach /
+    /// Index, DivergenceTime). Part of the field definitions (doc §3.B).</summary>
+    internal const double RoundOffRel = 1e-14;
+    /// <summary>Relative tie tolerance for the closest-approach index.</summary>
+    internal const double MinTieRel = 1e-9;
 
     // Mutable per-pixel accumulator (stack-local in the row loop).
     private struct PairAccum
     {
         public DualOrbitPairChannels Ch;
-        public double Eps;
+        public double EpsRatio;          // ρ: divergence threshold = ρ·|D_0|
+        public double Eps;               // set at step 0
+        public double D0;
+        public double PrevD;
+        public double DivergeT;
         public double LogSigmaSum;
         public int Steps;
         public double Winding;          // turns
@@ -168,7 +203,8 @@ public sealed partial class DualOrbitEscapeCalculator
 
         public static PairAccum Create(DualOrbitPairChannels ch, double eps) => new()
         {
-            Ch = ch, Eps = eps, MinSep = double.PositiveInfinity, MinSepIdx = -1, DivergeIdx = -1,
+            Ch = ch, EpsRatio = eps, MinSep = double.PositiveInfinity, MinSepIdx = -1, DivergeIdx = -1,
+            DivergeT = -1, D0 = double.NaN,
             MidPert = double.NaN,
             LogAbsEz = double.NaN, LogAbsEc = double.NaN, LogDz = double.NaN, ArgDz = double.NaN,
             LogDcS = double.NaN, ArgDcS = double.NaN, LogDcC = double.NaN, ArgDcC = double.NaN,
@@ -185,7 +221,8 @@ public sealed partial class DualOrbitEscapeCalculator
             if ((Ch & DualOrbitPairChannels.Winding) != 0)
                 Winding += Math.Atan2(sgy, sgx) / (2.0 * Math.PI);
             if ((Ch & DualOrbitPairChannels.Separation) != 0)
-                Separation(n, Math.Sqrt((cx - zx) * (cx - zx) + (cy - zy) * (cy - zy)));
+                Separation(n, Math.Max(Math.Sqrt((cx - zx) * (cx - zx) + (cy - zy) * (cy - zy)),
+                    RoundOffRel * Math.Sqrt(zx * zx + zy * zy + cx * cx + cy * cy)));
             if ((Ch & DualOrbitPairChannels.Itinerary) != 0 && n >= 1 && !ItinBroken)
             {
                 if ((zy >= 0.0) == (cy >= 0.0)) ItinAgree++;
@@ -195,8 +232,23 @@ public sealed partial class DualOrbitEscapeCalculator
 
         public void Separation(int n, double d)
         {
-            if (d < MinSep) { MinSep = d; MinSepIdx = n; }
-            if (DivergeIdx < 0 && d > Eps) DivergeIdx = n;
+            if (n == 0) { D0 = d; Eps = EpsRatio * d; }
+            // First step attaining the minimum (to MinTieRel): converged pairs sit
+            // at the round-off floor every cycle — keep the earliest, not noise.
+            if (d < MinSep * (1.0 - MinTieRel)) { MinSep = d; MinSepIdx = n; }
+            if (DivergeIdx < 0 && Eps > 0 && d > Eps)
+            {
+                DivergeIdx = n;
+                // Log-interpolate the crossing between steps n−1 and n.
+                if (n == 0) DivergeT = 0;
+                else
+                {
+                    double l0 = Math.Log(Math.Max(PrevD, LogFloor)), l1 = Math.Log(d), le = Math.Log(Eps);
+                    double f = l1 > l0 ? Math.Clamp((le - l0) / (l1 - l0), 0.0, 1.0) : 1.0;
+                    DivergeT = n - 1 + f;
+                }
+            }
+            PrevD = d;
         }
 
         public void Stop(double zx, double zy, double cx, double cy)
@@ -321,7 +373,8 @@ public sealed partial class DualOrbitEscapeCalculator
             double zr2 = ax * ax + ay * ay + az * az + aw * aw;
             double cr2 = qx * qx + qy * qy + qz * qz + qw * qw;
             bool zEsc = zAlive && zr2 > b.R2, cEsc = cAlive && cr2 > b.R2;
-            double d = Norm4(qx - ax, qy - ay, qz - az, qw - aw);
+            double d = Math.Max(Norm4(qx - ax, qy - ay, qz - az, qw - aw),
+                RoundOffRel * Math.Sqrt(zr2 + cr2));
             if (!acc.Stopped)
             {
                 if (zEsc || cEsc || !zAlive || !cAlive) StopQ(ref acc, n, d, logD0, ax, ay, az, aw, qx, qy, qz, qw);
@@ -374,6 +427,67 @@ public sealed partial class DualOrbitEscapeCalculator
         acc.MidPert = m2 > LogFloor ? (ex * ex + ey * ey + ez * ez + ew * ew) / m2 : double.PositiveInfinity;
     }
 
+    // ── Pair-native field scalars (#1116) ────────────────────────────────────
+    //
+    // Each maps to [LiveFloor, maxIter] like the shipped fields (palette / Relief
+    // height). `live == false` means the field has no value at this pixel and
+    // the interior colour is used (e.g. a pair that never diverged, or a
+    // complex-only field under the quaternion map).
+    internal const double ApproachScaleNats = 8.0;      // ClosestApproach: 1 − e^(−depth/8)
+    internal const double MidpointDecades = 6.0;        // MidpointPerturbation: ±6 decades
+
+    private static double PairScalar(DualOrbitField field, in PairAccum a, int maxIter,
+        double lyapSpan, bool quat, out bool live)
+    {
+        live = true;
+        double v;
+        switch (field)
+        {
+            case DualOrbitField.SecantLyapunov:
+            {
+                // λ = mean ln|z_k + c_k| over the window; no window (an orbit
+                // starts past the bailout) reads as maximally separating.
+                double t = a.Steps > 0 ? 0.5 + 0.5 * Math.Clamp(a.LogSigmaSum / a.Steps / lyapSpan, -1.0, 1.0) : 1.0;
+                v = t * maxIter;
+                break;
+            }
+            case DualOrbitField.DivergenceTime:
+                if (a.DivergeT < 0) { live = false; return 0.0; }
+                v = a.DivergeT;
+                break;
+            case DualOrbitField.ClosestApproach:
+            {
+                // Approach depth ln(|D_0| / min|D|) ≥ 0, compressed to [0, 1).
+                double depth = a.Steps > 0 && a.D0 > 0
+                    ? Math.Max(0.0, Math.Log(a.D0 / Math.Max(a.MinSep, LogFloor))) : 0.0;
+                v = (1.0 - Math.Exp(-depth / ApproachScaleNats)) * maxIter;
+                break;
+            }
+            case DualOrbitField.ClosestApproachIndex:
+                v = a.MinSepIdx;
+                break;
+            case DualOrbitField.PairWinding:
+                if (quat || double.IsNaN(a.Winding)) { live = false; return 0.0; }
+                v = 0.5 * maxIter + a.Winding;     // one palette unit per turn, 0 turns mid-palette
+                break;
+            case DualOrbitField.MidpointPerturbation:
+            {
+                double r = a.MidPert;
+                double t = double.IsNaN(r) ? 0.0
+                    : 0.5 + Math.Log10(Math.Max(r, 1e-300)) / (2.0 * MidpointDecades);
+                v = Math.Clamp(t, 0.0, 1.0) * maxIter;
+                break;
+            }
+            case DualOrbitField.ItineraryAgreement:
+                if (quat) { live = false; return 0.0; }
+                v = a.ItinAgree;
+                break;
+            default:
+                live = false; return 0.0;
+        }
+        return Math.Clamp(v, LiveFloor, maxIter);
+    }
+
     private static void WritePlanes(DualOrbitPairPlanes p, int idx, in PairAccum a, bool quat)
     {
         var ch = p.Channels;
@@ -388,7 +502,8 @@ public sealed partial class DualOrbitEscapeCalculator
         {
             p.MinSeparationLog[idx] = (float)Math.Log(Math.Max(a.MinSep, LogFloor));
             p.MinSeparationIndex[idx] = a.MinSepIdx;
-            p.DivergenceIndex[idx] = a.DivergeIdx;
+            p.DivergenceTime[idx] = (float)a.DivergeT;
+            p.InitialSeparationLog[idx] = (float)Math.Log(Math.Max(double.IsNaN(a.D0) ? 0 : a.D0, LogFloor));
         }
         if ((ch & DualOrbitPairChannels.MidpointPerturbation) != 0)
             p.MidpointPerturbation[idx] = (float)a.MidPert;

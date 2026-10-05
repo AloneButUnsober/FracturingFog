@@ -1213,6 +1213,12 @@ namespace FracturingFog.Models
         /// <summary>GreenRatio half-range in octaves: log2(G_c/G_z) = ±span maps to
         /// the palette ends, 0 to mid-palette (#970).</summary>
         public double DualOrbitRatioSpan { get; set; } = 8.0;
+        /// <summary>SecantLyapunov half-range in nats per step: λ = ±span maps to the
+        /// palette ends, 0 (neutral pair) to mid-palette (#1116).</summary>
+        public double DualOrbitLyapunovSpan { get; set; } = 2.0;
+        /// <summary>DivergenceTime amplification ratio ρ: the field is the time for
+        /// the pair separation to first exceed ρ·|D_0| (#1116). Must be &gt; 1.</summary>
+        public double DualOrbitDivergenceRatio { get; set; } = 4.0;
         /// <summary>Which two of (c.x, c.y, s.x, s.y) the image spans (#971).
         /// Default SxSy = the parameter plane (shipped view, byte-identical).</summary>
         public DualOrbitSliceAxes DualOrbitSliceAxes { get; set; } = DualOrbitSliceAxes.SxSy;
@@ -1860,6 +1866,8 @@ namespace FracturingFog.Models
                 DualOrbitCEqualsS = DualOrbitCEqualsS,
                 DualOrbitBailout = DualOrbitBailout,
                 DualOrbitRatioSpan = DualOrbitRatioSpan,
+                DualOrbitLyapunovSpan = DualOrbitLyapunovSpan,
+                DualOrbitDivergenceRatio = DualOrbitDivergenceRatio,
                 DualOrbitSliceAxes = DualOrbitSliceAxes,
                 DualOrbitSX = DualOrbitSX,
                 DualOrbitSY = DualOrbitSY,
