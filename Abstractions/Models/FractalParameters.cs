@@ -1265,6 +1265,15 @@ namespace FracturingFog.Models
         public double DualOrbitTrapScale { get; set; } = 0.25;
         /// <summary>Stripe density for StripeZ / StripeC / StripeInterference (#1117).</summary>
         public double DualOrbitStripeDensity { get; set; } = 5.0;
+        /// <summary>DistanceZ / DistanceC: a distance of d pixels maps to d/(d + scale)
+        /// (#1118).</summary>
+        public double DualOrbitDEScale { get; set; } = 8.0;
+        /// <summary>DualOutline line width in pixels (#1118).</summary>
+        public double DualOrbitOutlineWidth { get; set; } = 1.5;
+        /// <summary>DualOutline colour of the z-orbit's boundary (M): blue.</summary>
+        public uint DualOrbitOutlineColorZ { get; set; } = 0xFF0072B2u;
+        /// <summary>DualOutline colour of the c-orbit's boundary (M_c): amber.</summary>
+        public uint DualOrbitOutlineColorC { get; set; } = 0xFFE69F00u;
         /// <summary>Which two of (c.x, c.y, s.x, s.y) the image spans (#971).
         /// Default SxSy = the parameter plane (shipped view, byte-identical).</summary>
         public DualOrbitSliceAxes DualOrbitSliceAxes { get; set; } = DualOrbitSliceAxes.SxSy;
@@ -1932,6 +1941,10 @@ namespace FracturingFog.Models
                 DualOrbitTrapShape = DualOrbitTrapShape,
                 DualOrbitTrapScale = DualOrbitTrapScale,
                 DualOrbitStripeDensity = DualOrbitStripeDensity,
+                DualOrbitDEScale = DualOrbitDEScale,
+                DualOrbitOutlineWidth = DualOrbitOutlineWidth,
+                DualOrbitOutlineColorZ = DualOrbitOutlineColorZ,
+                DualOrbitOutlineColorC = DualOrbitOutlineColorC,
                 DualOrbitSliceAxes = DualOrbitSliceAxes,
                 DualOrbitSX = DualOrbitSX,
                 DualOrbitSY = DualOrbitSY,

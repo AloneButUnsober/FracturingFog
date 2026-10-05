@@ -258,6 +258,35 @@ the 2-bulb) and `CyclePeriod`.*
 *Headless `--batch`, c = 0.5. TrapDelta (point trap), StripeInterference, TiaC (Cividis), and
 FF's "Orbit Trap - Point" theme sampling the c-orbit (`OrbitThemeC`).*
 
+**S4 as shipped (#1118).**
+- **Image-plane distance estimate for every slice:** DE = ½·ln|u_N| / |∇ln|u_N||. The gradient is
+  built from each orbit's derivatives wrt s and c₀, with ∂ln|u|/∂Re p = Re(u_p/u) and
+  ∂ln|u|/∂Im p = −Im(u_p/u). On the holomorphic slices this is exactly the classic ½|u|ln|u|/|u′|:
+  a Koebe lower bound on the distance to M (z, SxSy), M_c (c, SxSy) or the filled Julia set
+  (c, CxCy). On mixed slices it's an estimate, not a bound.
+- **Distance fields:** `DistanceZ` / `DistanceC` give d px → d/(d + `DualOrbitDEScale`). `DistanceZ`
+  has no value on the CxCy slice, since the z-orbit doesn't depend on c.
+- **`DualOutline`:** ink lines on **both** boundaries over the z escape time — M blue, M_c amber,
+  width and colours colour-only. This is the first view to show the two boundaries interleaving.
+- **Relief:** `DistanceBuffer` (`IDistanceFieldSource`) drives the Relief "Distance" height source.
+- **`BinaryXor`:** XOR of the two orbits' binary decompositions. It was flat in the first smoke
+  render because 0.25 / 0.75 × maxIter aliased under a cycling theme, as phase lag had. It's now a
+  two-class categorical field via `DualOrbitLagColors`.
+- **`FinalAngleDelta`:** raw arg E_c − arg E_z (bailout-dependent; the intrinsic version is
+  `ExternalAngleDelta`).
+- **Tests:**
+  - DistanceZ / DistanceC against the classic Mandelbrot / M_c DE, and the Julia-slice DE wrt the
+    seed;
+  - a **brute-force Koebe probe**: 16 points at 0.95·DE around pixels on three slice/field
+    combinations all escape;
+  - the mixed-slice DE against central differences of ln|u_N|;
+  - outline inking, the XOR / angle against test-side escape points, `DistanceBuffer` scope, the
+    quaternion case and the CLI round trip.
+
+![Distance and decomposition](../Images/dualorbit-coloring/s4-distance-decomp.png)
+*Headless `--batch`. DualOutline (M blue, M_c amber) at zoom 1 and ×6 near −0.75+0.15i;
+DistanceC (Cividis); BinaryXor (categorical).*
+
 ---
 
 ## 4. Architecture (S1 #1115)
