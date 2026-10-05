@@ -168,6 +168,66 @@
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4,0,0" />
         </Grid>
 
+        <!-- Dual Buddhabrot (#1124) — extra rows under the shared sampler rows -->
+        <Grid IsVisible="{Binding IsDualBuddhabrot}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="c-seed real:" VerticalAlignment="Center" Margin="0,8,0,2" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1"
+                           Minimum="-2" Maximum="2" Increment="0.02" FormatString="F3"
+                           Value="{Binding DualBuddhaCSeedX, Mode=TwoWay}" Margin="0,8,0,2"
+                           ToolTip.Tip="Seed of the second (c) orbit. Each sample s runs the classic z-orbit from 0 AND a c-orbit from this seed. Sweeping it re-textures the c channels while the Z channel (classic Buddhabrot) stays put. 0 = degenerate (c-orbit = z-orbit)." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="c-seed imag:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="-2" Maximum="2" Increment="0.02" FormatString="F3"
+                           Value="{Binding DualBuddhaCSeedY, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Imaginary part of the c-seed. Non-zero breaks the up/down symmetry of the c channels (HD mirror sampling is switched off for them)." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Min escape iter:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1"
+                           Minimum="0" Maximum="10000" Increment="1" FormatString="F0"
+                           Value="{Binding DualBuddhaMinIter, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Orbits that escape in fewer steps are not drawn. Removes the flat wash from fast escapers. 0 = classic Buddhabrot behaviour." />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Composite:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="3" Grid.Column="1"
+                      ItemsSource="{Binding DualBuddhaComposites}"
+                      SelectedItem="{Binding DualBuddhaComposite, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Channels = each outcome in its own colour, normalised separately (the c-escaped / z-bounded filaments stay visible). Theme = the weighted total through the active colour theme." />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Z colour (classic):" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualBuddhaChannels}" />
+            <TextBox Grid.Row="4" Grid.Column="1" Margin="0,2"
+                     Text="{Binding DualBuddhaColorZHex, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                     IsVisible="{Binding IsDualBuddhaChannels}"
+                     ToolTip.Tip="AARRGGBB hex. Z channel = z-orbits that escape — the classic Buddhabrot." />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="CB colour (c esc, z bnd):" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualBuddhaChannels}" />
+            <TextBox Grid.Row="5" Grid.Column="1" Margin="0,2"
+                     Text="{Binding DualBuddhaColorCBHex, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                     IsVisible="{Binding IsDualBuddhaChannels}"
+                     ToolTip.Tip="AARRGGBB hex. CB channel = c-orbits that escape while the z-orbit stays bounded (s inside the Mandelbrot set) — the structure the classic Buddhabrot cannot show." />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="CE colour (both esc):" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualBuddhaChannels}" />
+            <TextBox Grid.Row="6" Grid.Column="1" Margin="0,2"
+                     Text="{Binding DualBuddhaColorCEHex, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                     IsVisible="{Binding IsDualBuddhaChannels}"
+                     ToolTip.Tip="AARRGGBB hex. CE channel = c-orbits where both orbits escape." />
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Z gain:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="7" Grid.Column="1"
+                           Minimum="0" Maximum="4" Increment="0.1" FormatString="F2"
+                           Value="{Binding DualBuddhaGainZ, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Channel weight. 0 hides the channel. Re-composites without re-sampling." />
+            <TextBlock Grid.Row="8" Grid.Column="0" Text="CB gain:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="8" Grid.Column="1"
+                           Minimum="0" Maximum="4" Increment="0.1" FormatString="F2"
+                           Value="{Binding DualBuddhaGainCB, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="9" Grid.Column="0" Text="CE gain:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="9" Grid.Column="1"
+                           Minimum="0" Maximum="4" Increment="0.1" FormatString="F2"
+                           Value="{Binding DualBuddhaGainCE, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="10" Grid.Column="0" Grid.ColumnSpan="2"
+                       Text="Iter low / mid are not used here — the channels are outcomes (which orbit escaped), not iteration bands. Iter high is the orbit cap."
+                       TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4,0,0" />
+        </Grid>
+
         <!-- Plasma -->
         <Grid IsVisible="{Binding IsPlasma}"
               ColumnDefinitions="160,*"

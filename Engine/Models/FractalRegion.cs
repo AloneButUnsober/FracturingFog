@@ -604,6 +604,25 @@ namespace FracturingFog.Models
         // #970 — bailout radius + GreenRatio span.
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitBailout { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitRatioSpan { get; set; }
+        // #1124 — Dual Buddhabrot: the shared Buddhabrot sampler settings (first
+        // family to persist them — the classic four still do not) + dual knobs.
+        [JsonIgnore(Condition = OmitNull)] public int? BuddhaSamples { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? BuddhaIterHigh { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? BuddhaQualityMode { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? BuddhaMetropolis { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? BuddhaProgressive { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? BuddhaSeed { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? BuddhaZoomCompensation { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DualBuddhaCSeedX { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DualBuddhaCSeedY { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? DualBuddhaMinIter { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? DualBuddhaComposite { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public uint? DualBuddhaColorZ { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public uint? DualBuddhaColorCB { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public uint? DualBuddhaColorCE { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DualBuddhaGainZ { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DualBuddhaGainCB { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DualBuddhaGainCE { get; set; }
         // #1116 — pair-native field scales.
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitLyapunovSpan { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitDivergenceRatio { get; set; }
@@ -996,6 +1015,27 @@ namespace FracturingFog.Models
                     DualOrbitLayerBlend = p.DualOrbitLayerBlend != FracturingFog.DualOrbitLayerBlend.COverZ ? (int)p.DualOrbitLayerBlend : (int?)null,
                     DualOrbitOpacityZ = p.DualOrbitOpacityZ != 1.0 ? p.DualOrbitOpacityZ : (double?)null,
                     DualOrbitOpacityC = p.DualOrbitOpacityC != 0.6 ? p.DualOrbitOpacityC : (double?)null,
+                },
+                // #1124 — Dual Buddhabrot: sampler + dual knobs, each omitted at default.
+                FractalType.DualBuddhabrot => new RegionFractalParams
+                {
+                    BuddhaSamples = p.BuddhaSamples != D.BuddhaSamples ? p.BuddhaSamples : (int?)null,
+                    BuddhaIterHigh = p.BuddhaIterHigh != D.BuddhaIterHigh ? p.BuddhaIterHigh : (int?)null,
+                    BuddhaQualityMode = p.BuddhaQualityMode != D.BuddhaQualityMode ? (int)p.BuddhaQualityMode : (int?)null,
+                    BuddhaMetropolis = p.BuddhaMetropolis != D.BuddhaMetropolis ? p.BuddhaMetropolis : (bool?)null,
+                    BuddhaProgressive = p.BuddhaProgressive != D.BuddhaProgressive ? p.BuddhaProgressive : (bool?)null,
+                    BuddhaSeed = p.BuddhaSeed != D.BuddhaSeed ? p.BuddhaSeed : (int?)null,
+                    BuddhaZoomCompensation = p.BuddhaZoomCompensation != D.BuddhaZoomCompensation ? p.BuddhaZoomCompensation : (bool?)null,
+                    DualBuddhaCSeedX = p.DualBuddhaCSeedX != D.DualBuddhaCSeedX ? p.DualBuddhaCSeedX : (double?)null,
+                    DualBuddhaCSeedY = p.DualBuddhaCSeedY != D.DualBuddhaCSeedY ? p.DualBuddhaCSeedY : (double?)null,
+                    DualBuddhaMinIter = p.DualBuddhaMinIter != D.DualBuddhaMinIter ? p.DualBuddhaMinIter : (int?)null,
+                    DualBuddhaComposite = p.DualBuddhaComposite != D.DualBuddhaComposite ? (int)p.DualBuddhaComposite : (int?)null,
+                    DualBuddhaColorZ = p.DualBuddhaColorZ != D.DualBuddhaColorZ ? p.DualBuddhaColorZ : (uint?)null,
+                    DualBuddhaColorCB = p.DualBuddhaColorCB != D.DualBuddhaColorCB ? p.DualBuddhaColorCB : (uint?)null,
+                    DualBuddhaColorCE = p.DualBuddhaColorCE != D.DualBuddhaColorCE ? p.DualBuddhaColorCE : (uint?)null,
+                    DualBuddhaGainZ = p.DualBuddhaGainZ != D.DualBuddhaGainZ ? p.DualBuddhaGainZ : (double?)null,
+                    DualBuddhaGainCB = p.DualBuddhaGainCB != D.DualBuddhaGainCB ? p.DualBuddhaGainCB : (double?)null,
+                    DualBuddhaGainCE = p.DualBuddhaGainCE != D.DualBuddhaGainCE ? p.DualBuddhaGainCE : (double?)null,
                 },
                 // #893 — Indra's Pearls 2D group. Family + the family's parameter
                 // (μ / traces / c) + depth + mode, each omitted at its default.
@@ -1435,6 +1475,24 @@ namespace FracturingFog.Models
             if (DualOrbitBailout.HasValue) p.DualOrbitBailout = DualOrbitBailout.Value;
             if (DualOrbitRatioSpan.HasValue) p.DualOrbitRatioSpan = DualOrbitRatioSpan.Value;
             if (DualOrbitLyapunovSpan.HasValue) p.DualOrbitLyapunovSpan = DualOrbitLyapunovSpan.Value;
+            // #1124 — Dual Buddhabrot.
+            if (BuddhaSamples.HasValue) p.BuddhaSamples = BuddhaSamples.Value;
+            if (BuddhaIterHigh.HasValue) p.BuddhaIterHigh = BuddhaIterHigh.Value;
+            if (this.BuddhaQualityMode.HasValue) p.BuddhaQualityMode = (FracturingFog.Models.BuddhaQualityMode)this.BuddhaQualityMode.Value;
+            if (BuddhaMetropolis.HasValue) p.BuddhaMetropolis = BuddhaMetropolis.Value;
+            if (BuddhaProgressive.HasValue) p.BuddhaProgressive = BuddhaProgressive.Value;
+            if (BuddhaSeed.HasValue) p.BuddhaSeed = BuddhaSeed.Value;
+            if (BuddhaZoomCompensation.HasValue) p.BuddhaZoomCompensation = BuddhaZoomCompensation.Value;
+            if (DualBuddhaCSeedX.HasValue) p.DualBuddhaCSeedX = DualBuddhaCSeedX.Value;
+            if (DualBuddhaCSeedY.HasValue) p.DualBuddhaCSeedY = DualBuddhaCSeedY.Value;
+            if (DualBuddhaMinIter.HasValue) p.DualBuddhaMinIter = DualBuddhaMinIter.Value;
+            if (this.DualBuddhaComposite.HasValue) p.DualBuddhaComposite = (FracturingFog.DualBuddhaComposite)this.DualBuddhaComposite.Value;
+            if (DualBuddhaColorZ.HasValue) p.DualBuddhaColorZ = DualBuddhaColorZ.Value;
+            if (DualBuddhaColorCB.HasValue) p.DualBuddhaColorCB = DualBuddhaColorCB.Value;
+            if (DualBuddhaColorCE.HasValue) p.DualBuddhaColorCE = DualBuddhaColorCE.Value;
+            if (DualBuddhaGainZ.HasValue) p.DualBuddhaGainZ = DualBuddhaGainZ.Value;
+            if (DualBuddhaGainCB.HasValue) p.DualBuddhaGainCB = DualBuddhaGainCB.Value;
+            if (DualBuddhaGainCE.HasValue) p.DualBuddhaGainCE = DualBuddhaGainCE.Value;
             if (DualOrbitDivergenceRatio.HasValue) p.DualOrbitDivergenceRatio = DualOrbitDivergenceRatio.Value;
             if (this.DualOrbitSliceAxes.HasValue) p.DualOrbitSliceAxes = (FracturingFog.DualOrbitSliceAxes)this.DualOrbitSliceAxes.Value;
             if (DualOrbitSX.HasValue) p.DualOrbitSX = DualOrbitSX.Value;

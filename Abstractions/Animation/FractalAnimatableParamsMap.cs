@@ -103,6 +103,9 @@ public static class FractalAnimatableParamsMap
         FractalType.DualOrbitEscape
             => _dualOrbitList,
 
+        FractalType.DualBuddhabrot
+            => _dualBuddhaList,
+
         FractalType.IndrasPearls
             => _indrasList,
 
@@ -402,6 +405,21 @@ public static class FractalAnimatableParamsMap
         new("DualOrbitOpacityC", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 1.0,
             Cost: AnimatableParamCost.Expensive,
             Notes: "Per-orbit layers: c-orbit layer opacity — cross-fade the c-seed's 'disc' against the z layer (#980)."),
+    };
+
+    // Dual Buddhabrot (#1124). Sweeping the c-seed re-textures the c channels on
+    // a fixed classic body; channel gains cross-fade the outcomes. The seed is a
+    // full Monte Carlo re-sample per tick (Expensive); gains only re-composite.
+    private static readonly AnimatableParamDescriptor[] _dualBuddhaList =
+    {
+        new("DualBuddhaCSeedX", AnimatableParamKind.ScalarDouble, Min: -1.5, Max: 1.5,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "c-seed real — the CB / CE filaments re-texture while Z stays fixed."),
+        new("DualBuddhaCSeedY", AnimatableParamKind.ScalarDouble, Min: -1.5, Max: 1.5,
+            Cost: AnimatableParamCost.Expensive),
+        new("DualBuddhaGainZ", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 2.0),
+        new("DualBuddhaGainCB", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 2.0),
+        new("DualBuddhaGainCE", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 2.0),
     };
 
     // Indra's Pearls (#895) — the marquee "group degenerating into a limit curve"

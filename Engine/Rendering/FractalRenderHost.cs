@@ -79,6 +79,7 @@ namespace FracturingFog.Rendering
         private NebulabrotCalculator _nebulabrotCalculator;
         private AntiBuddhabrotCalculator _antiBuddhabrotCalculator;
         private AntiNebulabrotCalculator _antiNebulabrotCalculator;
+        private DualBuddhabrotCalculator _dualBuddhabrotCalculator;   // #1124
         private NewtonCalculator _newtonCalculator;
         private UserEquationCalculator _userEquationCalculator;
         private MandelbulbCalculator _mandelbulbCalculator;
@@ -458,6 +459,7 @@ namespace FracturingFog.Rendering
             _nebulabrotCalculator = new NebulabrotCalculator(w, h);
             _antiBuddhabrotCalculator = new AntiBuddhabrotCalculator(w, h);
             _antiNebulabrotCalculator = new AntiNebulabrotCalculator(w, h);
+            _dualBuddhabrotCalculator = new DualBuddhabrotCalculator(w, h);
             _newtonCalculator = new NewtonCalculator(w, h);
             _userEquationCalculator = new UserEquationCalculator(w, h);
             _mandelbulbCalculator = new MandelbulbCalculator(w, h);
@@ -505,6 +507,7 @@ namespace FracturingFog.Rendering
                 _nebulabrotCalculator.ColorMap = initialColorMap;
                 _antiBuddhabrotCalculator.ColorMap = initialColorMap;
                 _antiNebulabrotCalculator.ColorMap = initialColorMap;
+                _dualBuddhabrotCalculator.ColorMap = initialColorMap;
                 _newtonCalculator.ColorMap = initialColorMap;
                 _userEquationCalculator.ColorMap = initialColorMap;
                 _mandelbulbCalculator.ColorMap = initialColorMap;
@@ -992,6 +995,7 @@ namespace FracturingFog.Rendering
                 _nebulabrotCalculator.ColorMap = value;
                 _antiBuddhabrotCalculator.ColorMap = value;
                 _antiNebulabrotCalculator.ColorMap = value;
+                _dualBuddhabrotCalculator.ColorMap = value;
                 _newtonCalculator.ColorMap = value;
                 _userEquationCalculator.ColorMap = value;
                 _mandelbulbCalculator.ColorMap = value;
@@ -2936,6 +2940,7 @@ namespace FracturingFog.Rendering
             _nebulabrotCalculator.Resize(w, h);
             _antiBuddhabrotCalculator.Resize(w, h);
             _antiNebulabrotCalculator.Resize(w, h);
+            _dualBuddhabrotCalculator.Resize(w, h);
             _newtonCalculator.Resize(w, h);
             _userEquationCalculator.Resize(w, h);
             _mandelbulbCalculator.Resize(w, h);
@@ -3817,6 +3822,7 @@ namespace FracturingFog.Rendering
             FractalType.Nebulabrot => _nebulabrotCalculator,
             FractalType.AntiBuddhabrot => _antiBuddhabrotCalculator,
             FractalType.AntiNebulabrot => _antiNebulabrotCalculator,
+            FractalType.DualBuddhabrot => _dualBuddhabrotCalculator,
             FractalType.Newton => _newtonCalculator,
             FractalType.Nova => _newtonCalculator,
             FractalType.UserEquation => _userEquationCalculator,

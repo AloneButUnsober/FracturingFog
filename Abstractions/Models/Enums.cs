@@ -294,6 +294,18 @@ namespace FracturingFog
         CySy,
     }
 
+    /// <summary>How the Dual Buddhabrot composites its outcome channels (#1124).
+    /// Append only.</summary>
+    public enum DualBuddhaComposite
+    {
+        /// <summary>Each channel (Z / CB / CE) log-normalised on its own, tinted
+        /// by its colour × gain and added — the sparse CB channel stays visible.</summary>
+        Channels,
+        /// <summary>Gain-weighted total density through the active colour theme
+        /// (the classic Buddhabrot ColorMap composite).</summary>
+        Theme,
+    }
+
     /// <summary>How the 2D dual-orbit calculator colours pixels (#979). Append only.</summary>
     public enum DualOrbitColorMode
     {
@@ -653,6 +665,14 @@ namespace FracturingFog
         /// colours it (<c>DualOrbitVolumeColor.CriticalLayer</c>). Analytic DE from
         /// ∂u/∂c and ∂u/∂s. CPU raymarcher (Coquaternion clone pattern).</summary>
         DualOrbitVolume,
+        /// <summary>Dual Buddhabrot (#1124, epic #1114). The Buddhabrot of the
+        /// dual-orbit construction: per sampled s, the critical z-orbit (seed 0) and
+        /// a c-orbit (fixed seed <c>DualBuddhaCSeedX/Y</c>) under u → u² + s are
+        /// deposited into joint-outcome channels — Z (z escaped; the classic
+        /// Buddhabrot), CB (c escaped, z bounded: s ∈ M \ M_c) and CE (both
+        /// escaped). Shares the Buddhabrot family's Monte Carlo core
+        /// (samples / seed / HD / Metropolis / progressive).</summary>
+        DualBuddhabrot,
     }
 
     public enum RenderProfile { Preview, Final }
@@ -799,6 +819,7 @@ namespace FracturingFog
                 or FractalType.Nebulabrot
                 or FractalType.AntiBuddhabrot
                 or FractalType.AntiNebulabrot
+                or FractalType.DualBuddhabrot
                 or FractalType.Dla
                 or FractalType.Flame
                 or FractalType.Plasma

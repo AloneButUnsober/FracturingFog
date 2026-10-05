@@ -1083,6 +1083,7 @@ namespace FracturingFog.Imaging
                 FractalType.Nebulabrot       => new NebulabrotCalculator(w, h),
                 FractalType.AntiBuddhabrot   => new AntiBuddhabrotCalculator(w, h),
                 FractalType.AntiNebulabrot   => new AntiNebulabrotCalculator(w, h),
+                FractalType.DualBuddhabrot   => new DualBuddhabrotCalculator(w, h),
                 FractalType.Newton           => new NewtonCalculator(w, h),
                 FractalType.Nova             => new NewtonCalculator(w, h),
                 FractalType.UserEquation     => new UserEquationCalculator(w, h),

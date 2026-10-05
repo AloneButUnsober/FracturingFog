@@ -148,6 +148,34 @@ Prototype findings that fix design decisions (S10 #1124):
 - **Real-axis mirror sampling** (`HighDefinition`) is **invalid for the c channels when `c.y ≠ 0`**:
   `conj(s)` maps to the orbit of `conj(c)`, not of `c`. Force it off for those channels.
 
+**S10 as shipped (#1124).** The Dual Buddhabrot is `FractalType.DualBuddhabrot`, implemented as
+`DualBuddhabrotCalculator : BuddhaFamilyCalculator`.
+- **Base hooks:** the base class gained protected virtual hooks (`SampleBatch`, `Composite`,
+  `PrepareSampling`, `CanReuseSamples`, `OnSamplingFinished`) and a `mirror` flag on the HD splat.
+  The classic types are unchanged.
+- **Channels:** the base's three hit buffers hold Z / CB / CE.
+- **Z channel = classic, hit for hit:** the z-orbit uses the classic loop, and its splats draw from
+  the classic RNG stream; c splats use a second stream. So with uniform sampling and
+  `DualBuddhaMinIter = 0`, the Z channel is the classic Buddhabrot's hit total, exactly (tested in
+  both qualities).
+- **Early stop for bounded c-orbits:** they stop on Brent periodicity (no analytic "c ∈ K_s" test
+  exists, and they're never deposited). Default renders cost about the same as the classic.
+- **Mirror rule:** HD mirror is on for Z, and on for CB / CE only when `c.y = 0`.
+- **Colour edits don't re-sample:** colour / gain / composite edits re-composite the cached hits
+  (sample key; a reflection guard covers every `Buddha*` / `DualBuddha*` param). Exception: a run
+  with a video `OnBatchComposited` callback always re-samples.
+- **New params:** `DualBuddhaCSeedX/Y` (animatable), `DualBuddhaMinIter` (12),
+  `DualBuddhaComposite` {Channels, Theme}, `DualBuddhaColorZ/CB/CE` (blue / amber / near-white),
+  and `DualBuddhaGainZ/CB/CE` (1 / 1 / 0.35; animatable).
+- **Batch parity:** the region snapshot carries the dual knobs *and* the shared `Buddha*` sampler
+  settings. This is the first Buddha-family type to persist them; the classic four don't (#1134).
+- **Deferred to S11 #1125:** anti (bounded-orbit) channels.
+- **Cost:** about 0.9 s for 4M HD samples at 640×480.
+
+![Dual Buddhabrot](../Images/dualorbit-coloring/s10-dual-buddhabrot.png)
+*Headless `--batch`, 4M samples, HD. Top: c = 0.5, composite and the CB channel alone. Bottom:
+c = −0.3+0.6i. The CB lace follows the M_c boundary and re-textures with c.*
+
 ---
 
 ## 4. Architecture (S1 #1115)

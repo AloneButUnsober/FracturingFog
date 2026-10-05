@@ -372,7 +372,11 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsBuddhaBrot => FractalType is FractalType.BuddhaBrot
         or FractalType.Nebulabrot
         or FractalType.AntiBuddhabrot
-        or FractalType.AntiNebulabrot;
+        or FractalType.AntiNebulabrot
+        or FractalType.DualBuddhabrot;
+    /// <summary>#1124 — Dual Buddhabrot: shares the Buddhabrot sampler rows and
+    /// adds the c-seed / channel rows.</summary>
+    public bool IsDualBuddhabrot => FractalType == FractalType.DualBuddhabrot;
     public bool IsMandelbulb => FractalType == FractalType.Mandelbulb;
     public bool IsMandelbox => FractalType == FractalType.Mandelbox;
     public bool IsKifs => FractalType == FractalType.Kifs;
@@ -1169,6 +1173,22 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             Fire();
         }
     }
+
+    // ── Dual Buddhabrot (#1124) ──
+    public double DualBuddhaCSeedX { get => _p.DualBuddhaCSeedX; set { var v = Clamp(value, -2.0, 2.0); if (v == _p.DualBuddhaCSeedX) return; _p.DualBuddhaCSeedX = v; this.RaisePropertyChanged(); Fire(); } }
+    public double DualBuddhaCSeedY { get => _p.DualBuddhaCSeedY; set { var v = Clamp(value, -2.0, 2.0); if (v == _p.DualBuddhaCSeedY) return; _p.DualBuddhaCSeedY = v; this.RaisePropertyChanged(); Fire(); } }
+    public int DualBuddhaMinIter { get => _p.DualBuddhaMinIter; set { int v = (int)Clamp(value, 0, 10_000); if (v == _p.DualBuddhaMinIter) return; _p.DualBuddhaMinIter = v; this.RaisePropertyChanged(); Fire(); } }
+    public DualBuddhaComposite DualBuddhaComposite { get => _p.DualBuddhaComposite; set { if (value == _p.DualBuddhaComposite) return; _p.DualBuddhaComposite = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(IsDualBuddhaChannels)); Fire(); } }
+    public System.Array DualBuddhaComposites => s_DualBuddhaComposites;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_DualBuddhaComposites = System.Enum.GetValues(typeof(DualBuddhaComposite));
+    public bool IsDualBuddhaChannels => _p.DualBuddhaComposite == DualBuddhaComposite.Channels;
+    public string DualBuddhaColorZHex { get => Hex(_p.DualBuddhaColorZ); set { if (TryParseHexColor(value, out uint u) && u != _p.DualBuddhaColorZ) { _p.DualBuddhaColorZ = u; this.RaisePropertyChanged(); Fire(); } } }
+    public string DualBuddhaColorCBHex { get => Hex(_p.DualBuddhaColorCB); set { if (TryParseHexColor(value, out uint u) && u != _p.DualBuddhaColorCB) { _p.DualBuddhaColorCB = u; this.RaisePropertyChanged(); Fire(); } } }
+    public string DualBuddhaColorCEHex { get => Hex(_p.DualBuddhaColorCE); set { if (TryParseHexColor(value, out uint u) && u != _p.DualBuddhaColorCE) { _p.DualBuddhaColorCE = u; this.RaisePropertyChanged(); Fire(); } } }
+    public double DualBuddhaGainZ { get => _p.DualBuddhaGainZ; set { var v = Clamp(value, 0, 4); if (v == _p.DualBuddhaGainZ) return; _p.DualBuddhaGainZ = v; this.RaisePropertyChanged(); Fire(); } }
+    public double DualBuddhaGainCB { get => _p.DualBuddhaGainCB; set { var v = Clamp(value, 0, 4); if (v == _p.DualBuddhaGainCB) return; _p.DualBuddhaGainCB = v; this.RaisePropertyChanged(); Fire(); } }
+    public double DualBuddhaGainCE { get => _p.DualBuddhaGainCE; set { var v = Clamp(value, 0, 4); if (v == _p.DualBuddhaGainCE) return; _p.DualBuddhaGainCE = v; this.RaisePropertyChanged(); Fire(); } }
+    private static string Hex(uint c) => c.ToString("X8", System.Globalization.CultureInfo.InvariantCulture);
 
     private static bool TryParseHexColor(string? value, out uint result)
     {
