@@ -478,7 +478,7 @@ public sealed class DualOrbitVolumeCalculator : IFractalCalculator, IStereoEyeCa
         const int it = SurfaceFieldIterations;
         bool At(double x, double y, double z, out double s)
             => DualOrbitEscapeCalculator.TryFieldAt(field, x, z, y + sxc, sy, it,
-                fp.DualOrbitBailout, fp.DualOrbitLyapunovSpan, fp.DualOrbitDivergenceRatio, out s);
+                fp.DualOrbitBailout, fp.DualOrbitLyapunovSpan, fp.DualOrbitDivergenceRatio, out s, fp.DualOrbitLyapunovSmooth);
 
         bool live = At(px, py, pz, out double scalar);
         if (!live && field == DualOrbitField.PhaseLag)

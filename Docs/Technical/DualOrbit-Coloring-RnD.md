@@ -402,7 +402,7 @@ by `ExternalAngleDelta`, or the per-orbit layer composite on a `GreenRatio` reli
   defaults (emboss, raymarch, layers) is pixel-identical to the pre-change build.
 - **Observation:** a `SecantLyapunov` relief shows terrace lines. λ = (1/N)Σ ln|σ| is not smoothed
   across the escape step, so it jumps where N changes. That's a property of the field (S2), not of
-  the split.
+  the split. Fixed by `DualOrbitLyapunovSmooth` (#1144, below).
 - **Tests:**
   - split height ≡ the `SmoothBuffer` of an independent render that colours that field, and
     `ColorBuffer` ≡ the unsplit render (five mode / field combinations);
@@ -602,6 +602,33 @@ ExternalAngleDelta with LIC along the separation direction.*
 ![Volume colour sources](../Images/dualorbit-coloring/s15-volume-sources.png)
 *Headless `--batch` DualOrbitVolume, Cividis: ExternalAngle (existing), SecantLyapunov, PhaseLag
 (categorical: lag-0 amber on the layers whose s is in M), PairWinding.*
+
+**Escape-step smoothing (#1144).** `DualOrbitLyapunovSmooth` (default off, so the shipped look is
+byte-identical) removes the escape-band terraces from the two step-additive pair fields.
+- **Why they jump:** the pair window holds N whole steps (until either orbit escapes). λ = S_N/N
+  and the winding sum W_N jump wherever N changes.
+- **The blend:** the window really closes at the continuous time T = min(smooth count of each
+  escaping orbit) ∈ (N − 1, N]. The fields blend the N- and (N − 1)-step values by w = T − (N − 1),
+  as the S3 stripe average does (Härkönen):
+  λ = w·S_N/N + (1 − w)·S_{N−1}/(N − 1) and W = W_N − (1 − w)·(the last step's turn).
+- **Why it is continuous:** across an edge (N → N + 1), T is continuous, and the blend meets itself
+  (w → 1 on one side, w → 0 on the other).
+- **Scope:** bounded pairs (no escape) are unchanged.
+  - **The quaternion pair runner records T too,** so C_i parity holds with smoothing on.
+  - **Not smoothed:** `MidpointPerturbation` is a point value at step N rather than a window sum
+    (blending would mix different steps' geometry), and the separation-based fields are minima or
+    crossing times.
+- **Tests:**
+  - the blend against a test-side loop at three points, with off = the original values;
+  - **continuity at band edges** found by bisection on the test-side step count. The smoothed jump
+    is < 1e-4 of the raw one, for both λ and winding, over ≥ 3 edges near the s = ¼ cusp;
+  - a 2000-pixel scan whose largest jump shrinks below 0.2× the raw one;
+  - bounded pairs unchanged; quaternion ≡ complex in C_i with smoothing; CLI round trip;
+  - the recolour guard classifies it as geometry.
+
+![Escape-step smoothing](../Images/dualorbit-coloring/1144-lyapunov-smooth.png)
+*Headless `--batch --relief`, the S9 split (colour ExternalAngleDelta, height SecantLyapunov).
+Raw: escape-band terraces. Smoothed: continuous.*
 
 ---
 

@@ -204,6 +204,10 @@ public sealed partial class DualOrbitEscapeCalculator
         public int ItinAgree;
         public bool ItinBroken;
         public bool Stopped;
+        // #1144 — the last window step's terms and the continuous stop time
+        // (min of the escaping orbits' smooth counts; NaN = no escape), for the
+        // escape-step smoothing of the step-additive fields.
+        public double LastLogSigma, LastWinding, StopT;
         // derivatives at escape
         public double LogAbsEz, LogAbsEc, LogDz, ArgDz, LogDcS, ArgDcS, LogDcC, ArgDcC;
 
@@ -211,7 +215,7 @@ public sealed partial class DualOrbitEscapeCalculator
         {
             Ch = ch, EpsRatio = eps, MinSep = double.PositiveInfinity, MinSepIdx = -1, DivergeIdx = -1,
             DivergeT = -1, D0 = double.NaN,
-            MidPert = double.NaN,
+            MidPert = double.NaN, StopT = double.NaN,
             LogAbsEz = double.NaN, LogAbsEc = double.NaN, LogDz = double.NaN, ArgDz = double.NaN,
             LogDcS = double.NaN, ArgDcS = double.NaN, LogDcC = double.NaN, ArgDcC = double.NaN,
         };
@@ -223,9 +227,15 @@ public sealed partial class DualOrbitEscapeCalculator
             Steps++;
             double sgx = zx + cx, sgy = zy + cy;
             if ((Ch & DualOrbitPairChannels.SecantLogSum) != 0)
-                LogSigmaSum += 0.5 * Math.Log(Math.Max(sgx * sgx + sgy * sgy, LogFloor));   // |σ| floored at 1e-150 (coalescence)
+            {
+                LastLogSigma = 0.5 * Math.Log(Math.Max(sgx * sgx + sgy * sgy, LogFloor));   // |σ| floored at 1e-150 (coalescence)
+                LogSigmaSum += LastLogSigma;
+            }
             if ((Ch & DualOrbitPairChannels.Winding) != 0)
-                Winding += Math.Atan2(sgy, sgx) / (2.0 * Math.PI);
+            {
+                LastWinding = Math.Atan2(sgy, sgx) / (2.0 * Math.PI);
+                Winding += LastWinding;
+            }
             if ((Ch & DualOrbitPairChannels.Separation) != 0)
                 Separation(n, Math.Max(Math.Sqrt((cx - zx) * (cx - zx) + (cy - zy) * (cy - zy)),
                     RoundOffRel * Math.Sqrt(zx * zx + zy * zy + cx * cx + cy * cy)));
@@ -359,7 +369,13 @@ public sealed partial class DualOrbitEscapeCalculator
         if (zAlive) oz = new Orbit(false, zx, zy, maxIter);
         if (cAlive) oc = new Orbit(false, cx, cy, maxIter);
         if (!acc.Stopped) acc.Stop(zx, zy, cx, cy);
+        acc.StopT = StopTime(oz.Escaped, oz.SmoothN, oc.Escaped, oc.SmoothN);   // #1144
     }
+
+    // #1144 — the continuous time the pair window closes: the smaller smooth
+    // escape count (the orbit whose escape ended the window); NaN if neither escaped.
+    private static double StopTime(bool zEsc, double zSmooth, bool cEsc, double cSmooth)
+        => zEsc && cEsc ? Math.Min(zSmooth, cSmooth) : zEsc ? zSmooth : cEsc ? cSmooth : double.NaN;
 
     // Lockstep quaternion iteration (Hamilton square, as RunQuat). The product
     // identity fails (non-commutative), so the secant sum is the telescoped
@@ -398,7 +414,8 @@ public sealed partial class DualOrbitEscapeCalculator
                         double ns = ds * ss - (di * si + dj * sj + dk * sk);
                         double ni = ds * si + ss * di, nj = ds * sj + ss * dj, nk = ds * sk + ss * dk;
                         double g = Norm4(ns, ni, nj, nk);
-                        acc.LogSigmaSum += Math.Log(Math.Max(g, 1e-150));   // the complex path's |σ| floor
+                        acc.LastLogSigma = Math.Log(Math.Max(g, 1e-150));   // the complex path's |σ| floor
+                        acc.LogSigmaSum += acc.LastLogSigma;
                         if (g > 0) { ds = ns / g; di = ni / g; dj = nj / g; dk = nk / g; }
                     }
                 }
@@ -430,6 +447,7 @@ public sealed partial class DualOrbitEscapeCalculator
         }
         if (zAlive) oz = new QOrbit(false, ax, ay, az, aw, maxIter, -1);
         if (cAlive) oc = new QOrbit(false, qx, qy, qz, qw, maxIter, -1);
+        acc.StopT = StopTime(oz.Escaped, oz.SmoothN, oc.Escaped, oc.SmoothN);   // #1144
         if (!acc.Stopped)
             StopQ(ref acc, maxIter, ax, ay, az, aw, qx, qy, qz, qw);
 
@@ -459,17 +477,27 @@ public sealed partial class DualOrbitEscapeCalculator
     internal const double MidpointDecades = 6.0;        // MidpointPerturbation: ±6 decades
 
     private static double PairScalar(DualOrbitField field, in PairAccum a, int maxIter,
-        double lyapSpan, bool quat, out bool live)
+        double lyapSpan, bool quat, out bool live, bool smooth = false)
     {
         live = true;
         double v;
+        // #1144 — escape-step smoothing (Härkönen, as the S3 stripe average): the
+        // window holds N = Steps whole steps and closes at the continuous time
+        // T = StopT ∈ (N − 1, N]; blend the N- and (N − 1)-step values by
+        // w = T − (N − 1). Across a band edge (N → N + 1) T is continuous and
+        // the blend meets itself: w → 1 on one side, w → 0 on the other.
+        double w = smooth && a.Steps >= 2 && !double.IsNaN(a.StopT)
+            ? Math.Clamp(a.StopT - (a.Steps - 1), 0.0, 1.0) : 1.0;
         switch (field)
         {
             case DualOrbitField.SecantLyapunov:
             {
                 // λ = mean ln|z_k + c_k| over the window; no window (an orbit
                 // starts past the bailout) reads as maximally separating.
-                double t = a.Steps > 0 ? 0.5 + 0.5 * Math.Clamp(a.LogSigmaSum / a.Steps / lyapSpan, -1.0, 1.0) : 1.0;
+                double lambda = a.Steps > 0 ? a.LogSigmaSum / a.Steps : 0.0;
+                if (w < 1.0)
+                    lambda = w * lambda + (1.0 - w) * (a.LogSigmaSum - a.LastLogSigma) / (a.Steps - 1);
+                double t = a.Steps > 0 ? 0.5 + 0.5 * Math.Clamp(lambda / lyapSpan, -1.0, 1.0) : 1.0;
                 v = t * maxIter;
                 break;
             }
@@ -490,7 +518,7 @@ public sealed partial class DualOrbitEscapeCalculator
                 break;
             case DualOrbitField.PairWinding:
                 if (quat || double.IsNaN(a.Winding)) { live = false; return 0.0; }
-                v = 0.5 * maxIter + a.Winding;     // one palette unit per turn, 0 turns mid-palette
+                v = 0.5 * maxIter + a.Winding - (1.0 - w) * a.LastWinding;   // one palette unit per turn; #1144 blend
                 break;
             case DualOrbitField.MidpointPerturbation:
             {

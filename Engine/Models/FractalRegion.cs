@@ -663,6 +663,7 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitLicSource { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitLicLength { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitLicStrength { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? DualOrbitLyapunovSmooth { get; set; }   // #1144
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitStripeDensity { get; set; }
         // #1118 — distance estimates / dual outline.
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitDEScale { get; set; }
@@ -1077,6 +1078,7 @@ namespace FracturingFog.Models
                     DualOrbitLicSource = p.DualOrbitLicSource != D.DualOrbitLicSource ? (int)p.DualOrbitLicSource : (int?)null,
                     DualOrbitLicLength = p.DualOrbitLicLength != D.DualOrbitLicLength ? p.DualOrbitLicLength : (int?)null,
                     DualOrbitLicStrength = p.DualOrbitLicStrength != D.DualOrbitLicStrength ? p.DualOrbitLicStrength : (double?)null,
+                    DualOrbitLyapunovSmooth = p.DualOrbitLyapunovSmooth ? true : (bool?)null,
                     DualOrbitStripeDensity = p.DualOrbitStripeDensity != D.DualOrbitStripeDensity ? p.DualOrbitStripeDensity : (double?)null,
                     DualOrbitDEScale = p.DualOrbitDEScale != D.DualOrbitDEScale ? p.DualOrbitDEScale : (double?)null,
                     DualOrbitOutlineWidth = p.DualOrbitOutlineWidth != D.DualOrbitOutlineWidth ? p.DualOrbitOutlineWidth : (double?)null,
@@ -1626,6 +1628,7 @@ namespace FracturingFog.Models
             if (this.DualOrbitLicSource.HasValue) p.DualOrbitLicSource = (FracturingFog.DualOrbitLicSource)this.DualOrbitLicSource.Value;
             if (DualOrbitLicLength.HasValue) p.DualOrbitLicLength = DualOrbitLicLength.Value;
             if (DualOrbitLicStrength.HasValue) p.DualOrbitLicStrength = DualOrbitLicStrength.Value;
+            if (DualOrbitLyapunovSmooth.HasValue) p.DualOrbitLyapunovSmooth = DualOrbitLyapunovSmooth.Value;
             if (DualOrbitStripeDensity.HasValue) p.DualOrbitStripeDensity = DualOrbitStripeDensity.Value;
             if (DualOrbitDEScale.HasValue) p.DualOrbitDEScale = DualOrbitDEScale.Value;
             if (DualOrbitOutlineWidth.HasValue) p.DualOrbitOutlineWidth = DualOrbitOutlineWidth.Value;
