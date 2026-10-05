@@ -509,7 +509,7 @@
         <!-- Dual-Orbit Escape (#864 / #866) -->
         <Grid IsVisible="{Binding IsDualOrbitEscape}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Map:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding DualOrbitMaps}"
@@ -766,6 +766,17 @@
                            Value="{Binding DualOrbitTrapAngle, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsDualOrbitTrapField}"
                            ToolTip.Tip="Turns the trap shape by this many degrees, in either frame. Animatable — spin the trap." />
+            <CheckBox Grid.Row="41" Grid.Column="0" Grid.ColumnSpan="2"
+                      Content="Relief height from its own field"
+                      IsChecked="{Binding DualOrbitSplitHeight, Mode=TwoWay}" Margin="0,8,0,2"
+                      ToolTip.Tip="Off = Relief (and SSAO) height follows the coloured value. On = the height comes from the field chosen below while the colour stays as set above — e.g. hills from the secant Lyapunov exponent, painted by the external-angle difference or the per-orbit layers." />
+            <TextBlock Grid.Row="42" Grid.Column="0" Text="Height field:" VerticalAlignment="Center"
+                       IsVisible="{Binding DualOrbitSplitHeight}" />
+            <ComboBox Grid.Row="42" Grid.Column="1"
+                      ItemsSource="{Binding DualOrbitFields}"
+                      SelectedItem="{Binding DualOrbitHeightField, Mode=TwoWay}" Margin="0,2"
+                      IsVisible="{Binding DualOrbitSplitHeight}"
+                      ToolTip.Tip="The field the Relief height is built from (its own settings — trap shape, spans, scales — are shared with the colour field). Changing it does not re-run the colour orbits." />
             <TextBlock Grid.Row="24" Grid.Column="0" Grid.ColumnSpan="2"
                        Text="Böttcher domain colouring: inside the Mandelbrot set (critical orbit bounded) it shows the c-orbit's own angle and potential. ComplexPlane map only."
                        IsVisible="{Binding IsDualOrbitDomain}"
