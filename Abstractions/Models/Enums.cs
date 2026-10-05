@@ -337,6 +337,14 @@ namespace FracturingFog
         PathInterference,
         /// <summary>Phase (turns) of the summed two-path amplitude (#1126).</summary>
         PathInterferencePhase,
+        /// <summary>Shannon entropy of the outcome classes of N c-seeds in a disc of
+        /// radius ρ round c (Daza et al. 2016 basin entropy), scaled by ln(#classes)
+        /// (#1127). <c>DualOrbitEnsembleN</c> / <c>Radius</c> / <c>Sectors</c>.</summary>
+        BasinEntropy,
+        /// <summary>Uncertainty exponent α (Grebogi–McDonald–Ott–Yorke): slope of the
+        /// fraction of disagreeing ε-pairs vs ε; α = 2 − D_boundary (1 = smooth
+        /// boundary). α/2 on the palette; no value where &lt; 2 levels disagree (#1127).</summary>
+        UncertaintyExponent,
     }
 
     /// <summary>Which two of the four dual-orbit coordinates (c-seed x/y, parameter

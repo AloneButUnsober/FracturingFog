@@ -460,6 +460,51 @@ amplitude e^{iκΦ}, where κ (`DualOrbitInterferenceK`, animatable) is the "ħ"
 *Headless `--batch`, default c-seed, Cividis. κ = 20 (default, γ = 0); κ = 45; γ = 1 (the angle
 damping, S6 cuts visible as seams); phase at κ = 6.*
 
+**S13 as shipped (#1127).** The c-orbit is generalised to an ensemble of N seeds in a disc of
+radius ρ round c (`DualOrbitEnsembleN` = 32, `DualOrbitEnsembleRadius` = 0.02 in c units).
+- **Seed layout:** a deterministic sunflower spiral, area-uniform with no RNG, so renders are
+  reproducible.
+- **Outcome classes:** bounded or escaped (`DualOrbitEnsembleSectors` = 0). With K ≥ 1, bounded or
+  escaped through one of K level-1 external-angle sectors (lifted, so bailout-independent).
+- **`BasinEntropy`:** the Shannon entropy of the class histogram (Daza et al. 2016), scaled by
+  ln(#classes).
+  - Image aggregates are public: S_b (`BasinEntropyMean`), S_bb (`BasinEntropyBoundaryMean`) and
+    the boundary-box fraction.
+  - Daza's ln 2 criterion needs ≥ 3 classes (with 2 classes the bound *is* ln 2), so use sectors.
+- **`UncertaintyExponent`** (Grebogi–McDonald–Ott–Yorke):
+  - Each seed is paired with a partner at ε_k = ρ·2^{−(k+1)}, for k < `DualOrbitUncertaintyLevels`
+    (= 4), with one fixed plastic-sequence direction per seed.
+  - f(ε) is the fraction of disagreeing pairs. α is the least-squares slope of ln f against ln ε,
+    with α = 2 − D_boundary.
+  - Fewer than 2 disagreeing levels gives no value (interior).
+- **Measured α (N = 2048, ρ = 0.05, 5 levels):**
+  - unit circle (J of z²): **0.991**;
+  - straight external ray (2 sectors): **0.962**;
+  - basilica (D ≈ 1.268, theory 0.732): **0.666**.
+- **The UE field is a noisy local estimator.** N = 32–64 renders speckled; use N ≥ 256 for
+  smooth fields.
+- **Budget:** N·(1 + L) orbits per pixel (defaults: 160). A Brent cycle check stops bounded seeds
+  once they settle, so interior seeds in hyperbolic components are cheap. BasinEntropy skips the
+  partners. The smoke renders at 640×480 took 0.4–1.0 s.
+- **No progressive refinement:** the host's ¼ → ½ → full chain is Mandelbrot-only, so this is filed
+  as #1146 (the §7 open question).
+- All four params are geometry (`GeometryKey`). The quaternion map gives interior.
+- **Tests:**
+  - the layout is deterministic, in the unit disc, and area-uniform (P(r ≤ ½) = ¼);
+  - entropy is 0 inside one basin (both sides of |c| = 1);
+  - entropy over a basilica image ≡ a **test-side ensemble with its own escape loop** (≤ 1e-5),
+    including the boundary fraction and S_bb ≥ S_b;
+  - the entropy bound holds, and some box sees ≥ 3 of 4 classes;
+  - α ∈ [0.9, 1.1] on the circle and on a straight ray; α ∈ [0.5, 0.88] on the basilica; no
+    value away from boundaries;
+  - determinism; quaternion → interior; CLI round trip.
+
+![Basin entropy and uncertainty exponent](../Images/dualorbit-coloring/s13-basin-entropy.png)
+*Headless `--batch`, Cividis. BasinEntropy on the parameter plane (traces M_c's boundary) and on
+the basilica's Julia plane with 3 sectors (the θ = 0, ⅓, ⅔ rays appear as smooth class
+boundaries); UncertaintyExponent on the parameter plane and on the rabbit (N = 64: speckled, as
+expected).*
+
 ---
 
 ## 4. Architecture (S1 #1115)
@@ -600,7 +645,7 @@ Scripts: [`dualorbit_previews.py`](DualOrbit-Coloring-Prototypes/dualorbit_previ
   (#392 tails).
 - **S10:** Should the c-seed in the Dual Buddhabrot also be samplable (4D (c, s) sampling — a density
   over all Julia sets) as a mode, or stay fixed? Fixed first, because it makes c an animation knob.
-- **S13:** Per-pixel ensemble cost (×N). Progressive refinement only, or also a tile-level budget?
+- **S13:** Per-pixel ensemble cost (×N). Progressive refinement only, or also a tile-level budget? → S13 shipped single-pass with a Brent early-out; host progressive refinement filed as #1146.
 
 ---
 
