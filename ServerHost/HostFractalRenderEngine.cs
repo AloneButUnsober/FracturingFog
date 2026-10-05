@@ -33,7 +33,7 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
         ISessionLog log,
         CancellationToken ct)
     {
-        if (!Enum.TryParse<FractalType>(req.FractalType, ignoreCase: true, out var declaredType))
+        if (!FractalTypeNames.TryParse(req.FractalType, ignoreCase: true, out var declaredType))
             throw new ServerProtocolException("bad-request", $"unknown fractal type '{req.FractalType}'");
 
         FractalRegion? region = !string.IsNullOrWhiteSpace(req.RegionName)

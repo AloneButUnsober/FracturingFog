@@ -750,3 +750,8 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   traps, bivariate/copula palettes, path interference, basin entropy, FTLE/LIC, and a **Dual Buddhabrot**
   (joint-outcome channels; the c-escaped / z-bounded channel is new structure). Slices #1115–#1129;
   novelty research deferred to #1130. Supersedes #867's deposition scope.
+- **2026-10-05** — **Renamed (#1154 / #1155):** `FractalType.DualOrbitEscape` → **`JulibrotPair`**
+  ("Julibrot Pair") and `FractalType.DualOrbitVolume` → **`Julibrot`**, after the #1130 novelty research
+  found the volume is a classic Julibrot 3D slice and the 2D type reads two Julibrot points. Same enum
+  values; old names still parse (`FractalTypeNames`, `FractalTypeJsonConverter`); calculator classes and
+  `DualOrbit*` parameter keys unchanged. Entries above keep the names of their time.

@@ -63,6 +63,7 @@ namespace FracturingFog.Models
                 WriteIndented = true,
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
             };
+            opts.Converters.Add(new FractalTypeJsonConverter());   // #1154/#1155 renamed type names
             opts.Converters.Add(new JsonStringEnumConverter());
             return opts;
         }

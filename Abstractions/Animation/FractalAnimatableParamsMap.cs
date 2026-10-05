@@ -100,7 +100,7 @@ public static class FractalAnimatableParamsMap
         FractalType.PrecisionField
             => _precisionFieldList,
 
-        FractalType.DualOrbitEscape
+        FractalType.JulibrotPair
             => _dualOrbitList,
 
         FractalType.DualBuddhabrot
@@ -137,7 +137,7 @@ public static class FractalAnimatableParamsMap
         FractalType.Coquaternion
             => _coquaternionList,
 
-        FractalType.DualOrbitVolume
+        FractalType.Julibrot
             => _dualOrbitVolumeList,
 
         // ── User-defined 2D ───────────────────────────────────────────────

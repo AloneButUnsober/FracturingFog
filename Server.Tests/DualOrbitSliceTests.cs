@@ -126,7 +126,7 @@ public sealed class DualOrbitSliceTests
         Assert.Equal(0.02, cl.DualOrbitSY);
 
         var restored = new FractalParameters();
-        RegionFractalParams.Snapshot(FractalType.DualOrbitEscape, p)!.ApplyTo(restored);
+        RegionFractalParams.Snapshot(FractalType.JulibrotPair, p)!.ApplyTo(restored);
         Assert.Equal(DualOrbitSliceAxes.CxSx, restored.DualOrbitSliceAxes);
         Assert.Equal(-1.3, restored.DualOrbitSX);
         Assert.Equal(0.02, restored.DualOrbitSY);

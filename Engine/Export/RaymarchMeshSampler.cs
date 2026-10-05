@@ -110,7 +110,7 @@ public static class RaymarchMeshSampler
                     KifsCalculator.ProbeDE(fold, x, y, z, scale, ox, oy, oz, iter));
             }
 
-            case FractalType.DualOrbitVolume:
+            case FractalType.Julibrot:
             {
                 // #972 — same DE as the render (slab-clipped), so print = picture.
                 double bail = Math.Max(4.0, p.DualOrbitVolumeBailout);
@@ -135,7 +135,7 @@ public static class RaymarchMeshSampler
         FractalType.Kleinian  => Math.Max(0.25, p.KleinianSphereScale)
                                  * (Math.Sqrt(3.0) + Math.Sqrt(2.0)),
         // #972 — c-plane layers fit |c| <= 2; the slab spans +/- half-height in Y.
-        FractalType.DualOrbitVolume => Math.Max(2.2, p.DualOrbitVolumeHalfHeight + 0.1),
+        FractalType.Julibrot => Math.Max(2.2, p.DualOrbitVolumeHalfHeight + 0.1),
         _ => 2.0,
     };
 }

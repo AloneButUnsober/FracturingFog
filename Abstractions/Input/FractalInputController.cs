@@ -101,7 +101,7 @@ namespace FracturingFog.Input
                     FractalType.Kleinian        => ViewState.FractalParameters.KleinianCameraTheta,
                     FractalType.BicomplexMandelbrot => ViewState.FractalParameters.BicomplexCameraTheta,
                     FractalType.Coquaternion    => ViewState.FractalParameters.CoquaternionCameraTheta,
-                    FractalType.DualOrbitVolume => ViewState.FractalParameters.DualOrbitVolumeCameraTheta,
+                    FractalType.Julibrot => ViewState.FractalParameters.DualOrbitVolumeCameraTheta,
                     _                           => ViewState.FractalParameters.BulbCameraTheta,
                 };
                 _rightDragStartPhi = ViewState.FractalType switch
@@ -114,7 +114,7 @@ namespace FracturingFog.Input
                     FractalType.Kleinian        => ViewState.FractalParameters.KleinianCameraPhi,
                     FractalType.BicomplexMandelbrot => ViewState.FractalParameters.BicomplexCameraPhi,
                     FractalType.Coquaternion    => ViewState.FractalParameters.CoquaternionCameraPhi,
-                    FractalType.DualOrbitVolume => ViewState.FractalParameters.DualOrbitVolumeCameraPhi,
+                    FractalType.Julibrot => ViewState.FractalParameters.DualOrbitVolumeCameraPhi,
                     _                           => ViewState.FractalParameters.BulbCameraPhi,
                 };
                 CursorRequested?.Invoke(this, new InputCursorRequest(InputCursor.NoMove2D));
@@ -226,7 +226,7 @@ namespace FracturingFog.Input
                         ViewState.FractalParameters.CoquaternionCameraTheta = newTheta;
                         ViewState.FractalParameters.CoquaternionCameraPhi = newPhi;
                         break;
-                    case FractalType.DualOrbitVolume:
+                    case FractalType.Julibrot:
                         ViewState.FractalParameters.DualOrbitVolumeCameraTheta = newTheta;
                         ViewState.FractalParameters.DualOrbitVolumeCameraPhi = newPhi;
                         break;
@@ -596,7 +596,7 @@ namespace FracturingFog.Input
             else if (ViewState.FractalType == FractalType.Coquaternion)
                 ViewState.FractalParameters.CoquaternionCameraDistance = Math.Clamp(
                     ViewState.FractalParameters.CoquaternionCameraDistance + delta, 0.1, 500.0);
-            else if (ViewState.FractalType == FractalType.DualOrbitVolume)
+            else if (ViewState.FractalType == FractalType.Julibrot)
                 ViewState.FractalParameters.DualOrbitVolumeCameraDistance = Math.Clamp(
                     ViewState.FractalParameters.DualOrbitVolumeCameraDistance + delta, 0.1, 500.0);
             else return;
@@ -623,7 +623,7 @@ namespace FracturingFog.Input
                 ViewState.FractalParameters.BicomplexCameraTheta = NormalizeAngle(ViewState.FractalParameters.BicomplexCameraTheta + delta);
             else if (ViewState.FractalType == FractalType.Coquaternion)
                 ViewState.FractalParameters.CoquaternionCameraTheta = NormalizeAngle(ViewState.FractalParameters.CoquaternionCameraTheta + delta);
-            else if (ViewState.FractalType == FractalType.DualOrbitVolume)
+            else if (ViewState.FractalType == FractalType.Julibrot)
                 ViewState.FractalParameters.DualOrbitVolumeCameraTheta = NormalizeAngle(ViewState.FractalParameters.DualOrbitVolumeCameraTheta + delta);
             else return;
             RaiseViewChanged(RenderHint.Full);
@@ -660,7 +660,7 @@ namespace FracturingFog.Input
             else if (ViewState.FractalType == FractalType.Coquaternion)
                 ViewState.FractalParameters.CoquaternionCameraPhi = Math.Clamp(
                     ViewState.FractalParameters.CoquaternionCameraPhi + delta, phiMin, phiMax);
-            else if (ViewState.FractalType == FractalType.DualOrbitVolume)
+            else if (ViewState.FractalType == FractalType.Julibrot)
                 ViewState.FractalParameters.DualOrbitVolumeCameraPhi = Math.Clamp(
                     ViewState.FractalParameters.DualOrbitVolumeCameraPhi + delta, phiMin, phiMax);
             else return;
@@ -687,7 +687,7 @@ namespace FracturingFog.Input
                 ViewState.FractalParameters.BicomplexLightTheta = NormalizeAngle(ViewState.FractalParameters.BicomplexLightTheta + delta);
             else if (ViewState.FractalType == FractalType.Coquaternion)
                 ViewState.FractalParameters.CoquaternionLightTheta = NormalizeAngle(ViewState.FractalParameters.CoquaternionLightTheta + delta);
-            else if (ViewState.FractalType == FractalType.DualOrbitVolume)
+            else if (ViewState.FractalType == FractalType.Julibrot)
                 ViewState.FractalParameters.DualOrbitVolumeLightTheta = NormalizeAngle(ViewState.FractalParameters.DualOrbitVolumeLightTheta + delta);
             else return;
             RaiseViewChanged(RenderHint.Full);
@@ -724,7 +724,7 @@ namespace FracturingFog.Input
             else if (ViewState.FractalType == FractalType.Coquaternion)
                 ViewState.FractalParameters.CoquaternionLightPhi = Math.Clamp(
                     ViewState.FractalParameters.CoquaternionLightPhi + delta, phiMin, phiMax);
-            else if (ViewState.FractalType == FractalType.DualOrbitVolume)
+            else if (ViewState.FractalType == FractalType.Julibrot)
                 ViewState.FractalParameters.DualOrbitVolumeLightPhi = Math.Clamp(
                     ViewState.FractalParameters.DualOrbitVolumeLightPhi + delta, phiMin, phiMax);
             else return;

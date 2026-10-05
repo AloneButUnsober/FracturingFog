@@ -50,7 +50,7 @@ namespace FracturingFog.Models
             WriteIndented = true,
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            Converters = { new JsonStringEnumConverter() },
+            Converters = { new FractalTypeJsonConverter(), new JsonStringEnumConverter() },
         };
 
         /// <summary>Load the preset file, falling back to legacy migration when

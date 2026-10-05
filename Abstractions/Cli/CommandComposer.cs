@@ -228,7 +228,7 @@ namespace FracturingFog.Cli
         {
             get
             {
-                if (ValueOf(BatchFlags.Fractal) is string f && Enum.TryParse<FractalType>(f, true, out var ft)) return ft;
+                if (ValueOf(BatchFlags.Fractal) is string f && FractalTypeNames.TryParse(f, true, out var ft)) return ft;
                 return IsSelected(BatchFlags.Region) ? null : FractalType.Mandelbrot;
             }
         }

@@ -24,7 +24,7 @@ public sealed class DualOrbitLayerSettingsTests
             DualOrbitLayerBlend = DualOrbitLayerBlend.Screen, DualOrbitOpacityZ = 0.4, DualOrbitOpacityC = 0.9,
         };
         var restored = new FractalParameters { DualOrbitThemeC = "something else" };
-        RegionFractalParams.Snapshot(FractalType.DualOrbitEscape, p)!.ApplyTo(restored);
+        RegionFractalParams.Snapshot(FractalType.JulibrotPair, p)!.ApplyTo(restored);
         Assert.Equal(DualOrbitColorMode.PerOrbitLayers, restored.DualOrbitColorMode);
         Assert.Equal("Cividis", restored.DualOrbitThemeZ);
         Assert.Equal("", restored.DualOrbitThemeC);
@@ -37,7 +37,7 @@ public sealed class DualOrbitLayerSettingsTests
     public void Defaults_AreOmittedFromTheSnapshot()
     {
         // An all-default family snapshots to null (nothing to store) — that is omission too.
-        var snap = RegionFractalParams.Snapshot(FractalType.DualOrbitEscape, new FractalParameters());
+        var snap = RegionFractalParams.Snapshot(FractalType.JulibrotPair, new FractalParameters());
         if (snap is null) return;
         Assert.Null(snap.DualOrbitColorMode);
         Assert.Null(snap.DualOrbitThemeZ);
@@ -57,8 +57,8 @@ public sealed class DualOrbitLayerSettingsTests
         };
         var region = new FractalRegion
         {
-            Name = "t", FractalType = FractalType.DualOrbitEscape, CenterX = 0, CenterY = 0, Zoom = 1,
-            Params = RegionFractalParams.Snapshot(FractalType.DualOrbitEscape, new FractalParameters()),
+            Name = "t", FractalType = FractalType.JulibrotPair, CenterX = 0, CenterY = 0, Zoom = 1,
+            Params = RegionFractalParams.Snapshot(FractalType.JulibrotPair, new FractalParameters()),
         };
         region.ApplyFamilyParams(live);
         var d = new FractalParameters();
@@ -85,8 +85,8 @@ public sealed class DualOrbitLayerSettingsTests
         var c = ColorPalette.GetPaletteByName(FractalParameters.DualOrbitDefaultThemeC);
         Assert.IsNotType<HsvPalette>(z);
         Assert.IsNotType<HsvPalette>(c);
-        Assert.True(ColorPalette.IsCompatible(z, FractalType.DualOrbitEscape));
-        Assert.True(ColorPalette.IsCompatible(c, FractalType.DualOrbitEscape));
+        Assert.True(ColorPalette.IsCompatible(z, FractalType.JulibrotPair));
+        Assert.True(ColorPalette.IsCompatible(c, FractalType.JulibrotPair));
         z.MaxIterations = c.MaxIterations = 256;
         foreach (float s in new[] { 1f, 2f, 4f, 6f })
         {
@@ -99,7 +99,7 @@ public sealed class DualOrbitLayerSettingsTests
     // ── View model ───────────────────────────────────────────────────────────
 
     private static FractalParamsViewModel Vm(FractalParameters p, Func<IReadOnlyList<string>>? names)
-        => new(FractalType.DualOrbitEscape, p, layerThemeNames: names);
+        => new(FractalType.JulibrotPair, p, layerThemeNames: names);
 
     [Fact]
     public void MainThemeEntry_MapsToEmptyName_BothWays()

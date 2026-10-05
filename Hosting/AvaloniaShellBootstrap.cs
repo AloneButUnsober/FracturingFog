@@ -2432,7 +2432,7 @@ namespace FracturingFog.Hosting
                         // with the dual-orbit calculator, fetched only on first use.
                         layerThemeNames: () => s_themeService?.EnumerateThemeNames(
                             global::FracturingFog.Models.ThemeSortMode.ByFractalCompat, null, false,
-                            global::FracturingFog.FractalType.DualOrbitEscape)
+                            global::FracturingFog.FractalType.JulibrotPair)
                             ?? (IReadOnlyList<string>)Array.Empty<string>());
                     vm.ParamChanged += () => s_renderHost?.Trigger();
 

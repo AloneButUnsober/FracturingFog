@@ -95,7 +95,7 @@ namespace FracturingFog.Models
         {
             WriteIndented = true,
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            Converters = { new JsonStringEnumConverter() },
+            Converters = { new FractalTypeJsonConverter(), new JsonStringEnumConverter() },
         };
 
         /// <summary>Process-wide instance, loaded on first use. Mutate then

@@ -1910,7 +1910,7 @@ namespace FracturingFog.Rendering
             var incRegions = (_videoIncludedRegions is { Count: > 0 })
                 ? new HashSet<string>(_videoIncludedRegions, StringComparer.OrdinalIgnoreCase) : null;
             var incFractal = (_videoFilterFractalTypes is { Count: > 0 })
-                ? new HashSet<string>(_videoFilterFractalTypes, StringComparer.OrdinalIgnoreCase) : null;
+                ? new HashSet<string>(System.Linq.Enumerable.Select(_videoFilterFractalTypes, FractalTypeNames.Canonical), StringComparer.OrdinalIgnoreCase) : null;   // #1154/#1155
             var incQuality = (_videoFilterQualityPresets is { Count: > 0 })
                 ? new HashSet<string>(_videoFilterQualityPresets, StringComparer.OrdinalIgnoreCase) : null;
             var incThemes = (_videoIncludedThemes is { Count: > 0 })

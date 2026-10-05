@@ -244,12 +244,12 @@ public sealed class DualOrbitVolumeQuatParityTests
             var p = new FractalParameters { DualOrbitVolumeColor = src };
             var report = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot
             {
-                Fractal = FractalType.DualOrbitVolume, Parameters = p,
-                FamilyParams = RegionFractalParams.Snapshot(FractalType.DualOrbitVolume, p)!.ToKeyValues(),
+                Fractal = FractalType.Julibrot, Parameters = p,
+                FamilyParams = RegionFractalParams.Snapshot(FractalType.Julibrot, p)!.ToKeyValues(),
             });
             Assert.True(BatchOptions.TryParse(report.Args.ToArray(), 0, out var o, out var err), err);
             var fresh = new FractalParameters();
-            RegionFractalParams.FromKeyValues(o.Params, FractalType.DualOrbitVolume, out _)!.ApplyTo(fresh);
+            RegionFractalParams.FromKeyValues(o.Params, FractalType.Julibrot, out _)!.ApplyTo(fresh);
             Assert.Equal(src, fresh.DualOrbitVolumeColor);
         }
     }

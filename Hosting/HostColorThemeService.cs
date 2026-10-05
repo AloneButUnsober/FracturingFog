@@ -1455,7 +1455,7 @@ namespace FracturingFog.Hosting
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
                 Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-                Converters = { new JsonStringEnumConverter() },
+                Converters = { new FractalTypeJsonConverter(), new JsonStringEnumConverter() },
             };
             return JsonSerializer.Serialize(data, opts);
         }
@@ -1482,7 +1482,7 @@ namespace FracturingFog.Hosting
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
                 Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-                Converters = { new JsonStringEnumConverter() },
+                Converters = { new FractalTypeJsonConverter(), new JsonStringEnumConverter() },
             };
             return JsonSerializer.Serialize(region, opts);
         }

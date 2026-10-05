@@ -80,7 +80,7 @@ namespace FracturingFog.Models
             FractalType.ChaoticBilliard => FractalMotionClass.Zoomable2D,
             FractalType.PrecisionField => FractalMotionClass.Zoomable2D,
             // Dual-orbit escape-geometry (#864) — a 2D field over the s-plane.
-            FractalType.DualOrbitEscape => FractalMotionClass.Zoomable2D,
+            FractalType.JulibrotPair => FractalMotionClass.Zoomable2D,
             // Indra's Pearls (#892) — 2D Möbius-group limit set; deeper words
             // auto-reveal on zoom (Apollonian contract).
             FractalType.IndrasPearls => FractalMotionClass.Zoomable2D,
@@ -109,7 +109,7 @@ namespace FracturingFog.Models
             FractalType.Kleinian => FractalMotionClass.Raymarch3D,
             FractalType.BicomplexMandelbrot => FractalMotionClass.Raymarch3D,
             FractalType.Coquaternion => FractalMotionClass.Raymarch3D,
-            FractalType.DualOrbitVolume => FractalMotionClass.Raymarch3D,
+            FractalType.Julibrot => FractalMotionClass.Raymarch3D,
             FractalType.UserBulb => FractalMotionClass.Raymarch3D,
 
             // ── Non-spatial — zoom is a no-op or addresses the wrong axis ────
@@ -243,7 +243,7 @@ namespace FracturingFog.Models
             FractalType.Kleinian,
             FractalType.BicomplexMandelbrot,
             FractalType.Coquaternion,
-            FractalType.DualOrbitVolume,
+            FractalType.Julibrot,
         };
 
         public static bool IsMeshExportable(FractalType type) => System.Array.IndexOf(Types, type) >= 0;

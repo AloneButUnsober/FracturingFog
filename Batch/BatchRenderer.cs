@@ -1697,7 +1697,7 @@ namespace FracturingFog.Batch
             // pool), matching the interactive SlideshowEngine.
             var regionPool = new System.Collections.Generic.List<FractalRegion>();
             var incTypes = cfg.FilterFractalTypes != null && cfg.FilterFractalTypes.Count > 0
-                ? new System.Collections.Generic.HashSet<string>(cfg.FilterFractalTypes, StringComparer.OrdinalIgnoreCase)
+                ? new System.Collections.Generic.HashSet<string>(System.Linq.Enumerable.Select(cfg.FilterFractalTypes, FractalTypeNames.Canonical), StringComparer.OrdinalIgnoreCase)   // #1154/#1155 renamed types
                 : null;
             var incRegions = cfg.IncludedRegions != null && cfg.IncludedRegions.Count > 0
                 ? new System.Collections.Generic.HashSet<string>(cfg.IncludedRegions, StringComparer.OrdinalIgnoreCase)

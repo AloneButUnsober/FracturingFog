@@ -197,7 +197,7 @@ public sealed class DualOrbitInterferenceTests
     [Fact]
     public void Kappa_IsAnimatable()
     {
-        var names = FracturingFog.Abstractions.Animation.FractalAnimatableParamsMap.For(FractalType.DualOrbitEscape).Select(d => d.ParamName);
+        var names = FracturingFog.Abstractions.Animation.FractalAnimatableParamsMap.For(FractalType.JulibrotPair).Select(d => d.ParamName);
         Assert.Contains(nameof(FractalParameters.DualOrbitInterferenceK), names);
     }
 
@@ -211,12 +211,12 @@ public sealed class DualOrbitInterferenceTests
         };
         var report = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot
         {
-            Fractal = FractalType.DualOrbitEscape, Parameters = p,
-            FamilyParams = RegionFractalParams.Snapshot(FractalType.DualOrbitEscape, p)!.ToKeyValues(),
+            Fractal = FractalType.JulibrotPair, Parameters = p,
+            FamilyParams = RegionFractalParams.Snapshot(FractalType.JulibrotPair, p)!.ToKeyValues(),
         });
         Assert.True(BatchOptions.TryParse(report.Args.ToArray(), 0, out var o, out var err), err);
         var fresh = new FractalParameters();
-        RegionFractalParams.FromKeyValues(o.Params, FractalType.DualOrbitEscape, out _)!.ApplyTo(fresh);
+        RegionFractalParams.FromKeyValues(o.Params, FractalType.JulibrotPair, out _)!.ApplyTo(fresh);
         Assert.Equal(DualOrbitField.PathInterferencePhase, fresh.DualOrbitField);
         Assert.Equal(31.5, fresh.DualOrbitInterferenceK);
         Assert.Equal(0.25, fresh.DualOrbitInterferenceGamma);

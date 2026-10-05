@@ -6,6 +6,12 @@
 **Novelty research:** [#1130](https://github.com/AloneButUnsober/FracturingFog/issues/1130) → §8 ·
 **Session:** 2026-10-05
 
+> **Renamed (#1154 / #1155, after the #1130 novelty research):** the 2D type *Dual-Orbit Escape* is
+> now **Julibrot Pair** (`FractalType.JulibrotPair`) and the 3D *Dual-Orbit Volume* is now
+> **Julibrot** (`FractalType.Julibrot`). Same enum values; the old names still load everywhere
+> (`FractalTypeNames`). The calculator classes and every `DualOrbit*` parameter key are unchanged,
+> and this doc keeps "dual-orbit" for the construction.
+
 The dual-orbit construction (`DualOrbitEscapeCalculator`, `DualOrbitVolumeCalculator`) iterates
 **two** orbits under one map `u → u² + s` — the critical orbit `z` (seed 0) and a decoupled probe
 orbit `c` (seed `c`) — and today colours them through either one derived scalar
@@ -487,7 +493,7 @@ radius ρ round c (`DualOrbitEnsembleN` = 32, `DualOrbitEnsembleRadius` = 0.02 i
   once they settle, so interior seeds in hyperbolic components are cheap. BasinEntropy skips the
   partners. The smoke renders at 640×480 took 0.4–1.0 s.
 - **Progressive refinement:** the host's ¼ → ½ → full chain was Mandelbrot-only. #1146 extends it
-  to Dual-Orbit Escape (below).
+  to Julibrot Pair (below).
 - All four params are geometry (`GeometryKey`). The quaternion map gives interior.
 - **Tests:**
   - the layout is deterministic, in the unit disc, and area-uniform (P(r ≤ ½) = ¼);
@@ -600,7 +606,7 @@ ExternalAngleDelta with LIC along the separation direction.*
   - rotation covariance; CLI round trip.
 
 ![Volume colour sources](../Images/dualorbit-coloring/s15-volume-sources.png)
-*Headless `--batch` DualOrbitVolume, Cividis: ExternalAngle (existing), SecantLyapunov, PhaseLag
+*Headless `--batch` Julibrot (then DualOrbitVolume), Cividis: ExternalAngle (existing), SecantLyapunov, PhaseLag
 (categorical: lag-0 amber on the layers whose s is in M), PairWinding.*
 
 **Escape-step smoothing (#1144).** `DualOrbitLyapunovSmooth` (default off, so the shipped look is
@@ -630,7 +636,7 @@ byte-identical) removes the escape-band terraces from the two step-additive pair
 *Headless `--batch --relief`, the S9 split (colour ExternalAngleDelta, height SecantLyapunov).
 Raw: escape-band terraces. Smoothed: continuous.*
 
-**Progressive preview (#1146).** Dual-Orbit Escape now gets the host's Wave 2.5 progressive chain
+**Progressive preview (#1146).** Julibrot Pair now gets the host's Wave 2.5 progressive chain
 (¼ → ½ → full) during interaction, like Mandelbrot. Previously that chain covered the canonical
 Mandelbrot path and, since #327, only *relief-eligible* alt types.
 - **How:** `FractalRenderHost.AlwaysProgressiveAlt(type)` names alt types that are expensive per
@@ -645,7 +651,7 @@ Mandelbrot path and, since #327, only *relief-eligible* alt types.
   ensemble pre-pass (N/8 first) is also possible later; the resolution chain already makes heavy
   views responsive.
 - **Tests:** through a real `FractalRenderHost` with a recording renderer:
-  - Dual-Orbit Escape uploads the quarter, then half, then full frame, and the final frame equals a
+  - Julibrot Pair uploads the quarter, then half, then full frame, and the final frame equals a
     non-progressive render;
   - a non-relief Julia keeps its single full render;
   - Mandelbrot's chain is unchanged.
@@ -815,7 +821,7 @@ shipping software.
   - the c-orbit is a "perturbed" Mandelbrot set (z₀ ≠ 0, Fractint's initial-orbit / perturbation
     parameter);
   - the pair is two fibres of the 4D **Julibrot** space (z₀, c) that share their parameter;
-  - the 3D Dual-Orbit Volume is a 3D slice of that same Julibrot space.
+  - the 3D volume (now named **Julibrot**, #1154) is a 3D slice of that same Julibrot space.
 - **The pair algebra is known:** D_{n+1} = D_n·(z_n + c_n) is the perturbation-theory recurrence
   δ_{n+1} = δ_n(2Z_n + δ_n) behind every modern deep-zoom renderer. The bicomplex equivalence is
   Rochon (2000).
@@ -857,7 +863,7 @@ shipping software.
 | **Basins.jl (Julia)** | Basin entropy, uncertainty exponent, fractal-boundary tests for dynamical systems | Not a fractal colouring |
 | **Bicomplex / tricomplex research code** (Rochon group: Tetrabrot, tricomplex slices) | 3D slices of bicomplex / tricomplex Mandelbrot sets | Shapes; relational colouring not found |
 
-**The 3D Dual-Orbit Volume in particular.** World (X, Z) = c and Y = s.x at a fixed s.y. That is a
+**The 3D volume (now Julibrot) in particular.** World (X, Z) = c and Y = s.x at a fixed s.y. That is a
 3D slice of the Julibrot space, so every horizontal layer is a filled Julia set, which is what
 Fractint's julibrot type and the 3D Julibrot renders show. The *object* is therefore known (since
 at least Fractint). Where no prior was found:
@@ -880,7 +886,7 @@ The earlier description of the construction as "FF-original" overstated it, and 
   established tools.
 - **Claims corrected in this change:**
   - the `DualOrbitEscapeCalculator` header;
-  - the `FractalType.DualOrbitEscape` doc comment;
+  - the `FractalType.JulibrotPair` (then `DualOrbitEscape`) doc comment;
   - Resources-Bibliography;
   - Theoretical-Fractal-RnD §3.6;
   - the Indra's Pearls design plan's aside.

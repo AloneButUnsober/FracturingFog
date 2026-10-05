@@ -114,7 +114,7 @@ public sealed class DualOrbitReliefSplitTests
 
     private static PosterRequest Req(FractalParameters fp) => new()
     {
-        FractalType = FractalType.DualOrbitEscape,
+        FractalType = FractalType.JulibrotPair,
         CenterX = -0.6, CenterY = 0, Zoom = 1.0, MaxIterations = 300,
         Width = 96, Height = 72,
         ColorMap = ColorPalette.BuiltIns[0], Quality = QualityPreset.Standard,
@@ -166,12 +166,12 @@ public sealed class DualOrbitReliefSplitTests
         };
         var report = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot
         {
-            Fractal = FractalType.DualOrbitEscape, Parameters = p,
-            FamilyParams = RegionFractalParams.Snapshot(FractalType.DualOrbitEscape, p)!.ToKeyValues(),
+            Fractal = FractalType.JulibrotPair, Parameters = p,
+            FamilyParams = RegionFractalParams.Snapshot(FractalType.JulibrotPair, p)!.ToKeyValues(),
         });
         Assert.True(BatchOptions.TryParse(report.Args.ToArray(), 0, out var o, out var err), err);
         var fresh = new FractalParameters();
-        RegionFractalParams.FromKeyValues(o.Params, FractalType.DualOrbitEscape, out _)!.ApplyTo(fresh);
+        RegionFractalParams.FromKeyValues(o.Params, FractalType.JulibrotPair, out _)!.ApplyTo(fresh);
         Assert.True(fresh.DualOrbitSplitHeight);
         Assert.Equal(DualOrbitField.GreenRatio, fresh.DualOrbitHeightField);
     }
