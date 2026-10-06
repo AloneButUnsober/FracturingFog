@@ -3,11 +3,15 @@
 
 // KleinianGpuCalculator.cs
 //
-// P7b — ILGPU-backed GPU raymarcher for the Kleinian limit set (fixed
-// tetrahedral 4-sphere preset, per the CPU KleinianCalculator). Sphere
-// centres are packed as 12 scalar fields rather than an array — ILGPU
-// kernels don't take managed arrays as struct fields, and the preset is
-// hard-coded at 4 spheres anyway.
+// P7b — ILGPU-backed GPU raymarcher for the Kleinian limit set.
+//
+// #880 / #1173-E (GPU parity G3.4) — any inversion group, not just the uniform
+// tetrahedral 4-sphere preset: the generators arrive as a buffer of (cx, cy, cz, r)
+// quadruples (KleinianGpuParams.GenCount of them; presets up to the 24-sphere
+// necklace, or any custom list), each with its own radius. The #877 rotation fold,
+// #878 word-length / last-generator colouring and #881 under-relaxed stepping run
+// in the kernel too. The generator count is uniform across a launch, so the
+// variable-length descent doesn't diverge between threads.
 //
 // Distance estimator: for each iter, find the sphere whose interior most
 // contains p (largest negative signed distance); if none, escape. Otherwise
@@ -23,24 +27,35 @@ using ILGPU.Runtime;
 
 namespace FracturingFog.Calculators.Gpu;
 
-/// <summary>Per-fractal kernel parameters for the Kleinian limit set.
-/// Fixed 4-sphere preset — centres packed scalar-by-scalar so the struct
-/// stays blittable for ILGPU. <see cref="Radius"/> is the common tangent
-/// radius; sqrt-2 scaled at the CPU side.</summary>
+/// <summary>Per-fractal kernel parameters for the Kleinian limit set. The
+/// generators themselves are the kernel's generator buffer
+/// (<see cref="KleinianGpuCalculator.PackGenerators"/>); this carries their count
+/// and the group-wide settings.</summary>
 public struct KleinianGpuParams
 {
-    public double C0X, C0Y, C0Z;
-    public double C1X, C1Y, C1Z;
-    public double C2X, C2Y, C2Z;
-    public double C3X, C3Y, C3Z;
-    public double Radius;
+    /// <summary>Number of (cx, cy, cz, r) generators in the generator buffer.</summary>
+    public int GenCount;
     public int DEIter;
     public double SceneRadius;
+
+    /// <summary>#877 — rotation fold after each inversion (KleinianRotation):
+    /// RotHas 0 = none, else Rodrigues about the unit axis by the angle whose
+    /// sine / cosine are RotSin / RotCos.</summary>
+    public int RotHas;
+    public double RotAx, RotAy, RotAz, RotSin, RotCos;
+
+    /// <summary>#878 — KleinianColorSource: 0 Smooth (step / depth blend), else the
+    /// descent word sampled just inside the surface (1 WordLength, 2 LastGenerator;
+    /// the enum values).</summary>
+    public int ColorSource;
+
+    /// <summary>#881 — primary-march step factor (1 = plain sphere tracing).</summary>
+    public double DeFactor;
 }
 
 public sealed class KleinianGpuCalculator : IDisposable
 {
-    private Action<Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, KleinianGpuParams, ArrayView<uint>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<uint>, ArrayView<uint>>? _kernel;
+    private Action<Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, KleinianGpuParams, ArrayView<uint>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<uint>, ArrayView<uint>, ArrayView<double>>? _kernel;
     private bool _initFailed;
     // #1169 — set once a device proved too slow for this kernel; per family and
     // device, process-wide, so new calculator instances don't re-probe it.
@@ -60,7 +75,7 @@ public sealed class KleinianGpuCalculator : IDisposable
         try
         {
             _kernel = acc.LoadAutoGroupedStreamKernel<
-                Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, KleinianGpuParams, ArrayView<uint>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<uint>, ArrayView<uint>>(KleinianKernel);
+                Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, KleinianGpuParams, ArrayView<uint>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<uint>, ArrayView<uint>, ArrayView<double>>(KleinianKernel);
             return true;
         }
         catch (Exception ex)
@@ -71,7 +86,7 @@ public sealed class KleinianGpuCalculator : IDisposable
         }
     }
 
-    public bool Render(uint[] outBuffer, GpuRaymarchParams r, GpuShadingParams sp, KleinianGpuParams p, uint[]? palette = null, float[]? depthOut = null, CancellationToken ct = default, float[]? normalOut = null, float[]? hdrOut = null, uint[]? albedoLut = null, uint[]? hdri = null)
+    public bool Render(uint[] outBuffer, GpuRaymarchParams r, GpuShadingParams sp, KleinianGpuParams p, uint[]? palette = null, float[]? depthOut = null, CancellationToken ct = default, float[]? normalOut = null, float[]? hdrOut = null, uint[]? albedoLut = null, uint[]? hdri = null, double[]? generators = null)
     {
         if (!TryInit() || _kernel == null) return false;
         if (!GpuAcceleratorHost.TryAcquire(out var acc)) return false;
@@ -104,9 +119,17 @@ public sealed class KleinianGpuCalculator : IDisposable
             uint[] env = hdri is { Length: >= 2 } ? hdri : GpuKernelUtils.PaletteOff;
             using var devHdri = GpuMemoryStats.Allocate1D<uint>(acc, env.Length);
             devHdri.CopyFromCPU(env);
+            // #880 — the generator list, (cx, cy, cz, r) per generator.
+            if (generators is null || generators.Length < 4 * Math.Max(1, p.GenCount))
+            {
+                LastError = "Kleinian GPU render: generator buffer missing or shorter than GenCount";
+                return false;
+            }
+            using var devGens = GpuMemoryStats.Allocate1D<double>(acc, generators.Length);
+            devGens.CopyFromCPU(generators);
             // #1170 — tiled under the GPU watchdog; byte-identical to one launch.
             var kernel = _kernel;
-            var run = GpuTiledDispatch.Run(acc, r, (n, rt) => kernel(n, dev.View, rt, sp, p, devLut.View, devDepth.View, devNormal.View, devHdr.View, devAlbedo.View, devHdri.View), ct);
+            var run = GpuTiledDispatch.Run(acc, r, (n, rt) => kernel(n, dev.View, rt, sp, p, devLut.View, devDepth.View, devNormal.View, devHdr.View, devAlbedo.View, devHdri.View, devGens.View), ct);
             if (run == GpuDispatchResult.TooSlow)
             {
                 // #1169 — this device can't render this kernel in useful time; stay on the CPU.
@@ -130,7 +153,7 @@ public sealed class KleinianGpuCalculator : IDisposable
     }
 
     private static void KleinianKernel(
-        Index1D tid, ArrayView<uint> output, GpuRaymarchParams r, GpuShadingParams sp, KleinianGpuParams p, ArrayView<uint> palette, ArrayView<float> depth, ArrayView<float> normals, ArrayView<float> hdr, ArrayView<uint> albedo, ArrayView<uint> hdri)
+        Index1D tid, ArrayView<uint> output, GpuRaymarchParams r, GpuShadingParams sp, KleinianGpuParams p, ArrayView<uint> palette, ArrayView<float> depth, ArrayView<float> normals, ArrayView<float> hdr, ArrayView<uint> albedo, ArrayView<uint> hdri, ArrayView<double> gens)
     {
         int idx = GpuKernelUtils.TilePixel(tid, in r);   // #1170 — pixel this thread shades
         int x = idx % r.Width;
@@ -156,7 +179,7 @@ public sealed class KleinianGpuCalculator : IDisposable
         // ray (byte-identical). Otherwise average DofSamples taps whose origin is
         // jittered across the aperture disc, re-aimed through the focal point.
         int dofN = (r.DofSamples > 1 && r.DofAperture > 0.0) ? r.DofSamples : 1;
-        if (dofN <= 1) { output[idx] = ShadeRay(r.CamX, r.CamY, r.CamZ, cdx, cdy, cdz, in r, in sp, in p, palette, depth, dIdx, normals, hdr, gIdx, albedo, hdri); return; }
+        if (dofN <= 1) { output[idx] = ShadeRay(r.CamX, r.CamY, r.CamZ, cdx, cdy, cdz, in r, in sp, in p, palette, depth, dIdx, normals, hdr, gIdx, albedo, hdri, gens); return; }
         double fpx = r.CamX + cdx * r.DofFocus, fpy = r.CamY + cdy * r.DofFocus, fpz = r.CamZ + cdz * r.DofFocus;
         double aR = 0, aG = 0, aB = 0, aA = 0;
         for (int k = 0; k < dofN; k++)
@@ -169,7 +192,7 @@ public sealed class KleinianGpuCalculator : IDisposable
             double loz = r.CamZ + r.RightZ * lx + r.UpZ * ly;
             double ddx = fpx - lox, ddy = fpy - loy, ddz = fpz - loz;
             double il = 1.0 / Math.Sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
-            uint c = ShadeRay(lox, loy, loz, ddx * il, ddy * il, ddz * il, in r, in sp, in p, palette, depth, -1, normals, hdr, -1, albedo, hdri);
+            uint c = ShadeRay(lox, loy, loz, ddx * il, ddy * il, ddz * il, in r, in sp, in p, palette, depth, -1, normals, hdr, -1, albedo, hdri, gens);
             aR += (c >> 16) & 0xFF; aG += (c >> 8) & 0xFF; aB += c & 0xFF; aA += (c >> 24) & 0xFF;
         }
         double inv = 1.0 / dofN;
@@ -183,7 +206,7 @@ public sealed class KleinianGpuCalculator : IDisposable
     private static uint ShadeRay(
         double rox, double roy, double roz, double rdx, double rdy, double rdz,
         in GpuRaymarchParams r, in GpuShadingParams sp, in KleinianGpuParams p, ArrayView<uint> palette,
-        ArrayView<float> depth, int depthIdx, ArrayView<float> normals, ArrayView<float> hdr, int gIdx, ArrayView<uint> albedo, ArrayView<uint> hdri)
+        ArrayView<float> depth, int depthIdx, ArrayView<float> normals, ArrayView<float> hdr, int gIdx, ArrayView<uint> albedo, ArrayView<uint> hdri, ArrayView<double> gens)
     {
         var (sphereHit, tEn, _) = GpuKernelUtils.SphereClipFrom(rox, roy, roz, rdx, rdy, rdz, in r);
         if (!sphereHit) return GpuKernelUtils.MissColor(hdri, rdx, rdy, rdz, in r, in sp);
@@ -197,20 +220,21 @@ public sealed class KleinianGpuCalculator : IDisposable
 
         for (int step = 0; step < r.MaxSteps; step++)
         {
-            double d = KleinianDE(px, py, pz, in p);
+            double d = KleinianDE(px, py, pz, in p, gens);
             if (d < r.Eps) { hit = true; hitStep = step; break; }
             if (tT > p.SceneRadius) break;
-            px += rdx * d; py += rdy * d; pz += rdz * d;
-            tT += d;
+            double mstep = d * p.DeFactor;   // #881 — under-relaxed step (1 = plain)
+            px += rdx * mstep; py += rdy * mstep; pz += rdz * mstep;
+            tT += mstep;
         }
 
         if (!hit) return GpuKernelUtils.MissColor(hdri, rdx, rdy, rdz, in r, in sp);
         if (depthIdx >= 0) depth[depthIdx] = (float)tT;   // #1070 — ray distance to the hit
 
         double h = r.Eps * 2;
-        double n0 = KleinianDE(px + h, py, pz, in p) - KleinianDE(px - h, py, pz, in p);
-        double n1 = KleinianDE(px, py + h, pz, in p) - KleinianDE(px, py - h, pz, in p);
-        double n2 = KleinianDE(px, py, pz + h, in p) - KleinianDE(px, py, pz - h, in p);
+        double n0 = KleinianDE(px + h, py, pz, in p, gens) - KleinianDE(px - h, py, pz, in p, gens);
+        double n1 = KleinianDE(px, py + h, pz, in p, gens) - KleinianDE(px, py - h, pz, in p, gens);
+        double n2 = KleinianDE(px, py, pz + h, in p, gens) - KleinianDE(px, py, pz - h, in p, gens);
         double nl = 1.0 / Math.Sqrt(n0 * n0 + n1 * n1 + n2 * n2 + 1e-20);
         double nx = n0 * nl, ny = n1 * nl, nz = n2 * nl;
 
@@ -246,11 +270,11 @@ public sealed class KleinianGpuCalculator : IDisposable
         if (spL.ShadowSteps > 0)
         {
             if ((spL.ShadowLightMask & 0x1) != 0 && spL.L1I > 0)
-                sh1 = SoftShadow(ox, oy, oz, spL.L1X, spL.L1Y, spL.L1Z, r.Eps, spL.ShadowTMax, spL.ShadowK1, spL.ShadowSteps, in p);
+                sh1 = SoftShadow(ox, oy, oz, spL.L1X, spL.L1Y, spL.L1Z, r.Eps, spL.ShadowTMax, spL.ShadowK1, spL.ShadowSteps, in p, gens);
             if ((spL.ShadowLightMask & 0x2) != 0 && spL.L2I > 0)
-                sh2 = SoftShadow(ox, oy, oz, spL.L2X, spL.L2Y, spL.L2Z, r.Eps, spL.ShadowTMax, spL.ShadowK2, spL.ShadowSteps, in p);
+                sh2 = SoftShadow(ox, oy, oz, spL.L2X, spL.L2Y, spL.L2Z, r.Eps, spL.ShadowTMax, spL.ShadowK2, spL.ShadowSteps, in p, gens);
             if ((spL.ShadowLightMask & 0x4) != 0 && spL.L3I > 0)
-                sh3 = SoftShadow(ox, oy, oz, spL.L3X, spL.L3Y, spL.L3Z, r.Eps, spL.ShadowTMax, spL.ShadowK3, spL.ShadowSteps, in p);
+                sh3 = SoftShadow(ox, oy, oz, spL.L3X, spL.L3Y, spL.L3Z, r.Eps, spL.ShadowTMax, spL.ShadowK3, spL.ShadowSteps, in p, gens);
         }
 
         double ao = 1.0;
@@ -260,14 +284,20 @@ public sealed class KleinianGpuCalculator : IDisposable
             for (int k = 1; k <= sp.AoSamples; k++)
             {
                 double d = r.Eps * (double)(1L << k);
-                double sd = KleinianDE(px + nx * d, py + ny * d, pz + nz * d, in p);
+                double sd = KleinianDE(px + nx * d, py + ny * d, pz + nz * d, in p, gens);
                 occl += Math.Max(0.0, d - sd) / d;
                 w += 1.0;
             }
             ao = GpuKernelUtils.Clamp(1.0 - sp.AoStrength * (occl / Math.Max(w, 1.0)), 0.0, 1.0);
         }
 
-        var (aR, aG, aB) = GpuKernelUtils.SurfaceAlbedo(albedo, in spL, hitStep, r.MaxSteps, tT, nx, ny);   // #1172 / G2.2 — colour-map albedo
+        // #1172 / G2.2 — colour-map albedo; #878 — word colouring samples the descent
+        // just inside the surface, as the CPU KleinianColorScalar does.
+        var (aR, aG, aB) = p.ColorSource != 0
+            ? GpuKernelUtils.SurfaceAlbedoAt(albedo, in spL,
+                KleinianColorScalar(px + rdx * r.Eps * 4, py + rdy * r.Eps * 4, pz + rdz * r.Eps * 4, in p, gens),
+                nx, ny, hitStep, r.MaxSteps, tT)
+            : GpuKernelUtils.SurfaceAlbedo(albedo, in spL, hitStep, r.MaxSteps, tT, nx, ny);
         // #323 — AOV view: return the diagnostic encoding instead of the beauty shade.
         if (spL.DebugAov != 0)
             return GpuKernelUtils.EncodeSurfaceAov(in spL, nx, ny, nz, rdx, rdy, rdz, px, py, pz,
@@ -304,7 +334,7 @@ public sealed class KleinianGpuCalculator : IDisposable
                     hpx = bOx + bDirX * tR;
                     hpy = bOy + bDirY * tR;
                     hpz = bOz + bDirZ * tR;
-                    double hR = KleinianDE(hpx, hpy, hpz, in p);
+                    double hR = KleinianDE(hpx, hpy, hpz, in p, gens);
                     if (hR < r.Eps * 2.0) { hitR = true; hitTR = tR; break; }
                     tR += hR;
                     if (tR > rMax) break;
@@ -316,9 +346,9 @@ public sealed class KleinianGpuCalculator : IDisposable
                 if (!hitR) break;
                 if (b + 1 >= bounces) break;
                 double h2 = r.Eps * 2.0;
-                double n0b = KleinianDE(hpx + h2, hpy, hpz, in p) - KleinianDE(hpx - h2, hpy, hpz, in p);
-                double n1b = KleinianDE(hpx, hpy + h2, hpz, in p) - KleinianDE(hpx, hpy - h2, hpz, in p);
-                double n2b = KleinianDE(hpx, hpy, hpz + h2, in p) - KleinianDE(hpx, hpy, hpz - h2, in p);
+                double n0b = KleinianDE(hpx + h2, hpy, hpz, in p, gens) - KleinianDE(hpx - h2, hpy, hpz, in p, gens);
+                double n1b = KleinianDE(hpx, hpy + h2, hpz, in p, gens) - KleinianDE(hpx, hpy - h2, hpz, in p, gens);
+                double n2b = KleinianDE(hpx, hpy, hpz + h2, in p, gens) - KleinianDE(hpx, hpy, hpz - h2, in p, gens);
                 double nlb = 1.0 / Math.Sqrt(n0b * n0b + n1b * n1b + n2b * n2b + 1e-20);
                 double nbx2 = n0b * nlb, nby2 = n1b * nlb, nbz2 = n2b * nlb;
                 brdx = bDirX; brdy = bDirY; brdz = bDirZ;
@@ -369,7 +399,7 @@ public sealed class KleinianGpuCalculator : IDisposable
                 if (spL.L1I > 0)
                 {
                     double sh = sh1On ? SoftShadow(sx, sy, sz, spL.L1X, spL.L1Y, spL.L1Z,
-                        r.Eps, spL.ShadowTMax, spL.ShadowK1, spL.ShadowSteps, in p) : 1.0;
+                        r.Eps, spL.ShadowTMax, spL.ShadowK1, spL.ShadowSteps, in p, gens) : 1.0;
                     var (dR, dG, dB) = GpuKernelUtils.VolumeScatterLight(in spL,
                         sx, sy, sz, spL.L1X, spL.L1Y, spL.L1Z, rdx, rdy, rdz,
                         spL.L1R, spL.L1G, spL.L1B, spL.L1I, sh, T, density, stepSize);
@@ -378,7 +408,7 @@ public sealed class KleinianGpuCalculator : IDisposable
                 if (spL.L2I > 0)
                 {
                     double sh = sh2On ? SoftShadow(sx, sy, sz, spL.L2X, spL.L2Y, spL.L2Z,
-                        r.Eps, spL.ShadowTMax, spL.ShadowK2, spL.ShadowSteps, in p) : 1.0;
+                        r.Eps, spL.ShadowTMax, spL.ShadowK2, spL.ShadowSteps, in p, gens) : 1.0;
                     var (dR, dG, dB) = GpuKernelUtils.VolumeScatterLight(in spL,
                         sx, sy, sz, spL.L2X, spL.L2Y, spL.L2Z, rdx, rdy, rdz,
                         spL.L2R, spL.L2G, spL.L2B, spL.L2I, sh, T, density, stepSize);
@@ -387,7 +417,7 @@ public sealed class KleinianGpuCalculator : IDisposable
                 if (spL.L3I > 0)
                 {
                     double sh = sh3On ? SoftShadow(sx, sy, sz, spL.L3X, spL.L3Y, spL.L3Z,
-                        r.Eps, spL.ShadowTMax, spL.ShadowK3, spL.ShadowSteps, in p) : 1.0;
+                        r.Eps, spL.ShadowTMax, spL.ShadowK3, spL.ShadowSteps, in p, gens) : 1.0;
                     var (dR, dG, dB) = GpuKernelUtils.VolumeScatterLight(in spL,
                         sx, sy, sz, spL.L3X, spL.L3Y, spL.L3Z, rdx, rdy, rdz,
                         spL.L3R, spL.L3G, spL.L3B, spL.L3I, sh, T, density, stepSize);
@@ -428,7 +458,7 @@ public sealed class KleinianGpuCalculator : IDisposable
         double ox, double oy, double oz,
         double ldx, double ldy, double ldz,
         double tMin, double tMax, double k, int maxSteps,
-        in KleinianGpuParams p)
+        in KleinianGpuParams p, ArrayView<double> gens)
     {
         double res = 1.0, t = tMin;
         for (int s = 0; s < maxSteps; s++)
@@ -436,7 +466,7 @@ public sealed class KleinianGpuCalculator : IDisposable
             double px = ox + ldx * t;
             double py = oy + ldy * t;
             double pz = oz + ldz * t;
-            double h = KleinianDE(px, py, pz, in p);
+            double h = KleinianDE(px, py, pz, in p, gens);
             if (h < 1e-4) return 0.0;
             if (k > 0) res = Math.Min(res, k * h / t);
             t += h;
@@ -449,71 +479,119 @@ public sealed class KleinianGpuCalculator : IDisposable
     /// Hand-unrolled 4-sphere selection to keep the inner loop branchless
     /// of array indexing — ILGPU happily inlines the chain. Mirrors
     /// KleinianCalculator.KleinianDE.</summary>
-    private static double KleinianDE(double px, double py, double pz, in KleinianGpuParams p)
+    /// <summary>#880 — pack a generator list as the kernel's buffer: (cx, cy, cz, r)
+    /// per generator, in order (the order picks ties exactly as the CPU loop does).</summary>
+    public static double[] PackGenerators(FracturingFog.Models.KleinianGenerator[] gens)
     {
-        double r = p.Radius;
-        double r2 = r * r;
+        var buf = new double[4 * gens.Length];
+        for (int k = 0; k < gens.Length; k++)
+        {
+            buf[4 * k] = gens[k].Cx; buf[4 * k + 1] = gens[k].Cy;
+            buf[4 * k + 2] = gens[k].Cz; buf[4 * k + 3] = gens[k].R;
+        }
+        return buf;
+    }
+
+    /// <summary>#877 — twin of <c>KleinianCalculator.RotateInPlace</c> (Rodrigues).</summary>
+    private static (double x, double y, double z) Rotate(double px, double py, double pz, in KleinianGpuParams p)
+    {
+        double kv = p.RotAx * px + p.RotAy * py + p.RotAz * pz;
+        double kxx = p.RotAy * pz - p.RotAz * py;
+        double kxy = p.RotAz * px - p.RotAx * pz;
+        double kxz = p.RotAx * py - p.RotAy * px;
+        double om = 1.0 - p.RotCos;
+        return (px * p.RotCos + kxx * p.RotSin + p.RotAx * kv * om,
+                py * p.RotCos + kxy * p.RotSin + p.RotAy * kv * om,
+                pz * p.RotCos + kxz * p.RotSin + p.RotAz * kv * om);
+    }
+
+    /// <summary>Twin of <c>KleinianCalculator.KleinianDE</c> over the generator buffer:
+    /// invert through the deepest containing sphere until the point escapes every
+    /// sphere (rotating after each inversion when the fold is on), tracking the
+    /// inversion-scale product; DE = nearest sphere boundary / scale.</summary>
+    private static double KleinianDE(double px, double py, double pz, in KleinianGpuParams p, ArrayView<double> gens)
+    {
         double scale = 1.0;
+        int n = p.GenCount;
 
         for (int i = 0; i < p.DEIter; i++)
         {
             int bestK = -1;
             double bestDeep = 0.0;
-
-            double dx, dy, dz, d;
-
-            dx = px - p.C0X; dy = py - p.C0Y; dz = pz - p.C0Z;
-            d = Math.Sqrt(dx * dx + dy * dy + dz * dz) - r;
-            if (d < bestDeep) { bestDeep = d; bestK = 0; }
-
-            dx = px - p.C1X; dy = py - p.C1Y; dz = pz - p.C1Z;
-            d = Math.Sqrt(dx * dx + dy * dy + dz * dz) - r;
-            if (d < bestDeep) { bestDeep = d; bestK = 1; }
-
-            dx = px - p.C2X; dy = py - p.C2Y; dz = pz - p.C2Z;
-            d = Math.Sqrt(dx * dx + dy * dy + dz * dz) - r;
-            if (d < bestDeep) { bestDeep = d; bestK = 2; }
-
-            dx = px - p.C3X; dy = py - p.C3Y; dz = pz - p.C3Z;
-            d = Math.Sqrt(dx * dx + dy * dy + dz * dz) - r;
-            if (d < bestDeep) { bestDeep = d; bestK = 3; }
-
+            for (int k = 0; k < n; k++)
+            {
+                double dx = px - gens[4 * k];
+                double dy = py - gens[4 * k + 1];
+                double dz = pz - gens[4 * k + 2];
+                double d = Math.Sqrt(dx * dx + dy * dy + dz * dz) - gens[4 * k + 3];
+                if (d < bestDeep) { bestDeep = d; bestK = k; }
+            }
             if (bestK < 0) break;
 
-            double cx = bestK == 0 ? p.C0X : bestK == 1 ? p.C1X : bestK == 2 ? p.C2X : p.C3X;
-            double cy = bestK == 0 ? p.C0Y : bestK == 1 ? p.C1Y : bestK == 2 ? p.C2Y : p.C3Y;
-            double cz = bestK == 0 ? p.C0Z : bestK == 1 ? p.C1Z : bestK == 2 ? p.C2Z : p.C3Z;
-
+            double cx = gens[4 * bestK], cy = gens[4 * bestK + 1], cz = gens[4 * bestK + 2], br = gens[4 * bestK + 3];
             double ex = px - cx;
             double ey = py - cy;
             double ez = pz - cz;
             double e2 = ex * ex + ey * ey + ez * ez;
             if (e2 < 1e-30) break;
-            double f = r2 / e2;
+            double f = (br * br) / e2;
             scale *= f;
             px = cx + ex * f;
             py = cy + ey * f;
             pz = cz + ez * f;
+            if (p.RotHas != 0) (px, py, pz) = Rotate(px, py, pz, in p);   // #877
         }
 
         double nearest = double.PositiveInfinity;
-
-        double ax, ay, az, a;
-        ax = px - p.C0X; ay = py - p.C0Y; az = pz - p.C0Z;
-        a = Math.Abs(Math.Sqrt(ax * ax + ay * ay + az * az) - r);
-        if (a < nearest) nearest = a;
-        ax = px - p.C1X; ay = py - p.C1Y; az = pz - p.C1Z;
-        a = Math.Abs(Math.Sqrt(ax * ax + ay * ay + az * az) - r);
-        if (a < nearest) nearest = a;
-        ax = px - p.C2X; ay = py - p.C2Y; az = pz - p.C2Z;
-        a = Math.Abs(Math.Sqrt(ax * ax + ay * ay + az * az) - r);
-        if (a < nearest) nearest = a;
-        ax = px - p.C3X; ay = py - p.C3Y; az = pz - p.C3Z;
-        a = Math.Abs(Math.Sqrt(ax * ax + ay * ay + az * az) - r);
-        if (a < nearest) nearest = a;
-
+        for (int k = 0; k < n; k++)
+        {
+            double dx = px - gens[4 * k];
+            double dy = py - gens[4 * k + 1];
+            double dz = pz - gens[4 * k + 2];
+            double a = Math.Abs(Math.Sqrt(dx * dx + dy * dy + dz * dz) - gens[4 * k + 3]);
+            if (a < nearest) nearest = a;
+        }
         if (scale < 1e-30) return 0.0;
         return nearest / scale;
+    }
+
+    /// <summary>#878 — twin of <c>KleinianCalculator.KleinianWord</c> +
+    /// <c>KleinianColorScalar</c>: run the descent and return the palette scalar —
+    /// LastGenerator (g + 0.5) / n · 256, WordLength depth / iter · 255.</summary>
+    private static float KleinianColorScalar(double px, double py, double pz, in KleinianGpuParams p, ArrayView<double> gens)
+    {
+        int n = p.GenCount;
+        int depth = 0, lastGen = -1;
+        for (int i = 0; i < p.DEIter; i++)
+        {
+            int bestK = -1;
+            double bestDeep = 0.0;
+            for (int k = 0; k < n; k++)
+            {
+                double dx = px - gens[4 * k];
+                double dy = py - gens[4 * k + 1];
+                double dz = pz - gens[4 * k + 2];
+                double d = Math.Sqrt(dx * dx + dy * dy + dz * dz) - gens[4 * k + 3];
+                if (d < bestDeep) { bestDeep = d; bestK = k; }
+            }
+            if (bestK < 0) break;
+            double cx = gens[4 * bestK], cy = gens[4 * bestK + 1], cz = gens[4 * bestK + 2], br = gens[4 * bestK + 3];
+            double ex = px - cx, ey = py - cy, ez = pz - cz;
+            double e2 = ex * ex + ey * ey + ez * ez;
+            if (e2 < 1e-30) break;
+            double f = (br * br) / e2;
+            px = cx + ex * f; py = cy + ey * f; pz = cz + ez * f;
+            if (p.RotHas != 0) (px, py, pz) = Rotate(px, py, pz, in p);
+            depth++; lastGen = bestK;
+        }
+        if (p.ColorSource == 2)   // LastGenerator
+        {
+            int nn = n < 1 ? 1 : n;
+            int g = lastGen < 0 ? 0 : lastGen;
+            return (float)((g + 0.5) / nn * 256.0);
+        }
+        float wl = (float)depth / (p.DEIter < 1 ? 1 : p.DEIter);
+        return wl * 255.0f;
     }
 
     public void Dispose() => _kernel = null;
