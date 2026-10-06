@@ -23,6 +23,11 @@ using Xunit;
 
 namespace FracturingFog.Server.Tests;
 
+// Writes lighting-fx-presets.json under the shared test data root — the same file
+// StoreTolerantLoadTests corrupts / backs up. Outside the store collection the two
+// ran concurrently and clobbered each other (a full-suite flake: the "backed up"
+// file held this class's "as-…" preset). Serialised with the other store writers.
+[Collection(FractalRegionLibraryCollection.Name)]
 public sealed class LightingFxPresetLibraryTests
 {
     private static LightingFxPreset MakePreset(string name, double fogDensity, int volumeSteps) => new()

@@ -40,6 +40,35 @@ public sealed class JobStoreTests : IDisposable
         return (new JobSubmitDto { Request = req, TilePixelsHint = 512 }, plan);
     }
 
+    // Regression (D-6e stress-test full-suite timeout): on Windows an
+    // antivirus / indexer handle on status.json (opened share-read, no
+    // share-delete) makes the atomic File.Move replace fail for a moment. The
+    // exception escaped tile.deliver AFTER the tile was accepted, so the job
+    // never finalised. Writes now retry transient sharing violations. Here an
+    // external handle is held for 150 ms across the update; it must succeed.
+    [Fact]
+    public void UpdateStatus_Survives_A_Transient_External_Handle_On_StatusJson()
+    {
+        var id = JobStore.NewJobId();
+        var (submit, plan) = BuildSubmit();
+        _store.Create(id, submit, plan);
+        string statusPath = Path.Combine(_store.JobDir(id), "status.json");
+
+        using var opened = new System.Threading.ManualResetEventSlim(false);
+        var holder = System.Threading.Tasks.Task.Run(() =>
+        {
+            using var fs = new FileStream(statusPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            opened.Set();
+            System.Threading.Thread.Sleep(150);
+        });
+        Assert.True(opened.Wait(TimeSpan.FromSeconds(10)));
+
+        var st = _store.UpdateStatus(id, s => s.TilesDone = 7);   // threw IOException before
+        holder.Wait();
+        Assert.Equal(7, st.TilesDone);
+        Assert.Equal(7, _store.ReadStatus(id)!.TilesDone);
+    }
+
     [Fact]
     public void NewJobId_Produces_Distinct_Crockford_Strings()
     {

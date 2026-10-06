@@ -8,40 +8,46 @@
 // back to the cert that authenticated the session.
 //
 // Sync file IO is OFF the call path: Info/Warn/Err enqueue a formatted
-// line on a bounded channel; a single background task drains it. A slow
-// disk no longer blocks the render loop or the TLS accept loop, and a
-// burst of frame-progress lines never makes the worker wait on flush.
-// Dispose() signals the pump to drain remaining lines and waits up to
-// the flush timeout so crashes still produce visible tail content.
+// line on a bounded queue; a dedicated background THREAD drains it. A slow
+// disk no longer blocks the render loop or the TLS accept loop, and a burst
+// of frame-progress lines never makes the caller wait on IO.
+//
+// Why a thread, not a thread-pool task: the drain used to be an async
+// Task.Run pump. Under thread-pool starvation (a loaded server, or a
+// saturated test run) it might not have run at all by the time Dispose()
+// gave up waiting (3 s) — Dispose then wrote the close marker and closed the
+// writer, losing every queued line, and a late pump could race Dispose on the
+// same StreamWriter. A dedicated thread is scheduled independently of the
+// pool, is the ONLY writer until it exits, and Dispose joins it before
+// touching the file. The file is flushed whenever the queue runs empty, so a
+// crash still leaves the tail on disk.
 
 using System;
 using System.Globalization;
 using System.IO;
+using System.Collections.Concurrent;
 using System.Threading;
-using System.Threading.Channels;
-using System.Threading.Tasks;
 
 namespace FracturingFog.Server.Logging;
 
 public sealed class SessionLogger : IDisposable
 {
     /// <summary>Upper bound on queued lines. Bounded to keep memory finite
-    /// when the disk is slow; FullMode.DropWrite drops *new* lines once
-    /// the queue is saturated, preserving the earlier tail of the session
-    /// for diagnosis instead of evicting it.</summary>
-    private const int ChannelCapacity = 4096;
+    /// when the disk is slow; a full queue drops *new* lines (TryAdd fails),
+    /// preserving the earlier tail of the session for diagnosis instead of
+    /// evicting it.</summary>
+    private const int QueueCapacity = 4096;
 
-    /// <summary>Maximum time Dispose() waits for the pump to drain before
-    /// abandoning the tail. A misbehaving disk should not stall server
-    /// shutdown forever.</summary>
+    /// <summary>Maximum time Dispose() waits for the pump thread to drain. Only
+    /// a disk whose writes block longer than this hits it (the pump no longer
+    /// waits for a thread-pool thread); shutdown must not stall forever.</summary>
     private static readonly TimeSpan FlushTimeout = TimeSpan.FromSeconds(3);
 
     private readonly StreamWriter _writer;
-    private readonly Channel<string> _channel;
-    private readonly Task _pumpTask;
-    private readonly CancellationTokenSource _pumpCts = new();
+    private readonly BlockingCollection<string> _queue = new(new ConcurrentQueue<string>(), QueueCapacity);
+    private readonly Thread _pump;
     private long _droppedCount;
-    private bool _disposed;
+    private volatile bool _disposed;
 
     public string Path { get; }
     public string SessionId { get; }
@@ -51,13 +57,8 @@ public sealed class SessionLogger : IDisposable
         Path = path;
         SessionId = sessionId;
         _writer = writer;
-        _channel = Channel.CreateBounded<string>(new BoundedChannelOptions(ChannelCapacity)
-        {
-            FullMode = BoundedChannelFullMode.DropWrite,
-            SingleReader = true,
-            SingleWriter = false,
-        });
-        _pumpTask = Task.Run(PumpAsync);
+        _pump = new Thread(Pump) { IsBackground = true, Name = $"session-log-{sessionId}" };
+        _pump.Start();
     }
 
     public static SessionLogger Open(string logDir, string remoteEndpoint, string? clientCertThumbprint)
@@ -107,25 +108,32 @@ public sealed class SessionLogger : IDisposable
     {
         if (_disposed) return;
         string formatted = $"{DateTime.UtcNow:HH:mm:ss.fff} [{level}] {line}";
-        if (!_channel.Writer.TryWrite(formatted))
-            Interlocked.Increment(ref _droppedCount);
+        bool added;
+        // Bounded + non-blocking: a full queue drops the NEW line (keeps the
+        // earlier tail for diagnosis). A write racing Dispose's CompleteAdding
+        // is a write after dispose — ignored.
+        try { added = _queue.TryAdd(formatted); }
+        catch (InvalidOperationException) { return; }
+        if (!added) Interlocked.Increment(ref _droppedCount);
     }
 
-    private async Task PumpAsync()
+    private void Pump()
     {
         try
         {
-            await foreach (string line in _channel.Reader.ReadAllAsync(_pumpCts.Token).ConfigureAwait(false))
+            foreach (string line in _queue.GetConsumingEnumerable())
             {
-                try { await _writer.WriteLineAsync(line).ConfigureAwait(false); }
+                try
+                {
+                    _writer.WriteLine(line);
+                    // Coalesce: flush only when nothing else is waiting, so a burst
+                    // is one disk write but an idle session's tail is on disk.
+                    if (_queue.Count == 0) _writer.Flush();
+                }
                 catch (Exception) { /* swallow per-line write errors — log file may have been rotated */ }
             }
-            // Defer the flush so a burst of lines coalesces into one disk
-            // write under load. The final flush below catches the tail
-            // when the channel completes.
-            try { await _writer.FlushAsync().ConfigureAwait(false); } catch { }
         }
-        catch (OperationCanceledException) { /* shutdown */ }
+        catch (Exception) { /* queue disposed under us — Dispose owns the file from here */ }
     }
 
     public void Dispose()
@@ -134,22 +142,28 @@ public sealed class SessionLogger : IDisposable
         _disposed = true;
         try
         {
-            // Signal end-of-stream to the pump so it drains remaining
-            // queued lines, then write the close marker AFTER the pump
-            // finishes so the close line is always last in the file.
-            _channel.Writer.TryComplete();
-            try { _pumpTask.Wait(FlushTimeout); } catch { }
+            // End-of-stream: the pump drains every queued line, then exits. Join
+            // it before touching the writer so it is never used by two threads;
+            // the close marker is therefore always last in the file.
+            _queue.CompleteAdding();
+            bool drained = _pump.Join(FlushTimeout);
 
             long dropped = Interlocked.Read(ref _droppedCount);
+            if (!drained)
+            {
+                // Pathological disk (writes blocked > timeout): leave the pump to
+                // finish on its own rather than race it on the writer.
+                return;
+            }
             if (dropped > 0)
                 _writer.WriteLine($"# WARN: {dropped} log line(s) dropped due to slow disk / full queue");
             _writer.WriteLine();
             _writer.WriteLine($"# closed     : {DateTime.UtcNow:O}");
             _writer.Flush();
             _writer.Dispose();
+            _queue.Dispose();
         }
         catch { }
-        finally { try { _pumpCts.Dispose(); } catch { } }
     }
 
     private static string SanitizeFileName(string s)

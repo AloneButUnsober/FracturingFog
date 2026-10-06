@@ -134,7 +134,12 @@ public sealed class StressTests : IDisposable
                             CertRole.Worker, thumbs[wi], workerCts.Token);
                     }
                     catch (OperationCanceledException) { break; }
-                    if (next.ErrorCode != null) continue;
+                    if (next.ErrorCode != null)
+                    {
+                        // Back off rather than hot-spin the pool on a refusal.
+                        try { await Task.Delay(5, workerCts.Token); } catch (OperationCanceledException) { break; }
+                        continue;
+                    }
                     var res = (TileNextResultDto)next.Result!;
                     if (res.WaitAgain || res.Tile is null) continue;
 
@@ -250,6 +255,23 @@ public sealed class StressTests : IDisposable
         try
         {
             perClientIds = await Task.WhenAll(clientTasks);
+        }
+        catch (OperationCanceledException) when (globalCts.IsCancellationRequested)
+        {
+            // The wall-clock guard fired: say WHICH jobs never finished and
+            // where their tiles are, instead of a bare TaskCanceledException.
+            var stuck = new System.Text.StringBuilder();
+            foreach (var id in _jobs.ListJobIds())
+            {
+                var st = _jobs.ReadStatus(id);
+                if (st?.JobState == "ready") continue;
+                stuck.Append($"{id}: state={st?.JobState ?? "?"} done={st?.TilesDone} " +
+                             $"pending={_disp.PendingCount(id)} inflight={_disp.InFlightCount(id)} " +
+                             $"completed={_disp.CompletedCount(id)}; ");
+            }
+            Assert.Fail($"stress run exceeded the 2-minute guard after {sw.Elapsed.TotalSeconds:F1}s; " +
+                        $"tiles delivered {Interlocked.Read(ref tilesDelivered)}; unfinished jobs: {stuck}");
+            throw;
         }
         finally
         {

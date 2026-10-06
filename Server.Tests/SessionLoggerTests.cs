@@ -8,6 +8,11 @@ using Xunit;
 
 namespace FracturingFog.Server.Tests;
 
+// Non-parallel: one test caps the process-wide thread pool for a moment.
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class ThreadPoolExclusiveCollection { public const string Name = "ThreadPoolExclusive"; }
+
+[Collection(ThreadPoolExclusiveCollection.Name)]
 public sealed class SessionLoggerTests
 {
     [Fact]
@@ -71,6 +76,50 @@ public sealed class SessionLoggerTests
             Assert.DoesNotContain("after", content.Replace("# closed", ""));
         }
         finally { TryDelete(dir); }
+    }
+
+    // Regression (full-suite flake → real bug): the drain used to be a
+    // thread-pool task, and Dispose gave up after 3 s. With the pool starved
+    // (every worker blocked — a loaded server, or a busy test run) the pump
+    // never ran, Dispose closed the file, and every queued line was lost. The
+    // pump is now a dedicated thread: lines survive and Dispose returns promptly.
+    [Fact]
+    public void Dispose_DrainsQueuedLines_EvenWhenTheThreadPoolIsStarved()
+    {
+        string dir = TempDir();
+        using var gate = new System.Threading.ManualResetEventSlim(false);
+        // Deterministic starvation: cap the pool at its minimum, then block every
+        // worker. A pool-scheduled drain can then never run (the pool cannot
+        // inject threads past the cap), which is exactly the condition that lost
+        // lines before. Process-wide, hence the non-parallel collection; restored
+        // in finally.
+        System.Threading.ThreadPool.GetMinThreads(out int minWorkers, out int minIo);
+        System.Threading.ThreadPool.GetMaxThreads(out int maxWorkers, out int maxIo);
+        Assert.True(System.Threading.ThreadPool.SetMaxThreads(minWorkers, maxIo));
+        var blockers = Enumerable.Range(0, minWorkers)
+            .Select(_ => System.Threading.Tasks.Task.Run(() => gate.Wait(System.TimeSpan.FromSeconds(30))))
+            .ToArray();
+        try
+        {
+            System.Threading.Thread.Sleep(300);   // let the blockers occupy the pool
+            var log = SessionLogger.Open(dir, "starved", null);
+            for (int i = 0; i < 200; i++) log.Info($"line {i}");
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            log.Dispose();
+            sw.Stop();
+
+            string content = File.ReadAllText(log.Path);
+            for (int i = 0; i < 200; i++) Assert.Contains($"line {i}", content);
+            Assert.Contains("# closed", content);
+            Assert.True(sw.Elapsed < System.TimeSpan.FromSeconds(2), $"Dispose took {sw.Elapsed} (hit the flush timeout)");
+        }
+        finally
+        {
+            gate.Set();
+            System.Threading.ThreadPool.SetMaxThreads(maxWorkers, maxIo);
+            System.Threading.Tasks.Task.WaitAll(blockers, System.TimeSpan.FromSeconds(30));
+            TryDelete(dir);
+        }
     }
 
     private static string TempDir()
