@@ -40,6 +40,7 @@ system. The codebase is a single .NET 10 solution.
 | The 2D equation language (grammar, precedence, errors)     | [Equation Language Specification](Equation-Language.md) |
 | Touching the calculator generator                          | [CalculatorGen Architecture](CalculatorGen-Architecture.md) and [Authoring](CalculatorGen-Authoring.md) |
 | Tracking the GPU JIT / perturbation roadmap                | [Performance Development Plan](Performance-DevelopmentPlan.md) |
+| Closing GPU/CPU parity gaps — phase/slice order            | [GPU Parity Development Plan](GPU-Parity-DevelopmentPlan.md) (tracker #1173) |
 | Measuring perf — running/reading the benchmark harness     | [Benchmark Subsystem](Benchmark-Subsystem.md)               |
 | Porting away from Direct3D                                 | [Cross-Platform Roadmap](CrossPlatform-Roadmap.md) and [Implementation Plan](CrossPlatform-ImplementationPlan.md) |
 | Extending the 3-D Mandelbulb / User Bulb engine            | [User Bulb 3D Development Plan](UserBulb3D-DevelopmentPlan.md) and [Sandbox](UserBulbSandbox-DevPlan.md) |
