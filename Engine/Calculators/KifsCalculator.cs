@@ -24,7 +24,7 @@ using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
 
-public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource
+public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource, FracturingFog.Render.IGpuRouteSource
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -63,6 +63,9 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
         Height = height;
         ColorBuffer = new uint[width * height];
     }
+
+    /// <summary>#1173-M — GPU route of the last frame (GPU, or CPU and why).</summary>
+    public FracturingFog.Render.GpuRoute LastGpuRoute { get; private set; }
 
     public void Calculate(CancellationToken ct = default)
     {
@@ -184,7 +187,12 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
         // S8 (#404/#486) — the Menger + Sierpinski kernels now resolve point/spot
         // lights on the GPU (GpuKernelUtils.ResolveLight), so the !HasPositionalLight
         // gate is lifted. #492 added a per-light area-capped shadow hardness, so area lights render on the GPU now too.
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && ScreenSpacePost.GpuTraceAllowed(in fx) && gpuEligibleFold)
+        string? gpuFamilyReason = gpuEligibleFold ? null : $"{fold} fold";
+        string gpuFamilyDetail = $"the KIFS {fold} fold has no GPU kernel (#1173-D)";
+        // #1173-M — the same gate as before, plus the reason when it fails.
+        var gpuGate = Gpu3DRoute.Gate(in fx, lowRes, gpuFamilyReason, gpuFamilyDetail);
+        LastGpuRoute = gpuGate ?? default;
+        if (gpuGate is null)
         {
             // #1070 — Froxel3D on the GPU trace: the kernel also writes per-pixel
             // ray distance, and the CPU froxel pass composites over the GPU frame.
@@ -219,7 +227,9 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
                     DEIter = deIter, SceneRadius = sceneRadius,
                 };
                 _gpuSierp ??= new SierpinskiGpuCalculator();
-                if (_gpuSierp.Render(renderBuffer, rp, sp, sip, fx.VolumePalette, gpuDepth, ct))
+                bool gpuOk = _gpuSierp.Render(renderBuffer, rp, sp, sip, fx.VolumePalette, gpuDepth, ct);
+                LastGpuRoute = Gpu3DRoute.AfterRender(gpuOk, _gpuSierp.LastError);
+                if (gpuOk)
                 {
                     ScreenSpacePost.ApplyFroxel3D(renderBuffer, null, gpuDepth, width, height,
                         in froxelView, in froxelFx, new DelegateDeAdapter(deDelegate));   // #1070 — GPU trace + CPU froxel / #1078 shadowed by the DE
@@ -237,7 +247,9 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
                     DEIter = deIter, SceneRadius = sceneRadius,
                 };
                 _gpuMenger ??= new MengerGpuCalculator();
-                if (_gpuMenger.Render(renderBuffer, rp, sp, mp, fx.VolumePalette, gpuDepth, ct))
+                bool gpuOk = _gpuMenger.Render(renderBuffer, rp, sp, mp, fx.VolumePalette, gpuDepth, ct);
+                LastGpuRoute = Gpu3DRoute.AfterRender(gpuOk, _gpuMenger.LastError);
+                if (gpuOk)
                 {
                     ScreenSpacePost.ApplyFroxel3D(renderBuffer, null, gpuDepth, width, height,
                         in froxelView, in froxelFx, new DelegateDeAdapter(deDelegate));   // #1070 — GPU trace + CPU froxel / #1078 shadowed by the DE

@@ -1335,6 +1335,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             $"{typeTag}  cx={info.CenterX:G12}  cy={info.CenterY:G12}  " +
             $"zoom={info.Zoom:G6}  iter={info.Iterations}  " +
             $"{precTag}  [{info.ElapsedMs} ms  {info.Width}×{info.Height}]" +
+            // #1173-M — [GPU], or [CPU: reason] when the GPU was asked for but
+            // not used. Short on purpose (the full reason is in the perf HUD):
+            // a long status string wraps and resizes the panel.
+            (info.GpuRoute.StatusTag is { } gpuTag ? "  " + gpuTag : "") +
             (info.IterLocked ? "  [ITER LOCKED]" : "");
         // NOTE: the detail-depth limit notice moved OFF the status bar — a long
         // wrapping string there resized the panel and bounced the image edge.

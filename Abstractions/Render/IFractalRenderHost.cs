@@ -39,7 +39,10 @@ namespace FracturingFog.Render
         // live zoom exceeds it so a collapsed (flat) deep frame reads as a
         // location depth limit, not broken navigation. Other fractal paths
         // leave it +∞ (no notice).
-        double MaxUsefulZoomLog10 = double.PositiveInfinity);
+        double MaxUsefulZoomLog10 = double.PositiveInfinity,
+        // #1173-M — which way the frame went: on the GPU, or back to the CPU and
+        // why. default = the GPU was not requested.
+        GpuRoute GpuRoute = default);
 
     /// <summary>
     /// Orchestrates the renderer + per-fractal-type calculators. The input

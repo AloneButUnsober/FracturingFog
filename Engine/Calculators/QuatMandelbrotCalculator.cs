@@ -31,7 +31,7 @@ using FracturingFog.Rendering;
 
 namespace FracturingFog;
 
-public sealed class QuatMandelbrotCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource
+public sealed class QuatMandelbrotCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource, FracturingFog.Render.IGpuRouteSource
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -69,6 +69,9 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator, IStereoEyeCam
         Height = height;
         ColorBuffer = new uint[width * height];
     }
+
+    /// <summary>#1173-M — GPU route of the last frame (GPU, or CPU and why).</summary>
+    public FracturingFog.Render.GpuRoute LastGpuRoute { get; private set; }
 
     public void Calculate(CancellationToken ct = default)
     {
@@ -170,7 +173,12 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator, IStereoEyeCam
         // (GpuKernelUtils.ResolveLight); the !HasPositionalLight gate is lifted.
         // #492 added a per-light area-capped shadow hardness (sp.ShadowK1/2/3),
         // so area lights also render on the GPU now (punctual = byte-identical).
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && ScreenSpacePost.GpuTraceAllowed(in fx) && !dualColor)
+        string? gpuFamilyReason = dualColor ? "dual-orbit colour" : null;
+        string gpuFamilyDetail = "dual-orbit colouring renders on the CPU only (#1173-F)";
+        // #1173-M — the same gate as before, plus the reason when it fails.
+        var gpuGate = Gpu3DRoute.Gate(in fx, lowRes, gpuFamilyReason, gpuFamilyDetail);
+        LastGpuRoute = gpuGate ?? default;
+        if (gpuGate is null)
         {
             // #1070 — Froxel3D on the GPU trace: the kernel also writes per-pixel
             // ray distance, and the CPU froxel pass composites over the GPU frame.
@@ -204,7 +212,9 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator, IStereoEyeCam
             };
             var sp = GpuShadingParams.Build(in fx);
             _gpu ??= new QMandelGpuCalculator();
-            if (_gpu.Render(renderBuffer, rp, sp, qp, fx.VolumePalette, gpuDepth, ct))
+            bool gpuOk = _gpu.Render(renderBuffer, rp, sp, qp, fx.VolumePalette, gpuDepth, ct);
+            LastGpuRoute = Gpu3DRoute.AfterRender(gpuOk, _gpu.LastError);
+            if (gpuOk)
             {
                 ScreenSpacePost.ApplyFroxel3D(renderBuffer, null, gpuDepth, width, height,
                     in froxelView, in froxelFx, in deStruct);   // #1070 — GPU trace + CPU froxel

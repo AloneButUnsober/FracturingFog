@@ -54,7 +54,7 @@ using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
 
-public sealed class CoquaternionMandelbrotCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource
+public sealed class CoquaternionMandelbrotCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource, FracturingFog.Render.IGpuRouteSource
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -89,6 +89,9 @@ public sealed class CoquaternionMandelbrotCalculator : IFractalCalculator, ISter
         Height = height;
         ColorBuffer = new uint[width * height];
     }
+
+    /// <summary>#1173-M — GPU route of the last frame (always CPU: no kernel yet).</summary>
+    public FracturingFog.Render.GpuRoute LastGpuRoute { get; private set; }
 
     public void Calculate(CancellationToken ct = default)
     {
@@ -160,6 +163,10 @@ public sealed class CoquaternionMandelbrotCalculator : IFractalCalculator, ISter
             Math.Sin(FractalParameters.CoquaternionLightPhi) * Math.Sin(FractalParameters.CoquaternionLightTheta));
 
         var fx = FractalParameters.Lighting;
+        // #1173-M — no GPU kernel yet; say so when the GPU backend is selected.
+        LastGpuRoute = fx.UseGpuRender
+            ? FracturingFog.Render.GpuRoute.Cpu("no GPU kernel", "Coquaternion has no GPU kernel yet (#1173-G)")
+            : FracturingFog.Render.GpuRoute.NotRequested;
         // #1068 — froxel volumetrics: shade fog-free + arm the depth G-buffer;
         // the volume is composited after SSAO from the unstripped froxelFx.
         var froxelFx = fx;

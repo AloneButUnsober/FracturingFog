@@ -1049,6 +1049,7 @@ namespace FracturingFog.Batch
                 // families don't implement the capability and carry no HE.
                 // Brightness/contrast still apply downstream on the buffer.
                 alt.Calculate(CancellationToken.None);
+                NoteGpuRoute(alt);   // #1173-M
                 // #1012 — the depth a 3D raymarcher published (Fake / autostereogram).
                 if (depthOut != null) depthOut.Value = (alt as IDepthAovSource)?.DepthBuffer;
                 if (adaptive > 0 && alt is FracturingFog.Interefaces.ISupportsHistogramEq heAlt)
@@ -1073,6 +1074,23 @@ namespace FracturingFog.Batch
             var buf = CopyBuffer(calc.ColorBuffer, w, h);
             CompositeInteriorAlpha(buf, w, h, theme);
             return buf;
+        }
+
+        // #1173-M — when a calculator was asked for the GPU but rendered on the
+        // CPU, say why on stderr, once per distinct reason (a video would
+        // otherwise repeat it every frame). Headless runs have no HUD, and a
+        // silent fallback is how #1164 went unnoticed.
+        private static string? s_lastGpuNote;
+
+        private static void NoteGpuRoute(object calc)
+        {
+            if (calc is not FracturingFog.Render.IGpuRouteSource src) return;
+            var route = src.LastGpuRoute;
+            if (route.State != FracturingFog.Render.GpuRouteState.CpuFallback) return;
+            string note = route.Detail ?? route.Reason ?? "unknown reason";
+            if (note == s_lastGpuNote) return;
+            s_lastGpuNote = note;
+            Console.Error.WriteLine($"batch: GPU not used, rendering on the CPU: {note}");
         }
 
         // True when every pixel in the buffer is opaque black (0xFF000000).

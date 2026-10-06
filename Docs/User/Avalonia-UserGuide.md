@@ -627,6 +627,13 @@ See [ClientServer-UserGuide.md](ClientServer-UserGuide.md) for a full walkthroug
 
 Auto-promotion is transparent — status bar shows the live label (SP / DD / QD / AVX2 / PT / BLA / QD-PT).
 
+**GPU or CPU?** When GPU rendering is switched on (GPU compute for 2D, *Use GPU render* for 3D, Backend = GPU for User Bulb), the status bar also shows where the frame actually ran:
+
+- `[GPU]` means the frame ran on the GPU.
+- `[CPU: reason]` means the GPU was asked for but this frame rendered on the CPU. Examples: `[CPU: AOV view]`, `[CPU: preview frame]`, `[CPU: Octahedron fold]`, `[CPU: zoom > 1e4]`, `[CPU: device faulted]`, `[CPU: no GPU path]`.
+
+The perf HUD's `gpu` line gives the full reason, often with the tracking issue. When GPU rendering is off, the status bar shows no tag. Headless `--batch` runs print the reason to stderr, once per distinct reason.
+
 Perturbation theory + Series Approximation + BLA make zooms past 10²⁵ interactive on consumer hardware.
 
 ### GPU compute

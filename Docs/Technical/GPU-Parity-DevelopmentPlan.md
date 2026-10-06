@@ -76,8 +76,8 @@ Sizes are rough estimates (S ≈ a day, M ≈ a few days, L ≈ a week or more),
 | Slice | Issue | Goal | Depends | Size | Done when |
 |---|---|---|---|---|---|
 | G0.1 | #1164 (PR #1171) | 3D kernels JIT on CUDA; fault latch | — | S | **Done** (PR #1171 merged) |
-| G0.2 | #1170 | Tile the 3D dispatch into watchdog-sized launches (`GpuTiledDispatch`: comb launches sized from a probe, per-launch sync, cancellable between launches), as #1044 did for relief | G0.1 | M | 1080p `GpuCalculatorBench` cases time on the GT 710 instead of faulting |
-| G0.3 | #1173-M | Show the GPU-fallback reason for every family (HUD/status). Fold in #1112's "explain the fallback" bullet | G0.1 | S–M | Every gate and latch shows a reason |
+| G0.2 | #1170 | Tile the 3D dispatch into watchdog-sized launches (`GpuTiledDispatch`: comb launches sized from a probe, per-launch sync, cancellable between launches), as #1044 did for relief | G0.1 | M | **Done** (PR #1175 merged) |
+| G0.3 | #1173-M | Show the GPU-fallback reason for every family (HUD/status). Fold in #1112's "explain the fallback" bullet. Built as `GpuRoute` (`Abstractions/Render/GpuRoute.cs`): each GPU-capable calculator reports it (`IGpuRouteSource`), and it is shown in the status bar tag, the perf HUD `gpu` line and on `--batch` stderr | G0.1 | S–M | Every gate and latch shows a reason |
 | G0.4 | #1169 ⚑ | Find and fix the Mandelbulb CUDA launch fault (hypotheses: per-thread stack, `acos`/`pow` domain, SM_35 codegen) | G0.1 | M | Mandelbulb renders on CUDA, or is proven Kepler-only and gated off there |
 | G0.5 | #1045 | D3D11 presenter survives a device loss (recreate device + re-attach kernels) | — | M | A forced TDR doesn't crash the app |
 | G0.6 | #82 | Close out V6: live D3D parity smoke. The bench already ran D3D11 perturbation on the GT 710; add the image-parity check | — | S | #82 closed |

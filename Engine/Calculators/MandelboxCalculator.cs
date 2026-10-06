@@ -22,7 +22,7 @@ using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
 
-public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource
+public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource, FracturingFog.Render.IGpuRouteSource
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -60,6 +60,9 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, 
         Height = height;
         ColorBuffer = new uint[width * height];
     }
+
+    /// <summary>#1173-M — GPU route of the last frame (GPU, or CPU and why).</summary>
+    public FracturingFog.Render.GpuRoute LastGpuRoute { get; private set; }
 
     public void Calculate(CancellationToken ct = default)
     {
@@ -166,7 +169,10 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, 
         // S8 (#404/#486) — the Mandelbox kernel now resolves point/spot lights on
         // the GPU (GpuKernelUtils.ResolveLight), so the !HasPositionalLight gate is
         // lifted. #492 added a per-light area-capped shadow hardness, so area lights render on the GPU now too.
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && ScreenSpacePost.GpuTraceAllowed(in fx))
+        // #1173-M — the same gate as before, plus the reason when it fails.
+        var gpuGate = Gpu3DRoute.Gate(in fx, lowRes);
+        LastGpuRoute = gpuGate ?? default;
+        if (gpuGate is null)
         {
             // #1070 — Froxel3D on the GPU trace: the kernel also writes per-pixel
             // ray distance, and the CPU froxel pass composites over the GPU frame.
@@ -200,7 +206,9 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, 
             };
             var sp = GpuShadingParams.Build(in fx);
             _gpu ??= new MandelboxGpuCalculator();
-            if (_gpu.Render(renderBuffer, rp, sp, bp, fx.VolumePalette, gpuDepth, ct))
+            bool gpuOk = _gpu.Render(renderBuffer, rp, sp, bp, fx.VolumePalette, gpuDepth, ct);
+            LastGpuRoute = Gpu3DRoute.AfterRender(gpuOk, _gpu.LastError);
+            if (gpuOk)
             {
                 ScreenSpacePost.ApplyFroxel3D(renderBuffer, null, gpuDepth, width, height,
                     in froxelView, in froxelFx, in deStruct);   // #1070 — GPU trace + CPU froxel

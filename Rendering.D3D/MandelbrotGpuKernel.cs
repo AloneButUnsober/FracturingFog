@@ -628,6 +628,8 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     /// — i.e. advertises <c>DoublePrecisionFloatShaderOps</c>. Queried once and
     /// cached. The calculator gates its GPU-perturbation dispatch on this so a
     /// device without FP64 shader ops falls back to the CPU deep path.</summary>
+    public string BackendLabel => "D3D11";
+
     public bool SupportsPerturbation
     {
         get

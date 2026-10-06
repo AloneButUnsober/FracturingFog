@@ -48,9 +48,11 @@ using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using FracturingFog.Rendering.Lighting;
 
+using GpuRoute = FracturingFog.Render.GpuRoute;
+
 namespace FracturingFog;
 
-public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource
+public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource, FracturingFog.Render.IGpuRouteSource
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -545,6 +547,9 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         return names.ToArray();
     }
 
+    /// <summary>#1173-M — GPU route of the last frame (GPU, or CPU and why).</summary>
+    public GpuRoute LastGpuRoute { get; private set; }
+
     public void Calculate(CancellationToken ct = default)
     {
         DepthBuffer = null;   // #1009 — never describe an older frame
@@ -823,6 +828,16 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         // Falls through to CPU on any failure.
         bool sandboxQuatGpu = _compiledCompiler == UserBulbCompilerKind.Sandbox && quatMode;
         bool vecAnalyticGpuOk = !juliaMode && _analyticPattern.Kind != AnalyticDEKind.None;
+        // #1173-M / #1112 — say why the GPU isn't used: the first failing
+        // condition of the gate below (null-equivalent default = may try it).
+        LastGpuRoute = FractalParameters.UserBulbBackend != UserBulbBackendKind.GPU ? GpuRoute.NotRequested
+            : lowRes ? GpuRoute.Cpu("preview frame", "low-res preview frames render on the CPU")
+            : wantDepthOut ? GpuRoute.Cpu("stereo depth", "stereo / autostereogram output needs the CPU depth buffer")
+            : kifsScale > 0.0 ? GpuRoute.Cpu("scalar KIFS DE", "the scalar KIFS DE renders on the CPU only")
+            : sandboxQuatGpu || vecAnalyticGpuOk ? default
+            : quatMode ? GpuRoute.Cpu("quaternion compiler", "quaternion mode runs on the GPU only with the sandbox compiler")
+            : juliaMode ? GpuRoute.Cpu("Vec3 Julia", "Vec3 Julia renders on the CPU only (#1112)")
+            : GpuRoute.Cpu("Vec3 numerical DE", "Vec3 numerical DE renders on the CPU only (#1112)");
         if (FractalParameters.UserBulbBackend == UserBulbBackendKind.GPU
             && !lowRes
             && !wantDepthOut      // #1009 — the GPU kernels have no depth pass
@@ -835,6 +850,7 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
             // path. Both the positional and area force-CPU guards are lifted.
             && (sandboxQuatGpu || vecAnalyticGpuOk))
         {
+            string? gpuFailure = null;   // #1173-M — last GPU route error this frame
             // Quat-mode allows analytic only when the pattern matched and
             // we're not in Julia mode — matches the CPU `useAnalytic` gate.
             bool gpuUseAnalytic = !juliaMode && _analyticPattern.Kind != AnalyticDEKind.None;
@@ -900,11 +916,13 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
                           quatMode: quatMode);
                 if (compiled && _sandboxGpu.Render(ColorBuffer, pArr, gp))
                 {
+                    LastGpuRoute = GpuRoute.OnGpu(_sandboxGpu.DeviceLabel ?? "GPU");
                     // #84 — GPU path skips the CPU post stack; draw the debug HUD.
                     ScreenSpacePost.ApplyDebugHud(ColorBuffer, fullW, fullH, in fx);
                     return;
                 }
                 LastError = _sandboxGpu.LastError;
+                gpuFailure = _sandboxGpu.LastError;
                 // Fall through to legacy GPU (vec only) + then CPU.
             }
 
@@ -917,13 +935,18 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
                     _gpu ??= new UserBulbGpuCalculator();
                     if (_gpu.Render(ColorBuffer, gp))
                     {
+                        LastGpuRoute = GpuRoute.OnGpu(_gpu.DeviceLabel ?? "GPU");
                         // #84 — GPU path skips the CPU post stack; draw the HUD.
                         ScreenSpacePost.ApplyDebugHud(ColorBuffer, fullW, fullH, in fx);
                         return;
                     }
                     LastError = _gpu.LastError;
+                    gpuFailure = _gpu.LastError;
                 }
             }
+            // #1173-M — every GPU route above declined or failed.
+            LastGpuRoute = GpuRoute.Cpu("GPU error",
+                string.IsNullOrEmpty(gpuFailure) ? "no GPU route compiled for this User Bulb source" : gpuFailure);
         }
 
         // Temporal cache: identity blit on unchanged scene+camera.
