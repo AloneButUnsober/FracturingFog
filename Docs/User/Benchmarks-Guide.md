@@ -123,9 +123,10 @@ dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --filter "*Ma
 > card was found (the 3-D kernels need double-precision support, which many built-in Intel
 > graphics chips lack), or the card couldn't run the kernel. The benchmark deliberately refuses
 > to time the CPU fallback, so you never get a misleading "GPU" number. The log under
-> `BenchmarkDotNet.Artifacts` says why. **Known issue:** on some NVIDIA cards the Mandelbulb rows
-> show `NA` because its graphics kernel crashes there (#1169). The app then switches GPU rendering
-> off for the rest of the session and draws on the CPU instead.
+> `BenchmarkDotNet.Artifacts` says why. On old or low-end cards the Mandelbulb rows may show `NA`
+> with "GPU too slow for Mandelbulb on this device". Its kernel is heavy on double-precision maths,
+> which such cards run very slowly (about 5 ms per pixel on a GeForce GT 710, #1169). The app then
+> renders that fractal on the CPU, which is far faster there. The other fractals keep using the GPU.
 
 ---
 

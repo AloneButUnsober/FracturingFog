@@ -36,6 +36,9 @@ public sealed class QJuliaGpuCalculator : IDisposable
 {
     private Action<Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, QJuliaGpuParams, ArrayView<uint>, ArrayView<float>>? _kernel;
     private bool _initFailed;
+    // #1169 — set once a device proved too slow for this kernel; per family and
+    // device, process-wide, so new calculator instances don't re-probe it.
+    private static (Accelerator Device, string Message)? s_tooSlow;
     public string LastError { get; private set; } = string.Empty;
 
     private bool TryInit()
@@ -66,6 +69,7 @@ public sealed class QJuliaGpuCalculator : IDisposable
     {
         if (!TryInit() || _kernel == null) return false;
         if (!GpuAcceleratorHost.TryAcquire(out var acc)) return false;
+        if (s_tooSlow is { } slow && ReferenceEquals(slow.Device, acc)) { LastError = slow.Message; return false; }
         try
         {
             int total = r.Width * r.Height;
@@ -83,8 +87,15 @@ public sealed class QJuliaGpuCalculator : IDisposable
             using var devDepth = GpuMemoryStats.Allocate1D<float>(acc, wantDepth ? total : 1);
             // #1170 — tiled under the GPU watchdog; byte-identical to one launch.
             var kernel = _kernel;
-            if (!GpuTiledDispatch.Run(acc, r, (n, rt) => kernel(n, dev.View, rt, sp, p, devLut.View, devDepth.View), ct))
+            var run = GpuTiledDispatch.Run(acc, r, (n, rt) => kernel(n, dev.View, rt, sp, p, devLut.View, devDepth.View), ct);
+            if (run == GpuDispatchResult.TooSlow)
+            {
+                // #1169 — this device can't render this kernel in useful time; stay on the CPU.
+                LastError = GpuTiledDispatch.TooSlowMessage("QJulia");
+                s_tooSlow = (acc, LastError);
                 return false;
+            }
+            if (run != GpuDispatchResult.Completed) return false;
             dev.CopyToCPU(outBuffer);
             if (wantDepth) devDepth.CopyToCPU(depthOut!);
             return true;

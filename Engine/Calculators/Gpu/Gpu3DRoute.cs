@@ -58,6 +58,8 @@ public static class Gpu3DRoute
         if (GpuAcceleratorHost.IsFaulted)
             return GpuRoute.Cpu("device faulted", string.IsNullOrEmpty(detail) ? null : detail);
         if (string.IsNullOrEmpty(detail)) detail = "GPU render failed";
+        if (detail.StartsWith("GPU too slow", System.StringComparison.Ordinal))   // #1169
+            return GpuRoute.Cpu("GPU too slow", detail);
         if (detail.Contains("no Float64-capable GPU", System.StringComparison.Ordinal))
             return GpuRoute.Cpu("no fp64 GPU", detail);
         if (detail.Contains("kernel load failed", System.StringComparison.Ordinal))
