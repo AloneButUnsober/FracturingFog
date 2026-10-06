@@ -39,14 +39,15 @@
 // independent real quadratic recurrences — so it is not worth rendering. The
 // coquaternion is the genuinely-structured member of the split-algebra family.
 //
-// First cut is CPU-only (no GPU kernel yet); slice is fixed to the k-axis
-// (c = (x, y, z, CoquaternionSliceW)). Bailout uses the Euclidean |t|² for a
+// Slice is fixed to the k-axis (c = (x, y, z, CoquaternionSliceW)). The opt-in GPU
+// path is CoquaternionGpuCalculator (#1173-G); the CPU stays the reference. Bailout uses the Euclidean |t|² for a
 // well-behaved boundedness test.
 
 using System;
 using System.Threading;
 using System.Threading.Tasks;
 
+using FracturingFog.Calculators.Gpu;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using FracturingFog.Rendering;
@@ -59,6 +60,9 @@ public sealed class CoquaternionMandelbrotCalculator : IFractalCalculator, ISter
     public int Width { get; private set; }
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
+
+    // #1173-G — lazily-constructed GPU calculator. See MandelbulbCalculator for contract.
+    private CoquaternionGpuCalculator? _gpu;
 
     /// <summary>P2 — low-res interactive preview. See Mandelbulb for contract.</summary>
     public bool LowResPreview { get; set; } = false;
@@ -90,7 +94,7 @@ public sealed class CoquaternionMandelbrotCalculator : IFractalCalculator, ISter
         ColorBuffer = new uint[width * height];
     }
 
-    /// <summary>#1173-M — GPU route of the last frame (always CPU: no kernel yet).</summary>
+    /// <summary>#1173-M — GPU route of the last frame (GPU, or CPU and why).</summary>
     public FracturingFog.Render.GpuRoute LastGpuRoute { get; private set; }
 
     public void Calculate(CancellationToken ct = default)
@@ -163,10 +167,6 @@ public sealed class CoquaternionMandelbrotCalculator : IFractalCalculator, ISter
             Math.Sin(FractalParameters.CoquaternionLightPhi) * Math.Sin(FractalParameters.CoquaternionLightTheta));
 
         var fx = FractalParameters.Lighting;
-        // #1173-M — no GPU kernel yet; say so when the GPU backend is selected.
-        LastGpuRoute = fx.UseGpuRender
-            ? FracturingFog.Render.GpuRoute.Cpu("no GPU kernel", "Coquaternion has no GPU kernel yet (#1173-G)")
-            : FracturingFog.Render.GpuRoute.NotRequested;
         // #1068 — froxel volumetrics: shade fog-free + arm the depth G-buffer;
         // the volume is composited after SSAO from the unstripped froxelFx.
         var froxelFx = fx;
@@ -175,6 +175,58 @@ public sealed class CoquaternionMandelbrotCalculator : IFractalCalculator, ISter
         var deStruct = new De(sliceW, bailout2, deIter);
 
         double sceneRadius = camDist + setRadius * 2.0 + 4.0;
+
+        // #1173-G — opt-in GPU raymarch path (same contract as BicomplexMandelbrotCalculator:
+        // colour-map LUT albedo, HDRI, AOV views, the #1172 post stack on the kernel's
+        // G-buffers, thin-lens DoF in the kernel). #1173-M — the shared gate + reason.
+        var gpuGate = Gpu3DRoute.Gate(in fx, lowRes);
+        LastGpuRoute = gpuGate ?? default;
+        if (gpuGate is null)
+        {
+            bool gpuPost = fx.DebugAov == AovView.Beauty;
+            bool gpuG = gpuPost && ScreenSpacePost.WantsGBuffer(in fx);
+            float[]? gpuDepth = ScreenSpacePost.GpuWantsDepth(in fx) || gpuG ? new float[width * height] : null;
+            float[]? gpuNormal = gpuG ? new float[3 * width * height] : null;
+            float[]? gpuHdr = gpuPost && ScreenSpacePost.WantsHdrPost(in fx) ? new float[3 * width * height] : null;
+            var rp = new GpuRaymarchParams
+            {
+                Width = width, Height = height,
+                CamX = camPX, CamY = camPY, CamZ = camPZ,
+                TargetX = 0, TargetY = 0, TargetZ = 0,
+                FwdX = fwd[0], FwdY = fwd[1], FwdZ = fwd[2],
+                RightX = right[0], RightY = right[1], RightZ = right[2],
+                UpX = up[0], UpY = up[1], UpZ = up[2],
+                FovScale = fovScale, Aspect = aspect,
+                PanU = panU, PanV = panV,
+                LightX = light[0], LightY = light[1], LightZ = light[2],
+                MaxSteps = maxSteps, Eps = eps,
+                CullRadiusSq = 0.0,
+                InSetColor = ColorMap.InSetColor,
+                DofAperture = ThinLensDof.IsActive(in fx) ? fx.DofAperture : 0.0,
+                DofFocus = ThinLensDof.FocusDistance(in fx, camDist),
+                DofSamples = ThinLensDof.SampleCount(in fx),
+            };
+            var cp = new CoquaternionGpuParams
+            {
+                SliceW = sliceW,
+                Bailout2 = bailout2, DEIter = deIter,
+                SceneRadius = sceneRadius,
+            };
+            var sp = GpuShadingParams.Build(in fx);
+            uint[] albedoLut = GpuAlbedoLut.Bake(ColorMap, 192.0, 0.5, sceneRadius, ref sp);   // the CPU trace's smooth coefficients
+            uint[]? hdriEnv = GpuHdriEnv.Resolve(in fx, ref sp);
+            _gpu ??= new CoquaternionGpuCalculator();
+            bool gpuOk = _gpu.Render(renderBuffer, rp, sp, cp, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr, albedoLut, hdriEnv);
+            LastGpuRoute = Gpu3DRoute.AfterRender(gpuOk, _gpu.LastError);
+            if (gpuOk)
+            {
+                DepthBuffer = ScreenSpacePost.PublishDepth(gpuDepth, width, height, width, height, in fx, valid: !ThinLensDof.IsActive(in fx));
+                ScreenSpacePost.ApplyPost3D(renderBuffer, gpuHdr, gpuDepth, gpuNormal, width, height,
+                    ThinLensDof.IsActive(in fx), in fx, in froxelView, in froxelFx, in deStruct);
+                ScreenSpacePost.ApplyDebugHud(renderBuffer, width, height, in fx);
+                return;
+            }
+        }
 
         // Phase 4 — G-buffer for SSAO post-pass.
         float[]? depthBuf = null;

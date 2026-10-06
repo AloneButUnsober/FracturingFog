@@ -258,8 +258,8 @@ follow-up could carry a metric-aware DE + GPU kernel.
 
 **Sources:** Rochon (bicomplex dynamics) 2000s; Norton (quaternion) 1982. §7.
 
-**Status:** **SHIPPED** — `FractalType.Coquaternion` (#853). CPU-only; GPU kernel + metric-aware DE +
-split-complex-square-confirmation are follow-ups.
+**Status:** **SHIPPED** — `FractalType.Coquaternion` (#853). GPU kernel shipped 2026-10-06
+(`CoquaternionGpuCalculator`, #1173-G); metric-aware DE + split-complex-square-confirmation are follow-ups.
 
 ### 3.3 Positive-area Julia sets & near-parabolic explosions (Buff–Chéritat)
 

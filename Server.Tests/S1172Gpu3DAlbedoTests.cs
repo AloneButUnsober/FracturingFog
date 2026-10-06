@@ -30,7 +30,7 @@ public sealed class S1172Gpu3DAlbedoTests
 
     public static TheoryData<string> Families => new()
     {
-        "Mandelbulb", "Mandelbox", "Menger", "QuatJulia", "QuatMandel", "Kleinian", "Bicomplex",
+        "Mandelbulb", "Mandelbox", "Menger", "QuatJulia", "QuatMandel", "Kleinian", "Bicomplex", "Coquaternion",
     };
 
     private static IFractalCalculator Make(string family) => family switch
@@ -42,6 +42,7 @@ public sealed class S1172Gpu3DAlbedoTests
         "QuatMandel" => new QuatMandelbrotCalculator(W, H),
         "Kleinian" => new KleinianCalculator(W, H),
         "Bicomplex" => new BicomplexMandelbrotCalculator(W, H),
+        "Coquaternion" => new CoquaternionMandelbrotCalculator(W, H),   // #1173-G
         _ => throw new ArgumentException(family),
     };
 

@@ -35,7 +35,7 @@ public sealed class S1173BGpu3DHdriTests
 
     private static readonly string[] s_families =
     {
-        "Mandelbulb", "Mandelbox", "Menger", "Sierpinski", "QuatJulia", "QuatMandel", "Kleinian", "Bicomplex",
+        "Mandelbulb", "Mandelbox", "Menger", "Sierpinski", "QuatJulia", "QuatMandel", "Kleinian", "Bicomplex", "Coquaternion",
     };
 
     /// <summary>Each family with the sky backdrop on (miss pixels sample the HDRI) and
@@ -57,6 +57,7 @@ public sealed class S1173BGpu3DHdriTests
         "QuatMandel" => new QuatMandelbrotCalculator(W, H),
         "Kleinian" => new KleinianCalculator(W, H),
         "Bicomplex" => new BicomplexMandelbrotCalculator(W, H),
+        "Coquaternion" => new CoquaternionMandelbrotCalculator(W, H),   // #1173-G
         _ => throw new ArgumentException(family),
     };
 

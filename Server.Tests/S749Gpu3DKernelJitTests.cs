@@ -44,6 +44,7 @@ public sealed class S749Gpu3DKernelJitTests
         typeof(KleinianGpuCalculator),
         typeof(BicomplexGpuCalculator),
         typeof(KifsFoldGpuCalculator),   // #1173-D
+        typeof(CoquaternionGpuCalculator),   // #1173-G
     };
 
     [Theory]
