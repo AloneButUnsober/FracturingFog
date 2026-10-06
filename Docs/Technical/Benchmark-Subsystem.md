@@ -31,7 +31,7 @@ There are three CLI-flagged benchmark drivers. They split across two measurement
 
 | Flag                       | Engine                | Target under test                          | Output |
 |----------------------------|-----------------------|--------------------------------------------|--------|
-| `--bench`                  | **BenchmarkDotNet**   | `MandelbrotCalculator` (the shipping calc) | BDN summary table + `BenchmarkDotNet.Artifacts/` |
+| `--bench`                  | **BenchmarkDotNet**   | `MandelbrotCalculator` (the shipping calc); with `--filter`, the 8 ILGPU 3D kernels (`*GpuCalculatorBench*`) or the D3D11/Vulkan Mandelbrot kernels (`*MandelbrotGpuKernelBench*`) | BDN summary table + `BenchmarkDotNet.Artifacts/` |
 | `--gentestbench`           | hand-rolled Stopwatch | `Generated.MandelbrotZ2Calculator` (CalcGen output) | console + `gentestbench.out` |
 | `--benchmark --equation …` | hand-rolled Stopwatch | an **arbitrary** hot-compiled DSL equation | console + `benchmark.out` |
 
@@ -126,8 +126,36 @@ Job.Default
    .WithUnrollFactor(1);
 ```
 
-Plus `[MemoryDiagnoser]` (per-frame allocation columns) and
-`[Orderer(FastestToSlowest)]` (summary sorted by mean).
+Plus `[MemoryDiagnoser]` (per-frame allocation columns), the custom `Footprint` column
+(resident memory, see below) and `[Orderer(FastestToSlowest)]` (summary sorted by mean).
+
+### Memory: what is and isn't measured
+
+- **`MemoryDiagnoser` sees all managed allocations.** BDN 0.15.8 reads
+  `GC.GetTotalAllocatedBytes(precise: true)`, which covers the small-object, large-object and
+  pinned-object heaps on every thread, including the `Parallel` workers.
+- **The calculator's buffers are managed.** `MandelbrotCalculator` allocates its 17 per-pixel
+  buffers with `GC.AllocateUninitializedArray<T>(n, pinned: true)`, so they live on the pinned
+  object heap. That's about 68 B per pixel: ~15 MB at 640x360 and ~135 MB at 1920x1080.
+- **FF allocates no native heap memory on this path.** The codebase has no `NativeMemory.*` or
+  `Marshal.AllocHGlobal` call sites, and every GPU toggle is off under `--bench`. That leaves no
+  unmanaged memory to track (#1048).
+- **Footprint (`Benchmarks/CaseMetrics.cs`).** Per-op `Allocated` can't show the buffers above,
+  because they're allocated once in `[GlobalSetup]`. The Footprint column fills that gap.
+  - **How it measures:** `Setup()` settles the heap with a forced full GC, constructs the
+    calculator, configures it and runs one warm frame, then settles and measures again. Footprint is
+    the difference.
+  - **What it covers:** the per-pixel buffers plus lazily built deep-zoom state (reference orbit,
+    SA/BLA tables). Measured on an i5-13420H: 14.9 MB (SP), 15.6 MB (`DeepHPInPT`) and 16.1 MB
+    (`DeepHP`) at 640x360. The 134.5 MB SP figure at 1920x1080 matches the 68 B/px arithmetic
+    exactly.
+  - **`Accel` doesn't change it.** The tables are built either way; `DisableAcceleration` only
+    skips *using* them. The deep-zoom extra scales with `MaxIterations` (reference-orbit length),
+    not with `Accel`.
+  - **Toolchain dependency:** the value reaches the summary through a static registry keyed by the
+    case's parameters. That works only because the harness runs in-process. Under an out-of-process
+    toolchain the column prints `-`.
+- **GPU memory is covered by the GPU bench.** See "GPU calculator bench" below (#1162).
 
 ### Console attach (Windows WinExe quirk)
 
@@ -136,8 +164,12 @@ Plus `[MemoryDiagnoser]` (per-frame allocation columns) and
 Windows via `AttachConsole(ATTACH_PARENT_PROCESS)` (attach to the launching terminal) falling
 back to `AllocConsole` (pop a fresh console window), then rebinds `stdout`/`stderr` to the
 attached handle. On Linux/macOS the streams are already wired to the launching terminal, so the
-attach is gated behind `OperatingSystem.IsWindows()`. At the end it `FreeConsole`s and, if input
-is not redirected, waits on a keypress so a pop-up console does not vanish before you read it.
+attach is gated behind `OperatingSystem.IsWindows()`. At the end it `FreeConsole`s. It waits on a
+keypress **only if it had to allocate a fresh console window**, so a pop-up console doesn't vanish
+before you read it. When attached to a terminal it returns straight to the prompt. (Before #1162 the
+pause keyed off `Console.IsInputRedirected`. After `AttachConsole` that check reflects the console,
+not the caller's redirected stdin, so scripted runs blocked forever on `ReadKey` and kept the exe
+locked.)
 
 ### Argument pass-through
 
@@ -148,11 +180,117 @@ args just prints help and runs nothing, hence the explicit direct-run branch).
 
 > [!NOTE]
 > **Narrowing the run.** BenchmarkDotNet's `--filter` glob matches the fully-qualified benchmark
-> **name** (`*MandelbrotBench*`), *not* `[Params]` values — there is only one `[Benchmark]` method
-> here, so `--filter` is all-or-nothing and cannot select a single regime/theme/width. To run a
-> subset, temporarily edit the relevant `[Params]` array in `MandelbrotBench.cs` (e.g. drop
-> `Width` to `[Params(640)]`, or `Regime` to the two HP values) and rebuild. `--list flat` /
-> `--list tree` enumerate the cases without running.
+> **name** (`Namespace.Class.Method`), *not* `[Params]` values. So it selects a **class**:
+> `*MandelbrotBench*` is the CPU matrix, `*GpuCalculatorBench*` the 3D GPU bench,
+> `*MandelbrotGpuKernelBench*` the D3D11/Vulkan bench, `*` all three. Within a
+> class it is all-or-nothing, because each class has a single `[Benchmark]` method. To run a
+> subset of cases, temporarily edit the relevant `[Params]` array (e.g. drop `Width` to
+> `[Params(640)]`) and rebuild. `--list flat` / `--list tree` enumerate the cases without running.
+
+### GPU calculator bench (`GpuCalculatorBench`, #1162)
+
+Source: [`Benchmarks/GpuCalculatorBench.cs`](../../Benchmarks/GpuCalculatorBench.cs). It's opt-in;
+the default `--bench` run stays CPU-only:
+
+```powershell
+dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --filter "*GpuCalculatorBench*"
+```
+
+It times the **production** 3D calculators with `Lighting.UseGpuRender = true`, so the frame is
+what the app renders: real parameter construction, kernel launch, `Synchronize`, device-to-host
+copy. Matrix: 8 families (`Mandelbulb`, `Mandelbox`, KIFS `Menger` / `Sierpinski`, `QJulia`,
+`QMandel`, `Kleinian`, `Bicomplex`) x {640x360, 1920x1080} = 16 cases. Same in-process job as
+`MandelbrotBench`.
+
+**It refuses to time a CPU fallback.** In the app, a missing device or a failed kernel load falls
+through to the CPU ShadingPipeline silently. The bench guards against measuring that:
+
+- Every GPU frame allocates its buffers through `GpuMemoryStats.Allocate1D`
+  (`Engine/Calculators/Gpu/GpuMemoryStats.cs`), a thin counting wrapper used by all 24 per-frame
+  allocation sites in the 8 ILGPU calculators. A CPU frame allocates nothing there.
+- `Setup()` renders a JIT frame and then a steady-state frame. If the steady-state frame added no
+  device bytes, it throws, and BDN reports the case as failed (`NA`) instead of a number.
+- The exception names the inner GPU calculator's state: `=null (Render never called)` means a
+  calculator-side gate kept the frame on the CPU, and `LastError='…'` means the kernel failed on
+  this device.
+
+That guard is what exposed #1164: on CUDA, all 8 kernels fail to JIT because the context lacks
+`ILGPU.Algorithms`. **Until #1164 is fixed, every case reports `NA` on an NVIDIA host.** That's
+correct behaviour: the app is rendering those frames on the CPU too.
+
+Extra columns (`Benchmarks/CaseMetrics.cs`):
+
+- **DeviceAlloc/op**: ILGPU device bytes allocated per frame, measured on the steady-state frame.
+  On every frame the kernels allocate an output buffer, a palette LUT, and a depth buffer (one
+  element unless froxel compositing is on). So this is per-frame device churn, not resident VRAM.
+- **Device**: the accelerator that ran the case (`AcceleratorType` + name). GPU numbers mean
+  nothing without it.
+
+**Device selection** is the app's: `GpuAcceleratorHost.TryAcquire` picks an fp64-capable non-CPU
+device. If none exists, Setup throws `No GPU accelerator available …`. Intel Xe iGPUs, for example,
+expose no OpenCL fp64.
+
+### Mandelbrot GPU kernel bench (`MandelbrotGpuKernelBench`, #1162)
+
+Source: [`Benchmarks/MandelbrotGpuKernelBench.cs`](../../Benchmarks/MandelbrotGpuKernelBench.cs).
+It's opt-in:
+
+```powershell
+dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --filter "*MandelbrotGpuKernelBench*"
+```
+
+It times `MandelbrotCalculator` with a GPU `IGpuKernel` attached. Matrix (16 cases):
+
+| Axis      | Values |
+|-----------|--------|
+| `Backend` | `D3D11`: `Rendering.D3D` `MandelbrotGpuKernel` on the default hardware adapter. `Vulkan`: `VulkanComputeKernel.TryCreateWithOwnContext()`. |
+| `Path`    | `SpShallow` (`UseGpuCompute`, zoom 1, 512 iter) · `SpZoom1e4` (`UseGpuCompute`, seahorse at `MaxGpuZoom` = 1e4, 2048 iter) · `PerturbInPT` (`UseGpuPerturbation`, seahorse at 1e15, 2048 iter) · `PerturbDeep` (same, 4096 iter) |
+| `Width`   | 640x360 · 1920x1080 |
+
+The coordinates match `MandelbrotBench`, so a GPU row can be read against its CPU twin:
+`PerturbInPT` vs `DeepHPInPT`, and `PerturbDeep` vs `DeepHP`.
+
+- **Fallback guard.** After the warm frame, Setup requires
+  `MandelbrotCalculator.LastFrameUsedGpuCompute` (new, #1162) or the existing
+  `LastFrameUsedGpuPerturbation` to be set; otherwise it throws. The perturbation paths also
+  require `IGpuKernel.SupportsPerturbation` (fp64 shader ops) and say so when it's missing.
+- **`UseGpuPerturbation` is process-wide static.** Setup sets it per case and Cleanup restores it.
+- **No device-memory column.** These kernels keep persistent device buffers rather than
+  allocating per frame, so there's no per-op churn to count. Measuring resident VRAM would need
+  DXGI `QueryVideoMemoryInfo` / Vulkan memory budgets; that isn't done. The `Device` column records
+  the adapter.
+- **`NA` on perturbation rows can be by design.** `TryRunGpuPerturbation` estimates the frame
+  (first band's time x band count). If that exceeds its 3 s budget, it throws
+  `GPU-PERTURB-TOO-SLOW` and **switches `UseGpuPerturbation` off for the session**, so the app
+  renders that view on the CPU too. The bench detects the flipped static and says so in the failure
+  message. Set `FF_GPU_PERTURB_DEBUG=1` to get every gate input and failure in
+  `%TEMP%\ff_gpu_perturb_86.log`.
+
+Excerpt from a real run (GeForce GT 710, a low-end Kepler card with 1/24-rate fp64; 2026-10-06):
+
+```text
+| Backend | Path        | Width | Mean         | Device                                       |
+|-------- |------------ |------ |-------------:|--------------------------------------------- |
+| D3D11   | SpShallow   | 640   |     6.800 ms | D3D11 NVIDIA GeForce GT 710                  |
+| D3D11   | SpShallow   | 1920  |    43.947 ms | D3D11 NVIDIA GeForce GT 710                  |
+| Vulkan  | SpShallow   | 1920  |   889.062 ms | Vulkan compute (DiscreteGpu: GeForce GT 710) |
+| D3D11   | PerturbInPT | 640   | 1,494.751 ms | D3D11 NVIDIA GeForce GT 710                  |
+| D3D11   | PerturbInPT | 1920  |           NA | -   (too-slow guard: ~200 ms x 108 bands > 3 s) |
+```
+
+How to read that run:
+
+- **The card is slower than the CPU here.** The i5-13420H CPU does `ShallowSP` 1080p in ~23 ms and
+  `DeepHPInPT` 640 (Accel on) in ~28 ms, against 44 ms and 1.49 s on the GPU. That's expected
+  for a card with crippled fp64. Run this on the hardware you care about.
+- **Vulkan SP is ~20x slower than D3D11 SP on the same card** (889 vs 44 ms at 1080p). That gap
+  is worth investigating before treating Vulkan as a drop-in for D3D11.
+
+**Not covered:** the GPU QD reference orbit (`UseGpuReferenceOrbit`, `MandelbrotRefOrbitGpu`). It
+runs once per view and is cached across frames, so a per-frame `Calculate()` bench would only hit it
+on the warm frame. It needs its own orbit-build bench. It uses a private ILGPU context and QD-only
+arithmetic (no transcendental intrinsics), so #1164 likely doesn't apply, but that's unverified.
+Resident VRAM for the D3D11/Vulkan kernels isn't measured either. Both are tracked in #1166.
 
 ---
 
@@ -222,14 +360,23 @@ On compile failure the driver prints `hot.Error` and returns exit code 1.
 ### BenchmarkDotNet summary (`--bench`)
 
 BDN prints an environment block (host CPU, .NET runtime, GC mode) then a table, one row per case,
-sorted fastest→slowest:
+sorted fastest→slowest. Excerpt from a real run (i5-13420H, .NET 10.0.11, 2026-10-06):
 
 ```text
-| Method    | Width | Regime      | Theme      | Accel | Mean      | Error    | StdDev   | Gen0   | Allocated |
-|---------- |------ |------------ |----------- |------ |----------:|---------:|---------:|-------:|----------:|
-| Calculate | 640   | ShallowSP   | Hsv        | True  |  12.34 ms | 0.21 ms  | 0.19 ms  |      - |   1.2 KB  |
-| Calculate | 1920  | DeepHPInPT  | PhongStone | False | 842.10 ms | 9.88 ms  | 8.71 ms  |   3.00 |  48.9 KB  |
+| Method    | Width | Regime     | Theme      | Accel | Mean         | Error       | StdDev      | Footprint | Allocated |
+|---------- |------ |----------- |----------- |------ |-------------:|------------:|------------:|----------:|----------:|
+| Calculate | 640   | ShallowSP  | Hsv        | False |     4.149 ms |   0.4760 ms |   0.0737 ms |   14.9 MB |    6.8 KB |
+| Calculate | 1920  | ShallowSP  | Hsv        | False |    23.299 ms |   2.1100 ms |   0.5480 ms |  134.5 MB |   9.76 KB |
+| Calculate | 1920  | DeepHPInPT | Hsv        | True  |   253.409 ms |  16.8311 ms |   4.3710 ms |  135.2 MB |   13.8 KB |
+| Calculate | 1920  | DeepHPInPT | Hsv        | False | 2,989.251 ms |  69.9645 ms |  18.1695 ms |  135.2 MB |  13.52 KB |
+| Calculate | 1920  | DeepHP     | Hsv        | True  | 3,982.006 ms | 114.3847 ms |  29.7053 ms |  135.6 MB |   14.3 KB |
+| Calculate | 1920  | DeepHP     | Hsv        | False | 6,828.540 ms | 929.8048 ms | 241.4674 ms |  135.6 MB |  19.13 KB |
 ```
+
+On this run, SA+BLA cut the fully-in-perturbation 1080p frame from ~2.99 s to ~0.25 s (~12x). On
+`DeepHP` the gain is ~1.7x, because pixels that spill to the scalar DD fallback get no
+acceleration. No `Gen0` column appears because no case triggered a collection; BDN hides all-zero
+GC columns.
 
 Column meanings:
 
@@ -240,6 +387,9 @@ Column meanings:
 - **Gen0 / Gen1 / Gen2** — GC collections per 1000 ops (from `MemoryDiagnoser`).
 - **Allocated** — managed bytes allocated **per frame**. This is the regression tripwire: a hot
   path that starts churning buffers on resize shows up here even if Mean barely moves.
+- **Footprint** — managed memory the calculator **holds** after construction plus one warm frame.
+  It is resident size, not per-frame churn. If it grows, a buffer or table was added or enlarged;
+  that costs memory on every open view even when Mean is unchanged.
 
 Interpreting the matrix:
 
@@ -288,6 +438,12 @@ dotnet run -c Release --project FracturingFogCLD.csproj -- --bench
 
 # List every case without running (then trim [Params] to run a subset)
 dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --list flat
+
+# GPU 3D kernels (16 cases; needs an fp64 GPU, see the GPU calculator bench section)
+dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --filter "*GpuCalculatorBench*"
+
+# Mandelbrot on the D3D11 / Vulkan kernels (16 cases)
+dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --filter "*MandelbrotGpuKernelBench*"
 
 # CalcGen template quick-check
 dotnet run -c Release --project FracturingFogCLD.csproj -- --gentestbench

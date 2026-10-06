@@ -17,12 +17,15 @@
 //       - StripeAverageClassic: orbit-aware scalar path (different code path)
 //
 // MemoryDiagnoser shows per-frame allocations so resize / hot-path churn
-// regressions are visible. Each combo runs full Calculate() so all stages
-// (iteration + aux fill + color) are timed end to end.
+// regressions are visible. The Footprint column (#1048, CaseMetrics.cs)
+// shows what the calculator retains after construction + a warm frame. Each
+// combo runs full Calculate() so all stages (iteration + aux fill + color)
+// are timed end to end.
 
 using System;
 using System.Runtime.InteropServices;
 using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Diagnosers;
 using BenchmarkDotNet.Jobs;
@@ -85,6 +88,11 @@ public class MandelbrotBench
     [GlobalSetup]
     public void Setup()
     {
+        // #1048: settle the heap before constructing so the Footprint column
+        // captures exactly what this calculator retains (buffers + lazily
+        // built ref-orbit / SA / BLA tables after the warm frame below).
+        long heapBefore = CaseMetrics.SettledHeapBytes();
+
         int height = Width == 640 ? 360 : 1080;
         _calc = new MandelbrotCalculator(Width, height);
 
@@ -136,6 +144,26 @@ public class MandelbrotBench
 
         // Warm — first call sometimes JITs the generic specialisation.
         _calc.Calculate();
+
+        long heapAfter = CaseMetrics.SettledHeapBytes();
+        CaseMetrics.Record(
+            CaseMetrics.Footprint,
+            CaseMetrics.Key(new (string, object?)[]
+            {
+                (nameof(Width), Width),
+                (nameof(Regime), Regime),
+                (nameof(Theme), Theme),
+                (nameof(Accel), Accel),
+            }),
+            CaseMetrics.FormatMegabytes(heapAfter - heapBefore));
+    }
+
+    // Drop the calculator so the next case's "before" heap doesn't carry it.
+    [GlobalCleanup]
+    public void Cleanup()
+    {
+        _calc = null!;
+        _theme = null!;
     }
 
     [Benchmark]
@@ -158,6 +186,10 @@ public class MandelbrotBench
                 .WithInvocationCount(1)
                 .WithUnrollFactor(1));
             AddDiagnoser(MemoryDiagnoser.Default);
+            AddColumn(new CaseMetricColumn(CaseMetrics.Footprint,
+                "Managed memory the calculator retains after construction + one warm frame " +
+                "(settled heap delta around GlobalSetup; in-process toolchain only)",
+                isNumeric: true, UnitType.Size));
         }
     }
 }
@@ -182,8 +214,9 @@ public static class BenchEntry
         // unreachable on non-Win hosts once this file follows the entry point
         // into FracturingFog.App (net10.0). On Linux/macOS stdout/stderr are
         // already wired to the launching terminal.
+        bool allocatedConsole = false;
         if (OperatingSystem.IsWindows())
-            AttachOrAllocConsoleAndRebindStreams();
+            allocatedConsole = AttachOrAllocConsoleAndRebindStreams();
 
         Console.WriteLine("FracturingFog benchmark harness");
         Console.WriteLine($"Args after --bench: [{string.Join(' ', args.AsSpan(1).ToArray())}]");
@@ -205,18 +238,34 @@ public static class BenchEntry
             summary = BenchmarkRunner.Run<MandelbrotBench>();
         }
 
-        Console.WriteLine("Bench complete. Press any key to exit.");
-        if (Console.IsInputRedirected == false) Console.ReadKey();
+        // Pause only when we popped a fresh console window (launched outside a
+        // terminal) so the summary doesn't vanish with it. When attached to
+        // the launching terminal the output stays there. Keying the pause off
+        // Console.IsInputRedirected instead hung scripted runs: after
+        // AttachConsole that check reflects the console, not the caller's
+        // redirected stdin, so ReadKey blocked forever (#1162).
+        if (allocatedConsole && !Console.IsInputRedirected)
+        {
+            Console.WriteLine("Bench complete. Press any key to exit.");
+            Console.ReadKey();
+        }
+        else
+        {
+            Console.WriteLine("Bench complete.");
+        }
         if (OperatingSystem.IsWindows())
             FreeConsole();
         return 0;
     }
 
+    /// <summary>Returns true when a new console window was allocated (no
+    /// parent console to attach to).</summary>
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    private static void AttachOrAllocConsoleAndRebindStreams()
+    private static bool AttachOrAllocConsoleAndRebindStreams()
     {
+        bool allocated = false;
         if (!AttachConsole(ATTACH_PARENT_PROCESS))
-            AllocConsole();
+            allocated = AllocConsole();
 
         // Reopen stdout/stderr against the now-attached console handle.
         // Without this, Console.WriteLine no-ops because the streams were
@@ -224,5 +273,6 @@ public static class BenchEntry
         var stdout = new System.IO.StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true };
         Console.SetOut(stdout);
         Console.SetError(stdout);
+        return allocated;
     }
 }

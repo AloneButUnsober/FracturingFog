@@ -33,7 +33,7 @@ There are three benchmarks, from most thorough to quickest:
 
 | Command          | What it measures                                             | How long |
 |------------------|-------------------------------------------------------------|----------|
-| `--bench`        | The real Mandelbrot engine across 32 combinations of resolution, zoom depth, colour theme, and acceleration. **The proper one.** | Minutes  |
+| `--bench`        | The real Mandelbrot engine across 32 combinations of resolution, zoom depth, colour theme, and acceleration. **The proper one.** Add `--filter "*GpuCalculatorBench*"` to time the 3-D fractals on your graphics card instead. | Minutes  |
 | `--gentestbench` | A quick four-step speed ladder of the built-in test fractal. | Seconds  |
 | `--benchmark`    | The same quick ladder, but for **your own equation**.        | Seconds  |
 
@@ -93,6 +93,39 @@ what a full run covers.
 > [Benchmark Subsystem](../Technical/Benchmark-Subsystem.md) reference. For a quick partial check,
 > use `--gentestbench` below instead.
 
+### Measuring your graphics card (3-D fractals)
+
+The 3-D fractals (Mandelbulb, Mandelbox, Menger sponge and friends) can render on your graphics
+card when **Use GPU render** is on. To time that:
+
+```bash
+dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --filter "*GpuCalculatorBench*"
+```
+
+This measures 8 fractal families at two sizes. Two extra columns appear: **Device** (which graphics
+card did the work) and **DeviceAlloc/op** (graphics memory used per frame).
+
+The classic Mandelbrot can also run on the graphics card, through Direct3D 11 or Vulkan. To time
+that:
+
+```bash
+dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --filter "*MandelbrotGpuKernelBench*"
+```
+
+> [!NOTE]
+> A graphics card isn't automatically faster than your processor. Low-end cards can be much
+> slower, especially at deep zoom, which needs double precision. On a very slow card, the
+> deep-zoom rows at full HD may show `NA`. The app itself refuses to use the card for a frame it
+> estimates would take more than 3 seconds, and the benchmark reports the same decision.
+
+> [!WARNING]
+> If a row shows `NA`, that fractal did **not** render on your graphics card. Either no suitable
+> card was found (the 3-D kernels need double-precision support, which many built-in Intel
+> graphics chips lack), or the card couldn't run the kernel. The benchmark deliberately refuses
+> to time the CPU fallback, so you never get a misleading "GPU" number. The log under
+> `BenchmarkDotNet.Artifacts` says why. **Known issue:** on NVIDIA cards every row currently shows
+> `NA`, which matches what the app itself does today (#1164).
+
 ---
 
 ## The quick benchmarks
@@ -134,10 +167,11 @@ are valid, see the [User Equation & DSL Guide](CalcGen-UserGuide.md).)
 You get a table with one row per combination, sorted fastest at the top:
 
 ```text
-| Method    | Width | Regime      | Theme      | Accel | Mean      | Error   | StdDev  | Allocated |
-|---------- |------ |------------ |----------- |------ |----------:|--------:|--------:|----------:|
-| Calculate | 640   | ShallowSP   | Hsv        | True  |  12.34 ms | 0.21 ms | 0.19 ms |   1.2 KB  |
-| Calculate | 1920  | DeepHPInPT  | PhongStone | False | 842.10 ms | 9.88 ms | 8.71 ms |  48.9 KB  |
+| Method    | Width | Regime     | Theme | Accel | Mean         | Error      | StdDev     | Footprint | Allocated |
+|---------- |------ |----------- |------ |------ |-------------:|-----------:|-----------:|----------:|----------:|
+| Calculate | 640   | ShallowSP  | Hsv   | False |     4.149 ms |  0.4760 ms |  0.0737 ms |   14.9 MB |    6.8 KB |
+| Calculate | 1920  | DeepHPInPT | Hsv   | True  |   253.409 ms | 16.8311 ms |  4.3710 ms |  135.2 MB |   13.8 KB |
+| Calculate | 1920  | DeepHPInPT | Hsv   | False | 2,989.251 ms | 69.9645 ms | 18.1695 ms |  135.2 MB |  13.52 KB |
 ```
 
 The columns that matter to you:
@@ -147,8 +181,11 @@ The columns that matter to you:
   them as **the same speed** — the difference is just noise.
 - **StdDev** — how much the individual runs jumped around. If this is large compared to Mean, your
   machine was busy with something else — close background apps and run again.
-- **Allocated** — how much memory each frame used. Usually you can ignore it; developers watch it
-  for leaks.
+- **Allocated** — how much *extra* memory each frame used while drawing. Usually you can ignore
+  it; developers watch it for leaks.
+- **Footprint** — how much memory the fractal engine *holds on to* for that view, mostly
+  picture-sized buffers. Bigger pictures need more: expect roughly 15 MB at the small size and about
+  135 MB at full HD. Handy if you're wondering whether your machine has enough RAM.
 
 The other columns just say *which* combination the row is: **Width** (resolution), **Regime**
 (zoom depth), **Theme** (colour style), **Accel** (deep-zoom shortcuts on/off).
