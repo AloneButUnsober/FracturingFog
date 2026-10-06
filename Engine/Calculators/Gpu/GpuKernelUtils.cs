@@ -300,6 +300,59 @@ internal static class GpuKernelUtils
         return (aR, aG, aB);
     }
 
+    /// <summary>#1172 / G2.2 — surface albedo from the baked colour-map LUT
+    /// (<see cref="GpuAlbedoLut"/>), the kernel twin of the CPU trace's
+    /// <c>ColorMap.Map(smooth, 0, 256, nx, ny)</c> with
+    /// <c>smooth = hitStep · (stepScale / maxSteps) + t · depthScale</c> (same
+    /// float arithmetic). Linear along smooth, bilinear over the normal grid for
+    /// normal-dependent themes. No LUT → <see cref="CheapAlbedo"/>.</summary>
+    public static (double aR, double aG, double aB) SurfaceAlbedo(
+        ArrayView<uint> lut, in GpuShadingParams sp, int hitStep, int maxSteps, double tTotal, double nx, double ny)
+    {
+        int S = sp.AlbedoLutSmooth;
+        int N = sp.AlbedoLutNormals < 1 ? 1 : sp.AlbedoLutNormals;
+        if (S < 2 || lut.Length < (long)S * N * N) return CheapAlbedo(hitStep, maxSteps, tTotal);
+
+        float smooth = (float)hitStep * ((float)sp.AlbedoStepScale / (float)Math.Max(1, maxSteps))
+                     + (float)(tTotal * sp.AlbedoDepthScale);
+        double fs = Clamp(smooth / sp.AlbedoSMax * (S - 1), 0.0, S - 1);
+        int s0 = (int)fs;
+        int s1 = s0 + 1 < S ? s0 + 1 : S - 1;
+        double ws = fs - s0;
+
+        if (N == 1)
+        {
+            uint a = lut[s0], b = lut[s1];
+            return (LerpCh(a, b, 16, ws), LerpCh(a, b, 8, ws), LerpCh(a, b, 0, ws));
+        }
+
+        double gx = Clamp((nx + 1.0) * 0.5 * (N - 1), 0.0, N - 1);
+        double gy = Clamp((ny + 1.0) * 0.5 * (N - 1), 0.0, N - 1);
+        int x0 = (int)gx, y0 = (int)gy;
+        int x1 = x0 + 1 < N ? x0 + 1 : N - 1;
+        int y1 = y0 + 1 < N ? y0 + 1 : N - 1;
+        double wx = gx - x0, wy = gy - y0;
+        double r = 0, g = 0, bl = 0;
+        for (int c = 0; c < 4; c++)
+        {
+            int ix = (c & 1) == 0 ? x0 : x1;
+            int iy = (c & 2) == 0 ? y0 : y1;
+            double w = ((c & 1) == 0 ? 1.0 - wx : wx) * ((c & 2) == 0 ? 1.0 - wy : wy);
+            int b0 = (iy * N + ix) * S;
+            uint a = lut[b0 + s0], b = lut[b0 + s1];
+            r += w * LerpCh(a, b, 16, ws);
+            g += w * LerpCh(a, b, 8, ws);
+            bl += w * LerpCh(a, b, 0, ws);
+        }
+        return (r, g, bl);
+    }
+
+    private static double LerpCh(uint a, uint b, int shift, double w)
+    {
+        double ca = (a >> shift) & 0xFF, cb = (b >> shift) & 0xFF;
+        return ca + (cb - ca) * w;
+    }
+
     /// <summary>P7c.1 — vertical sky gradient sampled by ray-up component.
     /// Mirrors <c>ShadingPipeline.SkyColor</c> but takes the top/bot colors
     /// as channel doubles (so the kernel doesn't bit-unpack a uint per

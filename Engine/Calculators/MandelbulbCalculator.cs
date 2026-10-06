@@ -153,8 +153,8 @@ public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera,
         var deStruct = new MandelbulbDe(power, deIter);
 
         // P7a — opt-in GPU raymarch path. The kernel shades shadow / AO /
-        // reflection / volumetrics itself (P7c.1-.4) but uses a cheap step-hash
-        // albedo instead of the colour map. #1172 — the screen-space post stack
+        // reflection / volumetrics itself (P7c.1-.4) and takes its albedo from the
+        // colour map through a baked LUT (GpuAlbedoLut, #1172 / G2.2). #1172 — the screen-space post stack
         // (SSAO / tonemap / bloom / screen DoF / edge ink) runs on the kernel's
         // depth / normal / HDR G-buffers via ScreenSpacePost.ApplyPost3D, as on
         // the CPU path. Caller toggles via fx.UseGpuRender. Skipped for lowRes
@@ -210,8 +210,10 @@ public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera,
                 SceneRadius = 12.0,
             };
             var sp = GpuShadingParams.Build(in fx);
+            // #1172 / G2.2 — the CPU trace's colour-map albedo (same smooth coefficients).
+            uint[] albedoLut = GpuAlbedoLut.Bake(ColorMap, 256.0, 4.0, 12.0, ref sp);
             _gpu ??= new MandelbulbGpuCalculator();
-            bool gpuOk = _gpu.Render(renderBuffer, rp, sp, bp, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr);
+            bool gpuOk = _gpu.Render(renderBuffer, rp, sp, bp, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr, albedoLut);
             LastGpuRoute = Gpu3DRoute.AfterRender(gpuOk, _gpu.LastError);
             if (gpuOk)
             {

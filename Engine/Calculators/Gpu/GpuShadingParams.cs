@@ -177,6 +177,12 @@ public struct GpuShadingParams
     /// <c>ShadingPipeline.EncodeAov</c>.</summary>
     public int DebugAov;
 
+    // #1172 / G2.2 — surface albedo LUT (GpuAlbedoLut). AlbedoLutSmooth 0 = no LUT
+    // (kernels keep the legacy CheapAlbedo). Set per family by the calculator,
+    // not by Build: the smooth coefficients differ (192/0.5, Mandelbulb 256/4).
+    public int AlbedoLutSmooth, AlbedoLutNormals;
+    public double AlbedoSMax, AlbedoStepScale, AlbedoDepthScale;
+
     // ── Vol-color slice B/C GPU parity (#181) ─────────────────────────────
     /// <summary>Henyey-Greenstein phase anisotropy [-1, 1]. 0 = isotropic
     /// (legacy, bit-identical). g &gt; 0 forward-scatters the in-scatter toward
