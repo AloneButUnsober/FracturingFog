@@ -33,7 +33,7 @@ There are three benchmarks, from most thorough to quickest:
 
 | Command          | What it measures                                             | How long |
 |------------------|-------------------------------------------------------------|----------|
-| `--bench`        | The real Mandelbrot engine across 32 combinations of resolution, zoom depth, colour theme, and acceleration. **The proper one.** | Minutes  |
+| `--bench`        | The real Mandelbrot engine across 32 combinations of resolution, zoom depth, colour theme, and acceleration. **The proper one.** Add `--filter "*GpuCalculatorBench*"` to time the 3-D fractals on your graphics card instead. | Minutes  |
 | `--gentestbench` | A quick four-step speed ladder of the built-in test fractal. | Seconds  |
 | `--benchmark`    | The same quick ladder, but for **your own equation**.        | Seconds  |
 
@@ -92,6 +92,26 @@ what a full run covers.
 > source, which is a developer task covered in the
 > [Benchmark Subsystem](../Technical/Benchmark-Subsystem.md) reference. For a quick partial check,
 > use `--gentestbench` below instead.
+
+### Measuring your graphics card (3-D fractals)
+
+The 3-D fractals (Mandelbulb, Mandelbox, Menger sponge and friends) can render on your graphics
+card when **Use GPU render** is on. To time that:
+
+```bash
+dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --filter "*GpuCalculatorBench*"
+```
+
+This measures 8 fractal families at two sizes. Two extra columns appear: **Device** (which graphics
+card did the work) and **DeviceAlloc/op** (graphics memory used per frame).
+
+> [!WARNING]
+> If a row shows `NA`, that fractal did **not** render on your graphics card. Either no suitable
+> card was found (the 3-D kernels need double-precision support, which many built-in Intel
+> graphics chips lack), or the card couldn't run the kernel. The benchmark deliberately refuses
+> to time the CPU fallback, so you never get a misleading "GPU" number. The log under
+> `BenchmarkDotNet.Artifacts` says why. **Known issue:** on NVIDIA cards every row currently shows
+> `NA`, which matches what the app itself does today (#1164).
 
 ---
 

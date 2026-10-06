@@ -31,7 +31,7 @@ There are three CLI-flagged benchmark drivers. They split across two measurement
 
 | Flag                       | Engine                | Target under test                          | Output |
 |----------------------------|-----------------------|--------------------------------------------|--------|
-| `--bench`                  | **BenchmarkDotNet**   | `MandelbrotCalculator` (the shipping calc) | BDN summary table + `BenchmarkDotNet.Artifacts/` |
+| `--bench`                  | **BenchmarkDotNet**   | `MandelbrotCalculator` (the shipping calc); with `--filter *GpuCalculatorBench*`, the 8 ILGPU 3D kernels | BDN summary table + `BenchmarkDotNet.Artifacts/` |
 | `--gentestbench`           | hand-rolled Stopwatch | `Generated.MandelbrotZ2Calculator` (CalcGen output) | console + `gentestbench.out` |
 | `--benchmark --equation …` | hand-rolled Stopwatch | an **arbitrary** hot-compiled DSL equation | console + `benchmark.out` |
 
@@ -126,7 +126,7 @@ Job.Default
    .WithUnrollFactor(1);
 ```
 
-Plus `[MemoryDiagnoser]` (per-frame allocation columns), the custom `FootprintColumn`
+Plus `[MemoryDiagnoser]` (per-frame allocation columns), the custom `Footprint` column
 (resident memory, see below) and `[Orderer(FastestToSlowest)]` (summary sorted by mean).
 
 ### Memory: what is and isn't measured
@@ -140,7 +140,7 @@ Plus `[MemoryDiagnoser]` (per-frame allocation columns), the custom `FootprintCo
 - **FF allocates no native heap memory on this path.** The codebase has no `NativeMemory.*` or
   `Marshal.AllocHGlobal` call sites, and every GPU toggle is off under `--bench`. That leaves no
   unmanaged memory to track (#1048).
-- **Footprint (`Benchmarks/FootprintColumn.cs`).** Per-op `Allocated` can't show the buffers above,
+- **Footprint (`Benchmarks/CaseMetrics.cs`).** Per-op `Allocated` can't show the buffers above,
   because they're allocated once in `[GlobalSetup]`. The Footprint column fills that gap.
   - **How it measures:** `Setup()` settles the heap with a forced full GC, constructs the
     calculator, configures it and runs one warm frame, then settles and measures again. Footprint is
@@ -155,7 +155,7 @@ Plus `[MemoryDiagnoser]` (per-frame allocation columns), the custom `FootprintCo
   - **Toolchain dependency:** the value reaches the summary through a static registry keyed by the
     case's parameters. That works only because the harness runs in-process. Under an out-of-process
     toolchain the column prints `-`.
-- **GPU memory is out of scope here.** It's tracked with the GPU benchmarks in #1162.
+- **GPU memory is covered by the GPU bench.** See "GPU calculator bench" below (#1162).
 
 ### Console attach (Windows WinExe quirk)
 
@@ -164,8 +164,12 @@ Plus `[MemoryDiagnoser]` (per-frame allocation columns), the custom `FootprintCo
 Windows via `AttachConsole(ATTACH_PARENT_PROCESS)` (attach to the launching terminal) falling
 back to `AllocConsole` (pop a fresh console window), then rebinds `stdout`/`stderr` to the
 attached handle. On Linux/macOS the streams are already wired to the launching terminal, so the
-attach is gated behind `OperatingSystem.IsWindows()`. At the end it `FreeConsole`s and, if input
-is not redirected, waits on a keypress so a pop-up console does not vanish before you read it.
+attach is gated behind `OperatingSystem.IsWindows()`. At the end it `FreeConsole`s. It waits on a
+keypress **only if it had to allocate a fresh console window**, so a pop-up console doesn't vanish
+before you read it. When attached to a terminal it returns straight to the prompt. (Before #1162 the
+pause keyed off `Console.IsInputRedirected`. After `AttachConsole` that check reflects the console,
+not the caller's redirected stdin, so scripted runs blocked forever on `ReadKey` and kept the exe
+locked.)
 
 ### Argument pass-through
 
@@ -176,11 +180,57 @@ args just prints help and runs nothing, hence the explicit direct-run branch).
 
 > [!NOTE]
 > **Narrowing the run.** BenchmarkDotNet's `--filter` glob matches the fully-qualified benchmark
-> **name** (`*MandelbrotBench*`), *not* `[Params]` values — there is only one `[Benchmark]` method
-> here, so `--filter` is all-or-nothing and cannot select a single regime/theme/width. To run a
-> subset, temporarily edit the relevant `[Params]` array in `MandelbrotBench.cs` (e.g. drop
-> `Width` to `[Params(640)]`, or `Regime` to the two HP values) and rebuild. `--list flat` /
-> `--list tree` enumerate the cases without running.
+> **name** (`Namespace.Class.Method`), *not* `[Params]` values. So it selects a **class**:
+> `*MandelbrotBench*` is the CPU matrix, `*GpuCalculatorBench*` the GPU bench, `*` both. Within a
+> class it is all-or-nothing, because each class has a single `[Benchmark]` method. To run a
+> subset of cases, temporarily edit the relevant `[Params]` array (e.g. drop `Width` to
+> `[Params(640)]`) and rebuild. `--list flat` / `--list tree` enumerate the cases without running.
+
+### GPU calculator bench (`GpuCalculatorBench`, #1162)
+
+Source: [`Benchmarks/GpuCalculatorBench.cs`](../../Benchmarks/GpuCalculatorBench.cs). It's opt-in;
+the default `--bench` run stays CPU-only:
+
+```powershell
+dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --filter "*GpuCalculatorBench*"
+```
+
+It times the **production** 3D calculators with `Lighting.UseGpuRender = true`, so the frame is
+what the app renders: real parameter construction, kernel launch, `Synchronize`, device-to-host
+copy. Matrix: 8 families (`Mandelbulb`, `Mandelbox`, KIFS `Menger` / `Sierpinski`, `QJulia`,
+`QMandel`, `Kleinian`, `Bicomplex`) x {640x360, 1920x1080} = 16 cases. Same in-process job as
+`MandelbrotBench`.
+
+**It refuses to time a CPU fallback.** In the app, a missing device or a failed kernel load falls
+through to the CPU ShadingPipeline silently. The bench guards against measuring that:
+
+- Every GPU frame allocates its buffers through `GpuMemoryStats.Allocate1D`
+  (`Engine/Calculators/Gpu/GpuMemoryStats.cs`), a thin counting wrapper used by all 24 per-frame
+  allocation sites in the 8 ILGPU calculators. A CPU frame allocates nothing there.
+- `Setup()` renders a JIT frame and then a steady-state frame. If the steady-state frame added no
+  device bytes, it throws, and BDN reports the case as failed (`NA`) instead of a number.
+- The exception names the inner GPU calculator's state: `=null (Render never called)` means a
+  calculator-side gate kept the frame on the CPU, and `LastError='…'` means the kernel failed on
+  this device.
+
+That guard is what exposed #1164: on CUDA, all 8 kernels fail to JIT because the context lacks
+`ILGPU.Algorithms`. **Until #1164 is fixed, every case reports `NA` on an NVIDIA host.** That's
+correct behaviour: the app is rendering those frames on the CPU too.
+
+Extra columns (`Benchmarks/CaseMetrics.cs`):
+
+- **DeviceAlloc/op**: ILGPU device bytes allocated per frame, measured on the steady-state frame.
+  On every frame the kernels allocate an output buffer, a palette LUT, and a depth buffer (one
+  element unless froxel compositing is on). So this is per-frame device churn, not resident VRAM.
+- **Device**: the accelerator that ran the case (`AcceleratorType` + name). GPU numbers mean
+  nothing without it.
+
+**Device selection** is the app's: `GpuAcceleratorHost.TryAcquire` picks an fp64-capable non-CPU
+device. If none exists, Setup throws `No GPU accelerator available …`. Intel Xe iGPUs, for example,
+expose no OpenCL fp64.
+
+**Not covered yet:** `MandelbrotCalculator` with the D3D11 / Vulkan `IGpuKernel` (SP `UseGpuCompute`
+and deep `UseGpuPerturbation` paths) and the GPU QD reference orbit. Those are #1162 slice B.
 
 ---
 
@@ -328,6 +378,9 @@ dotnet run -c Release --project FracturingFogCLD.csproj -- --bench
 
 # List every case without running (then trim [Params] to run a subset)
 dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --list flat
+
+# GPU 3D kernels (16 cases; needs an fp64 GPU, see the GPU calculator bench section)
+dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --filter "*GpuCalculatorBench*"
 
 # CalcGen template quick-check
 dotnet run -c Release --project FracturingFogCLD.csproj -- --gentestbench
