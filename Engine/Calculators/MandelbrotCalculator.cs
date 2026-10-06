@@ -238,6 +238,12 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
     /// zoom GPU path is engaged. Reset at the start of every HP frame.</summary>
     public bool LastFrameUsedGpuPerturbation { get; private set; }
 
+    /// <summary>#1162 — true when the last single-precision frame ran its
+    /// iteration loop on the <see cref="GpuKernel"/> (<see cref="UseGpuCompute"/>
+    /// path) rather than falling back to the CPU SIMD loop. Reset at the start
+    /// of every frame. Lets the GPU benchmark refuse to time a CPU fallback.</summary>
+    public bool LastFrameUsedGpuCompute { get; private set; }
+
     /// <summary>Estimated deepest zoom (as log₁₀) at which the CURRENT view
     /// centre still resolves detail, set by the last reference-orbit build.
     ///
@@ -661,6 +667,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         // (orbit-aware, GPU palette, DD/QD/OD deep, …). Run the render, then a
         // single path-agnostic post-pass paints the beyond-escape-radius
         // surround, so every path is covered from one place.
+        LastFrameUsedGpuCompute = false;   // set true only after a successful GpuKernel.Run (SP path)
         CalculateInternal(ct);
         ApplyOutOfBoundsSurround(ct);
     }
@@ -1202,6 +1209,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
                     FinalDrBuffer, FinalDiBuffer,
                     useTileCap ? perRow : null,
                     colorDst: gpuPalette ? ColorBuffer : null);
+                LastFrameUsedGpuCompute = true;
 
                 if (gpuPalette)
                 {
