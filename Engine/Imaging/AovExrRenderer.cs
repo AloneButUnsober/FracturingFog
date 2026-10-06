@@ -11,8 +11,9 @@
 // that RENDERS the scene once per AOV (toggling LightingFxData.DebugAov), collects
 // the buffers and hands them to the packer. This is that loop.
 //
-// CPU-only: DebugAov is honoured by the CPU shade path (relief raymarch + the 3D
-// fractal calculators); a flat 2D render simply yields beauty-equal AOV planes.
+// DebugAov is honoured by the CPU shade path (relief raymarch + the 3D fractal
+// calculators) and, since #323, by the 3D families' GPU kernels (same 8-bit
+// encodings); a flat 2D render simply yields beauty-equal AOV planes.
 // Each pass is a full, deterministic re-render (no RNG), so the .exr is identical
 // live and under --batch.
 //

@@ -74,16 +74,23 @@ public static partial class ScreenSpacePost
 
     /// <summary>#1070 — true when a Froxel3D frame may still take the GPU trace: the
     /// ILGPU kernels write the per-pixel ray distance the froxel composite needs, so
-    /// the GPU traces and the CPU populates + composites the volume. Not when depth is
-    /// also wanted after the frame (the GPU path has no full G-buffer) or with thin-lens
+    /// the GPU traces and the CPU populates + composites the volume. Not with thin-lens
     /// DoF (its averaged taps have no single depth).</summary>
     public static bool GpuFroxel3DHybrid(in LightingFxData fx)
-        => fx.Froxel3D && !WantsDepthOutput(in fx) && !ThinLensDof.IsActive(in fx);
+        => fx.Froxel3D && !ThinLensDof.IsActive(in fx);
 
-    /// <summary>The 3D calculators' GPU-trace gate: no CPU-only need, or the only one is
-    /// the froxel pass and <see cref="GpuFroxel3DHybrid"/> covers it.</summary>
+    /// <summary>#1070 / #323 — true when the GPU trace must also emit its per-pixel
+    /// ray distance: for the froxel composite, or as the frame's published depth
+    /// (stereo / autostereogram, <see cref="WantsDepthOutput"/>). The kernels' depth
+    /// is the CPU G-buffer contract (ray distance, +Inf = miss).</summary>
+    public static bool GpuWantsDepth(in LightingFxData fx)
+        => ForcesCpuTrace(in fx) && !ThinLensDof.IsActive(in fx);
+
+    /// <summary>The 3D calculators' GPU-trace gate. The kernels supply depth
+    /// (<see cref="GpuWantsDepth"/>), so the only CPU-only need left is depth with
+    /// thin-lens DoF.</summary>
     public static bool GpuTraceAllowed(in LightingFxData fx)
-        => !ForcesCpuTrace(in fx) || GpuFroxel3DHybrid(in fx);
+        => !ForcesCpuTrace(in fx) || GpuWantsDepth(in fx);
 
     /// <summary>#1079 — the froxel view for a 3D calculator's ACTUAL primary-ray
     /// camera: the eye after the zoom / distance-floor clamp and stereo eye offset,

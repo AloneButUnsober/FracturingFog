@@ -38,7 +38,7 @@ public sealed class S1173MGpuRouteTests
         foreach (bool useGpu in new[] { false, true })
         foreach (var aov in new[] { AovView.Beauty, AovView.Normals })
         foreach (bool lowRes in new[] { false, true })
-        foreach (int extra in new[] { 0, 1, 2 })   // 0 plain, 1 stereo depth, 2 froxel + thin lens
+        foreach (int extra in new[] { 0, 1, 2, 3 })   // 0 plain, 1 stereo depth, 2 froxel + thin lens, 3 stereo + thin lens
         foreach (bool familyOk in new[] { true, false })
         {
             var fx = LightingFxData.CreateDefault();
@@ -46,9 +46,11 @@ public sealed class S1173MGpuRouteTests
             fx.DebugAov = aov;
             if (extra == 1) { fx.StereoMode = StereoMode.Fake; fx.StereoEyeSeparation = 0.05; }
             if (extra == 2) { fx.Froxel3D = true; fx.FogDensity = 0.05; fx.DofThinLens = true; fx.DofAperture = 0.2; fx.DofSamples = 4; }
+            if (extra == 3) { fx.StereoMode = StereoMode.Fake; fx.StereoEyeSeparation = 0.05; fx.DofThinLens = true; fx.DofAperture = 0.2; fx.DofSamples = 4; }
 
-            bool oldGate = fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes
-                           && ScreenSpacePost.GpuTraceAllowed(in fx) && familyOk;
+            // #323: AOV views and stereo depth no longer force the CPU; only depth
+            // needs with thin-lens DoF do (the extra == 2 and 3 rows).
+            bool oldGate = fx.UseGpuRender && !lowRes && extra < 2 && familyOk;
             var route = Gpu3DRoute.Gate(in fx, lowRes, familyOk ? null : "family", "family detail");
 
             Assert.Equal(oldGate, route is null);
@@ -65,13 +67,14 @@ public sealed class S1173MGpuRouteTests
         Assert.Null(Gpu3DRoute.Gate(in fx, lowRes: false));
 
         var aov = fx; aov.DebugAov = AovView.Depth;
-        Assert.Equal("AOV view", Gpu3DRoute.Gate(in aov, false)!.Value.Reason);
-        Assert.Contains("Depth", Gpu3DRoute.Gate(in aov, false)!.Value.Detail);
+        Assert.Null(Gpu3DRoute.Gate(in aov, false));   // #323 — AOV views render on the GPU
 
         Assert.Equal("preview frame", Gpu3DRoute.Gate(in fx, lowRes: true)!.Value.Reason);
 
         var stereo = fx; stereo.StereoMode = StereoMode.Fake; stereo.StereoEyeSeparation = 0.05;
-        Assert.Equal("stereo depth", Gpu3DRoute.Gate(in stereo, false)!.Value.Reason);
+        Assert.Null(Gpu3DRoute.Gate(in stereo, false));   // #323 — GPU depth feeds stereo
+        var stereoLens = stereo; stereoLens.DofThinLens = true; stereoLens.DofAperture = 0.2; stereoLens.DofSamples = 4;
+        Assert.Equal("stereo + thin-lens", Gpu3DRoute.Gate(in stereoLens, false)!.Value.Reason);
 
         var lens = fx; lens.Froxel3D = true; lens.FogDensity = 0.05;
         lens.DofThinLens = true; lens.DofAperture = 0.2; lens.DofSamples = 4;
@@ -113,14 +116,14 @@ public sealed class S1173MGpuRouteTests
     }
 
     [Fact]
-    public void Mandelbox_Aov_View_Reports_The_Aov_Gate()
+    public void Mandelbox_Preview_Frame_Reports_The_Preview_Gate()
     {
         var fx = LightingFxData.CreateDefault();
         fx.UseGpuRender = true;
-        fx.DebugAov = AovView.Normals;
-        var route = Run3D(new MandelboxCalculator(32, 24), new FractalParameters { Lighting = fx });
+        var calc = new MandelboxCalculator(32, 24) { LowResPreview = true };
+        var route = Run3D(calc, new FractalParameters { Lighting = fx });
         Assert.Equal(GpuRouteState.CpuFallback, route.State);
-        Assert.Equal("AOV view", route.Reason);
+        Assert.Equal("preview frame", route.Reason);
     }
 
     [Fact]

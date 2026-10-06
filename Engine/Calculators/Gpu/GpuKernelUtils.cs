@@ -953,6 +953,100 @@ internal static class GpuKernelUtils
         return (br, bg, bb);
     }
 
+    /// <summary>#323 — the AOV / view-mode encoding of one surface hit, the
+    /// kernel-side twin of <c>ShadingPipeline.EncodeAov</c> (same encodings,
+    /// same rounding). Kernels call it instead of <see cref="ComposeSurfacePbr"/>
+    /// when <see cref="GpuShadingParams.DebugAov"/> is non-zero, so a view mode
+    /// renders on the GPU rather than forcing the CPU trace. Diffuse / specular
+    /// are recomputed here with the same light math as ComposeSurfacePbr
+    /// (shadowed, attenuation folded into the light intensity, before the
+    /// ambient mix), leaving the Beauty path untouched.</summary>
+    public static uint EncodeSurfaceAov(
+        in GpuShadingParams sp,
+        double nx, double ny, double nz,
+        double rdx, double rdy, double rdz,
+        double px, double py, double pz,
+        double sh1, double sh2, double sh3,
+        double ao,
+        double aR, double aG, double aB,
+        double tT, int hitStep)
+    {
+        switch (sp.DebugAov)
+        {
+            case 1:   // Normals
+                return AovRgb(nx * 0.5 + 0.5, ny * 0.5 + 0.5, nz * 0.5 + 0.5);
+            case 2:   // Depth: near = dark, far = light
+            {
+                double v = 1.0 - Math.Exp(-tT * 0.12);
+                return AovRgb(v, v, v);
+            }
+            case 3:   // StepCount: blue (cheap) → yellow (expensive)
+            {
+                double v = Clamp(hitStep / 96.0, 0.0, 1.0);
+                return AovRgb(v, v * 0.8, 1.0 - v);
+            }
+            case 4:   // AmbientOcclusion
+                return AovRgb(ao, ao, ao);
+            case 5:   // Diffuse direct lighting (shadowed)
+            {
+                double sR = 0, sG = 0, sB = 0;
+                if (sp.L1I > 0)
+                {
+                    double w = sp.L1I * sh1 * Math.Max(0.0, nx * sp.L1X + ny * sp.L1Y + nz * sp.L1Z);
+                    sR += sp.L1R * w; sG += sp.L1G * w; sB += sp.L1B * w;
+                }
+                if (sp.L2I > 0)
+                {
+                    double w = sp.L2I * sh2 * Math.Max(0.0, nx * sp.L2X + ny * sp.L2Y + nz * sp.L2Z);
+                    sR += sp.L2R * w; sG += sp.L2G * w; sB += sp.L2B * w;
+                }
+                if (sp.L3I > 0)
+                {
+                    double w = sp.L3I * sh3 * Math.Max(0.0, nx * sp.L3X + ny * sp.L3Y + nz * sp.L3Z);
+                    sR += sp.L3R * w; sG += sp.L3G * w; sB += sp.L3B * w;
+                }
+                return AovRgb(sR / 255.0, sG / 255.0, sB / 255.0);
+            }
+            case 6:   // Specular only
+            {
+                if (sp.SpecularStrength <= 0) return AovRgb(0.0, 0.0, 0.0);
+                if (sp.TriplanarKind != 0 && sp.TriplanarStrength > 0)
+                    (aR, aG, aB) = ApplyTriplanar(aR, aG, aB, in sp, px, py, pz, nx, ny, nz);
+                double vx = -rdx, vy = -rdy, vz = -rdz;
+                double NdotV = Math.Max(0.0, nx * vx + ny * vy + nz * vz);
+                double rough = Math.Max(0.05, sp.Roughness);
+                double a = rough * rough;
+                double a2 = a * a;
+                double kg = (rough + 1.0) * (rough + 1.0) / 8.0;
+                double F0r = 0.04 + (aR / 255.0 - 0.04) * sp.Metallic;
+                double F0g = 0.04 + (aG / 255.0 - 0.04) * sp.Metallic;
+                double F0b = 0.04 + (aB / 255.0 - 0.04) * sp.Metallic;
+                var (s1R, s1G, s1B) = GgxSpecLight(sp.L1I * sh1, sp.L1R, sp.L1G, sp.L1B,
+                    sp.L1X, sp.L1Y, sp.L1Z, nx, ny, nz, vx, vy, vz,
+                    NdotV, a2, kg, F0r, F0g, F0b, sp.SpecularStrength);
+                var (s2R, s2G, s2B) = GgxSpecLight(sp.L2I * sh2, sp.L2R, sp.L2G, sp.L2B,
+                    sp.L2X, sp.L2Y, sp.L2Z, nx, ny, nz, vx, vy, vz,
+                    NdotV, a2, kg, F0r, F0g, F0b, sp.SpecularStrength);
+                var (s3R, s3G, s3B) = GgxSpecLight(sp.L3I * sh3, sp.L3R, sp.L3G, sp.L3B,
+                    sp.L3X, sp.L3Y, sp.L3Z, nx, ny, nz, vx, vy, vz,
+                    NdotV, a2, kg, F0r, F0g, F0b, sp.SpecularStrength);
+                return AovRgb((s1R + s2R + s3R) / 255.0, (s1G + s2G + s3G) / 255.0, (s1B + s2B + s3B) / 255.0);
+            }
+            case 7:   // Shadow: key-light visibility
+                return AovRgb(sh1, sh1, sh1);
+            default:
+                return 0xFF000000u;
+        }
+    }
+
+    /// <summary>#323 — twin of <c>ShadingPipeline.PackRgb</c>: 0..1 channels,
+    /// rounded (unlike <see cref="PackBgra"/>, which truncates byte-scale).</summary>
+    private static uint AovRgb(double r, double g, double b)
+        => 0xFF000000u
+         | ((uint)Clamp(r * 255.0 + 0.5, 0.0, 255.0) << 16)
+         | ((uint)Clamp(g * 255.0 + 0.5, 0.0, 255.0) << 8)
+         |  (uint)Clamp(b * 255.0 + 0.5, 0.0, 255.0);
+
     /// <summary>P7c.1 — full shade composition for the GPU path. Takes the
     /// per-fractal-precomputed soft-shadow factors + AO factor + cheap-palette
     /// albedo and walks the same 3-light Lambert + ambient + scalar fog the

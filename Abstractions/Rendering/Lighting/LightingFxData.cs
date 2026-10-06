@@ -103,9 +103,10 @@ public struct DirectionalLight
 /// .Shade{TDe}"/> return the chosen diagnostic buffer for each surface hit
 /// instead of the beauty pass — the standard lookdev isolates (Blender/Unreal
 /// "view modes"): geometry (normals / depth / raymarch step-count heat) and
-/// lighting components (AO / diffuse / specular / shadow). CPU raymarchers + the
-/// CPU relief path only; GPU kernels stay beauty (relief forces its CPU path
-/// while a view is active). Ray-miss (sky) pixels keep the background.</summary>
+/// lighting components (AO / diffuse / specular / shadow). CPU raymarchers, the CPU
+/// relief path and (#323) the eight ILGPU 3D kernels (GpuKernelUtils.EncodeSurfaceAov,
+/// same encodings). The relief GPU kernel and the User Bulb GPU path still force their
+/// CPU trace while a view is active. Ray-miss (sky) pixels keep the background.</summary>
 public enum AovView
 {
     /// <summary>Normal shaded output (default).</summary>

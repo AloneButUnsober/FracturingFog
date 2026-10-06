@@ -223,7 +223,7 @@ public sealed class KleinianCalculator : IFractalCalculator, IStereoEyeCamera, I
         {
             // #1070 — Froxel3D on the GPU trace: the kernel also writes per-pixel
             // ray distance, and the CPU froxel pass composites over the GPU frame.
-            float[]? gpuDepth = ScreenSpacePost.GpuFroxel3DHybrid(in fx) ? new float[width * height] : null;
+            float[]? gpuDepth = ScreenSpacePost.GpuWantsDepth(in fx) ? new float[width * height] : null;   // #323 — froxel and/or stereo depth
             var rp = new GpuRaymarchParams
             {
                 Width = width, Height = height,
@@ -261,6 +261,7 @@ public sealed class KleinianCalculator : IFractalCalculator, IStereoEyeCamera, I
             LastGpuRoute = Gpu3DRoute.AfterRender(gpuOk, _gpu.LastError);
             if (gpuOk)
             {
+                DepthBuffer = ScreenSpacePost.PublishDepth(gpuDepth, width, height, width, height, in fx);   // #323 — stereo depth from the GPU trace
                 ScreenSpacePost.ApplyFroxel3D(renderBuffer, null, gpuDepth, width, height,
                     in froxelView, in froxelFx, in deStruct);   // #1070 — GPU trace + CPU froxel
                 // #84 — GPU raymarch skips the CPU post stack; draw the debug
