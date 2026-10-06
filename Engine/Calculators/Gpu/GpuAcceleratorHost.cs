@@ -212,6 +212,18 @@ public static class GpuAcceleratorHost
         get { lock (_lock) return _accelerator != null; }
     }
 
+    /// <summary>#1173-M — true once a device fault has latched GPU 3D off for
+    /// the session (<see cref="ReportRenderFault"/>).</summary>
+    public static bool IsFaulted
+    {
+        get { lock (_lock) return _faulted && _testOverride == null; }
+    }
+
+    /// <summary>#1173-M — "Cuda GeForce GT 710"-style label for the device
+    /// <see cref="TryAcquire"/> hands out, or null when none is available.</summary>
+    public static string? DeviceLabel
+        => TryAcquire(out var acc) ? $"{acc.AcceleratorType} {acc.Name}" : null;
+
     /// <summary>Dispose the shared accelerator + context. Idempotent. Reset
     /// the init-attempted latch so a subsequent TryAcquire can re-probe (e.g.
     /// after a driver hot-swap during a long-running headless session).</summary>

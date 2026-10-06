@@ -398,6 +398,8 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
 
     public bool SupportsPerturbation => _ctx.SupportsFloat64;
 
+    public string BackendLabel => "Vulkan";
+
     public void RunPerturb(
         int width, int height,
         double scale, int maxIter, double escapeRadius2,

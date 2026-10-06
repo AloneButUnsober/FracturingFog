@@ -39,7 +39,7 @@ using FracturingFog.Models;
 
 namespace FracturingFog;
 
-public sealed class KleinianCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource
+public sealed class KleinianCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource, FracturingFog.Render.IGpuRouteSource
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -77,6 +77,9 @@ public sealed class KleinianCalculator : IFractalCalculator, IStereoEyeCamera, I
         Height = height;
         ColorBuffer = new uint[width * height];
     }
+
+    /// <summary>#1173-M — GPU route of the last frame (GPU, or CPU and why).</summary>
+    public FracturingFog.Render.GpuRoute LastGpuRoute { get; private set; }
 
     public void Calculate(CancellationToken ct = default)
     {
@@ -206,7 +209,17 @@ public sealed class KleinianCalculator : IFractalCalculator, IStereoEyeCamera, I
                            && !group.HasRotation                              // #877 — rotation fold is CPU-only
                            && colorSrc == KleinianColorSource.Smooth           // #878 — word colouring is CPU-only
                            && deFactor == 1.0;                                 // #881 — under-relaxed stepping is CPU-only
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && ScreenSpacePost.GpuTraceAllowed(in fx) && gpuEligible)
+        // #1173-M — first failing gpuEligible condition, for the HUD / status bar.
+        (string? gpuFamilyReason, string? gpuFamilyDetail) = gpuEligible ? (null, null)
+            : !(group.AllInversions && group.UniformRadius && gens.Length == 4)
+                ? ("generator group", "only the uniform 4-sphere inversion group has a GPU kernel (#880)")
+            : group.HasRotation ? ("rotation generators", "rotation generators render on the CPU only (#877, #1173-E)")
+            : colorSrc != KleinianColorSource.Smooth ? ("word colouring", "word-length colouring renders on the CPU only (#878, #1173-E)")
+            : ("under-relaxed DE", "under-relaxed DE stepping renders on the CPU only (#881, #1173-E)");
+        // #1173-M — the same gate as before, plus the reason when it fails.
+        var gpuGate = Gpu3DRoute.Gate(in fx, lowRes, gpuFamilyReason, gpuFamilyDetail);
+        LastGpuRoute = gpuGate ?? default;
+        if (gpuGate is null)
         {
             // #1070 — Froxel3D on the GPU trace: the kernel also writes per-pixel
             // ray distance, and the CPU froxel pass composites over the GPU frame.
@@ -244,7 +257,9 @@ public sealed class KleinianCalculator : IFractalCalculator, IStereoEyeCamera, I
             };
             var sp = GpuShadingParams.Build(in fx);
             _gpu ??= new KleinianGpuCalculator();
-            if (_gpu.Render(renderBuffer, rp, sp, kp, fx.VolumePalette, gpuDepth, ct))
+            bool gpuOk = _gpu.Render(renderBuffer, rp, sp, kp, fx.VolumePalette, gpuDepth, ct);
+            LastGpuRoute = Gpu3DRoute.AfterRender(gpuOk, _gpu.LastError);
+            if (gpuOk)
             {
                 ScreenSpacePost.ApplyFroxel3D(renderBuffer, null, gpuDepth, width, height,
                     in froxelView, in froxelFx, in deStruct);   // #1070 — GPU trace + CPU froxel

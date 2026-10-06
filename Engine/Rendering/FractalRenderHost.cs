@@ -702,6 +702,7 @@ namespace FracturingFog.Rendering
             lines.Add($"       {_calculator.CenterY:G10}");
             lines.Add($"limbs  X:{lx}/8  Y:{ly}/8   px {_calculator.Width}x{_calculator.Height}");
             lines.Add($"zoom   {zoom:G4}   iter {_calculator.MaxIterations}");
+            lines.Add(_lastGpuRoute.HudLine);   // #1173-M — GPU, or CPU and why
 
             double maxUseful = _calculator.MaxUsefulZoomLog10;
             string orbit = _calculator.ReferenceOrbitEscaped
@@ -730,6 +731,25 @@ namespace FracturingFog.Rendering
                 warning = $"detail limit ~1e{maxUseful:F0} - recenter on structure to zoom deeper";
             }
             return (lines, warning);
+        }
+
+        // #1173-M — the GPU route of the frame just presented, for the perf HUD.
+        private GpuRoute _lastGpuRoute;
+
+        // #1173-M — the route a frame took. Calculators that can run on the GPU
+        // report it (IGpuRouteSource); for any other calculator the GPU switch
+        // the user set (3D: Lighting.UseGpuRender, 2D: GPU compute) has no effect,
+        // which is itself worth saying.
+        private GpuRoute FrameGpuRoute(MandelbrotCalculator calc, IFractalCalculator? altCalc, bool useAlt)
+        {
+            if (!useAlt) return calc.LastGpuRoute;
+            if (altCalc is IGpuRouteSource src) return src.LastGpuRoute;
+            bool requested = ViewState.Is3D
+                ? ViewState.FractalParameters.Lighting.UseGpuRender
+                : _calculator.UseGpuCompute;
+            return requested
+                ? GpuRoute.Cpu("no GPU path", $"{ViewState.FractalType} has no GPU path")
+                : GpuRoute.NotRequested;
         }
 
         private static int NonZeroLimbs(double a, double b, double c, double d,
@@ -1752,11 +1772,12 @@ namespace FracturingFog.Rendering
                         if (TryClaimPresent(job.Seq))
                             UploadProcessedBuffer(sbs, outW, outH);
                     }
+                    _lastGpuRoute = FrameGpuRoute(_calculator, altCalc, useAlt: true);   // #1173-M
                     FrameCompleted?.Invoke(this, new RenderFrameInfo(
                         altCalc.CenterX, altCalc.CenterY, altCalc.Zoom, altCalc.MaxIterations,
                         job.Sw.ElapsedMilliseconds, altCalc.Width, altCalc.Height,
                         false, ViewState.IterLocked, ViewState.FractalType,
-                        "3D-SBS", double.PositiveInfinity));
+                        "3D-SBS", double.PositiveInfinity, _lastGpuRoute));
                 }
                 else
                 {
@@ -2864,9 +2885,10 @@ namespace FracturingFog.Rendering
                     // Mandelbrot calculator's reference orbit; alt calcs leave +∞.
                     double maxUseful = useAlt ? double.PositiveInfinity
                                               : _calculator.MaxUsefulZoomLog10;
+                    _lastGpuRoute = FrameGpuRoute(calc, altCalc, useAlt);   // #1173-M
                     FrameCompleted?.Invoke(this, new RenderFrameInfo(
                         curCx, curCy, curZoom, curIter, ms, curW, curH,
-                        hp, ViewState.IterLocked, ViewState.FractalType, lbl, maxUseful));
+                        hp, ViewState.IterLocked, ViewState.FractalType, lbl, maxUseful, _lastGpuRoute));
                 }
 
                 if (ShowPerfHud) _perfStats.RecordFrame(ms);

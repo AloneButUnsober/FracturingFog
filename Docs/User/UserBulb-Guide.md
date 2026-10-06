@@ -743,7 +743,7 @@ Drag sliders to morph live (no recompile).
 
 **Cull r too small.** Mandelbox extends beyond Cull r → bounding sphere clips silhouettes. Use 4–8 for Mandelbox; canonical bulbs are happy with 2.
 
-**GPU backend fallback.** An equation the GPU route can't take silently falls back to CPU (§7). If GPU was expected and you don't see a speedup, that's why.
+**GPU backend fallback.** An equation the GPU route can't take falls back to CPU (§7). The status bar then shows `[CPU: reason]`, for example `[CPU: Vec3 numerical DE]` or `[CPU: Vec3 Julia]`. The perf HUD's `gpu` line has the full reason. A frame that did run on the GPU shows `[GPU]`.
 
 **Perf.** Transcendental calls dominate the interpreter's cost. Prefer `x*x*x` over `pow(x, 3)`; name repeated sub-expressions with `let` / `var`.
 

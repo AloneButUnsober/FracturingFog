@@ -22,10 +22,12 @@ using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using FracturingFog.Models.FractalKernels;
 
+using GpuRoute = FracturingFog.Render.GpuRoute;
+
 namespace FracturingFog;
 
 public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Interefaces.IHeightFieldSource, Interefaces.ISupportsHistogramEq,
-    Interefaces.IDistanceFieldSource
+    Interefaces.IDistanceFieldSource, FracturingFog.Render.IGpuRouteSource
 {
     public bool SupportsZoomPan => true;
 
@@ -56,6 +58,9 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
     /// <summary>T3.1 phase 3: shared GPU kernel. Same instance used by
     /// the Mandelbrot path (set by the host).</summary>
     public FracturingFog.Rendering.IGpuKernel? GpuKernel { get; set; }
+
+    /// <summary>#1173-M — GPU route of the last frame (GPU, or CPU and why).</summary>
+    public GpuRoute LastGpuRoute { get; private set; }
 
     /// <summary>Phase 2.1 per-row maxIter cap. See
     /// <see cref="MandelbrotCalculator.PerRowMaxIter"/> for the policy.
@@ -313,6 +318,16 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
         // and route the SIMD kinds through the scalar dispatch when it's active.
         bool warp = WarpActive;
 
+        // #1173-M — the first failing condition of the gate below, for the
+        // HUD / status bar. TryDispatchGpu refines it (unsupported kind,
+        // dispatch error, GPU vs CPU palette).
+        LastGpuRoute = !UseGpuCompute ? GpuRoute.NotRequested
+            : GpuKernel == null ? GpuRoute.Cpu("no GPU kernel", "the active renderer has no GPU compute kernel")
+            : Zoom > MandelbrotCalculator.MaxGpuZoom
+                ? GpuRoute.Cpu("zoom > 1e4", "past the FP32 GPU zoom limit (1e4); deeper zooms render on the CPU")
+            : warp ? GpuRoute.Cpu("domain warp", "domain warp renders on the CPU only (#1173-I)")
+            : default;
+
         if (UseGpuCompute && GpuKernel != null
             && Zoom <= MandelbrotCalculator.MaxGpuZoom
             && !warp
@@ -416,6 +431,8 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
                 kind = FracturingFog.Rendering.FractalKind.Tricorn;
                 break;
             default:
+                LastGpuRoute = GpuRoute.Cpu($"{FractalType}: no kernel",
+                    $"{FractalType} has no GPU kernel (#1173-I)");
                 return false;  // Multibrot / Phoenix etc. — CPU only.
         }
 
@@ -449,6 +466,7 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
         {
             System.Diagnostics.Debug.WriteLine(
                 $"[EscapeTimeCalculator] GPU dispatch failed, falling back to CPU: {ex.Message}");
+            LastGpuRoute = GpuRoute.Cpu("GPU error", $"GPU dispatch failed: {ex.Message}");
             return false;
         }
 
@@ -459,6 +477,7 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
             // consume them through the CPU writeback in this path. #1029: the
             // distance estimate is still filled (the Distance relief source).
             FillDistanceFromFinalZ(MaxIterations, ct);
+            LastGpuRoute = GpuRoute.OnGpu(GpuKernel.BackendLabel);
             return true;
         }
 
@@ -531,6 +550,8 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
                 }
             }
         });
+        LastGpuRoute = GpuRoute.OnGpu(GpuKernel.BackendLabel,
+            $"{GpuKernel.BackendLabel}: iteration on the GPU, colouring on the CPU (#1173-H)");
         return true;
     }
 

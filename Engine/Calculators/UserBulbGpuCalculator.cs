@@ -71,6 +71,9 @@ public sealed class UserBulbGpuCalculator : IDisposable
     private bool _initFailed;
     public string LastError { get; private set; } = string.Empty;
 
+    /// <summary>#1173-M — the device this path renders on, or null before init.</summary>
+    public string? DeviceLabel => _accelerator is { } a ? $"{a.AcceleratorType} {a.Name}" : null;
+
     public bool TryInit()
     {
         if (_kernel != null) return true;

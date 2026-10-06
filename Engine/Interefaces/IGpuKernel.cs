@@ -84,6 +84,10 @@ namespace FracturingFog.Rendering
         /// keeps deep zoom on the CPU. See issue #82 / dev-plan §14.</summary>
         bool SupportsPerturbation => false;
 
+        /// <summary>#1173-M — short backend name for the HUD / status bar
+        /// ("D3D11", "Vulkan").</summary>
+        string BackendLabel => GetType().Name;
+
         /// <summary>Run the deep-zoom perturbation kernel over a precomputed
         /// reference orbit (Hi-limb doubles, length <paramref name="refLen"/>),
         /// the GPU twin of <c>MandelbrotCalculator.ComputePixelPTRebased</c>.

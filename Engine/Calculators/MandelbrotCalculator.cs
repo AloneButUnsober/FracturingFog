@@ -59,11 +59,12 @@ using FracturingFog.Interefaces;
 using FracturingFog.FFMath;
 using FracturingFog.Models;
 using System.Diagnostics;
+using GpuRoute = FracturingFog.Render.GpuRoute;
 
 namespace FracturingFog;
 
 public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Interefaces.ITrapFieldSource, Interefaces.ISupportsHistogramEq,
-    Interefaces.IDistanceFieldSource
+    Interefaces.IDistanceFieldSource, FracturingFog.Render.IGpuRouteSource
 {
     // ── Public state ──────────────────────────────────────────────────────────
 
@@ -243,6 +244,47 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
     /// path) rather than falling back to the CPU SIMD loop. Reset at the start
     /// of every frame. Lets the GPU benchmark refuse to time a CPU fallback.</summary>
     public bool LastFrameUsedGpuCompute { get; private set; }
+
+    /// <summary>#1173-M — GPU route of the last frame (GPU, or CPU and why),
+    /// resolved at the end of <see cref="Calculate"/>.</summary>
+    public GpuRoute LastGpuRoute { get; private set; }
+
+    // #1173-M — a specific reason recorded by a GPU gate or dispatch this frame
+    // (orbit theme, deep-zoom gate, kernel error). Null = derive it from state.
+    private GpuRoute? _gpuSkip;
+
+    // #1173-M — why GPU perturbation was switched off for the session (the
+    // TOO-SLOW / device-lost latches clear the static UseGpuPerturbation).
+    private static GpuRoute? s_gpuPerturbDisabled;
+
+    private GpuRoute ResolveGpuRoute()
+    {
+        var kernel = GpuKernel;
+        string label = kernel?.BackendLabel ?? "GPU";
+        bool hp = IsHighPrecisionActive;
+        if (!hp && LastFrameUsedGpuCompute) return GpuRoute.OnGpu(label);
+        if (hp && LastFrameUsedGpuPerturbation)
+            return GpuRoute.OnGpu(label, $"{label}: deep-zoom perturbation");
+        if (!UseGpuCompute && !UseGpuPerturbation && s_gpuPerturbDisabled == null)
+            return GpuRoute.NotRequested;
+        if (_gpuSkip is { } skip) return skip;
+        if (kernel == null)
+            return GpuRoute.Cpu("no GPU kernel", "the active renderer has no GPU compute kernel");
+        if (hp)
+        {
+            if (s_gpuPerturbDisabled is { } off) return off;
+            if (!UseGpuPerturbation)
+                return GpuRoute.Cpu("deep zoom", "deep zoom renders on the CPU unless GPU perturbation is enabled");
+            if (!kernel.SupportsPerturbation)
+                return GpuRoute.Cpu("no fp64 kernel", $"{label} has no deep-zoom perturbation kernel (no fp64)");
+            return GpuRoute.Cpu("deep-zoom path", "this deep-zoom render path runs on the CPU only");
+        }
+        if (!UseGpuCompute)
+            return GpuRoute.Cpu("GPU compute off", "shallow zooms render on the CPU unless GPU compute is enabled");
+        if (Zoom > MaxGpuZoom)
+            return GpuRoute.Cpu("zoom > 1e4", "past the FP32 GPU zoom limit (1e4); deeper zooms render on the CPU");
+        return GpuRoute.Cpu("CPU-only path", "this render path runs on the CPU only");
+    }
 
     /// <summary>Estimated deepest zoom (as log₁₀) at which the CURRENT view
     /// centre still resolves detail, set by the last reference-orbit build.
@@ -668,8 +710,10 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         // single path-agnostic post-pass paints the beyond-escape-radius
         // surround, so every path is covered from one place.
         LastFrameUsedGpuCompute = false;   // set true only after a successful GpuKernel.Run (SP path)
+        _gpuSkip = null;
         CalculateInternal(ct);
         ApplyOutOfBoundsSurround(ct);
+        LastGpuRoute = ResolveGpuRoute();   // #1173-M
     }
 
     // #615 Phase 1 — paint the flat "out-of-bounds" surround: the large disk
@@ -733,6 +777,11 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         // (complex-plane units) into pixel units for stable rendering at any zoom.
         LastPixelScale = (3.5 / Math.Max(Width, Height)) / Zoom;
         if (ColorMap is IColorMapWithPixelScale pxs) pxs.PixelScale = LastPixelScale;
+
+        // #1173-M — orbit-aware themes run on the scalar CPU path (only the opt-in
+        // GPU orbit kernel below can take them; it sets LastFrameUsedGpuCompute).
+        if (ColorMap is IOrbitAwareColorMap)
+            _gpuSkip = GpuRoute.Cpu("orbit theme", "orbit-aware themes (traps, stripe, TIA, ...) colour on the CPU unless the GPU orbit kernel is enabled for them");
 
         // ── Orbit-aware dispatch ─────────────────────────────────────────────
         // Orbit traps, stripe average and triangle-inequality average themes
@@ -1284,6 +1333,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
                 // Kernel failure (device lost, shader bug, OOM) — fall
                 // through to the CPU path so the user still gets a frame.
                 Debug.WriteLine($"[MandelbrotCalculator] GPU dispatch failed, falling back to CPU: {ex.Message}");
+                _gpuSkip = GpuRoute.Cpu("GPU error", $"GPU dispatch failed: {ex.Message}");   // #1173-M
             }
         }
 
@@ -2160,6 +2210,16 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
                   $"supports={(GpuKernel?.SupportsPerturbation ?? false)} allowRebase={AllowPtRebasing} " +
                   $"ddRebaseRef={UseDdRebaseReference} forceScalar={ForceScalarPtPath} tileCap={tileCap} " +
                   $"zoomOk={Zoom <= MaxGpuPerturbZoom} refLen={_refOrbitLen}");
+            // #1173-M — the first failing gate condition, when GPU perturbation is on.
+            if (!gateOk && UseGpuPerturbation && GpuKernel != null && GpuKernel.SupportsPerturbation)
+            {
+                _gpuSkip = recycled ? GpuRoute.Cpu("orbit recycling", "deep-zoom orbit recycling renders on the CPU only")
+                    : !AllowPtRebasing || UseDdRebaseReference || ForceScalarPtPath
+                        ? GpuRoute.Cpu("diagnostic toggle", "a perturbation diagnostic toggle (rebasing / DD reference / scalar path) keeps deep zoom on the CPU")
+                    : tileCap ? GpuRoute.Cpu("per-tile iter cap", "per-tile iteration caps render on the CPU only")
+                    : Zoom > MaxGpuPerturbZoom ? GpuRoute.Cpu($"zoom > {MaxGpuPerturbZoom:0e0}", $"past the GPU perturbation zoom limit ({MaxGpuPerturbZoom:0e0})")
+                    : GpuRoute.Cpu("no reference orbit", "the reference orbit is empty");
+            }
             if (gateOk && TryRunGpuPerturbation(colorMap, scale, maxIt, effImgW, effImgH, ct))
             {
                 return;
@@ -2297,6 +2357,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
                 FinalDrBuffer, FinalDiBuffer,
                 useTileCap ? perRow : null,
                 colorDst: ColorBuffer);
+            LastFrameUsedGpuCompute = true;   // #1173-M — the orbit kernel ran on the GPU
             return true;
         }
         catch
@@ -2337,6 +2398,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         {
             Debug.WriteLine($"[MandelbrotCalculator] GPU perturbation dispatch failed; CPU fallback: {ex.Message}");
             Dbg86($"RUNPERTURB-THREW {ex.GetType().Name}: {ex.Message} refLen={_refOrbitLen} zoom={Zoom:0e+0}");
+            _gpuSkip = GpuRoute.Cpu("GPU error", $"GPU perturbation failed: {ex.Message}");   // #1173-M
 
             // A lost/removed/hung GPU device (TDR) does not recover on its own and
             // — because the D3D kernel shares the renderer's device — also kills
@@ -2360,6 +2422,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
                 // consumer card). Disable for the session so every later frame
                 // goes straight to the multi-threaded CPU deep path.
                 UseGpuPerturbation = false;
+                s_gpuPerturbDisabled = GpuRoute.Cpu("deep zoom too slow", "GPU deep-zoom perturbation was disabled for this session: the GPU is slower than the CPU here (weak fp64)");   // #1173-M
                 Console.Error.WriteLine(
                     "[GPU] deep-zoom perturbation DISABLED for this session — the GPU is slower than the " +
                     "CPU here (weak FP64). Using the CPU deep path. Tune FF_GPU_PERTURB_BUDGET_MS to change " +
@@ -2369,6 +2432,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
             else if (deviceLost)
             {
                 UseGpuPerturbation = false;
+                s_gpuPerturbDisabled = GpuRoute.Cpu("device lost", "GPU deep-zoom perturbation was disabled for this session: the device was lost during a dispatch (TDR)");   // #1173-M
                 Console.Error.WriteLine(
                     "[GPU] deep-zoom perturbation DISABLED for this session — the GPU device was " +
                     "lost/removed during a dispatch (TDR). Falling back to the CPU deep path. " +
