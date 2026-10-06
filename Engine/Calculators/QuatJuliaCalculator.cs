@@ -159,7 +159,7 @@ public sealed class QuatJuliaCalculator : IFractalCalculator, IStereoEyeCamera, 
         double sceneRadius = camDist + setRadius * 2.0 + 4.0;
 
         // P7b — opt-in GPU raymarch path (cheap-palette shading). See
-        // MandelbulbCalculator for the FX-drop trade-off + P7c lift plan.
+        // MandelbulbCalculator for what the GPU path shades and the #1172 post stack.
         // #320 — force CPU while an AOV view is active (GPU has no view path).
         // S8 (#404/#487) — this kernel now resolves point/spot lights on the GPU
         // (GpuKernelUtils.ResolveLight); the !HasPositionalLight gate is lifted.
@@ -172,7 +172,13 @@ public sealed class QuatJuliaCalculator : IFractalCalculator, IStereoEyeCamera, 
         {
             // #1070 — Froxel3D on the GPU trace: the kernel also writes per-pixel
             // ray distance, and the CPU froxel pass composites over the GPU frame.
-            float[]? gpuDepth = ScreenSpacePost.GpuWantsDepth(in fx) ? new float[width * height] : null;   // #323 — froxel and/or stereo depth
+            // #1172 — the post stack's G-buffers, from the kernel, allocated under the CPU
+            // path's conditions. Beauty only: a view mode leaves them empty on the CPU too.
+            bool gpuPost = fx.DebugAov == AovView.Beauty;
+            bool gpuG = gpuPost && ScreenSpacePost.WantsGBuffer(in fx);
+            float[]? gpuDepth = ScreenSpacePost.GpuWantsDepth(in fx) || gpuG ? new float[width * height] : null;   // #323 — froxel and/or stereo depth
+            float[]? gpuNormal = gpuG ? new float[3 * width * height] : null;
+            float[]? gpuHdr = gpuPost && ScreenSpacePost.WantsHdrPost(in fx) ? new float[3 * width * height] : null;
             var rp = new GpuRaymarchParams
             {
                 Width = width, Height = height,
@@ -203,14 +209,14 @@ public sealed class QuatJuliaCalculator : IFractalCalculator, IStereoEyeCamera, 
             };
             var sp = GpuShadingParams.Build(in fx);
             _gpu ??= new QJuliaGpuCalculator();
-            bool gpuOk = _gpu.Render(renderBuffer, rp, sp, qp, fx.VolumePalette, gpuDepth, ct);
+            bool gpuOk = _gpu.Render(renderBuffer, rp, sp, qp, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr);
             LastGpuRoute = Gpu3DRoute.AfterRender(gpuOk, _gpu.LastError);
             if (gpuOk)
             {
-                DepthBuffer = ScreenSpacePost.PublishDepth(gpuDepth, width, height, width, height, in fx);   // #323 — stereo depth from the GPU trace
-                ScreenSpacePost.ApplyFroxel3D(renderBuffer, null, gpuDepth, width, height,
-                    in froxelView, in froxelFx, in deStruct);   // #1070 — GPU trace + CPU froxel
-                // #84 — GPU raymarch skips the CPU post stack; draw the debug
+                DepthBuffer = ScreenSpacePost.PublishDepth(gpuDepth, width, height, width, height, in fx, valid: !ThinLensDof.IsActive(in fx));   // #323 — stereo depth from the GPU trace
+                ScreenSpacePost.ApplyPost3D(renderBuffer, gpuHdr, gpuDepth, gpuNormal, width, height,
+                    ThinLensDof.IsActive(in fx), in fx, in froxelView, in froxelFx, in deStruct);   // #1172 — the full post stack on the GPU frame
+                // #84 — the GPU branch returns before the CPU tail; draw the debug
                 // HUD directly so the light compass still appears on GPU frames.
                 ScreenSpacePost.ApplyDebugHud(renderBuffer, width, height, in fx);
                 return;

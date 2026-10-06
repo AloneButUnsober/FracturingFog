@@ -36,6 +36,10 @@ public static class Gpu3DRoute
                 ? GpuRoute.Cpu("stereo + thin-lens", "stereo / autostereogram depth with thin-lens DoF renders on the CPU only (averaged lens taps have no single depth)")
                 : GpuRoute.Cpu("froxel + thin-lens", "3D froxel fog with thin-lens DoF renders on the CPU only");
         }
+        // #1172 — the GPU lens taps don't average the pre-clamp HDR beauty, so tonemap / bloom
+        // would silently drop on a thin-lens GPU frame.
+        if (ThinLensDof.IsActive(in fx) && ScreenSpacePost.WantsHdrPost(in fx))
+            return GpuRoute.Cpu("thin-lens + tonemap", "tonemap / bloom with thin-lens DoF renders on the CPU only (the GPU lens taps don't average the HDR beauty yet)");
         if (familyReason != null) return GpuRoute.Cpu(familyReason, familyDetail);
         return null;
     }

@@ -88,7 +88,7 @@ Sizes are rough estimates (S ≈ a day, M ≈ a few days, L ≈ a week or more),
 | Slice | Issue | Goal | Depends | Size | Done when |
 |---|---|---|---|---|---|
 | G1.1 | #323 | The 8 ILGPU 3D kernels encode every `DebugAov` view in-kernel (`GpuKernelUtils.EncodeSurfaceAov`, twin of `ShadingPipeline.EncodeAov`) and publish their depth buffer for stereo / autostereogram output (`ScreenSpacePost.GpuWantsDepth`). This lifts the AOV-view and depth-output force-CPU gates (#1009 path); only depth + thin-lens stays CPU. The normal G-buffer emit moves to G2.1, where its consumer (SSAO / edge ink) lands | G0.2 | L | `DebugAov` views and depth output render on the GPU; default output byte-identical |
-| G1.2 | #1172 (prereq) | Optional float HDR (pre-clamp) beauty emit, same contract as G1.1 | G1.1 | M | HDR buffer available to the post stack |
+| G1.2 | #1172 (prereq) | Optional float HDR (pre-clamp) beauty emit, same contract as G1.1. Delivered with normal + depth G-buffers: the kernels write the CPU Shade contract (unit normal / depth / pre-clamp HDR; 0 / +Inf / NaN on a miss) | G1.1 | M | **Done** (#1172 PR) |
 
 G1.1 depends on G0.2 because tiling changes the dispatch shape: build the emit contract band-aware
 once rather than twice.
@@ -97,7 +97,7 @@ once rather than twice.
 
 | Slice | Issue | Goal | Depends | Size | Done when |
 |---|---|---|---|---|---|
-| G2.1 | #1172 | Run SSAO, tonemap+bloom, HDR DoF and edge ink on GPU frames via the existing `GpuPostKernels` (CPU passes on downloaded buffers as fallback). Includes the normal G-buffer emit from the kernels (SSAO / edge ink input) | G1.1, G1.2 | M–L | Those effects appear on GPU frames; drift within bound |
+| G2.1 | #1172 | Run SSAO, tonemap+bloom, HDR DoF and edge ink on GPU frames via the existing `GpuPostKernels` (CPU passes on downloaded buffers as fallback). Includes the normal G-buffer emit from the kernels (SSAO / edge ink input). Delivered: `ScreenSpacePost.ApplyPost3D` runs the CPU tail's exact stack on the kernel G-buffers, through `GpuPostKernels` when `UseGpuPost` is on. Left (perf only): keep the G-buffers device-resident instead of the download + re-upload. Thin-lens + tonemap stays CPU (lens taps don't average HDR yet) | G1.1, G1.2 | M–L | **Done** except the device-resident perf follow-up |
 | G2.2 | #1172 | Align the GPU albedo with `ShadingPipeline.Shade`; tighten the S742 ceiling; add post-FX-on drift cases | G2.1 (or parallel) | M | Ceiling tightened |
 | G2.3 | #1173-B | HDRI environment sampling in the 3D kernels (port relief's equirect path) | G0.1 | M | HDRI scenes stay on the GPU |
 | G2.4 | #1173-A | UserBulb GPU shading: shadows, AO, specular, reusing `GpuKernelUtils` | G0.1 | M | UserBulb GPU frames match the family kernels' lighting |
