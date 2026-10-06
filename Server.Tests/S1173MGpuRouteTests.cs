@@ -133,13 +133,16 @@ public sealed class S1173MGpuRouteTests
         Assert.Equal(GpuRouteState.NotRequested, route.State);
     }
 
-    [Fact]
-    public void Kifs_Fold_Without_A_Kernel_Is_Named()
+    [Theory]
+    [InlineData(KifsFoldKind.Octahedron)]
+    [InlineData(KifsFoldKind.Dodecahedron)]
+    [InlineData(KifsFoldKind.MandelboxRot)]
+    public void Kifs_Folds_Are_No_Longer_Gated(KifsFoldKind fold)
     {
-        var route = Run3D(new KifsCalculator(32, 24), Params3D(fold: KifsFoldKind.Octahedron));
-        Assert.Equal(GpuRouteState.CpuFallback, route.State);
-        Assert.Equal("Octahedron fold", route.Reason);
-        Assert.Contains("#1173-D", route.Detail);
+        // #1173-D — every fold has a kernel now; whatever happens to the frame on
+        // this host (no device, a device error), it is never a fold gate.
+        var route = Run3D(new KifsCalculator(32, 24), Params3D(fold: fold));
+        Assert.NotEqual($"{fold} fold", route.Reason);
     }
 
     [Fact]

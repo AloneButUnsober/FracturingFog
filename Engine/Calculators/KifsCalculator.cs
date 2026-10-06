@@ -54,6 +54,7 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
     // P7a — Menger-fold GPU calculator. P7b — Sierpinski sibling. Both lazy.
     private MengerGpuCalculator? _gpuMenger;
     private SierpinskiGpuCalculator? _gpuSierp;
+    private KifsFoldGpuCalculator? _gpuFold;   // #1173-D — Octahedron / Dodecahedron / MandelboxRot
 
     public KifsCalculator(int width, int height) => Resize(width, height);
 
@@ -163,9 +164,6 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
 
         double sceneRadius = camDist + setRadius * 2.0 + 4.0;
         bool sierp = fold == KifsFoldKind.Sierpinski;
-        // GPU paths only exist for Menger + Sierpinski. New folds fall through
-        // to the CPU Parallel.For loop below.
-        bool gpuEligibleFold = fold == KifsFoldKind.Menger || fold == KifsFoldKind.Sierpinski;
 
         // Phase 1c — Lighting struct is authoritative for Light1/2/3.
         var fx = FractalParameters.Lighting;
@@ -180,17 +178,16 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
             fold, x, y, z, scale, ox, oy, oz, deIter);
 
         // P7a/P7b — opt-in GPU raymarch path. Menger + Sierpinski each get
-        // their own kernel (branchy fold-switch in one kernel bloats the JIT).
+        // their own kernel (branchy fold-switch in one kernel bloats the JIT);
+        // #1173-D — the three Wave 5.9.f1 folds share KifsFoldGpuCalculator.
         // Colour-map LUT albedo (#1172) — see MandelbulbCalculator for the
         // GPU-path shading notes and the #1172 post stack.
         // #320 — force CPU while an AOV view is active (GPU has no view path).
         // S8 (#404/#486) — the Menger + Sierpinski kernels now resolve point/spot
         // lights on the GPU (GpuKernelUtils.ResolveLight), so the !HasPositionalLight
         // gate is lifted. #492 added a per-light area-capped shadow hardness, so area lights render on the GPU now too.
-        string? gpuFamilyReason = gpuEligibleFold ? null : $"{fold} fold";
-        string gpuFamilyDetail = $"the KIFS {fold} fold has no GPU kernel (#1173-D)";
         // #1173-M — the same gate as before, plus the reason when it fails.
-        var gpuGate = Gpu3DRoute.Gate(in fx, lowRes, gpuFamilyReason, gpuFamilyDetail);
+        var gpuGate = Gpu3DRoute.Gate(in fx, lowRes);
         LastGpuRoute = gpuGate ?? default;
         if (gpuGate is null)
         {
@@ -228,7 +225,22 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
             // #1172 / G2.2 — the CPU trace's colour-map albedo (same smooth coefficients).
             uint[] albedoLut = GpuAlbedoLut.Bake(ColorMap, 192.0, 0.5, sceneRadius, ref sp);
             uint[]? hdriEnv = GpuHdriEnv.Resolve(in fx, ref sp);   // #1173-B / G2.3 — HDRI sky, ambient + reflections
-            if (sierp)
+            bool gpuOk;
+            string gpuError;
+            if (fold is KifsFoldKind.Octahedron or KifsFoldKind.Dodecahedron or KifsFoldKind.MandelboxRot)
+            {
+                var kfold = fold switch
+                {
+                    KifsFoldKind.Octahedron => KifsGpuFold.Octahedron,
+                    KifsFoldKind.Dodecahedron => KifsGpuFold.Dodecahedron,
+                    _ => KifsGpuFold.MandelboxRot,
+                };
+                var kp = KifsFoldGpuParams.For(kfold, scale, ox, oy, oz, deIter, sceneRadius);
+                _gpuFold ??= new KifsFoldGpuCalculator();
+                gpuOk = _gpuFold.Render(renderBuffer, rp, sp, kp, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr, albedoLut, hdriEnv);
+                gpuError = _gpuFold.LastError;
+            }
+            else if (sierp)
             {
                 var sip = new SierpinskiGpuParams
                 {
@@ -236,18 +248,8 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
                     DEIter = deIter, SceneRadius = sceneRadius,
                 };
                 _gpuSierp ??= new SierpinskiGpuCalculator();
-                bool gpuOk = _gpuSierp.Render(renderBuffer, rp, sp, sip, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr, albedoLut, hdriEnv);
-                LastGpuRoute = Gpu3DRoute.AfterRender(gpuOk, _gpuSierp.LastError);
-                if (gpuOk)
-                {
-                    DepthBuffer = ScreenSpacePost.PublishDepth(gpuDepth, width, height, width, height, in fx, valid: !ThinLensDof.IsActive(in fx));   // #323 — stereo depth from the GPU trace
-                    ScreenSpacePost.ApplyPost3D(renderBuffer, gpuHdr, gpuDepth, gpuNormal, width, height,
-                        ThinLensDof.IsActive(in fx), in fx, in froxelView, in froxelFx, new DelegateDeAdapter(deDelegate));   // #1172 — the full post stack on the GPU frame
-                    // #84 — the GPU branch returns before the CPU tail; draw the debug
-                    // HUD directly so the light compass still shows on GPU frames.
-                    ScreenSpacePost.ApplyDebugHud(renderBuffer, width, height, in fx);
-                    return;
-                }
+                gpuOk = _gpuSierp.Render(renderBuffer, rp, sp, sip, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr, albedoLut, hdriEnv);
+                gpuError = _gpuSierp.LastError;
             }
             else
             {
@@ -257,18 +259,19 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
                     DEIter = deIter, SceneRadius = sceneRadius,
                 };
                 _gpuMenger ??= new MengerGpuCalculator();
-                bool gpuOk = _gpuMenger.Render(renderBuffer, rp, sp, mp, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr, albedoLut, hdriEnv);
-                LastGpuRoute = Gpu3DRoute.AfterRender(gpuOk, _gpuMenger.LastError);
-                if (gpuOk)
-                {
-                    DepthBuffer = ScreenSpacePost.PublishDepth(gpuDepth, width, height, width, height, in fx, valid: !ThinLensDof.IsActive(in fx));   // #323 — stereo depth from the GPU trace
-                    ScreenSpacePost.ApplyPost3D(renderBuffer, gpuHdr, gpuDepth, gpuNormal, width, height,
-                        ThinLensDof.IsActive(in fx), in fx, in froxelView, in froxelFx, new DelegateDeAdapter(deDelegate));   // #1172 — the full post stack on the GPU frame
-                    // #84 — the GPU branch returns before the CPU tail; draw the debug
-                    // HUD directly so the light compass still shows on GPU frames.
-                    ScreenSpacePost.ApplyDebugHud(renderBuffer, width, height, in fx);
-                    return;
-                }
+                gpuOk = _gpuMenger.Render(renderBuffer, rp, sp, mp, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr, albedoLut, hdriEnv);
+                gpuError = _gpuMenger.LastError;
+            }
+            LastGpuRoute = Gpu3DRoute.AfterRender(gpuOk, gpuError);
+            if (gpuOk)
+            {
+                DepthBuffer = ScreenSpacePost.PublishDepth(gpuDepth, width, height, width, height, in fx, valid: !ThinLensDof.IsActive(in fx));   // #323 — stereo depth from the GPU trace
+                ScreenSpacePost.ApplyPost3D(renderBuffer, gpuHdr, gpuDepth, gpuNormal, width, height,
+                    ThinLensDof.IsActive(in fx), in fx, in froxelView, in froxelFx, new DelegateDeAdapter(deDelegate));   // #1172 — the full post stack on the GPU frame
+                // #84 — the GPU branch returns before the CPU tail; draw the debug
+                // HUD directly so the light compass still shows on GPU frames.
+                ScreenSpacePost.ApplyDebugHud(renderBuffer, width, height, in fx);
+                return;
             }
         }
 
