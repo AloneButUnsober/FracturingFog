@@ -31,6 +31,11 @@ static class Program
         if (args.Length > 0 && args[0] == "--ubtest")
             return UserBulbSelfTest.Run();
 
+        // V6 (#82) — D3D11 deep-zoom GPU perturbation parity vs the CPU deep path
+        // (twin of Rendering.Vulkan.Smoke's --vulkanpturbcalc).
+        if (args.Length > 0 && args[0] == "--d3dpturbcalc")
+            return D3DPerturbProbe.Run();
+
         if (args.Length > 0 && args[0] == "--ubspike")
             return FracturingFog.Calculators.UserBulbSandboxGpuSpike.Run();
 

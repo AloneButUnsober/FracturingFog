@@ -80,6 +80,7 @@ DISABLED.
 ### Gates (headless — run on GT710/lavapipe, speed-independent)
 ```
 dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke.csproj -- --vulkanpturbcalc  # end-to-end calc parity: 0/16384 exact
+dotnet run -c Release --project FracturingFogCLD.csproj -- --d3dpturbcalc  # D3D11 twin (Windows, #82): headless D3D11 device, 1e14 → 3e47, 0/16384 exact on a GT 710
 dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke.csproj -- --vulkanpturbprobe  # kernel-vs-CPU at noise floor
 dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke.csproj -- --vulkanpturbdc    # deep-dc precision sweep 1e6→1e50
 ```

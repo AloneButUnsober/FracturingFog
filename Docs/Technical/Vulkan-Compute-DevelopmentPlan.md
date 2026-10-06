@@ -544,9 +544,13 @@ Built 2026-07-19 on the spike's findings, in two validated slices (commits `d4ba
    D3D kernel attaches, then flips `UseGpuPerturbation`; the per-frame gate still checks the live kernel's
    `SupportsPerturbation`, so a device without FP64 shader ops self-disables and deep zoom stays CPU. Builds
    clean (Rendering.D3D + WinExe + App); the Vulkan gates (`--vulkanpturbcalc` 0/16384) stay green — the
-   default-interface member the D3D class now overrides did not disturb the Vulkan path. **NEXT: user runs a
-   live D3D deep-zoom parity smoke (`FF_GPU_PERTURB=1`, D3D renderer) — this repo has no FP64-D3D headless
-   surface.** Interface default still keeps any *other* IGpuKernel opt-out.
+   default-interface member the D3D class now overrides did not disturb the Vulkan path. Interface default
+   still keeps any *other* IGpuKernel opt-out. **Parity — DONE (2026-10-06, GPU parity plan G0.6):** the
+   headless gate `--d3dpturbcalc` (WinExe, `D3DPerturbProbe.cs`) creates a D3D11 hardware device the way
+   `MandelbrotGpuKernelBench` does and drives a real `MandelbrotCalculator` both ways at 1e14, 1e15, 4.5e46
+   and 3e47 (multi-limb centres from `--saprobe` / `--qdfloorprobe`). On a GeForce GT 710 every case is
+   0/16384 iteration disagreement and 0.000 colour drift, with the GPU path confirmed per case
+   (`LastFrameUsedGpuPerturbation`).
 2. **Enable in the GUI** — **DONE + smoke-signed-off (2026-07-19)**: `AvaloniaShellBootstrap`, on an explicit
    `--renderer vulkan` session, probes `VulkanComputeKernel.ProbeSupportsFloat64()` and sets
    `MandelbrotCalculator.UseGpuPerturbation` accordingly (logs ENABLED / disabled). Off everywhere else.
