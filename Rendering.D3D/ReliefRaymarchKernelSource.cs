@@ -1343,6 +1343,10 @@ uint TracePixel(float3 o, float3 rd, out float3 nrm, out float dep)
                 if (gGroundPlane != 0)
                 {
                     behind = ShadeFlat(float3(0, 1, 0), -rd, float3(hp.x, 0.0, hp.z), gFloorAlbedo);
+                    // #310 — fog the floor the edge dissolves into, as the CPU does (its Shade
+                    // includes the in-scatter at the terrain distance). Unfogged, the dissolve
+                    // faded toward a fog-free floor: a dark band hugging the footprint edge.
+                    behind = ApplyFogVolume(behind, o, rd, tf);
                 }
                 else
                 {

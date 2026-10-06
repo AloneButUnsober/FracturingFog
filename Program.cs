@@ -153,11 +153,12 @@ static class Program
 
         // --reliefgpuraymarch: #160 (Relief 3D Slice 3b) gate — the D3D relief
         // compute kernel (CSRelief) vs the CPU parity twin over identical
-        // ReliefUniforms, on a WARP device (no GPU needed). Asserts a real 3D
+        // ReliefUniforms, on a WARP device (no GPU needed); `--reliefgpuraymarch hw`
+        // runs the same scenes on the real GPU adapter (#310). Asserts a real 3D
         // silhouette and that the GPU tracks the twin (small mean/edge diff).
         // Writes relief-gpu-{cpu,gpu}.ppm + reliefgpuraymarch.out.
         if (args.Length > 0 && args[0] == "--reliefgpuraymarch")
-            return FracturingFog.Rendering.ReliefRaymarchGpuProbe.RunGate();
+            return FracturingFog.Rendering.ReliefRaymarchGpuProbe.RunGate(args.Length > 1 && args[1] == "hw");   // #310 — `hw` = real GPU
 
         // --froxelgpu: S6 (#408) gate — the D3D froxel compute pass
         // (CSFroxelIntegrate + CSFroxelComposite) vs the pure-CPU froxel pass
