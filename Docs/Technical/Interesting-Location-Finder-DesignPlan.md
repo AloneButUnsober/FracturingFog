@@ -1,0 +1,323 @@
+# Interesting-Location Finder — Design Plan
+
+**Tracking epic:** [#1184](https://github.com/AloneButUnsober/FracturingFog/issues/1184).
+Slices: S1 [#1185](https://github.com/AloneButUnsober/FracturingFog/issues/1185) ·
+S2 [#1186](https://github.com/AloneButUnsober/FracturingFog/issues/1186) ·
+S3 [#1187](https://github.com/AloneButUnsober/FracturingFog/issues/1187) ·
+S4 [#1188](https://github.com/AloneButUnsober/FracturingFog/issues/1188) ·
+S5 [#1189](https://github.com/AloneButUnsober/FracturingFog/issues/1189) ·
+S6 [#1190](https://github.com/AloneButUnsober/FracturingFog/issues/1190) ·
+S7 [#1191](https://github.com/AloneButUnsober/FracturingFog/issues/1191).
+The issues are the canonical task list; this doc is the maths + architecture context. Link both ways.
+
+**Status: DESIGN (2026-10-06).** No code yet.
+
+---
+
+## 1. Purpose
+
+Exploring by hand means zooming at random until something catches the eye. Most of the
+plane is either solid interior or smooth exterior. The goal is for the application to
+*assist* in finding **interesting locations**: regions with dense filaments, spirals,
+branch points, minibrots and embedded Julia sets — the places a human would screenshot.
+
+There are two complementary tracks:
+
+| Track | Works on | Idea |
+|---|---|---|
+| **Exact (theory)** | z²+c first; then Multibrot, holomorphic User Equations, Burning Ship / Tricorn (S7) | Interesting structure sits at mathematically special parameters: **nuclei** of hyperbolic components (minibrots) and **Misiurewicz points** (spiral / branch hubs). Locate them exactly with Newton's method; navigate by **external angles** (the "left/right" paths); compose shapes with **Julia morphing**. |
+| **Heuristic** | Every 2D family | Score a cheap probe render for "detail" (boundary density, iteration entropy, fractal dimension) and search downward toward high scores. |
+
+The tracks combine: the heuristic finds a promising area, then the exact track snaps to a
+crisp centre inside it.
+
+## 2. What already exists in FF
+
+- **Deep precision:** `Abstractions/Math/DeepComplex.cs` (octuple-double, ~124 digits) is
+  the view-centre representation; `Abstractions/ViewState/ViewCamera.cs` drives navigation.
+- **Perturbation reference orbits:** `Engine/Calculators/MandelbrotCalculator.cs`,
+  `Engine/Calculators/Gpu/MandelbrotRefOrbitGpu.cs`.
+- **Interior period detection** for colouring: the Atom Domains / Multiplier interior
+  themes (`Engine/Models/ColorSchemes/InteriorThemes.cs`). These detect a *pixel's* cycle,
+  not the component nucleus, but prove the cycle-detection plumbing.
+- **Symbolic derivatives:** `CalculatorGen/Parser/AstDifferentiator.cs` exposes `DpDz` and
+  `DpDc` — exactly what Newton needs for user equations (S7).
+- **UI home:** Control Center Explore section
+  (`UI.Avalonia/Views/ControlCenterSections/ExploreSectionView.axaml`).
+- **Precedent for UI-free maths in Abstractions:** `Abstractions/Animation/ParabolicImplosionMath.cs`.
+
+Nothing yet finds nuclei, Misiurewicz points or external angles, or scores views.
+
+## 3. Exact track (f_c(z) = z² + c)
+
+Notation: f_c(z) = z² + c, z₀ = 0, zₙ = fⁿ_c(0). Derivative with respect to c:
+dz₀ = 0, dzₙ₊₁ = 2zₙ·dzₙ + 1.
+
+### 3.1 Period detection — S1 #1185
+
+Question: *which minibrot (hyperbolic component) has its nucleus inside this view, and what
+is its period?* Answer the lowest period p for which the view contains a root of fᵖ_c(0).
+
+**Ball method.** Cover the view by a disk with centre c₀ and radius ρ. Track a ball around
+the orbit of c₀ that contains the orbits of every c in the disk:
+
+```
+z ← z² + c₀
+r ← 2|z|·r + r² + ρ          // |(z+e)² + c₀ + δ − (z² + c₀)| ≤ 2|z||e| + |e|² + |δ|
+```
+
+The first n ≥ 1 with |zₙ| < rₙ is the candidate period p (the ball contains 0, so some c in the
+disk has fⁿ_c(0) = 0). Stop with "none" when r exceeds the escape radius or n > pMax.
+
+**Box method** (Munafo): iterate the four view corners; p is the first n where the image
+quadrilateral winds around 0. Optional cross-check.
+
+Ball arithmetic over-approximates, so p is a *candidate*. S2's Newton confirms it.
+
+### 3.2 Nucleus by Newton's method — S2 #1186
+
+Solve F(c) = fᵖ_c(0) = 0, with F′(c) = dzₚ:
+
+```
+loop until |Δc| < tol:
+    z = 0; dz = 0
+    repeat p times: dz = 2·z·dz + 1; z = z² + c
+    Δc = z / dz;  c = c − Δc
+```
+
+Convergence is quadratic near the root. Seed with the view centre (or S1's disk centre).
+Use DeepComplex for c and z: the nucleus is needed to about the zoom's number of digits plus
+margin, so OD supports roughly 1e-115. Beyond that, cap with a clear message. A
+*perturbed* Newton (iterate δc against a reference) is the follow-up for deeper zooms.
+
+Cost: O(p) per step, ~5–20 steps. At p = 10⁵ this is ~10⁶ OD complex ops — acceptable
+async, but needs cancellation and progress.
+
+**Acceptance invariants** (independent, not self-consistency):
+1. |fᵖ(0)| below tolerance at the result.
+2. **Minimal period:** no proper divisor d of p has |f^d(0)| ≈ 0. Otherwise Newton found a
+   lower-period root that also solves fᵖ = 0.
+3. The result lies inside the original view. If Newton wandered off, refuse to navigate.
+
+### 3.3 Atom size and framing — S2 #1186
+
+A closed-form estimate of the minibrot's size *and orientation*, evaluated at the nucleus:
+
+```
+z = 0; l = 1; b = 1
+for q = 1 .. p−1:  z = z² + c;  l = 2·z·l;  b = b + 1/l
+size = 1 / (b · l²)          // complex: |size| ≈ radius, arg(size) ≈ orientation
+```
+
+Framing: centre = nucleus, view half-height ≈ k·|size| (k tunable, ~2–4), optional camera
+rotation by −arg(size) so every minibrot appears "upright" like the main set.
+
+**Bonus:** a nucleus is the ideal perturbation reference point. Its orbit is periodic, so it
+never escapes, which removes the main reference-glitch cause. Offering it to the reference
+orbit selection is a follow-up hook, not S2 scope.
+
+### 3.4 Misiurewicz points — S3 #1187
+
+A **Misiurewicz point** M(k,p) is a c whose critical orbit is *strictly preperiodic*:
+f^(k+p)(0) = f^k(0), with k ≥ 1 the preperiod and p the period, both minimal.
+Examples: c = i (0 → i → −1+i → −i → −1+i …: k = 2, p = 2), c = −2 (0 → −2 → 2 → 2: k = 2, p = 1).
+
+**Why they are interesting (Tan Lei, 1990):** near a Misiurewicz point, the Mandelbrot set
+is asymptotically self-similar and looks like the Julia set J_c at that point. These are the
+spiral centres and branch hubs of filaments. Zooming into one by the multiplier
+λ = (fᵖ)′(z_k) = Π 2zᵢ (over the cycle) repeats the picture, rotated by arg λ.
+
+**Finding (k, p) from a click:** iterate the clicked c and look for the near-return
+minimising |z_(k+p) − z_k| over a bounded (k, p) range. Present the top few candidates.
+
+**Newton:** G(c) = f^(k+p)(0) − f^k(0), G′(c) = dz_(k+p) − dz_k. Plain Newton on G also
+converges to roots of lower preperiod and to component centres whose period divides p.
+Heiland-Allen's remedy: divide G by the factors for those unwanted roots before taking the
+Newton step (equivalently, subtract their contributions to G′/G). Re-verify the minimal
+(k, p) after convergence.
+
+**Self-similar loop video** (S3 bonus, may split out): zoom by |λ| per cycle while rotating
+by arg λ → a seamless, infinitely looping zoom. Render-affecting → needs a batch flag.
+
+### 3.5 External angles, internal addresses and "left/right" paths — S4 #1188
+
+The exterior of the Mandelbrot set is conformally a disk (Douady–Hubbard). **Parameter
+rays** at angle θ ∈ [0, 1) come in from infinity; rational θ rays land on the set:
+
+- **periodic θ** (purely repeating binary, e.g. 1/7 = .(001)) lands on the **root** of a
+  hyperbolic component of that period;
+- **preperiodic θ** (e.g. 1/6 = .0(01)) lands on a **Misiurewicz point** (1/6 → c = i).
+
+Angle doubling θ ↦ 2θ mod 1 is the dynamics on the circle, so the n-th binary digit of θ
+records which half of the circle (θ < ½ or θ ≥ ½) the angle lies in after n−1 doublings. That
+is an L/R itinerary. **That is the "left/right zoom path" folklore made precise.** A
+sequence of L/R choices is an angle; an angle is a location.
+
+Navigation aids:
+
+- **Angle → location:** trace the ray inward. For decreasing radii r_m (S steps per binary
+  digit), Newton-solve fⁿ(c) = r_m·e^(2πi·2ⁿθ) starting from the previous point. Then finish
+  with the S2/S3 Newton at the landing point.
+- **Location → angle:** trace outward from just outside the component root and read the
+  digits from the half-plane each iterate falls into.
+- **Internal addresses** (`1 → 2 → 4 → …`, Lau–Schleicher) are a more human-readable
+  coordinate: the chain of lowest-period components on the way from the main cardioid.
+  The angled form converts to and from angle pairs (Lavaurs' algorithm / kneading
+  sequences). **Douady–Hubbard tuning** composes addresses, so one minibrot's address can
+  be nested inside another's.
+
+### 3.6 Julia morphing and shape stacking — S5 #1189
+
+Empirical technique, well documented by fractal artists (Heiland-Allen calls it "Julia
+morphing"): near a minibrot M of period P there is an **embedded Julia set**, a copy of
+J_c for c at M, appearing at roughly the **log-scale midpoint** between the view depth where
+M was chosen and M's own size (scale ≈ √(current · |size_M|)). If you zoom toward M
+*through* an off-centre target T rather than straight at it, the structure around T is
+doubled. Repeating with a new target each time **stacks** shapes: trees, X-forms, doubled
+spirals, "layers".
+
+Automatable per step:
+
+1. User clicks T (or presets: left / right / tip / spiral side).
+2. S1 period detection on a small disk around T → Q; S2 Newton → nucleus N_Q, atom size s_Q.
+3. New view: centre N_Q, scale = current^(1−α) · |s_Q|^α with α ≈ 0.5 (tunable; calibrate
+   against reference images in S5).
+4. Append (T, Q, N_Q, scale) to the morph path; undo/redo.
+
+A morph path doubles as zoom-video keyframes. Periods grow with each step (roughly
+doubling plus the base period), so S2's cost and precision ceiling bound how many layers
+are practical. Expect 5–15 at OD precision.
+
+## 4. Heuristic track — S6 #1190
+
+Theory-free, so it works for any 2D family: Burning Ship, Newton/Nova/Halley basins,
+Lyapunov, IFS, User Equation and so on.
+
+**Interest score** on a small probe render (e.g. 96×96, the family's normal calculator,
+lowered maxIter):
+
+| Term | Measures | Notes |
+|---|---|---|
+| Boundary fraction | Share of pixels with DE < k·pixel, or a large smooth-iteration gradient | Filament density |
+| Band entropy | Shannon entropy of the smooth-iteration histogram | Rewards many bands, penalises flat regions |
+| Box-count dimension | Slope of log N(boundary boxes) vs log(1/s), s = 2…32 | Preference band ~1.5–1.9; 1 = smooth curve, 2 = noise |
+| Penalties | Inside fraction above threshold, trivially-escaped fraction, maxIter saturation, precision floor | Avoid blobs, emptiness and undersampled views |
+
+All weights and thresholds are exposed as tunable parameters, per the project preference.
+
+**Search:** beam search with width B. Each node spawns K children (3×3 grid of sub-views
+plus seeded jitter) at zoom factor Z, up to depth D. Keep the top B by score at each level.
+Deterministic from a seed. "Surprise me" = random start from the family's home view plus
+descent. "Descend" = start from the current view. For Mandelbrot-family views, optionally
+finish with an S2/S3 snap.
+
+Outputs are regions (centre, scale, family params), so they plug into the region list and
+slideshows directly. An optional score-heatmap overlay helps tune the weights.
+
+## 5. Generalisation — S7 #1191
+
+| Family | Exact track? | How |
+|---|---|---|
+| Multibrot z^d + c | Yes | dz ← d·z^(d−1)·dz + 1; atom size generalises; external angles in base d |
+| User Equation (holomorphic) | Nucleus + Misiurewicz | `AstDifferentiator.DpDz` / `DpDc` supply the derivatives. Start at a critical point (solve f′(z) = 0 by Newton) instead of 0; with several, let the user pick. No angles. |
+| Burning Ship / Tricorn | Nucleus (+ Misiurewicz) | Real 2-D map; Newton in R² with the 2×2 Jacobian in (cx, cy). The abs-sign pattern is constant inside the basin (Kalles Fraktaler's approach). Tricorn is anti-holomorphic: use the second iterate. |
+| Non-holomorphic User Equation, IFS, Kleinian, scattering, Newton-family basins | No | S6 heuristic only; exact-track buttons hidden |
+
+Newton-family fractals (Newton/Nova/Halley) are a different case: their interesting areas
+are where root basins meet. S6 handles them directly. Their *parameter planes* (free
+critical point) contain Mandelbrot copies, which is a possible future exact-track target.
+
+## 6. Architecture and integration
+
+```
+Abstractions/Explore/          UI-free, unit-testable, DeepComplex-based
+    PeriodDetector             S1
+    NucleusFinder, AtomSize    S2
+    MisiurewiczFinder          S3
+    ExternalRay, InternalAddress  S4
+    MorphPlanner               S5
+Engine/Explore/                needs calculators
+    InterestScorer, AutoExplorer  S6
+UI.Avalonia  Control Center Explore section: "Find" group
+    Detect period · Zoom to minibrot · Snap to spiral (click mode)
+    Angle/address bar · Julia morph (click mode + step list) · Surprise me / Descend
+```
+
+- **Navigation** goes through `ViewCamera` (centre DeepComplex + scale + rotation). Never
+  bypass it.
+- **Threading:** every finder is async with a `CancellationToken` and progress; the UI
+  stays responsive. A new view request cancels a running search.
+- **Precision ceiling:** the OD limit (~1e-115) is surfaced to the user, not hidden.
+- **Clean-room:** implement from the published maths (sources below). Do **not** copy code
+  from mandelbrot-numerics or Kalles Fraktaler; their licences are incompatible.
+
+### Batch parity
+
+Per the project rule, every render-affecting feature must be reproducible with `--batch`
+and the Command builder.
+
+- **Finders only navigate** (S1–S4). Their result is a view, already expressible as
+  `--x/--y/--zoom`, and the Command builder's live seed captures it. S2 adds a round-trip
+  test at OD precision.
+- **Content generators** need flags in the same change: auto-explore (`--explore
+  seed=…,depth=…,beam=…`, S6), morph-path video (`--morph-path`, S5) and the Misiurewicz
+  loop (`--video-motion misiurewicz-loop`, S3 bonus). Each needs the `BatchFlags` const,
+  `BatchOptions` parse/validate, `BatchRenderer` apply, `BatchFlagCatalog` entry,
+  `BatchCommandBuilder` emit and a round-trip test, or else a `DetectGaps` banner plus an
+  issue.
+
+## 7. Validation strategy
+
+Check must-hold invariants, not self-consistency:
+
+| Check | Fixture / invariant |
+|---|---|
+| Period detection | c = −1 → 2; −1.7549 → 3; main-cardioid view → 1; a deep minibrot from `Resources/regions.json` → its known period |
+| Nucleus | \|fᵖ(0)\| ≈ 0, **minimal** p, result inside the view; −1, −1.7548776662466927, −0.1225611668766536 + 0.7448617666197442i |
+| Misiurewicz | f^(k+p)(0) = f^k(0) with minimal (k, p); c = i (2, 2), c = −2 (2, 1), c ≈ −0.10109636 + 0.95628651i |
+| External rays | 1/3, 2/3 → root −0.75; 1/7, 2/7 → period-3 components; 1/6 → i; angle → c → angle is the identity |
+| Interest score | All-inside and all-outside views score ≈ 0; seahorse and elephant valleys outscore the cardioid interior; same seed → same path |
+| Batch | A finder- or morph-produced view renders the same live and headless |
+
+## 8. Risks
+
+| Risk | Mitigation |
+|---|---|
+| Newton converges to the wrong root (lower period, outside the view) | Seed from S1; enforce the minimal-period and inside-view invariants; refuse rather than mis-navigate |
+| High periods (10⁴–10⁶) are slow in OD | Async + cancel + progress; perturbed Newton as a follow-up |
+| Precision ceiling at ~1e-115 | Surface it; perturbed Newton follow-up |
+| "Interesting" is subjective | Tunable weights, heatmap overlay, several candidates rather than one answer |
+| Julia-morph scale constant is empirical | Calibrate α in S5 against reference images; keep it tunable |
+| Ball method over-approximates p | Treat p as a candidate; S2 confirms |
+
+## 9. Slices
+
+| Slice | Issue | Depends on | Delivers |
+|---|---|---|---|
+| S1 | #1185 | — | Period detection + readout |
+| S2 | #1186 | S1 | Nucleus Newton + atom size → "Zoom to minibrot" |
+| S3 | #1187 | S2 | Misiurewicz snap (+ loop-video bonus) |
+| S4 | #1188 | S2 | External angles, internal addresses, L/R navigation |
+| S5 | #1189 | S2 (S4 optional) | Julia-morph assistant + morph-path video |
+| S6 | #1190 | — | Interest score + auto-explore for all 2D families |
+| S7 | #1191 | S2, S3 | Multibrot, User Equation, Burning Ship / Tricorn |
+
+Critical path: S1 → S2 → {S3, S4, S5}. S6 runs in parallel. S7 comes last.
+
+## 10. Sources
+
+- R. Munafo, *Mu-Ency — The Encyclopedia of the Mandelbrot Set*: period detection (box
+  method), nuclei, Misiurewicz points, external angles.
+- A. Douady, J. H. Hubbard, *Étude dynamique des polynômes complexes* (Orsay notes,
+  1984–85): external rays, landing theorems, tuning.
+- Tan Lei, "Similarity between the Mandelbrot set and Julia sets", *Comm. Math. Phys.* 134
+  (1990): local similarity at Misiurewicz points.
+- P. Lavaurs (1986): combinatorial algorithm pairing the periodic external angles that land
+  at the same component root.
+- E. Lau, D. Schleicher, "Internal addresses in the Mandelbrot set and irreducibility of
+  polynomials" (1994).
+- C. Heiland-Allen (mathr.co.uk): write-ups on Newton's method for nuclei and Misiurewicz
+  points, atom domain size estimation, external ray tracing, and Julia morphing. Use for
+  the maths only (clean-room).
+- Kalles Fraktaler 2 / its documentation: Newton-Raphson zooming and Jacobian Newton for
+  Burning Ship (reference behaviour only).
