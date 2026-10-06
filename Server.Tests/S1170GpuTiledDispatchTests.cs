@@ -42,6 +42,15 @@ public sealed class S1170GpuTiledDispatchTests
     /// <summary>Run <paramref name="body"/> with tiling forced on for small
     /// frames: no single-launch shortcut and a tiny probe, so a 64x48 frame
     /// takes several comb launches.</summary>
+    /// <summary>Run <paramref name="body"/> with tiling off: the whole frame in one
+    /// launch, the untiled reference.</summary>
+    private static void Single(Action body)
+    {
+        GpuTiledDispatch.SetTestThresholds(singleLaunchPixels: int.MaxValue, probePixels: 64);
+        try { body(); }
+        finally { GpuTiledDispatch.ClearTestThresholds(); }
+    }
+
     private static T Tiled<T>(Func<T> body)
     {
         GpuTiledDispatch.SetTestThresholds(singleLaunchPixels: 0, probePixels: 64);
@@ -84,7 +93,7 @@ public sealed class S1170GpuTiledDispatchTests
         {
             var gpu = new MandelbulbGpuCalculator();
             var a = new uint[W * H]; var ad = new float[W * H];
-            Assert.True(gpu.Render(a, rp, sp, bp, null, ad), gpu.LastError);
+            Single(() => Assert.True(gpu.Render(a, rp, sp, bp, null, ad), gpu.LastError));
             Assert.Equal(1, GpuTiledDispatch.LastLaunchCount);
 
             var b = new uint[W * H]; var bd = new float[W * H];
@@ -115,7 +124,7 @@ public sealed class S1170GpuTiledDispatchTests
         {
             var gpu = new MandelboxGpuCalculator();
             var a = new uint[W * H];
-            Assert.True(gpu.Render(a, rp, sp, bp), gpu.LastError);
+            Single(() => Assert.True(gpu.Render(a, rp, sp, bp), gpu.LastError));
 
             var b = new uint[W * H];
             int n = Tiled(() =>
@@ -147,5 +156,58 @@ public sealed class S1170GpuTiledDispatchTests
 
         Assert.False(ok);           // caller falls through to the CPU path, which observes ct
         Assert.Equal(0, launches);
+    }
+
+    // ── #1169 ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Default_Thresholds_Tile_Even_A_Small_Frame()
+    {
+        // #1169 — a 96x72 Mandelbulb frame went out as ONE launch and outlasted
+        // the watchdog on a GT 710. Every frame above SingleLaunchPixels is now
+        // tiled, starting from a ~ProbePixels launch.
+        Assert.True(W * H > GpuTiledDispatch.SingleLaunchPixels);
+        var rp = Camera(2.6);
+        var bp = new MandelbulbGpuParams { Power = 8, DEIter = 8, Bailout = 2.0, SceneRadius = 12.0 };
+        var sp = GpuShadingParams.Build(LightingFxData.CreateDefault());
+        int launches = WithCpuAccelerator(() =>
+        {
+            var gpu = new MandelbulbGpuCalculator();
+            Assert.True(gpu.Render(new uint[W * H], rp, sp, bp), gpu.LastError);
+            return GpuTiledDispatch.LastLaunchCount;
+        });
+        Assert.True(launches > 1, $"expected a tiled frame, got {launches} launch(es)");
+    }
+
+    [Fact]
+    public void Too_Slow_Device_Gives_Up_And_Stays_On_The_Cpu()
+    {
+        var rp = Camera(2.6);
+        var bp = new MandelbulbGpuParams { Power = 8, DEIter = 8, Bailout = 2.0, SceneRadius = 12.0 };
+        var sp = GpuShadingParams.Build(LightingFxData.CreateDefault());
+        var (first, firstErr, firstLaunches, second, secondLaunches) = WithCpuAccelerator(() =>
+        {
+            // Any measurable cost counts as "too slow", and the CPU accelerator is judged.
+            GpuTiledDispatch.SetTestThresholds(singleLaunchPixels: 0, probePixels: 8,
+                maxSecondsPerPixel: 0.0, minGuardSeconds: 0.0, judgeCpuAccelerator: true);
+            try
+            {
+                var gpu = new MandelbulbGpuCalculator();
+                bool a = gpu.Render(new uint[W * H], rp, sp, bp);
+                string err = gpu.LastError;
+                int n1 = GpuTiledDispatch.LastLaunchCount;
+                bool b = gpu.Render(new uint[W * H], rp, sp, bp);
+                int n2 = GpuTiledDispatch.LastLaunchCount;   // unchanged: the per-device latch skips Run entirely
+                return (a, err, n1, b, n2);
+            }
+            finally { GpuTiledDispatch.ClearTestThresholds(); }
+        });
+
+        Assert.False(first);
+        Assert.StartsWith("GPU too slow for Mandelbulb", firstErr);
+        Assert.Equal(GpuTiledDispatch.TooSlowStrikes, firstLaunches);   // gave up after N over-budget launches
+        Assert.False(second);
+        Assert.Equal(firstLaunches, secondLaunches);
+        Assert.Equal("GPU too slow", Gpu3DRoute.AfterRender(false, firstErr).Reason);
     }
 }

@@ -218,21 +218,29 @@ That guard is what exposed #1164: on CUDA, all 8 kernels failed to JIT because t
 `ILGPU.Algorithms`. Since #1164 they JIT, and every kernel context comes from
 `GpuAcceleratorHost.CreateContext()`, which calls `EnableAlgorithms()`.
 
-**Mandelbulb runs last.** On some CUDA devices (seen on a Kepler GT 710) its kernel faults at
-launch (#1169). A CUDA launch failure poisons the whole process, and `GpuAcceleratorHost` then
-latches GPU 3D off for the session (`ReportRenderFault`). Every case after a fault reports
-`NA` with "GPU device faulted … disabled for this session". So the `GpuFamily` enum declares
-Mandelbulb last, which keeps the other seven measurable. The order has to live in the enum because
-BenchmarkDotNet runs param values in **value order** and ignores the `[Params]` order. `Family` is
-also declared before `Width`, making it the outer axis, so both Mandelbulb cases run after every
-other case.
+**Mandelbulb runs last.** A CUDA launch failure poisons the whole process, and
+`GpuAcceleratorHost` then latches GPU 3D off for the session (`ReportRenderFault`). Every case
+after a fault would report `NA` with "GPU device faulted … disabled for this session". Mandelbulb
+was the family that faulted (#1169), so the `GpuFamily` enum declares it last to keep the other
+seven measurable. The order has to live in the enum because BenchmarkDotNet runs param values in
+**value order** and ignores the `[Params]` order. `Family` is also declared before `Width`, making
+it the outer axis, so both Mandelbulb cases run after every other case.
 
-**Long frames are tiled.** A single 1920x1080 raymarch launch on a slow GPU used to outlast the
-Windows GPU watchdog (TDR). The driver reset the device, which is the same sticky fault and the
-same latch. Since #1170 the kernels go out through `GpuTiledDispatch`
-(`Engine/Calculators/Gpu/GpuTiledDispatch.cs`): frames over 16384 pixels are split into launches
-of about 0.25 s each, sized from a small probe launch. The timed frame includes every launch and
-its `Synchronize`, so the number is still one whole frame.
+**Long frames are tiled.** A single long raymarch launch on a slow GPU outlasts the Windows GPU
+watchdog (TDR). The driver resets the device, which is the same sticky fault and the same latch.
+The kernels therefore go out through `GpuTiledDispatch`
+(`Engine/Calculators/Gpu/GpuTiledDispatch.cs`). Every frame over 64 pixels starts with a
+~64-pixel probe launch, and later launches are sized to about 0.25 s each (#1170, #1169). The
+timed frame includes every launch and its `Synchronize`, so the number is still one whole frame.
+
+**Too-slow kernels give up.** #1169 turned out to be the watchdog too. Mandelbulb's DE calls
+software fp64 `acos` / `atan2` / `pow` / `sin` / `cos` (ILGPU.Algorithms) on every iteration,
+which costs ~5 ms per pixel on a GT 710 (1/24-rate fp64). Even a 96x72 frame in one launch
+outlasted the watchdog. If three launches in a row each measure more than 1 ms per pixel, `GpuTiledDispatch` returns
+`TooSlow`. One stalled launch behind another GPU client can't trip it. The GPU calculator then
+latches "GPU too slow for … on this device", per family and per device for the rest of the
+process, and the frame renders on the CPU. The bench reports `NA` with that message instead of poisoning the device for the cases
+after it.
 
 Extra columns (`Benchmarks/CaseMetrics.cs`):
 
