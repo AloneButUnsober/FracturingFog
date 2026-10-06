@@ -157,6 +157,7 @@ public sealed class FFServer
         string remoteStr = remote?.ToString() ?? "(unknown)";
         SessionLogger? sessLog = null;
         SslStream? ssl = null;
+        string? workerThumb = null;   // #1160: set once a worker-role session is established
 
         try
         {
@@ -220,6 +221,7 @@ public sealed class FFServer
                 clientThumb);
 
             sessLog.Info($"session opened, tls={ssl.SslProtocol}, cipher={ssl.NegotiatedCipherSuite}, role={clientRole}");
+            if (clientRole == CertRole.Worker && clientThumb != null) workerThumb = clientThumb;
 
             while (!ct.IsCancellationRequested)
             {
@@ -255,6 +257,12 @@ public sealed class FFServer
         }
         finally
         {
+            // #1160: a worker that goes away mid-tile hands its tiles back.
+            if (workerThumb != null)
+            {
+                try { Coordinator?.OnWorkerSessionClosed(workerThumb); }
+                catch (Exception ex) { sessLog?.Err($"tile reclaim failed: {ex.Message}"); }
+            }
             sessLog?.Dispose();
             try { ssl?.Dispose(); } catch { }
             try { tcp.Close(); } catch { }
