@@ -74,13 +74,26 @@ public sealed class S749Gpu3DKernelJitTests
         foreach (var dev in ctx.Devices.Where(d =>
                      d.AcceleratorType != AcceleratorType.CPU && GpuAcceleratorHost.SupportsFloat64(d)))
         {
-            using var acc = dev.CreateAccelerator(ctx);
-            AssertKernelJits(calcType, acc,
-                $"on {dev.AcceleratorType} '{dev.Name}' (#1164 — missing EnableAlgorithms or another backend gap?)");
+            // CUDA launch failures are sticky for the whole PROCESS. Another test
+            // in this run may have launched a kernel that faulted on this device
+            // (#1169 / #1170 on weak hardware) — then the device is unusable here
+            // and that is not this test's subject. JIT never launches, so it can't
+            // be the cause; skip rather than misreport.
+            Accelerator acc;
+            try { acc = dev.CreateAccelerator(ctx); }
+            catch (ILGPU.Runtime.Cuda.CudaException ex)
+            {
+                Assert.Skip($"{dev.Name} unusable in this process (sticky CUDA fault from an earlier test: {ex.Message})");
+                return;
+            }
+            using (acc)
+                AssertKernelJits(calcType, acc,
+                    $"on {dev.AcceleratorType} '{dev.Name}' (#1164 — missing EnableAlgorithms or another backend gap?)",
+                    skipOnStickyFault: true);
         }
     }
 
-    private static void AssertKernelJits(Type calcType, Accelerator acc, string hint)
+    private static void AssertKernelJits(Type calcType, Accelerator acc, string hint, bool skipOnStickyFault = false)
     {
         GpuAcceleratorHost.SetTestOverride(acc);
         try
@@ -92,6 +105,8 @@ public sealed class S749Gpu3DKernelJitTests
                     BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)!;
                 bool ok = (bool)tryInit.Invoke(inst, null)!;
                 var lastError = (string)calcType.GetProperty("LastError")!.GetValue(inst)!;
+                if (!ok && skipOnStickyFault && lastError.Contains("unspecified launch failure", StringComparison.Ordinal))
+                    Assert.Skip($"device poisoned by an earlier test's CUDA fault: {lastError}");
                 Assert.True(ok, $"{calcType.Name} kernel failed to JIT {hint}: {lastError}");
             }
             finally
