@@ -833,6 +833,7 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         LastGpuRoute = FractalParameters.UserBulbBackend != UserBulbBackendKind.GPU ? GpuRoute.NotRequested
             : lowRes ? GpuRoute.Cpu("preview frame", "low-res preview frames render on the CPU")
             : wantDepthOut ? GpuRoute.Cpu("stereo depth", "stereo / autostereogram output needs the CPU depth buffer")
+            : fx.DebugAov != AovView.Beauty ? GpuRoute.Cpu("AOV view", "User Bulb's GPU path has no AOV views; they render on the CPU (#1173-A)")
             : kifsScale > 0.0 ? GpuRoute.Cpu("scalar KIFS DE", "the scalar KIFS DE renders on the CPU only")
             : sandboxQuatGpu || vecAnalyticGpuOk ? default
             : quatMode ? GpuRoute.Cpu("quaternion compiler", "quaternion mode runs on the GPU only with the sandbox compiler")
@@ -841,6 +842,7 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         if (FractalParameters.UserBulbBackend == UserBulbBackendKind.GPU
             && !lowRes
             && !wantDepthOut      // #1009 — the GPU kernels have no depth pass
+            && fx.DebugAov == AovView.Beauty   // #323 — no AOV encoding on the User Bulb GPU path
             && kifsScale <= 0.0   // scalar KIFS DE is CPU-only
             // S8 (#404/#488/#492) — the UserBulb GPU shade resolves point/spot
             // Light1 on the GPU (#488), and area lights no longer force CPU (#492):

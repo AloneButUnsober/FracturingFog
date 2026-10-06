@@ -245,6 +245,10 @@ public sealed class QJuliaGpuCalculator : IDisposable
         }
 
         var (aR, aG, aB) = GpuKernelUtils.CheapAlbedo(hitStep, r.MaxSteps, tT);
+        // #323 — AOV view: return the diagnostic encoding instead of the beauty shade.
+        if (spL.DebugAov != 0)
+            return GpuKernelUtils.EncodeSurfaceAov(in spL, nx, ny, nz, rdx, rdy, rdz, px, py, pz,
+                sh1, sh2, sh3, ao, aR, aG, aB, tT, hitStep);
         var (br, bg, bb) = GpuKernelUtils.ComposeSurfacePbr(
             in spL, nx, ny, nz, rdx, rdy, rdz, px, py, pz, sh1, sh2, sh3, ao, aR, aG, aB);
 

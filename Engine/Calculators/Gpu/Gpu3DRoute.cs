@@ -27,14 +27,13 @@ public static class Gpu3DRoute
         string? familyReason = null, string? familyDetail = null)
     {
         if (!fx.UseGpuRender) return GpuRoute.NotRequested;
-        if (fx.DebugAov != AovView.Beauty)
-            return GpuRoute.Cpu("AOV view", $"the '{fx.DebugAov}' AOV view renders on the CPU only (#323)");
+        // #323 — AOV views render on the GPU (EncodeSurfaceAov); no gate.
         if (lowRes)
             return GpuRoute.Cpu("preview frame", "low-res preview frames render on the CPU");
         if (!ScreenSpacePost.GpuTraceAllowed(in fx))
         {
             return ScreenSpacePost.WantsDepthOutput(in fx)
-                ? GpuRoute.Cpu("stereo depth", "stereo / autostereogram output needs the CPU depth buffer")
+                ? GpuRoute.Cpu("stereo + thin-lens", "stereo / autostereogram depth with thin-lens DoF renders on the CPU only (averaged lens taps have no single depth)")
                 : GpuRoute.Cpu("froxel + thin-lens", "3D froxel fog with thin-lens DoF renders on the CPU only");
         }
         if (familyReason != null) return GpuRoute.Cpu(familyReason, familyDetail);

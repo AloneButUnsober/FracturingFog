@@ -171,6 +171,12 @@ public struct GpuShadingParams
     /// Mirrors LightingFxData.SceneTime.</summary>
     public double SceneTime;
 
+    /// <summary>#323 — <c>(int)LightingFxData.DebugAov</c>. 0 = Beauty; any other
+    /// value makes the kernel return the AOV encoding at a surface hit
+    /// (<see cref="GpuKernelUtils.EncodeSurfaceAov"/>), twin of the CPU
+    /// <c>ShadingPipeline.EncodeAov</c>.</summary>
+    public int DebugAov;
+
     // ── Vol-color slice B/C GPU parity (#181) ─────────────────────────────
     /// <summary>Henyey-Greenstein phase anisotropy [-1, 1]. 0 = isotropic
     /// (legacy, bit-identical). g &gt; 0 forward-scatters the in-scatter toward
@@ -396,6 +402,7 @@ public struct GpuShadingParams
             CausticsG          = (fx.CausticsColor >>  8) & 0xFF,
             CausticsB          =  fx.CausticsColor        & 0xFF,
             CausticsAnimSpeed  = fx.CausticsAnimSpeed,
+            DebugAov           = (int)fx.DebugAov,   // #323
         };
     }
 }

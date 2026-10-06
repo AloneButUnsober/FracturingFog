@@ -42,20 +42,25 @@ public sealed class Froxel3DGpuTests
     // ── Gate ──────────────────────────────────────────────────────────────
 
     [Fact]
-    public void Gate_Froxel3DKeepsTheGpuTrace_UnlessDepthOutputOrThinLens()
+    public void Gate_Froxel3DKeepsTheGpuTrace_UnlessThinLens()
     {
         var fx = LightingFxData.CreateDefault();
         fx.FogDensity = 0.05; fx.Froxel3D = true;
         fx = ScreenSpacePost.FogFreeForFroxel3D(in fx);
         Assert.True(ScreenSpacePost.ForcesCpuTrace(in fx));        // still needs depth…
         Assert.True(ScreenSpacePost.GpuFroxel3DHybrid(in fx));     // …which the GPU now supplies
+        Assert.True(ScreenSpacePost.GpuWantsDepth(in fx));
         Assert.True(ScreenSpacePost.GpuTraceAllowed(in fx));
 
+        // #323 — stereo depth output comes from the GPU depth buffer too.
         var stereo = fx; stereo.StereoMode = StereoMode.Fake; stereo.StereoEyeSeparation = 0.05;
-        Assert.False(ScreenSpacePost.GpuTraceAllowed(in stereo));
+        Assert.True(ScreenSpacePost.GpuTraceAllowed(in stereo));
+        Assert.True(ScreenSpacePost.GpuWantsDepth(in stereo));
 
         var lens = fx; lens.DofThinLens = true; lens.DofAperture = 0.2; lens.DofSamples = 4;
         Assert.False(ScreenSpacePost.GpuTraceAllowed(in lens));
+        var stereoLens = stereo; stereoLens.DofThinLens = true; stereoLens.DofAperture = 0.2; stereoLens.DofSamples = 4;
+        Assert.False(ScreenSpacePost.GpuTraceAllowed(in stereoLens));
 
         Assert.True(ScreenSpacePost.GpuTraceAllowed(LightingFxData.CreateDefault()));   // plain frame unchanged
     }
