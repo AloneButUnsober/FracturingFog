@@ -6,8 +6,9 @@
 // P7b — ILGPU-backed GPU raymarcher for the Bicomplex (tessarine) Mandelbrot.
 // Iteration t := t² + c with t, c ∈ ℂ² spanned by (1, i, j, k) under
 // i² = j² = −1, k² = +1, ij = ji = k. Multiplication commutes; the squaring
-// map is given in the CPU calculator's file comment. Pixel (x, y, z) ↦
-// c = (x, y, z, sliceW). Hubbard–Douady DE = 0.5·|t|·ln|t|/|dt|.
+// map is given in the CPU calculator's file comment. Pixel (x, y, z) fills three
+// of c's four slots; the slice axis (#1173-C) picks which one holds sliceW — K
+// (default) is c = (x, y, z, sliceW). Hubbard–Douady DE = 0.5·|t|·ln|t|/|dt|.
 //
 // Same shading + lifecycle contract as MandelbulbGpuCalculator.
 
@@ -20,10 +21,12 @@ using ILGPU.Runtime;
 namespace FracturingFog.Calculators.Gpu;
 
 /// <summary>Per-fractal kernel parameters for the bicomplex Mandelbrot.
-/// SliceW is the fixed 4th coord of the 4D slice.</summary>
+/// SliceW is the fixed coord of the 4D slice; SliceAxis is the slot it rides on
+/// (the <c>BicomplexSliceAxis</c> value: 0 = K, 1 = J, 2 = I, 3 = R).</summary>
 public struct BicomplexGpuParams
 {
     public double SliceW;
+    public int SliceAxis;
     public double Bailout2;
     public int DEIter;
     public double SceneRadius;
@@ -184,7 +187,7 @@ public sealed class BicomplexGpuCalculator : IDisposable
 
         for (int step = 0; step < r.MaxSteps; step++)
         {
-            double d = BicomplexDE(px, py, pz, p.SliceW, p.Bailout2, p.DEIter);
+            double d = BicomplexDE(px, py, pz, p.SliceW, p.SliceAxis, p.Bailout2, p.DEIter);
             if (d < r.Eps) { hit = true; hitStep = step; break; }
             if (tT > p.SceneRadius) break;
             px += rdx * d; py += rdy * d; pz += rdz * d;
@@ -195,12 +198,12 @@ public sealed class BicomplexGpuCalculator : IDisposable
         if (depthIdx >= 0) depth[depthIdx] = (float)tT;   // #1070 — ray distance to the hit
 
         double h = r.Eps * 2;
-        double n0 = BicomplexDE(px + h, py, pz, p.SliceW, p.Bailout2, p.DEIter)
-                  - BicomplexDE(px - h, py, pz, p.SliceW, p.Bailout2, p.DEIter);
-        double n1 = BicomplexDE(px, py + h, pz, p.SliceW, p.Bailout2, p.DEIter)
-                  - BicomplexDE(px, py - h, pz, p.SliceW, p.Bailout2, p.DEIter);
-        double n2 = BicomplexDE(px, py, pz + h, p.SliceW, p.Bailout2, p.DEIter)
-                  - BicomplexDE(px, py, pz - h, p.SliceW, p.Bailout2, p.DEIter);
+        double n0 = BicomplexDE(px + h, py, pz, p.SliceW, p.SliceAxis, p.Bailout2, p.DEIter)
+                  - BicomplexDE(px - h, py, pz, p.SliceW, p.SliceAxis, p.Bailout2, p.DEIter);
+        double n1 = BicomplexDE(px, py + h, pz, p.SliceW, p.SliceAxis, p.Bailout2, p.DEIter)
+                  - BicomplexDE(px, py - h, pz, p.SliceW, p.SliceAxis, p.Bailout2, p.DEIter);
+        double n2 = BicomplexDE(px, py, pz + h, p.SliceW, p.SliceAxis, p.Bailout2, p.DEIter)
+                  - BicomplexDE(px, py, pz - h, p.SliceW, p.SliceAxis, p.Bailout2, p.DEIter);
         double nl = 1.0 / Math.Sqrt(n0 * n0 + n1 * n1 + n2 * n2 + 1e-20);
         double nx = n0 * nl, ny = n1 * nl, nz = n2 * nl;
 
@@ -250,7 +253,7 @@ public sealed class BicomplexGpuCalculator : IDisposable
             for (int k = 1; k <= sp.AoSamples; k++)
             {
                 double d = r.Eps * (double)(1L << k);
-                double sd = BicomplexDE(px + nx * d, py + ny * d, pz + nz * d, p.SliceW, p.Bailout2, p.DEIter);
+                double sd = BicomplexDE(px + nx * d, py + ny * d, pz + nz * d, p.SliceW, p.SliceAxis, p.Bailout2, p.DEIter);
                 occl += Math.Max(0.0, d - sd) / d;
                 w += 1.0;
             }
@@ -294,7 +297,7 @@ public sealed class BicomplexGpuCalculator : IDisposable
                     hpx = bOx + bDirX * tR;
                     hpy = bOy + bDirY * tR;
                     hpz = bOz + bDirZ * tR;
-                    double hR = BicomplexDE(hpx, hpy, hpz, p.SliceW, p.Bailout2, p.DEIter);
+                    double hR = BicomplexDE(hpx, hpy, hpz, p.SliceW, p.SliceAxis, p.Bailout2, p.DEIter);
                     if (hR < r.Eps * 2.0) { hitR = true; hitTR = tR; break; }
                     tR += hR;
                     if (tR > rMax) break;
@@ -306,12 +309,12 @@ public sealed class BicomplexGpuCalculator : IDisposable
                 if (!hitR) break;
                 if (b + 1 >= bounces) break;
                 double h2 = r.Eps * 2.0;
-                double n0b = BicomplexDE(hpx + h2, hpy, hpz, p.SliceW, p.Bailout2, p.DEIter)
-                           - BicomplexDE(hpx - h2, hpy, hpz, p.SliceW, p.Bailout2, p.DEIter);
-                double n1b = BicomplexDE(hpx, hpy + h2, hpz, p.SliceW, p.Bailout2, p.DEIter)
-                           - BicomplexDE(hpx, hpy - h2, hpz, p.SliceW, p.Bailout2, p.DEIter);
-                double n2b = BicomplexDE(hpx, hpy, hpz + h2, p.SliceW, p.Bailout2, p.DEIter)
-                           - BicomplexDE(hpx, hpy, hpz - h2, p.SliceW, p.Bailout2, p.DEIter);
+                double n0b = BicomplexDE(hpx + h2, hpy, hpz, p.SliceW, p.SliceAxis, p.Bailout2, p.DEIter)
+                           - BicomplexDE(hpx - h2, hpy, hpz, p.SliceW, p.SliceAxis, p.Bailout2, p.DEIter);
+                double n1b = BicomplexDE(hpx, hpy + h2, hpz, p.SliceW, p.SliceAxis, p.Bailout2, p.DEIter)
+                           - BicomplexDE(hpx, hpy - h2, hpz, p.SliceW, p.SliceAxis, p.Bailout2, p.DEIter);
+                double n2b = BicomplexDE(hpx, hpy, hpz + h2, p.SliceW, p.SliceAxis, p.Bailout2, p.DEIter)
+                           - BicomplexDE(hpx, hpy, hpz - h2, p.SliceW, p.SliceAxis, p.Bailout2, p.DEIter);
                 double nlb = 1.0 / Math.Sqrt(n0b * n0b + n1b * n1b + n2b * n2b + 1e-20);
                 double nbx2 = n0b * nlb, nby2 = n1b * nlb, nbz2 = n2b * nlb;
                 brdx = bDirX; brdy = bDirY; brdz = bDirZ;
@@ -429,7 +432,7 @@ public sealed class BicomplexGpuCalculator : IDisposable
             double px = ox + ldx * t;
             double py = oy + ldy * t;
             double pz = oz + ldz * t;
-            double h = BicomplexDE(px, py, pz, p.SliceW, p.Bailout2, p.DEIter);
+            double h = BicomplexDE(px, py, pz, p.SliceW, p.SliceAxis, p.Bailout2, p.DEIter);
             if (h < 1e-4) return 0.0;
             if (k > 0) res = Math.Min(res, k * h / t);
             t += h;
@@ -441,12 +444,17 @@ public sealed class BicomplexGpuCalculator : IDisposable
     /// <summary>Hubbard–Douady DE for the bicomplex squaring map. t starts
     /// at zero; dt/dc starts at zero; per iter dt := 2·t·dt + 1 (commutative
     /// bicomplex product). Components packed (1, i, j, k). Mirrors the CPU
-    /// BicomplexMandelbrotCalculator.BicomplexDE.</summary>
+    /// BicomplexMandelbrotCalculator.BicomplexDE, slice-axis packing included.</summary>
     private static double BicomplexDE(
-        double sx, double sy, double sz, double sliceW,
+        double sx, double sy, double sz, double sliceW, int axis,
         double bailout2, int iter)
     {
-        double c1 = sx, c2 = sy, c3 = sz, c4 = sliceW;
+        // #1173-C — the CPU's slice-axis packing; K (0) is the legacy c = (x, y, z, sliceW).
+        double c1, c2, c3, c4;
+        if (axis == 3)      { c1 = sliceW; c2 = sx; c3 = sy; c4 = sz; }   // R
+        else if (axis == 2) { c1 = sx; c2 = sliceW; c3 = sy; c4 = sz; }   // I
+        else if (axis == 1) { c1 = sx; c2 = sy; c3 = sliceW; c4 = sz; }   // J
+        else                { c1 = sx; c2 = sy; c3 = sz; c4 = sliceW; }   // K
         double t1 = 0.0, t2 = 0.0, t3 = 0.0, t4 = 0.0;
         double d1 = 0.0, d2 = 0.0, d3 = 0.0, d4 = 0.0;
 

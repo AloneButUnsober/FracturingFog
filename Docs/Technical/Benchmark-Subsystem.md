@@ -198,8 +198,9 @@ dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --filter "*Gp
 
 It times the **production** 3D calculators with `Lighting.UseGpuRender = true`, so the frame is
 what the app renders: real parameter construction, kernel launch, `Synchronize`, device-to-host
-copy. Matrix: 8 families (`Mandelbulb`, `Mandelbox`, KIFS `Menger` / `Sierpinski`, `QJulia`,
-`QMandel`, `Kleinian`, `Bicomplex`) x {640x360, 1920x1080} = 16 cases. Same in-process job as
+copy. Matrix: 9 cases per width (`Mandelbulb`, `Mandelbox`, KIFS `Menger` / `Sierpinski`, `QJulia`,
+`QMandel`, `Kleinian`, `Bicomplex`, and `BicomplexR`, the R slice axis at sliceW 0.4, which
+rendered on the CPU before #1173-C) x {640x360, 1920x1080} = 18 cases. Same in-process job as
 `MandelbrotBench`.
 
 **It refuses to time a CPU fallback.** In the app, a missing device or a failed kernel load falls
@@ -222,7 +223,7 @@ That guard is what exposed #1164: on CUDA, all 8 kernels failed to JIT because t
 `GpuAcceleratorHost` then latches GPU 3D off for the session (`ReportRenderFault`). Every case
 after a fault would report `NA` with "GPU device faulted … disabled for this session". Mandelbulb
 was the family that faulted (#1169), so the `GpuFamily` enum declares it last to keep the other
-seven measurable. The order has to live in the enum because BenchmarkDotNet runs param values in
+cases measurable. The order has to live in the enum because BenchmarkDotNet runs param values in
 **value order** and ignores the `[Params]` order. `Family` is also declared before `Width`, making
 it the outer axis, so both Mandelbulb cases run after every other case.
 

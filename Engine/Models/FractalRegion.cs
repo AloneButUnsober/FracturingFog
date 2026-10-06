@@ -577,6 +577,8 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? KleinianColorSource { get; set; }
         // #881 — sphere-trace under-relaxation factor (omitted at the 1.0 default).
         [JsonIgnore(Condition = OmitNull)] public double? KleinianDeFactor { get; set; }
+        // #1173-C — Bicomplex slice axis (BicomplexSliceAxis; omitted at the K default).
+        [JsonIgnore(Condition = OmitNull)] public int? BicomplexSliceAxis { get; set; }
         // #893 — Indra's Pearls 2D group: family + μ / traces / c + depth + mode
         // (each omitted at its default). The generator matrices derive from these.
         [JsonIgnore(Condition = OmitNull)] public int? IndrasFamily { get; set; }
@@ -962,6 +964,8 @@ namespace FracturingFog.Models
                     Cam3DTheta = p.BicomplexCameraTheta,
                     Cam3DPhi = p.BicomplexCameraPhi,
                     Cam3DSliceW = p.BicomplexSliceW,
+                    BicomplexSliceAxis = p.BicomplexSliceAxis != FracturingFog.Models.BicomplexSliceAxis.K
+                        ? (int)p.BicomplexSliceAxis : (int?)null,
                 },
                 FractalType.Coquaternion => new RegionFractalParams
                 {
@@ -1517,22 +1521,9 @@ namespace FracturingFog.Models
                     case FractalType.QuaternionMandelbrot:
                         p.QMandelCameraDistance = d; p.QMandelCameraTheta = th; p.QMandelCameraPhi = ph;
                         if (Cam3DSliceW.HasValue) p.QMandelSliceW = Cam3DSliceW.Value;
-                        if (QMandelDualOrbitColor.HasValue) p.QMandelDualOrbitColor = QMandelDualOrbitColor.Value;
-                        if (QMandelDualSeedX.HasValue) p.QMandelDualSeedX = QMandelDualSeedX.Value;
-                        if (QMandelDualSeedY.HasValue) p.QMandelDualSeedY = QMandelDualSeedY.Value;
-                        if (QMandelDualSeedZ.HasValue) p.QMandelDualSeedZ = QMandelDualSeedZ.Value;
                         break;
                     case FractalType.Kleinian:
                         p.KleinianCameraDistance = d; p.KleinianCameraTheta = th; p.KleinianCameraPhi = ph;
-                        if (KleinianPreset.HasValue) p.KleinianPreset = (FracturingFog.KleinianPreset)KleinianPreset.Value;
-                        if (KleinianNecklaceCount.HasValue) p.KleinianNecklaceCount = KleinianNecklaceCount.Value;
-                        if (KleinianCustomSpheres != null) p.KleinianCustomSpheres = KleinianCustomSpheres.ConvertAll(s => s.Clone());
-                        if (KleinianRotationAngle.HasValue) p.KleinianRotationAngle = KleinianRotationAngle.Value;
-                        if (KleinianRotationAxisX.HasValue) p.KleinianRotationAxisX = KleinianRotationAxisX.Value;
-                        if (KleinianRotationAxisY.HasValue) p.KleinianRotationAxisY = KleinianRotationAxisY.Value;
-                        if (KleinianRotationAxisZ.HasValue) p.KleinianRotationAxisZ = KleinianRotationAxisZ.Value;
-                        if (KleinianColorSource.HasValue) p.KleinianColorSource = (FracturingFog.KleinianColorSource)KleinianColorSource.Value;
-                        if (KleinianDeFactor.HasValue) p.KleinianDeFactor = KleinianDeFactor.Value;
                         break;
                     case FractalType.BicomplexMandelbrot:
                         p.BicomplexCameraDistance = d; p.BicomplexCameraTheta = th; p.BicomplexCameraPhi = ph;
@@ -1548,6 +1539,24 @@ namespace FracturingFog.Models
                         break;
                 }
             }
+
+            // #1173-C — 3D family settings whose keys are unique to one family apply on
+            // their own, outside the camera block above: a lone --param KleinianDeFactor=0.5
+            // (or BicomplexSliceAxis=1) carries no Cam3D* keys and was silently dropped.
+            if (QMandelDualOrbitColor.HasValue) p.QMandelDualOrbitColor = QMandelDualOrbitColor.Value;
+            if (QMandelDualSeedX.HasValue) p.QMandelDualSeedX = QMandelDualSeedX.Value;
+            if (QMandelDualSeedY.HasValue) p.QMandelDualSeedY = QMandelDualSeedY.Value;
+            if (QMandelDualSeedZ.HasValue) p.QMandelDualSeedZ = QMandelDualSeedZ.Value;
+            if (KleinianPreset.HasValue) p.KleinianPreset = (FracturingFog.KleinianPreset)KleinianPreset.Value;
+            if (KleinianNecklaceCount.HasValue) p.KleinianNecklaceCount = KleinianNecklaceCount.Value;
+            if (KleinianCustomSpheres != null) p.KleinianCustomSpheres = KleinianCustomSpheres.ConvertAll(s => s.Clone());
+            if (KleinianRotationAngle.HasValue) p.KleinianRotationAngle = KleinianRotationAngle.Value;
+            if (KleinianRotationAxisX.HasValue) p.KleinianRotationAxisX = KleinianRotationAxisX.Value;
+            if (KleinianRotationAxisY.HasValue) p.KleinianRotationAxisY = KleinianRotationAxisY.Value;
+            if (KleinianRotationAxisZ.HasValue) p.KleinianRotationAxisZ = KleinianRotationAxisZ.Value;
+            if (KleinianColorSource.HasValue) p.KleinianColorSource = (FracturingFog.KleinianColorSource)KleinianColorSource.Value;
+            if (KleinianDeFactor.HasValue) p.KleinianDeFactor = KleinianDeFactor.Value;
+            if (BicomplexSliceAxis.HasValue) p.BicomplexSliceAxis = (FracturingFog.Models.BicomplexSliceAxis)BicomplexSliceAxis.Value;
 
             // #94 (P4) — non-spatial family params (static-hold legs).
             if (PlasmaSeed.HasValue) p.PlasmaSeed = PlasmaSeed.Value;
