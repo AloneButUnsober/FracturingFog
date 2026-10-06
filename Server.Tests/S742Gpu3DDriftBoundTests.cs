@@ -141,10 +141,11 @@ public sealed class S742Gpu3DDriftBoundTests
     }
 
     // The GPU kernel vs the CPU ShadingPipeline must stay within a documented
-    // ceiling. These are different code paths — the GPU branch uses a cheap
-    // step-hash albedo and drops some post effects (P7c) — so the ceiling is
-    // loose by design; its job is to trip if a regression *widens* the gap, not
-    // to claim parity. When the kernel does not load on the chosen accelerator
+    // ceiling. These are different code paths (the kernel samples a baked
+    // colour-map LUT for its albedo, #1172 / G2.2, and runs the same post stack,
+    // #1172 / G1.2), so the ceiling allows LUT interpolation and device float
+    // noise; its job is to trip if a regression widens the gap. When the kernel
+    // does not load on the chosen accelerator
     // the render is byte-identical to the pipeline (drift 0), which the ceiling
     // trivially passes — the WYSIWYG guarantee still holds via fallback.
     [Fact]
@@ -162,8 +163,11 @@ public sealed class S742Gpu3DDriftBoundTests
         uint[] pipeline = Render(null, useGpu: false);  // CPU ShadingPipeline
 
         var (mean, max, over8) = Drift(kernel, pipeline);
-        Assert.True(mean < 40.0,
-            $"kernel-vs-pipeline mean channel drift {mean:F2} exceeds ceiling 40 on {dev.AcceleratorType} " +
+        // #1172 / G2.2 — the kernels now take their albedo from the colour map (GpuAlbedoLut),
+        // so the gap is LUT interpolation + device float noise: ~0.2-0.3 on the CPU
+        // accelerator (was ~14 with the step-hash albedo; ceiling was 40).
+        Assert.True(mean < 3.0,
+            $"kernel-vs-pipeline mean channel drift {mean:F2} exceeds ceiling 3 on {dev.AcceleratorType} " +
             $"(regression widened the GPU/CPU gap); max {max}, pxOver8 {over8}");
     }
 }

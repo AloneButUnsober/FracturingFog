@@ -166,7 +166,7 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator, IStereoEyeCam
         // Hoisted for shared use by GPU dispatch + CPU path.
         double sceneRadius = camDist + setRadius * 2.0 + 4.0;
 
-        // P7b — opt-in GPU raymarch path (cheap-palette shading). See
+        // P7b — opt-in GPU raymarch path (colour-map LUT albedo, #1172). See
         // MandelbulbCalculator for what the GPU path shades and the #1172 post stack.
         // #320 — force CPU while an AOV view is active (GPU has no view path).
         // S8 (#404/#487) — this kernel now resolves point/spot lights on the GPU
@@ -217,8 +217,10 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator, IStereoEyeCam
                 SceneRadius = sceneRadius,
             };
             var sp = GpuShadingParams.Build(in fx);
+            // #1172 / G2.2 — the CPU trace's colour-map albedo (same smooth coefficients).
+            uint[] albedoLut = GpuAlbedoLut.Bake(ColorMap, 192.0, 0.5, sceneRadius, ref sp);
             _gpu ??= new QMandelGpuCalculator();
-            bool gpuOk = _gpu.Render(renderBuffer, rp, sp, qp, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr);
+            bool gpuOk = _gpu.Render(renderBuffer, rp, sp, qp, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr, albedoLut);
             LastGpuRoute = Gpu3DRoute.AfterRender(gpuOk, _gpu.LastError);
             if (gpuOk)
             {

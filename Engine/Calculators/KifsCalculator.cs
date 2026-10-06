@@ -181,7 +181,7 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
 
         // P7a/P7b — opt-in GPU raymarch path. Menger + Sierpinski each get
         // their own kernel (branchy fold-switch in one kernel bloats the JIT).
-        // Cheap-palette shading only — see MandelbulbCalculator for the
+        // Colour-map LUT albedo (#1172) — see MandelbulbCalculator for the
         // GPU-path shading notes and the #1172 post stack.
         // #320 — force CPU while an AOV view is active (GPU has no view path).
         // S8 (#404/#486) — the Menger + Sierpinski kernels now resolve point/spot
@@ -225,6 +225,8 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
                 DofSamples = ThinLensDof.SampleCount(in fx),
             };
             var sp = GpuShadingParams.Build(in fx);
+            // #1172 / G2.2 — the CPU trace's colour-map albedo (same smooth coefficients).
+            uint[] albedoLut = GpuAlbedoLut.Bake(ColorMap, 192.0, 0.5, sceneRadius, ref sp);
             if (sierp)
             {
                 var sip = new SierpinskiGpuParams
@@ -233,7 +235,7 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
                     DEIter = deIter, SceneRadius = sceneRadius,
                 };
                 _gpuSierp ??= new SierpinskiGpuCalculator();
-                bool gpuOk = _gpuSierp.Render(renderBuffer, rp, sp, sip, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr);
+                bool gpuOk = _gpuSierp.Render(renderBuffer, rp, sp, sip, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr, albedoLut);
                 LastGpuRoute = Gpu3DRoute.AfterRender(gpuOk, _gpuSierp.LastError);
                 if (gpuOk)
                 {
@@ -254,7 +256,7 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
                     DEIter = deIter, SceneRadius = sceneRadius,
                 };
                 _gpuMenger ??= new MengerGpuCalculator();
-                bool gpuOk = _gpuMenger.Render(renderBuffer, rp, sp, mp, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr);
+                bool gpuOk = _gpuMenger.Render(renderBuffer, rp, sp, mp, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr, albedoLut);
                 LastGpuRoute = Gpu3DRoute.AfterRender(gpuOk, _gpuMenger.LastError);
                 if (gpuOk)
                 {
