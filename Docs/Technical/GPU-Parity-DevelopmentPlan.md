@@ -81,7 +81,7 @@ Sizes are rough estimates (S ≈ a day, M ≈ a few days, L ≈ a week or more),
 | G0.4 | #1169 ⚑ | Find and fix the Mandelbulb CUDA launch fault. **Root cause: the watchdog, not codegen.** Software fp64 trig/pow makes Mandelbulb ~5 ms/px on a GT 710, so even a 96x72 single launch outlasts TDR. Fix: a ~64-px probe launch with every frame above that tiled, plus a `TooSlow` guard (3 consecutive launches >1 ms/px → that family renders on the CPU on this device for the session, with the reason shown) | G0.1 | M | Mandelbulb renders on CUDA, or is proven too slow there and gated off cleanly. Done on the GT 710; ⚑ a modern card should render it on the GPU |
 | G0.5 | #1045 | D3D11 presenter survives a device loss (recreate device + re-attach kernels) | — | M | A forced TDR doesn't crash the app |
 | G0.6 | #82 | Close out V6: live D3D parity smoke. The bench already ran D3D11 perturbation on the GT 710; add the image-parity check. Delivered as the headless gate `--d3dpturbcalc` (D3DPerturbProbe.cs): 1e14 → 3e47, 0/16384 exact on the GT 710 | — | S | **Done** |
-| G0.7 | #310 | On-device relief volumetric CPU-vs-GPU parity test | — | S–M | Gate lands; runs on the GT 710 |
+| G0.7 | #310 | On-device relief volumetric CPU-vs-GPU parity test. Delivered: `S310ReliefVolumetricParityTests` (GPU twin plugged in as the kernel vs the CPU trace, on the in-scatter and shaft terms) found and fixed a GPU-only bug (the #455 edge dissolve blended into an UNFOGGED floor); `--reliefgpuraymarch [hw]` gains a god-ray scene and a real-GPU mode | — | S–M | **Done** |
 
 ### Phase 1 — Kernel output contract (the foundation)
 

@@ -113,6 +113,16 @@ public static class ReliefRaymarchGpuProbe
     }
 
     /// <summary>CLI entry (`--reliefgpuraymarch`).</summary>
+    // #310 — WARP (software, any host) by default; `--reliefgpuraymarch hw` runs the same
+    // gate on the real GPU adapter (the on-device volumetric parity smoke).
+    private static DriverType s_driver = DriverType.Warp;
+
+    public static int RunGate(bool hardware)
+    {
+        s_driver = hardware ? DriverType.Hardware : DriverType.Warp;
+        return RunGate();
+    }
+
     public static int RunGate()
     {
         const int w = 320, h = 240, hw = 320, hh = 240;
@@ -382,9 +392,29 @@ public static class ReliefRaymarchGpuProbe
         fxArea.Light1.AreaAngularRadius = 12.0;
         bool? okArea = RunDiff(sb, "area soft shadow (directional, 12 deg)", 160, 120, 160, 120, pLights, fxArea);
 
+        // #310 — god-ray shafts over the ground plane: a low back light behind the bump,
+        // dense forward-scattering fog, per-step shadowed in-scatter. Covers the #455
+        // footprint-edge dissolve into the FOGGED floor (it used to blend into an
+        // unfogged floor on the GPU — a dark band along the plate edge).
+        var pShaft = new FractalParameters
+        {
+            Relief2DEnabled = true, Relief2DRaymarch = true, Relief2DHeightScale = 1.4,
+            Relief2DCameraAzimuthDeg = 25, Relief2DCameraElevationDeg = 35, Relief2DCameraFovDeg = 55,
+            Relief2DGroundPlane = true,
+        };
+        var fxShaft = LightingFxData.CreateDefault();
+        var key = fxShaft.Light1; key.Phi = 1.45; key.Theta = 3.5; key.Intensity = 1.5; fxShaft.Light1 = key;
+        fxShaft.FogDensity = 1.5;
+        fxShaft.VolumeSteps = 32;
+        fxShaft.VolumeAnisotropy = 0.7;
+        fxShaft.ShadowSteps = 24;
+        fxShaft.ShadowSoftK = 8.0;
+        fxShaft.ShadowLightMask = 0x1;
+        bool? okShaft = RunDiff(sb, "god-ray shafts over the ground plane", 160, 120, 160, 120, pShaft, fxShaft);
+
         bool ok = (okFull ?? true) && (okDof ?? true) && (okAov ?? true) && (okGlass ?? true)
                && (okMarch ?? true) && (okFrost ?? true) && (okLights ?? true) && (okPosFog ?? true)
-               && (okArea ?? true);
+               && (okArea ?? true) && (okShaft ?? true);
         sb.AppendLine(ok ? "RESULT: PASS" : "RESULT: FAIL");
         Finish(sb);
         return ok ? 0 : 1;
@@ -415,11 +445,11 @@ public static class ReliefRaymarchGpuProbe
         var gpu = new uint[w * h];
         try
         {
-            var hr = D3D11.D3D11CreateDevice(null, DriverType.Warp, DeviceCreationFlags.None,
+            var hr = D3D11.D3D11CreateDevice(null, s_driver, DeviceCreationFlags.None,
                 null!, out dev, out _, out ctx);
             if (hr.Failure || dev == null || ctx == null)
             {
-                sb.AppendLine($"  [{label}] SKIP: no WARP D3D11 device (0x{hr.Code:X8})");
+                sb.AppendLine($"  [{label}] SKIP: no {s_driver} D3D11 device (0x{hr.Code:X8})");
                 return null;
             }
             kernel = new ReliefRaymarchGpuKernel(dev, ctx, new object());

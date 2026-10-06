@@ -566,6 +566,9 @@ public static class ReliefRaymarchGpu
                     if (cam.GroundPlane)
                     {
                         behind = ShadeFlat(0.0, 1.0, 0.0, -rdx, -rdy, -rdz, hx, 0.0, hz, u.FloorAlbedo, in sde, in u);
+                        // #310 — twin of the HLSL fix: fog the dissolve's floor at the terrain
+                        // distance, as the CPU Shade does (was a fog-free floor → dark edge band).
+                        behind = ApplyFogVolume(behind, ox, oy, oz, rdx, rdy, rdz, tf, in sde, in u);
                     }
                     else
                     {
