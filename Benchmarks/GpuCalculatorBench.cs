@@ -68,18 +68,19 @@ public class GpuCalculatorBench
 {
     private IFractalCalculator _calc = null!;
 
-    // Width is declared FIRST so it is the outer axis: every 640x360 case runs
-    // before any 1920x1080 one. A single 1080p raymarch launch on a slow GPU
-    // can outlast the Windows GPU watchdog (TDR), and that device fault —
-    // like #1169 — latches GPU 3D off for the rest of the process. Smallest
-    // first keeps the small cases measurable on such hardware.
-    [Params(640, 1920)]
-    public int Width { get; set; }
-
+    // Family is declared FIRST so it is the outer axis, and Mandelbulb (last
+    // enum value) runs after every other case at every width. A Mandelbulb
+    // fault (#1169) latches GPU 3D off for the rest of the process, so it must
+    // not run before anything else is measured. #1170 tiles the dispatch under
+    // the GPU watchdog, so a 1080p frame no longer faults on a slow GPU and
+    // Width no longer needs to be the outer axis.
     [Params(GpuFamily.Mandelbox, GpuFamily.Menger, GpuFamily.Sierpinski,
             GpuFamily.QJulia, GpuFamily.QMandel, GpuFamily.Kleinian, GpuFamily.Bicomplex,
             GpuFamily.Mandelbulb)]
     public GpuFamily Family { get; set; }
+
+    [Params(640, 1920)]
+    public int Width { get; set; }
 
     [GlobalSetup]
     public void Setup()

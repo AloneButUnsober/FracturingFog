@@ -38,6 +38,13 @@ internal static class GpuKernelUtils
     /// a no-op regardless of strength.</summary>
     public static readonly uint[] PaletteOff = { 0u };
 
+    /// <summary>#1170 — map a launch's thread index to the frame pixel it
+    /// shades. TileRun 0 is the untiled identity map; otherwise thread i
+    /// shades pixel i % TileRun of the run starting at TileStart in block
+    /// i / TileRun. See <see cref="GpuTiledDispatch"/>.</summary>
+    public static int TilePixel(int i, in GpuRaymarchParams r)
+        => r.TileRun <= 0 ? i : (i / r.TileRun) * r.TileBlock + r.TileStart + (i % r.TileRun);
+
     /// <summary>Construct the primary ray direction for pixel <c>(x, y)</c>
     /// from the camera basis baked into <paramref name="p"/>. Returns the
     /// unit direction as (rdx, rdy, rdz). Honors <see
