@@ -769,6 +769,24 @@ recovery: considered=4 resumedImage=3 failedUnsupported=1 failed=0
 If the count is non-zero you'll also see the resumed jobs in the
 Cluster Dashboard's recent-jobs grid with their original `JobId`.
 
+### A worker lost mid-render
+
+If a worker's connection closes while it holds tiles (the worker
+crashed, its machine slept, the network dropped), the master hands those
+tiles back to the queue and another worker renders them, so the job
+still finishes. The cluster log records a `tile-reclaimed` event for
+each one.
+
+- A reclaim counts as one of the tile's attempts. A tile that keeps
+  killing workers fails its job after the retry budget instead of
+  looping forever.
+- If the lost worker reconnects and delivers the tile anyway, the first
+  delivery wins and any later copy is ignored. At worst, a tile renders
+  twice.
+- Only a closed connection triggers this. A worker that is still
+  connected but slow keeps its tiles; the last-10 % work-stealing covers
+  stragglers.
+
 ### What is *not* recovered
 
 - **In-flight video renders** — the streaming ffmpeg ingest path is

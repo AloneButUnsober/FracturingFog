@@ -444,7 +444,7 @@ public sealed class ClusterCoordinator : IClusterCoordinator
                 ["got"]      = actualSha,
                 ["expected"] = dto.Sha256,
             });
-            Dispatcher.RecordFailure(dto.JobId, dto.TileId);
+            TileFailed(dto.JobId, dto.TileId, dto.WorkerId, "delivery-rejected", allowRetry: true);
             return Ok(new TileDeliverAckDto { Accepted = false, RefuseReason = "sha-mismatch" });
         }
 
@@ -495,7 +495,7 @@ public sealed class ClusterCoordinator : IClusterCoordinator
                 ["tileId"]  = dto.TileId,
                 ["error"]   = ex.Message,
             });
-            Dispatcher.RecordFailure(dto.JobId, dto.TileId);
+            TileFailed(dto.JobId, dto.TileId, dto.WorkerId, "delivery-rejected", allowRetry: true);
             return Err("merge-failed", ex.Message);
         }
 
@@ -578,7 +578,7 @@ public sealed class ClusterCoordinator : IClusterCoordinator
                 ["got"]      = frames.Count,
                 ["expected"] = expectedCount,
             });
-            Dispatcher!.RecordFailure(dto.JobId, dto.TileId);
+            TileFailed(dto.JobId, dto.TileId, dto.WorkerId, "delivery-rejected", allowRetry: true);
             return Ok(new TileDeliverAckDto { Accepted = false, RefuseReason = "frame-count-mismatch" });
         }
 
@@ -593,7 +593,7 @@ public sealed class ClusterCoordinator : IClusterCoordinator
                     ["frame"]   = f.FrameIndex,
                     ["range"]   = $"[{range.StartFrame},{range.EndFrame})",
                 });
-                Dispatcher!.RecordFailure(dto.JobId, dto.TileId);
+                TileFailed(dto.JobId, dto.TileId, dto.WorkerId, "delivery-rejected", allowRetry: true);
                 return Ok(new TileDeliverAckDto { Accepted = false, RefuseReason = "frame-out-of-range" });
             }
         }
@@ -619,7 +619,7 @@ public sealed class ClusterCoordinator : IClusterCoordinator
                     ["tileId"] = dto.TileId,
                     ["error"]  = ex.Message,
                 });
-                Dispatcher!.RecordFailure(dto.JobId, dto.TileId);
+                TileFailed(dto.JobId, dto.TileId, dto.WorkerId, "delivery-rejected", allowRetry: true);
                 return Err("frames-write-failed", ex.Message);
             }
         }
@@ -733,7 +733,7 @@ public sealed class ClusterCoordinator : IClusterCoordinator
                     ["tileId"] = dto.TileId,
                     ["error"]  = ex.Message,
                 });
-                Dispatcher!.RecordFailure(dto.JobId, dto.TileId);
+                TileFailed(dto.JobId, dto.TileId, dto.WorkerId, "delivery-rejected", allowRetry: true);
                 return Err("slide-write-failed", ex.Message);
             }
         }
@@ -1054,40 +1054,111 @@ public sealed class ClusterCoordinator : IClusterCoordinator
             return Err(err ?? "unknown-worker", "tile.error refused");
 
         bool fatal = dto.Code is "forbidden-fractal" or "limit-exceeded" or "cancelled";
-        bool requeued = !fatal && Dispatcher.RecordFailure(dto.JobId, dto.TileId);
-
-        Jobs.AppendEvent(dto.JobId, "tile-error", new Dictionary<string, object?>
+        // #1160 — owner-checked: a report from a worker that no longer owns the
+        // tile (reclaimed + re-assigned, completed, or a stealer's duplicate) is
+        // stale and must neither requeue someone else's tile nor fail the job.
+        var result = TileFailed(dto.JobId, dto.TileId, dto.WorkerId,
+            $"[{dto.Code}] {dto.Message}", allowRetry: !fatal, where: "tile-error");
+        try
         {
-            ["tileId"]   = dto.TileId,
-            ["worker"]   = dto.WorkerId,
-            ["code"]     = dto.Code,
-            ["message"]  = dto.Message,
-            ["requeued"] = requeued,
-        });
-
-        if (!requeued)
-        {
-            Jobs.UpdateStatus(dto.JobId, s =>
+            Jobs.AppendEvent(dto.JobId, "tile-error", new Dictionary<string, object?>
             {
-                s.JobState   = "failed";
-                s.FailReason = $"tile {dto.TileId}: [{dto.Code}] {dto.Message}";
-            });
-            Dispatcher.RetireJob(dto.JobId);
-            if (_mergers.TryRemove(dto.JobId, out var m)) m.Dispose();
-            // D-4b — fail-the-job teardown for the streaming encoder.
-            _ = DisposeVideoPipelineAsync(dto.JobId);
-            // D-4c — drop slideshow registration so a re-submitted job
-            // with a colliding id (impossible in practice, defensive)
-            // doesn't inherit stale state.
-            _slideshowJobs.TryRemove(dto.JobId, out _);
-            _log.Event("job-failed", new Dictionary<string, object?>
-            {
-                ["jobId"]  = dto.JobId,
-                ["where"]  = "tile-error",
-                ["error"]  = $"{dto.Code}: {dto.Message}",
+                ["tileId"]   = dto.TileId,
+                ["worker"]   = dto.WorkerId,
+                ["code"]     = dto.Code,
+                ["message"]  = dto.Message,
+                ["requeued"] = result == TileDispatcher.FailureResult.Requeued,
+                ["stale"]    = result == TileDispatcher.FailureResult.NotOwned,
             });
         }
+        catch { /* best-effort audit trail */ }
         return Ok(new TileErrorAckDto { Acknowledged = true });
+    }
+
+    /// <summary>#1160 — one place for "this worker's tile failed": owner-checked
+    /// requeue via the dispatcher, and a failed job when the tile is out of
+    /// retries (or the error is fatal). Before, the delivery-rejection paths
+    /// ignored an exhausted budget: the tile left in-flight but was never
+    /// requeued or failed, and the job hung.</summary>
+    private TileDispatcher.FailureResult TileFailed(string jobId, int tileId, string workerId,
+        string reason, bool allowRetry, string where = "tile-delivery")
+    {
+        var result = Dispatcher!.RecordFailure(jobId, tileId, workerId, allowRetry);
+        if (result == TileDispatcher.FailureResult.Exhausted)
+            FailJob(jobId, $"tile {tileId}: {reason}", where);
+        return result;
+    }
+
+    /// <summary>Terminal failure: status, dispatcher, merger, video encoder and
+    /// slideshow teardown, log. Never throws (a client polling needs the
+    /// terminal state; teardown is best-effort).</summary>
+    private void FailJob(string jobId, string reason, string where)
+    {
+        try
+        {
+            Jobs?.UpdateStatus(jobId, s =>
+            {
+                s.JobState   = "failed";
+                s.FailReason = reason;
+            });
+        }
+        catch { /* logged below */ }
+        Dispatcher?.RetireJob(jobId);
+        if (_mergers.TryRemove(jobId, out var m)) { try { m.Dispose(); } catch { } }
+        // D-4b: fail-the-job teardown for the streaming encoder.
+        _ = DisposeVideoPipelineAsync(jobId);
+        // D-4c: drop slideshow registration so a re-submitted job with a
+        // colliding id (impossible in practice, defensive) doesn't inherit
+        // stale state.
+        _slideshowJobs.TryRemove(jobId, out _);
+        _log.Event("job-failed", new Dictionary<string, object?>
+        {
+            ["jobId"]  = jobId,
+            ["where"]  = where,
+            ["error"]  = reason,
+        });
+    }
+
+    // ── worker session lifecycle (#1160) ────────────────────────────────
+
+    /// <summary>#1160 — a worker's TLS session closed (crash, network drop,
+    /// shutdown). Every worker registered under that certificate hands its
+    /// in-flight tiles back to the queue, so another worker finishes the job
+    /// instead of it waiting forever. A reclaim counts as an attempt; a tile
+    /// out of attempts fails its job. Keyed by thumbprint because the
+    /// coordinator never sees sessions: if a worker reconnects (resuming its
+    /// id) before its old session is noticed closed, a tile it claimed on the
+    /// new session can be re-queued too. That only costs a duplicate render
+    /// (first delivery wins; the rest are idempotent).</summary>
+    public void OnWorkerSessionClosed(string thumbprint)
+    {
+        if (Dispatcher is null) return;
+        string normThumb = ServerCertLoader.NormalizeThumbprint(thumbprint);
+        foreach (var w in Registry.Snapshot())
+        {
+            if (!string.Equals(w.CertThumbprint, normThumb, StringComparison.Ordinal)) continue;
+            foreach (var r in Dispatcher.ReclaimWorker(w.WorkerId))
+            {
+                _log.Event("tile-reclaimed", new Dictionary<string, object?>
+                {
+                    ["jobId"]    = r.JobId,
+                    ["tileId"]   = r.TileId,
+                    ["workerId"] = w.WorkerId,
+                    ["attempt"]  = r.Attempt,
+                    ["requeued"] = r.Requeued,
+                });
+                try
+                {
+                    Jobs?.AppendEvent(r.JobId, "tile-reclaimed", new Dictionary<string, object?>
+                    {
+                        ["tileId"] = r.TileId, ["worker"] = w.WorkerId, ["requeued"] = r.Requeued,
+                    });
+                }
+                catch { /* best-effort audit trail */ }
+                if (!r.Requeued)
+                    FailJob(r.JobId, $"tile {r.TileId}: worker lost on its final attempt ({r.Attempt})", "worker-session-closed");
+            }
+        }
     }
 
     // ── job.* ───────────────────────────────────────────────────────────

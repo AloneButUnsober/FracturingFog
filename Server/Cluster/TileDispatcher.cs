@@ -157,7 +157,11 @@ public sealed class TileDispatcher
         foreach (var kv in _jobs)
         {
             var st = kv.Value;
-            if (st.Pending.TryDequeue(out var t))
+            // #1160 — a reclaimed tile can be completed (its original worker's
+            // late delivery won) while its re-queued copy still sits here: skip.
+            TileJobDto? t;
+            while (st.Pending.TryDequeue(out t) && st.Completed.ContainsKey(t.TileId)) { }
+            if (t != null && !st.Completed.ContainsKey(t.TileId))
             {
                 t.JobId = kv.Key;
                 st.InFlight[t.TileId] = new InFlightTile
@@ -230,7 +234,14 @@ public sealed class TileDispatcher
         if (!_jobs.TryGetValue(jobId, out var st)) return false;
         lock (_lock)
         {
-            if (!st.InFlight.TryRemove(tileId, out _)) return false;
+            // #1160 — first accepted delivery completes the tile even when it is
+            // no longer in flight: after a reclaim the tile is back in Pending
+            // (or re-claimed by another worker) while the original worker's
+            // delivery can still land. Before, that delivery merged but never
+            // completed the tile, and the re-render then hit the merger's
+            // duplicate path — the job never finalised.
+            if (st.Completed.ContainsKey(tileId)) return false;
+            st.InFlight.TryRemove(tileId, out _);
             st.Completed[tileId] = workerId;
             return true;
         }
@@ -277,6 +288,80 @@ public sealed class TileDispatcher
         }
         SignalAll();
         return toRequeue != null;
+    }
+
+    /// <summary>#1160 — outcome of an owner-checked failure report.</summary>
+    public enum FailureResult
+    {
+        /// <summary>Re-queued with the attempt count incremented.</summary>
+        Requeued,
+        /// <summary>The reporter owned the tile but its retry budget is spent
+        /// (or the error is fatal): the coordinator fails the job.</summary>
+        Exhausted,
+        /// <summary>The reporter does not own the tile (it was reclaimed and
+        /// re-assigned, completed, or the reporter only held a stolen
+        /// duplicate): ignore — the current owner carries on.</summary>
+        NotOwned,
+    }
+
+    /// <summary>#1160 — failure report from <paramref name="workerId"/>. Only the
+    /// tile's current owner can requeue or exhaust it; a stale report (the tile
+    /// was reclaimed from that worker, completed, or the reporter was a
+    /// stealer) is <see cref="FailureResult.NotOwned"/>. <paramref name="allowRetry"/>
+    /// false = a fatal error: an owned tile is removed and reported Exhausted.</summary>
+    public FailureResult RecordFailure(string jobId, int tileId, string workerId, bool allowRetry)
+    {
+        if (!_jobs.TryGetValue(jobId, out var st)) return FailureResult.NotOwned;
+        lock (_lock)
+        {
+            if (!st.InFlight.TryGetValue(tileId, out var inFlight)
+                || !string.Equals(inFlight.WorkerId, workerId, StringComparison.Ordinal))
+                return FailureResult.NotOwned;
+            st.InFlight.TryRemove(tileId, out _);
+            if (!allowRetry || inFlight.Tile.Attempt >= MaxAttempts) return FailureResult.Exhausted;
+            inFlight.Tile.Attempt += 1;
+            st.Pending.Enqueue(inFlight.Tile);
+        }
+        SignalAll();
+        return FailureResult.Requeued;
+    }
+
+    /// <summary>#1160 — one tile taken back from a lost worker.</summary>
+    public readonly record struct ReclaimedTile(string JobId, int TileId, int Attempt, bool Requeued);
+
+    /// <summary>#1160 — take back every tile <paramref name="workerId"/> holds in
+    /// flight (its session closed: crash, network drop, shutdown). Each is
+    /// re-queued with the attempt count incremented — a reclaim counts as an
+    /// attempt, so a tile that kills every worker still exhausts the budget
+    /// (Requeued = false → the coordinator fails the job) instead of looping.
+    /// Tiles it only holds as a stealer are not in InFlight under its id and
+    /// are untouched (the owner is still working on them).</summary>
+    public IReadOnlyList<ReclaimedTile> ReclaimWorker(string workerId)
+    {
+        var result = new List<ReclaimedTile>();
+        lock (_lock)
+        {
+            foreach (var kv in _jobs)
+            {
+                var st = kv.Value;
+                foreach (var f in st.InFlight)
+                {
+                    if (!string.Equals(f.Value.WorkerId, workerId, StringComparison.Ordinal)) continue;
+                    if (!st.InFlight.TryRemove(f.Key, out var mine)) continue;
+                    var tile = mine.Tile;
+                    if (tile.Attempt >= MaxAttempts)
+                    {
+                        result.Add(new ReclaimedTile(kv.Key, f.Key, tile.Attempt, Requeued: false));
+                        continue;
+                    }
+                    tile.Attempt += 1;
+                    st.Pending.Enqueue(tile);
+                    result.Add(new ReclaimedTile(kv.Key, f.Key, tile.Attempt, Requeued: true));
+                }
+            }
+        }
+        if (result.Exists(r => r.Requeued)) SignalAll();
+        return result;
     }
 
     public int PendingCount(string jobId)

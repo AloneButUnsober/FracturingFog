@@ -7,24 +7,26 @@
 // debugging "why did worker X get marked stale yesterday" has a single
 // chronological stream to grep without correlating per-session logs.
 //
-// Mirrors SessionLogger's bounded-channel pump-task pattern so a slow
-// disk does not stall the cluster dispatch loop. Lines are JSON objects;
-// every event carries an iso-8601 ts and a "kind" tag.
+// Mirrors SessionLogger's bounded-queue pump: a dedicated background THREAD
+// drains it so a slow disk does not stall the cluster dispatch loop. Lines
+// are JSON objects; every event carries an iso-8601 ts and a "kind" tag.
+// #1159 — a thread, not a Task.Run pump: under thread-pool starvation the old
+// async pump might never run before Dispose's 3 s wait gave up, losing the
+// queued events (same flaw fixed in SessionLogger, #1157).
 
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
+using System.Collections.Concurrent;
 using System.Threading;
-using System.Threading.Channels;
-using System.Threading.Tasks;
 
 namespace FracturingFog.Server.Logging;
 
 public sealed class ClusterLogger : IDisposable
 {
-    private const int ChannelCapacity = 8192;
+    private const int QueueCapacity = 8192;
     private static readonly TimeSpan FlushTimeout = TimeSpan.FromSeconds(3);
 
     private static readonly JsonSerializerOptions JsonOpts = new()
@@ -34,23 +36,17 @@ public sealed class ClusterLogger : IDisposable
     };
 
     private readonly string _logDir;
-    private readonly Channel<string> _channel;
-    private readonly Task _pumpTask;
-    private readonly CancellationTokenSource _pumpCts = new();
+    private readonly BlockingCollection<string> _queue = new(new ConcurrentQueue<string>(), QueueCapacity);
+    private readonly Thread _pump;
     private long _droppedCount;
-    private bool _disposed;
+    private volatile bool _disposed;
 
     public ClusterLogger(string logDir)
     {
         _logDir = logDir;
         Directory.CreateDirectory(logDir);
-        _channel = Channel.CreateBounded<string>(new BoundedChannelOptions(ChannelCapacity)
-        {
-            FullMode = BoundedChannelFullMode.DropWrite,
-            SingleReader = true,
-            SingleWriter = false,
-        });
-        _pumpTask = Task.Run(PumpAsync);
+        _pump = new Thread(Pump) { IsBackground = true, Name = "cluster-log" };
+        _pump.Start();
     }
 
     /// <summary>Append an event. <paramref name="fields"/> is appended as
@@ -69,15 +65,19 @@ public sealed class ClusterLogger : IDisposable
         string json;
         try { json = JsonSerializer.Serialize(line, JsonOpts); }
         catch { return; }  // never throw from a logger
-        if (!_channel.Writer.TryWrite(json))
-            Interlocked.Increment(ref _droppedCount);
+        bool added;
+        // Full queue drops the NEW event (keeps the earlier stream); a write
+        // racing Dispose's CompleteAdding is a write after dispose — ignored.
+        try { added = _queue.TryAdd(json); }
+        catch (InvalidOperationException) { return; }
+        if (!added) Interlocked.Increment(ref _droppedCount);
     }
 
-    private async Task PumpAsync()
+    private void Pump()
     {
         try
         {
-            await foreach (string line in _channel.Reader.ReadAllAsync(_pumpCts.Token).ConfigureAwait(false))
+            foreach (string line in _queue.GetConsumingEnumerable())
             {
                 string path = Path.Combine(_logDir,
                     $"cluster-{DateTime.UtcNow:yyyyMMdd}.log");
@@ -92,12 +92,12 @@ public sealed class ClusterLogger : IDisposable
                     using var fs = new FileStream(path,
                         FileMode.Append, FileAccess.Write, FileShare.Read);
                     using var sw = new StreamWriter(fs);
-                    await sw.WriteLineAsync(line).ConfigureAwait(false);
+                    sw.WriteLine(line);
                 }
                 catch { /* swallow per-line write errors */ }
             }
         }
-        catch (OperationCanceledException) { /* shutdown */ }
+        catch { /* queue disposed under us — shutdown */ }
     }
 
     public void Dispose()
@@ -106,8 +106,10 @@ public sealed class ClusterLogger : IDisposable
         _disposed = true;
         try
         {
-            _channel.Writer.TryComplete();
-            try { _pumpTask.Wait(FlushTimeout); } catch { }
+            // Drain then join: the pump writes every queued event and exits
+            // before the drop note below, so the note is always last.
+            _queue.CompleteAdding();
+            if (!_pump.Join(FlushTimeout)) return;   // pathological disk: don't race the pump
             long dropped = Interlocked.Read(ref _droppedCount);
             if (dropped > 0)
             {
@@ -122,7 +124,8 @@ public sealed class ClusterLogger : IDisposable
                 }
                 catch { }
             }
+            _queue.Dispose();
         }
-        finally { try { _pumpCts.Dispose(); } catch { } }
+        catch { /* never throw from a logger */ }
     }
 }

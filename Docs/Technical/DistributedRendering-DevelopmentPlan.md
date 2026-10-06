@@ -411,6 +411,14 @@ later ones; do not parallelise across phases without explicit need.
 - Raw RGBA worker tile output.
 - Optional LZ4.
 - Adaptive tile sizing, work-stealing on the last 10 % of tiles.
+- Tile reclaim on worker loss (#1160): when a worker-role session closes,
+  `ClusterCoordinator.OnWorkerSessionClosed` re-queues that worker's
+  in-flight tiles (a reclaim counts as an attempt). The first accepted
+  delivery completes a tile even after a reclaim. `tile.error` is
+  owner-checked, so a stale report neither requeues someone else's tile nor
+  fails the job. Not a heartbeat lease: `FFWorkerAgent` does not heartbeat
+  while rendering, so heartbeat age would wrongly reclaim tiles from busy
+  workers.
 - **Exit criteria**: 4-worker scale test shows ≥ 3.2× speedup over
   single-worker on a Bird-of-Paradise 8K render (≥ 80 % parallel
   efficiency).

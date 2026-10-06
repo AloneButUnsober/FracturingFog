@@ -35,6 +35,11 @@ public interface IClusterCoordinator
         string thumbprint,
         CancellationToken ct,
         byte[]? binaryPayload = null);
+
+    /// <summary>#1160 — FFServer calls this when a worker-role session closes,
+    /// so the coordinator can reclaim that worker's in-flight tiles. Default:
+    /// nothing (a coordinator without dispatch has nothing to reclaim).</summary>
+    void OnWorkerSessionClosed(string thumbprint) { }
 }
 
 public readonly record struct ClusterDispatchOutcome(
