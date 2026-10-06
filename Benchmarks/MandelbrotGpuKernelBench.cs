@@ -132,9 +132,17 @@ public class MandelbrotGpuKernelBench
         _calc.Calculate();
         bool ranOnGpu = IsPerturbation ? _calc.LastFrameUsedGpuPerturbation : _calc.LastFrameUsedGpuCompute;
         if (!ranOnGpu)
+        {
+            // The calculator's GPU-PERTURB-TOO-SLOW guard turns the static off
+            // for the session when the estimated frame exceeds its time budget;
+            // the app would render this view on the CPU too.
+            string why = IsPerturbation && !MandelbrotCalculator.UseGpuPerturbation
+                ? " The calculator's too-slow guard disabled GPU perturbation (estimated frame over its time budget on this device)."
+                : "";
             throw new InvalidOperationException(
-                $"{Backend}/{Path}: the frame fell back to the CPU on '{device}'. " +
+                $"{Backend}/{Path}: the frame fell back to the CPU on '{device}'.{why} " +
                 "Refusing to time a CPU fallback as a GPU number.");
+        }
 
         CaseMetrics.Record(CaseMetrics.Device,
             CaseMetrics.Key(new (string, object?)[]

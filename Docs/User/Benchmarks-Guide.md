@@ -105,6 +105,19 @@ dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --filter "*Gp
 This measures 8 fractal families at two sizes. Two extra columns appear: **Device** (which graphics
 card did the work) and **DeviceAlloc/op** (graphics memory used per frame).
 
+The classic Mandelbrot can also run on the graphics card, through Direct3D 11 or Vulkan. To time
+that:
+
+```bash
+dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --filter "*MandelbrotGpuKernelBench*"
+```
+
+> [!NOTE]
+> A graphics card isn't automatically faster than your processor. Low-end cards can be much
+> slower, especially at deep zoom, which needs double precision. On a very slow card, the
+> deep-zoom rows at full HD may show `NA`. The app itself refuses to use the card for a frame it
+> estimates would take more than 3 seconds, and the benchmark reports the same decision.
+
 > [!WARNING]
 > If a row shows `NA`, that fractal did **not** render on your graphics card. Either no suitable
 > card was found (the 3-D kernels need double-precision support, which many built-in Intel

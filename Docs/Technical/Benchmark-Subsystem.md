@@ -31,7 +31,7 @@ There are three CLI-flagged benchmark drivers. They split across two measurement
 
 | Flag                       | Engine                | Target under test                          | Output |
 |----------------------------|-----------------------|--------------------------------------------|--------|
-| `--bench`                  | **BenchmarkDotNet**   | `MandelbrotCalculator` (the shipping calc); with `--filter *GpuCalculatorBench*`, the 8 ILGPU 3D kernels | BDN summary table + `BenchmarkDotNet.Artifacts/` |
+| `--bench`                  | **BenchmarkDotNet**   | `MandelbrotCalculator` (the shipping calc); with `--filter`, the 8 ILGPU 3D kernels (`*GpuCalculatorBench*`) or the D3D11/Vulkan Mandelbrot kernels (`*MandelbrotGpuKernelBench*`) | BDN summary table + `BenchmarkDotNet.Artifacts/` |
 | `--gentestbench`           | hand-rolled Stopwatch | `Generated.MandelbrotZ2Calculator` (CalcGen output) | console + `gentestbench.out` |
 | `--benchmark --equation …` | hand-rolled Stopwatch | an **arbitrary** hot-compiled DSL equation | console + `benchmark.out` |
 
@@ -181,7 +181,8 @@ args just prints help and runs nothing, hence the explicit direct-run branch).
 > [!NOTE]
 > **Narrowing the run.** BenchmarkDotNet's `--filter` glob matches the fully-qualified benchmark
 > **name** (`Namespace.Class.Method`), *not* `[Params]` values. So it selects a **class**:
-> `*MandelbrotBench*` is the CPU matrix, `*GpuCalculatorBench*` the GPU bench, `*` both. Within a
+> `*MandelbrotBench*` is the CPU matrix, `*GpuCalculatorBench*` the 3D GPU bench,
+> `*MandelbrotGpuKernelBench*` the D3D11/Vulkan bench, `*` all three. Within a
 > class it is all-or-nothing, because each class has a single `[Benchmark]` method. To run a
 > subset of cases, temporarily edit the relevant `[Params]` array (e.g. drop `Width` to
 > `[Params(640)]`) and rebuild. `--list flat` / `--list tree` enumerate the cases without running.
@@ -229,8 +230,67 @@ Extra columns (`Benchmarks/CaseMetrics.cs`):
 device. If none exists, Setup throws `No GPU accelerator available …`. Intel Xe iGPUs, for example,
 expose no OpenCL fp64.
 
-**Not covered yet:** `MandelbrotCalculator` with the D3D11 / Vulkan `IGpuKernel` (SP `UseGpuCompute`
-and deep `UseGpuPerturbation` paths) and the GPU QD reference orbit. Those are #1162 slice B.
+### Mandelbrot GPU kernel bench (`MandelbrotGpuKernelBench`, #1162)
+
+Source: [`Benchmarks/MandelbrotGpuKernelBench.cs`](../../Benchmarks/MandelbrotGpuKernelBench.cs).
+It's opt-in:
+
+```powershell
+dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --filter "*MandelbrotGpuKernelBench*"
+```
+
+It times `MandelbrotCalculator` with a GPU `IGpuKernel` attached. Matrix (16 cases):
+
+| Axis      | Values |
+|-----------|--------|
+| `Backend` | `D3D11`: `Rendering.D3D` `MandelbrotGpuKernel` on the default hardware adapter. `Vulkan`: `VulkanComputeKernel.TryCreateWithOwnContext()`. |
+| `Path`    | `SpShallow` (`UseGpuCompute`, zoom 1, 512 iter) · `SpZoom1e4` (`UseGpuCompute`, seahorse at `MaxGpuZoom` = 1e4, 2048 iter) · `PerturbInPT` (`UseGpuPerturbation`, seahorse at 1e15, 2048 iter) · `PerturbDeep` (same, 4096 iter) |
+| `Width`   | 640x360 · 1920x1080 |
+
+The coordinates match `MandelbrotBench`, so a GPU row can be read against its CPU twin:
+`PerturbInPT` vs `DeepHPInPT`, and `PerturbDeep` vs `DeepHP`.
+
+- **Fallback guard.** After the warm frame, Setup requires
+  `MandelbrotCalculator.LastFrameUsedGpuCompute` (new, #1162) or the existing
+  `LastFrameUsedGpuPerturbation` to be set; otherwise it throws. The perturbation paths also
+  require `IGpuKernel.SupportsPerturbation` (fp64 shader ops) and say so when it's missing.
+- **`UseGpuPerturbation` is process-wide static.** Setup sets it per case and Cleanup restores it.
+- **No device-memory column.** These kernels keep persistent device buffers rather than
+  allocating per frame, so there's no per-op churn to count. Measuring resident VRAM would need
+  DXGI `QueryVideoMemoryInfo` / Vulkan memory budgets; that isn't done. The `Device` column records
+  the adapter.
+- **`NA` on perturbation rows can be by design.** `TryRunGpuPerturbation` estimates the frame
+  (first band's time x band count). If that exceeds its 3 s budget, it throws
+  `GPU-PERTURB-TOO-SLOW` and **switches `UseGpuPerturbation` off for the session**, so the app
+  renders that view on the CPU too. The bench detects the flipped static and says so in the failure
+  message. Set `FF_GPU_PERTURB_DEBUG=1` to get every gate input and failure in
+  `%TEMP%\ff_gpu_perturb_86.log`.
+
+Excerpt from a real run (GeForce GT 710, a low-end Kepler card with 1/24-rate fp64; 2026-10-06):
+
+```text
+| Backend | Path        | Width | Mean         | Device                                       |
+|-------- |------------ |------ |-------------:|--------------------------------------------- |
+| D3D11   | SpShallow   | 640   |     6.800 ms | D3D11 NVIDIA GeForce GT 710                  |
+| D3D11   | SpShallow   | 1920  |    43.947 ms | D3D11 NVIDIA GeForce GT 710                  |
+| Vulkan  | SpShallow   | 1920  |   889.062 ms | Vulkan compute (DiscreteGpu: GeForce GT 710) |
+| D3D11   | PerturbInPT | 640   | 1,494.751 ms | D3D11 NVIDIA GeForce GT 710                  |
+| D3D11   | PerturbInPT | 1920  |           NA | -   (too-slow guard: ~200 ms x 108 bands > 3 s) |
+```
+
+How to read that run:
+
+- **The card is slower than the CPU here.** The i5-13420H CPU does `ShallowSP` 1080p in ~23 ms and
+  `DeepHPInPT` 640 (Accel on) in ~28 ms, against 44 ms and 1.49 s on the GPU. That's expected
+  for a card with crippled fp64. Run this on the hardware you care about.
+- **Vulkan SP is ~20x slower than D3D11 SP on the same card** (889 vs 44 ms at 1080p). That gap
+  is worth investigating before treating Vulkan as a drop-in for D3D11.
+
+**Not covered:** the GPU QD reference orbit (`UseGpuReferenceOrbit`, `MandelbrotRefOrbitGpu`). It
+runs once per view and is cached across frames, so a per-frame `Calculate()` bench would only hit it
+on the warm frame. It needs its own orbit-build bench. It uses a private ILGPU context and QD-only
+arithmetic (no transcendental intrinsics), so #1164 likely doesn't apply, but that's unverified.
+Resident VRAM for the D3D11/Vulkan kernels isn't measured either. Both are tracked in #1166.
 
 ---
 
@@ -381,6 +441,9 @@ dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --list flat
 
 # GPU 3D kernels (16 cases; needs an fp64 GPU, see the GPU calculator bench section)
 dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --filter "*GpuCalculatorBench*"
+
+# Mandelbrot on the D3D11 / Vulkan kernels (16 cases)
+dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --filter "*MandelbrotGpuKernelBench*"
 
 # CalcGen template quick-check
 dotnet run -c Release --project FracturingFogCLD.csproj -- --gentestbench
