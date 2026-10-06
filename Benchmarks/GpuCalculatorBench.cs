@@ -68,6 +68,8 @@ public enum GpuFamily
     Bicomplex,
     // #1173-C — a non-K slice axis (R, sliceW 0.4): CPU-only before G3.1.
     BicomplexR,
+    // #1173-G — the Coquaternion kernel (no GPU path before G3.5).
+    Coquaternion,
     // #1173-B — Mandelbox under an HDRI sky with IBL ambient + reflections (gradient sky before G2.3).
     MandelboxHdri,
     Mandelbulb,
@@ -89,7 +91,7 @@ public class GpuCalculatorBench
     [Params(GpuFamily.Mandelbox, GpuFamily.Menger, GpuFamily.Sierpinski,
             GpuFamily.Octahedron, GpuFamily.Dodecahedron, GpuFamily.MandelboxRot,
             GpuFamily.QJulia, GpuFamily.QMandel, GpuFamily.QMandelDual, GpuFamily.Kleinian, GpuFamily.KleinianNecklace, GpuFamily.Bicomplex,
-            GpuFamily.BicomplexR, GpuFamily.MandelboxHdri, GpuFamily.Mandelbulb)]
+            GpuFamily.BicomplexR, GpuFamily.Coquaternion, GpuFamily.MandelboxHdri, GpuFamily.Mandelbulb)]
     public GpuFamily Family { get; set; }
 
     [Params(640, 1920)]
@@ -134,6 +136,7 @@ public class GpuCalculatorBench
                 },
             },
             GpuFamily.Bicomplex  => new BicomplexMandelbrotCalculator(Width, height) { FractalParameters = fp },
+            GpuFamily.Coquaternion => new CoquaternionMandelbrotCalculator(Width, height) { FractalParameters = fp },
             GpuFamily.MandelboxHdri => new MandelboxCalculator(Width, height) { FractalParameters = new FractalParameters { Lighting = HdriScene(fx) } },
             GpuFamily.BicomplexR => new BicomplexMandelbrotCalculator(Width, height)
             {

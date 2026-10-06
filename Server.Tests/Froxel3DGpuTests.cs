@@ -124,7 +124,7 @@ public sealed class Froxel3DGpuTests
 
     // ── Hybrid frame vs full CPU frame, every GPU family ──────────────────
 
-    public enum Family { Mandelbulb, Mandelbox, Menger, Sierpinski, QuatJulia, QuatMandelbrot, Kleinian, Bicomplex }
+    public enum Family { Mandelbulb, Mandelbox, Menger, Sierpinski, QuatJulia, QuatMandelbrot, Kleinian, Bicomplex, Coquaternion }
 
     private static uint[] Render(Family fam, bool gpu, double fog)
     {
@@ -147,6 +147,7 @@ public sealed class Froxel3DGpuTests
             Family.QuatJulia      => new QuatJuliaCalculator(W, H),
             Family.QuatMandelbrot => new QuatMandelbrotCalculator(W, H),
             Family.Kleinian       => new KleinianCalculator(W, H),
+            Family.Coquaternion   => new CoquaternionMandelbrotCalculator(W, H),   // #1173-G
             _                     => (object)new BicomplexMandelbrotCalculator(W, H),
         };
         calc.ColorMap = ColorPalette.BuiltIns[0];
@@ -170,6 +171,7 @@ public sealed class Froxel3DGpuTests
     [InlineData(Family.QuatMandelbrot)]
     [InlineData(Family.Kleinian)]
     [InlineData(Family.Bicomplex)]
+    [InlineData(Family.Coquaternion)]
     public void GpuTracePlusFroxel_MatchesTheCpuFroxelFrame_OnTheHaze(Family fam)
     {
         const double fog = 0.05;

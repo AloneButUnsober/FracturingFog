@@ -146,11 +146,12 @@ public sealed class S1173MGpuRouteTests
     }
 
     [Fact]
-    public void Coquaternion_Says_It_Has_No_Kernel()
+    public void Coquaternion_Has_A_Kernel()
     {
+        // #1173-G — no longer "no GPU kernel"; whatever this host does with the frame
+        // (no device, a device error), it is never a missing-kernel fallback.
         var on = Run3D(new CoquaternionMandelbrotCalculator(32, 24), Params3D());
-        Assert.Equal(GpuRouteState.CpuFallback, on.State);
-        Assert.Equal("no GPU kernel", on.Reason);
+        Assert.NotEqual("no GPU kernel", on.Reason);
 
         var off = Run3D(new CoquaternionMandelbrotCalculator(32, 24),
             new FractalParameters { Lighting = LightingFxData.CreateDefault() });
