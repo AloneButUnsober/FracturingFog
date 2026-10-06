@@ -36,7 +36,7 @@ public struct QMandelGpuParams
 
 public sealed class QMandelGpuCalculator : IDisposable
 {
-    private Action<Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, QMandelGpuParams, ArrayView<uint>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<uint>>? _kernel;
+    private Action<Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, QMandelGpuParams, ArrayView<uint>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<uint>, ArrayView<uint>>? _kernel;
     private bool _initFailed;
     // #1169 — set once a device proved too slow for this kernel; per family and
     // device, process-wide, so new calculator instances don't re-probe it.
@@ -56,7 +56,7 @@ public sealed class QMandelGpuCalculator : IDisposable
         try
         {
             _kernel = acc.LoadAutoGroupedStreamKernel<
-                Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, QMandelGpuParams, ArrayView<uint>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<uint>>(QMandelKernel);
+                Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, QMandelGpuParams, ArrayView<uint>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<uint>, ArrayView<uint>>(QMandelKernel);
             return true;
         }
         catch (Exception ex)
@@ -67,7 +67,7 @@ public sealed class QMandelGpuCalculator : IDisposable
         }
     }
 
-    public bool Render(uint[] outBuffer, GpuRaymarchParams r, GpuShadingParams sp, QMandelGpuParams p, uint[]? palette = null, float[]? depthOut = null, CancellationToken ct = default, float[]? normalOut = null, float[]? hdrOut = null, uint[]? albedoLut = null)
+    public bool Render(uint[] outBuffer, GpuRaymarchParams r, GpuShadingParams sp, QMandelGpuParams p, uint[]? palette = null, float[]? depthOut = null, CancellationToken ct = default, float[]? normalOut = null, float[]? hdrOut = null, uint[]? albedoLut = null, uint[]? hdri = null)
     {
         if (!TryInit() || _kernel == null) return false;
         if (!GpuAcceleratorHost.TryAcquire(out var acc)) return false;
@@ -96,9 +96,13 @@ public sealed class QMandelGpuCalculator : IDisposable
             uint[] alb = albedoLut is { Length: >= 2 } ? albedoLut : GpuKernelUtils.PaletteOff;
             using var devAlbedo = GpuMemoryStats.Allocate1D<uint>(acc, alb.Length);
             devAlbedo.CopyFromCPU(alb);
+            // #1173-B / G2.3 — flattened HDRI environment (GpuHdriEnv), or the length-1 "off" dummy.
+            uint[] env = hdri is { Length: >= 2 } ? hdri : GpuKernelUtils.PaletteOff;
+            using var devHdri = GpuMemoryStats.Allocate1D<uint>(acc, env.Length);
+            devHdri.CopyFromCPU(env);
             // #1170 — tiled under the GPU watchdog; byte-identical to one launch.
             var kernel = _kernel;
-            var run = GpuTiledDispatch.Run(acc, r, (n, rt) => kernel(n, dev.View, rt, sp, p, devLut.View, devDepth.View, devNormal.View, devHdr.View, devAlbedo.View), ct);
+            var run = GpuTiledDispatch.Run(acc, r, (n, rt) => kernel(n, dev.View, rt, sp, p, devLut.View, devDepth.View, devNormal.View, devHdr.View, devAlbedo.View, devHdri.View), ct);
             if (run == GpuDispatchResult.TooSlow)
             {
                 // #1169 — this device can't render this kernel in useful time; stay on the CPU.
@@ -122,7 +126,7 @@ public sealed class QMandelGpuCalculator : IDisposable
     }
 
     private static void QMandelKernel(
-        Index1D tid, ArrayView<uint> output, GpuRaymarchParams r, GpuShadingParams sp, QMandelGpuParams p, ArrayView<uint> palette, ArrayView<float> depth, ArrayView<float> normals, ArrayView<float> hdr, ArrayView<uint> albedo)
+        Index1D tid, ArrayView<uint> output, GpuRaymarchParams r, GpuShadingParams sp, QMandelGpuParams p, ArrayView<uint> palette, ArrayView<float> depth, ArrayView<float> normals, ArrayView<float> hdr, ArrayView<uint> albedo, ArrayView<uint> hdri)
     {
         int idx = GpuKernelUtils.TilePixel(tid, in r);   // #1170 — pixel this thread shades
         int x = idx % r.Width;
@@ -148,7 +152,7 @@ public sealed class QMandelGpuCalculator : IDisposable
         // ray (byte-identical). Otherwise average DofSamples taps whose origin is
         // jittered across the aperture disc, re-aimed through the focal point.
         int dofN = (r.DofSamples > 1 && r.DofAperture > 0.0) ? r.DofSamples : 1;
-        if (dofN <= 1) { output[idx] = ShadeRay(r.CamX, r.CamY, r.CamZ, cdx, cdy, cdz, in r, in sp, in p, palette, depth, dIdx, normals, hdr, gIdx, albedo); return; }
+        if (dofN <= 1) { output[idx] = ShadeRay(r.CamX, r.CamY, r.CamZ, cdx, cdy, cdz, in r, in sp, in p, palette, depth, dIdx, normals, hdr, gIdx, albedo, hdri); return; }
         double fpx = r.CamX + cdx * r.DofFocus, fpy = r.CamY + cdy * r.DofFocus, fpz = r.CamZ + cdz * r.DofFocus;
         double aR = 0, aG = 0, aB = 0, aA = 0;
         for (int k = 0; k < dofN; k++)
@@ -161,7 +165,7 @@ public sealed class QMandelGpuCalculator : IDisposable
             double loz = r.CamZ + r.RightZ * lx + r.UpZ * ly;
             double ddx = fpx - lox, ddy = fpy - loy, ddz = fpz - loz;
             double il = 1.0 / Math.Sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
-            uint c = ShadeRay(lox, loy, loz, ddx * il, ddy * il, ddz * il, in r, in sp, in p, palette, depth, -1, normals, hdr, -1, albedo);
+            uint c = ShadeRay(lox, loy, loz, ddx * il, ddy * il, ddz * il, in r, in sp, in p, palette, depth, -1, normals, hdr, -1, albedo, hdri);
             aR += (c >> 16) & 0xFF; aG += (c >> 8) & 0xFF; aB += c & 0xFF; aA += (c >> 24) & 0xFF;
         }
         double inv = 1.0 / dofN;
@@ -175,10 +179,10 @@ public sealed class QMandelGpuCalculator : IDisposable
     private static uint ShadeRay(
         double rox, double roy, double roz, double rdx, double rdy, double rdz,
         in GpuRaymarchParams r, in GpuShadingParams sp, in QMandelGpuParams p, ArrayView<uint> palette,
-        ArrayView<float> depth, int depthIdx, ArrayView<float> normals, ArrayView<float> hdr, int gIdx, ArrayView<uint> albedo)
+        ArrayView<float> depth, int depthIdx, ArrayView<float> normals, ArrayView<float> hdr, int gIdx, ArrayView<uint> albedo, ArrayView<uint> hdri)
     {
         var (sphereHit, tEn, _) = GpuKernelUtils.SphereClipFrom(rox, roy, roz, rdx, rdy, rdz, in r);
-        if (!sphereHit) return GpuKernelUtils.MissColor(rdy, in r, in sp);
+        if (!sphereHit) return GpuKernelUtils.MissColor(hdri, rdx, rdy, rdz, in r, in sp);
 
         double px = rox + rdx * tEn;
         double py = roy + rdy * tEn;
@@ -196,7 +200,7 @@ public sealed class QMandelGpuCalculator : IDisposable
             tT += d;
         }
 
-        if (!hit) return GpuKernelUtils.MissColor(rdy, in r, in sp);
+        if (!hit) return GpuKernelUtils.MissColor(hdri, rdx, rdy, rdz, in r, in sp);
         if (depthIdx >= 0) depth[depthIdx] = (float)tT;   // #1070 — ray distance to the hit
 
         double h = r.Eps * 2;
@@ -268,7 +272,7 @@ public sealed class QMandelGpuCalculator : IDisposable
             return GpuKernelUtils.EncodeSurfaceAov(in spL, nx, ny, nz, rdx, rdy, rdz, px, py, pz,
                 sh1, sh2, sh3, ao, aR, aG, aB, tT, hitStep);
         var (br, bg, bb) = GpuKernelUtils.ComposeSurfacePbr(
-            in spL, nx, ny, nz, rdx, rdy, rdz, px, py, pz, sh1, sh2, sh3, ao, aR, aG, aB);
+            hdri, in spL, nx, ny, nz, rdx, rdy, rdz, px, py, pz, sh1, sh2, sh3, ao, aR, aG, aB);
 
         // P7c.3/16b — N-bounce reflection (QMandel DE).
         if (sp.ReflectStrength > 0)
@@ -304,7 +308,7 @@ public sealed class QMandelGpuCalculator : IDisposable
                     tR += hR;
                     if (tR > rMax) break;
                 }
-                var (rcR, rcG, rcB) = GpuKernelUtils.ReflectShade(hitR, hitTR, bDirY, in sp);
+                var (rcR, rcG, rcB) = GpuKernelUtils.ReflectShade(hitR, hitTR, bDirX, bDirY, bDirZ, in sp, hdri);
                 accR += rcR * w;
                 accG += rcG * w;
                 accB += rcB * w;

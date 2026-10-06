@@ -227,6 +227,7 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
             var sp = GpuShadingParams.Build(in fx);
             // #1172 / G2.2 — the CPU trace's colour-map albedo (same smooth coefficients).
             uint[] albedoLut = GpuAlbedoLut.Bake(ColorMap, 192.0, 0.5, sceneRadius, ref sp);
+            uint[]? hdriEnv = GpuHdriEnv.Resolve(in fx, ref sp);   // #1173-B / G2.3 — HDRI sky, ambient + reflections
             if (sierp)
             {
                 var sip = new SierpinskiGpuParams
@@ -235,7 +236,7 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
                     DEIter = deIter, SceneRadius = sceneRadius,
                 };
                 _gpuSierp ??= new SierpinskiGpuCalculator();
-                bool gpuOk = _gpuSierp.Render(renderBuffer, rp, sp, sip, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr, albedoLut);
+                bool gpuOk = _gpuSierp.Render(renderBuffer, rp, sp, sip, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr, albedoLut, hdriEnv);
                 LastGpuRoute = Gpu3DRoute.AfterRender(gpuOk, _gpuSierp.LastError);
                 if (gpuOk)
                 {
@@ -256,7 +257,7 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
                     DEIter = deIter, SceneRadius = sceneRadius,
                 };
                 _gpuMenger ??= new MengerGpuCalculator();
-                bool gpuOk = _gpuMenger.Render(renderBuffer, rp, sp, mp, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr, albedoLut);
+                bool gpuOk = _gpuMenger.Render(renderBuffer, rp, sp, mp, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr, albedoLut, hdriEnv);
                 LastGpuRoute = Gpu3DRoute.AfterRender(gpuOk, _gpuMenger.LastError);
                 if (gpuOk)
                 {

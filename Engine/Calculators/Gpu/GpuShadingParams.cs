@@ -23,9 +23,9 @@
 // P7c.4 — adds full PBR/SSS/Triplanar/Caustics/IBL: Roughness +
 // SpecularStrength (GGX D·G·F per-light), SubSurfaceStrength (Burley backlight
 // lobe per-light), TriplanarKind+Scale+Strength+Tint (procedural texture
-// modulating albedo pre-lighting), IblStrength (sky-gradient at the surface
-// normal blended into ambient — HDRI env sampling remains GPU-blocked, the
-// gradient is the same MVP fallback the CPU pipe uses), CausticsStrength +
+// modulating albedo pre-lighting), IblStrength (environment at the surface
+// normal blended into ambient — the HDRI when one is loaded (#1173-B, HdriOn),
+// else the Solid / gradient env the CPU pipe uses), CausticsStrength +
 // FloorY + Scale + Color + AnimSpeed (procedural pattern in world XZ with
 // height + NdotUp gating). Cheap-palette albedo still feeds these — full
 // color-map GPU port is its own future phase.
@@ -256,6 +256,16 @@ public struct GpuShadingParams
     /// can't take System.Boolean fields on every backend). 1 by default
     /// to match the post-Phase 16b CPU behaviour.</summary>
     public int ShowSkyBackdrop;
+    /// <summary>#1173-B / G2.3 — 1 when the environment buffer the kernel gets holds a
+    /// flattened HDRI (<see cref="GpuHdriEnv"/>, the <c>ReliefHdriBuffer</c> layout):
+    /// miss pixels, IBL ambient and reflections sample it the way the CPU
+    /// <c>ShadingPipeline.SkyColorHdri</c> / <c>SampleEnvAmbientHdri</c> do.
+    /// 0 = the gradient sky.</summary>
+    public int HdriOn;
+    /// <summary>#1173-B — 1 when <c>SkyMode</c> is Solid: the CPU's env ambient
+    /// (<c>ShadingPipeline.SampleEnvAmbient</c>) then returns the flat top colour
+    /// instead of the gradient. Miss pixels keep the gradient, as on the CPU.</summary>
+    public int EnvSolid;
     /// <summary>#1061 — background fog fraction for ray-miss pixels (0 = off),
     /// precomputed CPU-side from LightingFxData.FogBackground /
     /// FogBackgroundDistance / FogDensity so kernels skip the exp.</summary>
@@ -399,6 +409,7 @@ public struct GpuShadingParams
 
             IblStrength        = fx.IblStrength,
             ShowSkyBackdrop    = fx.ShowSkyBackdrop ? 1 : 0,
+            EnvSolid           = fx.SkyMode == SkyMode.Solid ? 1 : 0,
             BackgroundFogF     = FracturingFog.Rendering.Lighting.ShadingPipeline.BackgroundFogFraction(in fx),
 
             CausticsStrength   = fx.CausticsStrength,

@@ -18,9 +18,9 @@
 //   * No exception throw.
 //
 // Pattern: methods take primitives or the shared GpuRaymarchParams struct.
-// They never touch ArrayView<T> — that stays in the per-fractal kernel so
-// each kernel controls its own output layout (uint color, optional depth /
-// normal G-buffer once 12b lands).
+// Output buffers stay in the per-fractal kernel so each kernel controls its own
+// layout; the read-only lookup tables (palette, albedo LUT, #1173-B HDRI) are
+// passed in as ArrayView<uint>.
 
 using System;
 using ILGPU;
@@ -206,12 +206,14 @@ internal static class GpuKernelUtils
     }
 
     /// <summary>Ray-miss color picker. Reads <see cref="GpuShadingParams.ShowSkyBackdrop"/>:
-    /// 1 → gradient sky from BgTop/BgBot, 0 → flat
-    /// <see cref="GpuRaymarchParams.InSetColor"/>. Used by every per-fractal
-    /// kernel for sphere-clip and march-out miss pixels.</summary>
-    public static uint MissColor(double rdy, in GpuRaymarchParams r, in GpuShadingParams sp)
+    /// 1 → sky (the HDRI along the ray when <see cref="GpuShadingParams.HdriOn"/>, else
+    /// the BgTop/BgBot gradient), 0 → flat <see cref="GpuRaymarchParams.InSetColor"/>.
+    /// Used by every per-fractal kernel for sphere-clip and march-out miss pixels.
+    /// Mirrors <c>ShadingPipeline.MissColor</c>.</summary>
+    public static uint MissColor(ArrayView<uint> hdri, double rdx, double rdy, double rdz,
+        in GpuRaymarchParams r, in GpuShadingParams sp)
     {
-        uint bg = sp.ShowSkyBackdrop == 0 ? r.InSetColor : SkyColorGradient(rdy, in sp);
+        uint bg = sp.ShowSkyBackdrop == 0 ? r.InSetColor : SkyColor(hdri, rdx, rdy, rdz, 0.0, in sp);
         if (sp.BackgroundFogF <= 0) return bg;
         // #1061 — background fog: blend toward the sky gradient tinted by the fog
         // colour (FogR/G/B, byte scale; 255 = untinted). Mirrors the CPU
@@ -230,12 +232,85 @@ internal static class GpuKernelUtils
         return 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | (uint)B;
     }
 
+    /// <summary>#1173-B — equirectangular, roughness-convolved HDRI sample (linear RGB,
+    /// unclamped) from a <c>ReliefHdriBuffer.Flatten</c> buffer. Line-for-line twin of
+    /// <c>ReliefHdriBuffer.Sample</c> / <c>HdriImage.Sample(dir, roughness)</c>: mip by
+    /// roughness²·(levels−1), nearest mip below, bilinear with u-wrap / v-clamp.</summary>
+    public static (double R, double G, double B) SampleHdri(
+        ArrayView<uint> hdri, double dx, double dy, double dz, double roughness)
+    {
+        double cy = dy < -1.0 ? -1.0 : (dy > 1.0 ? 1.0 : dy);
+        double u = 0.5 + Math.Atan2(dz, dx) * (1.0 / (2.0 * Math.PI));
+        double v = Math.Acos(cy) * (1.0 / Math.PI);
+        int levels = (int)hdri[0];
+        int mip = 0;
+        if (roughness > 0 && levels > 1)
+        {
+            if (roughness > 1) roughness = 1;
+            double level = roughness * roughness * (levels - 1);
+            mip = (int)Math.Floor(level);
+            if (mip >= levels - 1) mip = levels - 1;
+        }
+        int off = (int)hdri[1 + 3 * mip + 0];
+        int mw = (int)hdri[1 + 3 * mip + 1];
+        int mh = (int)hdri[1 + 3 * mip + 2];
+
+        u -= Math.Floor(u);
+        if (v < 0) v = 0; else if (v > 1) v = 1;
+        double fx = u * (mw - 1);
+        double fy = v * (mh - 1);
+        int x0 = (int)Math.Floor(fx);
+        int y0 = (int)Math.Floor(fy);
+        int x1 = x0 + 1; if (x1 >= mw) x1 = 0;
+        int y1 = y0 + 1; if (y1 > mh - 1) y1 = mh - 1;
+        double tx = fx - x0;
+        double ty = fy - y0;
+        int i00 = off + (y0 * mw + x0) * 3;
+        int i10 = off + (y0 * mw + x1) * 3;
+        int i01 = off + (y1 * mw + x0) * 3;
+        int i11 = off + (y1 * mw + x1) * 3;
+        double R = (1 - tx) * (1 - ty) * Px(hdri, i00)     + tx * (1 - ty) * Px(hdri, i10)
+                 + (1 - tx) *      ty  * Px(hdri, i01)     + tx *      ty  * Px(hdri, i11);
+        double G = (1 - tx) * (1 - ty) * Px(hdri, i00 + 1) + tx * (1 - ty) * Px(hdri, i10 + 1)
+                 + (1 - tx) *      ty  * Px(hdri, i01 + 1) + tx *      ty  * Px(hdri, i11 + 1);
+        double B = (1 - tx) * (1 - ty) * Px(hdri, i00 + 2) + tx * (1 - ty) * Px(hdri, i10 + 2)
+                 + (1 - tx) *      ty  * Px(hdri, i01 + 2) + tx *      ty  * Px(hdri, i11 + 2);
+        return (R, G, B);
+    }
+
+    private static float Px(ArrayView<uint> hdri, int i) => Interop.IntAsFloat(hdri[i]);
+
+    /// <summary>#1173-B — packed sky colour along a ray: the HDRI (clamped and truncated
+    /// to bytes, as <c>ShadingPipeline.SkyColorHdri</c>) when <see cref="GpuShadingParams.HdriOn"/>,
+    /// else the gradient. <paramref name="roughness"/> 0 = mip 0 (the no-roughness overload).</summary>
+    public static uint SkyColor(ArrayView<uint> hdri, double rdx, double rdy, double rdz,
+        double roughness, in GpuShadingParams sp)
+    {
+        if (sp.HdriOn == 0) return SkyColorGradient(rdy, in sp);
+        var (r, g, b) = SampleHdri(hdri, rdx, rdy, rdz, roughness);
+        double R = r * 255.0, G = g * 255.0, B = b * 255.0;
+        if (R < 0) R = 0; else if (R > 255) R = 255;
+        if (G < 0) G = 0; else if (G > 255) G = 255;
+        if (B < 0) B = 0; else if (B > 255) B = 255;
+        return 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | (uint)B;
+    }
+
+    /// <summary>#1173-B — environment radiance for IBL ambient and reflection hits (linear,
+    /// 1 = white). Twin of <c>ShadingPipeline.SampleEnvAmbientHdri</c>: the HDRI when on,
+    /// else <c>SampleEnvAmbient</c> (Solid → the top colour, otherwise the gradient on dy).</summary>
+    public static (double R, double G, double B) EnvRadiance(ArrayView<uint> hdri,
+        double dx, double dy, double dz, double roughness, in GpuShadingParams sp)
+    {
+        if (sp.HdriOn != 0) return SampleHdri(hdri, dx, dy, dz, roughness);
+        if (sp.EnvSolid != 0) return (sp.SkyTopR / 255.0, sp.SkyTopG / 255.0, sp.SkyTopB / 255.0);
+        var (eR, eG, eB) = SkyGradient(dy, sp.SkyTopR, sp.SkyTopG, sp.SkyTopB, sp.SkyBotR, sp.SkyBotG, sp.SkyBotB);
+        return (eR / 255.0, eG / 255.0, eB / 255.0);
+    }
+
     /// <summary>Vertical gradient sky lookup on the GPU. Mirrors the CPU
     /// <c>ShadingPipeline.SkyColor</c> formula bit-for-bit (linear lerp on
-    /// <c>0.5*(rdy+1)</c>). Drives the ray-miss / sphere-clip-miss
-    /// backdrop. HDRI sampling stays CPU-only — the kernel falls back to
-    /// the gradient sky on those paths until a future phase ships a GPU
-    /// equirect sampler with HDRI buffer upload.</summary>
+    /// <c>0.5*(rdy+1)</c>). The gradient half of <see cref="SkyColor"/>, and the
+    /// background-fog target (the CPU fogs toward the gradient even under an HDRI).</summary>
     public static uint SkyColorGradient(double rdy, in GpuShadingParams sp)
     {
         double t = rdy + 1.0;
@@ -686,24 +761,36 @@ internal static class GpuKernelUtils
         return reflectStrength * F;
     }
 
-    /// <summary>P7c.3 — bounce color for a reflect-march. On hit returns the
-    /// sky-tint along the bounce direction attenuated by <c>exp(-tR·0.15)</c>
-    /// (cheap env-proxy until IBL GPU port lands); on miss returns the sky
-    /// gradient directly. Matches the CPU pipe's reflection block intent —
-    /// HDRI env sampling is unavailable on GPU so sky-tint stands in.</summary>
+    /// <summary>P7c.3 — bounce color for a reflect-march, bytes-as-double. Mirrors the
+    /// CPU reflection block: on hit, the environment radiance along the bounce
+    /// (<see cref="EnvRadiance"/>, roughness-convolved under an HDRI) attenuated by
+    /// <c>exp(-tR·0.15)</c>; on miss, the sky colour along it (<see cref="SkyColor"/>
+    /// under an HDRI, #1173-B). Gradient scenes keep their pre-#1173-B values.</summary>
     public static (double rR, double rG, double rB) ReflectShade(
-        bool hit, double hitTr, double rry,
-        in GpuShadingParams sp)
+        bool hit, double hitTr, double rrx, double rry, double rrz,
+        in GpuShadingParams sp, ArrayView<uint> hdri)
     {
-        var (sR, sG, sB) = SkyGradient(rry,
-            sp.SkyTopR, sp.SkyTopG, sp.SkyTopB,
-            sp.SkyBotR, sp.SkyBotG, sp.SkyBotB);
         if (hit)
         {
             double atten = Math.Exp(-hitTr * 0.15);
-            return (sR * atten, sG * atten, sB * atten);
+            if (sp.HdriOn != 0 || sp.EnvSolid != 0)
+            {
+                var (eR, eG, eB) = EnvRadiance(hdri, rrx, rry, rrz, sp.Roughness, in sp);
+                return (eR * 255.0 * atten, eG * 255.0 * atten, eB * 255.0 * atten);
+            }
+            var (hR, hG, hB) = SkyGradient(rry,
+                sp.SkyTopR, sp.SkyTopG, sp.SkyTopB,
+                sp.SkyBotR, sp.SkyBotG, sp.SkyBotB);
+            return (hR * atten, hG * atten, hB * atten);
         }
-        return (sR, sG, sB);
+        if (sp.HdriOn != 0)
+        {
+            uint c = SkyColor(hdri, rrx, rry, rrz, sp.Roughness, in sp);
+            return ((c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF);
+        }
+        return SkyGradient(rry,
+            sp.SkyTopR, sp.SkyTopG, sp.SkyTopB,
+            sp.SkyBotR, sp.SkyBotG, sp.SkyBotB);
     }
 
     /// <summary>P7c.4 — Cook-Torrance GGX specular accumulator for one
@@ -870,6 +957,7 @@ internal static class GpuKernelUtils
     /// Caustics/IBL all 0 + Metallic 0, the math here collapses to
     /// <see cref="ComposeSurfaceNoFog"/> bit-for-bit.</summary>
     public static (double br, double bg, double bb) ComposeSurfacePbr(
+        ArrayView<uint> hdri,
         in GpuShadingParams sp,
         double nx, double ny, double nz,
         double rdx, double rdy, double rdz,
@@ -953,22 +1041,19 @@ internal static class GpuKernelUtils
             sssB = s1B + s2B + s3B;
         }
 
-        // IBL-modulated ambient via sky gradient at the surface normal.
-        // HDRI env sampling stays GPU-blocked — gradient is the same MVP
-        // fallback ShadingPipeline.SampleEnvAmbient hands back when SkyMode !=
-        // Hdri or the environment name doesn't resolve.
+        // IBL-modulated ambient: the environment at the surface normal, as the CPU
+        // ShadingPipeline.SampleEnvAmbientHdri — the HDRI (mip 0) when one is
+        // loaded (#1173-B), else the Solid / gradient SampleEnvAmbient.
         double ambR = sp.AmbientStrength;
         double ambG = sp.AmbientStrength;
         double ambB = sp.AmbientStrength;
         if (sp.IblStrength > 0)
         {
-            var (eR, eG, eB) = SkyGradient(ny,
-                sp.SkyTopR, sp.SkyTopG, sp.SkyTopB,
-                sp.SkyBotR, sp.SkyBotG, sp.SkyBotB);
+            var (eR, eG, eB) = EnvRadiance(hdri, nx, ny, nz, 0.0, in sp);
             double w = sp.IblStrength;
-            ambR = ambR * (1.0 - w) + (eR / 255.0) * w;
-            ambG = ambG * (1.0 - w) + (eG / 255.0) * w;
-            ambB = ambB * (1.0 - w) + (eB / 255.0) * w;
+            ambR = ambR * (1.0 - w) + eR * w;
+            ambG = ambG * (1.0 - w) + eG * w;
+            ambB = ambB * (1.0 - w) + eB * w;
         }
 
         // Metal suppresses diffuse on the spec-active path.

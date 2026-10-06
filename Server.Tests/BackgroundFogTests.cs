@@ -75,7 +75,8 @@ public sealed class BackgroundFogTests
             fx.FogColor = 0xFFFFD0A0u;
             var sp = GpuShadingParams.Build(fx);
             var r = new GpuRaymarchParams { InSetColor = 0xFF101010u };
-            uint gpu = (uint)GpuMissColor.Invoke(null, new object[] { rdy, r, sp })!;
+            // #1173-B — (hdri, rdx, rdy, rdz, r, sp); no HDRI loaded, so the empty view is never read.
+            uint gpu = (uint)GpuMissColor.Invoke(null, new object[] { default(ILGPU.ArrayView<uint>), 0.0, rdy, 0.0, r, sp })!;
             // CPU with the gradient sky (no HDRI loaded), same in-set colour.
             uint cpu = ShadingPipeline.MissColor(0, rdy, 0, fx, 0xFF101010u);
             Assert.True(Math.Abs((int)((gpu >> 16) & 0xFF) - (int)((cpu >> 16) & 0xFF)) <= 1

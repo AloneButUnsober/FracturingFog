@@ -213,8 +213,9 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, 
             var sp = GpuShadingParams.Build(in fx);
             // #1172 / G2.2 — the CPU trace's colour-map albedo (same smooth coefficients).
             uint[] albedoLut = GpuAlbedoLut.Bake(ColorMap, 192.0, 0.5, sceneRadius, ref sp);
+            uint[]? hdriEnv = GpuHdriEnv.Resolve(in fx, ref sp);   // #1173-B / G2.3 — HDRI sky, ambient + reflections
             _gpu ??= new MandelboxGpuCalculator();
-            bool gpuOk = _gpu.Render(renderBuffer, rp, sp, bp, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr, albedoLut);
+            bool gpuOk = _gpu.Render(renderBuffer, rp, sp, bp, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr, albedoLut, hdriEnv);
             LastGpuRoute = Gpu3DRoute.AfterRender(gpuOk, _gpu.LastError);
             if (gpuOk)
             {
