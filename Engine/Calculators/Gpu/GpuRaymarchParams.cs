@@ -77,4 +77,12 @@ public struct GpuRaymarchParams
     // Cam) already on this struct supplies the lens plane + focal point.
     public double DofAperture, DofFocus;
     public int DofSamples;
+
+    // #1170 — tiled dispatch under the GPU watchdog. Set per launch by
+    // GpuTiledDispatch, never by callers. TileRun 0 → one launch over the
+    // whole frame (thread i = pixel i). Otherwise thread i maps to pixel
+    // (i / TileRun) * TileBlock + TileStart + (i % TileRun): a run of TileRun
+    // pixels from every TileBlock-pixel block, so each launch samples the
+    // whole frame evenly. See GpuKernelUtils.TilePixel.
+    public int TileBlock, TileStart, TileRun;
 }

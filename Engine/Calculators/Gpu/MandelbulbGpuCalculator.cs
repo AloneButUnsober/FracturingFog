@@ -24,6 +24,7 @@
 // throw at Render time.
 
 using System;
+using System.Threading;
 
 using ILGPU;
 using ILGPU.Runtime;
@@ -83,7 +84,7 @@ public sealed class MandelbulbGpuCalculator : IDisposable
     /// <summary>Render one frame into <paramref name="outBuffer"/>. Returns
     /// false on init or kernel failure — caller falls back to CPU. The
     /// output buffer length must equal <c>r.Width * r.Height</c>.</summary>
-    public bool Render(uint[] outBuffer, GpuRaymarchParams r, GpuShadingParams sp, MandelbulbGpuParams p, uint[]? palette = null, float[]? depthOut = null)
+    public bool Render(uint[] outBuffer, GpuRaymarchParams r, GpuShadingParams sp, MandelbulbGpuParams p, uint[]? palette = null, float[]? depthOut = null, CancellationToken ct = default)
     {
         if (!TryInit() || _kernel == null) return false;
         if (!GpuAcceleratorHost.TryAcquire(out var acc)) return false;
@@ -102,8 +103,10 @@ public sealed class MandelbulbGpuCalculator : IDisposable
             // length-1 dummy so the kernel arity stays fixed.
             bool wantDepth = depthOut != null && depthOut.Length == total;
             using var devDepth = GpuMemoryStats.Allocate1D<float>(acc, wantDepth ? total : 1);
-            _kernel(total, dev.View, r, sp, p, devLut.View, devDepth.View);
-            acc.Synchronize();
+            // #1170 — tiled under the GPU watchdog; byte-identical to one launch.
+            var kernel = _kernel;
+            if (!GpuTiledDispatch.Run(acc, r, (n, rt) => kernel(n, dev.View, rt, sp, p, devLut.View, devDepth.View), ct))
+                return false;
             dev.CopyToCPU(outBuffer);
             if (wantDepth) devDepth.CopyToCPU(depthOut!);
             return true;
@@ -118,8 +121,9 @@ public sealed class MandelbulbGpuCalculator : IDisposable
 
     // ── Kernel ──────────────────────────────────────────────────────────────
     private static void BulbKernel(
-        Index1D idx, ArrayView<uint> output, GpuRaymarchParams r, GpuShadingParams sp, MandelbulbGpuParams p, ArrayView<uint> palette, ArrayView<float> depth)
+        Index1D tid, ArrayView<uint> output, GpuRaymarchParams r, GpuShadingParams sp, MandelbulbGpuParams p, ArrayView<uint> palette, ArrayView<float> depth)
     {
+        int idx = GpuKernelUtils.TilePixel(tid, in r);   // #1170 — pixel this thread shades
         int x = idx % r.Width;
         int y = idx / r.Width;
         if (y >= r.Height) return;
@@ -128,7 +132,7 @@ public sealed class MandelbulbGpuCalculator : IDisposable
         // it with the ray distance. Thin-lens taps leave the miss.
         bool wantDepth = depth.Length >= output.Length;
         if (wantDepth) depth[idx] = float.PositiveInfinity;
-        int dIdx = wantDepth ? idx.X : -1;
+        int dIdx = wantDepth ? idx : -1;
 
         var (cdx, cdy, cdz) = GpuKernelUtils.BuildPrimaryRay(x, y, in r);
 

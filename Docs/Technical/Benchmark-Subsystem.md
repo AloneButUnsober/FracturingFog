@@ -223,13 +223,16 @@ launch (#1169). A CUDA launch failure poisons the whole process, and `GpuAcceler
 latches GPU 3D off for the session (`ReportRenderFault`). Every case after a fault reports
 `NA` with "GPU device faulted … disabled for this session". So the `GpuFamily` enum declares
 Mandelbulb last, which keeps the other seven measurable. The order has to live in the enum because
-BenchmarkDotNet runs param values in **value order** and ignores the `[Params]` order.
+BenchmarkDotNet runs param values in **value order** and ignores the `[Params]` order. `Family` is
+also declared before `Width`, making it the outer axis, so both Mandelbulb cases run after every
+other case.
 
-**Smallest frames first.** On a slow GPU, a single 1920x1080 raymarch launch can outlast the
-Windows GPU watchdog (TDR). The driver resets the device, which is the same sticky fault and the
-same latch (#1170 proposes tiling the dispatch, as #1044 did for relief). `Width` is therefore
-declared before `Family`, making it the outer axis, so every 640x360 case runs before any 1080p
-one.
+**Long frames are tiled.** A single 1920x1080 raymarch launch on a slow GPU used to outlast the
+Windows GPU watchdog (TDR). The driver reset the device, which is the same sticky fault and the
+same latch. Since #1170 the kernels go out through `GpuTiledDispatch`
+(`Engine/Calculators/Gpu/GpuTiledDispatch.cs`): frames over 16384 pixels are split into launches
+of about 0.25 s each, sized from a small probe launch. The timed frame includes every launch and
+its `Synchronize`, so the number is still one whole frame.
 
 Extra columns (`Benchmarks/CaseMetrics.cs`):
 

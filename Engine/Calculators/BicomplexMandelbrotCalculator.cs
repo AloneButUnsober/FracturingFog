@@ -207,7 +207,7 @@ public sealed class BicomplexMandelbrotCalculator : IFractalCalculator, IStereoE
             };
             var sp = GpuShadingParams.Build(in fx);
             _gpu ??= new BicomplexGpuCalculator();
-            if (_gpu.Render(renderBuffer, rp, sp, bp, fx.VolumePalette, gpuDepth))
+            if (_gpu.Render(renderBuffer, rp, sp, bp, fx.VolumePalette, gpuDepth, ct))
             {
                 ScreenSpacePost.ApplyFroxel3D(renderBuffer, null, gpuDepth, width, height,
                     in froxelView, in froxelFx, in deStruct);   // #1070 — GPU trace + CPU froxel

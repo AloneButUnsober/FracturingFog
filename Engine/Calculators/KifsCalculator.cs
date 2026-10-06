@@ -219,7 +219,7 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
                     DEIter = deIter, SceneRadius = sceneRadius,
                 };
                 _gpuSierp ??= new SierpinskiGpuCalculator();
-                if (_gpuSierp.Render(renderBuffer, rp, sp, sip, fx.VolumePalette, gpuDepth))
+                if (_gpuSierp.Render(renderBuffer, rp, sp, sip, fx.VolumePalette, gpuDepth, ct))
                 {
                     ScreenSpacePost.ApplyFroxel3D(renderBuffer, null, gpuDepth, width, height,
                         in froxelView, in froxelFx, new DelegateDeAdapter(deDelegate));   // #1070 — GPU trace + CPU froxel / #1078 shadowed by the DE
@@ -237,7 +237,7 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
                     DEIter = deIter, SceneRadius = sceneRadius,
                 };
                 _gpuMenger ??= new MengerGpuCalculator();
-                if (_gpuMenger.Render(renderBuffer, rp, sp, mp, fx.VolumePalette, gpuDepth))
+                if (_gpuMenger.Render(renderBuffer, rp, sp, mp, fx.VolumePalette, gpuDepth, ct))
                 {
                     ScreenSpacePost.ApplyFroxel3D(renderBuffer, null, gpuDepth, width, height,
                         in froxelView, in froxelFx, new DelegateDeAdapter(deDelegate));   // #1070 — GPU trace + CPU froxel / #1078 shadowed by the DE
