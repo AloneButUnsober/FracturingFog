@@ -33,7 +33,7 @@ public struct MandelboxGpuParams
 
 public sealed class MandelboxGpuCalculator : IDisposable
 {
-    private Action<Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, MandelboxGpuParams, ArrayView<uint>, ArrayView<float>>? _kernel;
+    private Action<Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, MandelboxGpuParams, ArrayView<uint>, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _kernel;
     private bool _initFailed;
     // #1169 — set once a device proved too slow for this kernel; per family and
     // device, process-wide, so new calculator instances don't re-probe it.
@@ -53,7 +53,7 @@ public sealed class MandelboxGpuCalculator : IDisposable
         try
         {
             _kernel = acc.LoadAutoGroupedStreamKernel<
-                Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, MandelboxGpuParams, ArrayView<uint>, ArrayView<float>>(BoxKernel);
+                Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, MandelboxGpuParams, ArrayView<uint>, ArrayView<float>, ArrayView<float>, ArrayView<float>>(BoxKernel);
             return true;
         }
         catch (Exception ex)
@@ -64,7 +64,7 @@ public sealed class MandelboxGpuCalculator : IDisposable
         }
     }
 
-    public bool Render(uint[] outBuffer, GpuRaymarchParams r, GpuShadingParams sp, MandelboxGpuParams p, uint[]? palette = null, float[]? depthOut = null, CancellationToken ct = default)
+    public bool Render(uint[] outBuffer, GpuRaymarchParams r, GpuShadingParams sp, MandelboxGpuParams p, uint[]? palette = null, float[]? depthOut = null, CancellationToken ct = default, float[]? normalOut = null, float[]? hdrOut = null)
     {
         if (!TryInit() || _kernel == null) return false;
         if (!GpuAcceleratorHost.TryAcquire(out var acc)) return false;
@@ -84,9 +84,14 @@ public sealed class MandelboxGpuCalculator : IDisposable
             // length-1 dummy so the kernel arity stays fixed.
             bool wantDepth = depthOut != null && depthOut.Length == total;
             using var devDepth = GpuMemoryStats.Allocate1D<float>(acc, wantDepth ? total : 1);
+            // #1172 — optional normal + HDR G-buffers (3 floats / pixel); length-1 dummies when off.
+            bool wantNormal = normalOut != null && normalOut.Length == 3 * total;
+            bool wantHdr = hdrOut != null && hdrOut.Length == 3 * total;
+            using var devNormal = GpuMemoryStats.Allocate1D<float>(acc, wantNormal ? 3L * total : 1);
+            using var devHdr = GpuMemoryStats.Allocate1D<float>(acc, wantHdr ? 3L * total : 1);
             // #1170 — tiled under the GPU watchdog; byte-identical to one launch.
             var kernel = _kernel;
-            var run = GpuTiledDispatch.Run(acc, r, (n, rt) => kernel(n, dev.View, rt, sp, p, devLut.View, devDepth.View), ct);
+            var run = GpuTiledDispatch.Run(acc, r, (n, rt) => kernel(n, dev.View, rt, sp, p, devLut.View, devDepth.View, devNormal.View, devHdr.View), ct);
             if (run == GpuDispatchResult.TooSlow)
             {
                 // #1169 — this device can't render this kernel in useful time; stay on the CPU.
@@ -97,6 +102,8 @@ public sealed class MandelboxGpuCalculator : IDisposable
             if (run != GpuDispatchResult.Completed) return false;
             dev.CopyToCPU(outBuffer);
             if (wantDepth) devDepth.CopyToCPU(depthOut!);
+            if (wantNormal) devNormal.CopyToCPU(normalOut!);
+            if (wantHdr) devHdr.CopyToCPU(hdrOut!);
             return true;
         }
         catch (Exception ex)
@@ -108,7 +115,7 @@ public sealed class MandelboxGpuCalculator : IDisposable
     }
 
     private static void BoxKernel(
-        Index1D tid, ArrayView<uint> output, GpuRaymarchParams r, GpuShadingParams sp, MandelboxGpuParams p, ArrayView<uint> palette, ArrayView<float> depth)
+        Index1D tid, ArrayView<uint> output, GpuRaymarchParams r, GpuShadingParams sp, MandelboxGpuParams p, ArrayView<uint> palette, ArrayView<float> depth, ArrayView<float> normals, ArrayView<float> hdr)
     {
         int idx = GpuKernelUtils.TilePixel(tid, in r);   // #1170 — pixel this thread shades
         int x = idx % r.Width;
@@ -120,6 +127,13 @@ public sealed class MandelboxGpuCalculator : IDisposable
         bool wantDepth = depth.Length >= output.Length;
         if (wantDepth) depth[idx] = float.PositiveInfinity;
         int dIdx = wantDepth ? idx : -1;
+        // #1172 — optional normal + pre-clamp HDR G-buffers (3 floats / pixel) for the
+        // CPU post stack; the CPU Shade contract: normal 0 and HDR NaN on a miss.
+        bool wantNormal = normals.Length >= 3 * output.Length;
+        bool wantHdr = hdr.Length >= 3 * output.Length;
+        if (wantNormal) { normals[3 * idx] = 0f; normals[3 * idx + 1] = 0f; normals[3 * idx + 2] = 0f; }
+        if (wantHdr) { hdr[3 * idx] = float.NaN; hdr[3 * idx + 1] = float.NaN; hdr[3 * idx + 2] = float.NaN; }
+        int gIdx = wantNormal || wantHdr ? idx : -1;
 
         var (cdx, cdy, cdz) = GpuKernelUtils.BuildPrimaryRay(x, y, in r);
 
@@ -127,7 +141,7 @@ public sealed class MandelboxGpuCalculator : IDisposable
         // ray (byte-identical). Otherwise average DofSamples taps whose origin is
         // jittered across the aperture disc, re-aimed through the focal point.
         int dofN = (r.DofSamples > 1 && r.DofAperture > 0.0) ? r.DofSamples : 1;
-        if (dofN <= 1) { output[idx] = ShadeRay(r.CamX, r.CamY, r.CamZ, cdx, cdy, cdz, in r, in sp, in p, palette, depth, dIdx); return; }
+        if (dofN <= 1) { output[idx] = ShadeRay(r.CamX, r.CamY, r.CamZ, cdx, cdy, cdz, in r, in sp, in p, palette, depth, dIdx, normals, hdr, gIdx); return; }
         double fpx = r.CamX + cdx * r.DofFocus, fpy = r.CamY + cdy * r.DofFocus, fpz = r.CamZ + cdz * r.DofFocus;
         double aR = 0, aG = 0, aB = 0, aA = 0;
         for (int k = 0; k < dofN; k++)
@@ -140,7 +154,7 @@ public sealed class MandelboxGpuCalculator : IDisposable
             double loz = r.CamZ + r.RightZ * lx + r.UpZ * ly;
             double ddx = fpx - lox, ddy = fpy - loy, ddz = fpz - loz;
             double il = 1.0 / Math.Sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
-            uint c = ShadeRay(lox, loy, loz, ddx * il, ddy * il, ddz * il, in r, in sp, in p, palette, depth, -1);
+            uint c = ShadeRay(lox, loy, loz, ddx * il, ddy * il, ddz * il, in r, in sp, in p, palette, depth, -1, normals, hdr, -1);
             aR += (c >> 16) & 0xFF; aG += (c >> 8) & 0xFF; aB += c & 0xFF; aA += (c >> 24) & 0xFF;
         }
         double inv = 1.0 / dofN;
@@ -154,7 +168,7 @@ public sealed class MandelboxGpuCalculator : IDisposable
     private static uint ShadeRay(
         double rox, double roy, double roz, double rdx, double rdy, double rdz,
         in GpuRaymarchParams r, in GpuShadingParams sp, in MandelboxGpuParams p, ArrayView<uint> palette,
-        ArrayView<float> depth, int depthIdx)
+        ArrayView<float> depth, int depthIdx, ArrayView<float> normals, ArrayView<float> hdr, int gIdx)
     {
         var (sphereHit, tEn, _) = GpuKernelUtils.SphereClipFrom(rox, roy, roz, rdx, rdy, rdz, in r);
         if (!sphereHit) return GpuKernelUtils.MissColor(rdy, in r, in sp);
@@ -390,6 +404,13 @@ public sealed class MandelboxGpuCalculator : IDisposable
         else
         {
             (br, bg, bb) = GpuKernelUtils.ApplyScalarFog(in spL, br, bg, bb, rdy, tT);
+        }
+
+        // #1172 — G-buffer writes for the post stack (twin of ShadingPipeline.Shade's tail).
+        if (gIdx >= 0)
+        {
+            if (normals.Length > 1) { normals[3 * gIdx] = (float)nx; normals[3 * gIdx + 1] = (float)ny; normals[3 * gIdx + 2] = (float)nz; }
+            if (hdr.Length > 1) { hdr[3 * gIdx] = (float)br; hdr[3 * gIdx + 1] = (float)bg; hdr[3 * gIdx + 2] = (float)bb; }
         }
 
         return GpuKernelUtils.PackBgra(br, bg, bb);

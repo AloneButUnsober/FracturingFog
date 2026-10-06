@@ -152,14 +152,14 @@ public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera,
         // legacy DistanceEstimator delegate path.
         var deStruct = new MandelbulbDe(power, deIter);
 
-        // P7a — opt-in GPU raymarch path. Cheap-palette shading only (no full
-        // ShadingPipeline lift until P7c), so SSAO / tonemap / bloom / shadow
-        // / AO / edge / DoF / volumetric all silently drop on the GPU branch.
-        // Caller toggles via fx.UseGpuRender when they want raw speed and
-        // accept the visual trade. Skipped for lowRes since the CPU low-res
-        // preview is already fast and runs the full FX stack.
-        // #320 — a non-Beauty AOV view is produced by the CPU ShadingPipeline
-        // (GPU kernels have no view-mode path), so force CPU while one is active.
+        // P7a — opt-in GPU raymarch path. The kernel shades shadow / AO /
+        // reflection / volumetrics itself (P7c.1-.4) but uses a cheap step-hash
+        // albedo instead of the colour map. #1172 — the screen-space post stack
+        // (SSAO / tonemap / bloom / screen DoF / edge ink) runs on the kernel's
+        // depth / normal / HDR G-buffers via ScreenSpacePost.ApplyPost3D, as on
+        // the CPU path. Caller toggles via fx.UseGpuRender. Skipped for lowRes
+        // since the CPU low-res preview is already fast and runs the full FX stack.
+        // #323 — AOV views are encoded in-kernel (EncodeSurfaceAov), no CPU force.
         // S8 (#404) — a non-directional light used to force CPU here. #485 taught
         // the Mandelbulb kernel to resolve point/spot lights on the GPU
         // (GpuKernelUtils.ResolveLight, twin of LightSampler), so the
@@ -173,7 +173,13 @@ public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera,
         {
             // #1070 — Froxel3D on the GPU trace: the kernel also writes per-pixel
             // ray distance, and the CPU froxel pass composites over the GPU frame.
-            float[]? gpuDepth = ScreenSpacePost.GpuWantsDepth(in fx) ? new float[width * height] : null;   // #323 — froxel and/or stereo depth
+            // #1172 — the post stack's G-buffers, from the kernel, allocated under the CPU
+            // path's conditions. Beauty only: a view mode leaves them empty on the CPU too.
+            bool gpuPost = fx.DebugAov == AovView.Beauty;
+            bool gpuG = gpuPost && ScreenSpacePost.WantsGBuffer(in fx);
+            float[]? gpuDepth = ScreenSpacePost.GpuWantsDepth(in fx) || gpuG ? new float[width * height] : null;   // #323 — froxel and/or stereo depth
+            float[]? gpuNormal = gpuG ? new float[3 * width * height] : null;
+            float[]? gpuHdr = gpuPost && ScreenSpacePost.WantsHdrPost(in fx) ? new float[3 * width * height] : null;
             double lightX = Math.Sin(fx.Light1.Phi) * Math.Cos(fx.Light1.Theta);
             double lightY = Math.Cos(fx.Light1.Phi);
             double lightZ = Math.Sin(fx.Light1.Phi) * Math.Sin(fx.Light1.Theta);
@@ -205,14 +211,14 @@ public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera,
             };
             var sp = GpuShadingParams.Build(in fx);
             _gpu ??= new MandelbulbGpuCalculator();
-            bool gpuOk = _gpu.Render(renderBuffer, rp, sp, bp, fx.VolumePalette, gpuDepth, ct);
+            bool gpuOk = _gpu.Render(renderBuffer, rp, sp, bp, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr);
             LastGpuRoute = Gpu3DRoute.AfterRender(gpuOk, _gpu.LastError);
             if (gpuOk)
             {
-                DepthBuffer = ScreenSpacePost.PublishDepth(gpuDepth, width, height, width, height, in fx);   // #323 — stereo depth from the GPU trace
-                ScreenSpacePost.ApplyFroxel3D(renderBuffer, null, gpuDepth, width, height,
-                    in froxelView, in froxelFx, in deStruct);   // #1070 — GPU trace + CPU froxel
-                // #84 — GPU raymarch skips the CPU post stack; draw the debug
+                DepthBuffer = ScreenSpacePost.PublishDepth(gpuDepth, width, height, width, height, in fx, valid: !ThinLensDof.IsActive(in fx));   // #323 — stereo depth from the GPU trace
+                ScreenSpacePost.ApplyPost3D(renderBuffer, gpuHdr, gpuDepth, gpuNormal, width, height,
+                    ThinLensDof.IsActive(in fx), in fx, in froxelView, in froxelFx, in deStruct);   // #1172 — the full post stack on the GPU frame
+                // #84 — the GPU branch returns before the CPU tail; draw the debug
                 // HUD directly so the light compass still appears on GPU frames.
                 ScreenSpacePost.ApplyDebugHud(renderBuffer, width, height, in fx);
                 return;

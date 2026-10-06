@@ -322,6 +322,10 @@ GPU path is engaged — there are two, and they are not the same:
   volumetric parity with the CPU path: light color, phase, medium color,
   palette map. **UserBulb's GPU path is cheap-shaded and skips volumetrics** —
   for volumetric UserBulb, render on the CPU.
+  The screen-space effects (SSAO, tone map, bloom, screen-space depth of field,
+  edge ink) also apply to these GPU frames. Before #1172 the GPU path dropped them.
+  Thin-lens DoF together with tone map or bloom still renders on the CPU, and the
+  status bar shows `[CPU: thin-lens + tonemap]`.
 
 - **GPU: Relief 3D raymarch** (the default on Relief 3D scenes) — **full**
   volumetric parity with the CPU path as of #388: **all three lights** contribute
