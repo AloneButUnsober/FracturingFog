@@ -58,6 +58,39 @@ public sealed class JobStore
 
     public string JobDir(string jobId) => Path.Combine(Root, jobId);
 
+    // Transient sharing violations on Windows: an antivirus / indexer / backup
+    // handle on a freshly written job file (opened share-read, no share-delete)
+    // makes the atomic File.Move replace — and occasionally a write or append —
+    // fail for a few milliseconds. Unretried, that exception escaped tile.deliver
+    // AFTER the tile was accepted, so the job never finalised and sat "running"
+    // forever (the D-6e stress test's full-suite timeout). Retry briefly with a
+    // growing back-off (~1 s total) before letting a persistent error surface.
+    private const int IoRetries = 20;
+
+    internal static void RetryIo(Action op)
+    {
+        for (int attempt = 1; ; attempt++)
+        {
+            try { op(); return; }
+            catch (Exception ex) when (attempt < IoRetries && ex is IOException or UnauthorizedAccessException)
+            {
+                Thread.Sleep(Math.Min(100, 2 * attempt));
+            }
+        }
+    }
+
+    internal static T RetryIo<T>(Func<T> op)
+    {
+        for (int attempt = 1; ; attempt++)
+        {
+            try { return op(); }
+            catch (Exception ex) when (attempt < IoRetries && ex is IOException or UnauthorizedAccessException)
+            {
+                Thread.Sleep(Math.Min(100, 2 * attempt));
+            }
+        }
+    }
+
     private object LockFor(string jobId)
         => _jobLocks.GetOrAdd(jobId, _ => new object());
 
@@ -92,10 +125,10 @@ public sealed class JobStore
 
         lock (LockFor(jobId))
         {
-            File.WriteAllText(Path.Combine(dir, "request.json"),
-                JsonSerializer.Serialize(submit, JsonOpts));
-            File.WriteAllText(Path.Combine(dir, "plan.json"),
-                JsonSerializer.Serialize(plan, JsonOpts));
+            RetryIo(() => File.WriteAllText(Path.Combine(dir, "request.json"),
+                JsonSerializer.Serialize(submit, JsonOpts)));
+            RetryIo(() => File.WriteAllText(Path.Combine(dir, "plan.json"),
+                JsonSerializer.Serialize(plan, JsonOpts)));
             long now = NowUnixMs();
             WriteStatusLocked(dir, new PersistedStatus
             {
@@ -117,7 +150,7 @@ public sealed class JobStore
     {
         string path = Path.Combine(JobDir(jobId), "request.json");
         if (!File.Exists(path)) return null;
-        return JsonSerializer.Deserialize<JobSubmitDto>(File.ReadAllText(path), JsonOpts);
+        return JsonSerializer.Deserialize<JobSubmitDto>(RetryIo(() => File.ReadAllText(path)), JsonOpts);
     }
 
     public PersistedStatus? ReadStatus(string jobId)
@@ -125,7 +158,7 @@ public sealed class JobStore
         string path = Path.Combine(JobDir(jobId), "status.json");
         if (!File.Exists(path)) return null;
         lock (LockFor(jobId))
-            return JsonSerializer.Deserialize<PersistedStatus>(File.ReadAllText(path), JsonOpts);
+            return JsonSerializer.Deserialize<PersistedStatus>(RetryIo(() => File.ReadAllText(path)), JsonOpts);
     }
 
     /// <summary>Apply <paramref name="mutate"/> to the on-disk status
@@ -162,15 +195,15 @@ public sealed class JobStore
         // WriteStatusLocked fix closed for status.json.
         string finalPath = Path.Combine(tilesDir, $"{tileId}.bin");
         string tmpPath   = finalPath + ".tmp";
-        File.WriteAllBytes(tmpPath, payload);
-        File.Move(tmpPath, finalPath, overwrite: true);
+        RetryIo(() => File.WriteAllBytes(tmpPath, payload));
+        RetryIo(() => File.Move(tmpPath, finalPath, overwrite: true));
     }
 
     public bool TryReadTileBytes(string jobId, int tileId, out byte[] payload)
     {
         string path = Path.Combine(JobDir(jobId), "tiles", $"{tileId}.bin");
         if (!File.Exists(path)) { payload = Array.Empty<byte>(); return false; }
-        payload = File.ReadAllBytes(path);
+        payload = RetryIo(() => File.ReadAllBytes(path));
         return true;
     }
 
@@ -200,9 +233,9 @@ public sealed class JobStore
         Directory.CreateDirectory(dir);
         string finalPath = Path.Combine(dir, FrameFileName(frameIndex));
         string tmpPath   = finalPath + ".tmp";
-        File.WriteAllBytes(tmpPath, png);
+        RetryIo(() => File.WriteAllBytes(tmpPath, png));
         // D-6g — atomic replace; see WriteTileBytes for the race rationale.
-        File.Move(tmpPath, finalPath, overwrite: true);
+        RetryIo(() => File.Move(tmpPath, finalPath, overwrite: true));
     }
 
     public bool FrameExists(string jobId, int frameIndex)
@@ -242,12 +275,12 @@ public sealed class JobStore
         Directory.CreateDirectory(dir);
         string finalPath = Path.Combine(dir, SlideFileName(slideIndex));
         string tmpPath   = finalPath + ".tmp";
-        File.WriteAllBytes(tmpPath, png);
+        RetryIo(() => File.WriteAllBytes(tmpPath, png));
         // D-6g — atomic replace mirrors the WriteStatusLocked fix (D-6e).
         // The previous Delete + Move opened a window where a concurrent
         // SlideExists / manifest enumeration saw the file missing on a
         // retry-driven re-deliver of the same slide id.
-        File.Move(tmpPath, finalPath, overwrite: true);
+        RetryIo(() => File.Move(tmpPath, finalPath, overwrite: true));
     }
 
     public bool SlideExists(string jobId, int slideIndex)
@@ -266,7 +299,7 @@ public sealed class JobStore
         string tmpPath   = finalPath + ".tmp";
         encodeToTmp(tmpPath);
         // D-6g — atomic replace; see WriteSlideBytes for the race rationale.
-        File.Move(tmpPath, finalPath, overwrite: true);
+        RetryIo(() => File.Move(tmpPath, finalPath, overwrite: true));
     }
 
     /// <summary>D-4c — count of per-slide files on disk. Used by the
@@ -376,19 +409,19 @@ public sealed class JobStore
     {
         string path = Path.Combine(dir, "status.json");
         if (!File.Exists(path)) return null;
-        return JsonSerializer.Deserialize<PersistedStatus>(File.ReadAllText(path), JsonOpts);
+        return JsonSerializer.Deserialize<PersistedStatus>(RetryIo(() => File.ReadAllText(path)), JsonOpts);
     }
 
     private static void WriteStatusLocked(string dir, PersistedStatus s)
     {
         string final = Path.Combine(dir, "status.json");
         string tmp   = final + ".tmp";
-        File.WriteAllText(tmp, JsonSerializer.Serialize(s, JsonOpts));
+        RetryIo(() => File.WriteAllText(tmp, JsonSerializer.Serialize(s, JsonOpts)));
         // Atomic replace — keeps the destination visible to concurrent
         // readers across the swap. The previous Delete + Move opened a
         // window where ReadStatus saw status.json missing and the
         // coordinator answered "unknown-job" on a healthy in-flight job.
-        File.Move(tmp, final, overwrite: true);
+        RetryIo(() => File.Move(tmp, final, overwrite: true));
     }
 
     private static void AppendEventLocked(string dir, string kind, IReadOnlyDictionary<string, object?>? fields)
@@ -400,10 +433,10 @@ public sealed class JobStore
         };
         if (fields != null)
             foreach (var kv in fields) record[kv.Key] = kv.Value;
-        File.AppendAllText(
+        RetryIo(() => File.AppendAllText(
             Path.Combine(dir, "events.ndjson"),
             JsonSerializer.Serialize(record, JsonOpts) + "\n",
-            Encoding.UTF8);
+            Encoding.UTF8));
     }
 
     private const string CrockfordAlphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";

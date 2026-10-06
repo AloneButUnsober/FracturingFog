@@ -52,7 +52,10 @@ internal static class TestDataRootIsolation
 /// atomic-swap backup assertions and each other's state. Also serialises the
 /// sibling animation / scene library singletons, which the same classes mutate.
 /// Members: <c>RegionEditorServiceTests</c>, <c>AnimationLibrarySaveLoopTests</c>,
-/// <c>AssetSourceTests</c>, <c>SceneLibraryTests</c>.
+/// <c>AssetSourceTests</c>, <c>SceneLibraryTests</c>, and every other writer of a
+/// shared store file under the test root — e.g. <c>StoreTolerantLoadTests</c> and
+/// <c>LightingFxPresetLibraryTests</c> (both write <c>lighting-fx-presets.json</c>).
+/// A test class that writes a store file MUST join this collection.
 /// </summary>
 [CollectionDefinition(FractalRegionLibraryCollection.Name, DisableParallelization = true)]
 public sealed class FractalRegionLibraryCollection

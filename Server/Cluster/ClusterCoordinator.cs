@@ -514,17 +514,34 @@ public sealed class ClusterCoordinator : IClusterCoordinator
 
         int done = Dispatcher.CompletedCount(dto.JobId);
         int total = plan.Count;
-        Jobs.UpdateStatus(dto.JobId, s =>
+        // Progress bookkeeping is best-effort: the tile is already accepted
+        // (AcceptDelivery removed it from in-flight), so if this write throws,
+        // nothing would ever re-deliver it — an escaping exception here used to
+        // skip FinaliseMerge and strand the job "running" forever. Log and
+        // carry on; FinaliseMerge rewrites the status anyway.
+        try
         {
-            s.TilesDone     = done;
-            s.TilesInFlight = Dispatcher.InFlightCount(dto.JobId);
-        });
-        Jobs.AppendEvent(dto.JobId, "tile-delivered", new Dictionary<string, object?>
+            Jobs.UpdateStatus(dto.JobId, s =>
+            {
+                s.TilesDone     = done;
+                s.TilesInFlight = Dispatcher.InFlightCount(dto.JobId);
+            });
+            Jobs.AppendEvent(dto.JobId, "tile-delivered", new Dictionary<string, object?>
+            {
+                ["tileId"] = dto.TileId,
+                ["worker"] = dto.WorkerId,
+                ["ms"]     = dto.RenderMs,
+            });
+        }
+        catch (Exception ex)
         {
-            ["tileId"] = dto.TileId,
-            ["worker"] = dto.WorkerId,
-            ["ms"]     = dto.RenderMs,
-        });
+            _log.Event("tile-progress-write-failed", new Dictionary<string, object?>
+            {
+                ["jobId"]  = dto.JobId,
+                ["tileId"] = dto.TileId,
+                ["error"]  = ex.Message,
+            });
+        }
 
         if (done == total) FinaliseMerge(dto.JobId, merger);
 
@@ -1009,7 +1026,10 @@ public sealed class ClusterCoordinator : IClusterCoordinator
         }
         catch (Exception ex)
         {
-            Jobs?.UpdateStatus(jobId, s => { s.JobState = "failed"; s.FailReason = "merge-failed: " + ex.Message; });
+            // Must not throw out of the failure path: a client polling status
+            // needs a terminal state, not a job stuck in "merging".
+            try { Jobs?.UpdateStatus(jobId, s => { s.JobState = "failed"; s.FailReason = "merge-failed: " + ex.Message; }); }
+            catch { /* logged below; status stays as last written */ }
             _log.Event("job-failed", new Dictionary<string, object?>
             {
                 ["jobId"] = jobId,

@@ -336,18 +336,20 @@ public sealed class TileDispatcher
 
     private void SignalAll()
     {
-        LinkedListNode<TaskCompletionSource<bool>>? node;
+        // Snapshot under the lock, signal outside it. Signalling outside is
+        // needed (an awaiter's continuation may re-enter the lock to claim);
+        // the snapshot is needed because walking the live list outside the lock
+        // raced RemoveAwaiter — a node removed mid-walk has Next == null, so the
+        // walk stopped early and later awaiters missed the wake-up (they only
+        // recovered when their long-poll hold expired).
+        TaskCompletionSource<bool>[] awaiters;
         lock (_lock)
         {
-            node = _awaiters.First;
+            if (_awaiters.Count == 0) return;
+            awaiters = new TaskCompletionSource<bool>[_awaiters.Count];
+            _awaiters.CopyTo(awaiters, 0);
         }
-        // Walk outside the lock — every awaiter's continuation may grab
-        // back into the lock to claim; holding it here would deadlock.
-        while (node != null)
-        {
-            node.Value.TrySetResult(true);
-            node = node.Next;
-        }
+        foreach (var a in awaiters) a.TrySetResult(true);
     }
 
     private void RemoveAwaiter(TaskCompletionSource<bool> tcs)
