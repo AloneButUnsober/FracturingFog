@@ -198,12 +198,13 @@ dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --filter "*Gp
 
 It times the **production** 3D calculators with `Lighting.UseGpuRender = true`, so the frame is
 what the app renders: real parameter construction, kernel launch, `Synchronize`, device-to-host
-copy. Matrix: 14 cases per width (`Mandelbulb`, `Mandelbox`, KIFS `Menger` / `Sierpinski` /
+copy. Matrix: 15 cases per width (`Mandelbulb`, `Mandelbox`, KIFS `Menger` / `Sierpinski` /
 `Octahedron` / `Dodecahedron` / `MandelboxRot` (the last three CPU-only before #1173-D), `QJulia`,
-`QMandel`, `QMandelDual` (dual-orbit colour, CPU-only before #1173-F), `Kleinian`, `Bicomplex`; `BicomplexR`, the R slice axis at sliceW 0.4, which
+`QMandel`, `QMandelDual` (dual-orbit colour, CPU-only before #1173-F), `Kleinian`,
+`KleinianNecklace` (9-sphere necklace + rotation + last-generator colour, CPU-only before #880), `Bicomplex`; `BicomplexR`, the R slice axis at sliceW 0.4, which
 rendered on the CPU before #1173-C; and `MandelboxHdri`, Mandelbox under a synthetic 512x256
 HDRI with IBL ambient and reflections, which used the gradient sky before #1173-B)
-x {640x360, 1920x1080} = 28 cases. Same in-process job as
+x {640x360, 1920x1080} = 30 cases. Same in-process job as
 `MandelbrotBench`.
 
 **It refuses to time a CPU fallback.** In the app, a missing device or a failed kernel load falls

@@ -201,21 +201,14 @@ public sealed class KleinianCalculator : IFractalCalculator, IStereoEyeCamera, I
         // (GpuKernelUtils.ResolveLight); the !HasPositionalLight gate is lifted.
         // #492 added a per-light area-capped shadow hardness (sp.ShadowK1/2/3),
         // so area lights also render on the GPU now (punctual = byte-identical).
-        // #874 (S1) — the GPU kernel passes exactly four centres + one radius, so
-        // it only serves the uniform 4-sphere inversion group (the tetrahedral
-        // preset). Any other group (>4 spheres, mixed radii, non-inversion
-        // generators) falls to the general CPU descent below.
-        bool gpuEligible = group.AllInversions && group.UniformRadius && gens.Length == 4
-                           && !group.HasRotation                              // #877 — rotation fold is CPU-only
-                           && colorSrc == KleinianColorSource.Smooth           // #878 — word colouring is CPU-only
-                           && deFactor == 1.0;                                 // #881 — under-relaxed stepping is CPU-only
-        // #1173-M — first failing gpuEligible condition, for the HUD / status bar.
-        (string? gpuFamilyReason, string? gpuFamilyDetail) = gpuEligible ? (null, null)
-            : !(group.AllInversions && group.UniformRadius && gens.Length == 4)
-                ? ("generator group", "only the uniform 4-sphere inversion group has a GPU kernel (#880)")
-            : group.HasRotation ? ("rotation generators", "rotation generators render on the CPU only (#877, #1173-E)")
-            : colorSrc != KleinianColorSource.Smooth ? ("word colouring", "word-length colouring renders on the CPU only (#878, #1173-E)")
-            : ("under-relaxed DE", "under-relaxed DE stepping renders on the CPU only (#881, #1173-E)");
+        // #880 / #1173-E (GPU parity G3.4) — the kernel takes the whole generator list
+        // (any count, per-sphere radius) plus the rotation fold (#877), word colouring
+        // (#878) and under-relaxed stepping (#881), so every inversion group renders on
+        // the GPU. Only a non-inversion generator kind would need the CPU, and none
+        // exists yet (KleinianGeneratorKind has Inversion only).
+        (string? gpuFamilyReason, string? gpuFamilyDetail) = group.AllInversions && gens.Length > 0
+            ? (null, null)
+            : ("generator group", "only inversion generators have a GPU kernel (#880)");
         // #1173-M — the same gate as before, plus the reason when it fails.
         var gpuGate = Gpu3DRoute.Gate(in fx, lowRes, gpuFamilyReason, gpuFamilyDetail);
         LastGpuRoute = gpuGate ?? default;
@@ -253,20 +246,23 @@ public sealed class KleinianCalculator : IFractalCalculator, IStereoEyeCamera, I
             };
             var kp = new KleinianGpuParams
             {
-                C0X = gens[0].Cx, C0Y = gens[0].Cy, C0Z = gens[0].Cz,
-                C1X = gens[1].Cx, C1Y = gens[1].Cy, C1Z = gens[1].Cz,
-                C2X = gens[2].Cx, C2Y = gens[2].Cy, C2Z = gens[2].Cz,
-                C3X = gens[3].Cx, C3Y = gens[3].Cy, C3Z = gens[3].Cz,
-                Radius = group.SphereRadius,
+                GenCount = gens.Length,
                 DEIter = deIter,
                 SceneRadius = sceneRadius,
+                RotHas = rot.Has ? 1 : 0,                                     // #877
+                RotAx = rot.Ax, RotAy = rot.Ay, RotAz = rot.Az, RotSin = rot.Sin, RotCos = rot.Cos,
+                ColorSource = (int)colorSrc,                                  // #878
+                DeFactor = deFactor,                                          // #881
             };
+            double[] genBuf = KleinianGpuCalculator.PackGenerators(gens);     // #880
             var sp = GpuShadingParams.Build(in fx);
-            // #1172 / G2.2 — the CPU trace's colour-map albedo (same smooth coefficients).
-            uint[] albedoLut = GpuAlbedoLut.Bake(ColorMap, 192.0, 0.5, sceneRadius, ref sp);
+            // #1172 / G2.2 — the CPU trace's colour-map albedo (same smooth coefficients);
+            // #878 — word colouring reaches smooth 256, so the LUT spans that too.
+            uint[] albedoLut = GpuAlbedoLut.Bake(ColorMap, 192.0, 0.5, sceneRadius, ref sp,
+                colorSrc != KleinianColorSource.Smooth ? 256.0 : 0.0);
             uint[]? hdriEnv = GpuHdriEnv.Resolve(in fx, ref sp);   // #1173-B / G2.3 — HDRI sky, ambient + reflections
             _gpu ??= new KleinianGpuCalculator();
-            bool gpuOk = _gpu.Render(renderBuffer, rp, sp, kp, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr, albedoLut, hdriEnv);
+            bool gpuOk = _gpu.Render(renderBuffer, rp, sp, kp, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr, albedoLut, hdriEnv, genBuf);
             LastGpuRoute = Gpu3DRoute.AfterRender(gpuOk, _gpu.LastError);
             if (gpuOk)
             {

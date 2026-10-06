@@ -577,3 +577,10 @@ win, S1-only) → S4 → S6 → S8 → S7 (GPU last, largest, CPU-authoritative)
   `KleinianIterations` tooltip pointing at the word-length colour path + this
   section; no "make Smooth respond" work (auto-scaling the cap with zoom would not
   change the iteration-independent Smooth render). Closes #53 + #885.
+
+- **2026-10-06** — **S7 #880 shipped** (GPU parity G3.4, with #1173-E). `KleinianGpuCalculator`
+  takes the generator list as a (cx, cy, cz, r) buffer — any count, per-sphere radius — and
+  runs the #877 rotation fold, #878 colour sources and #881 under-relaxation in the kernel, so
+  every inversion group renders on the GPU (the §8 divergence risk doesn't bite: the generator
+  count is uniform per launch). CPU stays authoritative; `S1173EKleinianGpuTests` pins the two
+  together. Performance on a modern GPU still unmeasured (only a GT 710 + the ILGPU CPU device).

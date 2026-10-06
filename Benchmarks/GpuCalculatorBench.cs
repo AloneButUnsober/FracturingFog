@@ -63,6 +63,8 @@ public enum GpuFamily
     // #1173-F — QuatMandel with dual-orbit surface colour; CPU-only before G3.3.
     QMandelDual,
     Kleinian,
+    // #880 / #1173-E — 9-sphere necklace + rotation fold + last-generator colour; CPU-only before G3.4.
+    KleinianNecklace,
     Bicomplex,
     // #1173-C — a non-K slice axis (R, sliceW 0.4): CPU-only before G3.1.
     BicomplexR,
@@ -86,7 +88,7 @@ public class GpuCalculatorBench
     // Width no longer needs to be the outer axis.
     [Params(GpuFamily.Mandelbox, GpuFamily.Menger, GpuFamily.Sierpinski,
             GpuFamily.Octahedron, GpuFamily.Dodecahedron, GpuFamily.MandelboxRot,
-            GpuFamily.QJulia, GpuFamily.QMandel, GpuFamily.QMandelDual, GpuFamily.Kleinian, GpuFamily.Bicomplex,
+            GpuFamily.QJulia, GpuFamily.QMandel, GpuFamily.QMandelDual, GpuFamily.Kleinian, GpuFamily.KleinianNecklace, GpuFamily.Bicomplex,
             GpuFamily.BicomplexR, GpuFamily.MandelboxHdri, GpuFamily.Mandelbulb)]
     public GpuFamily Family { get; set; }
 
@@ -121,6 +123,16 @@ public class GpuCalculatorBench
                 FractalParameters = new FractalParameters { Lighting = fx, QMandelDualOrbitColor = true },
             },
             GpuFamily.Kleinian   => new KleinianCalculator(Width, height) { FractalParameters = fp },
+            GpuFamily.KleinianNecklace => new KleinianCalculator(Width, height)
+            {
+                FractalParameters = new FractalParameters
+                {
+                    Lighting = fx,
+                    KleinianPreset = KleinianPreset.NecklaceN, KleinianNecklaceCount = 9,
+                    KleinianRotationAngle = 15.0, KleinianRotationAxisY = 0.0, KleinianRotationAxisZ = 1.0,
+                    KleinianColorSource = KleinianColorSource.LastGenerator,
+                },
+            },
             GpuFamily.Bicomplex  => new BicomplexMandelbrotCalculator(Width, height) { FractalParameters = fp },
             GpuFamily.MandelboxHdri => new MandelboxCalculator(Width, height) { FractalParameters = new FractalParameters { Lighting = HdriScene(fx) } },
             GpuFamily.BicomplexR => new BicomplexMandelbrotCalculator(Width, height)
