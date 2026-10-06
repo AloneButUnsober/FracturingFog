@@ -60,6 +60,8 @@ public enum GpuFamily
     MandelboxRot,
     QJulia,
     QMandel,
+    // #1173-F — QuatMandel with dual-orbit surface colour; CPU-only before G3.3.
+    QMandelDual,
     Kleinian,
     Bicomplex,
     // #1173-C — a non-K slice axis (R, sliceW 0.4): CPU-only before G3.1.
@@ -84,7 +86,7 @@ public class GpuCalculatorBench
     // Width no longer needs to be the outer axis.
     [Params(GpuFamily.Mandelbox, GpuFamily.Menger, GpuFamily.Sierpinski,
             GpuFamily.Octahedron, GpuFamily.Dodecahedron, GpuFamily.MandelboxRot,
-            GpuFamily.QJulia, GpuFamily.QMandel, GpuFamily.Kleinian, GpuFamily.Bicomplex,
+            GpuFamily.QJulia, GpuFamily.QMandel, GpuFamily.QMandelDual, GpuFamily.Kleinian, GpuFamily.Bicomplex,
             GpuFamily.BicomplexR, GpuFamily.MandelboxHdri, GpuFamily.Mandelbulb)]
     public GpuFamily Family { get; set; }
 
@@ -114,6 +116,10 @@ public class GpuCalculatorBench
             GpuFamily.MandelboxRot => new KifsCalculator(Width, height) { FractalParameters = WithFold(fp, KifsFoldKind.MandelboxRot) },
             GpuFamily.QJulia     => new QuatJuliaCalculator(Width, height) { FractalParameters = fp },
             GpuFamily.QMandel    => new QuatMandelbrotCalculator(Width, height) { FractalParameters = fp },
+            GpuFamily.QMandelDual => new QuatMandelbrotCalculator(Width, height)
+            {
+                FractalParameters = new FractalParameters { Lighting = fx, QMandelDualOrbitColor = true },
+            },
             GpuFamily.Kleinian   => new KleinianCalculator(Width, height) { FractalParameters = fp },
             GpuFamily.Bicomplex  => new BicomplexMandelbrotCalculator(Width, height) { FractalParameters = fp },
             GpuFamily.MandelboxHdri => new MandelboxCalculator(Width, height) { FractalParameters = new FractalParameters { Lighting = HdriScene(fx) } },

@@ -32,6 +32,14 @@ public struct QMandelGpuParams
     public double Bailout2;
     public int DEIter;
     public double SceneRadius;
+
+    /// <summary>#1173-F / #909 — 1 = dual-orbit surface colour: the albedo's smooth
+    /// value is a second orbit's escape count from (DualSeedX/Y/Z, 0) instead of the
+    /// step / depth blend. DualLogR = ln √max(Bailout2, 1.0001) and DualLn2 = ln 2,
+    /// both computed on the host exactly as the CPU computes them.</summary>
+    public int DualColor;
+    public double DualSeedX, DualSeedY, DualSeedZ;
+    public double DualLogR, DualLn2;
 }
 
 public sealed class QMandelGpuCalculator : IDisposable
@@ -266,7 +274,10 @@ public sealed class QMandelGpuCalculator : IDisposable
             ao = GpuKernelUtils.Clamp(1.0 - sp.AoStrength * (occl / Math.Max(w, 1.0)), 0.0, 1.0);
         }
 
-        var (aR, aG, aB) = GpuKernelUtils.SurfaceAlbedo(albedo, in spL, hitStep, r.MaxSteps, tT, nx, ny);   // #1172 / G2.2 — colour-map albedo
+        // #1172 / G2.2 — colour-map albedo; #1173-F — dual-orbit colour feeds its own smooth value.
+        var (aR, aG, aB) = p.DualColor != 0
+            ? GpuKernelUtils.SurfaceAlbedoAt(albedo, in spL, (float)DualOrbitSurfaceScalar(px, py, pz, in p), nx, ny, hitStep, r.MaxSteps, tT)
+            : GpuKernelUtils.SurfaceAlbedo(albedo, in spL, hitStep, r.MaxSteps, tT, nx, ny);
         // #323 — AOV view: return the diagnostic encoding instead of the beauty shade.
         if (spL.DebugAov != 0)
             return GpuKernelUtils.EncodeSurfaceAov(in spL, nx, ny, nz, rdx, rdy, rdz, px, py, pz,
@@ -493,6 +504,34 @@ public sealed class QMandelGpuCalculator : IDisposable
         double qMag = Math.Sqrt(q2);
         double dMag = Math.Sqrt(d2);
         return 0.5 * qMag * Math.Log(qMag) / dMag;
+    }
+
+    /// <summary>#1173-F — twin of <c>QuatMandelbrotCalculator.DualOrbitSurfaceScalar</c>:
+    /// at the surface point c = (cx, cy, cz, SliceW) iterate q² + c from the seed
+    /// (DualSeedX/Y/Z, 0) and return its smooth escape count scaled to [0, 255]
+    /// (0 when the second orbit stays bounded).</summary>
+    private static double DualOrbitSurfaceScalar(double cx, double cy, double cz, in QMandelGpuParams p)
+    {
+        double cw = p.SliceW;
+        double qx = p.DualSeedX, qy = p.DualSeedY, qz = p.DualSeedZ, qw = 0.0;
+        int iter = p.DEIter;
+        for (int i = 0; i < iter; i++)
+        {
+            double nqx = qx * qx - qy * qy - qz * qz - qw * qw;
+            double nqy = 2.0 * qx * qy;
+            double nqz = 2.0 * qx * qz;
+            double nqw = 2.0 * qx * qw;
+            qx = nqx + cx; qy = nqy + cy; qz = nqz + cz; qw = nqw + cw;
+            double r2 = qx * qx + qy * qy + qz * qz + qw * qw;
+            if (r2 > p.Bailout2)
+            {
+                double logZn = Math.Log(r2) * 0.5;
+                double nu = Math.Log(logZn / p.DualLogR) / p.DualLn2;
+                double mu = (i + 1) - nu;
+                return GpuKernelUtils.Clamp(mu / iter, 0.0, 1.0) * 255.0;
+            }
+        }
+        return 0.0;
     }
 
     public void Dispose() => _kernel = null;
