@@ -49,7 +49,7 @@ public static class GpuAlbedoLut
     /// <paramref name="depthScale"/> are the family's CPU smooth coefficients;
     /// <paramref name="sceneRadius"/> bounds the ray distance t.</summary>
     public static uint[] Bake(IColorMap? map, double stepScale, double depthScale, double sceneRadius,
-        ref GpuShadingParams sp)
+        ref GpuShadingParams sp, double minSMax = 0.0)
     {
         if (map is null)
         {
@@ -58,6 +58,9 @@ public static class GpuAlbedoLut
         }
         // t can overshoot the scene radius by one march step; leave headroom.
         double sMax = stepScale + depthScale * Math.Max(1.0, sceneRadius) * 1.25 + 1.0;
+        // #1173-F — a kernel that feeds its own smooth value (QuatMandel dual-orbit,
+        // 0..255) needs the LUT to span that range too.
+        if (sMax < minSMax) sMax = minSMax;
 
         var fp = Fingerprint(map);
         var e = s_cache.GetOrCreateValue(map);

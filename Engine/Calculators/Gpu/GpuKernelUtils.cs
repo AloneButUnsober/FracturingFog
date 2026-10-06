@@ -384,12 +384,23 @@ internal static class GpuKernelUtils
     public static (double aR, double aG, double aB) SurfaceAlbedo(
         ArrayView<uint> lut, in GpuShadingParams sp, int hitStep, int maxSteps, double tTotal, double nx, double ny)
     {
+        float smooth = (float)hitStep * ((float)sp.AlbedoStepScale / (float)Math.Max(1, maxSteps))
+                     + (float)(tTotal * sp.AlbedoDepthScale);
+        return SurfaceAlbedoAt(lut, in sp, smooth, nx, ny, hitStep, maxSteps, tTotal);
+    }
+
+    /// <summary>#1173-F — <see cref="SurfaceAlbedo"/> for a smooth value the kernel
+    /// computed itself (the CPU's <c>ColorMap.Map(smooth, …)</c> input), e.g. the
+    /// QuatMandel dual-orbit escape count. <paramref name="hitStep"/> / <paramref name="maxSteps"/> /
+    /// <paramref name="tTotal"/> only feed the no-LUT fallback.</summary>
+    public static (double aR, double aG, double aB) SurfaceAlbedoAt(
+        ArrayView<uint> lut, in GpuShadingParams sp, float smooth, double nx, double ny,
+        int hitStep, int maxSteps, double tTotal)
+    {
         int S = sp.AlbedoLutSmooth;
         int N = sp.AlbedoLutNormals < 1 ? 1 : sp.AlbedoLutNormals;
         if (S < 2 || lut.Length < (long)S * N * N) return CheapAlbedo(hitStep, maxSteps, tTotal);
 
-        float smooth = (float)hitStep * ((float)sp.AlbedoStepScale / (float)Math.Max(1, maxSteps))
-                     + (float)(tTotal * sp.AlbedoDepthScale);
         double fs = Clamp(smooth / sp.AlbedoSMax * (S - 1), 0.0, S - 1);
         int s0 = (int)fs;
         int s1 = s0 + 1 < S ? s0 + 1 : S - 1;

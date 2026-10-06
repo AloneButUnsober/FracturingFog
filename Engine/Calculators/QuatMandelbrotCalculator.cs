@@ -173,10 +173,9 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator, IStereoEyeCam
         // (GpuKernelUtils.ResolveLight); the !HasPositionalLight gate is lifted.
         // #492 added a per-light area-capped shadow hardness (sp.ShadowK1/2/3),
         // so area lights also render on the GPU now (punctual = byte-identical).
-        string? gpuFamilyReason = dualColor ? "dual-orbit colour" : null;
-        string gpuFamilyDetail = "dual-orbit colouring renders on the CPU only (#1173-F)";
+        // #1173-F — dual-orbit colouring runs in the kernel too (QMandelGpuParams.DualColor).
         // #1173-M — the same gate as before, plus the reason when it fails.
-        var gpuGate = Gpu3DRoute.Gate(in fx, lowRes, gpuFamilyReason, gpuFamilyDetail);
+        var gpuGate = Gpu3DRoute.Gate(in fx, lowRes);
         LastGpuRoute = gpuGate ?? default;
         if (gpuGate is null)
         {
@@ -215,10 +214,16 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator, IStereoEyeCam
                 SliceZ = sliceZ, SliceW = sliceW,
                 Bailout2 = bailout2, DEIter = deIter,
                 SceneRadius = sceneRadius,
+                // #1173-F — dual-orbit colour, with DualOrbitSurfaceScalar's log constants.
+                DualColor = dualColor ? 1 : 0,
+                DualSeedX = dSeedX, DualSeedY = dSeedY, DualSeedZ = dSeedZ,
+                DualLogR = Math.Log(Math.Sqrt(Math.Max(bailout2, 1.0001))),
+                DualLn2 = Math.Log(2.0),
             };
             var sp = GpuShadingParams.Build(in fx);
-            // #1172 / G2.2 — the CPU trace's colour-map albedo (same smooth coefficients).
-            uint[] albedoLut = GpuAlbedoLut.Bake(ColorMap, 192.0, 0.5, sceneRadius, ref sp);
+            // #1172 / G2.2 — the CPU trace's colour-map albedo (same smooth coefficients);
+            // #1173-F — dual-orbit colour reaches smooth 255, so the LUT spans that too.
+            uint[] albedoLut = GpuAlbedoLut.Bake(ColorMap, 192.0, 0.5, sceneRadius, ref sp, dualColor ? 256.0 : 0.0);
             uint[]? hdriEnv = GpuHdriEnv.Resolve(in fx, ref sp);   // #1173-B / G2.3 — HDRI sky, ambient + reflections
             _gpu ??= new QMandelGpuCalculator();
             bool gpuOk = _gpu.Render(renderBuffer, rp, sp, qp, fx.VolumePalette, gpuDepth, ct, gpuNormal, gpuHdr, albedoLut, hdriEnv);

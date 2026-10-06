@@ -24,7 +24,7 @@ each #1173 row).
 
 | Area | On the GPU today | Still CPU-only |
 |---|---|---|
-| **3D families** (Mandelbulb, Mandelbox, KIFS, QuatJulia, QuatMandel, Kleinian, Bicomplex) | Raymarch + in-kernel lighting: 3 lights (point/spot/area), shadows, AO, fog/volumetrics, reflections, PBR terms, SSS, triplanar, IBL, sky, caustics; froxel 3D via the #1070 hybrid | Screen-space post stack: SSAO, tonemap+bloom, HDR DoF, edge ink (#1172); AOV views + depth output (#323); some features/colourings per family (#1173-E, F); Coquaternion entirely (#1173-G) |
+| **3D families** (Mandelbulb, Mandelbox, KIFS, QuatJulia, QuatMandel, Kleinian, Bicomplex) | Raymarch + in-kernel lighting: 3 lights (point/spot/area), shadows, AO, fog/volumetrics, reflections, PBR terms, SSS, triplanar, IBL, sky, caustics; froxel 3D via the #1070 hybrid | Screen-space post stack: SSAO, tonemap+bloom, HDR DoF, edge ink (#1172); AOV views + depth output (#323); some Kleinian features (#1173-E); Coquaternion entirely (#1173-G) |
 | **UserBulb** | Analytic vec + sandbox quaternion DE; ambient+diffuse shade | Shadows/AO/reflections (#1173-A); Vec3 numerical DE, Julia (#1112); scalar KIFS |
 | **Relief 3D** | Near parity: DoF, positional/area lights, glass, froxel temporal/reprojection, HDRI | Lighting-component / HDR-beauty captures and AOV views (#389 S1/S2, #323) |
 | **2D Mandelbrot** | SP iteration ≤ zoom 1e4 (D3D11/Vulkan); deep-zoom perturbation (#82, both backends) | SA/BLA skipping (#88); orbit accumulation at depth (#607) |
@@ -109,7 +109,7 @@ once rather than twice.
 |---|---|---|---|---|
 | G3.1 | #1173-C | Bicomplex: slice-axis parameter in the kernel. Delivered: `BicomplexGpuParams.SliceAxis` mirrors the CPU packing, the K-only gate is gone, `S1173CBicomplexSliceAxisGpuTests` checks each axis against the CPU (drift 0.04–0.07; ignoring the axis gives 3.5–4.0), and the bench gains `BicomplexR`. Batch: the axis joins the region snapshot (`--param BicomplexSliceAxis=N`), and family-unique Kleinian / QuatMandel keys now apply without the camera keys. **Done** | G0.1 | S |
 | G3.2 | #1173-D | KIFS: Octahedron/Dodecahedron/MandelboxRot folds (one kernel branching on fold kind). Delivered: `KifsFoldGpuCalculator` (the Menger kernel's shading body, a fold-dispatching DE; Menger and Sierpinski keep their own kernels) with ports of the shipped CPU DEs — still the 5.9.f1 approximations, parity only. Rotation coefficients come from the host, so there is no per-DE-call trig on fp64-poor cards. `S1173DKifsFoldGpuTests`: drift 0.000–0.19 vs 7–32 to every other fold; bench gains the three folds. **Done** | G0.1 | M |
-| G3.3 | #1173-F | QuatMandel dual-orbit colouring in the kernel | G0.1 | M |
+| G3.3 | #1173-F | QuatMandel dual-orbit colouring in the kernel. Delivered: the kernel runs the twin of `DualOrbitSurfaceScalar` (log constants from the host) and feeds it to the colour-map LUT through `GpuKernelUtils.SurfaceAlbedoAt`; `GpuAlbedoLut.Bake` takes a minimum range so the LUT spans smooth 255. `S1173FQuatMandelDualOrbitGpuTests`: drift 0.07–0.13, seed tracked; bench gains `QMandelDual`. **Done** | G0.1 | M |
 | G3.4 | #880 + #1173-E ⚑ | Kleinian: variable generator lists, rotation generators, word-length colouring, analytic DE | G0.1 | L |
 | G3.5 | #1173-G | Coquaternion GPU kernel | G0.1 | M |
 
