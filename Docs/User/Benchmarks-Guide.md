@@ -134,10 +134,11 @@ are valid, see the [User Equation & DSL Guide](CalcGen-UserGuide.md).)
 You get a table with one row per combination, sorted fastest at the top:
 
 ```text
-| Method    | Width | Regime      | Theme      | Accel | Mean      | Error   | StdDev  | Allocated |
-|---------- |------ |------------ |----------- |------ |----------:|--------:|--------:|----------:|
-| Calculate | 640   | ShallowSP   | Hsv        | True  |  12.34 ms | 0.21 ms | 0.19 ms |   1.2 KB  |
-| Calculate | 1920  | DeepHPInPT  | PhongStone | False | 842.10 ms | 9.88 ms | 8.71 ms |  48.9 KB  |
+| Method    | Width | Regime     | Theme | Accel | Mean         | Error      | StdDev     | Footprint | Allocated |
+|---------- |------ |----------- |------ |------ |-------------:|-----------:|-----------:|----------:|----------:|
+| Calculate | 640   | ShallowSP  | Hsv   | False |     4.149 ms |  0.4760 ms |  0.0737 ms |   14.9 MB |    6.8 KB |
+| Calculate | 1920  | DeepHPInPT | Hsv   | True  |   253.409 ms | 16.8311 ms |  4.3710 ms |  135.2 MB |   13.8 KB |
+| Calculate | 1920  | DeepHPInPT | Hsv   | False | 2,989.251 ms | 69.9645 ms | 18.1695 ms |  135.2 MB |  13.52 KB |
 ```
 
 The columns that matter to you:
@@ -147,8 +148,11 @@ The columns that matter to you:
   them as **the same speed** — the difference is just noise.
 - **StdDev** — how much the individual runs jumped around. If this is large compared to Mean, your
   machine was busy with something else — close background apps and run again.
-- **Allocated** — how much memory each frame used. Usually you can ignore it; developers watch it
-  for leaks.
+- **Allocated** — how much *extra* memory each frame used while drawing. Usually you can ignore
+  it; developers watch it for leaks.
+- **Footprint** — how much memory the fractal engine *holds on to* for that view, mostly
+  picture-sized buffers. Bigger pictures need more: expect roughly 15 MB at the small size and about
+  135 MB at full HD. Handy if you're wondering whether your machine has enough RAM.
 
 The other columns just say *which* combination the row is: **Width** (resolution), **Regime**
 (zoom depth), **Theme** (colour style), **Accel** (deep-zoom shortcuts on/off).

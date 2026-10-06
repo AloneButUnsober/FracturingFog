@@ -126,8 +126,36 @@ Job.Default
    .WithUnrollFactor(1);
 ```
 
-Plus `[MemoryDiagnoser]` (per-frame allocation columns) and
-`[Orderer(FastestToSlowest)]` (summary sorted by mean).
+Plus `[MemoryDiagnoser]` (per-frame allocation columns), the custom `FootprintColumn`
+(resident memory, see below) and `[Orderer(FastestToSlowest)]` (summary sorted by mean).
+
+### Memory: what is and isn't measured
+
+- **`MemoryDiagnoser` sees all managed allocations.** BDN 0.15.8 reads
+  `GC.GetTotalAllocatedBytes(precise: true)`, which covers the small-object, large-object and
+  pinned-object heaps on every thread, including the `Parallel` workers.
+- **The calculator's buffers are managed.** `MandelbrotCalculator` allocates its 17 per-pixel
+  buffers with `GC.AllocateUninitializedArray<T>(n, pinned: true)`, so they live on the pinned
+  object heap. That's about 68 B per pixel: ~15 MB at 640x360 and ~135 MB at 1920x1080.
+- **FF allocates no native heap memory on this path.** The codebase has no `NativeMemory.*` or
+  `Marshal.AllocHGlobal` call sites, and every GPU toggle is off under `--bench`. That leaves no
+  unmanaged memory to track (#1048).
+- **Footprint (`Benchmarks/FootprintColumn.cs`).** Per-op `Allocated` can't show the buffers above,
+  because they're allocated once in `[GlobalSetup]`. The Footprint column fills that gap.
+  - **How it measures:** `Setup()` settles the heap with a forced full GC, constructs the
+    calculator, configures it and runs one warm frame, then settles and measures again. Footprint is
+    the difference.
+  - **What it covers:** the per-pixel buffers plus lazily built deep-zoom state (reference orbit,
+    SA/BLA tables). Measured on an i5-13420H: 14.9 MB (SP), 15.6 MB (`DeepHPInPT`) and 16.1 MB
+    (`DeepHP`) at 640x360. The 134.5 MB SP figure at 1920x1080 matches the 68 B/px arithmetic
+    exactly.
+  - **`Accel` doesn't change it.** The tables are built either way; `DisableAcceleration` only
+    skips *using* them. The deep-zoom extra scales with `MaxIterations` (reference-orbit length),
+    not with `Accel`.
+  - **Toolchain dependency:** the value reaches the summary through a static registry keyed by the
+    case's parameters. That works only because the harness runs in-process. Under an out-of-process
+    toolchain the column prints `-`.
+- **GPU memory is out of scope here.** It's tracked with the GPU benchmarks in #1162.
 
 ### Console attach (Windows WinExe quirk)
 
@@ -222,14 +250,23 @@ On compile failure the driver prints `hot.Error` and returns exit code 1.
 ### BenchmarkDotNet summary (`--bench`)
 
 BDN prints an environment block (host CPU, .NET runtime, GC mode) then a table, one row per case,
-sorted fastest→slowest:
+sorted fastest→slowest. Excerpt from a real run (i5-13420H, .NET 10.0.11, 2026-10-06):
 
 ```text
-| Method    | Width | Regime      | Theme      | Accel | Mean      | Error    | StdDev   | Gen0   | Allocated |
-|---------- |------ |------------ |----------- |------ |----------:|---------:|---------:|-------:|----------:|
-| Calculate | 640   | ShallowSP   | Hsv        | True  |  12.34 ms | 0.21 ms  | 0.19 ms  |      - |   1.2 KB  |
-| Calculate | 1920  | DeepHPInPT  | PhongStone | False | 842.10 ms | 9.88 ms  | 8.71 ms  |   3.00 |  48.9 KB  |
+| Method    | Width | Regime     | Theme      | Accel | Mean         | Error       | StdDev      | Footprint | Allocated |
+|---------- |------ |----------- |----------- |------ |-------------:|------------:|------------:|----------:|----------:|
+| Calculate | 640   | ShallowSP  | Hsv        | False |     4.149 ms |   0.4760 ms |   0.0737 ms |   14.9 MB |    6.8 KB |
+| Calculate | 1920  | ShallowSP  | Hsv        | False |    23.299 ms |   2.1100 ms |   0.5480 ms |  134.5 MB |   9.76 KB |
+| Calculate | 1920  | DeepHPInPT | Hsv        | True  |   253.409 ms |  16.8311 ms |   4.3710 ms |  135.2 MB |   13.8 KB |
+| Calculate | 1920  | DeepHPInPT | Hsv        | False | 2,989.251 ms |  69.9645 ms |  18.1695 ms |  135.2 MB |  13.52 KB |
+| Calculate | 1920  | DeepHP     | Hsv        | True  | 3,982.006 ms | 114.3847 ms |  29.7053 ms |  135.6 MB |   14.3 KB |
+| Calculate | 1920  | DeepHP     | Hsv        | False | 6,828.540 ms | 929.8048 ms | 241.4674 ms |  135.6 MB |  19.13 KB |
 ```
+
+On this run, SA+BLA cut the fully-in-perturbation 1080p frame from ~2.99 s to ~0.25 s (~12x). On
+`DeepHP` the gain is ~1.7x, because pixels that spill to the scalar DD fallback get no
+acceleration. No `Gen0` column appears because no case triggered a collection; BDN hides all-zero
+GC columns.
 
 Column meanings:
 
@@ -240,6 +277,9 @@ Column meanings:
 - **Gen0 / Gen1 / Gen2** — GC collections per 1000 ops (from `MemoryDiagnoser`).
 - **Allocated** — managed bytes allocated **per frame**. This is the regression tripwire: a hot
   path that starts churning buffers on resize shows up here even if Mean barely moves.
+- **Footprint** — managed memory the calculator **holds** after construction plus one warm frame.
+  It is resident size, not per-frame churn. If it grows, a buffer or table was added or enlarged;
+  that costs memory on every open view even when Mean is unchanged.
 
 Interpreting the matrix:
 

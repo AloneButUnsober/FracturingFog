@@ -17,8 +17,10 @@
 //       - StripeAverageClassic: orbit-aware scalar path (different code path)
 //
 // MemoryDiagnoser shows per-frame allocations so resize / hot-path churn
-// regressions are visible. Each combo runs full Calculate() so all stages
-// (iteration + aux fill + color) are timed end to end.
+// regressions are visible. The Footprint column (#1048, FootprintColumn.cs)
+// shows what the calculator retains after construction + a warm frame. Each
+// combo runs full Calculate() so all stages (iteration + aux fill + color)
+// are timed end to end.
 
 using System;
 using System.Runtime.InteropServices;
@@ -85,6 +87,11 @@ public class MandelbrotBench
     [GlobalSetup]
     public void Setup()
     {
+        // #1048: settle the heap before constructing so the Footprint column
+        // captures exactly what this calculator retains (buffers + lazily
+        // built ref-orbit / SA / BLA tables after the warm frame below).
+        long heapBefore = FootprintRegistry.SettledHeapBytes();
+
         int height = Width == 640 ? 360 : 1080;
         _calc = new MandelbrotCalculator(Width, height);
 
@@ -136,6 +143,25 @@ public class MandelbrotBench
 
         // Warm — first call sometimes JITs the generic specialisation.
         _calc.Calculate();
+
+        long heapAfter = FootprintRegistry.SettledHeapBytes();
+        FootprintRegistry.Record(
+            FootprintRegistry.Key(new (string, object?)[]
+            {
+                (nameof(Width), Width),
+                (nameof(Regime), Regime),
+                (nameof(Theme), Theme),
+                (nameof(Accel), Accel),
+            }),
+            heapAfter - heapBefore);
+    }
+
+    // Drop the calculator so the next case's "before" heap doesn't carry it.
+    [GlobalCleanup]
+    public void Cleanup()
+    {
+        _calc = null!;
+        _theme = null!;
     }
 
     [Benchmark]
@@ -158,6 +184,7 @@ public class MandelbrotBench
                 .WithInvocationCount(1)
                 .WithUnrollFactor(1));
             AddDiagnoser(MemoryDiagnoser.Default);
+            AddColumn(new FootprintColumn());
         }
     }
 }
