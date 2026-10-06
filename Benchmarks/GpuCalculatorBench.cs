@@ -54,6 +54,10 @@ public enum GpuFamily
     Mandelbox,
     Menger,
     Sierpinski,
+    // #1173-D — the Wave 5.9.f1 KIFS folds (KifsFoldGpuCalculator); CPU-only before G3.2.
+    Octahedron,
+    Dodecahedron,
+    MandelboxRot,
     QJulia,
     QMandel,
     Kleinian,
@@ -79,6 +83,7 @@ public class GpuCalculatorBench
     // the GPU watchdog, so a 1080p frame no longer faults on a slow GPU and
     // Width no longer needs to be the outer axis.
     [Params(GpuFamily.Mandelbox, GpuFamily.Menger, GpuFamily.Sierpinski,
+            GpuFamily.Octahedron, GpuFamily.Dodecahedron, GpuFamily.MandelboxRot,
             GpuFamily.QJulia, GpuFamily.QMandel, GpuFamily.Kleinian, GpuFamily.Bicomplex,
             GpuFamily.BicomplexR, GpuFamily.MandelboxHdri, GpuFamily.Mandelbulb)]
     public GpuFamily Family { get; set; }
@@ -104,6 +109,9 @@ public class GpuCalculatorBench
             GpuFamily.Mandelbox  => new MandelboxCalculator(Width, height) { FractalParameters = fp },
             GpuFamily.Menger     => new KifsCalculator(Width, height) { FractalParameters = WithFold(fp, KifsFoldKind.Menger) },
             GpuFamily.Sierpinski => new KifsCalculator(Width, height) { FractalParameters = WithFold(fp, KifsFoldKind.Sierpinski) },
+            GpuFamily.Octahedron => new KifsCalculator(Width, height) { FractalParameters = WithFold(fp, KifsFoldKind.Octahedron) },
+            GpuFamily.Dodecahedron => new KifsCalculator(Width, height) { FractalParameters = WithFold(fp, KifsFoldKind.Dodecahedron) },
+            GpuFamily.MandelboxRot => new KifsCalculator(Width, height) { FractalParameters = WithFold(fp, KifsFoldKind.MandelboxRot) },
             GpuFamily.QJulia     => new QuatJuliaCalculator(Width, height) { FractalParameters = fp },
             GpuFamily.QMandel    => new QuatMandelbrotCalculator(Width, height) { FractalParameters = fp },
             GpuFamily.Kleinian   => new KleinianCalculator(Width, height) { FractalParameters = fp },

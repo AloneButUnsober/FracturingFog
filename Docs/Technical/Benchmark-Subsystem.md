@@ -31,7 +31,7 @@ There are three CLI-flagged benchmark drivers. They split across two measurement
 
 | Flag                       | Engine                | Target under test                          | Output |
 |----------------------------|-----------------------|--------------------------------------------|--------|
-| `--bench`                  | **BenchmarkDotNet**   | `MandelbrotCalculator` (the shipping calc); with `--filter`, the 8 ILGPU 3D kernels (`*GpuCalculatorBench*`) or the D3D11/Vulkan Mandelbrot kernels (`*MandelbrotGpuKernelBench*`) | BDN summary table + `BenchmarkDotNet.Artifacts/` |
+| `--bench`                  | **BenchmarkDotNet**   | `MandelbrotCalculator` (the shipping calc); with `--filter`, the 9 ILGPU 3D kernels (`*GpuCalculatorBench*`) or the D3D11/Vulkan Mandelbrot kernels (`*MandelbrotGpuKernelBench*`) | BDN summary table + `BenchmarkDotNet.Artifacts/` |
 | `--gentestbench`           | hand-rolled Stopwatch | `Generated.MandelbrotZ2Calculator` (CalcGen output) | console + `gentestbench.out` |
 | `--benchmark --equation …` | hand-rolled Stopwatch | an **arbitrary** hot-compiled DSL equation | console + `benchmark.out` |
 
@@ -198,19 +198,20 @@ dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --filter "*Gp
 
 It times the **production** 3D calculators with `Lighting.UseGpuRender = true`, so the frame is
 what the app renders: real parameter construction, kernel launch, `Synchronize`, device-to-host
-copy. Matrix: 10 cases per width (`Mandelbulb`, `Mandelbox`, KIFS `Menger` / `Sierpinski`, `QJulia`,
+copy. Matrix: 13 cases per width (`Mandelbulb`, `Mandelbox`, KIFS `Menger` / `Sierpinski` /
+`Octahedron` / `Dodecahedron` / `MandelboxRot` (the last three CPU-only before #1173-D), `QJulia`,
 `QMandel`, `Kleinian`, `Bicomplex`; `BicomplexR`, the R slice axis at sliceW 0.4, which
 rendered on the CPU before #1173-C; and `MandelboxHdri`, Mandelbox under a synthetic 512x256
 HDRI with IBL ambient and reflections, which used the gradient sky before #1173-B)
-x {640x360, 1920x1080} = 20 cases. Same in-process job as
+x {640x360, 1920x1080} = 26 cases. Same in-process job as
 `MandelbrotBench`.
 
 **It refuses to time a CPU fallback.** In the app, a missing device or a failed kernel load falls
 through to the CPU ShadingPipeline silently. The bench guards against measuring that:
 
 - Every GPU frame allocates its buffers through `GpuMemoryStats.Allocate1D`
-  (`Engine/Calculators/Gpu/GpuMemoryStats.cs`), a thin counting wrapper used by all 24 per-frame
-  allocation sites in the 8 ILGPU calculators. A CPU frame allocates nothing there.
+  (`Engine/Calculators/Gpu/GpuMemoryStats.cs`), a thin counting wrapper used by every per-frame
+  allocation site in the 9 ILGPU calculators. A CPU frame allocates nothing there.
 - `Setup()` renders a JIT frame and then a steady-state frame. If the steady-state frame added no
   device bytes, it throws, and BDN reports the case as failed (`NA`) instead of a number.
 - The exception names the inner GPU calculator's state: `=null (Render never called)` means a
