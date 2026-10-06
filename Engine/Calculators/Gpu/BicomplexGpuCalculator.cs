@@ -65,18 +65,18 @@ public sealed class BicomplexGpuCalculator : IDisposable
         try
         {
             int total = r.Width * r.Height;
-            using var dev = acc.Allocate1D<uint>(total);
+            using var dev = GpuMemoryStats.Allocate1D<uint>(acc, total);
             // Slice D GPU parity — upload the theme palette LUT (or a length-1
             // dummy when off) so the kernel arity stays fixed; the kernel gates
             // on VolumePaletteStrength + LUT length.
             uint[] lut = palette is { Length: >= 2 } ? palette : GpuKernelUtils.PaletteOff;
-            using var devLut = acc.Allocate1D<uint>(lut.Length);
+            using var devLut = GpuMemoryStats.Allocate1D<uint>(acc, lut.Length);
             devLut.CopyFromCPU(lut);
             // #1070 — optional per-pixel ray distance (+Inf = miss), the CPU
             // depth G-buffer contract, for the froxel composite. Off → a
             // length-1 dummy so the kernel arity stays fixed.
             bool wantDepth = depthOut != null && depthOut.Length == total;
-            using var devDepth = acc.Allocate1D<float>(wantDepth ? total : 1);
+            using var devDepth = GpuMemoryStats.Allocate1D<float>(acc, wantDepth ? total : 1);
             _kernel(total, dev.View, r, sp, p, devLut.View, devDepth.View);
             acc.Synchronize();
             dev.CopyToCPU(outBuffer);
