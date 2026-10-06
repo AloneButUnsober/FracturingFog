@@ -506,7 +506,7 @@
             </Grid>
         </StackPanel>
 
-        <!-- Dual-Orbit Escape (#864 / #866) -->
+        <!-- Julibrot Pair, was Dual-Orbit Escape (#864 / #866; renamed #1155) -->
         <Grid IsVisible="{Binding IsDualOrbitEscape}"
               ColumnDefinitions="160,*"
               RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">

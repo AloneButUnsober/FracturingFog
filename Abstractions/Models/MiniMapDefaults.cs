@@ -34,7 +34,7 @@ public static class MiniMapDefaults
         FractalType.Kleinian   => false,
         FractalType.BicomplexMandelbrot => false,
         FractalType.Coquaternion => false,
-        FractalType.DualOrbitVolume => false,
+        FractalType.Julibrot => false,
         FractalType.UserBulb   => false,
         _                      => true
     };
@@ -89,11 +89,11 @@ public static class MiniMapDefaults
         FractalType.Apollonian       => new( 0.0,  0.0, 2.0),
         FractalType.ChaoticBilliard  => new( 0.0,  0.0, 1.0),
         FractalType.PrecisionField   => new(-0.5,  0.0, 1.0),
-        FractalType.DualOrbitEscape  => new(-0.5,  0.0, 1.0),
+        FractalType.JulibrotPair  => new(-0.5,  0.0, 1.0),
         FractalType.Kleinian         => new( 0.0,  0.0, 1.0),
         FractalType.BicomplexMandelbrot => new( 0.0,  0.0, 1.0),
         FractalType.Coquaternion => new( 0.0,  0.0, 1.0),
-        FractalType.DualOrbitVolume => new( 0.0,  0.0, 1.0),
+        FractalType.Julibrot => new( 0.0,  0.0, 1.0),
         FractalType.Dla              => new( 0.0,  0.0, 1.0),
         // Indra's Pearls (#892) — Maskit μ = 2i limit set sits above the real
         // axis (period-2 in x); frame it centred at (0, 1) with a wide zoom.

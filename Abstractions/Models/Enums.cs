@@ -184,13 +184,13 @@ namespace FracturingFog
         LastGenerator,
     }
 
-    /// <summary>Which derived escape-space scalar the DualOrbitEscape (#864)
+    /// <summary>Which derived escape-space scalar the JulibrotPair (#864)
     /// field renders. Per parameter sample <c>s</c> two orbits run under
     /// <c>u→u²+s</c> from decoupled seeds (0 and the fixed <c>c</c>); the escape
     /// geometry of the pair (locations E_z/E_c, counts n_z/n_c) yields these
     /// scalars, written to the SmoothBuffer. See
     /// Docs/Technical/Theoretical-Fractal-RnD.md §3.6.</summary>
-    /// <summary>The shared nonlinear map iterated by both DualOrbitEscape (#864)
+    /// <summary>The shared nonlinear map iterated by both JulibrotPair (#864)
     /// orbits. <see cref="ComplexPlane"/> (S1, default) is the 2D square
     /// <c>u→u²+s</c>; <see cref="Quaternion"/> (S3, #866) is the Hamilton square
     /// <c>q→q²+S</c> with <c>S=(0,s_x,s_y,s_z)</c> pure-imaginary — non-degenerate
@@ -845,8 +845,11 @@ namespace FracturingFog
         /// c-seed MUST be decoupled from <c>s</c> — the <c>c = s</c> case collapses
         /// to a plain Mandelbrot (kept only as a labelled control). Handled by a
         /// dedicated <c>DualOrbitEscapeCalculator</c>. See
-        /// Docs/Technical/Theoretical-Fractal-RnD.md §3.6.</summary>
-        DualOrbitEscape,
+        /// Docs/Technical/Theoretical-Fractal-RnD.md §3.6.
+        /// #1155 — renamed from <c>DualOrbitEscape</c> (same value; the old name still
+        /// parses via <see cref="FractalTypeNames"/>): the two orbits are two points of
+        /// the Julibrot (z₀, c) space sharing their parameter.</summary>
+        JulibrotPair,
         /// <summary>Indra's Pearls (#892, epic #850) — the limit set of a
         /// two-generator complex-Möbius Kleinian group, rendered as a 2D plane
         /// fractal. NOT the 3D <c>Kleinian</c> sphere-inversion solid: here the
@@ -869,8 +872,11 @@ namespace FracturingFog
         /// the filled Julia set of s, and the c = 0 column is the Mandelbrot line
         /// at Im s = s.y. The critical (seed-0) orbit is constant per layer and
         /// colours it (<c>DualOrbitVolumeColor.CriticalLayer</c>). Analytic DE from
-        /// ∂u/∂c and ∂u/∂s. CPU raymarcher (Coquaternion clone pattern).</summary>
-        DualOrbitVolume,
+        /// ∂u/∂c and ∂u/∂s. CPU raymarcher (Coquaternion clone pattern).
+        /// #1154 — renamed from <c>DualOrbitVolume</c> (same value; the old name still
+        /// parses via <see cref="FractalTypeNames"/>): the solid is a 3D slice of the
+        /// classic Julibrot (z₀, c) space.</summary>
+        Julibrot,
         /// <summary>Dual Buddhabrot (#1124, epic #1114). The Buddhabrot of the
         /// dual-orbit construction: per sampled s, the critical z-orbit (seed 0) and
         /// a c-orbit (fixed seed <c>DualBuddhaCSeedX/Y</c>) under u → u² + s are
@@ -993,7 +999,7 @@ namespace FracturingFog
                 or FractalType.Kifs
                 or FractalType.BicomplexMandelbrot
                 or FractalType.Coquaternion
-                or FractalType.DualOrbitVolume
+                or FractalType.Julibrot
                 or FractalType.UserBulb
                 => FractalCapabilities.SuppliesNormals
                  | FractalCapabilities.SuppliesDE,
@@ -1036,7 +1042,7 @@ namespace FracturingFog
                 or FractalType.PrecisionField
                 // Dual-orbit escape-geometry (#864) — a derived escape-space scalar
                 // over the SmoothBuffer (PrecisionField precedent).
-                or FractalType.DualOrbitEscape
+                or FractalType.JulibrotPair
                 // Indra's Pearls (#892) — combinatorial word-enumeration point
                 // cloud coloured by log-density; no normals / orbit / DE surfaced.
                 or FractalType.IndrasPearls

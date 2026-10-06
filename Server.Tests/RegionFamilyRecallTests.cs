@@ -58,8 +58,8 @@ public sealed class RegionFamilyRecallTests
             DualOrbitCSeedX = 0.91, DualOrbitCSeedY = -0.4, DualOrbitCSeedZ = 0.77, DualOrbitSZ = 0.2,
             DualOrbitCEqualsS = true,
         };
-        var region = Region(FractalType.DualOrbitEscape,
-            RegionFractalParams.Snapshot(FractalType.DualOrbitEscape, new FractalParameters()));
+        var region = Region(FractalType.JulibrotPair,
+            RegionFractalParams.Snapshot(FractalType.JulibrotPair, new FractalParameters()));
         region.ApplyFamilyParams(p);
 
         Assert.Equal(0.5, p.DualOrbitCSeedX);
@@ -108,7 +108,7 @@ public sealed class RegionFamilyRecallTests
         Assert.DoesNotContain(nameof(FractalParameters.BulbPower), julia);
         Assert.DoesNotContain(nameof(FractalParameters.Lighting), julia);
 
-        var dual = RegionFractalParams.FamilyProperties(FractalType.DualOrbitEscape).Select(pi => pi.Name).ToHashSet();
+        var dual = RegionFractalParams.FamilyProperties(FractalType.JulibrotPair).Select(pi => pi.Name).ToHashSet();
         Assert.Contains(nameof(FractalParameters.DualOrbitCSeedX), dual);
         Assert.Contains(nameof(FractalParameters.DualOrbitCEqualsS), dual);
         Assert.DoesNotContain(nameof(FractalParameters.JuliaC), dual);

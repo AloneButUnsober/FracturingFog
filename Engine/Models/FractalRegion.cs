@@ -147,7 +147,7 @@ namespace FracturingFog.Models
         /// <see cref="FractalType.Mandelbrot"/> for backwards compatibility with regions saved
         /// before fractal-type-aware bookmarks existed.
         /// </summary>
-        [JsonConverter(typeof(JsonStringEnumConverter))]
+        [JsonConverter(typeof(FractalTypeJsonConverter))]   // #1154/#1155 — reads renamed type names
         public FractalType FractalType { get; set; } = FractalType.Mandelbrot;
 
         /// <summary>
@@ -973,7 +973,7 @@ namespace FracturingFog.Models
                 },
                 // #972 — dual-orbit volume: camera + s.y (the slice of the 4D (z0, s)
                 // space) in the Cam3D block; sweep window + colour source omitted at default.
-                FractalType.DualOrbitVolume => new RegionFractalParams
+                FractalType.Julibrot => new RegionFractalParams
                 {
                     Cam3DFamily = (int)type,
                     Cam3DDistance = p.DualOrbitVolumeCameraDistance,
@@ -1041,7 +1041,7 @@ namespace FracturingFog.Models
                 },
                 // #864 — dual-orbit escape-geometry: field + decoupled c-seed +
                 // control flag, each omitted at its default.
-                FractalType.DualOrbitEscape => new RegionFractalParams
+                FractalType.JulibrotPair => new RegionFractalParams
                 {
                     DualOrbitMap = p.DualOrbitMap != FracturingFog.DualOrbitMap.ComplexPlane ? (int)p.DualOrbitMap : (int?)null,
                     DualOrbitField = p.DualOrbitField != FracturingFog.DualOrbitField.EscapeSeparation ? (int)p.DualOrbitField : (int?)null,
@@ -1382,7 +1382,7 @@ namespace FracturingFog.Models
                 System.Text.Json.Nodes.JsonNode? node;
                 if (t == typeof(string))
                     node = System.Text.Json.Nodes.JsonValue.Create(value);
-                else if (pi.Name == nameof(Cam3DFamily) && Enum.TryParse<FractalType>(value.Trim(), true, out var fam) && !int.TryParse(value, out _))
+                else if (pi.Name == nameof(Cam3DFamily) && FractalTypeNames.TryParse(value.Trim(), true, out var fam) && !int.TryParse(value, out _))
                     node = System.Text.Json.Nodes.JsonValue.Create((int)fam);
                 else
                 {
@@ -1542,7 +1542,7 @@ namespace FracturingFog.Models
                         p.CoquaternionCameraDistance = d; p.CoquaternionCameraTheta = th; p.CoquaternionCameraPhi = ph;
                         if (Cam3DSliceW.HasValue) p.CoquaternionSliceW = Cam3DSliceW.Value;
                         break;
-                    case FractalType.DualOrbitVolume:
+                    case FractalType.Julibrot:
                         p.DualOrbitVolumeCameraDistance = d; p.DualOrbitVolumeCameraTheta = th; p.DualOrbitVolumeCameraPhi = ph;
                         if (Cam3DSliceW.HasValue) p.DualOrbitVolumeSY = Cam3DSliceW.Value;
                         break;

@@ -158,7 +158,7 @@ public sealed class DualOrbitVolumeTests
         Assert.Equal(DualOrbitVolumeColor.CriticalLayer, cl.DualOrbitVolumeColor);
 
         var restored = new FractalParameters();
-        RegionFractalParams.Snapshot(FractalType.DualOrbitVolume, p)!.ApplyTo(restored);
+        RegionFractalParams.Snapshot(FractalType.Julibrot, p)!.ApplyTo(restored);
         Assert.Equal(-0.2, restored.DualOrbitVolumeSY);
         Assert.Equal(-1.1, restored.DualOrbitVolumeSXCenter);
         Assert.Equal(0.9, restored.DualOrbitVolumeHalfHeight);
@@ -171,12 +171,12 @@ public sealed class DualOrbitVolumeTests
     [Fact]
     public void Registration()
     {
-        Assert.Equal(FractalMotionClass.Raymarch3D, FractalMotionCapabilities.MotionClass(FractalType.DualOrbitVolume));
+        Assert.Equal(FractalMotionClass.Raymarch3D, FractalMotionCapabilities.MotionClass(FractalType.Julibrot));
         Assert.Equal(FractalCapabilities.SuppliesNormals | FractalCapabilities.SuppliesDE,
-                     FractalCapabilityMap.For(FractalType.DualOrbitVolume));
-        Assert.Equal("Dual-Orbit Volume", Fractals.FractalNameByNameType[FractalType.DualOrbitVolume]);
-        Assert.True(RaymarchMeshSampler.IsMeshExportable(FractalType.DualOrbitVolume));
-        var de = RaymarchMeshSampler.For(FractalType.DualOrbitVolume, new FractalParameters());
+                     FractalCapabilityMap.For(FractalType.Julibrot));
+        Assert.Equal("Julibrot", Fractals.FractalNameByNameType[FractalType.Julibrot]);
+        Assert.True(RaymarchMeshSampler.IsMeshExportable(FractalType.Julibrot));
+        var de = RaymarchMeshSampler.For(FractalType.Julibrot, new FractalParameters());
         Assert.NotNull(de);
         Assert.Equal(De(0.4, 0.2, -0.3), de!.Evaluate(0.4, 0.2, -0.3), 12);   // print = picture
     }

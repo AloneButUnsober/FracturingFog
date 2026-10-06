@@ -453,8 +453,10 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
                 AvailableThemes.Add(new CheckableItem(t, _working.IncludedColorThemes.Contains(t)) { Owner = this });
 
         AvailableFractalTypes.Clear();
+        // #1154/#1155 — a saved filter may name a renamed type; match on the current name.
+        var filterNames = new HashSet<string>(_working.FilterFractalTypes.Select(FractalTypeNames.Canonical), StringComparer.OrdinalIgnoreCase);
         foreach (var ft in Enum.GetValues<FractalType>())
-            AvailableFractalTypes.Add(new CheckableItem(ft.ToString(), _working.FilterFractalTypes.Contains(ft.ToString())) { Owner = this });
+            AvailableFractalTypes.Add(new CheckableItem(ft.ToString(), filterNames.Contains(ft.ToString())) { Owner = this });
 
         AvailableQualityPresets.Clear();
         foreach (var name in new[] { "Draft", "Standard", "High", "Ultra", "Extreme" })

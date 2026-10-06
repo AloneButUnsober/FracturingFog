@@ -275,7 +275,7 @@
                            Value="{Binding CoquaternionCameraDistance, Mode=TwoWay}" Margin="0,2" />
         </Grid>
 
-        <!-- Dual-orbit escape-geometry volume (#972) -->
+        <!-- Julibrot volume, was Dual-Orbit Volume (#972; renamed #1154) -->
         <Grid IsVisible="{Binding IsDualOrbitVolume}"
               ColumnDefinitions="160,*"
               RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">

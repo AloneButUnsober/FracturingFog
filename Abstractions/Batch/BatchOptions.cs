@@ -484,7 +484,7 @@ namespace FracturingFog.Batch
                     case BatchFlags.Fractal:
                     case "-f":
                         if (!Next(args, ref i, a, out string fv, out error)) return false;
-                        if (!Enum.TryParse<FractalType>(fv, ignoreCase: true, out var ft))
+                        if (!FractalTypeNames.TryParse(fv, ignoreCase: true, out var ft))
                         {
                             error = $"Unknown --fractal '{fv}'. Valid: {string.Join(", ", Enum.GetNames<FractalType>())}";
                             return false;

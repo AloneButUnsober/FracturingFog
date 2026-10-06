@@ -151,11 +151,11 @@ namespace FracturingFog.Models
             {FractalType.Kleinian, "Kleinian" },
             {FractalType.BicomplexMandelbrot, "Bicomplex Mandelbrot" },
             {FractalType.Coquaternion, "Coquaternion" },
-            {FractalType.DualOrbitVolume, "Dual-Orbit Volume" },
+            {FractalType.Julibrot, "Julibrot" },   // #1154 (was Dual-Orbit Volume)
             {FractalType.Dla, "DLA" },
             {FractalType.RandomTile, "Random Tiling" },
             {FractalType.IndrasPearls, "Indra's Pearls" },
-            {FractalType.DualOrbitEscape, "Dual-Orbit Escape" }
+            {FractalType.JulibrotPair, "Julibrot Pair" }   // #1155 (was Dual-Orbit Escape)
         };
     }
 

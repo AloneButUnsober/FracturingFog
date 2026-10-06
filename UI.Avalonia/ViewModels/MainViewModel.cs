@@ -241,12 +241,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.Kleinian,              "Kleinian Limit Set (3D)"),
         (FractalType.BicomplexMandelbrot,   "Bicomplex Mandelbrot (3D)"),
         (FractalType.Coquaternion,          "Coquaternion (3D)"),
-        (FractalType.DualOrbitVolume,       "Dual-Orbit Volume (3D)"),
+        (FractalType.Julibrot,       "Julibrot (3D)"),          // #1154 (was Dual-Orbit Volume)
         (FractalType.Dla,                   "DLA (Brownian Tree)"),
         (FractalType.RandomTile,            "Random Tiling (Bourke)"),
         (FractalType.ChaoticBilliard,       "Chaotic Billiard (Scatter)"),
         (FractalType.PrecisionField,        "Precision Field (Fragility)"),
-        (FractalType.DualOrbitEscape,       "Dual-Orbit Escape (Scattering)"),
+        (FractalType.JulibrotPair,       "Julibrot Pair"),          // #1155 (was Dual-Orbit Escape)
         (FractalType.IndrasPearls,          "Indra's Pearls (2D Kleinian)"),
     };
 

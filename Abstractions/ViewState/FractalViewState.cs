@@ -287,11 +287,11 @@ namespace FracturingFog.ViewState
                 FractalType.Apollonian            => ( 0.0,  0.0, 2.0),
                 FractalType.ChaoticBilliard       => ( 0.0,  0.0, 1.0),
                 FractalType.PrecisionField        => (-0.5,  0.0, 1.0),
-                FractalType.DualOrbitEscape       => (-0.5,  0.0, 1.0),
+                FractalType.JulibrotPair       => (-0.5,  0.0, 1.0),
                 FractalType.Kleinian              => ( 0.0,  0.0, 1.0),
                 FractalType.BicomplexMandelbrot   => ( 0.0,  0.0, 1.0),
                 FractalType.Coquaternion          => ( 0.0,  0.0, 1.0),
-                FractalType.DualOrbitVolume       => ( 0.0,  0.0, 1.0),
+                FractalType.Julibrot       => ( 0.0,  0.0, 1.0),
                 FractalType.Dla                   => ( 0.0,  0.0, 1.0),
                 // Indra's Pearls (#892) — Maskit μ = 2i limit set above the real
                 // axis; centre (0, 1), wide zoom (matches MiniMapDefaults).
@@ -336,7 +336,7 @@ namespace FracturingFog.ViewState
             || t == FractalType.Kleinian
             || t == FractalType.BicomplexMandelbrot
             || t == FractalType.Coquaternion
-            || t == FractalType.DualOrbitVolume
+            || t == FractalType.Julibrot
             || t == FractalType.UserBulb;
     }
 }

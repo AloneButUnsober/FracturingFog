@@ -48,7 +48,7 @@ namespace FracturingFog.Models
             WriteIndented = true,
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            Converters = { new JsonStringEnumConverter() },
+            Converters = { new FractalTypeJsonConverter(), new JsonStringEnumConverter() },
         };
 
         /// <summary>Load the workspace file. Returns an empty (but non-null) file

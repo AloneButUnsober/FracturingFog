@@ -155,7 +155,7 @@ public sealed class DualOrbitEscapeTests
         Assert.Equal(0.7, cl.DualOrbitCSeedZ);
         Assert.Equal(-0.2, cl.DualOrbitSZ);
 
-        var snap = RegionFractalParams.Snapshot(FractalType.DualOrbitEscape, p);
+        var snap = RegionFractalParams.Snapshot(FractalType.JulibrotPair, p);
         var restored = new FractalParameters();
         snap!.ApplyTo(restored);
         Assert.Equal(DualOrbitMap.Quaternion, restored.DualOrbitMap);
@@ -333,7 +333,7 @@ public sealed class DualOrbitEscapeTests
         Assert.Equal(3.5, cl.DualOrbitRatioSpan);
 
         var restored = new FractalParameters();
-        RegionFractalParams.Snapshot(FractalType.DualOrbitEscape, p)!.ApplyTo(restored);
+        RegionFractalParams.Snapshot(FractalType.JulibrotPair, p)!.ApplyTo(restored);
         Assert.Equal(DualOrbitField.ExternalAngleDelta, restored.DualOrbitField);
         Assert.Equal(1000, restored.DualOrbitBailout);
         Assert.Equal(3.5, restored.DualOrbitRatioSpan);
@@ -344,16 +344,16 @@ public sealed class DualOrbitEscapeTests
     [Fact]
     public void MotionClass_IsZoomable2D()
         => Assert.Equal(FractalMotionClass.Zoomable2D,
-                        FractalMotionCapabilities.MotionClass(FractalType.DualOrbitEscape));
+                        FractalMotionCapabilities.MotionClass(FractalType.JulibrotPair));
 
     [Fact]
     public void Capabilities_SuppliesHistogram()
         => Assert.Equal(FractalCapabilities.SuppliesHistogram,
-                        FractalCapabilityMap.For(FractalType.DualOrbitEscape));
+                        FractalCapabilityMap.For(FractalType.JulibrotPair));
 
     [Fact]
     public void HasDisplayName()
-        => Assert.Equal("Dual-Orbit Escape", Fractals.FractalNameByNameType[FractalType.DualOrbitEscape]);
+        => Assert.Equal("Julibrot Pair", Fractals.FractalNameByNameType[FractalType.JulibrotPair]);
 
     [Fact]
     public void ClonesAndPersists()
@@ -369,7 +369,7 @@ public sealed class DualOrbitEscapeTests
         Assert.True(cl.DualOrbitCEqualsS);
 
         var pp = new FractalParameters { DualOrbitField = DualOrbitField.DeltaN, DualOrbitCSeedX = 0.9 };
-        var snap = RegionFractalParams.Snapshot(FractalType.DualOrbitEscape, pp);
+        var snap = RegionFractalParams.Snapshot(FractalType.JulibrotPair, pp);
         var restored = new FractalParameters();
         snap!.ApplyTo(restored);
         Assert.Equal(DualOrbitField.DeltaN, restored.DualOrbitField);

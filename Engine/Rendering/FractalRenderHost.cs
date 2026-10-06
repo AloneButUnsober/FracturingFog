@@ -2237,7 +2237,7 @@ namespace FracturingFog.Rendering
             FractalType.RandomTile => true,
             FractalType.ChaoticBilliard => true,
             FractalType.PrecisionField => true,
-            FractalType.DualOrbitEscape => true,
+            FractalType.JulibrotPair => true,
             // #726 slice 2 — interpreted User Equation / DSL: a fresh
             // UserEquationCalculator recompiles the same DSL source from
             // FractalParameters, so it CAN be built + parameterised generically
@@ -2266,7 +2266,7 @@ namespace FracturingFog.Rendering
             FractalType.RandomTile => new RandomTileCalculator(w, h),
             FractalType.ChaoticBilliard => new ChaoticBilliardCalculator(w, h),
             FractalType.PrecisionField => new PrecisionFieldCalculator(w, h),
-            FractalType.DualOrbitEscape => new DualOrbitEscapeCalculator(w, h),
+            FractalType.JulibrotPair => new DualOrbitEscapeCalculator(w, h),
             // #726 slice 2 — interpreted DSL twin; SyncAltStateFromMandel copies the
             // UserEquationSource + view so it recompiles the same equation at hi-res.
             FractalType.UserEquation => new UserEquationCalculator(w, h),
@@ -2318,7 +2318,7 @@ namespace FracturingFog.Rendering
         /// The final stage is the unchanged full render.</summary>
         public static bool AlwaysProgressiveAlt(FractalType type) => type switch
         {
-            FractalType.DualOrbitEscape => true,
+            FractalType.JulibrotPair => true,
             _ => false,
         };
 
@@ -3856,12 +3856,12 @@ namespace FracturingFog.Rendering
             FractalType.Kleinian => _kleinianCalculator,
             FractalType.BicomplexMandelbrot => _bicomplexCalculator,
             FractalType.Coquaternion => _coquaternionCalculator,
-            FractalType.DualOrbitVolume => _dualOrbitVolumeCalculator,
+            FractalType.Julibrot => _dualOrbitVolumeCalculator,
             FractalType.Dla => _dlaCalculator,
             FractalType.RandomTile => _randomTileCalculator,
             FractalType.ChaoticBilliard => _billiardCalculator,
             FractalType.PrecisionField => _precisionFieldCalculator,
-            FractalType.DualOrbitEscape => _dualOrbitCalculator,
+            FractalType.JulibrotPair => _dualOrbitCalculator,
             FractalType.IndrasPearls => _indrasPearlsCalculator,
             FractalType.Flame => _flameCalculator,
             FractalType.Sandbox => _sandboxCalculator,

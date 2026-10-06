@@ -241,7 +241,7 @@ public sealed class DualOrbitCoMovingTrapTests
     [Fact]
     public void TrapAngle_IsAnimatable()
     {
-        var names = FracturingFog.Abstractions.Animation.FractalAnimatableParamsMap.For(FractalType.DualOrbitEscape).Select(d => d.ParamName);
+        var names = FracturingFog.Abstractions.Animation.FractalAnimatableParamsMap.For(FractalType.JulibrotPair).Select(d => d.ParamName);
         Assert.Contains(nameof(FractalParameters.DualOrbitTrapAngle), names);
     }
 
@@ -255,12 +255,12 @@ public sealed class DualOrbitCoMovingTrapTests
         };
         var report = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot
         {
-            Fractal = FractalType.DualOrbitEscape, Parameters = p,
-            FamilyParams = RegionFractalParams.Snapshot(FractalType.DualOrbitEscape, p)!.ToKeyValues(),
+            Fractal = FractalType.JulibrotPair, Parameters = p,
+            FamilyParams = RegionFractalParams.Snapshot(FractalType.JulibrotPair, p)!.ToKeyValues(),
         });
         Assert.True(BatchOptions.TryParse(report.Args.ToArray(), 0, out var o, out var err), err);
         var fresh = new FractalParameters();
-        RegionFractalParams.FromKeyValues(o.Params, FractalType.DualOrbitEscape, out _)!.ApplyTo(fresh);
+        RegionFractalParams.FromKeyValues(o.Params, FractalType.JulibrotPair, out _)!.ApplyTo(fresh);
         Assert.Equal(DualOrbitTrapFrame.CoMoving, fresh.DualOrbitTrapFrame);
         Assert.False(fresh.DualOrbitTrapRotate);
         Assert.True(fresh.DualOrbitTrapScaleByOrbit);

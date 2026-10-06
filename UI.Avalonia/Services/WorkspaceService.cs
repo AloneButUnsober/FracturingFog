@@ -325,7 +325,7 @@ namespace FracturingFog.UI.Avalonia.Services
                     !e.IsDivider && e.Promoted != null &&
                     string.Equals(e.Promoted.Name, rw.PromotedFractalName, StringComparison.OrdinalIgnoreCase));
 
-            if (match == null && Enum.TryParse<FractalType>(rw.FractalType, out var ft))
+            if (match == null && FractalTypeNames.TryParse(rw.FractalType, out var ft))
                 match = entries.FirstOrDefault(e => !e.IsDivider && e.Promoted == null && e.Type == ft)
                      ?? entries.FirstOrDefault(e => !e.IsDivider && e.Type == ft);
 

@@ -68,7 +68,7 @@ public static class AnimationLegPicker
 
         FractalType? regionType = null;
         if (!string.IsNullOrWhiteSpace(regionFractalTypeName)
-            && Enum.TryParse<FractalType>(regionFractalTypeName, out var parsed))
+            && FractalTypeNames.TryParse(regionFractalTypeName, out var parsed))
         {
             regionType = parsed;
         }

@@ -54,8 +54,8 @@ public sealed class DualOrbitProgressiveTests
     [Fact]
     public void DualOrbitEscape_IsInTheAlwaysProgressiveSet_AndHasAPreviewTwin()
     {
-        Assert.True(FractalRenderHost.AlwaysProgressiveAlt(FractalType.DualOrbitEscape));
-        Assert.IsType<DualOrbitEscapeCalculator>(FractalRenderHost.CreateReliefFieldCalc(FractalType.DualOrbitEscape, 64, 64));
+        Assert.True(FractalRenderHost.AlwaysProgressiveAlt(FractalType.JulibrotPair));
+        Assert.IsType<DualOrbitEscapeCalculator>(FractalRenderHost.CreateReliefFieldCalc(FractalType.JulibrotPair, 64, 64));
         Assert.False(FractalRenderHost.AlwaysProgressiveAlt(FractalType.Julia));
         Assert.False(FractalRenderHost.AlwaysProgressiveAlt(FractalType.Mandelbrot));
     }
@@ -64,12 +64,12 @@ public sealed class DualOrbitProgressiveTests
     public void DualOrbitEscape_UploadsQuarterHalfThenFull_FinalMatchesSinglePass()
     {
         var fp = new FractalParameters { DualOrbitField = DualOrbitField.BasinEntropy, DualOrbitEnsembleN = 8 };
-        var (uploads, final) = Run(FractalType.DualOrbitEscape, progressive: true, fp);
+        var (uploads, final) = Run(FractalType.JulibrotPair, progressive: true, fp);
         (int, int) quarter = (Math.Max(64, W / 4), Math.Max(64, H / 4)), half = (Math.Max(64, W / 2), Math.Max(64, H / 2));
         int iq = uploads.IndexOf(quarter), ih = uploads.IndexOf(half), iF = uploads.LastIndexOf((W, H));
         Assert.True(iq >= 0 && ih > iq && iF > ih, $"uploads: {string.Join(", ", uploads)}");
 
-        var (single, singleFinal) = Run(FractalType.DualOrbitEscape, progressive: false, fp.Clone());
+        var (single, singleFinal) = Run(FractalType.JulibrotPair, progressive: false, fp.Clone());
         Assert.DoesNotContain(quarter, single);
         Assert.Equal(singleFinal, final);
     }

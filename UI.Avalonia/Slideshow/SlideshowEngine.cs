@@ -521,7 +521,7 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             var caps = FractalCapabilities.None;
             string? typeName = _service.GetRegionFractalTypeName(regionName);
             if (!string.IsNullOrEmpty(typeName)
-                && Enum.TryParse<FractalType>(typeName, ignoreCase: true, out var ft))
+                && FractalTypeNames.TryParse(typeName, ignoreCase: true, out var ft))
                 caps = FractalCapabilityMap.For(ft);
             return FracturingFog.Imaging.RandomThemeGenerator.KindsFor(caps);
         }

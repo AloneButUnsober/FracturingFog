@@ -169,7 +169,7 @@ public sealed class ServerConfig
                 var json = File.ReadAllText(path);
                 var opts = new JsonSerializerOptions
                 {
-                    Converters = { new JsonStringEnumConverter() },
+                    Converters = { new FractalTypeJsonConverter(), new JsonStringEnumConverter() },
                 };
                 return JsonSerializer.Deserialize<ServerConfig>(json, opts) ?? new ServerConfig();
             }
@@ -186,7 +186,7 @@ public sealed class ServerConfig
         {
             WriteIndented = true,
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            Converters = { new JsonStringEnumConverter() },
+            Converters = { new FractalTypeJsonConverter(), new JsonStringEnumConverter() },
         });
         AtomicFile.WriteAllText(path, json);
     }

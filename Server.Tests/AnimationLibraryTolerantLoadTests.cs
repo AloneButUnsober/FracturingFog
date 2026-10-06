@@ -46,7 +46,7 @@ public sealed class AnimationLibraryTolerantLoadTests
     [Fact]
     public void Unknown_fractal_type_entry_does_not_hide_the_others()
     {
-        WithFile($"[{Entry("Before", "DualOrbitEscape")},{Entry("Future", "SemigroupJulia")},{Entry("After", "DualOrbitEscape")}]", () =>
+        WithFile($"[{Entry("Before", "JulibrotPair")},{Entry("Future", "SemigroupJulia")},{Entry("After", "JulibrotPair")}]", () =>
         {
             var lib = AnimationLibrary.Instance;
             lib.Load();
@@ -58,10 +58,29 @@ public sealed class AnimationLibraryTolerantLoadTests
         });
     }
 
+    // #1154 / #1155 — an entry saved before the rename (type DualOrbitEscape) loads
+    // as JulibrotPair (not "unreadable"), and is re-saved under the new name.
+    [Fact]
+    public void Renamed_fractal_type_entry_loads_under_its_new_name()
+    {
+        WithFile($"[{Entry("Old", "DualOrbitEscape")},{Entry("OldVol", "DualOrbitVolume")}]", () =>
+        {
+            var lib = AnimationLibrary.Instance;
+            lib.Load();
+            Assert.Equal(0, lib.UnreadableCount);
+            Assert.Equal(FractalType.JulibrotPair, lib.GetByName("Old")!.TargetFractalTypes.Single());
+            Assert.Equal(FractalType.Julibrot, lib.GetByName("OldVol")!.TargetFractalTypes.Single());
+            lib.Save();
+            string saved = File.ReadAllText(FilePath);
+            Assert.Contains("JulibrotPair", saved);
+            Assert.DoesNotContain("DualOrbitEscape", saved);
+        });
+    }
+
     [Fact]
     public void Save_round_trips_the_unreadable_entry_verbatim()
     {
-        WithFile($"[{Entry("Keep", "DualOrbitEscape")},{Entry("Future", "SemigroupJulia")}]", () =>
+        WithFile($"[{Entry("Keep", "JulibrotPair")},{Entry("Future", "SemigroupJulia")}]", () =>
         {
             var lib = AnimationLibrary.Instance;
             lib.Load();

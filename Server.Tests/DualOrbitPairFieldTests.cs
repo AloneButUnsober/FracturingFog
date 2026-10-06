@@ -298,13 +298,13 @@ public sealed class DualOrbitPairFieldTests
         };
         var report = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot
         {
-            Fractal = FractalType.DualOrbitEscape, Parameters = p,
-            FamilyParams = RegionFractalParams.Snapshot(FractalType.DualOrbitEscape, p)!.ToKeyValues(),
+            Fractal = FractalType.JulibrotPair, Parameters = p,
+            FamilyParams = RegionFractalParams.Snapshot(FractalType.JulibrotPair, p)!.ToKeyValues(),
         });
         Assert.Contains("--param DualOrbitDivergenceRatio=7.5", report.Command);
         Assert.True(BatchOptions.TryParse(report.Args.ToArray(), 0, out var o, out var err), err);
         var fresh = new FractalParameters();
-        RegionFractalParams.FromKeyValues(o.Params, FractalType.DualOrbitEscape, out var e2)!.ApplyTo(fresh);
+        RegionFractalParams.FromKeyValues(o.Params, FractalType.JulibrotPair, out var e2)!.ApplyTo(fresh);
         Assert.Equal(DualOrbitField.DivergenceTime, fresh.DualOrbitField);
         Assert.Equal(7.5, fresh.DualOrbitDivergenceRatio);
         Assert.Equal(3.25, fresh.DualOrbitLyapunovSpan);
@@ -313,7 +313,7 @@ public sealed class DualOrbitPairFieldTests
     [Fact]
     public void Defaults_AreOmittedFromTheRegionSnapshot()
     {
-        var snap = RegionFractalParams.Snapshot(FractalType.DualOrbitEscape, new FractalParameters());
+        var snap = RegionFractalParams.Snapshot(FractalType.JulibrotPair, new FractalParameters());
         Assert.True(snap == null || (snap.DualOrbitLyapunovSpan == null && snap.DualOrbitDivergenceRatio == null));
     }
 }
