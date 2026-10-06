@@ -214,9 +214,22 @@ through to the CPU ShadingPipeline silently. The bench guards against measuring 
   calculator-side gate kept the frame on the CPU, and `LastError='…'` means the kernel failed on
   this device.
 
-That guard is what exposed #1164: on CUDA, all 8 kernels fail to JIT because the context lacks
-`ILGPU.Algorithms`. **Until #1164 is fixed, every case reports `NA` on an NVIDIA host.** That's
-correct behaviour: the app is rendering those frames on the CPU too.
+That guard is what exposed #1164: on CUDA, all 8 kernels failed to JIT because the context lacked
+`ILGPU.Algorithms`. Since #1164 they JIT, and every kernel context comes from
+`GpuAcceleratorHost.CreateContext()`, which calls `EnableAlgorithms()`.
+
+**Mandelbulb runs last.** On some CUDA devices (seen on a Kepler GT 710) its kernel faults at
+launch (#1169). A CUDA launch failure poisons the whole process, and `GpuAcceleratorHost` then
+latches GPU 3D off for the session (`ReportRenderFault`). Every case after a fault reports
+`NA` with "GPU device faulted … disabled for this session". So the `GpuFamily` enum declares
+Mandelbulb last, which keeps the other seven measurable. The order has to live in the enum because
+BenchmarkDotNet runs param values in **value order** and ignores the `[Params]` order.
+
+**Smallest frames first.** On a slow GPU, a single 1920x1080 raymarch launch can outlast the
+Windows GPU watchdog (TDR). The driver resets the device, which is the same sticky fault and the
+same latch (#1170 proposes tiling the dispatch, as #1044 did for relief). `Width` is therefore
+declared before `Family`, making it the outer axis, so every 640x360 case runs before any 1080p
+one.
 
 Extra columns (`Benchmarks/CaseMetrics.cs`):
 

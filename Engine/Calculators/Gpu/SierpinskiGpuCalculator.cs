@@ -87,6 +87,7 @@ public sealed class SierpinskiGpuCalculator : IDisposable
         catch (Exception ex)
         {
             LastError = $"Sierpinski GPU render failed: {ex.Message}";
+            GpuAcceleratorHost.ReportRenderFault(acc, ex);
             return false;
         }
     }

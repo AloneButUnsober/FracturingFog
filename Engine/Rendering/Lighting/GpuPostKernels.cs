@@ -155,7 +155,7 @@ public static class GpuPostKernels
             if (_initFailed) return false;
             try
             {
-                _ctx = Context.Create(b => b.Default());
+                _ctx = FracturingFog.Calculators.Gpu.GpuAcceleratorHost.CreateContext();
                 // Prefer GPU; fall through to managed-CPU JIT on machines without
                 // CUDA / OpenCL. Same fallback ladder as UserBulbGpuCalculator.
                 _acc = _ctx.GetPreferredDevice(preferCPU: false).CreateAccelerator(_ctx);

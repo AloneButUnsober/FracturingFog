@@ -89,6 +89,7 @@ public sealed class QJuliaGpuCalculator : IDisposable
         catch (Exception ex)
         {
             LastError = $"QJulia GPU render failed: {ex.Message}";
+            GpuAcceleratorHost.ReportRenderFault(acc, ex);
             return false;
         }
     }

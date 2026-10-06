@@ -45,7 +45,7 @@ dotnet build FracturingFog.App                    # cross-platform Avalonia shel
 * Silk.NET OpenGL (Linux + macOS, opt-in on Windows via `--renderer silk`)
 * SkiaSharp 3 (Avalonia, exporters, CPU renderer)
 * NAudio 2 (Windows audio capture)
-* ILGPU 1.5 (GPU compute, CPU fallback everywhere)
+* ILGPU 1.5 + ILGPU.Algorithms (GPU compute, CPU fallback everywhere)
 * QuestPDF (palette PDF export)
 * MathNet.Numerics (FFT beat analyzer)
 

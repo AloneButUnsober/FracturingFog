@@ -86,6 +86,7 @@ public sealed class BicomplexGpuCalculator : IDisposable
         catch (Exception ex)
         {
             LastError = $"Bicomplex GPU render failed: {ex.Message}";
+            GpuAcceleratorHost.ReportRenderFault(acc, ex);
             return false;
         }
     }

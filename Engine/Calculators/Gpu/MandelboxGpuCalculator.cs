@@ -88,6 +88,7 @@ public sealed class MandelboxGpuCalculator : IDisposable
         catch (Exception ex)
         {
             LastError = $"Mandelbox GPU render failed: {ex.Message}";
+            GpuAcceleratorHost.ReportRenderFault(acc, ex);
             return false;
         }
     }

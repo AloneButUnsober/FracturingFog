@@ -123,8 +123,9 @@ dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --filter "*Ma
 > card was found (the 3-D kernels need double-precision support, which many built-in Intel
 > graphics chips lack), or the card couldn't run the kernel. The benchmark deliberately refuses
 > to time the CPU fallback, so you never get a misleading "GPU" number. The log under
-> `BenchmarkDotNet.Artifacts` says why. **Known issue:** on NVIDIA cards every row currently shows
-> `NA`, which matches what the app itself does today (#1164).
+> `BenchmarkDotNet.Artifacts` says why. **Known issue:** on some NVIDIA cards the Mandelbulb rows
+> show `NA` because its graphics kernel crashes there (#1169). The app then switches GPU rendering
+> off for the rest of the session and draws on the CPU instead.
 
 ---
 

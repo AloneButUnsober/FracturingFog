@@ -56,7 +56,7 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         if (_initFailed) return false;
         try
         {
-            _context = Context.Create(b => b.Default());
+            _context = FracturingFog.Calculators.Gpu.GpuAcceleratorHost.CreateContext();
             _accelerator = _context.GetPreferredDevice(preferCPU: false).CreateAccelerator(_context);
             return true;
         }

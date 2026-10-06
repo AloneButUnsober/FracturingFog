@@ -72,7 +72,7 @@ public sealed class MandelbrotRefOrbitGpu : IDisposable
         if (_ownAcc != null) { acc = _ownAcc; return true; }
         try
         {
-            _ownCtx = Context.Create(b => b.Default());
+            _ownCtx = GpuAcceleratorHost.CreateContext();
             var devices = _ownCtx.Devices.ToList();
             // Prefer CUDA (fast FP64), fall back to CPU (always FP64). OpenCL
             // is skipped — FP64 support varies and a JIT failure is costlier
