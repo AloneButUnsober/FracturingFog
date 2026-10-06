@@ -198,9 +198,11 @@ dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --filter "*Gp
 
 It times the **production** 3D calculators with `Lighting.UseGpuRender = true`, so the frame is
 what the app renders: real parameter construction, kernel launch, `Synchronize`, device-to-host
-copy. Matrix: 9 cases per width (`Mandelbulb`, `Mandelbox`, KIFS `Menger` / `Sierpinski`, `QJulia`,
-`QMandel`, `Kleinian`, `Bicomplex`, and `BicomplexR`, the R slice axis at sliceW 0.4, which
-rendered on the CPU before #1173-C) x {640x360, 1920x1080} = 18 cases. Same in-process job as
+copy. Matrix: 10 cases per width (`Mandelbulb`, `Mandelbox`, KIFS `Menger` / `Sierpinski`, `QJulia`,
+`QMandel`, `Kleinian`, `Bicomplex`; `BicomplexR`, the R slice axis at sliceW 0.4, which
+rendered on the CPU before #1173-C; and `MandelboxHdri`, Mandelbox under a synthetic 512x256
+HDRI with IBL ambient and reflections, which used the gradient sky before #1173-B)
+x {640x360, 1920x1080} = 20 cases. Same in-process job as
 `MandelbrotBench`.
 
 **It refuses to time a CPU fallback.** In the app, a missing device or a failed kernel load falls
@@ -214,6 +216,10 @@ through to the CPU ShadingPipeline silently. The bench guards against measuring 
 - The exception names the inner GPU calculator's state: `=null (Render never called)` means a
   calculator-side gate kept the frame on the CPU, and `LastError='…'` means the kernel failed on
   this device.
+- `No GPU accelerator available (GPU accelerator init failed: out of memory)` with plenty of free
+  VRAM usually means a **Remote Desktop session**: a GeForce card under WDDM can't create a CUDA
+  context there, and the driver reports it as out of memory (seen on the GT 710, driver 456.71).
+  Run GPU benches and the S749 CUDA tests from the console session.
 
 That guard is what exposed #1164: on CUDA, all 8 kernels failed to JIT because the context lacked
 `ILGPU.Algorithms`. Since #1164 they JIT, and every kernel context comes from

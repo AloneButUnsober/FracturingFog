@@ -53,7 +53,7 @@ public struct MandelbulbGpuParams
 
 public sealed class MandelbulbGpuCalculator : IDisposable
 {
-    private Action<Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, MandelbulbGpuParams, ArrayView<uint>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<uint>>? _kernel;
+    private Action<Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, MandelbulbGpuParams, ArrayView<uint>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<uint>, ArrayView<uint>>? _kernel;
     private bool _initFailed;
     // #1169 — set once a device proved too slow for this kernel; per family and
     // device, process-wide, so new calculator instances don't re-probe it.
@@ -73,7 +73,7 @@ public sealed class MandelbulbGpuCalculator : IDisposable
         try
         {
             _kernel = acc.LoadAutoGroupedStreamKernel<
-                Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, MandelbulbGpuParams, ArrayView<uint>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<uint>>(BulbKernel);
+                Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, MandelbulbGpuParams, ArrayView<uint>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<uint>, ArrayView<uint>>(BulbKernel);
             return true;
         }
         catch (Exception ex)
@@ -87,7 +87,7 @@ public sealed class MandelbulbGpuCalculator : IDisposable
     /// <summary>Render one frame into <paramref name="outBuffer"/>. Returns
     /// false on init or kernel failure — caller falls back to CPU. The
     /// output buffer length must equal <c>r.Width * r.Height</c>.</summary>
-    public bool Render(uint[] outBuffer, GpuRaymarchParams r, GpuShadingParams sp, MandelbulbGpuParams p, uint[]? palette = null, float[]? depthOut = null, CancellationToken ct = default, float[]? normalOut = null, float[]? hdrOut = null, uint[]? albedoLut = null)
+    public bool Render(uint[] outBuffer, GpuRaymarchParams r, GpuShadingParams sp, MandelbulbGpuParams p, uint[]? palette = null, float[]? depthOut = null, CancellationToken ct = default, float[]? normalOut = null, float[]? hdrOut = null, uint[]? albedoLut = null, uint[]? hdri = null)
     {
         if (!TryInit() || _kernel == null) return false;
         if (!GpuAcceleratorHost.TryAcquire(out var acc)) return false;
@@ -116,9 +116,13 @@ public sealed class MandelbulbGpuCalculator : IDisposable
             uint[] alb = albedoLut is { Length: >= 2 } ? albedoLut : GpuKernelUtils.PaletteOff;
             using var devAlbedo = GpuMemoryStats.Allocate1D<uint>(acc, alb.Length);
             devAlbedo.CopyFromCPU(alb);
+            // #1173-B / G2.3 — flattened HDRI environment (GpuHdriEnv), or the length-1 "off" dummy.
+            uint[] env = hdri is { Length: >= 2 } ? hdri : GpuKernelUtils.PaletteOff;
+            using var devHdri = GpuMemoryStats.Allocate1D<uint>(acc, env.Length);
+            devHdri.CopyFromCPU(env);
             // #1170 — tiled under the GPU watchdog; byte-identical to one launch.
             var kernel = _kernel;
-            var run = GpuTiledDispatch.Run(acc, r, (n, rt) => kernel(n, dev.View, rt, sp, p, devLut.View, devDepth.View, devNormal.View, devHdr.View, devAlbedo.View), ct);
+            var run = GpuTiledDispatch.Run(acc, r, (n, rt) => kernel(n, dev.View, rt, sp, p, devLut.View, devDepth.View, devNormal.View, devHdr.View, devAlbedo.View, devHdri.View), ct);
             if (run == GpuDispatchResult.TooSlow)
             {
                 // #1169 — this device can't render this kernel in useful time; stay on the CPU.
@@ -143,7 +147,7 @@ public sealed class MandelbulbGpuCalculator : IDisposable
 
     // ── Kernel ──────────────────────────────────────────────────────────────
     private static void BulbKernel(
-        Index1D tid, ArrayView<uint> output, GpuRaymarchParams r, GpuShadingParams sp, MandelbulbGpuParams p, ArrayView<uint> palette, ArrayView<float> depth, ArrayView<float> normals, ArrayView<float> hdr, ArrayView<uint> albedo)
+        Index1D tid, ArrayView<uint> output, GpuRaymarchParams r, GpuShadingParams sp, MandelbulbGpuParams p, ArrayView<uint> palette, ArrayView<float> depth, ArrayView<float> normals, ArrayView<float> hdr, ArrayView<uint> albedo, ArrayView<uint> hdri)
     {
         int idx = GpuKernelUtils.TilePixel(tid, in r);   // #1170 — pixel this thread shades
         int x = idx % r.Width;
@@ -173,7 +177,7 @@ public sealed class MandelbulbGpuCalculator : IDisposable
         int dofN = (r.DofSamples > 1 && r.DofAperture > 0.0) ? r.DofSamples : 1;
         if (dofN <= 1)
         {
-            output[idx] = ShadeBulbRay(r.CamX, r.CamY, r.CamZ, cdx, cdy, cdz, in r, in sp, in p, palette, depth, dIdx, normals, hdr, gIdx, albedo);
+            output[idx] = ShadeBulbRay(r.CamX, r.CamY, r.CamZ, cdx, cdy, cdz, in r, in sp, in p, palette, depth, dIdx, normals, hdr, gIdx, albedo, hdri);
             return;
         }
 
@@ -191,7 +195,7 @@ public sealed class MandelbulbGpuCalculator : IDisposable
             double oz = r.CamZ + r.RightZ * lx + r.UpZ * ly;
             double ddx = fpx - ox, ddy = fpy - oy, ddz = fpz - oz;
             double il = 1.0 / Math.Sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
-            uint c = ShadeBulbRay(ox, oy, oz, ddx * il, ddy * il, ddz * il, in r, in sp, in p, palette, depth, -1, normals, hdr, -1, albedo);
+            uint c = ShadeBulbRay(ox, oy, oz, ddx * il, ddy * il, ddz * il, in r, in sp, in p, palette, depth, -1, normals, hdr, -1, albedo, hdri);
             aR += (c >> 16) & 0xFF; aG += (c >> 8) & 0xFF; aB += c & 0xFF; aA += (c >> 24) & 0xFF;
         }
         double inv = 1.0 / dofN;
@@ -207,10 +211,10 @@ public sealed class MandelbulbGpuCalculator : IDisposable
     private static uint ShadeBulbRay(
         double rox, double roy, double roz, double rdx, double rdy, double rdz,
         in GpuRaymarchParams r, in GpuShadingParams sp, in MandelbulbGpuParams p, ArrayView<uint> palette,
-        ArrayView<float> depth, int depthIdx, ArrayView<float> normals, ArrayView<float> hdr, int gIdx, ArrayView<uint> albedo)
+        ArrayView<float> depth, int depthIdx, ArrayView<float> normals, ArrayView<float> hdr, int gIdx, ArrayView<uint> albedo, ArrayView<uint> hdri)
     {
         var (sphereHit, tEn, _) = GpuKernelUtils.SphereClipFrom(rox, roy, roz, rdx, rdy, rdz, in r);
-        if (!sphereHit) return GpuKernelUtils.MissColor(rdy, in r, in sp);
+        if (!sphereHit) return GpuKernelUtils.MissColor(hdri, rdx, rdy, rdz, in r, in sp);
 
         double px = rox + rdx * tEn;
         double py = roy + rdy * tEn;
@@ -228,7 +232,7 @@ public sealed class MandelbulbGpuCalculator : IDisposable
             tT += d;
         }
 
-        if (!hit) return GpuKernelUtils.MissColor(rdy, in r, in sp);
+        if (!hit) return GpuKernelUtils.MissColor(hdri, rdx, rdy, rdz, in r, in sp);
         if (depthIdx >= 0) depth[depthIdx] = (float)tT;   // #1070 — ray distance to the hit
 
         // Central-difference normals matching the CPU path.
@@ -311,7 +315,7 @@ public sealed class MandelbulbGpuCalculator : IDisposable
             return GpuKernelUtils.EncodeSurfaceAov(in spL, nx, ny, nz, rdx, rdy, rdz, px, py, pz,
                 sh1, sh2, sh3, ao, aR, aG, aB, tT, hitStep);
         var (br, bg, bb) = GpuKernelUtils.ComposeSurfacePbr(
-            in spL, nx, ny, nz, rdx, rdy, rdz, px, py, pz, sh1, sh2, sh3, ao, aR, aG, aB);
+            hdri, in spL, nx, ny, nz, rdx, rdy, rdz, px, py, pz, sh1, sh2, sh3, ao, aR, aG, aB);
 
         // P7c.3 — reflection probe. Reflect view ray about the surface
         // normal, sphere-trace this fractal's DE to either a hit (sky tint
@@ -360,7 +364,7 @@ public sealed class MandelbulbGpuCalculator : IDisposable
                     tR += hR;
                     if (tR > rMax) break;
                 }
-                var (rcR, rcG, rcB) = GpuKernelUtils.ReflectShade(hitR, hitTR, bDirY, in sp);
+                var (rcR, rcG, rcB) = GpuKernelUtils.ReflectShade(hitR, hitTR, bDirX, bDirY, bDirZ, in sp, hdri);
                 accR += rcR * w;
                 accG += rcG * w;
                 accB += rcB * w;

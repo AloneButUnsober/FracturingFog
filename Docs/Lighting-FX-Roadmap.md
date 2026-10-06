@@ -158,9 +158,10 @@ H)))` box-downsampled mips at load time; `Sample(dir, roughness)` picks
 the mip by `roughness² · (MipLevels − 1)` and bilinearly samples that
 level (mip 0 is sharp; mip N−1 is one pixel). `SampleEnvAmbientHdri`
 and `SkyColorHdri` route through the new overload so ambient IBL and
-sky-tint reflection misses both pick up roughness convolution. GPU
-HDRI sampling remains GPU-blocked (managed-array lookup); the GPU
-reflect bounce continues to use the sky-gradient proxy.
+sky-tint reflection misses both pick up roughness convolution. The 3D
+GPU kernels sample the same HDRI since #1173-B (GPU parity G2.3): the
+flattened `ReliefHdriBuffer` upload feeds miss pixels, IBL ambient and
+the reflection bounce, roughness mips included.
 
 GGX importance sampling per bounce (the original scope item #3) was
 **not** shipped — the existing mirror reflection + Fresnel mix matches

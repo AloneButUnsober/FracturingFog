@@ -60,6 +60,8 @@ public enum GpuFamily
     Bicomplex,
     // #1173-C — a non-K slice axis (R, sliceW 0.4): CPU-only before G3.1.
     BicomplexR,
+    // #1173-B — Mandelbox under an HDRI sky with IBL ambient + reflections (gradient sky before G2.3).
+    MandelboxHdri,
     Mandelbulb,
 }
 
@@ -78,7 +80,7 @@ public class GpuCalculatorBench
     // Width no longer needs to be the outer axis.
     [Params(GpuFamily.Mandelbox, GpuFamily.Menger, GpuFamily.Sierpinski,
             GpuFamily.QJulia, GpuFamily.QMandel, GpuFamily.Kleinian, GpuFamily.Bicomplex,
-            GpuFamily.BicomplexR, GpuFamily.Mandelbulb)]
+            GpuFamily.BicomplexR, GpuFamily.MandelboxHdri, GpuFamily.Mandelbulb)]
     public GpuFamily Family { get; set; }
 
     [Params(640, 1920)]
@@ -106,6 +108,7 @@ public class GpuCalculatorBench
             GpuFamily.QMandel    => new QuatMandelbrotCalculator(Width, height) { FractalParameters = fp },
             GpuFamily.Kleinian   => new KleinianCalculator(Width, height) { FractalParameters = fp },
             GpuFamily.Bicomplex  => new BicomplexMandelbrotCalculator(Width, height) { FractalParameters = fp },
+            GpuFamily.MandelboxHdri => new MandelboxCalculator(Width, height) { FractalParameters = new FractalParameters { Lighting = HdriScene(fx) } },
             GpuFamily.BicomplexR => new BicomplexMandelbrotCalculator(Width, height)
             {
                 FractalParameters = new FractalParameters
@@ -137,6 +140,30 @@ public class GpuCalculatorBench
         });
         CaseMetrics.Record(CaseMetrics.DeviceAllocPerOp, key, CaseMetrics.FormatMegabytes(perFrame));
         CaseMetrics.Record(CaseMetrics.Device, key, $"{accelerator.AcceleratorType} {accelerator.Name}");
+    }
+
+    private const string BenchEnv = "gpu-bench-env";
+
+    /// <summary>A synthetic 512x256 equirect (no file I/O in the timed path) with the
+    /// HDRI on every env lookup: backdrop, IBL ambient and a reflection bounce.</summary>
+    private static LightingFxData HdriScene(LightingFxData fx)
+    {
+        const int w = 512, h = 256;
+        var data = new float[w * h * 3];
+        for (int i = 0; i < w * h; i++)
+        {
+            int x = i % w, y = i / w;
+            data[3 * i] = 0.2f + 0.8f * x / w;
+            data[3 * i + 1] = 0.2f + 0.6f * (1f - (float)y / h);
+            data[3 * i + 2] = 0.3f + 0.5f * (float)y / h;
+        }
+        HdriRegistry.Register(BenchEnv, new HdriImage(w, h, data));
+        fx.SkyMode = SkyMode.Hdri;
+        fx.EnvironmentName = BenchEnv;
+        fx.IblStrength = 0.6;
+        fx.ReflectionStrength = 0.5;
+        fx.Roughness = 0.4;
+        return fx;
     }
 
     [GlobalCleanup]
