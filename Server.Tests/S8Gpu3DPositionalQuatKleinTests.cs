@@ -4,7 +4,7 @@
 // S8 GPU 3D lights slice 3 (#487) — Quaternion Julia / Mandelbrot, Kleinian,
 // Bicomplex. The #485 spL resolve pattern fans across the last four non-UserBulb
 // per-fractal kernels, and each family's !HasPositionalLight force-CPU gate is
-// lifted (Bicomplex keeps its GPU path gated to the K slice axis). On-device
+// lifted (Bicomplex was then gated to the K slice axis; #1173-C lifted that). On-device
 // pixel output is validated by user smoke; the executable lock is that moving a
 // point light changes each family's image (true on the GPU positional path now,
 // and on a CPU-only host where the CPU shade always honoured LightSampler).

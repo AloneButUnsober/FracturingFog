@@ -58,6 +58,8 @@ public enum GpuFamily
     QMandel,
     Kleinian,
     Bicomplex,
+    // #1173-C — a non-K slice axis (R, sliceW 0.4): CPU-only before G3.1.
+    BicomplexR,
     Mandelbulb,
 }
 
@@ -76,7 +78,7 @@ public class GpuCalculatorBench
     // Width no longer needs to be the outer axis.
     [Params(GpuFamily.Mandelbox, GpuFamily.Menger, GpuFamily.Sierpinski,
             GpuFamily.QJulia, GpuFamily.QMandel, GpuFamily.Kleinian, GpuFamily.Bicomplex,
-            GpuFamily.Mandelbulb)]
+            GpuFamily.BicomplexR, GpuFamily.Mandelbulb)]
     public GpuFamily Family { get; set; }
 
     [Params(640, 1920)]
@@ -104,6 +106,13 @@ public class GpuCalculatorBench
             GpuFamily.QMandel    => new QuatMandelbrotCalculator(Width, height) { FractalParameters = fp },
             GpuFamily.Kleinian   => new KleinianCalculator(Width, height) { FractalParameters = fp },
             GpuFamily.Bicomplex  => new BicomplexMandelbrotCalculator(Width, height) { FractalParameters = fp },
+            GpuFamily.BicomplexR => new BicomplexMandelbrotCalculator(Width, height)
+            {
+                FractalParameters = new FractalParameters
+                {
+                    Lighting = fx, BicomplexSliceAxis = BicomplexSliceAxis.R, BicomplexSliceW = 0.4,
+                },
+            },
             _ => throw new ArgumentOutOfRangeException(nameof(Family)),
         };
         _calc.ColorMap = ColorPalette.BuiltIns[0];

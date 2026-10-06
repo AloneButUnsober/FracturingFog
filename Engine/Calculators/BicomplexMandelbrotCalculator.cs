@@ -168,18 +168,15 @@ public sealed class BicomplexMandelbrotCalculator : IFractalCalculator, IStereoE
 
         // P7b — opt-in GPU raymarch path (colour-map LUT albedo, #1172). See
         // MandelbulbCalculator for what the GPU path shades and the #1172 post stack.
-        // Wave 5.14 — GPU kernel still hardcodes the legacy K-axis assignment;
-        // non-K slice-axis selections fall back to the CPU path until the
-        // kernel grows an axis parameter.
+        // #1173-C — the kernel takes the slice axis (BicomplexGpuParams.SliceAxis), so
+        // every axis renders on the GPU; Wave 5.14's K-only gate is gone.
         // #320 — force CPU while an AOV view is active (GPU has no view path).
         // S8 (#404/#487) — this kernel now resolves point/spot lights on the GPU
         // (GpuKernelUtils.ResolveLight); the !HasPositionalLight gate is lifted.
         // #492 added a per-light area-capped shadow hardness (sp.ShadowK1/2/3),
         // so area lights also render on the GPU now (punctual = byte-identical).
-        string? gpuFamilyReason = sliceAxis == BicomplexSliceAxis.K ? null : $"slice axis {sliceAxis}";
-        string gpuFamilyDetail = $"only the K slice axis has a GPU kernel; {sliceAxis} renders on the CPU (#1173-C)";
         // #1173-M — the same gate as before, plus the reason when it fails.
-        var gpuGate = Gpu3DRoute.Gate(in fx, lowRes, gpuFamilyReason, gpuFamilyDetail);
+        var gpuGate = Gpu3DRoute.Gate(in fx, lowRes);
         LastGpuRoute = gpuGate ?? default;
         if (gpuGate is null)
         {
@@ -215,7 +212,7 @@ public sealed class BicomplexMandelbrotCalculator : IFractalCalculator, IStereoE
             };
             var bp = new BicomplexGpuParams
             {
-                SliceW = sliceW,
+                SliceW = sliceW, SliceAxis = (int)sliceAxis,
                 Bailout2 = bailout2, DEIter = deIter,
                 SceneRadius = sceneRadius,
             };
