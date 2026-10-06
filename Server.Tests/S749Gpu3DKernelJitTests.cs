@@ -49,11 +49,52 @@ public sealed class S749Gpu3DKernelJitTests
     [MemberData(nameof(FamilyCalculators))]
     public void Family_Kernel_Jits_On_Cpu_Accelerator(Type calcType)
     {
-        using var ctx = Context.Create(b => b.Default());
+        using var ctx = GpuAcceleratorHost.CreateContext();
         var cpuDev = ctx.Devices.FirstOrDefault(d => d.AcceleratorType == AcceleratorType.CPU);
         Assert.NotNull(cpuDev); // ILGPU always exposes a CPU device.
         using var acc = cpuDev!.CreateAccelerator(ctx);
 
+        AssertKernelJits(calcType, acc,
+            "#749 regression — a Math.Clamp or other throw is back?");
+    }
+
+    // #1164 — the CPU accelerator has .NET math for every intrinsic, so the test
+    // above can't see backend-specific failures. On CUDA every family failed to
+    // load ("SinF does not have an intrinsic implementation for this backend")
+    // because the context lacked ILGPU.Algorithms, and the app silently rendered
+    // on the CPU. JIT each family on every real fp64 GPU device present, through
+    // the same GpuAcceleratorHost.CreateContext the app uses. A GPU-less runner
+    // has no such device and the test passes vacuously; on a dev box with a GPU
+    // it catches the next backend gap.
+    [Theory]
+    [MemberData(nameof(FamilyCalculators))]
+    public void Family_Kernel_Jits_On_Every_Gpu_Device(Type calcType)
+    {
+        using var ctx = GpuAcceleratorHost.CreateContext();
+        foreach (var dev in ctx.Devices.Where(d =>
+                     d.AcceleratorType != AcceleratorType.CPU && GpuAcceleratorHost.SupportsFloat64(d)))
+        {
+            // CUDA launch failures are sticky for the whole PROCESS. Another test
+            // in this run may have launched a kernel that faulted on this device
+            // (#1169 / #1170 on weak hardware) — then the device is unusable here
+            // and that is not this test's subject. JIT never launches, so it can't
+            // be the cause; skip rather than misreport.
+            Accelerator acc;
+            try { acc = dev.CreateAccelerator(ctx); }
+            catch (ILGPU.Runtime.Cuda.CudaException ex)
+            {
+                Assert.Skip($"{dev.Name} unusable in this process (sticky CUDA fault from an earlier test: {ex.Message})");
+                return;
+            }
+            using (acc)
+                AssertKernelJits(calcType, acc,
+                    $"on {dev.AcceleratorType} '{dev.Name}' (#1164 — missing EnableAlgorithms or another backend gap?)",
+                    skipOnStickyFault: true);
+        }
+    }
+
+    private static void AssertKernelJits(Type calcType, Accelerator acc, string hint, bool skipOnStickyFault = false)
+    {
         GpuAcceleratorHost.SetTestOverride(acc);
         try
         {
@@ -64,8 +105,9 @@ public sealed class S749Gpu3DKernelJitTests
                     BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)!;
                 bool ok = (bool)tryInit.Invoke(inst, null)!;
                 var lastError = (string)calcType.GetProperty("LastError")!.GetValue(inst)!;
-                Assert.True(ok,
-                    $"{calcType.Name} kernel failed to JIT (#749 regression — a Math.Clamp or other throw is back?): {lastError}");
+                if (!ok && skipOnStickyFault && lastError.Contains("unspecified launch failure", StringComparison.Ordinal))
+                    Assert.Skip($"device poisoned by an earlier test's CUDA fault: {lastError}");
+                Assert.True(ok, $"{calcType.Name} kernel failed to JIT {hint}: {lastError}");
             }
             finally
             {

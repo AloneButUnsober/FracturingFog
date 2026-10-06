@@ -33,6 +33,7 @@ Fog.
 | Microsoft.NET.Test.Sdk | MIT | Server.Tests |
 | System.Drawing.Common | MIT | FracturingFog.Win |
 | ILGPU | NCSA (University of Illinois/NCSA Open Source License) | Engine, Compute.Smoke, FracturingFogCLD |
+| ILGPU.Algorithms | NCSA (University of Illinois/NCSA Open Source License) | Engine |
 | **QuestPDF** | **QuestPDF Community License** (see note below) | PaletteBuilder.Lib |
 
 ### QuestPDF — dual-license note

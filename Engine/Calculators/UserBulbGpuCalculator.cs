@@ -77,7 +77,7 @@ public sealed class UserBulbGpuCalculator : IDisposable
         if (_initFailed) return false;
         try
         {
-            _context = Context.Create(b => b.Default());
+            _context = FracturingFog.Calculators.Gpu.GpuAcceleratorHost.CreateContext();
             // Pick a Float64-capable device: the kernel is all-double, so an
             // fp64-less OpenCL iGPU throws at JIT (#749). Prefer a real GPU with
             // fp64, else the CPU accelerator (always fp64 — still JITs the kernel

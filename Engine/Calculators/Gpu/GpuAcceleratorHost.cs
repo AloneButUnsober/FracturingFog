@@ -20,6 +20,7 @@
 using System;
 
 using ILGPU;
+using ILGPU.Algorithms;
 using ILGPU.Runtime;
 using ILGPU.Runtime.OpenCL;
 
@@ -38,6 +39,7 @@ public static class GpuAcceleratorHost
     private static Accelerator? _accelerator;
     private static bool _initAttempted;
     private static bool _initFailed;
+    private static bool _faulted;   // #1164: sticky CUDA fault on the shared accelerator
 
     // Test-only override. When set, TryAcquire returns this accelerator instead
     // of the lazily-probed process default, letting the #742/#749 tests pin the
@@ -58,6 +60,15 @@ public static class GpuAcceleratorHost
     /// recorded.</summary>
     public static string LastError { get; private set; } = string.Empty;
 
+    /// <summary>#1164 — create an ILGPU <see cref="Context"/> for running FF
+    /// kernels. Every context that JITs a kernel must come from here (or call
+    /// <c>EnableAlgorithms()</c> itself): the PTX (CUDA) backend has no
+    /// intrinsic for float math such as Sin / Log / Acos / Pow, and without
+    /// ILGPU.Algorithms every kernel using them fails to load on NVIDIA and
+    /// silently falls back to the CPU. Harmless on OpenCL and the CPU
+    /// accelerator, which have their own implementations.</summary>
+    public static Context CreateContext() => Context.Create(b => b.Default().EnableAlgorithms());
+
     /// <summary>Try to acquire the process-wide accelerator. Returns true and
     /// sets <paramref name="accelerator"/> on success. Returns false on init
     /// failure (no GPU, no compatible driver, OOM during context create);
@@ -71,6 +82,11 @@ public static class GpuAcceleratorHost
             {
                 accelerator = _testOverride;
                 return true;
+            }
+            if (_faulted)
+            {
+                accelerator = null!;
+                return false;
             }
             if (_accelerator != null)
             {
@@ -91,7 +107,7 @@ public static class GpuAcceleratorHost
             _initAttempted = true;
             try
             {
-                _context = Context.Create(b => b.Default());
+                _context = CreateContext();
                 // Real fp64 GPU only. No such device -> fail so callers use the
                 // CPU ShadingPipeline instead of JIT-ing the kernels on the CPU
                 // accelerator (#749 — too slow, lower quality than the pipeline).
@@ -129,7 +145,7 @@ public static class GpuAcceleratorHost
     /// the whole GPU path silently falls back to the CPU (#749). CPU and CUDA
     /// devices always provide fp64 — only OpenCL advertises it as optional, so
     /// only that backend is gated.</summary>
-    internal static bool SupportsFloat64(Device d)
+    public static bool SupportsFloat64(Device d)
     {
         try { return d.Capabilities is not CLCapabilityContext cl || cl.Float64; }
         catch { return true; } // CPU device: Capabilities not populated, fp64 always available.
@@ -156,6 +172,27 @@ public static class GpuAcceleratorHost
             else gpu ??= d;
         }
         return gpu ?? (allowCpu ? cpu : null);
+    }
+
+    /// <summary>#1164 — called by a GPU calculator when a kernel launch / copy on
+    /// <paramref name="accelerator"/> threw. CUDA faults (e.g. "unspecified
+    /// launch failure") are sticky: they poison the whole CUDA context, so every
+    /// later GPU call in the process fails too. On such a fault from the shared
+    /// accelerator, latch the GPU 3D path off for the session (TryAcquire
+    /// returns false, callers use the CPU pipeline) instead of re-attempting and
+    /// faulting on every frame. Non-CUDA errors and test-override accelerators
+    /// (owned by the test) are not latched. <see cref="Shutdown"/> clears it.</summary>
+    public static void ReportRenderFault(Accelerator accelerator, Exception ex)
+    {
+        if (ex.GetBaseException() is not ILGPU.Runtime.Cuda.CudaException && ex is not ILGPU.Runtime.Cuda.CudaException)
+            return;
+        lock (_lock)
+        {
+            if (_testOverride != null || !ReferenceEquals(accelerator, _accelerator))
+                return;
+            _faulted = true;
+            LastError = $"GPU device faulted ({ex.Message}); GPU 3D rendering disabled for this session";
+        }
     }
 
     /// <summary>Test-only. Pin <see cref="TryAcquire"/> to <paramref name="acc"/>
@@ -188,6 +225,7 @@ public static class GpuAcceleratorHost
             _context = null;
             _initAttempted = false;
             _initFailed = false;
+            _faulted = false;
             LastError = string.Empty;
         }
     }

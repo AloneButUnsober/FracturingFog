@@ -96,7 +96,7 @@ public sealed class UserBulbBenchmark1104
         sb.AppendLine($"Machine: {Environment.ProcessorCount} logical CPUs, {System.Runtime.InteropServices.RuntimeInformation.OSArchitecture}, .NET {Environment.Version}");
         try
         {
-            using var ctx = ILGPU.Context.Create(b => b.Default());
+            using var ctx = FracturingFog.Calculators.Gpu.GpuAcceleratorHost.CreateContext();
             foreach (var d in ctx.Devices) sb.AppendLine($"ILGPU device: {d.AcceleratorType} {d.Name}");
         }
         catch (Exception ex) { sb.AppendLine("ILGPU: " + ex.Message); }

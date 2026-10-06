@@ -635,7 +635,7 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IHeightFieldSource, IDi
         if (_gpuInitFailed) return false;
         try
         {
-            _gpuContext = Context.Create(b => b.Default());
+            _gpuContext = FracturingFog.Calculators.Gpu.GpuAcceleratorHost.CreateContext();
             _gpuAccel   = _gpuContext.GetPreferredDevice(preferCPU: false).CreateAccelerator(_gpuContext);
             _gpuKernel  = _gpuAccel.LoadAutoGroupedStreamKernel<Index1D, ArrayView<RawPixel>, GpuParams>(Kernel);
             return true;

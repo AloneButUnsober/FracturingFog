@@ -95,6 +95,7 @@ public sealed class KleinianGpuCalculator : IDisposable
         catch (Exception ex)
         {
             LastError = $"Kleinian GPU render failed: {ex.Message}";
+            GpuAcceleratorHost.ReportRenderFault(acc, ex);
             return false;
         }
     }

@@ -115,7 +115,7 @@ public sealed class S742Gpu3DDriftBoundTests
     [Fact]
     public void Same_Kernel_Across_Accelerator_Classes_Is_Within_Tolerance()
     {
-        using var ctx = Context.Create(b => b.Default());
+        using var ctx = GpuAcceleratorHost.CreateContext();
         var cpuDev = ctx.Devices.FirstOrDefault(d => d.AcceleratorType == AcceleratorType.CPU);
         var gpuDev = ctx.Devices.FirstOrDefault(d => d.AcceleratorType != AcceleratorType.CPU);
         if (cpuDev == null || gpuDev == null)
@@ -150,7 +150,7 @@ public sealed class S742Gpu3DDriftBoundTests
     [Fact]
     public void Gpu_Kernel_Vs_Cpu_Pipeline_Stays_Under_Ceiling()
     {
-        using var ctx = Context.Create(b => b.Default());
+        using var ctx = GpuAcceleratorHost.CreateContext();
         // Prefer a discrete GPU (that is what a preview would use); fall back to
         // the CPU accelerator so the test still runs where no GPU is present.
         var dev = ctx.Devices.FirstOrDefault(d => d.AcceleratorType != AcceleratorType.CPU)

@@ -91,6 +91,7 @@ public sealed class QMandelGpuCalculator : IDisposable
         catch (Exception ex)
         {
             LastError = $"QMandel GPU render failed: {ex.Message}";
+            GpuAcceleratorHost.ReportRenderFault(acc, ex);
             return false;
         }
     }

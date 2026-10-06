@@ -32,7 +32,7 @@ public sealed class Froxel3DGpuTests
 
     private static T WithCpuAccelerator<T>(Func<T> body)
     {
-        using var ctx = Context.Create(b => b.Default());
+        using var ctx = GpuAcceleratorHost.CreateContext();
         using var acc = ctx.Devices.First(d => d.AcceleratorType == AcceleratorType.CPU).CreateAccelerator(ctx);
         GpuAcceleratorHost.SetTestOverride(acc);
         try { return body(); }

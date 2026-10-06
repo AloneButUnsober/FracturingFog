@@ -50,7 +50,7 @@ public static class UserBulbSandboxGpuSpike
         Accelerator? acc = null;
         try
         {
-            ctx = Context.Create(b => b.Default());
+            ctx = FracturingFog.Calculators.Gpu.GpuAcceleratorHost.CreateContext();
             // CPU accelerator: JITs IL, supports fp64 + full Math.* surface.
             // Removes device-cap noise so the spike isolates the asm-loading
             // question. Real 3A target is still OpenCL/CUDA — see notes.

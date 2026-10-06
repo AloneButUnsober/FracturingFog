@@ -53,6 +53,13 @@
     -->
     <PackageReference Include="ILGPU" Version="1.5.3" />
     <!--
+      #1164: ILGPU.Algorithms supplies the float-math intrinsics (Sin, Log, Acos,
+      Pow, ...) the PTX (CUDA) backend lacks; contexts must call EnableAlgorithms()
+      (see GpuAcceleratorHost.CreateContext). Without it every 3D kernel failed to
+      JIT on NVIDIA and silently fell back to the CPU.
+    -->
+    <PackageReference Include="ILGPU.Algorithms" Version="1.5.3" />
+    <!--
       Roslyn scripting drives UserEquationCalculator and UserBulbCalculator
       hot-load paths. Cross-platform.
     -->

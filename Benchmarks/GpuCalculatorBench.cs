@@ -44,9 +44,13 @@ using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog.Benchmarks;
 
+// Execution order follows these enum VALUES (BenchmarkDotNet sorts param
+// values; [Params] order is ignored). Mandelbulb is deliberately LAST: on some
+// CUDA devices its kernel faults at launch (#1169), a CUDA launch failure
+// poisons the whole process, and GpuAcceleratorHost then latches GPU 3D off —
+// every later case would report NA. Last keeps the other families measurable.
 public enum GpuFamily
 {
-    Mandelbulb,
     Mandelbox,
     Menger,
     Sierpinski,
@@ -54,6 +58,7 @@ public enum GpuFamily
     QMandel,
     Kleinian,
     Bicomplex,
+    Mandelbulb,
 }
 
 [MemoryDiagnoser]
@@ -63,12 +68,18 @@ public class GpuCalculatorBench
 {
     private IFractalCalculator _calc = null!;
 
-    [Params(GpuFamily.Mandelbulb, GpuFamily.Mandelbox, GpuFamily.Menger, GpuFamily.Sierpinski,
-            GpuFamily.QJulia, GpuFamily.QMandel, GpuFamily.Kleinian, GpuFamily.Bicomplex)]
-    public GpuFamily Family { get; set; }
-
+    // Width is declared FIRST so it is the outer axis: every 640x360 case runs
+    // before any 1920x1080 one. A single 1080p raymarch launch on a slow GPU
+    // can outlast the Windows GPU watchdog (TDR), and that device fault —
+    // like #1169 — latches GPU 3D off for the rest of the process. Smallest
+    // first keeps the small cases measurable on such hardware.
     [Params(640, 1920)]
     public int Width { get; set; }
+
+    [Params(GpuFamily.Mandelbox, GpuFamily.Menger, GpuFamily.Sierpinski,
+            GpuFamily.QJulia, GpuFamily.QMandel, GpuFamily.Kleinian, GpuFamily.Bicomplex,
+            GpuFamily.Mandelbulb)]
+    public GpuFamily Family { get; set; }
 
     [GlobalSetup]
     public void Setup()
