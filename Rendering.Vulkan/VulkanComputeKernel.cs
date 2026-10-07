@@ -576,11 +576,15 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
     }
 
+    /// <summary>#88 / G4.5 — the SA kernel runs wherever the plain double one does.</summary>
+    public bool SupportsPerturbationSA => SupportsPerturbation;
+
     /// <summary>#88 SA spike — deep-zoom perturbation with a Series-Approximation
     /// prelude. Same rebased δ loop as <see cref="RunPerturb"/>, but each pixel
     /// first analytically skips to iteration k via the uploaded SA coefficients
     /// (A/B/C/D, length refLen+1). Correctness is speed-independent; validates on
-    /// weak-FP64 hardware. Perf sign-off is deferred to strong-FP64 HW.</summary>
+    /// weak-FP64 hardware. Perf sign-off is deferred to strong-FP64 HW. G4.5 —
+    /// carries the same first-band too-slow abort as <see cref="RunPerturb"/>.</summary>
     public void RunPerturbSA(
         int width, int height,
         double scale, int maxIter, double escapeRadius2,
@@ -722,10 +726,25 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
                     SType = StructureType.SubmitInfo,
                     CommandBufferCount = 1, PCommandBuffers = &cmdLocal,
                 };
+                long tBand = Stopwatch.GetTimestamp();
                 Check(_vk.QueueSubmit(_ctx.ComputeQueue, 1, &submit, default), "vkQueueSubmit");
                 Check(_vk.QueueWaitIdle(_ctx.ComputeQueue), "vkQueueWaitIdle");
                 _vk.FreeCommandBuffers(_device, _cmdPool, 1, in cmd);
                 cmd = default;
+
+                // G4.5 — the same perf abort as RunPerturb: extrapolate the frame from
+                // band 0 and hand back to the CPU deep path when the GPU is too slow.
+                if (bandIndex == 0 && bandCount > 1)
+                {
+                    double band0Ms = (Stopwatch.GetTimestamp() - tBand) * 1000.0 / Stopwatch.Frequency;
+                    if (MandelbrotKernelSource.PerturbTooSlow(band0Ms, bandCount))
+                    {
+                        if (pool.Handle != 0) { _vk.DestroyDescriptorPool(_device, pool, null); pool = default; }
+                        throw new TimeoutException(
+                            $"{MandelbrotKernelSource.PerturbTooSlowMarker}: band0={band0Ms:F1}ms × {bandCount} bands " +
+                            $"> {MandelbrotKernelSource.PerturbBudgetMs:F0}ms budget (SA)");
+                    }
+                }
             }
         }
         finally

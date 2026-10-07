@@ -5,7 +5,8 @@
 
 **Branch:** `feature/vulkan-compute` · **Tip at handoff:** `468859c` ·
 **Next task:** SA/BLA-on-GPU spike ([#88](https://github.com/AloneButUnsober/FracturingFog/issues/88)) — jump to
-[§6](#6-start-here-next-session--sabla-on-gpu-spike-88).
+[§6](#6-start-here-next-session--sabla-on-gpu-spike-88). **Update 2026-10-07 (GPU parity plan G4.5a):** SA is
+wired into production on both backends — see the note at the top of §6; BLA remains.
 
 ---
 
@@ -165,6 +166,16 @@ Closed this arc: #86 (stale deep frame → was TDR device-removed, fixed by tili
 > table, deferred until SA lands — now it has).
 >
 > Gate: `dotnet run --project Rendering.Vulkan.Smoke/... -- --vulkanpturbsa`
+>
+> **SA WIRED IN (2026-10-07, GPU parity plan G4.5a).** Step 4 and (a) are done:
+> `IGpuKernel.SupportsPerturbationSA` / `RunPerturbSA` on both backends (the D3D FXC
+> compile works; Vulkan's SA dispatch gained the first-band too-slow abort), and
+> `MandelbrotCalculator.TryRunGpuPerturbation` takes the SA kernel under the CPU's
+> conditions (SafeMax ≥ 16, `DisableAcceleration` / `DisableSeriesApproximation`
+> off; `FF_GPU_SA=0` opts out). `--d3dpturbcalc` runs every case plain and with SA
+> (GT 710: 0–0.024% vs CPU; SA cuts GPU time 17→7 / 44→25 / 156→103 / 206→178 ms
+> at 128²). `S88GpuPerturbSaTests` pins it on Vulkan. Remaining: (b) perf sign-off
+> on strong-FP64 HW, (c) BLA.
 
 
 **Goal:** add iteration-skipping (SA first, BLA later) to the GPU perturbation kernel so it stops repeating work the
