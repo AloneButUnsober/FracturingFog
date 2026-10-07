@@ -5,12 +5,12 @@
 //
 // Stage 3A: Sandbox-DSL → Roslyn → ILGPU bridge. Takes a parsed Sandbox AST,
 // emits a C# step function via UserBulbSandboxEmitter(gpuTarget: true),
-// wraps it in a GPU kernel that mirrors UserBulbGpuCalculator.BulbKernel,
-// compiles to an in-memory assembly, and loads the kernel via
-// LoadAutoGroupedStreamKernel.
+// splices it (with the vec / quat SandboxDE around it) into the text of
+// UserBulbShadeKernel — the shared User Bulb kernel with the family kernels'
+// shading (#1173-A / G2.4) — compiles that to an in-memory assembly, and loads
+// the kernel on the User Bulb device (UserBulbGpuDevice).
 //
-// Cache: source-string keyed. Recompile on source change. Accelerator + ILGPU
-// Context survive across compiles.
+// Cache: source-string + device keyed. Recompile on source or device change.
 //
 // Failure modes (Render returns false, LastError populated):
 //   - Emitter rejected the AST (e.g., Quat axis mode).
@@ -34,64 +34,30 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
 
+using FracturingFog.Calculators.Gpu;
 using FracturingFog.Models;
 
 namespace FracturingFog.Calculators;
 
 public sealed class UserBulbSandboxGpuCompiler : IDisposable
 {
-    private Context? _context;
-    private Accelerator? _accelerator;
-    private Action<Index1D, ArrayView<uint>, ArrayView<double>, GpuRenderParams>? _kernel;
+    private UserBulbKernel? _kernel;
+    private Accelerator? _acc;
     private string _cachedKey = string.Empty;
     private bool _initFailed;
-    /// <summary>Set once we've fallen back to the CPU accelerator after the
-    /// preferred device rejected fp64. Skip future device retries.</summary>
-    private bool _usingCpuFallback;
+    // #1169 — a device proved too slow for User Bulb kernels (process-wide, per device).
+    private static (Accelerator Device, string Message)? s_tooSlow;
     public string LastError { get; private set; } = string.Empty;
 
     /// <summary>#1173-M — the device this path renders on, or null before init.</summary>
-    public string? DeviceLabel => _accelerator is { } a ? $"{a.AcceleratorType} {a.Name}" : null;
+    public string? DeviceLabel => _acc is { } a ? UserBulbGpuDevice.Label(a) : null;
 
     public bool TryInit()
     {
-        if (_accelerator != null) return true;
         if (_initFailed) return false;
-        try
-        {
-            _context = FracturingFog.Calculators.Gpu.GpuAcceleratorHost.CreateContext();
-            _accelerator = _context.GetPreferredDevice(preferCPU: false).CreateAccelerator(_context);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            LastError = $"GPU init failed: {ex.Message}";
-            _initFailed = true;
-            return false;
-        }
-    }
-
-    /// <summary>Tear down current accelerator + swap to CPU. Used as fallback
-    /// when the preferred device JIT fails for fp64 (Intel UHD OpenCL etc.).
-    /// Kernel cache invalidates because the kernel is bound to the old
-    /// accelerator.</summary>
-    private bool SwitchToCpuAccelerator()
-    {
-        if (_usingCpuFallback) return false;
-        try
-        {
-            _accelerator?.Dispose();
-            _accelerator = null;
-            _kernel = null;
-            _cachedKey = string.Empty;
-            _accelerator = _context!.GetPreferredDevice(preferCPU: true).CreateAccelerator(_context);
-            _usingCpuFallback = true;
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
+        if (!UserBulbGpuDevice.TryAcquire(out var acc, out var err)) { LastError = err; _initFailed = true; return false; }
+        if (!ReferenceEquals(acc, _acc)) { _acc = acc; _kernel = null; _cachedKey = string.Empty; }
+        return true;
     }
 
     /// <summary>Compile (or recompile, if key changes) the Sandbox source into
@@ -138,51 +104,9 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         Assembly? asm = TryRoslynCompile(kernelSrc, out var rerr);
         if (asm == null) { LastError = $"Roslyn compile failed: {rerr}"; return false; }
 
-        var method = asm.GetType("FracturingFogDyn.SandboxBulbGpu")?.GetMethod("Kernel");
+        var method = asm.GetType("FracturingFog.Calculators.Gpu.SandboxBulbShade")?.GetMethod("Kernel");
         if (method == null) { LastError = "Internal: emitted kernel method not found."; return false; }
-
-        var del = (Action<Index1D, ArrayView<uint>, ArrayView<double>, GpuRenderParams>)
-            Delegate.CreateDelegate(
-                typeof(Action<Index1D, ArrayView<uint>, ArrayView<double>, GpuRenderParams>),
-                method);
-
-        try
-        {
-            _kernel = _accelerator!.LoadAutoGroupedStreamKernel<Index1D, ArrayView<uint>, ArrayView<double>, GpuRenderParams>(del);
-            _cachedKey = key;
-            LastError = string.Empty;
-            return true;
-        }
-        catch (Exception ex) when (IsFloat64Failure(ex) && SwitchToCpuAccelerator())
-        {
-            // Preferred device lacks fp64 (e.g. Intel UHD OpenCL). Retry on
-            // CPU accelerator — slower but always supports the full math surface.
-            try
-            {
-                _kernel = _accelerator!.LoadAutoGroupedStreamKernel<Index1D, ArrayView<uint>, ArrayView<double>, GpuRenderParams>(del);
-                _cachedKey = key;
-                LastError = $"GPU lacks fp64; fell back to CPU accelerator.";
-                return true;
-            }
-            catch (Exception ex2)
-            {
-                LastError = $"ILGPU JIT failed even on CPU accelerator: {ex2.GetType().Name}: {ex2.Message}";
-                _kernel = null;
-                _cachedKey = string.Empty;
-                return false;
-            }
-        }
-        catch (Exception ex)
-        {
-            var sb = new StringBuilder();
-            sb.Append("ILGPU JIT failed: ").Append(ex.GetType().Name).Append(": ").Append(ex.Message);
-            for (var e = ex.InnerException; e != null; e = e.InnerException)
-                sb.Append(" | inner: ").Append(e.GetType().Name).Append(": ").Append(e.Message);
-            LastError = sb.ToString();
-            _kernel = null;
-            _cachedKey = string.Empty;
-            return false;
-        }
+        return LoadKernel(method, key);
     }
 
     /// <summary>Wave 4.5 — Sandbox chain compile. Each step's body is emitted
@@ -241,88 +165,66 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         Assembly? asm = TryRoslynCompile(kernelSrc, out var rerr);
         if (asm == null) { LastError = $"Roslyn compile failed (chain): {rerr}"; return false; }
 
-        var method = asm.GetType("FracturingFogDyn.SandboxBulbGpu")?.GetMethod("Kernel");
+        var method = asm.GetType("FracturingFog.Calculators.Gpu.SandboxBulbShade")?.GetMethod("Kernel");
         if (method == null) { LastError = "Internal: emitted kernel method not found (chain)."; return false; }
+        return LoadKernel(method, key);
+    }
 
-        var del = (Action<Index1D, ArrayView<uint>, ArrayView<double>, GpuRenderParams>)
-            Delegate.CreateDelegate(
-                typeof(Action<Index1D, ArrayView<uint>, ArrayView<double>, GpuRenderParams>),
-                method);
-
+    private bool LoadKernel(MethodInfo method, string key)
+    {
         try
         {
-            _kernel = _accelerator!.LoadAutoGroupedStreamKernel<Index1D, ArrayView<uint>, ArrayView<double>, GpuRenderParams>(del);
+            var del = (Action<Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, GpuRenderParams, ArrayView<double>,
+                    ArrayView<uint>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<uint>, ArrayView<uint>>)
+                Delegate.CreateDelegate(typeof(Action<Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, GpuRenderParams, ArrayView<double>,
+                    ArrayView<uint>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<uint>, ArrayView<uint>>), method);
+            _kernel = UserBulbGpuDispatch.Load(_acc!, del);
             _cachedKey = key;
             LastError = string.Empty;
             return true;
         }
-        catch (Exception ex) when (IsFloat64Failure(ex) && SwitchToCpuAccelerator())
-        {
-            try
-            {
-                _kernel = _accelerator!.LoadAutoGroupedStreamKernel<Index1D, ArrayView<uint>, ArrayView<double>, GpuRenderParams>(del);
-                _cachedKey = key;
-                LastError = "GPU lacks fp64; fell back to CPU accelerator.";
-                return true;
-            }
-            catch (Exception ex2)
-            {
-                LastError = $"ILGPU JIT failed even on CPU accelerator: {ex2.GetType().Name}: {ex2.Message}";
-                _kernel = null; _cachedKey = string.Empty;
-                return false;
-            }
-        }
         catch (Exception ex)
         {
             var sb = new StringBuilder();
-            sb.Append("ILGPU JIT failed (chain): ").Append(ex.GetType().Name).Append(": ").Append(ex.Message);
+            sb.Append("ILGPU JIT failed: ").Append(ex.GetType().Name).Append(": ").Append(ex.Message);
             for (var e = ex.InnerException; e != null; e = e.InnerException)
                 sb.Append(" | inner: ").Append(e.GetType().Name).Append(": ").Append(e.Message);
             LastError = sb.ToString();
-            _kernel = null; _cachedKey = string.Empty;
+            _kernel = null;
+            _cachedKey = string.Empty;
             return false;
         }
     }
 
-    private static bool IsFloat64Failure(Exception ex)
+    /// <summary>Render one frame (#1173-A: the shared kernel contract — colour, optional
+    /// G-buffers, palette / albedo LUT / HDRI tables). False = fall back.</summary>
+    public bool Render(uint[] outBuffer, double[] pArr, GpuRaymarchParams r, GpuShadingParams sp, GpuRenderParams q,
+        uint[]? palette, float[]? depthOut, float[]? normalOut, float[]? hdrOut,
+        uint[]? albedoLut, uint[]? hdri, System.Threading.CancellationToken ct = default)
     {
-        for (var e = ex; e != null; e = e.InnerException)
-        {
-            if (e.GetType().Name.Contains("CapabilityNotSupported")) return true;
-            if (e.Message != null && e.Message.Contains("Float64")) return true;
-        }
-        return false;
-    }
-
-    public bool Render(uint[] outBuffer, double[] pArr, GpuRenderParams p)
-    {
-        if (_kernel == null || _accelerator == null) return false;
+        if (_kernel == null || _acc == null) return false;
+        if (s_tooSlow is { } slow && ReferenceEquals(slow.Device, _acc)) { LastError = slow.Message; return false; }
         try
         {
-            int total = p.Width * p.Height;
-            using var devOut = _accelerator.Allocate1D<uint>(total);
-            using var devP = _accelerator.Allocate1D<double>(Math.Max(1, pArr.Length));
-            if (pArr.Length > 0) devP.View.CopyFromCPU(pArr);
-            _kernel(total, devOut.View, devP.View, p);
-            _accelerator.Synchronize();
-            devOut.CopyToCPU(outBuffer);
-            return true;
+            var run = UserBulbGpuDispatch.Run(_acc, _kernel, outBuffer, r, sp, q, pArr,
+                palette, depthOut, normalOut, hdrOut, albedoLut, hdri, ct);
+            if (run == GpuDispatchResult.TooSlow)
+            {
+                LastError = GpuTiledDispatch.TooSlowMessage("User Bulb");
+                s_tooSlow = (_acc, LastError);
+                return false;
+            }
+            return run == GpuDispatchResult.Completed;
         }
         catch (Exception ex)
         {
             LastError = $"GPU render failed: {ex.Message}";
+            GpuAcceleratorHost.ReportRenderFault(_acc, ex);
             return false;
         }
     }
 
-    public void Dispose()
-    {
-        _accelerator?.Dispose();
-        _context?.Dispose();
-        _accelerator = null;
-        _context = null;
-        _kernel = null;
-    }
+    public void Dispose() { _kernel = null; _acc = null; }
 
     private static string BuildKey(string source, IReadOnlyList<string> paramNames, bool quatMode)
     {
@@ -371,29 +273,42 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
     private static string BuildKernelSource(string stepBody, IReadOnlyList<string> paramNames, bool quatMode)
     {
         var sb = new StringBuilder();
-        AppendKernelPrelude(sb);
-
-        // Step function — body comes verbatim from emitter.
         AppendStepFn(sb, stepBody, paramNames, quatMode);
-
-        // DE function — analytic-only for vec; analytic + Jacobian + Julia for quat.
-        sb.AppendLine(quatMode ? QuatSandboxDESource : VecSandboxDESource);
-
-        // Kernel: same shape as UserBulbGpuCalculator.BulbKernel.
-        sb.AppendLine(KernelBodySource);
-        sb.AppendLine("} }");
-        return sb.ToString();
+        return SpliceIntoTemplate(sb.ToString(), quatMode);
     }
 
-    private static void AppendKernelPrelude(StringBuilder sb)
+    /// <summary>#1173-A — the shared kernel's source text (UserBulbShadeKernel.cs,
+    /// embedded) with its built-in DE region swapped for <paramref name="stepFn"/> +
+    /// the vec / quat SandboxDE, and the class renamed.</summary>
+    public static string SpliceIntoTemplate(string stepFn, bool quatMode)
     {
-        sb.AppendLine("using System;");
-        sb.AppendLine("using ILGPU;");
-        sb.AppendLine("using ILGPU.Runtime;");
-        sb.AppendLine("using FracturingFog.Models;");
-        sb.AppendLine("using FracturingFog.Calculators;");
-        sb.AppendLine("namespace FracturingFogDyn {");
-        sb.AppendLine("public static class SandboxBulbGpu {");
+        string t = TemplateSource;
+        const string begin = "//@@USERDE-BEGIN", end = "//@@USERDE-END";
+        int i = t.IndexOf(begin, StringComparison.Ordinal);
+        int j = t.IndexOf(end, StringComparison.Ordinal);
+        if (i < 0 || j < i) throw new InvalidOperationException("UserBulbShadeKernel template markers missing");
+        var region = new StringBuilder();
+        region.AppendLine(begin);
+        region.Append(stepFn);
+        region.AppendLine(quatMode ? QuatSandboxDESource : VecSandboxDESource);
+        region.AppendLine("    private static double UserDE(double cx, double cy, double cz, in GpuRenderParams q, ArrayView<double> __p)");
+        region.AppendLine("        => SandboxDE(cx, cy, cz, q, __p);");
+        region.Append("    ");
+        string spliced = t.Substring(0, i) + region + t.Substring(j);
+        const string cls = "public static class UserBulbShadeKernel";
+        if (!spliced.Contains(cls)) throw new InvalidOperationException("UserBulbShadeKernel template class missing");
+        return spliced.Replace(cls, "public static class SandboxBulbShade");
+    }
+
+    private static string? s_template;
+    private static string TemplateSource => s_template ??= LoadTemplate();
+
+    private static string LoadTemplate()
+    {
+        using var st = typeof(UserBulbShadeKernel).Assembly.GetManifestResourceStream("FracturingFog.UserBulbShadeKernel.cs")
+            ?? throw new InvalidOperationException("embedded UserBulbShadeKernel.cs missing");
+        using var rd = new StreamReader(st);
+        return rd.ReadToEnd();
     }
 
     private static void AppendStepFn(StringBuilder sb, string stepBody, IReadOnlyList<string> paramNames, bool quatMode)
@@ -493,84 +408,6 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         return 0.5 * rN / Math.Max(drN, 1e-10);
     }";
 
-    private const string KernelBodySource = @"    public static void Kernel(Index1D idx, ArrayView<uint> output, ArrayView<double> __p, GpuRenderParams p) {
-        int x = idx % p.Width;
-        int y = idx / p.Width;
-        if (y >= p.Height) return;
-        double u = (2.0 * (x + 0.5) / p.Width - 1.0) * p.FovScale * p.Aspect;
-        double v = (1.0 - 2.0 * (y + 0.5) / p.Height) * p.FovScale;
-        double rdx = p.RightX * u + p.UpX * v + p.FwdX;
-        double rdy = p.RightY * u + p.UpY * v + p.FwdY;
-        double rdz = p.RightZ * u + p.UpZ * v + p.FwdZ;
-        double rl = 1.0 / Math.Sqrt(rdx * rdx + rdy * rdy + rdz * rdz);
-        rdx *= rl; rdy *= rl; rdz *= rl;
-        double ocx = p.CamX - p.TargetX;
-        double ocy = p.CamY - p.TargetY;
-        double ocz = p.CamZ - p.TargetZ;
-        double bS = ocx * rdx + ocy * rdy + ocz * rdz;
-        double cS = ocx * ocx + ocy * ocy + ocz * ocz - p.CullRadiusSq;
-        double disc = bS * bS - cS;
-        if (disc < 0) { output[idx] = p.InSetColor; return; }
-        double sq = Math.Sqrt(disc);
-        double tEx = -bS + sq;
-        if (tEx < 0) { output[idx] = p.InSetColor; return; }
-        double tEn = Math.Max(0.0, -bS - sq);
-        double px = p.CamX + rdx * tEn;
-        double py = p.CamY + rdy * tEn;
-        double pz = p.CamZ + rdz * tEn;
-        double tT = tEn;
-        bool hit = false;
-        int hitStep = 0;
-        double hitDist = 0.0;
-        for (int step = 0; step < p.MaxSteps; step++) {
-            double d = SandboxDE(px, py, pz, p, __p);
-            if (d < p.Eps) { hit = true; hitStep = step; hitDist = d; break; }
-            if (tT > tEx + 1.0) break;
-            px += rdx * d; py += rdy * d; pz += rdz * d;
-            tT += d;
-        }
-        if (!hit) { output[idx] = p.InSetColor; return; }
-        double h = p.Eps * 2;
-        double invH = 1.0 / h;
-        double n0 = (SandboxDE(px + h, py, pz, p, __p) - hitDist) * invH;
-        double n1 = (SandboxDE(px, py + h, pz, p, __p) - hitDist) * invH;
-        double n2 = (SandboxDE(px, py, pz + h, p, __p) - hitDist) * invH;
-        double nl = 1.0 / Math.Sqrt(n0 * n0 + n1 * n1 + n2 * n2 + 1e-20);
-        double nx = n0 * nl, ny = n1 * nl, nz = n2 * nl;
-        double llx = p.LightX, lly = p.LightY, llz = p.LightZ, latten = 1.0;
-        if (p.L1Type != 0) {
-            double ldx = p.L1PX - px, ldy = p.L1PY - py, ldz = p.L1PZ - pz;
-            double ld2 = ldx * ldx + ldy * ldy + ldz * ldz;
-            double ld = Math.Sqrt(ld2);
-            double linv = ld > 1e-12 ? 1.0 / ld : 0.0;
-            llx = ldx * linv; lly = ldy * linv; llz = ldz * linv;
-            latten = 1.0 / Math.Max(ld2, 1e-6);
-            if (p.L1Range > 0.0) {
-                double lt = ld / p.L1Range;
-                double lt4 = lt * lt * lt * lt;
-                double lwin = lt4 < 1.0 ? 1.0 - lt4 : 0.0;
-                latten *= lwin * lwin;
-            }
-            if (p.L1Type == 2) {
-                double lcos = llx * p.LightX + lly * p.LightY + llz * p.LightZ;
-                double ldenom = p.L1InnerCos - p.L1OuterCos;
-                double lcone;
-                if (ldenom <= 1e-9) lcone = lcos >= p.L1InnerCos ? 1.0 : 0.0;
-                else { double ltc = (lcos - p.L1OuterCos) / ldenom; if (ltc < 0.0) ltc = 0.0; else if (ltc > 1.0) ltc = 1.0; lcone = ltc * ltc * (3.0 - 2.0 * ltc); }
-                latten *= lcone;
-            }
-        }
-        double diffuse = Math.Max(0.0, nx * llx + ny * lly + nz * llz) * latten;
-        double ambient = 0.15;
-        double shade = ambient + diffuse * (1.0 - ambient);
-        double tt = hitStep / (double)p.MaxSteps + tT * 0.05;
-        tt -= Math.Floor(tt);
-        uint r2 = (uint)Math.Min(255.0, 255.0 * shade * (0.5 + 0.5 * Math.Sin(tt * 6.283)));
-        uint g2 = (uint)Math.Min(255.0, 255.0 * shade * (0.5 + 0.5 * Math.Sin(tt * 6.283 + 2.094)));
-        uint b2 = (uint)Math.Min(255.0, 255.0 * shade * (0.5 + 0.5 * Math.Sin(tt * 6.283 + 4.188)));
-        output[idx] = 0xFF000000u | (r2 << 16) | (g2 << 8) | b2;
-    }";
-
     /// <summary>Build kernel source for chain mode. Each step body is inlined
     /// as a local in <c>Step()</c>, so step N can reference step 0..N-1 by
     /// the local name the emitter resolved them to. Final return is the last
@@ -583,7 +420,6 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         bool quatMode)
     {
         var sb = new StringBuilder();
-        AppendKernelPrelude(sb);
 
         // Chain Step: each step body inlined as a typed local; prior step
         // outputs reachable by name (emitter resolved via extraSlots).
@@ -601,11 +437,8 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         sb.Append("        return ").Append(stepLocals[stepBodies.Count - 1]).AppendLine(";");
         sb.AppendLine("    }");
 
-        // Wave 4.6 — unified DE + Kernel shared with single-step path.
-        sb.AppendLine(quatMode ? QuatSandboxDESource : VecSandboxDESource);
-        sb.AppendLine(KernelBodySource);
-        sb.AppendLine("} }");
-        return sb.ToString();
+        // Wave 4.6 / #1173-A — the same DE + shared kernel as the single-step path.
+        return SpliceIntoTemplate(sb.ToString(), quatMode);
     }
 
     private static Assembly? TryRoslynCompile(string source, out string error)
@@ -623,7 +456,8 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
             typeof(Vec3).Assembly,
             typeof(Index1D).Assembly,
             typeof(ArrayView<>).Assembly,
-            typeof(GpuRenderParams).Assembly);
+            typeof(GpuRenderParams).Assembly,
+            typeof(FracturingFog.Rendering.Lighting.LightingFxData).Assembly);
         var compilation = CSharpCompilation.Create(
             "SandboxBulbGpu_" + Guid.NewGuid().ToString("N"),
             new[] { tree },

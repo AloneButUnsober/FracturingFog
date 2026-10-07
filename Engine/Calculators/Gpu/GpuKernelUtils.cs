@@ -30,7 +30,7 @@ namespace FracturingFog.Calculators.Gpu;
 /// <summary>Kernel-side helpers shared by every per-fractal GPU calculator.
 /// All methods are ILGPU-kernel-compatible — see file comment for the rules
 /// they obey.</summary>
-internal static class GpuKernelUtils
+public static class GpuKernelUtils
 {
     /// <summary>Slice D GPU parity — the length-1 "feature off" palette buffer
     /// every kernel Render uploads when no theme LUT is supplied, so the kernel

@@ -332,7 +332,9 @@ namespace FracturingFogDyn.Spike {{
             InSetColor = 0xFF000000u,
         };
         var output = new uint[W * H];
-        if (!compiler.Render(output, Array.Empty<double>(), gp))
+        if (!compiler.Render(output, Array.Empty<double>(), Gpu.UserBulbGpuDispatch.Raymarch(gp),
+            Gpu.GpuShadingParams.Build(FracturingFog.Rendering.Lighting.LightingFxData.CreateDefault()), gp,
+            null, null, null, null, null, null))
         {
             Console.WriteLine($"  RENDER_FAIL: {compiler.LastError}");
             return false;
@@ -379,10 +381,16 @@ namespace FracturingFogDyn.Spike {{
             Eps = 1e-3, Bailout = 4.0, CullRadiusSq = 4.0,
             Power = 2.0,
             QuatSliceW = 0.0,
+            // UseAnalyticDE stays 0: the numerical-Jacobian quat DE, the route the
+            // calculator takes. It needs a finite-difference step — without JacH every
+            // DE was ~1e10 and T5 found no surface (broken since Wave 4.6 added the field).
+            JacH = 1e-6,
             InSetColor = 0xFF000000u,
         };
         var output = new uint[W * H];
-        if (!compiler.Render(output, Array.Empty<double>(), gp))
+        if (!compiler.Render(output, Array.Empty<double>(), Gpu.UserBulbGpuDispatch.Raymarch(gp),
+            Gpu.GpuShadingParams.Build(FracturingFog.Rendering.Lighting.LightingFxData.CreateDefault()), gp,
+            null, null, null, null, null, null))
         {
             Console.WriteLine($"  RENDER_FAIL: {compiler.LastError}");
             return false;

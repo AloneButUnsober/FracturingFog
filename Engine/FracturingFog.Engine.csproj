@@ -59,6 +59,18 @@
       JIT on NVIDIA and silently fell back to the CPU.
     -->
     <PackageReference Include="ILGPU.Algorithms" Version="1.5.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      #1173-A - the User Bulb GPU kernel source is ALSO an embedded resource: the
+      sandbox compiler splices the user DE into this exact text and compiles it with
+      Roslyn, so the sandbox kernel and the built-in one never drift apart.
+    -->
+    <EmbeddedResource Include="Calculators\Gpu\UserBulbShadeKernel.cs" LogicalName="FracturingFog.UserBulbShadeKernel.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!--
       Roslyn scripting drives UserEquationCalculator and UserBulbCalculator
       hot-load paths. Cross-platform.

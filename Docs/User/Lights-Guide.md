@@ -192,12 +192,11 @@ FracturingFog --batch --fractal Mandelbulb --zoom 1 \
   positional (point/spot) scenes are correct everywhere and run on the GPU for
   relief and every 3D-fractal family — Mandelbulb, Mandelbox, the KIFS solids
   (Menger, Sierpinski), quaternion Julia / Mandelbrot, Kleinian, bicomplex and
-  UserBulb (custom-equation). UserBulb's GPU shade is single-light: it resolves
-  the primary light (Light 1); fills from Lights 2 / 3 are a CPU-shade feature.
+  UserBulb (custom-equation). UserBulb's GPU shade lights with all three lights, like
+  the other families.
 - **Area** softness needs shadows on. It now renders on the GPU across relief and
   the 3D-fractal families (the per-light shadow hardness is capped by the emitter's
-  angular size); a punctual light stays byte-identical. UserBulb's GPU shade has no
-  soft shadow, so area softness there only appears on its CPU render.
+  angular size); a punctual light stays byte-identical. UserBulb included.
 
 ---
 
