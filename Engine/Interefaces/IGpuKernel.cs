@@ -154,5 +154,30 @@ namespace FracturingFog.Rendering
             double[]? blaCoeffs = null, int blaLevels = 0)
             => throw new NotSupportedException(
                 "This GPU kernel has no SA perturbation path (SupportsPerturbationSA is false).");
+
+        /// <summary>#607 / G4.6 — true when this backend can run the orbit-accumulating
+        /// perturbation kernel (<see cref="RunPerturbOrbit"/>).</summary>
+        bool SupportsPerturbationOrbit => false;
+
+        /// <summary>#607 / G4.6 — <see cref="RunPerturb"/> that also accumulates the
+        /// orbit-colouring inputs in <paramref name="orbitMask"/> (<c>GpuOrbitInputs</c>
+        /// bits) on the reconstructed z = Z[m] + δ, the GPU twin of the CPU deep orbit
+        /// path. Writes their means to <paramref name="orbitDst"/>: one float per
+        /// mask'd input, in bit order, per pixel (0 for in-set pixels).
+        /// <paramref name="centerRe"/>/<paramref name="centerIm"/> is the view centre
+        /// (the triangle-inequality sample's c = centre + dc). Only valid when
+        /// <see cref="SupportsPerturbationOrbit"/> is true.</summary>
+        void RunPerturbOrbit(
+            int width, int height,
+            double scale, int maxIter, double escapeRadius2,
+            double offsetX0, double offsetY0,
+            double[] refZr, double[] refZi, int refLen,
+            int orbitMask, double centerRe, double centerIm,
+            int[] iterDst, float[] smoothDst,
+            float[] finalZrDst, float[] finalZiDst,
+            float[] finalDrDst, float[] finalDiDst,
+            float[] orbitDst)
+            => throw new NotSupportedException(
+                "This GPU kernel has no orbit perturbation path (SupportsPerturbationOrbit is false).");
     }
 }
