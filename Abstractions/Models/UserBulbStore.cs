@@ -766,7 +766,7 @@ namespace FracturingFog.Models
         {
             try
             {
-                string json = File.ReadAllText(filePath);
+                string json = FracturingFog.Abstractions.ImportedJson.ReadFile(filePath);
                 var entry = JsonSerializer.Deserialize<UserBulbEntry>(json, BuildJsonOptions());
                 if (entry == null || string.IsNullOrWhiteSpace(entry.Name)) return null;
                 MergeImportedEntry(entry);
@@ -819,7 +819,7 @@ namespace FracturingFog.Models
         {
             try
             {
-                string json = File.ReadAllText(filePath);
+                string json = FracturingFog.Abstractions.ImportedJson.ReadFile(filePath);
                 var imported = new List<UserBulbSnapshot>();
                 foreach (var element in AssetJsonFile.SplitEntries(json))
                 {

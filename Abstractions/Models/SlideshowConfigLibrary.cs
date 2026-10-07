@@ -195,7 +195,7 @@ namespace FracturingFog.Models
             if (file == null || string.IsNullOrWhiteSpace(path)) return Array.Empty<string>();
             try
             {
-                var json = File.ReadAllText(path);
+                var json = FracturingFog.Abstractions.ImportedJson.ReadFile(path);
                 var parsed = ParseConfigs(json);
                 if (parsed.Count == 0) return Array.Empty<string>();
 

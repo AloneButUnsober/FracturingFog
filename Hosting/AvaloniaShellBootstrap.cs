@@ -3023,8 +3023,11 @@ namespace FracturingFog.Hosting
                             expectsConfirmation: true);
                         bool overwrite = choice == AvaloniaDialogs.MessageResult.Yes;
 
-                        string json = await System.IO.File.ReadAllTextAsync(path);
-                        var summary = shell.ImportAssetsFromJson(args.Kind, json, overwrite);
+                        // #1212 — byte-level read so UTF-16 / ANSI files decode correctly.
+                        var decode = new FracturingFog.Abstractions.ImportTextReport();
+                        byte[] raw = await System.IO.File.ReadAllBytesAsync(path);
+                        string json = FracturingFog.Abstractions.ImportedJson.DecodeBytes(raw, decode);
+                        var summary = shell.ImportAssetsFromJson(args.Kind, json, overwrite, decode);
 
                         await AvaloniaDialogs.ShowMessageAsync(
                             args.Title, summary.Describe(), expectsConfirmation: false);

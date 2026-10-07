@@ -3291,8 +3291,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 if (src == null) { summary.Failed++; continue; }
 
                 string json;
-                using (var r = new System.IO.StreamReader(entry.Open(), System.Text.Encoding.UTF8))
-                    json = r.ReadToEnd();
+                using (var s = entry.Open())
+                    json = FracturingFog.Abstractions.ImportedJson.ReadStream(s, summary.Repairs);
 
                 summary.Tally(src.ImportJson(json, overwrite).Status);
                 touched.Add(kind);
@@ -3349,9 +3349,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// Unlike <see cref="ImportAssetBundle"/> this needs no open Asset Manager:
     /// the shell holds the source roster directly.</summary>
     public AssetImportSummary ImportAssetsFromJson(
-        FracturingFog.Abstractions.Assets.AssetKind kind, string json, bool overwrite)
+        FracturingFog.Abstractions.Assets.AssetKind kind, string json, bool overwrite,
+        FracturingFog.Abstractions.ImportTextReport? decodeReport = null)
     {
         var summary = new AssetImportSummary();
+        summary.Repairs.Merge(decodeReport);
 
         FracturingFog.Abstractions.Assets.IAssetSource? source = null;
         foreach (var s in _assetSources)
@@ -3362,7 +3364,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             return summary;
         }
 
-        var entries = FracturingFog.Abstractions.Assets.AssetJsonFile.SplitEntries(json);
+        var entries = FracturingFog.Abstractions.Assets.AssetJsonFile.SplitEntries(json, summary.Repairs);
         if (entries.Count == 0)
         {
             // Empty vs malformed is indistinguishable after the split; both mean

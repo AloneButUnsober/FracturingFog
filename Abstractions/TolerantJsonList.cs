@@ -57,7 +57,7 @@ namespace FracturingFog.Abstractions
             try
             {
                 if (string.IsNullOrEmpty(path) || !File.Exists(path)) return new List<T>();
-                json = File.ReadAllText(path);
+                json = ImportedJson.ReadFile(path);
             }
             catch
             {
