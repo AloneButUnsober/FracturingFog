@@ -654,6 +654,15 @@ whichever you use, the other reflects the change.
   early iterations can run in-shader as well, so the acceleration follows the
   render onto the card. The diagnostic toggles for these stages are listed under
   [Keyboard Shortcuts → Performance & Deep-Zoom Diagnostics](Keyboard-Shortcuts.md#performance--deep-zoom-diagnostics).
+- **Buddhabrot family.** Buddhabrot, Nebulabrot and the two Anti types draw their
+  random orbit samples on the card too, up to zoom 100. The anti types gain the most
+  (about 5x on a GeForce GT 710). Metropolis sampling stays on the CPU, and so does
+  Dual Buddhabrot. Zoom compensation turns Metropolis on above zoom 1.2, so most
+  zoomed-in Buddhabrot views render on the CPU; the status bar shows
+  `[CPU: Metropolis sampling]`. The card draws its own random samples, so a given
+  seed renders a different noise pattern on the GPU than on the CPU. The image has
+  the same structure and is just as stable from frame to frame. `--batch` renders
+  on the CPU.
 
 > [!TIP]
 > If you are comparing GPU vs CPU output, open the performance HUD with `H` first

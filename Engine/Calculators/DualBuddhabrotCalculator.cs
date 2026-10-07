@@ -96,6 +96,9 @@ public sealed class DualBuddhabrotCalculator : BuddhaFamilyCalculator
 
     // The video accumulation leg relies on the per-batch callbacks of a real
     // progressive run, so never short-circuit when one is attached.
+    /// <summary>#838 — the two-orbit samplers have no GPU kernel.</summary>
+    protected override bool SupportsGpuSampling => false;
+
     protected override bool CanReuseSamples()
         => OnBatchComposited == null && _lastKey is SampleKey k && k.Equals(CurrentKey());
 

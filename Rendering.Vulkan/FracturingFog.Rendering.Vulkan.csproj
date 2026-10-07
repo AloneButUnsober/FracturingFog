@@ -41,6 +41,8 @@
       file FXC compiles on Windows.
     -->
     <Compile Include="..\Rendering.D3D\MandelbrotKernelSource.cs" Link="Shared\MandelbrotKernelSource.cs" />
+    <!-- #838 (G4.7): the Buddhabrot sample-pass kernel, shared with D3D11 (FXC). -->
+    <Compile Include="..\Rendering.D3D\BuddhaKernelSource.cs" Link="Shared\BuddhaKernelSource.cs" />
     <!-- Relief 3D Slice 3c (#161): the same dependency-free relief kernel source
          FXC compiles on D3D (3b), compiled here by DXC → SPIR-V. -->
     <Compile Include="..\Rendering.D3D\ReliefRaymarchKernelSource.cs" Link="Shared\ReliefRaymarchKernelSource.cs" />

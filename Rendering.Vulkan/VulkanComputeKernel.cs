@@ -519,6 +519,149 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
     }
 
+    // ── #838 / G4.7 Buddhabrot sample pass ───────────────────────────────────────
+
+    // 64 bytes: 11 ints then 5 floats, the HLSL BuddhaParams cbuffer byte-for-byte.
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BuddhaParamsBlob
+    {
+        public int Width, Height, MaxOrbit, InSet, Low, Mid, Hd;
+        public uint Seed, Batch, ThreadBase, ThreadCount;
+        public float Scale, MidX, MidY, Pad0, Pad1;
+    }
+
+    private Program? _buddha;
+    private Allocated _buddhaParams, _buddhaHits;
+
+    public bool SupportsBuddhabrot => true;
+
+    /// <summary>#838 / G4.7 — one Buddhabrot uniform sample batch (BuddhaKernelSource):
+    /// the device histogram is cleared, the samples run in adaptive TDR-sized
+    /// dispatches (one submit each, BuddhaKernelSource.Plan), and the three bands are
+    /// added into the caller's arrays.</summary>
+    public void RunBuddhaBatch(in GpuBuddhaBatch b, uint[] hitsR, uint[] hitsG, uint[] hitsB)
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(VulkanComputeKernel));
+        int n = b.Width * b.Height;
+        if (n <= 0 || b.Samples <= 0) return;
+        if (hitsR.Length < n || hitsG.Length < n || hitsB.Length < n)
+            throw new ArgumentException("hit arrays shorter than width * height");
+
+        long t0 = Stopwatch.GetTimestamp();
+        _buddha ??= BuildProgram(BuddhaKernelSource.Build(), BuddhaKernelSource.EntryPoint, 0u, (uint)UShift);
+        if (_buddhaParams.Buffer.Handle == 0) _buddhaParams = AllocBuffer(64, BufferUsageFlags.UniformBufferBit);
+        ulong hitBytes = (ulong)n * 3 * sizeof(uint);
+        if (_buddhaHits.Buffer.Handle == 0 || _buddhaHits.Size < hitBytes)
+        {
+            FreeBuffer(ref _buddhaHits);
+            _buddhaHits = AllocBuffer(hitBytes, BufferUsageFlags.StorageBufferBit, readback: true);
+        }
+        ZeroBuffer(_buddhaHits);
+
+        var blob = new BuddhaParamsBlob
+        {
+            Width = b.Width, Height = b.Height, MaxOrbit = b.MaxOrbit, InSet = b.InSet ? 1 : 0,
+            Low = b.Low, Mid = b.Mid, Hd = b.HighDefinition ? 1 : 0,
+            Seed = b.Seed, Batch = (uint)b.Batch, ThreadCount = (uint)b.Samples,
+            Scale = (float)b.Scale, MidX = (float)b.MidX, MidY = (float)b.MidY,
+        };
+
+        DescriptorPool pool = default;
+        try
+        {
+            var poolSizes = stackalloc DescriptorPoolSize[2]
+            {
+                new DescriptorPoolSize { Type = DescriptorType.UniformBuffer, DescriptorCount = 1 },
+                new DescriptorPoolSize { Type = DescriptorType.StorageBuffer, DescriptorCount = 1 },
+            };
+            var dpci = new DescriptorPoolCreateInfo
+            {
+                SType = StructureType.DescriptorPoolCreateInfo,
+                MaxSets = 1, PoolSizeCount = 2, PPoolSizes = poolSizes,
+            };
+            Check(_vk.CreateDescriptorPool(_device, in dpci, null, out pool), "vkCreateDescriptorPool");
+            var dslLocal = _buddha.Dsl;
+            var dsai = new DescriptorSetAllocateInfo
+            {
+                SType = StructureType.DescriptorSetAllocateInfo,
+                DescriptorPool = pool, DescriptorSetCount = 1, PSetLayouts = &dslLocal,
+            };
+            Check(_vk.AllocateDescriptorSets(_device, in dsai, out DescriptorSet set), "vkAllocateDescriptorSets");
+            var infos = stackalloc DescriptorBufferInfo[2]
+            {
+                new DescriptorBufferInfo { Buffer = _buddhaParams.Buffer, Offset = 0, Range = Vk.WholeSize },
+                new DescriptorBufferInfo { Buffer = _buddhaHits.Buffer, Offset = 0, Range = Vk.WholeSize },
+            };
+            var writes = stackalloc WriteDescriptorSet[2]
+            {
+                new WriteDescriptorSet
+                {
+                    SType = StructureType.WriteDescriptorSet, DstSet = set, DstBinding = 0, DescriptorCount = 1,
+                    DescriptorType = DescriptorType.UniformBuffer, PBufferInfo = &infos[0],
+                },
+                new WriteDescriptorSet
+                {
+                    SType = StructureType.WriteDescriptorSet, DstSet = set, DstBinding = (uint)UShift, DescriptorCount = 1,
+                    DescriptorType = DescriptorType.StorageBuffer, PBufferInfo = &infos[1],
+                },
+            };
+            _vk.UpdateDescriptorSets(_device, 2, writes, 0, null);
+
+            var cbai = new CommandBufferAllocateInfo
+            {
+                SType = StructureType.CommandBufferAllocateInfo,
+                CommandPool = _cmdPool, Level = CommandBufferLevel.Primary, CommandBufferCount = 1,
+            };
+            BuddhaKernelSource.Plan(b.Samples, b.MaxOrbit, (baseT, count) =>
+            {
+                long tChunk = Stopwatch.GetTimestamp();
+                var blobLocal = blob;
+                blobLocal.ThreadBase = (uint)baseT;
+                WriteBytes(_buddhaParams, &blobLocal, sizeof(BuddhaParamsBlob));
+                var setForCmd = set;
+                Check(_vk.AllocateCommandBuffers(_device, in cbai, out CommandBuffer cmd), "vkAllocateCommandBuffers");
+                try
+                {
+                    var begin = new CommandBufferBeginInfo
+                    {
+                        SType = StructureType.CommandBufferBeginInfo, Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
+                    };
+                    Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
+                    _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, _buddha.Pipeline);
+                    _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, _buddha.Layout, 0, 1, &setForCmd, 0, null);
+                    _vk.CmdDispatch(cmd, (uint)((count + BuddhaKernelSource.GroupSize - 1) / BuddhaKernelSource.GroupSize), 1, 1);
+                    Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
+                    var submit = new SubmitInfo { SType = StructureType.SubmitInfo, CommandBufferCount = 1, PCommandBuffers = &cmd };
+                    Check(_vk.QueueSubmit(_ctx.ComputeQueue, 1, &submit, default), "vkQueueSubmit");
+                    // One packet per dispatch (TDR); the UBO is rewritten for the next.
+                    Check(_vk.QueueWaitIdle(_ctx.ComputeQueue), "vkQueueWaitIdle");
+                }
+                finally { _vk.FreeCommandBuffers(_device, _cmdPool, 1, in cmd); }
+                return (Stopwatch.GetTimestamp() - tChunk) * 1000.0 / Stopwatch.Frequency;
+            });
+        }
+        finally
+        {
+            if (pool.Handle != 0) _vk.DestroyDescriptorPool(_device, pool, null);
+        }
+
+        long tDispatch = Stopwatch.GetTimestamp();
+        void* mapped;
+        Check(_vk.MapMemory(_device, _buddhaHits.Memory, 0, hitBytes, 0, &mapped), "vkMapMemory");
+        var src = (uint*)mapped;
+        for (int i = 0; i < n; i++)
+        {
+            hitsR[i] += src[i];
+            hitsG[i] += src[n + i];
+            hitsB[i] += src[2 * n + i];
+        }
+        _vk.UnmapMemory(_device, _buddhaHits.Memory);
+        long tEnd = Stopwatch.GetTimestamp();
+        double freq = Stopwatch.Frequency;
+        LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
+        LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
+    }
+
     // #607 / G4.6 — orbit perturbation programs (one per mask) + the gOrbit output.
     private readonly Dictionary<int, Program> _perturbOrbit = new();
     private Allocated _orbitOut;
@@ -1097,6 +1240,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         if (_perturb != null) { DestroyProgram(_perturb); _perturb = null; }
         if (_perturbSa != null) { DestroyProgram(_perturbSa); _perturbSa = null; }
         foreach (var p in _perturbOrbit.Values) DestroyProgram(p);   // #607
+        if (_buddha != null) { DestroyProgram(_buddha); _buddha = null; }   // #838
         _perturbOrbit.Clear();
         foreach (var p in _colorById.Values) DestroyProgram(p);
         _colorById.Clear();
@@ -1111,6 +1255,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         FreeBuffer(ref _saDR); FreeBuffer(ref _saDI);
         FreeBuffer(ref _blaBuf);   // #88 / G4.5b
         FreeBuffer(ref _orbitOut); // #607
+        FreeBuffer(ref _buddhaParams); FreeBuffer(ref _buddhaHits);   // #838
         if (_cmdPool.Handle != 0) { _vk.DestroyCommandPool(_device, _cmdPool, null); _cmdPool = default; }
         if (_ownsContext) { try { _ctx.Dispose(); } catch { } }
     }
