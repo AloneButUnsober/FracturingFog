@@ -244,6 +244,17 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
     /// the plain rebased loop. Reset at the start of every HP frame.</summary>
     public bool LastFrameUsedGpuSeriesApproximation { get; private set; }
 
+    /// <summary>#88 / G4.5b — true when the last GPU perturbation frame also skipped
+    /// with the BLA table. Reset at the start of every HP frame.</summary>
+    public bool LastFrameUsedGpuBla { get; private set; }
+
+    /// <summary>#88 / G4.5b — let GPU perturbation skip with BLA (the CPU's table,
+    /// applied in-kernel) when the kernel supports the SA kernel. On by default (the
+    /// CPU deep path always applies BLA); honours <see cref="DisableAcceleration"/>.
+    /// <c>FF_GPU_BLA=0</c> turns it off.</summary>
+    public static bool UseGpuBla { get; set; } =
+        Environment.GetEnvironmentVariable("FF_GPU_BLA") is not ("0" or "false" or "off" or "no");
+
     /// <summary>#88 / G4.5 — let GPU perturbation skip with Series Approximation
     /// when the kernel supports it. On by default (the CPU deep path always applies
     /// SA, so the GPU frame now shares its truncation); it also honours
@@ -277,9 +288,9 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         bool hp = IsHighPrecisionActive;
         if (!hp && LastFrameUsedGpuCompute) return GpuRoute.OnGpu(label);
         if (hp && LastFrameUsedGpuPerturbation)
-            return GpuRoute.OnGpu(label, LastFrameUsedGpuSeriesApproximation
-                ? $"{label}: deep-zoom perturbation + series approximation"
-                : $"{label}: deep-zoom perturbation");
+            return GpuRoute.OnGpu(label, $"{label}: deep-zoom perturbation"
+                + (LastFrameUsedGpuSeriesApproximation ? " + series approximation" : "")
+                + (LastFrameUsedGpuBla ? " + BLA" : ""));
         if (!UseGpuCompute && !UseGpuPerturbation && s_gpuPerturbDisabled == null)
             return GpuRoute.NotRequested;
         if (_gpuSkip is { } skip) return skip;
@@ -2153,6 +2164,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         int maxIt = MaxIterations;
         LastFrameUsedGpuPerturbation = false;   // set true only on a successful GPU perturb dispatch below
         LastFrameUsedGpuSeriesApproximation = false;
+        LastFrameUsedGpuBla = false;
 
         // One reference orbit at the view centre. Each pixel iterates only
         // the double-precision delta δ_n = z_n − Z_n.
@@ -2401,7 +2413,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
     {
         var kernel = GpuKernel;
         if (kernel == null) return false;
-        bool useSa = false;
+        bool useSa = false, useBla = false;
         try
         {
             double offX0 = SubRectOffsetX - effImgW * 0.5;
@@ -2414,17 +2426,30 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
                 EnsureSeriesApproximation();
                 useSa = _sa is { SafeMax: >= 16 };
             }
-            if (useSa)
+            // #88 / G4.5b — the CPU's BLA table, built for the same worst-case pixel
+            // offset (the image corner) the CPU path uses; applied in the SA kernel.
+            if (UseGpuBla && kernel.SupportsPerturbationSA && !DisableAcceleration)
+            {
+                double halfWS = effImgW * 0.5 * scale, halfHS = effImgH * 0.5 * scale;
+                EnsureBlaTable(Math.Sqrt(halfWS * halfWS + halfHS * halfHS));
+                useBla = _blaTable is { Levels: > 1 } && _blaTable.RefLen == _refOrbitLen;
+                // Without SA the coefficient arrays only fill the kernel's bindings
+                // (safeMax 0 never skips); the cached table is the cheapest source.
+                if (useBla && !useSa) { EnsureSeriesApproximation(); useBla = _sa != null; }
+            }
+            if (useSa || useBla)
             {
                 var sa = _sa!;
+                var bla = useBla ? _blaTable : null;
                 kernel.RunPerturbSA(
                     Width, Height, scale, maxIt, EscapeRadius2,
                     offX0, offY0,
                     _refZr, _refZi, _refOrbitLen,
-                    SaTolerance, sa.SafeMax,
+                    SaTolerance, useSa ? sa.SafeMax : 0,
                     sa.AR, sa.AI, sa.BR, sa.BI, sa.CR, sa.CI, sa.DR, sa.DI,
                     IterationBuffer, SmoothBuffer,
-                    FinalZrBuffer, FinalZiBuffer, FinalDrBuffer, FinalDiBuffer);
+                    FinalZrBuffer, FinalZiBuffer, FinalDrBuffer, FinalDiBuffer,
+                    bla?.GpuCoefficients, bla?.Levels ?? 0);
             }
             else
             {
@@ -2500,6 +2525,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         });
         LastFrameUsedGpuPerturbation = true;
         LastFrameUsedGpuSeriesApproximation = useSa;
+        LastFrameUsedGpuBla = useBla;
         if (!_loggedGpuPerturbEngaged)
         {
             _loggedGpuPerturbEngaged = true;

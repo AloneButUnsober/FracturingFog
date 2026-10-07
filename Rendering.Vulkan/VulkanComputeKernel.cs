@@ -81,7 +81,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     private struct PerturbSaParamsBlob
     {
         public double Scale, EscapeR2, OffX0, OffY0, SaTol;
-        public int Width, Height, MaxIter, RefLen, RowBase, SafeMax, Pad0, Pad1, Pad2, Pad3;
+        public int Width, Height, MaxIter, RefLen, RowBase, SafeMax, BlaLevels, Pad1, Pad2, Pad3;   // BlaLevels: G4.5b (was Pad0)
     }
 
     // TDR row-band tiling helper lives in MandelbrotKernelSource (shared with the
@@ -595,11 +595,13 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         double[] cR, double[] cI, double[] dR, double[] dI,
         int[] iterDst, float[] smoothDst,
         float[] finalZrDst, float[] finalZiDst,
-        float[] finalDrDst, float[] finalDiDst)
+        float[] finalDrDst, float[] finalDiDst,
+        double[]? blaCoeffs = null, int blaLevels = 0)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(VulkanComputeKernel));
         if (!_ctx.SupportsFloat64)
             throw new NotSupportedException("Vulkan device has no shaderFloat64 — cannot run the SA perturbation kernel.");
+        if (blaCoeffs == null || blaCoeffs.Length < 5) blaLevels = 0;   // #88 / G4.5b
         if (width <= 0 || height <= 0) return;
         if (refLen < 1) throw new ArgumentException("reference orbit is empty", nameof(refLen));
 
@@ -612,10 +614,12 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         EnsureBuffers(width, height);
         EnsurePerturbBuffers(refLen);
         EnsurePerturbSaBuffers(coeffLen);
+        EnsureBlaBuffer(blaLevels > 0 ? blaCoeffs!.Length : 5);
         _perturbSa ??= BuildProgram(MandelbrotKernelSource.BuildPerturbSA(), MandelbrotKernelSource.PerturbSaEntryPoint,
             0u, (uint)TShift, (uint)TShift + 1,
             (uint)TShift + 2, (uint)TShift + 3, (uint)TShift + 4, (uint)TShift + 5,
             (uint)TShift + 6, (uint)TShift + 7, (uint)TShift + 8, (uint)TShift + 9,
+            (uint)TShift + 10,
             (uint)UShift, (uint)UShift + 1, (uint)UShift + 2);
 
         var blob = new PerturbSaParamsBlob
@@ -623,6 +627,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             Width = width, Height = height, MaxIter = maxIter, RefLen = refLen,
             Scale = scale, EscapeR2 = escapeRadius2, OffX0 = offsetX0, OffY0 = offsetY0,
             SaTol = saTolerance, SafeMax = safeMax, RowBase = 0,
+            BlaLevels = blaLevels,
         };
         fixed (double* pr = refZr) WriteBytes(_refZrBuf, pr, refLen * sizeof(double));
         fixed (double* pi = refZi) WriteBytes(_refZiBuf, pi, refLen * sizeof(double));
@@ -634,14 +639,17 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         fixed (double* p = cI) WriteBytes(_saCI, p, coeffLen * sizeof(double));
         fixed (double* p = dR) WriteBytes(_saDR, p, coeffLen * sizeof(double));
         fixed (double* p = dI) WriteBytes(_saDI, p, coeffLen * sizeof(double));
+        if (blaLevels > 0)
+            fixed (double* p = blaCoeffs) WriteBytes(_blaBuf, p, blaCoeffs!.Length * sizeof(double));
 
-        // Binding order matches BuildProgram above: b0, t0,t1, t2..t9, u0,u1,u2.
-        const int NB = 14;
+        // Binding order matches BuildProgram above: b0, t0,t1, t2..t9, t10 (BLA), u0,u1,u2.
+        const int NB = 15;
         Buffer* srcBufs = stackalloc Buffer[NB]
         {
             _saParams.Buffer, _refZrBuf.Buffer, _refZiBuf.Buffer,
             _saAR.Buffer, _saAI.Buffer, _saBR.Buffer, _saBI.Buffer,
             _saCR.Buffer, _saCI.Buffer, _saDR.Buffer, _saDI.Buffer,
+            _blaBuf.Buffer,
             _buf[2].Buffer, _buf[3].Buffer, _buf[4].Buffer,
         };
         uint* bindNums = stackalloc uint[NB]
@@ -649,6 +657,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             0, (uint)TShift, (uint)TShift + 1,
             (uint)TShift + 2, (uint)TShift + 3, (uint)TShift + 4, (uint)TShift + 5,
             (uint)TShift + 6, (uint)TShift + 7, (uint)TShift + 8, (uint)TShift + 9,
+            (uint)TShift + 10,
             (uint)UShift, (uint)UShift + 1, (uint)UShift + 2,
         };
         var types = stackalloc DescriptorType[NB];
@@ -761,6 +770,19 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         double freq = Stopwatch.Frequency;
         LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
         LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
+    }
+
+    // #88 / G4.5b — the flattened BLA table (t10). Always bound; a 5-double
+    // placeholder when the frame runs without BLA (gBlaLevels = 0).
+    private Allocated _blaBuf;
+    private int _blaAlloc;
+
+    private void EnsureBlaBuffer(int doubles)
+    {
+        if (_blaBuf.Buffer.Handle != 0 && _blaAlloc >= doubles) return;
+        FreeBuffer(ref _blaBuf);
+        _blaBuf = AllocBuffer((ulong)(doubles * sizeof(double)), BufferUsageFlags.StorageBufferBit);
+        _blaAlloc = doubles;
     }
 
     private void EnsurePerturbSaBuffers(int coeffLen)
@@ -1003,6 +1025,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         FreeBuffer(ref _saBR); FreeBuffer(ref _saBI);
         FreeBuffer(ref _saCR); FreeBuffer(ref _saCI);
         FreeBuffer(ref _saDR); FreeBuffer(ref _saDI);
+        FreeBuffer(ref _blaBuf);   // #88 / G4.5b
         if (_cmdPool.Handle != 0) { _vk.DestroyCommandPool(_device, _cmdPool, null); _cmdPool = default; }
         if (_ownsContext) { try { _ctx.Dispose(); } catch { } }
     }

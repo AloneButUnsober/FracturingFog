@@ -17,6 +17,14 @@
 //   • the calculator routes a deep frame through SA, reports it, honours
 //     DisableSeriesApproximation / DisableAcceleration / UseGpuSeriesApproximation,
 //     and stays within the CPU frame's bounds.
+// G4.5b — BLA in the same kernel:
+//   • against the oracle extended with the production BlaTable.Lookup and the
+//     Bla coefficients (independent of the GPU packing), with BLA skipping most
+//     of the iterations so the check is not vacuous;
+//   • a table with A scaled by 1.5 must wreck the frame when passed with its
+//     levels and change nothing with blaLevels 0 — the kernel reads and applies
+//     the table, and only when asked;
+//   • the calculator's SA x BLA toggle matrix (BLA alone runs with safeMax 0).
 
 using System;
 using System.Linq;
@@ -28,12 +36,23 @@ using Xunit;
 
 namespace FracturingFog.Server.Tests;
 
-public sealed class S88GpuPerturbSaTests
+public sealed class S88GpuPerturbSaTests : IDisposable
 {
+    // The perturbation dispatches abort to the CPU (and the calculator disables GPU
+    // perturbation for the session) when band 0 extrapolates past the budget. Under
+    // the full suite's load on a weak-fp64 card that trips spuriously, so these
+    // correctness tests run without it (0 = off) and restore it afterwards.
+    private readonly double _savedBudget = FracturingFog.Rendering.MandelbrotKernelSource.PerturbBudgetMs;
+    public S88GpuPerturbSaTests() => FracturingFog.Rendering.MandelbrotKernelSource.PerturbBudgetMs = 0;
+    public void Dispose() => FracturingFog.Rendering.MandelbrotKernelSource.PerturbBudgetMs = _savedBudget;
+
     private const int Dim = 96, MaxIter = 6000;
     private const double EscapeR2 = 512.0 * 512.0, Tol = 1e-3;
     // The --vulkanpturbsa view: the seahorse-valley centre at zoom 1e6 (orbit up to |Z| ~ 2).
     private const double Cx = -0.743643887037151, Cy = 0.13182590420533, Zoom = 1e6;
+    // BLA validity radii are ~1e-6 |Z|: it only skips once |delta| is that small, i.e. deep.
+    // Oracle and GPU share the double reference orbit, so a plain-double centre is fine here.
+    private const double BlaZoom = 1e12;
 
     private static VulkanComputeKernel Device()
     {
@@ -56,10 +75,16 @@ public sealed class S88GpuPerturbSaTests
         return (zr, zi, len);
     }
 
-    // CPU oracle: the shader's per-pixel loop in double, seeded by the production SA.
+    // CPU oracle: the shader's per-pixel loop in double, seeded by the production SA,
+    // with the production BLA lookup on the reference index (G4.5b).
     private static int[] Oracle(double scale, double off0, (double[] Zr, double[] Zi, int Len) r,
                                 SeriesApproximation? sa, double tol)
+        => Oracle(scale, off0, r, sa, tol, null, out _);
+
+    private static int[] Oracle(double scale, double off0, (double[] Zr, double[] Zi, int Len) r,
+                                SeriesApproximation? sa, double tol, BlaTable? bla, out double blaSkippedFrac)
     {
+        long skipped = 0, total = 0;
         var it = new int[Dim * Dim];
         for (int py = 0; py < Dim; py++)
             for (int px = 0; px < Dim; px++)
@@ -74,6 +99,21 @@ public sealed class S88GpuPerturbSaTests
                 int iter;
                 for (iter = start; iter < MaxIter; iter++)
                 {
+                    if (bla != null)
+                    {
+                        // Kernel bounds: iter + L <= maxIter and m + L < refLen.
+                        int cap = Math.Min(m + (MaxIter - iter), r.Len - 1);
+                        int bi = bla.Lookup(m, dr * dr + di * di, cap);
+                        if (bi >= 0 && bla.Data[bi].L >= 2)
+                        {
+                            var e = bla.Data[bi];
+                            double ndr0 = e.ARe * dr - e.AIm * di + (e.BRe * dcR - e.BIm * dcI);
+                            double ndi0 = e.ARe * di + e.AIm * dr + (e.BRe * dcI + e.BIm * dcR);
+                            dr = ndr0; di = ndi0;
+                            m += e.L; iter += e.L - 1; skipped += e.L;
+                            continue;
+                        }
+                    }
                     double Zr = r.Zr[m], Zi = r.Zi[m];
                     double zr = Zr + dr, zi = Zi + di;
                     double zm2 = zr * zr + zi * zi;
@@ -84,12 +124,15 @@ public sealed class S88GpuPerturbSaTests
                     dr = ndr; di = ndi; m++;
                 }
                 it[py * Dim + px] = iter;
+                total += iter;
             }
+        blaSkippedFrac = total > 0 ? skipped / (double)total : 0;
         return it;
     }
 
     private static int[] Gpu(VulkanComputeKernel k, double scale, double off0,
-                             (double[] Zr, double[] Zi, int Len) r, SeriesApproximation? sa, double tol)
+                             (double[] Zr, double[] Zi, int Len) r, SeriesApproximation? sa, double tol,
+                             double[]? bla = null, int blaLevels = 0, int safeMax = -1)
     {
         int n = Dim * Dim;
         var it = new int[n]; var sm = new float[n];
@@ -97,8 +140,9 @@ public sealed class S88GpuPerturbSaTests
         if (sa == null)
             k.RunPerturb(Dim, Dim, scale, MaxIter, EscapeR2, off0, off0, r.Zr, r.Zi, r.Len, it, sm, a, b, c, d);
         else
-            k.RunPerturbSA(Dim, Dim, scale, MaxIter, EscapeR2, off0, off0, r.Zr, r.Zi, r.Len, tol, sa.SafeMax,
-                sa.AR, sa.AI, sa.BR, sa.BI, sa.CR, sa.CI, sa.DR, sa.DI, it, sm, a, b, c, d);
+            k.RunPerturbSA(Dim, Dim, scale, MaxIter, EscapeR2, off0, off0, r.Zr, r.Zi, r.Len, tol,
+                safeMax >= 0 ? safeMax : sa.SafeMax,
+                sa.AR, sa.AI, sa.BR, sa.BI, sa.CR, sa.CI, sa.DR, sa.DI, it, sm, a, b, c, d, bla, blaLevels);
         return it;
     }
 
@@ -139,6 +183,49 @@ public sealed class S88GpuPerturbSaTests
         Assert.True(Disagree(huge, plain) > 0.10, $"a maximal skip changed only {Disagree(huge, plain):P2} of pixels");
     }
 
+    private static BlaTable Table(double scale, (double[] Zr, double[] Zi, int Len) r)
+        => new(r.Zr, r.Zi, r.Len, Math.Sqrt(2.0) * 0.5 * Dim * scale);   // corner |dc|, as the calculator
+
+    [Fact]
+    public void Bla_Kernel_Reproduces_The_Cpu_Bla_Answer()
+    {
+        using var k = Device();
+        var r = ReferenceOrbit();
+        var sa = new SeriesApproximation(r.Zr, r.Zi, r.Len);
+        double scale = 3.5 / (Dim * BlaZoom), off0 = -0.5 * Dim;
+        var table = Table(scale, r);
+        Assert.True(table.Levels > 4, $"BLA table has {table.Levels} levels");
+
+        // SA + BLA, and BLA alone (safeMax 0).
+        var oSaBla = Oracle(scale, off0, r, sa, Tol, table, out _);
+        var oBla = Oracle(scale, off0, r, null, Tol, table, out double skipBla);
+        Assert.True(skipBla > 0.3, $"BLA skips only {skipBla:P1} of the iterations here — the check would be weak");
+        var gSaBla = Gpu(k, scale, off0, r, sa, Tol, table.GpuCoefficients, table.Levels);
+        var gBla = Gpu(k, scale, off0, r, sa, Tol, table.GpuCoefficients, table.Levels, safeMax: 0);
+        Assert.True(Disagree(gSaBla, oSaBla) < 0.005, $"GPU SA+BLA vs oracle: {Disagree(gSaBla, oSaBla):P3}");
+        Assert.True(Disagree(gBla, oBla) < 0.005, $"GPU BLA vs oracle: {Disagree(gBla, oBla):P3}");
+    }
+
+    [Fact]
+    public void Bla_Table_Is_Read_And_Applied_Only_When_Asked()
+    {
+        using var k = Device();
+        var r = ReferenceOrbit();
+        var sa = new SeriesApproximation(r.Zr, r.Zi, r.Len);
+        double scale = 3.5 / (Dim * BlaZoom), off0 = -0.5 * Dim;
+        var table = Table(scale, r);
+        var good = table.GpuCoefficients;
+        var bad = (double[])good.Clone();
+        for (int e = 0; e < bad.Length; e += 5) { bad[e] *= 1.5; bad[e + 1] *= 1.5; }   // A x 1.5
+
+        var plainSa = Gpu(k, scale, off0, r, sa, Tol);
+        var right = Gpu(k, scale, off0, r, sa, Tol, good, table.Levels);
+        var wrong = Gpu(k, scale, off0, r, sa, Tol, bad, table.Levels);
+        var off = Gpu(k, scale, off0, r, sa, Tol, bad, 0);
+        Assert.True(Disagree(off, plainSa) < 0.001, $"blaLevels 0 still read the table: {Disagree(off, plainSa):P3}");
+        Assert.True(Disagree(wrong, right) > 0.10, $"a corrupted table changed only {Disagree(wrong, right):P2} of pixels");
+    }
+
     // The --saprobe deep view (multi-limb centre, zoom 1e15) through the calculator.
     private static MandelbrotCalculator DeepCalc(VulkanComputeKernel? k) => new(128, 128)
     {
@@ -153,41 +240,41 @@ public sealed class S88GpuPerturbSaTests
     {
         using var k = Device();
         bool savedPerturb = MandelbrotCalculator.UseGpuPerturbation, savedSa = MandelbrotCalculator.UseGpuSeriesApproximation;
+        bool savedBla = MandelbrotCalculator.UseGpuBla;
         try
         {
             var cpu = DeepCalc(null);
             cpu.Calculate(CancellationToken.None);
 
             MandelbrotCalculator.UseGpuPerturbation = true;
-            MandelbrotCalculator.UseGpuSeriesApproximation = true;
-            var g = DeepCalc(k);
-            g.Calculate(CancellationToken.None);
-            Assert.True(g.LastFrameUsedGpuPerturbation, $"GPU perturbation did not run: {g.LastGpuRoute.Detail}");
-            Assert.True(g.LastFrameUsedGpuSeriesApproximation);
-            Assert.Contains("series approximation", g.LastGpuRoute.Detail);
-            Assert.True(Disagree(g.IterationBuffer, cpu.IterationBuffer) < 0.02,
-                $"GPU SA frame vs CPU: {Disagree(g.IterationBuffer, cpu.IterationBuffer):P3}");
-
-            foreach (var (label, setup) in new (string, Action<MandelbrotCalculator>)[]
+            // (label, setup, expect SA, expect BLA) — default = both, as the CPU.
+            foreach (var (label, setup, wantSa, wantBla) in new (string, Action<MandelbrotCalculator>, bool, bool)[]
             {
-                ("DisableSeriesApproximation", c => c.DisableSeriesApproximation = true),
-                ("DisableAcceleration", c => c.DisableAcceleration = true),
-                ("UseGpuSeriesApproximation off", _ => MandelbrotCalculator.UseGpuSeriesApproximation = false),
+                ("defaults", _ => { }, true, true),
+                ("DisableSeriesApproximation", c => c.DisableSeriesApproximation = true, false, true),
+                ("DisableAcceleration", c => c.DisableAcceleration = true, false, false),
+                ("UseGpuSeriesApproximation off", _ => MandelbrotCalculator.UseGpuSeriesApproximation = false, false, true),
+                ("UseGpuBla off", _ => MandelbrotCalculator.UseGpuBla = false, true, false),
             })
             {
                 MandelbrotCalculator.UseGpuSeriesApproximation = true;
-                var off = DeepCalc(k);
-                setup(off);
-                off.Calculate(CancellationToken.None);
-                Assert.True(off.LastFrameUsedGpuPerturbation, $"{label}: GPU perturbation did not run");
-                Assert.False(off.LastFrameUsedGpuSeriesApproximation, $"{label}: SA still engaged");
-                Assert.DoesNotContain("series approximation", off.LastGpuRoute.Detail);
+                MandelbrotCalculator.UseGpuBla = true;
+                var g = DeepCalc(k);
+                setup(g);
+                g.Calculate(CancellationToken.None);
+                Assert.True(g.LastFrameUsedGpuPerturbation, $"{label}: GPU perturbation did not run: {g.LastGpuRoute.Detail}");
+                Assert.Equal((wantSa, wantBla), (g.LastFrameUsedGpuSeriesApproximation, g.LastFrameUsedGpuBla));
+                Assert.Equal(wantSa, g.LastGpuRoute.Detail!.Contains("series approximation"));
+                Assert.Equal(wantBla, g.LastGpuRoute.Detail!.Contains("BLA"));
+                Assert.True(Disagree(g.IterationBuffer, cpu.IterationBuffer) < 0.02,
+                    $"{label}: GPU frame vs CPU {Disagree(g.IterationBuffer, cpu.IterationBuffer):P3}");
             }
         }
         finally
         {
             MandelbrotCalculator.UseGpuPerturbation = savedPerturb;
             MandelbrotCalculator.UseGpuSeriesApproximation = savedSa;
+            MandelbrotCalculator.UseGpuBla = savedBla;
         }
     }
 }
