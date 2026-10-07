@@ -763,75 +763,158 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
             _ctx.CSSetShader(_csPerturb);
             _ctx.CSSetShaderResource(0, _refZrSrv);   // t0
             _ctx.CSSetShaderResource(1, _refZiSrv);   // t1
-            _ctx.CSSetUnorderedAccessView(0, _iterUav);
-            _ctx.CSSetUnorderedAccessView(1, _smoothUav);
-            _ctx.CSSetUnorderedAccessView(2, _finalZDUav);
-
-            // TDR row-band tiling — a deep-zoom full-image dispatch runs long
-            // enough on a weak-FP64 GPU to trip the OS watchdog
-            // (DXGI_ERROR_DEVICE_REMOVED), which also kills the shared present
-            // device. Split into row bands and Flush each so no single packet
-            // exceeds the ~2 s TDR budget. gRowBase offsets each band's rows.
-            int bandRows = MandelbrotKernelSource.PerturbBandRows(width, height, maxIter);
-            int bandCount = (height + bandRows - 1) / bandRows;
-            int bandIndex = 0;
-            for (int rowBase = 0; rowBase < height; rowBase += bandRows, bandIndex++)
+            DispatchPerturbBands(width, height, maxIter, srvCount: 2, "", rowBase =>
             {
-                int rows = Math.Min(bandRows, height - rowBase);
                 p.RowBase = rowBase;
                 var mapped = _ctx.Map(_perturbParamsBuf!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
                 unsafe { *(PerturbParams*)mapped.DataPointer = p; }
                 _ctx.Unmap(_perturbParamsBuf!, 0);
                 _ctx.CSSetConstantBuffer(0, _perturbParamsBuf);   // re-bind after WriteDiscard rename
+            });
+            ReadPerturbOutputs(width * height, t0, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst);
+        }
+    }
 
-                long tBand = System.Diagnostics.Stopwatch.GetTimestamp();
-                _ctx.Dispatch((uint)((width + 7) / 8), (uint)((rows + 7) / 8), 1);
+    /// <summary>#88 / G4.5 — the SA kernel needs only the double ops the plain one
+    /// does (squared-magnitude FindSkip, no double sqrt / division).</summary>
+    public bool SupportsPerturbationSA => SupportsPerturbation;
 
-                // Perf-fallback: sync + time the FIRST band, extrapolate the whole
-                // frame, and abort if the GPU is too slow at this depth (weak
-                // FP64) so the caller drops to the CPU deep path instead of
-                // grinding for minutes. A CopyResource + Map(Read) on the iter
-                // staging blocks until band 0's dispatch finishes → a real GPU
-                // time; the remaining bands just Flush (async).
-                if (bandIndex == 0 && bandCount > 1)
-                {
-                    _ctx.CopyResource(_iterStaging, _iterBuf);
-                    var sync = _ctx.Map(_iterStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
-                    _ctx.Unmap(_iterStaging, 0);
-                    _ = sync;
-                    double band0Ms = (System.Diagnostics.Stopwatch.GetTimestamp() - tBand) * 1000.0
-                                     / System.Diagnostics.Stopwatch.Frequency;
-                    if (MandelbrotKernelSource.PerturbTooSlow(band0Ms, bandCount))
-                    {
-                        // Leave the context clean before bailing to the CPU path.
-                        _ctx.CSUnsetUnorderedAccessView(0);
-                        _ctx.CSUnsetUnorderedAccessView(1);
-                        _ctx.CSUnsetUnorderedAccessView(2);
-                        _ctx.CSSetShaderResource(0, null);
-                        _ctx.CSSetShaderResource(1, null);
-                        throw new TimeoutException(
-                            $"{MandelbrotKernelSource.PerturbTooSlowMarker}: band0={band0Ms:F1}ms × {bandCount} bands " +
-                            $"> {MandelbrotKernelSource.PerturbBudgetMs:F0}ms budget");
-                    }
-                }
-                else
-                {
-                    _ctx.Flush();   // submit this band as its own GPU packet (resets the TDR clock)
-                }
-            }
+    /// <summary>#88 / G4.5 — deep-zoom perturbation with the Series-Approximation
+    /// prelude (MandelbrotKernelSource.BuildPerturbSA, entry CSPerturbSA — the same
+    /// HLSL the Vulkan backend runs): per pixel FindSkip → k, δ_k, dz_k from the
+    /// uploaded coefficients, then the rebased δ loop from k. Same band tiling,
+    /// too-slow abort and readback as <see cref="RunPerturb"/>.</summary>
+    public void RunPerturbSA(
+        int width, int height,
+        double scale, int maxIter, double escapeRadius2,
+        double offsetX0, double offsetY0,
+        double[] refZr, double[] refZi, int refLen,
+        double saTolerance, int safeMax,
+        double[] aR, double[] aI, double[] bR, double[] bI,
+        double[] cR, double[] cI, double[] dR, double[] dI,
+        int[] iterDst, float[] smoothDst,
+        float[] finalZrDst, float[] finalZiDst,
+        float[] finalDrDst, float[] finalDiDst)
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(MandelbrotGpuKernel));
+        if (!SupportsPerturbation)
+            throw new NotSupportedException("D3D device has no DoublePrecisionFloatShaderOps — cannot run the SA perturbation kernel.");
+        if (width <= 0 || height <= 0) return;
+        if (refLen < 1) throw new ArgumentException("reference orbit is empty", nameof(refLen));
+        if (refZr.Length < refLen || refZi.Length < refLen)
+            throw new ArgumentException("reference-orbit arrays shorter than refLen");
+        int coeffLen = aR.Length;   // SA arrays are refLen + 1 long
+        if (coeffLen < refLen + 1)
+            throw new ArgumentException("SA coefficient arrays shorter than refLen + 1");
 
+        lock (_d3dGate)
+        {
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            EnsureOutputBuffers(width, height);
+            EnsureRefOrbitBuffers(refLen);
+            EnsureSaBuffers(coeffLen);
+            _csPerturbSa ??= CompileShader(MandelbrotKernelSource.BuildPerturbSA(), label: "perturb-sa",
+                entryPoint: MandelbrotKernelSource.PerturbSaEntryPoint);
+
+            UploadDoubles(_refZrBuf!, refZr, refLen);
+            UploadDoubles(_refZiBuf!, refZi, refLen);
+            var coeffs = new[] { aR, aI, bR, bI, cR, cI, dR, dI };
+            for (int i = 0; i < 8; i++) UploadDoubles(_saBufs[i]!, coeffs[i], coeffLen);
+
+            var p = new PerturbSaParams
+            {
+                Width = width, Height = height, MaxIter = maxIter, RefLen = refLen,
+                Scale = scale, EscapeR2 = escapeRadius2, OffX0 = offsetX0, OffY0 = offsetY0,
+                SaTol = saTolerance, SafeMax = safeMax, RowBase = 0,
+            };
+
+            _ctx.CSSetShader(_csPerturbSa);
+            _ctx.CSSetShaderResource(0, _refZrSrv);   // t0
+            _ctx.CSSetShaderResource(1, _refZiSrv);   // t1
+            for (int i = 0; i < 8; i++) _ctx.CSSetShaderResource((uint)(2 + i), _saSrvs[i]);   // t2..t9
+            DispatchPerturbBands(width, height, maxIter, srvCount: 10, " (SA)", rowBase =>
+            {
+                p.RowBase = rowBase;
+                var mapped = _ctx.Map(_saParamsBuf!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
+                unsafe { *(PerturbSaParams*)mapped.DataPointer = p; }
+                _ctx.Unmap(_saParamsBuf!, 0);
+                _ctx.CSSetConstantBuffer(0, _saParamsBuf);
+            });
+            ReadPerturbOutputs(width * height, t0, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst);
+        }
+    }
+
+    /// <summary>TDR row-band tiling for the perturbation kernels (the shader + its
+    /// SRVs are bound by the caller; <paramref name="writeParams"/> uploads the
+    /// band's cbuffer). A deep-zoom full-image dispatch runs long enough on a
+    /// weak-FP64 GPU to trip the OS watchdog (DXGI_ERROR_DEVICE_REMOVED), which also
+    /// kills the shared present device, so each band is Flushed as its own packet.
+    /// Band 0 is synced and timed: if the extrapolated frame is too slow (weak FP64)
+    /// it throws the too-slow marker so the caller drops to the CPU deep path.</summary>
+    private void DispatchPerturbBands(int width, int height, int maxIter, int srvCount, string label,
+        Action<int> writeParams)
+    {
+        _ctx.CSSetUnorderedAccessView(0, _iterUav);
+        _ctx.CSSetUnorderedAccessView(1, _smoothUav);
+        _ctx.CSSetUnorderedAccessView(2, _finalZDUav);
+
+        void Unbind()
+        {
             _ctx.CSUnsetUnorderedAccessView(0);
             _ctx.CSUnsetUnorderedAccessView(1);
             _ctx.CSUnsetUnorderedAccessView(2);
-            _ctx.CSSetShaderResource(0, null);
-            _ctx.CSSetShaderResource(1, null);
+            for (int i = 0; i < srvCount; i++) _ctx.CSSetShaderResource((uint)i, null);
+        }
 
+        int bandRows = MandelbrotKernelSource.PerturbBandRows(width, height, maxIter);
+        int bandCount = (height + bandRows - 1) / bandRows;
+        int bandIndex = 0;
+        for (int rowBase = 0; rowBase < height; rowBase += bandRows, bandIndex++)
+        {
+            int rows = Math.Min(bandRows, height - rowBase);
+            writeParams(rowBase);
+
+            long tBand = System.Diagnostics.Stopwatch.GetTimestamp();
+            _ctx.Dispatch((uint)((width + 7) / 8), (uint)((rows + 7) / 8), 1);
+
+            // Perf-fallback: a CopyResource + Map(Read) on the iter staging blocks
+            // until band 0's dispatch finishes -> a real GPU time; the remaining
+            // bands just Flush (async).
+            if (bandIndex == 0 && bandCount > 1)
+            {
+                _ctx.CopyResource(_iterStaging, _iterBuf);
+                var sync = _ctx.Map(_iterStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
+                _ctx.Unmap(_iterStaging, 0);
+                _ = sync;
+                double band0Ms = (System.Diagnostics.Stopwatch.GetTimestamp() - tBand) * 1000.0
+                                 / System.Diagnostics.Stopwatch.Frequency;
+                if (MandelbrotKernelSource.PerturbTooSlow(band0Ms, bandCount))
+                {
+                    Unbind();   // leave the context clean before bailing to the CPU path
+                    throw new TimeoutException(
+                        $"{MandelbrotKernelSource.PerturbTooSlowMarker}: band0={band0Ms:F1}ms × {bandCount} bands " +
+                        $"> {MandelbrotKernelSource.PerturbBudgetMs:F0}ms budget{label}");
+                }
+            }
+            else
+            {
+                _ctx.Flush();   // submit this band as its own GPU packet (resets the TDR clock)
+            }
+        }
+        Unbind();
+    }
+
+    /// <summary>Copy the perturbation outputs (iter / smooth / finalZD) back to the
+    /// caller's arrays and record the dispatch / readback timings.</summary>
+    private void ReadPerturbOutputs(int n, long t0, int[] iterDst, float[] smoothDst,
+        float[] finalZrDst, float[] finalZiDst, float[] finalDrDst, float[] finalDiDst)
+    {
+        {
             _ctx.CopyResource(_iterStaging, _iterBuf);
             _ctx.CopyResource(_smoothStaging, _smoothBuf);
             _ctx.CopyResource(_finalZDStaging, _finalZDBuf);
 
             long tDispatch = System.Diagnostics.Stopwatch.GetTimestamp();
-            int n = width * height;
 
             var iterMap = _ctx.Map(_iterStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
             try
@@ -882,6 +965,52 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
             LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
             LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
         }
+    }
+
+    // #88 / G4.5 — SA cbuffer (b0 of CSPerturbSA): 5 doubles then 10 ints = 80 bytes,
+    // byte-for-byte the HLSL PerturbParams in BuildPerturbSA (and the Vulkan blob).
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PerturbSaParams
+    {
+        public double Scale, EscapeR2, OffX0, OffY0, SaTol;
+        public int Width, Height, MaxIter, RefLen, RowBase, SafeMax, Pad0, Pad1, Pad2, Pad3;
+    }
+
+    // SA coefficient SRVs t2..t9: A, B, C, D (re, im each), length refLen + 1.
+    private readonly ID3D11Buffer?[] _saBufs = new ID3D11Buffer?[8];
+    private readonly ID3D11ShaderResourceView?[] _saSrvs = new ID3D11ShaderResourceView?[8];
+    private int _saAllocLen;
+    private ID3D11Buffer? _saParamsBuf;
+    private ID3D11ComputeShader? _csPerturbSa;
+
+    private void EnsureSaBuffers(int coeffLen)
+    {
+        _saParamsBuf ??= _device.CreateBuffer(new BufferDescription(
+            byteWidth: 80, bindFlags: BindFlags.ConstantBuffer,
+            usage: ResourceUsage.Dynamic, cpuAccessFlags: CpuAccessFlags.Write));
+        if (_saBufs[0] != null && _saAllocLen >= coeffLen) return;
+        for (int i = 0; i < 8; i++) { _saSrvs[i]?.Dispose(); _saBufs[i]?.Dispose(); }
+        var desc = new BufferDescription
+        {
+            ByteWidth = (uint)(coeffLen * sizeof(double)),
+            BindFlags = BindFlags.ShaderResource,
+            Usage = ResourceUsage.Dynamic,
+            CPUAccessFlags = CpuAccessFlags.Write,
+            MiscFlags = ResourceOptionFlags.BufferStructured,
+            StructureByteStride = sizeof(double),
+        };
+        var srvDesc = new ShaderResourceViewDescription
+        {
+            Format = Vortice.DXGI.Format.Unknown,
+            ViewDimension = Vortice.Direct3D.ShaderResourceViewDimension.Buffer,
+            Buffer = new BufferShaderResourceView { FirstElement = 0, NumElements = (uint)coeffLen },
+        };
+        for (int i = 0; i < 8; i++)
+        {
+            _saBufs[i] = _device.CreateBuffer(desc);
+            _saSrvs[i] = _device.CreateShaderResourceView(_saBufs[i]!, srvDesc);
+        }
+        _saAllocLen = coeffLen;
     }
 
     private void EnsurePerturbParamsBuffer()
@@ -947,6 +1076,13 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         try { _refZiBuf?.Dispose(); } catch { }
         try { _perturbParamsBuf?.Dispose(); } catch { }
         try { _csPerturb?.Dispose(); } catch { }
+        try { _csPerturbSa?.Dispose(); } catch { }
+        try { _saParamsBuf?.Dispose(); } catch { }
+        for (int i = 0; i < 8; i++)
+        {
+            try { _saSrvs[i]?.Dispose(); } catch { }
+            try { _saBufs[i]?.Dispose(); } catch { }
+        }
         try { _iterUav?.Dispose(); } catch { }
         try { _smoothUav?.Dispose(); } catch { }
         try { _finalZDUav?.Dispose(); } catch { }

@@ -125,5 +125,29 @@ namespace FracturingFog.Rendering
             float[] finalDrDst, float[] finalDiDst)
             => throw new NotSupportedException(
                 "This GPU kernel has no perturbation path (SupportsPerturbation is false).");
+
+        /// <summary>#88 / G4.5 — true when this backend can run the perturbation kernel
+        /// with a Series-Approximation prelude (<see cref="RunPerturbSA"/>).</summary>
+        bool SupportsPerturbationSA => false;
+
+        /// <summary>#88 / G4.5 — <see cref="RunPerturb"/> with a Series-Approximation
+        /// prelude: each pixel first skips analytically to iteration k with the uploaded
+        /// <c>SeriesApproximation</c> coefficients (A/B/C/D, length ≥ refLen + 1; k from
+        /// the same FindSkip test as the CPU, valid up to <paramref name="safeMax"/>),
+        /// then runs the same rebased δ loop. Only valid when
+        /// <see cref="SupportsPerturbationSA"/> is true.</summary>
+        void RunPerturbSA(
+            int width, int height,
+            double scale, int maxIter, double escapeRadius2,
+            double offsetX0, double offsetY0,
+            double[] refZr, double[] refZi, int refLen,
+            double saTolerance, int safeMax,
+            double[] aR, double[] aI, double[] bR, double[] bI,
+            double[] cR, double[] cI, double[] dR, double[] dI,
+            int[] iterDst, float[] smoothDst,
+            float[] finalZrDst, float[] finalZiDst,
+            float[] finalDrDst, float[] finalDiDst)
+            => throw new NotSupportedException(
+                "This GPU kernel has no SA perturbation path (SupportsPerturbationSA is false).");
     }
 }

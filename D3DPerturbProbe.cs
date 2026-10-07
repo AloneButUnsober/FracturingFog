@@ -8,7 +8,8 @@
 // It creates a headless D3D11 hardware device (as MandelbrotGpuKernelBench does),
 // attaches a real MandelbrotGpuKernel to a MandelbrotCalculator at deep zoom, and
 // compares the frame BOTH ways: CPU deep path (UseGpuPerturbation off) vs the
-// D3D11 RunPerturb path (on). Checked:
+// D3D11 RunPerturb path (on). #88 / G4.5 — each case also runs the GPU with the
+// Series-Approximation prelude (RunPerturbSA) and holds it to the same bounds. Checked:
 //   - the GPU path really ran (LastFrameUsedGpuPerturbation, LastGpuRoute = Gpu),
 //     so a silent CPU fallback can't pass as parity;
 //   - the CPU frame is non-degenerate (many distinct iteration counts, not all
@@ -120,65 +121,80 @@ namespace FracturingFog
             var cpuCalc = MakeCalc(c);
             MandelbrotCalculator.UseGpuPerturbation = false;
             cpuCalc.GpuKernel = null;
+            var swCpu = System.Diagnostics.Stopwatch.StartNew();
             cpuCalc.Calculate();
+            long cpuMs = swCpu.ElapsedMilliseconds;
             int[] cpuIter = (int[])cpuCalc.IterationBuffer.Clone();
             uint[] cpuColor = (uint[])cpuCalc.ColorBuffer.Clone();
-
-            // D3D11 GPU perturbation.
-            var gpuCalc = MakeCalc(c);
-            gpuCalc.GpuKernel = kernel;
-            MandelbrotCalculator.UseGpuPerturbation = true;
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            gpuCalc.Calculate();
-            long ms = sw.ElapsedMilliseconds;
-            int[] gpuIter = (int[])gpuCalc.IterationBuffer.Clone();
-            uint[] gpuColor = (uint[])gpuCalc.ColorBuffer.Clone();
-            MandelbrotCalculator.UseGpuPerturbation = false;
 
             int n = W * H;
             var distinct = new HashSet<int>(cpuIter);
             int inSet = 0;
             for (int i = 0; i < n; i++) if (cpuIter[i] >= maxIter) inSet++;
-            int disagree = 0, maxDelta = 0;
-            for (int i = 0; i < n; i++)
-            {
-                int d = Math.Abs(gpuIter[i] - cpuIter[i]);
-                if (d != 0) { disagree++; if (d > maxDelta) maxDelta = d; }
-            }
-            double frac = (double)disagree / n;
-            long colourSum = 0;
-            for (int i = 0; i < n; i++)
-                for (int s = 0; s < 24; s += 8)
-                    colourSum += Math.Abs((int)((gpuColor[i] >> s) & 0xFF) - (int)((cpuColor[i] >> s) & 0xFF));
-            double colourMean = colourSum / (n * 3.0);
-
             Console.WriteLine(
-                $"  {label}: refLen={cpuCalc.ReferenceOrbitLength} distinct={distinct.Count} inSet={inSet}/{n} " +
-                $"gpu={gpuCalc.LastFrameUsedGpuPerturbation} route='{gpuCalc.LastGpuRoute.State} {gpuCalc.LastGpuRoute.Reason}' {ms} ms");
-            Console.WriteLine(
-                $"    iter disagree={disagree}/{n} ({frac:P3}) maxΔiter={maxDelta}; colour mean drift={colourMean:F3}");
-
-            if (!gpuCalc.LastFrameUsedGpuPerturbation)
-            {
-                Console.Error.WriteLine($"    FAIL {label}: the GPU perturbation path did not run ({gpuCalc.LastGpuRoute.Detail ?? gpuCalc.LastGpuRoute.Reason}).");
-                return false;
-            }
+                $"  {label}: refLen={cpuCalc.ReferenceOrbitLength} distinct={distinct.Count} inSet={inSet}/{n} cpu {cpuMs} ms");
             if (distinct.Count < 8 || inSet >= n)
             {
                 Console.Error.WriteLine($"    FAIL {label}: degenerate CPU frame — comparison vacuous.");
                 return false;
             }
-            if (frac > MaxDisagreeFrac)
+
+            // D3D11 GPU perturbation, plain and with the #88 / G4.5 SA prelude.
+            bool ok = true;
+            bool savedSa = MandelbrotCalculator.UseGpuSeriesApproximation;
+            try
             {
-                Console.Error.WriteLine($"    FAIL {label}: iteration disagreement {frac:P3} > {MaxDisagreeFrac:P0}.");
-                return false;
+                foreach (bool sa in new[] { false, true })
+                {
+                    MandelbrotCalculator.UseGpuSeriesApproximation = sa;
+                    var gpuCalc = MakeCalc(c);
+                    gpuCalc.GpuKernel = kernel;
+                    MandelbrotCalculator.UseGpuPerturbation = true;
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    gpuCalc.Calculate();
+                    long ms = sw.ElapsedMilliseconds;
+                    MandelbrotCalculator.UseGpuPerturbation = false;
+
+                    int disagree = 0, maxDelta = 0;
+                    long colourSum = 0;
+                    for (int i = 0; i < n; i++)
+                    {
+                        int d = Math.Abs(gpuCalc.IterationBuffer[i] - cpuIter[i]);
+                        if (d != 0) { disagree++; if (d > maxDelta) maxDelta = d; }
+                        for (int s = 0; s < 24; s += 8)
+                            colourSum += Math.Abs((int)((gpuCalc.ColorBuffer[i] >> s) & 0xFF) - (int)((cpuColor[i] >> s) & 0xFF));
+                    }
+                    double frac = (double)disagree / n;
+                    double colourMean = colourSum / (n * 3.0);
+                    string tag = sa ? "GPU+SA" : "GPU   ";
+                    Console.WriteLine(
+                        $"    {tag} sa={gpuCalc.LastFrameUsedGpuSeriesApproximation} {ms} ms: iter disagree={disagree}/{n} ({frac:P3}) " +
+                        $"maxΔiter={maxDelta}; colour mean drift={colourMean:F3}  route='{gpuCalc.LastGpuRoute.Detail}'");
+
+                    if (!gpuCalc.LastFrameUsedGpuPerturbation)
+                    {
+                        Console.Error.WriteLine($"    FAIL {label} {tag}: the GPU perturbation path did not run ({gpuCalc.LastGpuRoute.Detail ?? gpuCalc.LastGpuRoute.Reason}).");
+                        ok = false; continue;
+                    }
+                    if (gpuCalc.LastFrameUsedGpuSeriesApproximation != sa)
+                    {
+                        Console.Error.WriteLine($"    FAIL {label} {tag}: SA engaged={gpuCalc.LastFrameUsedGpuSeriesApproximation}, expected {sa}.");
+                        ok = false;
+                    }
+                    if (frac > MaxDisagreeFrac)
+                    {
+                        Console.Error.WriteLine($"    FAIL {label} {tag}: iteration disagreement {frac:P3} > {MaxDisagreeFrac:P0}.");
+                        ok = false;
+                    }
+                    if (colourMean > MaxMeanColourDrift)
+                    {
+                        Console.Error.WriteLine($"    FAIL {label} {tag}: colour mean drift {colourMean:F3} > {MaxMeanColourDrift}.");
+                        ok = false;
+                    }
+                }
             }
-            if (colourMean > MaxMeanColourDrift)
-            {
-                Console.Error.WriteLine($"    FAIL {label}: colour mean drift {colourMean:F3} > {MaxMeanColourDrift}.");
-                return false;
-            }
-            return true;
+            finally { MandelbrotCalculator.UseGpuSeriesApproximation = savedSa; }
+            return ok;
         }
 
         private static MandelbrotCalculator MakeCalc(
