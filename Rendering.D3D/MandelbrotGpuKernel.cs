@@ -119,9 +119,10 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         public int FractalKind;
         public float Param0;
         public float Param1;
-        // F11b: GPU ordered-dither amp (0 = off). Was _pad0; keeps the 64-byte
-        // (float4-multiple) cbuffer layout.
+        // F11b: GPU ordered-dither amp (0 = off). Was _pad0.
         public float DitherStrength;
+        // #1173-I: domain warp (Strength 0 = off). 72 bytes; the cbuffer is 80.
+        public float WarpStrength, WarpK, WarpHalfSpan;
     }
 
     // V6 (#82): deep-zoom perturbation params. Mirrors the HLSL PerturbParams
@@ -350,7 +351,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     private void AllocParamsBuffer()
     {
         var desc = new BufferDescription(
-            byteWidth: 64,
+            byteWidth: 80,      // #1173-I: Params is 72 bytes (domain warp), float4-rounded
             bindFlags: BindFlags.ConstantBuffer,
             usage: ResourceUsage.Dynamic,
             cpuAccessFlags: CpuAccessFlags.Write);
@@ -483,7 +484,8 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         FractalKind kind = FractalKind.Mandelbrot,
         float param0 = 0f, float param1 = 0f,
         uint[]? colorDst = null,
-        float[]? trapDst = null)
+        float[]? trapDst = null,
+        GpuDomainWarp warp = default)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(MandelbrotGpuKernel));
         if (width <= 0 || height <= 0) return;
@@ -546,6 +548,9 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
                 DitherStrength = FracturingFog.Models.GradientColorMap.DitherEnabled
                     ? FracturingFog.Models.GradientColorMap.DitherStrength
                     : 0f,
+                WarpStrength = warp.Active ? warp.Strength : 0f,
+                WarpK = warp.K,
+                WarpHalfSpan = warp.HalfSpan,
             };
             var mapped = _ctx.Map(_paramsBuf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
             unsafe

@@ -60,7 +60,8 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         public float CXHi, CXLo, CYHi, CYLo, ScaleHi, ScaleLo;
         public int UsePerRow, FractalKind;
         public float Param0, Param1, DitherStrength;
-        public float _pad; // -> 64 bytes
+        public float WarpStrength, WarpK, WarpHalfSpan;   // #1173-I domain warp
+        public float _pad0, _pad1; // -> 80 bytes
     }
 
     // V6 perturbation params (64 bytes): 4 doubles FIRST (offsets 0/8/16/24, all
@@ -259,7 +260,8 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         FractalKind kind = FractalKind.Mandelbrot,
         float param0 = 0f, float param1 = 0f,
         uint[]? colorDst = null,
-        float[]? trapDst = null)
+        float[]? trapDst = null,
+        GpuDomainWarp warp = default)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(VulkanComputeKernel));
         if (width <= 0 || height <= 0) return;
@@ -290,7 +292,9 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             // Same runtime dither knob as the D3D path so GPU output matches.
             DitherStrength = FracturingFog.Models.GradientColorMap.DitherEnabled
                 ? FracturingFog.Models.GradientColorMap.DitherStrength : 0f,
-            _pad = 0f,
+            WarpStrength = warp.Active ? warp.Strength : 0f,
+            WarpK = warp.K,
+            WarpHalfSpan = warp.HalfSpan,
         };
         WriteBytes(_buf[0], &blob, sizeof(ParamsBlob));
 
@@ -860,7 +864,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         for (int i = 0; i < _buf.Length; i++) FreeBuffer(ref _buf[i]);
 
         int n = width * height;
-        _buf[0] = AllocBuffer(64, BufferUsageFlags.UniformBufferBit);                       // params
+        _buf[0] = AllocBuffer(80, BufferUsageFlags.UniformBufferBit);                       // params (#1173-I: 80 B)
         _buf[1] = AllocBuffer((ulong)(Math.Max(height, 1) * sizeof(uint)), BufferUsageFlags.StorageBufferBit); // perRow
         _buf[2] = AllocBuffer((ulong)(n * sizeof(uint)),  BufferUsageFlags.StorageBufferBit, readback: true);  // iter
         _buf[3] = AllocBuffer((ulong)(n * sizeof(float)), BufferUsageFlags.StorageBufferBit, readback: true);  // smooth

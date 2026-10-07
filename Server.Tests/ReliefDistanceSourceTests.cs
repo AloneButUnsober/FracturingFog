@@ -115,7 +115,7 @@ public sealed class ReliefDistanceSourceTests
         public void Run(int width, int height, double centerX, double centerY, double scale, int maxIter, double bailout2,
             int[] iterDst, float[] smoothDst, float[] finalZrDst, float[] finalZiDst, float[] finalDrDst, float[] finalDiDst,
             int[]? perRowMaxIter = null, FractalKind kind = FractalKind.Mandelbrot, float param0 = 0f, float param1 = 0f,
-            uint[]? colorDst = null, float[]? trapDst = null)
+            uint[]? colorDst = null, float[]? trapDst = null, GpuDomainWarp warp = default)
         {
             for (int y = 0; y < height; y++)
                 for (int x = 0; x < width; x++)

@@ -40,6 +40,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--d3dorbittrapprobe")
             return D3DOrbitTrapProbe.Run();
 
+        // #1173-I (G4.4) — D3D11 Multibrot / Phoenix / domain-warp parity vs the CPU frame.
+        if (args.Length > 0 && args[0] == "--d3dfamilyprobe")
+            return D3DEscapeFamilyProbe.Run();
+
         if (args.Length > 0 && args[0] == "--ubspike")
             return FracturingFog.Calculators.UserBulbSandboxGpuSpike.Run();
 
