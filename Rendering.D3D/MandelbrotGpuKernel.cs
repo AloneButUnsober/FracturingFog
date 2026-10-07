@@ -178,6 +178,14 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     private ID3D11Buffer? _colorStaging;
     private ID3D11UnorderedAccessView? _colorUav;
     private int _colorAllocPixels;
+    // #1173-J: orbit-trap output (u4) of the F16 orbit variant + staging. Allocated
+    // on the first orbit Run that asks for it. _orbitPaletteIds = the cached
+    // palette ids built with BuildColorOrbit (the only shaders that declare u4).
+    private ID3D11Buffer? _trapBuf;
+    private ID3D11Buffer? _trapStaging;
+    private ID3D11UnorderedAccessView? _trapUav;
+    private int _trapAllocPixels;
+    private readonly HashSet<string> _orbitPaletteIds = new(StringComparer.Ordinal);
     // Phase 2: currently active palette state. When non-null, Run() with a
     // colorDst argument uses the color-emitting variant.
     private string? _activePaletteId;
@@ -237,12 +245,15 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
             // F16 (#603) — an orbit palette with a non-None mask builds the
             // orbit-accumulating kernel; every other palette uses the plain
             // escape-only colour kernel.
-            string hlsl = palette is FracturingFog.Interefaces.IGpuOrbitPalette o
-                          && o.OrbitInputs != FracturingFog.Interefaces.GpuOrbitInputs.None
-                ? MandelbrotKernelSource.BuildColorOrbit(palette.HlslPrelude, palette.HlslPaletteBody, (int)o.OrbitInputs)
+            bool orbit = palette is FracturingFog.Interefaces.IGpuOrbitPalette o
+                         && o.OrbitInputs != FracturingFog.Interefaces.GpuOrbitInputs.None;
+            string hlsl = orbit
+                ? MandelbrotKernelSource.BuildColorOrbit(palette.HlslPrelude, palette.HlslPaletteBody,
+                    (int)((FracturingFog.Interefaces.IGpuOrbitPalette)palette).OrbitInputs)
                 : BuildHlsl(palette.HlslPaletteBody, palette.HlslPrelude, emitColor: true);
             var cs = CompileShader(hlsl, label: id);
             _csByPaletteId[id] = cs;
+            if (orbit) _orbitPaletteIds.Add(id);
             _activePaletteId = id;
         }
         catch (Exception ex)
@@ -300,6 +311,40 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         };
         _colorUav = _device.CreateUnorderedAccessView(_colorBuf, uavDesc);
         _colorAllocPixels = n;
+    }
+
+    // #1173-J — the orbit variant's float trap UAV (u4) + its staging copy.
+    private void EnsureTrapBuffers(int n)
+    {
+        if (_trapBuf != null && _trapAllocPixels == n) return;
+        _trapUav?.Dispose();
+        _trapBuf?.Dispose();
+        _trapStaging?.Dispose();
+        _trapBuf = _device.CreateBuffer(new BufferDescription
+        {
+            ByteWidth = (uint)(n * sizeof(float)),
+            BindFlags = BindFlags.UnorderedAccess | BindFlags.ShaderResource,
+            Usage = ResourceUsage.Default,
+            CPUAccessFlags = CpuAccessFlags.None,
+            MiscFlags = ResourceOptionFlags.BufferStructured,
+            StructureByteStride = sizeof(float),
+        });
+        _trapStaging = _device.CreateBuffer(new BufferDescription
+        {
+            ByteWidth = (uint)(n * sizeof(float)),
+            Usage = ResourceUsage.Staging,
+            CPUAccessFlags = CpuAccessFlags.Read,
+            BindFlags = BindFlags.None,
+            MiscFlags = ResourceOptionFlags.None,
+            StructureByteStride = 0,
+        });
+        _trapUav = _device.CreateUnorderedAccessView(_trapBuf, new UnorderedAccessViewDescription
+        {
+            Format = Vortice.DXGI.Format.Unknown,
+            ViewDimension = UnorderedAccessViewDimension.Buffer,
+            Buffer = new BufferUnorderedAccessView { FirstElement = 0, NumElements = (uint)n, Flags = 0 },
+        });
+        _trapAllocPixels = n;
     }
 
     private void AllocParamsBuffer()
@@ -437,7 +482,8 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         int[]? perRowMaxIter = null,
         FractalKind kind = FractalKind.Mandelbrot,
         float param0 = 0f, float param1 = 0f,
-        uint[]? colorDst = null)
+        uint[]? colorDst = null,
+        float[]? trapDst = null)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(MandelbrotGpuKernel));
         if (width <= 0 || height <= 0) return;
@@ -446,12 +492,15 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         // supplied AND a palette is active. Mandelbrot-only — Julia and the
         // alt fractals come back through the CPU palette path for now.
         bool useColorPath = colorDst != null && HasGpuPalette;
+        // #1173-J — only the orbit variant declares the u4 trap output.
+        bool useTrap = useColorPath && trapDst != null && _orbitPaletteIds.Contains(_activePaletteId!);
 
         lock (_d3dGate)
         {
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             EnsureOutputBuffers(width, height);
             if (useColorPath) EnsureColorBuffers(width * height);
+            if (useTrap) EnsureTrapBuffers(width * height);
 
             bool usePerRow = perRowMaxIter != null && perRowMaxIter.Length >= height;
             if (usePerRow)
@@ -516,6 +565,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
             _ctx.CSSetUnorderedAccessView(1, _smoothUav);
             _ctx.CSSetUnorderedAccessView(2, _finalZDUav);
             if (useColorPath) _ctx.CSSetUnorderedAccessView(3, _colorUav);
+            if (useTrap) _ctx.CSSetUnorderedAccessView(4, _trapUav);
             if (usePerRow) _ctx.CSSetShaderResource(0, _perRowSrv);
 
             uint groupsX = (uint)((width + 7) / 8);
@@ -526,6 +576,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
             _ctx.CSUnsetUnorderedAccessView(1);
             _ctx.CSUnsetUnorderedAccessView(2);
             if (useColorPath) _ctx.CSUnsetUnorderedAccessView(3);
+            if (useTrap) _ctx.CSUnsetUnorderedAccessView(4);
             if (usePerRow) _ctx.CSUnsetShaderResource(0);
 
             // Copy default → staging then Map(Read) for CPU readback. Synchronous.
@@ -533,6 +584,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
             _ctx.CopyResource(_smoothStaging, _smoothBuf);
             _ctx.CopyResource(_finalZDStaging, _finalZDBuf);
             if (useColorPath) _ctx.CopyResource(_colorStaging!, _colorBuf!);
+            if (useTrap) _ctx.CopyResource(_trapStaging!, _trapBuf!);
 
             // Dispatch + flush cost: the first Map(Read) below blocks until
             // GPU finishes, so dispatch_ms covers cbuffer upload, Dispatch
@@ -613,6 +665,20 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
                     }
                 }
                 finally { _ctx.Unmap(_colorStaging!, 0); }
+            }
+
+            if (useTrap)
+            {
+                var trapMap = _ctx.Map(_trapStaging!, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
+                try
+                {
+                    unsafe
+                    {
+                        fixed (float* dst = trapDst!)
+                            Buffer.MemoryCopy((void*)trapMap.DataPointer, dst, (long)n * sizeof(float), (long)n * sizeof(float));
+                    }
+                }
+                finally { _ctx.Unmap(_trapStaging!, 0); }
             }
 
             long tEnd = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -888,6 +954,9 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         try { _smoothStaging?.Dispose(); } catch { }
         try { _finalZDStaging?.Dispose(); } catch { }
         try { _colorStaging?.Dispose(); } catch { }
+        try { _trapUav?.Dispose(); } catch { }
+        try { _trapBuf?.Dispose(); } catch { }
+        try { _trapStaging?.Dispose(); } catch { }
         try { _perRowSrv?.Dispose(); } catch { }
         try { _perRowBuf?.Dispose(); } catch { }
         try { _paramsBuf?.Dispose(); } catch { }

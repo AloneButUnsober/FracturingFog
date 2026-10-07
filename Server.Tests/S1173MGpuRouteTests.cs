@@ -187,7 +187,7 @@ public sealed class S1173MGpuRouteTests
         public void Run(int width, int height, double centerX, double centerY, double scale, int maxIter,
             double bailout2, int[] iterDst, float[] smoothDst, float[] finalZrDst, float[] finalZiDst,
             float[] finalDrDst, float[] finalDiDst, int[]? perRowMaxIter = null,
-            FractalKind kind = FractalKind.Mandelbrot, float param0 = 0f, float param1 = 0f, uint[]? colorDst = null)
+            FractalKind kind = FractalKind.Mandelbrot, float param0 = 0f, float param1 = 0f, uint[]? colorDst = null, float[]? trapDst = null)
         {
             if (Throw) throw new InvalidOperationException("stub dispatch failure");
             Array.Fill(iterDst, maxIter, 0, width * height);

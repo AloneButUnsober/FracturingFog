@@ -217,6 +217,16 @@ float3 EvalPalette(
             "    float in_isInSet, float in_pxScale)",
             "    float in_isInSet, float in_pxScale,\n" + OrbitParams);
 
+    /// <summary>#1173-J — the orbit kernel's per-pixel trap output: the slot-1
+    /// trap minimum (<c>in_trapMin</c>) on escape, 0 for in-set / bulb-skip pixels
+    /// and when the theme does not read <c>trapMin</c> — exactly what the CPU orbit
+    /// path writes to <c>MandelbrotCalculator.TrapBuffer</c> for an exterior theme.
+    /// It is the orbit-trap relief height source. Register u4 → Vulkan binding 204
+    /// (UShift + 4). Only the orbit variant declares it.</summary>
+    public const string OrbitTrapUav = @"
+RWStructuredBuffer<float> gTrap : register(u4);
+";
+
     /// <summary>Compose the orbit colour kernel: header + helpers + orbit
     /// EvalPalette + CSMain with per-iteration accumulation for the mask'd
     /// inputs. Shared by D3D (FXC) and Vulkan (DXC) exactly like BuildColor.</summary>
@@ -225,6 +235,7 @@ float3 EvalPalette(
         string helpers = string.IsNullOrEmpty(paletteHelpers) ? "" : paletteHelpers + "\n";
         string body = string.IsNullOrEmpty(paletteBody) ? "    return float3(0.0, 0.0, 0.0);" : paletteBody;
         return HlslBase
+            + OrbitTrapUav
             + helpers
             + OrbitPreludeHead()
             + body + "\n"
@@ -332,11 +343,13 @@ float3 EvalPalette(
         gColor[idx] = cg_pack_bgra(EvalPalette(
             0.0, 0.0, (float)gMaxIter, (float)gMaxIter,
             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0" + zeroArgs + @"), x, y);
+        gTrap[idx] = 0.0;
 ";
         string bulbSkipColor = @"
         gColor[idx] = cg_pack_bgra(EvalPalette(
             0.0, 0.0, (float)gMaxIter, (float)gMaxIter,
             0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0" + zeroArgs + @"), x, y);
+        gTrap[idx] = 0.0;
 ";
         string escapeColor =
             "        float t_iter = gMaxIter > 0 ? sm / (float)gMaxIter : 0.0;\n" +
@@ -347,7 +360,8 @@ float3 EvalPalette(
             means.ToString() +
             "        gColor[idx] = cg_pack_bgra(EvalPalette(\n" +
             "            sm, in_dist, (float)it, (float)gMaxIter,\n" +
-            "            t_iter, 0.0, 0.0, zr, zi, dr, di, in_arg, in_mag, 0.0, 0.0" + orbitArgs + "), x, y);\n";
+            "            t_iter, 0.0, 0.0, zr, zi, dr, di, in_arg, in_mag, 0.0, 0.0" + orbitArgs + "), x, y);\n" +
+            "        gTrap[idx] = in_trapMin;\n";
 
         return $@"
 [numthreads(8, 8, 1)]

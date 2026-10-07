@@ -1447,7 +1447,10 @@ height AOV**, no new geometry machinery.
   so trap must come from the CPU orbit path — filling `TrapBuffer` at the hi-res floor;
   smooth source keeps the fast default-map + GPU twin. So trap / blend now get the hi-res
   floor like smooth. (The twin's default escape-time map is remembered and restored for a
-  smooth-source render.)
+  smooth-source render.) **#1173-J (G4.3):** the GPU orbit kernel now writes `TrapBuffer`
+  as well (a `gTrap` UAV, both backends), so the trap twin is no longer forced to the CPU —
+  and the display-res / poster trap field is no longer stale when an orbit ColorGen theme
+  colours on the GPU.
 - **User Equation / DSL smooth-source relief (landed — #726 slice 1):** `UserEquationCalculator`
   (the interpreted DSL path) was the last mainstream 2D family with no relief — it computed a
   smooth value per pixel but discarded it and did not implement `IHeightFieldSource`, so the

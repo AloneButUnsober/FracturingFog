@@ -50,6 +50,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     private const int TShift = 100;
     private const int UShift = 200;
     private const int ColorBinding = UShift + 3;
+    private const int TrapBinding = UShift + 4;   // #1173-J: u4 (gTrap), orbit variant only
 
     [StructLayout(LayoutKind.Sequential)]
     private struct ParamsBlob
@@ -94,7 +95,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         public DescriptorSetLayout Dsl;
         public PipelineLayout Layout;
         public Pipeline Pipeline;
-        public int BindingCount;      // 5 (base) or 6 (colour)
+        public int BindingCount;      // 5 (base), 6 (colour) or 7 (orbit colour + trap, #1173-J)
     }
 
     private readonly VulkanContext _ctx;
@@ -121,8 +122,8 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     private Allocated _saAR, _saAI, _saBR, _saBI, _saCR, _saCI, _saDR, _saDI;
     private int _saAlloc;
 
-    // Persistent buffers, indexed: 0=params,1=perRow,2=iter,3=smooth,4=finalZD,5=color.
-    private readonly Allocated[] _buf = new Allocated[6];
+    // Persistent buffers, indexed: 0=params,1=perRow,2=iter,3=smooth,4=finalZD,5=color,6=trap.
+    private readonly Allocated[] _buf = new Allocated[7];
     private int _allocW, _allocH;
     private CommandPool _cmdPool;
     private bool _disposed;
@@ -228,11 +229,14 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         {
             // F16 (#603) — orbit palette (non-None mask) → orbit-accumulating
             // kernel; otherwise the plain escape-only colour kernel.
-            string hlsl = palette is IGpuOrbitPalette o && o.OrbitInputs != GpuOrbitInputs.None
-                ? MandelbrotKernelSource.BuildColorOrbit(palette.HlslPrelude, palette.HlslPaletteBody, (int)o.OrbitInputs)
-                : MandelbrotKernelSource.BuildColor(palette.HlslPrelude, palette.HlslPaletteBody);
-            _colorById[id] = BuildProgram(hlsl, MandelbrotKernelSource.EntryPoint,
-                0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)ColorBinding);
+            // #1173-J — the orbit variant also binds the gTrap output (u4 → 204).
+            _colorById[id] = palette is IGpuOrbitPalette o && o.OrbitInputs != GpuOrbitInputs.None
+                ? BuildProgram(MandelbrotKernelSource.BuildColorOrbit(palette.HlslPrelude, palette.HlslPaletteBody, (int)o.OrbitInputs),
+                    MandelbrotKernelSource.EntryPoint,
+                    0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)ColorBinding, (uint)TrapBinding)
+                : BuildProgram(MandelbrotKernelSource.BuildColor(palette.HlslPrelude, palette.HlslPaletteBody),
+                    MandelbrotKernelSource.EntryPoint,
+                    0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)ColorBinding);
             _activePaletteId = id;
         }
         catch (Exception ex)
@@ -254,7 +258,8 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         int[]? perRowMaxIter = null,
         FractalKind kind = FractalKind.Mandelbrot,
         float param0 = 0f, float param1 = 0f,
-        uint[]? colorDst = null)
+        uint[]? colorDst = null,
+        float[]? trapDst = null)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(VulkanComputeKernel));
         if (width <= 0 || height <= 0) return;
@@ -325,16 +330,17 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             };
             Check(_vk.AllocateDescriptorSets(_device, in dsai, out DescriptorSet set), "vkAllocateDescriptorSets");
 
-            // Binding order: UBO@0, perRow@100, iter@200, smooth@201, finalZD@202, [color@203].
-            uint* bindNums = stackalloc uint[6] { 0, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)ColorBinding };
-            var types = stackalloc DescriptorType[6]
+            // Binding order: UBO@0, perRow@100, iter@200, smooth@201, finalZD@202, [color@203], [trap@204].
+            uint* bindNums = stackalloc uint[7] { 0, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)ColorBinding, (uint)TrapBinding };
+            var types = stackalloc DescriptorType[7]
             {
                 DescriptorType.UniformBuffer, DescriptorType.StorageBuffer, DescriptorType.StorageBuffer,
                 DescriptorType.StorageBuffer, DescriptorType.StorageBuffer, DescriptorType.StorageBuffer,
+                DescriptorType.StorageBuffer,
             };
-            int* bufIndex = stackalloc int[6] { 0, 1, 2, 3, 4, 5 };
-            var infos = stackalloc DescriptorBufferInfo[6];
-            var writes = stackalloc WriteDescriptorSet[6];
+            int* bufIndex = stackalloc int[7] { 0, 1, 2, 3, 4, 5, 6 };
+            var infos = stackalloc DescriptorBufferInfo[7];
+            var writes = stackalloc WriteDescriptorSet[7];
             for (int i = 0; i < bc; i++)
             {
                 infos[i] = new DescriptorBufferInfo { Buffer = _buf[bufIndex[i]].Buffer, Offset = 0, Range = Vk.WholeSize };
@@ -387,6 +393,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         ReadFloats(_buf[3], smoothDst, n);
         ReadFinalZD(_buf[4], finalZrDst, finalZiDst, finalDrDst, finalDiDst, n);
         if (useColor) ReadUints(_buf[5], colorDst!, n);
+        if (useColor && trapDst != null && prog.BindingCount == 7) ReadFloats(_buf[6], trapDst, n);   // #1173-J
 
         long tEnd = Stopwatch.GetTimestamp();
         double freq = Stopwatch.Frequency;
@@ -859,6 +866,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         _buf[3] = AllocBuffer((ulong)(n * sizeof(float)), BufferUsageFlags.StorageBufferBit, readback: true);  // smooth
         _buf[4] = AllocBuffer((ulong)(n * 4 * sizeof(float)), BufferUsageFlags.StorageBufferBit, readback: true); // finalZD
         _buf[5] = AllocBuffer((ulong)(n * sizeof(uint)),  BufferUsageFlags.StorageBufferBit, readback: true);  // color
+        _buf[6] = AllocBuffer((ulong)(n * sizeof(float)), BufferUsageFlags.StorageBufferBit, readback: true);  // trap (#1173-J)
         _allocW = width; _allocH = height;
     }
 

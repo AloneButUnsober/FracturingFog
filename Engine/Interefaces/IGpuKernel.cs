@@ -64,7 +64,10 @@ namespace FracturingFog.Rendering
 
         /// <summary>Run the SP escape-time kernel. Output buffers are
         /// filled in-place; callers must size them to width*height before
-        /// the call.</summary>
+        /// the call. #1173-J — <paramref name="trapDst"/>, when non-null and the
+        /// active palette is an orbit palette (<see cref="IGpuOrbitPalette"/>), receives
+        /// the per-pixel orbit-trap minimum the CPU orbit path writes to
+        /// <c>TrapBuffer</c> (0 for in-set pixels); otherwise it is left untouched.</summary>
         void Run(
             int width, int height,
             double centerX, double centerY,
@@ -75,7 +78,8 @@ namespace FracturingFog.Rendering
             int[]? perRowMaxIter = null,
             FractalKind kind = FractalKind.Mandelbrot,
             float param0 = 0f, float param1 = 0f,
-            uint[]? colorDst = null);
+            uint[]? colorDst = null,
+            float[]? trapDst = null);
 
         /// <summary>True when this backend can run the deep-zoom PERTURBATION
         /// kernel (<see cref="RunPerturb"/>) — i.e. the device has FP64 support

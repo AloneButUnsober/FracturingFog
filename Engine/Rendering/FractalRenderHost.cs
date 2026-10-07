@@ -2443,24 +2443,17 @@ namespace FracturingFog.Rendering
                     // S11 (#592) — hi-res trap. The twin normally renders smooth-only via
                     // its default map (GPU ok). When the height source needs the orbit-trap
                     // field, run the SAME orbit-trap theme on the twin so it fills TrapBuffer
-                    // at the hi-res floor — and force CPU, because the GPU orbit path does
-                    // NOT emit TrapBuffer (TryRunGpuOrbit fills iter/smooth/finalZ/colour
-                    // only). Smooth source keeps the fast default-map + GPU path.
+                    // at the hi-res floor. #1173-J — the GPU orbit kernel now writes
+                    // TrapBuffer too, so the trap twin keeps the main calc's GPU config
+                    // (it used to be forced to the CPU); a theme the GPU orbit path can't
+                    // run falls back inside the calc to the CPU orbit path, which fills it.
                     bool needTrap = p.Relief2DHeightSource is FracturingFog.ReliefHeightSource.Trap
                                                           or FracturingFog.ReliefHeightSource.Blend
                         && _calculator.ColorMap is Interefaces.IOrbitAwareColorMap;
-                    if (needTrap)
-                    {
-                        rc.ColorMap = _calculator.ColorMap;
-                        rc.UseGpuCompute = false;
-                        rc.GpuKernel = null;
-                    }
-                    else
-                    {
-                        if (_reliefFieldSmoothMap != null) rc.ColorMap = _reliefFieldSmoothMap;
-                        rc.UseGpuCompute = _calculator.UseGpuCompute;
-                        rc.GpuKernel = _calculator.GpuKernel;
-                    }
+                    if (needTrap) rc.ColorMap = _calculator.ColorMap;
+                    else if (_reliefFieldSmoothMap != null) rc.ColorMap = _reliefFieldSmoothMap;
+                    rc.UseGpuCompute = _calculator.UseGpuCompute;
+                    rc.GpuKernel = _calculator.GpuKernel;
                     rc.Calculate(token);
                     if (needTrap) trapField = rc.TrapBuffer;
                     fieldSrc = rc;

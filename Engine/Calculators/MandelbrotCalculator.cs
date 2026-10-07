@@ -2326,7 +2326,9 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
     /// <see cref="InterpretedOrbitColorMap.GpuEnabled"/>), the theme colours the
     /// interior (GPU in-set uses the isInSet=1 path, not MapInteriorWithOrbit),
     /// the zoom is past <see cref="MaxGpuZoom"/> (perturbation is a later slice),
-    /// or no kernel / palette compile. Exterior, shallow-zoom scope.
+    /// or no kernel / palette compile. Exterior, shallow-zoom scope. #1173-J — the
+    /// kernel also writes the per-pixel trap minimum into <see cref="TrapBuffer"/>
+    /// (the orbit-trap relief height source), as the CPU orbit path does.
     /// </summary>
     private bool TryRunGpuOrbit(IOrbitAwareColorMap map, CancellationToken ct)
     {
@@ -2355,7 +2357,8 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
                 FinalZrBuffer, FinalZiBuffer,
                 FinalDrBuffer, FinalDiBuffer,
                 useTileCap ? perRow : null,
-                colorDst: ColorBuffer);
+                colorDst: ColorBuffer,
+                trapDst: TrapBuffer);         // #1173-J
             LastFrameUsedGpuCompute = true;   // #1173-M — the orbit kernel ran on the GPU
             return true;
         }

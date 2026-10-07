@@ -36,6 +36,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--d3dpturbcalc")
             return D3DPerturbProbe.Run();
 
+        // #1173-J (G4.3) — D3D11 GPU orbit kernel fills TrapBuffer like the CPU orbit path.
+        if (args.Length > 0 && args[0] == "--d3dorbittrapprobe")
+            return D3DOrbitTrapProbe.Run();
+
         if (args.Length > 0 && args[0] == "--ubspike")
             return FracturingFog.Calculators.UserBulbSandboxGpuSpike.Run();
 
