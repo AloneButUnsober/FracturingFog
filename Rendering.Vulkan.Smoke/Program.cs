@@ -239,7 +239,9 @@ internal static class Program
     // only when a colour change is intended and reviewed. Empty => not pinned
     // (gate fails and tells you to regen).
     private const string GoldenColorDigest =
-        "4e725df95c7e776418f31ad29e456c66b24f61a2a9c12b0ac78ddff6ae0df111";
+        // #1173-H (2026-10-07): regenerated — the SP smooth is now log2(log2|z|), the CPU's
+        // formula (was log2(ln|z|), +0.529), which shifts every escaped pixel's colour.
+        "5163cd7e5bf4c7eb669b11a0f0c2f92561e69af7dff49ee249eb0599673aaf26";
 
     private static int RunColorProbe(VulkanContext ctx, bool regen)
     {

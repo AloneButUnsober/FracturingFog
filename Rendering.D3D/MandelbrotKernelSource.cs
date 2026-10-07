@@ -435,7 +435,7 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     {{
         gIter[idx] = (uint)it;
         float mag = sqrt(zr * zr + zi * zi);
-        float nu = log(log(max(mag, 1.001))) / log(2.0);
+        float nu = log2(log2(max(mag, 1.001)));   // #1173-H: the CPU smooth is log2(log2|z|), not log2(ln|z|) (+0.529 off)
         float sm = (float)it + 1.0 - nu;
         gSmooth[idx] = sm;
 {escapeColor}    }}
@@ -891,7 +891,7 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     {{
         gIter[idx] = (uint)it;
         float mag = sqrt(zr * zr + zi * zi);
-        float nu = log(log(max(mag, 1.001))) / log(2.0);
+        float nu = log2(log2(max(mag, 1.001)));   // #1173-H: the CPU smooth is log2(log2|z|), not log2(ln|z|) (+0.529 off)
         float sm = (float)it + 1.0 - nu;
         gSmooth[idx] = sm;
         {escapeColor}

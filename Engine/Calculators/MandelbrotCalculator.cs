@@ -1239,11 +1239,10 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
             try
             {
                 // T3.1 phase 2/4 — pick GPU palette path when the active
-                // colour map ships an IGpuHlslPalette impl AND we're the
-                // Mandelbrot kernel kind (Julia/BurningShip/Tricorn come
-                // through EscapeTimeCalculator and stay on CPU palette
-                // until phase 5 wires them in). Falls back automatically
-                // when SetPalette failed at compile time.
+                // colour map ships an IGpuHlslPalette impl. (Julia / Burning
+                // Ship / Tricorn take the same path through
+                // EscapeTimeCalculator.TryDispatchGpu.) Falls back
+                // automatically when SetPalette failed at compile time.
                 var hlslPalette = colorMap as FracturingFog.Interefaces.IGpuHlslPalette;
                 if (hlslPalette != null) GpuKernel.SetPalette(hlslPalette);
                 else GpuKernel.SetPalette(null);
