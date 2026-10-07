@@ -49,7 +49,13 @@ cbuffer Params : register(b0)
     float gParam0;         // Julia c.re
     float gParam1;         // Julia c.im
     float gDitherStrength; // F11b: 0 = off (plain round); else ±0.5-LSB amp.
-    // 16 fields × 4 bytes = 64 (float4 multiple — same size as phase 1.b).
+    // #1173-I: domain warp (FractalDomainWarp). gWarpStrength 0 = off (the
+    // un-warped c expression is untouched). gWarpK = 3 * frequency (1 when the
+    // frequency is <= 0); gWarpHalfSpan = half the longer view span, plane units.
+    float gWarpStrength;
+    float gWarpK;
+    float gWarpHalfSpan;
+    // 18 fields x 4 bytes = 72, padded by the host to 80 (float4 multiple).
 }
 
 RWStructuredBuffer<uint>   gIter    : register(u0);
@@ -76,6 +82,87 @@ bool InPeriod2Bulb(float cx, float cy)
     // Disk of radius 1/4 centred at (-1, 0).
     float dx = cx + 1.0;
     return dx * dx + cy * cy <= 0.0625;
+}
+
+// #1173-I: |(x, y)| without fp32 overflow. A high-power Multibrot escapes with
+// |z| ~ 1e21, so x*x overflows and sqrt gave +inf (smooth -inf, the pixel black).
+// Bit-identical to sqrt(x*x + y*y) whenever that is finite.
+float SafeMag(float x, float y)
+{
+    float m2 = x * x + y * y;
+    if (m2 <= 3.0e38) return sqrt(m2);
+    float a = max(abs(x), abs(y));
+    float b = min(abs(x), abs(y)) / a;
+    return a * sqrt(1.0 + b * b);
+}
+
+// #1173-I: the CPU FractalDomainWarp.Apply on the pixel's offset from the view
+// centre (fx, fy pixels), then c = centre + warped offset.
+void ApplyDomainWarp(float fx, float fy, inout float cx, inout float cy)
+{
+    float ox = fx * gScaleHi + fx * gScaleLo;
+    float oy = fy * gScaleHi + fy * gScaleLo;
+    float nx = ox / gWarpHalfSpan;
+    float ny = oy / gWarpHalfSpan;
+    ox += gWarpStrength * sin(ny * gWarpK + nx * 1.3) * gWarpHalfSpan;
+    oy += gWarpStrength * sin(nx * gWarpK - ny * 1.3) * gWarpHalfSpan;
+    cx = gCXHi + gCXLo + ox;
+    cy = gCYHi + gCYLo + oy;
+}
+
+// #1173-I: Multibrot z^d + c with dz/dc, d = (int)gParam0 (the host keeps it in
+// [2, MaxGpuMultibrotExponent]). Mirrors MultibrotKernel.Step: closed forms for
+// d = 3, 4, 5. Other d (2 included) are polar on the CPU; here z^(d-1) is built
+// by repeated complex multiplication instead - the same value, without the
+// fp32 pow / atan2 / cos / sin error.
+void MultibrotStep(inout float zr, inout float zi, inout float dr, inout float di, float cr, float ci)
+{
+    int d = (int)gParam0;
+    float nzr, nzi, pr, pi;
+    if (d == 3)
+    {
+        float zr2 = zr * zr; float zi2 = zi * zi;
+        nzr = zr * (zr2 - 3.0 * zi2) + cr;
+        nzi = zi * (3.0 * zr2 - zi2) + ci;
+        pr = 3.0 * (zr2 - zi2);
+        pi = 6.0 * zr * zi;
+    }
+    else if (d == 4)
+    {
+        float u = zr * zr - zi * zi; float v = 2.0 * zr * zi;
+        nzr = u * u - v * v + cr;
+        nzi = 2.0 * u * v + ci;
+        pr = 4.0 * (zr * u - zi * v);
+        pi = 4.0 * (zr * v + zi * u);
+    }
+    else if (d == 5)
+    {
+        float u = zr * zr - zi * zi; float v = 2.0 * zr * zi;
+        float U = u * u - v * v;     float V = 2.0 * u * v;
+        nzr = zr * U - zi * V + cr;
+        nzi = zr * V + zi * U + ci;
+        pr = 5.0 * U;
+        pi = 5.0 * V;
+    }
+    else
+    {
+        if (zr * zr + zi * zi == 0.0) { zr = cr; zi = ci; return; }   // CPU: z = c, dz/dc unchanged
+        float qr = zr, qi = zi;                  // q = z^(d-1)
+        [loop]
+        for (int k = 2; k < d; k++)
+        {
+            float t = qr * zr - qi * zi;
+            qi = qr * zi + qi * zr;
+            qr = t;
+        }
+        nzr = qr * zr - qi * zi + cr;            // z^d = q * z
+        nzi = qr * zi + qi * zr + ci;
+        pr = d * qr;                             // dz^d/dz = d z^(d-1)
+        pi = d * qi;
+    }
+    float ndr = pr * dr - pi * di + 1.0;
+    float ndi = pr * di + pi * dr;
+    zr = nzr; zi = nzi; dr = ndr; di = ndi;
 }
 ";
 
@@ -154,8 +241,8 @@ float3 EvalPalette(
     public const string EscapeColorSplice = @"
         float t_iter = gMaxIter > 0 ? sm / (float)gMaxIter : 0.0;
         float in_arg = atan2(zi, zr);
-        float in_mag = sqrt(zr * zr + zi * zi);
-        float de_dz = sqrt(dr * dr + di * di);
+        float in_mag = SafeMag(zr, zi);
+        float de_dz = SafeMag(dr, di);
         float in_dist = de_dz > 1e-10 ? in_mag * log(in_mag) / de_dz : 0.0;
         gColor[idx] = cg_pack_bgra(EvalPalette(
             sm, in_dist, (float)it, (float)gMaxIter,
@@ -354,8 +441,8 @@ RWStructuredBuffer<float> gTrap : register(u4);
         string escapeColor =
             "        float t_iter = gMaxIter > 0 ? sm / (float)gMaxIter : 0.0;\n" +
             "        float in_arg = atan2(zi, zr);\n" +
-            "        float in_mag = sqrt(zr * zr + zi * zi);\n" +
-            "        float de_dz = sqrt(dr * dr + di * di);\n" +
+            "        float in_mag = SafeMag(zr, zi);\n" +
+            "        float de_dz = SafeMag(dr, di);\n" +
             "        float in_dist = de_dz > 1e-10 ? in_mag * log(in_mag) / de_dz : 0.0;\n" +
             means.ToString() +
             "        gColor[idx] = cg_pack_bgra(EvalPalette(\n" +
@@ -377,6 +464,7 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     float fy = (float)y - 0.5 * gHeight;
     float cx = gCXHi + fx * gScaleHi + gCXLo + fx * gScaleLo;
     float cy = gCYHi + fy * gScaleHi + gCYLo + fy * gScaleLo;
+    if (gWarpStrength != 0.0) ApplyDomainWarp(fx, fy, cx, cy);   // #1173-I
 
     int rowMaxIt = gMaxIter;
     if (gUsePerRow != 0)
@@ -406,8 +494,9 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         zr = 0.0;    zi = 0.0;
         cIterR = cx; cIterI = cy;
     }}
-    float dr = 1.0;
+    float dr = gFractalKind == 5 ? 0.0 : 1.0;   // #1173-I: Phoenix's dz/dc starts at 0 (CPU)
     float di = 0.0;
+    float pzr = 0.0, pzi = 0.0, pdr = 0.0, pdi = 0.0;   // Phoenix previous z, dz/dc
     int   it = 0;
 {decl}    [loop]
     for (; it < rowMaxIt; it++)
@@ -427,15 +516,37 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         {{
 {samp}        }}
 
-        float newDr = 2.0 * (fzr * dr - fzi * di) + 1.0;
-        float newDi = 2.0 * (fzr * di + fzi * dr);
-        dr = newDr;
-        di = newDi;
+        if (gFractalKind == 4)
+        {{
+            MultibrotStep(zr, zi, dr, di, cIterR, cIterI);   // #1173-I
+        }}
+        else if (gFractalKind == 5)
+        {{
+            // #1173-I: Phoenix z' = z^2 + c + p * z_prev (p = gParam0 + i gParam1),
+            // dz'/dc = 2 z dz/dc + 1 + p * dz_prev/dc (PhoenixKernel.StepWithPrevDeriv).
+            float ppr = gParam0 * pzr - gParam1 * pzi;
+            float ppi = gParam0 * pzi + gParam1 * pzr;
+            float pdR = gParam0 * pdr - gParam1 * pdi;
+            float pdI = gParam0 * pdi + gParam1 * pdr;
+            float ndr = 2.0 * (zr * dr - zi * di) + 1.0 + pdR;
+            float ndi = 2.0 * (zr * di + zi * dr) + pdI;
+            float nzr = zr * zr - zi * zi + cIterR + ppr;
+            float nzi = 2.0 * zr * zi + cIterI + ppi;
+            pzr = zr; pzi = zi; pdr = dr; pdi = di;
+            zr = nzr; zi = nzi; dr = ndr; di = ndi;
+        }}
+        else
+        {{
+            float newDr = 2.0 * (fzr * dr - fzi * di) + 1.0;
+            float newDi = 2.0 * (fzr * di + fzi * dr);
+            dr = newDr;
+            di = newDi;
 
-        float zrNew = zr2 - zi2 + cIterR;
-        float zi_new_unscaled = fzr * fzi;
-        zi = zi_new_unscaled + zi_new_unscaled + cIterI;
-        zr = zrNew;
+            float zrNew = zr2 - zi2 + cIterR;
+            float zi_new_unscaled = fzr * fzi;
+            zi = zi_new_unscaled + zi_new_unscaled + cIterI;
+            zr = zrNew;
+        }}
     }}
 
     gFinalZD[idx] = float4(zr, zi, dr, di);
@@ -448,7 +559,7 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     else
     {{
         gIter[idx] = (uint)it;
-        float mag = sqrt(zr * zr + zi * zi);
+        float mag = SafeMag(zr, zi);
         float nu = log2(log2(max(mag, 1.001)));   // #1173-H: the CPU smooth is log2(log2|z|), not log2(ln|z|) (+0.529 off)
         float sm = (float)it + 1.0 - nu;
         gSmooth[idx] = sm;
@@ -829,6 +940,7 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     float fy = (float)y - 0.5 * gHeight;
     float cx = gCXHi + fx * gScaleHi + gCXLo + fx * gScaleLo;
     float cy = gCYHi + fy * gScaleHi + gCYLo + fy * gScaleLo;
+    if (gWarpStrength != 0.0) ApplyDomainWarp(fx, fy, cx, cy);   // #1173-I
 
     // Per-row cap lookup. Falls back to gMaxIter when disabled or when
     // the buffer holds 0 for this row (defensive).
@@ -867,8 +979,9 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         zr = 0.0;    zi = 0.0;
         cIterR = cx; cIterI = cy;
     }}
-    float dr = 1.0;
+    float dr = gFractalKind == 5 ? 0.0 : 1.0;   // #1173-I: Phoenix's dz/dc starts at 0 (CPU)
     float di = 0.0;
+    float pzr = 0.0, pzi = 0.0, pdr = 0.0, pdi = 0.0;   // Phoenix previous z, dz/dc
     int   it = 0;
     [loop]
     for (; it < rowMaxIt; it++)
@@ -883,15 +996,37 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         float mag2 = zr2 + zi2;
         if (mag2 >= gBailout2) break;
 
-        float newDr = 2.0 * (fzr * dr - fzi * di) + 1.0;
-        float newDi = 2.0 * (fzr * di + fzi * dr);
-        dr = newDr;
-        di = newDi;
+        if (gFractalKind == 4)
+        {{
+            MultibrotStep(zr, zi, dr, di, cIterR, cIterI);   // #1173-I
+        }}
+        else if (gFractalKind == 5)
+        {{
+            // #1173-I: Phoenix z' = z^2 + c + p * z_prev (p = gParam0 + i gParam1),
+            // dz'/dc = 2 z dz/dc + 1 + p * dz_prev/dc (PhoenixKernel.StepWithPrevDeriv).
+            float ppr = gParam0 * pzr - gParam1 * pzi;
+            float ppi = gParam0 * pzi + gParam1 * pzr;
+            float pdR = gParam0 * pdr - gParam1 * pdi;
+            float pdI = gParam0 * pdi + gParam1 * pdr;
+            float ndr = 2.0 * (zr * dr - zi * di) + 1.0 + pdR;
+            float ndi = 2.0 * (zr * di + zi * dr) + pdI;
+            float nzr = zr * zr - zi * zi + cIterR + ppr;
+            float nzi = 2.0 * zr * zi + cIterI + ppi;
+            pzr = zr; pzi = zi; pdr = dr; pdi = di;
+            zr = nzr; zi = nzi; dr = ndr; di = ndi;
+        }}
+        else
+        {{
+            float newDr = 2.0 * (fzr * dr - fzi * di) + 1.0;
+            float newDi = 2.0 * (fzr * di + fzi * dr);
+            dr = newDr;
+            di = newDi;
 
-        float zrNew = zr2 - zi2 + cIterR;
-        float zi_new_unscaled = fzr * fzi;
-        zi = zi_new_unscaled + zi_new_unscaled + cIterI;
-        zr = zrNew;
+            float zrNew = zr2 - zi2 + cIterR;
+            float zi_new_unscaled = fzr * fzi;
+            zi = zi_new_unscaled + zi_new_unscaled + cIterI;
+            zr = zrNew;
+        }}
     }}
 
     gFinalZD[idx] = float4(zr, zi, dr, di);
@@ -904,7 +1039,7 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     else
     {{
         gIter[idx] = (uint)it;
-        float mag = sqrt(zr * zr + zi * zi);
+        float mag = SafeMag(zr, zi);
         float nu = log2(log2(max(mag, 1.001)));   // #1173-H: the CPU smooth is log2(log2|z|), not log2(ln|z|) (+0.529 off)
         float sm = (float)it + 1.0 - nu;
         gSmooth[idx] = sm;

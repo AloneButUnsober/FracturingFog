@@ -195,8 +195,10 @@ AW-3 / AW-5; IDEA-2..5 are independently useful on the existing fractals.
   Tricorn, Multibrot, Magnet 1/2, Glynn, Phoenix, Spider). Tunables
   `DomainWarpEnabled` / `DomainWarpStrength` / `DomainWarpFrequency` on
   `FractalParameters`; `DomainWarpStrength` is animatable (breathing swirl). An
-  active warp forces the scalar path (SIMD builds one `cy` per row, which a
-  per-pixel warp breaks) and skips GPU; it is gated below
+  active warp forces the scalar CPU path (SIMD builds one `cy` per row, which a
+  per-pixel warp breaks); since #1173-I the SP GPU kernel applies the same warp
+  per pixel for the GPU kinds (Julia / Burning Ship / Tricorn / Multibrot /
+  Phoenix). It is gated below
   `EscapeTimeCalculator.MaxWarpZoom` (1e6). **Mandelbrot is excluded** — it runs
   on the dedicated deep-zoom SIMD/perturbation calculator, and warping that
   vectorised path is out of scope (the original deep-zoom deferral). Off /

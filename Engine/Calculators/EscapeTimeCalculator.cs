@@ -185,8 +185,9 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
     // interference field before the fractal iterates (FractalDomainWarp). It is
     // an artful, shallow-zoom effect — gated below MaxWarpZoom so the deep-zoom
     // Phoenix perturbation tier (Zoom ≥ 1e10) never warps — and it forces the
-    // scalar cores (SIMD builds one cy per row, which a per-pixel warp breaks;
-    // GPU is skipped for the same reason). Off / strength 0 → byte-identical.
+    // scalar CPU cores (SIMD builds one cy per row, which a per-pixel warp breaks).
+    // #1173-I — the GPU kernel applies the same warp per pixel (GpuDomainWarp).
+    // Off / strength 0 → byte-identical.
 
     /// <summary>Upper zoom bound for the domain warp. Above this the warp is
     /// inactive (the field is defined in normalised view space and would just
@@ -211,6 +212,21 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
                FractalParameters.DomainWarpStrength,
                FractalParameters.DomainWarpFrequency,
                0.5 * Math.Max(width, height) * scale);
+
+    /// <summary>#1173-I — the active warp for a GPU frame (default = off), the
+    /// same field <see cref="FractalDomainWarp.Apply"/> evaluates on the CPU.</summary>
+    private FracturingFog.Rendering.GpuDomainWarp MakeGpuWarp(double scale)
+    {
+        var w = MakeWarp(scale, Width, Height);
+        if (!w.Active) return default;
+        double k = 3.0 * (w.Frequency <= 0.0 ? 1.0 : w.Frequency);
+        return new FracturingFog.Rendering.GpuDomainWarp((float)w.Strength, (float)k, (float)w.HalfSpan);
+    }
+
+    /// <summary>#1173-I — the largest Multibrot exponent the FP32 GPU kernel runs.
+    /// The escape step raises |z| &lt; 512 to the d-th power: 512^12 ≈ 3e32 stays
+    /// finite in float, 512^15 does not. Higher powers render on the CPU.</summary>
+    public const int MaxGpuMultibrotExponent = 12;
 
     // ── Entry point ──────────────────────────────────────────────────────────
 
@@ -304,13 +320,12 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
         // static (matches MandelbrotCalculator.Calculate).
         if (ColorMap is IColorMapWithPixelScale pxs) pxs.PixelScale = LastPixelScale;
 
-        // T3.1 phase 3: GPU dispatch for the SIMD-capable kinds. Skipped
+        // T3.1 phase 3: GPU dispatch for the shader-supported kinds. Skipped
         // when the kernel isn't attached, when the toggle is off, when
         // zoom exceeds MaxGpuZoom (FP32 precision band), or when the
-        // active fractal type isn't shader-supported (Multibrot needs
-        // pow, Phoenix has prev-z carry — both stay CPU).
-        // Domain warp (#253) needs the scalar cores (per-pixel c) — skip GPU
-        // and route the SIMD kinds through the scalar dispatch when it's active.
+        // active fractal type isn't shader-supported. #1173-I added Multibrot,
+        // Phoenix and the domain warp (#253, applied per pixel in the kernel).
+        // On the CPU the warp still routes the SIMD kinds through the scalar cores.
         bool warp = WarpActive;
 
         // #1173-M — the first failing condition of the gate below, for the
@@ -320,12 +335,10 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
             : GpuKernel == null ? GpuRoute.Cpu("no GPU kernel", "the active renderer has no GPU compute kernel")
             : Zoom > MandelbrotCalculator.MaxGpuZoom
                 ? GpuRoute.Cpu("zoom > 1e4", "past the FP32 GPU zoom limit (1e4); deeper zooms render on the CPU")
-            : warp ? GpuRoute.Cpu("domain warp", "domain warp renders on the CPU only (#1173-I)")
             : default;
 
         if (UseGpuCompute && GpuKernel != null
             && Zoom <= MandelbrotCalculator.MaxGpuZoom
-            && !warp
             && TryDispatchGpu(ct))
         {
             // #615 — the out-of-bounds post-pass must use the radius the frame
@@ -425,10 +438,31 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
             case FractalType.Tricorn:
                 kind = FracturingFog.Rendering.FractalKind.Tricorn;
                 break;
+            case FractalType.Multibrot:
+            {
+                // #1173-I — MultibrotKernel clamps d to >= 2; the kernel reads it from param0.
+                int d = new MultibrotKernel(FractalParameters.MultibrotExponent).Exponent;
+                if (d > MaxGpuMultibrotExponent)
+                {
+                    LastGpuRoute = GpuRoute.Cpu($"Multibrot d > {MaxGpuMultibrotExponent}",
+                        $"Multibrot power {d} overflows the FP32 GPU kernel (max {MaxGpuMultibrotExponent}); it renders on the CPU");
+                    return false;
+                }
+                kind = FracturingFog.Rendering.FractalKind.Multibrot;
+                p0 = d;
+                break;
+            }
+            case FractalType.Phoenix:
+                // #1173-I — z^2 + c + p·z_prev; the CPU's deep perturbation tier
+                // (Zoom >= 1e10) is far past MaxGpuZoom, so the GPU only sees the plain tier.
+                kind = FracturingFog.Rendering.FractalKind.Phoenix;
+                p0 = (float)FractalParameters.PhoenixP.Real;
+                p1 = (float)FractalParameters.PhoenixP.Imaginary;
+                break;
             default:
                 LastGpuRoute = GpuRoute.Cpu($"{FractalType}: no kernel",
-                    $"{FractalType} has no GPU kernel (#1173-I)");
-                return false;  // Multibrot / Phoenix etc. — CPU only.
+                    $"{FractalType} has no GPU kernel");
+                return false;  // Magnet / Glynn / Spider — CPU only.
         }
 
         bool gpuPalette;
@@ -455,7 +489,8 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
                 FinalDrBuffer, FinalDiBuffer,
                 useTileCap ? perRow : null,
                 kind, p0, p1,
-                colorDst: gpuPalette ? ColorBuffer : null);
+                colorDst: gpuPalette ? ColorBuffer : null,
+                warp: MakeGpuWarp(scale));   // #1173-I
         }
         catch (Exception ex)
         {

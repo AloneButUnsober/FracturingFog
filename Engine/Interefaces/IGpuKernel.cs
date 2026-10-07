@@ -30,6 +30,21 @@ namespace FracturingFog.Rendering
         Julia = 1,
         BurningShip = 2,
         Tricorn = 3,
+        /// <summary>#1173-I — z^d + c; param0 = the integer exponent d.</summary>
+        Multibrot = 4,
+        /// <summary>#1173-I — z^2 + c + p·z_prev; (param0, param1) = p.</summary>
+        Phoenix = 5,
+    }
+
+    /// <summary>#1173-I — the #253 cross-fractal domain warp
+    /// (<c>FractalDomainWarp.Apply</c>) for a GPU frame: each pixel's offset from the
+    /// view centre is displaced before it iterates. <see cref="Strength"/> 0 = off
+    /// (the default; the kernel's un-warped c is untouched). <see cref="K"/> is the
+    /// field's angular rate (3 · frequency, 3 when the frequency is ≤ 0) and
+    /// <see cref="HalfSpan"/> half the longer view span in plane units.</summary>
+    public readonly record struct GpuDomainWarp(float Strength, float K, float HalfSpan)
+    {
+        public bool Active => Strength != 0f && HalfSpan > 0f;
     }
 
     /// <summary>
@@ -79,7 +94,8 @@ namespace FracturingFog.Rendering
             FractalKind kind = FractalKind.Mandelbrot,
             float param0 = 0f, float param1 = 0f,
             uint[]? colorDst = null,
-            float[]? trapDst = null);
+            float[]? trapDst = null,
+            GpuDomainWarp warp = default);
 
         /// <summary>True when this backend can run the deep-zoom PERTURBATION
         /// kernel (<see cref="RunPerturb"/>) — i.e. the device has FP64 support

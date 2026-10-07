@@ -187,7 +187,7 @@ public sealed class S1173MGpuRouteTests
         public void Run(int width, int height, double centerX, double centerY, double scale, int maxIter,
             double bailout2, int[] iterDst, float[] smoothDst, float[] finalZrDst, float[] finalZiDst,
             float[] finalDrDst, float[] finalDiDst, int[]? perRowMaxIter = null,
-            FractalKind kind = FractalKind.Mandelbrot, float param0 = 0f, float param1 = 0f, uint[]? colorDst = null, float[]? trapDst = null)
+            FractalKind kind = FractalKind.Mandelbrot, float param0 = 0f, float param1 = 0f, uint[]? colorDst = null, float[]? trapDst = null, GpuDomainWarp warp = default)
         {
             if (Throw) throw new InvalidOperationException("stub dispatch failure");
             Array.Fill(iterDst, maxIter, 0, width * height);
@@ -222,12 +222,13 @@ public sealed class S1173MGpuRouteTests
         Assert.Contains("stub dispatch failure", bad.Detail);
     }
 
-    private static GpuRoute RunEscape(FractalType type, IGpuKernel? kernel)
+    private static GpuRoute RunEscape(FractalType type, IGpuKernel? kernel, int multibrotD = 3)
     {
         var calc = new EscapeTimeCalculator(32, 24)
         {
             FractalType = type, ColorMap = new HsvPalette(), Zoom = 1.0, MaxIterations = 64,
             UseGpuCompute = true, GpuKernel = kernel,
+            FractalParameters = new FractalParameters { MultibrotExponent = multibrotD },
         };
         calc.Calculate(CancellationToken.None);
         return calc.LastGpuRoute;
@@ -242,8 +243,15 @@ public sealed class S1173MGpuRouteTests
         Assert.Equal(GpuRouteState.Gpu, julia.State);
         Assert.Contains("colouring on the CPU", julia.Detail);   // stub has no GPU palette
 
-        var multi = RunEscape(FractalType.Multibrot, new StubKernel());
-        Assert.Equal(GpuRouteState.CpuFallback, multi.State);
-        Assert.Equal("Multibrot: no kernel", multi.Reason);
+        // #1173-I — Multibrot and Phoenix have GPU kernels; a power the FP32 kernel
+        // would overflow and the families without a kernel stay on the CPU, and say so.
+        Assert.Equal(GpuRouteState.Gpu, RunEscape(FractalType.Multibrot, new StubKernel()).State);
+        Assert.Equal(GpuRouteState.Gpu, RunEscape(FractalType.Phoenix, new StubKernel()).State);
+        var high = RunEscape(FractalType.Multibrot, new StubKernel(), multibrotD: EscapeTimeCalculator.MaxGpuMultibrotExponent + 1);
+        Assert.Equal(GpuRouteState.CpuFallback, high.State);
+        Assert.Equal($"Multibrot d > {EscapeTimeCalculator.MaxGpuMultibrotExponent}", high.Reason);
+        var magnet = RunEscape(FractalType.Magnet1, new StubKernel());
+        Assert.Equal(GpuRouteState.CpuFallback, magnet.State);
+        Assert.Equal("Magnet1: no kernel", magnet.Reason);
     }
 }
