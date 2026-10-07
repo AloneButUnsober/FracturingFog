@@ -261,7 +261,10 @@ the dev/CI fallback. On CI, DXC ships fine from the LunarG `vulkan-sdk` apt pack
   u-register→binding mapping. V1 maps cbuffer `b0` → push-constants/UBO and `u0–u3` storage buffers
   with explicit `vk::binding`.
 - **Memory:** V0 uses one `HOST_VISIBLE|HOST_COHERENT` storage buffer (direct map, no staging). A
-  `DEVICE_LOCAL` + staging copy is a later perf option.
+  `DEVICE_LOCAL` + staging copy is a later perf option. **#1173-L (2026-10-07):** buffers the CPU
+  reads back must be `HOST_CACHED` too — the first coherent type on NVIDIA is uncached
+  write-combined memory, and reading a 1080p frame out of it cost ~780 ms (the "Vulkan is 20x
+  slower than D3D11" finding). `VulkanHostMemory.FindType(readback: true)` picks the cached type.
 - **Parity band:** corners asserted bit-exact; interior pixels **not** (float ULP). V1's
   `--vulkanprobe` should adopt the documented ULP band, not strict bit-exact, for iter/smooth.
 

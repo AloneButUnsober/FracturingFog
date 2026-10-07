@@ -510,7 +510,7 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         FreeBuffer(ref _albedo);
         FreeBuffer(ref _color);
         _albedo = AllocBuffer((ulong)(n * sizeof(uint)), BufferUsageFlags.StorageBufferBit);
-        _color = AllocBuffer((ulong)(n * sizeof(uint)), BufferUsageFlags.StorageBufferBit);
+        _color = AllocBuffer((ulong)(n * sizeof(uint)), BufferUsageFlags.StorageBufferBit, readback: true);
         _outPixels = n;
     }
 
@@ -522,11 +522,13 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         if (pixels < 1) pixels = 1;
         if (_aov.Buffer.Handle != 0 && _aovPixels == pixels) return;
         FreeBuffer(ref _aov);
-        _aov = AllocBuffer((ulong)(pixels * 4 * sizeof(float)), BufferUsageFlags.StorageBufferBit);
+        _aov = AllocBuffer((ulong)(pixels * 4 * sizeof(float)), BufferUsageFlags.StorageBufferBit, readback: true);
         _aovPixels = pixels;
     }
 
-    private Allocated AllocBuffer(ulong size, BufferUsageFlags usage)
+    /// <summary><paramref name="readback"/>: the CPU maps and reads this buffer —
+    /// prefer host-cached memory (#1173-L, see <see cref="VulkanHostMemory"/>).</summary>
+    private Allocated AllocBuffer(ulong size, BufferUsageFlags usage, bool readback = false)
     {
         var bci = new BufferCreateInfo
         {
@@ -534,8 +536,7 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         };
         Check(_vk.CreateBuffer(_device, in bci, null, out Buffer buffer), "vkCreateBuffer");
         _vk.GetBufferMemoryRequirements(_device, buffer, out MemoryRequirements req);
-        uint memType = FindMemoryType(req.MemoryTypeBits,
-            MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
+        uint memType = VulkanHostMemory.FindType(_vk, _ctx.PhysicalDevice, req.MemoryTypeBits, readback);
         var mai = new MemoryAllocateInfo
         {
             SType = StructureType.MemoryAllocateInfo, AllocationSize = req.Size, MemoryTypeIndex = memType,
@@ -595,17 +596,6 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
             aovDepth[i] = src[i * 4 + 3];
         }
         _vk.UnmapMemory(_device, a.Memory);
-    }
-
-    private uint FindMemoryType(uint typeBits, MemoryPropertyFlags required)
-    {
-        PhysicalDeviceMemoryProperties memProps;
-        _vk.GetPhysicalDeviceMemoryProperties(_ctx.PhysicalDevice, &memProps);
-        var mtypes = (MemoryType*)&memProps.MemoryTypes;
-        for (uint i = 0; i < memProps.MemoryTypeCount; i++)
-            if ((typeBits & (1u << (int)i)) != 0 && (mtypes[i].PropertyFlags & required) == required)
-                return i;
-        throw new InvalidOperationException($"no memory type with {required} for typeBits 0x{typeBits:X}");
     }
 
     private static void Check(Result r, string what)

@@ -306,7 +306,7 @@ Excerpt from a real run (GeForce GT 710, a low-end Kepler card with 1/24-rate fp
 |-------- |------------ |------ |-------------:|--------------------------------------------- |
 | D3D11   | SpShallow   | 640   |     6.800 ms | D3D11 NVIDIA GeForce GT 710                  |
 | D3D11   | SpShallow   | 1920  |    43.947 ms | D3D11 NVIDIA GeForce GT 710                  |
-| Vulkan  | SpShallow   | 1920  |   889.062 ms | Vulkan compute (DiscreteGpu: GeForce GT 710) |
+| Vulkan  | SpShallow   | 1920  |   889.062 ms | Vulkan compute (DiscreteGpu: GeForce GT 710) |  ← before #1173-L
 | D3D11   | PerturbInPT | 640   | 1,494.751 ms | D3D11 NVIDIA GeForce GT 710                  |
 | D3D11   | PerturbInPT | 1920  |           NA | -   (too-slow guard: ~200 ms x 108 bands > 3 s) |
 ```
@@ -316,8 +316,24 @@ How to read that run:
 - **The card is slower than the CPU here.** The i5-13420H CPU does `ShallowSP` 1080p in ~23 ms and
   `DeepHPInPT` 640 (Accel on) in ~28 ms, against 44 ms and 1.49 s on the GPU. That's expected
   for a card with crippled fp64. Run this on the hardware you care about.
-- **Vulkan SP is ~20x slower than D3D11 SP on the same card** (889 vs 44 ms at 1080p). That gap
-  is worth investigating before treating Vulkan as a drop-in for D3D11.
+- **Vulkan SP was ~20x slower than D3D11 SP on the same card** (889 vs 44 ms at 1080p). That was
+  the readback, not the shader: the result buffers lived in uncached write-combined host memory
+  (~780 ms to read; dispatch ~22 ms). Fixed in #1173-L by reading back from host-cached memory.
+  Re-run (GT 710, 2026-10-07, over Remote Desktop — D3D11 and Vulkan still reach the card there):
+
+  | Backend | Path        | 640        | 1920      |
+  |-------- |------------ |-----------:|----------:|
+  | D3D11   | SpShallow   |   7.6 ms   |  45.1 ms  |
+  | Vulkan  | SpShallow   |   5.2 ms   |  35.9 ms  |
+  | D3D11   | SpZoom1e4   |  20.6 ms   | 153.6 ms  |
+  | Vulkan  | SpZoom1e4   |  18.6 ms   | 145.5 ms  |
+  | D3D11   | PerturbInPT | 1,491 ms   | NA (too-slow guard) |
+  | Vulkan  | PerturbInPT | 1,627 ms   | NA (too-slow guard) |
+  | D3D11   | PerturbDeep | 2,467 ms   | NA |
+  | Vulkan  | PerturbDeep | 2,706 ms   | NA |
+
+  Vulkan is now a drop-in for D3D11 on this card (a little faster on SP, ~9% slower on the
+  fp64-bound perturbation).
 
 **Not covered:** the GPU QD reference orbit (`UseGpuReferenceOrbit`, `MandelbrotRefOrbitGpu`). It
 runs once per view and is cached across frames, so a per-frame `Calculate()` bench would only hit it
