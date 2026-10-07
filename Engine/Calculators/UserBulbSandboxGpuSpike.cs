@@ -329,6 +329,7 @@ namespace FracturingFogDyn.Spike {{
             DEIter = 8, MaxSteps = 64,
             Eps = 1e-3, Bailout = 4.0, CullRadiusSq = 4.0,
             Power = 8.0,
+            UseAnalyticDE = 1,   // the analytic power DE (0 = the #1112 numerical Jacobian)
             InSetColor = 0xFF000000u,
         };
         var output = new uint[W * H];

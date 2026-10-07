@@ -10,7 +10,7 @@ take three targeted runtime slices that the measurements below point at: #1110,
 | Path | How an equation runs |
 |---|---|
 | CPU | `SandboxBulbExpression` parse → `SandboxBulbCompiler` builds an Expression-tree delegate (#283, no Roslyn). It is still **dynamically typed**: every value is an `SbxVal3` (kind + four doubles), every operator is a call into `SbxVal3.Add/Mul/…`, and every function goes through one `SbxFuncEval.Apply` switch taking four `SbxVal3` arguments. |
-| GPU | `UserBulbSandboxEmitter` infers each node's kind statically and emits **typed** C# (`Vec3`, `Quat`, `double`). Roslyn compiles it and ILGPU loads it as a kernel (`UserBulbSandboxGpuCompiler`). Routes: Quat mode with any DE; Vec3 mode only with an analytic-power pattern. Everything else falls back to the CPU. |
+| GPU | `UserBulbSandboxEmitter` infers each node's kind statically and emits **typed** C# (`Vec3`, `Quat`, `double`). Roslyn compiles it and ILGPU loads it as a kernel (`UserBulbSandboxGpuCompiler`). Routes (as measured below): Quat mode with any DE; Vec3 mode only with an analytic-power pattern. Everything else fell back to the CPU. **Since #1112 (2026-10-06):** Vec3 numerical + Julia and the exact quaternion DE run on the GPU too; only the scalar KIFS and non-escaping DEs stay on the CPU, and the status bar names the reason. |
 | DE | **Analytic:** a single trajectory with a running derivative, for recognised patterns (triplex power, square triplex, quaternion square #115). **Numerical:** four trajectories (base + three offsets) for a Jacobian. |
 
 ## Measurements
@@ -45,6 +45,25 @@ entry-level card, so the GPU column is a floor, not typical. Reproduce with
 
 The exact quaternion render is a real image: the same ~80 k covered pixels as the
 numerical one, with more distinct shades (9 492 vs 4 237).
+
+**Re-measured after #1112 (2026-10-06).** Same benchmark, but over Remote Desktop, where
+the GT 710 can't create a CUDA context (#1195). So the GPU column is User Bulb's ILGPU
+**CPU-accelerator** fallback, not the card. The GPU frames now also run the full family
+shading (#1173-A), so the GPU column isn't comparable with the table above:
+
+| Case | CPU | GPU route (CPU accelerator) |
+|---|---:|---:|
+| `z^8 + c`, analytic DE | 243 | 306 |
+| `z^8 + c`, numerical DE | 1248 | 1659 |
+| Mandelbox, numerical | 8138 | **929** (new GPU route) |
+| `z^4 + sin(z)*0.5 + c`, numerical | 8323 | **3497** (new GPU route) |
+| Quat Julia `z*z + c`, numerical | 1238 | 348 |
+| Quat Julia `z*z + c`, analytic (exact) | 34 | 117 (now the exact DE, not numerical) |
+| Quat `qsin(z*z) + c`, numerical | 2170 | 1148 |
+
+Even without a GPU, the JIT'd kernel beats the CPU path's delegate-based DE where the DE
+is expensive (Mandelbox 8.8×, `z^4 + sin` 2.4×). Cheap DEs (analytic `z^8`, the exact
+quaternion) stay faster on the CPU path, which a real GPU should reverse.
 
 ## The questions from #1104
 
