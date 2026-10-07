@@ -28,7 +28,7 @@ each #1173 row).
 | **UserBulb** | Every DE the CPU uses except two — Vec3 analytic / numerical (Julia too), quaternion numerical / exact (#1112) — with the family kernels' full shading + post stack (#1173-A) | Orbit-metric colour drivers (#1202); scalar KIFS and non-escaping DEs |
 | **Relief 3D** | Near parity: DoF, positional/area lights, glass, froxel temporal/reprojection, HDRI | Lighting-component / HDR-beauty captures and AOV views (#389 S1/S2, #323) |
 | **2D Mandelbrot** | SP iteration ≤ zoom 1e4 (D3D11/Vulkan); deep-zoom perturbation (#82, both backends) | SA/BLA skipping (#88); orbit accumulation at depth (#607) |
-| **2D other families** | Julia/Burning Ship/Tricorn iteration | Their palette (#1173-H); Multibrot, Phoenix, domain warp (#1173-I); orbit trap buffer (#1173-J); billiard colour programs (#1173-K) |
+| **2D other families** | Julia/Burning Ship/Tricorn iteration + GPU palette (#1173-H) | Multibrot, Phoenix, domain warp (#1173-I); orbit trap buffer (#1173-J); billiard colour programs (#1173-K) |
 
 **What changed on 2026-10-06.** Before #1164 / PR #1171, **no ILGPU 3D kernel loaded on CUDA**: every
 NVIDIA frame silently ran on the CPU. With `ILGPU.Algorithms` enabled, 7 of 8 families render on CUDA.
@@ -121,7 +121,7 @@ enough for correctness; the ⚑ is for performance sign-off only.
 | Slice | Issue | Goal | Depends | Size |
 |---|---|---|---|---|
 | G4.1 | #1173-L | Investigate why Vulkan SP is ~20x slower than D3D11 SP (889 vs 44 ms, 1080p, GT 710): readback, fp64 in the SP shader, dispatch shape. **Found: readback.** Dispatch was ~22 ms; reading the result buffers took ~780 ms because every buffer took the first `HOST_VISIBLE \| HOST_COHERENT` type — uncached write-combined memory on NVIDIA. Readback buffers now prefer a `HOST_CACHED` type (`VulkanHostMemory`, all three Vulkan kernels): 1080p SpShallow 864 → 36 ms (D3D11 45 ms), SpZoom1e4 146 ms (D3D11 154); perturbation ~9% behind D3D11 (fp64-bound). All Vulkan smoke gates pass on the GT 710; `S1173LVulkanReadbackMemoryTests` pins it. **Done** | — | S–M |
-| G4.2 | #1173-H | GPU palette for Julia / Burning Ship / Tricorn (the deferred "phase 5") | — | M |
+| G4.2 | #1173-H | GPU palette for Julia / Burning Ship / Tricorn (the deferred "phase 5"). **Finding:** the GPU palette already served them (`EscapeTimeCalculator.TryDispatchGpu`, T3.1 phase 4; the "phase 5" note was stale). What made their GPU frames differ from the CPU was the smooth iteration count: the SP shader used `log2(ln\|z\|)` where the CPU (and the perturbation shader) use `log2(log2\|z\|)` — every GPU pixel +0.529, Mandelbrot included — and `EscapeTimeCalculator` ran the GPU at a hardcoded bailout radius 2 (CPU 512). Fixed both (D3D11 + Vulkan share the HLSL; the Vulkan smoke CPU mirror + its golden digest follow). GT 710, GPU-palette theme, mean drift: Mandelbrot 5.00 → 0.42, Julia 6.33 → 1.43, Tricorn 6.44 → 0.35, Burning Ship 8.73 → 4.22 (fp32 boundary chaos). `S1173HGpuEscapeTimeColourTests`. Still CPU-coloured: the 291 of 312 themes with no HLSL palette (they iterate on the GPU and say so) | — | M | **Done** |
 | G4.3 | #1173-J | GPU orbit path fills `TrapBuffer` → orbit-trap relief on the GPU | — | M |
 | G4.4 | #1173-I | Multibrot (`pow`), Phoenix (previous-z carry), domain warp (per-pixel c) | — | M each |
 | G4.5 | #88 ⚑ | SA, then BLA, on the GPU perturbation path (spike-first) | G0.6 | L |

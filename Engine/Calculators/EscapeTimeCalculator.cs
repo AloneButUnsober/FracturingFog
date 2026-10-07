@@ -229,13 +229,8 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
                 ColorBuffer, IterationBuffer, Width, Height, MaxIterations, InteriorAlpha, _po, ct);
     }
 
-    // #615 — the escape radius² the GPU shader uses (radius 2). The GPU dispatch
-    // (TryDispatchGpu) hardcodes this, independent of the kernel's CPU
-    // BailoutRadius2; the out-of-bounds post-pass reads _lastBailout2 to match.
-    private const double GpuBailout2 = 4.0;
-
-    // #615 — escape radius² of the most recent render (GpuBailout2 when the GPU
-    // path ran, else the kernel's BailoutRadius2). Consumed by the out-of-bounds
+    // #615 — escape radius² of the most recent render (the kernel's BailoutRadius2;
+    // since #1173-H the GPU dispatch uses it too). Consumed by the out-of-bounds
     // post-pass so the surround disk is sized for the frame actually produced.
     private double _lastBailout2 = 512.0 * 512.0;
 
@@ -333,11 +328,11 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
             && !warp
             && TryDispatchGpu(ct))
         {
-            // #615 — the GPU shader escapes at |z|² ≥ GpuBailout2 (radius 2),
-            // NOT the kernel's CPU BailoutRadius2 (512²). The out-of-bounds
-            // post-pass must use the radius the frame actually rendered with,
-            // or the surround disk would be sized for the wrong bailout.
-            _lastBailout2 = GpuBailout2;
+            // #615 — the out-of-bounds post-pass must use the radius the frame
+            // actually rendered with. #1173-H — the GPU now escapes at the kernel's
+            // own BailoutRadius2 (it used a hardcoded radius 2, which also left the
+            // smooth iteration unconverged: every GPU pixel ~0.5 off the CPU's).
+            _lastBailout2 = CurrentEscapeRadius2();
             return;
         }
 
@@ -454,7 +449,7 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
             GpuKernel.Run(
                 Width, Height,
                 CenterX, CenterY, scale,
-                MaxIterations, GpuBailout2,
+                MaxIterations, CurrentEscapeRadius2(),
                 IterationBuffer, SmoothBuffer,
                 FinalZrBuffer, FinalZiBuffer,
                 FinalDrBuffer, FinalDiBuffer,

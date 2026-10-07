@@ -141,7 +141,7 @@ internal static unsafe class RealKernelProbe
             {
                 iter[idx] = (uint)it;
                 float mag = MathF.Sqrt(zr * zr + zi * zi);
-                float nu = MathF.Log(MathF.Log(MathF.Max(mag, 1.001f))) / MathF.Log(2f);
+                float nu = MathF.Log2(MathF.Log2(MathF.Max(mag, 1.001f)));   // twin of the shader (#1173-H)
                 smooth[idx] = (float)it + 1f - nu;
             }
         }
