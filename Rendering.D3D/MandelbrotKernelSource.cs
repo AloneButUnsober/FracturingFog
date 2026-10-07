@@ -776,8 +776,8 @@ cbuffer PerturbParams : register(b0)
     int    gMaxIter;
     int    gRefLen;
     int    gRowBase;
-    int    gSafeMax;    // SeriesApproximation.SafeMax — max valid coeff index
-    int    gPad0;
+    int    gSafeMax;    // SeriesApproximation.SafeMax — max valid coeff index (0 = no SA)
+    int    gBlaLevels;  // #88 / G4.5b: BlaTable.Levels, 0 = no BLA (was gPad0)
     int    gPad1;
     int    gPad2;
     int    gPad3;
@@ -794,6 +794,10 @@ StructuredBuffer<double> gCR : register(t6);
 StructuredBuffer<double> gCI : register(t7);
 StructuredBuffer<double> gDR : register(t8);
 StructuredBuffer<double> gDI : register(t9);
+// #88 / G4.5b: BlaTable.Data flattened, 5 doubles per entry (A re/im, B re/im, r^2;
+// A and B already Hi+Lo collapsed, as the CPU applies them). Level k holds
+// gRefLen >> k entries of L = 2^k steps, levels stored back to back.
+StructuredBuffer<double> gBla : register(t10);
 
 RWStructuredBuffer<uint>   gIter    : register(u0);
 RWStructuredBuffer<float>  gSmooth  : register(u1);
@@ -872,11 +876,52 @@ void CSPerturbSA(uint3 tid : SV_DispatchThreadID)
         iterStart = k;
     }
 
+    // #88 / G4.5b: BLA level starts (level k is gRefLen >> k entries long).
+    int blaStart[32];
+    {
+        int acc = 0;
+        for (int lv = 0; lv < 32; lv++) { blaStart[lv] = acc; acc += lv < gBlaLevels ? (gRefLen >> lv) : 0; }
+    }
+
     // ── Identical rebased δ loop as BuildPerturb, resumed from iterStart/m=k ──
     int iter;
     [loop]
     for (iter = iterStart; iter < gMaxIter; iter++)
     {
+        // #88 / G4.5b: BLA skip, BlaTable.Lookup on the reference index m: the
+        // longest aligned step (L >= 2) whose validity radius holds |delta|, then
+        // delta' = A delta + B dc and dz' = A dz (the CPU drops B there too).
+        // m + L stays below gRefLen so the next reference read is in range.
+        if (gBlaLevels > 1)
+        {
+            double dm2 = dr * dr + di * di;
+            int found = -1, foundL = 0;
+            [loop]
+            for (int lk = gBlaLevels - 1; lk >= 1; lk--)
+            {
+                int l = 1 << lk;
+                if ((m & (l - 1)) != 0) continue;
+                int bi = m >> lk;
+                if (bi >= (gRefLen >> lk) || m + l >= gRefLen || iter + l > gMaxIter) continue;
+                int e = (blaStart[lk] + bi) * 5;
+                double r2 = gBla[e + 4];
+                if (r2 > 0.0 && dm2 < r2) { found = e; foundL = l; break; }
+            }
+            if (found >= 0)
+            {
+                double baR = gBla[found], baI = gBla[found + 1];
+                double bbR = gBla[found + 2], bbI = gBla[found + 3];
+                double ndr = baR * dr - baI * di + (bbR * dcR - bbI * dcI);
+                double ndi = baR * di + baI * dr + (bbR * dcI + bbI * dcR);
+                double nvr = baR * drv - baI * div;
+                double nvi = baR * div + baI * drv;
+                dr = ndr; di = ndi; drv = nvr; div = nvi;
+                m += foundL;
+                iter += foundL - 1;   // the loop's ++ makes it +L
+                continue;
+            }
+        }
+
         double Zr = gRefZr[m];
         double Zi = gRefZi[m];
         zr = Zr + dr;

@@ -794,11 +794,13 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         double[] cR, double[] cI, double[] dR, double[] dI,
         int[] iterDst, float[] smoothDst,
         float[] finalZrDst, float[] finalZiDst,
-        float[] finalDrDst, float[] finalDiDst)
+        float[] finalDrDst, float[] finalDiDst,
+        double[]? blaCoeffs = null, int blaLevels = 0)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(MandelbrotGpuKernel));
         if (!SupportsPerturbation)
             throw new NotSupportedException("D3D device has no DoublePrecisionFloatShaderOps — cannot run the SA perturbation kernel.");
+        if (blaCoeffs == null || blaCoeffs.Length < 5) blaLevels = 0;   // #88 / G4.5b
         if (width <= 0 || height <= 0) return;
         if (refLen < 1) throw new ArgumentException("reference orbit is empty", nameof(refLen));
         if (refZr.Length < refLen || refZi.Length < refLen)
@@ -820,19 +822,23 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
             UploadDoubles(_refZiBuf!, refZi, refLen);
             var coeffs = new[] { aR, aI, bR, bI, cR, cI, dR, dI };
             for (int i = 0; i < 8; i++) UploadDoubles(_saBufs[i]!, coeffs[i], coeffLen);
+            EnsureBlaBuffer(blaLevels > 0 ? blaCoeffs!.Length : 5);
+            if (blaLevels > 0) UploadDoubles(_blaBuf!, blaCoeffs!, blaCoeffs!.Length);
 
             var p = new PerturbSaParams
             {
                 Width = width, Height = height, MaxIter = maxIter, RefLen = refLen,
                 Scale = scale, EscapeR2 = escapeRadius2, OffX0 = offsetX0, OffY0 = offsetY0,
                 SaTol = saTolerance, SafeMax = safeMax, RowBase = 0,
+                BlaLevels = blaLevels,
             };
 
             _ctx.CSSetShader(_csPerturbSa);
             _ctx.CSSetShaderResource(0, _refZrSrv);   // t0
             _ctx.CSSetShaderResource(1, _refZiSrv);   // t1
             for (int i = 0; i < 8; i++) _ctx.CSSetShaderResource((uint)(2 + i), _saSrvs[i]);   // t2..t9
-            DispatchPerturbBands(width, height, maxIter, srvCount: 10, " (SA)", rowBase =>
+            _ctx.CSSetShaderResource(10, _blaSrv);                                              // t10 (BLA)
+            DispatchPerturbBands(width, height, maxIter, srvCount: 11, blaLevels > 0 ? " (SA+BLA)" : " (SA)", rowBase =>
             {
                 p.RowBase = rowBase;
                 var mapped = _ctx.Map(_saParamsBuf!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
@@ -973,7 +979,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     private struct PerturbSaParams
     {
         public double Scale, EscapeR2, OffX0, OffY0, SaTol;
-        public int Width, Height, MaxIter, RefLen, RowBase, SafeMax, Pad0, Pad1, Pad2, Pad3;
+        public int Width, Height, MaxIter, RefLen, RowBase, SafeMax, BlaLevels, Pad1, Pad2, Pad3;   // BlaLevels: G4.5b (was Pad0)
     }
 
     // SA coefficient SRVs t2..t9: A, B, C, D (re, im each), length refLen + 1.
@@ -982,6 +988,34 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     private int _saAllocLen;
     private ID3D11Buffer? _saParamsBuf;
     private ID3D11ComputeShader? _csPerturbSa;
+
+    // #88 / G4.5b — the flattened BLA table (t10); a 5-double placeholder without BLA.
+    private ID3D11Buffer? _blaBuf;
+    private ID3D11ShaderResourceView? _blaSrv;
+    private int _blaAllocLen;
+
+    private void EnsureBlaBuffer(int doubles)
+    {
+        if (_blaBuf != null && _blaAllocLen >= doubles) return;
+        _blaSrv?.Dispose();
+        _blaBuf?.Dispose();
+        _blaBuf = _device.CreateBuffer(new BufferDescription
+        {
+            ByteWidth = (uint)(doubles * sizeof(double)),
+            BindFlags = BindFlags.ShaderResource,
+            Usage = ResourceUsage.Dynamic,
+            CPUAccessFlags = CpuAccessFlags.Write,
+            MiscFlags = ResourceOptionFlags.BufferStructured,
+            StructureByteStride = sizeof(double),
+        });
+        _blaSrv = _device.CreateShaderResourceView(_blaBuf, new ShaderResourceViewDescription
+        {
+            Format = Vortice.DXGI.Format.Unknown,
+            ViewDimension = Vortice.Direct3D.ShaderResourceViewDimension.Buffer,
+            Buffer = new BufferShaderResourceView { FirstElement = 0, NumElements = (uint)doubles },
+        });
+        _blaAllocLen = doubles;
+    }
 
     private void EnsureSaBuffers(int coeffLen)
     {
@@ -1078,6 +1112,8 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         try { _csPerturb?.Dispose(); } catch { }
         try { _csPerturbSa?.Dispose(); } catch { }
         try { _saParamsBuf?.Dispose(); } catch { }
+        try { _blaSrv?.Dispose(); } catch { }
+        try { _blaBuf?.Dispose(); } catch { }
         for (int i = 0; i < 8; i++)
         {
             try { _saSrvs[i]?.Dispose(); } catch { }

@@ -135,7 +135,11 @@ namespace FracturingFog.Rendering
         /// <c>SeriesApproximation</c> coefficients (A/B/C/D, length ≥ refLen + 1; k from
         /// the same FindSkip test as the CPU, valid up to <paramref name="safeMax"/>),
         /// then runs the same rebased δ loop. Only valid when
-        /// <see cref="SupportsPerturbationSA"/> is true.</summary>
+        /// <see cref="SupportsPerturbationSA"/> is true. <paramref name="safeMax"/> 0
+        /// disables the SA skip. #88 / G4.5b — <paramref name="blaCoeffs"/>
+        /// (<c>BlaTable.GpuCoefficients</c>: 5 doubles per entry, A re/im, B re/im, r²)
+        /// with <paramref name="blaLevels"/> &gt; 1 adds the BLA skip inside the loop;
+        /// null / 0 leaves it off.</summary>
         void RunPerturbSA(
             int width, int height,
             double scale, int maxIter, double escapeRadius2,
@@ -146,7 +150,8 @@ namespace FracturingFog.Rendering
             double[] cR, double[] cI, double[] dR, double[] dI,
             int[] iterDst, float[] smoothDst,
             float[] finalZrDst, float[] finalZiDst,
-            float[] finalDrDst, float[] finalDiDst)
+            float[] finalDrDst, float[] finalDiDst,
+            double[]? blaCoeffs = null, int blaLevels = 0)
             => throw new NotSupportedException(
                 "This GPU kernel has no SA perturbation path (SupportsPerturbationSA is false).");
     }

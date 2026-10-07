@@ -384,6 +384,28 @@ namespace FracturingFog.FFMath
                            rMerged * rMerged, l);
         }
 
+        private double[]? _gpuCoefficients;
+
+        /// <summary>#88 / G4.5b — <see cref="Data"/> flattened for the GPU perturbation
+        /// kernel: 5 doubles per entry (A re, A im, B re, B im, R²), levels back to back
+        /// in <see cref="LevelStart"/> order. A and B are collapsed to Hi + Lo, exactly
+        /// as the CPU applies them (<see cref="Bla.ARe"/> …). Built once per table.</summary>
+        public double[] GpuCoefficients
+        {
+            get
+            {
+                if (_gpuCoefficients != null) return _gpuCoefficients;
+                var c = new double[Data.Length * 5];
+                for (int i = 0; i < Data.Length; i++)
+                {
+                    ref readonly var b = ref Data[i];
+                    int e = i * 5;
+                    c[e] = b.ARe; c[e + 1] = b.AIm; c[e + 2] = b.BRe; c[e + 3] = b.BIm; c[e + 4] = b.R2;
+                }
+                return _gpuCoefficients = c;
+            }
+        }
+
         /// <summary>
         /// Find the longest BLA at iteration n applicable to current |δ|².
         /// Returns -1 if none usable (caller does a single perturbation step).

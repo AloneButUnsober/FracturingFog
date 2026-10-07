@@ -9,7 +9,8 @@
 // attaches a real MandelbrotGpuKernel to a MandelbrotCalculator at deep zoom, and
 // compares the frame BOTH ways: CPU deep path (UseGpuPerturbation off) vs the
 // D3D11 RunPerturb path (on). #88 / G4.5 — each case also runs the GPU with the
-// Series-Approximation prelude (RunPerturbSA) and holds it to the same bounds. Checked:
+// Series-Approximation prelude (RunPerturbSA), and with SA + the BLA skip (G4.5b),
+// and holds both to the same bounds. Checked:
 //   - the GPU path really ran (LastFrameUsedGpuPerturbation, LastGpuRoute = Gpu),
 //     so a silent CPU fallback can't pass as parity;
 //   - the CPU frame is non-degenerate (many distinct iteration counts, not all
@@ -141,12 +142,13 @@ namespace FracturingFog
 
             // D3D11 GPU perturbation, plain and with the #88 / G4.5 SA prelude.
             bool ok = true;
-            bool savedSa = MandelbrotCalculator.UseGpuSeriesApproximation;
+            bool savedSa = MandelbrotCalculator.UseGpuSeriesApproximation, savedBla = MandelbrotCalculator.UseGpuBla;
             try
             {
-                foreach (bool sa in new[] { false, true })
+                foreach (var (sa, bla) in new[] { (false, false), (true, false), (true, true) })
                 {
                     MandelbrotCalculator.UseGpuSeriesApproximation = sa;
+                    MandelbrotCalculator.UseGpuBla = bla;   // #88 / G4.5b
                     var gpuCalc = MakeCalc(c);
                     gpuCalc.GpuKernel = kernel;
                     MandelbrotCalculator.UseGpuPerturbation = true;
@@ -166,9 +168,9 @@ namespace FracturingFog
                     }
                     double frac = (double)disagree / n;
                     double colourMean = colourSum / (n * 3.0);
-                    string tag = sa ? "GPU+SA" : "GPU   ";
+                    string tag = bla ? "GPU+SA+BLA" : sa ? "GPU+SA    " : "GPU       ";
                     Console.WriteLine(
-                        $"    {tag} sa={gpuCalc.LastFrameUsedGpuSeriesApproximation} {ms} ms: iter disagree={disagree}/{n} ({frac:P3}) " +
+                        $"    {tag} sa={gpuCalc.LastFrameUsedGpuSeriesApproximation} bla={gpuCalc.LastFrameUsedGpuBla} {ms} ms: iter disagree={disagree}/{n} ({frac:P3}) " +
                         $"maxΔiter={maxDelta}; colour mean drift={colourMean:F3}  route='{gpuCalc.LastGpuRoute.Detail}'");
 
                     if (!gpuCalc.LastFrameUsedGpuPerturbation)
@@ -176,9 +178,10 @@ namespace FracturingFog
                         Console.Error.WriteLine($"    FAIL {label} {tag}: the GPU perturbation path did not run ({gpuCalc.LastGpuRoute.Detail ?? gpuCalc.LastGpuRoute.Reason}).");
                         ok = false; continue;
                     }
-                    if (gpuCalc.LastFrameUsedGpuSeriesApproximation != sa)
+                    if (gpuCalc.LastFrameUsedGpuSeriesApproximation != sa || gpuCalc.LastFrameUsedGpuBla != bla)
                     {
-                        Console.Error.WriteLine($"    FAIL {label} {tag}: SA engaged={gpuCalc.LastFrameUsedGpuSeriesApproximation}, expected {sa}.");
+                        Console.Error.WriteLine($"    FAIL {label} {tag}: SA engaged={gpuCalc.LastFrameUsedGpuSeriesApproximation} " +
+                                                $"BLA engaged={gpuCalc.LastFrameUsedGpuBla}, expected {sa}/{bla}.");
                         ok = false;
                     }
                     if (frac > MaxDisagreeFrac)
@@ -193,7 +196,11 @@ namespace FracturingFog
                     }
                 }
             }
-            finally { MandelbrotCalculator.UseGpuSeriesApproximation = savedSa; }
+            finally
+            {
+                MandelbrotCalculator.UseGpuSeriesApproximation = savedSa;
+                MandelbrotCalculator.UseGpuBla = savedBla;
+            }
             return ok;
         }
 
