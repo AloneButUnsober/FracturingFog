@@ -1061,8 +1061,10 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
                 return;
             }
             // #1173-M — every GPU route above declined or failed.
-            LastGpuRoute = GpuRoute.Cpu("GPU error",
-                string.IsNullOrEmpty(gpuFailure) ? "no GPU route compiled for this User Bulb source" : gpuFailure);
+            // (#1173-M mapping: "GPU too slow", "device faulted", … as the families report it.)
+            LastGpuRoute = string.IsNullOrEmpty(gpuFailure)
+                ? GpuRoute.Cpu("GPU error", "no GPU route compiled for this User Bulb source")
+                : Gpu3DRoute.DeviceFailure(gpuFailure);
         }
 
         // Temporal cache: identity blit on unchanged scene+camera.
