@@ -70,6 +70,8 @@ public enum GpuFamily
     BicomplexR,
     // #1173-G — the Coquaternion kernel (no GPU path before G3.5).
     Coquaternion,
+    // #1173-A — User Bulb (sandbox z^8 + c, analytic DE) on the shared-shading kernel.
+    UserBulb,
     // #1173-B — Mandelbox under an HDRI sky with IBL ambient + reflections (gradient sky before G2.3).
     MandelboxHdri,
     Mandelbulb,
@@ -91,7 +93,7 @@ public class GpuCalculatorBench
     [Params(GpuFamily.Mandelbox, GpuFamily.Menger, GpuFamily.Sierpinski,
             GpuFamily.Octahedron, GpuFamily.Dodecahedron, GpuFamily.MandelboxRot,
             GpuFamily.QJulia, GpuFamily.QMandel, GpuFamily.QMandelDual, GpuFamily.Kleinian, GpuFamily.KleinianNecklace, GpuFamily.Bicomplex,
-            GpuFamily.BicomplexR, GpuFamily.Coquaternion, GpuFamily.MandelboxHdri, GpuFamily.Mandelbulb)]
+            GpuFamily.BicomplexR, GpuFamily.Coquaternion, GpuFamily.UserBulb, GpuFamily.MandelboxHdri, GpuFamily.Mandelbulb)]
     public GpuFamily Family { get; set; }
 
     [Params(640, 1920)]
@@ -137,6 +139,15 @@ public class GpuCalculatorBench
             },
             GpuFamily.Bicomplex  => new BicomplexMandelbrotCalculator(Width, height) { FractalParameters = fp },
             GpuFamily.Coquaternion => new CoquaternionMandelbrotCalculator(Width, height) { FractalParameters = fp },
+            GpuFamily.UserBulb => new UserBulbCalculator(Width, height)
+            {
+                FractalParameters = new FractalParameters
+                {
+                    Lighting = fx, UserBulbSource = "z^8 + c",
+                    UserBulbCompiler = UserBulbCompilerKind.Sandbox, UserBulbBackend = UserBulbBackendKind.GPU,
+                    UserBulbDEMode = UserBulbDEModeKind.Analytic, UserBulbTemporalReuse = false,
+                },
+            },
             GpuFamily.MandelboxHdri => new MandelboxCalculator(Width, height) { FractalParameters = new FractalParameters { Lighting = HdriScene(fx) } },
             GpuFamily.BicomplexR => new BicomplexMandelbrotCalculator(Width, height)
             {

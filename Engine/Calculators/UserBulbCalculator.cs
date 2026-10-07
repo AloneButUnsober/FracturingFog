@@ -44,6 +44,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using FracturingFog.Calculators;
+using FracturingFog.Calculators.Gpu;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using FracturingFog.Rendering.Lighting;
@@ -816,164 +817,16 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
             ScreenSpacePost.ClearHdrBuffer(hdrBuf);
         }
 
-        // GPU path. Three routes:
-        //   (a) Sandbox-DSL quat-mode (Wave 4.6) — kernel runs analytic power-DE
-        //       when an analytic pattern is detected AND !juliaMode; otherwise
-        //       falls into a 5-trajectory numerical-Jacobian DE (and accepts
-        //       Julia mode by holding c constant at the Julia parameter).
-        //   (b) Sandbox-DSL vec-mode — analytic-power only (vec-Julia /
-        //       vec-numerical on GPU is out of scope this wave).
-        //   (c) Legacy Roslyn-source path — UserBulbGpuCalculator's hardcoded
-        //       TriplexPowerDE (vec only, !juliaMode, analytic only).
-        // Falls through to CPU on any failure.
-        bool sandboxQuatGpu = _compiledCompiler == UserBulbCompilerKind.Sandbox && quatMode;
-        bool vecAnalyticGpuOk = !juliaMode && _analyticPattern.Kind != AnalyticDEKind.None;
-        // #1173-M / #1112 — say why the GPU isn't used: the first failing
-        // condition of the gate below (null-equivalent default = may try it).
-        LastGpuRoute = FractalParameters.UserBulbBackend != UserBulbBackendKind.GPU ? GpuRoute.NotRequested
-            : lowRes ? GpuRoute.Cpu("preview frame", "low-res preview frames render on the CPU")
-            : wantDepthOut ? GpuRoute.Cpu("stereo depth", "stereo / autostereogram output needs the CPU depth buffer")
-            : fx.DebugAov != AovView.Beauty ? GpuRoute.Cpu("AOV view", "User Bulb's GPU path has no AOV views; they render on the CPU (#1173-A)")
-            : kifsScale > 0.0 ? GpuRoute.Cpu("scalar KIFS DE", "the scalar KIFS DE renders on the CPU only")
-            : sandboxQuatGpu || vecAnalyticGpuOk ? default
-            : quatMode ? GpuRoute.Cpu("quaternion compiler", "quaternion mode runs on the GPU only with the sandbox compiler")
-            : juliaMode ? GpuRoute.Cpu("Vec3 Julia", "Vec3 Julia renders on the CPU only (#1112)")
-            : GpuRoute.Cpu("Vec3 numerical DE", "Vec3 numerical DE renders on the CPU only (#1112)");
-        if (FractalParameters.UserBulbBackend == UserBulbBackendKind.GPU
-            && !lowRes
-            && !wantDepthOut      // #1009 — the GPU kernels have no depth pass
-            && fx.DebugAov == AovView.Beauty   // #323 — no AOV encoding on the User Bulb GPU path
-            && kifsScale <= 0.0   // scalar KIFS DE is CPU-only
-            // S8 (#404/#488/#492) — the UserBulb GPU shade resolves point/spot
-            // Light1 on the GPU (#488), and area lights no longer force CPU (#492):
-            // the UserBulb GPU shade is a cheap ambient+diffuse path with NO soft
-            // shadow at all, so an area radius (which only softens the shadow k) is
-            // a no-op here — same as it is for a punctual light on this shadowless
-            // path. Both the positional and area force-CPU guards are lifted.
-            && (sandboxQuatGpu || vecAnalyticGpuOk))
-        {
-            string? gpuFailure = null;   // #1173-M — last GPU route error this frame
-            // Quat-mode allows analytic only when the pattern matched and
-            // we're not in Julia mode — matches the CPU `useAnalytic` gate.
-            bool gpuUseAnalytic = !juliaMode && _analyticPattern.Kind != AnalyticDEKind.None;
-
-            // S8 (#484/#488) — the GPU shade is single-light. When Light1 is a
-            // point/spot light, feed its authoritative shine direction (the spot
-            // cone axis) + world position / range / cone so the kernel resolves
-            // it per surface point; directional keeps the legacy `light` vector →
-            // byte-identical. Light2/3 stay unlit on the GPU path (long-standing
-            // single-light limitation), positional or not.
-            bool l1Positional = fx.Light1.Type != LightType.Directional && fx.Light1.Intensity > 0;
-            var lightVec = l1Positional
-                ? Normalize3(
-                    Math.Sin(fx.Light1.Phi) * Math.Cos(fx.Light1.Theta),
-                    Math.Cos(fx.Light1.Phi),
-                    Math.Sin(fx.Light1.Phi) * Math.Sin(fx.Light1.Theta))
-                : light;
-            var gp = new GpuRenderParams
-            {
-                Width = width, Height = height,
-                CamX = camX, CamY = camY, CamZ = camZ,
-                TargetX = targetX, TargetY = targetY, TargetZ = targetZ,
-                FwdX = fwd.X, FwdY = fwd.Y, FwdZ = fwd.Z,
-                RightX = right.X, RightY = right.Y, RightZ = right.Z,
-                UpX = up.X, UpY = up.Y, UpZ = up.Z,
-                FovScale = fovScale, Aspect = aspect,
-                LightX = lightVec.X, LightY = lightVec.Y, LightZ = lightVec.Z,
-                DEIter = deIter, MaxSteps = maxSteps,
-                Eps = eps, Bailout = bailout, CullRadiusSq = cullRadiusSq,
-                Power = analyticPower,
-                QuatSliceW = FractalParameters.UserBulbQuatSliceW,
-                InSetColor = ColorMap.InSetColor,
-                // Wave 4.6 — quat-mode Julia + numerical-Jacobian fields.
-                JuliaMode = juliaMode ? 1 : 0,
-                JuliaCW = jcW, JuliaCX = jcX, JuliaCY = jcY, JuliaCZ = jcZ,
-                JacH = jacH,
-                UseAnalyticDE = gpuUseAnalytic ? 1 : 0,
-                // S8 (#484/#488) — primary-light positional resolve.
-                L1Type = l1Positional ? (int)fx.Light1.Type : 0,
-                L1PX = fx.Light1.PosX, L1PY = fx.Light1.PosY, L1PZ = fx.Light1.PosZ,
-                L1Range = fx.Light1.Range,
-                L1InnerCos = Math.Cos(fx.Light1.SpotInnerDeg * Math.PI / 180.0),
-                L1OuterCos = Math.Cos(fx.Light1.SpotOuterDeg * Math.PI / 180.0),
-            };
-
-            // (a) Sandbox path: vec + quat. Wave 4.5 — chain mode now compiles
-            // each step body via the emitter, inlines all step bodies into a
-            // single Step() with prior-step outputs visible by name as typed
-            // locals. CPU fallback on any failure.
-            bool useChainPath = FractalParameters.UserBulbChain != null
-                                 && FractalParameters.UserBulbChain.Count > 0;
-            if (_compiledCompiler == UserBulbCompilerKind.Sandbox)
-            {
-                _sandboxGpu ??= new UserBulbSandboxGpuCompiler();
-                bool compiled = useChainPath
-                    ? _sandboxGpu.TryCompileChain(
-                          FractalParameters.UserBulbChain!,
-                          _compiledParamNames,
-                          quatMode: quatMode)
-                    : _sandboxGpu.TryCompile(
-                          FractalParameters.UserBulbSource ?? string.Empty,
-                          _compiledParamNames,
-                          quatMode: quatMode);
-                if (compiled && _sandboxGpu.Render(ColorBuffer, pArr, gp))
-                {
-                    LastGpuRoute = GpuRoute.OnGpu(_sandboxGpu.DeviceLabel ?? "GPU");
-                    // #84 — GPU path skips the CPU post stack; draw the debug HUD.
-                    ScreenSpacePost.ApplyDebugHud(ColorBuffer, fullW, fullH, in fx);
-                    return;
-                }
-                LastError = _sandboxGpu.LastError;
-                gpuFailure = _sandboxGpu.LastError;
-                // Fall through to legacy GPU (vec only) + then CPU.
-            }
-
-            // (b) Legacy Roslyn-source path — vec only.
-            if (!quatMode)
-            {
-                var trans = UserBulbIlgpuTranslator.Translate(FractalParameters.UserBulbSource);
-                if (trans.Ok)
-                {
-                    _gpu ??= new UserBulbGpuCalculator();
-                    if (_gpu.Render(ColorBuffer, gp))
-                    {
-                        LastGpuRoute = GpuRoute.OnGpu(_gpu.DeviceLabel ?? "GPU");
-                        // #84 — GPU path skips the CPU post stack; draw the HUD.
-                        ScreenSpacePost.ApplyDebugHud(ColorBuffer, fullW, fullH, in fx);
-                        return;
-                    }
-                    LastError = _gpu.LastError;
-                    gpuFailure = _gpu.LastError;
-                }
-            }
-            // #1173-M — every GPU route above declined or failed.
-            LastGpuRoute = GpuRoute.Cpu("GPU error",
-                string.IsNullOrEmpty(gpuFailure) ? "no GPU route compiled for this User Bulb source" : gpuFailure);
-        }
-
-        // Temporal cache: identity blit on unchanged scene+camera.
-        string sceneKey = lowRes ? string.Empty : BuildSceneKey();
-        // #1009 — an identity blit replays colour only (no depth), so skip the
-        // temporal cache while depth is wanted as an output.
-        bool tempReuse = FractalParameters.UserBulbTemporalReuse && !lowRes && !wantDepthOut;
-        if (tempReuse)
-        {
-            var decision = _cache.Decide(sceneKey, width, height, camX, camY, camZ, fwd.X, fwd.Y, fwd.Z);
-            if (decision == ReuseDecision.Identity && _cache.Buffer != null)
-            {
-                Array.Copy(_cache.Buffer, ColorBuffer, ColorBuffer.Length);
-                // #84 — cache stores a HUD-free frame; redraw the HUD on replay.
-                ScreenSpacePost.ApplyDebugHud(ColorBuffer, fullW, fullH, in fx);
-                return;
-            }
-        }
-
-        // Cone-march prepass: for each tile, march a cone with widened eps
-        // along the tile center ray and cache tMin (entry distance to surface
-        // candidate). Per-pixel raymarch starts there with a 5% safety margin.
         const int tileSize = 16;
         int tilesX = (width + tileSize - 1) / tileSize;
         int tilesY = (height + tileSize - 1) / tileSize;
+        // Cone-march prepass: for each tile, march a cone with widened eps
+        // along the tile center ray and cache tMin (entry distance to surface
+        // candidate). Per-pixel raymarch starts there with a 5% safety margin.
+        // #1173-A — a local function so the GPU path hands the kernel the same hints:
+        // the StepDepth colour counts steps from this start, so it must match.
+        double[] ConeMarchTileHints()
+        {
         double[] tileTMin = new double[tilesX * tilesY];
         double coneEps = eps * tileSize * 0.5;
         Parallel.For(0, tilesY, new ParallelOptions { CancellationToken = ct }, ty =>
@@ -1021,6 +874,215 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
                 tileTMin[ty * tilesX + tx] = tMin;
             }
         });
+        return tileTMin;
+        }
+
+        // GPU path. Three routes:
+        //   (a) Sandbox-DSL quat-mode (Wave 4.6) — kernel runs analytic power-DE
+        //       when an analytic pattern is detected AND !juliaMode; otherwise
+        //       falls into a 5-trajectory numerical-Jacobian DE (and accepts
+        //       Julia mode by holding c constant at the Julia parameter).
+        //   (b) Sandbox-DSL vec-mode — analytic-power only (vec-Julia /
+        //       vec-numerical on GPU is out of scope this wave).
+        //   (c) Legacy path — UserBulbGpuCalculator's built-in triplex power DE
+        //       (vec only, !juliaMode, analytic only).
+        // #1173-A / G2.4 — all three run UserBulbShadeKernel: the family kernels'
+        // shading (3 lights, shadows, AO, PBR, reflections, volumetrics, sky / HDRI,
+        // colour-map albedo, AOV views) plus depth / normal / HDR G-buffers for the
+        // post stack, which then runs here exactly as on the CPU path. Before this the
+        // GPU frame was one Lambert light over a 0.15 ambient and a sine rainbow, with
+        // AOV views and stereo depth forced onto the CPU.
+        // Falls through to CPU on any failure.
+        // #1173-A — the GPU DE must be the one the CPU picked (the frames are the same
+        // surface only then): Vec3 runs on the GPU only when the CPU itself chose the
+        // analytic power DE (DE mode Analytic, or Auto + AcceptAuto); quaternion runs the
+        // GPU's numerical-Jacobian twin of UserBulbQuatDE, so the CPU's exact q²+c DE
+        // (DE mode Analytic) stays on the CPU. Before, the GPU took the analytic DE
+        // whenever a pattern matched — a different surface from the CPU's.
+        bool sandboxQuatGpu = _compiledCompiler == UserBulbCompilerKind.Sandbox && quatMode && !quatExact;
+        bool vecAnalyticGpuOk = !quatMode && useAnalytic;
+        // #1173-A — the kernel colours by step / depth or by the normal; the orbit-metric
+        // drivers (trap, escape angle, final magnitude, component) need the CPU orbit pass.
+        bool driverOnGpu = colorDriver == BulbColorDriver.StepDepth || colorDriver == BulbColorDriver.Normal;
+        // #1173-M / #1112 — say why the GPU isn't used: the first failing
+        // condition of the gate below (null-equivalent default = may try it).
+        LastGpuRoute = FractalParameters.UserBulbBackend != UserBulbBackendKind.GPU ? GpuRoute.NotRequested
+            : lowRes ? GpuRoute.Cpu("preview frame", "low-res preview frames render on the CPU")
+            : kifsScale > 0.0 ? GpuRoute.Cpu("scalar KIFS DE", "the scalar KIFS DE renders on the CPU only")
+            : !driverOnGpu ? GpuRoute.Cpu("colour driver", $"the {colorDriver} colour driver renders on the CPU only (#1202)")
+            : sandboxQuatGpu || vecAnalyticGpuOk ? default
+            : quatExact ? GpuRoute.Cpu("quaternion exact DE", "the exact q²+c DE (DE mode Analytic) renders on the CPU only; the GPU runs the numerical Jacobian")
+            : quatMode ? GpuRoute.Cpu("quaternion compiler", "quaternion mode runs on the GPU only with the sandbox compiler")
+            : juliaMode ? GpuRoute.Cpu("Vec3 Julia", "Vec3 Julia renders on the CPU only (#1112)")
+            : GpuRoute.Cpu("Vec3 numerical DE", "Vec3 numerical DE renders on the CPU only (#1112)");
+        if (FractalParameters.UserBulbBackend == UserBulbBackendKind.GPU
+            && !lowRes
+            && kifsScale <= 0.0   // scalar KIFS DE is CPU-only
+            && driverOnGpu
+            && (sandboxQuatGpu || vecAnalyticGpuOk))
+        {
+            string? gpuFailure = null;   // #1173-M — last GPU route error this frame
+            // #1173-A — the CPU's DE: Vec3 reaches here only with the analytic power DE;
+            // quaternion runs the numerical Jacobian (UserBulbQuatDE).
+            bool gpuUseAnalytic = !quatMode;
+
+            // gp.LightX/Y/Z + L1* feed the legacy single-light fields; the shared
+            // kernel lights from GpuShadingParams (all three lights, as the CPU Shade).
+            bool l1Positional = fx.Light1.Type != LightType.Directional && fx.Light1.Intensity > 0;
+            var lightVec = l1Positional
+                ? Normalize3(
+                    Math.Sin(fx.Light1.Phi) * Math.Cos(fx.Light1.Theta),
+                    Math.Cos(fx.Light1.Phi),
+                    Math.Sin(fx.Light1.Phi) * Math.Sin(fx.Light1.Theta))
+                : light;
+            var gp = new GpuRenderParams
+            {
+                Width = width, Height = height,
+                CamX = camX, CamY = camY, CamZ = camZ,
+                TargetX = targetX, TargetY = targetY, TargetZ = targetZ,
+                FwdX = fwd.X, FwdY = fwd.Y, FwdZ = fwd.Z,
+                RightX = right.X, RightY = right.Y, RightZ = right.Z,
+                UpX = up.X, UpY = up.Y, UpZ = up.Z,
+                FovScale = fovScale, Aspect = aspect,
+                LightX = lightVec.X, LightY = lightVec.Y, LightZ = lightVec.Z,
+                DEIter = deIter, MaxSteps = maxSteps,
+                Eps = eps, Bailout = bailout, CullRadiusSq = cullRadiusSq,
+                Power = analyticPower,
+                QuatSliceW = FractalParameters.UserBulbQuatSliceW,
+                InSetColor = ColorMap.InSetColor,
+                // Wave 4.6 — quat-mode Julia + numerical-Jacobian fields.
+                JuliaMode = juliaMode ? 1 : 0,
+                JuliaCW = jcW, JuliaCX = jcX, JuliaCY = jcY, JuliaCZ = jcZ,
+                JacH = jacH,
+                UseAnalyticDE = gpuUseAnalytic ? 1 : 0,
+                // S8 (#484/#488) — primary-light positional resolve.
+                L1Type = l1Positional ? (int)fx.Light1.Type : 0,
+                L1PX = fx.Light1.PosX, L1PY = fx.Light1.PosY, L1PZ = fx.Light1.PosZ,
+                L1Range = fx.Light1.Range,
+                L1InnerCos = Math.Cos(fx.Light1.SpotInnerDeg * Math.PI / 180.0),
+                L1OuterCos = Math.Cos(fx.Light1.SpotOuterDeg * Math.PI / 180.0),
+                // #1173-A — the CPU trace's clip plane, colour driver and cull-sphere bg.
+                ClipEnabled = clipEnabled ? 1 : 0,
+                ClipNX = clipNX, ClipNY = clipNY, ClipNZ = clipNZ, ClipD = clipD,
+                ColorDriverNormal = colorDriver == BulbColorDriver.Normal ? 1 : 0,
+                BgTop = bgTop, BgBottom = bgBot,
+            };
+
+            // #1173-A — the shared kernel's inputs: the raymarch block, the CPU Shade's
+            // lighting, the colour map baked over the StepDepth axis (256 / maxSteps, t·4;
+            // the Normal driver's (n.x + 1)·128 needs 0..256) and the HDRI.
+            // The CPU's cone-march hints ride after the user parameters (+ t).
+            double[] hints = ConeMarchTileHints();
+            var gpuP = new double[pArr.Length + hints.Length];
+            Array.Copy(pArr, gpuP, pArr.Length);
+            Array.Copy(hints, 0, gpuP, pArr.Length, hints.Length);
+            gp.HintOffset = pArr.Length; gp.HintTilesX = tilesX; gp.HintTileSize = tileSize;
+            var rp = UserBulbGpuDispatch.Raymarch(in gp);
+            var sp = GpuShadingParams.Build(in fx);
+            double ocLen = Math.Sqrt((camX - targetX) * (camX - targetX) + (camY - targetY) * (camY - targetY) + (camZ - targetZ) * (camZ - targetZ));
+            double gpuSceneRadius = ocLen + Math.Sqrt(cullRadiusSq) + 2.0;   // the march stops at the sphere exit + 1
+            uint[] albedoLut = GpuAlbedoLut.Bake(ColorMap, 256.0, 4.0, gpuSceneRadius, ref sp,
+                colorDriver == BulbColorDriver.Normal ? 256.0 : 0.0);
+            uint[]? hdriEnv = GpuHdriEnv.Resolve(in fx, ref sp);
+            // G-buffers as the CPU path allocated them above; normal + HDR only for the
+            // beauty view (an AOV view encodes its own colour).
+            bool beauty = fx.DebugAov == AovView.Beauty;
+            float[]? gDepth = depthBuf;
+            float[]? gNormal = beauty ? normalBuf : null;
+            float[]? gHdr = beauty ? hdrBuf : null;
+
+            bool gpuOk = false;
+            string gpuDevice = "GPU";
+            // (a) Sandbox path: vec + quat. Wave 4.5 — chain mode now compiles
+            // each step body via the emitter, inlines all step bodies into a
+            // single Step() with prior-step outputs visible by name as typed
+            // locals. CPU fallback on any failure.
+            bool useChainPath = FractalParameters.UserBulbChain != null
+                                 && FractalParameters.UserBulbChain.Count > 0;
+            if (_compiledCompiler == UserBulbCompilerKind.Sandbox)
+            {
+                _sandboxGpu ??= new UserBulbSandboxGpuCompiler();
+                bool compiled = useChainPath
+                    ? _sandboxGpu.TryCompileChain(
+                          FractalParameters.UserBulbChain!,
+                          _compiledParamNames,
+                          quatMode: quatMode)
+                    : _sandboxGpu.TryCompile(
+                          FractalParameters.UserBulbSource ?? string.Empty,
+                          _compiledParamNames,
+                          quatMode: quatMode);
+                if (compiled && _sandboxGpu.Render(renderBuffer, gpuP, rp, sp, gp, fx.VolumePalette,
+                        gDepth, gNormal, gHdr, albedoLut, hdriEnv, ct))
+                {
+                    gpuOk = true;
+                    gpuDevice = _sandboxGpu.DeviceLabel ?? "GPU";
+                }
+                else
+                {
+                    LastError = _sandboxGpu.LastError;
+                    gpuFailure = _sandboxGpu.LastError;
+                }
+                // Fall through to legacy GPU (vec only) + then CPU.
+            }
+
+            // (b) Legacy path — vec only, the built-in triplex power DE.
+            if (!gpuOk && !quatMode)
+            {
+                var trans = UserBulbIlgpuTranslator.Translate(FractalParameters.UserBulbSource);
+                if (trans.Ok)
+                {
+                    _gpu ??= new UserBulbGpuCalculator();
+                    if (_gpu.Render(renderBuffer, gpuP, rp, sp, gp, fx.VolumePalette,
+                            gDepth, gNormal, gHdr, albedoLut, hdriEnv, ct))
+                    {
+                        gpuOk = true;
+                        gpuDevice = _gpu.DeviceLabel ?? "GPU";
+                    }
+                    else
+                    {
+                        LastError = _gpu.LastError;
+                        gpuFailure = _gpu.LastError;
+                    }
+                }
+            }
+
+            if (gpuOk)
+            {
+                LastGpuRoute = GpuRoute.OnGpu(gpuDevice);
+                // #1173-A — the CPU path's post tail on the kernel's frame + G-buffers
+                // (SSAO, froxel, HDR DoF, tonemap / bloom, edge ink), then the depth
+                // publish, the supersample downsample and the HUD.
+                ScreenSpacePost.ApplyPost3D(renderBuffer, gHdr, gDepth, gNormal, width, height,
+                    false, in fx, in froxelView, in froxelFx, new DelegateDeAdapter(deDelegate));
+                DepthBuffer = ScreenSpacePost.PublishDepth(depthBuf, width, height, fullW, fullH, in fx);
+                if (ss > 1)
+                    DownsampleBox(renderBuffer, width, height, ColorBuffer, fullW, fullH, ss);
+                ScreenSpacePost.ApplyDebugHud(ColorBuffer, fullW, fullH, in fx);
+                return;
+            }
+            // #1173-M — every GPU route above declined or failed.
+            LastGpuRoute = GpuRoute.Cpu("GPU error",
+                string.IsNullOrEmpty(gpuFailure) ? "no GPU route compiled for this User Bulb source" : gpuFailure);
+        }
+
+        // Temporal cache: identity blit on unchanged scene+camera.
+        string sceneKey = lowRes ? string.Empty : BuildSceneKey();
+        // #1009 — an identity blit replays colour only (no depth), so skip the
+        // temporal cache while depth is wanted as an output.
+        bool tempReuse = FractalParameters.UserBulbTemporalReuse && !lowRes && !wantDepthOut;
+        if (tempReuse)
+        {
+            var decision = _cache.Decide(sceneKey, width, height, camX, camY, camZ, fwd.X, fwd.Y, fwd.Z);
+            if (decision == ReuseDecision.Identity && _cache.Buffer != null)
+            {
+                Array.Copy(_cache.Buffer, ColorBuffer, ColorBuffer.Length);
+                // #84 — cache stores a HUD-free frame; redraw the HUD on replay.
+                ScreenSpacePost.ApplyDebugHud(ColorBuffer, fullW, fullH, in fx);
+                return;
+            }
+        }
+
+        double[] tileTMin = ConeMarchTileHints();
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {

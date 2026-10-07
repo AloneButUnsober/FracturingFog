@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
-// S8 GPU 3D lights slice 4 (#488) — UserBulb GPU + retire force-CPU. The UserBulb
-// GPU shade is a single-light cheap Lambert; #488 teaches it to resolve a point /
-// spot Light1 at the surface point (inline twin of LightSampler) and lifts the
-// last !HasPositionalLight force-CPU guard (in UserBulbCalculator). With the guard
-// gone, every 3D-fractal family shades positional lights on the GPU.
+// S8 GPU 3D lights slice 4 (#488) — UserBulb GPU + retire force-CPU. #488 taught the
+// then single-light UserBulb GPU shade to resolve a point / spot Light1 and lifted the
+// last !HasPositionalLight force-CPU guard. Since #1173-A the UserBulb GPU kernel is
+// the family kernels' shading (all three lights, positional included); see
+// S1173AUserBulbGpuShadingTests for the GPU-vs-CPU parity.
 //
 // On-device output is validated by user smoke; the executable lock is that with
 // UserBulbBackend.GPU a point light beside the surface produces a different image

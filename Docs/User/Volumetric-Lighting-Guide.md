@@ -318,10 +318,9 @@ GPU path is engaged — there are two, and they are not the same:
   [Relief 3D Cookbook](Relief3D-Cookbook.md) for relief-specific tuning).
 
 - **GPU: 3D-fractal kernels** (`Use GPU render` on Mandelbulb, Mandelbox,
-  Menger, Sierpinski, Quaternion Julia/Mandelbrot, Kleinian, Bicomplex) — full
-  volumetric parity with the CPU path: light color, phase, medium color,
-  palette map. **UserBulb's GPU path is cheap-shaded and skips volumetrics** —
-  for volumetric UserBulb, render on the CPU.
+  the KIFS folds, Quaternion Julia/Mandelbrot, Kleinian, Bicomplex, Coquaternion,
+  and UserBulb with Backend = GPU) — full volumetric parity with the CPU path:
+  light color, phase, medium color, palette map.
   The screen-space effects (SSAO, tone map, bloom, screen-space depth of field,
   edge ink) also apply to these GPU frames. Before #1172 the GPU path dropped them.
   Thin-lens DoF together with tone map or bloom still renders on the CPU, and the
