@@ -855,14 +855,16 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         int n = width * height;
         _buf[0] = AllocBuffer(64, BufferUsageFlags.UniformBufferBit);                       // params
         _buf[1] = AllocBuffer((ulong)(Math.Max(height, 1) * sizeof(uint)), BufferUsageFlags.StorageBufferBit); // perRow
-        _buf[2] = AllocBuffer((ulong)(n * sizeof(uint)),  BufferUsageFlags.StorageBufferBit);  // iter
-        _buf[3] = AllocBuffer((ulong)(n * sizeof(float)), BufferUsageFlags.StorageBufferBit);  // smooth
-        _buf[4] = AllocBuffer((ulong)(n * 4 * sizeof(float)), BufferUsageFlags.StorageBufferBit); // finalZD
-        _buf[5] = AllocBuffer((ulong)(n * sizeof(uint)),  BufferUsageFlags.StorageBufferBit);  // color
+        _buf[2] = AllocBuffer((ulong)(n * sizeof(uint)),  BufferUsageFlags.StorageBufferBit, readback: true);  // iter
+        _buf[3] = AllocBuffer((ulong)(n * sizeof(float)), BufferUsageFlags.StorageBufferBit, readback: true);  // smooth
+        _buf[4] = AllocBuffer((ulong)(n * 4 * sizeof(float)), BufferUsageFlags.StorageBufferBit, readback: true); // finalZD
+        _buf[5] = AllocBuffer((ulong)(n * sizeof(uint)),  BufferUsageFlags.StorageBufferBit, readback: true);  // color
         _allocW = width; _allocH = height;
     }
 
-    private Allocated AllocBuffer(ulong size, BufferUsageFlags usage)
+    /// <summary><paramref name="readback"/>: the CPU maps and reads this buffer —
+    /// prefer host-cached memory (#1173-L, see <see cref="VulkanHostMemory"/>).</summary>
+    private Allocated AllocBuffer(ulong size, BufferUsageFlags usage, bool readback = false)
     {
         var bci = new BufferCreateInfo
         {
@@ -870,8 +872,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         };
         Check(_vk.CreateBuffer(_device, in bci, null, out Buffer buffer), "vkCreateBuffer");
         _vk.GetBufferMemoryRequirements(_device, buffer, out MemoryRequirements req);
-        uint memType = FindMemoryType(req.MemoryTypeBits,
-            MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
+        uint memType = VulkanHostMemory.FindType(_vk, _ctx.PhysicalDevice, req.MemoryTypeBits, readback);
         var mai = new MemoryAllocateInfo
         {
             SType = StructureType.MemoryAllocateInfo, AllocationSize = req.Size, MemoryTypeIndex = memType,
@@ -940,17 +941,6 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             zr[i] = src[b + 0]; zi[i] = src[b + 1]; dr[i] = src[b + 2]; di[i] = src[b + 3];
         }
         _vk.UnmapMemory(_device, a.Memory);
-    }
-
-    private uint FindMemoryType(uint typeBits, MemoryPropertyFlags required)
-    {
-        PhysicalDeviceMemoryProperties memProps;
-        _vk.GetPhysicalDeviceMemoryProperties(_ctx.PhysicalDevice, &memProps);
-        var types = (MemoryType*)&memProps.MemoryTypes;
-        for (uint i = 0; i < memProps.MemoryTypeCount; i++)
-            if ((typeBits & (1u << (int)i)) != 0 && (types[i].PropertyFlags & required) == required)
-                return i;
-        throw new InvalidOperationException($"no memory type with {required} for typeBits 0x{typeBits:X}");
     }
 
     private static DescriptorSetLayoutBinding LayoutBinding(uint binding, DescriptorType type) => new()

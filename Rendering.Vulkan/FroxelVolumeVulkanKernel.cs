@@ -554,11 +554,13 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
         FreeBuffer(ref _out);
         _beauty = AllocBuffer((ulong)(n * sizeof(uint)), BufferUsageFlags.StorageBufferBit);
         _depth = AllocBuffer((ulong)(n * sizeof(float)), BufferUsageFlags.StorageBufferBit);
-        _out = AllocBuffer((ulong)(n * sizeof(uint)), BufferUsageFlags.StorageBufferBit);
+        _out = AllocBuffer((ulong)(n * sizeof(uint)), BufferUsageFlags.StorageBufferBit, readback: true);
         _outPixels = n;
     }
 
-    private Allocated AllocBuffer(ulong size, BufferUsageFlags usage)
+    /// <summary><paramref name="readback"/>: the CPU maps and reads this buffer —
+    /// prefer host-cached memory (#1173-L, see <see cref="VulkanHostMemory"/>).</summary>
+    private Allocated AllocBuffer(ulong size, BufferUsageFlags usage, bool readback = false)
     {
         var bci = new BufferCreateInfo
         {
@@ -566,8 +568,7 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
         };
         Check(_vk.CreateBuffer(_device, in bci, null, out Buffer buffer), "vkCreateBuffer");
         _vk.GetBufferMemoryRequirements(_device, buffer, out MemoryRequirements req);
-        uint memType = FindMemoryType(req.MemoryTypeBits,
-            MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
+        uint memType = VulkanHostMemory.FindType(_vk, _ctx.PhysicalDevice, req.MemoryTypeBits, readback);
         var mai = new MemoryAllocateInfo
         {
             SType = StructureType.MemoryAllocateInfo, AllocationSize = req.Size, MemoryTypeIndex = memType,
@@ -598,17 +599,6 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
         Check(_vk.MapMemory(_device, a.Memory, 0, (ulong)(n * sizeof(uint)), 0, &mapped), "vkMapMemory");
         new Span<uint>(mapped, n).CopyTo(dst.AsSpan(0, n));
         _vk.UnmapMemory(_device, a.Memory);
-    }
-
-    private uint FindMemoryType(uint typeBits, MemoryPropertyFlags required)
-    {
-        PhysicalDeviceMemoryProperties memProps;
-        _vk.GetPhysicalDeviceMemoryProperties(_ctx.PhysicalDevice, &memProps);
-        var mtypes = (MemoryType*)&memProps.MemoryTypes;
-        for (uint i = 0; i < memProps.MemoryTypeCount; i++)
-            if ((typeBits & (1u << (int)i)) != 0 && (mtypes[i].PropertyFlags & required) == required)
-                return i;
-        throw new InvalidOperationException($"no memory type with {required} for typeBits 0x{typeBits:X}");
     }
 
     private static void Check(Result r, string what)

@@ -120,7 +120,7 @@ enough for correctness; the ⚑ is for performance sign-off only.
 
 | Slice | Issue | Goal | Depends | Size |
 |---|---|---|---|---|
-| G4.1 | #1173-L | Investigate why Vulkan SP is ~20x slower than D3D11 SP (889 vs 44 ms, 1080p, GT 710): readback, fp64 in the SP shader, dispatch shape | — | S–M |
+| G4.1 | #1173-L | Investigate why Vulkan SP is ~20x slower than D3D11 SP (889 vs 44 ms, 1080p, GT 710): readback, fp64 in the SP shader, dispatch shape. **Found: readback.** Dispatch was ~22 ms; reading the result buffers took ~780 ms because every buffer took the first `HOST_VISIBLE \| HOST_COHERENT` type — uncached write-combined memory on NVIDIA. Readback buffers now prefer a `HOST_CACHED` type (`VulkanHostMemory`, all three Vulkan kernels): 1080p SpShallow 864 → 36 ms (D3D11 45 ms), SpZoom1e4 146 ms (D3D11 154); perturbation ~9% behind D3D11 (fp64-bound). All Vulkan smoke gates pass on the GT 710; `S1173LVulkanReadbackMemoryTests` pins it. **Done** | — | S–M |
 | G4.2 | #1173-H | GPU palette for Julia / Burning Ship / Tricorn (the deferred "phase 5") | — | M |
 | G4.3 | #1173-J | GPU orbit path fills `TrapBuffer` → orbit-trap relief on the GPU | — | M |
 | G4.4 | #1173-I | Multibrot (`pow`), Phoenix (previous-z carry), domain warp (per-pixel c) | — | M each |
