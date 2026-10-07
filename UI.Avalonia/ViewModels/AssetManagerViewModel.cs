@@ -301,8 +301,8 @@ public sealed class AssetManagerViewModel : ViewModelBase
                 if (src == null) { summary.Failed++; continue; }
 
                 string json;
-                using (var r = new StreamReader(entry.Open(), Encoding.UTF8))
-                    json = r.ReadToEnd();
+                using (var s = entry.Open())
+                    json = FracturingFog.Abstractions.ImportedJson.ReadStream(s, summary.Repairs);
 
                 var result = src.ImportJson(json, overwrite);
                 summary.Tally(result.Status);
@@ -392,6 +392,10 @@ public sealed class AssetImportSummary
 
     public int Total => Added + Replaced + Skipped + Failed;
 
+    /// <summary>#1212 — encoding / character repairs applied to the imported
+    /// text (e.g. "decoded as UTF-16 LE"), listed in <see cref="Describe"/>.</summary>
+    public FracturingFog.Abstractions.ImportTextReport Repairs { get; } = new();
+
     public void Tally(AssetImportStatus status)
     {
         switch (status)
@@ -414,7 +418,10 @@ public sealed class AssetImportSummary
         if (Replaced > 0) parts.Add($"{Replaced} replaced");
         if (Skipped > 0)  parts.Add($"{Skipped} skipped (already exist)");
         if (Failed > 0)   parts.Add($"{Failed} failed");
-        return "Import complete: " + string.Join(", ", parts) + ".";
+        string text = "Import complete: " + string.Join(", ", parts) + ".";
+        if (Repairs.HasFixes)
+            text += "\n\nThe file needed repair: " + string.Join("; ", Repairs.Notes) + ".";
+        return text;
     }
 }
 

@@ -929,7 +929,7 @@ public sealed class UserEquationViewModel : ViewModelBase
         IReadOnlyList<string> entries;
         try
         {
-            entries = AssetJsonFile.SplitEntries(File.ReadAllText(path));
+            entries = AssetJsonFile.SplitEntries(FracturingFog.Abstractions.ImportedJson.ReadFile(path));
         }
         catch (Exception ex)
         {

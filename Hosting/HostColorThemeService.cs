@@ -1015,7 +1015,7 @@ namespace FracturingFog.Hosting
 
             try
             {
-                string text = File.ReadAllText(path);
+                string text = FracturingFog.Abstractions.ImportedJson.ReadFile(path);
                 string trimmed = text.TrimStart();
                 if (trimmed.StartsWith("{"))
                 {
@@ -1123,7 +1123,7 @@ namespace FracturingFog.Hosting
             List<ColorThemeData>? imported;
             try
             {
-                string text = File.ReadAllText(path);
+                string text = FracturingFog.Abstractions.ImportedJson.ReadFile(path);
                 // Root shape decides: '[' = the library form ExportUserThemesToFile
                 // writes, anything else = one bare theme object (what the Asset
                 // Manager's per-row export produces). Accepting both means a

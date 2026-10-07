@@ -263,7 +263,7 @@ public sealed class SandboxViewModel : ViewModelBase
         List<SandboxEquationEntry>? imported;
         try
         {
-            string text = File.ReadAllText(path);
+            string text = FracturingFog.Abstractions.ImportedJson.ReadFile(path);
             string trimmed = text.TrimStart();
             if (trimmed.StartsWith("["))
             {

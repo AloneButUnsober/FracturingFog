@@ -22,10 +22,13 @@ namespace FracturingFog.Abstractions.Assets
         /// array root yields one document per element; any other root is a
         /// single-asset file returned as-is. Malformed JSON yields an empty
         /// list rather than throwing, so callers report "no entries" the same
-        /// way for a bad file and an empty one.</summary>
-        public static IReadOnlyList<string> SplitEntries(string json)
+        /// way for a bad file and an empty one. The text is first run through
+        /// <see cref="ImportedJson.Sanitize"/> (#1212), so every per-kind importer
+        /// downstream sees repaired, normalized JSON.</summary>
+        public static IReadOnlyList<string> SplitEntries(string json, ImportTextReport? report = null)
         {
             if (string.IsNullOrWhiteSpace(json)) return Array.Empty<string>();
+            json = ImportedJson.Sanitize(json, report);
 
             try
             {

@@ -86,7 +86,7 @@ namespace FracturingFog.Views.Editors
         private static List<Rgb> LoadJson(string path)
         {
             var result = new List<Rgb>();
-            string raw = File.ReadAllText(path);
+            string raw = FracturingFog.Abstractions.ImportedJson.ReadFile(path);
             using var doc = JsonDocument.Parse(raw);
             JsonElement root = doc.RootElement;
 
@@ -183,10 +183,16 @@ namespace FracturingFog.Views.Editors
             @"^\s*(\d{1,3})\s+(\d{1,3})\s+(\d{1,3})(?:\s+.*)?$",
             RegexOptions.Compiled);
 
+        // #1212 — encoding-detected read (UTF-16 / ANSI palettes from other tools);
+        // CR-only and CRLF line endings are folded to LF before splitting.
+        private static string[] ReadImportLines(string path)
+            => FracturingFog.Abstractions.ImportedJson.ReadTextFile(path)
+                .Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+
         private static List<Rgb> LoadGpl(string path)
         {
             var result = new List<Rgb>();
-            foreach (var line in File.ReadAllLines(path))
+            foreach (var line in ReadImportLines(path))
             {
                 var trimmed = line.TrimStart();
                 if (trimmed.Length == 0) continue;
@@ -229,7 +235,7 @@ namespace FracturingFog.Views.Editors
         private static List<Rgb> LoadCss(string path)
         {
             var result = new List<Rgb>();
-            string text = File.ReadAllText(path);
+            string text = FracturingFog.Abstractions.ImportedJson.ReadTextFile(path);
 
             int hexIdx = 0;
             foreach (Match m in CssHex.Matches(text))
@@ -278,7 +284,7 @@ namespace FracturingFog.Views.Editors
         private static List<Rgb> LoadHex(string path)
         {
             var result = new List<Rgb>();
-            foreach (var line in File.ReadAllLines(path))
+            foreach (var line in ReadImportLines(path))
             {
                 var m = AnyHex.Match(line);
                 if (!m.Success) continue;
@@ -304,7 +310,7 @@ namespace FracturingFog.Views.Editors
             // a GIMP header, or a hex token.
             try
             {
-                string head = File.ReadAllText(path);
+                string head = FracturingFog.Abstractions.ImportedJson.ReadTextFile(path);
                 string t = head.TrimStart();
                 if (t.StartsWith("{") || t.StartsWith("[")) return LoadJson(path);
                 if (t.StartsWith("GIMP", StringComparison.OrdinalIgnoreCase)) return LoadGpl(path);
