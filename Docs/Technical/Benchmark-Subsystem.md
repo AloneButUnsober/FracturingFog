@@ -222,6 +222,8 @@ through to the CPU ShadingPipeline silently. The bench guards against measuring 
   VRAM usually means a **Remote Desktop session**: a GeForce card under WDDM can't create a CUDA
   context there, and the driver reports it as out of memory (seen on the GT 710, driver 456.71).
   Run GPU benches and the S749 CUDA tests from the console session.
+  (Confirmed 2026-10-07: the same machine at the console creates the CUDA context and runs
+  all S749 cases; D3D11 and Vulkan reach the card either way.)
 
 That guard is what exposed #1164: on CUDA, all 8 kernels failed to JIT because the context lacked
 `ILGPU.Algorithms`. Since #1164 they JIT, and every kernel context comes from

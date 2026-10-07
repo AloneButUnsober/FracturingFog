@@ -38,6 +38,10 @@ public static class UserBulbShadeKernel
     //@@USERDE-BEGIN
     /// <summary>The distance estimator. Built in: the analytic triplex power-N DE
     /// (the legacy GPU path's TriplexPowerDE). The sandbox path replaces this region.</summary>
+    // Not inlined: the shading body calls the DE from ~16 sites (march, normals, shadows,
+    // AO, reflections, volumetrics). Inlining a user DE into each — with software fp64
+    // trig on CUDA — made the GT 710's JIT take ~48 s for z^8 + c; as a call it takes ~5 s.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     private static double UserDE(double cx, double cy, double cz, in GpuRenderParams q, ArrayView<double> __p)
     {
         double power = q.Power;

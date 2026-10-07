@@ -16,6 +16,7 @@ using System;
 using System.Linq;
 using System.Threading;
 
+using FracturingFog.Calculators;
 using FracturingFog.Calculators.Gpu;
 using FracturingFog.Models;
 using FracturingFog.Render;
@@ -96,6 +97,45 @@ public sealed class S1112UserBulbGpuDeTests
             double vsOther = MeanDrift(g.color, other);
             Assert.True(vsOther > Math.Max(1.0, 8 * same),
                 $"{label}: the GPU frame is as close to the contrasting CPU frame ({vsOther:F2}) as to its own ({same:F2})");
+        }
+        finally { GpuAcceleratorHost.SetTestOverride(null); }
+    }
+
+    [Fact]
+    public void Too_Slow_Latches_Per_Equation_Not_Per_Device()
+    {
+        // Found on a GT 710: z^8 + c (software fp64 trig, ~2.5 ms/px) tripped the #1169 guard
+        // and the latch then refused EVERY User Bulb equation on that device for the session,
+        // cheap ones included. It is now keyed by the compiled source too.
+        using var ctx = GpuAcceleratorHost.CreateContext();
+        using var acc = ctx.Devices.First(d => d.AcceleratorType == AcceleratorType.CPU).CreateAccelerator(ctx);
+        GpuAcceleratorHost.SetTestOverride(acc);
+        try
+        {
+            var q = new GpuRenderParams
+            {
+                Width = 32, Height = 24, CamZ = -3.0, FwdZ = 1.0, RightX = 1.0, UpY = 1.0,
+                FovScale = Math.Tan(Math.PI / 6.0), Aspect = 32.0 / 24.0,
+                DEIter = 6, MaxSteps = 48, Eps = 1e-3, Bailout = 4.0, CullRadiusSq = 4.0, Power = 2.0, JacH = 1e-6,
+            };
+            var r = UserBulbGpuDispatch.Raymarch(in q);
+            var sp = GpuShadingParams.Build(LightingFxData.CreateDefault());
+            var buf = new uint[32 * 24];
+
+            using var slow = new UserBulbSandboxGpuCompiler();
+            Assert.True(slow.TryCompile("z^4 + c", Array.Empty<string>(), quatMode: false), slow.LastError);
+            // Any measurable cost is "too slow", and the CPU accelerator is judged.
+            GpuTiledDispatch.SetTestThresholds(singleLaunchPixels: 0, probePixels: 8,
+                maxSecondsPerPixel: 0.0, minGuardSeconds: 0.0, judgeCpuAccelerator: true);
+            try { Assert.False(slow.Render(buf, new[] { 0.0 }, r, sp, q, null, null, null, null, null, null)); }
+            finally { GpuTiledDispatch.ClearTestThresholds(); }
+            Assert.StartsWith("GPU too slow", slow.LastError);
+            Assert.False(slow.Render(buf, new[] { 0.0 }, r, sp, q, null, null, null, null, null, null));   // latched
+
+            // Another equation on the same device still renders.
+            using var other = new UserBulbSandboxGpuCompiler();
+            Assert.True(other.TryCompile("z^3 + c", Array.Empty<string>(), quatMode: false), other.LastError);
+            Assert.True(other.Render(buf, new[] { 0.0 }, r, sp, q, null, null, null, null, null, null), other.LastError);
         }
         finally { GpuAcceleratorHost.SetTestOverride(null); }
     }

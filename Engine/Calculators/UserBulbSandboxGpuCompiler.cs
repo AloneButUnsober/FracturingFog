@@ -45,8 +45,12 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
     private Accelerator? _acc;
     private string _cachedKey = string.Empty;
     private bool _initFailed;
-    // #1169 — a device proved too slow for User Bulb kernels (process-wide, per device).
-    private static (Accelerator Device, string Message)? s_tooSlow;
+    // #1169 — kernels a device proved too slow for (process-wide). Keyed by device AND the
+    // compiled source: equations differ wildly in cost (a power-8 bulb runs software fp64
+    // trig per step, a quaternion square doesn't), so one slow equation must not refuse
+    // every other User Bulb equation on that device for the session.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Accelerator,
+        System.Collections.Concurrent.ConcurrentDictionary<string, string>> s_tooSlow = new();
     public string LastError { get; private set; } = string.Empty;
 
     /// <summary>#1173-M — the device this path renders on, or null before init.</summary>
@@ -203,7 +207,8 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         uint[]? albedoLut, uint[]? hdri, System.Threading.CancellationToken ct = default)
     {
         if (_kernel == null || _acc == null) return false;
-        if (s_tooSlow is { } slow && ReferenceEquals(slow.Device, _acc)) { LastError = slow.Message; return false; }
+        var slowKeys = s_tooSlow.GetOrCreateValue(_acc);
+        if (slowKeys.TryGetValue(_cachedKey, out var slow)) { LastError = slow; return false; }
         try
         {
             var run = UserBulbGpuDispatch.Run(_acc, _kernel, outBuffer, r, sp, q, pArr,
@@ -211,7 +216,7 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
             if (run == GpuDispatchResult.TooSlow)
             {
                 LastError = GpuTiledDispatch.TooSlowMessage("User Bulb");
-                s_tooSlow = (_acc, LastError);
+                slowKeys[_cachedKey] = LastError;
                 return false;
             }
             return run == GpuDispatchResult.Completed;
@@ -291,6 +296,8 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         region.AppendLine(begin);
         region.Append(stepFn);
         region.AppendLine(quatMode ? QuatSandboxDESource : VecSandboxDESource);
+        // Not inlined, as in the template: one DE function, ~16 call sites (JIT ~48 s → ~5 s).
+        region.AppendLine("    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]");
         region.AppendLine("    private static double UserDE(double cx, double cy, double cz, in GpuRenderParams q, ArrayView<double> __p)");
         region.AppendLine("        => SandboxDE(cx, cy, cz, q, __p);");
         region.Append("    ");
