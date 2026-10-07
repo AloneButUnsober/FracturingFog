@@ -894,12 +894,13 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         // AOV views and stereo depth forced onto the CPU.
         // Falls through to CPU on any failure.
         // #1173-A — the GPU DE must be the one the CPU picked (the frames are the same
-        // surface only then): Vec3 runs on the GPU only when the CPU itself chose the
-        // analytic power DE (DE mode Analytic, or Auto + AcceptAuto); quaternion runs the
-        // GPU's numerical-Jacobian twin of UserBulbQuatDE, so the CPU's exact q²+c DE
-        // (DE mode Analytic) stays on the CPU. Before, the GPU took the analytic DE
-        // whenever a pattern matched — a different surface from the CPU's.
-        bool sandboxQuatGpu = _compiledCompiler == UserBulbCompilerKind.Sandbox && quatMode && !quatExact;
+        // surface only then). #1112 — the sandbox kernel now carries every CPU DE but two:
+        // Vec3 analytic power or numerical Jacobian (Julia included), quaternion numerical
+        // Jacobian or the exact q²+c DE. The scalar KIFS DE and the non-escaping DE (#280)
+        // stay on the CPU. The legacy (built-in triplex) path serves Vec3 analytic only.
+        bool sandbox = _compiledCompiler == UserBulbCompilerKind.Sandbox;
+        bool sandboxQuatGpu = sandbox && quatMode;
+        bool sandboxVecGpu = sandbox && !quatMode && !useNonEsc;
         bool vecAnalyticGpuOk = !quatMode && useAnalytic;
         // #1173-A — the kernel colours by step / depth or by the normal; the orbit-metric
         // drivers (trap, escape angle, final magnitude, component) need the CPU orbit pass.
@@ -910,21 +911,20 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
             : lowRes ? GpuRoute.Cpu("preview frame", "low-res preview frames render on the CPU")
             : kifsScale > 0.0 ? GpuRoute.Cpu("scalar KIFS DE", "the scalar KIFS DE renders on the CPU only")
             : !driverOnGpu ? GpuRoute.Cpu("colour driver", $"the {colorDriver} colour driver renders on the CPU only (#1202)")
-            : sandboxQuatGpu || vecAnalyticGpuOk ? default
-            : quatExact ? GpuRoute.Cpu("quaternion exact DE", "the exact q²+c DE (DE mode Analytic) renders on the CPU only; the GPU runs the numerical Jacobian")
+            : useNonEsc && !quatMode ? GpuRoute.Cpu("non-escaping DE", "the non-escaping DE (#280) renders on the CPU only")
+            : sandboxQuatGpu || sandboxVecGpu || vecAnalyticGpuOk ? default
             : quatMode ? GpuRoute.Cpu("quaternion compiler", "quaternion mode runs on the GPU only with the sandbox compiler")
-            : juliaMode ? GpuRoute.Cpu("Vec3 Julia", "Vec3 Julia renders on the CPU only (#1112)")
-            : GpuRoute.Cpu("Vec3 numerical DE", "Vec3 numerical DE renders on the CPU only (#1112)");
+            : GpuRoute.Cpu("Vec3 numerical DE", "the Vec3 numerical DE runs on the GPU only with the sandbox compiler");
         if (FractalParameters.UserBulbBackend == UserBulbBackendKind.GPU
             && !lowRes
             && kifsScale <= 0.0   // scalar KIFS DE is CPU-only
             && driverOnGpu
-            && (sandboxQuatGpu || vecAnalyticGpuOk))
+            && (sandboxQuatGpu || sandboxVecGpu || vecAnalyticGpuOk))
         {
             string? gpuFailure = null;   // #1173-M — last GPU route error this frame
-            // #1173-A — the CPU's DE: Vec3 reaches here only with the analytic power DE;
-            // quaternion runs the numerical Jacobian (UserBulbQuatDE).
-            bool gpuUseAnalytic = !quatMode;
+            // The CPU's DE, as the kernel's UseAnalyticDE code: Vec3 1 = analytic power,
+            // 0 = numerical Jacobian; quaternion 2 = exact q²+c (#1112), 0 = numerical.
+            int gpuDeKind = quatMode ? (quatExact ? 2 : 0) : (useAnalytic ? 1 : 0);
 
             // gp.LightX/Y/Z + L1* feed the legacy single-light fields; the shared
             // kernel lights from GpuShadingParams (all three lights, as the CPU Shade).
@@ -954,7 +954,7 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
                 JuliaMode = juliaMode ? 1 : 0,
                 JuliaCW = jcW, JuliaCX = jcX, JuliaCY = jcY, JuliaCZ = jcZ,
                 JacH = jacH,
-                UseAnalyticDE = gpuUseAnalytic ? 1 : 0,
+                UseAnalyticDE = gpuDeKind,
                 // S8 (#484/#488) — primary-light positional resolve.
                 L1Type = l1Positional ? (int)fx.Light1.Type : 0,
                 L1PX = fx.Light1.PosX, L1PY = fx.Light1.PosY, L1PZ = fx.Light1.PosZ,
@@ -1026,7 +1026,7 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
             }
 
             // (b) Legacy path — vec only, the built-in triplex power DE.
-            if (!gpuOk && !quatMode)
+            if (!gpuOk && !quatMode && useAnalytic)
             {
                 var trans = UserBulbIlgpuTranslator.Translate(FractalParameters.UserBulbSource);
                 if (trans.Ok)

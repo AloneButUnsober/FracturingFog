@@ -323,33 +323,95 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         sb.AppendLine("    }");
     }
 
-    // Vec mode: analytic-power DE only (Wave 4.6 leaves vec-Julia / vec-numerical
-    // on the CPU path — out of scope).
+    // Vec mode. UseAnalyticDE 1 = the analytic power DE (twin of
+    // UserBulbAnalyticDE.PowerDE); 0 = #1112 the numerical Jacobian, Julia included
+    // (twin of UserBulbCalculator.UserBulbDE: three perturbed trajectories, the largest
+    // forward-difference column length as |dz/dc|). `!(r <= bailout)` is the CPU's
+    // `!IsFinite(r) || r > bailout` for a non-negative r.
     private const string VecSandboxDESource = @"    private static double SandboxDE(double cx, double cy, double cz, GpuRenderParams p, ArrayView<double> __p) {
-        var c = new Vec3(cx, cy, cz);
-        var z = new Vec3(0.0, 0.0, 0.0);
-        double dr = 1.0, r = 0.0;
-        for (int i = 0; i < p.DEIter; i++) {
-            r = z.Length;
-            if (r > p.Bailout) break;
-            dr = p.Power * Math.Pow(r, p.Power - 1.0) * dr + 1.0;
-            z = Step(z, c, i, __p);
+        if (p.UseAnalyticDE != 0) {
+            var c = new Vec3(cx, cy, cz);
+            var z = new Vec3(0.0, 0.0, 0.0);
+            double dr = 1.0, r = 0.0;
+            for (int i = 0; i < p.DEIter; i++) {
+                r = z.Length;
+                if (!(r <= p.Bailout)) break;
+                dr = p.Power * Math.Pow(r, p.Power - 1.0) * dr + 1.0;
+                z = Step(z, c, i, __p);
+            }
+            if (r < 1e-12 || dr < 1e-12) return 0.5 * r / Math.Max(dr, 1e-10);
+            return 0.5 * Math.Log(Math.Max(r, 1.0)) * r / dr;
         }
-        if (r < 1e-12 || dr < 1e-12) return 0.5 * r / Math.Max(dr, 1e-10);
-        return 0.5 * Math.Log(Math.Max(r, 1.0)) * r / dr;
+
+        double h = p.JacH;
+        Vec3 cB, cX, cY, cZ;
+        Vec3 zB, zX, zY, zZ;
+        if (p.JuliaMode != 0) {
+            cB = cX = cY = cZ = new Vec3(p.JuliaCX, p.JuliaCY, p.JuliaCZ);
+            zB = new Vec3(cx,     cy,     cz);
+            zX = new Vec3(cx + h, cy,     cz);
+            zY = new Vec3(cx,     cy + h, cz);
+            zZ = new Vec3(cx,     cy,     cz + h);
+        } else {
+            cB = new Vec3(cx,     cy,     cz);
+            cX = new Vec3(cx + h, cy,     cz);
+            cY = new Vec3(cx,     cy + h, cz);
+            cZ = new Vec3(cx,     cy,     cz + h);
+            zB = zX = zY = zZ = new Vec3(0.0, 0.0, 0.0);
+        }
+        double rN = 0.0;
+        for (int i = 0; i < p.DEIter; i++) {
+            rN = zB.Length;
+            if (!(rN <= p.Bailout)) break;
+            zB = Step(zB, cB, i, __p);
+            zX = Step(zX, cX, i, __p);
+            zY = Step(zY, cY, i, __p);
+            zZ = Step(zZ, cZ, i, __p);
+        }
+        double j0 = (zX - zB).Length / h;
+        double j1 = (zY - zB).Length / h;
+        double j2 = (zZ - zB).Length / h;
+        double drN = Math.Max(Math.Max(j0, j1), j2);
+        return 0.5 * rN / Math.Max(drN, 1e-10);
     }";
 
-    // Wave 4.6 — Quat unified DE: branches on JuliaMode (c constant vs per-pixel)
-    // and UseAnalyticDE (power-DE vs 5-trajectory forward-diff Jacobian).
-    // Numerical-Jacobian path mirrors CPU UserBulbQuatDE: four perturbed
-    // trajectories along {W, X, Y, Z} axes; |z_pert - z|/h gives column lengths
-    // of ∂z/∂axis; max column length used as conservative spectral-radius proxy.
+    // Wave 4.6 — Quat unified DE: branches on JuliaMode (c constant vs per-pixel) and
+    // UseAnalyticDE: 0 = the 5-trajectory numerical Jacobian (twin of
+    // UserBulbCalculator.UserBulbQuatDE), 1 = the analytic power DE, 2 = #1112 the exact
+    // full-derivative q²+c DE (twin of UserBulbQuatExactDE; DE mode Analytic on a
+    // detected square map, independent of the user Step).
     private const string QuatSandboxDESource = @"    private static double SandboxDE(double cx, double cy, double cz, GpuRenderParams p, ArrayView<double> __p) {
         bool julia = p.JuliaMode != 0;
-        bool analytic = p.UseAnalyticDE != 0;
         double h = p.JacH;
 
-        if (analytic) {
+        if (p.UseAnalyticDE == 2) {
+            Quat q, c, dq;
+            if (julia) {
+                q = new Quat(p.QuatSliceW, cx, cy, cz);
+                c = new Quat(p.JuliaCW, p.JuliaCX, p.JuliaCY, p.JuliaCZ);
+                dq = new Quat(1.0, 0.0, 0.0, 0.0);
+            } else {
+                q = new Quat(0.0, 0.0, 0.0, 0.0);
+                c = new Quat(p.QuatSliceW, cx, cy, cz);
+                dq = new Quat(0.0, 0.0, 0.0, 0.0);
+            }
+            double bail2 = p.Bailout * p.Bailout;
+            double q2 = q.LengthSquared;
+            for (int i = 0; i < p.DEIter; i++) {
+                dq = 2.0 * (q * dq);
+                if (!julia) dq = dq + new Quat(1.0, 0.0, 0.0, 0.0);
+                q = q * q + c;
+                q2 = q.LengthSquared;
+                if (!(q2 <= bail2)) break;
+            }
+            double d2 = dq.LengthSquared;
+            if (!(q2 < double.PositiveInfinity) || !(d2 < double.PositiveInfinity) || d2 < 1e-30) return 0.0;
+            if (q2 < 1.0) return 0.0;
+            double qMag = Math.Sqrt(q2);
+            return 0.5 * qMag * Math.Log(qMag) / Math.Sqrt(d2);
+        }
+
+        if (p.UseAnalyticDE == 1) {
             Quat c0, z0;
             if (julia) {
                 c0 = new Quat(p.JuliaCW, p.JuliaCX, p.JuliaCY, p.JuliaCZ);
@@ -362,7 +424,7 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
             double dr = 1.0, r = 0.0;
             for (int i = 0; i < p.DEIter; i++) {
                 r = z.Length;
-                if (r > p.Bailout) break;
+                if (!(r <= p.Bailout)) break;
                 dr = p.Power * Math.Pow(r, p.Power - 1.0) * dr + 1.0;
                 z = Step(z, c, i, __p);
             }
@@ -392,18 +454,17 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         double rN = 0.0;
         for (int i = 0; i < p.DEIter; i++) {
             rN = zB.Length;
-            if (rN > p.Bailout) break;
+            if (!(rN <= p.Bailout)) break;
             zB  = Step(zB,  cB,  i, __p);
             zW  = Step(zW,  cW,  i, __p);
             zX  = Step(zX,  cX,  i, __p);
             zY  = Step(zY,  cY,  i, __p);
             zZc = Step(zZc, cZc, i, __p);
         }
-        double invH = 1.0 / Math.Max(h, 1e-12);
-        double j0 = (zW  - zB).Length * invH;
-        double j1 = (zX  - zB).Length * invH;
-        double j2 = (zY  - zB).Length * invH;
-        double j3 = (zZc - zB).Length * invH;
+        double j0 = (zW  - zB).Length / h;
+        double j1 = (zX  - zB).Length / h;
+        double j2 = (zY  - zB).Length / h;
+        double j3 = (zZc - zB).Length / h;
         double drN = Math.Max(Math.Max(j0, j1), Math.Max(j2, j3));
         return 0.5 * rN / Math.Max(drN, 1e-10);
     }";

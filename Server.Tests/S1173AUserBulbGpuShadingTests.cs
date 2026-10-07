@@ -146,28 +146,6 @@ public sealed class S1173AUserBulbGpuShadingTests
     }
 
     [Fact]
-    public void Gpu_Never_Draws_A_Different_De_Than_The_Cpu()
-    {
-        // Auto rejects the analytic DE for z^8 + c, so the CPU marches the numerical
-        // Jacobian. The GPU used to take the analytic DE anyway (another surface); it now
-        // leaves that frame to the CPU and says why.
-        OnCpuAccelerator(() =>
-        {
-            var fp = new FractalParameters
-            {
-                UserBulbSource = "z^8 + c", UserBulbCompiler = UserBulbCompilerKind.Sandbox,
-                UserBulbBackend = UserBulbBackendKind.GPU, UserBulbDEMode = UserBulbDEModeKind.Auto,
-                Lighting = LightingFxData.CreateDefault(),
-            };
-            var calc = new UserBulbCalculator(32, 24) { ColorMap = ColorPalette.BuiltIns[39], FractalParameters = fp };
-            calc.Calculate(CancellationToken.None);
-            Assert.Equal(GpuRouteState.CpuFallback, calc.LastGpuRoute.State);
-            Assert.Equal("Vec3 numerical DE", calc.LastGpuRoute.Reason);
-            return 0;
-        });
-    }
-
-    [Fact]
     public void Legacy_And_Sandbox_Kernels_Render_The_Same_Frame()
     {
         // The legacy path (built-in triplex DE, compiled with Engine) and the sandbox
@@ -181,7 +159,8 @@ public sealed class S1173AUserBulbGpuShadingTests
                 CamZ = -3.0, FwdZ = 1.0, RightX = 1.0, UpY = 1.0,
                 FovScale = Math.Tan(Math.PI / 6.0), Aspect = 48.0 / 36.0,
                 DEIter = 8, MaxSteps = 96, Eps = 1e-3, Bailout = 4.0, CullRadiusSq = 4.0,
-                Power = 8.0, InSetColor = 0xFF000000u, BgTop = 0xFF203040u, BgBottom = 0xFF101010u,
+                Power = 8.0, UseAnalyticDE = 1,   // the built-in DE is the analytic power DE
+                InSetColor = 0xFF000000u, BgTop = 0xFF203040u, BgBottom = 0xFF101010u,
             };
             var r = UserBulbGpuDispatch.Raymarch(in q);
             var sp = GpuShadingParams.Build(LightingFxData.CreateDefault());
