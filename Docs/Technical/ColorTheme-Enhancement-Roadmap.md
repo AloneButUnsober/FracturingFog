@@ -498,10 +498,13 @@ Each spec: what, surfaces, data model, algorithm, injection points, back-compat,
     palette path, so there is nothing to extend. Explicit non-goal in #603 ("only
     if it grows a DSL-palette path"). If Silk ever gains one, the shared
     `MandelbrotKernelSource.BuildColorOrbit` drops straight in.
-  - [#607](https://github.com/AloneButUnsober/FracturingFog/issues/607) tracks the
-    speculative deep-zoom-orbit enhancement so it is not lost, gated behind a
-    strong-FP64 GPU **and** a CPU perturbation-orbit reference to compare against
-    (the real prerequisite — none exists today).
+  - [#607](https://github.com/AloneButUnsober/FracturingFog/issues/607) tracked the
+    deep-zoom-orbit enhancement, gated behind a CPU perturbation-orbit reference to
+    compare against. #609 added that reference, and #607 (GPU parity plan G4.6) then
+    put the deep orbit accumulation on both GPU backends
+    (`MandelbrotKernelSource.BuildPerturbOrbit`). Colour stays in the CPU
+    `MapWithOrbit`, fed by the GPU means. It is faster than the CPU deep orbit path
+    even on a weak-fp64 GT 710.
 
 ---
 

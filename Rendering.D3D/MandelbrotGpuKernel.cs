@@ -775,6 +775,127 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         }
     }
 
+    /// <summary>#607 / G4.6 — the orbit kernel's double work is the plain kernel's;
+    /// its sampling is float.</summary>
+    public bool SupportsPerturbationOrbit => SupportsPerturbation;
+
+    /// <summary>#607 / G4.6 — deep-zoom perturbation with orbit accumulation
+    /// (MandelbrotKernelSource.BuildPerturbOrbit, one shader per mask). Same band
+    /// tiling, too-slow abort and readback as <see cref="RunPerturb"/>, plus the
+    /// gOrbit means (u3).</summary>
+    public void RunPerturbOrbit(
+        int width, int height,
+        double scale, int maxIter, double escapeRadius2,
+        double offsetX0, double offsetY0,
+        double[] refZr, double[] refZi, int refLen,
+        int orbitMask, double centerRe, double centerIm,
+        int[] iterDst, float[] smoothDst,
+        float[] finalZrDst, float[] finalZiDst,
+        float[] finalDrDst, float[] finalDiDst,
+        float[] orbitDst)
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(MandelbrotGpuKernel));
+        if (!SupportsPerturbation)
+            throw new NotSupportedException("D3D device has no DoublePrecisionFloatShaderOps — cannot run the orbit perturbation kernel.");
+        orbitMask &= MandelbrotKernelSource.OrbAll;
+        int stride = MandelbrotKernelSource.PerturbOrbitStride(orbitMask);
+        if (stride == 0) throw new ArgumentException("no orbit inputs in the mask", nameof(orbitMask));
+        if (width <= 0 || height <= 0) return;
+        if (refLen < 1) throw new ArgumentException("reference orbit is empty", nameof(refLen));
+        if (refZr.Length < refLen || refZi.Length < refLen)
+            throw new ArgumentException("reference-orbit arrays shorter than refLen");
+        int n = width * height;
+        if (orbitDst.Length < n * stride) throw new ArgumentException("orbitDst shorter than width * height * stride", nameof(orbitDst));
+
+        lock (_d3dGate)
+        {
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            EnsureOutputBuffers(width, height);
+            EnsurePerturbParamsBuffer();
+            EnsureRefOrbitBuffers(refLen);
+            EnsureOrbitOutBuffers(n * stride);
+            if (!_csPerturbOrbit.TryGetValue(orbitMask, out var cs))
+            {
+                cs = CompileShader(MandelbrotKernelSource.BuildPerturbOrbit(orbitMask), label: $"perturb-orbit-{orbitMask:X}",
+                    entryPoint: MandelbrotKernelSource.PerturbOrbitEntryPoint);
+                _csPerturbOrbit[orbitMask] = cs;
+            }
+
+            UploadDoubles(_refZrBuf!, refZr, refLen);
+            UploadDoubles(_refZiBuf!, refZi, refLen);
+
+            var p = new PerturbParams
+            {
+                Width = width, Height = height, MaxIter = maxIter, RefLen = refLen,
+                Scale = scale, EscapeR2 = escapeRadius2, OffX0 = offsetX0, OffY0 = offsetY0,
+                RowBase = 0,
+                Pad0 = BitConverter.SingleToInt32Bits((float)centerRe),   // gCRe
+                Pad1 = BitConverter.SingleToInt32Bits((float)centerIm),   // gCIm
+            };
+
+            _ctx.CSSetShader(cs);
+            _ctx.CSSetShaderResource(0, _refZrSrv);
+            _ctx.CSSetShaderResource(1, _refZiSrv);
+            _ctx.CSSetUnorderedAccessView(3, _orbitOutUav);   // u3 (unbound by DispatchPerturbBands)
+            DispatchPerturbBands(width, height, maxIter, srvCount: 2, " (orbit)", rowBase =>
+            {
+                p.RowBase = rowBase;
+                var mapped = _ctx.Map(_perturbParamsBuf!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
+                unsafe { *(PerturbParams*)mapped.DataPointer = p; }
+                _ctx.Unmap(_perturbParamsBuf!, 0);
+                _ctx.CSSetConstantBuffer(0, _perturbParamsBuf);
+            }, uavCount: 4);
+            ReadPerturbOutputs(n, t0, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst);
+
+            _ctx.CopyResource(_orbitOutStaging, _orbitOutBuf);
+            var map = _ctx.Map(_orbitOutStaging!, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
+            try
+            {
+                unsafe { new ReadOnlySpan<float>((void*)map.DataPointer, n * stride).CopyTo(orbitDst); }
+            }
+            finally { _ctx.Unmap(_orbitOutStaging!, 0); }
+        }
+    }
+
+    // #607 / G4.6 — orbit perturbation shaders (one per mask) + the gOrbit output.
+    private readonly Dictionary<int, ID3D11ComputeShader> _csPerturbOrbit = new();
+    private ID3D11Buffer? _orbitOutBuf;
+    private ID3D11Buffer? _orbitOutStaging;
+    private ID3D11UnorderedAccessView? _orbitOutUav;
+    private int _orbitOutAllocFloats;
+
+    private void EnsureOrbitOutBuffers(int floats)
+    {
+        if (_orbitOutBuf != null && _orbitOutAllocFloats >= floats) return;
+        _orbitOutUav?.Dispose();
+        _orbitOutBuf?.Dispose();
+        _orbitOutStaging?.Dispose();
+        _orbitOutBuf = _device.CreateBuffer(new BufferDescription
+        {
+            ByteWidth = (uint)(floats * sizeof(float)),
+            BindFlags = BindFlags.UnorderedAccess,
+            Usage = ResourceUsage.Default,
+            MiscFlags = ResourceOptionFlags.BufferStructured,
+            StructureByteStride = sizeof(float),
+        });
+        _orbitOutStaging = _device.CreateBuffer(new BufferDescription
+        {
+            ByteWidth = (uint)(floats * sizeof(float)),
+            Usage = ResourceUsage.Staging,
+            CPUAccessFlags = CpuAccessFlags.Read,
+            BindFlags = BindFlags.None,
+            MiscFlags = ResourceOptionFlags.None,
+            StructureByteStride = 0,
+        });
+        _orbitOutUav = _device.CreateUnorderedAccessView(_orbitOutBuf, new UnorderedAccessViewDescription
+        {
+            Format = Vortice.DXGI.Format.Unknown,
+            ViewDimension = UnorderedAccessViewDimension.Buffer,
+            Buffer = new BufferUnorderedAccessView { FirstElement = 0, NumElements = (uint)floats },
+        });
+        _orbitOutAllocFloats = floats;
+    }
+
     /// <summary>#88 / G4.5 — the SA kernel needs only the double ops the plain one
     /// does (squared-magnitude FindSkip, no double sqrt / division).</summary>
     public bool SupportsPerturbationSA => SupportsPerturbation;
@@ -858,7 +979,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     /// Band 0 is synced and timed: if the extrapolated frame is too slow (weak FP64)
     /// it throws the too-slow marker so the caller drops to the CPU deep path.</summary>
     private void DispatchPerturbBands(int width, int height, int maxIter, int srvCount, string label,
-        Action<int> writeParams)
+        Action<int> writeParams, int uavCount = 3)
     {
         _ctx.CSSetUnorderedAccessView(0, _iterUav);
         _ctx.CSSetUnorderedAccessView(1, _smoothUav);
@@ -866,9 +987,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
 
         void Unbind()
         {
-            _ctx.CSUnsetUnorderedAccessView(0);
-            _ctx.CSUnsetUnorderedAccessView(1);
-            _ctx.CSUnsetUnorderedAccessView(2);
+            for (int i = 0; i < uavCount; i++) _ctx.CSUnsetUnorderedAccessView((uint)i);   // u3: the orbit variant (#607)
             for (int i = 0; i < srvCount; i++) _ctx.CSSetShaderResource((uint)i, null);
         }
 
@@ -1111,6 +1230,11 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         try { _perturbParamsBuf?.Dispose(); } catch { }
         try { _csPerturb?.Dispose(); } catch { }
         try { _csPerturbSa?.Dispose(); } catch { }
+        foreach (var cs in _csPerturbOrbit.Values) { try { cs.Dispose(); } catch { } }   // #607
+        _csPerturbOrbit.Clear();
+        try { _orbitOutUav?.Dispose(); } catch { }
+        try { _orbitOutBuf?.Dispose(); } catch { }
+        try { _orbitOutStaging?.Dispose(); } catch { }
         try { _saParamsBuf?.Dispose(); } catch { }
         try { _blaSrv?.Dispose(); } catch { }
         try { _blaBuf?.Dispose(); } catch { }

@@ -248,6 +248,19 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
     /// with the BLA table. Reset at the start of every HP frame.</summary>
     public bool LastFrameUsedGpuBla { get; private set; }
 
+    /// <summary>#607 / G4.6 — true when the last frame was an orbit theme rendered on
+    /// the GPU deep-zoom orbit kernel (<see cref="IGpuKernel.RunPerturbOrbit"/>); it
+    /// also sets <see cref="LastFrameUsedGpuPerturbation"/>.</summary>
+    public bool LastFrameUsedGpuOrbitPerturbation { get; private set; }
+
+    /// <summary>#607 / G4.6 — let a deep-zoom orbit ColorGen theme (a GPU orbit
+    /// palette, exterior colouring) accumulate its orbit inputs on the GPU
+    /// perturbation kernel. On by default — the GPU twin of the CPU deep orbit path
+    /// (#609), parity-checked on both backends. Still needs
+    /// <see cref="UseGpuPerturbation"/>. <c>FF_GPU_DEEP_ORBIT=0</c> turns it off.</summary>
+    public static bool UseGpuDeepOrbit { get; set; } =
+        Environment.GetEnvironmentVariable("FF_GPU_DEEP_ORBIT") is not ("0" or "false" or "off" or "no");
+
     /// <summary>#88 / G4.5b — let GPU perturbation skip with BLA (the CPU's table,
     /// applied in-kernel) when the kernel supports the SA kernel. On by default (the
     /// CPU deep path always applies BLA); honours <see cref="DisableAcceleration"/>.
@@ -287,6 +300,8 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         string label = kernel?.BackendLabel ?? "GPU";
         bool hp = IsHighPrecisionActive;
         if (!hp && LastFrameUsedGpuCompute) return GpuRoute.OnGpu(label);
+        if (hp && LastFrameUsedGpuOrbitPerturbation)
+            return GpuRoute.OnGpu(label, $"{label}: deep-zoom orbit perturbation");   // #607
         if (hp && LastFrameUsedGpuPerturbation)
             return GpuRoute.OnGpu(label, $"{label}: deep-zoom perturbation"
                 + (LastFrameUsedGpuSeriesApproximation ? " + series approximation" : "")
@@ -736,6 +751,12 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         // single path-agnostic post-pass paints the beyond-escape-radius
         // surround, so every path is covered from one place.
         LastFrameUsedGpuCompute = false;   // set true only after a successful GpuKernel.Run (SP path)
+        // #607 — the GPU perturbation flags are also set by the deep orbit path, which
+        // bypasses CalculateHighPrecision's reset, so clear them for every frame.
+        LastFrameUsedGpuPerturbation = false;
+        LastFrameUsedGpuSeriesApproximation = false;
+        LastFrameUsedGpuBla = false;
+        LastFrameUsedGpuOrbitPerturbation = false;
         _gpuSkip = null;
         CalculateInternal(ct);
         ApplyOutOfBoundsSurround(ct);
@@ -1999,6 +2020,10 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
             ComputeReferenceOrbit(new DD(CenterX, CenterXLo), new DD(CenterY, CenterYLo), maxIt);
         }
 
+        // #607 / G4.6 — a GPU orbit palette accumulates on the GPU perturbation
+        // kernel (same loop + sampling convention as below); colour stays here.
+        if (TryRunGpuOrbitPerturbation(colorMap, scale, maxIt, effImgW, effImgH, ct)) return;
+
         // dc geometry mirrors ComputeRowPTScalar (sub-rect aware; collapses to the
         // legacy (x - Width*0.5)*scale formula when sub-rect mode is inactive).
         double halfH = effImgH * 0.5;
@@ -2081,7 +2106,8 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         double drv = 1.0, div = 0.0;  // dz/dc derivative (IQ convention), full orbit
         int m = 0;                    // reference-orbit index (independent of iter)
         double zr = 0.0, zi = 0.0;    // reconstructed full value z = Z[m] + δ
-        double zrSnap = 0, ziSnap = 0;
+        // Periodicity snapshot of z AND δ — see the early-out below.
+        double zrSnap = 0, ziSnap = 0, drSnap = 0, diSnap = 0;
         int snapInterval = PeriodicitySnapshotStart;
         int snapCounter = 0;
 
@@ -2126,17 +2152,24 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
             dr = newDr; di = newDi;
             m++;
 
-            // Periodicity early-out on the reconstructed z (continuous across a
-            // rebase). Skip iter 0: the reconstructed z there is exactly 0, which
-            // would collide with the initial (0,0) snapshot and falsely flag every
-            // pixel as periodic. The direct path avoids this by snapshotting the
-            // POST-update z (= c ≠ 0 at iter 0); here z is the pre-update value.
-            if (iter > 0)
+            // Periodicity early-out on the reconstructed z together with δ. z alone is
+            // not enough: once |δ| is below double resolution of Z[m] (zoom ~1e47),
+            // z = Z[m] + δ rounds to Z[m], so a repeating reference value flagged
+            // every pixel periodic and the whole frame rendered in-set (#607, found by
+            // the GPU parity probe at 3e47). An attracting cycle settles z and δ both
+            // onto an exact double cycle, so it is still caught; an escaping orbit's δ
+            // keeps growing and never repeats. δ = 0 is the reference pixel itself
+            // (dc = 0), whose z is the rounded reference: no evidence either way, so
+            // it is never flagged. Skip iter 0: the reconstructed z there is exactly
+            // 0, which would collide with the initial (0,0) snapshot. The direct path
+            // snapshots the POST-update z (= c ≠ 0 at iter 0); here z is the
+            // pre-update value.
+            if (iter > 0 && (dr != 0.0 || di != 0.0))
             {
-                if (zr == zrSnap && zi == ziSnap) { iter = maxIter; break; }
+                if (zr == zrSnap && zi == ziSnap && dr == drSnap && di == diSnap) { iter = maxIter; break; }
                 if (++snapCounter >= snapInterval)
                 {
-                    zrSnap = zr; ziSnap = zi;
+                    zrSnap = zr; ziSnap = zi; drSnap = dr; diSnap = di;
                     snapCounter = 0;
                     if (snapInterval < PeriodicitySnapshotMax) snapInterval <<= 1;
                 }
@@ -2353,7 +2386,8 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
     /// GPU orbit is off (mask None ⇒ default off via
     /// <see cref="InterpretedOrbitColorMap.GpuEnabled"/>), the theme colours the
     /// interior (GPU in-set uses the isInSet=1 path, not MapInteriorWithOrbit),
-    /// the zoom is past <see cref="MaxGpuZoom"/> (perturbation is a later slice),
+    /// the zoom is past <see cref="MaxGpuZoom"/> (deep frames take the GPU deep orbit
+    /// kernel instead, <see cref="TryRunGpuOrbitPerturbation{TMap}"/>, #607),
     /// or no kernel / palette compile. Exterior, shallow-zoom scope. #1173-J — the
     /// kernel also writes the per-pixel trap minimum into <see cref="TrapBuffer"/>
     /// (the orbit-trap relief height source), as the CPU orbit path does.
@@ -2388,6 +2422,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
                 colorDst: ColorBuffer,
                 trapDst: TrapBuffer);         // #1173-J
             LastFrameUsedGpuCompute = true;   // #1173-M — the orbit kernel ran on the GPU
+            IsHighPrecisionActive = false;    // shallow by the gate above; don't keep a deep frame's flag
             return true;
         }
         catch
@@ -2463,49 +2498,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[MandelbrotCalculator] GPU perturbation dispatch failed; CPU fallback: {ex.Message}");
-            Dbg86($"RUNPERTURB-THREW {ex.GetType().Name}: {ex.Message} refLen={_refOrbitLen} zoom={Zoom:0e+0}");
-            _gpuSkip = GpuRoute.Cpu("GPU error", $"GPU perturbation failed: {ex.Message}");   // #1173-M
-
-            // A lost/removed/hung GPU device (TDR) does not recover on its own and
-            // — because the D3D kernel shares the renderer's device — also kills
-            // presentation. Disable GPU perturbation for the rest of the session
-            // so we (a) stop hammering a dead device with retries and (b) fall
-            // straight through to the CPU deep path from here on. Row-band tiling
-            // is meant to prevent the TDR in the first place; this is the belt-
-            // and-braces backstop if a band still overruns on very slow FP64.
-            string m = ex.Message ?? "";
-            // Marker set by MandelbrotKernelSource.PerturbTooSlowMarker in the
-            // backend kernels (Engine can't reference Rendering.*, so match the
-            // literal — keep the two in sync).
-            bool tooSlow = m.Contains("GPU-PERTURB-TOO-SLOW", StringComparison.Ordinal);
-            bool deviceLost = m.Contains("DEVICE_REMOVED", StringComparison.OrdinalIgnoreCase)
-                           || m.Contains("DeviceRemoved", StringComparison.OrdinalIgnoreCase)
-                           || m.Contains("DEVICE_HUNG", StringComparison.OrdinalIgnoreCase)
-                           || m.Contains("device lost", StringComparison.OrdinalIgnoreCase);
-            if (tooSlow)
-            {
-                // The GPU's FP64 is too slow at this depth to beat the CPU (weak
-                // consumer card). Disable for the session so every later frame
-                // goes straight to the multi-threaded CPU deep path.
-                UseGpuPerturbation = false;
-                s_gpuPerturbDisabled = GpuRoute.Cpu("deep zoom too slow", "GPU deep-zoom perturbation was disabled for this session: the GPU is slower than the CPU here (weak fp64)");   // #1173-M
-                Console.Error.WriteLine(
-                    "[GPU] deep-zoom perturbation DISABLED for this session — the GPU is slower than the " +
-                    "CPU here (weak FP64). Using the CPU deep path. Tune FF_GPU_PERTURB_BUDGET_MS to change " +
-                    "the threshold, or run on a stronger-FP64 GPU.");
-                Dbg86($"TOO-SLOW → UseGpuPerturbation disabled for session ({ex.Message})");
-            }
-            else if (deviceLost)
-            {
-                UseGpuPerturbation = false;
-                s_gpuPerturbDisabled = GpuRoute.Cpu("device lost", "GPU deep-zoom perturbation was disabled for this session: the device was lost during a dispatch (TDR)");   // #1173-M
-                Console.Error.WriteLine(
-                    "[GPU] deep-zoom perturbation DISABLED for this session — the GPU device was " +
-                    "lost/removed during a dispatch (TDR). Falling back to the CPU deep path. " +
-                    "Restart with a higher OS TdrDelay or a stronger-FP64 GPU to re-enable.");
-                Dbg86("DEVICE-LOST → UseGpuPerturbation disabled for session");
-            }
+            OnGpuPerturbationFailed(ex);
             return false;
         }
 
@@ -2526,6 +2519,12 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         LastFrameUsedGpuPerturbation = true;
         LastFrameUsedGpuSeriesApproximation = useSa;
         LastFrameUsedGpuBla = useBla;
+        LogGpuPerturbEngaged();
+        return true;
+    }
+
+    private void LogGpuPerturbEngaged()
+    {
         if (!_loggedGpuPerturbEngaged)
         {
             _loggedGpuPerturbEngaged = true;
@@ -2533,7 +2532,151 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
                 $"[GPU] deep-zoom perturbation engaged — {GpuKernel?.GetType().Name ?? "GPU"} " +
                 $"(first frame at zoom {Zoom:0e+0}).");
         }
+    }
+
+    // Per-pixel orbit means read back from the GPU deep orbit kernel (#607).
+    private float[]? _gpuOrbitMeans;
+
+    /// <summary>
+    /// #607 / G4.6 — run a deep-zoom orbit frame on the GPU: the orbit-accumulating
+    /// perturbation kernel (<see cref="IGpuKernel.RunPerturbOrbit"/>) iterates the
+    /// same rebased δ loop as <see cref="ComputePixelOrbitPerturbation{TMap}"/> over
+    /// the just-built reference orbit and returns the mask'd orbit means; each pixel
+    /// is then coloured here through the same <see cref="FinalizeOrbitPixel{TMap}"/>
+    /// (MapWithOrbit + aux buffers), with an accumulator rebuilt from the means
+    /// (sums = mean, counts = 1, which MapWithOrbit and the aux writeback read back
+    /// unchanged). Scope = the shallow GPU orbit kernel's: a GPU orbit palette,
+    /// exterior colouring. Returns false (CPU path) when not viable or on failure.
+    /// </summary>
+    private bool TryRunGpuOrbitPerturbation<TMap>(
+        TMap colorMap, double scale, int maxIt, int effImgW, int effImgH, CancellationToken ct)
+        where TMap : IOrbitAwareColorMap
+    {
+        if (colorMap is not FracturingFog.Interefaces.IGpuOrbitPalette orbit
+            || orbit.OrbitInputs == FracturingFog.Interefaces.GpuOrbitInputs.None)
+            return false;
+        var kernel = GpuKernel;
+        if (!UseGpuPerturbation || !UseGpuDeepOrbit || kernel == null || !kernel.SupportsPerturbationOrbit)
+            return false;
+        // GPU in-set pixels carry no accumulator; interior-colouring themes stay on the CPU.
+        if (colorMap.WantsInteriorColor) return false;
+        int[]? perRow = PerRowMaxIter;
+        if (perRow != null && perRow.Length >= Height)
+        {
+            _gpuSkip = GpuRoute.Cpu("per-tile iter cap", "per-tile iteration caps render on the CPU only");
+            return false;
+        }
+        if (Zoom > MaxGpuPerturbZoom)
+        {
+            _gpuSkip = GpuRoute.Cpu($"zoom > {MaxGpuPerturbZoom:0e0}", $"past the GPU perturbation zoom limit ({MaxGpuPerturbZoom:0e0})");
+            return false;
+        }
+        if (_refOrbitLen < 1) return false;
+
+        int mask = (int)orbit.OrbitInputs & ((1 << 11) - 1);
+        int stride = System.Numerics.BitOperations.PopCount((uint)mask);
+        int n = Width * Height;
+        if (_gpuOrbitMeans == null || _gpuOrbitMeans.Length < n * stride) _gpuOrbitMeans = new float[n * stride];
+        var means = _gpuOrbitMeans;
+        try
+        {
+            kernel.RunPerturbOrbit(
+                Width, Height, scale, maxIt, EscapeRadius2,
+                SubRectOffsetX - effImgW * 0.5, SubRectOffsetY - effImgH * 0.5,
+                _refZr, _refZi, _refOrbitLen,
+                mask, CenterX, CenterY,
+                IterationBuffer, SmoothBuffer,
+                FinalZrBuffer, FinalZiBuffer, FinalDrBuffer, FinalDiBuffer,
+                means);
+        }
+        catch (Exception ex)
+        {
+            OnGpuPerturbationFailed(ex);
+            return false;
+        }
+
+        _po.CancellationToken = ct;
+        var po = _po;
+        ParallelForRows(0, Height, po, y =>
+        {
+            if (ct.IsCancellationRequested) return;
+            int rb = y * Width;
+            for (int x = 0; x < Width; x++)
+            {
+                int idx = rb + x;
+                colorMap.InitOrbit(out var acc);
+                int o = idx * stride;
+                // Bit order = GpuOrbitInputs (MandelbrotKernelSource.BuildPerturbOrbit).
+                if ((mask & (1 << 0)) != 0) acc.TrapMin = means[o++];
+                if ((mask & (1 << 1)) != 0) acc.TrapMin2 = means[o++];
+                if ((mask & (1 << 2)) != 0) acc.TrapMin3 = means[o++];
+                if ((mask & (1 << 3)) != 0) acc.TrapMin4 = means[o++];
+                if ((mask & (1 << 4)) != 0) acc.TrapMin5 = means[o++];
+                if ((mask & (1 << 5)) != 0) { acc.StripeSum = means[o++]; acc.StripeCount = 1; }
+                if ((mask & (1 << 6)) != 0) { acc.TiaSum = means[o++]; acc.TiaCount = 1; }
+                if ((mask & (1 << 7)) != 0) { acc.CurvatureSum = means[o++]; acc.CurvatureCount = 1; }
+                if ((mask & (1 << 8)) != 0) { acc.LyapunovSum = means[o++]; acc.LyapunovCount = 1; }
+                if ((mask & (1 << 9)) != 0) { acc.GaussianSum = means[o++]; acc.GaussianCount = 1; }
+                if ((mask & (1 << 10)) != 0) { acc.ExpSum = means[o++]; acc.ExpCount = 1; }
+                FinalizeOrbitPixel(idx, IterationBuffer[idx], maxIt,
+                    FinalZrBuffer[idx], FinalZiBuffer[idx], FinalDrBuffer[idx], FinalDiBuffer[idx],
+                    ref acc, colorMap, wantInterior: false);
+            }
+        });
+        LastFrameUsedGpuPerturbation = true;
+        LastFrameUsedGpuOrbitPerturbation = true;
+        LogGpuPerturbEngaged();
         return true;
+    }
+
+    /// <summary>Common GPU perturbation dispatch failure handling: record the route,
+    /// and latch GPU perturbation off for the session on a too-slow abort or a lost
+    /// device.</summary>
+    private void OnGpuPerturbationFailed(Exception ex)
+    {
+        Debug.WriteLine($"[MandelbrotCalculator] GPU perturbation dispatch failed; CPU fallback: {ex.Message}");
+        Dbg86($"RUNPERTURB-THREW {ex.GetType().Name}: {ex.Message} refLen={_refOrbitLen} zoom={Zoom:0e+0}");
+        _gpuSkip = GpuRoute.Cpu("GPU error", $"GPU perturbation failed: {ex.Message}");   // #1173-M
+
+        // A lost/removed/hung GPU device (TDR) does not recover on its own and
+        // — because the D3D kernel shares the renderer's device — also kills
+        // presentation. Disable GPU perturbation for the rest of the session
+        // so we (a) stop hammering a dead device with retries and (b) fall
+        // straight through to the CPU deep path from here on. Row-band tiling
+        // is meant to prevent the TDR in the first place; this is the belt-
+        // and-braces backstop if a band still overruns on very slow FP64.
+        string m = ex.Message ?? "";
+        // Marker set by MandelbrotKernelSource.PerturbTooSlowMarker in the
+        // backend kernels (Engine can't reference Rendering.*, so match the
+        // literal — keep the two in sync).
+        bool tooSlow = m.Contains("GPU-PERTURB-TOO-SLOW", StringComparison.Ordinal);
+        bool deviceLost = m.Contains("DEVICE_REMOVED", StringComparison.OrdinalIgnoreCase)
+                       || m.Contains("DeviceRemoved", StringComparison.OrdinalIgnoreCase)
+                       || m.Contains("DEVICE_HUNG", StringComparison.OrdinalIgnoreCase)
+                       || m.Contains("device lost", StringComparison.OrdinalIgnoreCase);
+        if (tooSlow)
+        {
+            // The GPU's FP64 is too slow at this depth to beat the CPU (weak
+            // consumer card). Disable for the session so every later frame
+            // goes straight to the multi-threaded CPU deep path.
+            UseGpuPerturbation = false;
+            s_gpuPerturbDisabled = GpuRoute.Cpu("deep zoom too slow", "GPU deep-zoom perturbation was disabled for this session: the GPU is slower than the CPU here (weak fp64)");   // #1173-M
+            Console.Error.WriteLine(
+                "[GPU] deep-zoom perturbation DISABLED for this session — the GPU is slower than the " +
+                "CPU here (weak FP64). Using the CPU deep path. Tune FF_GPU_PERTURB_BUDGET_MS to change " +
+                "the threshold, or run on a stronger-FP64 GPU.");
+            Dbg86($"TOO-SLOW → UseGpuPerturbation disabled for session ({ex.Message})");
+        }
+        else if (deviceLost)
+        {
+            UseGpuPerturbation = false;
+            s_gpuPerturbDisabled = GpuRoute.Cpu("device lost", "GPU deep-zoom perturbation was disabled for this session: the device was lost during a dispatch (TDR)");   // #1173-M
+            Console.Error.WriteLine(
+                "[GPU] deep-zoom perturbation DISABLED for this session — the GPU device was " +
+                "lost/removed during a dispatch (TDR). Falling back to the CPU deep path. " +
+                "Restart with a higher OS TdrDelay or a stronger-FP64 GPU to re-enable.");
+            Dbg86("DEVICE-LOST → UseGpuPerturbation disabled for session");
+        }
     }
 
     // One-shot latch so the "engaged" line logs once per process, not per frame.

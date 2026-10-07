@@ -12,6 +12,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using FracturingFog;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
@@ -129,5 +130,59 @@ public sealed class DeepZoomOrbitPerturbationTests
         double diff = MeanAbsChannelDiff(justBelow, justAbove);
         Assert.True(diff < 8.0,
             $"image must be continuous across the direct→perturbation crossover, mean|Δ|={diff:F3}");
+    }
+
+    // #607 — periodicity. Matching the reconstructed z alone flagged every pixel at
+    // the --d3dpturbcalc "3E47 Test" view periodic: |δ| is below double resolution of
+    // Z[m] there, so z = Z[m] + δ rounds to Z[m] and a repeating reference value
+    // looked like a cycle; the frame rendered all in-set. The plain deep path (no
+    // periodicity check) escapes every pixel — the orbit path must agree with it.
+    private static MandelbrotCalculator Deep3e47(IColorMap map) => new(64, 64)
+    {
+        Quality = QualityPreset.Extreme,
+        CenterX = -1.9918151296901943, CenterXLo = -7.8219844803880472E-17,
+        CenterX2 = 1.660139930392911E-34, CenterX3 = 8.217274172159319E-51,
+        CenterY = -5.5240415753972429E-06, CenterYLo = -2.8659813126937928E-22,
+        CenterY2 = 6.6910924119662832E-39, CenterY3 = 6.2394735914401016E-55,
+        Zoom = 3E+47, MaxIterations = 20000, ColorMap = map,
+    };
+
+    [Fact]
+    public void PerturbationOrbit_AtExtremeDepth_EscapesLikeThePlainDeepPath()
+    {
+        var plain = Deep3e47(new HsvPalette());
+        plain.Calculate(default);
+        var orbit = Deep3e47(DataDrivenColorThemes.Create(TrapData())!);
+        orbit.Calculate(default);
+        Assert.True(orbit.IsHighPrecisionActive);
+
+        int n = plain.IterationBuffer.Length;
+        int plainInSet = plain.IterationBuffer.Count(v => v >= 20000);
+        int orbitInSet = orbit.IterationBuffer.Count(v => v >= 20000);
+        int disagree = 0;
+        for (int i = 0; i < n; i++) if (plain.IterationBuffer[i] != orbit.IterationBuffer[i]) disagree++;
+        Assert.True(plainInSet < n / 10, $"the plain frame is {plainInSet}/{n} in-set — the view no longer tests escape");
+        Assert.Equal(plainInSet, orbitInSet);
+        Assert.True(disagree <= n / 200, $"orbit vs plain deep path: {disagree}/{n} pixels disagree");
+    }
+
+    // ... while a genuinely periodic interior still exits early: a minibrot-nucleus
+    // frame (every pixel in-set) at a huge iteration cap finishes in a blink. Without
+    // the early-out this frame iterates 64·64·200 000 steps (~8 s on a desktop CPU).
+    [Fact]
+    public void PerturbationOrbit_PeriodicInterior_StillExitsEarly()
+    {
+        var calc = new MandelbrotCalculator(64, 64)
+        {
+            Quality = QualityPreset.Extreme,
+            CenterX = -1.7548776662466927, CenterY = 0, Zoom = 1e13, MaxIterations = 200_000,
+            ColorMap = DataDrivenColorThemes.Create(TrapData())!,
+        };
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        calc.Calculate(default);
+        sw.Stop();
+        Assert.True(calc.IsHighPrecisionActive);
+        Assert.All(calc.IterationBuffer, v => Assert.Equal(200_000, v));
+        Assert.True(sw.ElapsedMilliseconds < 3000, $"periodic interior took {sw.ElapsedMilliseconds} ms — the early-out did not fire");
     }
 }

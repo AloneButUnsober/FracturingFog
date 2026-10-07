@@ -283,8 +283,8 @@ float3 EvalPalette(
     // the 11 orbit params, and passes the accumulated means at the escape write.
     // Mirrors the CPU InterpretedOrbitColorMap.Sample maths in float. Scope: the
     // shallow-escape kernel, exterior pixels; in-set uses the normal isInSet=1
-    // path (orbit params 0) and deep-zoom perturbation is unchanged (a separate
-    // slice). Mask bit order matches GpuOrbitInputOrder / GpuOrbitInputs.
+    // path (orbit params 0). Deep zoom has its own orbit kernel (BuildPerturbOrbit,
+    // #607). Mask bit order matches GpuOrbitInputOrder / GpuOrbitInputs.
     public const int OrbTrapMin = 1 << 0, OrbTrapCross = 1 << 1, OrbTrapRing = 1 << 2,
                      OrbTrapHyperbola = 1 << 3, OrbTrapHexagon = 1 << 4, OrbStripe = 1 << 5,
                      OrbTia = 1 << 6, OrbCurvature = 1 << 7, OrbLyapunov = 1 << 8,
@@ -336,6 +336,15 @@ RWStructuredBuffer<float> gTrap : register(u4);
     /// the accumulated means passed to EvalPalette on the escape branch.</summary>
     public static string HlslEntryOrbit(int mask)
     {
+        string decl = OrbitDecl(mask), samp = OrbitSample(mask), means = OrbitMeans(mask);
+        return HlslEntryOrbitBody(decl, samp, means);
+    }
+
+    /// <summary>Accumulator declarations for the mask'd orbit inputs (function scope,
+    /// before the iteration loop). Shared by the shallow orbit kernel and the
+    /// deep-zoom perturbation orbit kernel (G4.6).</summary>
+    private static string OrbitDecl(int mask)
+    {
         bool On(int bit) => (mask & bit) != 0;
 
         // Accumulator declarations (only what the mask needs).
@@ -353,6 +362,18 @@ RWStructuredBuffer<float> gTrap : register(u4);
         if (On(OrbCurvature))     decl.Append(
             "    float cvPrevZr = 0.0, cvPrevZi = 0.0, cvPrevSegR = 0.0, cvPrevSegI = 0.0;\n" +
             "    float acc_cvSum = 0.0; int acc_cvCount = 0;\n");
+        return decl.ToString();
+    }
+
+    /// <summary>Per-iteration sample block for the mask'd inputs (mirrors
+    /// InterpretedOrbitColorMap.Sample in float). Reads the float locals zr, zi
+    /// (pre-update z_it, RAW), cIterR, cIterI (c) and the int it (iteration index).
+    /// <paramref name="deepTia"/>: emit the deep kernel's cancellation-free
+    /// triangle-inequality sample (needs the double locals pzrD, pziD = z_{it-1})
+    /// in place of the float |z − c| form.</summary>
+    private static string OrbitSample(int mask, bool deepTia = false)
+    {
+        bool On(int bit) => (mask & bit) != 0;
 
         // Per-iteration sample block (mirrors InterpretedOrbitColorMap.Sample).
         // zr, zi = pre-update z_it (RAW); cIterR, cIterI = c; it = iteration index.
@@ -377,7 +398,27 @@ RWStructuredBuffer<float> gTrap : register(u4);
                 "            }\n");
         if (On(OrbStripe))
             samp.Append("            { float s = 0.5 + 0.5*sin(7.0*atan2(zi, zr)); acc_stripeSum += s; acc_stripeCount += 1; }\n");
-        if (On(OrbTia))
+        if (On(OrbTia) && deepTia)
+            // t = (|z| - m) / (M - m), m = ||w| - |c||, M = |w| + |c|, w = z_{n-1}^2 = z - c.
+            // In float both differences cancel once |w| << |c| (near a minibrot, where
+            // the orbit passes close to 0): M - m is 2 min(|w|, |c|) exactly, and for
+            // |w| <= |c|, |z| - m = (|c + w|^2 - |c|^2) / (|z| + |c|) + |w|
+            //                     = (2 Re(conj(c) w) + |w|^2) / (|z| + |c|) + |w|.
+            // w comes from z_{n-1} in double, so it keeps its relative precision.
+            samp.Append(
+                "            if (it >= 2) {\n" +
+                "                float wr = (float)(pzrD * pzrD - pziD * pziD);\n" +
+                "                float wi = (float)(2.0 * pzrD * pziD);\n" +
+                "                float absW = sqrt(wr*wr + wi*wi);\n" +
+                "                float absC = sqrt(cIterR*cIterR + cIterI*cIterI);\n" +
+                "                float absZ = sqrt(zr*zr + zi*zi);\n" +
+                "                float den = 2.0 * min(absW, absC);\n" +
+                "                float num = absW <= absC\n" +
+                "                    ? (2.0 * (cIterR*wr + cIterI*wi) + absW*absW) / (absZ + absC) + absW\n" +
+                "                    : absZ - (absW - absC);\n" +
+                "                if (den > 1e-12) { acc_tiaSum += num / den; acc_tiaCount += 1; }\n" +
+                "            }\n");
+        else if (On(OrbTia))
             samp.Append(
                 "            if (it >= 2) {\n" +
                 "                float zMcR = zr - cIterR; float zMcI = zi - cIterI;\n" +
@@ -407,6 +448,15 @@ RWStructuredBuffer<float> gTrap : register(u4);
                 "                }\n" +
                 "                cvPrevZr = zr; cvPrevZi = zi;\n" +
                 "            }\n");
+        return samp.ToString();
+    }
+
+    /// <summary>The post-loop means as the 11 float locals in_trapMin … in_expSmooth
+    /// (un-mask'd ones 0.0) — the values EvalPalette receives on the shallow kernel
+    /// and the deep orbit kernel writes to gOrbit.</summary>
+    private static string OrbitMeans(int mask)
+    {
+        bool On(int bit) => (mask & bit) != 0;
 
         // Post-loop means → in_* locals (all 11; unmask'd ones are 0.0).
         var means = new System.Text.StringBuilder();
@@ -421,7 +471,11 @@ RWStructuredBuffer<float> gTrap : register(u4);
         means.Append("        float in_lyapunov = ").Append(On(OrbLyapunov) ? "(acc_lyaCount > 0 ? acc_lyaSum / acc_lyaCount : 0.0)" : "0.0").Append(";\n");
         means.Append("        float in_gaussian = ").Append(On(OrbGaussian) ? "(acc_gauCount > 0 ? acc_gauSum / acc_gauCount : 0.0)" : "0.0").Append(";\n");
         means.Append("        float in_expSmooth = ").Append(On(OrbExp) ? "(acc_expCount > 0 ? acc_expSum / acc_expCount : 0.0)" : "0.0").Append(";\n");
+        return means.ToString();
+    }
 
+    private static string HlslEntryOrbitBody(string decl, string samp, string means)
+    {
         const string orbitArgs = ",\n            in_trapMin, in_trapCross, in_trapRing, in_trapHyperbola, in_trapHexagon,\n" +
                                  "            in_stripeAvg, in_tiaAvg, in_curvature, in_lyapunov, in_gaussian, in_expSmooth";
         const string zeroArgs  = ", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0";
@@ -444,7 +498,7 @@ RWStructuredBuffer<float> gTrap : register(u4);
             "        float in_mag = SafeMag(zr, zi);\n" +
             "        float de_dz = SafeMag(dr, di);\n" +
             "        float in_dist = de_dz > 1e-10 ? in_mag * log(in_mag) / de_dz : 0.0;\n" +
-            means.ToString() +
+            means +
             "        gColor[idx] = cg_pack_bgra(EvalPalette(\n" +
             "            sm, in_dist, (float)it, (float)gMaxIter,\n" +
             "            t_iter, 0.0, 0.0, zr, zi, dr, di, in_arg, in_mag, 0.0, 0.0" + orbitArgs + "), x, y);\n" +
@@ -744,6 +798,167 @@ void CSPerturb(uint3 tid : SV_DispatchThreadID)
     }
 }
 ";
+
+    // ── #607 (G4.6) — deep-zoom perturbation with orbit accumulation ──────────
+    //
+    // The GPU twin of MandelbrotCalculator.ComputePixelOrbitPerturbation (#609):
+    // BuildPerturb's rebased δ loop, plus the F16 orbit accumulators sampled on the
+    // reconstructed full value z = Z[m] + δ (pre-update, iter > 0 — the CPU
+    // convention). The sample maths is the shallow orbit kernel's, in float, on
+    // (float)z: z itself is O(1) at any depth, only δ needs the double. No SA/BLA:
+    // an orbit theme needs every iteration's z (the CPU deep orbit path skips
+    // nothing either).
+    //
+    // Colour stays on the CPU: the kernel writes the mask'd means (bit order,
+    // PerturbOrbitStride floats per pixel) to gOrbit (u3), and the calculator feeds
+    // them to the theme's MapWithOrbit through the same FinalizeOrbitPixel the CPU
+    // path uses. The cbuffer is BuildPerturb's 64 bytes with two pad ints reused
+    // as the float view centre (TIA's c = centre + dc).
+    //
+    // One deliberate departure from the float sample code: the triangle-inequality
+    // sample is rearranged to avoid cancellation (see OrbitSample's deepTia). Its
+    // M - m and |z| - m differences lose everything in float once |z_{n-1}|² << |c|,
+    // which happens near a minibrot, where the orbit passes close to 0 — the plain
+    // float form gave a median TIA error of 2e-3 against the CPU at the S88 1e15 view.
+
+    /// <summary>Compute-shader entry point for the orbit-accumulating perturbation
+    /// variant (#607).</summary>
+    public const string PerturbOrbitEntryPoint = "CSPerturbOrbit";
+
+    /// <summary>All 11 orbit-input bits.</summary>
+    public const int OrbAll = (1 << 11) - 1;
+
+    /// <summary>Floats per pixel in the deep orbit kernel's gOrbit output: one per
+    /// mask'd input, in bit order.</summary>
+    public static int PerturbOrbitStride(int mask) => System.Numerics.BitOperations.PopCount((uint)(mask & OrbAll));
+
+    private static readonly string[] OrbitMeanNames =
+    {
+        "in_trapMin", "in_trapCross", "in_trapRing", "in_trapHyperbola", "in_trapHexagon",
+        "in_stripeAvg", "in_tiaAvg", "in_curvature", "in_lyapunov", "in_gaussian", "in_expSmooth",
+    };
+
+    /// <summary>Compose the orbit-accumulating double perturbation kernel for
+    /// <paramref name="mask"/> (non-zero). Bindings: b0 params, t0/t1 reference
+    /// orbit, u0..u2 iter/smooth/finalZD (as BuildPerturb), u3 gOrbit.</summary>
+    public static string BuildPerturbOrbit(int mask)
+    {
+        mask &= OrbAll;
+        if (mask == 0) throw new System.ArgumentException("the deep orbit kernel needs at least one orbit input", nameof(mask));
+        int stride = PerturbOrbitStride(mask);
+        bool tia = (mask & OrbTia) != 0;
+        var writes = new System.Text.StringBuilder();
+        var zeros = new System.Text.StringBuilder();
+        for (int b = 0, k = 0; b < OrbitMeanNames.Length; b++)
+        {
+            if ((mask & (1 << b)) == 0) continue;
+            writes.Append("        gOrbit[obase + ").Append(k).Append("] = ").Append(OrbitMeanNames[b]).Append(";\n");
+            zeros.Append("        gOrbit[obase + ").Append(k).Append("] = 0.0;\n");
+            k++;
+        }
+
+        return @"
+// BuildPerturb's 64-byte cbuffer; gCRe/gCIm take the place of gPad0/gPad1.
+cbuffer PerturbParams : register(b0)
+{
+    double gScale;
+    double gEscapeR2;
+    double gOffX0;
+    double gOffY0;
+    int    gWidth;
+    int    gHeight;
+    int    gMaxIter;
+    int    gRefLen;
+    int    gRowBase;
+    float  gCRe;        // view centre (float): the TIA sample's c = centre + dc
+    float  gCIm;
+    int    gPad2;
+}
+
+StructuredBuffer<double> gRefZr : register(t0);
+StructuredBuffer<double> gRefZi : register(t1);
+
+RWStructuredBuffer<uint>   gIter    : register(u0);
+RWStructuredBuffer<float>  gSmooth  : register(u1);
+RWStructuredBuffer<float4> gFinalZD : register(u2);   // .xy = zr,zi  .zw = drv,div
+RWStructuredBuffer<float>  gOrbit   : register(u3);   // " + stride + @" mask'd means per pixel
+
+[numthreads(8, 8, 1)]
+void CSPerturbOrbit(uint3 tid : SV_DispatchThreadID)
+{
+    int px = (int)tid.x;
+    int py = gRowBase + (int)tid.y;
+    if (px >= gWidth || py >= gHeight) return;
+    int idx = py * gWidth + px;
+
+    double dcR = (gOffX0 + (double)px) * gScale;
+    double dcI = (gOffY0 + (double)py) * gScale;
+    float cIterR = gCRe + (float)dcR;
+    float cIterI = gCIm + (float)dcI;
+
+    double dr = 0.0, di = 0.0;      // δ_0 = 0
+    double drv = 1.0, div = 0.0;    // dz/dc of the full orbit
+    int m = 0;                      // reference-orbit index
+    double zrD = 0.0, ziD = 0.0;    // full value z = Z[m] + δ (last = escape z)
+" + (tia ? "    double pzrD = 0.0, pziD = 0.0;  // z_{n-1}, for the triangle-inequality term\n" : "")
+  + OrbitDecl(mask) + @"
+    int iter;
+    [loop]
+    for (iter = 0; iter < gMaxIter; iter++)
+    {
+        double Zr = gRefZr[m];
+        double Zi = gRefZi[m];
+        zrD = Zr + dr;
+        ziD = Zi + di;
+
+        double zmag2 = zrD * zrD + ziD * ziD;
+        if (zmag2 >= gEscapeR2) break;
+
+        // Orbit sample on the reconstructed full z, before the δ / reference
+        // advance, iter > 0 (ComputePixelOrbitPerturbation's convention).
+        if (iter > 0)
+        {
+            float zr = (float)zrD;
+            float zi = (float)ziD;
+            int it = iter;
+" + OrbitSample(mask, deepTia: true) + @"        }
+" + (tia ? "        pzrD = zrD; pziD = ziD;\n" : "") + @"
+        double ndrv = 2.0 * (zrD * drv - ziD * div) + 1.0;
+        double ndiv = 2.0 * (zrD * div + ziD * drv);
+        drv = ndrv; div = ndiv;
+
+        double dmag2 = dr * dr + di * di;
+        if (zmag2 < dmag2 || m + 1 >= gRefLen)
+        {
+            dr = zrD; di = ziD;
+            Zr = 0.0; Zi = 0.0;
+            m = 0;
+        }
+
+        double a = 2.0 * Zr + dr;
+        double b = 2.0 * Zi + di;
+        double ndr = a * dr - b * di + dcR;
+        double ndi = a * di + b * dr + dcI;
+        dr = ndr; di = ndi;
+        m++;
+    }
+
+    gFinalZD[idx] = float4((float)zrD, (float)ziD, (float)drv, (float)div);
+    int obase = idx * " + stride + @";
+    if (iter >= gMaxIter)
+    {
+        gIter[idx]   = (uint)gMaxIter;
+        gSmooth[idx] = 0.0;
+" + zeros + @"    }
+    else
+    {
+        gIter[idx] = (uint)iter;
+        float magf = sqrt((float)(zrD * zrD + ziD * ziD));
+        gSmooth[idx] = (float)iter + 1.0 - log2(log2(magf));
+" + OrbitMeans(mask) + writes + @"    }
+}
+";
+    }
 
     // ── #88 SA (Series-Approximation) iteration-skipping perturbation ──────────
     //

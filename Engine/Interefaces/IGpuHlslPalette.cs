@@ -65,10 +65,10 @@ public static class GpuPaletteInputOrder
 // the orbit params, and passes the accumulated means at the colour-write site.
 //
 // Orbit themes advertise no orbit inputs (mask None) → they render on the CPU,
-// exactly as before, so this stays inert until a theme opts in. Scope of the
-// first slice is the shallow-escape kernel + exterior pixels (see
-// MandelbrotKernelSource.BuildColorOrbit); deep-zoom perturbation + interior
-// colouring are separate slices.
+// exactly as before, so this stays inert until a theme opts in. Scope: exterior
+// pixels, on the shallow-escape kernel (MandelbrotKernelSource.BuildColorOrbit)
+// and, past the high-precision threshold, the deep-zoom perturbation orbit kernel
+// (BuildPerturbOrbit, #607). Interior colouring stays on the CPU.
 
 /// <summary>Which per-iteration orbit accumulators a GPU palette needs. Bit
 /// order is the canonical order used by the emitter and the kernel — matches
