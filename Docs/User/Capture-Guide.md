@@ -484,6 +484,24 @@ FracturingFog.exe --batch --mode video --fractal Mandelbulb --x 0 --y 0 --zoom 1
                   --seconds 12 --orbit 120 --out C:\out\bulb.mp4
 ```
 
+### Auto-explore (#1190)
+
+`--explore SPEC` searches from the start view for a detail-rich view and renders
+that instead. The start view is `--region`, `--x --y --zoom`, or, with neither, the
+type's home view. SPEC is comma-separated `key=value`: `seed`, `depth` (levels, each
+`step`× zoom, default 6 × 4), `beam` (views kept per level, default 3), `grid`,
+`jitter`, `start` (extra random first-level views), `probe` (test-render size in
+pixels) and `minscore`. The same seed always finds the same view. The search path
+and the final `--x --y --zoom` are printed, so you can re-render it without
+exploring. `--explore-regions OUT.json` also writes the finalists as regions
+(**Control Center → Explore → Region → Import…**). In video mode the zoom flies
+into the found view.
+
+```
+FracturingFog.exe --batch --fractal BurningShip --explore seed=7,depth=5 ^
+                  --explore-regions C:\out\ship.json --out C:\out\ship.png
+```
+
 ### Lossless 60-second archival zoom
 
 ```

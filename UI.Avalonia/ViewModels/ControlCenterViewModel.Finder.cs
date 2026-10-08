@@ -18,6 +18,8 @@
 //              its embedded Julia set doubles the pattern; clicks stack layers.
 //              The morph path is plain navigation, so the existing Video zoom /
 //              --video-motion zoom into the final view renders it.
+//   S6 (#1190) "Surprise me" / "Descend": heuristic auto-explore for every 2D
+//              family — see ControlCenterViewModel.Explore.cs.
 //   S3 (#1187) "Snap to spiral": arm a one-shot click on the render
 //              (IFractalInputController.PointPickHandler); the click is
 //              snapped to the simplest Misiurewicz point within reach
@@ -151,6 +153,7 @@ public sealed partial class ControlCenterViewModel
         GoToAngleCommand      = ReactiveCommand.CreateFromTask(GoToAngleAsync, idle);
         JuliaMorphCommand     = ReactiveCommand.Create(ArmJuliaMorph, idle);
         UndoMorphStepCommand  = ReactiveCommand.Create(UndoMorphStep, idle);
+        InitExplore();
         CancelFinderCommand   = ReactiveCommand.Create(() =>
         {
             _finderCts?.Cancel();

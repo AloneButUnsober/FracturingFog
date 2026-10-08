@@ -169,7 +169,16 @@ For the Mandelbrot set (z² + c), the **Find** group locates miniature copies of
 - **Backspace** returns to the view you jumped from.
 - **Detect period** is a quick read-only scan. It reports the lowest period *candidate* in view. That is a lower bound: the minibrot that **Zoom to minibrot** actually finds often has a higher period.
 
-Works at any depth up to the Extreme tier's 1e100 limit. A search runs in the background (usually well under a second; a few seconds on very busy views) and can be cancelled. Other fractal types will get a theory-free finder later (#1190).
+Works at any depth up to the Extreme tier's 1e100 limit. A search runs in the background (usually well under a second; a few seconds on very busy views) and can be cancelled.
+
+**Auto-explore** (every 2D type: Mandelbrot, Burning Ship, Julia, Newton, Lyapunov, User Equation, …) needs no theory about the fractal. It renders many small test views, scores each one for detail (how much boundary it shows, how many colour bands, how fractal the edges are, and not mostly flat or inside the set), and keeps descending into the best ones:
+
+- **Surprise me** starts from the type's home view with a fresh random seed, so every click goes somewhere new.
+- **Descend** starts from the current view.
+- **Depth** is the number of levels (each zooms in 4×); **Beam** is how many views are kept per level. More of either searches longer.
+- The best view is shown; the other finalists are listed below as buttons, each with its score. **Backspace** returns.
+- The readout names the seed (`--explore seed=…`). The same seed from the same view always finds the same place, and `--batch --explore seed=…` renders it headlessly (see the Capture Guide, §8).
+- 3D types, the Buddhabrot family, Flame and the non-pannable generators (Plasma, Acid Warp, DLA, Random Tile) are not supported. Types other than Mandelbrot stop at zoom 1e13 (their double-precision limit).
 
 ---
 

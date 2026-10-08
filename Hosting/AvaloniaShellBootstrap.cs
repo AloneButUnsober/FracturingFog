@@ -750,6 +750,18 @@ namespace FracturingFog.Hosting
                 });
             };
 
+            // Auto-explore probe (#1190): snapshot the live family / params /
+            // theme as a poster request (UI thread) and render square probes of
+            // it through the poster calculators (worker thread).
+            s_shell.CreateExploreProbe = size =>
+            {
+                var host = s_renderHost;
+                if (host == null) return null;
+                var template = host.CreatePosterRequest(size, size, rotate: false, path: string.Empty,
+                    FracturingFog.Imaging.ImageFileFormat.Png);
+                return FracturingFog.Explore.ExploreProbe.For(template, size);
+            };
+
             // Palette samplers for MiniDepth (#11 — theme-styled gradient).
             // Uses the host's MandelbrotCalculator.ColorMap so the strip
             // colours stay in lock-step with whatever theme is active.

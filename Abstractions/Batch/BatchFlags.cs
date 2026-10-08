@@ -34,6 +34,12 @@ namespace FracturingFog.Batch
         public const string Out            = "--out";
         public const string Name           = "--name";
 
+        // Auto-explore (#1190): beam-search for an interesting view from the
+        // start view (region / --x --y --zoom / the family's home view), then
+        // render it; --explore-regions also writes the finalists as regions.
+        public const string Explore        = "--explore";
+        public const string ExploreRegions = "--explore-regions";
+
         // Mode selection. --slideshow / --scene name a saved config and select
         // their mode; --regrade-exr / --relight-from (below) do the same.
         public const string Mode           = "--mode";

@@ -2039,6 +2039,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// built-in HSV ramp.</summary>
     public Func<int, uint>? SamplePaletteColor { get; set; }
 
+    /// <summary>Auto-explore probe factory (#1190), set by the host: given a
+    /// probe size, returns a renderer of square views of the CURRENT family,
+    /// parameters and theme (snapshotted at the call, on the UI thread) that
+    /// the explorer calls from a worker thread.</summary>
+    public Func<int, Func<FracturingFog.Abstractions.Explore.ExploreView,
+        System.Threading.CancellationToken, FracturingFog.Abstractions.Explore.ProbeField?>?>? CreateExploreProbe { get; set; }
+
     /// <summary>Host-supplied current swatch colour (packed ARGB). MiniDepth
     /// uses it to pick a high-contrast indicator colour over the gradient.</summary>
     public Func<uint>? GetCurrentSwatchArgb { get; set; }

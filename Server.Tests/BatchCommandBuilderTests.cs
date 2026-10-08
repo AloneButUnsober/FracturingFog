@@ -157,6 +157,41 @@ namespace FracturingFog.Server.Tests
         // same values through the REAL BatchOptions parser. This is possible now
         // that both parser and builder share Batch/BatchFlags + live in
         // Abstractions.
+        // #1190 — an auto-explore result is plain navigation, so the live seed
+        // reproduces it by coordinates. "Descend from this view" is the built
+        // command plus --explore (the Command panel offers it from the catalog):
+        // it must parse back to the same search settings.
+        [Fact]
+        public void Explore_AppendedToTheLiveCommand_RoundTrips()
+        {
+            var snap = new BatchCommandSnapshot { Fractal = FractalType.Tricorn, CenterX = -0.3, CenterY = 0.2, Zoom = 40 };
+            var o = FracturingFog.Abstractions.Explore.AutoExploreOptions.Default with { Seed = 42, Depth = 9, Beam = 5, ZoomStep = 3 };
+            var argv = new System.Collections.Generic.List<string>(Tokenize(BatchCommandBuilder.Build(snap)));
+            for (int i = 0; i < argv.Count; i++)
+                if (argv[i] == "<OUTPUT.png>") argv[i] = "out.png";
+            argv.Add(BatchFlags.Explore);
+            argv.Add(FracturingFog.Abstractions.Explore.AutoExplorer.FormatSpec(o));
+            argv.Add(BatchFlags.ExploreRegions);
+            argv.Add("found.json");
+
+            Assert.True(BatchOptions.TryParse(argv.ToArray(), startIndex: 2, out var opts, out var err), err);
+            Assert.Equal(o, opts.Explore);
+            Assert.Equal("found.json", opts.ExploreRegionsPath);
+            Assert.Equal(-0.3, opts.CenterX!.Value, 12);
+        }
+
+        [Fact]
+        public void Explore_Alone_NeedsNoCoordinates_ButABadSpecFails()
+        {
+            Assert.True(BatchOptions.TryParse(new[] { "--explore", "seed=3", "--out", "o.png" }, 0, out var opts, out var err), err);
+            Assert.Equal(3, opts.Explore!.Seed);
+            Assert.Null(opts.CenterX);
+            Assert.False(BatchOptions.TryParse(new[] { "--explore", "depth=0", "--out", "o.png" }, 0, out _, out err));
+            Assert.Contains("--explore", err);
+            // Without --explore the coordinates are still required.
+            Assert.False(BatchOptions.TryParse(new[] { "--out", "o.png" }, 0, out _, out _));
+        }
+
         [Fact]
         public void Build_RoundTripsThroughBatchOptions()
         {
