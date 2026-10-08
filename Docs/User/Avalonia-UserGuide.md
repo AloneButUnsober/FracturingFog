@@ -661,7 +661,11 @@ whichever you use, the other reflects the change.
   `[CPU: CPU faster]`). Set the environment variable `FF_GPU_BUDDHA=1` to sample
   on a card with far more compute than your CPU. Metropolis sampling (on by
   itself above zoom 1.2 with zoom compensation) and Dual Buddhabrot always run
-  on the CPU.
+  on the CPU. A frame's cost follows the sample count and the iteration limits,
+  not the window size. A larger window spreads the same samples over more
+  pixels, so it looks dimmer and grainier: raise **Samples** to get the same
+  density back. Metropolis traces far longer orbits per sample, so a zoomed-in
+  view takes a hundred times longer or more than the same view zoomed out.
 
 > [!TIP]
 > If you are comparing GPU vs CPU output, open the performance HUD with `H` first

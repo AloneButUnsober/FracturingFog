@@ -425,32 +425,33 @@ public sealed class DualBuddhabrotCalculator : BuddhaFamilyCalculator
         bool hd = p.BuddhaQualityMode == BuddhaQualityMode.HighDefinition;
         uint floor = hd ? (uint)Math.Max(2, p.BuddhaSamples / 2_000_000) : 0u;
 
+        var (mR, mG, mB, _) = MaxHits();
         var inv = new double[3];
+        uint[] maxes = { mR, mG, mB };
         for (int c = 0; c < 3; c++)
-        {
-            uint max = 0;
-            foreach (uint h in ch[c]) if (h > max) max = h;
-            inv[c] = max > floor ? 1.0 / Math.Log(max + 1.0) : 0.0;
-        }
+            inv[c] = maxes[c] > floor ? 1.0 / Math.Log(maxes[c] + 1.0) : 0.0;
 
-        int n = ColorBuffer.Length;
-        for (int i = 0; i < n; i++)
+        var colors = ColorBuffer;
+        ForPixelBlocks(colors.Length, (from, to) =>   // #1222 — per pixel, in parallel
         {
-            double r = 0, g = 0, b = 0;
-            for (int c = 0; c < 3; c++)
+            for (int i = from; i < to; i++)
             {
-                uint h = ch[c][i];
-                if (h <= floor || inv[c] == 0) continue;
-                double w = Math.Log(h + 1.0) * inv[c] * gain[c];
-                r += w * ((col[c] >> 16) & 0xFF);
-                g += w * ((col[c] >> 8) & 0xFF);
-                b += w * (col[c] & 0xFF);
+                double r = 0, g = 0, b = 0;
+                for (int c = 0; c < 3; c++)
+                {
+                    uint h = ch[c][i];
+                    if (h <= floor || inv[c] == 0) continue;
+                    double w = Math.Log(h + 1.0) * inv[c] * gain[c];
+                    r += w * ((col[c] >> 16) & 0xFF);
+                    g += w * ((col[c] >> 8) & 0xFF);
+                    b += w * (col[c] & 0xFF);
+                }
+                colors[i] = 0xFF000000u
+                    | ((uint)Math.Clamp((int)(r + 0.5), 0, 255) << 16)
+                    | ((uint)Math.Clamp((int)(g + 0.5), 0, 255) << 8)
+                    | (uint)Math.Clamp((int)(b + 0.5), 0, 255);
             }
-            ColorBuffer[i] = 0xFF000000u
-                | ((uint)Math.Clamp((int)(r + 0.5), 0, 255) << 16)
-                | ((uint)Math.Clamp((int)(g + 0.5), 0, 255) << 8)
-                | (uint)Math.Clamp((int)(b + 0.5), 0, 255);
-        }
+        });
     }
 
     // Gain-weighted density through the active theme (the classic ColorMap
@@ -472,17 +473,21 @@ public sealed class DualBuddhabrotCalculator : BuddhaFamilyCalculator
         uint bg = cm.InSetColor;
         if (max <= 0) { Array.Fill(ColorBuffer, bg); return; }
         double inv = 1.0 / Math.Log(max + 1.0);
-        for (int i = 0; i < n; i++)
+        var colors = ColorBuffer;
+        ForPixelBlocks(n, (from, to) =>   // #1222 — per pixel, in parallel
         {
-            double v = gz * hz[i] + gcb * hcb[i] + gce * hce[i];
-            if (v <= 0) { ColorBuffer[i] = bg; continue; }
-            double norm = Math.Log(v + 1.0) * inv;
-            uint argb = unchecked((uint)cm.Map((float)((1.0 - norm) * iters), 0f, iters));
-            double a = norm * norm, oneMa = 1.0 - a;
-            uint R = (uint)(((argb >> 16) & 0xFF) * a + ((bg >> 16) & 0xFF) * oneMa);
-            uint G = (uint)(((argb >> 8) & 0xFF) * a + ((bg >> 8) & 0xFF) * oneMa);
-            uint B = (uint)((argb & 0xFF) * a + (bg & 0xFF) * oneMa);
-            ColorBuffer[i] = 0xFF000000u | (R << 16) | (G << 8) | B;
-        }
+            for (int i = from; i < to; i++)
+            {
+                double v = gz * hz[i] + gcb * hcb[i] + gce * hce[i];
+                if (v <= 0) { colors[i] = bg; continue; }
+                double norm = Math.Log(v + 1.0) * inv;
+                uint argb = unchecked((uint)cm.Map((float)((1.0 - norm) * iters), 0f, iters));
+                double a = norm * norm, oneMa = 1.0 - a;
+                uint R = (uint)(((argb >> 16) & 0xFF) * a + ((bg >> 16) & 0xFF) * oneMa);
+                uint G = (uint)(((argb >> 8) & 0xFF) * a + ((bg >> 8) & 0xFF) * oneMa);
+                uint B = (uint)((argb & 0xFF) * a + (bg & 0xFF) * oneMa);
+                colors[i] = 0xFF000000u | (R << 16) | (G << 8) | B;
+            }
+        });
     }
 }

@@ -39,30 +39,37 @@ public static class BuddhaUniformSampler
         => Run(b, hitsR, hitsG, hitsB, 0, b.Samples);
 
     /// <summary>Samples [<paramref name="firstSample"/>, firstSample + <paramref name="count"/>)
-    /// of the batch, ADDING into the arrays (callers split a batch across threads,
-    /// each into its own arrays, and sum them). A GPU backend differs from this only
-    /// where its division is approximate (a point one pixel over, a sample one band
-    /// over).</summary>
-    public static void Run(in GpuBuddhaBatch b, uint[] hitsR, uint[] hitsG, uint[] hitsB, int firstSample, int count)
+    /// of the batch, ADDING into the arrays. Callers split a batch across threads;
+    /// with <paramref name="atomic"/> every thread adds into the same arrays
+    /// (Interlocked, as the GPU's InterlockedAdd — integer sums, so the result does
+    /// not depend on the split). A GPU backend differs from this only where its
+    /// division is approximate (a point one pixel over, a sample one band over).</summary>
+    public static void Run(in GpuBuddhaBatch b, uint[] hitsR, uint[] hitsG, uint[] hitsB, int firstSample, int count,
+                           bool atomic = false)
     {
         int w = b.Width, h = b.Height, maxOrbit = b.MaxOrbit;
         float scale = (float)b.Scale, midX = (float)b.MidX, midY = (float)b.MidY;
         bool inSet = b.InSet, hd = b.HighDefinition;
         var bands = new[] { hitsR, hitsG, hitsB };
 
+        void Add(uint[] t, int i, uint wt)
+        {
+            if (atomic) System.Threading.Interlocked.Add(ref t[i], wt);
+            else t[i] += wt;
+        }
         void Bilinear(uint[] t, float fx, float fy, uint wt, ref uint rng)
         {
             float x0 = System.MathF.Floor(fx), y0 = System.MathF.Floor(fy);
             int xi = Rnd(ref rng) < fx - x0 ? (int)x0 + 1 : (int)x0;
             int yi = Rnd(ref rng) < fy - y0 ? (int)y0 + 1 : (int)y0;
-            if ((uint)xi < (uint)w && (uint)yi < (uint)h) t[yi * w + xi] += wt;
+            if ((uint)xi < (uint)w && (uint)yi < (uint)h) Add(t, yi * w + xi, wt);
         }
         void Point(uint[] t, float zr, float zi, uint wt, ref uint rng)
         {
             if (!hd)
             {
                 int ix = (int)((zr - midX) / scale + w * 0.5f), iy = (int)((zi - midY) / scale + h * 0.5f);
-                if ((uint)ix < (uint)w && (uint)iy < (uint)h) t[iy * w + ix] += wt;
+                if ((uint)ix < (uint)w && (uint)iy < (uint)h) Add(t, iy * w + ix, wt);
             }
             else
             {
