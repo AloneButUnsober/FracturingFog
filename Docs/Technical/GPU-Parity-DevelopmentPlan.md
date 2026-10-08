@@ -140,7 +140,7 @@ include a performance check on real hardware, not just parity.
 | #1166 | Reference-orbit build bench + resident VRAM for the D3D11/Vulkan kernels. **Done:** `ReferenceOrbitBench` (GT 710: GPU QD orbit ~125x slower than the CPU, 15.7 µs vs 126 ns per iteration; the single-launch kernel tripped the watchdog at 1M iterations, now run in ~100 ms launches) and a `Resident` column on `MandelbrotGpuKernelBench` (D3D11 ~28 B/px VRAM + ~28 B/px shared; Vulkan 32 B/px, all host memory). See Benchmark-Subsystem.md | Before G4.5/G4.6 decisions |
 | #432 | Benchmark improvements (GPU compute bullet) | Ongoing |
 | #44 | Vulkan on macOS via MoltenVK (stretch) | After G4.1 |
-| #623 (B5) | GPU parity for the out-of-bounds backdrop compositor | Rides the compositor work |
+| #623 (B5) | GPU parity for the out-of-bounds backdrop compositor. **Done for what ships (2026-10-08):** the #615 Phase 1 flat surround colour is a CPU pass over the finished frame (`ApplyOutOfBoundsSurround`, after the GPU dispatch and readback), so GPU frames already honour it. `S623GpuSurroundTests` (Vulkan) pins it: GPU and CPU frames paint the same surround pixels, for Mandelbrot and Julia, and nothing else changes. Phase 2 (the backdrop compositor, B1–B4) stays deferred under #623's own usage gate; B5 has nothing to port until it exists | Rides the compositor work |
 
 ---
 
