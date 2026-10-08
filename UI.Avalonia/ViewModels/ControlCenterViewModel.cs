@@ -360,8 +360,10 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
             Fractal     = main.SelectedFractalType,
             CenterX     = vs.CenterX,
             CenterY     = vs.CenterY,
-            CenterXLow  = vs.CenterXLo + vs.CenterX2 + vs.CenterX3 + vs.CenterX4 + vs.CenterX5 + vs.CenterX6 + vs.CenterX7,
-            CenterYLow  = vs.CenterYLo + vs.CenterY2 + vs.CenterY3 + vs.CenterY4 + vs.CenterY5 + vs.CenterY6 + vs.CenterY7,
+            // #1233 — the lower octuple-double limbs: --x/--y go out in Hi|Lo|… form
+            // when any is non-zero, so a deep view reproduces headless.
+            CenterXLimbs = new[] { vs.CenterXLo, vs.CenterX2, vs.CenterX3, vs.CenterX4, vs.CenterX5, vs.CenterX6, vs.CenterX7 },
+            CenterYLimbs = new[] { vs.CenterYLo, vs.CenterY2, vs.CenterY3, vs.CenterY4, vs.CenterY5, vs.CenterY6, vs.CenterY7 },
             Zoom        = vs.Zoom,
             Iterations  = iter,
             ThemeName   = main.SelectedTheme ?? FracturingFog.Batch.BatchDefaults.ThemeName,

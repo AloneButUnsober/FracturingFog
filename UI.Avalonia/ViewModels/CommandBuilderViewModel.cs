@@ -573,6 +573,9 @@ public sealed class CommandFlagRowViewModel : ViewModelBase
                 case BatchFlagKind.Int:
                     if (!int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out int iv)) return "expects a whole number";
                     return OutOfRange(iv) ? "outside " + BatchFlagCatalog.RangeText(Spec) : "";
+                case BatchFlagKind.Double when Spec.Name is BatchFlags.X or BatchFlags.Y:
+                    // #1233 — a centre also takes octuple-double limbs Hi|Lo|….
+                    return BatchOptions.TryParseCoordinate(v, out _) ? "" : "expects a number or limbs Hi|Lo|…";
                 case BatchFlagKind.Double:
                     if (!double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out double dv)) return "expects a number";
                     return OutOfRange(dv) ? "outside " + BatchFlagCatalog.RangeText(Spec) : "";

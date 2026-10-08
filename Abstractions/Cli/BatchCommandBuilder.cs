@@ -47,12 +47,12 @@ namespace FracturingFog.Cli
         public double CenterY { get; init; } = BatchDefaults.CenterY;
         public double Zoom { get; init; } = BatchDefaults.Zoom;
 
-        /// <summary>The part of the live centre below <see cref="CenterX"/> /
-        /// <see cref="CenterY"/> (the lower octuple-double limbs, summed).
-        /// --x / --y carry a double only, so this much is dropped; DetectGaps
-        /// reports it once it shifts the render by a visible fraction of a pixel.</summary>
-        public double CenterXLow { get; init; }
-        public double CenterYLow { get; init; }
+        /// <summary>#1233 — the live centre's lower octuple-double limbs (limbs
+        /// 1..7, below <see cref="CenterX"/> / <see cref="CenterY"/>). When any is
+        /// non-zero --x / --y are emitted in limb form <c>Hi|Lo|…</c>, so a deep
+        /// view reproduces exactly; all-zero keeps the plain decimal.</summary>
+        public IReadOnlyList<double> CenterXLimbs { get; init; } = Array.Empty<double>();
+        public IReadOnlyList<double> CenterYLimbs { get; init; } = Array.Empty<double>();
 
         /// <summary>Effective iteration count in use for the current render.
         /// Emitted as <c>--iter</c> whenever &gt; 0 so the poster does not drift
@@ -302,8 +302,8 @@ namespace FracturingFog.Cli
             parts.Add(snap.Fractal.ToString());
 
             // Live coordinates + iterations — always emitted for exact fidelity.
-            parts.Add(BatchFlags.X);    parts.Add(Num(snap.CenterX));
-            parts.Add(BatchFlags.Y);    parts.Add(Num(snap.CenterY));
+            parts.Add(BatchFlags.X);    parts.Add(Coordinate(snap.CenterX, snap.CenterXLimbs));
+            parts.Add(BatchFlags.Y);    parts.Add(Coordinate(snap.CenterY, snap.CenterYLimbs));
             parts.Add(BatchFlags.Zoom); parts.Add(Num(snap.Zoom));
             if (snap.Iterations > 0)
             {
@@ -572,9 +572,6 @@ namespace FracturingFog.Cli
             "DomainWarpEnabled", "DomainWarpStrength", "DomainWarpFrequency",
         };
 
-        /// <summary>Dropped centre precision (in output pixels) that counts as a gap.</summary>
-        public const double DroppedCenterPixelTolerance = 0.1;
-
         /// <summary>List the live fx the emitted command cannot reproduce.
         /// Empty when the 2D config is fully expressible.</summary>
         public static IReadOnlyList<string> DetectGaps(BatchCommandSnapshot snap)
@@ -591,15 +588,6 @@ namespace FracturingFog.Cli
                     gaps.Add("Lighting & FX settings with no batch flag (" + string.Join(", ", missing.Take(6))
                              + (missing.Count > 6 ? $", +{missing.Count - 6} more" : "")
                              + ") — save them as a Lighting & FX preset and re-seed to use --lighting-preset");
-            }
-            // Deep zoom: the live centre needs more than the double --x/--y carry.
-            if (snap.Zoom > 0)
-            {
-                double pixel = FracturingFog.ViewState.ViewCamera.PlaneExtent
-                             / (Math.Max(1, Math.Max(snap.Width, snap.Height)) * snap.Zoom);
-                double dropped = Math.Max(Math.Abs(snap.CenterXLow), Math.Abs(snap.CenterYLow));
-                if (dropped > DroppedCenterPixelTolerance * pixel)
-                    gaps.Add($"Deep-zoom centre needs more precision than --x/--y carry (double only): the batch render lands ~{dropped / pixel:G2} px off-centre");
             }
             if (!string.IsNullOrWhiteSpace(snap.LiveAnimationName))
                 gaps.Add($"Live animation '{snap.LiveAnimationName}' (a still shows one moment of it; for a video choose it under --animation)");
@@ -853,6 +841,19 @@ namespace FracturingFog.Cli
         /// <summary>Round-trippable invariant formatting for a double so the
         /// parsed value reproduces the live one bit-for-bit.</summary>
         private static string Num(double v) => v.ToString("R", CultureInfo.InvariantCulture);
+
+        /// <summary>#1233 — a centre coordinate: the plain decimal when the lower
+        /// limbs are all zero (byte-identical to before), else <c>Hi|Lo|…</c> up to
+        /// the last non-zero limb, every limb round-trippable.</summary>
+        internal static string Coordinate(double hi, IReadOnlyList<double> lower)
+        {
+            int last = -1;
+            for (int k = 0; k < lower.Count && k < 7; k++) if (lower[k] != 0) last = k;
+            if (last < 0) return Num(hi);
+            var sb = new System.Text.StringBuilder(Num(hi));
+            for (int k = 0; k <= last; k++) sb.Append('|').Append(Num(lower[k]));
+            return sb.ToString();
+        }
 
         /// <summary>Short flag spelling for a view transform, matching the aliases
         /// <see cref="BatchOptions.TryParseViewTransform"/> accepts.</summary>
