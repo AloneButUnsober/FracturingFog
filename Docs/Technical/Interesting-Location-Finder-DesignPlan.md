@@ -10,7 +10,7 @@ S6 [#1190](https://github.com/AloneButUnsober/FracturingFog/issues/1190) ·
 S7 [#1191](https://github.com/AloneButUnsober/FracturingFog/issues/1191).
 The issues are the canonical task list; this doc is the maths + architecture context. Link both ways.
 
-**Status: S1 shipped (#1185, PR #1232); S2 shipped (#1186, PR #1234); S3 shipped (#1187, PR #1236); S4 implemented (#1188) — 2026-10-08.** See §9.1 for what implementation changed versus this design.
+**Status: S1–S4 shipped (#1185/#1186/#1187/#1188, PRs #1232/#1234/#1236/#1238); S5 implemented (#1189) — 2026-10-08.** See §9.1 for what implementation changed versus this design.
 
 ---
 
@@ -382,6 +382,26 @@ Measured against all 158 built-in Mandelbrot regions (`Resources/regions.json`):
   bits and preperiodic ones to 32+, with **zero wrong landings**. Longer
   periodic angles fail cleanly at double precision. OD tracing, location →
   angle, and address → angle are #1237.
+
+### 9.4 Implementation notes (S5)
+
+- **`JuliaMorph.Plan`**: target = a minibrot near the click, found by S2's
+  verified `FindMinibrot` in a 48 px disk. New centre = its nucleus; new zoom
+  = z₀^(1−α)·(1/|size|)^α with α = ½ (tunable). A target that is not deeper
+  than the view is refused, which is typically the click landing on a big bulb
+  of the current minibrot. Tier promotion and the 100 × period iteration hint
+  are shared with S2 through `MinibrotJump.At`.
+- **Checked live** from *Lakes and Rivers*: two clicks gave periods 669 → 1139
+  (zoom 1.3e8 → 9.5e12). Each layer shows the point symmetry about the new
+  centre that marks an embedded Julia set. Test: a deterministic 3-step chain
+  stays nested, zoom strictly increases, and S1 confirms every period.
+- **No new batch flag.** A morph path is navigation ending at one view, and a
+  plain zoom video into that view passes through every layer. So the morph
+  video is the existing Video zoom / `--video-motion zoom --x --y --zoom`.
+  Deep centres still need #1233 for exact headless reproduction (already
+  flagged by `DetectGaps`).
+- **Undo** = nav Back plus restoring that layer's iteration hint (Back clears
+  the hint; without it the restored layer smears).
 
 ## 10. Sources
 

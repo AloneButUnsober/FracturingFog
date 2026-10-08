@@ -47,11 +47,21 @@ public static class MinibrotJump
         double framing = 1.0)
     {
         var (center, zoom) = NucleusFinder.Frame(found, framing);
+        return At(center, zoom, found.Period, current, iterLocked, lockedIterations);
+    }
+
+    /// <summary>Plan a view change to (<paramref name="center"/>,
+    /// <paramref name="zoom"/>) whose subject is a period-<paramref name="period"/>
+    /// minibrot: tier promotion + iteration hint. Null past the deepest tier.
+    /// Shared by the minibrot jump, angle landings and Julia-morph steps.</summary>
+    public static MinibrotJumpPlan? At(
+        DeepComplex center, double zoom, int period, QualityPreset current, bool iterLocked, int lockedIterations)
+    {
         if (!(zoom <= QualityPreset.Extreme.ZoomMax)) return null;
 
         var quality = QualityFor(current, zoom);
 
-        int wanted = NucleusFinder.SuggestedIterations(found.Period);
+        int wanted = NucleusFinder.SuggestedIterations(period);
         if (iterLocked)
             return new MinibrotJumpPlan(center, zoom, quality, 0, wanted, lockedIterations < wanted);
 

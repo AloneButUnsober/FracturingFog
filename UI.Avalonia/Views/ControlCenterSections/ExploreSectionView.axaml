@@ -82,8 +82,8 @@
 
         <!-- Interesting-location finder (epic #1184). S1 #1185: period
              detection; S2 #1186: zoom to a minibrot in view; S3 #1187: snap a
-             click to a Misiurewicz point; S4 #1188: go to an external angle
-             (z² + c). -->
+             click to a Misiurewicz point; S4 #1188: go to an external angle;
+             S5 #1189: Julia morph (z² + c). -->
         <Border Classes="group">
             <StackPanel Spacing="6" MaxWidth="425" HorizontalAlignment="Left">
                 <TextBlock Classes="section" Text="Find" />
@@ -94,6 +94,9 @@
                     <Button Classes="action go" Content="Snap to spiral"
                             Command="{Binding SnapToSpiralCommand}"
                             ToolTip.Tip="Then click a spiral centre or branch point in the render: the view recentres exactly on it (a Misiurewicz point, Mandelbrot z² + c). Backspace returns." />
+                    <Button Classes="action go" Content="Julia morph"
+                            Command="{Binding JuliaMorphCommand}"
+                            ToolTip.Tip="Then click points in the pattern: each click steps halfway (in zoom) toward a minibrot near that point, where its embedded Julia set doubles the pattern. Keep clicking to stack layers; Cancel to stop." />
                     <Button Classes="action neutral" Content="Detect period"
                             Command="{Binding DetectPeriodCommand}"
                             ToolTip.Tip="Report the lowest period candidate in the current view (a lower bound from a fast ball scan)." />
@@ -102,6 +105,14 @@
                             IsVisible="{Binding CanCancelFinder}" />
                 </StackPanel>
                 <TextBlock Text="{Binding FinderStatus}" Foreground="#9A9A9A" FontSize="11" TextWrapping="Wrap" />
+                <!-- S5 #1189: Julia-morph path. -->
+                <StackPanel Spacing="4" IsVisible="{Binding HasMorphSteps}">
+                    <TextBlock Classes="label" Text="Morph path" HorizontalAlignment="Left" />
+                    <TextBlock Text="{Binding MorphPathText}" Foreground="#9A9A9A" FontSize="11" TextWrapping="Wrap" />
+                    <Button Classes="action neutral" Content="Undo step" HorizontalAlignment="Left"
+                            Command="{Binding UndoMorphStepCommand}"
+                            ToolTip.Tip="Go back one morph layer." />
+                </StackPanel>
                 <!-- S4 #1188: external angle → location (binary .pre(per) or p/q). -->
                 <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6" Margin="0,6,0,0">
                     <TextBlock Grid.Column="0" Classes="label" Text="Angle:" VerticalAlignment="Center" />

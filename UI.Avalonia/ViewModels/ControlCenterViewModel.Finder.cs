@@ -13,6 +13,11 @@
 //              show its internal address, trace its parameter ray inward and
 //              land on the minibrot / Misiurewicz point it ends at
 //              (ExternalAngle, ExternalRay.Land).
+//   S5 (#1189) "Julia morph": each click finds a minibrot near the target and
+//              steps to the log-midpoint depth toward it (JuliaMorph), where
+//              its embedded Julia set doubles the pattern; clicks stack layers.
+//              The morph path is plain navigation, so the existing Video zoom /
+//              --video-motion zoom into the final view renders it.
 //   S3 (#1187) "Snap to spiral": arm a one-shot click on the render
 //              (IFractalInputController.PointPickHandler); the click is
 //              snapped to the simplest Misiurewicz point within reach
@@ -49,6 +54,34 @@ public sealed partial class ControlCenterViewModel
     public ReactiveCommand<Unit, Unit> ZoomToMinibrotCommand { get; private set; } = null!;
     public ReactiveCommand<Unit, Unit> SnapToSpiralCommand { get; private set; } = null!;
     public ReactiveCommand<Unit, Unit> GoToAngleCommand { get; private set; } = null!;
+    public ReactiveCommand<Unit, Unit> JuliaMorphCommand { get; private set; } = null!;
+    public ReactiveCommand<Unit, Unit> UndoMorphStepCommand { get; private set; } = null!;
+
+    /// <summary>Morph target reach around the click, in screen pixels.</summary>
+    public const int MorphPickRadiusPx = 48;
+
+    // One entry per morph layer: its path line and the first-render iteration
+    // hint it was applied with (restored when Undo returns to that layer —
+    // Back itself clears the hint).
+    private readonly System.Collections.Generic.List<(string Line, int Iterations)> _morphSteps = new();
+    private bool _isMorphing;
+    private string _morphPathText = "";
+
+    /// <summary>True while Julia morph keeps re-arming the click after each step.</summary>
+    public bool IsMorphing
+    {
+        get => _isMorphing;
+        private set => this.RaiseAndSetIfChanged(ref _isMorphing, value);
+    }
+
+    /// <summary>The morph path so far, one line per step.</summary>
+    public string MorphPathText
+    {
+        get => _morphPathText;
+        private set => this.RaiseAndSetIfChanged(ref _morphPathText, value);
+    }
+
+    public bool HasMorphSteps => _morphSteps.Count > 0;
 
     private string _angleText = "";
     private string _angleInfo = "e.g. .(001)  .0(01)  .01(10)  1/7";
@@ -116,10 +149,17 @@ public sealed partial class ControlCenterViewModel
         ZoomToMinibrotCommand = ReactiveCommand.CreateFromTask(ZoomToMinibrotAsync, idle);
         SnapToSpiralCommand   = ReactiveCommand.Create(ArmSnapToSpiral, idle);
         GoToAngleCommand      = ReactiveCommand.CreateFromTask(GoToAngleAsync, idle);
+        JuliaMorphCommand     = ReactiveCommand.Create(ArmJuliaMorph, idle);
+        UndoMorphStepCommand  = ReactiveCommand.Create(UndoMorphStep, idle);
         CancelFinderCommand   = ReactiveCommand.Create(() =>
         {
             _finderCts?.Cancel();
-            if (IsPickArmed) { DisarmPick(); FinderStatus = "Cancelled."; }
+            if (IsPickArmed || IsMorphing)
+            {
+                IsMorphing = false;
+                DisarmPick();
+                FinderStatus = HasMorphSteps ? "Julia morph stopped. Video ▸ zoom into this view renders the morph path." : "Cancelled.";
+            }
         });
     }
 
@@ -220,6 +260,16 @@ public sealed partial class ControlCenterViewModel
             return;
         }
 
+        string note = ApplyPlan(p);
+        FinderStatus = $"{prefix}Period {found.Period} minibrot, size {found.Size.Magnitude:G3} → zoom {Fmt(p.Zoom)} ({p.Quality.Name}).{note}";
+    }
+
+    // Apply a planned view change (nav history, centre, zoom, tier promotion,
+    // first-render iteration hint) and return an iterations note, if any.
+    private string ApplyPlan(in MinibrotJumpPlan p)
+    {
+        var main = Shell.Main;
+        var vs = main.ViewState;
         Shell.RecordNavChange();
         vs.SetCenter(p.Center);
         vs.Zoom = p.Zoom;
@@ -232,10 +282,9 @@ public sealed partial class ControlCenterViewModel
         if (!vs.IterLocked) vs.PreferredIterations = p.PreferredIterations;
         main.RenderHost.Trigger();
 
-        string note = !p.IterationsShort ? ""
+        return !p.IterationsShort ? ""
             : vs.IterLocked ? $" Iterations are locked at {vs.LockedIterations:N0}; ~{p.WantedIterations:N0} resolve it."
             : $" ~{p.WantedIterations:N0} iterations resolve it; using {p.PreferredIterations:N0}.";
-        FinderStatus = $"{prefix}Period {found.Period} minibrot, size {found.Size.Magnitude:G3} → zoom {Fmt(p.Zoom)} ({p.Quality.Name}).{note}";
     }
 
     private void ArmSnapToSpiral()
@@ -370,6 +419,101 @@ public sealed partial class ControlCenterViewModel
         double turn = m.Multiplier.Phase * 180.0 / System.Math.PI;
         FinderStatus = $"{prefix}Misiurewicz point M({m.Preperiod},{m.Period}), zoom {Fmt(zoom)}: the pattern repeats every ×{Fmt(m.Multiplier.Magnitude)} zoom, turning {turn:0.#}°.";
     }
+
+    // ── S5: Julia morph ──────────────────────────────────────────────────
+
+    private void ArmJuliaMorph()
+    {
+        var vs = Shell.Main.ViewState;
+        if (!FinderSupports(vs.FractalType))
+        {
+            FinderStatus = $"Julia morph supports z² + c (Mandelbrot) only — not {vs.FractalType}.";
+            return;
+        }
+        IsMorphing = true;
+        Shell.Main.Input.PointPickHandler = OnMorphPick;
+        IsPickArmed = true;
+        FinderStatus = HasMorphSteps
+            ? "Julia morph: click the next target to add a layer (Cancel to stop)."
+            : "Julia morph: click a point in the pattern to double it around that point (Cancel to stop).";
+    }
+
+    private void RearmMorph()
+    {
+        if (!IsMorphing) return;
+        Shell.Main.Input.PointPickHandler = OnMorphPick;
+        IsPickArmed = true;
+    }
+
+    private bool OnMorphPick(FracturingFog.Input.PointerInput e)
+    {
+        IsPickArmed = false;   // one-shot hook already cleared by the controller
+        var vs = Shell.Main.ViewState;
+        if (!FinderSupports(vs.FractalType))
+        {
+            IsMorphing = false;
+            FinderStatus = $"Julia morph supports z² + c (Mandelbrot) only — not {vs.FractalType}.";
+            return false;
+        }
+        var camera = new FracturingFog.ViewState.ViewCamera(vs);
+        var target = camera.WorldFromScreen(e.X, e.Y, e.ClientWidth, e.ClientHeight);
+        double reach = MorphPickRadiusPx * camera.Scale(e.ClientWidth, e.ClientHeight);
+        double zoom = vs.Zoom;
+        FinderStatus = "Julia morph: searching near the target…";
+        _ = RunFinderAsync(async ct =>
+        {
+            try
+            {
+                var q = await Task.Run(() => NucleusFinder.FindMinibrot(target, reach, ct: ct), ct);
+                if (!q.Found)
+                {
+                    FinderStatus = $"No minibrot within {MorphPickRadiusPx} px of that point — click elsewhere in the pattern.";
+                    return;
+                }
+                var step = JuliaMorph.Plan(q, zoom, vs.Quality, vs.IterLocked, vs.LockedIterations);
+                if (!step.Ok)
+                {
+                    FinderStatus = step.Refusal == JuliaMorphRefusal.NotDeeper
+                        ? $"The period-{q.Period} minibrot there is not deeper than this view — click further out in the pattern."
+                        : $"That step would pass the deepest zoom (1e100).";
+                    return;
+                }
+                string note = ApplyPlan(step.Plan);
+                _morphSteps.Add(($"{_morphSteps.Count + 1}. period {q.Period} → zoom {Fmt(step.Plan.Zoom)}", step.Plan.PreferredIterations));
+                MorphPathText = MorphPathLines();
+                this.RaisePropertyChanged(nameof(HasMorphSteps));
+                FinderStatus = $"Morph layer {_morphSteps.Count}: toward the period-{q.Period} minibrot, zoom {Fmt(step.Plan.Zoom)} ({step.Plan.Quality.Name}). Click the next target.{note}";
+            }
+            finally
+            {
+                // Re-arm after the search settles (also after a miss), unless
+                // the user cancelled meanwhile.
+                Dispatcher.UIThread.Post(RearmMorph);
+            }
+        });
+        return true;
+    }
+
+    private void UndoMorphStep()
+    {
+        if (_morphSteps.Count == 0) return;
+        if (!Shell.GoBack()) return;
+        _morphSteps.RemoveAt(_morphSteps.Count - 1);
+        MorphPathText = MorphPathLines();
+        // Back cleared the first-render hint; the layer we returned to needs
+        // its own iteration count to stay resolved.
+        var vs = Shell.Main.ViewState;
+        if (_morphSteps.Count > 0 && !vs.IterLocked && _morphSteps[^1].Iterations > 0)
+        {
+            vs.PreferredIterations = _morphSteps[^1].Iterations;
+            Shell.Main.RenderHost.Trigger();
+        }
+        this.RaisePropertyChanged(nameof(HasMorphSteps));
+        FinderStatus = _morphSteps.Count > 0 ? $"Undid layer {_morphSteps.Count + 1}." : "Undid the first layer.";
+    }
+
+    private string MorphPathLines()
+        => string.Join("\n", System.Linq.Enumerable.Select(_morphSteps, m => m.Line));
 
     private static string Fmt(double v) => v.ToString("G4", CultureInfo.InvariantCulture);
 }
