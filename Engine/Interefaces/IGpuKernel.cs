@@ -47,16 +47,18 @@ namespace FracturingFog.Rendering
         public bool Active => Strength != 0f && HalfSpan > 0f;
     }
 
-    /// <summary>#838 — one Buddhabrot-family uniform sample batch for the GPU
-    /// (<see cref="IGpuKernel.RunBuddhaBatch"/>): the BuddhaFamilyCalculator
-    /// sampler's inputs. <see cref="Samples"/> c values are drawn over the fixed
-    /// domain from a stream keyed by (<see cref="Seed"/>, <see cref="Batch"/>, sample
-    /// index); hits go to three bands split at <see cref="Low"/> / <see cref="Mid"/>
-    /// on the class iteration.</summary>
+    /// <summary>#838 — one Buddhabrot-family uniform sample batch
+    /// (<see cref="IGpuKernel.RunBuddhaBatch"/>, and its CPU twin
+    /// <see cref="BuddhaUniformSampler"/>). <see cref="Samples"/> c values are drawn
+    /// over the fixed domain from a stream keyed by (<see cref="Seed"/>,
+    /// <see cref="Batch"/>, sample index); hits go to three bands split at
+    /// <see cref="Low"/> / <see cref="Mid"/> on the class iteration. #1218 — an
+    /// escaping orbit is drawn only when it escapes at or after
+    /// <see cref="MinIter"/>.</summary>
     public readonly record struct GpuBuddhaBatch(
         int Width, int Height, double Scale, double MidX, double MidY,
         int MaxOrbit, bool InSet, bool HighDefinition, int Low, int Mid,
-        uint Seed, int Batch, int Samples);
+        uint Seed, int Batch, int Samples, int MinIter = 0);
 
     /// <summary>
     /// Per-pixel SP escape-time compute backend exposed to the calculator

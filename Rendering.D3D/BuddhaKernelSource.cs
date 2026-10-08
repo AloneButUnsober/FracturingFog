@@ -21,7 +21,11 @@
 // float orbits), with the same statistics. Integer atomics make it deterministic
 // for a given seed. Composite / recolour / relief stay on the CPU, untouched.
 // Metropolis-Hastings sampling stays on the CPU (see the G4.7 row of
-// Docs/Technical/GPU-Parity-DevelopmentPlan.md).
+// Docs/Technical/GPU-Parity-DevelopmentPlan.md). #1218 — the CPU's uniform
+// sampler IS this algorithm (BuddhaUniformSampler, Engine), so GPU and CPU render
+// the same image; neither draws z0 = 0 (every orbit's, a one-pixel spike that
+// darkened the whole log normalisation), and orbits escaping before gMinIter are
+// not drawn.
 //
 // Cycle detection (Brent, exact float compare). A float orbit that revisits a
 // value is periodic from there on, exactly, in the arithmetic the kernel runs:
@@ -39,7 +43,7 @@
 // escaping at ~maxOrbit could replay as an orbit that falls into an attracting
 // cycle and piles maxOrbit hits on a few pixels (one pixel took 10% of the high
 // band on a GT 710, a visible top/bottom imbalance). With it the kernel is plain
-// IEEE float, which GpuBuddhaReference (Engine) replays exactly on the CPU.
+// IEEE float, which BuddhaUniformSampler (Engine) replays exactly on the CPU.
 
 namespace FracturingFog.Rendering;
 
@@ -101,7 +105,7 @@ public static class BuddhaKernelSource
     }
 
     public static string Build() => @"
-// 64 bytes: 11 ints then 5 floats. Matches the C# BuddhaParams blobs byte-for-byte.
+// 64 bytes: 11 ints, 3 floats, 1 int, 1 float. Matches the C# BuddhaParams blobs byte-for-byte.
 cbuffer BuddhaParams : register(b0)
 {
     int   gWidth;
@@ -118,7 +122,7 @@ cbuffer BuddhaParams : register(b0)
     float gScale;        // plane units per pixel
     float gMidX;
     float gMidY;
-    float gPad0;
+    int   gMinIter;      // #1218 — escaping orbits shorter than this are not drawn
     float gPad1;
 }
 
@@ -206,7 +210,7 @@ bool Classify(float cx, float cy, out int recLen, out int cls)
     }
 
     bool escaped = iter < gMaxOrbit;
-    bool keep = gInSet != 0 ? !escaped : escaped;
+    bool keep = gInSet != 0 ? !escaped : (escaped && iter >= gMinIter);
     if (!keep) return false;
     if (escaped) cls = iter;
     else
@@ -262,7 +266,7 @@ void Splat(float cx, float cy, int recLen, int cls, inout uint rng)
     [loop]
     for (k = 0; k < recLen; k++)
     {
-        SplatPoint(bandBase, zr, zi, 1u, rng);
+        if (k > 0) SplatPoint(bandBase, zr, zi, 1u, rng);   // #1218 — z0 = 0 is not drawn
         if (gInSet != 0 && k > 0)
         {
             if (zr == snapR && zi == snapI) { lam = k - snapK; break; }

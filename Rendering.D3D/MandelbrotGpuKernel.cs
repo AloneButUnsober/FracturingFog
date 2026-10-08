@@ -777,13 +777,15 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
 
     // ── #838 / G4.7 Buddhabrot sample pass ───────────────────────────────────────
 
-    // 64 bytes: 11 ints then 5 floats, the HLSL BuddhaParams cbuffer byte-for-byte.
+    // 64 bytes: 11 ints, 3 floats, 1 int, 1 float — the HLSL BuddhaParams cbuffer byte-for-byte.
     [StructLayout(LayoutKind.Sequential)]
     private struct BuddhaParams
     {
         public int Width, Height, MaxOrbit, InSet, Low, Mid, Hd;
         public uint Seed, Batch, ThreadBase, ThreadCount;
-        public float Scale, MidX, MidY, Pad0, Pad1;
+        public float Scale, MidX, MidY;
+        public int MinIter;      // #1218
+        public float Pad1;
     }
 
     private ID3D11ComputeShader? _csBuddha;
@@ -829,6 +831,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
             Low = b.Low, Mid = b.Mid, Hd = b.HighDefinition ? 1 : 0,
             Seed = b.Seed, Batch = (uint)b.Batch, ThreadCount = (uint)b.Samples,
             Scale = (float)b.Scale, MidX = (float)b.MidX, MidY = (float)b.MidY,
+            MinIter = b.MinIter,
         };
         BuddhaKernelSource.Plan(b.Samples, b.MaxOrbit, (baseT, count) =>
         {

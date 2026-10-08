@@ -421,6 +421,13 @@ namespace FracturingFog.Models
         public int BuddhaIterMid { get; set; } = 5_000;
         public int BuddhaIterHigh { get; set; } = 50_000;
 
+        /// <summary>#1218 — Buddhabrot / Nebulabrot (escaping orbits): an orbit that
+        /// escapes in fewer steps is not drawn. The fast escapers are the bulk of the
+        /// samples and wash the |c| &lt;= 2 disc with a flat haze (Nebulabrot's red
+        /// disc); 0 draws them all. The Anti types keep bounded orbits and ignore it.
+        /// Default 12, as the Dual Buddhabrot's DualBuddhaMinIter.</summary>
+        public int BuddhaMinIter { get; set; } = 12;
+
         /// <summary>Output blend for the Buddhabrot family. NebulabrotBands
         /// keeps the classic three-band R/G/B composite; ColorMap log-norms
         /// a single-channel hit histogram and feeds it through the active
@@ -1808,6 +1815,7 @@ namespace FracturingFog.Models
                 BuddhaIterLow = BuddhaIterLow,
                 BuddhaIterMid = BuddhaIterMid,
                 BuddhaIterHigh = BuddhaIterHigh,
+                BuddhaMinIter = BuddhaMinIter,
                 BuddhaColorMode = BuddhaColorMode,
                 BuddhaQualityMode = BuddhaQualityMode,
                 BuddhaMetropolis = BuddhaMetropolis,

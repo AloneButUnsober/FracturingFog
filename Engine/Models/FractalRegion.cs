@@ -612,6 +612,7 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? BuddhaIterHigh { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? BuddhaIterLow { get; set; }    // #1125 — outcome Nebulabrot bands
         [JsonIgnore(Condition = OmitNull)] public int? BuddhaIterMid { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? BuddhaMinIter { get; set; }    // #1218 — classic escape types
         [JsonIgnore(Condition = OmitNull)] public int? DualBuddhaDeposit { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? DualBuddhaNebula { get; set; }
         [JsonIgnore(Condition = OmitNull)] public bool? DualBuddhaAnti { get; set; }
@@ -1114,6 +1115,7 @@ namespace FracturingFog.Models
                     BuddhaIterHigh = p.BuddhaIterHigh != D.BuddhaIterHigh ? p.BuddhaIterHigh : (int?)null,
                     BuddhaIterLow = p.BuddhaIterLow != D.BuddhaIterLow ? p.BuddhaIterLow : (int?)null,
                     BuddhaIterMid = p.BuddhaIterMid != D.BuddhaIterMid ? p.BuddhaIterMid : (int?)null,
+                    BuddhaMinIter = p.BuddhaMinIter != D.BuddhaMinIter ? p.BuddhaMinIter : (int?)null,   // #1218
                     BuddhaQualityMode = p.BuddhaQualityMode != D.BuddhaQualityMode ? (int)p.BuddhaQualityMode : (int?)null,
                     BuddhaMetropolis = p.BuddhaMetropolis != D.BuddhaMetropolis ? p.BuddhaMetropolis : (bool?)null,
                     BuddhaProgressive = p.BuddhaProgressive != D.BuddhaProgressive ? p.BuddhaProgressive : (bool?)null,
@@ -1594,6 +1596,7 @@ namespace FracturingFog.Models
             if (BuddhaIterHigh.HasValue) p.BuddhaIterHigh = BuddhaIterHigh.Value;
             if (BuddhaIterLow.HasValue) p.BuddhaIterLow = BuddhaIterLow.Value;
             if (BuddhaIterMid.HasValue) p.BuddhaIterMid = BuddhaIterMid.Value;
+            if (BuddhaMinIter.HasValue) p.BuddhaMinIter = BuddhaMinIter.Value;   // #1218
             if (this.DualBuddhaDeposit.HasValue) p.DualBuddhaDeposit = (FracturingFog.DualBuddhaDeposit)this.DualBuddhaDeposit.Value;
             if (this.DualBuddhaNebula.HasValue) p.DualBuddhaNebula = (FracturingFog.DualBuddhaNebula)this.DualBuddhaNebula.Value;
             if (DualBuddhaAnti.HasValue) p.DualBuddhaAnti = DualBuddhaAnti.Value;

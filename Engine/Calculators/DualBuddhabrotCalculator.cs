@@ -272,17 +272,26 @@ public sealed class DualBuddhabrotCalculator : BuddhaFamilyCalculator
         bool hd, Random rng, Random rngC,
         double scale, double midX, double midY, int width, int height)
     {
+        // #1218 — a raw orbit's index 0 is the same point for every sample (z0 = 0;
+        // the c-seed for the c-orbit), a one-pixel spike that darkens the channel's
+        // whole normalisation: not drawn, as in the classic family. The escape-
+        // location deposit keeps its one point at index 0; midpoint / chord already
+        // start their c buffer one step in.
+        bool deposits = !_anti && _nebula == DualBuddhaNebula.Off;
+        int zFrom = deposits && _deposit == DualBuddhaDeposit.EscapeLocation ? 0 : 1;
+        int cFrom = deposits && _deposit is DualBuddhaDeposit.EscapeLocation
+            or DualBuddhaDeposit.Midpoint or DualBuddhaDeposit.PairChord ? 0 : 1;
         if (zLen > 0)
         {
             uint[] tz = zTarget == 0 ? tR : zTarget == 1 ? tG : tB;
-            if (hd) SplatOrbitHD(tz, zr, zi, zLen, scale, midX, midY, width, height, rng);
-            else SplatOrbitStd(tz, zr, zi, zLen, scale, midX, midY, width, height);
+            if (hd) SplatOrbitHD(tz, zr, zi, zLen, scale, midX, midY, width, height, rng, from: zFrom);
+            else SplatOrbitStd(tz, zr, zi, zLen, scale, midX, midY, width, height, from: zFrom);
         }
         if (cLen > 0)
         {
             uint[] tc = cTarget == 0 ? tR : cTarget == 1 ? tG : tB;
-            if (hd) SplatOrbitHD(tc, cr, ci, cLen, scale, midX, midY, width, height, rngC, _mirrorC);
-            else SplatOrbitStd(tc, cr, ci, cLen, scale, midX, midY, width, height);
+            if (hd) SplatOrbitHD(tc, cr, ci, cLen, scale, midX, midY, width, height, rngC, _mirrorC, from: cFrom);
+            else SplatOrbitStd(tc, cr, ci, cLen, scale, midX, midY, width, height, from: cFrom);
         }
     }
 

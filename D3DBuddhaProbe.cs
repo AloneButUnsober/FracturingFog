@@ -6,13 +6,15 @@
 // (the test project is net10.0 and cannot load the D3D backend).
 //
 // It creates a headless D3D11 hardware device (as --d3dpturbcalc does) and checks:
-//   - the D3D11 kernel (FXC) against GpuBuddhaReference.Run, the strict-
+//   - the D3D11 kernel (FXC) against BuddhaUniformSampler.Run, the strict-
 //     float replay of its algorithm: equal band totals (within the approximate-
 //     division slack) and at most 1% of pixels different, for Buddhabrot and
 //     AntiBuddhabrot, Standard and HD splats;
 //   - the production path (a calculator with a real MandelbrotGpuKernel), 640x480:
-//     the GPU really sampled, and its block-summed histogram is as close to the
-//     CPU's as two CPU seeds are to each other. Checked at bands 20 / 200 / 2000:
+//     the GPU really sampled; #1218 — its frame is the CPU frame (one shared
+//     sampler), to a few pixels; and its block-summed histogram is as close to the
+//     classic double-precision sampler's as two seeds of that sampler are. Checked
+//     at bands 20 / 200 / 2000:
 //     at the default 500 / 5 000 / 50 000 the high band is a handful of 50 000-
 //     iteration orbits, so two CPU seeds already differ by 0.8-1.1 there and a
 //     one-seed comparison measures nothing;
@@ -55,6 +57,7 @@ namespace FracturingFog
             try
             {
                 using var kernel = new MandelbrotGpuKernel(device, context, new object());
+                BuddhaFamilyCalculator.UseGpuBuddha = true;   // #1218 — opt-in
                 Console.WriteLine($"d3dbuddhaprobe on {adapterName}");
                 bool ok = true;
                 foreach (bool anti in new[] { false, true })
@@ -81,7 +84,7 @@ namespace FracturingFog
             var g = new[] { new uint[n], new uint[n], new uint[n] };
             var e = new[] { new uint[n], new uint[n], new uint[n] };
             kernel.RunBuddhaBatch(batch, g[0], g[1], g[2]);
-            GpuBuddhaReference.Run(batch, e[0], e[1], e[2]);
+            BuddhaUniformSampler.Run(batch, e[0], e[1], e[2]);
             bool ok = true;
             var line = $"  reference anti={anti} hd={hd}:";
             for (int b = 0; b < 3; b++)
@@ -151,18 +154,29 @@ namespace FracturingFog
             timeGpu.Calculate();
             long gpuMs = sw.ElapsedMilliseconds;
 
-            // Parity at bands 20 / 200 / 2000.
-            var cpu1 = Calc(anti, 1, hd, null, defaults: false);
-            cpu1.Calculate();
-            var cpu2 = Calc(anti, 2, hd, null, defaults: false);
-            cpu2.Calculate();
+            // #1218 — one shared sampler: the GPU and CPU frames at the defaults are the
+            // same image (the GPU's approximate division may move a few pixels).
+            int differ = 0;
+            for (int i = 0; i < timeCpu.ColorBuffer.Length; i++)
+                if (timeCpu.ColorBuffer[i] != timeGpu.ColorBuffer[i]) differ++;
+
+            // The float sampler against the classic double-precision one, at bands
+            // 20 / 200 / 2000: as close as two seeds of the double sampler are.
             var gpu = Calc(anti, 1, hd, kernel, defaults: false);
             gpu.Calculate();
+            bool savedShared = BuddhaFamilyCalculator.UseSharedUniformSampler;
+            BuddhaFamilyCalculator.UseSharedUniformSampler = false;
+            var dbl1 = Calc(anti, 1, hd, null, defaults: false);
+            var dbl2 = Calc(anti, 2, hd, null, defaults: false);
+            try { dbl1.Calculate(); dbl2.Calculate(); }
+            finally { BuddhaFamilyCalculator.UseSharedUniformSampler = savedShared; }
 
-            double noise = Distance(Blocks(cpu1), Blocks(cpu2));
-            double parity = Distance(Blocks(gpu), Blocks(cpu1));
-            bool ok = gpu.LastCalculateUsedGpu && timeGpu.LastCalculateUsedGpu && parity < 1.4 * noise + 0.002;
-            Console.WriteLine($"  {label} 640x480: cpu {cpuMs} ms, gpu {gpuMs} ms; GPU vs CPU {parity:F4}, CPU seed noise {noise:F4}; " +
+            double noise = Distance(Blocks(dbl1), Blocks(dbl2));
+            double parity = Distance(Blocks(gpu), Blocks(dbl1));
+            bool ok = gpu.LastCalculateUsedGpu && timeGpu.LastCalculateUsedGpu
+                && differ <= timeCpu.ColorBuffer.Length / 1000 && parity < 1.4 * noise + 0.002;
+            Console.WriteLine($"  {label} 640x480: cpu {cpuMs} ms, gpu {gpuMs} ms; GPU vs CPU image {differ} px differ; " +
+                              $"vs double sampler {parity:F4} (double seed noise {noise:F4}); " +
                               $"route '{gpu.LastGpuRoute.Detail ?? gpu.LastGpuRoute.Reason}'" + (ok ? "" : "  FAIL"));
             return ok;
         }
