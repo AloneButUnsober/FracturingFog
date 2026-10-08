@@ -9,6 +9,10 @@
 //   S2 (#1186) "Zoom to minibrot": find a minibrot whose nucleus is really in
 //              the view (Abstractions/Explore/NucleusFinder.FindMinibrot) and
 //              frame it the way the home view frames the whole set.
+//   S4 (#1188) "Go to angle": parse an external angle (.(011), .01(10), 1/7),
+//              show its internal address, trace its parameter ray inward and
+//              land on the minibrot / Misiurewicz point it ends at
+//              (ExternalAngle, ExternalRay.Land).
 //   S3 (#1187) "Snap to spiral": arm a one-shot click on the render
 //              (IFractalInputController.PointPickHandler); the click is
 //              snapped to the simplest Misiurewicz point within reach
@@ -44,6 +48,29 @@ public sealed partial class ControlCenterViewModel
     public ReactiveCommand<Unit, Unit> DetectPeriodCommand { get; private set; } = null!;
     public ReactiveCommand<Unit, Unit> ZoomToMinibrotCommand { get; private set; } = null!;
     public ReactiveCommand<Unit, Unit> SnapToSpiralCommand { get; private set; } = null!;
+    public ReactiveCommand<Unit, Unit> GoToAngleCommand { get; private set; } = null!;
+
+    private string _angleText = "";
+    private string _angleInfo = "e.g. .(001)  .0(01)  .01(10)  1/7";
+
+    /// <summary>External angle typed in the Find group.</summary>
+    public string AngleText
+    {
+        get => _angleText;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _angleText, value);
+            AngleInfo = DescribeAngle(value);
+        }
+    }
+
+    /// <summary>Live parse of <see cref="AngleText"/>: exact form, fraction,
+    /// internal address — or why it does not parse.</summary>
+    public string AngleInfo
+    {
+        get => _angleInfo;
+        private set => this.RaiseAndSetIfChanged(ref _angleInfo, value);
+    }
     public ReactiveCommand<Unit, Unit> CancelFinderCommand { get; private set; } = null!;
 
     /// <summary>Readout line under the Find buttons.</summary>
@@ -88,6 +115,7 @@ public sealed partial class ControlCenterViewModel
         DetectPeriodCommand   = ReactiveCommand.CreateFromTask(DetectPeriodAsync, idle);
         ZoomToMinibrotCommand = ReactiveCommand.CreateFromTask(ZoomToMinibrotAsync, idle);
         SnapToSpiralCommand   = ReactiveCommand.Create(ArmSnapToSpiral, idle);
+        GoToAngleCommand      = ReactiveCommand.CreateFromTask(GoToAngleAsync, idle);
         CancelFinderCommand   = ReactiveCommand.Create(() =>
         {
             _finderCts?.Cancel();
@@ -181,14 +209,14 @@ public sealed partial class ControlCenterViewModel
         });
     }
 
-    private void ApplyMinibrotJump(in NucleusResult found)
+    private void ApplyMinibrotJump(in NucleusResult found, string prefix = "")
     {
         var main = Shell.Main;
         var vs = main.ViewState;
         var plan = MinibrotJump.Plan(found, vs.Quality, vs.IterLocked, vs.LockedIterations);
         if (plan is not MinibrotJumpPlan p)
         {
-            FinderStatus = $"Period {found.Period} minibrot is beyond the deepest zoom (1e100).";
+            FinderStatus = $"{prefix}Period {found.Period} minibrot is beyond the deepest zoom (1e100).";
             return;
         }
 
@@ -207,7 +235,7 @@ public sealed partial class ControlCenterViewModel
         string note = !p.IterationsShort ? ""
             : vs.IterLocked ? $" Iterations are locked at {vs.LockedIterations:N0}; ~{p.WantedIterations:N0} resolve it."
             : $" ~{p.WantedIterations:N0} iterations resolve it; using {p.PreferredIterations:N0}.";
-        FinderStatus = $"Period {found.Period} minibrot, size {found.Size.Magnitude:G3} → zoom {Fmt(p.Zoom)} ({p.Quality.Name}).{note}";
+        FinderStatus = $"{prefix}Period {found.Period} minibrot, size {found.Size.Magnitude:G3} → zoom {Fmt(p.Zoom)} ({p.Quality.Name}).{note}";
     }
 
     private void ArmSnapToSpiral()
@@ -262,6 +290,85 @@ public sealed partial class ControlCenterViewModel
             FinderStatus = $"Misiurewicz point M({m.Preperiod},{m.Period}): the pattern repeats every ×{Fmt(m.Multiplier.Magnitude)} zoom, turning {turn:0.#}°.";
         });
         return true;
+    }
+
+    // ── S4: external angles ──────────────────────────────────────────────
+
+    private static string DescribeAngle(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return "e.g. .(001)  .0(01)  .01(10)  1/7";
+        if (!ExternalAngle.TryParse(text, out var a, out var err)) return err ?? "Not an angle.";
+        var (n, d) = a!.Fraction;
+        string frac = d.ToString().Length <= 24 ? $" = {n}/{d}" : "";
+        string kind = a.IsPeriodic
+            ? $"periodic, period {a.Period}: lands on a minibrot's root"
+            : $"preperiod {a.Preperiod}, period {a.Period}: lands on a Misiurewicz point";
+        var address = a.InternalAddress(maxTerms: 12);
+        string addr = string.Join("→", address) + (a.IsPeriodic || address.Count < 12 ? "" : "→…");
+        return $"{a}{frac} — {kind}. Internal address {addr}.";
+    }
+
+    private Task GoToAngleAsync()
+    {
+        var vs = Shell.Main.ViewState;
+        if (!FinderSupports(vs.FractalType))
+        {
+            FinderStatus = $"External angles apply to z² + c (Mandelbrot) only — not {vs.FractalType}.";
+            return Task.CompletedTask;
+        }
+        if (!ExternalAngle.TryParse(AngleText, out var angle, out var err))
+        {
+            FinderStatus = err ?? "Not an angle.";
+            return Task.CompletedTask;
+        }
+        FinderStatus = $"Tracing the ray at {angle}…";
+        return RunFinderAsync(async ct =>
+        {
+            var landing = await Task.Run(() => ExternalRay.Land(angle!, ct: ct), ct);
+            string prefix = $"Ray {angle} → ";
+            switch (landing.Status)
+            {
+                case RayLandingStatus.Component:
+                    ApplyMinibrotJump(landing.Nucleus, prefix);
+                    break;
+                case RayLandingStatus.Misiurewicz:
+                    ApplyMisiurewiczLanding(landing, prefix);
+                    break;
+                default:
+                    FinderStatus = $"{prefix}{landing.Detail ?? "could not land the ray."}";
+                    break;
+            }
+        });
+    }
+
+    // Centre on the Misiurewicz point, zoomed so the view radius is the ray's
+    // context radius (the hub plus its first ring of structure).
+    private void ApplyMisiurewiczLanding(in RayLanding landing, string prefix)
+    {
+        var main = Shell.Main;
+        var vs = main.ViewState;
+        var m = landing.Misiurewicz;
+        var (w, h) = main.RenderHost.LastPresentedSize;
+        double unitRadius = PeriodDetector.ViewDiskRadius(1.0, w, h);   // view radius at zoom 1
+        double zoom = unitRadius / landing.ContextRadius;
+        if (!(zoom <= QualityPreset.Extreme.ZoomMax))
+        {
+            FinderStatus = $"{prefix}M({m.Preperiod},{m.Period}) is beyond the deepest zoom (1e100).";
+            return;
+        }
+        Shell.RecordNavChange();
+        vs.SetCenter(m.Point);
+        vs.Zoom = zoom;
+        var q = MinibrotJump.QualityFor(vs.Quality, zoom);
+        if (!ReferenceEquals(q, vs.Quality))
+        {
+            vs.Quality = q;
+            main.SetQualitySilent(q);
+            Menu.SetQualitySilent(q.Name);
+        }
+        main.RenderHost.Trigger();
+        double turn = m.Multiplier.Phase * 180.0 / System.Math.PI;
+        FinderStatus = $"{prefix}Misiurewicz point M({m.Preperiod},{m.Period}), zoom {Fmt(zoom)}: the pattern repeats every ×{Fmt(m.Multiplier.Magnitude)} zoom, turning {turn:0.#}°.";
     }
 
     private static string Fmt(double v) => v.ToString("G4", CultureInfo.InvariantCulture);

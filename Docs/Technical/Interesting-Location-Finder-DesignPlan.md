@@ -10,7 +10,7 @@ S6 [#1190](https://github.com/AloneButUnsober/FracturingFog/issues/1190) ·
 S7 [#1191](https://github.com/AloneButUnsober/FracturingFog/issues/1191).
 The issues are the canonical task list; this doc is the maths + architecture context. Link both ways.
 
-**Status: S1 shipped (#1185, PR #1232); S2 shipped (#1186, PR #1234); S3 implemented (#1187) — 2026-10-08.** See §9.1 for what implementation changed versus this design.
+**Status: S1 shipped (#1185, PR #1232); S2 shipped (#1186, PR #1234); S3 shipped (#1187, PR #1236); S4 implemented (#1188) — 2026-10-08.** See §9.1 for what implementation changed versus this design.
 
 ---
 
@@ -360,6 +360,28 @@ Measured against all 158 built-in Mandelbrot regions (`Resources/regions.json`):
   as M(24,1), λ ≈ 1.039∠172.6°.
 - **Deferred:** the J_c preview and the self-similar loop video are tracked
   separately as #1235.
+
+### 9.3 Implementation notes (S4)
+
+- **`ExternalAngle`** keeps θ exactly as binary `.pre(per)` (canonical, shortest
+  form) and converts to and from p/q with BigInteger arithmetic. The kneading
+  sequence and internal address (Lau–Schleicher ρ) are computed with exact
+  rational comparisons.
+- **`ExternalRay.Land`** traces inward in double (start radius 2¹⁶, 8 substeps
+  per bit, Newton on f^{k+1}(0) = r·e^{2πi·2ᵏθ}), then hands the end point to
+  the verified OD Newton of S2 (periodic) or S3 (preperiodic).
+  - **Periodic rays creep into a parabolic root**, so per-period movement says
+    nothing about the component's size. They are traced to the bit budget, and
+    the nucleus is accepted only within 2 atom sizes of the root (main cardioid
+    0.25, period-2 bulb 0.5); a neighbouring component's nucleus never is.
+    An early "barely moving" stop left seeds several sizes away.
+  - **A preperiodic angle's landing point can have a smaller period** than
+    the angle (e.g. `.010(001)` → M(4,1)). S3's Refine deflates divisor periods
+    out, so landing tries every divisor of the angle period, smallest first.
+- **Measured on random angles:** periodic angles land reliably to about 16–20
+  bits and preperiodic ones to 32+, with **zero wrong landings**. Longer
+  periodic angles fail cleanly at double precision. OD tracing, location →
+  angle, and address → angle are #1237.
 
 ## 10. Sources
 

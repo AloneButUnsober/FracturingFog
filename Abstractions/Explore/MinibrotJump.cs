@@ -29,6 +29,17 @@ public static class MinibrotJump
     /// <summary>Upper bound for the iteration hint: the Extreme tier's cap.</summary>
     public static readonly int MaxPreferredIterations = QualityPreset.Extreme.IterMax;
 
+    /// <summary>The tier a jump to <paramref name="zoom"/> needs: the current
+    /// one, or the first deeper tier whose ZoomMax reaches it. Promotion only
+    /// (as the wheel does) — never demotes a tier the user chose.</summary>
+    public static QualityPreset QualityFor(QualityPreset current, double zoom)
+    {
+        if (zoom <= current.ZoomMax) return current;
+        foreach (var p in QualityPreset.All)
+            if (p.ZoomMax >= zoom) return p;
+        return QualityPreset.Extreme;
+    }
+
     /// <summary>Plan the jump, or null when the minibrot is deeper than the
     /// deepest quality tier allows.</summary>
     public static MinibrotJumpPlan? Plan(
@@ -38,11 +49,7 @@ public static class MinibrotJump
         var (center, zoom) = NucleusFinder.Frame(found, framing);
         if (!(zoom <= QualityPreset.Extreme.ZoomMax)) return null;
 
-        // Promotion only (as the wheel does): never demote a tier the user chose.
-        var quality = current;
-        if (zoom > current.ZoomMax)
-            foreach (var p in QualityPreset.All)
-                if (p.ZoomMax >= zoom) { quality = p; break; }
+        var quality = QualityFor(current, zoom);
 
         int wanted = NucleusFinder.SuggestedIterations(found.Period);
         if (iterLocked)
