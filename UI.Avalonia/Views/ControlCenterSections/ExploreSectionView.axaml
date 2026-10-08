@@ -83,23 +83,23 @@
         <!-- Interesting-location finder (epic #1184). S1 #1185: period
              detection; S2 #1186: zoom to a minibrot in view; S3 #1187: snap a
              click to a Misiurewicz point; S4 #1188: go to an external angle;
-             S5 #1189: Julia morph (z² + c); S6 #1190: auto-explore (any 2D family). -->
+             S5 #1189: Julia morph (z² + c); S7 #1191: minibrot / spiral / morph for Multibrot, Burning Ship, Tricorn, User Equation; S6 #1190: auto-explore (any 2D family). -->
         <Border Classes="group">
             <StackPanel Spacing="6" MaxWidth="425" HorizontalAlignment="Left">
                 <TextBlock Classes="section" Text="Find" />
                 <StackPanel Orientation="Horizontal" Spacing="4">
                     <Button Classes="action go" Content="Zoom to minibrot"
                             Command="{Binding ZoomToMinibrotCommand}"
-                            ToolTip.Tip="Find a minibrot whose centre is inside the current view and zoom to frame it like the home view (Mandelbrot z² + c). Backspace returns to where you were." />
+                            ToolTip.Tip="Find a minibrot whose centre is inside the current view and zoom to frame it like the home view. Mandelbrot, Multibrot, Burning Ship, Tricorn and User Equation. Backspace returns to where you were." />
                     <Button Classes="action go" Content="Snap to spiral"
                             Command="{Binding SnapToSpiralCommand}"
-                            ToolTip.Tip="Then click a spiral centre or branch point in the render: the view recentres exactly on it (a Misiurewicz point, Mandelbrot z² + c). Backspace returns." />
+                            ToolTip.Tip="Then click a spiral centre or branch point in the render: the view recentres exactly on it (a Misiurewicz point). Mandelbrot, Multibrot, Burning Ship, Tricorn and User Equation. Backspace returns." />
                     <Button Classes="action go" Content="Julia morph"
                             Command="{Binding JuliaMorphCommand}"
                             ToolTip.Tip="Then click points in the pattern: each click steps halfway (in zoom) toward a minibrot near that point, where its embedded Julia set doubles the pattern. Keep clicking to stack layers; Cancel to stop." />
                     <Button Classes="action neutral" Content="Detect period"
                             Command="{Binding DetectPeriodCommand}"
-                            ToolTip.Tip="Report the lowest period candidate in the current view (a lower bound from a fast ball scan)." />
+                            ToolTip.Tip="Report the lowest period candidate in the current view (a lower bound from a fast ball scan; Mandelbrot z² + c only)." />
                     <Button Classes="action neutral" Content="Cancel"
                             Command="{Binding CancelFinderCommand}"
                             IsVisible="{Binding CanCancelFinder}" />

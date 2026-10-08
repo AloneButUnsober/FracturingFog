@@ -67,17 +67,32 @@ public static class JuliaMorph
         bool iterLocked, int lockedIterations, double depth = DefaultDepth)
     {
         if (!target.Found) throw new ArgumentException("The morph target must be a found minibrot.", nameof(target));
+        return Plan(target.Nucleus, target.Period, 1.0 / target.Size.Magnitude,
+                    currentZoom, currentQuality, iterLocked, lockedIterations, depth);
+    }
+
+    /// <summary>As above for any family (S7 #1191): the target is a nucleus,
+    /// its period, and the zoom that frames its minibrot
+    /// (<paramref name="minibrotZoom"/>). <paramref name="maxZoom"/> is the
+    /// family's precision limit.</summary>
+    public static JuliaMorphStep Plan(
+        DeepComplex nucleus, int period, double minibrotZoom,
+        double currentZoom, QualityPreset currentQuality,
+        bool iterLocked, int lockedIterations, double depth = DefaultDepth,
+        double maxZoom = double.PositiveInfinity)
+    {
         if (!(currentZoom > 0)) throw new ArgumentOutOfRangeException(nameof(currentZoom));
         if (!(depth > 0 && depth <= 1)) throw new ArgumentOutOfRangeException(nameof(depth), depth, "Depth α must be in (0, 1].");
 
-        double minibrotZoom = 1.0 / target.Size.Magnitude;
         if (!(minibrotZoom > currentZoom))
-            return new JuliaMorphStep(default, target.Period, minibrotZoom, JuliaMorphRefusal.NotDeeper);
+            return new JuliaMorphStep(default, period, minibrotZoom, JuliaMorphRefusal.NotDeeper);
 
         double zoom = SMath.Exp((1 - depth) * SMath.Log(currentZoom) + depth * SMath.Log(minibrotZoom));
-        var plan = MinibrotJump.At(target.Nucleus, zoom, target.Period, currentQuality, iterLocked, lockedIterations);
+        var plan = zoom <= maxZoom
+            ? MinibrotJump.At(nucleus, zoom, period, currentQuality, iterLocked, lockedIterations)
+            : null;
         return plan is MinibrotJumpPlan p
-            ? new JuliaMorphStep(p, target.Period, minibrotZoom)
-            : new JuliaMorphStep(default, target.Period, minibrotZoom, JuliaMorphRefusal.TooDeep);
+            ? new JuliaMorphStep(p, period, minibrotZoom)
+            : new JuliaMorphStep(default, period, minibrotZoom, JuliaMorphRefusal.TooDeep);
     }
 }

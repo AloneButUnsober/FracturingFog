@@ -157,7 +157,7 @@ Keyboard pan/zoom/camera keys are **ignored** while a text box has focus (CX, CY
 
 ### Finding minibrots and spirals (Control Center → Explore → Find)
 
-For the Mandelbrot set (z² + c), the **Find** group locates miniature copies of the set ("minibrots") and the exact centres of spirals for you:
+The **Find** group locates miniature copies of the set ("minibrots") and the exact centres of spirals for you. Everything below works on the Mandelbrot set (z² + c). **Zoom to minibrot**, **Snap to spiral** and **Julia morph** also work on Multibrot (z³, z⁴, …), Burning Ship, Tricorn and User Equation (see the end of the list):
 
 - **Zoom to minibrot** searches the current view for a minibrot whose centre is really inside it, then jumps there and frames it the way the home view frames the whole set. It may appear rotated, because minibrots are rotated copies. The readout names its **period** (how many steps its orbit cycles through) and its size. The jump:
   - raises the **Quality** tier if the new depth needs it (it never lowers a tier you chose);
@@ -168,6 +168,10 @@ For the Mandelbrot set (z² + c), the **Find** group locates miniature copies of
   - **Morph video:** a morph path ends at one view, and an ordinary zoom video into that view passes through every layer you stacked. So **Capture ▸ Video** (or `--batch … --video-motion zoom`) records it; nothing extra is needed.
 - **Backspace** returns to the view you jumped from.
 - **Detect period** is a quick read-only scan. It reports the lowest period *candidate* in view. That is a lower bound: the minibrot that **Zoom to minibrot** actually finds often has a higher period.
+- **Other families.** Multibrot, Burning Ship, Tricorn and User Equation support **Zoom to minibrot**, **Snap to spiral** and **Julia morph**. **Detect period** and **Angle** are Mandelbrot-only.
+  - These families render in double precision, so their finders stop at zoom 1e13.
+  - On Tricorn and Burning Ship the readout gives the spiral's repeat factor but no rotation angle: their spirals are not rotation-symmetric.
+  - A User Equation works when its step uses only `z` and `c`, not `n`, `iter` or `prev`. Equations with `conj`, `abs`, `re` or `im` work too. Minibrots are found for the equation's own start point (0, or its z₀ seed).
 
 Works at any depth up to the Extreme tier's 1e100 limit. A search runs in the background (usually well under a second; a few seconds on very busy views) and can be cancelled.
 
