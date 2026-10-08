@@ -1356,6 +1356,9 @@ and the structure resembles a seated Buddha figure (Daniel Green
   BuddhaIterLow   : int   Low band cutoff iters.  Default 500.
   BuddhaIterMid   : int   Mid band cutoff iters.  Default 5 000.
   BuddhaIterHigh  : int   High band cutoff iters.  Default 50 000.
+  BuddhaMinIter   : int   Shortest escape that is drawn.  Default 12.
+                          Faster escapers wash the |c| <= 2 disc with haze;
+                          0 draws every orbit.  Anti types ignore it.
 
 More samples → smoother density and brighter output.  Render time
 scales linearly with samples and roughly linearly with band size.

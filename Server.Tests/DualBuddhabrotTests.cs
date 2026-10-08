@@ -37,7 +37,19 @@ public sealed class DualBuddhabrotTests
             BuddhaSamples = samples, BuddhaIterHigh = 400, BuddhaQualityMode = q, BuddhaMetropolis = mh,
             BuddhaZoomCompensation = false, BuddhaSeed = 777,
             DualBuddhaCSeedX = cx, DualBuddhaCSeedY = cy, DualBuddhaMinIter = minIter,
+            BuddhaMinIter = minIter,   // #1218 — the classic comparisons use the same cut
         };
+
+    // #1218 — the Dual Z channel is the hit total of the classic double-precision
+    // System.Random sampler; classic uniform renders now default to the shared
+    // GPU/CPU sampler, so the comparisons switch it off for the classic render.
+    private static T Classic<T>(T calc, FractalParameters p) where T : BuddhaFamilyCalculator
+    {
+        bool saved = BuddhaFamilyCalculator.UseSharedUniformSampler;
+        BuddhaFamilyCalculator.UseSharedUniformSampler = false;
+        try { return Render(calc, p); }
+        finally { BuddhaFamilyCalculator.UseSharedUniformSampler = saved; }
+    }
 
     private static T Render<T>(T calc, FractalParameters p, int size = 96) where T : BuddhaFamilyCalculator
     {
@@ -59,7 +71,7 @@ public sealed class DualBuddhabrotTests
     public void ZChannel_EqualsTheClassicBuddhabrot(BuddhaQualityMode q)
     {
         var p = Params(minIter: 0, q: q);
-        var classic = Render(new BuddhabrotCalculator(96, 96), p.Clone());
+        var classic = Classic(new BuddhabrotCalculator(96, 96), p.Clone());
         var dual = Dual(p);
         var total = classic.HitsR.Zip(classic.HitsG, (a, b) => a + b).Zip(classic.HitsB, (a, b) => a + b).ToArray();
         Assert.True(total.Sum(v => (long)v) > 1000);
@@ -137,6 +149,7 @@ public sealed class DualBuddhabrotTests
         nameof(FractalParameters.DualBuddhaColorZ), nameof(FractalParameters.DualBuddhaColorCB), nameof(FractalParameters.DualBuddhaColorCE),
         nameof(FractalParameters.DualBuddhaGainZ), nameof(FractalParameters.DualBuddhaGainCB), nameof(FractalParameters.DualBuddhaGainCE),
         nameof(FractalParameters.BuddhaColorMode),   // classic band composite — unused by the dual composite
+        nameof(FractalParameters.BuddhaMinIter),     // #1218 — classic escape cut; the dual uses DualBuddhaMinIter
     };
 
     public static IEnumerable<object[]> SamplerAndColourParams()

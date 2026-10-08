@@ -39,12 +39,21 @@
 //   • Orbit buffer hard-cap at 200K to prevent per-thread allocation blow-up
 //     when MaxIterations is set very high in in-set mode.
 //
-// GPU sampling (#838, GPU parity plan G4.7): with GPU compute on, uniform
-// sampling runs on the GpuKernel (BuddhaKernelSource, D3D11 + Vulkan) and adds
-// into the same hit histograms; Composite / Recolor / relief are unchanged.
-// It is a different random realization of the same distribution (own RNG, float
-// orbits), deterministic per seed. Metropolis-Hastings (including the zoom-
-// compensation auto-enable) and the Dual Buddhabrot samplers stay on the CPU.
+// Uniform sampling (#838 / #1218): one algorithm on both paths — the GPU kernel
+// (BuddhaKernelSource, D3D11 + Vulkan) when GPU compute is on, otherwise its CPU
+// twin BuddhaUniformSampler (counter-based stream, float orbits, run in parallel).
+// Both add into the same hit histograms and render the same image for a seed, so
+// the GPU switch, --batch and the CPU core count do not change the picture.
+// Composite / Recolor / relief are unchanged. Metropolis-Hastings (including the
+// zoom-compensation auto-enable), the Dual Buddhabrot samplers and zooms past
+// MaxGpuBuddhaZoom (float orbits) use the double-precision System.Random sampler.
+//
+// #1218 — no sampler draws z0 = 0: every kept orbit starts there, so it piled one
+// hit per orbit on a single pixel (~250x the next hottest) and the log
+// normalisation divided the whole image by it — the near-black default
+// Buddhabrot. Escaping orbits shorter than BuddhaMinIter are not drawn either:
+// the fast escapers are most of the samples and wash the |c| <= 2 disc (the red
+// disc behind the default Nebulabrot).
 
 using System;
 using System.Threading;
@@ -116,10 +125,36 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
     /// <summary>#838 — the GPU compute kernel (shared with the 2D calculators).</summary>
     public FracturingFog.Rendering.IGpuKernel? GpuKernel { get; set; }
 
-    /// <summary>#838 — process-wide opt-out of GPU Buddhabrot sampling
-    /// (<c>FF_GPU_BUDDHA=0</c>); on by default, still needs <see cref="UseGpuCompute"/>.</summary>
-    public static bool UseGpuBuddha { get; set; } =
-        Environment.GetEnvironmentVariable("FF_GPU_BUDDHA") is not ("0" or "false" or "off" or "no");
+    // #838 / #1218 — FF_GPU_BUDDHA=1 opts in; a per-thread override for tests.
+    private static readonly bool s_gpuBuddhaEnv =
+        Environment.GetEnvironmentVariable("FF_GPU_BUDDHA") is "1" or "true" or "on" or "yes";
+    [ThreadStatic] private static bool? t_gpuBuddha;
+
+    /// <summary>#838 / #1218 — sample uniform Buddhabrot renders on the GPU kernel
+    /// (still needs <see cref="UseGpuCompute"/>). Off by default: the GPU and CPU run
+    /// one shared sampler and render the same image, and the CPU's run — cycle
+    /// detection included — is the faster one on the hardware this was measured on
+    /// (GT 710, 640x480 defaults: Buddhabrot 66 vs 195 ms, AntiBuddhabrot 125 vs
+    /// 1214 ms). <c>FF_GPU_BUDDHA=1</c> opts in (a card with far more compute than the
+    /// CPU). Setting it overrides for the calling thread only (tests).</summary>
+    public static bool UseGpuBuddha
+    {
+        get => t_gpuBuddha ?? s_gpuBuddhaEnv;
+        set => t_gpuBuddha = value;
+    }
+
+    // #1218 — test hook (thread-static, like the other calculator test knobs).
+    [ThreadStatic] private static bool t_legacyUniform;
+
+    /// <summary>#1218 — false routes uniform renders to the double-precision
+    /// System.Random sampler instead of the shared one (BuddhaUniformSampler / the GPU
+    /// kernel). Tests use it to compare against that sampler (the Dual Buddhabrot's Z
+    /// channel is its hit total). Per thread; default true.</summary>
+    public static bool UseSharedUniformSampler
+    {
+        get => !t_legacyUniform;
+        set => t_legacyUniform = !value;
+    }
 
     /// <summary>#838 — the GPU orbit is float: past this zoom the viewport pixel
     /// approaches float resolution of z (|z| ≤ 2), so the GPU leaves sampling to the
@@ -230,6 +265,7 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
         bool hd = FractalParameters.BuddhaQualityMode == BuddhaQualityMode.HighDefinition;
         bool mh = FractalParameters.BuddhaMetropolis;
         bool progressive = FractalParameters.BuddhaProgressive;
+        int minIter = Math.Max(0, FractalParameters.BuddhaMinIter);   // #1218
 
         // #837 — zoom-detail compensation. A zoomed viewport catches far fewer
         // of the fixed-domain sample orbits, so coverage collapses and the frame
@@ -258,8 +294,11 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
         int samplesPerBatch = Math.Max(1, samples / batches);
         int perThreadPerBatch = Math.Max(1, samplesPerBatch / threads);
 
-        // #838 — GPU uniform sampling when available; null kernel = CPU sampling.
+        // #838 / #1218 — the shared uniform sampler (GPU kernel, or its CPU twin)
+        // when the render is uniform and shallow enough for float orbits.
+        bool shared = UseSharedUniformSampler && !mh && SupportsGpuSampling && Zoom <= MaxGpuBuddhaZoom;
         var gpu = GpuSamplingKernel(mh);
+        _minIter = minIter;
 
         // Per-thread CPU histograms, allocated on first CPU batch (a GPU render
         // that never falls back never needs them).
@@ -309,27 +348,34 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
         {
             if (ct.IsCancellationRequested) break;
 
-            if (gpu != null)
+            if (shared)
             {
-                try
+                var sb = new FracturingFog.Rendering.GpuBuddhaBatch(
+                    width, height, scale, midX, midY, maxOrbit, inSet, hd, low, mid,
+                    unchecked((uint)baseSeed), batch, samplesPerBatch, minIter);
+                bool done = false;
+                if (gpu != null)
                 {
-                    gpu.RunBuddhaBatch(new FracturingFog.Rendering.GpuBuddhaBatch(
-                        width, height, scale, midX, midY, maxOrbit, inSet, hd, low, mid,
-                        unchecked((uint)baseSeed), batch, samplesPerBatch), _hitsR, _hitsG, _hitsB);
-                    LastCalculateUsedGpu = true;
-                    Composite();
-                    if (progressive) OnBatchComposited?.Invoke(batch + 1, batches);
-                    continue;
+                    try
+                    {
+                        gpu.RunBuddhaBatch(sb, _hitsR, _hitsG, _hitsB);
+                        LastCalculateUsedGpu = true;
+                        done = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        // A failed batch adds nothing (the GPU result is read back only
+                        // on success): the CPU twin runs it and the rest — same image.
+                        Console.Error.WriteLine($"[Buddhabrot] GPU sampling failed, CPU fallback: {ex.Message}");
+                        LastGpuRoute = GpuRoute.Cpu("GPU error", $"GPU Buddhabrot sampling failed: {ex.Message}");
+                        gpu = null;
+                        LastCalculateUsedGpu = false;
+                    }
                 }
-                catch (Exception ex)
-                {
-                    // A failed batch adds nothing (the GPU result is read back only
-                    // on success): run it and the rest on the CPU.
-                    Console.Error.WriteLine($"[Buddhabrot] GPU sampling failed, CPU fallback: {ex.Message}");
-                    LastGpuRoute = GpuRoute.Cpu("GPU error", $"GPU Buddhabrot sampling failed: {ex.Message}");
-                    gpu = null;
-                    LastCalculateUsedGpu = false;
-                }
+                if (!done && !RunSharedOnCpu(sb, ct)) break;
+                Composite();
+                if (progressive) OnBatchComposited?.Invoke(batch + 1, batches);
+                continue;
             }
             EnsureLocals();
 
@@ -378,6 +424,38 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
         OnSamplingFinished(!ct.IsCancellationRequested);
     }
 
+    /// <summary>#1218 — the shared uniform sampler on the CPU: the batch split into
+    /// chunks across threads, each into its own histograms, summed into the hit
+    /// arrays. Every sample owns its random stream, so the result does not depend on
+    /// how the chunks are scheduled. False when cancelled (nothing added).</summary>
+    private bool RunSharedOnCpu(FracturingFog.Rendering.GpuBuddhaBatch b, CancellationToken ct)
+    {
+        const int chunk = 8192;
+        int n = b.Width * b.Height;
+        int chunks = (b.Samples + chunk - 1) / chunk;
+        var parts = new System.Collections.Concurrent.ConcurrentBag<(uint[] R, uint[] G, uint[] B)>();
+        try
+        {
+            Parallel.For(0, chunks, new ParallelOptions { CancellationToken = ct },
+                () => (R: new uint[n], G: new uint[n], B: new uint[n]),
+                (ci, _, loc) =>
+                {
+                    int first = ci * chunk;
+                    FracturingFog.Rendering.BuddhaUniformSampler.Run(b, loc.R, loc.G, loc.B,
+                        first, Math.Min(chunk, b.Samples - first));
+                    return loc;
+                },
+                loc => parts.Add(loc));
+        }
+        catch (OperationCanceledException) { return false; }
+        foreach (var (pr, pg, pb) in parts)
+            for (int i = 0; i < n; i++) { _hitsR[i] += pr[i]; _hitsG[i] += pg[i]; _hitsB[i] += pb[i]; }
+        return true;
+    }
+
+    // #1218 — the minimum escape count of the render in progress (legacy sampler).
+    private int _minIter;
+
     /// <summary>#838 — the kernel to sample this render on, or null for the CPU
     /// (recording the reason in <see cref="LastGpuRoute"/>).</summary>
     private FracturingFog.Rendering.IGpuKernel? GpuSamplingKernel(bool metropolis)
@@ -387,7 +465,7 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
         string? why =
               k == null ? "the active renderer has no GPU compute kernel"
             : !k.SupportsBuddhabrot ? $"{k.BackendLabel} has no Buddhabrot kernel"
-            : !UseGpuBuddha ? "GPU Buddhabrot sampling is off (FF_GPU_BUDDHA=0)"
+            : !UseGpuBuddha ? "the CPU sampler renders the same image and is faster on most hardware; FF_GPU_BUDDHA=1 opts in to the GPU"
             : !SupportsGpuSampling ? "this Buddhabrot variant's sampler runs on the CPU only"
             : metropolis ? "Metropolis sampling (on above zoom 1.2 with zoom compensation) runs on the CPU only"
             : Zoom > MaxGpuBuddhaZoom ? $"past the GPU Buddhabrot zoom limit ({MaxGpuBuddhaZoom:0}; float orbits)"
@@ -396,7 +474,7 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
         {
             string reason = k == null ? "no GPU kernel"
                 : !k.SupportsBuddhabrot ? "no Buddhabrot kernel"
-                : !UseGpuBuddha ? "GPU Buddhabrot off"
+                : !UseGpuBuddha ? "CPU faster"
                 : !SupportsGpuSampling ? "CPU-only sampler"
                 : metropolis ? "Metropolis sampling"
                 : $"zoom > {MaxGpuBuddhaZoom:0}";
@@ -649,7 +727,7 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
         }
 
         bool escaped = iter < maxOrbit;
-        bool keep = inSet ? !escaped : escaped;
+        bool keep = inSet ? !escaped : escaped && iter >= _minIter;   // #1218 — no fast escapers
         if (!keep) return false;
 
         if (escaped) classIter = iter;
@@ -682,7 +760,7 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
         double invScale = 1.0 / scale;
         double cxOff = width * 0.5 - midX * invScale;
         double cyOff = height * 0.5 - midY * invScale;
-        for (int k = 0; k < recLen; k++)
+        for (int k = 1; k < recLen; k++)   // #1218 — z0 is not drawn, so it does not score
         {
             int ix = (int)(orbitR[k] * invScale + cxOff);
             int iy = (int)(orbitI[k] * invScale + cyOff);
@@ -712,9 +790,11 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
     /// hit buffer using integer pixel snapping.</summary>
     protected static void SplatOrbitStd(
         uint[] target, double[] orbitR, double[] orbitI, int recLen,
-        double scale, double midX, double midY, int width, int height)
+        double scale, double midX, double midY, int width, int height, int from = 1)
     {
-        for (int k = 0; k < recLen; k++)
+        // #1218 — from 1: z0 = 0 is every orbit's, not drawn (Dual Buddhabrot passes
+        // its own start, unchanged).
+        for (int k = from; k < recLen; k++)
         {
             double ozr = orbitR[k], ozi = orbitI[k];
             int ix = (int)((ozr - midX) / scale + width * 0.5);
@@ -740,9 +820,9 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
     protected static void SplatOrbitHD(
         uint[] target, double[] orbitR, double[] orbitI, int recLen,
         double scale, double midX, double midY, int width, int height, Random rng,
-        bool mirror = true)
+        bool mirror = true, int from = 1)
     {
-        for (int k = 0; k < recLen; k++)
+        for (int k = from; k < recLen; k++)   // #1218 — see SplatOrbitStd
         {
             double ozr = orbitR[k], ozi = orbitI[k];
 

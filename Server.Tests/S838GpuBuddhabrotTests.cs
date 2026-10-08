@@ -5,13 +5,16 @@
 // GPU (BuddhaKernelSource, D3D11 + Vulkan). The GPU draws its own random samples,
 // so its image is a different realization of the same distribution as the CPU's:
 // parity is statistical. These run on the Vulkan device (skipped without one):
-//   • GPU vs CPU distance between block-summed, jointly normalised histograms,
-//     held to the distance between two CPU seeds (the noise floor), with a
-//     shifted-view contrast so a loose metric can't pass — Buddhabrot and
+//   • #1218 — the GPU and the CPU render the same image (one shared sampler,
+//     BuddhaUniformSampler), and the CPU's parallel split equals a one-thread run;
+//   • the shared float sampler against the classic double-precision System.Random
+//     sampler: distance between block-summed, jointly normalised histograms, held
+//     to the distance between two seeds of the double sampler (the noise floor),
+//     with a shifted-view contrast so a loose metric can't pass — Buddhabrot and
 //     AntiBuddhabrot, Standard and HD splats;
 //   • real-axis symmetry of the GPU's own uniform (non-mirrored) histogram, an
 //     invariant of the Mandelbrot map that holds independently of the CPU;
-//   • the kernel against GpuBuddhaReference.Run, a strict-IEEE-float C#
+//   • the kernel against BuddhaUniformSampler.Run, a strict-IEEE-float C#
 //     replay of its algorithm (same RNG, cycle detection, splat) — near pixel-
 //     exact, which pins the two passes replaying one orbit (the bug a multiply-add
 //     fused differently in the two passes caused);
@@ -37,6 +40,8 @@ public sealed class S838GpuBuddhabrotTests
 
     private static VulkanComputeKernel Device()
     {
+        // #1218 — GPU Buddhabrot sampling is opt-in (per-thread override here).
+        BuddhaFamilyCalculator.UseGpuBuddha = true;
         var k = VulkanComputeKernel.TryCreateWithOwnContext();
         if (k is null) Assert.Skip("no Vulkan device on this host");
         return k;
@@ -63,6 +68,16 @@ public sealed class S838GpuBuddhabrotTests
     {
         c.Calculate();
         return ((uint[])c.HitsR.Clone(), (uint[])c.HitsG.Clone(), (uint[])c.HitsB.Clone());
+    }
+
+    // The classic double-precision System.Random sampler (Metropolis / deep zoom /
+    // pre-#1218 uniform renders): the independent statistical reference.
+    private static (uint[] R, uint[] G, uint[] B) RunDouble(BuddhaFamilyCalculator c)
+    {
+        bool saved = BuddhaFamilyCalculator.UseSharedUniformSampler;
+        BuddhaFamilyCalculator.UseSharedUniformSampler = false;
+        try { return Run(c); }
+        finally { BuddhaFamilyCalculator.UseSharedUniformSampler = saved; }
     }
 
     // Block-summed bands, normalised by the grand total (band fractions count too).
@@ -103,9 +118,9 @@ public sealed class S838GpuBuddhabrotTests
         Assert.True(gpuCalc.LastCalculateUsedGpu, $"GPU sampling did not run: {gpuCalc.LastGpuRoute.Detail}");
         Assert.Equal(GpuRouteState.Gpu, gpuCalc.LastGpuRoute.State);
 
-        var cpu1 = Blocks(Run(Calc(anti, 1, hd, null)));
-        var cpu2 = Blocks(Run(Calc(anti, 2, hd, null)));
-        var shifted = Blocks(Run(Calc(anti, 1, hd, null, centerY: 0.15)));
+        var cpu1 = Blocks(RunDouble(Calc(anti, 1, hd, null)));
+        var cpu2 = Blocks(RunDouble(Calc(anti, 2, hd, null)));
+        var shifted = Blocks(RunDouble(Calc(anti, 1, hd, null, centerY: 0.3)));
 
         double noise = Distance(cpu1, cpu2), parity = Distance(gpu, cpu1), contrast = Distance(shifted, cpu1);
         TestContext.Current.TestOutputHelper?.WriteLine($"anti={anti} hd={hd}: GPU vs CPU {parity:F4}, noise {noise:F4}, contrast {contrast:F4}");
@@ -124,7 +139,7 @@ public sealed class S838GpuBuddhabrotTests
         using var k = Device();
         var g = Run(Calc(anti, 3, hd: false, k));
         double asym = Distance(Blocks(g), Blocks(g, flipY: true));
-        double noise = Distance(Blocks(Run(Calc(anti, 1, false, null))), Blocks(Run(Calc(anti, 2, false, null))));
+        double noise = Distance(Blocks(RunDouble(Calc(anti, 1, false, null))), Blocks(RunDouble(Calc(anti, 2, false, null))));
         TestContext.Current.TestOutputHelper?.WriteLine($"anti={anti}: asymmetry {asym:F4}, noise {noise:F4}");
         Assert.True(asym < 1.4 * noise + 0.002, $"GPU histogram vs its mirror {asym:F4}, CPU seed noise {noise:F4}");
     }
@@ -149,12 +164,61 @@ public sealed class S838GpuBuddhabrotTests
         c.ProgressiveBatchesOverride = 4;
         int callbacks = 0;
         c.OnBatchComposited = (_, _) => callbacks++;
-        var h = Run(c);
+        Run(c);
         Assert.True(c.LastCalculateUsedGpu);
         Assert.Equal(4, callbacks);
-        double d = Distance(Blocks(h), Blocks(Run(Calc(false, 1, false, null))));
-        double noise = Distance(Blocks(Run(Calc(false, 1, false, null))), Blocks(Run(Calc(false, 2, false, null))));
-        Assert.True(d < 1.4 * noise + 0.002, $"progressive GPU vs CPU {d:F4}, noise {noise:F4}");
+        // #1218 — the CPU's progressive render is the same image.
+        var cpu = Calc(false, 1, false, null);
+        cpu.FractalParameters.BuddhaProgressive = true;
+        cpu.ProgressiveBatchesOverride = 4;
+        Run(cpu);
+        Assert.True(Mismatch(c.ColorBuffer, cpu.ColorBuffer) <= c.ColorBuffer.Length / 1000,
+            $"progressive GPU vs CPU: {Mismatch(c.ColorBuffer, cpu.ColorBuffer)} px differ");
+    }
+
+    private static int Mismatch(uint[] a, uint[] b) => a.Zip(b).Count(p => p.First != p.Second);
+
+    // #1218 — the point of the shared sampler: switching GPU compute does not change
+    // the picture. Only the GPU's approximate division may move a point one pixel or
+    // a sample one band, so a handful of pixels may differ.
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Gpu_And_Cpu_Render_The_Same_Image(bool anti, bool hd)
+    {
+        using var k = Device();
+        var g = Calc(anti, 4, hd, k);
+        var gh = Run(g);
+        var c = Calc(anti, 4, hd, null);
+        var ch = Run(c);
+        Assert.True(g.LastCalculateUsedGpu && !c.LastCalculateUsedGpu);
+        int n = W * H;
+        int px = Mismatch(g.ColorBuffer, c.ColorBuffer);
+        TestContext.Current.TestOutputHelper?.WriteLine($"anti={anti} hd={hd}: {px} of {n} px differ");
+        Assert.True(px <= n / 1000, $"GPU vs CPU image: {px} of {n} pixels differ");
+        foreach (var (a, b) in new[] { (gh.R, ch.R), (gh.G, ch.G), (gh.B, ch.B) })
+        {
+            long ta = a.Sum(v => (long)v), tb = b.Sum(v => (long)v);
+            Assert.True(Math.Abs(ta - tb) <= Math.Max(4, tb / 2000), $"band totals GPU {ta} vs CPU {tb}");
+        }
+    }
+
+    // #1218 — the CPU splits a batch across threads; every sample owns its stream, so
+    // the split is invisible: the frame equals one sequential run of the sampler.
+    [Fact]
+    public void Cpu_Parallel_Split_Equals_A_Single_Threaded_Run()
+    {
+        var c = Calc(false, 5, true, null);
+        c.FractalParameters.BuddhaSamples = 100_000;
+        c.FractalParameters.BuddhaMinIter = 0;   // most samples drawn: a chunk-boundary slip shows
+        var h = Run(c);
+        int n = W * H;
+        var s = (R: new uint[n], G: new uint[n], B: new uint[n]);
+        BuddhaUniformSampler.Run(new GpuBuddhaBatch(W, H, 3.5 / Math.Max(W, H), -0.5, 0, Iter, false, true, 20, 200,
+            5, 0, 100_000, c.FractalParameters.BuddhaMinIter), s.R, s.G, s.B);
+        Assert.Equal(s.R, h.R); Assert.Equal(s.G, h.G); Assert.Equal(s.B, h.B);
     }
 
     [Fact]
@@ -188,7 +252,7 @@ public sealed class S838GpuBuddhabrotTests
             Assert.Equal(("no GPU kernel", false), Route(noKernel));
 
             BuddhaFamilyCalculator.UseGpuBuddha = false;
-            Assert.Equal(("GPU Buddhabrot off", false), Route(Calc(false, 1, false, k)));
+            Assert.Equal(("CPU faster", false), Route(Calc(false, 1, false, k)));
             BuddhaFamilyCalculator.UseGpuBuddha = true;
 
             var off = Calc(false, 1, false, null);
@@ -220,6 +284,7 @@ public sealed class S838GpuBuddhabrotTests
     [Fact]
     public void A_Failing_Kernel_Falls_Back_To_The_Exact_Cpu_Frame()
     {
+        BuddhaFamilyCalculator.UseGpuBuddha = true;
         var cpu = Calc(false, 5, false, null);
         cpu.FractalParameters.BuddhaSamples = 50_000;
         cpu.Calculate();
@@ -249,7 +314,7 @@ public sealed class S838GpuBuddhabrotTests
         var g = (R: new uint[n], G: new uint[n], B: new uint[n]);
         k.RunBuddhaBatch(batch, g.R, g.G, g.B);
         var e = (R: new uint[n], G: new uint[n], B: new uint[n]);
-        GpuBuddhaReference.Run(batch, e.R, e.G, e.B);
+        BuddhaUniformSampler.Run(batch, e.R, e.G, e.B);
         // The GPU divides approximately (projection, in-set mean), so a point may land
         // one pixel over or a sample one band over; everything else is bit-identical.
         foreach (var (gb, eb, name) in new[] { (g.R, e.R, "low"), (g.G, e.G, "mid"), (g.B, e.B, "high") })
@@ -270,8 +335,9 @@ public sealed class S838GpuBuddhabrotTests
     public void In_Set_Orbits_Land_Every_Point_When_The_View_Holds_The_Disc()
     {
         // Zoomed out so the view holds |z| <= 2 whole: a kept in-set orbit splats all
-        // maxOrbit of its points (cycle repeats included) and nothing else does, so
-        // every band total is a multiple of maxOrbit — whatever the RNG drew.
+        // its points but z0 (#1218), maxOrbit - 1 of them (cycle repeats included),
+        // and nothing else does, so every band total is a multiple of maxOrbit - 1 —
+        // whatever the RNG drew.
         using var k = Device();
         int n = W * H;
         var g = (R: new uint[n], G: new uint[n], B: new uint[n]);
@@ -280,10 +346,10 @@ public sealed class S838GpuBuddhabrotTests
         foreach (var (h, name) in new[] { (g.R, "low"), (g.G, "mid"), (g.B, "high") })
         {
             long t = h.Sum(v => (long)v);
-            Assert.True(t % Iter == 0, $"{name} band: {t} hits is not a whole number of {Iter}-point orbits");
+            Assert.True(t % (Iter - 1) == 0, $"{name} band: {t} hits is not a whole number of {Iter - 1}-point orbits");
             total += t;
         }
-        Assert.True(total / Iter > 10_000, $"only {total / Iter} in-set orbits kept");
+        Assert.True(total / (Iter - 1) > 10_000, $"only {total / (Iter - 1)} in-set orbits kept");
     }
 
     [Fact]

@@ -1,17 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
-// Engine/Interefaces/GpuBuddhaReference.cs
+// Engine/Interefaces/BuddhaUniformSampler.cs
 //
-// #838 (GPU parity plan G4.7) — the GPU Buddhabrot kernel's algorithm
-// (Rendering.D3D/BuddhaKernelSource.cs) replayed on the CPU in strict IEEE float:
-// the parity oracle the Vulkan tests and the D3D11 probe hold each backend to.
-// Lives in Engine so both reach one copy (the kernel source is compiled into the
-// D3D and Vulkan assemblies alike). Keep it in step with the HLSL.
+// #838 / #1218 — the Buddhabrot family's uniform sampler, the one algorithm both
+// paths run: the GPU kernel (Rendering.D3D/BuddhaKernelSource.cs, D3D11 + Vulkan)
+// and this CPU twin in strict IEEE float (C# does not contract multiply-adds).
+// The same counter-based stream, cycle detection, band split and splat, so the
+// GPU, the CPU and --batch render the same image for a given seed — and, because
+// each sample owns its stream, independently of the CPU core count. Keep it in
+// step with the HLSL; S838GpuBuddhabrotTests and --d3dbuddhaprobe hold the
+// backends to it.
 
 namespace FracturingFog.Rendering;
 
-public static class GpuBuddhaReference
+public static class BuddhaUniformSampler
 {
     private static uint Wang(uint x) { x = (x ^ 61u) ^ (x >> 16); x *= 9u; x ^= x >> 4; x *= 0x27d4eb2du; x ^= x >> 15; return x; }
 
@@ -30,13 +33,17 @@ public static class GpuBuddhaReference
         zr = nzr; zi = nzi;
     }
 
-    /// <summary>The kernel's algorithm replayed on the CPU in strict IEEE float
-    /// (C# does not contract multiply-adds): the same RNG stream, cycle detection,
-    /// band split and splat, ADDING into the arrays like
-    /// <see cref="IGpuKernel.RunBuddhaBatch"/>. Parity checks hold each backend to it; a
-    /// backend differs only where its division is approximate (a point one pixel
-    /// over, a sample one band over).</summary>
+    /// <summary>Run the whole batch, ADDING into the arrays like
+    /// <see cref="IGpuKernel.RunBuddhaBatch"/>.</summary>
     public static void Run(in GpuBuddhaBatch b, uint[] hitsR, uint[] hitsG, uint[] hitsB)
+        => Run(b, hitsR, hitsG, hitsB, 0, b.Samples);
+
+    /// <summary>Samples [<paramref name="firstSample"/>, firstSample + <paramref name="count"/>)
+    /// of the batch, ADDING into the arrays (callers split a batch across threads,
+    /// each into its own arrays, and sum them). A GPU backend differs from this only
+    /// where its division is approximate (a point one pixel over, a sample one band
+    /// over).</summary>
+    public static void Run(in GpuBuddhaBatch b, uint[] hitsR, uint[] hitsG, uint[] hitsB, int firstSample, int count)
     {
         int w = b.Width, h = b.Height, maxOrbit = b.MaxOrbit;
         float scale = (float)b.Scale, midX = (float)b.MidX, midY = (float)b.MidY;
@@ -65,7 +72,8 @@ public static class GpuBuddhaReference
             }
         }
 
-        for (uint g = 0; g < (uint)b.Samples; g++)
+        int minIter = b.MinIter;
+        for (uint g = (uint)firstSample, end = (uint)(firstSample + count); g < end; g++)
         {
             uint rng = Wang(b.Seed ^ Wang(g * 0x9E3779B9u + Wang((uint)b.Batch + 0x632BE5ABu)));
             float cx = -2.5f + Rnd(ref rng) * 4.0f, cy = -1.5f + Rnd(ref rng) * 3.0f;
@@ -107,6 +115,7 @@ public static class GpuBuddhaReference
             }
             bool escaped = iter < maxOrbit;
             if (inSet == escaped) continue;
+            if (escaped && iter < minIter) continue;   // #1218 — fast escapers wash the |c| <= 2 disc
             int cls = escaped ? iter
                 : (int)(System.MathF.Sqrt(System.MathF.Min(1f, sum / (float)System.Math.Max(1, iter) * 0.25f)) * (float)maxOrbit);
             int recLen = escaped ? iter : maxOrbit;
@@ -117,7 +126,7 @@ public static class GpuBuddhaReference
             int k;
             for (k = 0; k < recLen; k++)
             {
-                Point(t, zr, zi, 1, ref rng);
+                if (k > 0) Point(t, zr, zi, 1, ref rng);   // #1218 — z0 = 0 is every orbit's: not drawn
                 if (inSet && k > 0)
                 {
                     if (zr == sr && zi == si) { lam = k - sk; break; }

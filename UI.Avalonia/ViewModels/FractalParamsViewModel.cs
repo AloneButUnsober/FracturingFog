@@ -135,6 +135,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _buddhaIterLow = _p.BuddhaIterLow;
         _buddhaIterMid = _p.BuddhaIterMid;
         _buddhaIterHigh = _p.BuddhaIterHigh;
+        _buddhaMinIter = _p.BuddhaMinIter;
         _buddhaColorMode = _p.BuddhaColorMode;
         _buddhaQualityMode = _p.BuddhaQualityMode;
         _buddhaMetropolis = _p.BuddhaMetropolis;
@@ -1622,6 +1623,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public int BuddhaIterMid { get => _buddhaIterMid; set { Set(ref _buddhaIterMid, (int)Clamp(value, 100, 200_000)); _p.BuddhaIterMid = _buddhaIterMid; Fire(); } }
     private int _buddhaIterHigh;
     public int BuddhaIterHigh { get => _buddhaIterHigh; set { Set(ref _buddhaIterHigh, (int)Clamp(value, 500, 500_000)); _p.BuddhaIterHigh = _buddhaIterHigh; Fire(); } }
+    private int _buddhaMinIter;   // #1218
+    public int BuddhaMinIter { get => _buddhaMinIter; set { Set(ref _buddhaMinIter, (int)Clamp(value, 0, 10_000)); _p.BuddhaMinIter = _buddhaMinIter; Fire(); } }
     private BuddhaColorMode _buddhaColorMode;
     public BuddhaColorMode BuddhaColorMode
     {

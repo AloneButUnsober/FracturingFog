@@ -36,9 +36,20 @@ public sealed class DualBuddhabrotVariantTests
             BuddhaSamples = samples, BuddhaIterHigh = 300, BuddhaQualityMode = BuddhaQualityMode.Standard,
             BuddhaZoomCompensation = false, BuddhaSeed = 99,
             DualBuddhaCSeedX = cx, DualBuddhaCSeedY = cy, DualBuddhaMinIter = minIter,
+            BuddhaMinIter = minIter,   // #1218 — the classic comparisons use the same cut
         };
         tweak?.Invoke(p);
         return p;
+    }
+
+    // #1218 — classic renders compared hit for hit with the Dual Z channel use the
+    // double-precision System.Random sampler (the shared GPU/CPU one is the default).
+    private static T Classic<T>(T calc, FractalParameters p) where T : BuddhaFamilyCalculator
+    {
+        bool saved = BuddhaFamilyCalculator.UseSharedUniformSampler;
+        BuddhaFamilyCalculator.UseSharedUniformSampler = false;
+        try { return Render(calc, p); }
+        finally { BuddhaFamilyCalculator.UseSharedUniformSampler = saved; }
     }
 
     private static T Render<T>(T calc, FractalParameters p, double zoom = 1.0) where T : BuddhaFamilyCalculator
@@ -139,10 +150,7 @@ public sealed class DualBuddhabrotVariantTests
     {
         var p = Params(samples: 6_000, tweak: q => q.DualBuddhaAnti = true);
         var dual = Dual(p);
-        var classic = new AntiBuddhabrotCalculator(96, 96);
-        classic.CenterX = -0.5; classic.CenterY = 0; classic.Zoom = 1; classic.MaxIterations = 300;   // maxOrbit = IterHigh
-        classic.FractalParameters = p.Clone(); classic.ColorMap = new RampMap();
-        classic.Calculate();
+        var classic = Classic(new AntiBuddhabrotCalculator(96, 96), p.Clone());   // maxOrbit = IterHigh (MaxIterations 300)
         Assert.Equal(Sum(classic.HitsR, classic.HitsG, classic.HitsB), Sum(dual.HitsR, dual.HitsB));
         Assert.True(dual.HitsG.Sum(h => (long)h) > 0);
         // c bounded ⇒ z bounded (M_c ⊂ M), up to samples whose z escapes but whose
@@ -154,7 +162,7 @@ public sealed class DualBuddhabrotVariantTests
     public void DefaultMode_IsUnchanged_ZStillTheClassicBuddhabrot()
     {
         var p = Params();
-        var classic = Render(new BuddhabrotCalculator(96, 96), p.Clone());
+        var classic = Classic(new BuddhabrotCalculator(96, 96), p.Clone());
         var dual = Dual(p);
         Assert.Equal(Sum(classic.HitsR, classic.HitsG, classic.HitsB), dual.HitsR);
     }
