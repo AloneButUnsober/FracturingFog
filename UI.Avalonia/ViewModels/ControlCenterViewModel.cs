@@ -88,6 +88,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
         RefreshWorkspaces();
 
         InitQuickRecord();
+        InitFinder();
 
         RebuildNav();
     }
