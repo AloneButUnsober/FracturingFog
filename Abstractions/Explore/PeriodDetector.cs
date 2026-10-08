@@ -129,10 +129,7 @@ public static class PeriodDetector
 
             double az = Magnitude(zx, zy);
             r = 2 * az * r + r * r + rho;
-            OD nx = zx * zx - zy * zy + c.Re;
-            OD xy = zx * zy;
-            zy = xy + xy + c.Im;
-            zx = nx;
+            (zx, zy) = OdExact.SquareAdd(zx, zy, c.Re, c.Im);
 
             var stop = Check(Magnitude(zx, zy), r, escapeRadius);
             if (stop is PeriodStop s)

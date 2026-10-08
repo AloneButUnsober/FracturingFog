@@ -4,16 +4,21 @@
 // ControlCenterViewModel.Finder.cs
 //
 // Explore ▸ Find group — interesting-location finder (epic #1184).
-// S1 (#1185): "Detect period" reports the period of the lowest-period
-// minibrot whose nucleus lies inside the current view (ball method,
-// Abstractions/Explore/PeriodDetector). Read-only diagnostic: it does not
-// move the view, so there is nothing for --batch to reproduce.
+//   S1 (#1185) "Detect period": the ball scan's lowest period candidate in the
+//              view (a lower bound; read-only).
+//   S2 (#1186) "Zoom to minibrot": find a minibrot whose nucleus is really in
+//              the view (Abstractions/Explore/NucleusFinder.FindMinibrot) and
+//              frame it the way the home view frames the whole set.
+// The jump only moves centre / zoom / quality / first-render iterations, all
+// of which the --batch Command builder already captures from the live view.
 
 using System;
 using System.Globalization;
 using System.Reactive;
 using System.Threading;
 using System.Threading.Tasks;
+
+using Avalonia.Threading;
 
 using ReactiveUI;
 
@@ -25,10 +30,11 @@ namespace FracturingFog.UI.Avalonia.ViewModels;
 public sealed partial class ControlCenterViewModel
 {
     private CancellationTokenSource? _finderCts;
-    private string _finderStatus = "Detect the period of the minibrot in view (z² + c).";
+    private string _finderStatus = "Find minibrots in view (z² + c).";
     private bool _isFinderBusy;
 
     public ReactiveCommand<Unit, Unit> DetectPeriodCommand { get; private set; } = null!;
+    public ReactiveCommand<Unit, Unit> ZoomToMinibrotCommand { get; private set; } = null!;
     public ReactiveCommand<Unit, Unit> CancelFinderCommand { get; private set; } = null!;
 
     /// <summary>Readout line under the Find buttons.</summary>
@@ -51,43 +57,38 @@ public sealed partial class ControlCenterViewModel
 
     private void InitFinder()
     {
-        DetectPeriodCommand = ReactiveCommand.CreateFromTask(DetectPeriodAsync);
-        CancelFinderCommand = ReactiveCommand.Create(() => _finderCts?.Cancel());
+        var idle = this.WhenAnyValue(x => x.IsFinderBusy, busy => !busy);
+        DetectPeriodCommand   = ReactiveCommand.CreateFromTask(DetectPeriodAsync, idle);
+        ZoomToMinibrotCommand = ReactiveCommand.CreateFromTask(ZoomToMinibrotAsync, idle);
+        CancelFinderCommand   = ReactiveCommand.Create(() => _finderCts?.Cancel());
     }
 
-    private async Task DetectPeriodAsync()
+    // Snapshot of the live view taken on the UI thread; finders run off it.
+    private readonly record struct FinderView(FFMath.DeepComplex Centre, double Zoom, double Radius);
+
+    private bool TryFinderView(out FinderView view)
     {
-        var main = Shell.Main;
-        var vs = main.ViewState;
+        var vs = Shell.Main.ViewState;
         if (!FinderSupports(vs.FractalType))
         {
-            FinderStatus = $"Period detection supports z² + c (Mandelbrot) only — not {vs.FractalType}.";
-            return;
+            FinderStatus = $"The minibrot finder supports z² + c (Mandelbrot) only — not {vs.FractalType}.";
+            view = default;
+            return false;
         }
+        var (w, h) = Shell.Main.RenderHost.LastPresentedSize;
+        view = new FinderView(vs.GetCenter(), vs.Zoom, PeriodDetector.ViewDiskRadius(vs.Zoom, w, h));
+        return true;
+    }
 
-        // Snapshot the view on the UI thread; the scan runs off it.
-        var centre = vs.GetCenter();
-        double zoom = vs.Zoom;
-        var (w, h) = main.RenderHost.LastPresentedSize;
-        double radius = PeriodDetector.ViewDiskRadius(zoom, w, h);
-
+    // Runs `work` off the UI thread with a fresh cancellation token; busy state,
+    // cancellation and the "Cancelled." readout are handled here.
+    private async Task RunFinderAsync(Func<CancellationToken, Task> work)
+    {
         _finderCts?.Cancel();
         var cts = new CancellationTokenSource();
         _finderCts = cts;
         IsFinderBusy = true;
-        FinderStatus = "Scanning…";
-        try
-        {
-            var d = await Task.Run(() => PeriodDetector.Detect(centre, radius, ct: cts.Token), cts.Token);
-            string z = zoom.ToString("G4", CultureInfo.InvariantCulture);
-            FinderStatus = d.Stop switch
-            {
-                PeriodStop.Found       => $"Period {d.Period} minibrot in view (zoom {z}).",
-                PeriodStop.Escaped     => $"No minibrot in view — the whole view escapes (zoom {z}).",
-                PeriodStop.BallTooLarge => $"No period found within {d.Iterations} iterations (zoom {z}). Zoom in and retry.",
-                _                      => $"No period up to {PeriodDetector.DefaultMaxPeriod:N0} (zoom {z}).",
-            };
-        }
+        try { await work(cts.Token); }
         catch (OperationCanceledException)
         {
             if (ReferenceEquals(_finderCts, cts)) FinderStatus = "Cancelled.";
@@ -102,4 +103,80 @@ public sealed partial class ControlCenterViewModel
             cts.Dispose();
         }
     }
+
+    private Task DetectPeriodAsync()
+    {
+        if (!TryFinderView(out var v)) return Task.CompletedTask;
+        FinderStatus = "Scanning…";
+        return RunFinderAsync(async ct =>
+        {
+            var d = await Task.Run(() => PeriodDetector.Detect(v.Centre, v.Radius, ct: ct), ct);
+            string z = Fmt(v.Zoom);
+            FinderStatus = d.Stop switch
+            {
+                PeriodStop.Found        => $"Lowest period candidate in view: {d.Period} (zoom {z}). Zoom to minibrot finds the real one.",
+                PeriodStop.Escaped      => $"No minibrot in view — the whole view escapes (zoom {z}).",
+                PeriodStop.BallTooLarge => $"No period found within {d.Iterations} iterations (zoom {z}). Zoom in and retry.",
+                _                       => $"No period up to {PeriodDetector.DefaultMaxPeriod:N0} (zoom {z}).",
+            };
+        });
+    }
+
+    private Task ZoomToMinibrotAsync()
+    {
+        if (!TryFinderView(out var v)) return Task.CompletedTask;
+        FinderStatus = "Searching for a minibrot…";
+        return RunFinderAsync(async ct =>
+        {
+            // Progress: the period being tried, throttled to the UI thread.
+            int lastShown = 0;
+            void OnPeriod(int p)
+            {
+                if (p - lastShown < 16 && lastShown != 0) return;
+                lastShown = p;
+                Dispatcher.UIThread.Post(() => { if (IsFinderBusy) FinderStatus = $"Searching… trying period {p}"; });
+            }
+
+            var found = await Task.Run(() => NucleusFinder.FindMinibrot(v.Centre, v.Radius, onPeriod: OnPeriod, ct: ct), ct);
+            if (!found.Found)
+            {
+                FinderStatus = found.Status == NucleusStatus.PrecisionLimit
+                    ? "Too deep: beyond octuple-double precision."
+                    : $"No minibrot found in view (zoom {Fmt(v.Zoom)}). Pan or zoom out and retry.";
+                return;
+            }
+            ApplyMinibrotJump(found);
+        });
+    }
+
+    private void ApplyMinibrotJump(in NucleusResult found)
+    {
+        var main = Shell.Main;
+        var vs = main.ViewState;
+        var plan = MinibrotJump.Plan(found, vs.Quality, vs.IterLocked, vs.LockedIterations);
+        if (plan is not MinibrotJumpPlan p)
+        {
+            FinderStatus = $"Period {found.Period} minibrot is beyond the deepest zoom (1e100).";
+            return;
+        }
+
+        Shell.RecordNavChange();
+        vs.SetCenter(p.Center);
+        vs.Zoom = p.Zoom;
+        if (!ReferenceEquals(p.Quality, vs.Quality))
+        {
+            vs.Quality = p.Quality;
+            main.SetQualitySilent(p.Quality);
+            Menu.SetQualitySilent(p.Quality.Name);
+        }
+        if (!vs.IterLocked) vs.PreferredIterations = p.PreferredIterations;
+        main.RenderHost.Trigger();
+
+        string note = !p.IterationsShort ? ""
+            : vs.IterLocked ? $" Iterations are locked at {vs.LockedIterations:N0}; ~{p.WantedIterations:N0} resolve it."
+            : $" ~{p.WantedIterations:N0} iterations resolve it; using {p.PreferredIterations:N0}.";
+        FinderStatus = $"Period {found.Period} minibrot, size {found.Size.Magnitude:G3} → zoom {Fmt(p.Zoom)} ({p.Quality.Name}).{note}";
+    }
+
+    private static string Fmt(double v) => v.ToString("G4", CultureInfo.InvariantCulture);
 }

@@ -239,6 +239,23 @@ namespace FracturingFog.Server.Tests
             Assert.Empty(gaps);
         }
 
+        // #1186 — a deep live centre carries OD limbs that --x/--y (double)
+        // drop. Reported once the shift is a visible fraction of a pixel.
+        [Fact]
+        public void DeepCentre_DroppedPrecision_IsAGap()
+        {
+            var deep = new BatchCommandSnapshot { Zoom = 1e15, Width = 1920, Height = 1080, CenterXLow = 1e-17 };
+            Assert.Contains(BatchCommandBuilder.DetectGaps(deep), g => g.Contains("Deep-zoom centre"));
+        }
+
+        [Fact]
+        public void ShallowCentre_NegligibleLowLimbs_AreNotAGap()
+        {
+            // Same dropped amount at zoom 1 is ~1e-14 px: invisible.
+            var shallow = new BatchCommandSnapshot { Zoom = 1.0, Width = 1920, Height = 1080, CenterXLow = 1e-17 };
+            Assert.DoesNotContain(BatchCommandBuilder.DetectGaps(shallow), g => g.Contains("Deep-zoom centre"));
+        }
+
         // #1012 — stereo is expressible now: emitted as flags, not a gap.
         [Fact]
         public void Stereo_IsEmitted_NotAGap()

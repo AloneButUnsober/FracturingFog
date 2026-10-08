@@ -3968,7 +3968,14 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             var s = Main.ViewState;
             s.CenterX = snap.Cx; s.CenterXLo = snap.CxLo; s.CenterX2 = snap.Cx2; s.CenterX3 = snap.Cx3;
             s.CenterY = snap.Cy; s.CenterYLo = snap.CyLo; s.CenterY2 = snap.Cy2; s.CenterY3 = snap.Cy3;
+            // The snapshot keeps four limbs; clear the OD tail so a deep view
+            // being left (e.g. a finder jump, #1186) leaves no residue behind.
+            s.CenterX4 = s.CenterX5 = s.CenterX6 = s.CenterX7 = 0;
+            s.CenterY4 = s.CenterY5 = s.CenterY6 = s.CenterY7 = 0;
             s.Zoom = snap.Zoom;
+            // A region / minibrot jump's first-render iteration hint belongs to
+            // the view being left; the restored view recomputes (or uses its lock).
+            s.PreferredIterations = 0;
             s.FractalType = snap.Type;
             s.IterLocked = snap.IterLocked;
             s.LockedIterations = snap.LockedIterations;

@@ -10,7 +10,7 @@ S6 [#1190](https://github.com/AloneButUnsober/FracturingFog/issues/1190) ·
 S7 [#1191](https://github.com/AloneButUnsober/FracturingFog/issues/1191).
 The issues are the canonical task list; this doc is the maths + architecture context. Link both ways.
 
-**Status: DESIGN (2026-10-06).** No code yet.
+**Status: S1 shipped (#1185, PR #1232); S2 implemented (#1186) — 2026-10-08.** See §9.1 for what implementation changed versus this design.
 
 ---
 
@@ -303,6 +303,40 @@ Check must-hold invariants, not self-consistency:
 | S7 | #1191 | S2, S3 | Multibrot, User Equation, Burning Ship / Tricorn |
 
 Critical path: S1 → S2 → {S3, S4, S5}. S6 runs in parallel. S7 comes last.
+
+### 9.1 Implementation notes (S1–S2)
+
+Measured against all 158 built-in Mandelbrot regions (`Resources/regions.json`):
+
+- **The ball period is a lower bound, not "the minibrot in view".** On a whole
+  view the ball scan over-approximates: for 63 of 158 regions its period-p₀
+  nucleus lies outside the view. After its first hit the ball saturates (every
+  later n also "contains 0"), so later candidates carry no information. The real
+  lowest period found in view is often several times p₀ (116 → 261,
+  53 → 466, 351 → 427). The S1 button is labelled accordingly.
+- **S2 therefore scans periods upward from p₀** (`NucleusFinder.FindMinibrot`):
+  Newton from the view centre for each p, the first root inside the view wins.
+  The scan runs as **perturbed Newton in double** against one OD reference orbit
+  at the centre (εₙ₊₁ = 2Zₙεₙ + εₙ² + δ), so each try is O(p) double ops at any
+  depth. A proposal is then polished and verified in OD (minimal period, inside
+  view) before it is accepted. Result: 157/158 regions found, every one
+  re-confirmed at its period by the ball scan on a disk 1/100 the minibrot's
+  size. Worst found case ≈ 1.1 s; zoom 1e43 works. The one miss ("Bird of
+  Paradise", p₀ = 86 570) is stopped by a work budget (~5 s) instead of
+  scanning for minutes. Quadtree localisation by sub-disk ball scans was tried
+  first and abandoned: sub-disks inherit the same false positive.
+- **OD's `+` is the sloppy variant and floors at ~1e-65 under cancellation.**
+  z² + c → 0 at a nucleus is exactly that case, so Newton stalled.
+  `Abstractions/Explore/OdExact` adds b limb by limb through OD's full-cascade
+  `OD + double`; S1's deep path uses it too.
+- **Iterations:** a minibrot framed at its own size needs ~100 × period
+  iterations; 10 × leaves it a black smear (checked live). The jump sets this as
+  a region-style first-render hint, capped at the Extreme tier's 131 072, and
+  promotes (never demotes) the quality tier for the depth.
+- **Batch:** the jump is plain centre / zoom / quality / iterations. Deep
+  centres exposed a pre-existing gap — `--x/--y` are double only — now reported
+  by `BatchCommandBuilder.DetectGaps` once the dropped limbs shift the render by
+  ≥ 0.1 px; full-precision `--x/--y` is #1233.
 
 ## 10. Sources
 

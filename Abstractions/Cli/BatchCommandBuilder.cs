@@ -47,6 +47,13 @@ namespace FracturingFog.Cli
         public double CenterY { get; init; } = BatchDefaults.CenterY;
         public double Zoom { get; init; } = BatchDefaults.Zoom;
 
+        /// <summary>The part of the live centre below <see cref="CenterX"/> /
+        /// <see cref="CenterY"/> (the lower octuple-double limbs, summed).
+        /// --x / --y carry a double only, so this much is dropped; DetectGaps
+        /// reports it once it shifts the render by a visible fraction of a pixel.</summary>
+        public double CenterXLow { get; init; }
+        public double CenterYLow { get; init; }
+
         /// <summary>Effective iteration count in use for the current render.
         /// Emitted as <c>--iter</c> whenever &gt; 0 so the poster does not drift
         /// with the quality preset's iteration formula.</summary>
@@ -565,6 +572,9 @@ namespace FracturingFog.Cli
             "DomainWarpEnabled", "DomainWarpStrength", "DomainWarpFrequency",
         };
 
+        /// <summary>Dropped centre precision (in output pixels) that counts as a gap.</summary>
+        public const double DroppedCenterPixelTolerance = 0.1;
+
         /// <summary>List the live fx the emitted command cannot reproduce.
         /// Empty when the 2D config is fully expressible.</summary>
         public static IReadOnlyList<string> DetectGaps(BatchCommandSnapshot snap)
@@ -581,6 +591,15 @@ namespace FracturingFog.Cli
                     gaps.Add("Lighting & FX settings with no batch flag (" + string.Join(", ", missing.Take(6))
                              + (missing.Count > 6 ? $", +{missing.Count - 6} more" : "")
                              + ") — save them as a Lighting & FX preset and re-seed to use --lighting-preset");
+            }
+            // Deep zoom: the live centre needs more than the double --x/--y carry.
+            if (snap.Zoom > 0)
+            {
+                double pixel = FracturingFog.ViewState.ViewCamera.PlaneExtent
+                             / (Math.Max(1, Math.Max(snap.Width, snap.Height)) * snap.Zoom);
+                double dropped = Math.Max(Math.Abs(snap.CenterXLow), Math.Abs(snap.CenterYLow));
+                if (dropped > DroppedCenterPixelTolerance * pixel)
+                    gaps.Add($"Deep-zoom centre needs more precision than --x/--y carry (double only): the batch render lands ~{dropped / pixel:G2} px off-centre");
             }
             if (!string.IsNullOrWhiteSpace(snap.LiveAnimationName))
                 gaps.Add($"Live animation '{snap.LiveAnimationName}' (a still shows one moment of it; for a video choose it under --animation)");

@@ -155,6 +155,18 @@ Both the toolbar and status bar can be hidden via the Floating Menu (`Status` ch
 
 Keyboard pan/zoom/camera keys are **ignored** while a text box has focus (CX, CY, Zoom, Iter, equation editor, search box, …). Clicking the render surface restores focus — including after a toolbar click, since v0.6.2 fixed a focus regression that swallowed keystrokes after toolbar interaction.
 
+### Finding minibrots (Control Center → Explore → Find)
+
+For the Mandelbrot set (z² + c), the **Find** group locates miniature copies of the set ("minibrots") for you:
+
+- **Zoom to minibrot** searches the current view for a minibrot whose centre is really inside it, then jumps there and frames it the way the home view frames the whole set. It may appear rotated, because minibrots are rotated copies. The readout names its **period** (how many steps its orbit cycles through) and its size. The jump:
+  - raises the **Quality** tier if the new depth needs it (it never lowers a tier you chose);
+  - sets the first render's iterations to about 100 × the period, which a minibrot needs to render cleanly. Like a region jump, that count holds until you pan or zoom. If **Lock Iterations** is on, your locked count is kept and the readout says if it is too low.
+- **Backspace** returns to the view you jumped from.
+- **Detect period** is a quick read-only scan. It reports the lowest period *candidate* in view. That is a lower bound: the minibrot that **Zoom to minibrot** actually finds often has a higher period.
+
+Works at any depth up to the Extreme tier's 1e100 limit. A search runs in the background (usually well under a second; a few seconds on very busy views) and can be cancelled. Other fractal types will get a theory-free finder later (#1190).
+
 ---
 
 ## 4. Floating Menu
