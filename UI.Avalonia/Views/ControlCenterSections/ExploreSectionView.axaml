@@ -83,7 +83,7 @@
         <!-- Interesting-location finder (epic #1184). S1 #1185: period
              detection; S2 #1186: zoom to a minibrot in view; S3 #1187: snap a
              click to a Misiurewicz point; S4 #1188: go to an external angle;
-             S5 #1189: Julia morph (z² + c). -->
+             S5 #1189: Julia morph (z² + c); S6 #1190: auto-explore (any 2D family). -->
         <Border Classes="group">
             <StackPanel Spacing="6" MaxWidth="425" HorizontalAlignment="Left">
                 <TextBlock Classes="section" Text="Find" />
@@ -124,6 +124,32 @@
                             ToolTip.Tip="Trace the parameter ray at this angle into the set and jump to where it lands: a minibrot (periodic angle) or a Misiurewicz point (preperiodic angle). Backspace returns." />
                 </Grid>
                 <TextBlock Text="{Binding AngleInfo}" Foreground="#9A9A9A" FontSize="11" TextWrapping="Wrap" />
+                <!-- S6 #1190: heuristic auto-explore (every 2D family). -->
+                <TextBlock Classes="label" Text="Auto-explore" HorizontalAlignment="Left" Margin="0,6,0,0" />
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                    <Button Classes="action go" Content="Surprise me"
+                            Command="{Binding SurpriseMeCommand}"
+                            ToolTip.Tip="Search from this family's home view, with a fresh random seed, for a detail-rich view and go there. Works on every 2D type. Backspace returns." />
+                    <Button Classes="action go" Content="Descend"
+                            Command="{Binding DescendCommand}"
+                            ToolTip.Tip="Search downward from the current view for the most detail-rich view and go there. Backspace returns." />
+                    <TextBlock Classes="label" Text="Depth" VerticalAlignment="Center" Margin="6,0,0,0" />
+                    <NumericUpDown Value="{Binding ExploreDepth}" Minimum="1" Maximum="16" Increment="1"
+                                   FormatString="0" Width="96"
+                                   ToolTip.Tip="Levels to descend; each level zooms in 4x." />
+                    <TextBlock Classes="label" Text="Beam" VerticalAlignment="Center" />
+                    <NumericUpDown Value="{Binding ExploreBeam}" Minimum="1" Maximum="8" Increment="1"
+                                   FormatString="0" Width="96"
+                                   ToolTip.Tip="Views kept per level. Wider searches more but takes longer." />
+                </StackPanel>
+                <ItemsControl ItemsSource="{Binding ExploreCandidates}" IsVisible="{Binding HasExploreCandidates}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:ExploreCandidateItem">
+                            <Button Classes="action neutral" Content="{Binding Label}" Command="{Binding Go}"
+                                    ToolTip.Tip="{Binding Tip}" HorizontalAlignment="Left" Margin="0,2,0,0" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </StackPanel>
         </Border>
 

@@ -10,7 +10,7 @@ S6 [#1190](https://github.com/AloneButUnsober/FracturingFog/issues/1190) ·
 S7 [#1191](https://github.com/AloneButUnsober/FracturingFog/issues/1191).
 The issues are the canonical task list; this doc is the maths + architecture context. Link both ways.
 
-**Status: S1–S4 shipped (#1185/#1186/#1187/#1188, PRs #1232/#1234/#1236/#1238); S5 implemented (#1189) — 2026-10-08.** See §9.1 for what implementation changed versus this design.
+**Status: S1–S5 shipped (#1185–#1189, PRs #1232/#1234/#1236/#1238/#1239); S6 implemented (#1190) — 2026-10-08.** See §9.1 for what implementation changed versus this design.
 
 ---
 
@@ -402,6 +402,43 @@ Measured against all 158 built-in Mandelbrot regions (`Resources/regions.json`):
   flagged by `DetectGaps`).
 - **Undo** = nav Back plus restoring that layer's iteration hint (Back clears
   the hint; without it the restored layer smears).
+
+### 9.5 Implementation notes (S6)
+
+- **Placement.** `InterestScorer` and `AutoExplorer` live in `Abstractions/Explore/`
+  (pure, UI- and Engine-free, unit-tested with synthetic fields), not
+  `Engine/Explore/` as planned. Only the probe renderer, `Engine/Explore/ExploreProbe`,
+  needs the Engine: it builds the poster/batch calculator for the family
+  (`PosterRenderer.BuildCaptureCalculator`, or `MandelbrotCalculator` with the full
+  octuple-double centre). The UI reaches it through `Shell.CreateExploreProbe`, wired
+  by the host.
+- **Field.** The smooth-iteration buffer when the family has one (in-set = 0 gives the
+  inside mask); otherwise rendered luminance. Relief, lighting and post-FX are not
+  applied.
+- **Score.** Boundary is a preference band (rises to 1 at 30 % boundary pixels and
+  falls past 60 %, where views turn into pixel noise). Entropy is over 1-iteration
+  bands (1/32 luminance bands). Dimension is a Gaussian around 1.7 (σ 0.35), trusted
+  once 24+ boundary pixels exist. The penalties multiply: inside > 60 %, one escaped
+  band > 60 %, near-maxIter escapes > 2 %. All of these are fields on `InterestWeights`.
+- **Search.** Square probes (96 px), a 3×3 grid of cell centres plus 2 seeded jitter
+  children per node, step 4×, beam 3, depth 6. Kept views are at least half a child
+  width apart, and the search stops when a level's best child scores < 0.05. The
+  depth is capped at 1e100 for Mandelbrot and 1e13 for everything else.
+  "Surprise me" uses a random seed and 16 first-level jitter children from the home
+  view. The final S2/S3 snap is left to the existing Find buttons.
+- **Supported:** every 2D family except the Buddhabrot family, Flame, Plasma, Acid
+  Warp, DLA and Random Tile (stochastic or not pannable).
+- **Validated:** all-inside, uniform-escape and flat-colour fields score 0. Box
+  dimension is 1 for a line and 2 for a filled square. Seahorse valley (0.79) and
+  elephant valley (0.59) beat the cardioid interior and empty space (both 0). The same
+  seed gives the same path. A 5-level descent from home lands where independent plain
+  escape-time iteration counts span 28 to 447. Burning Ship, Tricorn, Newton, Lyapunov
+  and Julia all descend to views scoring > 0.8. Checked live in the app: Surprise me
+  (Mandelbrot), Descend (Burning Ship), finalist buttons, Backspace.
+- **Batch:** `--explore SPEC` (image and video) and `--explore-regions OUT.json` (the
+  finalists as an importable plain region list). These are catalog flags, so the
+  Command panel offers them. The live seed reproduces an explored view by coordinates.
+- **Not shipped:** the score-heatmap overlay and live weight tuning ([#1240](https://github.com/AloneButUnsober/FracturingFog/issues/1240)).
 
 ## 10. Sources
 

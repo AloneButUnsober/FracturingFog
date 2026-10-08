@@ -232,6 +232,15 @@ namespace FracturingFog.Batch
         /// <summary>Saved animation name (#998), played across a video's frames.</summary>
         public string? AnimationName { get; set; }
 
+        /// <summary>Auto-explore (#1190): the parsed <c>--explore</c> spec, or
+        /// null when the flag is absent. The image / video target becomes the
+        /// best view the search finds from the start view.</summary>
+        public FracturingFog.Abstractions.Explore.AutoExploreOptions? Explore { get; set; }
+
+        /// <summary>Where <c>--explore-regions</c> writes the finalists (a regions
+        /// JSON the Import Regions dialog reads). Only with --explore.</summary>
+        public string? ExploreRegionsPath { get; set; }
+
         // ── Stereo output (#1012) — null / false = keep the lighting block's value ──
         public FracturingFog.Rendering.Lighting.StereoMode? Stereo { get; set; }
         public double? StereoEyeSep { get; set; }         // 0..0.25 world units
@@ -770,6 +779,20 @@ namespace FracturingFog.Batch
                     case BatchFlags.Animation:
                         if (!Next(args, ref i, a, out string anv, out error)) return false;
                         opts.AnimationName = anv;
+                        break;
+
+                    case BatchFlags.Explore:
+                    {
+                        if (!Next(args, ref i, a, out string explV, out error)) return false;
+                        if (!FracturingFog.Abstractions.Explore.AutoExplorer.TryParseSpec(explV, out var explO, out string? explErr))
+                        { error = $"{BatchFlags.Explore}: {explErr}"; return false; }
+                        opts.Explore = explO;
+                        break;
+                    }
+
+                    case BatchFlags.ExploreRegions:
+                        if (!Next(args, ref i, a, out string erv, out error)) return false;
+                        opts.ExploreRegionsPath = erv;
                         break;
 
                     // ── Stereo output (#1012) ──
@@ -1500,9 +1523,12 @@ namespace FracturingFog.Batch
             if (opts.Mode != BatchMode.Slideshow && opts.Mode != BatchMode.Scene
                 && string.IsNullOrWhiteSpace(opts.RegionName))
             {
-                if (opts.CenterX == null || opts.CenterY == null || opts.Zoom == null)
+                // --explore may start from the family's home view (no coordinates).
+                bool noCoords = opts.CenterX == null && opts.CenterY == null && opts.Zoom == null;
+                if (opts.Explore != null && noCoords) { }
+                else if (opts.CenterX == null || opts.CenterY == null || opts.Zoom == null)
                 {
-                    error = "Must specify --region NAME, or all of --x --y --zoom (and optionally --iter).";
+                    error = "Must specify --region NAME, or all of --x --y --zoom (and optionally --iter), or --explore alone (starts at the family's home view).";
                     return false;
                 }
             }

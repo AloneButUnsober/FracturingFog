@@ -466,6 +466,14 @@ namespace FracturingFog.Batch
                 Dbl(BatchFlags.Zoom, Source, ImgVid, "Zoom.") with { Aliases = new[] { "--z" } },
                 Int(BatchFlags.Iter, Source, ImgVid, "Override the iteration count.", min: 1)
                     with { Aliases = new[] { "--i", "--iterations" } },
+                Txt(BatchFlags.Explore, Source, ImgVid,
+                    "Auto-explore: beam-search from the start view (region, --x --y --zoom, or the family's home view) "
+                    + "for a detail-rich view and render that. Keys: seed, depth (levels), beam, grid, jitter, start "
+                    + "(first-level jitter), step (zoom per level), probe (px), minscore. Same seed, same view.",
+                    hint: "SPEC") with { Example = "seed=1,depth=6,beam=3" },
+                PathFlag(BatchFlags.ExploreRegions, Source, ImgVid,
+                    "With --explore: also write the finalist views as a regions JSON (Control Center > Regions > Import).",
+                    "OUT.json") with { Requires = new[] { BatchFlags.Explore } },
                 Txt(BatchFlags.Theme, Source, ImgVid, "Colour theme name.", BatchFlagSource.Theme, def: BatchDefaults.ThemeName)
                     with { Aliases = new[] { "-t" } },
                 Pick(BatchFlags.Quality, Source, ImgVid, "Quality preset.",

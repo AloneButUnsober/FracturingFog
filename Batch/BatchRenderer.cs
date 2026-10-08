@@ -272,6 +272,20 @@ namespace FracturingFog.Batch
                 : null;
             var fp = BuildFractalParameters(opts, namedRegion);
             WarnIfNoUserCodeSource(frType, fp);
+
+            // #1190 — --explore replaces the target with the best view found.
+            FracturingFog.FFMath.DeepComplex? explored = null;
+            if (opts.Explore != null)
+            {
+                var start = StartCenter(cx, cy, opts.CenterX == null && opts.CenterY == null ? namedRegion : null);
+                var best = RunExplore(opts, frType, quality, theme, fp, start, zoom, namedRegion);
+                if (best == null) return 2;
+                explored = best.Value.Center;
+                (cx, cy, zoom) = (explored.Value.Re.X0, explored.Value.Im.X0, best.Value.Zoom);
+                quality = FracturingFog.Abstractions.Explore.MinibrotJump.QualityFor(quality, zoom);
+                iter = opts.Iterations ?? quality.ComputeIterations(zoom);
+            }
+
             // #1012 — the poster renders every stereo mode from fp; only say when it can't.
             NoteIfStereoInert(frType, fp,
                 BatchStereo.For(frType, fp.Relief2DEnabled && fp.Relief2DRaymarch, fp.Lighting, 16, 16) != null);
@@ -284,7 +298,7 @@ namespace FracturingFog.Batch
             // coordinate. Any type — the deep-capable calculators (Mandelbrot,
             // TearDrop, CalcGen Generated*) consume them; the rest ignore them.
             FractalRegion? limbRegion =
-                (opts.CenterX == null && opts.CenterY == null) ? namedRegion : null;
+                (opts.CenterX == null && opts.CenterY == null && explored == null) ? namedRegion : null;
 
             var req = new PosterRequest
             {
@@ -330,6 +344,17 @@ namespace FracturingFog.Batch
                     ? FracturingFog.Imaging.ExrCompression.Zip
                     : FracturingFog.Imaging.ExrCompression.None,
             };
+            if (explored is { } ex)
+            {
+                // The explored centre in full (octuple-double) precision.
+                req = req with
+                {
+                    CenterXLo = ex.Re.X1, CenterX2 = ex.Re.X2, CenterX3 = ex.Re.X3,
+                    CenterX4 = ex.Re.X4, CenterX5 = ex.Re.X5, CenterX6 = ex.Re.X6, CenterX7 = ex.Re.X7,
+                    CenterYLo = ex.Im.X1, CenterY2 = ex.Im.X2, CenterY3 = ex.Im.X3,
+                    CenterY4 = ex.Im.X4, CenterY5 = ex.Im.X5, CenterY6 = ex.Im.X6, CenterY7 = ex.Im.X7,
+                };
+            }
 
             Console.WriteLine($"Batch image render");
             Console.WriteLine($"  fractal : {frType}");
@@ -475,6 +500,21 @@ namespace FracturingFog.Batch
             // Deep-zoom limbs for the non-Mandelbrot poster path (CalcGen /
             // TearDrop) — only when the centre comes from the region.
             FractalRegion? limbSource = (opts.CenterX == null && opts.CenterY == null) ? namedRegion : null;
+
+            // #1190 — --explore: the video zooms into the best view found. Its
+            // centre is carried as a double (the explore depth stays well inside
+            // double range at the default settings).
+            if (opts.Explore != null)
+            {
+                var best = RunExplore(opts, frType, quality, theme, BuildFractalParameters(opts, namedRegion),
+                                      StartCenter(cx, cy, limbSource), targetZoom, namedRegion);
+                if (best == null) return 2;
+                (cx, cy, targetZoom) = (best.Value.Center.Re.X0, best.Value.Center.Im.X0, best.Value.Zoom);
+                quality = FracturingFog.Abstractions.Explore.MinibrotJump.QualityFor(quality, targetZoom);
+                iter = opts.Iterations ?? quality.ComputeIterations(targetZoom);
+                limbRegion = null;
+                limbSource = null;
+            }
             var motion = VideoMotionPlan.Resolve(frType, opts.VideoMotion, out string? motionNote);
             var motionRng = new Random(opts.VideoSeed);
 
@@ -2147,6 +2187,89 @@ namespace FracturingFog.Batch
             return string.IsNullOrEmpty(result.FrameFolder) ? 4 : 1;
         }
 
+        // ── Auto-explore (#1190) ──────────────────────────────────────────────
+
+        private static FracturingFog.FFMath.DeepComplex StartCenter(double cx, double cy, FractalRegion? limbs)
+            => limbs == null
+                ? new FracturingFog.FFMath.DeepComplex(cx, cy)
+                : FracturingFog.FFMath.DeepComplex.FromLimbs(
+                    limbs.CenterX, limbs.CenterXLo, limbs.CenterX2, limbs.CenterX3, 0, 0, 0, 0,
+                    limbs.CenterY, limbs.CenterYLo, limbs.CenterY2, limbs.CenterY3, 0, 0, 0, 0);
+
+        /// <summary>Run the --explore beam search from the start view and report
+        /// it; writes --explore-regions when asked. Null (after printing why) when
+        /// the family cannot be explored or the start view cannot be probed.</summary>
+        internal static FracturingFog.Abstractions.Explore.ExploreView? RunExplore(
+            BatchOptions opts, FractalType frType, QualityPreset quality, IColorMap theme,
+            FractalParameters fp, FracturingFog.FFMath.DeepComplex start, double zoom, FractalRegion? sourceRegion)
+        {
+            if (!FracturingFog.Abstractions.Explore.AutoExplorer.Supports(frType))
+            {
+                Console.Error.WriteLine($"batch: --explore does not support {frType} (3D, stochastic and non-pannable families are excluded).");
+                return null;
+            }
+            var o = opts.Explore! with { MaxZoom = FracturingFog.Abstractions.Explore.AutoExplorer.MaxZoomFor(frType) };
+            var template = new PosterRequest
+            {
+                FractalType = frType, ColorMap = theme, Quality = quality, FractalParameters = fp,
+                Path = string.Empty, Format = FracturingFog.Imaging.ImageFileFormat.Png,
+            };
+            Console.WriteLine($"Auto-explore  {FracturingFog.Abstractions.Explore.AutoExplorer.FormatSpec(o)}");
+            var sw = Stopwatch.StartNew();
+            var result = FracturingFog.Abstractions.Explore.AutoExplorer.Run(
+                new FracturingFog.Abstractions.Explore.ExploreView(start, zoom), o,
+                FracturingFog.Explore.ExploreProbe.For(template, o.ProbeSize));
+            if (result.Best == null)
+            {
+                Console.Error.WriteLine($"batch: --explore could not probe {frType} at the start view.");
+                return null;
+            }
+            Console.WriteLine($"  {result.Probes} probes, {sw.ElapsedMilliseconds} ms, stop: {result.Stop}");
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            foreach (var n in result.Best.Path())
+                Console.WriteLine($"  L{n.Level}  x={n.View.Center.Re.X0.ToString("G17", inv)} y={n.View.Center.Im.X0.ToString("G17", inv)} "
+                                + $"zoom={n.View.Zoom.ToString("G6", inv)}  score {n.Score.Total.ToString("F3", inv)}");
+            Console.WriteLine($"  best: {result.Best.Score}");
+
+            if (!string.IsNullOrWhiteSpace(opts.ExploreRegionsPath))
+            {
+                var regions = ExploreRegions(result, frType, quality, o.Seed, sourceRegion);
+                EnsureDirectoryForFile(opts.ExploreRegionsPath!);
+                File.WriteAllText(opts.ExploreRegionsPath!, System.Text.Json.JsonSerializer.Serialize(
+                    regions, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+                Console.WriteLine($"  regions: {regions.Count} written to {opts.ExploreRegionsPath}");
+            }
+            return result.Best.View;
+        }
+
+        /// <summary>The finalists as regions (best first), in the plain-list
+        /// JSON shape Import Regions reads.</summary>
+        internal static System.Collections.Generic.List<FractalRegion> ExploreRegions(
+            FracturingFog.Abstractions.Explore.AutoExploreResult result, FractalType frType,
+            QualityPreset quality, int seed, FractalRegion? sourceRegion)
+        {
+            var regions = new System.Collections.Generic.List<FractalRegion>();
+            int k = 0;
+            foreach (var n in result.Finalists)
+            {
+                var c = n.View.Center;
+                var q = FracturingFog.Abstractions.Explore.MinibrotJump.QualityFor(quality, n.View.Zoom);
+                regions.Add(new FractalRegion
+                {
+                    Name = $"Explore {frType} seed {seed} #{++k}",
+                    FractalType = frType,
+                    CenterX = c.Re.X0, CenterXLo = c.Re.X1, CenterX2 = c.Re.X2, CenterX3 = c.Re.X3,
+                    CenterY = c.Im.X0, CenterYLo = c.Im.X1, CenterY2 = c.Im.X2, CenterY3 = c.Im.X3,
+                    Zoom = n.View.Zoom,
+                    Iterations = q.ComputeIterations(n.View.Zoom),
+                    QualityPreset = q,
+                    // The start region's per-family snapshot (Julia constant, ...).
+                    Params = sourceRegion?.Params,
+                });
+            }
+            return regions;
+        }
+
         private static (double cx, double cy, double zoom, int iter,
                         FractalType frType, QualityPreset quality, string? regionName)
             ResolveRegion(BatchOptions opts)
@@ -2175,6 +2298,16 @@ namespace FracturingFog.Batch
                 quality = !string.Equals(opts.QualityName, "Standard", StringComparison.OrdinalIgnoreCase)
                     ? QualityPreset.FromName(opts.QualityName)
                     : (region.QualityPreset ?? QualityPreset.Standard);
+            }
+            else if (opts.Explore != null && opts.CenterX == null)
+            {
+                // #1190 — --explore alone starts from the family's home view.
+                var home = new FracturingFog.ViewState.FractalViewState();
+                home.SnapToFractalDefault(opts.FractalType);
+                (cx, cy, zoom) = (home.CenterX, home.CenterY, home.Zoom);
+                iter = opts.Iterations ?? 1000;
+                frType = opts.FractalType;
+                quality = QualityPreset.FromName(opts.QualityName);
             }
             else
             {
