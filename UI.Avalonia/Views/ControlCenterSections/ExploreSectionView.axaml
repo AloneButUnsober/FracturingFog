@@ -82,7 +82,8 @@
 
         <!-- Interesting-location finder (epic #1184). S1 #1185: period
              detection; S2 #1186: zoom to a minibrot in view; S3 #1187: snap a
-             click to a Misiurewicz point (z² + c). -->
+             click to a Misiurewicz point; S4 #1188: go to an external angle
+             (z² + c). -->
         <Border Classes="group">
             <StackPanel Spacing="6" MaxWidth="425" HorizontalAlignment="Left">
                 <TextBlock Classes="section" Text="Find" />
@@ -101,6 +102,17 @@
                             IsVisible="{Binding CanCancelFinder}" />
                 </StackPanel>
                 <TextBlock Text="{Binding FinderStatus}" Foreground="#9A9A9A" FontSize="11" TextWrapping="Wrap" />
+                <!-- S4 #1188: external angle → location (binary .pre(per) or p/q). -->
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6" Margin="0,6,0,0">
+                    <TextBlock Grid.Column="0" Classes="label" Text="Angle:" VerticalAlignment="Center" />
+                    <TextBox Grid.Column="1" Classes="coord" Text="{Binding AngleText, UpdateSourceTrigger=PropertyChanged}"
+                             MinWidth="180" Watermark=".(001)  or  1/7"
+                             ToolTip.Tip="External angle θ: binary with the repeating part in brackets (.(011), .01(10)) or a fraction p/q. Its bits are the left/right turns of the ray's path into the set." />
+                    <Button Grid.Column="2" Classes="action go" Content="Go to angle"
+                            Command="{Binding GoToAngleCommand}"
+                            ToolTip.Tip="Trace the parameter ray at this angle into the set and jump to where it lands: a minibrot (periodic angle) or a Misiurewicz point (preperiodic angle). Backspace returns." />
+                </Grid>
+                <TextBlock Text="{Binding AngleInfo}" Foreground="#9A9A9A" FontSize="11" TextWrapping="Wrap" />
             </StackPanel>
         </Border>
 
