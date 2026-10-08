@@ -775,6 +775,145 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         }
     }
 
+    // ── #838 / G4.7 Buddhabrot sample pass ───────────────────────────────────────
+
+    // 64 bytes: 11 ints then 5 floats, the HLSL BuddhaParams cbuffer byte-for-byte.
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BuddhaParams
+    {
+        public int Width, Height, MaxOrbit, InSet, Low, Mid, Hd;
+        public uint Seed, Batch, ThreadBase, ThreadCount;
+        public float Scale, MidX, MidY, Pad0, Pad1;
+    }
+
+    private ID3D11ComputeShader? _csBuddha;
+    private ID3D11Buffer? _buddhaParamsBuf;
+    private ID3D11Buffer? _buddhaHitsBuf;
+    private ID3D11Buffer? _buddhaHitsStaging;
+    private ID3D11UnorderedAccessView? _buddhaHitsUav;
+    private ID3D11Query? _buddhaDone;
+    private int _buddhaHitsAlloc;
+
+    /// <summary>#838 / G4.7 — the uniform Buddhabrot sample pass is plain float.</summary>
+    public bool SupportsBuddhabrot => true;
+
+    /// <summary>#838 / G4.7 — one Buddhabrot uniform sample batch
+    /// (BuddhaKernelSource, the same HLSL Vulkan runs): clear the device histogram,
+    /// run the samples in adaptive TDR-sized dispatches (BuddhaKernelSource.Plan;
+    /// each Flushed and waited on through an event query, the shared D3D gate held
+    /// per dispatch so presentation can run between them), then add the three bands
+    /// into the caller's arrays.</summary>
+    public void RunBuddhaBatch(in GpuBuddhaBatch b, uint[] hitsR, uint[] hitsG, uint[] hitsB)
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(MandelbrotGpuKernel));
+        int n = b.Width * b.Height;
+        if (n <= 0 || b.Samples <= 0) return;
+        if (hitsR.Length < n || hitsG.Length < n || hitsB.Length < n)
+            throw new ArgumentException("hit arrays shorter than width * height");
+
+        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+        lock (_d3dGate)
+        {
+            _csBuddha ??= CompileShader(BuddhaKernelSource.Build(), label: "buddha", entryPoint: BuddhaKernelSource.EntryPoint);
+            _buddhaParamsBuf ??= _device.CreateBuffer(new BufferDescription(
+                byteWidth: 64, bindFlags: BindFlags.ConstantBuffer,
+                usage: ResourceUsage.Dynamic, cpuAccessFlags: CpuAccessFlags.Write));
+            _buddhaDone ??= _device.CreateQuery(new QueryDescription(QueryType.Event));
+            EnsureBuddhaHits(n * 3);
+            _ctx.ClearUnorderedAccessView(_buddhaHitsUav!, new Vortice.Mathematics.Int4(0, 0, 0, 0));
+        }
+
+        var p = new BuddhaParams
+        {
+            Width = b.Width, Height = b.Height, MaxOrbit = b.MaxOrbit, InSet = b.InSet ? 1 : 0,
+            Low = b.Low, Mid = b.Mid, Hd = b.HighDefinition ? 1 : 0,
+            Seed = b.Seed, Batch = (uint)b.Batch, ThreadCount = (uint)b.Samples,
+            Scale = (float)b.Scale, MidX = (float)b.MidX, MidY = (float)b.MidY,
+        };
+        BuddhaKernelSource.Plan(b.Samples, b.MaxOrbit, (baseT, count) =>
+        {
+            lock (_d3dGate)
+            {
+                long tChunk = System.Diagnostics.Stopwatch.GetTimestamp();
+                var pl = p;
+                pl.ThreadBase = (uint)baseT;
+                var mapped = _ctx.Map(_buddhaParamsBuf!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
+                unsafe { *(BuddhaParams*)mapped.DataPointer = pl; }
+                _ctx.Unmap(_buddhaParamsBuf!, 0);
+                _ctx.CSSetShader(_csBuddha);
+                _ctx.CSSetConstantBuffer(0, _buddhaParamsBuf);
+                _ctx.CSSetUnorderedAccessView(0, _buddhaHitsUav);
+                _ctx.Dispatch((uint)((count + BuddhaKernelSource.GroupSize - 1) / BuddhaKernelSource.GroupSize), 1, 1);
+                _ctx.CSUnsetUnorderedAccessView(0);
+                // One GPU packet per dispatch (TDR); wait for it so the next is sized
+                // from a real time.
+                _ctx.End(_buddhaDone!);
+                _ctx.Flush();
+                while (_ctx.GetData(_buddhaDone!, IntPtr.Zero, 0, AsyncGetDataFlags.None).Code != 0)   // S_FALSE until done
+                    System.Threading.Thread.Yield();
+                return (System.Diagnostics.Stopwatch.GetTimestamp() - tChunk) * 1000.0
+                       / System.Diagnostics.Stopwatch.Frequency;
+            }
+        });
+
+        long tDispatch = System.Diagnostics.Stopwatch.GetTimestamp();
+        lock (_d3dGate)
+        {
+            _ctx.CopyResource(_buddhaHitsStaging!, _buddhaHitsBuf!);
+            var map = _ctx.Map(_buddhaHitsStaging!, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
+            try
+            {
+                unsafe
+                {
+                    uint* src = (uint*)map.DataPointer;
+                    for (int i = 0; i < n; i++)
+                    {
+                        hitsR[i] += src[i];
+                        hitsG[i] += src[n + i];
+                        hitsB[i] += src[2 * n + i];
+                    }
+                }
+            }
+            finally { _ctx.Unmap(_buddhaHitsStaging!, 0); }
+        }
+        long tEnd = System.Diagnostics.Stopwatch.GetTimestamp();
+        double freq = System.Diagnostics.Stopwatch.Frequency;
+        LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
+        LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
+    }
+
+    private void EnsureBuddhaHits(int uints)
+    {
+        if (_buddhaHitsBuf != null && _buddhaHitsAlloc == uints) return;
+        _buddhaHitsUav?.Dispose();
+        _buddhaHitsBuf?.Dispose();
+        _buddhaHitsStaging?.Dispose();
+        _buddhaHitsBuf = _device.CreateBuffer(new BufferDescription
+        {
+            ByteWidth = (uint)(uints * sizeof(uint)),
+            BindFlags = BindFlags.UnorderedAccess,
+            Usage = ResourceUsage.Default,
+            MiscFlags = ResourceOptionFlags.BufferStructured,
+            StructureByteStride = sizeof(uint),
+        });
+        _buddhaHitsStaging = _device.CreateBuffer(new BufferDescription
+        {
+            ByteWidth = (uint)(uints * sizeof(uint)),
+            Usage = ResourceUsage.Staging,
+            CPUAccessFlags = CpuAccessFlags.Read,
+            BindFlags = BindFlags.None,
+            MiscFlags = ResourceOptionFlags.None,
+            StructureByteStride = 0,
+        });
+        _buddhaHitsUav = _device.CreateUnorderedAccessView(_buddhaHitsBuf, new UnorderedAccessViewDescription
+        {
+            Format = Vortice.DXGI.Format.Unknown,
+            ViewDimension = UnorderedAccessViewDimension.Buffer,
+            Buffer = new BufferUnorderedAccessView { FirstElement = 0, NumElements = (uint)uints },
+        });
+        _buddhaHitsAlloc = uints;
+    }
+
     /// <summary>#607 / G4.6 — the orbit kernel's double work is the plain kernel's;
     /// its sampling is float.</summary>
     public bool SupportsPerturbationOrbit => SupportsPerturbation;
@@ -1231,6 +1370,12 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         try { _csPerturb?.Dispose(); } catch { }
         try { _csPerturbSa?.Dispose(); } catch { }
         foreach (var cs in _csPerturbOrbit.Values) { try { cs.Dispose(); } catch { } }   // #607
+        try { _csBuddha?.Dispose(); } catch { }   // #838
+        try { _buddhaParamsBuf?.Dispose(); } catch { }
+        try { _buddhaHitsUav?.Dispose(); } catch { }
+        try { _buddhaHitsBuf?.Dispose(); } catch { }
+        try { _buddhaHitsStaging?.Dispose(); } catch { }
+        try { _buddhaDone?.Dispose(); } catch { }
         _csPerturbOrbit.Clear();
         try { _orbitOutUav?.Dispose(); } catch { }
         try { _orbitOutBuf?.Dispose(); } catch { }

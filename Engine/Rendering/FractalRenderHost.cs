@@ -882,6 +882,17 @@ namespace FracturingFog.Rendering
         /// </summary>
         public Func<string, int, int, FracturingFog.Imaging.IVideoWriter?>? VideoWriterFactory { get; set; }
 
+        /// <summary>#838 — the Buddhabrot family calculators, which sample on the GPU
+        /// compute kernel when the 2D GPU switch is on.</summary>
+        private System.Collections.Generic.IEnumerable<BuddhaFamilyCalculator> BuddhaCalculators()
+        {
+            yield return _buddhabrotCalculator;
+            yield return _nebulabrotCalculator;
+            yield return _antiBuddhabrotCalculator;
+            yield return _antiNebulabrotCalculator;
+            yield return _dualBuddhabrotCalculator;
+        }
+
         /// <summary>T3.1: toggle the SP-path GPU compute dispatch on the
         /// active MandelbrotCalculator. First true assignment lazily
         /// constructs the kernel via <see cref="GpuKernelFactory"/>;
@@ -907,6 +918,7 @@ namespace FracturingFog.Rendering
                         if (_gpuKernel == null) return;
                         _calculator.GpuKernel = _gpuKernel;
                         _escapeCalculator.GpuKernel = _gpuKernel;
+                        foreach (var b in BuddhaCalculators()) b.GpuKernel = _gpuKernel;   // #838
                     }
                     catch (Exception ex)
                     {
@@ -915,11 +927,13 @@ namespace FracturingFog.Rendering
                         _gpuKernel = null;
                         _calculator.GpuKernel = null;
                         _escapeCalculator.GpuKernel = null;
+                        foreach (var b in BuddhaCalculators()) b.GpuKernel = null;   // #838
                         return;
                     }
                 }
                 _calculator.UseGpuCompute = value;
                 _escapeCalculator.UseGpuCompute = value;
+                foreach (var b in BuddhaCalculators()) b.UseGpuCompute = value;   // #838
             }
         }
 
@@ -5326,6 +5340,7 @@ namespace FracturingFog.Rendering
             {
                 _calculator.GpuKernel = null;
                 _escapeCalculator.GpuKernel = null;
+                foreach (var b in BuddhaCalculators()) b.GpuKernel = null;   // #838
                 _gpuKernel?.Dispose();
                 _gpuKernel = null;
                 // #162 — release the relief kernel's device objects before the

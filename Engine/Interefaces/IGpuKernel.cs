@@ -47,6 +47,17 @@ namespace FracturingFog.Rendering
         public bool Active => Strength != 0f && HalfSpan > 0f;
     }
 
+    /// <summary>#838 — one Buddhabrot-family uniform sample batch for the GPU
+    /// (<see cref="IGpuKernel.RunBuddhaBatch"/>): the BuddhaFamilyCalculator
+    /// sampler's inputs. <see cref="Samples"/> c values are drawn over the fixed
+    /// domain from a stream keyed by (<see cref="Seed"/>, <see cref="Batch"/>, sample
+    /// index); hits go to three bands split at <see cref="Low"/> / <see cref="Mid"/>
+    /// on the class iteration.</summary>
+    public readonly record struct GpuBuddhaBatch(
+        int Width, int Height, double Scale, double MidX, double MidY,
+        int MaxOrbit, bool InSet, bool HighDefinition, int Low, int Mid,
+        uint Seed, int Batch, int Samples);
+
     /// <summary>
     /// Per-pixel SP escape-time compute backend exposed to the calculator
     /// fleet. Implementations are thread-affine — a single caller drives
@@ -154,6 +165,16 @@ namespace FracturingFog.Rendering
             double[]? blaCoeffs = null, int blaLevels = 0)
             => throw new NotSupportedException(
                 "This GPU kernel has no SA perturbation path (SupportsPerturbationSA is false).");
+
+        /// <summary>#838 / G4.7 — true when this backend can run the Buddhabrot
+        /// uniform sample pass (<see cref="RunBuddhaBatch"/>).</summary>
+        bool SupportsBuddhabrot => false;
+
+        /// <summary>#838 / G4.7 — run one Buddhabrot-family uniform sample batch on the
+        /// GPU and ADD its hits into the three band histograms (W x H each). Only valid
+        /// when <see cref="SupportsBuddhabrot"/> is true.</summary>
+        void RunBuddhaBatch(in GpuBuddhaBatch batch, uint[] hitsR, uint[] hitsG, uint[] hitsB)
+            => throw new NotSupportedException("This GPU kernel has no Buddhabrot path (SupportsBuddhabrot is false).");
 
         /// <summary>#607 / G4.6 — true when this backend can run the orbit-accumulating
         /// perturbation kernel (<see cref="RunPerturbOrbit"/>).</summary>

@@ -40,6 +40,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--d3dorbittrapprobe")
             return D3DOrbitTrapProbe.Run();
 
+        // #838 (G4.7) — D3D11 Buddhabrot sample pass vs its float reference and the CPU.
+        if (args.Length > 0 && args[0] == "--d3dbuddhaprobe")
+            return D3DBuddhaProbe.Run();
+
         // #607 (G4.6) — D3D11 deep-zoom orbit accumulation vs the CPU deep orbit path.
         if (args.Length > 0 && args[0] == "--d3ddeeporbitprobe")
             return D3DDeepOrbitProbe.Run();
