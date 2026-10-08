@@ -394,22 +394,28 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
             if (ct.IsCancellationRequested && !progressive) break;
 
             // Merge locals → globals (additive), then clear locals for next batch.
-            for (int t = 0; t < threads; t++)
+            // Split by pixel block, not by thread, so the merge runs in parallel
+            // (it was serial: threads × pixels adds, ~0.5 s a frame at 2560×1440).
+            bool clearLocals = progressive;
+            ForPixelBlocks(_hitsR.Length, (from, to) =>
             {
-                var lR = localR![t]; var lG = localG![t]; var lB = localB![t];
-                for (int i = 0; i < _hitsR.Length; i++)
+                for (int t = 0; t < threads; t++)
                 {
-                    _hitsR[i] += lR[i];
-                    _hitsG[i] += lG[i];
-                    _hitsB[i] += lB[i];
+                    var lR = localR![t]; var lG = localG![t]; var lB = localB![t];
+                    for (int i = from; i < to; i++)
+                    {
+                        _hitsR[i] += lR[i];
+                        _hitsG[i] += lG[i];
+                        _hitsB[i] += lB[i];
+                    }
+                    if (clearLocals)
+                    {
+                        Array.Clear(lR, from, to - from);
+                        Array.Clear(lG, from, to - from);
+                        Array.Clear(lB, from, to - from);
+                    }
                 }
-                if (progressive)
-                {
-                    Array.Clear(lR);
-                    Array.Clear(lG);
-                    Array.Clear(lB);
-                }
-            }
+            });
 
             // Composite to ColorBuffer. Progressive mode does it every batch
             // so a mid-render cancel still yields a usable image; single-pass
@@ -425,31 +431,28 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
     }
 
     /// <summary>#1218 — the shared uniform sampler on the CPU: the batch split into
-    /// chunks across threads, each into its own histograms, summed into the hit
-    /// arrays. Every sample owns its random stream, so the result does not depend on
-    /// how the chunks are scheduled. False when cancelled (nothing added).</summary>
+    /// chunks across threads, all adding into the hit arrays with Interlocked, as
+    /// the GPU does. Every sample owns its random stream and the sums are integer, so
+    /// the result does not depend on how the chunks are scheduled. Per-thread
+    /// full-frame histograms cost O(threads × pixels) to allocate and merge — most of
+    /// the frame at large windows (2560×1440: 548 MB, 327 ms of a 25 ms sampling
+    /// job) — while a frame takes only a few million hits. False when cancelled (the
+    /// arrays may then hold part of the batch).</summary>
     private bool RunSharedOnCpu(FracturingFog.Rendering.GpuBuddhaBatch b, CancellationToken ct)
     {
         const int chunk = 8192;
-        int n = b.Width * b.Height;
         int chunks = (b.Samples + chunk - 1) / chunk;
-        var parts = new System.Collections.Concurrent.ConcurrentBag<(uint[] R, uint[] G, uint[] B)>();
+        var hitsR = _hitsR; var hitsG = _hitsG; var hitsB = _hitsB;
         try
         {
-            Parallel.For(0, chunks, new ParallelOptions { CancellationToken = ct },
-                () => (R: new uint[n], G: new uint[n], B: new uint[n]),
-                (ci, _, loc) =>
-                {
-                    int first = ci * chunk;
-                    FracturingFog.Rendering.BuddhaUniformSampler.Run(b, loc.R, loc.G, loc.B,
-                        first, Math.Min(chunk, b.Samples - first));
-                    return loc;
-                },
-                loc => parts.Add(loc));
+            Parallel.For(0, chunks, new ParallelOptions { CancellationToken = ct }, ci =>
+            {
+                int first = ci * chunk;
+                FracturingFog.Rendering.BuddhaUniformSampler.Run(b, hitsR, hitsG, hitsB,
+                    first, Math.Min(chunk, b.Samples - first), atomic: true);
+            });
         }
         catch (OperationCanceledException) { return false; }
-        foreach (var (pr, pg, pb) in parts)
-            for (int i = 0; i < n; i++) { _hitsR[i] += pr[i]; _hitsG[i] += pg[i]; _hitsB[i] += pb[i]; }
         return true;
     }
 
@@ -535,20 +538,61 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
     {
         int n = _hitsR.Length;
         if (SmoothBuffer.Length < n) SmoothBuffer = new float[n];
-        uint maxAll = 0;
-        for (int i = 0; i < n; i++)
-        {
-            uint sum = _hitsR[i] + _hitsG[i] + _hitsB[i];
-            if (sum > maxAll) maxAll = sum;
-        }
+        uint maxAll = MaxTotalHits();
         if (maxAll == 0) { Array.Clear(SmoothBuffer, 0, n); return; }
         double inv = 1.0 / Math.Log(maxAll + 1.0);
-        for (int i = 0; i < n; i++)
+        var smooth = SmoothBuffer;
+        ForPixelBlocks(n, (from, to) =>
         {
-            uint sum = _hitsR[i] + _hitsG[i] + _hitsB[i];
-            SmoothBuffer[i] = sum == 0 ? 0f : (float)(Math.Log(sum + 1.0) * inv);
-        }
+            for (int i = from; i < to; i++)
+            {
+                uint sum = _hitsR[i] + _hitsG[i] + _hitsB[i];
+                smooth[i] = sum == 0 ? 0f : (float)(Math.Log(sum + 1.0) * inv);
+            }
+        });
     }
+
+    // The composite is per pixel and was single-threaded: at 2560×1440 it took
+    // more time than sampling the default 500K orbits. Every pixel is written
+    // independently, so splitting it into blocks gives the same image.
+    private const int PixelBlock = 1 << 15;
+
+    protected static void ForPixelBlocks(int n, Action<int, int> body)
+    {
+        int blocks = (n + PixelBlock - 1) / PixelBlock;
+        if (blocks <= 1) { body(0, n); return; }
+        Parallel.For(0, blocks, k => body(k * PixelBlock, Math.Min(n, (k + 1) * PixelBlock)));
+    }
+
+    /// <summary>Largest per-band hit counts (R, G, B) and largest band total.</summary>
+    protected (uint R, uint G, uint B, uint Total) MaxHits()
+    {
+        uint mR = 0, mG = 0, mB = 0, mT = 0;
+        var gate = new object();
+        ForPixelBlocks(_hitsR.Length, (from, to) =>
+        {
+            uint r = 0, g = 0, b = 0, t = 0;
+            for (int i = from; i < to; i++)
+            {
+                uint hR = _hitsR[i], hG = _hitsG[i], hB = _hitsB[i];
+                if (hR > r) r = hR;
+                if (hG > g) g = hG;
+                if (hB > b) b = hB;
+                uint sum = hR + hG + hB;
+                if (sum > t) t = sum;
+            }
+            lock (gate)
+            {
+                if (r > mR) mR = r;
+                if (g > mG) mG = g;
+                if (b > mB) mB = b;
+                if (t > mT) mT = t;
+            }
+        });
+        return (mR, mG, mB, mT);
+    }
+
+    private uint MaxTotalHits() => MaxHits().Total;
 
     // ── Uniform sampling path (classic Buddhabrot) ────────────────────────
 
@@ -857,13 +901,7 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
     private void RenderBands()
     {
         int n = _hitsR.Length;
-        uint maxR = 0, maxG = 0, maxB = 0;
-        for (int i = 0; i < n; i++)
-        {
-            if (_hitsR[i] > maxR) maxR = _hitsR[i];
-            if (_hitsG[i] > maxG) maxG = _hitsG[i];
-            if (_hitsB[i] > maxB) maxB = _hitsB[i];
-        }
+        var (maxR, maxG, maxB, _) = MaxHits();
 
         bool hd = FractalParameters.BuddhaQualityMode == BuddhaQualityMode.HighDefinition;
 
@@ -900,23 +938,27 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
             floor = Math.Max(2, samples / 2_000_000); // 1 per 2M samples, min 2
         }
 
-        for (int i = 0; i < n; i++)
+        var colors = ColorBuffer;
+        ForPixelBlocks(n, (from, to) =>
         {
-            uint hR = _hitsR[i], hG = _hitsG[i], hB = _hitsB[i];
-            if (hd)
+            for (int i = from; i < to; i++)
             {
-                if (hR <= floor) hR = 0;
-                if (hG <= floor) hG = 0;
-                if (hB <= floor) hB = 0;
+                uint hR = _hitsR[i], hG = _hitsG[i], hB = _hitsB[i];
+                if (hd)
+                {
+                    if (hR <= floor) hR = 0;
+                    if (hG <= floor) hG = 0;
+                    if (hB <= floor) hB = 0;
+                }
+                double r = Math.Log(hR + 1) * invR;
+                double g = Math.Log(hG + 1) * invG;
+                double b = Math.Log(hB + 1) * invB;
+                byte R = (byte)Math.Clamp(r * 255, 0, 255);
+                byte G = (byte)Math.Clamp(g * 255, 0, 255);
+                byte B = (byte)Math.Clamp(b * 255, 0, 255);
+                colors[i] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
             }
-            double r = Math.Log(hR + 1) * invR;
-            double g = Math.Log(hG + 1) * invG;
-            double b = Math.Log(hB + 1) * invB;
-            byte R = (byte)Math.Clamp(r * 255, 0, 255);
-            byte G = (byte)Math.Clamp(g * 255, 0, 255);
-            byte B = (byte)Math.Clamp(b * 255, 0, 255);
-            ColorBuffer[i] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
-        }
+        });
     }
 
     private void RenderColorMap()
@@ -933,12 +975,7 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
         //      saturated theme colour. The square fades sparse hits hard
         //      while leaving genuine fractal density at near-full saturation.
         int n = _hitsR.Length;
-        uint maxAll = 0;
-        for (int i = 0; i < n; i++)
-        {
-            uint sum = _hitsR[i] + _hitsG[i] + _hitsB[i];
-            if (sum > maxAll) maxAll = sum;
-        }
+        uint maxAll = MaxTotalHits();
         if (maxAll == 0)
         {
             Array.Clear(ColorBuffer);
@@ -954,27 +991,31 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
         byte bgG = (byte)((inSetColor >>  8) & 0xFF);
         byte bgB = (byte)(inSetColor & 0xFF);
 
-        for (int i = 0; i < n; i++)
+        var colors = ColorBuffer;
+        ForPixelBlocks(n, (from, to) =>
         {
-            uint sum = _hitsR[i] + _hitsG[i] + _hitsB[i];
-            if (sum == 0)
+            for (int i = from; i < to; i++)
             {
-                ColorBuffer[i] = inSetColor;
-                continue;
-            }
-            double norm = Math.Log(sum + 1.0) * inv;     // 0..1, hot ≈ 1
-            float smooth = (float)((1.0 - norm) * iters);
-            uint argb = unchecked((uint)cm.Map(smooth, 0f, iters));
-            byte fR = (byte)((argb >> 16) & 0xFF);
-            byte fG = (byte)((argb >>  8) & 0xFF);
-            byte fB = (byte)(argb & 0xFF);
+                uint sum = _hitsR[i] + _hitsG[i] + _hitsB[i];
+                if (sum == 0)
+                {
+                    colors[i] = inSetColor;
+                    continue;
+                }
+                double norm = Math.Log(sum + 1.0) * inv;     // 0..1, hot ≈ 1
+                float smooth = (float)((1.0 - norm) * iters);
+                uint argb = unchecked((uint)cm.Map(smooth, 0f, iters));
+                byte fR = (byte)((argb >> 16) & 0xFF);
+                byte fG = (byte)((argb >>  8) & 0xFF);
+                byte fB = (byte)(argb & 0xFF);
 
-            double a = norm * norm;                       // density alpha
-            double oneMa = 1.0 - a;
-            byte R = (byte)(fR * a + bgR * oneMa);
-            byte G = (byte)(fG * a + bgG * oneMa);
-            byte B = (byte)(fB * a + bgB * oneMa);
-            ColorBuffer[i] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
-        }
+                double a = norm * norm;                       // density alpha
+                double oneMa = 1.0 - a;
+                byte R = (byte)(fR * a + bgR * oneMa);
+                byte G = (byte)(fG * a + bgG * oneMa);
+                byte B = (byte)(fB * a + bgB * oneMa);
+                colors[i] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
+            }
+        });
     }
 }
