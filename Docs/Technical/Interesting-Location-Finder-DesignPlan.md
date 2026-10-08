@@ -10,7 +10,7 @@ S6 [#1190](https://github.com/AloneButUnsober/FracturingFog/issues/1190) ·
 S7 [#1191](https://github.com/AloneButUnsober/FracturingFog/issues/1191).
 The issues are the canonical task list; this doc is the maths + architecture context. Link both ways.
 
-**Status: S1 shipped (#1185, PR #1232); S2 implemented (#1186) — 2026-10-08.** See §9.1 for what implementation changed versus this design.
+**Status: S1 shipped (#1185, PR #1232); S2 shipped (#1186, PR #1234); S3 implemented (#1187) — 2026-10-08.** See §9.1 for what implementation changed versus this design.
 
 ---
 
@@ -337,6 +337,29 @@ Measured against all 158 built-in Mandelbrot regions (`Resources/regions.json`):
   centres exposed a pre-existing gap — `--x/--y` are double only — now reported
   by `BatchCommandBuilder.DetectGaps` once the dropped limbs shift the render by
   ≥ 0.1 px; full-precision `--x/--y` is #1233.
+
+### 9.2 Implementation notes (S3)
+
+- **Candidates from one orbit.** At the clicked point, the first-order distance
+  to a root of z_{k+p} − z_k is |Z_{k+p} − Z_k| / |dZ_{k+p} − dZ_k|, for every
+  (k, p) at once. Because (k′ ≥ k, p) and (k, multiples of p) are roots too,
+  only the smallest k per p is kept, and candidates are tried by k + p.
+- **Exact reference differences.** The near-cancelling differences
+  Z_a − Z_b must come from the OD orbit (`OdExact.Sub`), not from double copies
+  of Z. With double copies, ~1e-16 absolute noise hid every candidate at depth
+  and blocked convergence even on shallow points. The perturbed Newton
+  therefore uses (Z_a − Z_b exact) + (ε_a − ε_b).
+- **Deflation + verification** as designed. Newton is deflated against lower
+  preperiods (i = 0 removes hyperbolic centres) and divisor periods. The OD
+  polish then re-checks (k, p) minimality independently.
+- **Click-mode** is a one-shot `IFractalInputController.PointPickHandler`
+  (cross cursor while armed). Snap keeps the zoom and only recentres.
+- **Measured.** Snapping at the centres of the 158 built-in regions (48 px
+  reach) found a hub for 106; every hit's OD residual was ≤ 1e-117. Worst case
+  was ~5.5 s. The seahorse spiral snaps to the published −0.77568377 + 0.13646737i
+  as M(24,1), λ ≈ 1.039∠172.6°.
+- **Deferred:** the J_c preview and the self-similar loop video are tracked
+  separately as #1235.
 
 ## 10. Sources
 

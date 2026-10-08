@@ -66,6 +66,13 @@ namespace FracturingFog.Input
         /// the relief-raymarch path.</summary>
         Func<PointerInput, bool>? ReliefFocusPickHandler { get; set; }
 
+        /// <summary>Finder click-mode (#1187) — optional one-shot hook. While set,
+        /// the next left press on the render is handed to it instead of starting
+        /// a pan, and the hook clears itself (one shot). Setting it shows the
+        /// cross cursor; clearing it restores the default. The handler returns
+        /// true when it consumed the press.</summary>
+        Func<PointerInput, bool>? PointPickHandler { get; set; }
+
         // ── Keyboard ──────────────────────────────────────────────────────────
         /// <summary>Returns true when the controller consumed the key (so the
         /// shell adapter can set Handled=true on its KeyEventArgs).</summary>

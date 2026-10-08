@@ -85,6 +85,13 @@ namespace FracturingFog.Input
         {
             if (InputSuppressed) return;
 
+            // Finder click-mode: an armed one-shot pick takes this press.
+            if ((e.Buttons & PointerButton.Left) != 0 && _pointPick is { } pick)
+            {
+                PointPickHandler = null;   // one shot; restores the cursor
+                if (pick(e)) return;
+            }
+
             // Right-click drag in 3D rotates the camera (theta = X, phi = Y).
             if ((e.Buttons & PointerButton.Right) != 0 && ViewState.Is3D)
             {
@@ -381,6 +388,20 @@ namespace FracturingFog.Input
         /// through to the normal recenter, so the gesture is harmless off the relief
         /// path. Shell-neutral: the depth read lives in the host, not here.</summary>
         public Func<PointerInput, bool>? ReliefFocusPickHandler { get; set; }
+
+        private Func<PointerInput, bool>? _pointPick;
+
+        /// <summary>Finder click-mode (#1187): one-shot left-press hook; see
+        /// <see cref="IFractalInputController.PointPickHandler"/>.</summary>
+        public Func<PointerInput, bool>? PointPickHandler
+        {
+            get => _pointPick;
+            set
+            {
+                _pointPick = value;
+                CursorRequested?.Invoke(this, new InputCursorRequest(value != null ? InputCursor.Cross : InputCursor.Default));
+            }
+        }
 
         public void OnPointerDoubleClick(PointerInput e)
         {

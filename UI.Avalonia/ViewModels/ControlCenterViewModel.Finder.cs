@@ -9,8 +9,12 @@
 //   S2 (#1186) "Zoom to minibrot": find a minibrot whose nucleus is really in
 //              the view (Abstractions/Explore/NucleusFinder.FindMinibrot) and
 //              frame it the way the home view frames the whole set.
-// The jump only moves centre / zoom / quality / first-render iterations, all
-// of which the --batch Command builder already captures from the live view.
+//   S3 (#1187) "Snap to spiral": arm a one-shot click on the render
+//              (IFractalInputController.PointPickHandler); the click is
+//              snapped to the simplest Misiurewicz point within reach
+//              (MisiurewiczFinder.FindNear) and the view recentres on it.
+// Every action only moves centre / zoom / quality / first-render iterations,
+// all of which the --batch Command builder already captures from the live view.
 
 using System;
 using System.Globalization;
@@ -32,9 +36,14 @@ public sealed partial class ControlCenterViewModel
     private CancellationTokenSource? _finderCts;
     private string _finderStatus = "Find minibrots in view (z² + c).";
     private bool _isFinderBusy;
+    private bool _isPickArmed;
+
+    /// <summary>Snap-to-spiral reach around the click, in screen pixels.</summary>
+    public const int SnapPickRadiusPx = 48;
 
     public ReactiveCommand<Unit, Unit> DetectPeriodCommand { get; private set; } = null!;
     public ReactiveCommand<Unit, Unit> ZoomToMinibrotCommand { get; private set; } = null!;
+    public ReactiveCommand<Unit, Unit> SnapToSpiralCommand { get; private set; } = null!;
     public ReactiveCommand<Unit, Unit> CancelFinderCommand { get; private set; } = null!;
 
     /// <summary>Readout line under the Find buttons.</summary>
@@ -47,8 +56,26 @@ public sealed partial class ControlCenterViewModel
     public bool IsFinderBusy
     {
         get => _isFinderBusy;
-        private set => this.RaiseAndSetIfChanged(ref _isFinderBusy, value);
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _isFinderBusy, value);
+            this.RaisePropertyChanged(nameof(CanCancelFinder));
+        }
     }
+
+    /// <summary>True while Snap to spiral waits for a click on the render.</summary>
+    public bool IsPickArmed
+    {
+        get => _isPickArmed;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _isPickArmed, value);
+            this.RaisePropertyChanged(nameof(CanCancelFinder));
+        }
+    }
+
+    /// <summary>Cancel is offered while a search runs or a click is armed.</summary>
+    public bool CanCancelFinder => IsFinderBusy || IsPickArmed;
 
     /// <summary>The exact-track finders model f_c(z) = z² + c only; other
     /// families get the heuristic finder (S6 #1190) instead.</summary>
@@ -60,7 +87,12 @@ public sealed partial class ControlCenterViewModel
         var idle = this.WhenAnyValue(x => x.IsFinderBusy, busy => !busy);
         DetectPeriodCommand   = ReactiveCommand.CreateFromTask(DetectPeriodAsync, idle);
         ZoomToMinibrotCommand = ReactiveCommand.CreateFromTask(ZoomToMinibrotAsync, idle);
-        CancelFinderCommand   = ReactiveCommand.Create(() => _finderCts?.Cancel());
+        SnapToSpiralCommand   = ReactiveCommand.Create(ArmSnapToSpiral, idle);
+        CancelFinderCommand   = ReactiveCommand.Create(() =>
+        {
+            _finderCts?.Cancel();
+            if (IsPickArmed) { DisarmPick(); FinderStatus = "Cancelled."; }
+        });
     }
 
     // Snapshot of the live view taken on the UI thread; finders run off it.
@@ -176,6 +208,60 @@ public sealed partial class ControlCenterViewModel
             : vs.IterLocked ? $" Iterations are locked at {vs.LockedIterations:N0}; ~{p.WantedIterations:N0} resolve it."
             : $" ~{p.WantedIterations:N0} iterations resolve it; using {p.PreferredIterations:N0}.";
         FinderStatus = $"Period {found.Period} minibrot, size {found.Size.Magnitude:G3} → zoom {Fmt(p.Zoom)} ({p.Quality.Name}).{note}";
+    }
+
+    private void ArmSnapToSpiral()
+    {
+        var vs = Shell.Main.ViewState;
+        if (!FinderSupports(vs.FractalType))
+        {
+            FinderStatus = $"The spiral finder supports z² + c (Mandelbrot) only — not {vs.FractalType}.";
+            return;
+        }
+        Shell.Main.Input.PointPickHandler = OnSnapPick;
+        IsPickArmed = true;
+        FinderStatus = "Click a spiral centre or branch point in the render…";
+    }
+
+    private void DisarmPick()
+    {
+        if (Shell.Main.Input.PointPickHandler != null) Shell.Main.Input.PointPickHandler = null;
+        IsPickArmed = false;
+    }
+
+    // The armed click: world point + reach in world units, then the search.
+    // Runs on the UI thread (input callback); the search goes async.
+    private bool OnSnapPick(FracturingFog.Input.PointerInput e)
+    {
+        IsPickArmed = false;   // the controller has already cleared its one-shot hook
+        var vs = Shell.Main.ViewState;
+        if (!FinderSupports(vs.FractalType))
+        {
+            // The type changed while armed: let the press act normally.
+            FinderStatus = $"The spiral finder supports z² + c (Mandelbrot) only — not {vs.FractalType}.";
+            return false;
+        }
+        var camera = new FracturingFog.ViewState.ViewCamera(vs);
+        var click = camera.WorldFromScreen(e.X, e.Y, e.ClientWidth, e.ClientHeight);
+        double reach = SnapPickRadiusPx * camera.Scale(e.ClientWidth, e.ClientHeight);
+        FinderStatus = "Searching for a spiral / branch point…";
+        _ = RunFinderAsync(async ct =>
+        {
+            var m = await Task.Run(() => MisiurewiczFinder.FindNear(click, reach, ct: ct), ct);
+            if (!m.Found)
+            {
+                FinderStatus = m.Status == MisiurewiczStatus.PrecisionLimit
+                    ? "Too deep: beyond octuple-double precision."
+                    : $"No spiral / branch point within {SnapPickRadiusPx} px of the click. Click nearer its centre, or zoom in.";
+                return;
+            }
+            Shell.RecordNavChange();
+            vs.SetCenter(m.Point);
+            Shell.Main.RenderHost.Trigger();
+            double turn = m.Multiplier.Phase * 180.0 / System.Math.PI;
+            FinderStatus = $"Misiurewicz point M({m.Preperiod},{m.Period}): the pattern repeats every ×{Fmt(m.Multiplier.Magnitude)} zoom, turning {turn:0.#}°.";
+        });
+        return true;
     }
 
     private static string Fmt(double v) => v.ToString("G4", CultureInfo.InvariantCulture);
