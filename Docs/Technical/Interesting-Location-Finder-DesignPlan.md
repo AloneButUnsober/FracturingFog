@@ -10,7 +10,7 @@ S6 [#1190](https://github.com/AloneButUnsober/FracturingFog/issues/1190) ·
 S7 [#1191](https://github.com/AloneButUnsober/FracturingFog/issues/1191).
 The issues are the canonical task list; this doc is the maths + architecture context. Link both ways.
 
-**Status: S1–S5 shipped (#1185–#1189, PRs #1232/#1234/#1236/#1238/#1239); S6 implemented (#1190) — 2026-10-08.** See §9.1 for what implementation changed versus this design.
+**Status: S1–S6 shipped (#1185–#1190, PRs #1232/#1234/#1236/#1238/#1239/#1241); S7 implemented (#1191) — 2026-10-08.** See §9.1 for what implementation changed versus this design.
 
 ---
 
@@ -439,6 +439,65 @@ Measured against all 158 built-in Mandelbrot regions (`Resources/regions.json`):
   finalists as an importable plain region list). These are catalog flags, so the
   Command panel offers them. The live seed reproduces an explored view by coordinates.
 - **Not shipped:** the score-heatmap overlay and live weight tuning ([#1240](https://github.com/AloneButUnsober/FracturingFog/issues/1240)).
+
+### 9.6 Implementation notes (S7)
+
+- **One engine, not three.** Every family is an `IOrbitMap`: a real 2-D map whose step
+  returns z′ and the 2×2 Jacobians A = ∂z′/∂z and B = ∂z′/∂c. `GeneralFinder` runs Newton
+  in R² on that map, carrying J = ∂z_n/∂c. The maps:
+  - `MultibrotMap(d)`: analytic. It covers Multibrot and the Generated z³/z⁴/z⁵.
+  - `BurningShipMap`: the Jacobian of the active fold piece.
+  - `TricornMap`: anti-holomorphic, handled directly in R², with no second-iterate trick.
+  - `UserEquationMap`: the Sandbox DSL step plus the optional z₀ seed, with central
+    finite differences. That also covers non-holomorphic equations.
+  An equation that depends on `n` / `iter` / `prev` is detected by evaluation and refused.
+- **Nucleus acceptance.** All three conditions must hold:
+  - z_p(c) = z₀(c), converged inside the view;
+  - the period is minimal: no proper divisor q has a root within a scale-aware threshold
+    (10⁻⁶ of the reach, floored at 64 ulp);
+  - the cycle through z₀ is **attracting** (spectral radius of the cycle Jacobian < 1).
+  The last test makes the method sound for any start point, so it replaces the planned
+  "solve f′(z) = 0 and let the user pick": z₀ is then attracted to the cycle, so c lies in
+  a hyperbolic component of the rendered set. With a critical z₀ the radius is 0.
+  Picking another critical point is follow-up #1242.
+- **Search.** Periods are scanned upward from 1 (lowest period first, as in S2) within a
+  work budget. Newton starts at the view centre. Once the centre's orbit escapes too early
+  for the period, it starts instead from the point of a 9×9 grid whose orbit survives
+  longest. Trying atom-domain periods first, or always starting from the deepest grid
+  point, favoured tiny high-period minibrots, so both were dropped. Newton runs through
+  escaping orbits and stops only on overflow (|z|² > 10²⁰⁰).
+- **Framing.** These families have no closed-form atom size. Instead, the body radius is
+  measured by escape: along 12 rays, double until a point escapes, then bisect, and take
+  the median. Medians resist rays that run on through an attached bulb; the max over-read
+  the cardioid as 1.05. Frame zoom = 0.8 · 0.72 / radius, where 0.72 is the measured median
+  of the Mandelbrot main cardioid. A minibrot therefore frames like the home view.
+- **Misiurewicz.** Every (k, p) is ranked by the length of a Newton step from the click,
+  and the shortest are refined, lowest k + p first. Instead of deflating, the root is
+  re-classified to its minimal (k, p). A periodic root (k = 0) is rejected, and the cycle
+  must be repelling. A rotation angle is reported only when the cycle Jacobian is conformal.
+- **Julia morph** gained a family-agnostic `JuliaMorph.Plan(nucleus, period,
+  minibrotZoom, …, maxZoom)` overload.
+- **Not shipped (#1242):** base-d external angles for Multibrot, the User Equation
+  critical-point picker, and deep zoom past 1e13.
+- **Validated:**
+  - Hand-solved nuclei:
+    - z²: −1, the airplane and the rabbit;
+    - z³: ±i;
+    - z⁴: −1 and e^{±iπ/3};
+    - Tricorn: −1 and e^{±iπ/3};
+    - Burning Ship: (−1, 0) and (½, −√3/2). The mirror point is correctly rejected,
+      because the ship is not symmetric.
+  - User Equation `z^2 + c`, `z^3 + c`, the Burning Ship written in DSL, and a z₀ = c seed
+    all reproduce the analytic nuclei.
+  - Misiurewicz points:
+    - i = M(2, 2) of z² with multiplier 4√2;
+    - M(2, 1) of z³ at c² = ω − 1;
+    - −2 = M(2, 1) for Burning Ship and Tricorn, with multiplier 4.
+  - Independent render check: for Multibrot, Burning Ship, Tricorn, their Generated
+    variants and User Equation, the found minibrot's nucleus and its 3×3 neighbours render
+    in-set in the family's real calculator, and the frame shows exterior.
+- **Batch:** navigation only, so no new flag is needed. The Command builder reproduces the
+  result by coordinates (double precision suffices below 1e13).
 
 ## 10. Sources
 

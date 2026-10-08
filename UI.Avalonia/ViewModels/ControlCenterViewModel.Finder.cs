@@ -18,6 +18,9 @@
 //              its embedded Julia set doubles the pattern; clicks stack layers.
 //              The morph path is plain navigation, so the existing Video zoom /
 //              --video-motion zoom into the final view renders it.
+//   S7 (#1191) Multibrot, Burning Ship, Tricorn and User Equation get Zoom to
+//              minibrot / Snap to spiral / Julia morph through the R² Newton
+//              engine — see ControlCenterViewModel.General.cs.
 //   S6 (#1190) "Surprise me" / "Descend": heuristic auto-explore for every 2D
 //              family — see ControlCenterViewModel.Explore.cs.
 //   S3 (#1187) "Snap to spiral": arm a one-shot click on the render
@@ -45,7 +48,7 @@ namespace FracturingFog.UI.Avalonia.ViewModels;
 public sealed partial class ControlCenterViewModel
 {
     private CancellationTokenSource? _finderCts;
-    private string _finderStatus = "Find minibrots in view (z² + c).";
+    private string _finderStatus = "Find minibrots and spirals in view (Mandelbrot, Multibrot, Burning Ship, Tricorn, User Equation).";
     private bool _isFinderBusy;
     private bool _isPickArmed;
 
@@ -139,10 +142,14 @@ public sealed partial class ControlCenterViewModel
     /// <summary>Cancel is offered while a search runs or a click is armed.</summary>
     public bool CanCancelFinder => IsFinderBusy || IsPickArmed;
 
-    /// <summary>The exact-track finders model f_c(z) = z² + c only; other
-    /// families get the heuristic finder (S6 #1190) instead.</summary>
+    /// <summary>The octuple-double finders (and Detect period / angles) model
+    /// f_c(z) = z² + c only; Multibrot, Burning Ship, Tricorn and User Equation
+    /// take the general track (S7 #1191); the rest Auto-explore only.</summary>
     private static bool FinderSupports(FractalType t)
-        => t is FractalType.Mandelbrot or FractalType.GeneratedMandelbrotZ2;
+        => OrbitMaps.TrackFor(t) == FinderTrack.Mandelbrot;
+
+    private static string NoFinder(FractalType t)
+        => $"No exact finder for {t} — use Auto-explore below.";
 
     private void InitFinder()
     {
@@ -174,7 +181,7 @@ public sealed partial class ControlCenterViewModel
         var vs = Shell.Main.ViewState;
         if (!FinderSupports(vs.FractalType))
         {
-            FinderStatus = $"The minibrot finder supports z² + c (Mandelbrot) only — not {vs.FractalType}.";
+            FinderStatus = $"Detect period applies to z² + c (Mandelbrot) only — not {vs.FractalType}.";
             view = default;
             return false;
         }
@@ -227,6 +234,9 @@ public sealed partial class ControlCenterViewModel
 
     private Task ZoomToMinibrotAsync()
     {
+        var type = Shell.Main.ViewState.FractalType;
+        if (TrackOf(type) == FinderTrack.General) return GeneralZoomToMinibrotAsync();
+        if (TrackOf(type) == FinderTrack.None) { FinderStatus = NoFinder(type); return Task.CompletedTask; }
         if (!TryFinderView(out var v)) return Task.CompletedTask;
         FinderStatus = "Searching for a minibrot…";
         return RunFinderAsync(async ct =>
@@ -293,9 +303,9 @@ public sealed partial class ControlCenterViewModel
     private void ArmSnapToSpiral()
     {
         var vs = Shell.Main.ViewState;
-        if (!FinderSupports(vs.FractalType))
+        if (TrackOf(vs.FractalType) == FinderTrack.None)
         {
-            FinderStatus = $"The spiral finder supports z² + c (Mandelbrot) only — not {vs.FractalType}.";
+            FinderStatus = NoFinder(vs.FractalType);
             return;
         }
         Shell.Main.Input.PointPickHandler = OnSnapPick;
@@ -315,15 +325,23 @@ public sealed partial class ControlCenterViewModel
     {
         IsPickArmed = false;   // the controller has already cleared its one-shot hook
         var vs = Shell.Main.ViewState;
-        if (!FinderSupports(vs.FractalType))
+        var track = TrackOf(vs.FractalType);
+        if (track == FinderTrack.None)
         {
             // The type changed while armed: let the press act normally.
-            FinderStatus = $"The spiral finder supports z² + c (Mandelbrot) only — not {vs.FractalType}.";
+            FinderStatus = NoFinder(vs.FractalType);
             return false;
         }
         var camera = new FracturingFog.ViewState.ViewCamera(vs);
         var click = camera.WorldFromScreen(e.X, e.Y, e.ClientWidth, e.ClientHeight);
         double reach = SnapPickRadiusPx * camera.Scale(e.ClientWidth, e.ClientHeight);
+        if (track == FinderTrack.General)
+        {
+            var map = BuildOrbitMap(out string why);
+            if (map == null) { FinderStatus = why; return true; }
+            GeneralSnap(map, ToV2(click), reach);
+            return true;
+        }
         FinderStatus = "Searching for a spiral / branch point…";
         _ = RunFinderAsync(async ct =>
         {
@@ -428,9 +446,9 @@ public sealed partial class ControlCenterViewModel
     private void ArmJuliaMorph()
     {
         var vs = Shell.Main.ViewState;
-        if (!FinderSupports(vs.FractalType))
+        if (TrackOf(vs.FractalType) == FinderTrack.None)
         {
-            FinderStatus = $"Julia morph supports z² + c (Mandelbrot) only — not {vs.FractalType}.";
+            FinderStatus = NoFinder(vs.FractalType);
             return;
         }
         IsMorphing = true;
@@ -452,11 +470,18 @@ public sealed partial class ControlCenterViewModel
     {
         IsPickArmed = false;   // one-shot hook already cleared by the controller
         var vs = Shell.Main.ViewState;
-        if (!FinderSupports(vs.FractalType))
+        var track = TrackOf(vs.FractalType);
+        if (track == FinderTrack.None)
         {
             IsMorphing = false;
-            FinderStatus = $"Julia morph supports z² + c (Mandelbrot) only — not {vs.FractalType}.";
+            FinderStatus = NoFinder(vs.FractalType);
             return false;
+        }
+        IOrbitMap? map = null;
+        if (track == FinderTrack.General)
+        {
+            map = BuildOrbitMap(out string why);
+            if (map == null) { IsMorphing = false; FinderStatus = why; return true; }
         }
         var camera = new FracturingFog.ViewState.ViewCamera(vs);
         var target = camera.WorldFromScreen(e.X, e.Y, e.ClientWidth, e.ClientHeight);
@@ -467,25 +492,38 @@ public sealed partial class ControlCenterViewModel
         {
             try
             {
-                var q = await Task.Run(() => NucleusFinder.FindMinibrot(target, reach, ct: ct), ct);
-                if (!q.Found)
+                // The target minibrot: nucleus, period and the zoom framing it.
+                var (found, nucleus, period, minibrotZoom) = map == null
+                    ? await Task.Run(() =>
+                    {
+                        var q = NucleusFinder.FindMinibrot(target, reach, ct: ct);
+                        return (q.Found, q.Nucleus, q.Period, q.Found ? 1.0 / q.Size.Magnitude : 0.0);
+                    }, ct)
+                    : await Task.Run(() =>
+                    {
+                        var g = GeneralFinder.FindMinibrot(map, ToV2(target), reach, ct: ct);
+                        return (g.Found && g.Zoom > 0, ToDeep(g.Point), g.Period, g.Zoom);
+                    }, ct);
+                if (!found)
                 {
                     FinderStatus = $"No minibrot within {MorphPickRadiusPx} px of that point — click elsewhere in the pattern.";
                     return;
                 }
-                var step = JuliaMorph.Plan(q, zoom, vs.Quality, vs.IterLocked, vs.LockedIterations);
+                double maxZoom = map == null ? QualityPreset.Extreme.ZoomMax : AutoExplorer.DoubleMaxZoom;
+                var step = JuliaMorph.Plan(nucleus, period, minibrotZoom, zoom, vs.Quality, vs.IterLocked, vs.LockedIterations,
+                                           maxZoom: maxZoom);
                 if (!step.Ok)
                 {
                     FinderStatus = step.Refusal == JuliaMorphRefusal.NotDeeper
-                        ? $"The period-{q.Period} minibrot there is not deeper than this view — click further out in the pattern."
-                        : $"That step would pass the deepest zoom (1e100).";
+                        ? $"The period-{period} minibrot there is not deeper than this view — click further out in the pattern."
+                        : $"That step would pass the deepest zoom ({Fmt(maxZoom)}).";
                     return;
                 }
                 string note = ApplyPlan(step.Plan);
-                _morphSteps.Add(($"{_morphSteps.Count + 1}. period {q.Period} → zoom {Fmt(step.Plan.Zoom)}", step.Plan.PreferredIterations));
+                _morphSteps.Add(($"{_morphSteps.Count + 1}. period {period} → zoom {Fmt(step.Plan.Zoom)}", step.Plan.PreferredIterations));
                 MorphPathText = MorphPathLines();
                 this.RaisePropertyChanged(nameof(HasMorphSteps));
-                FinderStatus = $"Morph layer {_morphSteps.Count}: toward the period-{q.Period} minibrot, zoom {Fmt(step.Plan.Zoom)} ({step.Plan.Quality.Name}). Click the next target.{note}";
+                FinderStatus = $"Morph layer {_morphSteps.Count}: toward the period-{period} minibrot, zoom {Fmt(step.Plan.Zoom)} ({step.Plan.Quality.Name}). Click the next target.{note}";
             }
             finally
             {
