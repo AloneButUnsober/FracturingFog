@@ -336,7 +336,8 @@ Measured against all 158 built-in Mandelbrot regions (`Resources/regions.json`):
 - **Batch:** the jump is plain centre / zoom / quality / iterations. Deep
   centres exposed a pre-existing gap — `--x/--y` are double only — now reported
   by `BatchCommandBuilder.DetectGaps` once the dropped limbs shift the render by
-  ≥ 0.1 px; full-precision `--x/--y` is #1233.
+  ≥ 0.1 px. #1233 has since closed the gap: `--x/--y` take octuple-double
+  limbs `Hi|Lo|…`, the builder emits them for deep views, and the gap entry is gone.
 
 ### 9.2 Implementation notes (S3)
 
@@ -398,8 +399,7 @@ Measured against all 158 built-in Mandelbrot regions (`Resources/regions.json`):
 - **No new batch flag.** A morph path is navigation ending at one view, and a
   plain zoom video into that view passes through every layer. So the morph
   video is the existing Video zoom / `--video-motion zoom --x --y --zoom`.
-  Deep centres still need #1233 for exact headless reproduction (already
-  flagged by `DetectGaps`).
+  Deep centres reproduce exactly since #1233 (`--x/--y` limb form).
 - **Undo** = nav Back plus restoring that layer's iteration hint (Back clears
   the hint; without it the restored layer smears).
 

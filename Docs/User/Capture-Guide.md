@@ -484,6 +484,20 @@ FracturingFog.exe --batch --mode video --fractal Mandelbulb --x 0 --y 0 --zoom 1
                   --seconds 12 --orbit 120 --out C:\out\bulb.mp4
 ```
 
+### Deep centres (#1233)
+
+Past about zoom 1e15 a single decimal can't hold the centre exactly. `--x` and `--y`
+therefore also take the centre as octuple-double limbs, `Hi|Lo|...` (up to 8 numbers;
+quote it, because `|` is a pipe to the shell). This is FF's own lossless form, the
+same one the Explore **Pipe notation** toggle shows. The Control Center **Command**
+builder emits it automatically for deep views, so a copied command renders the same
+view headless. Shallow views still get a plain decimal.
+
+```
+FracturingFog.exe --batch --x "-0.24905543435932342|-6.604062758348074e-18" ^
+                  --y "-0.7149922770539002|4.275119836666484e-17" --zoom 1e17 --out C:\out\deep.png
+```
+
 ### Auto-explore (#1190)
 
 `--explore SPEC` searches from the start view for a detail-rich view and renders

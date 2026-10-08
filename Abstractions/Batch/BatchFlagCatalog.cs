@@ -461,8 +461,10 @@ namespace FracturingFog.Batch
                     with { Aliases = new[] { "-r" } },
                 Pick(BatchFlags.Fractal, Source, ImgVid, "Fractal type.", Enum.GetNames<FractalType>(), "Mandelbrot", "TYPE")
                     with { Aliases = new[] { "-f" }, Source = BatchFlagSource.FractalType },
-                Dbl(BatchFlags.X, Source, ImgVid, "Centre real coordinate (with --y and --zoom)."),
-                Dbl(BatchFlags.Y, Source, ImgVid, "Centre imaginary coordinate."),
+                Dbl(BatchFlags.X, Source, ImgVid,
+                    "Centre real coordinate (with --y and --zoom). A deep centre takes octuple-double limbs "
+                    + "Hi|Lo|... (up to 8, as the Command builder emits; quote it for the shell)."),
+                Dbl(BatchFlags.Y, Source, ImgVid, "Centre imaginary coordinate (a number or Hi|Lo|... limbs, as --x)."),
                 Dbl(BatchFlags.Zoom, Source, ImgVid, "Zoom.") with { Aliases = new[] { "--z" } },
                 Int(BatchFlags.Iter, Source, ImgVid, "Override the iteration count.", min: 1)
                     with { Aliases = new[] { "--i", "--iterations" } },

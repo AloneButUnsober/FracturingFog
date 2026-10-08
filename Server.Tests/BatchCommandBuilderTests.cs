@@ -6,7 +6,9 @@
 // the real BatchOptions parser (now shared in Abstractions, #362), and reports
 // fidelity gaps for live fx the 2D batch path cannot reproduce.
 
+using System;
 using System.Globalization;
+using System.Linq;
 using FracturingFog;
 using FracturingFog.Batch;
 using FracturingFog.Cli;
@@ -274,22 +276,58 @@ namespace FracturingFog.Server.Tests
             Assert.Empty(gaps);
         }
 
-        // #1186 — a deep live centre carries OD limbs that --x/--y (double)
-        // drop. Reported once the shift is a visible fraction of a pixel.
+        // #1233 — a deep live centre goes out as octuple-double limbs and parses
+        // back exactly: no precision gap any more.
         [Fact]
-        public void DeepCentre_DroppedPrecision_IsAGap()
+        public void DeepCentre_RoundTripsAtOctupleDoublePrecision()
         {
-            var deep = new BatchCommandSnapshot { Zoom = 1e15, Width = 1920, Height = 1080, CenterXLow = 1e-17 };
-            Assert.Contains(BatchCommandBuilder.DetectGaps(deep), g => g.Contains("Deep-zoom centre"));
+            // A real OD centre: limbs of decreasing magnitude, as DeepComplex keeps them.
+            double[] xs = { -1.7685736563152709, 2.7e-17, -3.1e-34, 4.4e-51, -5.5e-68, 6.6e-85, -7.7e-102, 8.8e-119 };
+            double[] ys = { 0.0019532175, -1.5e-19, 2.5e-36, 0, 0, 0, 0, 0 };
+            var snap = new BatchCommandSnapshot
+            {
+                CenterX = xs[0], CenterXLimbs = xs[1..],
+                CenterY = ys[0], CenterYLimbs = ys[1..],
+                Zoom = 3.8e17,
+            };
+            Assert.DoesNotContain(BatchCommandBuilder.DetectGaps(snap), g => g.Contains("centre"));
+
+            var report = BatchCommandBuilder.BuildWithReport(snap);
+            var args = report.Args.ToArray();
+            int xi = Array.IndexOf(args, "--x"), yi = Array.IndexOf(args, "--y");
+            Assert.Equal(8, args[xi + 1].Split('|').Length);
+            Assert.Equal(3, args[yi + 1].Split('|').Length);      // trailing zero limbs are not emitted
+            // The joined command quotes the limb form for the shell ('|' is a pipe).
+            Assert.Contains("\"" + args[xi + 1] + "\"", BatchCommandBuilder.Build(snap));
+
+            for (int i = 0; i < args.Length; i++) if (args[i] == "<OUTPUT.png>") args[i] = "out.png";
+            Assert.True(BatchOptions.TryParse(args, 0, out var opts, out var err), err);
+            Assert.Equal(xs, opts.CenterXLimbs);
+            Assert.Equal(ys, opts.CenterYLimbs);
+            Assert.Equal(xs[0], opts.CenterX);
         }
 
         [Fact]
-        public void ShallowCentre_NegligibleLowLimbs_AreNotAGap()
+        public void ShallowCentre_StaysAPlainDecimal()
         {
-            // Same dropped amount at zoom 1 is ~1e-14 px: invisible.
-            var shallow = new BatchCommandSnapshot { Zoom = 1.0, Width = 1920, Height = 1080, CenterXLow = 1e-17 };
-            Assert.DoesNotContain(BatchCommandBuilder.DetectGaps(shallow), g => g.Contains("Deep-zoom centre"));
+            var snap = new BatchCommandSnapshot
+            {
+                CenterX = -0.75, CenterXLimbs = new double[7], CenterY = 0.1, CenterYLimbs = new double[7],
+            };
+            var args = BatchCommandBuilder.BuildWithReport(snap).Args.ToArray();
+            Assert.Equal("-0.75", args[Array.IndexOf(args, "--x") + 1]);
+            Assert.Equal("0.1", args[Array.IndexOf(args, "--y") + 1]);
+            Assert.True(BatchOptions.TryParse(new[] { "--x", "-0.75", "--y", "0.1", "--zoom", "1", "--out", "o.png" }, 0, out var o, out _));
+            Assert.Null(o.CenterXLimbs);
         }
+
+        [Theory]
+        [InlineData("1|2|3|4|5|6|7|8|9")]    // more than 8 limbs
+        [InlineData("1|x")]
+        [InlineData("1||2")]
+        [InlineData("NaN|0")]
+        public void BadLimbForm_IsRejected(string v)
+            => Assert.False(BatchOptions.TryParse(new[] { "--x", v, "--y", "0", "--zoom", "1", "--out", "o.png" }, 0, out _, out _));
 
         // #1012 — stereo is expressible now: emitted as flags, not a gap.
         [Fact]

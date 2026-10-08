@@ -273,11 +273,12 @@ namespace FracturingFog.Batch
             var fp = BuildFractalParameters(opts, namedRegion);
             WarnIfNoUserCodeSource(frType, fp);
 
+            // #1233 — a --x/--y limb centre is carried in full (all 8 limbs);
             // #1190 — --explore replaces the target with the best view found.
-            FracturingFog.FFMath.DeepComplex? explored = null;
+            FracturingFog.FFMath.DeepComplex? explored = CliCentre(opts);
             if (opts.Explore != null)
             {
-                var start = StartCenter(cx, cy, opts.CenterX == null && opts.CenterY == null ? namedRegion : null);
+                var start = explored ?? StartCenter(cx, cy, opts.CenterX == null && opts.CenterY == null ? namedRegion : null);
                 var best = RunExplore(opts, frType, quality, theme, fp, start, zoom, namedRegion);
                 if (best == null) return 2;
                 explored = best.Value.Center;
@@ -344,17 +345,8 @@ namespace FracturingFog.Batch
                     ? FracturingFog.Imaging.ExrCompression.Zip
                     : FracturingFog.Imaging.ExrCompression.None,
             };
-            if (explored is { } ex)
-            {
-                // The explored centre in full (octuple-double) precision.
-                req = req with
-                {
-                    CenterXLo = ex.Re.X1, CenterX2 = ex.Re.X2, CenterX3 = ex.Re.X3,
-                    CenterX4 = ex.Re.X4, CenterX5 = ex.Re.X5, CenterX6 = ex.Re.X6, CenterX7 = ex.Re.X7,
-                    CenterYLo = ex.Im.X1, CenterY2 = ex.Im.X2, CenterY3 = ex.Im.X3,
-                    CenterY4 = ex.Im.X4, CenterY5 = ex.Im.X5, CenterY6 = ex.Im.X6, CenterY7 = ex.Im.X7,
-                };
-            }
+            // The explored / --x --y limb centre in full (octuple-double) precision.
+            if (explored is { } ex) req = WithCentre(req, ex);
 
             Console.WriteLine($"Batch image render");
             Console.WriteLine($"  fractal : {frType}");
@@ -501,6 +493,16 @@ namespace FracturingFog.Batch
             // TearDrop) — only when the centre comes from the region.
             FractalRegion? limbSource = (opts.CenterX == null && opts.CenterY == null) ? namedRegion : null;
 
+            // #1233 — a --x/--y limb centre: Mandelbrot frames render from all 8
+            // limbs (deepCentre); the other deep-capable families take the QD
+            // limbs through the region-limb path.
+            FracturingFog.FFMath.DeepComplex? deepCentre = CliCentre(opts);
+            if (deepCentre is { } dc)
+            {
+                limbRegion = null;
+                limbSource = LimbRegion(dc, frType);
+            }
+
             // #1190 — --explore: the video zooms into the best view found. Its
             // centre is carried as a double (the explore depth stays well inside
             // double range at the default settings).
@@ -514,6 +516,7 @@ namespace FracturingFog.Batch
                 iter = opts.Iterations ?? quality.ComputeIterations(targetZoom);
                 limbRegion = null;
                 limbSource = null;
+                deepCentre = best.Value.Center;
             }
             var motion = VideoMotionPlan.Resolve(frType, opts.VideoMotion, out string? motionNote);
             var motionRng = new Random(opts.VideoSeed);
@@ -832,6 +835,8 @@ namespace FracturingFog.Batch
                         FroxelHistory = reliefHist,             // #468 shared across frames
                         Path = string.Empty, Format = ImageFileFormat.Png,
                     };
+                    if (deepCentre is { } rd && frameCx == cx)
+                        rreq = WithCentre(rreq, rd);   // #1233 — all 8 limbs
                     if (captureHdr || reliefStereo)
                     {
                         var aov = FracturingFog.Imaging.ReliefDenoisePass.MakeCapture(reliefFp, outW, outH, captureHdr, captureGeom: reliefStereo);
@@ -842,6 +847,8 @@ namespace FracturingFog.Batch
                     }
                     return PosterRenderer.RenderToPixels(rreq, CancellationToken.None, out _, out _);
                 }
+                if (deepCentre is { } fd && frameCx == cx && frType == FractalType.Mandelbrot)
+                    return RenderDeepMandelFrame(fd, outW, outH, fz, iter, theme, pfAdaptive, quality);
                 return limbRegion != null && frameCx == cx
                     ? RenderRegionMandelFrame(limbRegion, outW, outH, fz, iter, theme, pfAdaptive, quality)
                     : RenderOneFrame(frType, outW, outH, frameCx, cy, fz, iter, theme, quality, pfAdaptive,
@@ -2185,6 +2192,61 @@ namespace FracturingFog.Batch
             Console.Error.WriteLine(result.Message ?? "Scene render failed.");
             // ffmpeg-missing left a recoverable PNG sequence — not a hard failure.
             return string.IsNullOrEmpty(result.FrameFolder) ? 4 : 1;
+        }
+
+        // ── Full-precision centre (#1233) ─────────────────────────────────────
+
+        /// <summary>The --x/--y centre when either was given in limb form
+        /// (Hi|Lo|…), else null (plain decimals stay doubles, as before).</summary>
+        internal static FracturingFog.FFMath.DeepComplex? CliCentre(BatchOptions opts)
+        {
+            if (opts.CenterXLimbs == null && opts.CenterYLimbs == null) return null;
+            if (opts.CenterX == null || opts.CenterY == null) return null;
+            var x = opts.CenterXLimbs ?? new[] { opts.CenterX.Value, 0, 0, 0, 0, 0, 0, 0 };
+            var y = opts.CenterYLimbs ?? new[] { opts.CenterY.Value, 0, 0, 0, 0, 0, 0, 0 };
+            return FracturingFog.FFMath.DeepComplex.FromLimbs(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7],
+                                                              y[0], y[1], y[2], y[3], y[4], y[5], y[6], y[7]);
+        }
+
+        /// <summary>A poster request centred on <paramref name="c"/> (all 8 limbs).</summary>
+        internal static PosterRequest WithCentre(PosterRequest req, FracturingFog.FFMath.DeepComplex c) => req with
+        {
+            CenterX = c.Re.X0, CenterXLo = c.Re.X1, CenterX2 = c.Re.X2, CenterX3 = c.Re.X3,
+            CenterX4 = c.Re.X4, CenterX5 = c.Re.X5, CenterX6 = c.Re.X6, CenterX7 = c.Re.X7,
+            CenterY = c.Im.X0, CenterYLo = c.Im.X1, CenterY2 = c.Im.X2, CenterY3 = c.Im.X3,
+            CenterY4 = c.Im.X4, CenterY5 = c.Im.X5, CenterY6 = c.Im.X6, CenterY7 = c.Im.X7,
+        };
+
+        /// <summary>A transient region carrying a centre's QD limbs for the
+        /// region-limb frame path of the non-Mandelbrot deep families.</summary>
+        private static FractalRegion LimbRegion(FracturingFog.FFMath.DeepComplex c, FractalType t) => new()
+        {
+            FractalType = t,
+            CenterX = c.Re.X0, CenterXLo = c.Re.X1, CenterX2 = c.Re.X2, CenterX3 = c.Re.X3,
+            CenterY = c.Im.X0, CenterYLo = c.Im.X1, CenterY2 = c.Im.X2, CenterY3 = c.Im.X3,
+        };
+
+        /// <summary>One Mandelbrot video frame at the full octuple-double centre.</summary>
+        private static uint[] RenderDeepMandelFrame(
+            FracturingFog.FFMath.DeepComplex c, int w, int h, double zoom, int iter, IColorMap theme, int adaptive,
+            QualityPreset quality)
+        {
+            var calc = new MandelbrotCalculator(w, h)
+            {
+                CenterX = c.Re.X0, CenterXLo = c.Re.X1, CenterX2 = c.Re.X2, CenterX3 = c.Re.X3,
+                CenterX4 = c.Re.X4, CenterX5 = c.Re.X5, CenterX6 = c.Re.X6, CenterX7 = c.Re.X7,
+                CenterY = c.Im.X0, CenterYLo = c.Im.X1, CenterY2 = c.Im.X2, CenterY3 = c.Im.X3,
+                CenterY4 = c.Im.X4, CenterY5 = c.Im.X5, CenterY6 = c.Im.X6, CenterY7 = c.Im.X7,
+                Zoom = zoom,
+                MaxIterations = iter,
+                ColorMap = theme,
+                Quality = quality,
+            };
+            calc.Calculate(CancellationToken.None);
+            if (adaptive > 0) calc.ApplyHistogramEqualization(adaptive / 100.0);
+            var buf = CopyBuffer(calc.ColorBuffer, w, h);
+            CompositeInteriorAlpha(buf, w, h, theme);
+            return buf;
         }
 
         // ── Auto-explore (#1190) ──────────────────────────────────────────────

@@ -68,6 +68,13 @@ namespace FracturingFog.Batch
         public FractalType FractalType { get; set; } = FractalType.Mandelbrot;
         public double? CenterX { get; set; }
         public double? CenterY { get; set; }
+
+        /// <summary>#1233 — the full-precision centre when --x / --y were given in
+        /// limb form (<c>Hi|Lo|…</c>, up to 8 octuple-double limbs; index 0 =
+        /// <see cref="CenterX"/>). Null for a plain decimal, which stays a double
+        /// exactly as before.</summary>
+        public double[]? CenterXLimbs { get; set; }
+        public double[]? CenterYLimbs { get; set; }
         public double? Zoom { get; set; }
         public int? Iterations { get; set; }
 
@@ -502,14 +509,22 @@ namespace FracturingFog.Batch
                         break;
 
                     case BatchFlags.X:
-                        if (!NextDouble(args, ref i, a, out double xv, out error)) return false;
-                        opts.CenterX = xv;
+                    {
+                        if (!Next(args, ref i, a, out string xs, out error)) return false;
+                        if (!TryParseCoordinate(xs, out var xl)) { error = CoordinateError(a, xs); return false; }
+                        opts.CenterX = xl[0];
+                        opts.CenterXLimbs = xl.Length > 1 ? Pad8(xl) : null;
                         break;
+                    }
 
                     case BatchFlags.Y:
-                        if (!NextDouble(args, ref i, a, out double yv, out error)) return false;
-                        opts.CenterY = yv;
+                    {
+                        if (!Next(args, ref i, a, out string ys, out error)) return false;
+                        if (!TryParseCoordinate(ys, out var yl)) { error = CoordinateError(a, ys); return false; }
+                        opts.CenterY = yl[0];
+                        opts.CenterYLimbs = yl.Length > 1 ? Pad8(yl) : null;
                         break;
+                    }
 
                     case "--z":
                     case BatchFlags.Zoom:
@@ -1887,6 +1902,35 @@ namespace FracturingFog.Batch
                     return false;
             values = outv;
             return true;
+        }
+
+        /// <summary>#1233 — a centre coordinate: a plain decimal (parsed as a
+        /// double, exactly as before) or octuple-double limbs <c>Hi|Lo|…</c>
+        /// (2..8 finite doubles, each written round-trippably), the form the
+        /// Command builder emits for deep views. <paramref name="limbs"/> holds
+        /// one value for a decimal, the given limbs otherwise.</summary>
+        public static bool TryParseCoordinate(string? s, out double[] limbs)
+        {
+            limbs = Array.Empty<double>();
+            if (string.IsNullOrWhiteSpace(s)) return false;
+            var parts = s.Split('|');
+            if (parts.Length > 8) return false;
+            var v = new double[parts.Length];
+            for (int k = 0; k < parts.Length; k++)
+                if (!double.TryParse(parts[k].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out v[k])
+                    || !double.IsFinite(v[k])) return false;
+            limbs = v;
+            return true;
+        }
+
+        private static string CoordinateError(string flag, string value)
+            => $"{flag}: '{value}' is not a coordinate (a number, or octuple-double limbs Hi|Lo|... up to 8).";
+
+        private static double[] Pad8(double[] l)
+        {
+            var r = new double[8];
+            Array.Copy(l, r, l.Length);
+            return r;
         }
 
         private static bool Next(string[] a, ref int i, string flag, out string v, out string? err)
