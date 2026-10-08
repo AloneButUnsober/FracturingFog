@@ -621,6 +621,7 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public bool? BuddhaProgressive { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? BuddhaSeed { get; set; }
         [JsonIgnore(Condition = OmitNull)] public bool? BuddhaZoomCompensation { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? BuddhaScaleSamplesWithWindow { get; set; }   // #1224
         [JsonIgnore(Condition = OmitNull)] public double? DualBuddhaCSeedX { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualBuddhaCSeedY { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? DualBuddhaMinIter { get; set; }
@@ -1121,6 +1122,7 @@ namespace FracturingFog.Models
                     BuddhaProgressive = p.BuddhaProgressive != D.BuddhaProgressive ? p.BuddhaProgressive : (bool?)null,
                     BuddhaSeed = p.BuddhaSeed != D.BuddhaSeed ? p.BuddhaSeed : (int?)null,
                     BuddhaZoomCompensation = p.BuddhaZoomCompensation != D.BuddhaZoomCompensation ? p.BuddhaZoomCompensation : (bool?)null,
+                    BuddhaScaleSamplesWithWindow = p.BuddhaScaleSamplesWithWindow != D.BuddhaScaleSamplesWithWindow ? p.BuddhaScaleSamplesWithWindow : (bool?)null,   // #1224
                 },
                 // #1124 — Dual Buddhabrot: sampler + dual knobs, each omitted at default.
                 FractalType.DualBuddhabrot => new RegionFractalParams
@@ -1137,6 +1139,7 @@ namespace FracturingFog.Models
                     BuddhaProgressive = p.BuddhaProgressive != D.BuddhaProgressive ? p.BuddhaProgressive : (bool?)null,
                     BuddhaSeed = p.BuddhaSeed != D.BuddhaSeed ? p.BuddhaSeed : (int?)null,
                     BuddhaZoomCompensation = p.BuddhaZoomCompensation != D.BuddhaZoomCompensation ? p.BuddhaZoomCompensation : (bool?)null,
+                    BuddhaScaleSamplesWithWindow = p.BuddhaScaleSamplesWithWindow != D.BuddhaScaleSamplesWithWindow ? p.BuddhaScaleSamplesWithWindow : (bool?)null,   // #1224
                     DualBuddhaCSeedX = p.DualBuddhaCSeedX != D.DualBuddhaCSeedX ? p.DualBuddhaCSeedX : (double?)null,
                     DualBuddhaCSeedY = p.DualBuddhaCSeedY != D.DualBuddhaCSeedY ? p.DualBuddhaCSeedY : (double?)null,
                     DualBuddhaMinIter = p.DualBuddhaMinIter != D.DualBuddhaMinIter ? p.DualBuddhaMinIter : (int?)null,
@@ -1605,6 +1608,7 @@ namespace FracturingFog.Models
             if (BuddhaProgressive.HasValue) p.BuddhaProgressive = BuddhaProgressive.Value;
             if (BuddhaSeed.HasValue) p.BuddhaSeed = BuddhaSeed.Value;
             if (BuddhaZoomCompensation.HasValue) p.BuddhaZoomCompensation = BuddhaZoomCompensation.Value;
+            if (BuddhaScaleSamplesWithWindow.HasValue) p.BuddhaScaleSamplesWithWindow = BuddhaScaleSamplesWithWindow.Value;   // #1224
             if (DualBuddhaCSeedX.HasValue) p.DualBuddhaCSeedX = DualBuddhaCSeedX.Value;
             if (DualBuddhaCSeedY.HasValue) p.DualBuddhaCSeedY = DualBuddhaCSeedY.Value;
             if (DualBuddhaMinIter.HasValue) p.DualBuddhaMinIter = DualBuddhaMinIter.Value;

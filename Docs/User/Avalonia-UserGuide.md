@@ -659,13 +659,17 @@ whichever you use, the other reflects the change.
   picture, and `--batch` renders the same image as the live view. The CPU run is
   the faster one on most machines, so it stays on the CPU (status bar
   `[CPU: CPU faster]`). Set the environment variable `FF_GPU_BUDDHA=1` to sample
-  on a card with far more compute than your CPU. Metropolis sampling (on by
-  itself above zoom 1.2 with zoom compensation) and Dual Buddhabrot always run
-  on the CPU. A frame's cost follows the sample count and the iteration limits,
-  not the window size. A larger window spreads the same samples over more
-  pixels, so it looks dimmer and grainier: raise **Samples** to get the same
-  density back. Metropolis traces far longer orbits per sample, so a zoomed-in
-  view takes a hundred times longer or more than the same view zoomed out.
+  on a card with far more compute than your CPU. Metropolis sampling and Dual
+  Buddhabrot always run on the CPU.
+- **Buddhabrot samples and speed.** **Samples** is the budget for a 640×480
+  frame. With **Scale samples with window size** (on by default), a larger
+  window or export samples proportionally more, so it is as bright and smooth
+  as the preview, and takes proportionally longer. Zoom compensation raises the
+  sample count as you zoom in (up to 64×, shared with the window factor, so a
+  large zoomed frame stays interactive). It keeps the fast uniform sampler up to
+  zoom 100 and switches to Metropolis past it; Dual Buddhabrot switches past
+  zoom 1.2. Metropolis costs far more per frame (seconds rather than tens of
+  milliseconds), so tick it only when you want its look.
 
 > [!TIP]
 > If you are comparing GPU vs CPU output, open the performance HUD with `H` first

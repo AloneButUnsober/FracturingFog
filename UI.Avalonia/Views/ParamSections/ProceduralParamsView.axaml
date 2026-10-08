@@ -107,7 +107,7 @@
         <!-- BuddhaBrot / Nebulabrot / Anti-* family -->
         <Grid IsVisible="{Binding IsBuddhaBrot}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Samples:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="0" Grid.Column="1"
                            Minimum="50000" Maximum="50000000" Increment="50000" FormatString="N0"
@@ -162,12 +162,17 @@
                       Content="Auto zoom-detail compensation"
                       IsChecked="{Binding BuddhaZoomCompensation, Mode=TwoWay}"
                       Margin="0,2"
-                      ToolTip.Tip="When zoomed in, scale the sample budget with zoom and auto-enable Metropolis sampling so the viewport stays populated instead of going dark/grainy. No effect when zoomed out." />
+                      ToolTip.Tip="When zoomed in, scale the sample budget with zoom (up to 64×) so the viewport stays populated instead of going dark/grainy. Past zoom 100 it also turns on Metropolis sampling (Dual Buddhabrot: past zoom 1.2). No effect when zoomed out." />
             <TextBlock Grid.Row="11" Grid.Column="0" Text="Min escape iter:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="11" Grid.Column="1"
                            Minimum="0" Maximum="10000" Increment="1" FormatString="F0"
                            Value="{Binding BuddhaMinIter, Mode=TwoWay}" Margin="0,2"
                            ToolTip.Tip="Orbits that escape in fewer steps are not drawn. Removes the flat haze the fast escapers lay over the |c| &lt;= 2 disc. 0 = draw every orbit. Ignored by the Anti types (they draw bounded orbits)." />
+            <CheckBox Grid.Row="12" Grid.Column="0" Grid.ColumnSpan="2"
+                      Content="Scale samples with window size"
+                      IsChecked="{Binding BuddhaScaleSamplesWithWindow, Mode=TwoWay}"
+                      Margin="0,2"
+                      ToolTip.Tip="Samples is the budget for a 640×480 frame. A larger window or export samples proportionally more, so it is as bright and smooth as the preview (and takes proportionally longer). Off = the same Samples at every size." />
             <TextBlock Grid.Row="10" Grid.Column="0" Grid.ColumnSpan="2"
                        Text="This is a 2D density plot — zooming shows more samples of the same statistical structure, not new boundary detail like the Mandelbrot set. Raise Samples (or zoom-compensation) if a zoomed view looks sparse."
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4,0,0" />

@@ -79,7 +79,7 @@ public sealed class DualBuddhabrotCalculator : BuddhaFamilyCalculator
         int Samples, int IterLow, int IterMid, int IterHigh,
         BuddhaQualityMode Quality, bool Metropolis, bool Progressive, int Seed, bool ZoomComp,
         int? BatchOverride, double CX, double CY, int MinIter, int Threads,
-        DualBuddhaDeposit Deposit, DualBuddhaNebula Nebula, bool Anti);
+        DualBuddhaDeposit Deposit, DualBuddhaNebula Nebula, bool Anti, bool ScaleWithWindow);
 
     private SampleKey? _lastKey;
 
@@ -91,7 +91,7 @@ public sealed class DualBuddhabrotCalculator : BuddhaFamilyCalculator
             p.BuddhaQualityMode, p.BuddhaMetropolis, p.BuddhaProgressive, p.BuddhaSeed, p.BuddhaZoomCompensation,
             ProgressiveBatchesOverride, p.DualBuddhaCSeedX, p.DualBuddhaCSeedY, Math.Max(0, p.DualBuddhaMinIter),
             Environment.ProcessorCount,
-            p.DualBuddhaDeposit, p.DualBuddhaNebula, p.DualBuddhaAnti);
+            p.DualBuddhaDeposit, p.DualBuddhaNebula, p.DualBuddhaAnti, p.BuddhaScaleSamplesWithWindow);
     }
 
     // The video accumulation leg relies on the per-batch callbacks of a real

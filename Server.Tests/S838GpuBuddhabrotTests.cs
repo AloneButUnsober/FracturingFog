@@ -238,7 +238,11 @@ public sealed class S838GpuBuddhabrotTests
             var mh = Calc(false, 1, false, k); mh.FractalParameters.BuddhaMetropolis = true;
             Assert.Equal(("Metropolis sampling", false), Route(mh));
 
-            var zoomComp = Calc(false, 1, false, k); zoomComp.Zoom = 3;   // compensation auto-enables MH
+            // #1224 — zoom compensation keeps uniform sampling (so the GPU) up to
+            // zoom 100; past it, it turns Metropolis on.
+            var zoomUniform = Calc(false, 1, false, k); zoomUniform.Zoom = 3;
+            Assert.True(Route(zoomUniform).Gpu);
+            var zoomComp = Calc(false, 1, false, k); zoomComp.Zoom = 150;
             Assert.Equal(("Metropolis sampling", false), Route(zoomComp));
 
             var deep = Calc(false, 1, false, k); deep.Zoom = 200; deep.FractalParameters.BuddhaZoomCompensation = false;
