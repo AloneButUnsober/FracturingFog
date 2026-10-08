@@ -90,6 +90,24 @@ public sealed class BilliardColorGenTests
         Assert.Equal(a.MapBilliard(1, 3, 5, 100, 0.5f), b.MapBilliard(1, 3, 5, 100, 0.5f));
     }
 
+    // #1173-K (G4.8) — decided won't-do: billiard programs colour the CPU trace's
+    // per-pixel outcome and have no GPU palette. The family has no GPU trace, so a
+    // GPU palette would only add an upload of the outcome buffers and a readback of
+    // the colour. With GPU compute on, the host reports "ChaoticBilliard has no GPU
+    // path" (FractalRenderHost.FrameGpuRoute). If a billiard GPU kernel is ever
+    // added, revisit this together with it (see GPU-Parity-DevelopmentPlan.md, G4.8).
+    [Fact]
+    public void Billiard_Programs_Advertise_No_Gpu_Palette()
+    {
+        var map = InterpretedColorMap.TryCreate(
+            "return gateId < 0 ? rgb(0, 0, 0) : hsv(gateId / gateCount + 0.1 * pathLength, 1.0, 1.0);", null, out var err);
+        Assert.Null(err);
+        var gpu = Assert.IsAssignableFrom<IGpuHlslPalette>(map);
+        Assert.Equal("", gpu.HlslPaletteBody);
+        Assert.Equal("Interp_none", gpu.PaletteId);
+        Assert.False(typeof(FracturingFog.Render.IGpuRouteSource).IsAssignableFrom(typeof(ChaoticBilliardCalculator)));
+    }
+
     [Fact]
     public void CSharp_Export_Rejects_Billiard_Themes()
     {
