@@ -119,8 +119,11 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     private readonly Vk _vk;
     private readonly Device _device;
 
-    private Program? _base;                                   // no-colour variant
-    private readonly Dictionary<string, Program> _colorById = new(StringComparer.Ordinal);
+    // #1227: every SP variant is specialised for the fractal kind it runs
+    // (MandelbrotKernelSource.ForKind) and built on first use.
+    private readonly Dictionary<int, Program> _baseByKind = new();          // no-colour variant
+    private readonly Dictionary<string, Func<int, Program>> _colorBuilders = new(StringComparer.Ordinal);
+    private readonly Dictionary<(string Id, int Kind), Program> _colorByIdKind = new();
     private string? _activePaletteId;
 
     // V6 (#82): deep-zoom perturbation program + its dedicated buffers (the
@@ -146,7 +149,24 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
 
     public double LastDispatchMs { get; private set; }
     public double LastReadbackMs { get; private set; }
-    public bool HasGpuPalette => _activePaletteId != null && _colorById.ContainsKey(_activePaletteId);
+    public bool HasGpuPalette => _activePaletteId != null && _colorBuilders.ContainsKey(_activePaletteId);
+
+    private Program BaseProgram(int kind)
+    {
+        if (_baseByKind.TryGetValue(kind, out var p)) return p;
+        p = BuildProgram(MandelbrotKernelSource.ForKind(MandelbrotKernelSource.BuildBase(), kind), MandelbrotKernelSource.EntryPoint,
+            0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2);
+        _baseByKind[kind] = p;
+        return p;
+    }
+
+    private Program ColorProgram(string id, int kind)
+    {
+        if (_colorByIdKind.TryGetValue((id, kind), out var p)) return p;
+        p = _colorBuilders[id](kind);
+        _colorByIdKind[(id, kind)] = p;
+        return p;
+    }
 
     /// <param name="ctx">A context whose logical device is already created.</param>
     /// <param name="ownsContext">When true, <see cref="Dispose"/> also disposes
@@ -240,19 +260,27 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         if (palette == null) { _activePaletteId = null; return; }
         string id = palette.PaletteId ?? "";
         if (string.IsNullOrEmpty(id)) { _activePaletteId = null; return; }
-        if (_colorById.ContainsKey(id)) { _activePaletteId = id; return; }
+        if (_colorBuilders.ContainsKey(id)) { _activePaletteId = id; return; }
         try
         {
             // F16 (#603) — orbit palette (non-None mask) → orbit-accumulating
             // kernel; otherwise the plain escape-only colour kernel.
             // #1173-J — the orbit variant also binds the gTrap output (u4 → 204).
-            _colorById[id] = palette is IGpuOrbitPalette o && o.OrbitInputs != GpuOrbitInputs.None
-                ? BuildProgram(MandelbrotKernelSource.BuildColorOrbit(palette.HlslPrelude, palette.HlslPaletteBody, (int)o.OrbitInputs),
-                    MandelbrotKernelSource.EntryPoint,
-                    0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)ColorBinding, (uint)TrapBinding)
-                : BuildProgram(MandelbrotKernelSource.BuildColor(palette.HlslPrelude, palette.HlslPaletteBody),
-                    MandelbrotKernelSource.EntryPoint,
+            Func<int, Program> build;
+            if (palette is IGpuOrbitPalette o && o.OrbitInputs != GpuOrbitInputs.None)
+            {
+                string hlsl = MandelbrotKernelSource.BuildColorOrbit(palette.HlslPrelude, palette.HlslPaletteBody, (int)o.OrbitInputs);
+                build = kind => BuildProgram(MandelbrotKernelSource.ForKind(hlsl, kind), MandelbrotKernelSource.EntryPoint,
+                    0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)ColorBinding, (uint)TrapBinding);
+            }
+            else
+            {
+                string hlsl = MandelbrotKernelSource.BuildColor(palette.HlslPrelude, palette.HlslPaletteBody);
+                build = kind => BuildProgram(MandelbrotKernelSource.ForKind(hlsl, kind), MandelbrotKernelSource.EntryPoint,
                     0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)ColorBinding);
+            }
+            _colorByIdKind[(id, 0)] = build(0);   // compile now so a bad theme falls back here
+            _colorBuilders[id] = build;
             _activePaletteId = id;
         }
         catch (Exception ex)
@@ -282,9 +310,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         if (width <= 0 || height <= 0) return;
 
         bool useColor = colorDst != null && HasGpuPalette;
-        Program prog = useColor ? _colorById[_activePaletteId!]
-            : (_base ??= BuildProgram(MandelbrotKernelSource.BuildBase(), MandelbrotKernelSource.EntryPoint,
-                0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2));
+        Program prog = useColor ? ColorProgram(_activePaletteId!, (int)kind) : BaseProgram((int)kind);
 
         long t0 = Stopwatch.GetTimestamp();
         int n = width * height;
@@ -1269,14 +1295,16 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         if (_disposed) return;
         _disposed = true;
         try { if (_device.Handle != 0) _vk.DeviceWaitIdle(_device); } catch { }
-        if (_base != null) { DestroyProgram(_base); _base = null; }
+        foreach (var p in _baseByKind.Values) DestroyProgram(p);
+        _baseByKind.Clear();
         if (_perturb != null) { DestroyProgram(_perturb); _perturb = null; }
         if (_perturbSa != null) { DestroyProgram(_perturbSa); _perturbSa = null; }
         foreach (var p in _perturbOrbit.Values) DestroyProgram(p);   // #607
         if (_buddha != null) { DestroyProgram(_buddha); _buddha = null; }   // #838
         _perturbOrbit.Clear();
-        foreach (var p in _colorById.Values) DestroyProgram(p);
-        _colorById.Clear();
+        foreach (var p in _colorByIdKind.Values) DestroyProgram(p);
+        _colorByIdKind.Clear();
+        _colorBuilders.Clear();
         for (int i = 0; i < _buf.Length; i++) FreeBuffer(ref _buf[i]);
         FreeBuffer(ref _perturbParams);
         FreeBuffer(ref _refZrBuf);

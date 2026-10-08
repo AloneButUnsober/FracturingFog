@@ -8,7 +8,7 @@
 // (T3.1 phase 4) packed BGRA color when a GPU palette is active.
 //
 // Two compiled shader variants kept:
-//   • _csBase   — iter + smooth + finalZD only (palette done on CPU).
+//   • _csBaseByKind — iter + smooth + finalZD only (palette done on CPU).
 //   • _csColor  — same plus emitted EvalPalette and a gColor UAV write.
 //                 Compiled on demand and cached per-theme by PaletteId
 //                 (IGpuHlslPalette opt-in).
@@ -152,10 +152,13 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     // (immediate) is not thread-safe; the calc thread (which calls Run)
     // and the threadpool upload (which calls Render) must serialise.
     private readonly object _d3dGate;
-    // Phase 4: shader cache. _csBase = no-color variant (palette on CPU).
-    // _csByPaletteId[paletteId] = color-emitting variants (one per theme).
-    private ID3D11ComputeShader _csBase = null!;
-    private readonly Dictionary<string, ID3D11ComputeShader> _csByPaletteId = new(StringComparer.Ordinal);
+    // Phase 4: shader cache. _csBaseByKind = no-color variant (palette on CPU).
+    // _hlslByPaletteId[paletteId] = the theme's color-emitting source; compiled
+    // per fractal kind into _csByPaletteKind. #1227: every variant is specialised
+    // for the kind it runs (MandelbrotKernelSource.ForKind), compiled on first use.
+    private readonly Dictionary<int, ID3D11ComputeShader> _csBaseByKind = new();
+    private readonly Dictionary<string, string> _hlslByPaletteId = new(StringComparer.Ordinal);
+    private readonly Dictionary<(string Id, int Kind), ID3D11ComputeShader> _csByPaletteKind = new();
     private ID3D11Buffer _paramsBuf = null!;
     private ID3D11Buffer _iterBuf = null!;
     private ID3D11Buffer _smoothBuf = null!;
@@ -212,8 +215,26 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         _device = device ?? throw new ArgumentNullException(nameof(device));
         _ctx = context ?? throw new ArgumentNullException(nameof(context));
         _d3dGate = d3dGate ?? throw new ArgumentNullException(nameof(d3dGate));
-        _csBase = CompileShader(BuildHlsl(null, null, emitColor: false), label: "base");
+        BaseShader(0);   // compile the Mandelbrot variant up front, as before
         AllocParamsBuffer();
+    }
+
+    /// <summary>#1227 — the base (no-colour) variant specialised for <paramref name="kind"/>.</summary>
+    private ID3D11ComputeShader BaseShader(int kind)
+    {
+        if (_csBaseByKind.TryGetValue(kind, out var cs)) return cs;
+        cs = CompileShader(MandelbrotKernelSource.ForKind(BuildHlsl(null, null, emitColor: false), kind), label: $"base.k{kind}");
+        _csBaseByKind[kind] = cs;
+        return cs;
+    }
+
+    /// <summary>#1227 — the active palette's variant specialised for <paramref name="kind"/>.</summary>
+    private ID3D11ComputeShader PaletteShader(string id, int kind)
+    {
+        if (_csByPaletteKind.TryGetValue((id, kind), out var cs)) return cs;
+        cs = CompileShader(MandelbrotKernelSource.ForKind(_hlslByPaletteId[id], kind), label: $"{id}.k{kind}");
+        _csByPaletteKind[(id, kind)] = cs;
+        return cs;
     }
 
     /// <summary>Compile a CS variant from a fully composed HLSL string.
@@ -236,7 +257,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         if (palette == null) { _activePaletteId = null; return; }
         string id = palette.PaletteId ?? "";
         if (string.IsNullOrEmpty(id)) { _activePaletteId = null; return; }
-        if (_csByPaletteId.ContainsKey(id))
+        if (_hlslByPaletteId.ContainsKey(id))
         {
             _activePaletteId = id;
             return;
@@ -252,8 +273,9 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
                 ? MandelbrotKernelSource.BuildColorOrbit(palette.HlslPrelude, palette.HlslPaletteBody,
                     (int)((FracturingFog.Interefaces.IGpuOrbitPalette)palette).OrbitInputs)
                 : BuildHlsl(palette.HlslPaletteBody, palette.HlslPrelude, emitColor: true);
-            var cs = CompileShader(hlsl, label: id);
-            _csByPaletteId[id] = cs;
+            _hlslByPaletteId[id] = hlsl;
+            try { PaletteShader(id, 0); }   // compile now so a bad theme falls back here
+            catch { _hlslByPaletteId.Remove(id); throw; }
             if (orbit) _orbitPaletteIds.Add(id);
             _activePaletteId = id;
         }
@@ -268,7 +290,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     /// <summary>Whether the kernel currently has an active GPU palette
     /// loaded. Read by the calculator to decide between Run-with-color and
     /// Run-without-color.</summary>
-    public bool HasGpuPalette => _activePaletteId != null && _csByPaletteId.ContainsKey(_activePaletteId);
+    public bool HasGpuPalette => _activePaletteId != null && _hlslByPaletteId.ContainsKey(_activePaletteId);
 
     private void EnsureColorBuffers(int n)
     {
@@ -562,8 +584,8 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
             // Pick the right CS variant. Color path uses the cached
             // per-palette shader; non-color path uses the base.
             var shader = useColorPath
-                ? _csByPaletteId[_activePaletteId!]
-                : _csBase;
+                ? PaletteShader(_activePaletteId!, (int)kind)
+                : BaseShader((int)kind);
             _ctx.CSSetShader(shader);
             _ctx.CSSetConstantBuffer(0, _paramsBuf);
             _ctx.CSSetUnorderedAccessView(0, _iterUav);
@@ -1409,11 +1431,16 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         try { _perRowSrv?.Dispose(); } catch { }
         try { _perRowBuf?.Dispose(); } catch { }
         try { _paramsBuf?.Dispose(); } catch { }
-        try { _csBase?.Dispose(); } catch { }
-        foreach (var cs in _csByPaletteId.Values)
+        foreach (var cs in _csBaseByKind.Values)
         {
             try { cs.Dispose(); } catch { }
         }
-        _csByPaletteId.Clear();
+        _csBaseByKind.Clear();
+        foreach (var cs in _csByPaletteKind.Values)
+        {
+            try { cs.Dispose(); } catch { }
+        }
+        _csByPaletteKind.Clear();
+        _hlslByPaletteId.Clear();
     }
 }

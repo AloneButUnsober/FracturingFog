@@ -58,6 +58,18 @@ cbuffer Params : register(b0)
     // 18 fields x 4 bytes = 72, padded by the host to 80 (float4 multiple).
 }
 
+// #1227: the fractal kind the loop is specialised for. The hosts compile one
+// variant per kind (ForKind prepends #define FF_KIND n), so the kinds a frame
+// does not use fold away. One loop holding every kind's step (Multibrot's inner
+// loop, Phoenix's carried z and dz/dc) needs registers for all of them, and the
+// lost occupancy halved plain Mandelbrot on a GT 710 (SpZoom1e4 1080p 148 -> 309
+// ms). Without FF_KIND the kind is read from the cbuffer, as before.
+#ifdef FF_KIND
+#define KIND FF_KIND
+#else
+#define KIND gFractalKind
+#endif
+
 RWStructuredBuffer<uint>   gIter    : register(u0);
 RWStructuredBuffer<float>  gSmooth  : register(u1);
 // Phase 1.b: final z + dz/dc per pixel. .xy = zr, zi; .zw = dr, di.
@@ -165,6 +177,11 @@ void MultibrotStep(inout float zr, inout float zi, inout float dr, inout float d
     zr = nzr; zi = nzi; dr = ndr; di = ndi;
 }
 ";
+
+    /// <summary>#1227 — <paramref name="hlsl"/> (any variant built on
+    /// <see cref="HlslBase"/>) specialised for one fractal kind: the loop keeps only
+    /// that kind's step. The kind must match the cbuffer's gFractalKind at dispatch.</summary>
+    public static string ForKind(string hlsl, int kind) => "#define FF_KIND " + kind + "\n" + hlsl;
 
     /// <summary>Compose the full base (non-colour) kernel: header + CSMain
     /// with the colour splices empty. This is the exact source V1 DXC-compiles
@@ -527,7 +544,7 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         if (rc > 0) rowMaxIt = (int)rc;
     }}
 
-    if (gFractalKind == 0 && (InCardioid(cx, cy) || InPeriod2Bulb(cx, cy)))
+    if (KIND == 0 && (InCardioid(cx, cy) || InPeriod2Bulb(cx, cy)))
     {{
         gIter[idx]    = (uint)gMaxIter;
         gSmooth[idx]  = 0.0;
@@ -538,7 +555,7 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
 
     float zr, zi;
     float cIterR, cIterI;
-    if (gFractalKind == 1)
+    if (KIND == 1)
     {{
         zr = cx;     zi = cy;
         cIterR = gParam0; cIterI = gParam1;
@@ -548,7 +565,7 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         zr = 0.0;    zi = 0.0;
         cIterR = cx; cIterI = cy;
     }}
-    float dr = gFractalKind == 5 ? 0.0 : 1.0;   // #1173-I: Phoenix's dz/dc starts at 0 (CPU)
+    float dr = KIND == 5 ? 0.0 : 1.0;   // #1173-I: Phoenix's dz/dc starts at 0 (CPU)
     float di = 0.0;
     float pzr = 0.0, pzi = 0.0, pdr = 0.0, pdi = 0.0;   // Phoenix previous z, dz/dc
     int   it = 0;
@@ -557,8 +574,8 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     {{
         float fzr = zr;
         float fzi = zi;
-        if (gFractalKind == 2)      {{ fzr = abs(zr); fzi = abs(zi); }}
-        else if (gFractalKind == 3) {{ fzi = -zi; }}
+        if (KIND == 2)      {{ fzr = abs(zr); fzi = abs(zi); }}
+        else if (KIND == 3) {{ fzi = -zi; }}
 
         float zr2 = fzr * fzr;
         float zi2 = fzi * fzi;
@@ -570,11 +587,11 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         {{
 {samp}        }}
 
-        if (gFractalKind == 4)
+        if (KIND == 4)
         {{
             MultibrotStep(zr, zi, dr, di, cIterR, cIterI);   // #1173-I
         }}
-        else if (gFractalKind == 5)
+        else if (KIND == 5)
         {{
             // #1173-I: Phoenix z' = z^2 + c + p * z_prev (p = gParam0 + i gParam1),
             // dz'/dc = 2 z dz/dc + 1 + p * dz_prev/dc (PhoenixKernel.StepWithPrevDeriv).
@@ -1216,7 +1233,7 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     // gMaxIter so the in-set gate is consistent across bands regardless of
     // per-row cap. Final z+dz are (0,0,1,0) — matches the CPU bulb-skip
     // writeback.
-    if (gFractalKind == 0 && (InCardioid(cx, cy) || InPeriod2Bulb(cx, cy)))
+    if (KIND == 0 && (InCardioid(cx, cy) || InPeriod2Bulb(cx, cy)))
     {{
         gIter[idx]    = (uint)gMaxIter;
         gSmooth[idx]  = 0.0;
@@ -1229,7 +1246,7 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     // pixel coord. Julia: z_0 = pixel coord, c = (gParam0, gParam1) const.
     float zr, zi;
     float cIterR, cIterI;
-    if (gFractalKind == 1)
+    if (KIND == 1)
     {{
         zr = cx;     zi = cy;
         cIterR = gParam0; cIterI = gParam1;
@@ -1239,7 +1256,7 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         zr = 0.0;    zi = 0.0;
         cIterR = cx; cIterI = cy;
     }}
-    float dr = gFractalKind == 5 ? 0.0 : 1.0;   // #1173-I: Phoenix's dz/dc starts at 0 (CPU)
+    float dr = KIND == 5 ? 0.0 : 1.0;   // #1173-I: Phoenix's dz/dc starts at 0 (CPU)
     float di = 0.0;
     float pzr = 0.0, pzi = 0.0, pdr = 0.0, pdi = 0.0;   // Phoenix previous z, dz/dc
     int   it = 0;
@@ -1248,19 +1265,19 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     {{
         float fzr = zr;
         float fzi = zi;
-        if (gFractalKind == 2)      {{ fzr = abs(zr); fzi = abs(zi); }}
-        else if (gFractalKind == 3) {{ fzi = -zi; }}
+        if (KIND == 2)      {{ fzr = abs(zr); fzi = abs(zi); }}
+        else if (KIND == 3) {{ fzi = -zi; }}
 
         float zr2 = fzr * fzr;
         float zi2 = fzi * fzi;
         float mag2 = zr2 + zi2;
         if (mag2 >= gBailout2) break;
 
-        if (gFractalKind == 4)
+        if (KIND == 4)
         {{
             MultibrotStep(zr, zi, dr, di, cIterR, cIterI);   // #1173-I
         }}
-        else if (gFractalKind == 5)
+        else if (KIND == 5)
         {{
             // #1173-I: Phoenix z' = z^2 + c + p * z_prev (p = gParam0 + i gParam1),
             // dz'/dc = 2 z dz/dc + 1 + p * dz_prev/dc (PhoenixKernel.StepWithPrevDeriv).
