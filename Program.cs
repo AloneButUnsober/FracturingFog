@@ -48,6 +48,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--d3ddeeporbitprobe")
             return D3DDeepOrbitProbe.Run();
 
+        // #1045 (G0.5) — the D3D11 presenter recovers from a device loss.
+        if (args.Length > 0 && args[0] == "--d3ddevicelossprobe")
+            return D3DDeviceLossProbe.Run();
+
         // #1173-I (G4.4) — D3D11 Multibrot / Phoenix / domain-warp parity vs the CPU frame.
         if (args.Length > 0 && args[0] == "--d3dfamilyprobe")
             return D3DEscapeFamilyProbe.Run();

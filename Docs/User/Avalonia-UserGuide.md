@@ -720,6 +720,8 @@ All JSON is human-readable indented output via `System.Text.Json`. Region + them
 
 **Sweep button is greyed out.** Adaptive must be enabled (not locked at 0 by a theme). Tick the Adaptive checkbox in Post-FX.
 
+**Screen flickered and the status bar says "GPU reset".** The graphics driver reset (a slow GPU job hit the Windows watchdog, another app, or a driver hiccup). With the default DirectX 11 renderer the app rebuilds its display and its GPU compute on its own, and keeps the last frame on screen. The status bar says "display restored". After three resets in one session, or if the driver does not come back, it says to restart the app instead. GPU deep-zoom perturbation stays on the CPU after a reset it caused.
+
 **Ctrl-Z / undo doesn't work in the canvas.** There is no view-history undo. Save important views as regions before exploring further.
 
 ---

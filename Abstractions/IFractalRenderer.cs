@@ -40,4 +40,14 @@ public interface IFractalRenderer : IDisposable
     /// not paced by the display.
     /// </summary>
     bool VSync { get; set; }
+
+    /// <summary>#1045 — moves on each time the renderer rebuilt its GPU device
+    /// after a device loss (driver reset). GPU compute kernels built on the old
+    /// device are dead; the host rebuilds them when this changes. 0 for a
+    /// renderer that never rebuilds.</summary>
+    int DeviceGeneration => 0;
+
+    /// <summary>#1045 — the latest device-loss status for the status bar ("GPU
+    /// reset: display restored", "... restart the app"), or null.</summary>
+    string? DeviceStatus => null;
 }
