@@ -81,14 +81,17 @@
         </Border>
 
         <!-- Interesting-location finder (epic #1184). S1 #1185: period
-             detection on the current view (z² + c). -->
+             detection; S2 #1186: zoom to a minibrot in view (z² + c). -->
         <Border Classes="group">
             <StackPanel Spacing="6" MaxWidth="425" HorizontalAlignment="Left">
                 <TextBlock Classes="section" Text="Find" />
                 <StackPanel Orientation="Horizontal" Spacing="4">
+                    <Button Classes="action go" Content="Zoom to minibrot"
+                            Command="{Binding ZoomToMinibrotCommand}"
+                            ToolTip.Tip="Find a minibrot whose centre is inside the current view and zoom to frame it like the home view (Mandelbrot z² + c). Backspace returns to where you were." />
                     <Button Classes="action neutral" Content="Detect period"
                             Command="{Binding DetectPeriodCommand}"
-                            ToolTip.Tip="Report the period of the lowest-period minibrot whose centre lies inside the current view (Mandelbrot z² + c)." />
+                            ToolTip.Tip="Report the lowest period candidate in the current view (a lower bound from a fast ball scan)." />
                     <Button Classes="action neutral" Content="Cancel"
                             Command="{Binding CancelFinderCommand}"
                             IsVisible="{Binding IsFinderBusy}" />
