@@ -28,6 +28,16 @@
 // These kernels keep persistent device buffers (no per-frame device
 // allocation), so there is no DeviceAlloc/op column here; the Device column
 // records the adapter that ran the case.
+//
+// #1166 — the Resident column is the device memory those persistent buffers
+// hold after the warm frame:
+//   • D3D11: DXGI's per-process usage (IDXGIAdapter3.QueryVideoMemoryInfo
+//     CurrentUsage), the delta from just before the kernel was created to after
+//     the warm frame (context flushed), for the local (VRAM) and non-local
+//     (shared system memory, e.g. the readback staging) segments. It includes
+//     the driver's own overhead (shaders, constant buffers, rounding).
+//   • Vulkan: the kernel's own count of the buffer memory it allocated
+//     (VulkanComputeKernel.ResidentBytes), and the part on a device-local heap.
 
 using System;
 using BenchmarkDotNet.Attributes;
@@ -68,6 +78,7 @@ public class MandelbrotGpuKernelBench
     private FracturingFog.Rendering.IGpuKernel _kernel = null!;
     private ID3D11Device? _d3dDevice;
     private ID3D11DeviceContext? _d3dContext;
+    private (long Local, long NonLocal) _d3dBaseline;   // #1166 — DXGI usage before the kernel
     private bool _savedUseGpuPerturbation;
 
     [Params(GpuKernelBackend.D3D11, GpuKernelBackend.Vulkan)]
@@ -144,14 +155,45 @@ public class MandelbrotGpuKernelBench
                 "Refusing to time a CPU fallback as a GPU number.");
         }
 
-        CaseMetrics.Record(CaseMetrics.Device,
-            CaseMetrics.Key(new (string, object?)[]
-            {
-                (nameof(Backend), Backend),
-                (nameof(Path), Path),
-                (nameof(Width), Width),
-            }),
-            device);
+        string key = CaseMetrics.Key(new (string, object?)[]
+        {
+            (nameof(Backend), Backend),
+            (nameof(Path), Path),
+            (nameof(Width), Width),
+        });
+        CaseMetrics.Record(CaseMetrics.Device, key, device);
+        CaseMetrics.Record(CaseMetrics.Resident, key, ResidentAfterWarmFrame());
+    }
+
+    /// <summary>#1166 — the kernel's resident device memory after the warm frame
+    /// (see the header).</summary>
+    private string ResidentAfterWarmFrame()
+    {
+        if (_kernel is FracturingFog.Rendering.Vulkan.VulkanComputeKernel vk)
+            return $"{CaseMetrics.FormatMegabytes(vk.ResidentBytes)} " +
+                   $"({CaseMetrics.FormatMegabytes(vk.ResidentDeviceLocalBytes)} device-local)";
+        if (_d3dDevice == null) return "-";
+        _d3dContext?.Flush();
+        var now = DxgiUsage(_d3dDevice);
+        if (now.Local < 0 || _d3dBaseline.Local < 0) return "n/a (no IDXGIAdapter3)";
+        return $"{CaseMetrics.FormatMegabytes(now.Local - _d3dBaseline.Local)} VRAM + " +
+               $"{CaseMetrics.FormatMegabytes(now.NonLocal - _d3dBaseline.NonLocal)} shared";
+    }
+
+    /// <summary>This process's DXGI video-memory usage on the device's adapter,
+    /// local and non-local segment; -1 when the adapter has no IDXGIAdapter3.</summary>
+    private static (long Local, long NonLocal) DxgiUsage(ID3D11Device device)
+    {
+        try
+        {
+            using var dxgiDevice = device.QueryInterface<IDXGIDevice>();
+            using var adapter = dxgiDevice.GetAdapter();
+            using var adapter3 = adapter.QueryInterface<IDXGIAdapter3>();
+            var local = adapter3.QueryVideoMemoryInfo(0, MemorySegmentGroup.Local);
+            var nonLocal = adapter3.QueryVideoMemoryInfo(0, MemorySegmentGroup.NonLocal);
+            return ((long)local.CurrentUsage, (long)nonLocal.CurrentUsage);
+        }
+        catch { return (-1, -1); }
     }
 
     [GlobalCleanup]
@@ -189,6 +231,8 @@ public class MandelbrotGpuKernelBench
         }
         catch { /* name is cosmetic */ }
 
+        context.Flush();
+        _d3dBaseline = DxgiUsage(device);   // #1166 — before the kernel's buffers
         return (new FracturingFog.Rendering.MandelbrotGpuKernel(device, context, new object()), $"D3D11 {name}");
     }
 
@@ -214,6 +258,9 @@ public class MandelbrotGpuKernelBench
             AddDiagnoser(MemoryDiagnoser.Default);
             AddColumn(new CaseMetricColumn(CaseMetrics.Device,
                 "GPU adapter that ran the case (backend + device name)",
+                isNumeric: false, UnitType.Dimensionless));
+            AddColumn(new CaseMetricColumn(CaseMetrics.Resident,
+                "Device memory the kernel holds after a warm frame (D3D11: DXGI per-process usage delta; Vulkan: the kernel's own allocations)",
                 isNumeric: false, UnitType.Dimensionless));
         }
     }

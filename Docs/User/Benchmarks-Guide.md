@@ -112,6 +112,20 @@ that:
 dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --filter "*MandelbrotGpuKernelBench*"
 ```
 
+Its **Resident** column shows how much graphics memory the Mandelbrot kernel keeps while it's in
+use. For Direct3D 11 that's memory on the card plus shared system memory; for Vulkan it's the
+total, with the part on the card in brackets. Expect roughly 50–60 MB each at full HD.
+
+Deep zooms also need a *reference orbit*, built once per view in very high precision. The app can
+build it on the graphics card instead (off by default). To compare the two:
+
+```bash
+dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --filter "*ReferenceOrbitBench*"
+```
+
+The `Gpu` rows show which card built the orbit. On a low-end card they can be a hundred times
+slower than the `Cpu` rows; only turn the GPU orbit on if your card wins here.
+
 > [!NOTE]
 > A graphics card isn't automatically faster than your processor. Low-end cards can be much
 > slower, especially at deep zoom, which needs double precision. On a very slow card, the

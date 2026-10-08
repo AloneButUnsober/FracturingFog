@@ -12,6 +12,8 @@
 //     ref-orbit / SA / BLA state are all allocated in setup.
 //   • DeviceAlloc/op, Device (#1162) — ILGPU device bytes per frame and the
 //     accelerator that ran it, for the GPU calculator bench.
+//   • Resident (#1166) — device memory a D3D11 / Vulkan kernel holds after a
+//     warm frame (persistent, frame-sized buffers).
 //
 // Setup records a formatted value keyed by (metric, case parameters); the
 // column reads it back at summary time. This hand-off works only because the
@@ -34,6 +36,7 @@ public static class CaseMetrics
     public const string Footprint = "Footprint";
     public const string DeviceAllocPerOp = "DeviceAlloc/op";
     public const string Device = "Device";
+    public const string Resident = "Resident";
 
     private static readonly ConcurrentDictionary<(string Metric, string Key), string> s_values = new();
 

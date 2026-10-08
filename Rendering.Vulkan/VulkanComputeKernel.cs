@@ -87,7 +87,22 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     // TDR row-band tiling helper lives in MandelbrotKernelSource (shared with the
     // D3D backend). See MandelbrotKernelSource.PerturbBandRows.
 
-    private struct Allocated { public Buffer Buffer; public DeviceMemory Memory; public ulong Size; }
+    private struct Allocated
+    {
+        public Buffer Buffer; public DeviceMemory Memory; public ulong Size;
+        public ulong AllocSize; public bool DeviceLocal;   // #1166 — resident accounting
+    }
+
+    // #1166 — device memory this kernel holds right now (every buffer goes through
+    // AllocBuffer / FreeBuffer), and the part on a device-local heap (VRAM on a
+    // discrete card; host-visible types can live on either heap).
+    private long _residentBytes, _residentDeviceLocalBytes;
+
+    /// <summary>#1166 — device memory the kernel's buffers hold now, in bytes.</summary>
+    public long ResidentBytes => System.Threading.Interlocked.Read(ref _residentBytes);
+
+    /// <summary>#1166 — the part of <see cref="ResidentBytes"/> on a device-local heap.</summary>
+    public long ResidentDeviceLocalBytes => System.Threading.Interlocked.Read(ref _residentDeviceLocalBytes);
 
     // A compiled compute program: shader module + pipeline + its layout objects.
     private sealed class Program
@@ -1160,13 +1175,28 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         };
         Check(_vk.AllocateMemory(_device, in mai, null, out DeviceMemory mem), "vkAllocateMemory");
         Check(_vk.BindBufferMemory(_device, buffer, mem, 0), "vkBindBufferMemory");
-        return new Allocated { Buffer = buffer, Memory = mem, Size = size };
+        bool local = IsDeviceLocalType(memType);
+        System.Threading.Interlocked.Add(ref _residentBytes, (long)req.Size);
+        if (local) System.Threading.Interlocked.Add(ref _residentDeviceLocalBytes, (long)req.Size);
+        return new Allocated { Buffer = buffer, Memory = mem, Size = size, AllocSize = req.Size, DeviceLocal = local };
+    }
+
+    private bool IsDeviceLocalType(uint memType)
+    {
+        _vk.GetPhysicalDeviceMemoryProperties(_ctx.PhysicalDevice, out PhysicalDeviceMemoryProperties props);
+        uint heap = props.MemoryTypes[(int)memType].HeapIndex;
+        return (props.MemoryHeaps[(int)heap].Flags & MemoryHeapFlags.DeviceLocalBit) != 0;
     }
 
     private void FreeBuffer(ref Allocated a)
     {
         if (a.Buffer.Handle != 0) _vk.DestroyBuffer(_device, a.Buffer, null);
-        if (a.Memory.Handle != 0) _vk.FreeMemory(_device, a.Memory, null);
+        if (a.Memory.Handle != 0)
+        {
+            _vk.FreeMemory(_device, a.Memory, null);
+            System.Threading.Interlocked.Add(ref _residentBytes, -(long)a.AllocSize);
+            if (a.DeviceLocal) System.Threading.Interlocked.Add(ref _residentDeviceLocalBytes, -(long)a.AllocSize);
+        }
         a = default;
     }
 

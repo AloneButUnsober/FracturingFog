@@ -47,13 +47,45 @@ public struct MandelbrotRefOrbitParams
     public double CyX0, CyX1, CyX2, CyX3;
     public int MaxIter;
     public double EscapeRadius2;  // |Z|² escape threshold (Hi-limb only)
+    // #1166 — this launch iterates n in [StartIter, EndIter); it resumes from the
+    // state the previous launch left in slot StartIter (zero at StartIter 0).
+    public int StartIter;
+    public int EndIter;
 }
 
 /// <summary>
 /// Single-orbit Mandelbrot reference-orbit GPU kernel + host shim.
 /// </summary>
+/// <remarks>#1166 — the orbit is one sequential thread, so a single launch of a
+/// long orbit ran for seconds on a weak-fp64 card (GT 710: ~15 µs per QD
+/// iteration) and the OS watchdog killed it ("unspecified launch failure" at 1M
+/// iterations after 3.5 s, a driver reset). The orbit now runs in launches of a
+/// bounded number of iterations, each resuming from the last slot written, sized
+/// from the measured time toward <see cref="TargetLaunchMs"/>.</remarks>
 public sealed class MandelbrotRefOrbitGpu : IDisposable
 {
+    /// <summary>#1166 — wall time each launch is sized toward, well under the
+    /// ~2 s Windows GPU watchdog.</summary>
+    public const double TargetLaunchMs = 100.0;
+
+    private const int FirstLaunchIterations = 1024;
+    private const int MaxLaunchIterations = 1 << 20;
+
+    [ThreadStatic] private static int t_fixedLaunchIterations;
+
+    /// <summary>#1166 test knob — a fixed number of iterations per launch
+    /// (0 = adaptive). Per thread.</summary>
+    public static int FixedLaunchIterations
+    {
+        get => t_fixedLaunchIterations;
+        set => t_fixedLaunchIterations = Math.Max(0, value);
+    }
+
+    /// <summary>#1166 — launches the last <see cref="Compute"/> took.</summary>
+    public int LastLaunchCount { get; private set; }
+
+    // Adaptive launch size, kept across orbits (the device's speed is stable).
+    private double _msPerIteration;
     private Action<Index1D, ArrayView<RefOrbitSlot>, ArrayView<int>, MandelbrotRefOrbitParams>? _kernel;
     private bool _initFailed;
     public string LastError { get; private set; } = string.Empty;
@@ -195,12 +227,29 @@ public sealed class MandelbrotRefOrbitGpu : IDisposable
                 EscapeRadius2 = escapeRadius2,
             };
 
-            // Single sequential workload — launch one thread.
-            _kernel(1, dSlots.View, dInfo.View, p);
-            acc.Synchronize();
-
+            // Single sequential workload — one thread, in launches of a bounded
+            // number of iterations (#1166, see the class remarks).
             int[] info = new int[2];
-            dInfo.CopyToCPU(info);
+            int start = 0, launches = 0;
+            while (true)
+            {
+                int span = t_fixedLaunchIterations > 0 ? t_fixedLaunchIterations
+                    : _msPerIteration > 0 ? (int)Math.Clamp(TargetLaunchMs / _msPerIteration, 64, MaxLaunchIterations)
+                    : FirstLaunchIterations;
+                p.StartIter = start;
+                p.EndIter = (int)Math.Min((long)start + span, maxIter);
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                _kernel(1, dSlots.View, dInfo.View, p);
+                acc.Synchronize();
+                double ms = sw.Elapsed.TotalMilliseconds;
+                launches++;
+                dInfo.CopyToCPU(info);
+                int done = p.EndIter - start;
+                if (done > 0 && ms > 0) _msPerIteration = ms / done;
+                if (info[1] != 2) break;          // escaped, or reached maxIter
+                start = info[0];
+            }
+            LastLaunchCount = launches;
             int n = info[0];
             if (n < 0 || n > maxIter)
             {
@@ -253,14 +302,30 @@ public sealed class MandelbrotRefOrbitGpu : IDisposable
         int maxIter = p.MaxIter;
         double er2 = p.EscapeRadius2;
 
+        // #1166 — resume from the state the previous launch stored in slot
+        // StartIter (the same Z_n it would have written next).
+        int start = p.StartIter;
+        if (start > 0)
+        {
+            RefOrbitSlot r0 = slots[start];
+            zr = new GpuQD(r0.ZrX0, r0.ZrX1, r0.ZrX2, r0.ZrX3);
+            zi = new GpuQD(r0.ZiX0, r0.ZiX1, r0.ZiX2, r0.ZiX3);
+        }
+        int end = p.EndIter < maxIter ? p.EndIter : maxIter;
+
         int n = 0;
-        for (n = 0; n < maxIter; n++)
+        for (n = start; n < end; n++)
         {
             RefOrbitSlot s = default;
             s.ZrX0 = zr.X0; s.ZrX1 = zr.X1; s.ZrX2 = zr.X2; s.ZrX3 = zr.X3;
             s.ZiX0 = zi.X0; s.ZiX1 = zi.X1; s.ZiX2 = zi.X2; s.ZiX3 = zi.X3;
             slots[n] = s;
-            if (zr.X0 * zr.X0 + zi.X0 * zi.X0 >= er2) break;
+            if (zr.X0 * zr.X0 + zi.X0 * zi.X0 >= er2)
+            {
+                info[0] = n;
+                info[1] = 1;   // escaped at n
+                return;
+            }
 
             // newZi = 2·Zr·Zi + Cy ; newZr = Zr² - Zi² + Cx
             GpuQD cross = GpuQDMath.Mul(zr, zi);
@@ -272,13 +337,15 @@ public sealed class MandelbrotRefOrbitGpu : IDisposable
             zi = newZi;
         }
         {
+            // Z_n after the last step: the orbit's final slot at maxIter, or the
+            // state the next launch resumes from.
             RefOrbitSlot s = default;
             s.ZrX0 = zr.X0; s.ZrX1 = zr.X1; s.ZrX2 = zr.X2; s.ZrX3 = zr.X3;
             s.ZiX0 = zi.X0; s.ZiX1 = zi.X1; s.ZiX2 = zi.X2; s.ZiX3 = zi.X3;
             slots[n] = s;
         }
         info[0] = n;
-        info[1] = (n < maxIter) ? 1 : 0;
+        info[1] = (n < maxIter) ? 2 : 0;   // 2 = continue from n; 0 = full length
     }
 
     public void Dispose()
