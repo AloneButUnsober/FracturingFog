@@ -346,6 +346,12 @@ How to read that run:
   Vulkan is now a drop-in for D3D11 on this card (a little faster on SP, ~9% slower on the
   fp64-bound perturbation).
 
+- **SP regression and fix (#1227).** G4.4 (#1209) put every fractal kind's step into one loop chosen at
+  run time, which doubled the SP rows (D3D11 `SpZoom1e4` 1080p 148 → 309 ms; bisected with this
+  bench, narrowed `[Params]`, one worktree per merge). With the kernel compiled per kind (GT 710,
+  2026-10-08): D3D11 `SpZoom1e4` 19 / 141 ms and Vulkan 13 / 106 ms (640 / 1080p); `SpShallow` D3D11
+  6.5 / 45 ms, Vulkan 4.9 / 38 ms.
+
 Resident memory (#1166), GT 710, 2026-10-08:
 
 | Backend | Path        | 640x360                      | 1920x1080                      |
