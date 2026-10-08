@@ -28,6 +28,7 @@
 using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
+using System.Threading;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
@@ -132,6 +133,66 @@ float4 PS(VSOut i) : SV_Target
     private int  _width;
     private int  _height;
     private bool _disposed;
+    private readonly IntPtr _hwnd;
+
+    // ── Device loss (#1045) ───────────────────────────────────────────────────
+    //
+    // A GPU driver reset (TDR, another app, a driver hiccup) removes the device:
+    // Present returns DXGI_ERROR_DEVICE_REMOVED and Map / ResizeBuffers throw it.
+    // The GPU compute kernels share this device, so before #1045 any reset ended
+    // presentation (Present's result was ignored, so the window froze) or crashed
+    // the app (Map / ResizeBuffers threw). Now a lost device is detected at every
+    // entry point, the device, swap chain and pipeline objects are rebuilt on the
+    // same window, the last frame is re-uploaded, and DeviceGeneration moves on so
+    // the host rebuilds the kernels that held the old device. Recovery is capped
+    // per session: a kernel that trips the watchdog on every dispatch must not
+    // loop the screen through resets. A recreate that fails (driver still
+    // resetting) is retried after a pause, then given up with a status.
+    private const int MaxRecoveries = 3;
+    private const int MaxRecreateAttempts = 10;
+    private const int RecreateRetryMs = 1000;
+    private bool _deviceLost;
+    private int _recoveries;
+    private int _recreateFailures;
+    private long _nextRecreateTicks;
+    private int _deviceGeneration;
+    private uint[]? _lastUpload;
+    private int _lastUploadW, _lastUploadH;
+    private DeviceLossSite _simulateSite;
+    private int _simulateRecreateFailures;
+
+    /// <summary>#1045 test hook — where a simulated device loss surfaces.</summary>
+    public enum DeviceLossSite { None, Present, Upload, Resize }
+
+    /// <inheritdoc/>
+    public int DeviceGeneration => Volatile.Read(ref _deviceGeneration);
+
+    /// <inheritdoc/>
+    public string? DeviceStatus { get; private set; }
+
+    /// <summary>#1045 — true while the device is lost and not yet rebuilt.</summary>
+    public bool DeviceLost => _deviceLost;
+
+    /// <summary>#1045 test hook — the next call at <paramref name="site"/> sees
+    /// DXGI_ERROR_DEVICE_REMOVED as a real loss surfaces there: Present returns
+    /// it, Map (upload) and ResizeBuffers throw it.</summary>
+    public void SimulateDeviceLoss(DeviceLossSite site = DeviceLossSite.Present) => _simulateSite = site;
+
+    private const int DXGI_ERROR_DEVICE_REMOVED = unchecked((int)0x887A0005);
+
+    private bool TakeSimulated(DeviceLossSite site)
+    {
+        if (_simulateSite != site) return false;
+        _simulateSite = DeviceLossSite.None;
+        return true;
+    }
+
+    /// <summary>#1045 test hook — the next <paramref name="count"/> device
+    /// recreations fail, as while a driver is still resetting.</summary>
+    public void SimulateRecreateFailures(int count) => _simulateRecreateFailures = Math.Max(0, count);
+
+    /// <summary>#1045 test hook — skip the retry pause after a failed recreate.</summary>
+    public void ExpireRecreateDelay() => _nextRecreateTicks = 0;
 
     /// <inheritdoc/>
     public bool VSync { get; set; } = true;
@@ -152,11 +213,122 @@ float4 PS(VSOut i) : SV_Target
     {
         _width  = System.Math.Max(1, width);
         _height = System.Math.Max(1, height);
+        _hwnd   = hwnd;
 
-        CreateDeviceAndSwapChain(hwnd);
+        CreateDeviceObjects();
+    }
+
+    private void CreateDeviceObjects()
+    {
+        CreateDeviceAndSwapChain(_hwnd);
         CreateRenderTarget();
         CreateShaders();
         CreateSamplerAndStates();
+    }
+
+    // Every object on the device; null-safe, so a half-built recreate can be
+    // torn down too. A window takes one flip-model swap chain at a time, and
+    // D3D11 destroys released objects only when the immediate context flushes:
+    // without the ClearState + Flush the old swap chain outlives its last
+    // reference and the new one on the same window fails with E_ACCESSDENIED
+    // (the GPU kernels still hold the old device and context).
+    private void ReleaseDeviceObjects()
+    {
+        try { _context?.ClearState(); } catch { /* removed device */ }
+        _srv?.Dispose();        _srv = null;
+        _tex?.Dispose();        _tex = null;
+        _blendState?.Dispose(); _blendState = null!;
+        _rasterizer?.Dispose(); _rasterizer = null!;
+        _sampler?.Dispose();    _sampler = null!;
+        _ps?.Dispose();         _ps = null!;
+        _vs?.Dispose();         _vs = null!;
+        _rtv?.Dispose();        _rtv = null!;
+        _swapChain?.Dispose();  _swapChain = null!;
+        try { _context?.Flush(); } catch { /* removed device */ }
+        _context?.Dispose();    _context = null!;
+        _device?.Dispose();     _device = null!;
+    }
+
+    // DXGI_ERROR_DEVICE_REMOVED / _HUNG / _RESET / DRIVER_INTERNAL_ERROR.
+    private static bool IsDeviceLossCode(int hr) =>
+        hr is unchecked((int)0x887A0005) or unchecked((int)0x887A0006)
+           or unchecked((int)0x887A0007) or unchecked((int)0x887A0020);
+
+    /// <summary>A failure is a lost device when its HRESULT says so or the
+    /// device reports a removed reason (the authoritative signal: a call can
+    /// surface the loss with another code).</summary>
+    private bool IsDeviceLoss(int hr)
+    {
+        if (IsDeviceLossCode(hr)) return true;
+        try { return _device == null || _device.DeviceRemovedReason.Failure; }
+        catch { return true; }   // the device object itself is unusable
+    }
+
+    private void OnDeviceLost(int hr, string where)
+    {
+        if (_deviceLost) return;
+        _deviceLost = true;
+        int reason = 0;
+        try { reason = _device?.DeviceRemovedReason.Code ?? 0; } catch { }
+        string msg = $"D3D11 device lost in {where} (HRESULT 0x{hr:X8}, reason 0x{reason:X8}); rebuilding it.";
+        System.Diagnostics.Debug.WriteLine("[DirectXRenderer] " + msg);
+        try { Console.Error.WriteLine("[DirectXRenderer] " + msg); } catch { }
+        DeviceStatus = "GPU reset: restoring the display...";
+        TryRecover();
+    }
+
+    /// <summary>Rebuild the device after a loss. True when the renderer is usable
+    /// (not lost, or rebuilt now); false while it is still lost (retry later) or
+    /// recovery was given up (<see cref="DeviceStatus"/> says so).</summary>
+    private bool TryRecover()
+    {
+        if (!_deviceLost) return true;
+        if (_recoveries >= MaxRecoveries || _recreateFailures >= MaxRecreateAttempts)
+        {
+            DeviceStatus = "GPU reset: the display could not be restored - restart the app";
+            return false;
+        }
+        long now = Environment.TickCount64;
+        if (now < _nextRecreateTicks) return false;
+        try
+        {
+            ReleaseDeviceObjects();
+            if (_simulateRecreateFailures > 0)
+            {
+                _simulateRecreateFailures--;
+                throw new InvalidOperationException("simulated recreate failure");
+            }
+            CreateDeviceObjects();
+        }
+        catch (Exception ex)
+        {
+            ReleaseDeviceObjects();
+            _recreateFailures++;
+            _nextRecreateTicks = now + RecreateRetryMs;
+            DeviceStatus = _recreateFailures >= MaxRecreateAttempts
+                ? "GPU reset: the display could not be restored - restart the app"
+                : "GPU reset: restoring the display...";
+            try { Console.Error.WriteLine($"[DirectXRenderer] device recreate failed ({_recreateFailures}/{MaxRecreateAttempts}): {ex.Message}"); } catch { }
+            return false;
+        }
+
+        _deviceLost = false;
+        _recoveries++;
+        _recreateFailures = 0;
+        Interlocked.Increment(ref _deviceGeneration);
+        DeviceStatus = _recoveries >= MaxRecoveries
+            ? "GPU reset: display restored (a further reset this session will not be recovered)"
+            : "GPU reset: display restored";
+        try { Console.Error.WriteLine($"[DirectXRenderer] device rebuilt (generation {_deviceGeneration})."); } catch { }
+
+        // The new device starts with no texture: re-upload the last frame so the
+        // window shows it rather than black until the next one arrives.
+        if (_lastUpload is { } last)
+        {
+            try { UploadCore(last, _lastUploadW, _lastUploadH); }
+            catch (SharpGenException) { /* the next frame uploads */ }
+        }
+        return true;
     }
 
     // ── Device + swap chain ───────────────────────────────────────────────────
@@ -382,10 +554,24 @@ float4 PS(VSOut i) : SV_Target
     /// Uploads a new BGRA colour buffer from the CPU to the GPU texture.
     /// The array must contain exactly <paramref name="width"/> × <paramref name="height"/> elements.
     /// </summary>
-    public unsafe void UpdateTexture(uint[] colorBuffer, int width, int height)
+    public void UpdateTexture(uint[] colorBuffer, int width, int height)
     {
         if (_disposed) return;
+        _lastUpload = colorBuffer;
+        _lastUploadW = width;
+        _lastUploadH = height;
+        if (_deviceLost && !TryRecover()) return;
+        try { UploadCore(colorBuffer, width, height); }
+        catch (SharpGenException ex) when (IsDeviceLoss(ex.HResult))
+        {
+            OnDeviceLost(ex.HResult, "UpdateTexture");
+        }
+    }
+
+    private unsafe void UploadCore(uint[] colorBuffer, int width, int height)
+    {
         EnsureTexture(width, height);
+        if (TakeSimulated(DeviceLossSite.Upload)) throw new SharpGenException(new Result(DXGI_ERROR_DEVICE_REMOVED));
 
         // MappedSubresource.DataPointer is IntPtr in Vortice 3.8.x.
         // MappedSubresource.RowPitch    is int.
@@ -430,9 +616,24 @@ float4 PS(VSOut i) : SV_Target
     /// <summary>
     /// Presents the Mandelbrot texture as a full-screen quad using the current GPU texture.
     /// </summary>
-    public unsafe void Render()
+    public void Render()
     {
-        if (_disposed || _tex == null) return;
+        if (_disposed) return;
+        if (_deviceLost && !TryRecover()) return;
+        try
+        {
+            Result hr = RenderCore();
+            if (hr.Failure && IsDeviceLoss(hr.Code)) OnDeviceLost(hr.Code, "Present");
+        }
+        catch (SharpGenException ex) when (IsDeviceLoss(ex.HResult))
+        {
+            OnDeviceLost(ex.HResult, "Render");
+        }
+    }
+
+    private unsafe Result RenderCore()
+    {
+        if (_tex == null) return Result.Ok;
 
         // Output-merger: bind RTV, opaque blend.
         _context.OMSetRenderTargets(_rtv);
@@ -449,8 +650,7 @@ float4 PS(VSOut i) : SV_Target
         if (_tex == null)
         {
             _context.ClearRenderTargetView(_rtv, new Color4(0f, 0f, 0f, 1f));
-            _swapChain.Present(VSync ? 1u : 0u, PresentFlags.None);
-            return;
+            return _swapChain.Present(VSync ? 1u : 0u, PresentFlags.None);
         }
         
         //_context.ClearRenderTargetView(_rtv, new Color4(0f, 0f, 0f, 1f));
@@ -475,7 +675,8 @@ float4 PS(VSOut i) : SV_Target
         // Present: SyncInterval=1 → wait for next VBlank (vsync on).
         // VSync=false → SyncInterval=0 → uncapped (video record / blocking
         // single-image render path).
-        _swapChain.Present(VSync ? 1u : 0u, PresentFlags.None);
+        Result presented = _swapChain.Present(VSync ? 1u : 0u, PresentFlags.None);
+        return TakeSimulated(DeviceLossSite.Present) ? new Result(DXGI_ERROR_DEVICE_REMOVED) : presented;
     }
 
     // ── Resize ────────────────────────────────────────────────────────────────
@@ -491,6 +692,20 @@ float4 PS(VSOut i) : SV_Target
 
         _width  = width;
         _height = height;
+
+        // A lost device is rebuilt at the new size (the swap chain takes _width /
+        // _height), so there is nothing to resize.
+        if (_deviceLost) { TryRecover(); return; }
+        try { ResizeCore(width, height); }
+        catch (SharpGenException ex) when (IsDeviceLoss(ex.HResult))
+        {
+            OnDeviceLost(ex.HResult, "Resize");
+        }
+    }
+
+    private void ResizeCore(int width, int height)
+    {
+        if (TakeSimulated(DeviceLossSite.Resize)) throw new SharpGenException(new Result(DXGI_ERROR_DEVICE_REMOVED));
 
         // Unbind the RTV before resize; D3D11 will refuse if it is still bound.
         _context.OMSetRenderTargets((ID3D11RenderTargetView)null!);
@@ -516,16 +731,6 @@ float4 PS(VSOut i) : SV_Target
         if (_disposed) return;
         _disposed = true;
 
-        _srv?.Dispose();
-        _tex?.Dispose();
-        _blendState.Dispose();
-        _rasterizer.Dispose();
-        _sampler.Dispose();
-        _ps.Dispose();
-        _vs.Dispose();
-        _rtv.Dispose();
-        _swapChain.Dispose();
-        _context.Dispose();
-        _device.Dispose();
+        ReleaseDeviceObjects();
     }
 }

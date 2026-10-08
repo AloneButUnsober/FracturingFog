@@ -937,6 +937,50 @@ namespace FracturingFog.Rendering
             }
         }
 
+        // #1045 — the renderer device generation the GPU kernels were built on,
+        // and the last device status shown.
+        private int _kernelDeviceGeneration;
+        private string? _lastDeviceStatus;
+
+        /// <summary>#1045 — a renderer that rebuilt its GPU device after a loss
+        /// (driver reset) moves its <see cref="IFractalRenderer.DeviceGeneration"/>
+        /// on. The kernels built on the old device (escape-time, relief, froxel)
+        /// are dead: drop them, so the escape-time kernel is rebuilt now if GPU
+        /// compute is on, and the relief / froxel kernels on their next use. Also
+        /// posts the renderer's device status to the status bar once per change.
+        /// Called before each frame's calculation.</summary>
+        public void SyncGpuKernelsWithDevice()
+        {
+            string? status = _renderer.DeviceStatus;
+            if (status != null && status != _lastDeviceStatus)
+            {
+                _lastDeviceStatus = status;
+                StatusRequested?.Invoke(this, status);
+            }
+
+            int gen = _renderer.DeviceGeneration;
+            if (gen == _kernelDeviceGeneration) return;
+            _kernelDeviceGeneration = gen;
+
+            bool gpuOn = UseGpuCompute;
+            lock (_d3dGate)
+            {
+                _calculator.GpuKernel = null;
+                _escapeCalculator.GpuKernel = null;
+                foreach (var b in BuddhaCalculators()) b.GpuKernel = null;
+                try { _gpuKernel?.Dispose(); } catch { /* objects of a removed device */ }
+                _gpuKernel = null;
+                try { _reliefKernel?.Dispose(); } catch { }
+                _reliefKernel = null;
+                _reliefKernelTried = false;
+                try { _froxelKernel?.Dispose(); } catch { }
+                _froxelKernel = null;
+                _froxelKernelTried = false;
+            }
+            Console.Error.WriteLine($"[FractalRenderHost] renderer device rebuilt (generation {gen}); GPU kernels re-created.");
+            if (gpuOn) UseGpuCompute = true;   // builds a kernel on the new device
+        }
+
         // ── Source-compiled calculators (UserEquation / Sandbox / UserBulb) ──
         // The Avalonia shell's dedicated editors live in UI.Avalonia and can't
         // see these main-project calculators directly. These thin wrappers let
@@ -1733,6 +1777,8 @@ namespace FracturingFog.Rendering
                     }
                 }
             }
+
+            SyncGpuKernelsWithDevice();   // #1045 — a rebuilt device needs fresh kernels
 
             long calcStart = Stopwatch.GetTimestamp();
 
