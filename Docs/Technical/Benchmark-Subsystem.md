@@ -31,7 +31,7 @@ There are three CLI-flagged benchmark drivers. They split across two measurement
 
 | Flag                       | Engine                | Target under test                          | Output |
 |----------------------------|-----------------------|--------------------------------------------|--------|
-| `--bench`                  | **BenchmarkDotNet**   | `MandelbrotCalculator` (the shipping calc); with `--filter`, the 10 ILGPU 3D kernels (`*GpuCalculatorBench*`) or the D3D11/Vulkan Mandelbrot kernels (`*MandelbrotGpuKernelBench*`) | BDN summary table + `BenchmarkDotNet.Artifacts/` |
+| `--bench`                  | **BenchmarkDotNet**   | `MandelbrotCalculator` (the shipping calc); with `--filter`, the 10 ILGPU 3D kernels (`*GpuCalculatorBench*`), the D3D11/Vulkan Mandelbrot kernels (`*MandelbrotGpuKernelBench*`) or the QD reference-orbit build (`*ReferenceOrbitBench*`, #1166) | BDN summary table + `BenchmarkDotNet.Artifacts/` |
 | `--gentestbench`           | hand-rolled Stopwatch | `Generated.MandelbrotZ2Calculator` (CalcGen output) | console + `gentestbench.out` |
 | `--benchmark --equation …` | hand-rolled Stopwatch | an **arbitrary** hot-compiled DSL equation | console + `benchmark.out` |
 
@@ -182,7 +182,8 @@ args just prints help and runs nothing, hence the explicit direct-run branch).
 > **Narrowing the run.** BenchmarkDotNet's `--filter` glob matches the fully-qualified benchmark
 > **name** (`Namespace.Class.Method`), *not* `[Params]` values. So it selects a **class**:
 > `*MandelbrotBench*` is the CPU matrix, `*GpuCalculatorBench*` the 3D GPU bench,
-> `*MandelbrotGpuKernelBench*` the D3D11/Vulkan bench, `*` all three. Within a
+> `*MandelbrotGpuKernelBench*` the D3D11/Vulkan bench, `*ReferenceOrbitBench*` the QD reference-orbit
+> build (#1166), `*` all four. Within a
 > class it is all-or-nothing, because each class has a single `[Benchmark]` method. To run a
 > subset of cases, temporarily edit the relevant `[Params]` array (e.g. drop `Width` to
 > `[Params(640)]`) and rebuild. `--list flat` / `--list tree` enumerate the cases without running.
@@ -290,10 +291,18 @@ The coordinates match `MandelbrotBench`, so a GPU row can be read against its CP
   `LastFrameUsedGpuPerturbation` to be set; otherwise it throws. The perturbation paths also
   require `IGpuKernel.SupportsPerturbation` (fp64 shader ops) and say so when it's missing.
 - **`UseGpuPerturbation` is process-wide static.** Setup sets it per case and Cleanup restores it.
-- **No device-memory column.** These kernels keep persistent device buffers rather than
-  allocating per frame, so there's no per-op churn to count. Measuring resident VRAM would need
-  DXGI `QueryVideoMemoryInfo` / Vulkan memory budgets; that isn't done. The `Device` column records
-  the adapter.
+- **`Resident` column (#1166), not per-op churn.** These kernels keep persistent, frame-sized
+  device buffers rather than allocating per frame, so there's nothing per op to count. `Resident`
+  is what they hold after the warm frame:
+  - **D3D11:** DXGI's per-process usage (`IDXGIAdapter3.QueryVideoMemoryInfo` `CurrentUsage`).
+    It is the delta from just before the kernel is created to after the warm frame, with the
+    context flushed. It is split into the local segment (VRAM) and the non-local one (shared
+    system memory, e.g. the readback staging), and includes the driver's own overhead.
+  - **Vulkan:** the kernel's own count of the buffer memory it allocated
+    (`VulkanComputeKernel.ResidentBytes`, every buffer goes through `AllocBuffer` / `FreeBuffer`),
+    plus the part on a device-local heap.
+
+  The `Device` column records the adapter.
 - **`NA` on perturbation rows can be by design.** `TryRunGpuPerturbation` estimates the frame
   (first band's time x band count). If that exceeds its 3 s budget, it throws
   `GPU-PERTURB-TOO-SLOW` and **switches `UseGpuPerturbation` off for the session**, so the app
@@ -337,11 +346,78 @@ How to read that run:
   Vulkan is now a drop-in for D3D11 on this card (a little faster on SP, ~9% slower on the
   fp64-bound perturbation).
 
-**Not covered:** the GPU QD reference orbit (`UseGpuReferenceOrbit`, `MandelbrotRefOrbitGpu`). It
-runs once per view and is cached across frames, so a per-frame `Calculate()` bench would only hit it
-on the warm frame. It needs its own orbit-build bench. It uses a private ILGPU context and QD-only
-arithmetic (no transcendental intrinsics), so #1164 likely doesn't apply, but that's unverified.
-Resident VRAM for the D3D11/Vulkan kernels isn't measured either. Both are tracked in #1166.
+Resident memory (#1166), GT 710, 2026-10-08:
+
+| Backend | Path        | 640x360                      | 1920x1080                      |
+|-------- |------------ |----------------------------- |------------------------------- |
+| D3D11   | SpShallow   | 6.5 MB VRAM + 6.2 MB shared  | 55.6 MB VRAM + 55.5 MB shared  |
+| D3D11   | PerturbInPT | 5.9 MB VRAM + 7.2 MB shared  | 48.0 MB VRAM + 56.8 MB shared  |
+| Vulkan  | SpShallow   | 7.0 MB (0.0 MB device-local) | 63.3 MB (0.0 MB device-local)  |
+| Vulkan  | PerturbInPT | 7.3 MB (0.0 MB device-local) | 63.6 MB (0.0 MB device-local)  |
+
+- **D3D11:** ~28 B/px on the card plus ~28 B/px of shared staging. That is about one copy of the
+  frame's per-pixel outputs on each side (iteration, smooth, final z/dz, colour, trap: 32 B/px
+  requested).
+- **Vulkan:** 32 B/px, all of it in **host** memory. Its memory-type choice
+  (`VulkanHostMemory.FindType`) picks host-visible types for every buffer, the CPU-written ones
+  too, so the shader reads and writes system RAM over PCIe on this card. #1173-L made the readback
+  fast; nothing here says the kernel is slower for it, but a device-local layout with a copy
+  before readback is the conventional design.
+- The perturbation rows add the reference orbit (16 B per iteration) and the SA / BLA tables.
+
+### Reference-orbit bench (`ReferenceOrbitBench`, #1166)
+
+Source: [`Benchmarks/ReferenceOrbitBench.cs`](../../Benchmarks/ReferenceOrbitBench.cs).
+
+```powershell
+dotnet run -c Release --project FracturingFogCLD.csproj -- --bench --filter "*ReferenceOrbitBench*"
+```
+
+It times one uncached QD reference-orbit build:
+- `Builder`: `Cpu` is `ComputeReferenceOrbitQD`; `Gpu` is `MandelbrotRefOrbitGpu`, ILGPU, on with
+  `UseGpuReferenceOrbit`.
+- `Length`: 10K, 100K or 1M iterations.
+
+Design points:
+- **Each op misses the orbit cache.** The orbit is cached by centre, so each op flips the centre's
+  lowest QD limb (1e-60 / 2e-60) before calling `MandelbrotCalculator.BuildReferenceOrbit()`. That
+  is the path a deep-zoom frame takes, without rendering.
+- **The centre is c = -1.9 at zoom 1e30 (QD tier).** Real c in [-2, 0.25] never escapes, so
+  `Length` is the real orbit length, and -1.9 is chaotic, so the orbit never settles.
+- **Two centres that would distort the CPU numbers:**
+  - A centre whose low QD limbs are exactly zero costs the CPU ~3 ms extra over the first ~10K
+    iterations (450 against a steady ~130 ns per iteration).
+  - An interior c (a converging orbit) is slower still early on (~1.2 µs per iteration).
+
+  Neither looks like a real deep-zoom centre, which carries all its limbs.
+- **Fallback guard.** `Gpu` requires `MandelbrotCalculator.LastFrameBuiltGpuReferenceOrbit` (new)
+  after the warm build. It also refuses ILGPU's CPU accelerator, which is the kernel's last-resort
+  device. The `Device` column records what built the orbit.
+- **Iteration time ~250 ms, not a fixed single invocation.** A lone 5 ms op after BenchmarkDotNet's
+  pause between iterations started on a cold core clock, and read 4.6 ms for a 1.3 ms build. The
+  15 s GPU case still runs once per iteration, under a 30-minute in-process timeout.
+
+GeForce GT 710 (CUDA) vs i5-13420H, 2026-10-08:
+
+| Builder | 10K      | 100K     | 1M       | Device                |
+|-------- |---------:|---------:|---------:|---------------------- |
+| Cpu     | 1.5 ms   | 12.6 ms  | 127 ms   | CPU QD                |
+| Gpu     | 159 ms   | 1,574 ms | 15,727 ms | Cuda — GeForce GT 710 |
+
+- **Linear, ~126 ns vs ~15.7 µs per iteration.** The GPU is ~125x slower on this card: one
+  sequential thread of QD on 1/24-rate fp64. That is why `UseGpuReferenceOrbit` is off by default.
+  Run it on the hardware you care about.
+- **#1164 does not apply.** CUDA builds and runs the QD kernel on the GT 710.
+- **Found by the bench: the watchdog.** The kernel ran the whole orbit in one launch. At 1M
+  iterations the OS killed it after 3.5 s ("unspecified launch failure", a driver reset). The orbit
+  now runs in launches sized from the measured time toward 100 ms, each resuming from the last slot
+  written. `S1166ReferenceOrbitTests` pins it:
+  - any launch size, one iteration included, gives the single-launch orbit limb for limb, and
+    matches the CPU QD orbit to round-off early on;
+  - a 2000-iteration orbit at 250 per launch takes 8 launches.
+- **GPU vs CPU limbs differ in the last bit.** The GPU's split TwoProduct and the CPU's FMA differ
+  in the last bit of the lowest limb, as `--gpurefprobe` already reported; chaos amplifies that
+  along the orbit.
 
 ---
 

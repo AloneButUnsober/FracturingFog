@@ -248,6 +248,15 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
     /// with the BLA table. Reset at the start of every HP frame.</summary>
     public bool LastFrameUsedGpuBla { get; private set; }
 
+    /// <summary>#1166 — true when the last frame (or <see cref="BuildReferenceOrbit"/>)
+    /// built its QD reference orbit on the GPU (<see cref="UseGpuReferenceOrbit"/>),
+    /// false when it was built on the CPU, recycled or served from the cache.</summary>
+    public bool LastFrameBuiltGpuReferenceOrbit { get; private set; }
+
+    /// <summary>#1166 — the accelerator the GPU reference orbit runs on ("Cuda — …",
+    /// or "CPU — …" for ILGPU's CPU accelerator), or empty before its first use.</summary>
+    public string GpuReferenceOrbitDevice => _refOrbitGpu?.SelectedDeviceLabel ?? string.Empty;
+
     /// <summary>#607 / G4.6 — true when the last frame was an orbit theme rendered on
     /// the GPU deep-zoom orbit kernel (<see cref="IGpuKernel.RunPerturbOrbit"/>); it
     /// also sets <see cref="LastFrameUsedGpuPerturbation"/>.</summary>
@@ -757,6 +766,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         LastFrameUsedGpuSeriesApproximation = false;
         LastFrameUsedGpuBla = false;
         LastFrameUsedGpuOrbitPerturbation = false;
+        LastFrameBuiltGpuReferenceOrbit = false;   // #1166
         _gpuSkip = null;
         CalculateInternal(ct);
         ApplyOutOfBoundsSurround(ct);
@@ -2225,30 +2235,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         // final image is always exact; only the transient preview reuses.
         bool recycled = (AllowRefOrbitRecycle || AllowRecycleThisRender)
                         && TryRecycleReferenceOrbit(maxIt, scale);
-        if (!recycled)
-        {
-            if (Zoom > ODZoomThreshold)
-            {
-                var cxOD = new OD(CenterX, CenterXLo, CenterX2, CenterX3,
-                                  CenterX4, CenterX5, CenterX6, CenterX7);
-                var cyOD = new OD(CenterY, CenterYLo, CenterY2, CenterY3,
-                                  CenterY4, CenterY5, CenterY6, CenterY7);
-                ComputeReferenceOrbitOD(cxOD, cyOD, maxIt);
-            }
-            else if (Zoom > QDZoomThreshold)
-            {
-                var cxQD = new QD(CenterX, CenterXLo, CenterX2, CenterX3);
-                var cyQD = new QD(CenterY, CenterYLo, CenterY2, CenterY3);
-                // Wave 2.12 — opt-in GPU QD reference orbit. Falls back to CPU on
-                // any GPU init / kernel / copy failure.
-                if (!(UseGpuReferenceOrbit && TryComputeReferenceOrbitQDGpu(cxQD, cyQD, maxIt)))
-                    ComputeReferenceOrbitQD(cxQD, cyQD, maxIt);
-            }
-            else
-            {
-                ComputeReferenceOrbit(new DD(CenterX, CenterXLo), new DD(CenterY, CenterYLo), maxIt);
-            }
-        }
+        if (!recycled) ComputeReferenceOrbitForCenter(maxIt);
 
         // V6 (#82) — GPU deep-zoom perturbation. With the reference orbit built,
         // dispatch the whole frame's δ-rebased loop to an FP64 GPU kernel, then
@@ -3307,6 +3294,46 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         _refCachedTier = 1;  // QD
     }
 
+    /// <summary>The reference orbit at the view centre, at the precision tier the
+    /// zoom needs (DD, QD — on the GPU with <see cref="UseGpuReferenceOrbit"/> — or
+    /// OD). A centre and length already cached are not recomputed.</summary>
+    private void ComputeReferenceOrbitForCenter(int maxIt)
+    {
+        if (Zoom > ODZoomThreshold)
+        {
+            var cxOD = new OD(CenterX, CenterXLo, CenterX2, CenterX3,
+                              CenterX4, CenterX5, CenterX6, CenterX7);
+            var cyOD = new OD(CenterY, CenterYLo, CenterY2, CenterY3,
+                              CenterY4, CenterY5, CenterY6, CenterY7);
+            ComputeReferenceOrbitOD(cxOD, cyOD, maxIt);
+        }
+        else if (Zoom > QDZoomThreshold)
+        {
+            var cxQD = new QD(CenterX, CenterXLo, CenterX2, CenterX3);
+            var cyQD = new QD(CenterY, CenterYLo, CenterY2, CenterY3);
+            // Wave 2.12 — opt-in GPU QD reference orbit. Falls back to CPU on
+            // any GPU init / kernel / copy failure.
+            if (!(UseGpuReferenceOrbit && TryComputeReferenceOrbitQDGpu(cxQD, cyQD, maxIt)))
+                ComputeReferenceOrbitQD(cxQD, cyQD, maxIt);
+        }
+        else
+        {
+            ComputeReferenceOrbit(new DD(CenterX, CenterXLo), new DD(CenterY, CenterYLo), maxIt);
+        }
+    }
+
+    /// <summary>#1166 — build the reference orbit for the current centre and
+    /// <see cref="MaxIterations"/> exactly as a deep-zoom frame does, without
+    /// rendering; returns the orbit length. For the reference-orbit bench (the
+    /// orbit is cached per centre, so a frame bench only builds it once).
+    /// <see cref="LastFrameBuiltGpuReferenceOrbit"/> says where it was built.</summary>
+    public int BuildReferenceOrbit()
+    {
+        LastFrameBuiltGpuReferenceOrbit = false;
+        ComputeReferenceOrbitForCenter(MaxIterations);
+        return _refOrbitLen;
+    }
+
     // Wave 2.12 — GPU QD reference orbit dispatch. Lazily instantiated so
     // the kernel JIT cost is paid only when first engaged. Lives on the
     // calculator (not static) because each instance owns its own ref-orbit
@@ -3363,6 +3390,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         _refCachedMaxIter = maxIter;
         _refCachedEscaped = escaped;
         _refCachedTier = 1;  // QD (GPU)
+        LastFrameBuiltGpuReferenceOrbit = true;   // #1166
         return true;
     }
 
