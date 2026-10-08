@@ -29,6 +29,7 @@ public sealed class BuddhaFamilyRegionBatchTests
         BuddhaQualityMode = BuddhaQualityMode.HighDefinition, BuddhaMetropolis = true,
         BuddhaProgressive = !new FractalParameters().BuddhaProgressive,
         BuddhaSeed = 4242, BuddhaZoomCompensation = !new FractalParameters().BuddhaZoomCompensation,
+        BuddhaScaleSamplesWithWindow = !new FractalParameters().BuddhaScaleSamplesWithWindow,   // #1224
     };
 
     private static void AssertSampler(FractalParameters want, FractalParameters got)
@@ -42,6 +43,7 @@ public sealed class BuddhaFamilyRegionBatchTests
         Assert.Equal(want.BuddhaProgressive, got.BuddhaProgressive);
         Assert.Equal(want.BuddhaSeed, got.BuddhaSeed);
         Assert.Equal(want.BuddhaZoomCompensation, got.BuddhaZoomCompensation);
+        Assert.Equal(want.BuddhaScaleSamplesWithWindow, got.BuddhaScaleSamplesWithWindow);
     }
 
     [Theory]

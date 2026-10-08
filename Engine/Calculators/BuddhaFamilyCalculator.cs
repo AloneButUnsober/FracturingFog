@@ -79,6 +79,70 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
     private const double BuddhaZoomCompThreshold = 1.2;
     private const double BuddhaZoomCompMaxSampleFactor = 8.0;
 
+    // #1224 — BuddhaSamples is the budget for a 640×480 frame. A larger window
+    // spreads a fixed budget over more pixels (0.4 hits/px at 2560×1440 against
+    // 4.6 at 640×480: dim and grainy), so with BuddhaScaleSamplesWithWindow the
+    // budget grows with the pixel count. Never scaled down: frames up to 640×480
+    // sample exactly BuddhaSamples, as before.
+    public const int SampleReferencePixels = 640 * 480;
+
+    // #1224 — zoom compensation used to turn Metropolis on past zoom 1.2. On
+    // the shared uniform sampler (cycle detection, all cores) uniform sampling is
+    // far cheaper for less noise at those zooms: 640×480, zoom 6, Buddhabrot
+    // Metropolis 12.8 s at block-histogram seed noise 0.18 against uniform 8M
+    // samples 76 ms at 0.15; AntiBuddhabrot 150 s against 414 ms at 0.08. (One
+    // Metropolis step re-draws the chain's whole orbit, and the chains are
+    // correlated, so cutting their steps raised the noise nearly as fast as it
+    // cut the time.) So zoom compensation now only raises the sample count, and
+    // turns Metropolis on past the zoom where the float uniform sampler stops
+    // (MaxGpuBuddhaZoom). Without the shared sampler (Dual) it is on past 1.2,
+    // as before. Uniform still wins at zoom 80 for Buddhabrot (32M samples
+    // 256 ms, noise 0.23, against Metropolis 14 s, 0.19); AntiBuddhabrot there is
+    // cleaner on Metropolis but takes 20 s.
+    //
+    // Uniform samples are cheap, so their zoom boost goes to ×64 (Metropolis
+    // keeps ×8); with window scaling the window × zoom factor is held to ×64 so
+    // a large zoomed live frame stays bounded (500K → at most 32M samples,
+    // ~0.3 s Buddhabrot on 12 cores).
+    private const double BuddhaZoomCompUniformMaxFactor = 64.0;
+    protected virtual double AutoMetropolisZoom =>
+        SupportsGpuSampling ? MaxGpuBuddhaZoom : BuddhaZoomCompThreshold;
+
+    /// <summary>#1224 — samples the last Calculate ran (uniform samples or
+    /// Metropolis steps), after window and zoom scaling.</summary>
+    public int LastEffectiveSamples { get; private set; }
+
+    /// <summary>#1224 — true when the last Calculate sampled with Metropolis
+    /// (ticked, or turned on by zoom compensation).</summary>
+    public bool LastCalculateUsedMetropolis { get; private set; }
+
+    /// <summary>#1224 — the sample budget for a frame: BuddhaSamples, scaled up
+    /// with the window (when enabled) and with zoom (zoom compensation, which
+    /// also turns Metropolis on past <paramref name="autoMetropolisZoom"/>).</summary>
+    public static int EffectiveSamples(FractalParameters p, int width, int height, double zoom,
+                                       double autoMetropolisZoom, out bool metropolis)
+    {
+        bool zoomComp = p.BuddhaZoomCompensation && zoom > BuddhaZoomCompThreshold;
+        metropolis = p.BuddhaMetropolis || (zoomComp && zoom > autoMetropolisZoom);
+        double s = Math.Max(1, p.BuddhaSamples);
+        if (metropolis)
+        {
+            // Metropolis already deposits thousands of hits per pixel; its noise is
+            // the chains' correlation, not the pixel count, so the window does not
+            // scale it (it would only multiply a multi-second frame).
+            if (zoomComp) s *= Math.Clamp(zoom, 1.0, BuddhaZoomCompMaxSampleFactor);
+        }
+        else
+        {
+            double windowFactor = p.BuddhaScaleSamplesWithWindow
+                ? Math.Max(1.0, (double)width * height / SampleReferencePixels) : 1.0;
+            s *= windowFactor;
+            if (zoomComp)
+                s *= Math.Clamp(zoom, 1.0, Math.Max(1.0, BuddhaZoomCompUniformMaxFactor / windowFactor));
+        }
+        return (int)Math.Clamp(s, 1, int.MaxValue);
+    }
+
     // Progressive batch count. 8 gives ~12.5% increments — frequent enough for
     // perceived live preview, infrequent enough that composite overhead stays
     // negligible relative to sampling.
@@ -258,12 +322,12 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
 
         int width = Width;
         int height = Height;
-        int samples = FractalParameters.BuddhaSamples;
+        int samples;
         int low = FractalParameters.BuddhaIterLow;
         int mid = FractalParameters.BuddhaIterMid;
         int high = FractalParameters.BuddhaIterHigh;
         bool hd = FractalParameters.BuddhaQualityMode == BuddhaQualityMode.HighDefinition;
-        bool mh = FractalParameters.BuddhaMetropolis;
+        bool mh;
         bool progressive = FractalParameters.BuddhaProgressive;
         int minIter = Math.Max(0, FractalParameters.BuddhaMinIter);   // #1218
 
@@ -271,16 +335,12 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
         // of the fixed-domain sample orbits, so coverage collapses and the frame
         // reads dark/grainy (sparse hits, not under-normalisation). Past the
         // threshold, scale the effective sample budget with zoom (capped) and
-        // auto-enable Metropolis-Hastings, which concentrates samples on c
-        // values whose orbits reach the visible pixels. No-op below the
-        // threshold, so zoomed-out renders stay byte-identical.
-        if (FractalParameters.BuddhaZoomCompensation && Zoom > BuddhaZoomCompThreshold)
-        {
-            double factor = Math.Clamp(Zoom, 1.0, BuddhaZoomCompMaxSampleFactor);
-            long scaled = (long)(samples * factor);
-            samples = (int)Math.Min(scaled, int.MaxValue);
-            mh = true;
-        }
+        // (past AutoMetropolisZoom) turn on Metropolis-Hastings, which
+        // concentrates samples on c values whose orbits reach the visible
+        // pixels. #1224 — the budget also grows with the window.
+        samples = EffectiveSamples(FractalParameters, width, height, Zoom, AutoMetropolisZoom, out mh);
+        LastEffectiveSamples = samples;
+        LastCalculateUsedMetropolis = mh;
 
         int maxOrbit = IsInSet ? Math.Max(high, MaxIterations) : high;
         if (maxOrbit > MaxOrbitCap) maxOrbit = MaxOrbitCap;
@@ -470,7 +530,7 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
             : !k.SupportsBuddhabrot ? $"{k.BackendLabel} has no Buddhabrot kernel"
             : !UseGpuBuddha ? "the CPU sampler renders the same image and is faster on most hardware; FF_GPU_BUDDHA=1 opts in to the GPU"
             : !SupportsGpuSampling ? "this Buddhabrot variant's sampler runs on the CPU only"
-            : metropolis ? "Metropolis sampling (on above zoom 1.2 with zoom compensation) runs on the CPU only"
+            : metropolis ? "Metropolis sampling runs on the CPU only"
             : Zoom > MaxGpuBuddhaZoom ? $"past the GPU Buddhabrot zoom limit ({MaxGpuBuddhaZoom:0}; float orbits)"
             : null;
         if (why != null)

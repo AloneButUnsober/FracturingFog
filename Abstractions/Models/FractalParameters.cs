@@ -472,14 +472,24 @@ namespace FracturingFog.Models
         /// sample orbits, so per-pixel hit counts collapse and the frame goes
         /// dark/grainy (sparse coverage, not under-normalisation). When true and
         /// the view is zoomed past <see cref="BuddhaZoomCompensationThreshold"/>,
-        /// the sampler scales the effective sample budget with zoom (capped) and
-        /// auto-enables Metropolis-Hastings importance sampling, which
-        /// concentrates samples on c values whose orbits reach the visible
+        /// the sampler scales the effective sample budget with zoom (capped: ×64
+        /// with uniform sampling, shared with the window factor; ×8 with
+        /// Metropolis). #1224 — uniform sampling stays on up to zoom 100, where
+        /// it is far faster than Metropolis for less noise; past it (and always
+        /// for Dual Buddhabrot, past the threshold) Metropolis-Hastings turns
+        /// on, concentrating samples on c values whose orbits reach the visible
         /// pixels. Below the threshold this is a no-op, so zoomed-out renders are
         /// byte-identical to before. The structural change on zoom (a density
         /// plot re-populates as the contributing orbit set changes) is
         /// algorithm-inherent and unaffected.</summary>
         public bool BuddhaZoomCompensation { get; set; } = true;
+
+        /// <summary>#1224 — <see cref="BuddhaSamples"/> is the budget for a
+        /// 640×480 frame; a larger frame samples proportionally more, so the
+        /// hit density (brightness, grain) does not fall as the window grows.
+        /// Never scales down. Uniform sampling only: Metropolis already deposits
+        /// thousands of hits per pixel. Off = the same budget at every size.</summary>
+        public bool BuddhaScaleSamplesWithWindow { get; set; } = true;
 
         // ── Dual Buddhabrot (#1124, epic #1114 S10) ─────────────────────────
         /// <summary>Default per-channel colours — colour-blind-safe blue / amber /
@@ -1822,6 +1832,7 @@ namespace FracturingFog.Models
                 BuddhaProgressive = BuddhaProgressive,
                 BuddhaSeed = BuddhaSeed,
                 BuddhaZoomCompensation = BuddhaZoomCompensation,
+                BuddhaScaleSamplesWithWindow = BuddhaScaleSamplesWithWindow,
                 DualBuddhaCSeedX = DualBuddhaCSeedX,
                 DualBuddhaCSeedY = DualBuddhaCSeedY,
                 DualBuddhaMinIter = DualBuddhaMinIter,

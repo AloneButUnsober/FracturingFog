@@ -1352,7 +1352,10 @@ and the structure resembles a seated Buddha figure (Daniel Green
 
 === Parameters ===
 
-  BuddhaSamples   : int   Number of c samples.  Default 500 000.
+  BuddhaSamples   : int   Number of c samples for a 640x480 frame.
+                          Default 500 000.
+  BuddhaScaleSamplesWithWindow : bool  Larger frames sample
+                          proportionally more (same density).  Default on.
   BuddhaIterLow   : int   Low band cutoff iters.  Default 500.
   BuddhaIterMid   : int   Mid band cutoff iters.  Default 5 000.
   BuddhaIterHigh  : int   High band cutoff iters.  Default 50 000.
