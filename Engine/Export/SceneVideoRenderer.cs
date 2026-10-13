@@ -97,19 +97,38 @@ namespace FracturingFog.Export
         /// <see cref="AudioSource"/> was baked from, so the exported MP4 carries its
         /// music. Null / missing = a silent video.</summary>
         public string? AudioMuxPath { get; set; }
+
+        /// <summary>#1256 — asked (on the render thread) when the first frame of a
+        /// Relief 3D shot looks collapsed: its trace hits the terrain box walls far
+        /// more than the same frame traced at a small size (what a live window shows).
+        /// Gets the warning text; return true to keep rendering, false to stop before
+        /// the rest of a possibly hours-long render. Null = write the warning to
+        /// stderr and keep rendering.</summary>
+        public Func<string, bool>? ReliefCollapseConfirm { get; set; }
+
+        /// <summary>#1257 — render only the first output frame, through the exact
+        /// export frame path (sub-frames, transitions, overlay, collapse check), and
+        /// return it in <see cref="SceneVideoResult.PreviewPixels"/>: no output file,
+        /// no PNG sequence, no encode. A relief collapse warning is returned in
+        /// <see cref="SceneVideoResult.Message"/> instead of asking.</summary>
+        public bool PreviewFirstFrame { get; set; }
     }
 
     /// <summary>Outcome of a scene render.</summary>
     public readonly struct SceneVideoResult
     {
         public SceneVideoResult(bool ok, int framesWritten, string? videoPath,
-                                string? frameFolder, string? message)
+                                string? frameFolder, string? message,
+                                uint[]? previewPixels = null, int previewWidth = 0, int previewHeight = 0)
         {
             Ok = ok;
             FramesWritten = framesWritten;
             VideoPath = videoPath;
             FrameFolder = frameFolder;
             Message = message;
+            PreviewPixels = previewPixels;
+            PreviewWidth = previewWidth;
+            PreviewHeight = previewHeight;
         }
 
         /// <summary>True when the frames rendered and (if ffmpeg was available)
@@ -127,6 +146,14 @@ namespace FracturingFog.Export
         public string? FrameFolder { get; }
 
         public string? Message { get; }
+
+        /// <summary>#1257 — the first frame (packed 0xAARRGGBB, row-major) when
+        /// <see cref="SceneVideoOptions.PreviewFirstFrame"/> was set; else null.</summary>
+        public uint[]? PreviewPixels { get; }
+
+        public int PreviewWidth { get; }
+
+        public int PreviewHeight { get; }
     }
 
     public static class SceneVideoRenderer
@@ -165,10 +192,13 @@ namespace FracturingFog.Export
                     Resolve(scene, s.OriginalIndex, resolved);
             }
 
-            // Output target.
+            // Output target (#1257 — a first-frame preview writes no file).
+            bool preview = options.PreviewFirstFrame;
+            string? previewWarning = null;
             string outPath = options.OutputPath;
             string ext = options.EncodeGif ? ".gif" : "." + FfmpegEncoder.DefaultExtensionFor(options.Encode);
-            if (string.IsNullOrWhiteSpace(Path.GetExtension(outPath)))
+            if (preview) { }
+            else if (string.IsNullOrWhiteSpace(Path.GetExtension(outPath)))
             {
                 Directory.CreateDirectory(string.IsNullOrWhiteSpace(outPath) ? "." : outPath);
                 string baseName = "FF_Scene_" + Sanitize(scene.Name) + "_" +
@@ -235,6 +265,9 @@ namespace FracturingFog.Export
             // #1065 — debug overlay timeline (null = overlay off).
             var overlayTimeline = options.DebugOverlay ? SceneTimeline.Build(scene) : null;
 
+            // #1256 — shots whose first frame has had the relief collapse check.
+            var collapseChecked = new HashSet<int>();
+
             using (var png = new PngSequenceWriter(pngFolder, w, h))
             {
                 foreach (var frame in plan.Frames)
@@ -289,6 +322,29 @@ namespace FracturingFog.Export
                             motionFrame ? prevReliefCam : null,
                             motionFrame ? motionAov : null,
                             cleanFroxelFrame ? svgfHistory : null);
+
+                        // #1256 — on a shot's first frame, compare the relief trace with
+                        // the same frame traced at a small size; stop early if asked.
+                        if (collapseChecked.Add(s.OriginalIndex))
+                        {
+                            var exportStats = FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.LastTraceStats;
+                            string? warn = CheckReliefCollapse(resolved, s.OriginalIndex, s.LocalTime, w, h, ct,
+                                overrideBase, s.GlobalTime, globalTracks, audioSource, audioTracks, exportStats, scene);
+                            if (warn != null && preview) previewWarning = warn;   // #1257 — report, don't ask
+                            else if (warn != null)
+                            {
+                                bool go;
+                                if (options.ReliefCollapseConfirm != null) go = options.ReliefCollapseConfirm(warn);
+                                else { Console.Error.WriteLine("[scene] warning: " + warn); go = true; }
+                                if (!go)
+                                {
+                                    png.Dispose();
+                                    try { Directory.Delete(pngFolder, recursive: true); } catch { /* best effort */ }
+                                    return new SceneVideoResult(false, framesWritten, null, null,
+                                        "Scene export stopped: " + warn);
+                                }
+                            }
+                        }
                         float wt = (float)s.Weight;
                         for (int i = 0; i < n; i++)
                         {
@@ -368,6 +424,15 @@ namespace FracturingFog.Export
                             overlayTimeline.TotalDuration, posed, posedType));
                     }
 
+                    // #1257 — preview: hand back the first frame, write nothing.
+                    if (preview)
+                    {
+                        png.Dispose();
+                        try { Directory.Delete(pngFolder, recursive: true); } catch { /* best effort */ }
+                        return new SceneVideoResult(true, 1, null, null, previewWarning,
+                            (uint[])outBuf.Clone(), w, h);
+                    }
+
                     png.WriteFrame(outBuf);
                     framesWritten++;
                     progress?.Invoke((double)framesWritten / plan.TotalFrames,
@@ -438,6 +503,61 @@ namespace FracturingFog.Export
 
             try { Directory.Delete(pngFolder, recursive: true); } catch { /* best effort */ }
             return new SceneVideoResult(true, framesWritten, outPath, null, null);
+        }
+
+        // ── #1256 relief collapse check ─────────────────────────────────────
+
+        /// <summary>Short axis (px) of the small reference trace.</summary>
+        public const int CollapseReferenceShortAxis = 360;
+
+        /// <summary>Box-wall fraction by which the export may exceed the small
+        /// reference before it counts as collapsed. Measured (#1256): the #1255 block
+        /// 23–27% vs 3.8% small; fixed 5.5% vs 3.8%; Mandelbrot's established plate
+        /// 21.4% at every size.</summary>
+        public const double CollapseWallMargin = 0.10;
+
+        /// <summary>The warning text when <paramref name="export"/>'s trace hits the
+        /// terrain box walls more than <see cref="CollapseWallMargin"/> above the small
+        /// reference trace <paramref name="small"/>; null when consistent (or when
+        /// either side ran no CPU trace).</summary>
+        public static string? ReliefCollapseWarning(
+            FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefTraceStats export,
+            FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefTraceStats small,
+            int w, int h, string shotLabel)
+        {
+            if (export.Samples == 0 || small.Samples == 0) return null;
+            if (export.WallFraction - small.WallFraction <= CollapseWallMargin) return null;
+            return $"the Relief 3D trace of {shotLabel} at {w}x{h} looks collapsed: " +
+                   $"{export.WallFraction:P0} of the frame is the terrain box wall vs " +
+                   $"{small.WallFraction:P0} when the same frame is traced at a small size, " +
+                   "so the export may show a solid block instead of the relief you see live. " +
+                   "Try a smaller export size or turn on Real height.";
+        }
+
+        // Re-trace a shot frame at the small reference size and compare its box-wall
+        // fraction with the export trace's. Null = nothing to report.
+        private static string? CheckReliefCollapse(
+            IReadOnlyDictionary<int, ResolvedShot> cache, int originalIndex,
+            double localTime, int w, int h, CancellationToken ct,
+            FractalParameters? overrideBase, double globalTime,
+            IReadOnlyList<SceneGlobalTrack>? globalTracks,
+            IAudioModulationSource? audioSource,
+            IReadOnlyList<SceneAudioTrack>? audioTracks,
+            FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefTraceStats exportStats,
+            SceneData scene)
+        {
+            if (exportStats.Samples == 0) return null;   // no CPU relief trace ran
+            int shortAxis = Math.Min(w, h);
+            if (shortAxis <= CollapseReferenceShortAxis * 3 / 2) return null;   // already small
+            double k = CollapseReferenceShortAxis / (double)shortAxis;
+            int rw = Math.Max(16, (int)Math.Round(w * k)) & ~1, rh = Math.Max(16, (int)Math.Round(h * k)) & ~1;
+            RenderShotFrame(cache, originalIndex, localTime, rw, rh, ct,
+                overrideBase, globalTime, globalTracks, audioSource, audioTracks);
+            var small = FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.LastTraceStats;
+            string label = originalIndex >= 0 && originalIndex < scene.Shots.Count
+                ? $"shot {originalIndex + 1} ('{scene.Shots[originalIndex].Name}')"
+                : $"shot {originalIndex + 1}";
+            return ReliefCollapseWarning(exportStats, small, w, h, label);
         }
 
         // ── #1065 debug overlay ─────────────────────────────────────────────

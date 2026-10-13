@@ -567,7 +567,8 @@ namespace FracturingFog.Imaging
                 // of a Relief 3D scene must apply relief here too — otherwise it
                 // silently falls back to the flat 2D themed colour. No-op when
                 // relief is off or the calc exposes no field.
-                buffer = ApplyReliefIfEnabled(buffer, alt as IHeightFieldSource, w, h, req.FractalParameters, alt?.ColorMap, aovCapture, req.FroxelHistory, reliefField, reliefFw, reliefFh, req.PreviousCamera, req.SvgfHistory);
+                buffer = ApplyReliefIfEnabled(buffer, alt as IHeightFieldSource, w, h, req.FractalParameters, alt?.ColorMap, aovCapture, req.FroxelHistory, reliefField, reliefFw, reliefFh, req.PreviousCamera, req.SvgfHistory,
+                    req.FractalParameters is { } rfp && FracturingFog.Rendering.FractalRenderHost.ReliefFieldTracksWindow(req.FractalType, rfp));
             }
             else
             {
@@ -652,7 +653,8 @@ namespace FracturingFog.Imaging
                 // not apply — BUT the dedicated hi-res relief field is a separate,
                 // higher-quality field, not just a resolution bump, so a supplied
                 // req.ReliefField (the interactive one) is preferred (#508).
-                buffer = ApplyReliefIfEnabled(buffer, calc, w, h, req.FractalParameters, calc.ColorMap, aovCapture, req.FroxelHistory, reliefField, reliefFw, reliefFh, req.PreviousCamera, req.SvgfHistory);
+                buffer = ApplyReliefIfEnabled(buffer, calc, w, h, req.FractalParameters, calc.ColorMap, aovCapture, req.FroxelHistory, reliefField, reliefFw, reliefFh, req.PreviousCamera, req.SvgfHistory,
+                    req.FractalParameters is { } rfp && FracturingFog.Rendering.FractalRenderHost.ReliefFieldTracksWindow(req.FractalType, rfp));
             }
 
             }
@@ -738,7 +740,8 @@ namespace FracturingFog.Imaging
             FracturingFog.Rendering.Lighting.FroxelHistory? froxelHistory = null,
             float[]? hiResField = null, int hiResW = 0, int hiResH = 0,
             FracturingFog.Rendering.Lighting.ReliefMotionVector.CameraView? previousCamera = null,
-            SvgfHistory? svgfHistory = null)
+            SvgfHistory? svgfHistory = null,
+            bool displayResField = false)
         {
             if (p == null || !p.Relief2DEnabled) return buffer;
             int n = w * h;
@@ -806,7 +809,9 @@ namespace FracturingFog.Imaging
                     aov = new FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers(
                         w, h, aov?.Components != null, true);
                 FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
-                    buffer, field, w, h, fw, fh, p, dst, out _, null, aov, null, froxelHistory, fx, previousCamera);
+                    buffer, field, w, h, fw, fh, p, dst, out _, null, aov, null, froxelHistory, fx, previousCamera,
+                    // #1255 — a family without a hi-res twin traces a display-res field.
+                    displayResField: displayResField);
                 // S4 (#402) — SVGF temporal denoise when a persistent history is supplied
                 // and the temporal toggle is on; else the plain single-frame denoise. Both
                 // are no-ops when the denoise is off, so this stays byte-identical by default.

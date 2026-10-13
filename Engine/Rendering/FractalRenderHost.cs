@@ -2309,6 +2309,18 @@ namespace FracturingFog.Rendering
         /// twin for it)? Mandelbrot plus the alt escape-time / root-finding /
         /// Apollonian families that expose <see cref="Interefaces.IHeightFieldSource"/>.
         /// Buddha family is excluded (Monte-Carlo; supersample semantics differ).</summary>
+        /// <summary>#1255 — true when the live relief field for <paramref name="type"/>
+        /// under <paramref name="p"/> is display-res, i.e. tracks the window size: the
+        /// family has no hi-res field twin, or the hi-res field is switched off. The
+        /// default plate trace caps such a field (HeightfieldRaymarch2D.TraceGrid) so a
+        /// large export traces it like a live window does; a floor field keeps its
+        /// established look.</summary>
+        public static bool ReliefFieldTracksWindow(FractalType type, FractalParameters p)
+            => !p.Relief2DHiResField || !SupportsHiResReliefField(type);
+
+        private bool ReliefFieldIsDisplayRes
+            => ReliefFieldTracksWindow(ViewState.FractalType, ViewState.FractalParameters);
+
         public static bool SupportsHiResReliefField(FractalType type) => type switch
         {
             FractalType.Mandelbrot => true,
@@ -2684,7 +2696,8 @@ namespace FracturingFog.Rendering
                                 _reliefPreviewScratch = new uint[pn];
                             if (prp.Relief2DRaymarch)
                                 FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
-                                    previewSrc, phs, pw, ph, prp, _reliefPreviewScratch);
+                                    previewSrc, phs, pw, ph, pw, ph, prp, _reliefPreviewScratch, out _,
+                                    displayResField: ReliefFieldIsDisplayRes);
                             else
                                 FracturingFog.Rendering.Lighting.HeightfieldRelief2D.Apply(
                                     previewSrc, _reliefPreviewScratch, phs, pw, ph, prp);
@@ -3176,7 +3189,7 @@ namespace FracturingFog.Rendering
             var copy = new float[(long)fw * fh];
             Array.Copy(field, copy, copy.Length);
             var m = FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.MeasureHeightNormalization(
-                copy, fw, fh, p, _calculator.Width, _calculator.Height);
+                copy, fw, fh, p, _calculator.Width, _calculator.Height, ReliefFieldIsDisplayRes);
             if (m is not { } r) return false;
             baseline = r.Baseline; reference = r.Reference;
             return true;
@@ -3595,7 +3608,8 @@ namespace FracturingFog.Rendering
                 // is byte-identical by default (Render keeps its GPU fast path).
                 var aov = FracturingFog.Imaging.ReliefDenoisePass.MakeCapture(rp, w, h);
                 FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
-                    buf, _reliefHeight, w, h, _reliefW, _reliefH, rp, dst, out _, null, aov);
+                    buf, _reliefHeight, w, h, _reliefW, _reliefH, rp, dst, out _, null, aov,
+                    displayResField: ReliefFieldIsDisplayRes);
                 FracturingFog.Imaging.ReliefDenoisePass.Apply(dst, aov, w, h, rp);
             }
             else
@@ -4234,7 +4248,8 @@ namespace FracturingFog.Rendering
                             // S6 (#408) — persistent temporal-reprojection history (used
                             // only when Relief2DFroxelTemporal is on; forces the CPU
                             // froxel post-pass).
-                            _froxelHistory);
+                            _froxelHistory,
+                            displayResField: ReliefFieldIsDisplayRes);
                         }
                         finally { reliefParams.Relief2DFarDetail = savedFarDetail; }
                         FracturingFog.Imaging.ReliefDenoisePass.Apply(_reliefColorScratch, reliefAov, w, h, reliefParams);

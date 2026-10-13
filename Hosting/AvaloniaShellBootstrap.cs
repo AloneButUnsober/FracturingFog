@@ -1014,6 +1014,61 @@ namespace FracturingFog.Hosting
             shell.SceneAudioFileBrowseRequested += async e =>
                 e.Path = await AvaloniaDialogs.PickOpenFileAsync(e.Title, e.Filter);
 
+            // #1257 — "Preview first frame": render frame 1 exactly as the export
+            // will (export size, same SceneVideoRenderer frame path, relief collapse
+            // check) and show it before the user commits to a long render.
+            shell.SceneExportPreviewRequested += async (_, args) =>
+            {
+                try
+                {
+                    var s = args.Settings;
+                    var opts = new FracturingFog.Export.SceneVideoOptions
+                    {
+                        Width = s.Width,
+                        Height = s.Height,
+                        DebugOverlay = s.BurnDebugOverlay,
+                        PreviewFirstFrame = true,
+                        Settings = new FracturingFog.Abstractions.Animation.SceneRenderSettings
+                        {
+                            Fps = s.Fps,
+                            MotionBlurSubframes = s.MotionBlurSubframes,
+                            ShutterFraction = s.ShutterFraction,
+                        },
+                    };
+                    using var cts = new CancellationTokenSource();
+                    var busy = shell.BeginRenderBusy("Rendering first frame…", () => { try { cts.Cancel(); } catch { } });
+                    FracturingFog.Export.SceneVideoResult result;
+                    try
+                    {
+                        result = await Task.Run(() =>
+                            FracturingFog.Export.SceneVideoRenderer.Render(args.Scene, opts, null, cts.Token));
+                    }
+                    finally { busy.Dispose(); }
+
+                    if (result.PreviewPixels is not { } px)
+                    {
+                        await AvaloniaDialogs.ShowMessageAsync("Preview First Frame",
+                            result.Message ?? "The first frame could not be rendered.", false);
+                        return;
+                    }
+                    await AvaloniaDialogs.ShowImageAsync("Preview First Frame",
+                        BgraToBitmap(px, result.PreviewWidth, result.PreviewHeight),
+                        $"First frame of '{args.Scene.Name}' at {result.PreviewWidth}×{result.PreviewHeight}, as the export will render it.",
+                        result.Message);
+                }
+                catch (OperationCanceledException) { /* cancelled from the busy chip */ }
+                catch (Exception ex)
+                {
+                    try { await AvaloniaDialogs.ShowMessageAsync("Preview First Frame", "Preview failed: " + ex.Message, false); }
+                    catch { /* dialog itself failed */ }
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] Scene preview failed: {ex.Message}");
+                }
+                finally
+                {
+                    args.Completion.TrySetResult(true);
+                }
+            };
+
             shell.ExportSceneRequested += async (_, args) =>
             {
                 try
@@ -1055,6 +1110,12 @@ namespace FracturingFog.Hosting
                         EncodeGif = gif,
                         OutputPath = path,
                         DebugOverlay = s.BurnDebugOverlay,   // #1065
+                        // #1256 — a collapsed relief trace on a shot's first frame asks
+                        // before the rest of the (possibly hours-long) render. Called on
+                        // the render thread; the dialog marshals to the UI thread.
+                        ReliefCollapseConfirm = warn => AvaloniaDialogs.ShowMessageAsync("Export Scene",
+                                "Warning: " + warn + "\n\nKeep rendering?", true)
+                            .GetAwaiter().GetResult() == AvaloniaDialogs.MessageResult.Yes,
                         Settings = new FracturingFog.Abstractions.Animation.SceneRenderSettings
                         {
                             Fps = s.Fps,
