@@ -9,6 +9,10 @@
 // ~28 ms. These tests pin the type choice on whatever Vulkan device the host has
 // (skipped without one) and check a 1080p Mandelbrot frame's readback is no longer
 // pathological.
+//
+// The timing check is wall clock, so it runs in its own non-parallel collection:
+// xUnit runs those after the parallel collections finish. Under the full suite's
+// parallel CPU load it went over 200 ms in 2 of ~6 runs while passing alone.
 
 using System;
 
@@ -18,6 +22,10 @@ using Xunit;
 
 namespace FracturingFog.Server.Tests;
 
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class VulkanReadbackTimingCollection { public const string Name = "VulkanReadbackTiming"; }
+
+[Collection(VulkanReadbackTimingCollection.Name)]
 public sealed class S1173LVulkanReadbackMemoryTests
 {
     private static VulkanContext? TryContext()
@@ -67,7 +75,7 @@ public sealed class S1173LVulkanReadbackMemoryTests
         var it = new int[n]; var sm = new float[n];
         var zr = new float[n]; var zi = new float[n]; var dr = new float[n]; var di = new float[n];
         double best = double.MaxValue, dispatch = 0;
-        for (int rep = 0; rep < 3; rep++)
+        for (int rep = 0; rep < 6; rep++)   // best of 6: one quiet sample is enough
         {
             k.Run(w, h, -0.5, 0.0, 3.0 / w, 256, 4.0, it, sm, zr, zi, dr, di);
             if (k.LastReadbackMs < best) { best = k.LastReadbackMs; dispatch = k.LastDispatchMs; }
