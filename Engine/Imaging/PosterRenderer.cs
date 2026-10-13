@@ -568,7 +568,7 @@ namespace FracturingFog.Imaging
                 // silently falls back to the flat 2D themed colour. No-op when
                 // relief is off or the calc exposes no field.
                 buffer = ApplyReliefIfEnabled(buffer, alt as IHeightFieldSource, w, h, req.FractalParameters, alt?.ColorMap, aovCapture, req.FroxelHistory, reliefField, reliefFw, reliefFh, req.PreviousCamera, req.SvgfHistory,
-                    !FracturingFog.Rendering.FractalRenderHost.SupportsHiResReliefField(req.FractalType));
+                    req.FractalParameters is { } rfp && FracturingFog.Rendering.FractalRenderHost.ReliefFieldTracksWindow(req.FractalType, rfp));
             }
             else
             {
@@ -654,7 +654,7 @@ namespace FracturingFog.Imaging
                 // higher-quality field, not just a resolution bump, so a supplied
                 // req.ReliefField (the interactive one) is preferred (#508).
                 buffer = ApplyReliefIfEnabled(buffer, calc, w, h, req.FractalParameters, calc.ColorMap, aovCapture, req.FroxelHistory, reliefField, reliefFw, reliefFh, req.PreviousCamera, req.SvgfHistory,
-                    !FracturingFog.Rendering.FractalRenderHost.SupportsHiResReliefField(req.FractalType));
+                    req.FractalParameters is { } rfp && FracturingFog.Rendering.FractalRenderHost.ReliefFieldTracksWindow(req.FractalType, rfp));
             }
 
             }

@@ -1408,7 +1408,7 @@ namespace FracturingFog.Hosting
                         FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
                             copy, field, width, height, width, height, rp, reliefDst, out _,
                             // #1255 — same display-res field cap as the committed frame.
-                            displayResField: !FracturingFog.Rendering.FractalRenderHost.SupportsHiResReliefField(region.FractalType));
+                            displayResField: FracturingFog.Rendering.FractalRenderHost.ReliefFieldTracksWindow(region.FractalType, rp));
                     }
                     else
                         FracturingFog.Rendering.Lighting.HeightfieldRelief2D.Apply(

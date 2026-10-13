@@ -2309,10 +2309,17 @@ namespace FracturingFog.Rendering
         /// twin for it)? Mandelbrot plus the alt escape-time / root-finding /
         /// Apollonian families that expose <see cref="Interefaces.IHeightFieldSource"/>.
         /// Buddha family is excluded (Monte-Carlo; supersample semantics differ).</summary>
-        /// <summary>#1255 — true when the current family has no hi-res relief-field
-        /// twin, so its relief field is display-res (it tracks the window size).
-        /// The default plate trace caps such a field (HeightfieldRaymarch2D.TraceGrid).</summary>
-        private bool ReliefFieldIsDisplayRes => !SupportsHiResReliefField(ViewState.FractalType);
+        /// <summary>#1255 — true when the live relief field for <paramref name="type"/>
+        /// under <paramref name="p"/> is display-res, i.e. tracks the window size: the
+        /// family has no hi-res field twin, or the hi-res field is switched off. The
+        /// default plate trace caps such a field (HeightfieldRaymarch2D.TraceGrid) so a
+        /// large export traces it like a live window does; a floor field keeps its
+        /// established look.</summary>
+        public static bool ReliefFieldTracksWindow(FractalType type, FractalParameters p)
+            => !p.Relief2DHiResField || !SupportsHiResReliefField(type);
+
+        private bool ReliefFieldIsDisplayRes
+            => ReliefFieldTracksWindow(ViewState.FractalType, ViewState.FractalParameters);
 
         public static bool SupportsHiResReliefField(FractalType type) => type switch
         {

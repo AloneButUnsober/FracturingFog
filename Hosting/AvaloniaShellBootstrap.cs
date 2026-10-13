@@ -1055,6 +1055,12 @@ namespace FracturingFog.Hosting
                         EncodeGif = gif,
                         OutputPath = path,
                         DebugOverlay = s.BurnDebugOverlay,   // #1065
+                        // #1256 — a collapsed relief trace on a shot's first frame asks
+                        // before the rest of the (possibly hours-long) render. Called on
+                        // the render thread; the dialog marshals to the UI thread.
+                        ReliefCollapseConfirm = warn => AvaloniaDialogs.ShowMessageAsync("Export Scene",
+                                "Warning: " + warn + "\n\nKeep rendering?", true)
+                            .GetAwaiter().GetResult() == AvaloniaDialogs.MessageResult.Yes,
                         Settings = new FracturingFog.Abstractions.Animation.SceneRenderSettings
                         {
                             Fps = s.Fps,

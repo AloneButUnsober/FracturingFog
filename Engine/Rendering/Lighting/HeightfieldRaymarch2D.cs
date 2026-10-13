@@ -386,6 +386,7 @@ public static class HeightfieldRaymarch2D
                               bool displayResField = false)
     {
         hitFraction = 0.0;
+        LastTraceStats = default;   // #1256 — stays empty unless the CPU trace runs
         int n = w * h;            // OUTPUT / albedo pixel count
         int hn = hw * hh;         // FIELD (height) cell count
         if (w <= 2 || h <= 2 || hw <= 2 || hh <= 2
@@ -658,6 +659,8 @@ public static class HeightfieldRaymarch2D
         if (dofAperture > 0.0 && dofFocus <= 0.0)
             dofFocus = Math.Sqrt(camX * camX + camY * camY + camZ * camZ);
 
+        long wallHits = 0;   // #1256 — first-sample hits on a box side face
+
         // One primary sample. Returns the shaded colour + whether it hit the
         // terrain (ground / sky return false so the silhouette metric stays the
         // terrain coverage). (lensX, lensY) is a unit-disc lens sample; ignored
@@ -717,7 +720,16 @@ public static class HeightfieldRaymarch2D
                     // within the tolerance. Comparing the Lipschitz-scaled d itself
                     // stopped every ray at the box top on fine fields (tiny invLip):
                     // big windows rendered a flat plate with the fractal painted on.
-                    if (d < epsT * hitScale) { hit = true; break; }
+                    if (d < epsT * hitScale)
+                    {
+                        hit = true;
+                        // #1256 — a first-sample hit on a ray that entered the box
+                        // through a vertical side face is the bounding box itself,
+                        // not terrain (the solid-block collapse). Count it.
+                        if (s == 0 && t0 > 0.0 && oy + rdy * t0 < by * (1.0 - 1e-6))
+                            System.Threading.Interlocked.Increment(ref wallHits);
+                        break;
+                    }
                     tPrev = t;
                     double adv = Math.Max(d, epsT * 0.5);
                     if (skipMip is not null)
@@ -928,6 +940,7 @@ public static class HeightfieldRaymarch2D
         }, localHits => System.Threading.Interlocked.Add(ref hitCount, localHits));
 
         hitFraction = (double)hitCount / n;
+        LastTraceStats = new ReliefTraceStats((long)n * ss * ss, wallHits);
 
         // S1 (#398) — relight post-pass. Rebuild the shaded beauty from the captured
         // per-pixel lighting components + the albedo under the relight gains / tints,
@@ -1846,7 +1859,7 @@ public static class HeightfieldRaymarch2D
     {
         if (!p.Relief2DTrueHeight)
         {
-            if (!displayResField) return (hw, hh, 0);
+            if (!displayResField || t_testDisableLegacyCap) return (hw, hh, 0);
             var (lw, lh) = CanonicalDims(hw, hh, LegacyTraceShortAxisCap);
             return (lw, lh, 0);
         }
@@ -1886,6 +1899,33 @@ public static class HeightfieldRaymarch2D
     /// <see cref="ResolutionRamp"/> identity point (480) so the amplitude ramp is
     /// unaffected.</summary>
     public const int LegacyTraceShortAxisCap = 540;
+
+    // #1256 — test-only: trace an uncapped display-res field (the #1255 block) so the
+    // export collapse guard can be exercised end to end. [ThreadStatic] so it stays
+    // on the test thread that set it; never set on a production path.
+    [ThreadStatic] private static bool t_testDisableLegacyCap;
+
+    /// <summary>#1256 — TEST ONLY. Turn the <see cref="LegacyTraceShortAxisCap"/> off
+    /// (true) or back on for traces on the calling thread.</summary>
+    public static void SetTestDisableLegacyCap(bool disable) => t_testDisableLegacyCap = disable;
+
+    /// <summary>#1256 — collapse statistics of the last CPU trace on this thread.</summary>
+    /// <param name="Samples">Primary samples traced (0 = no CPU trace ran: GPU path,
+    /// dead-flat field, relief off).</param>
+    /// <param name="WallHits">Samples that "hit" on their first march step after
+    /// entering the terrain box through a vertical side face — the box wall, not
+    /// terrain (the #1255 solid-block collapse).</param>
+    public readonly record struct ReliefTraceStats(long Samples, long WallHits)
+    {
+        /// <summary>Fraction of samples that are box wall (0 when nothing traced).</summary>
+        public double WallFraction => Samples > 0 ? (double)WallHits / Samples : 0.0;
+    }
+
+    /// <summary>#1256 — <see cref="ReliefTraceStats"/> of the last
+    /// <see cref="Render(uint[],float[],int,int,int,int,FractalParameters,uint[],out double,IReliefRaymarchKernel,ReliefAovBuffers,IFroxelVolumeKernel,FroxelHistory,LightingFxData?,ReliefMotionVector.CameraView?,bool)"/>
+    /// on this thread (reset at entry). Exports read it after a synchronous render to
+    /// catch a collapsed trace before rendering the rest of a long sequence.</summary>
+    [ThreadStatic] public static ReliefTraceStats LastTraceStats;
 
     /// <summary>#1027 — area-average <paramref name="src"/> (sw×sh) onto a dw×dh
     /// grid; each target cell averages the source cells whose centres fall in it.</summary>
