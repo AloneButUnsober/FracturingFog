@@ -23,6 +23,8 @@ namespace FracturingFog.Batch
     {
         public const string Fractal        = "--fractal";
         public const string Region         = "--region";
+        public const string Equation       = "--equation";          // #1249
+        public const string EquationSource = "--equation-source";   // #1249
         public const string X              = "--x";
         public const string Y              = "--y";
         public const string Zoom           = "--zoom";

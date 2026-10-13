@@ -159,11 +159,18 @@ public sealed class CriticalPointsTests
     }
 
     [Fact]
-    public void CommandBuilder_FlagsTheUserEquationSourceGap()
+    public void CommandBuilder_CarriesTheSeedWithTheEquation()
     {
-        var gaps = BatchCommandBuilder.DetectGaps(new BatchCommandSnapshot { Fractal = FractalType.UserEquation });
-        Assert.Contains(gaps, g => g.Contains("equation source"));
-        Assert.DoesNotContain(BatchCommandBuilder.DetectGaps(new BatchCommandSnapshot { Fractal = FractalType.Multibrot }),
-                              g => g.Contains("equation source"));
+        // #1249 — with the source inline and the seed as --param, no gap remains.
+        var p = new FractalParameters { UserEquationSource = "z^3 - 3*z + c", UserEquationSeed = "1" };
+        var snap = new BatchCommandSnapshot
+        {
+            Fractal = FractalType.UserEquation, EquationSource = p.UserEquationSource, Parameters = p,
+            FamilyParams = RegionFractalParams.Snapshot(FractalType.UserEquation, p)!.ToKeyValues(),
+        };
+        string cmd = BatchCommandBuilder.Build(snap);
+        Assert.Contains("--equation-source", cmd);
+        Assert.Contains("UserEquationSeed=1", cmd);
+        Assert.DoesNotContain(BatchCommandBuilder.DetectGaps(snap), g => g.Contains("equation"));
     }
 }

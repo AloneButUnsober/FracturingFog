@@ -450,9 +450,31 @@ FracturingFog.exe --batch --region ""Seahorse Valley"" --theme Fire ^
 
 Every fractal type renders headlessly (#949). A `--region` brings its saved
 settings into the image — the Julia constant, 3D camera, seeds, lighting, relief
-and deep-zoom precision for every type. The user-code types (User Equation,
-Sandbox, User Bulb) load their equation **only** through `--region`; a bare
-`--fractal UserEquation` has no equation and prints a note instead of a picture.
+and deep-zoom precision for every type.
+
+The user-code types (User Equation, Sandbox, User Bulb) need their equation:
+
+- `--equation NAME` loads a saved equation of that type. A User Equation brings its
+  escape radius, z₀ seed, bailout condition and interior colouring with it, as
+  selecting it in the editor does.
+- `--equation-source TEXT` gives the equation itself, for one you have not saved.
+  Write each newline as `\n` and a backslash as `\\`, so the command stays on one line:
+
+  ```
+  FracturingFog.exe --batch --fractal UserEquation ^
+                    --equation-source "var w = z*z*z;\nreturn w - 3*z + c;" ^
+                    --param UserEquationSeed=1 --out C:\out\cubic.png
+  ```
+
+- A `--region` of that type also carries its equation.
+
+The settings that differ from the defaults go in `--param`: `UserEquationSeed`,
+`UserEquationEscapeRadius`, `UserEquationBailoutCondition`,
+`UserEquationBailoutReplacesModulus` and `UserEquationColorInterior`. The Command
+builder writes all of this for you. It uses `--equation NAME` only when the saved
+equation matches the live one exactly (source and settings); otherwise it writes the
+source inline. Without any equation, `--fractal UserEquation` prints a note instead of
+a picture.
 
 ### Video
 
