@@ -1910,6 +1910,63 @@ namespace FracturingFog.Hosting
             return win;
         }
 
+        // ── Image preview ───────────────────────────────────────────────────
+
+        /// <summary>#1257 — show <paramref name="image"/> (fit into ~960×540) with a
+        /// caption line and, when set, a <paramref name="warning"/> in the warning
+        /// yellow. OK closes. Safe from any thread.</summary>
+        public static Task ShowImageAsync(string title, Bitmap image, string caption, string? warning)
+        {
+            var owner = ActiveMainWindow;
+            var tcs = new TaskCompletionSource<bool>();
+
+            void Run()
+            {
+                var win = new Window
+                {
+                    Title = title,
+                    SizeToContent = SizeToContent.WidthAndHeight,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    CanResize = false,
+                    ShowInTaskbar = false,
+                    Background = Brushes.Black,
+                };
+                var panel = new StackPanel { Margin = new Thickness(16), Spacing = 8 };
+                panel.Children.Add(new Image
+                {
+                    Source = image,
+                    Stretch = Stretch.Uniform,
+                    MaxWidth = 960,
+                    MaxHeight = 540,
+                });
+                panel.Children.Add(new TextBlock
+                {
+                    Text = caption,
+                    Foreground = Brushes.White,
+                    TextWrapping = TextWrapping.Wrap,
+                    MaxWidth = 960,
+                });
+                if (!string.IsNullOrEmpty(warning))
+                    panel.Children.Add(new TextBlock
+                    {
+                        Text = "Warning: " + warning,
+                        Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0xCC, 0x00)),
+                        TextWrapping = TextWrapping.Wrap,
+                        MaxWidth = 960,
+                    });
+                var ok = new Button { Content = "OK", MinWidth = 80, HorizontalAlignment = HorizontalAlignment.Right };
+                ok.Click += (_, _) => win.Close();
+                panel.Children.Add(ok);
+                win.Content = panel;
+                win.Closed += (_, _) => tcs.TrySetResult(true);
+                _ = WindowService.ShowDialogAsync(win, owner);
+            }
+
+            if (Dispatcher.UIThread.CheckAccess()) Run();
+            else Dispatcher.UIThread.Post(Run);
+            return tcs.Task;
+        }
+
         // ── Text-name prompt ────────────────────────────────────────────────
 
         /// <summary>Async replacement for the retired WinForms PromptName. Opens

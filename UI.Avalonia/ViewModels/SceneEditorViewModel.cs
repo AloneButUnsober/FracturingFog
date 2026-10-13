@@ -845,6 +845,7 @@ public sealed class SceneEditorViewModel : ViewModelBase
         ClearAudioFileCommand = ReactiveCommand.Create(() => { AudioFilePath = string.Empty; });
         PlayCommand        = ReactiveCommand.Create(Play);
         ExportCommand      = ReactiveCommand.CreateFromTask(ExportAsync);
+        PreviewExportFrameCommand = ReactiveCommand.CreateFromTask(PreviewExportFrameAsync);
         ImportCommand      = ReactiveCommand.Create(() =>
             ImportRequested?.Invoke(this, EventArgs.Empty));
         StopPreviewCommand = ReactiveCommand.Create(StopPreview);
@@ -1033,6 +1034,7 @@ public sealed class SceneEditorViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> ClearAudioFileCommand { get; }
     public ReactiveCommand<Unit, Unit> PlayCommand { get; }
     public ReactiveCommand<Unit, Unit> ExportCommand { get; }
+    public ReactiveCommand<Unit, Unit> PreviewExportFrameCommand { get; }
     public ReactiveCommand<Unit, Unit> ImportCommand { get; }
     public ReactiveCommand<Unit, Unit> StopPreviewCommand { get; }
     public ReactiveCommand<Unit, Unit> ResetPreviewLightingCommand { get; }
@@ -1064,6 +1066,11 @@ public sealed class SceneEditorViewModel : ViewModelBase
     /// host picks an output path and runs the Engine's frame-locked
     /// SceneVideoRenderer (motion blur + composited transitions).</summary>
     public event EventHandler<SceneExportEventArgs>? ExportSceneRequested;
+
+    /// <summary>#1257 — render the export's first frame at the export size and show
+    /// it, before committing to a (possibly hours-long) full render. The host runs
+    /// the Engine's SceneVideoRenderer in first-frame preview mode.</summary>
+    public event EventHandler<SceneExportEventArgs>? ExportPreviewRequested;
 
     /// <summary>Import scenes from a JSON file (one scene object, or an array
     /// of them). The shell owns the import — SceneLibrary lives in Engine — and
@@ -1315,16 +1322,38 @@ public sealed class SceneEditorViewModel : ViewModelBase
     private async Task ExportAsync()
     {
         var scene = BuildData();
-        if (scene.Shots.Count == 0 || scene.TotalDurationSeconds <= 0)
-        {
-            MessageRequested?.Invoke(this, new ThemeMessageEventArgs(
-                "Export Scene",
-                "This scene has no shots with a positive duration to render.",
-                MessageSeverity.Warning));
-            return;
-        }
+        if (!CanExport(scene, "Export Scene")) return;
         if (ExportSceneRequested == null) return;
 
+        var args = new SceneExportEventArgs(scene, BuildExportSettings());
+        ExportSceneRequested.Invoke(this, args);
+        await args.Completion.Task;
+    }
+
+    /// <summary>#1257 — ask the host to render and show the export's first frame.</summary>
+    private async Task PreviewExportFrameAsync()
+    {
+        var scene = BuildData();
+        if (!CanExport(scene, "Preview First Frame")) return;
+        if (ExportPreviewRequested == null) return;
+
+        var args = new SceneExportEventArgs(scene, BuildExportSettings());
+        ExportPreviewRequested.Invoke(this, args);
+        await args.Completion.Task;
+    }
+
+    private bool CanExport(SceneData scene, string title)
+    {
+        if (scene.Shots.Count > 0 && scene.TotalDurationSeconds > 0) return true;
+        MessageRequested?.Invoke(this, new ThemeMessageEventArgs(
+            title,
+            "This scene has no shots with a positive duration to render.",
+            MessageSeverity.Warning));
+        return false;
+    }
+
+    private SceneExportSettings BuildExportSettings()
+    {
         // Clamp the tunables to the Engine's accepted ranges.
         int w = Math.Clamp(ExportWidth, 16, 16384) & ~1;
         int h = Math.Clamp(ExportHeight, 16, 16384) & ~1;
@@ -1341,10 +1370,7 @@ public sealed class SceneEditorViewModel : ViewModelBase
             Encode = MapEncode(SelectedEncode),
             BurnDebugOverlay = ExportDebugOverlay,
         };
-
-        var args = new SceneExportEventArgs(scene, settings);
-        ExportSceneRequested.Invoke(this, args);
-        await args.Completion.Task;
+        return settings;
     }
 
     private static SceneExportEncode MapEncode(string label) => label switch

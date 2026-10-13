@@ -105,19 +105,30 @@ namespace FracturingFog.Export
         /// the rest of a possibly hours-long render. Null = write the warning to
         /// stderr and keep rendering.</summary>
         public Func<string, bool>? ReliefCollapseConfirm { get; set; }
+
+        /// <summary>#1257 — render only the first output frame, through the exact
+        /// export frame path (sub-frames, transitions, overlay, collapse check), and
+        /// return it in <see cref="SceneVideoResult.PreviewPixels"/>: no output file,
+        /// no PNG sequence, no encode. A relief collapse warning is returned in
+        /// <see cref="SceneVideoResult.Message"/> instead of asking.</summary>
+        public bool PreviewFirstFrame { get; set; }
     }
 
     /// <summary>Outcome of a scene render.</summary>
     public readonly struct SceneVideoResult
     {
         public SceneVideoResult(bool ok, int framesWritten, string? videoPath,
-                                string? frameFolder, string? message)
+                                string? frameFolder, string? message,
+                                uint[]? previewPixels = null, int previewWidth = 0, int previewHeight = 0)
         {
             Ok = ok;
             FramesWritten = framesWritten;
             VideoPath = videoPath;
             FrameFolder = frameFolder;
             Message = message;
+            PreviewPixels = previewPixels;
+            PreviewWidth = previewWidth;
+            PreviewHeight = previewHeight;
         }
 
         /// <summary>True when the frames rendered and (if ffmpeg was available)
@@ -135,6 +146,14 @@ namespace FracturingFog.Export
         public string? FrameFolder { get; }
 
         public string? Message { get; }
+
+        /// <summary>#1257 — the first frame (packed 0xAARRGGBB, row-major) when
+        /// <see cref="SceneVideoOptions.PreviewFirstFrame"/> was set; else null.</summary>
+        public uint[]? PreviewPixels { get; }
+
+        public int PreviewWidth { get; }
+
+        public int PreviewHeight { get; }
     }
 
     public static class SceneVideoRenderer
@@ -173,10 +192,13 @@ namespace FracturingFog.Export
                     Resolve(scene, s.OriginalIndex, resolved);
             }
 
-            // Output target.
+            // Output target (#1257 — a first-frame preview writes no file).
+            bool preview = options.PreviewFirstFrame;
+            string? previewWarning = null;
             string outPath = options.OutputPath;
             string ext = options.EncodeGif ? ".gif" : "." + FfmpegEncoder.DefaultExtensionFor(options.Encode);
-            if (string.IsNullOrWhiteSpace(Path.GetExtension(outPath)))
+            if (preview) { }
+            else if (string.IsNullOrWhiteSpace(Path.GetExtension(outPath)))
             {
                 Directory.CreateDirectory(string.IsNullOrWhiteSpace(outPath) ? "." : outPath);
                 string baseName = "FF_Scene_" + Sanitize(scene.Name) + "_" +
@@ -308,7 +330,8 @@ namespace FracturingFog.Export
                             var exportStats = FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.LastTraceStats;
                             string? warn = CheckReliefCollapse(resolved, s.OriginalIndex, s.LocalTime, w, h, ct,
                                 overrideBase, s.GlobalTime, globalTracks, audioSource, audioTracks, exportStats, scene);
-                            if (warn != null)
+                            if (warn != null && preview) previewWarning = warn;   // #1257 — report, don't ask
+                            else if (warn != null)
                             {
                                 bool go;
                                 if (options.ReliefCollapseConfirm != null) go = options.ReliefCollapseConfirm(warn);
@@ -399,6 +422,15 @@ namespace FracturingFog.Export
                         }
                         BurnDebugOverlay(outBuf, w, h, DebugOverlayText(scene, sample, frame.FrameCenterTime,
                             overlayTimeline.TotalDuration, posed, posedType));
+                    }
+
+                    // #1257 — preview: hand back the first frame, write nothing.
+                    if (preview)
+                    {
+                        png.Dispose();
+                        try { Directory.Delete(pngFolder, recursive: true); } catch { /* best effort */ }
+                        return new SceneVideoResult(true, 1, null, null, previewWarning,
+                            (uint[])outBuf.Clone(), w, h);
                     }
 
                     png.WriteFrame(outBuf);

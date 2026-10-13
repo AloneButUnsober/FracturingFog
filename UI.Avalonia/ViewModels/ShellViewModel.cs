@@ -2718,6 +2718,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             };
             vm.PlaySceneRequested    += (_, scene) => PlayScene(scene);
             vm.ExportSceneRequested  += (_, args) => ExportSceneRequested?.Invoke(this, args);
+            vm.ExportPreviewRequested += (_, args) => SceneExportPreviewRequested?.Invoke(this, args);   // #1257
             vm.BrowseAudioFileRequested += async e =>
             {
                 if (SceneAudioFileBrowseRequested is { } h) await h(e);
@@ -3604,6 +3605,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// to render + encode a scene offline (the host picks the output path and
     /// drives the Engine's SceneVideoRenderer).</summary>
     public event EventHandler<SceneExportEventArgs>? ExportSceneRequested;
+
+    /// <summary>#1257 — the Scene Editor asks the host to render the export's first
+    /// frame at the export size and show it.</summary>
+    public event EventHandler<SceneExportEventArgs>? SceneExportPreviewRequested;
 
     /// <summary>Scene Editor wants to pick the export audio file (Phase 7 / #266).
     /// The host fills <see cref="OpenFileEventArgs.Path"/> via its file picker.</summary>
