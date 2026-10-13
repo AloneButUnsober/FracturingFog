@@ -154,6 +154,10 @@ public static class ColorGenHotLoad
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
         {
             if (asm.IsDynamic) continue;
+            // #1259 — never hand Roslyn raw metadata from a collectible
+            // (hot-loaded) assembly; its memory is freed when the context is
+            // collected, mid-compile. See CalculatorGenHotLoad.GatherReferences.
+            if (asm.IsCollectible) continue;
             string? simpleName = asm.GetName().Name;
             if (string.IsNullOrEmpty(simpleName)) continue;
             if (!seen.Add("bundle:" + simpleName)) continue;
