@@ -71,6 +71,7 @@ public sealed partial class ControlCenterViewModel
     private void InitExplore()
     {
         var idle = this.WhenAnyValue(x => x.IsFinderBusy, busy => !busy);
+        InitHeatmap();
         SurpriseMeCommand = ReactiveCommand.CreateFromTask(() => ExploreAsync(surprise: true), idle);
         DescendCommand    = ReactiveCommand.CreateFromTask(() => ExploreAsync(surprise: false), idle);
         ExploreCandidates.CollectionChanged += (_, _) => this.RaisePropertyChanged(nameof(HasExploreCandidates));
@@ -90,6 +91,7 @@ public sealed partial class ControlCenterViewModel
         {
             Depth = ExploreDepth,
             Beam = ExploreBeam,
+            Weights = CurrentWeights,   // #1240 — as tuned on the heatmap
             MaxZoom = AutoExplorer.MaxZoomFor(type),
         };
         var probe = Shell.CreateExploreProbe?.Invoke(opts.ProbeSize);

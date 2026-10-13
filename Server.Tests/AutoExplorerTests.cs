@@ -171,6 +171,7 @@ public sealed class AutoExplorerTests
     [Theory]
     [InlineData("seed=5", "seed=5")]
     [InlineData("seed=5,depth=8,beam=4", "seed=5,depth=8,beam=4")]
+    [InlineData("seed=1,wb=0.6,we=0.1,wd=0.3,dc=1.5", "seed=1,wb=0.6,we=0.1,dc=1.5")]   // #1240 weights (wd 0.3 = default)
     [InlineData(" beam=2 , seed=-3, step=2.5, probe=64, start=16, minscore=0.1 ",
                 "seed=-3,beam=2,start=16,step=2.5,probe=64,minscore=0.1")]
     public void Spec_RoundTrips(string spec, string canonical)

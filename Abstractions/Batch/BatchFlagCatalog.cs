@@ -471,7 +471,8 @@ namespace FracturingFog.Batch
                 Txt(BatchFlags.Explore, Source, ImgVid,
                     "Auto-explore: beam-search from the start view (region, --x --y --zoom, or the family's home view) "
                     + "for a detail-rich view and render that. Keys: seed, depth (levels), beam, grid, jitter, start "
-                    + "(first-level jitter), step (zoom per level), probe (px), minscore. Same seed, same view.",
+                    + "(first-level jitter), step (zoom per level), probe (px), minscore, and the interest weights wb / we / wd "
+                    + "(boundary / entropy / dimension, 0..1) and dc (preferred dimension, 1..2). Same seed, same view.",
                     hint: "SPEC") with { Example = "seed=1,depth=6,beam=3" },
                 PathFlag(BatchFlags.ExploreRegions, Source, ImgVid,
                     "With --explore: also write the finalist views as a regions JSON (Control Center > Regions > Import).",
