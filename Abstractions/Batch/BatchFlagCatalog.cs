@@ -504,8 +504,20 @@ namespace FracturingFog.Batch
                     "Starting zoom (0.5 = full set; 3D dolly picks its own wide zoom when omitted).", def: "0.5"),
                 Sw(BatchFlags.Reverse, Video, BatchModes.Sequence, "Zoom out from the target back to the full view."),
                 Pick(BatchFlags.VideoMotion, Video, BatchModes.Sequence,
-                    "How the video moves. auto = per family (2D plane zoom, 3D dolly, Logistic/AcidWarp sweep, else kenburns).",
-                    new[] { "auto", "zoom", "hold", "kenburns", "sweep" }, "auto", "MODE"),
+                    "How the video moves. auto = per family (2D plane zoom, 3D dolly, Logistic/AcidWarp sweep, else kenburns). "
+                    + "loop = seamless Misiurewicz loop at --x/--y (needs --loop-multiplier; video mode).",
+                    new[] { "auto", "zoom", "hold", "kenburns", "sweep", "loop" }, "auto", "MODE"),
+                Txt(BatchFlags.LoopMultiplier, Video, BatchModes.Video,
+                    "Loop multiplier λ of the Misiurewicz point as MAG,DEG (|λ| > 1, arg λ in degrees; "
+                    + "Explore > Find > Snap to spiral reports it). One loop zooms x|λ|^n and turns -n*arg λ.",
+                    hint: "MAG,DEG") with { Example = "5.656854,45",
+                        RequiresChoice = new BatchChoiceRequirement(BatchFlags.VideoMotion, new[] { "loop" }) },
+                Int(BatchFlags.LoopPeriod, Video, BatchModes.Video,
+                    "Cycle period p of the Misiurewicz point: the palette turns back p iterations per cycle so colours loop too (0 = off).",
+                    min: 0, def: "0") with { RequiresChoice = new BatchChoiceRequirement(BatchFlags.VideoMotion, new[] { "loop" }) },
+                Int(BatchFlags.LoopCycles, Video, BatchModes.Video,
+                    "Cycles of λ per loop (default: enough to zoom at least x2).", 1, 256, enforced: true)
+                    with { RequiresChoice = new BatchChoiceRequirement(BatchFlags.VideoMotion, new[] { "loop" }) },
                 Dbl(BatchFlags.Orbit, Video, BatchModes.Sequence, "3D only: sweep the camera azimuth this many degrees.",
                     -3600, 3600, enforced: true, def: "0") with { ValueHint = "DEG" },
                 Txt(BatchFlags.Animation, Video, BatchModes.Video,

@@ -842,10 +842,28 @@ namespace FracturingFog.Cli
         /// parsed value reproduces the live one bit-for-bit.</summary>
         private static string Num(double v) => v.ToString("R", CultureInfo.InvariantCulture);
 
+        /// <summary>#1235 — the tokens that turn a live command into a Misiurewicz
+        /// loop video: <c>--mode video --video-motion loop --loop-multiplier MAG,DEG
+        /// [--loop-period P] [--loop-cycles N]</c> (cycles only when not automatic).</summary>
+        public static IReadOnlyList<string> LoopVideoArgs(FracturingFog.Abstractions.Explore.MisiurewiczLoop loop)
+        {
+            var a = new List<string>
+            {
+                BatchFlags.Mode, "video",
+                BatchFlags.VideoMotion, "loop",
+                BatchFlags.LoopMultiplier,
+                FracturingFog.Abstractions.Explore.MisiurewiczLoop.FormatMultiplier(loop.Magnitude, loop.AngleDegrees),
+            };
+            if (loop.Period > 0) { a.Add(BatchFlags.LoopPeriod); a.Add(loop.Period.ToString(CultureInfo.InvariantCulture)); }
+            if (loop.Cycles != FracturingFog.Abstractions.Explore.MisiurewiczLoop.AutoCycles(loop.Magnitude))
+            { a.Add(BatchFlags.LoopCycles); a.Add(loop.Cycles.ToString(CultureInfo.InvariantCulture)); }
+            return a;
+        }
+
         /// <summary>#1233 — a centre coordinate: the plain decimal when the lower
         /// limbs are all zero (byte-identical to before), else <c>Hi|Lo|…</c> up to
         /// the last non-zero limb, every limb round-trippable.</summary>
-        internal static string Coordinate(double hi, IReadOnlyList<double> lower)
+        public static string Coordinate(double hi, IReadOnlyList<double> lower)
         {
             int last = -1;
             for (int k = 0; k < lower.Count && k < 7; k++) if (lower[k] != 0) last = k;

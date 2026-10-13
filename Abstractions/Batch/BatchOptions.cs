@@ -239,6 +239,18 @@ namespace FracturingFog.Batch
         /// <summary>Saved animation name (#998), played across a video's frames.</summary>
         public string? AnimationName { get; set; }
 
+        /// <summary>#1235 — <c>--video-motion loop</c>: a seamless Misiurewicz
+        /// self-similar loop (zoom ×|λ|^n, turn −n·arg λ) instead of a plain zoom.
+        /// The video path treats it as Zoom motion with its own endpoints.</summary>
+        public bool VideoLoop { get; set; }
+        /// <summary>|λ| and arg λ (degrees) for the loop (<c>--loop-multiplier MAG,DEG</c>).</summary>
+        public double? LoopMagnitude { get; set; }
+        public double? LoopAngleDegrees { get; set; }
+        /// <summary>Cycle period p: the palette turns back p iterations per cycle (0 = none).</summary>
+        public int? LoopPeriod { get; set; }
+        /// <summary>Cycles per loop (null = auto, at least ×2 zoom).</summary>
+        public int? LoopCycles { get; set; }
+
         /// <summary>Auto-explore (#1190): the parsed <c>--explore</c> spec, or
         /// null when the flag is absent. The image / video target becomes the
         /// best view the search finds from the start view.</summary>
@@ -601,8 +613,10 @@ namespace FracturingFog.Batch
                             case "hold":     opts.VideoMotion = VideoMotionMode.Hold; break;
                             case "kenburns": opts.VideoMotion = VideoMotionMode.KenBurns; break;
                             case "sweep":    opts.VideoMotion = VideoMotionMode.Sweep; break;
+                            // #1235 — a zoom with the loop's endpoints, turn and palette shift.
+                            case "loop":     opts.VideoMotion = VideoMotionMode.Zoom; opts.VideoLoop = true; break;
                             default:
-                                error = $"--video-motion must be auto|zoom|hold|kenburns|sweep (got '{vmv}').";
+                                error = $"--video-motion must be auto|zoom|hold|kenburns|sweep|loop (got '{vmv}').";
                                 return false;
                         }
                         break;
@@ -794,6 +808,29 @@ namespace FracturingFog.Batch
                     case BatchFlags.Animation:
                         if (!Next(args, ref i, a, out string anv, out error)) return false;
                         opts.AnimationName = anv;
+                        break;
+
+                    case BatchFlags.LoopMultiplier:
+                    {
+                        if (!Next(args, ref i, a, out string lmv, out error)) return false;
+                        if (!FracturingFog.Abstractions.Explore.MisiurewiczLoop.TryParseMultiplier(lmv, out double lmMag, out double lmDeg))
+                        { error = $"{a}: expects MAG,DEG with MAG > 1 (|λ| and arg λ in degrees), got '{lmv}'."; return false; }
+                        opts.LoopMagnitude = lmMag;
+                        opts.LoopAngleDegrees = lmDeg;
+                        break;
+                    }
+
+                    case BatchFlags.LoopPeriod:
+                        if (!NextInt(args, ref i, a, out int loopPv, out error)) return false;
+                        if (loopPv < 0) { error = $"{a} must be >= 0."; return false; }
+                        opts.LoopPeriod = loopPv;
+                        break;
+
+                    case BatchFlags.LoopCycles:
+                        if (!NextInt(args, ref i, a, out int lcv, out error)) return false;
+                        if (lcv < 1 || lcv > FracturingFog.Abstractions.Explore.MisiurewiczLoop.MaxCycles)
+                        { error = $"{a} must be 1..{FracturingFog.Abstractions.Explore.MisiurewiczLoop.MaxCycles}."; return false; }
+                        opts.LoopCycles = lcv;
                         break;
 
                     case BatchFlags.Explore:

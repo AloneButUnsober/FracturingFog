@@ -126,6 +126,8 @@ public sealed partial class ControlCenterViewModel
             Shell.Main.RenderHost.Trigger();
             string turn = m.TurnDegrees is double t ? $", turning {t:0.#}°" : "";
             FinderStatus = $"Misiurewicz point M({m.Preperiod},{m.Period}): the pattern repeats every ×{Fmt(m.Multiplier)} zoom{turn}.";
+            // #1235 — a loop when the cycle is conformal (no J_c: z² + c only).
+            SetLoopTarget(ToDeep(m.Point), m.Multiplier, m.TurnDegrees, m.Period, juliaPreview: false);
         });
     }
 }

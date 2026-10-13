@@ -2039,6 +2039,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// built-in HSV ramp.</summary>
     public Func<int, uint>? SamplePaletteColor { get; set; }
 
+    /// <summary>#1235 — render a small Julia-set preview J_c (z² + c) at the given
+    /// constant in the current theme, as 0xAARRGGBB pixels (width, height).
+    /// Set by the host; called on the UI thread (it snapshots the live theme).</summary>
+    public Func<double, double, int, int, uint[]?>? RenderJuliaPreview { get; set; }
+
     /// <summary>Auto-explore probe factory (#1190), set by the host: given a
     /// probe size, returns a renderer of square views of the CURRENT family,
     /// parameters and theme (snapshotted at the call, on the UI thread) that

@@ -105,6 +105,18 @@
                             IsVisible="{Binding CanCancelFinder}" />
                 </StackPanel>
                 <TextBlock Text="{Binding FinderStatus}" Foreground="#9A9A9A" FontSize="11" TextWrapping="Wrap" />
+                <!-- S3b #1235: after Snap to spiral — the seamless loop and J_c. -->
+                <StackPanel Spacing="4" IsVisible="{Binding HasLoop}">
+                    <TextBlock Text="{Binding LoopInfo}" Foreground="#9A9A9A" FontSize="11" TextWrapping="Wrap" />
+                    <Button Classes="action go" Content="Loop video" HorizontalAlignment="Left"
+                            Command="{Binding LoopVideoCommand}"
+                            ToolTip.Tip="Load a seamless self-similar loop video of this point into the Command section: each loop zooms by the multiplier and turns by its angle, so the last frame leads straight back into the first. Set --out and Run." />
+                </StackPanel>
+                <StackPanel Spacing="2" IsVisible="{Binding HasJuliaPreview}">
+                    <TextBlock Classes="label" Text="Julia set at this point" HorizontalAlignment="Left" />
+                    <Image Source="{Binding JuliaPreview}" Width="240" Height="135" HorizontalAlignment="Left" Stretch="Uniform"
+                           ToolTip.Tip="J_c at the snapped point: near c the Mandelbrot set looks like this Julia set near c (Tan Lei)." />
+                </StackPanel>
                 <!-- S5 #1189: Julia-morph path. -->
                 <StackPanel Spacing="4" IsVisible="{Binding HasMorphSteps}">
                     <TextBlock Classes="label" Text="Morph path" HorizontalAlignment="Left" />
