@@ -690,8 +690,8 @@ Measured against all 158 built-in Mandelbrot regions (`Resources/regions.json`):
   - The seed changes the render, so it joins the region snapshot (`RegionFractalParams.UserEquationSeed`),
     which makes it `--param UserEquationSeed=…`, with a round-trip test. A blank seed is not
     emitted, so a saved equation's own seed stands.
-  - The equation source itself was never in the Command builder. `DetectGaps` now reports
-    it, and #1249 tracks the fix.
+  - The equation source itself was never in the Command builder. #1249 fixed that with
+    `--equation NAME` / `--equation-source TEXT` (see the Capture Guide).
 - **Not done:** deep zoom past 1e13 for these families. They render in double with no
   perturbation tier, so an OD reference orbit in the finders would gain nothing. It becomes
   relevant once a family gains perturbation rendering.

@@ -3702,6 +3702,13 @@ namespace FracturingFog.Hosting
                         return global::FracturingFog.Models.LightingFxPresetLibrary.Load().Presets.Select(p => p.Name).ToList();
                     case global::FracturingFog.Batch.BatchFlagSource.Animation:
                         return global::FracturingFog.Models.AnimationLibrary.Instance.Animations.Select(a => a.Name).ToList();
+                    case global::FracturingFog.Batch.BatchFlagSource.Equation:   // #1249
+                        return fractal switch
+                        {
+                            global::FracturingFog.FractalType.Sandbox => global::FracturingFog.Models.SandboxEquationStore.Instance.Equations.Select(e => e.Name).ToList(),
+                            global::FracturingFog.FractalType.UserBulb => global::FracturingFog.Models.UserBulbStore.Instance.Equations.Select(e => e.Name).ToList(),
+                            _ => global::FracturingFog.Models.UserEquationStore.Instance.Equations.Select(e => e.Name).ToList(),
+                        };
                 }
             }
             catch { }

@@ -99,6 +99,30 @@ namespace FracturingFog.Models
 
         /// <summary>#583 — colour in-set pixels from the accumulated orbit.</summary>
         public bool ColorInterior { get; set; }
+
+        /// <summary>Copy this entry's per-equation render settings onto
+        /// <paramref name="p"/> — a blank / default field RESETS it, as selecting
+        /// the entry in the editor does. Shared by the editor and the headless
+        /// <c>--equation NAME</c> (#1249).</summary>
+        public void ApplyRenderSettingsTo(FractalParameters p)
+        {
+            p.EscapeRadius = EscapeRadius;
+            p.UserEquationSeed = string.IsNullOrWhiteSpace(Seed) ? null : Seed;
+            p.UserEquationBailoutCondition = string.IsNullOrWhiteSpace(BailoutCondition) ? null : BailoutCondition;
+            p.UserEquationColorInterior = ColorInterior;
+            p.UserEquationBailoutReplacesModulus = BailoutReplacesModulus;
+        }
+
+        /// <summary>True when <paramref name="p"/> holds exactly this entry's
+        /// render settings (so <c>--equation NAME</c> reproduces them).</summary>
+        public bool RenderSettingsMatch(FractalParameters p)
+            => p.EscapeRadius == EscapeRadius
+               && Blank(p.UserEquationSeed) == Blank(Seed)
+               && Blank(p.UserEquationBailoutCondition) == Blank(BailoutCondition)
+               && p.UserEquationColorInterior == ColorInterior
+               && p.UserEquationBailoutReplacesModulus == BailoutReplacesModulus;
+
+        private static string Blank(string? s) => string.IsNullOrWhiteSpace(s) ? "" : s.Trim();
     }
 
     public sealed class UserEquationStore

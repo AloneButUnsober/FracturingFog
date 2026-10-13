@@ -48,6 +48,18 @@ namespace FracturingFog.Batch
                 region.ApplyHeadlessParams(fp);   // equation source, lighting, relief
                 region.ApplyFamilyParams(fp);     // per-family snapshot (#91-#94, #960)
             }
+            // #1249 — the user-code equation by name or inline; --param below
+            // still overrides its render settings.
+            if (opts.EquationName != null || opts.EquationSource != null)
+            {
+                var eqFamily = region != null && opts.FractalType == FractalType.Mandelbrot
+                    ? region.FractalType : opts.FractalType;
+                string? eqError;
+                bool ok = opts.EquationName != null
+                    ? UserCodeSource.TryApplySaved(eqFamily, opts.EquationName, fp, out eqError)
+                    : UserCodeSource.TryApplyInline(eqFamily, opts.EquationSource!, fp, out eqError);
+                if (!ok) throw new InvalidOperationException(eqError);
+            }
             // #998 — a saved Lighting & FX preset replaces the lighting block
             // (over the region's own lighting); the individual lighting flags
             // below still tweak on top of it.
@@ -227,9 +239,9 @@ namespace FracturingFog.Batch
         }
 
         // #949 — the user-code types (UserEquation / Sandbox / UserBulb) get
-        // their equation from a saved region (--region); a bare --fractal has
-        // none and renders the theme's flat in-set colour. Say so instead of
-        // silently writing a blank image.
+        // their equation from --equation / --equation-source (#1249) or a saved
+        // region (--region); without one they render the theme's flat in-set
+        // colour. Say so instead of silently writing a blank image.
         private static void WarnIfNoUserCodeSource(FractalType type, FractalParameters fp)
         {
             string? src = type switch
@@ -240,8 +252,8 @@ namespace FracturingFog.Batch
                 _ => "n/a",
             };
             if (string.IsNullOrWhiteSpace(src))
-                Console.WriteLine($"  note    : {type} has no equation — pass --region NAME of a saved " +
-                                  $"{type} region to load its source; this render will be blank.");
+                Console.WriteLine($"  note    : {type} has no equation — pass --equation NAME (a saved equation), " +
+                                  $"--equation-source TEXT, or --region NAME of a saved {type} region; this render will be blank.");
         }
 
         public static int RenderImage(BatchOptions opts)

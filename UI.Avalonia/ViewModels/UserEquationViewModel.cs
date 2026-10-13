@@ -872,12 +872,7 @@ public sealed class UserEquationViewModel : ViewModelBase
     /// compile/validate does the single re-render.</summary>
     private void ApplyEntryRenderSettings(UserEquationEntry entry)
     {
-        _params.EscapeRadius = entry.EscapeRadius;
-        _params.UserEquationSeed = string.IsNullOrWhiteSpace(entry.Seed) ? null : entry.Seed;
-        _params.UserEquationBailoutCondition =
-            string.IsNullOrWhiteSpace(entry.BailoutCondition) ? null : entry.BailoutCondition;
-        _params.UserEquationColorInterior = entry.ColorInterior;
-        _params.UserEquationBailoutReplacesModulus = entry.BailoutReplacesModulus;
+        entry.ApplyRenderSettingsTo(_params);
 
         this.RaisePropertyChanged(nameof(EscapeRadius));
         this.RaisePropertyChanged(nameof(SeedExpression));

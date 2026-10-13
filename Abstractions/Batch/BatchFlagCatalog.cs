@@ -118,6 +118,8 @@ namespace FracturingFog.Batch
         LightingPreset,
         /// <summary>Saved animations (#998).</summary>
         Animation,
+        /// <summary>Saved equations of the rendered user-code family (#1249).</summary>
+        Equation,
     }
 
     /// <summary>A flag that only has an effect while another (choice) flag
@@ -459,6 +461,14 @@ namespace FracturingFog.Batch
                 // ── Source ──
                 Txt(BatchFlags.Region, Source, ImgVid, "Load a saved built-in or user region by name.", BatchFlagSource.Region)
                     with { Aliases = new[] { "-r" } },
+                Txt(BatchFlags.Equation, Source, ImgVid,
+                    "UserEquation / Sandbox / UserBulb: load the saved equation of that name (a User Equation's escape radius, z0 seed, bailout and interior colouring come with it).",
+                    BatchFlagSource.Equation)
+                    with { ConflictsWith = new[] { BatchFlags.EquationSource } },
+                Txt(BatchFlags.EquationSource, Source, ImgVid,
+                    "UserEquation / Sandbox / UserBulb: the equation text itself, for an unsaved equation. Write newlines as \\n and a backslash as \\\\.",
+                    hint: "TEXT")
+                    with { ConflictsWith = new[] { BatchFlags.Equation } },
                 Pick(BatchFlags.Fractal, Source, ImgVid, "Fractal type.", Enum.GetNames<FractalType>(), "Mandelbrot", "TYPE")
                     with { Aliases = new[] { "-f" }, Source = BatchFlagSource.FractalType },
                 Dbl(BatchFlags.X, Source, ImgVid,

@@ -245,6 +245,7 @@ public sealed class CommandBuilderViewModel : ViewModelBase
         BatchFlagSource.ParamKey         => "--param keys",
         BatchFlagSource.LightingPreset   => "saved Lighting & FX presets",
         BatchFlagSource.Animation        => "saved animations",
+        BatchFlagSource.Equation         => FilterFractal(source) is FractalType ef ? $"saved {ef} equations" : "saved equations",
         _                                => "saved names",
     };
 

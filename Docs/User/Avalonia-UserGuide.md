@@ -179,7 +179,7 @@ The **Find** group locates miniature copies of the set ("minibrots") and the exa
   - **Critical points (User Equation):** **Critical points** lists the points where the equation's derivative f′(z) is zero. Each one has its own Mandelbrot-like set in the parameter plane, and the render shows the set of its start point z₀. Pick one and press **Use as z0** to make it the start point; the minibrot finders then find true (superattracting) nuclei of that set.
     - A point that moves with c, such as ±√(−c/3) for `z^3 + c*z`, is listed with its value at the view centre but cannot be set as a constant. Type its formula into the editor's z₀ seed instead.
     - Needs a holomorphic equation: no `conj`, `abs`, `re`, `im` or conditions.
-    - The seed reaches the **Command** builder as `--param UserEquationSeed=…`. The equation itself still has to come from a saved region (`--region NAME`); the yellow banner says so (#1249).
+    - The **Command** builder carries the seed as `--param UserEquationSeed=…`. It carries the equation itself as `--equation NAME` when a saved equation matches it exactly, and otherwise as `--equation-source …` (#1249).
   - On Tricorn and Burning Ship the readout gives the spiral's repeat factor but no rotation angle: their spirals are not rotation-symmetric.
   - A User Equation works when its step uses only `z` and `c`, not `n`, `iter` or `prev`. Equations with `conj`, `abs`, `re` or `im` work too. Minibrots are found for the equation's own start point (0, or its z₀ seed).
 

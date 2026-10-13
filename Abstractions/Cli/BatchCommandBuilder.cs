@@ -249,6 +249,15 @@ namespace FracturingFog.Cli
         /// flag can (AO, shadows, sky, lens, …).</summary>
         public string? LightingPresetName { get; init; }
 
+        /// <summary>#1249 — user-code types: the saved equation that reproduces
+        /// the live one exactly (source and settings; host-matched), emitted as
+        /// <c>--equation</c>. Otherwise <see cref="EquationSource"/> is emitted
+        /// inline.</summary>
+        public string? EquationName { get; init; }
+
+        /// <summary>#1249 — the live equation source of a user-code type.</summary>
+        public string? EquationSource { get; init; }
+
         /// <summary>#998 — the animation playing in the live view, if any. A still
         /// command captures one moment of it; reported so the user can pick it
         /// under --animation for a video.</summary>
@@ -300,6 +309,22 @@ namespace FracturingFog.Cli
             // Fractal type — always explicit so the command is self-describing.
             parts.Add(BatchFlags.Fractal);
             parts.Add(snap.Fractal.ToString());
+
+            // #1249 — the equation of a user-code type: by saved name when that
+            // reproduces it exactly, else inline (UserCodeSource.Encode: one line).
+            if (UserCodeSource.IsUserCode(snap.Fractal))
+            {
+                if (!string.IsNullOrWhiteSpace(snap.EquationName))
+                {
+                    parts.Add(BatchFlags.Equation);
+                    parts.Add(snap.EquationName!);
+                }
+                else if (!string.IsNullOrWhiteSpace(snap.EquationSource))
+                {
+                    parts.Add(BatchFlags.EquationSource);
+                    parts.Add(UserCodeSource.Encode(snap.EquationSource!.Trim()));
+                }
+            }
 
             // Live coordinates + iterations — always emitted for exact fidelity.
             parts.Add(BatchFlags.X);    parts.Add(Coordinate(snap.CenterX, snap.CenterXLimbs));
@@ -589,10 +614,10 @@ namespace FracturingFog.Cli
                              + (missing.Count > 6 ? $", +{missing.Count - 6} more" : "")
                              + ") — save them as a Lighting & FX preset and re-seed to use --lighting-preset");
             }
-            // #1242 / #1249 — user-code types render from their source, which no flag
-            // carries: the batch loads it from a saved region (--region NAME).
-            if (snap.Fractal is FractalType.UserEquation or FractalType.Sandbox or FractalType.UserBulb)
-                gaps.Add($"{snap.Fractal} equation source (no flag carries it — add --region NAME of a saved region that uses this equation)");
+            // #1249 — a user-code type with no equation renders blank.
+            if (UserCodeSource.IsUserCode(snap.Fractal)
+                && string.IsNullOrWhiteSpace(snap.EquationName) && string.IsNullOrWhiteSpace(snap.EquationSource))
+                gaps.Add($"{snap.Fractal} has no equation (the render is blank) — write or load one first");
             if (!string.IsNullOrWhiteSpace(snap.LiveAnimationName))
                 gaps.Add($"Live animation '{snap.LiveAnimationName}' (a still shows one moment of it; for a video choose it under --animation)");
             return gaps;

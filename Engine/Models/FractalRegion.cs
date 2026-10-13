@@ -716,6 +716,13 @@ namespace FracturingFog.Models
         /// critical point picked in Explore ▸ Find). Null when blank (z₀ = 0),
         /// so the saved equation's own seed stands.</summary>
         [JsonIgnore(Condition = OmitNull)] public string? UserEquationSeed { get; set; }
+        /// <summary>#1249 — User Equation / Sandbox render settings (escape radius
+        /// override, convergence bailout, interior-orbit colouring). Captured only
+        /// when they differ from the defaults.</summary>
+        [JsonIgnore(Condition = OmitNull)] public double? UserEquationEscapeRadius { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public string? UserEquationBailoutCondition { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? UserEquationBailoutReplacesModulus { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? UserEquationColorInterior { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? BulbPower { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? BulbIterations { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? UserBulbIterations { get; set; }
@@ -1186,6 +1193,17 @@ namespace FracturingFog.Models
                 {
                     UserEquationRotationDegrees = Nd(p.UserEquationRotationDegrees, D.UserEquationRotationDegrees),
                     UserEquationSeed = string.IsNullOrWhiteSpace(p.UserEquationSeed) ? null : p.UserEquationSeed.Trim(),
+                    UserEquationEscapeRadius = Nd(p.EscapeRadius, D.EscapeRadius),
+                    UserEquationBailoutCondition = string.IsNullOrWhiteSpace(p.UserEquationBailoutCondition) ? null : p.UserEquationBailoutCondition.Trim(),
+                    UserEquationBailoutReplacesModulus = p.UserEquationBailoutReplacesModulus ? true : null,
+                    UserEquationColorInterior = p.UserEquationColorInterior ? true : null,
+                },
+                // #1249 — Sandbox shares the escape radius and bailout knobs.
+                FractalType.Sandbox => new RegionFractalParams
+                {
+                    UserEquationEscapeRadius = Nd(p.EscapeRadius, D.EscapeRadius),
+                    UserEquationBailoutCondition = string.IsNullOrWhiteSpace(p.UserEquationBailoutCondition) ? null : p.UserEquationBailoutCondition.Trim(),
+                    UserEquationBailoutReplacesModulus = p.UserEquationBailoutReplacesModulus ? true : null,
                 },
                 // UserBulb keeps its source + dedicated camera on the region itself;
                 // the animatable power / iterations / time ride here.
@@ -1700,6 +1718,10 @@ namespace FracturingFog.Models
             if (AttractorD.HasValue) p.AttractorD = AttractorD.Value;
             if (UserEquationRotationDegrees.HasValue) p.UserEquationRotationDegrees = UserEquationRotationDegrees.Value;
             if (!string.IsNullOrWhiteSpace(UserEquationSeed)) p.UserEquationSeed = UserEquationSeed;
+            if (UserEquationEscapeRadius.HasValue) p.EscapeRadius = UserEquationEscapeRadius.Value;
+            if (!string.IsNullOrWhiteSpace(UserEquationBailoutCondition)) p.UserEquationBailoutCondition = UserEquationBailoutCondition;
+            if (UserEquationBailoutReplacesModulus.HasValue) p.UserEquationBailoutReplacesModulus = UserEquationBailoutReplacesModulus.Value;
+            if (UserEquationColorInterior.HasValue) p.UserEquationColorInterior = UserEquationColorInterior.Value;
             if (BulbPower.HasValue) p.BulbPower = BulbPower.Value;
             if (BulbIterations.HasValue) p.BulbIterations = BulbIterations.Value;
             if (UserBulbIterations.HasValue) p.UserBulbIterations = UserBulbIterations.Value;

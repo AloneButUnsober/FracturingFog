@@ -65,6 +65,10 @@ namespace FracturingFog.Batch
 
         // Region/coords source — Region takes precedence when set.
         public string? RegionName { get; set; }
+        /// <summary>#1249 — saved equation (User Equation / Sandbox / User Bulb) by name.</summary>
+        public string? EquationName { get; set; }
+        /// <summary>#1249 — inline equation source, already decoded (\n → newline).</summary>
+        public string? EquationSource { get; set; }
         public FractalType FractalType { get; set; } = FractalType.Mandelbrot;
         public double? CenterX { get; set; }
         public double? CenterY { get; set; }
@@ -507,6 +511,19 @@ namespace FracturingFog.Batch
                     case "-r":
                         if (!Next(args, ref i, a, out string rv, out error)) return false;
                         opts.RegionName = rv;
+                        break;
+
+                    case BatchFlags.Equation:
+                        if (!Next(args, ref i, a, out string eqn, out error)) return false;
+                        if (opts.EquationSource != null) { error = $"{BatchFlags.Equation} and {BatchFlags.EquationSource} cannot be combined."; return false; }
+                        opts.EquationName = eqn;
+                        break;
+
+                    case BatchFlags.EquationSource:
+                        if (!Next(args, ref i, a, out string eqs, out error)) return false;
+                        if (opts.EquationName != null) { error = $"{BatchFlags.Equation} and {BatchFlags.EquationSource} cannot be combined."; return false; }
+                        if (string.IsNullOrWhiteSpace(eqs)) { error = $"{BatchFlags.EquationSource} needs the equation text."; return false; }
+                        opts.EquationSource = FracturingFog.Models.UserCodeSource.Decode(eqs);
                         break;
 
                     case BatchFlags.Fractal:
