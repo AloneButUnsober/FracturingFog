@@ -10,7 +10,12 @@ S6 [#1190](https://github.com/AloneButUnsober/FracturingFog/issues/1190) ·
 S7 [#1191](https://github.com/AloneButUnsober/FracturingFog/issues/1191).
 The issues are the canonical task list; this doc is the maths + architecture context. Link both ways.
 
-**Status: S1–S6 shipped (#1185–#1190, PRs #1232/#1234/#1236/#1238/#1239/#1241); S7 implemented (#1191) — 2026-10-08.** See §9.1 for what implementation changed versus this design.
+**Status: complete — epic closed 2026-10-13.** All seven slices (S1–S7, #1185–#1191) and
+their follow-ups (#1233, #1235, #1237, #1240, #1242, #1249) have shipped; the table in §9
+lists them with their PRs. §9.1–§9.7 record what implementation changed versus this design.
+Two items are tracked outside the epic:
+- deep zoom past 1e13 for the double-only families ([#1253](https://github.com/AloneButUnsober/FracturingFog/issues/1253));
+- a pre-existing precision bug in the single-value CX/CY boxes ([#1252](https://github.com/AloneButUnsober/FracturingFog/issues/1252)).
 
 ---
 
@@ -292,15 +297,21 @@ Check must-hold invariants, not self-consistency:
 
 ## 9. Slices
 
-| Slice | Issue | Depends on | Delivers |
-|---|---|---|---|
-| S1 | #1185 | — | Period detection + readout |
-| S2 | #1186 | S1 | Nucleus Newton + atom size → "Zoom to minibrot" |
-| S3 | #1187 | S2 | Misiurewicz snap (+ loop-video bonus) |
-| S4 | #1188 | S2 | External angles, internal addresses, L/R navigation |
-| S5 | #1189 | S2 (S4 optional) | Julia-morph assistant + morph-path video |
-| S6 | #1190 | — | Interest score + auto-explore for all 2D families |
-| S7 | #1191 | S2, S3 | Multibrot, User Equation, Burning Ship / Tricorn |
+| Slice | Issue | Depends on | Delivers | PR |
+|---|---|---|---|---|
+| S1 | #1185 | — | Period detection + readout | #1232 |
+| S2 | #1186 | S1 | Nucleus Newton + atom size → "Zoom to minibrot" | #1234 |
+| S3 | #1187 | S2 | Misiurewicz snap | #1236 |
+| S4 | #1188 | S2 | External angles, internal addresses, L/R navigation | #1238 |
+| S5 | #1189 | S2 (S4 optional) | Julia-morph assistant + morph-path video | #1239 |
+| S6 | #1190 | — | Interest score + auto-explore for all 2D families | #1241 |
+| S7 | #1191 | S2, S3 | Multibrot, User Equation, Burning Ship / Tricorn | #1243 |
+| follow-up | #1233 | — | Full-precision `--x/--y` (OD limbs) | #1244 |
+| S3b | #1235 | S3 | Misiurewicz self-similar loop video + J_c preview (§9.5b) | #1246 |
+| S4b | #1237 | S4 | Deep (OD) rays, location → angle, address → angle (§9.3b) | #1247 |
+| S6b | #1240 | S6 | Interest heatmap + live weight tuning (§9.5) | #1248 |
+| S7b | #1242 | S7 | Base-d angles (Multibrot), User Equation critical points (§9.7) | #1250 |
+| follow-up | #1249 | — | Command builder carries user-code equation source | #1251 |
 
 Critical path: S1 → S2 → {S3, S4, S5}. S6 runs in parallel. S7 comes last.
 
