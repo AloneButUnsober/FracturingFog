@@ -63,6 +63,27 @@ public static class CalculatorGenHotLoad
     // Load" repeatedly should be free — skip Roslyn entirely when the
     // tuple matches a still-loaded assembly.
     private static readonly System.Collections.Generic.Dictionary<string, Type> _cache = new();
+    // #1259 — guards _cache, _lastContext and _keptContexts. xUnit runs test
+    // classes in parallel and the live UI compiles from more than one thread;
+    // unguarded, concurrent calls corrupted the Dictionary. Roslyn runs outside
+    // the lock, so two threads may compile the same equation twice (the later
+    // one wins the cache slot) — wasted work, never corrupt state.
+    private static readonly object _gate = new();
+
+    // Drop cache entries from a context about to be unloaded, so a future miss
+    // recompiles cleanly. Caller holds _gate.
+    // NB: assembly names start "GeneratedCalc_", context names "GenCalc_", so
+    // this match never fires and the cache keeps (and keeps alive) every type.
+    // Startup warm-load (LoadAllPersisted) relies on that: each persisted
+    // calculator stays a cache hit for Compile & Load. Left as is (#1259).
+    private static void EvictContext(AssemblyLoadContext stale)
+    {
+        var staleKeys = new System.Collections.Generic.List<string>();
+        foreach (var kv in _cache)
+            if (kv.Value.Assembly.GetName().Name?.StartsWith(stale.Name ?? "") ?? false)
+                staleKeys.Add(kv.Key);
+        foreach (var k in staleKeys) _cache.Remove(k);
+    }
 
     private static string CacheKey(string equation, string name) => $"{equation}{name}";
 
@@ -80,8 +101,11 @@ public static class CalculatorGenHotLoad
             return new HotLoadResult(null, gen.Error);
 
         string key = CacheKey(equation, gen.ClassName);
-        if (_cache.TryGetValue(key, out var cached))
-            return new HotLoadResult(cached, null);
+        lock (_gate)
+        {
+            if (_cache.TryGetValue(key, out var cached))
+                return new HotLoadResult(cached, null);
+        }
 
         // Roslyn compile.
         var syntaxTree = CSharpSyntaxTree.ParseText(gen.Source);
@@ -109,36 +133,35 @@ public static class CalculatorGenHotLoad
         ms.Seek(0, SeekOrigin.Begin);
         var ctx = new AssemblyLoadContext($"GenCalc_{gen.ClassName}_{Environment.TickCount}", isCollectible: true);
         var asm = ctx.LoadFromStream(ms);
-        // Unload the previous context to free the prior assembly's
-        // memory. The cache holds Type references for fast re-load —
-        // entries pointing at unloaded contexts get invalidated here.
-        // Skipped while KeepContexts is true (Wave 2.9 morph) — the
-        // caller will flush via FlushKeptContexts when safe.
-        if (KeepContexts)
-        {
-            if (_lastContext != null) _keptContexts.Add(_lastContext);
-        }
-        else if (_lastContext != null)
-        {
-            var stale = _lastContext;
-            // Drop cache entries from the dying context so a future
-            // miss recompiles cleanly.
-            var staleKeys = new System.Collections.Generic.List<string>();
-            foreach (var kv in _cache)
-                if (kv.Value.Assembly.GetName().Name?.StartsWith(stale.Name ?? "") ?? false)
-                    staleKeys.Add(kv.Key);
-            foreach (var k in staleKeys) _cache.Remove(k);
-            stale.Unload();
-        }
-        _lastContext = ctx;
 
         var fullName = $"FracturingFog.Calculators.Generated.{gen.ClassName}";
         var type = asm.GetType(fullName);
+
+        lock (_gate)
+        {
+            // Unload the previous context to free the prior assembly's
+            // memory. The cache holds Type references for fast re-load —
+            // entries pointing at unloaded contexts get invalidated here.
+            // Skipped while KeepContexts is true (Wave 2.9 morph) — the
+            // caller will flush via FlushKeptContexts when safe.
+            if (KeepContexts)
+            {
+                if (_lastContext != null) _keptContexts.Add(_lastContext);
+            }
+            else if (_lastContext != null)
+            {
+                var stale = _lastContext;
+                EvictContext(stale);
+                stale.Unload();
+            }
+            _lastContext = ctx;
+
+            if (type != null) _cache[key] = type;
+        }
+
         if (type == null)
             return new HotLoadResult(null,
                 $"Compile succeeded but type '{fullName}' not found in generated assembly.");
-
-        _cache[key] = type;
         return new HotLoadResult(type, null);
     }
 
@@ -147,8 +170,11 @@ public static class CalculatorGenHotLoad
     /// active calculator, any cached buffers it produced). Idempotent.</summary>
     public static void UnloadPreviousContext()
     {
-        _lastContext?.Unload();
-        _lastContext = null;
+        lock (_gate)
+        {
+            _lastContext?.Unload();
+            _lastContext = null;
+        }
     }
 
     /// <summary>Unload all contexts retained while <see cref="KeepContexts"/>
@@ -159,24 +185,23 @@ public static class CalculatorGenHotLoad
     /// the queue still flushes.</summary>
     public static void FlushKeptContexts()
     {
-        foreach (var stale in _keptContexts)
+        lock (_gate)
         {
-            try
+            foreach (var stale in _keptContexts)
             {
-                var staleKeys = new System.Collections.Generic.List<string>();
-                foreach (var kv in _cache)
-                    if (kv.Value.Assembly.GetName().Name?.StartsWith(stale.Name ?? "") ?? false)
-                        staleKeys.Add(kv.Key);
-                foreach (var k in staleKeys) _cache.Remove(k);
-                stale.Unload();
+                try
+                {
+                    EvictContext(stale);
+                    stale.Unload();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"FlushKeptContexts: unload failed: {ex.Message}");
+                }
             }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine(
-                    $"FlushKeptContexts: unload failed: {ex.Message}");
-            }
+            _keptContexts.Clear();
         }
-        _keptContexts.Clear();
     }
 
     // ── Phase D-6 / item 26 — permanent persist + auto-reload (Wave 2.3) ────
@@ -407,6 +432,13 @@ public static class CalculatorGenHotLoad
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
         {
             if (asm.IsDynamic) continue;
+            // #1259 — skip collectible assemblies (earlier hot-loaded
+            // calculators and themes). TryGetRawMetadata hands Roslyn a raw
+            // pointer into the assembly's own memory, not a copy; once its
+            // context is unloaded and collected, a compile still reading it
+            // crashes the process (access violation). Generated code never
+            // references another generated assembly.
+            if (asm.IsCollectible) continue;
             // NB: do NOT skip on empty Location. This fallback exists precisely
             // for single-file self-contained publish (default on Linux) where
             // Location == "" for every loaded assembly and TPA is empty — the
