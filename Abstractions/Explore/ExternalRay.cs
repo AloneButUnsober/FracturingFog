@@ -21,9 +21,12 @@
 // S3's MisiurewiczFinder.Refine polishes and verifies it in OD. So the double
 // trace only proposes; acceptance is the same verified OD Newton as S2/S3.
 //
-// Limit: the trace runs in double, so it resolves landing points down to about
-// 1e-12 of scale. Longer angles whose landing structure is finer report
-// "too deep" (OD / perturbed tracing is a follow-up).
+// Precision (#1237): the trace is PERTURBED. Each bit rebases a reference
+// point to the current ray point in octuple-double and computes its orbit
+// Z_n there (exact OD); the substeps then solve for a double offset Δ with
+// ε_{n+1} = 2Z_n·ε_n + ε_n² + Δ. Δ is one bit's movement, so double keeps
+// full relative precision at any depth (to OD's ~1e-120); a plain double trace
+// lost the ray after ~16–20 bits of a periodic angle (c itself has only 1e-16).
 
 using System;
 using System.Collections.Generic;
@@ -77,42 +80,75 @@ public static class ExternalRay
     private const double RootReach = 2.0;
 
     /// <summary>Incremental inward trace of R_θ: each <see cref="Advance"/>
-    /// walks one more bit (doubling) in <c>sharpness</c> substeps.</summary>
+    /// walks one more bit (doubling) in <c>sharpness</c> substeps, perturbed
+    /// about an OD reference rebased to the ray point every bit (file header).</summary>
     public sealed class Tracer
     {
         private readonly ExternalAngle _angle;
         private readonly int _sharpness;
+        private DeepComplex _ref;
+        private Complex _delta;
+        private Complex[] _z = Array.Empty<Complex>();
 
         /// <summary>Bits walked so far.</summary>
         public int Bits { get; private set; }
 
-        /// <summary>Current point on the ray.</summary>
-        public Complex C { get; private set; }
+        /// <summary>Current point on the ray, full precision.</summary>
+        public DeepComplex Point => _ref.Translate(_delta.Real, _delta.Imaginary);
+
+        /// <summary>Current point on the ray (double).</summary>
+        public Complex C { get { var p = Point; return new Complex(p.Re.X0, p.Im.X0); } }
 
         public Tracer(ExternalAngle angle, int sharpness = DefaultSharpness)
         {
             _angle = angle ?? throw new ArgumentNullException(nameof(angle));
             if (sharpness < 1) throw new ArgumentOutOfRangeException(nameof(sharpness));
             _sharpness = sharpness;
-            C = Complex.FromPolarCoordinates(StartRadius, 2 * SMath.PI * angle.DoubledValue(0));
+            var c0 = Complex.FromPolarCoordinates(StartRadius, 2 * SMath.PI * angle.DoubledValue(0));
+            _ref = new DeepComplex(c0.Real, c0.Imaginary);
         }
 
-        /// <summary>Walk one bit. False when a Newton substep fails — the ray
-        /// is finer here than double resolves; <see cref="C"/> is unchanged.</summary>
+        /// <summary>Walk one bit. False when a Newton substep fails;
+        /// <see cref="Point"/> is unchanged.</summary>
         public bool Advance()
         {
             int k = Bits;
+            // Rebase the reference to the current point and take its exact
+            // orbit Z_0..Z_{k+1} (stored as doubles; the ε recursion only needs
+            // them to relative precision).
+            var keepRef = _ref; var keepDelta = _delta;
+            _ref = Point;
+            _delta = Complex.Zero;
+            _z = ReferenceOrbit(_ref, k + 1, _z);
+
             double phase = 2 * SMath.PI * _angle.DoubledValue(k);
-            Complex c = C;
             for (int j = 0; j < _sharpness; j++)
             {
                 double r = SMath.Pow(StartRadius, SMath.Pow(0.5, (j + 0.5) / _sharpness));
-                if (!SolveDepth(ref c, k, Complex.FromPolarCoordinates(r, phase))) return false;
+                if (!SolveDepth(_z, ref _delta, k, Complex.FromPolarCoordinates(r, phase)))
+                {
+                    (_ref, _delta) = (keepRef, keepDelta);
+                    return false;
+                }
             }
-            C = c;
             Bits = k + 1;
             return true;
         }
+    }
+
+    /// <summary>Z_0..Z_n of c = <paramref name="c"/> (Z_0 = 0), computed exactly
+    /// in OD and stored as doubles.</summary>
+    internal static Complex[] ReferenceOrbit(DeepComplex c, int n, Complex[] buffer)
+    {
+        var z = buffer.Length >= n + 1 ? buffer : new Complex[SMath.Max(n + 1, 2 * buffer.Length)];
+        OD x = new(0), y = new(0);
+        z[0] = Complex.Zero;
+        for (int i = 1; i <= n; i++)
+        {
+            (x, y) = OdExact.SquareAdd(x, y, c.Re, c.Im);
+            z[i] = new Complex(x.X0, y.X0);
+        }
+        return z;
     }
 
     /// <summary>Points of R_θ after each of the first <paramref name="bits"/>
@@ -132,19 +168,30 @@ public static class ExternalRay
         return points;
     }
 
-    // Newton on c for f^{k+1}_c(0) = target, from the current c.
-    private static bool SolveDepth(ref Complex c, int k, Complex target)
+    // Newton on the offset Δ (c = reference + Δ) for f^{k+1}_c(0) = target,
+    // perturbed about the reference orbit z (z[n] = Z_n).
+    internal static bool SolveDepth(Complex[] z, ref Complex delta, int k, Complex target)
     {
+        double last = double.PositiveInfinity;
         for (int i = 0; i < NewtonSteps; i++)
         {
-            Complex z = Complex.Zero, dc = Complex.Zero;
-            for (int n = 0; n <= k; n++) { dc = 2.0 * z * dc + Complex.One; z = z * z + c; }
-            Complex step = (z - target) / dc;
+            Complex e = Complex.Zero, dc = Complex.Zero;
+            for (int n = 0; n <= k; n++)
+            {
+                Complex zn = z[n];
+                dc = 2.0 * (zn + e) * dc + Complex.One;
+                e = 2.0 * zn * e + e * e + delta;
+            }
+            Complex step = (z[k + 1] + e - target) / dc;
             if (!double.IsFinite(step.Real) || !double.IsFinite(step.Imaginary)) return false;
-            c -= step;
-            if (step.Magnitude <= 1e-15 * SMath.Max(1.0, c.Magnitude)) return true;
+            delta -= step;
+            double m = step.Magnitude;
+            if (m <= 1e-14 * delta.Magnitude) return true;
+            // Noise floor: tiny and no longer shrinking.
+            if (m <= 1e-9 * delta.Magnitude && m >= last) return true;
+            last = m;
         }
-        return false;
+        return last <= 1e-8 * delta.Magnitude;
     }
 
     /// <summary>Trace R_θ to where it lands and verify the landing point in OD
@@ -161,30 +208,33 @@ public static class ExternalRay
         // (parabolic), so the bit budget or the double limit ends those and the
         // landing Newton takes over from there.
         var t = new Tracer(angle);
-        var history = new List<Complex> { t.C };
+        var history = new List<DeepComplex> { t.Point };
         bool precisionStop = false;
-        while (t.Bits < maxBits)
+        // A periodic ray creeps into its parabolic root; walk it this far past
+        // one period (more only costs time) before the landing Newton.
+        int periodicBits = SMath.Min(maxBits, SMath.Max(PeriodicMinBits, PeriodicBitsPerPeriod * p));
+        while (t.Bits < (angle.IsPeriodic ? periodicBits : maxBits))
         {
             ct.ThrowIfCancellationRequested();
             if (!t.Advance()) { precisionStop = true; break; }
-            history.Add(t.C);
-            // Early stop only for preperiodic rays (geometric approach): a
-            // periodic ray creeps into its parabolic root, so "barely moving"
-            // there can still be several component sizes away.
+            history.Add(t.Point);
+            // Early stop only for preperiodic rays (geometric approach): stop
+            // once a period moves the ray by a tiny fraction of its first full
+            // cycle past the preperiod — converged relative to its own scale.
             if (!angle.IsPeriodic && t.Bits >= l + 2 * p && (t.Bits - l) % p == 0)
             {
-                double move = (history[^1] - history[^(p + 1)]).Magnitude;
-                if (move <= 1e-10 * SMath.Max(1.0, t.C.Magnitude)) break;
+                double move = Dist(history[^1], history[^(p + 1)]);
+                double first = Dist(history[l + p], history[l]);
+                if (move <= PreperiodicStop * first) break;
             }
         }
         if (t.Bits < l + p)
-            return Fail(angle, default, 0, "The ray could not be traced that far (angle too long for double precision).");
+            return Fail(angle, default, 0, "The ray could not be traced that far.");
 
-        Complex end = t.C;
+        var seed = t.Point;
         int back = SMath.Min(p, history.Count - 1);
-        double scale = SMath.Max((history[^1] - history[^(back + 1)]).Magnitude, 1e-14 * SMath.Max(1.0, end.Magnitude));
-        var seed = new DeepComplex(end.Real, end.Imaginary);
-        string limit = precisionStop ? " (the trace hit double precision first)" : "";
+        double scale = SMath.Max(Dist(history[^1], history[^(back + 1)]), 1e-110 * SMath.Max(1.0, Mag(seed)));
+        string limit = precisionStop ? " (the trace stopped early)" : "";
 
         if (angle.IsPeriodic)
         {
@@ -194,7 +244,7 @@ public static class ExternalRay
             // (growing reach) and accept a nucleus only when the root it was
             // reached from lies on ITS component — within RootReach atom sizes,
             // which a neighbouring period-p component's nucleus never is.
-            double cap = 2.0 * SMath.Max(1.0, end.Magnitude);
+            double cap = 2.0 * SMath.Max(1.0, Mag(seed));
             for (double reach = 4 * scale; ; reach = SMath.Min(cap, reach * 8))
             {
                 var n = NucleusFinder.Find(seed, p, reach, ct: ct);
@@ -226,8 +276,7 @@ public static class ExternalRay
                     var m = MisiurewiczFinder.Refine(at, k, qq, seed, reach, ct);
                     if (m.Found)
                     {
-                        Complex pt = new(m.Point.Re.X0, m.Point.Im.X0);
-                        double context = (history[SMath.Min(l + p + 1, history.Count - 1)] - pt).Magnitude;
+                        double context = Dist(history[SMath.Min(l + p + 1, history.Count - 1)], m.Point);
                         return new RayLanding(RayLandingStatus.Misiurewicz, angle, seed, scale, default, m,
                                               ContextRadius: SMath.Max(context, 1e3 * scale));
                     }
@@ -237,6 +286,22 @@ public static class ExternalRay
             }
         return Fail(angle, seed, scale, $"No Misiurewicz point M({l + 1},{p}) found near the ray's landing point{limit}.");
     }
+
+    /// <summary>Bits a periodic ray is walked: at least this many…</summary>
+    public const int PeriodicMinBits = 64;
+    /// <summary>…and this many per period.</summary>
+    public const int PeriodicBitsPerPeriod = 10;
+    /// <summary>A preperiodic trace stops once a period moves the ray by this
+    /// fraction of its first cycle past the preperiod.</summary>
+    public const double PreperiodicStop = 1e-8;
+
+    public static double Dist(in DeepComplex a, in DeepComplex b)
+    {
+        double dx = OdExact.Sub(a.Re, b.Re).X0, dy = OdExact.Sub(a.Im, b.Im).X0;
+        return SMath.Sqrt(dx * dx + dy * dy);
+    }
+
+    private static double Mag(in DeepComplex a) => SMath.Sqrt(a.Re.X0 * a.Re.X0 + a.Im.X0 * a.Im.X0);
 
     private static RayLanding Fail(ExternalAngle a, DeepComplex end, double scale, string why)
         => new(RayLandingStatus.Failed, a, end, scale, default, default, why);

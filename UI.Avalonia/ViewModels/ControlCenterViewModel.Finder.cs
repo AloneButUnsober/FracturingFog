@@ -162,6 +162,7 @@ public sealed partial class ControlCenterViewModel
         UndoMorphStepCommand  = ReactiveCommand.Create(UndoMorphStep, idle);
         InitExplore();
         InitLoop();
+        InitLocationCopy();
         CancelFinderCommand   = ReactiveCommand.Create(() =>
         {
             _finderCts?.Cancel();
@@ -196,6 +197,7 @@ public sealed partial class ControlCenterViewModel
     private async Task RunFinderAsync(Func<CancellationToken, Task> work)
     {
         ClearLoopTarget();   // #1235 — the loop belongs to the last snap only
+        SetLocation("");
         _finderCts?.Cancel();
         var cts = new CancellationTokenSource();
         _finderCts = cts;
@@ -261,6 +263,7 @@ public sealed partial class ControlCenterViewModel
                 return;
             }
             ApplyMinibrotJump(found);
+            await ShowComponentAnglesAsync(found, ct);   // #1237
         });
     }
 
@@ -361,23 +364,34 @@ public sealed partial class ControlCenterViewModel
             double turn = m.Multiplier.Phase * 180.0 / System.Math.PI;
             FinderStatus = $"Misiurewicz point M({m.Preperiod},{m.Period}): the pattern repeats every ×{Fmt(m.Multiplier.Magnitude)} zoom, turning {turn:0.#}°.";
             SetLoopTarget(m.Point, m.Multiplier.Magnitude, turn, m.Period, juliaPreview: true);   // #1235
+            await ShowMisiurewiczAnglesAsync(m, reach, ct);   // #1237
         });
         return true;
     }
 
     // ── S4: external angles ──────────────────────────────────────────────
 
+    private static bool LooksLikeAddress(string text) => text.Contains('→') || text.Contains("->");
+
     private static string DescribeAngle(string text)
     {
-        if (string.IsNullOrWhiteSpace(text)) return "e.g. .(001)  .0(01)  .01(10)  1/7";
+        if (string.IsNullOrWhiteSpace(text)) return "e.g. .(001)  .0(01)  .01(10)  1/7  or an address 1 → 2 → 4";
+        if (LooksLikeAddress(text))
+            return AddressAngles.TryParse(text, out _, out var aerr)
+                ? "Internal address — Go finds its component's angle pair and lands there."
+                : aerr ?? "Not an internal address.";
         if (!ExternalAngle.TryParse(text, out var a, out var err)) return err ?? "Not an angle.";
         var (n, d) = a!.Fraction;
         string frac = d.ToString().Length <= 24 ? $" = {n}/{d}" : "";
         string kind = a.IsPeriodic
             ? $"periodic, period {a.Period}: lands on a minibrot's root"
             : $"preperiod {a.Preperiod}, period {a.Period}: lands on a Misiurewicz point";
-        var address = a.InternalAddress(maxTerms: 12);
-        string addr = string.Join("→", address) + (a.IsPeriodic || address.Count < 12 ? "" : "→…");
+        // Show the whole address when it is short; mark a cut one with "…"
+        // (a cut periodic address names a different, shallower component).
+        const int MaxShown = 24;
+        var address = a.InternalAddress(maxTerms: MaxShown);
+        bool complete = a.IsPeriodic && address.Count > 0 && address[^1] == a.Period;
+        string addr = string.Join(" → ", address) + (complete ? "" : " → …");
         return $"{a}{frac} — {kind}. Internal address {addr}.";
     }
 
@@ -389,14 +403,31 @@ public sealed partial class ControlCenterViewModel
             FinderStatus = $"External angles apply to z² + c (Mandelbrot) only — not {vs.FractalType}.";
             return Task.CompletedTask;
         }
-        if (!ExternalAngle.TryParse(AngleText, out var angle, out var err))
+        string text = AngleText;
+        ExternalAngle? angle = null;
+        string? err = null;
+        if (!LooksLikeAddress(text) && !ExternalAngle.TryParse(text, out angle, out err))
         {
             FinderStatus = err ?? "Not an angle.";
             return Task.CompletedTask;
         }
-        FinderStatus = $"Tracing the ray at {angle}…";
+        FinderStatus = angle != null ? $"Tracing the ray at {angle}…" : "Resolving the internal address…";
         return RunFinderAsync(async ct =>
         {
+            string pairNote = "";
+            if (angle == null)
+            {
+                // #1237 — internal address → the component's angle pair.
+                if (!AddressAngles.TryParse(text, out var steps, out err)) { FinderStatus = err ?? "Not an internal address."; return; }
+                var resolved = await Task.Run(() => AddressAngles.ToAngles(steps, out err), ct);
+                if (resolved == null) { FinderStatus = err ?? "No component has that address."; return; }
+                angle = resolved.Lower;
+                pairNote = $" Angles {resolved.Lower} and {resolved.Upper}" + (resolved.Ambiguous
+                    ? $" ({AddressAngles.Format(resolved.Resolved)}; other conjugates exist — add sublimb angles like 1_2/3 to pick one)."
+                    : $" ({AddressAngles.Format(resolved.Resolved)}).");
+                SetLocation($"Address {AddressAngles.Format(resolved.Resolved)}: angles {resolved.Lower}, {resolved.Upper}",
+                            resolved.Lower.ToString(), AddressAngles.Format(resolved.Resolved));
+            }
             var landing = await Task.Run(() => ExternalRay.Land(angle!, ct: ct), ct);
             string prefix = $"Ray {angle} → ";
             switch (landing.Status)
@@ -411,6 +442,7 @@ public sealed partial class ControlCenterViewModel
                     FinderStatus = $"{prefix}{landing.Detail ?? "could not land the ray."}";
                     break;
             }
+            if (pairNote.Length > 0 && landing.Status != RayLandingStatus.Failed) FinderStatus += pairNote;
         });
     }
 
@@ -558,6 +590,95 @@ public sealed partial class ControlCenterViewModel
 
     private string MorphPathLines()
         => string.Join("\n", System.Linq.Enumerable.Select(_morphSteps, m => m.Line));
+
+    // ── #1237: location → angles ───────────────────────────────────────
+
+    private string _locationAngleInfo = "";
+
+    /// <summary>The external angles (and internal address) of the last
+    /// minibrot / Misiurewicz point the finder went to, once computed.</summary>
+    public string LocationAngleInfo
+    {
+        get => _locationAngleInfo;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _locationAngleInfo, value);
+            this.RaisePropertyChanged(nameof(HasLocationAngles));
+        }
+    }
+
+    public bool HasLocationAngles => _locationAngleInfo.Length > 0;
+
+    private string _locationAngle = "", _locationAddress = "";
+
+    /// <summary>The found point's (lower) external angle, for Copy angle.</summary>
+    public string LocationAngle
+    {
+        get => _locationAngle;
+        private set { this.RaiseAndSetIfChanged(ref _locationAngle, value); this.RaisePropertyChanged(nameof(HasLocationAngle)); }
+    }
+
+    /// <summary>The found component's angled internal address, for Copy address.</summary>
+    public string LocationAddress
+    {
+        get => _locationAddress;
+        private set { this.RaiseAndSetIfChanged(ref _locationAddress, value); this.RaisePropertyChanged(nameof(HasLocationAddress)); }
+    }
+
+    public bool HasLocationAngle => _locationAngle.Length > 0;
+    public bool HasLocationAddress => _locationAddress.Length > 0;
+
+    public ReactiveCommand<Unit, Unit> CopyLocationAngleCommand { get; private set; } = null!;
+    public ReactiveCommand<Unit, Unit> CopyLocationAddressCommand { get; private set; } = null!;
+
+    private void InitLocationCopy()
+    {
+        CopyLocationAngleCommand = ReactiveCommand.Create(
+            () => CopyFinderText(LocationAngle, "Angle"), this.WhenAnyValue(x => x.HasLocationAngle));
+        CopyLocationAddressCommand = ReactiveCommand.Create(
+            () => CopyFinderText(LocationAddress, "Address"), this.WhenAnyValue(x => x.HasLocationAddress));
+    }
+
+    private void CopyFinderText(string text, string what)
+    {
+        if (text.Length == 0) return;
+        Shell.RequestCopyToClipboard(text);
+        FinderStatus = $"{what} copied: {text} — paste it into Angle and press Go to come back here.";
+    }
+
+    private void SetLocation(string info, string angle = "", string address = "")
+    {
+        LocationAngleInfo = info;
+        LocationAngle = angle;
+        LocationAddress = address;
+    }
+
+    private async Task ShowComponentAnglesAsync(NucleusResult found, CancellationToken ct)
+    {
+        SetLocation("Finding its external angles…");
+        var angles = await Task.Run(() => LocationAngles.ComponentAngles(found, ct), ct);
+        if (angles.Count == 0) { SetLocation("Its external angles could not be verified."); return; }
+        string address = await Task.Run(() => AngledAddressText(angles[0]), ct);
+        SetLocation($"Angles {string.Join(", ", angles)} · address {address}", angles[0].ToString(), address);
+    }
+
+    // The angled internal address (pastes back to exactly this component);
+    // the plain address when the angled one cannot be resolved.
+    private static string AngledAddressText(ExternalAngle angle)
+    {
+        var angled = AddressAngles.AngledAddressOf(angle);
+        return angled != null ? AddressAngles.Format(angled) : string.Join(" → ", angle.InternalAddress(64));
+    }
+
+    private async Task ShowMisiurewiczAnglesAsync(MisiurewiczResult m, double scale, CancellationToken ct)
+    {
+        SetLocation("Finding its external angles…");
+        var angles = await Task.Run(() => LocationAngles.MisiurewiczAngles(m, scale, ct), ct);
+        if (angles.Count == 0) { SetLocation("Its external angles could not be verified."); return; }
+        // A Misiurewicz point has no internal address (addresses name components).
+        SetLocation($"{(angles.Count == 1 ? "Angle" : $"{angles.Count} rays land here:")} {string.Join(", ", angles)}",
+                    angles[0].ToString());
+    }
 
     private static string Fmt(double v) => v.ToString("G4", CultureInfo.InvariantCulture);
 }
