@@ -750,6 +750,16 @@ namespace FracturingFog.Hosting
                 });
             };
 
+            // #1242 — Explore ▸ Find ▸ Critical points ▸ Use as z0.
+            s_shell.SetUserEquationSeed = seed =>
+            {
+                if (s_userEqWin?.DataContext is UserEquationViewModel ueVm) { ueVm.SeedExpression = seed; return; }
+                var host = s_renderHost;
+                if (host == null) return;
+                host.ViewState.FractalParameters.UserEquationSeed = seed;
+                host.Trigger();
+            };
+
             // Auto-explore probe (#1190): snapshot the live family / params /
             // theme as a poster request (UI thread) and render square probes of
             // it through the poster calculators (worker thread).

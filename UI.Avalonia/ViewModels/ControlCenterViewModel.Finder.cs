@@ -98,7 +98,7 @@ public sealed partial class ControlCenterViewModel
         set
         {
             this.RaiseAndSetIfChanged(ref _angleText, value);
-            AngleInfo = DescribeAngle(value);
+            AngleInfo = DescribeAngleForView(value);
         }
     }
 
@@ -163,6 +163,7 @@ public sealed partial class ControlCenterViewModel
         InitExplore();
         InitLoop();
         InitLocationCopy();
+        InitCriticalPoints();   // #1242
         CancelFinderCommand   = ReactiveCommand.Create(() =>
         {
             _finderCts?.Cancel();
@@ -398,9 +399,10 @@ public sealed partial class ControlCenterViewModel
     private Task GoToAngleAsync()
     {
         var vs = Shell.Main.ViewState;
+        if (TrackOf(vs.FractalType) == FinderTrack.General) return GeneralGoToAngleAsync();   // #1242
         if (!FinderSupports(vs.FractalType))
         {
-            FinderStatus = $"External angles apply to z² + c (Mandelbrot) only — not {vs.FractalType}.";
+            FinderStatus = $"External angles apply to z² + c and z^d + c (Mandelbrot, Multibrot) only — not {vs.FractalType}.";
             return Task.CompletedTask;
         }
         string text = AngleText;

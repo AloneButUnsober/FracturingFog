@@ -589,6 +589,10 @@ namespace FracturingFog.Cli
                              + (missing.Count > 6 ? $", +{missing.Count - 6} more" : "")
                              + ") — save them as a Lighting & FX preset and re-seed to use --lighting-preset");
             }
+            // #1242 / #1249 — user-code types render from their source, which no flag
+            // carries: the batch loads it from a saved region (--region NAME).
+            if (snap.Fractal is FractalType.UserEquation or FractalType.Sandbox or FractalType.UserBulb)
+                gaps.Add($"{snap.Fractal} equation source (no flag carries it — add --region NAME of a saved region that uses this equation)");
             if (!string.IsNullOrWhiteSpace(snap.LiveAnimationName))
                 gaps.Add($"Live animation '{snap.LiveAnimationName}' (a still shows one moment of it; for a video choose it under --animation)");
             return gaps;

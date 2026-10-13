@@ -589,7 +589,7 @@ Measured against all 158 built-in Mandelbrot regions (`Resources/regions.json`):
   The last test makes the method sound for any start point, so it replaces the planned
   "solve f′(z) = 0 and let the user pick": z₀ is then attracted to the cycle, so c lies in
   a hyperbolic component of the rendered set. With a critical z₀ the radius is 0.
-  Picking another critical point is follow-up #1242.
+  Picking another critical point shipped in #1242 (§9.7).
 - **Search.** Periods are scanned upward from 1 (lowest period first, as in S2) within a
   work budget. Newton starts at the view centre. Once the centre's orbit escapes too early
   for the period, it starts instead from the point of a 9×9 grid whose orbit survives
@@ -607,8 +607,8 @@ Measured against all 158 built-in Mandelbrot regions (`Resources/regions.json`):
   must be repelling. A rotation angle is reported only when the cycle Jacobian is conformal.
 - **Julia morph** gained a family-agnostic `JuliaMorph.Plan(nucleus, period,
   minibrotZoom, …, maxZoom)` overload.
-- **Not shipped (#1242):** base-d external angles for Multibrot, the User Equation
-  critical-point picker, and deep zoom past 1e13.
+- **Follow-ups:** base-d angles and the critical-point picker shipped in #1242 (§9.7).
+  Deep zoom past 1e13 waits on the families themselves.
 - **Validated:**
   - Hand-solved nuclei:
     - z²: −1, the airplane and the rabbit;
@@ -628,6 +628,73 @@ Measured against all 158 built-in Mandelbrot regions (`Resources/regions.json`):
     in-set in the family's real calculator, and the frame shows exterior.
 - **Batch:** navigation only, so no new flag is needed. The Command builder reproduces the
   result by coordinates (double precision suffices below 1e13).
+
+### 9.7 Implementation notes (#1242: base-d angles, critical points)
+
+- **Base-d angles (`BaseAngle`).** For z^d + c the circle dynamics is θ ↦ dθ, so an angle
+  is stored exactly as base-d digits `.pre(per)`, with base ≤ 36 (digits 0–9, a–z).
+  - A fraction p/q is split as q = q₁·r, where r is coprime to d and q₁ divides d^a. The
+    pre part is then a digits long, and the period is the order of d mod r.
+  - The canonical form has the minimal period, trailing pre digits folded into the period,
+    and a (d−1)-recurring tail rewritten as a terminating angle.
+  - In base 2 it reproduces `ExternalAngle` exactly (the test compares them).
+- **Rays (`MultibrotRay`).** The same scheme as S4, with f^{k+1}_c(0) ≈ Φ(c)^{d^k}:
+  - each digit takes 8 substeps over r = R^{(1/d)^{(j+½)/8}};
+  - Newton runs on c with dz/dc = d·z^{d−1}·dz + 1;
+  - the trace is plain double, because these families render in double, and it stops once
+    the ray stalls at that limit.
+- **Landing.**
+  - A periodic ray lands on a parabolic point of a period-p component. For d > 2 that is the
+    root or one of the d − 2 co-roots: the multiplier map of a component of M_d is
+    (d − 1)-to-1, so each component has d − 1 such points. `GeneralFinder.FindNucleus`
+    takes the trace end to the nucleus with a growing reach, accepted within 2.5 body radii.
+  - A preperiodic ray (preperiod l, period p) lands on M(l + 1, p′) with p′ | p. The new
+    `GeneralFinder.FindMisiurewicz(k, p)` refines it: Newton, re-classification to the
+    minimal (k, p), and a repelling cycle.
+- **Validated (independent facts):**
+  - In base 2 the landings equal S4's OD `ExternalRay` (1/3, 1/7, 2/7, 1/15; 1/6, 1/4, 5/12).
+  - z³ + c:
+    - the period-2 rays 1/8, 1/4, 3/8 land on the nucleus i, and 5/8, 3/4, 7/8 on −i (c³ + c = 0);
+    - 0 and 1/2 land at the cusps ±2/(3√3);
+    - 1/6, 2/3, 5/6 and 1/3 land on the M(2,1) points 3^{1/4}·e^{iφ}, with c² = ω − 1.
+  - z⁴ + c: the twelve period-2 rays land four apiece on the roots of c³ = −1 (a root plus
+    two co-roots each).
+  - The (d − 1)-fold rotation (θ + 1/(d−1) ↔ e^{2πi/(d−1)}·c) and conjugation (−θ ↔ c̄)
+    symmetries hold for d = 4 and 5.
+- **Critical points (`CriticalPoints`).**
+  - f′ = ∂f/∂z is exact, from the DSL's forward-mode dual numbers (`EvalStepDz`, with c
+    held constant). That keeps full relative precision where f itself is swamped by c
+    (z⁸ + c near 0).
+  - The dual rule for a^b at a = 0 used the log form, 0·∞ = NaN. With a constant real b ≥ 1
+    it now returns b·a^{b−1}·a′.
+  - Roots of f′ are found by Newton from 0 and 7 rings of 12 starts, with f″ from a central
+    difference of f′. The step is scaled by the multiplicity m, estimated from successive
+    steps contracting by (m − 1)/m.
+  - Each root is checked: |f′| must be under 10⁻⁶ of its value a little way off, and the
+    order is measured.
+  - A root that moves when c changes, at two test offsets, is flagged as c-dependent. It is
+    listed but cannot be applied, because no constant seed reproduces it.
+  - Refused for non-holomorphic equations, whose Jacobian vanishes on curves, not points.
+- **Validated (critical points):**
+  - Hand-solved roots: z^d + c → 0 with multiplicity d − 1; z³ − 3z + c → ±1;
+    z⁴ − 2z² + c → 0, ±1; z³ + 3z + c → ±i; z³ + cz → ±√(−c/3), flagged as c-dependent;
+    exp(z) + c → none.
+  - Dynamical check: with z₀ = ±1 on z³ − 3z + c, the nuclei the general finder accepts
+    (c = ±3) are superattracting (multiplier 0), as they must be when the cycle passes
+    through a critical point.
+- **UI.** Explore ▸ Find:
+  - On a Multibrot, the Angle box reads base-d angles.
+  - On a User Equation, **Critical points** fills a list and **Use as z0** sets the seed. It
+    goes through the equation editor when that is open, so its seed box follows.
+- **Batch parity.**
+  - The seed changes the render, so it joins the region snapshot (`RegionFractalParams.UserEquationSeed`),
+    which makes it `--param UserEquationSeed=…`, with a round-trip test. A blank seed is not
+    emitted, so a saved equation's own seed stands.
+  - The equation source itself was never in the Command builder. `DetectGaps` now reports
+    it, and #1249 tracks the fix.
+- **Not done:** deep zoom past 1e13 for these families. They render in double with no
+  perturbation tier, so an OD reference orbit in the finders would gain nothing. It becomes
+  relevant once a family gains perturbation rendering.
 
 ## 10. Sources
 

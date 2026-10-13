@@ -142,12 +142,26 @@
                     <TextBlock Grid.Column="0" Classes="label" Text="Angle:" VerticalAlignment="Center" />
                     <TextBox Grid.Column="1" Classes="coord" Text="{Binding AngleText, UpdateSourceTrigger=PropertyChanged}"
                              MinWidth="180" Watermark=".(001)  1/7  or  1 → 2 → 4"
-                             ToolTip.Tip="External angle θ: binary with the repeating part in brackets (.(011), .01(10)) or a fraction p/q. Its bits are the left/right turns of the ray's path into the set. Or an internal address such as 1 → 2 → 4 (angled: 1_1/3 → 3)." />
+                             ToolTip.Tip="External angle θ: binary with the repeating part in brackets (.(011), .01(10)) or a fraction p/q. Its bits are the left/right turns of the ray's path into the set. Or an internal address such as 1 → 2 → 4 (angled: 1_1/3 → 3). On Multibrot z^d + c the digits are base d (z³: .(01) = 1/8); fractions work in any base." />
                     <Button Grid.Column="2" Classes="action go" Content="Go to angle"
                             Command="{Binding GoToAngleCommand}"
                             ToolTip.Tip="Trace the parameter ray at this angle into the set and jump to where it lands: a minibrot (periodic angle) or a Misiurewicz point (preperiodic angle). Backspace returns." />
                 </Grid>
                 <TextBlock Text="{Binding AngleInfo}" Foreground="#9A9A9A" FontSize="11" TextWrapping="Wrap" />
+                <!-- #1242: User Equation critical points; one becomes the z0 seed. -->
+                <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,6,0,0" IsVisible="{Binding IsUserEquation}">
+                    <Button Classes="action neutral" Content="Critical points"
+                            Command="{Binding FindCriticalPointsCommand}"
+                            ToolTip.Tip="List the critical points of the equation (where f'(z) = 0). Each has its own Mandelbrot-like set in the parameter plane; the render shows the set of its start point z0." />
+                    <ComboBox ItemsSource="{Binding CriticalPointItems}" SelectedIndex="{Binding CriticalPointIndex}"
+                              IsVisible="{Binding HasCriticalPoints}" MinWidth="170"
+                              ToolTip.Tip="The critical points, nearest the origin first; (xm) marks a multiple one. One that moves with c is shown at the view centre and cannot be set as a constant seed." />
+                    <Button Classes="action go" Content="Use as z0"
+                            Command="{Binding UseCriticalPointCommand}" IsVisible="{Binding HasCriticalPoints}"
+                            ToolTip.Tip="Set the User Equation's z0 seed to this critical point and re-render. The minibrot finders then find nuclei of its set." />
+                </StackPanel>
+                <TextBlock Text="{Binding CriticalPointInfo}" Foreground="#9A9A9A" FontSize="11" TextWrapping="Wrap"
+                           IsVisible="{Binding IsUserEquation}" />
                 <!-- S6 #1190: heuristic auto-explore (every 2D family). -->
                 <TextBlock Classes="label" Text="Auto-explore" HorizontalAlignment="Left" Margin="0,6,0,0" />
                 <StackPanel Orientation="Horizontal" Spacing="4">

@@ -383,22 +383,41 @@ public static class GeneralFinder
             foreach (var s in seen) if ((s - c).Length <= thr) { dup = true; break; }
             if (dup) continue;
             seen.Add(c);
-
-            // Minimal period (a divisor of p), then minimal preperiod.
-            int pp = p;
-            for (int q = 1; q < p; q++)
-                if (p % q == 0 && RootDistance(map, c, k, q) <= thr) { pp = q; break; }
-            int kk = k;
-            for (int j = 0; j < k; j++)
-                if (RootDistance(map, c, j, pp) <= thr) { kk = j; break; }
-            if (kk == 0) continue;   // periodic: a nucleus, not a Misiurewicz point
-
-            var m = CycleJacobian(map, c, kk, pp);
-            double rho = m.IsFinite ? m.SpectralRadius : double.PositiveInfinity;
-            if (!(rho > 1 + 1e-9) || !double.IsFinite(rho)) continue;
-            double? turn = m.IsConformal(1e-4) ? SMath.Atan2(m.C, m.A) * 180 / SMath.PI : null;
-            return new GeneralMisiurewicz(GeneralStatus.Found, c, kk, pp, rho, turn, attempts);
+            if (Classify(map, c, k, p, thr, attempts) is GeneralMisiurewicz found) return found;
         }
         return new GeneralMisiurewicz(GeneralStatus.NotFound, click, 0, 0, double.NaN, null, attempts);
+    }
+
+    /// <summary>Newton from <paramref name="seed"/> for the root of
+    /// z_{k+p} = z_k within <paramref name="reach"/>, re-classified to its
+    /// minimal (k, p) and required to be a repelling Misiurewicz point (#1242:
+    /// the landing point of a preperiodic ray).</summary>
+    public static GeneralMisiurewicz FindMisiurewicz(IOrbitMap map, V2 seed, int k, int p, double reach, CancellationToken ct = default)
+    {
+        long work = 0;
+        var c = seed;
+        if (k >= 1 && p >= 1 && Newton(map, ref c, k, p, seed, reach, ref work, ct) && (c - seed).Length <= reach
+            && Classify(map, c, k, p, SameRootThreshold(c, reach), 1) is GeneralMisiurewicz found)
+            return found;
+        return new GeneralMisiurewicz(GeneralStatus.NotFound, seed, 0, 0, double.NaN, null, 1);
+    }
+
+    // Minimal period (a divisor of p), then minimal preperiod; null for a
+    // periodic root or a cycle that is not repelling.
+    private static GeneralMisiurewicz? Classify(IOrbitMap map, V2 c, int k, int p, double thr, int attempts)
+    {
+        int pp = p;
+        for (int q = 1; q < p; q++)
+            if (p % q == 0 && RootDistance(map, c, k, q) <= thr) { pp = q; break; }
+        int kk = k;
+        for (int j = 0; j < k; j++)
+            if (RootDistance(map, c, j, pp) <= thr) { kk = j; break; }
+        if (kk == 0) return null;   // periodic: a nucleus, not a Misiurewicz point
+
+        var m = CycleJacobian(map, c, kk, pp);
+        double rho = m.IsFinite ? m.SpectralRadius : double.PositiveInfinity;
+        if (!(rho > 1 + 1e-9) || !double.IsFinite(rho)) return null;
+        double? turn = m.IsConformal(1e-4) ? SMath.Atan2(m.C, m.A) * 180 / SMath.PI : null;
+        return new GeneralMisiurewicz(GeneralStatus.Found, c, kk, pp, rho, turn, attempts);
     }
 }

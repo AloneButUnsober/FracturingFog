@@ -133,6 +133,18 @@ namespace FracturingFog.Models
         public readonly Complex D;   // d/dc
         public CxDual(Complex v, Complex d) { V = v; D = d; }
         public static CxDual Const(Complex v) => new CxDual(v, Complex.Zero);
+
+        /// <summary>a^b with d(a^b) = a^b · (b'·ln a + b·a'/a). At a = 0 with a
+        /// constant real exponent b ≥ 1 that form is 0·∞ (NaN); the derivative
+        /// is b·a^{b−1}·a' there — a' for b = 1, else 0 (#1242: critical points
+        /// such as z = 0 of z^d + c).</summary>
+        public static CxDual Pow(CxDual a, CxDual b)
+        {
+            Complex v = Complex.Pow(a.V, b.V);
+            if (a.V == Complex.Zero && b.D == Complex.Zero && b.V.Imaginary == 0 && b.V.Real >= 1)
+                return new CxDual(v, b.V.Real == 1 ? a.D : Complex.Zero);
+            return new CxDual(v, v * (b.D * Complex.Log(a.V) + b.V * a.D / a.V));
+        }
     }
 
     public abstract class SbxNode
@@ -254,13 +266,7 @@ namespace FracturingFog.Models
                     Complex v = a.V / b.V;
                     return new CxDual(v, (a.D * b.V - a.V * b.D) / (b.V * b.V));  // quotient rule
                 }
-                case "^":
-                {
-                    // d(a^b) = a^b · (b'·ln a + b·a'/a).
-                    Complex v = Complex.Pow(a.V, b.V);
-                    Complex d = v * (b.D * Complex.Log(a.V) + b.V * a.D / a.V);
-                    return new CxDual(v, d);
-                }
+                case "^": return CxDual.Pow(a, b);
                 default: throw new NotSupportedException("non-holomorphic op '" + Op + "'");
             }
         }
@@ -376,11 +382,7 @@ namespace FracturingFog.Models
             // pow(a,b) is the only holomorphic multi-arg fn.
             if (Name == "pow")
             {
-                var a = Args[0].EvalD(env);
-                var b = Args[1].EvalD(env);
-                Complex pv = Complex.Pow(a.V, b.V);
-                Complex pd = pv * (b.D * Complex.Log(a.V) + b.V * a.D / a.V);
-                return new CxDual(pv, pd);
+                return CxDual.Pow(Args[0].EvalD(env), Args[1].EvalD(env));
             }
 
             var u = Args[0].EvalD(env);
@@ -531,6 +533,20 @@ namespace FracturingFog.Models
             denv[SlotC] = new CxDual(c, Complex.One);
             denv[SlotN] = CxDual.Const(n);
             denv[SlotPrev] = new CxDual(prev, dprev);
+            denv[SlotIter] = CxDual.Const(n);
+            var r = Root.EvalD(denv);
+            return (r.V, r.D);
+        }
+
+        /// <summary>#1242 — the step and its exact partial derivative ∂f/∂z at
+        /// fixed c (z seeds 1, c / prev / n are constants). Only valid when
+        /// <see cref="IsHolomorphic"/>.</summary>
+        public (Complex f, Complex dfdz) EvalStepDz(Complex z, Complex c, int n, CxDual[] denv, Complex prev = default)
+        {
+            denv[SlotZ] = new CxDual(z, Complex.One);
+            denv[SlotC] = CxDual.Const(c);
+            denv[SlotN] = CxDual.Const(n);
+            denv[SlotPrev] = CxDual.Const(prev);
             denv[SlotIter] = CxDual.Const(n);
             var r = Root.EvalD(denv);
             return (r.V, r.D);

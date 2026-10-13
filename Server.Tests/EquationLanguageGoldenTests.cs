@@ -14,6 +14,12 @@
 // frozen fingerprint now proves that: every source is upgraded, then parsed
 // with the current rules — it must still evaluate exactly as the original did
 // under the old parser.
+//
+// #1242 re-froze it once, for one intended change: the dual derivative of a^b
+// at a = 0 with a constant real b >= 1 was 0*inf = NaN and is now b*a^(b-1)*a'.
+// Dumping EvalStep / EvalStepD over this grid before and after showed 30
+// differences, every one an EvalStepD derivative that was NaN at z = 0 and is
+// now finite; every value (and every other derivative) is bit-identical.
 
 using System;
 using System.Collections.Generic;
@@ -30,7 +36,7 @@ namespace FracturingFog.Server.Tests;
 public sealed class EquationLanguageGoldenTests
 {
     // Captured from the pre-refactor parser; see the header.
-    private const ulong GoldenFingerprint = 14060104663537180074UL;
+    private const ulong GoldenFingerprint = 3620760727292370346UL;
 
     /// <summary>Grammar coverage the corpora below might not hit on their own.</summary>
     private static readonly string[] Coverage =

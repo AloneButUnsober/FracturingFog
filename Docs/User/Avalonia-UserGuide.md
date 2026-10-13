@@ -173,8 +173,13 @@ The **Find** group locates miniature copies of the set ("minibrots") and the exa
   - **Morph video:** a morph path ends at one view, and an ordinary zoom video into that view passes through every layer you stacked. So **Capture ▸ Video** (or `--batch … --video-motion zoom`) records it; nothing extra is needed.
 - **Backspace** returns to the view you jumped from.
 - **Detect period** is a quick read-only scan. It reports the lowest period *candidate* in view. That is a lower bound: the minibrot that **Zoom to minibrot** actually finds often has a higher period.
-- **Other families.** Multibrot, Burning Ship, Tricorn and User Equation support **Zoom to minibrot**, **Snap to spiral** and **Julia morph**. **Detect period** and **Angle** are Mandelbrot-only.
-  - These families render in double precision, so their finders stop at zoom 1e13.
+- **Other families.** Multibrot, Burning Ship, Tricorn and User Equation support **Zoom to minibrot**, **Snap to spiral** and **Julia morph**. **Detect period** is Mandelbrot-only.
+  - These families render in double precision, so their finders stop at zoom 1e13. That includes jumps from **Angle**.
+  - **Angle on Multibrot (z^d + c):** angles are written in **base d**, because each step of the ray multiplies the angle by d instead of 2. For z³ + c the digits are 0, 1 and 2: `1/8` = `.(01)`, `1/6` = `.0(1)`. Fractions work in any base. A periodic angle lands on a minibrot. For d > 2 every minibrot has d − 1 "roots", so more rays reach each one: on z³ + c, `1/8`, `1/4` and `3/8` all land on the bulb at *i*. A preperiodic angle lands on a spiral or branch point. Internal addresses are Mandelbrot-only.
+  - **Critical points (User Equation):** **Critical points** lists the points where the equation's derivative f′(z) is zero. Each one has its own Mandelbrot-like set in the parameter plane, and the render shows the set of its start point z₀. Pick one and press **Use as z0** to make it the start point; the minibrot finders then find true (superattracting) nuclei of that set.
+    - A point that moves with c, such as ±√(−c/3) for `z^3 + c*z`, is listed with its value at the view centre but cannot be set as a constant. Type its formula into the editor's z₀ seed instead.
+    - Needs a holomorphic equation: no `conj`, `abs`, `re`, `im` or conditions.
+    - The seed reaches the **Command** builder as `--param UserEquationSeed=…`. The equation itself still has to come from a saved region (`--region NAME`); the yellow banner says so (#1249).
   - On Tricorn and Burning Ship the readout gives the spiral's repeat factor but no rotation angle: their spirals are not rotation-symmetric.
   - A User Equation works when its step uses only `z` and `c`, not `n`, `iter` or `prev`. Equations with `conj`, `abs`, `re` or `im` work too. Minibrots are found for the equation's own start point (0, or its z₀ seed).
 
