@@ -194,6 +194,31 @@ namespace FracturingFog.Server.Tests
             Assert.False(BatchOptions.TryParse(new[] { "--out", "o.png" }, 0, out _, out _));
         }
 
+        // #1235 — the Misiurewicz loop video command (live command + loop tokens)
+        // parses back to the same loop.
+        [Theory]
+        [InlineData(5.656854249492381, 45.0, 2, 0)]       // c = i, automatic cycles
+        [InlineData(1.0387, 172.6, 1, 0)]                 // a slow seahorse spiral
+        [InlineData(4.0, 0.0, 1, 3)]                      // the tip −2, three cycles per loop
+        public void LoopVideo_RoundTripsThroughBatchOptions(double mag, double deg, int period, int cycles)
+        {
+            var loop = FracturingFog.Abstractions.Explore.MisiurewiczLoop.For(mag, deg, period, cycles);
+            var snap = new BatchCommandSnapshot { CenterX = 0, CenterY = 1, Zoom = 2000 };
+            var args = new System.Collections.Generic.List<string>(BatchCommandBuilder.BuildWithReport(snap).Args);
+            args.AddRange(BatchCommandBuilder.LoopVideoArgs(loop));
+            for (int i = 0; i < args.Count; i++) if (args[i] == "<OUTPUT.png>") args[i] = "out";
+
+            Assert.True(BatchOptions.TryParse(args.ToArray(), 0, out var o, out var err), err);
+            Assert.Equal(BatchMode.Video, o.Mode);
+            Assert.True(o.VideoLoop);
+            Assert.Equal(mag, o.LoopMagnitude);
+            Assert.Equal(loop.AngleDegrees, o.LoopAngleDegrees);
+            Assert.Equal(period, o.LoopPeriod ?? 0);
+            var back = FracturingFog.Abstractions.Explore.MisiurewiczLoop.For(
+                o.LoopMagnitude!.Value, o.LoopAngleDegrees!.Value, o.LoopPeriod ?? 0, o.LoopCycles ?? 0);
+            Assert.Equal(loop, back);
+        }
+
         [Fact]
         public void Build_RoundTripsThroughBatchOptions()
         {

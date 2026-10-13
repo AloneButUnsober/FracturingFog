@@ -521,9 +521,35 @@ namespace FracturingFog.Batch
             var motion = VideoMotionPlan.Resolve(frType, opts.VideoMotion, out string? motionNote);
             var motionRng = new Random(opts.VideoSeed);
 
+            // #1235 — Misiurewicz loop: --x/--y is the point, --zoom the loop's
+            // first frame; one loop (the whole video) zooms ×|λ|^n and turns.
+            FracturingFog.Abstractions.Explore.MisiurewiczLoop? loop = null;
+            if (opts.VideoLoop)
+            {
+                if (opts.LoopMagnitude is not double loopMag)
+                {
+                    Console.Error.WriteLine("batch: --video-motion loop needs --loop-multiplier MAG,DEG (Snap to spiral reports it).");
+                    return 2;
+                }
+                if (motion != VideoMotionKind.Zoom)
+                {
+                    Console.Error.WriteLine($"batch: --video-motion loop needs a 2D zoomable family, not {frType}.");
+                    return 2;
+                }
+                loop = FracturingFog.Abstractions.Explore.MisiurewiczLoop.For(
+                    loopMag, opts.LoopAngleDegrees ?? 0, opts.LoopPeriod ?? 0, opts.LoopCycles ?? 0);
+                if (opts.VideoReverse)
+                    Console.WriteLine("  note     : --reverse is ignored for a loop (it already wraps).");
+            }
+
             double startZoom, endZoom;
             switch (motion)
             {
+                case VideoMotionKind.Zoom when loop != null:
+                    startZoom = Math.Max(targetZoom, QualityPreset.DefaultZoomMin);
+                    endZoom = loop.ZoomAt(startZoom, 1);
+                    quality = FracturingFog.Abstractions.Explore.MinibrotJump.QualityFor(quality, endZoom);
+                    break;
                 case VideoMotionKind.Zoom:
                     startZoom = Math.Max(opts.VideoStartZoom, QualityPreset.DefaultZoomMin);
                     endZoom = Math.Max(targetZoom, QualityPreset.DefaultZoomMin);
@@ -551,7 +577,7 @@ namespace FracturingFog.Batch
                 startZoom = endZoom;
                 motionNote = "target is the start view — nothing to zoom into; using Ken-Burns (--start-zoom to override).";
             }
-            if (opts.VideoReverse)
+            if (opts.VideoReverse && loop == null)
             {
                 // Reverse: start at target, end at the start-zoom (full view).
                 (startZoom, endZoom) = (endZoom, startZoom);
@@ -641,6 +667,11 @@ namespace FracturingFog.Batch
             var stereo = BatchStereo.For(frType, fp.Relief2DEnabled && fp.Relief2DRaymarch, fp.Lighting, outW, outH);
             int frameW = stereo?.FrameW ?? outW, frameH = stereo?.FrameH ?? outH;
             NoteIfStereoInert(frType, fp, stereo != null);
+            if (stereo != null && loop != null)
+            {
+                Console.Error.WriteLine("batch: a Misiurewicz loop turns the frame in image space, which a stereo pair can't follow — drop --stereo.");
+                return 2;
+            }
             if (stereo != null && motion == VideoMotionKind.KenBurns)
             {
                 // Ken-Burns pans ONE rendered frame in image space; a stereo pair /
@@ -656,6 +687,9 @@ namespace FracturingFog.Batch
             Console.WriteLine($"  zoom     : {startZoom:G6} → {endZoom:G6}    iter: {iter}");
             Console.WriteLine($"  motion   : {motion}{(opts.VideoOrbitDegrees != 0 ? $" + orbit {opts.VideoOrbitDegrees:G4}°" : "")}");
             if (motionNote != null) Console.WriteLine($"  note     : {motionNote}");
+            if (loop != null)
+                Console.WriteLine($"  loop     : x{loop.Magnitude:G6} turning {loop.AngleDegrees:G4}° per cycle, {loop.Cycles} cycle(s) = x{loop.LoopZoom:G4} zoom, "
+                                + (loop.Period > 0 ? $"palette back {loop.Period} iter/cycle" : "no palette shift"));
             Console.WriteLine($"  theme    : {opts.ThemeName}    quality: {quality.Name}");
             Console.WriteLine($"  size     : {outW}x{outH}    fps: {opts.VideoFps}    frames: {totalFrames}");
             if (stereo != null) Console.WriteLine($"  stereo   : {stereo.Describe()}");
@@ -756,7 +790,7 @@ namespace FracturingFog.Batch
                     Console.WriteLine($"  note     : '{animation.Name}' was authored for {string.Join(", ", animation.TargetFractalTypes)}.");
             }
             // The animation owns param motion: no default constant drift beside it.
-            var drift = (motion == VideoMotionKind.Zoom && !opts.VideoNoDrift && animation == null)
+            var drift = (motion == VideoMotionKind.Zoom && !opts.VideoNoDrift && animation == null && loop == null)
                 ? FracturingFog.Abstractions.Animation.ConstantDriftResolver.TryBuild(
                     frType, fp, opts.VideoSeconds, motionRng)
                 : null;
@@ -818,6 +852,7 @@ namespace FracturingFog.Batch
             bool reliefStereo = stereo?.Kind == BatchStereoKind.DepthRelief;
             uint[] RenderZoomFrame(double teLocal, FracturingFog.Rendering.Lighting.FroxelHistory? reliefHist, bool captureHdr)
             {
+                if (loop != null) return RenderLoopFrame(teLocal);
                 double fz = Math.Exp(logZ0 + (logZ1 - logZ0) * teLocal);
                 if (reliefFp != null)
                 {
@@ -855,6 +890,26 @@ namespace FracturingFog.Batch
                                      fp, limbSource, stereo, frameDepth);
             }
 
+            // #1235 — one Misiurewicz-loop frame: the loop's first frame (centre on
+            // the point, start zoom) turned and zoomed to loop time te.
+            uint[] RenderLoopFrame(double teLocal)
+            {
+                var lsrc = limbSource ?? limbRegion;
+                var lreq = new PosterRequest
+                {
+                    FractalType = frType, Width = outW, Height = outH,
+                    CenterX = cx, CenterXLo = lsrc?.CenterXLo ?? 0, CenterX2 = lsrc?.CenterX2 ?? 0, CenterX3 = lsrc?.CenterX3 ?? 0,
+                    CenterY = cy, CenterYLo = lsrc?.CenterYLo ?? 0, CenterY2 = lsrc?.CenterY2 ?? 0, CenterY3 = lsrc?.CenterY3 ?? 0,
+                    Zoom = startZoom, MaxIterations = iter,
+                    ColorMap = theme, Quality = quality,
+                    FractalParameters = reliefFp ?? fp,
+                    HistogramEq = pfAdaptive,
+                    Path = string.Empty, Format = ImageFileFormat.Png,
+                };
+                if (deepCentre is { } ld) lreq = WithCentre(lreq, ld);
+                return FracturingFog.Explore.MisiurewiczLoopRenderer.RenderFrame(lreq, loop!, teLocal, CancellationToken.None);
+            }
+
             var progress = new ConsoleProgress("Frames");
             var sw = Stopwatch.StartNew();
             int framesWritten = 0;
@@ -863,8 +918,11 @@ namespace FracturingFog.Batch
             {
                 for (int f = 0; f < totalFrames; f++)
                 {
-                    double t = totalFrames == 1 ? 1.0 : (double)f / (totalFrames - 1);
-                    double te = VideoMotionPlan.SmoothStep(t);
+                    // A loop runs linearly and stops one frame short of t = 1 (which
+                    // is frame 0 again), so playback wraps seamlessly (#1235).
+                    double t = loop != null ? (double)f / totalFrames
+                             : totalFrames == 1 ? 1.0 : (double)f / (totalFrames - 1);
+                    double te = loop != null ? t : VideoMotionPlan.SmoothStep(t);
                     double frameZoom = Math.Exp(logZ0 + (logZ1 - logZ0) * te);   // nominal (progress)
                     double eHold = VideoMotionPlan.SmootherStep(t);              // sweep / orbit / Ken-Burns
 

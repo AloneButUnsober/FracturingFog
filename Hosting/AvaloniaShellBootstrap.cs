@@ -762,6 +762,29 @@ namespace FracturingFog.Hosting
                 return FracturingFog.Explore.ExploreProbe.For(template, size);
             };
 
+            // J_c preview for a snapped Misiurewicz point (#1235): the Julia set at
+            // c in the live theme. The theme is snapshotted on the calling thread
+            // through CreatePosterRequest's colour map.
+            s_shell.RenderJuliaPreview = (cre, cim, w, h) =>
+            {
+                var host = s_renderHost;
+                if (host == null) return null;
+                var template = host.CreatePosterRequest(w, h, rotate: false, path: string.Empty,
+                    FracturingFog.Imaging.ImageFileFormat.Png);
+                var req = template with
+                {
+                    FractalType = FracturingFog.FractalType.Julia,
+                    CenterX = 0, CenterXLo = 0, CenterX2 = 0, CenterX3 = 0, CenterX4 = 0, CenterX5 = 0, CenterX6 = 0, CenterX7 = 0,
+                    CenterY = 0, CenterYLo = 0, CenterY2 = 0, CenterY3 = 0, CenterY4 = 0, CenterY5 = 0, CenterY6 = 0, CenterY7 = 0,
+                    Zoom = 1.0,
+                    MaxIterations = 1000,
+                    Quality = FracturingFog.Models.QualityPreset.Standard,
+                    FractalParameters = new FracturingFog.Models.FractalParameters { JuliaC = new System.Numerics.Complex(cre, cim) },
+                    ReliefField = null, ReliefFieldW = 0, ReliefFieldH = 0,
+                };
+                return FracturingFog.Imaging.PosterRenderer.RenderToPixels(req, System.Threading.CancellationToken.None, out _, out _);
+            };
+
             // Palette samplers for MiniDepth (#11 — theme-styled gradient).
             // Uses the host's MandelbrotCalculator.ColorMap so the strip
             // colours stay in lock-step with whatever theme is active.

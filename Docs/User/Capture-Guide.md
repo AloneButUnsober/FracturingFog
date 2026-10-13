@@ -498,6 +498,26 @@ FracturingFog.exe --batch --x "-0.24905543435932342|-6.604062758348074e-18" ^
                   --y "-0.7149922770539002|4.275119836666484e-17" --zoom 1e17 --out C:\out\deep.png
 ```
 
+### Misiurewicz loop (#1235)
+
+`--video-motion loop` renders a seamless self-similar loop at a spiral or branch
+point (a Misiurewicz point). **Explore → Find → Snap to spiral** reports its
+multiplier λ, and **Loop video** builds this command for you.
+- `--x/--y` is the point and `--zoom` the first frame.
+- `--loop-multiplier MAG,DEG` gives |λ| and its angle. One loop, which is the
+  whole video, zooms ×|λ|ⁿ and turns by −n·arg λ.
+- `--loop-cycles N` sets n. The default is enough cycles for at least ×2 zoom,
+  which matters for slow spirals with |λ| close to 1.
+- `--loop-period P` turns the palette back P iterations per cycle, so the
+  colours wrap too.
+- The last frame stops one step short of the first, so a player set to repeat
+  shows no seam.
+
+```
+FracturingFog.exe --batch --mode video --video-motion loop --loop-multiplier 5.656854,45 --loop-period 2 ^
+                  --x 0 --y 1 --zoom 2000 --seconds 6 --out C:\out\loop.mp4
+```
+
 ### Auto-explore (#1190)
 
 `--explore SPEC` searches from the start view for a detail-rich view and renders

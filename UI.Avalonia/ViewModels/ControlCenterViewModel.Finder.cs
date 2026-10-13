@@ -161,6 +161,7 @@ public sealed partial class ControlCenterViewModel
         JuliaMorphCommand     = ReactiveCommand.Create(ArmJuliaMorph, idle);
         UndoMorphStepCommand  = ReactiveCommand.Create(UndoMorphStep, idle);
         InitExplore();
+        InitLoop();
         CancelFinderCommand   = ReactiveCommand.Create(() =>
         {
             _finderCts?.Cancel();
@@ -194,6 +195,7 @@ public sealed partial class ControlCenterViewModel
     // cancellation and the "Cancelled." readout are handled here.
     private async Task RunFinderAsync(Func<CancellationToken, Task> work)
     {
+        ClearLoopTarget();   // #1235 — the loop belongs to the last snap only
         _finderCts?.Cancel();
         var cts = new CancellationTokenSource();
         _finderCts = cts;
@@ -358,6 +360,7 @@ public sealed partial class ControlCenterViewModel
             Shell.Main.RenderHost.Trigger();
             double turn = m.Multiplier.Phase * 180.0 / System.Math.PI;
             FinderStatus = $"Misiurewicz point M({m.Preperiod},{m.Period}): the pattern repeats every ×{Fmt(m.Multiplier.Magnitude)} zoom, turning {turn:0.#}°.";
+            SetLoopTarget(m.Point, m.Multiplier.Magnitude, turn, m.Period, juliaPreview: true);   // #1235
         });
         return true;
     }

@@ -55,6 +55,12 @@ namespace FracturingFog.Batch
         public const string Orbit          = "--orbit";
         public const string NoDrift        = "--no-drift";
         public const string VideoSeed      = "--video-seed";
+        // #1235 — Misiurewicz self-similar loop (--video-motion loop): the
+        // multiplier λ as MAG,DEG, the cycle period p (palette shift), and the
+        // cycles per loop.
+        public const string LoopMultiplier = "--loop-multiplier";
+        public const string LoopPeriod     = "--loop-period";
+        public const string LoopCycles     = "--loop-cycles";
         public const string Lossless       = "--lossless";
         public const string Encode         = "--encode";
         public const string KeepFrames     = "--keep-frames";

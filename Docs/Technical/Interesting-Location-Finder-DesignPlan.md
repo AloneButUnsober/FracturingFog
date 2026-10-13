@@ -440,6 +440,43 @@ Measured against all 158 built-in Mandelbrot regions (`Resources/regions.json`):
   Command panel offers them. The live seed reproduces an explored view by coordinates.
 - **Not shipped:** the score-heatmap overlay and live weight tuning ([#1240](https://github.com/AloneButUnsober/FracturingFog/issues/1240)).
 
+### 9.5b Implementation notes (S3b, #1235: Misiurewicz loop + J_c)
+
+- **Loop** (`MisiurewiczLoop`): one loop at time t ∈ [0, 1) zooms |λ|^{n·t} and
+  turns the camera by −n·t·arg λ. The palette is turned back by n·t·p iterations,
+  because the escape count grows by exactly p per cycle. Both facts were checked
+  numerically: smooth(M+δ) − smooth(M+λδ) = 2.000 at c = i, with δ from 1e-3 to
+  1e-7; using conj λ instead gives random values. The video samples
+  t = f / frames, so playback wraps.
+- **Rotation in image space** (`MisiurewiczLoopRenderer`). The renderers have no
+  plane rotation, so each frame renders a square of side ≥ the frame diagonal at
+  the same pixel scale, through `PosterRenderer.RenderToPixels`, so any family and
+  relief work. The square is then rotated and cropped bilinearly. The renderers map
+  screen y to +Im (`ViewCamera.WorldFromScreen`): assuming Im-up made the loop turn
+  the wrong way, which the "wrong-turn" control in the tests caught.
+- **Colour.** `ShiftedColorMap` hands the theme smooth − shift. That works for
+  every theme; the built-in palette-rotation static is ignored by HSV, the default.
+  The iteration cap grows by the same shift.
+- **Validated** (4×4 block means over the central half, so the test measures
+  geometry rather than per-pixel aliasing):
+
+  | Point | Seam | Mid-loop | Wrong-turn control | No-palette-shift control |
+  |---|---|---|---|---|
+  | c = i, M(2,2), \|λ\| = 4√2, 45° | 0.004 | 0.044 | 0.107 | 0.080 |
+  | Seahorse M(24,1), \|λ\| = 1.04, 172.6°, 19 cycles | 0.03 to 0.04 | 0.41 | 0.40 | 0.50 |
+  | −2, M(2,1) (seam only; the exterior is uniform) | 0.001 | | | |
+
+  For the seahorse the remaining seam is a slight hue drift in the core,
+  compounded over 19 cycles; the geometry still closes.
+- **Batch:** `--video-motion loop` plus `--loop-multiplier MAG,DEG`,
+  `--loop-period P` and `--loop-cycles N`. It is batch-only: the shared
+  `VideoMotionMode` enum used by live video and slideshows is unchanged.
+  `BatchCommandBuilder.LoopVideoArgs` emits the flags, with a round-trip test, and
+  **Loop video** loads live command + loop into the Command panel, whose **Run**
+  renders through the same code.
+- **J_c preview:** the host renders a 240×135 Julia set at the snapped c
+  (`Shell.RenderJuliaPreview`, live theme), z² + c only.
+
 ### 9.6 Implementation notes (S7)
 
 - **One engine, not three.** Every family is an `IOrbitMap`: a real 2-D map whose step
