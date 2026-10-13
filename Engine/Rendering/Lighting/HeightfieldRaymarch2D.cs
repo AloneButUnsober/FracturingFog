@@ -382,7 +382,8 @@ public static class HeightfieldRaymarch2D
                               IFroxelVolumeKernel? froxelKernel = null,
                               FroxelHistory? froxelHistory = null,
                               LightingFxData? lightingOverride = null,
-                              ReliefMotionVector.CameraView? previousCamera = null)
+                              ReliefMotionVector.CameraView? previousCamera = null,
+                              bool displayResField = false)
     {
         hitFraction = 0.0;
         int n = w * h;            // OUTPUT / albedo pixel count
@@ -423,7 +424,8 @@ public static class HeightfieldRaymarch2D
         // sy / invLip stay per-call (cheap, scale-dependent).
         // #1027 — the field downsample belongs to the true-height trace; the
         // default (plate) look traces the field as it is, as before.
-        var (tw, th, aa) = TraceGrid(hw, hh, w, h, p);
+        // #1255 — a display-res field is capped for the plate trace (TraceGrid).
+        var (tw, th, aa) = TraceGrid(hw, hh, w, h, p, displayResField);
         ReliefPrepass pre = GetPrepass(height, hn, hw, hh, p, tw, th, aa);
         // #1027 — a field finer than the output is area-downsampled inside the
         // prepass; everything below works on the prepass grid.
@@ -1394,12 +1396,13 @@ public static class HeightfieldRaymarch2D
     /// renders at (a finer field is downsampled to it, #1027); ≤ 0 = the field size.
     /// Null when the field is empty or dead flat.</summary>
     public static ReliefHeightNormalization? MeasureHeightNormalization(
-        float[] height, int hw, int hh, FractalParameters p, int outW = 0, int outH = 0)
+        float[] height, int hw, int hh, FractalParameters p, int outW = 0, int outH = 0,
+        bool displayResField = false)
     {
         int hn = hw * hh;
         if (height == null || p == null || hw <= 2 || hh <= 2 || height.Length < hn) return null;
         if (outW <= 0 || outH <= 0) { outW = hw; outH = hh; }
-        var (tw, th, aa) = TraceGrid(hw, hh, outW, outH, p);
+        var (tw, th, aa) = TraceGrid(hw, hh, outW, outH, p, displayResField);
         ReliefPrepass pre = GetPrepass(height, hn, hw, hh, p, tw, th, aa);
         if (pre.MaxH <= 1e-9f) return null;
         return new ReliefHeightNormalization(pre.Baseline, NormalizationReference(pre, p));
@@ -1828,10 +1831,25 @@ public static class HeightfieldRaymarch2D
     /// area-downsampled to it (a coarser one is kept, never upsampled), and when
     /// the grid is finer than the output a blur of about one output pixel stands in
     /// for the old downsample-to-output anti-aliasing. Without it, the #1027 grid:
-    /// downsampled to about one cell per output pixel.</summary>
-    public static (int W, int H, int AaRadius) TraceGrid(int hw, int hh, int w, int h, FractalParameters p)
+    /// downsampled to about one cell per output pixel.
+    ///
+    /// #1255 — the default (plate) trace on a display-res field
+    /// (<paramref name="displayResField"/>: a family with no hi-res field twin, so
+    /// the field tracks the output size) is capped at
+    /// <see cref="LegacyTraceShortAxisCap"/> on the short axis. Its hit test compares
+    /// the Lipschitz-scaled DE, so a finer field (steeper cells, smaller invLip)
+    /// stops every ray at the box entry — a 1080p export rendered a solid block
+    /// where the small live window showed the relief. Families with a twin always
+    /// trace the floor field and keep their established look.</summary>
+    public static (int W, int H, int AaRadius) TraceGrid(int hw, int hh, int w, int h, FractalParameters p,
+                                                         bool displayResField = false)
     {
-        if (!p.Relief2DTrueHeight) return (hw, hh, 0);
+        if (!p.Relief2DTrueHeight)
+        {
+            if (!displayResField) return (hw, hh, 0);
+            var (lw, lh) = CanonicalDims(hw, hh, LegacyTraceShortAxisCap);
+            return (lw, lh, 0);
+        }
         if (!p.Relief2DCanonicalField)
         {
             var (fw, fh) = FieldTargetDims(hw, hh, w, h);
@@ -1861,6 +1879,13 @@ public static class HeightfieldRaymarch2D
     /// <summary>#1027 — field cells per output pixel above which the field is
     /// downsampled for tracing.</summary>
     internal const double FieldDownsampleThreshold = 1.25;
+
+    /// <summary>#1255 — short-axis cap (cells) of the default plate trace on a
+    /// display-res field; see <see cref="TraceGrid"/>. At or below it the field is
+    /// traced as it is (byte-identical to before), and it sits at or above the
+    /// <see cref="ResolutionRamp"/> identity point (480) so the amplitude ramp is
+    /// unaffected.</summary>
+    public const int LegacyTraceShortAxisCap = 540;
 
     /// <summary>#1027 — area-average <paramref name="src"/> (sw×sh) onto a dw×dh
     /// grid; each target cell averages the source cells whose centres fall in it.</summary>

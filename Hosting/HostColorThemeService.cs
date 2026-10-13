@@ -1406,7 +1406,9 @@ namespace FracturingFog.Hosting
                         FracturingFog.Rendering.Lighting.VolumePaletteBaker.Bake(ref rfx, map);
                         rp.Lighting = rfx;
                         FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
-                            copy, field, width, height, rp, reliefDst);
+                            copy, field, width, height, width, height, rp, reliefDst, out _,
+                            // #1255 — same display-res field cap as the committed frame.
+                            displayResField: !FracturingFog.Rendering.FractalRenderHost.SupportsHiResReliefField(region.FractalType));
                     }
                     else
                         FracturingFog.Rendering.Lighting.HeightfieldRelief2D.Apply(
