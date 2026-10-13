@@ -316,6 +316,12 @@ namespace FracturingFog.Render
         /// so the change shows up immediately.</summary>
         bool ShowGrid { get; set; }
 
+        /// <summary>#1240 — interest-score heatmap to blend into the live frame
+        /// (diagnostic; never exported). Drawn only while the view matches the
+        /// one it was scored for. Null = off. Follow with
+        /// <see cref="RepaintWithPostFx"/>.</summary>
+        FracturingFog.Abstractions.Explore.ExploreHeatmap? ExploreHeatmap { get; set; }
+
         /// <summary>True to blend the region/theme + program-name watermark
         /// into the next uploaded frame.</summary>
         bool ShowWatermark { get; set; }

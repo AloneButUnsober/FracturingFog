@@ -187,6 +187,9 @@ Works at any depth up to the Extreme tier's 1e100 limit. A search runs in the ba
 - **Depth** is the number of levels (each zooms in 4×); **Beam** is how many views are kept per level. More of either searches longer.
 - The best view is shown; the other finalists are listed below as buttons, each with its score. **Backspace** returns.
 - The readout names the seed (`--explore seed=…`). The same seed from the same view always finds the same place, and `--batch --explore seed=…` renders it headlessly (see the Capture Guide, §8).
+- **Heatmap** overlays the score of each part of the view: deep blue = dull, yellow = detail-rich. It is a guide only and never appears in exports. Pick **Score** or one of its parts (boundary, entropy, dimension, penalty).
+  - The sliders re-weight the score instantly: **Boundary** (edge density), **Entropy** (colour-band variety), **Dimension** (how fractal the edges look) and **Preferred dim.** (1 = smooth curves, 2 = noise). **Reset weights** restores the defaults.
+  - The same weights steer **Surprise me** and **Descend**. Their `--explore` spec includes them (`wb`, `we`, `wd`, `dc`), so a batch run follows them too.
 - 3D types, the Buddhabrot family, Flame and the non-pannable generators (Plasma, Acid Warp, DLA, Random Tile) are not supported. Types other than Mandelbrot stop at zoom 1e13 (their double-precision limit).
 
 ---

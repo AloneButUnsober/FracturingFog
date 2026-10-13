@@ -248,12 +248,18 @@ public static class AutoExplorer
                 case "step" when okDbl && dv is >= 1.5 and <= 1000: o = o with { ZoomStep = dv }; break;
                 case "probe" when okInt && iv is >= 16 and <= 512: o = o with { ProbeSize = iv }; break;
                 case "minscore" when okDbl && dv is >= 0 and <= 1: o = o with { MinScore = dv }; break;
-                case "seed" or "depth" or "beam" or "grid" or "jitter" or "start" or "step" or "probe" or "minscore":
+                // #1240 — interest weights (tuned against the heatmap).
+                case "wb" when okDbl && dv is >= 0 and <= 1: o = o with { Weights = o.Weights with { BoundaryWeight = dv } }; break;
+                case "we" when okDbl && dv is >= 0 and <= 1: o = o with { Weights = o.Weights with { EntropyWeight = dv } }; break;
+                case "wd" when okDbl && dv is >= 0 and <= 1: o = o with { Weights = o.Weights with { DimensionWeight = dv } }; break;
+                case "dc" when okDbl && dv is >= 1 and <= 2: o = o with { Weights = o.Weights with { DimensionCentre = dv } }; break;
+                case "seed" or "depth" or "beam" or "grid" or "jitter" or "start" or "step" or "probe" or "minscore"
+                    or "wb" or "we" or "wd" or "dc":
                     error = $"bad value for {key}: '{val}' (seed int; depth 1..64; beam 1..32; grid 1..8; "
-                          + "jitter 0..64; start 0..256; step 1.5..1000; probe 16..512; minscore 0..1)";
+                          + "jitter 0..64; start 0..256; wb/we/wd 0..1; dc 1..2; step 1.5..1000; probe 16..512; minscore 0..1)";
                     return false;
                 default:
-                    error = $"unknown key '{key}' (seed, depth, beam, grid, jitter, start, step, probe, minscore)";
+                    error = $"unknown key '{key}' (seed, depth, beam, grid, jitter, start, step, probe, minscore, wb, we, wd, dc)";
                     return false;
             }
         }
@@ -276,6 +282,11 @@ public static class AutoExplorer
         if (o.ZoomStep != d.ZoomStep) parts.Add("step=" + o.ZoomStep.ToString("R", inv));
         if (o.ProbeSize != d.ProbeSize) parts.Add("probe=" + o.ProbeSize.ToString(inv));
         if (o.MinScore != d.MinScore) parts.Add("minscore=" + o.MinScore.ToString("R", inv));
+        var dw = d.Weights; var w = o.Weights;
+        if (w.BoundaryWeight != dw.BoundaryWeight) parts.Add("wb=" + w.BoundaryWeight.ToString("R", inv));
+        if (w.EntropyWeight != dw.EntropyWeight) parts.Add("we=" + w.EntropyWeight.ToString("R", inv));
+        if (w.DimensionWeight != dw.DimensionWeight) parts.Add("wd=" + w.DimensionWeight.ToString("R", inv));
+        if (w.DimensionCentre != dw.DimensionCentre) parts.Add("dc=" + w.DimensionCentre.ToString("R", inv));
         return string.Join(",", parts);
     }
 }

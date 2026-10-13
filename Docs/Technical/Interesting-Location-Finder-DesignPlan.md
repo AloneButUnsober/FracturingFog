@@ -438,7 +438,30 @@ Measured against all 158 built-in Mandelbrot regions (`Resources/regions.json`):
 - **Batch:** `--explore SPEC` (image and video) and `--explore-regions OUT.json` (the
   finalists as an importable plain region list). These are catalog flags, so the
   Command panel offers them. The live seed reproduces an explored view by coordinates.
-- **Not shipped:** the score-heatmap overlay and live weight tuning ([#1240](https://github.com/AloneButUnsober/FracturingFog/issues/1240)).
+- **Heatmap + live weights** ([#1240](https://github.com/AloneButUnsober/FracturingFog/issues/1240)).
+  - **Scoring:** Explore ▸ Find ▸ Auto-explore ▸ **Heatmap** splits the view into 10 ×
+    (aspect) cells. Each cell gets a 48 px probe render of its own; four render in
+    parallel. Each cell is scored by `InterestScorer`.
+  - **Drawing:** the render host blends the result into the live frame
+    (`FractalOverlayCompositor.CompositeHeatmap`, under the grid). It is diagnostic
+    only and never exported. The native GPU surface occludes Avalonia overlays, so the
+    heatmap is composited into the frame like the grid. It is drawn only while the view
+    is the one it was scored for. A 400 ms poll re-probes once the view has changed and
+    then held still.
+  - **Colours:** a colour-blind-safe ramp, deep blue → grey → yellow (cividis-like).
+    Luminance rises strictly, so the order reads without hue; the test checks this.
+    Each cell is labelled with its value when the cell is ≥ 56 px wide.
+  - **Terms:** total score, boundary, entropy, dimension, or "penalty keep"
+    (total ÷ weighted base).
+  - **Live weights:** sliders set the boundary, entropy and dimension weights and the
+    preferred dimension, with Reset. The probes are cached, so a slider re-scores at
+    once without re-rendering. The same weights drive **Surprise me** / **Descend**.
+  - **Batch parity:** the `--explore` spec gained `wb`, `we`, `wd` and `dc`; only values
+    that differ from the defaults are emitted, with a round-trip test. The heatmap
+    itself is not part of any export, so it has no flag.
+  - **Checked live:** in seahorse valley at zoom 40, interior cells read 0.00, filament
+    cells 0.7–0.96 and smooth exterior about 0.07. Dragging the boundary weight to 0
+    re-scored at once and updated the shown spec (`wb=0`).
 
 ### 9.3b Implementation notes (S4b, #1237: deep rays, location → angle, address → angle)
 

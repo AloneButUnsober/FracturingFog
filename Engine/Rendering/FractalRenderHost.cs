@@ -588,6 +588,9 @@ namespace FracturingFog.Rendering
         // into the BGRA pixel buffer on the CPU before the swap-chain upload.
 
         public bool ShowGrid { get; set; }
+
+        /// <inheritdoc/>
+        public FracturingFog.Abstractions.Explore.ExploreHeatmap? ExploreHeatmap { get; set; }
         public bool ShowWatermark { get; set; }
 
         /// <summary>#511 (C) — when true, composite an export-aspect frame guide
@@ -4513,6 +4516,13 @@ namespace FracturingFog.Rendering
             // runs when at least one toggle is on.
             // S-X7.5 (2026-06-23) — IsWindows gate dropped; compositor is Skia.
             double exportGuideAspect = ShowExportAspectGuide ? ExportAspectRatio : 0.0;
+            // #1240 — the heatmap goes under the grid / watermark, and only
+            // while the view is the one it was scored for.
+            if (ExploreHeatmap is { } heat && heat.Matches(ViewState.CenterX, ViewState.CenterY, ViewState.Zoom))
+            {
+                try { _overlay.CompositeHeatmap(dst, w, h, heat); }
+                catch (Exception ex) { Console.Error.WriteLine($"[FractalRenderHost] Heatmap composite failed: {ex.Message}"); }
+            }
             if (ShowGrid || ShowWatermark || _selectionBox.HasValue || exportGuideAspect > 0.0)
             {
                 try

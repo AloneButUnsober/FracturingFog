@@ -525,7 +525,8 @@ that instead. The start view is `--region`, `--x --y --zoom`, or, with neither, 
 type's home view. SPEC is comma-separated `key=value`: `seed`, `depth` (levels, each
 `step`× zoom, default 6 × 4), `beam` (views kept per level, default 3), `grid`,
 `jitter`, `start` (extra random first-level views), `probe` (test-render size in
-pixels) and `minscore`. The same seed always finds the same view. The search path
+pixels), `minscore`, and the interest weights `wb` / `we` / `wd` (boundary / entropy /
+dimension, 0..1) and `dc` (preferred dimension, 1..2), as tuned on the Explore heatmap. The same seed always finds the same view. The search path
 and the final `--x --y --zoom` are printed, so you can re-render it without
 exploring. `--explore-regions OUT.json` also writes the finalists as regions
 (**Control Center → Explore → Region → Import…**). In video mode the zoom flies

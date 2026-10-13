@@ -166,6 +166,36 @@
                                    FormatString="0" Width="96"
                                    ToolTip.Tip="Views kept per level. Wider searches more but takes longer." />
                 </StackPanel>
+                <!-- #1240: interest-score heatmap + live weights. -->
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <CheckBox Content="Heatmap" IsChecked="{Binding ShowHeatmap}" Foreground="#B4B4B4"
+                              ToolTip.Tip="Overlay the interest score of each part of the view (the score Auto-explore descends on): blue = dull, yellow = detail-rich. Diagnostic only — never exported." />
+                    <ComboBox ItemsSource="{Binding HeatmapTerms}" SelectedIndex="{Binding HeatmapTermIndex}"
+                              IsVisible="{Binding ShowHeatmap}" MinWidth="120"
+                              ToolTip.Tip="Show the total score or one of its terms (boundary density, band entropy, fractal-dimension fit, penalty keep)." />
+                </StackPanel>
+                <Grid ColumnDefinitions="Auto,*,48" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8" IsVisible="{Binding ShowHeatmap}">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="fxLabel" Text="Boundary" VerticalAlignment="Center" Width="104" />
+                    <Slider    Grid.Row="0" Grid.Column="1" Value="{Binding WeightBoundary}" Minimum="0" Maximum="1" Margin="0,2,6,2"
+                               ToolTip.Tip="How much edge / filament density counts." />
+                    <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding WeightBoundaryText}" VerticalAlignment="Center" Foreground="#9A9A9A" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="fxLabel" Text="Entropy" VerticalAlignment="Center" Width="104" />
+                    <Slider    Grid.Row="1" Grid.Column="1" Value="{Binding WeightEntropy}" Minimum="0" Maximum="1" Margin="0,2,6,2"
+                               ToolTip.Tip="How much colour-band variety counts." />
+                    <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding WeightEntropyText}" VerticalAlignment="Center" Foreground="#9A9A9A" />
+                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="fxLabel" Text="Dimension" VerticalAlignment="Center" Width="104" />
+                    <Slider    Grid.Row="2" Grid.Column="1" Value="{Binding WeightDimension}" Minimum="0" Maximum="1" Margin="0,2,6,2"
+                               ToolTip.Tip="How much a fractal-looking edge (dimension near the preferred value) counts." />
+                    <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding WeightDimensionText}" VerticalAlignment="Center" Foreground="#9A9A9A" />
+                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="fxLabel" Text="Preferred dim." VerticalAlignment="Center" Width="104" />
+                    <Slider    Grid.Row="3" Grid.Column="1" Value="{Binding DimensionCentre}" Minimum="1" Maximum="2" Margin="0,2,6,2"
+                               ToolTip.Tip="Box-count dimension that scores best: 1 = smooth curves, 2 = space-filling noise (default 1.7)." />
+                    <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding DimensionCentreText}" VerticalAlignment="Center" Foreground="#9A9A9A" />
+                    <Button    Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2" Classes="action neutral" Content="Reset weights"
+                               Command="{Binding ResetWeightsCommand}" HorizontalAlignment="Left" Margin="0,4,0,0"
+                               ToolTip.Tip="Back to the default interest weights." />
+                </Grid>
+                <TextBlock Text="{Binding HeatmapStatus}" IsVisible="{Binding ShowHeatmap}" Foreground="#9A9A9A" FontSize="11" TextWrapping="Wrap" />
                 <ItemsControl ItemsSource="{Binding ExploreCandidates}" IsVisible="{Binding HasExploreCandidates}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="vm:ExploreCandidateItem">

@@ -121,6 +121,60 @@ namespace FracturingFog.Rendering
             });
         }
 
+        // ── Interest-score heatmap (#1240) ───────────────────────────────────
+
+        /// <summary>Blend the heatmap's cells into <paramref name="bgra"/>: a
+        /// translucent colour-blind-safe fill per cell, a hairline grid, and
+        /// the value when cells are wide enough to read.</summary>
+        public void CompositeHeatmap(uint[] bgra, int width, int height,
+                                     FracturingFog.Abstractions.Explore.ExploreHeatmap heat)
+        {
+            if (bgra == null || bgra.Length < width * height || width <= 1 || height <= 1) return;
+            if (heat.Cols < 1 || heat.Rows < 1 || heat.Values.Length < heat.Cols * heat.Rows) return;
+            byte alpha = (byte)Math.Clamp((int)Math.Round(heat.Opacity * 255), 0, 255);
+            float cw = (float)width / heat.Cols, ch = (float)height / heat.Rows;
+            bool labels = cw >= FracturingFog.Abstractions.Explore.ExploreHeatmap.MinLabelCellPx;
+            DrawOnto(bgra, width, height, canvas =>
+            {
+                using var fill = new SKPaint { IsAntialias = false, Style = SKPaintStyle.Fill };
+                using var line = new SKPaint { IsAntialias = false, Style = SKPaintStyle.Stroke, StrokeWidth = 1,
+                                               Color = new SKColor(0, 0, 0, 90) };
+                using var text = new SKPaint { IsAntialias = true, Color = SKColors.White };
+                using var shade = new SKPaint { IsAntialias = true, Color = new SKColor(0, 0, 0, 170) };
+                for (int r = 0; r < heat.Rows; r++)
+                    for (int c = 0; c < heat.Cols; c++)
+                    {
+                        float v = heat.Values[r * heat.Cols + c];
+                        var rect = new SKRect(c * cw, r * ch, (c + 1) * cw, (r + 1) * ch);
+                        if (float.IsNaN(v))
+                        {
+                            fill.Color = new SKColor(0, 0, 0, (byte)(alpha / 2));
+                            canvas.DrawRect(rect, fill);
+                        }
+                        else
+                        {
+                            var (R, G, B) = FracturingFog.Abstractions.Explore.ExploreHeatmap.Ramp(v);
+                            fill.Color = new SKColor(R, G, B, alpha);
+                            canvas.DrawRect(rect, fill);
+                        }
+                        canvas.DrawRect(rect, line);
+                        if (labels && !float.IsNaN(v))
+                        {
+                            string s = v.ToString("0.00", CultureInfo.InvariantCulture);
+                            float tw = _hudBody.MeasureText(s);
+                            float x = rect.MidX - tw / 2, y = rect.MidY + Baseline(_hudBody) / 2;
+                            canvas.DrawText(s, x + 1, y + 1, _hudBody, shade);
+                            canvas.DrawText(s, x, y, _hudBody, text);
+                        }
+                    }
+                if (!string.IsNullOrEmpty(heat.Label))
+                {
+                    canvas.DrawText(heat.Label, 7, 7 + Baseline(_hudHeader), _hudHeader, shade);
+                    canvas.DrawText(heat.Label, 6, 6 + Baseline(_hudHeader), _hudHeader, text);
+                }
+            });
+        }
+
         // ── Export-aspect frame guide (#511 C) ─────────────────────────────
         // Draw the largest centred rectangle of the given aspect (export width /
         // height) that fits the window, dim the area OUTSIDE it, and outline it.
