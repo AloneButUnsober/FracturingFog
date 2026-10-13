@@ -2044,6 +2044,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// Set by the host; called on the UI thread (it snapshots the live theme).</summary>
     public Func<double, double, int, int, uint[]?>? RenderJuliaPreview { get; set; }
 
+    /// <summary>#1242 — set the User Equation z₀ seed (null = z₀ = 0) and
+    /// re-render, through the equation editor when it is open so its seed box
+    /// follows. Set by the host.</summary>
+    public Action<string?>? SetUserEquationSeed { get; set; }
+
     /// <summary>Auto-explore probe factory (#1190), set by the host: given a
     /// probe size, returns a renderer of square views of the CURRENT family,
     /// parameters and theme (snapshotted at the call, on the UI thread) that

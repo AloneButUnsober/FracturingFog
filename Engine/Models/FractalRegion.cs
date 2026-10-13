@@ -712,6 +712,10 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? AttractorC { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? AttractorD { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? UserEquationRotationDegrees { get; set; }
+        /// <summary>#1242 — the User Equation's z₀ seed expression (e.g. a
+        /// critical point picked in Explore ▸ Find). Null when blank (z₀ = 0),
+        /// so the saved equation's own seed stands.</summary>
+        [JsonIgnore(Condition = OmitNull)] public string? UserEquationSeed { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? BulbPower { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? BulbIterations { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? UserBulbIterations { get; set; }
@@ -1181,6 +1185,7 @@ namespace FracturingFog.Models
                 FractalType.UserEquation => new RegionFractalParams
                 {
                     UserEquationRotationDegrees = Nd(p.UserEquationRotationDegrees, D.UserEquationRotationDegrees),
+                    UserEquationSeed = string.IsNullOrWhiteSpace(p.UserEquationSeed) ? null : p.UserEquationSeed.Trim(),
                 },
                 // UserBulb keeps its source + dedicated camera on the region itself;
                 // the animatable power / iterations / time ride here.
@@ -1694,6 +1699,7 @@ namespace FracturingFog.Models
             if (AttractorC.HasValue) p.AttractorC = AttractorC.Value;
             if (AttractorD.HasValue) p.AttractorD = AttractorD.Value;
             if (UserEquationRotationDegrees.HasValue) p.UserEquationRotationDegrees = UserEquationRotationDegrees.Value;
+            if (!string.IsNullOrWhiteSpace(UserEquationSeed)) p.UserEquationSeed = UserEquationSeed;
             if (BulbPower.HasValue) p.BulbPower = BulbPower.Value;
             if (BulbIterations.HasValue) p.BulbIterations = BulbIterations.Value;
             if (UserBulbIterations.HasValue) p.UserBulbIterations = UserBulbIterations.Value;
