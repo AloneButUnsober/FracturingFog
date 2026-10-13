@@ -440,6 +440,76 @@ Measured against all 158 built-in Mandelbrot regions (`Resources/regions.json`):
   Command panel offers them. The live seed reproduces an explored view by coordinates.
 - **Not shipped:** the score-heatmap overlay and live weight tuning ([#1240](https://github.com/AloneButUnsober/FracturingFog/issues/1240)).
 
+### 9.3b Implementation notes (S4b, #1237: deep rays, location → angle, address → angle)
+
+- **Deep rays.** The inward trace is perturbed. Each bit rebases an OD reference to the
+  ray point and computes its exact orbit Z_n. The substeps solve for a double offset
+  with ε ← 2Zε + ε² + Δ. The double trace had lost periodic rays after about 16–20 bits.
+  A periodic ray creeps into its parabolic root, so it is walked
+  max(64, 10·p) bits; at 4p bits it was still about 10 atom sizes away. Preperiodic
+  traces stop once a period moves the ray by less than 1e-8 of its first cycle.
+  - **Validated:** 3 random periodic angles each of 24, 32, 48 and 64 bits land, and
+    S1 re-confirms the period every time. Components reach |size| 1e-40, in 0.5–4 s.
+- **Location → angle** (`LocationAngles`).
+  - **Root:** the interior coordinate b runs from 0 to 1, with Newton on
+    (z₀, c): f^p(z₀) = z₀, (f^p)′(z₀) = b, perturbed about the nucleus orbit. At b = 1
+    the root is a double root, so Newton is linear there and the solve is loosened to
+    1e-9 relative.
+  - **Probes:** the exterior near a root is a thin cusp. So a dense ring (128 directions
+    × 4 radii) is escape-tested by perturbation about the root's orbit. The shallowest
+    probes still at least 4p deep are traced outward first, since the outward trace
+    costs depth² and deepest-first took minutes.
+  - **Outward trace:** Newton on c raises r to the escape radius at depth k. The digit
+    b_{k−1} is chosen so that (φ + b)/2 matches arg f^k(0); then k drops by 1.
+  - **Verification:** every candidate angle is landed again and kept only if it returns
+    to the same component or point.
+  - **Validated:** the round trips (angle → land → angles) give exact pairs for 1/3,
+    the rabbit, the airplane, 2/5 and the period-4 bulb. Random period-12, 16 and 20
+    components recover pairs that contain the original angle and share an address.
+    Misiurewicz points recover the original angle, including all three rays of an
+    M(4,1).
+- **Address → angle** (`AddressAngles`), combinatorial and exact.
+  - Main k/m bulb: the m-cycle with rotation k/m has digits
+    [(i + j·k) mod m ≥ m − k]; the bulb's angles bound its shortest gap.
+  - Sub-wakes: tuning (0 → w₋, 1 → w₊).
+  - Each step s → q goes into a k/m sub-wake with s·m ≥ q. It lands on the satellite
+    when s·m = q, otherwise on the period-q angles in the sub-wake whose own internal
+    address (S4's ρ function) is the prefix → q, paired consecutively. Steps are
+    searched depth-first with backtracking, because a plain address leaves conjugates
+    open.
+  - **Finding those angles.** The address fixes the kneading sequence:
+    ν₁ = 1, s_k-periodic up to s_{k+1}, flipped at s_{k+1} (Lau–Schleicher).
+    A periodic angle's kneading is its doubling itinerary relative to
+    (θ/2, (θ+1)/2). So θ's digits are built depth-first, and a branch is pruned once
+    its known digits leave the sub-wake or decide some ν_j wrongly, using exact
+    integer interval arithmetic.
+    - The first version enumerated every period-q angle in the sub-wake. Along an
+      antenna that grows about 8× per step: a smoke-test address
+      (1 → 4 → … → 46 → 53, a period-53 minibrot at zoom 7.5e13) hit the enumeration
+      cap at 25 → 29 and wrongly reported "not an internal address". The pruned
+      search resolves it in about 2.5 s.
+  - **Angled output.** The angles line after Zoom to minibrot / Snap shows the
+    *angled* address, with every step's sublimb chosen to hold the found angle
+    (`AngledAddressOf`). Pasting it back lands on that exact component; a plain address
+    resolves to the first conjugate (here the mirror image in the 1/4 limb). The live
+    description under the Angle box no longer cuts periodic addresses at 12 terms
+    without marking it.
+  - **Copy buttons** (added to the design after the smoke test). Under the angles line
+    sit **Copy angle**, which copies the found point's lower angle, and **Copy address**,
+    which copies the angled address (components only, since a Misiurewicz point has no
+    internal address). Both go to the clipboard through `Shell.RequestCopyToClipboard`.
+    The line itself stays selectable. Either value pasted into Angle + Go returns to the
+    same place, which makes a found location shareable as text.
+  - Two simpler rules failed:
+    - "lowest period in the sub-wake": the period-4 bulb's wake holds the period-3
+      airplane;
+    - pairing by lowest-period wakes: wakes of different periods nest arbitrarily.
+  - **Validated:** textbook pairs. Addresses from random angles up to period 28 round-trip.
+    Resolved angles land on a component whose period S1 confirms, with both angles on
+    the same component.
+- **Batch:** navigation only, so no flag. A `--angle` flag was optional in the issue and
+  is not added.
+
 ### 9.5b Implementation notes (S3b, #1235: Misiurewicz loop + J_c)
 
 - **Loop** (`MisiurewiczLoop`): one loop at time t ∈ [0, 1) zooms |λ|^{n·t} and
