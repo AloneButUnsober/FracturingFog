@@ -32,6 +32,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using FracturingFog.Interefaces;
+using FracturingFog.Models;
 
 namespace FracturingFog;
 
@@ -59,6 +60,22 @@ internal static class NewtonBasinColoring
         float hue = (float)basin / totalBasins;
         float shade = 1.0f - Math.Min(iter / (float)maxIter, 0.9f);
         return unchecked((uint)HsvToArgb(hue, 1.0f, shade));
+    }
+
+    /// <summary>#1294 — Nova colour for a CONVERGED pixel. A Newton theme
+    /// (<paramref name="map"/>) keeps its basin colouring; any other palette
+    /// shades by the smooth convergence count through that palette, like the
+    /// Magnet convergence path. The basin-hue fallback would be flat for Nova:
+    /// its parameter plane has one attractor per c, so the sectors carry no
+    /// structure and the shade (1 − iter/maxIter) barely moves.
+    /// The caller sets the per-pixel dither.</summary>
+    public static uint NovaConvergedColor(
+        INewtonColorMap? map, IColorMap palette, int basin, int totalBasins,
+        float smooth, int maxIter, double zr, double zi)
+    {
+        if (map != null)
+            return unchecked((uint)map.MapNewton(basin, totalBasins, (int)smooth, maxIter, zr, zi));
+        return unchecked((uint)palette.Map(smooth, 0f, maxIter, 0f, 0f, (float)zr, (float)zi, 0f, 0f));
     }
 
     /// <summary>
@@ -122,7 +139,8 @@ internal static class NewtonBasinColoring
         int totalBasins, int maxIter, INewtonColorMap? map,
         double[] cdf, int bins, int sourceMaxIter,
         double strength, double ditherIterStrength,
-        out long convergedCount, out long saturatedCount)
+        out long convergedCount, out long saturatedCount,
+        IColorMap? novaPalette = null)
     {
         convergedCount = 0;
         saturatedCount = 0;
@@ -155,6 +173,15 @@ internal static class NewtonBasinColoring
                 double effF = (1.0 - s) * rawIter + s * eqIter;
                 if (ditherIterStrength > 0.0)
                     effF += HistogramEqualizer.SpatialDither(x, y) * ditherIterStrength;
+
+                if (novaPalette != null)
+                {
+                    // #1294 — Nova keeps its smooth count (no integer rounding).
+                    float effS = (float)Math.Clamp(effF, 0.0, maxIter);
+                    GradientColorMap.SetDitherForPixel(x, y);
+                    color[i] = NovaConvergedColor(map, novaPalette, bsn, totalBasins, effS, maxIter, finalZr[i], finalZi[i]);
+                    continue;
+                }
 
                 int effIter = (int)Math.Round(effF);
                 if (effIter < 0) effIter = 0;

@@ -163,7 +163,7 @@
     },
     {
       "Name": "nova-default",
-      "Sha256": "97aa013d0ec05a6c3e20f775dfbb561ad9685ab400e9abc39e733454535f4939",
+      "Sha256": "305a818af63e3e1ae24293e81c77a83ad35e05fab1511cba0495b9f34d3a254d",
       "Args": [
         "--fractal",
         "Nova",

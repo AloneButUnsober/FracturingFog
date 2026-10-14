@@ -286,6 +286,37 @@
             </StackPanel>
         </Border>
 
+        <!-- Nova (#1294): z := z - R·f/f' + c. Parameter plane (c = pixel, start
+             at z0) or Julia plane (z0 = pixel, fixed c). -->
+        <StackPanel IsVisible="{Binding IsNova}" Spacing="2">
+            <CheckBox Content="Julia plane (fixed c)" IsChecked="{Binding NovaJuliaMode, Mode=TwoWay}"
+                      ToolTip.Tip="Off: each pixel is c and every orbit starts at z0 (Mandelbrot-like parameter plane). On: each pixel is the start z and c is fixed." />
+            <Grid IsVisible="{Binding IsNovaParameterPlane}"
+                  ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Start z0 (real):" VerticalAlignment="Center"
+                           ToolTip.Tip="Where every orbit starts. 1 (a root of z^d - 1) is the classic Nova start." />
+                <NumericUpDown Grid.Row="0" Grid.Column="1"
+                               Minimum="-4" Maximum="4" Increment="0.01" FormatString="F4"
+                               Value="{Binding NovaZ0R, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Start z0 (imag):" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="-4" Maximum="4" Increment="0.01" FormatString="F4"
+                               Value="{Binding NovaZ0I, Mode=TwoWay}" Margin="0,2" />
+            </Grid>
+            <Grid IsVisible="{Binding NovaJuliaMode}"
+                  ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="c (real):" VerticalAlignment="Center"
+                           ToolTip.Tip="The constant added every step in the Julia plane." />
+                <NumericUpDown Grid.Row="0" Grid.Column="1"
+                               Minimum="-4" Maximum="4" Increment="0.01" FormatString="F4"
+                               Value="{Binding NovaJuliaCR, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="c (imag):" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="-4" Maximum="4" Increment="0.01" FormatString="F4"
+                               Value="{Binding NovaJuliaCI, Mode=TwoWay}" Margin="0,2" />
+            </Grid>
+        </StackPanel>
+
         <!-- Secant initial-offset add-on -->
         <Grid IsVisible="{Binding IsSecant}"
               ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">

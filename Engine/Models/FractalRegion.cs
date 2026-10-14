@@ -490,6 +490,12 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? SpiderCDecay { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? NewtonExponent { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? NewtonRelaxation { get; set; }
+        // #1294 — Nova: Julia-plane switch, parameter-plane z0, Julia-plane c.
+        [JsonIgnore(Condition = OmitNull)] public bool? NovaJuliaMode { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? NovaZ0Re { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? NovaZ0Im { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? NovaJuliaCRe { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? NovaJuliaCIm { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? SecantOffsetRe { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? SecantOffsetIm { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? ApollonianDepth { get; set; }
@@ -843,10 +849,21 @@ namespace FracturingFog.Models
                             ? p.MagnetConvergenceEpsilon : (double?)null,
                     },
                 // Newton-family basins share NewtonExponent + NewtonRelaxation.
-                FractalType.Newton or FractalType.Nova or FractalType.Halley => new RegionFractalParams
+                FractalType.Newton or FractalType.Halley => new RegionFractalParams
                 {
                     NewtonExponent = p.NewtonExponent,
                     NewtonRelaxation = p.NewtonRelaxation,
+                },
+                // #1294 — Nova adds the +c term: its plane switch, z0 and Julia c.
+                FractalType.Nova => new RegionFractalParams
+                {
+                    NewtonExponent = p.NewtonExponent,
+                    NewtonRelaxation = p.NewtonRelaxation,
+                    NovaJuliaMode = p.NovaJuliaMode,
+                    NovaZ0Re = p.NovaZ0.Real,
+                    NovaZ0Im = p.NovaZ0.Imaginary,
+                    NovaJuliaCRe = p.NovaJuliaC.Real,
+                    NovaJuliaCIm = p.NovaJuliaC.Imaginary,
                 },
                 FractalType.Secant => new RegionFractalParams
                 {
@@ -1477,6 +1494,12 @@ namespace FracturingFog.Models
                 p.NewtonExponent = NewtonExponent.Value;
             if (NewtonRelaxation.HasValue)
                 p.NewtonRelaxation = NewtonRelaxation.Value;
+            if (NovaJuliaMode.HasValue)
+                p.NovaJuliaMode = NovaJuliaMode.Value;
+            if (NovaZ0Re.HasValue || NovaZ0Im.HasValue)   // #1294 — either half alone keeps the other
+                p.NovaZ0 = new Complex(NovaZ0Re ?? p.NovaZ0.Real, NovaZ0Im ?? p.NovaZ0.Imaginary);
+            if (NovaJuliaCRe.HasValue || NovaJuliaCIm.HasValue)
+                p.NovaJuliaC = new Complex(NovaJuliaCRe ?? p.NovaJuliaC.Real, NovaJuliaCIm ?? p.NovaJuliaC.Imaginary);
             if (SecantOffsetRe.HasValue && SecantOffsetIm.HasValue)
                 p.SecantInitialOffset = new Complex(SecantOffsetRe.Value, SecantOffsetIm.Value);
             if (ApollonianDepth.HasValue)

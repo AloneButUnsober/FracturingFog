@@ -1146,6 +1146,7 @@ namespace FracturingFog.Imaging
                 case AttractorCalculator a:    a.FractalParameters = req.FractalParameters; break;
                 case BuddhaFamilyCalculator b: b.FractalParameters = req.FractalParameters; break;
                 case NewtonCalculator n:
+                    n.FractalType = type;   // #1294 — Nova vs Newton
                     n.FractalParameters = req.FractalParameters;
                     n.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;  // #830
                     break;

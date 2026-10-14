@@ -3713,6 +3713,7 @@ namespace FracturingFog.Rendering
                 case AttractorCalculator a: a.FractalParameters = ViewState.FractalParameters; break;
                 case BuddhaFamilyCalculator b: b.FractalParameters = ViewState.FractalParameters; break;
                 case NewtonCalculator n:
+                    n.FractalType = ViewState.FractalType;   // #1294 — Nova vs Newton
                     n.FractalParameters = ViewState.FractalParameters;
                     n.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;  // #830
                     break;

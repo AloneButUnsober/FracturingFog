@@ -58,7 +58,7 @@ public static class MiniMapDefaults
         FractalType.Multibrot        => new( 0.0,  0.0, 1.0),
         FractalType.Phoenix          => new( 0.0,  0.0, 1.0),
         FractalType.Newton           => new( 0.0,  0.0, 0.9),
-        FractalType.Nova             => new( 1.0,  0.0, 0.8),
+        FractalType.Nova             => new(-0.35, 0.0, 1.4),   // #1294
         FractalType.BuddhaBrot       => new(-0.5,  0.0, 0.85),
         FractalType.Nebulabrot       => new(-0.5,  0.0, 0.85),
         FractalType.AntiBuddhabrot   => new(-0.5,  0.0, 0.85),
