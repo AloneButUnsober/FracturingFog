@@ -28,6 +28,7 @@ using Xunit;
 
 namespace FracturingFog.Server.Tests;
 
+[Collection(MandelbrotGpuStaticsCollection.Name)]   // writes UseGpuPerturbation / UseGpuDeepOrbit
 public sealed class S607GpuDeepOrbitTests : IDisposable
 {
     // Same budget hardening as S88GpuPerturbSaTests: a weak-fp64 card under full-suite
