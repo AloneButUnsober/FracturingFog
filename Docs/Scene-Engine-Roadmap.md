@@ -520,7 +520,8 @@ a latent scenes.json race the new test class perturbed into view.
 Bezier easing editor (this is the deferred Animation-roadmap `D.1` keyframe
 work, which Scenes need anyway), rack-focus preset, exposure / tonemap /
 IBL-sky-rotation global tracks, audio-reactive scenes (deferred Animation-
-roadmap `D.4`).
+roadmap `D.4` — since shipped as `SceneData.AudioTracks` / `SceneAudioTrack`,
+[#265](https://github.com/AloneButUnsober/FracturingFog/issues/265)).
 
 **Status — Shipped (bespoke transition visuals).** The transition trio S6/S7
 carried as crossfade fallbacks is now complete; the other S8 items remain open
@@ -629,9 +630,13 @@ follow-up; global tracks are authored today through the Asset Manager's
 JSON-editable Scene node (they round-trip as human-editable strings).
 
 **Still open (future polish):** a graphical Bezier-handle curve editor (beyond
-the per-key ease enum + the JSON global-track authoring above), rack-focus
-preset, IBL-sky-rotation track (needs the lighting field first), audio-reactive
-scenes (`D.4`). None block the core Scene authoring → preview → export loop,
+the per-key ease enum + the JSON global-track authoring above —
+[#1279](https://github.com/AloneButUnsober/FracturingFog/issues/1279)), rack-focus
+preset ([#1280](https://github.com/AloneButUnsober/FracturingFog/issues/1280)),
+IBL-sky-rotation track (needs the lighting field first —
+[#1281](https://github.com/AloneButUnsober/FracturingFog/issues/1281)).
+Audio-reactive scenes (`D.4`) shipped as `SceneAudioTrack`
+([#265](https://github.com/AloneButUnsober/FracturingFog/issues/265)). None block the core Scene authoring → preview → export loop,
 which is complete end to end (S0–S8 core).
 
 ---
