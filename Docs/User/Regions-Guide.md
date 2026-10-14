@@ -41,6 +41,13 @@ Tomorrow:
 6. Pick your bookmark. The view snaps to the exact saved coordinates, with the same iteration
    count and fractal family.
 
+> **Deep regions that come up as one flat colour.** A deep Mandelbrot region saved with no
+> iteration count (or too low a one) falls back to the quality preset's count, which can sit
+> below the point where any pixel escapes, so every pixel reads as "inside the set". When a
+> frame comes out entirely in-set and the iteration count is **not** locked, Fracturing Fog
+> raises the count on a small probe until pixels escape and re-renders (#1267). A locked count
+> is always used as is. Batch renders do the same when `--iterations` is not given.
+
 ### Worked example — "Share a region with a friend"
 
 1. Open Control Center → Explore → Region Navigation → **Exp…** (Export).
