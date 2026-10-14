@@ -14,10 +14,15 @@
 // samples at the cadence they were recorded, and raises data / end-of-stream /
 // failure through caller-supplied delegates. Delegates fire on the pump thread;
 // the caller marshals as needed.
+//
+// The loop owns a dedicated background thread (like OpenAlAudioBackend's capture
+// poll) and paces on the cancellation wait handle. It used to run on the thread
+// pool (Task.Run) and pace with Task.Delay(..).Wait(), whose timer completion
+// also needs a pool thread, so a saturated pool (a busy render, a parallel test
+// run) could stall the real-time feed for seconds.
 
 using System;
 using System.Threading;
-using System.Threading.Tasks;
 using NAudio.Wave;
 
 namespace FracturingFog.Audio
@@ -34,7 +39,7 @@ namespace FracturingFog.Audio
         private readonly Action<Exception>? _onFailed;
 
         private CancellationTokenSource? _cts;
-        private Task? _task;
+        private Thread? _thread;
 
         public SampleProviderPump(
             ISampleProvider source,
@@ -56,16 +61,27 @@ namespace FracturingFog.Audio
 
         public void Start()
         {
-            _cts = new CancellationTokenSource();
-            _task = Task.Run(() => Run(_cts.Token));
+            var cts = new CancellationTokenSource();
+            _cts = cts;
+            _thread = new Thread(() => Run(cts.Token))
+            {
+                IsBackground = true,
+                Name = "SampleProviderPump",
+            };
+            _thread.Start();
         }
 
         public void Stop()
         {
             var cts = _cts; _cts = null;
-            var task = _task; _task = null;
+            var thread = _thread; _thread = null;
             try { cts?.Cancel(); } catch { }
-            try { task?.Wait(TimeSpan.FromSeconds(1)); } catch { }
+            // A delegate may call Stop on the pump thread itself (e.g. from
+            // onEndOfStream); joining it there would only wait out the timeout.
+            if (thread != null && thread != Thread.CurrentThread)
+            {
+                try { thread.Join(TimeSpan.FromSeconds(1)); } catch { }
+            }
             cts?.Dispose();
         }
 
@@ -88,8 +104,8 @@ namespace FracturingFog.Audio
                         return;
                     }
                     _onData(buf.AsMemory(0, read), _format);
-                    try { Task.Delay(msPerChunk, ct).Wait(ct); }
-                    catch (OperationCanceledException) { return; }
+                    // Signalled on cancel; times out to pace the next chunk.
+                    if (ct.WaitHandle.WaitOne(msPerChunk)) return;
                 }
             }
             catch (OperationCanceledException) { }
