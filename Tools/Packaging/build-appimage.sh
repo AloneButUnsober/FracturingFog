@@ -11,6 +11,8 @@
 #   * appimagetool     — https://github.com/AppImage/AppImageKit/releases
 #                        download appimagetool-x86_64.AppImage, mark exe,
 #                        drop on PATH.
+#   * python3          — extracts the launcher icon from Resources/FracturingFog.ico
+#                        (Tools/Packaging/ico-to-png.py, standard library only).
 #
 # Usage:
 #   Tools/Packaging/build-appimage.sh [rid]
@@ -44,8 +46,9 @@ DIST_DIR="$REPO_ROOT/dist"
 APPIMAGE="$DIST_DIR/FracturingFog-$RID.AppImage"
 
 DESKTOP_SRC="$REPO_ROOT/Resources/Linux/FracturingFog.desktop"
-ICON_SRC_PNG="$REPO_ROOT/Resources/Linux/FracturingFog.png"
-ICON_SRC_FALLBACK="$REPO_ROOT/Resources/FracturingFog.ico"
+# #429 — the launcher icon is the Windows exe's icon; its 256x256 frame is a PNG.
+ICON_SRC_ICO="$REPO_ROOT/Resources/FracturingFog.ico"
+ICO_TO_PNG="$REPO_ROOT/Tools/Packaging/ico-to-png.py"
 
 # ── 1. Publish the App self-contained ─────────────────────────────────────
 # S-X3 (2026-06-23) — pass -f explicitly. FracturingFog.App multi-targets
@@ -93,23 +96,16 @@ EOF
 fi
 cp "$APPDIR/usr/share/applications/FracturingFog.desktop" "$APPDIR/FracturingFog.desktop"
 
-# Icon: prefer a hand-rolled PNG; fall back to a 1×1 placeholder so
-# appimagetool does not reject the AppDir for missing icons during early
-# development. Users wanting the real icon drop Resources/Linux/FracturingFog.png.
-if [ -f "$ICON_SRC_PNG" ]; then
-    cp "$ICON_SRC_PNG" "$APPDIR/usr/share/icons/hicolor/256x256/apps/FracturingFog.png"
-elif [ -f "$ICON_SRC_FALLBACK" ]; then
-    # `.ico` is not a valid AppImage icon; warn but copy as a placeholder
-    # so appimagetool produces output. Replace at the user's leisure.
-    echo "build-appimage.sh: WARN — Resources/Linux/FracturingFog.png missing." >&2
-    echo "                  Emitting 1x1 placeholder; AppImage will build but" >&2
-    echo "                  the icon will not render in Linux launchers." >&2
-    printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDAT\x08\x99c\xf8\x0f\x00\x00\x01\x01\x00\x01\x1b\xb6\xee\x56\x00\x00\x00\x00IEND\xaeB`\x82' \
-        > "$APPDIR/usr/share/icons/hicolor/256x256/apps/FracturingFog.png"
-else
-    echo "build-appimage.sh: no icon source available; cannot proceed." >&2
+# Icon (#429): extract the 256x256 PNG frame from Resources/FracturingFog.ico.
+# This used to fall back to a 1x1 placeholder PNG when a hand-made
+# Resources/Linux/FracturingFog.png was absent (it always was), so installed
+# launchers showed no icon. A missing or unreadable icon now fails the build.
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "build-appimage.sh: python3 not on PATH (needed to extract the icon)." >&2
     exit 1
 fi
+python3 "$ICO_TO_PNG" "$ICON_SRC_ICO" \
+    "$APPDIR/usr/share/icons/hicolor/256x256/apps/FracturingFog.png"
 cp "$APPDIR/usr/share/icons/hicolor/256x256/apps/FracturingFog.png" \
    "$APPDIR/FracturingFog.png"
 
