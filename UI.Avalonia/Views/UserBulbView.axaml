@@ -404,10 +404,12 @@
                     <TextBlock     Grid.Column="4" Classes="label" Text="L3:" Margin="10,0,4,0" Grid.Row="0" />
                     <NumericUpDown Grid.Column="5" Minimum="-10" Maximum="10" Increment="0.05"
                                    FormatString="0.000" Value="{Binding Light3}"  Grid.Row="0" MinWidth="120"/>
-                    <TextBlock     Grid.Column="0" Classes="label" Text="AO:" Margin="10,0,4,0" Grid.Row="1" />
+                    <TextBlock     Grid.Column="0" Classes="label" Text="AO:" Margin="10,0,4,0" Grid.Row="1"
+                                   ToolTip.Tip="Ambient-occlusion samples on the bulb's surface (0 = use Lighting &amp; FX's AO). When set it overrides Lighting &amp; FX. AO darkens creases on the object; it has no effect on empty space." />
                     <NumericUpDown Grid.Column="1" Minimum="0" Maximum="16" Increment="1"
                                    FormatString="0" Value="{Binding AOSamples}" Grid.Row="1" MinWidth="120"/>
-                    <TextBlock     Grid.Column="2" Classes="label" Text="Fog:" Margin="10,0,4,0" Grid.Row="1"/>
+                    <TextBlock     Grid.Column="2" Classes="label" Text="Fog:" Margin="10,0,4,0" Grid.Row="1"
+                                   ToolTip.Tip="Scene fog density (0 = use Lighting &amp; FX's fog). When set it overrides Lighting &amp; FX and fogs both the bulb and the background. For light shafts that fill the scene, turn on Froxel 3D in Lighting &amp; FX; this fog then drives that volume." />
                     <NumericUpDown Grid.Column="3" Minimum="0" Maximum="5" Increment="0.05"
                                    FormatString="0.000" Value="{Binding FogDensity}" Grid.Row="1" MinWidth="120"/>
                 </Grid>

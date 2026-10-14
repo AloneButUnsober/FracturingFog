@@ -763,11 +763,19 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         // Phase 1c — Lighting struct is authoritative. Legacy
         // FractalParameters.UserBulb{Light*,Ambient,Ao*,Fog*,Bg*} fields are
         // no longer copied here — the FractalParamsView Lighting & FX block
-        // drives Light1/2/3, ambient, AO, fog, and sky colours. Bulb-specific
-        // AO/fog/bg knobs that aren't yet bound through the Lighting struct
-        // (legacy bulb dialog) are kept below as opt-in overrides only when
-        // the Lighting struct value is at its untouched default.
+        // drives Light1/2/3, ambient, AO, fog, and sky colours. The User Bulb
+        // dialog's own AO / Fog knobs override it when set (#536, below).
         var fx = FractalParameters.Lighting;
+        // #536 — the dialog's Fog, when set, is the scene's fog: it wins over the
+        // Lighting value (which used to win, leaving the dialog knob dead), and it
+        // fogs the background as well as the object — rays that miss get the
+        // background fog (#1061) instead of a crisp sky behind a fogged bulb. Set
+        // before the froxel split, so with Froxel 3D on it drives that volume.
+        if (fogDensity > 0)
+        {
+            fx.FogDensity = fogDensity;
+            fx.FogBackground = true;
+        }
         // #1068 — froxel volumetrics: shade fog-free + arm the depth G-buffer;
         // the volume is composited after SSAO from the unstripped froxelFx.
         var froxelFx = fx;
@@ -775,14 +783,10 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         // Vol-color slice D (#180) — bake the active theme gradient for the
         // volumetric palette remap (no-op unless VolumePaletteStrength > 0).
         VolumePaletteBaker.Bake(ref fx, ColorMap);
-        // Treat fx.AoSamples == 0 as "user hasn't dialled this in via the
-        // Lighting block" and respect the legacy bulb AO knob; otherwise
-        // the Lighting value wins. Same logic for fog.
-        if (fx.AoSamples == 0) fx.AoSamples = aoSamples;
+        // #536 — the dialog's AO samples win when set (the Lighting value used to
+        // win whenever it was non-zero, so dialog changes did nothing).
+        if (aoSamples > 0) fx.AoSamples = aoSamples;
         if (fx.AoStrength == 0) fx.AoStrength = aoStrength;
-        // #1078 — not when the 3D froxel volume replaces the surface fog (it
-        // stripped FogDensity on purpose; the legacy knob must not stack on it).
-        if (fx.FogDensity == 0 && !ScreenSpacePost.Froxel3DActive(in froxelFx)) fx.FogDensity = fogDensity;
         // Sky colours: keep legacy bg fallback so first-time bulb scenes
         // render against the same dark sky they always have.
         if (fx.BgTopColor == 0) fx.BgTopColor = bgTop;
@@ -1327,9 +1331,8 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
             // lighting edits — a point/spot switch didn't repaint until nav/equation
             // changed the key (S8, #404). Key on the whole struct's signature.
             p.Lighting.SceneSignature(),
-            // The legacy fallback fields still feed the render when the Lighting
-            // value is at its untouched default (see the AO/fog/bg fallbacks), so
-            // keep them in the key too.
+            // The dialog's AO / fog knobs override the Lighting values when set
+            // (#536) and the bg colours are a fallback, so keep them in the key too.
             p.UserBulbAOSamples, p.UserBulbAOStrength, p.UserBulbFogDensity,
             p.UserBulbBgTopColor, p.UserBulbBgBottomColor,
             // View + clip
