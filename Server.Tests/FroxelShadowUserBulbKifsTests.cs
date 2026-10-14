@@ -27,10 +27,11 @@ public sealed class FroxelShadowUserBulbKifsTests
     public enum Kind { Kifs, KifsSierpinski, UserBulb }
 
     private static uint[] Render(Kind kind, int steps, out long ms, double legacyBulbFog = 0,
-        double bulbDist = 3.0, double zoom = 1.0)
+        double bulbDist = 3.0, double zoom = 1.0, double lightingFog = 0.05, bool fogBackground = false)
     {
         var fx = LightingFxData.CreateDefault();
-        fx.FogDensity = 0.05; fx.Froxel3D = true; fx.Froxel3DShadowSteps = steps;
+        fx.FogDensity = lightingFog; fx.Froxel3D = true; fx.Froxel3DShadowSteps = steps;
+        fx.FogBackground = fogBackground;
         fx.SsaoSamples = 0; fx.EdgeStrength = 0;
         var fp = new FractalParameters
         {
@@ -77,11 +78,17 @@ public sealed class FroxelShadowUserBulbKifsTests
     }
 
     [Fact]
-    public void UserBulb_LegacyFogKnob_DoesNotStackOnTheFroxelVolume()
+    public void UserBulb_DialogFogKnob_SetsTheFroxelVolume_WithoutStacking()
     {
-        // The froxel volume replaces the surface fog; the legacy UserBulbFogDensity
-        // fallback must not re-add it underneath.
-        Assert.Equal(Render(Kind.UserBulb, 0, out _), Render(Kind.UserBulb, 0, out _, legacyBulbFog: 0.3));
+        // #1078 — the froxel volume replaces the surface fog, so the User Bulb
+        // dialog's fog must not re-add surface fog underneath it. #536 — when set,
+        // the dialog fog IS the scene's fog density (it overrides Lighting & FX and
+        // turns on background fog). Together: dialog fog 0.3 renders exactly as
+        // Lighting fog 0.3 with background fog, with no extra layer.
+        var viaDialog = Render(Kind.UserBulb, 0, out _, legacyBulbFog: 0.3);
+        var viaLighting = Render(Kind.UserBulb, 0, out _, lightingFog: 0.3, fogBackground: true);
+        Assert.Equal(viaLighting, viaDialog);
+        Assert.NotEqual(Render(Kind.UserBulb, 0, out _), viaDialog);   // and it does something
     }
 
     [Fact]
