@@ -399,17 +399,11 @@ public sealed partial class MainWindow : Window
                 {
                     string wsName = w.Name;
                     var child = new MenuItem { Header = wsName };
-                    child.Click += (_, _) =>
-                    {
-                        // Route through the Control Center so its droplist selection
-                        // stays in sync — otherwise a later context "Save…" defaults
-                        // to the CC's stale selection and could overwrite the wrong
-                        // preset (#506). Same Restore either way.
-                        var cc = shell.EnsureControlCenter();
-                        cc.RefreshWorkspaces();
-                        cc.SelectedWorkspace = wsName;
-                        cc.ApplyWorkspaceCommand.Execute().Subscribe();
-                    };
+                    // Route through the Control Center so its droplist selection
+                    // stays in sync — otherwise a later context "Save…" defaults
+                    // to the CC's stale selection and could overwrite the wrong
+                    // preset (#506). Same Restore either way.
+                    child.Click += (_, _) => shell.EnsureControlCenter().RecallWorkspace(wsName);
                     workspacesItem.Items.Add(child);
                 }
             }

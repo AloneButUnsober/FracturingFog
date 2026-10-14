@@ -204,6 +204,18 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
         SelectedWorkspace = name;
     }
 
+    /// <summary>#506 — recall a workspace from outside the Control Center (the
+    /// render-window context menu, the Asset Manager's Open). Selects it in the
+    /// droplist first, so a later Save… defaults to the recalled name instead of
+    /// a stale selection that would overwrite a different preset.</summary>
+    public void RecallWorkspace(string name)
+    {
+        RefreshWorkspaces();
+        if (!Workspaces.Contains(name)) return;
+        SelectedWorkspace = name;
+        ApplyWorkspace();
+    }
+
     private void ApplyWorkspace()
     {
         if (string.IsNullOrWhiteSpace(SelectedWorkspace)) return;
