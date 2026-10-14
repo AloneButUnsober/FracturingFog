@@ -2,7 +2,7 @@
   "Cases": [
     {
       "Name": "mandelbrot-default",
-      "Sha256": "c27997cb6101bb94344adc8c4484bffbcde4f75e16e1aef3e8661cf754fc7fd7",
+      "Sha256": "115270f20b0e0ec72d9872452ecfdde24ae4901ca487c26ef6f1dcda634ce438",
       "Args": [
         "--fractal",
         "Mandelbrot",
@@ -19,12 +19,13 @@
         "--height",
         "256",
         "--quality",
-        "Standard"
+        "Standard",
+        "--no-watermark"
       ]
     },
     {
       "Name": "julia-default",
-      "Sha256": "acddc8d129b60e6d7040d4085dc2ef9fd1fdad49b3f2ef6d4884f1eb20c9ed83",
+      "Sha256": "e0c41a20746283050b456f39450f6e22d91e00641ab9124e90e85ff96adb4114",
       "Args": [
         "--fractal",
         "Julia",
@@ -41,12 +42,13 @@
         "--height",
         "256",
         "--quality",
-        "Standard"
+        "Standard",
+        "--no-watermark"
       ]
     },
     {
       "Name": "burningship-default",
-      "Sha256": "ab205ec7c7032bdc53a00049fe79c7a9613c33202afec50c9075aca0772b4530",
+      "Sha256": "1aaf7da1b9e0a530a7d4f025e54daf1fb8be5968a7bd37dd69070ce9185078cc",
       "Args": [
         "--fractal",
         "BurningShip",
@@ -63,12 +65,13 @@
         "--height",
         "256",
         "--quality",
-        "Standard"
+        "Standard",
+        "--no-watermark"
       ]
     },
     {
       "Name": "tricorn-default",
-      "Sha256": "16da1f67ae8ddc78cd48e59d226481168dedebaa781e0dc2395d5bd15f9155f5",
+      "Sha256": "0e8dff95b1ca90a776066423fff32a4d74f901fcffb47217418d47d2025696ba",
       "Args": [
         "--fractal",
         "Tricorn",
@@ -85,12 +88,13 @@
         "--height",
         "256",
         "--quality",
-        "Standard"
+        "Standard",
+        "--no-watermark"
       ]
     },
     {
       "Name": "multibrot-default",
-      "Sha256": "89bb3570a703d698e34a7e2103ab833888b6daa9fa7083e2241eb15ad5eb7b04",
+      "Sha256": "1fd3a891980e8d6cd9aa07505c815af2ebfa6fe77a28ab6b71add83668867114",
       "Args": [
         "--fractal",
         "Multibrot",
@@ -107,12 +111,13 @@
         "--height",
         "256",
         "--quality",
-        "Standard"
+        "Standard",
+        "--no-watermark"
       ]
     },
     {
       "Name": "phoenix-default",
-      "Sha256": "43457911f17ad416e5390b5e81c401a368f155be406563361ba1b92b5fa50023",
+      "Sha256": "9e7cd6daa4bb32a3ae0cfa4750f9e6879372f4534c64147d1c78486e0e6e7845",
       "Args": [
         "--fractal",
         "Phoenix",
@@ -129,12 +134,13 @@
         "--height",
         "256",
         "--quality",
-        "Standard"
+        "Standard",
+        "--no-watermark"
       ]
     },
     {
       "Name": "newton-default",
-      "Sha256": "ddd50556c4eab6679534e6d268aa9aa6ae8eb2f6730f2087912841d741d29f8d",
+      "Sha256": "97aa013d0ec05a6c3e20f775dfbb561ad9685ab400e9abc39e733454535f4939",
       "Args": [
         "--fractal",
         "Newton",
@@ -151,12 +157,13 @@
         "--height",
         "256",
         "--quality",
-        "Standard"
+        "Standard",
+        "--no-watermark"
       ]
     },
     {
       "Name": "nova-default",
-      "Sha256": "ddd50556c4eab6679534e6d268aa9aa6ae8eb2f6730f2087912841d741d29f8d",
+      "Sha256": "97aa013d0ec05a6c3e20f775dfbb561ad9685ab400e9abc39e733454535f4939",
       "Args": [
         "--fractal",
         "Nova",
@@ -173,12 +180,36 @@
         "--height",
         "256",
         "--quality",
-        "Standard"
+        "Standard",
+        "--no-watermark"
+      ]
+    },
+    {
+      "Name": "teardrop-default",
+      "Sha256": "7e45488945bff3837d2c8bb6427462c836aa42017425b7282a19f79e406f6af8",
+      "Args": [
+        "--fractal",
+        "TearDrop",
+        "--theme",
+        "HSV",
+        "--x",
+        "0",
+        "--y",
+        "0",
+        "--zoom",
+        "0.5",
+        "--width",
+        "256",
+        "--height",
+        "256",
+        "--quality",
+        "Standard",
+        "--no-watermark"
       ]
     },
     {
       "Name": "magnet1-default",
-      "Sha256": "dcc906dbbee16203237621b4e26d637cf9755dbea0204d13fcfaba9b5949355c",
+      "Sha256": "b56df6ab975164477f4ae52c25f7c21052f8e371945d7509447316fc0ce03495",
       "Args": [
         "--fractal",
         "Magnet1",
@@ -195,12 +226,13 @@
         "--height",
         "256",
         "--quality",
-        "Standard"
+        "Standard",
+        "--no-watermark"
       ]
     },
     {
       "Name": "magnet2-default",
-      "Sha256": "fe56d830b3bbe600b9ca48882b6e00668f14b93151496bbad6b6d3d95447a15b",
+      "Sha256": "112e1d0fc79845dca1e12b81aa9074100ec3062744cf5308cc0d43b0c4f916a5",
       "Args": [
         "--fractal",
         "Magnet2",
@@ -217,12 +249,13 @@
         "--height",
         "256",
         "--quality",
-        "Standard"
+        "Standard",
+        "--no-watermark"
       ]
     },
     {
       "Name": "halley-default",
-      "Sha256": "d2629cfeeb791496ccf0b15748be6b03bb070c21cbd2a0345b43e46d74574959",
+      "Sha256": "3b6f9589cd8e21463aa33c7335b6db339a49bbccc3e6e9d2df0de2b5aa59bbcd",
       "Args": [
         "--fractal",
         "Halley",
@@ -239,12 +272,13 @@
         "--height",
         "256",
         "--quality",
-        "Standard"
+        "Standard",
+        "--no-watermark"
       ]
     },
     {
       "Name": "secant-default",
-      "Sha256": "510309956db88faf8fecf8f32f0c674742ab856af872b3fff447299166538440",
+      "Sha256": "086023c75ec4f0c4cfda710ff9c77919b598b0c55f7b73c80c1c32630f441b47",
       "Args": [
         "--fractal",
         "Secant",
@@ -261,12 +295,13 @@
         "--height",
         "256",
         "--quality",
-        "Standard"
+        "Standard",
+        "--no-watermark"
       ]
     },
     {
       "Name": "glynn-default",
-      "Sha256": "4d16017d1e18d9e35574ab3a2d1733fec8fd3db5b4f5504302969e8fa7c78cb0",
+      "Sha256": "4946a4735faf3cf2e2d334f12cde978e0b5eae6ee68d34cfdb6c2447b0e78e54",
       "Args": [
         "--fractal",
         "Glynn",
@@ -283,12 +318,13 @@
         "--height",
         "256",
         "--quality",
-        "Standard"
+        "Standard",
+        "--no-watermark"
       ]
     },
     {
       "Name": "spider-default",
-      "Sha256": "3603f4d1968c427db4e0dc8f8ed60e1c1f2d3d3a62b2a9774c328f3f40abf3ab",
+      "Sha256": "c81fb24952b4ba10b7552946bd074574f02c477f69a0bb6363bd5c4ca28d14f5",
       "Args": [
         "--fractal",
         "Spider",
@@ -305,12 +341,13 @@
         "--height",
         "256",
         "--quality",
-        "Standard"
+        "Standard",
+        "--no-watermark"
       ]
     },
     {
       "Name": "buddhabrot-default",
-      "Sha256": "a7e1e567789cc821310dea07e293055434c39d5a62eb083de2556a5cd26667b9",
+      "Sha256": "fa0df9e0ed76223e0847000a2b7eae7e2adf5cf7f614d186a863c11ba241dcfa",
       "Args": [
         "--fractal",
         "BuddhaBrot",
@@ -327,12 +364,105 @@
         "--height",
         "256",
         "--quality",
-        "Standard"
+        "Standard",
+        "--no-watermark"
+      ]
+    },
+    {
+      "Name": "nebulabrot-default",
+      "Sha256": "0e734054a072ffd9c9cea61178dace669cb08387d06fba069a48b3936340751a",
+      "Args": [
+        "--fractal",
+        "Nebulabrot",
+        "--theme",
+        "HSV",
+        "--x",
+        "0",
+        "--y",
+        "0",
+        "--zoom",
+        "0.5",
+        "--width",
+        "256",
+        "--height",
+        "256",
+        "--quality",
+        "Standard",
+        "--no-watermark"
+      ]
+    },
+    {
+      "Name": "antibuddhabrot-default",
+      "Sha256": "eefb0ecfa81554a07e03343343f7375b5c635338714fa742203cf1782f3206be",
+      "Args": [
+        "--fractal",
+        "AntiBuddhabrot",
+        "--theme",
+        "HSV",
+        "--x",
+        "0",
+        "--y",
+        "0",
+        "--zoom",
+        "0.5",
+        "--width",
+        "256",
+        "--height",
+        "256",
+        "--quality",
+        "Standard",
+        "--no-watermark"
+      ]
+    },
+    {
+      "Name": "antinebulabrot-default",
+      "Sha256": "6d4dd7953f0ac2addd971155bac02b1c34a0112c59846e9d392b88616af02664",
+      "Args": [
+        "--fractal",
+        "AntiNebulabrot",
+        "--theme",
+        "HSV",
+        "--x",
+        "0",
+        "--y",
+        "0",
+        "--zoom",
+        "0.5",
+        "--width",
+        "256",
+        "--height",
+        "256",
+        "--quality",
+        "Standard",
+        "--no-watermark"
+      ]
+    },
+    {
+      "Name": "logistic-default",
+      "Sha256": "9826b8c8c488fa33f89dc4a80c865a9522f61a4827ba4aaffb9f246c4e6ec7d2",
+      "Args": [
+        "--fractal",
+        "Logistic",
+        "--theme",
+        "HSV",
+        "--x",
+        "0",
+        "--y",
+        "0",
+        "--zoom",
+        "0.5",
+        "--width",
+        "256",
+        "--height",
+        "256",
+        "--quality",
+        "Standard",
+        "--no-watermark"
       ]
     },
     {
       "Name": "ifs-default",
-      "Sha256": "415f37fda13f7e45b14c7307202d98681a70d47b0f351fb07b72de94ef6f5e27",
+      "Sha256": "e5a60e6d7bd4b9ea1c8c087b6d8c677c4a54240e7c079abf95af7614edcdbdf9",
       "Args": [
         "--fractal",
         "IFS",
@@ -349,12 +479,13 @@
         "--height",
         "256",
         "--quality",
-        "Standard"
+        "Standard",
+        "--no-watermark"
       ]
     },
     {
       "Name": "lsystem-default",
-      "Sha256": "9b4e0438d3434954f5014b9cbdedbe0beaec1affb248f920e073031e5bb77fad",
+      "Sha256": "c9fb7333464bb0038d56dcc57f3311128da569a8aae44f00cd090d63189e1bf8",
       "Args": [
         "--fractal",
         "LSystem",
@@ -371,12 +502,13 @@
         "--height",
         "256",
         "--quality",
-        "Standard"
+        "Standard",
+        "--no-watermark"
       ]
     },
     {
       "Name": "strangeattractor-default",
-      "Sha256": "d7ca694b7bef62723472229bd7e298c0a83a643d8ecd75c0fb4cbb00b4866786",
+      "Sha256": "a7cf25c9b3f6810debb6162b680942a9d9b5496189c9cc0248d3e314aaa26422",
       "Args": [
         "--fractal",
         "StrangeAttractor",
@@ -393,12 +525,13 @@
         "--height",
         "256",
         "--quality",
-        "Standard"
+        "Standard",
+        "--no-watermark"
       ]
     },
     {
       "Name": "plasma-default",
-      "Sha256": "ef9de54d7e571f8a15c675681a7e650fefa17d724d1b572b45c5a5b4424613b6",
+      "Sha256": "c3b1bb2a7217ac821e38b7f27ec4654c999af7f405799db80af1ef2d71a8b9bf",
       "Args": [
         "--fractal",
         "Plasma",
@@ -415,12 +548,13 @@
         "--height",
         "256",
         "--quality",
-        "Standard"
+        "Standard",
+        "--no-watermark"
       ]
     },
     {
       "Name": "apollonian-default",
-      "Sha256": "0dd93bf6d89eb37a2f16b9ec6fdbd53941b97a15be90d2bdbe7b2998c0ce0ce8",
+      "Sha256": "63577bd0f0afabadae5979cff286469f8e0fb6a1e620691f70ae368de72b7b0f",
       "Args": [
         "--fractal",
         "Apollonian",
@@ -437,12 +571,13 @@
         "--height",
         "256",
         "--quality",
-        "Standard"
+        "Standard",
+        "--no-watermark"
       ]
     },
     {
       "Name": "dla-default",
-      "Sha256": "c9d3650e811c90a9d3ca357d6c8d291f2fe21abe1d9186d4c1d5f522e0069c47",
+      "Sha256": "5e226df7014e79e35853bb7380fd0b60d9aa12e35892e8094c69ea926a785423",
       "Args": [
         "--fractal",
         "Dla",
@@ -459,12 +594,13 @@
         "--height",
         "256",
         "--quality",
-        "Standard"
+        "Standard",
+        "--no-watermark"
       ]
     },
     {
       "Name": "flame-default",
-      "Sha256": "8cab0ae2307f560fb2814234d489c23c15e4a6f851fc04965fa677362dc098b3",
+      "Sha256": "afdc4c71d304cc59334d5485822ae3a81588c7903f2eceee5447a4871126a211",
       "Args": [
         "--fractal",
         "Flame",
@@ -481,7 +617,307 @@
         "--height",
         "256",
         "--quality",
-        "Standard"
+        "Standard",
+        "--no-watermark"
+      ]
+    },
+    {
+      "Name": "mandelbulb-default",
+      "Sha256": "33a73336f91a8606c282539e3af07d590dc9a90ea8b0e0135a8c146d38e07c48",
+      "Args": [
+        "--fractal",
+        "Mandelbulb",
+        "--theme",
+        "HSV",
+        "--x",
+        "0",
+        "--y",
+        "0",
+        "--zoom",
+        "0.5",
+        "--width",
+        "256",
+        "--height",
+        "256",
+        "--quality",
+        "Standard",
+        "--no-watermark"
+      ]
+    },
+    {
+      "Name": "mandelbox-default",
+      "Sha256": "0ca6610c4ecf7102b41a552e0355f8a48c67e4d72b36e9d419b212ccea9e4024",
+      "Args": [
+        "--fractal",
+        "Mandelbox",
+        "--theme",
+        "HSV",
+        "--x",
+        "0",
+        "--y",
+        "0",
+        "--zoom",
+        "0.5",
+        "--width",
+        "256",
+        "--height",
+        "256",
+        "--quality",
+        "Standard",
+        "--no-watermark"
+      ]
+    },
+    {
+      "Name": "kifs-default",
+      "Sha256": "6d951c710f6ecbddbfd02afabe111a59728884512570c14ffec742072f69d790",
+      "Args": [
+        "--fractal",
+        "Kifs",
+        "--theme",
+        "HSV",
+        "--x",
+        "0",
+        "--y",
+        "0",
+        "--zoom",
+        "0.5",
+        "--width",
+        "256",
+        "--height",
+        "256",
+        "--quality",
+        "Standard",
+        "--no-watermark"
+      ]
+    },
+    {
+      "Name": "quaternionjulia-default",
+      "Sha256": "9f799c194573c1467a78107c25d71e7426f664a40b5b8f47068828bff24a882a",
+      "Args": [
+        "--fractal",
+        "QuaternionJulia",
+        "--theme",
+        "HSV",
+        "--x",
+        "0",
+        "--y",
+        "0",
+        "--zoom",
+        "0.5",
+        "--width",
+        "256",
+        "--height",
+        "256",
+        "--quality",
+        "Standard",
+        "--no-watermark"
+      ]
+    },
+    {
+      "Name": "quaternionmandelbrot-default",
+      "Sha256": "2ad1e436e1ffc430cb330f8c9344089f6163958d04294bf718d58116ef8aa24b",
+      "Args": [
+        "--fractal",
+        "QuaternionMandelbrot",
+        "--theme",
+        "HSV",
+        "--x",
+        "0",
+        "--y",
+        "0",
+        "--zoom",
+        "0.5",
+        "--width",
+        "256",
+        "--height",
+        "256",
+        "--quality",
+        "Standard",
+        "--no-watermark"
+      ]
+    },
+    {
+      "Name": "bicomplexmandelbrot-default",
+      "Sha256": "e779592a3fd0a85f933a28c4cba5629bfb0ea2e75b817f3185d0c11f1ae96a0c",
+      "Args": [
+        "--fractal",
+        "BicomplexMandelbrot",
+        "--theme",
+        "HSV",
+        "--x",
+        "0",
+        "--y",
+        "0",
+        "--zoom",
+        "0.5",
+        "--width",
+        "256",
+        "--height",
+        "256",
+        "--quality",
+        "Standard",
+        "--no-watermark"
+      ]
+    },
+    {
+      "Name": "kleinian-default",
+      "Sha256": "b0a321a05de961dc89eb510a9b8cd39d50d1387f80157794a9eded231c8d8aa2",
+      "Args": [
+        "--fractal",
+        "Kleinian",
+        "--theme",
+        "HSV",
+        "--x",
+        "0",
+        "--y",
+        "0",
+        "--zoom",
+        "0.5",
+        "--width",
+        "256",
+        "--height",
+        "256",
+        "--quality",
+        "Standard",
+        "--no-watermark"
+      ]
+    },
+    {
+      "Name": "generatedmandelbrotz2-default",
+      "Sha256": "2241a9fb1f348a4a73116754ec4ade7076546f4f20a2919e9d941b240c6d0af3",
+      "Args": [
+        "--fractal",
+        "GeneratedMandelbrotZ2",
+        "--theme",
+        "HSV",
+        "--x",
+        "0",
+        "--y",
+        "0",
+        "--zoom",
+        "0.5",
+        "--width",
+        "256",
+        "--height",
+        "256",
+        "--quality",
+        "Standard",
+        "--no-watermark"
+      ]
+    },
+    {
+      "Name": "generatedmandelbrotz3-default",
+      "Sha256": "de6416a3d3888826ee3c6f151329dd9e6283a632902dc24f4332c7a6020d6705",
+      "Args": [
+        "--fractal",
+        "GeneratedMandelbrotZ3",
+        "--theme",
+        "HSV",
+        "--x",
+        "0",
+        "--y",
+        "0",
+        "--zoom",
+        "0.5",
+        "--width",
+        "256",
+        "--height",
+        "256",
+        "--quality",
+        "Standard",
+        "--no-watermark"
+      ]
+    },
+    {
+      "Name": "generatedmandelbrotz4-default",
+      "Sha256": "2e58dc7d7a2e7674bbf7d526eb17943d0392f83e7e2aabb0d393fe43c031f75a",
+      "Args": [
+        "--fractal",
+        "GeneratedMandelbrotZ4",
+        "--theme",
+        "HSV",
+        "--x",
+        "0",
+        "--y",
+        "0",
+        "--zoom",
+        "0.5",
+        "--width",
+        "256",
+        "--height",
+        "256",
+        "--quality",
+        "Standard",
+        "--no-watermark"
+      ]
+    },
+    {
+      "Name": "generatedmandelbrotz5-default",
+      "Sha256": "20def1f197a46bb577cd76aca911a794ab71320dd672846445d52ff71c301690",
+      "Args": [
+        "--fractal",
+        "GeneratedMandelbrotZ5",
+        "--theme",
+        "HSV",
+        "--x",
+        "0",
+        "--y",
+        "0",
+        "--zoom",
+        "0.5",
+        "--width",
+        "256",
+        "--height",
+        "256",
+        "--quality",
+        "Standard",
+        "--no-watermark"
+      ]
+    },
+    {
+      "Name": "generatedtricorn-default",
+      "Sha256": "c1f2a4e30f99354abc1b23b860fa8492436934429b21f427ba4a0760bb3d0422",
+      "Args": [
+        "--fractal",
+        "GeneratedTricorn",
+        "--theme",
+        "HSV",
+        "--x",
+        "0",
+        "--y",
+        "0",
+        "--zoom",
+        "0.5",
+        "--width",
+        "256",
+        "--height",
+        "256",
+        "--quality",
+        "Standard",
+        "--no-watermark"
+      ]
+    },
+    {
+      "Name": "generatedburningship-default",
+      "Sha256": "135b4d3e470e5303bd2f69662a0d8461e6225cad1f266d35e00a0af07b8f1aba",
+      "Args": [
+        "--fractal",
+        "GeneratedBurningShip",
+        "--theme",
+        "HSV",
+        "--x",
+        "0",
+        "--y",
+        "0",
+        "--zoom",
+        "0.5",
+        "--width",
+        "256",
+        "--height",
+        "256",
+        "--quality",
+        "Standard",
+        "--no-watermark"
       ]
     }
   ]
