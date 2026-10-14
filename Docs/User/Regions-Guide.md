@@ -253,9 +253,10 @@ pipe-delimited limbs for lossless deep-zoom precision. Either way, the boxes
 forum post still pastes correctly whichever mode you are in.
 
 > [!NOTE]
-> Single-value notation carries about 29 significant digits. That is exact for
-> everyday views; a pure region jump stays lossless (the box isn't re-parsed
-> unless you edit it). To hand off the **full** DD/QD/OD precision of a very deep
+> Single-value notation carries 28 decimal places (about 29 significant
+> digits), enough to type or copy a centre to about 1e25 zoom. A shallow centre
+> shows the shortest digits that read back as the same value. A pure region jump
+> stays lossless (the box isn't re-parsed unless you edit it). To hand off the **full** DD/QD/OD precision of a very deep
 > coordinate by copy-paste, tick **Pipe notation** first.
 
 The pipe **limb format** looks like:
