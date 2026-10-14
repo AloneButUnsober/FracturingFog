@@ -93,6 +93,8 @@
 
 <ItemGroup>
   <AvaloniaResource Include="Assets\**" />
+  <!-- #429 — the window icon on Linux/macOS (Windows uses the exe's ApplicationIcon). -->
+  <AvaloniaResource Include="..\Resources\FracturingFog.ico" Link="Assets\FracturingFog.ico" />
   <!--
     In-app Help viewer loads project markdown docs via the avares: URI scheme.
     Sibling `Docs\` folder is embedded as Avalonia resources so the viewer

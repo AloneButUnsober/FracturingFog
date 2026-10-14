@@ -77,6 +77,8 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="Resources\PaletteBuilder_Logo.ico" />
+    <!-- #429 — the window icon on Linux/macOS (Windows uses ApplicationIcon). -->
+    <AvaloniaResource Include="Resources\PaletteBuilder_Logo.ico" />
   </ItemGroup>
 
   <ItemGroup>
