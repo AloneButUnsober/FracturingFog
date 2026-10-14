@@ -338,7 +338,7 @@ Each spec: what, surfaces, data model, algorithm, injection points, back-compat,
 
 ### F15 — ColorGen: orbit-accumulator inputs (route a)
 
-- **Tracking:** [#591](https://github.com/AloneButUnsober/FracturingFog/issues/591). Status: ◐ MVP shipped (trapMin / stripeAvg / tiaAvg, interpreter/CPU); GPU + C# export + more accumulators/shapes deferred.
+- **Tracking:** [#591](https://github.com/AloneButUnsober/FracturingFog/issues/591). Status: ☑ complete (closed 2026-10-14). Interpreter / CPU, native and DSL calculators, and C# export shipped here. The GPU side, with all 11 accumulators, is F16 (#603), and deep zoom is #607.
 - **What:** ColorGen inputs are escape-final only, so true orbit traps / Stripe /
   SAC / TIA / curvature / Lyapunov / Gaussian / exp-smoothing **cannot** be
   written in it (only single-final-point fakes). Expose the engine's already-

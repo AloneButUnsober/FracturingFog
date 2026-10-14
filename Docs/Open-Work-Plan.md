@@ -101,7 +101,7 @@ audio-reactive dialog without crash.
 | 2.9 | D-6.25 — Animation: morph equations | ✅ Shipped 2026-06-21 |
 | 2.10 | D-4.18 — DD-precision BLA tables | ✅ Shipped 2026-06-21 |
 | 2.11 | D-4.17 — Octuple-double (OD) ref orbit — past 1e50 zoom | ✅ Shipped 2026-06-21; OD arithmetic fixed + re-enabled 2026-06-22 (op* rewrite + 23 xUnit OD parity tests in `Server.Tests/OctupleDoubleTests.cs`). UI navigation past 1e58 still pending — see status log |
-| 2.12 | D-6.27 — GPU reference orbit (QD on GPU) | 🟡 Scaffold shipped 2026-06-22 (Hi-only kernel works on CUDA). QD upgrade + perf-win analysis **deferred** as non-blocking follow-on — toggle off by default, no other wave depends on it |
+| 2.12 | D-6.27 — GPU reference orbit (QD on GPU) | ✅ Done (#1166, 2026-10-08). The full QD orbit runs on the GPU (`MandelbrotRefOrbitGpu`), in launches of about 100 ms so it stays under the GPU watchdog. `ReferenceOrbitBench` measures it: on a GT 710 it is about 125× slower than the CPU, so `UseGpuReferenceOrbit` stays opt-in (default off). Modern-GPU checks: #1265 |
 | 2.13 | D-7.29 — Roslyn source generator | ✅ Shipped 2026-06-22 |
 | 2.14 | D-4.19 — QD δ-chain precision floor — fix pixelation at zoom 1e40–1e58 | ⚫ **Closed obsolete 2026-07-05** — premise disproven by `--qdfloorsweep` (QD separates 128/128 pixels through 1e64; no arithmetic floor in the 1e40–1e58 band). Original report predates the 2.11 OD-arith fix + SM-1 iter-cap finding. Intent folded into **SM-2** (rebasing). See status log. |
 | 2.15 | D-4.20 — OD-aware UI navigation — populate `CenterX4..X7` from pan/zoom | ✅ Shipped 2026-06-22 (`FractalInputController.cs` — 6 pan/zoom sites + OD pan-start cache + `StoreOD` helper) |
@@ -183,15 +183,15 @@ audio-reactive dialog without crash.
 
 ---
 
-## Wave 8 — WinForms retirement (USER-GATED)
+## Wave 8 — WinForms retirement — ✅ DONE (#116)
 
-Do not start without explicit user signal — current note: "user wants legacy intact."
+Completed with the user's go-ahead: the WinForms shell was removed in #116. Avalonia is the only shell (see `CLAUDE.md`).
 
-| # | Item |
-|---|------|
-| 8.1 | Phase 2.3 G — delete `MainForm.cs` + `Slideshow.cs` + `VideoZoom.cs` + `MainForm.resx` + WinForms entry |
-| 8.2 | Phase 2.1 deferred — move `DirectXRenderer.cs` to `Rendering.D3D` + `HwndGpuSurface` |
-| 8.3 | B4 — retire `Views/ImagePaletteDialog.cs` `GdiToSkia` bridge |
+| # | Item | Status |
+|---|------|--------|
+| 8.1 | Phase 2.3 G — delete `MainForm.cs` + `Slideshow.cs` + `VideoZoom.cs` + `MainForm.resx` + WinForms entry | ✅ Done (#116), including the `Views/**` tree and the `--winforms` flag |
+| 8.2 | Phase 2.1 deferred — move `DirectXRenderer.cs` to `Rendering.D3D` + `HwndGpuSurface` | ✅ `Rendering.D3D/DirectXRenderer.cs`. No `HwndGpuSurface` class was needed: `UI.Avalonia/Controls/GpuSurfaceControl.cs` implements `IGpuSurface` |
+| 8.3 | B4 — retire `Views/ImagePaletteDialog.cs` `GdiToSkia` bridge | ✅ Gone with the WinForms `Views/` tree (#116); no `GdiToSkia` remains |
 
 ---
 

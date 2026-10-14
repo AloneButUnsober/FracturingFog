@@ -7,6 +7,10 @@
 **Next task:** SA/BLA-on-GPU spike ([#88](https://github.com/AloneButUnsober/FracturingFog/issues/88)) — jump to
 [§6](#6-start-here-next-session--sabla-on-gpu-spike-88). **Update 2026-10-07 (GPU parity plan G4.5a):** SA is
 wired into production on both backends — see the note at the top of §6; BLA remains.
+**Update 2026-10-14:** this handoff's thread is complete. SA (G4.5a, PR #1211) and BLA (G4.5b, PR #1215)
+both run on D3D11 and Vulkan. #82, #84, #85 and #87 are closed. What remains is the strong-fp64 speed
+sign-off and the `MaxGpuPerturbZoom` decision, tracked in #1265. §4 below shows current issue states;
+the rest of this page is history.
 
 ---
 
@@ -100,10 +104,10 @@ dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke
 
 | # | Title | State |
 |---|-------|-------|
-| [#82](https://github.com/AloneButUnsober/FracturingFog/issues/82) | V6 GPU perturbation | Core done both backends. Remaining: `MaxGpuPerturbZoom` lift decision + close-out — **both need a strong-FP64 perf sign-off**. |
-| [#88](https://github.com/AloneButUnsober/FracturingFog/issues/88) | **SA/BLA on GPU** | **Deferred — the next task (this handoff).** |
-| [#85](https://github.com/AloneButUnsober/FracturingFog/issues/85) | Resize-during-calc buffer realloc race | Mitigated (cancel before realloc) + not reproducing; proper **full calc-thread drain** still open, low priority. |
-| [#84](https://github.com/AloneButUnsober/FracturingFog/issues/84) | LightingFX HUD gone post-Vulkan | Open UI regression, unrelated to compute — quick win, weak HW fine. |
+| [#82](https://github.com/AloneButUnsober/FracturingFog/issues/82) | V6 GPU perturbation | **Closed.** The `MaxGpuPerturbZoom` lift decision moved to the modern-GPU sign-off, #1265. |
+| [#88](https://github.com/AloneButUnsober/FracturingFog/issues/88) | **SA/BLA on GPU** | **Implemented** (SA PR #1211, BLA PR #1215, both backends). Only the strong-fp64 speed sign-off is left, in #1265. |
+| [#85](https://github.com/AloneButUnsober/FracturingFog/issues/85) | Resize-during-calc buffer realloc race | **Closed.** |
+| [#84](https://github.com/AloneButUnsober/FracturingFog/issues/84) | LightingFX HUD gone post-Vulkan | **Closed.** |
 | [#44](https://github.com/AloneButUnsober/FracturingFog/issues/44) | V5 macOS via MoltenVK | Stretch — needs a **Mac**, not FP64. |
 
 Closed this arc: #86 (stale deep frame → was TDR device-removed, fixed by tiling), #87 (perf-fallback, done).
