@@ -107,6 +107,10 @@ namespace FracturingFog
             int fps = 30, CancellationToken ct = default,
             Action<string>? onProgressLine = null)
         {
+            // #22 — ffmpeg runs with the PNG folder as its working directory, so a
+            // relative output path (e.g. `--out out\show.mp4`) landed in the temp
+            // folder and ffmpeg failed to open it. Resolve against our own cwd.
+            outputPath = Path.GetFullPath(outputPath);
             string args = BuildArgs(pngFolder, outputPath, preset, fps);
             return await RunAsync(args, pngFolder, ct, onProgressLine).ConfigureAwait(false);
         }
@@ -215,6 +219,10 @@ namespace FracturingFog
         {
             string? exe = FindFfmpeg();
             if (exe == null) return (false, "ffmpeg not found.");
+            // #22 — absolute paths, whatever working directory ffmpeg runs in.
+            videoPath = Path.GetFullPath(videoPath);
+            audioPath = Path.GetFullPath(audioPath);
+            outputPath = Path.GetFullPath(outputPath);
             if (!File.Exists(videoPath)) return (false, "video not found: " + videoPath);
             if (!File.Exists(audioPath)) return (false, "audio not found: " + audioPath);
 

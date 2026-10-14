@@ -1221,13 +1221,77 @@ namespace FracturingFog.Batch
         // Used by the batch slideshow loop to drop region/theme combinations
         // that render as a hole (full in-set under a black-in-set palette,
         // or insufficient iter depth at extreme zoom).
-        private static bool IsAllBlack(uint[] pixels, int n)
+        // #22 — slideshow parity with the interactive SlideshowEngine (#437): a leg
+        // frame is blank when one colour covers ≥ 99.5 % of it (any flat colour,
+        // not only black, and a few stray pixels don't count).
+        private static bool IsSolidFrame(uint[] pixels, int n)
+            => FracturingFog.Slideshow.SolidFrame.IsEffectivelySolid(pixels, n);
+
+        // #22 — the region's theme pool as the interactive slideshow builds it: the
+        // themes suited to the region's zoom (ColorPalette.GetPaletteNamesForZoom),
+        // narrowed by the preset's included themes; an include list that matches
+        // none of them is ignored (ApplyThemeFilter's rule).
+        private static System.Collections.Generic.List<string> SlideshowThemesForZoom(
+            double zoom, System.Collections.Generic.HashSet<string>? included)
         {
-            const uint OpaqueBlack = 0xFF000000u;
-            int len = Math.Min(pixels.Length, n);
-            for (int i = 0; i < len; i++)
-                if (pixels[i] != OpaqueBlack) return false;
-            return true;
+            var forZoom = FracturingFog.Models.ColorPalette.GetPaletteNamesForZoom(zoom);
+            if (included == null) return forZoom;
+            var filtered = forZoom.FindAll(included.Contains);
+            return filtered.Count > 0 ? filtered : forZoom;
+        }
+
+        // #22 — the region's iteration count as the interactive slideshow uses it:
+        // the saved count, else the quality preset's zoom formula (batch used a
+        // flat 1000). A Mandelbrot region that renders fully in-set at that count
+        // (#437 / #1267: every theme would be one flat colour) is raised once per
+        // run to a count at which pixels escape. Cached per region.
+        private static int SlideshowIterations(FractalRegion region,
+            System.Collections.Generic.Dictionary<string, int> cache)
+        {
+            if (cache.TryGetValue(region.Name, out int cached)) return cached;
+            var quality = region.QualityPreset ?? QualityPreset.Standard;
+            int iters = region.Iterations > 0 ? region.Iterations : quality.ComputeIterations(region.Zoom);
+            if (region.FractalType == FractalType.Mandelbrot)
+            {
+                try
+                {
+                    var probe = new MandelbrotCalculator(96, 54)
+                    {
+                        CenterX = region.CenterX, CenterXLo = region.CenterXLo,
+                        CenterX2 = region.CenterX2, CenterX3 = region.CenterX3,
+                        CenterY = region.CenterY, CenterYLo = region.CenterYLo,
+                        CenterY2 = region.CenterY2, CenterY3 = region.CenterY3,
+                        Zoom = region.Zoom, MaxIterations = iters,
+                        ColorMap = new HsvPalette(), Quality = quality,
+                    };
+                    probe.Calculate(CancellationToken.None);
+                    if (IterationRescue.IsAllInSet(probe))
+                    {
+                        int found = IterationRescue.FindEscapingIterations(probe, IterationRescue.Ceiling, CancellationToken.None);
+                        if (found > iters)
+                        {
+                            Console.WriteLine($"  note      : {region.Name} is in-set at {iters} iterations; using {found}");
+                            iters = found;
+                        }
+                    }
+                }
+                catch { /* keep the formula count */ }
+            }
+            cache[region.Name] = iters;
+            return iters;
+        }
+
+        // #22 / #434 — a random theme for a slideshow slot, of a kind that suits the
+        // region's fractal type (the interactive SlideshowEngine.GenerateRandomTheme).
+        private static (string Name, IColorMap Map) RandomSlideshowTheme(
+            FractalRegion region, Random rng, bool experimental)
+        {
+            var kinds = FracturingFog.Imaging.RandomThemeGenerator.KindsFor(FractalCapabilityMap.For(region.FractalType));
+            var kind = kinds[rng.Next(kinds.Length)];
+            var def = FracturingFog.Imaging.RandomThemeGenerator.Generate(
+                kind, rng.Next(1, int.MaxValue), experimental, name: $"Random {kind}");
+            var map = HostColorThemeService.BuildColorMap(def) ?? ResolveTheme("HSV");
+            return (def.Name, map);
         }
 
         // Default interior-alpha params for the headless video / slideshow paths.
@@ -1649,7 +1713,7 @@ namespace FracturingFog.Batch
                     if (legThemeNames.Contains(name)) continue;
                     var map = ResolveTheme(name);
                     var probe = RenderRegionFrame(region, fp, outW, outH, target, iter, map, pfAdaptive);
-                    if (IsAllBlack(probe, n)) continue;
+                    if (IsSolidFrame(probe, n)) continue;   // #22 — any flat colour, as interactive
                     legThemeNames.Add(name);
                     legThemeMaps.Add(map);
                     heldBases.Add(relief && singleRender
@@ -1950,6 +2014,12 @@ namespace FracturingFog.Batch
                 Console.WriteLine($"  fade      : region {regionFadeFrames}f / theme {themeFadeFrames}f");
             }
             Console.WriteLine($"  post-fx   : brightness {pfBrightness}  contrast {pfContrast}  adaptive {pfAdaptive}");
+            // Batch parity — say what the interactive slideshow would do that this
+            // render doesn't yet (#1311), rather than dropping it silently.
+            if (cfg.Type == FracturingFog.Models.SlideshowType.Animation)
+                Console.WriteLine("  note      : Animation-type preset - batch renders static legs; region animations are not played yet (#1311)");
+            if (cfg.AdaptiveSweep?.Enabled == true)
+                Console.WriteLine($"  note      : adaptive sweep is not reproduced in batch yet (#1311); fixed adaptive {pfAdaptive}");
             Console.WriteLine($"  temp      : {tempRoot}");
             Console.WriteLine($"  encode    : {(opts.SlideshowEncode == BatchLossless.Gif ? "GIF (built-in)" : encodePreset.ToString())}");
             Console.WriteLine($"  out       : {opts.OutputPath}");
@@ -2000,6 +2070,10 @@ namespace FracturingFog.Batch
                     reliefOn, reliefHistory, opts, cfg);
             }
             else
+            {
+            // #22 — per-run caches + the interactive slideshow's random-theme switch.
+            var slideIters = new System.Collections.Generic.Dictionary<string, int>(StringComparer.Ordinal);
+            bool randomThemes = cfg.Timing.RandomizeThemes;
             while (framesWritten < totalFrames)
             {
                 string regionName = regionBag.Draw(regionNames);
@@ -2007,6 +2081,13 @@ namespace FracturingFog.Batch
                     string.Equals(r.Name, regionName, StringComparison.Ordinal));
                 if (region == null) break; // pool emptied unexpectedly
                 int lastTheme = -1;
+                // #22 — zoom-suited theme pool and the interactive iteration count.
+                var regionThemes = SlideshowThemesForZoom(region.Zoom, incThemes);
+                if (regionThemes.Count == 0) regionThemes = themePool;
+                int regionIter = SlideshowIterations(region, slideIters);
+                // #22 / #436 — with a single region the next cycle stays on it, so its
+                // first theme change is a theme fade, not a region fade into itself.
+                bool sameRegionAgain = regionNames.Count == 1 && prevFrame != null;
 
                 for (int tIdx = 0; tIdx < themesPerRegion && framesWritten < totalFrames; tIdx++)
                 {
@@ -2016,32 +2097,43 @@ namespace FracturingFog.Batch
                     // coloured buffer so an HE-flattened frame is judged fairly.
                     uint[]? currFrame = null;
                     string? themeChosen = null;
+                    IColorMap? mapChosen = null;
                     long calcMs = 0;
-                    int attempts = Math.Max(1, themePool.Count);
+                    // #437 parity: one pass through the region's themes, or 6 random draws.
+                    int attempts = randomThemes ? 6 : Math.Max(1, regionThemes.Count);
                     for (int at = 0; at < attempts; at++)
                     {
-                        int ti;
-                        do { ti = rng.Next(themePool.Count); }
-                        while (themePool.Count > 1 && ti == lastTheme);
-                        lastTheme = ti;
-                        var themeName = themePool[ti];
-                        var theme = ResolveTheme(themeName);
+                        string themeName;
+                        IColorMap theme;
+                        if (randomThemes)
+                        {
+                            (themeName, theme) = RandomSlideshowTheme(region, rng, cfg.Timing.RandomizeThemesExperimental);
+                        }
+                        else
+                        {
+                            int ti;
+                            do { ti = rng.Next(regionThemes.Count); }
+                            while (regionThemes.Count > 1 && ti == lastTheme);
+                            lastTheme = ti;
+                            themeName = regionThemes[ti];
+                            theme = ResolveTheme(themeName);
+                        }
 
-                        int iter = region.Iterations > 0 ? region.Iterations : 1000;
                         // #948 — any region type (HE + interior-alpha composite
                         // happen inside RenderRegionFrame, on an owned buffer).
                         var sw = Stopwatch.StartNew();
                         var frame = RenderRegionFrame(region, FpFor(region), outW, outH,
-                            region.Zoom, iter, theme, pfAdaptive);
+                            region.Zoom, regionIter, theme, pfAdaptive);
                         sw.Stop();
                         calcMs = sw.ElapsedMilliseconds;
 
-                        if (IsAllBlack(frame, outW * outH)) continue;
+                        if (IsSolidFrame(frame, outW * outH)) continue;
                         currFrame = frame;
                         themeChosen = themeName;
+                        mapChosen = theme;
                         break;
                     }
-                    if (currFrame == null) break; // no non-black theme this region
+                    if (currFrame == null) break; // no non-solid theme this region
 
                     // Relief 3D: the flat calc above only selected a non-black
                     // theme; re-render the chosen frame through the composed
@@ -2051,13 +2143,13 @@ namespace FracturingFog.Batch
                     if (ReliefFor(region) && themeChosen != null)
                     {
                         var reliefFp = FpFor(region);
-                        int iterR = region.Iterations > 0 ? region.Iterations : 1000;
+                        int iterR = regionIter;
                         // S2 (#396) — capture the relief still's HDR beauty when armed.
                         bool ssWantHdr = ReliefHdrWanted(reliefFp,
                             opts.ViewTransform ?? FracturingFog.Imaging.ViewTransform.None, pfBrightness, pfContrast);
                         currFrame = RenderReliefRegionFrame(
                             region, outW, outH, region.Zoom, iterR,
-                            ResolveTheme(themeChosen), pfAdaptive, reliefFp, reliefHistory, ssWantHdr, out ssHdr);
+                            mapChosen ?? ResolveTheme(themeChosen), pfAdaptive, reliefFp, reliefHistory, ssWantHdr, out ssHdr);
                     }
 
                     // Brightness/Contrast BGRA post-pass (parity with the
@@ -2074,7 +2166,7 @@ namespace FracturingFog.Batch
 
                     Console.Write($"  leg [{framesWritten}/{totalFrames}]: {region.Name} / {themeChosen} … ");
 
-                    int fadeFrames = tIdx == 0 ? regionFadeFrames : themeFadeFrames;
+                    int fadeFrames = tIdx == 0 && !sameRegionAgain ? regionFadeFrames : themeFadeFrames;
                     int legFramesWritten = 0;
 
                     // Cross-fade prev → curr. Skipped only for the very first
@@ -2114,6 +2206,7 @@ namespace FracturingFog.Batch
                     prevFrame = currFrame;
                     Console.WriteLine($"{legFramesWritten} frames in {calcMs} ms");
                 }
+            }
             }
 
             pngWriter.Dispose();
