@@ -961,11 +961,10 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
                 L1Range = fx.Light1.Range,
                 L1InnerCos = Math.Cos(fx.Light1.SpotInnerDeg * Math.PI / 180.0),
                 L1OuterCos = Math.Cos(fx.Light1.SpotOuterDeg * Math.PI / 180.0),
-                // #1173-A — the CPU trace's clip plane, colour driver and cull-sphere bg.
+                // #1173-A — the CPU trace's clip plane and colour driver.
                 ClipEnabled = clipEnabled ? 1 : 0,
                 ClipNX = clipNX, ClipNY = clipNY, ClipNZ = clipNZ, ClipD = clipD,
                 ColorDriverNormal = colorDriver == BulbColorDriver.Normal ? 1 : 0,
-                BgTop = bgTop, BgBottom = bgBot,
             };
 
             // #1173-A — the shared kernel's inputs: the raymarch block, the CPU Shade's
@@ -1109,9 +1108,13 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
                 double cSphere = ocx * ocx + ocy * ocy + ocz * ocz - cullRadiusSq;
                 double discSphere = bSphere * bSphere - cSphere;
                 int idx = rowBase + x;
+                // #1201 — a ray that misses the cull sphere is a background ray
+                // like any other miss: MissColor honours the sky backdrop toggle,
+                // the HDRI sky and the background fog. (It used UserBulb's own
+                // gradient, so the backdrop changed at the sphere's silhouette.)
                 if (discSphere < 0)
                 {
-                    renderBuffer[idx] = SkyColor(rdy, bgBot, bgTop);
+                    renderBuffer[idx] = ShadingPipeline.MissColor(rdx, rdy, rdz, in fx, ColorMap.InSetColor);
                     continue;
                 }
                 double sqrtDisc = Math.Sqrt(discSphere);
@@ -1119,7 +1122,7 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
                 double tExit = -bSphere + sqrtDisc;
                 if (tExit < 0)
                 {
-                    renderBuffer[idx] = SkyColor(rdy, bgBot, bgTop);
+                    renderBuffer[idx] = ShadingPipeline.MissColor(rdx, rdy, rdz, in fx, ColorMap.InSetColor);
                     continue;
                 }
                 double tStart = Math.Max(0.0, tEnter);
@@ -1783,16 +1786,6 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         sR += ((color >> 16) & 0xFF) * diffuse;
         sG += ((color >> 8) & 0xFF) * diffuse;
         sB += (color & 0xFF) * diffuse;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint SkyColor(double rdy, uint bgBot, uint bgTop)
-    {
-        double t = Math.Clamp(0.5 * (rdy + 1.0), 0, 1);
-        byte rb = (byte)((1 - t) * ((bgBot >> 16) & 0xFF) + t * ((bgTop >> 16) & 0xFF));
-        byte gb = (byte)((1 - t) * ((bgBot >> 8) & 0xFF) + t * ((bgTop >> 8) & 0xFF));
-        byte bb = (byte)((1 - t) * (bgBot & 0xFF) + t * (bgTop & 0xFF));
-        return 0xFF000000u | ((uint)rb << 16) | ((uint)gb << 8) | bb;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

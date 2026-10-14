@@ -66,19 +66,6 @@ public static class UserBulbShadeKernel
     }
     //@@USERDE-END
 
-    /// <summary>UserBulbCalculator.SkyColor twin: the bg gradient for rays that miss
-    /// the cull sphere (byte truncation as on the CPU).</summary>
-    private static uint BulbBackground(double rdy, in GpuRenderParams q)
-    {
-        double t = rdy * 0.5 + 0.5;
-        if (t < 0) t = 0; else if (t > 1) t = 1;
-        uint bot = q.BgBottom, top = q.BgTop;
-        uint rb = (uint)(byte)((1 - t) * ((bot >> 16) & 0xFF) + t * ((top >> 16) & 0xFF));
-        uint gb = (uint)(byte)((1 - t) * ((bot >> 8) & 0xFF) + t * ((top >> 8) & 0xFF));
-        uint bb = (uint)(byte)((1 - t) * (bot & 0xFF) + t * (top & 0xFF));
-        return 0xFF000000u | (rb << 16) | (gb << 8) | bb;
-    }
-
     /// <summary>The kernel: one pixel per thread (tiled, #1170), family-kernel shading
     /// around <see cref="UserDE"/>. <paramref name="q"/> carries the DE inputs and the
     /// UserBulb-specific march settings; <paramref name="__p"/> the user parameters
@@ -144,11 +131,11 @@ public static class UserBulbShadeKernel
         ArrayView<float> depth, int depthIdx, ArrayView<float> normals, ArrayView<float> hdr, int gIdx, ArrayView<uint> albedo, ArrayView<uint> hdri,
         double tHint)
     {
-        // The CPU UserBulb trace: a ray that misses the cull sphere gets UserBulb's own
-        // bg gradient (UserBulbCalculator.SkyColor — not MissColor; a CPU quirk this
-        // twin keeps for parity, #1201); the march stops one unit past the sphere exit.
+        // The CPU UserBulb trace: a ray that misses the cull sphere is a background ray
+        // like any other miss (MissColor: sky toggle, HDRI, background fog — #1201);
+        // the march stops one unit past the sphere exit.
         var (sphereHit, tEn, tEx) = GpuKernelUtils.SphereClipFrom(rox, roy, roz, rdx, rdy, rdz, in r);
-        if (!sphereHit) return BulbBackground(rdy, in q);
+        if (!sphereHit) return GpuKernelUtils.MissColor(hdri, rdx, rdy, rdz, in r, in sp);
 
         // Start where the CPU starts: the sphere entry, or 0.9 × the tile's cone hint.
         double tStart = tEn;

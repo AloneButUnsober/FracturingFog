@@ -160,7 +160,7 @@ public sealed class S1173AUserBulbGpuShadingTests
                 FovScale = Math.Tan(Math.PI / 6.0), Aspect = 48.0 / 36.0,
                 DEIter = 8, MaxSteps = 96, Eps = 1e-3, Bailout = 4.0, CullRadiusSq = 4.0,
                 Power = 8.0, UseAnalyticDE = 1,   // the built-in DE is the analytic power DE
-                InSetColor = 0xFF000000u, BgTop = 0xFF203040u, BgBottom = 0xFF101010u,
+                InSetColor = 0xFF000000u,
             };
             var r = UserBulbGpuDispatch.Raymarch(in q);
             var sp = GpuShadingParams.Build(LightingFxData.CreateDefault());
