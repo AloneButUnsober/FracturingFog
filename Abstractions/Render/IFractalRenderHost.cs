@@ -44,6 +44,13 @@ namespace FracturingFog.Render
         // why. default = the GPU was not requested.
         GpuRoute GpuRoute = default);
 
+    /// <summary>SM-3 (#1268) — progress of the anti-aliasing (TAA) refinement that
+    /// keeps running after <see cref="IFractalRenderHost.FrameCompleted"/>.
+    /// <paramref name="Sample"/> of <paramref name="Total"/> samples are in the
+    /// image; <paramref name="Done"/> = refinement has settled (cap reached, or no
+    /// further sample would change the image).</summary>
+    public readonly record struct RefineProgressInfo(int Sample, int Total, bool Done);
+
     /// <summary>
     /// Orchestrates the renderer + per-fractal-type calculators. The input
     /// controller calls <see cref="Trigger"/> / <see cref="TriggerFast"/>
@@ -274,6 +281,14 @@ namespace FracturingFog.Render
         /// No payload — caller decides whether to restore prior frame info
         /// or fall back to a generic idle string.</summary>
         event EventHandler? RenderCancelled;
+
+        /// <summary>SM-3 (#1268) — raised after each TAA refinement upload of the
+        /// current view: not done while another sample is queued, done once the
+        /// refinement settles. Not raised when the view has no refinement, or when
+        /// it was superseded (that path raises <see cref="RenderCancelled"/>).
+        /// <see cref="FrameCompleted"/> stays once per view, on the first sample.
+        /// May fire on a background thread.</summary>
+        event EventHandler<RefineProgressInfo>? RefineProgress;
 
         /// <summary>Raised after the GPU texture upload for the most recent
         /// frame finishes — including the cancelled case so the UserBulb

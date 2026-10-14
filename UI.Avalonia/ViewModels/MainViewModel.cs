@@ -116,6 +116,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _renderHost.StatusRequested += OnRenderHostStatusRequested;
         _renderHost.ColorMapChanged += OnRenderHostColorMapChanged;
         _renderHost.RenderCancelled += OnRenderCancelled;
+        _renderHost.RefineProgress += OnRefineProgress;   // SM-3 (#1268)
         _overlayContrastLuma = _renderHost.OverlayContrastLuma;
 
         _panStopDebounce = new System.Threading.Timer(_ =>
@@ -1344,9 +1345,32 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         // wrapping string there resized the panel and bounced the image edge.
         // It now lives in the render-context overlay (RenderContextOverlay).
         _lastFrameInfo = info;
+        _frameStatusText = text;
         ApplyOrDeferStatusText(text);
 
         MaybeArmReliefSettle(info);
+    }
+
+    // SM-3 (#1268) — FrameCompleted fires on the first full-res sample, but up
+    // to TaaMaxSamples anti-aliasing passes keep refining the same view after
+    // it. Show that on the bar ("[Refining n/N]") and drop the suffix when the
+    // refinement settles, so the status only reads as finished when the image is.
+    private string _frameStatusText = string.Empty;
+
+    private void OnRefineProgress(object? sender, RefineProgressInfo e)
+    {
+        string text = e.Done
+            ? _frameStatusText
+            : $"{_frameStatusText}  [Refining {e.Sample}/{e.Total}]";
+        if (_busyActive)
+        {
+            // The frame text is still held back behind "Calculating…": update
+            // what will be shown. With nothing pending, "Calculating…" belongs
+            // to a newer Trigger, so this view's progress is stale.
+            if (_pendingStatusText != null) _pendingStatusText = text;
+            return;
+        }
+        StatusText = text;
     }
 
     // ── #520 (part 3) — settle-based full detail ──────────────────────────────
@@ -1941,6 +1965,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _renderHost.StatusRequested -= OnRenderHostStatusRequested;
         _renderHost.ColorMapChanged -= OnRenderHostColorMapChanged;
         _renderHost.RenderCancelled -= OnRenderCancelled;
+        _renderHost.RefineProgress -= OnRefineProgress;
         _panStopDebounce.Dispose();
         _adaptiveRepaintDebounce.Dispose();
         _fullCoalesceTimer.Dispose();
