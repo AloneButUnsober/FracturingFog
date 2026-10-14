@@ -17,6 +17,7 @@
 // through the bootstrapper and never touches IColorMap directly.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
@@ -37,6 +38,17 @@ namespace FracturingFog.Hosting
     public sealed class HostColorThemeService : IColorThemeService
     {
         private readonly FractalRenderHost? _renderHost;
+
+        // #437 — session-only iteration counts found by RescueRegionIterations,
+        // keyed by region name. Never written back to the region store.
+        private readonly ConcurrentDictionary<string, int> _rescuedIterations = new(StringComparer.Ordinal);
+        // Regions already checked this session (rescued or not), so a healthy
+        // region isn't re-probed every time the slideshow comes back to it.
+        private readonly ConcurrentDictionary<string, byte> _rescueChecked = new(StringComparer.Ordinal);
+
+        /// <summary>The region's iteration count, with a slideshow rescue applied (#437).</summary>
+        private int RegionIterations(FractalRegion region)
+            => _rescuedIterations.TryGetValue(region.Name, out int rescued) ? rescued : region.Iterations;
 
         /// <inheritdoc/>
         public bool RegionReliefLocked { get; set; }
@@ -288,7 +300,8 @@ namespace FracturingFog.Hosting
             // its offscreen source at region.Iterations but the post-commit
             // Trigger drops back to Quality.ComputeIterations — visible iter
             // collapse the moment the fade-in completes.
-            state.PreferredIterations = region.Iterations > 0 ? region.Iterations : 0;
+            int regionIters = RegionIterations(region);   // #437 — slideshow rescue, if any
+            state.PreferredIterations = regionIters > 0 ? regionIters : 0;
             // A region jump must NOT toggle the iteration lock — legacy
             // MainForm.ApplyRegion leaves _iterLocked untouched and lets the
             // adaptive (zoom-scaled) iteration count drive the render. Forcing
@@ -1308,7 +1321,7 @@ namespace FracturingFog.Hosting
                     CenterY = region.CenterY, CenterYLo = region.CenterYLo,
                     CenterY2 = region.CenterY2, CenterY3 = region.CenterY3,
                     Zoom = zoom,
-                    MaxIterations = region.Iterations > 0 ? region.Iterations : quality.ComputeIterations(zoom),
+                    MaxIterations = RegionIterations(region) is > 0 and int ri ? ri : quality.ComputeIterations(zoom),
                     FractalType = region.FractalType,
                     ColorMap = map,
                     Quality = quality,
@@ -1333,6 +1346,41 @@ namespace FracturingFog.Hosting
         }
 
         // #434 — resolve a region by exact name across the main + slideshow libs.
+        /// <inheritdoc/>
+        public int RescueRegionIterations(string regionName)
+        {
+            var region = ResolveRegion(regionName);
+            // Mandelbrot only: IterationRescue drives a private MandelbrotCalculator.
+            if (region == null || region.FractalType != FractalType.Mandelbrot || region.Name == null) return 0;
+            if (!_rescueChecked.TryAdd(region.Name, 0)) return 0;   // checked earlier this session
+            try
+            {
+                var quality = region.QualityPreset ?? QualityPreset.Standard;
+                int iters = RegionIterations(region) is > 0 and int ri ? ri : quality.ComputeIterations(region.Zoom);
+                var probe = new MandelbrotCalculator(96, 54)
+                {
+                    CenterX = region.CenterX, CenterXLo = region.CenterXLo,
+                    CenterX2 = region.CenterX2, CenterX3 = region.CenterX3,
+                    CenterY = region.CenterY, CenterYLo = region.CenterYLo,
+                    CenterY2 = region.CenterY2, CenterY3 = region.CenterY3,
+                    Zoom = region.Zoom,
+                    MaxIterations = iters,
+                    ColorMap = new HsvPalette(),
+                    Quality = quality,
+                };
+                probe.Calculate(System.Threading.CancellationToken.None);
+                if (!IterationRescue.IsAllInSet(probe)) return 0;
+                int found = IterationRescue.FindEscapingIterations(probe, IterationRescue.Ceiling, System.Threading.CancellationToken.None);
+                if (found <= iters) return 0;
+                _rescuedIterations[region.Name] = found;
+                return found;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
         private static FractalRegion? ResolveRegion(string regionName)
         {
             if (string.IsNullOrEmpty(regionName)) return null;
@@ -1361,7 +1409,7 @@ namespace FracturingFog.Hosting
             }
 
             var quality = region.QualityPreset ?? QualityPreset.Standard;
-            int iters = region.Iterations > 0 ? region.Iterations : quality.ComputeIterations(region.Zoom);
+            int iters = RegionIterations(region) is > 0 and int ri ? ri : quality.ComputeIterations(region.Zoom);
 
             try
             {
