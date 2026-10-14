@@ -3215,12 +3215,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
             case FracturingFog.Abstractions.Assets.AssetKind.Workspace:
                 // "Open" a workspace = recall the arrangement (there is no editor).
-                {
-                    var wf = FracturingFog.Models.WorkspaceLayoutLibrary.Load();
-                    var wl = FracturingFog.Models.WorkspaceLayoutLibrary.Get(wf, name);
-                    if (wl != null)
-                        FracturingFog.UI.Avalonia.Services.WorkspaceService.Restore(wl, this);
-                }
+                // Through the Control Center so its droplist selection follows and
+                // a later Save… can't default to a stale name (#506).
+                EnsureControlCenter().RecallWorkspace(name);
                 break;
 
             case FracturingFog.Abstractions.Assets.AssetKind.LightingFx:
