@@ -549,6 +549,12 @@ roadmap entry — interacts with the existing audio band assignment
 and would need user-facing config. Deferred to the audio-reactive
 roadmap follow-up.
 
+**Status — Shipped** via the audio-reactive roadmap: the audio → parameter
+modulation matrix (`AudioModulatorAnimator` + `AudioModulationManager`,
+[#263](https://github.com/AloneButUnsober/FracturingFog/issues/263)) routes
+band energy into fractal parameters; Scenes carry it as audio tracks
+([#265](https://github.com/AloneButUnsober/FracturingFog/issues/265)).
+
 ### D.5 — Animation export to MP4
 
 Capture already records the framebuffer. Animation playback is just

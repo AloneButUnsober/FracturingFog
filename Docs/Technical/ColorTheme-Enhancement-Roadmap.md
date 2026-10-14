@@ -655,7 +655,7 @@ two assumptions the original phasing rested on, so the plan is re-sequenced:
    export/capture/video consumer first.
 
 **Phase E — orbit-aware colouring surfaces (new, 2026-09):**
-☑ F13 (data-driven Orbit Trap kind — P1 + editor-UI P2 shipped) · ◐ F14 (interior colouring — runtime + editor UI shipped; native-path interior in flight) · ☑ F15 (ColorGen orbit inputs — interpreter/CPU + native/DSL calculators + C# export shipped) · ☑ F16 (ColorGen orbit inputs on the GPU — shallow kernel both backends, C# export, on-device parity, default-on; deep-zoom/interior/Silk tails deferred as non-goals)
+☑ F13 (data-driven Orbit Trap kind — P1 + editor-UI P2 shipped) · ☑ F14 (interior colouring — runtime + editor UI + native-path interior shipped) · ☑ F15 (ColorGen orbit inputs — interpreter/CPU + native/DSL calculators + C# export shipped) · ☑ F16 (ColorGen orbit inputs on the GPU — shallow kernel both backends, C# export, on-device parity, default-on; deep-zoom/interior/Silk tails deferred as non-goals)
 
 These extend the colour system past the gradient/palette family into **orbit-aware**
 colouring authorable outside hardcoded C#. F13 is the keystone (reuses the whole
