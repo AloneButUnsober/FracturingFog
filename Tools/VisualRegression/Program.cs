@@ -15,6 +15,13 @@
 // Tool is intentionally engine-free — it shells out via `dotnet run` so
 // it works regardless of which calculators are wired in the current
 // FracturingFog.App configuration.
+//
+// The baseline is host-specific (#1292). Flame and the Buddhabrot family
+// split their sampling by Environment.ProcessorCount, and Buddhabrot can run
+// on the GPU, so their hashes can differ on another machine. On a new host,
+// run `verify` on a known-good main first and `record` if only those differ.
+// Cases render with --no-watermark, because the watermark prints the app
+// version.
 
 using System;
 using System.Collections.Generic;
@@ -87,6 +94,16 @@ internal static class Program
         Directory.CreateDirectory(workDir);
 
         var cases = DefaultCases();
+
+        // Build once, then run every case with --no-build (#1292). A per-case
+        // `dotnet run` re-checks the build each time.
+        int buildRc = BuildApp(repoRoot);
+        if (buildRc != 0)
+        {
+            Console.Error.WriteLine($"Build of {BatchProject} failed (exit {buildRc}).");
+            return 1;
+        }
+
         var baseline = record
             ? new Baseline { Cases = new() }
             : LoadBaseline(baselinePath);
@@ -135,6 +152,13 @@ internal static class Program
 
         if (record)
         {
+            // #1292 — a case that fails to render must not be dropped from the
+            // baseline silently; that left 18 of 40 cases unrecorded for months.
+            if (failed > 0)
+            {
+                Console.Error.WriteLine($"{failed} case(s) failed to render; baseline NOT written.");
+                return 1;
+            }
             baseline.Cases = results;
             File.WriteAllText(baselinePath, JsonSerializer.Serialize(baseline, JsonOpts));
             Console.WriteLine($"Wrote {results.Count} baseline entries to {baselinePath}");
@@ -231,6 +255,9 @@ internal static class Program
                     "--width", DefaultWidth.ToString(),
                     "--height", DefaultHeight.ToString(),
                     "--quality", "Standard",
+                    // The watermark prints the app version, which would change
+                    // every hash on each version bump (#1292).
+                    "--no-watermark",
                 },
             });
         }
@@ -239,9 +266,23 @@ internal static class Program
 
     // ── Batch shell-out ──────────────────────────────────────────────────────
 
+    private static int BuildApp(string repoRoot)
+    {
+        var psi = new ProcessStartInfo("dotnet")
+        {
+            WorkingDirectory = repoRoot,
+            UseShellExecute = false,
+        };
+        foreach (var a in new[] { "build", "-c", "Release", "-v", "q", "-nologo", BatchProject })
+            psi.ArgumentList.Add(a);
+        using var p = Process.Start(psi)!;
+        p.WaitForExit();
+        return p.ExitCode;
+    }
+
     private static int RunBatch(string repoRoot, IReadOnlyList<string> caseArgs, string outPng)
     {
-        // dotnet run -c Release --project FracturingFog.App -- --batch --mode image
+        // dotnet run -c Release --no-build --project FracturingFogCLD.csproj -- --batch --mode image
         //     --out <pngPath> <case args ...>
         var psi = new ProcessStartInfo("dotnet")
         {
@@ -253,6 +294,7 @@ internal static class Program
         psi.ArgumentList.Add("run");
         psi.ArgumentList.Add("-c");
         psi.ArgumentList.Add("Release");
+        psi.ArgumentList.Add("--no-build");
         psi.ArgumentList.Add("--project");
         psi.ArgumentList.Add(BatchProject);
         psi.ArgumentList.Add("--");
@@ -272,8 +314,8 @@ internal static class Program
         p.ErrorDataReceived  += static (_, _) => { };
         p.BeginOutputReadLine();
         p.BeginErrorReadLine();
-        // First case warms the build (~60-90 s cold cache); later cases skip
-        // rebuild. Per-case render itself runs in seconds at 256² Standard.
+        // BuildApp ran once up front; each case renders in about a second at
+        // 256² Standard.
         p.WaitForExit(600_000);
         return p.HasExited ? p.ExitCode : -1;
     }

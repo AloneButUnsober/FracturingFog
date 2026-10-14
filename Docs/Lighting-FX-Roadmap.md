@@ -348,13 +348,14 @@ with `Parallel.For` is acceptable at typical resolutions.
   output at default knob values. A scripted comparison
   (`--batch --headless` render → SHA256) on each of the 7 raymarchers
   would catch regressions caused by future GPU ports.
-  *Status — ◐ partial.* `Tools/VisualRegression` is that harness, and its
-  case list includes all 7 raymarchers (Mandelbulb, Mandelbox, Kifs,
-  QuaternionJulia, QuaternionMandelbrot, BicomplexMandelbrot, Kleinian),
-  but `baseline.json` was only recorded for 22 of the 40 cases — no 3D
-  entry yet, and `verify` fails each missing case as MISS. Remaining: a `record` pass
-  for the missing cases
+  *Status — ☑ shipped.* `Tools/VisualRegression` is that harness. Its
+  baseline covers all 40 cases, including the 7 raymarchers (Mandelbulb,
+  Mandelbox, Kifs, QuaternionJulia, QuaternionMandelbrot,
+  BicomplexMandelbrot, Kleinian)
   ([#1292](https://github.com/AloneButUnsober/FracturingFog/issues/1292)).
+  Cases render with `--no-watermark`, IFS is now seeded, and `record`
+  refuses to write a partial baseline. The baseline is host-specific
+  (Flame / Buddhabrot sample per core), so re-record on a new machine.
 - **Default-zero gating.** All FX knobs default to a zero value that
   means "pass through". The GPU dispatcher should skip kernel
   dispatch for any pass whose knob is at default, not just early-out

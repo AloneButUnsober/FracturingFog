@@ -39,6 +39,13 @@ public sealed class IFSCalculator : IFractalCalculator
     /// <summary>Per-pixel hit counts.</summary>
     private uint[] _hits = Array.Empty<uint>();
 
+    /// <summary>
+    /// Chaos-game work is split into this many independently seeded slices.
+    /// Fixed (not <see cref="Environment.ProcessorCount"/>) so the image does
+    /// not depend on the host's core count.
+    /// </summary>
+    private const int SliceCount = 64;
+
     public IFSCalculator(int width, int height) => Resize(width, height);
 
     public void Resize(int width, int height)
@@ -91,18 +98,21 @@ public sealed class IFSCalculator : IFractalCalculator
         double centerX = CenterX;
         double centerY = CenterY;
 
-        int threadCount = Math.Max(1, Environment.ProcessorCount);
-        int perThread = iterations / threadCount;
+        // #1292 — fixed slice count, each slice seeded by its index, so the
+        // render is identical run to run and on any core count. Hit counts are
+        // integers, so merging the thread-local buffers in any order gives the
+        // same totals. (Seeding from Environment.TickCount made every render —
+        // live or --batch — a different image.)
+        int perSlice = iterations / SliceCount;
+        var hits = _hits;
+        var mergeLock = new object();
 
-        // Per-thread local hit buffers to avoid contention.
-        var localBuffers = new uint[threadCount][];
-        for (int t = 0; t < threadCount; t++) localBuffers[t] = new uint[width * height];
-
-        Parallel.For(0, threadCount, new ParallelOptions { CancellationToken = ct }, t =>
+        Parallel.For(0, SliceCount, new ParallelOptions { CancellationToken = ct },
+            () => new uint[width * height],
+            (slice, _, local) =>
         {
-            if (ct.IsCancellationRequested) return;
-            var rng = new Random(unchecked(Environment.TickCount * 73856093 + t * 19349663));
-            var local = localBuffers[t];
+            if (ct.IsCancellationRequested) return local;
+            var rng = new Random(unchecked(slice * 19349663 + 0x1F5EED));
 
             // Warm up to settle on attractor.
             double x = 0, y = 0;
@@ -112,7 +122,7 @@ public sealed class IFSCalculator : IFractalCalculator
                 ApplyMap(maps[idx], ref x, ref y);
             }
 
-            for (int i = 0; i < perThread; i++)
+            for (int i = 0; i < perSlice; i++)
             {
                 int idx = PickMap(rng, cum, sum);
                 ApplyMap(maps[idx], ref x, ref y);
@@ -129,14 +139,14 @@ public sealed class IFSCalculator : IFractalCalculator
                 if ((uint)ix < (uint)width && (uint)iy < (uint)height)
                     local[iy * width + ix]++;
             }
-        });
-
-        // Reduce per-thread buffers.
-        for (int t = 0; t < threadCount; t++)
+            return local;
+        },
+        local =>
         {
-            var local = localBuffers[t];
-            for (int i = 0; i < _hits.Length; i++) _hits[i] += local[i];
-        }
+            // Reduce the thread-local buffer into the shared hit counts.
+            lock (mergeLock)
+                for (int i = 0; i < hits.Length; i++) hits[i] += local[i];
+        });
 
         // Tone-map via log-density + IColorMap.
         uint maxHit = 0;
