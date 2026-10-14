@@ -10,6 +10,33 @@
 > lives in [CrossPlatform-ImplementationPlan.md](CrossPlatform-ImplementationPlan.md); this file
 > is the high-level checklist and gap analysis.
 
+> [!NOTE]
+> **Status 2026-10-14: phases X.0–X.7 have shipped.** The checklist below is the 2026-06-12
+> plan, kept as written. Its boxes were never ticked, and several details shipped differently
+> from the plan, so read it as history, not as open work. Shipped status per phase lives in
+> [`Open-Work-Plan.md`](../Open-Work-Plan.md) Wave 1 (rows 1.5–1.14).
+>
+> **Shipped differently from this plan:**
+> - **WinForms is gone (#116).** There is no `MainForm`, `Views/**` or `--winforms` flag, so
+>   B2 and B4 no longer exist.
+> - **B1:** the WinExe `FracturingFogCLD.csproj` stays `net10.0-windows` as the Windows build;
+>   `FracturingFog.App` is the cross-platform exe.
+> - **`Hosting/` was not moved into the App project;** the bootstrap is shared from the root.
+>
+> **Also shipped:** the Help → Hardware tab (`FloatingHelpView` "Hardware", X.5 / Slice 5.2) and
+> the Linux Wayland CI leg (weston headless, `.github/workflows/cross-platform-build.yml`).
+>
+> **Still open:**
+> - Manual smoke runs on real Ubuntu (X11 + Wayland), macOS arm64 and Raspberry Pi
+>   (Open-Work-Plan 1.S1).
+> - Per-host install checks of the tagged release candidates (1.S2; v0.7.0-rc2 exists, see #429
+>   for its missing AppImage icon).
+> - A `--batch --self-test` check that each platform picks the expected compute device type
+>   (`AcceleratorProbe.Chosen.Kind`, 1.C3).
+> - A real Apple Silicon compute-fallback run (1.12).
+> - Linux audio-reactive (#58), the macOS installer smoke test (#61), Vulkan on macOS via
+>   MoltenVK (#44), the macOS eyedropper (#117) and the AVX / ARM64 sweep (#60).
+
 **Branch baseline:** `main` (HEAD `b8c7312`, post-Palette Builder reorg).
 **Active tracking branch:** `feature/cross-platform-full` (created 2026-06-12 from main).
 **Goal:** ship a runnable FracturingFog binary on **win-x64**, **linux-x64**, **linux-arm64**, **osx-arm64**, **osx-x64**.

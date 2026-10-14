@@ -80,7 +80,7 @@ Key structural facts (from `ColorTheme-Enhancement-Roadmap.md §1`):
 
 ## 2. The mode — implementation slices
 
-### AW-1 — `AcidWarpCalculator`: clean-room procedural pattern field  ☐
+### AW-1 — `AcidWarpCalculator`: clean-room procedural pattern field  ☑
 - **What.** New `IFractalCalculator` mirroring `PlasmaCalculator` (one-shot
   fill `ColorBuffer`, `SupportsZoom = false`). Selects one of ~40 closed-form
   patterns and writes a **normalized `[0,1)` field** sampled through the active
@@ -105,7 +105,7 @@ Key structural facts (from `ColorTheme-Enhancement-Roadmap.md §1`):
   in `[0,1)` and deterministic per pattern id.
 - **Depends on:** nothing.
 
-### AW-2 — `FractalType.AcidWarp` wiring + UI  ☐
+### AW-2 — `FractalType.AcidWarp` wiring + UI  ☑
 - Add `AcidWarp` to `Abstractions/Models/Enums.cs`; register the calculator on
   the same path `Plasma` uses (`FractalRenderHost` selection).
 - Expose pattern picker + tunables in `FractalParamsView`.
@@ -113,12 +113,12 @@ Key structural facts (from `ColorTheme-Enhancement-Roadmap.md §1`):
 - ASCII-only names (per the no-Unicode-names rule).
 - **Depends on:** AW-1.
 
-### AW-3 — Animated palette cycling as a first-class motion effect  ☐  *(= IDEA-1)*
+### AW-3 — Animated palette cycling as a first-class motion effect  ☑  *(= IDEA-1)*
 - See §3 IDEA-1. This is Acid Warp's *core* and also a standalone win on every
   fractal. The mode requires it; ship it general.
 - **Depends on:** nothing (but the mode leans on it).
 
-### AW-4 — Classic Spurrier intro on first launch (per process)  ☐
+### AW-4 — Classic Spurrier intro on first launch (per process)  ☑
 - **Requirement (from the user).** The **first** time Acid Warp mode is entered
   in a given app launch, show Noah Spurrier's original into-screen *before* the
   shuffle begins.
@@ -146,7 +146,7 @@ Each spec: **what · surfaces · algorithm · injection · back-compat · test.*
 These are ranked by artful payoff. IDEA-1 and IDEA-6 double as mode slices
 AW-3 / AW-5; IDEA-2..5 are independently useful on the existing fractals.
 
-### IDEA-1 — Animate COLOR, not CAMERA (first-class palette cycling)  ☐
+### IDEA-1 — Animate COLOR, not CAMERA (first-class palette cycling)  ☑
 - **What.** FF's entire motion vocabulary today animates *geometry* (zoom / pan
   / scene camera). Acid Warp's signature is the opposite: **hold the frame,
   move the palette.** Make time-driven palette cycling a first-class,
@@ -163,7 +163,7 @@ AW-3 / AW-5; IDEA-2..5 are independently useful on the existing fractals.
 - **Test.** Frame N and N+period render identically when the period aligns to
   the LUT length; recolor path does not re-invoke the calculator.
 
-### IDEA-2 — XOR / bitwise index-field patterns & post-transform  ☐
+### IDEA-2 — XOR / bitwise index-field patterns & post-transform  ☑
 - **What.** Acid Warp's `xor(angle,dist)` / `xor(dx,dy)` produce plaid / moiré
   fields with a demoscene / 8-bit aesthetic FF has **no analog** for.
 - **Surfaces.** AW pattern set (AW-1) **and** an optional color-index
@@ -204,7 +204,7 @@ AW-3 / AW-5; IDEA-2..5 are independently useful on the existing fractals.
   vectorised path is out of scope (the original deep-zoom deferral). Off /
   strength 0 stays byte-identical (`FractalDomainWarpTests`).
 
-### IDEA-4 — Sparkle palette post-fx  ☐
+### IDEA-4 — Sparkle palette post-fx  ☑
 - **What.** Acid Warp's `add_sparkles_to_palette` brightens every Nth palette
   entry → cheap glitter / lightning. FF has no such modifier.
 - **Surfaces.** `GradientColorMap.BuildLut()` (bake into the 256-entry LUT — free
@@ -218,7 +218,7 @@ AW-3 / AW-5; IDEA-2..5 are independently useful on the existing fractals.
   (#83) as an optional experimental knob.
 - **Test.** Stride 0 ⇒ LUT unchanged; stride N ⇒ exactly ⌈256/N⌉ entries lifted.
 
-### IDEA-5 — Seamless-under-rotation palette discipline (TOGGLEABLE)  ☐
+### IDEA-5 — Seamless-under-rotation palette discipline (TOGGLEABLE)  ☑
 - **What.** Acid Warp palettes are built to **tile with no visible seam** when
   the phase rotates. FF has `CycleWrap` but the Random theme generator (#83)
   does not *guarantee* first-stop ≈ last-stop, so cycling can flash a seam.
