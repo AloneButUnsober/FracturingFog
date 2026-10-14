@@ -313,6 +313,7 @@ namespace FracturingFog.Batch
             FractalRegion? limbRegion =
                 (opts.CenterX == null && opts.CenterY == null && explored == null) ? namedRegion : null;
 
+            var rescueReport = new FracturingFog.IterationRescueReport();   // SM-1 (#1267)
             var req = new PosterRequest
             {
                 FractalType = frType,
@@ -328,6 +329,9 @@ namespace FracturingFog.Batch
                 CenterY3 = limbRegion?.CenterY3 ?? 0,
                 Zoom = zoom,
                 MaxIterations = iter,
+                // SM-1 (#1267) — a default cap (no --iterations) can sit below
+                // a deep region's escape band and render solid; raise it then.
+                IterationRescue = opts.Iterations == null ? rescueReport : null,
                 ColorMap = theme,
                 Quality = quality,
                 FractalParameters = fp,
@@ -386,6 +390,8 @@ namespace FracturingFog.Batch
                 {
                     var result = PosterRenderer.RenderToFile(req, CancellationToken.None);
                     spinner.Stop($"saved {Path.GetFileName(outPath)} ({result.SavedWidth}x{result.SavedHeight}, {result.ElapsedMs} ms)");
+                    if (rescueReport.RaisedTo > 0)
+                        Console.WriteLine($"  note    : every pixel was in-set at {iter} iterations; re-rendered at {rescueReport.RaisedTo} (pass --iterations to fix the count)");
                 }
             }
             catch

@@ -1325,6 +1325,13 @@ namespace FracturingFog.Rendering
             else
                 _calculator.MaxIterations = ViewState.Quality.ComputeIterations(ViewState.Zoom);
 
+            // SM-1 (#1267) — a solid frame of this exact view was rescued with a
+            // higher cap on the calc thread; keep it for re-renders (theme, FX)
+            // until the view moves.
+            if (!ViewState.IterLocked && _iterRescue is { } rescue && rescue.Matches(_calculator)
+                && rescue.FromIterations == _calculator.MaxIterations && rescue.Iterations > 0)
+                _calculator.MaxIterations = rescue.Iterations;
+
             // #920 follow-up — animatable escape-iteration scale. The faithful
             // parabolic-implosion animations ramp this up as c nears a parabolic
             // root (near-parabolic orbits crawl → need more iterations), so shallow
@@ -1855,7 +1862,11 @@ namespace FracturingFog.Rendering
             try
             {
                 if (useAlt) altCalc!.Calculate(token);
-                else calc.Calculate(token);
+                else
+                {
+                    calc.Calculate(token);
+                    RescueSolidFrame(calc, token);   // SM-1 (#1267)
+                }
 
                 // Wave 2.6 — sub-pixel MSAA via Calculate() re-runs at jittered
                 // centre coords. Canonical Mandelbrot path goes through the
@@ -2285,6 +2296,47 @@ namespace FracturingFog.Rendering
         // (smaller) size — the calc thread temporarily inherits the centre /
         // zoom / iter / quality / colour map / acceleration flags so the
         // pixel scale and ref orbit reproduce the main view at downsample.
+        /// <summary>SM-1 (#1267) — the outcome of the last solid-frame rescue: the
+        /// view it was for, the cap it started from and the cap that made pixels
+        /// escape (0 = probed, nothing escapes up to the ceiling, so don't probe
+        /// this view again).</summary>
+        private sealed record IterRescueMemo(
+            double Zoom, double Cx, double CxLo, double Cx2, double Cy, double CyLo, double Cy2,
+            int FromIterations, int Iterations)
+        {
+            public static IterRescueMemo For(MandelbrotCalculator c, int from, int found)
+                => new(c.Zoom, c.CenterX, c.CenterXLo, c.CenterX2, c.CenterY, c.CenterYLo, c.CenterY2, from, found);
+
+            public bool Matches(MandelbrotCalculator c)
+                => c.Zoom == Zoom && c.CenterX == Cx && c.CenterXLo == CxLo && c.CenterX2 == Cx2
+                   && c.CenterY == Cy && c.CenterYLo == CyLo && c.CenterY2 == Cy2;
+        }
+
+        // Written on the calc thread, read by ApplyView on the UI thread; a
+        // reference swap of an immutable record.
+        private volatile IterRescueMemo? _iterRescue;
+
+        /// <summary>SM-1 (#1267) — when the full-res Mandelbrot frame came out
+        /// entirely in-set and the iteration count is not locked, climb the cap
+        /// on a small probe and re-render at the first cap where pixels escape.
+        /// See <see cref="IterationRescue"/>.</summary>
+        private void RescueSolidFrame(MandelbrotCalculator calc, CancellationToken token)
+        {
+            if (ViewState.IterLocked || token.IsCancellationRequested) return;
+            var memo = _iterRescue;
+            if (memo != null && memo.Matches(calc) && memo.FromIterations == calc.MaxIterations && memo.Iterations == 0)
+                return;   // already probed this view: genuinely all interior
+            if (!IterationRescue.IsAllInSet(calc)) return;
+
+            int from = calc.MaxIterations;
+            int found = IterationRescue.FindEscapingIterations(calc, IterationRescue.Ceiling, token);
+            if (token.IsCancellationRequested) return;
+            _iterRescue = IterRescueMemo.For(calc, from, found);
+            if (found <= from) return;
+            calc.MaxIterations = found;
+            calc.Calculate(token);
+        }
+
         private static void MirrorMandelbrotState(MandelbrotCalculator src, MandelbrotCalculator dst)
         {
             dst.CenterX   = src.CenterX;   dst.CenterXLo = src.CenterXLo;

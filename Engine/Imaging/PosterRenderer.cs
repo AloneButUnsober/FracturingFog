@@ -54,6 +54,15 @@ namespace FracturingFog.Imaging
 
         public double Zoom { get; init; }
         public int MaxIterations { get; init; }
+
+        /// <summary>SM-1 (#1267) — when set and the Mandelbrot frame comes out
+        /// entirely in-set, raise the cap until pixels escape and re-render
+        /// (<see cref="IterationRescue"/>); the raised cap is written to the
+        /// report. For callers whose cap is a default rather than an explicit
+        /// choice (batch without --iterations). Ignored for cluster sub-rect
+        /// tiles. A reference, so <c>with</c> copies share it.</summary>
+        public IterationRescueReport? IterationRescue { get; init; }
+
         public FractalType FractalType { get; init; }
         public IColorMap ColorMap { get; init; } = null!;
         public QualityPreset Quality { get; init; } = null!;
@@ -634,6 +643,13 @@ namespace FracturingFog.Imaging
                     calc.SeedReferenceOrbitOD(req.SeededOrbitOD);
                 }
                 calc.Calculate(token);
+                token.ThrowIfCancellationRequested();
+                // SM-1 (#1267) — a default cap below the escape band renders solid.
+                if (req.IterationRescue is { } rescueReport && req.ImageWidth == 0)
+                {
+                    int raised = FracturingFog.IterationRescue.TryRescue(calc, token);
+                    if (raised > 0) rescueReport.RaisedTo = raised;
+                }
                 token.ThrowIfCancellationRequested();
                 // Adaptive HE — Mandelbrot-only, applied on the calculator so
                 // it recolours from the iteration histogram before read.
