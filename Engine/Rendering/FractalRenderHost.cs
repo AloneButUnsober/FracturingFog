@@ -578,6 +578,7 @@ namespace FracturingFog.Rendering
         public event EventHandler<string>? StatusRequested;
         public event EventHandler? ColorMapChanged;
         public event EventHandler? RenderCancelled;
+        public event EventHandler<RefineProgressInfo>? RefineProgress;   // SM-3 (#1268)
 
         // ── Overlay state (CPU-composited into the BGRA buffer) ──────────
         //
@@ -2248,15 +2249,16 @@ namespace FracturingFog.Rendering
         // Any user Trigger cancels the token (which the calc thread checks) and
         // mutates the calc state (which invalidates the fingerprint), so we
         // don't need explicit cooperation to stop.
-        private void TryScheduleNextTaaSample(in FrameJob job)
+        /// <returns>True when a continuation sample was queued.</returns>
+        private bool TryScheduleNextTaaSample(in FrameJob job)
         {
-            if (job.AltCalc != null) return;
-            if (job.Token.IsCancellationRequested) return;
+            if (job.AltCalc != null) return false;
+            if (job.Token.IsCancellationRequested) return false;
             var calc = job.Calc;
             int taaMax = calc.Quality?.TaaMaxSamples ?? 1;
-            if (taaMax <= 1) return;
-            if (!TaaFingerprintMatches(calc)) return;
-            if (_taaSampleCount >= taaMax) return;
+            if (taaMax <= 1) return false;
+            if (!TaaFingerprintMatches(calc)) return false;
+            if (_taaSampleCount >= taaMax) return false;
 
             // Deep-zoom TAA no-op guard. RunOneTaaSample jitters the centre by
             // ~scale on the DOUBLE CenterX/CenterY only; once that sub-pixel
@@ -2270,7 +2272,7 @@ namespace FracturingFog.Rendering
             double taaScale = (3.5 / Math.Max(calc.Width, calc.Height)) / calc.Zoom;
             double ulpCentre = Math.Max(Math.Abs(calc.CenterX), Math.Abs(calc.CenterY))
                                * 2.220446049250313e-16;
-            if (taaScale <= ulpCentre) return;
+            if (taaScale <= ulpCentre) return false;
 
             var nextJob = new FrameJob(
                 job.Token, calc, altCalc: null, sw: Stopwatch.StartNew(),
@@ -2279,7 +2281,7 @@ namespace FracturingFog.Rendering
                 seq: System.Threading.Interlocked.Increment(ref _uploadSeq),
                 taaSampleIndex: _taaSampleCount);
             try { _calcQueue.Add(nextJob); }
-            catch (InvalidOperationException) { /* CompleteAdding during Dispose */ }
+            catch (InvalidOperationException) { return false; /* CompleteAdding during Dispose */ }
             catch (ArgumentException)
             {
                 // Bounded(1) full — drain stale entry then re-enqueue. A user
@@ -2287,15 +2289,11 @@ namespace FracturingFog.Rendering
                 // with a fresh frame, which is desired.
                 while (_calcQueue.TryTake(out _)) { }
                 try { _calcQueue.Add(nextJob); }
-                catch { /* shutdown race */ }
+                catch { return false; /* shutdown race */ }
             }
+            return true;
         }
 
-        // Wave 2.5 — copy view-relevant Mandelbrot state from the main calc
-        // onto a sidecar preview calc. Buffer dims stay at the preview calc's
-        // (smaller) size — the calc thread temporarily inherits the centre /
-        // zoom / iter / quality / colour map / acceleration flags so the
-        // pixel scale and ref orbit reproduce the main view at downsample.
         /// <summary>SM-1 (#1267) — the outcome of the last solid-frame rescue: the
         /// view it was for, the cap it started from and the cap that made pixels
         /// escape (0 = probed, nothing escapes up to the ceiling, so don't probe
@@ -2337,6 +2335,11 @@ namespace FracturingFog.Rendering
             calc.Calculate(token);
         }
 
+        // Wave 2.5 — copy view-relevant Mandelbrot state from the main calc
+        // onto a sidecar preview calc. Buffer dims stay at the preview calc's
+        // (smaller) size — the calc thread temporarily inherits the centre /
+        // zoom / iter / quality / colour map / acceleration flags so the
+        // pixel scale and ref orbit reproduce the main view at downsample.
         private static void MirrorMandelbrotState(MandelbrotCalculator src, MandelbrotCalculator dst)
         {
             dst.CenterX   = src.CenterX;   dst.CenterXLo = src.CenterXLo;
@@ -3021,7 +3024,19 @@ namespace FracturingFog.Rendering
                 // queue means a fresh Trigger from input simply replaces our
                 // continuation before it runs. Skipped for alt calcs (TAA
                 // currently restricted to the canonical Mandelbrot path).
-                if (!useAlt) TryScheduleNextTaaSample(in job);
+                if (!useAlt)
+                {
+                    bool more = TryScheduleNextTaaSample(in job);
+                    // SM-3 (#1268) — tell the status bar the image is still
+                    // refining, and when it settles. A superseded view (token
+                    // cancelled / fingerprint moved) says nothing: the new
+                    // Trigger owns the status bar.
+                    int taaTotal = calc.Quality?.TaaMaxSamples ?? 1;
+                    if (more)
+                        RefineProgress?.Invoke(this, new RefineProgressInfo(_taaSampleCount, taaTotal, Done: false));
+                    else if (job.TaaSampleIndex > 0 && !job.Token.IsCancellationRequested && TaaFingerprintMatches(calc))
+                        RefineProgress?.Invoke(this, new RefineProgressInfo(_taaSampleCount, taaTotal, Done: true));
+                }
             }
         }
 
