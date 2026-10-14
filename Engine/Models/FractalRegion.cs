@@ -1868,6 +1868,7 @@ namespace FracturingFog.Models
         public double DenoiseNormalSigma { get; set; } = 0.30;
         public double DenoiseDepthSigma { get; set; } = 0.20;
         public bool DenoiseAdaptiveSupersample { get; set; } = false;
+        public bool DenoiseSimd { get; set; } = false;   // #1285
         public bool DenoiseTemporal { get; set; } = false;
         public double DenoiseTemporalFeedback { get; set; } = 0.8;
         public double DenoiseVarianceScale { get; set; } = 4.0;
@@ -1988,6 +1989,7 @@ namespace FracturingFog.Models
                 DenoiseNormalSigma = p.Relief2DDenoiseNormalSigma,
                 DenoiseDepthSigma  = p.Relief2DDenoiseDepthSigma,
                 DenoiseAdaptiveSupersample = p.Relief2DDenoiseAdaptiveSupersample,
+                DenoiseSimd        = p.Relief2DDenoiseSimd,
                 DenoiseTemporal    = p.Relief2DDenoiseTemporal,
                 DenoiseTemporalFeedback = p.Relief2DDenoiseTemporalFeedback,
                 DenoiseVarianceScale = p.Relief2DDenoiseVarianceScale,
@@ -2068,6 +2070,7 @@ namespace FracturingFog.Models
             p.Relief2DDenoiseNormalSigma     = DenoiseNormalSigma;
             p.Relief2DDenoiseDepthSigma      = DenoiseDepthSigma;
             p.Relief2DDenoiseAdaptiveSupersample = DenoiseAdaptiveSupersample;
+            p.Relief2DDenoiseSimd            = DenoiseSimd;
             p.Relief2DDenoiseTemporal        = DenoiseTemporal;
             p.Relief2DDenoiseTemporalFeedback = DenoiseTemporalFeedback;
             p.Relief2DDenoiseVarianceScale   = DenoiseVarianceScale;

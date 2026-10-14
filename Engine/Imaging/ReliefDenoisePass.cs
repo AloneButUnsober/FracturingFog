@@ -170,5 +170,6 @@ public static class ReliefDenoisePass
         ColorSigma = p.Relief2DDenoiseColorSigma,
         NormalSigma = p.Relief2DDenoiseNormalSigma,
         DepthSigma = p.Relief2DDenoiseDepthSigma,
+        UseSimd = p.Relief2DDenoiseSimd,   // #1285
     };
 }

@@ -456,6 +456,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
             ReliefDenoiseNormalSigma = fp?.Relief2DDenoiseNormalSigma ?? 0.30,
             ReliefDenoiseDepthSigma  = fp?.Relief2DDenoiseDepthSigma ?? 0.20,
             ReliefDenoiseAdaptiveSupersample = fp?.Relief2DDenoiseAdaptiveSupersample ?? false,   // S4 (#402)
+            ReliefDenoiseSimd = fp?.Relief2DDenoiseSimd ?? false,   // #1285
             ReliefMotionBlur         = fp?.Relief2DMotionBlurStrength ?? 0.0,   // S1 (#398)
             ReliefMotionBlurSamples  = fp?.Relief2DMotionBlurSamples ?? 8,
             ReliefIsolate        = fp?.Relief2DIsolate ?? false,

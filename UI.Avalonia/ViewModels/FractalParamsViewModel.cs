@@ -744,6 +744,13 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         get => _p.Relief2DDenoiseAdaptiveSupersample;
         set { if (_p.Relief2DDenoiseAdaptiveSupersample == value) return; _p.Relief2DDenoiseAdaptiveSupersample = value; this.RaisePropertyChanged(); Fire(); }
     }
+
+    /// <summary>#1285 — SIMD À-Trous path (faster; not byte-identical).</summary>
+    public bool Relief2DDenoiseSimd
+    {
+        get => _p.Relief2DDenoiseSimd;
+        set { if (_p.Relief2DDenoiseSimd == value) return; _p.Relief2DDenoiseSimd = value; this.RaisePropertyChanged(); Fire(); }
+    }
     // SVGF temporal denoise (roadmap S4, #402). Accumulates the noisy signal across
     // frames (reproject prev frame along the motion AOV) + variance-guides the filter.
     // Only visible in a sequence render (a moving camera); a still frame denoises

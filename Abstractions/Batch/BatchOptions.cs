@@ -382,6 +382,7 @@ namespace FracturingFog.Batch
         public double? ReliefDenoiseNormalSigma { get; set; }
         public double? ReliefDenoiseDepthSigma { get; set; }
         public bool? ReliefDenoiseAdaptiveSupersample { get; set; }  // S4 (#402) — drop AA SS when denoise on
+        public bool? ReliefDenoiseSimd { get; set; }  // #1285 — SIMD À-Trous path
 
         // Vector motion blur (roadmap S1, #398). Strength 0 = off; any flag implies
         // relief + raymarch. Only visible in a sequence render (needs the motion AOV).
@@ -1468,6 +1469,13 @@ namespace FracturingFog.Batch
                     case BatchFlags.DenoiseAdaptiveSs:
                         // Boolean flag — coupling only bites when --denoise > 0.
                         opts.ReliefDenoiseAdaptiveSupersample = true;
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.DenoiseSimd:
+                        // #1285 — boolean; only bites when --denoise > 0.
+                        opts.ReliefDenoiseSimd = true;
                         opts.ReliefRaymarch = true;
                         opts.Relief = true;
                         break;

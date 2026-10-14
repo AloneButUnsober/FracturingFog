@@ -153,6 +153,7 @@ public sealed partial class FractalParamsViewModel
         _p.Relief2DDenoiseColorSigma  = d.Relief2DDenoiseColorSigma;
         _p.Relief2DDenoiseNormalSigma = d.Relief2DDenoiseNormalSigma;
         _p.Relief2DDenoiseDepthSigma  = d.Relief2DDenoiseDepthSigma;
+        _p.Relief2DDenoiseSimd        = d.Relief2DDenoiseSimd;         // #1285
         _p.Relief2DSupersample        = d.Relief2DSupersample;
         _p.Relief2DHeightCurve        = d.Relief2DHeightCurve;
         _p.Relief2DHeightSource       = d.Relief2DHeightSource;        // S11 #592
@@ -276,6 +277,7 @@ public sealed partial class FractalParamsViewModel
         nameof(Relief2DDofApertureRadius), nameof(Relief2DDofFocusDistance), nameof(DofEnabled),
         nameof(Relief2DDenoiseIterations), nameof(Relief2DDenoiseColorSigma),
         nameof(Relief2DDenoiseNormalSigma), nameof(Relief2DDenoiseDepthSigma), nameof(DenoiseEnabled),
+        nameof(Relief2DDenoiseSimd),
         nameof(Relief2DHeightCurve), nameof(Relief2DDetailGain), nameof(Relief2DDetailRadius),
         nameof(Relief2DHeightGamma), nameof(Relief2DBicubicHeight), nameof(Relief2DGroundPlane),
         nameof(Relief2DHeightMode), nameof(Relief2DHeightModeIsFixed),
