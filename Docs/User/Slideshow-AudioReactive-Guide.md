@@ -104,6 +104,8 @@ Modifiers:
 
 The Slideshow button label flips to **Stop** while running.
 
+**Single-region slideshows (#436).** When the slideshow has only one region to show — the region is locked (Shift+click), the region filter matches just one region, or a travel course visits only one — it stays on that region and keeps cycling themes. There's no region cross-fade, and the region's view and animation aren't restarted. ▶▶ (next region) moves to the next theme instead. Add a region to the pool or unlock, and normal region changes resume at the next theme.
+
 **Blank frames are skipped (#437).** Before each theme, the slideshow renders a tiny preview of the region with that theme. If one colour covers the preview (all black, or one flat colour), it tries another theme. If every theme comes out blank:
 - a deep Mandelbrot region that simply needs more iterations gets them for the rest of the session (the saved region is not changed);
 - otherwise the region is skipped.

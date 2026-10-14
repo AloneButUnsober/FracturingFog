@@ -306,7 +306,9 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                     while (!ct.IsCancellationRequested)
                     {
                         int themesPerRegion = FocusRegion ? 3 : 8;
-                        if (t >= themesPerRegion) break;
+                        // #436 — a single-region slideshow never ends its region:
+                        // keep cycling themes in place (see StaysOnRegion).
+                        if (t >= themesPerRegion && !StaysOnRegion(regionName)) break;
 
                         // #434 — when RandomizeThemes is on, generate a fresh random
                         // theme def for this slot instead of picking a library name;
@@ -402,7 +404,9 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                             }
                             sweep.Cts.Dispose();
                         }
-                        if (skipRegion) break;
+                        // #436 — single-region: "next region" has nowhere to go;
+                        // treat it as "next theme" instead of re-entering the region.
+                        if (skipRegion && !StaysOnRegion(regionName)) break;
                         if (ct.IsCancellationRequested) break;
                         t++;
                     }
@@ -445,6 +449,21 @@ namespace FracturingFog.UI.Avalonia.Slideshow
         // excluded fractal types). The caller's zero-count guard then holds
         // the current pool (live refresh) or stops the loop (initial pick)
         // instead of showing regions the user filtered out.
+        /// <summary>
+        /// #436 — true when the slideshow has only <paramref name="regionName"/> to
+        /// show: the region is locked (Shift+click), the filtered pool holds just
+        /// that region, or a travel course visits only it. Leaving the region would
+        /// re-enter the same one — re-applying the view, restarting its animation
+        /// and cross-fading the region into itself — so the leg keeps cycling themes
+        /// instead (the theme fades, audio sync, sweep and animation all carry on).
+        /// Re-checked every theme step, so adding a region to the pool or unlocking
+        /// mid-slideshow resumes normal region changes.
+        /// </summary>
+        private bool StaysOnRegion(string regionName)
+            => FracturingFog.Slideshow.SingleRegion.StaysOn(
+                regionName, LockRegion, _travelCourse,
+                LockRegion || _travelCourse != null ? null : ApplyRegionFilter(_service.EnumerateSlideshowRegionNames()));
+
         private IReadOnlyList<string> ApplyRegionFilter(IReadOnlyList<string> input)
         {
             var inc = Config?.IncludedRegions;
