@@ -67,7 +67,6 @@ public struct GpuRenderParams
     public int ClipEnabled;                     // clip plane: skip surface points with n·p − d > 0
     public double ClipNX, ClipNY, ClipNZ, ClipD;
     public int ColorDriverNormal;               // 1 = BulbColorDriver.Normal, 0 = StepDepth
-    public uint BgTop, BgBottom;                // UserBulb bg gradient for cull-sphere misses
     // The CPU cone-march prepass's per-tile start distances (UserBulbCalculator), packed
     // into the user-parameter buffer at HintOffset: HintTilesX × rows of HintTileSize²
     // pixels; +Inf = the tile's centre ray found nothing. HintTileSize 0 = no hints.
