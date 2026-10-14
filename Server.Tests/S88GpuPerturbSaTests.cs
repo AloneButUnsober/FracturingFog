@@ -36,6 +36,7 @@ using Xunit;
 
 namespace FracturingFog.Server.Tests;
 
+[Collection(MandelbrotGpuStaticsCollection.Name)]   // writes UseGpuPerturbation / SA / BLA
 public sealed class S88GpuPerturbSaTests : IDisposable
 {
     // The perturbation dispatches abort to the CPU (and the calculator disables GPU

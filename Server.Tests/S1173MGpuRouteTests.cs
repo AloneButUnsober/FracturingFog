@@ -28,6 +28,7 @@ using Xunit;
 
 namespace FracturingFog.Server.Tests;
 
+[Collection(MandelbrotGpuStaticsCollection.Name)]   // Mandelbrot_Routes needs UseGpuPerturbation off
 public sealed class S1173MGpuRouteTests
 {
     // ── Gate helper ──────────────────────────────────────────────────────

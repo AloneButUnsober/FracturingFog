@@ -24,10 +24,7 @@ using Xunit;
 
 namespace FracturingFog.Server.Tests;
 
-[CollectionDefinition(Name, DisableParallelization = true)]
-public sealed class GpuReferenceOrbitCollection { public const string Name = "GpuReferenceOrbitStatic"; }
-
-[Collection(GpuReferenceOrbitCollection.Name)]
+[Collection(MandelbrotGpuStaticsCollection.Name)]
 public sealed class S1166ReferenceOrbitTests
 {
     private const BindingFlags F = BindingFlags.Instance | BindingFlags.NonPublic;
