@@ -251,6 +251,7 @@ namespace FracturingFog.Batch
         public const string DenoiseNormalSigma    = "--denoise-normal-sigma";
         public const string DenoiseDepthSigma     = "--denoise-depth-sigma";
         public const string DenoiseAdaptiveSs     = "--denoise-adaptive-ss";
+        public const string DenoiseSimd           = "--denoise-simd";   // #1285
 
         // Per-pixel vector motion blur driven by the S1 motion-vector AOV (roadmap S1,
         // #398). Smears the relief beauty along each pixel's screen motion vector. Only

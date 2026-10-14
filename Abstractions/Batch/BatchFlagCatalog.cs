@@ -743,6 +743,8 @@ namespace FracturingFog.Batch
                     with { MinExclusive = true, Implies = RaymarchOn, Requires = new[] { BatchFlags.Denoise } },
                 Sw(BatchFlags.DenoiseAdaptiveSs, Denoise, FR, "Drop anti-alias supersampling while denoise is on.")
                     with { Implies = RaymarchOn, Requires = new[] { BatchFlags.Denoise } },
+                Sw(BatchFlags.DenoiseSimd, Denoise, FR, "Faster SIMD denoise path (float32; not byte-identical to the scalar path).")
+                    with { Implies = RaymarchOn, Requires = new[] { BatchFlags.Denoise } },
 
                 // ── Relight ──
                 Sw(BatchFlags.Relight, Relight, FR, "Relight in post from the captured lighting passes.")

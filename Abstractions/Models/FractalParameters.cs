@@ -805,6 +805,15 @@ namespace FracturingFog.Models
         /// single-frame path stays byte-identical.</summary>
         public bool Relief2DDenoiseAdaptiveSupersample { get; set; } = false;
 
+        /// <summary>#1285 — run the À-Trous denoiser on its SIMD path
+        /// (<c>AtrousParams.UseSimd</c>): several pixels per instruction, a faster
+        /// denoise stage.
+        /// Not byte-identical to the scalar path (float32, reordered sums), so it is
+        /// off by default and the scalar path stays the reference. Falls back to
+        /// scalar when SIMD isn't hardware-accelerated. Only bites when
+        /// <see cref="Relief2DDenoiseIterations"/> &gt; 0.</summary>
+        public bool Relief2DDenoiseSimd { get; set; } = false;
+
         /// <summary>S1 (#398) — per-pixel vector motion blur strength. 0 (default) = off.
         /// &gt;0 smears the relief beauty along the motion-vector AOV, scaled by this
         /// factor (1 = the full inter-frame screen displacement). Only bites when the
@@ -1942,6 +1951,7 @@ namespace FracturingFog.Models
                 Relief2DDenoiseTemporalFeedback = Relief2DDenoiseTemporalFeedback,
                 Relief2DDenoiseVarianceScale = Relief2DDenoiseVarianceScale,
                 Relief2DDenoiseAdaptiveSupersample = Relief2DDenoiseAdaptiveSupersample,
+                Relief2DDenoiseSimd = Relief2DDenoiseSimd,
                 Relief2DMotionBlurStrength = Relief2DMotionBlurStrength,
                 Relief2DMotionBlurSamples = Relief2DMotionBlurSamples,
                 Relief2DRelight = Relief2DRelight,
