@@ -13,6 +13,14 @@
 // translation. SourcePixelWidth/Height are wired in for the readout
 // label so the user sees both normalized fraction and source-pixel
 // extent.
+//
+// #33 — the overlay fills the preview cell, but the Image under it is
+// Stretch="Uniform", so the picture is letterboxed inside that cell. Image
+// space maps onto the picture's displayed rect (ImageRect: the same uniform
+// fit, from SourcePixelWidth/Height), not onto the whole overlay. Before,
+// the grid / ROI were stretched over the full cell, so moving a splitter
+// (which changes the letterbox) slid the outline off the picture, and the
+// region drawn was not the region extracted.
 
 using System;
 using Avalonia;
@@ -110,13 +118,37 @@ namespace PaletteBuilder.Views
 
         // ── Rendering ───────────────────────────────────────────────────
 
+        /// <summary>#33 — where a <paramref name="srcW"/>×<paramref name="srcH"/> picture
+        /// lands inside <paramref name="container"/> under Stretch="Uniform": scaled to
+        /// fit, centred, aspect kept. Unknown source size → the whole container.</summary>
+        public static Rect FitUniform(Size container, int srcW, int srcH)
+        {
+            double w = container.Width, h = container.Height;
+            if (w <= 0 || h <= 0 || srcW <= 0 || srcH <= 0) return new Rect(0, 0, Math.Max(0, w), Math.Max(0, h));
+            double scale = Math.Min(w / srcW, h / srcH);
+            double iw = srcW * scale, ih = srcH * scale;
+            return new Rect((w - iw) * 0.5, (h - ih) * 0.5, iw, ih);
+        }
+
+        /// <summary>The preview picture's displayed rect in overlay coordinates.</summary>
+        private Rect ImageRect() => FitUniform(Bounds.Size, SourcePixelWidth, SourcePixelHeight);
+
+        /// <summary>Overlay point → normalized image space, clamped to the picture.</summary>
+        private (double X, double Y) ToImage(Point p)
+        {
+            var r = ImageRect();
+            return (Math.Clamp((p.X - r.X) / r.Width, 0, 1), Math.Clamp((p.Y - r.Y) / r.Height, 0, 1));
+        }
+
         private void Rebuild()
         {
             if (_surface == null) return;
             _surface.Children.Clear();
 
-            double w = Bounds.Width;
-            double h = Bounds.Height;
+            var img = ImageRect();
+            double ox = img.X, oy = img.Y;
+            double w = img.Width;
+            double h = img.Height;
             if (w <= 0 || h <= 0) return;
 
             if (ShowGrid)
@@ -131,30 +163,30 @@ namespace PaletteBuilder.Views
                 var lightCore = new SolidColorBrush(Color.FromArgb(0xE0, 0xFF, 0xFF, 0xFF));
                 for (int i = 1; i < GridCols; i++)
                 {
-                    double x = w * i / GridCols;
-                    AddHaloLine(new Point(x, 0), new Point(x, h), darkHalo, lightCore);
+                    double x = ox + w * i / GridCols;
+                    AddHaloLine(new Point(x, oy), new Point(x, oy + h), darkHalo, lightCore);
                 }
                 for (int i = 1; i < GridRows; i++)
                 {
-                    double y = h * i / GridRows;
-                    AddHaloLine(new Point(0, y), new Point(w, y), darkHalo, lightCore);
+                    double y = oy + h * i / GridRows;
+                    AddHaloLine(new Point(ox, y), new Point(ox + w, y), darkHalo, lightCore);
                 }
             }
 
             bool hasRoi = RoiWidth > 0 && RoiHeight > 0;
             if (hasRoi)
             {
-                double rx = RoiX * w;
-                double ry = RoiY * h;
+                double rx = ox + RoiX * w;
+                double ry = oy + RoiY * h;
                 double rw = RoiWidth * w;
                 double rh = RoiHeight * h;
 
-                // Dim outside the ROI with four rectangles around it.
+                // Dim the picture outside the ROI with four rectangles around it.
                 var dim = new SolidColorBrush(Color.FromArgb(0x80, 0, 0, 0));
-                AddRect(0, 0, w, ry, dim);                       // top
-                AddRect(0, ry + rh, w, h - (ry + rh), dim);      // bottom
-                AddRect(0, ry, rx, rh, dim);                     // left
-                AddRect(rx + rw, ry, w - (rx + rw), rh, dim);    // right
+                AddRect(ox, oy, w, ry - oy, dim);                          // top
+                AddRect(ox, ry + rh, w, oy + h - (ry + rh), dim);          // bottom
+                AddRect(ox, ry, rx - ox, rh, dim);                         // left
+                AddRect(rx + rw, ry, ox + w - (rx + rw), rh, dim);         // right
 
                 // ROI outline gets the same halo treatment as the grid
                 // lines so the boundary stays legible against any image.
@@ -255,10 +287,9 @@ namespace PaletteBuilder.Views
 
         private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
         {
-            if (Bounds.Width <= 0 || Bounds.Height <= 0) return;
+            if (ImageRect().Width <= 0 || ImageRect().Height <= 0) return;
             var p = e.GetPosition(this);
-            double nx = Math.Clamp(p.X / Bounds.Width, 0, 1);
-            double ny = Math.Clamp(p.Y / Bounds.Height, 0, 1);
+            var (nx, ny) = ToImage(p);
 
             _dragStartX = nx;
             _dragStartY = ny;
@@ -274,10 +305,11 @@ namespace PaletteBuilder.Views
             if (RoiWidth <= 0 || RoiHeight <= 0)
                 return DragMode.NewRect;
 
-            double rx = RoiX * Bounds.Width;
-            double ry = RoiY * Bounds.Height;
-            double rw = RoiWidth * Bounds.Width;
-            double rh = RoiHeight * Bounds.Height;
+            var img = ImageRect();
+            double rx = img.X + RoiX * img.Width;
+            double ry = img.Y + RoiY * img.Height;
+            double rw = RoiWidth * img.Width;
+            double rh = RoiHeight * img.Height;
 
             bool nearLeft   = Math.Abs(p.X - rx) < EdgeGrabPx;
             bool nearRight  = Math.Abs(p.X - (rx + rw)) < EdgeGrabPx;
@@ -299,10 +331,9 @@ namespace PaletteBuilder.Views
         private void OnPointerMoved(object? sender, PointerEventArgs e)
         {
             if (_dragMode == DragMode.None) return;
-            if (Bounds.Width <= 0 || Bounds.Height <= 0) return;
+            if (ImageRect().Width <= 0 || ImageRect().Height <= 0) return;
             var p = e.GetPosition(this);
-            double nx = Math.Clamp(p.X / Bounds.Width, 0, 1);
-            double ny = Math.Clamp(p.Y / Bounds.Height, 0, 1);
+            var (nx, ny) = ToImage(p);
 
             switch (_dragMode)
             {
