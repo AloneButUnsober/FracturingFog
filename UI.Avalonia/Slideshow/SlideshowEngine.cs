@@ -224,6 +224,10 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                 int themeStepMs = Math.Max(8, Math.Max(50, _settings.ColorThemeFadeMs) / fadeSteps);
 
                 string? heldRegion = null;
+                // #437 — regions skipped in a row because every theme probed solid.
+                // Once a full pool's worth is skipped, stop skipping (accept the
+                // frame) so a pool of nothing-but-blank regions can't spin.
+                int solidRegionSkips = 0;
 
                 while (!ct.IsCancellationRequested)
                 {
@@ -262,6 +266,17 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                     var themes = ApplyThemeFilter(_service.EnumerateThemeNamesForZoom(zoom));
                     int lastTheme = -1;
 
+                    // #437 / #1267 — a region whose iteration cap is below its escape
+                    // band renders one flat colour under EVERY theme. Find a cap at
+                    // which pixels escape first (session-only; the region's offscreen
+                    // fade source, probes and live commit all use it), so the theme
+                    // skip below isn't fighting a problem no theme can fix.
+                    int rescued = _service.RescueRegionIterations(regionName);
+                    if (rescued > 0)
+                        StatusChanged?.Invoke(this,
+                            $"Slideshow: {regionName} needed more iterations — using {rescued}");
+                    bool canSkipRegion = !LockRegion && solidRegionSkips < Math.Max(1, regions.Count);
+
                     // Animation Roadmap Phase 4 — pick the leg's animation once
                     // per region (reused across the region's theme sub-legs).
                     // Null when Type != Animation or no library animation is
@@ -298,9 +313,10 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                         // the transitions apply it through the def-based service path.
                         string? themeName;
                         ColorThemeDef? themeDef = null;
+                        bool allSolid;
                         if (_settings.RandomizeThemes)
                         {
-                            themeDef = PickNonSolidRandomTheme(regionName, ct);
+                            themeDef = PickNonSolidRandomTheme(regionName, ct, out allSolid);
                             themeName = themeDef?.Name;
                         }
                         else
@@ -308,12 +324,28 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                             themeName = PickTheme(themes, ref lastTheme);
 
                             // Solid-frame skip: peek-render the candidate region/theme
-                            // at a tiny thumbnail. If every pixel is the same color —
+                            // at a tiny thumbnail. If one colour covers the frame —
                             // in-set black, in-set flat color, or iter depth too low
                             // at extreme zoom — retry up to one pass through the
                             // theme pool before giving up.
-                            themeName = PickNonSolidTheme(regionName, themeName, themes, ref lastTheme, ct);
+                            themeName = PickNonSolidTheme(regionName, themeName, themes, ref lastTheme, ct, out allSolid);
                         }
+
+                        // #437 — no theme makes this region show anything: leave it
+                        // instead of holding a blank frame for the rest of the leg.
+                        // (On a later theme slot the region has already shown at
+                        // least one good frame; end it rather than go blank.)
+                        if (allSolid && (t > 0 || canSkipRegion))
+                        {
+                            if (t == 0)
+                            {
+                                solidRegionSkips++;
+                                StatusChanged?.Invoke(this,
+                                    $"Slideshow: skipping {regionName} — every theme renders solid");
+                            }
+                            break;
+                        }
+                        if (t == 0) solidRegionSkips = 0;
 
                         if (t == 0 && legAnimation != null)
                             animStarted = await AnimatedRegionTransitionAsync(
@@ -470,23 +502,20 @@ namespace FracturingFog.UI.Avalonia.Slideshow
         private const int PeekW = 64;
         private const int PeekH = 36;
 
-        // Solid-color frame: all pixels equal the first. Catches in-set black
-        // (the original case) plus themes that paint the in-set a non-black
-        // flat color on a fully in-set region.
-        private static bool IsAllOneColor(uint[] buf)
-        {
-            if (buf.Length == 0) return false;
-            uint first = buf[0];
-            for (int i = 1; i < buf.Length; i++)
-                if (buf[i] != first) return false;
-            return true;
-        }
+        // Solid-color frame: one colour covers ≥ 99.5 % of the probe (#437 — was
+        // "every pixel equals the first", which let a frame with a few stray
+        // pixels through). Catches in-set black, themes that paint the in-set a
+        // flat colour on a fully in-set region, and near-blank deep frames.
+        private static bool IsSolid(uint[] buf) => FracturingFog.Slideshow.SolidFrame.IsEffectivelySolid(buf);
 
+        /// <param name="allSolid">#437 — true when every candidate tried probed
+        /// solid, i.e. the region looks blank whatever the theme.</param>
         private string? PickNonSolidTheme(
             string regionName, string? themeName,
             IReadOnlyList<string>? themes, ref int lastTheme,
-            CancellationToken ct)
+            CancellationToken ct, out bool allSolid)
         {
+            allSolid = false;
             if (themes == null || themes.Count == 0 || themeName == null) return themeName;
             int budget = Math.Max(1, themes.Count);
             for (int i = 0; i < budget; i++)
@@ -497,13 +526,14 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                 catch { probe = null; }
                 // No isolated probe for this type — give up the skip.
                 if (probe == null) return themeName;
-                if (!IsAllOneColor(probe)) return themeName;
+                if (!IsSolid(probe)) return themeName;
 
                 StatusChanged?.Invoke(this,
                     $"Slideshow: skipping solid {regionName} / {themeName}");
                 themeName = PickTheme(themes, ref lastTheme);
                 if (themeName == null) return null;
             }
+            allSolid = true;
             return themeName;
         }
 
@@ -540,8 +570,9 @@ namespace FracturingFog.UI.Avalonia.Slideshow
 
         // Random-theme analogue of PickNonSolidTheme: generate a def and peek-render
         // it; regenerate (new seed/kind) if the region comes out a solid colour.
-        private ColorThemeDef PickNonSolidRandomTheme(string regionName, CancellationToken ct)
+        private ColorThemeDef PickNonSolidRandomTheme(string regionName, CancellationToken ct, out bool allSolid)
         {
+            allSolid = false;
             ColorThemeDef def = GenerateRandomTheme(regionName);
             const int budget = 6;
             for (int i = 0; i < budget; i++)
@@ -550,10 +581,11 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                 uint[]? probe;
                 try { probe = _service.RenderRegionThumbnail(regionName, null, def, PeekW, PeekH); }
                 catch { probe = null; }
-                if (probe == null || !IsAllOneColor(probe)) return def;   // null = no isolated probe, accept
+                if (probe == null || !IsSolid(probe)) return def;   // null = no isolated probe, accept
                 StatusChanged?.Invoke(this, $"Slideshow: skipping solid random theme on {regionName}");
                 def = GenerateRandomTheme(regionName);
             }
+            allSolid = true;   // #437 — every generated theme came out solid
             return def;
         }
 

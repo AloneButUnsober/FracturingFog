@@ -104,6 +104,12 @@ Modifiers:
 
 The Slideshow button label flips to **Stop** while running.
 
+**Blank frames are skipped (#437).** Before each theme, the slideshow renders a tiny preview of the region with that theme. If one colour covers the preview (all black, or one flat colour), it tries another theme. If every theme comes out blank:
+- a deep Mandelbrot region that simply needs more iterations gets them for the rest of the session (the saved region is not changed);
+- otherwise the region is skipped.
+
+A locked region is never skipped, and if every region in the pool is blank the slideshow shows them rather than spinning. User Equation, Sandbox and User Bulb regions can't be previewed in isolation, so they are not checked.
+
 ---
 
 ## 2. Slideshow Settings Dialog

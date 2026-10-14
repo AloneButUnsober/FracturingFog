@@ -470,6 +470,18 @@ namespace FracturingFog.Models
              : null;
 
         /// <summary>
+        /// #437 — the slideshow's iteration rescue. When a region renders with every
+        /// pixel in-set at its saved (or quality-default) iteration count — so every
+        /// theme would show one flat colour — find a count at which pixels escape
+        /// and use it for this region for the rest of the session: the offscreen
+        /// fade source, the thumbnail probes and <see cref="ApplyRegion"/> all pick
+        /// it up. The saved region is not changed. Returns the raised count, or 0
+        /// when nothing changed (not solid, can't be checked in isolation, or nothing
+        /// escapes up to the ceiling). Default: no rescue.
+        /// </summary>
+        int RescueRegionIterations(string regionName) => 0;
+
+        /// <summary>
         /// JSON-serialize the named theme into a string suitable for inline
         /// transport over the client/server protocol. Returns null when the
         /// theme is algorithmic / hand-coded with no <see cref="ColorThemeData"/>
