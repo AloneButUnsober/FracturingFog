@@ -6,6 +6,13 @@
 // Renders Newton fractal for f(z) = z^d - 1. Iterates z := z - R·f(z)/f'(z)
 // until convergence to a root. Color is basin (root index) hue blended with
 // iteration count for shading.
+//
+// #1294 — also renders Nova: z := z - R·f(z)/f'(z) + c. In the parameter plane
+// (default) c is the pixel and z starts at NovaZ0; in Julia mode z starts at
+// the pixel and c is NovaJuliaC. With +c the orbit no longer lands on a root
+// of z^d - 1, so Nova converges when the step size falls below the tolerance
+// and its "basin" is the root sector (angle) the final z lies in. At c = 0 the
+// sectors are exactly Newton's root basins.
 
 using System;
 using System.Threading;
@@ -41,6 +48,10 @@ public sealed class NewtonCalculator : IFractalCalculator, IHeightFieldSource, I
     // the ISupportsHistogramEq recolor can pass totalBasins to MapNewton.
     private int _basins = 2;
 
+    // #1294 — whether the last Calculate rendered Nova, so the HE recolour uses
+    // the same colouring rule as the render that filled the buffers.
+    private bool _renderedNova;
+
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
     public double Zoom { get; set; } = 1.0;
@@ -60,6 +71,11 @@ public sealed class NewtonCalculator : IFractalCalculator, IHeightFieldSource, I
     public bool SupportsZoomPan => true;
 
     public FractalParameters FractalParameters { get; set; } = new();
+
+    /// <summary>#1294 — <see cref="FractalType.Nova"/> adds the +c term; every
+    /// other value renders plain Newton. Set by the host / poster / video
+    /// paths alongside <see cref="FractalParameters"/>.</summary>
+    public FractalType FractalType { get; set; } = FractalType.Newton;
 
     public NewtonCalculator(int width, int height) => Resize(width, height);
 
@@ -82,6 +98,7 @@ public sealed class NewtonCalculator : IFractalCalculator, IHeightFieldSource, I
         int maxIter = MaxIterations;
         if (maxIter < 8) maxIter = 64;
         _basins = d;   // #146 — cache for the HE recolor path
+        _renderedNova = FractalType == FractalType.Nova;   // #1294
 
         // Roots of z^d = 1 are unit roots e^(2π·k/d).
         var rootsR = new double[d];
@@ -98,9 +115,15 @@ public sealed class NewtonCalculator : IFractalCalculator, IHeightFieldSource, I
         double centerX = CenterX;
         double centerY = CenterY;
         const double eps2 = 1e-12;
+        double logEps = 0.5 * Math.Log(eps2);   // #1294 — Nova step tolerance, log scale
 
         var newtonMap = ColorMap as INewtonColorMap;
         ColorMap.MaxIterations = maxIter;
+
+        bool nova = FractalType == FractalType.Nova;
+        bool novaJulia = nova && FractalParameters.NovaJuliaMode;
+        double novaZ0R = FractalParameters.NovaZ0.Real, novaZ0I = FractalParameters.NovaZ0.Imaginary;
+        double novaCR = FractalParameters.NovaJuliaC.Real, novaCI = FractalParameters.NovaJuliaC.Imaginary;
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
@@ -111,8 +134,17 @@ public sealed class NewtonCalculator : IFractalCalculator, IHeightFieldSource, I
             {
                 double cx = centerX + (x - width * 0.5) * scale;
                 double zr = cx, zi = cy;
+                // #1294 — Nova's added constant (unused by Newton).
+                double addR = 0, addI = 0;
+                if (nova)
+                {
+                    if (novaJulia) { addR = novaCR; addI = novaCI; }
+                    else { zr = novaZ0R; zi = novaZ0I; addR = cx; addI = cy; }
+                }
                 int iter;
                 int basin = -1;
+                float smooth = 0f;              // #1294 — Nova smooth convergence count
+                double stepPrev = double.MaxValue;
                 for (iter = 0; iter < maxIter; iter++)
                 {
                     // f(z) = z^d - 1, f'(z) = d·z^(d-1)
@@ -139,6 +171,35 @@ public sealed class NewtonCalculator : IFractalCalculator, IHeightFieldSource, I
                     if (denom < 1e-30) break;
                     double quotR = (fR * fpR + fI * fpI) / denom;
                     double quotI = (fI * fpR - fR * fpI) / denom;
+
+                    if (nova)
+                    {
+                        // z := z - R · quot + c; converged once the step is tiny.
+                        double nzr = zr - R * quotR + addR;
+                        double nzi = zi - R * quotI + addI;
+                        double sx = nzr - zr, sy = nzi - zi;
+                        double step2 = sx * sx + sy * sy;
+                        zr = nzr; zi = nzi;
+                        if (step2 < eps2)
+                        {
+                            basin = RootSector(zr, zi, d);
+                            // Smooth count: log-interpolate where the step size
+                            // crossed the tolerance (as the Magnet path does).
+                            smooth = iter;
+                            if (iter > 0 && stepPrev < double.MaxValue)
+                            {
+                                double logPrev = 0.5 * Math.Log(stepPrev);
+                                double logCur = 0.5 * Math.Log(Math.Max(step2, 1e-300));
+                                double span = logPrev - logCur;
+                                double frac = span > 1e-12 ? (logPrev - logEps) / span : 0.0;
+                                smooth = (float)(iter - 1 + Math.Clamp(frac, 0.0, 1.0));
+                            }
+                            goto converged;
+                        }
+                        stepPrev = step2;
+                        continue;
+                    }
+
                     // z := z - R · quot
                     zr -= R * quotR;
                     zi -= R * quotI;
@@ -155,11 +216,17 @@ public sealed class NewtonCalculator : IFractalCalculator, IHeightFieldSource, I
             converged:
                 int idx = rowBase + x;
                 // Relief height / HE scalar = iterations to convergence.
-                SmoothBuffer[idx] = iter;
+                SmoothBuffer[idx] = nova && basin >= 0 ? smooth : iter;
                 BasinBuffer[idx] = basin;               // #146 — HE + recolor source
                 FinalZrBuffer[idx] = (float)zr;
                 FinalZiBuffer[idx] = (float)zi;
-                if (basin >= 0)
+                if (basin >= 0 && nova)
+                {
+                    GradientColorMap.SetDitherForPixel(x, y);
+                    ColorBuffer[idx] = NewtonBasinColoring.NovaConvergedColor(
+                        newtonMap, ColorMap, basin, d, smooth, maxIter, zr, zi);
+                }
+                else if (basin >= 0)
                 {
                     // Converged: shared dispatch (MapNewton theme or HSV fallback).
                     ColorBuffer[idx] = NewtonBasinColoring.ConvergedColor(
@@ -177,6 +244,15 @@ public sealed class NewtonCalculator : IFractalCalculator, IHeightFieldSource, I
                 }
             }
         });
+    }
+
+    /// <summary>#1294 — index k of the root e^(2πik/d) whose angular sector holds
+    /// z, i.e. the nearest root direction. For a z on a root it is that root's
+    /// index, matching Newton's basin numbering.</summary>
+    internal static int RootSector(double zr, double zi, int d)
+    {
+        int k = (int)Math.Round(Math.Atan2(zi, zr) * d / (2 * Math.PI));
+        return ((k % d) + d) % d;
     }
 
     // ── #146 histogram equalization (basin families) ───────────────────────────
@@ -207,6 +283,7 @@ public sealed class NewtonCalculator : IFractalCalculator, IHeightFieldSource, I
             ColorBuffer, Width, Height, BasinBuffer, SmoothBuffer, FinalZrBuffer, FinalZiBuffer,
             _basins, MaxIterations, ColorMap as INewtonColorMap,
             cdf, bins, sourceMaxIter, strength, ditherIterStrength,
-            out escapedCount, out saturatedCount);
+            out escapedCount, out saturatedCount,
+            novaPalette: _renderedNova ? ColorMap : null);   // #1294
     }
 }

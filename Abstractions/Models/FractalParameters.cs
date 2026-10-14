@@ -383,6 +383,22 @@ namespace FracturingFog.Models
         public int NewtonExponent { get; set; } = 3;
         public double NewtonRelaxation { get; set; } = 1.0;
 
+        /// <summary>#1294 — Nova renders the relaxed Newton map plus a constant,
+        /// z := z − R·f(z)/f′(z) + c, for f(z) = z^d − 1. False (default) = the
+        /// parameter plane: c is the pixel and every orbit starts at
+        /// <see cref="NovaZ0"/>. True = the Julia plane: z₀ is the pixel and c is
+        /// <see cref="NovaJuliaC"/>.</summary>
+        public bool NovaJuliaMode { get; set; } = false;
+
+        /// <summary>#1294 — Nova parameter-plane start point z₀. Default 1, a root
+        /// of z^d − 1 and so a critical point of the Newton map (exactly so at
+        /// relaxation R = 1): the orbit of a critical point decides which c give
+        /// an attracting cycle.</summary>
+        public Complex NovaZ0 { get; set; } = new Complex(1.0, 0.0);
+
+        /// <summary>#1294 — the fixed c added each step in Nova Julia mode.</summary>
+        public Complex NovaJuliaC { get; set; } = new Complex(-0.5, 0.0);
+
         /// <summary>Initial prev-z offset for the Secant basin renderer.
         /// Secant's two-point recurrence is undefined when prev = z, so
         /// the first prev is set to (pixel + offset). Default (0.5, 0)
@@ -1817,6 +1833,9 @@ namespace FracturingFog.Models
                 AttractorC = AttractorC, AttractorD = AttractorD,
                 NewtonExponent = NewtonExponent,
                 NewtonRelaxation = NewtonRelaxation,
+                NovaJuliaMode = NovaJuliaMode,
+                NovaZ0 = NovaZ0,
+                NovaJuliaC = NovaJuliaC,
                 SecantInitialOffset = SecantInitialOffset,
                 SpiderCDecay = SpiderCDecay,
                 MagnetConvergence = MagnetConvergence,

@@ -1308,12 +1308,31 @@ Setting c = 0 collapses Nova back to the pure Newton fractal.
     choices: z₀ = 1 (yields the canonical Nova) and z₀ = c
     (parameter-plane variant).
 
-=== Implementation Note ===
+=== Parameters ===
 
-Fracturing Fog currently routes Nova through the same calculator
-as Newton.  Selecting Nova in the UI uses the Newton kernel with
-the user's exponent and relaxation; full Nova c-offset support is
-on the roadmap.
+  NewtonExponent   : int      Polynomial degree d.  Default 3.
+                              Shared with Newton / Halley.
+  NewtonRelaxation : double   Relaxation factor R.  Default 1.0.
+  NovaJuliaMode    : bool     Off (default): parameter plane, c is
+                              the pixel and every orbit starts at
+                              NovaZ0.  On: Julia plane, z₀ is the
+                              pixel and c is NovaJuliaC.
+  NovaZ0           : Complex  Parameter-plane start.  Default 1
+                              (the canonical Nova).
+  NovaJuliaC       : Complex  Julia-plane constant.  Default −0.5.
+
+  Batch: --param NovaJuliaMode=true, NovaZ0Re / NovaZ0Im,
+  NovaJuliaCRe / NovaJuliaCIm.
+
+=== Colouring ===
+
+With + c the orbit no longer lands on a root, so a pixel counts
+as converged when the step size falls below 1e-6.  Converged
+pixels are shaded by a smooth convergence count through the
+active palette (like Magnet); a Newton theme instead colours by
+the root sector the final z lies in.  Pixels that never settle
+(attracting cycles, chaos) are the interior: the embedded
+Mandelbrot copies.
 
 === As a User Equation ===
 

@@ -121,6 +121,11 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _spiderCDecay = _p.SpiderCDecay;
         _newtonExponent = _p.NewtonExponent;
         _newtonRelaxation = _p.NewtonRelaxation;
+        _novaJuliaMode = _p.NovaJuliaMode;          // #1294
+        _novaZ0R = _p.NovaZ0.Real;
+        _novaZ0I = _p.NovaZ0.Imaginary;
+        _novaCR = _p.NovaJuliaC.Real;
+        _novaCI = _p.NovaJuliaC.Imaginary;
         _ifsPresetName = _p.IFSPresetName;
         _ifsIterations = _p.IFSIterations;
         _lsystemPresetName = _p.LSystemPresetName;
@@ -367,6 +372,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsTranscendentalJulia => FractalType == FractalType.TranscendentalJulia;
     public bool IsNewtonOrNova => FractalType is FractalType.Newton or FractalType.Nova or FractalType.Halley or FractalType.Secant;
     public bool IsSecant => FractalType == FractalType.Secant;
+    public bool IsNova => FractalType == FractalType.Nova;   // #1294
     public bool IsSpider => FractalType == FractalType.Spider;
     public bool IsIFS => FractalType == FractalType.IFS;
     public bool IsLSystem => FractalType == FractalType.LSystem;
@@ -1407,6 +1413,28 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public int NewtonExponent { get => _newtonExponent; set { Set(ref _newtonExponent, (int)Clamp(value, 2, 8)); _p.NewtonExponent = _newtonExponent; Fire(); } }
     private double _newtonRelaxation;
     public double NewtonRelaxation { get => _newtonRelaxation; set { Set(ref _newtonRelaxation, Clamp(value, 0.1, 2.0)); _p.NewtonRelaxation = _newtonRelaxation; Fire(); } }
+
+    // #1294 — Nova: parameter plane (z0) vs Julia plane (c).
+    private bool _novaJuliaMode;
+    public bool NovaJuliaMode
+    {
+        get => _novaJuliaMode;
+        set
+        {
+            Set(ref _novaJuliaMode, value); _p.NovaJuliaMode = value;
+            this.RaisePropertyChanged(nameof(IsNovaParameterPlane));
+            Fire();
+        }
+    }
+    public bool IsNovaParameterPlane => !_novaJuliaMode;
+    private double _novaZ0R;
+    public double NovaZ0R { get => _novaZ0R; set { Set(ref _novaZ0R, Clamp(value, -4, 4)); _p.NovaZ0 = new Complex(_novaZ0R, _novaZ0I); Fire(); } }
+    private double _novaZ0I;
+    public double NovaZ0I { get => _novaZ0I; set { Set(ref _novaZ0I, Clamp(value, -4, 4)); _p.NovaZ0 = new Complex(_novaZ0R, _novaZ0I); Fire(); } }
+    private double _novaCR;
+    public double NovaJuliaCR { get => _novaCR; set { Set(ref _novaCR, Clamp(value, -4, 4)); _p.NovaJuliaC = new Complex(_novaCR, _novaCI); Fire(); } }
+    private double _novaCI;
+    public double NovaJuliaCI { get => _novaCI; set { Set(ref _novaCI, Clamp(value, -4, 4)); _p.NovaJuliaC = new Complex(_novaCR, _novaCI); Fire(); } }
 
     // ── IFS ──
     private string _ifsPresetName = string.Empty;

@@ -51,8 +51,12 @@ public static class FractalAnimatableParamsMap
 
         // Newton / Halley / Secant share the polynomial-exponent + relaxation
         // pair. Secant also exposes an initial-offset complex.
-        FractalType.Newton or FractalType.Nova or FractalType.Halley
+        FractalType.Newton or FractalType.Halley
             => _newtonList,
+
+        // #1294 — Nova adds the parameter-plane z0 and the Julia-plane c.
+        FractalType.Nova
+            => _novaList,
 
         FractalType.Secant
             => _secantList,
@@ -216,6 +220,14 @@ public static class FractalAnimatableParamsMap
     {
         new("NewtonExponent", AnimatableParamKind.ScalarInt, Min: 2, Max: 8),
         new("NewtonRelaxation", AnimatableParamKind.ScalarDouble, Min: 0.1, Max: 2.0),
+    };
+
+    private static readonly AnimatableParamDescriptor[] _novaList =
+    {
+        new("NewtonExponent", AnimatableParamKind.ScalarInt, Min: 2, Max: 8),
+        new("NewtonRelaxation", AnimatableParamKind.ScalarDouble, Min: 0.1, Max: 2.0),
+        new("NovaZ0", AnimatableParamKind.Complex, Min: 0.05, Max: 2.0),
+        new("NovaJuliaC", AnimatableParamKind.Complex, Min: 0.0, Max: 1.5),
     };
 
     private static readonly AnimatableParamDescriptor[] _secantList =

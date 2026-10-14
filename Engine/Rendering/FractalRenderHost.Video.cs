@@ -1825,7 +1825,7 @@ namespace FracturingFog.Rendering
                 case FlameRenderer fr: fr.FractalParameters = ViewState.FractalParameters; break;
                 case AttractorCalculator a: a.FractalParameters = ViewState.FractalParameters; break;
                 case BuddhaFamilyCalculator b: b.FractalParameters = ViewState.FractalParameters; break;
-                case NewtonCalculator n: n.FractalParameters = ViewState.FractalParameters; break;
+                case NewtonCalculator n: n.FractalType = ViewState.FractalType; n.FractalParameters = ViewState.FractalParameters; break;   // #1294
                 case UserEquationCalculator u: u.FractalParameters = ViewState.FractalParameters; break;
                 case MandelbulbCalculator m: m.FractalParameters = ViewState.FractalParameters; break;
                 case SandboxCalculator sb: sb.FractalParameters = ViewState.FractalParameters; break;

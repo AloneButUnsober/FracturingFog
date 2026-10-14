@@ -252,7 +252,7 @@ namespace FracturingFog.ViewState
                 FractalType.Multibrot        => ( 0.0,  0.0, 1.0),
                 FractalType.Phoenix          => ( 0.0,  0.0, 1.5),
                 FractalType.Newton           => ( 0.0,  0.0, 1.0),
-                FractalType.Nova             => ( 1.0,  0.0, 0.8),
+                FractalType.Nova             => (-0.35, 0.0, 1.6),   // #1294 — parameter plane
                 FractalType.BuddhaBrot       => (-0.5,  0.0, 1.0),
                 FractalType.IFS              => ( 0.0,  0.0, 1.0),
                 FractalType.LSystem          => ( 0.0,  0.0, 1.0),
