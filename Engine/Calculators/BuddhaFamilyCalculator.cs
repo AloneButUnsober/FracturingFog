@@ -43,7 +43,9 @@
 // (BuddhaKernelSource, D3D11 + Vulkan) when GPU compute is on, otherwise its CPU
 // twin BuddhaUniformSampler (counter-based stream, float orbits, run in parallel).
 // Both add into the same hit histograms and render the same image for a seed, so
-// the GPU switch, --batch and the CPU core count do not change the picture.
+// the GPU switch, --batch and the CPU core count do not change the picture. Which
+// one runs is a speed choice (#1220, GpuBuddhaSelection): Auto measures both on the
+// first render and keeps the faster; FF_GPU_BUDDHA forces either.
 // Composite / Recolor / relief are unchanged. Metropolis-Hastings (including the
 // zoom-compensation auto-enable), the Dual Buddhabrot samplers and zooms past
 // MaxGpuBuddhaZoom (float orbits) use the double-precision System.Random sampler.
@@ -56,6 +58,7 @@
 // disc behind the default Nebulabrot).
 
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -189,23 +192,95 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
     /// <summary>#838 — the GPU compute kernel (shared with the 2D calculators).</summary>
     public FracturingFog.Rendering.IGpuKernel? GpuKernel { get; set; }
 
-    // #838 / #1218 — FF_GPU_BUDDHA=1 opts in; a per-thread override for tests.
-    private static readonly bool s_gpuBuddhaEnv =
-        Environment.GetEnvironmentVariable("FF_GPU_BUDDHA") is "1" or "true" or "on" or "yes";
-    [ThreadStatic] private static bool? t_gpuBuddha;
+    /// <summary>#1220 — where uniform Buddhabrot sampling runs when GPU compute is on.</summary>
+    public enum GpuBuddhaMode
+    {
+        /// <summary>Measure both paths on the first render (per kernel, family and
+        /// splat), keep the faster, re-measure when the frame or sample budget moves
+        /// by more than <see cref="RemeasureFactor"/>.</summary>
+        Auto,
+        /// <summary>Always the GPU kernel (<c>FF_GPU_BUDDHA=1</c>).</summary>
+        Gpu,
+        /// <summary>Always the CPU twin (<c>FF_GPU_BUDDHA=0</c>).</summary>
+        Cpu,
+    }
 
-    /// <summary>#838 / #1218 — sample uniform Buddhabrot renders on the GPU kernel
-    /// (still needs <see cref="UseGpuCompute"/>). Off by default: the GPU and CPU run
-    /// one shared sampler and render the same image, and the CPU's run — cycle
-    /// detection included — is the faster one on the hardware this was measured on
-    /// (GT 710, 640x480 defaults: Buddhabrot 66 vs 195 ms, AntiBuddhabrot 125 vs
-    /// 1214 ms). <c>FF_GPU_BUDDHA=1</c> opts in (a card with far more compute than the
-    /// CPU). Setting it overrides for the calling thread only (tests).</summary>
-    public static bool UseGpuBuddha
+    /// <summary>#1220 — FF_GPU_BUDDHA: 1 / true / on / yes / gpu → GPU, 0 / false /
+    /// off / no / cpu → CPU, anything else (or unset) → measure.</summary>
+    public static GpuBuddhaMode ParseGpuBuddhaMode(string? value) => value?.Trim().ToLowerInvariant() switch
+    {
+        "1" or "true" or "on" or "yes" or "gpu" => GpuBuddhaMode.Gpu,
+        "0" or "false" or "off" or "no" or "cpu" => GpuBuddhaMode.Cpu,
+        _ => GpuBuddhaMode.Auto,
+    };
+
+    private static readonly GpuBuddhaMode s_gpuBuddhaEnv =
+        ParseGpuBuddhaMode(Environment.GetEnvironmentVariable("FF_GPU_BUDDHA"));
+    [ThreadStatic] private static GpuBuddhaMode? t_gpuBuddha;
+
+    /// <summary>#838 / #1218 / #1220 — where uniform Buddhabrot renders sample when
+    /// <see cref="UseGpuCompute"/> is on. The GPU and the CPU run one shared sampler and
+    /// render the same image, so this is purely a speed choice, and the answer depends
+    /// on the hardware: on a GT 710 against a 12-thread CPU the CPU won (640x480
+    /// defaults: Buddhabrot 66 vs 195 ms, AntiBuddhabrot 125 vs 1214 ms), while a modern
+    /// card should win. <see cref="GpuBuddhaMode.Auto"/> (default) measures; FF_GPU_BUDDHA
+    /// forces either path. Setting it overrides for the calling thread only (tests).</summary>
+    public static GpuBuddhaMode GpuBuddhaSelection
     {
         get => t_gpuBuddha ?? s_gpuBuddhaEnv;
         set => t_gpuBuddha = value;
     }
+
+    /// <summary>Compatibility shim: true forces the GPU, false the CPU (per thread).</summary>
+    public static bool UseGpuBuddha
+    {
+        get => GpuBuddhaSelection == GpuBuddhaMode.Gpu;
+        set => t_gpuBuddha = value ? GpuBuddhaMode.Gpu : GpuBuddhaMode.Cpu;
+    }
+
+    /// <summary>#1220 — a cached Auto decision is re-measured when the pixel count or
+    /// the samples per batch differ from the measured frame by more than this factor
+    /// (the GPU's fixed per-batch costs — histogram clear and readback — weigh less
+    /// at scale).</summary>
+    public const double RemeasureFactor = 4.0;
+
+    /// <summary>#1220 — the GPU samples 1/<c>MeasureGpuShare</c> of the measuring batch
+    /// (the CPU twin the rest). Small, because on a weak GPU that share is the one-time
+    /// cost of measuring (GT 710, 640x480 AntiBuddhabrot HD: ~1.4 s at half).</summary>
+    public const int MeasureGpuShare = 8;
+
+    /// <summary>#1220 — one measured comparison: cost per sample on each path, and the
+    /// frame it was measured on.</summary>
+    public sealed record GpuBuddhaMeasurement(double CpuNsPerSample, double GpuNsPerSample, int Pixels, int SamplesPerBatch)
+    {
+        public bool GpuFaster => GpuNsPerSample < CpuNsPerSample;
+        public bool Covers(int pixels, int samplesPerBatch) =>
+            Within(pixels, Pixels) && Within(samplesPerBatch, SamplesPerBatch);
+        private static bool Within(double a, double b) => a <= b * RemeasureFactor && b <= a * RemeasureFactor;
+        public string Summary => $"measured CPU {CpuNsPerSample:0.#} vs GPU {GpuNsPerSample:0.#} ns/sample";
+    }
+
+    // #1220 — Auto decisions per kernel (one kernel per device; freed with it),
+    // keyed by in-set / escape and Standard / HD splat.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<
+        FracturingFog.Rendering.IGpuKernel, Dictionary<(bool InSet, bool Hd), GpuBuddhaMeasurement>> s_gpuBuddhaDecisions = new();
+
+    /// <summary>#1220 — the cached Auto measurement for this kernel and render kind,
+    /// or null (diagnostics / tests).</summary>
+    public static GpuBuddhaMeasurement? CachedGpuBuddhaMeasurement(FracturingFog.Rendering.IGpuKernel kernel, bool inSet, bool hd)
+    {
+        if (!s_gpuBuddhaDecisions.TryGetValue(kernel, out var d)) return null;
+        lock (d) return d.TryGetValue((inSet, hd), out var m) ? m : null;
+    }
+
+    private static void StoreGpuBuddhaMeasurement(FracturingFog.Rendering.IGpuKernel kernel, bool inSet, bool hd, GpuBuddhaMeasurement m)
+    {
+        var d = s_gpuBuddhaDecisions.GetOrCreateValue(kernel);
+        lock (d) d[(inSet, hd)] = m;
+    }
+
+    /// <summary>#1220 — the measurement behind the last Calculate's path (Auto), or null.</summary>
+    public GpuBuddhaMeasurement? LastGpuBuddhaMeasurement { get; private set; }
 
     // #1218 — test hook (thread-static, like the other calculator test knobs).
     [ThreadStatic] private static bool t_legacyUniform;
@@ -404,6 +479,19 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
         // the fractal appear to 'morph'.
         int baseSeed = FractalParameters.BuddhaSeed;
 
+        // #1220 — Auto: reuse a measurement that covers this frame, or measure on
+        // the first batch below.
+        LastGpuBuddhaMeasurement = null;
+        bool measure = false;
+        if (shared && gpu != null && GpuBuddhaSelection == GpuBuddhaMode.Auto)
+        {
+            var known = CachedGpuBuddhaMeasurement(gpu, inSet, hd);
+            if (known != null && known.Covers(width * height, samplesPerBatch))
+                gpu = ApplyGpuBuddhaDecision(gpu, known);
+            else
+                measure = true;
+        }
+
         for (int batch = 0; batch < batches; batch++)
         {
             if (ct.IsCancellationRequested) break;
@@ -414,7 +502,26 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
                     width, height, scale, midX, midY, maxOrbit, inSet, hd, low, mid,
                     unchecked((uint)baseSeed), batch, samplesPerBatch, minIter);
                 bool done = false;
-                if (gpu != null)
+                if (measure && gpu != null && samplesPerBatch >= MeasureGpuShare)
+                {
+                    // #1220 — the GPU samples the first 1/MeasureGpuShare of this batch,
+                    // the CPU twin the rest: together exactly the batch (a sample's stream
+                    // depends only on seed, batch and index), so measuring adds no work.
+                    measure = false;
+                    int share = samplesPerBatch / MeasureGpuShare;
+                    if (MeasureGpuBuddha(gpu, sb, share, inSet, hd, width * height, ct) is not { } m)
+                    {
+                        // The GPU share failed and added nothing: the CPU runs the whole batch.
+                        gpu = null;
+                    }
+                    else
+                    {
+                        gpu = ApplyGpuBuddhaDecision(gpu, m);
+                        done = true;
+                    }
+                    if (ct.IsCancellationRequested) break;
+                }
+                if (!done && gpu != null)
                 {
                     try
                     {
@@ -498,16 +605,18 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
     /// the frame at large windows (2560×1440: 548 MB, 327 ms of a 25 ms sampling
     /// job) — while a frame takes only a few million hits. False when cancelled (the
     /// arrays may then hold part of the batch).</summary>
-    private bool RunSharedOnCpu(FracturingFog.Rendering.GpuBuddhaBatch b, CancellationToken ct)
+    private bool RunSharedOnCpu(FracturingFog.Rendering.GpuBuddhaBatch b, CancellationToken ct, int firstSample = 0)
     {
         const int chunk = 8192;
-        int chunks = (b.Samples + chunk - 1) / chunk;
+        int count = b.Samples - firstSample;
+        if (count <= 0) return true;
+        int chunks = (count + chunk - 1) / chunk;
         var hitsR = _hitsR; var hitsG = _hitsG; var hitsB = _hitsB;
         try
         {
             Parallel.For(0, chunks, new ParallelOptions { CancellationToken = ct }, ci =>
             {
-                int first = ci * chunk;
+                int first = firstSample + ci * chunk;
                 FracturingFog.Rendering.BuddhaUniformSampler.Run(b, hitsR, hitsG, hitsB,
                     first, Math.Min(chunk, b.Samples - first), atomic: true);
             });
@@ -528,7 +637,7 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
         string? why =
               k == null ? "the active renderer has no GPU compute kernel"
             : !k.SupportsBuddhabrot ? $"{k.BackendLabel} has no Buddhabrot kernel"
-            : !UseGpuBuddha ? "the CPU sampler renders the same image and is faster on most hardware; FF_GPU_BUDDHA=1 opts in to the GPU"
+            : GpuBuddhaSelection == GpuBuddhaMode.Cpu ? "FF_GPU_BUDDHA=0 keeps Buddhabrot sampling on the CPU"
             : !SupportsGpuSampling ? "this Buddhabrot variant's sampler runs on the CPU only"
             : metropolis ? "Metropolis sampling runs on the CPU only"
             : Zoom > MaxGpuBuddhaZoom ? $"past the GPU Buddhabrot zoom limit ({MaxGpuBuddhaZoom:0}; float orbits)"
@@ -537,7 +646,7 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
         {
             string reason = k == null ? "no GPU kernel"
                 : !k.SupportsBuddhabrot ? "no Buddhabrot kernel"
-                : !UseGpuBuddha ? "CPU faster"
+                : GpuBuddhaSelection == GpuBuddhaMode.Cpu ? "CPU forced"
                 : !SupportsGpuSampling ? "CPU-only sampler"
                 : metropolis ? "Metropolis sampling"
                 : $"zoom > {MaxGpuBuddhaZoom:0}";
@@ -546,6 +655,63 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
         }
         LastGpuRoute = GpuRoute.OnGpu(k!.BackendLabel, $"{k.BackendLabel}: Buddhabrot sampling on the GPU, compositing on the CPU");
         return k;
+    }
+
+    /// <summary>#1220 — keep <paramref name="k"/> or hand sampling to the CPU on a
+    /// measurement, recording the route and the numbers behind it.</summary>
+    private FracturingFog.Rendering.IGpuKernel? ApplyGpuBuddhaDecision(
+        FracturingFog.Rendering.IGpuKernel k, GpuBuddhaMeasurement m)
+    {
+        LastGpuBuddhaMeasurement = m;
+        if (m.GpuFaster)
+        {
+            LastGpuRoute = GpuRoute.OnGpu(k.BackendLabel,
+                $"{k.BackendLabel}: Buddhabrot sampling on the GPU, compositing on the CPU (auto: {m.Summary})");
+            LastCalculateUsedGpu = true;
+            return k;
+        }
+        LastGpuRoute = GpuRoute.Cpu("CPU faster",
+            $"Buddhabrot sampling on the CPU: faster on this hardware (auto: {m.Summary}; FF_GPU_BUDDHA=1 forces the GPU)");
+        LastCalculateUsedGpu = false;
+        return null;
+    }
+
+    /// <summary>#1220 — run samples [0, <paramref name="gpuSamples"/>) of
+    /// <paramref name="b"/> on the GPU and the rest on the CPU twin, timing each, and
+    /// cache the per-sample costs for a whole batch. The GPU's cost is modelled from
+    /// the kernel's own split: dispatch scales with the samples, the histogram readback
+    /// is per batch (whole-batch GPU = dispatch × N / n + readback); a kernel that
+    /// reports neither falls back to wall time scaled by N / n. Null when the GPU share
+    /// failed (it then added nothing; the CPU share did not run).</summary>
+    private GpuBuddhaMeasurement? MeasureGpuBuddha(FracturingFog.Rendering.IGpuKernel k,
+        FracturingFog.Rendering.GpuBuddhaBatch b, int gpuSamples, bool inSet, bool hd, int pixels, CancellationToken ct)
+    {
+        double gpuMs;
+        try
+        {
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            k.RunBuddhaBatch(b with { Samples = gpuSamples }, _hitsR, _hitsG, _hitsB);
+            double wall = System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
+            double scaleUp = (double)b.Samples / gpuSamples;
+            gpuMs = k.LastDispatchMs + k.LastReadbackMs > 0
+                ? k.LastDispatchMs * scaleUp + k.LastReadbackMs
+                : wall * scaleUp;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[Buddhabrot] GPU sampling failed, CPU fallback: {ex.Message}");
+            LastGpuRoute = GpuRoute.Cpu("GPU error", $"GPU Buddhabrot sampling failed: {ex.Message}");
+            LastCalculateUsedGpu = false;
+            return null;
+        }
+        long c0 = System.Diagnostics.Stopwatch.GetTimestamp();
+        RunSharedOnCpu(b, ct, firstSample: gpuSamples);
+        double cpuMs = System.Diagnostics.Stopwatch.GetElapsedTime(c0).TotalMilliseconds;
+        int cpuSamples = b.Samples - gpuSamples;
+        var m = new GpuBuddhaMeasurement(cpuMs * 1e6 / Math.Max(1, cpuSamples), gpuMs * 1e6 / b.Samples,
+                                         pixels, b.Samples);
+        if (!ct.IsCancellationRequested) StoreGpuBuddhaMeasurement(k, inSet, hd, m);
+        return m;
     }
 
     /// <summary>#1124 — one thread's share of one batch. Classic: Metropolis-

@@ -700,11 +700,15 @@ whichever you use, the other reflects the change.
   [Keyboard Shortcuts → Performance & Deep-Zoom Diagnostics](Keyboard-Shortcuts.md#performance--deep-zoom-diagnostics).
 - **Buddhabrot family.** Buddhabrot, Nebulabrot and the two Anti types use one
   sampler on the GPU and the CPU, so switching GPU compute never changes the
-  picture, and `--batch` renders the same image as the live view. The CPU run is
-  the faster one on most machines, so it stays on the CPU (status bar
-  `[CPU: CPU faster]`). Set the environment variable `FF_GPU_BUDDHA=1` to sample
-  on a card with far more compute than your CPU. Metropolis sampling and Dual
-  Buddhabrot always run on the CPU.
+  picture, and `--batch` renders the same image as the live view. With GPU compute
+  on, the first render of each kind (escape or Anti, Standard or HD) measures both
+  paths: the GPU takes 1/8 of the first batch and the CPU the rest, so measuring adds
+  no samples. Fracturing Fog then keeps whichever is faster on your machine. The status
+  bar shows `[GPU]`, or `[CPU: CPU faster]`, and the perf HUD shows the measured
+  ns/sample. It measures again when the window or sample budget changes by more than
+  4×. On a weak card the measuring render takes longer once: up to ~0.5 s on a
+  GeForce GT 710. `FF_GPU_BUDDHA=1` forces the GPU and `FF_GPU_BUDDHA=0` the CPU.
+  Metropolis sampling and Dual Buddhabrot always run on the CPU.
 - **Buddhabrot samples and speed.** **Samples** is the budget for a 640×480
   frame. With **Scale samples with window size** (on by default), a larger
   window or export samples proportionally more, so it is as bright and smooth
