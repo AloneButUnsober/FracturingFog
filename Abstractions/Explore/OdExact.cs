@@ -4,12 +4,12 @@
 // Abstractions/Explore/OdExact.cs
 //
 // Cancellation-safe octuple-double arithmetic for the location finders
-// (epic #1184). OD's own OD+OD operator is the "sloppy" pairwise variant: fine
-// for a reference orbit, but under heavy cancellation — exactly z² + c → 0 at a
-// minibrot nucleus — it floors at ~1e-65 relative, which stalls Newton and
-// blinds a deep ball scan. Adding b one limb at a time through OD's
-// full-cascade OD+double operator keeps every carry, so a sum that cancels to
-// a tiny value is still accurate to ~OD epsilon of the operands.
+// (epic #1184). OD's OD+OD operator used to be the "sloppy" pairwise variant,
+// which under heavy cancellation — exactly z² + c → 0 at a minibrot nucleus —
+// floors at ~1e-65 relative; this class added b one limb at a time through the
+// full-cascade OD+double operator instead. Since #1319 OD+OD itself is an exact
+// expansion sum, so Add delegates to it; the class stays as the finders' named
+// entry point.
 
 using FracturingFog.FFMath;
 
@@ -18,18 +18,7 @@ namespace FracturingFog.Abstractions.Explore;
 public static class OdExact
 {
     /// <summary>a + b, accurate under cancellation.</summary>
-    public static OD Add(OD a, OD b)
-    {
-        OD s = a + b.X0;
-        if (b.X1 != 0) s += b.X1; else return s;
-        if (b.X2 != 0) s += b.X2; else return s;
-        if (b.X3 != 0) s += b.X3; else return s;
-        if (b.X4 != 0) s += b.X4; else return s;
-        if (b.X5 != 0) s += b.X5; else return s;
-        if (b.X6 != 0) s += b.X6; else return s;
-        if (b.X7 != 0) s += b.X7;
-        return s;
-    }
+    public static OD Add(OD a, OD b) => a + b;
 
     /// <summary>a − b, accurate under cancellation.</summary>
     public static OD Sub(OD a, OD b) => Add(a, -b);

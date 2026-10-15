@@ -336,10 +336,12 @@ Measured against all 158 built-in Mandelbrot regions (`Resources/regions.json`):
   Paradise", p₀ = 86 570) is stopped by a work budget (~5 s) instead of
   scanning for minutes. Quadtree localisation by sub-disk ball scans was tried
   first and abandoned: sub-disks inherit the same false positive.
-- **OD's `+` is the sloppy variant and floors at ~1e-65 under cancellation.**
+- **OD's `+` was the sloppy variant and floored at ~1e-65 under cancellation.**
   z² + c → 0 at a nucleus is exactly that case, so Newton stalled.
-  `Abstractions/Explore/OdExact` adds b limb by limb through OD's full-cascade
-  `OD + double`; S1's deep path uses it too.
+  `Abstractions/Explore/OdExact` added b limb by limb through OD's full-cascade
+  `OD + double`; S1's deep path uses it too. Since #1319 OD + OD itself is an
+  exact expansion sum (the renderer's reference orbit had the same bug), and
+  `OdExact.Add` delegates to it.
 - **Iterations:** a minibrot framed at its own size needs ~100 × period
   iterations; 10 × leaves it a black smear (checked live). The jump sets this as
   a region-style first-render hint, capped at the Extreme tier's 131 072, and
