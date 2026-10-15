@@ -19,7 +19,7 @@
 //     exact, which pins the two passes replaying one orbit (the bug a multiply-add
 //     fused differently in the two passes caused);
 //   • the same seed gives a bit-identical GPU image, a different seed does not;
-//   • Metropolis, Dual Buddhabrot, the opt-out, the zoom limit and a missing
+//   • Metropolis, Dual Buddhabrot, the forced-CPU override, the zoom limit and a missing
 //     kernel stay on the CPU with a reason; a failing kernel falls back to the
 //     exact CPU frame.
 
@@ -225,7 +225,7 @@ public sealed class S838GpuBuddhabrotTests
     public void Cpu_Only_Cases_Stay_On_The_Cpu_With_A_Reason()
     {
         using var k = Device();
-        bool saved = BuddhaFamilyCalculator.UseGpuBuddha;
+        var saved = BuddhaFamilyCalculator.GpuBuddhaSelection;
         try
         {
             (string Reason, bool Gpu) Route(BuddhaFamilyCalculator c)
@@ -255,15 +255,15 @@ public sealed class S838GpuBuddhabrotTests
             var noKernel = Calc(false, 1, false, null); noKernel.UseGpuCompute = true;
             Assert.Equal(("no GPU kernel", false), Route(noKernel));
 
-            BuddhaFamilyCalculator.UseGpuBuddha = false;
-            Assert.Equal(("CPU faster", false), Route(Calc(false, 1, false, k)));
+            BuddhaFamilyCalculator.UseGpuBuddha = false;   // FF_GPU_BUDDHA=0 (#1220)
+            Assert.Equal(("CPU forced", false), Route(Calc(false, 1, false, k)));
             BuddhaFamilyCalculator.UseGpuBuddha = true;
 
             var off = Calc(false, 1, false, null);
             off.Calculate();
             Assert.Equal(GpuRoute.NotRequested, off.LastGpuRoute);
         }
-        finally { BuddhaFamilyCalculator.UseGpuBuddha = saved; }
+        finally { BuddhaFamilyCalculator.GpuBuddhaSelection = saved; }
     }
 
     private sealed class ThrowingKernel : IGpuKernel
