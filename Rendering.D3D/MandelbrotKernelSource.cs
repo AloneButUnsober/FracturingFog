@@ -1128,11 +1128,15 @@ void CSPerturbSA(uint3 tid : SV_DispatchThreadID)
         {
             double dm2 = dr * dr + di * di;
             int found = -1, foundL = 0;
+            // A level-k entry starts only at multiples of 2^k, so start at the
+            // highest level m is aligned to (its trailing zeros), as the CPU
+            // Lookup does since #1346, instead of probing and skipping every
+            // level above it on each iteration.
+            int top = m == 0 ? gBlaLevels - 1 : min(gBlaLevels - 1, (int)firstbitlow((uint)m));
             [loop]
-            for (int lk = gBlaLevels - 1; lk >= 1; lk--)
+            for (int lk = top; lk >= 1; lk--)
             {
                 int l = 1 << lk;
-                if ((m & (l - 1)) != 0) continue;
                 int bi = m >> lk;
                 if (bi >= (gRefLen >> lk) || m + l >= gRefLen || iter + l > gMaxIter) continue;
                 int e = (blaStart[lk] + bi) * 5;
