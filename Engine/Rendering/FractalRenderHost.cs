@@ -216,6 +216,29 @@ namespace FracturingFog.Rendering
         // on top of grid + watermark by FractalOverlayCompositor.
         private (int X, int Y, int W, int H)? _selectionBox;
 
+        // #1269 (SM-4) — the outline repaint runs on its own thread, not on the
+        // UI thread. The repaint presents, which needs _uploadGate and _d3dGate;
+        // at deep zoom a GPU perturbation frame holds _d3dGate for its whole
+        // dispatch (up to the 3 s budget), so a synchronous repaint stalled every
+        // mouse move. SetSelectionBox now records the box and wakes this worker,
+        // which paints only the latest box (coalescing a burst of moves).
+        //
+        // _selBoxLock guards _selectionBox, the request bookkeeping and the held
+        // TAA job. _overlayUploads counts uploads that composited the overlay; it
+        // is bumped together with the box snapshot (under _selBoxLock), so the
+        // worker can tell that an upload after its request already drew the
+        // current box and must not be painted over with the older frame.
+        private readonly object _selBoxLock = new();
+        private readonly AutoResetEvent _selBoxSignal = new(false);
+        private Thread? _selBoxThread;
+        private bool _selBoxRepaintPending;
+        private long _selBoxRequestUploads;
+        private long _overlayUploads;
+        // #1269 — a TAA continuation held while a box is being drawn (each one
+        // is a full deep frame competing with the outline); resumed on release.
+        private bool _taaHeld;
+        private FrameJob _taaHeldJob;
+
         // Histogram CDF cache for the adaptive slider / sweep. Building the
         // CDF is a serial pass over the full SmoothBuffer + an allocation of
         // int[bins]/double[bins]; doing it on every slider tick is what made
@@ -2250,8 +2273,12 @@ namespace FracturingFog.Rendering
         // mutates the calc state (which invalidates the fingerprint), so we
         // don't need explicit cooperation to stop.
         /// <returns>True when a continuation sample was queued.</returns>
-        private bool TryScheduleNextTaaSample(in FrameJob job)
+        /// <param name="held">True when the continuation was held because a
+        /// selection box is on screen (#1269); <see cref="SetSelectionBox"/>
+        /// resumes it on release.</param>
+        private bool TryScheduleNextTaaSample(in FrameJob job, out bool held)
         {
+            held = false;
             if (job.AltCalc != null) return false;
             if (job.Token.IsCancellationRequested) return false;
             var calc = job.Calc;
@@ -2267,6 +2294,21 @@ namespace FracturingFog.Rendering
             // (~1e100+ zoom), not the double's (~1e10) as it used to be.
             double taaScale = (3.5 / Math.Max(calc.Width, calc.Height)) / calc.Zoom;
             if (!CentreJitter.IsResolvable(calc, taaScale)) return false;
+
+            // #1269 (SM-4) — while a selection box is on screen, hold the next
+            // sample: each one is a full frame (a deep GPU frame holds the D3D
+            // gate the outline repaint needs). Released by SetSelectionBox(null);
+            // a box-zoom supersedes it with a new view instead.
+            lock (_selBoxLock)
+            {
+                if (_selectionBox.HasValue)
+                {
+                    _taaHeld = true;
+                    _taaHeldJob = job;
+                    held = true;
+                    return false;
+                }
+            }
 
             var nextJob = new FrameJob(
                 job.Token, calc, altCalc: null, sw: Stopwatch.StartNew(),
@@ -3020,7 +3062,7 @@ namespace FracturingFog.Rendering
                 // currently restricted to the canonical Mandelbrot path).
                 if (!useAlt)
                 {
-                    bool more = TryScheduleNextTaaSample(in job);
+                    bool more = TryScheduleNextTaaSample(in job, out bool held);
                     // SM-3 (#1268) — tell the status bar the image is still
                     // refining, and when it settles. A superseded view (token
                     // cancelled / fingerprint moved) says nothing: the new
@@ -3028,7 +3070,7 @@ namespace FracturingFog.Rendering
                     int taaTotal = calc.Quality?.TaaMaxSamples ?? 1;
                     if (more)
                         RefineProgress?.Invoke(this, new RefineProgressInfo(_taaSampleCount, taaTotal, Done: false));
-                    else if (job.TaaSampleIndex > 0 && !job.Token.IsCancellationRequested && TaaFingerprintMatches(calc))
+                    else if (!held && job.TaaSampleIndex > 0 && !job.Token.IsCancellationRequested && TaaFingerprintMatches(calc))
                         RefineProgress?.Invoke(this, new RefineProgressInfo(_taaSampleCount, taaTotal, Done: true));
                 }
             }
@@ -3264,18 +3306,79 @@ namespace FracturingFog.Rendering
         public void SetSelectionBox(int? x, int? y, int? w, int? h)
         {
             if (_disposed) return;
-            if (x is null || y is null || w is null || h is null)
-                _selectionBox = null;
-            else
-                _selectionBox = (x.Value, y.Value, w.Value, h.Value);
-            // S-X9e (2026-06-27) — composite over the last-known-good frame,
-            // not over calc.ColorBuffer. At deep zoom the active calc holds
-            // a partial buffer (mid-render rows / cancelled state); reading
-            // it for the selection-box repaint stamped partial-render
-            // artifacts that compounded as the user dragged. Prefer the
-            // cached full-res snapshot; fall back to RepaintWithPostFx when
-            // we don't have one yet (first-frame edge case).
-            RepaintWithSelectionBox();
+            (int X, int Y, int W, int H)? box = x is null || y is null || w is null || h is null
+                ? null
+                : (x.Value, y.Value, w.Value, h.Value);
+            bool resume;
+            FrameJob held;
+            lock (_selBoxLock)
+            {
+                _selectionBox = box;
+                _selBoxRequestUploads = Interlocked.Read(ref _overlayUploads);
+                _selBoxRepaintPending = true;
+                if (_selBoxThread == null)
+                {
+                    _selBoxThread = new Thread(SelectionBoxRepaintLoop)
+                    {
+                        IsBackground = true,
+                        Name = "FF selection-box repaint",
+                    };
+                    _selBoxThread.Start();
+                }
+                // #1269 — releasing the box resumes a held TAA continuation.
+                resume = box == null && _taaHeld;
+                held = _taaHeldJob;
+                if (resume) { _taaHeld = false; _taaHeldJob = default; }
+            }
+            _selBoxSignal.Set();
+            if (resume) TryScheduleNextTaaSample(in held, out _);
+        }
+
+        /// <summary>#1269 — true while a selection box is on screen.</summary>
+        public bool SelectionBoxActive { get { lock (_selBoxLock) return _selectionBox.HasValue; } }
+
+        // #1269 — the outline repaint worker (see _selBoxLock). Off the UI thread,
+        // so a deep GPU frame holding the D3D gate delays the outline but never
+        // freezes input; only the newest box is painted.
+        private void SelectionBoxRepaintLoop()
+        {
+            while (true)
+            {
+                _selBoxSignal.WaitOne();
+                if (_disposed) return;
+                long since;
+                lock (_selBoxLock)
+                {
+                    if (!_selBoxRepaintPending) continue;
+                    _selBoxRepaintPending = false;
+                    since = _selBoxRequestUploads;
+                }
+                try
+                {
+                    lock (_uploadGate)
+                    {
+                        // An upload since the request already composited the
+                        // current box (or its absence) — e.g. the new view's first
+                        // frame after a box-zoom. Repainting the older frame now
+                        // would paint over it.
+                        if (Interlocked.Read(ref _overlayUploads) != since) continue;
+                        if (_disposed) return;
+                        // S-X9e (2026-06-27) — composite over the last-known-good
+                        // frame, not over calc.ColorBuffer. At deep zoom the active
+                        // calc holds a partial buffer (mid-render rows / cancelled
+                        // state); reading it for the selection-box repaint stamped
+                        // partial-render artifacts that compounded as the user
+                        // dragged. Prefer the cached full-res snapshot; fall back to
+                        // RepaintWithPostFx when we don't have one yet (first-frame
+                        // edge case).
+                        RepaintWithSelectionBox();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[FractalRenderHost] Selection-box repaint failed: {ex.Message}");
+                }
+            }
         }
 
         private void RepaintWithSelectionBox()
@@ -4600,7 +4703,15 @@ namespace FracturingFog.Rendering
                 try { _overlay.CompositeHeatmap(dst, w, h, heat); }
                 catch (Exception ex) { Console.Error.WriteLine($"[FractalRenderHost] Heatmap composite failed: {ex.Message}"); }
             }
-            if (ShowGrid || ShowWatermark || _selectionBox.HasValue || exportGuideAspect > 0.0)
+            // #1269 — snapshot the box and count this upload together, so the
+            // selection-box worker knows whether it drew the latest box.
+            (int X, int Y, int W, int H)? selectionBox;
+            lock (_selBoxLock)
+            {
+                selectionBox = _selectionBox;
+                Interlocked.Increment(ref _overlayUploads);
+            }
+            if (ShowGrid || ShowWatermark || selectionBox.HasValue || exportGuideAspect > 0.0)
             {
                 try
                 {
@@ -4608,7 +4719,7 @@ namespace FracturingFog.Rendering
                         ShowGrid, ShowWatermark, OverlayContrastLuma,
                         RegionName, ThemeName, ProgramName, ProgramVersion,
                         ActiveWatermark,
-                        _selectionBox, exportGuideAspect);
+                        selectionBox, exportGuideAspect);
                 }
                 catch (Exception ex)
                 {
@@ -5440,6 +5551,11 @@ namespace FracturingFog.Rendering
         {
             if (_disposed) return;
             _disposed = true;
+            // #1269 — wake the selection-box worker so it sees _disposed and exits.
+            // The event is not disposed: a worker that outlives the join must not
+            // wait on a disposed handle.
+            try { _selBoxSignal.Set(); } catch { }
+            try { _selBoxThread?.Join(1000); } catch { }
             // Phase 18b — stop the animation timer first so no more Triggers
             // fire while the rest of the pipeline is being torn down.
             try { _animTimer?.Dispose(); } catch { }
