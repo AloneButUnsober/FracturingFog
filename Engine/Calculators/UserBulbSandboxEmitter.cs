@@ -29,7 +29,23 @@ namespace FracturingFog.Calculators;
 
 public enum SbxEmitKind { Real, Vec, Quat }
 
-public sealed record SbxEmitResult(bool Ok, string? Error, string? Body, SbxEmitKind ResultKind);
+/// <summary>Emitter output. <see cref="Body"/> is the result expression; it may
+/// reference the typed locals that <see cref="Statements"/> declares (#1111:
+/// let bindings and multiply-used operands, each evaluated once), so a consumer
+/// emits the statements first — <see cref="MethodBody"/> is the complete body.</summary>
+public sealed record SbxEmitResult(bool Ok, string? Error, string? Body, SbxEmitKind ResultKind)
+{
+    /// <summary>Local declarations (<c>Vec3 __e0 = …;</c>), in evaluation order.</summary>
+    public IReadOnlyList<string> Statements { get; init; } = Array.Empty<string>();
+
+    /// <summary>The statements then <c>return Body;</c>, as one method body.</summary>
+    public string MethodBody(string indent = "")
+    {
+        var sb = new StringBuilder();
+        foreach (var st in Statements) sb.Append(indent).Append(st).Append('\n');
+        return sb.Append(indent).Append("return ").Append(Body).Append(';').ToString();
+    }
+}
 
 public static class UserBulbSandboxEmitter
 {
@@ -61,14 +77,26 @@ public static class UserBulbSandboxEmitter
         bool quatMode,
         bool gpuTarget,
         IReadOnlyDictionary<int, (string Name, SbxEmitKind Kind)>? extraSlots)
+        => Emit(root, paramNames, quatMode, gpuTarget, extraSlots, localPrefix: "__e");
+
+    /// <summary>Full overload. <paramref name="localPrefix"/> names the emitted
+    /// locals (<c>{prefix}0</c>, …); a chain gives each step its own prefix so
+    /// the steps' locals can share one C# scope.</summary>
+    public static SbxEmitResult Emit(
+        Sbx3Node? root,
+        IReadOnlyList<string> paramNames,
+        bool quatMode,
+        bool gpuTarget,
+        IReadOnlyDictionary<int, (string Name, SbxEmitKind Kind)>? extraSlots,
+        string localPrefix)
     {
         if (root == null) return new(false, "Empty AST.", null, SbxEmitKind.Real);
         try
         {
-            var ctx = new EmitCtx(paramNames, quatMode, gpuTarget, extraSlots);
+            var ctx = new EmitCtx(paramNames, quatMode, gpuTarget, extraSlots, localPrefix);
             var sb = new StringBuilder();
             var kind = ctx.Emit(root, sb);
-            return new(true, null, sb.ToString(), kind);
+            return new(true, null, sb.ToString(), kind) { Statements = ctx.Statements };
         }
         catch (NotSupportedException ex)
         {
@@ -86,30 +114,38 @@ public static class UserBulbSandboxEmitter
         /// have device-safe mirrors in Vec3GpuOps that avoid Throw.</summary>
         private string V3 => _gpu ? "Vec3GpuOps" : "Vec3";
         private readonly Dictionary<int, SbxEmitKind> _slotKinds = new();
-        /// <summary>Let-bound slot → already-emitted value expression text.
-        /// DSL is pure so direct substitution is safe; multiple references
-        /// to the same let-bound name re-evaluate the value expression, which
-        /// is fine for the small expression trees produced from real-world
-        /// Sandbox sources and avoids a delegate dispatch on the hot path.</summary>
+        /// <summary>Let-bound slot → the local its value was hoisted into.</summary>
         private readonly Dictionary<int, string> _letSubs = new();
         /// <summary>Prior-step output slot → (local C# identifier, value kind).
         /// Chain compile populates this so step bodies referencing prior step
         /// outputs by name resolve to the local declared in the emitted Step.</summary>
         private readonly IReadOnlyDictionary<int, (string Name, SbxEmitKind Kind)>? _extraSlots;
 
-        public EmitCtx(IReadOnlyList<string> paramNames, bool quatMode, bool gpuTarget = false)
-            : this(paramNames, quatMode, gpuTarget, extraSlots: null) { }
+        // #1111 — hoisted locals. A let value, and any operand the emitted text
+        // reads more than once (Hadamard / per-component forms, norm, the real
+        // → vec broadcast, an unfolded qpow), is declared once as a typed local
+        // instead of being pasted at every use: chained folds used to recompute
+        // their inputs at every reference (Menger ran at 0.7× of the interpreter).
+        // The DSL is pure, so hoisting a value out of a ternary branch or a
+        // short-circuit operand only evaluates it unconditionally, never changes
+        // a result.
+        private readonly List<string> _stmts = new();
+        private readonly string _prefix;
+        private int _nextLocal;
+        public IReadOnlyList<string> Statements => _stmts;
 
         public EmitCtx(
             IReadOnlyList<string> paramNames,
             bool quatMode,
             bool gpuTarget,
-            IReadOnlyDictionary<int, (string Name, SbxEmitKind Kind)>? extraSlots)
+            IReadOnlyDictionary<int, (string Name, SbxEmitKind Kind)>? extraSlots,
+            string localPrefix)
         {
             _paramNames = paramNames;
             _quat = quatMode;
             _gpu = gpuTarget;
             _extraSlots = extraSlots;
+            _prefix = localPrefix;
             _slotKinds[SandboxBulbExpression.SlotZ] = quatMode ? SbxEmitKind.Quat : SbxEmitKind.Vec;
             _slotKinds[SandboxBulbExpression.SlotC] = quatMode ? SbxEmitKind.Quat : SbxEmitKind.Vec;
             _slotKinds[SandboxBulbExpression.SlotN] = SbxEmitKind.Real;
@@ -123,6 +159,30 @@ public static class UserBulbSandboxEmitter
             // output (foo.x) infers correctly.
             if (extraSlots != null)
                 foreach (var kv in extraSlots) _slotKinds[kv.Key] = kv.Value.Kind;
+        }
+
+        /// <summary>Declare <paramref name="text"/> (of kind <paramref name="k"/>) as
+        /// a local and return its name; an identifier or a literal is returned
+        /// as is.</summary>
+        private string Hoist(string text, SbxEmitKind k)
+        {
+            if (IsAtom(text)) return text;
+            string name = _prefix + _nextLocal++.ToString(CultureInfo.InvariantCulture);
+            _stmts.Add(TypeName(k) + " " + name + " = " + text + ";");
+            return name;
+        }
+
+        private string Hoist(StringBuilder text, SbxEmitKind k) => Hoist(text.ToString(), k);
+
+        private static bool IsAtom(string s)
+        {
+            if (s.Length == 0) return false;
+            if (char.IsLetter(s[0]) || s[0] == '_')
+            {
+                foreach (char ch in s) if (!(char.IsLetterOrDigit(ch) || ch == '_')) return false;
+                return true;
+            }
+            return double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out _);
         }
 
         public SbxEmitKind Emit(Sbx3Node node, StringBuilder sb) => node switch
@@ -163,10 +223,10 @@ public static class UserBulbSandboxEmitter
 
         private SbxEmitKind EmitSlot(Sbx3Slot s, StringBuilder sb)
         {
-            // Let-bound slots inline the value expression text directly.
-            if (_letSubs.TryGetValue(s.Slot, out var subText))
+            // Let-bound slots read the local the value was hoisted into (#1111).
+            if (_letSubs.TryGetValue(s.Slot, out var local))
             {
-                sb.Append('(').Append(subText).Append(')');
+                sb.Append(local);
                 return _slotKinds.TryGetValue(s.Slot, out var k) ? k : SbxEmitKind.Real;
             }
             if (s.Slot == SandboxBulbExpression.SlotZ) { sb.Append('z'); return _quat ? SbxEmitKind.Quat : SbxEmitKind.Vec; }
@@ -262,7 +322,7 @@ public static class UserBulbSandboxEmitter
             if (b.Op == "*")
                 return EmitMul(ak, bk, sbA, sbB, sb);
             if (b.Op == "/")
-                return EmitDiv(ak, bk, sbA.ToString(), sbB.ToString(), sb);
+                return EmitDiv(ak, bk, sbA, sbB, sb);
 
             // + and -: promote both sides to the wider kind the way the
             // interpreter's Add/Sub read them, then use the overloaded operator.
@@ -308,9 +368,10 @@ public static class UserBulbSandboxEmitter
 
         // SbxVal3.Div. Quat/vec mixes (and quat/quat) take an odd branch in the
         // interpreter; they are left NotSupported so the GPU path falls back.
-        private static SbxEmitKind EmitDiv(SbxEmitKind ak, SbxEmitKind bk, string a, string b, StringBuilder sb)
+        private SbxEmitKind EmitDiv(SbxEmitKind ak, SbxEmitKind bk, StringBuilder a, StringBuilder b, StringBuilder sb)
         {
-            string A = "(" + a + ")", B = "(" + b + ")";
+            // Most forms read an operand per component: hoist both (#1111).
+            string A = Hoist(a, ak), B = Hoist(b, bk);
             if (ak == SbxEmitKind.Real && bk == SbxEmitKind.Real)
             {
                 sb.Append('(').Append(A).Append(" / ").Append(B).Append(')');
@@ -347,15 +408,16 @@ public static class UserBulbSandboxEmitter
             throw new NotSupportedException($"Emit: '/' between {ak} and {bk} is not supported.");
         }
 
-        private static SbxEmitKind EmitMul(SbxEmitKind ak, SbxEmitKind bk, StringBuilder sbA, StringBuilder sbB, StringBuilder sb)
+        private SbxEmitKind EmitMul(SbxEmitKind ak, SbxEmitKind bk, StringBuilder sbA, StringBuilder sbB, StringBuilder sb)
         {
-            // Vec3 has no `Vec3 * Vec3` — Hadamard written out.
+            // Vec3 has no `Vec3 * Vec3` — Hadamard written out, on hoisted operands.
             if (ak == SbxEmitKind.Vec && bk == SbxEmitKind.Vec)
             {
+                string a = Hoist(sbA, ak), b = Hoist(sbB, bk);
                 sb.Append("new Vec3(")
-                  .Append('(').Append(sbA).Append(").X * (").Append(sbB).Append(").X, ")
-                  .Append('(').Append(sbA).Append(").Y * (").Append(sbB).Append(").Y, ")
-                  .Append('(').Append(sbA).Append(").Z * (").Append(sbB).Append(").Z)");
+                  .Append(a).Append(".X * ").Append(b).Append(".X, ")
+                  .Append(a).Append(".Y * ").Append(b).Append(".Y, ")
+                  .Append(a).Append(".Z * ").Append(b).Append(".Z)");
                 return SbxEmitKind.Vec;
             }
             if ((ak == SbxEmitKind.Vec && bk == SbxEmitKind.Quat) || (ak == SbxEmitKind.Quat && bk == SbxEmitKind.Vec))
@@ -376,16 +438,14 @@ public static class UserBulbSandboxEmitter
 
         private SbxEmitKind EmitLet(Sbx3Let l, StringBuilder sb)
         {
-            // Inline substitution: emit the value expression as a string, push
-            // it onto _letSubs keyed by slot, then emit the body. EmitSlot
-            // intercepts references and pastes the value text. No delegate
-            // dispatch on the raymarch hot path.
+            // #1111 — the value becomes a local, evaluated once; EmitSlot reads
+            // it by name. (It used to paste the value's text at every use.)
             var sbVal = new StringBuilder();
             var vk = Emit(l.Value, sbVal);
             var prior = _slotKinds.TryGetValue(l.Slot, out var p) ? (SbxEmitKind?)p : null;
             _slotKinds[l.Slot] = vk;
             string? priorSub = _letSubs.TryGetValue(l.Slot, out var ps) ? ps : null;
-            _letSubs[l.Slot] = sbVal.ToString();
+            _letSubs[l.Slot] = Hoist(sbVal, vk);
             try
             {
                 var bk = Emit(l.Body, sb);
@@ -519,7 +579,7 @@ public static class UserBulbSandboxEmitter
                             if (n == 0) { sb.Append("Quat.Identity"); return SbxEmitKind.Quat; }
                             var sbBase = new StringBuilder();
                             EmitAsQuat(call.Args[0], sbBase);
-                            string baseS = sbBase.ToString();
+                            string baseS = n == 1 ? sbBase.ToString() : Hoist(sbBase, SbxEmitKind.Quat);
                             sb.Append('(').Append(baseS).Append(')');
                             for (int i = 1; i < n; i++) sb.Append(" * (").Append(baseS).Append(')');
                             return SbxEmitKind.Quat;
@@ -557,7 +617,7 @@ public static class UserBulbSandboxEmitter
                     // which is safe: emitted expressions have no side effects.
                     var arg = new StringBuilder();
                     var k = Emit(call.Args[0], arg);
-                    string a0 = "(" + arg + ")";
+                    string a0 = Hoist(arg, k);
                     if (k == SbxEmitKind.Quat)
                         sb.Append("(").Append(a0).Append(".W*").Append(a0).Append(".W + ")
                           .Append(a0).Append(".X*").Append(a0).Append(".X + ")
@@ -595,8 +655,10 @@ public static class UserBulbSandboxEmitter
 
         private SbxEmitKind EmitMathOrCompwise(Sbx3Node arg, StringBuilder sb, string fn, bool allowQuat)
         {
-            var sbArg = new StringBuilder();
-            var k = Emit(arg, sbArg);
+            var sbArgRaw = new StringBuilder();
+            var k = Emit(arg, sbArgRaw);
+            // Read per component: hoisted (#1111). A real is read once.
+            string sbArg = k == SbxEmitKind.Real ? sbArgRaw.ToString() : Hoist(sbArgRaw, k);
             if (k == SbxEmitKind.Vec)
             {
                 sb.Append("new Vec3(Math.").Append(fn).Append("((")
@@ -641,8 +703,11 @@ public static class UserBulbSandboxEmitter
             {
                 case SbxEmitKind.Vec: sb.Append(sbInner); break;
                 case SbxEmitKind.Real:
-                    sb.Append("new Vec3(").Append(sbInner).Append(", ").Append(sbInner).Append(", ").Append(sbInner).Append(')');
+                {
+                    string r = Hoist(sbInner, SbxEmitKind.Real);
+                    sb.Append("new Vec3(").Append(r).Append(", ").Append(r).Append(", ").Append(r).Append(')');
                     break;
+                }
                 case SbxEmitKind.Quat:
                     sb.Append('(').Append(sbInner).Append(").ToVec3()");
                     break;

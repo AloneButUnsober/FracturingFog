@@ -98,13 +98,13 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         // Vec mode: a stray Quat reference would mean a bug in the emitter
         // (Quat constants in a non-quat tree). Quat mode legitimately emits
         // Quat references — that's the whole point.
-        if (!quatMode && emit.Body!.Contains("Quat"))
+        if (!quatMode && ReferencesQuat(emit))
         {
             LastError = "GPU: vec-mode body unexpectedly references Quat.";
             return false;
         }
 
-        string kernelSrc = BuildKernelSource(emit.Body!, paramNames, quatMode);
+        string kernelSrc = BuildKernelSource(emit, paramNames, quatMode);
         Assembly? asm = TryRoslynCompile(kernelSrc, out var rerr);
         if (asm == null) { LastError = $"Roslyn compile failed: {rerr}"; return false; }
 
@@ -146,7 +146,7 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         var stepKind = quatMode ? SbxEmitKind.Quat : SbxEmitKind.Vec;
         var priorMap = new Dictionary<int, (string Name, SbxEmitKind Kind)>();
         var stepLocals = new List<string>(steps.Count); // local var names
-        var stepBodies = new List<string>(steps.Count); // emitted C# bodies
+        var stepBodies = new List<SbxEmitResult>(steps.Count); // emitted C# bodies
         for (int i = 0; i < steps.Count; i++)
         {
             string raw = string.IsNullOrWhiteSpace(steps[i].OutputName) ? $"step{i}" : steps[i].OutputName!;
@@ -156,11 +156,12 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
                 paramNames,
                 quatMode,
                 gpuTarget: true,
-                priorMap);
+                priorMap,
+                localPrefix: $"__s{i}_");   // #1111 — the steps' locals share one scope
             if (!emit.Ok) { LastError = $"Emitter rejected chain step {i}: {emit.Error}"; return false; }
-            if (!quatMode && emit.Body!.Contains("Quat"))
+            if (!quatMode && ReferencesQuat(emit))
             { LastError = $"GPU chain step {i}: vec-mode body unexpectedly references Quat."; return false; }
-            stepBodies.Add(emit.Body!);
+            stepBodies.Add(emit);
             stepLocals.Add(localName);
             priorMap[chain.StepOutputSlots[i]] = (localName, stepKind);
         }
@@ -275,11 +276,18 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
     /// <c>p.UseAnalyticDE</c> (power-map) vs 5-trajectory numerical Jacobian,
     /// and on <c>p.JuliaMode</c> (Julia substitution of c).
     /// </summary>
-    private static string BuildKernelSource(string stepBody, IReadOnlyList<string> paramNames, bool quatMode)
+    private static string BuildKernelSource(SbxEmitResult step, IReadOnlyList<string> paramNames, bool quatMode)
     {
         var sb = new StringBuilder();
-        AppendStepFn(sb, stepBody, paramNames, quatMode);
+        AppendStepFn(sb, step, paramNames, quatMode);
         return SpliceIntoTemplate(sb.ToString(), quatMode);
+    }
+
+    private static bool ReferencesQuat(SbxEmitResult emit)
+    {
+        if (emit.Body!.Contains("Quat")) return true;
+        foreach (var st in emit.Statements) if (st.Contains("Quat")) return true;
+        return false;
     }
 
     /// <summary>#1173-A — the shared kernel's source text (UserBulbShadeKernel.cs,
@@ -318,7 +326,7 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         return rd.ReadToEnd();
     }
 
-    private static void AppendStepFn(StringBuilder sb, string stepBody, IReadOnlyList<string> paramNames, bool quatMode)
+    private static void AppendStepFn(StringBuilder sb, SbxEmitResult step, IReadOnlyList<string> paramNames, bool quatMode)
     {
         string stepType = quatMode ? "Quat" : "Vec3";
         sb.Append("    private static ").Append(stepType).Append(" Step(").Append(stepType).Append(" z, ")
@@ -326,7 +334,8 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         for (int i = 0; i < paramNames.Count; i++)
             sb.Append("        double ").Append(paramNames[i]).Append(" = __p[").Append(i).AppendLine("];");
         sb.Append("        double t = __p[").Append(paramNames.Count).AppendLine("];");
-        sb.Append("        return ").Append(stepBody).AppendLine(";");
+        // #1111 — the emitter's locals (lets, multiply-used operands), then the result.
+        sb.AppendLine(step.MethodBody("        "));
         sb.AppendLine("    }");
     }
 
@@ -482,7 +491,7 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
     /// step's local. Surrounding DE / kernel scaffolding is identical to the
     /// single-step <see cref="BuildKernelSource"/>.</summary>
     private static string BuildChainKernelSource(
-        IReadOnlyList<string> stepBodies,
+        IReadOnlyList<SbxEmitResult> stepBodies,
         IReadOnlyList<string> stepLocals,
         IReadOnlyList<string> paramNames,
         bool quatMode)
@@ -499,8 +508,9 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         sb.Append("        double t = __p[").Append(paramNames.Count).AppendLine("];");
         for (int i = 0; i < stepBodies.Count; i++)
         {
+            foreach (var st in stepBodies[i].Statements) sb.Append("        ").AppendLine(st);
             sb.Append("        ").Append(stepType).Append(' ').Append(stepLocals[i])
-              .Append(" = ").Append(stepBodies[i]).AppendLine(";");
+              .Append(" = ").Append(stepBodies[i].Body).AppendLine(";");
         }
         sb.Append("        return ").Append(stepLocals[stepBodies.Count - 1]).AppendLine(";");
         sb.AppendLine("    }");

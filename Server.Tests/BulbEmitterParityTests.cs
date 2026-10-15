@@ -38,7 +38,7 @@ public sealed class BulbEmitterParityTests
         foreach (var (id, body, quat) in bodies)
         {
             string ty = quat ? "Quat" : "Vec3";
-            sb.Append($"  public static {ty} S{id}({ty} z, {ty} c, int n, double t) {{ return ").Append(body).AppendLine("; }");
+            sb.Append($"  public static {ty} S{id}({ty} z, {ty} c, int n, double t) {{ ").Append(body).AppendLine(" }");
         }
         sb.AppendLine("}");
 
@@ -135,7 +135,7 @@ public sealed class BulbEmitterParityTests
             try { e = SandboxBulbExpression.Parse(src, Extras); } catch (FormatException) { continue; }
             var r = Emitter.Emit(e.Root, Extras, quat, gpu);
             if (!r.Ok) { skipped.Add($"{src}: {r.Error}"); continue; }
-            items.Add((id++, src, e, r.Body!, quat));
+            items.Add((id++, src, e, r.MethodBody(), quat));
         }
 
         // Compile each body on its own so one gap can't hide behind another.

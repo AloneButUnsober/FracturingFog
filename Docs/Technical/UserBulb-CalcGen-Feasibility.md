@@ -46,6 +46,42 @@ The typed compile is gated by `S1110TypedBulbCompileTests` (raw-bit parity with
 the interpreter on the corpus in both modes, the chains, and the run-time-kind
 path).
 
+## #1111 result (2026-10-15): emitter locals shipped
+
+`UserBulbSandboxEmitter` used to paste a `let` value's text at every use, and
+did the same with any operand its output read more than once:
+- the Hadamard product and vec / vec division;
+- componentwise functions;
+- `norm`;
+- the real → vec broadcast;
+- an unfolded `qpow`.
+
+Chained folds therefore recomputed their inputs at every reference, and the
+text grew exponentially with the depth.
+
+It now declares each of those once, as a typed local (`SbxEmitResult.Statements`,
+`MethodBody`). The GPU `Step()` wrapper and the chain wrapper emit the locals
+before the result; each chain step gets its own prefix, since all the steps
+share one scope. The DSL is pure, so hoisting a value out of a ternary branch
+can't change a result.
+
+Measured with the same benchmark (the GPU column is the GPU route on this machine):
+
+| | Before | After |
+|---|---:|---:|
+| Menger fold, emitted C# (ns/step) | 530.2 | **53.3** (the tree walk: 496) |
+| Menger fold numerical, GPU frame (ms) | 16394 | **250** |
+| Other cases | — | unchanged (within noise) |
+
+Gated by:
+- `S1111EmitterLetLocalsTests`:
+  - Menger evaluates `abs` once;
+  - every multiply-read operand is computed once;
+  - the emitted calls stay linear in the AST size over the corpus;
+  - a chain emitted step by step matches the interpreter;
+  - the chain kernels JIT;
+- `BulbEmitterParityTests`, now run on the full method body.
+
 ## What exists today
 
 | Path | How an equation runs |
@@ -194,7 +230,7 @@ so headless renders stay reproducible.
 | Slice | What | Expected effect (from the tables) |
 |---|---|---|
 | **#1110** typed CPU compile (**done**, see above) | Compile the bulb AST to a **typed** Expression tree using the emitter's kind inference. Keep the dynamic compile as the fallback. Gate: `BulbEmitterParityTests`-style interpreter parity. | Transcendental maps 5–20× faster per step on the CPU; polynomial and fold maps unchanged. |
-| **#1111** emitter `let` locals | Emit `let` and statement locals as C# locals (a statement body) instead of pasting their text at every use. | Fixes the 0.7× regression on KIFS / chained folds, for CPU-typed code and GPU kernels alike. |
+| **#1111** emitter `let` locals (**done**, see above) | Emit `let` and statement locals as C# locals (a statement body) instead of pasting their text at every use. | Fixes the 0.7× regression on KIFS / chained folds, for CPU-typed code and GPU kernels alike. |
 | **#1112** GPU DE coverage | Add a Vec3 numerical-DE GPU kernel (Quat mode has one since Wave 4.6), plus Vec3 Julia. Give the exact quaternion DE (#115) a GPU form, or route that case to the CPU, which is faster today (33 vs 635 ms). Show why the GPU isn't used. | The slowest renders measured (Mandelbox / `z^4 + sin` numerical, ~8 s) get a GPU route at all. Where a numerical-DE GPU route exists today, this GT 710 ran 1.8–4.2× faster than the CPU (and slower for `qsin`), so a modern card should do much better. |
 
 **Not recommended:**

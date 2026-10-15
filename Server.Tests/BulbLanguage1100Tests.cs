@@ -98,7 +98,7 @@ public sealed class BulbLanguage1100Tests
             var em = UserBulbSandboxEmitter.Emit(e.Root, new[] { "t" }, quat);
             Assert.True(em.Ok, em.Error);
             var errors = new List<string>();
-            var type = BulbEmitterParityTests.Compile(new List<(int, string, bool)> { (0, em.Body!, quat) }, errors);
+            var type = BulbEmitterParityTests.Compile(new List<(int, string, bool)> { (0, em.MethodBody(), quat) }, errors);
             Assert.True(type != null, string.Join("\n", errors));
             var m = type!.GetMethod("S0")!;
             if (quat)

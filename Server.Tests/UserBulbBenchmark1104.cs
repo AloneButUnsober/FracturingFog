@@ -39,7 +39,7 @@ public sealed class UserBulbBenchmark1104
     private static Func<Vec3, Vec3, int, double, Vec3> CompileRoslyn(string body)
     {
         string src = "using System; using FracturingFog.Models; using FracturingFog.Calculators;\n" +
-                     "public static class B { public static Vec3 S(Vec3 z, Vec3 c, int n, double t) { return " + body + "; } }";
+                     "public static class B { public static Vec3 S(Vec3 z, Vec3 c, int n, double t) { " + body + " } }";
         var refs = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator)
             .Concat(new[] { typeof(Vec3).Assembly.Location }).Distinct(StringComparer.OrdinalIgnoreCase)
             .Where(File.Exists).Select(p => MetadataReference.CreateFromFile(p));
@@ -127,7 +127,7 @@ public sealed class UserBulbBenchmark1104
             string roslyn = "n/a";
             if (em.Ok)
             {
-                var f = CompileRoslyn(em.Body!);
+                var f = CompileRoslyn(em.MethodBody());
                 double r = NsPerStep((z, c, n) => f(z, c, n, 0.5), N);
                 roslyn = r.ToString("0.0");
             }
@@ -143,6 +143,7 @@ public sealed class UserBulbBenchmark1104
             ("z^8+c numerical DE", "z^8 + c", UserBulbAxisModeKind.Vec3, UserBulbDEModeKind.Numerical, false),
             ("mandelbox numerical", "var v = spherefold(boxfold(z, 1.0), 0.5, 1.0); v * 2.0 + c", UserBulbAxisModeKind.Vec3, UserBulbDEModeKind.Numerical, false),
             ("quartic+sin numerical", "z^4 + sin(z) * 0.5 + c", UserBulbAxisModeKind.Vec3, UserBulbDEModeKind.Numerical, false),
+            ("menger fold numerical (#1111)", Vec[3].Src, UserBulbAxisModeKind.Vec3, UserBulbDEModeKind.Numerical, false),
             ("quat julia z*z+c numerical", "z * z + c", UserBulbAxisModeKind.Quat, UserBulbDEModeKind.Numerical, true),
             ("quat julia z*z+c analytic (exact)", "z * z + c", UserBulbAxisModeKind.Quat, UserBulbDEModeKind.Analytic, true),
             ("quat qsin(z*z)+c numerical", "qsin(z * z) + c", UserBulbAxisModeKind.Quat, UserBulbDEModeKind.Numerical, true),
