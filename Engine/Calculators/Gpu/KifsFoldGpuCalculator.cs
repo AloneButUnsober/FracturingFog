@@ -9,12 +9,13 @@
 // (MengerGpuCalculator); only the DE differs. One kernel branches on the fold
 // (uniform across the launch) so Menger and Sierpinski keep their own lean kernels.
 //
-// The DEs are line-for-line ports of KifsCalculator.OctaDE / DodecaDE /
-// MandelboxRotDE AS SHIPPED. Those folds are approximations of their namesakes
-// (see the 5.9.f1 notes on the CPU methods); this is a parity port, not a fix —
-// the CPU is the reference. The per-iteration rotation coefficients come from the
-// host (KifsFoldGpuParams.Rot*), computed with the same Math.Cos / Math.Sin calls
-// as the CPU, so they match bit-for-bit and the kernel runs no trig per DE call.
+// The DEs are line-for-line twins of KifsCalculator.OctaDE / DodecaDE /
+// MandelboxRotDE — since #1197 the true folds (Knighty's octahedral and
+// dodecahedral KIFS folds; the canonical Mandelbox with a per-iteration
+// rotation). The CPU is the reference. Constants come from the host
+// (KifsFoldGpuParams: the dodecahedral normals, MandelboxRot's cos / sin) with
+// the CPU's own values, so they match bit-for-bit and the kernel runs no trig per
+// DE call.
 
 using System;
 using System.Threading;
@@ -33,8 +34,10 @@ public enum KifsGpuFold
 }
 
 /// <summary>Per-fractal kernel parameters for the Octahedron / Dodecahedron /
-/// MandelboxRot KIFS folds. <see cref="RotA"/> / <see cref="RotB"/> /
-/// <see cref="RotC"/> are the fold's rotation coefficients — use <see cref="For"/>.</summary>
+/// MandelboxRot KIFS folds — use <see cref="For"/>. Offsets are the fold-resolved
+/// ones (<c>KifsCalculator.FoldOffset</c>). <see cref="RotA"/> / <see cref="RotB"/>
+/// are MandelboxRot's cos / sin(π/48); <see cref="N1X"/>…<see cref="N3Z"/> the
+/// Dodecahedron's mirror normals (#1197).</summary>
 public struct KifsFoldGpuParams
 {
     public int Fold;
@@ -42,12 +45,13 @@ public struct KifsFoldGpuParams
     public double OffsetX, OffsetY, OffsetZ;
     public int DEIter;
     public double SceneRadius;
-    public double RotA, RotB, RotC;
+    public double RotA, RotB;
+    public double N1X, N1Y, N1Z, N2X, N2Y, N2Z, N3X, N3Y, N3Z;
 
-    /// <summary>Parameters for <paramref name="fold"/> with its rotation coefficients,
-    /// computed exactly as the CPU DE computes them: Octahedron cos / sin(30°) about
-    /// Y; Dodecahedron the Rodrigues k1 / k2 / k3 for 36° about (1, 1, 1)/√3;
-    /// MandelboxRot cos / sin(π/48) about Y.</summary>
+    /// <summary>Parameters for <paramref name="fold"/>, with the constants computed
+    /// exactly as the CPU DE uses them: MandelboxRot cos / sin of
+    /// <c>KifsCalculator.MandelboxRotAngle</c>; Dodecahedron
+    /// <c>KifsCalculator.DodecaNormals</c>. Octahedron needs none.</summary>
     public static KifsFoldGpuParams For(KifsGpuFold fold, double scale,
         double ox, double oy, double oz, int iter, double sceneRadius)
     {
@@ -58,29 +62,18 @@ public struct KifsFoldGpuParams
         };
         switch (fold)
         {
-            case KifsGpuFold.Octahedron:
-            {
-                const double rot = Math.PI / 6.0;
-                p.RotA = Math.Cos(rot); p.RotB = Math.Sin(rot);
-                break;
-            }
             case KifsGpuFold.Dodecahedron:
             {
-                const double ang = Math.PI / 5.0;
-                double cosA = Math.Cos(ang), sinA = Math.Sin(ang);
-                const double inv3 = 1.0 / 3.0;
-                const double invSqrt3 = 0.5773502691896258;
-                p.RotA = cosA + (1.0 - cosA) * inv3;
-                p.RotB = (1.0 - cosA) * inv3 - sinA * invSqrt3;
-                p.RotC = (1.0 - cosA) * inv3 + sinA * invSqrt3;
+                var n = KifsCalculator.DodecaNormals;
+                (p.N1X, p.N1Y, p.N1Z) = n[0];
+                (p.N2X, p.N2Y, p.N2Z) = n[1];
+                (p.N3X, p.N3Y, p.N3Z) = n[2];
                 break;
             }
-            default:
-            {
-                const double rot = Math.PI / 48.0;
-                p.RotA = Math.Cos(rot); p.RotB = Math.Sin(rot);
+            case KifsGpuFold.MandelboxRot:
+                p.RotA = Math.Cos(KifsCalculator.MandelboxRotAngle);
+                p.RotB = Math.Sin(KifsCalculator.MandelboxRotAngle);
                 break;
-            }
         }
         return p;
     }
@@ -509,116 +502,94 @@ public sealed class KifsFoldGpuCalculator : IDisposable
         return OctaDE(cx, cy, cz, in p);
     }
 
-    /// <summary>Twin of <c>KifsCalculator.OctaDE</c>: 30° Y pre-rotation, then the
-    /// Menger sort-3 + corner mirror.</summary>
+    /// <summary>Twin of <c>KifsCalculator.OctaDE</c> (#1197): Knighty's octahedral
+    /// fold (planes x+y, x+z, x−y, x−z), scale toward the resolved vertex, |z|·s⁻ⁿ.</summary>
     private static double OctaDE(double cx, double cy, double cz, in KifsFoldGpuParams p)
     {
         double scale = p.Scale;
         int iter = p.DEIter;
         double zx = cx, zy = cy, zz = cz;
         double k = scale - 1.0;
-        double offX = k * p.OffsetX;
-        double offY = k * p.OffsetY;
-        double offZ = k * p.OffsetZ;
-        double mirrorThresh = -0.5 * offZ;
-        double cosR = p.RotA;
-        double sinR = p.RotB;
+        double offX = k * p.OffsetX, offY = k * p.OffsetY, offZ = k * p.OffsetZ;
         for (int i = 0; i < iter; i++)
         {
-            double rxr = cosR * zx + sinR * zz;
-            double rzr = -sinR * zx + cosR * zz;
-            zx = rxr; zz = rzr;
-
-            zx = Math.Abs(zx); zy = Math.Abs(zy); zz = Math.Abs(zz);
             double t;
-            if (zx - zy < 0) { t = zx; zx = zy; zy = t; }
-            if (zx - zz < 0) { t = zx; zx = zz; zz = t; }
-            if (zy - zz < 0) { t = zy; zy = zz; zz = t; }
+            if (zx + zy < 0) { t = -zy; zy = -zx; zx = t; }
+            if (zx + zz < 0) { t = -zz; zz = -zx; zx = t; }
+            if (zx - zy < 0) { t = zy; zy = zx; zx = t; }
+            if (zx - zz < 0) { t = zz; zz = zx; zx = t; }
 
             zx = scale * zx - offX;
             zy = scale * zy - offY;
-            zz = scale * zz;
-            if (zz < mirrorThresh) zz += offZ;
+            zz = scale * zz - offZ;
         }
-        double rFinal = Math.Sqrt(zx * zx + zy * zy + zz * zz);
-        return (rFinal - 2.0) * Math.Pow(scale, -iter);
+        return Math.Sqrt(zx * zx + zy * zy + zz * zz) * Math.Pow(scale, -iter);
     }
 
-    /// <summary>Twin of <c>KifsCalculator.DodecaDE</c>: 36° rotation about (1, 1, 1)
-    /// per iteration, then the Sierpinski tetrahedron fold.</summary>
+    /// <summary>Twin of <c>KifsCalculator.DodecaDE</c> (#1197): three golden-ratio
+    /// mirror planes ×3 per iteration, scale toward the vertex, escape at r² 1e9,
+    /// |z|·s^−(n+1).</summary>
     private static double DodecaDE(double cx, double cy, double cz, in KifsFoldGpuParams p)
     {
         double scale = p.Scale;
         int iter = p.DEIter;
         double zx = cx, zy = cy, zz = cz;
         double k = scale - 1.0;
-        double offX = k * p.OffsetX;
-        double offY = k * p.OffsetY;
-        double offZ = k * p.OffsetZ;
-        double k1 = p.RotA, k2 = p.RotB, k3 = p.RotC;
-        for (int i = 0; i < iter; i++)
+        double offX = k * p.OffsetX, offY = k * p.OffsetY, offZ = k * p.OffsetZ;
+        int it = 0;
+        for (; it < iter; it++)
         {
-            double nx = k1 * zx + k2 * zy + k3 * zz;
-            double ny = k3 * zx + k1 * zy + k2 * zz;
-            double nz = k2 * zx + k3 * zy + k1 * zz;
-            zx = nx; zy = ny; zz = nz;
-
-            double t;
-            if (zx + zy < 0) { t = -zy; zy = -zx; zx = t; }
-            if (zx + zz < 0) { t = -zz; zz = -zx; zx = t; }
-            if (zy + zz < 0) { t = -zz; zz = -zy; zy = t; }
+            for (int rep = 0; rep < 3; rep++)
+            {
+                double d = zx * p.N1X + zy * p.N1Y + zz * p.N1Z;
+                if (d < 0) { zx -= 2 * d * p.N1X; zy -= 2 * d * p.N1Y; zz -= 2 * d * p.N1Z; }
+                d = zx * p.N2X + zy * p.N2Y + zz * p.N2Z;
+                if (d < 0) { zx -= 2 * d * p.N2X; zy -= 2 * d * p.N2Y; zz -= 2 * d * p.N2Z; }
+                d = zx * p.N3X + zy * p.N3Y + zz * p.N3Z;
+                if (d < 0) { zx -= 2 * d * p.N3X; zy -= 2 * d * p.N3Y; zz -= 2 * d * p.N3Z; }
+            }
 
             zx = scale * zx - offX;
             zy = scale * zy - offY;
             zz = scale * zz - offZ;
+            if (zx * zx + zy * zy + zz * zz > 1e9) break;
         }
-        double rFinal = Math.Sqrt(zx * zx + zy * zy + zz * zz);
-        return rFinal * Math.Pow(scale, -iter);
+        return Math.Sqrt(zx * zx + zy * zy + zz * zz) * Math.Pow(scale, -(it + 1));
     }
 
-    /// <summary>Twin of <c>KifsCalculator.MandelboxRotDE</c>: box fold at ±1, sphere
-    /// fold, π/48 Y rotation, scale + offset; the fixed-dr KIFS DE.</summary>
+    /// <summary>Twin of <c>KifsCalculator.MandelboxRotDE</c> (#1197): canonical
+    /// Mandelbox (box + sphere fold, running dr, c = point + offset delta) with the
+    /// per-iteration Y rotation; |z| / |dr|.</summary>
     private static double MandelboxRotDE(double cx, double cy, double cz, in KifsFoldGpuParams p)
     {
         double scale = p.Scale;
         int iter = p.DEIter;
+        double ccx = cx + p.OffsetX, ccy = cy + p.OffsetY, ccz = cz + p.OffsetZ;
         double zx = cx, zy = cy, zz = cz;
-        double k = scale - 1.0;
-        double offX = k * p.OffsetX;
-        double offY = k * p.OffsetY;
-        double offZ = k * p.OffsetZ;
-        double cosR = p.RotA;
-        double sinR = p.RotB;
+        double dr = 1.0;
+        double cosR = p.RotA, sinR = p.RotB;
+        double absScale = Math.Abs(scale);
         for (int i = 0; i < iter; i++)
         {
-            if      (zx >  1.0) zx =  2.0 - zx;
-            else if (zx < -1.0) zx = -2.0 - zx;
-            if      (zy >  1.0) zy =  2.0 - zy;
-            else if (zy < -1.0) zy = -2.0 - zy;
-            if      (zz >  1.0) zz =  2.0 - zz;
-            else if (zz < -1.0) zz = -2.0 - zz;
+            if (zx > 1.0) zx = 2.0 - zx; else if (zx < -1.0) zx = -2.0 - zx;
+            if (zy > 1.0) zy = 2.0 - zy; else if (zy < -1.0) zy = -2.0 - zy;
+            if (zz > 1.0) zz = 2.0 - zz; else if (zz < -1.0) zz = -2.0 - zz;
 
             double r2 = zx * zx + zy * zy + zz * zz;
-            if (r2 < 0.25)
-            {
-                zx *= 4.0; zy *= 4.0; zz *= 4.0;
-            }
-            else if (r2 < 1.0)
-            {
-                double m = 1.0 / r2;
-                zx *= m; zy *= m; zz *= m;
-            }
+            if (r2 < 0.25) { zx *= 4.0; zy *= 4.0; zz *= 4.0; dr *= 4.0; }
+            else if (r2 < 1.0) { double f = 1.0 / r2; zx *= f; zy *= f; zz *= f; dr *= f; }
 
             double nx = cosR * zx + sinR * zz;
             double nz = -sinR * zx + cosR * zz;
             zx = nx; zz = nz;
 
-            zx = scale * zx - offX;
-            zy = scale * zy - offY;
-            zz = scale * zz - offZ;
+            zx = scale * zx + ccx;
+            zy = scale * zy + ccy;
+            zz = scale * zz + ccz;
+            dr = dr * absScale + 1.0;
+            if (zx * zx + zy * zy + zz * zz > 1e6) break;
         }
-        double rFinal = Math.Sqrt(zx * zx + zy * zy + zz * zz);
-        return (rFinal - 2.0) * Math.Pow(scale, -iter);
+        return Math.Sqrt(zx * zx + zy * zy + zz * zz) / Math.Max(Math.Abs(dr), 1e-10);
     }
 
     public void Dispose() => _kernel = null;

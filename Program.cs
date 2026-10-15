@@ -561,11 +561,11 @@ static class Program
 
             (string name, FracturingFog.Models.KifsFoldKind fold, double scale)[] cases =
             {
-                ("Menger",       FracturingFog.Models.KifsFoldKind.Menger,       3.0),
-                ("Sierpinski",   FracturingFog.Models.KifsFoldKind.Sierpinski,   2.0),
-                ("Octahedron",   FracturingFog.Models.KifsFoldKind.Octahedron,   2.0),
-                ("Dodecahedron", FracturingFog.Models.KifsFoldKind.Dodecahedron, 2.0),
-                ("MandelboxRot", FracturingFog.Models.KifsFoldKind.MandelboxRot, 2.0),
+                ("Menger",       FracturingFog.Models.KifsFoldKind.Menger,       FracturingFog.KifsCalculator.ResolveScale(FracturingFog.Models.KifsFoldKind.Menger, 0)),
+                ("Sierpinski",   FracturingFog.Models.KifsFoldKind.Sierpinski,   FracturingFog.KifsCalculator.ResolveScale(FracturingFog.Models.KifsFoldKind.Sierpinski, 0)),
+                ("Octahedron",   FracturingFog.Models.KifsFoldKind.Octahedron,   FracturingFog.KifsCalculator.ResolveScale(FracturingFog.Models.KifsFoldKind.Octahedron, 0)),
+                ("Dodecahedron", FracturingFog.Models.KifsFoldKind.Dodecahedron, FracturingFog.KifsCalculator.ResolveScale(FracturingFog.Models.KifsFoldKind.Dodecahedron, 0)),
+                ("MandelboxRot", FracturingFog.Models.KifsFoldKind.MandelboxRot, FracturingFog.KifsCalculator.ResolveScale(FracturingFog.Models.KifsFoldKind.MandelboxRot, 0)),
             };
 
             const int N = 512;

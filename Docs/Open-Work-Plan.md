@@ -156,7 +156,7 @@ audio-reactive dialog without crash.
 | 5.6 | Allowlist negative tests for 19 new types | ✅ Shipped 2026-06-23 — +16 tests in `FractalTypeAllowlistTests.cs`; new enum-classification coverage assertion |
 | 5.7 | Headless visual-regression baseline (golden PNG per type) | ✅ Shipped 2026-06-23 — case set extended 22 → 41; baseline re-record deferred to user run |
 | 5.8 | `FractalParamsView.axaml` per-type extract | 🟡 Deferred — low pri per roadmap |
-| 5.9 | B.2 KIFS new folds (Mandelbox-rot / Octahedron / Dodecahedron) | 🔴 Bugged 2026-06-23 — enum values + DE bodies land but all three render incorrectly (Octa → cube, Dodeca → all-black, MandelboxRot → stepped-ridge cube). Fix deferred. See status log. |
+| 5.9 | B.2 KIFS new folds (Mandelbox-rot / Octahedron / Dodecahedron) | ✅ **Fixed 2026-10-14 (#1197)** — Knighty's octahedral / dodecahedral folds (as in Fragmentarium's KIFS examples) scaling toward a real vertex (offset read fold-relative), and the canonical Mandelbox DE + rotation with Mandelbox framing; CPU + GPU twins. Was: 🔴 Bugged 2026-06-23 (Octa → cube, Dodeca → all-black, MandelboxRot → stepped-ridge cube). |
 | 5.10 | D.5 L-System 5 more presets | ✅ Shipped 2026-06-23 — Crystal / Quadratic Koch Island / Twindragon / Bush / Sierpinski Carpet |
 | 5.11 | D.4 Flame next 8-16 Apophysis variations | ✅ Shipped 2026-06-23 — +10: Horseshoe / Spiral / Hyperbolic / Diamond / Ex / Bent / Fisheye / Exponential / Power / Cosine |
 | 5.12 | B.4 Kleinian user-editable sphere list + Möbius composition + analytic DE | 🟡 Deferred — heavy multi-file refactor |
@@ -271,7 +271,7 @@ Everything still OPEN, each with enough context to act without re-deriving:
 | **6.1.f1** | Remaining perturbation tail item (pre-session backlog). | — | — | Re-scope when reached; likely subsumed by the SM-2..SM-11 work. |
 
 Cross-thread (NOT this session's deep-zoom line, tracked in memory): KIFS folds
-5.9.f1 (Octahedron/Dodecahedron/MandelboxRot broken, `--kifsprobe`); Animation
+5.9.f1 (Octahedron/Dodecahedron/MandelboxRot — fixed in #1197); Animation
 roadmap D.1-D.6; Scene Engine IBL-rotation / rack-focus / audio-reactive.
 
 ## Status log

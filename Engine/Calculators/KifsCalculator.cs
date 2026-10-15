@@ -83,19 +83,16 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
 
         var fold = FractalParameters.KifsFold;
         // Default scale depends on fold table. Sentinel 0.0 means "use the
-        // canonical default for this fold". Per-fold defaults:
+        // canonical default for this fold" (ResolveScale):
         //   Menger        — 3.0 (Knighty)
         //   Sierpinski    — 2.0 (Knighty)
-        //   Octahedron    — 2.0 (Menger minus z-mirror; tighter scale)
-        //   Dodecahedron  — 2.0 (Knighty PHI fold)
+        //   Octahedron    — 2.0 (Knighty octahedral fold, #1197)
+        //   Dodecahedron  — φ² ≈ 2.618 (Knighty dodecahedral fold, #1197)
         //   MandelboxRot  — 2.0 (classic Mandelbox)
-        double rawScale = FractalParameters.KifsScale;
-        double scale = rawScale > 0.0
-            ? rawScale
-            : (fold == KifsFoldKind.Menger ? 3.0 : 2.0);
-        double ox = FractalParameters.KifsOffsetX;
-        double oy = FractalParameters.KifsOffsetY;
-        double oz = FractalParameters.KifsOffsetZ;
+        double scale = ResolveScale(fold, FractalParameters.KifsScale);
+        // #1197 — fold-relative offsets (see FoldOffset).
+        var (ox, oy, oz) = FoldOffset(fold,
+            FractalParameters.KifsOffsetX, FractalParameters.KifsOffsetY, FractalParameters.KifsOffsetZ);
         int deIter = Math.Max(2, FractalParameters.KifsIterations);
         int maxSteps = Math.Max(16, FractalParameters.KifsMaxSteps);
         double eps = Math.Max(1e-5, FractalParameters.KifsEpsilon);
@@ -109,11 +106,22 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
             KifsFoldKind.Sierpinski   => 2.5,
             KifsFoldKind.Octahedron   => 2.5,
             KifsFoldKind.Dodecahedron => 2.8,
-            KifsFoldKind.MandelboxRot => 3.5,
+            // #1197 — a true Mandelbox spans |z| ≤ 2·|scale| + 2 (MandelboxCalculator's
+            // framing); the old fixed-dr look-alike fitted inside 3.5.
+            KifsFoldKind.MandelboxRot => 2.0 * Math.Abs(scale) + 2.0,
             _                         => 3.0, // Menger
         };
         double camDistFloor = setRadius + 0.5;
         double rawCamDist = FractalParameters.KifsCameraDistance / Math.Max(0.05, Zoom);
+        if (fold == KifsFoldKind.MandelboxRot)
+        {
+            // #1197 — the camera distance is tuned for unit-sized KIFS shapes (4 for a
+            // ~2.5 radius). A true Mandelbox is ~2·|scale|+2 across, so frame it the
+            // way MandelboxCalculator does (distance 12 for radius 6): scale the user's
+            // distance with the body and keep the eye a unit outside it.
+            rawCamDist *= setRadius / 2.0;
+            camDistFloor = setRadius + 1.0;
+        }
         double camDist = Math.Max(camDistFloor, rawCamDist);
         double camTheta = FractalParameters.KifsCameraTheta;
         double camPhi = FractalParameters.KifsCameraPhi;
@@ -467,183 +475,171 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
             _                         => MengerDE(x, y, z, scale, ox, oy, oz, iter),
         };
 
+    // ── #1197 — true Octahedron / Dodecahedron / Mandelbox-rot folds ─────────
+    //
+    // The polyhedral folds follow Knighty's Kaleidoscopic IFS formulation
+    // (fractalforums.com, "Kaleidoscopic (escape time IFS)"), as published in
+    // Syntopia's Fragmentarium examples (Examples/Kaleidoscopic IFS/
+    // Octahedron.frag, Dodecahedron.frag). The key to each is scaling toward a
+    // real VERTEX of the polyhedron: the earlier ports scaled toward the shared
+    // default offset (1, 1, 1) — a cube corner — which collapsed the octahedron
+    // into a solid cube. FoldOffset maps the user offset onto each fold's vertex.
+    // MandelboxRot is the canonical Mandelbox (MandelboxCalculator's running-
+    // derivative DE) with a per-iteration rotation.
+    //
+    // Keep these in lockstep with KifsFoldGpuCalculator's twins.
+
+    /// <summary>#1197 — golden ratio φ.</summary>
+    public const double Phi = 1.6180339887498949;
+
+    /// <summary>#1197 — the fold's scale: the user's when set (&gt; 0), else the fold's
+    /// canonical one — Menger 3, Dodecahedron φ² (Knighty / Fragmentarium), others 2.</summary>
+    public static double ResolveScale(KifsFoldKind fold, double rawScale)
+        => rawScale > 0.0 ? rawScale : fold switch
+        {
+            KifsFoldKind.Menger       => 3.0,
+            KifsFoldKind.Dodecahedron => Phi * Phi,
+            _                         => 2.0,
+        };
+
     /// <summary>
-    /// Octahedron fold — Menger sponge with rotated coord system. Pre-iter
-    /// rotation by 30° around the Y axis swings the sort axes off the world
-    /// axes, so the Menger holes-in-corners pattern emerges along diagonals
-    /// instead of cardinal axes. Visually a tilted / faceted version of the
-    /// Menger sponge — reads as an octahedral approximation when viewed from
-    /// the default camera angle.
-    ///
-    /// NOTE (5.9.f1): a faithful Mandelbulber-style apex-fold port was attempted
-    /// but the <c>--kifsprobe</c> harness showed it collapses to a solid cube
-    /// (hitFrac 1.0, radius signature 1:√2:√3). Reverted to the shipped
-    /// rotated-Menger approximation, which at least keeps the Menger facets. A
-    /// correct octahedral IFS still needs a reference formula + visual iteration
-    /// — see the 5.9.f1 status log. The probe is now in place to gate that work.
+    /// #1197 — the offset the fold actually uses. The KIFS offset is shared by every
+    /// fold and defaults to (1, 1, 1), the scaling vertex of Menger, Sierpinski and
+    /// the dodecahedron. It is read RELATIVE to that default: the fold's own vertex
+    /// plus (offset − (1, 1, 1)). So defaults give each fold its true shape and a
+    /// tweak moves it the same way for every fold.
+    /// <list type="bullet">
+    /// <item>Octahedron — vertex (1, 0, 0).</item>
+    /// <item>MandelboxRot — no scaling vertex (c is the point itself); the delta
+    /// shifts c instead.</item>
+    /// <item>Menger / Sierpinski / Dodecahedron — unchanged (vertex (1, 1, 1)).</item>
+    /// </list>
+    /// </summary>
+    public static (double X, double Y, double Z) FoldOffset(KifsFoldKind fold, double ox, double oy, double oz)
+        => fold switch
+        {
+            KifsFoldKind.Octahedron   => (ox, oy - 1.0, oz - 1.0),
+            KifsFoldKind.MandelboxRot => (ox - 1.0, oy - 1.0, oz - 1.0),
+            _                         => (ox, oy, oz),
+        };
+
+    /// <summary>#1197 — the dodecahedral fold's three mirror normals (Knighty):
+    /// (−1, φ−1, 1/(φ−1)), (φ−1, 1/(φ−1), −1), (1/(φ−1), −1, φ−1), normalised.</summary>
+    public static readonly (double X, double Y, double Z)[] DodecaNormals = BuildDodecaNormals();
+
+    private static (double X, double Y, double Z)[] BuildDodecaNormals()
+    {
+        double a = Phi - 1.0, b = 1.0 / (Phi - 1.0);
+        static (double, double, double) N(double x, double y, double z)
+        {
+            double l = Math.Sqrt(x * x + y * y + z * z);
+            return (x / l, y / l, z / l);
+        }
+        return new[] { N(-1.0, a, b), N(a, b, -1.0), N(b, -1.0, a) };
+    }
+
+    /// <summary>Per-iteration Y rotation of the Mandelbox-rot fold (π/48).</summary>
+    public const double MandelboxRotAngle = Math.PI / 48.0;
+
+    /// <summary>
+    /// Octahedron — Knighty's octahedral fold: four mirror planes x+y, x+z, x−y,
+    /// x−z (folding into the octahedron's fundamental domain), then scale toward
+    /// the vertex (1, 0, 0) (offset via <see cref="FoldOffset"/>). DE = |z|·s⁻ⁿ.
     /// </summary>
     private static double OctaDE(double cx, double cy, double cz,
         double scale, double ox, double oy, double oz, int iter)
     {
         double zx = cx, zy = cy, zz = cz;
         double k = scale - 1.0;
-        double offX = k * ox;
-        double offY = k * oy;
-        double offZ = k * oz;
-        double mirrorThresh = -0.5 * offZ;
-        const double rot = Math.PI / 6.0; // 30°
-        double cosR = Math.Cos(rot);
-        double sinR = Math.Sin(rot);
+        double offX = k * ox, offY = k * oy, offZ = k * oz;
         for (int i = 0; i < iter; i++)
         {
-            // Y-axis pre-rotation — twists the Menger fold off the cardinal
-            // axes, producing the octahedral-facet pattern.
-            double rxr = cosR * zx + sinR * zz;
-            double rzr = -sinR * zx + cosR * zz;
-            zx = rxr; zz = rzr;
-
-            // Menger sort-3 + corner mirror.
-            zx = Math.Abs(zx); zy = Math.Abs(zy); zz = Math.Abs(zz);
             double t;
-            if (zx - zy < 0) { t = zx; zx = zy; zy = t; }
-            if (zx - zz < 0) { t = zx; zx = zz; zz = t; }
-            if (zy - zz < 0) { t = zy; zy = zz; zz = t; }
+            if (zx + zy < 0) { t = -zy; zy = -zx; zx = t; }
+            if (zx + zz < 0) { t = -zz; zz = -zx; zx = t; }
+            if (zx - zy < 0) { t = zy; zy = zx; zx = t; }
+            if (zx - zz < 0) { t = zz; zz = zx; zx = t; }
 
             zx = scale * zx - offX;
             zy = scale * zy - offY;
-            zz = scale * zz;
-            if (zz < mirrorThresh) zz += offZ;
+            zz = scale * zz - offZ;
         }
-        double rFinal = Math.Sqrt(zx * zx + zy * zy + zz * zz);
-        return (rFinal - 2.0) * Math.Pow(scale, -iter);
+        return Math.Sqrt(zx * zx + zy * zy + zz * zz) * Math.Pow(scale, -iter);
     }
 
     /// <summary>
-    /// Dodecahedron-flavoured fold — Sierpinski tetrahedron with a per-iter
-    /// rotation around the (1, 1, 1) diagonal axis (axis-angle 36° per iter).
-    /// The accumulated rotation breaks the 4-fold tetrahedral symmetry into a
-    /// 5-fold-ish pentagonal pattern reminiscent of icosahedral filaments.
-    ///
-    /// NOTE (5.9.f1): an exact Coxeter [5,3] mirror-plane icosahedral fold was
-    /// attempted but the <c>--kifsprobe</c> harness showed it diverges to an
-    /// all-black render (hitFrac 0.0) — the scale-from-vertex sends every orbit
-    /// to infinity because the user offset is not an icosahedron vertex.
-    /// Reverted to the shipped rotated-Sierpinski, which at least renders a
-    /// visible (if not truly dodecahedral) shape. A correct icosahedral IFS
-    /// needs the scaling centre pinned to a real vertex + visual iteration —
-    /// see the 5.9.f1 status log.
+    /// Dodecahedron — Knighty's dodecahedral (icosahedral-symmetry) fold: three
+    /// golden-ratio mirror planes, applied three times per iteration, then scale
+    /// toward the dodecahedron vertex (1, 1, 1) at scale φ². Escapes past r² 1e9;
+    /// DE = |z|·s^−(n+1) (Fragmentarium's "subtract one" form).
     /// </summary>
     private static double DodecaDE(double cx, double cy, double cz,
         double scale, double ox, double oy, double oz, int iter)
     {
+        var n = DodecaNormals;
+        double n1x = n[0].X, n1y = n[0].Y, n1z = n[0].Z;
+        double n2x = n[1].X, n2y = n[1].Y, n2z = n[1].Z;
+        double n3x = n[2].X, n3y = n[2].Y, n3z = n[2].Z;
         double zx = cx, zy = cy, zz = cz;
         double k = scale - 1.0;
-        double offX = k * ox;
-        double offY = k * oy;
-        double offZ = k * oz;
-        // 36° per-iter rotation around the (1, 1, 1) diagonal — Rodrigues
-        // rotation matrix collapsed to inline coefficients.
-        const double ang = Math.PI / 5.0; // 36°
-        double cosA = Math.Cos(ang);
-        double sinA = Math.Sin(ang);
-        const double inv3 = 1.0 / 3.0;                  // axis component squared
-        const double invSqrt3 = 0.5773502691896258;     // 1/√3
-        // Rodrigues entries for axis (1,1,1)/√3:
-        // R_ii = cos + (1-cos)·(1/3)
-        // R_ij (i!=j) = (1-cos)·(1/3) ± sin·(1/√3)
-        double k1 = cosA + (1.0 - cosA) * inv3;
-        double k2 = (1.0 - cosA) * inv3 - sinA * invSqrt3;
-        double k3 = (1.0 - cosA) * inv3 + sinA * invSqrt3;
-
-        for (int i = 0; i < iter; i++)
+        double offX = k * ox, offY = k * oy, offZ = k * oz;
+        int it = 0;
+        for (; it < iter; it++)
         {
-            // Rotate around (1,1,1)/√3 by 36°.
-            double nx = k1 * zx + k2 * zy + k3 * zz;
-            double ny = k3 * zx + k1 * zy + k2 * zz;
-            double nz = k2 * zx + k3 * zy + k1 * zz;
-            zx = nx; zy = ny; zz = nz;
+            for (int rep = 0; rep < 3; rep++)
+            {
+                double d = zx * n1x + zy * n1y + zz * n1z;
+                if (d < 0) { zx -= 2 * d * n1x; zy -= 2 * d * n1y; zz -= 2 * d * n1z; }
+                d = zx * n2x + zy * n2y + zz * n2z;
+                if (d < 0) { zx -= 2 * d * n2x; zy -= 2 * d * n2y; zz -= 2 * d * n2z; }
+                d = zx * n3x + zy * n3y + zz * n3z;
+                if (d < 0) { zx -= 2 * d * n3x; zy -= 2 * d * n3y; zz -= 2 * d * n3z; }
+            }
 
-            // Sierpinski tetrahedron fold.
-            double t;
-            if (zx + zy < 0) { t = -zy; zy = -zx; zx = t; }
-            if (zx + zz < 0) { t = -zz; zz = -zx; zx = t; }
-            if (zy + zz < 0) { t = -zz; zz = -zy; zy = t; }
-
-            // Scale from corner.
             zx = scale * zx - offX;
             zy = scale * zy - offY;
             zz = scale * zz - offZ;
+            if (zx * zx + zy * zy + zz * zz > 1e9) break;
         }
-        double rFinal = Math.Sqrt(zx * zx + zy * zy + zz * zz);
-        return rFinal * Math.Pow(scale, -iter);
+        return Math.Sqrt(zx * zx + zy * zy + zz * zz) * Math.Pow(scale, -(it + 1));
     }
 
     /// <summary>
-    /// Mandelbox-style KIFS fold. Per iter:
-    ///   box-fold at ±1        (reflect points outside [−1,1] inward)
-    ///   sphere-fold           (radial scale: r&lt;½ → 4·z; ½&lt;r&lt;1 → z/r²)
-    ///   Y-axis rotation π/48  (per-iter twist)
-    ///   z = scale·z − (scale−1)·offset
-    /// Uses the fixed-dr KIFS DE scheme (no per-iter |dz| tracking), so the
-    /// result is visually Mandelbox-flavoured but is NOT the canonical
-    /// Mandelbox DE — the proper sphere-fold + dr-magnitude update lives in
-    /// <c>MandelboxCalculator</c>.
-    ///
-    /// NOTE (5.9.f1): the documented dr-accumulator fix (DE = length/dr with
-    /// dr updated by the sphere-fold factor and dr·|scale|+1 per iter) was
-    /// implemented and probed. The <c>--kifsprobe</c> harness showed it makes
-    /// the object span to radius ~6 — larger than this fold's camera
-    /// <c>setRadius</c> (3.5), so the camera would sit inside the body. Reverted
-    /// to the shipped fixed-dr scheme rather than ship an unverifiable framing
-    /// regression; a correct fix needs the dr accumulator *and* a matched
-    /// camera-distance retune, verified visually. See the 5.9.f1 status log.
+    /// Mandelbox-rot — the canonical Mandelbox (box fold at ±1, sphere fold with
+    /// min radius ½ / fixed radius 1, z = s·z + c, running derivative dr, DE =
+    /// |z| / |dr| — as <c>MandelboxCalculator</c>) with a π/48 rotation about Y
+    /// each iteration. The rotation is an isometry, so dr is unchanged by it.
+    /// c is the point itself, shifted by the offset delta (<see cref="FoldOffset"/>).
     /// </summary>
     private static double MandelboxRotDE(double cx, double cy, double cz,
         double scale, double ox, double oy, double oz, int iter)
     {
+        double ccx = cx + ox, ccy = cy + oy, ccz = cz + oz;
         double zx = cx, zy = cy, zz = cz;
-        double k = scale - 1.0;
-        double offX = k * ox;
-        double offY = k * oy;
-        double offZ = k * oz;
-        const double rot = Math.PI / 48.0;
-        double cosR = Math.Cos(rot);
-        double sinR = Math.Sin(rot);
+        double dr = 1.0;
+        double cosR = Math.Cos(MandelboxRotAngle), sinR = Math.Sin(MandelboxRotAngle);
+        double absScale = Math.Abs(scale);
         for (int i = 0; i < iter; i++)
         {
-            // Box-fold at ±1.
-            if      (zx >  1.0) zx =  2.0 - zx;
-            else if (zx < -1.0) zx = -2.0 - zx;
-            if      (zy >  1.0) zy =  2.0 - zy;
-            else if (zy < -1.0) zy = -2.0 - zy;
-            if      (zz >  1.0) zz =  2.0 - zz;
-            else if (zz < -1.0) zz = -2.0 - zz;
+            if (zx > 1.0) zx = 2.0 - zx; else if (zx < -1.0) zx = -2.0 - zx;
+            if (zy > 1.0) zy = 2.0 - zy; else if (zy < -1.0) zy = -2.0 - zy;
+            if (zz > 1.0) zz = 2.0 - zz; else if (zz < -1.0) zz = -2.0 - zz;
 
-            // Sphere-fold — pulls points near origin outward, points in the
-            // [½, 1] shell get rescaled toward the unit sphere.
             double r2 = zx * zx + zy * zy + zz * zz;
-            if (r2 < 0.25)
-            {
-                zx *= 4.0; zy *= 4.0; zz *= 4.0;
-            }
-            else if (r2 < 1.0)
-            {
-                double m = 1.0 / r2;
-                zx *= m; zy *= m; zz *= m;
-            }
+            if (r2 < 0.25) { zx *= 4.0; zy *= 4.0; zz *= 4.0; dr *= 4.0; }
+            else if (r2 < 1.0) { double f = 1.0 / r2; zx *= f; zy *= f; zz *= f; dr *= f; }
 
-            // Y-axis rotation.
             double nx = cosR * zx + sinR * zz;
             double nz = -sinR * zx + cosR * zz;
             zx = nx; zz = nz;
 
-            // Scale + offset.
-            zx = scale * zx - offX;
-            zy = scale * zy - offY;
-            zz = scale * zz - offZ;
+            zx = scale * zx + ccx;
+            zy = scale * zy + ccy;
+            zz = scale * zz + ccz;
+            dr = dr * absScale + 1.0;
+            if (zx * zx + zy * zy + zz * zz > 1e6) break;
         }
-        double rFinal = Math.Sqrt(zx * zx + zy * zy + zz * zz);
-        return (rFinal - 2.0) * Math.Pow(scale, -iter);
+        return Math.Sqrt(zx * zx + zy * zy + zz * zz) / Math.Max(Math.Abs(dr), 1e-10);
     }
 
     /// <summary>Wave 5.9.f1 — test hook exposing <see cref="DispatchDE"/> for the
@@ -652,5 +648,9 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
     public static double ProbeDE(KifsFoldKind fold,
         double x, double y, double z,
         double scale, double ox, double oy, double oz, int iter)
-        => DispatchDE(fold, x, y, z, scale, ox, oy, oz, iter);
+    {
+        // #1197 — callers pass the user offset; resolve it per fold like Calculate.
+        var (fx, fy, fz) = FoldOffset(fold, ox, oy, oz);
+        return DispatchDE(fold, x, y, z, scale, fx, fy, fz, iter);
+    }
 }

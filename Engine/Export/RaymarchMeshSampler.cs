@@ -100,10 +100,7 @@ public static class RaymarchMeshSampler
             case FractalType.Kifs:
             {
                 var fold = p.KifsFold;
-                double rawScale = p.KifsScale;
-                double scale = rawScale > 0.0
-                    ? rawScale
-                    : (fold == KifsFoldKind.Menger ? 3.0 : 2.0);
+                double scale = KifsCalculator.ResolveScale(fold, p.KifsScale);   // #1197
                 double ox = p.KifsOffsetX, oy = p.KifsOffsetY, oz = p.KifsOffsetZ;
                 int iter = Math.Max(2, p.KifsIterations);
                 return new DelegateDeAdapter((x, y, z) =>
