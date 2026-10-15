@@ -153,6 +153,10 @@ public readonly struct ReliefUniforms
     // #1027 — true-height hit test (vertical gap) vs the default plate test.
     public readonly bool TrueHeight;
 
+    // #1178 — the DebugAov view (AovView as int; 0 = Beauty). The kernel / twin encode
+    // it in ShadeFlat (ShadingPipeline.EncodeAov), so a view no longer forces the CPU.
+    public readonly int AovMode;
+
     // 4d-ii — flattened HDRI equirect environment (ReliefHdriBuffer.Flatten of the
     // resolved HdriImage) uploaded as the t4 SRV. Null when SkyMode != Hdri or the
     // environment name doesn't resolve → the twin/kernels fall back to the #168
@@ -207,9 +211,10 @@ public readonly struct ReliefUniforms
         int lType2 = 0, double lPos2x = 0, double lPos2y = 0, double lPos2z = 0, double lRange2 = 0, double lInner2 = 1, double lOuter2 = 1,
         int volumeLightMask = 0x7,
         double shadowK0 = double.NaN, double shadowK1 = double.NaN, double shadowK2 = double.NaN,
-        bool trueHeight = false)
+        bool trueHeight = false, int aovMode = 0)
     {
         TrueHeight = trueHeight;
+        AovMode = aovMode;
         W = w; H = h; Hw = hw; Hh = hh; Sy = sy; Aspect = aspect;
         InvLip = invLip; Bicubic = bicubic; Cam = cam;
         L0x = l0x; L0y = l0y; L0z = l0z; I0 = i0; C0r = c0r; C0g = c0g; C0b = c0b;
@@ -337,7 +342,8 @@ public readonly struct ReliefUniforms
             ShadingPipeline.EffectiveShadowK(fx.ShadowSoftK, fx.Light1.AreaAngularRadius),
             ShadingPipeline.EffectiveShadowK(fx.ShadowSoftK, fx.Light2.AreaAngularRadius),
             ShadingPipeline.EffectiveShadowK(fx.ShadowSoftK, fx.Light3.AreaAngularRadius),
-            trueHeight: p.Relief2DTrueHeight);
+            trueHeight: p.Relief2DTrueHeight,
+            aovMode: (int)fx.DebugAov);
     }
 
     /// <summary>S3 (#389) — lens taps the GPU kernel + twin average when DOF is on.
@@ -506,6 +512,7 @@ public static class ReliefRaymarchGpu
             double t = Math.Max(t0, 0.0) + cam.Eps0;
             double tPrev = t, d = 0.0;
             bool hit = false;
+            int hitStep = 0;   // #1178 — Step-count view
             for (int s = 0; s < cam.MaxSteps && t < t1 + cam.By; s++)
             {
                 marchSteps++;
@@ -514,7 +521,7 @@ public static class ReliefRaymarchGpu
                 // #1027 — hit when the VERTICAL gap (d / invLip, world units) is
                 // within the tolerance. Comparing the Lipschitz-scaled d stopped every
                 // ray at the box top on fine fields (tiny invLip) — a flat plate.
-                if (d < (u.TrueHeight ? epsT * u.InvLip : epsT)) { hit = true; break; }
+                if (d < (u.TrueHeight ? epsT * u.InvLip : epsT)) { hit = true; hitStep = s; break; }
                 tPrev = t;
                 double adv = Math.Max(d, epsT * 0.5);
                 // 4f — empty-space skip. When the ray point is safely above the
@@ -551,8 +558,8 @@ public static class ReliefRaymarchGpu
                 uint alb = HeightfieldRaymarch2D.SampleAlbedoBilinear(albedo, w, h, uu, vv);
                 if (u.TriplanarStrength > 0 && u.TriplanarKind != 0)
                     alb = ApplyTriplanar(alb, hx, hy, hz, nx, ny, nz, in u);
-                uint shaded = ShadeFlat(nx, ny, nz, -rdx, -rdy, -rdz, hx, hy, hz, alb, in sde, in u);
-                shaded = ApplyFogVolume(shaded, ox, oy, oz, rdx, rdy, rdz, tf, in sde, in u);
+                uint shaded = ShadeFlat(nx, ny, nz, -rdx, -rdy, -rdz, hx, hy, hz, alb, in sde, in u, tf, hitStep);
+                if (u.AovMode == 0) shaded = ApplyFogVolume(shaded, ox, oy, oz, rdx, rdy, rdz, tf, in sde, in u);   // #1178 — a view is fog-free
 
                 // #455 — dissolve the terrain FOOTPRINT edge into what is behind
                 // it (floor when the ground plane is on, else sky / drop). Twin of
@@ -565,10 +572,10 @@ public static class ReliefRaymarchGpu
                     uint behind;
                     if (cam.GroundPlane)
                     {
-                        behind = ShadeFlat(0.0, 1.0, 0.0, -rdx, -rdy, -rdz, hx, 0.0, hz, u.FloorAlbedo, in sde, in u);
+                        behind = ShadeFlat(0.0, 1.0, 0.0, -rdx, -rdy, -rdz, hx, 0.0, hz, u.FloorAlbedo, in sde, in u, tf, 0);
                         // #310 — twin of the HLSL fix: fog the dissolve's floor at the terrain
                         // distance, as the CPU Shade does (was a fog-free floor → dark edge band).
-                        behind = ApplyFogVolume(behind, ox, oy, oz, rdx, rdy, rdz, tf, in sde, in u);
+                        if (u.AovMode == 0) behind = ApplyFogVolume(behind, ox, oy, oz, rdx, rdy, rdz, tf, in sde, in u);
                     }
                     else
                     {
@@ -593,8 +600,8 @@ public static class ReliefRaymarchGpu
                 double gx = ox + rdx * tp, gz = oz + rdz * tp;
                 if (Math.Abs(gx) <= cam.FloorBx && Math.Abs(gz) <= cam.FloorBz)
                 {
-                    uint fShaded = ShadeFlat(0.0, 1.0, 0.0, -rdx, -rdy, -rdz, gx, 0.0, gz, u.FloorAlbedo, in sde, in u);
-                    fShaded = ApplyFogVolume(fShaded, ox, oy, oz, rdx, rdy, rdz, tp, in sde, in u);
+                    uint fShaded = ShadeFlat(0.0, 1.0, 0.0, -rdx, -rdy, -rdz, gx, 0.0, gz, u.FloorAlbedo, in sde, in u, tp, 0);
+                    if (u.AovMode == 0) fShaded = ApplyFogVolume(fShaded, ox, oy, oz, rdx, rdy, rdz, tp, in sde, in u);
                     onx = 0.0; ony = 1.0; onz = 0.0; odep = tp;
                     return (fShaded, false);
                 }
@@ -617,7 +624,8 @@ public static class ReliefRaymarchGpu
     private static uint ShadeFlat(double nx, double ny, double nz,
                                   double vx, double vy, double vz,
                                   double px, double py, double pz, uint albedo,
-                                  in HeightfieldRaymarch2D.HeightShadeDe de, in ReliefUniforms u)
+                                  in HeightfieldRaymarch2D.HeightShadeDe de, in ReliefUniforms u,
+                                  double aovT = 0.0, int aovStep = 0)
     {
         // 4b — per-light soft shadow. IQ penumbra DE-march toward each light,
         // gating DIRECT lighting (diffuse + spec) only; ambient is left alone.
@@ -697,6 +705,13 @@ public static class ReliefRaymarchGpu
             }
             ao = Math.Clamp(1.0 - u.AoStrength * (occl / Math.Max(wsum, 1.0)), 0, 1);
         }
+
+        // #1178 — a DebugAov view returns the chosen component here, through the CPU
+        // Shade's own encoder (the twin of the HLSL EncodeAov).
+        if (u.AovMode != 0)
+            return ShadingPipeline.EncodeAov((AovView)u.AovMode,
+                new ShadingInputs(px, py, pz, nx, ny, nz, -vx, -vy, -vz, totalT: aovT, hitDist: 0.0, hitStep: aovStep, epsilon: u.Cam.Eps0),
+                sR, sG, sB, specR, specG, specB, ao, sh0);
 
         // 4d — IBL-modulated ambient. IblStrength>0 blends the env colour sampled
         // at the surface normal into the scalar ambient per channel; twin of

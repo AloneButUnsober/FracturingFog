@@ -42,10 +42,16 @@ public sealed class S1268RefineProgressTests
         using var host = new FractalRenderHost(new NullRenderer(), state, 64, 48, ColorPalette.BuiltIns[0]);
         int frames = 0;
         var refine = new List<RefineProgressInfo>();
-        using var done = new ManualResetEventSlim(false);
-        host.FrameCompleted += (_, _) => Interlocked.Increment(ref frames);
+        // Not disposed: a late host event must never Set a disposed handle (an
+        // ObjectDisposedException on the render thread crashes the test run).
+        var done = new ManualResetEventSlim(false);
+        var frame = new ManualResetEventSlim(false);
+        host.FrameCompleted += (_, _) => { Interlocked.Increment(ref frames); frame.Set(); };
         host.RefineProgress += (_, e) => { lock (refine) refine.Add(e); if (e.Done) done.Set(); };
         host.Trigger(progressive: false);
+        // The frame itself may take seconds under a loaded full-suite run; wait for it
+        // first, then give the refinement its settle window.
+        frame.Wait(TimeSpan.FromSeconds(60));
         done.Wait(settle);
         // Let any stray late event land before reading.
         Thread.Sleep(200);

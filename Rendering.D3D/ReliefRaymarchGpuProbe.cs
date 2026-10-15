@@ -412,9 +412,23 @@ public static class ReliefRaymarchGpuProbe
         fxShaft.ShadowLightMask = 0x1;
         bool? okShaft = RunDiff(sb, "god-ray shafts over the ground plane", 160, 120, 160, 120, pShaft, fxShaft);
 
+        // #1178 — every DebugAov view encoded in the shader (EncodeAov) against the twin,
+        // on the shaft scene with spec + AO on (a view skips the hit fog; the sky-miss
+        // in-scatter still runs, as on the CPU).
+        bool okViews = true;
+        foreach (AovView view in Enum.GetValues<AovView>())
+        {
+            if (view == AovView.Beauty) continue;
+            var fxView = fxShaft;
+            fxView.AoSamples = 5; fxView.AoStrength = 1.0;
+            fxView.SpecularStrength = 0.5; fxView.Roughness = 0.5;
+            fxView.DebugAov = view;
+            okViews &= RunDiff(sb, $"view {view} (#1178)", 160, 120, 160, 120, pShaft, fxView) ?? true;
+        }
+
         bool ok = (okFull ?? true) && (okDof ?? true) && (okAov ?? true) && (okGlass ?? true)
                && (okMarch ?? true) && (okFrost ?? true) && (okLights ?? true) && (okPosFog ?? true)
-               && (okArea ?? true) && (okShaft ?? true);
+               && (okArea ?? true) && (okShaft ?? true) && okViews;
         sb.AppendLine(ok ? "RESULT: PASS" : "RESULT: FAIL");
         Finish(sb);
         return ok ? 0 : 1;
