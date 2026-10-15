@@ -125,6 +125,135 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
     private int EffectiveImageWidth  => ImageWidth  > 0 ? ImageWidth  : Width;
     private int EffectiveImageHeight => ImageHeight > 0 ? ImageHeight : Height;
 
+    // ── #1330 — pan pixel reuse on an anchored lattice ───────────────────────
+    //
+    // A deep-zoom pan normally re-renders the whole frame. On the anchored
+    // lattice the centre fields stay at a fixed anchor (the reference centre)
+    // and the frame's position is the integer pixel offset SubRectOffsetX/Y (the
+    // D-6b sub-rect geometry, ImageWidth/Height = Width/Height): a pixel's dc is
+    // (offset + x − W/2)·scale, so after a whole-pixel pan the pixels still on
+    // screen keep exactly the same dc, and CalculatePanned shifts the buffers
+    // and computes only the exposed rows / columns.
+    //
+    // Exactness also needs the SIMD perturbation rows to batch pixels by their
+    // LATTICE column ((offset + x) mod lanes), not their screen column: SA picks
+    // one skip per batch (the minimum over lanes), BLA one step (the largest
+    // |δ|), and a glitch falls the whole batch back, so a pixel's result depends
+    // on its batch. With LatticeAligned the batches start on lattice multiples
+    // and the lanes off the frame (or outside the computed range) are computed
+    // and discarded. The BLA validity radius is sized for offsets up to
+    // LatticeMaxOffset so the table is the same at every offset of one anchor.
+    // The result: a panned frame is byte-identical to a full LatticeAligned
+    // render at the new offset (S1330PanReuseTests).
+
+    /// <summary>#1330 — batch the SIMD perturbation rows on the global pixel lattice
+    /// (see above). Deep CPU frames only; also keeps the frame off the GPU
+    /// perturbation path. Off by default: output unchanged.</summary>
+    public bool LatticeAligned { get; set; }
+
+    /// <summary>#1330 — the largest |SubRectOffsetX/Y| (pixels) the BLA radius
+    /// covers on the lattice; 0 = Max(Width, Height). Past it the caller should
+    /// re-anchor (CalculatePanned falls back to a full render).</summary>
+    public int LatticeMaxOffset { get; set; }
+
+    private int EffectiveLatticeMaxOffset => LatticeMaxOffset > 0 ? LatticeMaxOffset : Math.Max(Width, Height);
+
+    /// <summary>#1330 — pixels the last Calculate / CalculatePanned computed (deep
+    /// CPU path; 0 elsewhere). A panned frame computes only the exposed strips.</summary>
+    public long LastFrameComputedPixels { get; private set; }
+
+    // The exposed region of a panned frame (null on a full frame), read by
+    // CalculateHighPrecision: rows with (y + dy) outside the old frame are
+    // computed whole, the other rows only their exposed columns.
+    private (int Dx, int Dy)? _panRegion;
+    // Set after a complete LatticeAligned deep CPU frame: what it rendered, so
+    // CalculatePanned can check the next frame differs only by the offset.
+    private PanState? _panState;
+
+    private sealed record PanState(
+        double CX0, double CX1, double CX2, double CX3, double CX4, double CX5, double CX6, double CX7,
+        double CY0, double CY1, double CY2, double CY3, double CY4, double CY5, double CY6, double CY7,
+        double Zoom, int Width, int Height, int MaxIterations, IColorMap ColorMap, QualityPreset Quality,
+        double BlaTolerance, int InteriorAlpha, int OffX, int OffY, int MaxOffset);
+
+    private PanState CapturePanState() => new(
+        CenterX, CenterXLo, CenterX2, CenterX3, CenterX4, CenterX5, CenterX6, CenterX7,
+        CenterY, CenterYLo, CenterY2, CenterY3, CenterY4, CenterY5, CenterY6, CenterY7,
+        Zoom, Width, Height, MaxIterations, ColorMap, Quality, BlaTolerance, InteriorAlpha,
+        SubRectOffsetX, SubRectOffsetY, EffectiveLatticeMaxOffset);
+
+    /// <summary>#1330 — pan the anchored frame by whole pixels: the offset grows by
+    /// (<paramref name="dx"/>, <paramref name="dy"/>), so new pixel (x, y) is old
+    /// pixel (x + dx, y + dy). When the last frame was a complete LatticeAligned
+    /// deep CPU frame of the same view (same anchor, zoom, size, iterations,
+    /// palette, quality) and the new offset stays within
+    /// <see cref="LatticeMaxOffset"/>, the buffers are shifted and only the
+    /// exposed strips are computed; otherwise this is a full
+    /// <see cref="Calculate"/>. The caller owns the other settings: change
+    /// nothing else between the frames. Returns true when pixels were reused.</summary>
+    public bool CalculatePanned(int dx, int dy, CancellationToken ct = default)
+    {
+        bool reuse = CanReusePan(dx, dy);
+        SubRectOffsetX += dx;
+        SubRectOffsetY += dy;
+        if (!reuse) { Calculate(ct); return false; }
+        ShiftPanBuffers(dx, dy);
+        _panRegion = (dx, dy);
+        try { Calculate(ct); }
+        finally { _panRegion = null; }
+        return true;
+    }
+
+    private bool CanReusePan(int dx, int dy)
+    {
+        var st = _panState;
+        if (st is null || !LatticeAligned) return false;
+        if (Math.Abs(dx) >= Width || Math.Abs(dy) >= Height) return false;
+        int maxOff = EffectiveLatticeMaxOffset;
+        if (Math.Abs((long)SubRectOffsetX + dx) > maxOff || Math.Abs((long)SubRectOffsetY + dy) > maxOff) return false;
+        // Neighbourhood / whole-frame passes after the core would need the whole frame.
+        if (ColorMap is IOrbitAwareColorMap or IInteriorAwareColorMap or IPostProcessColorMap) return false;
+        if (InteriorAlpha < 255 || PerRowMaxIter != null) return false;
+        // The last frame's offset is the current one (dx / dy not applied yet).
+        return st == CapturePanState();
+    }
+
+    // The deep path's outputs (the orbit / interior buffers belong to colour maps
+    // CanReusePan refuses).
+    private void ShiftPanBuffers(int dx, int dy)
+    {
+        int w = Width, h = Height;
+        ShiftBuffer(IterationBuffer, w, h, dx, dy);
+        ShiftBuffer(SmoothBuffer, w, h, dx, dy);
+        ShiftBuffer(DistanceBuffer, w, h, dx, dy);
+        ShiftBuffer(NormalXBuffer, w, h, dx, dy);
+        ShiftBuffer(NormalYBuffer, w, h, dx, dy);
+        ShiftBuffer(ColorBuffer, w, h, dx, dy);
+        ShiftBuffer(FinalZrBuffer, w, h, dx, dy);
+        ShiftBuffer(FinalZiBuffer, w, h, dx, dy);
+        ShiftBuffer(FinalDrBuffer, w, h, dx, dy);
+        ShiftBuffer(FinalDiBuffer, w, h, dx, dy);
+    }
+
+    /// <summary>In place: new (x, y) = old (x + dx, y + dy) where that is inside the
+    /// frame; the exposed pixels keep stale values (they are recomputed).</summary>
+    public static void ShiftBuffer<T>(T[] buf, int w, int h, int dx, int dy)
+    {
+        if (buf.Length < w * h || (dx == 0 && dy == 0)) return;
+        int x0 = Math.Max(0, -dx), x1 = Math.Min(w, w - dx);   // destination columns with a source
+        int len = x1 - x0;
+        if (len <= 0) return;
+        // Rows in the order that never reads a row already overwritten.
+        if (dy >= 0)
+            for (int y = 0; y + dy < h; y++)
+                Array.Copy(buf, (y + dy) * w + x0 + dx, buf, y * w + x0, len);
+        else
+            for (int y = h - 1; y + dy >= 0; y--)
+                Array.Copy(buf, (y + dy) * w + x0 + dx, buf, y * w + x0, len);
+    }
+
+    private static int LatticeMod(int a, int m) { int r = a % m; return r < 0 ? r + m : r; }
+
     /// <summary>Zoom threshold above which QD ref orbit is used (else DD).</summary>
     private const double QDZoomThreshold = 1e25;
 
@@ -788,10 +917,16 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         LastFrameUsedGpuOrbitPerturbation = false;
         LastFrameBuiltGpuReferenceOrbit = false;   // #1166
         _gpuSkip = null;
+        _panState = null;                  // #1330: set again by a complete lattice frame
+        _panFrameComplete = false;
+        LastFrameComputedPixels = 0;
         CalculateInternal(ct);
         ApplyOutOfBoundsSurround(ct);
         LastGpuRoute = ResolveGpuRoute();   // #1173-M
+        if (_panFrameComplete && !ct.IsCancellationRequested) _panState = CapturePanState();
     }
+
+    private bool _panFrameComplete;   // #1330: this frame was a complete lattice deep CPU frame
 
     // #615 Phase 1 — paint the flat "out-of-bounds" surround: the large disk
     // seen when zoomed out, where the pixel's plane coordinate already lies
@@ -2276,7 +2411,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         {
             int[]? prCap = PerRowMaxIter;
             bool tileCap = prCap != null && prCap.Length >= Height;
-            bool gateOk = !recycled
+            bool gateOk = !recycled && !LatticeAligned   // #1330: the lattice is a CPU path
                 && UseGpuPerturbation && GpuKernel != null && GpuKernel.SupportsPerturbation
                 && AllowPtRebasing && !UseDdRebaseReference && !ForceScalarPtPath
                 && !tileCap && Zoom <= MaxGpuPerturbZoom && _refOrbitLen >= 1;
@@ -2289,6 +2424,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
             if (!gateOk && UseGpuPerturbation && GpuKernel != null && GpuKernel.SupportsPerturbation)
             {
                 _gpuSkip = recycled ? GpuRoute.Cpu("orbit recycling", "deep-zoom orbit recycling renders on the CPU only")
+                    : LatticeAligned ? GpuRoute.Cpu("pan reuse", "pixel reuse while panning (#1330) renders deep frames on the CPU")
                     : !AllowPtRebasing || UseDdRebaseReference || ForceScalarPtPath
                         ? GpuRoute.Cpu("diagnostic toggle", "a perturbation diagnostic toggle (rebasing / DD reference / scalar path) keeps deep zoom on the CPU")
                     : tileCap ? GpuRoute.Cpu("per-tile iter cap", "per-tile iteration caps render on the CPU only")
@@ -2308,6 +2444,15 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         // coefficients are valid for any tile pixel of the same image.
         double halfWS = effImgW * 0.5 * scale;
         double halfHS = effImgH * 0.5 * scale;
+        if (LatticeAligned)
+        {
+            // #1330 — sized for every offset up to LatticeMaxOffset, so one anchor
+            // keeps one BLA table (pixel results then don't depend on the offset).
+            double maxOff = Math.Max(EffectiveLatticeMaxOffset,
+                Math.Max(Math.Abs(SubRectOffsetX), Math.Abs(SubRectOffsetY)));
+            halfWS = (effImgW * 0.5 + maxOff) * scale;
+            halfHS = (effImgH * 0.5 + maxOff) * scale;
+        }
         double dcMaxAbs = Math.Sqrt(halfWS * halfWS + halfHS * halfHS);
         if (recycled)
         {
@@ -2354,18 +2499,30 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
 
         _po.CancellationToken = ct;
         var po = _po;
+        // #1330 — a panned frame computes only the exposed rows / columns.
+        var pan = _panRegion;
+        int w = Width, h = Height;
+        long computed = 0;
         ParallelForRows(0, Height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
+            int xBegin = 0, xEnd = w;
+            if (pan is { } pr && y + pr.Dy >= 0 && y + pr.Dy < h)
+            {
+                if (pr.Dx > 0) xBegin = w - pr.Dx;
+                else if (pr.Dx < 0) xEnd = -pr.Dx;
+                else return;   // this row is all reused
+            }
+            Interlocked.Add(ref computed, xEnd - xBegin);
             int rowMaxIt = useTileCap ? perRow![y] : maxIt;
             if (rowMaxIt <= 0) rowMaxIt = maxIt;
             int rowBase = y * Width;
             if (useSimd512)
-                ComputeRowPT8(y, scale, rowMaxIt, rowBase, colorMap);
+                ComputeRowPT8(y, scale, rowMaxIt, rowBase, colorMap, xBegin, xEnd);
             else if (useSimd)
-                ComputeRowPT4(y, scale, rowMaxIt, rowBase, colorMap);
+                ComputeRowPT4(y, scale, rowMaxIt, rowBase, colorMap, xBegin, xEnd);
             else
-                ComputeRowPTScalar(y, scale, rowMaxIt, rowBase, colorMap);
+                ComputeRowPTScalar(y, scale, rowMaxIt, rowBase, colorMap, xBegin, xEnd);
             // Phase 2.1 in-set rewrite (see CalculateDoublePrecision for
             // the rationale). Row-capped unescaped pixels get reclassed
             // as in-set so the recolor gate works.
@@ -2378,6 +2535,9 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
                 }
             }
         });
+        LastFrameComputedPixels = computed;
+        // #1330 — a complete lattice frame (whole, or panned from one) can be panned again.
+        _panFrameComplete = LatticeAligned && !recycled && !useTileCap && !ct.IsCancellationRequested;
 
         if (_blaTable != null)
             Debug.WriteLine(
@@ -4014,7 +4174,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
     }
 
     private void ComputeRowPTScalar<TMap>(
-        int y, double scale, int maxIter, int rowBase, TMap colorMap)
+        int y, double scale, int maxIter, int rowBase, TMap colorMap, int xBegin, int xEnd)
         where TMap : IColorMap
     {
         // D-6b — halfH / halfW measure from the FULL image centre, and the
@@ -4045,7 +4205,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
                 rowOffsetY, scale)
             : OD.Zero;
 
-        for (int x = 0; x < Width; x++)
+        for (int x = xBegin; x < xEnd; x++)   // #1330: per pixel, so a range is exact
         {
             double colOffsetX = offX + x - halfW;
             double dcX = colOffsetX * scale + _refRecycleDx;  // Wave 3.5 recycle shift (0 on normal path)
@@ -4078,7 +4238,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
     }
 
     private void ComputeRowPT4<TMap>(
-        int y, double scale, int maxIter, int rowBase, TMap colorMap)
+        int y, double scale, int maxIter, int rowBase, TMap colorMap, int xBegin, int xEnd)
         where TMap : IColorMap
     {
         // D-6b1 — sub-rect aware. halfW/halfH measure from the FULL
@@ -4135,7 +4295,13 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         Span<double> drvSpan = stackalloc double[4];
         Span<double> divSpan = stackalloc double[4];
 
-        for (; x + 4 <= Width; x += 4)
+        // #1330 — LatticeAligned: batches start on lattice multiples (the first may
+        // begin left of the range) and run past the range end; lanes outside
+        // [xBegin, xEnd) are computed and discarded, so a pixel's batch (and SA /
+        // BLA / glitch decision) is the same at every frame offset. No scalar tail.
+        bool lattice = LatticeAligned;
+        x = lattice ? xBegin - LatticeMod(offX + xBegin, 4) : xBegin;
+        for (; lattice ? x < xEnd : x + 4 <= xEnd; x += 4)
         {
             // Wave 3.5 — + _refRecycleDx applies the frame's centre shift so dc
             // is measured from the cached reference centre (zero unless the
@@ -4314,6 +4480,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
 
             for (int k = 0; k < 4; k++)
             {
+                if (x + k < xBegin || x + k >= xEnd) continue;   // #1330: a lane off the range
                 int idx = rowBase + x + k;
                 // Glitched pixels that never escaped need full fallback.
                 // At zoom > QDZoomThreshold, DD cannot distinguish adjacent pixels
@@ -4361,7 +4528,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         }
 
         // Scalar tail (0–3 remaining pixels)
-        for (; x < Width; x++)
+        for (; x < xEnd; x++)
         {
             double colOffsetX = offX + x - halfW;
             double dcX = colOffsetX * scale + _refRecycleDx;  // Wave 3.5 recycle shift (0 on normal path)
@@ -4418,7 +4585,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
     // ─────────────────────────────────────────────────────────────────────────
 
     private void ComputeRowPT8<TMap>(
-        int y, double scale, int maxIter, int rowBase, TMap colorMap)
+        int y, double scale, int maxIter, int rowBase, TMap colorMap, int xBegin, int xEnd)
         where TMap : IColorMap
     {
         // D-6b1 — sub-rect aware (see ComputeRowPT4 head for details).
@@ -4470,7 +4637,13 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         Span<double> drvSpan = stackalloc double[8];
         Span<double> divSpan = stackalloc double[8];
 
-        for (; x + 8 <= Width; x += 8)
+        // #1330 — LatticeAligned: batches start on lattice multiples (the first may
+        // begin left of the range) and run past the range end; lanes outside
+        // [xBegin, xEnd) are computed and discarded, so a pixel's batch (and SA /
+        // BLA / glitch decision) is the same at every frame offset. No scalar tail.
+        bool lattice = LatticeAligned;
+        x = lattice ? xBegin - LatticeMod(offX + xBegin, 8) : xBegin;
+        for (; lattice ? x < xEnd : x + 8 <= xEnd; x += 8)
         {
             // Wave 3.5 — + _refRecycleDx: see ComputeRowPT4 (centre-shift for
             // orbit recycling; zero on the common path → bit-identical).
@@ -4640,6 +4813,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
 
             for (int k = 0; k < 8; k++)
             {
+                if (x + k < xBegin || x + k >= xEnd) continue;   // #1330: a lane off the range
                 int idx = rowBase + x + k;
                 if (glitched && ((escapedMask >> k) & 1) == 0)
                 {
@@ -4683,7 +4857,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         }
 
         // Scalar tail (0–7 remaining pixels)
-        for (; x < Width; x++)
+        for (; x < xEnd; x++)
         {
             double colOffsetX = offX + x - halfW;
             double dcX = colOffsetX * scale + _refRecycleDx;  // Wave 3.5 recycle shift (0 on normal path)
