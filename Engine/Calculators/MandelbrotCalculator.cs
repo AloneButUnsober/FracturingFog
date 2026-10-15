@@ -233,6 +233,20 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
     /// <summary>True when the last Calculate() used double-double arithmetic.</summary>
     public bool IsHighPrecisionActive { get; private set; }
 
+    /// <summary>#1321 — the precision path the last frame actually ran: "SP"
+    /// (plain double), or the tier of the reference orbit it built + perturbation:
+    /// "DD-PT" (to 1e25), "QD-PT" (to 1e50), "OD-PT" (beyond). Read by the status
+    /// bar and perf HUD, which used to collapse every deep frame to "DD".</summary>
+    public string LastPrecisionLabel { get; private set; } = "SP";
+
+    // #1321 — label for the reference-orbit tier just built (_refCachedTier).
+    private string PerturbationLabel() => _refCachedTier switch
+    {
+        2 => "OD-PT",
+        1 => "QD-PT",
+        _ => "DD-PT",
+    };
+
     /// <summary>V6 (#82) — true when the last high-precision frame actually ran
     /// the GPU perturbation kernel (not a CPU fallback). Read by the render host
     /// to surface a "(GPU)" marker in the perf HUD so the user can see the deep-
@@ -1260,9 +1274,15 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         IsHighPrecisionActive = useHP;
 
         if (useHP)
+        {
             CalculateHighPrecision(colorMap, ct);
+            LastPrecisionLabel = PerturbationLabel();
+        }
         else
+        {
+            LastPrecisionLabel = "SP";
             CalculateDoublePrecision(colorMap, ct);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1807,8 +1827,10 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         if (useHP)
         {
             CalculateOrbitAwarePerturbation(colorMap, ct);
+            LastPrecisionLabel = PerturbationLabel();
             return;
         }
+        LastPrecisionLabel = "SP";
 
         double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
         int maxIt = MaxIterations;

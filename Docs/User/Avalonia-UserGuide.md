@@ -112,7 +112,7 @@ If `--server` has already been launched once on this machine, the status bar sho
 - **Toolbar (top)** — fractal type, quality preset, region / theme combos, overlay toggles, modeless-dialog launchers.
 - **Render surface (center)** — Direct3D 11/12 swap-chain hosted in a `NativeControlHost`. An invisible `Border` ("InputSponge") above it captures pointer / key events for the Avalonia input adapter.
 - **Slideshow VCR row** — only visible while a slideshow is running; never occluded by the swap-chain HWND.
-- **Status bar (bottom)** — live CX / CY / Zoom / Iter, active precision (SP / DD / QD), render-time hint, and a colored `● Server` pill.
+- **Status bar (bottom)** — live CX / CY / Zoom / Iter, active precision (`SP` = plain double; at depth the perturbation tier `DD-PT` to 1e25, `QD-PT` to 1e50, `OD-PT` beyond — other families show their own path labels), render-time hint, and a colored `● Server` pill.
 
 Both the toolbar and status bar can be hidden via the Floating Menu (`Status` checkbox). Span mode hides them automatically.
 

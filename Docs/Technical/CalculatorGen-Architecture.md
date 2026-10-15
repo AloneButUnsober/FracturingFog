@@ -482,10 +482,11 @@ path actually ran. The render host surfaces it to the status bar:
 | `DD-HP`  | Whole-frame DD direct iteration (centre is exterior) |
 | `QD-HP`  | Whole-frame QD direct iteration (centre exterior, very deep) |
 
-The render host's old `IsHighPrecisionActive` flag is meaningful only
-for `MandelbrotCalculator`; for generated calculators the host queries
-`LastPrecisionLabel` and maps `"DD"` / `"QD"` to "[DD]" status. See
-`FractalRenderHost.cs:Trigger` near the alt-calc branch.
+The render host shows `LastPrecisionLabel` in the status bar for the
+generated calculators and, since #1321, for `MandelbrotCalculator` too
+(`SP` / `DD-PT` / `QD-PT` / `OD-PT`, the tier of the reference orbit it
+built — it used to collapse to "DD"). See the frame-completed path in
+`FractalRenderHost.cs`.
 
 ---
 

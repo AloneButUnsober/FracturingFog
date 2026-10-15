@@ -3006,11 +3006,9 @@ namespace FracturingFog.Rendering
                 }
 
                 // Pull the richer LastPrecisionLabel from the generated calcs
-                // (PT, QD-PT, DD-HP4, etc.) so the status bar can show what
-                // path actually ran — essential for diagnosing perf at
-                // deep zoom. Legacy MandelbrotCalculator exposes only a
-                // boolean (IsHighPrecisionActive); collapse to "DD"/"SP"
-                // for the status string in that case.
+                // (PT, QD-PT, DD-HP4, etc.) and from MandelbrotCalculator (#1321:
+                // SP / DD-PT / QD-PT / OD-PT) so the status bar can show what
+                // path actually ran — essential for diagnosing perf at deep zoom.
                 string? lbl = useAlt
                     ? altCalc switch
                     {
@@ -3022,7 +3020,7 @@ namespace FracturingFog.Rendering
                         FracturingFog.Calculators.Generated.BurningShipCalculator bs => bs.LastPrecisionLabel,
                         _ => null
                     }
-                    : (calc.IsHighPrecisionActive ? "DD" : "SP");
+                    : calc.LastPrecisionLabel;
                 bool hp = useAlt
                     ? (lbl != null && (lbl.StartsWith("DD") || lbl.StartsWith("QD")))
                     : calc.IsHighPrecisionActive;
@@ -4746,7 +4744,7 @@ namespace FracturingFog.Rendering
                 try
                 {
                     var snap = _perfStats.Snapshot();
-                    string lbl = _calculator!.IsHighPrecisionActive ? "DD" : "SP";
+                    string lbl = _calculator!.LastPrecisionLabel;   // #1321 — SP / DD-PT / QD-PT / OD-PT
                     // T3.1: append GPU marker when the SP path actually ran
                     // on the GPU compute kernel this frame. Mirrors the
                     // exact same predicate the calculator uses (toggle on,
