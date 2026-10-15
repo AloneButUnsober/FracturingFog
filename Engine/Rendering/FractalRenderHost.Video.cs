@@ -1127,6 +1127,9 @@ namespace FracturingFog.Rendering
                     _perfStats.RecordGpuDispatch(_gpuKernel.LastDispatchMs);
                     _perfStats.RecordGpuReadback(_gpuKernel.LastReadbackMs);
                 }
+                if (_gpuKernel?.LastGpuStageTimes is { } gst   // #1329
+                    && ((_calculator.UseGpuCompute && !_calculator.IsHighPrecisionActive) || _calculator.LastFrameUsedGpuPerturbation))
+                    _perfStats.RecordGpuStages(gst);
             }
             if (ct.IsCancellationRequested) return;
 

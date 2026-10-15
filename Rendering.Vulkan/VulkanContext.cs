@@ -35,6 +35,12 @@ public sealed unsafe class VulkanContext : IDisposable
     // (or driver-exposed) doubles — the perturbation probe reports SKIP then.
     public bool SupportsFloat64 { get; private set; }
 
+    /// <summary>#1329 — nanoseconds per timestamp tick (VkPhysicalDeviceLimits.timestampPeriod).</summary>
+    public float TimestampPeriod { get; private set; }
+
+    /// <summary>#1329 — valid bits of the compute queue family's timestamps; 0 = no timestamps.</summary>
+    public uint TimestampValidBits { get; private set; }
+
     private VulkanContext(Vk vk) => Vk = vk;
 
     // Stand up instance only. Cheap enough that --list can run without ever
@@ -94,7 +100,7 @@ public sealed unsafe class VulkanContext : IDisposable
             PhysicalDeviceProperties props;
             Vk.GetPhysicalDeviceProperties(pd, &props);
             string name = SilkMarshal.PtrToString((nint)props.DeviceName) ?? "<unknown>";
-            list.Add(new DeviceInfo(name, props.DeviceType, HasComputeQueue(pd, out _)));
+            list.Add(new DeviceInfo(name, props.DeviceType, HasComputeQueue(pd, out _, out _)));
         }
         return list;
     }
@@ -109,12 +115,13 @@ public sealed unsafe class VulkanContext : IDisposable
         int bestRank = int.MinValue;
         string bestName = "<none>";
         PhysicalDeviceType bestType = default;
-        uint bestFamily = 0;
+        uint bestFamily = 0, bestTsBits = 0;
+        float bestTsPeriod = 0;
         bool found = false;
 
         foreach (var pd in PhysicalDevices())
         {
-            if (!HasComputeQueue(pd, out uint family)) continue;
+            if (!HasComputeQueue(pd, out uint family, out uint tsBits)) continue;
             PhysicalDeviceProperties props;
             Vk.GetPhysicalDeviceProperties(pd, &props);
             int rank = RankType(props.DeviceType);
@@ -123,6 +130,8 @@ public sealed unsafe class VulkanContext : IDisposable
                 bestRank = rank;
                 best = pd;
                 bestFamily = family;
+                bestTsBits = tsBits;
+                bestTsPeriod = props.Limits.TimestampPeriod;
                 bestType = props.DeviceType;
                 bestName = SilkMarshal.PtrToString((nint)props.DeviceName) ?? "<unknown>";
                 found = true;
@@ -134,6 +143,8 @@ public sealed unsafe class VulkanContext : IDisposable
 
         PhysicalDevice = best;
         ComputeQueueFamily = bestFamily;
+        TimestampValidBits = bestTsBits;
+        TimestampPeriod = bestTsPeriod;
         PickedName = bestName;
         PickedType = bestType;
 
@@ -185,9 +196,10 @@ public sealed unsafe class VulkanContext : IDisposable
         return devices;
     }
 
-    private bool HasComputeQueue(PhysicalDevice pd, out uint family)
+    private bool HasComputeQueue(PhysicalDevice pd, out uint family, out uint timestampValidBits)
     {
         family = 0;
+        timestampValidBits = 0;
         uint qCount = 0;
         Vk.GetPhysicalDeviceQueueFamilyProperties(pd, ref qCount, null);
         var qprops = new QueueFamilyProperties[qCount];
@@ -199,6 +211,7 @@ public sealed unsafe class VulkanContext : IDisposable
             if ((qprops[i].QueueFlags & QueueFlags.ComputeBit) != 0)
             {
                 family = i;
+                timestampValidBits = qprops[i].TimestampValidBits;
                 return true;
             }
         }

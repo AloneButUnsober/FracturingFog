@@ -303,6 +303,23 @@ The coordinates match `MandelbrotBench`, so a GPU row can be read against its CP
     plus the part on a device-local heap.
 
   The `Device` column records the adapter.
+- **`GpuClock` column (#1329): the frame on the GPU's own clock.** `Mean` is host wall time around
+  `Calculate()`. It mixes queue latency, the shader, the copy-back and the CPU work around them.
+  `GpuClock` is the kernel's per-stage time from **GPU timestamp queries**
+  (`IGpuKernel.LastGpuStageTimes`), the median of three frames after the warm one:
+  - **`up`:** staged input copies (Vulkan device-local inputs, #1228; always 0 on D3D11, whose
+    inputs are CPU-written dynamic buffers);
+  - **`dis`:** the dispatch, summed over TDR bands;
+  - **`cp`:** the copy of the outputs to host-readable memory (D3D11 staging; Vulkan only with
+    `FF_VULKAN_MEMORY=device-outputs`).
+
+  The stages are summed per GPU packet (a command buffer or band) from its own Begin stamp, so the
+  idle time between bands isn't counted. The perf HUD shows the same split as its `gclk` row.
+  First readings (GT 710, 2026-10-15, from `--gputimestampprobe` and `S1329GpuTimestampTests`):
+  - **The dispatch is linear in maxIter.** At 512², all in set (period-3 bulb), maxIter
+    1000 / 2000 / 4000 takes 42.7 / 84.8 / 169 ms on D3D11 and 32.3 / 64.3 / 128 ms on Vulkan. The
+    same shader dispatches ~25% faster under Vulkan on this card.
+  - **D3D11's staging copy is a real cost:** 5.7 ms of a 50 ms 512² frame.
 - **`NA` on perturbation rows can be by design.** `TryRunGpuPerturbation` estimates the frame
   (first band's time x band count). If that exceeds its 3 s budget, it throws
   `GPU-PERTURB-TOO-SLOW` and **switches `UseGpuPerturbation` off for the session**, so the app

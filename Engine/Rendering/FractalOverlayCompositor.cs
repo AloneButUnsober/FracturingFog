@@ -423,6 +423,10 @@ namespace FracturingFog.Rendering
                     $"calc   {snap.CalcMs,6:F1} ms  ({Pct(snap.CalcMs, snap.FrameMs)})",
                 };
                 if (hasGpu) coreLines.Add(gpuRow);
+                // #1329 — the same work on the GPU's own clock (timestamp queries):
+                // upload / dispatch / copy-out, without queue latency or host copies.
+                if (snap.GpuClkSampleCount > 0)
+                    coreLines.Add($"  gclk up {snap.GpuClkUploadMs,4:F1} dis {snap.GpuClkDispatchMs,5:F1} cp {snap.GpuClkCopyOutMs,4:F1}");
                 coreLines.Add($"upload {snap.UploadMs,6:F1} ms  ({Pct(snap.UploadMs, snap.FrameMs)})");
                 coreLines.Add($"presnt {snap.PresentMs,6:F1} ms  ({Pct(snap.PresentMs, snap.FrameMs)})");
                 if (stageLines.Count > 0)

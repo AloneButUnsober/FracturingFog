@@ -185,6 +185,16 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
 
     public double LastDispatchMs { get; private set; }
     public double LastReadbackMs { get; private set; }
+
+    // #1329 — GPU timestamp queries per frame (null result when unsupported).
+    private readonly VulkanStageTimer _timer;
+    public GpuStageTimes? LastGpuStageTimes { get; private set; }
+
+    /// <summary>#1329 — the compute queue writes timestamps (LastGpuStageTimes is filled).</summary>
+    public bool SupportsGpuTimestamps => _timer.Enabled;
+
+    private void BeginFrameTiming() { LastGpuStageTimes = null; _timer.BeginFrame(); }
+    private void EndFrameTiming() => LastGpuStageTimes = _timer.EndFrame();
     public bool HasGpuPalette => _activePaletteId != null && _colorBuilders.ContainsKey(_activePaletteId);
 
     private Program BaseProgram(int kind)
@@ -227,6 +237,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             Flags = CommandPoolCreateFlags.ResetCommandBufferBit,
         };
         Check(_vk.CreateCommandPool(_device, in cpci, null, out _cmdPool), "vkCreateCommandPool");
+        _timer = new VulkanStageTimer(ctx);
     }
 
     /// <summary>Human-readable backend label for the System Info dialog.</summary>
@@ -352,6 +363,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         Program prog = useColor ? ColorProgram(_activePaletteId!, (int)kind) : BaseProgram((int)kind);
 
         long t0 = Stopwatch.GetTimestamp();
+        BeginFrameTiming();   // #1329
         int n = width * height;
         EnsureBuffers(width, height);
 
@@ -450,10 +462,12 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
                 Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
             };
             Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
+            _timer.Begin(cmd);   // #1329
             FlushPending(cmd);
             _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, prog.Pipeline);
             _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, prog.Layout, 0, 1, &set, 0, null);
             _vk.CmdDispatch(cmd, (uint)((width + 7) / 8), (uint)((height + 7) / 8), 1);
+            _timer.Mark(cmd, GpuStage.Dispatch);
             bool trapOut = useColor && trapDst != null && prog.BindingCount == 7;
             RecordReadback(cmd, Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)),
                 useColor ? Out(_buf[5], n * sizeof(uint)) : default, trapOut ? Out(_buf[6], n * sizeof(float)) : default);
@@ -484,6 +498,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         if (useColor && trapDst != null && prog.BindingCount == 7) ReadFloats(_buf[6], trapDst, n);   // #1173-J
 
         long tEnd = Stopwatch.GetTimestamp();
+        EndFrameTiming();   // #1329
         double freq = Stopwatch.Frequency;
         LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
         LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
@@ -513,6 +528,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             throw new ArgumentException("reference-orbit arrays shorter than refLen");
 
         long t0 = Stopwatch.GetTimestamp();
+        BeginFrameTiming();   // #1329
         int n = width * height;
         EnsureBuffers(width, height);          // shares iter/smooth/finalZD at _buf[2..4]
         EnsurePerturbBuffers(refLen);
@@ -533,6 +549,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         ReadFloats(_buf[3], smoothDst, n);
         ReadFinalZD(_buf[4], finalZrDst, finalZiDst, finalDrDst, finalDiDst, n);
         long tEnd = Stopwatch.GetTimestamp();
+        EndFrameTiming();   // #1329
         double freq = Stopwatch.Frequency;
         LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
         LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
@@ -569,6 +586,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         if (orbitDst.Length < n * stride) throw new ArgumentException("orbitDst shorter than width * height * stride", nameof(orbitDst));
 
         long t0 = Stopwatch.GetTimestamp();
+        BeginFrameTiming();   // #1329
         EnsureBuffers(width, height);
         EnsurePerturbBuffers(refLen);
         if (_orbitOut.Buffer.Handle == 0 || _orbitOut.Size < (ulong)(n * stride * sizeof(float)))
@@ -601,6 +619,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         ReadFinalZD(_buf[4], finalZrDst, finalZiDst, finalDrDst, finalDiDst, n);
         ReadFloats(_orbitOut, orbitDst, n * stride);
         long tEnd = Stopwatch.GetTimestamp();
+        EndFrameTiming();   // #1329
         double freq = Stopwatch.Frequency;
         LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
         LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
@@ -637,6 +656,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             throw new ArgumentException("hit arrays shorter than width * height");
 
         long t0 = Stopwatch.GetTimestamp();
+        BeginFrameTiming();   // #1329
         _buddha ??= BuildProgram(BuddhaKernelSource.Build(), BuddhaKernelSource.EntryPoint, 0u, (uint)UShift);
         if (_buddhaParams.Buffer.Handle == 0) _buddhaParams = AllocBuffer(64, BufferUsageFlags.UniformBufferBit);
         ulong hitBytes = (ulong)n * 3 * sizeof(uint);
@@ -717,10 +737,12 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
                         SType = StructureType.CommandBufferBeginInfo, Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
                     };
                     Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
+                    _timer.Begin(cmd);   // #1329
                     FlushPending(cmd);   // #1228: the histogram clear lands before the first chunk
                     _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, _buddha.Pipeline);
                     _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, _buddha.Layout, 0, 1, &setForCmd, 0, null);
                     _vk.CmdDispatch(cmd, (uint)((count + BuddhaKernelSource.GroupSize - 1) / BuddhaKernelSource.GroupSize), 1, 1);
+                    _timer.Mark(cmd, GpuStage.Dispatch);
                     Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
                     var submit = new SubmitInfo { SType = StructureType.SubmitInfo, CommandBufferCount = 1, PCommandBuffers = &cmd };
                     Check(_vk.QueueSubmit(_ctx.ComputeQueue, 1, &submit, default), "vkQueueSubmit");
@@ -749,6 +771,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         }
         _vk.UnmapMemory(_device, _buddhaHits.HostMemory);
         long tEnd = Stopwatch.GetTimestamp();
+        EndFrameTiming();   // #1329
         double freq = Stopwatch.Frequency;
         LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
         LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
@@ -851,10 +874,12 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
                     Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
                 };
                 Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
+                _timer.Begin(cmd);   // #1329
                 FlushPending(cmd);   // #1228: the orbit upload lands before band 0
                 _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, prog.Pipeline);
                 _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, prog.Layout, 0, 1, &set, 0, null);
                 _vk.CmdDispatch(cmd, (uint)((width + 7) / 8), (uint)((rows + 7) / 8), 1);
+                _timer.Mark(cmd, GpuStage.Dispatch);
                 Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
 
                 var cmdLocal = cmd;
@@ -928,6 +953,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             throw new ArgumentException("SA coefficient arrays shorter than refLen+1");
 
         long t0 = Stopwatch.GetTimestamp();
+        BeginFrameTiming();   // #1329
         int n = width * height;
         EnsureBuffers(width, height);
         EnsurePerturbBuffers(refLen);
@@ -1042,10 +1068,12 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
                     Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
                 };
                 Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
+                _timer.Begin(cmd);   // #1329
                 FlushPending(cmd);   // #1228: orbit + SA / BLA uploads land before band 0
                 _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, _perturbSa.Pipeline);
                 _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, _perturbSa.Layout, 0, 1, &set, 0, null);
                 _vk.CmdDispatch(cmd, (uint)((width + 7) / 8), (uint)((rows + 7) / 8), 1);
+                _timer.Mark(cmd, GpuStage.Dispatch);
                 Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
 
                 var cmdLocal = cmd;
@@ -1087,6 +1115,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         ReadFloats(_buf[3], smoothDst, n);
         ReadFinalZD(_buf[4], finalZrDst, finalZiDst, finalDrDst, finalDiDst, n);
         long tEnd = Stopwatch.GetTimestamp();
+        EndFrameTiming();   // #1329
         double freq = Stopwatch.Frequency;
         LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
         LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
@@ -1367,6 +1396,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         };
         _vk.CmdPipelineBarrier(cmd, PipelineStageFlags.TransferBit, PipelineStageFlags.ComputeShaderBit,
             0, 1, &barrier, 0, null, 0, null);
+        _timer.Mark(cmd, GpuStage.Upload);   // #1329
     }
 
     // A readback request: the first Bytes of a buffer (default = none).
@@ -1399,6 +1429,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         };
         _vk.CmdPipelineBarrier(cmd, PipelineStageFlags.TransferBit, PipelineStageFlags.HostBit,
             0, 1, &after, 0, null, 0, null);
+        _timer.Mark(cmd, GpuStage.CopyOut);   // #1329
     }
 
     private static bool AnyStaged(ReadOnlySpan<ReadbackSpan> outs)
@@ -1425,6 +1456,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
                 SType = StructureType.CommandBufferBeginInfo, Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
             };
             Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
+            _timer.Begin(cmd);   // #1329
             RecordReadback(cmd, outs);
             Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
             var submit = new SubmitInfo { SType = StructureType.SubmitInfo, CommandBufferCount = 1, PCommandBuffers = &cmd };
@@ -1510,6 +1542,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         FreeBuffer(ref _orbitOut); // #607
         FreeBuffer(ref _buddhaParams); FreeBuffer(ref _buddhaHits);   // #838
         if (_cmdPool.Handle != 0) { _vk.DestroyCommandPool(_device, _cmdPool, null); _cmdPool = default; }
+        _timer.Dispose();   // #1329
         if (_ownsContext) { try { _ctx.Dispose(); } catch { } }
     }
 }
