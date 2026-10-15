@@ -11,10 +11,11 @@
 // δ stays double; only the reference orbit and view-centre coordinate need
 // this much precision.
 //
-// Algorithms extend the Hida-Li-Bailey QD pattern (LBNL 2007). Each operator
-// uses sloppy variants: drops O(eps⁸) tail terms, sufficient bound for our
-// ~124-digit target. The renormalization is a 9-term QuickTwoSum cascade
-// reducing back to canonical 8-term form.
+// Algorithms extend the Hida-Li-Bailey QD pattern (LBNL 2007). Multiplication
+// collects every partial product (drops only O(eps⁸) tail terms) and
+// renormalises with a 9-term QuickTwoSum cascade. OD + OD is an exact
+// expansion sum (Shewchuk) since #1319 — the sloppy pairwise add it replaced
+// broke deep reference orbits under cancellation.
 
 using System;
 using System.Runtime.CompilerServices;
@@ -124,47 +125,94 @@ namespace FracturingFog.FFMath
             return new OD(s0, dst[0], dst[1], dst[2], dst[3], dst[4], dst[5], dst[6]);
         }
 
-        // ── Addition (sloppy variant — eight pairwise TwoSums + cascade) ─────
-
+        // ── Addition (exact expansion sum, #1319) ──────────────────────────────
+        //
+        // The earlier "sloppy" pairwise variant (TwoSum limb i of a with limb i of
+        // b, one or two residual sweeps) loses mass whenever the two operands'
+        // limbs don't line up — above all under cancellation, which is exactly
+        // z² + c near a minibrot nucleus. Measured on a period-2950 minibrot at
+        // zoom 1e66, the reference orbit drifted 2.4e-33 from the true orbit
+        // (pixels there are 1.4e-68), so deep renders landed in the wrong place.
+        //
+        // This is Shewchuk's expansion sum (1997): each limb of b is grown into
+        // the expansion of a with exact TwoSums (16 exact terms), then the
+        // expansion is compressed and its top eight components kept, with the
+        // remainder folded into the last. The result is the exact sum rounded to
+        // OD precision, under any cancellation. No heap allocation.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static OD operator +(OD a, OD b)
         {
-            // Pairwise TwoSum across matching limbs.
-            var (s0, e0) = TwoSum(a.X0, b.X0);
-            var (s1, e1) = TwoSum(a.X1, b.X1);
-            var (s2, e2) = TwoSum(a.X2, b.X2);
-            var (s3, e3) = TwoSum(a.X3, b.X3);
-            var (s4, e4) = TwoSum(a.X4, b.X4);
-            var (s5, e5) = TwoSum(a.X5, b.X5);
-            var (s6, e6) = TwoSum(a.X6, b.X6);
-            double s7 = a.X7 + b.X7;
-
-            // Carry residuals up via TwoSum chain (one level — sloppy).
-            (s1, e0) = TwoSum(s1, e0);
-            (s2, e1) = TwoSum(s2, e1);
-            (s3, e2) = TwoSum(s3, e2);
-            (s4, e3) = TwoSum(s4, e3);
-            (s5, e4) = TwoSum(s5, e4);
-            (s6, e5) = TwoSum(s6, e5);
-            s7 += e6;
-
-            // Second residual sweep.
-            (s2, e0) = TwoSum(s2, e0);
-            (s3, e1) = TwoSum(s3, e1);
-            (s4, e2) = TwoSum(s4, e2);
-            (s5, e3) = TwoSum(s5, e3);
-            (s6, e4) = TwoSum(s6, e4);
-            s7 += e5;
-
-            // Final fold — remaining residuals into tail.
-            s3 += e0;
-            s4 += e1;
-            s5 += e2;
-            s6 += e3;
-            s7 += e4;
-
-            return Renorm9(s0, s1, s2, s3, s4, s5, s6, s7, 0.0);
+            // Expansion of a, smallest magnitude first.
+            var buf = new Expansion16();
+            Span<double> h = buf;
+            h[0] = a.X7; h[1] = a.X6; h[2] = a.X5; h[3] = a.X4;
+            h[4] = a.X3; h[5] = a.X2; h[6] = a.X1; h[7] = a.X0;
+            int m = 8;
+            Grow(h, ref m, b.X7); Grow(h, ref m, b.X6); Grow(h, ref m, b.X5); Grow(h, ref m, b.X4);
+            Grow(h, ref m, b.X3); Grow(h, ref m, b.X2); Grow(h, ref m, b.X1); Grow(h, ref m, b.X0);
+            return Compress(h, m);
         }
+
+        // Shewchuk GROW-EXPANSION: add q to the expansion h[0..m) exactly; the
+        // expansion gains one term. Zero b limbs are skipped (exact no-op).
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void Grow(Span<double> h, ref int m, double q)
+        {
+            if (q == 0.0) return;
+            for (int i = 0; i < m; i++)
+                (q, h[i]) = TwoSum(q, h[i]);
+            h[m++] = q;
+        }
+
+        // Shewchuk COMPRESS, then take the eight largest components (largest
+        // first) and fold anything smaller into the eighth. TwoSum (not the
+        // ordered Fast-Two-Sum) keeps every step exact even if the input limbs
+        // overlap slightly.
+        private static OD Compress(Span<double> e, int m)
+        {
+            var gBuf = new Expansion16();
+            Span<double> g = gBuf;
+            double q = e[m - 1];
+            int bottom = m - 1;
+            for (int i = m - 2; i >= 0; i--)
+            {
+                var (sum, err) = TwoSum(q, e[i]);
+                if (err != 0.0) { g[bottom--] = sum; q = err; }
+                else q = sum;
+            }
+            g[bottom] = q;
+            // Second pass: sweep g[bottom..m) and emit the non-zero components
+            // smallest-first into hOut.
+            var hBuf = new Expansion16();
+            Span<double> hOut = hBuf;
+            int top = 0;
+            q = g[bottom];
+            for (int i = bottom + 1; i < m; i++)
+            {
+                var (sum, err) = TwoSum(g[i], q);
+                if (err != 0.0) hOut[top++] = err;
+                q = sum;
+            }
+            hOut[top++] = q;
+
+            // hOut[0..top) is non-overlapping, smallest first. Largest eight →
+            // X0..X7; the rest (all below X7's ulp) folds into X7.
+            double x0 = hOut[top - 1];
+            double x1 = top > 1 ? hOut[top - 2] : 0.0;
+            double x2 = top > 2 ? hOut[top - 3] : 0.0;
+            double x3 = top > 3 ? hOut[top - 4] : 0.0;
+            double x4 = top > 4 ? hOut[top - 5] : 0.0;
+            double x5 = top > 5 ? hOut[top - 6] : 0.0;
+            double x6 = top > 6 ? hOut[top - 7] : 0.0;
+            double x7 = top > 7 ? hOut[top - 8] : 0.0;
+            for (int i = top - 9; i >= 0; i--) x7 += hOut[i];
+            return new OD(x0, x1, x2, x3, x4, x5, x6, x7);
+        }
+
+        // Fixed 16-double scratch for the expansion sum (an inline array, so no
+        // heap allocation and no stackalloc in the inlined operator).
+        [System.Runtime.CompilerServices.InlineArray(16)]
+        private struct Expansion16 { private double _e0; }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static OD operator -(OD a)
@@ -418,7 +466,9 @@ namespace FracturingFog.FFMath
         {
             var (offHi, offLo) = TwoProduct(pixelOffset, scale);
             // Add via the OD+double operator (full-cascade), NOT center + OD(offHi,…).
-            // The OD+OD sloppy operator only carries a residual down ~3 limbs, so a
+            // (Written when OD+OD was the sloppy pairwise add — #1319 made it exact,
+            // but the two OD+double steps stay the cheaper route.) That operator only
+            // carried a residual down ~3 limbs, so a
             // deep-zoom offset landing at limb X4+ (|off| ~ 1e-64, zoom > ~1e64) gets
             // parked against X3 and rounded away — every pixel collapsing to the
             // centre. OD+double propagates the addend's residual through all 8 limbs,

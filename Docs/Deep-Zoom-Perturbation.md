@@ -20,6 +20,14 @@ Memory: `project_detail_depth_limit`, `project_viewcamera_input`,
   scale)` builds a pixel's coordinate; **OD's must use the OD+double full-cascade
   add** (`(centre + offHi) + offLo`), not OD+OD — the sloppy OD+OD add loses a
   deep offset past ~1e64 (SM-6).
+- **OD + OD is an exact expansion sum since #1319.** It used to be the "sloppy"
+  pairwise add, which loses mass under cancellation; the OD reference orbit
+  (z² + c, cancelling near a nucleus) drifted ~1e-33 from the true orbit at a
+  1e66 minibrot, so long-period views past ~1e60 rendered in the wrong place
+  (minibrots lumpy or missing). The `--qdfloorsweep` check behind SM-6 only
+  measures whether pixels stay distinct, not whether the orbit is right — a
+  deep-precision change needs an orbit-vs-exact check (`S1319OdExactAddTests`
+  measures against BigInteger rationals) and a minibrot-vs-main-set render.
 - Thresholds (`MandelbrotCalculator`): `QDZoomThreshold=1e25` (QD reference
   orbit), `ODZoomThreshold=1e50` (OD reference orbit). One scale formula
   everywhere: `scale = 3.5 / (max(pxW, pxH) · zoom)`. Input and render MUST agree
