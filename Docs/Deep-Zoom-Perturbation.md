@@ -52,8 +52,20 @@ limbs per iteration (`_refZr/_refZrLo/..X7`). Each pixel iterates only its
   full value (`|z| < |δ|`) or the reference is exhausted, restart the reference
   (`Z[0]=0`, `δ := z`, `m := 0`). Keeps the δ-chain glitch-free to arbitrary
   depth without the slow per-pixel QD/OD fallback. The SIMD PT path
-  (`ComputeRowPT4/8`) carries most pixels; `ComputePixelPTRebased` is the scalar
-  fallback for lanes that glitch (typically a few % at extreme zoom).
+  (`ComputeRowPT4/8`) carries the pixels that don't glitch. Glitched lanes go to the
+  rebased loop. In the QD range (past ~1e25) the glitch check `z == Z && δ != 0` trips
+  within an iteration or two, so past ~1e30 that is **nearly every pixel**, not a few %.
+- **Vector rebasing (#1274, `UseSimdRebasing`, default on).** The PT4 / PT8 rows queue
+  their glitched pixels and run them through `ComputePixelsPTRebased4` at the row end.
+  - It works on two interleaved groups of 4 AVX2 lanes. Each lane has its own reference
+    index `m` (gathered loads), its own rebase and escape tests, and is refilled from
+    the queue when its pixel finishes.
+  - It performs `ComputePixelPTRebased`'s operations in the same order (2·x as x + x,
+    the same IEEE result), so every buffer is **byte-identical** to the scalar loop
+    (`S1274SimdRebasingTests`).
+  - Measured at 3e47, 20 000 iterations, on an i5-13420H: 2.7× per performance core,
+    1.1× per efficiency core, ~1.9× per frame on 12 threads (640×480: 600 → 310 ms).
+  - The DD-reference variant (SM-11a) stays scalar.
 - **SA (series approximation) + BLA** skip early/at-scale iterations. Toggle off
   with `DisableAcceleration` / `DisableSeriesApproximation` for A/B.
 
@@ -167,6 +179,8 @@ glance (a truncation bug would drop `n`).
   insufficient; kept for the QD follow-up).
 - `ForceScalarPtPath` — bypass SIMD so all pixels hit `ComputePixelPTRebased`
   (diagnostic; slow).
+- `UseSimdRebasing` (default **on**) — vector rebased loop for glitched lanes (#1274);
+  off = the scalar `ComputePixelPTRebased` per pixel (byte-identical, ~1.9× slower deep).
 - `DisableAcceleration` / `DisableSeriesApproximation` / `DisableDdBla`.
 
 ## 9. Rules of thumb
@@ -176,5 +190,7 @@ glance (a truncation bug would drop `n`).
    the render, not the input handlers.
 2. Never re-add per-tier branches to input handlers or a plain-double centre.
 3. New precision tier / zoom backend → extend `DeepComplex` only.
-4. Keep `ComputePixelPTRebased` and `ComputePixelPTRebasedDD` in sync.
+4. Keep `ComputePixelPTRebased`, `ComputePixelPTRebasedDD` and the vector
+   `RebaseStep` (#1274) in sync. `S1274SimdRebasingTests` fails on any drift between
+   the scalar and vector loops.
 5. Don't put long/variable status text on the status bar (panel resize bounce).

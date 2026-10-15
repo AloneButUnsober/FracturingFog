@@ -3781,6 +3781,231 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         FillAuxAndColorHP(idx, iter, maxIter, zrHi, ziHi, drv, div, colorMap);
     }
 
+    // #1274 — the rebased fallback, 4 pixels at a time (AVX2). Glitched lanes of
+    // the PT4 / PT8 rows queue here (RebaseQueue) instead of running
+    // ComputePixelPTRebased one by one; past ~1e30 that is nearly every pixel.
+    // Each lane carries its own pixel through the exact scalar loop: its own
+    // reference index m, rebase test and escape test, the same operations in the
+    // same order (no FMA contraction), so every lane's result is bit-identical to
+    // ComputePixelPTRebased for that pixel. A lane whose pixel escapes or reaches
+    // maxIter is refilled with the next queued pixel, so a long-iterating pixel
+    // never holds three idle lanes. Two such groups run interleaved per thread
+    // (each step is one long dependency chain; the core overlaps the two), and
+    // 2·x is computed as x + x (the same IEEE result, off the multiply latency).
+    // Measured at 3e47 (i5-13420H): 2.7x per performance core, 1.1x per
+    // efficiency core (128-bit units split the 256-bit ops), ~1.9x a frame on
+    // all 12 threads. AVX-512 rows (PT8) use the same 4-wide loop.
+    // UseSimdRebasing = false restores the scalar fallback (A/B, #1274 tests);
+    // the DD-reference variant (SM-11a) stays scalar.
+    public static bool UseSimdRebasing { get; set; } = true;
+
+    [ThreadStatic] private static double[]? t_rebaseCol;
+    [ThreadStatic] private static int[]? t_rebaseIdx;
+
+    /// <summary>#1274 — this thread's queue of glitched pixels for one row: column
+    /// offsets (image-centred, as ComputePixelPTRebased takes them) and buffer indices.</summary>
+    private static (double[] Col, int[] Idx) RebaseQueue(int width)
+    {
+        if (t_rebaseCol is not { } col || col.Length < width)
+        {
+            t_rebaseCol = col = new double[width];
+            t_rebaseIdx = new int[width];
+        }
+        return (col, t_rebaseIdx!);
+    }
+
+    // 4-bit lane mask → all-ones lanes, for the double blends and the int32 index blend.
+    private static readonly Vector256<double>[] s_laneMaskD = BuildLaneMasksD();
+    private static readonly Vector128<int>[] s_laneMaskI = BuildLaneMasksI();
+    private static Vector256<double>[] BuildLaneMasksD()
+    {
+        var t = new Vector256<double>[16];
+        for (int i = 0; i < 16; i++) t[i] = MaskToVector(i);
+        return t;
+    }
+    private static Vector128<int>[] BuildLaneMasksI()
+    {
+        var t = new Vector128<int>[16];
+        for (int i = 0; i < 16; i++)
+            t[i] = Vector128.Create((i & 1) != 0 ? -1 : 0, (i & 2) != 0 ? -1 : 0, (i & 4) != 0 ? -1 : 0, (i & 8) != 0 ? -1 : 0);
+        return t;
+    }
+
+    // #1274 — one group of 4 lanes of the vector rebased loop: each lane's δ, dz/dc,
+    // dc, reference index m, iteration count and queue position.
+    private unsafe struct RebaseQuad
+    {
+        public Vector256<double> DcR, Dr, Di, Drv, Div;
+        public Vector128<int> M, It;
+        public int Active;
+        public fixed int Pix[4];
+    }
+
+    // Loop-invariant inputs of the vector rebased loop.
+    private readonly unsafe struct RebaseInputs
+    {
+        public readonly double* Zr, Zi;
+        public readonly double[] Cols;
+        public readonly int[] Idxs;
+        public readonly int Count, MaxIter;
+        public readonly double Scale, RecycleDx;
+        public readonly Vector256<double> Er2, DcI;
+        public readonly Vector128<int> RefLast2, Cap;
+
+        public RebaseInputs(double* zr, double* zi, double[] cols, int[] idxs, int count, int maxIter,
+            double scale, double recycleDx, double er2, double dcI, int refLen)
+        {
+            Zr = zr; Zi = zi; Cols = cols; Idxs = idxs; Count = count; MaxIter = maxIter;
+            Scale = scale; RecycleDx = recycleDx;
+            Er2 = Vector256.Create(er2); DcI = Vector256.Create(dcI);
+            RefLast2 = Vector128.Create(refLen - 2);  // m > refLen - 2: reference exhausted
+            Cap = Vector128.Create(maxIter - 1);      // it > maxIter - 1: iteration cap reached
+        }
+    }
+
+    private unsafe void ComputePixelsPTRebased4<TMap>(
+        double[] cols, int[] idxs, int count, double rowOffsetY, double scale,
+        int maxIter, TMap colorMap)
+        where TMap : IColorMap
+    {
+        int refLen = _refOrbitLen;
+        if (refLen < 1 || maxIter <= 0 || !Avx2.IsSupported)
+        {
+            for (int p = 0; p < count; p++)
+                ComputePixelPTRebased(cols[p], rowOffsetY, scale, maxIter, idxs[p], colorMap);
+            return;
+        }
+
+        fixed (double* pZr = _refZr, pZi = _refZi)
+        {
+            // dc exactly as ComputePixelPTRebased forms it, per pixel.
+            var inp = new RebaseInputs(pZr, pZi, cols, idxs, count, maxIter, scale, _refRecycleDx,
+                EscapeRadius2, rowOffsetY * scale + _refRecycleDy, refLen);
+            // Two independent groups per thread: each iteration is one long
+            // dependency chain, and the core overlaps the two.
+            RebaseQuad qa = default, qb = default;
+            int next = 0;
+            for (int k = 0; k < 4; k++) LoadLane(ref qa, k, ref next, in inp);
+            for (int k = 0; k < 4; k++) LoadLane(ref qb, k, ref next, in inp);
+            while ((qa.Active | qb.Active) != 0)
+            {
+                if (qa.Active != 0) RebaseStep(ref qa, ref next, in inp, colorMap);
+                if (qb.Active != 0) RebaseStep(ref qb, ref next, in inp, colorMap);
+            }
+        }
+
+        Interlocked.Add(ref _ptRebasedPixels, count);
+    }
+
+    /// <summary>Start lane <paramref name="k"/> on the next queued pixel (δ_0 = 0,
+    /// dz/dc = 1, m = 0), or retire it (zeros) when the queue is empty.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static unsafe void LoadLane(ref RebaseQuad q, int k, ref int next, in RebaseInputs inp)
+    {
+        if (next < inp.Count)
+        {
+            q.Pix[k] = next;
+            q.DcR = q.DcR.WithElement(k, inp.Cols[next] * inp.Scale + inp.RecycleDx);
+            q.Active |= 1 << k;
+            next++;
+        }
+        else
+        {
+            q.Active &= ~(1 << k);
+            q.DcR = q.DcR.WithElement(k, 0.0);
+        }
+        q.Dr = q.Dr.WithElement(k, 0.0); q.Di = q.Di.WithElement(k, 0.0);
+        q.Drv = q.Drv.WithElement(k, 1.0); q.Div = q.Div.WithElement(k, 0.0);
+        q.M = q.M.WithElement(k, 0); q.It = q.It.WithElement(k, 0);
+    }
+
+    /// <summary>One iteration of ComputePixelPTRebased on 4 lanes, operation for
+    /// operation; finished lanes are resolved and refilled.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private unsafe void RebaseStep<TMap>(ref RebaseQuad q, ref int next, in RebaseInputs inp, TMap colorMap)
+        where TMap : IColorMap
+    {
+        var one = Vector256.Create(1.0);
+        var oneI = Vector128.Create(1);
+        var dr = q.Dr; var di = q.Di; var drv = q.Drv; var div = q.Div; var m = q.M;
+
+        // Every lane's m stays in [0, refLen): an exhausted reference rebases to 0
+        // below on every lane, live or idle, before m advances.
+        var Zr = Avx2.GatherVector256(inp.Zr, m, 8);
+        var Zi = Avx2.GatherVector256(inp.Zi, m, 8);
+        var zr = Avx.Add(Zr, dr);
+        var zi = Avx.Add(Zi, di);
+        var zmag2 = Avx.Add(Avx.Multiply(zr, zr), Avx.Multiply(zi, zi));
+
+        int finished = Avx.MoveMask(Avx.Compare(zmag2, inp.Er2,
+            FloatComparisonMode.OrderedGreaterThanOrEqualNonSignaling)) & q.Active;
+        if (finished != 0)
+        {
+            // Escape: z of this iteration, derivative before its update.
+            for (int k = 0; k < 4; k++)
+                if ((finished >> k & 1) != 0)
+                    Resolve(inp.Idxs[q.Pix[k]], q.It.GetElement(k), inp.MaxIter,
+                        zr.GetElement(k), zi.GetElement(k), drv.GetElement(k), div.GetElement(k), colorMap);
+        }
+
+        // 2·x as x + x: the same IEEE result, one fewer multiply on the chain.
+        var tDrv = Avx.Subtract(Avx.Multiply(zr, drv), Avx.Multiply(zi, div));
+        var tDiv = Avx.Add(Avx.Multiply(zr, div), Avx.Multiply(zi, drv));
+        var newDrv = Avx.Add(Avx.Add(tDrv, tDrv), one);
+        var newDiv = Avx.Add(tDiv, tDiv);
+        drv = newDrv; div = newDiv;
+
+        // Rebase where the full value is below the perturbation or the reference
+        // is exhausted. Lanes that just finished are refilled below and idle
+        // lanes carry zeros, so neither needs masking.
+        var dmag2 = Avx.Add(Avx.Multiply(dr, dr), Avx.Multiply(di, di));
+        int rebase = Avx.MoveMask(Avx.Compare(zmag2, dmag2, FloatComparisonMode.OrderedLessThanNonSignaling))
+                   | Sse.MoveMask(Sse2.CompareGreaterThan(m, inp.RefLast2).AsSingle());   // m + 1 >= refLen
+        if (rebase != 0)
+        {
+            // δ := z, relative to the restarted Z[0] = 0.
+            var mask = s_laneMaskD[rebase];
+            dr = Avx.BlendVariable(dr, zr, mask);
+            di = Avx.BlendVariable(di, zi, mask);
+            Zr = Avx.BlendVariable(Zr, Vector256<double>.Zero, mask);
+            Zi = Avx.BlendVariable(Zi, Vector256<double>.Zero, mask);
+            m = Sse41.BlendVariable(m, Vector128<int>.Zero, s_laneMaskI[rebase]);
+        }
+
+        // δ_{n+1} = (2·Z[m] + δ)·δ + dc  (Z[m] = 0 right after a rebase).
+        var a = Avx.Add(Avx.Add(Zr, Zr), dr);
+        var b = Avx.Add(Avx.Add(Zi, Zi), di);
+        q.Dr = Avx.Add(Avx.Subtract(Avx.Multiply(a, dr), Avx.Multiply(b, di)), q.DcR);
+        q.Di = Avx.Add(Avx.Add(Avx.Multiply(a, di), Avx.Multiply(b, dr)), inp.DcI);
+        q.Drv = drv; q.Div = div;
+        q.M = Sse2.Add(m, oneI);
+        var it = Sse2.Add(q.It, oneI);
+        q.It = it;
+
+        int capped = Sse.MoveMask(Sse2.CompareGreaterThan(it, inp.Cap).AsSingle()) & q.Active & ~finished;
+        if (capped != 0)
+        {
+            // In set: z of the last iteration, derivative after its update.
+            for (int k = 0; k < 4; k++)
+                if ((capped >> k & 1) != 0)
+                    Resolve(inp.Idxs[q.Pix[k]], inp.MaxIter, inp.MaxIter,
+                        zr.GetElement(k), zi.GetElement(k), drv.GetElement(k), div.GetElement(k), colorMap);
+            finished |= capped;
+        }
+
+        if (finished != 0)
+            for (int k = 0; k < 4; k++)
+                if ((finished >> k & 1) != 0) LoadLane(ref q, k, ref next, in inp);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void Resolve<TMap>(int idx, int iter, int maxIter, double zr, double zi, double drv, double div, TMap colorMap)
+        where TMap : IColorMap
+    {
+        IterationBuffer[idx] = iter;
+        FillAuxAndColorHP(idx, iter, maxIter, zr, zi, drv, div, colorMap);
+    }
+
     private void ComputeRowPTScalar<TMap>(
         int y, double scale, int maxIter, int rowBase, TMap colorMap)
         where TMap : IColorMap
@@ -3890,6 +4115,11 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         long rowSaApplied = 0;
         long rowSaIterSaved = 0;
         int x = 0;
+
+        // #1274 — glitched pixels queue for the 4-wide rebased loop at the row end.
+        bool queueRebase = AllowPtRebasing && UseSimdRebasing && !UseDdRebaseReference;
+        var (rqCol, rqIdx) = queueRebase ? RebaseQueue(Width) : (Array.Empty<double>(), Array.Empty<int>());
+        int rqN = 0;
 
         // Hoisted out of column loop to avoid CA2014 stack growth.
         Span<double> icSpan  = stackalloc double[4];
@@ -4086,7 +4316,8 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
                     double colOffsetX = offX + x + k - halfW;
                     if (AllowPtRebasing)
                     {
-                        ComputePixelPTRebased(
+                        if (queueRebase) { rqCol[rqN] = colOffsetX; rqIdx[rqN++] = idx; }   // #1274
+                        else ComputePixelPTRebased(
                             colOffsetX, rowOffsetY, scale, maxIter, idx, colorMap);
                         continue;
                     }
@@ -4131,7 +4362,10 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
             if (!ComputePixelPT(dcX, dcY, maxIter, idx, colorMap))
             {
                 if (AllowPtRebasing)
-                    ComputePixelPTRebased(colOffsetX, rowOffsetY, scale, maxIter, idx, colorMap);
+                {
+                    if (queueRebase) { rqCol[rqN] = colOffsetX; rqIdx[rqN++] = idx; }   // #1274
+                    else ComputePixelPTRebased(colOffsetX, rowOffsetY, scale, maxIter, idx, colorMap);
+                }
                 else if (useOD)
                 {
                     OD cx_od = OD.FromCenterOffset(
@@ -4153,6 +4387,9 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
                 }
             }
         }
+
+        if (rqN > 0)
+            ComputePixelsPTRebased4(rqCol, rqIdx, rqN, rowOffsetY, scale, maxIter, colorMap);
 
         if (rowBlaSkips != 0)
         {
@@ -4213,6 +4450,11 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         long rowSaApplied = 0;
         long rowSaIterSaved = 0;
         int x = 0;
+
+        // #1274 — glitched pixels queue for the 4-wide rebased loop at the row end.
+        bool queueRebase = AllowPtRebasing && UseSimdRebasing && !UseDdRebaseReference;
+        var (rqCol, rqIdx) = queueRebase ? RebaseQueue(Width) : (Array.Empty<double>(), Array.Empty<int>());
+        int rqN = 0;
 
         // Hoisted out of column loop to avoid CA2014 stack growth.
         Span<double> icSpan  = stackalloc double[8];
@@ -4397,7 +4639,8 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
                     double colOffsetX = offX + x + k - halfW;
                     if (AllowPtRebasing)
                     {
-                        ComputePixelPTRebased(
+                        if (queueRebase) { rqCol[rqN] = colOffsetX; rqIdx[rqN++] = idx; }   // #1274
+                        else ComputePixelPTRebased(
                             colOffsetX, rowOffsetY, scale, maxIter, idx, colorMap);
                         continue;
                     }
@@ -4441,7 +4684,10 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
             if (!ComputePixelPT(dcX, dcY, maxIter, idx, colorMap))
             {
                 if (AllowPtRebasing)
-                    ComputePixelPTRebased(colOffsetX, rowOffsetY, scale, maxIter, idx, colorMap);
+                {
+                    if (queueRebase) { rqCol[rqN] = colOffsetX; rqIdx[rqN++] = idx; }   // #1274
+                    else ComputePixelPTRebased(colOffsetX, rowOffsetY, scale, maxIter, idx, colorMap);
+                }
                 else if (useOD)
                 {
                     OD cx_od = OD.FromCenterOffset(
@@ -4463,6 +4709,9 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
                 }
             }
         }
+
+        if (rqN > 0)
+            ComputePixelsPTRebased4(rqCol, rqIdx, rqN, rowOffsetY, scale, maxIter, colorMap);
 
         if (rowBlaSkips != 0)
         {
