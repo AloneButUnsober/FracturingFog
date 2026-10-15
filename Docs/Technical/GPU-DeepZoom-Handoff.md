@@ -106,7 +106,7 @@ dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke
 | # | Title | State |
 |---|-------|-------|
 | [#82](https://github.com/AloneButUnsober/FracturingFog/issues/82) | V6 GPU perturbation | **Closed.** The `MaxGpuPerturbZoom` lift decision moved to the modern-GPU sign-off, #1265. |
-| [#88](https://github.com/AloneButUnsober/FracturingFog/issues/88) | **SA/BLA on GPU** | **Implemented** (SA PR #1211, BLA PR #1215, both backends). Only the strong-fp64 speed sign-off is left, in #1265. |
+| [#88](https://github.com/AloneButUnsober/FracturingFog/issues/88) | **SA/BLA on GPU** | **Closed** (SA PR #1211, BLA PR #1215, both backends; the shader BLA lookup starts at the aligned level like the CPU since #1346, ~5–9% on the GT 710). The strong-fp64 speed sign-off is #1265. |
 | [#85](https://github.com/AloneButUnsober/FracturingFog/issues/85) | Resize-during-calc buffer realloc race | **Closed.** |
 | [#84](https://github.com/AloneButUnsober/FracturingFog/issues/84) | LightingFX HUD gone post-Vulkan | **Closed.** |
 | [#44](https://github.com/AloneButUnsober/FracturingFog/issues/44) | V5 macOS via MoltenVK | Stretch — needs a **Mac**, not FP64. |
