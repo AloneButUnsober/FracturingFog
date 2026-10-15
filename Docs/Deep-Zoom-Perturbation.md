@@ -120,15 +120,20 @@ but not exact / jumping" is the residual below, not a navigation fault.
 
 ## 6. What actually remains (cosmetic, deep zoom)
 
-- **¼-res progressive drag preview.** `RenderHint.Fast` → `Trigger(progressive)`
-  shows a ¼-then-½-res preview during a drag; the block edges shift as you move,
-  which reads as "jumping" on a busy deep image. This is preview *resolution*,
-  not navigation. Lever: higher preview floor (½ instead of ¼) at deep zoom, or a
-  brief settle before the first preview.
-- **Palette sensitivity.** The reference-consistent render still varies by a few
-  iteration counts frame-to-frame (Δiter ≤ ~6/px over a 40px pan); a fast-cycling
-  rainbow palette turns that into visible shimmer. Lever: a less
-  iteration-sensitive / smoothed palette.
+- **¼-res progressive drag preview — FIXED (#1272).** Each drag step rendered
+  the ¼ / ½ preview centred on the new view, so its coarse grid sampled
+  different points every step and thin features flickered. Measured (mean
+  per-channel change beyond the pure pan, Seahorse 1e6): full-res frames 0.7,
+  view-centred ¼ preview ~29, a ½ floor ~26 (so the ½-floor lever barely helps),
+  **world-anchored ¼ preview 0.4**. Fix: `PreviewLattice.Snap` puts the preview
+  centre on a lattice of whole preview texels from a fixed world anchor
+  (reset on zoom / size change) and `PreviewLattice.Resample` draws it with the
+  exact sub-texel offset (~5 ms at 1080p). Plain 2D Mandelbrot previews only.
+- **Palette sensitivity / frame-to-frame Δiter.** Part of SM-11's measured
+  Δiter (at 4.7e64) was the sloppy OD add (#1319): after that fix full-res frames
+  there are identical across a pan. What remains appears close to the
+  detail-depth limit (e.g. "Will this work", 3e47: `MaxUsefulZoomLog10` 49.5, full
+  frames differ by ~12/255 per channel) — the double-δ floor, not the preview.
 - Both are cosmetic. The reference-recycle plumbing (`RecyclePreviewOrbit`,
   default OFF; `MandelbrotCalculator.AllowRecycleThisRender`) is kept but unused —
   `--panjitter` showed it changes neither pixels nor perceptible speed.

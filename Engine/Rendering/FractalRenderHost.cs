@@ -190,6 +190,18 @@ namespace FracturingFog.Rendering
         // 1080p, so ~0.5 MB / 2 MB respectively. Pinned (POH) so the GPU
         // upload path doesn't need a per-frame GCHandle.Alloc.
         private uint[]? _uploadPreviewPool;
+
+        // #1272 (SM-11 residual) — world-anchored progressive previews (see
+        // PreviewLattice). The anchor resets on a zoom or size change. Plain 2D
+        // Mandelbrot previews only: relief / alt previews keep the plain stretch.
+        private FracturingFog.FFMath.DeepComplex _previewAnchor;
+        private bool _previewAnchorValid;
+        private double _previewAnchorZoom;
+        private int _previewAnchorW, _previewAnchorH;
+        // Written on the calc thread, read by the upload callback: an immutable
+        // reference, so a read never sees a torn map. Null = plain stretch.
+        private volatile PreviewLattice.Map? _previewMapQuarter, _previewMapHalf;
+        private uint[]? _previewResamplePool;
         // Tracks the renderer's CURRENT back-buffer size (last value passed to
         // Resize). Survives _lastUploadedBuffer being nulled by Resize, so the
         // slideshow cold-start path can build a black source buffer at the right
@@ -1716,6 +1728,13 @@ namespace FracturingFog.Rendering
                         ? _previewCalcQuarter
                         : _previewCalcHalf;
                     MirrorMandelbrotState(calc, preview);
+                    // #1272 — snap the preview onto the world-anchored lattice (plain
+                    // 2D only: a relief preview is an oblique projection, not a pure
+                    // translation, so it keeps the plain stretch).
+                    PreviewLattice.Map? map = ViewState.FractalParameters.Relief2DEnabled
+                        ? null
+                        : AnchorPreview(calc, preview);
+                    if (quarter) _previewMapQuarter = map; else _previewMapHalf = map;
                     // SM-11b — let the preview reuse its cached reference orbit across
                     // a drag so consecutive preview frames share one reference (no
                     // per-move recompute → no deep-zoom "jumping"). Only the transient
@@ -2378,6 +2397,42 @@ namespace FracturingFog.Rendering
         // (smaller) size — the calc thread temporarily inherits the centre /
         // zoom / iter / quality / colour map / acceleration flags so the
         // pixel scale and ref orbit reproduce the main view at downsample.
+        /// <summary>#1272 — move <paramref name="preview"/>'s centre (already mirrored
+        /// from <paramref name="calc"/>) onto the world-anchored lattice of whole
+        /// preview texels and return the screen → texel map (calc thread only).</summary>
+        private PreviewLattice.Map? AnchorPreview(MandelbrotCalculator calc, MandelbrotCalculator preview)
+        {
+            int w = calc.Width, h = calc.Height, pw = preview.Width, ph = preview.Height;
+            if (w <= 0 || h <= 0 || pw <= 0 || ph <= 0 || !(calc.Zoom > 0)) return null;
+            double s = (3.5 / Math.Max(w, h)) / calc.Zoom;         // screen pixel
+            double sp = (3.5 / Math.Max(pw, ph)) / preview.Zoom;   // preview texel
+            var centre = FracturingFog.FFMath.DeepComplex.FromLimbs(
+                calc.CenterX, calc.CenterXLo, calc.CenterX2, calc.CenterX3,
+                calc.CenterX4, calc.CenterX5, calc.CenterX6, calc.CenterX7,
+                calc.CenterY, calc.CenterYLo, calc.CenterY2, calc.CenterY3,
+                calc.CenterY4, calc.CenterY5, calc.CenterY6, calc.CenterY7);
+
+            bool fresh = !_previewAnchorValid || _previewAnchorZoom != calc.Zoom
+                         || _previewAnchorW != w || _previewAnchorH != h;
+            var snap = fresh ? null : PreviewLattice.Snap(centre, _previewAnchor, s, sp, w, h, pw, ph);
+            if (snap == null)
+            {
+                // New zoom / size, or drifted far from the anchor: restart here.
+                _previewAnchor = centre;
+                _previewAnchorZoom = calc.Zoom;
+                _previewAnchorW = w;
+                _previewAnchorH = h;
+                _previewAnchorValid = true;
+                snap = PreviewLattice.Snap(centre, centre, s, sp, w, h, pw, ph);
+            }
+            var (p, map) = snap!.Value;
+            preview.CenterX = p.Re.X0; preview.CenterXLo = p.Re.X1; preview.CenterX2 = p.Re.X2; preview.CenterX3 = p.Re.X3;
+            preview.CenterX4 = p.Re.X4; preview.CenterX5 = p.Re.X5; preview.CenterX6 = p.Re.X6; preview.CenterX7 = p.Re.X7;
+            preview.CenterY = p.Im.X0; preview.CenterYLo = p.Im.X1; preview.CenterY2 = p.Im.X2; preview.CenterY3 = p.Im.X3;
+            preview.CenterY4 = p.Im.X4; preview.CenterY5 = p.Im.X5; preview.CenterY6 = p.Im.X6; preview.CenterY7 = p.Im.X7;
+            return map;
+        }
+
         private static void MirrorMandelbrotState(MandelbrotCalculator src, MandelbrotCalculator dst)
         {
             dst.CenterX   = src.CenterX;   dst.CenterXLo = src.CenterXLo;
@@ -2796,6 +2851,20 @@ namespace FracturingFog.Rendering
                                     previewSrc, _reliefPreviewScratch, phs, pw, ph, prp);
                             previewSrc = _reliefPreviewScratch;
                         }
+                    }
+                    // #1272 — an anchored preview is resampled to the screen with its
+                    // sub-texel offset (the plain stretch would show the lattice snap).
+                    var pmap = quarter ? _previewMapQuarter : _previewMapHalf;
+                    if (!useAlt && pmap is { K: > 0 } && previewSrc != null && previewSrc.Length >= pn
+                        && !ViewState.FractalParameters.Relief2DEnabled
+                        && job.CalcW > 0 && job.CalcH > 0)
+                    {
+                        int sn = job.CalcW * job.CalcH;
+                        if (_previewResamplePool == null || _previewResamplePool.Length < sn)
+                            _previewResamplePool = GC.AllocateUninitializedArray<uint>(sn, pinned: true);
+                        PreviewLattice.Resample(previewSrc, pw, ph, pmap, _previewResamplePool, job.CalcW, job.CalcH);
+                        previewSrc = _previewResamplePool;
+                        pw = job.CalcW; ph = job.CalcH; pn = sn;
                     }
                     if (previewSrc != null)
                     lock (_d3dGate)

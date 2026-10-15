@@ -84,7 +84,12 @@ public sealed class DualOrbitProgressiveTests
     [Fact]
     public void Mandelbrot_StillRunsItsProgressiveChain()
     {
-        var (uploads, _) = Run(FractalType.Mandelbrot, progressive: true);
-        Assert.Contains((Math.Max(64, W / 4), Math.Max(64, H / 4)), uploads);
+        // #1272 — Mandelbrot's ¼ / ½ previews are world-anchored and resampled to
+        // the screen, so they upload at full size: the chain shows as two extra
+        // presents (¼, ½) before the final, which still matches a single pass.
+        var (uploads, final) = Run(FractalType.Mandelbrot, progressive: true);
+        var (single, singleFinal) = Run(FractalType.Mandelbrot, progressive: false);
+        Assert.True(uploads.Count >= single.Count + 2, $"progressive {uploads.Count} vs single {single.Count} uploads");
+        Assert.Equal(singleFinal, final);
     }
 }
