@@ -19,9 +19,25 @@
 // pipelines, HOST_VISIBLE buffers re-allocated only on a dimension change,
 // one command pool). Per-Run: a small descriptor pool + set + command buffer,
 // created and destroyed each dispatch so a mid-session resize can never leave a
-// descriptor pointing at a freed buffer. Memory is HOST_VISIBLE|HOST_COHERENT
-// (direct map, no staging) — simplest correct path; a device-local + staging
-// fast path is a later perf slice, not a V3 concern.
+// descriptor pointing at a freed buffer.
+//
+// Memory (#1228, VulkanBufferPlacement):
+//   - Buffers the shader READS many times — the reference orbit, the SA / BLA
+//     tables — are DEVICE_LOCAL behind a host-visible staging twin: uploads land
+//     in staging and are copied in at the start of the next dispatch's command
+//     buffer.
+//   - The frame outputs (iter / smooth / finalZD / colour / trap / orbit means)
+//     and the Buddhabrot histogram stay in host-cached memory (#1173-L): the
+//     shader writes them while it computes, and those writes cross PCIe in the
+//     shadow of the compute. Staging them in VRAM adds a copy after the dispatch —
+//     measured on a GT 710: 1080p SP +3.5 ms at 64 iterations and +10 ms at 1024,
+//     Buddhabrot 720p +2-4%. FF_VULKAN_MEMORY=device-outputs stages them anyway
+//     (cleared with vkCmdFillBuffer, copied out after the dispatch), for judging
+//     the trade on faster hardware.
+//   - Params UBOs and the per-row caps are tiny and stay direct-mapped.
+// Where host-visible memory already sits on a device-local heap (integrated
+// GPUs, software devices) nothing is staged. FF_VULKAN_MEMORY=host restores the
+// pre-#1228 all-host layout (escape hatch / A-B).
 //
 // Thread-affinity: like the D3D kernel, a single caller drives Run() from the
 // calc thread. Not internally synchronised.
@@ -91,7 +107,27 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     {
         public Buffer Buffer; public DeviceMemory Memory; public ulong Size;
         public ulong AllocSize; public bool DeviceLocal;   // #1166 — resident accounting
+        // #1228 — the host-visible twin of a device-local buffer (0 = direct-mapped).
+        public Buffer Staging; public DeviceMemory StagingMemory; public ulong StagingAllocSize;
+        public readonly bool Staged => Staging.Handle != 0;
+        /// <summary>The memory the CPU maps: the staging twin, or the buffer itself.</summary>
+        public readonly DeviceMemory HostMemory => Staged ? StagingMemory : Memory;
     }
+
+    /// <summary>#1228 — what a buffer is for. <c>Host</c>: host-visible, direct map
+    /// (UBOs, per-row caps). <c>Upload</c>: shader input, device-local behind a
+    /// staging twin the CPU writes. <c>Output</c>: written by the shader and read
+    /// back — host-cached and direct, or device-local behind a host-cached staging
+    /// twin under <see cref="VulkanBufferPlacement.DeviceOutputs"/>.</summary>
+    private enum Residency { Host, Upload, Output }
+
+    // #1228 — staging → device copies and device fills waiting for the next
+    // command buffer (FlushPending), recorded in call order.
+    private readonly List<(Buffer Src, Buffer Dst, ulong Bytes)> _pendingCopies = new();
+    private readonly List<(Buffer Dst, ulong Bytes)> _pendingFills = new();
+
+    /// <summary>#1228 — the buffer layout this kernel runs.</summary>
+    public VulkanBufferPlacement Placement { get; }
 
     // #1166 — device memory this kernel holds right now (every buffer goes through
     // AllocBuffer / FreeBuffer), and the part on a device-local heap (VRAM on a
@@ -172,12 +208,15 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     /// <param name="ownsContext">When true, <see cref="Dispose"/> also disposes
     /// <paramref name="ctx"/> — used by <see cref="TryCreateWithOwnContext"/> so
     /// the host can hand the calculator a self-contained kernel.</param>
-    public VulkanComputeKernel(VulkanContext ctx, bool ownsContext = false)
+    /// <param name="placement">#1228 — the buffer layout; null reads FF_VULKAN_MEMORY
+    /// (see <see cref="VulkanHostMemory.PlacementFromEnvironment"/>).</param>
+    public VulkanComputeKernel(VulkanContext ctx, bool ownsContext = false, VulkanBufferPlacement? placement = null)
     {
         _ctx = ctx ?? throw new ArgumentNullException(nameof(ctx));
         if (ctx.Device.Handle == 0)
             throw new ArgumentException("VulkanContext has no logical device — call CreateComputeDevice() first.", nameof(ctx));
         _ownsContext = ownsContext;
+        Placement = placement ?? VulkanHostMemory.PlacementFromEnvironment();
         _vk = ctx.Vk;
         _device = ctx.Device;
 
@@ -237,7 +276,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     /// Vulkan device is available or init fails. The returned kernel disposes its
     /// context on <see cref="Dispose"/>. Suitable as a
     /// <c>FractalRenderHost.GpuKernelFactory</c>. Never throws.</summary>
-    public static VulkanComputeKernel? TryCreateWithOwnContext()
+    public static VulkanComputeKernel? TryCreateWithOwnContext(VulkanBufferPlacement? placement = null)
     {
         VulkanContext? ctx = null;
         try
@@ -245,7 +284,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             ctx = VulkanContext.CreateInstance();
             if (ctx.EnumerateDevices().Count == 0) { ctx.Dispose(); return null; }
             ctx.CreateComputeDevice();
-            return new VulkanComputeKernel(ctx, ownsContext: true);
+            return new VulkanComputeKernel(ctx, ownsContext: true, placement);
         }
         catch
         {
@@ -411,9 +450,13 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
                 Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
             };
             Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
+            FlushPending(cmd);
             _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, prog.Pipeline);
             _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, prog.Layout, 0, 1, &set, 0, null);
             _vk.CmdDispatch(cmd, (uint)((width + 7) / 8), (uint)((height + 7) / 8), 1);
+            bool trapOut = useColor && trapDst != null && prog.BindingCount == 7;
+            RecordReadback(cmd, Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)),
+                useColor ? Out(_buf[5], n * sizeof(uint)) : default, trapOut ? Out(_buf[6], n * sizeof(float)) : default);
             Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
 
             var cmdLocal = cmd;
@@ -483,6 +526,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             RowBase = 0,
         };
         DispatchPerturbPlain(_perturb, blob, width, height, maxIter, refZr, refZi, refLen, null, "");
+        SubmitReadback(Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)));
 
         long tDispatch = Stopwatch.GetTimestamp();
         ReadIter(_buf[2], iterDst, n);
@@ -530,7 +574,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         if (_orbitOut.Buffer.Handle == 0 || _orbitOut.Size < (ulong)(n * stride * sizeof(float)))
         {
             FreeBuffer(ref _orbitOut);
-            _orbitOut = AllocBuffer((ulong)(n * stride * sizeof(float)), BufferUsageFlags.StorageBufferBit, readback: true);
+            _orbitOut = AllocBuffer((ulong)(n * stride * sizeof(float)), BufferUsageFlags.StorageBufferBit, Residency.Output);
         }
         if (!_perturbOrbit.TryGetValue(orbitMask, out var prog))
         {
@@ -548,6 +592,8 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             Pad1 = BitConverter.SingleToInt32Bits((float)centerIm),   // gCIm
         };
         DispatchPerturbPlain(prog, blob, width, height, maxIter, refZr, refZi, refLen, _orbitOut, " (orbit)");
+        SubmitReadback(Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)),
+            Out(_orbitOut, (long)n * stride * sizeof(float)));
 
         long tDispatch = Stopwatch.GetTimestamp();
         ReadIter(_buf[2], iterDst, n);
@@ -597,7 +643,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         if (_buddhaHits.Buffer.Handle == 0 || _buddhaHits.Size < hitBytes)
         {
             FreeBuffer(ref _buddhaHits);
-            _buddhaHits = AllocBuffer(hitBytes, BufferUsageFlags.StorageBufferBit, readback: true);
+            _buddhaHits = AllocBuffer(hitBytes, BufferUsageFlags.StorageBufferBit, Residency.Output);
         }
         ZeroBuffer(_buddhaHits);
 
@@ -671,6 +717,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
                         SType = StructureType.CommandBufferBeginInfo, Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
                     };
                     Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
+                    FlushPending(cmd);   // #1228: the histogram clear lands before the first chunk
                     _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, _buddha.Pipeline);
                     _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, _buddha.Layout, 0, 1, &setForCmd, 0, null);
                     _vk.CmdDispatch(cmd, (uint)((count + BuddhaKernelSource.GroupSize - 1) / BuddhaKernelSource.GroupSize), 1, 1);
@@ -689,9 +736,10 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             if (pool.Handle != 0) _vk.DestroyDescriptorPool(_device, pool, null);
         }
 
+        SubmitReadback(Out(_buddhaHits, (long)hitBytes));
         long tDispatch = Stopwatch.GetTimestamp();
         void* mapped;
-        Check(_vk.MapMemory(_device, _buddhaHits.Memory, 0, hitBytes, 0, &mapped), "vkMapMemory");
+        Check(_vk.MapMemory(_device, _buddhaHits.HostMemory, 0, hitBytes, 0, &mapped), "vkMapMemory");
         var src = (uint*)mapped;
         for (int i = 0; i < n; i++)
         {
@@ -699,7 +747,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             hitsG[i] += src[n + i];
             hitsB[i] += src[2 * n + i];
         }
-        _vk.UnmapMemory(_device, _buddhaHits.Memory);
+        _vk.UnmapMemory(_device, _buddhaHits.HostMemory);
         long tEnd = Stopwatch.GetTimestamp();
         double freq = Stopwatch.Frequency;
         LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
@@ -803,6 +851,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
                     Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
                 };
                 Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
+                FlushPending(cmd);   // #1228: the orbit upload lands before band 0
                 _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, prog.Pipeline);
                 _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, prog.Layout, 0, 1, &set, 0, null);
                 _vk.CmdDispatch(cmd, (uint)((width + 7) / 8), (uint)((rows + 7) / 8), 1);
@@ -993,6 +1042,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
                     Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
                 };
                 Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
+                FlushPending(cmd);   // #1228: orbit + SA / BLA uploads land before band 0
                 _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, _perturbSa.Pipeline);
                 _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, _perturbSa.Layout, 0, 1, &set, 0, null);
                 _vk.CmdDispatch(cmd, (uint)((width + 7) / 8), (uint)((rows + 7) / 8), 1);
@@ -1030,6 +1080,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             if (cmd.Handle != 0) _vk.FreeCommandBuffers(_device, _cmdPool, 1, in cmd);
             if (pool.Handle != 0) _vk.DestroyDescriptorPool(_device, pool, null);
         }
+        SubmitReadback(Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)));
 
         long tDispatch = Stopwatch.GetTimestamp();
         ReadIter(_buf[2], iterDst, n);
@@ -1050,7 +1101,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     {
         if (_blaBuf.Buffer.Handle != 0 && _blaAlloc >= doubles) return;
         FreeBuffer(ref _blaBuf);
-        _blaBuf = AllocBuffer((ulong)(doubles * sizeof(double)), BufferUsageFlags.StorageBufferBit);
+        _blaBuf = AllocBuffer((ulong)(doubles * sizeof(double)), BufferUsageFlags.StorageBufferBit, Residency.Upload);
         _blaAlloc = doubles;
     }
 
@@ -1065,14 +1116,14 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             FreeBuffer(ref _saCR); FreeBuffer(ref _saCI);
             FreeBuffer(ref _saDR); FreeBuffer(ref _saDI);
             ulong sz = (ulong)(coeffLen * sizeof(double));
-            _saAR = AllocBuffer(sz, BufferUsageFlags.StorageBufferBit);
-            _saAI = AllocBuffer(sz, BufferUsageFlags.StorageBufferBit);
-            _saBR = AllocBuffer(sz, BufferUsageFlags.StorageBufferBit);
-            _saBI = AllocBuffer(sz, BufferUsageFlags.StorageBufferBit);
-            _saCR = AllocBuffer(sz, BufferUsageFlags.StorageBufferBit);
-            _saCI = AllocBuffer(sz, BufferUsageFlags.StorageBufferBit);
-            _saDR = AllocBuffer(sz, BufferUsageFlags.StorageBufferBit);
-            _saDI = AllocBuffer(sz, BufferUsageFlags.StorageBufferBit);
+            _saAR = AllocBuffer(sz, BufferUsageFlags.StorageBufferBit, Residency.Upload);
+            _saAI = AllocBuffer(sz, BufferUsageFlags.StorageBufferBit, Residency.Upload);
+            _saBR = AllocBuffer(sz, BufferUsageFlags.StorageBufferBit, Residency.Upload);
+            _saBI = AllocBuffer(sz, BufferUsageFlags.StorageBufferBit, Residency.Upload);
+            _saCR = AllocBuffer(sz, BufferUsageFlags.StorageBufferBit, Residency.Upload);
+            _saCI = AllocBuffer(sz, BufferUsageFlags.StorageBufferBit, Residency.Upload);
+            _saDR = AllocBuffer(sz, BufferUsageFlags.StorageBufferBit, Residency.Upload);
+            _saDI = AllocBuffer(sz, BufferUsageFlags.StorageBufferBit, Residency.Upload);
             _saAlloc = coeffLen;
         }
     }
@@ -1086,8 +1137,8 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             FreeBuffer(ref _refZrBuf);
             FreeBuffer(ref _refZiBuf);
             ulong sz = (ulong)(refLen * sizeof(double));
-            _refZrBuf = AllocBuffer(sz, BufferUsageFlags.StorageBufferBit);
-            _refZiBuf = AllocBuffer(sz, BufferUsageFlags.StorageBufferBit);
+            _refZrBuf = AllocBuffer(sz, BufferUsageFlags.StorageBufferBit, Residency.Upload);
+            _refZiBuf = AllocBuffer(sz, BufferUsageFlags.StorageBufferBit, Residency.Upload);
             _refAlloc = refLen;
         }
     }
@@ -1176,46 +1227,87 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         int n = width * height;
         _buf[0] = AllocBuffer(80, BufferUsageFlags.UniformBufferBit);                       // params (#1173-I: 80 B)
         _buf[1] = AllocBuffer((ulong)(Math.Max(height, 1) * sizeof(uint)), BufferUsageFlags.StorageBufferBit); // perRow
-        _buf[2] = AllocBuffer((ulong)(n * sizeof(uint)),  BufferUsageFlags.StorageBufferBit, readback: true);  // iter
-        _buf[3] = AllocBuffer((ulong)(n * sizeof(float)), BufferUsageFlags.StorageBufferBit, readback: true);  // smooth
-        _buf[4] = AllocBuffer((ulong)(n * 4 * sizeof(float)), BufferUsageFlags.StorageBufferBit, readback: true); // finalZD
-        _buf[5] = AllocBuffer((ulong)(n * sizeof(uint)),  BufferUsageFlags.StorageBufferBit, readback: true);  // color
-        _buf[6] = AllocBuffer((ulong)(n * sizeof(float)), BufferUsageFlags.StorageBufferBit, readback: true);  // trap (#1173-J)
+        _buf[2] = AllocBuffer((ulong)(n * sizeof(uint)),  BufferUsageFlags.StorageBufferBit, Residency.Output);  // iter
+        _buf[3] = AllocBuffer((ulong)(n * sizeof(float)), BufferUsageFlags.StorageBufferBit, Residency.Output);  // smooth
+        _buf[4] = AllocBuffer((ulong)(n * 4 * sizeof(float)), BufferUsageFlags.StorageBufferBit, Residency.Output); // finalZD
+        _buf[5] = AllocBuffer((ulong)(n * sizeof(uint)),  BufferUsageFlags.StorageBufferBit, Residency.Output);  // color
+        _buf[6] = AllocBuffer((ulong)(n * sizeof(float)), BufferUsageFlags.StorageBufferBit, Residency.Output);  // trap (#1173-J)
         _allocW = width; _allocH = height;
     }
 
-    /// <summary><paramref name="readback"/>: the CPU maps and reads this buffer —
-    /// prefer host-cached memory (#1173-L, see <see cref="VulkanHostMemory"/>).</summary>
-    private Allocated AllocBuffer(ulong size, BufferUsageFlags usage, bool readback = false)
+    /// <summary>#1228 — allocate a buffer for <paramref name="residency"/>. A staged
+    /// buffer is device-local with a host-visible staging twin (host-cached for
+    /// readback, #1173-L); it is direct-mapped instead when the host-visible type is
+    /// already on a device-local heap (unified memory) or <see cref="Placement"/>
+    /// keeps it on the host.</summary>
+    private Allocated AllocBuffer(ulong size, BufferUsageFlags usage, Residency residency = Residency.Host)
+    {
+        bool readback = residency == Residency.Output;
+        bool staged = Placement switch
+        {
+            VulkanBufferPlacement.HostOnly => false,
+            VulkanBufferPlacement.DeviceOutputs => residency != Residency.Host,
+            _ => residency == Residency.Upload,
+        };
+        if (staged)
+        {
+            Buffer dev = CreateBufferFor(size, usage | BufferUsageFlags.TransferSrcBit | BufferUsageFlags.TransferDstBit, out MemoryRequirements dreq);
+            uint hostType = VulkanHostMemory.FindType(_vk, _ctx.PhysicalDevice, dreq.MemoryTypeBits, readback);
+            uint? devType = VulkanHostMemory.FindDeviceLocalType(_vk, _ctx.PhysicalDevice, dreq.MemoryTypeBits);
+            if (devType is uint dt && !VulkanHostMemory.IsOnDeviceLocalHeap(_vk, _ctx.PhysicalDevice, hostType))
+            {
+                var a = new Allocated { Buffer = dev, Size = size, DeviceLocal = true };
+                (a.Memory, a.AllocSize) = AllocAndBind(dev, dreq, dt);
+                System.Threading.Interlocked.Add(ref _residentDeviceLocalBytes, (long)a.AllocSize);
+                a.Staging = CreateBufferFor(size, readback ? BufferUsageFlags.TransferDstBit : BufferUsageFlags.TransferSrcBit,
+                    out MemoryRequirements sreq);
+                (a.StagingMemory, a.StagingAllocSize) = AllocAndBind(a.Staging, sreq,
+                    VulkanHostMemory.FindType(_vk, _ctx.PhysicalDevice, sreq.MemoryTypeBits, readback));
+                return a;
+            }
+            _vk.DestroyBuffer(_device, dev, null);   // unified memory: direct map below
+        }
+
+        Buffer buffer = CreateBufferFor(size, usage, out MemoryRequirements req);
+        uint memType = VulkanHostMemory.FindType(_vk, _ctx.PhysicalDevice, req.MemoryTypeBits, readback);
+        var (mem, allocSize) = AllocAndBind(buffer, req, memType);
+        bool local = VulkanHostMemory.IsOnDeviceLocalHeap(_vk, _ctx.PhysicalDevice, memType);
+        if (local) System.Threading.Interlocked.Add(ref _residentDeviceLocalBytes, (long)allocSize);
+        return new Allocated { Buffer = buffer, Memory = mem, Size = size, AllocSize = allocSize, DeviceLocal = local };
+    }
+
+    private Buffer CreateBufferFor(ulong size, BufferUsageFlags usage, out MemoryRequirements req)
     {
         var bci = new BufferCreateInfo
         {
             SType = StructureType.BufferCreateInfo, Size = size, Usage = usage, SharingMode = SharingMode.Exclusive,
         };
         Check(_vk.CreateBuffer(_device, in bci, null, out Buffer buffer), "vkCreateBuffer");
-        _vk.GetBufferMemoryRequirements(_device, buffer, out MemoryRequirements req);
-        uint memType = VulkanHostMemory.FindType(_vk, _ctx.PhysicalDevice, req.MemoryTypeBits, readback);
+        _vk.GetBufferMemoryRequirements(_device, buffer, out req);
+        return buffer;
+    }
+
+    // Allocate + bind; counts the allocation as resident (#1166).
+    private (DeviceMemory, ulong) AllocAndBind(Buffer buffer, MemoryRequirements req, uint memType)
+    {
         var mai = new MemoryAllocateInfo
         {
             SType = StructureType.MemoryAllocateInfo, AllocationSize = req.Size, MemoryTypeIndex = memType,
         };
         Check(_vk.AllocateMemory(_device, in mai, null, out DeviceMemory mem), "vkAllocateMemory");
         Check(_vk.BindBufferMemory(_device, buffer, mem, 0), "vkBindBufferMemory");
-        bool local = IsDeviceLocalType(memType);
         System.Threading.Interlocked.Add(ref _residentBytes, (long)req.Size);
-        if (local) System.Threading.Interlocked.Add(ref _residentDeviceLocalBytes, (long)req.Size);
-        return new Allocated { Buffer = buffer, Memory = mem, Size = size, AllocSize = req.Size, DeviceLocal = local };
-    }
-
-    private bool IsDeviceLocalType(uint memType)
-    {
-        _vk.GetPhysicalDeviceMemoryProperties(_ctx.PhysicalDevice, out PhysicalDeviceMemoryProperties props);
-        uint heap = props.MemoryTypes[(int)memType].HeapIndex;
-        return (props.MemoryHeaps[(int)heap].Flags & MemoryHeapFlags.DeviceLocalBit) != 0;
+        return (mem, req.Size);
     }
 
     private void FreeBuffer(ref Allocated a)
     {
+        if (a.Staged)   // #1228: drop queued copies / fills a failed dispatch left behind
+        {
+            Buffer buf = a.Buffer;
+            _pendingCopies.RemoveAll(c => c.Dst.Handle == buf.Handle);
+            _pendingFills.RemoveAll(f => f.Dst.Handle == buf.Handle);
+        }
         if (a.Buffer.Handle != 0) _vk.DestroyBuffer(_device, a.Buffer, null);
         if (a.Memory.Handle != 0)
         {
@@ -1223,61 +1315,161 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             System.Threading.Interlocked.Add(ref _residentBytes, -(long)a.AllocSize);
             if (a.DeviceLocal) System.Threading.Interlocked.Add(ref _residentDeviceLocalBytes, -(long)a.AllocSize);
         }
+        if (a.Staging.Handle != 0) _vk.DestroyBuffer(_device, a.Staging, null);
+        if (a.StagingMemory.Handle != 0)
+        {
+            _vk.FreeMemory(_device, a.StagingMemory, null);
+            System.Threading.Interlocked.Add(ref _residentBytes, -(long)a.StagingAllocSize);
+        }
         a = default;
     }
 
+    /// <summary>Write <paramref name="bytes"/> into the buffer: straight into its
+    /// memory, or (#1228) into the staging twin with a copy queued for the next
+    /// command buffer.</summary>
     private void WriteBytes(Allocated a, void* src, int bytes)
     {
         void* mapped;
-        Check(_vk.MapMemory(_device, a.Memory, 0, (ulong)bytes, 0, &mapped), "vkMapMemory");
+        Check(_vk.MapMemory(_device, a.HostMemory, 0, (ulong)bytes, 0, &mapped), "vkMapMemory");
         System.Buffer.MemoryCopy(src, mapped, bytes, bytes);
-        _vk.UnmapMemory(_device, a.Memory);
+        _vk.UnmapMemory(_device, a.HostMemory);
+        if (a.Staged && bytes > 0) _pendingCopies.Add((a.Staging, a.Buffer, (ulong)bytes));
     }
 
     private void ZeroBuffer(Allocated a)
     {
+        if (a.Staged) { _pendingFills.Add((a.Buffer, a.Size)); return; }   // #1228: vkCmdFillBuffer
         void* mapped;
         Check(_vk.MapMemory(_device, a.Memory, 0, a.Size, 0, &mapped), "vkMapMemory");
         new Span<byte>(mapped, (int)a.Size).Clear();
         _vk.UnmapMemory(_device, a.Memory);
     }
 
+    /// <summary>#1228 — record the queued staging copies and fills at the start of a
+    /// command buffer, then make them visible to the compute shader.</summary>
+    private void FlushPending(CommandBuffer cmd)
+    {
+        if (_pendingCopies.Count == 0 && _pendingFills.Count == 0) return;
+        foreach (var (src, dst, bytes) in _pendingCopies)
+        {
+            var region = new BufferCopy { SrcOffset = 0, DstOffset = 0, Size = bytes };
+            _vk.CmdCopyBuffer(cmd, src, dst, 1, &region);
+        }
+        foreach (var (dst, bytes) in _pendingFills)
+            _vk.CmdFillBuffer(cmd, dst, 0, Vk.WholeSize, 0);
+        _pendingCopies.Clear();
+        _pendingFills.Clear();
+        var barrier = new MemoryBarrier
+        {
+            SType = StructureType.MemoryBarrier,
+            SrcAccessMask = AccessFlags.TransferWriteBit,
+            DstAccessMask = AccessFlags.ShaderReadBit | AccessFlags.ShaderWriteBit,
+        };
+        _vk.CmdPipelineBarrier(cmd, PipelineStageFlags.TransferBit, PipelineStageFlags.ComputeShaderBit,
+            0, 1, &barrier, 0, null, 0, null);
+    }
+
+    // A readback request: the first Bytes of a buffer (default = none).
+    private readonly record struct ReadbackSpan(Allocated Buf, ulong Bytes);
+    private static ReadbackSpan Out(Allocated a, long bytes) => new(a, (ulong)bytes);
+
+    /// <summary>#1228 — after the dispatch in <paramref name="cmd"/>: copy each staged
+    /// output's first bytes to its host-cached staging twin and make them visible
+    /// to the host. Direct-mapped outputs need nothing.</summary>
+    private void RecordReadback(CommandBuffer cmd, params ReadOnlySpan<ReadbackSpan> outs)
+    {
+        if (!AnyStaged(outs)) return;
+        var before = new MemoryBarrier
+        {
+            SType = StructureType.MemoryBarrier,
+            SrcAccessMask = AccessFlags.ShaderWriteBit, DstAccessMask = AccessFlags.TransferReadBit,
+        };
+        _vk.CmdPipelineBarrier(cmd, PipelineStageFlags.ComputeShaderBit, PipelineStageFlags.TransferBit,
+            0, 1, &before, 0, null, 0, null);
+        foreach (var o in outs)
+        {
+            if (o.Bytes == 0 || !o.Buf.Staged) continue;
+            var region = new BufferCopy { SrcOffset = 0, DstOffset = 0, Size = Math.Min(o.Bytes, o.Buf.Size) };
+            _vk.CmdCopyBuffer(cmd, o.Buf.Buffer, o.Buf.Staging, 1, &region);
+        }
+        var after = new MemoryBarrier
+        {
+            SType = StructureType.MemoryBarrier,
+            SrcAccessMask = AccessFlags.TransferWriteBit, DstAccessMask = AccessFlags.HostReadBit,
+        };
+        _vk.CmdPipelineBarrier(cmd, PipelineStageFlags.TransferBit, PipelineStageFlags.HostBit,
+            0, 1, &after, 0, null, 0, null);
+    }
+
+    private static bool AnyStaged(ReadOnlySpan<ReadbackSpan> outs)
+    {
+        foreach (var o in outs) if (o.Bytes > 0 && o.Buf.Staged) return true;
+        return false;
+    }
+
+    /// <summary>#1228 — <see cref="RecordReadback"/> in its own submit, for the
+    /// banded paths whose dispatches span several command buffers.</summary>
+    private void SubmitReadback(params ReadOnlySpan<ReadbackSpan> outs)
+    {
+        if (!AnyStaged(outs)) return;
+        var cbai = new CommandBufferAllocateInfo
+        {
+            SType = StructureType.CommandBufferAllocateInfo,
+            CommandPool = _cmdPool, Level = CommandBufferLevel.Primary, CommandBufferCount = 1,
+        };
+        Check(_vk.AllocateCommandBuffers(_device, in cbai, out CommandBuffer cmd), "vkAllocateCommandBuffers");
+        try
+        {
+            var begin = new CommandBufferBeginInfo
+            {
+                SType = StructureType.CommandBufferBeginInfo, Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
+            };
+            Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
+            RecordReadback(cmd, outs);
+            Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
+            var submit = new SubmitInfo { SType = StructureType.SubmitInfo, CommandBufferCount = 1, PCommandBuffers = &cmd };
+            Check(_vk.QueueSubmit(_ctx.ComputeQueue, 1, &submit, default), "vkQueueSubmit");
+            Check(_vk.QueueWaitIdle(_ctx.ComputeQueue), "vkQueueWaitIdle");
+        }
+        finally { _vk.FreeCommandBuffers(_device, _cmdPool, 1, in cmd); }
+    }
+
     private void ReadIter(Allocated a, int[] dst, int n)
     {
         void* mapped;
-        Check(_vk.MapMemory(_device, a.Memory, 0, (ulong)(n * sizeof(uint)), 0, &mapped), "vkMapMemory");
+        Check(_vk.MapMemory(_device, a.HostMemory, 0, (ulong)(n * sizeof(uint)), 0, &mapped), "vkMapMemory");
         var src = (uint*)mapped;
         for (int i = 0; i < n; i++) dst[i] = (int)src[i];
-        _vk.UnmapMemory(_device, a.Memory);
+        _vk.UnmapMemory(_device, a.HostMemory);
     }
 
     private void ReadFloats(Allocated a, float[] dst, int n)
     {
         void* mapped;
-        Check(_vk.MapMemory(_device, a.Memory, 0, (ulong)(n * sizeof(float)), 0, &mapped), "vkMapMemory");
+        Check(_vk.MapMemory(_device, a.HostMemory, 0, (ulong)(n * sizeof(float)), 0, &mapped), "vkMapMemory");
         new Span<float>(mapped, n).CopyTo(dst.AsSpan(0, n));
-        _vk.UnmapMemory(_device, a.Memory);
+        _vk.UnmapMemory(_device, a.HostMemory);
     }
 
     private void ReadUints(Allocated a, uint[] dst, int n)
     {
         void* mapped;
-        Check(_vk.MapMemory(_device, a.Memory, 0, (ulong)(n * sizeof(uint)), 0, &mapped), "vkMapMemory");
+        Check(_vk.MapMemory(_device, a.HostMemory, 0, (ulong)(n * sizeof(uint)), 0, &mapped), "vkMapMemory");
         new Span<uint>(mapped, n).CopyTo(dst.AsSpan(0, n));
-        _vk.UnmapMemory(_device, a.Memory);
+        _vk.UnmapMemory(_device, a.HostMemory);
     }
 
     private void ReadFinalZD(Allocated a, float[] zr, float[] zi, float[] dr, float[] di, int n)
     {
         void* mapped;
-        Check(_vk.MapMemory(_device, a.Memory, 0, (ulong)(n * 4 * sizeof(float)), 0, &mapped), "vkMapMemory");
+        Check(_vk.MapMemory(_device, a.HostMemory, 0, (ulong)(n * 4 * sizeof(float)), 0, &mapped), "vkMapMemory");
         var src = (float*)mapped;
         for (int i = 0; i < n; i++)
         {
             int b = i * 4;
             zr[i] = src[b + 0]; zi[i] = src[b + 1]; dr[i] = src[b + 2]; di[i] = src[b + 3];
         }
-        _vk.UnmapMemory(_device, a.Memory);
+        _vk.UnmapMemory(_device, a.HostMemory);
     }
 
     private static DescriptorSetLayoutBinding LayoutBinding(uint binding, DescriptorType type) => new()
