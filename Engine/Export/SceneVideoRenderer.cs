@@ -731,6 +731,7 @@ namespace FracturingFog.Export
                 MaxIterations = shot.MaxIterations,
                 ColorMap = shot.ThemeAt(localTime),
                 Quality = shot.Quality,
+                BlaTolerance = p.BlaTolerance,   // #1275
             };
             calc.Calculate(ct);
             return CopyBuffer(calc.ColorBuffer, w, h);

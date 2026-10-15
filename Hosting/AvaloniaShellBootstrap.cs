@@ -4418,6 +4418,7 @@ namespace FracturingFog.Hosting
                             MaxIterations = iters,
                             ColorMap = map,
                             Quality = QualityPreset.Standard,
+                            BlaTolerance = fractalParams?.BlaTolerance ?? FracturingFog.FFMath.BlaTable.DefaultEpsilon,   // #1275
                         };
                         calc.Calculate(System.Threading.CancellationToken.None);
                         bgra = calc.ColorBuffer;

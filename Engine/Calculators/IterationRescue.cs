@@ -81,6 +81,7 @@ public static class IterationRescue
             DisableAcceleration = src.DisableAcceleration,
             DisableSeriesApproximation = src.DisableSeriesApproximation,
             DisableDdBla = src.DisableDdBla,
+            BlaTolerance = src.BlaTolerance,   // #1275
         };
 
         long cap = src.MaxIterations;

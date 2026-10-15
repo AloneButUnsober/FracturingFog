@@ -906,9 +906,9 @@ namespace FracturingFog.Batch
                     return PosterRenderer.RenderToPixels(rreq, CancellationToken.None, out _, out _);
                 }
                 if (deepCentre is { } fd && frameCx == cx && frType == FractalType.Mandelbrot)
-                    return RenderDeepMandelFrame(fd, outW, outH, fz, iter, theme, pfAdaptive, quality);
+                    return RenderDeepMandelFrame(fd, outW, outH, fz, iter, theme, pfAdaptive, quality, fp.BlaTolerance);
                 return limbRegion != null && frameCx == cx
-                    ? RenderRegionMandelFrame(limbRegion, outW, outH, fz, iter, theme, pfAdaptive, quality)
+                    ? RenderRegionMandelFrame(limbRegion, outW, outH, fz, iter, theme, pfAdaptive, quality, fp.BlaTolerance)
                     : RenderOneFrame(frType, outW, outH, frameCx, cy, fz, iter, theme, quality, pfAdaptive,
                                      fp, limbSource, stereo, frameDepth);
             }
@@ -1199,6 +1199,7 @@ namespace FracturingFog.Batch
                 MaxIterations = iter,
                 ColorMap = theme,
                 Quality = quality,
+                BlaTolerance = fp.BlaTolerance,   // #1275
             };
             calc.Calculate(CancellationToken.None);
             if (adaptive > 0)
@@ -1460,10 +1461,11 @@ namespace FracturingFog.Batch
         // Shared by the video-slideshow leg loop (many zoom frames per region).
         private static uint[] RenderRegionMandelFrame(
             FractalRegion region, int w, int h, double zoom, int iter, IColorMap theme, int adaptive,
-            QualityPreset? quality = null)
+            QualityPreset? quality = null, double blaTolerance = FracturingFog.FFMath.BlaTable.DefaultEpsilon)
         {
             var calc = new MandelbrotCalculator(w, h)
             {
+                BlaTolerance = blaTolerance,   // #1275
                 CenterX = region.CenterX, CenterXLo = region.CenterXLo,
                 CenterX2 = region.CenterX2, CenterX3 = region.CenterX3,
                 CenterY = region.CenterY, CenterYLo = region.CenterYLo,
@@ -1491,7 +1493,7 @@ namespace FracturingFog.Batch
             IColorMap theme, int adaptive, double? centerXOverride = null)
         {
             if (region.FractalType == FractalType.Mandelbrot && centerXOverride == null)
-                return RenderRegionMandelFrame(region, w, h, zoom, iter, theme, adaptive);
+                return RenderRegionMandelFrame(region, w, h, zoom, iter, theme, adaptive, blaTolerance: fp.BlaTolerance);
             return RenderOneFrame(region.FractalType, w, h,
                 centerXOverride ?? region.CenterX, region.CenterY, zoom, iter, theme,
                 region.QualityPreset ?? QualityPreset.Standard, adaptive,
@@ -2413,10 +2415,11 @@ namespace FracturingFog.Batch
         /// <summary>One Mandelbrot video frame at the full octuple-double centre.</summary>
         private static uint[] RenderDeepMandelFrame(
             FracturingFog.FFMath.DeepComplex c, int w, int h, double zoom, int iter, IColorMap theme, int adaptive,
-            QualityPreset quality)
+            QualityPreset quality, double blaTolerance = FracturingFog.FFMath.BlaTable.DefaultEpsilon)
         {
             var calc = new MandelbrotCalculator(w, h)
             {
+                BlaTolerance = blaTolerance,   // #1275
                 CenterX = c.Re.X0, CenterXLo = c.Re.X1, CenterX2 = c.Re.X2, CenterX3 = c.Re.X3,
                 CenterX4 = c.Re.X4, CenterX5 = c.Re.X5, CenterX6 = c.Re.X6, CenterX7 = c.Re.X7,
                 CenterY = c.Im.X0, CenterYLo = c.Im.X1, CenterY2 = c.Im.X2, CenterY3 = c.Im.X3,

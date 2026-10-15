@@ -205,6 +205,23 @@
                            Value="{Binding NewtonRelaxation, Mode=TwoWay}" Margin="0,2" />
         </Grid>
 
+        <!-- #1275 — Mandelbrot deep zoom: BLA tolerance (accuracy vs speed). -->
+        <Border IsVisible="{Binding IsMandelbrot}"
+                BorderBrush="#404040" BorderThickness="0,1,0,0"
+                Padding="0,8,0,0" Margin="0,4,0,0">
+            <StackPanel Spacing="6">
+                <TextBlock Text="Deep zoom" FontWeight="Bold" Foreground="#FFCC00" />
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto">
+                    <TextBlock Grid.Column="0" Text="BLA accuracy:" VerticalAlignment="Center"
+                               ToolTip.Tip="Bilinear approximation skips blocks of iterations at deep zoom. Fast (default) can leave some pixels near deep minibrots a few iterations off; Accurate / Exact match an un-skipped render more closely, at a speed cost. Most views look identical at every setting." />
+                    <ComboBox Grid.Column="1"
+                              ItemsSource="{Binding BlaTolerancePresets}"
+                              SelectedItem="{Binding BlaTolerancePreset, Mode=TwoWay}"
+                              HorizontalAlignment="Stretch" Margin="0,2" />
+                </Grid>
+            </StackPanel>
+        </Border>
+
         <!-- Interior alpha (2D) — issue #96. Mandelbrot canonical path. -->
         <Border IsVisible="{Binding IsInteriorAlphaApplicable}"
                 BorderBrush="#404040" BorderThickness="0,1,0,0"
