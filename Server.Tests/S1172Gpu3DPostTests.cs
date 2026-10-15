@@ -13,7 +13,7 @@
 //   - asking for the G-buffers does not change the LDR frame;
 //   - each post pass now changes a GPU frame (it used to be dropped), and the
 //     frame stays on the GPU;
-//   - thin-lens DoF + tonemap stays on the CPU and says why.
+//   - (#1181: thin-lens DoF + tonemap now runs on the GPU — S1181ThinLensHdrTests.)
 
 using System;
 using System.Linq;
@@ -133,17 +133,6 @@ public sealed class S1172Gpu3DPostTests
         }
     }
 
-    [Fact]
-    public void Thin_Lens_With_Tonemap_Stays_On_The_Cpu()
-    {
-        var route = WithCpuAccelerator(() =>
-        {
-            var fx = Gpu();
-            fx.ToneMap = ToneMapOperator.Reinhard;
-            fx.DofThinLens = true; fx.DofAperture = 0.2; fx.DofSamples = 4;
-            return RenderBulb(fx).route;
-        });
-        Assert.Equal(GpuRouteState.CpuFallback, route.State);
-        Assert.Equal("thin-lens + tonemap", route.Reason);
-    }
+    // #1181 — thin-lens DoF + tonemap now stays on the GPU (the lens taps average the
+    // HDR beauty); covered with parity in S1181ThinLensHdrTests.
 }
