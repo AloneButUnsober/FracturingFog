@@ -92,21 +92,74 @@ namespace FracturingFog.Models
 
         public SbxVal3[] NewEnv() => new SbxVal3[EnvSize];
 
-        public Vec3 EvalStep(Vec3 z, Vec3 c, int n, SbxVal3[] env, ReadOnlySpan<double> extras = default)
+        // #1110 — typed compile of the whole chain (each step output a typed
+        // local); the interpreter stays the fallback. Bit-identical to it.
+        private SbxTypedVecStep? _typedVec;
+        private SbxTypedQuatStep? _typedQuat;
+
+        /// <summary>True once the typed compile for that axis mode is in use.</summary>
+        public bool IsTypedCompiled(bool quatMode) => quatMode ? _typedQuat != null : _typedVec != null;
+
+        /// <summary>Why the last typed compile fell back (null when it didn't).</summary>
+        public string? TypedFallbackReason { get; private set; }
+
+        /// <summary>Nodes of the last typed compile that run on SbxVal3 (see
+        /// SandboxBulbExpression.TypedDynamicNodes).</summary>
+        public int TypedDynamicNodes { get; private set; }
+
+        // Fallback when a kind can't be inferred: each step on the dynamic #283
+        // delegate (bit-identical to the walk, shares SbxFuncEval).
+        private Func<SbxVal3[], SbxVal3>[]? _dynamic;
+
+        /// <summary>True when the steps run on the dynamic #283 delegates.</summary>
+        public bool IsCompiled => _dynamic != null;
+
+        /// <summary>#1110 — compile the chain for one axis mode: the typed tree
+        /// when every kind can be inferred, else each step on the dynamic #283
+        /// delegate. True when either is in use afterwards (else the interpreter).</summary>
+        public bool TryCompile(bool quatMode)
         {
-            env[SandboxBulbExpression.SlotZ] = SbxVal3.V(z);
-            env[SandboxBulbExpression.SlotC] = SbxVal3.V(c);
-            env[SandboxBulbExpression.SlotN] = SbxVal3.R(n);
+            if (IsTypedCompiled(quatMode)) return true;
+            var d = SandboxBulbTypedCompiler.TryCompile(_stepRoots, _stepOutputSlots, _extraSlots, quatMode, out var why, out int dynNodes);
+            TypedFallbackReason = why;
+            TypedDynamicNodes = dynNodes;
+            if (d is SbxTypedQuatStep q) { _typedQuat = q; return true; }
+            if (d is SbxTypedVecStep v) { _typedVec = v; return true; }
+            if (_dynamic != null) return true;
+            var dyn = new Func<SbxVal3[], SbxVal3>[_stepRoots.Length];
+            for (int i = 0; i < dyn.Length; i++)
+            {
+                var f = SandboxBulbCompiler.TryCompile(_stepRoots[i]);
+                if (f == null) return false;
+                dyn[i] = f;
+            }
+            _dynamic = dyn;
+            return true;
+        }
+
+        private void WriteExtras(SbxVal3[] env, ReadOnlySpan<double> extras)
+        {
             for (int i = 0; i < _extraSlots.Length && i < extras.Length; i++)
             {
                 int s = _extraSlots[i];
                 if (s >= 0) env[s] = SbxVal3.R(extras[i]);
             }
+        }
 
+        public Vec3 EvalStep(Vec3 z, Vec3 c, int n, SbxVal3[] env, ReadOnlySpan<double> extras = default)
+        {
+            var typed = _typedVec;
+            if (typed != null) { WriteExtras(env, extras); return typed(z, c, n, env); }
+            env[SandboxBulbExpression.SlotZ] = SbxVal3.V(z);
+            env[SandboxBulbExpression.SlotC] = SbxVal3.V(c);
+            env[SandboxBulbExpression.SlotN] = SbxVal3.R(n);
+            WriteExtras(env, extras);
+
+            var dyn = _dynamic;
             SbxVal3 last = SbxVal3.V(z);
             for (int i = 0; i < _stepRoots.Length; i++)
             {
-                last = _stepRoots[i].Eval(env);
+                last = dyn != null ? dyn[i](env) : _stepRoots[i].Eval(env);
                 env[_stepOutputSlots[i]] = last;
             }
             return last.AsVec();
@@ -114,19 +167,18 @@ namespace FracturingFog.Models
 
         public Quat EvalStepQuat(Quat z, Quat c, int n, SbxVal3[] env, ReadOnlySpan<double> extras = default)
         {
+            var typed = _typedQuat;
+            if (typed != null) { WriteExtras(env, extras); return typed(z, c, n, env); }
             env[SandboxBulbExpression.SlotZ] = SbxVal3.Q(z);
             env[SandboxBulbExpression.SlotC] = SbxVal3.Q(c);
             env[SandboxBulbExpression.SlotN] = SbxVal3.R(n);
-            for (int i = 0; i < _extraSlots.Length && i < extras.Length; i++)
-            {
-                int s = _extraSlots[i];
-                if (s >= 0) env[s] = SbxVal3.R(extras[i]);
-            }
+            WriteExtras(env, extras);
 
+            var dyn = _dynamic;
             SbxVal3 last = SbxVal3.Q(z);
             for (int i = 0; i < _stepRoots.Length; i++)
             {
-                last = _stepRoots[i].Eval(env);
+                last = dyn != null ? dyn[i](env) : _stepRoots[i].Eval(env);
                 env[_stepOutputSlots[i]] = last;
             }
             return last.AsQuat();
