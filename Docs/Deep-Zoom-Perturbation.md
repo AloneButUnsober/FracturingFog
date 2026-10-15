@@ -165,6 +165,46 @@ but not exact / jumping" is the residual below, not a navigation fault.
   default OFF; `MandelbrotCalculator.AllowRecycleThisRender`) is kept but unused —
   `--panjitter` showed it changes neither pixels nor perceptible speed.
 
+## 7. Pan pixel reuse (#1330)
+
+A deep CPU frame of the main view at Draft / Standard quality renders on an
+**anchored lattice**:
+- **The anchor.** The calculator's centre stays at a fixed anchor (the reference
+  centre), and the view's position is a whole-pixel offset from it
+  (`SubRectOffsetX/Y`, the D-6b sub-rect geometry). A pixel's dc is
+  (offset + x − W/2)·scale.
+- **The pan.** After a pan, the pixels still on screen have exactly the same dc,
+  so `CalculatePanned` shifts the buffers and computes only the exposed rows and
+  columns.
+
+The obvious version, "shift the pixels of a normally centred frame", isn't
+exact. In centre + (x − W/2)·scale, the centre's rounding differs after a pan,
+and that flips chaotic boundary pixels.
+
+**Two details make it byte-exact:**
+- **SIMD batches follow the lattice.** The SIMD rows decide per batch of 4 / 8
+  pixels: SA takes the minimum skip, BLA the largest |δ|, and a glitch falls the
+  whole batch back. With `LatticeAligned`, batches start on lattice multiples of
+  the global pixel column. The lanes outside the frame or the computed range are
+  computed and discarded, so a pixel's batch is the same at every offset.
+- **One BLA table per anchor.** The BLA radius covers offsets up to
+  `LatticeMaxOffset` (the frame's larger side), so one anchor keeps one table.
+
+**Host behaviour** (`FractalRenderHost.CalculateMainFrame`):
+- It applies the lattice only around the main frame's calculate, then puts the
+  view centre back, so status, regions, exports and the preview mirrors see the
+  view as before.
+- The frame shows the view snapped to the nearest whole pixel (≤ 0.5 px).
+- It re-anchors on a zoom or size change, or past `LatticeMaxOffset`.
+- It stays off for MSAA / TAA presets (they re-render jittered frames), for orbit,
+  interior and post-process colour maps, and when a GPU deep path would run.
+
+**Measured** (DD 1e15, 4096 iterations): a 1080p full frame takes 244 ms; a
+4 px pan takes 10.5 ms (23×), and a 16×8 px pan 15 ms (16×).
+
+The gates are `S1330PanReuseTests` (byte-identical to a fresh lattice render in
+the DD / QD / OD tiers and on the scalar path) and `S1330PanReuseHostTests`.
+
 If a *positional* error is ever reproduced on a DETAILED frame, re-open with
 `--panjitter` (artefact-free) rather than the `--navrepro` focus test, and only
 then consider a QD-δ variant.

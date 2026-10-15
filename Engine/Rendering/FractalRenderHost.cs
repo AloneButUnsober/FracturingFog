@@ -1323,6 +1323,109 @@ namespace FracturingFog.Rendering
             };
         }
 
+        // ── #1330 — pan pixel reuse ──────────────────────────────────────────
+        //
+        // A deep CPU frame of the main view renders on MandelbrotCalculator's
+        // anchored lattice: the calculator's centre is a fixed anchor and the view's
+        // position the whole-pixel offset from it, so a pan reuses the pixels still
+        // on screen and computes only the exposed strips (CalculatePanned). The
+        // view centre is put back on the calculator right after the frame, so
+        // everything that reads it (status, regions, exports, the preview mirrors,
+        // rescue) sees the view as before; the frame shows the view snapped to the
+        // nearest whole pixel from the anchor (≤ 0.5 px). The anchor resets on a
+        // zoom or size change and when the view drifts past LatticeMaxOffset.
+        // Draft / Standard only: MSAA and TAA re-render jittered frames anyway.
+
+        /// <summary>#1330 — reuse pixels across pans of deep CPU frames (default on).</summary>
+        public static bool PanPixelReuse { get; set; } = true;
+
+        /// <summary>#1330 — the last main frame reused panned pixels (diagnostics / tests).</summary>
+        public bool LastFrameReusedPanPixels { get; private set; }
+
+        private FracturingFog.FFMath.DeepComplex _panAnchor;
+        private bool _panAnchorValid;
+        private double _panAnchorZoom;
+        private int _panAnchorW, _panAnchorH, _panOffX, _panOffY;
+
+        private bool PanReuseEligible(MandelbrotCalculator calc)
+        {
+            if (!PanPixelReuse || !ReferenceEquals(calc, _calculator)) return false;
+            var q = calc.Quality;
+            if (q == null || !q.NeedsHighPrecision(calc.Zoom) || q.AaSamples > 1 || q.TaaMaxSamples > 1) return false;
+            if (calc.PerRowMaxIter != null || calc.InteriorAlpha < 255) return false;
+            if (calc.ColorMap is IOrbitAwareColorMap or IInteriorAwareColorMap or IPostProcessColorMap) return false;
+            // Keep a GPU deep path when one would run: the lattice is CPU-only.
+            if (MandelbrotCalculator.UseGpuPerturbation && calc.GpuKernel is { SupportsPerturbation: true }
+                && calc.Zoom <= MandelbrotCalculator.MaxGpuPerturbZoom)
+                return false;
+            return true;
+        }
+
+        private void CalculateMainFrame(MandelbrotCalculator calc, CancellationToken token)
+        {
+            LastFrameReusedPanPixels = false;
+            if (!PanReuseEligible(calc)) { _panAnchorValid = false; calc.Calculate(token); return; }
+
+            var re = new FracturingFog.FFMath.OD(calc.CenterX, calc.CenterXLo, calc.CenterX2, calc.CenterX3,
+                calc.CenterX4, calc.CenterX5, calc.CenterX6, calc.CenterX7);
+            var im = new FracturingFog.FFMath.OD(calc.CenterY, calc.CenterYLo, calc.CenterY2, calc.CenterY3,
+                calc.CenterY4, calc.CenterY5, calc.CenterY6, calc.CenterY7);
+            int w = calc.Width, h = calc.Height;
+            double scale = (3.5 / Math.Max(w, h)) / calc.Zoom;
+            int maxOff = Math.Max(w, h);
+            bool prev = _panAnchorValid && _panAnchorZoom == calc.Zoom && _panAnchorW == w && _panAnchorH == h;
+            double dxPix = prev ? (re - _panAnchor.Re).X0 / scale : 0, dyPix = prev ? (im - _panAnchor.Im).X0 / scale : 0;
+            if (!prev || !(Math.Abs(dxPix) <= maxOff && Math.Abs(dyPix) <= maxOff))
+            {
+                _panAnchor = new FracturingFog.FFMath.DeepComplex(re, im);
+                _panAnchorZoom = calc.Zoom; _panAnchorW = w; _panAnchorH = h;
+                _panOffX = _panOffY = 0;
+                dxPix = dyPix = 0;
+                prev = false;
+            }
+            int ox = (int)Math.Round(dxPix), oy = (int)Math.Round(dyPix);
+
+            // The view centre, put back after the frame.
+            double sx0 = calc.CenterX, sx1 = calc.CenterXLo, sx2 = calc.CenterX2, sx3 = calc.CenterX3,
+                   sx4 = calc.CenterX4, sx5 = calc.CenterX5, sx6 = calc.CenterX6, sx7 = calc.CenterX7;
+            double sy0 = calc.CenterY, sy1 = calc.CenterYLo, sy2 = calc.CenterY2, sy3 = calc.CenterY3,
+                   sy4 = calc.CenterY4, sy5 = calc.CenterY5, sy6 = calc.CenterY6, sy7 = calc.CenterY7;
+            var a = _panAnchor;
+            calc.CenterX = a.Re.X0; calc.CenterXLo = a.Re.X1; calc.CenterX2 = a.Re.X2; calc.CenterX3 = a.Re.X3;
+            calc.CenterX4 = a.Re.X4; calc.CenterX5 = a.Re.X5; calc.CenterX6 = a.Re.X6; calc.CenterX7 = a.Re.X7;
+            calc.CenterY = a.Im.X0; calc.CenterYLo = a.Im.X1; calc.CenterY2 = a.Im.X2; calc.CenterY3 = a.Im.X3;
+            calc.CenterY4 = a.Im.X4; calc.CenterY5 = a.Im.X5; calc.CenterY6 = a.Im.X6; calc.CenterY7 = a.Im.X7;
+            calc.ImageWidth = w; calc.ImageHeight = h;
+            calc.LatticeAligned = true;
+            calc.LatticeMaxOffset = maxOff;
+            _panAnchorValid = false;   // until this frame completes
+            try
+            {
+                if (prev)
+                {
+                    calc.SubRectOffsetX = _panOffX; calc.SubRectOffsetY = _panOffY;
+                    LastFrameReusedPanPixels = calc.CalculatePanned(ox - _panOffX, oy - _panOffY, token);
+                }
+                else
+                {
+                    calc.SubRectOffsetX = ox; calc.SubRectOffsetY = oy;
+                    calc.Calculate(token);
+                }
+                _panOffX = ox; _panOffY = oy;
+                _panAnchorValid = !token.IsCancellationRequested;
+            }
+            finally
+            {
+                calc.CenterX = sx0; calc.CenterXLo = sx1; calc.CenterX2 = sx2; calc.CenterX3 = sx3;
+                calc.CenterX4 = sx4; calc.CenterX5 = sx5; calc.CenterX6 = sx6; calc.CenterX7 = sx7;
+                calc.CenterY = sy0; calc.CenterYLo = sy1; calc.CenterY2 = sy2; calc.CenterY3 = sy3;
+                calc.CenterY4 = sy4; calc.CenterY5 = sy5; calc.CenterY6 = sy6; calc.CenterY7 = sy7;
+                calc.ImageWidth = calc.ImageHeight = 0;
+                calc.SubRectOffsetX = calc.SubRectOffsetY = 0;
+                calc.LatticeAligned = false;
+            }
+        }
+
         // ── ApplyView ─────────────────────────────────────────────────────────
 
         public void ApplyView(int maxIters = 0)
@@ -1914,7 +2017,7 @@ namespace FracturingFog.Rendering
                 if (useAlt) altCalc!.Calculate(token);
                 else
                 {
-                    calc.Calculate(token);
+                    CalculateMainFrame(calc, token);   // #1330: pan pixel reuse on deep CPU frames
                     RescueSolidFrame(calc, token);   // SM-1 (#1267)
                 }
 
