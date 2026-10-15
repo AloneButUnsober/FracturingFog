@@ -575,7 +575,8 @@ public static class HeightfieldRaymarch2D
         bool aovOk = aov == null || (aov.Components == null && aov.Motion == null && aov.HdrBeauty == null);
         // #1044 — a kernel that lost its device stays off (CPU trace instead).
         if (IsGpuReliefLost(gpuKernel)) gpuKernel = null;
-        if (gpuKernel != null && p.Relief2DGpuRaymarch && fx.DebugAov == AovView.Beauty
+        // #1178 — a DebugAov view renders on the GPU too (the kernel encodes it).
+        if (gpuKernel != null && p.Relief2DGpuRaymarch
             && aovOk && !froxel)
         {
             var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx, aimH: normRef);
@@ -611,7 +612,7 @@ public static class HeightfieldRaymarch2D
         // previous camera bases), so it no longer forces the CPU froxel post-pass.
         bool froxelReproject = froxelTemporal && p.Relief2DFroxelReproject;
         if (froxel && froxelKernel != null && gpuKernel != null && p.Relief2DGpuRaymarch
-            && fx.DebugAov == AovView.Beauty && aovOk)
+            && aovOk)
         {
             var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx, aimH: normRef);
             // Reuse the caller's denoise guides when present, else scratch for depth.
@@ -712,6 +713,7 @@ public static class HeightfieldRaymarch2D
                 double t = Math.Max(t0, 0.0) + eps0;
                 double tPrev = t, d = 0.0;
                 bool hit = false;
+                int hitStep = 0;   // #1178 — the Step-count view (was always 0: solid blue)
                 for (int s = 0; s < maxSteps && t < t1 + by; s++)
                 {
                     d = de.Evaluate(ox + rdx * t, oy + rdy * t, oz + rdz * t);
@@ -723,6 +725,7 @@ public static class HeightfieldRaymarch2D
                     if (d < epsT * hitScale)
                     {
                         hit = true;
+                        hitStep = s;
                         // #1256 — a first-sample hit on a ray that entered the box
                         // through a vertical side face is the bounding box itself,
                         // not terrain (the solid-block collapse). Count it.
@@ -767,7 +770,7 @@ public static class HeightfieldRaymarch2D
 
                     var si = new ShadingInputs(
                         hx, hy, hz, nx, ny, nz, rdx, rdy, rdz,
-                        totalT: tf, hitDist: d, hitStep: 0, epsilon: eps0);
+                        totalT: tf, hitDist: d, hitStep: hitStep, epsilon: eps0);
                     // S1/S7 (#389) — capture the float lighting components at the
                     // primary terrain hit when an AOV component buffer is supplied.
                     uint tcol = trueHeight

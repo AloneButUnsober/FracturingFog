@@ -124,7 +124,7 @@ cbuffer ReliefParams : register(b0)
     int    gMipBlk;           // base cells per coarse cell
 
     int    gHasHdri;          // 4d-ii — HDRI equirect env bound at t4; 0 = gradient/solid
-    int    gPadH0;
+    int    gAovMode;          // #1178 — DebugAov view (AovView: 0 Beauty, 1 Normals .. 7 Shadow)
     int    gPadH1;
     int    gPadH2;
 
@@ -789,7 +789,28 @@ float3 Reflections(float3 N, float3 rd, float3 P)
     return acc;
 }
 
-uint ShadeFlat(float3 N, float3 V, float3 P, uint albedo)
+// #1178 — DebugAov view encode. Twin of ShadingPipeline.EncodeAov + PackRgb (the CPU
+// relief trace's Shade returns this before the ambient / IBL / reflection / glass /
+// fog composite). s = raw shadowed diffuse sums and spec in 0..255 space, ao and the
+// key light's shadow in 0..1, t = ray distance, step = march step at the hit.
+uint PackAovRgb(float3 c)
+{
+    uint3 b = (uint3)clamp(c * 255.0 + 0.5, 0.0, 255.0);
+    return 0xFF000000u | (b.x << 16) | (b.y << 8) | b.z;
+}
+uint EncodeAov(int mode, float3 N, float t, int step, float3 s, float3 spec, float ao, float sh)
+{
+    if (mode == 1) return PackAovRgb(N * 0.5 + 0.5);
+    if (mode == 2) { float v = 1.0 - exp(-t * 0.12); return PackAovRgb(float3(v, v, v)); }
+    if (mode == 3) { float v = saturate(step / 96.0); return PackAovRgb(float3(v, v * 0.8, 1.0 - v)); }
+    if (mode == 4) return PackAovRgb(float3(ao, ao, ao));
+    if (mode == 5) return PackAovRgb(s / 255.0);
+    if (mode == 6) return PackAovRgb(spec / 255.0);
+    if (mode == 7) return PackAovRgb(float3(sh, sh, sh));
+    return 0xFF000000u;
+}
+
+uint ShadeFlat(float3 N, float3 V, float3 P, uint albedo, float aovT, int aovStep)
 {
     // S8 (#389/#408) — resolve each light to its dir-to-light + attenuation at P.
     // Directional keeps (gL{n}, 1) → byte-identical; Point/Spot fold inverse-square
@@ -864,6 +885,9 @@ uint ShadeFlat(float3 N, float3 V, float3 P, uint albedo)
         }
         ao = clamp(1.0 - gAoStrength * (occl / max(wsum, 1.0)), 0.0, 1.0);
     }
+
+    // #1178 — a DebugAov view returns the chosen component here, as the CPU Shade does.
+    if (gAovMode != 0) return EncodeAov(gAovMode, N, aovT, aovStep, s, spec, ao, sh0);
 
     // 4d — IBL-modulated ambient. gIblStrength>0 blends the env colour (sampled
     // at the surface normal) into the scalar ambient per channel. Non-HDRI env:
@@ -1289,13 +1313,14 @@ uint TracePixel(float3 o, float3 rd, out float3 nrm, out float dep)
         float t = max(t0, 0.0) + gEps0;
         float tPrev = t, d = 0.0;
         bool hit = false;
+        int hitStep = 0;   // #1178 — Step-count view
         [loop]
         for (int s = 0; s < gMaxSteps && t < t1 + gB.y; s++)
         {
             float3 pw = o + rd * t;
             d = Evaluate(pw.x, pw.y, pw.z);
             float epsT = gEps0 + gPixelAngle * ((gConeCapT > 0.0 && t > gConeCapT) ? gConeCapT : t);   // #1027
-            if (d < (gTrueHeight != 0.0 ? epsT * gInvLip : epsT)) { hit = true; break; }   // #1027
+            if (d < (gTrueHeight != 0.0 ? epsT * gInvLip : epsT)) { hit = true; hitStep = s; break; }   // #1027
             tPrev = t;
             float adv = max(d, epsT * 0.5);
             // 4f — empty-space skip (conservative; only enlarges the advance).
@@ -1327,8 +1352,8 @@ uint TracePixel(float3 o, float3 rd, out float3 nrm, out float dep)
             uint alb = SampleAlbedo(uu, vv);
             if (gTriplanarStrength > 0.0 && gTriplanarKind != 0)
                 alb = ApplyTriplanar(alb, hp, N);
-            outCol = ShadeFlat(N, -rd, hp, alb);
-            outCol = ApplyFogVolume(outCol, o, rd, tf);
+            outCol = ShadeFlat(N, -rd, hp, alb, tf, hitStep);
+            if (gAovMode == 0) outCol = ApplyFogVolume(outCol, o, rd, tf);   // #1178 — a view is fog-free
 
             // #455 — dissolve the terrain FOOTPRINT edge into whatever is behind
             // it (the floor when the ground plane is on — coplanar, seamless —
@@ -1342,11 +1367,11 @@ uint TracePixel(float3 o, float3 rd, out float3 nrm, out float dep)
                 uint behind;
                 if (gGroundPlane != 0)
                 {
-                    behind = ShadeFlat(float3(0, 1, 0), -rd, float3(hp.x, 0.0, hp.z), gFloorAlbedo);
+                    behind = ShadeFlat(float3(0, 1, 0), -rd, float3(hp.x, 0.0, hp.z), gFloorAlbedo, tf, 0);
                     // #310 — fog the floor the edge dissolves into, as the CPU does (its Shade
                     // includes the in-scatter at the terrain distance). Unfogged, the dissolve
                     // faded toward a fog-free floor: a dark band hugging the footprint edge.
-                    behind = ApplyFogVolume(behind, o, rd, tf);
+                    if (gAovMode == 0) behind = ApplyFogVolume(behind, o, rd, tf);
                 }
                 else
                 {
@@ -1373,8 +1398,8 @@ uint TracePixel(float3 o, float3 rd, out float3 nrm, out float dep)
                 float gx = o.x + rd.x * tp, gz = o.z + rd.z * tp;
                 if (abs(gx) <= gFloorBx && abs(gz) <= gFloorBz)
                 {
-                    outCol = ShadeFlat(float3(0, 1, 0), -rd, float3(gx, 0.0, gz), gFloorAlbedo);
-                    outCol = ApplyFogVolume(outCol, o, rd, tp);
+                    outCol = ShadeFlat(float3(0, 1, 0), -rd, float3(gx, 0.0, gz), gFloorAlbedo, tp, 0);
+                    if (gAovMode == 0) outCol = ApplyFogVolume(outCol, o, rd, tp);
                     nrm = float3(0.0, 1.0, 0.0); dep = tp;
                     floored = true;
                 }

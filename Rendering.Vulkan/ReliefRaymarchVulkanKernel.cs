@@ -75,7 +75,7 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         public int TriplanarKind; public uint TriplanarTint; public float PadT0, PadT1;   // 4d
         public float FogDensity, FogHeightFalloff; public int VolumeSteps; public float VolumeStepsFalloff;   // 4e
         public int EmptySkip, MipW, MipH, MipBlk;   // 4f
-        public int HasHdri, PadH0, PadH1, PadH2;   // 4d-ii
+        public int HasHdri, AovMode, PadH1, PadH2;   // 4d-ii; #1178 — AovMode was PadH0
         public float ReflStrength; public int ReflSteps, MaxBounces, UseGgx;   // 4e-ii reflections
         public float VolNoiseAmount, VolNoiseScale, VolNoiseSpeed; public int VolNoiseOctaves;   // 4e-ii FBM
         public float VolSelfShadow; public int VolSelfShadowSteps; public float SceneTime, VolAnisotropy;   // 4e-ii + #184 Slice 3 (B)
@@ -356,6 +356,7 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
             VolumeSteps = u.VolumeSteps, VolumeStepsFalloff = (float)u.VolumeStepsFalloff,
             EmptySkip = u.EmptySkip, MipW = u.MipW, MipH = u.MipH, MipBlk = u.MipBlk,
             HasHdri = u.HdriBuf != null ? 1 : 0,
+            AovMode = u.AovMode,   // #1178
             ReflStrength = (float)u.ReflectionStrength, ReflSteps = u.ReflectionSteps,
             MaxBounces = u.MaxBounces, UseGgx = u.UseGgxSampling ? 1 : 0,
             VolNoiseAmount = (float)u.VolumeNoiseAmount, VolNoiseScale = (float)u.VolumeNoiseScale,
