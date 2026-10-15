@@ -107,7 +107,7 @@ public sealed class UserBulbBenchmark1104
 #endif
         sb.AppendLine();
         sb.AppendLine("== Per-step cost (ns/step, single thread, Vec3 mode) ==");
-        sb.AppendLine("equation | tree-walk | expression-tree (today) | Roslyn typed C# (emitter) | gain vs today");
+        sb.AppendLine("equation | tree-walk | expression-tree (dynamic, #283) | typed expression-tree (#1110) | Roslyn typed C# (emitter) | typed vs dynamic");
         const int N = 3_000_000;
         foreach (var (name, src) in Vec)
         {
@@ -119,16 +119,19 @@ public sealed class UserBulbBenchmark1104
             var env2 = e2.NewEnv();
             var extras = new[] { 0.5 };
             double tree = NsPerStep((z, c, n) => e2.EvalStep(z, c, n, env2, extras), N);
+            var e3 = SandboxBulbExpression.Parse(src, new[] { "t" });
+            bool typedOk = e3.TryCompile(quatMode: false) && e3.IsTypedCompiled(false);
+            var env3 = e3.NewEnv();
+            double typed = NsPerStep((z, c, n) => e3.EvalStep(z, c, n, env3, extras), N);
             var em = UserBulbSandboxEmitter.Emit(e2.Root, new[] { "t" }, false);
-            string roslyn = "n/a", gain = "n/a";
+            string roslyn = "n/a";
             if (em.Ok)
             {
                 var f = CompileRoslyn(em.Body!);
                 double r = NsPerStep((z, c, n) => f(z, c, n, 0.5), N);
                 roslyn = r.ToString("0.0");
-                gain = (tree / r).ToString("0.0") + "x";
             }
-            sb.AppendLine($"{name} | {walk:0.0} | {tree:0.0}{(compiled ? "" : " (not compiled)")} | {roslyn} | {gain}");
+            sb.AppendLine($"{name} | {walk:0.0} | {tree:0.0}{(compiled ? "" : " (not compiled)")} | {typed:0.0}{(typedOk ? "" : " (not typed)")} | {roslyn} | {tree / typed:0.0}x");
         }
 
         sb.AppendLine();

@@ -5,6 +5,47 @@ equivalent for User Bulb: no toggle, no persisted calculators, no DD/QD. Instead
 take three targeted runtime slices that the measurements below point at: #1110,
 #1111, #1112. Related: #1091 (language scope), #1100–#1102, #1105.
 
+## #1110 result (2026-10-15): typed CPU compile shipped
+
+`SandboxBulbTypedCompiler` compiles the bulb AST (a single step, a chain, or
+the NonEscaping `dr` body) to an Expression tree over `double` / `Vec3` /
+`Quat`:
+- Kinds are inferred statically. `z` and `c` take the axis mode's kind; `n`,
+  params and `t` are real; a `let` or a chain output takes its value's kind.
+- `let` and chain outputs are real locals. Nothing is re-evaluated, which is
+  what #1111 fixes in the emitter.
+- Each rule mirrors the interpreter case for case, including its odd kind
+  mixes, so results are **bit-identical** to the tree walk.
+
+Where a kind is only known at run time (a ternary whose branches differ, such as
+a KIFS swap fold `cond ? vec(…) : z` in Quat mode), that value is an `SbxVal3`.
+Only the nodes that consume it call the interpreter's own ops. sin & co. on a
+quat go through `SbxFuncEval.Apply`, so they still throw. Every corpus source,
+the mixes and all built-in chains take the typed compile in both modes.
+
+| Equation (ns/step) | Tree-walk | Dynamic (#283) | **Typed (#1110)** | Roslyn emitter | Typed vs dynamic |
+|---|---:|---:|---:|---:|---:|
+| `z^8 + c` | 105.1 | 73.1 | **61.5** | 78.5 | 1.2× |
+| square triplex | 198.4 | 63.9 | **15.3** | 34.9 | 4.2× |
+| Mandelbox | 90.0 | 62.4 | **16.5** | 66.2 | 3.8× |
+| Menger fold (KIFS) | 487.6 | 391.3 | **12.4** | 547.7 | 31.5× |
+| `z^4 + sin(z)*0.5 + c` | 430.7 | 396.0 | **55.8** | 85.6 | 7.1× |
+| Amoser sine | 970.8 | 881.2 | **32.2** | 36.8 | 27.4× |
+
+End-to-end CPU frames (same benchmark, ms):
+
+| Case | Before | After |
+|---|---:|---:|
+| Mandelbox, numerical | 8138 | **2112** |
+| `z^4 + sin`, numerical | 8323 | **2788** |
+| Quat Julia, numerical | 1238 | **462** |
+| Quat `qsin(z*z) + c`, numerical | 2170 | **925** |
+| `z^8 + c`, analytic / numerical | 243 / 1248 | 227 / 1225 |
+
+The typed compile is gated by `S1110TypedBulbCompileTests` (raw-bit parity with
+the interpreter on the corpus in both modes, the chains, and the run-time-kind
+path).
+
 ## What exists today
 
 | Path | How an equation runs |
@@ -152,7 +193,7 @@ so headless renders stay reproducible.
 
 | Slice | What | Expected effect (from the tables) |
 |---|---|---|
-| **#1110** typed CPU compile | Compile the bulb AST to a **typed** Expression tree using the emitter's kind inference. Keep the dynamic compile as the fallback. Gate: `BulbEmitterParityTests`-style interpreter parity. | Transcendental maps 5–20× faster per step on the CPU; polynomial and fold maps unchanged. |
+| **#1110** typed CPU compile (**done**, see above) | Compile the bulb AST to a **typed** Expression tree using the emitter's kind inference. Keep the dynamic compile as the fallback. Gate: `BulbEmitterParityTests`-style interpreter parity. | Transcendental maps 5–20× faster per step on the CPU; polynomial and fold maps unchanged. |
 | **#1111** emitter `let` locals | Emit `let` and statement locals as C# locals (a statement body) instead of pasting their text at every use. | Fixes the 0.7× regression on KIFS / chained folds, for CPU-typed code and GPU kernels alike. |
 | **#1112** GPU DE coverage | Add a Vec3 numerical-DE GPU kernel (Quat mode has one since Wave 4.6), plus Vec3 Julia. Give the exact quaternion DE (#115) a GPU form, or route that case to the CPU, which is faster today (33 vs 635 ms). Show why the GPU isn't used. | The slowest renders measured (Mandelbox / `z^4 + sin` numerical, ~8 s) get a GPU route at all. Where a numerical-DE GPU route exists today, this GT 710 ran 1.8–4.2× faster than the CPU (and slower for `qsin`), so a modern card should do much better. |
 

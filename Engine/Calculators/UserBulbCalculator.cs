@@ -259,8 +259,18 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         return Regex.IsMatch(stripped, @"\bc\b");
     }
 
+    /// <summary>#1110 — the step runs on the typed Expression-tree compile (no
+    /// SbxVal3 on the hot path). False on the dynamic #283 delegate or the
+    /// interpreter; the reason is in <see cref="TypedFallbackReason"/>.</summary>
+    public bool IsTypedCompiled { get; private set; }
+
+    /// <summary>#1110 — why the typed compile fell back (null when it didn't).</summary>
+    public string? TypedFallbackReason { get; private set; }
+
     public void Compile(string source)
     {
+        IsTypedCompiled = false;
+        TypedFallbackReason = null;
         LastErrorPosition = -1;
         LastErrorLength = 0;
         LastErrorStep = -1;
@@ -339,7 +349,7 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
             extras.Add("dr");
             extras.Add("de");
             var expr = SandboxBulbExpression.Parse(body, extras);
-            expr.TryCompile();   // #283 — JIT the dr recurrence, #27-safe.
+            expr.TryCompile(quatMode: false);   // #283 / #1110 — typed JIT of the dr recurrence, #27-safe.
             int envSize = expr.EnvSize;
             _deBodyEnv = new ThreadLocal<SbxVal3[]>(() => new SbxVal3[envSize]);
             _deBody = expr;
@@ -367,7 +377,9 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
             // #283 — JIT the AST (System.Linq.Expressions, #27-safe). Silent
             // fallback to the interpreter on failure; the probe below exercises
             // whichever path is now active.
-            expr.TryCompile();
+            expr.TryCompile(quatMode: false);   // #1110 — typed when kinds resolve
+            IsTypedCompiled = expr.IsTypedCompiled(false);
+            TypedFallbackReason = expr.TypedFallbackReason;
             int envSize = expr.EnvSize;
             var envLocal = new System.Threading.ThreadLocal<SbxVal3[]>(() => new SbxVal3[envSize]);
             Func<Vec3, Vec3, int, double[], Vec3> fn = (z, c, n, pp) =>
@@ -410,7 +422,9 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
             extras.AddRange(paramNames);
             extras.Add("t");
             var expr = SandboxBulbExpression.Parse(source, extras);
-            expr.TryCompile();   // #283 — JIT, #27-safe, silent interpreter fallback.
+            expr.TryCompile(quatMode: true);   // #283 / #1110 — typed JIT, #27-safe, silent fallback.
+            IsTypedCompiled = expr.IsTypedCompiled(true);
+            TypedFallbackReason = expr.TypedFallbackReason;
             int envSize = expr.EnvSize;
             var envLocal = new System.Threading.ThreadLocal<SbxVal3[]>(() => new SbxVal3[envSize]);
             Func<Quat, Quat, int, double[], Quat> fnQ = (z, c, n, pp) =>
@@ -452,6 +466,9 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
             extras.AddRange(paramNames);
             extras.Add("t");
             var chain = SandboxBulbChain.Parse(steps, extras);
+            chain.TryCompile(quatMode: true);   // #1110 — typed JIT; dynamic per step, then the interpreter, as fallbacks
+            IsTypedCompiled = chain.IsTypedCompiled(true);
+            TypedFallbackReason = chain.TypedFallbackReason;
             int envSize = chain.EnvSize;
             var envLocal = new System.Threading.ThreadLocal<SbxVal3[]>(() => new SbxVal3[envSize]);
             Func<Quat, Quat, int, double[], Quat> fnQ = (z, c, n, pp) =>
@@ -493,6 +510,9 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
             extras.AddRange(paramNames);
             extras.Add("t");
             var chain = SandboxBulbChain.Parse(steps, extras);
+            chain.TryCompile(quatMode: false);   // #1110 — typed JIT; dynamic per step, then the interpreter, as fallbacks
+            IsTypedCompiled = chain.IsTypedCompiled(false);
+            TypedFallbackReason = chain.TypedFallbackReason;
             int envSize = chain.EnvSize;
             var envLocal = new System.Threading.ThreadLocal<SbxVal3[]>(() => new SbxVal3[envSize]);
             Func<Vec3, Vec3, int, double[], Vec3> fn = (z, c, n, pp) =>

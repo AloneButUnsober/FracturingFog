@@ -713,10 +713,47 @@ namespace FracturingFog.Models
             return _compiledRoot != null;
         }
 
+        // #1110 — typed compile (SandboxBulbTypedCompiler) for one axis mode: no
+        // SbxVal3 on the hot path, Math / Vec3 / Quat called directly. Preferred
+        // over the dynamic delegate when present; bit-identical to both.
+        private SbxTypedVecStep? _typedVec;
+        private SbxTypedQuatStep? _typedQuat;
+
+        /// <summary>True once the typed compile for that axis mode is in use.</summary>
+        public bool IsTypedCompiled(bool quatMode) => quatMode ? _typedQuat != null : _typedVec != null;
+
+        /// <summary>Why the last typed compile fell back (null when it didn't).</summary>
+        public string? TypedFallbackReason { get; private set; }
+
+        /// <summary>Nodes of the last typed compile that run on SbxVal3 because
+        /// their kind is only known at run time (a ternary whose branches differ).</summary>
+        public int TypedDynamicNodes { get; private set; }
+
+        /// <summary>#1110 — compile for one axis mode: the typed tree when every
+        /// kind can be inferred, else the dynamic #283 delegate. Idempotent; true
+        /// when either is in use afterwards.</summary>
+        public bool TryCompile(bool quatMode)
+        {
+            if (IsTypedCompiled(quatMode)) return true;
+            var d = SandboxBulbTypedCompiler.TryCompile(Root, ExtraScalarSlots, quatMode, out var why, out int dyn);
+            TypedFallbackReason = why;
+            TypedDynamicNodes = dyn;
+            if (d is SbxTypedQuatStep q) { _typedQuat = q; return true; }
+            if (d is SbxTypedVecStep v) { _typedVec = v; return true; }
+            return TryCompile();
+        }
+
         /// <summary>Evaluate Step(z, c, n) → Vec3. env must come from <see cref="NewEnv"/>.
         /// extras (when provided) must match the names passed to <see cref="Parse(string, IReadOnlyList{string})"/>.</summary>
         public Vec3 EvalStep(Vec3 z, Vec3 c, int n, SbxVal3[] env, ReadOnlySpan<double> extras = default)
         {
+            var typed = _typedVec;
+            if (typed != null)
+            {
+                for (int i = 0; i < ExtraScalarSlots.Count && i < extras.Length; i++)
+                    env[ExtraScalarSlots[i]] = SbxVal3.R(extras[i]);
+                return typed(z, c, n, env);
+            }
             env[SlotZ] = SbxVal3.V(z);
             env[SlotC] = SbxVal3.V(c);
             env[SlotN] = SbxVal3.R(n);
@@ -731,6 +768,13 @@ namespace FracturingFog.Models
         /// (X/Y/Z used; W defaults to 0).</summary>
         public Quat EvalStepQuat(Quat z, Quat c, int n, SbxVal3[] env, ReadOnlySpan<double> extras = default)
         {
+            var typed = _typedQuat;
+            if (typed != null)
+            {
+                for (int i = 0; i < ExtraScalarSlots.Count && i < extras.Length; i++)
+                    env[ExtraScalarSlots[i]] = SbxVal3.R(extras[i]);
+                return typed(z, c, n, env);
+            }
             env[SlotZ] = SbxVal3.Q(z);
             env[SlotC] = SbxVal3.Q(c);
             env[SlotN] = SbxVal3.R(n);
