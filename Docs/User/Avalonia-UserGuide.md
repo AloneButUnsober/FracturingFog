@@ -676,7 +676,7 @@ Auto-promotion is transparent — status bar shows the live label (SP / DD / QD 
 - `[GPU]` means the frame ran on the GPU.
 - `[CPU: reason]` means the GPU was asked for but this frame rendered on the CPU. Examples: `[CPU: preview frame]`, `[CPU: froxel + thin-lens]`, `[CPU: zoom > 1e4]`, `[CPU: device faulted]`, `[CPU: GPU too slow]` (the card is far too slow for this fractal, so the CPU is faster), `[CPU: no GPU path]`.
 
-The perf HUD's `gpu` line gives the full reason, often with the tracking issue. When GPU rendering is off, the status bar shows no tag. Headless `--batch` runs print the reason to stderr, once per distinct reason.
+The perf HUD's `gpu` line gives the full reason, often with the tracking issue. Below it, the `gclk` line shows the same GPU work timed on the graphics card's own clock: `up` is the upload, `dis` the compute dispatch, `cp` the copy back. These times leave out the waiting and copying the CPU does around the GPU work, which the `gpu dis / rb` figures include. When GPU rendering is off, the status bar shows no tag. Headless `--batch` runs print the reason to stderr, once per distinct reason.
 
 Perturbation theory + Series Approximation + BLA make zooms past 10²⁵ interactive on consumer hardware.
 

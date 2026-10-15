@@ -85,6 +85,12 @@ namespace FracturingFog.Rendering
         /// <summary>Last readback latency in milliseconds.</summary>
         double LastReadbackMs { get; }
 
+        /// <summary>#1329 — the last frame's per-stage GPU time from GPU timestamp
+        /// queries (device clock, so queue latency and host copies are excluded).
+        /// Null when the device has no timestamps, the frame was aborted, or the
+        /// backend doesn't measure.</summary>
+        GpuStageTimes? LastGpuStageTimes => null;
+
         /// <summary>Activate a GPU-side palette evaluator. Pass null to
         /// disable the colour write path and fall back to CPU palette pass.
         /// Multiple palettes are compiled lazily and cached by PaletteId.</summary>

@@ -41,6 +41,11 @@ namespace FracturingFog.Rendering
         // as "no GPU" and hides the rows.
         private readonly double[] _gpuDispatch = new double[CAP];
         private readonly double[] _gpuReadback = new double[CAP];
+        // #1329 — the kernel's GPU timestamp stage times (device clock).
+        private readonly double[] _gpuClkUp = new double[CAP];
+        private readonly double[] _gpuClkDisp = new double[CAP];
+        private readonly double[] _gpuClkCopy = new double[CAP];
+        private int _idxGpuClk, _cntGpuClk;
 
         // Wave 0.6 — per-stage post-FX microbar. One ring per PostStage value
         // (ssao / bloom / dof / edge / lens / volume). Fed by StagePerf via
@@ -118,6 +123,19 @@ namespace FracturingFog.Rendering
             }
         }
 
+        /// <summary>#1329 — one frame's GPU timestamp stage times.</summary>
+        public void RecordGpuStages(GpuStageTimes t)
+        {
+            lock (_lock)
+            {
+                _gpuClkUp[_idxGpuClk] = t.UploadMs;
+                _gpuClkDisp[_idxGpuClk] = t.DispatchMs;
+                _gpuClkCopy[_idxGpuClk] = t.CopyOutMs;
+                _idxGpuClk = (_idxGpuClk + 1) % CAP;
+                if (_cntGpuClk < CAP) _cntGpuClk++;
+            }
+        }
+
         public void RecordGpuReadback(double ms)
         {
             lock (_lock)
@@ -174,7 +192,13 @@ namespace FracturingFog.Rendering
                     g0Rate, g1Rate, g2Rate,
                     _cntFrame,
                     aGpuD, aGpuR, _cntGpuD,
-                    stages, stageCounts);
+                    stages, stageCounts)
+                {
+                    GpuClkUploadMs = Avg(_gpuClkUp, _cntGpuClk),
+                    GpuClkDispatchMs = Avg(_gpuClkDisp, _cntGpuClk),
+                    GpuClkCopyOutMs = Avg(_gpuClkCopy, _cntGpuClk),
+                    GpuClkSampleCount = _cntGpuClk,
+                };
             }
         }
 
@@ -185,6 +209,8 @@ namespace FracturingFog.Rendering
                 Array.Clear(_calc); Array.Clear(_upload);
                 Array.Clear(_present); Array.Clear(_frame);
                 Array.Clear(_gpuDispatch); Array.Clear(_gpuReadback);
+                Array.Clear(_gpuClkUp); Array.Clear(_gpuClkDisp); Array.Clear(_gpuClkCopy);
+                _idxGpuClk = _cntGpuClk = 0;
                 for (int i = 0; i < STAGE_COUNT; i++)
                 {
                     Array.Clear(_stageRings[i]);
@@ -245,6 +271,11 @@ namespace FracturingFog.Rendering
         public readonly double GpuDispatchMs;
         public readonly double GpuReadbackMs;
         public readonly int GpuSampleCount;
+        // #1329 — GPU timestamp stage times (device clock); count 0 hides the row.
+        public double GpuClkUploadMs { get; init; }
+        public double GpuClkDispatchMs { get; init; }
+        public double GpuClkCopyOutMs { get; init; }
+        public int GpuClkSampleCount { get; init; }
         // Wave 0.6 — per-stage post-FX timings, indexed by (int)PostStage.
         // Both arrays have length 6. StageCounts[i] == 0 means the HUD hides
         // that row (stage didn't fire this frame batch).

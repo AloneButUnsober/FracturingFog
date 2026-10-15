@@ -210,11 +210,18 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     private int _fp64 = -1;
     private bool _disposed;
 
+    // #1329 — GPU timestamp queries per frame.
+    private readonly D3D11StageTimer _timer;
+    public GpuStageTimes? LastGpuStageTimes { get; private set; }
+
+    private void BeginFrameTiming() { LastGpuStageTimes = null; _timer.BeginFrame(); }
+
     public MandelbrotGpuKernel(ID3D11Device device, ID3D11DeviceContext context, object d3dGate)
     {
         _device = device ?? throw new ArgumentNullException(nameof(device));
         _ctx = context ?? throw new ArgumentNullException(nameof(context));
         _d3dGate = d3dGate ?? throw new ArgumentNullException(nameof(d3dGate));
+        _timer = new D3D11StageTimer(device, context);
         BaseShader(0);   // compile the Mandelbrot variant up front, as before
         AllocParamsBuffer();
     }
@@ -522,6 +529,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         lock (_d3dGate)
         {
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            BeginFrameTiming();   // #1329
             EnsureOutputBuffers(width, height);
             if (useColorPath) EnsureColorBuffers(width * height);
             if (useTrap) EnsureTrapBuffers(width * height);
@@ -597,7 +605,9 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
 
             uint groupsX = (uint)((width + 7) / 8);
             uint groupsY = (uint)((height + 7) / 8);
+            _timer.Begin();
             _ctx.Dispatch(groupsX, groupsY, 1);
+            _timer.Mark(GpuStage.Dispatch);
 
             _ctx.CSUnsetUnorderedAccessView(0);
             _ctx.CSUnsetUnorderedAccessView(1);
@@ -612,6 +622,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
             _ctx.CopyResource(_finalZDStaging, _finalZDBuf);
             if (useColorPath) _ctx.CopyResource(_colorStaging!, _colorBuf!);
             if (useTrap) _ctx.CopyResource(_trapStaging!, _trapBuf!);
+            _timer.Mark(GpuStage.CopyOut);
 
             // Dispatch + flush cost: the first Map(Read) below blocks until
             // GPU finishes, so dispatch_ms covers cbuffer upload, Dispatch
@@ -708,6 +719,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
                 finally { _ctx.Unmap(_trapStaging!, 0); }
             }
 
+            LastGpuStageTimes = _timer.EndFrame();
             long tEnd = System.Diagnostics.Stopwatch.GetTimestamp();
             double freq = System.Diagnostics.Stopwatch.Frequency;
             LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
@@ -765,6 +777,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         lock (_d3dGate)
         {
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            BeginFrameTiming();   // #1329
             EnsureOutputBuffers(width, height);      // shares iter/smooth/finalZD UAVs (u0/u1/u2)
             EnsurePerturbParamsBuffer();
             EnsureRefOrbitBuffers(refLen);
@@ -845,6 +858,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
             _buddhaDone ??= _device.CreateQuery(new QueryDescription(QueryType.Event));
             EnsureBuddhaHits(n * 3);
             _ctx.ClearUnorderedAccessView(_buddhaHitsUav!, new Vortice.Mathematics.Int4(0, 0, 0, 0));
+            BeginFrameTiming();   // #1329
         }
 
         var p = new BuddhaParams
@@ -868,7 +882,9 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
                 _ctx.CSSetShader(_csBuddha);
                 _ctx.CSSetConstantBuffer(0, _buddhaParamsBuf);
                 _ctx.CSSetUnorderedAccessView(0, _buddhaHitsUav);
+                _timer.Begin();
                 _ctx.Dispatch((uint)((count + BuddhaKernelSource.GroupSize - 1) / BuddhaKernelSource.GroupSize), 1, 1);
+                _timer.Mark(GpuStage.Dispatch);
                 _ctx.CSUnsetUnorderedAccessView(0);
                 // One GPU packet per dispatch (TDR); wait for it so the next is sized
                 // from a real time.
@@ -884,7 +900,9 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         long tDispatch = System.Diagnostics.Stopwatch.GetTimestamp();
         lock (_d3dGate)
         {
+            _timer.Begin();
             _ctx.CopyResource(_buddhaHitsStaging!, _buddhaHitsBuf!);
+            _timer.Mark(GpuStage.CopyOut);
             var map = _ctx.Map(_buddhaHitsStaging!, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
             try
             {
@@ -900,6 +918,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
                 }
             }
             finally { _ctx.Unmap(_buddhaHitsStaging!, 0); }
+            LastGpuStageTimes = _timer.EndFrame();
         }
         long tEnd = System.Diagnostics.Stopwatch.GetTimestamp();
         double freq = System.Diagnostics.Stopwatch.Frequency;
@@ -974,6 +993,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         lock (_d3dGate)
         {
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            BeginFrameTiming();   // #1329
             EnsureOutputBuffers(width, height);
             EnsurePerturbParamsBuffer();
             EnsureRefOrbitBuffers(refLen);
@@ -1009,9 +1029,9 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
                 _ctx.Unmap(_perturbParamsBuf!, 0);
                 _ctx.CSSetConstantBuffer(0, _perturbParamsBuf);
             }, uavCount: 4);
-            ReadPerturbOutputs(n, t0, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst);
+            ReadPerturbOutputs(n, t0, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst,
+                () => _ctx.CopyResource(_orbitOutStaging, _orbitOutBuf));
 
-            _ctx.CopyResource(_orbitOutStaging, _orbitOutBuf);
             var map = _ctx.Map(_orbitOutStaging!, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
             try
             {
@@ -1097,6 +1117,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         lock (_d3dGate)
         {
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            BeginFrameTiming();   // #1329
             EnsureOutputBuffers(width, height);
             EnsureRefOrbitBuffers(refLen);
             EnsureSaBuffers(coeffLen);
@@ -1164,7 +1185,9 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
             writeParams(rowBase);
 
             long tBand = System.Diagnostics.Stopwatch.GetTimestamp();
+            _timer.Begin();
             _ctx.Dispatch((uint)((width + 7) / 8), (uint)((rows + 7) / 8), 1);
+            _timer.Mark(GpuStage.Dispatch);
 
             // Perf-fallback: a CopyResource + Map(Read) on the iter staging blocks
             // until band 0's dispatch finishes -> a real GPU time; the remaining
@@ -1196,12 +1219,16 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     /// <summary>Copy the perturbation outputs (iter / smooth / finalZD) back to the
     /// caller's arrays and record the dispatch / readback timings.</summary>
     private void ReadPerturbOutputs(int n, long t0, int[] iterDst, float[] smoothDst,
-        float[] finalZrDst, float[] finalZiDst, float[] finalDrDst, float[] finalDiDst)
+        float[] finalZrDst, float[] finalZiDst, float[] finalDrDst, float[] finalDiDst,
+        Action? extraCopies = null)
     {
         {
+            _timer.Begin();
             _ctx.CopyResource(_iterStaging, _iterBuf);
             _ctx.CopyResource(_smoothStaging, _smoothBuf);
             _ctx.CopyResource(_finalZDStaging, _finalZDBuf);
+            extraCopies?.Invoke();   // #607 orbit means
+            _timer.Mark(GpuStage.CopyOut);
 
             long tDispatch = System.Diagnostics.Stopwatch.GetTimestamp();
 
@@ -1249,6 +1276,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
             }
             finally { _ctx.Unmap(_finalZDStaging, 0); }
 
+            LastGpuStageTimes = _timer.EndFrame();
             long tEnd = System.Diagnostics.Stopwatch.GetTimestamp();
             double freq = System.Diagnostics.Stopwatch.Frequency;
             LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
@@ -1401,6 +1429,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         try { _buddhaHitsBuf?.Dispose(); } catch { }
         try { _buddhaHitsStaging?.Dispose(); } catch { }
         try { _buddhaDone?.Dispose(); } catch { }
+        try { _timer.Dispose(); } catch { }   // #1329
         _csPerturbOrbit.Clear();
         try { _orbitOutUav?.Dispose(); } catch { }
         try { _orbitOutBuf?.Dispose(); } catch { }

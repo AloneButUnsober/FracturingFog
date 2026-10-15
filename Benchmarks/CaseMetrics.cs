@@ -14,6 +14,9 @@
 //     accelerator that ran it, for the GPU calculator bench.
 //   • Resident (#1166) — device memory a D3D11 / Vulkan kernel holds after a
 //     warm frame (persistent, frame-sized buffers).
+//   • GpuClock (#1329) — the kernel's per-stage GPU time from timestamp
+//     queries (upload / dispatch / copy-out, device clock), the median of a few
+//     frames. The Mean column is the host's wall time around the whole frame.
 //
 // Setup records a formatted value keyed by (metric, case parameters); the
 // column reads it back at summary time. This hand-off works only because the
@@ -37,6 +40,7 @@ public static class CaseMetrics
     public const string DeviceAllocPerOp = "DeviceAlloc/op";
     public const string Device = "Device";
     public const string Resident = "Resident";
+    public const string GpuClock = "GpuClock";
 
     private static readonly ConcurrentDictionary<(string Metric, string Key), string> s_values = new();
 

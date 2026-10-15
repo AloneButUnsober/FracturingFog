@@ -163,6 +163,25 @@ public class MandelbrotGpuKernelBench
         });
         CaseMetrics.Record(CaseMetrics.Device, key, device);
         CaseMetrics.Record(CaseMetrics.Resident, key, ResidentAfterWarmFrame());
+        CaseMetrics.Record(CaseMetrics.GpuClock, key, GpuClockStages());
+    }
+
+    /// <summary>#1329 — the median per-stage GPU time of three frames, from the
+    /// kernel's timestamp queries.</summary>
+    private string GpuClockStages()
+    {
+        var up = new System.Collections.Generic.List<double>();
+        var dis = new System.Collections.Generic.List<double>();
+        var cp = new System.Collections.Generic.List<double>();
+        for (int i = 0; i < 3; i++)
+        {
+            _calc.Calculate();
+            if (_kernel.LastGpuStageTimes is not { } t) return "n/a (no GPU timestamps)";
+            up.Add(t.UploadMs); dis.Add(t.DispatchMs); cp.Add(t.CopyOutMs);
+        }
+        static double Median(System.Collections.Generic.List<double> v) { v.Sort(); return v[v.Count / 2]; }
+        return string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"up {Median(up):0.00} / dis {Median(dis):0.00} / cp {Median(cp):0.00} ms");
     }
 
     /// <summary>#1166 — the kernel's resident device memory after the warm frame
@@ -261,6 +280,9 @@ public class MandelbrotGpuKernelBench
                 isNumeric: false, UnitType.Dimensionless));
             AddColumn(new CaseMetricColumn(CaseMetrics.Resident,
                 "Device memory the kernel holds after a warm frame (D3D11: DXGI per-process usage delta; Vulkan: the kernel's own allocations)",
+                isNumeric: false, UnitType.Dimensionless));
+            AddColumn(new CaseMetricColumn(CaseMetrics.GpuClock,
+                "Per-stage GPU time on the device clock (timestamp queries; median of 3 frames): upload / dispatch / copy-out",
                 isNumeric: false, UnitType.Dimensionless));
         }
     }

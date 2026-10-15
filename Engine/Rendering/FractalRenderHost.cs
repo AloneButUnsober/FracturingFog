@@ -1987,6 +1987,11 @@ namespace FracturingFog.Rendering
                     _perfStats.RecordGpuDispatch(_gpuKernel.LastDispatchMs);
                     _perfStats.RecordGpuReadback(_gpuKernel.LastReadbackMs);
                 }
+                // #1329 — the device-clock stage times, whenever the kernel ran
+                // this frame (the SP path or the deep-zoom perturbation).
+                if (_gpuKernel?.LastGpuStageTimes is { } gst
+                    && ((calc.UseGpuCompute && !calc.IsHighPrecisionActive) || calc.LastFrameUsedGpuPerturbation))
+                    _perfStats.RecordGpuStages(gst);
             }
 
             long ms = job.Sw.ElapsedMilliseconds;
