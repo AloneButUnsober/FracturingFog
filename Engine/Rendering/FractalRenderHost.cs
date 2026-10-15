@@ -311,7 +311,10 @@ namespace FracturingFog.Rendering
         private long[]? _taaSumA;
         private int _taaSumPixels;
         private int _taaSampleCount;
-        private double _taaFpCx, _taaFpCy, _taaFpZoom;
+        // #1270 — the full multi-limb centre: past ~1e10 a pan only moves the
+        // tail limbs, so a double-only fingerprint would keep stale samples.
+        private CentreLimbs _taaFpCentre;
+        private double _taaFpZoom;
         private int _taaFpIter;
         private int _taaFpW, _taaFpH;
         private FractalType _taaFpType;
@@ -1986,9 +1989,10 @@ namespace FracturingFog.Rendering
             }
 
             // Pixel scale matches generated calculators: 3.5/max(W,H)/Zoom.
+            // #1270 — the jitter goes through every centre limb (CentreJitter),
+            // so it survives past the double's precision (~1e10 zoom).
             double scale = (3.5 / Math.Max(calc.Width, calc.Height)) / calc.Zoom;
-            double origCx = calc.CenterX;
-            double origCy = calc.CenterY;
+            var orig = CentreLimbs.Capture(calc);
 
             int count = 1; // sample 0 already counted
             for (int sy = 0; sy < side; sy++)
@@ -2000,8 +2004,7 @@ namespace FracturingFog.Rendering
                     if (token.IsCancellationRequested) goto WriteBack;
 
                     double jx = (sx + 0.5) / side - 0.5;
-                    calc.CenterX = origCx + jx * scale;
-                    calc.CenterY = origCy + jy * scale;
+                    CentreJitter.Apply(calc, in orig, jx, jy, scale);
                     try { calc.Calculate(token); }
                     catch (OperationCanceledException) { goto WriteBack; }
 
@@ -2018,8 +2021,7 @@ namespace FracturingFog.Rendering
                 }
             }
         WriteBack:
-            calc.CenterX = origCx;
-            calc.CenterY = origCy;
+            orig.Restore(calc);
             if (count <= 0) return;
             int half = count / 2;
             var outBuf = calc.ColorBuffer;
@@ -2149,8 +2151,7 @@ namespace FracturingFog.Rendering
                 _taaSumA![i] =  (long)((c >> 24) & 0xFF);
             }
             _taaSampleCount = 1;
-            _taaFpCx = calc.CenterX;
-            _taaFpCy = calc.CenterY;
+            _taaFpCentre = CentreLimbs.Capture(calc);
             _taaFpZoom = calc.Zoom;
             _taaFpIter = calc.MaxIterations;
             _taaFpW = calc.Width;
@@ -2170,8 +2171,7 @@ namespace FracturingFog.Rendering
         private bool TaaFingerprintMatches(MandelbrotCalculator calc)
         {
             return _taaValid
-                && _taaFpCx == calc.CenterX
-                && _taaFpCy == calc.CenterY
+                && _taaFpCentre == CentreLimbs.Capture(calc)
                 && _taaFpZoom == calc.Zoom
                 && _taaFpIter == calc.MaxIterations
                 && _taaFpW == calc.Width
@@ -2205,18 +2205,18 @@ namespace FracturingFog.Rendering
             double jy = Halton(sampleIndex + 2, 3) - 0.5;
             double scale = (3.5 / Math.Max(calc.Width, calc.Height)) / calc.Zoom;
 
-            double origCx = calc.CenterX;
-            double origCy = calc.CenterY;
-            calc.CenterX = origCx + jx * scale;
-            calc.CenterY = origCy + jy * scale;
+            // #1270 — jitter through every centre limb, so it survives past the
+            // double's precision (~1e10 zoom); the reference orbit is rebuilt at
+            // the jittered centre like any other view.
+            var orig = CentreLimbs.Capture(calc);
+            CentreJitter.Apply(calc, in orig, jx, jy, scale);
             try { calc.Calculate(token); }
             catch (OperationCanceledException)
             {
-                calc.CenterX = origCx; calc.CenterY = origCy;
+                orig.Restore(calc);
                 return false;
             }
-            calc.CenterX = origCx;
-            calc.CenterY = origCy;
+            orig.Restore(calc);
             if (token.IsCancellationRequested) return false;
 
             var buf = calc.ColorBuffer;
@@ -2260,19 +2260,13 @@ namespace FracturingFog.Rendering
             if (!TaaFingerprintMatches(calc)) return false;
             if (_taaSampleCount >= taaMax) return false;
 
-            // Deep-zoom TAA no-op guard. RunOneTaaSample jitters the centre by
-            // ~scale on the DOUBLE CenterX/CenterY only; once that sub-pixel
-            // offset falls below the centre's double ULP (roughly past zoom
-            // ~1e10) it rounds away, so every continuation renders a byte-
-            // identical frame. Those are pure waste and re-run the upload/HUD/
-            // status path each pass — the "status flushing after the render
-            // finished" the user sees at deep zoom. Skip them: the base sample
-            // already IS the converged image. (Real deep-zoom TAA needs the
-            // jitter fed through the OD centre / per-pixel offset — deferred.)
+            // Deep-zoom TAA no-op guard (SM-8c). A jitter the centre can't
+            // represent renders a byte-identical frame, which is pure waste and
+            // re-runs the upload/HUD/status path each pass. Since #1270 the
+            // jitter goes through the OD centre limbs, so that floor is OD's
+            // (~1e100+ zoom), not the double's (~1e10) as it used to be.
             double taaScale = (3.5 / Math.Max(calc.Width, calc.Height)) / calc.Zoom;
-            double ulpCentre = Math.Max(Math.Abs(calc.CenterX), Math.Abs(calc.CenterY))
-                               * 2.220446049250313e-16;
-            if (taaScale <= ulpCentre) return false;
+            if (!CentreJitter.IsResolvable(calc, taaScale)) return false;
 
             var nextJob = new FrameJob(
                 job.Token, calc, altCalc: null, sw: Stopwatch.StartNew(),
