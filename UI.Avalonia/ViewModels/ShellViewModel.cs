@@ -3927,6 +3927,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     private sealed record NavSnapshot(
         double Cx, double CxLo, double Cx2, double Cx3,
         double Cy, double CyLo, double Cy2, double Cy3,
+        // #1320 — the OD tail, so Back returns to a view past ~1e50 exactly.
+        double Cx4, double Cx5, double Cx6, double Cx7,
+        double Cy4, double Cy5, double Cy6, double Cy7,
         double Zoom,
         global::FracturingFog.FractalType Type,
         string? QualityName,
@@ -3947,6 +3950,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         return new NavSnapshot(
             s.CenterX, s.CenterXLo, s.CenterX2, s.CenterX3,
             s.CenterY, s.CenterYLo, s.CenterY2, s.CenterY3,
+            s.CenterX4, s.CenterX5, s.CenterX6, s.CenterX7,
+            s.CenterY4, s.CenterY5, s.CenterY6, s.CenterY7,
             s.Zoom, s.FractalType, s.Quality?.Name,
             s.IterLocked, s.LockedIterations,
             Main.SelectedRegion);
@@ -3987,10 +3992,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             var s = Main.ViewState;
             s.CenterX = snap.Cx; s.CenterXLo = snap.CxLo; s.CenterX2 = snap.Cx2; s.CenterX3 = snap.Cx3;
             s.CenterY = snap.Cy; s.CenterYLo = snap.CyLo; s.CenterY2 = snap.Cy2; s.CenterY3 = snap.Cy3;
-            // The snapshot keeps four limbs; clear the OD tail so a deep view
-            // being left (e.g. a finder jump, #1186) leaves no residue behind.
-            s.CenterX4 = s.CenterX5 = s.CenterX6 = s.CenterX7 = 0;
-            s.CenterY4 = s.CenterY5 = s.CenterY6 = s.CenterY7 = 0;
+            // #1320 — restore the OD tail too (it used to be cleared, so Back to a
+            // view past ~1e50 landed up to a view-width off). Shallower snapshots
+            // carry zeros there, which also clears a deep view being left (#1186).
+            s.CenterX4 = snap.Cx4; s.CenterX5 = snap.Cx5; s.CenterX6 = snap.Cx6; s.CenterX7 = snap.Cx7;
+            s.CenterY4 = snap.Cy4; s.CenterY5 = snap.Cy5; s.CenterY6 = snap.Cy6; s.CenterY7 = snap.Cy7;
             s.Zoom = snap.Zoom;
             // A region / minibrot jump's first-render iteration hint belongs to
             // the view being left; the restored view recomputes (or uses its lock).

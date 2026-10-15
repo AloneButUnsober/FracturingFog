@@ -328,6 +328,8 @@ namespace FracturingFog.Batch
                 CenterYLo = limbRegion?.CenterYLo ?? 0,
                 CenterY2 = limbRegion?.CenterY2 ?? 0,
                 CenterY3 = limbRegion?.CenterY3 ?? 0,
+                CenterX4 = limbRegion?.CenterX4 ?? 0, CenterX5 = limbRegion?.CenterX5 ?? 0, CenterX6 = limbRegion?.CenterX6 ?? 0, CenterX7 = limbRegion?.CenterX7 ?? 0,
+                CenterY4 = limbRegion?.CenterY4 ?? 0, CenterY5 = limbRegion?.CenterY5 ?? 0, CenterY6 = limbRegion?.CenterY6 ?? 0, CenterY7 = limbRegion?.CenterY7 ?? 0,
                 Zoom = zoom,
                 MaxIterations = iter,
                 // SM-1 (#1267) — a default cap (no --iterations) can sit below
@@ -882,6 +884,8 @@ namespace FracturingFog.Batch
                         CenterX2 = limbRegion?.CenterX2 ?? 0, CenterX3 = limbRegion?.CenterX3 ?? 0,
                         CenterY = cy, CenterYLo = limbRegion?.CenterYLo ?? 0,
                         CenterY2 = limbRegion?.CenterY2 ?? 0, CenterY3 = limbRegion?.CenterY3 ?? 0,
+                        CenterX4 = limbRegion?.CenterX4 ?? 0, CenterX5 = limbRegion?.CenterX5 ?? 0, CenterX6 = limbRegion?.CenterX6 ?? 0, CenterX7 = limbRegion?.CenterX7 ?? 0,
+                        CenterY4 = limbRegion?.CenterY4 ?? 0, CenterY5 = limbRegion?.CenterY5 ?? 0, CenterY6 = limbRegion?.CenterY6 ?? 0, CenterY7 = limbRegion?.CenterY7 ?? 0,
                         Zoom = fz, MaxIterations = iter,
                         ColorMap = theme, Quality = quality,
                         FractalParameters = reliefFp,
@@ -919,6 +923,8 @@ namespace FracturingFog.Batch
                     FractalType = frType, Width = outW, Height = outH,
                     CenterX = cx, CenterXLo = lsrc?.CenterXLo ?? 0, CenterX2 = lsrc?.CenterX2 ?? 0, CenterX3 = lsrc?.CenterX3 ?? 0,
                     CenterY = cy, CenterYLo = lsrc?.CenterYLo ?? 0, CenterY2 = lsrc?.CenterY2 ?? 0, CenterY3 = lsrc?.CenterY3 ?? 0,
+                    CenterX4 = lsrc?.CenterX4 ?? 0, CenterX5 = lsrc?.CenterX5 ?? 0, CenterX6 = lsrc?.CenterX6 ?? 0, CenterX7 = lsrc?.CenterX7 ?? 0,
+                    CenterY4 = lsrc?.CenterY4 ?? 0, CenterY5 = lsrc?.CenterY5 ?? 0, CenterY6 = lsrc?.CenterY6 ?? 0, CenterY7 = lsrc?.CenterY7 ?? 0,
                     Zoom = startZoom, MaxIterations = iter,
                     ColorMap = theme, Quality = quality,
                     FractalParameters = reliefFp ?? fp,
@@ -1141,6 +1147,8 @@ namespace FracturingFog.Batch
                 CenterXLo = limbs?.CenterXLo ?? 0, CenterX2 = limbs?.CenterX2 ?? 0, CenterX3 = limbs?.CenterX3 ?? 0,
                 CenterY = cy,
                 CenterYLo = limbs?.CenterYLo ?? 0, CenterY2 = limbs?.CenterY2 ?? 0, CenterY3 = limbs?.CenterY3 ?? 0,
+                CenterX4 = limbs?.CenterX4 ?? 0, CenterX5 = limbs?.CenterX5 ?? 0, CenterX6 = limbs?.CenterX6 ?? 0, CenterX7 = limbs?.CenterX7 ?? 0,
+                CenterY4 = limbs?.CenterY4 ?? 0, CenterY5 = limbs?.CenterY5 ?? 0, CenterY6 = limbs?.CenterY6 ?? 0, CenterY7 = limbs?.CenterY7 ?? 0,
                 Zoom = zoom,
                 MaxIterations = iter,
                 Quality = quality,
@@ -1261,6 +1269,8 @@ namespace FracturingFog.Batch
                         CenterX2 = region.CenterX2, CenterX3 = region.CenterX3,
                         CenterY = region.CenterY, CenterYLo = region.CenterYLo,
                         CenterY2 = region.CenterY2, CenterY3 = region.CenterY3,
+                        CenterX4 = region.CenterX4, CenterX5 = region.CenterX5, CenterX6 = region.CenterX6, CenterX7 = region.CenterX7,
+                        CenterY4 = region.CenterY4, CenterY5 = region.CenterY5, CenterY6 = region.CenterY6, CenterY7 = region.CenterY7,
                         Zoom = region.Zoom, MaxIterations = iters,
                         ColorMap = new HsvPalette(), Quality = quality,
                     };
@@ -1458,6 +1468,8 @@ namespace FracturingFog.Batch
                 CenterX2 = region.CenterX2, CenterX3 = region.CenterX3,
                 CenterY = region.CenterY, CenterYLo = region.CenterYLo,
                 CenterY2 = region.CenterY2, CenterY3 = region.CenterY3,
+                CenterX4 = region.CenterX4, CenterX5 = region.CenterX5, CenterX6 = region.CenterX6, CenterX7 = region.CenterX7,
+                CenterY4 = region.CenterY4, CenterY5 = region.CenterY5, CenterY6 = region.CenterY6, CenterY7 = region.CenterY7,
                 Zoom = zoom,
                 MaxIterations = iter,
                 ColorMap = theme,
@@ -1523,6 +1535,8 @@ namespace FracturingFog.Batch
                 CenterX2 = region.CenterX2, CenterX3 = region.CenterX3,
                 CenterY = region.CenterY, CenterYLo = region.CenterYLo,
                 CenterY2 = region.CenterY2, CenterY3 = region.CenterY3,
+                CenterX4 = region.CenterX4, CenterX5 = region.CenterX5, CenterX6 = region.CenterX6, CenterX7 = region.CenterX7,
+                CenterY4 = region.CenterY4, CenterY5 = region.CenterY5, CenterY6 = region.CenterY6, CenterY7 = region.CenterY7,
                 Zoom = zoom, MaxIterations = iter,
                 ColorMap = theme,
                 Quality = quality ?? region.QualityPreset ?? QualityPreset.Standard,
@@ -2387,13 +2401,13 @@ namespace FracturingFog.Batch
             CenterY4 = c.Im.X4, CenterY5 = c.Im.X5, CenterY6 = c.Im.X6, CenterY7 = c.Im.X7,
         };
 
-        /// <summary>A transient region carrying a centre's QD limbs for the
-        /// region-limb frame path of the non-Mandelbrot deep families.</summary>
+        /// <summary>A transient region carrying a centre's limbs for the
+        /// region-limb frame path (all eight since #1320; the QD-only families
+        /// read the first four).</summary>
         private static FractalRegion LimbRegion(FracturingFog.FFMath.DeepComplex c, FractalType t) => new()
         {
             FractalType = t,
-            CenterX = c.Re.X0, CenterXLo = c.Re.X1, CenterX2 = c.Re.X2, CenterX3 = c.Re.X3,
-            CenterY = c.Im.X0, CenterYLo = c.Im.X1, CenterY2 = c.Im.X2, CenterY3 = c.Im.X3,
+            Centre = c,
         };
 
         /// <summary>One Mandelbrot video frame at the full octuple-double centre.</summary>
@@ -2425,8 +2439,10 @@ namespace FracturingFog.Batch
             => limbs == null
                 ? new FracturingFog.FFMath.DeepComplex(cx, cy)
                 : FracturingFog.FFMath.DeepComplex.FromLimbs(
-                    limbs.CenterX, limbs.CenterXLo, limbs.CenterX2, limbs.CenterX3, 0, 0, 0, 0,
-                    limbs.CenterY, limbs.CenterYLo, limbs.CenterY2, limbs.CenterY3, 0, 0, 0, 0);
+                    limbs.CenterX, limbs.CenterXLo, limbs.CenterX2, limbs.CenterX3,
+                    limbs.CenterX4, limbs.CenterX5, limbs.CenterX6, limbs.CenterX7,
+                    limbs.CenterY, limbs.CenterYLo, limbs.CenterY2, limbs.CenterY3,
+                    limbs.CenterY4, limbs.CenterY5, limbs.CenterY6, limbs.CenterY7);
 
         /// <summary>Run the --explore beam search from the start view and report
         /// it; writes --explore-regions when asked. Null (after printing why) when
@@ -2491,7 +2507,9 @@ namespace FracturingFog.Batch
                     Name = $"Explore {frType} seed {seed} #{++k}",
                     FractalType = frType,
                     CenterX = c.Re.X0, CenterXLo = c.Re.X1, CenterX2 = c.Re.X2, CenterX3 = c.Re.X3,
+                    CenterX4 = c.Re.X4, CenterX5 = c.Re.X5, CenterX6 = c.Re.X6, CenterX7 = c.Re.X7,
                     CenterY = c.Im.X0, CenterYLo = c.Im.X1, CenterY2 = c.Im.X2, CenterY3 = c.Im.X3,
+                    CenterY4 = c.Im.X4, CenterY5 = c.Im.X5, CenterY6 = c.Im.X6, CenterY7 = c.Im.X7,
                     Zoom = n.View.Zoom,
                     Iterations = q.ComputeIterations(n.View.Zoom),
                     QualityPreset = q,

@@ -280,6 +280,8 @@ namespace FracturingFog.Hosting
             state.CenterX2 = region.CenterX2; state.CenterX3  = region.CenterX3;
             state.CenterY  = region.CenterY;  state.CenterYLo = region.CenterYLo;
             state.CenterY2 = region.CenterY2; state.CenterY3  = region.CenterY3;
+            state.CenterX4 = region.CenterX4; state.CenterX5 = region.CenterX5; state.CenterX6 = region.CenterX6; state.CenterX7 = region.CenterX7;
+            state.CenterY4 = region.CenterY4; state.CenterY5 = region.CenterY5; state.CenterY6 = region.CenterY6; state.CenterY7 = region.CenterY7;
             state.Zoom = region.Zoom > 0 ? region.Zoom : state.Zoom;
             state.FractalType = region.FractalType;
             // Source-compiled types (UserEquation / Sandbox / UserBulb) carry
@@ -739,6 +741,8 @@ namespace FracturingFog.Hosting
                 CenterX2 = state.CenterX2, CenterX3  = state.CenterX3,
                 CenterY  = state.CenterY,  CenterYLo = state.CenterYLo,
                 CenterY2 = state.CenterY2, CenterY3  = state.CenterY3,
+                CenterX4 = state.CenterX4, CenterX5 = state.CenterX5, CenterX6 = state.CenterX6, CenterX7 = state.CenterX7,
+                CenterY4 = state.CenterY4, CenterY5 = state.CenterY5, CenterY6 = state.CenterY6, CenterY7 = state.CenterY7,
                 Zoom = state.Zoom,
                 // Capture the live iter count so the saved region renders at
                 // the same detail it had on screen — matches legacy MainForm:2248
@@ -937,6 +941,8 @@ namespace FracturingFog.Hosting
             CenterX2 = src.CenterX2, CenterX3  = src.CenterX3,
             CenterY  = src.CenterY,  CenterYLo = src.CenterYLo,
             CenterY2 = src.CenterY2, CenterY3  = src.CenterY3,
+            CenterX4 = src.CenterX4, CenterX5 = src.CenterX5, CenterX6 = src.CenterX6, CenterX7 = src.CenterX7,
+            CenterY4 = src.CenterY4, CenterY5 = src.CenterY5, CenterY6 = src.CenterY6, CenterY7 = src.CenterY7,
             Zoom = src.Zoom,
             Iterations = src.Iterations,
             FractalType = src.FractalType,
@@ -1320,6 +1326,8 @@ namespace FracturingFog.Hosting
                     CenterX2 = region.CenterX2, CenterX3 = region.CenterX3,
                     CenterY = region.CenterY, CenterYLo = region.CenterYLo,
                     CenterY2 = region.CenterY2, CenterY3 = region.CenterY3,
+                    CenterX4 = region.CenterX4, CenterX5 = region.CenterX5, CenterX6 = region.CenterX6, CenterX7 = region.CenterX7,
+                    CenterY4 = region.CenterY4, CenterY5 = region.CenterY5, CenterY6 = region.CenterY6, CenterY7 = region.CenterY7,
                     Zoom = zoom,
                     MaxIterations = RegionIterations(region) is > 0 and int ri ? ri : quality.ComputeIterations(zoom),
                     FractalType = region.FractalType,
@@ -1363,6 +1371,8 @@ namespace FracturingFog.Hosting
                     CenterX2 = region.CenterX2, CenterX3 = region.CenterX3,
                     CenterY = region.CenterY, CenterYLo = region.CenterYLo,
                     CenterY2 = region.CenterY2, CenterY3 = region.CenterY3,
+                    CenterX4 = region.CenterX4, CenterX5 = region.CenterX5, CenterX6 = region.CenterX6, CenterX7 = region.CenterX7,
+                    CenterY4 = region.CenterY4, CenterY5 = region.CenterY5, CenterY6 = region.CenterY6, CenterY7 = region.CenterY7,
                     Zoom = region.Zoom,
                     MaxIterations = iters,
                     ColorMap = new HsvPalette(),
@@ -1419,6 +1429,8 @@ namespace FracturingFog.Hosting
                     CenterX2 = region.CenterX2, CenterX3 = region.CenterX3,
                     CenterY = region.CenterY, CenterYLo = region.CenterYLo,
                     CenterY2 = region.CenterY2, CenterY3 = region.CenterY3,
+                    CenterX4 = region.CenterX4, CenterX5 = region.CenterX5, CenterX6 = region.CenterX6, CenterX7 = region.CenterX7,
+                    CenterY4 = region.CenterY4, CenterY5 = region.CenterY5, CenterY6 = region.CenterY6, CenterY7 = region.CenterY7,
                     Zoom = region.Zoom,
                     MaxIterations = iters,
                     ColorMap = map,

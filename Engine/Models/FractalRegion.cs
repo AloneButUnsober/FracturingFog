@@ -78,6 +78,78 @@ namespace FracturingFog.Models
         /// <summary>QD limb 3 of imaginary centre.  See <see cref="CenterX2"/>.</summary>
         public double CenterY3 { get; set; }
 
+        // #1320 — OD limbs 4..7 (~124 digits), needed past zoom ~1e50: there the
+        // QD limbs alone leave the centre up to a view-width off (and far more
+        // deeper). Written only when non-zero, so shallower regions (and the
+        // built-in store) serialise exactly as before; older files load them as 0.
+        /// <summary>OD limb 4 of the real centre (zoom &gt; ~1e50).</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public double CenterX4 { get; set; }
+        /// <summary>OD limb 5 of the real centre.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public double CenterX5 { get; set; }
+        /// <summary>OD limb 6 of the real centre.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public double CenterX6 { get; set; }
+        /// <summary>OD limb 7 of the real centre.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public double CenterX7 { get; set; }
+        /// <summary>OD limb 4 of the imaginary centre.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public double CenterY4 { get; set; }
+        /// <summary>OD limb 5 of the imaginary centre.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public double CenterY5 { get; set; }
+        /// <summary>OD limb 6 of the imaginary centre.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public double CenterY6 { get; set; }
+        /// <summary>OD limb 7 of the imaginary centre.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public double CenterY7 { get; set; }
+
+        /// <summary>#1320 — the full eight-limb centre.</summary>
+        [JsonIgnore]
+        public DeepComplex Centre
+        {
+            get => DeepComplex.FromLimbs(
+                CenterX, CenterXLo, CenterX2, CenterX3, CenterX4, CenterX5, CenterX6, CenterX7,
+                CenterY, CenterYLo, CenterY2, CenterY3, CenterY4, CenterY5, CenterY6, CenterY7);
+            set
+            {
+                CenterX = value.Re.X0; CenterXLo = value.Re.X1; CenterX2 = value.Re.X2; CenterX3 = value.Re.X3;
+                CenterX4 = value.Re.X4; CenterX5 = value.Re.X5; CenterX6 = value.Re.X6; CenterX7 = value.Re.X7;
+                CenterY = value.Im.X0; CenterYLo = value.Im.X1; CenterY2 = value.Im.X2; CenterY3 = value.Im.X3;
+                CenterY4 = value.Im.X4; CenterY5 = value.Im.X5; CenterY6 = value.Im.X6; CenterY7 = value.Im.X7;
+            }
+        }
+
+        /// <summary>#1320 — copy all sixteen centre limbs into a view state.</summary>
+        public void CopyCentreTo(FracturingFog.ViewState.FractalViewState s)
+        {
+            s.CenterX = CenterX; s.CenterXLo = CenterXLo; s.CenterX2 = CenterX2; s.CenterX3 = CenterX3;
+            s.CenterX4 = CenterX4; s.CenterX5 = CenterX5; s.CenterX6 = CenterX6; s.CenterX7 = CenterX7;
+            s.CenterY = CenterY; s.CenterYLo = CenterYLo; s.CenterY2 = CenterY2; s.CenterY3 = CenterY3;
+            s.CenterY4 = CenterY4; s.CenterY5 = CenterY5; s.CenterY6 = CenterY6; s.CenterY7 = CenterY7;
+        }
+
+        /// <summary>#1320 — copy all sixteen centre limbs from a view state.</summary>
+        public void CopyCentreFrom(FracturingFog.ViewState.FractalViewState s)
+        {
+            CenterX = s.CenterX; CenterXLo = s.CenterXLo; CenterX2 = s.CenterX2; CenterX3 = s.CenterX3;
+            CenterX4 = s.CenterX4; CenterX5 = s.CenterX5; CenterX6 = s.CenterX6; CenterX7 = s.CenterX7;
+            CenterY = s.CenterY; CenterYLo = s.CenterYLo; CenterY2 = s.CenterY2; CenterY3 = s.CenterY3;
+            CenterY4 = s.CenterY4; CenterY5 = s.CenterY5; CenterY6 = s.CenterY6; CenterY7 = s.CenterY7;
+        }
+
+        /// <summary>#1320 — copy all sixteen centre limbs into a Mandelbrot calculator.</summary>
+        public void CopyCentreTo(MandelbrotCalculator c)
+        {
+            c.CenterX = CenterX; c.CenterXLo = CenterXLo; c.CenterX2 = CenterX2; c.CenterX3 = CenterX3;
+            c.CenterX4 = CenterX4; c.CenterX5 = CenterX5; c.CenterX6 = CenterX6; c.CenterX7 = CenterX7;
+            c.CenterY = CenterY; c.CenterYLo = CenterYLo; c.CenterY2 = CenterY2; c.CenterY3 = CenterY3;
+            c.CenterY4 = CenterY4; c.CenterY5 = CenterY5; c.CenterY6 = CenterY6; c.CenterY7 = CenterY7;
+        }
+
         /// <summary>#27 Phase 0 — true when this region was loaded from an
         /// external (cross-user) file via import. Runtime-only ([JsonIgnore]) so
         /// it cannot be forged by the file itself. When set, applying the
