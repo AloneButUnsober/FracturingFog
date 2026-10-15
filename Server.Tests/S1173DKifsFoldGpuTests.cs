@@ -109,23 +109,20 @@ public sealed class S1173DKifsFoldGpuTests
     }
 
     [Fact]
-    public void Rotation_Coefficients_Are_The_Cpu_Ones()
+    public void Kernel_Constants_Are_The_Cpu_Ones()
     {
-        // The kernel takes the rotation from the host; it must be exactly what the
-        // CPU DE computes inline (same calls, same order -> same bits).
-        var o = KifsFoldGpuParams.For(KifsGpuFold.Octahedron, 2, 1, 1, 1, 8, 10);
-        Assert.Equal(Math.Cos(Math.PI / 6.0), o.RotA);
-        Assert.Equal(Math.Sin(Math.PI / 6.0), o.RotB);
-
+        // The kernel takes its constants from the host; they must be exactly what the
+        // CPU DE uses (same values -> same bits). #1197.
         var m = KifsFoldGpuParams.For(KifsGpuFold.MandelboxRot, 2, 1, 1, 1, 8, 10);
-        Assert.Equal(Math.Cos(Math.PI / 48.0), m.RotA);
-        Assert.Equal(Math.Sin(Math.PI / 48.0), m.RotB);
+        Assert.Equal(Math.Cos(KifsCalculator.MandelboxRotAngle), m.RotA);
+        Assert.Equal(Math.Sin(KifsCalculator.MandelboxRotAngle), m.RotB);
+        Assert.Equal(Math.PI / 48.0, KifsCalculator.MandelboxRotAngle);
 
         var d = KifsFoldGpuParams.For(KifsGpuFold.Dodecahedron, 2, 1, 1, 1, 8, 10);
-        double c = Math.Cos(Math.PI / 5.0), s = Math.Sin(Math.PI / 5.0);
-        Assert.Equal(c + (1.0 - c) / 3.0, d.RotA, 15);
-        // Rodrigues about (1,1,1)/√3: the matrix is a rotation, so its rows are unit length.
-        Assert.Equal(1.0, d.RotA * d.RotA + d.RotB * d.RotB + d.RotC * d.RotC, 12);
-        Assert.True(d.RotC - d.RotB > 0 && Math.Abs((d.RotC - d.RotB) - 2 * s / Math.Sqrt(3)) < 1e-12);
+        var n = KifsCalculator.DodecaNormals;
+        Assert.Equal(n[0], (d.N1X, d.N1Y, d.N1Z));
+        Assert.Equal(n[1], (d.N2X, d.N2Y, d.N2Z));
+        Assert.Equal(n[2], (d.N3X, d.N3Y, d.N3Z));
+        foreach (var v in n) Assert.Equal(1.0, v.X * v.X + v.Y * v.Y + v.Z * v.Z, 12);
     }
 }
