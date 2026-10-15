@@ -1267,6 +1267,8 @@ namespace FracturingFog.Rendering
                 Height = height,
                 CenterX = s.CenterX, CenterXLo = s.CenterXLo, CenterX2 = s.CenterX2, CenterX3 = s.CenterX3,
                 CenterY = s.CenterY, CenterYLo = s.CenterYLo, CenterY2 = s.CenterY2, CenterY3 = s.CenterY3,
+                CenterX4 = s.CenterX4, CenterX5 = s.CenterX5, CenterX6 = s.CenterX6, CenterX7 = s.CenterX7,
+                CenterY4 = s.CenterY4, CenterY5 = s.CenterY5, CenterY6 = s.CenterY6, CenterY7 = s.CenterY7,
                 Zoom = posterZoom,
                 MaxIterations = effIters,
                 // _calculator.ColorMap is always initialised (ctor sets it, and
@@ -3985,6 +3987,8 @@ namespace FracturingFog.Rendering
             _calculator.CenterX2 = region.CenterX2; _calculator.CenterX3  = region.CenterX3;
             _calculator.CenterY  = region.CenterY;  _calculator.CenterYLo = region.CenterYLo;
             _calculator.CenterY2 = region.CenterY2; _calculator.CenterY3  = region.CenterY3;
+            _calculator.CenterX4 = region.CenterX4; _calculator.CenterX5 = region.CenterX5; _calculator.CenterX6 = region.CenterX6; _calculator.CenterX7 = region.CenterX7;
+            _calculator.CenterY4 = region.CenterY4; _calculator.CenterY5 = region.CenterY5; _calculator.CenterY6 = region.CenterY6; _calculator.CenterY7 = region.CenterY7;
             if (region.Zoom > 0) _calculator.Zoom = region.Zoom;
             var quality = region.QualityPreset ?? QualityPreset.Standard;
             _calculator.Quality = quality;

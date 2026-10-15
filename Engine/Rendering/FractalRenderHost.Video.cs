@@ -2078,6 +2078,8 @@ namespace FracturingFog.Rendering
                     ViewState.CenterX2 = region.CenterX2; ViewState.CenterX3 = region.CenterX3;
                     ViewState.CenterY = region.CenterY; ViewState.CenterYLo = region.CenterYLo;
                     ViewState.CenterY2 = region.CenterY2; ViewState.CenterY3 = region.CenterY3;
+                    ViewState.CenterX4 = region.CenterX4; ViewState.CenterX5 = region.CenterX5; ViewState.CenterX6 = region.CenterX6; ViewState.CenterX7 = region.CenterX7;
+                    ViewState.CenterY4 = region.CenterY4; ViewState.CenterY5 = region.CenterY5; ViewState.CenterY6 = region.CenterY6; ViewState.CenterY7 = region.CenterY7;
                     ViewState.Zoom = tz;
 
                     QualityPreset natural = QualityPreset.Standard;
@@ -2103,6 +2105,8 @@ namespace FracturingFog.Rendering
                     ViewState.CenterX2 = region.CenterX2; ViewState.CenterX3 = region.CenterX3;
                     ViewState.CenterY = region.CenterY; ViewState.CenterYLo = region.CenterYLo;
                     ViewState.CenterY2 = region.CenterY2; ViewState.CenterY3 = region.CenterY3;
+                    ViewState.CenterX4 = region.CenterX4; ViewState.CenterX5 = region.CenterX5; ViewState.CenterX6 = region.CenterX6; ViewState.CenterX7 = region.CenterX7;
+                    ViewState.CenterY4 = region.CenterY4; ViewState.CenterY5 = region.CenterY5; ViewState.CenterY6 = region.CenterY6; ViewState.CenterY7 = region.CenterY7;
                     ViewState.Zoom = reverse ? camAuthoredZoom : camWideZoom;
 
                     QualityPreset natural = QualityPreset.Standard;
@@ -2121,6 +2125,8 @@ namespace FracturingFog.Rendering
                     ViewState.CenterX2 = region.CenterX2; ViewState.CenterX3 = region.CenterX3;
                     ViewState.CenterY = region.CenterY; ViewState.CenterYLo = region.CenterYLo;
                     ViewState.CenterY2 = region.CenterY2; ViewState.CenterY3 = region.CenterY3;
+                    ViewState.CenterX4 = region.CenterX4; ViewState.CenterX5 = region.CenterX5; ViewState.CenterX6 = region.CenterX6; ViewState.CenterX7 = region.CenterX7;
+                    ViewState.CenterY4 = region.CenterY4; ViewState.CenterY5 = region.CenterY5; ViewState.CenterY6 = region.CenterY6; ViewState.CenterY7 = region.CenterY7;
                     ViewState.Zoom = tz;
 
                     // Natural-for-zoom acts as a floor; authored region preset
@@ -2155,6 +2161,8 @@ namespace FracturingFog.Rendering
                 _calculator.CenterYLo = ViewState.CenterYLo;
                 _calculator.CenterY2 = ViewState.CenterY2;
                 _calculator.CenterY3 = ViewState.CenterY3;
+                _calculator.CenterX4 = ViewState.CenterX4; _calculator.CenterX5 = ViewState.CenterX5; _calculator.CenterX6 = ViewState.CenterX6; _calculator.CenterX7 = ViewState.CenterX7;
+                _calculator.CenterY4 = ViewState.CenterY4; _calculator.CenterY5 = ViewState.CenterY5; _calculator.CenterY6 = ViewState.CenterY6; _calculator.CenterY7 = ViewState.CenterY7;
                 _calculator.Zoom = ViewState.Zoom;
                 _calculator.Quality = _videoQuality;
                 if (ViewState.IterLocked)

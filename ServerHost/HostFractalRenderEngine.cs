@@ -110,6 +110,12 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             {
                 cxLo = region.CenterXLo; cx2 = region.CenterX2; cx3 = region.CenterX3;
                 cyLo = region.CenterYLo; cy2 = region.CenterY2; cy3 = region.CenterY3;
+                // #1320 — the region's OD limbs too; the poster request reads
+                // them from req (the D-6b2 plumbing below).
+                req.CenterX4 = region.CenterX4; req.CenterX5 = region.CenterX5;
+                req.CenterX6 = region.CenterX6; req.CenterX7 = region.CenterX7;
+                req.CenterY4 = region.CenterY4; req.CenterY5 = region.CenterY5;
+                req.CenterY6 = region.CenterY6; req.CenterY7 = region.CenterY7;
             }
             iter = (req.Iterations is int ri && ri > 0)
                 ? ri

@@ -164,6 +164,15 @@ public static class SlideshowPlanner
             CenterYLo            = slide.CenterYLo != 0 ? slide.CenterYLo : template.CenterYLo,
             CenterY2             = slide.CenterY2  != 0 ? slide.CenterY2  : template.CenterY2,
             CenterY3             = slide.CenterY3  != 0 ? slide.CenterY3  : template.CenterY3,
+            // #1320 — the OD limbs, same slide-else-template rule.
+            CenterX4             = slide.CenterX4  != 0 ? slide.CenterX4  : template.CenterX4,
+            CenterX5             = slide.CenterX5  != 0 ? slide.CenterX5  : template.CenterX5,
+            CenterX6             = slide.CenterX6  != 0 ? slide.CenterX6  : template.CenterX6,
+            CenterX7             = slide.CenterX7  != 0 ? slide.CenterX7  : template.CenterX7,
+            CenterY4             = slide.CenterY4  != 0 ? slide.CenterY4  : template.CenterY4,
+            CenterY5             = slide.CenterY5  != 0 ? slide.CenterY5  : template.CenterY5,
+            CenterY6             = slide.CenterY6  != 0 ? slide.CenterY6  : template.CenterY6,
+            CenterY7             = slide.CenterY7  != 0 ? slide.CenterY7  : template.CenterY7,
             ThemeName            = !string.IsNullOrEmpty(slide.ThemeName)
                                      ? slide.ThemeName
                                      : template.ThemeName,

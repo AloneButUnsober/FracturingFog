@@ -674,6 +674,8 @@ namespace FracturingFog.Export
                 CenterX2 = shot.CenterX2, CenterX3 = shot.CenterX3,
                 CenterY = shot.CenterY, CenterYLo = shot.CenterYLo,
                 CenterY2 = shot.CenterY2, CenterY3 = shot.CenterY3,
+                CenterX4 = shot.CenterX4, CenterX5 = shot.CenterX5, CenterX6 = shot.CenterX6, CenterX7 = shot.CenterX7,
+                CenterY4 = shot.CenterY4, CenterY5 = shot.CenterY5, CenterY6 = shot.CenterY6, CenterY7 = shot.CenterY7,
                 Zoom = shot.Zoom,
                 MaxIterations = shot.MaxIterations,
                 Quality = shot.Quality,
@@ -723,6 +725,8 @@ namespace FracturingFog.Export
                 CenterX2 = shot.CenterX2, CenterX3 = shot.CenterX3,
                 CenterY = shot.CenterY, CenterYLo = shot.CenterYLo,
                 CenterY2 = shot.CenterY2, CenterY3 = shot.CenterY3,
+                CenterX4 = shot.CenterX4, CenterX5 = shot.CenterX5, CenterX6 = shot.CenterX6, CenterX7 = shot.CenterX7,
+                CenterY4 = shot.CenterY4, CenterY5 = shot.CenterY5, CenterY6 = shot.CenterY6, CenterY7 = shot.CenterY7,
                 Zoom = shot.Zoom,
                 MaxIterations = shot.MaxIterations,
                 ColorMap = shot.ThemeAt(localTime),
@@ -814,6 +818,8 @@ namespace FracturingFog.Export
                 CenterX2 = region?.CenterX2 ?? 0, CenterX3  = region?.CenterX3  ?? 0,
                 CenterY  = region?.CenterY  ?? 0, CenterYLo = region?.CenterYLo ?? 0,
                 CenterY2 = region?.CenterY2 ?? 0, CenterY3  = region?.CenterY3  ?? 0,
+                CenterX4 = region?.CenterX4 ?? 0, CenterX5 = region?.CenterX5 ?? 0, CenterX6 = region?.CenterX6 ?? 0, CenterX7 = region?.CenterX7 ?? 0,
+                CenterY4 = region?.CenterY4 ?? 0, CenterY5 = region?.CenterY5 ?? 0, CenterY6 = region?.CenterY6 ?? 0, CenterY7 = region?.CenterY7 ?? 0,
                 Zoom = zoom,
                 MaxIterations = iter,
                 Quality = quality,
@@ -890,7 +896,9 @@ namespace FracturingFog.Export
         {
             public FractalType RenderType;
             public double CenterX, CenterXLo, CenterX2, CenterX3;
+            public double CenterX4, CenterX5, CenterX6, CenterX7;   // #1320 — OD limbs
             public double CenterY, CenterYLo, CenterY2, CenterY3;
+            public double CenterY4, CenterY5, CenterY6, CenterY7;
             public double Zoom;
             public int MaxIterations;
             public QualityPreset Quality = QualityPreset.Standard;

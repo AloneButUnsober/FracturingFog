@@ -491,6 +491,8 @@ public sealed class FFWorkerAgent : IAsyncDisposable
         CenterYLo            = src.CenterYLo,
         CenterY2             = src.CenterY2,
         CenterY3             = src.CenterY3,
+        CenterX4 = src.CenterX4, CenterX5 = src.CenterX5, CenterX6 = src.CenterX6, CenterX7 = src.CenterX7,
+        CenterY4 = src.CenterY4, CenterY5 = src.CenterY5, CenterY6 = src.CenterY6, CenterY7 = src.CenterY7,
         ThemeName            = src.ThemeName,
         QualityName          = src.QualityName,
         ThemeJson            = src.ThemeJson,

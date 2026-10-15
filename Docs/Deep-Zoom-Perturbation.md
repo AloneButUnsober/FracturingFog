@@ -15,6 +15,12 @@ Memory: `project_detail_depth_limit`, `project_viewcamera_input`,
   reintroduce a plain-double centre with a promotion threshold — that was the
   historic "anchor drift" bug (frozen ~1e-16 world error blooming ∝ zoom).
   See `project_viewcamera_input`.
+- **Every copy of the centre carries all eight limbs per axis** — regions
+  (`FractalRegion.CenterX4..7` / `CenterY4..7`, written only when non-zero),
+  Back navigation, posters, slideshow / scene / server / cluster requests.
+  Until #1320 regions kept only the QD four, so a saved view past ~1e50 came
+  back up to a view-width off. Copy through `FractalRegion.Centre` /
+  `CopyCentreTo` / `CopyCentreFrom` rather than listing limbs by hand.
 - Precision types: `DD` (Hi/Lo, ~31 digits), `QD` (X0..X3, ~62), `OD` (X0..X7,
   ~124), all in `Abstractions/Math`. `FromCenterOffset(centre, pixelOffset,
   scale)` builds a pixel's coordinate; **OD's must use the OD+double full-cascade
