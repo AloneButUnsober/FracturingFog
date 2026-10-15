@@ -371,6 +371,33 @@ Resident memory (#1166), GT 710, 2026-10-08:
   before readback is the conventional design.
 - The perturbation rows add the reference orbit (16 B per iteration) and the SA / BLA tables.
 
+**#1228 (2026-10-15): device-local layout, measured.** `VulkanBufferPlacement` /
+`FF_VULKAN_MEMORY` (`host` | `auto` (default) | `device-outputs`). GT 710, best of 5, the same
+frames byte-identical in all three layouts:
+
+| Case | `host` (pre-#1228) | `auto` | `device-outputs` |
+|---- |---- |---- |---- |
+| SP 1080p, 64 iter | 24.0 ms | 24.4 ms | 28.2 ms |
+| SP 1080p, 1024 iter | 30.7 ms | 31.2 ms | 41.0 ms |
+| Perturb 960x540, 1000 iter | 1,965 ms | 1,966 ms | 1,972 ms |
+| Perturb 64x64, 50 000-iter orbit | 913 ms | 917 ms | 916 ms |
+| Buddhabrot 720p, 2M samples | 190 ms | 198 ms\* | 196 ms |
+
+\* measured with the histogram staged; `auto` now keeps it on the host, as `host` does.
+
+- **Frame outputs stay on the host.** The shader writes each output once, and those writes
+  cross PCIe while it computes. Staging them in VRAM means a `vkCmdCopyBuffer` of the same bytes
+  after the dispatch, which cannot overlap it: +3.5 ms at 64 iterations, +10 ms at 1024. That is
+  not specific to a slow card: the bytes cross the bus either way, and only the direct write
+  overlaps the compute. `device-outputs` keeps the staged layout for judging the trade on other
+  hardware (#1265).
+- **The Buddhabrot histogram stays on the host** for the same reason (+2-4% staged here: the
+  clear and the 11 MB copy-out). Its atomics on system memory may cost more on a fast card;
+  `device-outputs` stages it too.
+- **Shader inputs go to VRAM** (`auto`): the reference orbit and the SA / BLA tables, read once
+  per iteration by every pixel. Neutral on the GT 710 (fp64-bound; the orbit streams through its
+  cache), the conventional layout, and cheap: one copy of the orbit per frame.
+
 ### Reference-orbit bench (`ReferenceOrbitBench`, #1166)
 
 Source: [`Benchmarks/ReferenceOrbitBench.cs`](../../Benchmarks/ReferenceOrbitBench.cs).

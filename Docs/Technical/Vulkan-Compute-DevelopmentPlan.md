@@ -265,6 +265,13 @@ the dev/CI fallback. On CI, DXC ships fine from the LunarG `vulkan-sdk` apt pack
   reads back must be `HOST_CACHED` too — the first coherent type on NVIDIA is uncached
   write-combined memory, and reading a 1080p frame out of it cost ~780 ms (the "Vulkan is 20x
   slower than D3D11" finding). `VulkanHostMemory.FindType(readback: true)` picks the cached type.
+  **#1228 (2026-10-15):** `VulkanComputeKernel` now keeps the buffers the shader reads every
+  iteration (reference orbit, SA / BLA tables) `DEVICE_LOCAL` behind host-visible staging, copied
+  in at the start of the dispatch's command buffer. Frame outputs and the Buddhabrot histogram
+  stay host-cached: a write-once output staged in VRAM costs a copy after the dispatch (GT 710,
+  1080p SP: +3.5 to +10 ms). `FF_VULKAN_MEMORY=host` / `device-outputs` select the other layouts;
+  measurements in `Benchmark-Subsystem.md`. The relief and froxel kernels still use host memory
+  for every buffer.
 - **Parity band:** corners asserted bit-exact; interior pixels **not** (float ULP). V1's
   `--vulkanprobe` should adopt the documented ULP band, not strict bit-exact, for iter/smooth.
 
