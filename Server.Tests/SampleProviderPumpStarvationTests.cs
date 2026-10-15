@@ -31,7 +31,11 @@ public sealed class SampleProviderPumpStarvationTests
     {
         ThreadPool.GetMinThreads(out int minWorkers, out _);
         int blockers = minWorkers + 64;   // well past what the pool runs without injecting threads
-        using var gate = new ManualResetEventSlim(false);
+        // Deliberately not disposed: blockers still queued behind the saturated
+        // pool run after this test returns, and Wait on a disposed gate throws on
+        // a pool thread (an xUnit "catastrophic failure"). Once set, the gate never
+        // allocates a kernel handle, so leaving it to the GC is safe.
+        var gate = new ManualResetEventSlim(false);
         for (int i = 0; i < blockers; i++)
             ThreadPool.UnsafeQueueUserWorkItem(_ => gate.Wait(), null);
 
