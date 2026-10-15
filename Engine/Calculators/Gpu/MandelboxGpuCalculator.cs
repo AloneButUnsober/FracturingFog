@@ -152,6 +152,7 @@ public sealed class MandelboxGpuCalculator : IDisposable
         if (dofN <= 1) { output[idx] = ShadeRay(r.CamX, r.CamY, r.CamZ, cdx, cdy, cdz, in r, in sp, in p, palette, depth, dIdx, normals, hdr, gIdx, albedo, hdri); return; }
         double fpx = r.CamX + cdx * r.DofFocus, fpy = r.CamY + cdy * r.DofFocus, fpz = r.CamZ + cdz * r.DofFocus;
         double aR = 0, aG = 0, aB = 0, aA = 0;
+        double hR = 0, hG = 0, hB = 0;   // #1181 — per-tap pre-clamp HDR
         for (int k = 0; k < dofN; k++)
         {
             var (u1, u2) = GpuKernelUtils.HashPair(x, y, k, 9);
@@ -162,10 +163,18 @@ public sealed class MandelboxGpuCalculator : IDisposable
             double loz = r.CamZ + r.RightZ * lx + r.UpZ * ly;
             double ddx = fpx - lox, ddy = fpy - loy, ddz = fpz - loz;
             double il = 1.0 / Math.Sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
-            uint c = ShadeRay(lox, loy, loz, ddx * il, ddy * il, ddz * il, in r, in sp, in p, palette, depth, -1, normals, hdr, -1, albedo, hdri);
+            // #1181 — the tap writes its own HDR (NaN on a miss) for the average below.
+            if (wantHdr) { hdr[3 * idx] = float.NaN; hdr[3 * idx + 1] = float.NaN; hdr[3 * idx + 2] = float.NaN; }
+            uint c = ShadeRay(lox, loy, loz, ddx * il, ddy * il, ddz * il, in r, in sp, in p, palette, depth, -1, normals, hdr, wantHdr ? idx : -1, albedo, hdri);
             aR += (c >> 16) & 0xFF; aG += (c >> 8) & 0xFF; aB += c & 0xFF; aA += (c >> 24) & 0xFF;
+            if (wantHdr) { hR += hdr[3 * idx]; hG += hdr[3 * idx + 1]; hB += hdr[3 * idx + 2]; }
         }
         double inv = 1.0 / dofN;
+        // #1181 — the averaged pre-clamp HDR, as the CPU ThinLensDof accumulator (NaN
+        // when any tap missed), so tonemap / bloom see the lens-blurred frame. The taps
+        // also wrote normals; a thin-lens pixel keeps the miss value (no single surface).
+        if (wantHdr) { hdr[3 * idx] = (float)(hR * inv); hdr[3 * idx + 1] = (float)(hG * inv); hdr[3 * idx + 2] = (float)(hB * inv); }
+        if (wantNormal) { normals[3 * idx] = 0f; normals[3 * idx + 1] = 0f; normals[3 * idx + 2] = 0f; }
         output[idx] = ((uint)(aA * inv + 0.5) << 24) | ((uint)(aR * inv + 0.5) << 16)
                     | ((uint)(aG * inv + 0.5) << 8) | (uint)(aB * inv + 0.5);
     }
