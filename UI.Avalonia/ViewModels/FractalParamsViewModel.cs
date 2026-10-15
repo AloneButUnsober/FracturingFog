@@ -573,6 +573,32 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         }
     }
 
+    // ── #1275 Mandelbrot deep zoom: BLA tolerance ────────────────────────────
+    // Direct-write to _p; ApplyView copies it onto the calculator. Presets only:
+    // a value from a region / batch that is not one of them shows as "Custom".
+
+    private static readonly double[] s_blaTolerances = { 1e-6, 1e-8, 1e-10, 1e-12 };
+    private static readonly string[] s_blaTolerancePresets =
+        { "Fast (1e-6, default)", "Balanced (1e-8)", "Accurate (1e-10)", "Exact (1e-12)" };
+    public IReadOnlyList<string> BlaTolerancePresets => s_blaTolerancePresets;   // cached: see Interior2DBackgroundModes
+
+    public string BlaTolerancePreset
+    {
+        get
+        {
+            int i = System.Array.IndexOf(s_blaTolerances, _p.BlaTolerance);
+            return i >= 0 ? s_blaTolerancePresets[i] : $"Custom ({_p.BlaTolerance:G3})";
+        }
+        set
+        {
+            int i = System.Array.IndexOf(s_blaTolerancePresets, value);
+            if (i < 0 || _p.BlaTolerance == s_blaTolerances[i]) return;
+            _p.BlaTolerance = s_blaTolerances[i];
+            this.RaisePropertyChanged();
+            Fire();
+        }
+    }
+
     // ── 2D heightfield relief (#102) ─────────────────────────────────────────
     // Direct-write to _p (same pattern as interior alpha); the render host reads
     // these off ViewState.FractalParameters in UploadProcessedBuffer.

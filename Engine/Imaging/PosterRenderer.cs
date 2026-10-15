@@ -615,6 +615,7 @@ namespace FracturingFog.Imaging
                     // (= new()); a null-conditional here poisons the flow state
                     // and trips CS8604 at the ApplyReliefIfEnabled call below.
                     InteriorAlpha = req.FractalParameters.InteriorAlpha,
+                    BlaTolerance = req.FractalParameters.BlaTolerance,   // #1275
                     // D-6b — sub-rect + seeded orbit for cluster tile workers.
                     // All four properties default to 0 (= legacy full-image render);
                     // any non-zero value engages the sub-rect dc geometry.
@@ -954,6 +955,7 @@ namespace FracturingFog.Imaging
                     ColorMap = req.ColorMap,
                     Quality = req.Quality,
                     InteriorAlpha = req.FractalParameters.InteriorAlpha,
+                    BlaTolerance = req.FractalParameters.BlaTolerance,   // #1275
                 };
                 m.Calculate(token);
                 return m;

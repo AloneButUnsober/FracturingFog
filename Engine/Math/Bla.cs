@@ -104,12 +104,22 @@ namespace FracturingFog.FFMath
         /// <summary>True when level-0 + merges built using DD-precision ref orbit (Wave 2.10).</summary>
         public readonly bool DdPrecision;
 
-        // Linearisation tolerance: |δ|·|2Z+δ| dominated by 2Zδ requires |δ| ≤ ε·|Z|.
-        // 1e-6 keeps the dropped δ² term ≥ 12 orders of magnitude below 2Zδ —
-        // safely below the double-precision floor for the per-pixel δ iteration.
+        // Linearisation tolerance: |δ|·|2Z+δ| dominated by 2Zδ requires |δ| ≤ ε·|Z|,
+        // i.e. each skipped step drops a δ² term up to ε of the linear term.
         // (1e-4 was tried but produced visible banding at medium zoom near
         // near-zero |Z| crossings of the reference orbit.)
-        private const double Epsilon = 1e-6;
+        //
+        // #1275 — the default 1e-6 is a speed / accuracy trade, not exact: near a
+        // deep minibrot (period 998 at 1.6e15, 30 000 iterations) it put 12.8 % of
+        // pixels > 2 iterations off a BLA-off render (and off direct OD
+        // iteration), the dropped terms compounding over the long chaotic orbits.
+        // 1e-10 → 2.7 %, 1e-12 → the chaotic floor; most views are exact at any ε.
+        // FractalParameters.BlaTolerance makes it a per-render choice.
+        /// <summary>Default linearisation tolerance ε (FractalParameters.BlaTolerance default).</summary>
+        public const double DefaultEpsilon = 1e-6;
+
+        /// <summary>#1275 — the ε this table was built with.</summary>
+        public readonly double Epsilon;
 
         /// <summary>
         /// Build a BLA hierarchy from a reference orbit (Z values stored as doubles).
@@ -120,8 +130,9 @@ namespace FracturingFog.FFMath
         /// <param name="refZi">Reference orbit imaginary parts.</param>
         /// <param name="refLen">Number of valid reference iterations (orbit may have terminated by escape).</param>
         /// <param name="dcMaxAbs">Maximum |dc| over all pixels — needed for merge validity.</param>
-        public BlaTable(double[] refZr, double[] refZi, int refLen, double dcMaxAbs)
-            : this(BuildMandelbrotLevel0(refZr, refZi, refLen), refLen, dcMaxAbs, ddPrecision: false)
+        /// <param name="epsilon">Linearisation tolerance ε (#1275); smaller = fewer, safer skips.</param>
+        public BlaTable(double[] refZr, double[] refZi, int refLen, double dcMaxAbs, double epsilon = DefaultEpsilon)
+            : this(BuildMandelbrotLevel0(refZr, refZi, refLen, epsilon), refLen, dcMaxAbs, ddPrecision: false, epsilon)
         {
         }
 
@@ -135,20 +146,20 @@ namespace FracturingFog.FFMath
         public BlaTable(
             double[] refZr, double[] refZrLo,
             double[] refZi, double[] refZiLo,
-            int refLen, double dcMaxAbs)
-            : this(BuildMandelbrotLevel0Dd(refZr, refZrLo, refZi, refZiLo, refLen),
-                   refLen, dcMaxAbs, ddPrecision: true)
+            int refLen, double dcMaxAbs, double epsilon = DefaultEpsilon)
+            : this(BuildMandelbrotLevel0Dd(refZr, refZrLo, refZi, refZiLo, refLen, epsilon),
+                   refLen, dcMaxAbs, ddPrecision: true, epsilon)
         {
         }
 
-        private static Bla[] BuildMandelbrotLevel0(double[] refZr, double[] refZi, int refLen)
+        private static Bla[] BuildMandelbrotLevel0(double[] refZr, double[] refZi, int refLen, double epsilon)
         {
             var level0 = new Bla[refLen];
             for (int n = 0; n < refLen; n++)
             {
                 double zr = refZr[n], zi = refZi[n];
                 double zMag = System.Math.Sqrt(zr * zr + zi * zi);
-                double r = Epsilon * zMag;
+                double r = epsilon * zMag;
                 level0[n] = new Bla(2.0 * zr, 2.0 * zi, 1.0, 0.0, r * r, 1);
             }
             return level0;
@@ -156,7 +167,7 @@ namespace FracturingFog.FFMath
 
         private static Bla[] BuildMandelbrotLevel0Dd(
             double[] refZr, double[] refZrLo,
-            double[] refZi, double[] refZiLo, int refLen)
+            double[] refZi, double[] refZiLo, int refLen, double epsilon)
         {
             var level0 = new Bla[refLen];
             for (int n = 0; n < refLen; n++)
@@ -164,9 +175,9 @@ namespace FracturingFog.FFMath
                 double zrHi = refZr[n], zrLo = refZrLo[n];
                 double ziHi = refZi[n], ziLo = refZiLo[n];
                 // |Z| from collapsed DD — Hi alone is fine for the radius
-                // (Lo contributes ~1e-16 relative, far below Epsilon=1e-6).
+                // (Lo contributes ~1e-16 relative, far below any useful ε).
                 double zMag = System.Math.Sqrt(zrHi * zrHi + ziHi * ziHi);
-                double r = Epsilon * zMag;
+                double r = epsilon * zMag;
                 // A = 2·Z exactly in FP (multiply by 2 = exponent bump).
                 level0[n] = new Bla(
                     2.0 * zrHi, 2.0 * zrLo,
@@ -188,14 +199,15 @@ namespace FracturingFog.FFMath
         /// <param name="refLen">Number of valid reference iterations.</param>
         /// <param name="dcMaxAbs">Maximum |dc| over all pixels.</param>
         public BlaTable(Bla[] level0, int refLen, double dcMaxAbs)
-            : this(level0, refLen, dcMaxAbs, ddPrecision: false)
+            : this(level0, refLen, dcMaxAbs, ddPrecision: false, DefaultEpsilon)
         {
         }
 
-        private BlaTable(Bla[] level0, int refLen, double dcMaxAbs, bool ddPrecision)
+        private BlaTable(Bla[] level0, int refLen, double dcMaxAbs, bool ddPrecision, double epsilon)
         {
             RefLen = refLen;
             DdPrecision = ddPrecision;
+            Epsilon = epsilon;
             int maxLevel = 0;
             while ((1 << (maxLevel + 1)) <= refLen) maxLevel++;
             Levels = System.Math.Max(1, maxLevel + 1);
@@ -424,11 +436,15 @@ namespace FracturingFog.FFMath
         /// </summary>
         public int Lookup(int n, double dMag2, int maxIter)
         {
-            // Walk levels top-down — first valid match wins.
-            for (int k = Levels - 1; k >= 0; k--)
+            // Walk levels top-down — first valid match wins. #1275: a level-k BLA
+            // starts only at multiples of 2^k, so start at the highest level n is
+            // aligned to (its trailing zeros) instead of testing and skipping every
+            // level above it: the same answer, without ~Levels wasted probes per
+            // iteration (which made a tight ε slower than no BLA at all).
+            int top = n == 0 ? Levels - 1 : System.Math.Min(Levels - 1, System.Numerics.BitOperations.TrailingZeroCount(n));
+            for (int k = top; k >= 0; k--)
             {
                 int l = 1 << k;
-                if ((n & (l - 1)) != 0) continue;     // n must be aligned to l
                 int idx = n >> k;
                 if (idx >= LevelLen[k]) continue;
                 if (n + l > RefLen) continue;

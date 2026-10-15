@@ -669,6 +669,8 @@ See [ClientServer-UserGuide.md](ClientServer-UserGuide.md) for a full walkthroug
 
 Auto-promotion is transparent — status bar shows the live label (SP / DD / QD / AVX2 / PT / BLA / QD-PT).
 
+**BLA accuracy (Mandelbrot, Fractal Params → Deep zoom).** At deep zoom the renderer skips blocks of iterations with a bilinear approximation (BLA). The default, **Fast (1e-6)**, can leave some pixels near deep minibrots a few iterations off an un-skipped render, at high iteration counts. That's invisible on busy palettes, but can show on smooth ones. **Balanced (1e-8)**, **Accurate (1e-10)** and **Exact (1e-12)** trade speed for accuracy: on a period-998 minibrot at 1.6×10¹⁵ with 30 000 iterations, Exact took ~5× as long as Fast. Most views look identical at every setting. The choice is saved with regions and carried by `--batch` as `--param BlaTolerance=1e-10`.
+
 **GPU or CPU?** When GPU rendering is switched on (GPU compute for 2D, *Use GPU render* for 3D, Backend = GPU for User Bulb), the status bar also shows where the frame actually ran:
 
 - `[GPU]` means the frame ran on the GPU.

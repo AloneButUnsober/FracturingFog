@@ -1351,6 +1351,8 @@ namespace FracturingFog.Rendering
             _calculator.Quality = ViewState.Quality;
             // Issue #96 — global interior alpha (Mandelbrot canonical path).
             _calculator.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;
+            // #1275 — BLA tolerance (accuracy vs speed near deep minibrots).
+            _calculator.BlaTolerance = ViewState.FractalParameters?.BlaTolerance ?? FracturingFog.FFMath.BlaTable.DefaultEpsilon;
 
             if (ViewState.IterLocked)
                 _calculator.MaxIterations = ViewState.LockedIterations;
@@ -2450,6 +2452,7 @@ namespace FracturingFog.Rendering
             dst.DisableAcceleration = src.DisableAcceleration;
             dst.DisableSeriesApproximation = src.DisableSeriesApproximation;
             dst.DisableDdBla = src.DisableDdBla;
+            dst.BlaTolerance = src.BlaTolerance;   // #1275
         }
 
         /// <summary>#328 — is <paramref name="type"/> a 2D height-field type whose

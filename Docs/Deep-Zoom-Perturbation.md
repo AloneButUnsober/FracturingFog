@@ -68,6 +68,21 @@ limbs per iteration (`_refZr/_refZrLo/..X7`). Each pixel iterates only its
   - The DD-reference variant (SM-11a) stays scalar.
 - **SA (series approximation) + BLA** skip early/at-scale iterations. Toggle off
   with `DisableAcceleration` / `DisableSeriesApproximation` for A/B.
+- **BLA tolerance (#1346, `FractalParameters.BlaTolerance`, default 1e-6).** A BLA skip
+  may drop a δ² term up to ε of the linear term. 1e-6 is a speed setting, not exact.
+  - Measured on a period-998 minibrot at 1.6e15, 30 000 iterations: 12.8 % of pixels
+    > 2 iterations off a BLA-off render (14 / 120 against direct OD iteration). 1e-10
+    gives 2.7 %; 1e-12 sits at the chaotic floor (1 / 120), at ~5× the time.
+  - Views ≤ ~6 000 iterations are identical at any ε.
+  - Carried by the Mandelbrot region snapshot (batch `--param`); the GPU SA / BLA kernel
+    shares the table.
+  - `BlaTable.Lookup` starts at the level the iteration is aligned to (trailing zeros),
+    not at the top, with the same answers. Before, a tight ε made BLA slower than BLA off.
+- **#1275 (cluster-rebase port) closed as superseded.** With BLA off, the default path
+  matched "rebase every pixel" to the chaotic floor on every view tried (1e11–4e32,
+  periods 61–998), and a per-lane Pauldelbrot soft-glitch test changed nothing. The
+  strict absorption check plus rebasing leaves no undetected glitch class; the error
+  that remained was BLA's.
 
 ## 3. The detail-depth floor (SM-7) — NOT a bug
 

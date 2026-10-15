@@ -28,6 +28,15 @@ namespace FracturingFog.Models
         /// per-render iteration cap is set.</summary>
         public double EscapeIterationScale { get; set; } = 1.0;
 
+        /// <summary>#1275 — Mandelbrot deep zoom: the BLA (bilinear approximation)
+        /// linearisation tolerance ε. Each skipped block may drop a δ² term up to ε
+        /// of the linear term. 1e-6 (default) is fast; near deep minibrots with long
+        /// iteration counts it leaves some exterior pixels a few iterations off the
+        /// un-skipped render (measured 12.8 % > 2 iterations at 1.6e15 / 30 000
+        /// iterations). 1e-8 / 1e-10 / 1e-12 trade speed for accuracy (1e-12 ≈
+        /// exact). Most views render identically at any value.</summary>
+        public double BlaTolerance { get; set; } = 1e-6;
+
         // ── #920 faithful parabolic implosion (user-picked p/q) ───────────────
         /// <summary>When true, the Julia parameter is driven from the parabolic
         /// root <c>p/q</c> instead of <see cref="JuliaC"/>: the render uses
@@ -1782,6 +1791,7 @@ namespace FracturingFog.Models
             {
                 JuliaC = JuliaC,
                 EscapeIterationScale = EscapeIterationScale,
+                BlaTolerance = BlaTolerance,
                 FaithfulImplosion = FaithfulImplosion,
                 FaithfulImplosionP = FaithfulImplosionP,
                 FaithfulImplosionQ = FaithfulImplosionQ,

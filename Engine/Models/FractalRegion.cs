@@ -782,6 +782,8 @@ namespace FracturingFog.Models
         // reproduce it. Each is omitted at its FractalParameters default (recall
         // resets the family to defaults first, #960).
         [JsonIgnore(Condition = OmitNull)] public double? EscapeIterationScale { get; set; }
+        // #1275 — Mandelbrot BLA tolerance; omitted at the 1e-6 default.
+        [JsonIgnore(Condition = OmitNull)] public double? BlaTolerance { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? IFSIterations { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? LSystemDepth { get; set; }
         [JsonIgnore(Condition = OmitNull)] public string? AttractorPresetName { get; set; }
@@ -1302,8 +1304,14 @@ namespace FracturingFog.Models
                     UserBulbIterations = Ni(p.UserBulbIterations, D.UserBulbIterations),
                     UserBulbTime = Nd(p.UserBulbTime, D.UserBulbTime),
                 },
-                // Mandelbrot, Tricorn, BurningShip, Magnet1/2, TearDrop and the
-                // generated families need no extra params — defaults suffice.
+                // #1275 — Mandelbrot carries its BLA tolerance when it is not the
+                // default (null otherwise, so a stock region stays block-free).
+                FractalType.Mandelbrot => new RegionFractalParams
+                {
+                    BlaTolerance = Nd(p.BlaTolerance, D.BlaTolerance),
+                },
+                // Tricorn, BurningShip, Magnet1/2, TearDrop and the generated
+                // families need no extra params — defaults suffice.
                 _ => null,
             };
 
@@ -1804,6 +1812,7 @@ namespace FracturingFog.Models
 
             // #961 — full animatable coverage.
             if (EscapeIterationScale.HasValue) p.EscapeIterationScale = EscapeIterationScale.Value;
+            if (BlaTolerance.HasValue) p.BlaTolerance = BlaTolerance.Value;   // #1275
             if (IFSIterations.HasValue) p.IFSIterations = IFSIterations.Value;
             if (LSystemDepth.HasValue) p.LSystemDepth = LSystemDepth.Value;
             if (!string.IsNullOrEmpty(AttractorPresetName)) p.AttractorPresetName = AttractorPresetName;

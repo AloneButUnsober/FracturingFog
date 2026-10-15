@@ -395,6 +395,12 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
     /// </summary>
     public bool DisableSeriesApproximation { get; set; } = false;
 
+    /// <summary>#1275 — BLA linearisation tolerance ε (FractalParameters.BlaTolerance):
+    /// a skip may drop a δ² term up to ε of the linear term. Smaller = fewer skips,
+    /// closer to the un-skipped render near deep minibrots; the default 1e-6 is the
+    /// fast setting. Non-positive or non-finite values use the default.</summary>
+    public double BlaTolerance { get; set; } = BlaTable.DefaultEpsilon;
+
     /// <summary>
     /// Force the legacy single-precision BLA table (pre-Wave-2.10) instead
     /// of the DD-precision merge. Used to isolate suspected Wave 2.10
@@ -2722,10 +2728,11 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
                        || _blaForRefOrbitLen != _refOrbitLen
                        || _blaForRefOrbitGen != _refOrbitGen;
         // Relative tolerance: BLA merge uses dcMaxAbs in its validity bound,
-        // so a 5% drift is safely within the linearisation margin (Epsilon=1e-6).
+        // so a 5% drift is safely within the linearisation margin (ε, BlaTolerance).
         double dcDrift = _blaDcMaxAbs <= 0 ? double.PositiveInfinity
                                            : Math.Abs(dcMaxAbs - _blaDcMaxAbs) / _blaDcMaxAbs;
-        if (!refChanged && _blaTable != null && dcDrift < 0.05) return;
+        double eps = BlaTolerance > 0 && double.IsFinite(BlaTolerance) ? BlaTolerance : BlaTable.DefaultEpsilon;
+        if (!refChanged && _blaTable != null && dcDrift < 0.05 && _blaTable.Epsilon == eps) return;
 
         if (_refOrbitLen < 4) { _blaTable = null; return; }
         // Wave 2.10 — DD-precision BLA tables. HP path always populates
@@ -2743,8 +2750,8 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         // "DD kicks in" at medium depth.
         bool useDdBla = !DisableDdBla && Zoom > DdBlaZoomThreshold;
         _blaTable = useDdBla
-            ? new BlaTable(_refZr, _refZrLo, _refZi, _refZiLo, _refOrbitLen, dcMaxAbs)
-            : new BlaTable(_refZr, _refZi, _refOrbitLen, dcMaxAbs);
+            ? new BlaTable(_refZr, _refZrLo, _refZi, _refZiLo, _refOrbitLen, dcMaxAbs, eps)
+            : new BlaTable(_refZr, _refZi, _refOrbitLen, dcMaxAbs, eps);
         _blaDcMaxAbs = dcMaxAbs;
         _blaForRefMaxIter = _refCachedMaxIter;
         _blaForRefOrbitLen = _refOrbitLen;
