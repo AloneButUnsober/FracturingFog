@@ -63,6 +63,10 @@ using GpuRoute = FracturingFog.Render.GpuRoute;
 
 namespace FracturingFog;
 
+/// <summary>#1331 — the GPU deep-zoom kernel precision (see
+/// MandelbrotCalculator.GpuDeepPrecisionMode).</summary>
+public enum GpuDeepPrecision { Auto, Double, Fp32 }
+
 public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Interefaces.ITrapFieldSource, Interefaces.ISupportsHistogramEq,
     Interefaces.IDistanceFieldSource, FracturingFog.Render.IGpuRouteSource
 {
@@ -302,6 +306,42 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
     /// the deep-dc precision re-check (#82 checkbox 2) gates lifting it further.</summary>
     public const double MaxGpuPerturbZoom = ODZoomThreshold;
 
+    /// <summary>#1331 — which kernel the plain GPU deep-zoom frame runs:
+    /// <c>Auto</c> = the fp32 kernels (scaled fp32 / float-exp) only on a device
+    /// without fp64, the double kernel otherwise; <c>Fp32</c> = the fp32 kernels
+    /// wherever available (3–8× faster on weak-fp64 cards, but ~0.1–0.4% of
+    /// pixels wrong at hard views: a 24-bit mantissa); <c>Double</c> = never fp32.
+    /// Process-wide; from FF_GPU_PERTURB_PRECISION (auto / double / fp32).</summary>
+    public static GpuDeepPrecision GpuDeepPrecisionMode { get; set; } =
+        ParseGpuDeepPrecision(Environment.GetEnvironmentVariable("FF_GPU_PERTURB_PRECISION"));
+
+    /// <summary>#1331 — FF_GPU_PERTURB_PRECISION → mode (unknown / unset = Auto).</summary>
+    public static GpuDeepPrecision ParseGpuDeepPrecision(string? value) => value?.Trim().ToLowerInvariant() switch
+    {
+        "double" or "fp64" => GpuDeepPrecision.Double,
+        "fp32" or "float" or "fast" => GpuDeepPrecision.Fp32,
+        _ => GpuDeepPrecision.Auto,
+    };
+
+    /// <summary>#1331 — compatibility switch for the spike / probes: true forces
+    /// <see cref="GpuDeepPrecision.Fp32"/>, false restores the mode it replaced.</summary>
+    public static bool UseGpuFloatExpPerturbation
+    {
+        get => GpuDeepPrecisionMode == GpuDeepPrecision.Fp32;
+        set => GpuDeepPrecisionMode = value ? GpuDeepPrecision.Fp32 : GpuDeepPrecision.Auto;
+    }
+
+    /// <summary>#1331 — the last frame's GPU perturbation ran an fp32 kernel.</summary>
+    public bool LastFrameUsedGpuFloatExp { get; private set; }
+
+    /// <summary>#1331 — the fp32 kernels for this device under the current mode.</summary>
+    public static bool UseFloatExpKernel(FracturingFog.Rendering.IGpuKernel k) => k.SupportsPerturbationFloatExp && GpuDeepPrecisionMode switch
+    {
+        GpuDeepPrecision.Fp32 => true,
+        GpuDeepPrecision.Auto => !k.SupportsPerturbation,
+        _ => false,
+    };
+
     /// <summary>V6 (#82): master toggle for the GPU deep-zoom perturbation path.
     /// Off by default — the deep path stays CPU unless explicitly enabled AND a
     /// perturbation-capable kernel (<c>IGpuKernel.SupportsPerturbation</c>) is
@@ -454,6 +494,10 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         if (!hp && LastFrameUsedGpuCompute) return GpuRoute.OnGpu(label);
         if (hp && LastFrameUsedGpuOrbitPerturbation)
             return GpuRoute.OnGpu(label, $"{label}: deep-zoom orbit perturbation");   // #607
+        if (hp && LastFrameUsedGpuPerturbation && LastFrameUsedGpuFloatExp)   // #1331
+            return GpuRoute.OnGpu(label, $"{label}: deep-zoom perturbation in fp32 "
+                + "(24-bit mantissa: a few pixels near deep minibrots can differ; FF_GPU_PERTURB_PRECISION=double for the double kernel)")
+                with { Mode = "fp32" };
         if (hp && LastFrameUsedGpuPerturbation)
             return GpuRoute.OnGpu(label, $"{label}: deep-zoom perturbation"
                 + (LastFrameUsedGpuSeriesApproximation ? " + series approximation" : "")
@@ -468,8 +512,10 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
             if (s_gpuPerturbDisabled is { } off) return off;
             if (!UseGpuPerturbation)
                 return GpuRoute.Cpu("deep zoom", "deep zoom renders on the CPU unless GPU perturbation is enabled");
-            if (!kernel.SupportsPerturbation)
-                return GpuRoute.Cpu("no fp64 kernel", $"{label} has no deep-zoom perturbation kernel (no fp64)");
+            if (!kernel.SupportsPerturbation && !UseFloatExpKernel(kernel))
+                return GpuRoute.Cpu("no fp64 kernel", kernel.SupportsPerturbationFloatExp
+                    ? $"{label} has no fp64, and FF_GPU_PERTURB_PRECISION=double rules out the fp32 deep-zoom kernel (#1331)"
+                    : $"{label} has no deep-zoom perturbation kernel (no fp64)");
             return GpuRoute.Cpu("deep-zoom path", "this deep-zoom render path runs on the CPU only");
         }
         if (!UseGpuCompute)
@@ -915,6 +961,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         LastFrameUsedGpuSeriesApproximation = false;
         LastFrameUsedGpuBla = false;
         LastFrameUsedGpuOrbitPerturbation = false;
+        LastFrameUsedGpuFloatExp = false;          // #1331
         LastFrameBuiltGpuReferenceOrbit = false;   // #1166
         _gpuSkip = null;
         _panState = null;                  // #1330: set again by a complete lattice frame
@@ -2412,7 +2459,8 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
             int[]? prCap = PerRowMaxIter;
             bool tileCap = prCap != null && prCap.Length >= Height;
             bool gateOk = !recycled && !LatticeAligned   // #1330: the lattice is a CPU path
-                && UseGpuPerturbation && GpuKernel != null && GpuKernel.SupportsPerturbation
+                && UseGpuPerturbation && GpuKernel != null
+                && (GpuKernel.SupportsPerturbation || UseFloatExpKernel(GpuKernel))   // #1331: no fp64 needed
                 && AllowPtRebasing && !UseDdRebaseReference && !ForceScalarPtPath
                 && !tileCap && Zoom <= MaxGpuPerturbZoom && _refOrbitLen >= 1;
             Dbg86($"GATE zoom={Zoom:0e+0} gateOk={gateOk} recycled={recycled} " +
@@ -2660,6 +2708,17 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
                     IterationBuffer, SmoothBuffer,
                     FinalZrBuffer, FinalZiBuffer, FinalDrBuffer, FinalDiBuffer,
                     bla?.GpuCoefficients, bla?.Levels ?? 0);
+            }
+            else if (UseFloatExpKernel(kernel))
+            {
+                // #1331 — the all-fp32 float-exp kernel (weak / no fp64).
+                kernel.RunPerturbFloatExp(
+                    Width, Height, scale, maxIt, EscapeRadius2,
+                    offX0, offY0,
+                    _refZr, _refZi, _refOrbitLen,
+                    IterationBuffer, SmoothBuffer,
+                    FinalZrBuffer, FinalZiBuffer, FinalDrBuffer, FinalDiBuffer);
+                LastFrameUsedGpuFloatExp = true;
             }
             else
             {

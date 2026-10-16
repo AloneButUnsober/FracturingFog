@@ -94,6 +94,7 @@ dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke
 | Var | Effect |
 |-----|--------|
 | `FF_GPU_PERTURB=1` | D3D/Windows: opt in to deep GPU perturbation (deep-only). |
+| `FF_GPU_PERTURB_PRECISION` | #1331 — `auto` (default: the fp32 kernels only on a device without fp64), `fp32` (opt in anywhere: 2–8× faster on weak-fp64 cards, ~0.1–0.4% of pixels wrong near deep minibrots), `double` (never fp32). See Deep-Zoom-Perturbation.md §8. |
 | `FF_GPU_PERTURB_BUDGET_MS` | Perf-fallback threshold, ms (default 3000). Raise to force GPU to stay on for measuring. |
 | `FF_PERTURB_BANDROWS` | Force band height (test hook — stress multi-band; e.g. `8`). |
 | `FF_VULKAN_MEMORY` | Vulkan buffer layout (#1228): `auto` (default: orbit + SA / BLA in VRAM, outputs host-cached), `host` (pre-#1228, every buffer host-visible), `device-outputs` (outputs in VRAM too, copied out). |

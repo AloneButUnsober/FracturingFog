@@ -34,6 +34,10 @@ namespace FracturingFog.Render
     {
         public static GpuRoute NotRequested => default;
 
+        /// <summary>#1331 — a qualifier for a GPU frame's status tag ("fp32" for the
+        /// reduced-precision deep-zoom kernels); null = plain "[GPU]".</summary>
+        public string? Mode { get; init; }
+
         public static GpuRoute OnGpu(string device, string? detail = null)
             => new(GpuRouteState.Gpu, device, detail);
 
@@ -44,7 +48,7 @@ namespace FracturingFog.Render
         /// not requested (nothing to say).</summary>
         public string? StatusTag => State switch
         {
-            GpuRouteState.Gpu => "[GPU]",
+            GpuRouteState.Gpu => Mode is null ? "[GPU]" : $"[GPU {Mode}]",
             GpuRouteState.CpuFallback => $"[CPU: {Reason}]",
             _ => null,
         };

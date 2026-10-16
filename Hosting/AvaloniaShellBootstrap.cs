@@ -477,11 +477,17 @@ namespace FracturingFog.Hosting
                     // SupportsPerturbation, so this is belt-and-braces. Off by
                     // default everywhere else — only an explicit Vulkan session
                     // opts in.
+                    // #1331 — without shaderFloat64 the fp32 kernels (scaled fp32 /
+                    // float-exp) still run deep zoom on the GPU, unless
+                    // FF_GPU_PERTURB_PRECISION=double rules them out.
                     bool fp64 = VulkanComputeKernel.ProbeSupportsFloat64();
-                    FracturingFog.MandelbrotCalculator.UseGpuPerturbation = fp64;
+                    bool fp32 = FracturingFog.MandelbrotCalculator.GpuDeepPrecisionMode != FracturingFog.GpuDeepPrecision.Double;
+                    FracturingFog.MandelbrotCalculator.UseGpuPerturbation = fp64 || fp32;
                     Console.Error.WriteLine(fp64
                         ? "[Vulkan] deep-zoom GPU perturbation ENABLED (shaderFloat64 present)."
-                        : "[Vulkan] deep-zoom GPU perturbation disabled (no shaderFloat64); deep zoom stays CPU.");
+                        : fp32
+                            ? "[Vulkan] deep-zoom GPU perturbation ENABLED in fp32 (no shaderFloat64; FF_GPU_PERTURB_PRECISION=double turns it off)."
+                            : "[Vulkan] deep-zoom GPU perturbation disabled (no shaderFloat64, fp32 ruled out); deep zoom stays CPU.");
                 }
                 else
                 {

@@ -810,6 +810,113 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         }
     }
 
+    // ── #1331 fp32 deep-zoom perturbation (scaled fp32 / float-exp) ──────────────
+
+    // 48 bytes, no doubles: the HLSL PerturbFxParams cbuffer.
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PerturbFxParams
+    {
+        public float ScaleM; public int ScaleE; public float OffX0, OffY0;
+        public int Width, Height, MaxIter, RefLen, RowBase;
+        public float EscapeR2; public int Pad0, Pad1;
+    }
+
+    private ID3D11ComputeShader? _csPerturbFx, _csPerturbF32;
+    private ID3D11Buffer? _fxParamsBuf, _fxRefZBuf;
+    private ID3D11ShaderResourceView? _fxRefZSrv;
+    private int _fxRefAlloc;
+
+    /// <summary>#1331 — the fp32 kernels need no double shader ops.</summary>
+    public bool SupportsPerturbationFloatExp => true;
+
+    /// <summary>#1331 — the last fp32 frame ran the scaled-fp32 entry (not float-exp).</summary>
+    public bool LastPerturbFloatExpWasScaledF32 { get; private set; }
+
+    /// <summary>#1331 — <see cref="RunPerturb"/> on the fp32 kernels
+    /// (MandelbrotKernelSource.BuildPerturbFloatExp): scaled fp32 while the pixel
+    /// scale is in float range, float-exp deeper. Same outputs and bands.</summary>
+    public void RunPerturbFloatExp(
+        int width, int height,
+        double scale, int maxIter, double escapeRadius2,
+        double offsetX0, double offsetY0,
+        double[] refZr, double[] refZi, int refLen,
+        int[] iterDst, float[] smoothDst,
+        float[] finalZrDst, float[] finalZiDst,
+        float[] finalDrDst, float[] finalDiDst)
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(MandelbrotGpuKernel));
+        if (width <= 0 || height <= 0) return;
+        if (refLen < 1) throw new ArgumentException("reference orbit is empty", nameof(refLen));
+        if (refZr.Length < refLen || refZi.Length < refLen)
+            throw new ArgumentException("reference-orbit arrays shorter than refLen");
+        if (!(scale > 0) || !double.IsFinite(scale)) throw new ArgumentOutOfRangeException(nameof(scale));
+
+        lock (_d3dGate)
+        {
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            BeginFrameTiming();   // #1329
+            EnsureOutputBuffers(width, height);
+            _fxParamsBuf ??= _device.CreateBuffer(new BufferDescription(
+                byteWidth: 48, bindFlags: BindFlags.ConstantBuffer,
+                usage: ResourceUsage.Dynamic, cpuAccessFlags: CpuAccessFlags.Write));
+            if (_fxRefZBuf == null || _fxRefAlloc < refLen)
+            {
+                _fxRefZSrv?.Dispose();
+                _fxRefZBuf?.Dispose();
+                _fxRefZBuf = _device.CreateBuffer(new BufferDescription
+                {
+                    ByteWidth = (uint)(refLen * 2 * sizeof(float)),
+                    BindFlags = BindFlags.ShaderResource,
+                    Usage = ResourceUsage.Dynamic,
+                    CPUAccessFlags = CpuAccessFlags.Write,
+                    MiscFlags = ResourceOptionFlags.BufferStructured,
+                    StructureByteStride = 2 * sizeof(float),
+                });
+                _fxRefZSrv = _device.CreateShaderResourceView(_fxRefZBuf, new ShaderResourceViewDescription
+                {
+                    Format = Vortice.DXGI.Format.Unknown,
+                    ViewDimension = Vortice.Direct3D.ShaderResourceViewDimension.Buffer,
+                    Buffer = new BufferShaderResourceView { FirstElement = 0, NumElements = (uint)refLen },
+                });
+                _fxRefAlloc = refLen;
+            }
+            var zm = _ctx.Map(_fxRefZBuf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
+            unsafe
+            {
+                float* dst = (float*)zm.DataPointer;
+                for (int i = 0; i < refLen; i++) { dst[2 * i] = (float)refZr[i]; dst[2 * i + 1] = (float)refZi[i]; }
+            }
+            _ctx.Unmap(_fxRefZBuf, 0);
+
+            int e = Math.ILogB(scale);
+            float m = (float)Math.ScaleB(scale, -e);
+            bool f32 = e >= MandelbrotKernelSource.PerturbF32MinScaleExponent;
+            LastPerturbFloatExpWasScaledF32 = f32;
+            var cs = f32
+                ? _csPerturbF32 ??= CompileShader(MandelbrotKernelSource.BuildPerturbFloatExp(), label: "perturb-f32",
+                    entryPoint: MandelbrotKernelSource.PerturbF32EntryPoint)
+                : _csPerturbFx ??= CompileShader(MandelbrotKernelSource.BuildPerturbFloatExp(), label: "perturb-fx",
+                    entryPoint: MandelbrotKernelSource.PerturbFxEntryPoint);
+            var p = new PerturbFxParams
+            {
+                ScaleM = m, ScaleE = e, OffX0 = (float)offsetX0, OffY0 = (float)offsetY0,
+                Width = width, Height = height, MaxIter = maxIter, RefLen = refLen,
+                EscapeR2 = (float)escapeRadius2,
+            };
+            _ctx.CSSetShader(cs);
+            _ctx.CSSetShaderResource(0, _fxRefZSrv);   // t0
+            DispatchPerturbBands(width, height, maxIter, srvCount: 1, f32 ? " (scaled fp32)" : " (float-exp)", rowBase =>
+            {
+                p.RowBase = rowBase;
+                var mapped = _ctx.Map(_fxParamsBuf!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
+                unsafe { *(PerturbFxParams*)mapped.DataPointer = p; }
+                _ctx.Unmap(_fxParamsBuf!, 0);
+                _ctx.CSSetConstantBuffer(0, _fxParamsBuf);
+            });
+            ReadPerturbOutputs(width * height, t0, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst);
+        }
+    }
+
     // ── #838 / G4.7 Buddhabrot sample pass ───────────────────────────────────────
 
     // 64 bytes: 11 ints, 3 floats, 1 int, 1 float — the HLSL BuddhaParams cbuffer byte-for-byte.
@@ -1430,6 +1537,11 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         try { _buddhaHitsStaging?.Dispose(); } catch { }
         try { _buddhaDone?.Dispose(); } catch { }
         try { _timer.Dispose(); } catch { }   // #1329
+        try { _csPerturbFx?.Dispose(); } catch { }   // #1331
+        try { _csPerturbF32?.Dispose(); } catch { }
+        try { _fxRefZSrv?.Dispose(); } catch { }
+        try { _fxRefZBuf?.Dispose(); } catch { }
+        try { _fxParamsBuf?.Dispose(); } catch { }
         _csPerturbOrbit.Clear();
         try { _orbitOutUav?.Dispose(); } catch { }
         try { _orbitOutBuf?.Dispose(); } catch { }

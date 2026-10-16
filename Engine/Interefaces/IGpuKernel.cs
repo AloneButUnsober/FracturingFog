@@ -123,6 +123,22 @@ namespace FracturingFog.Rendering
         /// keeps deep zoom on the CPU. See issue #82 / dev-plan §14.</summary>
         bool SupportsPerturbation => false;
 
+        /// <summary>#1331 — the float-exp perturbation kernel (fp32 mantissa + int
+        /// exponent, no fp64) is available: <see cref="RunPerturbFloatExp"/>.</summary>
+        bool SupportsPerturbationFloatExp => false;
+
+        /// <summary>#1331 — <see cref="RunPerturb"/> on the float-exp kernel: same
+        /// inputs and outputs, all-fp32 arithmetic (for weak- or no-fp64 GPUs).</summary>
+        void RunPerturbFloatExp(
+            int width, int height,
+            double scale, int maxIter, double escapeRadius2,
+            double offsetX0, double offsetY0,
+            double[] refZr, double[] refZi, int refLen,
+            int[] iterDst, float[] smoothDst,
+            float[] finalZrDst, float[] finalZiDst,
+            float[] finalDrDst, float[] finalDiDst)
+            => throw new NotSupportedException("This GPU kernel has no float-exp perturbation path.");
+
         /// <summary>#1173-M — short backend name for the HUD / status bar
         /// ("D3D11", "Vulkan").</summary>
         string BackendLabel => GetType().Name;
