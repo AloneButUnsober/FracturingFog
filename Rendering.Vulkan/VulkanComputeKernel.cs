@@ -100,6 +100,15 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         public int Width, Height, MaxIter, RefLen, RowBase, SafeMax, BlaLevels, Pad1, Pad2, Pad3;   // BlaLevels: G4.5b (was Pad0)
     }
 
+    // #1331 float-exp params (48 bytes, no doubles): the HLSL PerturbFxParams cbuffer.
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PerturbFxParamsBlob
+    {
+        public float ScaleM; public int ScaleE; public float OffX0, OffY0;
+        public int Width, Height, MaxIter, RefLen, RowBase;
+        public float EscapeR2; public int Pad0, Pad1;
+    }
+
     // TDR row-band tiling helper lives in MandelbrotKernelSource (shared with the
     // D3D backend). See MandelbrotKernelSource.PerturbBandRows.
 
@@ -623,6 +632,188 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         double freq = Stopwatch.Frequency;
         LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
         LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
+    }
+
+    // ── #1331 float-exp perturbation ────────────────────────────────────────────
+
+    private Program? _perturbFx, _perturbF32;
+
+    /// <summary>#1331 — the last float-exp frame ran the scaled-fp32 entry (not float-exp).</summary>
+    public bool LastPerturbFloatExpWasScaledF32 { get; private set; }
+    private Allocated _fxParams, _fxRefZ;
+    private int _fxRefAlloc;
+
+    /// <summary>#1331 — the float-exp perturbation kernel needs no fp64: every
+    /// Vulkan compute device can run it.</summary>
+    public bool SupportsPerturbationFloatExp => true;
+
+    /// <summary>#1331 — test hook: always the float-exp entry, never scaled fp32.</summary>
+    [ThreadStatic] public static bool ForceFloatExpEntry;
+
+    /// <summary>#1331 — <see cref="RunPerturb"/> on the float-exp kernel
+    /// (MandelbrotKernelSource.BuildPerturbFloatExp): δ and dz/dc as a float
+    /// mantissa + int exponent, the reference orbit as float. Same outputs, bands
+    /// and too-slow abort.</summary>
+    public void RunPerturbFloatExp(
+        int width, int height,
+        double scale, int maxIter, double escapeRadius2,
+        double offsetX0, double offsetY0,
+        double[] refZr, double[] refZi, int refLen,
+        int[] iterDst, float[] smoothDst,
+        float[] finalZrDst, float[] finalZiDst,
+        float[] finalDrDst, float[] finalDiDst)
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(VulkanComputeKernel));
+        if (width <= 0 || height <= 0) return;
+        if (refLen < 1) throw new ArgumentException("reference orbit is empty", nameof(refLen));
+        if (refZr.Length < refLen || refZi.Length < refLen)
+            throw new ArgumentException("reference-orbit arrays shorter than refLen");
+        if (!(scale > 0) || !double.IsFinite(scale)) throw new ArgumentOutOfRangeException(nameof(scale));
+
+        long t0 = Stopwatch.GetTimestamp();
+        BeginFrameTiming();   // #1329
+        int n = width * height;
+        EnsureBuffers(width, height);
+        if (_fxParams.Buffer.Handle == 0)
+            _fxParams = AllocBuffer((ulong)sizeof(PerturbFxParamsBlob), BufferUsageFlags.UniformBufferBit);
+        if (_fxRefZ.Buffer.Handle == 0 || _fxRefAlloc < refLen)
+        {
+            FreeBuffer(ref _fxRefZ);
+            _fxRefZ = AllocBuffer((ulong)(refLen * 2 * sizeof(float)), BufferUsageFlags.StorageBufferBit, Residency.Upload);
+            _fxRefAlloc = refLen;
+        }
+        // scale = m · 2^e, m in [1, 2); the scaled-fp32 entry while 2^e is in float range.
+        int e = Math.ILogB(scale);
+        float m = (float)Math.ScaleB(scale, -e);
+        bool f32 = e >= MandelbrotKernelSource.PerturbF32MinScaleExponent && !ForceFloatExpEntry;
+        LastPerturbFloatExpWasScaledF32 = f32;
+        Program prog = f32
+            ? _perturbF32 ??= BuildProgram(MandelbrotKernelSource.BuildPerturbFloatExp(), MandelbrotKernelSource.PerturbF32EntryPoint,
+                0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2)
+            : _perturbFx ??= BuildProgram(MandelbrotKernelSource.BuildPerturbFloatExp(), MandelbrotKernelSource.PerturbFxEntryPoint,
+                0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2);
+
+        var z = new float[refLen * 2];
+        for (int i = 0; i < refLen; i++) { z[2 * i] = (float)refZr[i]; z[2 * i + 1] = (float)refZi[i]; }
+        fixed (float* pz = z) WriteBytes(_fxRefZ, pz, z.Length * sizeof(float));
+
+        var blob = new PerturbFxParamsBlob
+        {
+            ScaleM = m, ScaleE = e, OffX0 = (float)offsetX0, OffY0 = (float)offsetY0,
+            Width = width, Height = height, MaxIter = maxIter, RefLen = refLen,
+            EscapeR2 = (float)escapeRadius2,
+        };
+        DispatchBands(prog, width, height, maxIter, f32 ? " (scaled fp32)" : " (float-exp)",
+            rowBase => { var b = blob; b.RowBase = rowBase; WriteBytes(_fxParams, &b, sizeof(PerturbFxParamsBlob)); },
+            new[] { _fxParams.Buffer, _fxRefZ.Buffer, _buf[2].Buffer, _buf[3].Buffer, _buf[4].Buffer },
+            new[] { 0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2 });
+        SubmitReadback(Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)));
+
+        long tDispatch = Stopwatch.GetTimestamp();
+        ReadIter(_buf[2], iterDst, n);
+        ReadFloats(_buf[3], smoothDst, n);
+        ReadFinalZD(_buf[4], finalZrDst, finalZiDst, finalDrDst, finalDiDst, n);
+        long tEnd = Stopwatch.GetTimestamp();
+        EndFrameTiming();   // #1329
+        double freq = Stopwatch.Frequency;
+        LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
+        LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
+    }
+
+    /// <summary>Run <paramref name="prog"/> over the frame in TDR row bands (one
+    /// submit each, the UBO rewritten per band by <paramref name="writeParams"/>),
+    /// with the first-band too-slow abort. Binding 0 is the UBO, the rest SSBOs.</summary>
+    private void DispatchBands(Program prog, int width, int height, int maxIter, string label,
+        Action<int> writeParams, Buffer[] buffers, uint[] bindings)
+    {
+        int nb = buffers.Length;
+        DescriptorPool pool = default;
+        CommandBuffer cmd = default;
+        try
+        {
+            var poolSizes = stackalloc DescriptorPoolSize[2]
+            {
+                new DescriptorPoolSize { Type = DescriptorType.UniformBuffer, DescriptorCount = 1 },
+                new DescriptorPoolSize { Type = DescriptorType.StorageBuffer, DescriptorCount = (uint)(nb - 1) },
+            };
+            var dpci = new DescriptorPoolCreateInfo
+            {
+                SType = StructureType.DescriptorPoolCreateInfo,
+                MaxSets = 1, PoolSizeCount = 2, PPoolSizes = poolSizes,
+            };
+            Check(_vk.CreateDescriptorPool(_device, in dpci, null, out pool), "vkCreateDescriptorPool");
+            var dslLocal = prog.Dsl;
+            var dsai = new DescriptorSetAllocateInfo
+            {
+                SType = StructureType.DescriptorSetAllocateInfo,
+                DescriptorPool = pool, DescriptorSetCount = 1, PSetLayouts = &dslLocal,
+            };
+            Check(_vk.AllocateDescriptorSets(_device, in dsai, out DescriptorSet set), "vkAllocateDescriptorSets");
+            var infos = stackalloc DescriptorBufferInfo[nb];
+            var writes = stackalloc WriteDescriptorSet[nb];
+            for (int i = 0; i < nb; i++)
+            {
+                infos[i] = new DescriptorBufferInfo { Buffer = buffers[i], Offset = 0, Range = Vk.WholeSize };
+                writes[i] = new WriteDescriptorSet
+                {
+                    SType = StructureType.WriteDescriptorSet,
+                    DstSet = set, DstBinding = bindings[i], DescriptorCount = 1,
+                    DescriptorType = i == 0 ? DescriptorType.UniformBuffer : DescriptorType.StorageBuffer,
+                    PBufferInfo = &infos[i],
+                };
+            }
+            _vk.UpdateDescriptorSets(_device, (uint)nb, writes, 0, null);
+
+            var cbai = new CommandBufferAllocateInfo
+            {
+                SType = StructureType.CommandBufferAllocateInfo,
+                CommandPool = _cmdPool, Level = CommandBufferLevel.Primary, CommandBufferCount = 1,
+            };
+            int bandRows = MandelbrotKernelSource.PerturbBandRows(width, height, maxIter);
+            int bandCount = (height + bandRows - 1) / bandRows;
+            int bandIndex = 0;
+            for (int rowBase = 0; rowBase < height; rowBase += bandRows, bandIndex++)
+            {
+                int rows = Math.Min(bandRows, height - rowBase);
+                writeParams(rowBase);
+                Check(_vk.AllocateCommandBuffers(_device, in cbai, out cmd), "vkAllocateCommandBuffers");
+                var begin = new CommandBufferBeginInfo
+                {
+                    SType = StructureType.CommandBufferBeginInfo, Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
+                };
+                Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
+                _timer.Begin(cmd);   // #1329
+                FlushPending(cmd);
+                _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, prog.Pipeline);
+                _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, prog.Layout, 0, 1, &set, 0, null);
+                _vk.CmdDispatch(cmd, (uint)((width + 7) / 8), (uint)((rows + 7) / 8), 1);
+                _timer.Mark(cmd, GpuStage.Dispatch);
+                Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
+                var cmdLocal = cmd;
+                var submit = new SubmitInfo { SType = StructureType.SubmitInfo, CommandBufferCount = 1, PCommandBuffers = &cmdLocal };
+                long tBand = Stopwatch.GetTimestamp();
+                Check(_vk.QueueSubmit(_ctx.ComputeQueue, 1, &submit, default), "vkQueueSubmit");
+                Check(_vk.QueueWaitIdle(_ctx.ComputeQueue), "vkQueueWaitIdle");
+                _vk.FreeCommandBuffers(_device, _cmdPool, 1, in cmd);
+                cmd = default;
+                if (bandIndex == 0 && bandCount > 1)
+                {
+                    double band0Ms = (Stopwatch.GetTimestamp() - tBand) * 1000.0 / Stopwatch.Frequency;
+                    if (MandelbrotKernelSource.PerturbTooSlow(band0Ms, bandCount))
+                    {
+                        if (pool.Handle != 0) { _vk.DestroyDescriptorPool(_device, pool, null); pool = default; }
+                        throw new TimeoutException(
+                            $"{MandelbrotKernelSource.PerturbTooSlowMarker}: band0={band0Ms:F1}ms × {bandCount} bands " +
+                            $"> {MandelbrotKernelSource.PerturbBudgetMs:F0}ms budget{label}");
+                    }
+                }
+            }
+        }
+        finally
+        {
+            if (cmd.Handle != 0) _vk.FreeCommandBuffers(_device, _cmdPool, 1, in cmd);
+            if (pool.Handle != 0) _vk.DestroyDescriptorPool(_device, pool, null);
+        }
     }
 
     // ── #838 / G4.7 Buddhabrot sample pass ───────────────────────────────────────
@@ -1525,6 +1716,9 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         if (_perturbSa != null) { DestroyProgram(_perturbSa); _perturbSa = null; }
         foreach (var p in _perturbOrbit.Values) DestroyProgram(p);   // #607
         if (_buddha != null) { DestroyProgram(_buddha); _buddha = null; }   // #838
+        if (_perturbFx != null) { DestroyProgram(_perturbFx); _perturbFx = null; }   // #1331
+        if (_perturbF32 != null) { DestroyProgram(_perturbF32); _perturbF32 = null; }
+        FreeBuffer(ref _fxParams); FreeBuffer(ref _fxRefZ);
         _perturbOrbit.Clear();
         foreach (var p in _colorByIdKind.Values) DestroyProgram(p);
         _colorByIdKind.Clear();

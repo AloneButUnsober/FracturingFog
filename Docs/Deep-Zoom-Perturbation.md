@@ -249,3 +249,62 @@ glance (a truncation bug would drop `n`).
    `RebaseStep` (#1274) in sync. `S1274SimdRebasingTests` fails on any drift between
    the scalar and vector loops.
 5. Don't put long/variable status text on the status bar (panel resize bounce).
+
+## 8. fp32 GPU deep-zoom kernels (#1331)
+
+`MandelbrotKernelSource.BuildPerturbFloatExp` holds the GPU perturbation loop in
+fp32 only, with no double anywhere. It runs on GPUs without fp64 (Intel Xe,
+Apple), and on weak-fp64 cards it runs at the fp32 rate. It has two entries:
+
+- **Scaled fp32** (`CSPerturbF32`, pixel scale ≥ 2^-100, zoom ≲ 1e30):
+  - δ is held as δ / S and dz/dc as dz/dc · S, plain floats, with S = 2^⌊log2 scale⌋.
+  - A step costs what the double kernel's does.
+- **Float-exp** (`CSPerturbFX`, deeper): δ and dz/dc are a complex float mantissa
+  with one shared int exponent, renormalised every step from the exponent bits
+  (no exp2 / ldexp).
+
+In both entries the reference orbit is `float2`.
+
+**Measured on the GT 710** (GPU dispatch, vs the double kernel):
+
+| Path | Speed-up |
+|---|---|
+| Scaled fp32, Vulkan | 8–8.6× |
+| Scaled fp32, D3D11 | up to 6.5× |
+| Float-exp, Vulkan | ~3.4× |
+| Float-exp, D3D11 | ~2× |
+
+**Accuracy: a 24-bit mantissa.** Most views are exact, but near deep minibrots a
+few pixels go wrong:
+
+| View | Pixels that differ from the CPU deep path |
+|---|---|
+| seahorse 1e14 | 0% |
+| Deeper and Deeper 4.5e46 | 0% |
+| 3E47 | ~0.1% |
+| saprobe 1e15 | ~0.35%, some by tens of iterations |
+
+An exact 600-bit fixed-point orbit sides with the CPU (and the double kernel) on
+every one of those pixels.
+
+The error comes from both halves. On the disagreeing pixels:
+- a double Z with a float δ is right on only 30 / 80;
+- a float Z with a double δ is right on 11 / 80.
+
+Closing the gap needs float-float arithmetic for both, which costs most of the
+speed.
+
+**Hence the policy** (`MandelbrotCalculator.GpuDeepPrecisionMode`, from
+`FF_GPU_PERTURB_PRECISION`):
+
+| Mode | Behaviour |
+|---|---|
+| `auto` (default) | fp32 only on a device without fp64, where deep zoom would otherwise stay on the CPU |
+| `fp32` | opts in on any device |
+| `double` | never uses fp32 |
+
+A Vulkan session on a device with no `shaderFloat64` now enables GPU deep zoom
+in fp32. When an fp32 kernel ran, the status bar reads `[GPU fp32]`.
+
+`--batch` renders deep zoom on the CPU and is unaffected. The plain kernel only
+runs fp32: SA / BLA keep the double kernels.

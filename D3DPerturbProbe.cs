@@ -143,12 +143,15 @@ namespace FracturingFog
             // D3D11 GPU perturbation, plain and with the #88 / G4.5 SA prelude.
             bool ok = true;
             bool savedSa = MandelbrotCalculator.UseGpuSeriesApproximation, savedBla = MandelbrotCalculator.UseGpuBla;
+            var savedPrec = MandelbrotCalculator.GpuDeepPrecisionMode;   // #1331
             try
             {
-                foreach (var (sa, bla) in new[] { (false, false), (true, false), (true, true) })
+                // #1331 — and the fp32 kernel (scaled fp32 / float-exp by depth).
+                foreach (var (sa, bla, fx) in new[] { (false, false, false), (true, false, false), (true, true, false), (false, false, true) })
                 {
                     MandelbrotCalculator.UseGpuSeriesApproximation = sa;
                     MandelbrotCalculator.UseGpuBla = bla;   // #88 / G4.5b
+                    MandelbrotCalculator.GpuDeepPrecisionMode = fx ? GpuDeepPrecision.Fp32 : GpuDeepPrecision.Double;
                     var gpuCalc = MakeCalc(c);
                     gpuCalc.GpuKernel = kernel;
                     MandelbrotCalculator.UseGpuPerturbation = true;
@@ -168,7 +171,7 @@ namespace FracturingFog
                     }
                     double frac = (double)disagree / n;
                     double colourMean = colourSum / (n * 3.0);
-                    string tag = bla ? "GPU+SA+BLA" : sa ? "GPU+SA    " : "GPU       ";
+                    string tag = fx ? "GPU fp32  " : bla ? "GPU+SA+BLA" : sa ? "GPU+SA    " : "GPU       ";
                     Console.WriteLine(
                         $"    {tag} sa={gpuCalc.LastFrameUsedGpuSeriesApproximation} bla={gpuCalc.LastFrameUsedGpuBla} {ms} ms: iter disagree={disagree}/{n} ({frac:P3}) " +
                         $"maxΔiter={maxDelta}; colour mean drift={colourMean:F3}  route='{gpuCalc.LastGpuRoute.Detail}'");
@@ -177,6 +180,11 @@ namespace FracturingFog
                     {
                         Console.Error.WriteLine($"    FAIL {label} {tag}: the GPU perturbation path did not run ({gpuCalc.LastGpuRoute.Detail ?? gpuCalc.LastGpuRoute.Reason}).");
                         ok = false; continue;
+                    }
+                    if (gpuCalc.LastFrameUsedGpuFloatExp != fx)
+                    {
+                        Console.Error.WriteLine($"    FAIL {label} {tag}: fp32 kernel engaged={gpuCalc.LastFrameUsedGpuFloatExp}, expected {fx}.");
+                        ok = false;
                     }
                     if (gpuCalc.LastFrameUsedGpuSeriesApproximation != sa || gpuCalc.LastFrameUsedGpuBla != bla)
                     {
@@ -200,6 +208,7 @@ namespace FracturingFog
             {
                 MandelbrotCalculator.UseGpuSeriesApproximation = savedSa;
                 MandelbrotCalculator.UseGpuBla = savedBla;
+                MandelbrotCalculator.GpuDeepPrecisionMode = savedPrec;
             }
             return ok;
         }

@@ -816,6 +816,215 @@ void CSPerturb(uint3 tid : SV_DispatchThreadID)
 }
 ";
 
+    // ── #1331 — deep-zoom perturbation in fp32 + exponent ("floatexp") ────────
+    //
+    // BuildPerturb's rebased δ loop without a single double, for GPUs whose fp64
+    // runs at 1/24..1/64 of fp32 (or not at all). δ and the derivative dz/dc are
+    // a complex float mantissa with ONE shared int exponent (value = m · 2^e,
+    // max(|m.x|, |m.y|) in [1, 2)), renormalised after each step with exponent
+    // bit arithmetic; the reference orbit Z (O(1) at any depth) is plain float2.
+    //   δ' = (2Z + δ_f)·δ + dc,   δ_f = δ as a float (0 once it underflows): the δ
+    //   part of 2Z + δ only matters when |δ| is comparable to |Z|, where it is in
+    //   float range anyway; dc enters with its own exponent and is aligned.
+    //   dz' = 2·z·dz + 1, z = Z + δ_f in float (the escape test and the rebase
+    //   test |z| < |δ| run on that float z, as the double kernel's do).
+    // The cbuffer is floats and ints only, so the kernel needs no fp64 support.
+    // Outputs and banding are BuildPerturb's; the derivative goes out as a float,
+    // which saturates past ~1e38 exactly as the double kernel's (float) cast does.
+
+    /// <summary>Compute-shader entry point for the float-exp perturbation variant (#1331).</summary>
+    public const string PerturbFxEntryPoint = "CSPerturbFX";
+
+    /// <summary>#1331 — the scaled-fp32 entry of the same source, for pixel scales
+    /// down to 2^<see cref="PerturbF32MinScaleExponent"/>.</summary>
+    public const string PerturbF32EntryPoint = "CSPerturbF32";
+
+    /// <summary>#1331 — the smallest pixel-scale exponent the scaled-fp32 entry
+    /// takes (zoom ~1e30); deeper frames run float-exp.</summary>
+    public const int PerturbF32MinScaleExponent = -100;
+
+    /// <summary>#1331 — compose the float-exp perturbation kernel (see above).</summary>
+    public static string BuildPerturbFloatExp() => @"
+// 48 bytes, no doubles. Matches the C# PerturbFxParams blob byte-for-byte.
+cbuffer PerturbFxParams : register(b0)
+{
+    float gScaleM;      // pixel scale = gScaleM · 2^gScaleE, gScaleM in [1, 2)
+    int   gScaleE;
+    float gOffX0;       // column offset of pixel x=0 (pixels; add x)
+    float gOffY0;       // row offset of pixel y=0 (pixels; add y)
+    int   gWidth;
+    int   gHeight;
+    int   gMaxIter;
+    int   gRefLen;
+    int   gRowBase;     // TDR tiling: this dispatch covers rows [gRowBase, gRowBase+groupsY*8)
+    float gEscapeR2;
+    int   gPad0;
+    int   gPad1;
+}
+
+StructuredBuffer<float2> gRefZ : register(t0);   // reference orbit Z_n as float
+
+RWStructuredBuffer<uint>   gIter    : register(u0);
+RWStructuredBuffer<float>  gSmooth  : register(u1);
+RWStructuredBuffer<float4> gFinalZD : register(u2);   // .xy = zr,zi  .zw = drv,div
+
+static const int FxZeroExp = -1000000;
+
+// 2^k as a float, exact, for -126 <= k <= 127 (built from the exponent bits:
+// no exp2 / ldexp, which run on the slow special-function units).
+float Pow2(int k) { return asfloat((uint)(k + 127) << 23); }
+
+// m · 2^e with max(|m.x|,|m.y|) in [1, 2), or (0, FxZeroExp) for zero.
+void FxNorm(inout float2 m, inout int e)
+{
+    float a = max(abs(m.x), abs(m.y));
+    if (a == 0.0) { m = float2(0.0, 0.0); e = FxZeroExp; return; }
+    int k = (int)((asuint(a) >> 23) & 0xFF) - 127;   // floor(log2 a) (normal floats)
+    k = max(k, -126);
+    m *= Pow2(-k);                                    // exact · 2^-k
+    e += k;
+}
+
+// m · 2^e as a float (0 when it underflows; |m| < 2 so e <= 127 stays finite).
+float2 FxToFloat(float2 m, int e)
+{
+    if (e < -126) return float2(0.0, 0.0);
+    if (e > 127) return m * 3.4e38;
+    return m * Pow2(e);
+}
+
+// (am · 2^ae) + (bm · 2^be), normalised. Past a 40-bit gap the smaller term
+// can't reach a float mantissa.
+void FxAdd(float2 am, int ae, float2 bm, int be, out float2 rm, out int re)
+{
+    int d = ae - be;
+    if (d >= 0) { rm = d > 40 ? am : am + bm * Pow2(-d); re = ae; }
+    else        { rm = d < -40 ? bm : bm + am * Pow2(d); re = be; }
+    FxNorm(rm, re);
+}
+
+float2 CMul(float2 a, float2 b) { return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }
+
+void FxWrite(int idx, int iter, float2 z, float2 dzf);
+
+[numthreads(8, 8, 1)]
+void CSPerturbFX(uint3 tid : SV_DispatchThreadID)
+{
+    int px = (int)tid.x;
+    int py = gRowBase + (int)tid.y;
+    if (px >= gWidth || py >= gHeight) return;
+    int idx = py * gWidth + px;
+
+    // dc = pixelOffset · scale, as float-exp.
+    float2 dcM = float2(gOffX0 + (float)px, gOffY0 + (float)py) * gScaleM;
+    int dcE = gScaleE;
+    FxNorm(dcM, dcE);
+
+    float2 dM = float2(0.0, 0.0); int dE = FxZeroExp;   // δ_0 = 0
+    float2 vM = float2(1.0, 0.0); int vE = 0;           // dz/dc = 1
+    int m = 0;
+    float2 z = float2(0.0, 0.0);
+
+    int iter;
+    [loop]
+    for (iter = 0; iter < gMaxIter; iter++)
+    {
+        float2 Z = gRefZ[m];
+        float2 df = FxToFloat(dM, dE);
+        z = Z + df;
+
+        float zmag2 = dot(z, z);
+        if (zmag2 >= gEscapeR2) break;
+
+        // dz' = 2·z·dz + 1 (the full orbit, before any rebase).
+        float2 nvM = CMul(2.0 * z, vM); int nvE = vE;
+        FxNorm(nvM, nvE);
+        FxAdd(nvM, nvE, float2(1.0, 0.0), 0, vM, vE);
+
+        // Rebase when the reference no longer anchors this pixel or is exhausted.
+        if (zmag2 < dot(df, df) || m + 1 >= gRefLen)
+        {
+            dM = z; dE = 0; FxNorm(dM, dE);
+            df = z;
+            Z = float2(0.0, 0.0);
+            m = 0;
+        }
+
+        // δ' = (2Z + δ_f)·δ + dc.
+        float2 tM = CMul(2.0 * Z + df, dM); int tE = dE;
+        FxNorm(tM, tE);
+        FxAdd(tM, tE, dcM, dcE, dM, dE);
+        m++;
+    }
+
+    float2 dzf = FxToFloat(vM, vE);
+    FxWrite(idx, iter, z, dzf);
+}
+
+void FxWrite(int idx, int iter, float2 z, float2 dzf)
+{
+    gFinalZD[idx] = float4(z.x, z.y, dzf.x, dzf.y);
+    if (iter >= gMaxIter)
+    {
+        gIter[idx]   = (uint)gMaxIter;
+        gSmooth[idx] = 0.0;
+    }
+    else
+    {
+        gIter[idx] = (uint)iter;
+        float magf = sqrt(dot(z, z));
+        gSmooth[idx] = (float)iter + 1.0 - log2(log2(magf));
+    }
+}
+
+// The scaled-fp32 variant, for frames whose pixel scale 2^gScaleE is in float
+// range (the host takes it while gScaleE >= -100, zoom ~1e30): δ is held as
+// δ' = δ / S with S = 2^gScaleE, the derivative as v' = v · S, both plain float,
+// so a step costs what the double kernel's does at the fp32 rate:
+//   δ'' = (2Z + δ)·δ' + dc'  with δ = δ'·S,   v'' = 2·z·v' + S.
+// |δ'| stays below ~2/S and |δ| above ~S, both inside float range at that depth.
+[numthreads(8, 8, 1)]
+void CSPerturbF32(uint3 tid : SV_DispatchThreadID)
+{
+    int px = (int)tid.x;
+    int py = gRowBase + (int)tid.y;
+    if (px >= gWidth || py >= gHeight) return;
+    int idx = py * gWidth + px;
+
+    float S = Pow2(gScaleE), invS = Pow2(-gScaleE);
+    float2 dc = float2(gOffX0 + (float)px, gOffY0 + (float)py) * gScaleM;   // dc / S
+    float2 d = float2(0.0, 0.0);      // δ' = δ / S
+    float2 v = float2(S, 0.0);        // v' = (dz/dc) · S, dz/dc = 1
+    int m = 0;
+    float2 z = float2(0.0, 0.0);
+
+    int iter;
+    [loop]
+    for (iter = 0; iter < gMaxIter; iter++)
+    {
+        float2 Z = gRefZ[m];
+        float2 df = d * S;            // δ
+        z = Z + df;
+        float zmag2 = dot(z, z);
+        if (zmag2 >= gEscapeR2) break;
+
+        v = CMul(2.0 * z, v) + float2(S, 0.0);
+
+        if (zmag2 < dot(df, df) || m + 1 >= gRefLen)
+        {
+            d = z * invS; df = z;
+            Z = float2(0.0, 0.0);
+            m = 0;
+        }
+
+        d = CMul(2.0 * Z + df, d) + dc;
+        m++;
+    }
+
+    FxWrite(idx, iter, z, v * invS);
+}
+";
+
     // ── #607 (G4.6) — deep-zoom perturbation with orbit accumulation ──────────
     //
     // The GPU twin of MandelbrotCalculator.ComputePixelOrbitPerturbation (#609):
