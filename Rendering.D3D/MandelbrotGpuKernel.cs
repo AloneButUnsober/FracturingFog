@@ -412,11 +412,13 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         _perRowAllocRows = height;
     }
 
-    private void EnsureOutputBuffers(int width, int height)
+    private void EnsureOutputBuffers(int width, int height, int[] iterDst)
     {
+        FlushDeferredLocked(iterDst);   // #1332 — before anything reuses the output buffers
         int n = width * height;
         if (_iterBuf != null && _allocPixels == n) return;
 
+        _iterSrv?.Dispose(); _iterSrv = null;   // #1332
         _iterUav?.Dispose();
         _smoothUav?.Dispose();
         _finalZDUav?.Dispose();
@@ -504,6 +506,193 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     /// IGPs.</summary>
     public double LastReadbackMs { get; private set; }
 
+    // ── #1332: deferred readback ────────────────────────────────────────────
+    //
+    // RunDeferred leaves iter / smooth / finalZD on the GPU; ReadDeferred copies
+    // them into the arrays that frame was handed when a CPU reader first asks. The
+    // next dispatch into the shared output buffers (EnsureOutputBuffers) flushes a
+    // still-pending frame into its arrays first, or drops it when the dispatch
+    // targets those same arrays, which it is about to overwrite. The eager paths
+    // use the same CopyAux / MapAux, so a deferred read copies the same bytes.
+    private GpuAuxOutputs _defPending;
+    private int[]? _defIter;
+    private float[]? _defSmooth, _defZr, _defZi, _defDr, _defDi;
+    private int _defN;
+
+    public bool SupportsDeferredReadback => true;
+
+    public void ReadDeferred(int[] iterDst, GpuAuxOutputs outputs)
+    {
+        lock (_d3dGate)
+        {
+            if (_disposed || !ReferenceEquals(iterDst, _defIter)) return;
+            var parts = outputs & _defPending;
+            if (parts == GpuAuxOutputs.None) return;
+            ReadDeferredLocked(parts);
+            _defPending &= ~parts;
+            if (_defPending == GpuAuxOutputs.None) ClearDeferred();
+        }
+    }
+
+    private void FlushDeferredLocked(int[] nextIterDst)
+    {
+        if (_defPending == GpuAuxOutputs.None) return;
+        if (!ReferenceEquals(nextIterDst, _defIter)) ReadDeferredLocked(_defPending);
+        ClearDeferred();
+    }
+
+    private void ReadDeferredLocked(GpuAuxOutputs parts)
+    {
+        CopyAux(parts);
+        MapAux(parts, _defN, _defIter!, _defSmooth!, _defZr!, _defZi!, _defDr!, _defDi!);
+    }
+
+    private void ClearDeferred()
+    {
+        _defPending = GpuAuxOutputs.None;
+        _defIter = null;
+        _defSmooth = _defZr = _defZi = _defDr = _defDi = null;
+        _defN = 0;
+    }
+
+    /// <summary>#1332 — after a <see cref="RunDeferred"/>: whether any pixel escaped
+    /// (iteration &lt; maxIter), counted on the GPU; null when it wasn't (an eager
+    /// frame, or per-row caps).</summary>
+    public bool? LastDeferredAnyEscaped { get; private set; }
+
+    private const string AnyEscapedHlsl = @"
+StructuredBuffer<uint> gIter : register(t0);
+RWStructuredBuffer<uint> gAny : register(u0);
+cbuffer EscParams : register(b0) { uint gN; uint gMaxIter; uint gGroupsX; uint gPad; };
+[numthreads(256, 1, 1)]
+void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
+{
+    uint i = (gid.y * gGroupsX + gid.x) * 256 + gtid.x;
+    if (i >= gN || gIter[i] >= gMaxIter) return;
+    if (gAny[0] == 0) InterlockedOr(gAny[0], 1u);
+}";
+    private ID3D11ComputeShader? _csAnyEscaped;
+    private ID3D11Buffer? _escBuf, _escStaging, _escParams;
+    private ID3D11UnorderedAccessView? _escUav;
+    private ID3D11ShaderResourceView? _iterSrv;
+
+    private void DispatchAnyEscaped(int n, int maxIter)
+    {
+        if (_csAnyEscaped == null)
+        {
+            _csAnyEscaped = CompileShader(AnyEscapedHlsl, label: "anyescaped", entryPoint: "CSAnyEscaped");
+            _escBuf = _device.CreateBuffer(new BufferDescription
+            {
+                ByteWidth = sizeof(uint), BindFlags = BindFlags.UnorderedAccess, Usage = ResourceUsage.Default,
+                MiscFlags = ResourceOptionFlags.BufferStructured, StructureByteStride = sizeof(uint),
+            });
+            _escStaging = _device.CreateBuffer(new BufferDescription
+            {
+                ByteWidth = sizeof(uint), Usage = ResourceUsage.Staging, CPUAccessFlags = CpuAccessFlags.Read,
+            });
+            _escParams = _device.CreateBuffer(new BufferDescription(16, BindFlags.ConstantBuffer,
+                ResourceUsage.Dynamic, CpuAccessFlags.Write));
+            _escUav = _device.CreateUnorderedAccessView(_escBuf, new UnorderedAccessViewDescription
+            {
+                Format = Vortice.DXGI.Format.Unknown,
+                ViewDimension = UnorderedAccessViewDimension.Buffer,
+                Buffer = new BufferUnorderedAccessView { FirstElement = 0, NumElements = 1, Flags = 0 },
+            });
+        }
+        _iterSrv ??= _device.CreateShaderResourceView(_iterBuf, new ShaderResourceViewDescription
+        {
+            Format = Vortice.DXGI.Format.Unknown,
+            ViewDimension = Vortice.Direct3D.ShaderResourceViewDimension.Buffer,
+            Buffer = new BufferShaderResourceView { FirstElement = 0, NumElements = (uint)_allocPixels },
+        });
+        uint groups = (uint)((n + 255) / 256);
+        uint gx = Math.Min(groups, 65535u), gy = (groups + gx - 1) / gx;
+        var m = _ctx.Map(_escParams!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
+        unsafe
+        {
+            uint* q = (uint*)m.DataPointer;
+            q[0] = (uint)n; q[1] = (uint)Math.Max(maxIter, 0); q[2] = gx; q[3] = 0;
+        }
+        _ctx.Unmap(_escParams!, 0);
+        _ctx.ClearUnorderedAccessView(_escUav!, new Vortice.Mathematics.Int4(0, 0, 0, 0));
+        _ctx.CSSetShader(_csAnyEscaped);
+        _ctx.CSSetConstantBuffer(0, _escParams);
+        _ctx.CSSetShaderResource(0, _iterSrv);
+        _ctx.CSSetUnorderedAccessView(0, _escUav);
+        _ctx.Dispatch(gx, gy, 1);
+        _ctx.CSUnsetUnorderedAccessView(0);
+        _ctx.CSUnsetShaderResource(0);
+        _ctx.CopyResource(_escStaging!, _escBuf!);
+    }
+
+    private unsafe bool ReadAnyEscaped()
+    {
+        var m = _ctx.Map(_escStaging!, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
+        try { return *(uint*)m.DataPointer != 0; }
+        finally { _ctx.Unmap(_escStaging!, 0); }
+    }
+
+    /// <summary>Queue the default → staging copies of the given outputs.</summary>
+    private void CopyAux(GpuAuxOutputs parts)
+    {
+        if ((parts & GpuAuxOutputs.Iterations) != 0) _ctx.CopyResource(_iterStaging, _iterBuf);
+        if ((parts & GpuAuxOutputs.Smooth) != 0) _ctx.CopyResource(_smoothStaging, _smoothBuf);
+        if ((parts & GpuAuxOutputs.FinalZ) != 0) _ctx.CopyResource(_finalZDStaging, _finalZDBuf);
+    }
+
+    /// <summary>Map the staged outputs and unpack them into the caller's arrays
+    /// (the packed finalZD float4 scatters to four arrays).</summary>
+    private unsafe void MapAux(GpuAuxOutputs parts, int n, int[] iterDst, float[] smoothDst,
+        float[] finalZrDst, float[] finalZiDst, float[] finalDrDst, float[] finalDiDst)
+    {
+        if ((parts & GpuAuxOutputs.Iterations) != 0)
+        {
+            var iterMap = _ctx.Map(_iterStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
+            try
+            {
+                uint* src = (uint*)iterMap.DataPointer;
+                fixed (int* dst = iterDst) { for (int i = 0; i < n; i++) dst[i] = (int)src[i]; }
+            }
+            finally { _ctx.Unmap(_iterStaging, 0); }
+        }
+
+        if ((parts & GpuAuxOutputs.Smooth) != 0)
+        {
+            var smoothMap = _ctx.Map(_smoothStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
+            try
+            {
+                float* src = (float*)smoothMap.DataPointer;
+                fixed (float* dst = smoothDst) { for (int i = 0; i < n; i++) dst[i] = src[i]; }
+            }
+            finally { _ctx.Unmap(_smoothStaging, 0); }
+        }
+
+        // Unpack the packed float4 into four CPU arrays. Could be SIMD'd
+        // (Avx.GatherVector256) — left scalar for clarity since cost is
+        // ~0.5 ms at 1080p, much less than the kernel + IColorMap pass.
+        if ((parts & GpuAuxOutputs.FinalZ) != 0)
+        {
+            var fzdMap = _ctx.Map(_finalZDStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
+            try
+            {
+                float* src = (float*)fzdMap.DataPointer;
+                fixed (float* zr = finalZrDst)
+                fixed (float* zi = finalZiDst)
+                fixed (float* dr = finalDrDst)
+                fixed (float* di = finalDiDst)
+                {
+                    for (int i = 0; i < n; i++)
+                    {
+                        int b = i * 4;
+                        zr[i] = src[b + 0]; zi[i] = src[b + 1];
+                        dr[i] = src[b + 2]; di[i] = src[b + 3];
+                    }
+                }
+            }
+            finally { _ctx.Unmap(_finalZDStaging, 0); }
+        }
+    }
+
     public void Run(int width, int height, double centerX, double centerY,
         double scale, int maxIter, double bailout2,
         int[] iterDst, float[] smoothDst,
@@ -515,6 +704,43 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         uint[]? colorDst = null,
         float[]? trapDst = null,
         GpuDomainWarp warp = default)
+        => RunCore(width, height, centerX, centerY, scale, maxIter, bailout2,
+            iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst,
+            perRowMaxIter, kind, param0, param1, colorDst, trapDst, warp, defer: false);
+
+    /// <summary>#1332 — <see cref="Run"/> that leaves iter / smooth / finalZD on the
+    /// GPU (colour and trap still come back); <see cref="ReadDeferred"/> copies them
+    /// into the arrays handed here when a CPU reader first asks.</summary>
+    public GpuAuxOutputs RunDeferred(int width, int height, double centerX, double centerY,
+        double scale, int maxIter, double bailout2,
+        int[] iterDst, float[] smoothDst,
+        float[] finalZrDst, float[] finalZiDst,
+        float[] finalDrDst, float[] finalDiDst,
+        int[]? perRowMaxIter = null,
+        FractalKind kind = FractalKind.Mandelbrot,
+        float param0 = 0f, float param1 = 0f,
+        uint[]? colorDst = null,
+        float[]? trapDst = null,
+        GpuDomainWarp warp = default)
+    {
+        RunCore(width, height, centerX, centerY, scale, maxIter, bailout2,
+            iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst,
+            perRowMaxIter, kind, param0, param1, colorDst, trapDst, warp, defer: true);
+        return width > 0 && height > 0 ? GpuAuxOutputs.All : GpuAuxOutputs.None;
+    }
+
+    private void RunCore(int width, int height, double centerX, double centerY,
+        double scale, int maxIter, double bailout2,
+        int[] iterDst, float[] smoothDst,
+        float[] finalZrDst, float[] finalZiDst,
+        float[] finalDrDst, float[] finalDiDst,
+        int[]? perRowMaxIter,
+        FractalKind kind,
+        float param0, float param1,
+        uint[]? colorDst,
+        float[]? trapDst,
+        GpuDomainWarp warp,
+        bool defer)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(MandelbrotGpuKernel));
         if (width <= 0 || height <= 0) return;
@@ -530,7 +756,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         {
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             BeginFrameTiming();   // #1329
-            EnsureOutputBuffers(width, height);
+            EnsureOutputBuffers(width, height, iterDst);
             if (useColorPath) EnsureColorBuffers(width * height);
             if (useTrap) EnsureTrapBuffers(width * height);
 
@@ -618,10 +844,14 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
             if (useTrap) _ctx.CSUnsetUnorderedAccessView(4);
             if (usePerRow) _ctx.CSUnsetShaderResource(0);
 
+            // #1332 — a deferred frame without per-row caps counts its escaped pixels
+            // on the GPU, so the solid-frame check needn't read the iterations back.
+            bool countEscaped = defer && !usePerRow;
+            if (countEscaped) DispatchAnyEscaped(width * height, maxIter);
+
             // Copy default → staging then Map(Read) for CPU readback. Synchronous.
-            _ctx.CopyResource(_iterStaging, _iterBuf);
-            _ctx.CopyResource(_smoothStaging, _smoothBuf);
-            _ctx.CopyResource(_finalZDStaging, _finalZDBuf);
+            // #1332 — a deferred frame leaves iter / smooth / finalZD on the GPU.
+            if (!defer) CopyAux(GpuAuxOutputs.All);
             if (useColorPath) _ctx.CopyResource(_colorStaging!, _colorBuf!);
             if (useTrap) _ctx.CopyResource(_trapStaging!, _trapBuf!);
             _timer.Mark(GpuStage.CopyOut);
@@ -632,61 +862,17 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
             // CPU-side memcpy.
             long tDispatch = System.Diagnostics.Stopwatch.GetTimestamp();
             int n = width * height;
-            var iterMap = _ctx.Map(_iterStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
-            try
+            LastDeferredAnyEscaped = null;
+            if (!defer)
+                MapAux(GpuAuxOutputs.All, n, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst);
+            else
             {
-                unsafe
-                {
-                    uint* src = (uint*)iterMap.DataPointer;
-                    fixed (int* dst = iterDst)
-                    {
-                        for (int i = 0; i < n; i++)
-                            dst[i] = (int)src[i];
-                    }
-                }
+                if (countEscaped) LastDeferredAnyEscaped = ReadAnyEscaped();
+                _defIter = iterDst; _defSmooth = smoothDst;
+                _defZr = finalZrDst; _defZi = finalZiDst; _defDr = finalDrDst; _defDi = finalDiDst;
+                _defN = n;
+                _defPending = GpuAuxOutputs.All;
             }
-            finally { _ctx.Unmap(_iterStaging, 0); }
-
-            var smoothMap = _ctx.Map(_smoothStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
-            try
-            {
-                unsafe
-                {
-                    float* src = (float*)smoothMap.DataPointer;
-                    fixed (float* dst = smoothDst)
-                    {
-                        for (int i = 0; i < n; i++) dst[i] = src[i];
-                    }
-                }
-            }
-            finally { _ctx.Unmap(_smoothStaging, 0); }
-
-            // Unpack the packed float4 into four CPU arrays. Could be SIMD'd
-            // (Avx.GatherVector256) — left scalar for clarity since cost is
-            // ~0.5 ms at 1080p, much less than the kernel + IColorMap pass.
-            var fzdMap = _ctx.Map(_finalZDStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
-            try
-            {
-                unsafe
-                {
-                    float* src = (float*)fzdMap.DataPointer;
-                    fixed (float* zr = finalZrDst)
-                    fixed (float* zi = finalZiDst)
-                    fixed (float* dr = finalDrDst)
-                    fixed (float* di = finalDiDst)
-                    {
-                        for (int i = 0; i < n; i++)
-                        {
-                            int b = i * 4;
-                            zr[i] = src[b + 0];
-                            zi[i] = src[b + 1];
-                            dr[i] = src[b + 2];
-                            di[i] = src[b + 3];
-                        }
-                    }
-                }
-            }
-            finally { _ctx.Unmap(_finalZDStaging, 0); }
 
             if (useColorPath)
             {
@@ -780,7 +966,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         {
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             BeginFrameTiming();   // #1329
-            EnsureOutputBuffers(width, height);      // shares iter/smooth/finalZD UAVs (u0/u1/u2)
+            EnsureOutputBuffers(width, height, iterDst);      // shares iter/smooth/finalZD UAVs (u0/u1/u2)
             EnsurePerturbParamsBuffer();
             EnsureRefOrbitBuffers(refLen);
             _csPerturb ??= CompileShader(MandelbrotKernelSource.BuildPerturb(), label: "perturb",
@@ -857,7 +1043,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         {
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             BeginFrameTiming();   // #1329
-            EnsureOutputBuffers(width, height);
+            EnsureOutputBuffers(width, height, iterDst);
             _fxParamsBuf ??= _device.CreateBuffer(new BufferDescription(
                 byteWidth: 48, bindFlags: BindFlags.ConstantBuffer,
                 usage: ResourceUsage.Dynamic, cpuAccessFlags: CpuAccessFlags.Write));
@@ -1103,7 +1289,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         {
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             BeginFrameTiming();   // #1329
-            EnsureOutputBuffers(width, height);
+            EnsureOutputBuffers(width, height, iterDst);
             EnsurePerturbParamsBuffer();
             EnsureRefOrbitBuffers(refLen);
             EnsureOrbitOutBuffers(n * stride);
@@ -1227,7 +1413,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         {
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             BeginFrameTiming();   // #1329
-            EnsureOutputBuffers(width, height);
+            EnsureOutputBuffers(width, height, iterDst);
             EnsureRefOrbitBuffers(refLen);
             EnsureSaBuffers(coeffLen);
             _csPerturbSa ??= CompileShader(MandelbrotKernelSource.BuildPerturbSA(), label: "perturb-sa",
@@ -1333,57 +1519,12 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     {
         {
             _timer.Begin();
-            _ctx.CopyResource(_iterStaging, _iterBuf);
-            _ctx.CopyResource(_smoothStaging, _smoothBuf);
-            _ctx.CopyResource(_finalZDStaging, _finalZDBuf);
+            CopyAux(GpuAuxOutputs.All);
             extraCopies?.Invoke();   // #607 orbit means
             _timer.Mark(GpuStage.CopyOut);
 
             long tDispatch = System.Diagnostics.Stopwatch.GetTimestamp();
-
-            var iterMap = _ctx.Map(_iterStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
-            try
-            {
-                unsafe
-                {
-                    uint* src = (uint*)iterMap.DataPointer;
-                    fixed (int* dst = iterDst) { for (int i = 0; i < n; i++) dst[i] = (int)src[i]; }
-                }
-            }
-            finally { _ctx.Unmap(_iterStaging, 0); }
-
-            var smoothMap = _ctx.Map(_smoothStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
-            try
-            {
-                unsafe
-                {
-                    float* src = (float*)smoothMap.DataPointer;
-                    fixed (float* dst = smoothDst) { for (int i = 0; i < n; i++) dst[i] = src[i]; }
-                }
-            }
-            finally { _ctx.Unmap(_smoothStaging, 0); }
-
-            var fzdMap = _ctx.Map(_finalZDStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
-            try
-            {
-                unsafe
-                {
-                    float* src = (float*)fzdMap.DataPointer;
-                    fixed (float* zr = finalZrDst)
-                    fixed (float* zi = finalZiDst)
-                    fixed (float* dr = finalDrDst)
-                    fixed (float* di = finalDiDst)
-                    {
-                        for (int i = 0; i < n; i++)
-                        {
-                            int b = i * 4;
-                            zr[i] = src[b + 0]; zi[i] = src[b + 1];
-                            dr[i] = src[b + 2]; di[i] = src[b + 3];
-                        }
-                    }
-                }
-            }
-            finally { _ctx.Unmap(_finalZDStaging, 0); }
+            MapAux(GpuAuxOutputs.All, n, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst);
 
             LastGpuStageTimes = _timer.EndFrame();
             long tEnd = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -1524,6 +1665,13 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     {
         if (_disposed) return;
         _disposed = true;
+        ClearDeferred();   // #1332 — a pending frame's GPU data goes with the device
+        try { _csAnyEscaped?.Dispose(); } catch { }
+        try { _escUav?.Dispose(); } catch { }
+        try { _escBuf?.Dispose(); } catch { }
+        try { _escStaging?.Dispose(); } catch { }
+        try { _escParams?.Dispose(); } catch { }
+        try { _iterSrv?.Dispose(); } catch { }
         try { _refZrSrv?.Dispose(); } catch { }
         try { _refZiSrv?.Dispose(); } catch { }
         try { _refZrBuf?.Dispose(); } catch { }

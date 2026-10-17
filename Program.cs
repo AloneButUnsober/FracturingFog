@@ -40,6 +40,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--gputimestampprobe")
             return GpuTimestampProbe.Run();
 
+        // #1332 — D3D11 deferred readback: lazy reads == eager bit for bit, flush, timing.
+        if (args.Length > 0 && args[0] == "--gpudeferprobe")
+            return GpuDeferredReadbackProbe.Run();
+
         // #1342 — D3D11 SP periodicity early-out: on == off bit for bit, fires, timing.
         if (args.Length > 0 && args[0] == "--gpuperiodicityprobe")
             return GpuPeriodicityProbe.Run();

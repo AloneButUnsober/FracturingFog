@@ -89,6 +89,7 @@ dotnet run -c Release --project FracturingFogCLD.csproj -- --d3dpturbcalc  # D3D
 dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke.csproj -- --vulkanpturbprobe  # kernel-vs-CPU at noise floor
 dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke.csproj -- --vulkanpturbdc    # deep-dc precision sweep 1e6→1e50
 dotnet run -c Release --project FracturingFogCLD.csproj -- --gpuperiodicityprobe  # #1342 shallow SP kernel (D3D11): periodicity on == off bit for bit, fires, timing
+dotnet run -c Release --project FracturingFogCLD.csproj -- --gpudeferprobe  # #1332 shallow SP kernel (D3D11): deferred readback == eager bit for bit, flush, GPU escape count, timing
 ```
 
 ### Env vars
@@ -99,6 +100,7 @@ dotnet run -c Release --project FracturingFogCLD.csproj -- --gpuperiodicityprobe
 | `FF_GPU_PERTURB_BUDGET_MS` | Perf-fallback threshold, ms (default 3000). Raise to force GPU to stay on for measuring. |
 | `FF_PERTURB_BANDROWS` | Force band height (test hook — stress multi-band; e.g. `8`). |
 | `FF_GPU_PERIODICITY=0` | #1342 — shallow SP kernels (D3D11 + Vulkan): compile the plain loop, without the periodicity early-out (default on; output identical either way, only the time differs). Tests and probes use `GpuPeriodicity.Mode`. |
+| `FF_GPU_DEFER_READBACK=0` | #1332 — GPU-coloured SP frames (D3D11 + Vulkan) read every output back eagerly again. Default: the iteration / smooth / final-z outputs (and the CPU distance fill) stay on the GPU until something reads them (`Calculators/Gpu/GpuDeferredAux`); readers get the same bytes either way. Tests and probes use `GpuDeferredReadback.Enabled`. |
 | `FF_VULKAN_MEMORY` | Vulkan buffer layout (#1228): `auto` (default: orbit + SA / BLA in VRAM, outputs host-cached), `host` (pre-#1228, every buffer host-visible), `device-outputs` (outputs in VRAM too, copied out). |
 | `FF_GPU_PERTURB_DEBUG=1` | Write `#86` present/gate trace to `%TEMP%/ff_gpu_perturb_86.log` (WinExe has no console). |
 
