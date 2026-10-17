@@ -41,6 +41,10 @@ public sealed unsafe class VulkanContext : IDisposable
     /// <summary>#1329 — valid bits of the compute queue family's timestamps; 0 = no timestamps.</summary>
     public uint TimestampValidBits { get; private set; }
 
+    /// <summary>#1334 — VkPhysicalDeviceLimits.minUniformBufferOffsetAlignment: the
+    /// stride of the per-band UBO slices a banded dispatch binds by dynamic offset.</summary>
+    public ulong MinUniformBufferOffsetAlignment { get; private set; } = 256;
+
     private VulkanContext(Vk vk) => Vk = vk;
 
     // Stand up instance only. Cheap enough that --list can run without ever
@@ -117,6 +121,7 @@ public sealed unsafe class VulkanContext : IDisposable
         PhysicalDeviceType bestType = default;
         uint bestFamily = 0, bestTsBits = 0;
         float bestTsPeriod = 0;
+        ulong bestUboAlign = 256;
         bool found = false;
 
         foreach (var pd in PhysicalDevices())
@@ -132,6 +137,7 @@ public sealed unsafe class VulkanContext : IDisposable
                 bestFamily = family;
                 bestTsBits = tsBits;
                 bestTsPeriod = props.Limits.TimestampPeriod;
+                bestUboAlign = Math.Max(1UL, props.Limits.MinUniformBufferOffsetAlignment);
                 bestType = props.DeviceType;
                 bestName = SilkMarshal.PtrToString((nint)props.DeviceName) ?? "<unknown>";
                 found = true;
@@ -145,6 +151,7 @@ public sealed unsafe class VulkanContext : IDisposable
         ComputeQueueFamily = bestFamily;
         TimestampValidBits = bestTsBits;
         TimestampPeriod = bestTsPeriod;
+        MinUniformBufferOffsetAlignment = bestUboAlign;
         PickedName = bestName;
         PickedType = bestType;
 

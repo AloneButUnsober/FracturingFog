@@ -44,6 +44,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--dynresprobe")
             return DynamicResolutionProbe.Run();
 
+        // #1334 — deep perturbation in row bands, D3D11 + Vulkan: banded == one band, timing.
+        if (args.Length > 0 && args[0] == "--gpubandprobe")
+            return GpuBandProbe.Run();
+
         // #1332 — D3D11 deferred readback: lazy reads == eager bit for bit, flush, timing.
         if (args.Length > 0 && args[0] == "--gpudeferprobe")
             return GpuDeferredReadbackProbe.Run();

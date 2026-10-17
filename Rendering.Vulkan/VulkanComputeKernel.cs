@@ -172,17 +172,15 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     private string? _activePaletteId;
 
     // V6 (#82): deep-zoom perturbation program + its dedicated buffers (the
-    // reference-orbit SSBOs + the 48-byte double param UBO). Output iter/smooth/
+    // reference-orbit SSBOs; the params go in the band UBO, #1334). Output iter/smooth/
     // finalZD reuse the shared _buf[2..4].
     private Program? _perturb;
-    private Allocated _perturbParams;
     private Allocated _refZrBuf, _refZiBuf;
     private int _refAlloc;
 
     // #88 SA spike: iteration-skipping perturbation program + its coefficient
-    // SSBOs (A/B/C/D complex = 8 double arrays) and 80-byte SA param UBO.
+    // SSBOs (A/B/C/D complex = 8 double arrays); the 80-byte SA params go in the band UBO.
     private Program? _perturbSa;
-    private Allocated _saParams;
     private Allocated _saAR, _saAI, _saBR, _saBI, _saCR, _saCI, _saDR, _saDI;
     private int _saAlloc;
 
@@ -202,7 +200,17 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     /// <summary>#1329 — the compute queue writes timestamps (LastGpuStageTimes is filled).</summary>
     public bool SupportsGpuTimestamps => _timer.Enabled;
 
-    private void BeginFrameTiming() { LastGpuStageTimes = null; _timer.BeginFrame(); }
+    private void BeginFrameTiming() { LastGpuStageTimes = null; _timer.BeginFrame(); LastFrameQueueWaits = 0; }
+
+    /// <summary>#1334 — how many times the last frame waited for the queue to go idle
+    /// (a banded frame: once after band 0 when the too-slow abort is armed, once at the end).</summary>
+    public int LastFrameQueueWaits { get; private set; }
+
+    private void WaitQueue()
+    {
+        Check(_vk.QueueWaitIdle(_ctx.ComputeQueue), "vkQueueWaitIdle");
+        LastFrameQueueWaits++;
+    }
     private void EndFrameTiming() => LastGpuStageTimes = _timer.EndFrame();
     public bool HasGpuPalette => _activePaletteId != null && _colorBuilders.ContainsKey(_activePaletteId);
 
@@ -537,7 +545,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
                 CommandBufferCount = 1, PCommandBuffers = &cmdLocal,
             };
             Check(_vk.QueueSubmit(_ctx.ComputeQueue, 1, &submit, default), "vkQueueSubmit");
-            Check(_vk.QueueWaitIdle(_ctx.ComputeQueue), "vkQueueWaitIdle");
+            WaitQueue();
         }
         finally
         {
@@ -595,7 +603,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         int n = width * height;
         EnsureBuffers(width, height, iterDst);          // shares iter/smooth/finalZD at _buf[2..4]
         EnsurePerturbBuffers(refLen);
-        _perturb ??= BuildProgram(MandelbrotKernelSource.BuildPerturb(), MandelbrotKernelSource.PerturbEntryPoint,
+        _perturb ??= BuildBandProgram(MandelbrotKernelSource.BuildPerturb(), MandelbrotKernelSource.PerturbEntryPoint,
             0u, (uint)TShift, (uint)TShift + 1, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2);
 
         var blob = new PerturbParamsBlob
@@ -604,8 +612,8 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             Scale = scale, EscapeR2 = escapeRadius2, OffX0 = offsetX0, OffY0 = offsetY0,
             RowBase = 0,
         };
-        DispatchPerturbPlain(_perturb, blob, width, height, maxIter, refZr, refZi, refLen, null, "");
-        SubmitReadback(Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)));
+        DispatchPerturbPlain(_perturb, blob, width, height, maxIter, refZr, refZi, refLen, null, "",
+            Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)));
 
         long tDispatch = Stopwatch.GetTimestamp();
         ReadIter(_buf[2], iterDst, n);
@@ -660,7 +668,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         }
         if (!_perturbOrbit.TryGetValue(orbitMask, out var prog))
         {
-            prog = BuildProgram(MandelbrotKernelSource.BuildPerturbOrbit(orbitMask), MandelbrotKernelSource.PerturbOrbitEntryPoint,
+            prog = BuildBandProgram(MandelbrotKernelSource.BuildPerturbOrbit(orbitMask), MandelbrotKernelSource.PerturbOrbitEntryPoint,
                 0u, (uint)TShift, (uint)TShift + 1, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)UShift + 3);
             _perturbOrbit[orbitMask] = prog;
         }
@@ -673,8 +681,8 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             Pad0 = BitConverter.SingleToInt32Bits((float)centerRe),   // gCRe
             Pad1 = BitConverter.SingleToInt32Bits((float)centerIm),   // gCIm
         };
-        DispatchPerturbPlain(prog, blob, width, height, maxIter, refZr, refZi, refLen, _orbitOut, " (orbit)");
-        SubmitReadback(Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)),
+        DispatchPerturbPlain(prog, blob, width, height, maxIter, refZr, refZi, refLen, _orbitOut, " (orbit)",
+            Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)),
             Out(_orbitOut, (long)n * stride * sizeof(float)));
 
         long tDispatch = Stopwatch.GetTimestamp();
@@ -695,7 +703,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
 
     /// <summary>#1331 — the last float-exp frame ran the scaled-fp32 entry (not float-exp).</summary>
     public bool LastPerturbFloatExpWasScaledF32 { get; private set; }
-    private Allocated _fxParams, _fxRefZ;
+    private Allocated _fxRefZ;
     private int _fxRefAlloc;
 
     /// <summary>#1331 — the float-exp perturbation kernel needs no fp64: every
@@ -730,8 +738,6 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         BeginFrameTiming();   // #1329
         int n = width * height;
         EnsureBuffers(width, height, iterDst);
-        if (_fxParams.Buffer.Handle == 0)
-            _fxParams = AllocBuffer((ulong)sizeof(PerturbFxParamsBlob), BufferUsageFlags.UniformBufferBit);
         if (_fxRefZ.Buffer.Handle == 0 || _fxRefAlloc < refLen)
         {
             FreeBuffer(ref _fxRefZ);
@@ -744,9 +750,9 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         bool f32 = e >= MandelbrotKernelSource.PerturbF32MinScaleExponent && !ForceFloatExpEntry;
         LastPerturbFloatExpWasScaledF32 = f32;
         Program prog = f32
-            ? _perturbF32 ??= BuildProgram(MandelbrotKernelSource.BuildPerturbFloatExp(), MandelbrotKernelSource.PerturbF32EntryPoint,
+            ? _perturbF32 ??= BuildBandProgram(MandelbrotKernelSource.BuildPerturbFloatExp(), MandelbrotKernelSource.PerturbF32EntryPoint,
                 0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2)
-            : _perturbFx ??= BuildProgram(MandelbrotKernelSource.BuildPerturbFloatExp(), MandelbrotKernelSource.PerturbFxEntryPoint,
+            : _perturbFx ??= BuildBandProgram(MandelbrotKernelSource.BuildPerturbFloatExp(), MandelbrotKernelSource.PerturbFxEntryPoint,
                 0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2);
 
         var z = new float[refLen * 2];
@@ -759,11 +765,11 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             Width = width, Height = height, MaxIter = maxIter, RefLen = refLen,
             EscapeR2 = (float)escapeRadius2,
         };
-        DispatchBands(prog, width, height, maxIter, f32 ? " (scaled fp32)" : " (float-exp)",
-            rowBase => { var b = blob; b.RowBase = rowBase; WriteBytes(_fxParams, &b, sizeof(PerturbFxParamsBlob)); },
-            new[] { _fxParams.Buffer, _fxRefZ.Buffer, _buf[2].Buffer, _buf[3].Buffer, _buf[4].Buffer },
-            new[] { 0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2 });
-        SubmitReadback(Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)));
+        DispatchBands(prog, width, height, maxIter, f32 ? " (scaled fp32)" : " (float-exp)", sizeof(PerturbFxParamsBlob),
+            (rowBase, dst) => { var b = blob; b.RowBase = rowBase; *(PerturbFxParamsBlob*)dst = b; },
+            stackalloc Buffer[] { _fxRefZ.Buffer, _buf[2].Buffer, _buf[3].Buffer, _buf[4].Buffer },
+            stackalloc uint[] { (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2 },
+            Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)));
 
         long tDispatch = Stopwatch.GetTimestamp();
         ReadIter(_buf[2], iterDst, n);
@@ -776,20 +782,61 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
     }
 
-    /// <summary>Run <paramref name="prog"/> over the frame in TDR row bands (one
-    /// submit each, the UBO rewritten per band by <paramref name="writeParams"/>),
-    /// with the first-band too-slow abort. Binding 0 is the UBO, the rest SSBOs.</summary>
+    /// <summary>#1334 — test hook (per thread): wait for the queue to go idle after
+    /// every band, as before #1334. FF_VULKAN_SERIAL_BANDS=1 does the same for the
+    /// process.</summary>
+    [ThreadStatic] public static bool ForceSerialBands;
+    private static readonly bool s_serialBandsEnv = Environment.GetEnvironmentVariable("FF_VULKAN_SERIAL_BANDS") == "1";
+    private static bool SerialBands => ForceSerialBands || s_serialBandsEnv;
+
+    /// <summary>Writes the params blob of the band starting at <c>rowBase</c> to <c>dst</c>.</summary>
+    private delegate void BandParams(int rowBase, byte* dst);
+
+    // #1334 — the banded programs' UBO: one slice per band, bound by dynamic offset.
+    private Allocated _bandUbo;
+
+    /// <summary>Run <paramref name="prog"/> (a <see cref="BuildBandProgram"/>) over the
+    /// frame in TDR row bands, one submit each, with the first-band too-slow abort,
+    /// then copy <paramref name="outs"/> back. Binding 0 is the UBO; the SSBOs follow
+    /// at <paramref name="ssboBindings"/>.
+    ///
+    /// #1334 — the bands don't wait for each other. Every band's params are written
+    /// up front, each into its own UBO slice, so no band has to finish reading the UBO
+    /// before the next one's params can go in. Only band 0 is waited on: its wall time
+    /// feeds the too-slow abort, and an abort must not leave the rest of a slow frame
+    /// queued. Bands 1.. queue back to back, the last one also records the readback,
+    /// and the frame ends in one wait. Submission order alone keeps this correct: band
+    /// 0's upload barrier (FlushPending) and the last band's readback barrier cover
+    /// every command submitted after / before them, and the bands write disjoint rows.</summary>
     private void DispatchBands(Program prog, int width, int height, int maxIter, string label,
-        Action<int> writeParams, Buffer[] buffers, uint[] bindings)
+        int blobBytes, BandParams writeParams, ReadOnlySpan<Buffer> ssbos, ReadOnlySpan<uint> ssboBindings,
+        params ReadOnlySpan<ReadbackSpan> outs)
     {
-        int nb = buffers.Length;
+        int bandRows = MandelbrotKernelSource.PerturbBandRows(width, height, maxIter);
+        int bandCount = (height + bandRows - 1) / bandRows;
+        ulong align = _ctx.MinUniformBufferOffsetAlignment;
+        ulong stride = ((ulong)blobBytes + align - 1) / align * align;
+        ulong uboBytes = stride * (ulong)bandCount;
+        if (_bandUbo.Buffer.Handle == 0 || _bandUbo.Size < uboBytes)
+        {
+            FreeBuffer(ref _bandUbo);
+            _bandUbo = AllocBuffer(uboBytes, BufferUsageFlags.UniformBufferBit);   // host: written in place
+        }
+        void* mapped;
+        Check(_vk.MapMemory(_device, _bandUbo.HostMemory, 0, uboBytes, 0, &mapped), "vkMapMemory");
+        for (int band = 0; band < bandCount; band++)
+            writeParams(band * bandRows, (byte*)mapped + (ulong)band * stride);
+        _vk.UnmapMemory(_device, _bandUbo.HostMemory);
+
+        int nb = ssbos.Length + 1;
         DescriptorPool pool = default;
-        CommandBuffer cmd = default;
+        var cmds = new CommandBuffer[bandCount];
+        bool idle = true;   // nothing submitted since the last wait
         try
         {
             var poolSizes = stackalloc DescriptorPoolSize[2]
             {
-                new DescriptorPoolSize { Type = DescriptorType.UniformBuffer, DescriptorCount = 1 },
+                new DescriptorPoolSize { Type = DescriptorType.UniformBufferDynamic, DescriptorCount = 1 },
                 new DescriptorPoolSize { Type = DescriptorType.StorageBuffer, DescriptorCount = (uint)(nb - 1) },
             };
             var dpci = new DescriptorPoolCreateInfo
@@ -809,12 +856,14 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             var writes = stackalloc WriteDescriptorSet[nb];
             for (int i = 0; i < nb; i++)
             {
-                infos[i] = new DescriptorBufferInfo { Buffer = buffers[i], Offset = 0, Range = Vk.WholeSize };
+                infos[i] = i == 0
+                    ? new DescriptorBufferInfo { Buffer = _bandUbo.Buffer, Offset = 0, Range = (ulong)blobBytes }
+                    : new DescriptorBufferInfo { Buffer = ssbos[i - 1], Offset = 0, Range = Vk.WholeSize };
                 writes[i] = new WriteDescriptorSet
                 {
                     SType = StructureType.WriteDescriptorSet,
-                    DstSet = set, DstBinding = bindings[i], DescriptorCount = 1,
-                    DescriptorType = i == 0 ? DescriptorType.UniformBuffer : DescriptorType.StorageBuffer,
+                    DstSet = set, DstBinding = i == 0 ? 0u : ssboBindings[i - 1], DescriptorCount = 1,
+                    DescriptorType = i == 0 ? DescriptorType.UniformBufferDynamic : DescriptorType.StorageBuffer,
                     PBufferInfo = &infos[i],
                 };
             }
@@ -823,51 +872,55 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             var cbai = new CommandBufferAllocateInfo
             {
                 SType = StructureType.CommandBufferAllocateInfo,
-                CommandPool = _cmdPool, Level = CommandBufferLevel.Primary, CommandBufferCount = 1,
+                CommandPool = _cmdPool, Level = CommandBufferLevel.Primary, CommandBufferCount = (uint)bandCount,
             };
-            int bandRows = MandelbrotKernelSource.PerturbBandRows(width, height, maxIter);
-            int bandCount = (height + bandRows - 1) / bandRows;
-            int bandIndex = 0;
-            for (int rowBase = 0; rowBase < height; rowBase += bandRows, bandIndex++)
+            fixed (CommandBuffer* pc = cmds) Check(_vk.AllocateCommandBuffers(_device, in cbai, pc), "vkAllocateCommandBuffers");
+
+            bool guard = bandCount > 1 && MandelbrotKernelSource.PerturbBudgetMs > 0;
+            bool serial = SerialBands;
+            for (int band = 0; band < bandCount; band++)
             {
-                int rows = Math.Min(bandRows, height - rowBase);
-                writeParams(rowBase);
-                Check(_vk.AllocateCommandBuffers(_device, in cbai, out cmd), "vkAllocateCommandBuffers");
+                int rowBase = band * bandRows, rows = Math.Min(bandRows, height - rowBase);
+                bool last = band == bandCount - 1;
+                var cmd = cmds[band];
                 var begin = new CommandBufferBeginInfo
                 {
                     SType = StructureType.CommandBufferBeginInfo, Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
                 };
                 Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
                 _timer.Begin(cmd);   // #1329
-                FlushPending(cmd);
+                FlushPending(cmd);   // #1228: the uploads land before band 0 (nothing left after it)
                 _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, prog.Pipeline);
-                _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, prog.Layout, 0, 1, &set, 0, null);
+                uint offset = (uint)((ulong)band * stride);
+                _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, prog.Layout, 0, 1, &set, 1, &offset);
                 _vk.CmdDispatch(cmd, (uint)((width + 7) / 8), (uint)((rows + 7) / 8), 1);
                 _timer.Mark(cmd, GpuStage.Dispatch);
+                if (last) RecordReadback(cmd, outs);
                 Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
-                var cmdLocal = cmd;
-                var submit = new SubmitInfo { SType = StructureType.SubmitInfo, CommandBufferCount = 1, PCommandBuffers = &cmdLocal };
+                var submit = new SubmitInfo { SType = StructureType.SubmitInfo, CommandBufferCount = 1, PCommandBuffers = &cmd };
                 long tBand = Stopwatch.GetTimestamp();
+                idle = false;
                 Check(_vk.QueueSubmit(_ctx.ComputeQueue, 1, &submit, default), "vkQueueSubmit");
-                Check(_vk.QueueWaitIdle(_ctx.ComputeQueue), "vkQueueWaitIdle");
-                _vk.FreeCommandBuffers(_device, _cmdPool, 1, in cmd);
-                cmd = default;
-                if (bandIndex == 0 && bandCount > 1)
+                bool first = band == 0 && guard;
+                if (!last && !first && !serial) continue;
+                WaitQueue();
+                idle = true;
+                if (first)
                 {
                     double band0Ms = (Stopwatch.GetTimestamp() - tBand) * 1000.0 / Stopwatch.Frequency;
                     if (MandelbrotKernelSource.PerturbTooSlow(band0Ms, bandCount))
-                    {
-                        if (pool.Handle != 0) { _vk.DestroyDescriptorPool(_device, pool, null); pool = default; }
                         throw new TimeoutException(
                             $"{MandelbrotKernelSource.PerturbTooSlowMarker}: band0={band0Ms:F1}ms × {bandCount} bands " +
                             $"> {MandelbrotKernelSource.PerturbBudgetMs:F0}ms budget{label}");
-                    }
                 }
             }
         }
         finally
         {
-            if (cmd.Handle != 0) _vk.FreeCommandBuffers(_device, _cmdPool, 1, in cmd);
+            // Never free a command buffer the GPU may still be running.
+            if (!idle) _vk.QueueWaitIdle(_ctx.ComputeQueue);
+            if (cmds[0].Handle != 0)
+                fixed (CommandBuffer* pc = cmds) _vk.FreeCommandBuffers(_device, _cmdPool, (uint)bandCount, pc);
             if (pool.Handle != 0) _vk.DestroyDescriptorPool(_device, pool, null);
         }
     }
@@ -995,7 +1048,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
                     var submit = new SubmitInfo { SType = StructureType.SubmitInfo, CommandBufferCount = 1, PCommandBuffers = &cmd };
                     Check(_vk.QueueSubmit(_ctx.ComputeQueue, 1, &submit, default), "vkQueueSubmit");
                     // One packet per dispatch (TDR); the UBO is rewritten for the next.
-                    Check(_vk.QueueWaitIdle(_ctx.ComputeQueue), "vkQueueWaitIdle");
+                    WaitQueue();
                 }
                 finally { _vk.FreeCommandBuffers(_device, _cmdPool, 1, in cmd); }
                 return (Stopwatch.GetTimestamp() - tChunk) * 1000.0 / Stopwatch.Frequency;
@@ -1030,141 +1083,29 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     private Allocated _orbitOut;
 
     /// <summary>Upload the reference orbit and run a BuildPerturb-layout program
-    /// (plain or orbit variant) over the frame in TDR row bands, with the
-    /// first-band too-slow abort. <paramref name="orbitOut"/> non-null binds the
-    /// orbit variant's gOrbit at 203.</summary>
+    /// (plain or orbit variant) over the frame in TDR row bands
+    /// (<see cref="DispatchBands"/>), then read <paramref name="outs"/> back.
+    /// <paramref name="orbitOut"/> non-null binds the orbit variant's gOrbit at 203.</summary>
     private void DispatchPerturbPlain(Program prog, PerturbParamsBlob blob, int width, int height, int maxIter,
-        double[] refZr, double[] refZi, int refLen, Allocated? orbitOut, string label)
+        double[] refZr, double[] refZi, int refLen, Allocated? orbitOut, string label,
+        params ReadOnlySpan<ReadbackSpan> outs)
     {
         fixed (double* pr = refZr) WriteBytes(_refZrBuf, pr, refLen * sizeof(double));
         fixed (double* pi = refZi) WriteBytes(_refZiBuf, pi, refLen * sizeof(double));
 
-        // Binding order matches BuildProgram's bindingNums:
-        //   b0=params, t0=refZr(100), t1=refZi(101), u0=iter(200), u1=smooth(201), u2=finalZD(202),
+        // Binding order matches BuildBandProgram's bindingNums: b0=params (the band UBO),
+        //   t0=refZr(100), t1=refZi(101), u0=iter(200), u1=smooth(201), u2=finalZD(202),
         //   [u3=orbit means(203), the orbit variant only (#607)].
-        int nb = orbitOut.HasValue ? 7 : 6;
-        Buffer* srcBufs = stackalloc Buffer[7]
+        int ns = orbitOut.HasValue ? 6 : 5;
+        Span<Buffer> ssbos = stackalloc Buffer[6]
         {
-            _perturbParams.Buffer, _refZrBuf.Buffer, _refZiBuf.Buffer,
+            _refZrBuf.Buffer, _refZiBuf.Buffer,
             _buf[2].Buffer, _buf[3].Buffer, _buf[4].Buffer, orbitOut.GetValueOrDefault().Buffer,
         };
-        uint* bindNums = stackalloc uint[7] { 0, (uint)TShift, (uint)TShift + 1, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)UShift + 3 };
-        var types = stackalloc DescriptorType[7]
-        {
-            DescriptorType.UniformBuffer, DescriptorType.StorageBuffer, DescriptorType.StorageBuffer,
-            DescriptorType.StorageBuffer, DescriptorType.StorageBuffer, DescriptorType.StorageBuffer,
-            DescriptorType.StorageBuffer,
-        };
-
-        DescriptorPool pool = default;
-        CommandBuffer cmd = default;
-        try
-        {
-            var poolSizes = stackalloc DescriptorPoolSize[2]
-            {
-                new DescriptorPoolSize { Type = DescriptorType.UniformBuffer, DescriptorCount = 1 },
-                new DescriptorPoolSize { Type = DescriptorType.StorageBuffer, DescriptorCount = (uint)(nb - 1) },
-            };
-            var dpci = new DescriptorPoolCreateInfo
-            {
-                SType = StructureType.DescriptorPoolCreateInfo,
-                MaxSets = 1, PoolSizeCount = 2, PPoolSizes = poolSizes,
-            };
-            Check(_vk.CreateDescriptorPool(_device, in dpci, null, out pool), "vkCreateDescriptorPool");
-
-            var dslLocal = prog.Dsl;
-            var dsai = new DescriptorSetAllocateInfo
-            {
-                SType = StructureType.DescriptorSetAllocateInfo,
-                DescriptorPool = pool, DescriptorSetCount = 1, PSetLayouts = &dslLocal,
-            };
-            Check(_vk.AllocateDescriptorSets(_device, in dsai, out DescriptorSet set), "vkAllocateDescriptorSets");
-
-            var infos = stackalloc DescriptorBufferInfo[7];
-            var writes = stackalloc WriteDescriptorSet[7];
-            for (int i = 0; i < nb; i++)
-            {
-                infos[i] = new DescriptorBufferInfo { Buffer = srcBufs[i], Offset = 0, Range = Vk.WholeSize };
-                writes[i] = new WriteDescriptorSet
-                {
-                    SType = StructureType.WriteDescriptorSet,
-                    DstSet = set, DstBinding = bindNums[i], DescriptorCount = 1,
-                    DescriptorType = types[i], PBufferInfo = &infos[i],
-                };
-            }
-            _vk.UpdateDescriptorSets(_device, (uint)nb, writes, 0, null);
-
-            var cbai = new CommandBufferAllocateInfo
-            {
-                SType = StructureType.CommandBufferAllocateInfo,
-                CommandPool = _cmdPool, Level = CommandBufferLevel.Primary, CommandBufferCount = 1,
-            };
-
-            // TDR tiling — dispatch the frame in row bands, each a separate
-            // submit, so no single GPU packet runs long enough to trip the
-            // watchdog. The descriptor set (bindings) is fixed; only the UBO's
-            // RowBase changes per band, and QueueWaitIdle after each submit
-            // guarantees the band finished reading the UBO before the next
-            // WriteBytes overwrites it.
-            int bandRows = MandelbrotKernelSource.PerturbBandRows(width, height, maxIter);
-            int bandCount = (height + bandRows - 1) / bandRows;
-            int bandIndex = 0;
-            for (int rowBase = 0; rowBase < height; rowBase += bandRows, bandIndex++)
-            {
-                int rows = Math.Min(bandRows, height - rowBase);
-                blob.RowBase = rowBase;
-                WriteBytes(_perturbParams, &blob, sizeof(PerturbParamsBlob));
-
-                Check(_vk.AllocateCommandBuffers(_device, in cbai, out cmd), "vkAllocateCommandBuffers");
-                var begin = new CommandBufferBeginInfo
-                {
-                    SType = StructureType.CommandBufferBeginInfo,
-                    Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
-                };
-                Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
-                _timer.Begin(cmd);   // #1329
-                FlushPending(cmd);   // #1228: the orbit upload lands before band 0
-                _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, prog.Pipeline);
-                _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, prog.Layout, 0, 1, &set, 0, null);
-                _vk.CmdDispatch(cmd, (uint)((width + 7) / 8), (uint)((rows + 7) / 8), 1);
-                _timer.Mark(cmd, GpuStage.Dispatch);
-                Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
-
-                var cmdLocal = cmd;
-                var submit = new SubmitInfo
-                {
-                    SType = StructureType.SubmitInfo,
-                    CommandBufferCount = 1, PCommandBuffers = &cmdLocal,
-                };
-                long tBand = Stopwatch.GetTimestamp();
-                Check(_vk.QueueSubmit(_ctx.ComputeQueue, 1, &submit, default), "vkQueueSubmit");
-                Check(_vk.QueueWaitIdle(_ctx.ComputeQueue), "vkQueueWaitIdle");
-                _vk.FreeCommandBuffers(_device, _cmdPool, 1, in cmd);
-                cmd = default;
-
-                // Perf-fallback: after the FIRST band, extrapolate the whole-frame
-                // time. If the GPU is too slow at this depth (weak FP64), abort so
-                // the caller falls back to the CPU deep path instead of grinding
-                // for minutes. QueueWaitIdle above makes this band's time real.
-                if (bandIndex == 0 && bandCount > 1)
-                {
-                    double band0Ms = (Stopwatch.GetTimestamp() - tBand) * 1000.0 / Stopwatch.Frequency;
-                    if (MandelbrotKernelSource.PerturbTooSlow(band0Ms, bandCount))
-                    {
-                        if (pool.Handle != 0) { _vk.DestroyDescriptorPool(_device, pool, null); pool = default; }
-                        throw new TimeoutException(
-                            $"{MandelbrotKernelSource.PerturbTooSlowMarker}: band0={band0Ms:F1}ms × {bandCount} bands " +
-                            $"> {MandelbrotKernelSource.PerturbBudgetMs:F0}ms budget{label}");
-                    }
-                }
-            }
-        }
-        finally
-        {
-            if (cmd.Handle != 0) _vk.FreeCommandBuffers(_device, _cmdPool, 1, in cmd);
-            if (pool.Handle != 0) _vk.DestroyDescriptorPool(_device, pool, null);
-        }
-
+        Span<uint> bindNums = stackalloc uint[6] { (uint)TShift, (uint)TShift + 1, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)UShift + 3 };
+        DispatchBands(prog, width, height, maxIter, label, sizeof(PerturbParamsBlob),
+            (rowBase, dst) => { var b = blob; b.RowBase = rowBase; *(PerturbParamsBlob*)dst = b; },
+            ssbos[..ns], bindNums[..ns], outs);
     }
 
     /// <summary>#88 / G4.5 — the SA kernel runs wherever the plain double one does.</summary>
@@ -1208,7 +1149,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         EnsurePerturbBuffers(refLen);
         EnsurePerturbSaBuffers(coeffLen);
         EnsureBlaBuffer(blaLevels > 0 ? blaCoeffs!.Length : 5);
-        _perturbSa ??= BuildProgram(MandelbrotKernelSource.BuildPerturbSA(), MandelbrotKernelSource.PerturbSaEntryPoint,
+        _perturbSa ??= BuildBandProgram(MandelbrotKernelSource.BuildPerturbSA(), MandelbrotKernelSource.PerturbSaEntryPoint,
             0u, (uint)TShift, (uint)TShift + 1,
             (uint)TShift + 2, (uint)TShift + 3, (uint)TShift + 4, (uint)TShift + 5,
             (uint)TShift + 6, (uint)TShift + 7, (uint)TShift + 8, (uint)TShift + 9,
@@ -1235,129 +1176,26 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         if (blaLevels > 0)
             fixed (double* p = blaCoeffs) WriteBytes(_blaBuf, p, blaCoeffs!.Length * sizeof(double));
 
-        // Binding order matches BuildProgram above: b0, t0,t1, t2..t9, t10 (BLA), u0,u1,u2.
-        const int NB = 15;
-        Buffer* srcBufs = stackalloc Buffer[NB]
-        {
-            _saParams.Buffer, _refZrBuf.Buffer, _refZiBuf.Buffer,
-            _saAR.Buffer, _saAI.Buffer, _saBR.Buffer, _saBI.Buffer,
-            _saCR.Buffer, _saCI.Buffer, _saDR.Buffer, _saDI.Buffer,
-            _blaBuf.Buffer,
-            _buf[2].Buffer, _buf[3].Buffer, _buf[4].Buffer,
-        };
-        uint* bindNums = stackalloc uint[NB]
-        {
-            0, (uint)TShift, (uint)TShift + 1,
-            (uint)TShift + 2, (uint)TShift + 3, (uint)TShift + 4, (uint)TShift + 5,
-            (uint)TShift + 6, (uint)TShift + 7, (uint)TShift + 8, (uint)TShift + 9,
-            (uint)TShift + 10,
-            (uint)UShift, (uint)UShift + 1, (uint)UShift + 2,
-        };
-        var types = stackalloc DescriptorType[NB];
-        types[0] = DescriptorType.UniformBuffer;
-        for (int i = 1; i < NB; i++) types[i] = DescriptorType.StorageBuffer;
-
-        DescriptorPool pool = default;
-        CommandBuffer cmd = default;
-        try
-        {
-            var poolSizes = stackalloc DescriptorPoolSize[2]
+        // Binding order matches BuildBandProgram above: b0 (the band UBO), t0,t1, t2..t9, t10 (BLA), u0,u1,u2.
+        DispatchBands(_perturbSa, width, height, maxIter, " (SA)", sizeof(PerturbSaParamsBlob),
+            (rowBase, dst) => { var b = blob; b.RowBase = rowBase; *(PerturbSaParamsBlob*)dst = b; },
+            stackalloc Buffer[]
             {
-                new DescriptorPoolSize { Type = DescriptorType.UniformBuffer, DescriptorCount = 1 },
-                new DescriptorPoolSize { Type = DescriptorType.StorageBuffer, DescriptorCount = NB - 1 },
-            };
-            var dpci = new DescriptorPoolCreateInfo
+                _refZrBuf.Buffer, _refZiBuf.Buffer,
+                _saAR.Buffer, _saAI.Buffer, _saBR.Buffer, _saBI.Buffer,
+                _saCR.Buffer, _saCI.Buffer, _saDR.Buffer, _saDI.Buffer,
+                _blaBuf.Buffer,
+                _buf[2].Buffer, _buf[3].Buffer, _buf[4].Buffer,
+            },
+            stackalloc uint[]
             {
-                SType = StructureType.DescriptorPoolCreateInfo,
-                MaxSets = 1, PoolSizeCount = 2, PPoolSizes = poolSizes,
-            };
-            Check(_vk.CreateDescriptorPool(_device, in dpci, null, out pool), "vkCreateDescriptorPool");
-
-            var dslLocal = _perturbSa.Dsl;
-            var dsai = new DescriptorSetAllocateInfo
-            {
-                SType = StructureType.DescriptorSetAllocateInfo,
-                DescriptorPool = pool, DescriptorSetCount = 1, PSetLayouts = &dslLocal,
-            };
-            Check(_vk.AllocateDescriptorSets(_device, in dsai, out DescriptorSet set), "vkAllocateDescriptorSets");
-
-            var infos = stackalloc DescriptorBufferInfo[NB];
-            var writes = stackalloc WriteDescriptorSet[NB];
-            for (int i = 0; i < NB; i++)
-            {
-                infos[i] = new DescriptorBufferInfo { Buffer = srcBufs[i], Offset = 0, Range = Vk.WholeSize };
-                writes[i] = new WriteDescriptorSet
-                {
-                    SType = StructureType.WriteDescriptorSet,
-                    DstSet = set, DstBinding = bindNums[i], DescriptorCount = 1,
-                    DescriptorType = types[i], PBufferInfo = &infos[i],
-                };
-            }
-            _vk.UpdateDescriptorSets(_device, NB, writes, 0, null);
-
-            var cbai = new CommandBufferAllocateInfo
-            {
-                SType = StructureType.CommandBufferAllocateInfo,
-                CommandPool = _cmdPool, Level = CommandBufferLevel.Primary, CommandBufferCount = 1,
-            };
-
-            int bandRows = MandelbrotKernelSource.PerturbBandRows(width, height, maxIter);
-            int bandCount = (height + bandRows - 1) / bandRows;
-            int bandIndex = 0;
-            for (int rowBase = 0; rowBase < height; rowBase += bandRows, bandIndex++)
-            {
-                int rows = Math.Min(bandRows, height - rowBase);
-                blob.RowBase = rowBase;
-                WriteBytes(_saParams, &blob, sizeof(PerturbSaParamsBlob));
-
-                Check(_vk.AllocateCommandBuffers(_device, in cbai, out cmd), "vkAllocateCommandBuffers");
-                var begin = new CommandBufferBeginInfo
-                {
-                    SType = StructureType.CommandBufferBeginInfo,
-                    Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
-                };
-                Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
-                _timer.Begin(cmd);   // #1329
-                FlushPending(cmd);   // #1228: orbit + SA / BLA uploads land before band 0
-                _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, _perturbSa.Pipeline);
-                _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, _perturbSa.Layout, 0, 1, &set, 0, null);
-                _vk.CmdDispatch(cmd, (uint)((width + 7) / 8), (uint)((rows + 7) / 8), 1);
-                _timer.Mark(cmd, GpuStage.Dispatch);
-                Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
-
-                var cmdLocal = cmd;
-                var submit = new SubmitInfo
-                {
-                    SType = StructureType.SubmitInfo,
-                    CommandBufferCount = 1, PCommandBuffers = &cmdLocal,
-                };
-                long tBand = Stopwatch.GetTimestamp();
-                Check(_vk.QueueSubmit(_ctx.ComputeQueue, 1, &submit, default), "vkQueueSubmit");
-                Check(_vk.QueueWaitIdle(_ctx.ComputeQueue), "vkQueueWaitIdle");
-                _vk.FreeCommandBuffers(_device, _cmdPool, 1, in cmd);
-                cmd = default;
-
-                // G4.5 — the same perf abort as RunPerturb: extrapolate the frame from
-                // band 0 and hand back to the CPU deep path when the GPU is too slow.
-                if (bandIndex == 0 && bandCount > 1)
-                {
-                    double band0Ms = (Stopwatch.GetTimestamp() - tBand) * 1000.0 / Stopwatch.Frequency;
-                    if (MandelbrotKernelSource.PerturbTooSlow(band0Ms, bandCount))
-                    {
-                        if (pool.Handle != 0) { _vk.DestroyDescriptorPool(_device, pool, null); pool = default; }
-                        throw new TimeoutException(
-                            $"{MandelbrotKernelSource.PerturbTooSlowMarker}: band0={band0Ms:F1}ms × {bandCount} bands " +
-                            $"> {MandelbrotKernelSource.PerturbBudgetMs:F0}ms budget (SA)");
-                    }
-                }
-            }
-        }
-        finally
-        {
-            if (cmd.Handle != 0) _vk.FreeCommandBuffers(_device, _cmdPool, 1, in cmd);
-            if (pool.Handle != 0) _vk.DestroyDescriptorPool(_device, pool, null);
-        }
-        SubmitReadback(Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)));
+                (uint)TShift, (uint)TShift + 1,
+                (uint)TShift + 2, (uint)TShift + 3, (uint)TShift + 4, (uint)TShift + 5,
+                (uint)TShift + 6, (uint)TShift + 7, (uint)TShift + 8, (uint)TShift + 9,
+                (uint)TShift + 10,
+                (uint)UShift, (uint)UShift + 1, (uint)UShift + 2,
+            },
+            Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)));
 
         long tDispatch = Stopwatch.GetTimestamp();
         ReadIter(_buf[2], iterDst, n);
@@ -1385,8 +1223,6 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
 
     private void EnsurePerturbSaBuffers(int coeffLen)
     {
-        if (_saParams.Buffer.Handle == 0)
-            _saParams = AllocBuffer((ulong)sizeof(PerturbSaParamsBlob), BufferUsageFlags.UniformBufferBit);
         if (_saAR.Buffer.Handle == 0 || _saAlloc < coeffLen)
         {
             FreeBuffer(ref _saAR); FreeBuffer(ref _saAI);
@@ -1408,8 +1244,6 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
 
     private void EnsurePerturbBuffers(int refLen)
     {
-        if (_perturbParams.Buffer.Handle == 0)
-            _perturbParams = AllocBuffer((ulong)sizeof(PerturbParamsBlob), BufferUsageFlags.UniformBufferBit);
         if (_refZrBuf.Buffer.Handle == 0 || _refAlloc < refLen)
         {
             FreeBuffer(ref _refZrBuf);
@@ -1427,6 +1261,14 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     // selects the HLSL entry point (CSMain for base/colour, CSPerturb for the
     // perturbation variant).
     private Program BuildProgram(string hlsl, string entry, params uint[] bindingNums)
+        => BuildProgram(hlsl, entry, false, bindingNums);
+
+    /// <summary>#1334 — a banded program (<see cref="DispatchBands"/>): its UBO at
+    /// binding 0 is UNIFORM_BUFFER_DYNAMIC, one slice per band.</summary>
+    private Program BuildBandProgram(string hlsl, string entry, params uint[] bindingNums)
+        => BuildProgram(hlsl, entry, true, bindingNums);
+
+    private Program BuildProgram(string hlsl, string entry, bool dynamicUbo, uint[] bindingNums)
     {
         byte[] spirv = DxcCompiler.CompileToSpirv(
             hlsl, entry, "cs_6_0",
@@ -1448,7 +1290,8 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         var bindings = stackalloc DescriptorSetLayoutBinding[bindingNums.Length];
         for (int i = 0; i < bindingNums.Length; i++)
             bindings[i] = LayoutBinding(bindingNums[i],
-                i == 0 ? DescriptorType.UniformBuffer : DescriptorType.StorageBuffer);
+                i > 0 ? DescriptorType.StorageBuffer
+                : dynamicUbo ? DescriptorType.UniformBufferDynamic : DescriptorType.UniformBuffer);
         var dslci = new DescriptorSetLayoutCreateInfo
         {
             SType = StructureType.DescriptorSetLayoutCreateInfo,
@@ -1711,7 +1554,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
             var submit = new SubmitInfo { SType = StructureType.SubmitInfo, CommandBufferCount = 1, PCommandBuffers = &cmd };
             Check(_vk.QueueSubmit(_ctx.ComputeQueue, 1, &submit, default), "vkQueueSubmit");
-            Check(_vk.QueueWaitIdle(_ctx.ComputeQueue), "vkQueueWaitIdle");
+            WaitQueue();
         }
         finally { _vk.FreeCommandBuffers(_device, _cmdPool, 1, in cmd); }
     }
@@ -1837,16 +1680,15 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         if (_buddha != null) { DestroyProgram(_buddha); _buddha = null; }   // #838
         if (_perturbFx != null) { DestroyProgram(_perturbFx); _perturbFx = null; }   // #1331
         if (_perturbF32 != null) { DestroyProgram(_perturbF32); _perturbF32 = null; }
-        FreeBuffer(ref _fxParams); FreeBuffer(ref _fxRefZ);
+        FreeBuffer(ref _fxRefZ);
         _perturbOrbit.Clear();
         foreach (var p in _colorByIdKind.Values) DestroyProgram(p);
         _colorByIdKind.Clear();
         _colorBuilders.Clear();
         for (int i = 0; i < _buf.Length; i++) FreeBuffer(ref _buf[i]);
-        FreeBuffer(ref _perturbParams);
+        FreeBuffer(ref _bandUbo);   // #1334
         FreeBuffer(ref _refZrBuf);
         FreeBuffer(ref _refZiBuf);
-        FreeBuffer(ref _saParams);
         FreeBuffer(ref _saAR); FreeBuffer(ref _saAI);
         FreeBuffer(ref _saBR); FreeBuffer(ref _saBI);
         FreeBuffer(ref _saCR); FreeBuffer(ref _saCI);
