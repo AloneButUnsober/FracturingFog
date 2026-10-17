@@ -40,6 +40,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--gputimestampprobe")
             return GpuTimestampProbe.Run();
 
+        // #1342 — D3D11 SP periodicity early-out: on == off bit for bit, fires, timing.
+        if (args.Length > 0 && args[0] == "--gpuperiodicityprobe")
+            return GpuPeriodicityProbe.Run();
+
         // #1173-J (G4.3) — D3D11 GPU orbit kernel fills TrapBuffer like the CPU orbit path.
         if (args.Length > 0 && args[0] == "--d3dorbittrapprobe")
             return D3DOrbitTrapProbe.Run();

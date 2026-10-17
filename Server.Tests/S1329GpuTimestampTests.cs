@@ -84,9 +84,15 @@ public sealed class S1329GpuTimestampTests(ITestOutputHelper output) : IDisposab
     }
 
     // Inside the period-3 bulb: every pixel runs to maxIter (the shader's cardioid /
-    // period-2 bulb skip would make the main cardioid free).
-    private static void InSetFrame(VulkanComputeKernel k, Frame f, int maxIter) =>
-        k.Run(f.W, f.H, -0.1225611668766536, 0.7448617666197442, 0.02 / f.W, maxIter, 4.0, f.It, f.Sm, f.Zr, f.Zi, f.Dr, f.Di);
+    // period-2 bulb skip would make the main cardioid free). #1342: on the plain
+    // kernel — the periodicity early-out would stop these pixels after a few hundred
+    // steps, whatever the cap.
+    private static void InSetFrame(VulkanComputeKernel k, Frame f, int maxIter)
+    {
+        GpuPeriodicity.Mode = GpuPeriodicity.Off;
+        try { k.Run(f.W, f.H, -0.1225611668766536, 0.7448617666197442, 0.02 / f.W, maxIter, 4.0, f.It, f.Sm, f.Zr, f.Zi, f.Dr, f.Di); }
+        finally { GpuPeriodicity.Reset(); }
+    }
 
     [Fact]
     public void A_Frame_Has_Positive_Stages_Within_The_Host_Wall_Time()

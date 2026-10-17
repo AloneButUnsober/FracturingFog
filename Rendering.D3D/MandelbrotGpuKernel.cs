@@ -230,7 +230,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     private ID3D11ComputeShader BaseShader(int kind)
     {
         if (_csBaseByKind.TryGetValue(kind, out var cs)) return cs;
-        cs = CompileShader(MandelbrotKernelSource.ForKind(BuildHlsl(null, null, emitColor: false), kind), label: $"base.k{kind}");
+        cs = CompileShader(MandelbrotKernelSource.ForVariant(BuildHlsl(null, null, emitColor: false), kind), label: $"base.k{kind}");
         _csBaseByKind[kind] = cs;
         return cs;
     }
@@ -239,7 +239,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     private ID3D11ComputeShader PaletteShader(string id, int kind)
     {
         if (_csByPaletteKind.TryGetValue((id, kind), out var cs)) return cs;
-        cs = CompileShader(MandelbrotKernelSource.ForKind(_hlslByPaletteId[id], kind), label: $"{id}.k{kind}");
+        cs = CompileShader(MandelbrotKernelSource.ForVariant(_hlslByPaletteId[id], kind), label: $"{id}.k{kind}");
         _csByPaletteKind[(id, kind)] = cs;
         return cs;
     }
@@ -591,9 +591,11 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
 
             // Pick the right CS variant. Color path uses the cached
             // per-palette shader; non-color path uses the base.
+            // #1342: kind + periodicity variant (VariantKey; 0 = plain Mandelbrot).
+            int variant = MandelbrotKernelSource.VariantKey((int)kind, GpuPeriodicity.Mode);
             var shader = useColorPath
-                ? PaletteShader(_activePaletteId!, (int)kind)
-                : BaseShader((int)kind);
+                ? PaletteShader(_activePaletteId!, variant)
+                : BaseShader(variant);
             _ctx.CSSetShader(shader);
             _ctx.CSSetConstantBuffer(0, _paramsBuf);
             _ctx.CSSetUnorderedAccessView(0, _iterUav);

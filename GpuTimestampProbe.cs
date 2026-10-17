@@ -63,7 +63,11 @@ namespace FracturingFog
                 var zr = new float[N]; var zi = new float[N]; var dr = new float[N]; var di = new float[N];
                 GpuStageTimes? Frame(int maxIter, out double wall, out bool allInSet)
                 {
-                    k.Run(W, H, -0.1225611668766536, 0.7448617666197442, 0.02 / W, maxIter, 4.0, it, sm, zr, zi, dr, di);
+                    // #1342: the plain kernel — the periodicity early-out would stop
+                    // these in-set pixels after a few hundred steps, whatever the cap.
+                    GpuPeriodicity.Mode = GpuPeriodicity.Off;
+                    try { k.Run(W, H, -0.1225611668766536, 0.7448617666197442, 0.02 / W, maxIter, 4.0, it, sm, zr, zi, dr, di); }
+                    finally { GpuPeriodicity.Reset(); }
                     wall = k.LastDispatchMs + k.LastReadbackMs;
                     allInSet = Array.TrueForAll(it, v => v == maxIter);
                     return k.LastGpuStageTimes;
