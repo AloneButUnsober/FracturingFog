@@ -123,6 +123,8 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         public float DitherStrength;
         // #1173-I: domain warp (Strength 0 = off). 72 bytes; the cbuffer is 80.
         public float WarpStrength, WarpK, WarpHalfSpan;
+        // #1340: the wavefront schedule (1) or one thread per pixel (0). 76 bytes.
+        public int Wave;
     }
 
     // V6 (#82): deep-zoom perturbation params. Mirrors the HLSL PerturbParams
@@ -133,7 +135,9 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     private struct PerturbParams
     {
         public double Scale, EscapeR2, OffX0, OffY0;
-        public int Width, Height, MaxIter, RefLen, RowBase, Pad0, Pad1, Pad2;
+        public int Width, Height, MaxIter, RefLen, RowBase;
+        // #1340: CSPerturb's gWave / gBandRows / gBand; the orbit kernel's gCRe / gCIm bits (#607).
+        public int Pad0, Pad1, Pad2;
     }
 
     /// <summary>Phase 3 fractal selector. Matches the shader's
@@ -593,6 +597,10 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     /// shader runtime.</summary>
     public double LastDispatchMs { get; private set; }
 
+    /// <summary>#1340 — true when the last frame (shallow or deep) ran the wavefront
+    /// schedule (<see cref="GpuWavefront"/>), false for one thread per pixel.</summary>
+    public bool LastFrameWavefront { get; private set; }
+
     /// <summary>Last dispatch's CPU readback cost in ms — Map+memcpy of
     /// all three staging buffers (iter, smooth, finalZD). Useful for
     /// diagnosing PCIe / unified-memory bandwidth bottlenecks on weak
@@ -664,6 +672,33 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
     if (i >= gN || gIter[i] >= gMaxIter) return;
     if (gAny[0] == 0) InterlockedOr(gAny[0], 1u);
 }";
+    // #1340 — the wavefront entry's pixel counter (u5, gWork[0]), zeroed per dispatch.
+    private ID3D11Buffer? _workBuf;
+    private ID3D11UnorderedAccessView? _workUav;
+
+    private int _workCount;
+
+    /// <summary>At least <paramref name="count"/> counters (one per perturbation band).</summary>
+    private void EnsureWorkBuffer(int count = 1)
+    {
+        count = Math.Max(4, count);
+        if (_workUav != null && _workCount >= count) return;
+        _workUav?.Dispose();
+        _workBuf?.Dispose();
+        _workBuf = _device.CreateBuffer(new BufferDescription
+        {
+            ByteWidth = (uint)(count * sizeof(uint)), BindFlags = BindFlags.UnorderedAccess, Usage = ResourceUsage.Default,
+            MiscFlags = ResourceOptionFlags.BufferStructured, StructureByteStride = sizeof(uint),
+        });
+        _workUav = _device.CreateUnorderedAccessView(_workBuf, new UnorderedAccessViewDescription
+        {
+            Format = Vortice.DXGI.Format.Unknown,
+            ViewDimension = UnorderedAccessViewDimension.Buffer,
+            Buffer = new BufferUnorderedAccessView { FirstElement = 0, NumElements = (uint)count, Flags = 0 },
+        });
+        _workCount = count;
+    }
+
     private ID3D11ComputeShader? _csAnyEscaped;
     private ID3D11Buffer? _escBuf, _escStaging, _escParams;
     private ID3D11UnorderedAccessView? _escUav;
@@ -844,6 +879,9 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
         bool useColorPath = colorDst != null && HasGpuPalette;
         // #1173-J — only the orbit variant declares the u4 trap output.
         bool useTrap = useColorPath && trapDst != null && _orbitPaletteIds.Contains(_activePaletteId!);
+        // #1340 — the wavefront schedule (HlslEntry; the orbit colour entry has none).
+        bool wave = GpuWavefront.Mode == GpuWavefront.On
+            && !(useColorPath && _orbitPaletteIds.Contains(_activePaletteId!));
 
         lock (_d3dGate)
         {
@@ -901,6 +939,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
                 WarpStrength = warp.Active ? warp.Strength : 0f,
                 WarpK = warp.K,
                 WarpHalfSpan = warp.HalfSpan,
+                Wave = wave ? 1 : 0,
             };
             var mapped = _ctx.Map(_paramsBuf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
             unsafe
@@ -928,10 +967,19 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             var shape = Shape(GpuGroupShapes.SlotEscape);   // #1339
             uint groupsX = shape.GroupsX(width);
             uint groupsY = shape.GroupsY(height);
+            LastFrameWavefront = wave;
+            if (wave)
+            {
+                EnsureWorkBuffer();
+                _ctx.ClearUnorderedAccessView(_workUav!, new Vortice.Mathematics.Int4(0, 0, 0, 0));
+                _ctx.CSSetUnorderedAccessView(5, _workUav);
+                (groupsX, groupsY) = (GpuWavefront.Groups(width * height, shape.Threads), 1);
+            }
             _timer.Begin();
             _ctx.Dispatch(groupsX, groupsY, 1);
             _timer.Mark(GpuStage.Dispatch);
 
+            if (wave) _ctx.CSUnsetUnorderedAccessView(5);
             _ctx.CSUnsetUnorderedAccessView(0);
             _ctx.CSUnsetUnorderedAccessView(1);
             _ctx.CSUnsetUnorderedAccessView(2);
@@ -1072,24 +1120,28 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             UploadDoubles(_refZrBuf!, refZr, refLen);
             UploadDoubles(_refZiBuf!, refZi, refLen);
 
+            bool wave = GpuWavefront.UsePerturb;   // #1340
+            LastFrameWavefront = wave;
             var p = new PerturbParams
             {
                 Width = width, Height = height, MaxIter = maxIter, RefLen = refLen,
                 Scale = scale, EscapeR2 = escapeRadius2, OffX0 = offsetX0, OffY0 = offsetY0,
-                RowBase = 0,
+                RowBase = 0, Pad0 = wave ? 1 : 0,   // gWave
             };
 
             _ctx.CSSetShader(_csPerturb);
             _ctx.CSSetShaderResource(0, _refZrSrv);   // t0
             _ctx.CSSetShaderResource(1, _refZiSrv);   // t1
-            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturb), width, height, maxIter, srvCount: 2, "", rowBase =>
+            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturb), width, height, maxIter, srvCount: 2, "", (rowBase, rows, band) =>
             {
                 p.RowBase = rowBase;
+                p.Pad1 = rows;   // gBandRows
+                p.Pad2 = band;   // gBand
                 var mapped = _ctx.Map(_perturbParamsBuf!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
                 unsafe { *(PerturbParams*)mapped.DataPointer = p; }
                 _ctx.Unmap(_perturbParamsBuf!, 0);
                 _ctx.CSSetConstantBuffer(0, _perturbParamsBuf);   // re-bind after WriteDiscard rename
-            });
+            }, wave: wave);
             ReadPerturbOutputs(width * height, t0, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst);
         }
     }
@@ -1190,7 +1242,8 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             };
             _ctx.CSSetShader(cs);
             _ctx.CSSetShaderResource(0, _fxRefZSrv);   // t0
-            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturbFp32), width, height, maxIter, srvCount: 1, f32 ? " (scaled fp32)" : " (float-exp)", rowBase =>
+            LastFrameWavefront = false;   // #1340: no wavefront form
+            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturbFp32), width, height, maxIter, srvCount: 1, f32 ? " (scaled fp32)" : " (float-exp)", (rowBase, rows, band) =>
             {
                 p.RowBase = rowBase;
                 var mapped = _ctx.Map(_fxParamsBuf!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
@@ -1414,7 +1467,8 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             _ctx.CSSetShaderResource(0, _refZrSrv);
             _ctx.CSSetShaderResource(1, _refZiSrv);
             _ctx.CSSetUnorderedAccessView(3, _orbitOutUav);   // u3 (unbound by DispatchPerturbBands)
-            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturb), width, height, maxIter, srvCount: 2, " (orbit)", rowBase =>
+            LastFrameWavefront = false;   // #1340: no wavefront form
+            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturb), width, height, maxIter, srvCount: 2, " (orbit)", (rowBase, rows, band) =>
             {
                 p.RowBase = rowBase;
                 var mapped = _ctx.Map(_perturbParamsBuf!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
@@ -1538,14 +1592,19 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             _ctx.CSSetShaderResource(1, _refZiSrv);   // t1
             for (int i = 0; i < 8; i++) _ctx.CSSetShaderResource((uint)(2 + i), _saSrvs[i]);   // t2..t9
             _ctx.CSSetShaderResource(10, _blaSrv);                                              // t10 (BLA)
-            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturb), width, height, maxIter, srvCount: 11, blaLevels > 0 ? " (SA+BLA)" : " (SA)", rowBase =>
+            bool wave = GpuWavefront.UsePerturb;   // #1340
+            LastFrameWavefront = wave;
+            p.Wave = wave ? 1 : 0;
+            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturb), width, height, maxIter, srvCount: 11, blaLevels > 0 ? " (SA+BLA)" : " (SA)", (rowBase, rows, band) =>
             {
                 p.RowBase = rowBase;
+                p.BandRows = rows;
+                p.Band = band;
                 var mapped = _ctx.Map(_saParamsBuf!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
                 unsafe { *(PerturbSaParams*)mapped.DataPointer = p; }
                 _ctx.Unmap(_saParamsBuf!, 0);
                 _ctx.CSSetConstantBuffer(0, _saParamsBuf);
-            });
+            }, wave: wave);
             ReadPerturbOutputs(width * height, t0, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst);
         }
     }
@@ -1558,7 +1617,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
     /// Band 0 is synced and timed: if the extrapolated frame is too slow (weak FP64)
     /// it throws the too-slow marker so the caller drops to the CPU deep path.</summary>
     private void DispatchPerturbBands(GpuGroupShape shape, int width, int height, int maxIter, int srvCount, string label,
-        Action<int> writeParams, int uavCount = 3)
+        Action<int, int, int> writeParams, int uavCount = 3, bool wave = false)
     {
         _ctx.CSSetUnorderedAccessView(0, _iterUav);
         _ctx.CSSetUnorderedAccessView(1, _smoothUav);
@@ -1572,15 +1631,24 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
 
         int bandRows = MandelbrotKernelSource.PerturbBandRows(width, height, maxIter, shape.Y);
         int bandCount = (height + bandRows - 1) / bandRows;
+        if (wave)
+        {
+            // #1340: one counter per band (gWork[band], u3), all zeroed up front.
+            EnsureWorkBuffer(bandCount);
+            _ctx.ClearUnorderedAccessView(_workUav!, new Vortice.Mathematics.Int4(0, 0, 0, 0));
+            _ctx.CSSetUnorderedAccessView(3, _workUav);
+            uavCount = Math.Max(uavCount, 4);
+        }
         int bandIndex = 0;
         for (int rowBase = 0; rowBase < height; rowBase += bandRows, bandIndex++)
         {
             int rows = Math.Min(bandRows, height - rowBase);
-            writeParams(rowBase);
+            writeParams(rowBase, rows, bandIndex);
 
             long tBand = System.Diagnostics.Stopwatch.GetTimestamp();
             _timer.Begin();
-            _ctx.Dispatch(shape.GroupsX(width), shape.GroupsY(rows), 1);
+            if (wave) _ctx.Dispatch(GpuWavefront.PerturbGroups(rows * width, shape.Threads), 1, 1);
+            else _ctx.Dispatch(shape.GroupsX(width), shape.GroupsY(rows), 1);
             _timer.Mark(GpuStage.Dispatch);
 
             // Perf-fallback: a CopyResource + Map(Read) on the iter staging blocks
@@ -1639,7 +1707,8 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
     private struct PerturbSaParams
     {
         public double Scale, EscapeR2, OffX0, OffY0, SaTol;
-        public int Width, Height, MaxIter, RefLen, RowBase, SafeMax, BlaLevels, Pad1, Pad2, Pad3;   // BlaLevels: G4.5b (was Pad0)
+        public int Width, Height, MaxIter, RefLen, RowBase, SafeMax, BlaLevels;   // BlaLevels: G4.5b (was Pad0)
+        public int Wave, BandRows, Band;   // #1340 (were Pad1..Pad3)
     }
 
     // SA coefficient SRVs t2..t9: A, B, C, D (re, im each), length refLen + 1.
@@ -1766,6 +1835,8 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
         _disposed = true;
         ClearDeferred();   // #1332 — a pending frame's GPU data goes with the device
         try { _csAnyEscaped?.Dispose(); } catch { }
+        try { _workUav?.Dispose(); } catch { }
+        try { _workBuf?.Dispose(); } catch { }
         try { _escUav?.Dispose(); } catch { }
         try { _escBuf?.Dispose(); } catch { }
         try { _escStaging?.Dispose(); } catch { }

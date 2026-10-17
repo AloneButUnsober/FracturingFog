@@ -55,7 +55,10 @@ cbuffer Params : register(b0)
     float gWarpStrength;
     float gWarpK;
     float gWarpHalfSpan;
-    // 18 fields x 4 bytes = 72, padded by the host to 80 (float4 multiple).
+    // #1340: 1 = wavefront schedule (HlslEntry): the threads pull pixels from
+    // gWork[0]; 0 = one thread per pixel. Only HlslEntry reads it.
+    int   gWave;
+    // 19 fields x 4 bytes = 76, padded by the host to 80 (float4 multiple).
 }
 
 // #1227: the fractal kind the loop is specialised for. The hosts compile one
@@ -798,7 +801,7 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     /// <summary>Compose the double perturbation kernel. Standalone HLSL (its own
     /// cbuffer + reference-orbit SRVs + output UAVs); requires FP64 support on
     /// the device (Vulkan <c>shaderFloat64</c> / D3D double shader ops).</summary>
-    public static string BuildPerturb() => @"
+    public static string BuildPerturb() => PerturbChunkDefine + @"
 // Layout note: doubles FIRST so every double lands 8-byte-aligned at a fixed
 // offset (0/8/16/24) with no 16-byte-row straddle, then the ints. Matches the
 // C# PerturbParams / PerturbParamsBlob (both backends) byte-for-byte. 64 bytes.
@@ -813,9 +816,9 @@ cbuffer PerturbParams : register(b0)
     int    gMaxIter;
     int    gRefLen;
     int    gRowBase;    // TDR tiling: this dispatch covers rows [gRowBase, gRowBase+groupsY*8)
-    int    gPad0;
-    int    gPad1;
-    int    gPad2;
+    int    gWave;       // #1340: 1 = wavefront schedule (was gPad0)
+    int    gBandRows;   // #1340: rows in this band (was gPad1)
+    int    gBand;       // #1340: band index, its gWork counter (was gPad2)
 }
 
 // Reference orbit Z_n, Hi-limb doubles (the CPU _refZr/_refZi). Length gRefLen.
@@ -825,7 +828,13 @@ StructuredBuffer<double> gRefZi : register(t1);
 RWStructuredBuffer<uint>   gIter    : register(u0);
 RWStructuredBuffer<float>  gSmooth  : register(u1);
 RWStructuredBuffer<float4> gFinalZD : register(u2);   // .xy = zr,zi  .zw = drv,div
-
+// #1340: per-band pixel counters of the wavefront schedule, zeroed by the host.
+RWStructuredBuffer<uint>   gWork    : register(u3);
+" + WaveFetch + @"
+// #1340 — two schedules, one compiled shader (gWave): one thread per pixel of the
+// band, or a fixed number of threads pulling the band's pixels from gWork[gBand]
+// and iterating them PERTURB_CHUNK steps at a time (HlslEntry). A pixel runs the
+// same instructions either way, so every output is bit-identical.
 [numthreads(8, 8, 1)]
 void CSPerturb(uint3 tid : SV_DispatchThreadID)
 {
@@ -833,68 +842,87 @@ void CSPerturb(uint3 tid : SV_DispatchThreadID)
     // weak-FP64 GPU and trip the OS watchdog (DXGI_ERROR_DEVICE_REMOVED), which
     // also kills the shared present device. The host splits the frame into row
     // bands and offsets each dispatch by gRowBase; the actual pixel row is
-    // gRowBase + tid.y.
-    int px = (int)tid.x;
-    int py = gRowBase + (int)tid.y;
-    if (px >= gWidth || py >= gHeight) return;
-    int idx = py * gWidth + px;
-
-    // dc = pixelOffset · scale (double).
-    double dcR = (gOffX0 + (double)px) * gScale;
-    double dcI = (gOffY0 + (double)py) * gScale;
-
-    double dr = 0.0, di = 0.0;      // δ_0 = 0
-    double drv = 1.0, div = 0.0;    // dz/dc (IQ convention) for distance + normals
-    int m = 0;                      // reference-orbit index
-    double zr = 0.0, zi = 0.0;      // full value z = Z[m] + δ (last = escape z)
-
-    int iter;
-    [loop]
-    for (iter = 0; iter < gMaxIter; iter++)
+    // gRowBase + the band-local row.
+    uint rows = (uint)min(gBandRows, gHeight - gRowBase);
+    bool taken = false;
+    int idx = -1;
+    double dcR = 0.0, dcI = 0.0;
+    double dr = 0.0, di = 0.0, drv = 0.0, div = 0.0, zr = 0.0, zi = 0.0;
+    int m = 0, iter = 0;
+    [loop] [allow_uav_condition]
+    for (;;)
     {
-        double Zr = gRefZr[m];
-        double Zi = gRefZi[m];
-        zr = Zr + dr;
-        zi = Zi + di;
-
-        double zmag2 = zr * zr + zi * zi;
-        if (zmag2 >= gEscapeR2) break;
-
-        // Derivative of the FULL orbit — independent of rebasing, before it.
-        double ndrv = 2.0 * (zr * drv - zi * div) + 1.0;
-        double ndiv = 2.0 * (zr * div + zi * drv);
-        drv = ndrv; div = ndiv;
-
-        // Rebase when the reference no longer anchors this pixel or is exhausted.
-        double dmag2 = dr * dr + di * di;
-        if (zmag2 < dmag2 || m + 1 >= gRefLen)
+        if (idx < 0)
         {
-            dr = zr; di = zi;
-            Zr = 0.0; Zi = 0.0;
-            m = 0;
+            uint lx, ly;
+            int got = WaveFetch(gWave, taken, tid.xy, (uint)gWidth, rows, (uint)gBand, true, lx, ly);
+            if (got == 0) break;
+            if (got == 2) continue;
+            int px = (int)lx;
+            int py = gRowBase + (int)ly;
+            idx = py * gWidth + px;
+
+            // dc = pixelOffset · scale (double).
+            dcR = (gOffX0 + (double)px) * gScale;
+            dcI = (gOffY0 + (double)py) * gScale;
+
+            dr = 0.0; di = 0.0;         // δ_0 = 0
+            drv = 1.0; div = 0.0;       // dz/dc (IQ convention) for distance + normals
+            m = 0;                      // reference-orbit index
+            zr = 0.0; zi = 0.0;         // full value z = Z[m] + δ (last = escape z)
+            iter = 0;
         }
 
-        // δ_{n+1} = (2·Z[m] + δ)·δ + dc   (Z[m]=0 right after a rebase).
-        double a = 2.0 * Zr + dr;
-        double b = 2.0 * Zi + di;
-        double ndr = a * dr - b * di + dcR;
-        double ndi = a * di + b * dr + dcI;
-        dr = ndr; di = ndi;
-        m++;
-    }
+        bool escaped = false;
+        [loop]
+        for (int trip = 0; trip < PERTURB_CHUNK && iter < gMaxIter; trip++, iter++)
+        {
+            double Zr = gRefZr[m];
+            double Zi = gRefZi[m];
+            zr = Zr + dr;
+            zi = Zi + di;
 
-    gFinalZD[idx] = float4((float)zr, (float)zi, (float)drv, (float)div);
-    if (iter >= gMaxIter)
-    {
-        gIter[idx]   = (uint)gMaxIter;
-        gSmooth[idx] = 0.0;
-    }
-    else
-    {
-        gIter[idx] = (uint)iter;
-        // Match FillAuxAndColorHP: iters + 1 - log2(log2(mag)), mag = |z|.
-        float magf = sqrt((float)(zr * zr + zi * zi));
-        gSmooth[idx] = (float)iter + 1.0 - log2(log2(magf));
+            double zmag2 = zr * zr + zi * zi;
+            if (zmag2 >= gEscapeR2) { escaped = true; break; }
+
+            // Derivative of the FULL orbit — independent of rebasing, before it.
+            double ndrv = 2.0 * (zr * drv - zi * div) + 1.0;
+            double ndiv = 2.0 * (zr * div + zi * drv);
+            drv = ndrv; div = ndiv;
+
+            // Rebase when the reference no longer anchors this pixel or is exhausted.
+            double dmag2 = dr * dr + di * di;
+            if (zmag2 < dmag2 || m + 1 >= gRefLen)
+            {
+                dr = zr; di = zi;
+                Zr = 0.0; Zi = 0.0;
+                m = 0;
+            }
+
+            // δ_{n+1} = (2·Z[m] + δ)·δ + dc   (Z[m]=0 right after a rebase).
+            double a = 2.0 * Zr + dr;
+            double b = 2.0 * Zi + di;
+            double ndr = a * dr - b * di + dcR;
+            double ndi = a * di + b * dr + dcI;
+            dr = ndr; di = ndi;
+            m++;
+        }
+        if (!escaped && iter < gMaxIter) continue;
+
+        gFinalZD[idx] = float4((float)zr, (float)zi, (float)drv, (float)div);
+        if (iter >= gMaxIter)
+        {
+            gIter[idx]   = (uint)gMaxIter;
+            gSmooth[idx] = 0.0;
+        }
+        else
+        {
+            gIter[idx] = (uint)iter;
+            // Match FillAuxAndColorHP: iters + 1 - log2(log2(mag)), mag = |z|.
+            float magf = sqrt((float)(zr * zr + zi * zi));
+            gSmooth[idx] = (float)iter + 1.0 - log2(log2(magf));
+        }
+        idx = -1;
     }
 }
 ";
@@ -1147,6 +1175,12 @@ void CSPerturbF32(uint3 tid : SV_DispatchThreadID)
         "in_stripeAvg", "in_tiaAvg", "in_curvature", "in_lyapunov", "in_gaussian", "in_expSmooth",
     };
 
+    /// <summary>#1340 — loop trips a wavefront lane runs on its perturbation pixel
+    /// between refills (a trip is one δ step, or one BLA skip).</summary>
+    public const int PerturbChunk = 32;
+
+    private static readonly string PerturbChunkDefine = $"#define PERTURB_CHUNK {PerturbChunk}\n";
+
     /// <summary>Compose the orbit-accumulating double perturbation kernel for
     /// <paramref name="mask"/> (non-zero). Bindings: b0 params, t0/t1 reference
     /// orbit, u0..u2 iter/smooth/finalZD (as BuildPerturb), u3 gOrbit.</summary>
@@ -1285,7 +1319,7 @@ void CSPerturbOrbit(uint3 tid : SV_DispatchThreadID)
     // double SSBOs (t2..t9), length gRefLen+1. Correctness is speed-independent,
     // so this validates on weak-FP64 hardware (GT710/lavapipe); the perf payoff
     // is deferred to strong-FP64 HW (see Docs/Technical/GPU-DeepZoom-Handoff.md).
-    public static string BuildPerturbSA() => @"
+    public static string BuildPerturbSA() => PerturbChunkDefine + @"
 // cbuffer: 5 doubles FIRST (offsets 0/8/16/24/32) then 10 ints. 80 bytes.
 // Matches the C# PerturbSaParamsBlob byte-for-byte.
 cbuffer PerturbParams : register(b0)
@@ -1302,9 +1336,9 @@ cbuffer PerturbParams : register(b0)
     int    gRowBase;
     int    gSafeMax;    // SeriesApproximation.SafeMax — max valid coeff index (0 = no SA)
     int    gBlaLevels;  // #88 / G4.5b: BlaTable.Levels, 0 = no BLA (was gPad0)
-    int    gPad1;
-    int    gPad2;
-    int    gPad3;
+    int    gWave;       // #1340: 1 = wavefront schedule (was gPad1)
+    int    gBandRows;   // #1340: rows in this band (was gPad2)
+    int    gBand;       // #1340: band index, its gWork counter (was gPad3)
 }
 
 StructuredBuffer<double> gRefZr : register(t0);
@@ -1326,80 +1360,16 @@ StructuredBuffer<double> gBla : register(t10);
 RWStructuredBuffer<uint>   gIter    : register(u0);
 RWStructuredBuffer<float>  gSmooth  : register(u1);
 RWStructuredBuffer<float4> gFinalZD : register(u2);
-
+// #1340: per-band pixel counters of the wavefront schedule, zeroed by the host.
+RWStructuredBuffer<uint>   gWork    : register(u3);
+" + WaveFetch + @"
+// #1340 — two schedules, one compiled shader (gWave): one thread per pixel of the
+// band, or a fixed number of threads pulling the band's pixels from gWork[gBand]
+// and iterating them PERTURB_CHUNK loop trips at a time (HlslEntry). A pixel runs
+// the same instructions either way, so every output is bit-identical.
 [numthreads(8, 8, 1)]
 void CSPerturbSA(uint3 tid : SV_DispatchThreadID)
 {
-    int px = (int)tid.x;
-    int py = gRowBase + (int)tid.y;
-    if (px >= gWidth || py >= gHeight) return;
-    int idx = py * gWidth + px;
-
-    double dcR = (gOffX0 + (double)px) * gScale;
-    double dcI = (gOffY0 + (double)py) * gScale;
-
-    double dr = 0.0, di = 0.0;      // δ_0 = 0
-    double drv = 1.0, div = 0.0;    // dz/dc (IQ convention)
-    int m = 0;                      // reference-orbit index
-    int iterStart = 0;              // SA skip target
-    double zr = 0.0, zi = 0.0;
-
-    // ── SA FindSkip (squared-magnitude binary search, mirrors CPU FindSkip) ──
-    double dcMag2 = dcR * dcR + dcI * dcI;
-    int hi = min(gSafeMax, gMaxIter - 1);
-    int k = 0;
-    if (dcMag2 == 0.0)
-    {
-        k = hi;                     // centre pixel — full skip is safe
-    }
-    else if (hi > 0)
-    {
-        double tol2 = gSaTol * gSaTol;
-        int lo = 0, best = 0;
-        [loop]
-        while (lo <= hi)
-        {
-            int mid = (lo + hi) >> 1;
-            double Bm2 = gBR[mid] * gBR[mid] + gBI[mid] * gBI[mid];
-            double Cm2 = gCR[mid] * gCR[mid] + gCI[mid] * gCI[mid];
-            double Dm2 = gDR[mid] * gDR[mid] + gDI[mid] * gDI[mid];
-            bool cubicOk  = Cm2 * dcMag2 <= tol2 * Bm2;   // (|C|·|dc|)² ≤ (τ·|B|)²
-            bool quarticOk = Dm2 * dcMag2 <= tol2 * Cm2;  // (|D|·|dc|)² ≤ (τ·|C|)²
-            if (cubicOk && quarticOk) { best = mid; lo = mid + 1; }
-            else                      { hi = mid - 1; }
-        }
-        k = best;
-    }
-
-    // Apply the skip only when it clears the CPU guard (k ≥ 16, k ≤ refLen).
-    if (k >= 16 && k <= gRefLen)
-    {
-        // EvalDelta(k): δ_k = A_k·dc + B_k·dc² + C_k·dc³.
-        double dc2R = dcR * dcR - dcI * dcI;
-        double dc2I = 2.0 * dcR * dcI;
-        double dc3R = dc2R * dcR - dc2I * dcI;
-        double dc3I = dc2R * dcI + dc2I * dcR;
-        double aR = gAR[k] * dcR - gAI[k] * dcI;
-        double aI = gAR[k] * dcI + gAI[k] * dcR;
-        double bR = gBR[k] * dc2R - gBI[k] * dc2I;
-        double bI = gBR[k] * dc2I + gBI[k] * dc2R;
-        double cR = gCR[k] * dc3R - gCI[k] * dc3I;
-        double cI = gCR[k] * dc3I + gCI[k] * dc3R;
-        dr = aR + bR + cR;
-        di = aI + bI + cI;
-
-        // EvalDDelta(k): dδ_k/dc = A_k + 2·B_k·dc + 3·C_k·dc² — derivative seed.
-        double twoBR = 2.0 * (gBR[k] * dcR - gBI[k] * dcI);
-        double twoBI = 2.0 * (gBR[k] * dcI + gBI[k] * dcR);
-        double threeCR = 3.0 * (gCR[k] * dc2R - gCI[k] * dc2I);
-        double threeCI = 3.0 * (gCR[k] * dc2I + gCI[k] * dc2R);
-        drv = gAR[k] + twoBR + threeCR;
-        div = gAI[k] + twoBI + threeCI;
-
-        m = k;
-        iterStart = k;
-    }
-
     // #88 / G4.5b: BLA level starts (level k is gRefLen >> k entries long).
     int blaStart[32];
     {
@@ -1407,88 +1377,179 @@ void CSPerturbSA(uint3 tid : SV_DispatchThreadID)
         for (int lv = 0; lv < 32; lv++) { blaStart[lv] = acc; acc += lv < gBlaLevels ? (gRefLen >> lv) : 0; }
     }
 
-    // ── Identical rebased δ loop as BuildPerturb, resumed from iterStart/m=k ──
-    int iter;
-    [loop]
-    for (iter = iterStart; iter < gMaxIter; iter++)
+    uint rows = (uint)min(gBandRows, gHeight - gRowBase);
+    bool taken = false;
+    int idx = -1;
+    double dcR = 0.0, dcI = 0.0;
+    double dr = 0.0, di = 0.0, drv = 0.0, div = 0.0, zr = 0.0, zi = 0.0;
+    int m = 0, iter = 0;
+    [loop] [allow_uav_condition]
+    for (;;)
     {
-        // #88 / G4.5b: BLA skip, BlaTable.Lookup on the reference index m: the
-        // longest aligned step (L >= 2) whose validity radius holds |delta|, then
-        // delta' = A delta + B dc and dz' = A dz (the CPU drops B there too).
-        // m + L stays below gRefLen so the next reference read is in range.
-        if (gBlaLevels > 1)
+        if (idx < 0)
         {
-            double dm2 = dr * dr + di * di;
-            int found = -1, foundL = 0;
-            // A level-k entry starts only at multiples of 2^k, so start at the
-            // highest level m is aligned to (its trailing zeros), as the CPU
-            // Lookup does since #1346, instead of probing and skipping every
-            // level above it on each iteration.
-            int top = m == 0 ? gBlaLevels - 1 : min(gBlaLevels - 1, (int)firstbitlow((uint)m));
-            [loop]
-            for (int lk = top; lk >= 1; lk--)
+            uint lx, ly;
+            int got = WaveFetch(gWave, taken, tid.xy, (uint)gWidth, rows, (uint)gBand, true, lx, ly);
+            if (got == 0) break;
+            if (got == 2) continue;
+            int px = (int)lx;
+            int py = gRowBase + (int)ly;
+            idx = py * gWidth + px;
+
+            dcR = (gOffX0 + (double)px) * gScale;
+            dcI = (gOffY0 + (double)py) * gScale;
+
+            dr = 0.0; di = 0.0;             // δ_0 = 0
+            drv = 1.0; div = 0.0;           // dz/dc (IQ convention)
+            m = 0;                          // reference-orbit index
+            int iterStart = 0;              // SA skip target
+            zr = 0.0; zi = 0.0;
+
+            // ── SA FindSkip (squared-magnitude binary search, mirrors CPU FindSkip) ──
+            double dcMag2 = dcR * dcR + dcI * dcI;
+            int hi = min(gSafeMax, gMaxIter - 1);
+            int k = 0;
+            if (dcMag2 == 0.0)
             {
-                int l = 1 << lk;
-                int bi = m >> lk;
-                if (bi >= (gRefLen >> lk) || m + l >= gRefLen || iter + l > gMaxIter) continue;
-                int e = (blaStart[lk] + bi) * 5;
-                double r2 = gBla[e + 4];
-                if (r2 > 0.0 && dm2 < r2) { found = e; foundL = l; break; }
+                k = hi;                     // centre pixel — full skip is safe
             }
-            if (found >= 0)
+            else if (hi > 0)
             {
-                double baR = gBla[found], baI = gBla[found + 1];
-                double bbR = gBla[found + 2], bbI = gBla[found + 3];
-                double ndr = baR * dr - baI * di + (bbR * dcR - bbI * dcI);
-                double ndi = baR * di + baI * dr + (bbR * dcI + bbI * dcR);
-                double nvr = baR * drv - baI * div;
-                double nvi = baR * div + baI * drv;
-                dr = ndr; di = ndi; drv = nvr; div = nvi;
-                m += foundL;
-                iter += foundL - 1;   // the loop's ++ makes it +L
-                continue;
+                double tol2 = gSaTol * gSaTol;
+                int lo = 0, best = 0;
+                [loop]
+                while (lo <= hi)
+                {
+                    int mid = (lo + hi) >> 1;
+                    double Bm2 = gBR[mid] * gBR[mid] + gBI[mid] * gBI[mid];
+                    double Cm2 = gCR[mid] * gCR[mid] + gCI[mid] * gCI[mid];
+                    double Dm2 = gDR[mid] * gDR[mid] + gDI[mid] * gDI[mid];
+                    bool cubicOk  = Cm2 * dcMag2 <= tol2 * Bm2;   // (|C|·|dc|)² ≤ (τ·|B|)²
+                    bool quarticOk = Dm2 * dcMag2 <= tol2 * Cm2;  // (|D|·|dc|)² ≤ (τ·|C|)²
+                    if (cubicOk && quarticOk) { best = mid; lo = mid + 1; }
+                    else                      { hi = mid - 1; }
+                }
+                k = best;
             }
+
+            // Apply the skip only when it clears the CPU guard (k ≥ 16, k ≤ refLen).
+            if (k >= 16 && k <= gRefLen)
+            {
+                // EvalDelta(k): δ_k = A_k·dc + B_k·dc² + C_k·dc³.
+                double dc2R = dcR * dcR - dcI * dcI;
+                double dc2I = 2.0 * dcR * dcI;
+                double dc3R = dc2R * dcR - dc2I * dcI;
+                double dc3I = dc2R * dcI + dc2I * dcR;
+                double aR = gAR[k] * dcR - gAI[k] * dcI;
+                double aI = gAR[k] * dcI + gAI[k] * dcR;
+                double bR = gBR[k] * dc2R - gBI[k] * dc2I;
+                double bI = gBR[k] * dc2I + gBI[k] * dc2R;
+                double cR = gCR[k] * dc3R - gCI[k] * dc3I;
+                double cI = gCR[k] * dc3I + gCI[k] * dc3R;
+                dr = aR + bR + cR;
+                di = aI + bI + cI;
+
+                // EvalDDelta(k): dδ_k/dc = A_k + 2·B_k·dc + 3·C_k·dc² — derivative seed.
+                double twoBR = 2.0 * (gBR[k] * dcR - gBI[k] * dcI);
+                double twoBI = 2.0 * (gBR[k] * dcI + gBI[k] * dcR);
+                double threeCR = 3.0 * (gCR[k] * dc2R - gCI[k] * dc2I);
+                double threeCI = 3.0 * (gCR[k] * dc2I + gCI[k] * dc2R);
+                drv = gAR[k] + twoBR + threeCR;
+                div = gAI[k] + twoBI + threeCI;
+
+                m = k;
+                iterStart = k;
+            }
+
+            iter = iterStart;
         }
 
-        double Zr = gRefZr[m];
-        double Zi = gRefZi[m];
-        zr = Zr + dr;
-        zi = Zi + di;
-
-        double zmag2 = zr * zr + zi * zi;
-        if (zmag2 >= gEscapeR2) break;
-
-        double ndrv = 2.0 * (zr * drv - zi * div) + 1.0;
-        double ndiv = 2.0 * (zr * div + zi * drv);
-        drv = ndrv; div = ndiv;
-
-        double dmag2 = dr * dr + di * di;
-        if (zmag2 < dmag2 || m + 1 >= gRefLen)
+        // ── Identical rebased δ loop as BuildPerturb, resumed from iterStart/m=k ──
+        // #1340: PERTURB_CHUNK trips at a time; a trip is one step or one BLA skip.
+        bool escaped = false;
+        [loop]
+        for (int trip = 0; trip < PERTURB_CHUNK && iter < gMaxIter; trip++, iter++)
         {
-            dr = zr; di = zi;
-            Zr = 0.0; Zi = 0.0;
-            m = 0;
+            // #88 / G4.5b: BLA skip, BlaTable.Lookup on the reference index m: the
+            // longest aligned step (L >= 2) whose validity radius holds |delta|, then
+            // delta' = A delta + B dc and dz' = A dz (the CPU drops B there too).
+            // m + L stays below gRefLen so the next reference read is in range.
+            if (gBlaLevels > 1)
+            {
+                double dm2 = dr * dr + di * di;
+                int found = -1, foundL = 0;
+                // A level-k entry starts only at multiples of 2^k, so start at the
+                // highest level m is aligned to (its trailing zeros), as the CPU
+                // Lookup does since #1346, instead of probing and skipping every
+                // level above it on each iteration.
+                int top = m == 0 ? gBlaLevels - 1 : min(gBlaLevels - 1, (int)firstbitlow((uint)m));
+                [loop]
+                for (int lk = top; lk >= 1; lk--)
+                {
+                    int l = 1 << lk;
+                    int bi = m >> lk;
+                    if (bi >= (gRefLen >> lk) || m + l >= gRefLen || iter + l > gMaxIter) continue;
+                    int e = (blaStart[lk] + bi) * 5;
+                    double r2 = gBla[e + 4];
+                    if (r2 > 0.0 && dm2 < r2) { found = e; foundL = l; break; }
+                }
+                if (found >= 0)
+                {
+                    double baR = gBla[found], baI = gBla[found + 1];
+                    double bbR = gBla[found + 2], bbI = gBla[found + 3];
+                    double ndr = baR * dr - baI * di + (bbR * dcR - bbI * dcI);
+                    double ndi = baR * di + baI * dr + (bbR * dcI + bbI * dcR);
+                    double nvr = baR * drv - baI * div;
+                    double nvi = baR * div + baI * drv;
+                    dr = ndr; di = ndi; drv = nvr; div = nvi;
+                    m += foundL;
+                    iter += foundL - 1;   // the loop's ++ makes it +L
+                    continue;
+                }
+            }
+
+            double Zr = gRefZr[m];
+            double Zi = gRefZi[m];
+            zr = Zr + dr;
+            zi = Zi + di;
+
+            double zmag2 = zr * zr + zi * zi;
+            if (zmag2 >= gEscapeR2) { escaped = true; break; }
+
+            double ndrv = 2.0 * (zr * drv - zi * div) + 1.0;
+            double ndiv = 2.0 * (zr * div + zi * drv);
+            drv = ndrv; div = ndiv;
+
+            double dmag2 = dr * dr + di * di;
+            if (zmag2 < dmag2 || m + 1 >= gRefLen)
+            {
+                dr = zr; di = zi;
+                Zr = 0.0; Zi = 0.0;
+                m = 0;
+            }
+
+            double a = 2.0 * Zr + dr;
+            double b = 2.0 * Zi + di;
+            double ndr = a * dr - b * di + dcR;
+            double ndi = a * di + b * dr + dcI;
+            dr = ndr; di = ndi;
+            m++;
         }
+        if (!escaped && iter < gMaxIter) continue;
 
-        double a = 2.0 * Zr + dr;
-        double b = 2.0 * Zi + di;
-        double ndr = a * dr - b * di + dcR;
-        double ndi = a * di + b * dr + dcI;
-        dr = ndr; di = ndi;
-        m++;
-    }
-
-    gFinalZD[idx] = float4((float)zr, (float)zi, (float)drv, (float)div);
-    if (iter >= gMaxIter)
-    {
-        gIter[idx]   = (uint)gMaxIter;
-        gSmooth[idx] = 0.0;
-    }
-    else
-    {
-        gIter[idx] = (uint)iter;
-        float magf = sqrt((float)(zr * zr + zi * zi));
-        gSmooth[idx] = (float)iter + 1.0 - log2(log2(magf));
+        gFinalZD[idx] = float4((float)zr, (float)zi, (float)drv, (float)div);
+        if (iter >= gMaxIter)
+        {
+            gIter[idx]   = (uint)gMaxIter;
+            gSmooth[idx] = 0.0;
+        }
+        else
+        {
+            gIter[idx] = (uint)iter;
+            float magf = sqrt((float)(zr * zr + zi * zi));
+            gSmooth[idx] = (float)iter + 1.0 - log2(log2(magf));
+        }
+        idx = -1;
     }
 }
 ";
@@ -1557,83 +1618,13 @@ void CSPerturbSA(uint3 tid : SV_DispatchThreadID)
     if (it > rowMaxIt) it = rowMaxIt;
 ";
 
-    /// <summary>Per-emit CSMain. The three colour splice points are empty in
-    /// the base variant and filled by <c>MandelbrotGpuKernel</c> (D3D, V2 on
-    /// Vulkan) for the colour-emitting variant.</summary>
-    public static string HlslEntry(bool emitColor, string inSetColor = "", string escapeColor = "", string bulbSkipColor = "")
-    {
-        return $@"
-[numthreads(8, 8, 1)]
-void CSMain(uint3 tid : SV_DispatchThreadID)
-{{
-    uint x = tid.x;
-    uint y = tid.y;
-    if ((int)x >= gWidth || (int)y >= gHeight) return;
-
-    int idx = (int)y * gWidth + (int)x;
-
-    // Reconstruct cx / cy using the split centre.
-    float fx = (float)x - 0.5 * gWidth;
-    float fy = (float)y - 0.5 * gHeight;
-    float cx = gCXHi + fx * gScaleHi + gCXLo + fx * gScaleLo;
-    float cy = gCYHi + fy * gScaleHi + gCYLo + fy * gScaleLo;
-    if (gWarpStrength != 0.0) ApplyDomainWarp(fx, fy, cx, cy);   // #1173-I
-
-    // Per-row cap lookup. Falls back to gMaxIter when disabled or when
-    // the buffer holds 0 for this row (defensive).
-    int rowMaxIt = gMaxIter;
-    if (gUsePerRow != 0)
-    {{
-        uint rc = gPerRow[y];
-        if (rc > 0) rowMaxIt = (int)rc;
-    }}
-
-    // Whole-cardioid + period-2 bulb early-out. Mandelbrot-only — Julia /
-    // BurningShip / Tricorn have different in-set shapes. Always writes
-    // gMaxIter so the in-set gate is consistent across bands regardless of
-    // per-row cap. Final z+dz are (0,0,1,0) — matches the CPU bulb-skip
-    // writeback.
-    if (KIND == 0 && (InCardioid(cx, cy) || InPeriod2Bulb(cx, cy)))
-    {{
-        gIter[idx]    = (uint)gMaxIter;
-        gSmooth[idx]  = 0.0;
-        gFinalZD[idx] = float4(0.0, 0.0, 1.0, 0.0);
-        {bulbSkipColor}
-        return;
-    }}
-
-    // Per-fractal init. Mandelbrot/BurningShip/Tricorn: z_0 = 0, c =
-    // pixel coord. Julia: z_0 = pixel coord, c = (gParam0, gParam1) const.
-    float zr, zi;
-    float cIterR, cIterI;
-    if (KIND == 1)
-    {{
-        zr = cx;     zi = cy;
-        cIterR = gParam0; cIterI = gParam1;
-    }}
-    else
-    {{
-        zr = 0.0;    zi = 0.0;
-        cIterR = cx; cIterI = cy;
-    }}
-    float dr = KIND == 5 ? 0.0 : 1.0;   // #1173-I: Phoenix's dz/dc starts at 0 (CPU)
-    float di = 0.0;
-    float pzr = 0.0, pzi = 0.0, pdr = 0.0, pdi = 0.0;   // Phoenix previous z, dz/dc
-    int   it = 0;
-#ifdef FF_PERIODICITY
-    // #1342: the steps run in blocks of PeriodicityBlock, the periodicity
-    // check between blocks (PeriodicityStep).
-{PeriodicityDecl}    [loop]
-    for (;;)
-    {{
-        int blockEnd = min(it + {PeriodicityBlock}, rowMaxIt);
-        [loop]
-        for (; it < blockEnd; it++)
-        {{
+    /// <summary>#1340 — one SP iteration step: the escape test (breaks the
+    /// enclosing loop) and the kind's update of z (and dz/dc, Phoenix's previous z).</summary>
+    private const string SpStep = @"
             float fzr = zr;
             float fzi = zi;
-            if (KIND == 2)      {{ fzr = abs(zr); fzi = abs(zi); }}
-            else if (KIND == 3) {{ fzi = -zi; }}
+            if (KIND == 2)      { fzr = abs(zr); fzi = abs(zi); }
+            else if (KIND == 3) { fzi = -zi; }
 
             float zr2 = fzr * fzr;
             float zi2 = fzi * fzi;
@@ -1641,11 +1632,11 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
             if (mag2 >= gBailout2) break;
 
             if (KIND == 4)
-            {{
+            {
                 MultibrotStep(zr, zi, dr, di, cIterR, cIterI);   // #1173-I
-            }}
+            }
             else if (KIND == 5)
-            {{
+            {
                 // #1173-I: Phoenix z' = z^2 + c + p * z_prev (p = gParam0 + i gParam1),
                 // dz'/dc = 2 z dz/dc + 1 + p * dz_prev/dc (PhoenixKernel.StepWithPrevDeriv).
                 float ppr = gParam0 * pzr - gParam1 * pzi;
@@ -1658,9 +1649,9 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
                 float nzi = 2.0 * zr * zi + cIterI + ppi;
                 pzr = zr; pzi = zi; pdr = dr; pdi = di;
                 zr = nzr; zi = nzi; dr = ndr; di = ndi;
-            }}
+            }
             else
-            {{
+            {
                 float newDr = 2.0 * (fzr * dr - fzi * di) + 1.0;
                 float newDi = 2.0 * (fzr * di + fzi * dr);
                 dr = newDr;
@@ -1670,77 +1661,218 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
                 float zi_new_unscaled = fzr * fzi;
                 zi = zi_new_unscaled + zi_new_unscaled + cIterI;
                 zr = zrNew;
+            }
+";
+
+    /// <summary>#1340 — steps a lane runs on its pixel between refills. The
+    /// periodicity variant checks between the same blocks (<see cref="PeriodicityBlock"/>),
+    /// so a pixel's arithmetic and checks are the pre-#1340 loop's.</summary>
+    public const int WavefrontChunk = PeriodicityBlock;
+
+    /// <summary>#1340 — the wavefront entry's pixel counter (u5; Vulkan binding
+    /// UShift + 5). gWork[0] is zeroed by the host before a wavefront dispatch.</summary>
+    public const string WorkUav = @"
+RWStructuredBuffer<uint> gWork : register(u5);
+" + WaveFetch;
+
+    /// <summary>#1340 — the pixel fetch of both schedules (HlslEntry, CSPerturb,
+    /// CSPerturbSA; declared after their gWork counter buffer).
+    /// <para>wave = 0: this thread's own pixel (tid, band-local), once.</para>
+    /// <para>wave = 1: the next slot of gWork[slot]. <c>tiled</c> (a literal at each
+    /// call) picks the order: row-major, or 8×8 tiles (tiles row-major, pixels
+    /// row-major in a tile) so a warp's lanes take neighbouring pixels as an 8×8 group
+    /// does. Measured on a GT 710: the deep kernels need the tiles (row-major strips
+    /// cost CSPerturbSA up to 15%: the lanes' iteration counts and reference-orbit
+    /// reads drift apart), while the shallow kernel, which is cheap per pixel and
+    /// writes four outputs, needs row-major (coalesced writes; tiles cost a filled
+    /// Julia frame 10% and Phoenix a third of its gain on Vulkan).</para>
+    /// Returns 0 = no pixel left (the thread exits), 1 = pixel (lx, ly) of the
+    /// w × rows region, 2 = a slot past its right / bottom edge (fetch again).</summary>
+    public const string WaveFetch = @"
+int WaveFetch(int wave, inout bool taken, uint2 tid, uint w, uint rows, uint slot, bool tiled, out uint lx, out uint ly)
+{
+    lx = 0; ly = 0;
+    if (wave == 0)
+    {
+        if (taken || tid.x >= w || tid.y >= rows) return 0;
+        taken = true;
+        lx = tid.x; ly = tid.y;
+        return 1;
+    }
+    uint q;
+    InterlockedAdd(gWork[slot], 1u, q);
+    if (!tiled)
+    {
+        if (q >= w * rows) return 0;
+        ly = q / w;
+        lx = q - ly * w;
+        return 1;
+    }
+    uint tilesX = (w + 7) / 8;
+    if (q >= tilesX * ((rows + 7) / 8) * 64) return 0;
+    uint t = q >> 6, l = q & 63, ty = t / tilesX;
+    lx = (t - ty * tilesX) * 8 + (l & 7);
+    ly = ty * 8 + (l >> 3);
+    return lx < w && ly < rows ? 1 : 2;
+}
+";
+
+    /// <summary>Per-emit CSMain. The three colour splice points are empty in
+    /// the base variant and filled by <c>MandelbrotGpuKernel</c> (D3D, V2 on
+    /// Vulkan) for the colour-emitting variant.
+    /// <para>#1340 — two schedules, one compiled shader (gWave in the cbuffer):</para>
+    /// <list type="bullet">
+    /// <item>gWave = 0: one thread per pixel (SV_DispatchThreadID, a 2D grid over
+    /// the frame), as before.</item>
+    /// <item>gWave = 1 ("wavefront", persistent threads): a fixed number of threads,
+    /// far fewer than pixels, pull pixels from a global counter (gWork[0]) and run
+    /// them <see cref="WavefrontChunk"/> steps at a time. A lane whose pixel escaped
+    /// or reached the cap writes it and takes the next pixel at the next chunk, so a
+    /// warp no longer idles while its slowest pixel runs on: its lanes stay busy as
+    /// long as pixels are left.</item>
+    /// </list>
+    /// Each pixel runs the same instructions in either schedule (<see cref="SpStep"/>,
+    /// the same blocks and periodicity checks, in the same binary), only in another
+    /// order and on another lane, so every output is bit-identical. Two separately
+    /// compiled entries were not: FXC folded the dz/dc update into a dp4 in one and
+    /// into mul + mad in the other (an ulp apart), and <c>precise</c> to forbid that
+    /// cost 15–25% on a GT 710.</summary>
+    public static string HlslEntry(bool emitColor, string inSetColor = "", string escapeColor = "", string bulbSkipColor = "")
+    {
+        return WorkUav + $@"
+[numthreads(8, 8, 1)]
+void CSMain(uint3 tid : SV_DispatchThreadID)
+{{
+    bool taken = false;   // gWave = 0: this thread's one pixel has been taken
+    int idx = -1;         // the pixel this lane is iterating, -1 = none
+    uint x = 0, y = 0;
+    int rowMaxIt = 0;
+    float zr = 0.0, zi = 0.0, dr = 0.0, di = 0.0;
+    float cIterR = 0.0, cIterI = 0.0;
+    float pzr = 0.0, pzi = 0.0, pdr = 0.0, pdi = 0.0;   // Phoenix previous z, dz/dc
+    int   it = 0;
+#ifdef FF_PERIODICITY
+    float snapR = 0.0, snapI = 0.0, snapPR = 0.0, snapPI = 0.0;
+    int nextSnap = 0;
+#endif
+    [loop] [allow_uav_condition]
+    for (;;)
+    {{
+        if (idx < 0)
+        {{
+            int got = WaveFetch(gWave, taken, tid.xy, (uint)gWidth, (uint)gHeight, 0, false, x, y);
+            if (got == 0) break;
+            if (got == 2) continue;
+            idx = (int)y * gWidth + (int)x;
+
+            // Reconstruct cx / cy using the split centre.
+            float fx = (float)x - 0.5 * gWidth;
+            float fy = (float)y - 0.5 * gHeight;
+            float cx = gCXHi + fx * gScaleHi + gCXLo + fx * gScaleLo;
+            float cy = gCYHi + fy * gScaleHi + gCYLo + fy * gScaleLo;
+            if (gWarpStrength != 0.0) ApplyDomainWarp(fx, fy, cx, cy);   // #1173-I
+
+            // Per-row cap lookup. Falls back to gMaxIter when disabled or when
+            // the buffer holds 0 for this row (defensive).
+            rowMaxIt = gMaxIter;
+            if (gUsePerRow != 0)
+            {{
+                uint rc = gPerRow[y];
+                if (rc > 0) rowMaxIt = (int)rc;
+            }}
+
+            // Whole-cardioid + period-2 bulb early-out. Mandelbrot-only — Julia /
+            // BurningShip / Tricorn have different in-set shapes. Always writes
+            // gMaxIter so the in-set gate is consistent across bands regardless of
+            // per-row cap. Final z+dz are (0,0,1,0) — matches the CPU bulb-skip
+            // writeback.
+            if (KIND == 0 && (InCardioid(cx, cy) || InPeriod2Bulb(cx, cy)))
+            {{
+                gIter[idx]    = (uint)gMaxIter;
+                gSmooth[idx]  = 0.0;
+                gFinalZD[idx] = float4(0.0, 0.0, 1.0, 0.0);
+                {bulbSkipColor}
+                idx = -1;
+                continue;
+            }}
+
+            // Per-fractal init. Mandelbrot/BurningShip/Tricorn: z_0 = 0, c =
+            // pixel coord. Julia: z_0 = pixel coord, c = (gParam0, gParam1) const.
+            if (KIND == 1)
+            {{
+                zr = cx;     zi = cy;
+                cIterR = gParam0; cIterI = gParam1;
+            }}
+            else
+            {{
+                zr = 0.0;    zi = 0.0;
+                cIterR = cx; cIterI = cy;
+            }}
+            dr = KIND == 5 ? 0.0 : 1.0;   // #1173-I: Phoenix's dz/dc starts at 0 (CPU)
+            di = 0.0;
+            pzr = 0.0; pzi = 0.0; pdr = 0.0; pdi = 0.0;
+            it = 0;
+#ifdef FF_PERIODICITY
+            // #1342: the snapshot starts at the initial state (PeriodicityDecl).
+            snapR = zr; snapI = zi; snapPR = pzr; snapPI = pzi;
+            nextSnap = 0;
+#endif
+        }}
+
+        int blockEnd = min(it + {WavefrontChunk}, rowMaxIt);
+        [loop]
+        for (; it < blockEnd; it++)
+        {{
+{SpStep}
+        }}
+        bool done = it < blockEnd || it >= rowMaxIt;   // escaped, or at the cap
+#ifdef FF_PERIODICITY
+        // #1342: the periodicity check between blocks (PeriodicityStep).
+        if (!done)
+        {{
+            if (asuint(zr) == asuint(snapR) && asuint(zi) == asuint(snapI)
+                && (KIND != 5 || (asuint(pzr) == asuint(snapPR) && asuint(pzi) == asuint(snapPI))))
+            {{
+                it += rowMaxIt;   // > rowMaxIt: in set, detected after it - rowMaxIt steps
+                done = true;
+            }}
+            else if (it >= nextSnap)
+            {{
+                snapR = zr; snapI = zi; snapPR = pzr; snapPI = pzi;
+                nextSnap = it + it;
             }}
         }}
-        if (it < blockEnd || it >= rowMaxIt) break;   // escaped, or at the cap
-{PeriodicityStep}    }}
-{PeriodicityEnd}#else
-    [loop]
-    for (; it < rowMaxIt; it++)
-    {{
-        float fzr = zr;
-        float fzi = zi;
-        if (KIND == 2)      {{ fzr = abs(zr); fzi = abs(zi); }}
-        else if (KIND == 3) {{ fzi = -zi; }}
+#endif
+        if (!done) continue;
+#ifdef FF_PERIODICITY
+        int periodicAt = it > rowMaxIt ? it - rowMaxIt : 0;   // PeriodicityEnd
+        if (it > rowMaxIt) it = rowMaxIt;
+#endif
 
-        float zr2 = fzr * fzr;
-        float zi2 = fzi * fzi;
-        float mag2 = zr2 + zi2;
-        if (mag2 >= gBailout2) break;
-
-        if (KIND == 4)
+        gFinalZD[idx] = float4(zr, zi, dr, di);
+        if (it >= rowMaxIt)
         {{
-            MultibrotStep(zr, zi, dr, di, cIterR, cIterI);   // #1173-I
-        }}
-        else if (KIND == 5)
-        {{
-            // #1173-I: Phoenix z' = z^2 + c + p * z_prev (p = gParam0 + i gParam1),
-            // dz'/dc = 2 z dz/dc + 1 + p * dz_prev/dc (PhoenixKernel.StepWithPrevDeriv).
-            float ppr = gParam0 * pzr - gParam1 * pzi;
-            float ppi = gParam0 * pzi + gParam1 * pzr;
-            float pdR = gParam0 * pdr - gParam1 * pdi;
-            float pdI = gParam0 * pdi + gParam1 * pdr;
-            float ndr = 2.0 * (zr * dr - zi * di) + 1.0 + pdR;
-            float ndi = 2.0 * (zr * di + zi * dr) + pdI;
-            float nzr = zr * zr - zi * zi + cIterR + ppr;
-            float nzi = 2.0 * zr * zi + cIterI + ppi;
-            pzr = zr; pzi = zi; pdr = dr; pdi = di;
-            zr = nzr; zi = nzi; dr = ndr; di = ndi;
+            gIter[idx]   = (uint)gMaxIter;
+#if defined(FF_PERIODICITY) && FF_PERIODICITY == 2
+            gSmooth[idx] = periodicAt > 0 ? -(float)periodicAt : 0.0;   // #1342 diagnostic
+#else
+            gSmooth[idx] = 0.0;
+#endif
+            {inSetColor}
         }}
         else
         {{
-            float newDr = 2.0 * (fzr * dr - fzi * di) + 1.0;
-            float newDi = 2.0 * (fzr * di + fzi * dr);
-            dr = newDr;
-            di = newDi;
-
-            float zrNew = zr2 - zi2 + cIterR;
-            float zi_new_unscaled = fzr * fzi;
-            zi = zi_new_unscaled + zi_new_unscaled + cIterI;
-            zr = zrNew;
+            gIter[idx] = (uint)it;
+            // #1340: precise (once per pixel, no loop cost) — FXC otherwise compiled
+            // |z| differently in the periodicity on / off variants (separate
+            // binaries), an ulp apart in the smooth of the colour kernel.
+            precise float mag = SafeMag(zr, zi);
+            precise float nu = log2(log2(max(mag, 1.001)));   // #1173-H: the CPU smooth is log2(log2|z|), not log2(ln|z|) (+0.529 off)
+            precise float sm = (float)it + 1.0 - nu;
+            gSmooth[idx] = sm;
+            {escapeColor}
         }}
-    }}
-#endif
-
-    gFinalZD[idx] = float4(zr, zi, dr, di);
-    if (it >= rowMaxIt)
-    {{
-        gIter[idx]   = (uint)gMaxIter;
-#if defined(FF_PERIODICITY) && FF_PERIODICITY == 2
-        gSmooth[idx] = periodicAt > 0 ? -(float)periodicAt : 0.0;   // #1342 diagnostic
-#else
-        gSmooth[idx] = 0.0;
-#endif
-        {inSetColor}
-    }}
-    else
-    {{
-        gIter[idx] = (uint)it;
-        float mag = SafeMag(zr, zi);
-        float nu = log2(log2(max(mag, 1.001)));   // #1173-H: the CPU smooth is log2(log2|z|), not log2(ln|z|) (+0.529 off)
-        float sm = (float)it + 1.0 - nu;
-        gSmooth[idx] = sm;
-        {escapeColor}
+        idx = -1;
     }}
 }}
 ";

@@ -61,6 +61,7 @@ using FracturingFog.Models;
 using FracturingFog.Calculators.Gpu;
 using System.Diagnostics;
 using GpuRoute = FracturingFog.Render.GpuRoute;
+using GpuWavefront = FracturingFog.Rendering.GpuWavefront;
 
 namespace FracturingFog;
 
@@ -335,6 +336,18 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
     /// <summary>#1331 — the last frame's GPU perturbation ran an fp32 kernel.</summary>
     public bool LastFrameUsedGpuFloatExp { get; private set; }
 
+    /// <summary>#1340 — true when the last GPU perturbation frame ran the wavefront
+    /// schedule (<see cref="GpuWavefront"/>). Reset at the start of every frame.</summary>
+    public bool LastFrameUsedGpuWavefront { get; private set; }
+
+    /// <summary>#1340 — the last GPU perturbation frame's <see cref="GpuWavefront.WarpWaste"/>
+    /// (measured under <see cref="GpuWavefront.Auto"/>), or 0 when not measured.</summary>
+    public double LastGpuWarpWaste { get; private set; }
+
+    // #1340 — Auto: run the next GPU perturbation frame in the wavefront schedule
+    // (the last one's warp waste reached GpuWavefront.PerturbWasteThreshold).
+    private bool _gpuWavefrontNext;
+
     /// <summary>#1331 — the fp32 kernels for this device under the current mode.</summary>
     public static bool UseFloatExpKernel(FracturingFog.Rendering.IGpuKernel k) => k.SupportsPerturbationFloatExp && GpuDeepPrecisionMode switch
     {
@@ -502,7 +515,8 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         if (hp && LastFrameUsedGpuPerturbation)
             return GpuRoute.OnGpu(label, $"{label}: deep-zoom perturbation"
                 + (LastFrameUsedGpuSeriesApproximation ? " + series approximation" : "")
-                + (LastFrameUsedGpuBla ? " + BLA" : ""));
+                + (LastFrameUsedGpuBla ? " + BLA" : "")
+                + (LastFrameUsedGpuWavefront ? " + wavefront" : ""));
         if (!UseGpuCompute && !UseGpuPerturbation && s_gpuPerturbDisabled == null)
             return GpuRoute.NotRequested;
         if (_gpuSkip is { } skip) return skip;
@@ -1033,6 +1047,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         LastFrameUsedGpuBla = false;
         LastFrameUsedGpuOrbitPerturbation = false;
         LastFrameUsedGpuFloatExp = false;          // #1331
+        LastFrameUsedGpuWavefront = false;         // #1340
         LastFrameBuiltGpuReferenceOrbit = false;   // #1166
         _gpuSkip = null;
         _panState = null;                  // #1330: set again by a complete lattice frame
@@ -2793,7 +2808,9 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
     {
         var kernel = GpuKernel;
         if (kernel == null) return false;
-        bool useSa = false, useBla = false;
+        bool useSa = false, useBla = false, wave = false;
+        // #1340 — the deep kernels' schedule for this dispatch (Auto: the last frame's hint).
+        GpuWavefront.PerturbHint = _gpuWavefrontNext;
         try
         {
             double offX0 = SubRectOffsetX - effImgW * 0.5;
@@ -2821,6 +2838,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
             {
                 var sa = _sa!;
                 var bla = useBla ? _blaTable : null;
+                wave = GpuWavefront.UsePerturb;
                 kernel.RunPerturbSA(
                     Width, Height, scale, maxIt, EscapeRadius2,
                     offX0, offY0,
@@ -2833,7 +2851,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
             }
             else if (UseFloatExpKernel(kernel))
             {
-                // #1331 — the all-fp32 float-exp kernel (weak / no fp64).
+                // #1331 — the all-fp32 float-exp kernel (weak / no fp64; no wavefront form).
                 kernel.RunPerturbFloatExp(
                     Width, Height, scale, maxIt, EscapeRadius2,
                     offX0, offY0,
@@ -2844,6 +2862,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
             }
             else
             {
+                wave = GpuWavefront.UsePerturb;
                 kernel.RunPerturb(
                     Width, Height, scale, maxIt, EscapeRadius2,
                     offX0, offY0,
@@ -2857,6 +2876,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
             OnGpuPerturbationFailed(ex);
             return false;
         }
+        finally { GpuWavefront.PerturbHint = false; }
 
         _po.CancellationToken = ct;
         var po = _po;
@@ -2875,6 +2895,14 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         LastFrameUsedGpuPerturbation = true;
         LastFrameUsedGpuSeriesApproximation = useSa;
         LastFrameUsedGpuBla = useBla;
+        LastFrameUsedGpuWavefront = wave;
+        // #1340 — Auto: this frame's warp waste picks the next frame's schedule.
+        LastGpuWarpWaste = 0;
+        if (GpuWavefront.Mode == GpuWavefront.On && GpuWavefront.PerturbMode == GpuWavefront.Auto)
+        {
+            LastGpuWarpWaste = GpuWavefront.WarpWaste(IterationBuffer, Width, Height);
+            _gpuWavefrontNext = LastGpuWarpWaste >= GpuWavefront.PerturbWasteThreshold;
+        }
         LogGpuPerturbEngaged();
         return true;
     }
