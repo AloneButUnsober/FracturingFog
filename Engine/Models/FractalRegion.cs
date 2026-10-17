@@ -787,6 +787,10 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? EscapeIterationScale { get; set; }
         // #1275 — Mandelbrot BLA tolerance; omitted at the 1e-6 default.
         [JsonIgnore(Condition = OmitNull)] public double? BlaTolerance { get; set; }
+        // #1344 — Mandelbrot adaptive anti-aliasing; each omitted at its default.
+        [JsonIgnore(Condition = OmitNull)] public bool? AdaptiveAa { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? AdaptiveAaThreshold { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? AdaptiveAaTolerance { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? IFSIterations { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? LSystemDepth { get; set; }
         [JsonIgnore(Condition = OmitNull)] public string? AttractorPresetName { get; set; }
@@ -1312,6 +1316,9 @@ namespace FracturingFog.Models
                 FractalType.Mandelbrot => new RegionFractalParams
                 {
                     BlaTolerance = Nd(p.BlaTolerance, D.BlaTolerance),
+                    AdaptiveAa = p.AdaptiveAa != D.AdaptiveAa ? p.AdaptiveAa : null,                      // #1344
+                    AdaptiveAaThreshold = Nd(p.AdaptiveAaThreshold, D.AdaptiveAaThreshold),
+                    AdaptiveAaTolerance = Nd(p.AdaptiveAaTolerance, D.AdaptiveAaTolerance),
                 },
                 // Tricorn, BurningShip, Magnet1/2, TearDrop and the generated
                 // families need no extra params — defaults suffice.
@@ -1825,6 +1832,9 @@ namespace FracturingFog.Models
             // #961 — full animatable coverage.
             if (EscapeIterationScale.HasValue) p.EscapeIterationScale = EscapeIterationScale.Value;
             if (BlaTolerance.HasValue) p.BlaTolerance = BlaTolerance.Value;   // #1275
+            if (AdaptiveAa.HasValue) p.AdaptiveAa = AdaptiveAa.Value;                       // #1344
+            if (AdaptiveAaThreshold.HasValue) p.AdaptiveAaThreshold = AdaptiveAaThreshold.Value;
+            if (AdaptiveAaTolerance.HasValue) p.AdaptiveAaTolerance = AdaptiveAaTolerance.Value;
             if (IFSIterations.HasValue) p.IFSIterations = IFSIterations.Value;
             if (LSystemDepth.HasValue) p.LSystemDepth = LSystemDepth.Value;
             if (!string.IsNullOrEmpty(AttractorPresetName)) p.AttractorPresetName = AttractorPresetName;

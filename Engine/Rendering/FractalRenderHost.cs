@@ -2070,17 +2070,20 @@ namespace FracturingFog.Rendering
                 // Flame/DLA/Apollonian/StrangeAttractor whose Calculate()
                 // ignores those fields and would just re-roll noise.
                 // Pixel scale: 3.5/max(W,H)/Zoom mirrors generator template.
+                // #1344: Supersampling (shared with --batch and export); adaptive on
+                // the Mandelbrot path when FractalParameters.AdaptiveAa is set.
                 if (!useAlt)
                 {
                     int aaSamples = calc.Quality?.AaSamples ?? 1;
                     if (aaSamples > 1 && !token.IsCancellationRequested)
-                        RunMsaaAccumulateMandelbrot(calc, aaSamples, token);
+                        LastSupersample = Supersampling.AccumulateMandelbrot(calc, aaSamples,
+                            AdaptiveAa.From(ViewState?.FractalParameters), token);
                 }
                 else if (altCalc!.SupportsZoomPan)
                 {
                     int aaSamples = altCalc.Quality?.AaSamples ?? 1;
                     if (aaSamples > 1 && !token.IsCancellationRequested)
-                        RunMsaaAccumulateAlt(altCalc, aaSamples, token);
+                        LastSupersample = Supersampling.AccumulateAlt(altCalc, aaSamples, token);
                 }
 
                 // Wave 2.7 — seed the TAA accumulator from this frame's
@@ -2148,169 +2151,9 @@ namespace FracturingFog.Rendering
                 new UploadCtx(this, job, ms, calcStart), preferLocal: false);
         }
 
-        // Wave 2.6 — MSAA helper. Runs N total samples on a √N×√N jitter grid
-        // around the original centre coords; first sample (already in
-        // calc.ColorBuffer when this is called) is reused as the (0,0)-jitter
-        // entry. Each subsequent Calculate() shifts CenterX/CenterY by a
-        // sub-pixel offset, then we accumulate channel sums and write the
-        // averaged colour back. Restores Center on exit.
-        //
-        // Format: ColorBuffer is uint with packed BGRA (matches IColorMap.Map's
-        // output everywhere; the renderer's UpdateTexture also expects BGRA).
-        // The byte extraction below is endian-safe because we touch the same
-        // uint on both sides — we never reinterpret the byte order.
-        private static void RunMsaaAccumulateMandelbrot(
-            MandelbrotCalculator calc, int aaSamples, CancellationToken token)
-        {
-            int side = (int)Math.Round(Math.Sqrt(aaSamples));
-            if (side * side != aaSamples) return; // only square grids
-            int pixels = calc.Width * calc.Height;
-            uint[] color = calc.ColorBuffer;
-            if (color.Length < pixels) return;
-
-            var sumR = new int[pixels];
-            var sumG = new int[pixels];
-            var sumB = new int[pixels];
-            var sumA = new int[pixels];
-
-            // Accumulate the already-computed sample 0 (centre).
-            for (int i = 0; i < pixels; i++)
-            {
-                uint c = color[i];
-                sumB[i] +=  (int)(c        & 0xFF);
-                sumG[i] +=  (int)((c >> 8)  & 0xFF);
-                sumR[i] +=  (int)((c >> 16) & 0xFF);
-                sumA[i] +=  (int)((c >> 24) & 0xFF);
-            }
-
-            // Pixel scale matches generated calculators: 3.5/max(W,H)/Zoom.
-            // #1270 — the jitter goes through every centre limb (CentreJitter),
-            // so it survives past the double's precision (~1e10 zoom).
-            double scale = (3.5 / Math.Max(calc.Width, calc.Height)) / calc.Zoom;
-            var orig = CentreLimbs.Capture(calc);
-
-            int count = 1; // sample 0 already counted
-            for (int sy = 0; sy < side; sy++)
-            {
-                double jy = (sy + 0.5) / side - 0.5; // ∈ [-0.5, 0.5)
-                for (int sx = 0; sx < side; sx++)
-                {
-                    if (sx == side / 2 && sy == side / 2) continue; // centre already done
-                    if (token.IsCancellationRequested) goto WriteBack;
-
-                    double jx = (sx + 0.5) / side - 0.5;
-                    CentreJitter.Apply(calc, in orig, jx, jy, scale);
-                    try { calc.Calculate(token); }
-                    catch (OperationCanceledException) { goto WriteBack; }
-
-                    var buf = calc.ColorBuffer;
-                    for (int i = 0; i < pixels; i++)
-                    {
-                        uint c = buf[i];
-                        sumB[i] += (int)(c        & 0xFF);
-                        sumG[i] += (int)((c >> 8)  & 0xFF);
-                        sumR[i] += (int)((c >> 16) & 0xFF);
-                        sumA[i] += (int)((c >> 24) & 0xFF);
-                    }
-                    count++;
-                }
-            }
-        WriteBack:
-            orig.Restore(calc);
-            if (count <= 0) return;
-            int half = count / 2;
-            var outBuf = calc.ColorBuffer;
-            for (int i = 0; i < pixels; i++)
-            {
-                uint b = (uint)((sumB[i] + half) / count) & 0xFF;
-                uint g = (uint)((sumG[i] + half) / count) & 0xFF;
-                uint r = (uint)((sumR[i] + half) / count) & 0xFF;
-                uint a = (uint)((sumA[i] + half) / count) & 0xFF;
-                outBuf[i] = (a << 24) | (r << 16) | (g << 8) | b;
-            }
-        }
-
-        // Wave 2.6 alt-calc broadening — IFractalCalculator-shaped twin of
-        // RunMsaaAccumulateMandelbrot for the user-equation hot-load path
-        // and other escape-time alt calcs (Newton/Nova/Halley/Secant/Magnet/
-        // Glynn/Spider/Phoenix) and 3D raymarchers (Mandelbulb/UserBulb/
-        // Mandelbox/KIFS/Quaternion*/Bicomplex/Kleinian). Identical maths;
-        // only the calc shape differs because MandelbrotCalculator is the
-        // concrete legacy path (still carries QD/DD/OD limb fields), not an
-        // IFractalCalculator. Sub-pixel jitter on (CenterX, CenterY) at the
-        // standard pixel-size heuristic; weighted-mean BGRA channels written
-        // back into ColorBuffer. Caller gates SupportsZoomPan so families
-        // whose Calculate() ignores centre+zoom (IFS/LSystem/Plasma/Flame/
-        // DLA/Apollonian/StrangeAttractor) never reach here.
-        private static void RunMsaaAccumulateAlt(
-            IFractalCalculator calc, int aaSamples, CancellationToken token)
-        {
-            int side = (int)Math.Round(Math.Sqrt(aaSamples));
-            if (side * side != aaSamples) return;
-            int pixels = calc.Width * calc.Height;
-            uint[] color = calc.ColorBuffer;
-            if (color.Length < pixels) return;
-
-            var sumR = new int[pixels];
-            var sumG = new int[pixels];
-            var sumB = new int[pixels];
-            var sumA = new int[pixels];
-
-            for (int i = 0; i < pixels; i++)
-            {
-                uint c = color[i];
-                sumB[i] +=  (int)(c        & 0xFF);
-                sumG[i] +=  (int)((c >> 8)  & 0xFF);
-                sumR[i] +=  (int)((c >> 16) & 0xFF);
-                sumA[i] +=  (int)((c >> 24) & 0xFF);
-            }
-
-            double scale = (3.5 / Math.Max(calc.Width, calc.Height)) / calc.Zoom;
-            double origCx = calc.CenterX;
-            double origCy = calc.CenterY;
-
-            int count = 1;
-            for (int sy = 0; sy < side; sy++)
-            {
-                double jy = (sy + 0.5) / side - 0.5;
-                for (int sx = 0; sx < side; sx++)
-                {
-                    if (sx == side / 2 && sy == side / 2) continue;
-                    if (token.IsCancellationRequested) goto WriteBack;
-
-                    double jx = (sx + 0.5) / side - 0.5;
-                    calc.CenterX = origCx + jx * scale;
-                    calc.CenterY = origCy + jy * scale;
-                    try { calc.Calculate(token); }
-                    catch (OperationCanceledException) { goto WriteBack; }
-
-                    var buf = calc.ColorBuffer;
-                    for (int i = 0; i < pixels; i++)
-                    {
-                        uint c = buf[i];
-                        sumB[i] += (int)(c        & 0xFF);
-                        sumG[i] += (int)((c >> 8)  & 0xFF);
-                        sumR[i] += (int)((c >> 16) & 0xFF);
-                        sumA[i] += (int)((c >> 24) & 0xFF);
-                    }
-                    count++;
-                }
-            }
-        WriteBack:
-            calc.CenterX = origCx;
-            calc.CenterY = origCy;
-            if (count <= 0) return;
-            int half = count / 2;
-            var outBuf = calc.ColorBuffer;
-            for (int i = 0; i < pixels; i++)
-            {
-                uint b = (uint)((sumB[i] + half) / count) & 0xFF;
-                uint g = (uint)((sumG[i] + half) / count) & 0xFF;
-                uint r = (uint)((sumR[i] + half) / count) & 0xFF;
-                uint a = (uint)((sumA[i] + half) / count) & 0xFF;
-                outBuf[i] = (a << 24) | (r << 16) | (g << 8) | b;
-            }
-        }
+        /// <summary>#1344 — the last frame's sub-pixel AA pass (pixels marked and
+        /// pixel-samples computed); null until one ran.</summary>
+        public SupersampleStats? LastSupersample { get; private set; }
 
         // Wave 2.7 — TAA helpers.
         //

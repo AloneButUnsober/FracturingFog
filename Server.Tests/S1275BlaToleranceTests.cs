@@ -228,7 +228,15 @@ public sealed class S1275BlaToleranceTests(ITestOutputHelper output)
             Path = string.Empty,
         }, CancellationToken.None, out _, out _);
 
-        uint[] Live(double tol) { var c = Calc(tol); c.Calculate(); return (uint[])c.ColorBuffer.Clone(); }
+        // #1344 — export runs the preset's sub-pixel AA, as the live view does.
+        uint[] Live(double tol)
+        {
+            var c = Calc(tol);
+            c.Calculate();
+            FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(c, c.Quality.AaSamples,
+                FracturingFog.Rendering.AdaptiveAa.Off, CancellationToken.None);
+            return (uint[])c.ColorBuffer.Clone();
+        }
 
         var tight = Poster(1e-12);
         Assert.Equal(Live(1e-12), tight);

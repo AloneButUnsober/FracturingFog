@@ -37,6 +37,24 @@ namespace FracturingFog.Models
         /// exact). Most views render identically at any value.</summary>
         public double BlaTolerance { get; set; } = 1e-6;
 
+        /// <summary>#1344 — Mandelbrot: adaptive anti-aliasing. With the quality
+        /// preset's sub-pixel AA on (AaSamples &gt; 1), only the pixels whose
+        /// neighbourhood changes (the set boundary, or a neighbour more than
+        /// <see cref="AdaptiveAaThreshold"/> apart in a colour channel) take the
+        /// extra samples, each until its mean settles within
+        /// <see cref="AdaptiveAaTolerance"/>; the rest keep the one-sample colour.
+        /// Off by default (every pixel takes every sample, as before).</summary>
+        public bool AdaptiveAa { get; set; }
+
+        /// <summary>#1344 — channel difference (0–255) to a neighbour that marks a
+        /// pixel for supersampling. Lower = more pixels sampled.</summary>
+        public double AdaptiveAaThreshold { get; set; } = 12.0;
+
+        /// <summary>#1344 — a marked pixel stops sampling once the standard error of
+        /// its mean colour is at most this (channel levels, 0–255) in every channel,
+        /// after at least 4 samples. 0 = every marked pixel takes every sample.</summary>
+        public double AdaptiveAaTolerance { get; set; } = 1.5;
+
         // ── #920 faithful parabolic implosion (user-picked p/q) ───────────────
         /// <summary>When true, the Julia parameter is driven from the parabolic
         /// root <c>p/q</c> instead of <see cref="JuliaC"/>: the render uses
@@ -1809,6 +1827,9 @@ namespace FracturingFog.Models
                 JuliaC = JuliaC,
                 EscapeIterationScale = EscapeIterationScale,
                 BlaTolerance = BlaTolerance,
+                AdaptiveAa = AdaptiveAa,                         // #1344
+                AdaptiveAaThreshold = AdaptiveAaThreshold,
+                AdaptiveAaTolerance = AdaptiveAaTolerance,
                 FaithfulImplosion = FaithfulImplosion,
                 FaithfulImplosionP = FaithfulImplosionP,
                 FaithfulImplosionQ = FaithfulImplosionQ,

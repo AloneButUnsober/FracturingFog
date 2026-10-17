@@ -716,6 +716,8 @@ namespace FracturingFog.Export
             if (alt != null)
             {
                 alt.Calculate(ct);
+                if (alt.SupportsZoomPan && shot.Quality != null)   // #1344 — the preset's sub-pixel AA
+                    FracturingFog.Rendering.Supersampling.AccumulateAlt(alt, shot.Quality.AaSamples, ct);
                 return CopyBuffer(alt.ColorBuffer, w, h);
             }
 
@@ -734,6 +736,9 @@ namespace FracturingFog.Export
                 BlaTolerance = p.BlaTolerance,   // #1275
             };
             calc.Calculate(ct);
+            if (shot.Quality != null)   // #1344 — the preset's sub-pixel AA (adaptive with AdaptiveAa)
+                FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(calc, shot.Quality.AaSamples,
+                    FracturingFog.Rendering.AdaptiveAa.From(p), ct);
             return CopyBuffer(calc.ColorBuffer, w, h);
         }
 

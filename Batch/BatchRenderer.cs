@@ -906,9 +906,11 @@ namespace FracturingFog.Batch
                     return PosterRenderer.RenderToPixels(rreq, CancellationToken.None, out _, out _);
                 }
                 if (deepCentre is { } fd && frameCx == cx && frType == FractalType.Mandelbrot)
-                    return RenderDeepMandelFrame(fd, outW, outH, fz, iter, theme, pfAdaptive, quality, fp.BlaTolerance);
+                    return RenderDeepMandelFrame(fd, outW, outH, fz, iter, theme, pfAdaptive, quality, fp.BlaTolerance,
+                        FracturingFog.Rendering.AdaptiveAa.From(fp));
                 return limbRegion != null && frameCx == cx
-                    ? RenderRegionMandelFrame(limbRegion, outW, outH, fz, iter, theme, pfAdaptive, quality, fp.BlaTolerance)
+                    ? RenderRegionMandelFrame(limbRegion, outW, outH, fz, iter, theme, pfAdaptive, quality, fp.BlaTolerance,
+                        FracturingFog.Rendering.AdaptiveAa.From(fp))
                     : RenderOneFrame(frType, outW, outH, frameCx, cy, fz, iter, theme, quality, pfAdaptive,
                                      fp, limbSource, stereo, frameDepth);
             }
@@ -1181,6 +1183,9 @@ namespace FracturingFog.Batch
                 // families don't implement the capability and carry no HE.
                 // Brightness/contrast still apply downstream on the buffer.
                 alt.Calculate(CancellationToken.None);
+                // #1344 — the quality preset's sub-pixel AA, as the live view runs it.
+                if (alt.SupportsZoomPan)
+                    FracturingFog.Rendering.Supersampling.AccumulateAlt(alt, quality.AaSamples, CancellationToken.None);
                 NoteGpuRoute(alt);   // #1173-M
                 // #1012 — the depth a 3D raymarcher published (Fake / autostereogram).
                 if (depthOut != null) depthOut.Value = (alt as IDepthAovSource)?.DepthBuffer;
@@ -1202,6 +1207,8 @@ namespace FracturingFog.Batch
                 BlaTolerance = fp.BlaTolerance,   // #1275
             };
             calc.Calculate(CancellationToken.None);
+            FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(calc, quality.AaSamples,
+                FracturingFog.Rendering.AdaptiveAa.From(fp), CancellationToken.None);   // #1344
             if (adaptive > 0)
                 calc.ApplyHistogramEqualization(adaptive / 100.0);
             var buf = CopyBuffer(calc.ColorBuffer, w, h);
@@ -1461,7 +1468,8 @@ namespace FracturingFog.Batch
         // Shared by the video-slideshow leg loop (many zoom frames per region).
         private static uint[] RenderRegionMandelFrame(
             FractalRegion region, int w, int h, double zoom, int iter, IColorMap theme, int adaptive,
-            QualityPreset? quality = null, double blaTolerance = FracturingFog.FFMath.BlaTable.DefaultEpsilon)
+            QualityPreset? quality = null, double blaTolerance = FracturingFog.FFMath.BlaTable.DefaultEpsilon,
+            FracturingFog.Rendering.AdaptiveAa? aa = null)
         {
             var calc = new MandelbrotCalculator(w, h)
             {
@@ -1478,6 +1486,8 @@ namespace FracturingFog.Batch
                 Quality = quality ?? region.QualityPreset ?? QualityPreset.Standard,
             };
             calc.Calculate(CancellationToken.None);
+            FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(calc, calc.Quality.AaSamples,
+                aa ?? FracturingFog.Rendering.AdaptiveAa.Off, CancellationToken.None);   // #1344
             if (adaptive > 0) calc.ApplyHistogramEqualization(adaptive / 100.0);
             var buf = CopyBuffer(calc.ColorBuffer, w, h);
             CompositeInteriorAlpha(buf, w, h, theme);
@@ -1493,7 +1503,8 @@ namespace FracturingFog.Batch
             IColorMap theme, int adaptive, double? centerXOverride = null)
         {
             if (region.FractalType == FractalType.Mandelbrot && centerXOverride == null)
-                return RenderRegionMandelFrame(region, w, h, zoom, iter, theme, adaptive, blaTolerance: fp.BlaTolerance);
+                return RenderRegionMandelFrame(region, w, h, zoom, iter, theme, adaptive, blaTolerance: fp.BlaTolerance,
+                    aa: FracturingFog.Rendering.AdaptiveAa.From(fp));
             return RenderOneFrame(region.FractalType, w, h,
                 centerXOverride ?? region.CenterX, region.CenterY, zoom, iter, theme,
                 region.QualityPreset ?? QualityPreset.Standard, adaptive,
@@ -2415,7 +2426,8 @@ namespace FracturingFog.Batch
         /// <summary>One Mandelbrot video frame at the full octuple-double centre.</summary>
         private static uint[] RenderDeepMandelFrame(
             FracturingFog.FFMath.DeepComplex c, int w, int h, double zoom, int iter, IColorMap theme, int adaptive,
-            QualityPreset quality, double blaTolerance = FracturingFog.FFMath.BlaTable.DefaultEpsilon)
+            QualityPreset quality, double blaTolerance = FracturingFog.FFMath.BlaTable.DefaultEpsilon,
+            FracturingFog.Rendering.AdaptiveAa? aa = null)
         {
             var calc = new MandelbrotCalculator(w, h)
             {
@@ -2430,6 +2442,8 @@ namespace FracturingFog.Batch
                 Quality = quality,
             };
             calc.Calculate(CancellationToken.None);
+            FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(calc, quality.AaSamples,
+                aa ?? FracturingFog.Rendering.AdaptiveAa.Off, CancellationToken.None);   // #1344
             if (adaptive > 0) calc.ApplyHistogramEqualization(adaptive / 100.0);
             var buf = CopyBuffer(calc.ColorBuffer, w, h);
             CompositeInteriorAlpha(buf, w, h, theme);

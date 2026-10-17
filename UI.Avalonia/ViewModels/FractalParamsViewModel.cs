@@ -600,6 +600,38 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         }
     }
 
+    // ── #1344 Mandelbrot adaptive anti-aliasing ──────────────────────────────
+    // Direct-write to _p; the render host, --batch and export read it off
+    // FractalParameters wherever the quality preset's sub-pixel AA runs.
+
+    public bool AdaptiveAa
+    {
+        get => _p.AdaptiveAa;
+        set { if (_p.AdaptiveAa == value) return; _p.AdaptiveAa = value; this.RaisePropertyChanged(); Fire(); }
+    }
+
+    public double AdaptiveAaThreshold
+    {
+        get => _p.AdaptiveAaThreshold;
+        set
+        {
+            value = System.Math.Clamp(value, 0, 255);
+            if (_p.AdaptiveAaThreshold == value) return;
+            _p.AdaptiveAaThreshold = value; this.RaisePropertyChanged(); Fire();
+        }
+    }
+
+    public double AdaptiveAaTolerance
+    {
+        get => _p.AdaptiveAaTolerance;
+        set
+        {
+            value = System.Math.Clamp(value, 0, 64);
+            if (_p.AdaptiveAaTolerance == value) return;
+            _p.AdaptiveAaTolerance = value; this.RaisePropertyChanged(); Fire();
+        }
+    }
+
     // ── 2D heightfield relief (#102) ─────────────────────────────────────────
     // Direct-write to _p (same pattern as interior alpha); the render host reads
     // these off ViewState.FractalParameters in UploadProcessedBuffer.
