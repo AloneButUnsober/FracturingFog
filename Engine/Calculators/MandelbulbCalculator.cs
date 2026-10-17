@@ -83,6 +83,7 @@ public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera,
         double power = FractalParameters.BulbPower;
         int deIter = Math.Max(2, FractalParameters.BulbIterations);
         int maxSteps = Math.Max(16, FractalParameters.BulbMaxSteps);
+        double omega = SphereRelax.Clamp(FractalParameters.MarchRelaxation);   // #1335 over-relaxed sphere tracing
         double eps = Math.Max(1e-5, FractalParameters.BulbEpsilon);
 
         // Camera: orbit around origin. CenterX/Y act as a 2D screen-space pan
@@ -194,7 +195,7 @@ public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera,
                 FovScale = fovScale, Aspect = aspect,
                 PanU = panU, PanV = panV,
                 LightX = lightX, LightY = lightY, LightZ = lightZ,
-                MaxSteps = maxSteps, Eps = eps,
+                MaxSteps = maxSteps, Eps = eps, Relaxation = omega,   // #1335
                 CullRadiusSq = 0.0,  // No sphere clip — CPU path bails on tTotal>12 instead
                 InSetColor = ColorMap.InSetColor,
                 // S3 (#567) — thin-lens DOF on the GPU kernel. Inactive (aperture 0 /
@@ -272,12 +273,17 @@ public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera,
                          float[] hdrScratch, out float hr, out float hg, out float hb)
         {
             double px = ox, py = oy, pz = oz, tTotal = 0; bool hit = false; int hitStep = 0;
+            var relax = new SphereRelax(omega);   // #1335 over-relaxed sphere tracing
             for (int step = 0; step < maxSteps; step++)
             {
                 double dist = MandelbulbDE(px, py, pz, power, deIter, out _);
+                // #1335: the step here overshot (spheres apart): back up, march plainly.
+                double back = relax.BackOff(dist);
+                if (back > 0) { px -= dx * back; py -= dy * back; pz -= dz * back; tTotal -= back; continue; }
                 if (dist < eps) { hit = true; hitStep = step; break; }
                 if (tTotal > 12.0) break;
-                px += dx * dist; py += dy * dist; pz += dz * dist; tTotal += dist;
+                double rs = relax.Step(dist);   // #1335
+                px += dx * rs; py += dy * rs; pz += dz * rs; tTotal += rs;
             }
             if (!hit)
             {
@@ -358,9 +364,13 @@ public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera,
                 bool hit = false;
                 int hitStep = 0;
 
+                var relax = new SphereRelax(omega);   // #1335 over-relaxed sphere tracing
                 for (int step = 0; step < maxSteps; step++)
                 {
                     double dist = MandelbulbDE(px, py, pz, power, deIter, out _);
+                    // #1335: the step here overshot (spheres apart): back up, march plainly.
+                    double back = relax.BackOff(dist);
+                    if (back > 0) { px -= rdx * back; py -= rdy * back; pz -= rdz * back; tTotal -= back; continue; }
                     if (dist < eps)
                     {
                         hit = true;
@@ -368,8 +378,9 @@ public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera,
                         break;
                     }
                     if (tTotal > 12.0) break; // escaped scene
-                    px += rdx * dist; py += rdy * dist; pz += rdz * dist;
-                    tTotal += dist;
+                    double rs = relax.Step(dist);   // #1335
+                    px += rdx * rs; py += rdy * rs; pz += rdz * rs;
+                    tTotal += rs;
                 }
 
                 if (!hit)

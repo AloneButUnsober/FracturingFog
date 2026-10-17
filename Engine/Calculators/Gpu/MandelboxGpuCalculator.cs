@@ -197,13 +197,18 @@ public sealed class MandelboxGpuCalculator : IDisposable
         bool hit = false;
         int hitStep = 0;
 
+        var relax = new SphereRelax(r.Relaxation);   // #1335 over-relaxed sphere tracing
         for (int step = 0; step < r.MaxSteps; step++)
         {
             double d = MandelboxDE(px, py, pz, p.Scale, p.FixedR2, p.MinR2, p.Bailout2, p.DEIter);
+            // #1335: the step here overshot (spheres apart): back up, march plainly.
+            double back = relax.BackOff(d);
+            if (back > 0) { px -= rdx * back; py -= rdy * back; pz -= rdz * back; tT -= back; continue; }
             if (d < r.Eps) { hit = true; hitStep = step; break; }
             if (tT > p.SceneRadius) break;
-            px += rdx * d; py += rdy * d; pz += rdz * d;
-            tT += d;
+            double rs = relax.Step(d);   // #1335
+            px += rdx * rs; py += rdy * rs; pz += rdz * rs;
+            tT += rs;
         }
 
         if (!hit) return GpuKernelUtils.MissColor(hdri, rdx, rdy, rdz, in r, in sp);

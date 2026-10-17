@@ -95,6 +95,7 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
             FractalParameters.KifsOffsetX, FractalParameters.KifsOffsetY, FractalParameters.KifsOffsetZ);
         int deIter = Math.Max(2, FractalParameters.KifsIterations);
         int maxSteps = Math.Max(16, FractalParameters.KifsMaxSteps);
+        double omega = SphereRelax.Clamp(FractalParameters.MarchRelaxation);   // #1335 over-relaxed sphere tracing
         double eps = Math.Max(1e-5, FractalParameters.KifsEpsilon);
 
         // KIFS attractor inscribed in a unit-ish cube; with offsets at 1
@@ -219,7 +220,7 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
                 FovScale = fovScale, Aspect = aspect,
                 PanU = panU, PanV = panV,
                 LightX = light[0], LightY = light[1], LightZ = light[2],
-                MaxSteps = maxSteps, Eps = eps,
+                MaxSteps = maxSteps, Eps = eps, Relaxation = omega,   // #1335
                 CullRadiusSq = 0.0,
                 InSetColor = ColorMap.InSetColor,
                 // S3 (#567) — thin-lens DOF on the GPU kernel. Inactive (aperture 0 /
@@ -320,13 +321,18 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
                 bool hit = false;
                 int hitStep = 0;
 
+                var relax = new SphereRelax(omega);   // #1335 over-relaxed sphere tracing
                 for (int step = 0; step < maxSteps; step++)
                 {
                     double dist = DispatchDE(fold, px, py, pz, scale, ox, oy, oz, deIter);
+                    // #1335: the step here overshot (spheres apart): back up, march plainly.
+                    double back = relax.BackOff(dist);
+                    if (back > 0) { px -= rdx * back; py -= rdy * back; pz -= rdz * back; tTotal -= back; continue; }
                     if (dist < eps) { hit = true; hitStep = step; break; }
                     if (tTotal > sceneRadius) break;
-                    px += rdx * dist; py += rdy * dist; pz += rdz * dist;
-                    tTotal += dist;
+                    double rs = relax.Step(dist);   // #1335
+                    px += rdx * rs; py += rdy * rs; pz += rdz * rs;
+                    tTotal += rs;
                 }
 
                 int idx = rowBase + x;

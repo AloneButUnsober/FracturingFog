@@ -1060,6 +1060,14 @@ Mandelbulb is rendered via DISTANCE ESTIMATION + RAYMARCHING:
   BulbIterations      : int     DE inner iters. Default 8.
   BulbMaxSteps        : int     Raymarch step cap. Default 96.
   BulbEpsilon         : double  Hit threshold. Default 0.0015.
+  MarchRelaxation     : double  Over-relaxed sphere tracing ω, shared by
+                                the DE raymarchers (not User Bulb,
+                                Coquaternion or Kleinian). 1 = plain
+                                march (default);
+                                1.3–1.6 = fewer steps, same surface,
+                                5–35% faster; gradient themes (which
+                                colour by step count) shift hue.
+                                --param key.
   BulbCameraDistance  : double  Camera-origin distance. Default 3.
   BulbCameraTheta/Phi : double  Camera spherical angles.
   BulbLightTheta/Phi  : double  Light spherical angles.

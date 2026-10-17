@@ -266,6 +266,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _kleinRotAxisZ = _p.KleinianRotationAxisZ;
         _kleinColorSrc = _p.KleinianColorSource;
         _kleinDeFactor = _p.KleinianDeFactor;
+        _marchRelax = _p.MarchRelaxation;   // #1335
         _kleinIter = _p.KleinianIterations;
         _kleinScale = _p.KleinianSphereScale;
         _kleinCameraTheta = _p.KleinianCameraTheta;
@@ -2508,6 +2509,12 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     // #881 — sphere-trace under-relaxation factor (crisper cusps; 1 = full step).
     private double _kleinDeFactor;
     public double KleinianDeFactor { get => _kleinDeFactor; set { Set(ref _kleinDeFactor, Clamp(value, 0.1, 1.0)); _p.KleinianDeFactor = _kleinDeFactor; Fire(); } }
+
+    // #1335 — over-relaxed sphere tracing ω for the DE raymarchers (1 = plain march).
+    private double _marchRelax;
+    public double MarchRelaxation { get => _marchRelax; set { Set(ref _marchRelax, Clamp(value, 1.0, 2.0)); _p.MarchRelaxation = _marchRelax; Fire(); } }
+    /// <summary>#1335 — the active family's primary march honours <see cref="MarchRelaxation"/>.</summary>
+    public bool UsesMarchRelaxation => FracturingFog.Models.MarchRelaxationCapabilities.UsesMarchRelaxation(FractalType);
 
     // #876 — Kleinian custom inversion-sphere editor.
     /// <summary>Editable rows backing <c>FractalParameters.KleinianCustomSpheres</c>.</summary>

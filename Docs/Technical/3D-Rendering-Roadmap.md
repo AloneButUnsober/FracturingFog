@@ -69,6 +69,38 @@ all of it into one 8-bit beauty buffer and discards the rest.
 Everything below **reuses** this — no item requires a mesh scene graph, a
 modeler, or a simulation solver.
 
+### Over-relaxed sphere tracing (#1335)
+
+`FractalParameters.MarchRelaxation` sets ω (default 1 = the plain march, byte-identical). The shared `SphereRelax` (`Engine/Calculators/Gpu/SphereRelax.cs`) drives the primary march on the CPU and in the ILGPU kernels in lockstep.
+
+**How it steps.** Each step is ω × the DE, following Keinert et al. 2014, with one change. When consecutive spheres stop overlapping, the ray backs up to the plain step and halves ω − 1, and safe steps grow ω back. Keinert's rule (plain for the rest of the ray after the first failure) gained nothing on FF's DEs: the first step from the camera nearly always overshoots.
+
+**Families.** It applies to Mandelbulb, Mandelbox, KIFS (with the Menger and Sierpinski kernels), quaternion Julia and quaternion Mandelbrot, Bicomplex and Julibrot (`MarchRelaxationCapabilities`). Three are left out:
+- **User Bulb:** its DE is numeric.
+- **Coquaternion:** at ω 1.5 it lost 5% of its hits.
+- **Kleinian:** up to 45% slower when zoomed; it has `KleinianDeFactor` instead.
+
+**What it gains.** Over-relaxation only pays where the DE underestimates the distance. On an exact SDF it saves nothing; on half the SDF it saves 20–25% of the steps.
+
+CPU frame time at 480×360, relaxed as a percentage of plain:
+
+| Family | ω 1.3 | ω 1.6 |
+|---|---:|---:|
+| Mandelbox | 80–83% | 67–73% |
+| Quaternion Julia | 77–85% | 76–80% |
+| Bicomplex | 80–91% | 78–90% |
+| Quaternion Mandelbrot | 92–94% | 80–90% |
+| Julibrot | 88–93% | 91–94% |
+| Mandelbulb | 91–102% | 100–105% |
+| KIFS | 96–104% | 103–110% |
+
+**What it changes.**
+- **Shape:** the same, to within a hit epsilon or two.
+- **Silhouettes:** a few pixels (≤ 0.1%) can land on a neighbouring surface, because these DEs are not strict distance bounds.
+- **Colour:** the surface colour index is the step count plus the depth, so gradient themes change hue.
+
+Tests: `S1335OverRelaxedMarchTests`.
+
 ## 3. Roadmap slices (ranked by fit × payoff)
 
 Ranking reflects *architectural fit* (reuses what exists, twinnable, headless)

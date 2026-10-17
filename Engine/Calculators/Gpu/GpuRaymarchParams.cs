@@ -61,6 +61,9 @@ public struct GpuRaymarchParams
     public int MaxSteps;
     /// <summary>Hit threshold — when DE returns less than this, treat as surface.</summary>
     public double Eps;
+    /// <summary>#1335 — over-relaxation ω of the primary march (SphereRelax);
+    /// 1 (or 0, an unset struct) = the plain march.</summary>
+    public double Relaxation;
     /// <summary>Sphere clip radius squared. Rays missing this sphere short-circuit
     /// to <see cref="InSetColor"/> with no DE evaluation. 0 = no clip.</summary>
     public double CullRadiusSq;

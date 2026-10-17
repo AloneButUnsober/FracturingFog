@@ -42,6 +42,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using FracturingFog.Calculators.Gpu;
 
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
@@ -112,6 +113,7 @@ public sealed class DualOrbitVolumeCalculator : IFractalCalculator, IStereoEyeCa
         double bail = Math.Max(4.0, fp.DualOrbitVolumeBailout);
         double bailout2 = bail * bail;
         int maxSteps = Math.Max(16, fp.DualOrbitVolumeMaxSteps);
+        double omega = SphereRelax.Clamp(fp.MarchRelaxation);   // #1335 over-relaxed sphere tracing
         double eps = Math.Max(1e-5, fp.DualOrbitVolumeEpsilon);
         var colorSource = fp.DualOrbitVolumeColor;
         double halfH = Math.Max(0.05, fp.DualOrbitVolumeHalfHeight);
@@ -239,12 +241,16 @@ public sealed class DualOrbitVolumeCalculator : IFractalCalculator, IStereoEyeCa
                           out float hr, out float hg, out float hb)
             {
                 double sx = ox, sy2 = oy, sz = oz, tT = 0; bool sHit = false; int sStep = 0;
+                var relax = new SphereRelax(omega);   // #1335 over-relaxed sphere tracing
                 for (int step = 0; step < maxSteps; step++)
                 {
                     double dist = VolumeDE(sx, sy2, sz, sxCenter, sy, bailout2, deIter, halfH);
+                    // #1335: the step here overshot (spheres apart): back up, march plainly.
+                    double back = relax.BackOff(dist * StepFactor);
+                    if (back > 0) { sx -= dx * back; sy2 -= dy * back; sz -= dz * back; tT -= back; continue; }
                     if (dist < eps) { sHit = true; sStep = step; break; }
                     if (tT > sceneRadius) break;
-                    dist *= StepFactor; sx += dx * dist; sy2 += dy * dist; sz += dz * dist; tT += dist;
+                    dist = relax.Step(dist * StepFactor); sx += dx * dist; sy2 += dy * dist; sz += dz * dist; tT += dist;   // #1335
                 }
                 if (!sHit)
                 {
@@ -287,12 +293,16 @@ public sealed class DualOrbitVolumeCalculator : IFractalCalculator, IStereoEyeCa
                 bool hit = false;
                 int hitStep = 0;
 
+                var relax = new SphereRelax(omega);   // #1335 over-relaxed sphere tracing
                 for (int step = 0; step < maxSteps; step++)
                 {
                     double dist = VolumeDE(px, py, pz, sxCenter, sy, bailout2, deIter, halfH);
+                    // #1335: the step here overshot (spheres apart): back up, march plainly.
+                    double back = relax.BackOff(dist * StepFactor);
+                    if (back > 0) { px -= rdx * back; py -= rdy * back; pz -= rdz * back; tTotal -= back; continue; }
                     if (dist < eps) { hit = true; hitStep = step; break; }
                     if (tTotal > sceneRadius) break;
-                    dist *= StepFactor;
+                    dist = relax.Step(dist * StepFactor);   // #1335
                     px += rdx * dist; py += rdy * dist; pz += rdz * dist;
                     tTotal += dist;
                 }
