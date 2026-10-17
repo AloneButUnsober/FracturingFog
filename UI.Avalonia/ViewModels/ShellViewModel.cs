@@ -309,6 +309,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // Initial sync so the checkbox reflects the host default at startup.
         FloatingMenu.SetGpuComputeState(Main.UseGpuCompute);
 
+        // #1333 — dynamic preview resolution: interaction only, so no re-render.
+        FloatingMenu.DynamicPreviewResolutionToggled += (_, v) => Main.RenderHost.DynamicPreviewResolution = v;
+        FloatingMenu.InteractiveTargetMsChanged += (_, v) => Main.RenderHost.InteractiveTargetMs = v;
+        FloatingMenu.SetDynamicResolutionState(Main.RenderHost.DynamicPreviewResolution, Main.RenderHost.InteractiveTargetMs);
+
         // Status-bar visibility flag the MainWindow status row binds to.
         FloatingMenu.StatusBarToggled  += (_, v) => IsStatusBarVisible = v;
 

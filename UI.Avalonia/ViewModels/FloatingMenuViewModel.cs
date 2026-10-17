@@ -1043,6 +1043,44 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         }
     }
 
+    // #1333 — dynamic preview resolution: the first interactive stage's size
+    // follows the measured frame cost (host DynamicResolution). The shell pushes
+    // the host's values in at startup and forwards edits.
+    private bool _dynamicPreviewResolution = true;
+    public bool DynamicPreviewResolution
+    {
+        get => _dynamicPreviewResolution;
+        set
+        {
+            if (_dynamicPreviewResolution == value) return;
+            this.RaiseAndSetIfChanged(ref _dynamicPreviewResolution, value);
+            DynamicPreviewResolutionToggled?.Invoke(this, value);
+        }
+    }
+
+    private double _interactiveTargetMs = 33.0;
+    /// <summary>#1333 — interactive frame-time target, ms (4 … 500).</summary>
+    public double InteractiveTargetMs
+    {
+        get => _interactiveTargetMs;
+        set
+        {
+            double v = Math.Clamp(value, 4.0, 500.0);
+            if (_interactiveTargetMs == v) return;
+            this.RaiseAndSetIfChanged(ref _interactiveTargetMs, v);
+            InteractiveTargetMsChanged?.Invoke(this, v);
+        }
+    }
+
+    /// <summary>#1333 — load the host's values without re-firing the events.</summary>
+    public void SetDynamicResolutionState(bool enabled, double targetMs)
+    {
+        _dynamicPreviewResolution = enabled;
+        _interactiveTargetMs = targetMs;
+        this.RaisePropertyChanged(nameof(DynamicPreviewResolution));
+        this.RaisePropertyChanged(nameof(InteractiveTargetMs));
+    }
+
     /// <summary>Push the host's actual GPU-compute state onto the checkbox
     /// without re-firing <see cref="UseGpuComputeToggled"/>. Called by the
     /// shell after a toggle (read-back), on startup (initial sync), and from
@@ -1177,6 +1215,8 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public event EventHandler<bool>? BypassDdBlaToggled;
     public event EventHandler<bool>? BypassRebasingToggled;
     public event EventHandler<bool>? UseGpuComputeToggled;
+    public event EventHandler<bool>? DynamicPreviewResolutionToggled;   // #1333
+    public event EventHandler<double>? InteractiveTargetMsChanged;      // #1333
 
     public event EventHandler<IterLockEventArgs>? IterLockChanged;
 }

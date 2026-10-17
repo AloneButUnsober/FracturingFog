@@ -27,7 +27,8 @@ shipped.
 |-------|--------|-------|
 | P0 — Buffer pooling                     | ✅ shipped | `PostPassBufferPool` + `GpuBufferPool` |
 | P1 — Raymarch micro-opts                | ✅ shipped | `1L<<k` + `ExpNegSmall` Padé |
-| P2 — Low-res interactive preview        | ✅ shipped | `LowResPreview` helper + 7 calculators wired |
+| P2 — Low-res interactive preview        | ✅ shipped | `LowResPreview` helper + 7 calculators wired. **But the host never sets the flag during a drag** (only User Bulb's `TriggerFast`), so true-3D drags render full-res: #1373 |
+| #1333 — Dynamic preview resolution       | ✅ shipped | The 2D progressive ladder's first stage (Mandelbrot, relief, Julibrot pair) is chosen from measured frame cost by `Engine/Rendering/DynamicResolution.cs`: half-octave levels ⅛ … full, a fixed + per-pixel cost model, a 0.75 / 1.25 × target dead band. Default target 33 ms (Control Center → Advanced). GT 710 1080p: Relief 3D drag p90 87 → 33 ms at ⅛; a shallow CPU drag shows a finer first preview (12.5% of the pixels, was 6.25%) still inside the target. `--dynresprobe` |
 | P3 — `IDistanceEstimator` struct generic| ✅ shipped | Generic `Shade<TDe>` + 5 concrete DE structs (Mandelbulb, Mandelbox, QJulia, QMandel, Bicomplex, Kleinian). KIFS + UserBulb still route through `DelegateDeAdapter`; complex closures, lower-priority follow-up |
 | P4 — Adaptive volumetric LOD            | ✅ shipped | `VolumeStepsFalloff` knob (default 0.5) |
 | P5 — Bloom blur SIMD                    | ✅ shipped | Vector&lt;float&gt; horizontal + vertical interior pass; scalar edge tails |
