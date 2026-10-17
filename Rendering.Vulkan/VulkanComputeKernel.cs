@@ -162,6 +162,16 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
 
     private readonly VulkanContext _ctx;
     private readonly bool _ownsContext;
+    // #1341 — the driver's compiled pipelines, kept on disk ("compute" cache file).
+    private readonly VulkanPipelineCache _pipelineCache;
+
+    /// <summary>#1341 — the pipeline cache's load result (tests / probes).</summary>
+    public VulkanPipelineCache PipelineCache => _pipelineCache;
+
+    /// <summary>#1341 — pipelines this kernel created, and the time spent in
+    /// vkCreateComputePipelines for them (the driver's SPIR-V → GPU compile).</summary>
+    public int PipelinesCreated { get; private set; }
+    public double PipelineCreateMs { get; private set; }
     private readonly Vk _vk;
     private readonly Device _device;
 
@@ -332,6 +342,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         };
         Check(_vk.CreateCommandPool(_device, in cpci, null, out _cmdPool), "vkCreateCommandPool");
         _timer = new VulkanStageTimer(ctx);
+        _pipelineCache = new VulkanPipelineCache(ctx, "compute");   // #1341
     }
 
     /// <summary>Human-readable backend label for the System Info dialog.</summary>
@@ -1410,7 +1421,11 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
                 Layout = prog.Layout,
             };
             Pipeline created;
-            Check(_vk.CreateComputePipelines(_device, default, 1, &cpci, null, &created), "vkCreateComputePipelines");
+            long tPipe = System.Diagnostics.Stopwatch.GetTimestamp();
+            Check(_vk.CreateComputePipelines(_device, _pipelineCache.Handle, 1, &cpci, null, &created), "vkCreateComputePipelines");
+            PipelineCreateMs += System.Diagnostics.Stopwatch.GetElapsedTime(tPipe).TotalMilliseconds;   // #1341
+            PipelinesCreated++;
+            _pipelineCache.Save();   // #1341 — write-through: a process can end without disposing the kernel
             prog.Pipeline = created;
         }
         finally { SilkMarshal.Free(entryPtr); }
@@ -1785,6 +1800,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         FreeBuffer(ref _orbitOut); // #607
         FreeBuffer(ref _buddhaParams); FreeBuffer(ref _buddhaHits);   // #838
         if (_cmdPool.Handle != 0) { _vk.DestroyCommandPool(_device, _cmdPool, null); _cmdPool = default; }
+        _pipelineCache.Dispose();   // #1341 — saves
         _timer.Dispose();   // #1329
         if (_ownsContext) { try { _ctx.Dispose(); } catch { } }
     }

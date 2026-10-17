@@ -51,6 +51,10 @@ public sealed unsafe class VulkanContext : IDisposable
     public uint DeviceId { get; private set; }
     public uint DriverVersion { get; private set; }
 
+    /// <summary>#1341 — VkPhysicalDeviceProperties.pipelineCacheUUID: a pipeline
+    /// cache blob is only valid for the device + driver that report this UUID.</summary>
+    public byte[] PipelineCacheUuid { get; private set; } = new byte[16];
+
     /// <summary>#1339 — the compute work-group limits (the tuner skips shapes past them).</summary>
     public uint MaxComputeWorkGroupInvocations { get; private set; } = 128;
     public uint MaxComputeWorkGroupSizeX { get; private set; } = 128;
@@ -171,6 +175,9 @@ public sealed unsafe class VulkanContext : IDisposable
         MaxComputeWorkGroupInvocations = bestProps.Limits.MaxComputeWorkGroupInvocations;
         MaxComputeWorkGroupSizeX = bestProps.Limits.MaxComputeWorkGroupSize[0];
         MaxComputeWorkGroupSizeY = bestProps.Limits.MaxComputeWorkGroupSize[1];
+        var uuid = new byte[16];
+        for (int i = 0; i < 16; i++) uuid[i] = bestProps.PipelineCacheUuid[i];
+        PipelineCacheUuid = uuid;
         PickedName = bestName;
         PickedType = bestType;
 

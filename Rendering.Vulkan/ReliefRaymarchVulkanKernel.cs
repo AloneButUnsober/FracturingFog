@@ -96,6 +96,16 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
 
     private readonly VulkanContext _ctx;
     private readonly bool _ownsContext;
+    // #1341 — the driver's compiled pipelines, kept on disk ("relief" cache file).
+    private readonly VulkanPipelineCache _pipelineCache;
+
+    /// <summary>#1341 — the pipeline cache's load result (tests / probes).</summary>
+    public VulkanPipelineCache PipelineCache => _pipelineCache;
+
+    /// <summary>#1341 — pipelines this kernel created, and the time spent in
+    /// vkCreateComputePipelines for them (the driver's SPIR-V → GPU compile).</summary>
+    public int PipelinesCreated { get; private set; }
+    public double PipelineCreateMs { get; private set; }
     private readonly Vk _vk;
     private readonly Device _device;
     private CommandPool _cmdPool;
@@ -134,6 +144,7 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         _ownsContext = ownsContext;
         _vk = ctx.Vk;
         _device = ctx.Device;
+        _pipelineCache = new VulkanPipelineCache(ctx, "relief");   // #1341, before the pipelines are built
 
         var cpci = new CommandPoolCreateInfo
         {
@@ -451,7 +462,11 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
                 Layout = _layout,
             };
             Pipeline created;
-            Check(_vk.CreateComputePipelines(_device, default, 1, &cpci, null, &created), "vkCreateComputePipelines");
+            long tPipe = System.Diagnostics.Stopwatch.GetTimestamp();
+            Check(_vk.CreateComputePipelines(_device, _pipelineCache.Handle, 1, &cpci, null, &created), "vkCreateComputePipelines");
+            PipelineCreateMs += System.Diagnostics.Stopwatch.GetElapsedTime(tPipe).TotalMilliseconds;   // #1341
+            PipelinesCreated++;
+            _pipelineCache.Save();   // #1341 — write-through: a process can end without disposing the kernel
             return (mod, created);
         }
         finally { SilkMarshal.Free(entryPtr); }
@@ -625,6 +640,7 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         FreeBuffer(ref _color);
         FreeBuffer(ref _aov);
         if (_cmdPool.Handle != 0) { _vk.DestroyCommandPool(_device, _cmdPool, null); _cmdPool = default; }
+        _pipelineCache.Dispose();   // #1341 — saves
         if (_ownsContext) { try { _ctx.Dispose(); } catch { } }
     }
 }
