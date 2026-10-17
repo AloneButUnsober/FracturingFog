@@ -622,6 +622,11 @@ namespace FracturingFog.Cli
                 gaps.Add($"{snap.Fractal} has no equation (the render is blank) — write or load one first");
             if (!string.IsNullOrWhiteSpace(snap.LiveAnimationName))
                 gaps.Add($"Live animation '{snap.LiveAnimationName}' (a still shows one moment of it; for a video choose it under --animation)");
+            // #1344 / #1380 — batch and export run the quality's sub-pixel AA, but its
+            // temporal AA (samples added while the view is still) is live-only.
+            if (FracturingFog.Models.QualityPreset.FromName(snap.QualityName) is { TaaMaxSamples: > 1 } q)
+                gaps.Add($"{q.Name} quality's temporal anti-aliasing ({q.TaaMaxSamples} samples while the view is still) is live-only: "
+                         + "the batch renders its sub-pixel anti-aliasing but not the temporal samples (#1380)");
             return gaps;
         }
 

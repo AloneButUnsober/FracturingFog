@@ -44,6 +44,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--dynresprobe")
             return DynamicResolutionProbe.Run();
 
+        // #1344 — adaptive anti-aliasing against full supersampling: samples, time, error.
+        if (args.Length > 0 && args[0] == "--adaptiveaaprobe")
+            return AdaptiveAaProbe.Run(args);
+
         // #1341 — persisted Vulkan pipeline cache: cold / warm / off / corrupt / foreign sessions.
         if (args.Length > 0 && (args[0] == "--vkpipelinecacheprobe" || args[0] == "--vkpipelinecacheprobe-session"))
             return VulkanPipelineCacheProbe.Run(args);

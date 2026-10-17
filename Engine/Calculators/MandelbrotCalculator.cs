@@ -1038,13 +1038,68 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         _panState = null;                  // #1330: set again by a complete lattice frame
         _panFrameComplete = false;
         LastFrameComputedPixels = 0;
+        PrepareMask();   // #1344
         CalculateInternal(ct);
         ApplyOutOfBoundsSurround(ct);
         LastGpuRoute = ResolveGpuRoute();   // #1173-M
-        if (_panFrameComplete && !ct.IsCancellationRequested) _panState = CapturePanState();
+        // #1330 / #1344 — a masked frame's buffers are partly another frame's: never a pan source.
+        if (_panFrameComplete && _mask == null && !ct.IsCancellationRequested) _panState = CapturePanState();
     }
 
     private bool _panFrameComplete;   // #1330: this frame was a complete lattice deep CPU frame
+
+    // ── #1344 — pixel mask (adaptive anti-aliasing) ─────────────────────────
+    //
+    // A supersample pass only needs the pixels whose neighbourhood changes.
+    // With a mask set, the CPU iteration loops skip unmarked pixels: a scalar
+    // loop pixel by pixel, a SIMD batch only when none of its lanes is marked (a
+    // batch couples its lanes' SA skip, BLA steps and glitch decision, so a
+    // marked pixel's result is exactly what a full frame computes), and a row with
+    // no marked pixel altogether. Unmarked pixels keep whatever their buffers
+    // held. The GPU paths compute every pixel, as without a mask.
+
+    /// <summary>#1344 — when non-null (Width × Height bytes), the CPU paths of the
+    /// next <see cref="Calculate"/> compute only the pixels whose byte is non-zero;
+    /// the others keep their buffer contents. A marked pixel gets exactly the bytes
+    /// a frame without the mask gives it. Ignored when its length doesn't match.</summary>
+    public byte[]? PixelMask { get; set; }
+
+    private byte[]? _mask;      // PixelMask for this frame (null = every pixel)
+    private bool[]? _maskRows;  // rows with at least one marked pixel
+
+    private void PrepareMask()
+    {
+        var m = PixelMask;
+        int w = Width, h = Height;
+        if (m == null || m.Length != w * h) { _mask = null; _maskRows = null; return; }
+        var rows = new bool[h];
+        for (int y = 0; y < h; y++)
+        {
+            int rb = y * w;
+            for (int x = 0; x < w; x++) if (m[rb + x] != 0) { rows[y] = true; break; }
+        }
+        _mask = m;
+        _maskRows = rows;
+    }
+
+    /// <summary>#1344 — compute pixel <paramref name="idx"/> this frame.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool Marked(int idx) => _mask == null || _mask[idx] != 0;
+
+    /// <summary>#1344 — compute any pixel of row <paramref name="y"/> this frame.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool RowMarked(int y) => _maskRows == null || _maskRows[y];
+
+    /// <summary>#1344 — any lane of the batch at columns [x, x + lanes) that lies in
+    /// [xBegin, xEnd) and the frame is marked.</summary>
+    private bool BatchMarked(int rowBase, int x, int lanes, int xBegin, int xEnd)
+    {
+        var m = _mask;
+        if (m == null) return true;
+        int from = Math.Max(Math.Max(x, xBegin), 0), to = Math.Min(Math.Min(x + lanes, xEnd), Width);
+        for (int c = from; c < to; c++) if (m[rowBase + c] != 0) return true;
+        return false;
+    }
 
     // #615 Phase 1 — paint the flat "out-of-bounds" surround: the large disk
     // seen when zoomed out, where the pixel's plane coordinate already lies
@@ -1422,6 +1477,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
             {
                 int idx = rowBase + x;
                 if (IterationBuffer[idx] < maxIt) continue;     // exterior pixel
+                if (!Marked(idx)) continue;                      // #1344
 
                 double cx = cx0 + (x - w * 0.5) * scale;
                 DetectCycle(cx, cy, settle, maxPeriod,
@@ -1673,6 +1729,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         ParallelForRows(0, Height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
+            if (!RowMarked(y)) return;   // #1344
             int rowMaxIt = useTileCap ? perRow![y] : maxIt;
             if (rowMaxIt <= 0) rowMaxIt = maxIt;
             double cy = CenterY + (y - Height * 0.5) * scale;
@@ -1727,6 +1784,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         // ── Vectorized lanes ──────────────────────────────────────────────────
         for (; x + VecLen <= Width; x += VecLen)
         {
+            if (_mask != null && !BatchMarked(rowBase, x, VecLen, 0, Width)) continue;   // #1344
             for (int k = 0; k < VecLen; k++)
                 cxBuf[k] = centerX + ((x + k) - Width * 0.5) * scale;
             var cx = new Vector<double>(cxBuf);
@@ -1872,6 +1930,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         // ── Scalar tail ───────────────────────────────────────────────────────
         for (; x < Width; x++)
         {
+            if (!Marked(rowBase + x)) continue;   // #1344
             double cx2 = centerX + (x - Width * 0.5) * scale;
             ComputePixelSP(cx2, cy, maxIter, rowBase + x, colorMap);
         }
@@ -2109,6 +2168,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
             int rowBase = y * Width;
             for (int x = 0; x < Width; x++)
             {
+                if (!Marked(rowBase + x)) continue;   // #1344
                 double cx = CenterX + (x - Width * 0.5) * scale;
                 ComputePixelOrbit(cx, cy, rowMaxIt, rowBase + x, colorMap, wantInterior);
             }
@@ -2335,6 +2395,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
             int rowBase = y * Width;
             for (int x = 0; x < Width; x++)
             {
+                if (!Marked(rowBase + x)) continue;   // #1344
                 double dcX = (offX + x - halfW) * scale;
                 double cx = CenterX + dcX;
                 ComputePixelOrbitPerturbation(dcX, dcY, cx, cy, rowMaxIt, rowBase + x, colorMap, wantInterior);
@@ -2628,6 +2689,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
                 else if (pr.Dx < 0) xEnd = -pr.Dx;
                 else return;   // this row is all reused
             }
+            if (!RowMarked(y)) return;   // #1344
             Interlocked.Add(ref computed, xEnd - xBegin);
             int rowMaxIt = useTileCap ? perRow![y] : maxIt;
             if (rowMaxIt <= 0) rowMaxIt = maxIt;
@@ -4326,6 +4388,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
 
         for (int x = xBegin; x < xEnd; x++)   // #1330: per pixel, so a range is exact
         {
+            if (!Marked(rowBase + x)) continue;   // #1344
             double colOffsetX = offX + x - halfW;
             double dcX = colOffsetX * scale + _refRecycleDx;  // Wave 3.5 recycle shift (0 on normal path)
             int idx = rowBase + x;
@@ -4422,6 +4485,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         x = lattice ? xBegin - LatticeMod(offX + xBegin, 4) : xBegin;
         for (; lattice ? x < xEnd : x + 4 <= xEnd; x += 4)
         {
+            if (_mask != null && !BatchMarked(rowBase, x, 4, xBegin, xEnd)) continue;   // #1344
             // Wave 3.5 — + _refRecycleDx applies the frame's centre shift so dc
             // is measured from the cached reference centre (zero unless the
             // orbit was recycled; `+ 0.0` keeps the common path bit-identical).
@@ -4649,6 +4713,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         // Scalar tail (0–3 remaining pixels)
         for (; x < xEnd; x++)
         {
+            if (!Marked(rowBase + x)) continue;   // #1344
             double colOffsetX = offX + x - halfW;
             double dcX = colOffsetX * scale + _refRecycleDx;  // Wave 3.5 recycle shift (0 on normal path)
             int idx = rowBase + x;
@@ -4764,6 +4829,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         x = lattice ? xBegin - LatticeMod(offX + xBegin, 8) : xBegin;
         for (; lattice ? x < xEnd : x + 8 <= xEnd; x += 8)
         {
+            if (_mask != null && !BatchMarked(rowBase, x, 8, xBegin, xEnd)) continue;   // #1344
             // Wave 3.5 — + _refRecycleDx: see ComputeRowPT4 (centre-shift for
             // orbit recycling; zero on the common path → bit-identical).
             double dcR0 = (offX + x     - halfW) * scale + _refRecycleDx;
@@ -4978,6 +5044,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         // Scalar tail (0–7 remaining pixels)
         for (; x < xEnd; x++)
         {
+            if (!Marked(rowBase + x)) continue;   // #1344
             double colOffsetX = offX + x - halfW;
             double dcX = colOffsetX * scale + _refRecycleDx;  // Wave 3.5 recycle shift (0 on normal path)
             int idx = rowBase + x;

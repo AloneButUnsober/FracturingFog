@@ -222,6 +222,30 @@
             </StackPanel>
         </Border>
 
+        <!-- #1344 — Mandelbrot: adaptive anti-aliasing (with the quality preset's sub-pixel AA). -->
+        <Border IsVisible="{Binding IsMandelbrot}"
+                BorderBrush="#404040" BorderThickness="0,1,0,0"
+                Padding="0,8,0,0" Margin="0,4,0,0">
+            <StackPanel Spacing="6">
+                <TextBlock Text="Anti-aliasing" FontWeight="Bold" Foreground="#FFCC00" />
+                <CheckBox Content="Adaptive anti-aliasing"
+                          IsChecked="{Binding AdaptiveAa, Mode=TwoWay}"
+                          ToolTip.Tip="With the High / Ultra / Extreme quality presets (2×2 or 4×4 sub-pixel samples), take the extra samples only where the image changes: along the set boundary and wherever a pixel differs from a neighbour by more than the threshold. Flat bands and the set's interior keep the single sample. Much faster on views with large smooth areas; also used by image export and --batch." />
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto" IsEnabled="{Binding AdaptiveAa}">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Edge threshold:" VerticalAlignment="Center"
+                               ToolTip.Tip="Colour difference to a neighbour (0–255 per channel) that marks a pixel for supersampling. Lower samples more pixels (closer to full anti-aliasing, slower)." />
+                    <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                   Minimum="0" Maximum="255" Increment="1" FormatString="F0"
+                                   Value="{Binding AdaptiveAaThreshold, Mode=TwoWay}" Margin="0,2" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Stop tolerance:" VerticalAlignment="Center"
+                               ToolTip.Tip="A marked pixel stops taking samples once its average colour is settled to within this many levels (after 4 samples; matters with 4×4). 0 = every marked pixel takes every sample." />
+                    <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                   Minimum="0" Maximum="64" Increment="0.5" FormatString="F1"
+                                   Value="{Binding AdaptiveAaTolerance, Mode=TwoWay}" Margin="0,2" />
+                </Grid>
+            </StackPanel>
+        </Border>
+
         <!-- Interior alpha (2D) — issue #96. Mandelbrot canonical path. -->
         <Border IsVisible="{Binding IsInteriorAlphaApplicable}"
                 BorderBrush="#404040" BorderThickness="0,1,0,0"

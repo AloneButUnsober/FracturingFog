@@ -555,6 +555,13 @@ namespace FracturingFog.Imaging
             {
                 alt.Calculate(token);
                 token.ThrowIfCancellationRequested();
+                // #1344 — the quality preset's sub-pixel AA, as the live view runs it
+                // (export and --batch used to skip it).
+                if (alt.SupportsZoomPan && req.Quality != null)
+                {
+                    FracturingFog.Rendering.Supersampling.AccumulateAlt(alt, req.Quality.AaSamples, token);
+                    token.ThrowIfCancellationRequested();
+                }
                 // #1009 — hand the 3D raymarcher's published depth to the caller
                 // (Fake stereo). Null for every other family.
                 if (depthCapture != null)
@@ -652,6 +659,15 @@ namespace FracturingFog.Imaging
                     if (raised > 0) rescueReport.RaisedTo = raised;
                 }
                 token.ThrowIfCancellationRequested();
+                // #1344 — the quality preset's sub-pixel AA (adaptive with
+                // FractalParameters.AdaptiveAa), after the rescue as in the live view.
+                // A cluster tile (sub-rect) masks from its own pixels only.
+                if (req.Quality != null)
+                {
+                    FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(calc, req.Quality.AaSamples,
+                        FracturingFog.Rendering.AdaptiveAa.From(req.FractalParameters), token);
+                    token.ThrowIfCancellationRequested();
+                }
                 // Adaptive HE — Mandelbrot-only, applied on the calculator so
                 // it recolours from the iteration histogram before read.
                 if (req.HistogramEq > 0)
