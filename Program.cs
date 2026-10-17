@@ -44,6 +44,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--dynresprobe")
             return DynamicResolutionProbe.Run();
 
+        // #1341 — persisted Vulkan pipeline cache: cold / warm / off / corrupt / foreign sessions.
+        if (args.Length > 0 && (args[0] == "--vkpipelinecacheprobe" || args[0] == "--vkpipelinecacheprobe-session"))
+            return VulkanPipelineCacheProbe.Run(args);
+
         // #1339 — tuned compute thread-group shapes, D3D11 + Vulkan: timings, tuned == 8x8.
         if (args.Length > 0 && args[0] == "--gpugroupshapeprobe")
             return GpuGroupShapeProbe.Run();
