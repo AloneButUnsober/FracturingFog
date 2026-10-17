@@ -313,6 +313,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         FloatingMenu.DynamicPreviewResolutionToggled += (_, v) => Main.RenderHost.DynamicPreviewResolution = v;
         FloatingMenu.InteractiveTargetMsChanged += (_, v) => Main.RenderHost.InteractiveTargetMs = v;
         FloatingMenu.SetDynamicResolutionState(Main.RenderHost.DynamicPreviewResolution, Main.RenderHost.InteractiveTargetMs);
+        FloatingMenu.TemporalLighting3DToggled += (_, v) => Main.RenderHost.TemporalLighting3D = v;   // #1337
+        FloatingMenu.SetTemporalLighting3DState(Main.RenderHost.TemporalLighting3D);
 
         // Status-bar visibility flag the MainWindow status row binds to.
         FloatingMenu.StatusBarToggled  += (_, v) => IsStatusBarVisible = v;

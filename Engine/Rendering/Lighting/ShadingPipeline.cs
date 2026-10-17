@@ -396,7 +396,16 @@ public static class ShadingPipeline
         // ShadowLightMask: bit n enables shadow tracing for Light n+1.
         // ShadowSteps = 0 disables entirely (legacy behaviour).
         double sh1 = 1.0, sh2 = 1.0, sh3 = 1.0;
-        if (fx.ShadowSteps > 0 && hasDe)
+        // #1337 — the live 3D view's temporal reuse: on an interactive frame this
+        // pixel's AO and shadows may come from the previous frame (TemporalLighting).
+        // No cache installed (batch, export, the settle frame's reuse) = the full
+        // computation below, unchanged.
+        double ao = 1.0;
+        var temporal = hasDe && pixelIndex >= 0 && (fx.ShadowSteps > 0 || fx.AoSamples > 0)
+            ? TemporalLighting.Current : null;
+        if (temporal is { Active: false }) temporal = null;
+        bool reused = temporal != null && temporal.TryReuse(pixelIndex, in i, out ao, out sh1, out sh2, out sh3);
+        if (fx.ShadowSteps > 0 && hasDe && !reused)
         {
             double bias = i.Epsilon * 4.0;
             double ox = i.Px + i.Nx * bias;
@@ -482,8 +491,7 @@ public static class ShadingPipeline
                 ref sssR, ref sssG, ref sssB);
         }
 
-        double ao = 1.0;
-        if (fx.AoSamples > 0 && hasDe)
+        if (fx.AoSamples > 0 && hasDe && !reused)
         {
             double occl = 0, w = 0;
             for (int k = 1; k <= fx.AoSamples; k++)
@@ -499,6 +507,7 @@ public static class ShadingPipeline
             }
             ao = Math.Clamp(1.0 - fx.AoStrength * (occl / Math.Max(w, 1)), 0, 1);
         }
+        if (temporal != null && !reused) temporal.Store(pixelIndex, in i, ao, sh1, sh2, sh3);   // #1337
 
         // S1/S7 (#389) — float lighting-component capture. Every component is
         // resolved by here (diffuse/specular byte-scale, AO/shadow 0..1); record

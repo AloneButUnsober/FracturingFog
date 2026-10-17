@@ -264,6 +264,13 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, 
         // ray exited the budget while still ~100 units from origin.
         // (Definition hoisted above the GPU dispatch; left here as marker.)
 
+        // #1337 — the live view's temporal AO / shadow reuse (no-op without a cache).
+        TemporalLighting.BeginFrame(width, height,
+            new PinholeCamera(camX, camY, camZ, right[0], right[1], right[2], up[0], up[1], up[2],
+                fwd[0], fwd[1], fwd[2], fovScale, aspect, panU, panV),
+            TemporalLighting.SceneKey(in fx, eps, in deStruct),
+            usable: !thinLensDof && eyeOffset == 0 && fx.DebugAov == AovView.Beauty);
+
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             if (ct.IsCancellationRequested) return;

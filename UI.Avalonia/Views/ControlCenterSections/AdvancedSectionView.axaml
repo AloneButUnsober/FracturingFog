@@ -35,6 +35,9 @@
                                    ToolTip.Tip="Frame-time target for interactive previews, in milliseconds (33 = about 30 frames a second, 16 = about 60)" />
                     <TextBlock Grid.Column="3" Classes="fxLabel" Text="ms" VerticalAlignment="Center" Margin="4,0,0,0" />
                 </Grid>
+                <CheckBox Content="Temporal 3D lighting"
+                          IsChecked="{Binding Menu.TemporalLighting3D, Mode=TwoWay}"
+                          ToolTip.Tip="3D views (CPU raymarch): while you move the camera, each pixel recomputes its ambient occlusion and soft shadows only every 4th frame and otherwise reuses them from where its surface point was in the previous frame, so moving frames render faster but their AO / shadows are approximate. When the view settles, one more frame is rendered in full — exactly as with this off. Batch and export are unaffected." />
             </StackPanel>
         </Border>
 

@@ -384,6 +384,13 @@ namespace FracturingFog.Render
         /// <summary>#1333 — the interactive frame-time target, ms (4 … 500).</summary>
         double InteractiveTargetMs { get; set; }
 
+        /// <summary>#1337 — temporal reuse of the 3D views' AO and soft shadows while
+        /// the view moves (CPU raymarch path): a pixel recomputes them every 4th frame
+        /// and otherwise takes them from where its surface point was in the previous
+        /// frame. Interactive frames are approximate; when the view settles one more
+        /// frame is rendered in full, exactly as with this off. Default off.</summary>
+        bool TemporalLighting3D { get; set; }
+
         /// <summary>Diagnostic toggle — bypass BLA + SA on the legacy
         /// MandelbrotCalculator HP path. Used to isolate deep-zoom precision
         /// regressions: when on, perturbation runs raw (no BLA skip, no SA

@@ -384,13 +384,17 @@ namespace FracturingFog.Rendering
             // a job built later (a newer trigger, or a later progressive/TAA
             // stage of the same trigger) always outranks an earlier one.
             public readonly long Seq;
+            // #1337 — the temporal-lighting settle frame: a 3D frame rendered in full
+            // (no AO / shadow reuse) after an approximate interactive one.
+            public readonly bool Settle;
 
             public FrameJob(CancellationToken token, MandelbrotCalculator calc,
                 IFractalCalculator? altCalc, Stopwatch sw,
                 uint[]? staleBuf, int staleW, int staleH, int calcW, int calcH,
                 long seq,
-                int taaSampleIndex = 0, int progressiveStage = 0)
+                int taaSampleIndex = 0, int progressiveStage = 0, bool settle = false)
             {
+                Settle = settle;
                 Token = token; Calc = calc; AltCalc = altCalc; Sw = sw;
                 StaleBuf = staleBuf; StaleW = staleW; StaleH = staleH;
                 CalcW = calcW; CalcH = calcH;
@@ -739,6 +743,44 @@ namespace FracturingFog.Rendering
         {
             get => DynamicResolution.Enabled;
             set => DynamicResolution.Enabled = value;
+        }
+
+        /// <summary>#1337 — see <see cref="IFractalRenderHost.TemporalLighting3D"/>.</summary>
+        public bool TemporalLighting3D { get; set; }
+
+        // #1337 — the live 3D view's AO / shadow history (the ALT 3D calculators), and
+        // one per relief preview level (each level renders at its own size). Owned by
+        // the calc thread. _temporalSettleSeq = the frame that reused, so owes a settle.
+        private readonly FracturingFog.Rendering.Lighting.TemporalLighting _temporal3D = new();
+        private readonly System.Collections.Generic.Dictionary<int, FracturingFog.Rendering.Lighting.TemporalLighting> _temporalRelief = new();
+        private long _temporalSettleSeq = -1;
+
+        /// <summary>#1337 — the 3D frame's temporal-lighting cache, armed for this
+        /// render (null = shade in full). A settle job reuses nothing.</summary>
+        private FracturingFog.Rendering.Lighting.TemporalLighting? Temporal3DFor(in FrameJob job)
+        {
+            if (!TemporalLighting3D || !ViewState.Is3D) { _temporal3D.Clear(); return null; }
+            _temporal3D.BeginRender();
+            _temporal3D.Settle = job.Settle;
+            return _temporal3D;
+        }
+
+        /// <summary>#1337 — after an approximate 3D frame reaches the screen, queue one
+        /// full frame of the same view (superseded by any new Trigger, like a TAA
+        /// continuation).</summary>
+        private void TryScheduleTemporalSettle(in FrameJob job)
+        {
+            if (job.AltCalc == null || job.Settle || job.Token.IsCancellationRequested) return;
+            if (Interlocked.Read(ref _temporalSettleSeq) != job.Seq) return;
+            var next = new FrameJob(job.Token, job.Calc, job.AltCalc, Stopwatch.StartNew(),
+                staleBuf: null, staleW: 0, staleH: 0, calcW: job.CalcW, calcH: job.CalcH,
+                seq: Interlocked.Increment(ref _uploadSeq), settle: true);
+            try { _calcQueue.Add(next); }
+            catch (InvalidOperationException) { /* CompleteAdding during Dispose */ }
+            catch (ArgumentException)
+            {
+                // Bounded(1) full: a newer job is already queued, and it supersedes us.
+            }
         }
 
         /// <summary>#1333 — the interactive frame-time target, ms.</summary>
@@ -2055,7 +2097,14 @@ namespace FracturingFog.Rendering
 
             try
             {
-                if (useAlt) altCalc!.Calculate(token);
+                if (useAlt)
+                {
+                    // #1337 — temporal AO / shadow reuse on the live 3D view (opt-in).
+                    var temporal = Temporal3DFor(in job);
+                    using (FracturingFog.Rendering.Lighting.TemporalLighting.Use(temporal))
+                        altCalc!.Calculate(token);
+                    Interlocked.Exchange(ref _temporalSettleSeq, temporal?.LastFrameApproximate == true ? job.Seq : -1);
+                }
                 else
                 {
                     CalculateMainFrame(calc, token);   // #1330: pan pixel reuse on deep CPU frames
@@ -2850,9 +2899,23 @@ namespace FracturingFog.Rendering
                             if (_reliefPreviewScratch == null || _reliefPreviewScratch.Length < pn)
                                 _reliefPreviewScratch = new uint[pn];
                             if (prp.Relief2DRaymarch)
-                                FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
-                                    previewSrc, phs, pw, ph, pw, ph, prp, _reliefPreviewScratch, out _,
-                                    displayResField: ReliefFieldIsDisplayRes);
+                            {
+                                // #1337 — temporal shadow reuse between consecutive previews of
+                                // this level (the preview keeps full-quality shadows, #155). The
+                                // final relief frame never takes the cache: it stays exact.
+                                FracturingFog.Rendering.Lighting.TemporalLighting? rt = null;
+                                if (TemporalLighting3D)
+                                {
+                                    if (!_temporalRelief.TryGetValue(level, out rt))
+                                        _temporalRelief[level] = rt = new FracturingFog.Rendering.Lighting.TemporalLighting();
+                                    rt.BeginRender();
+                                }
+                                else _temporalRelief.Clear();
+                                using (FracturingFog.Rendering.Lighting.TemporalLighting.Use(rt))
+                                    FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
+                                        previewSrc, phs, pw, ph, pw, ph, prp, _reliefPreviewScratch, out _,
+                                        displayResField: ReliefFieldIsDisplayRes);
+                            }
                             else
                                 FracturingFog.Rendering.Lighting.HeightfieldRelief2D.Apply(
                                     previewSrc, _reliefPreviewScratch, phs, pw, ph, prp);
@@ -3178,6 +3241,7 @@ namespace FracturingFog.Rendering
                 // queue means a fresh Trigger from input simply replaces our
                 // continuation before it runs. Skipped for alt calcs (TAA
                 // currently restricted to the canonical Mandelbrot path).
+                if (useAlt) TryScheduleTemporalSettle(in job);   // #1337
                 if (!useAlt)
                 {
                     bool more = TryScheduleNextTaaSample(in job, out bool held);
