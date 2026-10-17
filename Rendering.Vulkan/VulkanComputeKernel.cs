@@ -157,6 +157,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         public PipelineLayout Layout;
         public Pipeline Pipeline;
         public int BindingCount;      // 5 (base), 6 (colour) or 7 (orbit colour + trap, #1173-J)
+        public GpuGroupShape Shape = GpuGroupShape.Default;   // #1339 — what it was compiled with
     }
 
     private readonly VulkanContext _ctx;
@@ -217,7 +218,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     private Program BaseProgram(int kind)
     {
         if (_baseByKind.TryGetValue(kind, out var p)) return p;
-        p = BuildProgram(MandelbrotKernelSource.ForVariant(MandelbrotKernelSource.BuildBase(), kind), MandelbrotKernelSource.EntryPoint,
+        p = BuildShapedProgram(GpuGroupShapes.SlotEscape, MandelbrotKernelSource.ForVariant(MandelbrotKernelSource.BuildBase(), kind), MandelbrotKernelSource.EntryPoint,
             0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2);
         _baseByKind[kind] = p;
         return p;
@@ -229,6 +230,82 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         p = _colorBuilders[id](kind);
         _colorByIdKind[(id, kind)] = p;
         return p;
+    }
+
+    // ── #1339: thread-group shapes ───────────────────────────────────────────
+    // Each slot (GpuGroupShapes) runs in one shape, tuned on its first use in the
+    // process (or read from the store). Programs record the shape they were built
+    // with and dispatch by it; a slot's programs are dropped when its shape changes.
+    private readonly Dictionary<string, GpuGroupShape> _shapes = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _shapesResolved = new(StringComparer.Ordinal);
+
+    private GpuGroupShape Shape(string slot) => _shapes.TryGetValue(slot, out var s) ? s : GpuGroupShape.Default;
+
+    /// <summary>#1339 — the thread-group shape <paramref name="slot"/> dispatches in
+    /// (the default until the slot's first frame resolves it).</summary>
+    public GpuGroupShape GroupShape(string slot) { using var sync = Sync(); return Shape(slot); }
+
+    /// <summary>#1339 — "vulkan|adapter|vendor:device|driver", the store's device key.</summary>
+    public string GroupShapeDeviceKey =>
+        $"vulkan|{_ctx.PickedName}|{_ctx.VendorId:X4}:{_ctx.DeviceId:X4}|{_ctx.DriverVersion:X8}";
+
+    /// <summary>#1339 — the candidates this device can run.</summary>
+    private List<GpuGroupShape> ShapeCandidates()
+    {
+        var list = new List<GpuGroupShape>();
+        foreach (var c in GpuGroupShapes.Candidates)
+            if (c.Threads <= _ctx.MaxComputeWorkGroupInvocations && c.X <= _ctx.MaxComputeWorkGroupSizeX && c.Y <= _ctx.MaxComputeWorkGroupSizeY)
+                list.Add(c);
+        return list;
+    }
+
+    private static string SlotSource(string slot) => slot switch
+    {
+        GpuGroupShapes.SlotEscape => MandelbrotKernelSource.BuildBase(),
+        GpuGroupShapes.SlotPerturb => MandelbrotKernelSource.BuildPerturb(),
+        _ => MandelbrotKernelSource.BuildPerturbFloatExp(),
+    };
+
+    /// <summary>Resolve <paramref name="slot"/>'s shape once per kernel: the
+    /// override, the stored winner, or a tuning run (each candidate timed on the
+    /// slot's representative frame through this kernel's own entry point).</summary>
+    private void EnsureShape(string slot)
+    {
+        if (!_shapesResolved.Add(slot)) return;   // marked first: the tuning frames re-enter here
+        var winner = GpuGroupShapes.Resolve(GroupShapeDeviceKey, slot,
+            GpuGroupShapes.SourceHash("vulkan-spv\n" + SlotSource(slot)), ShapeCandidates(),
+            shape => { SetShape(slot, shape); return GpuGroupShapes.Representative(this, slot); });
+        SetShape(slot, winner);
+    }
+
+    private void SetShape(string slot, GpuGroupShape shape)
+    {
+        if (Shape(slot) == shape) return;
+        _shapes[slot] = shape;
+        DropPrograms(slot);
+    }
+
+    private void DropPrograms(string slot)
+    {
+        switch (slot)
+        {
+            case GpuGroupShapes.SlotEscape:
+                foreach (var p in _baseByKind.Values) DestroyProgram(p);
+                _baseByKind.Clear();
+                foreach (var p in _colorByIdKind.Values) DestroyProgram(p);
+                _colorByIdKind.Clear();
+                break;
+            case GpuGroupShapes.SlotPerturb:
+                if (_perturb != null) { DestroyProgram(_perturb); _perturb = null; }
+                if (_perturbSa != null) { DestroyProgram(_perturbSa); _perturbSa = null; }
+                foreach (var p in _perturbOrbit.Values) DestroyProgram(p);
+                _perturbOrbit.Clear();
+                break;
+            default:
+                if (_perturbFx != null) { DestroyProgram(_perturbFx); _perturbFx = null; }
+                if (_perturbF32 != null) { DestroyProgram(_perturbF32); _perturbF32 = null; }
+                break;
+        }
     }
 
     /// <param name="ctx">A context whose logical device is already created.</param>
@@ -337,13 +414,13 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             if (palette is IGpuOrbitPalette o && o.OrbitInputs != GpuOrbitInputs.None)
             {
                 string hlsl = MandelbrotKernelSource.BuildColorOrbit(palette.HlslPrelude, palette.HlslPaletteBody, (int)o.OrbitInputs);
-                build = kind => BuildProgram(MandelbrotKernelSource.ForVariant(hlsl, kind), MandelbrotKernelSource.EntryPoint,
+                build = kind => BuildShapedProgram(GpuGroupShapes.SlotEscape, MandelbrotKernelSource.ForVariant(hlsl, kind), MandelbrotKernelSource.EntryPoint,
                     0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)ColorBinding, (uint)TrapBinding);
             }
             else
             {
                 string hlsl = MandelbrotKernelSource.BuildColor(palette.HlslPrelude, palette.HlslPaletteBody);
-                build = kind => BuildProgram(MandelbrotKernelSource.ForVariant(hlsl, kind), MandelbrotKernelSource.EntryPoint,
+                build = kind => BuildShapedProgram(GpuGroupShapes.SlotEscape, MandelbrotKernelSource.ForVariant(hlsl, kind), MandelbrotKernelSource.EntryPoint,
                     0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)ColorBinding);
             }
             _colorByIdKind[(id, 0)] = build(0);   // compile now so a bad theme falls back here
@@ -422,6 +499,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         if (_disposed) throw new ObjectDisposedException(nameof(VulkanComputeKernel));
         if (width <= 0 || height <= 0) return;
 
+        EnsureShape(GpuGroupShapes.SlotEscape);   // #1339 (may tune: before this frame starts)
         bool useColor = colorDst != null && HasGpuPalette;
         // #1342: kind + periodicity variant (VariantKey; 0 = plain Mandelbrot).
         int variant = MandelbrotKernelSource.VariantKey((int)kind, GpuPeriodicity.Mode);
@@ -531,7 +609,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             FlushPending(cmd);
             _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, prog.Pipeline);
             _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, prog.Layout, 0, 1, &set, 0, null);
-            _vk.CmdDispatch(cmd, (uint)((width + 7) / 8), (uint)((height + 7) / 8), 1);
+            _vk.CmdDispatch(cmd, prog.Shape.GroupsX(width), prog.Shape.GroupsY(height), 1);
             _timer.Mark(cmd, GpuStage.Dispatch);
             bool trapOut = useColor && trapDst != null && prog.BindingCount == 7;
             RecordReadback(cmd, Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)),
@@ -598,12 +676,13 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         if (refZr.Length < refLen || refZi.Length < refLen)
             throw new ArgumentException("reference-orbit arrays shorter than refLen");
 
+        EnsureShape(GpuGroupShapes.SlotPerturb);   // #1339
         long t0 = Stopwatch.GetTimestamp();
         BeginFrameTiming();   // #1329
         int n = width * height;
         EnsureBuffers(width, height, iterDst);          // shares iter/smooth/finalZD at _buf[2..4]
         EnsurePerturbBuffers(refLen);
-        _perturb ??= BuildBandProgram(MandelbrotKernelSource.BuildPerturb(), MandelbrotKernelSource.PerturbEntryPoint,
+        _perturb ??= BuildBandProgram(GpuGroupShapes.SlotPerturb, MandelbrotKernelSource.BuildPerturb(), MandelbrotKernelSource.PerturbEntryPoint,
             0u, (uint)TShift, (uint)TShift + 1, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2);
 
         var blob = new PerturbParamsBlob
@@ -657,6 +736,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         int n = width * height;
         if (orbitDst.Length < n * stride) throw new ArgumentException("orbitDst shorter than width * height * stride", nameof(orbitDst));
 
+        EnsureShape(GpuGroupShapes.SlotPerturb);   // #1339
         long t0 = Stopwatch.GetTimestamp();
         BeginFrameTiming();   // #1329
         EnsureBuffers(width, height, iterDst);
@@ -668,7 +748,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         }
         if (!_perturbOrbit.TryGetValue(orbitMask, out var prog))
         {
-            prog = BuildBandProgram(MandelbrotKernelSource.BuildPerturbOrbit(orbitMask), MandelbrotKernelSource.PerturbOrbitEntryPoint,
+            prog = BuildBandProgram(GpuGroupShapes.SlotPerturb, MandelbrotKernelSource.BuildPerturbOrbit(orbitMask), MandelbrotKernelSource.PerturbOrbitEntryPoint,
                 0u, (uint)TShift, (uint)TShift + 1, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)UShift + 3);
             _perturbOrbit[orbitMask] = prog;
         }
@@ -734,6 +814,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             throw new ArgumentException("reference-orbit arrays shorter than refLen");
         if (!(scale > 0) || !double.IsFinite(scale)) throw new ArgumentOutOfRangeException(nameof(scale));
 
+        EnsureShape(GpuGroupShapes.SlotPerturbFp32);   // #1339
         long t0 = Stopwatch.GetTimestamp();
         BeginFrameTiming();   // #1329
         int n = width * height;
@@ -750,9 +831,9 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         bool f32 = e >= MandelbrotKernelSource.PerturbF32MinScaleExponent && !ForceFloatExpEntry;
         LastPerturbFloatExpWasScaledF32 = f32;
         Program prog = f32
-            ? _perturbF32 ??= BuildBandProgram(MandelbrotKernelSource.BuildPerturbFloatExp(), MandelbrotKernelSource.PerturbF32EntryPoint,
+            ? _perturbF32 ??= BuildBandProgram(GpuGroupShapes.SlotPerturbFp32, MandelbrotKernelSource.BuildPerturbFloatExp(), MandelbrotKernelSource.PerturbF32EntryPoint,
                 0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2)
-            : _perturbFx ??= BuildBandProgram(MandelbrotKernelSource.BuildPerturbFloatExp(), MandelbrotKernelSource.PerturbFxEntryPoint,
+            : _perturbFx ??= BuildBandProgram(GpuGroupShapes.SlotPerturbFp32, MandelbrotKernelSource.BuildPerturbFloatExp(), MandelbrotKernelSource.PerturbFxEntryPoint,
                 0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2);
 
         var z = new float[refLen * 2];
@@ -812,7 +893,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         int blobBytes, BandParams writeParams, ReadOnlySpan<Buffer> ssbos, ReadOnlySpan<uint> ssboBindings,
         params ReadOnlySpan<ReadbackSpan> outs)
     {
-        int bandRows = MandelbrotKernelSource.PerturbBandRows(width, height, maxIter);
+        int bandRows = MandelbrotKernelSource.PerturbBandRows(width, height, maxIter, prog.Shape.Y);
         int bandCount = (height + bandRows - 1) / bandRows;
         ulong align = _ctx.MinUniformBufferOffsetAlignment;
         ulong stride = ((ulong)blobBytes + align - 1) / align * align;
@@ -893,7 +974,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
                 _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, prog.Pipeline);
                 uint offset = (uint)((ulong)band * stride);
                 _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, prog.Layout, 0, 1, &set, 1, &offset);
-                _vk.CmdDispatch(cmd, (uint)((width + 7) / 8), (uint)((rows + 7) / 8), 1);
+                _vk.CmdDispatch(cmd, prog.Shape.GroupsX(width), prog.Shape.GroupsY(rows), 1);
                 _timer.Mark(cmd, GpuStage.Dispatch);
                 if (last) RecordReadback(cmd, outs);
                 Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
@@ -1142,6 +1223,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         if (coeffLen < refLen + 1)
             throw new ArgumentException("SA coefficient arrays shorter than refLen+1");
 
+        EnsureShape(GpuGroupShapes.SlotPerturb);   // #1339
         long t0 = Stopwatch.GetTimestamp();
         BeginFrameTiming();   // #1329
         int n = width * height;
@@ -1149,7 +1231,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         EnsurePerturbBuffers(refLen);
         EnsurePerturbSaBuffers(coeffLen);
         EnsureBlaBuffer(blaLevels > 0 ? blaCoeffs!.Length : 5);
-        _perturbSa ??= BuildBandProgram(MandelbrotKernelSource.BuildPerturbSA(), MandelbrotKernelSource.PerturbSaEntryPoint,
+        _perturbSa ??= BuildBandProgram(GpuGroupShapes.SlotPerturb, MandelbrotKernelSource.BuildPerturbSA(), MandelbrotKernelSource.PerturbSaEntryPoint,
             0u, (uint)TShift, (uint)TShift + 1,
             (uint)TShift + 2, (uint)TShift + 3, (uint)TShift + 4, (uint)TShift + 5,
             (uint)TShift + 6, (uint)TShift + 7, (uint)TShift + 8, (uint)TShift + 9,
@@ -1261,22 +1343,28 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     // selects the HLSL entry point (CSMain for base/colour, CSPerturb for the
     // perturbation variant).
     private Program BuildProgram(string hlsl, string entry, params uint[] bindingNums)
-        => BuildProgram(hlsl, entry, false, bindingNums);
+        => BuildProgram(hlsl, entry, false, bindingNums, GpuGroupShape.Default);
+
+    /// <summary>#1339 — a 2D kernel in <paramref name="slot"/>'s current group shape.</summary>
+    private Program BuildShapedProgram(string slot, string hlsl, string entry, params uint[] bindingNums)
+        => BuildProgram(hlsl, entry, false, bindingNums, Shape(slot));
 
     /// <summary>#1334 — a banded program (<see cref="DispatchBands"/>): its UBO at
-    /// binding 0 is UNIFORM_BUFFER_DYNAMIC, one slice per band.</summary>
-    private Program BuildBandProgram(string hlsl, string entry, params uint[] bindingNums)
-        => BuildProgram(hlsl, entry, true, bindingNums);
+    /// binding 0 is UNIFORM_BUFFER_DYNAMIC, one slice per band. #1339: in
+    /// <paramref name="slot"/>'s current group shape.</summary>
+    private Program BuildBandProgram(string slot, string hlsl, string entry, params uint[] bindingNums)
+        => BuildProgram(hlsl, entry, true, bindingNums, Shape(slot));
 
-    private Program BuildProgram(string hlsl, string entry, bool dynamicUbo, uint[] bindingNums)
+    private Program BuildProgram(string hlsl, string entry, bool dynamicUbo, uint[] bindingNums, GpuGroupShape shape)
     {
+        if (shape != GpuGroupShape.Default) hlsl = shape.Apply(hlsl);   // #1339
         byte[] spirv = DxcCompiler.CompileToSpirv(
             hlsl, entry, "cs_6_0",
             "-fvk-b-shift", BShift.ToString(), "0",
             "-fvk-t-shift", TShift.ToString(), "0",
             "-fvk-u-shift", UShift.ToString(), "0");
 
-        var prog = new Program { BindingCount = bindingNums.Length };
+        var prog = new Program { BindingCount = bindingNums.Length, Shape = shape };
         fixed (byte* code = spirv)
         {
             var smci = new ShaderModuleCreateInfo

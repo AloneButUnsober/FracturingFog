@@ -43,7 +43,8 @@ namespace FracturingFog
                 try
                 {
                     using var k = new MandelbrotGpuKernel(device, context, new object());
-                    failures += Backend("D3D11", k, typeof(MandelbrotGpuKernel).Assembly);
+                    failures += Backend("D3D11", k, typeof(MandelbrotGpuKernel).Assembly,
+                        () => k.GroupShape(GpuGroupShapes.SlotPerturb).Y);
                 }
                 finally { context.Dispose(); device.Dispose(); }
             }
@@ -51,13 +52,14 @@ namespace FracturingFog
             VulkanComputeKernel? vk = null;
             try { vk = VulkanComputeKernel.TryCreateWithOwnContext(); } catch { }
             if (vk == null) Console.WriteLine("gpubandprobe Vulkan SKIP: no device.");
-            else using (vk) failures += Backend("Vulkan", vk, typeof(VulkanComputeKernel).Assembly);
+            else using (vk) failures += Backend("Vulkan", vk, typeof(VulkanComputeKernel).Assembly,
+                () => vk.GroupShape(GpuGroupShapes.SlotPerturb).Y);
 
             Console.WriteLine(failures == 0 ? "gpubandprobe OK" : $"gpubandprobe FAIL: {failures} frame(s) differ");
             return failures == 0 ? 0 : 1;
         }
 
-        private static int Backend(string name, IGpuKernel k, Assembly asm)
+        private static int Backend(string name, IGpuKernel k, Assembly asm, Func<int> groupRows)
         {
             if (!k.SupportsPerturbation) { Console.WriteLine($"gpubandprobe {name} SKIP: no fp64 perturbation."); return 0; }
             Console.WriteLine($"gpubandprobe {name}: {(k as VulkanComputeKernel)?.Description ?? name}");
@@ -75,7 +77,8 @@ namespace FracturingFog
                 void Render(Frame f) => k.RunPerturb(W, H, scale, maxIter, 512.0 * 512.0, -W / 2, -H / 2, zr, zi, len,
                     f.It, f.Sm, f.Zr, f.Zi, f.Dr, f.Di);
 
-                int rows = (int)bandRows.Invoke(null, new object[] { W, H, maxIter })!;
+                Render(banded);   // resolves the perturbation shape (#1339) before the band count is read
+                int rows = (int)bandRows.Invoke(null, new object[] { W, H, maxIter, groupRows() })!;
                 int bands = (H + rows - 1) / rows;
                 double best = double.MaxValue; GpuStageTimes? gpu = null;
                 for (int r = 0; r < 3; r++)
@@ -87,7 +90,7 @@ namespace FracturingFog
                 }
 
                 int saved = (int)overrideField.GetValue(null)!;
-                overrideField.SetValue(null, H);
+                overrideField.SetValue(null, 1 << 20);   // rounds down to whole groups, then clamps to the height: one band
                 try { Render(whole); }
                 finally { overrideField.SetValue(null, saved); }
 

@@ -230,7 +230,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     private ID3D11ComputeShader BaseShader(int kind)
     {
         if (_csBaseByKind.TryGetValue(kind, out var cs)) return cs;
-        cs = CompileShader(MandelbrotKernelSource.ForVariant(BuildHlsl(null, null, emitColor: false), kind), label: $"base.k{kind}");
+        cs = CompileShaped(GpuGroupShapes.SlotEscape, MandelbrotKernelSource.ForVariant(BuildHlsl(null, null, emitColor: false), kind), label: $"base.k{kind}");
         _csBaseByKind[kind] = cs;
         return cs;
     }
@@ -239,7 +239,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     private ID3D11ComputeShader PaletteShader(string id, int kind)
     {
         if (_csByPaletteKind.TryGetValue((id, kind), out var cs)) return cs;
-        cs = CompileShader(MandelbrotKernelSource.ForVariant(_hlslByPaletteId[id], kind), label: $"{id}.k{kind}");
+        cs = CompileShaped(GpuGroupShapes.SlotEscape, MandelbrotKernelSource.ForVariant(_hlslByPaletteId[id], kind), label: $"{id}.k{kind}");
         _csByPaletteKind[(id, kind)] = cs;
         return cs;
     }
@@ -254,6 +254,99 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
             profile: "cs_5_0",
             sourceName: $"MandelbrotGpuKernel.{label}.hlsl",
             errorLabel: $"MandelbrotGpuKernel ({label})");
+
+    // ── #1339: thread-group shapes ───────────────────────────────────────────
+    // Each slot (GpuGroupShapes) runs in one shape, tuned on its first use in the
+    // process (or read from the store). The cached shaders of a slot are always in
+    // its current shape: they are dropped whenever the shape changes.
+    private readonly Dictionary<string, GpuGroupShape> _shapes = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _shapesResolved = new(StringComparer.Ordinal);
+    private string? _shapeDeviceKey;
+
+    private GpuGroupShape Shape(string slot) => _shapes.TryGetValue(slot, out var s) ? s : GpuGroupShape.Default;
+
+    /// <summary>#1339 — the thread-group shape <paramref name="slot"/> dispatches in
+    /// (the default until the slot's first frame resolves it).</summary>
+    public GpuGroupShape GroupShape(string slot) { lock (_d3dGate) return Shape(slot); }
+
+    /// <summary>A 2D kernel compiled in <paramref name="slot"/>'s current shape.</summary>
+    private ID3D11ComputeShader CompileShaped(string slot, string hlsl, string label, string entryPoint = "CSMain")
+    {
+        var shape = Shape(slot);
+        return shape == GpuGroupShape.Default
+            ? CompileShader(hlsl, label, entryPoint)
+            : CompileShader(shape.Apply(hlsl), $"{label}.g{shape}", entryPoint);
+    }
+
+    /// <summary>#1339 — "d3d11|adapter|vendor:device:revision|driver", the store's device key.</summary>
+    public string GroupShapeDeviceKey => _shapeDeviceKey ??= DeviceKey();
+
+    private string DeviceKey()
+    {
+        try
+        {
+            using var dxgi = _device.QueryInterface<Vortice.DXGI.IDXGIDevice>();
+            using var adapter = dxgi.GetAdapter();
+            var d = adapter.Description;
+            string driver = adapter.CheckInterfaceSupport<Vortice.DXGI.IDXGIDevice>(out long umd) ? umd.ToString("X16") : "?";
+            return $"d3d11|{d.Description}|{d.VendorId:X4}:{d.DeviceId:X4}:{d.Revision:X2}|{driver}";
+        }
+        catch { return "d3d11|unknown adapter"; }
+    }
+
+    private static string SlotSource(string slot) => slot switch
+    {
+        GpuGroupShapes.SlotEscape => BuildHlsl(null, null, emitColor: false),
+        GpuGroupShapes.SlotPerturb => MandelbrotKernelSource.BuildPerturb(),
+        _ => MandelbrotKernelSource.BuildPerturbFloatExp(),
+    };
+
+    /// <summary>Resolve <paramref name="slot"/>'s shape once per kernel: the
+    /// override, the stored winner, or a tuning run (each candidate timed on the
+    /// slot's representative frame through this kernel's own entry point).
+    /// Called with the D3D gate held.</summary>
+    private void EnsureShape(string slot)
+    {
+        if (!_shapesResolved.Add(slot)) return;   // marked first: the tuning frames re-enter here
+        var winner = GpuGroupShapes.Resolve(GroupShapeDeviceKey, slot,
+            GpuGroupShapes.SourceHash("fxc-cs_5_0\n" + SlotSource(slot)), GpuGroupShapes.Candidates,
+            shape => { SetShape(slot, shape); return GpuGroupShapes.Representative(this, slot); });
+        SetShape(slot, winner);
+    }
+
+    private void SetShape(string slot, GpuGroupShape shape)
+    {
+        if (Shape(slot) == shape) return;
+        _shapes[slot] = shape;
+        DropShaders(slot);
+    }
+
+    private void DropShaders(string slot)
+    {
+        switch (slot)
+        {
+            case GpuGroupShapes.SlotEscape:
+                foreach (var cs in _csBaseByKind.Values) { try { cs.Dispose(); } catch { } }
+                _csBaseByKind.Clear();
+                foreach (var cs in _csByPaletteKind.Values) { try { cs.Dispose(); } catch { } }
+                _csByPaletteKind.Clear();
+                break;
+            case GpuGroupShapes.SlotPerturb:
+                try { _csPerturb?.Dispose(); } catch { }
+                _csPerturb = null;
+                try { _csPerturbSa?.Dispose(); } catch { }
+                _csPerturbSa = null;
+                foreach (var cs in _csPerturbOrbit.Values) { try { cs.Dispose(); } catch { } }
+                _csPerturbOrbit.Clear();
+                break;
+            default:
+                try { _csPerturbFx?.Dispose(); } catch { }
+                _csPerturbFx = null;
+                try { _csPerturbF32?.Dispose(); } catch { }
+                _csPerturbF32 = null;
+                break;
+        }
+    }
 
     /// <summary>Phase 2: switch active GPU palette. Pass null to clear; the
     /// next Run-with-color call will use the base shader (CPU palette path).
@@ -754,6 +847,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
 
         lock (_d3dGate)
         {
+            EnsureShape(GpuGroupShapes.SlotEscape);   // #1339 (may tune: before this frame starts)
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             BeginFrameTiming();   // #1329
             EnsureOutputBuffers(width, height, iterDst);
@@ -831,8 +925,9 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             if (useTrap) _ctx.CSSetUnorderedAccessView(4, _trapUav);
             if (usePerRow) _ctx.CSSetShaderResource(0, _perRowSrv);
 
-            uint groupsX = (uint)((width + 7) / 8);
-            uint groupsY = (uint)((height + 7) / 8);
+            var shape = Shape(GpuGroupShapes.SlotEscape);   // #1339
+            uint groupsX = shape.GroupsX(width);
+            uint groupsY = shape.GroupsY(height);
             _timer.Begin();
             _ctx.Dispatch(groupsX, groupsY, 1);
             _timer.Mark(GpuStage.Dispatch);
@@ -964,12 +1059,13 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
 
         lock (_d3dGate)
         {
+            EnsureShape(GpuGroupShapes.SlotPerturb);   // #1339
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             BeginFrameTiming();   // #1329
             EnsureOutputBuffers(width, height, iterDst);      // shares iter/smooth/finalZD UAVs (u0/u1/u2)
             EnsurePerturbParamsBuffer();
             EnsureRefOrbitBuffers(refLen);
-            _csPerturb ??= CompileShader(MandelbrotKernelSource.BuildPerturb(), label: "perturb",
+            _csPerturb ??= CompileShaped(GpuGroupShapes.SlotPerturb, MandelbrotKernelSource.BuildPerturb(), label: "perturb",
                 entryPoint: MandelbrotKernelSource.PerturbEntryPoint);
 
             // Upload the reference orbit (Hi-limb doubles) into t0/t1.
@@ -986,7 +1082,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             _ctx.CSSetShader(_csPerturb);
             _ctx.CSSetShaderResource(0, _refZrSrv);   // t0
             _ctx.CSSetShaderResource(1, _refZiSrv);   // t1
-            DispatchPerturbBands(width, height, maxIter, srvCount: 2, "", rowBase =>
+            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturb), width, height, maxIter, srvCount: 2, "", rowBase =>
             {
                 p.RowBase = rowBase;
                 var mapped = _ctx.Map(_perturbParamsBuf!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
@@ -1041,6 +1137,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
 
         lock (_d3dGate)
         {
+            EnsureShape(GpuGroupShapes.SlotPerturbFp32);   // #1339
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             BeginFrameTiming();   // #1329
             EnsureOutputBuffers(width, height, iterDst);
@@ -1081,9 +1178,9 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             bool f32 = e >= MandelbrotKernelSource.PerturbF32MinScaleExponent;
             LastPerturbFloatExpWasScaledF32 = f32;
             var cs = f32
-                ? _csPerturbF32 ??= CompileShader(MandelbrotKernelSource.BuildPerturbFloatExp(), label: "perturb-f32",
+                ? _csPerturbF32 ??= CompileShaped(GpuGroupShapes.SlotPerturbFp32, MandelbrotKernelSource.BuildPerturbFloatExp(), label: "perturb-f32",
                     entryPoint: MandelbrotKernelSource.PerturbF32EntryPoint)
-                : _csPerturbFx ??= CompileShader(MandelbrotKernelSource.BuildPerturbFloatExp(), label: "perturb-fx",
+                : _csPerturbFx ??= CompileShaped(GpuGroupShapes.SlotPerturbFp32, MandelbrotKernelSource.BuildPerturbFloatExp(), label: "perturb-fx",
                     entryPoint: MandelbrotKernelSource.PerturbFxEntryPoint);
             var p = new PerturbFxParams
             {
@@ -1093,7 +1190,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             };
             _ctx.CSSetShader(cs);
             _ctx.CSSetShaderResource(0, _fxRefZSrv);   // t0
-            DispatchPerturbBands(width, height, maxIter, srvCount: 1, f32 ? " (scaled fp32)" : " (float-exp)", rowBase =>
+            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturbFp32), width, height, maxIter, srvCount: 1, f32 ? " (scaled fp32)" : " (float-exp)", rowBase =>
             {
                 p.RowBase = rowBase;
                 var mapped = _ctx.Map(_fxParamsBuf!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
@@ -1287,6 +1384,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
 
         lock (_d3dGate)
         {
+            EnsureShape(GpuGroupShapes.SlotPerturb);   // #1339
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             BeginFrameTiming();   // #1329
             EnsureOutputBuffers(width, height, iterDst);
@@ -1295,7 +1393,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             EnsureOrbitOutBuffers(n * stride);
             if (!_csPerturbOrbit.TryGetValue(orbitMask, out var cs))
             {
-                cs = CompileShader(MandelbrotKernelSource.BuildPerturbOrbit(orbitMask), label: $"perturb-orbit-{orbitMask:X}",
+                cs = CompileShaped(GpuGroupShapes.SlotPerturb, MandelbrotKernelSource.BuildPerturbOrbit(orbitMask), label: $"perturb-orbit-{orbitMask:X}",
                     entryPoint: MandelbrotKernelSource.PerturbOrbitEntryPoint);
                 _csPerturbOrbit[orbitMask] = cs;
             }
@@ -1316,7 +1414,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             _ctx.CSSetShaderResource(0, _refZrSrv);
             _ctx.CSSetShaderResource(1, _refZiSrv);
             _ctx.CSSetUnorderedAccessView(3, _orbitOutUav);   // u3 (unbound by DispatchPerturbBands)
-            DispatchPerturbBands(width, height, maxIter, srvCount: 2, " (orbit)", rowBase =>
+            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturb), width, height, maxIter, srvCount: 2, " (orbit)", rowBase =>
             {
                 p.RowBase = rowBase;
                 var mapped = _ctx.Map(_perturbParamsBuf!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
@@ -1411,12 +1509,13 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
 
         lock (_d3dGate)
         {
+            EnsureShape(GpuGroupShapes.SlotPerturb);   // #1339
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             BeginFrameTiming();   // #1329
             EnsureOutputBuffers(width, height, iterDst);
             EnsureRefOrbitBuffers(refLen);
             EnsureSaBuffers(coeffLen);
-            _csPerturbSa ??= CompileShader(MandelbrotKernelSource.BuildPerturbSA(), label: "perturb-sa",
+            _csPerturbSa ??= CompileShaped(GpuGroupShapes.SlotPerturb, MandelbrotKernelSource.BuildPerturbSA(), label: "perturb-sa",
                 entryPoint: MandelbrotKernelSource.PerturbSaEntryPoint);
 
             UploadDoubles(_refZrBuf!, refZr, refLen);
@@ -1439,7 +1538,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             _ctx.CSSetShaderResource(1, _refZiSrv);   // t1
             for (int i = 0; i < 8; i++) _ctx.CSSetShaderResource((uint)(2 + i), _saSrvs[i]);   // t2..t9
             _ctx.CSSetShaderResource(10, _blaSrv);                                              // t10 (BLA)
-            DispatchPerturbBands(width, height, maxIter, srvCount: 11, blaLevels > 0 ? " (SA+BLA)" : " (SA)", rowBase =>
+            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturb), width, height, maxIter, srvCount: 11, blaLevels > 0 ? " (SA+BLA)" : " (SA)", rowBase =>
             {
                 p.RowBase = rowBase;
                 var mapped = _ctx.Map(_saParamsBuf!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
@@ -1458,7 +1557,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
     /// kills the shared present device, so each band is Flushed as its own packet.
     /// Band 0 is synced and timed: if the extrapolated frame is too slow (weak FP64)
     /// it throws the too-slow marker so the caller drops to the CPU deep path.</summary>
-    private void DispatchPerturbBands(int width, int height, int maxIter, int srvCount, string label,
+    private void DispatchPerturbBands(GpuGroupShape shape, int width, int height, int maxIter, int srvCount, string label,
         Action<int> writeParams, int uavCount = 3)
     {
         _ctx.CSSetUnorderedAccessView(0, _iterUav);
@@ -1471,7 +1570,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             for (int i = 0; i < srvCount; i++) _ctx.CSSetShaderResource((uint)i, null);
         }
 
-        int bandRows = MandelbrotKernelSource.PerturbBandRows(width, height, maxIter);
+        int bandRows = MandelbrotKernelSource.PerturbBandRows(width, height, maxIter, shape.Y);
         int bandCount = (height + bandRows - 1) / bandRows;
         int bandIndex = 0;
         for (int rowBase = 0; rowBase < height; rowBase += bandRows, bandIndex++)
@@ -1481,7 +1580,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
 
             long tBand = System.Diagnostics.Stopwatch.GetTimestamp();
             _timer.Begin();
-            _ctx.Dispatch((uint)((width + 7) / 8), (uint)((rows + 7) / 8), 1);
+            _ctx.Dispatch(shape.GroupsX(width), shape.GroupsY(rows), 1);
             _timer.Mark(GpuStage.Dispatch);
 
             // Perf-fallback: a CopyResource + Map(Read) on the iter staging blocks

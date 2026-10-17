@@ -41,6 +41,11 @@ internal static class TestDataRootIsolation
             "FracturingFog.Tests",
             Guid.NewGuid().ToString("N"));
         AppDataPaths.SetProcessRootOverride(temp);
+
+        // #1339 — GPU kernels keep the 8×8 thread groups the kernel sources are
+        // written with (band heights, packet counts), instead of tuning on first
+        // use; S1339GpuGroupShapeTests opts back in per thread.
+        FracturingFog.Rendering.GpuGroupShapes.ProcessSetting = "off";
     }
 }
 
