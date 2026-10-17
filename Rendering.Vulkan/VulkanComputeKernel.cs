@@ -67,6 +67,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     private const int UShift = 200;
     private const int ColorBinding = UShift + 3;
     private const int TrapBinding = UShift + 4;   // #1173-J: u4 (gTrap), orbit variant only
+    private const int WorkBinding = UShift + 5;   // #1340: u5 (gWork), the base + colour entries
 
     [StructLayout(LayoutKind.Sequential)]
     private struct ParamsBlob
@@ -77,7 +78,8 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         public int UsePerRow, FractalKind;
         public float Param0, Param1, DitherStrength;
         public float WarpStrength, WarpK, WarpHalfSpan;   // #1173-I domain warp
-        public float _pad0, _pad1; // -> 80 bytes
+        public int Wave;   // #1340: 1 = wavefront schedule
+        public float _pad1; // -> 80 bytes
     }
 
     // V6 perturbation params (64 bytes): 4 doubles FIRST (offsets 0/8/16/24, all
@@ -88,7 +90,9 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     private struct PerturbParamsBlob
     {
         public double Scale, EscapeR2, OffX0, OffY0;
-        public int Width, Height, MaxIter, RefLen, RowBase, Pad0, Pad1, Pad2;
+        public int Width, Height, MaxIter, RefLen, RowBase;
+        // #1340: CSPerturb's gWave / gBandRows / gBand; the orbit kernel's gCRe / gCIm bits (#607).
+        public int Pad0, Pad1, Pad2;
     }
 
     // #88 SA params (80 bytes): 5 doubles FIRST (0/8/16/24/32) then 10 ints.
@@ -97,7 +101,8 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     private struct PerturbSaParamsBlob
     {
         public double Scale, EscapeR2, OffX0, OffY0, SaTol;
-        public int Width, Height, MaxIter, RefLen, RowBase, SafeMax, BlaLevels, Pad1, Pad2, Pad3;   // BlaLevels: G4.5b (was Pad0)
+        public int Width, Height, MaxIter, RefLen, RowBase, SafeMax, BlaLevels;   // BlaLevels: G4.5b (was Pad0)
+        public int Wave, BandRows, Band;   // #1340 (were Pad1..Pad3)
     }
 
     // #1331 float-exp params (48 bytes, no doubles): the HLSL PerturbFxParams cbuffer.
@@ -156,7 +161,9 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         public DescriptorSetLayout Dsl;
         public PipelineLayout Layout;
         public Pipeline Pipeline;
-        public int BindingCount;      // 5 (base), 6 (colour) or 7 (orbit colour + trap, #1173-J)
+        public int BindingCount;      // 5 (base), 6 (colour) or 7 (orbit colour + trap, #1173-J); + gWork (#1340)
+        public uint[] Bindings = System.Array.Empty<uint>();   // binding numbers, UBO first
+        public bool Has(int binding) => System.Array.IndexOf(Bindings, (uint)binding) >= 0;
         public GpuGroupShape Shape = GpuGroupShape.Default;   // #1339 — what it was compiled with
     }
 
@@ -195,13 +202,18 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     private Allocated _saAR, _saAI, _saBR, _saBI, _saCR, _saCI, _saDR, _saDI;
     private int _saAlloc;
 
-    // Persistent buffers, indexed: 0=params,1=perRow,2=iter,3=smooth,4=finalZD,5=color,6=trap.
-    private readonly Allocated[] _buf = new Allocated[7];
+    // Persistent buffers, indexed: 0=params,1=perRow,2=iter,3=smooth,4=finalZD,5=color,6=trap,
+    // 7=work (#1340).
+    private readonly Allocated[] _buf = new Allocated[8];
     private int _allocW, _allocH;
     private CommandPool _cmdPool;
     private bool _disposed;
 
     public double LastDispatchMs { get; private set; }
+
+    /// <summary>#1340 — true when the last frame (shallow or deep) ran the wavefront
+    /// schedule (<see cref="GpuWavefront"/>), false for one thread per pixel.</summary>
+    public bool LastFrameWavefront { get; private set; }
     public double LastReadbackMs { get; private set; }
 
     // #1329 — GPU timestamp queries per frame (null result when unsupported).
@@ -229,7 +241,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     {
         if (_baseByKind.TryGetValue(kind, out var p)) return p;
         p = BuildShapedProgram(GpuGroupShapes.SlotEscape, MandelbrotKernelSource.ForVariant(MandelbrotKernelSource.BuildBase(), kind), MandelbrotKernelSource.EntryPoint,
-            0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2);
+            0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)WorkBinding);
         _baseByKind[kind] = p;
         return p;
     }
@@ -432,7 +444,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             {
                 string hlsl = MandelbrotKernelSource.BuildColor(palette.HlslPrelude, palette.HlslPaletteBody);
                 build = kind => BuildShapedProgram(GpuGroupShapes.SlotEscape, MandelbrotKernelSource.ForVariant(hlsl, kind), MandelbrotKernelSource.EntryPoint,
-                    0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)ColorBinding);
+                    0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)ColorBinding, (uint)WorkBinding);
             }
             _colorByIdKind[(id, 0)] = build(0);   // compile now so a bad theme falls back here
             _colorBuilders[id] = build;
@@ -515,6 +527,9 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         // #1342: kind + periodicity variant (VariantKey; 0 = plain Mandelbrot).
         int variant = MandelbrotKernelSource.VariantKey((int)kind, GpuPeriodicity.Mode);
         Program prog = useColor ? ColorProgram(_activePaletteId!, variant) : BaseProgram(variant);
+        // #1340 — the wavefront schedule (HlslEntry; the orbit colour entry has none).
+        bool wave = GpuWavefront.Mode == GpuWavefront.On && prog.Has(WorkBinding);
+        LastFrameWavefront = wave;
 
         long t0 = Stopwatch.GetTimestamp();
         BeginFrameTiming();   // #1329
@@ -541,8 +556,10 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             WarpStrength = warp.Active ? warp.Strength : 0f,
             WarpK = warp.K,
             WarpHalfSpan = warp.HalfSpan,
+            Wave = wave ? 1 : 0,
         };
         WriteBytes(_buf[0], &blob, sizeof(ParamsBlob));
+        if (wave) ZeroDevice(_buf[7]);   // #1340: gWork[0], the next pixel
 
         // Per-row caps: upload as uint[] (narrow negatives to 0 -> shader falls
         // back to gMaxIter), else zero the (still-bound) buffer.
@@ -580,25 +597,21 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             };
             Check(_vk.AllocateDescriptorSets(_device, in dsai, out DescriptorSet set), "vkAllocateDescriptorSets");
 
-            // Binding order: UBO@0, perRow@100, iter@200, smooth@201, finalZD@202, [color@203], [trap@204].
-            uint* bindNums = stackalloc uint[7] { 0, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)ColorBinding, (uint)TrapBinding };
-            var types = stackalloc DescriptorType[7]
-            {
-                DescriptorType.UniformBuffer, DescriptorType.StorageBuffer, DescriptorType.StorageBuffer,
-                DescriptorType.StorageBuffer, DescriptorType.StorageBuffer, DescriptorType.StorageBuffer,
-                DescriptorType.StorageBuffer,
-            };
-            int* bufIndex = stackalloc int[7] { 0, 1, 2, 3, 4, 5, 6 };
-            var infos = stackalloc DescriptorBufferInfo[7];
-            var writes = stackalloc WriteDescriptorSet[7];
+            // Bindings: UBO@0, perRow@100, iter@200, smooth@201, finalZD@202, [color@203],
+            // [trap@204], [work@205] — _buf[0..7] in that order (binding - UShift + 2 past t0).
+            var infos = stackalloc DescriptorBufferInfo[8];
+            var writes = stackalloc WriteDescriptorSet[8];
             for (int i = 0; i < bc; i++)
             {
-                infos[i] = new DescriptorBufferInfo { Buffer = _buf[bufIndex[i]].Buffer, Offset = 0, Range = Vk.WholeSize };
+                uint b = prog.Bindings[i];
+                int bufIndex = b == 0 ? 0 : b == TShift ? 1 : (int)b - UShift + 2;
+                infos[i] = new DescriptorBufferInfo { Buffer = _buf[bufIndex].Buffer, Offset = 0, Range = Vk.WholeSize };
                 writes[i] = new WriteDescriptorSet
                 {
                     SType = StructureType.WriteDescriptorSet,
-                    DstSet = set, DstBinding = bindNums[i], DescriptorCount = 1,
-                    DescriptorType = types[i], PBufferInfo = &infos[i],
+                    DstSet = set, DstBinding = b, DescriptorCount = 1,
+                    DescriptorType = b == 0 ? DescriptorType.UniformBuffer : DescriptorType.StorageBuffer,
+                    PBufferInfo = &infos[i],
                 };
             }
             _vk.UpdateDescriptorSets(_device, (uint)bc, writes, 0, null);
@@ -620,9 +633,10 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             FlushPending(cmd);
             _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, prog.Pipeline);
             _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, prog.Layout, 0, 1, &set, 0, null);
-            _vk.CmdDispatch(cmd, prog.Shape.GroupsX(width), prog.Shape.GroupsY(height), 1);
+            if (wave) _vk.CmdDispatch(cmd, GpuWavefront.Groups(n, prog.Shape.Threads), 1, 1);
+            else _vk.CmdDispatch(cmd, prog.Shape.GroupsX(width), prog.Shape.GroupsY(height), 1);
             _timer.Mark(cmd, GpuStage.Dispatch);
-            bool trapOut = useColor && trapDst != null && prog.BindingCount == 7;
+            bool trapOut = useColor && trapDst != null && prog.Has(TrapBinding);
             RecordReadback(cmd, Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)),
                 useColor ? Out(_buf[5], n * sizeof(uint)) : default, trapOut ? Out(_buf[6], n * sizeof(float)) : default);
             Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
@@ -654,7 +668,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             _defPending = GpuAuxOutputs.All;
         }
         if (useColor) ReadUints(_buf[5], colorDst!, n);
-        if (useColor && trapDst != null && prog.BindingCount == 7) ReadFloats(_buf[6], trapDst, n);   // #1173-J
+        if (useColor && trapDst != null && prog.Has(TrapBinding)) ReadFloats(_buf[6], trapDst, n);   // #1173-J
 
         long tEnd = Stopwatch.GetTimestamp();
         EndFrameTiming();   // #1329
@@ -694,7 +708,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         EnsureBuffers(width, height, iterDst);          // shares iter/smooth/finalZD at _buf[2..4]
         EnsurePerturbBuffers(refLen);
         _perturb ??= BuildBandProgram(GpuGroupShapes.SlotPerturb, MandelbrotKernelSource.BuildPerturb(), MandelbrotKernelSource.PerturbEntryPoint,
-            0u, (uint)TShift, (uint)TShift + 1, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2);
+            0u, (uint)TShift, (uint)TShift + 1, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)UShift + 3);   // u3: gWork (#1340)
 
         var blob = new PerturbParamsBlob
         {
@@ -857,8 +871,9 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             Width = width, Height = height, MaxIter = maxIter, RefLen = refLen,
             EscapeR2 = (float)escapeRadius2,
         };
+        LastFrameWavefront = false;   // #1340: no wavefront form
         DispatchBands(prog, width, height, maxIter, f32 ? " (scaled fp32)" : " (float-exp)", sizeof(PerturbFxParamsBlob),
-            (rowBase, dst) => { var b = blob; b.RowBase = rowBase; *(PerturbFxParamsBlob*)dst = b; },
+            (rowBase, _, _, dst) => { var b = blob; b.RowBase = rowBase; *(PerturbFxParamsBlob*)dst = b; },
             stackalloc Buffer[] { _fxRefZ.Buffer, _buf[2].Buffer, _buf[3].Buffer, _buf[4].Buffer },
             stackalloc uint[] { (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2 },
             Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)));
@@ -882,7 +897,28 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     private static bool SerialBands => ForceSerialBands || s_serialBandsEnv;
 
     /// <summary>Writes the params blob of the band starting at <c>rowBase</c> to <c>dst</c>.</summary>
-    private delegate void BandParams(int rowBase, byte* dst);
+    private delegate void BandParams(int rowBase, int rows, int band, byte* dst);
+
+    // #1340 — the wavefront schedule's per-band pixel counters (u3 → binding 203 of
+    // CSPerturb / CSPerturbSA), device-local, zeroed by a fill before band 0.
+    private Allocated _bandWork;
+
+    private static int BandCount(int width, int height, int maxIter, GpuGroupShape shape)
+    {
+        int rows = MandelbrotKernelSource.PerturbBandRows(width, height, maxIter, shape.Y);
+        return (height + rows - 1) / rows;
+    }
+
+    private Buffer BandWork(int bands)
+    {
+        ulong bytes = (ulong)Math.Max(4, bands) * sizeof(uint);
+        if (_bandWork.Buffer.Handle == 0 || _bandWork.Size < bytes)
+        {
+            FreeBuffer(ref _bandWork);
+            _bandWork = AllocDeviceLocal(bytes, BufferUsageFlags.StorageBufferBit);
+        }
+        return _bandWork.Buffer;
+    }
 
     // #1334 — the banded programs' UBO: one slice per band, bound by dynamic offset.
     private Allocated _bandUbo;
@@ -903,9 +939,19 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     private void DispatchBands(Program prog, int width, int height, int maxIter, string label,
         int blobBytes, BandParams writeParams, ReadOnlySpan<Buffer> ssbos, ReadOnlySpan<uint> ssboBindings,
         params ReadOnlySpan<ReadbackSpan> outs)
+        => DispatchBands(prog, width, height, maxIter, label, blobBytes, writeParams, ssbos, ssboBindings, false, outs);
+
+    /// <summary><paramref name="wave"/> (#1340): the program's gWork (binding 203, the
+    /// <see cref="BandCount"/>-long <see cref="BandWork"/> buffer, which the caller
+    /// passes in <paramref name="ssbos"/>) is zeroed first, and each band dispatches
+    /// <see cref="GpuWavefront.PerturbGroups"/> groups in a 1D grid.</summary>
+    private void DispatchBands(Program prog, int width, int height, int maxIter, string label,
+        int blobBytes, BandParams writeParams, ReadOnlySpan<Buffer> ssbos, ReadOnlySpan<uint> ssboBindings,
+        bool wave, params ReadOnlySpan<ReadbackSpan> outs)
     {
         int bandRows = MandelbrotKernelSource.PerturbBandRows(width, height, maxIter, prog.Shape.Y);
         int bandCount = (height + bandRows - 1) / bandRows;
+        if (wave) ZeroDevice(_bandWork);   // the counters (BandWork sized them to bandCount)
         ulong align = _ctx.MinUniformBufferOffsetAlignment;
         ulong stride = ((ulong)blobBytes + align - 1) / align * align;
         ulong uboBytes = stride * (ulong)bandCount;
@@ -917,7 +963,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         void* mapped;
         Check(_vk.MapMemory(_device, _bandUbo.HostMemory, 0, uboBytes, 0, &mapped), "vkMapMemory");
         for (int band = 0; band < bandCount; band++)
-            writeParams(band * bandRows, (byte*)mapped + (ulong)band * stride);
+            writeParams(band * bandRows, Math.Min(bandRows, height - band * bandRows), band, (byte*)mapped + (ulong)band * stride);
         _vk.UnmapMemory(_device, _bandUbo.HostMemory);
 
         int nb = ssbos.Length + 1;
@@ -985,7 +1031,8 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
                 _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, prog.Pipeline);
                 uint offset = (uint)((ulong)band * stride);
                 _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, prog.Layout, 0, 1, &set, 1, &offset);
-                _vk.CmdDispatch(cmd, prog.Shape.GroupsX(width), prog.Shape.GroupsY(rows), 1);
+                if (wave) _vk.CmdDispatch(cmd, GpuWavefront.PerturbGroups((long)rows * width, prog.Shape.Threads), 1, 1);
+                else _vk.CmdDispatch(cmd, prog.Shape.GroupsX(width), prog.Shape.GroupsY(rows), 1);
                 _timer.Mark(cmd, GpuStage.Dispatch);
                 if (last) RecordReadback(cmd, outs);
                 Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
@@ -1187,17 +1234,27 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
 
         // Binding order matches BuildBandProgram's bindingNums: b0=params (the band UBO),
         //   t0=refZr(100), t1=refZi(101), u0=iter(200), u1=smooth(201), u2=finalZD(202),
-        //   [u3=orbit means(203), the orbit variant only (#607)].
-        int ns = orbitOut.HasValue ? 6 : 5;
+        //   u3(203) = the orbit means (the orbit variant, #607) or gWork (CSPerturb, #1340).
+        bool orbit = orbitOut.HasValue;
+        bool wave = !orbit && GpuWavefront.UsePerturb;   // #1340: the orbit kernel has no wavefront form
+        LastFrameWavefront = wave;
+        Buffer u3 = orbit ? orbitOut!.Value.Buffer : BandWork(BandCount(width, height, maxIter, prog.Shape));
         Span<Buffer> ssbos = stackalloc Buffer[6]
         {
             _refZrBuf.Buffer, _refZiBuf.Buffer,
-            _buf[2].Buffer, _buf[3].Buffer, _buf[4].Buffer, orbitOut.GetValueOrDefault().Buffer,
+            _buf[2].Buffer, _buf[3].Buffer, _buf[4].Buffer, u3,
         };
         Span<uint> bindNums = stackalloc uint[6] { (uint)TShift, (uint)TShift + 1, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)UShift + 3 };
         DispatchBands(prog, width, height, maxIter, label, sizeof(PerturbParamsBlob),
-            (rowBase, dst) => { var b = blob; b.RowBase = rowBase; *(PerturbParamsBlob*)dst = b; },
-            ssbos[..ns], bindNums[..ns], outs);
+            (rowBase, rows, band, dst) =>
+            {
+                var b = blob;
+                b.RowBase = rowBase;
+                // #1340: CSPerturb's gWave / gBandRows / gBand (the orbit kernel's pads hold gCRe / gCIm).
+                if (!orbit) { b.Pad0 = wave ? 1 : 0; b.Pad1 = rows; b.Pad2 = band; }
+                *(PerturbParamsBlob*)dst = b;
+            },
+            ssbos, bindNums, wave, outs);
     }
 
     /// <summary>#88 / G4.5 — the SA kernel runs wherever the plain double one does.</summary>
@@ -1247,8 +1304,11 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             (uint)TShift + 2, (uint)TShift + 3, (uint)TShift + 4, (uint)TShift + 5,
             (uint)TShift + 6, (uint)TShift + 7, (uint)TShift + 8, (uint)TShift + 9,
             (uint)TShift + 10,
-            (uint)UShift, (uint)UShift + 1, (uint)UShift + 2);
+            (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)UShift + 3);   // u3: gWork (#1340)
 
+        bool wave = GpuWavefront.UsePerturb;   // #1340
+        LastFrameWavefront = wave;
+        Buffer work = BandWork(BandCount(width, height, maxIter, _perturbSa.Shape));
         var blob = new PerturbSaParamsBlob
         {
             Width = width, Height = height, MaxIter = maxIter, RefLen = refLen,
@@ -1269,16 +1329,21 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         if (blaLevels > 0)
             fixed (double* p = blaCoeffs) WriteBytes(_blaBuf, p, blaCoeffs!.Length * sizeof(double));
 
-        // Binding order matches BuildBandProgram above: b0 (the band UBO), t0,t1, t2..t9, t10 (BLA), u0,u1,u2.
+        // Binding order matches BuildBandProgram above: b0 (the band UBO), t0,t1, t2..t9, t10 (BLA), u0,u1,u2, u3 (gWork).
         DispatchBands(_perturbSa, width, height, maxIter, " (SA)", sizeof(PerturbSaParamsBlob),
-            (rowBase, dst) => { var b = blob; b.RowBase = rowBase; *(PerturbSaParamsBlob*)dst = b; },
+            (rowBase, rows, band, dst) =>
+            {
+                var b = blob;
+                b.RowBase = rowBase; b.Wave = wave ? 1 : 0; b.BandRows = rows; b.Band = band;   // #1340
+                *(PerturbSaParamsBlob*)dst = b;
+            },
             stackalloc Buffer[]
             {
                 _refZrBuf.Buffer, _refZiBuf.Buffer,
                 _saAR.Buffer, _saAI.Buffer, _saBR.Buffer, _saBI.Buffer,
                 _saCR.Buffer, _saCI.Buffer, _saDR.Buffer, _saDI.Buffer,
                 _blaBuf.Buffer,
-                _buf[2].Buffer, _buf[3].Buffer, _buf[4].Buffer,
+                _buf[2].Buffer, _buf[3].Buffer, _buf[4].Buffer, work,
             },
             stackalloc uint[]
             {
@@ -1286,8 +1351,9 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
                 (uint)TShift + 2, (uint)TShift + 3, (uint)TShift + 4, (uint)TShift + 5,
                 (uint)TShift + 6, (uint)TShift + 7, (uint)TShift + 8, (uint)TShift + 9,
                 (uint)TShift + 10,
-                (uint)UShift, (uint)UShift + 1, (uint)UShift + 2,
+                (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)UShift + 3,
             },
+            wave,
             Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)));
 
         long tDispatch = Stopwatch.GetTimestamp();
@@ -1375,7 +1441,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             "-fvk-t-shift", TShift.ToString(), "0",
             "-fvk-u-shift", UShift.ToString(), "0");
 
-        var prog = new Program { BindingCount = bindingNums.Length, Shape = shape };
+        var prog = new Program { BindingCount = bindingNums.Length, Bindings = bindingNums, Shape = shape };
         fixed (byte* code = spirv)
         {
             var smci = new ShaderModuleCreateInfo
@@ -1457,6 +1523,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         _buf[4] = AllocBuffer((ulong)(n * 4 * sizeof(float)), BufferUsageFlags.StorageBufferBit, Residency.Output); // finalZD
         _buf[5] = AllocBuffer((ulong)(n * sizeof(uint)),  BufferUsageFlags.StorageBufferBit, Residency.Output);  // color
         _buf[6] = AllocBuffer((ulong)(n * sizeof(float)), BufferUsageFlags.StorageBufferBit, Residency.Output);  // trap (#1173-J)
+        _buf[7] = AllocDeviceLocal(16, BufferUsageFlags.StorageBufferBit);                    // work counter (#1340)
         _allocW = width; _allocH = height;
     }
 
@@ -1501,6 +1568,30 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         return new Allocated { Buffer = buffer, Memory = mem, Size = size, AllocSize = allocSize, DeviceLocal = local };
     }
 
+    /// <summary>#1340 — a buffer only the GPU touches (the wavefront counter: its
+    /// atomics must not cross the bus), zeroed with <see cref="ZeroDevice"/>. Host
+    /// memory when the device has no device-local type for it, or under
+    /// <see cref="VulkanBufferPlacement.HostOnly"/> (every buffer host-visible, #1228).</summary>
+    private Allocated AllocDeviceLocal(ulong size, BufferUsageFlags usage)
+    {
+        usage |= BufferUsageFlags.TransferDstBit;
+        if (Placement == VulkanBufferPlacement.HostOnly) return AllocBuffer(size, usage);
+        Buffer buffer = CreateBufferFor(size, usage, out MemoryRequirements req);
+        if (VulkanHostMemory.FindDeviceLocalType(_vk, _ctx.PhysicalDevice, req.MemoryTypeBits) is not uint dt)
+        {
+            _vk.DestroyBuffer(_device, buffer, null);
+            return AllocBuffer(size, usage);
+        }
+        var a = new Allocated { Buffer = buffer, Size = size, DeviceLocal = true };
+        (a.Memory, a.AllocSize) = AllocAndBind(buffer, req, dt);
+        System.Threading.Interlocked.Add(ref _residentDeviceLocalBytes, (long)a.AllocSize);
+        return a;
+    }
+
+    /// <summary>#1340 — zero an <see cref="AllocDeviceLocal"/> buffer with a fill at
+    /// the start of the next command buffer (FlushPending).</summary>
+    private void ZeroDevice(Allocated a) => _pendingFills.Add((a.Buffer, a.Size));
+
     private Buffer CreateBufferFor(ulong size, BufferUsageFlags usage, out MemoryRequirements req)
     {
         var bci = new BufferCreateInfo
@@ -1527,7 +1618,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
 
     private void FreeBuffer(ref Allocated a)
     {
-        if (a.Staged)   // #1228: drop queued copies / fills a failed dispatch left behind
+        if (a.Buffer.Handle != 0)   // #1228: drop queued copies / fills a failed dispatch left behind (#1340: any buffer)
         {
             Buffer buf = a.Buffer;
             _pendingCopies.RemoveAll(c => c.Dst.Handle == buf.Handle);
@@ -1790,6 +1881,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         _colorBuilders.Clear();
         for (int i = 0; i < _buf.Length; i++) FreeBuffer(ref _buf[i]);
         FreeBuffer(ref _bandUbo);   // #1334
+        FreeBuffer(ref _bandWork);  // #1340
         FreeBuffer(ref _refZrBuf);
         FreeBuffer(ref _refZiBuf);
         FreeBuffer(ref _saAR); FreeBuffer(ref _saAI);
