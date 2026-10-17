@@ -45,6 +45,17 @@ public sealed unsafe class VulkanContext : IDisposable
     /// stride of the per-band UBO slices a banded dispatch binds by dynamic offset.</summary>
     public ulong MinUniformBufferOffsetAlignment { get; private set; } = 256;
 
+    /// <summary>#1339 — the picked device's PCI vendor / device ids and driver version
+    /// (they key the tuned thread-group shapes).</summary>
+    public uint VendorId { get; private set; }
+    public uint DeviceId { get; private set; }
+    public uint DriverVersion { get; private set; }
+
+    /// <summary>#1339 — the compute work-group limits (the tuner skips shapes past them).</summary>
+    public uint MaxComputeWorkGroupInvocations { get; private set; } = 128;
+    public uint MaxComputeWorkGroupSizeX { get; private set; } = 128;
+    public uint MaxComputeWorkGroupSizeY { get; private set; } = 128;
+
     private VulkanContext(Vk vk) => Vk = vk;
 
     // Stand up instance only. Cheap enough that --list can run without ever
@@ -122,6 +133,7 @@ public sealed unsafe class VulkanContext : IDisposable
         uint bestFamily = 0, bestTsBits = 0;
         float bestTsPeriod = 0;
         ulong bestUboAlign = 256;
+        PhysicalDeviceProperties bestProps = default;
         bool found = false;
 
         foreach (var pd in PhysicalDevices())
@@ -138,6 +150,7 @@ public sealed unsafe class VulkanContext : IDisposable
                 bestTsBits = tsBits;
                 bestTsPeriod = props.Limits.TimestampPeriod;
                 bestUboAlign = Math.Max(1UL, props.Limits.MinUniformBufferOffsetAlignment);
+                bestProps = props;
                 bestType = props.DeviceType;
                 bestName = SilkMarshal.PtrToString((nint)props.DeviceName) ?? "<unknown>";
                 found = true;
@@ -152,6 +165,12 @@ public sealed unsafe class VulkanContext : IDisposable
         TimestampValidBits = bestTsBits;
         TimestampPeriod = bestTsPeriod;
         MinUniformBufferOffsetAlignment = bestUboAlign;
+        VendorId = bestProps.VendorID;
+        DeviceId = bestProps.DeviceID;
+        DriverVersion = bestProps.DriverVersion;
+        MaxComputeWorkGroupInvocations = bestProps.Limits.MaxComputeWorkGroupInvocations;
+        MaxComputeWorkGroupSizeX = bestProps.Limits.MaxComputeWorkGroupSize[0];
+        MaxComputeWorkGroupSizeY = bestProps.Limits.MaxComputeWorkGroupSize[1];
         PickedName = bestName;
         PickedType = bestType;
 

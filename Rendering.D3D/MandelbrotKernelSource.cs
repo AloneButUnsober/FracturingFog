@@ -747,22 +747,24 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     public static int PerturbBandRowsOverride =
         int.TryParse(System.Environment.GetEnvironmentVariable("FF_PERTURB_BANDROWS"), out int pbr) && pbr > 0 ? pbr : 0;
 
-    /// <summary>Thread-group height of the perturbation kernels ([numthreads(8, 8, 1)]).</summary>
+    /// <summary>Thread-group height the perturbation kernels are written with
+    /// ([numthreads(8, 8, 1)]); #1339 may tune another (GpuGroupShape.Y).</summary>
     public const int PerturbGroupRows = 8;
 
     /// <summary>Rows per perturbation dispatch band for the given frame, derived
     /// from <see cref="PerturbDispatchIterBudget"/> and the frame's width +
     /// maxIter (or the override). Always ≤ height, and a whole number of
-    /// <see cref="PerturbGroupRows"/> (at least one group) unless it is the whole
-    /// height.
+    /// <paramref name="groupRows"/> (the dispatch's thread-group height; at least
+    /// one group) unless it is the whole height.
     /// #1334: a band dispatches ⌈rows / 8⌉ groups from its gRowBase, so a band of
     /// rows that is not a multiple of 8 also ran the first rows of the next band
     /// (the same pixels, written twice). Deep frames whose budget gave fewer than 8
     /// rows (1920 wide from maxIter ≈ 2600) ran every row up to 8 times. A
     /// one-group band runs exactly what the old under-8 bands already dispatched,
     /// so no dispatch got longer.</summary>
-    public static int PerturbBandRows(int width, int height, int maxIter)
+    public static int PerturbBandRows(int width, int height, int maxIter, int groupRows = PerturbGroupRows)
     {
+        groupRows = System.Math.Max(1, groupRows);
         int rows;
         if (PerturbBandRowsOverride > 0) rows = PerturbBandRowsOverride;
         else
@@ -770,7 +772,7 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
             long denom = (long)System.Math.Max(1, width) * System.Math.Max(1, maxIter);
             rows = (int)System.Math.Min(int.MaxValue, System.Math.Max(1, PerturbDispatchIterBudget / denom));
         }
-        rows = System.Math.Max(PerturbGroupRows, rows / PerturbGroupRows * PerturbGroupRows);
+        rows = System.Math.Max(groupRows, rows / groupRows * groupRows);
         return System.Math.Min(rows, System.Math.Max(1, height));
     }
 

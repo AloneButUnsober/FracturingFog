@@ -112,7 +112,7 @@ namespace FracturingFog
                     var pzr = new float[pn]; var pzi = new float[pn]; var pdr = new float[pn]; var pdi = new float[pn];
                     k.RunPerturb(PW, PH, 3.5 / (PW * 1e4), MaxIter, 512.0 * 512.0, -PW / 2, -PH / 2, orZr, orZi, len,
                         pit, psm, pzr, pzi, pdr, pdi);
-                    int bandRows = BandRows(PW, PH, MaxIter);
+                    int bandRows = BandRows(PW, PH, MaxIter, k.GroupShape(GpuGroupShapes.SlotPerturb).Y);   // #1339
                     int bands = (PH + bandRows - 1) / bandRows;
                     var pt = k.LastGpuStageTimes;
                     double pwall = k.LastDispatchMs + k.LastReadbackMs;
@@ -133,9 +133,9 @@ namespace FracturingFog
 
         // MandelbrotKernelSource is linked into both the D3D and the Vulkan assembly;
         // the D3D kernel bands with the D3D assembly's copy.
-        private static int BandRows(int w, int h, int maxIter) =>
+        private static int BandRows(int w, int h, int maxIter, int groupRows) =>
             (int)typeof(MandelbrotGpuKernel).Assembly.GetType("FracturingFog.Rendering.MandelbrotKernelSource", throwOnError: true)!
-                .GetMethod("PerturbBandRows")!.Invoke(null, new object[] { w, h, maxIter })!;
+                .GetMethod("PerturbBandRows")!.Invoke(null, new object[] { w, h, maxIter, groupRows })!;
 
         private static (double[] Zr, double[] Zi, int Len) Orbit(double cx, double cy, int maxIter)
         {
