@@ -421,6 +421,15 @@
                     Command="{Binding ImportKleinianSpheresCommand}" />
         </StackPanel>
 
+        <!-- #1335: over-relaxed sphere tracing, shared by the DE raymarchers. -->
+        <Grid IsVisible="{Binding UsesMarchRelaxation}" ColumnDefinitions="160,*">
+            <TextBlock Grid.Column="0" Text="March relaxation:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Column="1"
+                           Minimum="1.0" Maximum="2.0" Increment="0.05" FormatString="F2"
+                           Value="{Binding MarchRelaxation, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Over-relaxed sphere tracing: each ray step is up to this × the distance estimate, backing off to a plain step where it would overshoot. Same shape in fewer steps: 5–35% faster on most of these fractals (least on Mandelbulb and KIFS). 1 = plain march; 1.3 is a good start. Gradient themes colour the surface by step count, so their hue changes above 1." />
+        </Grid>
+
         <!-- Mesh export (#101). Any DE raymarcher → marching-cubes OBJ/STL. -->
         <Border IsVisible="{Binding CanExportMesh}"
                 BorderBrush="#404040" BorderThickness="0,1,0,0"

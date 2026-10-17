@@ -88,6 +88,7 @@ public sealed class QuatJuliaCalculator : IFractalCalculator, IStereoEyeCamera, 
         int deIter = Math.Max(2, FractalParameters.QJuliaIterations);
         double bailout2 = Math.Max(4.0, FractalParameters.QJuliaBailout);
         int maxSteps = Math.Max(16, FractalParameters.QJuliaMaxSteps);
+        double omega = SphereRelax.Clamp(FractalParameters.MarchRelaxation);   // #1335 over-relaxed sphere tracing
         double eps = Math.Max(1e-5, FractalParameters.QJuliaEpsilon);
 
         // Quaternion Julia at typical c lives inside a ball of radius ≈ 1.6.
@@ -190,7 +191,7 @@ public sealed class QuatJuliaCalculator : IFractalCalculator, IStereoEyeCamera, 
                 FovScale = fovScale, Aspect = aspect,
                 PanU = panU, PanV = panV,
                 LightX = light[0], LightY = light[1], LightZ = light[2],
-                MaxSteps = maxSteps, Eps = eps,
+                MaxSteps = maxSteps, Eps = eps, Relaxation = omega,   // #1335
                 CullRadiusSq = 0.0,
                 InSetColor = ColorMap.InSetColor,
                 // S3 (#567) — thin-lens DOF on the GPU kernel. Inactive (aperture 0 /
@@ -262,12 +263,17 @@ public sealed class QuatJuliaCalculator : IFractalCalculator, IStereoEyeCamera, 
                           out float hr, out float hg, out float hb)
             {
                 double sx = ox, sy = oy, sz = oz, tT = 0; bool sHit = false; int sStep = 0;
+                var relax = new SphereRelax(omega);   // #1335 over-relaxed sphere tracing
                 for (int step = 0; step < maxSteps; step++)
                 {
                     double dist = QuatJuliaDE(sx, sy, sz, sliceW, cx, cy, cz, cw, bailout2, deIter);
+                    // #1335: the step here overshot (spheres apart): back up, march plainly.
+                    double back = relax.BackOff(dist);
+                    if (back > 0) { sx -= dx * back; sy -= dy * back; sz -= dz * back; tT -= back; continue; }
                     if (dist < eps) { sHit = true; sStep = step; break; }
                     if (tT > sceneRadius) break;
-                    sx += dx * dist; sy += dy * dist; sz += dz * dist; tT += dist;
+                    double rs = relax.Step(dist);   // #1335
+                    sx += dx * rs; sy += dy * rs; sz += dz * rs; tT += rs;
                 }
                 if (!sHit)
                 {
@@ -318,14 +324,19 @@ public sealed class QuatJuliaCalculator : IFractalCalculator, IStereoEyeCamera, 
                 bool hit = false;
                 int hitStep = 0;
 
+                var relax = new SphereRelax(omega);   // #1335 over-relaxed sphere tracing
                 for (int step = 0; step < maxSteps; step++)
                 {
                     double dist = QuatJuliaDE(px, py, pz, sliceW,
                         cx, cy, cz, cw, bailout2, deIter);
+                    // #1335: the step here overshot (spheres apart): back up, march plainly.
+                    double back = relax.BackOff(dist);
+                    if (back > 0) { px -= rdx * back; py -= rdy * back; pz -= rdz * back; tTotal -= back; continue; }
                     if (dist < eps) { hit = true; hitStep = step; break; }
                     if (tTotal > sceneRadius) break;
-                    px += rdx * dist; py += rdy * dist; pz += rdz * dist;
-                    tTotal += dist;
+                    double rs = relax.Step(dist);   // #1335
+                    px += rdx * rs; py += rdy * rs; pz += rdz * rs;
+                    tTotal += rs;
                 }
 
                 int idx = rowBase + x;

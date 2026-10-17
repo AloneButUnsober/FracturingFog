@@ -655,6 +655,9 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? KleinianColorSource { get; set; }
         // #881 — sphere-trace under-relaxation factor (omitted at the 1.0 default).
         [JsonIgnore(Condition = OmitNull)] public double? KleinianDeFactor { get; set; }
+        // #1335 — over-relaxed sphere tracing ω for the DE raymarchers
+        // (UsesMarchRelaxation; omitted at the 1.0 plain-march default).
+        [JsonIgnore(Condition = OmitNull)] public double? MarchRelaxation { get; set; }
         // #1173-C — Bicomplex slice axis (BicomplexSliceAxis; omitted at the K default).
         [JsonIgnore(Condition = OmitNull)] public int? BicomplexSliceAxis { get; set; }
         // #893 — Indra's Pearls 2D group: family + μ / traces / c + depth + mode
@@ -1327,6 +1330,14 @@ namespace FracturingFog.Models
                 rp.DomainWarpFrequency = p.DomainWarpFrequency;
             }
 
+            // #1335 — the DE raymarchers' over-relaxation rides along when it is not
+            // the plain march (1.0, the default).
+            if (MarchRelaxationCapabilities.UsesMarchRelaxation(type) && p.MarchRelaxation != 1.0)
+            {
+                rp ??= new RegionFractalParams();
+                rp.MarchRelaxation = p.MarchRelaxation;
+            }
+
             // #961 — a family whose params are all at their defaults (every field
             // omitted) carries no block, so a stock region never saves an empty {}.
             if (rp != null && JsonSerializer.Serialize(rp, s_omitNull) == "{}") rp = null;
@@ -1687,6 +1698,7 @@ namespace FracturingFog.Models
             if (KleinianRotationAxisZ.HasValue) p.KleinianRotationAxisZ = KleinianRotationAxisZ.Value;
             if (KleinianColorSource.HasValue) p.KleinianColorSource = (FracturingFog.KleinianColorSource)KleinianColorSource.Value;
             if (KleinianDeFactor.HasValue) p.KleinianDeFactor = KleinianDeFactor.Value;
+            if (MarchRelaxation.HasValue) p.MarchRelaxation = MarchRelaxation.Value;   // #1335
             if (BicomplexSliceAxis.HasValue) p.BicomplexSliceAxis = (FracturingFog.Models.BicomplexSliceAxis)BicomplexSliceAxis.Value;
 
             // #94 (P4) — non-spatial family params (static-hold legs).

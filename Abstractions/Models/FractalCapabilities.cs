@@ -248,4 +248,20 @@ namespace FracturingFog.Models
 
         public static bool IsMeshExportable(FractalType type) => System.Array.IndexOf(Types, type) >= 0;
     }
+
+    /// <summary>#1335 — the families whose primary march honours
+    /// <see cref="FractalParameters.MarchRelaxation"/> (over-relaxed sphere tracing):
+    /// the DE raymarchers, with three left out. User Bulb: a numeric DE is not a
+    /// true distance bound, so the overlap test could pass a step through the
+    /// surface. Coquaternion: the same, measured — ω 1.5 lost 5% of its hits (2% of
+    /// the pixels flipped). Kleinian: its limit-set DE made the relaxed march slower
+    /// (up to 45% when zoomed in), and it has its own under-relaxation knob
+    /// (KleinianDeFactor).</summary>
+    public static class MarchRelaxationCapabilities
+    {
+        public static bool UsesMarchRelaxation(FractalType type) => type is
+            FractalType.Mandelbulb or FractalType.Mandelbox or FractalType.Kifs
+            or FractalType.QuaternionJulia or FractalType.QuaternionMandelbrot
+            or FractalType.BicomplexMandelbrot or FractalType.Julibrot;
+    }
 }

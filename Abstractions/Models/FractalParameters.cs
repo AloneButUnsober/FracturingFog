@@ -1590,6 +1590,23 @@ namespace FracturingFog.Models
         public int BulbMaxSteps { get; set; } = 96;
         public double BulbEpsilon { get; set; } = 0.0015;
 
+        /// <summary>#1335 — over-relaxed sphere tracing (after Keinert et al. 2014)
+        /// for the DE raymarchers' primary rays: Mandelbulb, Mandelbox, KIFS (with
+        /// its Menger / Sierpinski GPU kernels), quaternion Julia / Mandelbrot,
+        /// Bicomplex and Julibrot, CPU and GPU alike
+        /// (MarchRelaxationCapabilities). Each step is up to this × the distance
+        /// estimate; when consecutive spheres stop overlapping, the ray backs up to
+        /// the plain step, so it finds the same surface in fewer steps (CPU frames
+        /// 5–35% faster at 1.3–1.6, family-dependent). 1 = the plain march
+        /// (default, byte-identical). The shape is the same, but the colour is
+        /// not: the 3D surface colour index is the step count plus depth, so
+        /// themes that read it (HSV and other gradients) change hue noticeably.
+        /// These DEs are not strict distance bounds either, so a few silhouette
+        /// pixels can land on a neighbouring surface. Clamped to [1, 2]. Not User Bulb or Coquaternion
+        /// (their DEs are not distance bounds: holes) or Kleinian (slower there;
+        /// see KleinianDeFactor).</summary>
+        public double MarchRelaxation { get; set; } = 1.0;
+
         // ── UserBulb: user-supplied 3D iteration step rendered Mandelbulb-style.
         // Source is C# expression body of: Vec3 Step(Vec3 z, Vec3 c, int n).
         public string? UserBulbSource { get; set; }
@@ -2169,6 +2186,7 @@ namespace FracturingFog.Models
                 BulbLightPhi = BulbLightPhi,
                 BulbMaxSteps = BulbMaxSteps,
                 BulbEpsilon = BulbEpsilon,
+                MarchRelaxation = MarchRelaxation,
                 UserBulbSource = UserBulbSource,
                 UserBulbName = UserBulbName,
                 UserBulbIterations = UserBulbIterations,
