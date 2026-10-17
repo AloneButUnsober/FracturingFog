@@ -21,6 +21,7 @@ using System.Threading.Tasks;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using FracturingFog.Models.FractalKernels;
+using FracturingFog.Calculators.Gpu;
 
 using GpuRoute = FracturingFog.Render.GpuRoute;
 
@@ -82,9 +83,12 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
 
     // ── Output buffers ───────────────────────────────────────────────────────
 
-    public int[] IterationBuffer { get; private set; } = Array.Empty<int>();
-    public float[] SmoothBuffer { get; private set; } = Array.Empty<float>();
-    public float[] DistanceBuffer { get; private set; } = Array.Empty<float>();
+    private int[] _iterationBuffer = Array.Empty<int>();
+    public int[] IterationBuffer { get { _gpuAux.Need(GpuDeferredAux.Iterations); return _iterationBuffer; } private set => _iterationBuffer = value; }
+    private float[] _smoothBuffer = Array.Empty<float>();
+    public float[] SmoothBuffer { get { _gpuAux.Need(GpuDeferredAux.Smooth); return _smoothBuffer; } private set => _smoothBuffer = value; }
+    private float[] _distanceBuffer = Array.Empty<float>();
+    public float[] DistanceBuffer { get { _gpuAux.Need(GpuDeferredAux.Distance); return _distanceBuffer; } private set => _distanceBuffer = value; }
 
     /// <summary>#1029 — complex-plane width of one pixel, for the Distance relief
     /// height source.</summary>
@@ -97,29 +101,88 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
     private void FillDistanceFromFinalZ(int maxIt, CancellationToken ct)
     {
         _po.CancellationToken = ct;
-        ParallelForRows(0, Height, _po, y =>
+        FillDistanceFromFinalZ(maxIt, Width, Height, _po);
+    }
+
+    // #1332 — on the backing arrays: the deferred fill runs inside
+    // GpuDeferredAux.Materialize (after it read the iterations and final z / dz),
+    // where the getters would re-enter it.
+    private void FillDistanceFromFinalZ(int maxIt, int w, int h, ParallelOptions po)
+    {
+        int[] iter = _iterationBuffer;
+        float[] dist = _distanceBuffer;
+        float[] zrB = _finalZrBuffer, ziB = _finalZiBuffer, drB = _finalDrBuffer, diB = _finalDiBuffer;
+        ParallelForRows(0, h, po, y =>
         {
-            int rb = y * Width;
-            for (int x = 0; x < Width; x++)
+            int rb = y * w;
+            for (int x = 0; x < w; x++)
             {
                 int idx = rb + x;
-                if (IterationBuffer[idx] >= maxIt) { DistanceBuffer[idx] = 0f; continue; }
-                float fzr = FinalZrBuffer[idx], fzi = FinalZiBuffer[idx];
-                float fdr = FinalDrBuffer[idx], fdi = FinalDiBuffer[idx];
+                if (iter[idx] >= maxIt) { dist[idx] = 0f; continue; }
+                float fzr = zrB[idx], fzi = ziB[idx];
+                float fdr = drB[idx], fdi = diB[idx];
                 double mag = Math.Sqrt(fzr * fzr + fzi * fzi);
                 double dMag = Math.Sqrt(fdr * fdr + fdi * fdi);
-                DistanceBuffer[idx] = dMag > 1e-10 ? (float)(mag * Math.Log(mag) / dMag) : 0f;
+                dist[idx] = dMag > 1e-10 ? (float)(mag * Math.Log(mag) / dMag) : 0f;
             }
         });
+    }
+
+    // #1332 — the GPU-coloured frame's iteration / smooth / final z / distance,
+    // read back when a CPU reader first asks (see GpuDeferredAux).
+    private readonly GpuDeferredAux _gpuAux = new();
+
+    /// <summary>#1332 — the deferred outputs not yet read back (GpuAuxOutputs bits,
+    /// plus 8 for the distance buffer); 0 when everything is on the CPU. For diagnostics
+    /// and tests.</summary>
+    public int GpuAuxPending => _gpuAux.Pending;
+
+    /// <summary>#1332 — a GPU SP dispatch into this calculator's buffers: deferred
+    /// (the iteration / smooth / final-z stay on the GPU, distance filled on demand
+    /// when <paramref name="fillDistance"/>) when the kernel and the switch allow,
+    /// else the eager <see cref="IGpuKernel.Run"/>. Returns true when it deferred.</summary>
+    private bool RunGpuSp(FracturingFog.Rendering.IGpuKernel kernel, double scale, int maxIt, double bailout2, int[]? perRow,
+        FracturingFog.Rendering.FractalKind kind, float p0, float p1, uint[]? colorDst, float[]? trapDst,
+        FracturingFog.Rendering.GpuDomainWarp warp, bool fillDistance)
+    {
+        // This dispatch overwrites every deferred buffer, so a pending frame is moot.
+        _gpuAux.Discard();
+        if (colorDst != null && kernel.SupportsDeferredReadback && FracturingFog.Rendering.GpuDeferredReadback.Enabled)
+        {
+            var pending = kernel.RunDeferred(Width, Height, CenterX, CenterY, scale, maxIt, bailout2,
+                _iterationBuffer, _smoothBuffer, _finalZrBuffer, _finalZiBuffer, _finalDrBuffer, _finalDiBuffer,
+                perRow, kind, p0, p1, colorDst, trapDst, warp);
+            if (pending != FracturingFog.Rendering.GpuAuxOutputs.None)
+            {
+                int w = Width, h = Height;
+                Action? fill = null;
+                if (fillDistance)
+                {
+                    var po = new ParallelOptions { MaxDegreeOfParallelism = _po.MaxDegreeOfParallelism };
+                    fill = () => FillDistanceFromFinalZ(maxIt, w, h, po);
+                }
+                _gpuAux.Defer(kernel, _iterationBuffer, pending, fill);
+                return true;
+            }
+            return false;
+        }
+        kernel.Run(Width, Height, CenterX, CenterY, scale, maxIt, bailout2,
+            _iterationBuffer, _smoothBuffer, _finalZrBuffer, _finalZiBuffer, _finalDrBuffer, _finalDiBuffer,
+            perRow, kind, p0, p1, colorDst, trapDst, warp);
+        return false;
     }
 
     public float[] NormalXBuffer { get; private set; } = Array.Empty<float>();
     public float[] NormalYBuffer { get; private set; } = Array.Empty<float>();
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
-    public float[] FinalZrBuffer { get; private set; } = Array.Empty<float>();
-    public float[] FinalZiBuffer { get; private set; } = Array.Empty<float>();
-    public float[] FinalDrBuffer { get; private set; } = Array.Empty<float>();
-    public float[] FinalDiBuffer { get; private set; } = Array.Empty<float>();
+    private float[] _finalZrBuffer = Array.Empty<float>();
+    public float[] FinalZrBuffer { get { _gpuAux.Need(GpuDeferredAux.FinalZ); return _finalZrBuffer; } private set => _finalZrBuffer = value; }
+    private float[] _finalZiBuffer = Array.Empty<float>();
+    public float[] FinalZiBuffer { get { _gpuAux.Need(GpuDeferredAux.FinalZ); return _finalZiBuffer; } private set => _finalZiBuffer = value; }
+    private float[] _finalDrBuffer = Array.Empty<float>();
+    public float[] FinalDrBuffer { get { _gpuAux.Need(GpuDeferredAux.FinalZ); return _finalDrBuffer; } private set => _finalDrBuffer = value; }
+    private float[] _finalDiBuffer = Array.Empty<float>();
+    public float[] FinalDiBuffer { get { _gpuAux.Need(GpuDeferredAux.FinalZ); return _finalDiBuffer; } private set => _finalDiBuffer = value; }
 
     /// <summary>Global interior-alpha knob (#97): 0..255, copied from
     /// <c>FractalParameters.InteriorAlpha</c> by the render host. Scales the
@@ -163,6 +226,7 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
     {
         if (width < 1 || height < 1)
             throw new ArgumentException("Dimensions must be positive.");
+        _gpuAux.Discard();   // #1332 — a deferred frame belongs to the old arrays
         Width = width;
         Height = height;
         int n = width * height;
@@ -465,7 +529,7 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
                 return false;  // Magnet / Glynn / Spider — CPU only.
         }
 
-        bool gpuPalette;
+        bool gpuPalette, deferred;
         try
         {
             int[]? perRow = PerRowMaxIter;
@@ -480,17 +544,11 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
             else GpuKernel!.SetPalette(null);
             gpuPalette = hlslPalette != null && GpuKernel.HasGpuPalette;
 
-            GpuKernel.Run(
-                Width, Height,
-                CenterX, CenterY, scale,
-                MaxIterations, CurrentEscapeRadius2(),
-                IterationBuffer, SmoothBuffer,
-                FinalZrBuffer, FinalZiBuffer,
-                FinalDrBuffer, FinalDiBuffer,
-                useTileCap ? perRow : null,
-                kind, p0, p1,
-                colorDst: gpuPalette ? ColorBuffer : null,
-                warp: MakeGpuWarp(scale));   // #1173-I
+            // #1332 — a GPU-coloured frame defers its iter / smooth / final z
+            // (and the distance fill) until a CPU reader asks.
+            deferred = RunGpuSp(GpuKernel, scale, MaxIterations, CurrentEscapeRadius2(),
+                useTileCap ? perRow : null, kind, p0, p1,
+                gpuPalette ? ColorBuffer : null, null, MakeGpuWarp(scale), fillDistance: true);   // #1173-I warp
         }
         catch (Exception ex)
         {
@@ -506,7 +564,7 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
             // previous frame left them — none of the ColorGen-emitted themes
             // consume them through the CPU writeback in this path. #1029: the
             // distance estimate is still filled (the Distance relief source).
-            FillDistanceFromFinalZ(MaxIterations, ct);
+            if (!deferred) FillDistanceFromFinalZ(MaxIterations, ct);
             LastGpuRoute = GpuRoute.OnGpu(GpuKernel.BackendLabel);
             return true;
         }

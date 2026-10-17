@@ -60,6 +60,19 @@ namespace FracturingFog.Rendering
         int MaxOrbit, bool InSet, bool HighDefinition, int Low, int Mid,
         uint Seed, int Batch, int Samples, int MinIter = 0);
 
+    /// <summary>#1332 — the per-pixel outputs a deferred <see cref="IGpuKernel.RunDeferred"/>
+    /// can leave on the GPU until a CPU reader asks for them.</summary>
+    [Flags]
+    public enum GpuAuxOutputs
+    {
+        None = 0,
+        Iterations = 1,
+        Smooth = 2,
+        /// <summary>The final z and dz (four arrays, one GPU buffer).</summary>
+        FinalZ = 4,
+        All = Iterations | Smooth | FinalZ,
+    }
+
     /// <summary>
     /// Per-pixel SP escape-time compute backend exposed to the calculator
     /// fleet. Implementations are thread-affine — a single caller drives
@@ -115,6 +128,52 @@ namespace FracturingFog.Rendering
             uint[]? colorDst = null,
             float[]? trapDst = null,
             GpuDomainWarp warp = default);
+
+        /// <summary>#1332 — <see cref="RunDeferred"/> really defers (it is <see cref="Run"/>
+        /// otherwise).</summary>
+        bool SupportsDeferredReadback => false;
+
+        /// <summary>#1332 — <see cref="Run"/>, but the iteration, smooth and final-z outputs
+        /// may stay on the GPU: the colour and trap outputs come back as usual, and the
+        /// returned set names what did NOT. <see cref="ReadDeferred"/> copies those into
+        /// the arrays handed here; until then the arrays hold whatever they held before.
+        /// The kernel keeps one pending frame: its next dispatch into the shared output
+        /// buffers first copies a pending frame into its arrays, or drops it when that
+        /// dispatch targets the same arrays (which it is about to overwrite). The default
+        /// reads everything back.</summary>
+        GpuAuxOutputs RunDeferred(
+            int width, int height,
+            double centerX, double centerY,
+            double scale, int maxIter, double bailout2,
+            int[] iterDst, float[] smoothDst,
+            float[] finalZrDst, float[] finalZiDst,
+            float[] finalDrDst, float[] finalDiDst,
+            int[]? perRowMaxIter = null,
+            FractalKind kind = FractalKind.Mandelbrot,
+            float param0 = 0f, float param1 = 0f,
+            uint[]? colorDst = null,
+            float[]? trapDst = null,
+            GpuDomainWarp warp = default)
+        {
+            Run(width, height, centerX, centerY, scale, maxIter, bailout2,
+                iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst,
+                perRowMaxIter, kind, param0, param1, colorDst, trapDst, warp);
+            return GpuAuxOutputs.None;
+        }
+
+        /// <summary>#1332 — copy the given outputs of the pending deferred frame into the
+        /// arrays it was handed. <paramref name="iterDst"/> names the frame (its
+        /// iteration array): a no-op when that frame is no longer pending (already read,
+        /// flushed, or superseded) or the outputs were read already. Thread-safe against
+        /// the kernel's dispatches.</summary>
+        void ReadDeferred(int[] iterDst, GpuAuxOutputs outputs) { }
+
+        /// <summary>#1332 — right after <see cref="RunDeferred"/>: whether any pixel of
+        /// that frame escaped (iteration &lt; maxIter), counted on the GPU, so a caller
+        /// can answer "is the frame all in set?" without reading the iterations back.
+        /// Null when the backend didn't count (no per-row caps are honoured here, so a
+        /// frame run with them is never counted).</summary>
+        bool? LastDeferredAnyEscaped => null;
 
         /// <summary>True when this backend can run the deep-zoom PERTURBATION
         /// kernel (<see cref="RunPerturb"/>) — i.e. the device has FP64 support

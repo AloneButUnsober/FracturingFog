@@ -365,6 +365,52 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         float[]? trapDst = null,
         GpuDomainWarp warp = default)
     {
+        using var sync = Sync();
+        RunCore(width, height, centerX, centerY, scale, maxIter, bailout2,
+            iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst,
+            perRowMaxIter, kind, param0, param1, colorDst, trapDst, warp, defer: false);
+    }
+
+    /// <summary>#1332 — <see cref="Run"/> that leaves the iter / smooth / finalZD copy
+    /// into the caller's arrays to <see cref="ReadDeferred"/>. The GPU-side readback
+    /// copy (staged placement) still runs in this frame's command buffer, so a
+    /// deferred read only maps host memory and never touches the queue.</summary>
+    public GpuAuxOutputs RunDeferred(
+        int width, int height,
+        double centerX, double centerY,
+        double scale, int maxIter, double bailout2,
+        int[] iterDst, float[] smoothDst,
+        float[] finalZrDst, float[] finalZiDst,
+        float[] finalDrDst, float[] finalDiDst,
+        int[]? perRowMaxIter = null,
+        FractalKind kind = FractalKind.Mandelbrot,
+        float param0 = 0f, float param1 = 0f,
+        uint[]? colorDst = null,
+        float[]? trapDst = null,
+        GpuDomainWarp warp = default)
+    {
+        using var sync = Sync();
+        RunCore(width, height, centerX, centerY, scale, maxIter, bailout2,
+            iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst,
+            perRowMaxIter, kind, param0, param1, colorDst, trapDst, warp, defer: true);
+        return width > 0 && height > 0 ? GpuAuxOutputs.All : GpuAuxOutputs.None;
+    }
+
+    private void RunCore(
+        int width, int height,
+        double centerX, double centerY,
+        double scale, int maxIter, double bailout2,
+        int[] iterDst, float[] smoothDst,
+        float[] finalZrDst, float[] finalZiDst,
+        float[] finalDrDst, float[] finalDiDst,
+        int[]? perRowMaxIter,
+        FractalKind kind,
+        float param0, float param1,
+        uint[]? colorDst,
+        float[]? trapDst,
+        GpuDomainWarp warp,
+        bool defer)
+    {
         if (_disposed) throw new ObjectDisposedException(nameof(VulkanComputeKernel));
         if (width <= 0 || height <= 0) return;
 
@@ -376,7 +422,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         long t0 = Stopwatch.GetTimestamp();
         BeginFrameTiming();   // #1329
         int n = width * height;
-        EnsureBuffers(width, height);
+        EnsureBuffers(width, height, iterDst);
 
         bool usePerRow = perRowMaxIter != null && perRowMaxIter.Length >= height;
 
@@ -501,10 +547,15 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
 
         long tDispatch = Stopwatch.GetTimestamp();
 
-        // Readback + scatter into the caller's CPU arrays.
-        ReadIter(_buf[2], iterDst, n);
-        ReadFloats(_buf[3], smoothDst, n);
-        ReadFinalZD(_buf[4], finalZrDst, finalZiDst, finalDrDst, finalDiDst, n);
+        // Readback + scatter into the caller's CPU arrays (#1332: or later).
+        if (!defer) ReadAux(GpuAuxOutputs.All, n, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst);
+        else
+        {
+            _defIter = iterDst; _defSmooth = smoothDst;
+            _defZr = finalZrDst; _defZi = finalZiDst; _defDr = finalDrDst; _defDi = finalDiDst;
+            _defN = n;
+            _defPending = GpuAuxOutputs.All;
+        }
         if (useColor) ReadUints(_buf[5], colorDst!, n);
         if (useColor && trapDst != null && prog.BindingCount == 7) ReadFloats(_buf[6], trapDst, n);   // #1173-J
 
@@ -530,6 +581,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         float[] finalZrDst, float[] finalZiDst,
         float[] finalDrDst, float[] finalDiDst)
     {
+        using var sync = Sync();   // #1332 — ReadDeferred may run on another thread
         if (_disposed) throw new ObjectDisposedException(nameof(VulkanComputeKernel));
         if (!_ctx.SupportsFloat64)
             throw new NotSupportedException("Vulkan device has no shaderFloat64 — cannot run the perturbation kernel.");
@@ -541,7 +593,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         long t0 = Stopwatch.GetTimestamp();
         BeginFrameTiming();   // #1329
         int n = width * height;
-        EnsureBuffers(width, height);          // shares iter/smooth/finalZD at _buf[2..4]
+        EnsureBuffers(width, height, iterDst);          // shares iter/smooth/finalZD at _buf[2..4]
         EnsurePerturbBuffers(refLen);
         _perturb ??= BuildProgram(MandelbrotKernelSource.BuildPerturb(), MandelbrotKernelSource.PerturbEntryPoint,
             0u, (uint)TShift, (uint)TShift + 1, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2);
@@ -583,6 +635,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         float[] finalDrDst, float[] finalDiDst,
         float[] orbitDst)
     {
+        using var sync = Sync();   // #1332 — ReadDeferred may run on another thread
         if (_disposed) throw new ObjectDisposedException(nameof(VulkanComputeKernel));
         if (!_ctx.SupportsFloat64)
             throw new NotSupportedException("Vulkan device has no shaderFloat64 — cannot run the orbit perturbation kernel.");
@@ -598,7 +651,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
 
         long t0 = Stopwatch.GetTimestamp();
         BeginFrameTiming();   // #1329
-        EnsureBuffers(width, height);
+        EnsureBuffers(width, height, iterDst);
         EnsurePerturbBuffers(refLen);
         if (_orbitOut.Buffer.Handle == 0 || _orbitOut.Size < (ulong)(n * stride * sizeof(float)))
         {
@@ -665,6 +718,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         float[] finalZrDst, float[] finalZiDst,
         float[] finalDrDst, float[] finalDiDst)
     {
+        using var sync = Sync();   // #1332 — ReadDeferred may run on another thread
         if (_disposed) throw new ObjectDisposedException(nameof(VulkanComputeKernel));
         if (width <= 0 || height <= 0) return;
         if (refLen < 1) throw new ArgumentException("reference orbit is empty", nameof(refLen));
@@ -675,7 +729,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         long t0 = Stopwatch.GetTimestamp();
         BeginFrameTiming();   // #1329
         int n = width * height;
-        EnsureBuffers(width, height);
+        EnsureBuffers(width, height, iterDst);
         if (_fxParams.Buffer.Handle == 0)
             _fxParams = AllocBuffer((ulong)sizeof(PerturbFxParamsBlob), BufferUsageFlags.UniformBufferBit);
         if (_fxRefZ.Buffer.Handle == 0 || _fxRefAlloc < refLen)
@@ -842,6 +896,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     /// added into the caller's arrays.</summary>
     public void RunBuddhaBatch(in GpuBuddhaBatch b, uint[] hitsR, uint[] hitsG, uint[] hitsB)
     {
+        using var sync = Sync();   // #1332 — ReadDeferred may run on another thread
         if (_disposed) throw new ObjectDisposedException(nameof(VulkanComputeKernel));
         int n = b.Width * b.Height;
         if (n <= 0 || b.Samples <= 0) return;
@@ -1134,6 +1189,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         float[] finalDrDst, float[] finalDiDst,
         double[]? blaCoeffs = null, int blaLevels = 0)
     {
+        using var sync = Sync();   // #1332 — ReadDeferred may run on another thread
         if (_disposed) throw new ObjectDisposedException(nameof(VulkanComputeKernel));
         if (!_ctx.SupportsFloat64)
             throw new NotSupportedException("Vulkan device has no shaderFloat64 — cannot run the SA perturbation kernel.");
@@ -1148,7 +1204,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         long t0 = Stopwatch.GetTimestamp();
         BeginFrameTiming();   // #1329
         int n = width * height;
-        EnsureBuffers(width, height);
+        EnsureBuffers(width, height, iterDst);
         EnsurePerturbBuffers(refLen);
         EnsurePerturbSaBuffers(coeffLen);
         EnsureBlaBuffer(blaLevels > 0 ? blaCoeffs!.Length : 5);
@@ -1440,8 +1496,9 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     }
 
     // ── buffers ───────────────────────────────────────────────────────────────
-    private void EnsureBuffers(int width, int height)
+    private void EnsureBuffers(int width, int height, int[]? iterDst)
     {
+        FlushDeferred(iterDst);   // #1332 — before anything reuses the output buffers
         if (_buf[2].Buffer.Handle != 0 && _allocW == width && _allocH == height) return;
 
         for (int i = 0; i < _buf.Length; i++) FreeBuffer(ref _buf[i]);
@@ -1659,6 +1716,64 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         finally { _vk.FreeCommandBuffers(_device, _cmdPool, 1, in cmd); }
     }
 
+    // ── #1332: deferred readback ────────────────────────────────────────────
+    //
+    // RunDeferred leaves the host copy of iter / smooth / finalZD to ReadDeferred.
+    // The next dispatch into the shared output buffers (EnsureBuffers) copies a
+    // still-pending frame into its arrays first, or drops it when it targets those
+    // same arrays. _sync orders ReadDeferred (any thread) against the dispatches.
+    private readonly object _sync = new();
+    private GpuAuxOutputs _defPending;
+    private int[]? _defIter;
+    private float[]? _defSmooth, _defZr, _defZi, _defDr, _defDi;
+    private int _defN;
+
+    private readonly struct SyncScope : IDisposable
+    {
+        private readonly object _o;
+        public SyncScope(object o) { _o = o; System.Threading.Monitor.Enter(o); }
+        public void Dispose() => System.Threading.Monitor.Exit(_o);
+    }
+
+    private SyncScope Sync() => new(_sync);
+
+    public bool SupportsDeferredReadback => true;
+
+    public void ReadDeferred(int[] iterDst, GpuAuxOutputs outputs)
+    {
+        using var sync = Sync();
+        if (_disposed || !ReferenceEquals(iterDst, _defIter)) return;
+        var parts = outputs & _defPending;
+        if (parts == GpuAuxOutputs.None) return;
+        ReadAux(parts, _defN, _defIter!, _defSmooth!, _defZr!, _defZi!, _defDr!, _defDi!);
+        _defPending &= ~parts;
+        if (_defPending == GpuAuxOutputs.None) ClearDeferred();
+    }
+
+    private void FlushDeferred(int[]? nextIterDst)
+    {
+        if (_defPending == GpuAuxOutputs.None) return;
+        if (!ReferenceEquals(nextIterDst, _defIter))
+            ReadAux(_defPending, _defN, _defIter!, _defSmooth!, _defZr!, _defZi!, _defDr!, _defDi!);
+        ClearDeferred();
+    }
+
+    private void ClearDeferred()
+    {
+        _defPending = GpuAuxOutputs.None;
+        _defIter = null;
+        _defSmooth = _defZr = _defZi = _defDr = _defDi = null;
+        _defN = 0;
+    }
+
+    private void ReadAux(GpuAuxOutputs parts, int n, int[] iterDst, float[] smoothDst,
+        float[] finalZrDst, float[] finalZiDst, float[] finalDrDst, float[] finalDiDst)
+    {
+        if ((parts & GpuAuxOutputs.Iterations) != 0) ReadIter(_buf[2], iterDst, n);
+        if ((parts & GpuAuxOutputs.Smooth) != 0) ReadFloats(_buf[3], smoothDst, n);
+        if ((parts & GpuAuxOutputs.FinalZ) != 0) ReadFinalZD(_buf[4], finalZrDst, finalZiDst, finalDrDst, finalDiDst, n);
+    }
+
     private void ReadIter(Allocated a, int[] dst, int n)
     {
         void* mapped;
@@ -1709,8 +1824,10 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
 
     public void Dispose()
     {
+        using var sync = Sync();   // #1332
         if (_disposed) return;
         _disposed = true;
+        ClearDeferred();
         try { if (_device.Handle != 0) _vk.DeviceWaitIdle(_device); } catch { }
         foreach (var p in _baseByKind.Values) DestroyProgram(p);
         _baseByKind.Clear();

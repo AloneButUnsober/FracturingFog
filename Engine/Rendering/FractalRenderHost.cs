@@ -3046,7 +3046,15 @@ namespace FracturingFog.Rendering
                 // the (serial) histogram build and just re-apply with the new
                 // strength. Even at HistogramEq == 0 we build the CDF here so
                 // the first slider movement off zero is instant.
-                if (!useAlt)
+                // #1332 — except on a deferred GPU frame with equalisation off: the
+                // build would read the iterations / smooth back every frame just in
+                // case. The slider's first tick builds it instead (the invalid cache
+                // routes RepaintWithAdaptive to a fresh build).
+                if (!useAlt && ViewState.HistogramEq == 0 && calc.GpuAuxPending != 0)
+                {
+                    lock (_adaptiveCdfLock) _adaptiveCdfValid = false;
+                }
+                else if (!useAlt)
                 {
                     if (calc.BuildHistogramCdf(out double[]? cdf, out int bins, out int srcMaxIter))
                     {
@@ -3093,7 +3101,16 @@ namespace FracturingFog.Rendering
                 // detail areas visibly sparkle for several seconds. Locking the
                 // height keeps the relief pattern fixed while the colour
                 // accumulates underneath — no jitter, same settled result.
-                if (job.ProgressiveStage <= 1)
+                //
+                // #1332 — with relief off there is nothing to stash for: every
+                // reader of the field checks Relief2DEnabled, and turning relief on
+                // re-renders. Skipping it keeps a deferred GPU frame's smooth and
+                // distance on the GPU.
+                if (job.ProgressiveStage <= 1 && !ViewState.FractalParameters.Relief2DEnabled)
+                {
+                    _reliefValid = false;
+                }
+                else if (job.ProgressiveStage <= 1)
                 {
                     // Any escape-time 2D calculator exposes its height field via
                     // IHeightFieldSource — Mandelbrot, the EscapeTimeCalculator

@@ -44,6 +44,10 @@ public static class IterationRescue
     public static bool IsAllInSet(MandelbrotCalculator calc)
     {
         int w = calc.Width, h = calc.Height;
+        if (w <= 0 || h <= 0) return false;
+        // #1332 — a deferred GPU frame counted its escaped pixels on the GPU, so the
+        // iterations needn't come back just for this check.
+        if (calc.GpuFrameAnyEscaped is bool anyEscaped) return !anyEscaped;
         int[] it = calc.IterationBuffer;
         if (w <= 0 || h <= 0 || it.Length < w * h) return false;
         int[]? perRow = calc.PerRowMaxIter;
