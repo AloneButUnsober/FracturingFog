@@ -569,7 +569,67 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     float di = 0.0;
     float pzr = 0.0, pzi = 0.0, pdr = 0.0, pdi = 0.0;   // Phoenix previous z, dz/dc
     int   it = 0;
-{decl}    [loop]
+{decl}#ifdef FF_PERIODICITY
+    // #1342: the steps run in blocks of PeriodicityBlock, the periodicity
+    // check between blocks (PeriodicityStep).
+{PeriodicityDecl}    [loop]
+    for (;;)
+    {{
+        int blockEnd = min(it + {PeriodicityBlock}, rowMaxIt);
+        [loop]
+        for (; it < blockEnd; it++)
+        {{
+            float fzr = zr;
+            float fzi = zi;
+            if (KIND == 2)      {{ fzr = abs(zr); fzi = abs(zi); }}
+            else if (KIND == 3) {{ fzi = -zi; }}
+
+            float zr2 = fzr * fzr;
+            float zi2 = fzi * fzi;
+            float mag2 = zr2 + zi2;
+            if (mag2 >= gBailout2) break;
+
+            // F16 orbit sample — pre-update RAW z, it > 0 (matches CPU Sample).
+            if (it > 0)
+            {{
+    {samp}        }}
+
+            if (KIND == 4)
+            {{
+                MultibrotStep(zr, zi, dr, di, cIterR, cIterI);   // #1173-I
+            }}
+            else if (KIND == 5)
+            {{
+                // #1173-I: Phoenix z' = z^2 + c + p * z_prev (p = gParam0 + i gParam1),
+                // dz'/dc = 2 z dz/dc + 1 + p * dz_prev/dc (PhoenixKernel.StepWithPrevDeriv).
+                float ppr = gParam0 * pzr - gParam1 * pzi;
+                float ppi = gParam0 * pzi + gParam1 * pzr;
+                float pdR = gParam0 * pdr - gParam1 * pdi;
+                float pdI = gParam0 * pdi + gParam1 * pdr;
+                float ndr = 2.0 * (zr * dr - zi * di) + 1.0 + pdR;
+                float ndi = 2.0 * (zr * di + zi * dr) + pdI;
+                float nzr = zr * zr - zi * zi + cIterR + ppr;
+                float nzi = 2.0 * zr * zi + cIterI + ppi;
+                pzr = zr; pzi = zi; pdr = dr; pdi = di;
+                zr = nzr; zi = nzi; dr = ndr; di = ndi;
+            }}
+            else
+            {{
+                float newDr = 2.0 * (fzr * dr - fzi * di) + 1.0;
+                float newDi = 2.0 * (fzr * di + fzi * dr);
+                dr = newDr;
+                di = newDi;
+
+                float zrNew = zr2 - zi2 + cIterR;
+                float zi_new_unscaled = fzr * fzi;
+                zi = zi_new_unscaled + zi_new_unscaled + cIterI;
+                zr = zrNew;
+            }}
+        }}
+        if (it < blockEnd || it >= rowMaxIt) break;   // escaped, or at the cap
+{PeriodicityStep}    }}
+{PeriodicityEnd}#else
+    [loop]
     for (; it < rowMaxIt; it++)
     {{
         float fzr = zr;
@@ -619,12 +679,17 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
             zr = zrNew;
         }}
     }}
+#endif
 
     gFinalZD[idx] = float4(zr, zi, dr, di);
     if (it >= rowMaxIt)
     {{
         gIter[idx]   = (uint)gMaxIter;
+#if defined(FF_PERIODICITY) && FF_PERIODICITY == 2
+        gSmooth[idx] = periodicAt > 0 ? -(float)periodicAt : 0.0;   // #1342 diagnostic
+#else
         gSmooth[idx] = 0.0;
+#endif
         {inSetColor}
     }}
     else
@@ -1410,6 +1475,70 @@ void CSPerturbSA(uint3 tid : SV_DispatchThreadID)
 }
 ";
 
+    /// <summary>#1342 — the cache / compile key of an SP variant: the fractal kind
+    /// in the low byte, the GpuPeriodicity mode (Engine) above it.</summary>
+    public static int VariantKey(int kind, int periodicity) => kind | (periodicity << 8);
+
+    /// <summary>#1342 — <paramref name="hlsl"/> (a variant built on
+    /// <see cref="HlslBase"/>) specialised for <see cref="VariantKey"/>
+    /// <paramref name="key"/>: <see cref="ForKind"/>, plus <c>FF_PERIODICITY</c>
+    /// (1 = the periodicity early-out, 2 = it plus the diagnostic smooth) for a
+    /// non-zero mode. Without it the loop is the plain one, unchanged.</summary>
+    public static string ForVariant(string hlsl, int key)
+    {
+        int mode = key >> 8;
+        string s = ForKind(hlsl, key & 0xFF);
+        return mode != 0 ? "#define FF_PERIODICITY " + mode + "\n" + s : s;
+    }
+
+    /// <summary>#1342 — periodicity state, declared after the iteration state. The
+    /// snapshot starts at the initial state, so every snapshot is a state the orbit
+    /// really had (z_0 = 0 for Mandelbrot, the pixel for Julia; Phoenix's previous
+    /// z starts at 0). <c>nextSnap</c> is the step count of the next snapshot.</summary>
+    private const string PeriodicityDecl = @"    float snapR = zr, snapI = zi, snapPR = pzr, snapPI = pzi;
+    int nextSnap = 0;
+";
+
+    /// <summary>#1342 — steps per periodicity block. Checked every step, the compare
+    /// and the snapshot slowed an all-exterior frame by ~47% on a GT 710. Once per
+    /// block the cost falls with the block (16 / 32 / 64 steps: seahorse 1e4 at
+    /// 2048 iterations +11 / +6 / +3%), while a cycle is found a block or two
+    /// later (period-3 bulb at cap 10k: 12.7 / 14.7 / 19.7 ms, 56 ms plain).</summary>
+    private const int PeriodicityBlock = 32;
+
+    /// <summary>#1342 — the periodicity early-out, between blocks (z is the state
+    /// after <c>it</c> steps). The test is bit-exact on the whole state the next
+    /// step reads — z, plus the previous z for Phoenix (dz/dc never feeds back into
+    /// z). Equal to an earlier state, the orbit repeats from there and never
+    /// escapes, and every state of the cycle already passed the bailout test, so the
+    /// pixel is exactly what running to the cap gives: in set. Bits, not ==, so a
+    /// flushed denormal or a ±0 never counts as a repeat. Escaping pixels never
+    /// repeat, so their iter, smooth and colour are untouched; only the final z /
+    /// dz/dc of an in-set pixel (which no reader uses) changes.
+    /// <para>The schedule is Brent's, as on the CPU (MandelbrotCalculator
+    /// PeriodicitySnapshotStart), on block boundaries: snapshots after 32, 64, 128,
+    /// … steps, each held as long as the steps before it, so a cycle of period p is
+    /// found once that span reaches lcm(p, 32) ≤ 32p.</para></summary>
+    private const string PeriodicityStep = @"        if (asuint(zr) == asuint(snapR) && asuint(zi) == asuint(snapI)
+            && (KIND != 5 || (asuint(pzr) == asuint(snapPR) && asuint(pzi) == asuint(snapPI))))
+        {
+            it += rowMaxIt;   // > rowMaxIt: in set, detected after it - rowMaxIt steps
+            break;
+        }
+        if (it >= nextSnap)
+        {
+            snapR = zr; snapI = zi; snapPR = pzr; snapPI = pzi;
+            nextSnap = it + it;
+        }
+";
+
+    /// <summary>#1342 — after the loop: a detected pixel left <c>it</c> above the
+    /// cap (<see cref="PeriodicityStep"/>); keep its step count for the diagnostic
+    /// mode and put <c>it</c> back at the cap.</summary>
+    private const string PeriodicityEnd = @"    int periodicAt = it > rowMaxIt ? it - rowMaxIt : 0;
+    if (it > rowMaxIt) it = rowMaxIt;
+";
+
     /// <summary>Per-emit CSMain. The three colour splice points are empty in
     /// the base variant and filled by <c>MandelbrotGpuKernel</c> (D3D, V2 on
     /// Vulkan) for the colour-emitting variant.</summary>
@@ -1473,6 +1602,61 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     float di = 0.0;
     float pzr = 0.0, pzi = 0.0, pdr = 0.0, pdi = 0.0;   // Phoenix previous z, dz/dc
     int   it = 0;
+#ifdef FF_PERIODICITY
+    // #1342: the steps run in blocks of PeriodicityBlock, the periodicity
+    // check between blocks (PeriodicityStep).
+{PeriodicityDecl}    [loop]
+    for (;;)
+    {{
+        int blockEnd = min(it + {PeriodicityBlock}, rowMaxIt);
+        [loop]
+        for (; it < blockEnd; it++)
+        {{
+            float fzr = zr;
+            float fzi = zi;
+            if (KIND == 2)      {{ fzr = abs(zr); fzi = abs(zi); }}
+            else if (KIND == 3) {{ fzi = -zi; }}
+
+            float zr2 = fzr * fzr;
+            float zi2 = fzi * fzi;
+            float mag2 = zr2 + zi2;
+            if (mag2 >= gBailout2) break;
+
+            if (KIND == 4)
+            {{
+                MultibrotStep(zr, zi, dr, di, cIterR, cIterI);   // #1173-I
+            }}
+            else if (KIND == 5)
+            {{
+                // #1173-I: Phoenix z' = z^2 + c + p * z_prev (p = gParam0 + i gParam1),
+                // dz'/dc = 2 z dz/dc + 1 + p * dz_prev/dc (PhoenixKernel.StepWithPrevDeriv).
+                float ppr = gParam0 * pzr - gParam1 * pzi;
+                float ppi = gParam0 * pzi + gParam1 * pzr;
+                float pdR = gParam0 * pdr - gParam1 * pdi;
+                float pdI = gParam0 * pdi + gParam1 * pdr;
+                float ndr = 2.0 * (zr * dr - zi * di) + 1.0 + pdR;
+                float ndi = 2.0 * (zr * di + zi * dr) + pdI;
+                float nzr = zr * zr - zi * zi + cIterR + ppr;
+                float nzi = 2.0 * zr * zi + cIterI + ppi;
+                pzr = zr; pzi = zi; pdr = dr; pdi = di;
+                zr = nzr; zi = nzi; dr = ndr; di = ndi;
+            }}
+            else
+            {{
+                float newDr = 2.0 * (fzr * dr - fzi * di) + 1.0;
+                float newDi = 2.0 * (fzr * di + fzi * dr);
+                dr = newDr;
+                di = newDi;
+
+                float zrNew = zr2 - zi2 + cIterR;
+                float zi_new_unscaled = fzr * fzi;
+                zi = zi_new_unscaled + zi_new_unscaled + cIterI;
+                zr = zrNew;
+            }}
+        }}
+        if (it < blockEnd || it >= rowMaxIt) break;   // escaped, or at the cap
+{PeriodicityStep}    }}
+{PeriodicityEnd}#else
     [loop]
     for (; it < rowMaxIt; it++)
     {{
@@ -1518,12 +1702,17 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
             zr = zrNew;
         }}
     }}
+#endif
 
     gFinalZD[idx] = float4(zr, zi, dr, di);
     if (it >= rowMaxIt)
     {{
         gIter[idx]   = (uint)gMaxIter;
+#if defined(FF_PERIODICITY) && FF_PERIODICITY == 2
+        gSmooth[idx] = periodicAt > 0 ? -(float)periodicAt : 0.0;   // #1342 diagnostic
+#else
         gSmooth[idx] = 0.0;
+#endif
         {inSetColor}
     }}
     else

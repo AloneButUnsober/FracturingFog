@@ -209,7 +209,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     private Program BaseProgram(int kind)
     {
         if (_baseByKind.TryGetValue(kind, out var p)) return p;
-        p = BuildProgram(MandelbrotKernelSource.ForKind(MandelbrotKernelSource.BuildBase(), kind), MandelbrotKernelSource.EntryPoint,
+        p = BuildProgram(MandelbrotKernelSource.ForVariant(MandelbrotKernelSource.BuildBase(), kind), MandelbrotKernelSource.EntryPoint,
             0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2);
         _baseByKind[kind] = p;
         return p;
@@ -329,13 +329,13 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             if (palette is IGpuOrbitPalette o && o.OrbitInputs != GpuOrbitInputs.None)
             {
                 string hlsl = MandelbrotKernelSource.BuildColorOrbit(palette.HlslPrelude, palette.HlslPaletteBody, (int)o.OrbitInputs);
-                build = kind => BuildProgram(MandelbrotKernelSource.ForKind(hlsl, kind), MandelbrotKernelSource.EntryPoint,
+                build = kind => BuildProgram(MandelbrotKernelSource.ForVariant(hlsl, kind), MandelbrotKernelSource.EntryPoint,
                     0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)ColorBinding, (uint)TrapBinding);
             }
             else
             {
                 string hlsl = MandelbrotKernelSource.BuildColor(palette.HlslPrelude, palette.HlslPaletteBody);
-                build = kind => BuildProgram(MandelbrotKernelSource.ForKind(hlsl, kind), MandelbrotKernelSource.EntryPoint,
+                build = kind => BuildProgram(MandelbrotKernelSource.ForVariant(hlsl, kind), MandelbrotKernelSource.EntryPoint,
                     0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)ColorBinding);
             }
             _colorByIdKind[(id, 0)] = build(0);   // compile now so a bad theme falls back here
@@ -369,7 +369,9 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         if (width <= 0 || height <= 0) return;
 
         bool useColor = colorDst != null && HasGpuPalette;
-        Program prog = useColor ? ColorProgram(_activePaletteId!, (int)kind) : BaseProgram((int)kind);
+        // #1342: kind + periodicity variant (VariantKey; 0 = plain Mandelbrot).
+        int variant = MandelbrotKernelSource.VariantKey((int)kind, GpuPeriodicity.Mode);
+        Program prog = useColor ? ColorProgram(_activePaletteId!, variant) : BaseProgram(variant);
 
         long t0 = Stopwatch.GetTimestamp();
         BeginFrameTiming();   // #1329
