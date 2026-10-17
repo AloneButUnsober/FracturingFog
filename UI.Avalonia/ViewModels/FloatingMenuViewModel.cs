@@ -1081,6 +1081,26 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(InteractiveTargetMs));
     }
 
+    // #1337 — temporal AO / shadow reuse on the live 3D view (host TemporalLighting3D).
+    private bool _temporalLighting3D;
+    public bool TemporalLighting3D
+    {
+        get => _temporalLighting3D;
+        set
+        {
+            if (_temporalLighting3D == value) return;
+            this.RaiseAndSetIfChanged(ref _temporalLighting3D, value);
+            TemporalLighting3DToggled?.Invoke(this, value);
+        }
+    }
+
+    /// <summary>#1337 — load the host's value without re-firing the event.</summary>
+    public void SetTemporalLighting3DState(bool enabled)
+    {
+        _temporalLighting3D = enabled;
+        this.RaisePropertyChanged(nameof(TemporalLighting3D));
+    }
+
     /// <summary>Push the host's actual GPU-compute state onto the checkbox
     /// without re-firing <see cref="UseGpuComputeToggled"/>. Called by the
     /// shell after a toggle (read-back), on startup (initial sync), and from
@@ -1217,6 +1237,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public event EventHandler<bool>? UseGpuComputeToggled;
     public event EventHandler<bool>? DynamicPreviewResolutionToggled;   // #1333
     public event EventHandler<double>? InteractiveTargetMsChanged;      // #1333
+    public event EventHandler<bool>? TemporalLighting3DToggled;         // #1337
 
     public event EventHandler<IterLockEventArgs>? IterLockChanged;
 }

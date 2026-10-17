@@ -301,6 +301,13 @@ public sealed class KleinianCalculator : IFractalCalculator, IStereoEyeCamera, I
         double dofFocus = ThinLensDof.FocusDistance(in fx, camDist);
         double dofAperture = fx.DofAperture;
 
+        // #1337 — the live view's temporal AO / shadow reuse (no-op without a cache).
+        TemporalLighting.BeginFrame(width, height,
+            new PinholeCamera(camPX, camPY, camPZ, right[0], right[1], right[2], up[0], up[1], up[2],
+                fwd[0], fwd[1], fwd[2], fovScale, aspect, panU, panV),
+            KleinianSceneKey(in fx, eps, gens, deIter, rot, deFactor),
+            usable: !thinLensDof && eyeOffset == 0 && fx.DebugAov == AovView.Beauty);
+
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             if (ct.IsCancellationRequested) return;
@@ -451,6 +458,18 @@ public sealed class KleinianCalculator : IFractalCalculator, IStereoEyeCamera, I
     /// </summary>
     /// <summary>P3 — concrete DE struct. Holds references to the sphere
     /// centre arrays + tangent radius; iter loop runs inside KleinianDE.</summary>
+    /// <summary>#1337 — the temporal lighting scene key: the lighting, epsilon and
+    /// what the estimator iterates (the generators, the rotation, the step factor).</summary>
+    private static long KleinianSceneKey(in LightingFxData fx, double eps, KleinianGenerator[] gens, int iter,
+        KleinianRotation rot, double deFactor)
+    {
+        var h = new HashCode();
+        h.Add(TemporalLighting.SceneKey(in fx, eps, iter, deFactor));
+        h.AddBytes(System.Runtime.InteropServices.MemoryMarshal.AsBytes<KleinianGenerator>(gens));
+        h.AddBytes(System.Runtime.InteropServices.MemoryMarshal.AsBytes(new ReadOnlySpan<KleinianRotation>(in rot)));
+        return h.ToHashCode();
+    }
+
     public readonly struct De
         : FracturingFog.Rendering.Lighting.IDistanceEstimator,
           FracturingFog.Rendering.Lighting.IOrbitTrapEstimator

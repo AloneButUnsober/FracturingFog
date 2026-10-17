@@ -1109,6 +1109,14 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
 
         double[] tileTMin = ConeMarchTileHints();
 
+        // #1337 — the live view's temporal AO / shadow reuse (no-op without a cache).
+        // The scene is BuildSceneKey's (the source, the DE knobs, the lighting).
+        TemporalLighting.BeginFrame(width, height,
+            new PinholeCamera(camX, camY, camZ, right.X, right.Y, right.Z, up.X, up.Y, up.Z,
+                fwd.X, fwd.Y, fwd.Z, fovScale, aspect, 0.0, 0.0),
+            TemporalLighting.SceneKey(in fx, eps, (sceneKey.Length > 0 ? sceneKey : BuildSceneKey()).GetHashCode()),
+            usable: eyeOffset == 0 && fx.DebugAov == AovView.Beauty);
+
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             if (ct.IsCancellationRequested) return;

@@ -347,6 +347,19 @@ public static class HeightfieldRaymarch2D
         public ReliefMotionVector.CameraView? CurrentCamera { get; set; }
     }
 
+    /// <summary>#1337 — the temporal lighting scene key of a relief frame: the
+    /// lighting, the height field and the estimator's parameters.</summary>
+    private static long ReliefSceneKey(in LightingFxData fx, double eps, float[] hbuf, int hw, int hh,
+        double sy, double aspect, double invLip, FractalParameters p, byte[]? keep)
+    {
+        var hc = new HashCode();
+        hc.Add(TemporalLighting.SceneKey(in fx, eps, hw, hh, sy, aspect, invLip,
+            p.Relief2DBicubicHeight ? 1 : 0, p.Relief2DTrueHeight ? 1 : 0, p.Relief2DGroundPlane ? 1 : 0, p.Relief2DEdgeFade));
+        hc.AddBytes(System.Runtime.InteropServices.MemoryMarshal.AsBytes<float>(hbuf));
+        if (keep != null) hc.AddBytes(keep);
+        return hc.ToHashCode();
+    }
+
     public static void Render(uint[] albedo, float[] height, int w, int h,
                               FractalParameters p, uint[] dst,
                               IReliefRaymarchKernel? gpuKernel = null)
@@ -887,6 +900,15 @@ public static class HeightfieldRaymarch2D
         // #189 — cap workers to the process-global render throttle (poster path
         // sets ~90% CPU; default -1 = unlimited, unchanged).
         var po = new ParallelOptions { MaxDegreeOfParallelism = FracturingFog.Rendering.RenderThrottle.MaxDegreeOfParallelism };
+        // #1337 — the live view's temporal AO / shadow reuse (no-op without a cache):
+        // one centred perspective sample per pixel only. The scene is the height
+        // field and what the estimators read of it.
+        bool temporalOk = TemporalLighting.Current != null && ss == 1 && !ortho && dofAperture == 0.0
+                          && fx.DebugAov == AovView.Beauty;
+        TemporalLighting.BeginFrame(w, h,
+            new PinholeCamera(camX, camY, camZ, rX, rY, rZ, uX, uY, uZ, fX, fY, fZ, tanHalf, aspect, 0.0, 0.0),
+            temporalOk ? ReliefSceneKey(in fx, eps0, hbuf, hw, hh, sy, aspect, invLip, p, keep) : 0,
+            usable: temporalOk);
         Parallel.For(0, h, po, () => 0L, (py, _, localHits) =>
         {
             for (int px = 0; px < w; px++)
@@ -910,7 +932,7 @@ public static class HeightfieldRaymarch2D
                     bool capCentre = (aov?.Components != null || aov?.HdrBeauty != null) && si == 0 && sj == 0;
                     var (col, hit, snx, sny, snz, sdepth) = SamplePixel(
                         px + (si + 0.5) / ss, py + (sj + 0.5) / ss, lensX, lensY,
-                        capCentre ? aov!.Components : null, capCentre ? py * w + px : -1,
+                        capCentre ? aov!.Components : null, capCentre || temporalOk ? py * w + px : -1,   // #1337: the temporal index
                         capCentre ? aov!.HdrBeauty : null);
                     aR += (col >> 16) & 0xFF;
                     aG += (col >> 8) & 0xFF;

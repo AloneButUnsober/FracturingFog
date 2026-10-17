@@ -64,6 +64,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--gpudeferprobe")
             return GpuDeferredReadbackProbe.Run();
 
+        // #1337 — temporal AO / shadow reuse on the CPU 3D families: speed, error, settle == full.
+        if (args.Length > 0 && args[0] == "--temporallightingprobe")
+            return TemporalLightingProbe.Run(args);
+
         // #1340 — D3D11 wavefront scheduling: on == off bit for bit, timing.
         if (args.Length > 0 && args[0] == "--gpuwavefrontprobe")
             return GpuWavefrontProbe.Run(args);
