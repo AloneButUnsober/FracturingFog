@@ -376,6 +376,14 @@ namespace FracturingFog.Render
         /// caller should re-read after setting to verify.</summary>
         bool UseGpuCompute { get; set; }
 
+        /// <summary>#1333 — choose the first interactive preview stage's resolution
+        /// from the measured frame cost (on, default) or keep the fixed
+        /// quarter → half → full ladder (off). The final frame is unaffected.</summary>
+        bool DynamicPreviewResolution { get; set; }
+
+        /// <summary>#1333 — the interactive frame-time target, ms (4 … 500).</summary>
+        double InteractiveTargetMs { get; set; }
+
         /// <summary>Diagnostic toggle — bypass BLA + SA on the legacy
         /// MandelbrotCalculator HP path. Used to isolate deep-zoom precision
         /// regressions: when on, perturbation runs raw (no BLA skip, no SA

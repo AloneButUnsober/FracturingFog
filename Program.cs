@@ -40,6 +40,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--gputimestampprobe")
             return GpuTimestampProbe.Run();
 
+        // #1333 — drag responsiveness, dynamic preview resolution off vs on (measurement).
+        if (args.Length > 0 && args[0] == "--dynresprobe")
+            return DynamicResolutionProbe.Run();
+
         // #1332 — D3D11 deferred readback: lazy reads == eager bit for bit, flush, timing.
         if (args.Length > 0 && args[0] == "--gpudeferprobe")
             return GpuDeferredReadbackProbe.Run();

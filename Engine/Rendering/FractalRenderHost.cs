@@ -56,15 +56,16 @@ namespace FracturingFog.Rendering
         // disposed because MandelbrotCalculator owns no native handles.
         // Memory cost at 1080p: ~5 MB (quarter) + ~20 MB (half) of pinned
         // LOH on top of the main calc's ~80 MB.
-        private MandelbrotCalculator _previewCalcQuarter;
-        private MandelbrotCalculator _previewCalcHalf;
+        // #1333 — one sidecar per DynamicResolution level (index = level; 2 = ½,
+        // 4 = ¼ are made up front as before, the others on first use), each sized
+        // DynamicResolution.PreviewDims of the surface.
+        private readonly MandelbrotCalculator?[] _previewCalcs = new MandelbrotCalculator?[DynamicResolution.MaxLevel + 1];
         // #327 — dedicated ALT (non-Mandelbrot) relief-preview sidecars, resolved by
         // FractalType (via CreateReliefFieldCalc) and configured with SyncAltStateFromMandel.
         // Give relief-eligible alt height-field types the same low-res 3D preview during
         // interaction the Mandelbrot path gets, instead of a flat held frame → 3D snap.
         // Lazily created / resized in the progressive branch; rebuilt on type change.
-        private IFractalCalculator? _altPreviewCalcQuarter;
-        private IFractalCalculator? _altPreviewCalcHalf;
+        private readonly IFractalCalculator?[] _altPreviewCalcs = new IFractalCalculator?[DynamicResolution.MaxLevel + 1];   // #1333: per level
         private FractalType _altPreviewType = (FractalType)(-1);
         private EscapeTimeCalculator _escapeCalculator;
         private IFSCalculator _ifsCalculator;
@@ -200,7 +201,8 @@ namespace FracturingFog.Rendering
         private int _previewAnchorW, _previewAnchorH;
         // Written on the calc thread, read by the upload callback: an immutable
         // reference, so a read never sees a torn map. Null = plain stretch.
-        private volatile PreviewLattice.Map? _previewMapQuarter, _previewMapHalf;
+        // #1333 — per DynamicResolution level; read / written with Volatile.
+        private readonly PreviewLattice.Map?[] _previewMaps = new PreviewLattice.Map?[DynamicResolution.MaxLevel + 1];
         private uint[]? _previewResamplePool;
         // Tracks the renderer's CURRENT back-buffer size (last value passed to
         // Resize). Survives _lastUploadedBuffer being nulled by Resize, so the
@@ -371,10 +373,12 @@ namespace FracturingFog.Rendering
             // sample N (skip stale-upload + MSAA; blend into the TAA
             // accumulator and present the running average).
             public readonly int TaaSampleIndex;
-            // Wave 2.5 — progressive downsample factor. 0 / 1 = final
-            // full-resolution stage (existing path). 2 = half. 4 = quarter.
-            // When non-final the calc runs on a sidecar preview calc; the
-            // upload tail schedules the next stage (4 → 2 → 0).
+            // Wave 2.5 — progressive stage. 0 = final full-resolution stage
+            // (existing path). #1333 — otherwise a DynamicResolution level:
+            // 2 = half, 4 = quarter, 6 = eighth, odd levels between. When
+            // non-final the calc runs on a sidecar preview calc; the upload
+            // tail schedules the next stage (DynamicResolution.NextLevel:
+            // 4 → 2 → 0).
             public readonly int ProgressiveStage;
             // #86 — monotonic present-priority id. Assigned at construction, so
             // a job built later (a newer trigger, or a later progressive/TAA
@@ -401,12 +405,15 @@ namespace FracturingFog.Rendering
             public readonly FractalRenderHost Host;
             public readonly FrameJob Job;
             public readonly long Ms;
-            public UploadCtx(FractalRenderHost host, FrameJob job, long ms)
-            { Host = host; Job = job; Ms = ms; }
+            // #1333 — Stopwatch ticks when this stage's calculation started (0 =
+            // not measured), so the upload tail can time the whole stage.
+            public readonly long StartTicks;
+            public UploadCtx(FractalRenderHost host, FrameJob job, long ms, long startTicks = 0)
+            { Host = host; Job = job; Ms = ms; StartTicks = startTicks; }
         }
 
         private static readonly Action<UploadCtx> s_uploadCallback =
-            static ctx => ctx.Host.RunFrameJobUpload(ctx.Job, ctx.Ms);
+            static ctx => ctx.Host.RunFrameJobUpload(ctx.Job, ctx.Ms, ctx.StartTicks);
 
         // #86 — newest-wins present gate. MUST be called while holding
         // _uploadGate. Returns false when a frame with a higher Seq has already
@@ -479,11 +486,13 @@ namespace FracturingFog.Rendering
             _currentTargetHeight = h;
             // Wave 2.5 — progressive sidecars at ¼ and ½ resolution. Min
             // 64×64 to keep BLA / SA prelude math well-behaved at very small
-            // window sizes.
-            int qw = Math.Max(64, w / 4); int qh = Math.Max(64, h / 4);
-            int hw = Math.Max(64, w / 2); int hh = Math.Max(64, h / 2);
-            _previewCalcQuarter = new MandelbrotCalculator(qw, qh);
-            _previewCalcHalf    = new MandelbrotCalculator(hw, hh);
+            // window sizes. #1333 — the other DynamicResolution levels are made
+            // on first use (PreviewCalc).
+            foreach (int level in new[] { 2, 4 })
+            {
+                var (pw0, ph0) = DynamicResolution.PreviewDims(w, h, level);
+                _previewCalcs[level] = new MandelbrotCalculator(pw0, ph0);
+            }
             _escapeCalculator = new EscapeTimeCalculator(w, h);
             _ifsCalculator = new IFSCalculator(w, h);
             _lsystemCalculator = new LSystemCalculator(w, h);
@@ -719,6 +728,37 @@ namespace FracturingFog.Rendering
         /// clean plumbing (instance flag on the preview calc) for future recycle
         /// work; flip on only with a measured reason. See Docs/Deep-Zoom-Perturbation.md §6.</summary>
         public bool RecyclePreviewOrbit { get; set; } = false;
+
+        /// <summary>#1333 — picks the first interactive stage's resolution from the
+        /// measured frame cost (see <see cref="Rendering.DynamicResolution"/>).</summary>
+        public DynamicResolution DynamicResolution { get; } = new();
+
+        /// <summary>#1333 — <see cref="DynamicResolution"/> on (default) / off (the
+        /// fixed ¼ → ½ → full ladder).</summary>
+        public bool DynamicPreviewResolution
+        {
+            get => DynamicResolution.Enabled;
+            set => DynamicResolution.Enabled = value;
+        }
+
+        /// <summary>#1333 — the interactive frame-time target, ms.</summary>
+        public double InteractiveTargetMs
+        {
+            get => DynamicResolution.TargetMs;
+            set => DynamicResolution.TargetMs = value;
+        }
+
+        // #1333 — the measurements belong to one fractal type and relief mode (a
+        // relief preview costs far more per pixel); a change starts them over.
+        private (FractalType Type, bool Relief) _dynResKey = ((FractalType)(-1), false);
+
+        private void SyncDynamicResolutionKey()
+        {
+            var key = (ViewState.FractalType, ViewState.FractalParameters.Relief2DEnabled);
+            if (key == _dynResKey) return;
+            _dynResKey = key;
+            DynamicResolution.Reset();
+        }
 
         // Render-context overlay lines + optional detail-limit warning, folded
         // into the perf HUD (ShowPerfHud). Kept out of the status bar so a long
@@ -1727,9 +1767,13 @@ namespace FracturingFog.Rendering
             // calcs still run a single full render as before. Tiny windows (W*H < 256 px)
             // skip progressive — overhead exceeds the win.
             bool altReliefPreview = AltPreviewEligible(useAlt);
+            // #1333 — the first stage's level comes from the measured frame cost
+            // (DynamicResolution): ¼ until frames are measured, ⅛ … full after.
+            // Level 0 = no preview, the final frame is fast enough on its own.
+            SyncDynamicResolutionKey();
             int progressiveStage = (progressive && calcW * calcH >= 256 * 256
                                      && ((!useAlt && _dynamicAltCalculator == null) || altReliefPreview))
-                ? 4
+                ? DynamicResolution.Choose(calcW, calcH)
                 : 0;
 
             // T2.4: enqueue onto the dedicated calc thread (latest-only).
@@ -1800,20 +1844,19 @@ namespace FracturingFog.Rendering
             // schedule the next stage. Skips TAA / MSAA / SSAO / CDF rebuild
             // / FrameCompleted — those apply only to the final full-res
             // frame.
-            if (job.ProgressiveStage >= 2)
+            if (job.ProgressiveStage > 0)
             {
                 long pCalcStart = Stopwatch.GetTimestamp();
-                bool quarter = job.ProgressiveStage >= 4;
+                int level = job.ProgressiveStage;   // #1333: a DynamicResolution level
                 if (useAlt)
                 {
                     // #327 — alt relief preview: resolve a dedicated low-res twin for the
-                    // active height-field type at the same quarter/half dims the Mandelbrot
+                    // active height-field type at the same preview dims the Mandelbrot
                     // sidecars use, configure it exactly like the live alt render, and
                     // Calculate. Its SmoothBuffer / TrapBuffer drive the relief apply on the
-                    // upload tail (which reads the same _altPreviewCalc* slots).
-                    int apw = Math.Max(64, quarter ? job.CalcW / 4 : job.CalcW / 2);
-                    int aph = Math.Max(64, quarter ? job.CalcH / 4 : job.CalcH / 2);
-                    var altPreview = EnsureAltPreviewCalc(quarter, apw, aph);
+                    // upload tail (which reads the same _altPreviewCalcs slot).
+                    var (apw, aph) = DynamicResolution.PreviewDims(job.CalcW, job.CalcH, level);
+                    var altPreview = EnsureAltPreviewCalc(level, apw, aph);
                     if (altPreview == null)   // type has no twin → abandon preview stage
                     {
                         AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
@@ -1829,9 +1872,7 @@ namespace FracturingFog.Rendering
                 }
                 else
                 {
-                    MandelbrotCalculator preview = quarter
-                        ? _previewCalcQuarter
-                        : _previewCalcHalf;
+                    MandelbrotCalculator preview = PreviewCalc(level);
                     MirrorMandelbrotState(calc, preview);
                     // #1272 — snap the preview onto the world-anchored lattice (plain
                     // 2D only: a relief preview is an oblique projection, not a pure
@@ -1839,7 +1880,7 @@ namespace FracturingFog.Rendering
                     PreviewLattice.Map? map = ViewState.FractalParameters.Relief2DEnabled
                         ? null
                         : AnchorPreview(calc, preview);
-                    if (quarter) _previewMapQuarter = map; else _previewMapHalf = map;
+                    Volatile.Write(ref _previewMaps[level], map);
                     // SM-11b — let the preview reuse its cached reference orbit across
                     // a drag so consecutive preview frames share one reference (no
                     // per-move recompute → no deep-zoom "jumping"). Only the transient
@@ -1864,7 +1905,7 @@ namespace FracturingFog.Rendering
 
                 long pMs = job.Sw.ElapsedMilliseconds;
                 ThreadPool.UnsafeQueueUserWorkItem(s_uploadCallback,
-                    new UploadCtx(this, job, pMs), preferLocal: false);
+                    new UploadCtx(this, job, pMs, pCalcStart), preferLocal: false);
                 return;
             }
 
@@ -2104,7 +2145,7 @@ namespace FracturingFog.Rendering
             // thread loops back for the next queued frame without blocking
             // on UploadProcessedBuffer (post-FX + GPU upload).
             ThreadPool.UnsafeQueueUserWorkItem(s_uploadCallback,
-                new UploadCtx(this, job, ms), preferLocal: false);
+                new UploadCtx(this, job, ms, calcStart), preferLocal: false);
         }
 
         // Wave 2.6 — MSAA helper. Runs N total samples on a √N×√N jitter grid
@@ -2679,31 +2720,41 @@ namespace FracturingFog.Rendering
 
         /// <summary>#327 — resolve (create / resize / rebuild-on-type-change) the alt
         /// relief-preview sidecar for the current <see cref="ViewState.FractalType"/> at
-        /// the given preview dims. <paramref name="quarter"/> selects the quarter- vs
-        /// half-res slot (mirrors the Mandelbrot <c>_previewCalcQuarter/Half</c>). Returns
-        /// null when the type has no supersamplable twin.</summary>
-        private IFractalCalculator? EnsureAltPreviewCalc(bool quarter, int pw, int ph)
+        /// the given preview dims. #1333 — one slot per DynamicResolution
+        /// <paramref name="level"/> (mirrors the Mandelbrot <see cref="PreviewCalc"/>).
+        /// Returns null when the type has no supersamplable twin.</summary>
+        private IFractalCalculator? EnsureAltPreviewCalc(int level, int pw, int ph)
         {
             var type = ViewState.FractalType;
             if (_altPreviewType != type)
             {
-                (_altPreviewCalcQuarter as IDisposable)?.Dispose();
-                (_altPreviewCalcHalf as IDisposable)?.Dispose();
-                _altPreviewCalcQuarter = null;
-                _altPreviewCalcHalf = null;
+                DropAltPreviewCalcs();
                 _altPreviewType = type;
             }
-            if (quarter)
+            _altPreviewCalcs[level] ??= CreateReliefFieldCalc(type, pw, ph);
+            var c = _altPreviewCalcs[level];
+            if (c != null && (c.Width != pw || c.Height != ph)) c.Resize(pw, ph);
+            return c;
+        }
+
+        private void DropAltPreviewCalcs()
+        {
+            for (int i = 0; i < _altPreviewCalcs.Length; i++)
             {
-                _altPreviewCalcQuarter ??= CreateReliefFieldCalc(type, pw, ph);
-                var q = _altPreviewCalcQuarter;
-                if (q != null && (q.Width != pw || q.Height != ph)) q.Resize(pw, ph);
-                return q;
+                (_altPreviewCalcs[i] as IDisposable)?.Dispose();
+                _altPreviewCalcs[i] = null;
             }
-            _altPreviewCalcHalf ??= CreateReliefFieldCalc(type, pw, ph);
-            var h = _altPreviewCalcHalf;
-            if (h != null && (h.Width != pw || h.Height != ph)) h.Resize(pw, ph);
-            return h;
+        }
+
+        /// <summary>#1333 — the Mandelbrot progressive sidecar for a DynamicResolution
+        /// <paramref name="level"/>, made on first use and sized to the main calc.</summary>
+        private MandelbrotCalculator PreviewCalc(int level)
+        {
+            var (pw, ph) = DynamicResolution.PreviewDims(_calculator.Width, _calculator.Height, level);
+            var c = _previewCalcs[level];
+            if (c == null) _previewCalcs[level] = c = new MandelbrotCalculator(pw, ph);
+            else if (c.Width != pw || c.Height != ph) c.Resize(pw, ph);
+            return c;
         }
 
         /// <summary>#143 / #1028 — the dedicated relief field's size for a
@@ -2860,7 +2911,7 @@ namespace FracturingFog.Rendering
             catch (OperationCanceledException) { return false; }
         }
 
-        private void RunFrameJobUpload(FrameJob job, long ms)
+        private void RunFrameJobUpload(FrameJob job, long ms, long startTicks = 0)
         {
             var token = job.Token;
             var calc = job.Calc;
@@ -2874,7 +2925,7 @@ namespace FracturingFog.Rendering
             // overlay composite, no TAA, no FrameCompleted, no perf-HUD
             // frame timing (still records calc ms above). After upload,
             // enqueue the next stage (4 → 2 → 0 final).
-            if (job.ProgressiveStage >= 2)
+            if (job.ProgressiveStage > 0)
             {
                 if (token.IsCancellationRequested || _disposed)
                 {
@@ -2886,18 +2937,19 @@ namespace FracturingFog.Rendering
                     RenderCancelled?.Invoke(this, EventArgs.Empty);
                     return;
                 }
-                bool quarter = job.ProgressiveStage >= 4;
-                // #327 — the preview sidecar is the Mandelbrot _previewCalc* on the
+                int level = job.ProgressiveStage;   // #1333
+                // #327 — the preview sidecar is the Mandelbrot _previewCalcs slot on the
                 // canonical path, or the alt relief-preview twin (same slot the calc
                 // branch filled) for a relief-eligible alt type. Both expose ColorBuffer /
                 // Width / Height + IHeightFieldSource / ITrapFieldSource, so the relief
                 // apply below is source-agnostic.
                 uint[]? previewSrc; int pw, ph;
+                int previewPixels = 0; double previewMs = 0, previewFixedMs = 0;   // #1333: set when the stage reached the screen
                 float[]? previewSmooth; float[]? previewTrap;
                 Interefaces.IDistanceFieldSource? previewDist;   // #1029
                 if (useAlt)
                 {
-                    var ap = quarter ? _altPreviewCalcQuarter : _altPreviewCalcHalf;
+                    var ap = _altPreviewCalcs[level];
                     if (ap == null) { AnimationFrameUploaded?.Invoke(this, EventArgs.Empty); return; }
                     previewSrc = ap.ColorBuffer; pw = ap.Width; ph = ap.Height;
                     previewSmooth = (ap as Interefaces.IHeightFieldSource)?.SmoothBuffer;
@@ -2906,7 +2958,7 @@ namespace FracturingFog.Rendering
                 }
                 else
                 {
-                    MandelbrotCalculator preview = quarter ? _previewCalcQuarter : _previewCalcHalf;
+                    MandelbrotCalculator preview = _previewCalcs[level]!;
                     previewSrc = preview.ColorBuffer; pw = preview.Width; ph = preview.Height;
                     previewSmooth = preview.SmoothBuffer; previewTrap = preview.TrapBuffer;
                     previewDist = preview;
@@ -2931,6 +2983,7 @@ namespace FracturingFog.Rendering
                     // cheap at quarter/half and frames identically (aspect-based),
                     // so the 3D preview lines up with the final — no flash, no jump.
                     int pn = pw * ph;
+                    int ownPixels = pn;   // #1333: the preview's own size, before any resample
                     {
                         var rp = ViewState.FractalParameters;
                         var phs = previewSmooth;
@@ -2963,9 +3016,12 @@ namespace FracturingFog.Rendering
                             previewSrc = _reliefPreviewScratch;
                         }
                     }
+                    // #1333 — what follows (screen resample, upload) doesn't scale with
+                    // the preview's own size: timed apart as the stage's fixed part.
+                    long scaledEnd = Stopwatch.GetTimestamp();
                     // #1272 — an anchored preview is resampled to the screen with its
                     // sub-texel offset (the plain stretch would show the lattice snap).
-                    var pmap = quarter ? _previewMapQuarter : _previewMapHalf;
+                    var pmap = Volatile.Read(ref _previewMaps[level]);
                     if (!useAlt && pmap is { K: > 0 } && previewSrc != null && previewSrc.Length >= pn
                         && !ViewState.FractalParameters.Relief2DEnabled
                         && job.CalcW > 0 && job.CalcH > 0)
@@ -2982,6 +3038,14 @@ namespace FracturingFog.Rendering
                     {
                         _renderer.UpdateTexture(previewSrc, pw, ph);
                         _renderer.Render();
+                        // #1333 — timed at the present: the next drag step cancels
+                        // this chain at once, so a later check would never see it.
+                        if (startTicks != 0)
+                        {
+                            previewPixels = ownPixels;
+                            previewMs = (scaledEnd - startTicks) * 1000.0 / Stopwatch.Frequency;
+                            previewFixedMs = (Stopwatch.GetTimestamp() - scaledEnd) * 1000.0 / Stopwatch.Frequency;
+                        }
                     }
 
                     // S-X9g (2026-06-27) — snapshot the preview buffer into
@@ -3001,9 +3065,14 @@ namespace FracturingFog.Rendering
                     }
                     }
                 }
+                // #1333 — the whole stage (calculation + preview relief + upload) is
+                // the cost DynamicResolution steers by; only stages that reached the
+                // screen count.
+                if (previewPixels > 0)
+                    DynamicResolution.RecordPreview(previewPixels, previewMs, previewFixedMs);
                 AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
 
-                int nextStage = job.ProgressiveStage >= 4 ? 2 : 0;
+                int nextStage = DynamicResolution.NextLevel(job.ProgressiveStage);
                 // #327 — carry the alt calc forward so the alt preview chain
                 // (stage 4→2→0) stays on the alt path: the intermediate stage runs the
                 // alt preview twin again, and the stage-0 final renders the full alt frame
@@ -3106,11 +3175,11 @@ namespace FracturingFog.Rendering
                 // reader of the field checks Relief2DEnabled, and turning relief on
                 // re-renders. Skipping it keeps a deferred GPU frame's smooth and
                 // distance on the GPU.
-                if (job.ProgressiveStage <= 1 && !ViewState.FractalParameters.Relief2DEnabled)
+                if (job.ProgressiveStage == 0 && !ViewState.FractalParameters.Relief2DEnabled)
                 {
                     _reliefValid = false;
                 }
-                else if (job.ProgressiveStage <= 1)
+                else if (job.ProgressiveStage == 0)
                 {
                     // Any escape-time 2D calculator exposes its height field via
                     // IHeightFieldSource — Mandelbrot, the EscapeTimeCalculator
@@ -3188,6 +3257,7 @@ namespace FracturingFog.Rendering
                 // frame's upload has already reached the screen. A superseded
                 // final still runs its bookkeeping below (status label, events,
                 // TAA seed) so gates never stick — it just doesn't paint.
+                double finalMs = -1;   // #1333: set when the final reached the screen
                 lock (_uploadGate)
                 {
                     bool claimedF = TryClaimPresent(job.Seq);
@@ -3199,8 +3269,16 @@ namespace FracturingFog.Rendering
                             UploadProcessedBuffer(altCalc!.ColorBuffer, altCalc.Width, altCalc.Height);
                         else
                             UploadProcessedBuffer(calc.ColorBuffer, calc.Width, calc.Height);
+                        if (job.TaaSampleIndex == 0 && startTicks != 0)
+                            finalMs = (Stopwatch.GetTimestamp() - startTicks) * 1000.0 / Stopwatch.Frequency;
                     }
                 }
+                // #1333 — a final frame's whole cost (calculation, MSAA, post tail,
+                // upload) predicts a frame rendered without a preview stage. Timed at
+                // the present, as the preview stages are.
+                if (finalMs >= 0)
+                    DynamicResolution.Record(useAlt ? altCalc!.Width * altCalc.Height : calc.Width * calc.Height,
+                        finalMs, final: true);
 
                 // Pull the richer LastPrecisionLabel from the generated calcs
                 // (PT, QD-PT, DD-HP4, etc.) and from MandelbrotCalculator (#1321:
@@ -3333,10 +3411,12 @@ namespace FracturingFog.Rendering
             DrainCalc();
             _calculator.Resize(w, h);
             // Wave 2.5 — keep progressive sidecars in sync with main surface.
-            int qw = Math.Max(64, w / 4); int qh = Math.Max(64, h / 4);
-            int hw = Math.Max(64, w / 2); int hh = Math.Max(64, h / 2);
-            _previewCalcQuarter.Resize(qw, qh);
-            _previewCalcHalf.Resize(hw, hh);
+            for (int level = 1; level <= DynamicResolution.MaxLevel; level++)
+            {
+                if (_previewCalcs[level] is not { } pc) continue;
+                var (pw0, ph0) = DynamicResolution.PreviewDims(w, h, level);
+                pc.Resize(pw0, ph0);
+            }
             _escapeCalculator.Resize(w, h);
             _ifsCalculator.Resize(w, h);
             _lsystemCalculator.Resize(w, h);
@@ -4032,10 +4112,7 @@ namespace FracturingFog.Rendering
             (_reliefFieldAltCalc as IDisposable)?.Dispose();
             _reliefFieldAltCalc = null;
             _reliefFieldAltType = FractalType.Mandelbrot;
-            (_altPreviewCalcQuarter as IDisposable)?.Dispose();
-            (_altPreviewCalcHalf as IDisposable)?.Dispose();
-            _altPreviewCalcQuarter = null;
-            _altPreviewCalcHalf = null;
+            DropAltPreviewCalcs();
             _altPreviewType = (FractalType)(-1);
             // #745 — drop the hot-load hi-res twin too, so the next Compile & Load rebuilds
             // it from the new compiled type.

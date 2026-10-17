@@ -22,6 +22,19 @@
                 <CheckBox Content="GPU compute"
                           IsChecked="{Binding Menu.UseGpuCompute, Mode=TwoWay}"
                           ToolTip.Tip="Ctrl+G — run the shallow Mandelbrot pass on the GPU, using whichever compute backend this session attached (D3D11 on Windows, or Vulkan/SPIR-V under --renderer vulkan). Clears itself if no device can engage. Deep-zoom stays on the CPU." />
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                    <CheckBox Grid.Column="0" Content="Dynamic preview resolution"
+                              IsChecked="{Binding Menu.DynamicPreviewResolution, Mode=TwoWay}"
+                              ToolTip.Tip="While you drag or zoom, size the first preview from how long recent frames took: as fine as the frame-time target allows, from 1/8 resolution up to full (no preview at all when a full frame already fits). The final frame is always full resolution and unchanged. Off: the fixed 1/4, 1/2, full ladder." />
+                    <NumericUpDown Grid.Column="2"
+                                   Value="{Binding Menu.InteractiveTargetMs, Mode=TwoWay}"
+                                   Minimum="4" Maximum="500" Increment="1"
+                                   FormatString="0"
+                                   Width="110"
+                                   IsEnabled="{Binding Menu.DynamicPreviewResolution}"
+                                   ToolTip.Tip="Frame-time target for interactive previews, in milliseconds (33 = about 30 frames a second, 16 = about 60)" />
+                    <TextBlock Grid.Column="3" Classes="fxLabel" Text="ms" VerticalAlignment="Center" Margin="4,0,0,0" />
+                </Grid>
             </StackPanel>
         </Border>
 
