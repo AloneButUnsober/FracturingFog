@@ -4,9 +4,9 @@
 // Rendering.Vulkan/VulkanStageTimer.cs
 //
 // #1329 — GPU timestamp queries for a kernel's frame. A frame is several
-// command buffers (one per TDR band / chunk, plus a readback submit), each
-// waited on before the next. Each command buffer starts with a Begin stamp
-// (TOP_OF_PIPE) and closes each stage with a BOTTOM_OF_PIPE stamp; the first
+// command buffers (one per TDR band / chunk, plus a readback submit), submitted
+// in order; since #1334 a frame's bands don't wait for each other. Each command
+// buffer starts with a Begin stamp (TOP_OF_PIPE) and closes each stage with a BOTTOM_OF_PIPE stamp; the first
 // command buffer of the frame resets the pool. After the frame's last wait the
 // results are read and turned into stage times (GpuStageTimes.FromStamps).
 // Disabled (every call a no-op, the result null) when the queue family has no

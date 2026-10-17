@@ -89,6 +89,7 @@ dotnet run -c Release --project FracturingFogCLD.csproj -- --d3dpturbcalc  # D3D
 dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke.csproj -- --vulkanpturbprobe  # kernel-vs-CPU at noise floor
 dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke.csproj -- --vulkanpturbdc    # deep-dc precision sweep 1e6→1e50
 dotnet run -c Release --project FracturingFogCLD.csproj -- --gpuperiodicityprobe  # #1342 shallow SP kernel (D3D11): periodicity on == off bit for bit, fires, timing
+dotnet run -c Release --project FracturingFogCLD.csproj -- --gpubandprobe  # #1334 deep perturbation bands (D3D11 + Vulkan): banded == one band bit for bit, band sizes, wall + GPU time
 dotnet run -c Release --project FracturingFogCLD.csproj -- --gpudeferprobe  # #1332 shallow SP kernel (D3D11): deferred readback == eager bit for bit, flush, GPU escape count, timing
 ```
 
@@ -98,7 +99,8 @@ dotnet run -c Release --project FracturingFogCLD.csproj -- --gpudeferprobe  # #1
 | `FF_GPU_PERTURB=1` | D3D/Windows: opt in to deep GPU perturbation (deep-only). |
 | `FF_GPU_PERTURB_PRECISION` | #1331 — `auto` (default: the fp32 kernels only on a device without fp64), `fp32` (opt in anywhere: 2–8× faster on weak-fp64 cards, ~0.1–0.4% of pixels wrong near deep minibrots), `double` (never fp32). See Deep-Zoom-Perturbation.md §8. |
 | `FF_GPU_PERTURB_BUDGET_MS` | Perf-fallback threshold, ms (default 3000). Raise to force GPU to stay on for measuring. |
-| `FF_PERTURB_BANDROWS` | Force band height (test hook — stress multi-band; e.g. `8`). |
+| `FF_PERTURB_BANDROWS` | Force band height (test hook — stress multi-band; e.g. `8`). Rounded down to whole 8-row thread groups (#1334), like the budget-derived height. |
+| `FF_VULKAN_SERIAL_BANDS=1` | #1334 — Vulkan: wait for the queue after every perturbation band, as before #1334. Default: each band gets its own UBO slice, only band 0 is waited on (the too-slow abort), and the frame ends in one wait; output identical either way. Tests use `VulkanComputeKernel.ForceSerialBands`. |
 | `FF_GPU_PERIODICITY=0` | #1342 — shallow SP kernels (D3D11 + Vulkan): compile the plain loop, without the periodicity early-out (default on; output identical either way, only the time differs). Tests and probes use `GpuPeriodicity.Mode`. |
 | `FF_GPU_DEFER_READBACK=0` | #1332 — GPU-coloured SP frames (D3D11 + Vulkan) read every output back eagerly again. Default: the iteration / smooth / final-z outputs (and the CPU distance fill) stay on the GPU until something reads them (`Calculators/Gpu/GpuDeferredAux`); readers get the same bytes either way. Tests and probes use `GpuDeferredReadback.Enabled`. |
 | `FF_VULKAN_MEMORY` | Vulkan buffer layout (#1228): `auto` (default: orbit + SA / BLA in VRAM, outputs host-cached), `host` (pre-#1228, every buffer host-visible), `device-outputs` (outputs in VRAM too, copied out). |
