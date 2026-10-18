@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+             xmlns:ctrl="using:FracturingFog.UI.Avalonia.Controls"
              xmlns:m="using:FracturingFog.Models"
              x:Class="FracturingFog.UI.Avalonia.Views.UserBulbView"
              x:DataType="vm:UserBulbViewModel"
@@ -26,7 +27,7 @@
             <Setter Property="Foreground" Value="White" />
             <Setter Property="Padding" Value="10,3" />
         </Style>
-        <Style Selector="TextBox.code">
+        <Style Selector="ctrl|DslCodeEditor.code">
             <Setter Property="FontFamily" Value="Consolas, monospace" />
             <Setter Property="Background" Value="#1C1C1C" />
             <Setter Property="Foreground" Value="White" />
@@ -95,10 +96,11 @@
 
                 <!-- Source editor -->
                 <Border BorderBrush="#5A5A5A" BorderThickness="1" Background="#1C1C1C">
-                    <TextBox x:Name="SourceEditor"
+                    <!-- #1362 — DslCodeEditor; all User Bulb boxes share the "UserBulb" mode. -->
+                    <ctrl:DslCodeEditor x:Name="SourceEditor"
                              Classes="code"
-                             AcceptsReturn="True"
-                             AcceptsTab="True"
+                             Language="Bulb"
+                             PrefsKey="UserBulb"
                              Text="{Binding Source, Mode=TwoWay}"
                              MinHeight="110"/>
                 </Border>
@@ -109,10 +111,11 @@
                                Text="DE body (dr) — returns new dr; z,c,n,dr,de,t + params in scope. Empty = numerical tangent."
                                TextWrapping="Wrap" Margin="0,0,0,2"/>
                     <Border BorderBrush="#5A5A5A" BorderThickness="1" Background="#1C1C1C">
-                        <TextBox x:Name="DeBodyEditor"
+                        <ctrl:DslCodeEditor x:Name="DeBodyEditor"
                                  Classes="code"
-                                 AcceptsReturn="True"
-                                 AcceptsTab="True"
+                                 Language="Bulb"
+                                 PrefsKey="UserBulb"
+                                 ShowModeToggle="False"
                                  Text="{Binding DeBody, Mode=TwoWay}"
                                  MinHeight="70"
                                  ToolTip.Tip="Optional Sandbox-DSL scalar expression evaluated once per iteration, returning the new running-derivative bound dr. In scope: the pre-step orbit point z, the constant c, iteration n, animation t, the named params, and the previous dr / de. The engine owns de = min(de, 1/dr) and the final DEMultiplier*de. Example (Amoser): let ez = exp(z.z) in let s = max(StretchMax, StretchScale*sqrt(0.5*(ez*ez + 1/(ez*ez)))) in drScale*s*dr + drOffset"/>
@@ -576,7 +579,11 @@
                                     <DataTemplate DataType="m:UserBulbChainStep">
                                             <Grid ColumnDefinitions="70,*,Auto" Margin="2">
                                                 <TextBox Grid.Column="0" Text="{Binding OutputName, Mode=TwoWay}" />
-                                                <TextBox Grid.Column="1" Classes="code"
+                                                <ctrl:DslCodeEditor Grid.Column="1" Classes="code"
+                                                         Language="Bulb"
+                                                         PrefsKey="UserBulb"
+                                                         ShowModeToggle="False"
+                                                         AcceptsReturn="False"
                                                          Text="{Binding Source, Mode=TwoWay}" Margin="4,0,4,0" />
                                                 <Button  Grid.Column="2" Content="X" Background="#5A3232" Foreground="White"
                                                          Command="{Binding $parent[ItemsControl].((vm:UserBulbViewModel)DataContext).RemoveChainCommand}"
