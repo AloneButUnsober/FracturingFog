@@ -222,6 +222,18 @@
             </StackPanel>
         </Border>
 
+        <!-- #1343 — Mandelbrot: solid-region skipping (Mariani–Silver). -->
+        <Border IsVisible="{Binding IsMandelbrot}"
+                BorderBrush="#404040" BorderThickness="0,1,0,0"
+                Padding="0,8,0,0" Margin="0,4,0,0">
+            <StackPanel Spacing="6">
+                <TextBlock Text="Speed" FontWeight="Bold" Foreground="#FFCC00" />
+                <CheckBox Content="Skip solid in-set regions"
+                          IsChecked="{Binding SolidRegionSkip, Mode=TwoWay}"
+                          ToolTip.Tip="Mariani–Silver: compute the borders of a grid of tiles first and fill a tile whose whole border is inside the set without iterating its interior (CPU). Much faster where the inside of the set is expensive — minibrots, satellite bulbs, deep zoom, slow-converging points (2–8x measured); a view whose inside is the main cardioid is already fast and gets slightly slower. Not exact: an escaping filament thinner than a pixel that crosses a tile between its border pixels is filled as inside (rare: up to ~0.01% of pixels on the test views)." />
+            </StackPanel>
+        </Border>
+
         <!-- #1344 — Mandelbrot: adaptive anti-aliasing (with the quality preset's sub-pixel AA). -->
         <Border IsVisible="{Binding IsMandelbrot}"
                 BorderBrush="#404040" BorderThickness="0,1,0,0"

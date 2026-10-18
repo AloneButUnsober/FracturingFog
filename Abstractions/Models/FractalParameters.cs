@@ -46,6 +46,17 @@ namespace FracturingFog.Models
         /// Off by default (every pixel takes every sample, as before).</summary>
         public bool AdaptiveAa { get; set; }
 
+        /// <summary>#1343 — Mandelbrot: solid-region skipping (Mariani–Silver). The
+        /// CPU paths compute a grid of tile borders and fill a tile whose border is
+        /// uniformly in-set instead of iterating its interior; other tiles split down to
+        /// 16 px. Exact except where an escaping filament thinner than a pixel crosses a
+        /// tile between border samples (measured 0–49 pixels of 518k on the probe views).
+        /// Pays off on expensive interiors — minibrots, satellite bulbs, deep zoom,
+        /// parabolic points (2–8x); a view whose interior is the main cardioid / period-2
+        /// bulb (already free on the shallow path) renders ~0.7–0.9x. Off = every pixel
+        /// iterated (byte-identical).</summary>
+        public bool SolidRegionSkip { get; set; }
+
         /// <summary>#1344 — channel difference (0–255) to a neighbour that marks a
         /// pixel for supersampling. Lower = more pixels sampled.</summary>
         public double AdaptiveAaThreshold { get; set; } = 12.0;
@@ -1828,6 +1839,7 @@ namespace FracturingFog.Models
                 EscapeIterationScale = EscapeIterationScale,
                 BlaTolerance = BlaTolerance,
                 AdaptiveAa = AdaptiveAa,                         // #1344
+                SolidRegionSkip = SolidRegionSkip,               // #1343
                 AdaptiveAaThreshold = AdaptiveAaThreshold,
                 AdaptiveAaTolerance = AdaptiveAaTolerance,
                 FaithfulImplosion = FaithfulImplosion,

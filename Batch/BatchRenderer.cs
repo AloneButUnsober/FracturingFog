@@ -920,10 +920,10 @@ namespace FracturingFog.Batch
                 }
                 if (deepCentre is { } fd && frameCx == cx && frType == FractalType.Mandelbrot)
                     return RenderDeepMandelFrame(fd, outW, outH, fz, iter, theme, pfAdaptive, quality, fp.BlaTolerance,
-                        FracturingFog.Rendering.AdaptiveAa.From(fp));
+                        FracturingFog.Rendering.AdaptiveAa.From(fp), fp.SolidRegionSkip);
                 return limbRegion != null && frameCx == cx
                     ? RenderRegionMandelFrame(limbRegion, outW, outH, fz, iter, theme, pfAdaptive, quality, fp.BlaTolerance,
-                        FracturingFog.Rendering.AdaptiveAa.From(fp))
+                        FracturingFog.Rendering.AdaptiveAa.From(fp), fp.SolidRegionSkip)
                     : RenderOneFrame(frType, outW, outH, frameCx, cy, fz, iter, theme, quality, pfAdaptive,
                                      fp, limbSource, stereo, frameDepth);
             }
@@ -1218,6 +1218,7 @@ namespace FracturingFog.Batch
                 ColorMap = theme,
                 Quality = quality,
                 BlaTolerance = fp.BlaTolerance,   // #1275
+                SolidRegionSkip = fp.SolidRegionSkip,   // #1343
             };
             calc.Calculate(CancellationToken.None);
             FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(calc, quality.AaSamples,
@@ -1482,11 +1483,12 @@ namespace FracturingFog.Batch
         private static uint[] RenderRegionMandelFrame(
             FractalRegion region, int w, int h, double zoom, int iter, IColorMap theme, int adaptive,
             QualityPreset? quality = null, double blaTolerance = FracturingFog.FFMath.BlaTable.DefaultEpsilon,
-            FracturingFog.Rendering.AdaptiveAa? aa = null)
+            FracturingFog.Rendering.AdaptiveAa? aa = null, bool solidRegionSkip = false)
         {
             var calc = new MandelbrotCalculator(w, h)
             {
                 BlaTolerance = blaTolerance,   // #1275
+                SolidRegionSkip = solidRegionSkip,   // #1343
                 CenterX = region.CenterX, CenterXLo = region.CenterXLo,
                 CenterX2 = region.CenterX2, CenterX3 = region.CenterX3,
                 CenterY = region.CenterY, CenterYLo = region.CenterYLo,
@@ -1517,7 +1519,7 @@ namespace FracturingFog.Batch
         {
             if (region.FractalType == FractalType.Mandelbrot && centerXOverride == null)
                 return RenderRegionMandelFrame(region, w, h, zoom, iter, theme, adaptive, blaTolerance: fp.BlaTolerance,
-                    aa: FracturingFog.Rendering.AdaptiveAa.From(fp));
+                    aa: FracturingFog.Rendering.AdaptiveAa.From(fp), solidRegionSkip: fp.SolidRegionSkip);
             return RenderOneFrame(region.FractalType, w, h,
                 centerXOverride ?? region.CenterX, region.CenterY, zoom, iter, theme,
                 region.QualityPreset ?? QualityPreset.Standard, adaptive,
@@ -2440,11 +2442,12 @@ namespace FracturingFog.Batch
         private static uint[] RenderDeepMandelFrame(
             FracturingFog.FFMath.DeepComplex c, int w, int h, double zoom, int iter, IColorMap theme, int adaptive,
             QualityPreset quality, double blaTolerance = FracturingFog.FFMath.BlaTable.DefaultEpsilon,
-            FracturingFog.Rendering.AdaptiveAa? aa = null)
+            FracturingFog.Rendering.AdaptiveAa? aa = null, bool solidRegionSkip = false)
         {
             var calc = new MandelbrotCalculator(w, h)
             {
                 BlaTolerance = blaTolerance,   // #1275
+                SolidRegionSkip = solidRegionSkip,   // #1343
                 CenterX = c.Re.X0, CenterXLo = c.Re.X1, CenterX2 = c.Re.X2, CenterX3 = c.Re.X3,
                 CenterX4 = c.Re.X4, CenterX5 = c.Re.X5, CenterX6 = c.Re.X6, CenterX7 = c.Re.X7,
                 CenterY = c.Im.X0, CenterYLo = c.Im.X1, CenterY2 = c.Im.X2, CenterY3 = c.Im.X3,
