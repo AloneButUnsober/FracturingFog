@@ -302,6 +302,15 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
             ScreenSpacePost.ClearHdrBuffer(hdrBuf);
         }
 
+        // #1336 — the live view's distance-field cache: march the baked field while
+        // only the camera moves (null without a cache, before the bake's coarse grid,
+        // or with the camera too close for its voxels).
+        var field = DistanceFieldCache.Current?.Acquire(DeKey(fold, scale, ox, oy, oz, deIter),
+            0, 0, 0, setRadius, eps, camX, camY, camZ, camDist, 2.0 * fovScale / height,
+            (x, y, z) => DispatchDE(fold, x, y, z, scale, ox, oy, oz, deIter));
+        if (field is not null) deDelegate = field.Sample;
+        double normalH = field is null ? eps * 2 : Math.Max(eps * 2, 0.5 * field.Voxel);
+
         // #1337 — the live view's temporal AO / shadow reuse (no-op without a cache).
         TemporalLighting.BeginFrame(width, height,
             new PinholeCamera(camX, camY, camZ, right[0], right[1], right[2], up[0], up[1], up[2],
@@ -331,7 +340,8 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
                 var relax = new SphereRelax(omega);   // #1335 over-relaxed sphere tracing
                 for (int step = 0; step < maxSteps; step++)
                 {
-                    double dist = DispatchDE(fold, px, py, pz, scale, ox, oy, oz, deIter);
+                    double dist = field is null ? DispatchDE(fold, px, py, pz, scale, ox, oy, oz, deIter)
+                                                : field.Sample(px, py, pz);
                     // #1335: the step here overshot (spheres apart): back up, march plainly.
                     double back = relax.BackOff(dist);
                     if (back > 0) { px -= rdx * back; py -= rdy * back; pz -= rdz * back; tTotal -= back; continue; }
@@ -350,13 +360,23 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
                     continue;
                 }
 
-                double h = eps * 2;
-                double n0 = DispatchDE(fold, px + h, py, pz, scale, ox, oy, oz, deIter)
-                          - DispatchDE(fold, px - h, py, pz, scale, ox, oy, oz, deIter);
-                double n1 = DispatchDE(fold, px, py + h, pz, scale, ox, oy, oz, deIter)
-                          - DispatchDE(fold, px, py - h, pz, scale, ox, oy, oz, deIter);
-                double n2 = DispatchDE(fold, px, py, pz + h, scale, ox, oy, oz, deIter)
-                          - DispatchDE(fold, px, py, pz - h, scale, ox, oy, oz, deIter);
+                double h = normalH;   // #1336: half a voxel on the cached field (smooth preview normals)
+                double n0, n1, n2;
+                if (field is null)
+                {
+                    n0 = DispatchDE(fold, px + h, py, pz, scale, ox, oy, oz, deIter)
+                       - DispatchDE(fold, px - h, py, pz, scale, ox, oy, oz, deIter);
+                    n1 = DispatchDE(fold, px, py + h, pz, scale, ox, oy, oz, deIter)
+                       - DispatchDE(fold, px, py - h, pz, scale, ox, oy, oz, deIter);
+                    n2 = DispatchDE(fold, px, py, pz + h, scale, ox, oy, oz, deIter)
+                       - DispatchDE(fold, px, py, pz - h, scale, ox, oy, oz, deIter);
+                }
+                else
+                {
+                    n0 = field.Sample(px + h, py, pz) - field.Sample(px - h, py, pz);
+                    n1 = field.Sample(px, py + h, pz) - field.Sample(px, py - h, pz);
+                    n2 = field.Sample(px, py, pz + h) - field.Sample(px, py, pz - h);
+                }
                 var nrm = Normalize3(n0, n1, n2);
 
                 float smooth = (float)hitStep * (192f / Math.Max(1, maxSteps))
@@ -464,6 +484,15 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
         }
         double rFinal = Math.Sqrt(zx * zx + zy * zy + zz * zz);
         return rFinal * Math.Pow(scale, -iter);
+    }
+
+    /// <summary>#1336 — the distance-field cache key: every input of <see cref="DispatchDE"/>.</summary>
+    internal static long DeKey(KifsFoldKind fold, double scale, double ox, double oy, double oz, int deIter)
+    {
+        var h = new HashCode();
+        h.Add(0x4B494653);   // "KIFS"
+        h.Add((int)fold); h.Add(scale); h.Add(ox); h.Add(oy); h.Add(oz); h.Add(deIter);
+        return h.ToHashCode();
     }
 
     private static double[] Normalize3(double x, double y, double z)
