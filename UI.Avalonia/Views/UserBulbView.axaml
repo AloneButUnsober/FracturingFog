@@ -574,7 +574,7 @@
 
                     <Border Grid.Row="2" Grid.Column="0" BorderBrush="#5A5A5A" BorderThickness="1" Background="#232323" >
                             <ScrollViewer VerticalScrollBarVisibility="Auto"> 
-                            <ItemsControl ItemsSource="{Binding Chain}" >
+                            <ItemsControl x:Name="ChainItems" ItemsSource="{Binding Chain}" >
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="m:UserBulbChainStep">
                                             <Grid ColumnDefinitions="70,*,Auto" Margin="2">

@@ -801,50 +801,18 @@ public sealed class UserEquationViewModel : ViewModelBase
         _lastPreview = null;
         RefreshCalcGenReport();
         // Parse errors carry their position as "... at line L, col C." Map
-        // back to a char offset so the view can select the bad token, covering
-        // a whole unknown name, with its Did-you-mean as the quick fix.
-        var m = Regex.Match(message, @"\bcol\s+(\d+)");
-        if (m.Success && int.TryParse(m.Groups[1].Value, out int col))
-        {
-            int line = 1;
-            var lm = Regex.Match(message, @"\bline\s+(\d+)");
-            if (lm.Success) int.TryParse(lm.Groups[1].Value, out line);
-            int offset = ColToOffset(raw, line, col);
-            int spanLen = 1;
-            string? fix = null;
-            var idM = Regex.Match(message, @"Unknown (?:identifier|function) '([^']+)'");
-            if (idM.Success) spanLen = idM.Groups[1].Value.Length;
-            var hintM = Regex.Match(message, @"Did you mean '([^']+)'");
-            if (hintM.Success) fix = hintM.Groups[1].Value;
-            SetErrorSpan(offset, spanLen, fix);
-        }
+        // back to a char offset so the view can mark the bad token, covering
+        // a whole unknown name, with its Did-you-mean as the quick fix
+        // (#1365: shared EquationErrorSpan, also used by the Sandbox editor).
+        if (EquationErrorSpan.TryLocate(raw, message, out int offset, out int spanLen))
+            SetErrorSpan(offset, Math.Max(1, spanLen), EquationErrorSpan.DidYouMean(message));
         else
-        {
             ClearErrorSpan();
-        }
     }
 
     private static bool LooksLikeCSharp(string s)
         => s.Contains("Complex.") || s.Contains("Math.") || s.Contains("new Complex")
            || Regex.IsMatch(s, @"\.(Real|Imaginary|Magnitude|Phase)\b");
-
-    // Walk source line-by-line until the target line, then add (col-1) for
-    // the character offset. Clamps to source length so a stale span past
-    // the end of a freshly-trimmed buffer doesn't throw.
-    private static int ColToOffset(string source, int line, int col)
-    {
-        if (line <= 1) return Math.Min(Math.Max(0, col - 1), source.Length);
-        int offset = 0;
-        int seen = 1;
-        while (seen < line && offset < source.Length)
-        {
-            int nl = source.IndexOf('\n', offset);
-            if (nl < 0) break;
-            offset = nl + 1;
-            seen++;
-        }
-        return Math.Min(offset + Math.Max(0, col - 1), source.Length);
-    }
 
     private void OnSavedSelectionChanged()
     {
