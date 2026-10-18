@@ -755,6 +755,25 @@ namespace FracturingFog.Rendering
         private readonly System.Collections.Generic.Dictionary<int, FracturingFog.Rendering.Lighting.TemporalLighting> _temporalRelief = new();
         private long _temporalSettleSeq = -1;
 
+        /// <summary>#1336 — see <see cref="IFractalRenderHost.DistanceFieldCache3D"/>.</summary>
+        public bool DistanceFieldCache3D { get; set; }
+
+        // #1336 — the live 3D view's baked distance fields (bakes run in the background
+        // and survive camera moves; a DE change re-bakes). Owned by the calc thread.
+        private readonly FracturingFog.Rendering.Lighting.DistanceFieldCache _distanceField3D = new();
+
+        /// <summary>#1336 — the live view's distance-field cache (diagnostics, tests).</summary>
+        public FracturingFog.Rendering.Lighting.DistanceFieldCache DistanceField3DCache => _distanceField3D;
+
+        /// <summary>#1336 — the distance-field cache installed for this 3D render (null =
+        /// march the true DE). A settle job marches the true DE.</summary>
+        private FracturingFog.Rendering.Lighting.DistanceFieldCache? DistanceField3DFor(in FrameJob job)
+        {
+            if (!DistanceFieldCache3D || !ViewState.Is3D) { _distanceField3D.Clear(); return null; }
+            _distanceField3D.BeginRender();
+            return job.Settle ? null : _distanceField3D;
+        }
+
         /// <summary>#1337 — the 3D frame's temporal-lighting cache, armed for this
         /// render (null = shade in full). A settle job reuses nothing.</summary>
         private FracturingFog.Rendering.Lighting.TemporalLighting? Temporal3DFor(in FrameJob job)
@@ -2100,10 +2119,14 @@ namespace FracturingFog.Rendering
                 if (useAlt)
                 {
                     // #1337 — temporal AO / shadow reuse on the live 3D view (opt-in).
+                    // #1336 — the baked distance field for camera moves (opt-in).
                     var temporal = Temporal3DFor(in job);
+                    var distanceField = DistanceField3DFor(in job);
                     using (FracturingFog.Rendering.Lighting.TemporalLighting.Use(temporal))
+                    using (FracturingFog.Rendering.Lighting.DistanceFieldCache.Use(distanceField))
                         altCalc!.Calculate(token);
-                    Interlocked.Exchange(ref _temporalSettleSeq, temporal?.LastFrameApproximate == true ? job.Seq : -1);
+                    bool approximate = temporal?.LastFrameApproximate == true || distanceField?.LastFrameApproximate == true;
+                    Interlocked.Exchange(ref _temporalSettleSeq, approximate ? job.Seq : -1);
                 }
                 else
                 {

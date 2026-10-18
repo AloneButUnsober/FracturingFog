@@ -38,6 +38,9 @@
                 <CheckBox Content="Temporal 3D lighting"
                           IsChecked="{Binding Menu.TemporalLighting3D, Mode=TwoWay}"
                           ToolTip.Tip="3D views (CPU raymarch): while you move the camera, each pixel recomputes its ambient occlusion and soft shadows only every 4th frame and otherwise reuses them from where its surface point was in the previous frame, so moving frames render faster but their AO / shadows are approximate. When the view settles, one more frame is rendered in full — exactly as with this off. Batch and export are unaffected." />
+                <CheckBox Content="Distance-field cache for 3D camera moves"
+                          IsChecked="{Binding Menu.DistanceFieldCache3D, Mode=TwoWay}"
+                          ToolTip.Tip="KIFS and User Bulb (CPU raymarch): the fractal's distance field is baked once in the background into a sparse voxel volume, and while you only move the camera the frames march that instead of the formula, so they render much faster. Moving frames are a preview: detail finer than a voxel is smoothed. When the view settles, one more frame is rendered with the true formula — exactly as with this off. Changing the fractal re-bakes. Batch and export are unaffected." />
             </StackPanel>
         </Border>
 

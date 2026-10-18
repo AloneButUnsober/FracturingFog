@@ -68,6 +68,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--temporallightingprobe")
             return TemporalLightingProbe.Run(args);
 
+        // #1336 — the baked distance-field cache: bake cost, field error, moving frames.
+        if (args.Length > 0 && args[0] == "--distancefieldprobe")
+            return DistanceFieldProbe.Run(args);
+
         // #1340 — D3D11 wavefront scheduling: on == off bit for bit, timing.
         if (args.Length > 0 && args[0] == "--gpuwavefrontprobe")
             return GpuWavefrontProbe.Run(args);

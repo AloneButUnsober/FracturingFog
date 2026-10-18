@@ -1101,6 +1101,26 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(TemporalLighting3D));
     }
 
+    // #1336 — the baked distance field for 3D camera moves (host DistanceFieldCache3D).
+    private bool _distanceFieldCache3D;
+    public bool DistanceFieldCache3D
+    {
+        get => _distanceFieldCache3D;
+        set
+        {
+            if (_distanceFieldCache3D == value) return;
+            this.RaiseAndSetIfChanged(ref _distanceFieldCache3D, value);
+            DistanceFieldCache3DToggled?.Invoke(this, value);
+        }
+    }
+
+    /// <summary>#1336 — load the host's value without re-firing the event.</summary>
+    public void SetDistanceFieldCache3DState(bool enabled)
+    {
+        _distanceFieldCache3D = enabled;
+        this.RaisePropertyChanged(nameof(DistanceFieldCache3D));
+    }
+
     /// <summary>Push the host's actual GPU-compute state onto the checkbox
     /// without re-firing <see cref="UseGpuComputeToggled"/>. Called by the
     /// shell after a toggle (read-back), on startup (initial sync), and from
@@ -1238,6 +1258,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public event EventHandler<bool>? DynamicPreviewResolutionToggled;   // #1333
     public event EventHandler<double>? InteractiveTargetMsChanged;      // #1333
     public event EventHandler<bool>? TemporalLighting3DToggled;         // #1337
+    public event EventHandler<bool>? DistanceFieldCache3DToggled;       // #1336
 
     public event EventHandler<IterLockEventArgs>? IterLockChanged;
 }
