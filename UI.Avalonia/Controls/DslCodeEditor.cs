@@ -129,6 +129,11 @@ namespace FracturingFog.UI.Avalonia.Controls
             _code.Document.TextChanged += OnCodeTextChanged;
             _code.TextArea.AddHandler(KeyDownEvent, OnCodeKeyDown, RoutingStrategies.Tunnel);
             _code.TextArea.TextView.LineTransformers.Add(_highlighter);
+            // #1364 — box the bracket pair at the caret; redraw it as the caret moves.
+            _code.TextArea.TextView.BackgroundRenderers.Add(
+                new DslBracketPairRenderer(_highlighter, () => _code.CaretOffset));
+            _code.TextArea.Caret.PositionChanged += (_, _) =>
+                _code.TextArea.TextView.InvalidateLayer(AvaloniaEdit.Rendering.KnownLayer.Selection);
 
             _codePlaceholder = new TextBlock
             {
@@ -151,7 +156,8 @@ namespace FracturingFog.UI.Avalonia.Controls
                 Focusable = false,
             };
             ToolTip.SetTip(_toggle,
-                "Code view: line numbers and syntax colouring (#1360). Off = plain text box. " +
+                "Code view: line numbers, syntax colouring and bracket matching (Ctrl+] jumps to the " +
+                "matching bracket) (#1360). Off = plain text box. " +
                 "The equation text is the same either way — code view never changes what is saved.");
             _toggle.IsCheckedChanged += (_, _) =>
             {
@@ -348,6 +354,24 @@ namespace FracturingFog.UI.Avalonia.Controls
 
         private void OnCodeKeyDown(object? sender, KeyEventArgs e)
         {
+            // #1364 — Ctrl+] jumps between a bracket next to the caret and its partner.
+            if (e.Key == Key.OemCloseBrackets && e.KeyModifiers == KeyModifiers.Control)
+            {
+                var (tokens, brackets) = _highlighter.Analyze(_code.Document);
+                if (DslBrackets.PairAtCaret(tokens, brackets, _code.CaretOffset) is { } pair)
+                {
+                    // Land in front of the other bracket, so a second press jumps back.
+                    int caret = _code.CaretOffset;
+                    bool atOpen = caret == tokens[pair.Open].Start || caret == tokens[pair.Open].End;
+                    int target = tokens[atOpen ? pair.Close : pair.Open].Start;
+                    // Empty pair "(|)": the close starts at the caret, so go to the open.
+                    if (target == caret) target = tokens[pair.Open].Start;
+                    _code.CaretOffset = target;
+                    _code.TextArea.Caret.BringCaretToView();
+                }
+                e.Handled = true;
+                return;
+            }
             // Single-line boxes (chain steps): Enter must not split the step.
             if (!AcceptsReturn && e.Key == Key.Enter) e.Handled = true;
         }
