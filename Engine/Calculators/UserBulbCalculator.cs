@@ -841,6 +841,10 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
             ScreenSpacePost.ClearHdrBuffer(hdrBuf);
         }
 
+        // #1336 — the live view's distance-field cache (acquired for the CPU march
+        // below; null on the GPU route and whenever the true DE is marched).
+        DistanceField? field = null;
+
         const int tileSize = 16;
         int tilesX = (width + tileSize - 1) / tileSize;
         int tilesY = (height + tileSize - 1) / tileSize;
@@ -889,7 +893,8 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
                 for (int s = 0; s < coneSteps; s++)
                 {
                     if (ct.IsCancellationRequested) return;
-                    double d = quatMode ? quatSample(px, py, pz) : vecSample(px, py, pz);
+                    double d = field is not null ? field.Sample(px, py, pz)
+                             : quatMode ? quatSample(px, py, pz) : vecSample(px, py, pz);
                     if (d < coneEps) { tMin = tT; break; }
                     if (tT > tEx + 1.0) break;
                     px += rdx * d; py += rdy * d; pz += rdz * d;
@@ -1107,6 +1112,16 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
             }
         }
 
+        // #1336 — march the baked field while only the camera moves (null without a
+        // cache, before the bake's coarse grid, or with the camera too close for its
+        // voxels). The field's cube is the cull sphere's, about the origin (the DE's
+        // frame), so a pan does not re-bake.
+        field = DistanceFieldCache.Current?.Acquire(BuildDeKey(quatMode, useAnalytic, quatExact, useNonEsc, kifsScale),
+            0, 0, 0, cullRadius, eps, camX, camY, camZ, camDist, 2.0 * fovScale / height,
+            quatMode ? quatSample : vecSample);
+        if (field is not null) deDelegate = field.Sample;
+        double normalH = field is null ? eps * 2 : Math.Max(eps * 2, 0.5 * field.Voxel);
+
         double[] tileTMin = ConeMarchTileHints();
 
         // #1337 — the live view's temporal AO / shadow reuse (no-op without a cache).
@@ -1178,7 +1193,8 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
                 for (int step = 0; step < maxSteps; step++)
                 {
                     if (ct.IsCancellationRequested) return;
-                    double dist = quatMode ? quatSample(px, py, pz) : vecSample(px, py, pz);
+                    double dist = field is not null ? field.Sample(px, py, pz)
+                                : quatMode ? quatSample(px, py, pz) : vecSample(px, py, pz);
                     if (dist < eps)
                     {
                         // Clip plane: if surface point is on positive side of plane, skip past.
@@ -1210,11 +1226,21 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
                 }
 
                 // Forward-diff normals: reuse hitDist as f(p), 3 extra probes.
-                double h = eps * 2;
+                double h = normalH;   // #1336: half a voxel on the cached field (smooth preview normals)
                 double invH = 1.0 / h;
-                double dxp = quatMode ? quatSample(px + h, py, pz) : vecSample(px + h, py, pz);
-                double dyp = quatMode ? quatSample(px, py + h, pz) : vecSample(px, py + h, pz);
-                double dzp = quatMode ? quatSample(px, py, pz + h) : vecSample(px, py, pz + h);
+                double dxp, dyp, dzp;
+                if (field is not null)
+                {
+                    dxp = field.Sample(px + h, py, pz);
+                    dyp = field.Sample(px, py + h, pz);
+                    dzp = field.Sample(px, py, pz + h);
+                }
+                else
+                {
+                    dxp = quatMode ? quatSample(px + h, py, pz) : vecSample(px + h, py, pz);
+                    dyp = quatMode ? quatSample(px, py + h, pz) : vecSample(px, py + h, pz);
+                    dzp = quatMode ? quatSample(px, py, pz + h) : vecSample(px, py, pz + h);
+                }
                 double n0 = (dxp - hitDist) * invH;
                 double n1 = (dyp - hitDist) * invH;
                 double n2 = (dzp - hitDist) * invH;
@@ -1308,7 +1334,11 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
             DownsampleBox(renderBuffer, width, height, ColorBuffer, fullW, fullH, ss);
         }
 
-        if (!lowRes && ss == 1 && tempReuse)
+        // #1336 / #1337 — never keep an approximate frame (a cached field, or reused AO /
+        // shadows) for the identity blit: the settle frame of the same view would replay
+        // it instead of rendering in full.
+        bool approximate = field is not null || TemporalLighting.Current?.LastFrameApproximate == true;
+        if (!lowRes && ss == 1 && tempReuse && !approximate)
         {
             // Save buffer for identity blit. Hit-data arrays empty (reproject
             // path not wired yet — Identity decision doesn't need them).
@@ -1328,6 +1358,26 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         // buffer, AFTER the temporal-cache save above so the cached frame stays
         // HUD-free (the identity-blit path redraws the HUD on replay). Self-guards.
         ScreenSpacePost.ApplyDebugHud(ColorBuffer, fullW, fullH, in fx);
+    }
+
+    /// <summary>#1336 — the distance-field cache key: every input of the DE the march
+    /// samples (the source, the DE knobs and mode, Julia c, the parameter bank, time),
+    /// and nothing of the camera, the lighting or the colouring.</summary>
+    private long BuildDeKey(bool quatMode, bool useAnalytic, bool quatExact, bool useNonEsc, double kifsScale)
+    {
+        var p = FractalParameters;
+        var h = new HashCode();
+        h.Add(_compiledSource ?? "");
+        h.Add(quatMode); h.Add(useAnalytic); h.Add(quatExact); h.Add(useNonEsc); h.Add(kifsScale);
+        h.Add(p.UserBulbIterations); h.Add(p.UserBulbBailout); h.Add(p.UserBulbJacobianH);
+        h.Add(p.UserBulbCullRadius); h.Add((int)p.UserBulbDEMode);
+        h.Add(p.UserBulbNonEscDEMultiplier); h.Add(p.UserBulbNonEscStabilityAxis); h.Add(p.UserBulbNonEscStabilityLimit);
+        h.Add(p.UserBulbDeBody ?? ""); h.Add((int)p.UserBulbAxisMode); h.Add(p.UserBulbQuatSliceW);
+        h.Add(p.UserBulbTime);
+        h.Add(p.UserBulbJuliaMode); h.Add(p.UserBulbJuliaCX); h.Add(p.UserBulbJuliaCY); h.Add(p.UserBulbJuliaCZ); h.Add(p.UserBulbJuliaCW);
+        if (p.UserBulbParams != null)
+            foreach (var pp in p.UserBulbParams) { h.Add(pp.Name); h.Add(pp.Value); }
+        return ((long)h.ToHashCode() << 32) ^ (uint)0x55425542;   // "UBUB"
     }
 
     private string BuildSceneKey()
