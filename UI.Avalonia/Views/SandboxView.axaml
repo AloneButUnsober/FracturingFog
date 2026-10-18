@@ -57,7 +57,8 @@
                 BorderThickness="1"
                 Background="#1C1C1C">
             <!-- #1362 — DslCodeEditor: plain TextBox or code view ("{ }" toggle). -->
-            <ctrl:DslCodeEditor Text="{Binding Source, Mode=TwoWay}"
+            <ctrl:DslCodeEditor x:Name="SourceEditor"
+                     Text="{Binding Source, Mode=TwoWay}"
                      Language="Sandbox"
                      PrefsKey="Sandbox"
                      FontFamily="Consolas, monospace"

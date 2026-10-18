@@ -99,6 +99,14 @@ namespace FracturingFog.UI.Avalonia.Controls
         private readonly DslHighlighter _highlighter = new();
         private bool _syncing;
 
+        // #1365 — current error span. Code view: anchors in the document so the
+        // underline follows edits until the next validation replaces it. Plain
+        // view: a selection, deferred while the box has focus (#1089).
+        private TextAnchor? _errStart, _errEnd;
+        private string? _errMessage;
+        private bool _errIsError = true;
+        private int _pendingSelStart = -1, _pendingSelEnd = -1;
+
         public DslCodeEditor()
         {
             _plain = new TextBox
@@ -111,6 +119,7 @@ namespace FracturingFog.UI.Avalonia.Controls
             ScrollViewer.SetHorizontalScrollBarVisibility(_plain, ScrollBarVisibility.Auto);
             ScrollViewer.SetVerticalScrollBarVisibility(_plain, ScrollBarVisibility.Auto);
             _plain.PropertyChanged += OnPlainPropertyChanged;
+            _plain.LostFocus += (_, _) => FlushPendingSelection();
 
             _code = new TextEditor
             {
@@ -134,6 +143,10 @@ namespace FracturingFog.UI.Avalonia.Controls
                 new DslBracketPairRenderer(_highlighter, () => _code.CaretOffset));
             _code.TextArea.Caret.PositionChanged += (_, _) =>
                 _code.TextArea.TextView.InvalidateLayer(AvaloniaEdit.Rendering.KnownLayer.Selection);
+            // #1365 — wavy underline under the error span + its message on hover.
+            _code.TextArea.TextView.BackgroundRenderers.Add(new DslSquiggleRenderer(this));
+            _code.TextArea.TextView.PointerMoved += OnCodePointerMoved;
+            _code.TextArea.TextView.PointerExited += (_, _) => ToolTip.SetIsOpen(_code.TextArea.TextView, false);
 
             _codePlaceholder = new TextBlock
             {
@@ -177,21 +190,88 @@ namespace FracturingFog.UI.Avalonia.Controls
         /// <summary>True while either inner editor has keyboard focus.</summary>
         public bool IsEditorFocused => IsKeyboardFocusWithin;
 
-        /// <summary>Select [start, end) in whichever editor is showing — the
-        /// error-span highlight (#1089 / #1102).</summary>
-        public void Select(int start, int end)
+        /// <summary>
+        /// #1365 — show a validation result over [start, start+length).
+        /// Code view: a wavy underline (yellow for errors, blue for hints such as
+        /// "C#-style, Ctrl+. converts") with <paramref name="message"/> on hover;
+        /// it moves with edits and never touches the caret or selection.
+        /// Plain view: the pre-#1360 behaviour — the span is selected, deferred
+        /// to focus loss so typing is never replaced by the selection.
+        /// A length of 0 clears.
+        /// </summary>
+        public void ShowError(int start, int length, string? message, bool isError = true)
         {
-            int len = (Text ?? string.Empty).Length;
-            start = Math.Clamp(start, 0, len);
-            end = Math.Clamp(end, start, len);
-            if (IsCodeView)
+            if (length <= 0) { ClearError(); return; }
+            var doc = _code.Document;
+            int s = Math.Clamp(start, 0, doc.TextLength);
+            int e = Math.Clamp(start + length, s, doc.TextLength);
+            _errStart = doc.CreateAnchor(s);
+            _errEnd = doc.CreateAnchor(e);
+            _errMessage = message;
+            _errIsError = isError;
+            _code.TextArea.TextView.InvalidateLayer(AvaloniaEdit.Rendering.KnownLayer.Selection);
+
+            if (!IsCodeView)
             {
-                _code.Select(start, end - start);
+                _pendingSelStart = s;
+                _pendingSelEnd = e;
+                if (!_plain.IsKeyboardFocusWithin) FlushPendingSelection();
             }
             else
             {
-                _plain.SelectionStart = start;
-                _plain.SelectionEnd = end;
+                _pendingSelStart = _pendingSelEnd = -1;
+            }
+        }
+
+        /// <summary>#1365 — remove the error underline / pending selection.</summary>
+        public void ClearError()
+        {
+            _errStart = _errEnd = null;
+            _errMessage = null;
+            _pendingSelStart = _pendingSelEnd = -1;
+            _code.TextArea.TextView.InvalidateLayer(AvaloniaEdit.Rendering.KnownLayer.Selection);
+            ToolTip.SetIsOpen(_code.TextArea.TextView, false);
+        }
+
+        /// <summary>#1365 — the live error span (follows edits), or null when there
+        /// is none or its text was deleted.</summary>
+        public (int Start, int Length, string? Message, bool IsError)? CurrentError
+        {
+            get
+            {
+                if (_errStart is not { IsDeleted: false } a || _errEnd is not { IsDeleted: false } b) return null;
+                int len = b.Offset - a.Offset;
+                return len > 0 ? (a.Offset, len, _errMessage, _errIsError) : null;
+            }
+        }
+
+        private void FlushPendingSelection()
+        {
+            if (_pendingSelStart < 0) return;
+            int len = (_plain.Text ?? string.Empty).Length;
+            _plain.SelectionStart = Math.Min(_pendingSelStart, len);
+            _plain.SelectionEnd = Math.Min(_pendingSelEnd, len);
+            _pendingSelStart = _pendingSelEnd = -1;
+        }
+
+        private void OnCodePointerMoved(object? sender, PointerEventArgs e)
+        {
+            var view = _code.TextArea.TextView;
+            if (CurrentError is not { } err || string.IsNullOrEmpty(err.Message))
+            {
+                ToolTip.SetIsOpen(view, false);
+                return;
+            }
+            var pos = view.GetPosition(e.GetPosition(view) + view.ScrollOffset);
+            int offset = pos is { } p ? _code.Document.GetOffset(p.Location) : -1;
+            if (offset >= err.Start && offset <= err.Start + err.Length)
+            {
+                ToolTip.SetTip(view, err.Message);
+                ToolTip.SetIsOpen(view, true);
+            }
+            else
+            {
+                ToolTip.SetIsOpen(view, false);
             }
         }
 

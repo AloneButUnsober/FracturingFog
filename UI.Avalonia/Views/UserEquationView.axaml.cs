@@ -19,34 +19,20 @@ namespace FracturingFog.UI.Avalonia.Views;
 /// two-way bindings + host-callback events (CompileRequested, RenderRequested,
 /// PromotionChanged, NamePromptRequested, ConfirmDeleteRequested, HotLoadRequested).
 ///
-/// The one piece the view DOES own: applying the VM's <c>ErrorSpan*</c> to the
-/// editor's selection (#1089: one editor; #1362: <see cref="DslCodeEditor"/>,
-/// plain or code view). Selection is the canonical highlight mechanism;
-/// binding it two-way fights the user's own caret moves, so we listen to an
-/// event from the VM and apply once per validation cycle.
+/// The one piece the view DOES own: handing the VM's <c>ErrorSpan*</c> to the
+/// editor (#1089: one editor). #1365 — <see cref="DslCodeEditor.ShowError"/>
+/// underlines it in code view (message on hover) and, in plain view, keeps the
+/// old selection deferred to focus loss, so typing is never clobbered.
 /// </summary>
 public sealed partial class UserEquationView : UserControl
 {
     private DslCodeEditor? _editor;
     private UserEquationViewModel? _vm;
 
-    // Pending span — applied only when the relevant editor is NOT focused.
-    // Applying SelectionStart/End while the user is typing replaces the
-    // user's next keystroke with the selected text (Avalonia TextBox follows
-    // the standard convention: typing replaces selection). Defer the apply
-    // to LostFocus so the highlight is non-destructive. Status-bar message
-    // still updates immediately so the user sees the error.
-    //
-    // -1 sentinel means "no pending span".
-    private int _pendingStart = -1;
-    private int _pendingEnd = -1;
-
     public UserEquationView()
     {
         AvaloniaXamlLoader.Load(this);
         _editor = this.FindControl<DslCodeEditor>("EquationEditor");
-        if (_editor != null)
-            _editor.LostFocus += (_, _) => FlushPending(_editor);
         DataContextChanged += OnDataContextChanged;
     }
 
@@ -68,33 +54,14 @@ public sealed partial class UserEquationView : UserControl
     private void OnHelpRequested(string docId, string? anchor, string title)
         => HelpViewerLauncher.Show(TopLevel.GetTopLevel(this) as Window, docId, anchor, title);
 
-    // Receives the VM's "I just produced a new error span" notification. We
-    // stash the span and apply it ONLY when the editor isn't focused — that
-    // way the user's typing never gets clobbered by a selection sweep.
-    // When the editor later loses focus (Alt+Tab, click elsewhere, focus
-    // the Apply Fix button, etc.) the LostFocus handler flushes the stash.
+    // Receives the VM's "I just produced a new error span" notification
+    // (length 0 = cleared). The status text is set before the span, so it is
+    // the message for the hover tooltip; a non-error status (C#-style hint)
+    // draws as a hint underline.
     private void ApplyErrorSpan()
     {
-        if (_vm == null) return;
-        var editor = _editor;
-        if (editor == null) return;
-
-        int start = _vm.ErrorSpanStart;
-        int len = _vm.ErrorSpanLength;
-        int textLen = editor.Text?.Length ?? 0;
-        start = Math.Clamp(start, 0, textLen);
-        int end = Math.Clamp(start + len, start, textLen);
-
-        if (len == 0)
-        {
-            // Clear request — no highlight to apply; drop any pending one.
-            _pendingStart = _pendingEnd = -1;
-            return;
-        }
-
-        _pendingStart = start;
-        _pendingEnd = end;
-        if (!editor.IsEditorFocused) FlushPending(editor);
+        if (_vm == null || _editor == null) return;
+        _editor.ShowError(_vm.ErrorSpanStart, _vm.ErrorSpanLength, _vm.StatusText, _vm.StatusIsError);
     }
 
     // Copy the interpreted-math LaTeX (#754) / MathML (#756) to the clipboard.
@@ -153,12 +120,5 @@ public sealed partial class UserEquationView : UserControl
             _vm.ShowStatus($"Clipboard read failed: {ex.Message}", isError: true);
             return null;
         }
-    }
-
-    private void FlushPending(DslCodeEditor editor)
-    {
-        if (_pendingStart < 0) return;
-        editor.Select(_pendingStart, _pendingEnd);
-        _pendingStart = _pendingEnd = -1;
     }
 }

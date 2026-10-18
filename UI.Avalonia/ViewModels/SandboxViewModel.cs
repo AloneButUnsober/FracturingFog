@@ -146,6 +146,27 @@ public sealed class SandboxViewModel : ViewModelBase
         bool ok = string.IsNullOrEmpty(error);
         StatusText = ok ? "✓ Compiled" : error!;
         StatusIsError = !ok;
+        // #1365 — the host only returns the message; recover the span from its
+        // "line L, col C" so the editor can underline the bad token.
+        if (!ok && EquationErrorSpan.TryLocate(_params.SandboxSource ?? _source, error, out int start, out int length))
+            SetErrorSpan(start, Math.Max(1, length));
+        else
+            SetErrorSpan(0, 0);
+    }
+
+    /// <summary>#1365 — offset / length of the last compile error in the source
+    /// (length 0 = no error). The view applies it via <see cref="ErrorSpanChanged"/>.</summary>
+    public int ErrorSpanStart { get; private set; }
+    public int ErrorSpanLength { get; private set; }
+
+    /// <summary>Raised after every compile result (span may be empty).</summary>
+    public event Action? ErrorSpanChanged;
+
+    private void SetErrorSpan(int start, int length)
+    {
+        ErrorSpanStart = Math.Max(0, start);
+        ErrorSpanLength = Math.Max(0, length);
+        ErrorSpanChanged?.Invoke();
     }
 
     public void LoadEquationByName(string? name)

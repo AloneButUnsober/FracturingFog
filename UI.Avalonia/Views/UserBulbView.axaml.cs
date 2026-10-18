@@ -2,11 +2,13 @@
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
 using System;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Avalonia.VisualTree;
 
 using FracturingFog.UI.Avalonia.Controls;
 using FracturingFog.UI.Avalonia.Input;
@@ -29,10 +31,7 @@ public sealed partial class UserBulbView : UserControl
 {
     private UserBulbViewModel? _vm;
     private DslCodeEditor? _sourceEditor;
-    // Pending span to apply on next LostFocus — avoids clobbering an active
-    // edit caret while the user is typing.
-    private int _pendingStart = -1;
-    private int _pendingEnd = -1;
+    private ItemsControl? _chainItems;
 
     public UserBulbView()
     {
@@ -44,7 +43,7 @@ public sealed partial class UserBulbView : UserControl
     private void OnAttachedToVisualTree(object? sender, VisualTreeAttachmentEventArgs e)
     {
         _sourceEditor = this.FindControl<DslCodeEditor>("SourceEditor");
-        if (_sourceEditor != null) _sourceEditor.LostFocus += OnSourceLostFocus;
+        _chainItems = this.FindControl<ItemsControl>("ChainItems");
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)
@@ -65,37 +64,28 @@ public sealed partial class UserBulbView : UserControl
     private void OnHelpRequested(object? sender, (string DocId, string? Anchor, string Title) args)
         => HelpViewerLauncher.Show(TopLevel.GetTopLevel(this) as Window, args.DocId, args.Anchor, args.Title);
 
+    // #1365 — route the compile error to the box it belongs to: the source
+    // editor, or (#1102) the chain step's editor, and clear the others.
+    // DslCodeEditor.ShowError underlines in code view and keeps the deferred
+    // selection in plain view.
     private void OnErrorSpanChanged(object? sender, EventArgs e)
     {
-        if (_vm == null || _sourceEditor == null) return;
-        // #1102 — a chain-step error has no span in the source box; the status
-        // line names the step and Apply fix edits it.
-        if (_vm.ErrorSpanStep >= 0) { _pendingStart = _pendingEnd = -1; return; }
-        int start = _vm.ErrorSpanStart;
-        int len = _vm.ErrorSpanLength;
-        int textLen = _sourceEditor.Text?.Length ?? 0;
-        start = Math.Clamp(start, 0, textLen);
-        int end = Math.Clamp(start + len, start, textLen);
+        if (_vm == null) return;
+        int step = _vm.ErrorSpanStep;
+        int start = _vm.ErrorSpanStart, len = _vm.ErrorSpanLength;
+        string? message = _vm.StatusMessage;
 
-        if (len == 0)
+        if (step < 0) _sourceEditor?.ShowError(start, len, message);
+        else _sourceEditor?.ClearError();
+
+        if (_chainItems == null) return;
+        for (int i = 0; i < _chainItems.ItemCount; i++)
         {
-            _pendingStart = _pendingEnd = -1;
-            return;
+            var editor = _chainItems.ContainerFromIndex(i)?
+                .GetVisualDescendants().OfType<DslCodeEditor>().FirstOrDefault();
+            if (editor == null) continue;
+            if (i == step) editor.ShowError(start, len, message);
+            else editor.ClearError();
         }
-
-        _pendingStart = start;
-        _pendingEnd = end;
-        // Apply immediately only when editor isn't focused — otherwise wait
-        // for LostFocus so the user's caret/IME composition isn't clobbered.
-        if (!_sourceEditor.IsEditorFocused) FlushPending();
-    }
-
-    private void OnSourceLostFocus(object? sender, RoutedEventArgs e) => FlushPending();
-
-    private void FlushPending()
-    {
-        if (_pendingStart < 0 || _sourceEditor == null) return;
-        _sourceEditor.Select(_pendingStart, _pendingEnd);
-        _pendingStart = _pendingEnd = -1;
     }
 }

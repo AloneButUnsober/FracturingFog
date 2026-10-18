@@ -107,6 +107,17 @@ public sealed class UserBulbViewModel : ViewModelBase
 
         Params = new ObservableCollection<UserBulbParam>(_params.UserBulbParams);
         Chain  = new ObservableCollection<UserBulbChainStep>(_params.UserBulbChain);
+        // #1365 — a chain-step box writes straight into its UserBulbChainStep;
+        // recompile (debounced, like the source box) so the render updates and
+        // the step's error underline is re-validated.
+        foreach (var step in Chain) step.PropertyChanged += OnChainStepEdited;
+        Chain.CollectionChanged += (_, e) =>
+        {
+            if (e.OldItems != null)
+                foreach (UserBulbChainStep step in e.OldItems) step.PropertyChanged -= OnChainStepEdited;
+            if (e.NewItems != null)
+                foreach (UserBulbChainStep step in e.NewItems) step.PropertyChanged += OnChainStepEdited;
+        };
         SavedNames = new ObservableCollection<string>();
 
         UserBulbStore.Instance.Load();
@@ -169,6 +180,12 @@ public sealed class UserBulbViewModel : ViewModelBase
             if (_loadingNamedEquation) return;
             ScheduleCompile();
         }
+    }
+
+    private void OnChainStepEdited(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (_loadingNamedEquation) return;
+        ScheduleCompile();
     }
 
     private void ScheduleCompile()

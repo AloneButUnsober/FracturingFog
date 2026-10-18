@@ -40,6 +40,10 @@ namespace FracturingFog.UI.Avalonia.Controls
             Brush("#E8E8E8"), Brush("#DA70D6"), Brush("#4FB0FF"), Brush("#F0A050"),
         };
 
+        /// <summary>#1365 — wavy underline under an error (yellow) or a hint (blue).</summary>
+        public static readonly IPen ErrorSquiggle = new ImmutablePen(new ImmutableSolidColorBrush(Color.Parse("#FFCC00")), 1.2);
+        public static readonly IPen HintSquiggle = new ImmutablePen(new ImmutableSolidColorBrush(Color.Parse("#82AAFF")), 1.2);
+
         /// <summary>#1364 — box around the bracket pair at the caret.</summary>
         public static readonly IBrush PairFill = Brush("#3A4A5A");
         public static readonly IPen PairPen = new ImmutablePen(new ImmutableSolidColorBrush(Color.Parse("#8FA8C0")), 1);
@@ -181,6 +185,41 @@ namespace FracturingFog.UI.Avalonia.Controls
                 var seg = new TextSegment { StartOffset = tokens[idx].Start, Length = tokens[idx].Length };
                 foreach (var r in BackgroundGeometryBuilder.GetRectsForSegment(textView, seg))
                     drawingContext.DrawRectangle(DslPalette.PairFill, DslPalette.PairPen, r);
+            }
+        }
+    }
+
+    /// <summary>
+    /// #1365 — draws a wavy underline under <see cref="DslCodeEditor.CurrentError"/>.
+    /// </summary>
+    public sealed class DslSquiggleRenderer : IBackgroundRenderer
+    {
+        private const double Amplitude = 1.5;
+        private const double HalfWave = 2.5;
+        private readonly DslCodeEditor _editor;
+
+        public DslSquiggleRenderer(DslCodeEditor editor) => _editor = editor;
+
+        public KnownLayer Layer => KnownLayer.Selection;
+
+        public void Draw(TextView textView, DrawingContext drawingContext)
+        {
+            if (_editor.CurrentError is not { } err || !textView.VisualLinesValid) return;
+            var pen = err.IsError ? DslPalette.ErrorSquiggle : DslPalette.HintSquiggle;
+            var seg = new TextSegment { StartOffset = err.Start, Length = err.Length };
+            foreach (var r in BackgroundGeometryBuilder.GetRectsForSegment(textView, seg))
+            {
+                double y = r.Bottom - Amplitude;
+                var geo = new StreamGeometry();
+                using (var ctx = geo.Open())
+                {
+                    ctx.BeginFigure(new global::Avalonia.Point(r.Left, y), false);
+                    bool up = true;
+                    for (double x = r.Left + HalfWave; x < r.Right + HalfWave; x += HalfWave, up = !up)
+                        ctx.LineTo(new global::Avalonia.Point(Math.Min(x, r.Right), up ? y - Amplitude : y + Amplitude));
+                    ctx.EndFigure(false);
+                }
+                drawingContext.DrawGeometry(null, pen, geo);
             }
         }
     }
