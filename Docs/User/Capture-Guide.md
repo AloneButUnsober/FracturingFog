@@ -1,6 +1,6 @@
 # Capture Guide
 
-Screenshots, posters, videos, and PNG sequences from Fracturing Fog.
+Screenshots, posters, QR codes, videos, and PNG sequences from Fracturing Fog.
 
 > Companion pages: [User Index](_Index.md) · [Avalonia User Guide](Avalonia-UserGuide.md) · [Regions Guide](Regions-Guide.md)
 
@@ -17,6 +17,7 @@ want to *do* with it, and the rest follows:
 |------------------------------------------------|---------------------|-------------------------|
 | Post a screenshot to social media              | **Image**           | One PNG, ~1-3 MB        |
 | Print a wall-sized poster, or send to a printer | **Poster**         | One huge TIFF/PNG       |
+| Make a QR code that is also a fractal           | **Export QR Image…** (Capture → QR Code) | One square PNG / JPEG / WebP |
 | Record whatever is on screen right now         | **● Rec** / **F9**  | MP4 / H.265 / WebM / MKV / GIF / PNG — picked when you stop |
 | Share a smooth zoom-in video                   | **Video** (tick *Record this run*) | Same choice as ● Rec |
 | Loop endlessly between favourite views         | **Video Slideshow** (tick *Record this run*) | Same choice as ● Rec |
@@ -72,6 +73,7 @@ want to *do* with it, and the rest follows:
 
 1. [Screenshot (Image button)](#1-screenshot-image-button)
 2. [Poster (multi-tile)](#2-poster-multi-tile)
+   - 2a. [QR Code (a fractal that scans)](#2a-qr-code-a-fractal-that-scans)
 3. [Video Zoom (single shot)](#3-video-zoom-single-shot)
 4. [Video Slideshow (continuous loop)](#4-video-slideshow-continuous-loop)
 5. [Recording Formats](#5-recording-formats)
@@ -164,6 +166,94 @@ Use the Client dialog instead of the local Poster button:
 5. Output: a local file path on YOUR machine.
 
 For huge posters, set Return mode = `saved-path`. The server keeps the file on its disk and replies with the path; read it later over file share. Inline (default) streams bytes in 1 MB chunks over TLS — fine for a few-MB poster, slow for multi-GB.
+
+---
+
+## 2a. QR Code (a fractal that scans)
+
+**Control Center → Capture → QR Code** saves the current view as a square image that is
+also a working QR code. Point a phone camera at it and it opens your link; look at it and
+you see the fractal. Introduced by epic #1305.
+
+1. Pan / zoom / theme the view as usual.
+2. Type the **Text** the code should carry, usually a URL. Shorter text makes a smaller
+   code with bigger modules, so more of the fractal survives.
+3. Optional: **Find View** to nudge the framing toward one the code fits better, and/or
+   tick **Shape to the image** (see below).
+4. Click **Export QR Image…** and pick a file. PNG is best; JPEG and WebP work.
+5. The status line reports whether the **saved file** scans, e.g.
+   *Saved … — scans (4/4 passes) (version 6, 24 px/module)*. A failure shows in yellow
+   with what to change.
+
+The default file name ends in `_qrc`, the way posters end in `_poster` and wallpapers in
+`_wallpaper`: `FracturingFog_…_1200x1200_qrc.png`.
+
+### Controls
+
+| Control | What it does | Default |
+|---|---|---|
+| Text | The payload (UTF-8). Up to 2953 bytes, but a short URL looks far better. | — |
+| Style | **Steer**: every module is recoloured into a dark or light band (hue kept). **Dots**: only a square at each module's centre is forced; the fractal shows around it. **Halftone**: each module split 3×3; the centre cell carries the code, the outer cells are the fractal's own halftone. | Steer |
+| Error fix | Reed-Solomon level, the share of the code that can be damaged and still scan: L 7%, M 15%, Q 25%, H 30%. Higher tolerates more but makes the code larger. | H |
+| Size | Side of the square image in pixels. | 1200 |
+| Module px | Pixels per module. 0 = the largest that fits with the 4-module quiet zone. | 0 |
+| Dot | Size of the forced centre square, as a fraction of the module (Dots style; Steer's strict core). | 0.40 |
+| Invert | Light modules on a dark field. Many readers accept it, but not all. | off |
+| Version | Smallest QR version (1–40). Above what the text needs it makes a bigger code with smaller modules, and frees bits for *Shape to the image*. | 1 |
+| Shape to the image | QArt: choose the data bits a reader never reads so the code's own pattern follows the fractal (#1402). | off |
+| Find View | Search around the view for a framing that needs fewer changes (#1401). | — |
+
+### How it stays scannable
+
+A reader turns the picture into black and white and samples the middle of each module.
+The QR code only ever changes **lightness**: hues and colours stay the fractal's own. The
+three corner squares, the timing lines and the format bits are always drawn at full
+strength, and the 4-module border is lifted into the light band.
+
+After the file is written it is **decoded again** by an independent reader, four ways:
+full size, shrunk to 3 pixels per module, blurred, and re-saved as a JPEG at quality 70.
+It counts as scanning only when all four return the exact text. The check reads the file
+on disk, so the watermark and the encoder are included. The mask pattern is chosen the
+same way: patterns are tried until one composite passes every check, because a reader can
+mistake a fractal shape for one of the corner squares.
+
+### Find View
+
+Looks around the current view (position and zoom, within 0.5×–8× of the start zoom) and
+over the 8 mask patterns. It picks the framing where the code changes the picture least,
+then goes there; Backspace returns. The status line reports the result, e.g.
+*luma change 36% → 33%*. A framing must keep at least 80% of the start view's detail;
+otherwise the search would drift to a flat, featureless area (cheap to recolour, but no
+fractal left). Gains are modest by nature, because QR data looks random and no picture
+lines up with it well.
+
+### Shape to the image
+
+A reader stops at the end of the text, so the code's remaining data bits are free. With
+this ticked they are chosen so the code's own modules match the fractal's light and dark
+areas, strongest contrast first. The result is still a perfect, error-free code; it just
+already looks like the picture, so the style barely has to change it.
+
+How much follows the image depends on how many bits are free:
+
+| Settings (40-character URL) | Free bits | Code matches the image |
+|---|---|---|
+| Error fix L, Version 1 (code is v3) | 40 | 53% → 57% |
+| Error fix H, Version 1 (code is v6) | 80 | 51% → 53% |
+| **Error fix L, Version 8** | 1152 | **51% → 84%** |
+
+So for a strongly shaped code, pick **Error fix L** and raise **Version** to 6–10. Since
+the code is error-free, it doesn't need the high error correction that unshaped codes rely on.
+
+> [!TIP]
+> **Steer** is the most robust style; **Dots** and **Halftone** show more fractal but give
+> the reader less to work with. If a style fails the check, try Steer, a higher Error
+> fix, a shorter text or a larger Size. The export never hides a failure.
+
+> [!NOTE]
+> The code is centred in a square image and always dark-on-light unless **Invert** is
+> ticked. The same settings go into **Command → Seed from live view** as the `--qr-*`
+> flags ([§8](#fractal-qr-code-1305)), so a QR export can be reproduced headless.
 
 ---
 
@@ -559,6 +649,57 @@ FracturingFog.exe --batch --fractal BurningShip --explore seed=7,depth=5 ^
                   --explore-regions C:\out\ship.json --out C:\out\ship.png
 ```
 
+### Fractal QR code (#1305)
+
+Image mode only. `--qr-payload TEXT` turns it on; the other `--qr-*` flags need it.
+See [§2a](#2a-qr-code-a-fractal-that-scans) for what each setting does.
+
+| Flag | Value | Default |
+|---|---|---|
+| `--qr-payload` | text to encode | — |
+| `--qr-ecc` | `L` / `M` / `Q` / `H` | `H` |
+| `--qr-style` | `steer` / `dots` / `halftone` | `steer` |
+| `--qr-module-px` | 0–256 (0 = auto) | 0 |
+| `--qr-dot` | 0.2–0.6 | 0.4 |
+| `--qr-invert` | switch | off |
+| `--qr-no-verify` | switch: skip the post-save decode | off |
+| `--qr-version` | 1–40, smallest version | 1 |
+| `--qr-shape` | switch: shape the code toward the image (QArt) | off |
+| `--qr-mask` | 0–7, preferred mask (tried first) | auto |
+| `--qr-search` | `SPEC`: find a better-fitting framing | off |
+
+```
+FracturingFog.exe --batch --region ""Seahorse Valley"" --theme Fire ^
+                  --width 1200 --height 1200 ^
+                  --qr-payload https://example.org --qr-ecc L --qr-version 8 --qr-shape ^
+                  --out C:\out\seahorse-qr.png
+```
+
+The console reports the code and the check:
+
+```
+  qr code : version 8 (49x49 modules), mask 6, 17 px/module
+  qr shape: shaped 1152 of 1936 modules (1152 free bits); image agreement 51% -> 84%
+  qr scan : scans (4/4 passes)
+```
+
+`--qr-search SPEC` runs Find View before rendering. SPEC is comma-separated `key=value`:
+`seed`, `tries` (views per level, default 24), `levels` (4), `keep` (3), `zmin` / `zmax`
+(zoom range as factors of the start zoom, 0.5 / 8), `probe` (px per module, 3) and
+`detail` (share of the start view's detail a framing must keep, 0.8). The same seed
+always finds the same view. It prints a `replay` line, and that line re-renders the
+identical image without searching:
+
+```
+  found   : luma change 35.5% -> 32.4%, modules flipped 49% -> 47% (mask 7, 47 probes)
+  replay  : --x -0.76283849313580|3.64E-17 --y 0.13484123954685|-1.21E-17 --zoom 60 --iter 1000 --qr-mask 7
+```
+
+`--qr-search` and `--explore` both choose the view, so they cannot be combined;
+`--qr-payload` cannot be combined with `--aov-exr`. If the text does not fit, or the image
+is too small for the code, the run stops before rendering (exit 2). If the file is saved
+but does not scan, the exit code is **8**.
+
 ### Lossless 60-second archival zoom
 
 ```
@@ -639,6 +780,10 @@ Exit codes:
 | 2 | bad command-line argument |
 | 3 | --lossless selected but ffmpeg.exe not found |
 | 4 | ffmpeg encode pass failed |
+| 5 | remote: render preset or connection not found |
+| 6 | remote: vault unlock failed |
+| 7 | remote: fractal type not permitted for remote rendering |
+| 8 | QR code saved but does not scan (`--qr-payload`) |
 
 ---
 

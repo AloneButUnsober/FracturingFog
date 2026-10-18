@@ -105,18 +105,23 @@ namespace FracturingFog.Imaging.Qr
                 throw new ArgumentOutOfRangeException(nameof(minVersion));
             if (mask < -1 || mask > 7) throw new ArgumentOutOfRangeException(nameof(mask));
 
-            int version = -1;
-            for (int v = minVersion; v <= maxVersion; v++)
-            {
-                if (DataBitsNeeded(data.Length, v, utf8Eci) <= NumDataCodewords(v, ecc) * 8) { version = v; break; }
-            }
-            if (version < 0)
-                throw new ArgumentException(
-                    $"Payload of {data.Length} bytes does not fit a version {minVersion}..{maxVersion} QR code at ECC {ecc}.",
-                    nameof(data));
-
+            int version = ChooseVersion(data.Length, ecc, minVersion, maxVersion, utf8Eci);
             byte[] codewords = BuildDataCodewords(data, version, ecc, utf8Eci);
             return EncodeCodewords(codewords, version, ecc, mask);
+        }
+
+        /// <summary>The smallest version in [<paramref name="minVersion"/>,
+        /// <paramref name="maxVersion"/>] that holds a byte-mode payload of
+        /// <paramref name="byteCount"/> bytes. Throws ArgumentException when none does.</summary>
+        public static int ChooseVersion(int byteCount, QrErrorCorrection ecc,
+            int minVersion = MinVersion, int maxVersion = MaxVersion, bool utf8Eci = false)
+        {
+            if (minVersion < MinVersion || maxVersion > MaxVersion || minVersion > maxVersion)
+                throw new ArgumentOutOfRangeException(nameof(minVersion));
+            for (int v = minVersion; v <= maxVersion; v++)
+                if (DataBitsNeeded(byteCount, v, utf8Eci) <= NumDataCodewords(v, ecc) * 8) return v;
+            throw new ArgumentException(
+                $"Payload of {byteCount} bytes does not fit a version {minVersion}..{maxVersion} QR code at ECC {ecc}.");
         }
 
         /// <summary>Largest payload (bytes, byte mode, no ECI) a version holds.</summary>
@@ -128,7 +133,7 @@ namespace FracturingFog.Imaging.Qr
 
         private static int CharCountBits(int version) => version <= 9 ? 8 : 16;
 
-        private static int DataBitsNeeded(int byteCount, int version, bool eci)
+        internal static int DataBitsNeeded(int byteCount, int version, bool eci)
         {
             if (byteCount >= (1 << CharCountBits(version))) return int.MaxValue;
             return (eci ? 12 : 0) + 4 + CharCountBits(version) + byteCount * 8;
@@ -155,6 +160,117 @@ namespace FracturingFog.Imaging.Qr
             bb.Append(0, (8 - bb.Count % 8) % 8);                  // byte align
             for (int pad = 0xEC; bb.Count < capacityBits; pad ^= 0xEC ^ 0x11) bb.Append(pad, 8);
             return bb.ToBytes();
+        }
+
+        /// <summary>#1402 — the data codewords for a payload with everything after
+        /// the terminator left FREE (zero here): header, payload, a 4-bit
+        /// terminator, then <c>capacity - FixedBits</c> bits a decoder never reads
+        /// (it stops at the terminator). QArt shaping chooses those bits.</summary>
+        public static (byte[] Data, int FixedBits) BuildShapeableData(byte[] data, int version, QrErrorCorrection ecc, bool utf8Eci = false)
+        {
+            int capacityBits = NumDataCodewords(version, ecc) * 8;
+            var bb = new BitBuffer();
+            if (utf8Eci)
+            {
+                bb.Append(0x7, 4);
+                bb.Append(26, 8);
+            }
+            bb.Append(0x4, 4);
+            bb.Append(data.Length, CharCountBits(version));
+            foreach (byte b in data) bb.Append(b, 8);
+            if (bb.Count > capacityBits)
+                throw new ArgumentException("Payload does not fit the chosen version.", nameof(data));
+            bb.Append(0, Math.Min(4, capacityBits - bb.Count));   // terminator (always fixed)
+            int fixedBits = bb.Count;
+            bb.Append(0, capacityBits - bb.Count);
+            return (bb.ToBytes(), fixedBits);
+        }
+
+        /// <summary>#1402 — module index (y * size + x) of every raw codeword bit in
+        /// placement order: bit <c>8c + j</c> is codeword <c>c</c>'s bit j (MSB first).</summary>
+        public static int[] CodewordBitModules(int version)
+        {
+            int size = version * 4 + 17;
+            var dark = new bool[size, size];
+            var isFunc = new bool[size, size];
+            DrawFunctionPatterns(version, QrErrorCorrection.L, dark, isFunc);
+            var result = new int[NumRawDataModules(version) / 8 * 8];
+            int i = 0;
+            for (int right = size - 1; right >= 1; right -= 2)
+            {
+                if (right == 6) right = 5;
+                bool upward = ((right + 1) & 2) == 0;
+                for (int vert = 0; vert < size; vert++)
+                    for (int j = 0; j < 2; j++)
+                    {
+                        int x = right - j;
+                        int y = upward ? size - 1 - vert : vert;
+                        if (isFunc[y, x] || i >= result.Length) continue;
+                        result[i++] = y * size + x;
+                    }
+            }
+            return result;
+        }
+
+        /// <summary>#1402 — where each data and ECC codeword lands after block
+        /// splitting and interleaving (mirrors AddEccAndInterleave).</summary>
+        public sealed class BlockMap
+        {
+            /// <summary>Interleaved codeword index of data codeword k.</summary>
+            public required int[] DataToCodeword { get; init; }
+            /// <summary>Block of data codeword k, and its position in that block.</summary>
+            public required int[] DataBlock { get; init; }
+            public required int[] DataPos { get; init; }
+            /// <summary>[block][e] = interleaved codeword index of ECC byte e.</summary>
+            public required int[][] EccToCodeword { get; init; }
+            public required int[] BlockDataLength { get; init; }
+            public required int EccLength { get; init; }
+            public required byte[] Divisor { get; init; }
+        }
+
+        public static BlockMap MapBlocks(int version, QrErrorCorrection ecc)
+        {
+            int numBlocks = NumErrorCorrectionBlocks[(int)ecc][version];
+            int blockEccLen = EccCodewordsPerBlock[(int)ecc][version];
+            int rawCodewords = NumRawDataModules(version) / 8;
+            int numShortBlocks = numBlocks - rawCodewords % numBlocks;
+            int shortBlockLen = rawCodewords / numBlocks;
+            int numData = NumDataCodewords(version, ecc);
+
+            var blockLen = new int[numBlocks];
+            var blockStart = new int[numBlocks];
+            for (int i = 0, k = 0; i < numBlocks; i++)
+            {
+                blockLen[i] = shortBlockLen - blockEccLen + (i < numShortBlocks ? 0 : 1);
+                blockStart[i] = k;
+                k += blockLen[i];
+            }
+            var dataToCw = new int[numData];
+            var dataBlock = new int[numData];
+            var dataPos = new int[numData];
+            var eccToCw = new int[numBlocks][];
+            for (int b = 0; b < numBlocks; b++) eccToCw[b] = new int[blockEccLen];
+
+            int cw = 0;
+            int eccStart = shortBlockLen + 1 - blockEccLen;
+            for (int i = 0; i < shortBlockLen + 1; i++)
+                for (int j = 0; j < numBlocks; j++)
+                {
+                    if (i == shortBlockLen - blockEccLen && j < numShortBlocks) continue;   // short-block placeholder
+                    if (i < blockLen[j])
+                    {
+                        int k = blockStart[j] + i;
+                        dataToCw[k] = cw; dataBlock[k] = j; dataPos[k] = i;
+                    }
+                    else eccToCw[j][i - eccStart] = cw;
+                    cw++;
+                }
+            return new BlockMap
+            {
+                DataToCodeword = dataToCw, DataBlock = dataBlock, DataPos = dataPos,
+                EccToCodeword = eccToCw, BlockDataLength = blockLen, EccLength = blockEccLen,
+                Divisor = ReedSolomon.ComputeDivisor(blockEccLen),
+            };
         }
 
         /// <summary>Build the symbol from a full set of data codewords (exactly

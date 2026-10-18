@@ -629,6 +629,9 @@ namespace FracturingFog.Cli
             if (!qr.Verify) parts.Add(BatchFlags.QrNoVerify);
             if (qr.Mask >= 0)
             { parts.Add(BatchFlags.QrMask); parts.Add(qr.Mask.ToString(CultureInfo.InvariantCulture)); }
+            if (qr.Shape) parts.Add(BatchFlags.QrShape);
+            if (qr.MinVersion > 1)
+            { parts.Add(BatchFlags.QrVersion); parts.Add(qr.MinVersion.ToString(CultureInfo.InvariantCulture)); }
         }
 
         /// <summary>List the live fx the emitted command cannot reproduce.

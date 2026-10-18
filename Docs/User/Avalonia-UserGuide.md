@@ -21,7 +21,7 @@ session, in the order you typically use them. Everything else is a refinement.
 | 2    | Navigate to something interesting (mouse + keyboard)                                | The render surface itself                |
 | 3    | Pick a **palette / theme** you like                                                 | Toolbar → *Theme* dropdown               |
 | 4    | Bookmark the view (press **`V`**) so you can come back                              | Region Navigation                        |
-| 5    | Capture it — screenshot, poster, or video                                            | Floating Menu → *Image / Poster / Video* |
+| 5    | Capture it — screenshot, poster, QR code, or video                                   | Floating Menu → *Image / Poster / Video*; Control Center → Capture → *QR Code* |
 
 That is the whole core loop. You can spend an hour on step 2 alone. The hot keys make it muscle memory:
 

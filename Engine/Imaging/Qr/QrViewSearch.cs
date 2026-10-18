@@ -129,7 +129,7 @@ namespace FracturingFog.Imaging.Qr
         public static QrCode[] AllMasks(QrCodeOptions qr)
         {
             var codes = new QrCode[8];
-            for (int m = 0; m < 8; m++) codes[m] = QrEncoder.Encode(qr.Payload, qr.ErrorCorrection, mask: m);
+            for (int m = 0; m < 8; m++) codes[m] = QrExport.Encode(qr, m);
             return codes;
         }
 

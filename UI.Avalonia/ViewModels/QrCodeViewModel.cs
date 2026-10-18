@@ -132,6 +132,19 @@ public sealed class QrCodeViewModel : ViewModelBase
 
     public string MaskText => _mask < 0 ? "Mask: auto" : $"Mask: {_mask} (from Find View)";
 
+    private bool _shape;
+    /// <summary>#1402 — shape the code toward the image (QArt).</summary>
+    public bool Shape { get => _shape; set { this.RaiseAndSetIfChanged(ref _shape, value); Refresh(); } }
+
+    private int _minVersion = 1;
+    /// <summary>#1402 — smallest QR version (1..40); larger buys shaping room.
+    /// Changes the code, so it clears a searched mask.</summary>
+    public int MinVersion
+    {
+        get => _minVersion;
+        set { this.RaiseAndSetIfChanged(ref _minVersion, Math.Clamp(value, 1, 40)); Mask = -1; Refresh(); }
+    }
+
     public static QrStyle StyleAt(int index) => index switch { 1 => QrStyle.Dots, 2 => QrStyle.Halftone, _ => QrStyle.Steer };
 
     /// <summary>The options the panel describes; null with no payload.</summary>
@@ -144,6 +157,8 @@ public sealed class QrCodeViewModel : ViewModelBase
         DotFraction = _dotFraction,
         Invert = _invert,
         Mask = _mask,
+        Shape = _shape,
+        MinVersion = _minVersion,
     };
 
     private string _message = "";

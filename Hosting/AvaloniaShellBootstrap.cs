@@ -4845,7 +4845,7 @@ namespace FracturingFog.Hosting
             if (s_renderHost == null) return null;
             string? path = await AvaloniaDialogs.PickSaveFileAsync(
                 "Save QR Code Image",
-                suggestedName: BuildSuggestedFileName("png", imageWidth: size, imageHeight: size),
+                suggestedName: BuildSuggestedFileName("png", imageWidth: size, imageHeight: size, suffix: "_qrc"),
                 filter: "PNG image (*.png)|*.png|JPEG image (*.jpg;*.jpeg)|*.jpg;*.jpeg|WebP image (*.webp)|*.webp");
             if (string.IsNullOrEmpty(path)) return null;
 
@@ -4904,7 +4904,8 @@ namespace FracturingFog.Hosting
             int? imageHeight = null,
             bool isSpanning = false,
             bool isPoster = false,
-            bool isPortrait = false)
+            bool isPortrait = false,
+            string? suffix = null)
         {
             static string Sanitize(string? s)
             {
@@ -4955,6 +4956,8 @@ namespace FracturingFog.Hosting
                 sb2.Append("_poster");
                 if (isPortrait) sb2.Append("_portrait");
             }
+            // #1305 — export-kind tag appended verbatim (QR code images: "_qrc").
+            if (!string.IsNullOrEmpty(suffix)) sb2.Append(suffix);
 
             string ext = (defaultExt ?? "png").TrimStart('.');
             if (string.IsNullOrEmpty(ext)) ext = "png";
