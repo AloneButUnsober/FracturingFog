@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        xmlns:ctrl="using:FracturingFog.UI.Avalonia.Controls"
         x:Class="FracturingFog.UI.Avalonia.Views.SandboxView"
         x:DataType="vm:SandboxViewModel"
         Foreground="White">
@@ -55,17 +56,14 @@
                 BorderBrush="#505050"
                 BorderThickness="1"
                 Background="#1C1C1C">
-            <TextBox Text="{Binding Source, Mode=TwoWay}"
-                     AcceptsReturn="True"
-                     AcceptsTab="True"
-                     TextWrapping="NoWrap"
+            <!-- #1362 — DslCodeEditor: plain TextBox or code view ("{ }" toggle). -->
+            <ctrl:DslCodeEditor Text="{Binding Source, Mode=TwoWay}"
+                     Language="Sandbox"
+                     PrefsKey="Sandbox"
                      FontFamily="Consolas, monospace"
                      FontSize="14"
                      Background="#1C1C1C"
-                     Foreground="White"
-                     BorderThickness="0"
-                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                     Foreground="White" />
         </Border>
 
         <!-- Status -->

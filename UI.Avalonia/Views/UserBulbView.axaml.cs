@@ -8,6 +8,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 
+using FracturingFog.UI.Avalonia.Controls;
 using FracturingFog.UI.Avalonia.Input;
 using FracturingFog.UI.Avalonia.ViewModels;
 
@@ -27,7 +28,7 @@ namespace FracturingFog.UI.Avalonia.Views;
 public sealed partial class UserBulbView : UserControl
 {
     private UserBulbViewModel? _vm;
-    private TextBox? _sourceEditor;
+    private DslCodeEditor? _sourceEditor;
     // Pending span to apply on next LostFocus — avoids clobbering an active
     // edit caret while the user is typing.
     private int _pendingStart = -1;
@@ -42,7 +43,7 @@ public sealed partial class UserBulbView : UserControl
 
     private void OnAttachedToVisualTree(object? sender, VisualTreeAttachmentEventArgs e)
     {
-        _sourceEditor = this.FindControl<TextBox>("SourceEditor");
+        _sourceEditor = this.FindControl<DslCodeEditor>("SourceEditor");
         if (_sourceEditor != null) _sourceEditor.LostFocus += OnSourceLostFocus;
     }
 
@@ -86,7 +87,7 @@ public sealed partial class UserBulbView : UserControl
         _pendingEnd = end;
         // Apply immediately only when editor isn't focused — otherwise wait
         // for LostFocus so the user's caret/IME composition isn't clobbered.
-        if (!_sourceEditor.IsFocused) FlushPending();
+        if (!_sourceEditor.IsEditorFocused) FlushPending();
     }
 
     private void OnSourceLostFocus(object? sender, RoutedEventArgs e) => FlushPending();
@@ -94,8 +95,7 @@ public sealed partial class UserBulbView : UserControl
     private void FlushPending()
     {
         if (_pendingStart < 0 || _sourceEditor == null) return;
-        _sourceEditor.SelectionStart = _pendingStart;
-        _sourceEditor.SelectionEnd = _pendingEnd;
+        _sourceEditor.Select(_pendingStart, _pendingEnd);
         _pendingStart = _pendingEnd = -1;
     }
 }

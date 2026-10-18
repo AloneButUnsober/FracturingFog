@@ -8,6 +8,7 @@ using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 
+using FracturingFog.UI.Avalonia.Controls;
 using FracturingFog.UI.Avalonia.Input;
 using FracturingFog.UI.Avalonia.ViewModels;
 
@@ -19,14 +20,14 @@ namespace FracturingFog.UI.Avalonia.Views;
 /// PromotionChanged, NamePromptRequested, ConfirmDeleteRequested, HotLoadRequested).
 ///
 /// The one piece the view DOES own: applying the VM's <c>ErrorSpan*</c> to the
-/// editor's <c>SelectionStart/End</c> (#1089: one editor). Avalonia's TextBox uses
-/// SelectionStart/End as the canonical highlight mechanism; binding both
-/// two-way fights the user's own caret moves, so we listen to an event from
-/// the VM and apply once per validation cycle.
+/// editor's selection (#1089: one editor; #1362: <see cref="DslCodeEditor"/>,
+/// plain or code view). Selection is the canonical highlight mechanism;
+/// binding it two-way fights the user's own caret moves, so we listen to an
+/// event from the VM and apply once per validation cycle.
 /// </summary>
 public sealed partial class UserEquationView : UserControl
 {
-    private TextBox? _editor;
+    private DslCodeEditor? _editor;
     private UserEquationViewModel? _vm;
 
     // Pending span — applied only when the relevant editor is NOT focused.
@@ -43,7 +44,7 @@ public sealed partial class UserEquationView : UserControl
     public UserEquationView()
     {
         AvaloniaXamlLoader.Load(this);
-        _editor = this.FindControl<TextBox>("EquationEditor");
+        _editor = this.FindControl<DslCodeEditor>("EquationEditor");
         if (_editor != null)
             _editor.LostFocus += (_, _) => FlushPending(_editor);
         DataContextChanged += OnDataContextChanged;
@@ -93,7 +94,7 @@ public sealed partial class UserEquationView : UserControl
 
         _pendingStart = start;
         _pendingEnd = end;
-        if (!editor.IsFocused) FlushPending(editor);
+        if (!editor.IsEditorFocused) FlushPending(editor);
     }
 
     // Copy the interpreted-math LaTeX (#754) / MathML (#756) to the clipboard.
@@ -154,11 +155,10 @@ public sealed partial class UserEquationView : UserControl
         }
     }
 
-    private void FlushPending(TextBox editor)
+    private void FlushPending(DslCodeEditor editor)
     {
         if (_pendingStart < 0) return;
-        editor.SelectionStart = _pendingStart;
-        editor.SelectionEnd = _pendingEnd;
+        editor.Select(_pendingStart, _pendingEnd);
         _pendingStart = _pendingEnd = -1;
     }
 }

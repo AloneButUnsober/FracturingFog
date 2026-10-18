@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        xmlns:ctrl="using:FracturingFog.UI.Avalonia.Controls"
         x:Class="FracturingFog.UI.Avalonia.Views.UserEquationView"
         x:DataType="vm:UserEquationViewModel"
         Foreground="White">
@@ -245,20 +246,17 @@
                         <Setter Property="BorderBrush" Value="#FFCC00" />
                     </Style>
                 </Border.Styles>
-                <TextBox x:Name="EquationEditor"
+                <!-- #1362 — DslCodeEditor: plain TextBox or code view ("{ }" toggle). -->
+                <ctrl:DslCodeEditor x:Name="EquationEditor"
                          Text="{Binding Source, Mode=TwoWay}"
-                         AcceptsReturn="True"
-                         AcceptsTab="True"
-                         TextWrapping="NoWrap"
+                         Language="Equation"
+                         PrefsKey="UserEquation"
                          FontFamily="Consolas, monospace"
                          FontSize="14"
                          Background="#1C1C1C"
                          Foreground="White"
-                         BorderThickness="0"
                          Margin="0,0,8,0"
-                         PlaceholderText="z*z + c   (C#-style text is accepted too: Ctrl+. converts it)"
-                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                         ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                         PlaceholderText="z*z + c   (C#-style text is accepted too: Ctrl+. converts it)" />
             </Border>
         </Grid>
 
