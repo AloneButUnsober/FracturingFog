@@ -52,7 +52,7 @@ The shell is **Avalonia 12** — pure MVVM, and the only UI (the legacy WinForms
 | ~38 fractal families | 2D escape-time: Mandelbrot, Julia, Burning Ship, Tricorn, Multibrot, Phoenix, Newton, Nova, Tear Drop, Magnet 1/2, Glynn, Halley, Secant, Spider. Histogram / orbit-replay: Buddhabrot, Nebulabrot, Anti-Buddhabrot, Anti-Nebulabrot, Logistic bifurcation. Procedural / stochastic: IFS, L-System, Strange Attractor, Plasma, Flame, Apollonian gasket, DLA. 3D raymarchers: Mandelbulb, Mandelbox, KIFS, Quaternion Julia, Quaternion Mandelbrot, Bicomplex Mandelbrot, Kleinian. Authoring: User Equation, Sandbox, User Bulb (3D). Plus CalcGen-generated family (Z² / Z³ / Z⁴ / Z⁵ / Tricorn / Burning Ship). |
 | 290+ color themes | Built-in palettes plus JSON-imported user themes plus algorithmic ColorGen DSL |
 | Full theme editor | Live-preview parameter tweaking with save/export + From-Image kmeans extractor |
-| Capture suite | PNG, multi-tile poster, MP4 video (built-in + ffmpeg lossless), PNG sequence |
+| Capture suite | PNG, multi-tile poster, fractal QR code, MP4 video (built-in + ffmpeg lossless), PNG sequence |
 | Automation | Slideshow + animated zoom slideshow + audio-reactive mode |
 | Multi-monitor | Span across all displays, wallpaper-resolution capture |
 | Remote rendering | Mutual-TLS render server + sealed-vault client dialog |
@@ -552,6 +552,17 @@ Cancel any time — partial buffer is dropped. 64 MP soft cap.
 ### 15.3 Remote Poster
 
 The Client dialog can also produce posters — pick a saved server connection, Mode = `image`, dial up Width / Height. The server renders + streams bytes back over TLS. For huge posters, use Return mode = `saved-path`.
+
+### 15.4 Fractal QR Code
+
+**Control Center → Capture → QR Code** exports the view as a square image that scans as a
+QR code (#1305). Only lightness changes, so the fractal's colours stay.
+
+- **Styles:** Steer (whole modules recoloured), Dots (module centres only), Halftone (3×3 sub-modules).
+- **Every export is checked:** the saved file is decoded by an independent reader at full size, small, blurred and as JPEG.
+- **Find View** searches nearby framings and mask patterns for the one the code changes least.
+- **Shape to the image** (QArt) uses the code's free data bits so its own pattern follows the fractal (51% → 84% with error fix L, version 8).
+- **Batch:** the `--qr-*` flags reproduce all of it headless; exit code 8 = saved but does not scan. The default file name ends in `_qrc`.
 
 See [Docs/Capture-Guide.md](Docs/Capture-Guide.md).
 

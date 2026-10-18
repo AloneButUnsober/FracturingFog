@@ -25,7 +25,7 @@ Highlights (full menu on the index page):
 |--------------------------------------------------------------------------------------|----------------------------------------------------------------------|
 | [Avalonia User Guide](User/Avalonia-UserGuide.md)                                    | Every menu, button, and dialog in the main shell.                    |
 | [Regions Guide](User/Regions-Guide.md)                                               | Save, recall, and organise favourite views.                          |
-| [Capture Guide](User/Capture-Guide.md)                                               | Screenshots, posters, PNG sequences, MP4 video export.               |
+| [Capture Guide](User/Capture-Guide.md)                                               | Screenshots, posters, fractal QR codes, PNG sequences, MP4 video export. |
 | [Slideshow + Fractured Waves Guide](User/Slideshow-AudioReactive-Guide.md)            | Cycle regions + themes on the beat with live audio.                  |
 | [Scene Engine Guide](User/SceneEngine-UserGuide.md)                                  | Direct cinematic Scenes: timeline, flying camera, transitions, video.|
 | [Colour Theme Editor Guide](User/ColorThemeEditor-Guide.md)                          | Live palette editing with the floating editor.                       |

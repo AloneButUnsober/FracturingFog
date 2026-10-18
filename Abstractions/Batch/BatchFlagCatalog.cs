@@ -588,7 +588,7 @@ namespace FracturingFog.Batch
                 // ── Fractal QR code (#1305) ──
                 Txt(BatchFlags.QrPayload, Qr, BatchModes.Image,
                     "Composite a scannable QR code of this text (UTF-8) into the image. The saved file is decoded "
-                    + "afterwards (full size, small, blurred, JPEG); exit code 3 = saved but does not scan.",
+                    + "afterwards (full size, small, blurred, JPEG); exit code 8 = saved but does not scan.",
                     hint: "TEXT") with { Example = "https://example.org", ConflictsWith = new[] { BatchFlags.AovExr } },
                 Pick(BatchFlags.QrEcc, Qr, BatchModes.Image,
                     "QR error-correction level (share of damage tolerated: L 7%, M 15%, Q 25%, H 30%).",

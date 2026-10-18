@@ -457,8 +457,9 @@ namespace FracturingFog.Batch
                         if (qr.Verify is { } v)
                         {
                             Console.WriteLine($"  qr scan : {v.Summary}");
-                            // #1305 — exit 3: the file is written but would not scan.
-                            if (!v.Ok) return 3;
+                            // #1305 — exit 8: the file is written but would not scan
+                            // (3..7 already mean ffmpeg / encode / remote failures).
+                            if (!v.Ok) return 8;
                         }
                     }
                 }
