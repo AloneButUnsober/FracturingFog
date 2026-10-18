@@ -256,7 +256,7 @@ namespace FracturingFog.Batch
             BatchFlagGroup.ReliefCamera  => "Relief raymarch camera",
             BatchFlagGroup.Froxel        => "Froxel volumetrics (relief raymarch)",
             BatchFlagGroup.Glass         => "Refractive glass (relief raymarch)",
-            BatchFlagGroup.Denoise       => "Guided denoise (relief raymarch)",
+            BatchFlagGroup.Denoise       => "Denoise (A-Trous: relief raymarch; OIDN: 3D + relief)",
             BatchFlagGroup.Relight       => "Relight in post (relief raymarch, or --relight-from)",
             BatchFlagGroup.Volumetric    => "Volumetric lighting (3D fractals + relief raymarch)",
             BatchFlagGroup.Isolate       => "Relief isolate masking",
@@ -735,6 +735,8 @@ namespace FracturingFog.Batch
                 // ── Denoise ──
                 Int(BatchFlags.Denoise, Denoise, FR, "Guided A-Trous denoise passes (0 = off).", 0, 8, enforced: true, def: "0")
                     with { Implies = RaymarchOn },
+                Sw(BatchFlags.Oidn, Denoise, FR,
+                    "Denoise the finished 3D or relief-raymarch frame with Intel Open Image Denoise (replaces --denoise). Needs the OIDN runtime (install it from the app, or set FF_OIDN_DIR); without it the frame renders undenoised and a warning is printed."),
                 Dbl(BatchFlags.DenoiseColorSigma, Denoise, FR, "Colour edge-stopping sigma.", 0, null, enforced: true, def: "0.1")
                     with { MinExclusive = true, Implies = RaymarchOn, Requires = new[] { BatchFlags.Denoise } },
                 Dbl(BatchFlags.DenoiseNormalSigma, Denoise, FR, "Normal edge-stopping sigma.", 0, null, enforced: true, def: "0.3")

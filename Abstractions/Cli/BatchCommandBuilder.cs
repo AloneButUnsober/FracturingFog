@@ -212,6 +212,8 @@ namespace FracturingFog.Cli
         public bool Froxel3D { get; init; }
         public FracturingFog.Models.FroxelQuality Froxel3DQuality { get; init; } = FracturingFog.Models.FroxelQuality.Balanced;
         public int Froxel3DShadowSteps { get; init; }
+        /// <summary>#1338 — Intel Open Image Denoise on the finished 3D / relief frame.</summary>
+        public bool Oidn { get; init; }
         public double FogBackgroundDistance { get; init; } = FracturingFog.Rendering.Lighting.LightingFxData.DefaultFogBackgroundDistance;
         public double VolumePaletteStrength { get; init; }
 
@@ -547,6 +549,7 @@ namespace FracturingFog.Cli
                 if (snap.Froxel3DShadowSteps > 0)
                 { parts.Add(BatchFlags.Froxel3DShadowSteps); parts.Add(snap.Froxel3DShadowSteps.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
             }
+            if (snap.Oidn) parts.Add(BatchFlags.Oidn);   // #1338
             if (snap.FogBackground)
             {
                 if (snap.FogBackgroundDistance > 0

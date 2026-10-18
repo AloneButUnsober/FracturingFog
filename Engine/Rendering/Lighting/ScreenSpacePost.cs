@@ -699,6 +699,38 @@ public static partial class ScreenSpacePost
         return (uint)v;
     }
 
+    /// <summary>#1338 — the end of every 3D family's frame (the CPU raymarch and the
+    /// GPU route alike): the Intel Open Image Denoise pass when
+    /// <see cref="LightingFxData.OidnDenoise"/> is on, then the debug HUD. A
+    /// <paramref name="preview"/> frame (the low-res drag preview) is not denoised: it
+    /// is replaced within the gesture, and the denoise costs tens of milliseconds.</summary>
+    public static void FinishFrame3D(uint[] colorBuffer, int width, int height, in LightingFxData fx, bool preview = false)
+    {
+        if (!preview) ApplyOidn(colorBuffer, width, height, in fx);
+        ApplyDebugHud(colorBuffer, width, height, in fx);
+    }
+
+    /// <summary>#1338 — why the last requested OIDN pass did not run (null when it ran
+    /// or none was requested since). The batch reports it; the live view shows the
+    /// install state in the denoiser setup.</summary>
+    public static string? LastOidnSkip { get; private set; }
+
+    /// <summary>#1338 — denoise a finished beauty frame in place with Intel Open Image
+    /// Denoise (colour only — see <see cref="LightingFxData.OidnDenoise"/>). No-op (false)
+    /// when the option is off, an AOV view is shown, or the runtime is unavailable
+    /// (the frame is then exactly the option-off frame).</summary>
+    public static bool ApplyOidn(uint[] colorBuffer, int width, int height, in LightingFxData fx)
+    {
+        if (!fx.OidnDenoise || fx.DebugAov != AovView.Beauty) return false;
+        if (FracturingFog.Imaging.OidnDenoiser.TryDenoiseBgra(colorBuffer, null, null, width, height, out var err))
+        {
+            LastOidnSkip = null;
+            return true;
+        }
+        LastOidnSkip = err;
+        return false;
+    }
+
     /// <summary>
     /// Phase 19 — debug HUD overlay. Pure visual indicators (no font/text):
     ///   bit 0 (0x1) — light-direction compass in the top-right corner.

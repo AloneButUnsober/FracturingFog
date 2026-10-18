@@ -1047,6 +1047,16 @@
                     </Grid>
                 </Expander>
 
+                <!-- #1338 — Intel Open Image Denoise -->
+                <Expander Header="Denoise (Intel OIDN)" HorizontalAlignment="Stretch">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Denoise:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Run Intel Open Image Denoise (a learned denoiser) over the finished 3D or relief-raymarch frame. It works best on sample noise — thin-lens depth of field with few lens samples comes out close to many — and smooths low-sample edges. It also reads fine, high-contrast fractal colour detail as noise and softens it, so compare with it off. Replaces the relief A-Trous denoise. Needs the OIDN runtime: Control Center → Advanced → Denoiser (Intel OIDN)…; without it frames render as with this off. Not applied to low-res drag previews; a 1080p frame takes about a second on the CPU." />
+                        <CheckBox Grid.Row="0" Grid.Column="1" IsChecked="{Binding OidnDenoise, Mode=TwoWay}"
+                                  Content="Intel Open Image Denoise (3D + relief)" Margin="0,2" />
+                    </Grid>
+                </Expander>
+
                 <!-- Triplanar Material -->
                 <Expander Header="Triplanar Material" HorizontalAlignment="Stretch">
                     <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto">

@@ -176,6 +176,7 @@ public sealed class LightingFxPresetData
     public double DofFocusDistance    { get; set; } = 3.0;
     public int    DofSamples          { get; set; } = 8;
     public bool   DofThinLens         { get; set; } = false;
+    public bool   OidnDenoise         { get; set; } = false;   // #1338
     public double SceneTime           { get; set; } = 0.0;
     public double LightOrbitSpeed     { get; set; } = 0.0;
     public double CausticsAnimSpeed   { get; set; } = 0.0;
@@ -292,6 +293,7 @@ public sealed class LightingFxPresetData
         StereoConvergence = fx.StereoConvergence, StereoMaxDisparity = fx.StereoMaxDisparity,
         DofAperture = fx.DofAperture, DofFocusDistance = fx.DofFocusDistance, DofSamples = fx.DofSamples,
         DofThinLens = fx.DofThinLens,
+        OidnDenoise = fx.OidnDenoise,
         SceneTime = fx.SceneTime, LightOrbitSpeed = fx.LightOrbitSpeed,
         CausticsAnimSpeed = fx.CausticsAnimSpeed,
         DebugHudFlags = fx.DebugHudFlags,
@@ -379,6 +381,7 @@ public sealed class LightingFxPresetData
         StereoConvergence = StereoConvergence, StereoMaxDisparity = StereoMaxDisparity,
         DofAperture = DofAperture, DofFocusDistance = DofFocusDistance, DofSamples = DofSamples,
         DofThinLens = DofThinLens,
+        OidnDenoise = OidnDenoise,
         SceneTime = SceneTime, LightOrbitSpeed = LightOrbitSpeed,
         CausticsAnimSpeed = CausticsAnimSpeed,
         DebugHudFlags = DebugHudFlags,

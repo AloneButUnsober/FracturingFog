@@ -116,6 +116,16 @@ are provided as scholarly attribution, not because any code was copied.
   ship FFmpeg's own license and, for GPL builds, its corresponding source offer.
   See <https://ffmpeg.org/legal.html>.
 
+- **Intel Open Image Denoise (OIDN) 2.5.1** and **oneTBB** — optional learned
+  denoiser (#1338), never bundled: the in-app installer (Control Center →
+  Advanced → Denoiser (Intel OIDN)…) downloads the official release from
+  <https://github.com/RenderKit/oidn/releases>, checks its pinned SHA-256, and
+  keeps only the CPU runtime (`OpenImageDenoise`, its core and CPU device
+  modules, oneTBB) plus the release's `LICENSE.txt` and `third-party-programs*.txt`
+  in the user data folder. Both are licensed under the **Apache License 2.0**,
+  which is compatible with AGPL-3.0 (GPLv3 accepts Apache-2.0 code). Loaded at
+  runtime through its C API; nothing of it is compiled into Fracturing Fog.
+
 ## 4. Fonts
 
 - **Inter** (bundled via `Avalonia.Fonts.Inter`) — SIL Open Font License 1.1.

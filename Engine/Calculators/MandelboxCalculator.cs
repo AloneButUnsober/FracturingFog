@@ -225,7 +225,7 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, 
                     ThinLensDof.IsActive(in fx), in fx, in froxelView, in froxelFx, in deStruct);   // #1172 — the full post stack on the GPU frame
                 // #84 — the GPU branch returns before the CPU tail; draw the debug
                 // HUD directly so the light compass still appears on GPU frames.
-                ScreenSpacePost.ApplyDebugHud(renderBuffer, width, height, in fx);
+                ScreenSpacePost.FinishFrame3D(renderBuffer, width, height, in fx, preview: lowRes);
                 return;
             }
         }
@@ -421,7 +421,7 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, 
         // #84 — light-direction compass / param bars / scene clock. Standalone
         // final pass on the composited full-res buffer so it survives both the
         // low-res upscale and the GPU-raymarch early-out. Self-guards on flags.
-        ScreenSpacePost.ApplyDebugHud(ColorBuffer, fullW, fullH, in fx);
+        ScreenSpacePost.FinishFrame3D(ColorBuffer, fullW, fullH, in fx, preview: lowRes);
     }
 
     /// <summary>

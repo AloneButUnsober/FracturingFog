@@ -219,8 +219,21 @@ namespace FracturingFog.Batch
             if (opts.HasStereoFlags)
                 fp.Lighting = BatchStereo.ApplyFlags(fp.Lighting, opts);
 
+            // #1338 — Intel Open Image Denoise, by flag (or carried in a --lighting-preset).
+            if (opts.Oidn)
+            {
+                var fxo = fp.Lighting;
+                fxo.OidnDenoise = true;
+                fp.Lighting = fxo;
+            }
+            if (fp.Lighting.OidnDenoise && !FracturingFog.Imaging.OidnDenoiser.IsAvailable
+                && Interlocked.Exchange(ref s_oidnWarned, 1) == 0)
+                Console.Error.WriteLine($"batch: OIDN denoise requested but unavailable ({FracturingFog.Imaging.OidnDenoiser.LoadError}); rendering without it.");
+
             return fp;
         }
+
+        private static int s_oidnWarned;   // #1338 — warn once per process
 
         /// <summary>#1012 — the stereo flags drive --mode image / video only; say so
         /// instead of silently rendering mono slideshow / scene frames.</summary>

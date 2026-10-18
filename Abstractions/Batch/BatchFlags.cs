@@ -247,6 +247,7 @@ namespace FracturingFog.Batch
         // on the render's own float normal/depth AOVs. Any denoise flag implies
         // --relief-raymarch (only the raymarch emits the guides). 0 passes = off.
         public const string Denoise               = "--denoise";
+        public const string Oidn                  = "--oidn";                     // #1338 Intel Open Image Denoise (3D + relief)
         public const string DenoiseColorSigma     = "--denoise-color-sigma";
         public const string DenoiseNormalSigma    = "--denoise-normal-sigma";
         public const string DenoiseDepthSigma     = "--denoise-depth-sigma";

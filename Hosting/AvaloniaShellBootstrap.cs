@@ -900,6 +900,10 @@ namespace FracturingFog.Hosting
             s_shell.FloatingMenu.FfmpegSetupClick += (_, _) =>
                 Dispatcher.UIThread.Post(() =>
                     _ = FfmpegSetupDialog.ShowAsync(AvaloniaDialogs.ActiveMainWindow));
+            // #1338 — the Intel Open Image Denoise installer (OidnInstaller in Engine).
+            s_shell.FloatingMenu.OidnSetupClick += (_, _) =>
+                Dispatcher.UIThread.Post(() =>
+                    _ = OidnSetupDialog.ShowAsync(AvaloniaDialogs.ActiveMainWindow));
 
             // User-data location picker. Lets the user move every FracturingFog
             // settings file (presets, themes, equations, etc.) to a folder of

@@ -819,6 +819,12 @@ public sealed partial class FractalParamsViewModel
         get => _p.Lighting.DofThinLens;
         set { MutateLighting(r => r.Fx.DofThinLens = value); this.RaisePropertyChanged(); Fire(); }
     }
+    // #1338 — Intel Open Image Denoise on the finished 3D / relief frame.
+    public bool OidnDenoise
+    {
+        get => _p.Lighting.OidnDenoise;
+        set { MutateLighting(r => r.Fx.OidnDenoise = value); this.RaisePropertyChanged(); Fire(); }
+    }
     public double LightOrbitSpeed
     {
         get => _p.Lighting.LightOrbitSpeed;

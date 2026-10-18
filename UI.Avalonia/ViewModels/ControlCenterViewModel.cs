@@ -443,6 +443,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
             Froxel3D             = fp?.Lighting.Froxel3D ?? false,
             Froxel3DQuality      = fp?.Lighting.Froxel3DQuality ?? FracturingFog.Models.FroxelQuality.Balanced,
             Froxel3DShadowSteps  = fp?.Lighting.Froxel3DShadowSteps ?? 0,
+            Oidn                 = fp?.Lighting.OidnDenoise ?? false,   // #1338
             FogBackgroundDistance = fp?.Lighting.FogBackgroundDistance ?? FracturingFog.Rendering.Lighting.LightingFxData.DefaultFogBackgroundDistance,
             VolumePaletteStrength = fp?.Lighting.VolumePaletteStrength ?? 0.0,
             Transmission         = fp?.Lighting.Transmission ?? 0.0,        // S5 (#406)

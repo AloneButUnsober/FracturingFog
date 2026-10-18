@@ -90,6 +90,7 @@ public static class ReliefDenoisePass
     public static void Apply(uint[] beauty, HeightfieldRaymarch2D.ReliefAovBuffers? aov,
         int w, int h, FractalParameters? p)
     {
+        if (ApplyOidn(beauty, w, h, p)) return;
         if (aov == null || beauty == null || !Enabled(p)) return;
         long n = (long)w * h;
         if (beauty.Length < n) return;
@@ -112,6 +113,7 @@ public static class ReliefDenoisePass
     public static void ApplySvgf(uint[] beauty, HeightfieldRaymarch2D.ReliefAovBuffers? aov,
         int w, int h, FractalParameters? p, SvgfHistory history)
     {
+        if (ApplyOidn(beauty, w, h, p)) return;
         if (aov == null || beauty == null || history == null || !Enabled(p)) return;
         long n = (long)w * h;
         if (beauty.Length < n) return;
@@ -161,6 +163,19 @@ public static class ReliefDenoisePass
         history.Moment1 = m1; history.Moment2 = m2; history.Length = len;
         history.PrevCamera = aov.CurrentCamera;
         history.W = w; history.H = h; history.Valid = true;
+    }
+
+    /// <summary>#1338 — Intel Open Image Denoise on a relief-raymarch beauty, when the
+    /// Lighting &amp; FX option is on (it replaces the À-Trous / SVGF pass, so the call
+    /// sites need nothing new). Colour only, so it needs no AOV capture and keeps the
+    /// raymarch's GPU path: measured, the albedo + normal guides made it worse (the 1 spp
+    /// guides carry the same aliasing, and OIDN keeps it as detail). False when it did
+    /// not run — the À-Trous pass then applies as configured.</summary>
+    public static bool ApplyOidn(uint[] beauty, int w, int h, FractalParameters? p)
+    {
+        if (p == null || beauty == null || !p.Relief2DEnabled || !p.Relief2DRaymarch) return false;
+        var fx = p.Lighting;
+        return ScreenSpacePost.ApplyOidn(beauty, w, h, in fx);
     }
 
     /// <summary>Map the relief denoise knobs onto the pure operator's parameters.</summary>

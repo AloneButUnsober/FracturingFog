@@ -353,7 +353,7 @@ public sealed class DualOrbitVolumeCalculator : IFractalCalculator, IStereoEyeCa
             FracturingFog.Rendering.LowResPreview.UpscaleNearest(
                 renderBuffer, width, height, ColorBuffer, fullW, fullH);
 
-        ScreenSpacePost.ApplyDebugHud(ColorBuffer, fullW, fullH, in fx);
+        ScreenSpacePost.FinishFrame3D(ColorBuffer, fullW, fullH, in fx, preview: lowRes);
     }
 
     /// <summary>Concrete DE struct for the shared shading pipeline.</summary>
