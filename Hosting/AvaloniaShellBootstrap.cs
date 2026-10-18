@@ -2907,6 +2907,11 @@ namespace FracturingFog.Hosting
                 cc.FamilyParamsSerializer = (type, fp) =>
                     global::FracturingFog.Models.RegionFractalParams.Snapshot(type, fp)?.ToKeyValues()
                     ?? (IReadOnlyList<KeyValuePair<string, string>>)Array.Empty<KeyValuePair<string, string>>();
+                // #1305 — fractal QR code export (Capture > QR Code).
+                cc.QrCode.Preflight = global::FracturingFog.Imaging.Qr.QrExport.Preflight;
+                cc.QrCode.ExportRequested = (opt, size) => ExportQrCodeAsync(shell, opt, size);
+                cc.QrCode.SearchRequested = (opt, size) => SearchQrViewAsync(shell, opt, size);
+                cc.QrCode.HooksAttached();
             };
 
             // #493 — a region jump mutates FractalParameters in place; refresh any
@@ -4828,6 +4833,69 @@ namespace FracturingFog.Hosting
                 long ts = 0;
                 foreach (var b in bufs) { vw.WriteFrame(b, ts); ts += dt100ns; }
             });
+        }
+
+        /// <summary>#1305 — render the current view as a square fractal QR code:
+        /// pick a path, run the shared poster pipeline with the QR options attached
+        /// (View framing, so a wide window keeps its whole view), and report whether
+        /// the saved file decodes. Null = the save dialog was cancelled.</summary>
+        private static async Task<FracturingFog.UI.Avalonia.ViewModels.QrExportOutcome?> ExportQrCodeAsync(
+            ShellViewModel shell, FracturingFog.Imaging.QrCodeOptions opt, int size)
+        {
+            if (s_renderHost == null) return null;
+            string? path = await AvaloniaDialogs.PickSaveFileAsync(
+                "Save QR Code Image",
+                suggestedName: BuildSuggestedFileName("png", imageWidth: size, imageHeight: size),
+                filter: "PNG image (*.png)|*.png|JPEG image (*.jpg;*.jpeg)|*.jpg;*.jpeg|WebP image (*.webp)|*.webp");
+            if (string.IsNullOrEmpty(path)) return null;
+
+            string ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+            var format = ext switch
+            {
+                ".jpg" or ".jpeg" => FracturingFog.Imaging.ImageFileFormat.Jpeg,
+                ".webp" => FracturingFog.Imaging.ImageFileFormat.Webp,
+                _ => FracturingFog.Imaging.ImageFileFormat.Png,
+            };
+            var customWm = shell.Main.UseCustomWatermark
+                ? UserWatermarkStore.Instance.GetByName(shell.Main.SelectedCustomWatermarkName)
+                : null;
+            var req = s_renderHost.CreatePosterRequest(
+                size, size, rotate: false, path, format, customWm,
+                global::FracturingFog.PosterAspectMode.View) with { Qr = opt };
+
+            var busy = shell.BeginRenderBusy("Rendering QR code…");
+            FracturingFog.Imaging.PosterResult result;
+            try { result = await Task.Run(() => PosterRenderer.RenderToFile(req, CancellationToken.None)); }
+            finally { busy.Dispose(); }
+
+            string name = System.IO.Path.GetFileName(path);
+            var qr = result.Qr;
+            if (qr?.Verify is { } v)
+                return new FracturingFog.UI.Avalonia.ViewModels.QrExportOutcome(v.Ok,
+                    v.Ok ? $"Saved {name} - {v.Summary} (version {qr.Code.Version}, {qr.Layout.ModulePixels} px/module)."
+                         : $"Saved {name}, but it {v.Summary}. Try Steer style, a higher error fix, a shorter text or a larger size.");
+            return new FracturingFog.UI.Avalonia.ViewModels.QrExportOutcome(true, $"Saved {name}.");
+        }
+
+        /// <summary>#1401 — run the QR view search on the live view at the export
+        /// size (same framing as Export) and return the best view + mask.</summary>
+        private static async Task<FracturingFog.UI.Avalonia.ViewModels.QrSearchOutcome?> SearchQrViewAsync(
+            ShellViewModel shell, FracturingFog.Imaging.QrCodeOptions opt, int size)
+        {
+            if (s_renderHost == null) return null;
+            var req = s_renderHost.CreatePosterRequest(
+                size, size, rotate: false, string.Empty, FracturingFog.Imaging.ImageFileFormat.Png, null,
+                global::FracturingFog.PosterAspectMode.View);
+            var busy = shell.BeginRenderBusy("Searching for a matching QR view…");
+            FracturingFog.Imaging.Qr.QrSearchResult found;
+            try
+            {
+                found = await Task.Run(() => FracturingFog.Imaging.Qr.QrViewSearch.Run(
+                    req, opt, FracturingFog.Imaging.QrSearchOptions.Default with { Seed = Environment.TickCount & 0x7FFFFFFF }));
+            }
+            finally { busy.Dispose(); }
+            return new FracturingFog.UI.Avalonia.ViewModels.QrSearchOutcome(
+                found.Best, found.BestScore.Mask, "Found: " + found.Summary + ".");
         }
 
         private static string BuildSuggestedFileName(

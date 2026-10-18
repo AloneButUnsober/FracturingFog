@@ -101,6 +101,19 @@ namespace FracturingFog.Batch
         // byte-stable; opt-in. Applies to any EXR the run writes.
         public const string ExrZip         = "--exr-zip";
 
+        // Fractal QR code (#1305). Image mode only. --qr-payload turns it on;
+        // the rest tune it and have no effect without a payload.
+        public const string QrPayload      = "--qr-payload";
+        public const string QrEcc          = "--qr-ecc";
+        public const string QrStyle        = "--qr-style";
+        public const string QrModulePx     = "--qr-module-px";
+        public const string QrDot          = "--qr-dot";
+        public const string QrInvert       = "--qr-invert";
+        public const string QrNoVerify     = "--qr-no-verify";
+        // #1401 — preferred mask (0..7), and the fractal-native view search.
+        public const string QrMask         = "--qr-mask";
+        public const string QrSearch       = "--qr-search";
+
         // EXR read-back / regrade (roadmap S2, #396). Value = input .exr path;
         // selects Regrade mode — read it, apply --view-transform/--exposure, write
         // to --out. No fractal render (regrade a rendered EXR without re-rendering).

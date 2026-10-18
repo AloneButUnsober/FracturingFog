@@ -4,6 +4,14 @@
         x:Class="FracturingFog.UI.Avalonia.Views.ControlCenterSections.CaptureSectionView"
         x:DataType="vm:ControlCenterViewModel"
         Foreground="#DCDCDC">
+    <UserControl.Styles>
+        <Style Selector="TextBlock.qrstatus">
+            <Setter Property="Foreground" Value="#B4B4B4" />
+        </Style>
+        <Style Selector="TextBlock.qrstatus.warn">
+            <Setter Property="Foreground" Value="#FFCC00" />
+        </Style>
+    </UserControl.Styles>
     <!-- ═══ Capture ═══ (extracted from ControlCenterView for detach/pop-out) -->
     <StackPanel Spacing="0">
         <Border Classes="group">
@@ -29,6 +37,59 @@
                               ToolTip.Tip="How a wallpaper render (virtual-screen union, usually a different aspect than the window) is framed. View = keep the whole on-screen view, revealing more fractal on the wide axis (default). Aspect = current on-screen span on the long axis, cropping the short axis. Letterbox = keep the on-screen view exactly and pad the surround with the out-of-bounds colour." />
                 </Grid>
                 
+            </StackPanel>
+        </Border>
+
+        <!-- #1305 Fractal QR code: export the current view as a square image that
+             is also a scannable QR code. The saved file is decoded afterwards
+             (full size, small, blurred, JPEG); a failure is reported in yellow
+             (#FFCC00, never red - the user is red/green colour-blind). The same
+             settings feed Command > Seed from live view (the qr batch flags). -->
+        <Border Classes="group">
+            <StackPanel Spacing="6">
+                <TextBlock Classes="section" Text="QR Code" />
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6" Width="420" HorizontalAlignment="Left">
+                    <TextBlock Grid.Column="0" Text="Text" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
+                    <TextBox Grid.Column="1" Text="{Binding QrCode.Payload, Mode=TwoWay}"
+                             Watermark="https://…"
+                             ToolTip.Tip="What the code carries when scanned - usually a URL. Shorter text makes a smaller code with bigger modules, so more of the fractal survives." />
+                </Grid>
+                <Grid ColumnDefinitions="Auto,*,Auto,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="4" ColumnSpacing="6" Width="420" HorizontalAlignment="Left">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Style" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
+                    <ComboBox Grid.Row="0" Grid.Column="1" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding QrCode.StyleChoices}"
+                              SelectedIndex="{Binding QrCode.StyleIndex, Mode=TwoWay}"
+                              ToolTip.Tip="Steer: every module recoloured into a dark or light band, hue kept. Dots: only a square at each module's centre is forced, the fractal shows around it. Halftone: each module split 3x3, the centre cell carries the code and the outer cells are the fractal's own halftone." />
+                    <TextBlock Grid.Row="0" Grid.Column="2" Text="Error fix" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
+                    <ComboBox Grid.Row="0" Grid.Column="3" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding QrCode.ErrorCorrectionChoices}"
+                              SelectedIndex="{Binding QrCode.ErrorCorrectionIndex, Mode=TwoWay}"
+                              ToolTip.Tip="Reed-Solomon error correction: the share of the code that may be damaged and still scan. Higher leaves more room for the fractal but makes the code larger." />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Size" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
+                    <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding QrCode.Size}" Minimum="64" Maximum="8192" Increment="100"
+                                   FormatString="0" ToolTip.Tip="Side of the square image, in pixels. The code is centred with its 4-module quiet zone." />
+                    <TextBlock Grid.Row="1" Grid.Column="2" Text="Module px" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
+                    <NumericUpDown Grid.Row="1" Grid.Column="3" Value="{Binding QrCode.ModulePixels}" Minimum="0" Maximum="256" Increment="1"
+                                   FormatString="0" ToolTip.Tip="Pixels per module. 0 = auto: the largest that fits the image." />
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Dot" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
+                    <NumericUpDown Grid.Row="2" Grid.Column="1" Value="{Binding QrCode.DotFraction}" Minimum="0.2" Maximum="0.6" Increment="0.05"
+                                   FormatString="0.00" ToolTip.Tip="Size of the forced centre square as a fraction of the module (Dots style; the strict core in Steer)." />
+                    <CheckBox Grid.Row="2" Grid.Column="2" Grid.ColumnSpan="2" Content="Invert (light on dark)"
+                              IsChecked="{Binding QrCode.Invert, Mode=TwoWay}"
+                              ToolTip.Tip="Light modules on a dark field. Many readers accept it, but not all." />
+                </Grid>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Classes="action neutral" Content="Find View"
+                            Command="{Binding QrCode.FindViewCommand}"
+                            ToolTip.Tip="Search around the current view (position and zoom) and over the 8 mask patterns for the framing whose own light and dark areas already agree best with the code, then go there. The fractal is altered less; gains are modest because QR data looks random. Backspace returns." />
+                    <Button Classes="action neutral" Content="Export QR Image…"
+                            Command="{Binding QrCode.ExportCommand}"
+                            ToolTip.Tip="Render the current view as a square image with the QR code composited in, save it, then decode the saved file to confirm it scans." />
+                    <TextBlock Text="{Binding QrCode.MaskText}" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding QrCode.Message}" IsVisible="{Binding QrCode.HasMessage}"
+                               Classes="qrstatus" Classes.warn="{Binding QrCode.MessageIsWarning}"
+                               FontSize="11" TextWrapping="Wrap" MaxWidth="300" VerticalAlignment="Center" />
+                </StackPanel>
             </StackPanel>
         </Border>
 

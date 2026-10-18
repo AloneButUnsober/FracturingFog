@@ -87,6 +87,10 @@ namespace FracturingFog.Cli
         /// batch flag are read, and only for the matching fractal type.</summary>
         public FractalParameters? Parameters { get; init; }
 
+        /// <summary>#1305 — the Control Center's fractal-QR settings when a payload
+        /// is set (null = no QR). Emitted as the <c>--qr-*</c> flags.</summary>
+        public QrCodeOptions? Qr { get; init; }
+
         /// <summary>The live per-family settings as region-snapshot
         /// <c>Key=Value</c> pairs (#997) — Julia constant, 3D camera, … — emitted
         /// as <c>--param</c>. Supplied by the host (the snapshot lives in Engine).</summary>
@@ -379,6 +383,10 @@ namespace FracturingFog.Cli
                 parts.Add(snap.ViewExposureEv.ToString("0.###", CultureInfo.InvariantCulture));
             }
 
+            // Fractal QR code (#1305) — payload plus the knobs that deviate from
+            // their defaults.
+            AppendQr(parts, snap.Qr);
+
             // Domain-warp post-fx (any fractal). Emit the toggle, plus knobs when
             // they deviate from their defaults.
             if (snap.DomainWarpActive)
@@ -601,6 +609,27 @@ namespace FracturingFog.Cli
             "AcidWarpPattern", "AcidWarpFrequency", "AcidWarpWarpStrength",
             "DomainWarpEnabled", "DomainWarpStrength", "DomainWarpFrequency",
         };
+
+        /// <summary>#1305 — the <c>--qr-*</c> flags for <paramref name="qr"/>;
+        /// nothing without a payload.</summary>
+        public static void AppendQr(List<string> parts, QrCodeOptions? qr)
+        {
+            if (qr == null || string.IsNullOrEmpty(qr.Payload)) return;
+            parts.Add(BatchFlags.QrPayload);
+            parts.Add(qr.Payload);
+            if (qr.ErrorCorrection != QrErrorCorrection.H)
+            { parts.Add(BatchFlags.QrEcc); parts.Add(qr.ErrorCorrection.ToString()); }
+            if (qr.Style != QrStyle.Steer)
+            { parts.Add(BatchFlags.QrStyle); parts.Add(QrCodeOptions.StyleName(qr.Style)); }
+            if (qr.ModulePixels != 0)
+            { parts.Add(BatchFlags.QrModulePx); parts.Add(qr.ModulePixels.ToString(CultureInfo.InvariantCulture)); }
+            if (qr.DotFraction != QrCodeOptions.DefaultDotFraction)
+            { parts.Add(BatchFlags.QrDot); parts.Add(Num(qr.DotFraction)); }
+            if (qr.Invert) parts.Add(BatchFlags.QrInvert);
+            if (!qr.Verify) parts.Add(BatchFlags.QrNoVerify);
+            if (qr.Mask >= 0)
+            { parts.Add(BatchFlags.QrMask); parts.Add(qr.Mask.ToString(CultureInfo.InvariantCulture)); }
+        }
 
         /// <summary>List the live fx the emitted command cannot reproduce.
         /// Empty when the 2D config is fully expressible.</summary>

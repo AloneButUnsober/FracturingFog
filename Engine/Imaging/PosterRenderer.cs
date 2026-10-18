@@ -179,6 +179,10 @@ namespace FracturingFog.Imaging
         /// not byte-stable. Ignored for non-EXR formats.</summary>
         public ExrCompression ExrCompression { get; init; } = ExrCompression.None;
 
+        /// <summary>#1305 — composite a scannable QR code into the final image
+        /// (after rotation, before the watermark + write). Null = no QR.</summary>
+        public QrCodeOptions? Qr { get; init; }
+
         // ── D-6b — sub-rect rendering for cluster tile workers ─────────────
         // When non-zero, the worker renders only a sub-rect of a larger
         // image and derives per-pixel dc from the FULL image's centre +
@@ -222,6 +226,10 @@ namespace FracturingFog.Imaging
         public int SavedWidth { get; }
         public int SavedHeight { get; }
         public long ElapsedMs { get; }
+
+        /// <summary>#1305 — the QR composited into the image (null = none), with
+        /// the verification of the saved file when the request asked for it.</summary>
+        public FracturingFog.Imaging.Qr.QrExportReport? Qr { get; init; }
     }
 
     /// <summary>Offscreen high-resolution fractal renderer shared by both shells.</summary>
@@ -701,6 +709,18 @@ namespace FracturingFog.Imaging
             return buffer;
         }
 
+        /// <summary>#1401 — the final display buffer (render + grade + tonemap +
+        /// composite: everything the saved file gets except the watermark, QR and
+        /// rotation), owned by the caller. The QR view search probes with it so a
+        /// candidate is scored on what the export will actually look like.</summary>
+        public static uint[] RenderDisplayPixels(PosterRequest req, CancellationToken token, out int w, out int h)
+        {
+            if (req == null) throw new ArgumentNullException(nameof(req));
+            if (req.Width <= 0 || req.Height <= 0)
+                throw new ArgumentException("Poster dimensions must be positive.", nameof(req));
+            return (uint[])RenderDisplayBuffer(req, token, out w, out h, out _).Clone();
+        }
+
         /// <summary>Render the composed scene buffer as a straight pixel array —
         /// calculator colour + relief, no output post-pipeline — cloned so the
         /// caller owns it (roadmap S1, #389; the AOV export orchestrator captures
@@ -741,24 +761,44 @@ namespace FracturingFog.Imaging
                         rotated[x * h + (h - 1 - y)] = buffer[y * w + x];
 
                 int savedW = h, savedH = w;
+                var qr = ApplyQr(req, rotated, savedW, savedH);
                 var fontColor = ImageExport.ComputeContrastColor(
                     Color.White, watermark: true, pixels: rotated, imgW: savedW, imgH: savedH);
                 var wm = BuildPosterWatermark(req, fontColor);
                 ImageExport.SavePixelsToFile(
                     rotated, savedW, savedH, req.Path, req.Format,
                     wm, poster: true, dpi: req.Dpi, exrCompression: req.ExrCompression);
-                return new PosterResult(savedW, savedH, elapsedMs);
+                return new PosterResult(savedW, savedH, elapsedMs) { Qr = VerifyQr(req, qr, rotated, savedW, savedH) };
             }
             else
             {
+                var qr = ApplyQr(req, buffer, w, h);
                 var fontColor = ImageExport.ComputeContrastColor(
                     Color.White, watermark: true, pixels: buffer, imgW: w, imgH: h);
                 var wm = BuildPosterWatermark(req, fontColor);
                 ImageExport.SavePixelsToFile(
                     buffer, w, h, req.Path, req.Format,
                     wm, poster: true, dpi: req.Dpi, exrCompression: req.ExrCompression);
-                return new PosterResult(w, h, elapsedMs);
+                return new PosterResult(w, h, elapsedMs) { Qr = VerifyQr(req, qr, buffer, w, h) };
             }
+        }
+
+        // #1305 — the QR goes onto the final (rotated) display buffer so the
+        // module grid is square in the saved file; the watermark is painted
+        // after it, and the verify reads the saved file so both are accounted for.
+        private static (FracturingFog.Imaging.Qr.QrCode Code, FracturingFog.Imaging.Qr.QrLayout Layout)? ApplyQr(
+            PosterRequest req, uint[] buffer, int w, int h)
+            => req.Qr == null ? null : FracturingFog.Imaging.Qr.QrExport.Apply(buffer, w, h, req.Qr);
+
+        private static FracturingFog.Imaging.Qr.QrExportReport? VerifyQr(PosterRequest req,
+            (FracturingFog.Imaging.Qr.QrCode Code, FracturingFog.Imaging.Qr.QrLayout Layout)? qr,
+            uint[] buffer, int w, int h)
+        {
+            if (qr is not { } q || req.Qr == null) return null;
+            var verify = req.Qr.Verify
+                ? FracturingFog.Imaging.Qr.QrExport.VerifySaved(req.Path, req.Qr, q.Layout, buffer, w, h)
+                : null;
+            return new FracturingFog.Imaging.Qr.QrExportReport(q.Code, q.Layout, verify);
         }
 
         // #102 — apply heightfield relief to a freshly rendered colour buffer
