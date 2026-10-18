@@ -6,8 +6,9 @@
 //     an AOV view and a low-res drag preview are never denoised;
 //   • on, a 1 spp 3D frame and a ss-1 relief frame get closer (PSNR) to a 4x4 / ss-4
 //     supersampled reference — measured independently of OIDN's own output;
-//   • on the relief raymarch OIDN replaces the A-Trous pass; without the runtime the
-//     A-Trous pass runs exactly as configured;
+//   • on the relief raymarch OIDN replaces the A-Trous pass, and every A-Trous setting
+//     is inactive while it is on (without the runtime: no denoise, as on 3D); the relief
+//     dialog greys the A-Trous controls out;
 //   • batch parity: --oidn parses, the Command builder emits it from the live view and
 //     it parses back, the preset carries the field, the fidelity check covers it;
 //   • the installer takes only the CPU runtime + licences, and rejects a wrong hash.
@@ -152,12 +153,14 @@ public sealed class S1338OidnTests(ITestOutputHelper output)
         return (m.ColorBuffer.Take(W * H).ToArray(), smooth.Take(W * H).Select(v => v / max).ToArray());
     }
 
-    private static uint[] Relief(uint[] albedo, float[] height, int ss, bool oidn, int atrous)
+    private static uint[] Relief(uint[] albedo, float[] height, int ss, bool oidn, int atrous, bool adaptive = false, bool geom = false)
     {
-        var p = new FractalParameters { Relief2DEnabled = true, Relief2DRaymarch = true, Relief2DSupersample = ss, Relief2DDenoiseIterations = atrous };
+        var p = new FractalParameters { Relief2DEnabled = true, Relief2DRaymarch = true, Relief2DSupersample = ss, Relief2DDenoiseIterations = atrous,
+            Relief2DDenoiseAdaptiveSupersample = adaptive };
         var l = p.Lighting; l.UseGpuRender = false; l.OidnDenoise = oidn; p.Lighting = l;
         // As the host's final relief stage does it.
-        var aov = ReliefDenoisePass.MakeCapture(p, W, H);
+        // geom: a normal + depth capture made for another pass (relief SSAO / edge ink).
+        var aov = ReliefDenoisePass.MakeCapture(p, W, H, captureHdr: false, captureGeom: geom);
         var dst = new uint[W * H];
         HeightfieldRaymarch2D.Render(albedo, height, W, H, W, H, p, dst, out _, null, aov);
         ReliefDenoisePass.Apply(dst, aov, W, H, p);
@@ -165,7 +168,7 @@ public sealed class S1338OidnTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void Relief_Oidn_Replaces_ATrous_And_Falls_Back_Without_The_Runtime()
+    public void Relief_Oidn_Replaces_ATrous_Whose_Settings_Go_Inactive()
     {
         var (albedo, height) = ReliefSource();
         var raw = Relief(albedo, height, 1, oidn: false, atrous: 0);
@@ -173,9 +176,17 @@ public sealed class S1338OidnTests(ITestOutputHelper output)
         Assert.NotEqual(raw, atrous);   // precondition: the A-Trous pass does something
         try
         {
+            // Without the runtime: no denoise at all — the A-Trous passes stay inactive.
             OidnDenoiser.Disabled = true;
             Assert.Equal(raw, Relief(albedo, height, 1, oidn: true, atrous: 0));
-            Assert.Equal(atrous, Relief(albedo, height, 1, oidn: true, atrous: 3));
+            Assert.Equal(raw, Relief(albedo, height, 1, oidn: true, atrous: 3));
+            // ...even when another pass captured the normal + depth guides it would use.
+            Assert.Equal(atrous, Relief(albedo, height, 1, oidn: false, atrous: 3, geom: true));   // precondition
+            Assert.Equal(raw, Relief(albedo, height, 1, oidn: true, atrous: 3, geom: true));
+            // ...the adaptive-supersample coupling too (it would halve ss 2 to ss 1).
+            var ss2 = Relief(albedo, height, 2, oidn: false, atrous: 0);
+            Assert.NotEqual(raw, ss2);   // precondition: ss 2 differs from ss 1
+            Assert.Equal(ss2, Relief(albedo, height, 2, oidn: true, atrous: 3, adaptive: true));
         }
         finally { OidnDenoiser.Disabled = false; }
         if (!Oidn) { output.WriteLine("OIDN not installed"); return; }
@@ -218,6 +229,28 @@ public sealed class S1338OidnTests(ITestOutputHelper output)
         Assert.NotEqual(fx.SceneSignature(), on.SceneSignature());
         Assert.True(LightingFxPresetData.FromFx(on).ToFx().OidnDenoise);
         Assert.DoesNotContain("OidnDenoise", LightingFidelity.UnexpressedFields(on));
+    }
+
+    [Fact]
+    public void The_Relief_Dialog_Greys_Out_ATrous_While_Oidn_Is_On()
+    {
+        var fp = new FractalParameters { Relief2DEnabled = true, Relief2DRaymarch = true, Relief2DDenoiseIterations = 2, Relief2DDenoiseTemporal = true };
+        var vm = new FracturingFog.UI.Avalonia.ViewModels.FractalParamsViewModel(FractalType.Mandelbrot, fp);
+        Assert.True(vm.AtrousDenoiseApplies);
+        Assert.True(vm.DenoiseEnabled);
+        Assert.True(vm.DenoiseTemporalEnabled);
+        var raised = new System.Collections.Generic.HashSet<string?>();
+        vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        vm.OidnDenoise = true;
+        Assert.False(vm.AtrousDenoiseApplies);
+        Assert.False(vm.DenoiseEnabled);
+        Assert.False(vm.DenoiseTemporalEnabled);
+        Assert.Contains(nameof(vm.AtrousDenoiseApplies), raised);
+        Assert.Contains(nameof(vm.DenoiseEnabled), raised);
+        Assert.Contains(nameof(vm.DenoiseTemporalEnabled), raised);
+        Assert.Equal(2, fp.Relief2DDenoiseIterations);   // the setting is kept, only inactive
+        vm.OidnDenoise = false;
+        Assert.True(vm.AtrousDenoiseApplies && vm.DenoiseEnabled && vm.DenoiseTemporalEnabled);
     }
 
     [Fact]

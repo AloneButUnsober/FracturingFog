@@ -75,7 +75,7 @@ public static class ReliefDenoisePass
         FractalParameters? p, int w, int h, bool captureHdr, bool captureGeom)
     {
         if (w <= 0 || h <= 0) return null;
-        bool denoise = Enabled(p);
+        bool denoise = Enabled(p) && !OidnOwns(p);   // #1338 — OIDN needs no AOVs
         if (!denoise && !captureHdr && !captureGeom) return null;
         // SVGF temporal also needs the motion-vector AOV (to reproject the history);
         // the plain denoise needs only normal + depth. Motion capture forces the CPU
@@ -90,7 +90,7 @@ public static class ReliefDenoisePass
     public static void Apply(uint[] beauty, HeightfieldRaymarch2D.ReliefAovBuffers? aov,
         int w, int h, FractalParameters? p)
     {
-        if (ApplyOidn(beauty, w, h, p)) return;
+        if (OidnOwns(p)) { ApplyOidn(beauty, w, h, p); return; }
         if (aov == null || beauty == null || !Enabled(p)) return;
         long n = (long)w * h;
         if (beauty.Length < n) return;
@@ -113,7 +113,7 @@ public static class ReliefDenoisePass
     public static void ApplySvgf(uint[] beauty, HeightfieldRaymarch2D.ReliefAovBuffers? aov,
         int w, int h, FractalParameters? p, SvgfHistory history)
     {
-        if (ApplyOidn(beauty, w, h, p)) return;
+        if (OidnOwns(p)) { ApplyOidn(beauty, w, h, p); return; }
         if (aov == null || beauty == null || history == null || !Enabled(p)) return;
         long n = (long)w * h;
         if (beauty.Length < n) return;
@@ -165,16 +165,24 @@ public static class ReliefDenoisePass
         history.W = w; history.H = h; history.Valid = true;
     }
 
+    /// <summary>#1338 — true when the Lighting &amp; FX OIDN option is on for a relief
+    /// raymarch: OIDN then owns the relief denoise and every À-Trous / SVGF setting is
+    /// inactive (the relief dialog greys them out; the adaptive-supersample coupling
+    /// ignores them too). Without the runtime that means no denoise — the frame is the
+    /// option-off, À-Trous-off frame, as on the 3D families.</summary>
+    public static bool OidnOwns(FractalParameters? p)
+        => p != null && p.Relief2DEnabled && p.Relief2DRaymarch && p.Lighting.OidnDenoise;
+
     /// <summary>#1338 — Intel Open Image Denoise on a relief-raymarch beauty, when the
     /// Lighting &amp; FX option is on (it replaces the À-Trous / SVGF pass, so the call
     /// sites need nothing new). Colour only, so it needs no AOV capture and keeps the
     /// raymarch's GPU path: measured, the albedo + normal guides made it worse (the 1 spp
     /// guides carry the same aliasing, and OIDN keeps it as detail). False when it did
-    /// not run — the À-Trous pass then applies as configured.</summary>
+    /// not run (option off, or the runtime unavailable).</summary>
     public static bool ApplyOidn(uint[] beauty, int w, int h, FractalParameters? p)
     {
-        if (p == null || beauty == null || !p.Relief2DEnabled || !p.Relief2DRaymarch) return false;
-        var fx = p.Lighting;
+        if (beauty == null || !OidnOwns(p)) return false;
+        var fx = p!.Lighting;
         return ScreenSpacePost.ApplyOidn(beauty, w, h, in fx);
     }
 

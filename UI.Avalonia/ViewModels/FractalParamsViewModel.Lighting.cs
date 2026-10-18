@@ -823,7 +823,16 @@ public sealed partial class FractalParamsViewModel
     public bool OidnDenoise
     {
         get => _p.Lighting.OidnDenoise;
-        set { MutateLighting(r => r.Fx.OidnDenoise = value); this.RaisePropertyChanged(); Fire(); }
+        set
+        {
+            MutateLighting(r => r.Fx.OidnDenoise = value);
+            this.RaisePropertyChanged();
+            // The relief dialog's À-Trous controls grey out while OIDN replaces them.
+            this.RaisePropertyChanged(nameof(AtrousDenoiseApplies));
+            this.RaisePropertyChanged(nameof(DenoiseEnabled));
+            this.RaisePropertyChanged(nameof(DenoiseTemporalEnabled));
+            Fire();
+        }
     }
     public double LightOrbitSpeed
     {

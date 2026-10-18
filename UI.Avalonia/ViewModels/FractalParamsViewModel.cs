@@ -778,7 +778,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public int Relief2DDenoiseIterations
     {
         get => _p.Relief2DDenoiseIterations;
-        set { int v = (int)Clamp(value, 0, 8); if (_p.Relief2DDenoiseIterations == v) return; _p.Relief2DDenoiseIterations = v; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(DenoiseEnabled)); Fire(); }
+        set { int v = (int)Clamp(value, 0, 8); if (_p.Relief2DDenoiseIterations == v) return; _p.Relief2DDenoiseIterations = v; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(DenoiseEnabled)); this.RaisePropertyChanged(nameof(DenoiseTemporalEnabled)); Fire(); }
     }
     public double Relief2DDenoiseColorSigma
     {
@@ -796,7 +796,10 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         set { double v = Clamp(value, 0.001, 4.0); if (_p.Relief2DDenoiseDepthSigma == v) return; _p.Relief2DDenoiseDepthSigma = v; this.RaisePropertyChanged(); Fire(); }
     }
     /// <summary>The sigma controls only bite once at least one denoise pass runs.</summary>
-    public bool DenoiseEnabled => _p.Relief2DDenoiseIterations > 0;
+    public bool DenoiseEnabled => _p.Relief2DDenoiseIterations > 0 && !_p.Lighting.OidnDenoise;
+    /// <summary>#1338 — the À-Trous "Denoise passes" apply: Intel OIDN (Lighting &amp; FX)
+    /// replaces the À-Trous pass on the relief while it is on, so its controls grey out.</summary>
+    public bool AtrousDenoiseApplies => !_p.Lighting.OidnDenoise;
     /// <summary>S4 (#402) — drop the AA supersample while denoising (fewer rays).</summary>
     public bool Relief2DDenoiseAdaptiveSupersample
     {
@@ -831,7 +834,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     }
     /// <summary>The SVGF feedback / variance controls only bite once the temporal
     /// toggle is on (which itself needs at least one denoise pass).</summary>
-    public bool DenoiseTemporalEnabled => _p.Relief2DDenoiseIterations > 0 && _p.Relief2DDenoiseTemporal;
+    public bool DenoiseTemporalEnabled => _p.Relief2DDenoiseIterations > 0 && _p.Relief2DDenoiseTemporal && !_p.Lighting.OidnDenoise;
     // Vector motion blur (roadmap S1, #398). Strength 0 = off (byte-identical). Only
     // visible in a sequence render (needs the motion-vector AOV from a previous frame).
     public double Relief2DMotionBlurStrength
