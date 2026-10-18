@@ -623,6 +623,7 @@ namespace FracturingFog.Imaging
                     // and trips CS8604 at the ApplyReliefIfEnabled call below.
                     InteriorAlpha = req.FractalParameters.InteriorAlpha,
                     BlaTolerance = req.FractalParameters.BlaTolerance,   // #1275
+                    SolidRegionSkip = req.FractalParameters.SolidRegionSkip,   // #1343
                     // D-6b — sub-rect + seeded orbit for cluster tile workers.
                     // All four properties default to 0 (= legacy full-image render);
                     // any non-zero value engages the sub-rect dc geometry.
@@ -972,6 +973,7 @@ namespace FracturingFog.Imaging
                     Quality = req.Quality,
                     InteriorAlpha = req.FractalParameters.InteriorAlpha,
                     BlaTolerance = req.FractalParameters.BlaTolerance,   // #1275
+                    SolidRegionSkip = req.FractalParameters.SolidRegionSkip,   // #1343
                 };
                 m.Calculate(token);
                 return m;

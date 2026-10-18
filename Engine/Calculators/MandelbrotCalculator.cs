@@ -69,7 +69,7 @@ namespace FracturingFog;
 /// MandelbrotCalculator.GpuDeepPrecisionMode).</summary>
 public enum GpuDeepPrecision { Auto, Double, Fp32 }
 
-public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Interefaces.ITrapFieldSource, Interefaces.ISupportsHistogramEq,
+public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSource, Interefaces.ITrapFieldSource, Interefaces.ISupportsHistogramEq,
     Interefaces.IDistanceFieldSource, FracturingFog.Render.IGpuRouteSource
 {
     // ── Public state ──────────────────────────────────────────────────────────
@@ -1053,8 +1053,12 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         _panState = null;                  // #1330: set again by a complete lattice frame
         _panFrameComplete = false;
         LastFrameComputedPixels = 0;
+        LastFrameFilledPixels = 0;   // #1343
+        LastFrameSolidPasses = 0;
+        LastFilledMask = null;
         PrepareMask();   // #1344
-        CalculateInternal(ct);
+        if (SolidRegionsApply()) CalculateSolidRegions(ct);   // #1343 opt-in
+        else CalculateInternal(ct);
         ApplyOutOfBoundsSurround(ct);
         LastGpuRoute = ResolveGpuRoute();   // #1173-M
         // #1330 / #1344 — a masked frame's buffers are partly another frame's: never a pan source.
@@ -1408,6 +1412,15 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         if (ColorMap is IInteriorAwareColorMap interiorMap)
             RunInteriorPass(interiorMap, ct);
 
+        // #1343 — a solid-region frame runs these whole-frame passes once, on the
+        // finished frame, not after each of its masked passes.
+        if (!_deferWholeFramePasses) RunWholeFramePasses(ct);
+    }
+
+    private bool _deferWholeFramePasses;   // #1343
+
+    private void RunWholeFramePasses(CancellationToken ct)
+    {
         // ── Optional post-process pass ───────────────────────────────────────
         // Themes that need neighbourhood information (emboss, AO, soft shadow)
         // implement IPostProcessColorMap and run a second pass over the
@@ -2727,7 +2740,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
                 }
             }
         });
-        LastFrameComputedPixels = computed;
+        LastFrameComputedPixels += computed;   // #1343: a solid-region frame runs several masked passes
         // #1330 — a complete lattice frame (whole, or panned from one) can be panned again.
         _panFrameComplete = LatticeAligned && !recycled && !useTileCap && !ct.IsCancellationRequested;
 

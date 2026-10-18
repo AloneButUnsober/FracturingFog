@@ -1557,6 +1557,8 @@ namespace FracturingFog.Rendering
             _calculator.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;
             // #1275 — BLA tolerance (accuracy vs speed near deep minibrots).
             _calculator.BlaTolerance = ViewState.FractalParameters?.BlaTolerance ?? FracturingFog.FFMath.BlaTable.DefaultEpsilon;
+            // #1343 — solid-region skipping (opt-in).
+            _calculator.SolidRegionSkip = ViewState.FractalParameters?.SolidRegionSkip ?? false;
 
             if (ViewState.IterLocked)
                 _calculator.MaxIterations = ViewState.LockedIterations;
@@ -2517,6 +2519,7 @@ namespace FracturingFog.Rendering
             dst.DisableSeriesApproximation = src.DisableSeriesApproximation;
             dst.DisableDdBla = src.DisableDdBla;
             dst.BlaTolerance = src.BlaTolerance;   // #1275
+            dst.SolidRegionSkip = src.SolidRegionSkip;   // #1343
         }
 
         /// <summary>#328 — is <paramref name="type"/> a 2D height-field type whose

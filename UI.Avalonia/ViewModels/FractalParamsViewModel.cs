@@ -610,6 +610,13 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         set { if (_p.AdaptiveAa == value) return; _p.AdaptiveAa = value; this.RaisePropertyChanged(); Fire(); }
     }
 
+    /// <summary>#1343 — Mandelbrot solid-region skipping (Mariani–Silver).</summary>
+    public bool SolidRegionSkip
+    {
+        get => _p.SolidRegionSkip;
+        set { if (_p.SolidRegionSkip == value) return; _p.SolidRegionSkip = value; this.RaisePropertyChanged(); Fire(); }
+    }
+
     public double AdaptiveAaThreshold
     {
         get => _p.AdaptiveAaThreshold;

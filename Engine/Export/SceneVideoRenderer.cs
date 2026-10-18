@@ -734,6 +734,7 @@ namespace FracturingFog.Export
                 ColorMap = shot.ThemeAt(localTime),
                 Quality = shot.Quality,
                 BlaTolerance = p.BlaTolerance,   // #1275
+                SolidRegionSkip = p.SolidRegionSkip,   // #1343
             };
             calc.Calculate(ct);
             if (shot.Quality != null)   // #1344 — the preset's sub-pixel AA (adaptive with AdaptiveAa)

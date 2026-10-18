@@ -68,6 +68,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--temporallightingprobe")
             return TemporalLightingProbe.Run(args);
 
+        // #1343 — Mariani–Silver solid-region skipping: speed, fill share, mismatches.
+        if (args.Length > 0 && args[0] == "--solidregionprobe")
+            return SolidRegionProbe.Run(args);
+
         // #1338 — Intel Open Image Denoise vs À-Trous on low-sample renders (PSNR / SSIM).
         if (args.Length > 0 && args[0] == "--oidnprobe")
             return OidnProbe.Run(args);
