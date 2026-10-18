@@ -51,6 +51,7 @@ namespace FracturingFog.Cli
             BatchFlagGroup.Froxel, BatchFlagGroup.Glass, BatchFlagGroup.Denoise,
             BatchFlagGroup.Relight, BatchFlagGroup.Volumetric, BatchFlagGroup.Isolate,
             BatchFlagGroup.Lights, BatchFlagGroup.Stereo,
+            BatchFlagGroup.Qr,   // #1305 — the live seed carries the Capture > QR Code settings
         };
 
         /// <summary>True when <paramref name="g"/> describes what is rendered, so

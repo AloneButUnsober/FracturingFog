@@ -92,6 +92,13 @@
     -->
     <PackageReference Include="SkiaSharp" Version="3.119.4" />
     <!--
+      #1305 (fractal QR codes) - ZXing.Net is the INDEPENDENT decoder that
+      verifies a composited fractal QR still scans (QrVerifier). The encoder is
+      our own (Imaging/Qr/QrEncoder), so the decode check is never the encoder
+      agreeing with itself. Pure managed, Apache-2.0.
+    -->
+    <PackageReference Include="ZXing.Net" Version="0.16.9" />
+    <!--
       Phase X.0 / Slice 0.1b: Vortice package refs removed. MandelbrotGpuKernel
       now lives in FracturingFog.Rendering.D3D and is consumed across the
       Engine boundary only through IGpuKernel (Engine\Interefaces\IGpuKernel.cs).

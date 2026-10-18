@@ -196,6 +196,38 @@ namespace FracturingFog.Batch
         /// Ignored for non-EXR output.</summary>
         public bool ExrZip { get; set; }
 
+        // ── Fractal QR code (#1305) ──────────────────────────────────────────
+        /// <summary>Text to encode as a scannable QR code composited into the
+        /// image. Null = no QR. Image mode only.</summary>
+        public string? QrPayload { get; set; }
+        public QrErrorCorrection? QrEcc { get; set; }
+        public QrStyle? QrStyle { get; set; }
+        /// <summary>Pixels per module; 0 / null = auto (largest that fits).</summary>
+        public int? QrModulePx { get; set; }
+        /// <summary>Forced centre-square size as a fraction of the module.</summary>
+        public double? QrDot { get; set; }
+        public bool QrInvert { get; set; }
+        /// <summary>Skip the post-save decode check.</summary>
+        public bool QrNoVerify { get; set; }
+        /// <summary>#1401 — preferred mask 0..7 (null = auto).</summary>
+        public int? QrMask { get; set; }
+        /// <summary>#1401 — search around the start view for the framing (and
+        /// mask) whose own pattern best matches the code. Null = no search.</summary>
+        public QrSearchOptions? QrSearch { get; set; }
+
+        /// <summary>The QR options these flags describe, or null without a payload.</summary>
+        public QrCodeOptions? BuildQrOptions() => QrPayload == null ? null : new QrCodeOptions
+        {
+            Payload = QrPayload,
+            ErrorCorrection = QrEcc ?? QrErrorCorrection.H,
+            Style = QrStyle ?? FracturingFog.Imaging.QrStyle.Steer,
+            ModulePixels = QrModulePx ?? 0,
+            DotFraction = QrDot ?? QrCodeOptions.DefaultDotFraction,
+            Invert = QrInvert,
+            Verify = !QrNoVerify,
+            Mask = QrMask ?? -1,
+        };
+
         /// <summary>Exposure in stops applied before the view transform (roadmap
         /// S2, #389). Null = neutral (0). Only meaningful alongside a non-None
         /// <see cref="ViewTransform"/>, but honoured on its own too.</summary>
@@ -764,6 +796,61 @@ namespace FracturingFog.Batch
 
                     case BatchFlags.ExrZip:
                         opts.ExrZip = true;
+                        break;
+
+                    // ── Fractal QR code (#1305) ──
+                    case BatchFlags.QrPayload:
+                        if (!Next(args, ref i, a, out string qrp, out error)) return false;
+                        opts.QrPayload = qrp;
+                        break;
+
+                    case BatchFlags.QrEcc:
+                        if (!Next(args, ref i, a, out string qre, out error)) return false;
+                        if (!QrCodeOptions.TryParseErrorCorrection(qre, out var qecc))
+                        {
+                            error = $"Unknown --qr-ecc '{qre}'. Use L|M|Q|H.";
+                            return false;
+                        }
+                        opts.QrEcc = qecc;
+                        break;
+
+                    case BatchFlags.QrStyle:
+                        if (!Next(args, ref i, a, out string qrs, out error)) return false;
+                        if (!QrCodeOptions.TryParseStyle(qrs, out var qstyle))
+                        {
+                            error = $"Unknown --qr-style '{qrs}'. Use dots|steer|halftone.";
+                            return false;
+                        }
+                        opts.QrStyle = qstyle;
+                        break;
+
+                    case BatchFlags.QrModulePx:
+                        if (!NextInt(args, ref i, a, out int qrm, out error)) return false;
+                        opts.QrModulePx = qrm;
+                        break;
+
+                    case BatchFlags.QrDot:
+                        if (!NextDouble(args, ref i, a, out double qrd, out error)) return false;
+                        opts.QrDot = qrd;
+                        break;
+
+                    case BatchFlags.QrInvert:
+                        opts.QrInvert = true;
+                        break;
+
+                    case BatchFlags.QrNoVerify:
+                        opts.QrNoVerify = true;
+                        break;
+
+                    case BatchFlags.QrMask:
+                        if (!NextInt(args, ref i, a, out int qmask, out error)) return false;
+                        opts.QrMask = qmask;
+                        break;
+
+                    case BatchFlags.QrSearch:
+                        if (!Next(args, ref i, a, out string qsearch, out error)) return false;
+                        if (!QrSearchOptions.TryParseSpec(qsearch, out var qso, out error)) return false;
+                        opts.QrSearch = qso;
                         break;
 
                     case BatchFlags.BulbPower:
@@ -1641,6 +1728,26 @@ namespace FracturingFog.Batch
                 { error = "--exposure must be -16..16 (stops)."; return false; }
             if (opts.AovExr && opts.Mode != BatchMode.Image)
                 { error = "--aov-exr is image mode only."; return false; }
+            // #1305 — fractal QR code.
+            if (opts.QrModulePx is < 0 or > QrCodeOptions.MaxModulePixels)
+                { error = $"--qr-module-px must be 0..{QrCodeOptions.MaxModulePixels} (0 = auto)."; return false; }
+            if (opts.QrMask is < 0 or > 7)
+                { error = "--qr-mask must be 0..7."; return false; }
+            if (opts.QrSearch != null && opts.Explore != null)
+                { error = "--qr-search cannot be combined with --explore (both choose the view)."; return false; }
+            if (opts.QrDot is < QrCodeOptions.MinDotFraction or > QrCodeOptions.MaxDotFraction)
+                { error = $"--qr-dot must be {QrCodeOptions.MinDotFraction}..{QrCodeOptions.MaxDotFraction}."; return false; }
+            if (opts.QrPayload != null)
+            {
+                if (opts.QrPayload.Length == 0)
+                    { error = "--qr-payload must not be empty."; return false; }
+                if (System.Text.Encoding.UTF8.GetByteCount(opts.QrPayload) > QrCodeOptions.MaxPayloadBytes)
+                    { error = $"--qr-payload is longer than the largest QR code holds ({QrCodeOptions.MaxPayloadBytes} bytes)."; return false; }
+                if (opts.Mode != BatchMode.Image)
+                    { error = "--qr-payload is image mode only."; return false; }
+                if (opts.AovExr)
+                    { error = "--qr-payload cannot be combined with --aov-exr (the QR is composited into a flat image)."; return false; }
+            }
             if (opts.AcidPattern is < 0 or >= FractalParameters.AcidWarpPatternCount)
                 { error = $"--acid-pattern must be 0..{FractalParameters.AcidWarpPatternCount - 1}."; return false; }
             if (opts.ReliefHeight is <= 0)

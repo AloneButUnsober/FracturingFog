@@ -69,6 +69,9 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
         DetachSectionCommand = ReactiveCommand.Create(
             () => DetachRequested?.Invoke(this, _selectedSection));
         CommandBuilder = new CommandBuilderViewModel(BuildLiveSeed, shell.RequestCopyToClipboard);
+        QrCode = new QrCodeViewModel();
+        // #1401 — a found QR view is plain navigation, like an explored one.
+        QrCode.NavigateRequested = v => GoToExploreView(v, Shell.Main.ViewState.Quality);
 
         // Global UI-scale controls (#809 / S4 #813) — bound by the View section
         // next to the Size combo. Commands drive the static UiScaleService; the
@@ -345,6 +348,10 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
     /// <summary>The Command section's model (#994).</summary>
     public CommandBuilderViewModel CommandBuilder { get; }
 
+    /// <summary>#1305 — the Capture section's fractal QR code export. Its
+    /// options also go into the live seed, so the Command builder reproduces it.</summary>
+    public QrCodeViewModel QrCode { get; }
+
     /// <summary>#997 — host-supplied serializer of the live per-family settings
     /// to region-snapshot <c>Key=Value</c> pairs (the snapshot lives in Engine,
     /// which UI.Avalonia cannot reference). Emitted by the seed as --param.</summary>
@@ -388,6 +395,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
             InteriorAlpha = fp?.InteriorAlpha ?? 255,   // #363 — now emitted as a flag
             ViewTransform  = vs.ViewTransform,           // S2 (#389) — output tonemap
             ViewExposureEv = vs.ViewExposureEv,
+            Qr             = QrCode.Options,            // #1305 — fractal QR code
             Parameters  = fp,
             // #998 — a saved Lighting & FX preset equal to the live lighting carries
             // the settings no individual flag can; a playing animation is a gap.

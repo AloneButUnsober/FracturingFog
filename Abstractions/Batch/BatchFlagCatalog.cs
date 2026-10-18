@@ -22,6 +22,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using FracturingFog.Imaging;
 using FracturingFog.Models;
 
 namespace FracturingFog.Batch
@@ -81,6 +82,7 @@ namespace FracturingFog.Batch
         Slideshow,
         PostFx,
         Exr,
+        Qr,
         FractalParams,
         DomainWarp,
         Relief,
@@ -250,6 +252,7 @@ namespace FracturingFog.Batch
             BatchFlagGroup.Slideshow     => "Slideshow + scene encode (--slideshow NAME / --scene NAME)",
             BatchFlagGroup.PostFx        => "Post-FX (parity with the interactive sliders)",
             BatchFlagGroup.Exr           => "OpenEXR",
+            BatchFlagGroup.Qr            => "Fractal QR code (image mode; the image doubles as a scannable QR code)",
             BatchFlagGroup.FractalParams => "Fractal-specific parameters",
             BatchFlagGroup.DomainWarp    => "Domain warp (any fractal)",
             BatchFlagGroup.Relief        => "2D relief (heightfield shading; any relief flag implies --relief)",
@@ -429,7 +432,7 @@ namespace FracturingFog.Batch
         {
             const BatchFlagGroup Mode = BatchFlagGroup.Mode, Source = BatchFlagGroup.Source, Output = BatchFlagGroup.Output,
                 Video = BatchFlagGroup.Video, Slideshow = BatchFlagGroup.Slideshow,
-                PostFx = BatchFlagGroup.PostFx, Exr = BatchFlagGroup.Exr, Fp = BatchFlagGroup.FractalParams,
+                PostFx = BatchFlagGroup.PostFx, Exr = BatchFlagGroup.Exr, Qr = BatchFlagGroup.Qr, Fp = BatchFlagGroup.FractalParams,
                 Warp = BatchFlagGroup.DomainWarp, Relief = BatchFlagGroup.Relief, Cam = BatchFlagGroup.ReliefCamera,
                 Froxel = BatchFlagGroup.Froxel, Glass = BatchFlagGroup.Glass, Denoise = BatchFlagGroup.Denoise,
                 Relight = BatchFlagGroup.Relight, Vol = BatchFlagGroup.Volumetric, Iso = BatchFlagGroup.Isolate,
@@ -483,7 +486,7 @@ namespace FracturingFog.Batch
                     + "for a detail-rich view and render that. Keys: seed, depth (levels), beam, grid, jitter, start "
                     + "(first-level jitter), step (zoom per level), probe (px), minscore, and the interest weights wb / we / wd "
                     + "(boundary / entropy / dimension, 0..1) and dc (preferred dimension, 1..2). Same seed, same view.",
-                    hint: "SPEC") with { Example = "seed=1,depth=6,beam=3" },
+                    hint: "SPEC") with { Example = "seed=1,depth=6,beam=3", ConflictsWith = new[] { BatchFlags.QrSearch } },
                 PathFlag(BatchFlags.ExploreRegions, Source, ImgVid,
                     "With --explore: also write the finalist views as a regions JSON (Control Center > Regions > Import).",
                     "OUT.json") with { Requires = new[] { BatchFlags.Explore } },
@@ -577,9 +580,45 @@ namespace FracturingFog.Batch
 
                 // ── EXR ──
                 Sw(BatchFlags.AovExr, Exr, BatchModes.Image,
-                    "Write a multi-layer AOV OpenEXR (beauty, normal, depth, AO, diffuse, specular, shadow, stepcount). Meaningful for 3D / relief raymarch."),
+                    "Write a multi-layer AOV OpenEXR (beauty, normal, depth, AO, diffuse, specular, shadow, stepcount). Meaningful for 3D / relief raymarch.")
+                    with { ConflictsWith = new[] { BatchFlags.QrPayload } },
                 Sw(BatchFlags.ExrZip, Exr, BatchModes.Image | BatchModes.Regrade | BatchModes.Relight,
                     "ZIP-compress .exr output (smaller, lossless, not byte-stable)."),
+
+                // ── Fractal QR code (#1305) ──
+                Txt(BatchFlags.QrPayload, Qr, BatchModes.Image,
+                    "Composite a scannable QR code of this text (UTF-8) into the image. The saved file is decoded "
+                    + "afterwards (full size, small, blurred, JPEG); exit code 3 = saved but does not scan.",
+                    hint: "TEXT") with { Example = "https://example.org", ConflictsWith = new[] { BatchFlags.AovExr } },
+                Pick(BatchFlags.QrEcc, Qr, BatchModes.Image,
+                    "QR error-correction level (share of damage tolerated: L 7%, M 15%, Q 25%, H 30%).",
+                    new[] { "L", "M", "Q", "H" }, "H", "LEVEL") with { Requires = new[] { BatchFlags.QrPayload } },
+                Pick(BatchFlags.QrStyle, Qr, BatchModes.Image,
+                    "dots = only module centres forced; steer = whole modules recoloured into dark/light bands; "
+                    + "halftone = 3x3 sub-modules, the fractal's own halftone around a centre cell.",
+                    new[] { "steer", "dots", "halftone" }, "steer", "STYLE") with { Requires = new[] { BatchFlags.QrPayload } },
+                Int(BatchFlags.QrModulePx, Qr, BatchModes.Image,
+                    "Pixels per QR module (0 = largest that fits the short side with the 4-module quiet zone).",
+                    0, QrCodeOptions.MaxModulePixels, enforced: true, def: "0") with { Requires = new[] { BatchFlags.QrPayload } },
+                Dbl(BatchFlags.QrDot, Qr, BatchModes.Image,
+                    "Forced centre square as a fraction of the module (dots; steer's strict core).",
+                    QrCodeOptions.MinDotFraction, QrCodeOptions.MaxDotFraction, enforced: true,
+                    def: QrCodeOptions.DefaultDotFraction.ToString(CultureInfo.InvariantCulture))
+                    with { Requires = new[] { BatchFlags.QrPayload } },
+                Sw(BatchFlags.QrInvert, Qr, BatchModes.Image,
+                    "Light modules on a dark field (not every reader accepts inverted codes).")
+                    with { Requires = new[] { BatchFlags.QrPayload } },
+                Sw(BatchFlags.QrNoVerify, Qr, BatchModes.Image, "Skip decoding the saved file to check it scans.")
+                    with { Requires = new[] { BatchFlags.QrPayload } },
+                Int(BatchFlags.QrMask, Qr, BatchModes.Image,
+                    "Preferred QR mask pattern (tried first; another is used only if it would not scan). --qr-search reports one.",
+                    0, 7, enforced: true) with { Requires = new[] { BatchFlags.QrPayload } },
+                Txt(BatchFlags.QrSearch, Qr, BatchModes.Image,
+                    "Search around the view (centre + zoom) and the 8 masks for the framing whose own light/dark "
+                    + "pattern best matches the code, then render that. Keys: seed, tries (per level), levels, keep, "
+                    + "zmin / zmax (zoom range as factors of the start zoom), probe (px/module). Same seed, same view.",
+                    hint: "SPEC") with { Example = "seed=1,tries=24,levels=4",
+                        Requires = new[] { BatchFlags.QrPayload }, ConflictsWith = new[] { BatchFlags.Explore } },
 
                 // ── Fractal-specific ──
                 Int(BatchFlags.MultibrotExp, Fp, FR, "Multibrot exponent.", def: "3")

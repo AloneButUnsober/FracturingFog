@@ -34,6 +34,7 @@ Fog.
 | System.Drawing.Common | MIT | FracturingFog.Win |
 | ILGPU | NCSA (University of Illinois/NCSA Open Source License) | Engine, Compute.Smoke, FracturingFogCLD |
 | ILGPU.Algorithms | NCSA (University of Illinois/NCSA Open Source License) | Engine |
+| ZXing.Net | Apache-2.0 | Engine (decode-only verifier for fractal QR codes, #1305) |
 | **QuestPDF** | **QuestPDF Community License** (see note below) | PaletteBuilder.Lib |
 
 ### QuestPDF — dual-license note
@@ -68,6 +69,14 @@ are provided as scholarly attribution, not because any code was copied.
   Report (2000/2007), and the accompanying `qd` reference library.
   Implemented independently in `Abstractions/Math/DoubleDouble.cs` and
   `Abstractions/Math/QuadDouble.cs`.
+
+- **QR Code symbology + halftone QR**
+  ISO/IEC 18004 (QR Code Model 2) for the symbol, Reed-Solomon and mask
+  rules; the encoder layout follows the structure of Project Nayuki's
+  "QR Code generator library" (MIT). H.-K. Chu, C.-S. Chang, R.-R. Lee,
+  N. J. Mitra — *"Halftone QR Codes"*, ACM SIGGRAPH Asia 2013, for the 3x3
+  sub-module halftone style. Implemented independently in
+  `Engine/Imaging/Qr/` (#1305).
 
 - **Perturbation-theory Mandelbrot rendering (arbitrary-precision deep zoom)**
   K. I. Martin — *SuperFractalThing* method, as described at

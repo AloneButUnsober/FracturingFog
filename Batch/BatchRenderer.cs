@@ -376,9 +376,44 @@ namespace FracturingFog.Batch
                 ExrCompression = opts.ExrZip
                     ? FracturingFog.Imaging.ExrCompression.Zip
                     : FracturingFog.Imaging.ExrCompression.None,
+                // #1305 — fractal QR code; null without --qr-payload.
+                Qr = opts.BuildQrOptions(),
             };
+            // #1305 — fail before the (possibly long) render when the code cannot
+            // fit: payload too large for the level, or image too small for it.
+            if (req.Qr != null && FracturingFog.Imaging.Qr.QrExport.Preflight(req.Qr, opts.Width, opts.Height) is { } qrErr)
+            {
+                Console.Error.WriteLine($"batch: {qrErr}");
+                return 2;
+            }
+            if (req.Qr == null && (opts.QrEcc != null || opts.QrStyle != null || opts.QrModulePx != null
+                                   || opts.QrDot != null || opts.QrInvert || opts.QrNoVerify
+                                   || opts.QrMask != null || opts.QrSearch != null))
+                Console.WriteLine("  note    : --qr-* options have no effect without --qr-payload");
             // The explored / --x --y limb centre in full (octuple-double) precision.
             if (explored is { } ex) req = WithCentre(req, ex);
+
+            // #1401 — fractal-native QR: move to the framing (and mask) whose own
+            // pattern best matches the code. The iteration count stays the one the
+            // probes used, so the printed command reproduces this exact image.
+            if (req.Qr != null && opts.QrSearch is { } qso)
+            {
+                Console.WriteLine($"QR view search ({FracturingFog.Imaging.QrSearchOptions.FormatSpec(qso)})");
+                var found = FracturingFog.Imaging.Qr.QrViewSearch.Run(req, req.Qr, qso,
+                    new Progress<FracturingFog.Imaging.Qr.QrSearchProgress>(p =>
+                        Console.WriteLine($"  level {p.Level}/{p.Levels}: {p.Probes} probes, best luma change {p.BestCost:P1}")));
+                req = FracturingFog.Imaging.Qr.QrViewSearch.WithView(req, found.Best) with
+                {
+                    Qr = req.Qr with { Mask = found.BestScore.Mask },
+                    IterationRescue = null,
+                };
+                (cx, cy, zoom) = (found.Best.Center.Re.X0, found.Best.Center.Im.X0, found.Best.Zoom);
+                Console.WriteLine($"  found   : {found.Summary}");
+                Console.WriteLine($"  replay  : {BatchFlags.X} {QrCoord(found.Best.Center.Re)}"
+                    + $" {BatchFlags.Y} {QrCoord(found.Best.Center.Im)}"
+                    + $" {BatchFlags.Zoom} {found.Best.Zoom.ToString("R", System.Globalization.CultureInfo.InvariantCulture)}"
+                    + $" {BatchFlags.Iter} {req.MaxIterations} {BatchFlags.QrMask} {found.BestScore.Mask}");
+            }
 
             Console.WriteLine($"Batch image render");
             Console.WriteLine($"  fractal : {frType}");
@@ -391,6 +426,9 @@ namespace FracturingFog.Batch
                 Console.WriteLine($"  post-fx : brightness {pfBrightness}  contrast {pfContrast}  adaptive {pfAdaptive}");
             if (req.ViewTransform != FracturingFog.Imaging.ViewTransform.None || req.ViewExposureEv != 0f)
                 Console.WriteLine($"  view    : {req.ViewTransform}  exposure {req.ViewExposureEv:+0.##;-0.##;0} EV");
+            if (req.Qr != null)
+                Console.WriteLine($"  qr      : {FracturingFog.Imaging.QrCodeOptions.StyleName(req.Qr.Style)}  ecc {req.Qr.ErrorCorrection}"
+                    + (req.Qr.Invert ? "  inverted" : "") + $"  \"{req.Qr.Payload}\"");
             Console.WriteLine($"  out     : {outPath}");
 
             using var spinner = new ConsoleSpinner("Rendering");
@@ -408,6 +446,17 @@ namespace FracturingFog.Batch
                     spinner.Stop($"saved {Path.GetFileName(outPath)} ({result.SavedWidth}x{result.SavedHeight}, {result.ElapsedMs} ms)");
                     if (rescueReport.RaisedTo > 0)
                         Console.WriteLine($"  note    : every pixel was in-set at {iter} iterations; re-rendered at {rescueReport.RaisedTo} (pass --iterations to fix the count)");
+                    if (result.Qr is { } qr)
+                    {
+                        Console.WriteLine($"  qr code : version {qr.Code.Version} ({qr.Code.Size}x{qr.Code.Size} modules), "
+                            + $"mask {qr.Code.Mask}, {qr.Layout.ModulePixels} px/module");
+                        if (qr.Verify is { } v)
+                        {
+                            Console.WriteLine($"  qr scan : {v.Summary}");
+                            // #1305 — exit 3: the file is written but would not scan.
+                            if (!v.Ok) return 3;
+                        }
+                    }
                 }
             }
             catch
@@ -417,6 +466,10 @@ namespace FracturingFog.Batch
             }
             return 0;
         }
+
+        // #1401 — a searched centre in --x / --y form (limb form when deep).
+        private static string QrCoord(FracturingFog.FFMath.OD v)
+            => FracturingFog.Cli.BatchCommandBuilder.Coordinate(v.X0, new[] { v.X1, v.X2, v.X3, v.X4, v.X5, v.X6, v.X7 });
 
         // ── EXR read-back / regrade (roadmap S2, #396) ─────────────────────────
 
