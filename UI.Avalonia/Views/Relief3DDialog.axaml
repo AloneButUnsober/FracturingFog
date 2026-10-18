@@ -293,10 +293,19 @@
                     <!-- Guided À-Trous denoise (roadmap S4, #389). Keyed on the
                          render's own float normal/depth AOVs. 0 passes = off. -->
                     <TextBlock Grid.Row="10" Grid.Column="0" Text="Denoise passes:" VerticalAlignment="Center"
-                               ToolTip.Tip="Edge-avoiding À-Trous wavelet denoise over the relief image, guided by the render's own normal + depth passes. Pays down Monte-Carlo noise (AO / soft shadow / reflections) so you need fewer anti-alias samples for the same quality, while geometric edges stay crisp. 0 = off (byte-identical); each pass widens the filter footprint. Forces the CPU relief trace (the GPU kernel emits no guides yet)." />
-                    <NumericUpDown Grid.Row="10" Grid.Column="1"
-                                   Minimum="0" Maximum="8" Increment="1" FormatString="F0"
-                                   Value="{Binding Relief2DDenoiseIterations, Mode=TwoWay}" Margin="0,2" />
+                               IsEnabled="{Binding AtrousDenoiseApplies}" ToolTip.ShowOnDisabled="True"
+                               ToolTip.Tip="Edge-avoiding À-Trous wavelet denoise over the relief image, guided by the render's own normal + depth passes. Pays down Monte-Carlo noise (AO / soft shadow / reflections) so you need fewer anti-alias samples for the same quality, while geometric edges stay crisp. 0 = off (byte-identical); each pass widens the filter footprint. Forces the CPU relief trace (the GPU kernel emits no guides yet). Not used while Lighting &amp; FX → Denoise (Intel OIDN) is on: OIDN replaces this pass." />
+                    <Grid Grid.Row="10" Grid.Column="1" ColumnDefinitions="*,Auto">
+                        <NumericUpDown Grid.Column="0"
+                                       Minimum="0" Maximum="8" Increment="1" FormatString="F0"
+                                       IsEnabled="{Binding AtrousDenoiseApplies}"
+                                       Value="{Binding Relief2DDenoiseIterations, Mode=TwoWay}" Margin="0,2" />
+                        <!-- #1338 — say why the À-Trous controls are greyed out. -->
+                        <TextBlock Grid.Column="1" Text="replaced by Intel OIDN" VerticalAlignment="Center"
+                                   Margin="8,0,0,0" FontStyle="Italic" Foreground="LightGray"
+                                   IsVisible="{Binding OidnDenoise}"
+                                   ToolTip.Tip="Lighting &amp; FX → Denoise (Intel OIDN) is on: it denoises the relief instead of the À-Trous pass, so these À-Trous settings are not used. Turn it off to use them." />
+                    </Grid>
 
                     <TextBlock Grid.Row="11" Grid.Column="0" Text="Denoise colour σ:" VerticalAlignment="Center"
                                IsEnabled="{Binding DenoiseEnabled}"

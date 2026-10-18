@@ -797,6 +797,15 @@ public struct LightingFxData
     /// pinhole either way → byte-identical. Perspective cameras only (raymarch families).</summary>
     public bool DofThinLens;
 
+    /// <summary>#1338 — denoise the finished 3D / relief frame with Intel Open Image
+    /// Denoise (a learned denoiser; an optional native runtime installed from the app).
+    /// Colour only: FF's AO / shadows are deterministic, so what it cleans is
+    /// low-sample aliasing, thin-lens DoF taps and similar sample noise (measured: DoF
+    /// 4 taps comes close to 64). It also reads fine fractal colour detail as noise and
+    /// softens it. Off (default) is byte-identical; on without the runtime renders as off
+    /// (the batch warns).</summary>
+    public bool OidnDenoise;
+
     /// <summary>Route SSAO + (future) tonemap/bloom post-passes through the
     /// ILGPU kernel dispatcher when an accelerator is available. Falls back
     /// to the CPU path on any failure (GPU init failure, OOM, kernel throw).
@@ -970,6 +979,7 @@ public struct LightingFxData
         DofFocusDistance   = 3.0,
         DofSamples         = 8,
         DofThinLens        = false,
+        OidnDenoise        = false,
 
         SceneTime          = 0.0,
         LightOrbitSpeed    = 0.0,
@@ -1025,6 +1035,7 @@ public struct LightingFxData
         h.Add(StereoAutoCrossEyed); h.Add(StereoAutoGuideDots); h.Add(StereoAutoSeed);
         h.Add(StereoAutoBlur); h.Add(StereoAutoLevels); h.Add(StereoAutoTemporal);
         h.Add(DofAperture); h.Add(DofFocusDistance); h.Add(DofSamples); h.Add(DofThinLens);
+        h.Add(OidnDenoise);
         h.Add(SceneTime); h.Add(LightOrbitSpeed);
         h.Add(DebugHudFlags); h.Add(DebugAov);
         h.Add(UseGpuPost); h.Add(UseGpuRender);

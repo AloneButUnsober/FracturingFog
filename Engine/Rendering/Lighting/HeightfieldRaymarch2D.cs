@@ -889,8 +889,11 @@ public static class HeightfieldRaymarch2D
         // S4 (#402) — adaptive-supersample coupling: when the guided denoiser is on
         // and coupling is enabled, drop the AA supersample (the À-Trous pass cleans
         // the extra MC noise). Off / denoise-off → the authored SS (byte-identical).
+        // #1338 — Intel OIDN replaces the À-Trous pass, and every À-Trous setting
+        // (this one included) is inactive while it is on.
         int ss = DenoiseSupersampleCoupling.EffectiveSupersample(
-            p.Relief2DSupersample, p.Relief2DDenoiseIterations, p.Relief2DDenoiseAdaptiveSupersample);
+            p.Relief2DSupersample, p.Lighting.OidnDenoise ? 0 : p.Relief2DDenoiseIterations,
+            p.Relief2DDenoiseAdaptiveSupersample);
         double invSS = 1.0 / (ss * ss);
 
         long hitCount = 0;

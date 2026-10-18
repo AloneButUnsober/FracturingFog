@@ -49,6 +49,7 @@
                 <TextBlock Classes="section" Text="System" />
                 <Button Classes="action slideshow" Content="App Settings…"     Command="{Binding Menu.AppSettingsCommand}"     HorizontalAlignment="Stretch" ToolTip.Tip="Application settings" />
                 <Button Classes="action video"     Content="FFmpeg…"           Command="{Binding Menu.FfmpegSetupCommand}"     HorizontalAlignment="Stretch" ToolTip.Tip="Install, update, or skip the FFmpeg video encoder" />
+                <Button Classes="action video"     Content="Denoiser (Intel OIDN)…" Command="{Binding Menu.OidnSetupCommand}" HorizontalAlignment="Stretch" ToolTip.Tip="Install Intel Open Image Denoise, the learned denoiser behind Lighting &amp; FX → Denoise (Intel OIDN)" />
                 <Button Classes="action neutral"   Content="AppData Location…" Command="{Binding Menu.AppDataLocationCommand}" HorizontalAlignment="Stretch" ToolTip.Tip="Choose where FracturingFog stores its data" />
                 <Button Classes="action help"      Content="Help…"             Command="{Binding Menu.HelpCommand}"            HorizontalAlignment="Stretch" ToolTip.Tip="Open help" />
                 <Button Classes="action danger"    Content="Close Program"     Command="{Binding Menu.CloseProgramCommand}"    HorizontalAlignment="Stretch" Margin="0,8,0,0" ToolTip.Tip="Exit Fracturing Fog" />

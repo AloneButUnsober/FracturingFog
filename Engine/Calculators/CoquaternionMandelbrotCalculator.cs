@@ -223,7 +223,7 @@ public sealed class CoquaternionMandelbrotCalculator : IFractalCalculator, ISter
                 DepthBuffer = ScreenSpacePost.PublishDepth(gpuDepth, width, height, width, height, in fx, valid: !ThinLensDof.IsActive(in fx));
                 ScreenSpacePost.ApplyPost3D(renderBuffer, gpuHdr, gpuDepth, gpuNormal, width, height,
                     ThinLensDof.IsActive(in fx), in fx, in froxelView, in froxelFx, in deStruct);
-                ScreenSpacePost.ApplyDebugHud(renderBuffer, width, height, in fx);
+                ScreenSpacePost.FinishFrame3D(renderBuffer, width, height, in fx, preview: lowRes);
                 return;
             }
         }
@@ -383,7 +383,7 @@ public sealed class CoquaternionMandelbrotCalculator : IFractalCalculator, ISter
             FracturingFog.Rendering.LowResPreview.UpscaleNearest(
                 renderBuffer, width, height, ColorBuffer, fullW, fullH);
 
-        ScreenSpacePost.ApplyDebugHud(ColorBuffer, fullW, fullH, in fx);
+        ScreenSpacePost.FinishFrame3D(ColorBuffer, fullW, fullH, in fx, preview: lowRes);
     }
 
     /// <summary>P3 — concrete DE struct for the shared shading pipeline.</summary>

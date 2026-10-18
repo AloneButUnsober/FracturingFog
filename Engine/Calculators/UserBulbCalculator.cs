@@ -1085,7 +1085,7 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
                 DepthBuffer = ScreenSpacePost.PublishDepth(depthBuf, width, height, fullW, fullH, in fx);
                 if (ss > 1)
                     DownsampleBox(renderBuffer, width, height, ColorBuffer, fullW, fullH, ss);
-                ScreenSpacePost.ApplyDebugHud(ColorBuffer, fullW, fullH, in fx);
+                ScreenSpacePost.FinishFrame3D(ColorBuffer, fullW, fullH, in fx, preview: lowRes);
                 return;
             }
             // #1173-M — every GPU route above declined or failed.
@@ -1107,7 +1107,7 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
             {
                 Array.Copy(_cache.Buffer, ColorBuffer, ColorBuffer.Length);
                 // #84 — cache stores a HUD-free frame; redraw the HUD on replay.
-                ScreenSpacePost.ApplyDebugHud(ColorBuffer, fullW, fullH, in fx);
+                ScreenSpacePost.FinishFrame3D(ColorBuffer, fullW, fullH, in fx, preview: lowRes);
                 return;
             }
         }
@@ -1357,7 +1357,7 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         // #84 — light-direction compass etc. Drawn last on the final full-res
         // buffer, AFTER the temporal-cache save above so the cached frame stays
         // HUD-free (the identity-blit path redraws the HUD on replay). Self-guards.
-        ScreenSpacePost.ApplyDebugHud(ColorBuffer, fullW, fullH, in fx);
+        ScreenSpacePost.FinishFrame3D(ColorBuffer, fullW, fullH, in fx, preview: lowRes);
     }
 
     /// <summary>#1336 — the distance-field cache key: every input of the DE the march

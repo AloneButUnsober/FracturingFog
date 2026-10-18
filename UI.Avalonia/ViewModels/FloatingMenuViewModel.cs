@@ -77,6 +77,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         EditAnimationCommand    = MakeCmd(() => EditAnimationClick?.Invoke(this, EventArgs.Empty));
         EditSceneCommand        = MakeCmd(() => EditSceneClick?.Invoke(this, EventArgs.Empty));
         FfmpegSetupCommand      = MakeCmd(() => FfmpegSetupClick?.Invoke(this, EventArgs.Empty));
+        OidnSetupCommand        = MakeCmd(() => OidnSetupClick?.Invoke(this, EventArgs.Empty));   // #1338
         AppDataLocationCommand  = MakeCmd(() => AppDataLocationClick?.Invoke(this, EventArgs.Empty));
     }
 
@@ -1171,6 +1172,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     /// <summary>Scene Engine Roadmap Phase S5 — opens the Scene Editor.</summary>
     public ReactiveCommand<Unit, Unit> EditSceneCommand { get; }
     public ReactiveCommand<Unit, Unit> FfmpegSetupCommand { get; }
+    public ReactiveCommand<Unit, Unit> OidnSetupCommand { get; }   // #1338
     public ReactiveCommand<Unit, Unit> AppDataLocationCommand { get; }
 
     // ── Events ────────────────────────────────────────────────────────────
@@ -1227,6 +1229,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     /// in the menu. Shell opens the Scene Editor dialog.</summary>
     public event EventHandler? EditSceneClick;
     public event EventHandler? FfmpegSetupClick;
+    public event EventHandler? OidnSetupClick;   // #1338
     public event EventHandler? AppDataLocationClick;
 
     public event EventHandler<string>? RegionComboChanged;

@@ -68,6 +68,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--temporallightingprobe")
             return TemporalLightingProbe.Run(args);
 
+        // #1338 — Intel Open Image Denoise vs À-Trous on low-sample renders (PSNR / SSIM).
+        if (args.Length > 0 && args[0] == "--oidnprobe")
+            return OidnProbe.Run(args);
+
         // #1336 — the baked distance-field cache: bake cost, field error, moving frames.
         if (args.Length > 0 && args[0] == "--distancefieldprobe")
             return DistanceFieldProbe.Run(args);

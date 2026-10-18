@@ -819,6 +819,21 @@ public sealed partial class FractalParamsViewModel
         get => _p.Lighting.DofThinLens;
         set { MutateLighting(r => r.Fx.DofThinLens = value); this.RaisePropertyChanged(); Fire(); }
     }
+    // #1338 — Intel Open Image Denoise on the finished 3D / relief frame.
+    public bool OidnDenoise
+    {
+        get => _p.Lighting.OidnDenoise;
+        set
+        {
+            MutateLighting(r => r.Fx.OidnDenoise = value);
+            this.RaisePropertyChanged();
+            // The relief dialog's À-Trous controls grey out while OIDN replaces them.
+            this.RaisePropertyChanged(nameof(AtrousDenoiseApplies));
+            this.RaisePropertyChanged(nameof(DenoiseEnabled));
+            this.RaisePropertyChanged(nameof(DenoiseTemporalEnabled));
+            Fire();
+        }
+    }
     public double LightOrbitSpeed
     {
         get => _p.Lighting.LightOrbitSpeed;

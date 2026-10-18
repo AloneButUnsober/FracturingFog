@@ -372,6 +372,7 @@ namespace FracturingFog.Batch
         public bool FogBackground { get; set; }            // #1061 fog the ray-miss background
         public double? FogBackgroundDistance { get; set; } // #1061 depth the background is fogged over
         public bool Froxel3D { get; set; }                 // #1068 froxel volumetrics on the 3D raymarchers
+        public bool Oidn { get; set; }                     // #1338 Intel Open Image Denoise on the finished 3D / relief frame
         public FracturingFog.Models.FroxelQuality? Froxel3DQuality { get; set; } // #1068
         public int? Froxel3DShadowSteps { get; set; }      // #1069 DE shadow steps (shafts)
         public double? VolumePaletteStrength { get; set; } // palette-map cross-fade, 0..1
@@ -1393,6 +1394,11 @@ namespace FracturingFog.Batch
                     // #1068 — froxel volumetrics on the 3D raymarchers.
                     case BatchFlags.Froxel3D:
                         opts.Froxel3D = true;
+                        break;
+
+                    // #1338 — Intel Open Image Denoise (3D families + relief raymarch).
+                    case BatchFlags.Oidn:
+                        opts.Oidn = true;
                         break;
 
                     case BatchFlags.Froxel3DQuality:
