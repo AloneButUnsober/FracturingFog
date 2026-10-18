@@ -113,6 +113,9 @@ namespace FracturingFog.Batch
         // #1401 — preferred mask (0..7), and the fractal-native view search.
         public const string QrMask         = "--qr-mask";
         public const string QrSearch       = "--qr-search";
+        // #1402 — shape the code toward the image (QArt); minimum version.
+        public const string QrShape        = "--qr-shape";
+        public const string QrVersion      = "--qr-version";
 
         // EXR read-back / regrade (roadmap S2, #396). Value = input .exr path;
         // selects Regrade mode — read it, apply --view-transform/--exposure, write

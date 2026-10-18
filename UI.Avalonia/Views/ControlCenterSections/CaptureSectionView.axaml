@@ -54,7 +54,7 @@
                              Watermark="https://…"
                              ToolTip.Tip="What the code carries when scanned - usually a URL. Shorter text makes a smaller code with bigger modules, so more of the fractal survives." />
                 </Grid>
-                <Grid ColumnDefinitions="Auto,*,Auto,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="4" ColumnSpacing="6" Width="420" HorizontalAlignment="Left">
+                <Grid ColumnDefinitions="Auto,*,Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="4" ColumnSpacing="6" Width="420" HorizontalAlignment="Left">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Style" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
                     <ComboBox Grid.Row="0" Grid.Column="1" HorizontalAlignment="Stretch"
                               ItemsSource="{Binding QrCode.StyleChoices}"
@@ -77,6 +77,12 @@
                     <CheckBox Grid.Row="2" Grid.Column="2" Grid.ColumnSpan="2" Content="Invert (light on dark)"
                               IsChecked="{Binding QrCode.Invert, Mode=TwoWay}"
                               ToolTip.Tip="Light modules on a dark field. Many readers accept it, but not all." />
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Version" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
+                    <NumericUpDown Grid.Row="3" Grid.Column="1" Value="{Binding QrCode.MinVersion}" Minimum="1" Maximum="40" Increment="1"
+                                   FormatString="0" ToolTip.Tip="Smallest QR version (1-40). Above what the text needs it makes a bigger code with smaller modules, and leaves more free bits for Shape to the image." />
+                    <CheckBox Grid.Row="3" Grid.Column="2" Grid.ColumnSpan="2" Content="Shape to the image"
+                              IsChecked="{Binding QrCode.Shape, Mode=TwoWay}"
+                              ToolTip.Tip="QArt: choose the data bits a reader never reads so the code's own pattern follows the fractal's light and dark areas, then composite as usual. Lower error fix and a higher version shape more of the code." />
                 </Grid>
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button Classes="action neutral" Content="Find View"

@@ -613,6 +613,14 @@ namespace FracturingFog.Batch
                 Int(BatchFlags.QrMask, Qr, BatchModes.Image,
                     "Preferred QR mask pattern (tried first; another is used only if it would not scan). --qr-search reports one.",
                     0, 7, enforced: true) with { Requires = new[] { BatchFlags.QrPayload } },
+                Sw(BatchFlags.QrShape, Qr, BatchModes.Image,
+                    "Shape the code toward the image (QArt): the data bits a reader never reads are chosen so the "
+                    + "code's own modules follow the fractal. Lower --qr-ecc and a larger --qr-version shape more.")
+                    with { Requires = new[] { BatchFlags.QrPayload } },
+                Int(BatchFlags.QrVersion, Qr, BatchModes.Image,
+                    "Smallest QR version (1..40). Above what the payload needs it buys free bits for --qr-shape "
+                    + "and makes the modules smaller.", 1, 40, enforced: true, def: "1")
+                    with { Requires = new[] { BatchFlags.QrPayload } },
                 Txt(BatchFlags.QrSearch, Qr, BatchModes.Image,
                     "Search around the view (centre + zoom) and the 8 masks for the framing whose own light/dark "
                     + "pattern best matches the code, then render that. Keys: seed, tries (per level), levels, keep, "

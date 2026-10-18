@@ -786,19 +786,18 @@ namespace FracturingFog.Imaging
         // #1305 — the QR goes onto the final (rotated) display buffer so the
         // module grid is square in the saved file; the watermark is painted
         // after it, and the verify reads the saved file so both are accounted for.
-        private static (FracturingFog.Imaging.Qr.QrCode Code, FracturingFog.Imaging.Qr.QrLayout Layout)? ApplyQr(
+        private static FracturingFog.Imaging.Qr.QrApplyResult? ApplyQr(
             PosterRequest req, uint[] buffer, int w, int h)
             => req.Qr == null ? null : FracturingFog.Imaging.Qr.QrExport.Apply(buffer, w, h, req.Qr);
 
         private static FracturingFog.Imaging.Qr.QrExportReport? VerifyQr(PosterRequest req,
-            (FracturingFog.Imaging.Qr.QrCode Code, FracturingFog.Imaging.Qr.QrLayout Layout)? qr,
-            uint[] buffer, int w, int h)
+            FracturingFog.Imaging.Qr.QrApplyResult? q, uint[] buffer, int w, int h)
         {
-            if (qr is not { } q || req.Qr == null) return null;
+            if (q == null || req.Qr == null) return null;
             var verify = req.Qr.Verify
                 ? FracturingFog.Imaging.Qr.QrExport.VerifySaved(req.Path, req.Qr, q.Layout, buffer, w, h)
                 : null;
-            return new FracturingFog.Imaging.Qr.QrExportReport(q.Code, q.Layout, verify);
+            return new FracturingFog.Imaging.Qr.QrExportReport(q.Code, q.Layout, verify) { Shape = q.Shape };
         }
 
         // #102 — apply heightfield relief to a freshly rendered colour buffer

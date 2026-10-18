@@ -214,6 +214,10 @@ namespace FracturingFog.Batch
         /// <summary>#1401 — search around the start view for the framing (and
         /// mask) whose own pattern best matches the code. Null = no search.</summary>
         public QrSearchOptions? QrSearch { get; set; }
+        /// <summary>#1402 — shape the code toward the image (QArt).</summary>
+        public bool QrShape { get; set; }
+        /// <summary>#1402 — smallest QR version (1..40; null = 1).</summary>
+        public int? QrVersion { get; set; }
 
         /// <summary>The QR options these flags describe, or null without a payload.</summary>
         public QrCodeOptions? BuildQrOptions() => QrPayload == null ? null : new QrCodeOptions
@@ -226,6 +230,8 @@ namespace FracturingFog.Batch
             Invert = QrInvert,
             Verify = !QrNoVerify,
             Mask = QrMask ?? -1,
+            Shape = QrShape,
+            MinVersion = QrVersion ?? 1,
         };
 
         /// <summary>Exposure in stops applied before the view transform (roadmap
@@ -845,6 +851,15 @@ namespace FracturingFog.Batch
                     case BatchFlags.QrMask:
                         if (!NextInt(args, ref i, a, out int qmask, out error)) return false;
                         opts.QrMask = qmask;
+                        break;
+
+                    case BatchFlags.QrShape:
+                        opts.QrShape = true;
+                        break;
+
+                    case BatchFlags.QrVersion:
+                        if (!NextInt(args, ref i, a, out int qver, out error)) return false;
+                        opts.QrVersion = qver;
                         break;
 
                     case BatchFlags.QrSearch:
@@ -1731,6 +1746,8 @@ namespace FracturingFog.Batch
             // #1305 — fractal QR code.
             if (opts.QrModulePx is < 0 or > QrCodeOptions.MaxModulePixels)
                 { error = $"--qr-module-px must be 0..{QrCodeOptions.MaxModulePixels} (0 = auto)."; return false; }
+            if (opts.QrVersion is < 1 or > 40)
+                { error = "--qr-version must be 1..40."; return false; }
             if (opts.QrMask is < 0 or > 7)
                 { error = "--qr-mask must be 0..7."; return false; }
             if (opts.QrSearch != null && opts.Explore != null)

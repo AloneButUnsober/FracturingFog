@@ -388,7 +388,8 @@ namespace FracturingFog.Batch
             }
             if (req.Qr == null && (opts.QrEcc != null || opts.QrStyle != null || opts.QrModulePx != null
                                    || opts.QrDot != null || opts.QrInvert || opts.QrNoVerify
-                                   || opts.QrMask != null || opts.QrSearch != null))
+                                   || opts.QrMask != null || opts.QrSearch != null
+                                   || opts.QrShape || opts.QrVersion != null))
                 Console.WriteLine("  note    : --qr-* options have no effect without --qr-payload");
             // The explored / --x --y limb centre in full (octuple-double) precision.
             if (explored is { } ex) req = WithCentre(req, ex);
@@ -428,7 +429,8 @@ namespace FracturingFog.Batch
                 Console.WriteLine($"  view    : {req.ViewTransform}  exposure {req.ViewExposureEv:+0.##;-0.##;0} EV");
             if (req.Qr != null)
                 Console.WriteLine($"  qr      : {FracturingFog.Imaging.QrCodeOptions.StyleName(req.Qr.Style)}  ecc {req.Qr.ErrorCorrection}"
-                    + (req.Qr.Invert ? "  inverted" : "") + $"  \"{req.Qr.Payload}\"");
+                    + (req.Qr.Invert ? "  inverted" : "") + (req.Qr.Shape ? "  shaped" : "")
+                    + (req.Qr.MinVersion > 1 ? $"  version>={req.Qr.MinVersion}" : "") + $"  \"{req.Qr.Payload}\"");
             Console.WriteLine($"  out     : {outPath}");
 
             using var spinner = new ConsoleSpinner("Rendering");
@@ -450,6 +452,8 @@ namespace FracturingFog.Batch
                     {
                         Console.WriteLine($"  qr code : version {qr.Code.Version} ({qr.Code.Size}x{qr.Code.Size} modules), "
                             + $"mask {qr.Code.Mask}, {qr.Layout.ModulePixels} px/module");
+                        if (qr.Shape is { } shp)
+                            Console.WriteLine($"  qr shape: {shp.Summary}");
                         if (qr.Verify is { } v)
                         {
                             Console.WriteLine($"  qr scan : {v.Summary}");

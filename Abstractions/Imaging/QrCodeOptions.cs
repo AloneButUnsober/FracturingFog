@@ -81,6 +81,17 @@ namespace FracturingFog.Imaging
         /// tried first, and only replaced if that composite would not scan.</summary>
         public int Mask { get; init; } = -1;
 
+        /// <summary>#1402 — shape the code toward the image (QArt): the data bits
+        /// after the terminator, which a decoder never reads, are chosen so the
+        /// code's own modules follow the fractal's light and dark areas. Lower
+        /// error correction and a larger <see cref="MinVersion"/> leave more bits
+        /// free, so more of the code can follow the image.</summary>
+        public bool Shape { get; init; }
+
+        /// <summary>Smallest QR version to use (1..40). Above what the payload
+        /// needs it buys free bits for <see cref="Shape"/> and smaller modules.</summary>
+        public int MinVersion { get; init; } = 1;
+
         /// <summary>The CLI / UI spelling of a style.</summary>
         public static string StyleName(QrStyle s) => s switch
         {

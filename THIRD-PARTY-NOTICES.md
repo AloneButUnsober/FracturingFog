@@ -75,8 +75,9 @@ are provided as scholarly attribution, not because any code was copied.
   rules; the encoder layout follows the structure of Project Nayuki's
   "QR Code generator library" (MIT). H.-K. Chu, C.-S. Chang, R.-R. Lee,
   N. J. Mitra — *"Halftone QR Codes"*, ACM SIGGRAPH Asia 2013, for the 3x3
-  sub-module halftone style. Implemented independently in
-  `Engine/Imaging/Qr/` (#1305).
+  sub-module halftone style. Russ Cox — *"QArt Codes"* (research.swtch.com/qart,
+  2012), for shaping the free data bits by GF(2) elimination (#1402).
+  Implemented independently in `Engine/Imaging/Qr/` (#1305).
 
 - **Perturbation-theory Mandelbrot rendering (arbitrary-precision deep zoom)**
   K. I. Martin — *SuperFractalThing* method, as described at
