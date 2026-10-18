@@ -613,18 +613,9 @@ namespace FracturingFog.Models
             return Run(new Builder(source, bindings, startEnvSize), source, extras: Array.Empty<int>());
         }
 
-        /// <summary>#1100 — function names, for Did-you-mean and help.</summary>
-        public static readonly IReadOnlyList<string> FunctionNames = new[]
-        {
-            "sin", "cos", "tan", "sinh", "cosh", "tanh", "exp", "log", "sqrt", "abs", "norm",
-            "length", "normalize", "absx", "absy", "absz", "floor", "sign",
-            "dot", "cross", "triplex", "boxfold", "mod", "pow", "min", "max",
-            "vec", "rot", "spherefold", "smin", "clamp", "qvec",
-            "qmul", "qpow", "qconj", "qexp", "qlog", "qsqrt", "qinv",
-            "qsin", "qcos", "qtan", "qsinh", "qcosh", "qtanh",
-            "qasin", "qacos", "qatan", "qasinh", "qacosh", "qatanh",
-            "qcsc", "qsec", "qcot", "qcsch", "qsech", "qcoth",
-        };
+        /// <summary>#1100 — function names, for Did-you-mean and help. #1363 —
+        /// the list lives in <see cref="BulbVocabulary"/> so the editor shares it.</summary>
+        public static readonly IReadOnlyList<string> FunctionNames = BulbVocabulary.FunctionNames;
 
         /// <summary>#1100 — parse with the PRE-#1100 (language version 1) rules:
         /// unary minus binds tighter than <c>^</c> (<c>-x^y</c> = <c>(-x)^y</c>).
@@ -791,7 +782,7 @@ namespace FracturingFog.Models
 
         private static readonly EquationSyntax Syntax = new(
             AllowMembers: true,
-            TypeKeywords: new HashSet<string>(StringComparer.Ordinal) { "var", "Vec3", "Quat", "double", "int", "float" },
+            TypeKeywords: BulbVocabulary.TypeKeywords,
             NonAssignableWords: new HashSet<string>(StringComparer.Ordinal) { "let", "in", "return", "if", "then", "else" });
 
         private static SandboxBulbExpression Run(Builder b, string source, bool legacy = false,
