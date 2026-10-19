@@ -38,7 +38,11 @@ using System.Text;
 
 namespace FracturingFog.Models
 {
-    public sealed record DslFormatResult(bool Ok, string Text, string Message);
+    public sealed record DslFormatResult(bool Ok, string Text, string Message)
+    {
+        /// <summary>Bracket pairs removed (Minimise parens only; 0 otherwise).</summary>
+        public int Removed { get; init; }
+    }
 
     public static class DslFormatter
     {
@@ -109,7 +113,7 @@ namespace FracturingFog.Models
             }
             return removed == 0
                 ? new DslFormatResult(true, source, "No redundant brackets.")
-                : new DslFormatResult(true, text, removed == 1 ? "Removed 1 pair of brackets." : $"Removed {removed} pairs of brackets.");
+                : new DslFormatResult(true, text, removed == 1 ? "Removed 1 pair of brackets." : $"Removed {removed} pairs of brackets.") { Removed = removed };
         }
 
         // A matched '(' that groups an expression: not a call's bracket (a name

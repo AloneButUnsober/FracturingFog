@@ -19,6 +19,11 @@ namespace FracturingFog.Models
         /// <summary>Code view on/off per editor key. A missing key = off (plain
         /// text box, the pre-#1360 behaviour).</summary>
         public Dictionary<string, bool> CodeView { get; set; } = new(StringComparer.Ordinal);
+
+        /// <summary>#1419 — the User Equation editor's Paste LaTeX / Paste MathML
+        /// imports drop redundant grouping brackets (parse-tree-guarded). Missing
+        /// in an older file = on.</summary>
+        public bool MinimiseImportBrackets { get; set; } = true;
     }
 
     /// <summary>Loads/saves <see cref="DslEditorPrefs"/> to
