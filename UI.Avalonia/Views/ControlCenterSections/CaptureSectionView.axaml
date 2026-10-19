@@ -129,10 +129,28 @@
                     <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding QrCode.ReliefMinElevation}" Minimum="5" Maximum="89" Increment="5"
                                    FormatString="0" ToolTip.Tip="Lowest camera elevation in degrees while the code is extruded; a lower Relief 3D camera is raised to it. Codes stopped scanning below about 50 degrees in testing." />
                 </Grid>
+                <!-- #1411 3D-printable tile (Export QR Mesh...). -->
+                <Grid ColumnDefinitions="Auto,*,Auto,*" RowDefinitions="Auto,Auto" RowSpacing="4" ColumnSpacing="6" Width="420" HorizontalAlignment="Left">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Tile mm" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
+                    <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding QrCode.MeshSize}" Minimum="20" Maximum="400" Increment="5"
+                                   FormatString="0.#" ToolTip.Tip="Printed tile side in millimetres (the code plus its quiet zone)." />
+                    <TextBlock Grid.Row="0" Grid.Column="2" Text="Base mm" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
+                    <NumericUpDown Grid.Row="0" Grid.Column="3" Value="{Binding QrCode.MeshBase}" Minimum="0.4" Maximum="20" Increment="0.2"
+                                   FormatString="0.0#" ToolTip.Tip="Base plate thickness in millimetres." />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Raise mm" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
+                    <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding QrCode.MeshHeight}" Minimum="0.2" Maximum="10" Increment="0.2"
+                                   FormatString="0.0#" ToolTip.Tip="How far the dark modules stand above the base, in millimetres. For a two-material print, swap filament at base + this height." />
+                    <TextBlock Grid.Row="1" Grid.Column="2" Text="Terrain mm" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
+                    <NumericUpDown Grid.Row="1" Grid.Column="3" Value="{Binding QrCode.MeshTerrain}" Minimum="0" Maximum="20" Increment="0.5"
+                                   FormatString="0.0#" ToolTip.Tip="Relief from the fractal's brightness under the code, in millimetres. 0 = a flat plate. A two-material (filament swap) print needs 0; with terrain, use 3MF or OBJ colour." />
+                </Grid>
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button Classes="action neutral" Content="Find View"
                             Command="{Binding QrCode.FindViewCommand}"
                             ToolTip.Tip="Search around the current view (position and zoom) and over the 8 mask patterns for the framing whose own light and dark areas already agree best with the code, then go there. The fractal is altered less; gains are modest because QR data looks random. Backspace returns." />
+                    <Button Classes="action neutral" Content="Export QR Mesh…"
+                            Command="{Binding QrCode.MeshExportCommand}"
+                            ToolTip.Tip="Save the code as a 3D-printable tile: STL (geometry, Z up), 3MF (colour, mm) or OBJ (vertex colour). The tile is checked watertight and decoded from a top-down view of the mesh." />
                     <Button Classes="action neutral" Content="Export QR Image…"
                             Command="{Binding QrCode.ExportCommand}"
                             ToolTip.Tip="Render the current view as a square image with the QR code composited in, save it, then decode the saved file to confirm it scans." />

@@ -188,6 +188,11 @@ namespace FracturingFog.Imaging
         /// filled by the relief stage, consumed when the QR is applied).</summary>
         public FracturingFog.Imaging.Qr.QrReliefState? QrReliefState { get; init; }
 
+        /// <summary>#1411 — keep a copy of the saved image's display buffer from just
+        /// before the QR is applied (<see cref="PosterResult.PreQrPixels"/>), so a QR
+        /// tile mesh can be built from the same render.</summary>
+        public bool KeepPreQrPixels { get; init; }
+
         // ── D-6b — sub-rect rendering for cluster tile workers ─────────────
         // When non-zero, the worker renders only a sub-rect of a larger
         // image and derives per-pixel dc from the FULL image's centre +
@@ -235,6 +240,10 @@ namespace FracturingFog.Imaging
         /// <summary>#1305 — the QR composited into the image (null = none), with
         /// the verification of the saved file when the request asked for it.</summary>
         public FracturingFog.Imaging.Qr.QrExportReport? Qr { get; init; }
+
+        /// <summary>#1411 — the display buffer before the QR (saved orientation), when
+        /// <see cref="PosterRequest.KeepPreQrPixels"/> asked for it.</summary>
+        public uint[]? PreQrPixels { get; init; }
     }
 
     /// <summary>Offscreen high-resolution fractal renderer shared by both shells.</summary>
@@ -774,6 +783,7 @@ namespace FracturingFog.Imaging
                         rotated[x * h + (h - 1 - y)] = buffer[y * w + x];
 
                 int savedW = h, savedH = w;
+                var preQr = req.KeepPreQrPixels ? (uint[])rotated.Clone() : null;
                 var qr = ApplyQr(req, rotated, savedW, savedH);
                 var fontColor = ImageExport.ComputeContrastColor(
                     Color.White, watermark: true, pixels: rotated, imgW: savedW, imgH: savedH);
@@ -781,10 +791,11 @@ namespace FracturingFog.Imaging
                 ImageExport.SavePixelsToFile(
                     rotated, savedW, savedH, req.Path, req.Format,
                     wm, poster: true, dpi: req.Dpi, exrCompression: req.ExrCompression);
-                return new PosterResult(savedW, savedH, elapsedMs) { Qr = VerifyQr(req, qr, rotated, savedW, savedH) };
+                return new PosterResult(savedW, savedH, elapsedMs) { Qr = VerifyQr(req, qr, rotated, savedW, savedH), PreQrPixels = preQr };
             }
             else
             {
+                var preQr = req.KeepPreQrPixels ? (uint[])buffer.Clone() : null;
                 var qr = ApplyQr(req, buffer, w, h);
                 var fontColor = ImageExport.ComputeContrastColor(
                     Color.White, watermark: true, pixels: buffer, imgW: w, imgH: h);
@@ -792,7 +803,7 @@ namespace FracturingFog.Imaging
                 ImageExport.SavePixelsToFile(
                     buffer, w, h, req.Path, req.Format,
                     wm, poster: true, dpi: req.Dpi, exrCompression: req.ExrCompression);
-                return new PosterResult(w, h, elapsedMs) { Qr = VerifyQr(req, qr, buffer, w, h) };
+                return new PosterResult(w, h, elapsedMs) { Qr = VerifyQr(req, qr, buffer, w, h), PreQrPixels = preQr };
             }
         }
 

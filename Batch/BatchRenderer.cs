@@ -378,6 +378,7 @@ namespace FracturingFog.Batch
                     : FracturingFog.Imaging.ExrCompression.None,
                 // #1305 — fractal QR code; null without --qr-payload.
                 Qr = opts.BuildQrOptions(),
+                KeepPreQrPixels = opts.QrMesh != null && opts.QrPayload != null,   // #1411
             };
             // #1305 — fail before the (possibly long) render when the code cannot
             // fit: payload too large for the level, or image too small for it.
@@ -389,7 +390,8 @@ namespace FracturingFog.Batch
             if (req.Qr == null && (opts.QrEcc != null || opts.QrStyle != null || opts.QrModulePx != null
                                    || opts.QrDot != null || opts.QrInvert || opts.QrNoVerify
                                    || opts.QrMask != null || opts.QrSearch != null
-                                   || opts.QrShape || opts.QrVersion != null || HasBevelFlags(opts) || opts.QrRelief))
+                                   || opts.QrShape || opts.QrVersion != null || HasBevelFlags(opts) || opts.QrRelief
+                                   || opts.QrMesh != null))
                 Console.WriteLine("  note    : --qr-* options have no effect without --qr-payload");
             if (req.Qr is { Relief: true } && req.FractalParameters is not { Relief2DEnabled: true, Relief2DRaymarch: true })
                 Console.WriteLine("  note    : --qr-relief needs the Relief 3D raymarch (--relief-raymarch); the flat QR is used");
@@ -476,13 +478,25 @@ namespace FracturingFog.Batch
                             + $"mask {qr.Code.Mask}, {qr.Layout.ModulePixels} px/module");
                         if (qr.Shape is { } shp)
                             Console.WriteLine($"  qr shape: {shp.Summary}");
+                        bool scanFailed = false;
                         if (qr.Verify is { } v)
                         {
                             Console.WriteLine($"  qr scan : {v.Summary}");
                             // #1305 — exit 8: the file is written but would not scan
                             // (3..7 already mean ffmpeg / encode / remote failures).
-                            if (!v.Ok) return 8;
+                            scanFailed = !v.Ok;
                         }
+                        // #1411 — the printable tile, from the same render.
+                        if (opts.QrMesh != null && req.Qr != null && result.PreQrPixels is { } pre)
+                        {
+                            var mesh = FracturingFog.Imaging.Qr.QrMesh.Export(pre, result.SavedWidth, result.SavedHeight, req.Qr, opts.QrMesh);
+                            Console.WriteLine($"  qr mesh : {opts.QrMesh}");
+                            if (req.Qr.MeshTerrainMm > 0 && opts.QrMesh.EndsWith(".stl", StringComparison.OrdinalIgnoreCase))
+                                Console.WriteLine("  note    : an STL carries no colour; with --qr-mesh-terrain the modules are told apart by colour only (use .3mf / .obj)");
+                            Console.WriteLine($"            {mesh.Summary}");
+                            if (!mesh.Report.IsClosedManifold || !mesh.Scan.Ok) scanFailed = true;
+                        }
+                        if (scanFailed) return 8;
                     }
                 }
             }

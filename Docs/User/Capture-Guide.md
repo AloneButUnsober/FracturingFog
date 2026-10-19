@@ -266,6 +266,47 @@ In testing, codes scanned at 50° and above and failed at 40°. The 60° minimum
 margin. Set **Module px** to make the code smaller than the image if you want the fractal
 terrain to show around it.
 
+### 3D-printable tile (Export QR Mesh…)
+
+**Export QR Mesh…** (#1411) saves the code as a tile you can 3D print: a base plate with
+the dark modules standing up from it, sized in millimetres. The code and colours come from
+the current view, framed the same way as **Export QR Image…**.
+
+| Control | What it does | Default |
+|---|---|---|
+| Tile mm | Side of the tile, the code plus its quiet zone. | 60 |
+| Base mm | Thickness of the base plate. | 2 |
+| Raise mm | How far the dark modules stand above the base. | 1 |
+| Terrain mm | Relief from the fractal's brightness under the code. 0 = a flat plate. | 0 |
+
+Pick the format in the save dialog:
+
+| Format | Carries | Use it for |
+|---|---|---|
+| **STL** | geometry only, Z up, mm | a single-colour or two-material (filament swap) print |
+| **3MF** | geometry + per-vertex colour, mm | colour printers and slicers that read 3MF colour |
+| **OBJ** | geometry + vertex colour, Y up | Blender and other 3D tools |
+
+Every tile is checked before the status line reports it. The mesh must be **watertight**
+(closed, 2-manifold and wound outward), and a straight-down view of the mesh must
+**decode** to your text. For an STL the view is shaded by height, as a two-material print
+looks; for 3MF and OBJ it uses the colours. Where two raised modules touch only at a
+corner, one sixteenth of a module is filled in to join them. A corner-only contact is
+not printable as a solid, and the fill does not affect scanning.
+
+**Two-material print recipe (STL, Terrain 0):**
+
+1. Slice the STL as is; it lies flat, already in millimetres.
+2. Print the base in a light filament.
+3. Add a filament change (pause / M600) at the layer **Base mm** (2 mm by default), so
+   the raised modules print in a dark filament.
+4. Scan it. A matte dark filament on a white base reads best. Leave the 4-module light
+   border uncovered.
+
+With **Terrain** above 0 the modules no longer start at one height, so a filament swap
+cannot separate them. Use 3MF or OBJ colour instead; the STL height check then reports
+that it does not scan. A real print test is manual; please note results on #1411.
+
 ### Find View
 
 Looks around the current view (position and zoom, within 0.5×–8× of the start zoom) and
@@ -742,6 +783,27 @@ FracturingFog.exe --batch --region "Seahorse Valley" --theme "Polar Night 3D" ^
                   --width 900 --height 900 --relief-raymarch ^
                   --qr-payload https://example.org --qr-relief --qr-module-px 12 ^
                   --out C:\out\seahorse-qr-3d.png
+```
+
+`--qr-mesh PATH` also writes the printable tile from the same render: `.stl`, `.3mf` or
+`.obj`, chosen by extension.
+
+| Flag | Value | Default |
+|---|---|---|
+| `--qr-mesh` | tile path (`.stl` / `.3mf` / `.obj`) | — |
+| `--qr-mesh-size` | 20–400 mm, tile side | 60 |
+| `--qr-mesh-base` | 0.4–20 mm, base plate | 2 |
+| `--qr-mesh-height` | 0.2–10 mm, module height above the base | 1 |
+| `--qr-mesh-terrain` | 0–20 mm, fractal relief under the code | 0 |
+
+The console prints a `qr mesh:` line with the triangle count, the size, the watertight check
+and the top-down scan. A tile that is not watertight or does not scan exits **8**, like an
+image that does not scan.
+
+```
+FracturingFog.exe --batch --region "Seahorse Valley" --width 900 --height 900 ^
+                  --qr-payload https://example.org --qr-mesh C:\out\seahorse-tile.stl ^
+                  --out C:\out\seahorse-qr.png
 ```
 
 ```

@@ -39,6 +39,7 @@ public sealed class QrCodeViewModel : ViewModelBase
     {
         ExportCommand = ReactiveCommand.CreateFromTask(ExportAsync, _canExport);
         FindViewCommand = ReactiveCommand.CreateFromTask(FindViewAsync, _canSearch);
+        MeshExportCommand = ReactiveCommand.CreateFromTask(ExportMeshAsync, _canMesh);
         Refresh();
     }
 
@@ -46,6 +47,14 @@ public sealed class QrCodeViewModel : ViewModelBase
 
     private readonly System.Reactive.Subjects.BehaviorSubject<bool> _canExport = new(false);
     private readonly System.Reactive.Subjects.BehaviorSubject<bool> _canSearch = new(false);
+    private readonly System.Reactive.Subjects.BehaviorSubject<bool> _canMesh = new(false);
+
+    /// <summary>#1411 — export the code as a 3D-printable tile.</summary>
+    public ReactiveCommand<Unit, Unit> MeshExportCommand { get; }
+
+    /// <summary>Host mesh export: save dialog + render + build / check the tile.
+    /// Null result = cancelled.</summary>
+    public Func<QrCodeOptions, int, Task<QrExportOutcome?>>? MeshExportRequested { get; set; }
 
     /// <summary>#1401 — search around the live view for a better-matching framing.</summary>
     public ReactiveCommand<Unit, Unit> FindViewCommand { get; }
@@ -188,6 +197,42 @@ public sealed class QrCodeViewModel : ViewModelBase
             Math.Clamp(Math.Round(value), QrCodeOptions.MinReliefElevation, 89));
     }
 
+    private double _meshSize = QrCodeOptions.DefaultMeshSizeMm;
+    /// <summary>#1411 — tile side in mm.</summary>
+    public double MeshSize
+    {
+        get => _meshSize;
+        set => this.RaiseAndSetIfChanged(ref _meshSize,
+            Math.Clamp(Math.Round(value, 1), QrCodeOptions.MinMeshSizeMm, QrCodeOptions.MaxMeshSizeMm));
+    }
+
+    private double _meshBase = QrCodeOptions.DefaultMeshBaseMm;
+    /// <summary>#1411 — base plate thickness in mm.</summary>
+    public double MeshBase
+    {
+        get => _meshBase;
+        set => this.RaiseAndSetIfChanged(ref _meshBase,
+            Math.Clamp(Math.Round(value, 2), QrCodeOptions.MinMeshBaseMm, QrCodeOptions.MaxMeshBaseMm));
+    }
+
+    private double _meshHeight = QrCodeOptions.DefaultMeshHeightMm;
+    /// <summary>#1411 — module height above the base in mm.</summary>
+    public double MeshHeight
+    {
+        get => _meshHeight;
+        set => this.RaiseAndSetIfChanged(ref _meshHeight,
+            Math.Clamp(Math.Round(value, 2), QrCodeOptions.MinMeshHeightMm, QrCodeOptions.MaxMeshHeightMm));
+    }
+
+    private double _meshTerrain;
+    /// <summary>#1411 — terrain from the fractal under the code, in mm (0 = flat).</summary>
+    public double MeshTerrain
+    {
+        get => _meshTerrain;
+        set => this.RaiseAndSetIfChanged(ref _meshTerrain,
+            Math.Clamp(Math.Round(value, 2), 0, QrCodeOptions.MaxMeshTerrainMm));
+    }
+
     private double _bevelShadow = QrCodeOptions.DefaultBevelShadow;
     public double BevelShadow
     {
@@ -275,6 +320,10 @@ public sealed class QrCodeViewModel : ViewModelBase
         ReliefHeight = _reliefHeight,
         ReliefTerrain = _reliefTerrain,
         ReliefMinElevationDeg = _reliefMinElevation,
+        MeshSizeMm = _meshSize,
+        MeshBaseMm = _meshBase,
+        MeshHeightMm = _meshHeight,
+        MeshTerrainMm = _meshTerrain,
     };
 
     private string _message = "";
@@ -304,6 +353,7 @@ public sealed class QrCodeViewModel : ViewModelBase
         }
         _canExport.OnNext(!_isExporting && o != null && _problem == null && ExportRequested != null);
         _canSearch.OnNext(!_isExporting && o != null && _problem == null && SearchRequested != null);
+        _canMesh.OnNext(!_isExporting && o != null && _problem == null && MeshExportRequested != null);
     }
 
     /// <summary>Re-run the checks once the host hooks are attached.</summary>
@@ -328,6 +378,32 @@ public sealed class QrCodeViewModel : ViewModelBase
         catch (Exception ex)
         {
             Message = "QR view search failed: " + ex.Message;
+            MessageIsWarning = true;
+        }
+        finally
+        {
+            IsExporting = false;
+        }
+    }
+
+    private async Task ExportMeshAsync()
+    {
+        var o = Options;
+        if (o == null || MeshExportRequested == null) return;
+        IsExporting = true;
+        _messageIsPreflight = false;
+        Message = "Building QR tile…";
+        MessageIsWarning = false;
+        try
+        {
+            var outcome = await MeshExportRequested(o, _size);
+            if (outcome == null) { Message = ""; return; }
+            Message = outcome.Message;
+            MessageIsWarning = !outcome.Scans;
+        }
+        catch (Exception ex)
+        {
+            Message = "QR mesh export failed: " + ex.Message;
             MessageIsWarning = true;
         }
         finally

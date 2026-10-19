@@ -2911,6 +2911,7 @@ namespace FracturingFog.Hosting
                 cc.QrCode.Preflight = global::FracturingFog.Imaging.Qr.QrExport.Preflight;
                 cc.QrCode.ExportRequested = (opt, size) => ExportQrCodeAsync(shell, opt, size);
                 cc.QrCode.SearchRequested = (opt, size) => SearchQrViewAsync(shell, opt, size);
+                cc.QrCode.MeshExportRequested = (opt, size) => ExportQrMeshAsync(shell, opt, size);
                 cc.QrCode.HooksAttached();
             };
 
@@ -4875,6 +4876,43 @@ namespace FracturingFog.Hosting
                     v.Ok ? $"Saved {name} - {v.Summary} (version {qr.Code.Version}, {qr.Layout.ModulePixels} px/module)."
                          : $"Saved {name}, but it {v.Summary}. Try Steer style, a higher error fix, a shorter text or a larger size.");
             return new FracturingFog.UI.Avalonia.ViewModels.QrExportOutcome(true, $"Saved {name}.");
+        }
+
+        /// <summary>#1411 — export the QR as a 3D-printable tile from the current view
+        /// (same framing as Export QR Image): pick a path, render the display buffer,
+        /// build + write the mesh, and report the watertight check and the top-down
+        /// scan. Null = the save dialog was cancelled.</summary>
+        private static async Task<FracturingFog.UI.Avalonia.ViewModels.QrExportOutcome?> ExportQrMeshAsync(
+            ShellViewModel shell, FracturingFog.Imaging.QrCodeOptions opt, int size)
+        {
+            if (s_renderHost == null) return null;
+            string? path = await AvaloniaDialogs.PickSaveFileAsync(
+                "Save QR Tile Mesh",
+                suggestedName: BuildSuggestedFileName("stl", imageWidth: size, imageHeight: size, suffix: "_qrc"),
+                filter: "STL mesh, geometry (*.stl)|*.stl|3MF, colour + mm (*.3mf)|*.3mf|OBJ, vertex colour (*.obj)|*.obj");
+            if (string.IsNullOrEmpty(path)) return null;
+
+            var req = s_renderHost.CreatePosterRequest(
+                size, size, rotate: false, string.Empty, FracturingFog.Imaging.ImageFileFormat.Png, null,
+                global::FracturingFog.PosterAspectMode.View);
+            var busy = shell.BeginRenderBusy("Building QR tile…");
+            FracturingFog.Imaging.Qr.QrMeshResult mesh;
+            try
+            {
+                mesh = await Task.Run(() =>
+                {
+                    var px = PosterRenderer.RenderDisplayPixels(req, CancellationToken.None, out int w, out int h);
+                    return FracturingFog.Imaging.Qr.QrMesh.Export(px, w, h, opt, path);
+                });
+            }
+            finally { busy.Dispose(); }
+
+            string name = System.IO.Path.GetFileName(path);
+            bool ok = mesh.Report.IsClosedManifold && mesh.Scan.Ok;
+            return new FracturingFog.UI.Avalonia.ViewModels.QrExportOutcome(ok,
+                ok ? $"Saved {name} - {mesh.Summary}."
+                   : $"Saved {name}, but: {mesh.Summary}."
+                     + (mesh.Scan.Ok ? "" : " For an STL with terrain, use 3MF / OBJ colour or Terrain 0."));
         }
 
         /// <summary>#1401 — run the QR view search on the live view at the export

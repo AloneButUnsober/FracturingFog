@@ -91,6 +91,10 @@ namespace FracturingFog.Cli
         /// is set (null = no QR). Emitted as the <c>--qr-*</c> flags.</summary>
         public QrCodeOptions? Qr { get; init; }
 
+        /// <summary>#1411 — also write a QR tile mesh to this path (null = no mesh;
+        /// the live seed leaves it null, the mesh is a Control Center button).</summary>
+        public string? QrMeshPath { get; init; }
+
         /// <summary>The live per-family settings as region-snapshot
         /// <c>Key=Value</c> pairs (#997) — Julia constant, 3D camera, … — emitted
         /// as <c>--param</c>. Supplied by the host (the snapshot lives in Engine).</summary>
@@ -385,7 +389,7 @@ namespace FracturingFog.Cli
 
             // Fractal QR code (#1305) — payload plus the knobs that deviate from
             // their defaults.
-            AppendQr(parts, snap.Qr);
+            AppendQr(parts, snap.Qr, snap.QrMeshPath);
 
             // Domain-warp post-fx (any fractal). Emit the toggle, plus knobs when
             // they deviate from their defaults.
@@ -612,7 +616,7 @@ namespace FracturingFog.Cli
 
         /// <summary>#1305 — the <c>--qr-*</c> flags for <paramref name="qr"/>;
         /// nothing without a payload.</summary>
-        public static void AppendQr(List<string> parts, QrCodeOptions? qr)
+        public static void AppendQr(List<string> parts, QrCodeOptions? qr, string? meshPath = null)
         {
             if (qr == null || string.IsNullOrEmpty(qr.Payload)) return;
             parts.Add(BatchFlags.QrPayload);
@@ -643,6 +647,19 @@ namespace FracturingFog.Cli
                 { parts.Add(BatchFlags.QrReliefTerrain); parts.Add(Num(qr.ReliefTerrain)); }
                 if (qr.ReliefMinElevationDeg != QrCodeOptions.DefaultReliefMinElevation)
                 { parts.Add(BatchFlags.QrReliefMinElevation); parts.Add(Num(qr.ReliefMinElevationDeg)); }
+            }
+            // #1411 — the tile mesh and its sizes (only with a mesh path).
+            if (!string.IsNullOrEmpty(meshPath))
+            {
+                parts.Add(BatchFlags.QrMesh); parts.Add(meshPath);
+                if (qr.MeshSizeMm != QrCodeOptions.DefaultMeshSizeMm)
+                { parts.Add(BatchFlags.QrMeshSize); parts.Add(Num(qr.MeshSizeMm)); }
+                if (qr.MeshBaseMm != QrCodeOptions.DefaultMeshBaseMm)
+                { parts.Add(BatchFlags.QrMeshBase); parts.Add(Num(qr.MeshBaseMm)); }
+                if (qr.MeshHeightMm != QrCodeOptions.DefaultMeshHeightMm)
+                { parts.Add(BatchFlags.QrMeshHeight); parts.Add(Num(qr.MeshHeightMm)); }
+                if (qr.MeshTerrainMm != 0)
+                { parts.Add(BatchFlags.QrMeshTerrain); parts.Add(Num(qr.MeshTerrainMm)); }
             }
             // #1409 — the bevel knobs only mean something for the Bevel style.
             if (qr.Style == QrStyle.Bevel)
