@@ -256,7 +256,7 @@
                          Background="#1C1C1C"
                          Foreground="White"
                          Margin="0,0,8,0"
-                         PlaceholderText="z*z + c   (C#-style text is accepted too: Ctrl+. converts it)" />
+                         PlaceholderText="z*z + c   (C#-style text is accepted too: Ctrl+Period converts it)" />
             </Border>
         </Grid>
 
@@ -341,10 +341,10 @@
                 </TextBlock.Styles>
             </TextBlock>
             <Button Grid.Column="1"
-                    Content="{Binding SuggestedFix, StringFormat='Apply fix: {0}  (Ctrl+.)'}"
+                    Content="{Binding SuggestedFix, StringFormat='Apply fix: {0}  (Ctrl+Period)'}"
                     Command="{Binding ApplyFixCommand}"
                     IsVisible="{Binding HasSuggestedFix}"
-                    ToolTip.Tip="Replace the highlighted span with the suggested fix. Shortcut: Ctrl+."
+                    ToolTip.Tip="Replace the highlighted span with the suggested fix. Shortcut: Ctrl+Period (the full-stop key; Ctrl and + scales the UI)."
                     Margin="8,0,0,0"
                     Padding="10,4" />
         </Grid>

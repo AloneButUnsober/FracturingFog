@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
 using System;
+using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -11,6 +12,7 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using AvaloniaEdit;
+using AvaloniaEdit.CodeCompletion;
 using AvaloniaEdit.Document;
 
 using FracturingFog.Models;
@@ -107,6 +109,11 @@ namespace FracturingFog.UI.Avalonia.Controls
         private bool _errIsError = true;
         private int _pendingSelStart = -1, _pendingSelEnd = -1;
 
+        // #1366 — completion list and signature help popups (one of each at most).
+        private CompletionWindow? _completion;
+        private OverloadInsightWindow? _insight;
+        private DslSignatureProvider? _insightProvider;
+
         public DslCodeEditor()
         {
             _plain = new TextBox
@@ -137,6 +144,11 @@ namespace FracturingFog.UI.Avalonia.Controls
             _code.TextArea.Caret.CaretBrush = Brushes.White;
             _code.Document.TextChanged += OnCodeTextChanged;
             _code.TextArea.AddHandler(KeyDownEvent, OnCodeKeyDown, RoutingStrategies.Tunnel);
+            // #1366 smoke — AvaloniaEdit inserts whatever text input arrives, unlike
+            // TextBox: Ctrl+- (U+001F), Ctrl+] (U+001D) and Ctrl+Space (" ") put
+            // stray characters into the equation. Ctrl chords never type here;
+            // the window's Ctrl+= / Ctrl+- / Ctrl+0 UI-scale keys still fire.
+            _code.TextArea.AddHandler(TextInputEvent, OnCodeTextInput, RoutingStrategies.Tunnel);
             _code.TextArea.TextView.LineTransformers.Add(_highlighter);
             // #1364 — box the bracket pair at the caret; redraw it as the caret moves.
             _code.TextArea.TextView.BackgroundRenderers.Add(
@@ -147,6 +159,9 @@ namespace FracturingFog.UI.Avalonia.Controls
             _code.TextArea.TextView.BackgroundRenderers.Add(new DslSquiggleRenderer(this));
             _code.TextArea.TextView.PointerMoved += OnCodePointerMoved;
             _code.TextArea.TextView.PointerExited += (_, _) => ToolTip.SetIsOpen(_code.TextArea.TextView, false);
+            // #1366 — completion as you type, signature help inside calls.
+            _code.TextArea.TextEntered += OnCodeTextEntered;
+            _code.TextArea.Caret.PositionChanged += (_, _) => UpdateSignatureHelp(openIfClosed: false);
 
             _codePlaceholder = new TextBlock
             {
@@ -169,8 +184,8 @@ namespace FracturingFog.UI.Avalonia.Controls
                 Focusable = false,
             };
             ToolTip.SetTip(_toggle,
-                "Code view: line numbers, syntax colouring and bracket matching (Ctrl+] jumps to the " +
-                "matching bracket) (#1360). Off = plain text box. " +
+                "Code view: line numbers, syntax colouring, bracket matching (Ctrl+] jumps to the " +
+                "matching bracket), error underlines and completion (Ctrl+Space) (#1360). Off = plain text box. " +
                 "The equation text is the same either way — code view never changes what is saved.");
             _toggle.IsCheckedChanged += (_, _) =>
             {
@@ -190,10 +205,23 @@ namespace FracturingFog.UI.Avalonia.Controls
         /// <summary>True while either inner editor has keyboard focus.</summary>
         public bool IsEditorFocused => IsKeyboardFocusWithin;
 
+        /// <summary>#1366 — extra names to offer in completion, asked for each time
+        /// the list opens (User Bulb params and chain-step outputs). Inherited, so
+        /// a view sets it once on itself and templated editors (chain steps) see it.</summary>
+        public static readonly AttachedProperty<Func<IEnumerable<string>>?> HostNamesProviderProperty =
+            AvaloniaProperty.RegisterAttached<DslCodeEditor, Control, Func<IEnumerable<string>>?>(
+                "HostNamesProvider", inherits: true);
+
+        public static void SetHostNamesProvider(Control element, Func<IEnumerable<string>>? value)
+            => element.SetValue(HostNamesProviderProperty, value);
+
+        public static Func<IEnumerable<string>>? GetHostNamesProvider(Control element)
+            => element.GetValue(HostNamesProviderProperty);
+
         /// <summary>
         /// #1365 — show a validation result over [start, start+length).
         /// Code view: a wavy underline (yellow for errors, blue for hints such as
-        /// "C#-style, Ctrl+. converts") with <paramref name="message"/> on hover;
+        /// "C#-style, Ctrl+Period converts") with <paramref name="message"/> on hover;
         /// it moves with edits and never touches the caret or selection.
         /// Plain view: the pre-#1360 behaviour — the span is selected, deferred
         /// to focus loss so typing is never replaced by the selection.
@@ -257,22 +285,106 @@ namespace FracturingFog.UI.Avalonia.Controls
         private void OnCodePointerMoved(object? sender, PointerEventArgs e)
         {
             var view = _code.TextArea.TextView;
-            if (CurrentError is not { } err || string.IsNullOrEmpty(err.Message))
-            {
-                ToolTip.SetIsOpen(view, false);
-                return;
-            }
             var pos = view.GetPosition(e.GetPosition(view) + view.ScrollOffset);
             int offset = pos is { } p ? _code.Document.GetOffset(p.Location) : -1;
-            if (offset >= err.Start && offset <= err.Start + err.Length)
+            string? tip = null;
+            // #1365 — the error message wins over the hover doc.
+            if (CurrentError is { } err && !string.IsNullOrEmpty(err.Message)
+                && offset >= err.Start && offset <= err.Start + err.Length)
             {
-                ToolTip.SetTip(view, err.Message);
+                tip = err.Message;
+            }
+            else if (offset >= 0)
+            {
+                // #1366 — description of the built-in function / input under the pointer.
+                var (tokens, _) = _highlighter.Analyze(_code.Document);
+                foreach (var t in tokens)
+                {
+                    if (t.Start > offset) break;
+                    if (offset >= t.End) continue;
+                    if (t.Kind is DslTokenKind.Function or DslTokenKind.Variable)
+                        tip = DslCompletion.DocFor(_code.Document.GetText(t.Start, t.Length), DialectOf(Language));
+                    break;
+                }
+            }
+            if (tip != null)
+            {
+                ToolTip.SetTip(view, tip);
                 ToolTip.SetIsOpen(view, true);
             }
             else
             {
                 ToolTip.SetIsOpen(view, false);
             }
+        }
+
+        // #1366 — open the list on an identifier character (or '.' for a Bulb
+        // member), signature help on '(' / ','.
+        private void OnCodeTextEntered(object? sender, TextInputEventArgs e)
+        {
+            if (string.IsNullOrEmpty(e.Text)) return;
+            char ch = e.Text[^1];
+            if (ch is '(' or ',')
+            {
+                _completion?.Close();
+                UpdateSignatureHelp(openIfClosed: true);
+                return;
+            }
+            if (ch == ')') { UpdateSignatureHelp(openIfClosed: false); return; }
+            if (_completion == null && (char.IsLetter(ch) || ch == '_' || (ch == '.' && Language == DslLanguage.Bulb)))
+                ShowCompletion(force: false);
+        }
+
+        /// <summary>#1366 — open the completion list at the caret. Unforced (while
+        /// typing) it only opens when something matches.</summary>
+        private void ShowCompletion(bool force)
+        {
+            int caret = _code.CaretOffset;
+            string text = _code.Document.Text;
+            var dialect = DialectOf(Language);
+            if (DslCompletion.ContextAt(text, caret, dialect) is not { } ctx) return;
+            var items = DslCompletion.Items(text, caret, dialect, GetHostNamesProvider(this)?.Invoke());
+            if (items.Count == 0 || (!force && ctx.Prefix.Length == 0 && !ctx.IsMember)) return;
+
+            _completion?.Close();
+            var window = new CompletionWindow(_code.TextArea) { StartOffset = ctx.Start, CloseWhenCaretAtBeginning = true };
+            foreach (var item in items) window.CompletionList.CompletionData.Add(new DslCompletionData(item));
+            window.Closed += (_, _) =>
+            {
+                if (ReferenceEquals(_completion, window)) _completion = null;
+                // A function was picked (inserted "name("): show its signature.
+                UpdateSignatureHelp(openIfClosed: true);
+            };
+            _completion = window;
+            window.Show();
+            if (ctx.Prefix.Length > 0) window.CompletionList.SelectItem(ctx.Prefix);
+        }
+
+        /// <summary>#1366 — keep signature help in step with the caret: update the
+        /// bold argument, close outside a built-in call, open on request.</summary>
+        private void UpdateSignatureHelp(bool openIfClosed)
+        {
+            if (!IsCodeView) return;
+            var at = DslCompletion.SignatureAt(_code.Document.Text, _code.CaretOffset, DialectOf(Language));
+            if (at is not { } sig)
+            {
+                _insight?.Close();
+                return;
+            }
+            if (_insight != null && _insightProvider != null)
+            {
+                _insightProvider.Update(sig.Signature, sig.ArgIndex);
+                return;
+            }
+            if (!openIfClosed) return;
+            _insightProvider = new DslSignatureProvider(sig.Signature, sig.ArgIndex);
+            var window = new OverloadInsightWindow(_code.TextArea) { Provider = _insightProvider };
+            window.Closed += (_, _) =>
+            {
+                if (ReferenceEquals(_insight, window)) { _insight = null; _insightProvider = null; }
+            };
+            _insight = window;
+            window.Show();
         }
 
         /// <summary>
@@ -379,6 +491,7 @@ namespace FracturingFog.UI.Avalonia.Controls
         {
             bool code = IsCodeView;
             bool hadFocus = IsKeyboardFocusWithin;
+            if (!code) { _completion?.Close(); _insight?.Close(); }
             _toggle.IsChecked = code;
             if (code)
             {
@@ -432,8 +545,37 @@ namespace FracturingFog.UI.Avalonia.Controls
             UpdatePlaceholder();
         }
 
+        // Modifiers of the last key press: text input that follows a Ctrl chord
+        // (Ctrl without Alt — Ctrl+Alt is AltGr and must still type) is dropped.
+        private bool _ctrlChord;
+
+        /// <summary>#1366 — true when text input should not reach the document:
+        /// any control character other than tab / newline, or anything typed as
+        /// part of a Ctrl chord.</summary>
+        public static bool ShouldDropTextInput(string? text, bool ctrlChord)
+        {
+            if (string.IsNullOrEmpty(text)) return false;
+            if (ctrlChord) return true;
+            foreach (char ch in text)
+                if (char.IsControl(ch) && ch is not ('\t' or '\n' or '\r')) return true;
+            return false;
+        }
+
+        private void OnCodeTextInput(object? sender, TextInputEventArgs e)
+        {
+            if (ShouldDropTextInput(e.Text, _ctrlChord)) e.Handled = true;
+        }
+
         private void OnCodeKeyDown(object? sender, KeyEventArgs e)
         {
+            _ctrlChord = e.KeyModifiers.HasFlag(KeyModifiers.Control) && !e.KeyModifiers.HasFlag(KeyModifiers.Alt);
+            // #1366 — Ctrl+Space opens completion even with nothing typed yet.
+            if (e.Key == Key.Space && e.KeyModifiers == KeyModifiers.Control)
+            {
+                ShowCompletion(force: true);
+                e.Handled = true;
+                return;
+            }
             // #1364 — Ctrl+] jumps between a bracket next to the caret and its partner.
             if (e.Key == Key.OemCloseBrackets && e.KeyModifiers == KeyModifiers.Control)
             {

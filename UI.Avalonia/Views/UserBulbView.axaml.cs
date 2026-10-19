@@ -37,6 +37,10 @@ public sealed partial class UserBulbView : UserControl
     {
         AvaloniaXamlLoader.Load(this);
         DataContextChanged += OnDataContextChanged;
+        // #1366 — params and chain-step outputs are in scope in every box here.
+        DslCodeEditor.SetHostNamesProvider(this, () => _vm == null
+            ? Array.Empty<string>()
+            : _vm.Params.Select(p => p.Name).Concat(_vm.Chain.Select(s => s.OutputName)));
         AttachedToVisualTree += OnAttachedToVisualTree;
     }
 

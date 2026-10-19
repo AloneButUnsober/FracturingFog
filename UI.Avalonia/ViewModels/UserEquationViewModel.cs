@@ -776,7 +776,7 @@ public sealed class UserEquationViewModel : ViewModelBase
         if (TryConvertCSharp(raw, out string converted, out _))
         {
             UpdatePreview(converted);
-            StatusText = $"C#-style equation, translated for rendering. Ctrl+. converts it to: {converted}";
+            StatusText = $"C#-style equation, translated for rendering. Ctrl+Period converts it to: {converted}";
             StatusIsError = false;
             SetErrorSpan(0, raw.Length, converted);
             return;
