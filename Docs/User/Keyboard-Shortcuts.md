@@ -207,7 +207,25 @@ Visible only while the slideshow is running.
 | `Ctrl+S` | Save under current name |
 | `Ctrl+Shift+S` | Save As |
 | `F5` | Force recompile |
+| `Ctrl+Period` | **Apply fix**: replace the highlighted typo with the *Did you mean* suggestion, or convert C#-style text (User Equation, User Bulb). This is the full-stop key, not `Ctrl` and `+` |
 | `Esc` | Close |
+
+#### Code view (the `{ }` button in the equation box)
+
+These work while the code view is on (#1360). The plain text box keeps the
+ordinary text-box keys.
+
+| Key | Action |
+|---|---|
+| `Ctrl+Space` | Open the completion list (functions, keywords, built-in names, your names) |
+| `Enter` / `Tab` | Accept the selected completion |
+| `Esc` | Close the completion list or the signature hint |
+| `Ctrl+]` | Jump between a bracket next to the cursor and its matching bracket |
+| `Shift+Alt+F` | **Format**: tidy spacing and indentation (also the **Format** button) |
+| `Ctrl+Z` | Undo (a Format or **( )** bracket tidy is a single undo step) |
+
+The UI-scale keys `Ctrl+=` / `Ctrl+-` / `Ctrl+0` keep scaling the interface
+while you type in the editor; they never edit the equation.
 
 ### Control Center (main menu)
 
