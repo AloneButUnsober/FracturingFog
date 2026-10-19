@@ -20,6 +20,9 @@
 // \lceil, ^{} _{} (z_{n-1}->prev), | | (abs), e^{}->exp, implicit multiplication
 // (2z, z(z+c)), \begin{cases}..\end{cases} -> if/then/else. Spacing macros and
 // \text/\displaystyle are stripped.
+//
+// #1421 — sequence notation: z_n -> z, c_n -> c (ImportSubscripts), and a
+// recurrence's left-hand side (z_{n+1} =, z \mapsto, f_c(z) =) is dropped.
 
 using System;
 using System.Collections.Generic;
@@ -59,7 +62,7 @@ public static class LatexImporter
         string dsl;
         try
         {
-            var toks = Tokenize(source);
+            var toks = StripRecurrenceLhs(Tokenize(source));
             int pos = 0;
             dsl = ParseExpr(toks, ref pos);
             if (pos != toks.Count)
@@ -131,6 +134,7 @@ public static class LatexImporter
                 case '*': toks.Add(new(TT.Op, "*")); i++; break;
                 case '/': toks.Add(new(TT.Op, "/")); i++; break;
                 case '=': toks.Add(new(TT.Cmp, "==")); i++; break;
+                case ':' when i + 1 < n && s[i + 1] == '=': toks.Add(new(TT.Cmp, Defines)); i += 2; break;
                 case '<': toks.Add(new(TT.Cmp, "<")); i++; break;
                 case '>': toks.Add(new(TT.Cmp, ">")); i++; break;
                 default:
@@ -169,8 +173,49 @@ public static class LatexImporter
             case "lceil": toks.Add(new(TT.CeilL, "lceil")); return;
             case "rceil": toks.Add(new(TT.CeilR, "rceil")); return;
             case "pi": toks.Add(new(TT.Ident, "pi")); return;
+            case "mapsto": case "to": case "rightarrow": case "leftarrow": case "coloneqq":
+                toks.Add(new(TT.Cmp, Defines)); return;
             default: toks.Add(new(TT.Cmd, name)); return;      // \frac \sqrt \sin \operatorname \begin ...
         }
+    }
+
+    // A definition arrow (\mapsto, \to, :=, \leftarrow): only valid right after
+    // a recurrence's left-hand side.
+    private const string Defines = "↦";
+
+    // #1421 — drop a leading recurrence left-hand side: everything before the
+    // first top-level '=' / definition arrow when it spells z_{n+1}, z, f(z) or
+    // f_c(z). Any other '=' stays (an equality comparison).
+    private static List<Tok> StripRecurrenceLhs(List<Tok> toks)
+    {
+        int depth = 0, split = -1;
+        for (int i = 0; i < toks.Count && split < 0; i++)
+        {
+            var k = toks[i].Kind;
+            if (k is TT.LBrace or TT.LParen) depth++;
+            else if (k is TT.RBrace or TT.RParen) depth--;
+            else if (depth == 0 && k == TT.Cmp && toks[i].Text is "==" or Defines) split = i;
+        }
+        if (split < 0)
+        {
+            if (toks.Exists(t => t.Kind == TT.Cmp && t.Text == Defines))
+                throw new ImportException(@"a definition arrow must follow the left-hand side, as in 'z \mapsto z^2 + c'.");
+            return toks;
+        }
+
+        var lhs = new StringBuilder();
+        for (int i = 0; i < split; i++)
+            if (toks[i].Kind is not (TT.LBrace or TT.RBrace)) lhs.Append(toks[i].Text);
+        if (ImportSubscripts.IsRecurrenceLhs(lhs.ToString()))
+        {
+            var rest = toks.GetRange(split + 1, toks.Count - split - 1);
+            if (rest.Exists(t => t.Kind == TT.Cmp && t.Text == Defines))
+                throw new ImportException("only one definition ('z_{n+1} = ...') is supported.");
+            return rest;
+        }
+        if (toks[split].Text == Defines)
+            throw new ImportException($"unsupported left-hand side '{lhs}'; use z_{{n+1}}, z or f(z).");
+        return toks;
     }
 
     // ── parser (emits parenthesised DSL) ─────────────────────────────────────
@@ -294,17 +339,17 @@ public static class LatexImporter
         }
     }
 
-    // Ident that may carry a subscript (z_{n-1} -> prev).
+    // Ident that may carry a subscript (z_n -> z, z_{n-1} -> prev, c_n -> c; #1421).
     private static string Atom(Tok t, List<Tok> toks, ref int pos)
     {
-        if (t.Text == "z" && pos < toks.Count && toks[pos].Kind == TT.Underscore)
+        if (pos < toks.Count && toks[pos].Kind == TT.Underscore)
         {
             pos++;
             string sub = pos < toks.Count && toks[pos].Kind == TT.LBrace
                 ? ReadBraceRaw(toks, ref pos)
                 : (pos < toks.Count ? Consume(toks, ref pos) : string.Empty);
-            if (sub.Replace(" ", string.Empty) is "n-1" or "(n-1)") return "prev";
-            throw new ImportException("only z_{n-1} (prev) subscripts are supported.");
+            var (dsl, error) = ImportSubscripts.Map(t.Text, sub);
+            return dsl ?? throw new ImportException(error!);
         }
         return AtomDsl(t.Text);
     }
