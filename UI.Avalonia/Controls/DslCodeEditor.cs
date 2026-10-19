@@ -11,6 +11,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
 using AvaloniaEdit;
 using AvaloniaEdit.CodeCompletion;
 using AvaloniaEdit.Document;
@@ -98,6 +99,10 @@ namespace FracturingFog.UI.Avalonia.Controls
         private readonly TextEditor _code;
         private readonly TextBlock _codePlaceholder;
         private readonly ToggleButton _toggle;
+        // #1367 — Format / Minimise-brackets buttons beside the toggle (code view only).
+        private readonly Button _formatButton;
+        private readonly Button _parensButton;
+        private readonly StackPanel _tools;
         private readonly DslHighlighter _highlighter = new();
         private bool _syncing;
 
@@ -177,15 +182,13 @@ namespace FracturingFog.UI.Avalonia.Controls
                 FontSize = 11,
                 Padding = new Thickness(5, 0),
                 MinHeight = 0,
-                HorizontalAlignment = HorizontalAlignment.Right,
-                VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(0, 2, 20, 0),
                 Opacity = 0.8,
                 Focusable = false,
             };
             ToolTip.SetTip(_toggle,
                 "Code view: line numbers, syntax colouring, bracket matching (Ctrl+] jumps to the " +
-                "matching bracket), error underlines and completion (Ctrl+Space) (#1360). Off = plain text box. " +
+                "matching bracket), error underlines, completion (Ctrl+Space) and Format (Shift+Alt+F) (#1360). " +
+                "Off = plain text box. " +
                 "The equation text is the same either way — code view never changes what is saved.");
             _toggle.IsCheckedChanged += (_, _) =>
             {
@@ -194,11 +197,32 @@ namespace FracturingFog.UI.Avalonia.Controls
                 else IsCodeView = on;
             };
 
+            _formatButton = MakeToolButton("Format",
+                "Format: tidy spacing and indentation (Shift+Alt+F). Only whitespace changes; " +
+                "refused if it would change the equation. Undo with Ctrl+Z.");
+            _formatButton.Click += (_, _) => RunFormat(minimiseParens: false);
+            _parensButton = MakeToolButton("( )",
+                "Minimise brackets: remove brackets that don't change the equation " +
+                "(checked against the parsed equation; needs an equation that parses). Undo with Ctrl+Z.");
+            _parensButton.Click += (_, _) => RunFormat(minimiseParens: true);
+
+            _tools = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 3,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, 2, 20, 0),
+            };
+            _tools.Children.Add(_formatButton);
+            _tools.Children.Add(_parensButton);
+            _tools.Children.Add(_toggle);
+
             var grid = new Grid();
             grid.Children.Add(_plain);
             grid.Children.Add(_code);
             grid.Children.Add(_codePlaceholder);
-            grid.Children.Add(_toggle);
+            grid.Children.Add(_tools);
             Content = grid;
         }
 
@@ -451,7 +475,7 @@ namespace FracturingFog.UI.Avalonia.Controls
             }
             else if (change.Property == ShowModeToggleProperty)
             {
-                _toggle.IsVisible = ShowModeToggle;
+                _tools.IsVisible = ShowModeToggle;
             }
             else if (change.Property == AcceptsReturnProperty)
             {
@@ -493,6 +517,8 @@ namespace FracturingFog.UI.Avalonia.Controls
             bool hadFocus = IsKeyboardFocusWithin;
             if (!code) { _completion?.Close(); _insight?.Close(); }
             _toggle.IsChecked = code;
+            _formatButton.IsVisible = code;
+            _parensButton.IsVisible = code;
             if (code)
             {
                 int caret = Math.Clamp(_plain.CaretIndex, 0, _code.Document.TextLength);
@@ -545,6 +571,74 @@ namespace FracturingFog.UI.Avalonia.Controls
             UpdatePlaceholder();
         }
 
+        private static Button MakeToolButton(string content, string tip)
+        {
+            var b = new Button
+            {
+                Content = content,
+                FontSize = 11,
+                Padding = new Thickness(5, 0),
+                MinHeight = 0,
+                Opacity = 0.8,
+                Focusable = false,
+                IsVisible = false,
+            };
+            ToolTip.SetTip(b, tip);
+            return b;
+        }
+
+        /// <summary>#1367 — apply Format or Minimise brackets to the code view as
+        /// one undo step, and say what happened (applied / already tidy / why
+        /// refused) in a short-lived tooltip.</summary>
+        private void RunFormat(bool minimiseParens)
+        {
+            if (!IsCodeView) return;
+            _completion?.Close();
+            _insight?.Close();
+            var dialect = DialectOf(Language);
+            string before = _code.Document.Text;
+            var result = minimiseParens
+                ? DslFormatter.MinimiseParens(before, dialect)
+                : DslFormatter.Format(before, dialect);
+            if (result.Ok && result.Text != before)
+            {
+                int caret = _code.CaretOffset;
+                ReplaceMinimal(_code.Document, result.Text);
+                _code.CaretOffset = Math.Min(caret, _code.Document.TextLength);
+            }
+            Flash(_tools.IsVisible ? (minimiseParens ? _parensButton : _formatButton) : this, result.Message);
+        }
+
+        private DispatcherTimer? _flashTimer;
+        private Control? _flashAnchor;
+        private object? _flashNormalTip;
+
+        // Show a message as the control's tooltip (below it) for a few seconds,
+        // then put its normal tooltip back. A new message first ends the old one.
+        private void Flash(Control anchor, string message)
+        {
+            EndFlash();
+            _flashAnchor = anchor;
+            _flashNormalTip = ToolTip.GetTip(anchor);
+            ToolTip.SetPlacement(anchor, PlacementMode.Bottom);
+            ToolTip.SetTip(anchor, message);
+            ToolTip.SetIsOpen(anchor, true);
+            _flashTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+            _flashTimer.Tick += (_, _) => EndFlash();
+            _flashTimer.Start();
+        }
+
+        private void EndFlash()
+        {
+            _flashTimer?.Stop();
+            _flashTimer = null;
+            if (_flashAnchor is not { } a) return;
+            ToolTip.SetIsOpen(a, false);
+            ToolTip.SetTip(a, _flashNormalTip);
+            _flashAnchor = null;
+            _flashNormalTip = null;
+        }
+
         // Modifiers of the last key press: text input that follows a Ctrl chord
         // (Ctrl without Alt — Ctrl+Alt is AltGr and must still type) is dropped.
         private bool _ctrlChord;
@@ -569,6 +663,13 @@ namespace FracturingFog.UI.Avalonia.Controls
         private void OnCodeKeyDown(object? sender, KeyEventArgs e)
         {
             _ctrlChord = e.KeyModifiers.HasFlag(KeyModifiers.Control) && !e.KeyModifiers.HasFlag(KeyModifiers.Alt);
+            // #1367 — Shift+Alt+F formats (the VS Code key; Ctrl+ is the UI scale).
+            if (e.Key == Key.F && e.KeyModifiers == (KeyModifiers.Shift | KeyModifiers.Alt))
+            {
+                RunFormat(minimiseParens: false);
+                e.Handled = true;
+                return;
+            }
             // #1366 — Ctrl+Space opens completion even with nothing typed yet.
             if (e.Key == Key.Space && e.KeyModifiers == KeyModifiers.Control)
             {
