@@ -166,26 +166,31 @@
               Margin="0,0,8,0">
 
             <!-- Toggle + importers + help -->
-            <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="0,0,0,6">
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="0,0,0,6">
                 <CheckBox Grid.Column="0"
                           x:Name="CalcGenToggle"
                           Content="CalcGen"
                           IsChecked="{Binding UseCalcGen, Mode=TwoWay}"
                           VerticalAlignment="Center"
                           ToolTip.Tip="Off: the interpreter renders the equation live as you edit. On: also compile it with CalcGen (Compile &amp; Load / Compile + Save / Generate) for SIMD speed and deep zoom. The interpreter keeps rendering every edit either way." />
-                <Button Grid.Column="2"
+                <CheckBox Grid.Column="2"
+                          Content="Tidy brackets"
+                          IsChecked="{Binding MinimiseImportBrackets, Mode=TwoWay}"
+                          VerticalAlignment="Center"
+                          ToolTip.Tip="On: Paste LaTeX… and Paste MathML… drop redundant brackets from the imported equation, e.g. ((z^2)) + (c) becomes z^2 + c. A bracket is removed only when the equation's meaning (its parse tree) is unchanged; an import that does not parse is left exactly as converted. Off: the import arrives as converted. Remembered between sessions (#1419)." />
+                <Button Grid.Column="3"
                         Content="Paste LaTeX…"
                         Click="OnPasteLatex"
                         ToolTip.Tip="Convert LaTeX math on the clipboard into an equation (best-effort subset) (#765)."
                         Margin="8,0,0,0"
                         Padding="10,4" />
-                <Button Grid.Column="3"
+                <Button Grid.Column="4"
                         Content="Paste MathML…"
                         Click="OnPasteMathml"
                         ToolTip.Tip="Convert presentation MathML on the clipboard (e.g. from Word / LibreOffice) into an equation (#764)."
                         Margin="8,0,0,0"
                         Padding="10,4" />
-                <Button Grid.Column="4"
+                <Button Grid.Column="5"
                         Content="?"
                         Command="{Binding OpenEditorHelpCommand}"
                         ToolTip.Tip="Help for the User Equation editor"

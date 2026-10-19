@@ -33,5 +33,17 @@ namespace FracturingFog.UI.Avalonia.Services
             DslEditorPrefsStore.Save(_prefs);
             CodeViewChanged?.Invoke(key);
         }
+
+        /// <summary>#1419 — minimise brackets on Paste LaTeX / Paste MathML.</summary>
+        public static bool MinimiseImportBrackets
+        {
+            get => _prefs.MinimiseImportBrackets;
+            set
+            {
+                if (_prefs.MinimiseImportBrackets == value) return;
+                _prefs.MinimiseImportBrackets = value;
+                DslEditorPrefsStore.Save(_prefs);
+            }
+        }
     }
 }

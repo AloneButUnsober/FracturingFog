@@ -621,9 +621,7 @@ public sealed class UserEquationViewModel : ViewModelBase
             ShowStatus($"MathML import: {r.Error}", isError: true);
             return;
         }
-        Source = r.Dsl;
-        CommitSourceNow();              // render + preview now, don't wait for the debounce
-        ShowStatus("✓ Imported MathML");
+        ApplyImported(r.Dsl, "MathML");
     }
 
     /// <summary>#765 — import pasted LaTeX (constrained subset) into the
@@ -637,9 +635,47 @@ public sealed class UserEquationViewModel : ViewModelBase
             ShowStatus($"LaTeX import: {r.Error}", isError: true);
             return;
         }
-        Source = r.Dsl;
+        ApplyImported(r.Dsl, "LaTeX");
+    }
+
+    /// <summary>#1419 — Paste LaTeX / Paste MathML drop redundant grouping
+    /// brackets from the import (the importers bracket defensively). Persisted
+    /// in dsl-editor.json; default on.</summary>
+    public bool MinimiseImportBrackets
+    {
+        get => Services.DslEditorPrefsService.MinimiseImportBrackets;
+        set
+        {
+            if (Services.DslEditorPrefsService.MinimiseImportBrackets == value) return;
+            Services.DslEditorPrefsService.MinimiseImportBrackets = value;
+            this.RaisePropertyChanged();
+        }
+    }
+
+    // Put an importer's DSL into the editor, minimising brackets first when the
+    // option is on. The minimiser keeps a removal only when the parse tree is
+    // unchanged and refuses outright on a source that does not parse, so a
+    // non-parsing import arrives exactly as the importer produced it.
+    private void ApplyImported(string dsl, string format)
+    {
+        int removed = 0;
+        if (MinimiseImportBrackets)
+        {
+            var m = DslFormatter.MinimiseParens(dsl, DslDialect.Complex2D);
+            if (m.Ok && m.Removed > 0)
+            {
+                dsl = m.Text;
+                removed = m.Removed;
+            }
+        }
+        Source = dsl;
         CommitSourceNow();              // render + preview now, don't wait for the debounce
-        ShowStatus("✓ Imported LaTeX");
+        ShowStatus(removed switch
+        {
+            0 => $"✓ Imported {format}",
+            1 => $"✓ Imported {format}; removed 1 redundant bracket pair",
+            _ => $"✓ Imported {format}; removed {removed} redundant bracket pairs",
+        });
     }
 
     /// <summary>Force an immediate render of the current source (cancel the
