@@ -19,6 +19,9 @@
 // operators, numeric and common named entities, msub z_{n-1}). tan/sinh/cosh/
 // tanh are accepted because the DSL supports them even though there is no AST
 // node — we emit DSL text, not an AstNode.
+//
+// #1421 — sequence notation: z_n -> z, c_n -> c (ImportSubscripts), <msubsup>,
+// and a recurrence's left-hand side (z_{n+1} =, z ↦, f_c(z) =) is dropped.
 
 using System;
 using System.Collections.Generic;
@@ -81,7 +84,7 @@ public static class MathmlImporter
         try
         {
             XElement root = LoadMathRoot(source);
-            dsl = ConvertRow(Meaningful(root.Elements()));
+            dsl = ConvertRow(StripRecurrenceLhs(Meaningful(root.Elements())));
             if (string.IsNullOrWhiteSpace(dsl))
                 throw new ImportException("no convertible math content found.");
         }
@@ -141,6 +144,52 @@ public static class MathmlImporter
             }
         }
         return outl;
+    }
+
+    // #1421 — drop a leading recurrence left-hand side: the elements before the
+    // first top-level '=' / definition arrow when they spell z_{n+1}, z, f(z)
+    // or f_c(z). Any other '=' stays (an equality comparison).
+    private static List<XElement> StripRecurrenceLhs(List<XElement> els)
+    {
+        if (els.Count == 1 && LN(els[0]) == "mrow") els = Meaningful(els[0].Elements());
+        static bool IsDefines(string t) => t is "↦" or "→" or "←" or "≔" or ":=";
+        int split = els.FindIndex(e => LN(e) == "mo" && (Txt(e) == "=" || IsDefines(Txt(e))));
+        if (split < 0)
+        {
+            if (els.Exists(e => LN(e) == "mo" && IsDefines(Txt(e))))
+                throw new ImportException("a definition arrow must follow the left-hand side, as in 'z ↦ z^2 + c'.");
+            return els;
+        }
+
+        string lhs = string.Concat(els.Take(split).Select(Flatten));
+        if (ImportSubscripts.IsRecurrenceLhs(lhs))
+        {
+            var rest = els.Skip(split + 1).ToList();
+            if (rest.Exists(e => LN(e) == "mo" && IsDefines(Txt(e))))
+                throw new ImportException("only one definition ('z_{n+1} = ...') is supported.");
+            return rest;
+        }
+        if (IsDefines(Txt(els[split])))
+            throw new ImportException($"unsupported left-hand side '{lhs}'; use z_{{n+1}}, z or f(z).");
+        return els;
+    }
+
+    // A brace/space-free text spelling of an element (msub -> base_sub), for
+    // recognising a recurrence left-hand side and reading subscripts.
+    private static string Flatten(XElement el)
+    {
+        switch (LN(el))
+        {
+            case "mi": case "mn": case "mo": case "mtext":
+                return Txt(el).Replace("⁡", string.Empty).Replace("⁢", string.Empty).Replace(" ", string.Empty);
+            case "msub":
+            {
+                var k = Meaningful(el.Elements());
+                return k.Count == 2 ? Flatten(k[0]) + "_" + Flatten(k[1]) : string.Empty;
+            }
+            default:
+                return string.Concat(Meaningful(el.Elements()).Select(Flatten));
+        }
     }
 
     // ── token stream over a sibling sequence ─────────────────────────────────
@@ -299,6 +348,7 @@ public static class MathmlImporter
                 return ConvertRow(Meaningful(el.Elements()));
             case "msup": return ConvertSup(el);
             case "msub": return ConvertSub(el);
+            case "msubsup": return ConvertSubSup(el);
             case "mfrac":
             {
                 var k = Meaningful(el.Elements());
@@ -344,23 +394,39 @@ public static class MathmlImporter
         var k = Meaningful(el.Elements());
         if (k.Count != 2) throw new ImportException("<msup> needs a base and an exponent.");
         if (IsEulerE(k[0])) return $"exp({ConvertElement(k[1])})";
-        string baseDsl = ConvertElement(k[0]);
-        // Integer exponent → the DSL '^' operator; anything else → pow(base,exp).
-        if (LN(k[1]) == "mn" && int.TryParse(Txt(k[1]), NumberStyles.Integer, CultureInfo.InvariantCulture, out int p) && p >= 0)
-            return $"({baseDsl})^{p}";
-        return $"pow({baseDsl}, {ConvertElement(k[1])})";
+        return Power(ConvertElement(k[0]), k[1]);
     }
 
+    // Integer exponent → the DSL '^' operator; anything else → pow(base,exp).
+    private static string Power(string baseDsl, XElement exponent)
+    {
+        if (LN(exponent) == "mn" && int.TryParse(Txt(exponent), NumberStyles.Integer, CultureInfo.InvariantCulture, out int p) && p >= 0)
+            return $"({baseDsl})^{p}";
+        return $"pow({baseDsl}, {ConvertElement(exponent)})";
+    }
+
+    // Subscripted identifier: z_n -> z, z_{n-1} -> prev, c_n -> c (#1421).
     private static string ConvertSub(XElement el)
     {
-        // Only z_{n-1} (the previous iterate) is representable in the DSL.
         var k = Meaningful(el.Elements());
-        if (k.Count == 2 && LN(k[0]) == "mi" && Txt(k[0]) == "z")
-        {
-            string sub = ConvertRow(Meaningful(k[1].Name.LocalName == "mrow" ? k[1].Elements() : new[] { k[1] }));
-            if (sub.Replace(" ", string.Empty) is "(n-1)" or "n-1") return "prev";
-        }
-        throw new ImportException("only z_{n-1} (prev) subscripts are supported.");
+        if (k.Count != 2) throw new ImportException("<msub> needs a base and a subscript.");
+        return Subscripted(k[0], k[1]);
+    }
+
+    // <msubsup> base sub sup = (base_sub)^sup — MathJax writes z_n^2 this way.
+    private static string ConvertSubSup(XElement el)
+    {
+        var k = Meaningful(el.Elements());
+        if (k.Count != 3) throw new ImportException("<msubsup> needs a base, a subscript and a superscript.");
+        return Power(Subscripted(k[0], k[1]), k[2]);
+    }
+
+    private static string Subscripted(XElement baseEl, XElement subEl)
+    {
+        if (LN(baseEl) != "mi")
+            throw new ImportException($"unsupported subscript on '{Flatten(baseEl)}'.");
+        var (dsl, error) = ImportSubscripts.Map(Txt(baseEl), Flatten(subEl));
+        return dsl ?? throw new ImportException(error!);
     }
 
     private static string ConvertOver(XElement el)
