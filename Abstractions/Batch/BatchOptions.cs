@@ -229,9 +229,9 @@ namespace FracturingFog.Batch
         /// <summary>The QR options these flags describe, or null without a payload.</summary>
         public QrCodeOptions? BuildQrOptions()
         {
-            if (QrPayload == null) return null;
+            if (QrPayload is not { } payload) return null;
             QrCodeOptions.TryParseBevelLight(QrBevelLight ?? "theme", out bool fromTheme, out double az, out double el);
-            return BuildQrCore() with
+            return BuildQrCore(payload) with
             {
                 BevelHeight = QrBevelHeight ?? QrCodeOptions.DefaultBevelHeight,
                 BevelWidth = QrBevelWidth ?? QrCodeOptions.DefaultBevelWidth,
@@ -243,9 +243,9 @@ namespace FracturingFog.Batch
             };
         }
 
-        private QrCodeOptions BuildQrCore() => new QrCodeOptions
+        private QrCodeOptions BuildQrCore(string payload) => new QrCodeOptions
         {
-            Payload = QrPayload,
+            Payload = payload,
             ErrorCorrection = QrEcc ?? QrErrorCorrection.H,
             Style = QrStyle ?? FracturingFog.Imaging.QrStyle.Steer,
             ModulePixels = QrModulePx ?? 0,
