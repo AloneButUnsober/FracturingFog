@@ -120,11 +120,14 @@ Open it with toolbar **Type → User Equation**, then **Params**. The editor has
 | Control | What it does |
 |---|---|
 | **Equation box** | The equation (`z*z + c`). The interpreter renders it live as you type (after a short pause). A typo is highlighted with a *Did you mean* fix; C#-style text is accepted and **Ctrl+Period** converts it. Errors show in yellow. |
+| **`{ }` (code view)** | Top-right of the equation box: switches to a code editor with line numbers, colouring, bracket matching, yellow error underlines (hover for the message), completion (**Ctrl+Space**), parameter hints inside function calls and hover help for built-ins. The equation text is the same either way. See [Code view](Avalonia-UserGuide.md#code-view-all-three-editors). |
+| **Format** / **( )** | Code view only. **Format** (**Shift+Alt+F**) tidies spacing and indentation without changing the equation; **( )** removes brackets that don't change it (`((z*z)) + (c)` → `z*z + c`). Both refuse rather than change the meaning, and each is one undo step. |
 | **CalcGen** toggle | Off: the interpreter only. On: shows the CalcGen actions below, their compile state (*Not compiled* → *Compiling…* → *Compiled* / *Compile failed*), and what CalcGen will and won't accelerate for this equation (perturbation, series approximation, DE; seed and *Bail if* are interpreter-only). Saved with the equation. The interpreter keeps rendering every edit either way. |
 | **Compile & Load** | CalcGen-compiles the equation in the background and swaps it onto the live render when done (unlocks SIMD / GPU / deep zoom / normals). An edit afterwards returns to the interpreter. |
 | **Compile + Save** | The same, and keeps the generated calculator so it reloads on the next launch. |
 | **Generate via CalcGen** | Writes `Calculators/Generated/{Name}Calculator.cs` for a permanent, build-time calculator. |
 | **Paste LaTeX… / Paste MathML…** | Converts math from the clipboard into an equation. |
+| **Tidy brackets** | On (the default, remembered): the two Paste buttons drop redundant brackets from the import, e.g. `((z^2)) + (c)` → `z^2 + c`. A bracket goes only when the equation's meaning is unchanged; an import that doesn't parse arrives exactly as converted (#1419). |
 | **Equation Guide** | Opens this document. |
 | **Rotation°** | Rotates the sampling plane for display only; the equation is unchanged. |
 | **Escape r** | The bailout radius the orbit must exceed to count as escaped (`0` = automatic default). Lower it for transcendental maps whose orbits stay small — see [§11](#11-orbit-controls--escape-radius-z-seeding-julia-convergence). |

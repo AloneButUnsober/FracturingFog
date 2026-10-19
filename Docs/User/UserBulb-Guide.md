@@ -101,7 +101,18 @@ absolute-value step makes the map non-smooth.
 
 Fractal Type → **User Bulb (3D)** → Floating Menu → **Params** button (or click the gear icon in the toolbar).
 
-Modeless dialog. Auto-compiles shortly after the last keystroke. Errors show in yellow below the editor, with the bad token selected. Camera, lighting, iter count, epsilon, bailout, Jacobian h, params, animation, color driver, lighting weights, and view knobs update without recompiling — only changes to source body / algebra / chain steps / param names trigger a fresh compile.
+Modeless dialog. Auto-compiles shortly after the last keystroke. Errors show in yellow below the editor, with the bad token selected (or, in code view, underlined). Camera, lighting, iter count, epsilon, bailout, Jacobian h, params, animation, color driver, lighting weights, and view knobs update without recompiling — only changes to source body / algebra / chain steps / param names trigger a fresh compile.
+
+**Code view.** The **`{ }`** button at the top-right of the source box turns on a
+code editor for the source, the DE body and every chain step at once (#1360):
+line numbers, colouring, bracket matching (**Ctrl+]** jumps to the partner),
+yellow error underlines with the message on hover, completion (**Ctrl+Space**)
+that also offers your **params** and **chain-step output names**, `x y z w`
+after a `.`, parameter hints inside function calls, hover help for built-ins,
+and **Format** (**Shift+Alt+F**) / **( )** to tidy spacing or drop redundant
+brackets without changing the equation. C#-style text (`return new Vec3(…)`,
+`Math.Sqrt(…)`) is coloured too. The source text is identical with code view on
+or off. Details: [Code view](Avalonia-UserGuide.md#code-view-all-three-editors).
 
 ---
 
@@ -304,6 +315,8 @@ Three settings appear (only in this mode):
 
 In Non-escaping mode a **DE body** editor appears. You write **one scalar DSL expression** that returns the **next `dr`**. The engine owns everything else: it computes `de = min(de, 1/dr)` each iteration and multiplies by `DEMultiplier`. You write only the derivative growth.
 
+The DE body box follows the source box's code view (colouring, completion with `dr` / `de`, **Shift+Alt+F** to format). A DE-body error is reported on the status line only; it is not underlined in the box.
+
 In scope inside the DE body:
 
 | Name | Meaning |
@@ -493,7 +506,7 @@ Step 2   name = sq
          source = pre^8 + c
 ```
 
-A parse error names the step (`Step 2 (sq): Unknown function 'sni' at line 1, col 1. Did you mean 'sin'?`), and **Apply fix (Ctrl+Period)** edits that step.
+Editing a step re-renders shortly after you stop typing, like the source box. A parse error names the step (`Step 2 (sq): Unknown function 'sni' at line 1, col 1. Did you mean 'sin'?`), and **Apply fix (Ctrl+Period)** edits that step. In code view the error is underlined in that step's box, and completion offers the chain's output names.
 
 Delete every chain row to revert to the single-editor flow.
 

@@ -569,6 +569,7 @@ Three authoring engines for one-off custom fractals.
 The User Equation modal has **one equation box** and a **CalcGen** toggle (#1089):
 
 - **The equation** — the equation language: `z*z + c`, `sin(z)`, `if norm(z) > 4 then z else z*z + c`. The safe interpreter renders it live about two seconds after the last keystroke. A typo is selected and a fix suggested (**Apply fix**, shortcut **Ctrl+Period**, the full-stop key; Ctrl and + scales the UI instead). C#-style text (`return Complex.Pow(z, 2) + c;`) is still accepted and translated; **Ctrl+Period** converts it.
+- **Paste LaTeX… / Paste MathML…** — convert clipboard math into an equation. With **Tidy brackets** ticked (the default, remembered), redundant brackets are dropped from the import, e.g. `((z^2)) + (c)` becomes `z^2 + c`; a bracket goes only when the equation's meaning is unchanged (#1419).
 - **CalcGen** toggle — on: **Compile & Load**, **Compile + Save** and **Generate via CalcGen** appear, with the compile state (*Not compiled* → *Compiling…* → *Compiled* / *Compile failed*; the compile runs in the background) and a line saying what CalcGen will and won't accelerate. The toggle is saved with the equation and restored when you select it.
 
 The header row (Saved combo / Save / Import / Delete / Promote) applies to the equation. The `?` button opens the in-app Help viewer at the editor section; **CalcGen Help** opens the full CalcGen User Guide.
@@ -601,6 +602,50 @@ Vec3.Pow(z, 8) + c                       // canonical Mandelbulb
 Vec3.SphereFold(Vec3.BoxFold(z, 1.0), 0.5, 1.0) * 2.0 + c   // Mandelbox
 Vec3.Pow(z, 4 + 2*Math.Sin(t)) + c       // breathing bulb
 ```
+
+### Code view (all three editors)
+
+Every equation box (User Equation, Sandbox, and the User Bulb source, DE body and
+chain-step boxes) has a small **`{ }`** button in its top-right corner that
+switches between the plain text box and a **code view** (#1360). The choice is
+remembered per window; all User Bulb boxes switch together. The equation text is
+identical either way: code view never changes what is saved, rendered or sent to
+`--batch`, so turning it off is also "remove formatting".
+
+In code view you get:
+
+- **Line numbers and colouring.** Keywords and types purple, functions blue,
+  built-in names (`z`, `c`, `n`, `t`, …) and `.x/.y/.z` members orange, numbers
+  tan, comments grey italic. The palette avoids red/green pairs; yellow is kept
+  for problems.
+- **Bracket matching.** Brackets are coloured by nesting depth, the pair next to
+  the cursor is boxed, an unmatched bracket is yellow and underlined, and
+  **Ctrl+]** jumps to the partner.
+- **Error underlines.** A parse error gets a yellow wavy underline under the bad
+  token (a blue one for hints such as "C#-style, Ctrl+Period converts"); hover it
+  for the message. The underline follows your edits until the next check, about
+  a second after you stop typing. In User Bulb a chain-step error is underlined in
+  that step's box. (In the plain text box the bad token is selected instead,
+  as before.)
+- **Completion.** Start typing a name, or press **Ctrl+Space**: functions (with
+  their signature and a one-line description), keywords, types, built-in names,
+  names already used in the equation and, in User Bulb, your params and
+  chain-step output names. After `.` in User Bulb you get `x y z w`. Picking a
+  function inserts `name(`.
+- **Signature help.** Inside a function call a hint shows the parameters, with
+  the one you are typing in bold.
+- **Hover help.** Hover a built-in function or name for its description.
+- **Format** (button, or **Shift+Alt+F**). Tidies spacing and indentation in the
+  house style (`z*z + c`, `pow(z, 3)`, one statement per line). It only changes
+  whitespace, keeps your comments and line breaks, and is refused, leaving the
+  text alone, if it would change the equation.
+- **( )** (minimise brackets). Removes brackets that don't change the equation:
+  `((z*z)) + (c)` becomes `z*z + c`, but `(-z)^2` keeps its brackets. Needs an
+  equation that parses.
+
+Format and **( )** are each one **Ctrl+Z** undo step, and say what they did (or
+why they didn't) in a short tooltip. Full key list:
+[Keyboard-Shortcuts.md](Keyboard-Shortcuts.md#code-view-the---button-in-the-equation-box).
 
 All three engines persist to JSON under `%APPDATA%\FracturingFog\`. Saved entries with **Promote to fractal list** ticked appear in the toolbar Type combo as first-class fractal types.
 
