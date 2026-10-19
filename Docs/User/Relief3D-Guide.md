@@ -319,6 +319,11 @@ The panel shows a live **Estimated size** as you tune. Click **"Export mesh
 
 ---
 
+## 8a. QR codes in Relief 3D
+
+A fractal QR code can be built into the relief as raised blocks. See the
+[Capture Guide, Extrude in Relief 3D](Capture-Guide.md#extrude-in-relief-3d) section.
+
 ## 9. Regions, slideshow, and animation
 
 - **Saved per region.** Relief settings travel with a saved region, so a relief

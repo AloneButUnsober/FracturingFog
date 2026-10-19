@@ -632,6 +632,18 @@ namespace FracturingFog.Cli
             if (qr.Shape) parts.Add(BatchFlags.QrShape);
             if (qr.MinVersion > 1)
             { parts.Add(BatchFlags.QrVersion); parts.Add(qr.MinVersion.ToString(CultureInfo.InvariantCulture)); }
+            // #1410 — extruded into the relief raymarch (the relief flags themselves
+            // come from the live relief settings).
+            if (qr.Relief)
+            {
+                parts.Add(BatchFlags.QrRelief);
+                if (qr.ReliefHeight != QrCodeOptions.DefaultReliefHeight)
+                { parts.Add(BatchFlags.QrReliefHeight); parts.Add(Num(qr.ReliefHeight)); }
+                if (qr.ReliefTerrain != QrCodeOptions.DefaultReliefTerrain)
+                { parts.Add(BatchFlags.QrReliefTerrain); parts.Add(Num(qr.ReliefTerrain)); }
+                if (qr.ReliefMinElevationDeg != QrCodeOptions.DefaultReliefMinElevation)
+                { parts.Add(BatchFlags.QrReliefMinElevation); parts.Add(Num(qr.ReliefMinElevationDeg)); }
+            }
             // #1409 — the bevel knobs only mean something for the Bevel style.
             if (qr.Style == QrStyle.Bevel)
             {

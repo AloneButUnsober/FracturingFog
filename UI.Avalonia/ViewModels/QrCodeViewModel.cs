@@ -157,6 +157,37 @@ public sealed class QrCodeViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _bevelSpecular, Math.Clamp(Math.Round(value, 2), 0, 1));
     }
 
+    private bool _relief;
+    /// <summary>#1410 — build the code into the Relief 3D raymarch (used when the
+    /// view is in Relief 3D raymarch mode; otherwise the flat style is exported).</summary>
+    public bool Relief { get => _relief; set => this.RaiseAndSetIfChanged(ref _relief, value); }
+
+    private double _reliefHeight = QrCodeOptions.DefaultReliefHeight;
+    /// <summary>#1410 — block height in modules.</summary>
+    public double ReliefHeight
+    {
+        get => _reliefHeight;
+        set => this.RaiseAndSetIfChanged(ref _reliefHeight,
+            Math.Clamp(Math.Round(value, 2), QrCodeOptions.MinReliefHeight, QrCodeOptions.MaxReliefHeight));
+    }
+
+    private double _reliefTerrain = QrCodeOptions.DefaultReliefTerrain;
+    /// <summary>#1410 — share of the fractal's relief kept under the code.</summary>
+    public double ReliefTerrain
+    {
+        get => _reliefTerrain;
+        set => this.RaiseAndSetIfChanged(ref _reliefTerrain, Math.Clamp(Math.Round(value, 2), 0, 1));
+    }
+
+    private double _reliefMinElevation = QrCodeOptions.DefaultReliefMinElevation;
+    /// <summary>#1410 — lowest camera elevation while the code is extruded.</summary>
+    public double ReliefMinElevation
+    {
+        get => _reliefMinElevation;
+        set => this.RaiseAndSetIfChanged(ref _reliefMinElevation,
+            Math.Clamp(Math.Round(value), QrCodeOptions.MinReliefElevation, 89));
+    }
+
     private double _bevelShadow = QrCodeOptions.DefaultBevelShadow;
     public double BevelShadow
     {
@@ -240,6 +271,10 @@ public sealed class QrCodeViewModel : ViewModelBase
         BevelElevationDeg = _bevelElevation,
         BevelSpecular = _bevelSpecular,
         BevelShadow = _bevelShadow,
+        Relief = _relief,
+        ReliefHeight = _reliefHeight,
+        ReliefTerrain = _reliefTerrain,
+        ReliefMinElevationDeg = _reliefMinElevation,
     };
 
     private string _message = "";

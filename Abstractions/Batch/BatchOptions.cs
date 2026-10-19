@@ -225,6 +225,11 @@ namespace FracturingFog.Batch
         public string? QrBevelLight { get; set; }
         public double? QrBevelSpecular { get; set; }
         public double? QrBevelShadow { get; set; }
+        // #1410 — extrude into the relief raymarch (null = default).
+        public bool QrRelief { get; set; }
+        public double? QrReliefHeight { get; set; }
+        public double? QrReliefTerrain { get; set; }
+        public double? QrReliefMinElevation { get; set; }
 
         /// <summary>The QR options these flags describe, or null without a payload.</summary>
         public QrCodeOptions? BuildQrOptions()
@@ -240,6 +245,10 @@ namespace FracturingFog.Batch
                 BevelElevationDeg = el,
                 BevelSpecular = QrBevelSpecular ?? QrCodeOptions.DefaultBevelSpecular,
                 BevelShadow = QrBevelShadow ?? QrCodeOptions.DefaultBevelShadow,
+                Relief = QrRelief,
+                ReliefHeight = QrReliefHeight ?? QrCodeOptions.DefaultReliefHeight,
+                ReliefTerrain = QrReliefTerrain ?? QrCodeOptions.DefaultReliefTerrain,
+                ReliefMinElevationDeg = QrReliefMinElevation ?? QrCodeOptions.DefaultReliefMinElevation,
             };
         }
 
@@ -913,6 +922,25 @@ namespace FracturingFog.Batch
                     case BatchFlags.QrBevelShadow:
                         if (!NextDouble(args, ref i, a, out double qbsh, out error)) return false;
                         opts.QrBevelShadow = qbsh;
+                        break;
+
+                    case BatchFlags.QrRelief:
+                        opts.QrRelief = true;
+                        break;
+
+                    case BatchFlags.QrReliefHeight:
+                        if (!NextDouble(args, ref i, a, out double qrh, out error)) return false;
+                        opts.QrReliefHeight = qrh;
+                        break;
+
+                    case BatchFlags.QrReliefTerrain:
+                        if (!NextDouble(args, ref i, a, out double qrt, out error)) return false;
+                        opts.QrReliefTerrain = qrt;
+                        break;
+
+                    case BatchFlags.QrReliefMinElevation:
+                        if (!NextDouble(args, ref i, a, out double qre2, out error)) return false;
+                        opts.QrReliefMinElevation = qre2;
                         break;
 
                     case BatchFlags.QrSearch:
@@ -1815,6 +1843,12 @@ namespace FracturingFog.Batch
                 { error = "--qr-bevel-specular must be 0..1."; return false; }
             if (opts.QrBevelShadow is < 0 or > 1)
                 { error = "--qr-bevel-shadow must be 0..1."; return false; }
+            if (opts.QrReliefHeight is < QrCodeOptions.MinReliefHeight or > QrCodeOptions.MaxReliefHeight)
+                { error = $"--qr-relief-height must be {QrCodeOptions.MinReliefHeight}..{QrCodeOptions.MaxReliefHeight}."; return false; }
+            if (opts.QrReliefTerrain is < 0 or > 1)
+                { error = "--qr-relief-terrain must be 0..1."; return false; }
+            if (opts.QrReliefMinElevation is < QrCodeOptions.MinReliefElevation or > 89)
+                { error = $"--qr-relief-min-elevation must be {QrCodeOptions.MinReliefElevation}..89."; return false; }
             if (opts.QrPayload != null)
             {
                 if (opts.QrPayload.Length == 0)

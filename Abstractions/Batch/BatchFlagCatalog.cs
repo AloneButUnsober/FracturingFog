@@ -399,6 +399,7 @@ namespace FracturingFog.Batch
         // #1409 — the bevel knobs need a QR and only act with --qr-style bevel.
         private static readonly string[] QrNeeds = { BatchFlags.QrPayload };
         private static readonly BatchChoiceRequirement BevelStyle = new(BatchFlags.QrStyle, new[] { "bevel" });
+        private static readonly string[] QrReliefNeeds = { BatchFlags.QrRelief };
         private static readonly string[] RaymarchOn = { BatchFlags.ReliefRaymarch, BatchFlags.Relief };
 
         private static BatchFlagSpec Sw(string name, BatchFlagGroup g, BatchModes m, string help)
@@ -648,6 +649,25 @@ namespace FracturingFog.Batch
                     "Darkness of the shadow the blocks cast on the floor.", 0, 1, enforced: true,
                     def: QrCodeOptions.DefaultBevelShadow.ToString(CultureInfo.InvariantCulture))
                     with { Requires = QrNeeds, RequiresChoice = BevelStyle },
+                // #1410 — extrude into the Relief 3D raymarch.
+                Sw(BatchFlags.QrRelief, Qr, BatchModes.Image,
+                    "Build the QR code into the Relief 3D raymarch as raised blocks (camera tilt, cast shadows, AO and "
+                    + "the lights act on it). Needs --relief-raymarch; without it the flat QR is used. Square output only.")
+                    with { Requires = new[] { BatchFlags.QrPayload, BatchFlags.ReliefRaymarch } },
+                Dbl(BatchFlags.QrReliefHeight, Qr, BatchModes.Image,
+                    "Extruded block height in modules.", QrCodeOptions.MinReliefHeight, QrCodeOptions.MaxReliefHeight,
+                    enforced: true, def: QrCodeOptions.DefaultReliefHeight.ToString(CultureInfo.InvariantCulture))
+                    with { Requires = QrReliefNeeds },
+                Dbl(BatchFlags.QrReliefTerrain, Qr, BatchModes.Image,
+                    "Share of the fractal's own relief kept under the code (0 = flat plinth, 1 = full terrain).", 0, 1,
+                    enforced: true, def: QrCodeOptions.DefaultReliefTerrain.ToString(CultureInfo.InvariantCulture))
+                    with { Requires = QrReliefNeeds },
+                Dbl(BatchFlags.QrReliefMinElevation, Qr, BatchModes.Image,
+                    "Lowest camera elevation (degrees) while the code is extruded; a lower --relief-camera-elevation is "
+                    + "raised to it, because a low camera lets blocks hide the modules behind them.",
+                    QrCodeOptions.MinReliefElevation, 89, enforced: true,
+                    def: QrCodeOptions.DefaultReliefMinElevation.ToString(CultureInfo.InvariantCulture))
+                    with { Requires = QrReliefNeeds },
                 Txt(BatchFlags.QrSearch, Qr, BatchModes.Image,
                     "Search around the view (centre + zoom) and the 8 masks for the framing whose own light/dark "
                     + "pattern best matches the code, then render that. Keys: seed, tries (per level), levels, keep, "

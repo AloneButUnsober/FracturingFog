@@ -61,6 +61,9 @@ namespace FracturingFog.Imaging
         public const double MinBevelWidth = 0.05, MaxBevelWidth = 0.45, DefaultBevelWidth = 0.2;
         public const double DefaultBevelSpecular = 0.5, DefaultBevelShadow = 0.4;
         public const double DefaultBevelAzimuthDeg = 135, DefaultBevelElevationDeg = 30;
+        public const double MinReliefHeight = 0.05, MaxReliefHeight = 3.0, DefaultReliefHeight = 0.5;
+        public const double DefaultReliefTerrain = 0.15;
+        public const double MinReliefElevation = 5, DefaultReliefMinElevation = 60;
 
         /// <summary>Text to encode (UTF-8, byte mode). Required, non-empty.</summary>
         public string Payload { get; init; } = "";
@@ -126,6 +129,24 @@ namespace FracturingFog.Imaging
 
         /// <summary>Darkness of the shadow a block casts on the floor, 0..1.</summary>
         public double BevelShadow { get; init; } = DefaultBevelShadow;
+
+        // ── #1410 Extrude in Relief 3D ───────────────────────────────────
+        /// <summary>Build the code into the Relief 3D raymarch as real blocks (needs
+        /// the relief raymarch on; otherwise the flat style is used). Camera tilt,
+        /// cast shadows, AO and the lights then act on the code itself.</summary>
+        public bool Relief { get; init; }
+
+        /// <summary>Block height in modules (world height = this x module size).</summary>
+        public double ReliefHeight { get; init; } = DefaultReliefHeight;
+
+        /// <summary>How much of the fractal's own relief is kept under the code,
+        /// 0 (flat plinth) .. 1 (full terrain). Tall terrain casts shadows across
+        /// modules and can hide them from the camera.</summary>
+        public double ReliefTerrain { get; init; } = DefaultReliefTerrain;
+
+        /// <summary>The camera elevation is raised to at least this (degrees) while
+        /// the code is extruded: a low camera lets a block hide the module behind it.</summary>
+        public double ReliefMinElevationDeg { get; init; } = DefaultReliefMinElevation;
 
         /// <summary>The CLI / UI spelling of a style.</summary>
         public static string StyleName(QrStyle s) => s switch
