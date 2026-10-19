@@ -568,7 +568,7 @@ Three authoring engines for one-off custom fractals.
 
 The User Equation modal has **one equation box** and a **CalcGen** toggle (#1089):
 
-- **The equation** — the equation language: `z*z + c`, `sin(z)`, `if norm(z) > 4 then z else z*z + c`. The safe interpreter renders it live about two seconds after the last keystroke. A typo is selected and a fix suggested (**Apply fix**, shortcut **Ctrl+.**). C#-style text (`return Complex.Pow(z, 2) + c;`) is still accepted and translated; **Ctrl+.** converts it.
+- **The equation** — the equation language: `z*z + c`, `sin(z)`, `if norm(z) > 4 then z else z*z + c`. The safe interpreter renders it live about two seconds after the last keystroke. A typo is selected and a fix suggested (**Apply fix**, shortcut **Ctrl+Period**, the full-stop key; Ctrl and + scales the UI instead). C#-style text (`return Complex.Pow(z, 2) + c;`) is still accepted and translated; **Ctrl+Period** converts it.
 - **CalcGen** toggle — on: **Compile & Load**, **Compile + Save** and **Generate via CalcGen** appear, with the compile state (*Not compiled* → *Compiling…* → *Compiled* / *Compile failed*; the compile runs in the background) and a line saying what CalcGen will and won't accelerate. The toggle is saved with the equation and restored when you select it.
 
 The header row (Saved combo / Save / Import / Delete / Promote) applies to the equation. The `?` button opens the in-app Help viewer at the editor section; **CalcGen Help** opens the full CalcGen User Guide.

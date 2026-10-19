@@ -493,7 +493,7 @@ Step 2   name = sq
          source = pre^8 + c
 ```
 
-A parse error names the step (`Step 2 (sq): Unknown function 'sni' at line 1, col 1. Did you mean 'sin'?`), and **Apply fix (Ctrl+.)** edits that step.
+A parse error names the step (`Step 2 (sq): Unknown function 'sni' at line 1, col 1. Did you mean 'sin'?`), and **Apply fix (Ctrl+Period)** edits that step.
 
 Delete every chain row to revert to the single-editor flow.
 

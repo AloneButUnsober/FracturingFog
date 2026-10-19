@@ -106,7 +106,7 @@ when you want speed or a deep dive, **Compile & Load** through CalcGen.
 > Older versions accepted raw C# that was compiled with full .NET access. That
 > path has been retired for safety. The editor still *accepts* C#-style text
 > (`return Complex.Pow(z, 2) + c;`), translates it for rendering, and offers the
-> converted form as a quick fix (**Ctrl+.**; see
+> converted form as a quick fix (**Ctrl+Period**; see
 > [§12](#12-migrating-c-equations-to-the-dsl)). The DSL is the real language
 > underneath; write new equations in it directly.
 
@@ -119,7 +119,7 @@ Open it with toolbar **Type → User Equation**, then **Params**. The editor has
 
 | Control | What it does |
 |---|---|
-| **Equation box** | The equation (`z*z + c`). The interpreter renders it live as you type (after a short pause). A typo is highlighted with a *Did you mean* fix; C#-style text is accepted and **Ctrl+.** converts it. Errors show in yellow. |
+| **Equation box** | The equation (`z*z + c`). The interpreter renders it live as you type (after a short pause). A typo is highlighted with a *Did you mean* fix; C#-style text is accepted and **Ctrl+Period** converts it. Errors show in yellow. |
 | **CalcGen** toggle | Off: the interpreter only. On: shows the CalcGen actions below, their compile state (*Not compiled* → *Compiling…* → *Compiled* / *Compile failed*), and what CalcGen will and won't accelerate for this equation (perturbation, series approximation, DE; seed and *Bail if* are interpreter-only). Saved with the equation. The interpreter keeps rendering every edit either way. |
 | **Compile & Load** | CalcGen-compiles the equation in the background and swaps it onto the live render when done (unlocks SIMD / GPU / deep zoom / normals). An edit afterwards returns to the interpreter. |
 | **Compile + Save** | The same, and keeps the generated calculator so it reloads on the next launch. |
@@ -677,7 +677,7 @@ and the normals come from the numeric path — expected for this map.
 ## 12. Migrating C# equations to the DSL
 
 The editor still accepts C#-style text, translates it automatically, and offers
-the converted form as a quick fix (**Ctrl+.**); the table below is the exact mapping so you can convert by hand or
+the converted form as a quick fix (**Ctrl+Period**); the table below is the exact mapping so you can convert by hand or
 understand what the translator did. **Write new equations in DSL directly.**
 
 | C# form | DSL form |
@@ -922,7 +922,7 @@ sin(1/z) + c                  // simpler pole map             (seed: c, Escape r
 ### Authoring loop
 
 1. **Type → User Equation**, then **Params**.
-2. Type the equation (DSL, or C#-style that **Ctrl+.** converts) — it renders live.
+2. Type the equation (DSL, or C#-style that **Ctrl+Period** converts) — it renders live.
 3. When you like it, turn on **CalcGen**: the report line says whether it
    compiles and which paths it supports. Then **Compile & Load** for the
    fast/deep engine.
