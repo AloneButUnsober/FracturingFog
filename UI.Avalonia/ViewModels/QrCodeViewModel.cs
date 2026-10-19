@@ -71,8 +71,10 @@ public sealed class QrCodeViewModel : ViewModelBase
 
     public IReadOnlyList<string> StyleChoices { get; } = new[]
     {
-        "Steer", "Dots", "Halftone",
+        "Steer", "Dots", "Halftone", "Bevel (3D)",
     };
+
+    public const int BevelStyleIndex = 3;
 
     private string _payload = "";
     /// <summary>The text the code carries (a URL, usually).</summary>
@@ -90,8 +92,77 @@ public sealed class QrCodeViewModel : ViewModelBase
     public int ErrorCorrectionIndex { get => _eccIndex; set { this.RaiseAndSetIfChanged(ref _eccIndex, Math.Clamp(value, 0, 3)); Mask = -1; Refresh(); } }
 
     private int _styleIndex;
-    /// <summary>Index into <see cref="StyleChoices"/>: 0 steer, 1 dots, 2 halftone.</summary>
-    public int StyleIndex { get => _styleIndex; set { this.RaiseAndSetIfChanged(ref _styleIndex, Math.Clamp(value, 0, 2)); Refresh(); } }
+    /// <summary>Index into <see cref="StyleChoices"/>: 0 steer, 1 dots, 2 halftone, 3 bevel.</summary>
+    public int StyleIndex
+    {
+        get => _styleIndex;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _styleIndex, Math.Clamp(value, 0, BevelStyleIndex));
+            this.RaisePropertyChanged(nameof(IsBevel));
+            Refresh();
+        }
+    }
+
+    /// <summary>#1409 — the bevel controls show only for the Bevel style.</summary>
+    public bool IsBevel => _styleIndex == BevelStyleIndex;
+
+    private double _bevelHeight = QrCodeOptions.DefaultBevelHeight;
+    /// <summary>#1409 — block height as a fraction of the module.</summary>
+    public double BevelHeight
+    {
+        get => _bevelHeight;
+        set => this.RaiseAndSetIfChanged(ref _bevelHeight,
+            Math.Clamp(Math.Round(value, 2), QrCodeOptions.MinBevelHeight, QrCodeOptions.MaxBevelHeight));
+    }
+
+    private double _bevelWidth = QrCodeOptions.DefaultBevelWidth;
+    /// <summary>#1409 — sloped edge width as a fraction of the module.</summary>
+    public double BevelWidth
+    {
+        get => _bevelWidth;
+        set => this.RaiseAndSetIfChanged(ref _bevelWidth,
+            Math.Clamp(Math.Round(value, 2), QrCodeOptions.MinBevelWidth, QrCodeOptions.MaxBevelWidth));
+    }
+
+    private bool _bevelLightFromTheme = true;
+    /// <summary>#1409 — light with the theme's 3D lights (else the angles below).</summary>
+    public bool BevelLightFromTheme
+    {
+        get => _bevelLightFromTheme;
+        set { this.RaiseAndSetIfChanged(ref _bevelLightFromTheme, value); this.RaisePropertyChanged(nameof(BevelLightExplicit)); }
+    }
+
+    public bool BevelLightExplicit => !_bevelLightFromTheme;
+
+    private double _bevelAzimuth = QrCodeOptions.DefaultBevelAzimuthDeg;
+    /// <summary>#1409 — degrees counter-clockwise from east (135 = upper left).</summary>
+    public double BevelAzimuth
+    {
+        get => _bevelAzimuth;
+        set => this.RaiseAndSetIfChanged(ref _bevelAzimuth, ((Math.Round(value) % 360) + 360) % 360);
+    }
+
+    private double _bevelElevation = QrCodeOptions.DefaultBevelElevationDeg;
+    public double BevelElevation
+    {
+        get => _bevelElevation;
+        set => this.RaiseAndSetIfChanged(ref _bevelElevation, Math.Clamp(Math.Round(value), 1, 89));
+    }
+
+    private double _bevelSpecular = QrCodeOptions.DefaultBevelSpecular;
+    public double BevelSpecular
+    {
+        get => _bevelSpecular;
+        set => this.RaiseAndSetIfChanged(ref _bevelSpecular, Math.Clamp(Math.Round(value, 2), 0, 1));
+    }
+
+    private double _bevelShadow = QrCodeOptions.DefaultBevelShadow;
+    public double BevelShadow
+    {
+        get => _bevelShadow;
+        set => this.RaiseAndSetIfChanged(ref _bevelShadow, Math.Clamp(Math.Round(value, 2), 0, 1));
+    }
 
     private int _modulePixels;
     /// <summary>Pixels per module; 0 = auto (largest that fits).</summary>
@@ -145,7 +216,10 @@ public sealed class QrCodeViewModel : ViewModelBase
         set { this.RaiseAndSetIfChanged(ref _minVersion, Math.Clamp(value, 1, 40)); Mask = -1; Refresh(); }
     }
 
-    public static QrStyle StyleAt(int index) => index switch { 1 => QrStyle.Dots, 2 => QrStyle.Halftone, _ => QrStyle.Steer };
+    public static QrStyle StyleAt(int index) => index switch
+    {
+        1 => QrStyle.Dots, 2 => QrStyle.Halftone, BevelStyleIndex => QrStyle.Bevel, _ => QrStyle.Steer,
+    };
 
     /// <summary>The options the panel describes; null with no payload.</summary>
     public QrCodeOptions? Options => _payload.Length == 0 ? null : new QrCodeOptions
@@ -159,6 +233,13 @@ public sealed class QrCodeViewModel : ViewModelBase
         Mask = _mask,
         Shape = _shape,
         MinVersion = _minVersion,
+        BevelHeight = _bevelHeight,
+        BevelWidth = _bevelWidth,
+        BevelLightFromTheme = _bevelLightFromTheme,
+        BevelAzimuthDeg = _bevelAzimuth,
+        BevelElevationDeg = _bevelElevation,
+        BevelSpecular = _bevelSpecular,
+        BevelShadow = _bevelShadow,
     };
 
     private string _message = "";

@@ -786,9 +786,14 @@ namespace FracturingFog.Imaging
         // #1305 — the QR goes onto the final (rotated) display buffer so the
         // module grid is square in the saved file; the watermark is painted
         // after it, and the verify reads the saved file so both are accounted for.
+        // #1409 — the Bevel style lights the blocks with the theme's 3D lights,
+        // turned with the image when it is saved rotated.
         private static FracturingFog.Imaging.Qr.QrApplyResult? ApplyQr(
             PosterRequest req, uint[] buffer, int w, int h)
-            => req.Qr == null ? null : FracturingFog.Imaging.Qr.QrExport.Apply(buffer, w, h, req.Qr);
+            => req.Qr == null ? null : FracturingFog.Imaging.Qr.QrExport.Apply(buffer, w, h, req.Qr,
+                req.Qr.Style == QrStyle.Bevel
+                    ? FracturingFog.Imaging.Qr.QrBevelLighting.Resolve(req.Qr, req.ColorMap, req.Rotate)
+                    : null);
 
         private static FracturingFog.Imaging.Qr.QrExportReport? VerifyQr(PosterRequest req,
             FracturingFog.Imaging.Qr.QrApplyResult? q, uint[] buffer, int w, int h)

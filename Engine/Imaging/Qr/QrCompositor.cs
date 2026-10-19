@@ -21,6 +21,9 @@
 //              halftone stays visible yet a blurred or shrunken module still
 //              averages to the right side - the pure two-tone version failed
 //              the blur / small passes on busy images.
+//   Bevel    - #1409: raised blocks lit by the theme's lights (QrBevel); the
+//              band follows the distance to the other shade, so centres
+//              stay in the core band and faces stay continuous.
 //
 // Function patterns (finders, timing, alignment, format/version) are always
 // drawn at full strength; the quiet zone is lifted into the light band. The
@@ -75,11 +78,14 @@ namespace FracturingFog.Imaging.Qr
 
         /// <summary>Composite <paramref name="code"/> into <paramref name="buf"/>
         /// (straight-alpha BGRA uint, in place) and return the layout used.</summary>
-        public static QrLayout Composite(uint[] buf, int w, int h, QrCode code, QrCodeOptions opt)
+        public static QrLayout Composite(uint[] buf, int w, int h, QrCode code, QrCodeOptions opt,
+            QrBevelLighting? lighting = null)
         {
             if (buf == null) throw new ArgumentNullException(nameof(buf));
             if (buf.Length < w * h) throw new ArgumentException("Buffer smaller than w*h.", nameof(buf));
             var L = Layout(w, h, code.Size, opt.ModulePixels);
+            // #1409 — Bevel steers, lights and bounds the symbol + quiet zone itself.
+            if (opt.Style == QrStyle.Bevel) { QrBevel.Composite(buf, w, h, L, code, opt, lighting); return L; }
             int m = L.ModulePixels;
             bool invert = opt.Invert;
 
@@ -185,9 +191,31 @@ namespace FracturingFog.Imaging.Qr
             r = r * a + 255 * (1 - a); g = g * a + 255 * (1 - a); b = b * a + 255 * (1 - a);
 
             double y = 0.299 * r + 0.587 * g + 0.114 * b;
-            double cb = b - y, cr = r - y;
-            double ty = min + y * (max - min) / 255.0;
+            return WithLuma(r, g, b, y, min + y * (max - min) / 255.0, min, max);
+        }
 
+        /// <summary>#1409 — move luma only as far as needed to land in
+        /// [<paramref name="min"/>, <paramref name="max"/>]; a pixel already
+        /// inside is returned unchanged (made opaque).</summary>
+        public static uint ClampLuma(uint p, int min, int max)
+        {
+            int ir = (int)((p >> 16) & 0xFF), ig = (int)((p >> 8) & 0xFF), ib = (int)(p & 0xFF);
+            if (p >> 24 == 0xFF)
+            {
+                int ly = (299 * ir + 587 * ig + 114 * ib + 500) / 1000;
+                if (ly >= min && ly <= max) return p;
+            }
+            double r = ir, g = ig, b = ib, a = (p >> 24) / 255.0;
+            r = r * a + 255 * (1 - a); g = g * a + 255 * (1 - a); b = b * a + 255 * (1 - a);
+            double y = 0.299 * r + 0.587 * g + 0.114 * b;
+            return WithLuma(r, g, b, y, Math.Clamp(y, min, max), min, max);
+        }
+
+        // Set luma to ty keeping hue / chroma, backing chroma off when the gamut
+        // clamp would push luma out of [min, max].
+        private static uint WithLuma(double r, double g, double b, double y, double ty, int min, int max)
+        {
+            double cb = b - y, cr = r - y;
             for (double k = 1.0; ; k *= 0.5)
             {
                 if (k < 1.0 / 64) k = 0;

@@ -84,6 +84,20 @@ namespace FracturingFog.Models
     }
 
     /// <summary>
+    /// #1409 — a colour map that carries 3D lights (the Phong / PBR theme bases),
+    /// so a post pass such as the QR Bevel style can light with the theme's own
+    /// key / fill / rim. Directions are complex-plane convention (y up).
+    /// </summary>
+    public interface IThemeLights
+    {
+        LightSource ExportKeyLight { get; }
+        LightSource ExportFillLight { get; }
+        LightSource ExportRimLight { get; }
+        bool ExportUseRimLight { get; }
+        float ExportAmbient { get; }
+    }
+
+    /// <summary>
     /// Phong illumination helper.  Used by all 3D colour map implementations.
     /// </summary>
     public static class PhongHelper

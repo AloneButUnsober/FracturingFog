@@ -558,7 +558,7 @@ The Client dialog can also produce posters — pick a saved server connection, M
 **Control Center → Capture → QR Code** exports the view as a square image that scans as a
 QR code (#1305). Only lightness changes, so the fractal's colours stay.
 
-- **Styles:** Steer (whole modules recoloured), Dots (module centres only), Halftone (3×3 sub-modules).
+- **Styles:** Steer (whole modules recoloured), Dots (module centres only), Halftone (3×3 sub-modules), Bevel (raised 3D blocks lit by the 3D theme's lights, with cast shadows; #1409).
 - **Every export is checked:** the saved file is decoded by an independent reader at full size, small, blurred and as JPEG.
 - **Find View** searches nearby framings and mask patterns for the one the code changes least.
 - **Shape to the image** (QArt) uses the code's free data bits so its own pattern follows the fractal (51% → 84% with error fix L, version 8).

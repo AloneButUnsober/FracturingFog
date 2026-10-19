@@ -193,7 +193,7 @@ The default file name ends in `_qrc`, the way posters end in `_poster` and wallp
 | Control | What it does | Default |
 |---|---|---|
 | Text | The payload (UTF-8). Up to 2953 bytes, but a short URL looks far better. | — |
-| Style | **Steer**: every module is recoloured into a dark or light band (hue kept). **Dots**: only a square at each module's centre is forced; the fractal shows around it. **Halftone**: each module split 3×3; the centre cell carries the code, the outer cells are the fractal's own halftone. | Steer |
+| Style | **Steer**: every module is recoloured into a dark or light band (hue kept). **Dots**: only a square at each module's centre is forced; the fractal shows around it. **Halftone**: each module split 3×3; the centre cell carries the code, the outer cells are the fractal's own halftone. **Bevel (3D)**: dark modules become raised blocks lit by the 3D theme ([below](#bevel-3d)). | Steer |
 | Error fix | Reed-Solomon level, the share of the code that can be damaged and still scan: L 7%, M 15%, Q 25%, H 30%. Higher tolerates more but makes the code larger. | H |
 | Size | Side of the square image in pixels. | 1200 |
 | Module px | Pixels per module. 0 = the largest that fits with the 4-module quiet zone. | 0 |
@@ -216,6 +216,31 @@ It counts as scanning only when all four return the exact text. The check reads 
 on disk, so the watermark and the encoder are included. The mask pattern is chosen the
 same way: patterns are tried until one composite passes every check, because a reader can
 mistake a fractal shape for one of the corner squares.
+
+### Bevel (3D)
+
+The **Bevel (3D)** style (#1409) turns the dark modules into raised blocks on a light
+floor. Neighbouring dark modules merge into one block, so the corner squares read as
+solid rings. The block edges are sloped and lit, and each block casts a soft shadow
+onto the floor.
+
+The light comes from the active **3D theme** (its key, fill and rim lights, Phong or
+PBR), so the code is lit the same way as the fractal. A theme without 3D lights gets
+one light from the upper left. Untick **Light from the 3D theme** to set the direction
+yourself.
+
+| Control | What it does | Default |
+|---|---|---|
+| Height | Block height as a fraction of the module. Taller blocks cast longer shadows and their edges shade harder. | 0.35 |
+| Bevel | Width of the sloped edge as a fraction of the module. | 0.20 |
+| Shine | Specular highlight on the lit edges. | 0.50 |
+| Shadow | How dark the cast shadow is. | 0.40 |
+| Azimuth / Elevation | Light direction when not taken from the theme: degrees counter-clockwise from the right (90 top, 135 upper left), and height above the image (1–89). | 135 / 30 |
+
+The middle of every module stays in its dark or light band whatever the lighting.
+Shading and shadows fade out toward the middle, and a module that a long shadow
+covers is lifted back as a whole, so the code scans like **Steer**. The saved file is
+still decoded afterwards.
 
 ### Find View
 
@@ -667,6 +692,15 @@ See [§2a](#2a-qr-code-a-fractal-that-scans) for what each setting does.
 | `--qr-shape` | switch: shape the code toward the image (QArt) | off |
 | `--qr-mask` | 0–7, preferred mask (tried first) | auto |
 | `--qr-search` | `SPEC`: find a better-fitting framing | off |
+| `--qr-bevel-height` | 0.05–2, block height (× module) | 0.35 |
+| `--qr-bevel-width` | 0.05–0.45, sloped edge (× module) | 0.2 |
+| `--qr-bevel-light` | `theme` or `AZ,EL` (degrees) | `theme` |
+| `--qr-bevel-specular` | 0–1 | 0.5 |
+| `--qr-bevel-shadow` | 0–1 | 0.4 |
+
+The `--qr-bevel-*` flags act only with `--qr-style bevel`. With a light from the
+theme, the console line `qr bevel:` says whether the theme's lights or the fallback
+light were used.
 
 ```
 FracturingFog.exe --batch --region ""Seahorse Valley"" --theme Fire ^

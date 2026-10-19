@@ -41,6 +41,11 @@ namespace FracturingFog.Imaging
         /// are the fractal's own two-tone halftone within the module's half of the
         /// lightness range.</summary>
         Halftone = 2,
+        /// <summary>#1409 — 3D look: dark modules are raised blocks on a light
+        /// floor, with bevelled edges and cast shadows lit by the active 3D
+        /// theme's key / fill lights (or an explicit light). Module centres are
+        /// flat and stay in their luma band, so the code reads like Steer.</summary>
+        Bevel = 3,
     }
 
     /// <summary>Fractal QR export options. Attached to a poster / batch render;
@@ -52,6 +57,10 @@ namespace FracturingFog.Imaging
         public const double MaxDotFraction = 0.6;
         public const double DefaultDotFraction = 0.4;
         public const int MaxModulePixels = 256;
+        public const double MinBevelHeight = 0.05, MaxBevelHeight = 2.0, DefaultBevelHeight = 0.35;
+        public const double MinBevelWidth = 0.05, MaxBevelWidth = 0.45, DefaultBevelWidth = 0.2;
+        public const double DefaultBevelSpecular = 0.5, DefaultBevelShadow = 0.4;
+        public const double DefaultBevelAzimuthDeg = 135, DefaultBevelElevationDeg = 30;
 
         /// <summary>Text to encode (UTF-8, byte mode). Required, non-empty.</summary>
         public string Payload { get; init; } = "";
@@ -92,11 +101,38 @@ namespace FracturingFog.Imaging
         /// needs it buys free bits for <see cref="Shape"/> and smaller modules.</summary>
         public int MinVersion { get; init; } = 1;
 
+        // ── #1409 Bevel style ────────────────────────────────────────────
+        /// <summary>Block height as a fraction of the module side. Taller blocks
+        /// cast longer shadows and steeper bevels shade harder.</summary>
+        public double BevelHeight { get; init; } = DefaultBevelHeight;
+
+        /// <summary>Width of the sloped edge as a fraction of the module side.</summary>
+        public double BevelWidth { get; init; } = DefaultBevelWidth;
+
+        /// <summary>Light the blocks with the active theme's 3D lights (Phong / PBR
+        /// key + fill). When false, or when the theme has no 3D lights, a single
+        /// light at <see cref="BevelAzimuthDeg"/> / <see cref="BevelElevationDeg"/> is used.</summary>
+        public bool BevelLightFromTheme { get; init; } = true;
+
+        /// <summary>Light direction in the saved image: degrees counter-clockwise
+        /// from +x (east), so 135 = from the upper left.</summary>
+        public double BevelAzimuthDeg { get; init; } = DefaultBevelAzimuthDeg;
+
+        /// <summary>Light elevation above the image plane, 1..89 degrees.</summary>
+        public double BevelElevationDeg { get; init; } = DefaultBevelElevationDeg;
+
+        /// <summary>Specular highlight strength on the bevels, 0..1.</summary>
+        public double BevelSpecular { get; init; } = DefaultBevelSpecular;
+
+        /// <summary>Darkness of the shadow a block casts on the floor, 0..1.</summary>
+        public double BevelShadow { get; init; } = DefaultBevelShadow;
+
         /// <summary>The CLI / UI spelling of a style.</summary>
         public static string StyleName(QrStyle s) => s switch
         {
             QrStyle.Dots     => "dots",
             QrStyle.Halftone => "halftone",
+            QrStyle.Bevel    => "bevel",
             _                => "steer",
         };
 
@@ -107,8 +143,33 @@ namespace FracturingFog.Imaging
                 case "dots":     style = QrStyle.Dots;     return true;
                 case "steer":    style = QrStyle.Steer;    return true;
                 case "halftone": style = QrStyle.Halftone; return true;
+                case "bevel":    style = QrStyle.Bevel;    return true;
                 default:         style = QrStyle.Steer;    return false;
             }
+        }
+
+        /// <summary>The CLI spelling of the bevel light: <c>theme</c> or <c>AZ,EL</c>.</summary>
+        public string BevelLightSpec => BevelLightFromTheme
+            ? "theme"
+            : FormattableString.Invariant($"{BevelAzimuthDeg:0.###},{BevelElevationDeg:0.###}");
+
+        /// <summary>Parse <c>theme</c> or <c>AZ,EL</c> (degrees; elevation 1..89).</summary>
+        public static bool TryParseBevelLight(string? s, out bool fromTheme, out double azimuthDeg, out double elevationDeg)
+        {
+            fromTheme = true; azimuthDeg = DefaultBevelAzimuthDeg; elevationDeg = DefaultBevelElevationDeg;
+            var t = (s ?? "").Trim();
+            if (t.Equals("theme", StringComparison.OrdinalIgnoreCase)) return true;
+            var parts = t.Split(',');
+            if (parts.Length != 2) return false;
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            if (!double.TryParse(parts[0].Trim(), System.Globalization.NumberStyles.Float, inv, out var az)
+                || !double.TryParse(parts[1].Trim(), System.Globalization.NumberStyles.Float, inv, out var el)
+                || !double.IsFinite(az) || el < 1 || el > 89)
+                return false;
+            fromTheme = false;
+            azimuthDeg = ((az % 360) + 360) % 360;
+            elevationDeg = el;
+            return true;
         }
 
         public static bool TryParseErrorCorrection(string? s, out QrErrorCorrection ecc)

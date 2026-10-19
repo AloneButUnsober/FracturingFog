@@ -218,11 +218,34 @@ namespace FracturingFog.Batch
         public bool QrShape { get; set; }
         /// <summary>#1402 — smallest QR version (1..40; null = 1).</summary>
         public int? QrVersion { get; set; }
+        // #1409 — Bevel style knobs (null = default).
+        public double? QrBevelHeight { get; set; }
+        public double? QrBevelWidth { get; set; }
+        /// <summary>The <c>--qr-bevel-light</c> spec (<c>theme</c> or <c>AZ,EL</c>), null = theme.</summary>
+        public string? QrBevelLight { get; set; }
+        public double? QrBevelSpecular { get; set; }
+        public double? QrBevelShadow { get; set; }
 
         /// <summary>The QR options these flags describe, or null without a payload.</summary>
-        public QrCodeOptions? BuildQrOptions() => QrPayload == null ? null : new QrCodeOptions
+        public QrCodeOptions? BuildQrOptions()
         {
-            Payload = QrPayload,
+            if (QrPayload is not { } payload) return null;
+            QrCodeOptions.TryParseBevelLight(QrBevelLight ?? "theme", out bool fromTheme, out double az, out double el);
+            return BuildQrCore(payload) with
+            {
+                BevelHeight = QrBevelHeight ?? QrCodeOptions.DefaultBevelHeight,
+                BevelWidth = QrBevelWidth ?? QrCodeOptions.DefaultBevelWidth,
+                BevelLightFromTheme = fromTheme,
+                BevelAzimuthDeg = az,
+                BevelElevationDeg = el,
+                BevelSpecular = QrBevelSpecular ?? QrCodeOptions.DefaultBevelSpecular,
+                BevelShadow = QrBevelShadow ?? QrCodeOptions.DefaultBevelShadow,
+            };
+        }
+
+        private QrCodeOptions BuildQrCore(string payload) => new QrCodeOptions
+        {
+            Payload = payload,
             ErrorCorrection = QrEcc ?? QrErrorCorrection.H,
             Style = QrStyle ?? FracturingFog.Imaging.QrStyle.Steer,
             ModulePixels = QrModulePx ?? 0,
@@ -860,6 +883,36 @@ namespace FracturingFog.Batch
                     case BatchFlags.QrVersion:
                         if (!NextInt(args, ref i, a, out int qver, out error)) return false;
                         opts.QrVersion = qver;
+                        break;
+
+                    case BatchFlags.QrBevelHeight:
+                        if (!NextDouble(args, ref i, a, out double qbh, out error)) return false;
+                        opts.QrBevelHeight = qbh;
+                        break;
+
+                    case BatchFlags.QrBevelWidth:
+                        if (!NextDouble(args, ref i, a, out double qbw, out error)) return false;
+                        opts.QrBevelWidth = qbw;
+                        break;
+
+                    case BatchFlags.QrBevelLight:
+                        if (!Next(args, ref i, a, out string qbl, out error)) return false;
+                        if (!QrCodeOptions.TryParseBevelLight(qbl, out _, out _, out _))
+                        {
+                            error = $"Bad --qr-bevel-light '{qbl}'. Use theme or AZ,EL (degrees, elevation 1..89).";
+                            return false;
+                        }
+                        opts.QrBevelLight = qbl.Trim();
+                        break;
+
+                    case BatchFlags.QrBevelSpecular:
+                        if (!NextDouble(args, ref i, a, out double qbs, out error)) return false;
+                        opts.QrBevelSpecular = qbs;
+                        break;
+
+                    case BatchFlags.QrBevelShadow:
+                        if (!NextDouble(args, ref i, a, out double qbsh, out error)) return false;
+                        opts.QrBevelShadow = qbsh;
                         break;
 
                     case BatchFlags.QrSearch:
@@ -1754,6 +1807,14 @@ namespace FracturingFog.Batch
                 { error = "--qr-search cannot be combined with --explore (both choose the view)."; return false; }
             if (opts.QrDot is < QrCodeOptions.MinDotFraction or > QrCodeOptions.MaxDotFraction)
                 { error = $"--qr-dot must be {QrCodeOptions.MinDotFraction}..{QrCodeOptions.MaxDotFraction}."; return false; }
+            if (opts.QrBevelHeight is < QrCodeOptions.MinBevelHeight or > QrCodeOptions.MaxBevelHeight)
+                { error = $"--qr-bevel-height must be {QrCodeOptions.MinBevelHeight}..{QrCodeOptions.MaxBevelHeight}."; return false; }
+            if (opts.QrBevelWidth is < QrCodeOptions.MinBevelWidth or > QrCodeOptions.MaxBevelWidth)
+                { error = $"--qr-bevel-width must be {QrCodeOptions.MinBevelWidth}..{QrCodeOptions.MaxBevelWidth}."; return false; }
+            if (opts.QrBevelSpecular is < 0 or > 1)
+                { error = "--qr-bevel-specular must be 0..1."; return false; }
+            if (opts.QrBevelShadow is < 0 or > 1)
+                { error = "--qr-bevel-shadow must be 0..1."; return false; }
             if (opts.QrPayload != null)
             {
                 if (opts.QrPayload.Length == 0)

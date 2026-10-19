@@ -59,7 +59,7 @@
                     <ComboBox Grid.Row="0" Grid.Column="1" HorizontalAlignment="Stretch"
                               ItemsSource="{Binding QrCode.StyleChoices}"
                               SelectedIndex="{Binding QrCode.StyleIndex, Mode=TwoWay}"
-                              ToolTip.Tip="Steer: every module recoloured into a dark or light band, hue kept. Dots: only a square at each module's centre is forced, the fractal shows around it. Halftone: each module split 3x3, the centre cell carries the code and the outer cells are the fractal's own halftone." />
+                              ToolTip.Tip="Steer: every module recoloured into a dark or light band, hue kept. Dots: only a square at each module's centre is forced, the fractal shows around it. Halftone: each module split 3x3, the centre cell carries the code and the outer cells are the fractal's own halftone. Bevel (3D): dark modules become raised blocks with sloped edges and cast shadows, lit by the theme's 3D lights." />
                     <TextBlock Grid.Row="0" Grid.Column="2" Text="Error fix" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
                     <ComboBox Grid.Row="0" Grid.Column="3" HorizontalAlignment="Stretch"
                               ItemsSource="{Binding QrCode.ErrorCorrectionChoices}"
@@ -83,6 +83,35 @@
                     <CheckBox Grid.Row="3" Grid.Column="2" Grid.ColumnSpan="2" Content="Shape to the image"
                               IsChecked="{Binding QrCode.Shape, Mode=TwoWay}"
                               ToolTip.Tip="QArt: choose the data bits a reader never reads so the code's own pattern follows the fractal's light and dark areas, then composite as usual. Lower error fix and a higher version shape more of the code." />
+                </Grid>
+                <!-- #1409 Bevel style controls (shown only for Bevel). -->
+                <Grid ColumnDefinitions="Auto,*,Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="4" ColumnSpacing="6" Width="420" HorizontalAlignment="Left"
+                      IsVisible="{Binding QrCode.IsBevel}">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Height" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
+                    <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding QrCode.BevelHeight}" Minimum="0.05" Maximum="2" Increment="0.05"
+                                   FormatString="0.00" ToolTip.Tip="Block height as a fraction of the module. Taller blocks cast longer shadows and their edges shade harder." />
+                    <TextBlock Grid.Row="0" Grid.Column="2" Text="Bevel" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
+                    <NumericUpDown Grid.Row="0" Grid.Column="3" Value="{Binding QrCode.BevelWidth}" Minimum="0.05" Maximum="0.45" Increment="0.05"
+                                   FormatString="0.00" ToolTip.Tip="Width of the sloped edge as a fraction of the module." />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Shine" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
+                    <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding QrCode.BevelSpecular}" Minimum="0" Maximum="1" Increment="0.1"
+                                   FormatString="0.00" ToolTip.Tip="Specular highlight on the lit edges." />
+                    <TextBlock Grid.Row="1" Grid.Column="2" Text="Shadow" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
+                    <NumericUpDown Grid.Row="1" Grid.Column="3" Value="{Binding QrCode.BevelShadow}" Minimum="0" Maximum="1" Increment="0.1"
+                                   FormatString="0.00" ToolTip.Tip="How dark the shadow the blocks cast on the floor is." />
+                    <CheckBox Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4" Content="Light from the 3D theme"
+                              IsChecked="{Binding QrCode.BevelLightFromTheme, Mode=TwoWay}"
+                              ToolTip.Tip="Use the active 3D theme's key, fill and rim lights. A theme without 3D lights gets a light from the upper left. Untick to set the direction yourself." />
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Azimuth" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center"
+                               IsVisible="{Binding QrCode.BevelLightExplicit}" />
+                    <NumericUpDown Grid.Row="3" Grid.Column="1" Value="{Binding QrCode.BevelAzimuth}" Minimum="0" Maximum="359" Increment="15"
+                                   FormatString="0" IsVisible="{Binding QrCode.BevelLightExplicit}"
+                                   ToolTip.Tip="Light direction in degrees, counter-clockwise from the right: 0 right, 90 top, 135 upper left, 180 left." />
+                    <TextBlock Grid.Row="3" Grid.Column="2" Text="Elevation" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center"
+                               IsVisible="{Binding QrCode.BevelLightExplicit}" />
+                    <NumericUpDown Grid.Row="3" Grid.Column="3" Value="{Binding QrCode.BevelElevation}" Minimum="1" Maximum="89" Increment="5"
+                                   FormatString="0" IsVisible="{Binding QrCode.BevelLightExplicit}"
+                                   ToolTip.Tip="Light height above the image in degrees. Low light casts long shadows." />
                 </Grid>
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button Classes="action neutral" Content="Find View"
