@@ -122,6 +122,12 @@ namespace FracturingFog.Batch
         public const string QrBevelLight    = "--qr-bevel-light";
         public const string QrBevelSpecular = "--qr-bevel-specular";
         public const string QrBevelShadow   = "--qr-bevel-shadow";
+        // #1410 — extrude the code into the Relief 3D raymarch (needs --relief-raymarch,
+        // as the Control Center export needs Relief 3D on).
+        public const string QrRelief             = "--qr-relief";
+        public const string QrReliefHeight       = "--qr-relief-height";
+        public const string QrReliefTerrain      = "--qr-relief-terrain";
+        public const string QrReliefMinElevation = "--qr-relief-min-elevation";
 
         // EXR read-back / regrade (roadmap S2, #396). Value = input .exr path;
         // selects Regrade mode — read it, apply --view-transform/--exposure, write

@@ -2,7 +2,7 @@
 
 Epic #1305. Slices: S1 #1396 encoder + verifier, S2 #1397 compositor, S3 #1398 batch parity,
 S4 #1399 Control Center, S5 #1400 halftone, S6 #1401 view search, S7 #1402 QArt shaping.
-3D-look follow-up: epic #1408; phase A #1409 Bevel style (done), B #1410 relief extrusion, C #1411 printable mesh.
+3D-look follow-up: epic #1408; phase A #1409 Bevel style (done), B #1410 relief extrusion (done), C #1411 printable mesh.
 User documentation: [Capture Guide §2a](../User/Capture-Guide.md#2a-qr-code-a-fractal-that-scans).
 
 A render is exported as a square image that is also a valid QR code. Everything lives in
@@ -100,12 +100,56 @@ On the synthetic busy test image, plain Steer itself fails the small pass at som
 square sizes (640, 800). Bevel tracks Steer there, so the robustness tests use the
 #1305 size (900 × 640) and real renders.
 
+## Extrude in Relief 3D (#1410)
+
+`QrRelief.cs`. `PosterRenderer.RenderToFile` attaches a `QrReliefState` to the request when
+`Qr.Relief` is set, the output is unrotated and the relief raymarch is on. The steps:
+
+1. **Prepare** (in `ApplyReliefIfEnabled`, before the trace). The code and mask are chosen
+   the flat way, by a decode-verified composite (`QrExport.Apply`). That composite becomes
+   the **albedo**. Steer and Bevel use the Bevel bands with no lights
+   (`QrBevelLighting.None`), so no core square shows on a lit face. The camera elevation is
+   raised to `ReliefMinElevationDeg`, on a clone of the parameters.
+2. **Inject** (`HeightfieldRaymarch2D.Render(..., heightInjection:)`). The hook edits the
+   prepared field **after** the prepass, because its despike filters and tone curve would
+   round the blocks off. It works on a copy, since the prepass is a shared cache. Under the
+   code and quiet zone, the terrain is compressed toward its median (`ReliefTerrain`) and
+   eases back over two modules outside. Dark modules rise by `ReliefHeight × module size`
+   (world units, ÷ sy) with the Bevel smoothstep ramp. The peak, slope bound and skip mip
+   are re-derived. `sy` and the camera aim (normRef) stay the fractal's, so the framing
+   does not move. Both the CPU trace and the GPU kernel consume the edited field. That is
+   the parity: the test plugs the kernel's CPU twin in at the seam and compares it with
+   the CPU trace (mean drift < 1.5).
+3. **Frame fit.** The outer corners of the quiet zone are projected at plinth height through
+   the trace camera (`ReliefAovBuffers.TraceCamera`, set on both paths). If one leaves the
+   frame (2% margin), the camera zoom is scaled by the overflow and the scene traced again,
+   at most twice. A tilted perspective camera otherwise cuts the near quiet zone, and the
+   detector needs it.
+4. **Resteer** (in `ApplyQr`, on the final display buffer, after grade, tonemap and
+   denoise). Each pixel's primary hit (depth AOV + `HeightfieldRaymarch2D.HitPoint`) maps
+   back to field coordinates, so to a module and a position in it. Luma is clamped into a
+   band set by the distance to the other shade, as in Bevel. Data module edges may widen
+   to the soft band, so wall shading and shadows survive. Then each module's on-screen
+   mean is held at Steer's worst case.
+
+**Plate vs true height.** The default (plate) trace is kept, so the user's terrain looks
+the same. Its hit test uses the Lipschitz-scaled DE, which gives early "air hits" near
+very steep walls (#1025). Moderate blocks (≤ 1 module, bevel ramp) render cleanly. True
+height draws tall blocks properly, but it rescales the whole terrain into mountains that
+bury the code, so it is not forced.
+
+**Limits measured** (Seahorse Valley, 900², v4-H, 0.5 and 1 module blocks): 60° and 50°
+scan 4/4, 40° and below fail. The trapezoid is clean, but ZXing's detector rejects it.
+Hence the 60° default minimum.
+
 ## Batch parity
 
 Flags `--qr-payload --qr-ecc --qr-style --qr-module-px --qr-dot --qr-invert --qr-no-verify
 --qr-version --qr-shape --qr-mask --qr-search`, plus `--qr-bevel-height --qr-bevel-width
 --qr-bevel-light --qr-bevel-specular --qr-bevel-shadow` (catalog: requires `--qr-style
-bevel`), in `BatchFlagGroup.Qr`, image mode only. The
+bevel`), plus `--qr-relief --qr-relief-height --qr-relief-terrain
+--qr-relief-min-elevation` (`--qr-relief` requires `--relief-raymarch` and does not turn it
+on, matching the Control Center export), in `BatchFlagGroup.Qr`, image mode only. The
 group is a Command-composer *look* group, so **Seed from live view** carries the Control
 Center settings. Exit code 8 = saved but does not scan. Preflight failures (payload does not
 fit, image too small) exit 2 before rendering.

@@ -242,6 +242,30 @@ Shading and shadows fade out toward the middle, and a module that a long shadow
 covers is lifted back as a whole, so the code scans like **Steer**. The saved file is
 still decoded afterwards.
 
+### Extrude in Relief 3D
+
+With the view in **Relief 3D** raymarch mode (Color & Light → Relief 3D, oblique 3D on),
+tick **Extrude in Relief 3D** (#1410) to build the code into the 3D scene itself. The dark
+modules become raised blocks on a plinth. Then the relief camera's tilt, cast shadows,
+ambient occlusion, the scene lights, HDRI and glass all act on the code. Without Relief 3D
+raymarch, the flat style is exported as usual.
+
+| Control | What it does | Default |
+|---|---|---|
+| Blocks | Block height in modules. | 0.50 |
+| Terrain | How much of the fractal's own relief stays under the code: 0 = a flat plinth, 1 = the full terrain. Tall terrain casts shadows across modules and can hide them. | 0.15 |
+| Min elev. | Lowest camera elevation while the code is extruded. A lower Relief 3D camera is raised to it, because a low camera lets a block hide the module behind it. | 60 |
+
+The camera also **zooms out** automatically if the code's border would leave the frame
+(a tilted camera pushes the near edge out). After the render, every pixel is traced back to
+the module it shows, and its lightness is held in that module's band, so shading and
+shadows survive at the module edges while the middles stay readable. The saved file is
+still decoded afterwards.
+
+In testing, codes scanned at 50° and above and failed at 40°. The 60° minimum keeps a
+margin. Set **Module px** to make the code smaller than the image if you want the fractal
+terrain to show around it.
+
 ### Find View
 
 Looks around the current view (position and zoom, within 0.5×–8× of the start zoom) and
@@ -701,6 +725,24 @@ See [§2a](#2a-qr-code-a-fractal-that-scans) for what each setting does.
 The `--qr-bevel-*` flags act only with `--qr-style bevel`. With a light from the
 theme, the console line `qr bevel:` says whether the theme's lights or the fallback
 light were used.
+
+| Flag | Value | Default |
+|---|---|---|
+| `--qr-relief` | switch: extrude the code into the Relief 3D raymarch (needs `--relief-raymarch`) | off |
+| `--qr-relief-height` | 0.05–3, block height in modules | 0.5 |
+| `--qr-relief-terrain` | 0–1, fractal relief kept under the code | 0.15 |
+| `--qr-relief-min-elevation` | 5–89, lowest camera elevation (degrees) | 60 |
+
+Like the Control Center, `--qr-relief` extrudes only when the Relief 3D raymarch is on
+(`--relief-raymarch`). Without it, the console notes this and the flat QR is used. The
+`qr relief:` line reports the camera elevation used and whether it was raised.
+
+```
+FracturingFog.exe --batch --region "Seahorse Valley" --theme "Polar Night 3D" ^
+                  --width 900 --height 900 --relief-raymarch ^
+                  --qr-payload https://example.org --qr-relief --qr-module-px 12 ^
+                  --out C:\out\seahorse-qr-3d.png
+```
 
 ```
 FracturingFog.exe --batch --region ""Seahorse Valley"" --theme Fire ^

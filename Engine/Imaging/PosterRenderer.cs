@@ -183,6 +183,11 @@ namespace FracturingFog.Imaging
         /// (after rotation, before the watermark + write). Null = no QR.</summary>
         public QrCodeOptions? Qr { get; init; }
 
+        /// <summary>#1410 — runtime state of a QR extruded into the relief (set by
+        /// <see cref="PosterRenderer.RenderToFile"/> when <see cref="Qr"/> asks for it;
+        /// filled by the relief stage, consumed when the QR is applied).</summary>
+        public FracturingFog.Imaging.Qr.QrReliefState? QrReliefState { get; init; }
+
         // ── D-6b — sub-rect rendering for cluster tile workers ─────────────
         // When non-zero, the worker renders only a sub-rect of a larger
         // image and derives per-pixel dc from the FULL image's centre +
@@ -295,6 +300,12 @@ namespace FracturingFog.Imaging
                 uint[] padded = PadCentred(innerBuf, rw, rh, req.Width, req.Height, req.SurroundColor);
                 return WritePoster(req, padded, req.Width, req.Height, innerMs);
             }
+
+            // #1410 — a QR extruded into the relief raymarch (square, unrotated output;
+            // the letterbox path above keeps the flat QR).
+            if (req.Qr is { Relief: true } && !req.Rotate
+                && req.FractalParameters is { Relief2DEnabled: true, Relief2DRaymarch: true })
+                req = req with { QrReliefState = new FracturingFog.Imaging.Qr.QrReliefState(req.Qr) };
 
             uint[] display = RenderDisplayBuffer(req, token, out int dw, out int dh, out long ms);
             return WritePoster(req, display, dw, dh, ms);
@@ -592,7 +603,8 @@ namespace FracturingFog.Imaging
                 // silently falls back to the flat 2D themed colour. No-op when
                 // relief is off or the calc exposes no field.
                 buffer = ApplyReliefIfEnabled(buffer, alt as IHeightFieldSource, w, h, req.FractalParameters, alt?.ColorMap, aovCapture, req.FroxelHistory, reliefField, reliefFw, reliefFh, req.PreviousCamera, req.SvgfHistory,
-                    req.FractalParameters is { } rfp && FracturingFog.Rendering.FractalRenderHost.ReliefFieldTracksWindow(req.FractalType, rfp));
+                    req.FractalParameters is { } rfp && FracturingFog.Rendering.FractalRenderHost.ReliefFieldTracksWindow(req.FractalType, rfp),
+                    req.QrReliefState);
             }
             else
             {
@@ -696,7 +708,8 @@ namespace FracturingFog.Imaging
                 // higher-quality field, not just a resolution bump, so a supplied
                 // req.ReliefField (the interactive one) is preferred (#508).
                 buffer = ApplyReliefIfEnabled(buffer, calc, w, h, req.FractalParameters, calc.ColorMap, aovCapture, req.FroxelHistory, reliefField, reliefFw, reliefFh, req.PreviousCamera, req.SvgfHistory,
-                    req.FractalParameters is { } rfp && FracturingFog.Rendering.FractalRenderHost.ReliefFieldTracksWindow(req.FractalType, rfp));
+                    req.FractalParameters is { } rfp && FracturingFog.Rendering.FractalRenderHost.ReliefFieldTracksWindow(req.FractalType, rfp),
+                    req.QrReliefState);
             }
 
             }
@@ -788,12 +801,19 @@ namespace FracturingFog.Imaging
         // after it, and the verify reads the saved file so both are accounted for.
         // #1409 — the Bevel style lights the blocks with the theme's 3D lights,
         // turned with the image when it is saved rotated.
+        // #1410 — an extruded QR was built into the relief; only the screen-space
+        // re-steer of the final buffer remains.
         private static FracturingFog.Imaging.Qr.QrApplyResult? ApplyQr(
             PosterRequest req, uint[] buffer, int w, int h)
-            => req.Qr == null ? null : FracturingFog.Imaging.Qr.QrExport.Apply(buffer, w, h, req.Qr,
+        {
+            if (req.Qr == null) return null;
+            if (req.QrReliefState?.Plan is { Traced: true } plan && plan.W == w && plan.H == h)
+                return plan.Resteer(buffer, w, h);
+            return FracturingFog.Imaging.Qr.QrExport.Apply(buffer, w, h, req.Qr,
                 req.Qr.Style == QrStyle.Bevel
                     ? FracturingFog.Imaging.Qr.QrBevelLighting.Resolve(req.Qr, req.ColorMap, req.Rotate)
                     : null);
+        }
 
         private static FracturingFog.Imaging.Qr.QrExportReport? VerifyQr(PosterRequest req,
             FracturingFog.Imaging.Qr.QrApplyResult? q, uint[] buffer, int w, int h)
@@ -819,7 +839,8 @@ namespace FracturingFog.Imaging
             float[]? hiResField = null, int hiResW = 0, int hiResH = 0,
             FracturingFog.Rendering.Lighting.ReliefMotionVector.CameraView? previousCamera = null,
             SvgfHistory? svgfHistory = null,
-            bool displayResField = false)
+            bool displayResField = false,
+            FracturingFog.Imaging.Qr.QrReliefState? qrState = null)
         {
             if (p == null || !p.Relief2DEnabled) return buffer;
             int n = w * h;
@@ -867,6 +888,19 @@ namespace FracturingFog.Imaging
                 // lighting override; never write it back onto the shared (live)
                 // FractalParameters — a background-thread mutation of the live params
                 // raced the render loop (the on-screen "flip" during a poster save).
+                // #1410 — QR extruded into the relief: the steered composite becomes the
+                // albedo, and the camera is kept high enough that blocks cannot hide
+                // the modules behind them (on a copy; the request's params are shared).
+                FracturingFog.Imaging.Qr.QrReliefPlan? qrPlan = null;
+                if (qrState != null)
+                {
+                    qrPlan = FracturingFog.Imaging.Qr.QrReliefPlan.Prepare(buffer, w, h, qrState.Options);
+                    var cp = p.Clone();
+                    cp.Relief2DCameraElevationDeg = FracturingFog.Imaging.Qr.QrReliefPlan.CappedElevation(
+                        cp.Relief2DCameraElevationDeg, qrState.Options);
+                    p = cp;
+                }
+
                 var fx = p.Lighting;
                 FracturingFog.Rendering.Lighting.VolumePaletteBaker.Bake(ref fx, colorMap);
                 // S4 (#389) — capture the float normal/depth AOVs and denoise iff
@@ -886,10 +920,36 @@ namespace FracturingFog.Imaging
                 if (wantMotionBlur && aovCapture == null && (aov == null || aov.Motion == null))
                     aov = new FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers(
                         w, h, aov?.Components != null, true);
+                // #1410 — the QR re-steer maps pixels back to modules through the depth AOV.
+                if (qrPlan != null && aov == null)
+                    aov = new FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers(w, h);
                 FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
                     buffer, field, w, h, fw, fh, p, dst, out _, null, aov, null, froxelHistory, fx, previousCamera,
                     // #1255 — a family without a hi-res twin traces a display-res field.
-                    displayResField: displayResField);
+                    displayResField: displayResField,
+                    heightInjection: qrPlan == null ? null : qrPlan.Inject);
+                if (qrPlan != null && aov != null)
+                {
+                    qrPlan.CaptureTrace(aov);
+                    // #1410 — a tilted perspective camera can push the near edge of the
+                    // quiet zone out of the frame, and a reader needs it. Zoom out by
+                    // the measured overflow and trace again (twice at most).
+                    for (int retry = 0; retry < 2 && qrPlan.Traced; retry++)
+                    {
+                        double fit = qrPlan.FrameFit(w, h);
+                        if (fit >= 1.0) break;
+                        var zp = p.Clone();
+                        zp.Relief2DCameraZoom = Math.Clamp(p.Relief2DCameraZoom * fit, 0.2, 5.0);
+                        if (zp.Relief2DCameraZoom >= p.Relief2DCameraZoom) break;
+                        p = zp;
+                        if (aov.HdrBeauty is { } hdr) Array.Fill(hdr, float.NaN);
+                        FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
+                            buffer, field, w, h, fw, fh, p, dst, out _, null, aov, null, froxelHistory, fx, previousCamera,
+                            displayResField: displayResField, heightInjection: qrPlan.Inject);
+                        qrPlan.CaptureTrace(aov);
+                    }
+                    if (qrPlan.Traced) qrState!.Plan = qrPlan;
+                }
                 // S4 (#402) — SVGF temporal denoise when a persistent history is supplied
                 // and the temporal toggle is on; else the plain single-frame denoise. Both
                 // are no-ops when the denoise is off, so this stays byte-identical by default.

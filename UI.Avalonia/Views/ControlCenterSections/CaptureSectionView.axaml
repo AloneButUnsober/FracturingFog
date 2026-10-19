@@ -113,6 +113,22 @@
                                    FormatString="0" IsVisible="{Binding QrCode.BevelLightExplicit}"
                                    ToolTip.Tip="Light height above the image in degrees. Low light casts long shadows." />
                 </Grid>
+                <!-- #1410 Extrude in Relief 3D. -->
+                <CheckBox Content="Extrude in Relief 3D"
+                          IsChecked="{Binding QrCode.Relief, Mode=TwoWay}"
+                          ToolTip.Tip="Build the code into the Relief 3D scene as raised blocks, so camera tilt, cast shadows, ambient occlusion and the lights act on the code itself. Used when the view is in Relief 3D raymarch mode; otherwise the flat style is exported. The camera is raised to at least the minimum elevation below, and zoomed out if the code would leave the frame." />
+                <Grid ColumnDefinitions="Auto,*,Auto,*" RowDefinitions="Auto,Auto" RowSpacing="4" ColumnSpacing="6" Width="420" HorizontalAlignment="Left"
+                      IsVisible="{Binding QrCode.Relief}">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Blocks" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
+                    <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding QrCode.ReliefHeight}" Minimum="0.05" Maximum="3" Increment="0.1"
+                                   FormatString="0.00" ToolTip.Tip="Block height in modules." />
+                    <TextBlock Grid.Row="0" Grid.Column="2" Text="Terrain" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
+                    <NumericUpDown Grid.Row="0" Grid.Column="3" Value="{Binding QrCode.ReliefTerrain}" Minimum="0" Maximum="1" Increment="0.05"
+                                   FormatString="0.00" ToolTip.Tip="How much of the fractal's own relief is kept under the code: 0 = a flat plinth, 1 = the full terrain. Tall terrain casts shadows across modules and can hide them." />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Min elev." Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
+                    <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding QrCode.ReliefMinElevation}" Minimum="5" Maximum="89" Increment="5"
+                                   FormatString="0" ToolTip.Tip="Lowest camera elevation in degrees while the code is extruded; a lower Relief 3D camera is raised to it. Codes stopped scanning below about 50 degrees in testing." />
+                </Grid>
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button Classes="action neutral" Content="Find View"
                             Command="{Binding QrCode.FindViewCommand}"

@@ -345,6 +345,46 @@ public static class HeightfieldRaymarch2D
         /// sequence caller can capture it and feed it back as the next frame's previous
         /// camera for the motion-vector fill (roadmap S1, #398). Null until a render sets it.</summary>
         public ReliefMotionVector.CameraView? CurrentCamera { get; set; }
+
+        /// <summary>#1410 — the camera this render traced with (perspective or
+        /// orthographic, set on the CPU and GPU paths alike), so a caller can turn
+        /// <see cref="Depth"/> back into world hit points with
+        /// <see cref="HeightfieldRaymarch2D.HitPoint"/>. Null until a render sets it.</summary>
+        public ReliefCamera? TraceCamera { get; set; }
+
+        /// <summary>#1410 — the field-to-world height scale of that render.</summary>
+        public double TraceSy { get; set; }
+    }
+
+    /// <summary>#1410 — edits the prepared (post-prepass) height field in place
+    /// before the trace: <paramref name="hbuf"/> is <paramref name="hw"/> x
+    /// <paramref name="hh"/>, world height = field value x <paramref name="sy"/>,
+    /// and the field spans world x in [-aspect/2, aspect/2], z in [-1/2, 1/2].</summary>
+    public delegate void ReliefHeightInjection(float[] hbuf, int hw, int hh, double sy, double aspect);
+
+    /// <summary>#1410 — the world point a primary ray through pixel centre
+    /// (<paramref name="px"/>+0.5, <paramref name="py"/>+0.5) reaches at ray
+    /// distance <paramref name="depth"/> (the depth AOV), for a pinhole or
+    /// orthographic camera (depth of field ignored). Mirrors the trace's ray
+    /// generation.</summary>
+    public static (double X, double Y, double Z) HitPoint(in ReliefCamera cam, int w, int h, double aspect,
+        int px, int py, double depth)
+    {
+        double ndcx = 2.0 * (px + 0.5) / w - 1.0;
+        double ndcy = 1.0 - 2.0 * (py + 0.5) / h;
+        if (cam.Ortho)
+        {
+            double sxo = ndcx * aspect * cam.OrthoHalfV, syo = ndcy * cam.OrthoHalfV;
+            return (cam.CamX + cam.RX * sxo + cam.UX * syo + cam.FX * depth,
+                    cam.CamY + cam.UY * syo + cam.FY * depth,
+                    cam.CamZ + cam.RZ * sxo + cam.UZ * syo + cam.FZ * depth);
+        }
+        double a = ndcx * aspect * cam.TanHalf, b = ndcy * cam.TanHalf;
+        double rdx = cam.FX + cam.RX * a + cam.UX * b;
+        double rdy = cam.FY + cam.UY * b;
+        double rdz = cam.FZ + cam.RZ * a + cam.UZ * b;
+        double il = 1.0 / Math.Sqrt(rdx * rdx + rdy * rdy + rdz * rdz);
+        return (cam.CamX + rdx * il * depth, cam.CamY + rdy * il * depth, cam.CamZ + rdz * il * depth);
     }
 
     /// <summary>#1337 — the temporal lighting scene key of a relief frame: the
@@ -396,7 +436,8 @@ public static class HeightfieldRaymarch2D
                               FroxelHistory? froxelHistory = null,
                               LightingFxData? lightingOverride = null,
                               ReliefMotionVector.CameraView? previousCamera = null,
-                              bool displayResField = false)
+                              bool displayResField = false,
+                              ReliefHeightInjection? heightInjection = null)
     {
         hitFraction = 0.0;
         LastTraceStats = default;   // #1256 — stays empty unless the CPU trace runs
@@ -473,6 +514,25 @@ public static class HeightfieldRaymarch2D
         double normRef = NormalizationReference(pre, p);
         double sy = 0.35 * reliefAmp * Math.Max(0.0, p.Relief2DHeightScale) / normRef;
 
+        // #1410 — a caller-supplied edit of the prepared field (the QR blocks of
+        // an extruded QR code). It runs AFTER the prepass, whose spike filters and
+        // tone curve would round the blocks off, on a copy (the prepass is a shared
+        // cache). The peak, slope bound and skip grid are re-derived from the edited
+        // field, and both the CPU trace and the GPU kernel consume it, so the two
+        // paths stay in step. sy and the camera aim (normRef) stay the fractal's, so
+        // the framing does not move. Null (the default) = byte-identical.
+        if (heightInjection != null)
+        {
+            var edited = (float[])hbuf.Clone();
+            heightInjection(edited, hw, hh, sy, aspect);
+            float emax = 0f;
+            for (int i = 0, en = hw * hh; i < en; i++) if (edited[i] > emax) emax = edited[i];
+            var (egx, egz) = GridSlopeMaxima(edited, hw, hh);
+            var emip = ReliefHeightMip.BuildMaxGrid(edited, hw, hh, ReliefHeightMip.Blk, out int emw, out int emh);
+            pre = new ReliefPrepass(edited, emax, egx, egz, pre.Baseline, pre.RobustRef, emip, emw, emh, hw, hh);
+            hbuf = edited; maxH = emax; gMaxX = egx; gMaxZ = egz;
+        }
+
         // Lipschitz bound from the max world-space slope, reconstructed from the
         // cached unitless grid maxima × sy / world-cell size (#155). Exactly the
         // old two-pass scan's result: max over both axes.
@@ -537,6 +597,7 @@ public static class HeightfieldRaymarch2D
         // (ReliefRaymarchGpu) drive rays from byte-identical numbers. The math is
         // unchanged — moved verbatim — so this render is bit-for-bit as before.
         ReliefCamera cam = BuildObliqueCamera(w, h, aspect, sy, maxH, p, aimH: normRef);
+        if (aov != null) { aov.TraceCamera = cam; aov.TraceSy = sy; }   // #1410
         var sde = new HeightShadeDe(in de, skipMip, skipMipW, skipMipH, cam.By);   // #1033 / #1044
 
         // #162 (Slice 3d) — GPU dispatch seam. When the opt-in flag is set and the

@@ -389,8 +389,10 @@ namespace FracturingFog.Batch
             if (req.Qr == null && (opts.QrEcc != null || opts.QrStyle != null || opts.QrModulePx != null
                                    || opts.QrDot != null || opts.QrInvert || opts.QrNoVerify
                                    || opts.QrMask != null || opts.QrSearch != null
-                                   || opts.QrShape || opts.QrVersion != null || HasBevelFlags(opts)))
+                                   || opts.QrShape || opts.QrVersion != null || HasBevelFlags(opts) || opts.QrRelief))
                 Console.WriteLine("  note    : --qr-* options have no effect without --qr-payload");
+            if (req.Qr is { Relief: true } && req.FractalParameters is not { Relief2DEnabled: true, Relief2DRaymarch: true })
+                Console.WriteLine("  note    : --qr-relief needs the Relief 3D raymarch (--relief-raymarch); the flat QR is used");
             else if (req.Qr != null && req.Qr.Style != FracturingFog.Imaging.QrStyle.Bevel && HasBevelFlags(opts))
                 Console.WriteLine("  note    : --qr-bevel-* options have no effect without --qr-style bevel");
             // The explored / --x --y limb centre in full (octuple-double) precision.
@@ -461,6 +463,15 @@ namespace FracturingFog.Batch
                         Console.WriteLine($"  note    : every pixel was in-set at {iter} iterations; re-rendered at {rescueReport.RaisedTo} (pass --iterations to fix the count)");
                     if (result.Qr is { } qr)
                     {
+                        // #1410 — say whether the code was extruded, and at what camera.
+                        if (req.Qr is { Relief: true } && req.FractalParameters is { Relief2DEnabled: true, Relief2DRaymarch: true } qfp)
+                        {
+                            double el0 = qfp.Relief2DCameraElevationDeg;
+                            double el = FracturingFog.Imaging.Qr.QrReliefPlan.CappedElevation(el0, req.Qr);
+                            string raised = el > el0 ? FormattableString.Invariant($" (raised from {el0:0.#}°)") : "";
+                            Console.WriteLine(FormattableString.Invariant(
+                                $"  qr relief: blocks {req.Qr.ReliefHeight:0.##} modules, terrain {req.Qr.ReliefTerrain:0.##}, camera elevation {el:0.#}°{raised}"));
+                        }
                         Console.WriteLine($"  qr code : version {qr.Code.Version} ({qr.Code.Size}x{qr.Code.Size} modules), "
                             + $"mask {qr.Code.Mask}, {qr.Layout.ModulePixels} px/module");
                         if (qr.Shape is { } shp)

@@ -49,6 +49,10 @@ namespace FracturingFog.Imaging.Qr
     {
         public const double FillWeight = 0.35, RimWeight = 0.2;
 
+        /// <summary>#1410 — no lights: the Bevel style's smooth bands without its
+        /// shading (the relief raymarch lights the extruded code itself).</summary>
+        public static QrBevelLighting None { get; } = new(Array.Empty<QrBevelLight>(), "none");
+
         /// <summary>A single white light at azimuth / elevation (degrees; azimuth
         /// counter-clockwise from +x, so 135 = from the upper left).</summary>
         public static QrBevelLighting FromAngles(double azimuthDeg, double elevationDeg, string source = "explicit")
@@ -183,6 +187,10 @@ namespace FracturingFog.Imaging.Qr
                 }
             });
 
+            // #1410 — unlit (QrBevelLighting.None): the smooth bands only, for an
+            // albedo the relief raymarch lights for real.
+            if (lighting.Lights.Count == 0) goto Bound;
+
             // 2. Heightfield: raised blocks with a smoothstep bevel at their edges.
             var toFloor = Chamfer(raised, rw, rh);
             double bevelPx = Math.Max(1.0, Math.Clamp(opt.BevelWidth, QrCodeOptions.MinBevelWidth, QrCodeOptions.MaxBevelWidth) * m);
@@ -278,6 +286,7 @@ namespace FracturingFog.Imaging.Qr
                 }
             });
 
+            Bound:
             // 4. Hold every pixel in its band: the core band in the core, widening
             //    toward an edge to the Dots style's soft band (function modules and
             //    the quiet zone only to the edge band), so a decoder still reads the
