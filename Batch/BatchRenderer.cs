@@ -389,8 +389,10 @@ namespace FracturingFog.Batch
             if (req.Qr == null && (opts.QrEcc != null || opts.QrStyle != null || opts.QrModulePx != null
                                    || opts.QrDot != null || opts.QrInvert || opts.QrNoVerify
                                    || opts.QrMask != null || opts.QrSearch != null
-                                   || opts.QrShape || opts.QrVersion != null))
+                                   || opts.QrShape || opts.QrVersion != null || HasBevelFlags(opts)))
                 Console.WriteLine("  note    : --qr-* options have no effect without --qr-payload");
+            else if (req.Qr != null && req.Qr.Style != FracturingFog.Imaging.QrStyle.Bevel && HasBevelFlags(opts))
+                Console.WriteLine("  note    : --qr-bevel-* options have no effect without --qr-style bevel");
             // The explored / --x --y limb centre in full (octuple-double) precision.
             if (explored is { } ex) req = WithCentre(req, ex);
 
@@ -431,6 +433,15 @@ namespace FracturingFog.Batch
                 Console.WriteLine($"  qr      : {FracturingFog.Imaging.QrCodeOptions.StyleName(req.Qr.Style)}  ecc {req.Qr.ErrorCorrection}"
                     + (req.Qr.Invert ? "  inverted" : "") + (req.Qr.Shape ? "  shaped" : "")
                     + (req.Qr.MinVersion > 1 ? $"  version>={req.Qr.MinVersion}" : "") + $"  \"{req.Qr.Payload}\"");
+            if (req.Qr?.Style == FracturingFog.Imaging.QrStyle.Bevel)
+            {
+                // #1409 — say which lights the blocks get (theme or explicit / default).
+                var lit = FracturingFog.Imaging.Qr.QrBevelLighting.Resolve(req.Qr, req.ColorMap, req.Rotate);
+                Console.WriteLine(FormattableString.Invariant(
+                    $"  qr bevel: height {req.Qr.BevelHeight:0.###}  width {req.Qr.BevelWidth:0.###}  light {lit.Source}")
+                    + (lit.Lights.Count > 1 ? $" ({lit.Lights.Count} lights)" : "")
+                    + (lit.Source == "explicit" ? $" {req.Qr.BevelLightSpec}" : ""));
+            }
             Console.WriteLine($"  out     : {outPath}");
 
             using var spinner = new ConsoleSpinner("Rendering");
@@ -471,6 +482,10 @@ namespace FracturingFog.Batch
             }
             return 0;
         }
+
+        private static bool HasBevelFlags(BatchOptions o)
+            => o.QrBevelHeight != null || o.QrBevelWidth != null || o.QrBevelLight != null
+               || o.QrBevelSpecular != null || o.QrBevelShadow != null;
 
         // #1401 — a searched centre in --x / --y form (limb form when deep).
         private static string QrCoord(FracturingFog.FFMath.OD v)

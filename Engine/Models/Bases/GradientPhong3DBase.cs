@@ -31,7 +31,7 @@ namespace FracturingFog.Models
     /// Subclasses set gradient stops, KeyLight, FillLight, and optionally
     /// CycleSpeed and Steepness; the base handles all lighting maths.
     /// </summary>
-    public abstract class GradientPhong3DBase : GradientColorMap, IColorMap
+    public abstract class GradientPhong3DBase : GradientColorMap, IColorMap, IThemeLights
     {
         public new ColorPaletteType Type => ColorPaletteType.Relief3D;
 

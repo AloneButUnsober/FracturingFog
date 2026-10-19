@@ -396,6 +396,9 @@ namespace FracturingFog.Batch
 
         private const BatchModes FR = BatchModes.FractalRender;
         private static readonly string[] ReliefOn = { BatchFlags.Relief };
+        // #1409 — the bevel knobs need a QR and only act with --qr-style bevel.
+        private static readonly string[] QrNeeds = { BatchFlags.QrPayload };
+        private static readonly BatchChoiceRequirement BevelStyle = new(BatchFlags.QrStyle, new[] { "bevel" });
         private static readonly string[] RaymarchOn = { BatchFlags.ReliefRaymarch, BatchFlags.Relief };
 
         private static BatchFlagSpec Sw(string name, BatchFlagGroup g, BatchModes m, string help)
@@ -595,8 +598,9 @@ namespace FracturingFog.Batch
                     new[] { "L", "M", "Q", "H" }, "H", "LEVEL") with { Requires = new[] { BatchFlags.QrPayload } },
                 Pick(BatchFlags.QrStyle, Qr, BatchModes.Image,
                     "dots = only module centres forced; steer = whole modules recoloured into dark/light bands; "
-                    + "halftone = 3x3 sub-modules, the fractal's own halftone around a centre cell.",
-                    new[] { "steer", "dots", "halftone" }, "steer", "STYLE") with { Requires = new[] { BatchFlags.QrPayload } },
+                    + "halftone = 3x3 sub-modules, the fractal's own halftone around a centre cell; "
+                    + "bevel = 3D-look raised blocks lit by the theme's 3D lights.",
+                    new[] { "steer", "dots", "halftone", "bevel" }, "steer", "STYLE") with { Requires = new[] { BatchFlags.QrPayload } },
                 Int(BatchFlags.QrModulePx, Qr, BatchModes.Image,
                     "Pixels per QR module (0 = largest that fits the short side with the 4-module quiet zone).",
                     0, QrCodeOptions.MaxModulePixels, enforced: true, def: "0") with { Requires = new[] { BatchFlags.QrPayload } },
@@ -621,6 +625,29 @@ namespace FracturingFog.Batch
                     "Smallest QR version (1..40). Above what the payload needs it buys free bits for --qr-shape "
                     + "and makes the modules smaller.", 1, 40, enforced: true, def: "1")
                     with { Requires = new[] { BatchFlags.QrPayload } },
+                // #1409 — Bevel style.
+                Dbl(BatchFlags.QrBevelHeight, Qr, BatchModes.Image,
+                    "Bevel block height as a fraction of the module (taller = longer shadows, harder shading).",
+                    QrCodeOptions.MinBevelHeight, QrCodeOptions.MaxBevelHeight, enforced: true,
+                    def: QrCodeOptions.DefaultBevelHeight.ToString(CultureInfo.InvariantCulture))
+                    with { Requires = QrNeeds, RequiresChoice = BevelStyle },
+                Dbl(BatchFlags.QrBevelWidth, Qr, BatchModes.Image,
+                    "Width of the bevel's sloped edge as a fraction of the module.",
+                    QrCodeOptions.MinBevelWidth, QrCodeOptions.MaxBevelWidth, enforced: true,
+                    def: QrCodeOptions.DefaultBevelWidth.ToString(CultureInfo.InvariantCulture))
+                    with { Requires = QrNeeds, RequiresChoice = BevelStyle },
+                Txt(BatchFlags.QrBevelLight, Qr, BatchModes.Image,
+                    "Bevel light: theme = the active 3D theme's key/fill/rim lights (a light from the upper left when "
+                    + "the theme has none), or AZ,EL in degrees (azimuth counter-clockwise from east, elevation 1..89).",
+                    hint: "theme|AZ,EL") with { Example = "135,30", Requires = QrNeeds, RequiresChoice = BevelStyle },
+                Dbl(BatchFlags.QrBevelSpecular, Qr, BatchModes.Image,
+                    "Bevel specular highlight strength.", 0, 1, enforced: true,
+                    def: QrCodeOptions.DefaultBevelSpecular.ToString(CultureInfo.InvariantCulture))
+                    with { Requires = QrNeeds, RequiresChoice = BevelStyle },
+                Dbl(BatchFlags.QrBevelShadow, Qr, BatchModes.Image,
+                    "Darkness of the shadow the blocks cast on the floor.", 0, 1, enforced: true,
+                    def: QrCodeOptions.DefaultBevelShadow.ToString(CultureInfo.InvariantCulture))
+                    with { Requires = QrNeeds, RequiresChoice = BevelStyle },
                 Txt(BatchFlags.QrSearch, Qr, BatchModes.Image,
                     "Search around the view (centre + zoom) and the 8 masks for the framing whose own light/dark "
                     + "pattern best matches the code, then render that. Keys: seed, tries (per level), levels, keep, "

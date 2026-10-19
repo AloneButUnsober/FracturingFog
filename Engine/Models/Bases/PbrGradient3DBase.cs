@@ -237,7 +237,7 @@ namespace FracturingFog.Models
         PBRBright       // HDR boosted, glow-friendly
     }
 
-    public abstract class PbrGradient3DBase : GradientColorMap, IColorMap
+    public abstract class PbrGradient3DBase : GradientColorMap, IColorMap, IThemeLights
     {
         public new ColorPaletteType Type => ColorPaletteType.Relief3D;
 

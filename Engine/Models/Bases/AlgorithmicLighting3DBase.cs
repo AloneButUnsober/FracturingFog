@@ -33,7 +33,7 @@ namespace FracturingFog.Models
     // Phong 3D base for algorithmic colour maps
     // =========================================================================
 
-    public abstract class AlgorithmicPhong3DBase : IColorMap
+    public abstract class AlgorithmicPhong3DBase : IColorMap, IThemeLights
     {
         public ColorPaletteType Type { get; } = ColorPaletteType.Relief3D;
         public int MaxIterations { get; set; } = 1000;
@@ -172,7 +172,7 @@ namespace FracturingFog.Models
     // PBR 3D base for algorithmic colour maps  (Cook-Torrance GGX)
     // =========================================================================
 
-    public abstract class AlgorithmicPbr3DBase : IColorMap
+    public abstract class AlgorithmicPbr3DBase : IColorMap, IThemeLights
     {
         public ColorPaletteType Type { get; } = ColorPaletteType.Relief3D;
         public int MaxIterations { get; set; } = 1000;

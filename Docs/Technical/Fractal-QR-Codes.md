@@ -2,6 +2,7 @@
 
 Epic #1305. Slices: S1 #1396 encoder + verifier, S2 #1397 compositor, S3 #1398 batch parity,
 S4 #1399 Control Center, S5 #1400 halftone, S6 #1401 view search, S7 #1402 QArt shaping.
+3D-look follow-up: epic #1408; phase A #1409 Bevel style (done), B #1410 relief extrusion, C #1411 printable mesh.
 User documentation: [Capture Guide §2a](../User/Capture-Guide.md#2a-qr-code-a-fractal-that-scans).
 
 A render is exported as a square image that is also a valid QR code. Everything lives in
@@ -28,6 +29,7 @@ carries the code, the layout, the verify result and the shaping stats.
 | `QrExport.cs` | Entry point: Validate / Preflight / Apply / VerifySaved. Chooses the mask by decoding. |
 | `QrViewSearch.cs` | S6: seeded random beam over centre (DeepComplex) + zoom, scored on probes from `PosterRenderer.RenderDisplayPixels`. |
 | `QrQArt.cs` | S7: GF(2) elimination over the post-terminator data bits. |
+| `QrBevel.cs` | #1409: Bevel style. `QrBevelLighting.Resolve` takes the theme's lights (`IThemeLights` on the Phong / PBR / orbit-trap 3D bases) or explicit angles. The compositor steers, builds the heightfield, shades, then bounds every pixel. |
 
 ## Invariants the tests hold
 
@@ -66,10 +68,44 @@ carries the code, the layout, the verify result and the shaping stats.
   is what makes shaping visible (51% → 84% at v8-L for a 40-character URL, against ~40 free
   bits at the minimal version).
 
+## Bevel style (#1409)
+
+1. **Band from the distance to the other shade.** A 3-4 chamfer distance from each
+   pixel to the nearest pixel of the opposite shade sets its band: the core band from
+   (0.5 − dot/2) modules in, so every sampled centre is covered, widening smoothly to
+   the edge band. Measuring to the other shade rather than to the module border keeps
+   a run of same-shade modules one continuous face. The first version steered the
+   Steer way (core square, edge band) and then clamped, which left a bright square in
+   every light module.
+2. **Heightfield.** Raised = dark modules, with a smoothstep ramp `BevelWidth` wide at
+   the block edge. The floor is height 0 and the quiet zone is floor.
+3. **Shade relative to flat** (Blinn-Phong per light, minus the flat-normal response),
+   so plateaus and floor keep their steered colour and only slopes change. A soft
+   horizon walk toward the key light gives the cast shadow.
+4. **Bound.** Each pixel is clamped (luma only) into its band. At an edge, data modules
+   may widen to the Dots soft band; function modules and the quiet zone only to the
+   edge band.
+5. **Module mean.** Each module's mean is held at Steer's worst case (light ≥ 160,
+   dark ≤ 104) by a uniform remap, because the small and blur passes average a module
+   and a long shadow can cover most of a light one.
+
+Not `HeightfieldRelief2D`: that pass treats height ≤ 0 as unlit interior, which here
+is the whole floor that the shadows must land on.
+
+Theme lights are complex-plane convention (y up), the same orientation as the saved
+image. A rotated (portrait) poster save turns them 90° clockwise with the picture;
+batch renders never rotate.
+
+On the synthetic busy test image, plain Steer itself fails the small pass at some
+square sizes (640, 800). Bevel tracks Steer there, so the robustness tests use the
+#1305 size (900 × 640) and real renders.
+
 ## Batch parity
 
 Flags `--qr-payload --qr-ecc --qr-style --qr-module-px --qr-dot --qr-invert --qr-no-verify
---qr-version --qr-shape --qr-mask --qr-search`, in `BatchFlagGroup.Qr`, image mode only. The
+--qr-version --qr-shape --qr-mask --qr-search`, plus `--qr-bevel-height --qr-bevel-width
+--qr-bevel-light --qr-bevel-specular --qr-bevel-shadow` (catalog: requires `--qr-style
+bevel`), in `BatchFlagGroup.Qr`, image mode only. The
 group is a Command-composer *look* group, so **Seed from live view** carries the Control
 Center settings. Exit code 8 = saved but does not scan. Preflight failures (payload does not
 fit, image too small) exit 2 before rendering.

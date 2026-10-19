@@ -632,6 +632,20 @@ namespace FracturingFog.Cli
             if (qr.Shape) parts.Add(BatchFlags.QrShape);
             if (qr.MinVersion > 1)
             { parts.Add(BatchFlags.QrVersion); parts.Add(qr.MinVersion.ToString(CultureInfo.InvariantCulture)); }
+            // #1409 — the bevel knobs only mean something for the Bevel style.
+            if (qr.Style == QrStyle.Bevel)
+            {
+                if (qr.BevelHeight != QrCodeOptions.DefaultBevelHeight)
+                { parts.Add(BatchFlags.QrBevelHeight); parts.Add(Num(qr.BevelHeight)); }
+                if (qr.BevelWidth != QrCodeOptions.DefaultBevelWidth)
+                { parts.Add(BatchFlags.QrBevelWidth); parts.Add(Num(qr.BevelWidth)); }
+                if (!qr.BevelLightFromTheme)
+                { parts.Add(BatchFlags.QrBevelLight); parts.Add(qr.BevelLightSpec); }
+                if (qr.BevelSpecular != QrCodeOptions.DefaultBevelSpecular)
+                { parts.Add(BatchFlags.QrBevelSpecular); parts.Add(Num(qr.BevelSpecular)); }
+                if (qr.BevelShadow != QrCodeOptions.DefaultBevelShadow)
+                { parts.Add(BatchFlags.QrBevelShadow); parts.Add(Num(qr.BevelShadow)); }
+            }
         }
 
         /// <summary>List the live fx the emitted command cannot reproduce.

@@ -44,7 +44,7 @@ namespace FracturingFog.Models
     // OrbitTrapPowerPhong3DBase for the pow-curve mapping.
     // =========================================================================
 
-    public abstract class OrbitTrapPhong3DBase : OrbitTrapBaseMap
+    public abstract class OrbitTrapPhong3DBase : OrbitTrapBaseMap, IThemeLights
     {
         public new ColorPaletteType Type => ColorPaletteType.Relief3D;
 

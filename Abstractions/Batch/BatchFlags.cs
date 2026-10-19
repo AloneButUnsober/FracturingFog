@@ -116,6 +116,12 @@ namespace FracturingFog.Batch
         // #1402 — shape the code toward the image (QArt); minimum version.
         public const string QrShape        = "--qr-shape";
         public const string QrVersion      = "--qr-version";
+        // #1409 — Bevel style (3D-look blocks lit by the theme).
+        public const string QrBevelHeight   = "--qr-bevel-height";
+        public const string QrBevelWidth    = "--qr-bevel-width";
+        public const string QrBevelLight    = "--qr-bevel-light";
+        public const string QrBevelSpecular = "--qr-bevel-specular";
+        public const string QrBevelShadow   = "--qr-bevel-shadow";
 
         // EXR read-back / regrade (roadmap S2, #396). Value = input .exr path;
         // selects Regrade mode — read it, apply --view-transform/--exposure, write

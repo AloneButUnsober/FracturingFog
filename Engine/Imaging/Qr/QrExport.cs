@@ -46,6 +46,14 @@ namespace FracturingFog.Imaging.Qr
                 return "QR version must be 1..40";
             if (opt.DotFraction < QrCodeOptions.MinDotFraction || opt.DotFraction > QrCodeOptions.MaxDotFraction)
                 return $"QR dot fraction must be {QrCodeOptions.MinDotFraction} .. {QrCodeOptions.MaxDotFraction}";
+            if (opt.BevelHeight < QrCodeOptions.MinBevelHeight || opt.BevelHeight > QrCodeOptions.MaxBevelHeight)
+                return $"QR bevel height must be {QrCodeOptions.MinBevelHeight} .. {QrCodeOptions.MaxBevelHeight}";
+            if (opt.BevelWidth < QrCodeOptions.MinBevelWidth || opt.BevelWidth > QrCodeOptions.MaxBevelWidth)
+                return $"QR bevel width must be {QrCodeOptions.MinBevelWidth} .. {QrCodeOptions.MaxBevelWidth}";
+            if (opt.BevelSpecular is < 0 or > 1 || opt.BevelShadow is < 0 or > 1)
+                return "QR bevel specular and shadow must be 0 .. 1";
+            if (opt.BevelElevationDeg is < 1 or > 89 || !double.IsFinite(opt.BevelAzimuthDeg))
+                return "QR bevel light elevation must be 1 .. 89 degrees";
             try { Encode(opt, -1); }
             catch (ArgumentException ex) { return ex.Message; }
             return null;
@@ -78,7 +86,8 @@ namespace FracturingFog.Imaging.Qr
         /// first composite that passes every QrVerifier pass wins; if none
         /// does, the one passing the most passes is kept (and the post-save
         /// verify reports it).</summary>
-        public static QrApplyResult Apply(uint[] buf, int w, int h, QrCodeOptions opt)
+        public static QrApplyResult Apply(uint[] buf, int w, int h, QrCodeOptions opt,
+            QrBevelLighting? lighting = null)
         {
             string? err = Validate(opt);
             if (err != null) throw new ArgumentException(err, nameof(opt));
@@ -115,7 +124,7 @@ namespace FracturingFog.Imaging.Qr
             foreach (var (code, _) in candidates)
             {
                 var trial = (uint[])buf.Clone();
-                var layout = QrCompositor.Composite(trial, w, h, code, opt);
+                var layout = QrCompositor.Composite(trial, w, h, code, opt, lighting);
                 var v = QrVerifier.Verify(trial, w, h, opt.Payload, layout.ModulePixels);
                 int passed = v.Passes.Count(p => p.Ok);
                 if (passed > bestPassed) { best = trial; bestCode = code; bestLayout = layout; bestPassed = passed; }
