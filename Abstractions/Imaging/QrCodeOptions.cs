@@ -64,6 +64,10 @@ namespace FracturingFog.Imaging
         public const double MinReliefHeight = 0.05, MaxReliefHeight = 3.0, DefaultReliefHeight = 0.5;
         public const double DefaultReliefTerrain = 0.15;
         public const double MinReliefElevation = 5, DefaultReliefMinElevation = 60;
+        public const double MinMeshSizeMm = 20, MaxMeshSizeMm = 400, DefaultMeshSizeMm = 60;
+        public const double MinMeshBaseMm = 0.4, MaxMeshBaseMm = 20, DefaultMeshBaseMm = 2;
+        public const double MinMeshHeightMm = 0.2, MaxMeshHeightMm = 10, DefaultMeshHeightMm = 1;
+        public const double MaxMeshTerrainMm = 20;
 
         /// <summary>Text to encode (UTF-8, byte mode). Required, non-empty.</summary>
         public string Payload { get; init; } = "";
@@ -147,6 +151,17 @@ namespace FracturingFog.Imaging
         /// <summary>The camera elevation is raised to at least this (degrees) while
         /// the code is extruded: a low camera lets a block hide the module behind it.</summary>
         public double ReliefMinElevationDeg { get; init; } = DefaultReliefMinElevation;
+
+        // ── #1411 printable tile (QR mesh export) ─────────────────────────
+        /// <summary>Tile side in millimetres (the code plus its quiet zone).</summary>
+        public double MeshSizeMm { get; init; } = DefaultMeshSizeMm;
+        /// <summary>Base plate thickness in millimetres.</summary>
+        public double MeshBaseMm { get; init; } = DefaultMeshBaseMm;
+        /// <summary>How far dark modules stand above the base (millimetres).</summary>
+        public double MeshHeightMm { get; init; } = DefaultMeshHeightMm;
+        /// <summary>Terrain from the fractal's brightness under the code, in
+        /// millimetres (0 = a flat plate; a two-material print needs 0).</summary>
+        public double MeshTerrainMm { get; init; }
 
         /// <summary>The CLI / UI spelling of a style.</summary>
         public static string StyleName(QrStyle s) => s switch

@@ -2,7 +2,7 @@
 
 Epic #1305. Slices: S1 #1396 encoder + verifier, S2 #1397 compositor, S3 #1398 batch parity,
 S4 #1399 Control Center, S5 #1400 halftone, S6 #1401 view search, S7 #1402 QArt shaping.
-3D-look follow-up: epic #1408; phase A #1409 Bevel style (done), B #1410 relief extrusion (done), C #1411 printable mesh.
+3D-look follow-up: epic #1408; phase A #1409 Bevel style (done), B #1410 relief extrusion (done), C #1411 printable mesh (done).
 User documentation: [Capture Guide §2a](../User/Capture-Guide.md#2a-qr-code-a-fractal-that-scans).
 
 A render is exported as a square image that is also a valid QR code. Everything lives in
@@ -142,6 +142,33 @@ bury the code, so it is not forced.
 scan 4/4, 40° and below fail. The trapezoid is clean, but ZXing's detector rejects it.
 Hence the 60° default minimum.
 
+## Printable tile (#1411)
+
+`QrMesh.cs`. The input is the display buffer without the QR (`PosterRenderer.RenderDisplayPixels`,
+or `PosterResult.PreQrPixels` when `PosterRequest.KeepPreQrPixels` is set, so batch reuses
+the image render). The code and its colours come from a flat, decode-verified composite
+(the unlit Bevel bands for Steer / Bevel).
+
+- **Not `HeightfieldMeshExporter`.** Its median / close / blur chain rounds blocks off.
+  The tile is instead flat-topped columns on a grid of 4 cells per module: one top quad
+  and one bottom quad per cell. Wherever two neighbouring cells (or a cell and the
+  outside) differ in height there is a vertical wall. A wall's sides are split at **every
+  height present at that grid corner** and zipper-triangulated, so walls that meet share
+  edges exactly: no T-junctions. Each wall triangle is wound against the direction from
+  the taller cell to the lower one, so it faces outward.
+- **Saddles.** Two raised modules touching only diagonally make a vertical edge of four
+  walls, which is non-manifold (the first build had 28 such edges). `RemoveSaddles`
+  raises the taller of the low diagonal pair to the lower of the high pair until no corner
+  alternates. Heights only rise to values already present, so it converges. For blocks
+  this fills one cell (1/16 module); with terrain it is a small height nudge.
+- **Frames.** STL and 3MF are Z-up (slicer convention) via a proper rotation, so winding
+  is kept. OBJ is Y-up like the other FF mesh exports. Both read unmirrored from above.
+- **Checks.** `MeshValidator` must report a closed 2-manifold with positive signed
+  volume. A top-down raster (`RenderTopDown`) must decode, using colours for 3MF / OBJ
+  and height for STL (dark above base + terrain + half a module). Tests read the
+  **written files** back (`StlMeshReader`, `ThreeMfMeshReader`) for both checks. An STL
+  with terrain taller than a module is expected to fail the height scan, and does.
+
 ## Batch parity
 
 Flags `--qr-payload --qr-ecc --qr-style --qr-module-px --qr-dot --qr-invert --qr-no-verify
@@ -149,7 +176,9 @@ Flags `--qr-payload --qr-ecc --qr-style --qr-module-px --qr-dot --qr-invert --qr
 --qr-bevel-light --qr-bevel-specular --qr-bevel-shadow` (catalog: requires `--qr-style
 bevel`), plus `--qr-relief --qr-relief-height --qr-relief-terrain
 --qr-relief-min-elevation` (`--qr-relief` requires `--relief-raymarch` and does not turn it
-on, matching the Control Center export), in `BatchFlagGroup.Qr`, image mode only. The
+on, matching the Control Center export), plus `--qr-mesh PATH --qr-mesh-size --qr-mesh-base
+--qr-mesh-height --qr-mesh-terrain` (the builder emits these only when the snapshot has a
+mesh path: the mesh is a Control Center button, so the live seed carries none), in `BatchFlagGroup.Qr`, image mode only. The
 group is a Command-composer *look* group, so **Seed from live view** carries the Control
 Center settings. Exit code 8 = saved but does not scan. Preflight failures (payload does not
 fit, image too small) exit 2 before rendering.

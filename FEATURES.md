@@ -560,6 +560,7 @@ QR code (#1305). Only lightness changes, so the fractal's colours stay.
 
 - **Styles:** Steer (whole modules recoloured), Dots (module centres only), Halftone (3×3 sub-modules), Bevel (raised 3D blocks lit by the 3D theme's lights, with cast shadows; #1409).
 - **Extrude in Relief 3D** (#1410): the code is built into the Relief 3D raymarch as real blocks (camera tilt, cast shadows, AO, lights, HDRI), each pixel re-held in its module's band after the trace; scans down to a 50° camera.
+- **Export QR Mesh** (#1411): the code as a 3D-printable tile in mm (STL Z-up, 3MF colour, OBJ vertex colour); every tile is validated watertight and decoded from a top-down view of the mesh; two-material print recipe in the Capture Guide.
 - **Every export is checked:** the saved file is decoded by an independent reader at full size, small, blurred and as JPEG.
 - **Find View** searches nearby framings and mask patterns for the one the code changes least.
 - **Shape to the image** (QArt) uses the code's free data bits so its own pattern follows the fractal (51% → 84% with error fix L, version 8).

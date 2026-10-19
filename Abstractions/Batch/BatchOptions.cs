@@ -230,6 +230,12 @@ namespace FracturingFog.Batch
         public double? QrReliefHeight { get; set; }
         public double? QrReliefTerrain { get; set; }
         public double? QrReliefMinElevation { get; set; }
+        // #1411 — QR tile mesh (null = none / default).
+        public string? QrMesh { get; set; }
+        public double? QrMeshSize { get; set; }
+        public double? QrMeshBase { get; set; }
+        public double? QrMeshHeight { get; set; }
+        public double? QrMeshTerrain { get; set; }
 
         /// <summary>The QR options these flags describe, or null without a payload.</summary>
         public QrCodeOptions? BuildQrOptions()
@@ -249,6 +255,10 @@ namespace FracturingFog.Batch
                 ReliefHeight = QrReliefHeight ?? QrCodeOptions.DefaultReliefHeight,
                 ReliefTerrain = QrReliefTerrain ?? QrCodeOptions.DefaultReliefTerrain,
                 ReliefMinElevationDeg = QrReliefMinElevation ?? QrCodeOptions.DefaultReliefMinElevation,
+                MeshSizeMm = QrMeshSize ?? QrCodeOptions.DefaultMeshSizeMm,
+                MeshBaseMm = QrMeshBase ?? QrCodeOptions.DefaultMeshBaseMm,
+                MeshHeightMm = QrMeshHeight ?? QrCodeOptions.DefaultMeshHeightMm,
+                MeshTerrainMm = QrMeshTerrain ?? 0,
             };
         }
 
@@ -941,6 +951,31 @@ namespace FracturingFog.Batch
                     case BatchFlags.QrReliefMinElevation:
                         if (!NextDouble(args, ref i, a, out double qre2, out error)) return false;
                         opts.QrReliefMinElevation = qre2;
+                        break;
+
+                    case BatchFlags.QrMesh:
+                        if (!Next(args, ref i, a, out string qmp, out error)) return false;
+                        opts.QrMesh = qmp;
+                        break;
+
+                    case BatchFlags.QrMeshSize:
+                        if (!NextDouble(args, ref i, a, out double qms, out error)) return false;
+                        opts.QrMeshSize = qms;
+                        break;
+
+                    case BatchFlags.QrMeshBase:
+                        if (!NextDouble(args, ref i, a, out double qmb, out error)) return false;
+                        opts.QrMeshBase = qmb;
+                        break;
+
+                    case BatchFlags.QrMeshHeight:
+                        if (!NextDouble(args, ref i, a, out double qmh, out error)) return false;
+                        opts.QrMeshHeight = qmh;
+                        break;
+
+                    case BatchFlags.QrMeshTerrain:
+                        if (!NextDouble(args, ref i, a, out double qmt, out error)) return false;
+                        opts.QrMeshTerrain = qmt;
                         break;
 
                     case BatchFlags.QrSearch:
@@ -1847,6 +1882,20 @@ namespace FracturingFog.Batch
                 { error = $"--qr-relief-height must be {QrCodeOptions.MinReliefHeight}..{QrCodeOptions.MaxReliefHeight}."; return false; }
             if (opts.QrReliefTerrain is < 0 or > 1)
                 { error = "--qr-relief-terrain must be 0..1."; return false; }
+            if (opts.QrMesh != null)
+            {
+                string mext = System.IO.Path.GetExtension(opts.QrMesh).ToLowerInvariant();
+                if (mext is not (".stl" or ".obj" or ".3mf"))
+                    { error = "--qr-mesh must be a .stl, .obj or .3mf path."; return false; }
+            }
+            if (opts.QrMeshSize is < QrCodeOptions.MinMeshSizeMm or > QrCodeOptions.MaxMeshSizeMm)
+                { error = $"--qr-mesh-size must be {QrCodeOptions.MinMeshSizeMm}..{QrCodeOptions.MaxMeshSizeMm} mm."; return false; }
+            if (opts.QrMeshBase is < QrCodeOptions.MinMeshBaseMm or > QrCodeOptions.MaxMeshBaseMm)
+                { error = $"--qr-mesh-base must be {QrCodeOptions.MinMeshBaseMm}..{QrCodeOptions.MaxMeshBaseMm} mm."; return false; }
+            if (opts.QrMeshHeight is < QrCodeOptions.MinMeshHeightMm or > QrCodeOptions.MaxMeshHeightMm)
+                { error = $"--qr-mesh-height must be {QrCodeOptions.MinMeshHeightMm}..{QrCodeOptions.MaxMeshHeightMm} mm."; return false; }
+            if (opts.QrMeshTerrain is < 0 or > QrCodeOptions.MaxMeshTerrainMm)
+                { error = $"--qr-mesh-terrain must be 0..{QrCodeOptions.MaxMeshTerrainMm} mm."; return false; }
             if (opts.QrReliefMinElevation is < QrCodeOptions.MinReliefElevation or > 89)
                 { error = $"--qr-relief-min-elevation must be {QrCodeOptions.MinReliefElevation}..89."; return false; }
             if (opts.QrPayload != null)

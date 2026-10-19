@@ -128,6 +128,12 @@ namespace FracturingFog.Batch
         public const string QrReliefHeight       = "--qr-relief-height";
         public const string QrReliefTerrain      = "--qr-relief-terrain";
         public const string QrReliefMinElevation = "--qr-relief-min-elevation";
+        // #1411 — also write a 3D-printable QR tile (.stl / .obj / .3mf), in mm.
+        public const string QrMesh        = "--qr-mesh";
+        public const string QrMeshSize    = "--qr-mesh-size";
+        public const string QrMeshBase    = "--qr-mesh-base";
+        public const string QrMeshHeight  = "--qr-mesh-height";
+        public const string QrMeshTerrain = "--qr-mesh-terrain";
 
         // EXR read-back / regrade (roadmap S2, #396). Value = input .exr path;
         // selects Regrade mode — read it, apply --view-transform/--exposure, write

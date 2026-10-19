@@ -400,6 +400,7 @@ namespace FracturingFog.Batch
         private static readonly string[] QrNeeds = { BatchFlags.QrPayload };
         private static readonly BatchChoiceRequirement BevelStyle = new(BatchFlags.QrStyle, new[] { "bevel" });
         private static readonly string[] QrReliefNeeds = { BatchFlags.QrRelief };
+        private static readonly string[] QrMeshNeeds = { BatchFlags.QrMesh };
         private static readonly string[] RaymarchOn = { BatchFlags.ReliefRaymarch, BatchFlags.Relief };
 
         private static BatchFlagSpec Sw(string name, BatchFlagGroup g, BatchModes m, string help)
@@ -668,6 +669,23 @@ namespace FracturingFog.Batch
                     QrCodeOptions.MinReliefElevation, 89, enforced: true,
                     def: QrCodeOptions.DefaultReliefMinElevation.ToString(CultureInfo.InvariantCulture))
                     with { Requires = QrReliefNeeds },
+                // #1411 — 3D-printable QR tile.
+                Txt(BatchFlags.QrMesh, Qr, BatchModes.Image,
+                    "Also write the QR as a 3D-printable tile: .stl (geometry, Z up), .obj (vertex colour) or .3mf "
+                    + "(colour, mm). Base plate + raised dark modules, in millimetres. Validated watertight and "
+                    + "scan-checked top-down.", hint: "PATH") with { Example = "tile.stl", Requires = QrNeeds },
+                Dbl(BatchFlags.QrMeshSize, Qr, BatchModes.Image, "QR tile side in mm (code + quiet zone).",
+                    QrCodeOptions.MinMeshSizeMm, QrCodeOptions.MaxMeshSizeMm, enforced: true,
+                    def: QrCodeOptions.DefaultMeshSizeMm.ToString(CultureInfo.InvariantCulture)) with { Requires = QrMeshNeeds },
+                Dbl(BatchFlags.QrMeshBase, Qr, BatchModes.Image, "QR tile base plate thickness in mm.",
+                    QrCodeOptions.MinMeshBaseMm, QrCodeOptions.MaxMeshBaseMm, enforced: true,
+                    def: QrCodeOptions.DefaultMeshBaseMm.ToString(CultureInfo.InvariantCulture)) with { Requires = QrMeshNeeds },
+                Dbl(BatchFlags.QrMeshHeight, Qr, BatchModes.Image, "How far dark modules stand above the base, in mm.",
+                    QrCodeOptions.MinMeshHeightMm, QrCodeOptions.MaxMeshHeightMm, enforced: true,
+                    def: QrCodeOptions.DefaultMeshHeightMm.ToString(CultureInfo.InvariantCulture)) with { Requires = QrMeshNeeds },
+                Dbl(BatchFlags.QrMeshTerrain, Qr, BatchModes.Image,
+                    "Terrain from the fractal's brightness under the code, in mm (0 = flat; a two-material print needs 0).",
+                    0, QrCodeOptions.MaxMeshTerrainMm, enforced: true, def: "0") with { Requires = QrMeshNeeds },
                 Txt(BatchFlags.QrSearch, Qr, BatchModes.Image,
                     "Search around the view (centre + zoom) and the 8 masks for the framing whose own light/dark "
                     + "pattern best matches the code, then render that. Keys: seed, tries (per level), levels, keep, "
