@@ -29,6 +29,9 @@ public sealed class AudioBindingRowViewModel : ViewModelBase
     public static IReadOnlyList<AudioResponseCurve> Curves { get; } =
         (AudioResponseCurve[])Enum.GetValues(typeof(AudioResponseCurve));
 
+    public static IReadOnlyList<AudioRateEdge> Edges { get; } =
+        (AudioRateEdge[])Enum.GetValues(typeof(AudioRateEdge));
+
     public static IReadOnlyList<AudioBindingMode> Modes { get; } =
         (AudioBindingMode[])Enum.GetValues(typeof(AudioBindingMode));
 
@@ -130,12 +133,12 @@ public sealed class AudioBindingRowViewModel : ViewModelBase
     public string MinLabel => IsRate ? "Min/s:" : "Min:";
     public string MaxLabel => IsRate ? "Max/s:" : "Max:";
 
-    /// <summary>#1431 — Rate mode: wrap around the param's range instead of
-    /// stopping at its ends.</summary>
-    public bool Wrap
+    /// <summary>#1436 — Rate mode: stop (Clamp), jump round (Wrap) or turn
+    /// back (PingPong) at the ends of the param's range.</summary>
+    public AudioRateEdge Edge
     {
-        get => _binding.Wrap;
-        set { _binding.Wrap = value; this.RaisePropertyChanged(); }
+        get => _binding.Edge;
+        set { _binding.Edge = value; this.RaisePropertyChanged(); }
     }
 
     /// <summary>#1431 — seconds for the drive to rise (0 = instant).</summary>

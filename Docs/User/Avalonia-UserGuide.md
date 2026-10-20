@@ -488,10 +488,13 @@ The **Fractured Waves** expander in the Fractal Parameters dialog (and the matri
 - **Mode**:
   - **Position**: the music sets the value between Min and Max. The knob follows the music and falls back when it gets quieter.
   - **Rate**: the music sets a *speed*: Min/s .. Max/s units per second, added up over time. The knob keeps flowing and never jumps back. Switching mode re-seeds an untouched range (Rate starts at 0 .. a tenth of the knob's range per second).
-- **Wrap** (Rate only): wrap around the knob's range instead of stopping at its end. On by default for periodic knobs (Acid Fog `AcidWarpFlow`, angles).
+- **Edge** (Rate only): what happens at the ends of the knob's range.
+  - **Clamp**: stop at the end. The default for most knobs.
+  - **Wrap**: jump to the other end. Seamless on looping knobs, so it is the default for Acid Fog `AcidWarpFlow` and angles.
+  - **PingPong**: turn around and come back. The music sets the speed and the ends set the direction, so the knob never stalls and never jumps. Best for knobs that don't loop, such as `AcidWarpFrequency` or `AcidWarpWarpStrength`.
 - **Attack / Release**: seconds for the drive to rise / fall (0 = instant). A short attack with a longer release turns jittery bands and beat pulses into smooth swells.
 
-Example (Acid Fog, music pushes the patterns from one to the next): `AcidWarpFlow`, Signal RMS, Mode Rate, Min/s 0.05, Max/s 1.5, Wrap, Release 0.8. Enabling an audio drive on `AcidWarpFlow` turns **Morph** on automatically.
+Example (Acid Fog, music pushes the patterns from one to the next): `AcidWarpFlow`, Signal RMS, Mode Rate, Min/s 0.05, Max/s 1.5, Edge Wrap, Release 0.8. Enabling an audio drive on `AcidWarpFlow` turns **Morph** on automatically.
 
 Audio drive is saved with the region. It is live-only for now: `--batch` renders the knobs at their current values, and the Command builder flags this (#1432).
 
