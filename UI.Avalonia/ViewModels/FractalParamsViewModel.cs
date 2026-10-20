@@ -67,7 +67,16 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             foreach (var d in FractalAnimatableParamsMap.For(type))
             {
                 if (d.Kind == AnimatableParamKind.Complex) continue;
-                rows.Add(new AudioBindingRowViewModel(d, audioModulation));
+                var row = new AudioBindingRowViewModel(d, audioModulation);
+                // #1431 — Flow only shows with Morph on; turning on its audio
+                // drive turns Morph on so the binding is visible at once.
+                if (d.ParamName == nameof(AcidWarpFlow))
+                    row.PropertyChanged += (_, e) =>
+                    {
+                        if (e.PropertyName == nameof(AudioBindingRowViewModel.Enabled) && row.Enabled)
+                            AcidWarpMorph = true;
+                    };
+                rows.Add(row);
             }
             AudioDrivableParams = rows;
         }

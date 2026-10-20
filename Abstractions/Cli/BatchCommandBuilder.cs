@@ -274,6 +274,11 @@ namespace FracturingFog.Cli
         /// under --animation for a video.</summary>
         public string? LiveAnimationName { get; init; }
 
+        /// <summary>#1432 — parameters the live view is driving from audio
+        /// (enabled audio→param bindings). No batch flag reproduces them yet, so
+        /// they are reported as a fidelity gap.</summary>
+        public IReadOnlyList<string>? AudioDrivenParams { get; init; }
+
         /// <summary>The active theme is a custom/edited palette with no saved
         /// name to reference. The command cannot emit <c>--theme</c> for it, so
         /// the poster falls back to the batch default (HSV).</summary>
@@ -700,6 +705,11 @@ namespace FracturingFog.Cli
                 gaps.Add($"{snap.Fractal} has no equation (the render is blank) — write or load one first");
             if (!string.IsNullOrWhiteSpace(snap.LiveAnimationName))
                 gaps.Add($"Live animation '{snap.LiveAnimationName}' (a still shows one moment of it; for a video choose it under --animation)");
+            // #1432 — audio→param bindings are live-only: batch renders the
+            // parameters at their current values, with no audio drive.
+            if (snap.AudioDrivenParams is { Count: > 0 } audio)
+                gaps.Add("Audio-driven parameters (" + string.Join(", ", audio)
+                         + ") are live-only: the batch renders their current values without the audio drive (#1432)");
             // #1344 / #1380 — batch and export run the quality's sub-pixel AA, but its
             // temporal AA (samples added while the view is still) is live-only.
             if (FracturingFog.Models.QualityPreset.FromName(snap.QualityName) is { TaaMaxSamples: > 1 } q)

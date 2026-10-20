@@ -2617,8 +2617,10 @@ namespace FracturingFog.Hosting
                         new FractalParamsView(),
                         new PanelHostOptions(
                             string.IsNullOrEmpty(vm.Title) ? "Fractal Params" : vm.Title,
-                            Width: 400, MinWidth: 320,
-                            SizeToContentHeight: true, CanResize: false, ShowInTaskbar: true,
+                            // Resizable + wider default: the audio binding rows' numeric
+                            // fields need room for their entry text (#1431 smoke).
+                            Width: 520, MinWidth: 320,
+                            SizeToContentHeight: true, CanResize: true, ShowInTaskbar: true,
                             StartupLocation: WindowStartupLocation.CenterOwner,
                             Background: new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28))))
                     {

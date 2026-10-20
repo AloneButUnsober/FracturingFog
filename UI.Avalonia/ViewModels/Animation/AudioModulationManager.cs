@@ -73,6 +73,7 @@ public sealed class AudioModulationManager
             Source = AudioSignalKind.Rms,
             OutMin = d.Min,
             OutMax = d.Max,
+            Wrap = d.Wraps,   // #1431 — periodic targets wrap in Rate mode
         };
         _entries[d.ParamName] = new Entry { Binding = binding };
         return binding;
@@ -80,6 +81,21 @@ public sealed class AudioModulationManager
 
     public bool IsEnabled(string paramName)
         => _entries.TryGetValue(paramName, out var e) && e.Enabled;
+
+    /// <summary>#1431 — true when an enabled binding drives
+    /// <paramref name="paramName"/> (e.g. <c>AcidWarpFlow</c>, whose drive only
+    /// shows with Acid Warp Morph on).</summary>
+    public static bool AnyEnabledFor(IEnumerable<AudioParamBinding>? bindings, string paramName)
+        => bindings != null && bindings.Any(b => b != null && b.Enabled
+            && string.Equals(b.ParamName, paramName, StringComparison.Ordinal));
+
+    /// <summary>#1432 — names of the params audio is driving right now (enabled
+    /// and resolved against the current type), in name order.</summary>
+    public IReadOnlyList<string> ActiveParamNames()
+        => _entries.Where(kv => kv.Value.Enabled && kv.Value.Animator != null)
+                   .Select(kv => kv.Key)
+                   .OrderBy(n => n, StringComparer.Ordinal)
+                   .ToList();
 
     /// <summary>#277 — true when at least one binding is enabled. Feeds the
     /// host's audio-capture demand predicate.</summary>
@@ -153,6 +169,10 @@ public sealed class AudioModulationManager
         Invert = b.Invert,
         OutMin = b.OutMin,
         OutMax = b.OutMax,
+        Mode = b.Mode,
+        Wrap = b.Wrap,
+        AttackSeconds = b.AttackSeconds,
+        ReleaseSeconds = b.ReleaseSeconds,
     };
 
     /// <summary>Re-resolve every enabled binding against the current params /
@@ -177,7 +197,7 @@ public sealed class AudioModulationManager
             {
                 if (!e.Enabled) continue;
                 if (!byName.TryGetValue(name, out var d)) continue;  // not animatable on this type
-                var anim = AudioModulatorAnimator.TryCreate(p, name, src, e.Binding, d.Cost);
+                var anim = AudioModulatorAnimator.TryCreate(p, name, src, e.Binding, d.Cost, d.Min, d.Max);
                 if (anim != null) { anim.IsEnabled = true; bus.Register(anim); e.Animator = anim; }
             }
         }

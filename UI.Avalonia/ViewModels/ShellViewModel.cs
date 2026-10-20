@@ -2414,14 +2414,19 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // the morph without having to hand-toggle it. Cleared for a non-Acid-
             // Fog region, or an Acid Fog region whose animation doesn't animate
             // Flow (a plain hard-cut pattern), matching the calc's morph gate.
+            // #1431 — an enabled audio binding on AcidWarpFlow counts too, else
+            // the recalled audio drive would move a Flow the calc ignores.
+            var regionAudioBindings = _themeService.GetRegionAudioBindings(name);
             Main.ViewState.FractalParameters.AcidWarpMorph =
-                isAcidFog && attachedAnim != null
-                && attachedAnim.Tracks.Any(t => t.Enabled
-                    && string.Equals(t.ParamName, "AcidWarpFlow", StringComparison.Ordinal));
+                isAcidFog
+                && ((attachedAnim != null
+                     && attachedAnim.Tracks.Any(t => t.Enabled
+                        && string.Equals(t.ParamName, "AcidWarpFlow", StringComparison.Ordinal)))
+                    || AudioModulationManager.AnyEnabledFor(regionAudioBindings, "AcidWarpFlow"));
             // #268 — hydrate the audio→param manager from this region's saved
             // bindings before re-resolving, so a recalled region restores its audio
             // drive. Null / empty clears any prior region's drive.
-            AudioModulation?.LoadBindings(_themeService.GetRegionAudioBindings(name));
+            AudioModulation?.LoadBindings(regionAudioBindings);
             // #263 — re-resolve audio→param animators against the region's params
             // instance + fractal type (drops params the new type can't animate).
             AudioModulation?.Rebind();
