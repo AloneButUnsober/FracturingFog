@@ -178,33 +178,45 @@
                                             <ComboBox Grid.Column="3" ItemsSource="{Binding Curves}"
                                                       SelectedItem="{Binding Curve, Mode=TwoWay}" HorizontalAlignment="Stretch" />
                                         </Grid>
-                                        <Grid ColumnDefinitions="Auto,70,Auto,70,Auto,70,Auto" IsEnabled="{Binding Enabled}">
-                                            <TextBlock Grid.Column="0" Text="Gain:" VerticalAlignment="Center" Margin="0,0,4,0" />
-                                            <NumericUpDown Grid.Column="1" Value="{Binding Gain, Mode=TwoWay}" Increment="0.1" FormatString="F2" />
-                                            <TextBlock Grid.Column="2" Text="{Binding MinLabel}" VerticalAlignment="Center" Margin="8,0,4,0" />
-                                            <NumericUpDown Grid.Column="3" Value="{Binding OutMin, Mode=TwoWay}" Increment="0.1" FormatString="F2" />
-                                            <TextBlock Grid.Column="4" Text="{Binding MaxLabel}" VerticalAlignment="Center" Margin="8,0,4,0" />
-                                            <NumericUpDown Grid.Column="5" Value="{Binding OutMax, Mode=TwoWay}" Increment="0.1" FormatString="F2" />
-                                            <CheckBox Grid.Column="6" Content="Invert" IsChecked="{Binding Invert, Mode=TwoWay}"
-                                                      VerticalAlignment="Center" Margin="8,0,0,0" />
-                                        </Grid>
+                                        <!-- #1431: label + field pairs wrap onto new lines in a narrow
+                                             window; fixed-width numeric fields so the entry text stays
+                                             visible next to the spinner buttons. -->
+                                        <WrapPanel IsEnabled="{Binding Enabled}" ItemSpacing="8" LineSpacing="4">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <TextBlock Text="Gain:" VerticalAlignment="Center" />
+                                                <NumericUpDown Value="{Binding Gain, Mode=TwoWay}" Increment="0.1" FormatString="F2" Width="110" />
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <TextBlock Text="{Binding MinLabel}" VerticalAlignment="Center" />
+                                                <NumericUpDown Value="{Binding OutMin, Mode=TwoWay}" Increment="0.1" FormatString="F2" Width="110" />
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <TextBlock Text="{Binding MaxLabel}" VerticalAlignment="Center" />
+                                                <NumericUpDown Value="{Binding OutMax, Mode=TwoWay}" Increment="0.1" FormatString="F2" Width="110" />
+                                            </StackPanel>
+                                            <CheckBox Content="Invert" IsChecked="{Binding Invert, Mode=TwoWay}" VerticalAlignment="Center" />
+                                        </WrapPanel>
                                         <!-- #1431: Position picks the value, Rate picks a speed
                                              integrated onto it; attack / release slew the drive. -->
-                                        <Grid ColumnDefinitions="Auto,90,Auto,70,Auto,70,Auto" IsEnabled="{Binding Enabled}">
-                                            <TextBlock Grid.Column="0" Text="Mode:" VerticalAlignment="Center" Margin="0,0,4,0" />
-                                            <ComboBox Grid.Column="1" ItemsSource="{Binding Modes}"
-                                                      SelectedItem="{Binding Mode, Mode=TwoWay}" HorizontalAlignment="Stretch"
-                                                      ToolTip.Tip="Position: the music sets the value. Rate: the music sets a speed, so the value keeps flowing and never jumps back." />
-                                            <TextBlock Grid.Column="2" Text="Attack:" VerticalAlignment="Center" Margin="8,0,4,0" />
-                                            <NumericUpDown Grid.Column="3" Value="{Binding AttackSeconds, Mode=TwoWay}" Minimum="0" Increment="0.05" FormatString="F2"
-                                                           ToolTip.Tip="Seconds to rise toward a louder drive (0 = instant)." />
-                                            <TextBlock Grid.Column="4" Text="Release:" VerticalAlignment="Center" Margin="8,0,4,0" />
-                                            <NumericUpDown Grid.Column="5" Value="{Binding ReleaseSeconds, Mode=TwoWay}" Minimum="0" Increment="0.05" FormatString="F2"
-                                                           ToolTip.Tip="Seconds to fall back toward a quieter drive (0 = instant)." />
-                                            <CheckBox Grid.Column="6" Content="Wrap" IsChecked="{Binding Wrap, Mode=TwoWay}"
-                                                      IsVisible="{Binding IsRate}" VerticalAlignment="Center" Margin="8,0,0,0"
+                                        <WrapPanel IsEnabled="{Binding Enabled}" ItemSpacing="8" LineSpacing="4">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <TextBlock Text="Mode:" VerticalAlignment="Center" />
+                                                <ComboBox ItemsSource="{Binding Modes}" SelectedItem="{Binding Mode, Mode=TwoWay}" MinWidth="110"
+                                                          ToolTip.Tip="Position: the music sets the value. Rate: the music sets a speed, so the value keeps flowing and never jumps back." />
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <TextBlock Text="Attack:" VerticalAlignment="Center" />
+                                                <NumericUpDown Value="{Binding AttackSeconds, Mode=TwoWay}" Minimum="0" Increment="0.05" FormatString="F2" Width="110"
+                                                               ToolTip.Tip="Seconds to rise toward a louder drive (0 = instant)." />
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <TextBlock Text="Release:" VerticalAlignment="Center" />
+                                                <NumericUpDown Value="{Binding ReleaseSeconds, Mode=TwoWay}" Minimum="0" Increment="0.05" FormatString="F2" Width="110"
+                                                               ToolTip.Tip="Seconds to fall back toward a quieter drive (0 = instant)." />
+                                            </StackPanel>
+                                            <CheckBox Content="Wrap" IsChecked="{Binding Wrap, Mode=TwoWay}" IsVisible="{Binding IsRate}" VerticalAlignment="Center"
                                                       ToolTip.Tip="Rate mode: wrap around the parameter range instead of stopping at its ends." />
-                                        </Grid>
+                                        </WrapPanel>
                                         <TextBlock Text="{Binding Notes}" IsVisible="{Binding HasNotes}"
                                                    Foreground="#9AACA0" FontSize="10" TextWrapping="Wrap" />
                                     </StackPanel>
