@@ -41,14 +41,15 @@ namespace FracturingFog.Abstractions.Animation
         private bool _primed;
         private double _drive;
         private bool _seeded;
-        private double _acc;
+        private double _acc;              // the phase: == the value except in PingPong
+        private AudioRateEdge _edge;
         private double _lastWritten;
 
         /// <param name="read">Reads the target's current value. Rate mode
         /// integrates from it (and re-seeds when something else changes it);
         /// without it Rate integrates from 0.</param>
         /// <param name="rangeMin">Lower end of the target's range — Rate mode
-        /// clamps (or, with <see cref="AudioModulationBinding.Wrap"/>, wraps) the
+        /// clamps, wraps or ping-pongs (<see cref="AudioModulationBinding.Edge"/>) the
         /// integrated value into [<paramref name="rangeMin"/>, <paramref name="rangeMax"/>].
         /// Unbounded when either end is not finite.</param>
         public AudioModulatorAnimator(
@@ -107,20 +108,42 @@ namespace FracturingFog.Abstractions.Animation
         private void Integrate(double speed, double dt)
         {
             double current = _read?.Invoke() ?? (_seeded ? _lastWritten : 0.0);
-            if (!_seeded || current != _lastWritten) { _acc = current; _seeded = true; }
-            _acc = Fit(_acc + speed * System.Math.Max(0.0, dt));
-            _apply(_acc);
-            _lastWritten = _read?.Invoke() ?? _acc;
+            // Re-seed on an outside edit or an edge-mode change (a PingPong phase
+            // means nothing to Clamp / Wrap); a seeded phase in range == heading up.
+            if (!_seeded || current != _lastWritten || _edge != _binding.Edge)
+            { _acc = current; _seeded = true; _edge = _binding.Edge; }
+            _acc = Advance(_acc + speed * System.Math.Max(0.0, dt));
+            double value = Value(_acc);
+            _apply(value);
+            _lastWritten = _read?.Invoke() ?? value;
         }
 
-        private double Fit(double v)
+        private bool Bounded => double.IsFinite(_rangeMin) && double.IsFinite(_rangeMax) && _rangeMax > _rangeMin;
+
+        /// <summary>Keep the phase bounded: clamp, wrap into one span, or (#1436)
+        /// wrap into the two-span ping-pong period.</summary>
+        private double Advance(double p)
         {
-            if (!double.IsFinite(_rangeMin) || !double.IsFinite(_rangeMax) || _rangeMax <= _rangeMin)
-                return v;
-            if (!_binding.Wrap) return System.Math.Clamp(v, _rangeMin, _rangeMax);
+            if (!Bounded) return p;
             double span = _rangeMax - _rangeMin;
-            return _rangeMin + (v - _rangeMin - System.Math.Floor((v - _rangeMin) / span) * span);
+            return _edge switch
+            {
+                AudioRateEdge.Wrap => _rangeMin + Mod(p - _rangeMin, span),
+                AudioRateEdge.PingPong => _rangeMin + Mod(p - _rangeMin, 2.0 * span),
+                _ => System.Math.Clamp(p, _rangeMin, _rangeMax),
+            };
         }
+
+        /// <summary>Phase → value: the triangle fold for PingPong (up the first
+        /// span, back down the second), identity otherwise.</summary>
+        private double Value(double p)
+        {
+            if (!Bounded || _edge != AudioRateEdge.PingPong) return p;
+            double t = p - _rangeMin, span = _rangeMax - _rangeMin;
+            return t <= span ? p : _rangeMax - (t - span);
+        }
+
+        private static double Mod(double x, double m) => x - System.Math.Floor(x / m) * m;
 
         /// <summary>
         /// Build an audio animator that drives the named scalar property of

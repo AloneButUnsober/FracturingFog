@@ -6,6 +6,20 @@ using System.Text.Json.Serialization;
 
 namespace FracturingFog.Audio
 {
+    /// <summary>#1436 — what a Rate-mode binding does at the ends of its
+    /// target's range.</summary>
+    public enum AudioRateEdge
+    {
+        /// <summary>Stop at the end (the knob holds until the speed reverses).</summary>
+        Clamp,
+        /// <summary>Jump back to the other end — seamless only on periodic
+        /// targets (<c>AcidWarpFlow</c>, angles).</summary>
+        Wrap,
+        /// <summary>Turn around and come back: the music sets the speed, the
+        /// edges set the direction — never stalls, never jumps.</summary>
+        PingPong,
+    }
+
     /// <summary>How a binding's shaped drive lands on its target (#1431).</summary>
     public enum AudioBindingMode
     {
@@ -73,11 +87,21 @@ namespace FracturingFog.Audio
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
         public AudioBindingMode Mode { get; set; } = AudioBindingMode.Position;
 
-        /// <summary>#1431 — Rate mode only: wrap the integrated value around the
-        /// target's range instead of clamping at its ends (for periodic targets
-        /// such as <c>AcidWarpFlow</c> or an angle).</summary>
+        /// <summary>#1436 — Rate mode only: what the integrated value does at the
+        /// ends of the target's range (Clamp / Wrap / PingPong).</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-        public bool Wrap { get; set; }
+        public AudioRateEdge Edge { get; set; } = AudioRateEdge.Clamp;
+
+        /// <summary>#1431 back-compat: bindings saved before #1436 carry a
+        /// <c>"Wrap": true</c> flag instead of <see cref="Edge"/>. Read-only
+        /// shim — never written.</summary>
+        [JsonInclude, JsonPropertyName("Wrap")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        private bool? LegacyWrap
+        {
+            get => null;
+            set { if (value == true) Edge = AudioRateEdge.Wrap; }
+        }
 
         /// <summary>#1431 — time constant (seconds) for the drive to rise toward a
         /// higher value. 0 = instant (no smoothing).</summary>

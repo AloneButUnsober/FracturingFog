@@ -83,7 +83,7 @@ public sealed class AudioBindingRateModeTests
     public void Rate_Wraps_Around_The_Range()
     {
         // AcidWarpFlow-like: 0..20, wrap. 19.9 + 1/s * 0.2 s = 20.1 -> 0.1.
-        var b = new AudioModulationBinding { Mode = AudioBindingMode.Rate, OutMin = 0, OutMax = 1, Wrap = true };
+        var b = new AudioModulationBinding { Mode = AudioBindingMode.Rate, OutMin = 0, OutMax = 1, Edge = AudioRateEdge.Wrap };
         var (t, _, anim) = Make(b, rms: 1f, start: 19.9, min: 0, max: 20);
         anim.Tick(0.2);
         Assert.Equal(0.1, t.Scalar, 1e-9);
@@ -92,10 +92,81 @@ public sealed class AudioBindingRateModeTests
     [Fact]
     public void Rate_Wraps_Negative_Speed_Below_Min()
     {
-        var b = new AudioModulationBinding { Mode = AudioBindingMode.Rate, OutMin = -1, OutMax = -1, Wrap = true };
+        var b = new AudioModulationBinding { Mode = AudioBindingMode.Rate, OutMin = -1, OutMax = -1, Edge = AudioRateEdge.Wrap };
         var (t, _, anim) = Make(b, start: 0.1, min: 0, max: 20);
         anim.Tick(0.2);
         Assert.Equal(19.9, t.Scalar, 1e-9);
+    }
+
+    // ── #1436 ping-pong ────────────────────────────────────────────────────────
+
+    private static AudioModulationBinding PingPong(double speed) => new()
+    {
+        Mode = AudioBindingMode.Rate, OutMin = speed, OutMax = speed, Edge = AudioRateEdge.PingPong,
+    };
+
+    [Fact]
+    public void PingPong_Turns_At_The_Top_And_Keeps_Going_Down()
+    {
+        // 0..10 at 1/s from 9.5: +1 -> 10.5 reflects to 9.5, then down.
+        var (t, _, anim) = Make(PingPong(1), start: 9.5, min: 0, max: 10);
+        anim.Tick(1.0);
+        Assert.Equal(9.5, t.Scalar, 1e-9);
+        anim.Tick(1.0);
+        Assert.Equal(8.5, t.Scalar, 1e-9);   // still heading down — no stall, no jump
+    }
+
+    [Fact]
+    public void PingPong_Turns_At_The_Bottom_And_Heads_Back_Up()
+    {
+        var (t, _, anim) = Make(PingPong(1), start: 9.5, min: 0, max: 10);
+        for (int i = 0; i < 10; i++) anim.Tick(1.0);     // up 0.5, down 9.5 -> 0.5... down to 0.5
+        Assert.Equal(0.5, t.Scalar, 1e-9);
+        anim.Tick(1.0);                                   // 0.5 -> -0.5 reflects to 0.5, now up
+        Assert.Equal(0.5, t.Scalar, 1e-9);
+        anim.Tick(1.0);
+        Assert.Equal(1.5, t.Scalar, 1e-9);
+    }
+
+    [Fact]
+    public void PingPong_Folds_Several_Bounces_In_One_Step()
+    {
+        // 2 + 25 = 27 over a 0..10 range: period 20 -> phase 7, going up -> 7.
+        var (t, _, anim) = Make(PingPong(25), start: 2, min: 0, max: 10);
+        anim.Tick(1.0);
+        Assert.Equal(7.0, t.Scalar, 1e-9);
+        // independent check: every write stays inside the range
+        for (int i = 0; i < 50; i++) { anim.Tick(0.37); Assert.InRange(t.Scalar, 0.0, 10.0); }
+    }
+
+    [Fact]
+    public void PingPong_Negative_Speed_Bounces_Off_The_Bottom()
+    {
+        var (t, _, anim) = Make(PingPong(-1), start: 0.5, min: 0, max: 10);
+        anim.Tick(1.0);                                   // 0.5 - 1 -> reflects to 0.5
+        Assert.Equal(0.5, t.Scalar, 1e-9);
+        anim.Tick(1.0);                                   // continuing the fold
+        Assert.InRange(t.Scalar, 0.0, 10.0);
+    }
+
+    [Fact]
+    public void PingPong_Reseeds_Heading_Up_After_An_Outside_Edit()
+    {
+        var (t, _, anim) = Make(PingPong(1), start: 9.5, min: 0, max: 10);
+        anim.Tick(1.0);                                   // bounced, heading down
+        t.Scalar = 3.0;                                   // user drags the slider
+        anim.Tick(1.0);
+        Assert.Equal(4.0, t.Scalar, 1e-9);
+    }
+
+    [Fact]
+    public void Legacy_Wrap_Flag_Loads_As_Wrap_Edge_And_Is_Never_Written()
+    {
+        var b = JsonSerializer.Deserialize<AudioModulationBinding>("{\"Mode\":1,\"Wrap\":true}")!;
+        Assert.Equal(AudioRateEdge.Wrap, b.Edge);
+        string json = JsonSerializer.Serialize(b);
+        Assert.DoesNotContain("\"Wrap\"", json);
+        Assert.Contains("\"Edge\":1", json);
     }
 
     [Fact]
@@ -202,12 +273,13 @@ public sealed class AudioBindingRateModeTests
         string json = JsonSerializer.Serialize(new AudioModulationBinding());
         Assert.DoesNotContain("Mode", json);
         Assert.DoesNotContain("Wrap", json);
+        Assert.DoesNotContain("Edge", json);
         Assert.DoesNotContain("Attack", json);
         Assert.DoesNotContain("Release", json);
 
         var old = JsonSerializer.Deserialize<AudioModulationBinding>("{\"Source\":1,\"OutMax\":4}")!;
         Assert.Equal(AudioBindingMode.Position, old.Mode);
-        Assert.False(old.Wrap);
+        Assert.Equal(AudioRateEdge.Clamp, old.Edge);
         Assert.Equal(0.0, old.AttackSeconds);
         Assert.Equal(0.0, old.ReleaseSeconds);
     }
@@ -226,7 +298,7 @@ public sealed class AudioBindingRateModeTests
                     ParamName = "AcidWarpFlow", Enabled = true,
                     Binding = new AudioModulationBinding
                     {
-                        Mode = AudioBindingMode.Rate, Wrap = true,
+                        Mode = AudioBindingMode.Rate, Edge = AudioRateEdge.PingPong,
                         AttackSeconds = 0.1, ReleaseSeconds = 0.8, OutMin = 0.05, OutMax = 1.5,
                     },
                 },
@@ -236,7 +308,7 @@ public sealed class AudioBindingRateModeTests
             JsonSerializer.Serialize(new List<FractalRegion> { region }))!;
         var b = back[0].AudioBindings![0].Binding;
         Assert.Equal(AudioBindingMode.Rate, b.Mode);
-        Assert.True(b.Wrap);
+        Assert.Equal(AudioRateEdge.PingPong, b.Edge);
         Assert.Equal(0.1, b.AttackSeconds, Eps);
         Assert.Equal(0.8, b.ReleaseSeconds, Eps);
     }
@@ -254,7 +326,7 @@ public sealed class AudioBindingRateModeTests
     {
         var d = Flow();
         Assert.True(d.Wraps);
-        Assert.True(Manager().GetOrCreateBinding(d).Wrap);
+        Assert.Equal(AudioRateEdge.Wrap, Manager().GetOrCreateBinding(d).Edge);
     }
 
     [Fact]
@@ -266,7 +338,7 @@ public sealed class AudioBindingRateModeTests
         var copy = mgr.ExportBindings().Single().Binding;
         Assert.NotSame(b, copy);
         Assert.Equal(AudioBindingMode.Rate, copy.Mode);
-        Assert.True(copy.Wrap);
+        Assert.Equal(AudioRateEdge.Wrap, copy.Edge);
         Assert.Equal(0.2, copy.AttackSeconds, Eps);
         Assert.Equal(0.6, copy.ReleaseSeconds, Eps);
     }

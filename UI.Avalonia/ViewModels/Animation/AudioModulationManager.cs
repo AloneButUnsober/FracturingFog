@@ -73,7 +73,7 @@ public sealed class AudioModulationManager
             Source = AudioSignalKind.Rms,
             OutMin = d.Min,
             OutMax = d.Max,
-            Wrap = d.Wraps,   // #1431 — periodic targets wrap in Rate mode
+            Edge = d.Wraps ? AudioRateEdge.Wrap : AudioRateEdge.Clamp,   // #1431 — periodic targets wrap in Rate mode
         };
         _entries[d.ParamName] = new Entry { Binding = binding };
         return binding;
@@ -170,7 +170,7 @@ public sealed class AudioModulationManager
         OutMin = b.OutMin,
         OutMax = b.OutMax,
         Mode = b.Mode,
-        Wrap = b.Wrap,
+        Edge = b.Edge,
         AttackSeconds = b.AttackSeconds,
         ReleaseSeconds = b.ReleaseSeconds,
     };

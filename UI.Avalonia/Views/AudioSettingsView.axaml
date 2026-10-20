@@ -214,8 +214,11 @@
                                                 <NumericUpDown Value="{Binding ReleaseSeconds, Mode=TwoWay}" Minimum="0" Increment="0.05" FormatString="F2" Width="110"
                                                                ToolTip.Tip="Seconds to fall back toward a quieter drive (0 = instant)." />
                                             </StackPanel>
-                                            <CheckBox Content="Wrap" IsChecked="{Binding Wrap, Mode=TwoWay}" IsVisible="{Binding IsRate}" VerticalAlignment="Center"
-                                                      ToolTip.Tip="Rate mode: wrap around the parameter range instead of stopping at its ends." />
+                                            <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsRate}">
+                                                <TextBlock Text="Edge:" VerticalAlignment="Center" />
+                                                <ComboBox ItemsSource="{Binding Edges}" SelectedItem="{Binding Edge, Mode=TwoWay}" MinWidth="110"
+                                                          ToolTip.Tip="Rate mode at the ends of the range. Clamp: stop. Wrap: jump to the other end (seamless on looping knobs). PingPong: turn around and come back." />
+                                            </StackPanel>
                                         </WrapPanel>
                                         <TextBlock Text="{Binding Notes}" IsVisible="{Binding HasNotes}"
                                                    Foreground="#9AACA0" FontSize="10" TextWrapping="Wrap" />
