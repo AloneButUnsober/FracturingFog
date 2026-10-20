@@ -107,6 +107,7 @@ namespace FracturingFog.Audio
                 _onsetCount = 0;
                 _sampleClock = 0;
                 _beatIndex = 0;
+                _downbeatBeatCounter = 0;
                 _bpm = 0;
                 _lastBeatSampleClock = long.MinValue;
             }
@@ -265,7 +266,11 @@ namespace FracturingFog.Audio
             // Refractory period: min 100ms between beats (avoid double-trigger).
             long sampleClockNow = (long)_sampleClock;
             long minGap = _sampleRate / 10;
-            bool refractoryOk = sampleClockNow - _lastBeatSampleClock > minGap;
+            // The long.MinValue "no beat yet" sentinel must be tested explicitly:
+            // subtracting it overflows to a negative gap, which held refractoryOk
+            // false forever and silenced every beat / downbeat / BPM signal.
+            bool refractoryOk = _lastBeatSampleClock == long.MinValue
+                || sampleClockNow - _lastBeatSampleClock > minGap;
 
             if (refractoryOk && flux > thresh && _fluxCount > 16)
             {
