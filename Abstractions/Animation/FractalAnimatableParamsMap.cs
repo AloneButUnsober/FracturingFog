@@ -306,7 +306,8 @@ public static class FractalAnimatableParamsMap
             Cost: AnimatableParamCost.Expensive,
             Notes: "Continuous pattern position (needs Morph on). Animate 0 → "
                  + "pattern-count for an endless morph through every pattern, "
-                 + "wrapping seamlessly. Blends two fields per pixel — expensive."),
+                 + "wrapping seamlessly. Blends two fields per pixel — expensive.",
+            Wraps: true),
     };
 
     private static readonly AnimatableParamDescriptor[] _flameList =
@@ -421,7 +422,8 @@ public static class FractalAnimatableParamsMap
             Notes: "PhaseModulated: κ in n_z + κ·n_c — the c-orbit sweeps the z palette's phase (#1122). Recolour only."),
         new("DualOrbitTrapAngle", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 360.0,
             Cost: AnimatableParamCost.Expensive,
-            Notes: "Trap fields: turns the trap shape (degrees), fixed or co-moving frame — spin the trap (#1119)."),
+            Notes: "Trap fields: turns the trap shape (degrees), fixed or co-moving frame — spin the trap (#1119).",
+            Wraps: true),
         new("DualOrbitInterferenceK", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 60.0,
             Notes: "Path interference κ (the 'ħ' knob) — sweeping it makes the fringes shimmer (#1126). Recolour only."),
     };
@@ -574,6 +576,7 @@ public static class FractalAnimatableParamsMap
     private static readonly AnimatableParamDescriptor[] _userEquationList =
     {
         new("UserEquationRotationDegrees", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 360.0,
-            Notes: "Cycles through a full rotation. Wrap is at 360."),
+            Notes: "Cycles through a full rotation. Wrap is at 360.",
+            Wraps: true),
     };
 }

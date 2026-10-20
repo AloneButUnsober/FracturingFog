@@ -479,6 +479,22 @@ Tunables:
 
 Settings persist to `%APPDATA%\FracturingFog\audio-settings.json`.
 
+### Driving parameters from audio
+
+The **Fractured Waves** expander in the Fractal Parameters dialog (and the matrix in Audio Settings: both edit the same binding) lists every animatable knob of the current fractal. Tick a row to let the music drive it:
+
+- **Signal**: Bass / LowMid / Mid / HighMid / High, RMS (overall loudness), BeatPulse / DownbeatPulse (a quick hit on each beat / bar), BpmPhaseSaw / BpmPhaseSine (smooth tempo-locked ramps).
+- **Curve / Gain / Invert**: shape the signal before it lands.
+- **Mode**:
+  - **Position**: the music sets the value between Min and Max. The knob follows the music and falls back when it gets quieter.
+  - **Rate**: the music sets a *speed*: Min/s .. Max/s units per second, added up over time. The knob keeps flowing and never jumps back. Switching mode re-seeds an untouched range (Rate starts at 0 .. a tenth of the knob's range per second).
+- **Wrap** (Rate only): wrap around the knob's range instead of stopping at its end. On by default for periodic knobs (Acid Fog `AcidWarpFlow`, angles).
+- **Attack / Release**: seconds for the drive to rise / fall (0 = instant). A short attack with a longer release turns jittery bands and beat pulses into smooth swells.
+
+Example (Acid Fog, music pushes the patterns from one to the next): `AcidWarpFlow`, Signal RMS, Mode Rate, Min/s 0.05, Max/s 1.5, Wrap, Release 0.8. Enabling an audio drive on `AcidWarpFlow` turns **Morph** on automatically.
+
+Audio drive is saved with the region. It is live-only for now: `--batch` renders the knobs at their current values, and the Command builder flags this (#1432).
+
 ---
 
 ## 12. Screenshot + Poster

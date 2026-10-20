@@ -62,10 +62,15 @@ public enum AnimatableParamCost
 /// <param name="Notes">Optional human-readable note shown in the animation
 /// editor — typically a caveat ("accumulator reset on change", "discrete
 /// step only").</param>
+/// <param name="Wraps">#1431 — the parameter is periodic over
+/// [<paramref name="Min"/>, <paramref name="Max"/>] (an angle, the Acid Warp
+/// pattern position), so a Rate-mode audio binding wraps around the range by
+/// default instead of clamping at its ends.</param>
 public sealed record AnimatableParamDescriptor(
     string ParamName,
     AnimatableParamKind Kind,
     double Min,
     double Max,
     AnimatableParamCost Cost = AnimatableParamCost.Cheap,
-    string? Notes = null);
+    string? Notes = null,
+    bool Wraps = false);
