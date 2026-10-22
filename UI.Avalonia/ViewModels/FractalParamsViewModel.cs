@@ -228,6 +228,9 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _billiardMaxBounces = _p.BilliardMaxBounces;
         _billiardGateCount = _p.BilliardGateCount;
         _billiardSeed = _p.BilliardSeed;
+        _billiardLaunchMode = _p.BilliardLaunchMode;
+        _billiardGateMode = _p.BilliardGateMode;
+        _billiardMuteMisses = _p.BilliardMuteMisses;
         _precLowTier = _p.PrecisionLowTier;
         _precHighTier = _p.PrecisionHighTier;
         _precMetric = _p.PrecisionDiffMetric;
@@ -1992,6 +1995,17 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     private int _billiardSeed;
     /// <summary>PRNG seed for the NDisk arrangement.</summary>
     public int BilliardSeed { get => _billiardSeed; set { Set(ref _billiardSeed, value); _p.BilliardSeed = _billiardSeed; Fire(); } }
+    // #1445 — launch / gate mode and miss muting.
+    private BilliardLaunchMode _billiardLaunchMode;
+    public BilliardLaunchMode BilliardLaunchMode { get => _billiardLaunchMode; set { Set(ref _billiardLaunchMode, value); _p.BilliardLaunchMode = value; Fire(); } }
+    public System.Array BilliardLaunchModes => s_BilliardLaunchModes;   // cached (see BilliardGeometries)
+    private static readonly System.Array s_BilliardLaunchModes = System.Enum.GetValues(typeof(BilliardLaunchMode));
+    private BilliardGateMode _billiardGateMode;
+    public BilliardGateMode BilliardGateMode { get => _billiardGateMode; set { Set(ref _billiardGateMode, value); _p.BilliardGateMode = value; Fire(); } }
+    public System.Array BilliardGateModes => s_BilliardGateModes;
+    private static readonly System.Array s_BilliardGateModes = System.Enum.GetValues(typeof(BilliardGateMode));
+    private bool _billiardMuteMisses;
+    public bool BilliardMuteMisses { get => _billiardMuteMisses; set { Set(ref _billiardMuteMisses, value); _p.BilliardMuteMisses = value; Fire(); } }
 
     // ── Precision Field (#628) ──
     private PrecisionTier _precLowTier;

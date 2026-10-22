@@ -5,7 +5,7 @@
 //
 // Chaotic-billiard (#627) colouring contract. ChaoticBilliardCalculator
 // dispatches per-pixel colour through this interface when the active ColorMap
-// implements it; otherwise it falls back to its built-in HSV-per-gate shading.
+// implements it; otherwise it falls back to its built-in Okabe-Ito-per-gate shading.
 //
 // The billiard outcome is categorical (which escape gate the trajectory left
 // through) plus two continuous secondaries (bounce count, path length). None of
@@ -14,11 +14,13 @@
 // categorical outcome gets its own contract.
 //
 // Inputs unique to the billiard scatter:
-//   gateId      Index of the angular escape-gate sector the trajectory exited
-//               through (0 .. gateCount-1). -1 when the trajectory was trapped
+//   gateId      Index of the escape gate the trajectory exited through
+//               (0 .. gateCount-1): a compass sector, or in ExitGap mode the gap
+//               between ring disks k and k+1 (#1445). -1 when the trajectory was trapped
 //               (exceeded the bounce cap and never escaped); themes should paint
 //               a sensible "trapped" colour (the interior of the scatter set).
-//   gateCount   Total number of escape-gate sectors (BilliardGateCount).
+//   gateCount   Total number of escape gates: BilliardGateCount in Sector mode,
+//               the ring disk count in ExitGap mode (#1445).
 //   bounces     Reflections consumed before escape (or the bounce cap if trapped).
 //   maxBounces  Bounce cap for the frame.
 //   pathLength  Total world-space path length travelled, normalised to ~[0, 1]

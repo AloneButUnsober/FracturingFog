@@ -76,6 +76,24 @@ namespace FracturingFog
     /// region; <see cref="Ring"/> places the disks evenly on a circle.</summary>
     public enum BilliardGeometry { ThreeDisk, NDisk, Ring }
 
+    /// <summary>How a ChaoticBilliard pixel maps to a launch initial condition (#1445).
+    /// <see cref="FarField"/> launches from outside the scatterer: impact parameter b
+    /// along x, incoming angle phi along y. Each disk's first-hit shadow is a sine band in
+    /// (b, phi), so the view is dominated by those bands and the chaotic set is thin.
+    /// <see cref="PhaseSpace"/> is the Birkhoff section: the ray leaves the surface of
+    /// disk 0, x = boundary angle (x * pi/2 radians, so zoom 1 spans the whole circle),
+    /// y = sine of the outgoing angle to the surface normal (|y| &lt; 1). The chaotic set
+    /// fills a large part of this view.</summary>
+    public enum BilliardLaunchMode { FarField, PhaseSpace }
+
+    /// <summary>How a ChaoticBilliard escape is classified into a gate (#1445).
+    /// <see cref="Sector"/> buckets the exit direction into <c>BilliardGateCount</c>
+    /// equal compass sectors starting at +x (the #627 behaviour). <see cref="ExitGap"/>
+    /// buckets it into the n sectors centred on the gaps between the n ring disks
+    /// (ThreeDisk / Ring), so the colours are the exit basins of the scatterer and
+    /// rotate with it. NDisk has no ring gaps and falls back to Sector.</summary>
+    public enum BilliardGateMode { Sector, ExitGap }
+
     /// <summary>Arithmetic precision tier for the PrecisionField (#628) diff
     /// renderer. The map z² + c is iterated at two tiers and the per-pixel
     /// divergence of the outcome is the image. <see cref="Float"/> (32-bit) and
@@ -818,7 +836,8 @@ namespace FracturingFog
         /// <c>FractalParameters</c>: <c>BilliardGeometry</c>,
         /// <c>BilliardDiskCount</c>, <c>BilliardDiskRadius</c>,
         /// <c>BilliardSeparation</c>, <c>BilliardMaxBounces</c>,
-        /// <c>BilliardGateCount</c>, <c>BilliardSeed</c>.</summary>
+        /// <c>BilliardGateCount</c>, <c>BilliardSeed</c>, <c>BilliardLaunchMode</c>,
+        /// <c>BilliardGateMode</c>, <c>BilliardMuteMisses</c>.</summary>
         ChaoticBilliard,
         /// <summary>Precision-sensitivity field (#628). Not a new fractal shape —
         /// it iterates Mandelbrot z² + c at two arithmetic tiers
