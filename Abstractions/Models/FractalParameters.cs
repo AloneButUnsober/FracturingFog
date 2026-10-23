@@ -1258,9 +1258,12 @@ namespace FracturingFog.Models
         /// Ignored by ThreeDisk (always 3). Clamped to [1, 64]. Default 5.</summary>
         public int BilliardDiskCount { get; set; } = 5;
         /// <summary>Disk radius in world units. The play region spans roughly
-        /// [-2, 2]; the default 0.4 leaves escape gaps between disks so
-        /// trajectories can thread through and produce fractal basins.</summary>
-        public double BilliardDiskRadius { get; set; } = 0.4;
+        /// [-2, 2]. The default 0.8 with separation 1 puts the ThreeDisk centres
+        /// √3 apart, a centre-distance / radius ratio of ≈ 2.17: nearly touching,
+        /// the regime where the trapped set and the Wada exit basins are wide
+        /// enough to see (#1445; the #627 default 0.4 gave ≈ 4.3, mostly direct
+        /// escapes).</summary>
+        public double BilliardDiskRadius { get; set; } = 0.8;
         /// <summary>Centre-to-centre spacing for ThreeDisk / Ring, in world
         /// units (radius of the circle the disk centres sit on). Larger =
         /// wider gaps, simpler basins; smaller = tighter gaps, deeper chaos.
@@ -1271,12 +1274,23 @@ namespace FracturingFog.Models
         /// linear cost. Clamped to [1, 4096]. Default 256.</summary>
         public int BilliardMaxBounces { get; set; } = 256;
         /// <summary>Number of angular escape-gate sectors the exit direction is
-        /// bucketed into (the categorical outcome). Clamped to [2, 64].
+        /// bucketed into (the categorical outcome) in <see cref="BilliardGateMode.Sector"/>
+        /// mode. ExitGap mode uses the ring disk count instead. Clamped to [2, 64].
         /// Default 6.</summary>
         public int BilliardGateCount { get; set; } = 6;
         /// <summary>PRNG seed for the NDisk random arrangement. Identical
         /// (geometry, count, radius, seed) reproduce the same field. Default 1.</summary>
         public int BilliardSeed { get; set; } = 1;
+        /// <summary>Pixel → launch mapping (#1445): FarField (b, phi) or the
+        /// PhaseSpace Birkhoff section off disk 0. Default FarField.</summary>
+        public BilliardLaunchMode BilliardLaunchMode { get; set; } = BilliardLaunchMode.FarField;
+        /// <summary>Escape classification (#1445): ExitGap colours by which gap
+        /// between ring disks the ray leaves through; Sector is the #627 compass
+        /// bucketing. Default ExitGap.</summary>
+        public BilliardGateMode BilliardGateMode { get; set; } = BilliardGateMode.ExitGap;
+        /// <summary>Draw rays that never hit a mirror as a muted background (#1445),
+        /// so the scattered rays carry the picture. Default true.</summary>
+        public bool BilliardMuteMisses { get; set; } = true;
 
         // Precision-sensitivity field (#628). Mandelbrot z² + c iterated at two
         // arithmetic tiers; the per-pixel divergence of the outcome is the image.
@@ -2089,6 +2103,9 @@ namespace FracturingFog.Models
                 BilliardMaxBounces = BilliardMaxBounces,
                 BilliardGateCount = BilliardGateCount,
                 BilliardSeed = BilliardSeed,
+                BilliardLaunchMode = BilliardLaunchMode,
+                BilliardGateMode = BilliardGateMode,
+                BilliardMuteMisses = BilliardMuteMisses,
                 PrecisionLowTier = PrecisionLowTier,
                 PrecisionHighTier = PrecisionHighTier,
                 PrecisionDiffMetric = PrecisionDiffMetric,

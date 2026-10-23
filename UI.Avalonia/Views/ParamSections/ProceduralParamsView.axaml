@@ -876,7 +876,7 @@
         <!-- Chaotic Billiard (#627) -->
         <Grid IsVisible="{Binding IsChaoticBilliard}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Geometry:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding BilliardGeometries}"
@@ -907,12 +907,27 @@
             <NumericUpDown Grid.Row="5" Grid.Column="1"
                            Minimum="2" Maximum="64" Increment="1" FormatString="F0"
                            Value="{Binding BilliardGateCount, Mode=TwoWay}" Margin="0,2"
-                           ToolTip.Tip="Number of angular escape-gate sectors the exit direction is bucketed into — the categorical outcome that drives Billiard themes." />
+                           ToolTip.Tip="Sector gate mode only: number of compass sectors the exit direction is bucketed into. ExitGap mode uses one gate per gap between ring disks." />
             <TextBlock Grid.Row="6" Grid.Column="0" Text="Seed:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="6" Grid.Column="1"
                            Minimum="-2147483648" Maximum="2147483647" Increment="1" FormatString="F0"
                            Value="{Binding BilliardSeed, Mode=TwoWay}" Margin="0,2"
                            ToolTip.Tip="PRNG seed for the NDisk random arrangement. Same seed + settings = identical field." />
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Launch:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="7" Grid.Column="1"
+                      ItemsSource="{Binding BilliardLaunchModes}"
+                      SelectedItem="{Binding BilliardLaunchMode, Mode=TwoWay}"
+                      Margin="0,2"
+                      ToolTip.Tip="FarField: rays come in from outside (x = impact offset, y = incoming angle). PhaseSpace: rays leave the surface of disk 0 (x = position around the disk, y = sine of the outgoing angle) — the chaotic set fills the view." />
+            <TextBlock Grid.Row="8" Grid.Column="0" Text="Gate mode:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="8" Grid.Column="1"
+                      ItemsSource="{Binding BilliardGateModes}"
+                      SelectedItem="{Binding BilliardGateMode, Mode=TwoWay}"
+                      Margin="0,2"
+                      ToolTip.Tip="ExitGap: colour by which gap between ring disks the ray leaves through (the Wada exit basins; ThreeDisk / Ring). Sector: equal compass sectors (Gate count)." />
+            <CheckBox Grid.Row="9" Grid.Column="1" Content="Mute direct misses"
+                      IsChecked="{Binding BilliardMuteMisses, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Draw rays that never hit a mirror as a dark background, so the scattered rays carry the picture." />
         </Grid>
 
         <!-- Precision Field (#628) -->

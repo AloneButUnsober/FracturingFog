@@ -588,6 +588,12 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? BilliardMaxBounces { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? BilliardGateCount { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? BilliardSeed { get; set; }
+        // #1445 — launch / gate mode (int casts of BilliardLaunchMode / BilliardGateMode)
+        // and miss muting. A region saved before these existed carries all seven #627
+        // fields and none of these; ApplyTo then restores the #627 look.
+        [JsonIgnore(Condition = OmitNull)] public int? BilliardLaunchMode { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? BilliardGateMode { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? BilliardMuteMisses { get; set; }
         // Precision-sensitivity field (#628). Tiers/metric stored as int casts of
         // PrecisionTier / PrecisionDiffMetric.
         [JsonIgnore(Condition = OmitNull)] public int? PrecisionLowTier { get; set; }
@@ -970,6 +976,9 @@ namespace FracturingFog.Models
                     BilliardMaxBounces = p.BilliardMaxBounces,
                     BilliardGateCount = p.BilliardGateCount,
                     BilliardSeed = p.BilliardSeed,
+                    BilliardLaunchMode = (int)p.BilliardLaunchMode,
+                    BilliardGateMode = (int)p.BilliardGateMode,
+                    BilliardMuteMisses = p.BilliardMuteMisses,
                 },
                 FractalType.PrecisionField => new RegionFractalParams
                 {
@@ -1564,6 +1573,15 @@ namespace FracturingFog.Models
              : t == typeof(bool) ? "true/false"
              : "JSON value";
 
+        // #1445 — a billiard snapshot written before the launch / gate / mute fields
+        // existed. Snapshot always writes all seven #627 fields, so a hand-typed
+        // `--param` with a few billiard keys is not mistaken for one.
+        private bool IsLegacyBilliardSnapshot =>
+            BilliardGeometry.HasValue && BilliardDiskCount.HasValue && BilliardDiskRadius.HasValue
+            && BilliardSeparation.HasValue && BilliardMaxBounces.HasValue && BilliardGateCount.HasValue
+            && BilliardSeed.HasValue
+            && !BilliardLaunchMode.HasValue && !BilliardGateMode.HasValue && !BilliardMuteMisses.HasValue;
+
         /// <summary>
         /// Overlay every captured (non-null) field onto <paramref name="p"/>.
         /// No-op for fields left null, so applying a Julia snapshot never
@@ -1623,6 +1641,20 @@ namespace FracturingFog.Models
                 p.BilliardGateCount = BilliardGateCount.Value;
             if (BilliardSeed.HasValue)
                 p.BilliardSeed = BilliardSeed.Value;
+            if (BilliardLaunchMode.HasValue)
+                p.BilliardLaunchMode = (FracturingFog.BilliardLaunchMode)BilliardLaunchMode.Value;
+            if (BilliardGateMode.HasValue)
+                p.BilliardGateMode = (FracturingFog.BilliardGateMode)BilliardGateMode.Value;
+            if (BilliardMuteMisses.HasValue)
+                p.BilliardMuteMisses = BilliardMuteMisses.Value;
+            // #1445 — a full pre-#1445 billiard snapshot (all seven #627 fields, none of
+            // the new ones) keeps the look it was saved with: compass sectors, no muting.
+            if (IsLegacyBilliardSnapshot)
+            {
+                p.BilliardLaunchMode = FracturingFog.BilliardLaunchMode.FarField;
+                p.BilliardGateMode = FracturingFog.BilliardGateMode.Sector;
+                p.BilliardMuteMisses = false;
+            }
             if (PrecisionLowTier.HasValue)
                 p.PrecisionLowTier = (FracturingFog.PrecisionTier)PrecisionLowTier.Value;
             if (PrecisionHighTier.HasValue)
