@@ -17,7 +17,8 @@ credited in Docs/Resources-Bibliography.md. This script fails (exit 1) when:
      (explicit <a id> or a heading slug);
   4. with --base <git-ref>: a credit present in the bibliography at <git-ref>
      (a **bold** author / source name, a <URL>, an <a id> anchor) is gone.
-     Credits are corrected or moved, never removed.
+     Credits are corrected or moved, never removed: a confirmed correction
+     keeps the old form under "Corrected attributions" in the bibliography.
 
 A detected name / host that is NOT a citation (a word that happens to sit next
 to a year, a test fixture URL) goes in allowlist.txt beside this script, one
@@ -185,6 +186,9 @@ def main():
             print(f"\n{title} ({len(items)}):")
             for k in sorted(items, key=str.lower):
                 print(f"  {k:<40} {'present at' if items is removed else 'first seen'} {items[k]}")
+    if removed:
+        print("\nA correction keeps the old form under \"Corrected attributions\" in " + BIB +
+              " (date, PR, reason); a renamed anchor keeps its old <a id>.")
     if not ok:
         print("\nSource citation contract: credit every source in " + BIB +
               " (see CONTRIBUTING.md). Only non-citations may go in Tools/CitationGuard/allowlist.txt.")

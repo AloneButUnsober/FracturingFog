@@ -18,7 +18,9 @@ traded against speed or scope.
   texts, presets and issue-driven research as well as shipped code.
 - **Never remove a credit.** Correct, expand or move it. Never delete it, even
   when the feature that used it is removed. If details are uncertain, the entry
-  goes under *Citations awaiting verification*. It is never dropped.
+  goes under *Citations awaiting verification*. It is never dropped. A confirmed
+  correction records the old form under *Corrected attributions* (date, PR,
+  reason); renamed anchors keep their old `<a id>`.
 - **Never invent citation details.** Write only what you can verify. If a
   detail can't be confirmed, say so in the entry. Never fill in a plausible
   venue, volume or URL.

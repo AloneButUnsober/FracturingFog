@@ -16,7 +16,8 @@ back to a citation here.
 If you spot a missing reference, file an issue or open a pull request. Citations age — broken links
 are flagged for fixing in [Documentation Plan → Citation maintenance](Documentation-Plan.md#citation-maintenance).
 Entries whose publication details are not yet confirmed are kept, not dropped — see
-[Citations awaiting verification](#citations-awaiting-verification).
+[Citations awaiting verification](#citations-awaiting-verification). Corrections keep the old form
+on record — see [Corrected attributions](#corrected-attributions).
 
 ---
 
@@ -521,6 +522,37 @@ entry above completed or corrected.
 - **"Yuhao Zhu"** — an earlier revision of this page credited *Higher-precision arithmetic via
   double-double and quad-double* to Yuhao Zhu. The QD work it describes is Hida, Li and Bailey (above);
   any separate Zhu write-up hasn't been identified.
+
+---
+
+## Corrected attributions
+
+When an entry is corrected (a wrong author, title, year, venue, URL or anchor), the old form is
+recorded here. The credit history then stays visible, and anyone who saw the old credit can see
+where it went. The citation guard's `--base` check passes because the old form is still on this
+page. The convention:
+
+- **Change the entry in place, then add a line here:** the old form (bold for a name, `<URL>` for a
+  link), the new form, the date and the PR or issue, and why.
+- **Renamed anchors keep their old `<a id>`** next to the new one, so existing links keep working.
+- **Only corrections that are confirmed go here.** If it isn't settled, it goes under
+  [Citations awaiting verification](#citations-awaiting-verification).
+- **Never use this section to remove a credit.** A source that was credited but turns out unused is
+  still credited. It was part of the project's history.
+
+Corrections so far:
+
+- 2026-10-25 (#1450). **Kevin I. Martin** — was *"Superfractalthing: Mandelbrot Set Calculation in
+  High Precision", Bulletin of the Mandel-machine project, 2014*; now *SuperFractalThing* /
+  *Superfractalthing Maths*, 2013, with the fractalforums.com announcement. No "Mandel-machine
+  bulletin" publication could be identified.
+- 2026-10-25 (#1450). **Botond Kósa** — was credited with *KallesFraktaler2* (linked to
+  <https://github.com/edyoung/kalles-fraktaler-2>); now credited with *Mandel Machine*. Kalles
+  Fraktaler is credited to **Karl Runmo** and KF2+ to Claude Heiland-Allen. The old link is under
+  awaiting verification.
+- 2026-10-25 (#1450). **Yuhao Zhu** — was credited with *Higher-precision arithmetic via
+  double-double and quad-double*; the QD work is now credited to **Yozo Hida, Xiaoye S. Li, David H.
+  Bailey**. The Zhu attribution is under awaiting verification.
 
 ---
 

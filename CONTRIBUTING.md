@@ -42,7 +42,10 @@ is not merged.
    It is never deleted, even when the feature that used it is removed. When
    details are uncertain, the entry goes under *Citations awaiting
    verification* and stays until it is traced. A credit is never dropped for
-   being incomplete.
+   being incomplete. When a confirmed correction changes an entry (a wrong
+   author, URL or anchor), record the old form under *Corrected
+   attributions* in the bibliography, with the date, PR and reason. Renamed
+   anchors keep their old `<a id>`.
 4. **Don't overstate originality.** Describe Fracturing Fog's own
    contribution only after checking prior art, and say what it builds on (see
    the novelty research in `Docs/Technical/DualOrbit-Coloring-RnD.md` §8).
