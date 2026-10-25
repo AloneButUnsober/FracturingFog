@@ -474,15 +474,24 @@ namespace FracturingFog.Hosting
             // the CPU used to do all the compute. GpuComputeSelection.Decide wants a
             // real (non-CPU) Vulkan GPU and a dxc that runs; its status goes to the
             // window title, stderr and Help → Hardware.
+            bool d3dHooked = s_renderHost.GpuKernelFactory != null;
             var gpuDecision = GpuComputeSelection.Decide(
                 OperatingSystem.IsLinux(), RendererFactory.PreferredBackend,
-                s_renderHost.GpuKernelFactory != null,
+                d3dHooked,
                 GpuComputeSelection.ProbeDevices(),
                 () => (DxcCompiler.Probe(out string d), d),
                 GpuComputeSelection.AllowCpuFromEnvironment());
             s_gpuCompute = gpuDecision;
             if (gpuDecision.Status != null) Console.Error.WriteLine($"[Vulkan] {gpuDecision.Status}");
-            if (gpuDecision.UseVulkan)
+            // #1457 — Windows' D3D11 kernel attached above (UseGpuCompute = true built
+            // it): name its adapter in the window title the way Linux names its
+            // Vulkan device.
+            if (d3dHooked)
+            {
+                s_gpuCompute = GpuComputeSelection.FromAttachedKernel(s_renderHost.Mandelbrot.GpuKernel);
+                Console.Error.WriteLine($"[GPU] {s_gpuCompute.Value.Status}");
+            }
+            if (gpuDecision.UseGpu)
             {
                 string? vkDev = VulkanComputeKernel.ProbeDeviceName();
                 if (vkDev != null)
@@ -535,7 +544,7 @@ namespace FracturingFog.Hosting
                 }
                 else
                 {
-                    s_gpuCompute = gpuDecision with { UseVulkan = false, Device = null,
+                    s_gpuCompute = gpuDecision with { UseGpu = false, Device = null,
                         Status = "GPU compute off: the Vulkan device could not be opened" };
                     Console.Error.WriteLine(
                         "[Vulkan] no Vulkan compute device could be opened; " +

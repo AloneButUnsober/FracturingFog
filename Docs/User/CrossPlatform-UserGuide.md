@@ -112,6 +112,11 @@ FracturingFog.App --renderer vulkan    # Vulkan GPU compute (any OS with a Vulka
 The Hardware tab in `Help → Hardware` lists the picked accelerator + the
 full DXGI / Vulkan / ILGPU / audio backend so you can confirm what is live.
 
+On every OS the window title ends with the GPU compute line, e.g.
+`GPU compute: D3D11 (NVIDIA GeForce GT 710)` on Windows,
+`GPU compute: Vulkan (NVIDIA GeForce GT 710)` on Linux, or `GPU compute off: …` with
+the reason.
+
 ### GPU compute on Linux
 
 On Linux the 2D fractals (and the GPU relief / volumetric passes) compute on

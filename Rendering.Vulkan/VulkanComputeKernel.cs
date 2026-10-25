@@ -683,6 +683,9 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
 
     public string BackendLabel => "Vulkan";
 
+    /// <summary>#1457 — the physical device the context picked.</summary>
+    public string? DeviceName => _ctx.PickedName;
+
     public void RunPerturb(
         int width, int height,
         double scale, int maxIter, double escapeRadius2,

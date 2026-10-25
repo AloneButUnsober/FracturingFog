@@ -202,6 +202,11 @@ namespace FracturingFog.Rendering
         /// ("D3D11", "Vulkan").</summary>
         string BackendLabel => GetType().Name;
 
+        /// <summary>#1457 — the adapter / device the kernel runs on (e.g. "NVIDIA
+        /// GeForce GT 710"), for the window title's GPU compute line; null when
+        /// unknown.</summary>
+        string? DeviceName => null;
+
         /// <summary>Run the deep-zoom perturbation kernel over a precomputed
         /// reference orbit (Hi-limb doubles, length <paramref name="refLen"/>),
         /// the GPU twin of <c>MandelbrotCalculator.ComputePixelPTRebased</c>.
