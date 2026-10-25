@@ -40,6 +40,8 @@ namespace FracturingFog.Hosting
         // than crashing on a null deref.
         public static Func<string?>? AudioBackendProbe { get; set; }
         public static Func<string?>? IlgpuDeviceProbe { get; set; }
+        // #1455 — the Vulkan compute decision: status, devices, DXC.
+        public static Func<string?>? VulkanComputeProbe { get; set; }
 
         public string ProgramName => "Fracturing Fog";
 
@@ -235,6 +237,16 @@ namespace FracturingFog.Hosting
 
             sb.AppendLine();
             sb.AppendLine($"SIMD vector width (double): {System.Numerics.Vector<double>.Count}");
+
+            // #1455 — the 2D / relief / froxel GPU compute (Vulkan, off Windows):
+            // whether it is on, the devices, the DXC it compiles with, and why not.
+            string? vulkan = SafeProbe(VulkanComputeProbe);
+            if (!string.IsNullOrWhiteSpace(vulkan))
+            {
+                sb.AppendLine();
+                sb.AppendLine("=== GPU Compute (Vulkan) ===");
+                sb.AppendLine(vulkan);
+            }
 
             // Phase X.5 / Slice 5.2 — GPU compute (ILGPU) section. Bootstrap
             // populates IlgpuDeviceProbe with a callable that enumerates

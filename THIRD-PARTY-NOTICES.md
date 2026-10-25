@@ -136,6 +136,16 @@ are provided as scholarly attribution, not because any code was copied.
   which is compatible with AGPL-3.0 (GPLv3 accepts Apache-2.0 code). Loaded at
   runtime through its C API; nothing of it is compiled into Fracturing Fog.
 
+- **Microsoft DirectX Shader Compiler (DXC) v1.9.2609** — the HLSL → SPIR-V
+  compiler the Vulkan GPU compute kernels run at run time (#1455). The Linux
+  x86-64 AppImage bundles the official release binaries (`dxc` and its `lib/`
+  libraries) from <https://github.com/microsoft/DirectXShaderCompiler/releases>,
+  checked against a pinned SHA-256 (`Tools/Packaging/fetch-dxc.sh`), in
+  `usr/bin/dxc/` together with the release's licence files. DXC is licensed under
+  the **University of Illinois/NCSA Open Source License** (the LLVM release
+  licence), a permissive licence compatible with AGPL-3.0. It runs as a separate
+  process; nothing of it is compiled into Fracturing Fog.
+
 ## 4. Fonts
 
 - **Inter** (bundled via `Avalonia.Fonts.Inter`) — SIL Open Font License 1.1.

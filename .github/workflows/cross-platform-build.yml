@@ -361,20 +361,10 @@ jobs:
           # DXC (HLSL->SPIR-V) from Microsoft's GitHub release, pinned and
           # SHA-256 checked (#1453). The LunarG apt repo it used to come from
           # publishes per-codename lists only, and has none for the runner's
-          # Ubuntu 26.04, so `ubuntu-latest` moving on broke the leg.
-          # DxcCompiler resolves DXC_PATH first; libdxcompiler.so sits in lib/.
-          DXC_TAG=v1.9.2609
-          DXC_ASSET=linux_dxc_2026_09_28.x86_x64.tar.gz
-          DXC_SHA256=96faadc7f5c282d2ffda49804beb4c3ee38127bc252b723234e3c5cdf7aa39a1
-          DXC_DIR="$RUNNER_TEMP/dxc"
-          mkdir -p "$DXC_DIR"
-          curl -fsSL -o "$RUNNER_TEMP/$DXC_ASSET" \
-            "https://github.com/microsoft/DirectXShaderCompiler/releases/download/$DXC_TAG/$DXC_ASSET"
-          echo "$DXC_SHA256  $RUNNER_TEMP/$DXC_ASSET" | sha256sum -c -
-          tar -xzf "$RUNNER_TEMP/$DXC_ASSET" -C "$DXC_DIR"
-          DXC_BIN=$(find "$DXC_DIR" \( -type f -o -type l \) -name dxc -path '*/bin/*' | head -1)
-          test -n "$DXC_BIN"
-          chmod +x "$DXC_BIN"
+          # Ubuntu 26.04, so `ubuntu-latest` moving on broke the leg. The pin
+          # lives in Tools/Packaging/fetch-dxc.sh, shared with the AppImage
+          # (#1455). DxcCompiler resolves DXC_PATH first.
+          DXC_BIN=$(bash Tools/Packaging/fetch-dxc.sh "$RUNNER_TEMP/dxc")
           DXC_LIB=$(dirname "$(dirname "$DXC_BIN")")/lib
           echo "DXC_PATH=$DXC_BIN" >> "$GITHUB_ENV"
           echo "LD_LIBRARY_PATH=$DXC_LIB${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
@@ -415,3 +405,24 @@ jobs:
           # ReliefRaymarchGpu.RenderCpuMirror. Same source FXC compiles for the
           # D3D --reliefgpuraymarch gate (#160); float32-only (no shaderFloat64).
           dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke.csproj -c Release -r ${{ matrix.rid }} --no-build -- --vulkanrelief
+
+      # #1455 — the AppImage ships DXC next to the app (dxc/bin/dxc + dxc/lib).
+      # Prove that layout works on its own: copy the fetched DXC next to the
+      # smoke binary, drop DXC_PATH / LD_LIBRARY_PATH / VULKAN_SDK and every dxc
+      # from PATH, disable the SPIR-V cache, and compile + run a real kernel.
+      # DxcCompiler must find the bundled copy and put its lib/ on the child's
+      # loader path itself.
+      - name: "Bundled DXC next to the app (Linux / lavapipe, #1455)"
+        if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' && matrix.display == 'xvfb' }}
+        run: |
+          OUT=$(dirname "$(find Rendering.Vulkan.Smoke/bin/Release -name 'FracturingFog.Rendering.Vulkan.Smoke.dll' -path '*${{ matrix.rid }}*' | head -1)")
+          test -d "$OUT"
+          rm -rf "$OUT/dxc"
+          cp -a "$RUNNER_TEMP/dxc" "$OUT/dxc"
+          LVP=$(find /usr/share/vulkan/icd.d /etc/vulkan/icd.d -name 'lvp_icd*.json' 2>/dev/null | head -1)
+          DOTNET_DIR=$(dirname "$(readlink -f "$(command -v dotnet)")")
+          CLEAN_PATH="$DOTNET_DIR:/usr/local/bin:/usr/bin:/bin"
+          if PATH="$CLEAN_PATH" command -v dxc; then echo "a dxc is still on PATH" >&2; exit 1; fi
+          env -u DXC_PATH -u LD_LIBRARY_PATH -u VULKAN_SDK \
+            PATH="$CLEAN_PATH" FF_NO_SHADER_CACHE=1 ${LVP:+VK_ICD_FILENAMES="$LVP"} \
+            dotnet "$OUT/FracturingFog.Rendering.Vulkan.Smoke.dll" --vulkanprobe

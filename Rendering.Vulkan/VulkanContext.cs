@@ -251,7 +251,8 @@ public sealed unsafe class VulkanContext : IDisposable
         return false;
     }
 
-    private static int RankType(PhysicalDeviceType t) => t switch
+    /// <summary>The picker's preference (higher wins); #1455 reuses it to name the device a host would get.</summary>
+    public static int RankType(PhysicalDeviceType t) => t switch
     {
         PhysicalDeviceType.DiscreteGpu => 4,
         PhysicalDeviceType.IntegratedGpu => 3,

@@ -13,6 +13,8 @@
 #                        drop on PATH.
 #   * python3          — extracts the launcher icon from Resources/FracturingFog.ico
 #                        (Tools/Packaging/ico-to-png.py, standard library only).
+#   * curl + sha256sum — fetch the pinned DXC the Vulkan compute kernels compile
+#                        their shaders with (#1455, Tools/Packaging/fetch-dxc.sh).
 #
 # Usage:
 #   Tools/Packaging/build-appimage.sh [rid]
@@ -77,6 +79,16 @@ mkdir -p "$APPDIR/usr/bin" \
 
 cp -r "$PUBLISH_DIR/." "$APPDIR/usr/bin/"
 chmod +x "$APPDIR/usr/bin/FracturingFog.App"
+
+# #1455 — DXC next to the app (usr/bin/dxc/{bin,lib}), where DxcCompiler looks,
+# so the GPU compute path works without a Vulkan SDK. DXC publishes Linux builds
+# for x86-64 only; the arm64 AppImage falls back to a dxc on PATH.
+if [ "$RID" = "linux-x64" ]; then
+    echo "==> Bundling DXC"
+    bash "$REPO_ROOT/Tools/Packaging/fetch-dxc.sh" "$APPDIR/usr/bin/dxc" >/dev/null
+else
+    echo "==> No DXC build for $RID: GPU compute needs a dxc on PATH (or DXC_PATH)"
+fi
 
 # Desktop file: prefer the version-controlled template; emit a stub if the
 # user has not added one yet so the AppImage still builds.

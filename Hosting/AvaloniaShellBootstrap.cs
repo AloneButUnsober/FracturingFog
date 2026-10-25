@@ -239,6 +239,7 @@ namespace FracturingFog.Hosting
             // help window so they reflect the audio backend / ILGPU device
             // list at that moment, not at boot.
             HostHelpContentProvider.IlgpuDeviceProbe = ProbeIlgpuDevices;
+            HostHelpContentProvider.VulkanComputeProbe = ProbeVulkanCompute;   // #1455
             HostHelpContentProvider.AudioBackendProbe = ProbeAudioBackend;
 
             // Phase 16b / EXR — wire the UI-layer HDRI probe to the Engine's
@@ -286,6 +287,29 @@ namespace FracturingFog.Hosting
             {
                 return $"  (ILGPU probe failed: {ex.Message})";
             }
+        }
+
+        // #1455 — the startup decision (set once the render host is wired) plus a
+        // live device / DXC listing for Help → Hardware.
+        private static GpuComputeDecision? s_gpuCompute;
+
+        private static string? ProbeVulkanCompute()
+        {
+            if (OperatingSystem.IsWindows() && BootstrapHooks.GpuKernelFactoryHook != null
+                && RendererFactory.PreferredBackend != RendererBackend.Vulkan) return null;
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"  {s_gpuCompute?.Status ?? "GPU compute: not decided"}");
+            var devices = GpuComputeSelection.ProbeDevices();
+            if (devices == null) sb.AppendLine("  Devices: (Vulkan loader / instance unavailable)");
+            else
+            {
+                sb.AppendLine($"  Devices ({devices.Count}):");
+                foreach (var d in devices)
+                    sb.AppendLine($"    {d.Type,-14}  {d.Name}{(d.HasCompute ? "" : "  (no compute queue)")}");
+            }
+            bool dxcOk = DxcCompiler.Probe(out string dxc);
+            sb.Append($"  DXC: {(dxcOk ? dxc : "not available — " + dxc)}");
+            return sb.ToString();
         }
 
         private static string? ProbeAudioBackend()
@@ -446,8 +470,19 @@ namespace FracturingFog.Hosting
             // Only when Vulkan is explicitly selected AND a device exists; with no
             // device we log and leave the factory unset, so UseGpuCompute stays
             // off and the CPU path handles compute while GL still presents.
-            if (RendererFactory.PreferredBackend == RendererBackend.Vulkan
-                && s_renderHost.GpuKernelFactory == null)
+            // #1455 — and by default on Linux (Auto), where there is no D3D hook and
+            // the CPU used to do all the compute. GpuComputeSelection.Decide wants a
+            // real (non-CPU) Vulkan GPU and a dxc that runs; its status goes to the
+            // window title, stderr and Help → Hardware.
+            var gpuDecision = GpuComputeSelection.Decide(
+                OperatingSystem.IsLinux(), RendererFactory.PreferredBackend,
+                s_renderHost.GpuKernelFactory != null,
+                GpuComputeSelection.ProbeDevices(),
+                () => (DxcCompiler.Probe(out string d), d),
+                GpuComputeSelection.AllowCpuFromEnvironment());
+            s_gpuCompute = gpuDecision;
+            if (gpuDecision.Status != null) Console.Error.WriteLine($"[Vulkan] {gpuDecision.Status}");
+            if (gpuDecision.UseVulkan)
             {
                 string? vkDev = VulkanComputeKernel.ProbeDeviceName();
                 if (vkDev != null)
@@ -462,11 +497,12 @@ namespace FracturingFog.Hosting
                     // per frame (GPU relief + froxel both on); the CPU froxel post-pass
                     // runs whenever construction returns null or the flags are off.
                     s_renderHost.FroxelKernelFactory = (_, _) => FroxelVolumeVulkanKernel.TryCreateWithOwnContext();
-                    RendererFactory.VulkanProbeBackend = () => $"Vulkan compute ({vkDev}) + OpenGL (present)";
-                    // Default GPU compute ON for an explicit --renderer vulkan
-                    // session — the setter constructs the kernel now via the
-                    // factory. If construction returns null the host leaves it
-                    // off silently and the CPU path takes over.
+                    if (RendererFactory.PreferredBackend == RendererBackend.Vulkan)
+                        RendererFactory.VulkanProbeBackend = () => $"Vulkan compute ({vkDev}) + OpenGL (present)";
+                    // Default GPU compute ON for a Vulkan session (explicit, or
+                    // Linux's default, #1455) — the setter constructs the kernel now
+                    // via the factory. If construction returns null the host leaves
+                    // it off silently and the CPU path takes over.
                     s_renderHost.UseGpuCompute = true;
                     Console.Error.WriteLine($"[Vulkan] compute backend selected: {vkDev}");
 
@@ -480,19 +516,29 @@ namespace FracturingFog.Hosting
                     // #1331 — without shaderFloat64 the fp32 kernels (scaled fp32 /
                     // float-exp) still run deep zoom on the GPU, unless
                     // FF_GPU_PERTURB_PRECISION=double rules them out.
-                    bool fp64 = VulkanComputeKernel.ProbeSupportsFloat64();
-                    bool fp32 = FracturingFog.MandelbrotCalculator.GpuDeepPrecisionMode != FracturingFog.GpuDeepPrecision.Double;
-                    FracturingFog.MandelbrotCalculator.UseGpuPerturbation = fp64 || fp32;
-                    Console.Error.WriteLine(fp64
-                        ? "[Vulkan] deep-zoom GPU perturbation ENABLED (shaderFloat64 present)."
-                        : fp32
-                            ? "[Vulkan] deep-zoom GPU perturbation ENABLED in fp32 (no shaderFloat64; FF_GPU_PERTURB_PRECISION=double turns it off)."
-                            : "[Vulkan] deep-zoom GPU perturbation disabled (no shaderFloat64, fp32 ruled out); deep zoom stays CPU.");
+                    // #1455 — Linux's default (Auto) Vulkan session matches Windows'
+                    // default D3D one: shallow frames on the GPU, deep-zoom
+                    // perturbation opt-in (FF_GPU_PERTURB=1, or --renderer vulkan).
+                    if (RendererFactory.PreferredBackend == RendererBackend.Vulkan || IsTruthyEnv("FF_GPU_PERTURB"))
+                    {
+                        bool fp64 = VulkanComputeKernel.ProbeSupportsFloat64();
+                        bool fp32 = FracturingFog.MandelbrotCalculator.GpuDeepPrecisionMode != FracturingFog.GpuDeepPrecision.Double;
+                        FracturingFog.MandelbrotCalculator.UseGpuPerturbation = fp64 || fp32;
+                        Console.Error.WriteLine(fp64
+                            ? "[Vulkan] deep-zoom GPU perturbation ENABLED (shaderFloat64 present)."
+                            : fp32
+                                ? "[Vulkan] deep-zoom GPU perturbation ENABLED in fp32 (no shaderFloat64; FF_GPU_PERTURB_PRECISION=double turns it off)."
+                                : "[Vulkan] deep-zoom GPU perturbation disabled (no shaderFloat64, fp32 ruled out); deep zoom stays CPU.");
+                    }
+                    else
+                        Console.Error.WriteLine("[Vulkan] deep-zoom GPU perturbation off by default (FF_GPU_PERTURB=1 turns it on).");
                 }
                 else
                 {
+                    s_gpuCompute = gpuDecision with { UseVulkan = false, Device = null,
+                        Status = "GPU compute off: the Vulkan device could not be opened" };
                     Console.Error.WriteLine(
-                        "[Vulkan] --renderer vulkan requested but no Vulkan device was found; " +
+                        "[Vulkan] no Vulkan compute device could be opened; " +
                         "falling back to CPU compute (OpenGL present unaffected).");
                 }
             }
@@ -729,6 +775,10 @@ namespace FracturingFog.Hosting
             s_shell.ProgramName = helpProvider.ProgramName;
             s_shell.ProgramVersion = helpProvider.ProgramVersion;
             s_shell.RendererDescription = s_renderer?.RendererDescription ?? "";
+            // #1455 — say whether the GPU computes (and why not), off Windows' D3D path.
+            if (s_gpuCompute?.Status is { } gpuStatus)
+                s_shell.RendererDescription = string.IsNullOrEmpty(s_shell.RendererDescription)
+                    ? gpuStatus : $"{s_shell.RendererDescription}  ·  {gpuStatus}";
 
             // Dimensions combo: feed the resolution table + handle resize.
             // Lives here (not in ShellViewModel) because the main-project

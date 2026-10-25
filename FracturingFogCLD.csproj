@@ -166,6 +166,19 @@
          IHostSyncDialogs + WindowsDxRendererFactory. WinExe consumes the
          bootstrap class across the Hosting ProjectReference. -->
     <Compile Remove="Hosting\AvaloniaShellBootstrap.cs" />
+    <!-- #1455 — the GPU compute (Vulkan) decision lives in Hosting.dll beside the
+         bootstrap that calls it; compiled here too it collides (CS0436). -->
+    <Compile Remove="Hosting\GpuComputeSelection.cs" />
+    <!-- Also owned by Hosting.dll and only compiled here by the glob (latent
+         duplicates: the public ones would hit CS0436 as soon as something named
+         them). S1455HostingCompileOwnershipTests keeps every Hosting\*.cs listed. -->
+    <Compile Remove="Hosting\HostPaletteLookApplyService.cs" />
+    <Compile Remove="Hosting\HostPaletteThemeSourceService.cs" />
+    <Compile Remove="Hosting\HostPaletteViewParamService.cs" />
+    <Compile Remove="Hosting\OidnSetupDialog.cs" />
+    <Compile Remove="Hosting\PortalColorSampleBridge.cs" />
+    <Compile Remove="Hosting\X11ColorSampleBridge.cs" />
+    <Compile Remove="Hosting\X11InputBridge.cs" />
     <!--
       Phase X.0 / Slice 0.2 — Audio files now owned by FracturingFog.Audio
       (temporary net10.0-windows TFM until Phase X.B introduces the backend
