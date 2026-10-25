@@ -47,6 +47,36 @@ public sealed partial class ColorThemeEditorView : UserControl
         // approximation to "click anywhere on the row to select it".
         AddHandler(InputElement.PointerPressedEvent, OnAnyPointerPressed,
             RoutingStrategies.Bubble, handledEventsToo: false);
+
+        // Width-responsive columns: side by side when wide, right column
+        // stacked under the left when narrow, so nothing clips off-screen.
+        if (this.FindControl<ScrollViewer>("ContentScroll") is { } scroll)
+            scroll.SizeChanged += (_, e) => ApplyColumnLayout(e.NewSize.Width);
+    }
+
+    /// <summary>Below this content width the two columns stack. Each column's
+    /// widest unbreakable row (colour-stop row / 3D grid) needs ~540 px.</summary>
+    private const double StackBreakpoint = 1100;
+
+    private bool? _stacked;
+
+    private void ApplyColumnLayout(double width)
+    {
+        bool stack = width < StackBreakpoint;
+        if (_stacked == stack) return;
+        _stacked = stack;
+        var grid = this.FindControl<Grid>("ColumnsGrid");
+        var right = this.FindControl<StackPanel>("RightColumn");
+        var left = this.FindControl<StackPanel>("LeftColumn");
+        if (grid == null || right == null || left == null) return;
+
+        grid.ColumnDefinitions = stack
+            ? new ColumnDefinitions("*,0,0")
+            : new ColumnDefinitions("*,8,*");
+        Grid.SetRow(right, stack ? 1 : 0);
+        Grid.SetColumn(right, stack ? 0 : 2);
+        Grid.SetColumnSpan(right, stack ? 3 : 1);
+        Grid.SetColumnSpan(left, stack ? 3 : 1);
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)
