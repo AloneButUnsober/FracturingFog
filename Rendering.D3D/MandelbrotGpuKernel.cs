@@ -1066,6 +1066,22 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
     /// device without FP64 shader ops falls back to the CPU deep path.</summary>
     public string BackendLabel => "D3D11";
 
+    /// <summary>#1457 — the DXGI adapter this kernel's device runs on.</summary>
+    public string? DeviceName => _deviceName ??= AdapterName();
+    private string? _deviceName;
+
+    private string? AdapterName()
+    {
+        try
+        {
+            using var dxgi = _device.QueryInterface<Vortice.DXGI.IDXGIDevice>();
+            using var adapter = dxgi.GetAdapter();
+            string name = adapter.Description.Description.Trim();
+            return name.Length == 0 ? null : name;
+        }
+        catch { return null; }
+    }
+
     public bool SupportsPerturbation
     {
         get

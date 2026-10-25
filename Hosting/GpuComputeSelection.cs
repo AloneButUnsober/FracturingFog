@@ -26,12 +26,15 @@ using Silk.NET.Vulkan;
 
 namespace FracturingFog.Hosting;
 
-/// <summary>#1455 — the outcome: attach Vulkan compute or not, and why.</summary>
-/// <param name="UseVulkan">Attach the Vulkan compute / relief / froxel kernels.</param>
+/// <summary>#1455 — the outcome: whether the GPU computes, on which device, and why.</summary>
+/// <param name="UseGpu">The GPU computes: attach the Vulkan compute / relief / froxel kernels
+/// (<see cref="GpuComputeSelection.Decide"/>), or the D3D11 kernel attached
+/// (<see cref="GpuComputeSelection.FromAttachedKernel"/>, #1457).</param>
 /// <param name="Device">The device the kernels will run on (null when off).</param>
 /// <param name="Status">One line for the window title and stderr; null when there
-/// is nothing to report (Windows' D3D path, macOS by default).</param>
-public readonly record struct GpuComputeDecision(bool UseVulkan, string? Device, string? Status);
+/// is nothing to report (Decide on Windows' D3D path, where FromAttachedKernel
+/// reports instead; macOS by default).</param>
+public readonly record struct GpuComputeDecision(bool UseGpu, string? Device, string? Status);
 
 public static class GpuComputeSelection
 {
@@ -85,6 +88,17 @@ public static class GpuComputeSelection
         }
         catch { return null; }
         finally { ctx?.Dispose(); }
+    }
+
+    /// <summary>#1457 — the status of a backend whose kernel the host already
+    /// attached (Windows' D3D11 hook): it computes on the kernel's device, or, with
+    /// no kernel (e.g. the DirectX 12 renderer), the CPU computes.</summary>
+    public static GpuComputeDecision FromAttachedKernel(IGpuKernel? kernel)
+    {
+        if (kernel == null)
+            return new(false, null, "GPU compute off: this renderer has no GPU compute kernel");
+        string? name = kernel.DeviceName;
+        return new(true, name, $"GPU compute: {kernel.BackendLabel} ({name ?? "unknown device"})");
     }
 
     public static bool AllowCpuFromEnvironment()

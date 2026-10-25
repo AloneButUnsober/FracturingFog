@@ -44,7 +44,7 @@ public sealed class S1455LinuxGpuComputeTests
     public void Linux_By_Default_Uses_Vulkan_On_A_Real_Gpu_And_Says_So()
     {
         var d = Linux(new[] { Gt710 });
-        Assert.True(d.UseVulkan);
+        Assert.True(d.UseGpu);
         Assert.Equal(Gt710.Name, d.Device);
         Assert.Equal("GPU compute: Vulkan (NVIDIA GeForce GT 710)", d.Status);
     }
@@ -62,13 +62,13 @@ public sealed class S1455LinuxGpuComputeTests
     public void A_Cpu_Vulkan_Driver_Alone_Is_Refused_Unless_Allowed()
     {
         var off = Linux(new[] { Llvmpipe });
-        Assert.False(off.UseVulkan);
+        Assert.False(off.UseGpu);
         Assert.Null(off.Device);
         Assert.Contains("CPU driver", off.Status);
         Assert.Contains("llvmpipe", off.Status);
 
         var on = Linux(new[] { Llvmpipe }, allowCpu: true);
-        Assert.True(on.UseVulkan);
+        Assert.True(on.UseGpu);
         Assert.Contains(GpuComputeSelection.AllowCpuEnv, on.Status);
     }
 
@@ -76,22 +76,22 @@ public sealed class S1455LinuxGpuComputeTests
     public void No_Driver_Or_No_Compute_Device_Is_Off_With_The_Reason()
     {
         var none = Linux(null);
-        Assert.False(none.UseVulkan);
+        Assert.False(none.UseGpu);
         Assert.Contains("no Vulkan driver", none.Status);
 
         var empty = Linux(Array.Empty<VulkanContext.DeviceInfo>());
-        Assert.False(empty.UseVulkan);
+        Assert.False(empty.UseGpu);
         Assert.Contains("no Vulkan device", empty.Status);
 
         var noCompute = Linux(new[] { Dev("GPU", PhysicalDeviceType.DiscreteGpu, compute: false) });
-        Assert.False(noCompute.UseVulkan);
+        Assert.False(noCompute.UseGpu);
     }
 
     [Fact]
     public void Without_A_Working_Dxc_It_Is_Off_And_Says_So()
     {
         var d = Linux(new[] { Gt710 }, dxc: false);
-        Assert.False(d.UseVulkan);
+        Assert.False(d.UseGpu);
         Assert.Contains("no DXC shader compiler", d.Status);
         Assert.Contains("not found", d.Status);
         Assert.Contains("DXC_PATH", d.Status);
@@ -117,7 +117,7 @@ public sealed class S1455LinuxGpuComputeTests
     public void Silk_Or_Skia_On_Linux_Keep_The_Cpu_And_Say_So(RendererBackend backend, string name)
     {
         var d = Linux(new[] { Gt710 }, backend: backend);
-        Assert.False(d.UseVulkan);
+        Assert.False(d.UseGpu);
         Assert.Equal($"GPU compute off (--renderer {name})", d.Status);
     }
 
@@ -126,12 +126,12 @@ public sealed class S1455LinuxGpuComputeTests
     {
         // macOS / a Windows host without the D3D hook: Auto decides nothing, says nothing.
         var macAuto = GpuComputeSelection.Decide(false, RendererBackend.Auto, false, new[] { Gt710 }, DxcOk, false);
-        Assert.False(macAuto.UseVulkan);
+        Assert.False(macAuto.UseGpu);
         Assert.Null(macAuto.Status);
         var macVulkan = GpuComputeSelection.Decide(false, RendererBackend.Vulkan, false, new[] { Gt710 }, DxcOk, false);
-        Assert.True(macVulkan.UseVulkan);
+        Assert.True(macVulkan.UseGpu);
         // --renderer vulkan with only a CPU driver is refused too.
-        Assert.False(Linux(new[] { Llvmpipe }, backend: RendererBackend.Vulkan).UseVulkan);
+        Assert.False(Linux(new[] { Llvmpipe }, backend: RendererBackend.Vulkan).UseGpu);
     }
 
     [Fact]
@@ -152,9 +152,9 @@ public sealed class S1455LinuxGpuComputeTests
         var d = GpuComputeSelection.Decide(true, RendererBackend.Auto, false, devices,
             () => (DxcCompiler.Probe(out string detail), detail), allowCpu: false);
         bool gpu = devices != null && devices.Any(x => x.HasCompute && x.Type != PhysicalDeviceType.Cpu);
-        if (!gpu) { Assert.False(d.UseVulkan); return; }   // no GPU Vulkan device here: off, by rule
-        if (!DxcCompiler.Probe(out _)) { Assert.False(d.UseVulkan); return; }
-        Assert.True(d.UseVulkan, d.Status);
+        if (!gpu) { Assert.False(d.UseGpu); return; }   // no GPU Vulkan device here: off, by rule
+        if (!DxcCompiler.Probe(out _)) { Assert.False(d.UseGpu); return; }
+        Assert.True(d.UseGpu, d.Status);
         // The picker (VulkanContext.CreateComputeDevice) opens the same device.
         Assert.EndsWith(": " + d.Device, VulkanComputeKernel.ProbeDeviceName());
     }
