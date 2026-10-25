@@ -1715,7 +1715,7 @@ public sealed partial class MainWindow : Window
                     new ColorThemeEditorView(),
                     new PanelHostOptions(
                         "Color Theme Editor",
-                        Width: 980, Height: 900, MinWidth: 780, MinHeight: 600,
+                        Width: 1140, Height: 900, MinWidth: 780, MinHeight: 600,
                         SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
                         StartupLocation: WindowStartupLocation.CenterOwner,
                         Background: new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x16))))

@@ -44,7 +44,10 @@
         </Style>
     </UserControl.Styles>
 
-    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="10" MinWidth="1000" MaxWidth="1400">
+    <!-- No MinWidth: the host window may be narrower (min 780), and a
+         wider centred child clipped BOTH edges. Width is now constrained to the
+         window; the two columns stack below StackBreakpoint (code-behind). -->
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="10" MaxWidth="1400">
 
         <!-- Title row -->
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
@@ -65,7 +68,7 @@
         </Grid>
 
         <!-- Action row -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,6,0,8" Spacing="0">
+        <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="0,6,0,8">
             <CheckBox Content="Live preview"
                       IsChecked="{Binding LivePreview}"
                       Foreground="#C8C878"
@@ -79,14 +82,14 @@
             <Button Classes="action save"    Content="Save"         Command="{Binding SaveCommand}"       IsEnabled="{Binding CanApply}" />
             <Button Classes="action export"  Content="Export JSON…" Command="{Binding ExportJsonCommand}" IsEnabled="{Binding CanApply}" />
             <Button Classes="action export"  Content="Export C#…"   Command="{Binding ExportCSharpCommand}" IsEnabled="{Binding CanApply}" />
-        </StackPanel>
+        </WrapPanel>
 
         <!-- Main two-column content -->
-        <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-            <Grid ColumnDefinitions="Auto,8,*">
+        <ScrollViewer x:Name="ContentScroll" Grid.Row="2" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <Grid x:Name="ColumnsGrid" ColumnDefinitions="*,8,*" RowDefinitions="Auto,Auto">
 
                 <!-- LEFT COLUMN -->
-                <StackPanel Grid.Column="0" Orientation="Vertical">
+                <StackPanel x:Name="LeftColumn" Grid.Column="0" Orientation="Vertical">
 
                     <!-- Target -->
                     <Border Classes="group">
@@ -123,13 +126,14 @@
                                 <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Name:" 
                                            Margin="0,0,8,4" MaxWidth="90" MinWidth="0"/>
                                 <TextBox   x:Name="NameField" Grid.Row="0" Grid.Column="1" Text="{Binding Name}" 
+                                           TextWrapping="Wrap" MinWidth="0"
                                            Margin="0,0,0,4"  />
                                 <TextBlock Classes="label" Grid.Row="1" Grid.Column="0" Text="Category:" 
                                            Margin="0,0,8,4" MaxWidth="90"/>
-                                <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Category}"    Margin="0,0,0,4" />
+                                <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Category}"    TextWrapping="Wrap" MinWidth="0" Margin="0,0,0,4" />
                                 <TextBlock Classes="label" Grid.Row="2" Grid.Column="0" Text="Desc:" 
                                            Margin="0,0,8,4" MaxWidth="50"/>
-                                <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding Description}" Margin="0,0,0,4" />
+                                <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding Description}" TextWrapping="Wrap" MinWidth="0" Margin="0,0,0,4" />
                                 <TextBlock Classes="label" Grid.Row="3" Grid.Column="0" Text="Max zoom:" 
                                            Margin="0,0,8,0" MaxWidth="90"/>
                                 <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Spacing="8" MinWidth="0">
@@ -302,7 +306,7 @@
 
                     <!-- Gradient interpolation (F1 space, F2 curve, F3 transfer) -->
                     <Border Classes="group">
-                        <StackPanel Spacing="4" Orientation="Horizontal">
+                        <WrapPanel Orientation="Horizontal">
                         <StackPanel Spacing="6">
                             <TextBlock Classes="section" Text="Interpolation" />
                             <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0">
@@ -400,17 +404,18 @@
                                         <TextBlock Text="Image" Foreground="#B4B4B4" VerticalAlignment="Center" Width="64" />
                                         <TextBox Width="112"
                                                  Text="{Binding Interior2DBgImagePath, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                 TextWrapping="Wrap"
                                                  Watermark="path\to\image.png"
                                                  ToolTip.Tip="Used when Background = Image. Stretched to fill the viewport." />
                                     </StackPanel>
                                 </StackPanel>
                             </StackPanel>
-                        </StackPanel>
+                        </WrapPanel>
                     </Border>
 
                     <!-- Cycle -->
                     <Border Classes="group">
-                        <StackPanel Spacing="4" Orientation="Horizontal">
+                        <WrapPanel Orientation="Horizontal">
                             <StackPanel Spacing="6" IsEnabled="{Binding ShowCycle}">
                                 <TextBlock Classes="section" Text="Cycle" />
                                 <StackPanel Orientation="Horizontal" Spacing="8">
@@ -488,7 +493,7 @@
                                     </StackPanel>
                                 </StackPanel>
                             </StackPanel>
-                        </StackPanel>
+                        </WrapPanel>
                     </Border>
 
                     <!-- Post-FX defaults -->
@@ -522,7 +527,7 @@
                               Margin="4,0,4,0"
                               Width="4"/>-->
                 <!-- RIGHT COLUMN -->
-                <StackPanel Grid.Column="2" Orientation="Vertical">
+                <StackPanel x:Name="RightColumn" Grid.Column="2" Orientation="Vertical">
                     <!-- Randomize scope / mode toggles (#83) -->
                             <Border Classes="group">
                                 <StackPanel Spacing="6">
