@@ -57,6 +57,12 @@ namespace FracturingFog.Models
         /// iterated (byte-identical).</summary>
         public bool SolidRegionSkip { get; set; }
 
+        /// <summary>#1394 — with <see cref="SolidRegionSkip"/>: decide per frame. The grid
+        /// rows are computed first; a frame with too little costly in-set area on them
+        /// (the main cardioid / period-2 bulb cost nothing) is computed whole instead, so
+        /// those views render ~0.91–0.97x rather than ~0.6–0.9x. Off = always subdivide.</summary>
+        public bool SolidRegionAuto { get; set; } = true;
+
         /// <summary>#1344 — channel difference (0–255) to a neighbour that marks a
         /// pixel for supersampling. Lower = more pixels sampled.</summary>
         public double AdaptiveAaThreshold { get; set; } = 12.0;
@@ -1854,6 +1860,7 @@ namespace FracturingFog.Models
                 BlaTolerance = BlaTolerance,
                 AdaptiveAa = AdaptiveAa,                         // #1344
                 SolidRegionSkip = SolidRegionSkip,               // #1343
+                SolidRegionAuto = SolidRegionAuto,               // #1394
                 AdaptiveAaThreshold = AdaptiveAaThreshold,
                 AdaptiveAaTolerance = AdaptiveAaTolerance,
                 FaithfulImplosion = FaithfulImplosion,

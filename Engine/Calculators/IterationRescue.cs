@@ -87,6 +87,7 @@ public static class IterationRescue
             DisableDdBla = src.DisableDdBla,
             BlaTolerance = src.BlaTolerance,   // #1275
             SolidRegionSkip = src.SolidRegionSkip,   // #1343
+            SolidRegionAuto = src.SolidRegionAuto,   // #1394
         };
 
         long cap = src.MaxIterations;

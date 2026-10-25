@@ -797,6 +797,8 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public bool? AdaptiveAa { get; set; }
         // #1343 — Mandelbrot solid-region skipping; omitted at its default (off).
         [JsonIgnore(Condition = OmitNull)] public bool? SolidRegionSkip { get; set; }
+        // #1394 — its per-frame Auto decision; omitted at its default (on).
+        [JsonIgnore(Condition = OmitNull)] public bool? SolidRegionAuto { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? AdaptiveAaThreshold { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? AdaptiveAaTolerance { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? IFSIterations { get; set; }
@@ -1329,6 +1331,7 @@ namespace FracturingFog.Models
                     BlaTolerance = Nd(p.BlaTolerance, D.BlaTolerance),
                     AdaptiveAa = p.AdaptiveAa != D.AdaptiveAa ? p.AdaptiveAa : null,                      // #1344
                     SolidRegionSkip = p.SolidRegionSkip != D.SolidRegionSkip ? p.SolidRegionSkip : null,   // #1343
+                    SolidRegionAuto = p.SolidRegionAuto != D.SolidRegionAuto ? p.SolidRegionAuto : null,   // #1394
                     AdaptiveAaThreshold = Nd(p.AdaptiveAaThreshold, D.AdaptiveAaThreshold),
                     AdaptiveAaTolerance = Nd(p.AdaptiveAaTolerance, D.AdaptiveAaTolerance),
                 },
@@ -1869,6 +1872,7 @@ namespace FracturingFog.Models
             if (BlaTolerance.HasValue) p.BlaTolerance = BlaTolerance.Value;   // #1275
             if (AdaptiveAa.HasValue) p.AdaptiveAa = AdaptiveAa.Value;                       // #1344
             if (SolidRegionSkip.HasValue) p.SolidRegionSkip = SolidRegionSkip.Value;         // #1343
+            if (SolidRegionAuto.HasValue) p.SolidRegionAuto = SolidRegionAuto.Value;         // #1394
             if (AdaptiveAaThreshold.HasValue) p.AdaptiveAaThreshold = AdaptiveAaThreshold.Value;
             if (AdaptiveAaTolerance.HasValue) p.AdaptiveAaTolerance = AdaptiveAaTolerance.Value;
             if (IFSIterations.HasValue) p.IFSIterations = IFSIterations.Value;
