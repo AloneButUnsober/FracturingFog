@@ -513,6 +513,9 @@ namespace FracturingFog.Batch
                 Sw(BatchFlags.NoWatermark, Output, FR,
                     "Turn the region/theme + program watermark OFF (it is on by default).")
                     with { Aliases = new[] { "--watermark" } },
+                Sw(BatchFlags.NoTaa, Output, BatchModes.Image,
+                    "Skip the quality preset's temporal anti-aliasing on a still (High / Ultra / Extreme: "
+                    + "8 / 16 / 32 samples, as the live view settles): sub-pixel anti-aliasing only, faster."),
 
                 // ── Video ──
                 Dbl(BatchFlags.Seconds, Video, BatchModes.Sequence,

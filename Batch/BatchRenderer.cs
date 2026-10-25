@@ -333,6 +333,7 @@ namespace FracturingFog.Batch
                 FractalType = frType,
                 Width = opts.Width,
                 Height = opts.Height,
+                TemporalAa = opts.TemporalAa,   // #1380 — a still settles like the live view
                 CenterX = cx,
                 CenterXLo = limbRegion?.CenterXLo ?? 0,
                 CenterX2 = limbRegion?.CenterX2 ?? 0,
@@ -406,7 +407,9 @@ namespace FracturingFog.Batch
             if (req.Qr != null && opts.QrSearch is { } qso)
             {
                 Console.WriteLine($"QR view search ({FracturingFog.Imaging.QrSearchOptions.FormatSpec(qso)})");
-                var found = FracturingFog.Imaging.Qr.QrViewSearch.Run(req, req.Qr, qso,
+                // #1380 — the search's probe renders skip the temporal samples; the
+                // found view renders with them.
+                var found = FracturingFog.Imaging.Qr.QrViewSearch.Run(req with { TemporalAa = false }, req.Qr, qso,
                     new Progress<FracturingFog.Imaging.Qr.QrSearchProgress>(p =>
                         Console.WriteLine($"  level {p.Level}/{p.Levels}: {p.Probes} probes, best luma change {p.BestCost:P1}")));
                 req = FracturingFog.Imaging.Qr.QrViewSearch.WithView(req, found.Best) with

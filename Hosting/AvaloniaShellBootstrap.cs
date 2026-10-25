@@ -833,7 +833,7 @@ namespace FracturingFog.Hosting
                 var host = s_renderHost;
                 if (host == null) return null;
                 var template = host.CreatePosterRequest(size, size, rotate: false, path: string.Empty,
-                    FracturingFog.Imaging.ImageFileFormat.Png);
+                    FracturingFog.Imaging.ImageFileFormat.Png) with { TemporalAa = false };   // #1380: many probes
                 return FracturingFog.Explore.ExploreProbe.For(template, size);
             };
 
@@ -4984,7 +4984,7 @@ namespace FracturingFog.Hosting
             if (s_renderHost == null) return null;
             var req = s_renderHost.CreatePosterRequest(
                 size, size, rotate: false, string.Empty, FracturingFog.Imaging.ImageFileFormat.Png, null,
-                global::FracturingFog.PosterAspectMode.View);
+                global::FracturingFog.PosterAspectMode.View) with { TemporalAa = false };   // #1380: many probes
             var busy = shell.BeginRenderBusy("Searching for a matching QR view…");
             FracturingFog.Imaging.Qr.QrSearchResult found;
             try

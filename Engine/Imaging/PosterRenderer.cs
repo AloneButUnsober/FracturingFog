@@ -111,6 +111,11 @@ namespace FracturingFog.Imaging
         // live gamma the on-screen frame applied (FractalRenderHost.UploadProcessedBuffer).
         public int Gamma { get; init; }        // -100..100, 0 = none
         public int HistogramEq { get; init; }  //    0..100, 0 = none
+        /// <summary>#1380 — run the quality preset's temporal AA (TaaMaxSamples) the
+        /// way the live view settles a still view. On for stills (--batch image,
+        /// the export paths via FractalRenderHost.CreatePosterRequest); off for
+        /// video / scene frames, probes and previews (the default).</summary>
+        public bool TemporalAa { get; init; }
 
         /// <summary>S2 (#389) — output-stage view transform / tonemap, parity with
         /// <c>ViewState.ViewTransform</c>. Default None = identity (byte-identical).</summary>
@@ -694,11 +699,14 @@ namespace FracturingFog.Imaging
                 // FractalParameters.AdaptiveAa), after the rescue as in the live view.
                 // A cluster tile (sub-rect) masks from its own pixels only.
                 // #1381 — adaptive contrast per sample, before the average.
+                // #1380 — then the preset's temporal AA on a still (TemporalAa), the
+                // samples the live view settles with.
                 FracturingFog.Rendering.SupersampleStats ss = default;
                 if (req.Quality != null)
                 {
-                    ss = FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(calc, req.Quality.AaSamples,
-                        FracturingFog.Rendering.AdaptiveAa.From(req.FractalParameters), token, req.HistogramEq);
+                    ss = FracturingFog.Rendering.Supersampling.AccumulateQuality(calc, req.Quality,
+                        FracturingFog.Rendering.AdaptiveAa.From(req.FractalParameters), req.HistogramEq,
+                        req.TemporalAa, token);
                     token.ThrowIfCancellationRequested();
                 }
                 // Adaptive HE — applied on the calculator so it recolours from the
