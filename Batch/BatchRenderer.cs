@@ -1294,14 +1294,15 @@ namespace FracturingFog.Batch
                 // families don't implement the capability and carry no HE.
                 // Brightness/contrast still apply downstream on the buffer.
                 alt.Calculate(CancellationToken.None);
-                // #1344 — the quality preset's sub-pixel AA, as the live view runs it.
-                if (alt.SupportsZoomPan)
-                    FracturingFog.Rendering.Supersampling.AccumulateAlt(alt, quality.AaSamples, CancellationToken.None);
+                // #1344 — the quality preset's sub-pixel AA, as the live view runs it;
+                // #1381 — adaptive contrast per sample, before the average.
+                var altSs = alt.SupportsZoomPan
+                    ? FracturingFog.Rendering.Supersampling.AccumulateAlt(alt, quality.AaSamples, CancellationToken.None, adaptive)
+                    : default;
                 NoteGpuRoute(alt);   // #1173-M
                 // #1012 — the depth a 3D raymarcher published (Fake / autostereogram).
                 if (depthOut != null) depthOut.Value = (alt as IDepthAovSource)?.DepthBuffer;
-                if (adaptive > 0 && alt is FracturingFog.Interefaces.ISupportsHistogramEq heAlt)
-                    heAlt.ApplyHistogramEqualization(adaptive / 100.0);
+                FracturingFog.Rendering.Supersampling.FinishHistogramEq(alt, in altSs, adaptive);
                 var altBuf = CopyBuffer(alt.ColorBuffer, w, h);
                 CompositeInteriorAlpha(altBuf, w, h, theme, fp);
                 return altBuf;
@@ -1319,10 +1320,9 @@ namespace FracturingFog.Batch
                 SolidRegionSkip = fp.SolidRegionSkip,   // #1343
             };
             calc.Calculate(CancellationToken.None);
-            FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(calc, quality.AaSamples,
-                FracturingFog.Rendering.AdaptiveAa.From(fp), CancellationToken.None);   // #1344
-            if (adaptive > 0)
-                calc.ApplyHistogramEqualization(adaptive / 100.0);
+            var ss = FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(calc, quality.AaSamples,
+                FracturingFog.Rendering.AdaptiveAa.From(fp), CancellationToken.None, adaptive);   // #1344, #1381
+            FracturingFog.Rendering.Supersampling.FinishHistogramEq(calc, in ss, adaptive);
             var buf = CopyBuffer(calc.ColorBuffer, w, h);
             CompositeInteriorAlpha(buf, w, h, theme);
             return buf;
@@ -1599,9 +1599,9 @@ namespace FracturingFog.Batch
                 Quality = quality ?? region.QualityPreset ?? QualityPreset.Standard,
             };
             calc.Calculate(CancellationToken.None);
-            FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(calc, calc.Quality.AaSamples,
-                aa ?? FracturingFog.Rendering.AdaptiveAa.Off, CancellationToken.None);   // #1344
-            if (adaptive > 0) calc.ApplyHistogramEqualization(adaptive / 100.0);
+            var ss = FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(calc, calc.Quality.AaSamples,
+                aa ?? FracturingFog.Rendering.AdaptiveAa.Off, CancellationToken.None, adaptive);   // #1344, #1381
+            FracturingFog.Rendering.Supersampling.FinishHistogramEq(calc, in ss, adaptive);
             var buf = CopyBuffer(calc.ColorBuffer, w, h);
             CompositeInteriorAlpha(buf, w, h, theme);
             return buf;
@@ -2556,9 +2556,9 @@ namespace FracturingFog.Batch
                 Quality = quality,
             };
             calc.Calculate(CancellationToken.None);
-            FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(calc, quality.AaSamples,
-                aa ?? FracturingFog.Rendering.AdaptiveAa.Off, CancellationToken.None);   // #1344
-            if (adaptive > 0) calc.ApplyHistogramEqualization(adaptive / 100.0);
+            var ss = FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(calc, quality.AaSamples,
+                aa ?? FracturingFog.Rendering.AdaptiveAa.Off, CancellationToken.None, adaptive);   // #1344, #1381
+            FracturingFog.Rendering.Supersampling.FinishHistogramEq(calc, in ss, adaptive);
             var buf = CopyBuffer(calc.ColorBuffer, w, h);
             CompositeInteriorAlpha(buf, w, h, theme);
             return buf;

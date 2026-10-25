@@ -25,6 +25,14 @@
 // the same integer sums and rounding (the order of the sum doesn't matter).
 // Off by default (FractalParameters.AdaptiveAa), where this is the full grid as
 // before, byte for byte.
+//
+// #1381 — adaptive contrast (histogram equalisation, FractalViewState.HistogramEq)
+// recolours a frame from its iteration / smooth buffers, which after a supersample
+// pass hold only the last jittered sample. Equalising after the average therefore
+// threw the anti-aliasing away. With histogramEq > 0 the pass builds one CDF from
+// sample 0 (SampleEqualizer), equalises every sample with it and averages the
+// equalised colours; the caller then skips its own equalisation
+// (FinishHistogramEq). Without a supersample pass nothing changes.
 
 using System;
 using System.Collections.Generic;
@@ -52,6 +60,43 @@ namespace FracturingFog.Rendering
     {
         /// <summary>Pixel-samples full supersampling computes: every pixel, every sample.</summary>
         public long FullPixelSamples => (long)Pixels * Samples;
+
+        /// <summary>#1381 — the equalisation every sample went through (null: none, so
+        /// the caller equalises as before).</summary>
+        public SampleEqualizer? Equalizer { get; init; }
+
+        /// <summary>#1381 — the colour is already the mean of equalised samples.</summary>
+        public bool Equalized => Equalizer != null;
+    }
+
+    /// <summary>#1381 — adaptive contrast at a fixed CDF, so every sample of a pixel is
+    /// equalised the same way (see the file header).</summary>
+    public sealed class SampleEqualizer
+    {
+        public double[] Cdf { get; }
+        public int Bins { get; }
+        public int SourceMaxIter { get; }
+        public double Strength { get; }
+
+        private SampleEqualizer(double[] cdf, int bins, int sourceMaxIter, double strength)
+        { Cdf = cdf; Bins = bins; SourceMaxIter = sourceMaxIter; Strength = strength; }
+
+        /// <summary>The CDF of <paramref name="calc"/>'s current frame at
+        /// <paramref name="histogramEq"/> % strength; null when it is 0, the calculator
+        /// has no adaptive contrast, or no pixel escaped (the identity case).</summary>
+        public static SampleEqualizer? Build(object? calc, int histogramEq)
+        {
+            if (histogramEq <= 0 || calc is not ISupportsHistogramEq he) return null;
+            if (!he.BuildHistogramCdf(out double[]? cdf, out int bins, out int src) || cdf == null) return null;
+            return new SampleEqualizer(cdf, bins, src, histogramEq / 100.0);
+        }
+
+        /// <summary>Recolour <paramref name="calc"/>'s current buffers with this CDF.</summary>
+        public void Apply(object calc)
+        {
+            if (calc is ISupportsHistogramEq he)
+                he.ApplyHistogramEqualizationWithCdf(Cdf, Bins, SourceMaxIter, Strength);
+        }
     }
 
     public static class Supersampling
@@ -150,22 +195,52 @@ namespace FracturingFog.Rendering
         /// <summary>Supersample <paramref name="calc"/>'s just-computed frame (its
         /// ColorBuffer is sample 0) with <paramref name="aaSamples"/> = side² samples
         /// per pixel, fully or (<paramref name="adaptive"/>) only where needed.
-        /// Restores the view centre (every limb) on exit; a cancellation averages the
-        /// samples taken so far.</summary>
+        /// <paramref name="histogramEq"/> (%) &gt; 0 equalises every sample with the
+        /// CDF of sample 0 first (#1381). Restores the view centre (every limb) on
+        /// exit; a cancellation averages the samples taken so far.</summary>
         public static SupersampleStats AccumulateMandelbrot(MandelbrotCalculator calc, int aaSamples,
-            AdaptiveAa adaptive, CancellationToken token)
+            AdaptiveAa adaptive, CancellationToken token, int histogramEq = 0)
         {
-            int side = (int)Math.Round(Math.Sqrt(aaSamples));
-            int pixels = calc.Width * calc.Height;
-            if (aaSamples <= 1 || side * side != aaSamples || calc.ColorBuffer.Length < pixels)
-                return new SupersampleStats(pixels, 1, 0, pixels);
-            return adaptive.Enabled
-                ? Adaptive(calc, side, adaptive, token)
-                : Full(calc, side, token);
+            if (!Supersamples(calc.Width, calc.Height, calc.ColorBuffer, aaSamples, out _)) return Single(calc.Width, calc.Height);
+            var eq = SampleEqualizer.Build(calc, histogramEq);
+            eq?.Apply(calc);
+            return AccumulateMandelbrot(calc, aaSamples, adaptive, token, eq);
+        }
+
+        /// <summary>As above, with an equaliser the caller built from sample 0 and has
+        /// already applied to it (the live view equalises every frame on its calc
+        /// thread, #1381); null = no adaptive contrast.</summary>
+        public static SupersampleStats AccumulateMandelbrot(MandelbrotCalculator calc, int aaSamples,
+            AdaptiveAa adaptive, CancellationToken token, SampleEqualizer? equalizer)
+        {
+            if (!Supersamples(calc.Width, calc.Height, calc.ColorBuffer, aaSamples, out int side)) return Single(calc.Width, calc.Height);
+            var st = adaptive.Enabled
+                ? Adaptive(calc, side, adaptive, equalizer, token)
+                : Full(calc, side, equalizer, token);
+            return st with { Equalizer = equalizer };
+        }
+
+        // A pass runs for a square sample count > 1 over a full colour buffer.
+        private static bool Supersamples(int w, int h, uint[] color, int aaSamples, out int side)
+        {
+            side = (int)Math.Round(Math.Sqrt(aaSamples));
+            return aaSamples > 1 && side * side == aaSamples && color.Length >= w * h;
+        }
+
+        private static SupersampleStats Single(int w, int h) => new(w * h, 1, 0, (long)w * h);
+
+        /// <summary>#1381 — the adaptive contrast a caller applies after a supersample
+        /// pass: none when the pass already equalised every sample, otherwise the
+        /// calculator's own equalisation at <paramref name="histogramEq"/> % (as
+        /// before).</summary>
+        public static void FinishHistogramEq(object calc, in SupersampleStats stats, int histogramEq)
+        {
+            if (histogramEq > 0 && !stats.Equalized && calc is ISupportsHistogramEq he)
+                he.ApplyHistogramEqualization(histogramEq / 100.0);
         }
 
         // The pre-#1344 pass (FractalRenderHost.RunMsaaAccumulateMandelbrot), unchanged.
-        private static SupersampleStats Full(MandelbrotCalculator calc, int side, CancellationToken token)
+        private static SupersampleStats Full(MandelbrotCalculator calc, int side, SampleEqualizer? eq, CancellationToken token)
         {
             int pixels = calc.Width * calc.Height;
             uint[] color = calc.ColorBuffer;
@@ -189,6 +264,7 @@ namespace FracturingFog.Rendering
                     CentreJitter.Apply(calc, in orig, jx, jy, scale);
                     try { calc.Calculate(token); }
                     catch (OperationCanceledException) { break; }
+                    eq?.Apply(calc);   // #1381
                     Add(calc.ColorBuffer, pixels, sumR, sumG, sumB, sumA);
                     count++;
                 }
@@ -198,7 +274,7 @@ namespace FracturingFog.Rendering
             return new SupersampleStats(pixels, side * side, pixels, (long)pixels * count);
         }
 
-        private static SupersampleStats Adaptive(MandelbrotCalculator calc, int side, AdaptiveAa a, CancellationToken token)
+        private static SupersampleStats Adaptive(MandelbrotCalculator calc, int side, AdaptiveAa a, SampleEqualizer? eq, CancellationToken token)
         {
             int w = calc.Width, h = calc.Height, pixels = w * h;
             var color0 = (uint[])calc.ColorBuffer.Clone();
@@ -237,6 +313,7 @@ namespace FracturingFog.Rendering
                     CentreJitter.Apply(calc, in orig, jx, jy, scale);
                     try { calc.Calculate(token); }
                     catch (OperationCanceledException) { break; }
+                    eq?.Apply(calc);   // #1381
                     var buf = calc.ColorBuffer;
                     pixelSamples += activeCount;
                     int keep = 0;
@@ -277,14 +354,24 @@ namespace FracturingFog.Rendering
 
         /// <summary>Wave 2.6 alt-calc twin (IFractalCalculator escape-time families and
         /// the 3D raymarchers whose Calculate honours centre + zoom): the full grid,
-        /// jittering CenterX / CenterY. Unchanged from FractalRenderHost.</summary>
-        public static SupersampleStats AccumulateAlt(IFractalCalculator calc, int aaSamples, CancellationToken token)
+        /// jittering CenterX / CenterY. Unchanged from FractalRenderHost, but for
+        /// <paramref name="histogramEq"/> (#1381, as in AccumulateMandelbrot).</summary>
+        public static SupersampleStats AccumulateAlt(IFractalCalculator calc, int aaSamples, CancellationToken token,
+            int histogramEq = 0)
         {
-            int side = (int)Math.Round(Math.Sqrt(aaSamples));
+            if (!Supersamples(calc.Width, calc.Height, calc.ColorBuffer, aaSamples, out _)) return Single(calc.Width, calc.Height);
+            var eq = SampleEqualizer.Build(calc, histogramEq);
+            eq?.Apply(calc);
+            return AccumulateAlt(calc, aaSamples, token, eq);
+        }
+
+        /// <summary>As above, with an equaliser already applied to sample 0 (#1381).</summary>
+        public static SupersampleStats AccumulateAlt(IFractalCalculator calc, int aaSamples, CancellationToken token,
+            SampleEqualizer? eq)
+        {
+            if (!Supersamples(calc.Width, calc.Height, calc.ColorBuffer, aaSamples, out int side)) return Single(calc.Width, calc.Height);
             int pixels = calc.Width * calc.Height;
             uint[] color = calc.ColorBuffer;
-            if (aaSamples <= 1 || side * side != aaSamples || color.Length < pixels)
-                return new SupersampleStats(pixels, 1, 0, pixels);
 
             var sumR = new int[pixels];
             var sumG = new int[pixels];
@@ -305,6 +392,7 @@ namespace FracturingFog.Rendering
                     calc.CenterY = origCy + jy * scale;
                     try { calc.Calculate(token); }
                     catch (OperationCanceledException) { break; }
+                    eq?.Apply(calc);   // #1381
                     Add(calc.ColorBuffer, pixels, sumR, sumG, sumB, sumA);
                     count++;
                 }
@@ -315,7 +403,7 @@ namespace FracturingFog.Rendering
                 calc.CenterY = origCy;
             }
             WriteMeans(calc.ColorBuffer, pixels, sumR, sumG, sumB, sumA, count);
-            return new SupersampleStats(pixels, side * side, pixels, (long)pixels * count);
+            return new SupersampleStats(pixels, side * side, pixels, (long)pixels * count) { Equalizer = eq };
         }
 
         // Format: ColorBuffer is uint with packed BGRA (matches IColorMap.Map's

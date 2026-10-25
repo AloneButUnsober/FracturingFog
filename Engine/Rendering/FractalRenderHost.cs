@@ -356,6 +356,9 @@ namespace FracturingFog.Rendering
         private int _taaFpW, _taaFpH;
         private FractalType _taaFpType;
         private bool _taaValid;
+        // #1381 — the adaptive-contrast CDF the TAA seed was equalised with; every
+        // continuation sample is equalised with it before it is added (null = off).
+        private SampleEqualizer? _taaEqualizer;
 
         private readonly struct FrameJob
         {
@@ -412,12 +415,16 @@ namespace FracturingFog.Rendering
             // #1333 — Stopwatch ticks when this stage's calculation started (0 =
             // not measured), so the upload tail can time the whole stage.
             public readonly long StartTicks;
-            public UploadCtx(FractalRenderHost host, FrameJob job, long ms, long startTicks = 0)
-            { Host = host; Job = job; Ms = ms; StartTicks = startTicks; }
+            // #1381 — the adaptive contrast the calc thread already applied to this
+            // frame's colour (null: the upload tail equalises, as before).
+            public readonly SampleEqualizer? Equalizer;
+            public UploadCtx(FractalRenderHost host, FrameJob job, long ms, long startTicks = 0,
+                SampleEqualizer? equalizer = null)
+            { Host = host; Job = job; Ms = ms; StartTicks = startTicks; Equalizer = equalizer; }
         }
 
         private static readonly Action<UploadCtx> s_uploadCallback =
-            static ctx => ctx.Host.RunFrameJobUpload(ctx.Job, ctx.Ms, ctx.StartTicks);
+            static ctx => ctx.Host.RunFrameJobUpload(ctx.Job, ctx.Ms, ctx.StartTicks, ctx.Equalizer);
 
         // #86 — newest-wins present gate. MUST be called while holding
         // _uploadGate. Returns false when a frame with a higher Seq has already
@@ -1983,9 +1990,10 @@ namespace FracturingFog.Rendering
             {
                 long taaCalcStart = Stopwatch.GetTimestamp();
                 bool ok = false;
+                var taaEq = _taaEqualizer;   // #1381
                 try
                 {
-                    ok = RunOneTaaSample(calc, job.TaaSampleIndex, token);
+                    ok = RunOneTaaSample(calc, job.TaaSampleIndex, taaEq, token);
                 }
                 catch (OperationCanceledException) { ok = false; }
                 long taaCalcEnd = Stopwatch.GetTimestamp();
@@ -2009,7 +2017,7 @@ namespace FracturingFog.Rendering
 
                 long taaMs = job.Sw.ElapsedMilliseconds;
                 ThreadPool.UnsafeQueueUserWorkItem(s_uploadCallback,
-                    new UploadCtx(this, job, taaMs), preferLocal: false);
+                    new UploadCtx(this, job, taaMs, equalizer: taaEq), preferLocal: false);
                 return;
             }
 
@@ -2048,6 +2056,7 @@ namespace FracturingFog.Rendering
             SyncGpuKernelsWithDevice();   // #1045 — a rebuilt device needs fresh kernels
 
             long calcStart = Stopwatch.GetTimestamp();
+            SampleEqualizer? frameEq = null;   // #1381 — adaptive contrast applied on this thread
 
             // #318 — feed the byte-buffer HUD telemetry panel (bit 0x200) before
             // Calculate, since the 3D raymarcher calculators bake the HUD during
@@ -2146,18 +2155,28 @@ namespace FracturingFog.Rendering
                 // Pixel scale: 3.5/max(W,H)/Zoom mirrors generator template.
                 // #1344: Supersampling (shared with --batch and export); adaptive on
                 // the Mandelbrot path when FractalParameters.AdaptiveAa is set.
+                // #1381 — adaptive contrast is applied here, to sample 0 and then to
+                // every jittered sample with sample 0's CDF, so the averages are of
+                // equalised colours (the upload tail used to equalise the finished
+                // average from the last sample's buffers, which discarded the AA).
+                int heq = ViewState?.HistogramEq ?? 0;
+                if (heq > 0 && !token.IsCancellationRequested)
+                {
+                    frameEq = SampleEqualizer.Build(useAlt ? altCalc : calc, heq);
+                    frameEq?.Apply(useAlt ? altCalc! : calc);
+                }
                 if (!useAlt)
                 {
                     int aaSamples = calc.Quality?.AaSamples ?? 1;
                     if (aaSamples > 1 && !token.IsCancellationRequested)
                         LastSupersample = Supersampling.AccumulateMandelbrot(calc, aaSamples,
-                            AdaptiveAa.From(ViewState?.FractalParameters), token);
+                            AdaptiveAa.From(ViewState?.FractalParameters), token, frameEq);
                 }
                 else if (altCalc!.SupportsZoomPan)
                 {
                     int aaSamples = altCalc.Quality?.AaSamples ?? 1;
                     if (aaSamples > 1 && !token.IsCancellationRequested)
-                        LastSupersample = Supersampling.AccumulateAlt(altCalc, aaSamples, token);
+                        LastSupersample = Supersampling.AccumulateAlt(altCalc, aaSamples, token, frameEq);
                 }
 
                 // Wave 2.7 — seed the TAA accumulator from this frame's
@@ -2165,7 +2184,10 @@ namespace FracturingFog.Rendering
                 // view fingerprint so the upload tail can decide whether to
                 // queue continuation samples.
                 if (!useAlt && !token.IsCancellationRequested)
+                {
                     SeedTaaAccumulator(calc);
+                    _taaEqualizer = frameEq;   // #1381
+                }
                 else if (useAlt)
                     InvalidateTaa();
             }
@@ -2222,7 +2244,7 @@ namespace FracturingFog.Rendering
             // thread loops back for the next queued frame without blocking
             // on UploadProcessedBuffer (post-FX + GPU upload).
             ThreadPool.UnsafeQueueUserWorkItem(s_uploadCallback,
-                new UploadCtx(this, job, ms, calcStart), preferLocal: false);
+                new UploadCtx(this, job, ms, calcStart, frameEq), preferLocal: false);
         }
 
         /// <summary>#1344 — the last frame's sub-pixel AA pass (pixels marked and
@@ -2307,7 +2329,8 @@ namespace FracturingFog.Rendering
             return r;
         }
 
-        private bool RunOneTaaSample(MandelbrotCalculator calc, int sampleIndex, CancellationToken token)
+        private bool RunOneTaaSample(MandelbrotCalculator calc, int sampleIndex,
+            SampleEqualizer? equalizer, CancellationToken token)
         {
             if (!TaaFingerprintMatches(calc)) return false;
             int pixels = calc.Width * calc.Height;
@@ -2330,6 +2353,7 @@ namespace FracturingFog.Rendering
             }
             orig.Restore(calc);
             if (token.IsCancellationRequested) return false;
+            equalizer?.Apply(calc);   // #1381 — the seed's CDF, before the blend
 
             var buf = calc.ColorBuffer;
             for (int i = 0; i < pixels; i++)
@@ -2829,7 +2853,8 @@ namespace FracturingFog.Rendering
             catch (OperationCanceledException) { return false; }
         }
 
-        private void RunFrameJobUpload(FrameJob job, long ms, long startTicks = 0)
+        private void RunFrameJobUpload(FrameJob job, long ms, long startTicks = 0,
+            SampleEqualizer? equalizer = null)
         {
             var token = job.Token;
             var calc = job.Calc;
@@ -3051,7 +3076,19 @@ namespace FracturingFog.Rendering
                 // build would read the iterations / smooth back every frame just in
                 // case. The slider's first tick builds it instead (the invalid cache
                 // routes RepaintWithAdaptive to a fresh build).
-                if (!useAlt && ViewState.HistogramEq == 0 && calc.GpuAuxPending != 0)
+                // #1381 — a frame the calc thread already equalised (every sample,
+                // with sample 0's CDF): cache that CDF for the slider, don't recolour.
+                if (!useAlt && equalizer != null)
+                {
+                    lock (_adaptiveCdfLock)
+                    {
+                        _cachedAdaptiveCdf = equalizer.Cdf;
+                        _cachedAdaptiveBins = equalizer.Bins;
+                        _cachedAdaptiveSourceMaxIter = equalizer.SourceMaxIter;
+                        _adaptiveCdfValid = true;
+                    }
+                }
+                else if (!useAlt && ViewState.HistogramEq == 0 && calc.GpuAuxPending != 0)
                 {
                     lock (_adaptiveCdfLock) _adaptiveCdfValid = false;
                 }
@@ -3080,7 +3117,7 @@ namespace FracturingFog.Rendering
                 // through the same shared core. Builds + applies inline (no
                 // per-calc CDF cache on the alt path; the live slider rebuilds in
                 // RepaintWithAdaptive). Non-escape-time alts skip HE entirely.
-                else if (ViewState.HistogramEq > 0
+                else if (equalizer == null && ViewState.HistogramEq > 0
                     && altCalc is FracturingFog.Interefaces.ISupportsHistogramEq heAltCalc
                     && heAltCalc.BuildHistogramCdf(out double[]? altCdf, out int altBins, out int altSrc))
                 {
@@ -3634,6 +3671,16 @@ namespace FracturingFog.Rendering
         {
             if (_disposed) return;
             IFractalCalculator? alt = SelectAltCalculator(ViewState.FractalType);
+            // #1381 — the cached buffers hold one sample (the last jittered one of a
+            // supersampled / TAA frame), so this cheap recolour can't keep the AA.
+            // Show it now for the slider's latency, stop the TAA chain (its samples
+            // were equalised at the old strength) and settle with a full render.
+            var q = alt?.Quality ?? _calculator.Quality;
+            if ((q?.AaSamples ?? 1) > 1 || (alt == null && (q?.TaaMaxSamples ?? 1) > 1))
+            {
+                InvalidateTaa();
+                ArmColorSettle();
+            }
             if (alt != null)
             {
                 // #145 — escape-time alt calculators recolor live from their
