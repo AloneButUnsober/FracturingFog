@@ -556,7 +556,7 @@ Built 2026-07-19 on the spike's findings, in two validated slices (commits `d4ba
    clean (Rendering.D3D + WinExe + App); the Vulkan gates (`--vulkanpturbcalc` 0/16384) stay green — the
    default-interface member the D3D class now overrides did not disturb the Vulkan path. Interface default
    still keeps any *other* IGpuKernel opt-out. **Parity — DONE (2026-10-06, GPU parity plan G0.6):** the
-   headless gate `--d3dpturbcalc` (WinExe, `D3DPerturbProbe.cs`) creates a D3D11 hardware device the way
+   headless gate `--d3dpturbcalc` (WinExe, `Probes/D3DPerturbProbe.cs`) creates a D3D11 hardware device the way
    `MandelbrotGpuKernelBench` does and drives a real `MandelbrotCalculator` both ways at 1e14, 1e15, 4.5e46
    and 3e47 (multi-limb centres from `--saprobe` / `--qdfloorprobe`). On a GeForce GT 710 every case is
    0/16384 iteration disagreement and 0.000 colour drift, with the GPU path confirmed per case

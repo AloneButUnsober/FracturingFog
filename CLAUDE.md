@@ -169,3 +169,5 @@ WinForms artifact.
 - Solution: `FracturingFogCLD.sln` (root).
 - Default run: `dotnet run --project FracturingFogCLD.csproj` → Avalonia shell.
 - Headless: `--server`, `--batch`, plus self-test flags in `Program.cs`.
+- Probes (`--xxxprobe` measurement / parity flags of the WinExe) live in `Probes/`, not the
+  repo root; a new probe goes there with a row in `Probes/README.md` (#1468).
