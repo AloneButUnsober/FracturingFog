@@ -1,0 +1,49 @@
+# Source citation contract guard (CONTRIBUTING.md, "Source citation contract").
+#
+# Fails when code or docs cite a source the bibliography does not credit, when
+# an external URL's host is uncredited, when a bibliography anchor link is
+# broken, or when a credit present on the base branch has been removed.
+# Pure Python, no build: runs in seconds on every PR and every push to main.
+
+name: Citation guard
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  citations:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check citations
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="origin/${{ github.base_ref }}"
+          elif [ "${{ github.event_name }}" = "push" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            BASE="${{ github.event.before }}"
+          else
+            BASE=""
+          fi
+          if [ -n "$BASE" ]; then
+            python Tools/CitationGuard/citation_guard.py . --base "$BASE"
+          else
+            python Tools/CitationGuard/citation_guard.py .
+          fi

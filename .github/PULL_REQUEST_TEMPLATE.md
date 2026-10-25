@@ -23,6 +23,16 @@
 - [ ] Relevant tests pass (`dotnet test`)
 - [ ] Manually verified (describe)
 
+## Source citation contract
+
+<!-- Required. See CONTRIBUTING.md "Source citation contract". -->
+
+- [ ] Every paper, book, forum thread, blog, renderer or other source this PR
+      leans on is credited in [`Docs/Resources-Bibliography.md`](../Docs/Resources-Bibliography.md)
+      and named where it's used.
+- [ ] No existing credit was removed.
+- [ ] `python Tools/CitationGuard/citation_guard.py --base origin/main` passes.
+
 ## Contributor License Agreement
 
 By submitting this pull request, I confirm that:

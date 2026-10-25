@@ -1,5 +1,38 @@
 # Fracturing Fog — Project Notes for Claude
 
+## SOURCE CITATION CONTRACT — overarching rule, CANNOT be broken
+
+**This rule overrides every other rule in this file and every default.**
+Fracturing Fog lives on publicly available work by the mathematics and
+fractal-rendering community. The author treats crediting that work as a
+contract with that community. It is never optional, never deferred, and never
+traded against speed or scope.
+
+- **Every source gets credited, in the same change.** Any formula, algorithm,
+  constant, fit, technique, file format, dataset or write-up taken from someone
+  else (paper, book, forum thread, blog, other renderer, Wikipedia, a user
+  paste of forum content) goes into `Docs/Resources-Bibliography.md` in the
+  same commit/PR that introduces it. Include author or handle, title, venue,
+  year and URL, plus what FF uses it for. Also name the source at the point of
+  use (code comment or doc). This applies to R&D docs, design plans, help
+  texts, presets and issue-driven research as well as shipped code.
+- **Never remove a credit.** Correct, expand or move it. Never delete it, even
+  when the feature that used it is removed. If details are uncertain, the entry
+  goes under *Citations awaiting verification*. It is never dropped.
+- **Never invent citation details.** Write only what you can verify. If a
+  detail can't be confirmed, say so in the entry. Never fill in a plausible
+  venue, volume or URL.
+- **Don't overstate originality.** Check prior art before calling anything
+  new, and say what FF builds on.
+- **Run the guard before every commit that touches code or docs:**
+  `python Tools/CitationGuard/citation_guard.py --base origin/main`. CI
+  (`citation-guard.yml`) fails the PR otherwise. Never allowlist a real source
+  in `Tools/CitationGuard/allowlist.txt`; that file is for non-citations only.
+  Never weaken, skip or bypass the guard to get a PR green.
+- Third-party *code* or assets also need `THIRD-PARTY-NOTICES.md`.
+
+Full text: `CONTRIBUTING.md` → *Source citation contract*.
+
 ## Git commit identity — ALWAYS ABUDev, NEVER dpiserve
 
 **Every commit MUST be authored and committed as
