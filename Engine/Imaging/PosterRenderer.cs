@@ -585,9 +585,11 @@ namespace FracturingFog.Imaging
                 token.ThrowIfCancellationRequested();
                 // #1344 — the quality preset's sub-pixel AA, as the live view runs it
                 // (export and --batch used to skip it).
+                // #1381 — adaptive contrast per sample, before the average.
+                FracturingFog.Rendering.SupersampleStats altSs = default;
                 if (alt.SupportsZoomPan && req.Quality != null)
                 {
-                    FracturingFog.Rendering.Supersampling.AccumulateAlt(alt, req.Quality.AaSamples, token);
+                    altSs = FracturingFog.Rendering.Supersampling.AccumulateAlt(alt, req.Quality.AaSamples, token, req.HistogramEq);
                     token.ThrowIfCancellationRequested();
                 }
                 // #1009 — hand the 3D raymarcher's published depth to the caller
@@ -599,8 +601,7 @@ namespace FracturingFog.Imaging
                 // Spider) equalize through the shared core just like Mandelbrot.
                 // Non-escape-time families don't implement the capability and
                 // fall through unchanged.
-                if (req.HistogramEq > 0 && alt is ISupportsHistogramEq heAlt)
-                    heAlt.ApplyHistogramEqualization(req.HistogramEq / 100.0);
+                FracturingFog.Rendering.Supersampling.FinishHistogramEq(alt, in altSs, req.HistogramEq);
                 buffer = alt.ColorBuffer;
                 w = alt.Width;
                 h = alt.Height;
@@ -692,16 +693,17 @@ namespace FracturingFog.Imaging
                 // #1344 — the quality preset's sub-pixel AA (adaptive with
                 // FractalParameters.AdaptiveAa), after the rescue as in the live view.
                 // A cluster tile (sub-rect) masks from its own pixels only.
+                // #1381 — adaptive contrast per sample, before the average.
+                FracturingFog.Rendering.SupersampleStats ss = default;
                 if (req.Quality != null)
                 {
-                    FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(calc, req.Quality.AaSamples,
-                        FracturingFog.Rendering.AdaptiveAa.From(req.FractalParameters), token);
+                    ss = FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(calc, req.Quality.AaSamples,
+                        FracturingFog.Rendering.AdaptiveAa.From(req.FractalParameters), token, req.HistogramEq);
                     token.ThrowIfCancellationRequested();
                 }
-                // Adaptive HE — Mandelbrot-only, applied on the calculator so
-                // it recolours from the iteration histogram before read.
-                if (req.HistogramEq > 0)
-                    calc.ApplyHistogramEqualization(req.HistogramEq / 100.0);
+                // Adaptive HE — applied on the calculator so it recolours from the
+                // iteration histogram before read (unless the AA pass already did).
+                FracturingFog.Rendering.Supersampling.FinishHistogramEq(calc, in ss, req.HistogramEq);
                 buffer = calc.ColorBuffer;
                 w = calc.Width;
                 h = calc.Height;
