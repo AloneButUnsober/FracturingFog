@@ -7,8 +7,9 @@
 // invoke `dxc -spirv` at runtime, mirroring how the D3D path runtime-compiles
 // HLSL. Themes are dynamic, so a build-time SPIR-V bake cannot cover per-theme
 // EvalPalette variants; runtime compile is the representative path. `dxc` is
-// located via DXC_PATH -> VULKAN_SDK/Bin -> PATH so CI can point at whichever
-// DXC the leg ships (Vulkan SDK on the LunarG image, or an apt/NuGet DXC).
+// located via DXC_PATH -> VULKAN_SDK/Bin -> the copy shipped next to the app
+// (#1455, the Linux AppImage's dxc/bin/dxc) -> PATH, so CI can point at whichever
+// DXC the leg ships and an end user needs no SDK.
 
 using System;
 using System.Diagnostics;
@@ -57,6 +58,7 @@ public static class DxcCompiler
                 UseShellExecute = false,
                 CreateNoWindow = true,
             };
+            AddLibraryPath(psi, dxc);   // #1455
             psi.ArgumentList.Add("-spirv");
             psi.ArgumentList.Add("-T"); psi.ArgumentList.Add(profile);   // e.g. cs_6_0
             psi.ArgumentList.Add("-E"); psi.ArgumentList.Add(entry);     // e.g. main
@@ -94,24 +96,100 @@ public static class DxcCompiler
         }
     }
 
-    // Resolve the dxc executable: DXC_PATH override, then VULKAN_SDK/Bin, then
-    // bare name for OS PATH resolution.
-    private static string LocateDxc()
+    // Resolve the dxc executable: DXC_PATH override, then VULKAN_SDK/Bin, then the
+    // copy bundled next to the app (#1455), then bare name for OS PATH resolution.
+    private static string LocateDxc() => LocateDxc(
+        Environment.GetEnvironmentVariable("DXC_PATH"),
+        Environment.GetEnvironmentVariable("VULKAN_SDK"),
+        AppContext.BaseDirectory);
+
+    /// <summary>The dxc to run, by the lookup order above (testable form).</summary>
+    public static string LocateDxc(string? dxcPathEnv, string? vulkanSdkEnv, string? appBaseDir)
     {
-        var env = Environment.GetEnvironmentVariable("DXC_PATH");
-        if (!string.IsNullOrEmpty(env) && File.Exists(env)) return env;
+        if (!string.IsNullOrEmpty(dxcPathEnv) && File.Exists(dxcPathEnv)) return dxcPathEnv;
 
         string exe = OperatingSystem.IsWindows() ? "dxc.exe" : "dxc";
-        var sdk = Environment.GetEnvironmentVariable("VULKAN_SDK");
-        if (!string.IsNullOrEmpty(sdk))
+        if (!string.IsNullOrEmpty(vulkanSdkEnv))
         {
             foreach (var sub in new[] { "Bin", "bin" })
             {
-                var candidate = Path.Combine(sdk, sub, exe);
+                var candidate = Path.Combine(vulkanSdkEnv, sub, exe);
                 if (File.Exists(candidate)) return candidate;
             }
         }
+        if (!string.IsNullOrEmpty(appBaseDir))
+        {
+            var bundled = Path.Combine(appBaseDir, BundledDirName, "bin", exe);
+            if (File.Exists(bundled)) return bundled;
+        }
         return exe; // fall through to PATH
+    }
+
+    /// <summary>#1455 — the folder, next to the app, a package ships DXC in
+    /// (<c>dxc/bin/dxc</c> + <c>dxc/lib/libdxcompiler.so</c>).</summary>
+    public const string BundledDirName = "dxc";
+
+    // #1455 — DXC's Linux build loads libdxcompiler.so from ../lib, which isn't on
+    // the loader path for a copy outside /usr; prepend it for the child process.
+    private static void AddLibraryPath(ProcessStartInfo psi, string dxc)
+    {
+        if (OperatingSystem.IsWindows() || !Path.IsPathRooted(dxc)) return;
+        var lib = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(dxc)!) ?? "", "lib");
+        if (!Directory.Exists(lib)) return;
+        string? cur = Environment.GetEnvironmentVariable(OperatingSystem.IsMacOS() ? "DYLD_LIBRARY_PATH" : "LD_LIBRARY_PATH");
+        psi.Environment[OperatingSystem.IsMacOS() ? "DYLD_LIBRARY_PATH" : "LD_LIBRARY_PATH"] =
+            string.IsNullOrEmpty(cur) ? lib : lib + Path.PathSeparator + cur;
+    }
+
+    private static readonly object s_probeLock = new();
+    private static (bool Ok, string Detail)? s_probe;
+
+    /// <summary>#1455 — whether a dxc can be run at all: resolves it and runs
+    /// <c>dxc --version</c> once per process (cached). <paramref name="detail"/> is
+    /// the version line, or why it failed. Never throws. The host checks this
+    /// before attaching a Vulkan kernel, whose shaders compile on first use.</summary>
+    public static bool Probe(out string detail)
+    {
+        lock (s_probeLock)
+        {
+            s_probe ??= RunProbe(LocateDxc());
+            detail = s_probe.Value.Detail;
+            return s_probe.Value.Ok;
+        }
+    }
+
+    private static (bool, string) RunProbe(string dxc)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = dxc,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            AddLibraryPath(psi, dxc);
+            psi.ArgumentList.Add("--version");
+            using var p = Process.Start(psi)!;
+            var stdout = p.StandardOutput.ReadToEndAsync();
+            var stderr = p.StandardError.ReadToEndAsync();
+            if (!p.WaitForExit(15000))
+            {
+                try { p.Kill(); } catch { }
+                return (false, $"'{dxc}' did not answer --version");
+            }
+            string text = (stdout.Result + stderr.Result).Trim();
+            string first = text.Split('\n')[0].Trim();
+            return p.ExitCode == 0
+                ? (true, $"{dxc} ({first})")
+                : (false, $"'{dxc}' failed (exit {p.ExitCode}): {first}");
+        }
+        catch (Exception ex)
+        {
+            return (false, $"'{dxc}' not found ({ex.Message})");
+        }
     }
 
     // Cheap validity gate for a cached SPIR-V blob: a whole number of 32-bit

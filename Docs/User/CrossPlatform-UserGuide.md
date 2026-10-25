@@ -96,7 +96,7 @@ Fracturing Fog auto-picks the best renderer for your host:
 | OS      | Default                   | Override                                          |
 |---------|---------------------------|---------------------------------------------------|
 | Windows | DirectX 12 → DX11 fallback | `--renderer dx` \| `silk` \| `skia`               |
-| Linux   | Silk.NET OpenGL (3.3 core / 4.10 fallback) | `--renderer silk` \| `skia`            |
+| Linux   | Silk.NET OpenGL (3.3 core / 4.10 fallback) + Vulkan GPU compute when a Vulkan GPU is present | `--renderer vulkan` \| `silk` \| `skia` |
 | macOS   | Silk.NET OpenGL via CGL    | `--renderer silk` \| `skia`                       |
 
 Use the `--renderer` CLI flag for parity testing or when the discrete
@@ -106,10 +106,42 @@ GPU is unavailable:
 FracturingFog.App --renderer skia      # CPU fallback, works on every host
 FracturingFog.App --renderer silk      # Force OpenGL on Windows
 FracturingFog.App --renderer dx        # Force DirectX (Windows only)
+FracturingFog.App --renderer vulkan    # Vulkan GPU compute (any OS with a Vulkan driver)
 ```
 
 The Hardware tab in `Help → Hardware` lists the picked accelerator + the
-full DXGI / ILGPU / audio backend so you can confirm what is live.
+full DXGI / Vulkan / ILGPU / audio backend so you can confirm what is live.
+
+### GPU compute on Linux
+
+On Linux the 2D fractals (and the GPU relief / volumetric passes) compute on
+the GPU through **Vulkan**, while OpenGL presents the image. It switches on by
+itself when all of these hold, and the window title says which way it went:
+
+| Needs | Why | If it is missing |
+|---|---|---|
+| A Vulkan driver for your GPU | the compute kernels run on it | title: *GPU compute off: no Vulkan driver* |
+| A real GPU device, not a CPU driver (llvmpipe / lavapipe) | a software Vulkan driver is slower than the CPU path | title: *GPU compute off: the only Vulkan device is a CPU driver* |
+| The DXC shader compiler | the kernels compile their shaders when first used | title: *GPU compute off: no DXC shader compiler* |
+
+* **DXC.** The x86-64 AppImage ships it (`usr/bin/dxc/`), so nothing to install.
+  The arm64 AppImage and source builds look for `dxc` via `DXC_PATH`, the
+  Vulkan SDK (`VULKAN_SDK`) or `PATH`. DXC's Linux builds are on the
+  [DirectXShaderCompiler releases](https://github.com/microsoft/DirectXShaderCompiler/releases).
+* **The driver.** Check with `vulkaninfo --summary` (package `vulkan-tools`): a
+  device whose type is `PHYSICAL_DEVICE_TYPE_DISCRETE_GPU` or `INTEGRATED_GPU`
+  means you are set. Older NVIDIA cards (Kepler — GT 710 / GT 730 class) need
+  NVIDIA's legacy 470 driver, or Mesa's NVK on nouveau where your Mesa supports
+  the card; without either, only llvmpipe shows up and the CPU computes.
+* **Opting out.** `--renderer silk` keeps the CPU computing (OpenGL still
+  presents); Ctrl+G toggles GPU compute live.
+* **Deep zoom.** As on Windows, deep-zoom GPU perturbation is opt-in:
+  `FF_GPU_PERTURB=1`, or `--renderer vulkan`.
+* **Testing on a software driver.** `FF_VULKAN_ALLOW_CPU=1` lets llvmpipe run the
+  compute kernels (slower; for testing only).
+* **3D fractals** (Mandelbulb, Mandelbox, …) use a separate GPU path (ILGPU) that
+  needs CUDA (NVIDIA's proprietary driver) or OpenCL with double precision;
+  `Help → Hardware` → *GPU Compute (ILGPU)* shows what it found.
 
 ---
 
