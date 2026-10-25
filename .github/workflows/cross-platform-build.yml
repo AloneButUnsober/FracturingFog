@@ -358,15 +358,27 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libvulkan1 mesa-vulkan-drivers vulkan-tools
-          # DXC (HLSL->SPIR-V) from the LunarG Vulkan SDK apt repo. Installs
-          # `dxc` onto PATH (/usr/bin/dxc); DxcCompiler resolves it via PATH.
-          CODENAME=$(lsb_release -cs)
-          wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc \
-            | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
-          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-${CODENAME}.list \
-            https://packages.lunarg.com/vulkan/lunarg-vulkan-${CODENAME}.list
-          sudo apt-get update
-          sudo apt-get install -y vulkan-sdk
+          # DXC (HLSL->SPIR-V) from Microsoft's GitHub release, pinned and
+          # SHA-256 checked (#1453). The LunarG apt repo it used to come from
+          # publishes per-codename lists only, and has none for the runner's
+          # Ubuntu 26.04, so `ubuntu-latest` moving on broke the leg.
+          # DxcCompiler resolves DXC_PATH first; libdxcompiler.so sits in lib/.
+          DXC_TAG=v1.9.2609
+          DXC_ASSET=linux_dxc_2026_09_28.x86_x64.tar.gz
+          DXC_SHA256=96faadc7f5c282d2ffda49804beb4c3ee38127bc252b723234e3c5cdf7aa39a1
+          DXC_DIR="$RUNNER_TEMP/dxc"
+          mkdir -p "$DXC_DIR"
+          curl -fsSL -o "$RUNNER_TEMP/$DXC_ASSET" \
+            "https://github.com/microsoft/DirectXShaderCompiler/releases/download/$DXC_TAG/$DXC_ASSET"
+          echo "$DXC_SHA256  $RUNNER_TEMP/$DXC_ASSET" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$DXC_ASSET" -C "$DXC_DIR"
+          DXC_BIN=$(find "$DXC_DIR" \( -type f -o -type l \) -name dxc -path '*/bin/*' | head -1)
+          test -n "$DXC_BIN"
+          chmod +x "$DXC_BIN"
+          DXC_LIB=$(dirname "$(dirname "$DXC_BIN")")/lib
+          echo "DXC_PATH=$DXC_BIN" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$DXC_LIB${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+          dirname "$DXC_BIN" >> "$GITHUB_PATH"
           # Diagnostics: show where the lavapipe ICD manifest actually landed.
           echo "=== installed Vulkan ICD manifests ==="
           ls -la /usr/share/vulkan/icd.d/ 2>/dev/null || true
