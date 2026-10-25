@@ -33,7 +33,7 @@ code. Probes shared with other hosts live in `Engine/Diagnostics/` instead.
 | `GpuPeriodicityProbe.cs` | `--gpuperiodicityprobe` | #1342 | D3D11 half of the GPU periodicity check |
 | `GpuTimestampProbe.cs` | `--gputimestampprobe` | #1329 | D3D11 GPU timestamp queries |
 | `GpuWavefrontProbe.cs` | `--gpuwavefrontprobe` | #1340 | D3D11 half of the wavefront schedule check |
-| `OidnProbe.cs` | `--oidnprobe [W H]` | #1338 | Intel Open Image Denoise against the À-Trous denoiser and a full-sample reference |
+| `OidnProbe.cs` | `--oidnprobe [W H]`, `--oidnprobe live [W H]` | #1338, #1392 | Intel Open Image Denoise against the À-Trous denoiser and a full-sample reference; live: time to screen with the background denoise, cancel latency |
 | `SolidRegionProbe.cs` | `--solidregionprobe [W H]` | #1343, #1394 | Solid-region skipping off / Auto / forced: times, fills, wrong fills |
 | `TemporalLightingProbe.cs` | `--temporallightingprobe [W H]` | #1337 | Temporal AO / shadow reuse on a moving camera |
 | `VulkanPipelineCacheProbe.cs` | `--vkpipelinecacheprobe` | #1341 | The persisted `VkPipelineCache` across fresh Vulkan devices |

@@ -12,6 +12,9 @@
 //  - a relief raymarch over a Mandelbrot: supersample 1 vs 4.
 // "aux" rows use the render's albedo + normal guides where the path captures them.
 // FF_OIDN_PNG=<dir> also writes each case as a strip: low | A-Trous | OIDN | reference.
+// #1392: --oidnprobe live [W H] instead times the live view through a real host (3D
+// families, CPU): when the settled frame first reaches the screen, when the background
+// denoise swaps in, and what the old synchronous pass would have taken.
 // Needs the OIDN runtime (FF_OIDN_DIR or the in-app install). Exit 0 always.
 
 using System;
@@ -29,6 +32,11 @@ namespace FracturingFog
     {
         public static int Run(string[] args)
         {
+            if (args.Length > 1 && args[1] == "live")
+            {
+                if (!OidnDenoiser.IsAvailable) { Console.WriteLine("oidnprobe: " + OidnDenoiser.LoadError); return 0; }
+                return LiveView(args.Length > 3 ? int.Parse(args[2]) : 1920, args.Length > 3 ? int.Parse(args[3]) : 1080);
+            }
             int w = args.Length > 2 ? int.Parse(args[1]) : 320, h = args.Length > 2 ? int.Parse(args[2]) : 180;
             if (!OidnDenoiser.IsAvailable) { Console.WriteLine("oidnprobe: " + OidnDenoiser.LoadError); return 0; }
             Console.WriteLine($"oidnprobe {w}x{h}, OIDN {OidnDenoiser.Version} from {OidnDenoiser.LoadedFrom}");
@@ -107,6 +115,86 @@ namespace FracturingFog
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 for (int r = 0; r < 3; r++) OidnDenoiser.TryDenoiseBgra((uint[])img.Clone(), null, null, cw, ch, out _);
                 Console.WriteLine($"  OIDN cost {cw}x{ch}: {sw.Elapsed.TotalMilliseconds / 3:F0} ms a frame ({Environment.ProcessorCount} threads)");
+            }
+            Console.WriteLine("oidnprobe done");
+            return 0;
+        }
+
+        // #1392 — records when each upload reaches the "screen".
+        private sealed class TimedRecorder : FracturingFog.IFractalRenderer
+        {
+            private readonly object _lock = new();
+            public readonly System.Diagnostics.Stopwatch Clock = new();
+            public readonly List<double> Times = new();
+            public void UpdateTexture(uint[] colorBuffer, int width, int height) { lock (_lock) Times.Add(Clock.Elapsed.TotalMilliseconds); }
+            public int Count { get { lock (_lock) return Times.Count; } }
+            public double At(int i) { lock (_lock) return Times[i]; }
+            public void Restart() { lock (_lock) Times.Clear(); Clock.Restart(); }
+            public void Render() { }
+            public void Resize(int width, int height) { }
+            public string RendererDescription => "probe";
+            public bool VSync { get; set; }
+            public void Dispose() { }
+        }
+
+        private static int LiveView(int w, int h)
+        {
+            Console.WriteLine($"oidnprobe live {w}x{h}, OIDN {OidnDenoiser.Version}, CPU 3D, {Environment.ProcessorCount} threads (best of 3)");
+            foreach (var type in new[] { FractalType.Mandelbulb, FractalType.Mandelbox, FractalType.Kifs })
+            {
+                var s = new FracturingFog.ViewState.FractalViewState { FractalType = type, Zoom = 1.0, Quality = QualityPreset.Standard };
+                var fx = s.FractalParameters.Lighting;
+                fx.UseGpuRender = false;
+                fx.OidnDenoise = true;
+                s.FractalParameters.Lighting = fx;
+                var rec = new TimedRecorder();
+                using var host = new FracturingFog.Rendering.FractalRenderHost(rec, s, w, h, ColorPalette.BuiltIns[0]);
+                double frameAt = -1;
+                host.FrameCompleted += (_, _) => frameAt = rec.Clock.Elapsed.TotalMilliseconds;
+                bool Wait(Func<bool> c) { var sw = System.Diagnostics.Stopwatch.StartNew(); while (!c()) { if (sw.ElapsedMilliseconds > 120000) return false; Thread.Sleep(2); } return true; }
+                double first = double.MaxValue, swapped = double.MaxValue, sync = double.MaxValue;
+                for (int run = 0; run < 4; run++)   // run 0 warms up (JIT, filter build)
+                {
+                    // A new view each run: the same one would find the last result.
+                    host.ViewState.Zoom = 1.0 + 0.01 * run;
+                    int jobs = host.LiveDenoise.JobsStarted;
+                    frameAt = -1;
+                    rec.Restart();
+                    host.Trigger(progressive: false);
+                    if (!Wait(() => frameAt >= 0) || !Wait(() => host.LiveDenoise.JobsStarted > jobs && !host.LiveDenoise.Pending))
+                    { Console.WriteLine($"  {type}: no frame"); break; }
+                    // The old synchronous pass: the frame, then the denoise before it is shown.
+                    var raw = host.ActiveAltCalculator!.ColorBuffer.Take(w * h).ToArray();
+                    var dsw = System.Diagnostics.Stopwatch.StartNew();
+                    OidnDenoiser.TryDenoiseBgra(raw, null, null, w, h, out _);
+                    double oidn = dsw.Elapsed.TotalMilliseconds;
+                    Thread.Sleep(200);   // the swap's upload
+                    if (run == 0) continue;
+                    first = Math.Min(first, frameAt);
+                    swapped = Math.Min(swapped, rec.At(rec.Count - 1));
+                    sync = Math.Min(sync, frameAt + oidn);
+                }
+                Console.WriteLine($"  {type,-11} settled frame on screen {first,7:F0} ms (synchronous pass: {sync,7:F0} ms); denoised swap at {swapped,7:F0} ms");
+            }
+            // A drag cancels the running denoise: how soon OIDN lets go of the CPU.
+            {
+                var img = new uint[w * h];
+                var rng = new Random(2);
+                for (int i = 0; i < img.Length; i++) img[i] = 0xFF000000u | (uint)rng.Next(0x1000000);
+                double worst = 0, sum = 0;
+                for (int r = 0; r < 5; r++)
+                {
+                    using var session = new OidnAsync();
+                    img[r] ^= 1;   // a new frame each time
+                    using (session.Enter(r)) session.Resolve((uint[])img.Clone(), w, h);
+                    Thread.Sleep(150);
+                    var csw = System.Diagnostics.Stopwatch.StartNew();
+                    session.Cancel();
+                    while (OidnDenoiser.IsBusy) Thread.Sleep(1);
+                    double ms = csw.Elapsed.TotalMilliseconds;
+                    worst = Math.Max(worst, ms); sum += ms;
+                }
+                Console.WriteLine($"  cancel 150 ms into a {w}x{h} denoise: OIDN free after {sum / 5:F0} ms mean, {worst:F0} ms worst");
             }
             Console.WriteLine("oidnprobe done");
             return 0;
