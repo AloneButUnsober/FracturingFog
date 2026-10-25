@@ -29,6 +29,7 @@ using Xunit;
 
 namespace FracturingFog.Server.Tests;
 
+[Collection(OidnRuntimeCollection.Name)]   // #1392 — OidnDenoiser.Disabled is static
 public sealed class S1338OidnTests(ITestOutputHelper output)
 {
     private static bool Oidn => OidnDenoiser.IsAvailable;

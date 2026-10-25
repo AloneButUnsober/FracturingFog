@@ -16,11 +16,17 @@
 // the installer unpacks. One device for the process; one RT ("ray tracing")
 // filter per image configuration, cached; calls are serialised (the filters share
 // the device's thread pool).
+//
+// #1392 — a call can be cancelled: OIDN's progress monitor polls the caller's
+// cancel predicate and stops the filter (the live view's background denoise of a
+// settled frame, OidnAsync, cancels a frame the view has moved on from).
 
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace FracturingFog.Imaging;
 
@@ -49,6 +55,9 @@ public static unsafe class OidnDenoiser
     private static delegate* unmanaged[Cdecl]<IntPtr, void> p_commitFilter;
     private static delegate* unmanaged[Cdecl]<IntPtr, void> p_executeFilter;
     private static delegate* unmanaged[Cdecl]<IntPtr, void> p_releaseFilter;
+    // #1392 — oidnSetFilterProgressMonitorFunction(filter, func, userPtr); null when absent.
+    private static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, IntPtr, void> p_setProgressMonitor;
+    private static Func<bool>? s_cancel;   // the running call's cancel predicate (calls are serialised)
 
     private const int DeviceTypeCpu = 1;
     private const int FormatFloat3 = 3;
@@ -73,6 +82,24 @@ public static unsafe class OidnDenoiser
     {
         get { lock (s_lock) { if (Disabled) return false; Probe(); return s_device != IntPtr.Zero; } }
     }
+
+    /// <summary>#1392 — the runtime has already loaded and started its device. Never
+    /// blocks (a running filter holds the lock for its whole run); false before the
+    /// first probe.</summary>
+    public static bool IsLoaded => !Disabled && Volatile.Read(ref s_ready);
+
+    /// <summary>#1392 — a call is running right now (diagnostics: how soon a cancelled
+    /// filter lets go).</summary>
+    public static bool IsBusy
+    {
+        get
+        {
+            if (!Monitor.TryEnter(s_lock)) return true;
+            Monitor.Exit(s_lock);
+            return false;
+        }
+    }
+    private static bool s_ready;
 
     /// <summary>Why the runtime is unavailable (null when it is available or untried).</summary>
     public static string? LoadError { get { lock (s_lock) { if (Disabled) return "Open Image Denoise is disabled."; Probe(); return s_error; } } }
@@ -133,6 +160,8 @@ public static unsafe class OidnDenoiser
             p_commitFilter = (delegate* unmanaged[Cdecl]<IntPtr, void>)Export("oidnCommitFilter");
             p_executeFilter = (delegate* unmanaged[Cdecl]<IntPtr, void>)Export("oidnExecuteFilter");
             p_releaseFilter = (delegate* unmanaged[Cdecl]<IntPtr, void>)Export("oidnReleaseFilter");
+            p_setProgressMonitor = NativeLibrary.TryGetExport(s_lib, "oidnSetFilterProgressMonitorFunction", out var pm)
+                ? (delegate* unmanaged[Cdecl]<IntPtr, IntPtr, IntPtr, void>)pm : null;
 
             var dev = p_newDevice(DeviceTypeCpu);
             if (dev == IntPtr.Zero) { s_error = "Open Image Denoise could not create its CPU device."; return; }
@@ -142,6 +171,7 @@ public static unsafe class OidnDenoiser
             fixed (byte* n = "versionMajor\0"u8) major = p_getDeviceInt(dev, n);
             if (major != 2) { s_error = $"Open Image Denoise {major}.x is not supported (2.x is)."; return; }
             s_device = dev;
+            Volatile.Write(ref s_ready, true);
         }
         catch (Exception ex)
         {
@@ -170,9 +200,11 @@ public static unsafe class OidnDenoiser
     /// HDR colour; else LDR in [0,1], <paramref name="srgb"/> when it is gamma-encoded
     /// (the output keeps the encoding). False (with <paramref name="error"/>) when the
     /// runtime is unavailable or the filter failed; <paramref name="output"/> is then
-    /// untouched.</summary>
+    /// untouched. <paramref name="cancel"/> (#1392): polled while the filter runs; true
+    /// stops it (false, error "cancelled"; <paramref name="output"/> may be partly
+    /// written).</summary>
     public static bool TryDenoise(float[] color, float[]? albedo, float[]? normal, int w, int h,
-        bool hdr, bool srgb, float[] output, out string? error)
+        bool hdr, bool srgb, float[] output, out string? error, Func<bool>? cancel = null)
     {
         error = null;
         long n3 = (long)w * h * 3;
@@ -204,23 +236,40 @@ public static unsafe class OidnDenoiser
                     fixed (byte* nOut = "output\0"u8) p_setSharedFilterImage(filter, nOut, po, FormatFloat3, (nuint)w, (nuint)h, 0, 0, 0);
                     if (albedo != null) fixed (byte* nA = "albedo\0"u8) p_setSharedFilterImage(filter, nA, pa, FormatFloat3, (nuint)w, (nuint)h, 0, 0, 0);
                     if (normal != null) fixed (byte* nN = "normal\0"u8) p_setSharedFilterImage(filter, nN, pn, FormatFloat3, (nuint)w, (nuint)h, 0, 0, 0);
+                    // #1392 — the monitor only when the caller can cancel (a cached
+                    // filter keeps the last one set, so clear it otherwise).
+                    s_cancel = cancel;
+                    if (p_setProgressMonitor != null)
+                        p_setProgressMonitor(filter, cancel != null ? (IntPtr)(delegate* unmanaged[Cdecl]<void*, double, byte>)&Progress : IntPtr.Zero, IntPtr.Zero);
                     p_commitFilter(filter);
                     if (DeviceError(s_device) is string ce) { error = ce; return false; }
+                    if (cancel?.Invoke() == true) { error = "cancelled"; return false; }
                     // An in-place call (output == color) is allowed by OIDN.
                     p_executeFilter(filter);
                 }
-                if (DeviceError(s_device) is string ee) { error = ee; return false; }
+                if (DeviceError(s_device) is string ee) { error = cancel?.Invoke() == true ? "cancelled" : ee; return false; }
                 return true;
             }
             catch (Exception ex) { error = ex.Message; return false; }
+            finally { s_cancel = null; }
         }
     }
+
+    /// <summary>True when the loaded runtime can stop a running filter (#1392).</summary>
+    public static bool SupportsCancel { get { lock (s_lock) { Probe(); return p_setProgressMonitor != null; } } }
+
+    // OIDN's progress monitor (OIDNProgressMonitorFunction: bool (void*, double)):
+    // returning false cancels the filter. Called on OIDN's worker threads.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    private static byte Progress(void* userPtr, double n) => s_cancel?.Invoke() == true ? (byte)0 : (byte)1;
 
     /// <summary>Denoise a straight-alpha BGRA beauty in place (LDR, gamma-encoded),
     /// guided by an optional BGRA <paramref name="albedo"/> and a float
     /// <paramref name="normalXyz"/> (w·h·3). Alpha is kept. False (beauty untouched)
-    /// when the runtime is unavailable or failed.</summary>
-    public static bool TryDenoiseBgra(uint[] beauty, uint[]? albedo, float[]? normalXyz, int w, int h, out string? error)
+    /// when the runtime is unavailable or failed (or <paramref name="cancel"/>, #1392,
+    /// stopped it).</summary>
+    public static bool TryDenoiseBgra(uint[] beauty, uint[]? albedo, float[]? normalXyz, int w, int h, out string? error,
+        Func<bool>? cancel = null)
     {
         long n = (long)w * h;
         error = null;
@@ -229,7 +278,7 @@ public static unsafe class OidnDenoiser
         var a = albedo != null && albedo.Length >= n ? ToFloat3(albedo, n, linear: true) : null;
         var nrm = normalXyz != null && normalXyz.Length >= n * 3 ? normalXyz : null;
         var o = new float[n * 3];
-        if (!TryDenoise(c, a, nrm, w, h, hdr: false, srgb: true, o, out error)) return false;
+        if (!TryDenoise(c, a, nrm, w, h, hdr: false, srgb: true, o, out error, cancel)) return false;
         for (long i = 0; i < n; i++)
         {
             uint px = beauty[i];

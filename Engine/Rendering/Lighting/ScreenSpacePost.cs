@@ -703,7 +703,9 @@ public static partial class ScreenSpacePost
     /// GPU route alike): the Intel Open Image Denoise pass when
     /// <see cref="LightingFxData.OidnDenoise"/> is on, then the debug HUD. A
     /// <paramref name="preview"/> frame (the low-res drag preview) is not denoised: it
-    /// is replaced within the gesture, and the denoise costs tens of milliseconds.</summary>
+    /// is replaced within the gesture, and the denoise costs tens of milliseconds.
+    /// #1392 — in the live view the pass may defer to a background job
+    /// (<see cref="ApplyOidn"/>).</summary>
     public static void FinishFrame3D(uint[] colorBuffer, int width, int height, in LightingFxData fx, bool preview = false)
     {
         if (!preview) ApplyOidn(colorBuffer, width, height, in fx);
@@ -718,10 +720,25 @@ public static partial class ScreenSpacePost
     /// <summary>#1338 — denoise a finished beauty frame in place with Intel Open Image
     /// Denoise (colour only — see <see cref="LightingFxData.OidnDenoise"/>). No-op (false)
     /// when the option is off, an AOV view is shown, or the runtime is unavailable
-    /// (the frame is then exactly the option-off frame).</summary>
+    /// (the frame is then exactly the option-off frame).
+    /// #1392 — on a thread with a live <see cref="FracturingFog.Imaging.OidnAsync"/>
+    /// session the filter runs in the background instead: the frame is denoised now
+    /// only when that session already holds its result, and otherwise stays raw (false)
+    /// until the host re-presents it. Not with the debug HUD on: the 3D families draw it
+    /// over the denoised frame, and the deferred result would come without it.</summary>
     public static bool ApplyOidn(uint[] colorBuffer, int width, int height, in LightingFxData fx)
     {
         if (!fx.OidnDenoise || fx.DebugAov != AovView.Beauty) return false;
+        if (FracturingFog.Imaging.OidnAsync.Current is { } live && fx.DebugHudFlags == 0
+            && FracturingFog.Imaging.OidnDenoiser.IsLoaded)
+        {
+            var outcome = live.Resolve(colorBuffer, width, height);
+            if (outcome != FracturingFog.Imaging.OidnAsync.Outcome.RunNow)
+            {
+                LastOidnSkip = null;
+                return outcome == FracturingFog.Imaging.OidnAsync.Outcome.Denoised;
+            }
+        }
         if (FracturingFog.Imaging.OidnDenoiser.TryDenoiseBgra(colorBuffer, null, null, width, height, out var err))
         {
             LastOidnSkip = null;

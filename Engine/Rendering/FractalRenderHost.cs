@@ -595,6 +595,8 @@ namespace FracturingFog.Rendering
                 _generatedBurningShipCalculator.ColorMap = initialColorMap;
             }
 
+            _oidnAsync.Completed += OnLiveOidnDone;   // #1392
+
             _calcThread = new Thread(CalcThreadLoop)
             {
                 IsBackground = true,
@@ -1691,6 +1693,7 @@ namespace FracturingFog.Rendering
         public void Trigger(bool progressive = false)
         {
             if (_disposed) return;
+            _oidnAsync.Cancel();   // #1392 — the view moves on: stop denoising the old frame
 
             // Phase 18b fix — mark a frame as in flight so the animation tick
             // doesn't cancel this Trigger 33 ms later. AnimationFrameUploaded
@@ -1884,12 +1887,14 @@ namespace FracturingFog.Rendering
                     // #85 — mark busy for the whole write region so a
                     // concurrent Resize drains (waits) before swapping arrays.
                     _calcIdle.Reset();
+                    // #1392 — a 3D frame's OIDN pass defers to the background session.
+                    FracturingFog.Imaging.OidnAsync.Scope? oidn = LiveOidnOnCalc(in job) ? _oidnAsync.Enter(job.Seq) : null;
                     try { RunFrameJobCalc(in job); }
                     catch (OperationCanceledException) { }
                     catch { /* swallow — token-driven cancellation is the only
                               expected failure mode; surface anything else via
                               the calc's own error path if it has one. */ }
-                    finally { _calcIdle.Set(); }
+                    finally { oidn?.Dispose(); _calcIdle.Set(); }
                 }
             }
             catch (OperationCanceledException) { }
@@ -4530,7 +4535,72 @@ namespace FracturingFog.Rendering
             return alt.Width == w && alt.Height == h && depth.Length >= w * h ? depth : null;
         }
 
+        // ── #1392 — background OIDN in the live view ─────────────────────────────
+        // A settled frame's Intel Open Image Denoise pass (~1 s at 1080p on the CPU)
+        // runs on a background thread instead of holding the frame back: the frame is
+        // shown raw, then re-presented denoised (FracturingFog.Imaging.OidnAsync). A 3D
+        // frame defers on the calc thread (its buffer stays raw; the upload shows the
+        // result in its place), a relief frame inside the upload (its raymarch re-runs
+        // on every upload and then finds the result). Anything that must hold the
+        // finished frame keeps the synchronous pass: video / slideshow runs, live
+        // recording, true stereo, and supersampled 3D (each sample is denoised before
+        // the average). Batch and export never see a session.
+        private readonly FracturingFog.Imaging.OidnAsync _oidnAsync = new();
+
+        /// <summary>#1392 — the live view's background OIDN session (diagnostics / tests).</summary>
+        public FracturingFog.Imaging.OidnAsync LiveDenoise => _oidnAsync;
+
+        // The OIDN pass would run on the live view's current frame.
+        private bool LiveOidnApplies()
+        {
+            if (_disposed || IsRunning || IsLiveRecording) return false;
+            var fp = ViewState?.FractalParameters;
+            if (fp == null) return false;
+            var fx = fp.Lighting;
+            return fx.OidnDenoise && fx.DebugAov == FracturingFog.Rendering.Lighting.AovView.Beauty && fx.DebugHudFlags == 0;
+        }
+
+        // A 3D frame job whose FinishFrame3D may defer: single-sample, not true stereo.
+        private bool LiveOidnOnCalc(in FrameJob job)
+        {
+            if (job.AltCalc is not { } alt || !ViewState.Is3D || !LiveOidnApplies()) return false;
+            if ((alt.Quality?.AaSamples ?? 1) > 1) return false;
+            var fx = ViewState.FractalParameters.Lighting;
+            return !FracturingFog.Rendering.Lighting.StereoRender.WantsTrueStereo(ViewState.Is3D, in fx);
+        }
+
+        // A job finished: re-present the frame if it is still the one on screen.
+        private void OnLiveOidnDone(long tag)
+        {
+            if (_disposed) return;
+            lock (_uploadGate)
+            {
+                if (tag != _lastPresentedUploadSeq || !LiveOidnApplies()) return;
+                using (_oidnAsync.Enter(tag, replay: true)) RepaintWithPostFx();
+            }
+        }
+
+        /// <summary>#1392 — before a user save of the last frame: let a background
+        /// denoise of it finish and reach the screen (bounded wait).</summary>
+        private void FinishLiveDenoise(int timeoutMs)
+        {
+            var sw = Stopwatch.StartNew();
+            while (_oidnAsync.Pending && sw.ElapsedMilliseconds < timeoutMs) Thread.Sleep(10);
+        }
+
         private void UploadProcessedBuffer(uint[] src, int w, int h, bool srcAlreadyProcessed = false)
+        {
+            if (!srcAlreadyProcessed && LiveOidnApplies())
+            {
+                using (_oidnAsync.Enter(_lastPresentedUploadSeq, FracturingFog.Imaging.OidnAsync.Replaying))
+                    UploadProcessedBufferCore(src, w, h, srcAlreadyProcessed, _oidnAsync.TryGetResult(src, w, h));
+                return;
+            }
+            UploadProcessedBufferCore(src, w, h, srcAlreadyProcessed, null);
+        }
+
+        // denoised (#1392): a 3D frame's background OIDN result, shown in place of src.
+        private void UploadProcessedBufferCore(uint[] src, int w, int h, bool srcAlreadyProcessed, uint[]? denoised)
         {
             // #1013 — a new video leg starts a fresh autostereogram sequence.
             if (_autostereoSeqResetPending)
@@ -4540,6 +4610,7 @@ namespace FracturingFog.Rendering
             }
             // #1009 — resolve before any pass swaps src for a scratch buffer.
             float[]? depthStereo3D = srcAlreadyProcessed ? null : DepthStereoDepthFor(src, w, h);
+            if (denoised != null) src = denoised;   // #1392 — after the depth lookup (it keys on the calc's buffer)
             int n = w * h;
             long uploadStart = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
             if (s_leakDiag) LeakDiagSample(w, h);
@@ -5345,6 +5416,7 @@ namespace FracturingFog.Rendering
         {
             if (_disposed) return;
             if (string.IsNullOrEmpty(path)) return;
+            FinishLiveDenoise(30000);   // #1392 — save the denoised frame, not the raw one
             // S-X7.4 (2026-06-23) — IsWindows gate dropped. The underlying
             // ImageExport.SavePixelsToFile is SkiaSharp end-to-end; the old
             // gate dates from before that migration when this method called
@@ -5821,6 +5893,7 @@ namespace FracturingFog.Rendering
                 _videoSlideshowLegCts?.Cancel();
             }
             lock (_calcLock) _calcCts?.Cancel();
+            _oidnAsync.Dispose();   // #1392
 
             // T2.4: stop the dedicated calc thread before tearing down the
             // renderer so a running Calculate doesn't try to use a disposed
