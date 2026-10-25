@@ -1360,6 +1360,22 @@ namespace FracturingFog.Models
                 rp.MarchRelaxation = p.MarchRelaxation;
             }
 
+            // #1382 — the 3D raymarchers' adaptive anti-aliasing rides along when not at
+            // its defaults (off, threshold 12, tolerance 1.5), as Mandelbrot's does.
+            if (AdaptiveAaCapabilities.IsRaymarch3D(type))
+            {
+                bool? aa = p.AdaptiveAa != D.AdaptiveAa ? p.AdaptiveAa : null;
+                double? thr = Nd(p.AdaptiveAaThreshold, D.AdaptiveAaThreshold);
+                double? tol = Nd(p.AdaptiveAaTolerance, D.AdaptiveAaTolerance);
+                if (aa != null || thr != null || tol != null)
+                {
+                    rp ??= new RegionFractalParams();
+                    rp.AdaptiveAa = aa;
+                    rp.AdaptiveAaThreshold = thr;
+                    rp.AdaptiveAaTolerance = tol;
+                }
+            }
+
             // #961 — a family whose params are all at their defaults (every field
             // omitted) carries no block, so a stock region never saves an empty {}.
             if (rp != null && JsonSerializer.Serialize(rp, s_omitNull) == "{}") rp = null;

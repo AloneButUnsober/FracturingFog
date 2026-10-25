@@ -63,6 +63,28 @@ namespace FracturingFog.Rendering
             : new(p.AdaptiveAa, p.AdaptiveAaThreshold, p.AdaptiveAaTolerance);
     }
 
+    /// <summary>#1382 — a calculator whose CPU pass can compute only the marked
+    /// pixels of a frame, so <see cref="Supersampling.AccumulateAlt(IFractalCalculator, int, CancellationToken, SampleEqualizer?)"/>
+    /// can take its extra samples adaptively (the 3D raymarchers).</summary>
+    public interface IAdaptiveAaCalculator
+    {
+        /// <summary>Width × Height bytes; when set, the next Calculate computes only the
+        /// pixels whose byte is non-zero (the others keep their buffer contents). A pass
+        /// that cannot honour it (the GPU route, a low-res preview, an internal
+        /// supersample) computes every pixel — still exact.</summary>
+        byte[]? PixelMask { get; set; }
+
+        /// <summary>The adaptive settings of this frame (its FractalParameters).</summary>
+        AdaptiveAa AdaptiveAa { get; }
+
+        /// <summary>A masked frame gives every marked pixel exactly the bytes of a full
+        /// frame: false while a pass reads neighbouring pixels (SSAO, bloom, lens, edge
+        /// ink, the screen-space DoF, froxel fog, OIDN, the debug HUD) or carries state
+        /// across frames (temporal lighting, the distance-field cache), or the depth is
+        /// published for a post-frame pass. Adaptive falls back to full supersampling then.</summary>
+        bool MaskExact { get; }
+    }
+
     /// <summary>What a supersample pass computed (tests, probes, HUD).</summary>
     public readonly record struct SupersampleStats(int Pixels, int Samples, int Marked, long PixelSamples)
     {
@@ -217,8 +239,10 @@ namespace FracturingFog.Rendering
         /// <summary>#1344 — mark (1) each pixel with an 8-connected neighbour on the
         /// other side of the set boundary (iteration ≥ <paramref name="maxIter"/>) or
         /// more than <paramref name="threshold"/> apart in any BGRA channel; clear (0)
-        /// the rest. Returns the marked count.</summary>
-        public static int BuildMask(uint[] color, int[] iter, int maxIter, int w, int h, double threshold, byte[] mask)
+        /// the rest. Returns the marked count. #1382: <paramref name="iter"/> null =
+        /// the colour test alone (a 3D frame has no set boundary; its silhouette is a
+        /// colour step against the background).</summary>
+        public static int BuildMask(uint[] color, int[]? iter, int maxIter, int w, int h, double threshold, byte[] mask)
         {
             int marked = 0;
             System.Threading.Tasks.Parallel.For(0, h, () => 0, (y, _, local) =>
@@ -229,7 +253,7 @@ namespace FracturingFog.Rendering
                 {
                     int i = rb + x;
                     uint c = color[i];
-                    bool inSet = iter[i] >= maxIter;
+                    bool inSet = iter != null && iter[i] >= maxIter;
                     int x0 = Math.Max(0, x - 1), x1 = Math.Min(w - 1, x + 1);
                     byte m = 0;
                     for (int ny = y0; ny <= y1 && m == 0; ny++)
@@ -239,7 +263,7 @@ namespace FracturingFog.Rendering
                         {
                             int j = nb + nx;
                             if (j == i) continue;
-                            if ((iter[j] >= maxIter) != inSet || MaxChannelDiff(c, color[j]) > threshold) { m = 1; break; }
+                            if ((iter != null && (iter[j] >= maxIter) != inSet) || MaxChannelDiff(c, color[j]) > threshold) { m = 1; break; }
                         }
                     }
                     mask[i] = m;
@@ -430,10 +454,28 @@ namespace FracturingFog.Rendering
 
         private static SupersampleStats Adaptive(MandelbrotCalculator calc, int side, AdaptiveAa a, SampleEqualizer? eq, CancellationToken token)
         {
-            int w = calc.Width, h = calc.Height, pixels = w * h;
-            var color0 = (uint[])calc.ColorBuffer.Clone();
+            double scale = PixelScale(calc);
+            var orig = CentreLimbs.Capture(calc);
+            return AdaptiveCore(calc.Width, calc.Height, () => calc.ColorBuffer, calc.IterationBuffer, calc.MaxIterations,
+                side, a, token,
+                m => calc.PixelMask = m,
+                (jx, jy) => CentreJitter.Apply(calc, in orig, jx, jy, scale),
+                () => orig.Restore(calc),
+                ct => { calc.Calculate(ct); eq?.Apply(calc); });   // #1381
+        }
+
+        // #1344 / #1382 — the adaptive pass over any calculator that honours a pixel
+        // mask: sample 0 is in color(); setMask installs (null removes) the mask,
+        // jitter moves the view by a pixel fraction, restore puts it back, sample
+        // renders (and equalises) one jittered frame.
+        private static SupersampleStats AdaptiveCore(int w, int h, Func<uint[]> color, int[]? iter, int maxIter,
+            int side, AdaptiveAa a, CancellationToken token, Action<byte[]?> setMask,
+            Action<double, double> jitter, Action restore, Action<CancellationToken> sample)
+        {
+            int pixels = w * h;
+            var color0 = (uint[])color().Clone();
             var mask = new byte[pixels];
-            int marked = BuildMask(color0, calc.IterationBuffer, calc.MaxIterations, w, h, a.Threshold, mask);
+            int marked = BuildMask(color0, iter, maxIter, w, h, a.Threshold, mask);
             long pixelSamples = pixels;
             if (marked == 0) return new SupersampleStats(pixels, side * side, 0, pixelSamples);
 
@@ -455,20 +497,17 @@ namespace FracturingFog.Rendering
                     list[activeCount++] = i;
                 }
 
-            double scale = PixelScale(calc);
-            var orig = CentreLimbs.Capture(calc);
             double tol2 = a.Tolerance * a.Tolerance;
             try
             {
-                calc.PixelMask = active;
+                setMask(active);
                 foreach (var (jx, jy) in ProgressiveOffsets(side))
                 {
                     if (activeCount == 0 || token.IsCancellationRequested) break;
-                    CentreJitter.Apply(calc, in orig, jx, jy, scale);
-                    try { calc.Calculate(token); }
+                    jitter(jx, jy);
+                    try { sample(token); }
                     catch (OperationCanceledException) { break; }
-                    eq?.Apply(calc);   // #1381
-                    var buf = calc.ColorBuffer;
+                    var buf = color();
                     pixelSamples += activeCount;
                     int keep = 0;
                     for (int l = 0; l < activeCount; l++)
@@ -487,11 +526,11 @@ namespace FracturingFog.Rendering
             }
             finally
             {
-                calc.PixelMask = null;
-                orig.Restore(calc);
+                setMask(null);
+                restore();
             }
 
-            var outBuf = calc.ColorBuffer;
+            var outBuf = color();
             Array.Copy(color0, outBuf, pixels);
             for (int i = 0; i < pixels; i++)
                 if (mask[i] != 0) outBuf[i] = Mean(sumR[i], sumG[i], sumB[i], sumA[i], n[i]);
@@ -524,6 +563,19 @@ namespace FracturingFog.Rendering
             SampleEqualizer? eq)
         {
             if (!Supersamples(calc.Width, calc.Height, calc.ColorBuffer, aaSamples, out int side)) return Single(calc.Width, calc.Height);
+            // #1382 — adaptive where the calculator can compute just the marked pixels
+            // exactly; otherwise (or off) the full grid below.
+            if (calc is IAdaptiveAaCalculator ad && ad.AdaptiveAa.Enabled && ad.MaskExact)
+            {
+                double s = (3.5 / Math.Max(calc.Width, calc.Height)) / calc.Zoom;
+                double cx0 = calc.CenterX, cy0 = calc.CenterY;
+                var st = AdaptiveCore(calc.Width, calc.Height, () => calc.ColorBuffer, null, 0, side, ad.AdaptiveAa, token,
+                    m => ad.PixelMask = m,
+                    (jx, jy) => { calc.CenterX = cx0 + jx * s; calc.CenterY = cy0 + jy * s; },
+                    () => { calc.CenterX = cx0; calc.CenterY = cy0; },
+                    ct => { calc.Calculate(ct); eq?.Apply(calc); });   // #1381
+                return st with { Equalizer = eq };
+            }
             int pixels = calc.Width * calc.Height;
             uint[] color = calc.ColorBuffer;
 

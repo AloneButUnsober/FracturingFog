@@ -430,6 +430,30 @@
                            ToolTip.Tip="Over-relaxed sphere tracing: each ray step is up to this × the distance estimate, backing off to a plain step where it would overshoot. Same shape in fewer steps: 5–35% faster on most of these fractals (least on Mandelbulb and KIFS). 1 = plain march; 1.3 is a good start. Gradient themes colour the surface by step count, so their hue changes above 1." />
         </Grid>
 
+        <!-- #1382 — adaptive anti-aliasing (with the quality preset's sub-pixel AA). -->
+        <Border IsVisible="{Binding IsRaymarch3DAdaptiveAa}"
+                BorderBrush="#404040" BorderThickness="0,1,0,0"
+                Padding="0,8,0,0" Margin="0,4,0,0">
+            <StackPanel Spacing="6">
+                <TextBlock Text="Anti-aliasing" FontWeight="Bold" Foreground="#FFCC00" />
+                <CheckBox Content="Adaptive anti-aliasing"
+                          IsChecked="{Binding AdaptiveAa, Mode=TwoWay}"
+                          ToolTip.Tip="With the High / Ultra / Extreme quality presets (2×2 or 4×4 sub-pixel samples), take the extra samples only where the image changes: along silhouettes and wherever a pixel differs from a neighbour by more than the threshold. Smooth surfaces and the background keep the single sample. Much faster on views with large smooth areas; also used by image export and --batch. The CPU raymarch only, and only while every Lighting &amp; FX pass works per pixel: with SSAO, bloom, lens effects, edge ink, the screen-space depth of field, froxel fog, OIDN, depth stereo or the temporal / distance-field caches on, every pixel takes every sample as before." />
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto" IsEnabled="{Binding AdaptiveAa}">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Edge threshold:" VerticalAlignment="Center"
+                               ToolTip.Tip="Colour difference to a neighbour (0–255 per channel) that marks a pixel for supersampling. Lower samples more pixels (closer to full anti-aliasing, slower)." />
+                    <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                   Minimum="0" Maximum="255" Increment="1" FormatString="F0"
+                                   Value="{Binding AdaptiveAaThreshold, Mode=TwoWay}" Margin="0,2" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Stop tolerance:" VerticalAlignment="Center"
+                               ToolTip.Tip="A marked pixel stops taking samples once its average colour is settled to within this many levels (after 4 samples; matters with 4×4). 0 = every marked pixel takes every sample." />
+                    <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                   Minimum="0" Maximum="64" Increment="0.5" FormatString="F1"
+                                   Value="{Binding AdaptiveAaTolerance, Mode=TwoWay}" Margin="0,2" />
+                </Grid>
+            </StackPanel>
+        </Border>
+
         <!-- Mesh export (#101). Any DE raymarcher → marching-cubes OBJ/STL. -->
         <Border IsVisible="{Binding CanExportMesh}"
                 BorderBrush="#404040" BorderThickness="0,1,0,0"
