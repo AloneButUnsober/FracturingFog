@@ -30,8 +30,37 @@ using System.Threading.Tasks;
 
 namespace FracturingFog.Rendering;
 
+/// <summary>#1373 — a 3D raymarcher that can render a frame at a reduced size and
+/// nearest-upscale it into its full-size ColorBuffer. The host's interactive
+/// preview stage (DynamicResolution) sets both for one Calculate, then clears them,
+/// so the final frame is the unchanged full render.</summary>
+public interface ILowResPreviewCalculator
+{
+    /// <summary>Render the next frame at the preview scale.</summary>
+    bool LowResPreview { get; set; }
+
+    /// <summary>The preview scale for the next frame (⅛ … 1, see
+    /// <see cref="LowResPreview.EffectiveScale"/>); null = the calculator's own
+    /// default (FractalParameters.LowResPreviewScale, or UserBulb's ½).</summary>
+    double? LowResPreviewScaleOverride { get; set; }
+}
+
 public static class LowResPreview
 {
+    /// <summary>#1373 — the smallest scale an override may ask for: DynamicResolution's
+    /// coarsest level (⅛).</summary>
+    public const double MinOverrideScale = 0.125;
+
+    /// <summary>The scale a frame renders at: 1 when not a preview; the host's
+    /// <paramref name="overrideScale"/> (clamped ⅛ … 1) when set; otherwise the
+    /// parameter's own default (clamped ¼ … 1, the pre-#1373 behaviour).</summary>
+    public static double EffectiveScale(bool lowRes, double? overrideScale, double paramScale)
+    {
+        if (!lowRes) return 1.0;
+        if (overrideScale is { } s && double.IsFinite(s)) return Math.Clamp(s, MinOverrideScale, 1.0);
+        return Math.Clamp(paramScale, 0.25, 1.0);
+    }
+
     public readonly struct Dims
     {
         public int Width { get; }

@@ -20,7 +20,7 @@ using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
 
-public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource, FracturingFog.Render.IGpuRouteSource
+public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource, FracturingFog.Rendering.ILowResPreviewCalculator, FracturingFog.Render.IGpuRouteSource
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -31,6 +31,8 @@ public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera,
     /// this during interactive rotate/pan/zoom and clears it for the deferred
     /// full-res render.</summary>
     public bool LowResPreview { get; set; } = false;
+    /// <summary>#1373 — the host preview stage's scale for the next frame (null: the default).</summary>
+    public double? LowResPreviewScaleOverride { get; set; }
 
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
@@ -75,7 +77,7 @@ public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera,
         int fullH = Height;
         // P2 — low-res preview. Render at scaled-down dims, nearest-upscale at end.
         bool lowRes = LowResPreview;
-        double lrScale = lowRes ? Math.Clamp(FractalParameters.LowResPreviewScale, 0.25, 1.0) : 1.0;
+        double lrScale = FracturingFog.Rendering.LowResPreview.EffectiveScale(lowRes, LowResPreviewScaleOverride, FractalParameters.LowResPreviewScale);   // #1373
         var dims = FracturingFog.Rendering.LowResPreview.ComputeDims(fullW, fullH, lrScale);
         int width = dims.Width;
         int height = dims.Height;

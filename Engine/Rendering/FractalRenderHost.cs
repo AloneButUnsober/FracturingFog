@@ -698,6 +698,9 @@ namespace FracturingFog.Rendering
         /// engine-specific knobs that have not yet been lifted into the
         /// view-state contract.</summary>
         public MandelbrotCalculator Mandelbrot => _calculator;
+        /// <summary>#1373 — the alt calculator rendering the current type (null on the
+        /// canonical Mandelbrot path).</summary>
+        public IFractalCalculator? ActiveAltCalculator => SelectAltCalculator(ViewState.FractalType);
 
         public bool MandelbrotDisableAcceleration
         {
@@ -815,11 +818,14 @@ namespace FracturingFog.Rendering
 
         // #1333 — the measurements belong to one fractal type and relief mode (a
         // relief preview costs far more per pixel); a change starts them over.
-        private (FractalType Type, bool Relief) _dynResKey = ((FractalType)(-1), false);
+        private (FractalType Type, bool Relief, bool Gpu3D) _dynResKey = ((FractalType)(-1), false, false);
 
         private void SyncDynamicResolutionKey()
         {
-            var key = (ViewState.FractalType, ViewState.FractalParameters.Relief2DEnabled);
+            // #1373 — the GPU 3D route costs differently from the CPU one (and a 3D
+            // preview frame always renders on the CPU), so a toggle relearns too.
+            var key = (ViewState.FractalType, ViewState.FractalParameters.Relief2DEnabled,
+                       ViewState.FractalParameters.Lighting.UseGpuRender);
             if (key == _dynResKey) return;
             _dynResKey = key;
             DynamicResolution.Reset();
@@ -1837,7 +1843,7 @@ namespace FracturingFog.Rendering
             // always-progressive expensive alt types (Dual-Orbit Escape). Other alt
             // calcs still run a single full render as before. Tiny windows (W*H < 256 px)
             // skip progressive — overhead exceeds the win.
-            bool altReliefPreview = AltPreviewEligible(useAlt);
+            bool altReliefPreview = AltPreviewEligible(useAlt, altCalc);
             // #1333 — the first stage's level comes from the measured frame cost
             // (DynamicResolution): ¼ until frames are measured, ⅛ … full after.
             // Level 0 = no preview, the final frame is fast enough on its own.
@@ -1919,7 +1925,28 @@ namespace FracturingFog.Rendering
             {
                 long pCalcStart = Stopwatch.GetTimestamp();
                 int level = job.ProgressiveStage;   // #1333: a DynamicResolution level
-                if (useAlt)
+                if (useAlt && altCalc is FracturingFog.Rendering.ILowResPreviewCalculator lowRes3D)
+                {
+                    // #1373 — a 3D raymarcher renders this stage itself at the level's
+                    // scale and nearest-upscales into its full-size ColorBuffer (the
+                    // P2 LowResPreview path: no temporal / distance-field state touched,
+                    // post-passes at the preview size). Cleared again before the final.
+                    var (lpw, _) = DynamicResolution.PreviewDims(job.CalcW, job.CalcH, level);
+                    lowRes3D.LowResPreviewScaleOverride = (double)lpw / Math.Max(1, altCalc.Width);
+                    lowRes3D.LowResPreview = true;
+                    try { altCalc.Calculate(token); }
+                    catch (OperationCanceledException)
+                    {
+                        AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
+                        return;
+                    }
+                    finally
+                    {
+                        lowRes3D.LowResPreview = false;
+                        lowRes3D.LowResPreviewScaleOverride = null;
+                    }
+                }
+                else if (useAlt)
                 {
                     // #327 — alt relief preview: resolve a dedicated low-res twin for the
                     // active height-field type at the same preview dims the Mandelbrot
@@ -2586,11 +2613,14 @@ namespace FracturingFog.Rendering
         /// field off the compiled calc (below).
         /// When false the alt render keeps its existing single full-res path
         /// (byte-identical) — this only ADDS a preview stage before the unchanged final.</summary>
-        private bool AltPreviewEligible(bool useAlt)
+        private bool AltPreviewEligible(bool useAlt, IFractalCalculator? alt)
         {
             if (!useAlt) return false;
             var type = ViewState.FractalType;
             if (type == FractalType.UserEquation && _dynamicAltCalculator != null) return false;
+            // #1373 — the 3D raymarchers preview on their own calculator at a reduced
+            // scale (LowResPreview); DynamicResolution picks it, or no preview at all.
+            if (alt is FracturingFog.Rendering.ILowResPreviewCalculator) return true;
             // #1146 — expensive per-pixel alt types preview progressively whether or
             // not relief is on (the upload tail only applies relief when it is).
             if (AlwaysProgressiveAlt(type)) return true;
@@ -2842,7 +2872,16 @@ namespace FracturingFog.Rendering
                 int previewPixels = 0; double previewMs = 0, previewFixedMs = 0;   // #1333: set when the stage reached the screen
                 float[]? previewSmooth; float[]? previewTrap;
                 Interefaces.IDistanceFieldSource? previewDist;   // #1029
-                if (useAlt)
+                int previewOwnPixels = -1;   // #1373: the pixels a 3D preview rendered, before its upscale
+                if (useAlt && altCalc is FracturingFog.Rendering.ILowResPreviewCalculator)
+                {
+                    // #1373 — the 3D raymarcher's own frame, already upscaled to full size.
+                    previewSrc = altCalc.ColorBuffer; pw = altCalc.Width; ph = altCalc.Height;
+                    previewSmooth = null; previewTrap = null; previewDist = null;
+                    var (lpw, lph) = DynamicResolution.PreviewDims(job.CalcW, job.CalcH, level);
+                    previewOwnPixels = lpw * lph;
+                }
+                else if (useAlt)
                 {
                     var ap = _altPreviewCalcs[level];
                     if (ap == null) { AnimationFrameUploaded?.Invoke(this, EventArgs.Empty); return; }
@@ -2878,7 +2917,7 @@ namespace FracturingFog.Rendering
                     // cheap at quarter/half and frames identically (aspect-based),
                     // so the 3D preview lines up with the final — no flash, no jump.
                     int pn = pw * ph;
-                    int ownPixels = pn;   // #1333: the preview's own size, before any resample
+                    int ownPixels = previewOwnPixels > 0 ? previewOwnPixels : pn;   // #1333: the preview's own size, before any resample
                     {
                         var rp = ViewState.FractalParameters;
                         var phs = previewSmooth;
