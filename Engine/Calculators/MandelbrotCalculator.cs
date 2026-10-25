@@ -1085,6 +1085,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
 
     private byte[]? _mask;      // PixelMask for this frame (null = every pixel)
     private bool[]? _maskRows;  // rows with at least one marked pixel
+    private byte[]? _maskDone;  // #1394 — solid-region passes: pixels a batch wrote
+    private byte[]? _batchCount; // #1394 — diagnostics: times a batch computed each pixel
 
     private void PrepareMask()
     {
@@ -1118,6 +1120,23 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         int from = Math.Max(Math.Max(x, xBegin), 0), to = Math.Min(Math.Min(x + lanes, xEnd), Width);
         for (int c = from; c < to; c++) if (m[rowBase + c] != 0) return true;
         return false;
+    }
+
+    /// <summary>#1394 — <see cref="BatchMarked"/>; a batch it takes writes every lane in
+    /// [xBegin, xEnd), marked or not, so during solid-region passes those lanes are
+    /// recorded as computed (their bytes are the full frame's: same batch, same lanes)
+    /// and later passes skip them.</summary>
+    private bool TakeBatch(int rowBase, int x, int lanes, int xBegin, int xEnd)
+    {
+        if (!BatchMarked(rowBase, x, lanes, xBegin, xEnd)) return false;
+        if (_maskDone is { } d)
+        {
+            int from = Math.Max(Math.Max(x, xBegin), 0), to = Math.Min(Math.Min(x + lanes, xEnd), Width);
+            for (int c = from; c < to; c++) d[rowBase + c] = 1;
+            if (_batchCount is { } bc)
+                for (int c = from; c < to; c++) bc[rowBase + c]++;
+        }
+        return true;
     }
 
     // #615 Phase 1 — paint the flat "out-of-bounds" surround: the large disk
@@ -1812,7 +1831,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         // ── Vectorized lanes ──────────────────────────────────────────────────
         for (; x + VecLen <= Width; x += VecLen)
         {
-            if (_mask != null && !BatchMarked(rowBase, x, VecLen, 0, Width)) continue;   // #1344
+            if (_mask != null && !TakeBatch(rowBase, x, VecLen, 0, Width)) continue;   // #1344 / #1394
             for (int k = 0; k < VecLen; k++)
                 cxBuf[k] = centerX + ((x + k) - Width * 0.5) * scale;
             var cx = new Vector<double>(cxBuf);
@@ -4526,7 +4545,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         x = lattice ? xBegin - LatticeMod(offX + xBegin, 4) : xBegin;
         for (; lattice ? x < xEnd : x + 4 <= xEnd; x += 4)
         {
-            if (_mask != null && !BatchMarked(rowBase, x, 4, xBegin, xEnd)) continue;   // #1344
+            if (_mask != null && !TakeBatch(rowBase, x, 4, xBegin, xEnd)) continue;   // #1344 / #1394
             // Wave 3.5 — + _refRecycleDx applies the frame's centre shift so dc
             // is measured from the cached reference centre (zero unless the
             // orbit was recycled; `+ 0.0` keeps the common path bit-identical).
@@ -4870,7 +4889,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         x = lattice ? xBegin - LatticeMod(offX + xBegin, 8) : xBegin;
         for (; lattice ? x < xEnd : x + 8 <= xEnd; x += 8)
         {
-            if (_mask != null && !BatchMarked(rowBase, x, 8, xBegin, xEnd)) continue;   // #1344
+            if (_mask != null && !TakeBatch(rowBase, x, 8, xBegin, xEnd)) continue;   // #1344 / #1394
             // Wave 3.5 — + _refRecycleDx: see ComputeRowPT4 (centre-shift for
             // orbit recycling; zero on the common path → bit-identical).
             double dcR0 = (offX + x     - halfW) * scale + _refRecycleDx;

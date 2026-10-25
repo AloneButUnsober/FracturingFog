@@ -629,6 +629,13 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         set { if (_p.SolidRegionSkip == value) return; _p.SolidRegionSkip = value; this.RaisePropertyChanged(); Fire(); }
     }
 
+    /// <summary>#1394 — solid-region skipping decides per frame whether it pays.</summary>
+    public bool SolidRegionAuto
+    {
+        get => _p.SolidRegionAuto;
+        set { if (_p.SolidRegionAuto == value) return; _p.SolidRegionAuto = value; this.RaisePropertyChanged(); Fire(); }
+    }
+
     public double AdaptiveAaThreshold
     {
         get => _p.AdaptiveAaThreshold;

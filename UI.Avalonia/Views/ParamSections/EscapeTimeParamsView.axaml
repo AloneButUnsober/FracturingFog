@@ -230,7 +230,13 @@
                 <TextBlock Text="Speed" FontWeight="Bold" Foreground="#FFCC00" />
                 <CheckBox Content="Skip solid in-set regions"
                           IsChecked="{Binding SolidRegionSkip, Mode=TwoWay}"
-                          ToolTip.Tip="Mariani–Silver: compute the borders of a grid of tiles first and fill a tile whose whole border is inside the set without iterating its interior (CPU). Much faster where the inside of the set is expensive — minibrots, satellite bulbs, deep zoom, slow-converging points (2–8x measured); a view whose inside is the main cardioid is already fast and gets slightly slower. Not exact: an escaping filament thinner than a pixel that crosses a tile between its border pixels is filled as inside (rare: up to ~0.01% of pixels on the test views)." />
+                          ToolTip.Tip="Mariani–Silver: compute the borders of a grid of tiles first and fill a tile whose whole border is inside the set without iterating its interior (CPU). Much faster where the inside of the set is expensive — minibrots, satellite bulbs, deep zoom, slow-converging points (2–8x measured); a view whose inside is the main cardioid is already fast and would get slightly slower (Auto, below, computes those normally). Not exact: an escaping filament thinner than a pixel that crosses a tile between its border pixels is filled as inside (rare: up to ~0.01% of pixels on the test views)." />
+                <!-- #1394 — per-frame Auto decision. -->
+                <CheckBox Content="Only where it pays (Auto)"
+                          Margin="20,0,0,0"
+                          IsEnabled="{Binding SolidRegionSkip}"
+                          IsChecked="{Binding SolidRegionAuto, Mode=TwoWay}"
+                          ToolTip.Tip="Decide per frame: compute the grid rows first, and when they show too little of the inside of the set that is expensive to iterate (the main cardioid and the period-2 bulb cost nothing), compute the frame normally instead — those views stay within a few percent of the normal speed instead of getting slower. Off = always subdivide." />
             </StackPanel>
         </Border>
 

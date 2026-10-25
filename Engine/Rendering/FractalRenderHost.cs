@@ -1573,6 +1573,7 @@ namespace FracturingFog.Rendering
             _calculator.BlaTolerance = ViewState.FractalParameters?.BlaTolerance ?? FracturingFog.FFMath.BlaTable.DefaultEpsilon;
             // #1343 — solid-region skipping (opt-in).
             _calculator.SolidRegionSkip = ViewState.FractalParameters?.SolidRegionSkip ?? false;
+            _calculator.SolidRegionAuto = ViewState.FractalParameters?.SolidRegionAuto ?? true;   // #1394
 
             if (ViewState.IterLocked)
                 _calculator.MaxIterations = ViewState.LockedIterations;
@@ -2523,6 +2524,7 @@ namespace FracturingFog.Rendering
             dst.DisableDdBla = src.DisableDdBla;
             dst.BlaTolerance = src.BlaTolerance;   // #1275
             dst.SolidRegionSkip = src.SolidRegionSkip;   // #1343
+            dst.SolidRegionAuto = src.SolidRegionAuto;   // #1394
         }
 
         /// <summary>#328 — is <paramref name="type"/> a 2D height-field type whose

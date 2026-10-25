@@ -33,6 +33,7 @@ public sealed class S1343SolidRegionTests(ITestOutputHelper output)
     {
         CenterX = x, CenterY = y, Zoom = zoom, MaxIterations = iter,
         ColorMap = map ?? new HsvPalette(), UseGpuCompute = false, SolidRegionSkip = skip, CaptureFilledMask = true,
+        SolidRegionAuto = false,   // #1394 — the subdivision itself (Auto declines cardioid views)
     };
 
     private static MandelbrotCalculator Run(MandelbrotCalculator c) { c.Calculate(CancellationToken.None); return c; }
@@ -242,7 +243,7 @@ public sealed class S1343SolidRegionTests(ITestOutputHelper output)
         {
             FractalType = FractalType.Mandelbrot, Width = W, Height = H,
             CenterX = X, CenterY = Y, Zoom = Z, MaxIterations = 3000, Quality = QualityPreset.Standard,
-            ColorMap = new HsvPalette(), FractalParameters = new FractalParameters { SolidRegionSkip = skip }, Path = string.Empty,
+            ColorMap = new HsvPalette(), FractalParameters = new FractalParameters { SolidRegionSkip = skip, SolidRegionAuto = false }, Path = string.Empty,
         };
         MandelbrotCalculator Live(bool skip) { var c = Calc(X, Y, Z, 3000, skip); c.Quality = QualityPreset.Standard; return Run(c); }
         var liveOn = Live(true);

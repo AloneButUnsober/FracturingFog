@@ -659,6 +659,7 @@ namespace FracturingFog.Imaging
                     InteriorAlpha = req.FractalParameters.InteriorAlpha,
                     BlaTolerance = req.FractalParameters.BlaTolerance,   // #1275
                     SolidRegionSkip = req.FractalParameters.SolidRegionSkip,   // #1343
+                    SolidRegionAuto = req.FractalParameters.SolidRegionAuto,   // #1394
                     // D-6b — sub-rect + seeded orbit for cluster tile workers.
                     // All four properties default to 0 (= legacy full-image render);
                     // any non-zero value engages the sub-rect dc geometry.
@@ -1099,6 +1100,7 @@ namespace FracturingFog.Imaging
                     InteriorAlpha = req.FractalParameters.InteriorAlpha,
                     BlaTolerance = req.FractalParameters.BlaTolerance,   // #1275
                     SolidRegionSkip = req.FractalParameters.SolidRegionSkip,   // #1343
+                    SolidRegionAuto = req.FractalParameters.SolidRegionAuto,   // #1394
                 };
                 m.Calculate(token);
                 return m;

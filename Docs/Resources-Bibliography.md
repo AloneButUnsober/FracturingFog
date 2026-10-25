@@ -278,6 +278,13 @@ finite-size-Lyapunov literature, which these entries anchor.
 - **Mariani–Silver subdivision** (Rico Mariani, Robert Silver). Rectangle subdivision that fills a
   box whose border is uniformly in-set — solid-region skipping (#1343). See
   [Citations awaiting verification](#citations-awaiting-verification) for the primary source.
+- **Wikipedia contributors.** *Plotting algorithms for the Mandelbrot set*, section "Cardioid / bulb
+  checking". <https://en.wikipedia.org/wiki/Plotting_algorithms_for_the_Mandelbrot_set> (accessed
+  2026-10-25). The closed-form main-cardioid test in its square-root-free form, q(q + (x − 1/4)) ≤ y²/4
+  with q = (x − 1/4)² + y², and the period-2 bulb test (x + 1)² + y² ≤ 1/16 —
+  `MandelbrotCalculator.IsInMainCardioidOrBulb` (the in-set early-out), and since #1394 the "free
+  in-set pixel" test solid-region Auto uses to decide whether a frame is worth subdividing. The same
+  article's "Rectangle checking" section describes Mariani–Silver as a variant.
 - **Richard P. Brent.** *An improved Monte Carlo factorization algorithm.* BIT 20, 1980. Brent's
   cycle detection — the periodicity early-out for bounded orbits.
 
