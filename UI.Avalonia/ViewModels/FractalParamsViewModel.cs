@@ -2588,6 +2588,9 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     /// <summary>#1335 — the active family's primary march honours <see cref="MarchRelaxation"/>.</summary>
     public bool UsesMarchRelaxation => FracturingFog.Models.MarchRelaxationCapabilities.UsesMarchRelaxation(FractalType);
 
+    /// <summary>#1382 — a 3D raymarcher: its supersampling can be adaptive too.</summary>
+    public bool IsRaymarch3DAdaptiveAa => FracturingFog.Models.AdaptiveAaCapabilities.IsRaymarch3D(FractalType);
+
     // #876 — Kleinian custom inversion-sphere editor.
     /// <summary>Editable rows backing <c>FractalParameters.KleinianCustomSpheres</c>.</summary>
     public ObservableCollection<KleinianSphereRow> KleinianSpheres { get; } = new();

@@ -264,6 +264,34 @@ public static partial class ScreenSpacePost
         GpuPostKernels.EndFrame();
     }
 
+    /// <summary>The lens pass (chromatic aberration, distortion, vignette, tangential
+    /// distortion, anamorphic squeeze) is on.</summary>
+    public static bool WantsLens(in LightingFxData fx)
+        => fx.ChromaticAberration > 0 || fx.LensDistortion != 0
+        || fx.Vignette > 0 || fx.LensTangentialX != 0
+        || fx.LensTangentialY != 0
+        || (fx.AnamorphicSqueeze != 0 && fx.AnamorphicSqueeze != 1.0);
+
+    /// <summary>#1382 — every pass of a 3D raymarcher's frame is per-pixel: a pixel's
+    /// bytes depend on its own ray alone, so a masked frame (adaptive AA) computes a
+    /// marked pixel exactly as a full one does. False while a pass reads neighbours
+    /// (SSAO, edge ink, the screen-space DoF, froxel fog, bloom, the lens pass, OIDN,
+    /// the debug HUD's histogram), the depth is published for a post-frame pass
+    /// (stereo), or a cross-frame cache is installed (temporal lighting, the
+    /// distance-field cache). Tone mapping alone and the thin-lens DoF are per-pixel.</summary>
+    public static bool PixelLocal3D(in LightingFxData fx)
+        => fx.SsaoSamples <= 0
+        && fx.EdgeStrength <= 0
+        && !(fx.DofAperture > 0.0 && !ThinLensDof.IsActive(in fx))
+        && !fx.Froxel3D
+        && fx.BloomStrength <= 0
+        && !WantsLens(in fx)
+        && !fx.OidnDenoise
+        && fx.DebugHudFlags == 0
+        && !WantsDepthOutput(in fx)
+        && TemporalLighting.Current == null
+        && DistanceFieldCache.Current == null;
+
     /// <summary>#1009 — true when a 3D raymarcher must capture the depth + normal
     /// G-buffer this frame: any whole-buffer pass that reads it (SSAO, edge ink,
     /// the screen-space DoF) or depth wanted as an output
@@ -390,10 +418,7 @@ public static partial class ScreenSpacePost
     {
         bool wantBloom = fx.BloomStrength > 0;
         bool wantTonemap = fx.ToneMap != ToneMapOperator.None;
-        bool wantLens = fx.ChromaticAberration > 0 || fx.LensDistortion != 0
-                     || fx.Vignette > 0 || fx.LensTangentialX != 0
-                     || fx.LensTangentialY != 0
-                     || (fx.AnamorphicSqueeze != 0 && fx.AnamorphicSqueeze != 1.0);
+        bool wantLens = WantsLens(in fx);
         // #84 — the debug HUD (light compass / bars / clock) is NOT drawn here
         // anymore. It moved to a standalone ApplyDebugHud pass the calculators
         // run last on the final full-res buffer, so it survives both the GPU

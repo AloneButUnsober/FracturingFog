@@ -257,6 +257,21 @@ namespace FracturingFog.Models
     /// the pixels flipped). Kleinian: its limit-set DE made the relaxed march slower
     /// (up to 45% when zoomed in), and it has its own under-relaxation knob
     /// (KleinianDeFactor).</summary>
+    /// <summary>#1382 — the families whose supersampling can be adaptive: Mandelbrot
+    /// (#1344) and the ten 3D raymarchers, whose CPU march honours a pixel mask.</summary>
+    public static class AdaptiveAaCapabilities
+    {
+        public static bool Supports(FractalType type) => type == FractalType.Mandelbrot || IsRaymarch3D(type);
+
+        /// <summary>The 3D raymarchers (the alt calculators that implement
+        /// <c>IAdaptiveAaCalculator</c>).</summary>
+        public static bool IsRaymarch3D(FractalType type) => type is
+            FractalType.Mandelbulb or FractalType.Mandelbox or FractalType.Kifs
+            or FractalType.QuaternionJulia or FractalType.QuaternionMandelbrot
+            or FractalType.Kleinian or FractalType.BicomplexMandelbrot
+            or FractalType.Coquaternion or FractalType.Julibrot or FractalType.UserBulb;
+    }
+
     public static class MarchRelaxationCapabilities
     {
         public static bool UsesMarchRelaxation(FractalType type) => type is

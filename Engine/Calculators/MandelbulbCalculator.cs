@@ -20,7 +20,7 @@ using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
 
-public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource, FracturingFog.Rendering.ILowResPreviewCalculator, FracturingFog.Render.IGpuRouteSource
+public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource, FracturingFog.Rendering.ILowResPreviewCalculator, FracturingFog.Rendering.IAdaptiveAaCalculator, FracturingFog.Render.IGpuRouteSource
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -33,6 +33,12 @@ public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera,
     public bool LowResPreview { get; set; } = false;
     /// <summary>#1373 — the host preview stage's scale for the next frame (null: the default).</summary>
     public double? LowResPreviewScaleOverride { get; set; }
+
+    /// <summary>#1382 — adaptive anti-aliasing (Supersampling.AccumulateAlt): with a
+    /// mask the CPU march computes only the marked pixels of a jittered sample.</summary>
+    public byte[]? PixelMask { get; set; }
+    public FracturingFog.Rendering.AdaptiveAa AdaptiveAa => FracturingFog.Rendering.AdaptiveAa.From(FractalParameters);
+    public bool MaskExact => FractalParameters is { } maskFp && ScreenSpacePost.PixelLocal3D(maskFp.Lighting);
 
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
@@ -316,6 +322,9 @@ public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera,
             TemporalLighting.SceneKey(in fx, eps, in deStruct),
             usable: !thinLensDof && eyeOffset == 0 && fx.DebugAov == AovView.Beauty);
 
+        // #1382 — adaptive AA: only the marked pixels (a full-size, full-detail frame).
+        byte[]? mask = !lowRes && width == fullW && height == fullH
+            && PixelMask is { } pmask && pmask.Length == width * height ? pmask : null;
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             if (ct.IsCancellationRequested) return;
@@ -324,6 +333,7 @@ public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera,
             float[]? hdrScratch = thinLensDof ? new float[3] : null;
             for (int x = 0; x < width; x++)
             {
+                if (mask != null && mask[rowBase + x] == 0) continue;   // #1382
                 double u = (2.0 * (x + 0.5) / width - 1.0) * fovScale * aspect + panU;
                 // Ray direction in world coords.
                 double rdx = right[0] * u + up[0] * v + fwd[0];

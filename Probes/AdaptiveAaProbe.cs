@@ -9,6 +9,8 @@
 // off by more than 4 levels). Also checks, on every view, that unmarked pixels are
 // exactly the one-sample render and that threshold −1 / tolerance 0 (every pixel,
 // every sample) is the full image byte for byte.
+// #1382: then the same for the ten 3D raymarchers (CPU march, default lighting) at
+// their home views.
 // Exit 0 = the checks pass; 1 = one failed.
 
 using System;
@@ -18,6 +20,7 @@ using System.Threading;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using FracturingFog.Rendering;
+using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog
 {
@@ -85,8 +88,62 @@ namespace FracturingFog
                         $"{fullMs,7:F0} -> {adMs,6:F0} ms ({fullMs / adMs:F1}x); error mean {mean:F2}, p99 {p99}, >4 levels {over4:F2}%");
                 }
             }
+            failures += Run3D(W, H, thr, tol);
             Console.WriteLine(failures == 0 ? "adaptiveaaprobe OK" : $"adaptiveaaprobe FAIL: {failures}");
             return failures == 0 ? 0 : 1;
+        }
+
+        // #1382 — the 3D raymarchers.
+        private static int Run3D(int w, int h, double thr, double tol)
+        {
+            int failures = 0;
+            Console.WriteLine($"  3D raymarchers {w}x{h}, CPU march, default lighting:");
+            var families = new (string Name, Func<IFractalCalculator> Make)[]
+            {
+                ("Mandelbulb", () => new MandelbulbCalculator(w, h)), ("Mandelbox", () => new MandelboxCalculator(w, h)),
+                ("KIFS", () => new KifsCalculator(w, h)), ("Quat Julia", () => new QuatJuliaCalculator(w, h)),
+                ("Quat Mandelbrot", () => new QuatMandelbrotCalculator(w, h)), ("Kleinian", () => new KleinianCalculator(w, h)),
+                ("Bicomplex", () => new BicomplexMandelbrotCalculator(w, h)), ("Coquaternion", () => new CoquaternionMandelbrotCalculator(w, h)),
+                ("Julibrot volume", () => new DualOrbitVolumeCalculator(w, h)), ("User Bulb", () => new UserBulbCalculator(w, h)),
+            };
+            foreach (int n in new[] { 4, 16 })
+                foreach (var (name, make) in families)
+                {
+                    IFractalCalculator Calc(bool adaptive, double t, double tl)
+                    {
+                        var fx = LightingFxData.CreateDefault();
+                        fx.UseGpuRender = false;
+                        var c = make();
+                        c.ColorMap = ColorPalette.BuiltIns[0];
+                        ((dynamic)c).FractalParameters = new FractalParameters
+                        {
+                            Lighting = fx, UserBulbSource = "z^8 + c",
+                            AdaptiveAa = adaptive, AdaptiveAaThreshold = t, AdaptiveAaTolerance = tl,
+                        };
+                        c.Calculate(CancellationToken.None);
+                        return c;
+                    }
+                    var one = Calc(true, thr, tol);
+                    var single = one.ColorBuffer.Take(w * h).ToArray();
+                    var full = Calc(false, thr, tol);
+                    long t0 = Stopwatch.GetTimestamp();
+                    Supersampling.AccumulateAlt(full, n, CancellationToken.None, histogramEq: 0);
+                    double fullMs = Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
+                    var ad = Calc(true, thr, tol);
+                    var mask = new byte[w * h];
+                    Supersampling.BuildMask(single, null, 0, w, h, thr, mask);
+                    t0 = Stopwatch.GetTimestamp();
+                    var st = Supersampling.AccumulateAlt(ad, n, CancellationToken.None, histogramEq: 0);
+                    double adMs = Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
+                    var err = new int[w * h];
+                    for (int i = 0; i < err.Length; i++) err[i] = MaxDiff(ad.ColorBuffer[i], full.ColorBuffer[i]);
+                    var sorted = err.OrderBy(e => e).ToArray();
+                    bool unmarkedOk = Enumerable.Range(0, w * h).All(i => mask[i] != 0 || ad.ColorBuffer[i] == single[i]);
+                    if (!unmarkedOk) { failures++; Console.Error.WriteLine($"  FAIL {name}: an unmarked pixel is not the one-sample colour"); }
+                    Console.WriteLine($"  {n,2}x {name,-15}: marked {st.Marked * 100.0 / st.Pixels,5:F1}%, samples {st.PixelSamples * 100.0 / st.FullPixelSamples,5:F1}% of full; " +
+                        $"{fullMs,7:F0} -> {adMs,6:F0} ms ({fullMs / adMs:F1}x); error mean {err.Average():F2}, p99 {sorted[(int)(sorted.Length * 0.99)]}");
+                }
+            return failures;
         }
 
         private static int MaxDiff(uint a, uint b)
