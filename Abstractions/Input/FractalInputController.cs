@@ -242,7 +242,10 @@ namespace FracturingFog.Input
                         ViewState.FractalParameters.BulbCameraPhi = newPhi;
                         break;
                 }
-                RaiseViewChanged(RenderHint.Full);
+                // #1373 — a camera orbit is a continuous drag like a pan: Fast puts it
+                // on the progressive chain (DynamicResolution picks a low-res first
+                // stage, or none), which ends in the unchanged full-resolution frame.
+                RaiseViewChanged(RenderHint.Fast);
                 return;
             }
 

@@ -53,7 +53,7 @@ using GpuRoute = FracturingFog.Render.GpuRoute;
 
 namespace FracturingFog;
 
-public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource, FracturingFog.Render.IGpuRouteSource
+public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource, FracturingFog.Rendering.ILowResPreviewCalculator, FracturingFog.Render.IGpuRouteSource
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -204,6 +204,8 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
     /// ColorBuffer. Used by MainForm during camera drag for interactive frame
     /// rate; full-res render fires after drag ends.</summary>
     public bool LowResPreview { get; set; } = false;
+    /// <summary>#1373 — the host preview stage's scale for the next frame (null: the default).</summary>
+    public double? LowResPreviewScaleOverride { get; set; }
 
     private Func<Vec3, Vec3, int, double[], Vec3>? _compiled;
     private Func<Quat, Quat, int, double[], Quat>? _compiledQuat;
@@ -675,8 +677,12 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         int fullW = Width;
         int fullH = Height;
         int ss = lowRes ? 1 : Math.Clamp(FractalParameters.UserBulbSuperSample, 1, 4);
-        int width = lowRes ? Math.Max(1, fullW / 2) : fullW * ss;
-        int height = lowRes ? Math.Max(1, fullH / 2) : fullH * ss;
+        // #1373 — the host preview stage may ask for its own scale; else the ½ preview.
+        var lrDims = LowResPreviewScaleOverride is { } lrs
+            ? FracturingFog.Rendering.LowResPreview.ComputeDims(fullW, fullH, FracturingFog.Rendering.LowResPreview.EffectiveScale(true, lrs, 0.5))
+            : new FracturingFog.Rendering.LowResPreview.Dims(Math.Max(1, fullW / 2), Math.Max(1, fullH / 2));
+        int width = lowRes ? lrDims.Width : fullW * ss;
+        int height = lowRes ? lrDims.Height : fullH * ss;
         uint[] renderBuffer = (lowRes || ss > 1) ? new uint[width * height] : ColorBuffer;
         int deIter = Math.Max(2, FractalParameters.UserBulbIterations);
         int maxSteps = Math.Max(16, FractalParameters.UserBulbMaxSteps);
