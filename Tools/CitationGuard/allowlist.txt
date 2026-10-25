@@ -1,0 +1,31 @@
+# Citation guard allowlist - NON-CITATIONS ONLY.
+#
+# Every entry here is a word, host or anchor the guard flags that is NOT a
+# source the project relies on. Each needs a reason. A real author, paper,
+# library or resource never goes here: credit it in
+# Docs/Resources-Bibliography.md instead (CONTRIBUTING.md, "Source citation
+# contract").
+#
+#   Name          -> a capitalised word that happens to precede a year
+#   host:<host>   -> a URL host that is not a source (namespace, fixture, CI badge)
+#   anchor:<id>   -> a placeholder anchor in documentation about anchors
+
+# --- Hosts: XML namespaces / schemas (identifiers, not references) ---
+host:w3.org                       # MathML / SVG XML namespaces
+host:schemas.microsoft.com        # 3MF core namespace
+host:schemas.openxmlformats.org   # OPC relationships namespace (3MF package)
+
+# --- Hosts: test fixtures and placeholder URLs ---
+host:example.com                  # RFC 2606 reserved example domain
+host:example.org                  # RFC 2606 reserved example domain
+
+# --- Hosts: tooling / infrastructure, not sources ---
+host:api.github.com               # FFmpeg / OIDN installer release lookups
+host:img.shields.io               # README badges
+host:cdn.jsdelivr.net             # Doc-site CDN for KaTeX / Prism (credited by name in the bibliography)
+host:apple.com                    # macOS packaging (codesign / notarisation endpoints)
+host:developercertificate.org     # DCO legal text linked from the PR template
+host:google.com                   # a search link, not a source (Devaney is credited)
+
+# --- Anchors: documentation about the anchor convention itself ---
+anchor:anchor                     # Docs/Technical/_Index.md "[Author Year](...#anchor)" placeholder
