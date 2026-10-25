@@ -457,21 +457,22 @@ public sealed class S1344AaParityTests
         Assert.Equal((AdaptiveAa.DefaultThreshold, AdaptiveAa.DefaultTolerance), (stock.AdaptiveAaThreshold, stock.AdaptiveAaTolerance));
     }
 
+    // #1380 — a batch still now runs the quality's temporal AA too, so no preset
+    // reports it as a live-only gap any more.
     [Theory]
-    [InlineData("Standard", false)]
-    [InlineData("Draft", false)]
-    [InlineData("High", true)]
-    [InlineData("Ultra", true)]
-    [InlineData("Extreme", true)]
-    public void The_Builder_Reports_The_Live_Only_Temporal_AA_As_A_Gap(string quality, bool gap)
+    [InlineData("Standard")]
+    [InlineData("Draft")]
+    [InlineData("High")]
+    [InlineData("Ultra")]
+    [InlineData("Extreme")]
+    public void The_Builder_No_Longer_Reports_Temporal_AA_As_A_Gap(string quality)
     {
         var snap = new FracturingFog.Cli.BatchCommandSnapshot
         {
             Fractal = FractalType.Mandelbrot, Parameters = new FractalParameters(), QualityName = quality,
         };
         var gaps = FracturingFog.Cli.BatchCommandBuilder.DetectGaps(snap);
-        Assert.Equal(gap, gaps.Any(g => g.Contains("temporal anti-aliasing", StringComparison.Ordinal) && g.Contains("#1380", StringComparison.Ordinal)));
-        Assert.Equal(gap, QualityPreset.FromName(quality).TaaMaxSamples > 1);   // the gap is exactly the TAA presets
+        Assert.DoesNotContain(gaps, g => g.Contains("temporal anti-aliasing", StringComparison.Ordinal));
     }
 
     [Fact]

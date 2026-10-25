@@ -159,6 +159,11 @@ namespace FracturingFog.Batch
         /// interactive Save flow, which always watermarks. (Scene mode governs
         /// its own watermark through SceneRenderSettings, not this flag.)</summary>
         public bool Watermark { get; set; } = true;
+        /// <summary>#1380 — when true (the default), an image (still) at High /
+        /// Ultra / Extreme also runs the quality's temporal AA, the samples the live
+        /// view adds while it is still, so the file equals the settled live frame.
+        /// <c>--no-taa</c> renders the sub-pixel (MSAA) pass only, for speed.</summary>
+        public bool TemporalAa { get; set; } = true;
 
         // Keep PNG frame folder after successful video encode. Defaults to false
         // when --lossless is used (frames are intermediate), true otherwise.
@@ -782,6 +787,10 @@ namespace FracturingFog.Batch
                     case BatchFlags.NoKeepFrames:
                         opts.KeepFrames = false;
                         opts.KeepFramesSpecified = true;
+                        break;
+
+                    case BatchFlags.NoTaa:   // #1380
+                        opts.TemporalAa = false;
                         break;
 
                     case BatchFlags.Verbose:

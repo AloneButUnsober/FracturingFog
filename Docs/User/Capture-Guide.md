@@ -898,6 +898,23 @@ FracturingFog.exe --batch --region ""Seahorse Valley"" --theme Fire ^
 Scene mode (`--mode scene`) is the exception: it carries its own watermark
 setting inside the saved scene, so this flag does not affect it.
 
+### Anti-aliasing on stills (High / Ultra / Extreme)
+
+The High, Ultra and Extreme quality presets anti-alias twice in the live view: a
+sub-pixel pass on every frame, then **temporal** samples (8 / 16 / 32 in total)
+added while the view is still. A batch image and an export from the app run both,
+so the file equals the frame the live view settles to. The temporal samples are
+full renders, so a still takes roughly 2–3× as long as with the sub-pixel pass
+alone. Pass `--no-taa` to skip them:
+
+```
+FracturingFog.exe --batch --region ""Seahorse Valley"" --quality Extreme ^
+                  --no-taa --out C:\out\seahorse-fast.png
+```
+
+Video, slideshow and scene frames always use the sub-pixel pass only: the live
+view adds temporal samples only while the camera is still.
+
 ### Remote render
 
 ```

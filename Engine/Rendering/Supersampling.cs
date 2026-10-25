@@ -33,6 +33,14 @@
 // sample 0 (SampleEqualizer), equalises every sample with it and averages the
 // equalised colours; the caller then skips its own equalisation
 // (FinishHistogramEq). Without a supersample pass nothing changes.
+//
+// #1380 — the quality presets' temporal AA (QualityPreset.TaaMaxSamples: High 8,
+// Ultra 16, Extreme 32), which the live view accumulates while it is still: the
+// finished (MSAA) frame seeds a running per-channel sum, then each Halton-jittered
+// full frame (TaaOffset) is added and the rounded mean written back. The live host
+// runs one sample per frame through TemporalAccumulator; AccumulateTemporal runs
+// them all at once for --batch / export stills, so a still equals the frame the
+// live view settles to. AccumulateQuality chains MSAA → TAA → adaptive contrast.
 
 using System;
 using System.Collections.Generic;
@@ -67,6 +75,65 @@ namespace FracturingFog.Rendering
 
         /// <summary>#1381 — the colour is already the mean of equalised samples.</summary>
         public bool Equalized => Equalizer != null;
+
+        /// <summary>#1380 — the temporal samples accumulated on top (incl. the seed);
+        /// 0 when no TAA ran.</summary>
+        public int TemporalSamples { get; init; }
+    }
+
+    /// <summary>#1380 — the live view's TAA running mean: a per-channel sum seeded
+    /// with the finished frame, each later sample added, the mean (rounded half up)
+    /// written back. One instance per view; shared by the host and the offline pass.</summary>
+    public sealed class TemporalAccumulator
+    {
+        private long[] _r = Array.Empty<long>(), _g = Array.Empty<long>(), _b = Array.Empty<long>(), _a = Array.Empty<long>();
+
+        public int Pixels { get; private set; }
+        public int Count { get; private set; }
+
+        /// <summary>Start over from <paramref name="color"/> (sample count 1).</summary>
+        public void Seed(uint[] color, int pixels)
+        {
+            if (_r.Length != pixels)
+            {
+                _r = new long[pixels]; _g = new long[pixels]; _b = new long[pixels]; _a = new long[pixels];
+            }
+            Pixels = pixels;
+            for (int i = 0; i < pixels; i++)
+            {
+                uint c = color[i];
+                _b[i] = c & 0xFF;
+                _g[i] = (c >> 8) & 0xFF;
+                _r[i] = (c >> 16) & 0xFF;
+                _a[i] = (c >> 24) & 0xFF;
+            }
+            Count = 1;
+        }
+
+        /// <summary>Add one more sample and overwrite <paramref name="color"/> with the
+        /// running mean.</summary>
+        public void AddAndWriteMean(uint[] color)
+        {
+            int pixels = Pixels;
+            for (int i = 0; i < pixels; i++)
+            {
+                uint c = color[i];
+                _b[i] += c & 0xFF;
+                _g[i] += (c >> 8) & 0xFF;
+                _r[i] += (c >> 16) & 0xFF;
+                _a[i] += (c >> 24) & 0xFF;
+            }
+            int count = ++Count;
+            long half = count / 2;
+            for (int i = 0; i < pixels; i++)
+            {
+                uint b = (uint)((_b[i] + half) / count) & 0xFF;
+                uint g = (uint)((_g[i] + half) / count) & 0xFF;
+                uint r = (uint)((_r[i] + half) / count) & 0xFF;
+                uint a = (uint)((_a[i] + half) / count) & 0xFF;
+                color[i] = (a << 24) | (r << 16) | (g << 8) | b;
+            }
+        }
     }
 
     /// <summary>#1381 — adaptive contrast at a fixed CDF, so every sample of a pixel is
@@ -229,6 +296,93 @@ namespace FracturingFog.Rendering
 
         private static SupersampleStats Single(int w, int h) => new(w * h, 1, 0, (long)w * h);
 
+        /// <summary>One pixel of the image in complex units: 3.5 / max(W, H) / zoom. A
+        /// cluster tile (#1380 found) renders a sub-rect of a larger image
+        /// (ImageWidth / ImageHeight), whose pixel is the whole image's, not the
+        /// tile's — the jitter used the tile's and so overshot.</summary>
+        public static double PixelScale(MandelbrotCalculator calc)
+        {
+            int w = calc.ImageWidth > 0 ? calc.ImageWidth : calc.Width;
+            int h = calc.ImageHeight > 0 ? calc.ImageHeight : calc.Height;
+            return (3.5 / Math.Max(w, h)) / calc.Zoom;
+        }
+
+        /// <summary>#1380 — the pixel-unit jitter of TAA sample <paramref name="sampleIndex"/>
+        /// (1 … TaaMaxSamples − 1; the seed is sample 0): Halton bases 2 and 3 from
+        /// index + 2, centred on the pixel.</summary>
+        public static (double Jx, double Jy) TaaOffset(int sampleIndex)
+            => (Halton(sampleIndex + 2, 2) - 0.5, Halton(sampleIndex + 2, 3) - 0.5);
+
+        /// <summary>Halton radical inverse of <paramref name="index"/> in base <paramref name="b"/>, in [0, 1).</summary>
+        public static double Halton(int index, int b)
+        {
+            double f = 1.0, r = 0.0;
+            for (int i = index; i > 0; i /= b)
+            {
+                f /= b;
+                r += f * (i % b);
+            }
+            return r;
+        }
+
+        /// <summary>#1380 — run the TAA samples the live view would accumulate on top
+        /// of <paramref name="calc"/>'s finished frame (its ColorBuffer is the seed):
+        /// samples 1 … <paramref name="taaMaxSamples"/> − 1 at <see cref="TaaOffset"/>,
+        /// each equalised with <paramref name="equalizer"/> (#1381) when given, into a
+        /// running mean left in ColorBuffer. Skipped (returns 0) when the centre can't
+        /// represent a sub-pixel jitter, as live. Restores the centre; a cancellation
+        /// keeps the mean so far. Returns the samples in the mean (incl. the seed).</summary>
+        public static int AccumulateTemporal(MandelbrotCalculator calc, int taaMaxSamples,
+            SampleEqualizer? equalizer, CancellationToken token)
+        {
+            int pixels = calc.Width * calc.Height;
+            if (taaMaxSamples <= 1 || calc.ColorBuffer.Length < pixels) return 0;
+            double scale = PixelScale(calc);
+            if (!CentreJitter.IsResolvable(calc, scale)) return 0;
+
+            var acc = new TemporalAccumulator();
+            acc.Seed(calc.ColorBuffer, pixels);
+            var orig = CentreLimbs.Capture(calc);
+            try
+            {
+                for (int k = 1; k < taaMaxSamples; k++)
+                {
+                    if (token.IsCancellationRequested) break;
+                    var (jx, jy) = TaaOffset(k);
+                    CentreJitter.Apply(calc, in orig, jx, jy, scale);
+                    var mean = (uint[])calc.ColorBuffer.Clone();   // the mean so far
+                    try { calc.Calculate(token); }
+                    catch (OperationCanceledException) { Array.Copy(mean, calc.ColorBuffer, pixels); break; }
+                    equalizer?.Apply(calc);
+                    acc.AddAndWriteMean(calc.ColorBuffer);
+                }
+            }
+            finally { orig.Restore(calc); }
+            return acc.Count;
+        }
+
+        /// <summary>#1380 — the quality preset's whole offline anti-aliasing for a
+        /// Mandelbrot still: the sub-pixel MSAA pass (adaptive per
+        /// <paramref name="adaptive"/>), then, when <paramref name="temporal"/>, the
+        /// TAA samples the live view settles with, every sample equalised with sample
+        /// 0's CDF when <paramref name="histogramEq"/> &gt; 0. Follow with
+        /// <see cref="FinishHistogramEq"/>.</summary>
+        public static SupersampleStats AccumulateQuality(MandelbrotCalculator calc, QualityPreset? quality,
+            AdaptiveAa adaptive, int histogramEq, bool temporal, CancellationToken token)
+        {
+            var st = AccumulateMandelbrot(calc, quality?.AaSamples ?? 1, adaptive, token, histogramEq);
+            int taa = quality?.TaaMaxSamples ?? 1;
+            if (!temporal || taa <= 1 || token.IsCancellationRequested) return st;
+            var eq = st.Equalizer;
+            if (eq == null)
+            {
+                eq = SampleEqualizer.Build(calc, histogramEq);
+                eq?.Apply(calc);
+            }
+            int n = AccumulateTemporal(calc, taa, eq, token);
+            return st with { Equalizer = eq, TemporalSamples = n };
+        }
+
         /// <summary>#1381 — the adaptive contrast a caller applies after a supersample
         /// pass: none when the pass already equalised every sample, otherwise the
         /// calculator's own equalisation at <paramref name="histogramEq"/> % (as
@@ -253,7 +407,7 @@ namespace FracturingFog.Rendering
             // Pixel scale matches generated calculators: 3.5/max(W,H)/Zoom.
             // #1270 — the jitter goes through every centre limb (CentreJitter),
             // so it survives past the double's precision (~1e10 zoom).
-            double scale = (3.5 / Math.Max(calc.Width, calc.Height)) / calc.Zoom;
+            double scale = PixelScale(calc);
             var orig = CentreLimbs.Capture(calc);
             int count = 1; // sample 0 already counted
             try
@@ -301,7 +455,7 @@ namespace FracturingFog.Rendering
                     list[activeCount++] = i;
                 }
 
-            double scale = (3.5 / Math.Max(w, h)) / calc.Zoom;
+            double scale = PixelScale(calc);
             var orig = CentreLimbs.Capture(calc);
             double tol2 = a.Tolerance * a.Tolerance;
             try

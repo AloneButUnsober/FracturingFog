@@ -333,20 +333,17 @@ namespace FracturingFog.Rendering
 
         // Wave 2.7 — TAA accumulator state.
         //
-        // _taaSumR/G/B/A hold per-pixel channel sums across all samples
-        // (sample 0 = original ColorBuffer + any MSAA jitter, sample N>0 =
-        // additional Halton-jittered Calculate runs). _taaSampleCount is the
+        // _taaAcc holds per-pixel channel sums across all samples (sample 0 =
+        // original ColorBuffer + any MSAA jitter, sample N>0 = additional
+        // Halton-jittered Calculate runs); #1380 moved it into Supersampling so
+        // --batch / export stills accumulate the same way. _taaSampleCount is the
         // number of samples folded in; the per-frame display value is
         // sum/count rounded to byte. _taaFp* captures the view fingerprint
         // (centre / zoom / iter cap / fractal type) we accumulated against —
         // any change invalidates the accumulator. Touched only from the
         // calc thread + the upload threadpool callback (which never overlap
         // on a single FrameJob, so no lock is needed beyond visibility).
-        private long[]? _taaSumR;
-        private long[]? _taaSumG;
-        private long[]? _taaSumB;
-        private long[]? _taaSumA;
-        private int _taaSumPixels;
+        private TemporalAccumulator? _taaAcc;
         private int _taaSampleCount;
         // #1270 — the full multi-limb centre: past ~1e10 a pan only moves the
         // tail limbs, so a double-only fingerprint would keep stale samples.
@@ -1396,6 +1393,10 @@ namespace FracturingFog.Rendering
                 // nullable-oblivious IColorMap read from MandelbrotCalculator.
                 ColorMap = _calculator.ColorMap!,
                 Quality = s.Quality,
+                // #1380 — an export is a still: run the quality's temporal AA so it
+                // equals the frame the live view settles to. Probes / previews that
+                // reuse this request turn it off.
+                TemporalAa = true,
                 FractalParameters = s.FractalParameters,
                 // #508 — the interactive hi-res relief field (raymarch WYSIWYG).
                 ReliefField = reliefField,
@@ -2267,24 +2268,9 @@ namespace FracturingFog.Rendering
             var color = calc.ColorBuffer;
             if (color.Length < pixels) { InvalidateTaa(); return; }
 
-            if (_taaSumR == null || _taaSumPixels != pixels)
-            {
-                _taaSumR = new long[pixels];
-                _taaSumG = new long[pixels];
-                _taaSumB = new long[pixels];
-                _taaSumA = new long[pixels];
-                _taaSumPixels = pixels;
-            }
-
-            for (int i = 0; i < pixels; i++)
-            {
-                uint c = color[i];
-                _taaSumB![i] =  (long)(c        & 0xFF);
-                _taaSumG![i] =  (long)((c >> 8)  & 0xFF);
-                _taaSumR![i] =  (long)((c >> 16) & 0xFF);
-                _taaSumA![i] =  (long)((c >> 24) & 0xFF);
-            }
-            _taaSampleCount = 1;
+            _taaAcc ??= new TemporalAccumulator();
+            _taaAcc.Seed(color, pixels);
+            _taaSampleCount = _taaAcc.Count;
             _taaFpCentre = CentreLimbs.Capture(calc);
             _taaFpZoom = calc.Zoom;
             _taaFpIter = calc.MaxIterations;
@@ -2313,31 +2299,16 @@ namespace FracturingFog.Rendering
                 && _taaFpType == ViewState.FractalType;
         }
 
-        // Halton(idx, base) radical-inverse — quasi-random in [0, 1).
-        // Used for sub-pixel jitter that distributes far better than a
-        // grid would across an arbitrary sample count.
-        private static double Halton(int index, int b)
-        {
-            double f = 1.0, r = 0.0;
-            int i = index;
-            while (i > 0)
-            {
-                f /= b;
-                r += f * (i % b);
-                i /= b;
-            }
-            return r;
-        }
-
         private bool RunOneTaaSample(MandelbrotCalculator calc, int sampleIndex,
             SampleEqualizer? equalizer, CancellationToken token)
         {
             if (!TaaFingerprintMatches(calc)) return false;
             int pixels = calc.Width * calc.Height;
-            if (_taaSumR == null || _taaSumPixels != pixels) return false;
+            if (_taaAcc == null || _taaAcc.Pixels != pixels) return false;
 
-            double jx = Halton(sampleIndex + 2, 2) - 0.5;
-            double jy = Halton(sampleIndex + 2, 3) - 0.5;
+            // Halton(idx, base) radical inverse: sub-pixel jitter that spreads far
+            // better than a grid across an arbitrary sample count (#1380: shared).
+            var (jx, jy) = Supersampling.TaaOffset(sampleIndex);
             double scale = (3.5 / Math.Max(calc.Width, calc.Height)) / calc.Zoom;
 
             // #1270 — jitter through every centre limb, so it survives past the
@@ -2355,27 +2326,8 @@ namespace FracturingFog.Rendering
             if (token.IsCancellationRequested) return false;
             equalizer?.Apply(calc);   // #1381 — the seed's CDF, before the blend
 
-            var buf = calc.ColorBuffer;
-            for (int i = 0; i < pixels; i++)
-            {
-                uint c = buf[i];
-                _taaSumB![i] += (long)(c        & 0xFF);
-                _taaSumG![i] += (long)((c >> 8)  & 0xFF);
-                _taaSumR![i] += (long)((c >> 16) & 0xFF);
-                _taaSumA![i] += (long)((c >> 24) & 0xFF);
-            }
-            _taaSampleCount++;
-
-            int count = _taaSampleCount;
-            long half = count / 2;
-            for (int i = 0; i < pixels; i++)
-            {
-                uint b = (uint)((_taaSumB![i] + half) / count) & 0xFF;
-                uint g = (uint)((_taaSumG![i] + half) / count) & 0xFF;
-                uint r = (uint)((_taaSumR![i] + half) / count) & 0xFF;
-                uint a = (uint)((_taaSumA![i] + half) / count) & 0xFF;
-                buf[i] = (a << 24) | (r << 16) | (g << 8) | b;
-            }
+            _taaAcc.AddAndWriteMean(calc.ColorBuffer);
+            _taaSampleCount = _taaAcc.Count;
             return true;
         }
 
@@ -3359,8 +3311,7 @@ namespace FracturingFog.Rendering
             InvalidateAdaptiveCdf();
             // Wave 2.7 — sum arrays sized for old buffers too.
             InvalidateTaa();
-            _taaSumR = null; _taaSumG = null; _taaSumB = null; _taaSumA = null;
-            _taaSumPixels = 0;
+            _taaAcc = null;
 
             lock (_d3dGate)
             {

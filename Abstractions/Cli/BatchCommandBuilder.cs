@@ -710,11 +710,8 @@ namespace FracturingFog.Cli
             if (snap.AudioDrivenParams is { Count: > 0 } audio)
                 gaps.Add("Audio-driven parameters (" + string.Join(", ", audio)
                          + ") are live-only: the batch renders their current values without the audio drive (#1432)");
-            // #1344 / #1380 — batch and export run the quality's sub-pixel AA, but its
-            // temporal AA (samples added while the view is still) is live-only.
-            if (FracturingFog.Models.QualityPreset.FromName(snap.QualityName) is { TaaMaxSamples: > 1 } q)
-                gaps.Add($"{q.Name} quality's temporal anti-aliasing ({q.TaaMaxSamples} samples while the view is still) is live-only: "
-                         + "the batch renders its sub-pixel anti-aliasing but not the temporal samples (#1380)");
+            // #1380 — the quality's temporal AA is no longer a gap: a batch still runs
+            // the same samples the live view settles with (--no-taa skips them).
             return gaps;
         }
 
