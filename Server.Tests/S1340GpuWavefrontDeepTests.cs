@@ -10,6 +10,9 @@
 //     with one band and with many 8-row bands (a counter each), at odd frame sizes.
 //     Each wavefront frame follows a frame of another view, so a skipped pixel would
 //     keep that view's value (checked: the views differ on most pixels);
+//   • #1384: the same for the orbit kernel (CSPerturbOrbit, every orbit input: its
+//     means too, each accumulator restarting at each pixel a lane takes) and the
+//     fp32 kernels (CSPerturbFX float-exp, CSPerturbF32 scaled fp32);
 //   • the calculator, under Auto, runs one thread per pixel on its first frame and the
 //     wavefront schedule on the next exactly when the first frame's warp waste reached
 //     the threshold (a boundary-heavy preset and a balanced one), with unchanged
@@ -80,11 +83,12 @@ public sealed class S1340GpuWavefrontDeepTests(ITestOutputHelper output) : IDisp
     private sealed class Frame
     {
         public readonly int[] It; public readonly float[] Sm, Zr, Zi, Dr, Di;
+        public float[] Orbit = [];
         public bool Wave;
         public Frame(int n) { It = new int[n]; Sm = new float[n]; Zr = new float[n]; Zi = new float[n]; Dr = new float[n]; Di = new float[n]; }
     }
 
-    private enum Kernel { Plain, Sa, SaBla }
+    private enum Kernel { Plain, Sa, SaBla, Orbit, FloatExp, ScaledF32 }   // #1384: Orbit / FloatExp / ScaledF32
 
     /// <summary>One deep frame of <paramref name="v"/> (offset by <paramref name="shift"/>
     /// view widths for the dirty frame) under the given schedule.</summary>
@@ -99,6 +103,19 @@ public sealed class S1340GpuWavefrontDeepTests(ITestOutputHelper output) : IDisp
         {
             if (kernel == Kernel.Plain)
                 k.RunPerturb(w, h, scale, v.MaxIter, EscapeR2, off0x, off0y, r.Zr, r.Zi, r.Len, f.It, f.Sm, f.Zr, f.Zi, f.Dr, f.Di);
+            else if (kernel == Kernel.Orbit)
+            {
+                f.Orbit = new float[w * h * MandelbrotKernelSource.PerturbOrbitStride(MandelbrotKernelSource.OrbAll)];
+                k.RunPerturbOrbit(w, h, scale, v.MaxIter, EscapeR2, off0x, off0y, r.Zr, r.Zi, r.Len,
+                    MandelbrotKernelSource.OrbAll, v.Cx, v.Cy, f.It, f.Sm, f.Zr, f.Zi, f.Dr, f.Di, f.Orbit);
+            }
+            else if (kernel is Kernel.FloatExp or Kernel.ScaledF32)
+            {
+                VulkanComputeKernel.ForceFloatExpEntry = kernel == Kernel.FloatExp;
+                try { k.RunPerturbFloatExp(w, h, scale, v.MaxIter, EscapeR2, off0x, off0y, r.Zr, r.Zi, r.Len, f.It, f.Sm, f.Zr, f.Zi, f.Dr, f.Di); }
+                finally { VulkanComputeKernel.ForceFloatExpEntry = false; }
+                Assert.Equal(kernel == Kernel.ScaledF32, k.LastPerturbFloatExpWasScaledF32);
+            }
             else
             {
                 var sa = new SeriesApproximation(r.Zr, r.Zi, r.Len);
@@ -126,8 +143,8 @@ public sealed class S1340GpuWavefrontDeepTests(ITestOutputHelper output) : IDisp
         for (int i = 0; i < plain.It.Length; i++)
             Assert.True(plain.It[i] == wave.It[i], $"{label}: iteration differs at pixel {i} ({plain.It[i]} vs {wave.It[i]})");
         foreach (var (a, b, n) in new[] { (plain.Sm, wave.Sm, "smooth"), (plain.Zr, wave.Zr, "zr"), (plain.Zi, wave.Zi, "zi"),
-                                          (plain.Dr, wave.Dr, "dr"), (plain.Di, wave.Di, "di") })
-            Assert.True(FirstBitDiff(a, b) < 0, $"{label}: {n} differs at pixel {FirstBitDiff(a, b)}");
+                                          (plain.Dr, wave.Dr, "dr"), (plain.Di, wave.Di, "di"), (plain.Orbit, wave.Orbit, "orbit means") })
+            Assert.True(FirstBitDiff(a, b) < 0, $"{label}: {n} differs at element {FirstBitDiff(a, b)}");
     }
 
     [Theory]
@@ -137,6 +154,12 @@ public sealed class S1340GpuWavefrontDeepTests(ITestOutputHelper output) : IDisp
     [InlineData(0, 97, 61, 8)]     // odd sizes, 8 bands of 8 rows (a counter each)
     [InlineData(2, 97, 61, 8)]
     [InlineData(2, 160, 90, 16)]
+    [InlineData(3, 96, 64, 0)]     // #1384: orbit, every input
+    [InlineData(3, 97, 61, 8)]
+    [InlineData(4, 96, 64, 0)]     // #1384: float-exp
+    [InlineData(4, 97, 61, 8)]
+    [InlineData(5, 96, 64, 0)]     // #1384: scaled fp32
+    [InlineData(5, 97, 61, 8)]
     public void Wavefront_Is_Bit_Identical_To_One_Thread_Per_Pixel(int kernelIndex, int w, int h, int bandRows)
     {
         var kernel = (Kernel)kernelIndex;
@@ -154,6 +177,8 @@ public sealed class S1340GpuWavefrontDeepTests(ITestOutputHelper output) : IDisp
                 || BitConverter.SingleToInt32Bits(dirty.Zr[i]) != BitConverter.SingleToInt32Bits(plain.Zr[i]));
             Assert.True(differ > n / 2, $"{label}: precondition — the dirty view differs on only {differ} of {n} pixels");
             Assert.True(plain.It.Distinct().Count() > 30, $"{label}: precondition — a flat frame");
+            if (kernel == Kernel.Orbit)
+                Assert.True(plain.Orbit.Distinct().Count() > 100, $"{label}: precondition — flat orbit means");
             AssertSame(label, plain, wave);
         }
     }

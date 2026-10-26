@@ -350,10 +350,11 @@ RWStructuredBuffer<float> gTrap : register(u4);
             + HlslEntryOrbit(mask);
     }
 
-    /// <summary>CSMain for the orbit colour kernel — a copy of HlslEntry with
-    /// accumulator declarations before the loop, a per-iteration Sample block
-    /// (it &gt; 0, after the escape break, on the RAW z — Mandelbrot orbit), and
-    /// the accumulated means passed to EvalPalette on the escape branch.</summary>
+    /// <summary>CSMain for the orbit colour kernel — HlslEntry (#1384: both
+    /// schedules) with accumulator declarations before the loop, reset at each new
+    /// pixel, a per-iteration Sample block (it &gt; 0, after the escape break, on the
+    /// RAW z — Mandelbrot orbit), and the accumulated means passed to EvalPalette on
+    /// the escape branch.</summary>
     public static string HlslEntryOrbit(int mask)
     {
         string decl = OrbitDecl(mask), samp = OrbitSample(mask), means = OrbitMeans(mask);
@@ -383,6 +384,27 @@ RWStructuredBuffer<float> gTrap : register(u4);
             "    float cvPrevZr = 0.0, cvPrevZi = 0.0, cvPrevSegR = 0.0, cvPrevSegI = 0.0;\n" +
             "    float acc_cvSum = 0.0; int acc_cvCount = 0;\n");
         return decl.ToString();
+    }
+
+    /// <summary>#1384 — the accumulator declarations of <paramref name="decl"/>
+    /// (<see cref="OrbitDecl"/>) as assignments: the wavefront schedule starts every
+    /// pixel a lane takes from the same values. "float a = 1.0, b = 2.0;" becomes
+    /// "a = 1.0; b = 2.0;".</summary>
+    private static string OrbitResetOf(string decl)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (string line in decl.Split('\n'))
+            foreach (string stmt in line.Split(';'))
+            {
+                string t = stmt.Trim();
+                if (t.Length == 0) continue;
+                if (t.StartsWith("float ", System.StringComparison.Ordinal)) t = t[6..];
+                else if (t.StartsWith("int ", System.StringComparison.Ordinal)) t = t[4..];
+                else if (t.StartsWith("double ", System.StringComparison.Ordinal)) t = t[7..];
+                foreach (string part in t.Split(','))
+                    sb.Append("            ").Append(part.Trim()).Append(";\n");
+            }
+        return sb.ToString();
     }
 
     /// <summary>Per-iteration sample block for the mask'd inputs (mirrors
@@ -524,187 +546,9 @@ RWStructuredBuffer<float> gTrap : register(u4);
             "            t_iter, 0.0, 0.0, zr, zi, dr, di, in_arg, in_mag, 0.0, 0.0" + orbitArgs + "), x, y);\n" +
             "        gTrap[idx] = in_trapMin;\n";
 
-        return $@"
-[numthreads(8, 8, 1)]
-void CSMain(uint3 tid : SV_DispatchThreadID)
-{{
-    uint x = tid.x;
-    uint y = tid.y;
-    if ((int)x >= gWidth || (int)y >= gHeight) return;
-
-    int idx = (int)y * gWidth + (int)x;
-
-    float fx = (float)x - 0.5 * gWidth;
-    float fy = (float)y - 0.5 * gHeight;
-    float cx = gCXHi + fx * gScaleHi + gCXLo + fx * gScaleLo;
-    float cy = gCYHi + fy * gScaleHi + gCYLo + fy * gScaleLo;
-    if (gWarpStrength != 0.0) ApplyDomainWarp(fx, fy, cx, cy);   // #1173-I
-
-    int rowMaxIt = gMaxIter;
-    if (gUsePerRow != 0)
-    {{
-        uint rc = gPerRow[y];
-        if (rc > 0) rowMaxIt = (int)rc;
-    }}
-
-    if (KIND == 0 && (InCardioid(cx, cy) || InPeriod2Bulb(cx, cy)))
-    {{
-        gIter[idx]    = (uint)gMaxIter;
-        gSmooth[idx]  = 0.0;
-        gFinalZD[idx] = float4(0.0, 0.0, 1.0, 0.0);
-        {bulbSkipColor}
-        return;
-    }}
-
-    float zr, zi;
-    float cIterR, cIterI;
-    if (KIND == 1)
-    {{
-        zr = cx;     zi = cy;
-        cIterR = gParam0; cIterI = gParam1;
-    }}
-    else
-    {{
-        zr = 0.0;    zi = 0.0;
-        cIterR = cx; cIterI = cy;
-    }}
-    float dr = KIND == 5 ? 0.0 : 1.0;   // #1173-I: Phoenix's dz/dc starts at 0 (CPU)
-    float di = 0.0;
-    float pzr = 0.0, pzi = 0.0, pdr = 0.0, pdi = 0.0;   // Phoenix previous z, dz/dc
-    int   it = 0;
-{decl}#ifdef FF_PERIODICITY
-    // #1342: the steps run in blocks of PeriodicityBlock, the periodicity
-    // check between blocks (PeriodicityStep).
-{PeriodicityDecl}    [loop]
-    for (;;)
-    {{
-        int blockEnd = min(it + {PeriodicityBlock}, rowMaxIt);
-        [loop]
-        for (; it < blockEnd; it++)
-        {{
-            float fzr = zr;
-            float fzi = zi;
-            if (KIND == 2)      {{ fzr = abs(zr); fzi = abs(zi); }}
-            else if (KIND == 3) {{ fzi = -zi; }}
-
-            float zr2 = fzr * fzr;
-            float zi2 = fzi * fzi;
-            float mag2 = zr2 + zi2;
-            if (mag2 >= gBailout2) break;
-
-            // F16 orbit sample — pre-update RAW z, it > 0 (matches CPU Sample).
-            if (it > 0)
-            {{
-    {samp}        }}
-
-            if (KIND == 4)
-            {{
-                MultibrotStep(zr, zi, dr, di, cIterR, cIterI);   // #1173-I
-            }}
-            else if (KIND == 5)
-            {{
-                // #1173-I: Phoenix z' = z^2 + c + p * z_prev (p = gParam0 + i gParam1),
-                // dz'/dc = 2 z dz/dc + 1 + p * dz_prev/dc (PhoenixKernel.StepWithPrevDeriv).
-                float ppr = gParam0 * pzr - gParam1 * pzi;
-                float ppi = gParam0 * pzi + gParam1 * pzr;
-                float pdR = gParam0 * pdr - gParam1 * pdi;
-                float pdI = gParam0 * pdi + gParam1 * pdr;
-                float ndr = 2.0 * (zr * dr - zi * di) + 1.0 + pdR;
-                float ndi = 2.0 * (zr * di + zi * dr) + pdI;
-                float nzr = zr * zr - zi * zi + cIterR + ppr;
-                float nzi = 2.0 * zr * zi + cIterI + ppi;
-                pzr = zr; pzi = zi; pdr = dr; pdi = di;
-                zr = nzr; zi = nzi; dr = ndr; di = ndi;
-            }}
-            else
-            {{
-                float newDr = 2.0 * (fzr * dr - fzi * di) + 1.0;
-                float newDi = 2.0 * (fzr * di + fzi * dr);
-                dr = newDr;
-                di = newDi;
-
-                float zrNew = zr2 - zi2 + cIterR;
-                float zi_new_unscaled = fzr * fzi;
-                zi = zi_new_unscaled + zi_new_unscaled + cIterI;
-                zr = zrNew;
-            }}
-        }}
-        if (it < blockEnd || it >= rowMaxIt) break;   // escaped, or at the cap
-{PeriodicityStep}    }}
-{PeriodicityEnd}#else
-    [loop]
-    for (; it < rowMaxIt; it++)
-    {{
-        float fzr = zr;
-        float fzi = zi;
-        if (KIND == 2)      {{ fzr = abs(zr); fzi = abs(zi); }}
-        else if (KIND == 3) {{ fzi = -zi; }}
-
-        float zr2 = fzr * fzr;
-        float zi2 = fzi * fzi;
-        float mag2 = zr2 + zi2;
-        if (mag2 >= gBailout2) break;
-
-        // F16 orbit sample — pre-update RAW z, it > 0 (matches CPU Sample).
-        if (it > 0)
-        {{
-{samp}        }}
-
-        if (KIND == 4)
-        {{
-            MultibrotStep(zr, zi, dr, di, cIterR, cIterI);   // #1173-I
-        }}
-        else if (KIND == 5)
-        {{
-            // #1173-I: Phoenix z' = z^2 + c + p * z_prev (p = gParam0 + i gParam1),
-            // dz'/dc = 2 z dz/dc + 1 + p * dz_prev/dc (PhoenixKernel.StepWithPrevDeriv).
-            float ppr = gParam0 * pzr - gParam1 * pzi;
-            float ppi = gParam0 * pzi + gParam1 * pzr;
-            float pdR = gParam0 * pdr - gParam1 * pdi;
-            float pdI = gParam0 * pdi + gParam1 * pdr;
-            float ndr = 2.0 * (zr * dr - zi * di) + 1.0 + pdR;
-            float ndi = 2.0 * (zr * di + zi * dr) + pdI;
-            float nzr = zr * zr - zi * zi + cIterR + ppr;
-            float nzi = 2.0 * zr * zi + cIterI + ppi;
-            pzr = zr; pzi = zi; pdr = dr; pdi = di;
-            zr = nzr; zi = nzi; dr = ndr; di = ndi;
-        }}
-        else
-        {{
-            float newDr = 2.0 * (fzr * dr - fzi * di) + 1.0;
-            float newDi = 2.0 * (fzr * di + fzi * dr);
-            dr = newDr;
-            di = newDi;
-
-            float zrNew = zr2 - zi2 + cIterR;
-            float zi_new_unscaled = fzr * fzi;
-            zi = zi_new_unscaled + zi_new_unscaled + cIterI;
-            zr = zrNew;
-        }}
-    }}
-#endif
-
-    gFinalZD[idx] = float4(zr, zi, dr, di);
-    if (it >= rowMaxIt)
-    {{
-        gIter[idx]   = (uint)gMaxIter;
-#if defined(FF_PERIODICITY) && FF_PERIODICITY == 2
-        gSmooth[idx] = periodicAt > 0 ? -(float)periodicAt : 0.0;   // #1342 diagnostic
-#else
-        gSmooth[idx] = 0.0;
-#endif
-        {inSetColor}
-    }}
-    else
-    {{
-        gIter[idx] = (uint)it;
-        float mag = SafeMag(zr, zi);
-        float nu = log2(log2(max(mag, 1.001)));   // #1173-H: the CPU smooth is log2(log2|z|), not log2(ln|z|) (+0.529 off)
-        float sm = (float)it + 1.0 - nu;
-        gSmooth[idx] = sm;
-{escapeColor}    }}
-}}
-";
+        // #1384 — HlslEntry with the orbit hooks: the same wavefront / one-thread-per-
+        // pixel loop, the accumulators re-initialised at each pixel (orbitReset).
+        return HlslEntry(true, inSetColor, escapeColor, bulbSkipColor, decl, OrbitResetOf(decl), samp);
     }
 
     // ── Perturbation variant (V6, issue #82) ─────────────────────────────────
@@ -955,8 +799,8 @@ void CSPerturb(uint3 tid : SV_DispatchThreadID)
     public const int PerturbF32MinScaleExponent = -100;
 
     /// <summary>#1331 — compose the float-exp perturbation kernel (see above).</summary>
-    public static string BuildPerturbFloatExp() => @"
-// 48 bytes, no doubles. Matches the C# PerturbFxParams blob byte-for-byte.
+    public static string BuildPerturbFloatExp() => PerturbChunkDefine + @"
+// 64 bytes, no doubles. Matches the C# PerturbFxParams blob byte-for-byte.
 cbuffer PerturbFxParams : register(b0)
 {
     float gScaleM;      // pixel scale = gScaleM · 2^gScaleE, gScaleM in [1, 2)
@@ -969,8 +813,12 @@ cbuffer PerturbFxParams : register(b0)
     int   gRefLen;
     int   gRowBase;     // TDR tiling: this dispatch covers rows [gRowBase, gRowBase+groupsY*8)
     float gEscapeR2;
-    int   gPad0;
-    int   gPad1;
+    int   gWave;        // #1384: 1 = wavefront schedule (was gPad0)
+    int   gBandRows;    // #1384: rows in this band (was gPad1)
+    int   gBand;        // #1384: band index, its gWork counter
+    int   gPadF0;
+    int   gPadF1;
+    int   gPadF2;
 }
 
 StructuredBuffer<float2> gRefZ : register(t0);   // reference orbit Z_n as float
@@ -978,6 +826,9 @@ StructuredBuffer<float2> gRefZ : register(t0);   // reference orbit Z_n as float
 RWStructuredBuffer<uint>   gIter    : register(u0);
 RWStructuredBuffer<float>  gSmooth  : register(u1);
 RWStructuredBuffer<float4> gFinalZD : register(u2);   // .xy = zr,zi  .zw = drv,div
+// #1384: per-band pixel counters of the wavefront schedule, zeroed by the host.
+RWStructuredBuffer<uint>   gWork    : register(u3);
+" + WaveFetch + @"
 
 static const int FxZeroExp = -1000000;
 
@@ -1018,34 +869,55 @@ float2 CMul(float2 a, float2 b) { return float2(a.x * b.x - a.y * b.y, a.x * b.y
 
 void FxWrite(int idx, int iter, float2 z, float2 dzf);
 
+// #1384 — both entries run CSPerturb's two schedules (#1340), one compiled shader
+// each: one thread per pixel of the band, or persistent threads pulling the band's
+// pixels from gWork[gBand], PERTURB_CHUNK steps at a time; bit-identical.
 [numthreads(8, 8, 1)]
 void CSPerturbFX(uint3 tid : SV_DispatchThreadID)
 {
-    int px = (int)tid.x;
-    int py = gRowBase + (int)tid.y;
-    if (px >= gWidth || py >= gHeight) return;
-    int idx = py * gWidth + px;
-
-    // dc = pixelOffset · scale, as float-exp.
-    float2 dcM = float2(gOffX0 + (float)px, gOffY0 + (float)py) * gScaleM;
-    int dcE = gScaleE;
-    FxNorm(dcM, dcE);
-
-    float2 dM = float2(0.0, 0.0); int dE = FxZeroExp;   // δ_0 = 0
-    float2 vM = float2(1.0, 0.0); int vE = 0;           // dz/dc = 1
-    int m = 0;
+    uint rows = (uint)min(gBandRows, gHeight - gRowBase);
+    bool taken = false;
+    int idx = -1;
+    float2 dcM = float2(0.0, 0.0); int dcE = FxZeroExp;
+    float2 dM = float2(0.0, 0.0); int dE = FxZeroExp;
+    float2 vM = float2(1.0, 0.0); int vE = 0;
+    int m = 0, iter = 0;
     float2 z = float2(0.0, 0.0);
+    [loop] [allow_uav_condition]
+    for (;;)
+    {
+        if (idx < 0)
+        {
+            uint lx, ly;
+            int got = WaveFetch(gWave, taken, tid.xy, (uint)gWidth, rows, (uint)gBand, true, lx, ly);
+            if (got == 0) break;
+            if (got == 2) continue;
+            int px = (int)lx;
+            int py = gRowBase + (int)ly;
+            idx = py * gWidth + px;
 
-    int iter;
+            // dc = pixelOffset · scale, as float-exp.
+            dcM = float2(gOffX0 + (float)px, gOffY0 + (float)py) * gScaleM;
+            dcE = gScaleE;
+            FxNorm(dcM, dcE);
+
+            dM = float2(0.0, 0.0); dE = FxZeroExp;   // δ_0 = 0
+            vM = float2(1.0, 0.0); vE = 0;           // dz/dc = 1
+            m = 0;
+            z = float2(0.0, 0.0);
+            iter = 0;
+        }
+
+    bool escaped = false;
     [loop]
-    for (iter = 0; iter < gMaxIter; iter++)
+    for (int trip = 0; trip < PERTURB_CHUNK && iter < gMaxIter; trip++, iter++)
     {
         float2 Z = gRefZ[m];
         float2 df = FxToFloat(dM, dE);
         z = Z + df;
 
         float zmag2 = dot(z, z);
-        if (zmag2 >= gEscapeR2) break;
+        if (zmag2 >= gEscapeR2) { escaped = true; break; }
 
         // dz' = 2·z·dz + 1 (the full orbit, before any rebase).
         float2 nvM = CMul(2.0 * z, vM); int nvE = vE;
@@ -1067,9 +939,12 @@ void CSPerturbFX(uint3 tid : SV_DispatchThreadID)
         FxAdd(tM, tE, dcM, dcE, dM, dE);
         m++;
     }
+    if (!escaped && iter < gMaxIter) continue;
 
     float2 dzf = FxToFloat(vM, vE);
     FxWrite(idx, iter, z, dzf);
+    idx = -1;
+    }
 }
 
 void FxWrite(int idx, int iter, float2 z, float2 dzf)
@@ -1097,27 +972,45 @@ void FxWrite(int idx, int iter, float2 z, float2 dzf)
 [numthreads(8, 8, 1)]
 void CSPerturbF32(uint3 tid : SV_DispatchThreadID)
 {
-    int px = (int)tid.x;
-    int py = gRowBase + (int)tid.y;
-    if (px >= gWidth || py >= gHeight) return;
-    int idx = py * gWidth + px;
-
+    uint rows = (uint)min(gBandRows, gHeight - gRowBase);
+    bool taken = false;
+    int idx = -1;
     float S = Pow2(gScaleE), invS = Pow2(-gScaleE);
-    float2 dc = float2(gOffX0 + (float)px, gOffY0 + (float)py) * gScaleM;   // dc / S
-    float2 d = float2(0.0, 0.0);      // δ' = δ / S
-    float2 v = float2(S, 0.0);        // v' = (dz/dc) · S, dz/dc = 1
-    int m = 0;
+    float2 dc = float2(0.0, 0.0);
+    float2 d = float2(0.0, 0.0);
+    float2 v = float2(S, 0.0);
+    int m = 0, iter = 0;
     float2 z = float2(0.0, 0.0);
+    [loop] [allow_uav_condition]
+    for (;;)
+    {
+        if (idx < 0)
+        {
+            uint lx, ly;
+            int got = WaveFetch(gWave, taken, tid.xy, (uint)gWidth, rows, (uint)gBand, true, lx, ly);
+            if (got == 0) break;
+            if (got == 2) continue;
+            int px = (int)lx;
+            int py = gRowBase + (int)ly;
+            idx = py * gWidth + px;
 
-    int iter;
+            dc = float2(gOffX0 + (float)px, gOffY0 + (float)py) * gScaleM;   // dc / S
+            d = float2(0.0, 0.0);      // δ' = δ / S
+            v = float2(S, 0.0);        // v' = (dz/dc) · S, dz/dc = 1
+            m = 0;
+            z = float2(0.0, 0.0);
+            iter = 0;
+        }
+
+    bool escaped = false;
     [loop]
-    for (iter = 0; iter < gMaxIter; iter++)
+    for (int trip = 0; trip < PERTURB_CHUNK && iter < gMaxIter; trip++, iter++)
     {
         float2 Z = gRefZ[m];
         float2 df = d * S;            // δ
         z = Z + df;
         float zmag2 = dot(z, z);
-        if (zmag2 >= gEscapeR2) break;
+        if (zmag2 >= gEscapeR2) { escaped = true; break; }
 
         v = CMul(2.0 * z, v) + float2(S, 0.0);
 
@@ -1131,8 +1024,11 @@ void CSPerturbF32(uint3 tid : SV_DispatchThreadID)
         d = CMul(2.0 * Z + df, d) + dc;
         m++;
     }
+    if (!escaped && iter < gMaxIter) continue;
 
     FxWrite(idx, iter, z, v * invS);
+    idx = -1;
+    }
 }
 ";
 
@@ -1183,7 +1079,8 @@ void CSPerturbF32(uint3 tid : SV_DispatchThreadID)
 
     /// <summary>Compose the orbit-accumulating double perturbation kernel for
     /// <paramref name="mask"/> (non-zero). Bindings: b0 params, t0/t1 reference
-    /// orbit, u0..u2 iter/smooth/finalZD (as BuildPerturb), u3 gOrbit.</summary>
+    /// orbit, u0..u2 iter/smooth/finalZD (as BuildPerturb), u3 gOrbit, u4 gWork
+    /// (#1384: the wavefront schedule's per-band counters).</summary>
     public static string BuildPerturbOrbit(int mask)
     {
         mask &= OrbAll;
@@ -1200,8 +1097,10 @@ void CSPerturbF32(uint3 tid : SV_DispatchThreadID)
             k++;
         }
 
-        return @"
-// BuildPerturb's 64-byte cbuffer; gCRe/gCIm take the place of gPad0/gPad1.
+        return PerturbChunkDefine + @"
+// BuildPerturb's cbuffer with gCRe/gCIm in place of its gWave/gBandRows, and
+// #1384's gWave / gBandRows / gBand after them: 80 bytes. Matches the C#
+// PerturbOrbitParams / PerturbOrbitParamsBlob (both backends) byte-for-byte.
 cbuffer PerturbParams : register(b0)
 {
     double gScale;
@@ -1215,7 +1114,11 @@ cbuffer PerturbParams : register(b0)
     int    gRowBase;
     float  gCRe;        // view centre (float): the TIA sample's c = centre + dc
     float  gCIm;
-    int    gPad2;
+    int    gWave;       // #1384: 1 = wavefront schedule (was gPad2)
+    int    gBandRows;   // #1384: rows in this band
+    int    gBand;       // #1384: band index, its gWork counter
+    int    gPadO0;
+    int    gPadO1;
 }
 
 StructuredBuffer<double> gRefZr : register(t0);
@@ -1225,37 +1128,64 @@ RWStructuredBuffer<uint>   gIter    : register(u0);
 RWStructuredBuffer<float>  gSmooth  : register(u1);
 RWStructuredBuffer<float4> gFinalZD : register(u2);   // .xy = zr,zi  .zw = drv,div
 RWStructuredBuffer<float>  gOrbit   : register(u3);   // " + stride + @" mask'd means per pixel
-
+// #1384: per-band pixel counters of the wavefront schedule, zeroed by the host.
+RWStructuredBuffer<uint>   gWork    : register(u4);
+" + WaveFetch + @"
+// #1384 — CSPerturb's two schedules (#1340), one compiled shader: one thread per
+// pixel of the band, or persistent threads pulling the band's pixels from
+// gWork[gBand], PERTURB_CHUNK steps at a time. A new pixel starts from the same
+// state (the accumulators included), so every output is bit-identical.
 [numthreads(8, 8, 1)]
 void CSPerturbOrbit(uint3 tid : SV_DispatchThreadID)
 {
-    int px = (int)tid.x;
-    int py = gRowBase + (int)tid.y;
-    if (px >= gWidth || py >= gHeight) return;
-    int idx = py * gWidth + px;
-
-    double dcR = (gOffX0 + (double)px) * gScale;
-    double dcI = (gOffY0 + (double)py) * gScale;
-    float cIterR = gCRe + (float)dcR;
-    float cIterI = gCIm + (float)dcI;
-
+    uint rows = (uint)min(gBandRows, gHeight - gRowBase);
+    bool taken = false;
+    int idx = -1;
+    double dcR = 0.0, dcI = 0.0;
+    float cIterR = 0.0, cIterI = 0.0;
     double dr = 0.0, di = 0.0;      // δ_0 = 0
     double drv = 1.0, div = 0.0;    // dz/dc of the full orbit
     int m = 0;                      // reference-orbit index
     double zrD = 0.0, ziD = 0.0;    // full value z = Z[m] + δ (last = escape z)
 " + (tia ? "    double pzrD = 0.0, pziD = 0.0;  // z_{n-1}, for the triangle-inequality term\n" : "")
   + OrbitDecl(mask) + @"
-    int iter;
-    [loop]
-    for (iter = 0; iter < gMaxIter; iter++)
+    int iter = 0;
+    [loop] [allow_uav_condition]
+    for (;;)
     {
+        if (idx < 0)
+        {
+            uint lx, ly;
+            int got = WaveFetch(gWave, taken, tid.xy, (uint)gWidth, rows, (uint)gBand, true, lx, ly);
+            if (got == 0) break;
+            if (got == 2) continue;
+            int px = (int)lx;
+            int py = gRowBase + (int)ly;
+            idx = py * gWidth + px;
+
+            dcR = (gOffX0 + (double)px) * gScale;
+            dcI = (gOffY0 + (double)py) * gScale;
+            cIterR = gCRe + (float)dcR;
+            cIterI = gCIm + (float)dcI;
+            dr = 0.0; di = 0.0;
+            drv = 1.0; div = 0.0;
+            m = 0;
+            zrD = 0.0; ziD = 0.0;
+" + (tia ? "            pzrD = 0.0; pziD = 0.0;\n" : "")
+  + OrbitResetOf(OrbitDecl(mask)) + @"            iter = 0;
+        }
+
+        bool escaped = false;
+        [loop]
+        for (int trip = 0; trip < PERTURB_CHUNK && iter < gMaxIter; trip++, iter++)
+        {
         double Zr = gRefZr[m];
         double Zi = gRefZi[m];
         zrD = Zr + dr;
         ziD = Zi + di;
 
         double zmag2 = zrD * zrD + ziD * ziD;
-        if (zmag2 >= gEscapeR2) break;
+        if (zmag2 >= gEscapeR2) { escaped = true; break; }
 
         // Orbit sample on the reconstructed full z, before the δ / reference
         // advance, iter > 0 (ComputePixelOrbitPerturbation's convention).
@@ -1284,7 +1214,8 @@ void CSPerturbOrbit(uint3 tid : SV_DispatchThreadID)
         double ndi = a * di + b * dr + dcI;
         dr = ndr; di = ndi;
         m++;
-    }
+        }
+        if (!escaped && iter < gMaxIter) continue;
 
     gFinalZD[idx] = float4((float)zrD, (float)ziD, (float)drv, (float)div);
     int obase = idx * " + stride + @";
@@ -1299,6 +1230,8 @@ void CSPerturbOrbit(uint3 tid : SV_DispatchThreadID)
         float magf = sqrt((float)(zrD * zrD + ziD * ziD));
         gSmooth[idx] = (float)iter + 1.0 - log2(log2(magf));
 " + OrbitMeans(mask) + writes + @"    }
+        idx = -1;
+    }
 }
 ";
     }
@@ -1737,8 +1670,21 @@ int WaveFetch(int wave, inout bool taken, uint2 tid, uint w, uint rows, uint slo
     /// compiled entries were not: FXC folded the dz/dc update into a dp4 in one and
     /// into mul + mad in the other (an ulp apart), and <c>precise</c> to forbid that
     /// cost 15–25% on a GT 710.</summary>
-    public static string HlslEntry(bool emitColor, string inSetColor = "", string escapeColor = "", string bulbSkipColor = "")
+    /// <para>#1384 — the orbit hooks (HlslEntryOrbit; empty for the base and colour
+    /// entries, which then compile from the same text as before): <paramref name="orbitDecl"/>
+    /// declares the accumulators, <paramref name="orbitReset"/> re-initialises them
+    /// for each new pixel, <paramref name="orbitSample"/> runs each step after the
+    /// escape test (it &gt; 0).</para>
+    public static string HlslEntry(bool emitColor, string inSetColor = "", string escapeColor = "", string bulbSkipColor = "",
+        string orbitDecl = "", string orbitReset = "", string orbitSample = "")
     {
+        // (SpStep's line ends are the source file's, so the anchor carries none.)
+        const string escapeTest = "if (mag2 >= gBailout2) break;";
+        if (orbitSample.Length > 0 && !SpStep.Contains(escapeTest, System.StringComparison.Ordinal))
+            throw new System.InvalidOperationException("SpStep has no escape test to sample after");
+        string step = orbitSample.Length == 0 ? SpStep : SpStep.Replace(escapeTest,
+            escapeTest + "\n\n            // F16 orbit sample — pre-update RAW z, it > 0 (matches CPU Sample).\n" +
+            "            if (it > 0)\n            {\n" + orbitSample + "            }", System.StringComparison.Ordinal);
         return WorkUav + $@"
 [numthreads(8, 8, 1)]
 void CSMain(uint3 tid : SV_DispatchThreadID)
@@ -1751,7 +1697,7 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     float cIterR = 0.0, cIterI = 0.0;
     float pzr = 0.0, pzi = 0.0, pdr = 0.0, pdi = 0.0;   // Phoenix previous z, dz/dc
     int   it = 0;
-#ifdef FF_PERIODICITY
+{orbitDecl}#ifdef FF_PERIODICITY
     float snapR = 0.0, snapI = 0.0, snapPR = 0.0, snapPI = 0.0;
     int nextSnap = 0;
 #endif
@@ -1812,7 +1758,7 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
             di = 0.0;
             pzr = 0.0; pzi = 0.0; pdr = 0.0; pdi = 0.0;
             it = 0;
-#ifdef FF_PERIODICITY
+{orbitReset}#ifdef FF_PERIODICITY
             // #1342: the snapshot starts at the initial state (PeriodicityDecl).
             snapR = zr; snapI = zi; snapPR = pzr; snapPI = pzi;
             nextSnap = 0;
@@ -1823,7 +1769,7 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         [loop]
         for (; it < blockEnd; it++)
         {{
-{SpStep}
+{step}
         }}
         bool done = it < blockEnd || it >= rowMaxIt;   // escaped, or at the cap
 #ifdef FF_PERIODICITY
