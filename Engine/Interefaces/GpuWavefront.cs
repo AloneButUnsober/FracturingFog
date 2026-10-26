@@ -30,6 +30,21 @@
 // deep frame and runs the next one in the wavefront schedule when it is at least
 // PerturbWasteThreshold; the first frame of a session runs one thread per pixel.
 //
+// #1386 — a first frame can be seeded from a lower-resolution frame of the same
+// view: the ¼ / ½ drag previews of the progressive ladder (the host hands their
+// estimate to the full-resolution calculator, free), or, opt-in
+// (FF_GPU_WAVEFRONT_SEED=1), a ¼-resolution seed dispatch the calculator runs
+// itself when it has no hint for a nearby view (first frame, a jump, a batch
+// still). A low-resolution frame's own warp waste overstates the full frame's
+// (each 8×8 tile covers 4–64× the area: Deep Mini 1.14 full, 1.41 at ¼), and
+// measured with tiles of the full frame's footprint (8/k) it understates it
+// (subsampled tiles); EstimateFullWaste takes the geometric mean of the two,
+// which tracked the full frame on every shipped deep preset (GT 710, 1080p:
+// Marina 2.14 full → 1.73 at ¼ / 1.93 at ½; Deep Mini 1.14 → 1.23 / 1.17;
+// Rosette 1.13 → 1.12 / 1.11; the rest ≈ 1.0), so the same threshold applies.
+// The seed dispatch costs 6–15% of a deep frame and pays back only on
+// boundary-heavy views (Marina 14.1 → ~8.5 s), hence opt-in.
+//
 // FF_GPU_WAVEFRONT=0 turns both off; FF_GPU_WAVEFRONT_PERTURB=0 / 1 forces the
 // deep kernels off / on (default auto). Both kernel assemblies link their own
 // MandelbrotKernelSource, so the knobs live here, in Engine, which both
@@ -79,12 +94,34 @@ namespace FracturingFog.Rendering
         /// which the next frame runs the wavefront schedule.</summary>
         public const double PerturbWasteThreshold = 1.4;
 
+        /// <summary>#1386 — process default of <see cref="Seed"/>: off, or on with
+        /// <c>FF_GPU_WAVEFRONT_SEED=1</c>.</summary>
+        public static readonly bool SeedDefault = Environment.GetEnvironmentVariable("FF_GPU_WAVEFRONT_SEED") == "1";
+
+        /// <summary>#1386 — the seed dispatch runs at 1/<see cref="SeedDivisor"/> of
+        /// the frame's resolution per axis.</summary>
+        public const int SeedDivisor = 4;
+
+        /// <summary>#1386 — the full frame's <see cref="WarpWaste"/> estimated from a
+        /// frame of the same view at 1/<paramref name="divisor"/> of its resolution per
+        /// axis: the geometric mean of the low frame's waste over 8×8 tiles (an
+        /// overestimate) and over tiles of the full frame's footprint, 8/divisor (an
+        /// underestimate). A divisor ≤ 1 is the frame itself.</summary>
+        public static double EstimateFullWaste(ReadOnlySpan<int> iter, int width, int height, double divisor)
+        {
+            double over = WarpWaste(iter, width, height, 8);
+            if (!(divisor > 1)) return over;
+            int tile = Math.Clamp((int)Math.Round(8 / divisor), 1, 8);
+            return Math.Sqrt(over * WarpWaste(iter, width, height, tile));
+        }
+
         // Thread-static like the other GPU test knobs, so a test (or a calculator's
         // hint) cannot leak into parallel work. 0 = no override; else value + 1.
         [ThreadStatic] private static int t_override;
         [ThreadStatic] private static int t_perturbOverride;
         [ThreadStatic] private static int t_threads;
         [ThreadStatic] private static bool t_perturbHint;
+        [ThreadStatic] private static int t_seed;   // 0 = no override, 1 = off, 2 = on
 
         /// <summary>Shallow kernel (and master switch): the schedule the next dispatch
         /// on this thread uses. <see cref="Off"/> also turns the deep kernels off.</summary>
@@ -107,6 +144,14 @@ namespace FracturingFog.Rendering
         {
             get => t_perturbHint;
             set => t_perturbHint = value;
+        }
+
+        /// <summary>#1386 — deep kernels, <see cref="Auto"/>: whether a calculator with no
+        /// hint for a nearby view runs the ¼-resolution seed dispatch first.</summary>
+        public static bool Seed
+        {
+            get => t_seed != 0 ? t_seed == 2 : SeedDefault;
+            set => t_seed = value ? 2 : 1;
         }
 
         /// <summary>Whether the next deep dispatch on this thread runs the wavefront schedule.</summary>
@@ -144,16 +189,22 @@ namespace FracturingFog.Rendering
         /// same steps; one thread per pixel spends this many times the steps the
         /// pixels need (a group runs as long as its slowest pixel), which bounds what
         /// the wavefront schedule can win. 1 for an empty or all-zero frame.</summary>
-        public static double WarpWaste(ReadOnlySpan<int> iter, int width, int height)
+        public static double WarpWaste(ReadOnlySpan<int> iter, int width, int height) => WarpWaste(iter, width, height, 8);
+
+        /// <summary>#1386 — <see cref="WarpWaste(ReadOnlySpan{int},int,int)"/> over
+        /// <paramref name="tile"/>×<paramref name="tile"/> tiles: a frame at 1/k of the
+        /// resolution, measured with 8/k tiles, covers the same footprint per tile as
+        /// the full frame's 8×8 groups.</summary>
+        public static double WarpWaste(ReadOnlySpan<int> iter, int width, int height, int tile)
         {
-            if (width <= 0 || height <= 0 || iter.Length < width * height) return 1.0;
+            if (width <= 0 || height <= 0 || iter.Length < width * height || tile < 1) return 1.0;
             double busy = 0, need = 0;
-            for (int ty = 0; ty < height; ty += 8)
+            for (int ty = 0; ty < height; ty += tile)
             {
-                int y1 = Math.Min(height, ty + 8);
-                for (int tx = 0; tx < width; tx += 8)
+                int y1 = Math.Min(height, ty + tile);
+                for (int tx = 0; tx < width; tx += tile)
                 {
-                    int x1 = Math.Min(width, tx + 8), max = 0;
+                    int x1 = Math.Min(width, tx + tile), max = 0;
                     long sum = 0;
                     for (int y = ty; y < y1; y++)
                     {
@@ -168,6 +219,6 @@ namespace FracturingFog.Rendering
         }
 
         /// <summary>Drop this thread's overrides and hint (back to the defaults).</summary>
-        public static void Reset() { t_override = 0; t_perturbOverride = 0; t_threads = 0; t_perturbHint = false; }
+        public static void Reset() { t_override = 0; t_perturbOverride = 0; t_threads = 0; t_perturbHint = false; t_seed = 0; }
     }
 }

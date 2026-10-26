@@ -12,7 +12,10 @@
 //   --gpuwavefrontprobe deep [W H]  deep perturbation, 960x540 by default: shipped
 //       deep presets through the calculator (SA + BLA), one thread per pixel vs the
 //       wavefront schedule forced on — iter and smooth bit-identical — with the
-//       frame's warp waste and what Auto would pick for the next frame.
+//       frame's warp waste and what Auto would pick for the next frame; #1386 — then
+//       a first frame with the opt-in seed dispatch (GpuWavefront.Seed): its ¼
+//       estimate of the warp waste, the schedule it picked, and its time against the
+//       unseeded first frame (one thread per pixel), output bit-identical.
 // Exit 0 = pass or SKIP (no D3D11 hardware device); 1 = a frame differs.
 
 using System;
@@ -147,7 +150,8 @@ namespace FracturingFog
             {
                 foreach (var v in DeepViews)
                 {
-                    (int[] It, float[] Sm, double Ms, bool Wave, string Route) Frame(int perturbMode)
+                    double seedEst = 0;
+                    (int[] It, float[] Sm, double Ms, bool Wave, string Route) Frame(int perturbMode, bool seed = false)
                     {
                         var c = new MandelbrotCalculator(w, h)
                         {
@@ -155,9 +159,11 @@ namespace FracturingFog
                             Zoom = v.Zoom, MaxIterations = v.MaxIter, ColorMap = new HsvPalette(), GpuKernel = k,
                         };
                         GpuWavefront.PerturbMode = perturbMode;
+                        GpuWavefront.Seed = seed;
                         long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
                         try { c.Calculate(System.Threading.CancellationToken.None); }
                         finally { GpuWavefront.Reset(); }
+                        if (seed) seedEst = c.LastFrameRanWavefrontSeed ? c.LastGpuWavefrontSeed : double.NaN;
                         double ms = System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
                         if (!c.LastFrameUsedGpuPerturbation) ms = double.NaN;
                         return ((int[])c.IterationBuffer.Clone(), (float[])c.SmoothBuffer.Clone(), ms,
@@ -177,6 +183,15 @@ namespace FracturingFog
                     double waste = GpuWavefront.WarpWaste(off.It, w, h);
                     Console.WriteLine($"  {v.Name}: one thread per pixel {tOff:F1} ms, wavefront {tOn:F1} ms ({tOff / tOn:F2}x); " +
                                       $"warp waste {waste:F2} -> Auto {(waste >= GpuWavefront.PerturbWasteThreshold ? "wavefront" : "one thread per pixel")}");
+                    var seeded = Frame(GpuWavefront.Auto, seed: true);
+                    if (!off.It.AsSpan().SequenceEqual(seeded.It) || !SameBits(off.Sm, seeded.Sm))
+                    {
+                        Console.Error.WriteLine($"  FAIL {v.Name}: the seeded frame differs");
+                        failures++;
+                    }
+                    double tSeed = Enumerable.Range(0, 2).Min(_ => Frame(GpuWavefront.Auto, seed: true).Ms);
+                    Console.WriteLine($"      seeded first frame: 1/{GpuWavefront.SeedDivisor} estimate {seedEst:F2} -> " +
+                                      $"{(seeded.Wave ? "wavefront" : "one thread per pixel")}, {tSeed:F1} ms vs {tOff:F1} ms unseeded ({tOff / tSeed:F2}x)");
                 }
             }
             finally { MandelbrotCalculator.UseGpuPerturbation = savedPerturb; }
