@@ -15,7 +15,16 @@
 //       frame's warp waste and what Auto would pick for the next frame; #1386 — then
 //       a first frame with the opt-in seed dispatch (GpuWavefront.Seed): its ¼
 //       estimate of the warp waste, the schedule it picked, and its time against the
-//       unseeded first frame (one thread per pixel), output bit-identical.
+//       unseeded first frame (one thread per pixel), output bit-identical;
+//   --gpuwavefrontprobe orbit [W H]  #1384 — the orbit colour kernel, 960x540 by
+//       default (at 1080p its one-thread-per-pixel frame of the period-3 minibrot
+//       runs past the GT 710's 2 s watchdog: the shallow kernels dispatch one
+//       frame, with no bands): the shallow views with a theme reading every orbit input, iter,
+//       smooth, colour, trap and final z / dz/dc bit-identical, and both times;
+//   --gpuwavefrontprobe deepkernels [W H]  #1384 — the deep orbit kernel (an orbit
+//       theme) and the fp32 kernel (FF_GPU_PERTURB_PRECISION fp32, SA / BLA off)
+//       through the calculator on the shipped deep presets, 480x270 by default: iter,
+//       smooth and colour bit-identical, both times, and the frame's warp waste.
 // Exit 0 = pass or SKIP (no D3D11 hardware device); 1 = a frame differs.
 
 using System;
@@ -85,12 +94,18 @@ namespace FracturingFog
             }
             try
             {
-                bool deep = args.Length > 1 && args[1] == "deep";
-                int a = deep ? 2 : 1;
-                int w = args.Length > a + 1 ? int.Parse(args[a]) : deep ? 960 : 1920;
-                int h = args.Length > a + 1 ? int.Parse(args[a + 1]) : deep ? 540 : 1080;
+                string mode = args.Length > 1 && args[1] is "deep" or "orbit" or "deepkernels" ? args[1] : "";
+                int a = mode.Length > 0 ? 2 : 1;
+                int w = args.Length > a + 1 ? int.Parse(args[a]) : mode switch { "deep" or "orbit" => 960, "deepkernels" => 480, _ => 1920 };
+                int h = args.Length > a + 1 ? int.Parse(args[a + 1]) : mode switch { "deep" or "orbit" => 540, "deepkernels" => 270, _ => 1080 };
                 using var k = new MandelbrotGpuKernel(device, context, new object());
-                return deep ? Deep(k, w, h) : Shallow(k, w, h);
+                return mode switch
+                {
+                    "deep" => Deep(k, w, h),
+                    "orbit" => ShallowOrbit(k, w, h),
+                    "deepkernels" => DeepKernels(k, w, h),
+                    _ => Shallow(k, w, h),
+                };
             }
             finally { context.Dispose(); device.Dispose(); }
         }
@@ -134,6 +149,128 @@ namespace FracturingFog
                                       $"warp waste {GpuWavefront.WarpWaste(off.It, w, h):F2}");
                 }
             Console.WriteLine(failures == 0 ? "gpuwavefrontprobe OK" : $"gpuwavefrontprobe FAIL: {failures} check(s)");
+            return failures == 0 ? 0 : 1;
+        }
+
+        // #1384 — a theme over every orbit input, so every accumulator is in the kernel.
+        private static IColorMap OrbitTheme()
+        {
+            bool prev = InterpretedOrbitColorMap.GpuEnabled;
+            InterpretedOrbitColorMap.GpuEnabled = true;
+            try
+            {
+                var t = InterpretedColorMap.TryCreate(
+                    "return hsv(fract(trapMin + trapCross + trapRing + trapHyperbola + trapHexagon + stripeAvg * 3.0 + tiaAvg + curvature * 0.1), " +
+                    "saturate(0.3 + gaussian), saturate(0.2 + expSmooth + lyapunov * 0.05));", null, out var err);
+                if (t is not InterpretedOrbitColorMap) throw new InvalidOperationException("orbit theme: " + err);
+                return t;
+            }
+            finally { InterpretedOrbitColorMap.GpuEnabled = prev; }
+        }
+
+        private static int ShallowOrbit(MandelbrotGpuKernel k, int w, int h)
+        {
+            int n = w * h, failures = 0;
+            var theme = (IGpuHlslPalette)OrbitTheme();
+            Console.WriteLine($"gpuwavefrontprobe orbit {w}x{h}, {GpuWavefront.Threads} threads");
+            (Out O, float[] Trap) Frame(View v, int schedule)
+            {
+                var o = new Out(n); var trap = new float[n];
+                k.SetPalette(theme);
+                if (!k.HasGpuPalette) throw new InvalidOperationException("the orbit theme did not compile");
+                GpuWavefront.Mode = schedule;
+                try
+                {
+                    k.Run(w, h, v.Cx, v.Cy, v.Width / w, v.MaxIter, 4.0, o.It, o.Sm, o.Zr, o.Zi, o.Dr, o.Di,
+                          null, v.Kind, v.P0, v.P1, colorDst: o.Col, trapDst: trap);
+                }
+                finally { GpuWavefront.Reset(); }
+                if (k.LastFrameWavefront != (schedule == GpuWavefront.On)) { Console.Error.WriteLine($"  FAIL {v.Name}: wrong schedule ran"); failures++; }
+                o.Ms = k.LastGpuStageTimes?.DispatchMs ?? k.LastDispatchMs;
+                return (o, trap);
+            }
+            foreach (var v in Views)
+            {
+                var (off, offTrap) = Frame(v, GpuWavefront.Off);
+                var (on, onTrap) = Frame(v, GpuWavefront.On);
+                if (!off.It.AsSpan().SequenceEqual(on.It) || !SameBits(off.Sm, on.Sm) || !off.Col.AsSpan().SequenceEqual(on.Col)
+                    || !SameBits(offTrap, onTrap) || !SameBits(off.Zr, on.Zr) || !SameBits(off.Zi, on.Zi) || !SameBits(off.Dr, on.Dr) || !SameBits(off.Di, on.Di))
+                {
+                    Console.Error.WriteLine($"  FAIL {v.Name}: the wavefront orbit frame differs");
+                    failures++;
+                }
+                double tOff = Enumerable.Range(0, 3).Min(_ => Frame(v, GpuWavefront.Off).O.Ms);
+                double tOn = Enumerable.Range(0, 3).Min(_ => Frame(v, GpuWavefront.On).O.Ms);
+                Console.WriteLine($"  {v.Name} (orbit): one thread per pixel {tOff:F1} ms, wavefront {tOn:F1} ms ({tOff / tOn:F2}x), " +
+                                  $"warp waste {GpuWavefront.WarpWaste(off.It, w, h):F2}");
+            }
+            k.SetPalette(null);
+            Console.WriteLine(failures == 0 ? "gpuwavefrontprobe orbit OK" : $"gpuwavefrontprobe orbit FAIL: {failures} check(s)");
+            return failures == 0 ? 0 : 1;
+        }
+
+        private static int DeepKernels(MandelbrotGpuKernel k, int w, int h)
+        {
+            if (Environment.GetEnvironmentVariable("FF_GPU_PERTURB_BUDGET_MS") == null)
+                Environment.SetEnvironmentVariable("FF_GPU_PERTURB_BUDGET_MS", "600000");
+            bool savedPerturb = MandelbrotCalculator.UseGpuPerturbation, savedOrbit = MandelbrotCalculator.UseGpuDeepOrbit,
+                 savedSa = MandelbrotCalculator.UseGpuSeriesApproximation, savedBla = MandelbrotCalculator.UseGpuBla;
+            var savedPrecision = MandelbrotCalculator.GpuDeepPrecisionMode;
+            MandelbrotCalculator.UseGpuPerturbation = true;
+            var theme = OrbitTheme();
+            int failures = 0;
+            Console.WriteLine($"gpuwavefrontprobe deepkernels {w}x{h}");
+            try
+            {
+                foreach (bool orbit in new[] { true, false })
+                {
+                    MandelbrotCalculator.UseGpuDeepOrbit = orbit;
+                    MandelbrotCalculator.GpuDeepPrecisionMode = orbit ? GpuDeepPrecision.Double : GpuDeepPrecision.Fp32;
+                    MandelbrotCalculator.UseGpuSeriesApproximation = orbit;   // fp32: the SA / BLA kernels would take the frame
+                    MandelbrotCalculator.UseGpuBla = orbit;
+                    string kernel = orbit ? "orbit" : "fp32";
+                    foreach (var v in DeepViews)
+                    {
+                        (int[] It, float[] Sm, uint[] Col, double Ms, bool Wave, bool Path) Frame(int perturbMode)
+                        {
+                            var c = new MandelbrotCalculator(w, h)
+                            {
+                                CenterX = v.Cx, CenterXLo = v.CxLo, CenterY = v.Cy, CenterYLo = v.CyLo,
+                                Zoom = v.Zoom, MaxIterations = v.MaxIter, ColorMap = orbit ? theme : new HsvPalette(), GpuKernel = k,
+                            };
+                            GpuWavefront.PerturbMode = perturbMode;
+                            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+                            try { c.Calculate(System.Threading.CancellationToken.None); }
+                            finally { GpuWavefront.Reset(); }
+                            double ms = System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
+                            bool path = orbit ? c.LastFrameUsedGpuOrbitPerturbation : c.LastFrameUsedGpuFloatExp;
+                            return ((int[])c.IterationBuffer.Clone(), (float[])c.SmoothBuffer.Clone(), (uint[])c.ColorBuffer.Clone(),
+                                    ms, c.LastFrameUsedGpuWavefront, path);
+                        }
+                        var off = Frame(GpuWavefront.Off);
+                        if (!off.Path) { Console.WriteLine($"  {v.Name} ({kernel}): not on the {kernel} kernel"); continue; }
+                        var on = Frame(GpuWavefront.On);
+                        if (!on.Wave) { Console.Error.WriteLine($"  FAIL {v.Name} ({kernel}): the forced frame ran one thread per pixel"); failures++; }
+                        if (!off.It.AsSpan().SequenceEqual(on.It) || !SameBits(off.Sm, on.Sm) || !off.Col.AsSpan().SequenceEqual(on.Col))
+                        {
+                            Console.Error.WriteLine($"  FAIL {v.Name} ({kernel}): the wavefront frame differs");
+                            failures++;
+                        }
+                        double tOff = Enumerable.Range(0, 2).Min(_ => Frame(GpuWavefront.Off).Ms);
+                        double tOn = Enumerable.Range(0, 2).Min(_ => Frame(GpuWavefront.On).Ms);
+                        double waste = GpuWavefront.WarpWaste(off.It, w, h);
+                        Console.WriteLine($"  {v.Name} ({kernel}): one thread per pixel {tOff:F1} ms, wavefront {tOn:F1} ms ({tOff / tOn:F2}x); " +
+                                          $"warp waste {waste:F2} -> Auto {(waste >= GpuWavefront.PerturbWasteThreshold ? "wavefront" : "one thread per pixel")}");
+                    }
+                }
+            }
+            finally
+            {
+                MandelbrotCalculator.UseGpuPerturbation = savedPerturb; MandelbrotCalculator.UseGpuDeepOrbit = savedOrbit;
+                MandelbrotCalculator.UseGpuSeriesApproximation = savedSa; MandelbrotCalculator.UseGpuBla = savedBla;
+                MandelbrotCalculator.GpuDeepPrecisionMode = savedPrecision;
+            }
+            Console.WriteLine(failures == 0 ? "gpuwavefrontprobe deepkernels OK" : $"gpuwavefrontprobe deepkernels FAIL: {failures} check(s)");
             return failures == 0 ? 0 : 1;
         }
 

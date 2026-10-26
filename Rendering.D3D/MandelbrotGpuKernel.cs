@@ -136,8 +136,19 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     {
         public double Scale, EscapeR2, OffX0, OffY0;
         public int Width, Height, MaxIter, RefLen, RowBase;
-        // #1340: CSPerturb's gWave / gBandRows / gBand; the orbit kernel's gCRe / gCIm bits (#607).
+        // #1340: CSPerturb's gWave / gBandRows / gBand.
         public int Pad0, Pad1, Pad2;
+    }
+
+    // #607 / #1384: the orbit kernel's cbuffer (BuildPerturbOrbit), 80 bytes: the
+    // centre as floats where CSPerturb has gWave / gBandRows, then its own schedule.
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PerturbOrbitParams
+    {
+        public double Scale, EscapeR2, OffX0, OffY0;
+        public int Width, Height, MaxIter, RefLen, RowBase;
+        public float CRe, CIm;
+        public int Wave, BandRows, Band, Pad0, Pad1;
     }
 
     /// <summary>Phase 3 fractal selector. Matches the shader's
@@ -866,9 +877,8 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
         bool useColorPath = colorDst != null && HasGpuPalette;
         // #1173-J — only the orbit variant declares the u4 trap output.
         bool useTrap = useColorPath && trapDst != null && _orbitPaletteIds.Contains(_activePaletteId!);
-        // #1340 — the wavefront schedule (HlslEntry; the orbit colour entry has none).
-        bool wave = GpuWavefront.Mode == GpuWavefront.On
-            && !(useColorPath && _orbitPaletteIds.Contains(_activePaletteId!));
+        // #1340 — the wavefront schedule (HlslEntry; #1384: the orbit colour entry too).
+        bool wave = GpuWavefront.Mode == GpuWavefront.On;
 
         lock (_d3dGate)
         {
@@ -1157,7 +1167,8 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
     {
         public float ScaleM; public int ScaleE; public float OffX0, OffY0;
         public int Width, Height, MaxIter, RefLen, RowBase;
-        public float EscapeR2; public int Pad0, Pad1;
+        public float EscapeR2;
+        public int Wave, BandRows, Band, Pad0, Pad1, Pad2;   // #1384 (Wave / BandRows were Pad0 / Pad1): 64 bytes
     }
 
     private ID3D11ComputeShader? _csPerturbFx, _csPerturbF32;
@@ -1197,7 +1208,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             BeginFrameTiming();   // #1329
             EnsureOutputBuffers(width, height, iterDst);
             _fxParamsBuf ??= _device.CreateBuffer(new BufferDescription(
-                byteWidth: 48, bindFlags: BindFlags.ConstantBuffer,
+                byteWidth: 64, bindFlags: BindFlags.ConstantBuffer,   // #1384
                 usage: ResourceUsage.Dynamic, cpuAccessFlags: CpuAccessFlags.Write));
             if (_fxRefZBuf == null || _fxRefAlloc < refLen)
             {
@@ -1245,15 +1256,19 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             };
             _ctx.CSSetShader(cs);
             _ctx.CSSetShaderResource(0, _fxRefZSrv);   // t0
-            LastFrameWavefront = false;   // #1340: no wavefront form
+            bool wave = GpuWavefront.UsePerturb;   // #1384
+            LastFrameWavefront = wave;
+            p.Wave = wave ? 1 : 0;
             DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturbFp32), width, height, maxIter, srvCount: 1, f32 ? " (scaled fp32)" : " (float-exp)", (rowBase, rows, band) =>
             {
                 p.RowBase = rowBase;
+                p.BandRows = rows;
+                p.Band = band;
                 var mapped = _ctx.Map(_fxParamsBuf!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
                 unsafe { *(PerturbFxParams*)mapped.DataPointer = p; }
                 _ctx.Unmap(_fxParamsBuf!, 0);
                 _ctx.CSSetConstantBuffer(0, _fxParamsBuf);
-            });
+            }, wave: wave);
             ReadPerturbOutputs(width * height, t0, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst);
         }
     }
@@ -1457,28 +1472,29 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             UploadDoubles(_refZrBuf!, refZr, refLen);
             UploadDoubles(_refZiBuf!, refZi, refLen);
 
-            var p = new PerturbParams
+            bool wave = GpuWavefront.UsePerturb;   // #1384
+            LastFrameWavefront = wave;
+            var p = new PerturbOrbitParams
             {
                 Width = width, Height = height, MaxIter = maxIter, RefLen = refLen,
                 Scale = scale, EscapeR2 = escapeRadius2, OffX0 = offsetX0, OffY0 = offsetY0,
-                RowBase = 0,
-                Pad0 = BitConverter.SingleToInt32Bits((float)centerRe),   // gCRe
-                Pad1 = BitConverter.SingleToInt32Bits((float)centerIm),   // gCIm
+                RowBase = 0, CRe = (float)centerRe, CIm = (float)centerIm, Wave = wave ? 1 : 0,
             };
 
             _ctx.CSSetShader(cs);
             _ctx.CSSetShaderResource(0, _refZrSrv);
             _ctx.CSSetShaderResource(1, _refZiSrv);
             _ctx.CSSetUnorderedAccessView(3, _orbitOutUav);   // u3 (unbound by DispatchPerturbBands)
-            LastFrameWavefront = false;   // #1340: no wavefront form
             DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturb), width, height, maxIter, srvCount: 2, " (orbit)", (rowBase, rows, band) =>
             {
                 p.RowBase = rowBase;
+                p.BandRows = rows;
+                p.Band = band;
                 var mapped = _ctx.Map(_perturbParamsBuf!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
-                unsafe { *(PerturbParams*)mapped.DataPointer = p; }
+                unsafe { *(PerturbOrbitParams*)mapped.DataPointer = p; }
                 _ctx.Unmap(_perturbParamsBuf!, 0);
                 _ctx.CSSetConstantBuffer(0, _perturbParamsBuf);
-            }, uavCount: 4);
+            }, uavCount: 4, wave: wave, workSlot: 4);   // #1384: gWork at u4 (u3 = gOrbit)
             ReadPerturbOutputs(n, t0, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst,
                 () => _ctx.CopyResource(_orbitOutStaging, _orbitOutBuf));
 
@@ -1618,9 +1634,11 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
     /// weak-FP64 GPU to trip the OS watchdog (DXGI_ERROR_DEVICE_REMOVED), which also
     /// kills the shared present device, so each band is Flushed as its own packet.
     /// Band 0 is synced and timed: if the extrapolated frame is too slow (weak FP64)
-    /// it throws the too-slow marker so the caller drops to the CPU deep path.</summary>
+    /// it throws the too-slow marker so the caller drops to the CPU deep path.
+    /// <paramref name="workSlot"/>: the UAV register of the wavefront counters (u3;
+    /// the orbit kernel's is u4, #1384).</summary>
     private void DispatchPerturbBands(GpuGroupShape shape, int width, int height, int maxIter, int srvCount, string label,
-        Action<int, int, int> writeParams, int uavCount = 3, bool wave = false)
+        Action<int, int, int> writeParams, int uavCount = 3, bool wave = false, int workSlot = 3)
     {
         _ctx.CSSetUnorderedAccessView(0, _iterUav);
         _ctx.CSSetUnorderedAccessView(1, _smoothUav);
@@ -1636,11 +1654,11 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
         int bandCount = (height + bandRows - 1) / bandRows;
         if (wave)
         {
-            // #1340: one counter per band (gWork[band], u3), all zeroed up front.
+            // #1340: one counter per band (gWork[band], u3 / u4), all zeroed up front.
             EnsureWorkBuffer(bandCount);
             _ctx.ClearUnorderedAccessView(_workUav!, new Vortice.Mathematics.Int4(0, 0, 0, 0));
-            _ctx.CSSetUnorderedAccessView(3, _workUav);
-            uavCount = Math.Max(uavCount, 4);
+            _ctx.CSSetUnorderedAccessView((uint)workSlot, _workUav);
+            uavCount = Math.Max(uavCount, workSlot + 1);
         }
         int bandIndex = 0;
         for (int rowBase = 0; rowBase < height; rowBase += bandRows, bandIndex++)
@@ -1783,7 +1801,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
     {
         if (_perturbParamsBuf != null) return;
         var desc = new BufferDescription(
-            byteWidth: 64,      // multiple of 16, matches PerturbParams cbuffer
+            byteWidth: 80,      // #1384: the orbit kernel's 80-byte cbuffer; CSPerturb reads 64
             bindFlags: BindFlags.ConstantBuffer,
             usage: ResourceUsage.Dynamic,
             cpuAccessFlags: CpuAccessFlags.Write);

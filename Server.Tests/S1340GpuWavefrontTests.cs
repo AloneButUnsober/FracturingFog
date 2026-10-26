@@ -16,7 +16,9 @@
 //     the views differ on most pixels);
 //   • every frame size: odd, smaller than a thread group, and many pixels per
 //     thread (few threads, one group);
-//   • the orbit colour kernel (no wavefront form) runs one thread per pixel;
+//   • #1384: the orbit colour kernel too — iter, smooth, colour, the trap output
+//     and the final z / dz/dc bit-identical — with themes that read every orbit
+//     input (each accumulator restarts at each pixel a lane takes);
 //   • the time win on views mixing fast and slow pixels, and no loss on the rest.
 // The D3D11 kernel is covered by --gpuwavefrontprobe.
 
@@ -63,18 +65,26 @@ public sealed class S1340GpuWavefrontTests(ITestOutputHelper output)
     private sealed class Out
     {
         public readonly int W, H;
-        public int[] It; public float[] Sm, Zr, Zi, Dr, Di; public uint[] Col;
+        public int[] It; public float[] Sm, Zr, Zi, Dr, Di, Trap; public uint[] Col;
         public bool Wave;
         public double DispatchMs;
         public Out(int w, int h)
         {
             W = w; H = h; int n = w * h;
             It = new int[n]; Sm = new float[n]; Zr = new float[n]; Zi = new float[n]; Dr = new float[n]; Di = new float[n];
-            Col = new uint[n];
+            Trap = new float[n]; Col = new uint[n];
         }
     }
 
-    private enum Variant { Base, Colour, Orbit }
+    public enum Variant { Base, Colour, Orbit, OrbitTraps, OrbitAverages }
+
+    // #1384 — orbit themes over every input: the traps, then the averaged inputs.
+    private static readonly System.Collections.Generic.Dictionary<Variant, string> OrbitThemes = new()
+    {
+        [Variant.Orbit] = "return hsv(saturate(trapMin + stripeAvg * 0.3), 0.9, 1.0);",
+        [Variant.OrbitTraps] = "return hsv(saturate(trapMin + trapCross * 2.0 + trapRing * 3.0), saturate(0.5 + trapHyperbola), saturate(0.4 + trapHexagon));",
+        [Variant.OrbitAverages] = "return hsv(saturate(stripeAvg * 0.5 + tiaAvg * 0.3 + curvature * 0.1), saturate(0.3 + gaussian), saturate(0.2 + expSmooth + lyapunov * 0.05));",
+    };
 
     private static VulkanComputeKernel Device()
     {
@@ -91,7 +101,7 @@ public sealed class S1340GpuWavefrontTests(ITestOutputHelper output)
         InterpretedOrbitColorMap.GpuEnabled = true;
         try
         {
-            var m = InterpretedColorMap.TryCreate("return hsv(saturate(trapMin + stripeAvg * 0.3), 0.9, 1.0);", null, out string? err);
+            var m = InterpretedColorMap.TryCreate(OrbitThemes[v], null, out string? err);
             Assert.Null(err);
             return Assert.IsAssignableFrom<IGpuHlslPalette>(m);
         }
@@ -112,7 +122,7 @@ public sealed class S1340GpuWavefrontTests(ITestOutputHelper output)
             k.Run(w, h, v.Cx, v.Cy, v.Width / w, maxIter ?? v.MaxIter, 4.0,
                   o.It, o.Sm, o.Zr, o.Zi, o.Dr, o.Di, perRow, v.Kind, v.P0, v.P1,
                   colorDst: variant == Variant.Base ? null : o.Col,
-                  trapDst: variant == Variant.Orbit ? new float[w * h] : null,
+                  trapDst: OrbitThemes.ContainsKey(variant) ? o.Trap : null,
                   warp: warp);
         }
         finally { GpuWavefront.Mode = GpuWavefront.Default; GpuPeriodicity.Reset(); }
@@ -143,7 +153,7 @@ public sealed class S1340GpuWavefrontTests(ITestOutputHelper output)
         Assert.True(FirstDiff(plain.It, wave.It) < 0, $"{label}: iteration differs at pixel {FirstDiff(plain.It, wave.It)}");
         Assert.True(FirstDiff(plain.Col, wave.Col) < 0, $"{label}: colour differs at pixel {FirstDiff(plain.Col, wave.Col)}");
         foreach (var (a, b, n) in new[] { (plain.Sm, wave.Sm, "smooth"), (plain.Zr, wave.Zr, "zr"), (plain.Zi, wave.Zi, "zi"),
-                                          (plain.Dr, wave.Dr, "dr"), (plain.Di, wave.Di, "di") })
+                                          (plain.Dr, wave.Dr, "dr"), (plain.Di, wave.Di, "di"), (plain.Trap, wave.Trap, "trap") })
             Assert.True(FirstBitDiff(a, b) < 0, $"{label}: {n} differs at pixel {FirstBitDiff(a, b)}");
     }
 
@@ -158,7 +168,7 @@ public sealed class S1340GpuWavefrontTests(ITestOutputHelper output)
         var dirty = Run(k, Dirty(v), w, h, GpuWavefront.Off, periodicity, variant, perRow, warp);
         var wave = Run(k, v, w, h, GpuWavefront.On, periodicity, variant, perRow, warp);
         Assert.False(plain.Wave, $"{label}: the one-thread-per-pixel frame ran the wavefront schedule");
-        Assert.True(wave.Wave || variant == Variant.Orbit, $"{label}: the wavefront frame ran one thread per pixel");
+        Assert.True(wave.Wave, $"{label}: the wavefront frame ran one thread per pixel");
         int n = w * h, differ = Enumerable.Range(0, n).Count(i => dirty.It[i] != plain.It[i]
             || BitConverter.SingleToInt32Bits(dirty.Zr[i]) != BitConverter.SingleToInt32Bits(plain.Zr[i]));
         Assert.True(differ > n / 2, $"{label}: precondition — the dirty view differs on only {differ} of {n} pixels");
@@ -190,15 +200,22 @@ public sealed class S1340GpuWavefrontTests(ITestOutputHelper output)
         }
     }
 
-    [Fact]
-    public void Orbit_Colour_Kernel_Runs_One_Thread_Per_Pixel()
+    [Theory]
+    [InlineData(Variant.Orbit)]
+    [InlineData(Variant.OrbitTraps)]
+    [InlineData(Variant.OrbitAverages)]
+    public void Orbit_Colour_Kernel_Is_Bit_Identical(Variant variant)
     {
         using var k = Device();
-        var v = Views.First(x => x.Name == "Seahorse valley");
-        var wave = Compare(k, "orbit", v, 256, 192, variant: Variant.Orbit);
-        Assert.False(wave.Wave, "the orbit kernel has no wavefront form");
-        // The next plain-kernel frame takes the schedule again.
-        Assert.True(Run(k, v, 256, 192, GpuWavefront.On).Wave);
+        // Mandelbrot and the kinds whose orbit differs (Julia's z_0, Burning Ship's folds, Phoenix's z_prev).
+        foreach (var v in Views.Where(x => x.Name is "Seahorse valley" or "Elephant valley" or "Rabbit Julia" or "Burning Ship" or "Phoenix"))
+            foreach (int per in new[] { GpuPeriodicity.Off, GpuPeriodicity.On })
+            {
+                var wave = Compare(k, $"{v.Name} {variant} periodicity {per}", v, 257, 93, per, variant);
+                Assert.Contains(wave.Col, c => c != wave.Col[0]);   // a real colour frame
+                if (variant != Variant.OrbitAverages)                 // a theme that reads trapMin writes it
+                    Assert.Contains(wave.Trap, t => t != 0f);
+            }
     }
 
     [Fact]

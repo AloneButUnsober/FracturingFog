@@ -67,7 +67,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     private const int UShift = 200;
     private const int ColorBinding = UShift + 3;
     private const int TrapBinding = UShift + 4;   // #1173-J: u4 (gTrap), orbit variant only
-    private const int WorkBinding = UShift + 5;   // #1340: u5 (gWork), the base + colour entries
+    private const int WorkBinding = UShift + 5;   // #1340: u5 (gWork), the base + colour (#1384: + orbit) entries
 
     [StructLayout(LayoutKind.Sequential)]
     private struct ParamsBlob
@@ -91,8 +91,19 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     {
         public double Scale, EscapeR2, OffX0, OffY0;
         public int Width, Height, MaxIter, RefLen, RowBase;
-        // #1340: CSPerturb's gWave / gBandRows / gBand; the orbit kernel's gCRe / gCIm bits (#607).
+        // #1340: CSPerturb's gWave / gBandRows / gBand.
         public int Pad0, Pad1, Pad2;
+    }
+
+    // #607 / #1384: the orbit kernel's params (BuildPerturbOrbit), 80 bytes: the
+    // centre as floats where CSPerturb has gWave / gBandRows, then its own schedule.
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PerturbOrbitParamsBlob
+    {
+        public double Scale, EscapeR2, OffX0, OffY0;
+        public int Width, Height, MaxIter, RefLen, RowBase;
+        public float CRe, CIm;
+        public int Wave, BandRows, Band, Pad0, Pad1;
     }
 
     // #88 SA params (80 bytes): 5 doubles FIRST (0/8/16/24/32) then 10 ints.
@@ -105,13 +116,14 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         public int Wave, BandRows, Band;   // #1340 (were Pad1..Pad3)
     }
 
-    // #1331 float-exp params (48 bytes, no doubles): the HLSL PerturbFxParams cbuffer.
+    // #1331 float-exp params (#1384: 64 bytes, no doubles): the HLSL PerturbFxParams cbuffer.
     [StructLayout(LayoutKind.Sequential)]
     private struct PerturbFxParamsBlob
     {
         public float ScaleM; public int ScaleE; public float OffX0, OffY0;
         public int Width, Height, MaxIter, RefLen, RowBase;
-        public float EscapeR2; public int Pad0, Pad1;
+        public float EscapeR2;
+        public int Wave, BandRows, Band, Pad0, Pad1, Pad2;   // #1384 (Wave / BandRows were Pad0 / Pad1)
     }
 
     // TDR row-band tiling helper lives in MandelbrotKernelSource (shared with the
@@ -430,7 +442,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             {
                 string hlsl = MandelbrotKernelSource.BuildColorOrbit(palette.HlslPrelude, palette.HlslPaletteBody, (int)o.OrbitInputs);
                 build = kind => BuildShapedProgram(GpuGroupShapes.SlotEscape, MandelbrotKernelSource.ForVariant(hlsl, kind), MandelbrotKernelSource.EntryPoint,
-                    0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)ColorBinding, (uint)TrapBinding);
+                    0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)ColorBinding, (uint)TrapBinding, (uint)WorkBinding);   // #1384
             }
             else
             {
@@ -519,7 +531,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         // #1342: kind + periodicity variant (VariantKey; 0 = plain Mandelbrot).
         int variant = MandelbrotKernelSource.VariantKey((int)kind, GpuPeriodicity.Mode);
         Program prog = useColor ? ColorProgram(_activePaletteId!, variant) : BaseProgram(variant);
-        // #1340 — the wavefront schedule (HlslEntry; the orbit colour entry has none).
+        // #1340 — the wavefront schedule (HlslEntry; #1384: the orbit colour entry too).
         bool wave = GpuWavefront.Mode == GpuWavefront.On && prog.Has(WorkBinding);
         LastFrameWavefront = wave;
 
@@ -711,7 +723,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             Scale = scale, EscapeR2 = escapeRadius2, OffX0 = offsetX0, OffY0 = offsetY0,
             RowBase = 0,
         };
-        DispatchPerturbPlain(_perturb, blob, width, height, maxIter, refZr, refZi, refLen, null, "",
+        DispatchPerturbPlain(_perturb, blob, width, height, maxIter, refZr, refZi, refLen, "",
             Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)));
 
         long tDispatch = Stopwatch.GetTimestamp();
@@ -769,19 +781,33 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         if (!_perturbOrbit.TryGetValue(orbitMask, out var prog))
         {
             prog = BuildBandProgram(GpuGroupShapes.SlotPerturb, MandelbrotKernelSource.BuildPerturbOrbit(orbitMask), MandelbrotKernelSource.PerturbOrbitEntryPoint,
-                0u, (uint)TShift, (uint)TShift + 1, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)UShift + 3);
+                0u, (uint)TShift, (uint)TShift + 1, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)UShift + 3, (uint)UShift + 4);   // u4: gWork (#1384)
             _perturbOrbit[orbitMask] = prog;
         }
 
-        var blob = new PerturbParamsBlob
+        fixed (double* pr = refZr) WriteBytes(_refZrBuf, pr, refLen * sizeof(double));
+        fixed (double* pi = refZi) WriteBytes(_refZiBuf, pi, refLen * sizeof(double));
+        bool wave = GpuWavefront.UsePerturb;   // #1384
+        LastFrameWavefront = wave;
+        var blob = new PerturbOrbitParamsBlob
         {
             Width = width, Height = height, MaxIter = maxIter, RefLen = refLen,
             Scale = scale, EscapeR2 = escapeRadius2, OffX0 = offsetX0, OffY0 = offsetY0,
-            RowBase = 0,
-            Pad0 = BitConverter.SingleToInt32Bits((float)centerRe),   // gCRe
-            Pad1 = BitConverter.SingleToInt32Bits((float)centerIm),   // gCIm
+            RowBase = 0, CRe = (float)centerRe, CIm = (float)centerIm, Wave = wave ? 1 : 0,
         };
-        DispatchPerturbPlain(prog, blob, width, height, maxIter, refZr, refZi, refLen, _orbitOut, " (orbit)",
+        // Bindings: b0 params, t0/t1 the reference orbit, u0..u2 iter / smooth / finalZD,
+        // u3 (203) the orbit means, u4 (204) the wavefront counters.
+        DispatchBands(prog, width, height, maxIter, " (orbit)", sizeof(PerturbOrbitParamsBlob),
+            (rowBase, rows, band, dst) =>
+            {
+                var b = blob;
+                b.RowBase = rowBase; b.BandRows = rows; b.Band = band;
+                *(PerturbOrbitParamsBlob*)dst = b;
+            },
+            stackalloc Buffer[] { _refZrBuf.Buffer, _refZiBuf.Buffer, _buf[2].Buffer, _buf[3].Buffer, _buf[4].Buffer,
+                _orbitOut.Buffer, BandWork(BandCount(width, height, maxIter, prog.Shape)) },
+            stackalloc uint[] { (uint)TShift, (uint)TShift + 1, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)UShift + 3, (uint)UShift + 4 },
+            wave,
             Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)),
             Out(_orbitOut, (long)n * stride * sizeof(float)));
 
@@ -852,25 +878,27 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         LastPerturbFloatExpWasScaledF32 = f32;
         Program prog = f32
             ? _perturbF32 ??= BuildBandProgram(GpuGroupShapes.SlotPerturbFp32, MandelbrotKernelSource.BuildPerturbFloatExp(), MandelbrotKernelSource.PerturbF32EntryPoint,
-                0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2)
+                0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)UShift + 3)   // u3: gWork (#1384)
             : _perturbFx ??= BuildBandProgram(GpuGroupShapes.SlotPerturbFp32, MandelbrotKernelSource.BuildPerturbFloatExp(), MandelbrotKernelSource.PerturbFxEntryPoint,
-                0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2);
+                0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)UShift + 3);
 
         var z = new float[refLen * 2];
         for (int i = 0; i < refLen; i++) { z[2 * i] = (float)refZr[i]; z[2 * i + 1] = (float)refZi[i]; }
         fixed (float* pz = z) WriteBytes(_fxRefZ, pz, z.Length * sizeof(float));
 
+        bool wave = GpuWavefront.UsePerturb;   // #1384
+        LastFrameWavefront = wave;
         var blob = new PerturbFxParamsBlob
         {
             ScaleM = m, ScaleE = e, OffX0 = (float)offsetX0, OffY0 = (float)offsetY0,
             Width = width, Height = height, MaxIter = maxIter, RefLen = refLen,
-            EscapeR2 = (float)escapeRadius2,
+            EscapeR2 = (float)escapeRadius2, Wave = wave ? 1 : 0,
         };
-        LastFrameWavefront = false;   // #1340: no wavefront form
         DispatchBands(prog, width, height, maxIter, f32 ? " (scaled fp32)" : " (float-exp)", sizeof(PerturbFxParamsBlob),
-            (rowBase, _, _, dst) => { var b = blob; b.RowBase = rowBase; *(PerturbFxParamsBlob*)dst = b; },
-            stackalloc Buffer[] { _fxRefZ.Buffer, _buf[2].Buffer, _buf[3].Buffer, _buf[4].Buffer },
-            stackalloc uint[] { (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2 },
+            (rowBase, rows, band, dst) => { var b = blob; b.RowBase = rowBase; b.BandRows = rows; b.Band = band; *(PerturbFxParamsBlob*)dst = b; },
+            stackalloc Buffer[] { _fxRefZ.Buffer, _buf[2].Buffer, _buf[3].Buffer, _buf[4].Buffer, BandWork(BandCount(width, height, maxIter, prog.Shape)) },
+            stackalloc uint[] { (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)UShift + 3 },
+            wave,
             Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)));
 
         long tDispatch = Stopwatch.GetTimestamp();
@@ -1216,12 +1244,12 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     private readonly Dictionary<int, Program> _perturbOrbit = new();
     private Allocated _orbitOut;
 
-    /// <summary>Upload the reference orbit and run a BuildPerturb-layout program
-    /// (plain or orbit variant) over the frame in TDR row bands
-    /// (<see cref="DispatchBands"/>), then read <paramref name="outs"/> back.
-    /// <paramref name="orbitOut"/> non-null binds the orbit variant's gOrbit at 203.</summary>
+    /// <summary>Upload the reference orbit and run CSPerturb over the frame in TDR
+    /// row bands (<see cref="DispatchBands"/>), then read <paramref name="outs"/> back.
+    /// (#1384: the orbit variant, with its own 80-byte params, dispatches in
+    /// <see cref="RunPerturbOrbit"/>.)</summary>
     private void DispatchPerturbPlain(Program prog, PerturbParamsBlob blob, int width, int height, int maxIter,
-        double[] refZr, double[] refZi, int refLen, Allocated? orbitOut, string label,
+        double[] refZr, double[] refZi, int refLen, string label,
         params ReadOnlySpan<ReadbackSpan> outs)
     {
         fixed (double* pr = refZr) WriteBytes(_refZrBuf, pr, refLen * sizeof(double));
@@ -1229,11 +1257,10 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
 
         // Binding order matches BuildBandProgram's bindingNums: b0=params (the band UBO),
         //   t0=refZr(100), t1=refZi(101), u0=iter(200), u1=smooth(201), u2=finalZD(202),
-        //   u3(203) = the orbit means (the orbit variant, #607) or gWork (CSPerturb, #1340).
-        bool orbit = orbitOut.HasValue;
-        bool wave = !orbit && GpuWavefront.UsePerturb;   // #1340: the orbit kernel has no wavefront form
+        //   u3(203) = gWork (CSPerturb, #1340).
+        bool wave = GpuWavefront.UsePerturb;   // #1340
         LastFrameWavefront = wave;
-        Buffer u3 = orbit ? orbitOut!.Value.Buffer : BandWork(BandCount(width, height, maxIter, prog.Shape));
+        Buffer u3 = BandWork(BandCount(width, height, maxIter, prog.Shape));
         Span<Buffer> ssbos = stackalloc Buffer[6]
         {
             _refZrBuf.Buffer, _refZiBuf.Buffer,
@@ -1245,8 +1272,8 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             {
                 var b = blob;
                 b.RowBase = rowBase;
-                // #1340: CSPerturb's gWave / gBandRows / gBand (the orbit kernel's pads hold gCRe / gCIm).
-                if (!orbit) { b.Pad0 = wave ? 1 : 0; b.Pad1 = rows; b.Pad2 = band; }
+                // #1340: CSPerturb's gWave / gBandRows / gBand.
+                b.Pad0 = wave ? 1 : 0; b.Pad1 = rows; b.Pad2 = band;
                 *(PerturbParamsBlob*)dst = b;
             },
             ssbos, bindNums, wave, outs);

@@ -32,7 +32,7 @@ code. Probes shared with other hosts live in `Engine/Diagnostics/` instead.
 | `GpuGroupShapeProbe.cs` | `--gpugroupshapeprobe` | #1339, #1377 | Tuned compute thread-group shapes (D3D11 and Vulkan): the 2D kernels, the relief raymarch and the froxel passes |
 | `GpuPeriodicityProbe.cs` | `--gpuperiodicityprobe` | #1342 | D3D11 half of the GPU periodicity check |
 | `GpuTimestampProbe.cs` | `--gputimestampprobe` | #1329 | D3D11 GPU timestamp queries |
-| `GpuWavefrontProbe.cs` | `--gpuwavefrontprobe` | #1340, #1386 | D3D11 half of the wavefront schedule check; `deep` adds the seeded first frame (¼ estimate, schedule, time) |
+| `GpuWavefrontProbe.cs` | `--gpuwavefrontprobe` | #1340, #1386, #1384 | D3D11 half of the wavefront schedule check; `deep` adds the seeded first frame (¼ estimate, schedule, time); `orbit` the orbit colour kernel, `deepkernels` the deep orbit and fp32 kernels |
 | `OidnProbe.cs` | `--oidnprobe [W H]`, `--oidnprobe live [W H]` | #1338, #1392 | Intel Open Image Denoise against the À-Trous denoiser and a full-sample reference; live: time to screen with the background denoise, cancel latency |
 | `SolidRegionProbe.cs` | `--solidregionprobe [W H]` | #1343, #1394 | Solid-region skipping off / Auto / forced: times, fills, wrong fills |
 | `TemporalLightingProbe.cs` | `--temporallightingprobe [W H]` | #1337 | Temporal AO / shadow reuse on a moving camera |
