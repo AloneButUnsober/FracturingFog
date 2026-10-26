@@ -499,7 +499,7 @@ namespace FracturingFog.Rendering
             foreach (int level in new[] { 2, 4 })
             {
                 var (pw0, ph0) = DynamicResolution.PreviewDims(w, h, level);
-                _previewCalcs[level] = new MandelbrotCalculator(pw0, ph0);
+                _previewCalcs[level] = new MandelbrotCalculator(pw0, ph0) { WavefrontSeedAllowed = false };   // #1386: previews are the seed
             }
             _escapeCalculator = new EscapeTimeCalculator(w, h);
             _ifsCalculator = new IFSCalculator(w, h);
@@ -1996,6 +1996,7 @@ namespace FracturingFog.Rendering
                         AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
                         return;
                     }
+                    SeedWavefrontFromPreview(calc, preview);   // #1386
                 }
                 long pCalcEnd = Stopwatch.GetTimestamp();
                 if (ShowPerfHud)
@@ -2510,6 +2511,18 @@ namespace FracturingFog.Rendering
             return map;
         }
 
+        /// <summary>#1386 — a GPU deep preview of the view seeds the full-resolution
+        /// calculator's wavefront Auto choice (its first frame of the view had none):
+        /// the preview's estimate of the full frame's warp waste
+        /// (<see cref="GpuWavefront.EstimateFullWaste"/>).</summary>
+        public static void SeedWavefrontFromPreview(MandelbrotCalculator calc, MandelbrotCalculator preview)
+        {
+            if (!preview.LastFrameUsedGpuPerturbation || preview.Width <= 0 || preview.Width >= calc.Width) return;
+            if (GpuWavefront.Mode != GpuWavefront.On || GpuWavefront.PerturbMode != GpuWavefront.Auto) return;
+            calc.SeedGpuWavefront(GpuWavefront.EstimateFullWaste(preview.IterationBuffer, preview.Width, preview.Height,
+                calc.Width / (double)preview.Width));
+        }
+
         private static void MirrorMandelbrotState(MandelbrotCalculator src, MandelbrotCalculator dst)
         {
             dst.CenterX   = src.CenterX;   dst.CenterXLo = src.CenterXLo;
@@ -2683,7 +2696,7 @@ namespace FracturingFog.Rendering
         {
             var (pw, ph) = DynamicResolution.PreviewDims(_calculator.Width, _calculator.Height, level);
             var c = _previewCalcs[level];
-            if (c == null) _previewCalcs[level] = c = new MandelbrotCalculator(pw, ph);
+            if (c == null) _previewCalcs[level] = c = new MandelbrotCalculator(pw, ph) { WavefrontSeedAllowed = false };   // #1386
             else if (c.Width != pw || c.Height != ph) c.Resize(pw, ph);
             return c;
         }

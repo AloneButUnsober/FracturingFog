@@ -348,6 +348,107 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     // (the last one's warp waste reached GpuWavefront.PerturbWasteThreshold).
     private bool _gpuWavefrontNext;
 
+    // #1386 — the view the hint was measured for (this calculator's own frame, a
+    // preview's seed, or the seed dispatch); null until one is.
+    private WavefrontView? _gpuWavefrontHintView;
+    private int[]? _seedIt;
+    private float[]? _seedSm, _seedZr, _seedZi, _seedDr, _seedDi;
+
+    /// <summary>#1386 — the last seeded warp-waste estimate (<see cref="SeedGpuWavefront"/>
+    /// or the seed dispatch), or 0 when none.</summary>
+    public double LastGpuWavefrontSeed { get; private set; }
+
+    /// <summary>#1386 — the last frame's seed dispatch iterations (<see cref="LastWavefrontSeedSize"/>),
+    /// or null when it ran none (probes / tests).</summary>
+    public int[]? LastWavefrontSeedIterations => LastFrameRanWavefrontSeed ? _seedIt : null;
+
+    /// <summary>#1386 — the size of <see cref="LastWavefrontSeedIterations"/>.</summary>
+    public (int W, int H) LastWavefrontSeedSize { get; private set; }
+
+    /// <summary>#1386 — whether this calculator may run the seed dispatch at all (the
+    /// host's preview sidecars don't: they are fast stand-ins, and seed the
+    /// full-resolution calculator themselves).</summary>
+    public bool WavefrontSeedAllowed { get; set; } = true;
+
+    /// <summary>#1386 — the last frame ran the ¼-resolution seed dispatch
+    /// (<see cref="GpuWavefront.Seed"/>). Reset at the start of every frame.</summary>
+    public bool LastFrameRanWavefrontSeed { get; private set; }
+
+    private sealed class WavefrontView(double[] x, double[] y, double zoom, int maxIter)
+    {
+        public readonly double[] X = x, Y = y;
+        public readonly double Zoom = zoom;
+        public readonly int MaxIter = maxIter;
+    }
+
+    private WavefrontView CurrentWavefrontView() => new(
+        [CenterX, CenterXLo, CenterX2, CenterX3, CenterX4, CenterX5, CenterX6, CenterX7],
+        [CenterY, CenterYLo, CenterY2, CenterY3, CenterY4, CenterY5, CenterY6, CenterY7],
+        Zoom, MaxIterations);
+
+    /// <summary>#1386 — the hint is for a view near this one: the same iteration
+    /// cap, a zoom within 2×, and a centre within one frame width (limb by limb,
+    /// so the difference is exact enough at any depth).</summary>
+    private bool WavefrontHintNear()
+    {
+        var h = _gpuWavefrontHintView;
+        if (h == null || h.MaxIter != MaxIterations || !(Zoom > 0) || !(h.Zoom > 0)) return false;
+        double ratio = Zoom / h.Zoom;
+        if (!(ratio >= 0.5 && ratio <= 2)) return false;
+        var v = CurrentWavefrontView();
+        double dx = 0, dy = 0;
+        for (int k = 0; k < 8; k++) { dx += v.X[k] - h.X[k]; dy += v.Y[k] - h.Y[k]; }
+        double frame = 3.5 / Zoom;
+        return Math.Abs(dx) <= frame && Math.Abs(dy) <= frame;
+    }
+
+    private void SetWavefrontHint(double waste)
+    {
+        _gpuWavefrontNext = waste >= GpuWavefront.PerturbWasteThreshold;
+        _gpuWavefrontHintView = CurrentWavefrontView();
+    }
+
+    /// <summary>#1386 — seed the next GPU deep frame's <see cref="GpuWavefront.Auto"/>
+    /// choice with <paramref name="estimatedWaste"/> for the current view: the host
+    /// passes <see cref="GpuWavefront.EstimateFullWaste"/> of a lower-resolution
+    /// preview of this view. The frame itself measures its own waste and replaces it.</summary>
+    public void SeedGpuWavefront(double estimatedWaste)
+    {
+        LastGpuWavefrontSeed = estimatedWaste;
+        SetWavefrontHint(estimatedWaste);
+    }
+
+    // #1386 — opt-in (GpuWavefront.Seed): with no hint for a nearby view, run the
+    // frame's deep kernel at 1/SeedDivisor resolution per axis (same orbit, SA and
+    // BLA; one thread per pixel) and seed the hint from its estimate. A pixel (x', y')
+    // of the seed frame sits at the full frame's (x' f, y' f). A failure only skips
+    // the seed: the frame's own dispatch reports any real fault.
+    private void SeedWavefrontIfAsked(Action<int, int, double, double, double, int[], float[], float[], float[], float[], float[]> dispatch,
+        double scale, double offX0, double offY0)
+    {
+        if (GpuWavefront.Mode != GpuWavefront.On || GpuWavefront.PerturbMode != GpuWavefront.Auto
+            || !GpuWavefront.Seed || !WavefrontSeedAllowed || WavefrontHintNear()) return;
+        int sw = Math.Max(8, Width / GpuWavefront.SeedDivisor);
+        double f = Width / (double)sw;
+        int sh = Math.Max(8, (int)Math.Round(Height / f));
+        int n = sw * sh;
+        if (_seedIt == null || _seedIt.Length != n)
+        {
+            _seedIt = new int[n];
+            _seedSm = new float[n]; _seedZr = new float[n]; _seedZi = new float[n]; _seedDr = new float[n]; _seedDi = new float[n];
+        }
+        bool hint = GpuWavefront.PerturbHint;
+        GpuWavefront.PerturbHint = false;
+        try { dispatch(sw, sh, scale * f, offX0 / f, offY0 / f, _seedIt, _seedSm!, _seedZr!, _seedZi!, _seedDr!, _seedDi!); }
+        catch { return; }
+        finally { GpuWavefront.PerturbHint = hint; }
+        double est = GpuWavefront.EstimateFullWaste(_seedIt, sw, sh, f);
+        LastGpuWavefrontSeed = est;
+        LastFrameRanWavefrontSeed = true;
+        LastWavefrontSeedSize = (sw, sh);
+        SetWavefrontHint(est);
+    }
+
     /// <summary>#1331 — the fp32 kernels for this device under the current mode.</summary>
     public static bool UseFloatExpKernel(FracturingFog.Rendering.IGpuKernel k) => k.SupportsPerturbationFloatExp && GpuDeepPrecisionMode switch
     {
@@ -1048,6 +1149,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         LastFrameUsedGpuOrbitPerturbation = false;
         LastFrameUsedGpuFloatExp = false;          // #1331
         LastFrameUsedGpuWavefront = false;         // #1340
+        LastFrameRanWavefrontSeed = false;         // #1386
         LastFrameBuiltGpuReferenceOrbit = false;   // #1166
         _gpuSkip = null;
         _panState = null;                  // #1330: set again by a complete lattice frame
@@ -2870,6 +2972,11 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             {
                 var sa = _sa!;
                 var bla = useBla ? _blaTable : null;
+                SeedWavefrontIfAsked((w, h, sc, ox, oy, it, sm, zr, zi, dr, di) => kernel.RunPerturbSA(   // #1386
+                    w, h, sc, maxIt, EscapeRadius2, ox, oy, _refZr, _refZi, _refOrbitLen,
+                    SaTolerance, useSa ? sa.SafeMax : 0, sa.AR, sa.AI, sa.BR, sa.BI, sa.CR, sa.CI, sa.DR, sa.DI,
+                    it, sm, zr, zi, dr, di, bla?.GpuCoefficients, bla?.Levels ?? 0), scale, offX0, offY0);
+                GpuWavefront.PerturbHint = _gpuWavefrontNext;
                 wave = GpuWavefront.UsePerturb;
                 kernel.RunPerturbSA(
                     Width, Height, scale, maxIt, EscapeRadius2,
@@ -2894,6 +3001,10 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             }
             else
             {
+                SeedWavefrontIfAsked((w, h, sc, ox, oy, it, sm, zr, zi, dr, di) => kernel.RunPerturb(   // #1386
+                    w, h, sc, maxIt, EscapeRadius2, ox, oy, _refZr, _refZi, _refOrbitLen,
+                    it, sm, zr, zi, dr, di), scale, offX0, offY0);
+                GpuWavefront.PerturbHint = _gpuWavefrontNext;
                 wave = GpuWavefront.UsePerturb;
                 kernel.RunPerturb(
                     Width, Height, scale, maxIt, EscapeRadius2,
@@ -2933,7 +3044,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         if (GpuWavefront.Mode == GpuWavefront.On && GpuWavefront.PerturbMode == GpuWavefront.Auto)
         {
             LastGpuWarpWaste = GpuWavefront.WarpWaste(IterationBuffer, Width, Height);
-            _gpuWavefrontNext = LastGpuWarpWaste >= GpuWavefront.PerturbWasteThreshold;
+            SetWavefrontHint(LastGpuWarpWaste);   // #1386 — for this view
         }
         LogGpuPerturbEngaged();
         return true;
