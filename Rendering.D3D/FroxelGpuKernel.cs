@@ -18,6 +18,11 @@
 //
 // Thread-affine like ReliefRaymarchGpuKernel: one caller drives Composite from
 // the calc thread under the shared D3D gate.
+//
+// #1377 — each pass has its own thread-group shape slot (GpuGroupShapes
+// "froxel-integrate" / "froxel-composite"), tuned per device on the first
+// Composite against RaymarchGroupShapes' representative frame; GPU timestamps
+// (D3D11StageTimer) time each pass (LastPassTimes).
 
 using System;
 using System.Runtime.InteropServices;
@@ -69,8 +74,8 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
     private readonly ID3D11DeviceContext _ctx;
     private readonly object _d3dGate;
 
-    private ID3D11ComputeShader _csIntegrate = null!;
-    private ID3D11ComputeShader _csComposite = null!;
+    private ID3D11ComputeShader? _csIntegrate;   // eager (again after a shape change)
+    private ID3D11ComputeShader? _csComposite;
     private ID3D11Buffer _paramsBuf = null!;
 
     private ID3D11Buffer? _volumeBuf;                 // float4/cell — UAV (integrate) + SRV (composite)
@@ -111,11 +116,18 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
     public double LastDispatchMs { get; private set; }
     public double LastReadbackMs { get; private set; }
 
+    // #1377 — GPU timestamps of the last Composite (null without timestamp queries).
+    private readonly D3D11StageTimer _timer;
+    private readonly System.Collections.Generic.List<double> _segments = new();
+    public GpuStageTimes? LastGpuStageTimes { get; private set; }
+    public FroxelPassTimes? LastPassTimes { get; private set; }
+
     public FroxelGpuKernel(ID3D11Device device, ID3D11DeviceContext context, object d3dGate)
     {
         _device = device ?? throw new ArgumentNullException(nameof(device));
         _ctx = context ?? throw new ArgumentNullException(nameof(context));
         _d3dGate = d3dGate ?? throw new ArgumentNullException(nameof(d3dGate));
+        _timer = new D3D11StageTimer(_device, _ctx);
 
         _csIntegrate = CompileEntry(FroxelKernelSource.IntegrateEntry);
         _csComposite = CompileEntry(FroxelKernelSource.CompositeEntry);
@@ -125,14 +137,74 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
             usage: ResourceUsage.Dynamic, cpuAccessFlags: CpuAccessFlags.Write));
     }
 
+    // #1377 — in the pass's current group shape. The rewrite reaches both entry
+    // points' attributes, but only the compiled entry's counts; the default leaves
+    // the source untouched (the same cache key as before).
     private ID3D11ComputeShader CompileEntry(string entry)
-        => D3DShaderCache.CompileOrLoad(       // #456 — machine-cached FXC bytecode
+    {
+        var shape = ShapeOf(entry);
+        return D3DShaderCache.CompileOrLoad(       // #456 — machine-cached FXC bytecode
             _device,
-            FroxelKernelSource.Build(),
+            shape.Apply(FroxelKernelSource.Build()),
             entryPoint: entry,
             profile: "cs_5_0",
-            sourceName: "Froxel.hlsl",
+            sourceName: shape == GpuGroupShape.Default ? "Froxel.hlsl" : $"Froxel.g{shape}.hlsl",
             errorLabel: $"FroxelGpuKernel ({entry})");
+    }
+
+    // ── #1377: thread-group shapes ───────────────────────────────────────────
+    // A slot per pass, both resolved on the first Composite (the integrate pass
+    // first, with the composite pass at 8×8; then the composite pass, with the
+    // integrate pass at its winner): the override, the stored winner, or a tuning
+    // run. A pass's cached shader is dropped whenever its shape changes.
+    private GpuGroupShape _integrateShape = GpuGroupShape.Default, _compositeShape = GpuGroupShape.Default;
+    private bool _shapesResolved;
+    private string? _shapeDeviceKey;
+
+    private GpuGroupShape ShapeOf(string entry) =>
+        entry == FroxelKernelSource.IntegrateEntry ? _integrateShape : _compositeShape;
+
+    /// <summary>#1377 — the shape <paramref name="slot"/> (froxel-integrate or
+    /// froxel-composite) dispatches in (the default until the first Composite).</summary>
+    public GpuGroupShape GroupShape(string slot)
+    {
+        lock (_d3dGate) return slot == GpuGroupShapes.SlotFroxelIntegrate ? _integrateShape : _compositeShape;
+    }
+
+    /// <summary>#1377 — the store's device key (see <see cref="D3DGroupShapes.DeviceKey"/>).</summary>
+    public string GroupShapeDeviceKey => _shapeDeviceKey ??= D3DGroupShapes.DeviceKey(_device);
+
+    // Called with the D3D gate held.
+    private void EnsureShapes()
+    {
+        if (_shapesResolved) return;
+        _shapesResolved = true;   // first: the tuning frames re-enter Composite
+        string hash = GpuGroupShapes.SourceHash("fxc-cs_5_0\n" + FroxelKernelSource.Build());
+        foreach (string slot in new[] { GpuGroupShapes.SlotFroxelIntegrate, GpuGroupShapes.SlotFroxelComposite })
+        {
+            var winner = GpuGroupShapes.Resolve(GroupShapeDeviceKey, slot, hash, GpuGroupShapes.Candidates,
+                shape => { SetShape(slot, shape); return RaymarchGroupShapes.TimeFroxel(this, slot); });
+            SetShape(slot, winner);
+        }
+    }
+
+    private void SetShape(string slot, GpuGroupShape shape)
+    {
+        if (slot == GpuGroupShapes.SlotFroxelIntegrate)
+        {
+            if (_integrateShape == shape) return;
+            _integrateShape = shape;
+            try { _csIntegrate?.Dispose(); } catch { }
+            _csIntegrate = null;
+        }
+        else
+        {
+            if (_compositeShape == shape) return;
+            _compositeShape = shape;
+            try { _csComposite?.Dispose(); } catch { }
+            _csComposite = null;
+        }
+    }
 
     private void EnsureVolumeBuffer(int cells)
     {
@@ -325,6 +397,11 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
 
         lock (_d3dGate)
         {
+            EnsureShapes();   // #1377 (may tune: before this frame starts)
+            LastGpuStageTimes = null;
+            LastPassTimes = null;
+            _csIntegrate ??= CompileEntry(FroxelKernelSource.IntegrateEntry);
+            _csComposite ??= CompileEntry(FroxelKernelSource.CompositeEntry);
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             EnsureVolumeBuffer(cells);
             EnsureOutputBuffers(n);
@@ -367,7 +444,10 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
             _ctx.CSSetUnorderedAccessView(0, _volumeUav);
             if (temporal) _ctx.CSSetUnorderedAccessView(1, _historyUav);
             if (reprojectNow) _ctx.CSSetShaderResource(3, _historyPrevSrv);
-            _ctx.Dispatch((uint)((g.DimX + 7) / 8), (uint)((g.DimY + 7) / 8), 1);
+            _timer.BeginFrame();
+            _timer.Begin();
+            _ctx.Dispatch(_integrateShape.GroupsX(g.DimX), _integrateShape.GroupsY(g.DimY), 1);   // #1377
+            _timer.Mark(GpuStage.Dispatch);
             _ctx.CSUnsetUnorderedAccessView(0);
             if (reprojectNow) _ctx.CSSetShaderResource(3, null);
             if (temporal)
@@ -390,7 +470,8 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
             _ctx.CSSetShaderResource(1, _depthSrv);
             _ctx.CSSetShaderResource(2, _volumeSrv);
             _ctx.CSSetUnorderedAccessView(0, _outUav);
-            _ctx.Dispatch((uint)((w + 7) / 8), (uint)((h + 7) / 8), 1);
+            _ctx.Dispatch(_compositeShape.GroupsX(w), _compositeShape.GroupsY(h), 1);   // #1377
+            _timer.Mark(GpuStage.Dispatch);
 
             _ctx.CSUnsetUnorderedAccessView(0);
             _ctx.CSSetShaderResource(0, null);
@@ -398,6 +479,7 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
             _ctx.CSSetShaderResource(2, null);
 
             _ctx.CopyResource(_outStaging!, _outBuf!);
+            _timer.Mark(GpuStage.CopyOut);
             long tDispatch = System.Diagnostics.Stopwatch.GetTimestamp();
 
             var map = _ctx.Map(_outStaging!, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
@@ -411,6 +493,12 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
                 }
             }
             finally { _ctx.Unmap(_outStaging!, 0); }
+
+            // #1377 — after the readback Map; segments: integrate, composite, copy-out.
+            _segments.Clear();
+            LastGpuStageTimes = _timer.EndFrame(_segments);
+            if (LastGpuStageTimes != null && _segments.Count >= 2)
+                LastPassTimes = new FroxelPassTimes(_segments[0], _segments[1]);
 
             long tEnd = System.Diagnostics.Stopwatch.GetTimestamp();
             double freq = System.Diagnostics.Stopwatch.Frequency;
@@ -506,5 +594,6 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
         try { _paramsBuf?.Dispose(); } catch { }
         try { _csIntegrate?.Dispose(); } catch { }
         try { _csComposite?.Dispose(); } catch { }
+        try { _timer.Dispose(); } catch { }   // #1377
     }
 }

@@ -45,9 +45,12 @@ namespace FracturingFog.Rendering
         /// <see cref="GpuStage.Begin"/> stamp starts a new packet (the time before it
         /// is idle). <paramref name="validMask"/> wraps a counter with fewer than 64
         /// valid bits; <paramref name="nsPerTick"/> converts device ticks to ns.
-        /// Null when there is no packet, or the stamps don't start with Begin.</summary>
+        /// Null when there is no packet, or the stamps don't start with Begin.
+        /// #1377 — <paramref name="segmentsMs"/>, when given, receives every closed
+        /// segment's time in stamp order (a kernel with two passes in one packet
+        /// reads each pass from it).</summary>
         public static GpuStageTimes? FromStamps(IReadOnlyList<GpuStage> stages, ReadOnlySpan<ulong> ticks,
-            double nsPerTick, ulong validMask = ulong.MaxValue)
+            double nsPerTick, ulong validMask = ulong.MaxValue, List<double>? segmentsMs = null)
         {
             int count = Math.Min(stages.Count, ticks.Length);
             if (count == 0 || stages[0] != GpuStage.Begin || !(nsPerTick > 0) || !double.IsFinite(nsPerTick)) return null;
@@ -58,6 +61,7 @@ namespace FracturingFog.Rendering
                 if (stages[i] == GpuStage.Begin) { packets++; continue; }
                 ulong dt = (ticks[i] - ticks[i - 1]) & validMask;
                 double ms = dt * nsPerTick * 1e-6;
+                segmentsMs?.Add(ms);
                 switch (stages[i])
                 {
                     case GpuStage.Upload: up += ms; break;

@@ -54,7 +54,7 @@ static class Program
 
         // #1339 — tuned compute thread-group shapes, D3D11 + Vulkan: timings, tuned == 8x8.
         if (args.Length > 0 && args[0] == "--gpugroupshapeprobe")
-            return GpuGroupShapeProbe.Run();
+            return GpuGroupShapeProbe.Run(args);
 
         // #1334 — deep perturbation in row bands, D3D11 + Vulkan: banded == one band, timing.
         if (args.Length > 0 && args[0] == "--gpubandprobe")

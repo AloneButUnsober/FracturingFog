@@ -23,6 +23,11 @@
 // that CPU pass. Memory is HOST_VISIBLE|HOST_COHERENT (direct map, no staging),
 // matching VulkanComputeKernel / ReliefRaymarchVulkanKernel. Thread-affine: a
 // single caller drives Composite. Not internally synchronised.
+//
+// #1377 — each pass has its own thread-group shape slot (GpuGroupShapes
+// "froxel-integrate" / "froxel-composite"), tuned per device on the first
+// Composite against RaymarchGroupShapes' representative frame; GPU timestamps
+// (VulkanStageTimer) time each pass (LastPassTimes).
 
 using System;
 using System.Diagnostics;
@@ -120,6 +125,12 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
     public double LastDispatchMs { get; private set; }
     public double LastReadbackMs { get; private set; }
 
+    // #1377 — GPU timestamps of the last Composite (null without timestamp support).
+    private readonly VulkanStageTimer _timer;
+    private readonly System.Collections.Generic.List<double> _segments = new();
+    public GpuStageTimes? LastGpuStageTimes { get; private set; }
+    public FroxelPassTimes? LastPassTimes { get; private set; }
+
     /// <summary>Human-readable backend label.</summary>
     public string Description => $"Vulkan froxel ({_ctx.PickedType}: {_ctx.PickedName})";
 
@@ -135,6 +146,7 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
         _vk = ctx.Vk;
         _device = ctx.Device;
         _pipelineCache = new VulkanPipelineCache(ctx, "froxel");   // #1341, before the pipelines are built
+        _timer = new VulkanStageTimer(ctx);   // #1377
 
         var cpci = new CommandPoolCreateInfo
         {
@@ -211,6 +223,11 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
 
         var g = u.Grid;
         int cells = g.DimX * g.DimY * g.DimZ;
+
+        EnsureShapes();   // #1377 (may tune: before this frame starts)
+        LastGpuStageTimes = null;
+        LastPassTimes = null;
+        EnsurePipelines();
 
         // Clamp to match FroxelHistory.BlendAndStore / the D3D kernel.
         double fb = feedback;
@@ -309,10 +326,14 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
             }
 
             // Pass 1 — populate + integrate every column into the volume.
+            // #1377 — timestamps: Begin, after the integrate pass, after the composite pass.
+            _timer.BeginFrame();
+            _timer.Begin(cmd);
             var iSet = integrateSet;
             _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, _integratePipeline);
             _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, _layout, 0, 1, &iSet, 0, null);
-            _vk.CmdDispatch(cmd, (uint)((g.DimX + 7) / 8), (uint)((g.DimY + 7) / 8), 1);
+            _vk.CmdDispatch(cmd, _integrateShape.GroupsX(g.DimX), _integrateShape.GroupsY(g.DimY), 1);
+            _timer.Mark(cmd, GpuStage.Dispatch);
 
             // Barrier: integrate's shader writes to the volume must be visible to the
             // composite's shader reads.
@@ -330,7 +351,8 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
             var cSet = compositeSet;
             _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, _compositePipeline);
             _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, _layout, 0, 1, &cSet, 0, null);
-            _vk.CmdDispatch(cmd, (uint)((w + 7) / 8), (uint)((h + 7) / 8), 1);
+            _vk.CmdDispatch(cmd, _compositeShape.GroupsX(w), _compositeShape.GroupsY(h), 1);
+            _timer.Mark(cmd, GpuStage.Dispatch);
 
             Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
 
@@ -342,6 +364,10 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
             };
             Check(_vk.QueueSubmit(_ctx.ComputeQueue, 1, &submit, default), "vkQueueSubmit");
             Check(_vk.QueueWaitIdle(_ctx.ComputeQueue), "vkQueueWaitIdle");
+            _segments.Clear();
+            LastGpuStageTimes = _timer.EndFrame(_segments);   // #1377 — segments: integrate, composite
+            if (LastGpuStageTimes != null && _segments.Count >= 2)
+                LastPassTimes = new FroxelPassTimes(_segments[0], _segments[1]);
 
             // The integrate pass wrote the blended scatter+ext into the history buffer;
             // it is now the previous frame for the next Composite with this grid.
@@ -477,11 +503,13 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
     }
 
     // Compile one froxel entry point → (shader module, compute pipeline), reusing
-    // the shared _layout.
+    // the shared _layout. #1377 — in the pass's current group shape (the rewrite
+    // reaches both entry points' attributes; only the compiled entry's counts).
     private (ShaderModule, Pipeline) CreatePipeline(string entry)
     {
+        var shape = entry == FroxelKernelSource.IntegrateEntry ? _integrateShape : _compositeShape;
         byte[] spirv = DxcCompiler.CompileToSpirv(
-            FroxelKernelSource.Build(), entry, "cs_6_0",
+            shape.Apply(FroxelKernelSource.Build()), entry, "cs_6_0",
             "-fvk-b-shift", BShift.ToString(), "0",
             "-fvk-t-shift", TShift.ToString(), "0",
             "-fvk-u-shift", UShift.ToString(), "0");
@@ -520,6 +548,62 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
             return (mod, created);
         }
         finally { SilkMarshal.Free(entryPtr); }
+    }
+
+    // ── #1377: thread-group shapes ─────────────────────────────────────────────
+    // A slot per pass, both resolved on the first Composite (the integrate pass
+    // first, with the composite pass at 8×8; then the composite pass, with the
+    // integrate pass at its winner): the override, the stored winner, or a tuning
+    // run. A pass's pipeline is dropped whenever its shape changes.
+    private GpuGroupShape _integrateShape = GpuGroupShape.Default, _compositeShape = GpuGroupShape.Default;
+    private bool _shapesResolved;
+
+    /// <summary>#1377 — the shape <paramref name="slot"/> (froxel-integrate or
+    /// froxel-composite) dispatches in (the default until the first Composite).</summary>
+    public GpuGroupShape GroupShape(string slot) =>
+        slot == GpuGroupShapes.SlotFroxelIntegrate ? _integrateShape : _compositeShape;
+
+    /// <summary>#1377 — the store's device key (see <see cref="VulkanGroupShapes.DeviceKey"/>).</summary>
+    public string GroupShapeDeviceKey => VulkanGroupShapes.DeviceKey(_ctx);
+
+    private void EnsureShapes()
+    {
+        if (_shapesResolved) return;
+        _shapesResolved = true;   // first: the tuning frames re-enter Composite
+        string hash = GpuGroupShapes.SourceHash("vulkan-spv\n" + FroxelKernelSource.Build());
+        var candidates = VulkanGroupShapes.Candidates(_ctx);
+        foreach (string slot in new[] { GpuGroupShapes.SlotFroxelIntegrate, GpuGroupShapes.SlotFroxelComposite })
+        {
+            var winner = GpuGroupShapes.Resolve(GroupShapeDeviceKey, slot, hash, candidates,
+                shape => { SetShape(slot, shape); return RaymarchGroupShapes.TimeFroxel(this, slot); });
+            SetShape(slot, winner);
+        }
+    }
+
+    // Every Composite waits for its queue, so no pipeline is in flight here.
+    private void SetShape(string slot, GpuGroupShape shape)
+    {
+        if (slot == GpuGroupShapes.SlotFroxelIntegrate)
+        {
+            if (_integrateShape == shape) return;
+            _integrateShape = shape;
+            if (_integratePipeline.Handle != 0) { _vk.DestroyPipeline(_device, _integratePipeline, null); _integratePipeline = default; }
+            if (_integrateModule.Handle != 0) { _vk.DestroyShaderModule(_device, _integrateModule, null); _integrateModule = default; }
+        }
+        else
+        {
+            if (_compositeShape == shape) return;
+            _compositeShape = shape;
+            if (_compositePipeline.Handle != 0) { _vk.DestroyPipeline(_device, _compositePipeline, null); _compositePipeline = default; }
+            if (_compositeModule.Handle != 0) { _vk.DestroyShaderModule(_device, _compositeModule, null); _compositeModule = default; }
+        }
+    }
+
+    // The pipelines a shape change dropped, rebuilt in the new shape.
+    private void EnsurePipelines()
+    {
+        if (_integratePipeline.Handle == 0) (_integrateModule, _integratePipeline) = CreatePipeline(FroxelKernelSource.IntegrateEntry);
+        if (_compositePipeline.Handle == 0) (_compositeModule, _compositePipeline) = CreatePipeline(FroxelKernelSource.CompositeEntry);
     }
 
     // ── buffers ───────────────────────────────────────────────────────────────
@@ -639,6 +723,7 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
         FreeBuffer(ref _beauty);
         FreeBuffer(ref _depth);
         FreeBuffer(ref _out);
+        _timer.Dispose();   // #1377
         if (_cmdPool.Handle != 0) { _vk.DestroyCommandPool(_device, _cmdPool, null); _cmdPool = default; }
         _pipelineCache.Dispose();   // #1341 — saves
         if (_ownsContext) { try { _ctx.Dispose(); } catch { } }

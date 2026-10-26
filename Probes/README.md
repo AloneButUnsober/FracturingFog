@@ -29,7 +29,7 @@ code. Probes shared with other hosts live in `Engine/Diagnostics/` instead.
 | `DynamicResolutionProbe.cs` | `--dynresprobe` | #1333 | Drag responsiveness through a real host, dynamic preview resolution off and on |
 | `GpuBandProbe.cs` | `--gpubandprobe` | #1334 | Deep perturbation frames in TDR row bands (D3D11 and Vulkan) |
 | `GpuDeferredReadbackProbe.cs` | `--gpudeferprobe` | #1332 | D3D11 deferred readback |
-| `GpuGroupShapeProbe.cs` | `--gpugroupshapeprobe` | #1339 | Tuned compute thread-group shapes (D3D11 and Vulkan) |
+| `GpuGroupShapeProbe.cs` | `--gpugroupshapeprobe` | #1339, #1377 | Tuned compute thread-group shapes (D3D11 and Vulkan): the 2D kernels, the relief raymarch and the froxel passes |
 | `GpuPeriodicityProbe.cs` | `--gpuperiodicityprobe` | #1342 | D3D11 half of the GPU periodicity check |
 | `GpuTimestampProbe.cs` | `--gputimestampprobe` | #1329 | D3D11 GPU timestamp queries |
 | `GpuWavefrontProbe.cs` | `--gpuwavefrontprobe` | #1340 | D3D11 half of the wavefront schedule check |

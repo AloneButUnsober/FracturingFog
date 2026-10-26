@@ -41,4 +41,11 @@ public interface IReliefRaymarchKernel : IDisposable
     /// to fall back to the CPU trace. Null (the default) = colour only.</summary>
     void Run(in ReliefUniforms u, float[] hbuf, byte[]? keep, uint[] albedo, uint[] dst,
         float[]? aovNormalXyz = null, float[]? aovDepth = null);
+
+    /// <summary>#1377 — the last <see cref="Run"/>'s host time (uploads, dispatch,
+    /// wait), for timing when the device has no GPU timestamps; 0 when unknown.</summary>
+    double LastDispatchMs => 0;
+
+    /// <summary>#1377 — the last <see cref="Run"/>'s GPU timestamps, or null.</summary>
+    GpuStageTimes? LastGpuStageTimes => null;
 }
