@@ -378,6 +378,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsMandelbrot => FractalType == FractalType.Mandelbrot;
     public bool IsJulia => FractalType == FractalType.Julia;
     public bool IsMultibrot => FractalType == FractalType.Multibrot;
+    /// <summary>#1343 / #1394 — the families with solid-region skipping (their in-set area is full).</summary>
+    public bool HasSolidRegionSkip => FractalType is FractalType.Mandelbrot or FractalType.Julia or FractalType.Multibrot;
     public bool IsPhoenix => FractalType == FractalType.Phoenix;
     public bool IsGlynn => FractalType == FractalType.Glynn;
     public bool IsLogistic => FractalType == FractalType.Logistic;
@@ -622,7 +624,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         set { if (_p.AdaptiveAa == value) return; _p.AdaptiveAa = value; this.RaisePropertyChanged(); Fire(); }
     }
 
-    /// <summary>#1343 — Mandelbrot solid-region skipping (Mariani–Silver).</summary>
+    /// <summary>#1343 — solid-region skipping (Mariani–Silver): Mandelbrot, and Julia /
+    /// Multibrot since #1394.</summary>
     public bool SolidRegionSkip
     {
         get => _p.SolidRegionSkip;

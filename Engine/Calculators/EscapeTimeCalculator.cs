@@ -27,7 +27,7 @@ using GpuRoute = FracturingFog.Render.GpuRoute;
 
 namespace FracturingFog;
 
-public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Interefaces.IHeightFieldSource, Interefaces.ISupportsHistogramEq,
+public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculator, Interefaces.IHeightFieldSource, Interefaces.ISupportsHistogramEq,
     Interefaces.IDistanceFieldSource, FracturingFog.Render.IGpuRouteSource
 {
     public bool SupportsZoomPan => true;
@@ -298,7 +298,14 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
     {
         // #615 Phase 1 — render, then a single path-agnostic post-pass paints the
         // beyond-escape-radius surround (opt-in via IColorMap.OutOfBoundsColor).
-        CalculateInternal(ct);
+        LastFrameFilledPixels = 0;   // #1394
+        LastFrameSolidPasses = 0;
+        LastFilledMask = null;
+        LastBatchComputeCount = null;
+        LastFrameSolidCostlyShare = double.NaN;
+        LastFrameSolidDeclined = false;
+        if (SolidRegionsApply()) CalculateSolidRegions(ct);   // #1394 opt-in (Julia / Multibrot)
+        else CalculateInternal(ct);
         ApplyOutOfBoundsSurround(ct);
         // #97 — global interior-alpha post-pass. Last, so it scales the final
         // in-set colour (after the surround pass). No fast-recolor path exists
@@ -391,6 +398,7 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
         // Phoenix and the domain warp (#253, applied per pixel in the kernel).
         // On the CPU the warp still routes the SIMD kinds through the scalar cores.
         bool warp = WarpActive;
+        _lastFrameOnGpu = false;   // #1394
 
         // #1173-M — the first failing condition of the gate below, for the
         // HUD / status bar. TryDispatchGpu refines it (unsupported kind,
@@ -410,6 +418,7 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
             // own BailoutRadius2 (it used a hardcoded radius 2, which also left the
             // smooth iteration unconverged: every GPU pixel ~0.5 off the CPU's).
             _lastBailout2 = CurrentEscapeRadius2();
+            _lastFrameOnGpu = true;   // #1394 — every pixel, whatever the mask
             return;
         }
 
@@ -707,7 +716,7 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
         var po = _po;
         ParallelForRows(0, height, po, y =>
         {
-            if (ct.IsCancellationRequested) return;
+            if (ct.IsCancellationRequested || !RowMarked(y)) return;   // #1394 mask
             int rowMaxIt = useTileCap ? perRow![y] : maxIt;
             if (rowMaxIt <= 0) rowMaxIt = maxIt;
             double cy = centerY + (y - height * 0.5) * scale;
@@ -722,6 +731,7 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
             int x = 0;
             for (; x + vecLen <= width; x += vecLen)
             {
+                if (_mask != null && !TakeBatch(rowBase, x, vecLen)) continue;   // #1394
                 // Build per-lane cx vector.
                 for (int k = 0; k < vecLen; k++)
                     cxBuf[k] = centerX + ((x + k) - width * 0.5) * scale;
@@ -787,6 +797,8 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
             {
                 double cx = centerX + (x - width * 0.5) * scale;
                 int idx = rowBase + x;
+                if (!Marked(idx)) continue;   // #1394
+                if (_batchCount is { } bct) bct[idx]++;
 
                 if (hasCardioidSkip && kernel.IsInTrivialInSet(cx, cy))
                 {
@@ -888,13 +900,15 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
         var po = _po;
         ParallelForRows(0, height, po, y =>
         {
-            if (ct.IsCancellationRequested) return;
+            if (ct.IsCancellationRequested || !RowMarked(y)) return;   // #1394 mask
             int rowMaxIt = useTileCap ? perRow![y] : maxIt;
             if (rowMaxIt <= 0) rowMaxIt = maxIt;
             double cyRow = centerY + (y - height * 0.5) * scale;
             int rowBase = y * width;
             for (int x = 0; x < width; x++)
             {
+                if (!Marked(rowBase + x)) continue;   // #1394
+                if (_batchCount is { } bcs) bcs[rowBase + x]++;
                 double ox = (x - width * 0.5) * scale;
                 double cx = centerX + ox;
                 double cy = cyRow;

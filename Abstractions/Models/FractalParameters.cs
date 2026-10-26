@@ -53,8 +53,9 @@ namespace FracturingFog.Models
         /// tile between border samples (measured 0–49 pixels of 518k on the probe views).
         /// Pays off on expensive interiors — minibrots, satellite bulbs, deep zoom,
         /// parabolic points (2–8x); a view whose interior is the main cardioid / period-2
-        /// bulb (already free on the shallow path) renders ~0.7–0.9x. Off = every pixel
-        /// iterated (byte-identical).</summary>
+        /// bulb (already free on the shallow path) renders ~0.7–0.9x. #1394 part 2 — also
+        /// Julia and Multibrot (their in-set area is full too): 1.3–4x on Julia sets with
+        /// an inside and Multibrot sets. Off = every pixel iterated (byte-identical).</summary>
         public bool SolidRegionSkip { get; set; }
 
         /// <summary>#1394 — with <see cref="SolidRegionSkip"/>: decide per frame. The grid

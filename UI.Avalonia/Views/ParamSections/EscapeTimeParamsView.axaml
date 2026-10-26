@@ -222,15 +222,15 @@
             </StackPanel>
         </Border>
 
-        <!-- #1343 — Mandelbrot: solid-region skipping (Mariani–Silver). -->
-        <Border IsVisible="{Binding IsMandelbrot}"
+        <!-- #1343 — Mandelbrot (and #1394 Julia / Multibrot): solid-region skipping (Mariani–Silver). -->
+        <Border IsVisible="{Binding HasSolidRegionSkip}"
                 BorderBrush="#404040" BorderThickness="0,1,0,0"
                 Padding="0,8,0,0" Margin="0,4,0,0">
             <StackPanel Spacing="6">
                 <TextBlock Text="Speed" FontWeight="Bold" Foreground="#FFCC00" />
                 <CheckBox Content="Skip solid in-set regions"
                           IsChecked="{Binding SolidRegionSkip, Mode=TwoWay}"
-                          ToolTip.Tip="Mariani–Silver: compute the borders of a grid of tiles first and fill a tile whose whole border is inside the set without iterating its interior (CPU). Much faster where the inside of the set is expensive — minibrots, satellite bulbs, deep zoom, slow-converging points (2–8x measured); a view whose inside is the main cardioid is already fast and would get slightly slower (Auto, below, computes those normally). Not exact: an escaping filament thinner than a pixel that crosses a tile between its border pixels is filled as inside (rare: up to ~0.01% of pixels on the test views)." />
+                          ToolTip.Tip="Mariani–Silver: compute the borders of a grid of tiles first and fill a tile whose whole border is inside the set without iterating its interior (CPU). Much faster where the inside of the set is expensive — minibrots, satellite bulbs, deep zoom, slow-converging points (2–8x measured); Julia sets with an inside (rabbit, basilica, San Marco) and Multibrot sets 1.3–4x. A Mandelbrot view whose inside is the main cardioid is already fast and would get slightly slower (Auto, below, computes those normally). Not exact: an escaping filament thinner than a pixel that crosses a tile between its border pixels is filled as inside (rare: up to ~0.01% of pixels on the test views)." />
                 <!-- #1394 — per-frame Auto decision. -->
                 <CheckBox Content="Only where it pays (Auto)"
                           Margin="20,0,0,0"
