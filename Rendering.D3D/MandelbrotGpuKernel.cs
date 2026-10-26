@@ -283,20 +283,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     }
 
     /// <summary>#1339 — "d3d11|adapter|vendor:device:revision|driver", the store's device key.</summary>
-    public string GroupShapeDeviceKey => _shapeDeviceKey ??= DeviceKey();
-
-    private string DeviceKey()
-    {
-        try
-        {
-            using var dxgi = _device.QueryInterface<Vortice.DXGI.IDXGIDevice>();
-            using var adapter = dxgi.GetAdapter();
-            var d = adapter.Description;
-            string driver = adapter.CheckInterfaceSupport<Vortice.DXGI.IDXGIDevice>(out long umd) ? umd.ToString("X16") : "?";
-            return $"d3d11|{d.Description}|{d.VendorId:X4}:{d.DeviceId:X4}:{d.Revision:X2}|{driver}";
-        }
-        catch { return "d3d11|unknown adapter"; }
-    }
+    public string GroupShapeDeviceKey => _shapeDeviceKey ??= D3DGroupShapes.DeviceKey(_device);
 
     private static string SlotSource(string slot) => slot switch
     {

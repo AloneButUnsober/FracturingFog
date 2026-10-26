@@ -62,4 +62,14 @@ public interface IFroxelVolumeKernel : IDisposable
     void Composite(in FroxelGpuUniforms u, uint[] beauty, float[] worldDepth, int w, int h, uint[] dst,
         double feedback, bool reproject)
         => Composite(in u, beauty, worldDepth, w, h, dst, feedback);
+
+    /// <summary>#1377 — the last composite's host time (uploads, both passes,
+    /// wait), for timing when the device has no GPU timestamps; 0 when unknown.</summary>
+    double LastDispatchMs => 0;
+
+    /// <summary>#1377 — the last composite's GPU time per pass (from timestamps), or null.</summary>
+    FroxelPassTimes? LastPassTimes => null;
 }
+
+/// <summary>#1377 — GPU time of the froxel kernel's two passes, in milliseconds.</summary>
+public readonly record struct FroxelPassTimes(double IntegrateMs, double CompositeMs);

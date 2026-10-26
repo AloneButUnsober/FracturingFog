@@ -23,6 +23,12 @@
 // small frames per candidate) is paid once per machine and redone only when the
 // device, the driver or the kernel source changes.
 //
+// #1377 — the relief raymarch (ReliefRaymarchKernelSource, slot "relief") and
+// the two froxel passes ("froxel-integrate", "froxel-composite") tune the same
+// way; their representative frames need uniforms, so they live with the relief
+// code (Lighting/RaymarchGroupShapes.cs). The relief slot is opt-in
+// (OptInSlots): "auto" keeps it 8×8, "relief=auto" tunes it.
+//
 // FF_GPU_GROUP_SHAPE overrides: "auto" (default: tune), "off" (8×8, no tuning),
 // "16x8" (every slot), or "sp=16x8,perturb=8x8" (those slots; the rest tune).
 // Both kernel assemblies link their own MandelbrotKernelSource, so this lives
@@ -93,6 +99,12 @@ namespace FracturingFog.Rendering
         public const string SlotPerturb = "perturb";
         /// <summary>The #1331 fp32 perturbation kernels (float-exp and scaled fp32).</summary>
         public const string SlotPerturbFp32 = "perturb-fp32";
+        /// <summary>#1377 — the Relief 3D raymarch (CSRelief, pinhole and DOF).</summary>
+        public const string SlotRelief = "relief";
+        /// <summary>#1377 — the froxel populate + integrate pass (one thread per column).</summary>
+        public const string SlotFroxelIntegrate = "froxel-integrate";
+        /// <summary>#1377 — the froxel composite pass (one thread per pixel).</summary>
+        public const string SlotFroxelComposite = "froxel-composite";
 
         /// <summary>Shapes the tuner times, the default first: 64–256 threads, whole
         /// multiples of a 32-wide warp, from square to wide-and-thin rows (a row of
@@ -130,13 +142,21 @@ namespace FracturingFog.Rendering
         /// <summary>Drop this thread's override (back to <see cref="ProcessSetting"/>).</summary>
         public static void ResetSettingForThread() { t_setting = null; t_settingSet = false; }
 
+        /// <summary>#1377 — slots that "auto" leaves at 8×8: tuned only when the
+        /// setting names them ("relief=auto"). The relief raymarch: on a GT 710 every
+        /// other shape is 1.2–6× slower, and tuning compiles the big relief shader once
+        /// per candidate (FXC ~3 min each, a 15-minute first frame; DXC ~38 s in all).</summary>
+        public static readonly IReadOnlyList<string> OptInSlots = [SlotRelief];
+
         /// <summary>The fixed shape <paramref name="setting"/> gives
-        /// <paramref name="slot"/>, or null to tune it. Unparseable parts are ignored.</summary>
+        /// <paramref name="slot"/>, or null to tune it. Unparseable parts are ignored.
+        /// An <see cref="OptInSlots"/> slot the setting doesn't name stays 8×8.</summary>
         public static GpuGroupShape? Fixed(string? setting, string slot)
         {
-            if (string.IsNullOrWhiteSpace(setting)) return null;
+            GpuGroupShape? unnamed = Contains(OptInSlots, slot) ? GpuGroupShape.Default : null;
+            if (string.IsNullOrWhiteSpace(setting)) return unnamed;
             string s = setting.Trim();
-            if (s.Equals("auto", StringComparison.OrdinalIgnoreCase)) return null;
+            if (s.Equals("auto", StringComparison.OrdinalIgnoreCase)) return unnamed;
             if (s.Equals("off", StringComparison.OrdinalIgnoreCase) || s == "0") return GpuGroupShape.Default;
             if (GpuGroupShape.TryParse(s, out var all)) return all;
             foreach (string part in s.Split(',', ';'))
@@ -148,7 +168,13 @@ namespace FracturingFog.Rendering
                 if (v.Equals("auto", StringComparison.OrdinalIgnoreCase)) return null;
                 if (GpuGroupShape.TryParse(v, out var one)) return one;
             }
-            return null;
+            return unnamed;
+        }
+
+        private static bool Contains(IReadOnlyList<string> list, string s)
+        {
+            foreach (var x in list) if (string.Equals(x, s, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
         }
 
         /// <summary>One candidate's timing, for probes and logs.</summary>

@@ -89,8 +89,9 @@ internal sealed unsafe class VulkanStageTimer : IDisposable
     }
 
     /// <summary>After the frame's last wait: read the stamps. Null when disabled,
-    /// overflowed or empty.</summary>
-    public GpuStageTimes? EndFrame()
+    /// overflowed or empty. #1377 — <paramref name="segmentsMs"/> receives each
+    /// segment's time (see <see cref="GpuStageTimes.FromStamps"/>).</summary>
+    public GpuStageTimes? EndFrame(List<double>? segmentsMs = null)
     {
         if (!Enabled || _overflow || _stages.Count == 0) return null;
         int count = _stages.Count;
@@ -100,7 +101,7 @@ internal sealed unsafe class VulkanStageTimer : IDisposable
             r = _vk.GetQueryPoolResults(_device, _pool, 0, (uint)count, (nuint)(count * sizeof(ulong)), p,
                 sizeof(ulong), QueryResultFlags.Result64Bit | QueryResultFlags.ResultWaitBit);
         if (r != Result.Success) return null;
-        return GpuStageTimes.FromStamps(_stages, ticks, _nsPerTick, _mask);
+        return GpuStageTimes.FromStamps(_stages, ticks, _nsPerTick, _mask, segmentsMs);
     }
 
     public void Dispose()

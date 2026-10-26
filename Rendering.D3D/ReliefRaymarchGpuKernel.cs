@@ -17,6 +17,11 @@
 //
 // Thread-affine like MandelbrotGpuKernel: one caller drives Run from the calc
 // thread under the shared D3D gate.
+//
+// #1377 — the thread-group shape is tuned per device (GpuGroupShapes slot
+// "relief", on RaymarchGroupShapes' representative frame) on the first Run;
+// the tiles (ReliefGpuTiling) are whole groups of that shape. GPU timestamps
+// (D3D11StageTimer) time the tiles' dispatches.
 
 using System;
 using System.Runtime.InteropServices;
@@ -83,7 +88,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
     private readonly ID3D11DeviceContext _ctx;
     private readonly object _d3dGate;
 
-    private ID3D11ComputeShader _cs = null!;      // pinhole (aperture 0) — eager
+    private ID3D11ComputeShader? _cs;             // pinhole (aperture 0) — eager (again after a shape change)
     private ID3D11ComputeShader? _csDof;          // DOF variant — compiled lazily
     private ID3D11Buffer _paramsBuf = null!;
 
@@ -118,11 +123,16 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
     public double LastDispatchMs { get; private set; }
     public double LastReadbackMs { get; private set; }
 
+    // #1377 — GPU timestamps of the last Run (null without timestamp queries).
+    private readonly D3D11StageTimer _timer;
+    public GpuStageTimes? LastGpuStageTimes { get; private set; }
+
     public ReliefRaymarchGpuKernel(ID3D11Device device, ID3D11DeviceContext context, object d3dGate)
     {
         _device = device ?? throw new ArgumentNullException(nameof(device));
         _ctx = context ?? throw new ArgumentNullException(nameof(context));
         _d3dGate = d3dGate ?? throw new ArgumentNullException(nameof(d3dGate));
+        _timer = new D3D11StageTimer(_device, _ctx);
 
         // Compile the pinhole variant eagerly. The DOF variant is compiled lazily on
         // the first aperture-open dispatch — its lens [loop] around TracePixel makes
@@ -144,13 +154,52 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         // #456 — load the cs_5_0 bytecode from the on-disk cache when present so
         // the one-time FXC compile is paid once per machine. The DOF variant's
         // slow lens-loop compile is the biggest single beneficiary.
+        // #1377 — in the slot's current group shape (the default leaves the source
+        // untouched, so the same cache key as before).
         return D3DShaderCache.CompileOrLoad(
             _device,
-            ReliefRaymarchKernelSource.Build(dof),
+            _shape.Apply(ReliefRaymarchKernelSource.Build(dof)),
             entryPoint: ReliefRaymarchKernelSource.EntryPoint,
             profile: "cs_5_0",
-            sourceName: "ReliefRaymarch.hlsl",
+            sourceName: _shape == GpuGroupShape.Default ? "ReliefRaymarch.hlsl" : $"ReliefRaymarch.g{_shape}.hlsl",
             errorLabel: "ReliefRaymarchGpuKernel");
+    }
+
+    // ── #1377: thread-group shape ────────────────────────────────────────────
+    // One slot (GpuGroupShapes.SlotRelief) for both variants, resolved on the
+    // first Run: the override, the stored winner, or a tuning run (each candidate
+    // timed on the representative frame through this kernel). The cached shaders
+    // are always in the current shape: dropped whenever it changes.
+    private GpuGroupShape _shape = GpuGroupShape.Default;
+    private bool _shapeResolved;
+    private string? _shapeDeviceKey;
+
+    /// <summary>#1377 — the shape the relief kernel dispatches in (the default
+    /// until the first Run resolves it).</summary>
+    public GpuGroupShape GroupShape { get { lock (_d3dGate) return _shape; } }
+
+    /// <summary>#1377 — the store's device key (see <see cref="D3DGroupShapes.DeviceKey"/>).</summary>
+    public string GroupShapeDeviceKey => _shapeDeviceKey ??= D3DGroupShapes.DeviceKey(_device);
+
+    // Called with the D3D gate held.
+    private void EnsureShape()
+    {
+        if (_shapeResolved) return;
+        _shapeResolved = true;   // first: the tuning frames re-enter Run
+        var winner = GpuGroupShapes.Resolve(GroupShapeDeviceKey, GpuGroupShapes.SlotRelief,
+            GpuGroupShapes.SourceHash("fxc-cs_5_0\n" + ReliefRaymarchKernelSource.Build()), GpuGroupShapes.Candidates,
+            shape => { SetShape(shape); return RaymarchGroupShapes.TimeRelief(this); });
+        SetShape(winner);
+    }
+
+    private void SetShape(GpuGroupShape shape)
+    {
+        if (_shape == shape) return;
+        _shape = shape;
+        try { _cs?.Dispose(); } catch { }
+        try { _csDof?.Dispose(); } catch { }
+        _cs = null;
+        _csDof = null;
     }
 
     private void EnsureFieldBuffers(int cells)
@@ -383,6 +432,8 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
 
         lock (_d3dGate)
         {
+            EnsureShape();   // #1377 (may tune: before this frame starts)
+            LastGpuStageTimes = null;
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             EnsureFieldBuffers(hn);
             EnsureOutputBuffers(n);
@@ -421,7 +472,8 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             // DOF shader compiles on first use only (slow FXC compile of its loop).
             bool dof = u.DofAperture > 0.0;
             if (dof) _csDof ??= CompileVariant(dof: true);
-            _ctx.CSSetShader(dof ? _csDof! : _cs);
+            else _cs ??= CompileVariant(dof: false);
+            _ctx.CSSetShader(dof ? _csDof! : _cs!);
             _ctx.CSSetConstantBuffer(0, _paramsBuf);
             _ctx.CSSetShaderResource(0, _heightSrv);
             _ctx.CSSetShaderResource(1, _albedoSrv);
@@ -433,9 +485,12 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             _ctx.CSSetUnorderedAccessView(1, _aovUav);   // S4 — always bound (stub when not emitting)
 
             // #1044 — row bands, each its own Dispatch + Flush (see BandRows).
+            // #1377 — whole groups of the tuned shape (TileSize rounds to it).
+            var shape = _shape;
             double cost = ReliefGpuTiling.CostPerPixel(in u);
-            var (tileRows, tileCols) = ReliefGpuTiling.TileSize(w, h, cost, _nsPerUnit);
+            var (tileRows, tileCols) = ReliefGpuTiling.TileSize(w, h, cost, _nsPerUnit, shape);
             long tGpu0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            _timer.BeginFrame();
             int tiles = 0;
             for (int rowBase = 0; rowBase < h; rowBase += tileRows)
             for (int colBase = 0; colBase < w; colBase += tileCols, tiles++)
@@ -446,7 +501,9 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
                 unsafe { *(ReliefParamsBlob*)mapped.DataPointer = p; }
                 _ctx.Unmap(_paramsBuf, 0);
                 _ctx.CSSetConstantBuffer(0, _paramsBuf);   // re-bind after the WriteDiscard rename
-                _ctx.Dispatch((uint)((cols + 7) / 8), (uint)((rows + 7) / 8), 1);
+                _timer.Begin();
+                _ctx.Dispatch(shape.GroupsX(cols), shape.GroupsY(rows), 1);
+                _timer.Mark(GpuStage.Dispatch);
                 _ctx.Flush();
             }
             LastBandCount = tiles;
@@ -460,7 +517,9 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             _ctx.CSSetShaderResource(4, null);
             _ctx.CSSetShaderResource(5, null);
 
+            _timer.Begin();
             _ctx.CopyResource(_colorStaging!, _colorBuf!);
+            _timer.Mark(GpuStage.CopyOut);
             long tDispatch = System.Diagnostics.Stopwatch.GetTimestamp();
 
             var map = _ctx.Map(_colorStaging!, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
@@ -497,6 +556,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
                 finally { _ctx.Unmap(_aovStaging!, 0); }
             }
 
+            LastGpuStageTimes = _timer.EndFrame();   // #1377 (after the readback Map)
             long tEnd = System.Diagnostics.Stopwatch.GetTimestamp();
             double freq = System.Diagnostics.Stopwatch.Frequency;
             // #1044 — learn the GPU's speed from this frame (dispatch → readback).
@@ -630,6 +690,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         try { _aovStaging?.Dispose(); } catch { }
         try { _paramsBuf?.Dispose(); } catch { }
         try { _cs?.Dispose(); } catch { }
+        try { _timer.Dispose(); } catch { }   // #1377
         try { _csDof?.Dispose(); } catch { }
     }
 }

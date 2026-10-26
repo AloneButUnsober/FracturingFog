@@ -25,6 +25,11 @@
 // Memory is HOST_VISIBLE|HOST_COHERENT (direct map, no staging), matching
 // VulkanComputeKernel. Thread-affine: a single caller drives Run from the calc
 // thread. Not internally synchronised.
+//
+// #1377 — the thread-group shape is tuned per device (GpuGroupShapes slot
+// "relief", on RaymarchGroupShapes' representative frame) on the first Run;
+// the pipelines are built in that shape and the dispatch counts its groups.
+// GPU timestamps (VulkanStageTimer) time the dispatch.
 
 using System;
 using System.Diagnostics;
@@ -130,6 +135,10 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
     public double LastDispatchMs { get; private set; }
     public double LastReadbackMs { get; private set; }
 
+    // #1377 — GPU timestamps of the last Run (null without timestamp support).
+    private readonly VulkanStageTimer _timer;
+    public GpuStageTimes? LastGpuStageTimes { get; private set; }
+
     /// <summary>Human-readable backend label.</summary>
     public string Description => $"Vulkan relief ({_ctx.PickedType}: {_ctx.PickedName})";
 
@@ -145,6 +154,7 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         _vk = ctx.Vk;
         _device = ctx.Device;
         _pipelineCache = new VulkanPipelineCache(ctx, "relief");   // #1341, before the pipelines are built
+        _timer = new VulkanStageTimer(ctx);   // #1377
 
         var cpci = new CommandPoolCreateInfo
         {
@@ -198,6 +208,8 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         if (w <= 0 || h <= 0) return;
         if (hbuf.Length < hn || albedo.Length < n || dst.Length < n)
             throw new ArgumentException("relief GPU input buffer too small for the uniforms");
+        EnsureShape();   // #1377 (may tune: before this frame starts)
+        LastGpuStageTimes = null;
 
         // S4 (#402) — emit the primary-hit normal/depth AOVs when both guides are
         // supplied and large enough; else colour only (a 1-px u1 stub stays bound).
@@ -304,10 +316,14 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
             // the pinhole single-ray pipeline.
             bool dof = u.DofAperture > 0.0;
             if (dof) EnsureDofPipeline();
+            else EnsurePinholePipeline();
             Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
+            _timer.BeginFrame();
+            _timer.Begin(cmd);
             _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, dof ? _pipelineDof : _pipeline);
             _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, _layout, 0, 1, &set, 0, null);
-            _vk.CmdDispatch(cmd, (uint)((w + 7) / 8), (uint)((h + 7) / 8), 1);
+            _vk.CmdDispatch(cmd, _shape.GroupsX(w), _shape.GroupsY(h), 1);   // #1377 — the tuned shape
+            _timer.Mark(cmd, GpuStage.Dispatch);
             Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
 
             var cmdLocal = cmd;
@@ -318,6 +334,7 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
             };
             Check(_vk.QueueSubmit(_ctx.ComputeQueue, 1, &submit, default), "vkQueueSubmit");
             Check(_vk.QueueWaitIdle(_ctx.ComputeQueue), "vkQueueWaitIdle");
+            LastGpuStageTimes = _timer.EndFrame();   // #1377
         }
         finally
         {
@@ -431,7 +448,7 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
     private (ShaderModule, Pipeline) CreateVariant(bool dof)
     {
         byte[] spirv = DxcCompiler.CompileToSpirv(
-            ReliefRaymarchKernelSource.Build(dof), ReliefRaymarchKernelSource.EntryPoint, "cs_6_0",
+            _shape.Apply(ReliefRaymarchKernelSource.Build(dof)), ReliefRaymarchKernelSource.EntryPoint, "cs_6_0",   // #1377
             "-fvk-b-shift", BShift.ToString(), "0",
             "-fvk-t-shift", TShift.ToString(), "0",
             "-fvk-u-shift", UShift.ToString(), "0");
@@ -477,6 +494,49 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
     {
         if (_pipelineDof.Handle != 0) return;
         (_moduleDof, _pipelineDof) = CreateVariant(dof: true);
+    }
+
+    // #1377 — the pinhole pipeline again after a shape change dropped it.
+    private void EnsurePinholePipeline()
+    {
+        if (_pipeline.Handle != 0) return;
+        (_module, _pipeline) = CreateVariant(dof: false);
+    }
+
+    // ── #1377: thread-group shape ─────────────────────────────────────────────
+    // One slot (GpuGroupShapes.SlotRelief) for both variants, resolved on the
+    // first Run: the override, the stored winner, or a tuning run (each candidate
+    // timed on the representative frame through this kernel). The pipelines are
+    // always in the current shape: dropped whenever it changes.
+    private GpuGroupShape _shape = GpuGroupShape.Default;
+    private bool _shapeResolved;
+
+    /// <summary>#1377 — the shape the relief kernel dispatches in (the default
+    /// until the first Run resolves it).</summary>
+    public GpuGroupShape GroupShape => _shape;
+
+    /// <summary>#1377 — the store's device key (see <see cref="VulkanGroupShapes.DeviceKey"/>).</summary>
+    public string GroupShapeDeviceKey => VulkanGroupShapes.DeviceKey(_ctx);
+
+    private void EnsureShape()
+    {
+        if (_shapeResolved) return;
+        _shapeResolved = true;   // first: the tuning frames re-enter Run
+        var winner = GpuGroupShapes.Resolve(GroupShapeDeviceKey, GpuGroupShapes.SlotRelief,
+            GpuGroupShapes.SourceHash("vulkan-spv\n" + ReliefRaymarchKernelSource.Build()), VulkanGroupShapes.Candidates(_ctx),
+            shape => { SetShape(shape); return RaymarchGroupShapes.TimeRelief(this); });
+        SetShape(winner);
+    }
+
+    private void SetShape(GpuGroupShape shape)
+    {
+        if (_shape == shape) return;
+        _shape = shape;
+        // Every Run waits for its queue, so no pipeline is in flight here.
+        if (_pipeline.Handle != 0) { _vk.DestroyPipeline(_device, _pipeline, null); _pipeline = default; }
+        if (_pipelineDof.Handle != 0) { _vk.DestroyPipeline(_device, _pipelineDof, null); _pipelineDof = default; }
+        if (_module.Handle != 0) { _vk.DestroyShaderModule(_device, _module, null); _module = default; }
+        if (_moduleDof.Handle != 0) { _vk.DestroyShaderModule(_device, _moduleDof, null); _moduleDof = default; }
     }
 
     // ── buffers ───────────────────────────────────────────────────────────────
@@ -639,6 +699,7 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         FreeBuffer(ref _albedo);
         FreeBuffer(ref _color);
         FreeBuffer(ref _aov);
+        _timer.Dispose();   // #1377
         if (_cmdPool.Handle != 0) { _vk.DestroyCommandPool(_device, _cmdPool, null); _cmdPool = default; }
         _pipelineCache.Dispose();   // #1341 — saves
         if (_ownsContext) { try { _ctx.Dispose(); } catch { } }

@@ -268,18 +268,10 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     public GpuGroupShape GroupShape(string slot) { using var sync = Sync(); return Shape(slot); }
 
     /// <summary>#1339 — "vulkan|adapter|vendor:device|driver", the store's device key.</summary>
-    public string GroupShapeDeviceKey =>
-        $"vulkan|{_ctx.PickedName}|{_ctx.VendorId:X4}:{_ctx.DeviceId:X4}|{_ctx.DriverVersion:X8}";
+    public string GroupShapeDeviceKey => VulkanGroupShapes.DeviceKey(_ctx);
 
     /// <summary>#1339 — the candidates this device can run.</summary>
-    private List<GpuGroupShape> ShapeCandidates()
-    {
-        var list = new List<GpuGroupShape>();
-        foreach (var c in GpuGroupShapes.Candidates)
-            if (c.Threads <= _ctx.MaxComputeWorkGroupInvocations && c.X <= _ctx.MaxComputeWorkGroupSizeX && c.Y <= _ctx.MaxComputeWorkGroupSizeY)
-                list.Add(c);
-        return list;
-    }
+    private List<GpuGroupShape> ShapeCandidates() => VulkanGroupShapes.Candidates(_ctx);
 
     private static string SlotSource(string slot) => slot switch
     {

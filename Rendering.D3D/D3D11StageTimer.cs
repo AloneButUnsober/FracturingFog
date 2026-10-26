@@ -73,8 +73,9 @@ internal sealed class D3D11StageTimer : IDisposable
     }
 
     /// <summary>Close the frame and read its stage times (null when off, aborted,
-    /// overflowed or disjoint).</summary>
-    public unsafe GpuStageTimes? EndFrame()
+    /// overflowed or disjoint). #1377 — <paramref name="segmentsMs"/> receives
+    /// each segment's time (see <see cref="GpuStageTimes.FromStamps"/>).</summary>
+    public unsafe GpuStageTimes? EndFrame(List<double>? segmentsMs = null)
     {
         if (!_open) return null;
         _open = false;
@@ -89,7 +90,7 @@ internal sealed class D3D11StageTimer : IDisposable
             if (!Wait(_queries[i], &t, sizeof(ulong))) return null;
             ticks[i] = t;
         }
-        return GpuStageTimes.FromStamps(_stages, ticks, 1e9 / dj.Frequency);
+        return GpuStageTimes.FromStamps(_stages, ticks, 1e9 / dj.Frequency, segmentsMs: segmentsMs);
     }
 
     // GetData returns S_FALSE until the GPU has reached the query; the frame's

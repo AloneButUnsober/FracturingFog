@@ -52,15 +52,25 @@ public static class ReliefGpuTiling
     /// row bands, narrowed to column tiles when even an 8-row band is too slow.</summary>
     public static (int Rows, int Cols) TileSize(int w, int h, double costPerPixel, double nsPerUnit,
                                                   double targetMs = BandTargetMs)
+        => TileSize(w, h, costPerPixel, nsPerUnit, GpuGroupShape.Default, targetMs);
+
+    /// <summary>#1377 — <see cref="TileSize(int,int,double,double,double)"/> for
+    /// thread groups of <paramref name="shape"/>: rows are whole multiples of its Y
+    /// and columns of its X, so every tile is a whole number of groups. A tile that
+    /// isn't would run its last groups into the next tile (#1334 found that bug in
+    /// the perturbation bands). The 8×8 default gives the #1044 sizes.</summary>
+    public static (int Rows, int Cols) TileSize(int w, int h, double costPerPixel, double nsPerUnit,
+                                                  GpuGroupShape shape, double targetMs = BandTargetMs)
     {
+        int gx = shape.X, gy = shape.Y;
         double msPerPixel = costPerPixel * nsPerUnit * 1e-6;
-        if (!(msPerPixel > 0)) return (RoundUp8(h), RoundUp8(w));
+        if (!(msPerPixel > 0)) return (RoundUp(h, gy), RoundUp(w, gx));
         double pixels = targetMs / msPerPixel;
         int rows = (int)(pixels / w);
-        if (rows >= 8) return (Math.Min(RoundUp8(h), rows / 8 * 8), RoundUp8(w));
-        int cols = Math.Max(8, (int)(pixels / 8) / 8 * 8);
-        return (8, Math.Min(RoundUp8(w), cols));
+        if (rows >= gy) return (Math.Min(RoundUp(h, gy), rows / gy * gy), RoundUp(w, gx));
+        int cols = Math.Max(gx, (int)(pixels / gy) / gx * gx);
+        return (gy, Math.Min(RoundUp(w, gx), cols));
     }
 
-    private static int RoundUp8(int v) => (Math.Max(1, v) + 7) / 8 * 8;
+    private static int RoundUp(int v, int m) => (Math.Max(1, v) + m - 1) / m * m;
 }
