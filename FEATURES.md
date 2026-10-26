@@ -66,15 +66,15 @@ this host today.
 | Feature                         | Windows | Linux   | macOS   |
 |---------------------------------|:-------:|:-------:|:-------:|
 | Avalonia shell                  | Yes     | Yes     | Yes     |
-| **Render — DirectX 11 / 12**    | Yes     | No      | No      |
+| **Render — DirectX 11 / 12**    | Yes (DX11 default; DX12 opt-in via `--renderer dx12`) | No | No |
 | **Render — Silk.NET OpenGL**    | Yes (opt-in via `--renderer silk`) | Yes (default) | Yes (default, CGL/GL 4.10 fallback) |
 | **Render — SkiaSharp CPU**      | Yes (opt-in via `--renderer skia`) | Yes | Yes |
 | GPU compute (D3D11 kernel)      | Yes     | No      | No      |
-| GPU compute (Vulkan / SPIR-V) ‡ | Opt-in (`--renderer vulkan`) | Opt-in (`--renderer vulkan`) | Opt-in (`--renderer vulkan`) |
+| GPU compute (Vulkan / SPIR-V) ‡ | Opt-in (`--renderer vulkan`) | Yes (default; DXC bundled in the x64 AppImage, arm64 needs `dxc` on PATH) | Untested (`--renderer vulkan` with a user-installed MoltenVK + `dxc`) |
 | GPU compute (ILGPU CUDA / OpenCL) | Yes (when GPU drivers present) | Yes (when GPU drivers present) | Limited (Metal backend pending upstream — CPU fallback) |
 | CPU compute (SIMD AVX2 / 512)   | Yes     | Yes     | Yes     |
-| **Audio — System loopback**     | Yes     | No      | No      |
-| **Audio — Microphone**          | Yes     | No      | No      |
+| **Audio — System loopback**     | Yes     | Limited (OpenAL, needs a PulseAudio / PipeWire `.monitor` source) | No (no native monitor source) |
+| **Audio — Microphone**          | Yes     | Yes (OpenAL Soft, bundled) | Yes (OpenAL Soft, bundled) |
 | **Audio — File playback**       | Yes     | Yes     | Yes     |
 | **Audio — Synth source**        | Yes     | Yes     | Yes     |
 | Audio-reactive slideshow        | Yes     | Yes     | Yes     |
@@ -93,22 +93,28 @@ this host today.
 | Headless render server (mTLS)   | Yes     | Yes     | Yes     |
 | Client dialog (sealed vault)    | Yes     | Yes     | Yes     |
 | Wayland session (Silk EGL)      | —       | Yes (Limited on NVIDIA) | —       |
-| Toy / Mini-mode window drag     | Yes     | No (Limited — Avalonia event hook pending) | No (same) |
+| Toy / Mini-mode window drag     | Yes     | Yes (Limited on Wayland — compositor may refuse the move) | Yes |
 | First-run FFmpeg auto-download  | Yes     | No (package-manager flow) | No (Homebrew flow) |
-| Code-signed installer           | No (zip ships unsigned) | No (AppImage) | Limited (notarisation pending Apple Developer cert) |
+| Installer                       | Yes (`.msi` + portable `.zip`) | Yes (AppImage + `web-install.sh`) | Yes (`.app` in `.tar.gz`) |
+| Code-signed installer           | No (`.msi` / `.zip` unsigned) | No (AppImage) | No (notarisation pending Apple Developer cert) |
 | Multi-monitor span              | Yes     | Yes     | Yes     |
 
-‡ **Vulkan / SPIR-V GPU compute is experimental.** Enabled by selecting the
-Vulkan backend (`--renderer vulkan`); it needs a Vulkan device (deep-zoom
-perturbation additionally needs `shaderFloat64`). Exercised so far only against
-software rasterizers (e.g. lavapipe) and low-end parts — **pending validation on
-a capable discrete GPU**. The Ctrl+G hotkey and the Control Center "GPU compute"
-checkbox toggle the shallow-Mandelbrot GPU path for **whichever compute backend
-this session attached** — D3D11 on a default Windows run, or Vulkan/SPIR-V under
-`--renderer vulkan` (one backend per session, chosen at launch by `--renderer`).
-The box clears itself when no device can engage. Deep-zoom perturbation is a
-separate auto-enabled path (needs `shaderFloat64`) and is unaffected by the
-checkbox.
+‡ **Vulkan / SPIR-V GPU compute.** On **Linux it is the default** (#1455): the
+shell attaches the Vulkan kernels when it finds a non-CPU Vulkan device with a
+compute queue and a working `dxc` (bundled in the x64 AppImage; otherwise
+`DXC_PATH`, the Vulkan SDK or `PATH`). The window title and stderr name the
+device, or say why GPU compute is off. `--renderer silk` / `skia` keep the CPU; a CPU Vulkan
+driver (llvmpipe / lavapipe) only counts with `FF_VULKAN_ALLOW_CPU=1` (testing).
+On **Windows** it is opt-in (`--renderer vulkan`) and replaces the default D3D11
+kernel for that session.
+Deep-zoom perturbation additionally needs `shaderFloat64`. The Ctrl+G hotkey and
+the Control Center "GPU compute" checkbox toggle the shallow-Mandelbrot GPU path
+for **whichever compute backend this session attached** (one backend per
+session, chosen at launch by `--renderer`). The box clears itself when no device
+can engage. Deep-zoom perturbation is a separate auto-enabled path and is
+unaffected by the checkbox.
+Performance work so far has been measured on low-end discrete GPUs and software
+rasterizers; validation on high-end discrete GPUs is still pending.
 
 See [Docs/User/CrossPlatform-UserGuide.md](Docs/User/CrossPlatform-UserGuide.md)
 for the per-OS install and caveat details and
