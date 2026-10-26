@@ -276,7 +276,8 @@ finite-size-Lyapunov literature, which these entries anchor.
   geometric predicates.* Discrete & Computational Geometry 18(3), 1997. The exact expansion sum used
   by octuple-double addition (`OctupleDouble.cs`, #1319).
 - **Mariani–Silver subdivision** (Rico Mariani, Robert Silver). Rectangle subdivision that fills a
-  box whose border is uniformly in-set — solid-region skipping (#1343). See
+  box whose border is uniformly in-set — solid-region skipping (#1343; since #1394 part 2 also the
+  Julia and Multibrot families, `SolidRegionSubdivision.cs`). See
   [Citations awaiting verification](#citations-awaiting-verification) for the primary source.
 - **Wikipedia contributors.** *Plotting algorithms for the Mandelbrot set*, section "Cardioid / bulb
   checking". <https://en.wikipedia.org/wiki/Plotting_algorithms_for_the_Mandelbrot_set> (accessed

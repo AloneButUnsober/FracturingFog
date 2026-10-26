@@ -908,10 +908,14 @@ namespace FracturingFog.Models
                     FaithfulImplosionParentQ = (p.FaithfulImplosion && p.FaithfulImplosionParentQ > 1) ? p.FaithfulImplosionParentQ : null,
                     FaithfulImplosionParentPath = (p.FaithfulImplosion && !string.IsNullOrWhiteSpace(p.FaithfulImplosionParentPath)) ? p.FaithfulImplosionParentPath : null,
                     EscapeIterationScale = Nd(p.EscapeIterationScale, D.EscapeIterationScale),   // #961
+                    SolidRegionSkip = p.SolidRegionSkip != D.SolidRegionSkip ? p.SolidRegionSkip : null,   // #1394 part 2
+                    SolidRegionAuto = p.SolidRegionAuto != D.SolidRegionAuto ? p.SolidRegionAuto : null,
                 },
                 FractalType.Multibrot => new RegionFractalParams
                 {
                     MultibrotExponent = p.MultibrotExponent,
+                    SolidRegionSkip = p.SolidRegionSkip != D.SolidRegionSkip ? p.SolidRegionSkip : null,   // #1394 part 2
+                    SolidRegionAuto = p.SolidRegionAuto != D.SolidRegionAuto ? p.SolidRegionAuto : null,
                 },
                 FractalType.Phoenix => new RegionFractalParams
                 {
