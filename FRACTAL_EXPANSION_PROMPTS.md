@@ -1,15 +1,53 @@
 # Fractal Expansion — Self-Contained Prompt Series
 
-Each prompt below is standalone. Drop into a fresh Claude Code session in this repo. Run in order.
+> **Status (2026-10-26, #1476): historical record. All nine prompts have shipped.**
+>
+> This was the May-2026 prompt series that took Fracturing Fog from one fractal to many.
+> Each prompt below now opens with an **As built** note giving the real file paths and
+> what changed from the plan. The original prompt text is kept, collapsed, for history.
+> **Do not run the original prompts as written.** They target `MainForm` / WinForms
+> (removed in #116), old paths and a Roslyn design that has since been retired.
+>
+> The live plans are elsewhere:
+>
+> - `Docs/Fractal-Expansion-Roadmap.md`: phases A–D (all 19 slices shipped) plus deferred
+>   follow-ups.
+> - Theoretical fractal R&D epic #850 (Lyapunov, transcendental Julia, Magnet,
+>   Kleinian / Indra's Pearls, dual-orbit / Julibrot, parabolic implosion, …).
+> - GitHub issues: the canonical task list (`AloneButUnsober/FracturingFog`).
 
-Decisions baked in:
-- Existing color themes must continue to work on new fractal types where mathematically meaningful (smooth iter + distance themes). Interior-cycle themes gated to Mandelbrot.
-- User-equation entry uses **Roslyn scripting** (full C#). Deferred to later phase.
-- 3D fractals (Mandelbulb, etc.) deferred.
+Decisions in the original series, and how they turned out:
+
+| Original decision | Outcome |
+|---|---|
+| Existing colour themes keep working on new types; interior-cycle themes gated to Mandelbrot | Held. Theme gating per `FractalType` / colour-map features. |
+| User equations via **Roslyn scripting** (full C#), deferred | Shipped, then replaced by the Sandbox DSL / equation language (#937). Raw C# removed. |
+| 3D fractals deferred | Shipped. Ten raymarched 3D families, CPU + GPU. |
 
 ---
 
 ## Prompt 0 — Foundation: kernel abstraction + enum + params
+
+### As built
+
+**Status: shipped.** Paths moved when the solution was split into projects.
+
+- `FractalType` lives in `Abstractions/Models/Enums.cs` and has grown from the 13 members
+  listed below to 56 (see *Current FractalType inventory*).
+- `FractalParameters` is a class (not a record) in `Abstractions/Models/FractalParameters.cs`
+  and now carries every family's tunables. `JuliaC`, `MultibrotExponent`, `PhoenixP`,
+  `IFSMaps`, `UserEquationSource` exist as specified. `AffineMap` is a
+  `readonly record struct` in the same file.
+- `NewtonPolyCoeffs` is declared but **no calculator reads it**. The Newton family
+  uses `NewtonExponent` (f(z) = z^d − 1).
+- `IFractalKernel` is in `Engine/Interefaces/IFractalKernel.cs` and gained `InitState(...)`
+  (per-kernel z0/derivative seeding). A sibling `ISimdFractalKernel` adds
+  `InitStateSimd` / `StepSimd` for `Vector<double>` lanes.
+- Kernels live in `Engine/Models/FractalKernels/`: Mandelbrot, Julia, BurningShip, Tricorn,
+  Multibrot, Phoenix, plus later Glynn, MagnetOne, MagnetTwo, Spider.
+
+<details>
+<summary>Original prompt (May 2026, superseded)</summary>
 
 ```
 Extend the fractal engine to support multiple escape-time formulas without rewriting MandelbrotCalculator.cs.
@@ -47,9 +85,33 @@ Extend the fractal engine to support multiple escape-time formulas without rewri
 6. Build clean. No UI wiring yet.
 ```
 
+</details>
+
 ---
 
 ## Prompt 1 — EscapeTimeCalculator + UI dispatch
+
+### As built
+
+**Status: shipped, UI path superseded.**
+
+- `Engine/Calculators/EscapeTimeCalculator.cs` serves Julia, BurningShip, Tricorn,
+  Multibrot, Phoenix, Magnet1/2, Glynn and Spider. `MandelbrotCalculator` stays the
+  deep-zoom path for Mandelbrot.
+- Dispatch is in `Engine/Rendering/FractalRenderHost.cs` (`FractalType` → calculator
+  switch), not `MainForm`.
+- **`MainForm` no longer exists.** WinForms was removed in #116. The fractal-type picker
+  is in the Control Center *Explore* section
+  (`UI.Avalonia/Views/ControlCenterSections/ExploreSectionView.axaml`). Per-family
+  parameters are Control Center controls bound through `FloatingMenuViewModel`.
+  Do not revive the toolbar combo or the FloatingMenu view.
+- Deep zoom for these families: CalculatorGen-emitted variants (`GeneratedMandelbrotZ2..Z5`,
+  `GeneratedTricorn`, `GeneratedBurningShip`) carry scalar / AVX2 / GPU / perturbation /
+  BLA. Perturbation past ~1e13 for the hand-written Multibrot / Burning Ship / Tricorn
+  paths is still open: #1253.
+
+<details>
+<summary>Original prompt (May 2026, superseded)</summary>
 
 ```
 Build a new calculator for the non-Mandelbrot escape-time fractals added in phase 0. Keep MandelbrotCalculator.cs untouched — it stays the optimized path for FractalType.Mandelbrot.
@@ -94,9 +156,28 @@ Build a new calculator for the non-Mandelbrot escape-time fractals added in phas
 11. Build clean. Manually test: open app, switch through every fractal, confirm something sensible renders.
 ```
 
+</details>
+
 ---
 
 ## Prompt 2 — Newton / Nova / Halley with basin coloring
+
+### As built
+
+**Status: shipped, different architecture.**
+
+- `IBasinKernel`, `BasinCalculator` and `BasinColorMap` were **never built**.
+- Newton and Nova share `Engine/Calculators/NewtonCalculator.cs`. Nova is selected by
+  `FractalType.Nova` and adds the +c term (#1294, see `NovaJuliaC`).
+- Halley and Secant each have their own calculator (`HalleyCalculator.cs`,
+  `SecantCalculator.cs`). Both reuse `NewtonExponent` / `NewtonRelaxation`. Secant adds
+  `SecantInitialOffset`.
+- The arbitrary-polynomial entry (`NewtonPolyCoeffs`, "z^3 − 1" parser) was not wired.
+  Root-finding on a user formula is reachable through the equation language instead
+  (see Prompt 7).
+
+<details>
+<summary>Original prompt (May 2026, superseded)</summary>
 
 ```
 Add root-finding fractals as a new family. They iterate z := z - f(z)/f'(z) and converge to one of f's roots — coloring is by basin (which root) blended with iteration count.
@@ -124,9 +205,26 @@ Add root-finding fractals as a new family. They iterate z := z - f(z)/f'(z) and 
 7. View default: (0, 0, 3).
 ```
 
+</details>
+
 ---
 
 ## Prompt 3 — Buddhabrot / Nebulabrot
+
+### As built
+
+**Status: shipped and extended.**
+
+- `Engine/Calculators/BuddhabrotCalculator.cs`. Metropolis–Hastings sampling is opt-in via
+  `BuddhaMetropolis`; uniform sampling scales with window size and zoom (#1222 / #1224).
+  GPU and CPU share one sampler and are chosen by measurement (#1218, #1220).
+- Nebulabrot became its own `FractalType` rather than a mode. `AntiBuddhabrot`,
+  `AntiNebulabrot` (`AntiBuddhabrotCalculator.cs`) and `DualBuddhabrot` (#1124,
+  `DualBuddhabrotCalculator.cs`) followed.
+- Interaction notes: #193, #194, #836–#838.
+
+<details>
+<summary>Original prompt (May 2026, superseded)</summary>
 
 ```
 Add Buddhabrot. Reuses Mandelbrot iteration but accumulates orbit visit counts for ESCAPING points rather than per-pixel escape time.
@@ -151,9 +249,24 @@ Add Buddhabrot. Reuses Mandelbrot iteration but accumulates orbit visit counts f
 6. View default: (-0.5, 0, 1).
 ```
 
+</details>
+
 ---
 
 ## Prompt 4 — IFS engine (chaos game + Barnsley fern, Sierpinski, etc.)
+
+### As built
+
+**Status: shipped.**
+
+- `Engine/Calculators/IFSCalculator.cs` + `Engine/Models/IFSPresets.cs`. Presets as
+  specified: Sierpinski Triangle, Sierpinski Carpet, Barnsley Fern, Heighway Dragon,
+  Koch Curve, Pythagoras Tree. Selected by `IFSPresetName`. Custom maps via `IFSMaps`.
+- No `DataGridView` editor (WinForms is gone). The non-linear chaos-game successor is the
+  `Flame` family (`FlameRenderer.cs`, `FlamePresets.cs`).
+
+<details>
+<summary>Original prompt (May 2026, superseded)</summary>
 
 ```
 Add Iterated Function System rendering. Completely different pipeline from escape-time.
@@ -179,9 +292,23 @@ Add Iterated Function System rendering. Completely different pipeline from escap
 6. Plug into FractalType.IFS dispatch in MainForm.
 ```
 
+</details>
+
 ---
 
 ## Prompt 5 — L-System engine
+
+### As built
+
+**Status: shipped, preset list larger.**
+
+- `Engine/Calculators/LSystemCalculator.cs` + `Engine/Models/LSystemPresets.cs`, selected by
+  `LSystemPresetName`. Presets now include Hilbert, Gosper, Plant, Bush, Crystal, Dragon,
+  Twindragon, Levy C, Koch Curve, Koch Snowflake, Quadratic Koch Island, Peano, Pentigree,
+  Pythagoras Tree, Sierpinski Arrowhead and Sierpinski Carpet.
+
+<details>
+<summary>Original prompt (May 2026, superseded)</summary>
 
 ```
 Add L-System fractals. String rewriting + turtle graphics.
@@ -209,9 +336,24 @@ Add L-System fractals. String rewriting + turtle graphics.
 6. Plug into FractalType.LSystem dispatch.
 ```
 
+</details>
+
 ---
 
 ## Prompt 6 — Strange attractors
+
+### As built
+
+**Status: shipped (preset-based, not an `IAttractorKernel` interface).**
+
+- `Engine/Calculators/AttractorCalculator.cs`. Built-ins: Clifford, De Jong, Hopalong,
+  Lorenz. Lorenz uses an RK4 step and projects (x, z) to 2D. There is no orbit camera or
+  z-buffer.
+- Selected by `AttractorPresetName`. Related histogram renderers that came later:
+  `Logistic` (`LogisticCalculator.cs`) and `Lyapunov` (#851, `LyapunovCalculator.cs`).
+
+<details>
+<summary>Original prompt (May 2026, superseded)</summary>
 
 ```
 Add strange attractor visualization (Lorenz, Clifford, De Jong, Hopalong).
@@ -239,9 +381,29 @@ Add strange attractor visualization (Lorenz, Clifford, De Jong, Hopalong).
 6. FractalType.StrangeAttractor dispatch.
 ```
 
+</details>
+
 ---
 
 ## Prompt 7 — User-entered equation via Roslyn
+
+### As built
+
+**Status: shipped, then redesigned. Do not follow this prompt.**
+
+- The raw-C# Roslyn compile path was **removed** (user-code surface reduction). User
+  equations are translated to the Sandbox DSL and run by a safe interpreter
+  (`Engine/Calculators/UserEquationCalculator.cs`, `SandboxCalculator.cs`). Legacy
+  sources migrate via `UserEquationDslMigration.cs`.
+- The shared equation language lives in the `Equations/` project (parser, formatter,
+  completion, signatures). Spec: `Docs/Technical/Equation-Language.md` (epic #937).
+  Editor formatting: epic #1360.
+- 3D user formulas are the `UserBulb` family: typed expression-tree compile (#1110 /
+  #1111) plus a GPU dispatch (`Engine/Calculators/Gpu/UserBulbGpuDispatch.cs`).
+- `RoslynRefs.cs` still exists for the hot-load path. It is not a user-equation compiler.
+
+<details>
+<summary>Original prompt (May 2026, superseded)</summary>
 
 ```
 Add user-defined equation rendering. Real-time edit + compile.
@@ -270,9 +432,26 @@ Add user-defined equation rendering. Real-time edit + compile.
 7. FractalType.UserEquation dispatch.
 ```
 
+</details>
+
 ---
 
 ## Prompt 8 — 3D Mandelbulb (compute shader, deferred)
+
+### As built
+
+**Status: shipped. No longer deferred.**
+
+- CPU: `Engine/Calculators/MandelbulbCalculator.cs`. GPU: ILGPU kernels in
+  `Engine/Calculators/Gpu/` (`MandelbulbGpuCalculator.cs` and siblings), not a
+  hand-written `Shaders/Mandelbulb.hlsl`.
+- The 3D family grew to Mandelbox, KIFS, Menger / Sierpinski folds, Quaternion Julia /
+  Mandelbrot, Bicomplex, Coquaternion, Kleinian, Julibrot and UserBulb. Shared camera,
+  lighting, Relief 3D, AO, DoF and adaptive-AA infrastructure now sit on top. See the
+  3D rendering roadmap (#389) and the GPU parity tracker (#1173).
+
+<details>
+<summary>Original prompt (May 2026, superseded)</summary>
 
 ```
 Add 3D Mandelbulb / Mandelbox / Quaternion Julia. Distance-estimation raymarching on GPU.
@@ -294,11 +473,69 @@ Add 3D Mandelbulb / Mandelbox / Quaternion Julia. Distance-estimation raymarchin
 NOTE: this is the largest single phase. Consider as v2 milestone.
 ```
 
+</details>
+
 ---
 
-## Cross-cutting notes for future phases
+## Current FractalType inventory (56 members)
+
+Grouped by engine. The enum's XML docs in `Abstractions/Models/Enums.cs` have the
+per-family formula and tunables. The sources behind each family are listed in
+`Docs/Resources-Bibliography.md`.
+
+| Engine | Types |
+|---|---|
+| Deep-zoom escape-time | `Mandelbrot` (`MandelbrotCalculator`: perturbation / BLA / DD–OD precision) |
+| Kernel escape-time (`EscapeTimeCalculator`) | `Julia`, `BurningShip`, `Tricorn`, `Multibrot`, `Phoenix`, `Magnet1`, `Magnet2`, `Glynn`, `Spider` |
+| CalculatorGen-emitted | `GeneratedMandelbrotZ2`–`Z5`, `GeneratedTricorn`, `GeneratedBurningShip` |
+| Other escape-time | `TearDrop`, `TranscendentalJulia`, `PrecisionField` |
+| Root-finding basins | `Newton`, `Nova`, `Halley`, `Secant` |
+| Orbit histograms | `BuddhaBrot`, `Nebulabrot`, `AntiBuddhabrot`, `AntiNebulabrot`, `DualBuddhabrot` |
+| Dynamical-system histograms | `StrangeAttractor`, `Logistic`, `Lyapunov`, `ChaoticBilliard` |
+| Geometric / IFS / grammar | `IFS`, `Flame`, `LSystem`, `Apollonian`, `IndrasPearls`, `RandomTile` |
+| Stochastic / procedural | `Dla`, `Plasma`, `AcidWarp` |
+| User formulas | `UserEquation`, `Sandbox` (2D DSL), `UserBulb` (3D) |
+| 3D raymarched | `Mandelbulb`, `Mandelbox`, `Kifs`, `QuaternionJulia`, `QuaternionMandelbrot`, `BicomplexMandelbrot`, `Coquaternion`, `Kleinian`, `Julibrot` |
+| Dual-orbit 2D | `JulibrotPair` |
+
+---
+
+## Cross-cutting notes (current)
+
+- **UI:** new surfaces go in Control Center sections (`UI.Avalonia/Views/ControlCenterSections/`).
+  `FloatingMenuView` is retired. `FloatingMenuViewModel` is the shared state hub.
+- **Batch parity:** every render-affecting family or parameter must stay reproducible via
+  `--batch` and the Control Center **Command** builder (#64). Per-family params ride
+  `RegionFractalParams` (→ `--param Key=Value`). See `CLAUDE.md` → *Keep batch processing in
+  step with every feature*.
+- **Theme compatibility:** smooth-iteration + distance themes work on any escape-time
+  family. Interior / orbit-trap themes need per-family validation. Histogram and
+  procedural families push their scalar through the active `IColorMap`.
+- **Screenshot / poster / video:** `Engine/Imaging/PosterRenderer.cs` handles every
+  family. Video zoom is meaningful only for zoomable families. Fixed-attractor families
+  (IFS, L-System, attractors, Plasma, Acid Warp) treat pan/zoom as fit-to-bounds or a no-op.
+- **Citation contract:** any formula, preset or constant taken from outside goes into
+  `Docs/Resources-Bibliography.md` in the same change, credited at point of use. Run
+  `python Tools/CitationGuard/citation_guard.py --base origin/main` before committing.
+
+## Writing a new prompt in this style
+
+If you add a family, file a GitHub issue first and write the prompt against today's
+layout:
+
+1. `FractalType` member + XML doc → `Abstractions/Models/Enums.cs` (ASCII name only).
+2. Tunables → `FractalParameters` + `RegionFractalParams` (batch / region round-trip).
+3. Calculator → `Engine/Calculators/`, dispatched in `Engine/Rendering/FractalRenderHost.cs`
+   and `PosterRenderer`.
+4. Control Center controls + help text (`Abstractions/Help/HelpTextBundle.cs`).
+5. Command-builder seed + parse round-trip test, and bibliography entry.
+
+<details>
+<summary>Original cross-cutting notes (May 2026, superseded)</summary>
 
 - Color theme compatibility: most smooth-iter + distance themes work on any escape-time fractal as-is. Themes flagged `UsesInterior` or `UsesOrbitTrap` need per-fractal validation — gate via `IColorMap.Features` checks in MainForm theme combo population.
 - Iteration lock: `_iterLocked` in MainForm should respect per-fractal sensible iteration ranges.
 - Screenshot/poster pipeline: should work without changes — operates on ColorBuffer regardless of source calculator.
 - Video zoom: only valid for fractals with meaningful zoom semantics (escape-time, basin). Disable for IFS/L-system/attractors which have fixed bounded attractors.
+
+</details>
