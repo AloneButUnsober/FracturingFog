@@ -279,6 +279,11 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, 
             TemporalLighting.SceneKey(in fx, eps, in deStruct),
             usable: !thinLensDof && eyeOffset == 0 && fx.DebugAov == AovView.Beauty);
 
+        // #1390 — the live view's distance-field cache (#1336): march the baked field
+        // while only the camera moves (no field: the DE itself, the same frame).
+        var fde = DistanceFieldCache.For(in deStruct, setRadius, eps, camX, camY, camZ, camDist,
+            2.0 * fovScale / height, usable: !thinLensDof);
+
         // #1382 — adaptive AA: only the marked pixels (a full-size, full-detail frame).
         byte[]? mask = !lowRes && width == fullW && height == fullH
             && PixelMask is { } pmask && pmask.Length == width * height ? pmask : null;
@@ -361,7 +366,7 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, 
                 var relax = new SphereRelax(omega);   // #1335 over-relaxed sphere tracing
                 for (int step = 0; step < maxSteps; step++)
                 {
-                    double dist = MandelboxDE(px, py, pz, scale, fixedR2, minR2, bailout2, deIter);
+                    double dist = fde.Evaluate(px, py, pz);
                     // #1335: the step here overshot (spheres apart): back up, march plainly.
                     double back = relax.BackOff(dist);
                     if (back > 0) { px -= rdx * back; py -= rdy * back; pz -= rdz * back; tTotal -= back; continue; }
@@ -380,13 +385,14 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, 
                     continue;
                 }
 
-                double h = eps * 2;
-                double n0 = MandelboxDE(px + h, py, pz, scale, fixedR2, minR2, bailout2, deIter)
-                          - MandelboxDE(px - h, py, pz, scale, fixedR2, minR2, bailout2, deIter);
-                double n1 = MandelboxDE(px, py + h, pz, scale, fixedR2, minR2, bailout2, deIter)
-                          - MandelboxDE(px, py - h, pz, scale, fixedR2, minR2, bailout2, deIter);
-                double n2 = MandelboxDE(px, py, pz + h, scale, fixedR2, minR2, bailout2, deIter)
-                          - MandelboxDE(px, py, pz - h, scale, fixedR2, minR2, bailout2, deIter);
+                fde.ObserveHit(x, y, tTotal);   // #1390: the next frame's voxel level
+                double h = fde.NormalStep(eps * 2);   // #1390: half a voxel on the field
+                double n0 = fde.Evaluate(px + h, py, pz)
+                          - fde.Evaluate(px - h, py, pz);
+                double n1 = fde.Evaluate(px, py + h, pz)
+                          - fde.Evaluate(px, py - h, pz);
+                double n2 = fde.Evaluate(px, py, pz + h)
+                          - fde.Evaluate(px, py, pz - h);
                 var nrm = Normalize3(n0, n1, n2);
 
                 // Color driver: scaled step count + small depth contribution.
@@ -400,8 +406,8 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, 
                 var inputs = new ShadingInputs(
                     px, py, pz, nrm[0], nrm[1], nrm[2],
                     rdx, rdy, rdz, tTotal, 0.0, hitStep, eps);
-                renderBuffer[idx] = ShadingPipeline.Shade<De>(
-                    in inputs, baseColor, in fx, in deStruct, true,
+                renderBuffer[idx] = ShadingPipeline.Shade<FieldOrDe<De>>(
+                    in inputs, baseColor, in fx, in fde, true,
                     idx, depthBuf, normalBuf, hdrBuf);
             }
         });
@@ -414,7 +420,7 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, 
         if (depthBuf is not null && normalBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
         ScreenSpacePost.ApplyFroxel3D(renderBuffer, hdrBuf, depthBuf, width, height,
-            in froxelView, in froxelFx, in deStruct);   // #1068 / #1069 shadowed by the DE
+            in froxelView, in froxelFx, in fde);   // #1068 / #1069 shadowed by the DE
         if (hdrBuf is not null && depthBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplyHdrDof(hdrBuf, depthBuf, width, height, in fx);
         if (hdrBuf is not null)

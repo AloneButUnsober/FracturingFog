@@ -32,7 +32,12 @@
 // The voxel size follows the view: the smallest power-of-two level whose voxel is at
 // most TargetVoxelPixels pixels at the view distance (64..512 voxels across the
 // bounding cube). A frame uses a field only while its voxel is within
-// MaxVoxelPixels pixels; closer views march the true DE.
+// MaxVoxelPixels pixels; closer views march the true DE. #1390 — the view distance
+// is the nearer quartile of the previous frame's hit distances (a sparse sample the
+// family reports, ObserveHit) once there is one for the fractal, not the distance to
+// the cube's centre: a camera just outside a face of a box-filling set (Mandelbox,
+// KIFS MandelboxRot) sees surface much nearer than the centre, and the centre's
+// level left its preview coarse.
 //
 // Measured (--distancefieldprobe, 480x270, an orbit, default lighting): User Bulb
 // z^8 (numerical DE) 444 -> 29 ms a frame (15x), KIFS Menger / Octahedron 1.5x,
@@ -41,6 +46,15 @@
 // feature thinner than a voxel can vanish from it (a shell — the iso-surface a
 // fraction of a voxel out — inflated User Bulb into a ball: its DE gradient spikes
 // near the surface). The other CPU families and the GPU kernels: #1390.
+//
+// #1390 — Mandelbulb and Mandelbox march through FieldOrDe: the field while one is
+// acquired, their own DE struct otherwise (the same arithmetic, so without a cache
+// the frame is unchanged). Their key is the DE struct's own bytes (every
+// parameter), like TemporalLighting.SceneKey. Measured (--distancefieldprobe, 480x270,
+// orbit): Mandelbulb 3.0x, Mandelbox 5.0x. The other CPU families keep their DE: the
+// quaternion and bicomplex sets gain nothing (their DE costs what a sample does),
+// Coquaternion and the Julibrot volume get slower, and Kleinian gets slower and
+// wrong (its limit set is detail at every scale, mostly thinner than a voxel).
 //
 // Exactness: an interactive frame that marched the cache is a preview (its detail is
 // bounded by the voxel size). The host renders one Settle frame without the cache
@@ -54,6 +68,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Threading;
 
 namespace FracturingFog.Rendering.Lighting;
@@ -108,9 +123,97 @@ public sealed class DistanceFieldCache
     /// <summary>The field the last render marched (null = none).</summary>
     public DistanceField? LastField { get; private set; }
 
+    /// <summary>#1390 — the field for a family whose DE is the unmanaged struct
+    /// <paramref name="de"/> (its bytes are its parameters, so they key the field),
+    /// about a cube of half-size <paramref name="half"/> at the origin; wrapped so the
+    /// march, the normals and the shading read the field while one is acquired and
+    /// the DE itself otherwise. <paramref name="usable"/> false (thin-lens DoF) marches
+    /// the DE.</summary>
+    public static FieldOrDe<TDe> For<TDe>(in TDe de, double half, double hitEps,
+        double camX, double camY, double camZ, double viewDistance, double pixelAngle, bool usable = true)
+        where TDe : unmanaged, IDistanceEstimator
+        => For(in de, DeKey(in de), half, hitEps, camX, camY, camZ, viewDistance, pixelAngle, usable);
+
+    /// <summary><see cref="For{TDe}(in TDe, double, double, double, double, double, double, double, bool)"/>
+    /// with an explicit key (a DE struct holding references: <paramref name="deKey"/>
+    /// covers every DE parameter).</summary>
+    public static FieldOrDe<TDe> For<TDe>(in TDe de, long deKey, double half, double hitEps,
+        double camX, double camY, double camZ, double viewDistance, double pixelAngle, bool usable = true)
+        where TDe : struct, IDistanceEstimator
+    {
+        var cache = usable ? Current : null;
+        if (cache is null) return new FieldOrDe<TDe>(in de, null);
+        var copy = de;
+        var field = cache.Acquire(deKey, 0, 0, 0, half, hitEps, camX, camY, camZ, viewDistance, pixelAngle,
+            (x, y, z) => copy.Evaluate(x, y, z));
+        return new FieldOrDe<TDe>(in de, field, cache);
+    }
+
+    /// <summary>#1390 — the cache key of an unmanaged DE struct: its type and bytes.</summary>
+    public static long DeKey<TDe>(in TDe de) where TDe : unmanaged
+    {
+        var h = new HashCode();
+        h.Add(typeof(TDe).FullName);
+        h.AddBytes(System.Runtime.InteropServices.MemoryMarshal.AsBytes(new ReadOnlySpan<TDe>(in de)));
+        return h.ToHashCode();
+    }
+
+    // #1390 — hit distances of the current frame (a sparse sample, ObserveHit), and the
+    // view distance they gave for the fractal of the last frame.
+    // Every 8th pixel of every 8th row: up to ~2900x1440 fits; a bigger frame
+    // overwrites the oldest samples (a ring), so no rows are left out.
+    private const int HitSampleCapacity = 1 << 16, HitSampleMin = 16;
+    private readonly double[] _hits = new double[HitSampleCapacity];
+    private int _hitCount;
+    private long _frameKey;
+    private bool _frameKeySet;
+    private long _hintKey;
+    private double _hintDistance;
+
+    /// <summary>#1390 — the hit samples the last frame reported (counted when the next
+    /// render begins).</summary>
+    public int LastFrameHitSamples { get; private set; }
+
+    /// <summary>#1390 — the view distance the next frame of <paramref name="deKey"/>
+    /// takes its level from (the nearer quartile of the last frame's hits), or 0
+    /// when there is none.</summary>
+    public double ViewDistanceHint(long deKey) => _hintKey == deKey ? _hintDistance : 0;
+
+    /// <summary>#1390 — the pixels whose hit distances a family reports: every 8th of
+    /// every 8th row.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool Samples(int x, int y) => (x & 7) == 0 && (y & 7) == 0;
+
+    /// <summary>#1390 — a family reports a primary ray's hit distance (a sparse sample
+    /// of the frame; thread-safe). The next frame of the same fractal picks its level
+    /// from them.</summary>
+    public void ObserveHit(double distance)
+    {
+        if (!(distance > 0) || !double.IsFinite(distance)) return;
+        int i = Interlocked.Increment(ref _hitCount) - 1;
+        _hits[i & (HitSampleCapacity - 1)] = distance;
+    }
+
+    /// <summary>The nearer quartile of the samples (sorts them in place).</summary>
+    internal static double NearQuartile(double[] samples, int count)
+    {
+        Array.Sort(samples, 0, count);
+        return samples[count / 4];
+    }
+
     /// <summary>Called by the host before each render it installs the cache for.</summary>
     public void BeginRender()
     {
+        // #1390 — the last frame's hits become its fractal's view-distance hint.
+        int n = Math.Min(Volatile.Read(ref _hitCount), HitSampleCapacity);   // a full ring holds the newest
+        LastFrameHitSamples = _frameKeySet ? n : 0;
+        if (_frameKeySet && n >= HitSampleMin)
+        {
+            _hintKey = _frameKey;
+            _hintDistance = NearQuartile(_hits, n);
+        }
+        _hitCount = 0;
+        _frameKeySet = false;
         LastFrameApproximate = false;
         LastField = null;
     }
@@ -150,6 +253,8 @@ public sealed class DistanceFieldCache
         Func<double, double, double, double> de)
     {
         if (!(half > 0) || !(viewDistance > 0) || !(pixelAngle > 0)) return null;
+        _frameKey = deKey; _frameKeySet = true;   // #1390: this frame's hits are this fractal's
+        if (ViewDistanceHint(deKey) is > 0 and var hint) viewDistance = hint;
         int level = LevelFor(half, viewDistance, pixelAngle);
         double maxVoxel = MaxVoxelPixels * viewDistance * pixelAngle;
         DistanceField? baking = null, pick = null;
@@ -193,6 +298,36 @@ public sealed class DistanceFieldCache
         LastField = pick;
         return pick;
     }
+}
+
+/// <summary>#1390 — a family's DE through the frame's distance field: the field's
+/// sample while one is acquired, the DE itself otherwise.</summary>
+public readonly struct FieldOrDe<TDe> : IDistanceEstimator where TDe : struct, IDistanceEstimator
+{
+    private readonly TDe _de;
+    private readonly DistanceField? _field;
+    private readonly DistanceFieldCache? _cache;
+
+    public FieldOrDe(in TDe de, DistanceField? field, DistanceFieldCache? cache = null) { _de = de; _field = field; _cache = cache; }
+
+    /// <summary>#1390 — report a primary ray's hit distance for a sparse grid of pixels
+    /// (<see cref="DistanceFieldCache.Samples"/>), whether or not this frame marched the
+    /// field: the next frame's level comes from them.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void ObserveHit(int x, int y, double distance)
+    {
+        if (_cache is not null && DistanceFieldCache.Samples(x, y)) _cache.ObserveHit(distance);
+    }
+
+    /// <summary>The field this frame marches, or null (the DE itself).</summary>
+    public DistanceField? Field => _field;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public double Evaluate(double x, double y, double z) => _field is null ? _de.Evaluate(x, y, z) : _field.Sample(x, y, z);
+
+    /// <summary>The normals' difference step: <paramref name="h"/>, or half a voxel on
+    /// the field (smooth preview normals, as #1336's families use).</summary>
+    public double NormalStep(double h) => _field is null ? h : Math.Max(h, 0.5 * _field.Voxel);
 }
 
 /// <summary>#1336 — one baked sparse distance field (see <see cref="DistanceFieldCache"/>).
@@ -524,6 +659,9 @@ public sealed class DistanceField
 
     /// <summary>The kind of the cell holding (x, y, z) for tests: -1 outside the grid,
     /// 0 empty, 1 near without a brick, 2 baked brick.</summary>
+    /// <summary>#1390 — the DE the field was baked from, at a point (probes / tests).</summary>
+    public double TrueDistance(double x, double y, double z) => _de(x, y, z);
+
     public int CellKindAt(double x, double y, double z)
     {
         double fx = (x - _ox) * _invCell, fy = (y - _oy) * _invCell, fz = (z - _oz) * _invCell;

@@ -372,6 +372,7 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
                     continue;
                 }
 
+                if (DistanceFieldCache.Samples(x, y)) DistanceFieldCache.Current?.ObserveHit(tTotal);   // #1390: the next frame's voxel level
                 double h = normalH;   // #1336: half a voxel on the cached field (smooth preview normals)
                 double n0, n1, n2;
                 if (field is null)
