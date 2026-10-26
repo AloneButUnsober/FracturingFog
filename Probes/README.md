@@ -25,7 +25,7 @@ code. Probes shared with other hosts live in `Engine/Diagnostics/` instead.
 | `D3DEscapeFamilyProbe.cs` | `--d3dfamilyprobe` | #1173 | D3D11 half of the Multibrot / Phoenix / domain-warp parity check |
 | `D3DOrbitTrapProbe.cs` | `--d3dorbittrapprobe` | #1173 | D3D11 half of the orbit-trap parity check |
 | `D3DPerturbProbe.cs` | `--d3dpturbcalc` | #82 | D3D11 deep-zoom perturbation parity (twin of `--vulkanpturbcalc`) |
-| `DistanceFieldProbe.cs` | `--distancefieldprobe [W H]` | #1336 | 3D raymarch with and without the baked distance-field cache |
+| `DistanceFieldProbe.cs` | `--distancefieldprobe [W H]` | #1336, #1390 | 3D raymarch with and without the baked distance-field cache (KIFS, User Bulb, Mandelbulb, Mandelbox; the moving frames' level; `FF_DF_CASES` filters) |
 | `DynamicResolutionProbe.cs` | `--dynresprobe` | #1333 | Drag responsiveness through a real host, dynamic preview resolution off and on |
 | `GpuBandProbe.cs` | `--gpubandprobe` | #1334 | Deep perturbation frames in TDR row bands (D3D11 and Vulkan) |
 | `GpuDeferredReadbackProbe.cs` | `--gpudeferprobe` | #1332 | D3D11 deferred readback |

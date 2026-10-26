@@ -392,7 +392,7 @@ namespace FracturingFog.Render
         bool TemporalLighting3D { get; set; }
 
         /// <summary>#1336 — a baked distance-field cache for 3D camera moves (CPU
-        /// raymarch of KIFS and User Bulb): the DE is baked once per fractal into a
+        /// raymarch of KIFS, User Bulb and, #1390, Mandelbulb and Mandelbox): the DE is baked once per fractal into a
         /// sparse brick volume in the background, and while only the camera moves the
         /// frames march that instead of the formula. Interactive frames are a preview
         /// (detail down to the voxel size); when the view settles one more frame is

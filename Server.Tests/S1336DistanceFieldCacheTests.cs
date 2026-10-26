@@ -352,6 +352,7 @@ public sealed class S1336DistanceFieldCacheTests(ITestOutputHelper output)
     {
         var cache = new DistanceFieldCache { SynchronousBake = true };
         var exact0 = Render(Calc(fam), null);
+        Render(Calc(fam), cache);   // #1390: the first frame's hits pick the next frame's level
         var prev0 = Render(Calc(fam), cache);
         Assert.True(cache.LastFrameApproximate);
         var field = cache.LastField!;

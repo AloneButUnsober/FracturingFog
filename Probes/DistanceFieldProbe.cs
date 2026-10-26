@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
-// #1336: --distancefieldprobe [W H]. For KIFS folds and User Bulb maps (the
-// families' default lighting, CPU), the raymarch with and without the baked
-// distance-field cache:
+// #1336: --distancefieldprobe [W H]. For KIFS folds and User Bulb maps (#1390: and
+// Mandelbulb and Mandelbox at their defaults; the families' default lighting, CPU),
+// the raymarch with and without the baked distance-field cache:
 //  - the bake: its level, grid, near / interior cells, bricks, memory, DE
 //    evaluations and time (synchronous, every core);
 //  - an orbiting camera (10 frames, 0.02 rad a frame): the frame time each way and
-//    the error of the preview frames against the true-DE frames.
+//    the error of the preview frames against the true-DE frames, and the level the
+//    last frame used (#1390: from the previous frames' hit distances).
 // FF_DF_PNG=<dir> also writes the last frame pair side by side (true | preview).
+// #1390: FF_DF_CASES=<text> runs only the cases whose name contains it.
 // Exit 0 always (a measurement); the bounds are asserted by the S1336 tests.
 
 using System;
@@ -36,6 +38,19 @@ namespace FracturingFog
             var fp = new FractalParameters { UserBulbSource = "z^8 + c", UserBulbDEMode = UserBulbDEModeKind.Numerical, UserBulbIterations = iterations };
             fp.UserBulbCameraTheta += theta; var lb = fp.Lighting; lb.UseGpuRender = false; fp.Lighting = lb;
             return new UserBulbCalculator(w, h) { FractalParameters = fp, ColorMap = ColorPalette.BuiltIns[0] };
+        }
+
+        // #1390 — Mandelbulb and Mandelbox at their defaults (CPU). The other six CPU 3D
+        // families march their DE (measured: the field is no faster there, or wrong).
+        private static IFractalCalculator Family(string name, int w, int h, double theta)
+        {
+            var fp = new FractalParameters();
+            var l = fp.Lighting; l.UseGpuRender = false; fp.Lighting = l;
+            IFractalCalculator c;
+            if (name == "Mandelbulb") { fp.BulbCameraTheta += theta; c = new MandelbulbCalculator(w, h) { FractalParameters = fp }; }
+            else { fp.MandelboxCameraTheta += theta; c = new MandelboxCalculator(w, h) { FractalParameters = fp }; }
+            c.ColorMap = ColorPalette.BuiltIns[0];
+            return c;
         }
 
         // The true-DE frame (left) beside the cached preview (right).
@@ -71,9 +86,13 @@ namespace FracturingFog
                 new Case("KIFS MandelboxRot", (a, b, t) => Kifs(KifsFoldKind.MandelboxRot, a, b, t)),
                 new Case("UserBulb z^8 num 8 it", (a, b, t) => Bulb(8, a, b, t)),
                 new Case("UserBulb z^8 num 16 it", (a, b, t) => Bulb(16, a, b, t)),
+                new Case("Mandelbulb", (a, b, t) => Family("Mandelbulb", a, b, t)),
+                new Case("Mandelbox", (a, b, t) => Family("Mandelbox", a, b, t)),
             };
+            string? only = Environment.GetEnvironmentVariable("FF_DF_CASES");
             foreach (var c in cases)
             {
+                if (only is { Length: > 0 } && !c.Name.Contains(only, StringComparison.OrdinalIgnoreCase)) continue;
                 // Bake (synchronously, every core) on the first frame's call.
                 var cache = new DistanceFieldCache { SynchronousBake = true };
                 var first = c.Make(w, h, 0);
@@ -111,8 +130,10 @@ namespace FracturingFog
                         err += e; px++; if (e > 32) over++;
                     }
                 }
+                var lf = cache.LastField;   // #1390: the moving frames' level (from the hits' view distance)
                 Console.WriteLine($"  {"",-24} moving: true DE {tFull / 8,7:F1} ms, cached {tCache / 8,7:F1} ms ({tFull / tCache:F2}x); " +
-                                  $"preview error mean {err / px:F1} levels, >32 levels {over / (double)px:P1}");
+                                  $"preview error mean {err / px:F1} levels, >32 levels {over / (double)px:P1}; " +
+                                  (lf is null ? "last frame no field" : $"last frame level {lf.Level} (voxel {lf.Voxel:G3}, {lf.BudgetedBricks} bricks)"));
             }
             Console.WriteLine("distancefieldprobe done");
             return 0;
