@@ -3,7 +3,7 @@
 Future work plan. Each family below is **not yet rendered** by Fracturing Fog as of v0.6.x. Grouped by engine reuse — items in same phase share infrastructure.
 
 Existing extension points to reuse:
-- `IFractalKernel` struct-generic kernel (see `FRACTAL_EXPANSION_PROMPTS.md` Prompt 0)
+- `IFractalKernel` struct-generic kernel (see `FRACTAL_EXPANSION_PROMPTS.md` Prompt 0 → *As built*)
 - `FractalParameters` record for per-family params
 - CalcGen 5-path pipeline (scalar / AVX2 / Pert / BLA / ILGPU) — auto-applies once kernel registered
 - 3D pipeline: `UserBulb` raymarcher + `Vec3` / `Quat` triplex algebra
