@@ -31,9 +31,10 @@ code. Probes shared with other hosts live in `Engine/Diagnostics/` instead.
 | `GpuDeferredReadbackProbe.cs` | `--gpudeferprobe` | #1332 | D3D11 deferred readback |
 | `GpuGroupShapeProbe.cs` | `--gpugroupshapeprobe` | #1339, #1377 | Tuned compute thread-group shapes (D3D11 and Vulkan): the 2D kernels, the relief raymarch and the froxel passes |
 | `GpuPeriodicityProbe.cs` | `--gpuperiodicityprobe` | #1342 | D3D11 half of the GPU periodicity check |
+| `GpuPixelMaskProbe.cs` | `--gpupixelmaskprobe [W H]` | #1394 | D3D11 half of the GPU pixel-mask check: masked dispatches (shallow base / colour, deep double / SA / fp32, both schedules) equal the full dispatch on marked pixels and leave unmarked ones untouched; masked vs full time |
 | `GpuTimestampProbe.cs` | `--gputimestampprobe` | #1329 | D3D11 GPU timestamp queries |
 | `GpuWavefrontProbe.cs` | `--gpuwavefrontprobe` | #1340, #1386, #1384 | D3D11 half of the wavefront schedule check; `deep` adds the seeded first frame (¼ estimate, schedule, time); `orbit` the orbit colour kernel, `deepkernels` the deep orbit and fp32 kernels |
 | `OidnProbe.cs` | `--oidnprobe [W H]`, `--oidnprobe live [W H]` | #1338, #1392 | Intel Open Image Denoise against the À-Trous denoiser and a full-sample reference; live: time to screen with the background denoise, cancel latency |
-| `SolidRegionProbe.cs` | `--solidregionprobe [W H]` | #1343, #1394 | Solid-region skipping off / Auto / forced: times, fills, wrong fills; Mandelbrot and Julia / Multibrot views (`FF_SOLID_CASES=mandelbrot` / `escape` for one half) |
+| `SolidRegionProbe.cs` | `--solidregionprobe [W H]` | #1343, #1394 | Solid-region skipping off / Auto / forced: times, fills, wrong fills; Mandelbrot and Julia / Multibrot views (`FF_SOLID_CASES=mandelbrot` / `escape` for one half); `FF_SOLID_GPU=1` runs GPU views on D3D11 (shallow and deep), `FF_SOLID_VIEW` filters by name |
 | `TemporalLightingProbe.cs` | `--temporallightingprobe [W H]` | #1337 | Temporal AO / shadow reuse on a moving camera |
 | `VulkanPipelineCacheProbe.cs` | `--vkpipelinecacheprobe` | #1341 | The persisted `VkPipelineCache` across fresh Vulkan devices |

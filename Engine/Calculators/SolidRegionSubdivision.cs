@@ -19,6 +19,10 @@
 // and a tile whose border is in-set encloses only in-set points — up to an escaping
 // channel thinner than a pixel that slips between the border samples (the known
 // Mariani–Silver artifact).
+//
+// #1394 part 1 — a target whose passes go to a masked GPU kernel (SolidFewPasses) runs
+// Auto on the whole grid in one pass and decides at its own threshold
+// (SolidAutoMinCostlyShare; AutoNever = compute the frame whole, no probe).
 
 using System;
 using System.Collections.Generic;
@@ -47,11 +51,25 @@ internal interface ISolidRegionTarget
     void SolidBegin(byte[] done, byte[]? batchCount);
 
     /// <summary>Compute the marked pixels (a masked pass: exactly the bytes a full frame
-    /// gives them); <paramref name="rows"/> flags the rows with a marked pixel.</summary>
-    void SolidPass(byte[] mark, bool[] rows, CancellationToken ct);
+    /// gives them); <paramref name="rows"/> flags the rows with a marked pixel. #1394 —
+    /// null for both: every pixel, unmasked (Auto's <see cref="SolidRegionSubdivision.AutoNever"/>).</summary>
+    void SolidPass(byte[]? mark, bool[]? rows, CancellationToken ct);
 
     /// <summary>The last pass ran on the GPU, which ignores the mask: the frame is complete.</summary>
     bool SolidFrameOnGpu { get; }
+
+    /// <summary>#1394 part 1 — each pass costs a fixed overhead on top of its pixels (a
+    /// masked GPU dispatch: the read-back, and a band at least as long as its slowest
+    /// pixel), so Auto decides on the first pass of the whole grid instead of running
+    /// the rows on their own first.</summary>
+    bool SolidFewPasses { get; }
+
+    /// <summary>#1394 part 1 — Auto subdivides when at least this share of the grid rows'
+    /// pixels lie in long runs of costly in-set pixels: <see cref="SolidRegionSubdivision.AutoMinCostlyShare"/>
+    /// on the CPU, <see cref="SolidRegionSubdivision.AutoMinCostlyShareGpu"/> when the frame
+    /// goes to a masked GPU kernel; <see cref="SolidRegionSubdivision.AutoNever"/>: never
+    /// (the frame is computed whole, with no probe pass).</summary>
+    double SolidAutoMinCostlyShare { get; }
 
     /// <summary>Pixel (x, y) is in-set by a closed-form test, so it costs nothing to
     /// compute (#1394: steers only how a tile splits, never what a pixel gets).</summary>
@@ -98,6 +116,24 @@ internal static class SolidRegionSubdivision
     /// (a period-3 minibrot filling 7 % of the frame: 1.2-1.3x). 4 % sits between.</summary>
     public const double AutoMinCostlyShare = 0.04;
 
+    /// <summary>#1394 part 1 — Auto's threshold for a frame on a masked GPU kernel whose
+    /// in-set pixels run to the cap (the deep perturbation kernels; the shallow one
+    /// with its periodicity check off). A pass costs more there: a read-back, and on a
+    /// deep frame bands that each last as long as their slowest pixel. Measured
+    /// (--solidregionprobe with FF_SOLID_GPU=1, GT 710, 960x540, a deep minibrot at
+    /// 20 000–50 000 iterations framed wider and wider): costly share 2.1 % 0.90x (Auto
+    /// declined, the grid pass lost), 7.9 % 0.98x, 17.5 % 1.25x, 41.7 % 1.9x, 82 % 3.7x.</summary>
+    public const double AutoMinCostlyShareGpu = 0.10;
+
+    /// <summary>#1394 part 1 — Auto's threshold that never subdivides: the frame is
+    /// computed whole in one unmasked pass, as with the skip off. The shallow GPU kernel
+    /// with its periodicity check on (#1342, the default) takes it: the check settles most
+    /// in-set pixels after a period or two, so only a frame almost all in-set gained, one
+    /// that was cheap already (GT 710, 960x540: 100 % costly 1.4–2x, 24 ms → 12 ms; 78 %
+    /// ~1.0x; 66 % 0.6x), while the probe pass alone cost a declined frame 0.63–0.87x.
+    /// Auto off still subdivides it.</summary>
+    public const double AutoNever = double.PositiveInfinity;
+
     /// <summary>The frame is big enough for the grid to leave any interior.</summary>
     public static bool FrameFits(int width, int height) => width >= 2 * TileSize && height >= 2 * TileSize;
 
@@ -137,13 +173,23 @@ internal static class SolidRegionSubdivision
         try
         {
             // 1. The grid lines. Auto: the rows first, full SIMD rows, which sample the
-            // frame cheaply enough to decide on.
+            // frame cheaply enough to decide on (#1394: with the columns, in one pass,
+            // when passes are dear).
             foreach (int y in ys) for (int x = 0; x < w; x++) mark[y * w + x] = 1;
+            if (auto && double.IsPositiveInfinity(t.SolidAutoMinCostlyShare))
+            {
+                stats.Declined = true;
+                t.SolidPass(null, null, ct);
+                stats.Passes++;
+                return;
+            }
+            if (auto && t.SolidFewPasses)
+                foreach (int x in xs) for (int y = 0; y < h; y++) mark[y * w + x] = 1;
             if (auto)
             {
                 if (!Pass()) return;
                 stats.CostlyShare = CostlyInSetShare(t, buf, ys);
-                if (stats.CostlyShare < AutoMinCostlyShare)
+                if (stats.CostlyShare < t.SolidAutoMinCostlyShare)
                 {
                     stats.Declined = true;
                     Array.Fill(mark, (byte)1);

@@ -101,13 +101,14 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
     private void FillDistanceFromFinalZ(int maxIt, CancellationToken ct)
     {
         _po.CancellationToken = ct;
-        FillDistanceFromFinalZ(maxIt, Width, Height, _po);
+        FillDistanceFromFinalZ(maxIt, Width, Height, _po, _gpuPassMask != null ? _mask : null);
     }
 
     // #1332 — on the backing arrays: the deferred fill runs inside
     // GpuDeferredAux.Materialize (after it read the iterations and final z / dz),
-    // where the getters would re-enter it.
-    private void FillDistanceFromFinalZ(int maxIt, int w, int h, ParallelOptions po)
+    // where the getters would re-enter it. #1394 — <paramref name="mask"/>: only its
+    // marked pixels (a solid-region pass; the others are another pass's).
+    private void FillDistanceFromFinalZ(int maxIt, int w, int h, ParallelOptions po, byte[]? mask)
     {
         int[] iter = _iterationBuffer;
         float[] dist = _distanceBuffer;
@@ -118,6 +119,7 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
             for (int x = 0; x < w; x++)
             {
                 int idx = rb + x;
+                if (mask != null && mask[idx] == 0) continue;
                 if (iter[idx] >= maxIt) { dist[idx] = 0f; continue; }
                 float fzr = zrB[idx], fzi = ziB[idx];
                 float fdr = drB[idx], fdi = diB[idx];
@@ -147,7 +149,10 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
     {
         // This dispatch overwrites every deferred buffer, so a pending frame is moot.
         _gpuAux.Discard();
-        if (colorDst != null && kernel.SupportsDeferredReadback && FracturingFog.Rendering.GpuDeferredReadback.Enabled)
+        // #1394 — a solid-region pass (kernel mask set) reads its marked pixels back now.
+        if (_gpuPassMask != null) _gpuPassMasked = true;
+        if (colorDst != null && kernel.SupportsDeferredReadback && FracturingFog.Rendering.GpuDeferredReadback.Enabled
+            && _gpuPassMask == null)
         {
             var pending = kernel.RunDeferred(Width, Height, CenterX, CenterY, scale, maxIt, bailout2,
                 _iterationBuffer, _smoothBuffer, _finalZrBuffer, _finalZiBuffer, _finalDrBuffer, _finalDiBuffer,
@@ -159,7 +164,7 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
                 if (fillDistance)
                 {
                     var po = new ParallelOptions { MaxDegreeOfParallelism = _po.MaxDegreeOfParallelism };
-                    fill = () => FillDistanceFromFinalZ(maxIt, w, h, po);
+                    fill = () => FillDistanceFromFinalZ(maxIt, w, h, po, null);
                 }
                 _gpuAux.Defer(kernel, _iterationBuffer, pending, fill);
                 return true;
@@ -418,7 +423,7 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
             // own BailoutRadius2 (it used a hardcoded radius 2, which also left the
             // smooth iteration unconverged: every GPU pixel ~0.5 off the CPU's).
             _lastBailout2 = CurrentEscapeRadius2();
-            _lastFrameOnGpu = true;   // #1394 — every pixel, whatever the mask
+            _lastFrameOnGpu = true;   // #1394 — every pixel, unless the kernel took the pass mask
             return;
         }
 
@@ -574,6 +579,9 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
             // consume them through the CPU writeback in this path. #1029: the
             // distance estimate is still filled (the Distance relief source).
             if (!deferred) FillDistanceFromFinalZ(MaxIterations, ct);
+            // #1394 — a solid-region pass zeroes them, so a tile's border compares (and the
+            // fill copies) defined values rather than another frame's.
+            if (_gpuPassMask != null) { Array.Clear(NormalXBuffer); Array.Clear(NormalYBuffer); }
             LastGpuRoute = GpuRoute.OnGpu(GpuKernel.BackendLabel);
             return true;
         }
@@ -588,11 +596,12 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
         var po = _po;
         ParallelForRows(0, Height, po, y =>
         {
-            if (ct.IsCancellationRequested) return;
+            if (ct.IsCancellationRequested || !GpuRowMarked(y)) return;
             int rb = y * Width;
             for (int x = 0; x < Width; x++)
             {
                 int idx = rb + x;
+                if (!GpuMarked(idx)) continue;   // #1394: another pass's pixel
                 // F11a: seed the ordered-dither offset for this pixel.
                 if (GradientColorMap.DitherEnabled) GradientColorMap.SetDitherForPixel(x, y);
                 int iters = IterationBuffer[idx];

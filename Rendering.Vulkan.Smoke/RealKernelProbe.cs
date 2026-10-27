@@ -182,7 +182,7 @@ internal static unsafe class RealKernelProbe
         ulong finalZDSize = (ulong)(n * 4 * sizeof(float));
         ulong perRowSize = (ulong)(Math.Max(H, 1) * sizeof(uint));
 
-        var buffers = new Allocated[5]; // 0=params,1=perRow,2=iter,3=smooth,4=finalZD
+        var buffers = new Allocated[6]; // 0=params,1=perRow,2=iter,3=smooth,4=finalZD,5=mask (#1394)
         ShaderModule module = default;
         DescriptorSetLayout dsl = default;
         PipelineLayout layout = default;
@@ -198,10 +198,12 @@ internal static unsafe class RealKernelProbe
             buffers[2] = AllocBuffer(ctx, iterSize, BufferUsageFlags.StorageBufferBit);
             buffers[3] = AllocBuffer(ctx, smoothSize, BufferUsageFlags.StorageBufferBit);
             buffers[4] = AllocBuffer(ctx, finalZDSize, BufferUsageFlags.StorageBufferBit);
+            buffers[5] = AllocBuffer(ctx, 8, BufferUsageFlags.StorageBufferBit);   // #1394: gMask, zero header = no mask
 
             // Upload params; zero per-row (UsePerRow=0 → unread, but must bind).
             WriteBuffer(ctx, buffers[0], &blob, (int)paramsSize);
             ZeroBuffer(ctx, buffers[1], (int)perRowSize);
+            ZeroBuffer(ctx, buffers[5], 8);
 
             fixed (byte* code = spirv)
             {
@@ -214,19 +216,20 @@ internal static unsafe class RealKernelProbe
                 Check(vk.CreateShaderModule(device, in smci, null, out module), "vkCreateShaderModule");
             }
 
-            // Descriptor set layout: UBO@0, SSBO@100/200/201/202.
-            var bindings = stackalloc DescriptorSetLayoutBinding[5]
+            // Descriptor set layout: UBO@0, SSBO@100/200/201/202, #1394: gMask t15@115.
+            var bindings = stackalloc DescriptorSetLayoutBinding[6]
             {
                 LayoutBinding(0,             DescriptorType.UniformBuffer),
                 LayoutBinding((uint)TShift,  DescriptorType.StorageBuffer),      // gPerRow t0
                 LayoutBinding((uint)UShift,  DescriptorType.StorageBuffer),      // gIter u0
                 LayoutBinding((uint)UShift+1,DescriptorType.StorageBuffer),      // gSmooth u1
                 LayoutBinding((uint)UShift+2,DescriptorType.StorageBuffer),      // gFinalZD u2
+                LayoutBinding((uint)TShift+15,DescriptorType.StorageBuffer),     // gMask t15 (#1394)
             };
             var dslci = new DescriptorSetLayoutCreateInfo
             {
                 SType = StructureType.DescriptorSetLayoutCreateInfo,
-                BindingCount = 5,
+                BindingCount = 6,
                 PBindings = bindings,
             };
             Check(vk.CreateDescriptorSetLayout(device, in dslci, null, out dsl), "vkCreateDescriptorSetLayout");
@@ -257,11 +260,11 @@ internal static unsafe class RealKernelProbe
             Check(vk.CreateComputePipelines(device, default, 1, &cpci, null, &created), "vkCreateComputePipelines");
             pipeline = created;
 
-            // Descriptor pool: 1 UBO + 4 SSBO in one set.
+            // Descriptor pool: 1 UBO + 5 SSBO in one set.
             var poolSizes = stackalloc DescriptorPoolSize[2]
             {
                 new DescriptorPoolSize { Type = DescriptorType.UniformBuffer, DescriptorCount = 1 },
-                new DescriptorPoolSize { Type = DescriptorType.StorageBuffer, DescriptorCount = 4 },
+                new DescriptorPoolSize { Type = DescriptorType.StorageBuffer, DescriptorCount = 5 },
             };
             var dpci = new DescriptorPoolCreateInfo
             {
@@ -282,15 +285,16 @@ internal static unsafe class RealKernelProbe
             Check(vk.AllocateDescriptorSets(device, in dsai, out DescriptorSet set), "vkAllocateDescriptorSets");
 
             // One write per binding.
-            var infos = stackalloc DescriptorBufferInfo[5];
-            var writes = stackalloc WriteDescriptorSet[5];
-            uint[] bindNums = { 0, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2 };
+            var infos = stackalloc DescriptorBufferInfo[6];
+            var writes = stackalloc WriteDescriptorSet[6];
+            uint[] bindNums = { 0, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)TShift + 15 };
             DescriptorType[] types =
             {
                 DescriptorType.UniformBuffer, DescriptorType.StorageBuffer,
                 DescriptorType.StorageBuffer, DescriptorType.StorageBuffer, DescriptorType.StorageBuffer,
+                DescriptorType.StorageBuffer,
             };
-            for (int i = 0; i < 5; i++)
+            for (int i = 0; i < 6; i++)
             {
                 infos[i] = new DescriptorBufferInfo { Buffer = buffers[i].Buffer, Offset = 0, Range = Vk.WholeSize };
                 writes[i] = new WriteDescriptorSet
@@ -303,7 +307,7 @@ internal static unsafe class RealKernelProbe
                     PBufferInfo = &infos[i],
                 };
             }
-            vk.UpdateDescriptorSets(device, 5, writes, 0, null);
+            vk.UpdateDescriptorSets(device, 6, writes, 0, null);
 
             // Command buffer.
             var cmdPoolCi = new CommandPoolCreateInfo

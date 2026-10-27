@@ -20,8 +20,14 @@
 // pixel costs the full cap — the case the skip is for. Filled Julia sets are mostly
 // interior: a connected c (the Douady rabbit, the basilica) leaves large in-set areas.
 //
-// Runs unchanged (an ordinary frame): a frame on the GPU (it ignores the mask, so
-// the first pass completes it), the domain warp (#253: a pixel no longer maps to its
+// #1394 part 1 — a frame on the shallow GPU kernel subdivides too: each pass hands the
+// kernel its mask (IGpuKernel.PixelMask), which computes and reads back only the marked
+// pixels. Auto computes such a frame whole while the kernel's periodicity check is on
+// (it settles most interiors already; see SolidRegionSubdivision.AutoNever), and probes
+// at the GPU threshold with it off. A kernel without mask support still completes the
+// frame in the first pass.
+//
+// Runs unchanged (an ordinary frame): the domain warp (#253: a pixel no longer maps to its
 // plane point linearly, so a tile border need not enclose its interior's points), a
 // per-row iteration cap (video: border and interior would be different sets). The
 // whole-frame passes of Calculate (the out-of-bounds surround, interior alpha) run
@@ -104,6 +110,19 @@ public sealed partial class EscapeTimeCalculator : ISolidRegionTarget
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private bool RowMarked(int y) => _maskRows == null || _maskRows[y];
 
+    // #1394 part 1 — the pass's mask on the GPU kernel (null when there is no pass or
+    // the kernel can't take one), and whether a GPU dispatch of this pass ran with it.
+    private FracturingFog.Rendering.GpuPixelMask? _gpuPassMask;
+    private bool _gpuPassMasked;
+
+    /// <summary>A GPU dispatch of this pass wrote pixel <paramref name="idx"/> (it took
+    /// the mask, or there is none).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool GpuMarked(int idx) => _gpuPassMask == null || _mask![idx] != 0;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool GpuRowMarked(int y) => _gpuPassMask == null || _maskRows![y];
+
     /// <summary>Any lane of the batch at columns [x, x + lanes) is marked; a batch this
     /// takes writes every lane, so the lanes are recorded as computed and later passes
     /// skip them.</summary>
@@ -137,14 +156,40 @@ public sealed partial class EscapeTimeCalculator : ISolidRegionTarget
         _batchCount = batchCount;
     }
 
-    void ISolidRegionTarget.SolidPass(byte[] mark, bool[] rows, CancellationToken ct)
+    void ISolidRegionTarget.SolidPass(byte[]? mark, bool[]? rows, CancellationToken ct)
     {
         _mask = mark;
         _maskRows = rows;
-        CalculateInternal(ct);
+        _gpuPassMasked = false;
+        var kernel = GpuKernel;
+        _gpuPassMask = mark != null && kernel is { SupportsPixelMask: true } && UseGpuCompute
+            ? FracturingFog.Rendering.GpuPixelMask.FromBytes(mark, Width, Height) : null;
+        if (_gpuPassMask != null) kernel!.PixelMask = _gpuPassMask;
+        try { CalculateInternal(ct); }
+        finally
+        {
+            if (_gpuPassMask != null) kernel!.PixelMask = null;
+            _gpuPassMask = null;
+        }
     }
 
-    bool ISolidRegionTarget.SolidFrameOnGpu => _lastFrameOnGpu;
+    // #1394 part 1 — the frame will go to the shallow GPU kernel, which takes the mask
+    // (TryDispatchGpu's gate; it only steers Auto's decision).
+    private bool SolidOnGpu
+        => GpuKernel is { SupportsPixelMask: true } && UseGpuCompute && Zoom <= MandelbrotCalculator.MaxGpuZoom
+           && (FractalType != FractalType.Multibrot
+               || new FracturingFog.Models.FractalKernels.MultibrotKernel(FractalParameters.MultibrotExponent).Exponent <= MaxGpuMultibrotExponent);
+
+    bool ISolidRegionTarget.SolidFewPasses => SolidOnGpu;
+
+    double ISolidRegionTarget.SolidAutoMinCostlyShare
+        => !SolidOnGpu ? SolidRegionSubdivision.AutoMinCostlyShare
+           : FracturingFog.Rendering.GpuPeriodicity.Mode != FracturingFog.Rendering.GpuPeriodicity.Off
+               ? SolidRegionSubdivision.AutoNever
+               : SolidRegionSubdivision.AutoMinCostlyShareGpu;
+
+    // A GPU pass that took the mask computed only the marked pixels, like a CPU one.
+    bool ISolidRegionTarget.SolidFrameOnGpu => _lastFrameOnGpu && !_gpuPassMasked;
 
     // Julia and Multibrot have no closed-form in-set test: every in-set pixel iterates
     // to the cap.

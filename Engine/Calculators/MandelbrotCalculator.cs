@@ -750,13 +750,14 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     private void FillDistanceFromFinalZ(int maxIt, CancellationToken ct)
     {
         _po.CancellationToken = ct;
-        FillDistanceFromFinalZ(maxIt, Width, Height, _po);
+        FillDistanceFromFinalZ(maxIt, Width, Height, _po, _gpuPassMask != null ? _mask : null);
     }
 
     // #1332 — on the backing arrays: the deferred fill runs inside
     // GpuDeferredAux.Materialize (after it read the iterations and final z / dz),
-    // where the getters would re-enter it.
-    private void FillDistanceFromFinalZ(int maxIt, int w, int h, ParallelOptions po)
+    // where the getters would re-enter it. #1394 — <paramref name="mask"/>: only its
+    // marked pixels (a solid-region pass; the others are another pass's).
+    private void FillDistanceFromFinalZ(int maxIt, int w, int h, ParallelOptions po, byte[]? mask)
     {
         int[] iter = _iterationBuffer;
         float[] dist = _distanceBuffer;
@@ -767,6 +768,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             for (int x = 0; x < w; x++)
             {
                 int idx = rb + x;
+                if (mask != null && mask[idx] == 0) continue;
                 if (iter[idx] >= maxIt) { dist[idx] = 0f; continue; }
                 float fzr = zrB[idx], fzi = ziB[idx];
                 float fdr = drB[idx], fdi = diB[idx];
@@ -801,7 +803,10 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     {
         // This dispatch overwrites every deferred buffer, so a pending frame is moot.
         _gpuAux.Discard();
-        if (colorDst != null && kernel.SupportsDeferredReadback && FracturingFog.Rendering.GpuDeferredReadback.Enabled)
+        // #1394 — a solid-region pass (kernel mask set) reads its marked pixels back now.
+        if (_gpuPassMask != null) _gpuPassMasked = true;
+        if (colorDst != null && kernel.SupportsDeferredReadback && FracturingFog.Rendering.GpuDeferredReadback.Enabled
+            && _gpuPassMask == null)
         {
             var pending = kernel.RunDeferred(Width, Height, CenterX, CenterY, scale, maxIt, bailout2,
                 _iterationBuffer, _smoothBuffer, _finalZrBuffer, _finalZiBuffer, _finalDrBuffer, _finalDiBuffer,
@@ -813,7 +818,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 if (fillDistance)
                 {
                     var po = new ParallelOptions { MaxDegreeOfParallelism = _po.MaxDegreeOfParallelism };
-                    fill = () => FillDistanceFromFinalZ(maxIt, w, h, po);
+                    fill = () => FillDistanceFromFinalZ(maxIt, w, h, po, null);
                 }
                 _gpuAux.Defer(kernel, _iterationBuffer, pending, fill);
                 GpuFrameAnyEscaped = kernel.LastDeferredAnyEscaped;
@@ -1206,6 +1211,15 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         _mask = m;
         _maskRows = rows;
     }
+
+    /// <summary>#1394 — a GPU dispatch of this pass wrote pixel <paramref name="idx"/>: it
+    /// took the solid-region pass's mask, or there is none (a #1344 mask alone leaves
+    /// the GPU computing every pixel).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool GpuMarked(int idx) => _gpuPassMask == null || _mask![idx] != 0;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool GpuRowMarked(int y) => _gpuPassMask == null || _maskRows![y];
 
     /// <summary>#1344 — compute pixel <paramref name="idx"/> this frame.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1805,6 +1819,10 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                     // eligible. #1029: the distance estimate is still filled
                     // (the Distance relief height source reads it).
                     if (!deferred) FillDistanceFromFinalZ(maxIt, ct);
+                    // #1394 — the buffers are allocated uninitialised, so the normals of a
+                    // GPU-coloured frame are whatever the memory held: a solid-region pass
+                    // zeroes them, so a tile's border compares (and the fill copies) defined values.
+                    if (_gpuPassMask != null) { Array.Clear(NormalXBuffer); Array.Clear(NormalYBuffer); }
                     return;
                 }
                 // Emit ColorBuffer from the GPU's iter + smooth + final z/dz
@@ -1820,11 +1838,12 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 uint inSetColor = colorMap.InSetColor;
                 ParallelForRows(0, Height, poFill, y =>
                 {
-                    if (ct.IsCancellationRequested) return;
+                    if (ct.IsCancellationRequested || !GpuRowMarked(y)) return;
                     int rb = y * Width;
                     for (int x = 0; x < Width; x++)
                     {
                         int idx = rb + x;
+                        if (!GpuMarked(idx)) continue;   // #1394: another pass's pixel
                         int iters = IterationBuffer[idx];
                         if (iters < maxIt)
                         {
@@ -2946,7 +2965,12 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         if (kernel == null) return false;
         bool useSa = false, useBla = false, wave = false;
         // #1340 — the deep kernels' schedule for this dispatch (Auto: the last frame's hint).
-        GpuWavefront.PerturbHint = _gpuWavefrontNext;
+        // #1394 — a sparse solid-region pass takes the wavefront schedule: its threads pull
+        // only marked pixels, while one thread per pixel idles a group's lanes around a 1-px
+        // line (GT 710, 640x360 deep grid lines: 9 % of the full frame's time vs 37 %). A
+        // dense one (Auto declined: the rest of the frame) keeps the frame's own schedule.
+        bool Hint() => _gpuWavefrontNext || _gpuPassMask is { } pm && pm.Count * 2 < (long)Width * Height;
+        GpuWavefront.PerturbHint = Hint();
         try
         {
             double offX0 = SubRectOffsetX - effImgW * 0.5;
@@ -2978,7 +3002,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                     w, h, sc, maxIt, EscapeRadius2, ox, oy, _refZr, _refZi, _refOrbitLen,
                     SaTolerance, useSa ? sa.SafeMax : 0, sa.AR, sa.AI, sa.BR, sa.BI, sa.CR, sa.CI, sa.DR, sa.DI,
                     it, sm, zr, zi, dr, di, bla?.GpuCoefficients, bla?.Levels ?? 0), scale, offX0, offY0);
-                GpuWavefront.PerturbHint = _gpuWavefrontNext;
+                GpuWavefront.PerturbHint = Hint();   // (the seed may have set the hint)
                 wave = GpuWavefront.UsePerturb;
                 kernel.RunPerturbSA(
                     Width, Height, scale, maxIt, EscapeRadius2,
@@ -2996,7 +3020,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 SeedWavefrontIfAsked((w, h, sc, ox, oy, it, sm, zr, zi, dr, di) => kernel.RunPerturbFloatExp(   // #1386
                     w, h, sc, maxIt, EscapeRadius2, ox, oy, _refZr, _refZi, _refOrbitLen,
                     it, sm, zr, zi, dr, di), scale, offX0, offY0);
-                GpuWavefront.PerturbHint = _gpuWavefrontNext;
+                GpuWavefront.PerturbHint = Hint();   // (the seed may have set the hint)
                 wave = GpuWavefront.UsePerturb;
                 kernel.RunPerturbFloatExp(
                     Width, Height, scale, maxIt, EscapeRadius2,
@@ -3011,7 +3035,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 SeedWavefrontIfAsked((w, h, sc, ox, oy, it, sm, zr, zi, dr, di) => kernel.RunPerturb(   // #1386
                     w, h, sc, maxIt, EscapeRadius2, ox, oy, _refZr, _refZi, _refOrbitLen,
                     it, sm, zr, zi, dr, di), scale, offX0, offY0);
-                GpuWavefront.PerturbHint = _gpuWavefrontNext;
+                GpuWavefront.PerturbHint = Hint();   // (the seed may have set the hint)
                 wave = GpuWavefront.UsePerturb;
                 kernel.RunPerturb(
                     Width, Height, scale, maxIt, EscapeRadius2,
@@ -3032,11 +3056,12 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         var po = _po;
         ParallelForRows(0, Height, po, y =>
         {
-            if (ct.IsCancellationRequested) return;
+            if (ct.IsCancellationRequested || !GpuRowMarked(y)) return;
             int rb = y * Width;
             for (int x = 0; x < Width; x++)
             {
                 int idx = rb + x;
+                if (!GpuMarked(idx)) continue;   // #1394: another pass's pixel
                 FillAuxAndColorHP(idx, IterationBuffer[idx], maxIt,
                     FinalZrBuffer[idx], FinalZiBuffer[idx],
                     FinalDrBuffer[idx], FinalDiBuffer[idx], colorMap);
@@ -3046,7 +3071,10 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         LastFrameUsedGpuSeriesApproximation = useSa;
         LastFrameUsedGpuBla = useBla;
         LastFrameUsedGpuWavefront = wave;
-        MeasureWavefrontHint();
+        // #1394 — a solid-region pass computed only its marked pixels: no warp-waste
+        // sample for the next frame's hint.
+        if (_gpuPassMask != null) _gpuPassMasked = true;
+        else MeasureWavefrontHint();
         LogGpuPerturbEngaged();
         return true;
     }

@@ -623,6 +623,68 @@ RWStructuredBuffer<float> gTrap : register(u4);
         return System.Math.Min(rows, System.Math.Max(1, height));
     }
 
+    /// <summary>#1394 — the bands of a perturbation dispatch, as (first row, rows).
+    /// Without a mask: <see cref="PerturbBandRows"/> rows each (the last band shorter),
+    /// exactly as before. With one (<paramref name="maskWords"/>, the GpuPixelMask
+    /// layout: a header word, then one bit per pixel), a band's budget counts only its
+    /// marked pixels, so a sparse solid-region pass runs in a few tall bands instead
+    /// of many short ones: a band takes as long as its slowest pixel, and at 50 000
+    /// iterations on a GT 710 the 68 one-group bands of a 960x540 frame made 3.5 % of
+    /// its pixels cost a fifth of the frame. The budget is the larger of
+    /// <see cref="PerturbDispatchIterBudget"/> and the unmasked band's (one group of a
+    /// wide deep frame is already over it), so no masked band iterates more than a
+    /// band of the same frame without a mask. Bands stay whole groups of
+    /// <paramref name="groupRows"/> rows (but the last), at least one group each.</summary>
+    public static (int RowBase, int Rows)[] PerturbBands(int width, int height, int maxIter,
+        int groupRows = PerturbGroupRows, uint[]? maskWords = null)
+    {
+        var bands = new System.Collections.Generic.List<(int, int)>();
+        if (maskWords == null || PerturbBandRowsOverride > 0)
+        {
+            int rows = PerturbBandRows(width, height, maxIter, groupRows);
+            for (int y = 0; y < height; y += rows) bands.Add((y, System.Math.Min(rows, height - y)));
+            return bands.ToArray();
+        }
+        groupRows = System.Math.Max(1, groupRows);
+        long perPixel = System.Math.Max(1, maxIter);
+        long budget = System.Math.Max(PerturbDispatchIterBudget,
+            (long)PerturbBandRows(width, height, maxIter, groupRows) * width * perPixel);
+        for (int y = 0; y < height;)
+        {
+            int rows = 0;
+            long cost = 0;
+            while (y + rows < height)
+            {
+                int g = System.Math.Min(groupRows, height - y - rows);
+                long c = MarkedPixels(maskWords, (long)(y + rows) * width, (long)(y + rows + g) * width) * perPixel;
+                if (rows > 0 && cost + c > budget) break;
+                cost += c;
+                rows += g;
+            }
+            bands.Add((y, rows));
+            y += rows;
+        }
+        return bands.ToArray();
+    }
+
+    // The marked pixels in [from, to) of a GpuPixelMask word array (bits after the header).
+    private static long MarkedPixels(uint[] words, long from, long to)
+    {
+        long count = 0;
+        for (long i = from; i < to;)
+        {
+            long w = 1 + (i >> 5);
+            int bit = (int)(i & 31);
+            int len = (int)System.Math.Min(32 - bit, to - i);
+            if (w >= words.Length) break;
+            uint bits = words[w] >> bit;
+            if (len < 32) bits &= (1u << len) - 1;
+            count += System.Numerics.BitOperations.PopCount(bits);
+            i += len;
+        }
+        return count;
+    }
+
     /// <summary>Perf-fallback budget (ms). After the first row band completes,
     /// each backend extrapolates band0·bandCount; if it exceeds this, the GPU is
     /// too slow at this depth (weak FP64) and the dispatch aborts so the caller
@@ -705,6 +767,7 @@ void CSPerturb(uint3 tid : SV_DispatchThreadID)
             int px = (int)lx;
             int py = gRowBase + (int)ly;
             idx = py * gWidth + px;
+            if (MaskSkips(idx)) { idx = -1; continue; }   // #1394
 
             // dc = pixelOffset · scale (double).
             dcR = (gOffX0 + (double)px) * gScale;
@@ -895,6 +958,7 @@ void CSPerturbFX(uint3 tid : SV_DispatchThreadID)
             int px = (int)lx;
             int py = gRowBase + (int)ly;
             idx = py * gWidth + px;
+            if (MaskSkips(idx)) { idx = -1; continue; }   // #1394
 
             // dc = pixelOffset · scale, as float-exp.
             dcM = float2(gOffX0 + (float)px, gOffY0 + (float)py) * gScaleM;
@@ -993,6 +1057,7 @@ void CSPerturbF32(uint3 tid : SV_DispatchThreadID)
             int px = (int)lx;
             int py = gRowBase + (int)ly;
             idx = py * gWidth + px;
+            if (MaskSkips(idx)) { idx = -1; continue; }   // #1394
 
             dc = float2(gOffX0 + (float)px, gOffY0 + (float)py) * gScaleM;   // dc / S
             d = float2(0.0, 0.0);      // δ' = δ / S
@@ -1162,6 +1227,7 @@ void CSPerturbOrbit(uint3 tid : SV_DispatchThreadID)
             int px = (int)lx;
             int py = gRowBase + (int)ly;
             idx = py * gWidth + px;
+            if (MaskSkips(idx)) { idx = -1; continue; }   // #1394
 
             dcR = (gOffX0 + (double)px) * gScale;
             dcI = (gOffY0 + (double)py) * gScale;
@@ -1328,6 +1394,7 @@ void CSPerturbSA(uint3 tid : SV_DispatchThreadID)
             int px = (int)lx;
             int py = gRowBase + (int)ly;
             idx = py * gWidth + px;
+            if (MaskSkips(idx)) { idx = -1; continue; }   // #1394
 
             dcR = (gOffX0 + (double)px) * gScale;
             dcI = (gOffY0 + (double)py) * gScale;
@@ -1621,7 +1688,23 @@ RWStructuredBuffer<uint> gWork : register(u5);
     /// Julia frame 10% and Phoenix a third of its gain on Vulkan).</para>
     /// Returns 0 = no pixel left (the thread exits), 1 = pixel (lx, ly) of the
     /// w × rows region, 2 = a slot past its right / bottom edge (fetch again).</summary>
+    /// <para>#1394 — also declares the pixel mask (GpuPixelMask, t15; Vulkan binding
+    /// TShift + 15): every entry that fetches a pixel skips it when MaskSkips says so,
+    /// before writing anything, so a masked dispatch leaves the unmarked pixels'
+    /// outputs alone. The D3D11 kernels leave t15 unbound without a mask (reads 0:
+    /// every pixel); Vulkan binds a zero header.</para>
     public const string WaveFetch = @"
+StructuredBuffer<uint> gMask : register(t15);
+
+// #1394 — gMask[0] != 0: a mask is active; pixel idx is bit (idx & 31) of word
+// 1 + (idx >> 5). Read once per pixel, before its loop: no per-step cost.
+bool MaskSkips(int idx)
+{
+    if (gMask[0] == 0) return false;
+    uint i = (uint)idx;
+    return (gMask[1 + (i >> 5)] & (1u << (i & 31u))) == 0;
+}
+
 int WaveFetch(int wave, inout bool taken, uint2 tid, uint w, uint rows, uint slot, bool tiled, out uint lx, out uint ly)
 {
     lx = 0; ly = 0;
@@ -1710,6 +1793,7 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
             if (got == 0) break;
             if (got == 2) continue;
             idx = (int)y * gWidth + (int)x;
+            if (MaskSkips(idx)) {{ idx = -1; continue; }}   // #1394
 
             // Reconstruct cx / cy using the split centre.
             float fx = (float)x - 0.5 * gWidth;
@@ -1795,9 +1879,12 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         if (it > rowMaxIt) it = rowMaxIt;
 #endif
 
-        gFinalZD[idx] = float4(zr, zi, dr, di);
         if (it >= rowMaxIt)
         {{
+            // #1394: in set — the CPU writeback's zeros, not the orbit's last z (which
+            // differs from pixel to pixel, so no two in-set pixels of a GPU-coloured
+            // frame agreed and the solid-region fill never applied).
+            gFinalZD[idx] = float4(0.0, 0.0, 0.0, 0.0);
             gIter[idx]   = (uint)gMaxIter;
 #if defined(FF_PERIODICITY) && FF_PERIODICITY == 2
             gSmooth[idx] = periodicAt > 0 ? -(float)periodicAt : 0.0;   // #1342 diagnostic
@@ -1808,6 +1895,7 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         }}
         else
         {{
+            gFinalZD[idx] = float4(zr, zi, dr, di);
             gIter[idx] = (uint)it;
             // #1340: precise (once per pixel, no loop cost) — FXC otherwise compiled
             // |z| differently in the periodicity on / off variants (separate

@@ -39,8 +39,17 @@
 // passes skip them (and a fill must agree with every one inside the tile, which also
 // rejects some sub-pixel-channel fills).
 //
-// A frame that went to the GPU (the GPU paths ignore the mask) is complete after
-// the first pass. These run unchanged: a frame with its own pixel mask (#1344
+// #1394 part 1 — the GPU kernels take the mask too (IGpuKernel.PixelMask, GpuPixelMask):
+// a masked dispatch computes and reads back only the marked pixels, the same bytes a
+// full dispatch gives them, so a frame on the shallow kernel or the deep perturbation
+// kernels subdivides like a CPU one. A sparse pass runs the wavefront schedule (its
+// threads pull only marked pixels: the persistent-thread scheme of Aila & Laine, HPG
+// 2009 — see Docs/Resources-Bibliography.md) in bands sized by their marked pixels.
+// Auto there: the frame's grid in one pass (passes cost a read-back and, deep, bands as
+// long as their slowest pixel), subdividing at SolidAutoMinCostlyShareGpu; on the shallow
+// kernel with its periodicity check on (which settles most interiors already) Auto
+// computes the frame whole, without a probe pass. A kernel without mask support still
+// completes the frame in the first pass. These run unchanged: a frame with its own pixel mask (#1344
 // adaptive AA) or a pan (#1330 reuse); the orbit-aware themes (their path takes no
 // mask); and the interior themes (atom domains, multiplier, …) — they colour each
 // in-set pixel by its own cycle, so no tile border is ever uniform and the passes
@@ -108,6 +117,10 @@ public sealed partial class MandelbrotCalculator : ISolidRegionTarget
     /// SolidRegionSubdivision.AutoMinCostlyShare).</summary>
     public const double SolidAutoMinCostlyShare = SolidRegionSubdivision.AutoMinCostlyShare;
 
+    /// <summary>#1394 part 1 — Auto's threshold for a frame on a masked GPU kernel whose
+    /// in-set pixels run to the cap (see SolidRegionSubdivision.AutoMinCostlyShareGpu).</summary>
+    public const double SolidAutoMinCostlyShareGpu = SolidRegionSubdivision.AutoMinCostlyShareGpu;
+
     private bool SolidRegionsApply()
         => SolidRegionSkip && _mask == null && _panRegion == null
            && ColorMap is not IOrbitAwareColorMap && ColorMap is not IInteriorAwareColorMap
@@ -147,15 +160,54 @@ public sealed partial class MandelbrotCalculator : ISolidRegionTarget
         _batchCount = batchCount;
     }
 
-    void ISolidRegionTarget.SolidPass(byte[] mark, bool[] rows, CancellationToken ct)
+    // #1394 part 1 — the pass's mask on the GPU kernel (null when the kernel can't
+    // take one), and whether a GPU dispatch of this pass ran with it.
+    private FracturingFog.Rendering.GpuPixelMask? _gpuPassMask;
+    private bool _gpuPassMasked;
+
+    void ISolidRegionTarget.SolidPass(byte[]? mark, bool[]? rows, CancellationToken ct)
     {
         _mask = mark;
         _maskRows = rows;
-        CalculateInternal(ct);
+        _gpuPassMasked = false;
+        var kernel = GpuKernel;
+        _gpuPassMask = mark != null && kernel is { SupportsPixelMask: true } && (UseGpuCompute || UseGpuPerturbation)
+            ? FracturingFog.Rendering.GpuPixelMask.FromBytes(mark, Width, Height) : null;
+        if (_gpuPassMask != null) kernel!.PixelMask = _gpuPassMask;
+        try { CalculateInternal(ct); }
+        finally
+        {
+            if (_gpuPassMask != null) kernel!.PixelMask = null;
+            _gpuPassMask = null;
+        }
     }
 
+    // #1394 part 1 — the GPU kernel the frame will go to, if it takes the mask: an
+    // estimate of the route CalculateInternal picks (it only steers Auto's decision).
+    private enum SolidGpu { None, Shallow, Deep }
+
+    private SolidGpu SolidGpuRoute()
+    {
+        if (GpuKernel is not { SupportsPixelMask: true } k) return SolidGpu.None;
+        if (!Quality.NeedsHighPrecision(Zoom)) return UseGpuCompute && Zoom <= MaxGpuZoom ? SolidGpu.Shallow : SolidGpu.None;
+        return UseGpuPerturbation && Zoom <= MaxGpuPerturbZoom && (k.SupportsPerturbation || UseFloatExpKernel(k))
+            ? SolidGpu.Deep : SolidGpu.None;
+    }
+
+    bool ISolidRegionTarget.SolidFewPasses => SolidGpuRoute() != SolidGpu.None;
+
+    double ISolidRegionTarget.SolidAutoMinCostlyShare => SolidGpuRoute() switch
+    {
+        SolidGpu.Shallow when FracturingFog.Rendering.GpuPeriodicity.Mode != FracturingFog.Rendering.GpuPeriodicity.Off
+            => SolidRegionSubdivision.AutoNever,
+        SolidGpu.None => SolidRegionSubdivision.AutoMinCostlyShare,
+        _ => SolidRegionSubdivision.AutoMinCostlyShareGpu,
+    };
+
+    // A GPU pass that took the mask computed only the marked pixels, like a CPU one.
     bool ISolidRegionTarget.SolidFrameOnGpu
-        => LastFrameUsedGpuCompute || LastFrameUsedGpuPerturbation || LastFrameUsedGpuOrbitPerturbation;
+        => (LastFrameUsedGpuCompute || LastFrameUsedGpuPerturbation || LastFrameUsedGpuOrbitPerturbation)
+           && !_gpuPassMasked;
 
     // #1394 — the pixel's c is in the main cardioid or the period-2 bulb, which the
     // shallow path settles with a closed-form test instead of iterating (the standard
