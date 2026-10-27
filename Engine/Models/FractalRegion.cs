@@ -628,6 +628,11 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? MirrorSpheresMaxBounces { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? MirrorSpheresReflectance { get; set; }
         [JsonIgnore(Condition = OmitNull)] public bool? MirrorSpheresMuteMisses { get; set; }
+        // #1441 — photo mode (mode = int cast of MirrorSpheresMode).
+        [JsonIgnore(Condition = OmitNull)] public int? MirrorSpheresMode { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public string? MirrorSpheresOpeningColors { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? MirrorSpheresViewerBlack { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? MirrorSpheresFresnel { get; set; }
 
         // #94 (P4) — non-spatial family params. These families ignore plane
         // zoom, so the video slideshow renders them as a static-hold leg; the
@@ -1101,6 +1106,14 @@ namespace FracturingFog.Models
                     MirrorSpheresReflectance = Nd(p.MirrorSpheresReflectance, D.MirrorSpheresReflectance),
                     MirrorSpheresMuteMisses = p.MirrorSpheresMuteMisses != D.MirrorSpheresMuteMisses
                         ? p.MirrorSpheresMuteMisses : (bool?)null,
+                    // #1441 — photo mode.
+                    MirrorSpheresMode = p.MirrorSpheresMode != D.MirrorSpheresMode ? (int)p.MirrorSpheresMode : (int?)null,
+                    MirrorSpheresOpeningColors = p.MirrorSpheresOpeningColors != D.MirrorSpheresOpeningColors
+                        ? p.MirrorSpheresOpeningColors : null,
+                    MirrorSpheresViewerBlack = p.MirrorSpheresViewerBlack != D.MirrorSpheresViewerBlack
+                        ? p.MirrorSpheresViewerBlack : (bool?)null,
+                    MirrorSpheresFresnel = p.MirrorSpheresFresnel != D.MirrorSpheresFresnel
+                        ? p.MirrorSpheresFresnel : (bool?)null,
                 },
                 FractalType.BicomplexMandelbrot => new RegionFractalParams
                 {
@@ -1779,6 +1792,10 @@ namespace FracturingFog.Models
             if (MirrorSpheresMaxBounces.HasValue) p.MirrorSpheresMaxBounces = MirrorSpheresMaxBounces.Value;
             if (MirrorSpheresReflectance.HasValue) p.MirrorSpheresReflectance = MirrorSpheresReflectance.Value;
             if (MirrorSpheresMuteMisses.HasValue) p.MirrorSpheresMuteMisses = MirrorSpheresMuteMisses.Value;
+            if (MirrorSpheresMode.HasValue) p.MirrorSpheresMode = (FracturingFog.MirrorSpheresMode)MirrorSpheresMode.Value;   // #1441
+            if (MirrorSpheresOpeningColors != null) p.MirrorSpheresOpeningColors = MirrorSpheresOpeningColors;
+            if (MirrorSpheresViewerBlack.HasValue) p.MirrorSpheresViewerBlack = MirrorSpheresViewerBlack.Value;
+            if (MirrorSpheresFresnel.HasValue) p.MirrorSpheresFresnel = MirrorSpheresFresnel.Value;
             if (KleinianNecklaceCount.HasValue) p.KleinianNecklaceCount = KleinianNecklaceCount.Value;
             if (KleinianCustomSpheres != null) p.KleinianCustomSpheres = KleinianCustomSpheres.ConvertAll(s => s.Clone());
             if (KleinianRotationAngle.HasValue) p.KleinianRotationAngle = KleinianRotationAngle.Value;

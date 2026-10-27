@@ -94,6 +94,16 @@ namespace FracturingFog
     /// rotate with it. NDisk has no ring gaps and falls back to Sector.</summary>
     public enum BilliardGateMode { Sector, ExitGap }
 
+    /// <summary>How the Wada mirror spheres (#1440) colour a pixel.
+    /// <see cref="Basins"/> (S1): the exit opening's categorical colour, from the
+    /// billiard theme or Okabe-Ito, darkened per bounce. <see cref="Photo"/> (#1441):
+    /// the 1999 photograph's physics. Each opening is covered by a coloured board
+    /// (<c>MirrorSpheresOpeningColors</c>) or open to the environment (the Lighting &amp; FX
+    /// sky / HDRI). The camera's own opening is dark (<c>MirrorSpheresViewerBlack</c>).
+    /// Every reflection keeps the Schlick-Fresnel share of the light
+    /// (<c>MirrorSpheresFresnel</c>).</summary>
+    public enum MirrorSpheresMode { Basins, Photo }
+
     /// <summary>Arithmetic precision tier for the PrecisionField (#628) diff
     /// renderer. The map z² + c is iterated at two tiers and the per-pixel
     /// divergence of the outcome is the image. <see cref="Float"/> (32-bit) and
@@ -913,7 +923,9 @@ namespace FracturingFog
         /// <c>MirrorSpheresCalculator</c>; colour through <c>IBilliardColorMap</c>
         /// (gate = opening). Tunables: <c>MirrorSpheresRadiusScale</c>,
         /// <c>MirrorSpheresMaxBounces</c>, <c>MirrorSpheresReflectance</c>,
-        /// <c>MirrorSpheresMuteMisses</c>, <c>MirrorSpheresCamera*</c>.</summary>
+        /// <c>MirrorSpheresMuteMisses</c>, <c>MirrorSpheresCamera*</c>; photo mode (#1441)
+        /// <c>MirrorSpheresMode</c>, <c>MirrorSpheresOpeningColors</c>,
+        /// <c>MirrorSpheresViewerBlack</c>, <c>MirrorSpheresFresnel</c>.</summary>
         MirrorSpheres,
     }
 

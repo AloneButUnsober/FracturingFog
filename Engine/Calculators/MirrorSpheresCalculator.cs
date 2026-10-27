@@ -39,9 +39,15 @@
 // billiard's categorical themes and ColorGen inputs: gate = opening, gateCount
 // = 4), else the built-in Okabe-Ito opening colours.
 //
-// S1 (#1440) scope: CPU, basin mode. The DE shading / Lighting & FX post stack
-// does not apply (there is no surface to shade, only mirrors). The photo look
-// (per-opening colours / environment, Fresnel) is S2 (#1441) and the GPU kernel S4 (#1443).
+// Photo mode (#1441) follows the photograph's setup: a coloured board over each
+// opening, or the opening left open to the Lighting & FX sky / HDRI. The camera's
+// own opening is black (dark room). Each reflection keeps the Schlick (1994) Fresnel
+// share. Rays that never enter the chamber show the environment reflected in the
+// balls' outer sides.
+//
+// The DE shading / Lighting & FX post stack does not apply (there is no surface to
+// shade, only mirrors); Lighting & FX supplies only the sky / HDRI in photo mode.
+// The GPU kernel is S4 (#1443).
 
 using System;
 using System.Threading;
@@ -116,6 +122,13 @@ public sealed class MirrorSpheresCalculator : IFractalCalculator, IStereoEyeCame
         var fx = p.Lighting;
         float[]? depthBuf = ScreenSpacePost.WantsDepthOutput(in fx) ? new float[width * height] : null;
 
+        if (p.MirrorSpheresMode == MirrorSpheresMode.Photo)
+        {
+            RenderPhoto(scene, in cam, in fx, renderBuffer, depthBuf, width, height, ct);
+            FinishFrame(depthBuf, renderBuffer, width, height, fullW, fullH, lowRes, in fx);
+            return;
+        }
+
         var billiardMap = ColorMap as IBilliardColorMap;
         uint trapped = ColorMap.InSetColor;
         bool mute = p.MirrorSpheresMuteMisses;
@@ -157,12 +170,73 @@ public sealed class MirrorSpheresCalculator : IFractalCalculator, IStereoEyeCame
             }
         });
 
+        FinishFrame(depthBuf, renderBuffer, width, height, fullW, fullH, lowRes, in fx);
+    }
+
+    private void FinishFrame(float[]? depthBuf, uint[] renderBuffer, int width, int height, int fullW, int fullH,
+                             bool lowRes, in LightingFxData fx)
+    {
         DepthBuffer = ScreenSpacePost.PublishDepth(depthBuf, width, height, fullW, fullH, in fx);
         if (lowRes)
             FracturingFog.Rendering.LowResPreview.UpscaleNearest(renderBuffer, width, height, ColorBuffer, fullW, fullH);
         ScreenSpacePost.FinishFrame3D(ColorBuffer, fullW, fullH, in fx, preview: lowRes);
     }
+
+    /// <summary>#1441 — the photograph's physics. A ray leaving the chamber through a
+    /// covered opening takes the board's colour; through an <c>env</c> opening (or a ray
+    /// that never entered: the room reflected in the balls' outer sides) it keeps
+    /// bouncing until nothing is ahead and takes the environment along its final
+    /// direction. Either way the colour is scaled by the light the reflections kept.
+    /// The camera's own opening is black when <c>MirrorSpheresViewerBlack</c> is on.</summary>
+    private void RenderPhoto(MirrorSpheresScene scene, in MirrorSpheresCamera camIn, in LightingFxData fxIn,
+                             uint[] renderBuffer, float[]? depthBuf, int width, int height, CancellationToken ct)
+    {
+        var p = FractalParameters;
+        var cam = camIn;
+        var fx = fxIn;
+        var paint = MirrorSpheresPalette.Parse(p.MirrorSpheresOpeningColors);
+        int viewer = p.MirrorSpheresViewerBlack
+            ? MirrorSpheresScene.Opening(cam.X, cam.Y, cam.Z)   // the face the camera sits in front of
+            : -1;
+
+        Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
+        {
+            if (ct.IsCancellationRequested) return;
+            int rowBase = y * width;
+            for (int x = 0; x < width; x++)
+            {
+                cam.Ray(x, y, width, height, out double dx, out double dy, out double dz);
+                var o = scene.Trace(cam.X, cam.Y, cam.Z, dx, dy, dz);
+                int idx = rowBase + x;
+                if (depthBuf != null) depthBuf[idx] = o.Bounces > 0 ? (float)o.FirstHit : ScreenSpacePost.DepthMiss;
+                renderBuffer[idx] = PhotoColor(scene, in o, paint, viewer, cam.X, cam.Y, cam.Z, dx, dy, dz, in fx);
+            }
+        });
+    }
+
+    /// <summary>#1441 — the photo-mode colour of one traced camera ray (public for tests).</summary>
+    public static uint PhotoColor(MirrorSpheresScene scene, in MirrorSpheresOutcome o, MirrorSpheresPalette.Paint[] paint,
+                                  int viewerOpening, double ox, double oy, double oz, double dx, double dy, double dz,
+                                  in LightingFxData fx)
+    {
+        const uint black = 0xFF000000u;
+        if (o.Gate < 0) return black;   // trapped: no light gets out
+        if (o.EnteredChamber && o.Gate == viewerOpening) return black;
+        if (o.EnteredChamber && !paint[o.Gate].Environment)
+            return Scale(paint[o.Gate].Color, o.Throughput);
+
+        // Open to the environment: follow the ray past the chamber until it is free.
+        var free = scene.Trace(ox, oy, oz, dx, dy, dz, stopAtChamberExit: false);
+        if (free.Gate < 0) return black;
+        uint sky = ShadingPipeline.ApplyBackgroundFog(
+            ShadingPipeline.SkyColorHdri(free.EndDx, free.EndDy, free.EndDz, in fx), free.EndDy, in fx);
+        return Scale(sky, free.Throughput);
+    }
+
+    private static uint Scale(uint argb, double k)
+        => k >= 1.0 ? argb | 0xFF000000u : unchecked((uint)BilliardColorHelper.Shade(unchecked((int)argb), (float)k));
 }
+
 
 /// <summary>One traced camera ray through the mirror spheres (#1440).</summary>
 public readonly struct MirrorSpheresOutcome
@@ -178,6 +252,9 @@ public readonly struct MirrorSpheresOutcome
     public double FirstHit { get; init; }
     /// <summary>World-space path length from the origin to the last reflection.</summary>
     public double PathLength { get; init; }
+    /// <summary>#1441 — share of the light the reflections kept (the product of the
+    /// per-bounce reflectance: F0, or Schlick's Fresnel term in photo mode).</summary>
+    public double Throughput { get; init; }
     /// <summary>Where the trace ended: the chamber exit point (on the face plane), else
     /// the last reflection point (the origin when no ball is hit).</summary>
     public double EndX { get; init; }
@@ -208,6 +285,10 @@ public sealed class MirrorSpheresScene
 
     public double Radius { get; }
     public int MaxBounces { get; }
+    /// <summary>#1441 — normal-incidence reflectance F0 (MirrorSpheresReflectance).</summary>
+    public double Reflectance { get; init; } = 1.0;
+    /// <summary>#1441 — weight each bounce by Schlick's Fresnel term instead of F0.</summary>
+    public bool Fresnel { get; init; }
     /// <summary>Radius of a sphere about the origin that encloses every ball.</summary>
     public double BoundingRadius => Math.Sqrt(3.0) + Radius;
 
@@ -223,7 +304,21 @@ public sealed class MirrorSpheresScene
 
     public static MirrorSpheresScene Build(FractalParameters p)
         => new(TangentRadius * Math.Clamp(p.MirrorSpheresRadiusScale, 0.05, 1.0),
-               Math.Clamp(p.MirrorSpheresMaxBounces, 1, 4096));
+               Math.Clamp(p.MirrorSpheresMaxBounces, 1, 4096))
+        {
+            Reflectance = Math.Clamp(p.MirrorSpheresReflectance, 0.0, 1.0),
+            Fresnel = p.MirrorSpheresFresnel && p.MirrorSpheresMode == MirrorSpheresMode.Photo,
+        };
+
+    /// <summary>#1441 — Schlick's (1994) Fresnel approximation for a mirror with
+    /// normal-incidence reflectance <paramref name="f0"/> at incidence cosine
+    /// <paramref name="cosTheta"/>: F0 + (1 − F0)(1 − cos θ)⁵.</summary>
+    public static double Schlick(double f0, double cosTheta)
+    {
+        double m = 1.0 - Math.Clamp(cosTheta, 0.0, 1.0);
+        double m2 = m * m;
+        return f0 + (1.0 - f0) * m2 * m2 * m;
+    }
 
     // Face k (opposite ball k) has outward normal -c_k/|c_k| = -c_k/√3 and sits at
     // distance FaceOffset from the origin (c_k · c_j = -1 for any two corners).
@@ -243,7 +338,7 @@ public sealed class MirrorSpheresScene
         double r2 = Radius * Radius;
         const double eps = 1e-9;
         double px = ox, py = oy, pz = oz;
-        double first = double.PositiveInfinity, path = 0.0;
+        double first = double.PositiveInfinity, path = 0.0, light = 1.0;
         int bounces = 0, last = -1;
 
         while (bounces < MaxBounces)
@@ -275,7 +370,7 @@ public sealed class MirrorSpheresScene
                     return new MirrorSpheresOutcome
                     {
                         Gate = exitFace, EnteredChamber = true, Bounces = bounces, FirstHit = first,
-                        PathLength = path + tOut,
+                        PathLength = path + tOut, Throughput = light,
                         EndX = px + tOut * dx, EndY = py + tOut * dy, EndZ = pz + tOut * dz,
                         EndDx = dx, EndDy = dy, EndDz = dz,
                     };
@@ -287,7 +382,7 @@ public sealed class MirrorSpheresScene
                 return new MirrorSpheresOutcome
                 {
                     Gate = Opening(dx, dy, dz), EnteredChamber = !stopAtChamberExit && bounces > 0,
-                    Bounces = bounces, FirstHit = first, PathLength = path,
+                    Bounces = bounces, FirstHit = first, PathLength = path, Throughput = light,
                     EndX = px, EndY = py, EndZ = pz, EndDx = dx, EndDy = dy, EndDz = dz,
                 };
             }
@@ -297,6 +392,7 @@ public sealed class MirrorSpheresScene
             if (bounces == 0) first = tHit;
             double nx = (px - s_cx[hit]) / Radius, ny = (py - s_cy[hit]) / Radius, nz = (pz - s_cz[hit]) / Radius;
             double dot = dx * nx + dy * ny + dz * nz;
+            light *= Fresnel ? Schlick(Reflectance, -dot) : Reflectance;   // cos θ = -d·n (incoming)
             dx -= 2.0 * dot * nx; dy -= 2.0 * dot * ny; dz -= 2.0 * dot * nz;
             last = hit;
             bounces++;
@@ -305,6 +401,7 @@ public sealed class MirrorSpheresScene
         return new MirrorSpheresOutcome   // trapped
         {
             Gate = -1, EnteredChamber = true, Bounces = bounces, FirstHit = first, PathLength = path,
+            Throughput = light,
             EndX = px, EndY = py, EndZ = pz, EndDx = dx, EndDy = dy, EndDz = dz,
         };
     }
@@ -409,5 +506,45 @@ public readonly struct MirrorSpheresCamera
         double len = Math.Sqrt(x * x + y * y + z * z);
         if (len < 1e-12) { ox = oy = oz = 0; return; }
         ox = x / len; oy = y / len; oz = z / len;
+    }
+}
+
+/// <summary>#1441 — what lies beyond each opening in photo mode, parsed from
+/// <c>FractalParameters.MirrorSpheresOpeningColors</c>.</summary>
+public static class MirrorSpheresPalette
+{
+    /// <summary>One opening's cover: a board colour, or open to the environment.</summary>
+    public readonly record struct Paint(uint Color, bool Environment);
+
+    /// <summary>Default covers: vermillion, blue, white, black (Okabe-Ito vermillion and
+    /// blue stand in for the photo's red and blue boards; white for the cloth below).</summary>
+    public const string DefaultText = "#D55E00,#0072B2,#F2F2F2,#000000";
+
+    private static readonly Paint[] s_default =
+    {
+        new(0xFFD55E00u, false), new(0xFF0072B2u, false), new(0xFFF2F2F2u, false), new(0xFF000000u, false),
+    };
+
+    /// <summary>Parse "#RRGGBB" / "RRGGBB" / "env" entries, comma-separated, in opening
+    /// order. A missing or malformed entry falls back to that opening's default.</summary>
+    public static Paint[] Parse(string? text)
+    {
+        var result = (Paint[])s_default.Clone();
+        if (string.IsNullOrWhiteSpace(text)) return result;
+        var parts = text.Split(',');
+        for (int k = 0; k < result.Length && k < parts.Length; k++)
+        {
+            string t = parts[k].Trim();
+            if (t.Equals("env", StringComparison.OrdinalIgnoreCase))
+            {
+                result[k] = new Paint(0, true);
+                continue;
+            }
+            if (t.StartsWith('#')) t = t.Substring(1);
+            if (t.Length == 6 && uint.TryParse(t, System.Globalization.NumberStyles.HexNumber,
+                    System.Globalization.CultureInfo.InvariantCulture, out uint rgb))
+                result[k] = new Paint(0xFF000000u | rgb, false);
+        }
+        return result;
     }
 }
