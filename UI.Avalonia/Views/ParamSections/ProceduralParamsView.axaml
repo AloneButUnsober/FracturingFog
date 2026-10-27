@@ -876,7 +876,7 @@
         <!-- Chaotic Billiard (#627) -->
         <Grid IsVisible="{Binding IsChaoticBilliard}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Geometry:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding BilliardGeometries}"
@@ -928,6 +928,9 @@
             <CheckBox Grid.Row="9" Grid.Column="1" Content="Mute direct misses"
                       IsChecked="{Binding BilliardMuteMisses, Mode=TwoWay}" Margin="0,2"
                       ToolTip.Tip="Draw rays that never hit a mirror as a dark background, so the scattered rays carry the picture." />
+            <Button Grid.Row="10" Grid.Column="1" Content="Ray paths..."
+                    Command="{Binding ShowBilliardRayInsetCommand}" Margin="0,4,0,2"
+                    ToolTip.Tip="Open the ray-path inset: hover the render to see that pixel's ray in real space; Ctrl+click to pin rays and compare neighbours across a basin boundary. Live only, never part of an export." />
         </Grid>
 
         <!-- Precision Field (#628) -->

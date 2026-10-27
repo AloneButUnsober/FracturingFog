@@ -860,6 +860,26 @@ namespace FracturingFog.Hosting
                 return FracturingFog.Imaging.PosterRenderer.RenderToPixels(req, System.Threading.CancellationToken.None, out _, out _);
             };
 
+            // #1447 — chaotic-billiard ray-path inset: trace through the render's own
+            // plane mapping and scene, coloured by the active theme's gate colours.
+            {
+                var inset = s_shell.BilliardRayInset;
+                var vs = viewState;
+                FracturingFog.Interefaces.IColorMap? InsetMap()
+                    => s_renderHost?.ActiveAltCalculator?.ColorMap ?? s_renderHost?.ColorMap;
+                bool IsBilliard() => vs.FractalType == FracturingFog.FractalType.ChaoticBilliard;
+                inset.GetScene = () => IsBilliard()
+                    ? FracturingFog.BilliardRayInspector.Scene(vs.FractalParameters, InsetMap())
+                    : null;
+                inset.TraceAtPlane = (px, py) => IsBilliard()
+                    ? FracturingFog.BilliardRayInspector.Trace(vs.FractalParameters, InsetMap(), px, py)
+                    : null;
+                inset.TraceAtPointer = (x, y, w, h) => IsBilliard()
+                    ? FracturingFog.BilliardRayInspector.TraceAt(vs.FractalParameters, InsetMap(),
+                        x, y, w, h, vs.CenterX, vs.CenterY, vs.Zoom)
+                    : null;
+            }
+
             // Palette samplers for MiniDepth (#11 — theme-styled gradient).
             // Uses the host's MandelbrotCalculator.ColorMap so the strip
             // colours stay in lock-step with whatever theme is active.
@@ -2610,6 +2630,8 @@ namespace FracturingFog.Hosting
                             global::FracturingFog.FractalType.JulibrotPair)
                             ?? (IReadOnlyList<string>)Array.Empty<string>());
                     vm.ParamChanged += () => s_renderHost?.Trigger();
+                    // #1447 — the billiard panel's "Ray paths" button.
+                    vm.ShowBilliardRayInsetCommand = s_shell?.ToggleBilliardRayInsetCommand;
 
                     // #135 — drop-colour eyedropper (shared wiring).
                     WireDropColorEyedropper(vm);

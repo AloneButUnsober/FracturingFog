@@ -63,6 +63,9 @@ public sealed partial class MainWindow : Window
     private MiniWindowTether? _miniDepthTether;
     private PostFxHudWindow? _postFxHudWin;
     private MiniWindowTether? _postFxHudTether;
+    private BilliardRayInsetWindow? _rayInsetWin;
+    private MiniWindowTether? _rayInsetTether;
+    private EventHandler<FracturingFog.Render.RenderFrameInfo>? _rayInsetFrameHandler;
     private SceneDebugHudWindow? _sceneDebugWin;     // #1051
     private MiniWindowTether? _sceneDebugTether;
     private StatusPanelWindow? _statusPanelWin;
@@ -737,6 +740,7 @@ public sealed partial class MainWindow : Window
                 _shell.Main.RenderHost.FrameCompleted -= _miniDepthFrameCompletedHandler;
             _miniDepthColorMapHandler = null;
             _miniDepthFrameCompletedHandler = null;
+            DetachBilliardRayInsetHooks(_shell);
         }
 
         // #531 — detach the asset-drop handlers off the persistent sponge.
@@ -923,6 +927,9 @@ public sealed partial class MainWindow : Window
                 break;
             case nameof(ShellViewModel.IsPostFxHudVisible):
                 SyncPostFxHud();
+                break;
+            case nameof(ShellViewModel.IsBilliardRayInsetVisible):
+                SyncBilliardRayInset();
                 break;
             case nameof(ShellViewModel.IsSceneDebugVisible):
                 SyncSceneDebugHud();
@@ -1556,6 +1563,68 @@ public sealed partial class MainWindow : Window
         {
             _postFxHudWin?.Hide();
         }
+    }
+
+    // #1447 — chaotic-billiard ray-path inset; same tethered-window pattern as the
+    // Post-FX HUD. While shown it takes the controller's hover + Ctrl+click hooks
+    // and re-traces after every frame (parameters, theme or view may have changed).
+    private void SyncBilliardRayInset()
+    {
+        if (_shell == null) return;
+        var shell = _shell;
+        var vm = shell.BilliardRayInset;
+        if (shell.IsBilliardRayInsetVisible)
+        {
+            if (_rayInsetWin == null)
+            {
+                _rayInsetWin = new BilliardRayInsetWindow(vm);
+                _rayInsetWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsBilliardRayInsetVisible = false;
+                };
+                FracturingFog.UI.Avalonia.Services.WindowService.RegisterWindow(
+                    FracturingFog.Models.WindowRole.BilliardRayInset, _rayInsetWin);
+            }
+            var input = shell.Main.Input;
+            input.HoverObserver = e => global::Avalonia.Threading.Dispatcher.UIThread.Post(() => vm.OnHover(e));
+            input.InspectClickHandler = vm.Pin;
+            if (_rayInsetFrameHandler == null)
+            {
+                _rayInsetFrameHandler = (_, _) =>
+                    global::Avalonia.Threading.Dispatcher.UIThread.Post(vm.Refresh);
+                shell.Main.RenderHost.FrameCompleted += _rayInsetFrameHandler;
+            }
+            vm.Refresh();
+            if (!_rayInsetWin.IsVisible)
+            {
+                _rayInsetWin.Show(this);
+                if (_rayInsetTether == null)
+                {
+                    _rayInsetTether = new MiniWindowTether(
+                        this, _rayInsetWin, MiniWindowTether.AnchorCorner.TopRight);
+                    _rayInsetWin.ResetAnchorRequested += (_, _) => _rayInsetTether?.ResetAnchor();
+                }
+                global::Avalonia.Threading.Dispatcher.UIThread.Post(
+                    () => _rayInsetTether?.Apply(),
+                    global::Avalonia.Threading.DispatcherPriority.Background);
+            }
+        }
+        else
+        {
+            DetachBilliardRayInsetHooks(shell);
+            _rayInsetWin?.Hide();
+        }
+    }
+
+    private void DetachBilliardRayInsetHooks(ShellViewModel shell)
+    {
+        shell.Main.Input.HoverObserver = null;
+        shell.Main.Input.InspectClickHandler = null;
+        if (_rayInsetFrameHandler != null)
+            shell.Main.RenderHost.FrameCompleted -= _rayInsetFrameHandler;
+        _rayInsetFrameHandler = null;
     }
 
     // #1051 — scene debug overlay; same tethered-window pattern as the Post-FX
@@ -2287,6 +2356,9 @@ public sealed partial class MainWindow : Window
         _miniDepthTether?.Dispose();
         _miniMapTether = null;
         _miniDepthTether = null;
+        _rayInsetTether?.Dispose();
+        _rayInsetTether = null;
+        _rayInsetWin?.Close();
 
         _menuWin?.Close();
         _controlCenterWin?.Close();

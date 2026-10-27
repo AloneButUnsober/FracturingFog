@@ -82,6 +82,8 @@ Right-click drag    Highlight-to-zoom — marquee box; release centers
                     + zooms to fill rectangle (v0.6 feature)
 Alt+double-click    Relief DOF focus pick (Relief 3D raymarch with
                     perspective + depth of field only; recenter else)
+Ctrl+click          Pin the ray under the pointer (Chaotic Billiard,
+                    with the Ray Paths inset open; pan else)
 
 MOUSE — 3-D
 -----------

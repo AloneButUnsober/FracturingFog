@@ -92,6 +92,11 @@ namespace FracturingFog.Input
                 if (pick(e)) return;
             }
 
+            // Ray-path inset (#1447): Ctrl+left pins the ray under the pointer.
+            if ((e.Buttons & PointerButton.Left) != 0 && (e.Modifiers & InputModifiers.Control) != 0
+                && InspectClickHandler is { } inspect && inspect(e))
+                return;
+
             // Right-click drag in 3D rotates the camera (theta = X, phi = Y).
             if ((e.Buttons & PointerButton.Right) != 0 && ViewState.Is3D)
             {
@@ -174,6 +179,8 @@ namespace FracturingFog.Input
         public void OnPointerMove(PointerInput e)
         {
             if (InputSuppressed) return;
+
+            if (e.Buttons == PointerButton.None) HoverObserver?.Invoke(e);
 
             if (_boxSelecting)
             {
@@ -399,6 +406,12 @@ namespace FracturingFog.Input
         public Func<PointerInput, bool>? ReliefFocusPickHandler { get; set; }
 
         private Func<PointerInput, bool>? _pointPick;
+
+        /// <summary>#1447 — see <see cref="IFractalInputController.InspectClickHandler"/>.</summary>
+        public Func<PointerInput, bool>? InspectClickHandler { get; set; }
+
+        /// <summary>#1447 — see <see cref="IFractalInputController.HoverObserver"/>.</summary>
+        public Action<PointerInput>? HoverObserver { get; set; }
 
         /// <summary>Finder click-mode (#1187): one-shot left-press hook; see
         /// <see cref="IFractalInputController.PointPickHandler"/>.</summary>

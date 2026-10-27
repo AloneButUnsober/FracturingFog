@@ -224,7 +224,15 @@ White comes from the table opening, red / blue boards from the other upper openi
 opening and the room (`MirrorSpheresRoomColor`) are dark. The paper doesn't say which upper opening
 held which board.
 
-**Status:** S1–S5 shipped (#1440–#1444); epic #1439 complete. Open follow-up: the ray-path inset #1447.
+**Ray-path inset (#1447, 2D billiard).** The billiard image maps launch conditions, so its sine-band
+"strands" are not trajectories. A live inset (Control Center → View → Ray Paths) traces the ray under
+the pointer in real space through the render's own plane mapping and scene; Ctrl+click pins rays, so two
+neighbours either side of a basin boundary show their divergence. Tests check the recorded paths against
+the reflection law and against the render's per-pixel bounce counts. The inset is live only: it is never
+drawn into a render or export, so it adds nothing to the batch. The mirror spheres could use the same
+inspector later.
+
+**Status:** S1–S5 shipped (#1440–#1444); epic #1439 complete.
 
 ---
 
@@ -810,3 +818,4 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   pixel-identical on the GT 710, but the CPU is faster there, so the GPU/CPU choice is measured (Auto).
 - **2026-10-27** — §2.5: S5 #1444, the 1999 photograph as a built-in region (`VertexUp` orientation, plain
   room colour); epic #1439 complete.
+- **2026-10-27** — §2.5: the 2D billiard ray-path inset #1447 (hover / pin a pixel to see its ray; live only).

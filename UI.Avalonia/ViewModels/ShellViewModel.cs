@@ -639,6 +639,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         ToggleMiniMapCommand = ReactiveCommand.Create(() => IsMiniMapVisible = !IsMiniMapVisible);
         ToggleMiniDepthCommand = ReactiveCommand.Create(() => IsMiniDepthVisible = !IsMiniDepthVisible);
         TogglePostFxHudCommand = ReactiveCommand.Create(() => IsPostFxHudVisible = !IsPostFxHudVisible);
+        ToggleBilliardRayInsetCommand = ReactiveCommand.Create(() => IsBilliardRayInsetVisible = !IsBilliardRayInsetVisible);
         ToggleStatusPanelCommand = ReactiveCommand.Create(() => IsStatusPanelVisible = !IsStatusPanelVisible);
         ToggleToolbarPanelCommand = ReactiveCommand.Create(() => IsToolbarPanelVisible = !IsToolbarPanelVisible);
         ToggleMiniModeCommand  = ReactiveCommand.Create(() => IsMiniMode = !IsMiniMode);
@@ -2014,6 +2015,21 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     }
 
     public ReactiveCommand<Unit, bool> TogglePostFxHudCommand { get; private set; } = null!;
+
+    // ── Chaotic-billiard ray-path inset (#1447) ─────────────────────────
+    // A tethered window that traces the launch under the pointer (and pinned
+    // launches) in real space. Host wires the tracing on BilliardRayInset and
+    // MainWindow.SyncBilliardRayInset the window + input hooks.
+    public BilliardRayInsetViewModel BilliardRayInset { get; } = new();
+
+    private bool _isBilliardRayInsetVisible;
+    public bool IsBilliardRayInsetVisible
+    {
+        get => _isBilliardRayInsetVisible;
+        set => this.RaiseAndSetIfChanged(ref _isBilliardRayInsetVisible, value);
+    }
+
+    public ReactiveCommand<Unit, bool> ToggleBilliardRayInsetCommand { get; private set; } = null!;
 
     // ── Floating standalone status panel (#499) ─────────────────────────────
     // A borderless, drag-to-move window mirroring the docked status bar. Host

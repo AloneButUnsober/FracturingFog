@@ -236,6 +236,7 @@ namespace FracturingFog.UI.Avalonia.Services
                 case WindowRole.MiniMap:          shell.IsMiniMapVisible = false; return;
                 case WindowRole.MiniDepth:        shell.IsMiniDepthVisible = false; return;
                 case WindowRole.PostFxHud:        shell.IsPostFxHudVisible = false; return;
+                case WindowRole.BilliardRayInset: shell.IsBilliardRayInsetVisible = false; return;
                 case WindowRole.ColorThemeEditor: shell.IsColorThemeEditorVisible = false; return;
                 case WindowRole.SceneEditor:      shell.IsSceneEditorVisible = false; return;
                 case WindowRole.AnimationEditor:  shell.IsAnimationEditorVisible = false; return;
