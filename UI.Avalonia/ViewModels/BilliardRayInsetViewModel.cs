@@ -50,6 +50,12 @@ public sealed class BilliardRayInsetViewModel : ViewModelBase
     /// <summary>Host (#1504): radius for a newly added disk (the panel's disk radius).</summary>
     public Func<double>? NewDiskRadius { get; set; }
 
+    /// <summary>Host (#1506): false when the render's pixels are not launches (Billiard
+    /// Rays), so hover and pins do not apply; the inset still shows and edits the scene.</summary>
+    public Func<bool>? CanTracePointer { get; set; }
+
+    public const string LayoutOnlyText = "Billiard Rays draws every ray in the render; edit the disks here.";
+
     /// <summary>Radius change per wheel notch (#1504).</summary>
     public const double WheelRadiusStep = 1.05;
 
@@ -85,7 +91,7 @@ public sealed class BilliardRayInsetViewModel : ViewModelBase
     }
 
     public const string HintText = "Hover the render to trace a ray. Ctrl+click to pin it.";
-    public const string WrongTypeText = "The ray-path inset works with Chaotic Billiard (Scatter).";
+    public const string WrongTypeText = "The ray-path inset works with Chaotic Billiard (Scatter) and Billiard Rays.";
 
     /// <summary>Pin letters, in pin order.</summary>
     public static string PinLabel(int i) => ((char)('A' + i)).ToString();
@@ -257,7 +263,8 @@ public sealed class BilliardRayInsetViewModel : ViewModelBase
         {
             var lines = new List<string>(_pins.Count + 1);
             for (int i = 0; i < _pins.Count; i++) lines.Add(PinLabel(i) + "  " + _pins[i].Summary);
-            lines.Add(Hover != null ? "Hover  " + Hover.Summary : HintText);
+            lines.Add(Hover != null ? "Hover  " + Hover.Summary
+                      : CanTracePointer?.Invoke() == false ? LayoutOnlyText : HintText);
             Status = string.Join(Environment.NewLine, lines);
         }
         InsetChanged?.Invoke(this, EventArgs.Empty);

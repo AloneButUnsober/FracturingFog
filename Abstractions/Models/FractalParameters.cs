@@ -1304,6 +1304,33 @@ namespace FracturingFog.Models
         /// geometry is switched away, so switching back restores the layout.</summary>
         public string BilliardCustomDisks { get; set; } = string.Empty;
 
+        // ── Billiard Rays (#1506) — ray-density render of the billiard scene ──
+        /// <summary>How rays are emitted (see <see cref="FracturingFog.BilliardRaySweep"/>). Default BSweep.</summary>
+        public BilliardRaySweep BilliardRaysSweep { get; set; } = BilliardRaySweep.BSweep;
+        /// <summary>Total rays emitted. Clamped to [1, 2 000 000]. Default 20 000.</summary>
+        public int BilliardRaysCount { get; set; } = 20_000;
+        /// <summary>BSweep: number of beam directions, evenly spaced round the circle from
+        /// <see cref="BilliardRaysAngle"/>. Clamped to [1, 360]. Default 1 (one parallel beam).</summary>
+        public int BilliardRaysAngleCount { get; set; } = 1;
+        /// <summary>Beam direction (BSweep: first beam's travel direction; PointSource: fan
+        /// centre) in degrees from +x, anticlockwise. Default 0 (rays travel left to right).</summary>
+        public double BilliardRaysAngle { get; set; } = 0.0;
+        /// <summary>Angular spread in degrees: AngleSweep, rays aimed within +-spread/2 of
+        /// the centre direction; PointSource, the fan's full width. Clamped to [0, 360].
+        /// Default 30.</summary>
+        public double BilliardRaysSpread { get; set; } = 30.0;
+        /// <summary>PointSource origin, world units. Default (-2.5, 0), left of the array.</summary>
+        public double BilliardRaysSourceX { get; set; } = -2.5;
+        public double BilliardRaysSourceY { get; set; } = 0.0;
+        /// <summary>Seed for the random sweeps (RandomFarField / PhaseSpace) and the
+        /// AngleSweep aim offsets. Default 1.</summary>
+        public int BilliardRaysSeed { get; set; } = 1;
+        /// <summary>Rays with fewer reflections are not drawn. 0 draws every ray; the default
+        /// 2 drops straight misses and rays that glance off one disk's outside and leave.</summary>
+        public int BilliardRaysMinBounces { get; set; } = 2;
+        /// <summary>Draw the mirror disks over the density. Default true.</summary>
+        public bool BilliardRaysShowDisks { get; set; } = true;
+
         // Precision-sensitivity field (#628). Mandelbrot z² + c iterated at two
         // arithmetic tiers; the per-pixel divergence of the outcome is the image.
         /// <summary>Lower arithmetic tier of the precision-diff pair. Default
@@ -2169,6 +2196,16 @@ namespace FracturingFog.Models
                 BilliardGateMode = BilliardGateMode,
                 BilliardMuteMisses = BilliardMuteMisses,
                 BilliardCustomDisks = BilliardCustomDisks,
+                BilliardRaysSweep = BilliardRaysSweep,
+                BilliardRaysCount = BilliardRaysCount,
+                BilliardRaysAngleCount = BilliardRaysAngleCount,
+                BilliardRaysAngle = BilliardRaysAngle,
+                BilliardRaysSpread = BilliardRaysSpread,
+                BilliardRaysSourceX = BilliardRaysSourceX,
+                BilliardRaysSourceY = BilliardRaysSourceY,
+                BilliardRaysSeed = BilliardRaysSeed,
+                BilliardRaysMinBounces = BilliardRaysMinBounces,
+                BilliardRaysShowDisks = BilliardRaysShowDisks,
                 PrecisionLowTier = PrecisionLowTier,
                 PrecisionHighTier = PrecisionHighTier,
                 PrecisionDiffMetric = PrecisionDiffMetric,

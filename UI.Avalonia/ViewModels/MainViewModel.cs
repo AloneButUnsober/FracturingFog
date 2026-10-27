@@ -247,6 +247,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.Dla,                   "DLA (Brownian Tree)"),
         (FractalType.RandomTile,            "Random Tiling (Bourke)"),
         (FractalType.ChaoticBilliard,       "Chaotic Billiard (Scatter)"),
+        (FractalType.BilliardRays,          "Billiard Rays (Ray Density)"),   // #1506
         (FractalType.PrecisionField,        "Precision Field (Fragility)"),
         (FractalType.JulibrotPair,       "Julibrot Pair"),          // #1155 (was Dual-Orbit Escape)
         (FractalType.IndrasPearls,          "Indra's Pearls (2D Kleinian)"),

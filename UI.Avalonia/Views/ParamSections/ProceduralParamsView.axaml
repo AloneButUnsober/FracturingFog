@@ -873,8 +873,8 @@
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4,0,0" />
         </Grid>
 
-        <!-- Chaotic Billiard (#627) -->
-        <Grid IsVisible="{Binding IsChaoticBilliard}"
+        <!-- Chaotic Billiard (#627); the scene rows are shared with Billiard Rays (#1506) -->
+        <Grid IsVisible="{Binding IsBilliardScene}"
               ColumnDefinitions="160,*"
               RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Geometry:" VerticalAlignment="Center" />
@@ -903,8 +903,8 @@
                            Minimum="1" Maximum="4096" Increment="16" FormatString="F0"
                            Value="{Binding BilliardMaxBounces, Mode=TwoWay}" Margin="0,2"
                            ToolTip.Tip="Reflection cap before a trajectory is declared trapped. Higher resolves the trapped (Cantor) set deeper at linear cost." />
-            <TextBlock Grid.Row="5" Grid.Column="0" Text="Gate count:" VerticalAlignment="Center" />
-            <NumericUpDown Grid.Row="5" Grid.Column="1"
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Gate count:" VerticalAlignment="Center" IsVisible="{Binding IsChaoticBilliard}" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1" IsVisible="{Binding IsChaoticBilliard}"
                            Minimum="2" Maximum="64" Increment="1" FormatString="F0"
                            Value="{Binding BilliardGateCount, Mode=TwoWay}" Margin="0,2"
                            ToolTip.Tip="Sector gate mode only: number of compass sectors the exit direction is bucketed into. ExitGap mode uses one gate per gap between ring disks." />
@@ -913,19 +913,19 @@
                            Minimum="-2147483648" Maximum="2147483647" Increment="1" FormatString="F0"
                            Value="{Binding BilliardSeed, Mode=TwoWay}" Margin="0,2"
                            ToolTip.Tip="PRNG seed for the NDisk random arrangement. Same seed + settings = identical field." />
-            <TextBlock Grid.Row="7" Grid.Column="0" Text="Launch:" VerticalAlignment="Center" />
-            <ComboBox Grid.Row="7" Grid.Column="1"
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Launch:" VerticalAlignment="Center" IsVisible="{Binding IsChaoticBilliard}" />
+            <ComboBox Grid.Row="7" Grid.Column="1" IsVisible="{Binding IsChaoticBilliard}"
                       ItemsSource="{Binding BilliardLaunchModes}"
                       SelectedItem="{Binding BilliardLaunchMode, Mode=TwoWay}"
                       Margin="0,2"
                       ToolTip.Tip="FarField: rays come in from outside (x = impact offset, y = incoming angle). PhaseSpace: rays leave the surface of disk 0 (x = position around the disk, y = sine of the outgoing angle) — the chaotic set fills the view." />
-            <TextBlock Grid.Row="8" Grid.Column="0" Text="Gate mode:" VerticalAlignment="Center" />
-            <ComboBox Grid.Row="8" Grid.Column="1"
+            <TextBlock Grid.Row="8" Grid.Column="0" Text="Gate mode:" VerticalAlignment="Center" IsVisible="{Binding IsChaoticBilliard}" />
+            <ComboBox Grid.Row="8" Grid.Column="1" IsVisible="{Binding IsChaoticBilliard}"
                       ItemsSource="{Binding BilliardGateModes}"
                       SelectedItem="{Binding BilliardGateMode, Mode=TwoWay}"
                       Margin="0,2"
                       ToolTip.Tip="ExitGap: colour by which gap between ring disks the ray leaves through (the Wada exit basins; ThreeDisk / Ring). Sector: equal compass sectors (Gate count)." />
-            <CheckBox Grid.Row="9" Grid.Column="1" Content="Mute direct misses"
+            <CheckBox Grid.Row="9" Grid.Column="1" Content="Mute direct misses" IsVisible="{Binding IsChaoticBilliard}"
                       IsChecked="{Binding BilliardMuteMisses, Mode=TwoWay}" Margin="0,2"
                       ToolTip.Tip="Draw rays that never hit a mirror as a dark background, so the scattered rays carry the picture." />
             <Button Grid.Row="10" Grid.Column="1" Content="Ray paths..."
@@ -940,6 +940,62 @@
             <TextBlock Grid.Row="12" Grid.Column="0" Grid.ColumnSpan="2"
                        IsVisible="{Binding IsBilliardCustom}" TextWrapping="Wrap" Margin="0,4,0,2"
                        Text="Custom layout: open Ray paths and drag disks to move them, wheel to resize, double-click to add, right-click to remove. Disk count, separation and seed don't apply; disk radius sets the size of added disks. Pick another geometry to go back (the custom layout is kept)." />
+        </Grid>
+
+        <!-- Billiard Rays (#1506): the sweep that emits the rays -->
+        <Grid IsVisible="{Binding IsBilliardRays}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Sweep:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="0" Grid.Column="1"
+                      ItemsSource="{Binding BilliardRaySweeps}"
+                      SelectedItem="{Binding BilliardRaysSweep, Mode=TwoWay}"
+                      Margin="0,2"
+                      ToolTip.Tip="How rays enter the disk array. BSweep: parallel beams, impact offset swept across the play circle. AngleSweep: an emitter going round the play circle, aiming inward. PointSource: a fan from one point. RandomFarField: random beams. PhaseSpace: random rays leaving disk 0." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Rays:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="1" Maximum="2000000" Increment="1000" FormatString="F0"
+                           Value="{Binding BilliardRaysCount, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Total rays emitted. Cost grows with rays x bounces x the length drawn." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Beams:" VerticalAlignment="Center" IsVisible="{Binding IsRaysBSweep}" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1" IsVisible="{Binding IsRaysBSweep}"
+                           Minimum="1" Maximum="360" Increment="1" FormatString="F0"
+                           Value="{Binding BilliardRaysAngleCount, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Number of beam directions, evenly spaced round the circle from the beam angle. 1 = a single parallel beam; the rays are shared between the beams." />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Angle (deg):" VerticalAlignment="Center" IsVisible="{Binding RaysUsesAngle}" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1" IsVisible="{Binding RaysUsesAngle}"
+                           Minimum="-360" Maximum="360" Increment="5" FormatString="F1"
+                           Value="{Binding BilliardRaysAngle, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="BSweep: direction the first beam travels (0 = left to right). AngleSweep: where the emitter starts round the circle. PointSource: the fan's centre direction." />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Spread (deg):" VerticalAlignment="Center" IsVisible="{Binding RaysUsesSpread}" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1" IsVisible="{Binding RaysUsesSpread}"
+                           Minimum="0" Maximum="360" Increment="5" FormatString="F1"
+                           Value="{Binding BilliardRaysSpread, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="AngleSweep: rays aim within half this either side of the centre. PointSource: the fan's full width (360 = every direction)." />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Source X:" VerticalAlignment="Center" IsVisible="{Binding IsRaysPointSource}" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1" IsVisible="{Binding IsRaysPointSource}"
+                           Minimum="-20" Maximum="20" Increment="0.1" FormatString="F2"
+                           Value="{Binding BilliardRaysSourceX, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Fan origin, world units. A point inside a disk emits nothing." />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Source Y:" VerticalAlignment="Center" IsVisible="{Binding IsRaysPointSource}" />
+            <NumericUpDown Grid.Row="6" Grid.Column="1" IsVisible="{Binding IsRaysPointSource}"
+                           Minimum="-20" Maximum="20" Increment="0.1" FormatString="F2"
+                           Value="{Binding BilliardRaysSourceY, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Ray seed:" VerticalAlignment="Center" IsVisible="{Binding RaysUsesSeed}" />
+            <NumericUpDown Grid.Row="7" Grid.Column="1" IsVisible="{Binding RaysUsesSeed}"
+                           Minimum="-2147483648" Maximum="2147483647" Increment="1" FormatString="F0"
+                           Value="{Binding BilliardRaysSeed, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Seed for the random sweeps and the AngleSweep aim offsets. Same seed = same rays." />
+            <TextBlock Grid.Row="8" Grid.Column="0" Text="Min bounces:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="8" Grid.Column="1"
+                           Minimum="0" Maximum="4096" Increment="1" FormatString="F0"
+                           Value="{Binding BilliardRaysMinBounces, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Rays with fewer reflections are not drawn. 2 (default) drops straight misses and rays that glance off one disk and leave; 0 draws everything." />
+            <CheckBox Grid.Row="9" Grid.Column="1" Content="Show disks"
+                      IsChecked="{Binding BilliardRaysShowDisks, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Draw the mirror disks over the ray density." />
+            <TextBlock Grid.Row="10" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Margin="0,4,0,2"
+                       Text="Each pixel shows how much ray path crosses it (log scale). Emission order does not change the picture: rays do not interact." />
         </Grid>
 
         <!-- Precision Field (#628) -->

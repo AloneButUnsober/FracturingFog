@@ -867,17 +867,23 @@ namespace FracturingFog.Hosting
                 var vs = viewState;
                 FracturingFog.Interefaces.IColorMap? InsetMap()
                     => s_renderHost?.ActiveAltCalculator?.ColorMap ?? s_renderHost?.ColorMap;
-                bool IsBilliard() => vs.FractalType == FracturingFog.FractalType.ChaoticBilliard;
+                // #1506 — Billiard Rays shares the scene, so the inset shows it and edits
+                // its layout; only ChaoticBilliard pixels are launches, so only it traces
+                // the pointer (hover / pins).
+                bool IsBilliard() => vs.FractalType is FracturingFog.FractalType.ChaoticBilliard
+                                                     or FracturingFog.FractalType.BilliardRays;
+                bool IsLaunchMap() => vs.FractalType == FracturingFog.FractalType.ChaoticBilliard;
                 inset.GetScene = () => IsBilliard()
                     ? FracturingFog.BilliardRayInspector.Scene(vs.FractalParameters, InsetMap())
                     : null;
-                inset.TraceAtPlane = (px, py) => IsBilliard()
+                inset.TraceAtPlane = (px, py) => IsLaunchMap()
                     ? FracturingFog.BilliardRayInspector.Trace(vs.FractalParameters, InsetMap(), px, py)
                     : null;
-                inset.TraceAtPointer = (x, y, w, h) => IsBilliard()
+                inset.TraceAtPointer = (x, y, w, h) => IsLaunchMap()
                     ? FracturingFog.BilliardRayInspector.TraceAt(vs.FractalParameters, InsetMap(),
                         x, y, w, h, vs.CenterX, vs.CenterY, vs.Zoom)
                     : null;
+                inset.CanTracePointer = IsLaunchMap;
                 // #1504 — layout editing writes the Custom geometry. A drag in progress
                 // only updates the parameters (the inset re-traces itself); the commit
                 // re-renders and refreshes an open params panel.

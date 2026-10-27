@@ -101,6 +101,9 @@ public static class FractalAnimatableParamsMap
         FractalType.ChaoticBilliard
             => _billiardList,
 
+        FractalType.BilliardRays
+            => _billiardRaysList,
+
         FractalType.PrecisionField
             => _precisionFieldList,
 
@@ -334,6 +337,17 @@ public static class FractalAnimatableParamsMap
             Notes: "Disk spacing — widening opens escape gaps, simplifying basins."),
         new("BilliardDiskRadius", AnimatableParamKind.ScalarDouble, Min: 0.1, Max: 0.9,
             Notes: "Disk size — larger disks narrow the gaps toward deeper chaos."),
+    };
+
+    // BilliardRays (#1506) — the shared billiard scene plus the sweep's beam angle.
+    private static readonly AnimatableParamDescriptor[] _billiardRaysList =
+    {
+        new("BilliardSeparation", AnimatableParamKind.ScalarDouble, Min: 0.5, Max: 2.5,
+            Notes: "Disk spacing — widening opens escape gaps, simplifying the ray web."),
+        new("BilliardDiskRadius", AnimatableParamKind.ScalarDouble, Min: 0.1, Max: 0.9,
+            Notes: "Disk size — larger disks trap rays longer."),
+        new("BilliardRaysAngle", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 360.0,
+            Notes: "Beam / fan direction in degrees — rotating it sweeps the beam round the array."),
     };
 
     // PrecisionField (#632, Renderer C2). The two tiers form a precision
