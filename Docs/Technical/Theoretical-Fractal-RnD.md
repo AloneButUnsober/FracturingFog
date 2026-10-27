@@ -211,8 +211,15 @@ Lighting & FX and its mirror term from Schlick's Fresnel approximation [(Schlick
 the 2D three-disk billiard; the cyclic coordinate shift permutes the openings; a tiny window around a
 bisected boundary point shows all four openings (the Wada property itself).
 
+**GPU (#1443).** An ILGPU trace (CUDA / OpenCL, the 3D families' path) writes per-pixel outcomes and the
+CPU colour pass reads them, so frames match the CPU pixel for pixel. The trace stays in fp64 because the
+basins are chaotic and fp32 would move boundary pixels. That makes it hardware-bound: on a GT 710
+(fp64 at 1/24 rate) the 12-thread CPU is about 2× faster (1080p basins 91 vs 207 ms). So, as with
+Buddhabrot #1220, Auto measures both on the first GPU frame and keeps the faster; `FF_GPU_MIRROR_SPHERES`
+forces either.
+
 **Status:** S1 #1440 (CPU, basins) and S2 #1441 (photo mode) shipped; S3 #1442 (colouring reuse + this
-doc + help) in review; S4 #1443 (GPU) and S5 #1444 (the 1999 photo preset, vertex-up) open.
+doc + help) and S4 #1443 (GPU) in review; S5 #1444 (the 1999 photo preset, vertex-up) open.
 
 ---
 
@@ -794,3 +801,5 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   billiard, from Sweet, Ott & Yorke 1999. S1 #1440 (CPU basin mode, PR #1495) and S2 #1441 (photo
   mode, PR #1496 / #1497) shipped; S3 #1442 adds this section, the help page and colouring-reuse tests.
   Bibliography (§7): Sweet–Ott–Yorke 1999, Yoneyama 1917, Bourke 1998, Schlick 1994.
+- **2026-10-27** — §2.5: S4 #1443, the mirror-spheres GPU trace (ILGPU, fp64, outcome readback). Parity is
+  pixel-identical on the GT 710, but the CPU is faster there, so the GPU/CPU choice is measured (Auto).

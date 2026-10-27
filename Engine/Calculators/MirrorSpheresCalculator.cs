@@ -47,12 +47,17 @@
 //
 // The DE shading / Lighting & FX post stack does not apply (there is no surface to
 // shade, only mirrors); Lighting & FX supplies only the sky / HDRI in photo mode.
-// The GPU kernel is S4 (#1443).
+// GPU (#1443): with GPU render on, MirrorSpheresGpuCalculator traces every ray (ILGPU,
+// as the other 3D families) and the colour pass reads its outcomes, so themes and the
+// photo palette are shared code. Low-res previews and a GPU failure trace on the CPU.
+// Both paths give the same frame, so Auto (default) measures and keeps the faster one
+// per device (the Buddhabrot #1220 pattern); FF_GPU_MIRROR_SPHERES forces either.
 
 using System;
 using System.Threading;
 using System.Threading.Tasks;
 
+using FracturingFog.Calculators.Gpu;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using FracturingFog.Rendering;
@@ -60,7 +65,7 @@ using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
 
-public sealed class MirrorSpheresCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource, ILowResPreviewCalculator
+public sealed class MirrorSpheresCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource, ILowResPreviewCalculator, FracturingFog.Render.IGpuRouteSource
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -88,6 +93,80 @@ public sealed class MirrorSpheresCalculator : IFractalCalculator, IStereoEyeCame
     public bool LowResPreview { get; set; }
     /// <inheritdoc/>
     public double? LowResPreviewScaleOverride { get; set; }
+
+    /// <summary>#1443 — how the last frame was traced (GPU, or CPU and why).</summary>
+    public FracturingFog.Render.GpuRoute LastGpuRoute { get; private set; }
+
+    /// <summary>#1443 — where the trace runs when GPU render is on.</summary>
+    public enum GpuMirrorSpheresMode
+    {
+        /// <summary>Measure on the first GPU frame (per device and mode), keep the faster,
+        /// re-measure when the pixel count moves by more than <see cref="RemeasureFactor"/>.</summary>
+        Auto,
+        /// <summary>Always the GPU (<c>FF_GPU_MIRROR_SPHERES=1</c>).</summary>
+        Gpu,
+        /// <summary>Always the CPU (<c>FF_GPU_MIRROR_SPHERES=0</c>).</summary>
+        Cpu,
+    }
+
+    /// <summary>#1443 — the GPU and the CPU trace identical outcomes (pixel-identical
+    /// frames), so this is purely a speed choice, and the answer depends on the hardware:
+    /// on a GT 710 (fp64 at 1/24 rate) against a 12-thread CPU the CPU won (1080p basins
+    /// 91 vs 207 ms, photo 155 vs 253 ms), while a card with usable fp64 should win.
+    /// <see cref="GpuMirrorSpheresMode.Auto"/> (default) measures; FF_GPU_MIRROR_SPHERES
+    /// forces either path (1 / gpu, 0 / cpu). Setting it overrides for the calling thread
+    /// only (tests).</summary>
+    public static GpuMirrorSpheresMode GpuSelection
+    {
+        get => t_gpuSelection ?? s_gpuSelectionEnv;
+        set => t_gpuSelection = value;
+    }
+
+    private static readonly GpuMirrorSpheresMode s_gpuSelectionEnv =
+        BuddhaFamilyCalculator.ParseGpuBuddhaMode(Environment.GetEnvironmentVariable("FF_GPU_MIRROR_SPHERES")) switch
+        {
+            BuddhaFamilyCalculator.GpuBuddhaMode.Gpu => GpuMirrorSpheresMode.Gpu,
+            BuddhaFamilyCalculator.GpuBuddhaMode.Cpu => GpuMirrorSpheresMode.Cpu,
+            _ => GpuMirrorSpheresMode.Auto,
+        };
+    [ThreadStatic] private static GpuMirrorSpheresMode? t_gpuSelection;
+
+    /// <summary>#1443 — Auto re-measures when the frame's pixel count differs from the
+    /// measured frame by more than this factor.</summary>
+    public const double RemeasureFactor = 4.0;
+
+    /// <summary>#1443 — Auto times the CPU on every this-many-th row of the first GPU frame.</summary>
+    public const int MeasureRowStride = 8;
+
+    /// <summary>#1443 — one measured comparison: trace cost per pixel on each path.</summary>
+    public sealed record GpuMeasurement(double CpuNsPerPixel, double GpuNsPerPixel, int Pixels)
+    {
+        public bool GpuFaster => GpuNsPerPixel < CpuNsPerPixel;
+        public bool Covers(int pixels) => pixels <= Pixels * RemeasureFactor && Pixels <= pixels * RemeasureFactor;
+        public string Summary => $"measured CPU {CpuNsPerPixel:0.#} vs GPU {GpuNsPerPixel:0.#} ns/pixel";
+    }
+
+    // Auto decisions per accelerator (freed with it), keyed by photo mode.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, System.Collections.Generic.Dictionary<bool, GpuMeasurement>> s_gpuDecisions = new();
+
+    /// <summary>#1443 — the cached Auto measurement for this device and mode, or null.</summary>
+    public static GpuMeasurement? CachedGpuMeasurement(object device, bool photo)
+    {
+        if (!s_gpuDecisions.TryGetValue(device, out var d)) return null;
+        lock (d) return d.TryGetValue(photo, out var m) ? m : null;
+    }
+
+    private static void StoreGpuMeasurement(object device, bool photo, GpuMeasurement m)
+    {
+        var d = s_gpuDecisions.GetOrCreateValue(device);
+        lock (d) d[photo] = m;
+    }
+
+    /// <summary>#1443 — the measurement behind the last Calculate's path (Auto), or null.</summary>
+    public GpuMeasurement? LastGpuMeasurement { get; private set; }
+
+    // #1443 — lazily-constructed GPU tracer (ILGPU, the 3D families' path).
+    private MirrorSpheresGpuCalculator? _gpu;
 
     public MirrorSpheresCalculator(int width, int height) => Resize(width, height);
 
@@ -121,12 +200,46 @@ public sealed class MirrorSpheresCalculator : IFractalCalculator, IStereoEyeCame
 
         var fx = p.Lighting;
         float[]? depthBuf = ScreenSpacePost.WantsDepthOutput(in fx) ? new float[width * height] : null;
+        bool photo = p.MirrorSpheresMode == MirrorSpheresMode.Photo;
 
-        if (p.MirrorSpheresMode == MirrorSpheresMode.Photo)
+        // #1443 — the GPU traces every ray (the same chamber-exit trace, plus the free
+        // continuation photo mode needs) and the colour pass below reads its outcomes.
+        // The gate is the shared 3D one: GPU render on, not a low-res preview.
+        MirrorSpheresGpuCalculator.Outcomes? gpuOut = null;
+        LastGpuMeasurement = null;
+        var gpuGate = Gpu3DRoute.Gate(in fx, lowRes);
+        LastGpuRoute = gpuGate ?? default;
+        bool measureCpu = false;
+        double gpuMs = 0;
+        object? device = null;
+        if (gpuGate is null)
         {
-            RenderPhoto(scene, in cam, in fx, renderBuffer, depthBuf, width, height, ct);
-            FinishFrame(depthBuf, renderBuffer, width, height, fullW, fullH, lowRes, in fx);
-            return;
+            // #1443 — GPU and CPU trace the same image, so the path is a speed choice
+            // (the #1220 pattern): Auto keeps a measured decision per device and mode.
+            var mode = GpuSelection;
+            if (GpuAcceleratorHost.TryAcquire(out var acc)) device = acc;
+            var known = mode == GpuMirrorSpheresMode.Auto && device != null ? CachedGpuMeasurement(device, photo) : null;
+            if (known != null && !known.Covers(width * height)) known = null;
+            if (mode == GpuMirrorSpheresMode.Cpu)
+            {
+                LastGpuRoute = FracturingFog.Render.GpuRoute.Cpu("CPU forced", "FF_GPU_MIRROR_SPHERES selects the CPU trace");
+            }
+            else if (known is { GpuFaster: false })
+            {
+                LastGpuMeasurement = known;
+                LastGpuRoute = FracturingFog.Render.GpuRoute.Cpu("CPU faster", known.Summary);
+            }
+            else
+            {
+                _gpu ??= new MirrorSpheresGpuCalculator();
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                gpuOut = _gpu.Render(cam.ToGpuParams(width, height), MirrorSpheresGpuCalculator.ParamsFor(scene, photo), ct);
+                gpuMs = sw.Elapsed.TotalMilliseconds;
+                LastGpuRoute = Gpu3DRoute.AfterRender(gpuOut != null, _gpu.LastError);
+                if (ct.IsCancellationRequested) return;
+                measureCpu = gpuOut != null && mode == GpuMirrorSpheresMode.Auto && known == null && device != null;
+                if (known != null) LastGpuMeasurement = known;
+            }
         }
 
         var billiardMap = ColorMap as IBilliardColorMap;
@@ -134,6 +247,10 @@ public sealed class MirrorSpheresCalculator : IFractalCalculator, IStereoEyeCame
         bool mute = p.MirrorSpheresMuteMisses;
         double reflectance = Math.Clamp(p.MirrorSpheresReflectance, 0.0, 1.0);
         double pathRef = cam.Distance * 4.0;
+        var paint = MirrorSpheresPalette.Parse(p.MirrorSpheresOpeningColors);
+        int viewer = photo && p.MirrorSpheresViewerBlack
+            ? MirrorSpheresScene.Opening(cam.X, cam.Y, cam.Z)   // the face the camera sits in front of
+            : -1;
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
@@ -141,13 +258,26 @@ public sealed class MirrorSpheresCalculator : IFractalCalculator, IStereoEyeCame
             int rowBase = y * width;
             for (int x = 0; x < width; x++)
             {
-                cam.Ray(x, y, width, height, out double dx, out double dy, out double dz);
-                var o = scene.Trace(cam.X, cam.Y, cam.Z, dx, dy, dz);
                 int idx = rowBase + x;
+                double dx = 0, dy = 0, dz = 0;
+                MirrorSpheresOutcome o;
+                if (gpuOut != null) o = gpuOut.Exit(idx);
+                else
+                {
+                    cam.Ray(x, y, width, height, out dx, out dy, out dz);
+                    o = scene.Trace(cam.X, cam.Y, cam.Z, dx, dy, dz);
+                }
                 if (depthBuf != null) depthBuf[idx] = o.Bounces > 0 ? (float)o.FirstHit : ScreenSpacePost.DepthMiss;
 
                 uint col;
-                if (o.Gate < 0)
+                if (photo)
+                {
+                    MirrorSpheresOutcome free = default;
+                    if (PhotoNeedsFreeTrace(in o, paint, viewer))
+                        free = gpuOut != null ? gpuOut.Free(idx) : scene.Trace(cam.X, cam.Y, cam.Z, dx, dy, dz, stopAtChamberExit: false);
+                    col = PhotoColor(in o, in free, paint, viewer, in fx);
+                }
+                else if (o.Gate < 0)
                 {
                     col = trapped;
                 }
@@ -170,54 +300,54 @@ public sealed class MirrorSpheresCalculator : IFractalCalculator, IStereoEyeCame
             }
         });
 
-        FinishFrame(depthBuf, renderBuffer, width, height, fullW, fullH, lowRes, in fx);
-    }
+        if (measureCpu)
+        {
+            // Auto's first GPU frame: time the CPU trace of every 8th row of the same
+            // frame, per pixel, against the GPU frame (trace + readback).
+            int rows = 0;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            Parallel.For(0, (height + MeasureRowStride - 1) / MeasureRowStride, new ParallelOptions { CancellationToken = ct }, r =>
+            {
+                int y = r * MeasureRowStride;
+                for (int x = 0; x < width; x++)
+                {
+                    cam.Ray(x, y, width, height, out double dx, out double dy, out double dz);
+                    var o = scene.Trace(cam.X, cam.Y, cam.Z, dx, dy, dz);
+                    if (photo && PhotoNeedsFreeTrace(in o, paint, viewer))
+                        scene.Trace(cam.X, cam.Y, cam.Z, dx, dy, dz, stopAtChamberExit: false);
+                }
+                Interlocked.Increment(ref rows);
+            });
+            double cpuNs = sw.Elapsed.TotalMilliseconds * 1e6 / Math.Max(1, rows * width);
+            var m = new GpuMeasurement(cpuNs, gpuMs * 1e6 / Math.Max(1, width * height), width * height);
+            StoreGpuMeasurement(device!, photo, m);
+            LastGpuMeasurement = m;
+        }
 
-    private void FinishFrame(float[]? depthBuf, uint[] renderBuffer, int width, int height, int fullW, int fullH,
-                             bool lowRes, in LightingFxData fx)
-    {
         DepthBuffer = ScreenSpacePost.PublishDepth(depthBuf, width, height, fullW, fullH, in fx);
         if (lowRes)
             FracturingFog.Rendering.LowResPreview.UpscaleNearest(renderBuffer, width, height, ColorBuffer, fullW, fullH);
         ScreenSpacePost.FinishFrame3D(ColorBuffer, fullW, fullH, in fx, preview: lowRes);
     }
 
-    /// <summary>#1441 — the photograph's physics. A ray leaving the chamber through a
-    /// covered opening takes the board's colour; through an <c>env</c> opening (or a ray
-    /// that never entered: the room reflected in the balls' outer sides) it keeps
-    /// bouncing until nothing is ahead and takes the environment along its final
-    /// direction. Either way the colour is scaled by the light the reflections kept.
-    /// The camera's own opening is black when <c>MirrorSpheresViewerBlack</c> is on.</summary>
-    private void RenderPhoto(MirrorSpheresScene scene, in MirrorSpheresCamera camIn, in LightingFxData fxIn,
-                             uint[] renderBuffer, float[]? depthBuf, int width, int height, CancellationToken ct)
+    /// <summary>#1441 — photo mode needs the free continuation (the ray traced on past
+    /// the chamber until nothing is ahead) when the ray leaves through an <c>env</c>
+    /// opening or never entered the chamber at all.</summary>
+    public static bool PhotoNeedsFreeTrace(in MirrorSpheresOutcome o, MirrorSpheresPalette.Paint[] paint, int viewerOpening)
     {
-        var p = FractalParameters;
-        var cam = camIn;
-        var fx = fxIn;
-        var paint = MirrorSpheresPalette.Parse(p.MirrorSpheresOpeningColors);
-        int viewer = p.MirrorSpheresViewerBlack
-            ? MirrorSpheresScene.Opening(cam.X, cam.Y, cam.Z)   // the face the camera sits in front of
-            : -1;
-
-        Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
-        {
-            if (ct.IsCancellationRequested) return;
-            int rowBase = y * width;
-            for (int x = 0; x < width; x++)
-            {
-                cam.Ray(x, y, width, height, out double dx, out double dy, out double dz);
-                var o = scene.Trace(cam.X, cam.Y, cam.Z, dx, dy, dz);
-                int idx = rowBase + x;
-                if (depthBuf != null) depthBuf[idx] = o.Bounces > 0 ? (float)o.FirstHit : ScreenSpacePost.DepthMiss;
-                renderBuffer[idx] = PhotoColor(scene, in o, paint, viewer, cam.X, cam.Y, cam.Z, dx, dy, dz, in fx);
-            }
-        });
+        if (o.Gate < 0) return false;
+        if (!o.EnteredChamber) return true;
+        return o.Gate != viewerOpening && paint[o.Gate].Environment;
     }
 
-    /// <summary>#1441 — the photo-mode colour of one traced camera ray (public for tests).</summary>
-    public static uint PhotoColor(MirrorSpheresScene scene, in MirrorSpheresOutcome o, MirrorSpheresPalette.Paint[] paint,
-                                  int viewerOpening, double ox, double oy, double oz, double dx, double dy, double dz,
-                                  in LightingFxData fx)
+    /// <summary>#1441 — the photograph's physics. A ray leaving the chamber through a
+    /// covered opening takes the board's colour; through an <c>env</c> opening (or a ray
+    /// that never entered: the room reflected in the balls' outer sides) it takes the
+    /// environment along the final direction of <paramref name="free"/>. Either way the
+    /// colour is scaled by the light the reflections kept. The camera's own opening is
+    /// black when <c>MirrorSpheresViewerBlack</c> is on (<paramref name="viewerOpening"/> ≥ 0).</summary>
+    public static uint PhotoColor(in MirrorSpheresOutcome o, in MirrorSpheresOutcome free, MirrorSpheresPalette.Paint[] paint,
+                                  int viewerOpening, in LightingFxData fx)
     {
         const uint black = 0xFF000000u;
         if (o.Gate < 0) return black;   // trapped: no light gets out
@@ -225,8 +355,6 @@ public sealed class MirrorSpheresCalculator : IFractalCalculator, IStereoEyeCame
         if (o.EnteredChamber && !paint[o.Gate].Environment)
             return Scale(paint[o.Gate].Color, o.Throughput);
 
-        // Open to the environment: follow the ray past the chamber until it is free.
-        var free = scene.Trace(ox, oy, oz, dx, dy, dz, stopAtChamberExit: false);
         if (free.Gate < 0) return black;
         uint sky = ShadingPipeline.ApplyBackgroundFog(
             ShadingPipeline.SkyColorHdri(free.EndDx, free.EndDy, free.EndDz, in fx), free.EndDy, in fx);
@@ -491,6 +619,20 @@ public readonly struct MirrorSpheresCamera
         double fov = Math.Tan(0.5 * Math.PI / 3.0) * lens;
         return new MirrorSpheresCamera(x, y, z, dist, fx, fy, fz, rx, ry, rz, ux, uy, uz, fov, centerX, -centerY);
     }
+
+    /// <summary>#1443 — this camera as the GPU kernel's parameters for a
+    /// <paramref name="width"/> × <paramref name="height"/> frame (the kernel rebuilds
+    /// each ray exactly as <see cref="Ray"/> does).</summary>
+    public GpuRaymarchParams ToGpuParams(int width, int height) => new()
+    {
+        Width = width, Height = height,
+        CamX = X, CamY = Y, CamZ = Z,
+        FwdX = _fx, FwdY = _fy, FwdZ = _fz,
+        RightX = _rx, RightY = _ry, RightZ = _rz,
+        UpX = _ux, UpY = _uy, UpZ = _uz,
+        FovScale = _fov, Aspect = (double)width / height,
+        PanU = _panU, PanV = _panV,
+    };
 
     /// <summary>Unit ray direction through pixel (<paramref name="px"/>, <paramref name="py"/>).</summary>
     public void Ray(int px, int py, int width, int height, out double dx, out double dy, out double dz)
