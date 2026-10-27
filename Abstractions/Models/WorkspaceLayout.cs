@@ -64,6 +64,9 @@ namespace FracturingFog.Models
 
         // Detached Control Center "Command" section (CLI Command Builder, #994).
         DetachedCommandPanel = 23,
+
+        // Chaotic-billiard ray-path inset (#1447).
+        BilliardRayInset = 24,
     }
 
     /// <summary>Render-window mode. Mirrors the Standard/Mini/Toy/Span shapes the

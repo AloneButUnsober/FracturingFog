@@ -73,6 +73,16 @@ namespace FracturingFog.Input
         /// true when it consumed the press.</summary>
         Func<PointerInput, bool>? PointPickHandler { get; set; }
 
+        /// <summary>Ray-path inset (#1447) — optional host hook. When set, a Ctrl+left
+        /// press on the render is handed to it before a pan starts; the handler returns
+        /// true when it consumed the press (it pinned the ray under the pointer).</summary>
+        Func<PointerInput, bool>? InspectClickHandler { get; set; }
+
+        /// <summary>Ray-path inset (#1447) — optional host hook. Called with every pointer
+        /// move over the render while no button is held (hover), so the host can trace
+        /// the launch under the pointer. Must be cheap: it runs on the input thread.</summary>
+        Action<PointerInput>? HoverObserver { get; set; }
+
         // ── Keyboard ──────────────────────────────────────────────────────────
         /// <summary>Returns true when the controller consumed the key (so the
         /// shell adapter can set Handled=true on its KeyEventArgs).</summary>

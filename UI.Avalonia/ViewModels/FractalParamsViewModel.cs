@@ -430,6 +430,10 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsDla => FractalType == FractalType.Dla;
     public bool IsRandomTile => FractalType == FractalType.RandomTile;
     public bool IsChaoticBilliard => FractalType == FractalType.ChaoticBilliard;
+
+    /// <summary>#1447 — opens / closes the ray-path inset (host-set; null hides nothing,
+    /// the button just does nothing).</summary>
+    public System.Windows.Input.ICommand? ShowBilliardRayInsetCommand { get; set; }
     public bool IsPrecisionField => FractalType == FractalType.PrecisionField;
     public bool IsDualOrbitEscape => FractalType == FractalType.JulibrotPair;
     // Indra's Pearls (#892). S1 has no user-facing params yet — the group /

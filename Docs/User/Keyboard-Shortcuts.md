@@ -148,6 +148,7 @@ a suffix such as `[ACCEL OFF]` or `[SA OFF]` so you never forget it is engaged.
 | Double-click | Center on point + zoom in one step |
 | **Right-click drag** | **Highlight-to-zoom** — marquee box; release centers + zooms to fill rectangle |
 | `Alt` + double-click | **Relief DOF focus pick** — sets the depth-of-field focal plane from the clicked pixel's depth. Only on the Relief 3D raymarch with perspective + depth of field; a normal recenter otherwise. |
+| `Ctrl` + click | **Pin a billiard ray** — with the Chaotic Billiard ray-path inset open (Control Center → View → **Ray Paths**, or **Ray paths...** in the billiard parameters), pins the ray under the pointer so you can compare it with its neighbours (up to 4; the oldest drops). Hovering traces the ray under the pointer. The inset is live only and is never part of a render or export. A normal pan otherwise. |
 
 ---
 

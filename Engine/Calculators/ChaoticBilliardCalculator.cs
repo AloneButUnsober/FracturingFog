@@ -26,6 +26,10 @@
 // which the chaotic set fills the frame. The physics lives in BilliardScene so
 // tests can check it (rotation symmetry, time reversal) on the render path.
 //
+// #1447 — the ray-path inset traces single launches with the path recorded
+// (BilliardScene.Trace's optional point list; null on the per-pixel render path,
+// which stays allocation-free) through the same PlaneAt mapping the render uses.
+//
 // Not escape-time: categorical gate colouring goes through IBilliardColorMap
 // (the INewtonColorMap precedent). When no such theme is selected the calculator
 // falls back to built-in Okabe-Ito-per-gate shading, so it renders standalone.
@@ -84,21 +88,17 @@ public sealed class ChaoticBilliardCalculator : IFractalCalculator, IHeightField
         var billiardMap = ColorMap as IBilliardColorMap;
         uint trappedFallback = ColorMap.InSetColor;
 
-        // Standard 2D plane mapping: pixel pitch = (4 / Width) / Zoom, origin at
-        // (CenterX, CenterY). The plane coordinate IS the initial condition.
-        double pixelPitch = (4.0 / Math.Max(1, Width)) / Math.Max(1e-12, Zoom);
         int width = Width, height = Height;
-        double centerX = CenterX, centerY = CenterY;
+        double centerX = CenterX, centerY = CenterY, zoom = Zoom;
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             if (ct.IsCancellationRequested) return;
             int rowBase = y * width;
-            double planeY = centerY + (y - height * 0.5) * pixelPitch;
 
             for (int x = 0; x < width; x++)
             {
-                double planeX = centerX + (x - width * 0.5) * pixelPitch;
+                var (planeX, planeY) = PlaneAt(x, y, width, height, centerX, centerY, zoom);
                 var o = scene.Launch(planeX, planeY);
 
                 int idx = rowBase + x;
@@ -137,6 +137,29 @@ public sealed class ChaoticBilliardCalculator : IFractalCalculator, IHeightField
                 ColorBuffer[idx] = col;
             }
         });
+    }
+
+    /// <summary>The plane point (the launch initial condition) at pixel (<paramref name="x"/>,
+    /// <paramref name="y"/>) of a <paramref name="width"/> x <paramref name="height"/> frame:
+    /// the standard 2D mapping, pitch (4 / width) / zoom about the centre. Scale-free, so a
+    /// pointer position in any client size that shows the same frame maps to the same
+    /// point (#1447 — the inset traces exactly the launch the render used).</summary>
+    public static (double X, double Y) PlaneAt(double x, double y, double width, double height,
+                                               double centerX, double centerY, double zoom)
+    {
+        double pitch = (4.0 / Math.Max(1.0, width)) / Math.Max(1e-12, zoom);
+        return (centerX + (x - width * 0.5) * pitch, centerY + (y - height * 0.5) * pitch);
+    }
+
+    /// <summary>#1447 — the colour <paramref name="map"/> gives gate <paramref name="gate"/>
+    /// on a ray with no bounces (the gate's own, unshaded colour), as the render would draw
+    /// it: the billiard theme when one is selected, else the built-in Okabe-Ito gate colour.</summary>
+    public static uint GateColor(IColorMap? map, int gate, int gateCount, int maxBounces)
+    {
+        if (map is IBilliardColorMap b)
+            return unchecked((uint)b.MapBilliard(gate, gateCount, 0, maxBounces, 0f)) | 0xFF000000u;
+        if (gate < 0) return map != null ? map.InSetColor | 0xFF000000u : 0xFF000000u;
+        return unchecked((uint)BilliardColorHelper.GateColor(gate));
     }
 
     /// <summary>Colour of phase-space pixels with no launch (|sin alpha| &gt;= 1).</summary>
@@ -276,15 +299,17 @@ public sealed class BilliardScene
     }
 
     /// <summary>Trace the launch a plane point encodes, per <see cref="LaunchMode"/>.</summary>
-    public BilliardOutcome Launch(double planeX, double planeY)
+    /// <param name="path">#1447 — when non-null, receives the start point, every bounce
+    /// point and the end point. Null on the per-pixel render path (no allocation).</param>
+    public BilliardOutcome Launch(double planeX, double planeY, List<BilliardPoint>? path = null)
         => LaunchMode == BilliardLaunchMode.PhaseSpace
-            ? LaunchPhaseSpace(planeX * (Math.PI / 2.0), planeY)
-            : LaunchFarField(planeX, planeY);
+            ? LaunchPhaseSpace(planeX * (Math.PI / 2.0), planeY, path)
+            : LaunchFarField(planeX, planeY, path);
 
     /// <summary>Far-field launch: impact parameter <paramref name="b"/>, incoming angle
     /// <paramref name="phi"/>. The ray starts offset perpendicular by b, pulled back to
     /// the play boundary along -dir so it enters the scene.</summary>
-    public BilliardOutcome LaunchFarField(double b, double phi)
+    public BilliardOutcome LaunchFarField(double b, double phi, List<BilliardPoint>? path = null)
     {
         double dx = Math.Cos(phi), dy = Math.Sin(phi);
         double px = -dy * b - dx * PlayRadius;
@@ -295,16 +320,19 @@ public sealed class BilliardScene
         {
             double ox = px - _cx[i], oy = py - _cy[i];
             if (ox * ox + oy * oy < _r[i] * _r[i])
+            {
+                path?.Add(new BilliardPoint(px, py));
                 return new BilliardOutcome { GateId = -1, Valid = true, EndX = px, EndY = py, EndDx = dx, EndDy = dy };
+            }
         }
-        return Trace(px, py, dx, dy, -1);
+        return Trace(px, py, dx, dy, -1, path);
     }
 
     /// <summary>Phase-space (Birkhoff) launch off disk 0: <paramref name="s"/> = angle of
     /// the surface point around the disk centre, <paramref name="sinAlpha"/> = sine of the
     /// outgoing angle to the outward normal (positive = counter-clockwise of the normal).
     /// Invalid when |sinAlpha| &gt;= 1 or the scene has no disks.</summary>
-    public BilliardOutcome LaunchPhaseSpace(double s, double sinAlpha)
+    public BilliardOutcome LaunchPhaseSpace(double s, double sinAlpha, List<BilliardPoint>? path = null)
     {
         if (_cx.Length == 0 || !(Math.Abs(sinAlpha) < 1.0))
             return new BilliardOutcome { GateId = -1, Valid = false };
@@ -314,15 +342,18 @@ public sealed class BilliardScene
         double dy = cosAlpha * ny + sinAlpha * nx;
         double px = _cx[0] + _r[0] * nx;
         double py = _cy[0] + _r[0] * ny;
-        return Trace(px, py, dx, dy, 0);
+        return Trace(px, py, dx, dy, 0, path);
     }
 
     /// <summary>Trace a ray from (<paramref name="px"/>, <paramref name="py"/>) along the
     /// unit direction (<paramref name="dx"/>, <paramref name="dy"/>) until it leaves the
     /// play region or reaches the bounce cap. <paramref name="onDisk"/> names a disk the
-    /// start point lies on (its own surface is not a hit), or -1.</summary>
-    public BilliardOutcome Trace(double px, double py, double dx, double dy, int onDisk = -1)
+    /// start point lies on (its own surface is not a hit), or -1. <paramref name="path"/>,
+    /// when non-null, receives the start, each bounce point and the end (#1447).</summary>
+    public BilliardOutcome Trace(double px, double py, double dx, double dy, int onDisk = -1,
+                                 List<BilliardPoint>? path = null)
     {
+        path?.Add(new BilliardPoint(px, py));
         double pathLen = 0.0;
         int bounces = 0;
         const double eps = 1e-9;
@@ -356,6 +387,7 @@ public sealed class BilliardScene
             {
                 // Escapes. Classify the exit direction into a gate.
                 double tOut = tExit < double.PositiveInfinity ? tExit : PlayRadius;
+                path?.Add(new BilliardPoint(px + tOut * dx, py + tOut * dy));
                 return new BilliardOutcome
                 {
                     GateId = Gate(dx, dy),
@@ -370,6 +402,7 @@ public sealed class BilliardScene
             px += tHit * dx;
             py += tHit * dy;
             pathLen += tHit;
+            path?.Add(new BilliardPoint(px, py));
             double nx = (px - _cx[hit]) / _r[hit];
             double ny = (py - _cy[hit]) / _r[hit];
             double dot = dx * nx + dy * ny;
@@ -385,6 +418,14 @@ public sealed class BilliardScene
             EndX = px, EndY = py, EndDx = dx, EndDy = dy,
         };
     }
+
+    /// <summary>#1447 — start angle (radians from +x) of gate <paramref name="gate"/>'s sector
+    /// of exit directions; the sector spans 2pi / GateCount from there (see <see cref="Gate"/>).</summary>
+    public double GateStartAngle(int gate)
+        => (_exitGap ? _gapBase : 0.0) + gate * (2.0 * Math.PI / GateCount);
+
+    /// <summary>True when gates are the gaps between ring disks (ExitGap mode on a ring).</summary>
+    public bool ExitGap => _exitGap;
 
     /// <summary>Gate of an escaping direction: compass sector from +x (Sector), or the
     /// sector centred on the gap between ring disks k and k+1 (ExitGap).</summary>

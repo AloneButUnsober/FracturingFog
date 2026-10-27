@@ -1,0 +1,39 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ctrl="using:FracturingFog.UI.Avalonia.Controls"
+        x:Class="FracturingFog.UI.Avalonia.Views.BilliardRayInsetWindow"
+        Title="Ray paths"
+        Width="300" Height="380"
+        MinWidth="180" MinHeight="220"
+        WindowDecorations="None"
+        WindowStartupLocation="Manual"
+        CanResize="True"
+        ShowInTaskbar="False"
+        Topmost="False"
+        Foreground="#DCDCDC"
+        Background="#121212">
+    <!-- #1447 — chaotic-billiard ray-path inset. A tethered top-level window (like
+         the MiniMap) because Avalonia content can't draw over the native GPU HWND.
+         Not composited into the frame, so it never lands in exports or recordings. -->
+    <Border BorderBrush="#404040" BorderThickness="1">
+        <Grid RowDefinitions="18,*,Auto">
+            <Border x:Name="DragHandle" Grid.Row="0" Background="#202020" Cursor="SizeAll">
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Text="Ray paths  (drag; double-click to re-dock)"
+                               Foreground="#A0A0A0"
+                               FontSize="10"
+                               VerticalAlignment="Center"
+                               Margin="6,0,0,0" />
+                    <Button x:Name="ClearPins" Grid.Column="1" Content="Clear pins"
+                            FontSize="10" Padding="6,0" Margin="0,1,2,1"
+                            ToolTip.Tip="Remove the pinned rays (Ctrl+click the render to pin one)" />
+                </Grid>
+            </Border>
+            <ctrl:BilliardRayInsetControl x:Name="Inset" Grid.Row="1" />
+            <TextBlock x:Name="StatusText" Grid.Row="2" Margin="6,4"
+                       FontFamily="Consolas, Menlo, monospace"
+                       FontSize="10"
+                       TextWrapping="Wrap" />
+        </Grid>
+    </Border>
+</Window>
