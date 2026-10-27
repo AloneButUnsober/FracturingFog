@@ -248,29 +248,8 @@ public sealed class BilliardScene
                 ring = true;
                 break;
             default: // NDisk — seeded pseudo-random, simple overlap reject.
-            {
-                int n = Math.Clamp(p.BilliardDiskCount, 1, 64);
-                var rng = new Random(p.BilliardSeed);
-                var xs = new List<double>(n);
-                var ys = new List<double>(n);
-                double half = Math.Max(diskR * 2.0, sep);   // placement box half-extent
-                int attempts = 0, cap = n * 200;
-                while (xs.Count < n && attempts++ < cap)
-                {
-                    double x = (rng.NextDouble() * 2.0 - 1.0) * half;
-                    double y = (rng.NextDouble() * 2.0 - 1.0) * half;
-                    bool ok = true;
-                    for (int e = 0; e < xs.Count; e++)
-                    {
-                        double dx = x - xs[e], dy = y - ys[e];
-                        double min = (diskR + diskR) * 1.05;   // keep an escape gap
-                        if (dx * dx + dy * dy < min * min) { ok = false; break; }
-                    }
-                    if (ok) { xs.Add(x); ys.Add(y); }
-                }
-                cx = xs.ToArray(); cy = ys.ToArray();
+                (cx, cy) = RandomCentres(Math.Clamp(p.BilliardDiskCount, 1, 64), diskR, sep, p.BilliardSeed);
                 break;
-            }
         }
         var r = new double[cx.Length];
         Array.Fill(r, diskR);
@@ -281,8 +260,62 @@ public sealed class BilliardScene
 
         // Play region — a bounding circle the ray escapes through. Big enough to
         // enclose every disk with margin; far-field launches start on its boundary.
+        // #1503: an NDisk field (or a grown one) can reach past the closed form, so the
+        // circle also covers the farthest disk edge. Ring / ThreeDisk never do (sep + R
+        // < 1.5 sep + 2R), so their play circle, and their render, are unchanged.
         double rPlay = Math.Max(3.0, sep * 1.5 + diskR * 2.0);
+        double reach = 0.0;
+        for (int i = 0; i < cx.Length; i++)
+            reach = Math.Max(reach, Math.Sqrt(cx[i] * cx[i] + cy[i] * cy[i]) + diskR);
+        rPlay = Math.Max(rPlay, reach * PlayMargin);
         return new BilliardScene(cx, cy, r, maxBounces, gateCount, exitGap, ringBase, rPlay, p.BilliardLaunchMode);
+    }
+
+    /// <summary>Play-circle radius as a multiple of the farthest disk edge (#1503).</summary>
+    public const double PlayMargin = 1.1;
+
+    /// <summary>Minimum NDisk centre distance as a multiple of 2R: keeps an escape gap.</summary>
+    public const double NDiskGapFactor = 1.05;
+
+    /// <summary>Growth of the NDisk placement box per retry (#1503).</summary>
+    public const double NDiskBoxGrowth = 1.25;
+
+    /// <summary>
+    /// NDisk centres: seeded random rejection sampling in a box of half-extent
+    /// max(2R, sep). #1503 — that box does not scale with the count, so it used to
+    /// stall after a few disks and silently keep fewer than requested. When a pass
+    /// cannot place all <paramref name="n"/>, the box grows by <see cref="NDiskBoxGrowth"/>
+    /// and placement restarts from the same seed. A field that fitted the first box
+    /// is therefore exactly the field it always was.
+    /// </summary>
+    public static (double[] X, double[] Y) RandomCentres(int n, double diskR, double sep, int seed)
+    {
+        double half = Math.Max(diskR * 2.0, sep);   // placement box half-extent
+        double min = (diskR + diskR) * NDiskGapFactor;
+        var xs = new List<double>(n);
+        var ys = new List<double>(n);
+        // Each growth multiplies the box area by 1.56, so even 64 disks at the largest
+        // radius fit within a handful of passes; the pass cap only guards the loop.
+        for (int pass = 0; pass < 32; pass++, half *= NDiskBoxGrowth)
+        {
+            var rng = new Random(seed);
+            xs.Clear(); ys.Clear();
+            int attempts = 0, cap = n * 200;
+            while (xs.Count < n && attempts++ < cap)
+            {
+                double x = (rng.NextDouble() * 2.0 - 1.0) * half;
+                double y = (rng.NextDouble() * 2.0 - 1.0) * half;
+                bool ok = true;
+                for (int e = 0; e < xs.Count; e++)
+                {
+                    double dx = x - xs[e], dy = y - ys[e];
+                    if (dx * dx + dy * dy < min * min) { ok = false; break; }
+                }
+                if (ok) { xs.Add(x); ys.Add(y); }
+            }
+            if (xs.Count == n) break;
+        }
+        return (xs.ToArray(), ys.ToArray());
     }
 
     private static (double[] X, double[] Y) RingCentres(int n, double sep, double baseAngle)

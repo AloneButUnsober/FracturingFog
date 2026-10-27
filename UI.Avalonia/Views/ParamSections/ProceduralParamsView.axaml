@@ -876,7 +876,7 @@
         <!-- Chaotic Billiard (#627) -->
         <Grid IsVisible="{Binding IsChaoticBilliard}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Geometry:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding BilliardGeometries}"
@@ -887,7 +887,7 @@
             <NumericUpDown Grid.Row="1" Grid.Column="1"
                            Minimum="1" Maximum="64" Increment="1" FormatString="F0"
                            Value="{Binding BilliardDiskCount, Mode=TwoWay}" Margin="0,2"
-                           ToolTip.Tip="Disk count for NDisk / Ring. ThreeDisk ignores this (always 3)." />
+                           ToolTip.Tip="Disk count for NDisk / Ring. ThreeDisk ignores this (always 3). NDisk spreads its random field wider when the disks would not fit, so every disk is placed." />
             <TextBlock Grid.Row="2" Grid.Column="0" Text="Disk radius:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="2" Grid.Column="1"
                            Minimum="0.05" Maximum="1.5" Increment="0.05" FormatString="F2"
@@ -931,6 +931,11 @@
             <Button Grid.Row="10" Grid.Column="1" Content="Ray paths..."
                     Command="{Binding ShowBilliardRayInsetCommand}" Margin="0,4,0,2"
                     ToolTip.Tip="Open the ray-path inset: hover the render to see that pixel's ray in real space; Ctrl+click to pin rays and compare neighbours across a basin boundary. Live only, never part of an export." />
+            <!-- #1503: Ring / ThreeDisk neighbours touching closes the exit gaps. -->
+            <TextBlock Grid.Row="11" Grid.Column="0" Grid.ColumnSpan="2"
+                       Text="{Binding BilliardLayoutWarning}"
+                       IsVisible="{Binding HasBilliardLayoutWarning}"
+                       Foreground="#FFCC00" TextWrapping="Wrap" Margin="0,4,0,2" />
         </Grid>
 
         <!-- Precision Field (#628) -->

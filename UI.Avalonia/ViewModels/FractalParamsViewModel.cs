@@ -2002,18 +2002,26 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     // ── Chaotic Billiard (#627) ──
     private BilliardGeometry _billiardGeometry;
     /// <summary>Obstacle arrangement — ThreeDisk / NDisk / Ring.</summary>
-    public BilliardGeometry BilliardGeometry { get => _billiardGeometry; set { Set(ref _billiardGeometry, value); _p.BilliardGeometry = value; Fire(); } }
+    public BilliardGeometry BilliardGeometry { get => _billiardGeometry; set { Set(ref _billiardGeometry, value); _p.BilliardGeometry = value; LayoutChanged(); Fire(); } }
+    /// <summary>#1503 — non-empty when Ring / ThreeDisk neighbours touch or overlap (gaps closed).</summary>
+    public string BilliardLayoutWarning => BilliardLayout.Warning(_billiardGeometry, _billiardDiskCount, _billiardDiskRadius, _billiardSeparation);
+    public bool HasBilliardLayoutWarning => BilliardLayoutWarning.Length > 0;
+    private void LayoutChanged()
+    {
+        this.RaisePropertyChanged(nameof(BilliardLayoutWarning));
+        this.RaisePropertyChanged(nameof(HasBilliardLayoutWarning));
+    }
     public System.Array BilliardGeometries => s_BilliardGeometries;   // cached: a new array per read resets the ComboBox selection on Refresh()
     private static readonly System.Array s_BilliardGeometries = System.Enum.GetValues(typeof(BilliardGeometry));
     private int _billiardDiskCount;
     /// <summary>Disk count for NDisk / Ring (ThreeDisk is always 3).</summary>
-    public int BilliardDiskCount { get => _billiardDiskCount; set { Set(ref _billiardDiskCount, (int)Clamp(value, 1, 64)); _p.BilliardDiskCount = _billiardDiskCount; Fire(); } }
+    public int BilliardDiskCount { get => _billiardDiskCount; set { Set(ref _billiardDiskCount, (int)Clamp(value, 1, 64)); _p.BilliardDiskCount = _billiardDiskCount; LayoutChanged(); Fire(); } }
     private double _billiardDiskRadius;
     /// <summary>Mirror-disk radius in world units.</summary>
-    public double BilliardDiskRadius { get => _billiardDiskRadius; set { Set(ref _billiardDiskRadius, Clamp(value, 0.05, 1.5)); _p.BilliardDiskRadius = _billiardDiskRadius; Fire(); } }
+    public double BilliardDiskRadius { get => _billiardDiskRadius; set { Set(ref _billiardDiskRadius, Clamp(value, 0.05, 1.5)); _p.BilliardDiskRadius = _billiardDiskRadius; LayoutChanged(); Fire(); } }
     private double _billiardSeparation;
     /// <summary>Centre spacing (radius of the circle the disk centres sit on).</summary>
-    public double BilliardSeparation { get => _billiardSeparation; set { Set(ref _billiardSeparation, Clamp(value, 0.1, 3.0)); _p.BilliardSeparation = _billiardSeparation; Fire(); } }
+    public double BilliardSeparation { get => _billiardSeparation; set { Set(ref _billiardSeparation, Clamp(value, 0.1, 3.0)); _p.BilliardSeparation = _billiardSeparation; LayoutChanged(); Fire(); } }
     private int _billiardMaxBounces;
     /// <summary>Reflection cap before a trajectory is declared trapped.</summary>
     public int BilliardMaxBounces { get => _billiardMaxBounces; set { Set(ref _billiardMaxBounces, (int)Clamp(value, 1, 4096)); _p.BilliardMaxBounces = _billiardMaxBounces; Fire(); } }
