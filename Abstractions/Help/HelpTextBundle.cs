@@ -5111,10 +5111,24 @@ black). The boundary needs many bounces.
   Mute misses     Basins mode: rays that never enter the chamber
                   are drawn dark.
   Opening colours Photo mode: four entries, #RRGGBB or env.
+  Room            Photo mode: what the balls' outer sides
+                  reflect, env (the sky) or #RRGGBB.
+  Orientation     CubeCorners (world up) or VertexUp (one ball
+                  on top of the other three, as stacked in the
+                  experiment; the camera orbits the vertical).
   Camera          Right-drag orbits, wheel dollies. The default
                   looks straight in through one opening; the ray
                   at the centre comes back out to you (you see
                   yourself).
+
+=== The 1999 photograph ===
+
+The built-in region 'Wada Mirror Spheres - 1999 Photograph' sets
+up the photo: the stack stood up with one ball on top, viewed
+through an upper opening. Red and blue boards cover the other two
+upper openings, and white light comes from below. The viewing
+opening and the room are dark. Vermillion stands in for the red
+board (colour-blind safe).
 
 On the command line every setting is a --param key, e.g.
   --param MirrorSpheresMode=1

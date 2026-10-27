@@ -293,6 +293,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _mirrorOpeningColors = _p.MirrorSpheresOpeningColors;
         _mirrorViewerBlack = _p.MirrorSpheresViewerBlack;
         _mirrorFresnel = _p.MirrorSpheresFresnel;
+        _mirrorOrientation = _p.MirrorSpheresOrientation;
+        _mirrorRoomColor = _p.MirrorSpheresRoomColor;
         _kleinCameraPhi = _p.KleinianCameraPhi;
         _kleinCameraDistance = _p.KleinianCameraDistance;
         _dlaParticles = _p.DlaParticles;
@@ -2725,6 +2727,13 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool MirrorSpheresViewerBlack { get => _mirrorViewerBlack; set { Set(ref _mirrorViewerBlack, value); _p.MirrorSpheresViewerBlack = value; Fire(); } }
     private bool _mirrorFresnel;
     public bool MirrorSpheresFresnel { get => _mirrorFresnel; set { Set(ref _mirrorFresnel, value); _p.MirrorSpheresFresnel = value; Fire(); } }
+    // #1444 — orientation + room colour.
+    private MirrorSpheresOrientation _mirrorOrientation;
+    public MirrorSpheresOrientation MirrorSpheresOrientation { get => _mirrorOrientation; set { Set(ref _mirrorOrientation, value); _p.MirrorSpheresOrientation = value; Fire(); } }
+    public System.Array MirrorSpheresOrientations => s_MirrorSpheresOrientations;   // cached (see BilliardGeometries)
+    private static readonly System.Array s_MirrorSpheresOrientations = System.Enum.GetValues(typeof(MirrorSpheresOrientation));
+    private string _mirrorRoomColor = "";
+    public string MirrorSpheresRoomColor { get => _mirrorRoomColor; set { Set(ref _mirrorRoomColor, value ?? ""); _p.MirrorSpheresRoomColor = _mirrorRoomColor; Fire(); } }
 
     // ── Flame ──
     private string _flamePresetName = "Sierpinski Variation";

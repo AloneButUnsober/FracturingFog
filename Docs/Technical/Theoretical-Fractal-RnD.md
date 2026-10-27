@@ -218,8 +218,13 @@ basins are chaotic and fp32 would move boundary pixels. That makes it hardware-b
 Buddhabrot #1220, Auto measures both on the first GPU frame and keeps the faster; `FF_GPU_MIRROR_SPHERES`
 forces either.
 
-**Status:** S1 #1440 (CPU, basins) and S2 #1441 (photo mode) shipped; S3 #1442 (colouring reuse + this
-doc + help) and S4 #1443 (GPU) in review; S5 #1444 (the 1999 photo preset, vertex-up) open.
+**The 1999 photograph (#1444).** A built-in region reproduces the photo. `VertexUp` is a scene rotation
+that puts one ball on top; the camera sits on an upper opening's outward normal (elevation acos(1/3)).
+White comes from the table opening, red / blue boards from the other upper openings, and the viewing
+opening and the room (`MirrorSpheresRoomColor`) are dark. The paper doesn't say which upper opening
+held which board.
+
+**Status:** S1–S5 shipped (#1440–#1444); epic #1439 complete. Open follow-up: the ray-path inset #1447.
 
 ---
 
@@ -803,3 +808,5 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   Bibliography (§7): Sweet–Ott–Yorke 1999, Yoneyama 1917, Bourke 1998, Schlick 1994.
 - **2026-10-27** — §2.5: S4 #1443, the mirror-spheres GPU trace (ILGPU, fp64, outcome readback). Parity is
   pixel-identical on the GT 710, but the CPU is faster there, so the GPU/CPU choice is measured (Auto).
+- **2026-10-27** — §2.5: S5 #1444, the 1999 photograph as a built-in region (`VertexUp` orientation, plain
+  room colour); epic #1439 complete.
