@@ -277,7 +277,8 @@ finite-size-Lyapunov literature, which these entries anchor.
   by octuple-double addition (`OctupleDouble.cs`, #1319).
 - **Mariani–Silver subdivision** (Rico Mariani, Robert Silver). Rectangle subdivision that fills a
   box whose border is uniformly in-set — solid-region skipping (#1343; since #1394 part 2 also the
-  Julia and Multibrot families, `SolidRegionSubdivision.cs`). See
+  Julia and Multibrot families, `SolidRegionSubdivision.cs`; since #1394 part 1 on the GPU kernels too,
+  as masked dispatches, `GpuPixelMask`). See
   [Citations awaiting verification](#citations-awaiting-verification) for the primary source.
 - **Wikipedia contributors.** *Plotting algorithms for the Mandelbrot set*, section "Cardioid / bulb
   checking". <https://en.wikipedia.org/wiki/Plotting_algorithms_for_the_Mandelbrot_set> (accessed
@@ -430,6 +431,15 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
   the Newton calculator's polynomial-coefficient mode (roadmap).
 - **Smoothstep / quintic Hermite interpolation** — Ken Perlin. *Improving noise.* SIGGRAPH 2002.
   Used for the slideshow cross-fade and the video-zoom easing curve.
+- **Persistent threads** — Timo Aila, Samuli Laine. *Understanding the Efficiency of Ray Traversal on
+  GPUs.* High-Performance Graphics 2009, pp. 145–149.
+  <https://research.nvidia.com/publication/understanding-efficiency-ray-traversal-gpus> (Eurographics
+  Digital Library: <https://diglib.eg.org/handle/10.2312/EGGH.HPG09.145-150>). A fixed pool of GPU
+  threads that fetch work from a global counter instead of one thread per item — the idea the GPU
+  escape-time kernels' wavefront schedule follows (#1340, `MandelbrotKernelSource.WaveFetch`), and why
+  #1394 part 1 runs a sparse solid-region pass in it (the threads pull only marked pixels). Credit added
+  with #1394; the attribution of the technique to this paper is to be confirmed against its text (see
+  [Citations awaiting verification](#citations-awaiting-verification)).
 
 ### Scene Engine — camera splines, motion blur, cinematic moves
 
@@ -521,6 +531,9 @@ entry above completed or corrected.
 - **Mariani–Silver** — primary description (Rico Mariani's algorithm; Robert Silver's formulation)
   isn't identified; it's commonly documented through Fractint-era material and Wikibooks *Fractals*.
 - **Earl F. Glynn** — the original publication of the fractional-power Julia set.
+- **Persistent threads (Aila & Laine 2009)** — the paper's details are confirmed (authors, venue,
+  pages, URL); that it is where the persistent-thread work distribution the wavefront schedule follows
+  was introduced is from memory, not yet checked against the paper's text.
 - **Garry T. Krollman** — the CIELAB / CIECAM02 conversion attribution above; the formulae themselves
   are Bruce Lindbloom's.
 - **NASA Ames perceptual papers** — which chromostereopsis papers.

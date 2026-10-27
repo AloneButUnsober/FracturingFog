@@ -129,6 +129,19 @@ namespace FracturingFog.Rendering
             float[]? trapDst = null,
             GpuDomainWarp warp = default);
 
+        /// <summary>#1394 — the backend honours <see cref="PixelMask"/>.</summary>
+        bool SupportsPixelMask => false;
+
+        /// <summary>#1394 — when set, the following <see cref="Run"/>, <see cref="RunPerturb"/>,
+        /// <see cref="RunPerturbSA"/> and <see cref="RunPerturbFloatExp"/> dispatches
+        /// compute only the marked pixels and write back only those: every other element
+        /// of the caller's arrays (colour and trap included) keeps what it held. A marked
+        /// pixel gets the bytes an unmasked dispatch gives it (same shader, same
+        /// instructions). A mask of another size than the dispatch is ignored (every
+        /// pixel), and <see cref="RunDeferred"/> reads everything back while one applies.
+        /// Null = every pixel. Ignored unless <see cref="SupportsPixelMask"/>.</summary>
+        GpuPixelMask? PixelMask { get => null; set { } }
+
         /// <summary>#1332 — <see cref="RunDeferred"/> really defers (it is <see cref="Run"/>
         /// otherwise).</summary>
         bool SupportsDeferredReadback => false;

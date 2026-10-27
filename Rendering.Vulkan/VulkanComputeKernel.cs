@@ -68,6 +68,10 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     private const int ColorBinding = UShift + 3;
     private const int TrapBinding = UShift + 4;   // #1173-J: u4 (gTrap), orbit variant only
     private const int WorkBinding = UShift + 5;   // #1340: u5 (gWork), the base + colour (#1384: + orbit) entries
+    // #1394: t15 (gMask, MandelbrotKernelSource.WaveFetch). BuildProgram adds it to
+    // every program whose source declares it; a dispatch binds the active mask or a
+    // zero header (Vulkan has no unbound reads).
+    private const int MaskBinding = TShift + 15;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct ParamsBlob
@@ -298,9 +302,17 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     private void EnsureShape(string slot)
     {
         if (!_shapesResolved.Add(slot)) return;   // marked first: the tuning frames re-enter here
-        var winner = GpuGroupShapes.Resolve(GroupShapeDeviceKey, slot,
-            GpuGroupShapes.SourceHash("vulkan-spv\n" + SlotSource(slot)), ShapeCandidates(),
-            shape => { SetShape(slot, shape); return GpuGroupShapes.Representative(this, slot); });
+        // #1394 — the tuning frames time whole frames, even when a masked pass asks first.
+        var mask = PixelMask;
+        PixelMask = null;
+        GpuGroupShape winner;
+        try
+        {
+            winner = GpuGroupShapes.Resolve(GroupShapeDeviceKey, slot,
+                GpuGroupShapes.SourceHash("vulkan-spv\n" + SlotSource(slot)), ShapeCandidates(),
+                shape => { SetShape(slot, shape); return GpuGroupShapes.Representative(this, slot); });
+        }
+        finally { PixelMask = mask; }
         SetShape(slot, winner);
     }
 
@@ -502,13 +514,14 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         GpuDomainWarp warp = default)
     {
         using var sync = Sync();
-        RunCore(width, height, centerX, centerY, scale, maxIter, bailout2,
+        bool deferred = RunCore(width, height, centerX, centerY, scale, maxIter, bailout2,
             iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst,
             perRowMaxIter, kind, param0, param1, colorDst, trapDst, warp, defer: true);
-        return width > 0 && height > 0 ? GpuAuxOutputs.All : GpuAuxOutputs.None;
+        return deferred ? GpuAuxOutputs.All : GpuAuxOutputs.None;
     }
 
-    private void RunCore(
+    /// <summary>Returns whether the frame's aux outputs were deferred.</summary>
+    private bool RunCore(
         int width, int height,
         double centerX, double centerY,
         double scale, int maxIter, double bailout2,
@@ -524,9 +537,12 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         bool defer)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(VulkanComputeKernel));
-        if (width <= 0 || height <= 0) return;
+        if (width <= 0 || height <= 0) return false;
 
         EnsureShape(GpuGroupShapes.SlotEscape);   // #1339 (may tune: before this frame starts)
+        // #1394 — a masked frame reads its marked pixels back now (nothing deferred).
+        var mask = ActiveMask(width, height);
+        if (mask != null) defer = false;
         bool useColor = colorDst != null && HasGpuPalette;
         // #1342: kind + periodicity variant (VariantKey; 0 = plain Mandelbrot).
         int variant = MandelbrotKernelSource.VariantKey((int)kind, GpuPeriodicity.Mode);
@@ -602,14 +618,16 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             Check(_vk.AllocateDescriptorSets(_device, in dsai, out DescriptorSet set), "vkAllocateDescriptorSets");
 
             // Bindings: UBO@0, perRow@100, iter@200, smooth@201, finalZD@202, [color@203],
-            // [trap@204], [work@205] — _buf[0..7] in that order (binding - UShift + 2 past t0).
-            var infos = stackalloc DescriptorBufferInfo[8];
-            var writes = stackalloc WriteDescriptorSet[8];
+            // [trap@204], [work@205] — _buf[0..7] in that order (binding - UShift + 2 past t0);
+            // #1394: the mask@115.
+            var infos = stackalloc DescriptorBufferInfo[9];
+            var writes = stackalloc WriteDescriptorSet[9];
             for (int i = 0; i < bc; i++)
             {
                 uint b = prog.Bindings[i];
                 int bufIndex = b == 0 ? 0 : b == TShift ? 1 : (int)b - UShift + 2;
-                infos[i] = new DescriptorBufferInfo { Buffer = _buf[bufIndex].Buffer, Offset = 0, Range = Vk.WholeSize };
+                var buffer = b == MaskBinding ? MaskBuffer(mask) : _buf[bufIndex].Buffer;
+                infos[i] = new DescriptorBufferInfo { Buffer = buffer, Offset = 0, Range = Vk.WholeSize };
                 writes[i] = new WriteDescriptorSet
                 {
                     SType = StructureType.WriteDescriptorSet,
@@ -663,7 +681,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         long tDispatch = Stopwatch.GetTimestamp();
 
         // Readback + scatter into the caller's CPU arrays (#1332: or later).
-        if (!defer) ReadAux(GpuAuxOutputs.All, n, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst);
+        if (!defer) ReadAux(GpuAuxOutputs.All, n, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst, mask);
         else
         {
             _defIter = iterDst; _defSmooth = smoothDst;
@@ -671,14 +689,60 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             _defN = n;
             _defPending = GpuAuxOutputs.All;
         }
-        if (useColor) ReadUints(_buf[5], colorDst!, n);
-        if (useColor && trapDst != null && prog.Has(TrapBinding)) ReadFloats(_buf[6], trapDst, n);   // #1173-J
+        if (useColor) ReadUints(_buf[5], colorDst!, n, mask);
+        if (useColor && trapDst != null && prog.Has(TrapBinding)) ReadFloats(_buf[6], trapDst, n, mask);   // #1173-J
 
         long tEnd = Stopwatch.GetTimestamp();
         EndFrameTiming();   // #1329
         double freq = Stopwatch.Frequency;
         LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
         LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
+        return defer;
+    }
+
+    // ── #1394: pixel mask ──────────────────────────────────────────────────────
+
+    /// <summary>#1394 — masked dispatches (see <see cref="IGpuKernel.PixelMask"/>).</summary>
+    public bool SupportsPixelMask => true;
+
+    /// <summary>#1394 — the mask of the following dispatches; null = every pixel.</summary>
+    public GpuPixelMask? PixelMask { get; set; }
+
+    private GpuPixelMask? ActiveMask(int width, int height)
+        => PixelMask is { } m && m.Fits(width, height) ? m : null;
+
+    // The mask SSBO (binding 115) and whether it holds a zero header now.
+    private Allocated _maskBuf;
+    private int _maskAllocWords;
+    private bool _maskZero;
+    // The mask of the next banded dispatch: set by a masked Run* right before it,
+    // consumed (and cleared) by DispatchBands, which binds it.
+    private GpuPixelMask? _dispatchMask;
+
+    /// <summary>The buffer for binding 115: <paramref name="mask"/>'s words, or a
+    /// zero header (no mask). Uploads land with the dispatch's FlushPending.</summary>
+    private Buffer MaskBuffer(GpuPixelMask? mask)
+    {
+        int words = Math.Max(mask?.Words.Length ?? 0, 2);
+        if (_maskBuf.Buffer.Handle == 0 || _maskAllocWords < words)
+        {
+            FreeBuffer(ref _maskBuf);
+            _maskBuf = AllocBuffer((ulong)words * sizeof(uint), BufferUsageFlags.StorageBufferBit, Residency.Upload);
+            _maskAllocWords = words;
+            _maskZero = false;
+        }
+        if (mask != null)
+        {
+            fixed (uint* w = mask.Words) WriteBytes(_maskBuf, w, mask.Words.Length * sizeof(uint));
+            _maskZero = false;
+        }
+        else if (!_maskZero)
+        {
+            uint zero = 0;
+            WriteBytes(_maskBuf, &zero, sizeof(uint));
+            _maskZero = true;
+        }
+        return _maskBuf.Buffer;
     }
 
     // ── V6 (#82) deep-zoom perturbation ────────────────────────────────────────
@@ -723,13 +787,15 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             Scale = scale, EscapeR2 = escapeRadius2, OffX0 = offsetX0, OffY0 = offsetY0,
             RowBase = 0,
         };
+        _dispatchMask = ActiveMask(width, height);   // #1394 (DispatchBands binds it; the reads take it)
         DispatchPerturbPlain(_perturb, blob, width, height, maxIter, refZr, refZi, refLen, "",
             Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)));
 
         long tDispatch = Stopwatch.GetTimestamp();
-        ReadIter(_buf[2], iterDst, n);
-        ReadFloats(_buf[3], smoothDst, n);
-        ReadFinalZD(_buf[4], finalZrDst, finalZiDst, finalDrDst, finalDiDst, n);
+        var mask = ActiveMask(width, height);   // #1394
+        ReadIter(_buf[2], iterDst, n, mask);
+        ReadFloats(_buf[3], smoothDst, n, mask);
+        ReadFinalZD(_buf[4], finalZrDst, finalZiDst, finalDrDst, finalDiDst, n, mask);
         long tEnd = Stopwatch.GetTimestamp();
         EndFrameTiming();   // #1329
         double freq = Stopwatch.Frequency;
@@ -894,6 +960,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             Width = width, Height = height, MaxIter = maxIter, RefLen = refLen,
             EscapeR2 = (float)escapeRadius2, Wave = wave ? 1 : 0,
         };
+        _dispatchMask = ActiveMask(width, height);   // #1394
         DispatchBands(prog, width, height, maxIter, f32 ? " (scaled fp32)" : " (float-exp)", sizeof(PerturbFxParamsBlob),
             (rowBase, rows, band, dst) => { var b = blob; b.RowBase = rowBase; b.BandRows = rows; b.Band = band; *(PerturbFxParamsBlob*)dst = b; },
             stackalloc Buffer[] { _fxRefZ.Buffer, _buf[2].Buffer, _buf[3].Buffer, _buf[4].Buffer, BandWork(BandCount(width, height, maxIter, prog.Shape)) },
@@ -902,9 +969,10 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)));
 
         long tDispatch = Stopwatch.GetTimestamp();
-        ReadIter(_buf[2], iterDst, n);
-        ReadFloats(_buf[3], smoothDst, n);
-        ReadFinalZD(_buf[4], finalZrDst, finalZiDst, finalDrDst, finalDiDst, n);
+        var mask = ActiveMask(width, height);   // #1394
+        ReadIter(_buf[2], iterDst, n, mask);
+        ReadFloats(_buf[3], smoothDst, n, mask);
+        ReadFinalZD(_buf[4], finalZrDst, finalZiDst, finalDrDst, finalDiDst, n, mask);
         long tEnd = Stopwatch.GetTimestamp();
         EndFrameTiming();   // #1329
         double freq = Stopwatch.Frequency;
@@ -972,8 +1040,12 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         int blobBytes, BandParams writeParams, ReadOnlySpan<Buffer> ssbos, ReadOnlySpan<uint> ssboBindings,
         bool wave, params ReadOnlySpan<ReadbackSpan> outs)
     {
-        int bandRows = MandelbrotKernelSource.PerturbBandRows(width, height, maxIter, prog.Shape.Y);
-        int bandCount = (height + bandRows - 1) / bandRows;
+        // #1394 — with a mask, a band's budget counts only its marked pixels (never more
+        // bands than without one, so BandWork's BandCount sizing still holds).
+        var dispatchMask = _dispatchMask;
+        _dispatchMask = null;   // consumed: a later dispatch never sees a stale mask
+        var bands = MandelbrotKernelSource.PerturbBands(width, height, maxIter, prog.Shape.Y, dispatchMask?.Words);
+        int bandCount = bands.Length;
         if (wave) ZeroDevice(_bandWork);   // the counters (BandWork sized them to bandCount)
         ulong align = _ctx.MinUniformBufferOffsetAlignment;
         ulong stride = ((ulong)blobBytes + align - 1) / align * align;
@@ -986,10 +1058,13 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         void* mapped;
         Check(_vk.MapMemory(_device, _bandUbo.HostMemory, 0, uboBytes, 0, &mapped), "vkMapMemory");
         for (int band = 0; band < bandCount; band++)
-            writeParams(band * bandRows, Math.Min(bandRows, height - band * bandRows), band, (byte*)mapped + (ulong)band * stride);
+            writeParams(bands[band].RowBase, bands[band].Rows, band, (byte*)mapped + (ulong)band * stride);
         _vk.UnmapMemory(_device, _bandUbo.HostMemory);
 
-        int nb = ssbos.Length + 1;
+        // #1394 — the mask (or a zero header) after the caller's SSBOs.
+        bool hasMask = prog.Has(MaskBinding);
+        int nb = ssbos.Length + 1 + (hasMask ? 1 : 0);
+        Buffer maskBuffer = hasMask ? MaskBuffer(dispatchMask) : default;
         DescriptorPool pool = default;
         var cmds = new CommandBuffer[bandCount];
         bool idle = true;   // nothing submitted since the last wait
@@ -1017,13 +1092,14 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             var writes = stackalloc WriteDescriptorSet[nb];
             for (int i = 0; i < nb; i++)
             {
+                bool maskSlot = hasMask && i == nb - 1;
                 infos[i] = i == 0
                     ? new DescriptorBufferInfo { Buffer = _bandUbo.Buffer, Offset = 0, Range = (ulong)blobBytes }
-                    : new DescriptorBufferInfo { Buffer = ssbos[i - 1], Offset = 0, Range = Vk.WholeSize };
+                    : new DescriptorBufferInfo { Buffer = maskSlot ? maskBuffer : ssbos[i - 1], Offset = 0, Range = Vk.WholeSize };
                 writes[i] = new WriteDescriptorSet
                 {
                     SType = StructureType.WriteDescriptorSet,
-                    DstSet = set, DstBinding = i == 0 ? 0u : ssboBindings[i - 1], DescriptorCount = 1,
+                    DstSet = set, DstBinding = i == 0 ? 0u : maskSlot ? (uint)MaskBinding : ssboBindings[i - 1], DescriptorCount = 1,
                     DescriptorType = i == 0 ? DescriptorType.UniformBufferDynamic : DescriptorType.StorageBuffer,
                     PBufferInfo = &infos[i],
                 };
@@ -1041,7 +1117,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             bool serial = SerialBands;
             for (int band = 0; band < bandCount; band++)
             {
-                int rowBase = band * bandRows, rows = Math.Min(bandRows, height - rowBase);
+                var (rowBase, rows) = bands[band];
                 bool last = band == bandCount - 1;
                 var cmd = cmds[band];
                 var begin = new CommandBufferBeginInfo
@@ -1352,6 +1428,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             fixed (double* p = blaCoeffs) WriteBytes(_blaBuf, p, blaCoeffs!.Length * sizeof(double));
 
         // Binding order matches BuildBandProgram above: b0 (the band UBO), t0,t1, t2..t9, t10 (BLA), u0,u1,u2, u3 (gWork).
+        _dispatchMask = ActiveMask(width, height);   // #1394
         DispatchBands(_perturbSa, width, height, maxIter, " (SA)", sizeof(PerturbSaParamsBlob),
             (rowBase, rows, band, dst) =>
             {
@@ -1379,9 +1456,10 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)));
 
         long tDispatch = Stopwatch.GetTimestamp();
-        ReadIter(_buf[2], iterDst, n);
-        ReadFloats(_buf[3], smoothDst, n);
-        ReadFinalZD(_buf[4], finalZrDst, finalZiDst, finalDrDst, finalDiDst, n);
+        var mask = ActiveMask(width, height);   // #1394
+        ReadIter(_buf[2], iterDst, n, mask);
+        ReadFloats(_buf[3], smoothDst, n, mask);
+        ReadFinalZD(_buf[4], finalZrDst, finalZiDst, finalDrDst, finalDiDst, n, mask);
         long tEnd = Stopwatch.GetTimestamp();
         EndFrameTiming();   // #1329
         double freq = Stopwatch.Frequency;
@@ -1457,6 +1535,9 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     private Program BuildProgram(string hlsl, string entry, bool dynamicUbo, uint[] bindingNums, GpuGroupShape shape)
     {
         if (shape != GpuGroupShape.Default) hlsl = shape.Apply(hlsl);   // #1339
+        // #1394 — the kernels that fetch pixels declare the mask (t15).
+        if (hlsl.Contains("gMask", StringComparison.Ordinal) && System.Array.IndexOf(bindingNums, (uint)MaskBinding) < 0)
+            bindingNums = [.. bindingNums, (uint)MaskBinding];
         byte[] spirv = DxcCompiler.CompileToSpirv(
             hlsl, entry, "cs_6_0",
             "-fvk-b-shift", BShift.ToString(), "0",
@@ -1825,49 +1906,55 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         _defN = 0;
     }
 
+    // #1394 — with a mask, the reads copy only its marked pixels.
     private void ReadAux(GpuAuxOutputs parts, int n, int[] iterDst, float[] smoothDst,
-        float[] finalZrDst, float[] finalZiDst, float[] finalDrDst, float[] finalDiDst)
+        float[] finalZrDst, float[] finalZiDst, float[] finalDrDst, float[] finalDiDst, GpuPixelMask? mask = null)
     {
-        if ((parts & GpuAuxOutputs.Iterations) != 0) ReadIter(_buf[2], iterDst, n);
-        if ((parts & GpuAuxOutputs.Smooth) != 0) ReadFloats(_buf[3], smoothDst, n);
-        if ((parts & GpuAuxOutputs.FinalZ) != 0) ReadFinalZD(_buf[4], finalZrDst, finalZiDst, finalDrDst, finalDiDst, n);
+        if ((parts & GpuAuxOutputs.Iterations) != 0) ReadIter(_buf[2], iterDst, n, mask);
+        if ((parts & GpuAuxOutputs.Smooth) != 0) ReadFloats(_buf[3], smoothDst, n, mask);
+        if ((parts & GpuAuxOutputs.FinalZ) != 0) ReadFinalZD(_buf[4], finalZrDst, finalZiDst, finalDrDst, finalDiDst, n, mask);
     }
 
-    private void ReadIter(Allocated a, int[] dst, int n)
+    private void ReadIter(Allocated a, int[] dst, int n, GpuPixelMask? mask = null)
     {
         void* mapped;
         Check(_vk.MapMemory(_device, a.HostMemory, 0, (ulong)(n * sizeof(uint)), 0, &mapped), "vkMapMemory");
         var src = (uint*)mapped;
-        for (int i = 0; i < n; i++) dst[i] = (int)src[i];
+        if (mask != null) mask.CopyMarked((int*)src, dst, n);
+        else for (int i = 0; i < n; i++) dst[i] = (int)src[i];
         _vk.UnmapMemory(_device, a.HostMemory);
     }
 
-    private void ReadFloats(Allocated a, float[] dst, int n)
+    private void ReadFloats(Allocated a, float[] dst, int n, GpuPixelMask? mask = null)
     {
         void* mapped;
         Check(_vk.MapMemory(_device, a.HostMemory, 0, (ulong)(n * sizeof(float)), 0, &mapped), "vkMapMemory");
-        new Span<float>(mapped, n).CopyTo(dst.AsSpan(0, n));
+        if (mask != null) mask.CopyMarked((float*)mapped, dst, n);
+        else new Span<float>(mapped, n).CopyTo(dst.AsSpan(0, n));
         _vk.UnmapMemory(_device, a.HostMemory);
     }
 
-    private void ReadUints(Allocated a, uint[] dst, int n)
+    private void ReadUints(Allocated a, uint[] dst, int n, GpuPixelMask? mask = null)
     {
         void* mapped;
         Check(_vk.MapMemory(_device, a.HostMemory, 0, (ulong)(n * sizeof(uint)), 0, &mapped), "vkMapMemory");
-        new Span<uint>(mapped, n).CopyTo(dst.AsSpan(0, n));
+        if (mask != null) mask.CopyMarked((uint*)mapped, dst, n);
+        else new Span<uint>(mapped, n).CopyTo(dst.AsSpan(0, n));
         _vk.UnmapMemory(_device, a.HostMemory);
     }
 
-    private void ReadFinalZD(Allocated a, float[] zr, float[] zi, float[] dr, float[] di, int n)
+    private void ReadFinalZD(Allocated a, float[] zr, float[] zi, float[] dr, float[] di, int n, GpuPixelMask? mask = null)
     {
         void* mapped;
         Check(_vk.MapMemory(_device, a.HostMemory, 0, (ulong)(n * 4 * sizeof(float)), 0, &mapped), "vkMapMemory");
         var src = (float*)mapped;
-        for (int i = 0; i < n; i++)
-        {
-            int b = i * 4;
-            zr[i] = src[b + 0]; zi[i] = src[b + 1]; dr[i] = src[b + 2]; di[i] = src[b + 3];
-        }
+        if (mask != null) mask.ScatterMarkedFinalZD(src, zr, zi, dr, di, n);
+        else
+            for (int i = 0; i < n; i++)
+            {
+                int b = i * 4;
+                zr[i] = src[b + 0]; zi[i] = src[b + 1]; dr[i] = src[b + 2]; di[i] = src[b + 3];
+            }
         _vk.UnmapMemory(_device, a.HostMemory);
     }
 
@@ -1912,6 +1999,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         FreeBuffer(ref _saDR); FreeBuffer(ref _saDI);
         FreeBuffer(ref _blaBuf);   // #88 / G4.5b
         FreeBuffer(ref _orbitOut); // #607
+        FreeBuffer(ref _maskBuf);  // #1394
         FreeBuffer(ref _buddhaParams); FreeBuffer(ref _buddhaHits);   // #838
         if (_cmdPool.Handle != 0) { _vk.DestroyCommandPool(_device, _cmdPool, null); _cmdPool = default; }
         _pipelineCache.Dispose();   // #1341 — saves

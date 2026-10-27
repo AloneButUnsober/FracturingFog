@@ -190,6 +190,11 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     private ID3D11Buffer? _perRowBuf;
     private ID3D11ShaderResourceView? _perRowSrv;
     private int _perRowAllocRows;
+    // #1394: the pixel mask SRV (t15, GpuPixelMask.Words). Bound only while a mask
+    // applies; unbound, t15 reads 0 (no mask: every pixel).
+    private ID3D11Buffer? _maskBuf;
+    private ID3D11ShaderResourceView? _maskSrv;
+    private int _maskAllocWords;
     // Phase 4: GPU-resident color buffer + staging. Allocated only when a
     // palette is active. Output is packed BGRA, matching the CPU
     // ColorBuffer layout (alpha = 0xFF, then RGB).
@@ -310,9 +315,17 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     private void EnsureShape(string slot)
     {
         if (!_shapesResolved.Add(slot)) return;   // marked first: the tuning frames re-enter here
-        var winner = GpuGroupShapes.Resolve(GroupShapeDeviceKey, slot,
-            GpuGroupShapes.SourceHash("fxc-cs_5_0\n" + SlotSource(slot)), GpuGroupShapes.Candidates,
-            shape => { SetShape(slot, shape); return GpuGroupShapes.Representative(this, slot); });
+        // #1394 — the tuning frames time whole frames, even when a masked pass asks first.
+        var mask = PixelMask;
+        PixelMask = null;
+        GpuGroupShape winner;
+        try
+        {
+            winner = GpuGroupShapes.Resolve(GroupShapeDeviceKey, slot,
+                GpuGroupShapes.SourceHash("fxc-cs_5_0\n" + SlotSource(slot)), GpuGroupShapes.Candidates,
+                shape => { SetShape(slot, shape); return GpuGroupShapes.Representative(this, slot); });
+        }
+        finally { PixelMask = mask; }
         SetShape(slot, winner);
     }
 
@@ -506,6 +519,52 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         _perRowSrv = _device.CreateShaderResourceView(_perRowBuf, srvDesc);
         _perRowAllocRows = height;
     }
+
+    /// <summary>#1394 — masked dispatches (see <see cref="IGpuKernel.PixelMask"/>).</summary>
+    public bool SupportsPixelMask => true;
+
+    /// <summary>#1394 — the mask of the following dispatches; null = every pixel.</summary>
+    public GpuPixelMask? PixelMask { get; set; }
+
+    private GpuPixelMask? ActiveMask(int width, int height)
+        => PixelMask is { } m && m.Fits(width, height) ? m : null;
+
+    /// <summary>#1394 — upload <paramref name="mask"/> and bind it at t15.</summary>
+    private void BindMask(GpuPixelMask mask)
+    {
+        int words = mask.Words.Length;
+        if (_maskBuf == null || _maskAllocWords < words)
+        {
+            _maskSrv?.Dispose();
+            _maskBuf?.Dispose();
+            _maskBuf = _device.CreateBuffer(new BufferDescription
+            {
+                ByteWidth = (uint)(words * sizeof(uint)),
+                BindFlags = BindFlags.ShaderResource,
+                Usage = ResourceUsage.Dynamic,
+                CPUAccessFlags = CpuAccessFlags.Write,
+                MiscFlags = ResourceOptionFlags.BufferStructured,
+                StructureByteStride = sizeof(uint),
+            });
+            _maskSrv = _device.CreateShaderResourceView(_maskBuf, new ShaderResourceViewDescription
+            {
+                Format = Vortice.DXGI.Format.Unknown,
+                ViewDimension = Vortice.Direct3D.ShaderResourceViewDimension.Buffer,
+                Buffer = new BufferShaderResourceView { FirstElement = 0, NumElements = (uint)words },
+            });
+            _maskAllocWords = words;
+        }
+        var mapped = _ctx.Map(_maskBuf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
+        unsafe
+        {
+            fixed (uint* src = mask.Words)
+                Buffer.MemoryCopy(src, (void*)mapped.DataPointer, (long)words * sizeof(uint), (long)words * sizeof(uint));
+        }
+        _ctx.Unmap(_maskBuf, 0);
+        _ctx.CSSetShaderResource(MaskSlot, _maskSrv);
+    }
+
+    private const uint MaskSlot = 15;   // t15: MandelbrotKernelSource.WaveFetch's gMask
 
     private void EnsureOutputBuffers(int width, int height, int[] iterDst)
     {
@@ -769,7 +828,8 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
     /// <summary>Map the staged outputs and unpack them into the caller's arrays
     /// (the packed finalZD float4 scatters to four arrays).</summary>
     private unsafe void MapAux(GpuAuxOutputs parts, int n, int[] iterDst, float[] smoothDst,
-        float[] finalZrDst, float[] finalZiDst, float[] finalDrDst, float[] finalDiDst)
+        float[] finalZrDst, float[] finalZiDst, float[] finalDrDst, float[] finalDiDst,
+        GpuPixelMask? mask = null)
     {
         if ((parts & GpuAuxOutputs.Iterations) != 0)
         {
@@ -777,7 +837,11 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             try
             {
                 uint* src = (uint*)iterMap.DataPointer;
-                fixed (int* dst = iterDst) { for (int i = 0; i < n; i++) dst[i] = (int)src[i]; }
+                fixed (int* dst = iterDst)
+                {
+                    if (mask != null) mask.CopyMarked((int*)src, dst, n);   // #1394
+                    else for (int i = 0; i < n; i++) dst[i] = (int)src[i];
+                }
             }
             finally { _ctx.Unmap(_iterStaging, 0); }
         }
@@ -788,7 +852,11 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             try
             {
                 float* src = (float*)smoothMap.DataPointer;
-                fixed (float* dst = smoothDst) { for (int i = 0; i < n; i++) dst[i] = src[i]; }
+                fixed (float* dst = smoothDst)
+                {
+                    if (mask != null) mask.CopyMarked(src, dst, n);   // #1394
+                    else for (int i = 0; i < n; i++) dst[i] = src[i];
+                }
             }
             finally { _ctx.Unmap(_smoothStaging, 0); }
         }
@@ -802,6 +870,8 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             try
             {
                 float* src = (float*)fzdMap.DataPointer;
+                if (mask != null) mask.ScatterMarkedFinalZD(src, finalZrDst, finalZiDst, finalDrDst, finalDiDst, n);   // #1394
+                else
                 fixed (float* zr = finalZrDst)
                 fixed (float* zi = finalZiDst)
                 fixed (float* dr = finalDrDst)
@@ -830,7 +900,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
         uint[]? colorDst = null,
         float[]? trapDst = null,
         GpuDomainWarp warp = default)
-        => RunCore(width, height, centerX, centerY, scale, maxIter, bailout2,
+        => _ = RunCore(width, height, centerX, centerY, scale, maxIter, bailout2,
             iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst,
             perRowMaxIter, kind, param0, param1, colorDst, trapDst, warp, defer: false);
 
@@ -849,13 +919,14 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
         float[]? trapDst = null,
         GpuDomainWarp warp = default)
     {
-        RunCore(width, height, centerX, centerY, scale, maxIter, bailout2,
+        bool deferred = RunCore(width, height, centerX, centerY, scale, maxIter, bailout2,
             iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst,
             perRowMaxIter, kind, param0, param1, colorDst, trapDst, warp, defer: true);
-        return width > 0 && height > 0 ? GpuAuxOutputs.All : GpuAuxOutputs.None;
+        return deferred ? GpuAuxOutputs.All : GpuAuxOutputs.None;
     }
 
-    private void RunCore(int width, int height, double centerX, double centerY,
+    /// <summary>Returns whether the frame's aux outputs were deferred.</summary>
+    private bool RunCore(int width, int height, double centerX, double centerY,
         double scale, int maxIter, double bailout2,
         int[] iterDst, float[] smoothDst,
         float[] finalZrDst, float[] finalZiDst,
@@ -869,7 +940,11 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
         bool defer)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(MandelbrotGpuKernel));
-        if (width <= 0 || height <= 0) return;
+        if (width <= 0 || height <= 0) return false;
+
+        // #1394 — a masked frame reads its marked pixels back now (nothing deferred).
+        var mask = ActiveMask(width, height);
+        if (mask != null) defer = false;
 
         // Phase 2/4: GPU palette path is only taken when a colorDst array is
         // supplied AND a palette is active. Mandelbrot-only — Julia and the
@@ -960,6 +1035,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             if (useColorPath) _ctx.CSSetUnorderedAccessView(3, _colorUav);
             if (useTrap) _ctx.CSSetUnorderedAccessView(4, _trapUav);
             if (usePerRow) _ctx.CSSetShaderResource(0, _perRowSrv);
+            if (mask != null) BindMask(mask);   // #1394
 
             var shape = Shape(GpuGroupShapes.SlotEscape);   // #1339
             uint groupsX = shape.GroupsX(width);
@@ -983,6 +1059,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             if (useColorPath) _ctx.CSUnsetUnorderedAccessView(3);
             if (useTrap) _ctx.CSUnsetUnorderedAccessView(4);
             if (usePerRow) _ctx.CSUnsetShaderResource(0);
+            if (mask != null) _ctx.CSUnsetShaderResource(MaskSlot);
 
             // #1332 — a deferred frame without per-row caps counts its escaped pixels
             // on the GPU, so the solid-frame check needn't read the iterations back.
@@ -1004,7 +1081,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             int n = width * height;
             LastDeferredAnyEscaped = null;
             if (!defer)
-                MapAux(GpuAuxOutputs.All, n, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst);
+                MapAux(GpuAuxOutputs.All, n, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst, mask);
             else
             {
                 if (countEscaped) LastDeferredAnyEscaped = ReadAnyEscaped();
@@ -1026,7 +1103,8 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
                         {
                             // Plain memcpy — packed BGRA matches CPU
                             // ColorBuffer layout (0xAARRGGBB with A=0xFF).
-                            Buffer.MemoryCopy(src, dst, (long)n * sizeof(uint), (long)n * sizeof(uint));
+                            if (mask != null) mask.CopyMarked(src, dst, n);   // #1394
+                            else Buffer.MemoryCopy(src, dst, (long)n * sizeof(uint), (long)n * sizeof(uint));
                         }
                     }
                 }
@@ -1041,7 +1119,10 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
                     unsafe
                     {
                         fixed (float* dst = trapDst!)
-                            Buffer.MemoryCopy((void*)trapMap.DataPointer, dst, (long)n * sizeof(float), (long)n * sizeof(float));
+                        {
+                            if (mask != null) mask.CopyMarked((float*)trapMap.DataPointer, dst, n);   // #1394
+                            else Buffer.MemoryCopy((void*)trapMap.DataPointer, dst, (long)n * sizeof(float), (long)n * sizeof(float));
+                        }
                     }
                 }
                 finally { _ctx.Unmap(_trapStaging!, 0); }
@@ -1052,6 +1133,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             double freq = System.Diagnostics.Stopwatch.Frequency;
             LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
             LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
+            return defer;
         }
     }
 
@@ -1154,8 +1236,9 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
                 unsafe { *(PerturbParams*)mapped.DataPointer = p; }
                 _ctx.Unmap(_perturbParamsBuf!, 0);
                 _ctx.CSSetConstantBuffer(0, _perturbParamsBuf);   // re-bind after WriteDiscard rename
-            }, wave: wave);
-            ReadPerturbOutputs(width * height, t0, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst);
+            }, wave: wave, mask: ActiveMask(width, height));   // #1394
+            ReadPerturbOutputs(width * height, t0, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst,
+                mask: ActiveMask(width, height));
         }
     }
 
@@ -1268,8 +1351,9 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
                 unsafe { *(PerturbFxParams*)mapped.DataPointer = p; }
                 _ctx.Unmap(_fxParamsBuf!, 0);
                 _ctx.CSSetConstantBuffer(0, _fxParamsBuf);
-            }, wave: wave);
-            ReadPerturbOutputs(width * height, t0, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst);
+            }, wave: wave, mask: ActiveMask(width, height));   // #1394
+            ReadPerturbOutputs(width * height, t0, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst,
+                mask: ActiveMask(width, height));
         }
     }
 
@@ -1623,8 +1707,9 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
                 unsafe { *(PerturbSaParams*)mapped.DataPointer = p; }
                 _ctx.Unmap(_saParamsBuf!, 0);
                 _ctx.CSSetConstantBuffer(0, _saParamsBuf);
-            }, wave: wave);
-            ReadPerturbOutputs(width * height, t0, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst);
+            }, wave: wave, mask: ActiveMask(width, height));   // #1394
+            ReadPerturbOutputs(width * height, t0, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst,
+                mask: ActiveMask(width, height));
         }
     }
 
@@ -1638,20 +1723,24 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
     /// <paramref name="workSlot"/>: the UAV register of the wavefront counters (u3;
     /// the orbit kernel's is u4, #1384).</summary>
     private void DispatchPerturbBands(GpuGroupShape shape, int width, int height, int maxIter, int srvCount, string label,
-        Action<int, int, int> writeParams, int uavCount = 3, bool wave = false, int workSlot = 3)
+        Action<int, int, int> writeParams, int uavCount = 3, bool wave = false, int workSlot = 3,
+        GpuPixelMask? mask = null)
     {
         _ctx.CSSetUnorderedAccessView(0, _iterUav);
         _ctx.CSSetUnorderedAccessView(1, _smoothUav);
         _ctx.CSSetUnorderedAccessView(2, _finalZDUav);
+        if (mask != null) BindMask(mask);   // #1394
 
         void Unbind()
         {
             for (int i = 0; i < uavCount; i++) _ctx.CSUnsetUnorderedAccessView((uint)i);   // u3: the orbit variant (#607)
             for (int i = 0; i < srvCount; i++) _ctx.CSSetShaderResource((uint)i, null);
+            if (mask != null) _ctx.CSSetShaderResource(MaskSlot, null);
         }
 
-        int bandRows = MandelbrotKernelSource.PerturbBandRows(width, height, maxIter, shape.Y);
-        int bandCount = (height + bandRows - 1) / bandRows;
+        // #1394 — with a mask, a band's budget counts only its marked pixels.
+        var bands = MandelbrotKernelSource.PerturbBands(width, height, maxIter, shape.Y, mask?.Words);
+        int bandCount = bands.Length;
         if (wave)
         {
             // #1340: one counter per band (gWork[band], u3 / u4), all zeroed up front.
@@ -1660,10 +1749,9 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             _ctx.CSSetUnorderedAccessView((uint)workSlot, _workUav);
             uavCount = Math.Max(uavCount, workSlot + 1);
         }
-        int bandIndex = 0;
-        for (int rowBase = 0; rowBase < height; rowBase += bandRows, bandIndex++)
+        for (int bandIndex = 0; bandIndex < bandCount; bandIndex++)
         {
-            int rows = Math.Min(bandRows, height - rowBase);
+            var (rowBase, rows) = bands[bandIndex];
             writeParams(rowBase, rows, bandIndex);
 
             long tBand = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -1703,7 +1791,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
     /// caller's arrays and record the dispatch / readback timings.</summary>
     private void ReadPerturbOutputs(int n, long t0, int[] iterDst, float[] smoothDst,
         float[] finalZrDst, float[] finalZiDst, float[] finalDrDst, float[] finalDiDst,
-        Action? extraCopies = null)
+        Action? extraCopies = null, GpuPixelMask? mask = null)
     {
         {
             _timer.Begin();
@@ -1712,7 +1800,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             _timer.Mark(GpuStage.CopyOut);
 
             long tDispatch = System.Diagnostics.Stopwatch.GetTimestamp();
-            MapAux(GpuAuxOutputs.All, n, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst);
+            MapAux(GpuAuxOutputs.All, n, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst, mask);
 
             LastGpuStageTimes = _timer.EndFrame();
             long tEnd = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -1912,6 +2000,8 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
         try { _trapStaging?.Dispose(); } catch { }
         try { _perRowSrv?.Dispose(); } catch { }
         try { _perRowBuf?.Dispose(); } catch { }
+        try { _maskSrv?.Dispose(); } catch { }   // #1394
+        try { _maskBuf?.Dispose(); } catch { }
         try { _paramsBuf?.Dispose(); } catch { }
         foreach (var cs in _csBaseByKind.Values)
         {
