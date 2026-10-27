@@ -229,6 +229,16 @@ finite-size-Lyapunov literature, which these entries anchor.
   lists the article as *Complex topology in chaotic scattering: a laboratory observation*, which may be
   a preprint title.
 
+<a id="schlick-fresnel"></a>
+
+- **Christophe Schlick.** *An inexpensive BRDF model for physically-based rendering.* Computer Graphics
+  Forum 13(3), 1994. doi:10.1111/1467-8659.1330233, <https://diglib.eg.org/handle/10.2312/6905>.
+  Schlick's Fresnel approximation F0 + (1 − F0)(1 − cos θ)⁵. FF uses it for the mirror-spheres photo
+  mode's per-bounce reflectance (`MirrorSpheresScene.Schlick`, #1441), and the GPU shading kernels
+  already used it (`GpuKernelUtils`, P7c.3). Author, year and DOI are from the Eurographics Digital
+  Library record. The page range 233–246 is from Wikipedia (*Schlick's approximation*) and isn't yet
+  checked against the journal.
+
 <a id="yoneyama-lakes-of-wada"></a>
 
 - **Kunizô Yoneyama.** *Theory of continuous set of points (not finished).* Tohoku Mathematical

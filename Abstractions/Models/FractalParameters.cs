@@ -1580,6 +1580,23 @@ namespace FracturingFog.Models
         public double MirrorSpheresCameraTheta { get; set; } = -Math.PI * 0.25;
         /// <summary>Camera elevation from +y. Default acos(1/√3) ≈ 0.9553 (see theta).</summary>
         public double MirrorSpheresCameraPhi { get; set; } = 0.9553166181245093;
+        /// <summary>#1441 — Basins (categorical exit colour) or Photo (the 1999
+        /// photograph's lighting). Default Basins.</summary>
+        public MirrorSpheresMode MirrorSpheresMode { get; set; } = MirrorSpheresMode.Basins;
+        /// <summary>#1441 — Photo mode: what lies beyond each of the four openings, as a
+        /// comma-separated list in opening order: <c>#RRGGBB</c> (a coloured board) or
+        /// <c>env</c> (open to the Lighting &amp; FX sky / HDRI). Missing or malformed entries
+        /// use the default. Default: vermillion, blue, white, black. These stand in for the
+        /// photo's red board, blue board and white cloth, with Okabe-Ito vermillion and blue
+        /// for the red / blue pair (colour-blind safe).</summary>
+        public string MirrorSpheresOpeningColors { get; set; } = "#D55E00,#0072B2,#F2F2F2,#000000";   // = Engine MirrorSpheresPalette.DefaultText
+        /// <summary>#1441 — Photo mode: the opening the camera looks in through shows
+        /// black (the dark room and photographer), whatever its colour entry. Default true.</summary>
+        public bool MirrorSpheresViewerBlack { get; set; } = true;
+        /// <summary>#1441 — Photo mode: each reflection keeps the Schlick-Fresnel share
+        /// F0 + (1 − F0)(1 − cos θ)⁵ with F0 = <see cref="MirrorSpheresReflectance"/>, so
+        /// grazing bounces lose less than head-on ones. Off = F0 per bounce. Default true.</summary>
+        public bool MirrorSpheresFresnel { get; set; } = true;
 
         // Bicomplex Mandelbrot (tessarine algebra, commutative; i² = j² = −1,
         // k² = +1, ij = ji = k). Raymarched 3D slice; pixel (x, y, z) routes
@@ -2231,6 +2248,10 @@ namespace FracturingFog.Models
                 MirrorSpheresCameraDistance = MirrorSpheresCameraDistance,
                 MirrorSpheresCameraTheta = MirrorSpheresCameraTheta,
                 MirrorSpheresCameraPhi = MirrorSpheresCameraPhi,
+                MirrorSpheresMode = MirrorSpheresMode,
+                MirrorSpheresOpeningColors = MirrorSpheresOpeningColors,
+                MirrorSpheresViewerBlack = MirrorSpheresViewerBlack,
+                MirrorSpheresFresnel = MirrorSpheresFresnel,
                 BicomplexSliceW = BicomplexSliceW,
                 BicomplexSliceAxis = BicomplexSliceAxis,
                 BicomplexIterations = BicomplexIterations,
