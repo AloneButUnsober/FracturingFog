@@ -2003,13 +2003,18 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     private BilliardGeometry _billiardGeometry;
     /// <summary>Obstacle arrangement — ThreeDisk / NDisk / Ring.</summary>
     public BilliardGeometry BilliardGeometry { get => _billiardGeometry; set { Set(ref _billiardGeometry, value); _p.BilliardGeometry = value; LayoutChanged(); Fire(); } }
-    /// <summary>#1503 — non-empty when Ring / ThreeDisk neighbours touch or overlap (gaps closed).</summary>
-    public string BilliardLayoutWarning => BilliardLayout.Warning(_billiardGeometry, _billiardDiskCount, _billiardDiskRadius, _billiardSeparation);
+    /// <summary>#1503 — non-empty when Ring / ThreeDisk neighbours touch or overlap (gaps closed);
+    /// #1504 — also when Custom disks touch, or Custom has no layout yet.</summary>
+    public string BilliardLayoutWarning => BilliardLayout.Warning(_billiardGeometry, _billiardDiskCount, _billiardDiskRadius, _billiardSeparation,
+                                                                  _p.BilliardCustomDisks);
     public bool HasBilliardLayoutWarning => BilliardLayoutWarning.Length > 0;
+    /// <summary>#1504 — the Custom geometry is edited in the ray-path inset, not here.</summary>
+    public bool IsBilliardCustom => _billiardGeometry == BilliardGeometry.Custom;
     private void LayoutChanged()
     {
         this.RaisePropertyChanged(nameof(BilliardLayoutWarning));
         this.RaisePropertyChanged(nameof(HasBilliardLayoutWarning));
+        this.RaisePropertyChanged(nameof(IsBilliardCustom));
     }
     public System.Array BilliardGeometries => s_BilliardGeometries;   // cached: a new array per read resets the ComboBox selection on Refresh()
     private static readonly System.Array s_BilliardGeometries = System.Enum.GetValues(typeof(BilliardGeometry));

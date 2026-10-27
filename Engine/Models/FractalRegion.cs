@@ -594,6 +594,9 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? BilliardLaunchMode { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? BilliardGateMode { get; set; }
         [JsonIgnore(Condition = OmitNull)] public bool? BilliardMuteMisses { get; set; }
+        // #1504 — Custom geometry disk list ("x,y,r;..."); captured only when Custom is
+        // the active geometry and has disks, so other billiard regions stay unchanged.
+        [JsonIgnore(Condition = OmitNull)] public string? BilliardCustomDisks { get; set; }
         // Precision-sensitivity field (#628). Tiers/metric stored as int casts of
         // PrecisionTier / PrecisionDiffMetric.
         [JsonIgnore(Condition = OmitNull)] public int? PrecisionLowTier { get; set; }
@@ -998,6 +1001,9 @@ namespace FracturingFog.Models
                     BilliardLaunchMode = (int)p.BilliardLaunchMode,
                     BilliardGateMode = (int)p.BilliardGateMode,
                     BilliardMuteMisses = p.BilliardMuteMisses,
+                    BilliardCustomDisks = p.BilliardGeometry == FracturingFog.BilliardGeometry.Custom
+                                          && !string.IsNullOrWhiteSpace(p.BilliardCustomDisks)
+                        ? p.BilliardCustomDisks : null,
                 },
                 FractalType.PrecisionField => new RegionFractalParams
                 {
@@ -1708,6 +1714,8 @@ namespace FracturingFog.Models
                 p.BilliardGateMode = (FracturingFog.BilliardGateMode)BilliardGateMode.Value;
             if (BilliardMuteMisses.HasValue)
                 p.BilliardMuteMisses = BilliardMuteMisses.Value;
+            if (BilliardCustomDisks != null)
+                p.BilliardCustomDisks = BilliardCustomDisks;
             // #1445 — a full pre-#1445 billiard snapshot (all seven #627 fields, none of
             // the new ones) keeps the look it was saved with: compass sectors, no muting.
             if (IsLegacyBilliardSnapshot)

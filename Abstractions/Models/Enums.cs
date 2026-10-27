@@ -73,8 +73,11 @@ namespace FracturingFog
     /// <see cref="ThreeDisk"/> is the classic well-studied three-disk scatterer
     /// (Cantor set of trapped trajectories); <see cref="NDisk"/> scatters
     /// <c>BilliardDiskCount</c> disks pseudo-randomly (seeded) inside the play
-    /// region; <see cref="Ring"/> places the disks evenly on a circle.</summary>
-    public enum BilliardGeometry { ThreeDisk, NDisk, Ring }
+    /// region; <see cref="Ring"/> places the disks evenly on a circle;
+    /// <see cref="Custom"/> (#1504) is an explicit disk list
+    /// (<c>BilliardCustomDisks</c>), edited by dragging disks in the ray-path inset.
+    /// Appended last: the region snapshot stores the int value.</summary>
+    public enum BilliardGeometry { ThreeDisk, NDisk, Ring, Custom }
 
     /// <summary>How a ChaoticBilliard pixel maps to a launch initial condition (#1445).
     /// <see cref="FarField"/> launches from outside the scatterer: impact parameter b
@@ -854,7 +857,7 @@ namespace FracturingFog
         /// <c>BilliardDiskCount</c>, <c>BilliardDiskRadius</c>,
         /// <c>BilliardSeparation</c>, <c>BilliardMaxBounces</c>,
         /// <c>BilliardGateCount</c>, <c>BilliardSeed</c>, <c>BilliardLaunchMode</c>,
-        /// <c>BilliardGateMode</c>, <c>BilliardMuteMisses</c>.</summary>
+        /// <c>BilliardGateMode</c>, <c>BilliardMuteMisses</c>, <c>BilliardCustomDisks</c> (#1504).</summary>
         ChaoticBilliard,
         /// <summary>Precision-sensitivity field (#628). Not a new fractal shape —
         /// it iterates Mandelbrot z² + c at two arithmetic tiers

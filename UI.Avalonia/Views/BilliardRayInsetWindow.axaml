@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ctrl="using:FracturingFog.UI.Avalonia.Controls"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
         x:Class="FracturingFog.UI.Avalonia.Views.BilliardRayInsetWindow"
         Title="Ray paths"
         Width="300" Height="380"
@@ -16,7 +17,7 @@
          the MiniMap) because Avalonia content can't draw over the native GPU HWND.
          Not composited into the frame, so it never lands in exports or recordings. -->
     <Border BorderBrush="#404040" BorderThickness="1">
-        <Grid RowDefinitions="18,*,Auto">
+        <Grid RowDefinitions="18,*,Auto,Auto">
             <Border x:Name="DragHandle" Grid.Row="0" Background="#202020" Cursor="SizeAll">
                 <Grid ColumnDefinitions="*,Auto">
                     <TextBlock Text="Ray paths  (drag; double-click to re-dock)"
@@ -34,6 +35,10 @@
                        FontFamily="Consolas, Menlo, monospace"
                        FontSize="10"
                        TextWrapping="Wrap" />
+            <!-- #1504 — layout editing gestures (BilliardRayInsetControl). -->
+            <TextBlock Grid.Row="3" Margin="6,0,6,4"
+                       Text="{x:Static vm:BilliardRayInsetViewModel.EditHintText}"
+                       Foreground="#8C8C8C" FontSize="10" TextWrapping="Wrap" />
         </Grid>
     </Border>
 </Window>

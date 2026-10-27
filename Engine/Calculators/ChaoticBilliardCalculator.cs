@@ -206,6 +206,10 @@ public sealed class BilliardScene
     private readonly double[] _cx, _cy, _r;
     private readonly bool _exitGap;
     private readonly double _gapBase;    // angle of ring disk 0; gap k is centred at _gapBase + (k + 1/2) * 2pi/n
+    // #1504 — Custom layout gates: gate k spans [_gateRel[k], _gateRel[k + 1]) radians
+    // after _gapBase (the angle of disk k's centre, disks sorted by angle from disk 0).
+    // Null for the generated geometries, whose gates are 2pi / n wide.
+    private readonly double[]? _gateRel;
 
     public int DiskCount => _cx.Length;
     public int MaxBounces { get; }
@@ -219,11 +223,13 @@ public sealed class BilliardScene
     public double DiskR(int i) => _r[i];
 
     private BilliardScene(double[] cx, double[] cy, double[] r, int maxBounces, int gateCount,
-                          bool exitGap, double gapBase, double playRadius, BilliardLaunchMode launch)
+                          bool exitGap, double gapBase, double playRadius, BilliardLaunchMode launch,
+                          double[]? gateRel = null)
     {
         _cx = cx; _cy = cy; _r = r;
         MaxBounces = maxBounces; GateCount = gateCount;
         _exitGap = exitGap; _gapBase = gapBase; PlayRadius = playRadius; LaunchMode = launch;
+        _gateRel = gateRel;
     }
 
     public static BilliardScene Build(FractalParameters p)
@@ -233,10 +239,27 @@ public sealed class BilliardScene
         double sep = Math.Max(1e-4, p.BilliardSeparation);
 
         double[] cx, cy;
+        double[]? r = null;
         double ringBase = 0.0;
         bool ring = false;
-        switch (p.BilliardGeometry)
+        var geometry = p.BilliardGeometry;
+        List<BilliardDisk>? custom = null;
+        if (geometry == BilliardGeometry.Custom)
         {
+            custom = BilliardLayout.ParseCustomDisks(p.BilliardCustomDisks);
+            if (custom.Count == 0) geometry = BilliardGeometry.ThreeDisk;   // no layout yet
+        }
+        switch (geometry)
+        {
+            case BilliardGeometry.Custom:
+                // #1504 — explicit disks. Disk 0 stays first (the PhaseSpace launch disk);
+                // the rest are ordered by centre angle from disk 0, so gate k is the gap
+                // between disks k and k + 1 going anticlockwise, as on a ring. A list made
+                // from a ring's centres is already in that order and builds the same scene.
+                (cx, cy, r) = OrderByAngle(custom!);
+                ringBase = Math.Atan2(cy[0], cx[0]);
+                ring = true;
+                break;
             case BilliardGeometry.ThreeDisk:
                 // Equilateral: centres at 90 deg, 210 deg, 330 deg on the sep circle.
                 ringBase = Math.PI / 2.0;
@@ -251,12 +274,23 @@ public sealed class BilliardScene
                 (cx, cy) = RandomCentres(Math.Clamp(p.BilliardDiskCount, 1, 64), diskR, sep, p.BilliardSeed);
                 break;
         }
-        var r = new double[cx.Length];
-        Array.Fill(r, diskR);
+        if (r == null)
+        {
+            r = new double[cx.Length];
+            Array.Fill(r, diskR);
+        }
 
-        // ExitGap needs a ring with at least two gaps; otherwise compass sectors.
+        // ExitGap needs a ring (or a Custom layout) with at least two gaps; otherwise
+        // compass sectors.
         bool exitGap = p.BilliardGateMode == BilliardGateMode.ExitGap && ring && cx.Length >= 2;
         int gateCount = exitGap ? cx.Length : Math.Clamp(p.BilliardGateCount, 2, 64);
+        double[]? gateRel = null;
+        if (exitGap && geometry == BilliardGeometry.Custom)
+        {
+            gateRel = new double[cx.Length + 1];
+            for (int i = 0; i < cx.Length; i++) gateRel[i] = RelAngle(Math.Atan2(cy[i], cx[i]), ringBase);
+            gateRel[cx.Length] = 2.0 * Math.PI;
+        }
 
         // Play region — a bounding circle the ray escapes through. Big enough to
         // enclose every disk with margin; far-field launches start on its boundary.
@@ -266,9 +300,38 @@ public sealed class BilliardScene
         double rPlay = Math.Max(3.0, sep * 1.5 + diskR * 2.0);
         double reach = 0.0;
         for (int i = 0; i < cx.Length; i++)
-            reach = Math.Max(reach, Math.Sqrt(cx[i] * cx[i] + cy[i] * cy[i]) + diskR);
+            reach = Math.Max(reach, Math.Sqrt(cx[i] * cx[i] + cy[i] * cy[i]) + r[i]);
         rPlay = Math.Max(rPlay, reach * PlayMargin);
-        return new BilliardScene(cx, cy, r, maxBounces, gateCount, exitGap, ringBase, rPlay, p.BilliardLaunchMode);
+        return new BilliardScene(cx, cy, r, maxBounces, gateCount, exitGap, ringBase, rPlay, p.BilliardLaunchMode, gateRel);
+    }
+
+    // Angle a measured anticlockwise from base, in [0, 2pi).
+    private static double RelAngle(double a, double baseAngle)
+    {
+        double rel = (a - baseAngle) % (2.0 * Math.PI);
+        return rel < 0 ? rel + 2.0 * Math.PI : rel;
+    }
+
+    // #1504 — disk 0 first, the rest by centre angle from disk 0 (stable for ties).
+    private static (double[] X, double[] Y, double[] R) OrderByAngle(List<BilliardDisk> disks)
+    {
+        double a0 = Math.Atan2(disks[0].Y, disks[0].X);
+        var order = new List<int>(disks.Count);
+        for (int i = 1; i < disks.Count; i++) order.Add(i);
+        order.Sort((i, j) =>
+        {
+            int c = RelAngle(Math.Atan2(disks[i].Y, disks[i].X), a0).CompareTo(RelAngle(Math.Atan2(disks[j].Y, disks[j].X), a0));
+            return c != 0 ? c : i.CompareTo(j);
+        });
+        order.Insert(0, 0);
+        var x = new double[disks.Count];
+        var y = new double[disks.Count];
+        var rr = new double[disks.Count];
+        for (int k = 0; k < order.Count; k++)
+        {
+            x[k] = disks[order[k]].X; y[k] = disks[order[k]].Y; rr[k] = disks[order[k]].R;
+        }
+        return (x, y, rr);
     }
 
     /// <summary>Play-circle radius as a multiple of the farthest disk edge (#1503).</summary>
@@ -455,7 +518,14 @@ public sealed class BilliardScene
     /// <summary>#1447 — start angle (radians from +x) of gate <paramref name="gate"/>'s sector
     /// of exit directions; the sector spans 2pi / GateCount from there (see <see cref="Gate"/>).</summary>
     public double GateStartAngle(int gate)
-        => (_exitGap ? _gapBase : 0.0) + gate * (2.0 * Math.PI / GateCount);
+        => _gateRel != null
+            ? _gapBase + _gateRel[gate]
+            : (_exitGap ? _gapBase : 0.0) + gate * (2.0 * Math.PI / GateCount);
+
+    /// <summary>#1504 — angular width of gate <paramref name="gate"/>'s sector (2pi / GateCount
+    /// except for a Custom layout's exit gaps).</summary>
+    public double GateWidth(int gate)
+        => _gateRel != null ? _gateRel[gate + 1] - _gateRel[gate] : 2.0 * Math.PI / GateCount;
 
     /// <summary>True when gates are the gaps between ring disks (ExitGap mode on a ring).</summary>
     public bool ExitGap => _exitGap;
@@ -468,6 +538,13 @@ public sealed class BilliardScene
         if (_exitGap) ang -= _gapBase;
         ang %= 2.0 * Math.PI;
         if (ang < 0) ang += 2.0 * Math.PI;
+        if (_gateRel != null)
+        {
+            // Last gate whose start is at or before ang (gates are sorted, gate 0 at 0).
+            int k = Array.BinarySearch(_gateRel, 0, GateCount, ang);
+            if (k < 0) k = ~k - 1;
+            return Math.Clamp(k, 0, GateCount - 1);
+        }
         int g = (int)(ang / (2.0 * Math.PI) * GateCount);
         return g >= GateCount ? GateCount - 1 : g;
     }

@@ -1298,6 +1298,11 @@ namespace FracturingFog.Models
         /// <summary>Draw rays that never hit a mirror as a muted background (#1445),
         /// so the scattered rays carry the picture. Default true.</summary>
         public bool BilliardMuteMisses { get; set; } = true;
+        /// <summary>#1504 — the <see cref="BilliardGeometry.Custom"/> disk list,
+        /// <c>x,y,r;x,y,r;...</c> in world units (invariant culture). Empty = no
+        /// custom layout yet (Custom then falls back to ThreeDisk). Kept when the
+        /// geometry is switched away, so switching back restores the layout.</summary>
+        public string BilliardCustomDisks { get; set; } = string.Empty;
 
         // Precision-sensitivity field (#628). Mandelbrot z² + c iterated at two
         // arithmetic tiers; the per-pixel divergence of the outcome is the image.
@@ -2163,6 +2168,7 @@ namespace FracturingFog.Models
                 BilliardLaunchMode = BilliardLaunchMode,
                 BilliardGateMode = BilliardGateMode,
                 BilliardMuteMisses = BilliardMuteMisses,
+                BilliardCustomDisks = BilliardCustomDisks,
                 PrecisionLowTier = PrecisionLowTier,
                 PrecisionHighTier = PrecisionHighTier,
                 PrecisionDiffMetric = PrecisionDiffMetric,
