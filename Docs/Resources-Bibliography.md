@@ -219,6 +219,9 @@ finite-size-Lyapunov literature, which these entries anchor.
   Reports 6, 2016. `BasinEntropy` (#1127).
 - **Helena E. Nusse, James A. Yorke.** *Wada basin boundaries and basin cells.* Physica D 90, 1996.
   Wada (three-or-more-way) exit basins.
+
+<a id="sweet-ott-yorke-1999"></a>
+
 - **David Sweet, Edward Ott, James A. Yorke.** *Topology in chaotic scattering.* Nature 399, 315–316,
   27 May 1999 (scientific correspondence). The four-mirror-ball Wada photograph: four touching mirrored
   balls stacked as a tetrahedron, a light ray leaving the inner chamber through one of four openings in

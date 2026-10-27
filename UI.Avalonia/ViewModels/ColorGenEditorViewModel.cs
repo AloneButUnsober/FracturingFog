@@ -52,7 +52,7 @@ public sealed class ColorGenEditorViewModel : ViewModelBase
         "//                   stripeAvg, tiaAvg, curvature, lyapunov, gaussian, expSmooth\n" +
         "//         trap   — primary trap; its shape is picked from the Trap shape menu\n" +
         "//                  (same 19 shapes as the Color Theme Editor). Point == trapMin.\n" +
-        "// Billiard (Chaotic Billiard fractal, CPU-only): gateId, gateCount,\n" +
+        "// Billiard (Chaotic Billiard / Wada Mirror Spheres, CPU-only): gateId, gateCount,\n" +
         "//                  bounceCount, maxBounces, pathLength (gateId < 0 = trapped)\n" +
         "// Funcs:  rgb(r,g,b), hsv(h,s,v), hsl(h,s,l), palette(t, c0, c1, …)\n" +
         "//         mix(a,b,t), brightness(c,s), contrast(c,s), gamma(c,g)\n" +
