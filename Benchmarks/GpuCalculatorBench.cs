@@ -74,6 +74,8 @@ public enum GpuFamily
     UserBulb,
     // #1173-B — Mandelbox under an HDRI sky with IBL ambient + reflections (gradient sky before G2.3).
     MandelboxHdri,
+    // #1443 — Wada mirror spheres: the ILGPU trace (photo mode, free continuation on).
+    MirrorSpheres,
     Mandelbulb,
 }
 
@@ -93,7 +95,7 @@ public class GpuCalculatorBench
     [Params(GpuFamily.Mandelbox, GpuFamily.Menger, GpuFamily.Sierpinski,
             GpuFamily.Octahedron, GpuFamily.Dodecahedron, GpuFamily.MandelboxRot,
             GpuFamily.QJulia, GpuFamily.QMandel, GpuFamily.QMandelDual, GpuFamily.Kleinian, GpuFamily.KleinianNecklace, GpuFamily.Bicomplex,
-            GpuFamily.BicomplexR, GpuFamily.Coquaternion, GpuFamily.UserBulb, GpuFamily.MandelboxHdri, GpuFamily.Mandelbulb)]
+            GpuFamily.BicomplexR, GpuFamily.Coquaternion, GpuFamily.UserBulb, GpuFamily.MandelboxHdri, GpuFamily.MirrorSpheres, GpuFamily.Mandelbulb)]
     public GpuFamily Family { get; set; }
 
     [Params(640, 1920)]
@@ -154,6 +156,14 @@ public class GpuCalculatorBench
                 FractalParameters = new FractalParameters
                 {
                     Lighting = fx, BicomplexSliceAxis = BicomplexSliceAxis.R, BicomplexSliceW = 0.4,
+                },
+            },
+            GpuFamily.MirrorSpheres => new MirrorSpheresCalculator(Width, height)
+            {
+                FractalParameters = new FractalParameters
+                {
+                    Lighting = fx, MirrorSpheresMode = MirrorSpheresMode.Photo,
+                    MirrorSpheresOpeningColors = "#D55E00,env,#F2F2F2,#000000",
                 },
             },
             _ => throw new ArgumentOutOfRangeException(nameof(Family)),
