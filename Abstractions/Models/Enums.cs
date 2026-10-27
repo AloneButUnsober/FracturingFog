@@ -111,6 +111,21 @@ namespace FracturingFog
     /// (the ChaoticBilliard PhaseSpace section).</summary>
     public enum BilliardRaySweep { BSweep, AngleSweep, PointSource, RandomFarField, PhaseSpace }
 
+    /// <summary>What colours a <see cref="FractalType.BilliardRays"/> pixel (#1507). Brightness is
+    /// always the log ray density; this picks the hue.
+    /// <see cref="Density"/>: the theme gradient over density (the S1 look).
+    /// <see cref="Gate"/>: the length-weighted mix of the exit-gate colours of the rays crossing
+    /// the pixel (theme gate colours when the theme is a billiard theme, else Okabe-Ito; trapped
+    /// rays grey), so each exit basin's flow shows in its own colour.
+    /// The rest are a length-weighted mean of one per-ray value, through the theme gradient:
+    /// <see cref="Bounces"/> (log scale to the bounce cap), <see cref="PathLength"/>,
+    /// <see cref="EntryAngle"/> / <see cref="ExitAngle"/> (travel direction, 0-360 degrees),
+    /// <see cref="GateDistance"/> (gates between entry and exit, round the ring), and
+    /// <see cref="SelfIntersects"/> (share of rays whose own path crosses itself). Rays with no
+    /// value (no exit when trapped, no entry gate when launched inside the play circle) add
+    /// brightness but not hue.</summary>
+    public enum BilliardRayColorSource { Density, Gate, Bounces, PathLength, EntryAngle, ExitAngle, GateDistance, SelfIntersects }
+
     /// <summary>How the Wada mirror spheres (#1440) colour a pixel.
     /// <see cref="Basins"/> (S1): the exit opening's categorical colour, from the
     /// billiard theme or Okabe-Ito, darkened per bounce. <see cref="Photo"/> (#1441):
@@ -962,7 +977,9 @@ namespace FracturingFog
         /// <c>BilliardRaysCount</c>, <c>BilliardRaysAngleCount</c>,
         /// <c>BilliardRaysAngle</c>, <c>BilliardRaysSpread</c>,
         /// <c>BilliardRaysSourceX/Y</c>, <c>BilliardRaysSeed</c>,
-        /// <c>BilliardRaysMinBounces</c>, <c>BilliardRaysShowDisks</c>.</summary>
+        /// <c>BilliardRaysMinBounces</c>, <c>BilliardRaysShowDisks</c>; #1507
+        /// <c>BilliardRaysColorSource</c> with the shared <c>BilliardGateMode</c> /
+        /// <c>BilliardGateCount</c>.</summary>
         BilliardRays,
     }
 

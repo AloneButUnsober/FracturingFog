@@ -608,6 +608,8 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysSeed { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysMinBounces { get; set; }
         [JsonIgnore(Condition = OmitNull)] public bool? BilliardRaysShowDisks { get; set; }
+        // #1507 — int cast of BilliardRayColorSource.
+        [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysColorSource { get; set; }
         // Precision-sensitivity field (#628). Tiers/metric stored as int casts of
         // PrecisionTier / PrecisionDiffMetric.
         [JsonIgnore(Condition = OmitNull)] public int? PrecisionLowTier { get; set; }
@@ -1039,6 +1041,10 @@ namespace FracturingFog.Models
                     BilliardRaysSeed = p.BilliardRaysSeed,
                     BilliardRaysMinBounces = p.BilliardRaysMinBounces,
                     BilliardRaysShowDisks = p.BilliardRaysShowDisks,
+                    // #1507 — gates now colour Billiard Rays too.
+                    BilliardGateMode = (int)p.BilliardGateMode,
+                    BilliardGateCount = p.BilliardGateCount,
+                    BilliardRaysColorSource = (int)p.BilliardRaysColorSource,
                 },
                 FractalType.PrecisionField => new RegionFractalParams
                 {
@@ -1761,6 +1767,7 @@ namespace FracturingFog.Models
             if (BilliardRaysSeed.HasValue)       p.BilliardRaysSeed = BilliardRaysSeed.Value;
             if (BilliardRaysMinBounces.HasValue) p.BilliardRaysMinBounces = BilliardRaysMinBounces.Value;
             if (BilliardRaysShowDisks.HasValue)  p.BilliardRaysShowDisks = BilliardRaysShowDisks.Value;
+            if (BilliardRaysColorSource.HasValue) p.BilliardRaysColorSource = (FracturingFog.BilliardRayColorSource)BilliardRaysColorSource.Value;
             // #1445 — a full pre-#1445 billiard snapshot (all seven #627 fields, none of
             // the new ones) keeps the look it was saved with: compass sectors, no muting.
             if (IsLegacyBilliardSnapshot)
