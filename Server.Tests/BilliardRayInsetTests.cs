@@ -105,7 +105,7 @@ public class BilliardRayInsetTests
         {
             FractalParameters = p, CenterX = cx, CenterY = cy, Zoom = zoom,
         };
-        calc.Calculate();
+        calc.Calculate(TestContext.Current.CancellationToken);
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++)
             {

@@ -34,8 +34,9 @@ public sealed class BilliardRayInsetViewModel : ViewModelBase
     /// <summary>Host: the current real-space scene; null when not the billiard.</summary>
     public Func<BilliardInsetScene?>? GetScene { get; set; }
 
-    /// <summary>Raised after anything the inset draws changed.</summary>
-    public event EventHandler? Changed;
+    /// <summary>Raised after anything the inset draws changed. (Not "Changed":
+    /// ReactiveObject already has that, for property-change notifications.)</summary>
+    public event EventHandler? InsetChanged;
 
     private readonly List<(double X, double Y)> _pinPlanes = new();
     private readonly List<BilliardRayPath> _pins = new();
@@ -127,6 +128,6 @@ public sealed class BilliardRayInsetViewModel : ViewModelBase
             lines.Add(Hover != null ? "Hover  " + Hover.Summary : HintText);
             Status = string.Join(Environment.NewLine, lines);
         }
-        Changed?.Invoke(this, EventArgs.Empty);
+        InsetChanged?.Invoke(this, EventArgs.Empty);
     }
 }

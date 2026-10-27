@@ -31,9 +31,9 @@ public sealed class BilliardRayInsetControl : Control
 
     public void Attach(BilliardRayInsetViewModel vm)
     {
-        if (_vm != null) _vm.Changed -= OnChanged;
+        if (_vm != null) _vm.InsetChanged -= OnChanged;
         _vm = vm;
-        _vm.Changed += OnChanged;
+        _vm.InsetChanged += OnChanged;
         InvalidateVisual();
     }
 

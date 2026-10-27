@@ -34,7 +34,7 @@ public sealed partial class BilliardRayInsetWindow : Window
         _status = this.FindControl<TextBlock>("StatusText")
             ?? throw new InvalidOperationException("TextBlock x:Name=StatusText missing");
         _status.Text = vm.Status;
-        vm.Changed += (_, _) => _status.Text = vm.Status;
+        vm.InsetChanged += (_, _) => _status.Text = vm.Status;
 
         if (this.FindControl<Button>("ClearPins") is { } clear)
             clear.Click += (_, _) => _vm.ClearPins();
