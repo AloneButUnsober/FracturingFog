@@ -188,6 +188,34 @@ theme + an optional per-axis bailout toggle on `FractalParameters`, no new calcu
 
 ---
 
+### 2.5 Wada mirror spheres — chaotic scattering in 3D — **#1439, S1–S3 shipped**
+
+**Math.** Four mutually tangent mirror spheres at the vertices of a tetrahedron; a light ray in the
+inner chamber leaves through one of four openings (one per face). The four exit basins share one
+fractal boundary with the Wada property: every boundary point is on the boundary of all four basins.
+Laboratory demonstration and the photograph that motivates the epic: [(Sweet, Ott & Yorke 1999)](../Resources-Bibliography.md#sweet-ott-yorke-1999).
+The name is from the Lakes of Wada [(Yoneyama 1917)](../Resources-Bibliography.md#yoneyama-lakes-of-wada).
+Ray-traced renders of the same scatterer are prior art [(Bourke 1998)](../Resources-Bibliography.md#bourke-wada).
+This is the 3D sibling of the 2D chaotic billiard (#627, #1445).
+
+**Toolchain reach.** A new calculator (`MirrorSpheresCalculator`), no DE: ray-sphere intersection is
+closed-form, so each bounce is exact, and the trace stops where the ray leaves the chamber (the paper's
+basin definition; classifying by final direction instead gave smooth, non-Wada boundaries from bounces
+off the balls' outer sides). *ColorGen / Theme* reach is free: the categorical outcome goes through
+`IBilliardColorMap` (gate = opening, gateCount = 4), so the billiard themes, the Categorical theme kind
+(#630) and billiard ColorGen programs (#633) drive it unchanged. *DSL* is out of reach (not an
+iteration). *Batch*: region snapshot → `--param`. Photo mode (#1441) takes its sky / HDRI from
+Lighting & FX and its mirror term from Schlick's Fresnel approximation [(Schlick 1994)](../Resources-Bibliography.md#schlick-fresnel).
+
+**Validation (independent invariants).** Rays in the plane through three ball centres reduce exactly to
+the 2D three-disk billiard; the cyclic coordinate shift permutes the openings; a tiny window around a
+bisected boundary point shows all four openings (the Wada property itself).
+
+**Status:** S1 #1440 (CPU, basins) and S2 #1441 (photo mode) shipped; S3 #1442 (colouring reuse + this
+doc + help) in review; S4 #1443 (GPU) and S5 #1444 (the 1999 photo preset, vertex-up) open.
+
+---
+
 ## 3. Bucket II — Theoretical (thin reference imagery, validation is the risk)
 
 Real published theory, near-zero faithful renders. Implementation risk is *correctness* — few images
@@ -608,6 +636,13 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   finite-separation reading of `D=E_c−E_z` (§3.6).
 - **Haller 2015** — George Haller. *Lagrangian coherent structures.* Annual Review of Fluid Mechanics
   47. FTLE ridges / transport barriers — the applied twin of the §3.6 separation field.
+- **Sweet, Ott & Yorke 1999** — D. Sweet, E. Ott, J. A. Yorke. *Topology in chaotic scattering.*
+  Nature 399, 315–316. The four-mirror-ball Wada experiment (§2.5).
+- **Yoneyama 1917** — Kunizô Yoneyama. *Theory of continuous set of points (not finished).* Tohoku
+  Mathematical Journal 12. The Lakes of Wada (§2.5).
+- **Bourke 1998** — Paul Bourke. *Wada basins: rendering chaotic scattering.* Prior-art renders (§2.5).
+- **Schlick 1994** — Christophe Schlick. *An inexpensive BRDF model for physically-based rendering.*
+  Computer Graphics Forum 13(3). Fresnel term of the photo mode (§2.5).
 
 ---
 
@@ -755,3 +790,7 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   found the volume is a classic Julibrot 3D slice and the 2D type reads two Julibrot points. Same enum
   values; old names still parse (`FractalTypeNames`, `FractalTypeJsonConverter`); calculator classes and
   `DualOrbit*` parameter keys unchanged. Entries above keep the names of their time.
+- **2026-10-27** — Added §2.5 Wada mirror spheres (#1439): the 3D chaotic-scattering sibling of the
+  billiard, from Sweet, Ott & Yorke 1999. S1 #1440 (CPU basin mode, PR #1495) and S2 #1441 (photo
+  mode, PR #1496 / #1497) shipped; S3 #1442 adds this section, the help page and colouring-reuse tests.
+  Bibliography (§7): Sweet–Ott–Yorke 1999, Yoneyama 1917, Bourke 1998, Schlick 1994.

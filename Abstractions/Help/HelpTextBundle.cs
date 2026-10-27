@@ -5043,6 +5043,86 @@ Möbius-group composition are deferred to a later slice — this
 first cut ships only the tetrahedral preset.
 ";
 
+        public const string MathMirrorSpheresText =
+@"=== Wada Mirror Spheres ===
+
+Four mirrored balls stacked like cannonballs (three on the bottom,
+one on top), every pair touching. Sweet, Ott and Yorke built this
+with Christmas-ornament-like mirror balls and photographed it for
+Nature in 1999 (see the Bibliography).
+
+The gaps between each three balls are openings into the small
+'inner chamber' in the middle, four openings in all, one in each
+face of the tetrahedron the ball centres form. Look in through
+one of them and the light you see has bounced between the mirrors,
+perhaps many times, after entering through one of the other
+openings.
+
+=== What a pixel shows ===
+
+Each pixel follows one ray backwards from the camera. It reflects
+off the balls (angle in = angle out) until it leaves the chamber
+through one of the four openings, and the pixel takes that
+opening's colour.
+
+The set of rays leaving through one opening is that opening's
+basin. Basins are not neat regions. Near any boundary between
+two colours you find all four colours, however far you zoom.
+That is the Wada property, named after the Lakes of Wada (three
+lakes sharing one boundary; Yoneyama 1917, credited to Takeo Wada).
+It is why the escape route is unpredictable: a ray near a
+boundary can leave through any of the four openings.
+
+=== Why the boundary is fractal ===
+
+A ray that grazes a ball can go either way, so the pattern of the
+whole view is repeated, squeezed, inside every reflection of every
+ball. Each repetition holds smaller ones, without end. The
+boundary's fractal dimension is about 1.6.
+
+=== Rendering ===
+
+There is no distance estimator: a ray meets a sphere where a
+quadratic has a root, so each bounce is exact. Rays stop when they
+leave the chamber, since a ray that has left can never come back.
+The bounce cap ends rays that are still bouncing (trapped, drawn
+black). The boundary needs many bounces.
+
+=== Modes ===
+
+  Basins  Each pixel in its opening's colour, darkened by
+          the light lost per bounce. Billiard themes and
+          billiard ColorGen programs recolour it: gateId is
+          the opening (0-3), gateCount is 4, bounceCount,
+          maxBounces and pathLength as for the billiard.
+  Photo   The photograph's setup. Each opening has a coloured
+          board behind it, or is open to the Lighting & FX
+          sky / HDRI. The opening the camera looks through is
+          black (the dark room). Mirrors keep more light at
+          grazing angles (Schlick's Fresnel term).
+
+=== Parameters ===
+
+  Ball radius     Fraction of the touching radius. 1 = the
+                  touching stack; smaller opens the gaps and the
+                  basins simplify.
+  Max bounces     Reflections before a ray counts as trapped.
+  Reflectance     Light kept per bounce (head-on, in Photo mode).
+  Mute misses     Basins mode: rays that never enter the chamber
+                  are drawn dark.
+  Opening colours Photo mode: four entries, #RRGGBB or env.
+  Camera          Right-drag orbits, wheel dollies. The default
+                  looks straight in through one opening; the ray
+                  at the centre comes back out to you (you see
+                  yourself).
+
+On the command line every setting is a --param key, e.g.
+  --param MirrorSpheresMode=1
+  --param ""MirrorSpheresOpeningColors=#D55E00,env,#F2F2F2,#000000""
+and the camera is Cam3DFamily=MirrorSpheres with Cam3DDistance /
+Cam3DTheta / Cam3DPhi.
+";
+
         public const string MathBicomplexText =
 @"=== Bicomplex (Tessarine) Mandelbrot ===
 
