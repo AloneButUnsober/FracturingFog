@@ -230,7 +230,7 @@ the pointer in real space through the render's own plane mapping and scene; Ctrl
 neighbours either side of a basin boundary show their divergence. Tests check the recorded paths against
 the reflection law and against the render's per-pixel bounce counts. The inset is live only: it is never
 drawn into a render or export, so it adds nothing to the batch. The mirror spheres could use the same
-inspector later.
+inspector later. #1503 fixed NDisk placing fewer disks than requested: its random field now spreads wider until every disk fits, and the play circle covers every disk. The params panel warns when Ring / ThreeDisk neighbours touch, which closes the exit gaps.
 
 **Status:** S1–S5 shipped (#1440–#1444); epic #1439 complete.
 
@@ -819,3 +819,4 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
 - **2026-10-27** — §2.5: S5 #1444, the 1999 photograph as a built-in region (`VertexUp` orientation, plain
   room colour); epic #1439 complete.
 - **2026-10-27** — §2.5: the 2D billiard ray-path inset #1447 (hover / pin a pixel to see its ray; live only).
+- **2026-10-27** — §2.5: NDisk places every requested disk (#1503); Ring overlap warning.
