@@ -1597,6 +1597,15 @@ namespace FracturingFog.Models
         /// F0 + (1 − F0)(1 − cos θ)⁵ with F0 = <see cref="MirrorSpheresReflectance"/>, so
         /// grazing bounces lose less than head-on ones. Off = F0 per bounce. Default true.</summary>
         public bool MirrorSpheresFresnel { get; set; } = true;
+        /// <summary>#1444 — CubeCorners (default, world +y up) or VertexUp (ball 0 on top
+        /// of the other three, as in the 1999 photograph). In VertexUp the camera's θ / φ
+        /// orbit around the vertical through the top ball.</summary>
+        public MirrorSpheresOrientation MirrorSpheresOrientation { get; set; } = MirrorSpheresOrientation.CubeCorners;
+        /// <summary>#1444 — Photo mode: what rays that never enter the chamber show (the
+        /// room reflected in the balls' outer sides). <c>env</c> (default) = the Lighting
+        /// &amp; FX sky / HDRI; <c>#RRGGBB</c> = a plain room (the photograph's dark room is
+        /// <c>#000000</c>).</summary>
+        public string MirrorSpheresRoomColor { get; set; } = "env";
 
         // Bicomplex Mandelbrot (tessarine algebra, commutative; i² = j² = −1,
         // k² = +1, ij = ji = k). Raymarched 3D slice; pixel (x, y, z) routes
@@ -2252,6 +2261,8 @@ namespace FracturingFog.Models
                 MirrorSpheresOpeningColors = MirrorSpheresOpeningColors,
                 MirrorSpheresViewerBlack = MirrorSpheresViewerBlack,
                 MirrorSpheresFresnel = MirrorSpheresFresnel,
+                MirrorSpheresOrientation = MirrorSpheresOrientation,
+                MirrorSpheresRoomColor = MirrorSpheresRoomColor,
                 BicomplexSliceW = BicomplexSliceW,
                 BicomplexSliceAxis = BicomplexSliceAxis,
                 BicomplexIterations = BicomplexIterations,

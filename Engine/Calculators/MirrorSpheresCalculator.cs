@@ -248,6 +248,7 @@ public sealed class MirrorSpheresCalculator : IFractalCalculator, IStereoEyeCame
         double reflectance = Math.Clamp(p.MirrorSpheresReflectance, 0.0, 1.0);
         double pathRef = cam.Distance * 4.0;
         var paint = MirrorSpheresPalette.Parse(p.MirrorSpheresOpeningColors);
+        var room = MirrorSpheresPalette.ParseOne(p.MirrorSpheresRoomColor, new MirrorSpheresPalette.Paint(0, true));
         int viewer = photo && p.MirrorSpheresViewerBlack
             ? MirrorSpheresScene.Opening(cam.X, cam.Y, cam.Z)   // the face the camera sits in front of
             : -1;
@@ -273,9 +274,9 @@ public sealed class MirrorSpheresCalculator : IFractalCalculator, IStereoEyeCame
                 if (photo)
                 {
                     MirrorSpheresOutcome free = default;
-                    if (PhotoNeedsFreeTrace(in o, paint, viewer))
+                    if (PhotoNeedsFreeTrace(in o, paint, viewer, room))
                         free = gpuOut != null ? gpuOut.Free(idx) : scene.Trace(cam.X, cam.Y, cam.Z, dx, dy, dz, stopAtChamberExit: false);
-                    col = PhotoColor(in o, in free, paint, viewer, in fx);
+                    col = PhotoColor(in o, in free, paint, viewer, room, in fx);
                 }
                 else if (o.Gate < 0)
                 {
@@ -313,7 +314,7 @@ public sealed class MirrorSpheresCalculator : IFractalCalculator, IStereoEyeCame
                 {
                     cam.Ray(x, y, width, height, out double dx, out double dy, out double dz);
                     var o = scene.Trace(cam.X, cam.Y, cam.Z, dx, dy, dz);
-                    if (photo && PhotoNeedsFreeTrace(in o, paint, viewer))
+                    if (photo && PhotoNeedsFreeTrace(in o, paint, viewer, room))
                         scene.Trace(cam.X, cam.Y, cam.Z, dx, dy, dz, stopAtChamberExit: false);
                 }
                 Interlocked.Increment(ref rows);
@@ -333,10 +334,11 @@ public sealed class MirrorSpheresCalculator : IFractalCalculator, IStereoEyeCame
     /// <summary>#1441 — photo mode needs the free continuation (the ray traced on past
     /// the chamber until nothing is ahead) when the ray leaves through an <c>env</c>
     /// opening or never entered the chamber at all.</summary>
-    public static bool PhotoNeedsFreeTrace(in MirrorSpheresOutcome o, MirrorSpheresPalette.Paint[] paint, int viewerOpening)
+    public static bool PhotoNeedsFreeTrace(in MirrorSpheresOutcome o, MirrorSpheresPalette.Paint[] paint, int viewerOpening,
+                                           MirrorSpheresPalette.Paint room)
     {
         if (o.Gate < 0) return false;
-        if (!o.EnteredChamber) return true;
+        if (!o.EnteredChamber) return room.Environment;   // #1444 — a plain room needs no direction
         return o.Gate != viewerOpening && paint[o.Gate].Environment;
     }
 
@@ -347,13 +349,17 @@ public sealed class MirrorSpheresCalculator : IFractalCalculator, IStereoEyeCame
     /// colour is scaled by the light the reflections kept. The camera's own opening is
     /// black when <c>MirrorSpheresViewerBlack</c> is on (<paramref name="viewerOpening"/> ≥ 0).</summary>
     public static uint PhotoColor(in MirrorSpheresOutcome o, in MirrorSpheresOutcome free, MirrorSpheresPalette.Paint[] paint,
-                                  int viewerOpening, in LightingFxData fx)
+                                  int viewerOpening, MirrorSpheresPalette.Paint room, in LightingFxData fx)
     {
         const uint black = 0xFF000000u;
         if (o.Gate < 0) return black;   // trapped: no light gets out
         if (o.EnteredChamber && o.Gate == viewerOpening) return black;
         if (o.EnteredChamber && !paint[o.Gate].Environment)
             return Scale(paint[o.Gate].Color, o.Throughput);
+        // #1444 — a plain room (the photograph's dark room). A ray that never entered
+        // traced its whole path already, so its kept light is o.Throughput.
+        if (!o.EnteredChamber && !room.Environment)
+            return Scale(room.Color, o.Throughput);
 
         if (free.Gate < 0) return black;
         uint sky = ShadingPipeline.ApplyBackgroundFog(
@@ -614,6 +620,16 @@ public readonly struct MirrorSpheresCamera
         double ux = ry * fz - rz * fy, uy = rz * fx - rx * fz, uz = rx * fy - ry * fx;
         x += rx * eyeOffset; y += ry * eyeOffset; z += rz * eyeOffset;
 
+        if (p.MirrorSpheresOrientation == MirrorSpheresOrientation.VertexUp)
+        {
+            // #1444 — the camera above was built in a display frame whose +y is the top
+            // ball; carry it into scene coordinates (the balls never move).
+            VertexUp(ref x, ref y, ref z);
+            VertexUp(ref fx, ref fy, ref fz);
+            VertexUp(ref rx, ref ry, ref rz);
+            VertexUp(ref ux, ref uy, ref uz);
+        }
+
         // Inside the floor, zoom narrows the lens instead of moving the camera.
         double lens = raw >= floor ? 1.0 : Math.Max(0.05, raw / floor);
         double fov = Math.Tan(0.5 * Math.PI / 3.0) * lens;
@@ -633,6 +649,22 @@ public readonly struct MirrorSpheresCamera
         FovScale = _fov, Aspect = (double)width / height,
         PanU = _panU, PanV = _panV,
     };
+
+    /// <summary>#1444 — the VertexUp display frame in scene coordinates: up = ball 0's
+    /// direction (1, 1, 1)/√3; x = the horizontal part of the face-3 (upper viewing
+    /// opening) normal, (1, 1, −2)/√6, so θ = 0 looks in through that opening;
+    /// z = x × up = (1, −1, 0)/√2. Orthonormal and right-handed.</summary>
+    public static readonly (double X, double Y, double Z) VertexUpX = (1 / Math.Sqrt(6), 1 / Math.Sqrt(6), -2 / Math.Sqrt(6));
+    public static readonly (double X, double Y, double Z) VertexUpY = (1 / Math.Sqrt(3), 1 / Math.Sqrt(3), 1 / Math.Sqrt(3));
+    public static readonly (double X, double Y, double Z) VertexUpZ = (1 / Math.Sqrt(2), -1 / Math.Sqrt(2), 0.0);
+
+    private static void VertexUp(ref double x, ref double y, ref double z)
+    {
+        double sx = VertexUpX.X * x + VertexUpY.X * y + VertexUpZ.X * z;
+        double sy = VertexUpX.Y * x + VertexUpY.Y * y + VertexUpZ.Y * z;
+        double sz = VertexUpX.Z * x + VertexUpY.Z * y + VertexUpZ.Z * z;
+        x = sx; y = sy; z = sz;
+    }
 
     /// <summary>Unit ray direction through pixel (<paramref name="px"/>, <paramref name="py"/>).</summary>
     public void Ray(int px, int py, int width, int height, out double dx, out double dy, out double dz)
@@ -675,18 +707,19 @@ public static class MirrorSpheresPalette
         if (string.IsNullOrWhiteSpace(text)) return result;
         var parts = text.Split(',');
         for (int k = 0; k < result.Length && k < parts.Length; k++)
-        {
-            string t = parts[k].Trim();
-            if (t.Equals("env", StringComparison.OrdinalIgnoreCase))
-            {
-                result[k] = new Paint(0, true);
-                continue;
-            }
-            if (t.StartsWith('#')) t = t.Substring(1);
-            if (t.Length == 6 && uint.TryParse(t, System.Globalization.NumberStyles.HexNumber,
-                    System.Globalization.CultureInfo.InvariantCulture, out uint rgb))
-                result[k] = new Paint(0xFF000000u | rgb, false);
-        }
+            result[k] = ParseOne(parts[k], result[k]);
         return result;
+    }
+
+    /// <summary>One entry: "#RRGGBB" / "RRGGBB" / "env", else <paramref name="fallback"/>.</summary>
+    public static Paint ParseOne(string? entry, Paint fallback)
+    {
+        string t = (entry ?? "").Trim();
+        if (t.Equals("env", StringComparison.OrdinalIgnoreCase)) return new Paint(0, true);
+        if (t.StartsWith('#')) t = t.Substring(1);
+        return t.Length == 6 && uint.TryParse(t, System.Globalization.NumberStyles.HexNumber,
+                   System.Globalization.CultureInfo.InvariantCulture, out uint rgb)
+            ? new Paint(0xFF000000u | rgb, false)
+            : fallback;
     }
 }

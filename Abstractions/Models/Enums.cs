@@ -104,6 +104,13 @@ namespace FracturingFog
     /// (<c>MirrorSpheresFresnel</c>).</summary>
     public enum MirrorSpheresMode { Basins, Photo }
 
+    /// <summary>How the Wada mirror spheres (#1444) sit in the view. <see cref="CubeCorners"/>
+    /// (default): the balls at the even-parity (±1, ±1, ±1) corners with world +y up, so no
+    /// ball is on top. <see cref="VertexUp"/>: the 1999 experiment's stack, with ball 0 on
+    /// top of the other three (resting on the table). The camera's θ / φ then orbit around
+    /// the vertical through the top ball, and the frame keeps that ball up.</summary>
+    public enum MirrorSpheresOrientation { CubeCorners, VertexUp }
+
     /// <summary>Arithmetic precision tier for the PrecisionField (#628) diff
     /// renderer. The map z² + c is iterated at two tiers and the per-pixel
     /// divergence of the outcome is the image. <see cref="Float"/> (32-bit) and
@@ -925,7 +932,8 @@ namespace FracturingFog
         /// <c>MirrorSpheresMaxBounces</c>, <c>MirrorSpheresReflectance</c>,
         /// <c>MirrorSpheresMuteMisses</c>, <c>MirrorSpheresCamera*</c>; photo mode (#1441)
         /// <c>MirrorSpheresMode</c>, <c>MirrorSpheresOpeningColors</c>,
-        /// <c>MirrorSpheresViewerBlack</c>, <c>MirrorSpheresFresnel</c>.</summary>
+        /// <c>MirrorSpheresViewerBlack</c>, <c>MirrorSpheresFresnel</c>; #1444
+        /// <c>MirrorSpheresOrientation</c>, <c>MirrorSpheresRoomColor</c>.</summary>
         MirrorSpheres,
     }
 

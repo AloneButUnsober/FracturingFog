@@ -633,6 +633,9 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public string? MirrorSpheresOpeningColors { get; set; }
         [JsonIgnore(Condition = OmitNull)] public bool? MirrorSpheresViewerBlack { get; set; }
         [JsonIgnore(Condition = OmitNull)] public bool? MirrorSpheresFresnel { get; set; }
+        // #1444 — orientation (int cast of MirrorSpheresOrientation) + room colour.
+        [JsonIgnore(Condition = OmitNull)] public int? MirrorSpheresOrientation { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public string? MirrorSpheresRoomColor { get; set; }
 
         // #94 (P4) — non-spatial family params. These families ignore plane
         // zoom, so the video slideshow renders them as a static-hold leg; the
@@ -1114,6 +1117,11 @@ namespace FracturingFog.Models
                         ? p.MirrorSpheresViewerBlack : (bool?)null,
                     MirrorSpheresFresnel = p.MirrorSpheresFresnel != D.MirrorSpheresFresnel
                         ? p.MirrorSpheresFresnel : (bool?)null,
+                    // #1444 — orientation + room.
+                    MirrorSpheresOrientation = p.MirrorSpheresOrientation != D.MirrorSpheresOrientation
+                        ? (int)p.MirrorSpheresOrientation : (int?)null,
+                    MirrorSpheresRoomColor = p.MirrorSpheresRoomColor != D.MirrorSpheresRoomColor
+                        ? p.MirrorSpheresRoomColor : null,
                 },
                 FractalType.BicomplexMandelbrot => new RegionFractalParams
                 {
@@ -1796,6 +1804,8 @@ namespace FracturingFog.Models
             if (MirrorSpheresOpeningColors != null) p.MirrorSpheresOpeningColors = MirrorSpheresOpeningColors;
             if (MirrorSpheresViewerBlack.HasValue) p.MirrorSpheresViewerBlack = MirrorSpheresViewerBlack.Value;
             if (MirrorSpheresFresnel.HasValue) p.MirrorSpheresFresnel = MirrorSpheresFresnel.Value;
+            if (MirrorSpheresOrientation.HasValue) p.MirrorSpheresOrientation = (FracturingFog.MirrorSpheresOrientation)MirrorSpheresOrientation.Value;   // #1444
+            if (MirrorSpheresRoomColor != null) p.MirrorSpheresRoomColor = MirrorSpheresRoomColor;
             if (KleinianNecklaceCount.HasValue) p.KleinianNecklaceCount = KleinianNecklaceCount.Value;
             if (KleinianCustomSpheres != null) p.KleinianCustomSpheres = KleinianCustomSpheres.ConvertAll(s => s.Clone());
             if (KleinianRotationAngle.HasValue) p.KleinianRotationAngle = KleinianRotationAngle.Value;
@@ -2754,6 +2764,37 @@ namespace FracturingFog.Models
                 RegionType  = RegionType.BuiltIn,
                 FractalType = FractalType.Kleinian,
                 QualityPreset = QualityPreset.Standard
+            },
+            // #1444 — the Sweet, Ott & Yorke 1999 Nature photograph (Fig. 2): four touching
+            // mirrored balls stacked like cannonballs, seen through one of the upper openings.
+            // Red and blue boards cover the other two upper openings, white light comes in
+            // through the bottom opening, and the viewing opening and the room are dark.
+            // Opening k is the face opposite ball k: 0 faces the table (white), 1 and 2 are
+            // the upper boards, 3 is the viewing opening. Vermillion stands in for the red
+            // board (colour-blind safe). Which upper opening held which board isn't stated.
+            new()
+            {
+                Name        = "Wada Mirror Spheres - 1999 Photograph",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  2.2,   // the opening fills the frame, as in Fig. 2
+                Iterations  = 256,
+                Description = "The Sweet, Ott & Yorke (Nature, 1999) four-mirror-ball photograph: looking in through an upper opening of the touching stack, with red and blue boards over the other upper openings, white light from below and a dark room. Every boundary between the colours has all four colours near it at every zoom (the Wada property).",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.MirrorSpheres,
+                QualityPreset = QualityPreset.Standard,
+                Params      = new RegionFractalParams
+                {
+                    Cam3DFamily = (int)FractalType.MirrorSpheres,
+                    Cam3DDistance = 3.8,
+                    Cam3DTheta = 0.0,
+                    Cam3DPhi = 1.2309594173407747,   // acos(1/3): the upper opening's outward normal
+                    MirrorSpheresMode = (int)FracturingFog.MirrorSpheresMode.Photo,
+                    MirrorSpheresOrientation = (int)FracturingFog.MirrorSpheresOrientation.VertexUp,
+                    MirrorSpheresOpeningColors = "#F2F2F2,#D55E00,#0072B2,#000000",
+                    MirrorSpheresRoomColor = "#000000",
+                    MirrorSpheresMaxBounces = 256,
+                },
             },
             new()
             {

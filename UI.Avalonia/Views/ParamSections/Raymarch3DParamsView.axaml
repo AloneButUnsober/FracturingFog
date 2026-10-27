@@ -321,7 +321,7 @@
         <!-- Wada mirror spheres (#1440) -->
         <Grid IsVisible="{Binding IsMirrorSpheres}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Ball radius:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="0" Grid.Column="1"
                            Minimum="0.05" Maximum="1.0" Increment="0.01" FormatString="F2"
@@ -374,6 +374,17 @@
                       IsChecked="{Binding MirrorSpheresFresnel, Mode=TwoWay}" Margin="0,2"
                       IsVisible="{Binding IsMirrorSpheresPhoto}"
                       ToolTip.Tip="Grazing reflections keep more light than head-on ones (Schlick's approximation). Off: every bounce keeps the reflectance." />
+            <TextBlock Grid.Row="12" Grid.Column="0" Text="Room:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsMirrorSpheresPhoto}" />
+            <TextBox Grid.Row="12" Grid.Column="1" Margin="0,2"
+                     Text="{Binding MirrorSpheresRoomColor, Mode=TwoWay}"
+                     IsVisible="{Binding IsMirrorSpheresPhoto}"
+                     ToolTip.Tip="What the balls' outer sides reflect: env for the Lighting &amp; FX sky / HDRI, or #RRGGBB for a plain room (#000000 = the photograph's dark room)." />
+            <TextBlock Grid.Row="13" Grid.Column="0" Text="Orientation:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="13" Grid.Column="1" HorizontalAlignment="Stretch" Margin="0,2"
+                      ItemsSource="{Binding MirrorSpheresOrientations}"
+                      SelectedItem="{Binding MirrorSpheresOrientation, Mode=TwoWay}"
+                      ToolTip.Tip="CubeCorners: the balls at the cube corners, world up. VertexUp: one ball on top of the other three, as stacked in the 1999 experiment; the camera orbits around the vertical through the top ball." />
         </Grid>
 
         <Grid IsVisible="{Binding IsKleinian}"
