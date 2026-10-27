@@ -106,6 +106,7 @@ namespace FracturingFog.Input
                     FractalType.QuaternionJulia => ViewState.FractalParameters.QJuliaCameraTheta,
                     FractalType.QuaternionMandelbrot => ViewState.FractalParameters.QMandelCameraTheta,
                     FractalType.Kleinian        => ViewState.FractalParameters.KleinianCameraTheta,
+                    FractalType.MirrorSpheres   => ViewState.FractalParameters.MirrorSpheresCameraTheta,
                     FractalType.BicomplexMandelbrot => ViewState.FractalParameters.BicomplexCameraTheta,
                     FractalType.Coquaternion    => ViewState.FractalParameters.CoquaternionCameraTheta,
                     FractalType.Julibrot => ViewState.FractalParameters.DualOrbitVolumeCameraTheta,
@@ -119,6 +120,7 @@ namespace FracturingFog.Input
                     FractalType.QuaternionJulia => ViewState.FractalParameters.QJuliaCameraPhi,
                     FractalType.QuaternionMandelbrot => ViewState.FractalParameters.QMandelCameraPhi,
                     FractalType.Kleinian        => ViewState.FractalParameters.KleinianCameraPhi,
+                    FractalType.MirrorSpheres   => ViewState.FractalParameters.MirrorSpheresCameraPhi,
                     FractalType.BicomplexMandelbrot => ViewState.FractalParameters.BicomplexCameraPhi,
                     FractalType.Coquaternion    => ViewState.FractalParameters.CoquaternionCameraPhi,
                     FractalType.Julibrot => ViewState.FractalParameters.DualOrbitVolumeCameraPhi,
@@ -224,6 +226,10 @@ namespace FracturingFog.Input
                     case FractalType.Kleinian:
                         ViewState.FractalParameters.KleinianCameraTheta = newTheta;
                         ViewState.FractalParameters.KleinianCameraPhi = newPhi;
+                        break;
+                    case FractalType.MirrorSpheres:
+                        ViewState.FractalParameters.MirrorSpheresCameraTheta = newTheta;
+                        ViewState.FractalParameters.MirrorSpheresCameraPhi = newPhi;
                         break;
                     case FractalType.BicomplexMandelbrot:
                         ViewState.FractalParameters.BicomplexCameraTheta = newTheta;
@@ -614,6 +620,9 @@ namespace FracturingFog.Input
             else if (ViewState.FractalType == FractalType.Kleinian)
                 ViewState.FractalParameters.KleinianCameraDistance = Math.Clamp(
                     ViewState.FractalParameters.KleinianCameraDistance + delta, 0.1, 500.0);
+            else if (ViewState.FractalType == FractalType.MirrorSpheres)
+                ViewState.FractalParameters.MirrorSpheresCameraDistance = Math.Clamp(
+                    ViewState.FractalParameters.MirrorSpheresCameraDistance + delta, 0.1, 500.0);
             else if (ViewState.FractalType == FractalType.BicomplexMandelbrot)
                 ViewState.FractalParameters.BicomplexCameraDistance = Math.Clamp(
                     ViewState.FractalParameters.BicomplexCameraDistance + delta, 0.1, 500.0);
@@ -643,6 +652,8 @@ namespace FracturingFog.Input
                 ViewState.FractalParameters.QMandelCameraTheta = NormalizeAngle(ViewState.FractalParameters.QMandelCameraTheta + delta);
             else if (ViewState.FractalType == FractalType.Kleinian)
                 ViewState.FractalParameters.KleinianCameraTheta = NormalizeAngle(ViewState.FractalParameters.KleinianCameraTheta + delta);
+            else if (ViewState.FractalType == FractalType.MirrorSpheres)
+                ViewState.FractalParameters.MirrorSpheresCameraTheta = NormalizeAngle(ViewState.FractalParameters.MirrorSpheresCameraTheta + delta);
             else if (ViewState.FractalType == FractalType.BicomplexMandelbrot)
                 ViewState.FractalParameters.BicomplexCameraTheta = NormalizeAngle(ViewState.FractalParameters.BicomplexCameraTheta + delta);
             else if (ViewState.FractalType == FractalType.Coquaternion)
@@ -678,6 +689,9 @@ namespace FracturingFog.Input
             else if (ViewState.FractalType == FractalType.Kleinian)
                 ViewState.FractalParameters.KleinianCameraPhi = Math.Clamp(
                     ViewState.FractalParameters.KleinianCameraPhi + delta, phiMin, phiMax);
+            else if (ViewState.FractalType == FractalType.MirrorSpheres)
+                ViewState.FractalParameters.MirrorSpheresCameraPhi = Math.Clamp(
+                    ViewState.FractalParameters.MirrorSpheresCameraPhi + delta, phiMin, phiMax);
             else if (ViewState.FractalType == FractalType.BicomplexMandelbrot)
                 ViewState.FractalParameters.BicomplexCameraPhi = Math.Clamp(
                     ViewState.FractalParameters.BicomplexCameraPhi + delta, phiMin, phiMax);

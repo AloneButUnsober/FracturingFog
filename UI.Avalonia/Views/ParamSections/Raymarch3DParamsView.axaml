@@ -318,6 +318,45 @@
         </Grid>
 
         <!-- Kleinian -->
+        <!-- Wada mirror spheres (#1440) -->
+        <Grid IsVisible="{Binding IsMirrorSpheres}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Ball radius:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1"
+                           Minimum="0.05" Maximum="1.0" Increment="0.01" FormatString="F2"
+                           Value="{Binding MirrorSpheresRadiusScale, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Ball radius as a fraction of the touching radius. 1 = every pair of balls touches (the 1999 experiment); smaller opens the gaps and simplifies the basins." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Max bounces:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="1" Maximum="4096" Increment="16" FormatString="F0"
+                           Value="{Binding MirrorSpheresMaxBounces, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Reflections before a ray counts as trapped. Deep boundary detail needs many." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Reflectance:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1"
+                           Minimum="0" Maximum="1" Increment="0.05" FormatString="F2"
+                           Value="{Binding MirrorSpheresReflectance, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Light kept per reflection. Below 1, rays that bounce many times (near the basin boundaries) darken." />
+            <CheckBox Grid.Row="3" Grid.Column="1" Content="Mute direct misses"
+                      IsChecked="{Binding MirrorSpheresMuteMisses, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Draw rays that never hit a ball as a dark background." />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Cam θ (azim):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1"
+                           Minimum="-10" Maximum="10" Increment="0.05" FormatString="F3"
+                           Value="{Binding MirrorSpheresCameraTheta, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Cam φ (elev):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1"
+                           Minimum="0.01" Maximum="3.13" Increment="0.05" FormatString="F3"
+                           Value="{Binding MirrorSpheresCameraPhi, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Cam dist:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="6" Grid.Column="1"
+                           Minimum="0.1" Maximum="500" Increment="0.1" FormatString="F2"
+                           Value="{Binding MirrorSpheresCameraDistance, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="2"
+                       Text="Colours are the four exit openings. Pick a Billiard theme to recolour them."
+                       TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4,0,0" />
+        </Grid>
+
         <Grid IsVisible="{Binding IsKleinian}"
               ColumnDefinitions="160,*"
               RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">

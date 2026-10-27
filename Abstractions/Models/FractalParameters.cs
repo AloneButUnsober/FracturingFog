@@ -1558,6 +1558,29 @@ namespace FracturingFog.Models
         public double KleinianLightTheta { get; set; } = Math.PI * 0.25;
         public double KleinianLightPhi { get; set; } = Math.PI * 0.45;
 
+        // Wada mirror spheres (#1440). Four mirrored balls at the even-parity
+        // (±1, ±1, ±1) cube corners; rays reflect until they leave through one of
+        // the four openings between the balls.
+        /// <summary>Ball radius as a fraction of the tangent radius √2: 1 = every pair
+        /// touches (the 1999 experiment), smaller opens the gaps. Clamped to [0.05, 1].
+        /// Default 1.</summary>
+        public double MirrorSpheresRadiusScale { get; set; } = 1.0;
+        /// <summary>Reflections before a ray is declared trapped. Deep boundary detail
+        /// needs many (Bourke's renders used 1000). Clamped to [1, 4096]. Default 128.</summary>
+        public int MirrorSpheresMaxBounces { get; set; } = 128;
+        /// <summary>Fraction of the light each reflection keeps (colour × reflectance^bounces):
+        /// deep-scattered rays near the basin boundaries darken. 1 = lossless. Default 0.85.</summary>
+        public double MirrorSpheresReflectance { get; set; } = 0.85;
+        /// <summary>Draw rays that miss every ball as a muted background. Default true.</summary>
+        public bool MirrorSpheresMuteMisses { get; set; } = true;
+        /// <summary>Orbit camera distance from the centre. Default 4 (the opening fills the middle third).</summary>
+        public double MirrorSpheresCameraDistance { get; set; } = 4.0;
+        /// <summary>Camera azimuth. The default (−π/4) with the default elevation looks
+        /// straight in through the opening opposite the ball at (−1, −1, 1).</summary>
+        public double MirrorSpheresCameraTheta { get; set; } = -Math.PI * 0.25;
+        /// <summary>Camera elevation from +y. Default acos(1/√3) ≈ 0.9553 (see theta).</summary>
+        public double MirrorSpheresCameraPhi { get; set; } = 0.9553166181245093;
+
         // Bicomplex Mandelbrot (tessarine algebra, commutative; i² = j² = −1,
         // k² = +1, ij = ji = k). Raymarched 3D slice; pixel (x, y, z) routes
         // to (c.1, c.i, c.j) with c.k pinned to BicomplexSliceW.
@@ -2201,6 +2224,13 @@ namespace FracturingFog.Models
                 KleinianCameraPhi = KleinianCameraPhi,
                 KleinianLightTheta = KleinianLightTheta,
                 KleinianLightPhi = KleinianLightPhi,
+                MirrorSpheresRadiusScale = MirrorSpheresRadiusScale,
+                MirrorSpheresMaxBounces = MirrorSpheresMaxBounces,
+                MirrorSpheresReflectance = MirrorSpheresReflectance,
+                MirrorSpheresMuteMisses = MirrorSpheresMuteMisses,
+                MirrorSpheresCameraDistance = MirrorSpheresCameraDistance,
+                MirrorSpheresCameraTheta = MirrorSpheresCameraTheta,
+                MirrorSpheresCameraPhi = MirrorSpheresCameraPhi,
                 BicomplexSliceW = BicomplexSliceW,
                 BicomplexSliceAxis = BicomplexSliceAxis,
                 BicomplexIterations = BicomplexIterations,

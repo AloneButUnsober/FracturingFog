@@ -34,6 +34,7 @@ public sealed class MeshExportCapabilityTests
         var raymarch = Enum.GetValues<FractalType>()
             .Where(t => FractalMotionCapabilities.MotionClass(t) == FractalMotionClass.Raymarch3D)
             .Where(t => t != FractalType.UserBulb)   // compiled-kernel DE, exports via its editor
+            .Where(t => t != FractalType.MirrorSpheres)   // #1440: no DE, no surface to mesh — the image is the reflections
             .ToArray();
         Assert.NotEmpty(raymarch);
         foreach (var t in raymarch)

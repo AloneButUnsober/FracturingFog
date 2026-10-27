@@ -282,6 +282,13 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _kleinIter = _p.KleinianIterations;
         _kleinScale = _p.KleinianSphereScale;
         _kleinCameraTheta = _p.KleinianCameraTheta;
+        _mirrorRadiusScale = _p.MirrorSpheresRadiusScale;
+        _mirrorMaxBounces = _p.MirrorSpheresMaxBounces;
+        _mirrorReflectance = _p.MirrorSpheresReflectance;
+        _mirrorMuteMisses = _p.MirrorSpheresMuteMisses;
+        _mirrorCameraTheta = _p.MirrorSpheresCameraTheta;
+        _mirrorCameraPhi = _p.MirrorSpheresCameraPhi;
+        _mirrorCameraDistance = _p.MirrorSpheresCameraDistance;
         _kleinCameraPhi = _p.KleinianCameraPhi;
         _kleinCameraDistance = _p.KleinianCameraDistance;
         _dlaParticles = _p.DlaParticles;
@@ -410,6 +417,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsFlame => FractalType == FractalType.Flame;
     public bool IsApollonian => FractalType == FractalType.Apollonian;
     public bool IsKleinian => FractalType == FractalType.Kleinian;
+    public bool IsMirrorSpheres => FractalType == FractalType.MirrorSpheres;
     public bool IsBicomplexMandelbrot => FractalType == FractalType.BicomplexMandelbrot;
     public bool IsCoquaternion => FractalType == FractalType.Coquaternion;
     public bool IsDualOrbitVolume => FractalType == FractalType.Julibrot;
@@ -566,7 +574,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool HasNoParams =>
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsLyapunov || IsTranscendentalJulia || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
-          || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian
+          || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian || IsMirrorSpheres
           || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable
           || SupportsDomainWarp);
 
@@ -2685,6 +2693,22 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double KleinianCameraPhi { get => _kleinCameraPhi; set { Set(ref _kleinCameraPhi, Clamp(value, 0.01, 3.13)); _p.KleinianCameraPhi = _kleinCameraPhi; Fire(); } }
     private double _kleinCameraDistance;
     public double KleinianCameraDistance { get => _kleinCameraDistance; set { Set(ref _kleinCameraDistance, Clamp(value, 0.1, 500)); _p.KleinianCameraDistance = _kleinCameraDistance; Fire(); } }
+
+    // ── Wada mirror spheres (#1440) ──
+    private double _mirrorRadiusScale;
+    public double MirrorSpheresRadiusScale { get => _mirrorRadiusScale; set { Set(ref _mirrorRadiusScale, Clamp(value, 0.05, 1.0)); _p.MirrorSpheresRadiusScale = _mirrorRadiusScale; Fire(); } }
+    private int _mirrorMaxBounces;
+    public int MirrorSpheresMaxBounces { get => _mirrorMaxBounces; set { Set(ref _mirrorMaxBounces, (int)Clamp(value, 1, 4096)); _p.MirrorSpheresMaxBounces = _mirrorMaxBounces; Fire(); } }
+    private double _mirrorReflectance;
+    public double MirrorSpheresReflectance { get => _mirrorReflectance; set { Set(ref _mirrorReflectance, Clamp(value, 0.0, 1.0)); _p.MirrorSpheresReflectance = _mirrorReflectance; Fire(); } }
+    private bool _mirrorMuteMisses;
+    public bool MirrorSpheresMuteMisses { get => _mirrorMuteMisses; set { Set(ref _mirrorMuteMisses, value); _p.MirrorSpheresMuteMisses = value; Fire(); } }
+    private double _mirrorCameraTheta;
+    public double MirrorSpheresCameraTheta { get => _mirrorCameraTheta; set { Set(ref _mirrorCameraTheta, Clamp(value, -10, 10)); _p.MirrorSpheresCameraTheta = _mirrorCameraTheta; Fire(); } }
+    private double _mirrorCameraPhi;
+    public double MirrorSpheresCameraPhi { get => _mirrorCameraPhi; set { Set(ref _mirrorCameraPhi, Clamp(value, 0.01, 3.13)); _p.MirrorSpheresCameraPhi = _mirrorCameraPhi; Fire(); } }
+    private double _mirrorCameraDistance;
+    public double MirrorSpheresCameraDistance { get => _mirrorCameraDistance; set { Set(ref _mirrorCameraDistance, Clamp(value, 0.1, 500)); _p.MirrorSpheresCameraDistance = _mirrorCameraDistance; Fire(); } }
 
     // ── Flame ──
     private string _flamePresetName = "Sierpinski Variation";

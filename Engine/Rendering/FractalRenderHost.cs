@@ -92,6 +92,7 @@ namespace FracturingFog.Rendering
         private AcidWarpCalculator _acidWarpCalculator;
         private ApollonianCalculator _apollonianCalculator;
         private KleinianCalculator _kleinianCalculator;
+        private MirrorSpheresCalculator _mirrorSpheresCalculator;
         private BicomplexMandelbrotCalculator _bicomplexCalculator;
         private CoquaternionMandelbrotCalculator _coquaternionCalculator;
         private DualOrbitVolumeCalculator _dualOrbitVolumeCalculator;
@@ -526,6 +527,7 @@ namespace FracturingFog.Rendering
             _acidWarpCalculator = new AcidWarpCalculator(w, h);
             _apollonianCalculator = new ApollonianCalculator(w, h);
             _kleinianCalculator = new KleinianCalculator(w, h);
+            _mirrorSpheresCalculator = new MirrorSpheresCalculator(w, h);
             _bicomplexCalculator = new BicomplexMandelbrotCalculator(w, h);
             _coquaternionCalculator = new CoquaternionMandelbrotCalculator(w, h);
             _dualOrbitVolumeCalculator = new DualOrbitVolumeCalculator(w, h);
@@ -574,6 +576,7 @@ namespace FracturingFog.Rendering
                 _acidWarpCalculator.ColorMap = initialColorMap;
                 _apollonianCalculator.ColorMap = initialColorMap;
                 _kleinianCalculator.ColorMap = initialColorMap;
+                _mirrorSpheresCalculator.ColorMap = initialColorMap;
                 _bicomplexCalculator.ColorMap = initialColorMap;
                 _coquaternionCalculator.ColorMap = initialColorMap;
                 _dualOrbitVolumeCalculator.ColorMap = initialColorMap;
@@ -1240,6 +1243,7 @@ namespace FracturingFog.Rendering
                 _acidWarpCalculator.ColorMap = value;
                 _apollonianCalculator.ColorMap = value;
                 _kleinianCalculator.ColorMap = value;
+                _mirrorSpheresCalculator.ColorMap = value;
                 _bicomplexCalculator.ColorMap = value;
                 _coquaternionCalculator.ColorMap = value;
                 _dualOrbitVolumeCalculator.ColorMap = value;
@@ -3422,6 +3426,7 @@ namespace FracturingFog.Rendering
             _acidWarpCalculator.Resize(w, h);
             _apollonianCalculator.Resize(w, h);
             _kleinianCalculator.Resize(w, h);
+            _mirrorSpheresCalculator.Resize(w, h);
             _bicomplexCalculator.Resize(w, h);
             _coquaternionCalculator.Resize(w, h);
             _dualOrbitVolumeCalculator.Resize(w, h);
@@ -4172,6 +4177,7 @@ namespace FracturingFog.Rendering
                 case ApollonianCalculator ap: ap.FractalParameters = ViewState.FractalParameters; break;
                 case IndrasPearlsCalculator ip: ip.FractalParameters = ViewState.FractalParameters; break;
                 case KleinianCalculator kl: kl.FractalParameters = ViewState.FractalParameters; break;
+                case MirrorSpheresCalculator ms: ms.FractalParameters = ViewState.FractalParameters; break;
                 case BicomplexMandelbrotCalculator bc: bc.FractalParameters = ViewState.FractalParameters; break;
                 case CoquaternionMandelbrotCalculator cq: cq.FractalParameters = ViewState.FractalParameters; break;
                 case DualOrbitVolumeCalculator dv: dv.FractalParameters = ViewState.FractalParameters; break;
@@ -4377,6 +4383,7 @@ namespace FracturingFog.Rendering
             FractalType.AcidWarp => _acidWarpCalculator,
             FractalType.Apollonian => _apollonianCalculator,
             FractalType.Kleinian => _kleinianCalculator,
+            FractalType.MirrorSpheres => _mirrorSpheresCalculator,
             FractalType.BicomplexMandelbrot => _bicomplexCalculator,
             FractalType.Coquaternion => _coquaternionCalculator,
             FractalType.Julibrot => _dualOrbitVolumeCalculator,

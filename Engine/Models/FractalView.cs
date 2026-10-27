@@ -149,6 +149,7 @@ namespace FracturingFog.Models
             {FractalType.ChaoticBilliard, "Chaotic Billiard" },
             {FractalType.PrecisionField, "Precision Field" },
             {FractalType.Kleinian, "Kleinian" },
+            {FractalType.MirrorSpheres, "MirrorSpheres" },
             {FractalType.BicomplexMandelbrot, "Bicomplex Mandelbrot" },
             {FractalType.Coquaternion, "Coquaternion" },
             {FractalType.Julibrot, "Julibrot" },   // #1154 (was Dual-Orbit Volume)

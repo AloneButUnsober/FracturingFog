@@ -1268,6 +1268,7 @@ namespace FracturingFog.Imaging
                 FractalType.PrecisionField   => new PrecisionFieldCalculator(w, h),
                 FractalType.JulibrotPair  => new DualOrbitEscapeCalculator(w, h),
                 FractalType.Kleinian         => new KleinianCalculator(w, h),
+                FractalType.MirrorSpheres    => new MirrorSpheresCalculator(w, h),
                 FractalType.BicomplexMandelbrot => new BicomplexMandelbrotCalculator(w, h),
                 FractalType.Coquaternion => new CoquaternionMandelbrotCalculator(w, h),
                 FractalType.Julibrot => new DualOrbitVolumeCalculator(w, h),
@@ -1335,6 +1336,7 @@ namespace FracturingFog.Imaging
                 case ApollonianCalculator ap:  ap.FractalParameters = req.FractalParameters; break;
                 case IndrasPearlsCalculator ip: ip.FractalParameters = req.FractalParameters; break;
                 case KleinianCalculator kl:    kl.FractalParameters = req.FractalParameters; break;
+                case MirrorSpheresCalculator ms: ms.FractalParameters = req.FractalParameters; break;
                 case BicomplexMandelbrotCalculator bc: bc.FractalParameters = req.FractalParameters; break;
                 case CoquaternionMandelbrotCalculator cq: cq.FractalParameters = req.FractalParameters; break;
                 case DualOrbitVolumeCalculator dv: dv.FractalParameters = req.FractalParameters; break;

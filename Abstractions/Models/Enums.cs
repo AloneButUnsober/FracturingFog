@@ -904,6 +904,17 @@ namespace FracturingFog
         /// escaped). Shares the Buddhabrot family's Monte Carlo core
         /// (samples / seed / HD / Metropolis / progressive).</summary>
         DualBuddhabrot,
+        /// <summary>Wada mirror spheres (#1440, epic #1439). Four touching mirrored
+        /// balls stacked as a tetrahedron, viewed through one of the four gaps between
+        /// them (the Sweet, Ott and Yorke 1999 photograph). Camera rays reflect
+        /// specularly (closed-form ray-sphere intersection, no distance estimator)
+        /// until they leave through one of the four openings; the pixel is that
+        /// opening. The four exit basins share one fractal (Wada) boundary. Handled by
+        /// <c>MirrorSpheresCalculator</c>; colour through <c>IBilliardColorMap</c>
+        /// (gate = opening). Tunables: <c>MirrorSpheresRadiusScale</c>,
+        /// <c>MirrorSpheresMaxBounces</c>, <c>MirrorSpheresReflectance</c>,
+        /// <c>MirrorSpheresMuteMisses</c>, <c>MirrorSpheresCamera*</c>.</summary>
+        MirrorSpheres,
     }
 
     public enum RenderProfile { Preview, Final }
@@ -1039,6 +1050,10 @@ namespace FracturingFog
             FractalType.Apollonian
                 => FractalCapabilities.SuppliesNormals
                  | FractalCapabilities.SuppliesHistogram,
+
+            // Wada mirror spheres (#1440) — categorical exit opening through
+            // IBilliardColorMap only; no normals / DE / orbit data for themes.
+            FractalType.MirrorSpheres => FractalCapabilities.None,
 
             // Histogram / chaos-game families — no normals, no orbit data
             // surfaced to per-pixel themes (each calculator paints through the
