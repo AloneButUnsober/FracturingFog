@@ -690,15 +690,32 @@ RWStructuredBuffer<float> gTrap : register(u4);
     /// too slow at this depth (weak FP64) and the dispatch aborts so the caller
     /// falls back to the CPU deep path. Tunable via FF_GPU_PERTURB_BUDGET_MS;
     /// default 3000 ms. 0 or negative disables the check (always finish on GPU).</summary>
-    public static double PerturbBudgetMs =
-        double.TryParse(System.Environment.GetEnvironmentVariable("FF_GPU_PERTURB_BUDGET_MS"),
-            System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture,
-            out double bms) && bms > 0 ? bms : 3000.0;
+    public static double PerturbBudgetMs = ParsePerturbBudget(System.Environment.GetEnvironmentVariable("FF_GPU_PERTURB_BUDGET_MS"));
+
+    /// <summary>Default <see cref="PerturbBudgetMs"/> when FF_GPU_PERTURB_BUDGET_MS is unset or unparseable.</summary>
+    public const double DefaultPerturbBudgetMs = 3000.0;
+
+    /// <summary>Parses an FF_GPU_PERTURB_BUDGET_MS value (#1490): a positive number is the
+    /// budget in ms, 0 or negative is 0 (check disabled), and unset, blank, NaN or garbage is
+    /// <see cref="DefaultPerturbBudgetMs"/>. Before #1490, 0 and negatives fell back to the
+    /// default, so the documented "0 disables" only worked by setting the field in code.</summary>
+    public static double ParsePerturbBudget(string? value)
+    {
+        if (!double.TryParse(value, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out double ms) || double.IsNaN(ms))
+            return DefaultPerturbBudgetMs;
+        return ms > 0 ? ms : 0.0;
+    }
 
     /// <summary>True when the extrapolated full-frame GPU time (first band ×
     /// band count) exceeds <see cref="PerturbBudgetMs"/> — i.e. abort to CPU.</summary>
     public static bool PerturbTooSlow(double band0Ms, int bandCount)
-        => PerturbBudgetMs > 0 && band0Ms * bandCount > PerturbBudgetMs;
+        => PerturbTooSlow(band0Ms, bandCount, PerturbBudgetMs);
+
+    /// <summary><see cref="PerturbTooSlow(double, int)"/> against an explicit budget; a
+    /// budget of 0 or less never aborts.</summary>
+    public static bool PerturbTooSlow(double band0Ms, int bandCount, double budgetMs)
+        => budgetMs > 0 && band0Ms * bandCount > budgetMs;
 
     /// <summary>Marker message for the perf-abort exception so the calculator can
     /// tell "GPU too slow" apart from a genuine device-lost error.</summary>
