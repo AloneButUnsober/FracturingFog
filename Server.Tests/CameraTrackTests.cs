@@ -193,6 +193,7 @@ public sealed class CameraTrackTests
         FractalType.Kleinian, FractalType.BicomplexMandelbrot, FractalType.Coquaternion,
         FractalType.Julibrot,
         FractalType.UserBulb,
+        FractalType.MirrorSpheres,   // #1440 — same orbit camera, analytic ray trace
     };
 
     [Fact]

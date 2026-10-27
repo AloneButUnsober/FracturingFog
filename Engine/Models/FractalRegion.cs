@@ -623,6 +623,11 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? Cam3DTheta { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? Cam3DPhi { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? Cam3DSliceW { get; set; }
+        // #1440 — Wada mirror spheres (camera rides the Cam3D block above).
+        [JsonIgnore(Condition = OmitNull)] public double? MirrorSpheresRadiusScale { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? MirrorSpheresMaxBounces { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MirrorSpheresReflectance { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? MirrorSpheresMuteMisses { get; set; }
 
         // #94 (P4) — non-spatial family params. These families ignore plane
         // zoom, so the video slideshow renders them as a static-hold leg; the
@@ -1084,6 +1089,18 @@ namespace FracturingFog.Models
                     KleinianDeFactor = p.KleinianDeFactor != 1.0 ? p.KleinianDeFactor : (double?)null,
                     KleinianSphereScale = Nd(p.KleinianSphereScale, D.KleinianSphereScale),   // #961
                     KleinianIterations = Ni(p.KleinianIterations, D.KleinianIterations),
+                },
+                FractalType.MirrorSpheres => new RegionFractalParams   // #1440
+                {
+                    Cam3DFamily = (int)type,
+                    Cam3DDistance = p.MirrorSpheresCameraDistance,
+                    Cam3DTheta = p.MirrorSpheresCameraTheta,
+                    Cam3DPhi = p.MirrorSpheresCameraPhi,
+                    MirrorSpheresRadiusScale = Nd(p.MirrorSpheresRadiusScale, D.MirrorSpheresRadiusScale),
+                    MirrorSpheresMaxBounces = Ni(p.MirrorSpheresMaxBounces, D.MirrorSpheresMaxBounces),
+                    MirrorSpheresReflectance = Nd(p.MirrorSpheresReflectance, D.MirrorSpheresReflectance),
+                    MirrorSpheresMuteMisses = p.MirrorSpheresMuteMisses != D.MirrorSpheresMuteMisses
+                        ? p.MirrorSpheresMuteMisses : (bool?)null,
                 },
                 FractalType.BicomplexMandelbrot => new RegionFractalParams
                 {
@@ -1732,6 +1749,9 @@ namespace FracturingFog.Models
                     case FractalType.Kleinian:
                         p.KleinianCameraDistance = d; p.KleinianCameraTheta = th; p.KleinianCameraPhi = ph;
                         break;
+                    case FractalType.MirrorSpheres:
+                        p.MirrorSpheresCameraDistance = d; p.MirrorSpheresCameraTheta = th; p.MirrorSpheresCameraPhi = ph;
+                        break;
                     case FractalType.BicomplexMandelbrot:
                         p.BicomplexCameraDistance = d; p.BicomplexCameraTheta = th; p.BicomplexCameraPhi = ph;
                         if (Cam3DSliceW.HasValue) p.BicomplexSliceW = Cam3DSliceW.Value;
@@ -1755,6 +1775,10 @@ namespace FracturingFog.Models
             if (QMandelDualSeedY.HasValue) p.QMandelDualSeedY = QMandelDualSeedY.Value;
             if (QMandelDualSeedZ.HasValue) p.QMandelDualSeedZ = QMandelDualSeedZ.Value;
             if (KleinianPreset.HasValue) p.KleinianPreset = (FracturingFog.KleinianPreset)KleinianPreset.Value;
+            if (MirrorSpheresRadiusScale.HasValue) p.MirrorSpheresRadiusScale = MirrorSpheresRadiusScale.Value;   // #1440
+            if (MirrorSpheresMaxBounces.HasValue) p.MirrorSpheresMaxBounces = MirrorSpheresMaxBounces.Value;
+            if (MirrorSpheresReflectance.HasValue) p.MirrorSpheresReflectance = MirrorSpheresReflectance.Value;
+            if (MirrorSpheresMuteMisses.HasValue) p.MirrorSpheresMuteMisses = MirrorSpheresMuteMisses.Value;
             if (KleinianNecklaceCount.HasValue) p.KleinianNecklaceCount = KleinianNecklaceCount.Value;
             if (KleinianCustomSpheres != null) p.KleinianCustomSpheres = KleinianCustomSpheres.ConvertAll(s => s.Clone());
             if (KleinianRotationAngle.HasValue) p.KleinianRotationAngle = KleinianRotationAngle.Value;

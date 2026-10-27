@@ -135,6 +135,9 @@ public static class FractalAnimatableParamsMap
         FractalType.Kleinian
             => _kleinianList,
 
+        FractalType.MirrorSpheres
+            => _mirrorSpheresList,
+
         FractalType.BicomplexMandelbrot
             => _bicomplexList,
 
@@ -544,6 +547,17 @@ public static class FractalAnimatableParamsMap
         new("KleinianSphereScale", AnimatableParamKind.ScalarDouble, Min: 0.5, Max: 1.5,
             Cost: AnimatableParamCost.Moderate),
         new("KleinianIterations", AnimatableParamKind.ScalarInt, Min: 4, Max: 32,
+            Cost: AnimatableParamCost.Moderate),
+    };
+
+    // Wada mirror spheres (#1440): shrinking the balls opens the gaps and the
+    // basins simplify; reflectance fades the deep-scattered boundary.
+    private static readonly AnimatableParamDescriptor[] _mirrorSpheresList =
+    {
+        new("MirrorSpheresRadiusScale", AnimatableParamKind.ScalarDouble, Min: 0.5, Max: 1.0,
+            Cost: AnimatableParamCost.Moderate,
+            Notes: "Ball radius / touching radius; 1 = the touching 1999 stack."),
+        new("MirrorSpheresReflectance", AnimatableParamKind.ScalarDouble, Min: 0.3, Max: 1.0,
             Cost: AnimatableParamCost.Moderate),
     };
 

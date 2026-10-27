@@ -219,9 +219,36 @@ finite-size-Lyapunov literature, which these entries anchor.
   Reports 6, 2016. `BasinEntropy` (#1127).
 - **Helena E. Nusse, James A. Yorke.** *Wada basin boundaries and basin cells.* Physica D 90, 1996.
   Wada (three-or-more-way) exit basins.
-- **David Sweet, Edward Ott, James A. Yorke.** *Topology in chaotic scattering.* Nature 399, 1999.
-  The four-mirror-ball Wada photograph — the target of the Wada mirror-spheres epic (#1439–#1444) and
-  context for the chaotic-billiard modes (#1445).
+- **David Sweet, Edward Ott, James A. Yorke.** *Topology in chaotic scattering.* Nature 399, 315–316,
+  27 May 1999 (scientific correspondence). The four-mirror-ball Wada photograph: four touching mirrored
+  balls stacked as a tetrahedron, a light ray leaving the inner chamber through one of four openings in
+  the tetrahedron's faces, the four exit basins sharing one fractal boundary (dimension ≈ 1.6). Volume,
+  pages, date and the experimental setup were checked against the article PDF attached to #1444. It is
+  the target of the Wada mirror-spheres epic (#1439–#1444): `MirrorSpheresCalculator` (#1440) traces
+  that scatterer. It is also context for the chaotic-billiard modes (#1445). Paul Bourke's page (below)
+  lists the article as *Complex topology in chaotic scattering: a laboratory observation*, which may be
+  a preprint title.
+
+<a id="yoneyama-lakes-of-wada"></a>
+
+- **Kunizô Yoneyama.** *Theory of continuous set of points (not finished).* Tohoku Mathematical
+  Journal, First Series 12, 43–158, 1917.
+  <https://www.jstage.jst.go.jp/article/tmj1911/12/0/12_0_43/_article>. The "Lakes of Wada"
+  construction, which Yoneyama credited to Takeo Wada: three or more disjoint open regions that share
+  one common boundary. The Wada property the mirror-spheres basins (#1440) show is named after it. The
+  title, volume and pages are from the J-STAGE listing. That the lakes appear on page 60 and are
+  credited to Wada comes from secondary sources (Wikipedia, *Lakes of Wada*); it isn't yet checked
+  against the paper's text.
+
+<a id="bourke-wada"></a>
+
+- **Paul Bourke.** *Wada basins: rendering chaotic scattering.* <https://paulbourke.net/fractals/wada/>,
+  December 1998 (addition December 2000). Prior art for ray-traced renders of the four-ball Wada
+  scatterer (Tachyon and POV-Ray models). It uses the same tangent arrangement FF uses (centres at
+  even-parity cube corners, radius √2 at FF's scale), coloured lights at three gaps and the camera at
+  the fourth, and notes that the number of reflections traced per ray is the setting that matters.
+  `MirrorSpheresCalculator` (#1440) builds on this kind of render; it is not new as an image. Linked by
+  the user on #1444.
 - **E. Aurell, G. Boffetta, A. Crisanti, G. Paladin, A. Vulpiani.** *Predictability in the large: an
   extension of the concept of Lyapunov exponent.* Journal of Physics A 30, 1997. Finite-size Lyapunov
   exponent (FSLE) — the finite-separation reading of `D = E_c − E_z`.
