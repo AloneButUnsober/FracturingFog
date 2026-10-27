@@ -215,9 +215,10 @@ public sealed class MirrorSpheresGpuTests
     [Fact]
     public void Auto_Remeasures_When_The_Frame_Size_Moves_Far()
     {
-        var m = new MirrorSpheresCalculator.GpuMeasurement(10, 20, 640 * 360);
-        Assert.True(m.Covers(640 * 360 * 3));
-        Assert.False(m.Covers(1920 * 1080 * 2));
+        const int measured = 640 * 360, fullHd = 1920 * 1080;
+        var m = new MirrorSpheresCalculator.GpuMeasurement(10, 20, measured);
+        Assert.True(m.Covers(measured * 3));
+        Assert.False(m.Covers(fullHd * 2));
         Assert.False(m.GpuFaster);
     }
 
