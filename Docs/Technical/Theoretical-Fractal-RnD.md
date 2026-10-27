@@ -232,6 +232,14 @@ the reflection law and against the render's per-pixel bounce counts. The inset i
 drawn into a render or export, so it adds nothing to the batch. The mirror spheres could use the same
 inspector later. #1503 fixed NDisk placing fewer disks than requested: its random field now spreads wider until every disk fits, and the play circle covers every disk. The params panel warns when Ring / ThreeDisk neighbours touch, which closes the exit gaps.
 
+**Custom layouts (#1504).** The inset doubles as a layout editor: drag a disk to move it, wheel to resize,
+double-click to add, right-click to remove. The first edit switches to the `Custom` geometry, seeded from the
+current disks; the list is stored as `BilliardCustomDisks` (`x,y,r;...`), so it rides the region snapshot and
+`--param BilliardCustomDisks=...` like any other per-family value. The inset re-traces while dragging; the render
+follows on release. Exit gaps work for any layout: disks are ordered by centre angle from disk 0 and gate k is the
+angular gap between disks k and k + 1, so a Custom list made from a ring builds the ring's scene. Every edit keeps
+a 5% escape gap between disks and every disk within 10 units of the origin.
+
 **Status:** S1–S5 shipped (#1440–#1444); epic #1439 complete.
 
 ---
@@ -820,3 +828,4 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   room colour); epic #1439 complete.
 - **2026-10-27** — §2.5: the 2D billiard ray-path inset #1447 (hover / pin a pixel to see its ray; live only).
 - **2026-10-27** — §2.5: NDisk places every requested disk (#1503); Ring overlap warning.
+- **2026-10-27** — §2.5: `Custom` billiard geometry edited in the ray-path inset (#1504).

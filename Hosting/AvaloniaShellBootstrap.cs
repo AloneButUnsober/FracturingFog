@@ -878,6 +878,20 @@ namespace FracturingFog.Hosting
                     ? FracturingFog.BilliardRayInspector.TraceAt(vs.FractalParameters, InsetMap(),
                         x, y, w, h, vs.CenterX, vs.CenterY, vs.Zoom)
                     : null;
+                // #1504 — layout editing writes the Custom geometry. A drag in progress
+                // only updates the parameters (the inset re-traces itself); the commit
+                // re-renders and refreshes an open params panel.
+                inset.ApplyLayout = (disks, commit) =>
+                {
+                    if (!IsBilliard()) return;
+                    var fp = vs.FractalParameters;
+                    fp.BilliardCustomDisks = FracturingFog.Models.BilliardLayout.FormatCustomDisks(disks);
+                    fp.BilliardGeometry = FracturingFog.BilliardGeometry.Custom;
+                    if (!commit) return;
+                    RefreshOpenParamEditor(s_paramsWin);
+                    s_renderHost?.Trigger();
+                };
+                inset.NewDiskRadius = () => vs.FractalParameters.BilliardDiskRadius;
             }
 
             // Palette samplers for MiniDepth (#11 — theme-styled gradient).

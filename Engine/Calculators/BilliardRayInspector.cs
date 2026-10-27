@@ -37,13 +37,17 @@ public static class BilliardRayInspector
         for (int i = 0; i < disks.Length; i++)
             disks[i] = new BilliardDisk(scene.DiskX(i), scene.DiskY(i), scene.DiskR(i));
         var starts = new double[scene.GateCount];
+        var widths = new double[scene.GateCount];
         var colors = new uint[scene.GateCount];
         for (int g = 0; g < starts.Length; g++)
         {
             starts[g] = scene.GateStartAngle(g);
+            widths[g] = scene.GateWidth(g);
             colors[g] = Legible(ChaoticBilliardCalculator.GateColor(map, g, scene.GateCount, scene.MaxBounces));
         }
-        return new BilliardInsetScene(disks, scene.PlayRadius, starts, colors, scene.ExitGap);
+        bool custom = p.BilliardGeometry == BilliardGeometry.Custom
+                      && BilliardLayout.ParseCustomDisks(p.BilliardCustomDisks).Count > 0;
+        return new BilliardInsetScene(disks, scene.PlayRadius, starts, colors, scene.ExitGap, widths, custom);
     }
 
     /// <summary>Trace the launch at plane point (<paramref name="planeX"/>, <paramref name="planeY"/>)

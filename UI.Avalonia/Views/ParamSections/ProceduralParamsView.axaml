@@ -876,13 +876,13 @@
         <!-- Chaotic Billiard (#627) -->
         <Grid IsVisible="{Binding IsChaoticBilliard}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Geometry:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding BilliardGeometries}"
                       SelectedItem="{Binding BilliardGeometry, Mode=TwoWay}"
                       Margin="0,2"
-                      ToolTip.Tip="Obstacle arrangement. ThreeDisk = classic scatterer; Ring = disks evenly on a circle; NDisk = seeded random field." />
+                      ToolTip.Tip="Obstacle arrangement. ThreeDisk = classic scatterer; Ring = disks evenly on a circle; NDisk = seeded random field; Custom = your own layout, edited by dragging disks in Ray Paths." />
             <TextBlock Grid.Row="1" Grid.Column="0" Text="Disk count:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="1" Grid.Column="1"
                            Minimum="1" Maximum="64" Increment="1" FormatString="F0"
@@ -936,6 +936,10 @@
                        Text="{Binding BilliardLayoutWarning}"
                        IsVisible="{Binding HasBilliardLayoutWarning}"
                        Foreground="#FFCC00" TextWrapping="Wrap" Margin="0,4,0,2" />
+            <!-- #1504: Custom layouts are edited in the ray-path inset. -->
+            <TextBlock Grid.Row="12" Grid.Column="0" Grid.ColumnSpan="2"
+                       IsVisible="{Binding IsBilliardCustom}" TextWrapping="Wrap" Margin="0,4,0,2"
+                       Text="Custom layout: open Ray paths and drag disks to move them, wheel to resize, double-click to add, right-click to remove. Disk count, separation and seed don't apply; disk radius sets the size of added disks. Pick another geometry to go back (the custom layout is kept)." />
         </Grid>
 
         <!-- Precision Field (#628) -->

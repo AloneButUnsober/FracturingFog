@@ -22,15 +22,20 @@ namespace FracturingFog.Models
     /// <param name="Disks">Mirror disks.</param>
     /// <param name="PlayRadius">Radius of the play circle the rays escape through.</param>
     /// <param name="GateStartAngles">Start angle (radians from +x) of each gate's sector of
-    /// exit directions; gate g spans [GateStartAngles[g], GateStartAngles[g] + 2pi/n).</param>
+    /// exit directions; gate g spans [GateStartAngles[g], GateStartAngles[g] + GateWidths[g]).</param>
     /// <param name="GateColors">Packed ARGB per gate, as the render colours that gate.</param>
-    /// <param name="ExitGap">True when gates are the gaps between ring disks.</param>
+    /// <param name="ExitGap">True when gates are the gaps between ring (or Custom) disks.</param>
+    /// <param name="GateWidths">Angular width of each gate's sector: 2pi/n, except for a
+    /// Custom layout's exit gaps (#1504).</param>
+    /// <param name="Custom">True when the layout is the editable Custom disk list (#1504).</param>
     public sealed record BilliardInsetScene(
         IReadOnlyList<BilliardDisk> Disks,
         double PlayRadius,
         IReadOnlyList<double> GateStartAngles,
         IReadOnlyList<uint> GateColors,
-        bool ExitGap);
+        bool ExitGap,
+        IReadOnlyList<double> GateWidths,
+        bool Custom);
 
     /// <summary>One traced launch: the plane point it came from, its outcome and its path.</summary>
     /// <param name="PlaneX">Plane x of the launch (the pixel's initial condition).</param>
