@@ -231,6 +231,16 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _billiardLaunchMode = _p.BilliardLaunchMode;
         _billiardGateMode = _p.BilliardGateMode;
         _billiardMuteMisses = _p.BilliardMuteMisses;
+        _raysSweep = _p.BilliardRaysSweep;
+        _raysCount = _p.BilliardRaysCount;
+        _raysAngleCount = _p.BilliardRaysAngleCount;
+        _raysAngle = _p.BilliardRaysAngle;
+        _raysSpread = _p.BilliardRaysSpread;
+        _raysSourceX = _p.BilliardRaysSourceX;
+        _raysSourceY = _p.BilliardRaysSourceY;
+        _raysSeed = _p.BilliardRaysSeed;
+        _raysMinBounces = _p.BilliardRaysMinBounces;
+        _raysShowDisks = _p.BilliardRaysShowDisks;
         _precLowTier = _p.PrecisionLowTier;
         _precHighTier = _p.PrecisionHighTier;
         _precMetric = _p.PrecisionDiffMetric;
@@ -430,6 +440,10 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsDla => FractalType == FractalType.Dla;
     public bool IsRandomTile => FractalType == FractalType.RandomTile;
     public bool IsChaoticBilliard => FractalType == FractalType.ChaoticBilliard;
+    /// <summary>#1506 — Billiard Rays (ray-density render of the same scene).</summary>
+    public bool IsBilliardRays => FractalType == FractalType.BilliardRays;
+    /// <summary>Either billiard type: the shared scene controls (geometry, disks, bounces).</summary>
+    public bool IsBilliardScene => IsChaoticBilliard || IsBilliardRays;
 
     /// <summary>#1447 — opens / closes the ray-path inset (host-set; null hides nothing,
     /// the button just does nothing).</summary>
@@ -563,6 +577,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         || IsRandomTile
         // Chaotic billiard — bounce-count height field (#627).
         || IsChaoticBilliard
+        // Billiard rays — log ray-density height field (#1506).
+        || IsBilliardRays
         // Precision field — divergence-scalar height field (#628).
         || IsPrecisionField
         // Dual-orbit escape-geometry (#864) — the derived scalar rides the
@@ -585,7 +601,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsLyapunov || IsTranscendentalJulia || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian || IsMirrorSpheres
-          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable
+          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -2047,6 +2063,43 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     private static readonly System.Array s_BilliardGateModes = System.Enum.GetValues(typeof(BilliardGateMode));
     private bool _billiardMuteMisses;
     public bool BilliardMuteMisses { get => _billiardMuteMisses; set { Set(ref _billiardMuteMisses, value); _p.BilliardMuteMisses = value; Fire(); } }
+
+    // ── Billiard Rays (#1506) ──
+    private BilliardRaySweep _raysSweep;
+    public BilliardRaySweep BilliardRaysSweep { get => _raysSweep; set { Set(ref _raysSweep, value); _p.BilliardRaysSweep = value; SweepChanged(); Fire(); } }
+    public System.Array BilliardRaySweeps => s_BilliardRaySweeps;   // cached (see BilliardGeometries)
+    private static readonly System.Array s_BilliardRaySweeps = System.Enum.GetValues(typeof(BilliardRaySweep));
+    /// <summary>Which sweep controls apply (the panel hides the rest).</summary>
+    public bool IsRaysBSweep => _raysSweep == BilliardRaySweep.BSweep;
+    public bool IsRaysAngleSweep => _raysSweep == BilliardRaySweep.AngleSweep;
+    public bool IsRaysPointSource => _raysSweep == BilliardRaySweep.PointSource;
+    public bool RaysUsesAngle => _raysSweep is BilliardRaySweep.BSweep or BilliardRaySweep.AngleSweep or BilliardRaySweep.PointSource;
+    public bool RaysUsesSpread => _raysSweep is BilliardRaySweep.AngleSweep or BilliardRaySweep.PointSource;
+    public bool RaysUsesSeed => _raysSweep is BilliardRaySweep.AngleSweep or BilliardRaySweep.RandomFarField or BilliardRaySweep.PhaseSpace;
+    private void SweepChanged()
+    {
+        foreach (var n in new[] { nameof(IsRaysBSweep), nameof(IsRaysAngleSweep), nameof(IsRaysPointSource),
+                                  nameof(RaysUsesAngle), nameof(RaysUsesSpread), nameof(RaysUsesSeed) })
+            this.RaisePropertyChanged(n);
+    }
+    private int _raysCount;
+    public int BilliardRaysCount { get => _raysCount; set { Set(ref _raysCount, (int)Clamp(value, 1, 2_000_000)); _p.BilliardRaysCount = _raysCount; Fire(); } }
+    private int _raysAngleCount;
+    public int BilliardRaysAngleCount { get => _raysAngleCount; set { Set(ref _raysAngleCount, (int)Clamp(value, 1, 360)); _p.BilliardRaysAngleCount = _raysAngleCount; Fire(); } }
+    private double _raysAngle;
+    public double BilliardRaysAngle { get => _raysAngle; set { Set(ref _raysAngle, Clamp(value, -360.0, 360.0)); _p.BilliardRaysAngle = _raysAngle; Fire(); } }
+    private double _raysSpread;
+    public double BilliardRaysSpread { get => _raysSpread; set { Set(ref _raysSpread, Clamp(value, 0.0, 360.0)); _p.BilliardRaysSpread = _raysSpread; Fire(); } }
+    private double _raysSourceX;
+    public double BilliardRaysSourceX { get => _raysSourceX; set { Set(ref _raysSourceX, Clamp(value, -20.0, 20.0)); _p.BilliardRaysSourceX = _raysSourceX; Fire(); } }
+    private double _raysSourceY;
+    public double BilliardRaysSourceY { get => _raysSourceY; set { Set(ref _raysSourceY, Clamp(value, -20.0, 20.0)); _p.BilliardRaysSourceY = _raysSourceY; Fire(); } }
+    private int _raysSeed;
+    public int BilliardRaysSeed { get => _raysSeed; set { Set(ref _raysSeed, value); _p.BilliardRaysSeed = _raysSeed; Fire(); } }
+    private int _raysMinBounces;
+    public int BilliardRaysMinBounces { get => _raysMinBounces; set { Set(ref _raysMinBounces, (int)Clamp(value, 0, 4096)); _p.BilliardRaysMinBounces = _raysMinBounces; Fire(); } }
+    private bool _raysShowDisks;
+    public bool BilliardRaysShowDisks { get => _raysShowDisks; set { Set(ref _raysShowDisks, value); _p.BilliardRaysShowDisks = value; Fire(); } }
 
     // ── Precision Field (#628) ──
     private PrecisionTier _precLowTier;

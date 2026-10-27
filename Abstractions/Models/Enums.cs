@@ -97,6 +97,20 @@ namespace FracturingFog
     /// rotate with it. NDisk has no ring gaps and falls back to Sector.</summary>
     public enum BilliardGateMode { Sector, ExitGap }
 
+    /// <summary>How <see cref="FractalType.BilliardRays"/> (#1506) emits its rays into the
+    /// disk array. Every sweep is deterministic for a given seed.
+    /// <see cref="BSweep"/> (default): impact parameter b swept evenly across the play
+    /// circle, at <c>BilliardRaysAngleCount</c> incoming directions spaced evenly round
+    /// the circle from <c>BilliardRaysAngle</c> (one direction = one parallel beam).
+    /// <see cref="AngleSweep"/>: an emitter swept round the play circle, each ray aimed
+    /// inward within <c>BilliardRaysSpread</c> of the centre direction.
+    /// <see cref="PointSource"/>: a fan from (<c>BilliardRaysSourceX</c>,
+    /// <c>BilliardRaysSourceY</c>) over <c>BilliardRaysSpread</c> degrees centred on
+    /// <c>BilliardRaysAngle</c>. <see cref="RandomFarField"/>: random (b, phi) far-field
+    /// launches. <see cref="PhaseSpace"/>: random launches off the surface of disk 0
+    /// (the ChaoticBilliard PhaseSpace section).</summary>
+    public enum BilliardRaySweep { BSweep, AngleSweep, PointSource, RandomFarField, PhaseSpace }
+
     /// <summary>How the Wada mirror spheres (#1440) colour a pixel.
     /// <see cref="Basins"/> (S1): the exit opening's categorical colour, from the
     /// billiard theme or Okabe-Ito, darkened per bounce. <see cref="Photo"/> (#1441):
@@ -938,6 +952,18 @@ namespace FracturingFog
         /// <c>MirrorSpheresViewerBlack</c>, <c>MirrorSpheresFresnel</c>; #1444
         /// <c>MirrorSpheresOrientation</c>, <c>MirrorSpheresRoomColor</c>.</summary>
         MirrorSpheres,
+        /// <summary>Billiard ray density (#1505 / #1506) — the chaotic-billiard disk
+        /// array seen from above in real space. Many rays are emitted by a sweep
+        /// (<c>BilliardRaysSweep</c>) and each one's reflecting path is accumulated,
+        /// length-weighted, into a density grid; disks are drawn over it. Shares the
+        /// ChaoticBilliard scene (<c>BilliardGeometry</c>, radius, separation, seed,
+        /// <c>BilliardCustomDisks</c>, <c>BilliardMaxBounces</c>). Handled by
+        /// <c>BilliardRaysCalculator</c>. Tunables: <c>BilliardRaysSweep</c>,
+        /// <c>BilliardRaysCount</c>, <c>BilliardRaysAngleCount</c>,
+        /// <c>BilliardRaysAngle</c>, <c>BilliardRaysSpread</c>,
+        /// <c>BilliardRaysSourceX/Y</c>, <c>BilliardRaysSeed</c>,
+        /// <c>BilliardRaysMinBounces</c>, <c>BilliardRaysShowDisks</c>.</summary>
+        BilliardRays,
     }
 
     public enum RenderProfile { Preview, Final }
@@ -1096,6 +1122,7 @@ namespace FracturingFog
                 or FractalType.Logistic
                 or FractalType.Lyapunov
                 or FractalType.ChaoticBilliard
+                or FractalType.BilliardRays
                 or FractalType.PrecisionField
                 // Dual-orbit escape-geometry (#864) — a derived escape-space scalar
                 // over the SmoothBuffer (PrecisionField precedent).

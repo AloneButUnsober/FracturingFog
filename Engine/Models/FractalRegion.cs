@@ -597,6 +597,17 @@ namespace FracturingFog.Models
         // #1504 — Custom geometry disk list ("x,y,r;..."); captured only when Custom is
         // the active geometry and has disks, so other billiard regions stay unchanged.
         [JsonIgnore(Condition = OmitNull)] public string? BilliardCustomDisks { get; set; }
+        // #1506 — Billiard Rays sweep (BilliardRaysSweep = int cast of BilliardRaySweep).
+        [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysSweep { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysCount { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysAngleCount { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BilliardRaysAngle { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BilliardRaysSpread { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BilliardRaysSourceX { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BilliardRaysSourceY { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysSeed { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysMinBounces { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? BilliardRaysShowDisks { get; set; }
         // Precision-sensitivity field (#628). Tiers/metric stored as int casts of
         // PrecisionTier / PrecisionDiffMetric.
         [JsonIgnore(Condition = OmitNull)] public int? PrecisionLowTier { get; set; }
@@ -1004,6 +1015,30 @@ namespace FracturingFog.Models
                     BilliardCustomDisks = p.BilliardGeometry == FracturingFog.BilliardGeometry.Custom
                                           && !string.IsNullOrWhiteSpace(p.BilliardCustomDisks)
                         ? p.BilliardCustomDisks : null,
+                },
+                // #1506 — the shared billiard scene (no launch / gate / mute: those
+                // colour ChaoticBilliard only) plus the sweep.
+                FractalType.BilliardRays => new RegionFractalParams
+                {
+                    BilliardGeometry = (int)p.BilliardGeometry,
+                    BilliardDiskCount = p.BilliardDiskCount,
+                    BilliardDiskRadius = p.BilliardDiskRadius,
+                    BilliardSeparation = p.BilliardSeparation,
+                    BilliardMaxBounces = p.BilliardMaxBounces,
+                    BilliardSeed = p.BilliardSeed,
+                    BilliardCustomDisks = p.BilliardGeometry == FracturingFog.BilliardGeometry.Custom
+                                          && !string.IsNullOrWhiteSpace(p.BilliardCustomDisks)
+                        ? p.BilliardCustomDisks : null,
+                    BilliardRaysSweep = (int)p.BilliardRaysSweep,
+                    BilliardRaysCount = p.BilliardRaysCount,
+                    BilliardRaysAngleCount = p.BilliardRaysAngleCount,
+                    BilliardRaysAngle = p.BilliardRaysAngle,
+                    BilliardRaysSpread = p.BilliardRaysSpread,
+                    BilliardRaysSourceX = p.BilliardRaysSourceX,
+                    BilliardRaysSourceY = p.BilliardRaysSourceY,
+                    BilliardRaysSeed = p.BilliardRaysSeed,
+                    BilliardRaysMinBounces = p.BilliardRaysMinBounces,
+                    BilliardRaysShowDisks = p.BilliardRaysShowDisks,
                 },
                 FractalType.PrecisionField => new RegionFractalParams
                 {
@@ -1716,6 +1751,16 @@ namespace FracturingFog.Models
                 p.BilliardMuteMisses = BilliardMuteMisses.Value;
             if (BilliardCustomDisks != null)
                 p.BilliardCustomDisks = BilliardCustomDisks;
+            if (BilliardRaysSweep.HasValue)      p.BilliardRaysSweep = (FracturingFog.BilliardRaySweep)BilliardRaysSweep.Value;
+            if (BilliardRaysCount.HasValue)      p.BilliardRaysCount = BilliardRaysCount.Value;
+            if (BilliardRaysAngleCount.HasValue) p.BilliardRaysAngleCount = BilliardRaysAngleCount.Value;
+            if (BilliardRaysAngle.HasValue)      p.BilliardRaysAngle = BilliardRaysAngle.Value;
+            if (BilliardRaysSpread.HasValue)     p.BilliardRaysSpread = BilliardRaysSpread.Value;
+            if (BilliardRaysSourceX.HasValue)    p.BilliardRaysSourceX = BilliardRaysSourceX.Value;
+            if (BilliardRaysSourceY.HasValue)    p.BilliardRaysSourceY = BilliardRaysSourceY.Value;
+            if (BilliardRaysSeed.HasValue)       p.BilliardRaysSeed = BilliardRaysSeed.Value;
+            if (BilliardRaysMinBounces.HasValue) p.BilliardRaysMinBounces = BilliardRaysMinBounces.Value;
+            if (BilliardRaysShowDisks.HasValue)  p.BilliardRaysShowDisks = BilliardRaysShowDisks.Value;
             // #1445 — a full pre-#1445 billiard snapshot (all seven #627 fields, none of
             // the new ones) keeps the look it was saved with: compass sectors, no muting.
             if (IsLegacyBilliardSnapshot)

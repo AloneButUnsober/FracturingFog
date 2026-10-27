@@ -481,6 +481,22 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
   with #1394; the attribution of the technique to this paper is to be confirmed against its text (see
   [Citations awaiting verification](#citations-awaiting-verification)).
 
+<a id="amanatides-woo-1987"></a>
+
+- **Voxel / grid traversal** — John Amanatides, Andrew Woo. *A Fast Voxel Traversal Algorithm for Ray
+  Tracing.* Eurographics 1987 Technical Papers, Eurographics Association, 1987. doi:10.2312/egtp.19871000,
+  <https://diglib.eg.org/handle/10.2312/egtp19871000>. Authors, title, year, venue and DOI checked
+  against the Eurographics Digital Library record; the page range was not confirmed and is left out. The
+  2D form of its cell walk splats each Billiard Rays path segment into the density grid, giving every
+  pixel the exact length inside it (`BilliardRaysCalculator.Splat`, #1506).
+
+<a id="liang-barsky-1984"></a>
+
+- **Line clipping** — You-Dong Liang, Brian A. Barsky. *A New Concept and Method for Line Clipping.*
+  ACM Transactions on Graphics 3(1), 1–22, 1984. doi:10.1145/357332.357333 (details checked against
+  DBLP). Its parametric clip trims each Billiard Rays segment to the row band being rasterised before the
+  cell walk (`BilliardRaysCalculator.Clip`, #1506).
+
 ### Scene Engine — camera splines, motion blur, cinematic moves
 
 <a id="catmull-rom"></a>

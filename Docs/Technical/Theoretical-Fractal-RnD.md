@@ -240,6 +240,18 @@ follows on release. Exit gaps work for any layout: disks are ordered by centre a
 angular gap between disks k and k + 1, so a Custom list made from a ring builds the ring's scene. Every edit keeps
 a 5% escape gap between disks and every disk within 10 units of the origin.
 
+**Billiard Rays (#1505 tracker; S1 #1506).** A separate type, `BilliardRays`, turns the billiard on end: the
+view is real space (y up, as in the inset), and instead of one launch per pixel a sweep emits many rays
+(`BSweep` default: parallel beams with b swept across the play circle; also `AngleSweep`, `PointSource`,
+`RandomFarField`, `PhaseSpace`). Each path is traced with the shared `BilliardScene` (so Custom layouts work)
+and accumulated, length-weighted, into a density grid: segments are clipped with Liang & Barsky (1984) and
+walked with the Amanatides & Woo (1987) cell traversal, so each pixel gets exactly the length inside it. The
+log density is coloured like the Buddhabrot composite, disks drawn on top. Rays do not interact, so emission
+order does not change a still; it matters only for the crossing slices (#1508, #1510). Rasterising by row
+band in fixed ray order keeps the image identical across core counts and between live, batch and export.
+Every sweep parameter rides the region snapshot / `--param`. Density plots of billiard trajectories are
+standard; the crossing statistics planned in S3–S5 still need a prior-art check (#1512).
+
 **Status:** S1–S5 shipped (#1440–#1444); epic #1439 complete.
 
 ---
@@ -829,3 +841,4 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
 - **2026-10-27** — §2.5: the 2D billiard ray-path inset #1447 (hover / pin a pixel to see its ray; live only).
 - **2026-10-27** — §2.5: NDisk places every requested disk (#1503); Ring overlap warning.
 - **2026-10-27** — §2.5: `Custom` billiard geometry edited in the ray-path inset (#1504).
+- **2026-10-27** — §2.5: Billiard Rays S1 #1506, the top-down ray-density render (tracker #1505).
