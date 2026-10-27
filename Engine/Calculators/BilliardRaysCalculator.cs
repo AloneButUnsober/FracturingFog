@@ -32,6 +32,12 @@
 // shows the length-weighted mean through the theme gradient. Both ride the same splat
 // as the density, so the weights are exactly the in-pixel lengths.
 //
+// #1508 (S3) — crossings (BilliardCrossingFinder): where each ray crosses the K rays drawn
+// just before it, and, counted separately, itself. Each crossing in view adds 1 to a
+// crossing-count grid and its value (delta N, angle, or path length from entry / to exit)
+// to a sum grid, splatted in ray order. Crossings mode draws them alone, Both draws them
+// over the paths; the crossing value is then the relief height field.
+//
 // Rasterisation: each segment is clipped to the row band with the parametric line
 // clip of Liang & Barsky (ACM TOG 3(1), 1984), then walked cell by cell with the
 // 2D form of the voxel traversal of Amanatides & Woo (Eurographics 1987). Each pixel
@@ -85,6 +91,22 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
     public double[] Tint1 { get; private set; } = Array.Empty<double>();
     public double[] Tint2 { get; private set; } = Array.Empty<double>();
     public double[] TintWeight { get; private set; } = Array.Empty<double>();
+
+    /// <summary>#1508 — crossings per pixel and the sum of their values. Empty in Paths mode.</summary>
+    public double[] CrossCount { get; private set; } = Array.Empty<double>();
+    public double[] CrossSum { get; private set; } = Array.Empty<double>();
+
+    /// <summary>#1508 — ray-ray and self-crossings found in view by the last render.</summary>
+    public int LastCrossings { get; private set; }
+    public int LastSelfCrossings { get; private set; }
+
+    /// <summary>#1508 — keep every crossing of the last render in <see cref="Crossings"/> (tests, probes).</summary>
+    public bool RecordCrossings { get; set; }
+    public IReadOnlyList<BilliardRayCrossing> Crossings { get; private set; } = Array.Empty<BilliardRayCrossing>();
+
+    /// <summary>Rays traced per chunk (default <see cref="ChunkSize"/>). Settable so tests can put a
+    /// crossing window across chunk boundaries.</summary>
+    public int ChunkRays { get; set; } = ChunkSize;
 
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
@@ -168,18 +190,39 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
         var t2 = source == BilliardRayColorSource.Gate ? Tint2 : null;
         var tw = tinted ? TintWeight : null;
 
+        var mode = p.BilliardRaysMode;
+        bool crossings = mode != BilliardRayMode.Paths;
+        bool splatPaths = mode != BilliardRayMode.Crossings;
+        int window = Math.Clamp(p.BilliardRaysCrossingWindow, 0, BilliardCrossingFinder.MaxWindow);
+        bool drawSelf = p.BilliardRaysSelfCrossings;
+        var crossValue = p.BilliardRaysCrossingValue;
+        if (crossings)
+        {
+            if (CrossCount.Length != n) { CrossCount = new double[n]; CrossSum = new double[n]; }
+            else { Array.Clear(CrossCount); Array.Clear(CrossSum); }
+        }
+        else { CrossCount = CrossSum = Array.Empty<double>(); }
+        var recorded = RecordCrossings ? new List<BilliardRayCrossing>() : null;
+        int crossCount = 0, selfCount = 0;
+        // View rectangle in world space (pixel i spans [i, i + 1) in pixel units).
+        double vx0 = cx - (w * 0.5 + 0.5) * pitch, vx1 = cx + (w * 0.5 - 0.5) * pitch;
+        double vy0 = -(cy + (h * 0.5 - 0.5) * pitch), vy1 = -(cy - (h * 0.5 + 0.5) * pitch);
+        var finder = crossings ? new BilliardCrossingFinder(window, vx0, vx1, vy0, vy1, 4.0 * pitch) : null;
+        var found = new List<BilliardRayCrossing>();
+        int chunkRays = Math.Max(1, ChunkRays);
+
         // Bands of rows for the parallel rasterise. The count depends only on the frame
         // height, never on the core count: a band edge clips segments, and the clip
         // point rounds differently from the walk's own row crossing.
         int bands = BandCount(h);
         int drawn = 0;
-        var paths = new BilliardPoint[]?[Math.Min(ChunkSize, Math.Max(1, launches.Count))];
+        var paths = new BilliardPoint[]?[Math.Min(chunkRays, Math.Max(1, launches.Count))];
         var tints = new BilliardRayTint[paths.Length];
 
-        for (int start = 0; start < launches.Count; start += ChunkSize)
+        for (int start = 0; start < launches.Count; start += chunkRays)
         {
             if (ct.IsCancellationRequested) return;
-            int count = Math.Min(ChunkSize, launches.Count - start);
+            int count = Math.Min(chunkRays, launches.Count - start);
 
             Parallel.For(0, count, new ParallelOptions { CancellationToken = ct },
                 () => new List<BilliardPoint>(64),
@@ -194,8 +237,31 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
                 },
                 _ => { });
 
+            if (finder != null)
+            {
+                double pathRef = scene.PathReference;
+                for (int i = 0; i < count; i++)
+                {
+                    if (paths[i] == null) continue;
+                    if ((i & 255) == 0 && ct.IsCancellationRequested) return;
+                    found.Clear();
+                    finder.Add(paths[i]!, found);
+                    foreach (var c in found)
+                    {
+                        if (c.IsSelf) { selfCount++; if (!drawSelf) continue; }
+                        else crossCount++;
+                        recorded?.Add(c);
+                        int px = Math.Clamp((int)Math.Floor(ToPixelX(c.X, cx, pitch, w)), 0, w - 1);
+                        int py = Math.Clamp((int)Math.Floor(ToPixelY(c.Y, cy, pitch, h)), 0, h - 1);
+                        CrossCount[py * w + px] += 1.0;
+                        CrossSum[py * w + px] += CrossingValue(crossValue, c, pathRef);
+                    }
+                }
+            }
+
             for (int i = 0; i < count; i++) if (paths[i] != null) drawn++;
 
+            if (splatPaths)
             Parallel.For(0, bands, new ParallelOptions { CancellationToken = ct }, band =>
             {
                 int y0 = (int)((long)h * band / bands), y1 = (int)((long)h * (band + 1) / bands);
@@ -217,8 +283,25 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
 
         LastRaysEmitted = launches.Count;
         LastRaysDrawn = drawn;
-        Composite(scene, p.BilliardRaysShowDisks, pitch, cx, cy, source);
+        LastCrossings = crossCount;
+        LastSelfCrossings = selfCount;
+        Crossings = (IReadOnlyList<BilliardRayCrossing>?)recorded ?? Array.Empty<BilliardRayCrossing>();
+        Composite(scene, p.BilliardRaysShowDisks, pitch, cx, cy, source, crossings ? crossValue : null);
     }
+
+    /// <summary>#1508 — the value crossing <paramref name="c"/> adds to <see cref="CrossSum"/>: 1 for
+    /// Count, the signed delta N, the angle as a fraction of a right angle, or a path length over
+    /// the scene's path reference (clamped to 1).</summary>
+    public static double CrossingValue(BilliardCrossingValue v, BilliardRayCrossing c, double pathReference) => v switch
+    {
+        BilliardCrossingValue.DeltaN => c.DeltaN,
+        BilliardCrossingValue.Angle => c.Angle / (Math.PI / 2.0),
+        BilliardCrossingValue.PreviousFromEntry => Math.Min(1.0, c.PreviousFromEntry / pathReference),
+        BilliardCrossingValue.PreviousToExit => Math.Min(1.0, c.PreviousToExit / pathReference),
+        BilliardCrossingValue.CurrentFromEntry => Math.Min(1.0, c.CurrentFromEntry / pathReference),
+        BilliardCrossingValue.CurrentToExit => Math.Min(1.0, c.CurrentToExit / pathReference),
+        _ => 1.0,
+    };
 
     /// <summary>#1507 — the tint ray <paramref name="o"/> (recorded <paramref name="path"/>) carries
     /// for <paramref name="source"/>.</summary>
@@ -466,7 +549,7 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
     // crossings, the chaotic spreading worth seeing, and norm^2 fades them out. Then
     // the disks.
     private void Composite(BilliardScene scene, bool showDisks, double pitch, double cx, double cy,
-                           BilliardRayColorSource source)
+                           BilliardRayColorSource source, BilliardCrossingValue? crossValue)
     {
         int w = Width, h = Height, n = w * h;
         double max = 0.0;
@@ -511,6 +594,8 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
             }
         });
 
+        if (crossValue is { } cv) CompositeCrossings(cm, iters, cv);
+
         if (!showDisks) return;
         for (int k = 0; k < scene.DiskCount; k++)
         {
@@ -527,5 +612,50 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
                     else if (dist <= rr) ColorBuffer[y * w + x] = DiskEdgeColor;
                 }
         }
+    }
+
+    // #1508 — crossings over whatever the paths drew (the background in Crossings mode):
+    // brightness / alpha the log crossing count, hue the theme gradient over the mean
+    // crossing value (signed delta N centred, so equal bounce counts sit mid-gradient).
+    // The value becomes the relief height (SmoothBuffer).
+    private void CompositeCrossings(IColorMap cm, int iters, BilliardCrossingValue cv)
+    {
+        int n = Width * Height;
+        double maxCount = 0, maxAbs = 0;
+        for (int i = 0; i < n; i++)
+        {
+            if (CrossCount[i] <= 0) { if (Density.Length == n && Density[i] <= 0) SmoothBuffer[i] = 0f; continue; }
+            maxCount = Math.Max(maxCount, CrossCount[i]);
+            maxAbs = Math.Max(maxAbs, Math.Abs(CrossSum[i] / CrossCount[i]));
+        }
+        if (maxCount <= 0) return;
+        double inv = 1.0 / Math.Log(1.0 + maxCount);
+        maxAbs = Math.Max(maxAbs, 1e-12);
+        Parallel.For(0, Height, y =>
+        {
+            for (int x = 0; x < Width; x++)
+            {
+                int i = y * Width + x;
+                double c = CrossCount[i];
+                if (c <= 0) { SmoothBuffer[i] = 0f; continue; }
+                double norm = Math.Log(1.0 + c) * inv;
+                double mean = CrossSum[i] / c;
+                double t = cv switch
+                {
+                    BilliardCrossingValue.Count => norm,
+                    BilliardCrossingValue.DeltaN => 0.5 + 0.5 * mean / maxAbs,
+                    _ => Math.Clamp(mean, 0.0, 1.0),
+                };
+                SmoothBuffer[i] = (float)t;
+                uint f = unchecked((uint)cm.Map((float)((cv == BilliardCrossingValue.Count ? 1.0 - t : t) * iters), 0f, iters));
+                // At least half opacity, so a single crossing is visible over bright paths.
+                double a = 0.5 + 0.5 * norm, b = 1.0 - a;
+                uint under = ColorBuffer[i];
+                uint R = (uint)(((f >> 16) & 0xFF) * a + ((under >> 16) & 0xFF) * b);
+                uint G = (uint)(((f >> 8) & 0xFF) * a + ((under >> 8) & 0xFF) * b);
+                uint B = (uint)((f & 0xFF) * a + (under & 0xFF) * b);
+                ColorBuffer[i] = 0xFF000000u | (R << 16) | (G << 8) | B;
+            }
+        });
     }
 }

@@ -256,6 +256,15 @@ length-weighted mix of the rays' exit-gate colours (`Gate`: each exit basin's fl
 rays grey) or the length-weighted mean of one per-ray value (bounces, path length, entry / exit angle,
 gates between entry and exit, self-intersection). Both ride the density splat, so the weights are the exact
 in-pixel lengths. Billiard themes colour the gates; the gradient modes then use the default gradient.
+S3 (#1508) adds crossings (`BilliardRaysMode` Paths / Crossings / Both): each ray, in sweep order, is checked
+against the K rays drawn just before it (`BilliardRaysCrossingWindow`) and, counted separately, against itself.
+Each crossing in view adds to a count grid and to a value: delta N (current minus previous bounce count at the
+crossing), the crossing angle, or the path length along either ray from where it entered or to where it
+leaves. The value is also the relief height field. The search is a uniform cell grid filled as rays arrive,
+each segment listed in the cells its cell walk visits, with rays that leave the window skipped by per-cell
+start pointers and compacted away; tests check it against a brute-force all-pairs search. This is the one
+place emission order matters. Crossing counts grow fast: about 4.6 M at window 100 and 27 M at window 1000 for
+60 k rays (0.45 s / 1.2 s release build, 800x600).
 
 **Status:** S1–S5 shipped (#1440–#1444); epic #1439 complete.
 
@@ -848,3 +857,4 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
 - **2026-10-27** — §2.5: `Custom` billiard geometry edited in the ray-path inset (#1504).
 - **2026-10-27** — §2.5: Billiard Rays S1 #1506, the top-down ray-density render (tracker #1505).
 - **2026-10-27** — §2.5: Billiard Rays S2 #1507, gate-coloured density and per-ray attribute colouring.
+- **2026-10-27** — §2.5: Billiard Rays S3 #1508, ray-ray crossings (delta N, angle, path lengths; heightfield).

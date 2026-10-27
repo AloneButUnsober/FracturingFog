@@ -610,6 +610,11 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public bool? BilliardRaysShowDisks { get; set; }
         // #1507 — int cast of BilliardRayColorSource.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysColorSource { get; set; }
+        // #1508 — crossings (int casts of BilliardRayMode / BilliardCrossingValue).
+        [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysMode { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysCrossingWindow { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysCrossingValue { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? BilliardRaysSelfCrossings { get; set; }
         // Precision-sensitivity field (#628). Tiers/metric stored as int casts of
         // PrecisionTier / PrecisionDiffMetric.
         [JsonIgnore(Condition = OmitNull)] public int? PrecisionLowTier { get; set; }
@@ -1045,6 +1050,10 @@ namespace FracturingFog.Models
                     BilliardGateMode = (int)p.BilliardGateMode,
                     BilliardGateCount = p.BilliardGateCount,
                     BilliardRaysColorSource = (int)p.BilliardRaysColorSource,
+                    BilliardRaysMode = (int)p.BilliardRaysMode,
+                    BilliardRaysCrossingWindow = p.BilliardRaysCrossingWindow,
+                    BilliardRaysCrossingValue = (int)p.BilliardRaysCrossingValue,
+                    BilliardRaysSelfCrossings = p.BilliardRaysSelfCrossings,
                 },
                 FractalType.PrecisionField => new RegionFractalParams
                 {
@@ -1768,6 +1777,10 @@ namespace FracturingFog.Models
             if (BilliardRaysMinBounces.HasValue) p.BilliardRaysMinBounces = BilliardRaysMinBounces.Value;
             if (BilliardRaysShowDisks.HasValue)  p.BilliardRaysShowDisks = BilliardRaysShowDisks.Value;
             if (BilliardRaysColorSource.HasValue) p.BilliardRaysColorSource = (FracturingFog.BilliardRayColorSource)BilliardRaysColorSource.Value;
+            if (BilliardRaysMode.HasValue)       p.BilliardRaysMode = (FracturingFog.BilliardRayMode)BilliardRaysMode.Value;
+            if (BilliardRaysCrossingWindow.HasValue) p.BilliardRaysCrossingWindow = BilliardRaysCrossingWindow.Value;
+            if (BilliardRaysCrossingValue.HasValue) p.BilliardRaysCrossingValue = (FracturingFog.BilliardCrossingValue)BilliardRaysCrossingValue.Value;
+            if (BilliardRaysSelfCrossings.HasValue) p.BilliardRaysSelfCrossings = BilliardRaysSelfCrossings.Value;
             // #1445 — a full pre-#1445 billiard snapshot (all seven #627 fields, none of
             // the new ones) keeps the look it was saved with: compass sectors, no muting.
             if (IsLegacyBilliardSnapshot)

@@ -242,6 +242,10 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _raysMinBounces = _p.BilliardRaysMinBounces;
         _raysShowDisks = _p.BilliardRaysShowDisks;
         _raysColorSource = _p.BilliardRaysColorSource;
+        _raysMode = _p.BilliardRaysMode;
+        _raysCrossWindow = _p.BilliardRaysCrossingWindow;
+        _raysCrossValue = _p.BilliardRaysCrossingValue;
+        _raysSelfCross = _p.BilliardRaysSelfCrossings;
         _precLowTier = _p.PrecisionLowTier;
         _precHighTier = _p.PrecisionHighTier;
         _precMetric = _p.PrecisionDiffMetric;
@@ -2106,6 +2110,21 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public BilliardRayColorSource BilliardRaysColorSource { get => _raysColorSource; set { Set(ref _raysColorSource, value); _p.BilliardRaysColorSource = value; Fire(); } }
     public System.Array BilliardRayColorSources => s_BilliardRayColorSources;   // cached (see BilliardGeometries)
     private static readonly System.Array s_BilliardRayColorSources = System.Enum.GetValues(typeof(BilliardRayColorSource));
+    // #1508 — crossings.
+    private BilliardRayMode _raysMode;
+    public BilliardRayMode BilliardRaysMode { get => _raysMode; set { Set(ref _raysMode, value); _p.BilliardRaysMode = value; this.RaisePropertyChanged(nameof(RaysShowsCrossings)); Fire(); } }
+    public System.Array BilliardRayModes => s_BilliardRayModes;   // cached (see BilliardGeometries)
+    private static readonly System.Array s_BilliardRayModes = System.Enum.GetValues(typeof(BilliardRayMode));
+    /// <summary>The crossing controls apply (Crossings / Both).</summary>
+    public bool RaysShowsCrossings => _raysMode != BilliardRayMode.Paths;
+    private int _raysCrossWindow;
+    public int BilliardRaysCrossingWindow { get => _raysCrossWindow; set { Set(ref _raysCrossWindow, (int)Clamp(value, 0, 50_000)); _p.BilliardRaysCrossingWindow = _raysCrossWindow; Fire(); } }
+    private BilliardCrossingValue _raysCrossValue;
+    public BilliardCrossingValue BilliardRaysCrossingValue { get => _raysCrossValue; set { Set(ref _raysCrossValue, value); _p.BilliardRaysCrossingValue = value; Fire(); } }
+    public System.Array BilliardCrossingValues => s_BilliardCrossingValues;
+    private static readonly System.Array s_BilliardCrossingValues = System.Enum.GetValues(typeof(BilliardCrossingValue));
+    private bool _raysSelfCross;
+    public bool BilliardRaysSelfCrossings { get => _raysSelfCross; set { Set(ref _raysSelfCross, value); _p.BilliardRaysSelfCrossings = value; Fire(); } }
 
     // ── Precision Field (#628) ──
     private PrecisionTier _precLowTier;
