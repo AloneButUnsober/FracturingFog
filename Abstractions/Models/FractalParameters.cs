@@ -1330,6 +1330,9 @@ namespace FracturingFog.Models
         public int BilliardRaysMinBounces { get; set; } = 2;
         /// <summary>Draw the mirror disks over the density. Default true.</summary>
         public bool BilliardRaysShowDisks { get; set; } = true;
+        /// <summary>#1507 — what sets each pixel's hue (see <see cref="FracturingFog.BilliardRayColorSource"/>).
+        /// Default Density (the S1 look).</summary>
+        public BilliardRayColorSource BilliardRaysColorSource { get; set; } = BilliardRayColorSource.Density;
 
         // Precision-sensitivity field (#628). Mandelbrot z² + c iterated at two
         // arithmetic tiers; the per-pixel divergence of the outcome is the image.
@@ -2206,6 +2209,7 @@ namespace FracturingFog.Models
                 BilliardRaysSeed = BilliardRaysSeed,
                 BilliardRaysMinBounces = BilliardRaysMinBounces,
                 BilliardRaysShowDisks = BilliardRaysShowDisks,
+                BilliardRaysColorSource = BilliardRaysColorSource,
                 PrecisionLowTier = PrecisionLowTier,
                 PrecisionHighTier = PrecisionHighTier,
                 PrecisionDiffMetric = PrecisionDiffMetric,

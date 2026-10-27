@@ -251,6 +251,11 @@ order does not change a still; it matters only for the crossing slices (#1508, #
 band in fixed ray order keeps the image identical across core counts and between live, batch and export.
 Every sweep parameter rides the region snapshot / `--param`. Density plots of billiard trajectories are
 standard; the crossing statistics planned in S3–S5 still need a prior-art check (#1512).
+S2 (#1507) adds `BilliardRaysColorSource`: brightness stays the log density, the hue comes from either the
+length-weighted mix of the rays' exit-gate colours (`Gate`: each exit basin's flow in its own colour, trapped
+rays grey) or the length-weighted mean of one per-ray value (bounces, path length, entry / exit angle,
+gates between entry and exit, self-intersection). Both ride the density splat, so the weights are the exact
+in-pixel lengths. Billiard themes colour the gates; the gradient modes then use the default gradient.
 
 **Status:** S1–S5 shipped (#1440–#1444); epic #1439 complete.
 
@@ -842,3 +847,4 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
 - **2026-10-27** — §2.5: NDisk places every requested disk (#1503); Ring overlap warning.
 - **2026-10-27** — §2.5: `Custom` billiard geometry edited in the ray-path inset (#1504).
 - **2026-10-27** — §2.5: Billiard Rays S1 #1506, the top-down ray-density render (tracker #1505).
+- **2026-10-27** — §2.5: Billiard Rays S2 #1507, gate-coloured density and per-ray attribute colouring.

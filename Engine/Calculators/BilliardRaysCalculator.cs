@@ -24,6 +24,14 @@
 // count, so live, batch and export render the same image. Rays are processed in
 // chunks so memory stays bounded at large counts.
 //
+// #1507 (S2) — colour sources. Brightness stays the log density; the hue comes from
+// BilliardRaysColorSource. Gate: each ray carries its exit gate's colour (the theme's
+// billiard gate colour, else Okabe-Ito; trapped grey) and the pixel shows the
+// length-weighted mix. Attributes (bounces, path length, entry / exit angle, entry-exit
+// gate distance, self-intersection): each ray carries one value in [0, 1] and the pixel
+// shows the length-weighted mean through the theme gradient. Both ride the same splat
+// as the density, so the weights are exactly the in-pixel lengths.
+//
 // Rasterisation: each segment is clipped to the row band with the parametric line
 // clip of Liang & Barsky (ACM TOG 3(1), 1984), then walked cell by cell with the
 // 2D form of the voxel traversal of Amanatides & Woo (Eurographics 1987). Each pixel
@@ -39,6 +47,11 @@ using FracturingFog.Interefaces;
 using FracturingFog.Models;
 
 namespace FracturingFog;
+
+/// <summary>What one ray adds to the colour channels (#1507): up to three values (gate RGB in
+/// [0, 1], or one attribute in <see cref="C0"/>), weighted by its in-pixel length. A ray with
+/// <see cref="Defined"/> false adds density only.</summary>
+public readonly record struct BilliardRayTint(bool Defined, double C0, double C1, double C2);
 
 /// <summary>One emitted ray of a <see cref="BilliardRaySweep"/> (#1506).</summary>
 public readonly record struct BilliardRayLaunch(BilliardRayLaunch.LaunchKind Kind, double A, double B, double C, double D)
@@ -66,6 +79,13 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
     /// <summary>Length-weighted density of the last render, world units per pixel.</summary>
     public double[] Density { get; private set; } = Array.Empty<double>();
 
+    /// <summary>#1507 — length-weighted sums of the rays' tints (<see cref="BilliardRayTint"/>)
+    /// and of the lengths of rays whose tint is defined. Empty in Density mode.</summary>
+    public double[] Tint0 { get; private set; } = Array.Empty<double>();
+    public double[] Tint1 { get; private set; } = Array.Empty<double>();
+    public double[] Tint2 { get; private set; } = Array.Empty<double>();
+    public double[] TintWeight { get; private set; } = Array.Empty<double>();
+
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
     public double Zoom { get; set; } = 0.6;
@@ -89,6 +109,12 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
 
     public const uint DiskFillColor = 0xFF262626;
     public const uint DiskEdgeColor = 0xFF8C8C8C;
+
+    /// <summary>#1507 — Gate mode colour of trapped rays (never escaped within the cap).</summary>
+    public const uint TrappedColor = 0xFF9A9A9A;
+
+    /// <summary>#1507 — hue of pixels crossed only by rays with no value for the attribute.</summary>
+    public const uint UndefinedColor = 0xFF5A5A5A;
 
     public BilliardRaysCalculator(int width, int height) => Resize(width, height);
 
@@ -121,6 +147,26 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
         double cx = CenterX, cy = CenterY;
         var density = Density;
         Array.Clear(density);
+        var source = p.BilliardRaysColorSource;
+        bool tinted = source != BilliardRayColorSource.Density;
+        int n = w * h;
+        if (tinted)
+        {
+            if (Tint0.Length != n) { Tint0 = new double[n]; TintWeight = new double[n]; }
+            else { Array.Clear(Tint0); Array.Clear(TintWeight); }
+            if (source == BilliardRayColorSource.Gate)
+            {
+                if (Tint1.Length != n) { Tint1 = new double[n]; Tint2 = new double[n]; }
+                else { Array.Clear(Tint1); Array.Clear(Tint2); }
+            }
+            else { Tint1 = Tint2 = Array.Empty<double>(); }
+        }
+        else { Tint0 = Tint1 = Tint2 = TintWeight = Array.Empty<double>(); }
+        var map = ColorMap;
+        var t0 = tinted ? Tint0 : null;
+        var t1 = source == BilliardRayColorSource.Gate ? Tint1 : null;
+        var t2 = source == BilliardRayColorSource.Gate ? Tint2 : null;
+        var tw = tinted ? TintWeight : null;
 
         // Bands of rows for the parallel rasterise. The count depends only on the frame
         // height, never on the core count: a band edge clips segments, and the clip
@@ -128,6 +174,7 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
         int bands = BandCount(h);
         int drawn = 0;
         var paths = new BilliardPoint[]?[Math.Min(ChunkSize, Math.Max(1, launches.Count))];
+        var tints = new BilliardRayTint[paths.Length];
 
         for (int start = 0; start < launches.Count; start += ChunkSize)
         {
@@ -140,7 +187,9 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
                 {
                     list.Clear();
                     var o = Launch(scene, launches[start + i], list);
-                    paths[i] = o.Valid && o.Bounces >= minBounces && list.Count >= 2 ? list.ToArray() : null;
+                    bool keep = o.Valid && o.Bounces >= minBounces && list.Count >= 2;
+                    paths[i] = keep ? list.ToArray() : null;
+                    if (keep && tinted) tints[i] = TintOf(source, scene, map, o, list);
                     return list;
                 },
                 _ => { });
@@ -155,18 +204,97 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
                 {
                     var pts = paths[i];
                     if (pts == null) continue;
+                    var tint = tints[i];
                     for (int k = 1; k < pts.Length; k++)
-                        Splat(density, w, y0, y1, pitch,
+                        Splat(density, t0, t1, t2, tw, tint, w, y0, y1, pitch,
                               ToPixelX(pts[k - 1].X, cx, pitch, w), ToPixelY(pts[k - 1].Y, cy, pitch, h),
                               ToPixelX(pts[k].X, cx, pitch, w), ToPixelY(pts[k].Y, cy, pitch, h));
                 }
             });
             Array.Clear(paths);
+            Array.Clear(tints);
         }
 
         LastRaysEmitted = launches.Count;
         LastRaysDrawn = drawn;
-        Composite(scene, p.BilliardRaysShowDisks, pitch, cx, cy);
+        Composite(scene, p.BilliardRaysShowDisks, pitch, cx, cy, source);
+    }
+
+    /// <summary>#1507 — the tint ray <paramref name="o"/> (recorded <paramref name="path"/>) carries
+    /// for <paramref name="source"/>.</summary>
+    public static BilliardRayTint TintOf(BilliardRayColorSource source, BilliardScene scene, IColorMap? map,
+                                         BilliardOutcome o, IReadOnlyList<BilliardPoint> path)
+    {
+        switch (source)
+        {
+            case BilliardRayColorSource.Gate:
+            {
+                uint c = o.GateId < 0 ? TrappedColor
+                    : ChaoticBilliardCalculator.GateColor(map, o.GateId, scene.GateCount, scene.MaxBounces);
+                return new(true, ((c >> 16) & 0xFF) / 255.0, ((c >> 8) & 0xFF) / 255.0, (c & 0xFF) / 255.0);
+            }
+            case BilliardRayColorSource.Bounces:
+                return Value(Math.Log(1.0 + o.Bounces) / Math.Log(1.0 + scene.MaxBounces));
+            case BilliardRayColorSource.PathLength:
+                return Value(Math.Clamp(o.PathLength / scene.PathReference, 0.0, 1.0));
+            case BilliardRayColorSource.EntryAngle:
+                return path.Count < 2 ? default
+                    : Value(Turn(path[1].X - path[0].X, path[1].Y - path[0].Y));
+            case BilliardRayColorSource.ExitAngle:
+                return o.GateId < 0 ? default : Value(Turn(o.EndDx, o.EndDy));
+            case BilliardRayColorSource.GateDistance:
+            {
+                int e = EntryGate(scene, path);
+                if (e < 0 || o.GateId < 0) return default;
+                int n = scene.GateCount, d = Math.Abs(e - o.GateId);
+                return Value(Math.Min(d, n - d) / (double)Math.Max(1, n / 2));
+            }
+            case BilliardRayColorSource.SelfIntersects:
+                return Value(SelfIntersects(path) ? 1.0 : 0.0);
+            default:
+                return default;
+        }
+
+        static BilliardRayTint Value(double v) => new(true, v, 0, 0);
+    }
+
+    // Direction as a fraction of a turn anticlockwise from +x, in [0, 1).
+    private static double Turn(double dx, double dy)
+    {
+        double a = Math.Atan2(dy, dx) / (2.0 * Math.PI);
+        return a < 0 ? a + 1.0 : a;
+    }
+
+    /// <summary>#1507 — the gate a ray came in through: the gate of the direction it came
+    /// from, for a ray that starts on or outside the play circle; -1 for one launched inside
+    /// (a point source or a disk surface).</summary>
+    public static int EntryGate(BilliardScene scene, IReadOnlyList<BilliardPoint> path)
+    {
+        if (path.Count < 2) return -1;
+        double r = Math.Sqrt(path[0].X * path[0].X + path[0].Y * path[0].Y);
+        if (r < scene.PlayRadius * (1.0 - 1e-9)) return -1;
+        return scene.Gate(path[0].X - path[1].X, path[0].Y - path[1].Y);
+    }
+
+    /// <summary>#1507 — true when two non-adjacent segments of the polyline cross.</summary>
+    public static bool SelfIntersects(IReadOnlyList<BilliardPoint> path)
+    {
+        for (int i = 1; i < path.Count; i++)
+            for (int j = i + 2; j < path.Count; j++)
+                if (SegmentsCross(path[i - 1], path[i], path[j - 1], path[j])) return true;
+        return false;
+    }
+
+    // Proper crossing of a-b and c-d: solve a + s (b - a) = c + t (d - c) with s, t in (0, 1).
+    private static bool SegmentsCross(BilliardPoint a, BilliardPoint b, BilliardPoint c, BilliardPoint d)
+    {
+        double rx = b.X - a.X, ry = b.Y - a.Y, qx = d.X - c.X, qy = d.Y - c.Y;
+        double den = rx * qy - ry * qx;
+        if (Math.Abs(den) < 1e-300) return false;
+        double ex = c.X - a.X, ey = c.Y - a.Y;
+        double s = (ex * qy - ey * qx) / den, t = (ex * ry - ey * rx) / den;
+        const double eps = 1e-12;
+        return s > eps && s < 1 - eps && t > eps && t < 1 - eps;
     }
 
     /// <summary>Row bands the rasterise splits a frame of height <paramref name="h"/> into.</summary>
@@ -274,9 +402,11 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
     // Add segment (x0, y0)-(x1, y1) (pixel coordinates) to rows [y0r, y1r): every pixel
     // it crosses gets the world length inside it. Liang-Barsky clip to the band, then
     // the Amanatides-Woo voxel walk.
-    private static void Splat(double[] grid, int w, int y0r, int y1r, double pitch,
+    private static void Splat(double[] grid, double[]? g0, double[]? g1, double[]? g2, double[]? gw,
+                              BilliardRayTint tint, int w, int y0r, int y1r, double pitch,
                               double x0, double y0, double x1, double y1)
     {
+        bool tinted = gw != null && tint.Defined;
         if ((y0 < y0r && y1 < y0r) || (y0 >= y1r && y1 >= y1r)) return;
         if ((x0 < 0 && x1 < 0) || (x0 >= w && x1 >= w)) return;
         double dx = x1 - x0, dy = y1 - y0;
@@ -303,7 +433,15 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
         while (t < t1 && guard-- > 0)
         {
             double tn = Math.Min(Math.Min(tMaxX, tMaxY), t1);
-            grid[iy * w + ix] += (tn - t) * len;
+            int cell = iy * w + ix;
+            double dl = (tn - t) * len;
+            grid[cell] += dl;
+            if (tinted)
+            {
+                g0![cell] += dl * tint.C0;
+                if (g1 != null) { g1[cell] += dl * tint.C1; g2![cell] += dl * tint.C2; }
+                gw![cell] += dl;
+            }
             t = tn;
             if (t >= t1) break;
             if (tMaxX <= tMaxY) { ix += sx; tMaxX += tDx; }
@@ -327,14 +465,17 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
     // InSetColor. Alpha is norm, not the Buddhabrot's norm^2: the exit fans are single
     // crossings, the chaotic spreading worth seeing, and norm^2 fades them out. Then
     // the disks.
-    private void Composite(BilliardScene scene, bool showDisks, double pitch, double cx, double cy)
+    private void Composite(BilliardScene scene, bool showDisks, double pitch, double cx, double cy,
+                           BilliardRayColorSource source)
     {
         int w = Width, h = Height, n = w * h;
         double max = 0.0;
         for (int i = 0; i < n; i++) if (Density[i] > max) max = Density[i];
 
         int iters = Math.Max(16, MaxIterations);
-        var cm = ColorMap;
+        // A billiard theme colours gates only (its gradient Map is black), so it feeds the
+        // Gate mode; the gradient modes then use the default gradient instead.
+        var cm = ColorMap is IBilliardColorMap ? new HsvPalette() : ColorMap;
         cm.MaxIterations = iters;
         uint bg = cm.InSetColor | 0xFF000000u;
         double inv = max > 0 ? 1.0 / Math.Log(1.0 + max / pitch) : 0.0;
@@ -348,7 +489,20 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
                 if (d <= 0 || max <= 0) { SmoothBuffer[i] = 0f; ColorBuffer[i] = bg; continue; }
                 double norm = Math.Log(1.0 + d / pitch) * inv;
                 SmoothBuffer[i] = (float)norm;
-                uint f = unchecked((uint)cm.Map((float)((1.0 - norm) * iters), 0f, iters));
+                uint f;
+                if (source == BilliardRayColorSource.Density)
+                    f = unchecked((uint)cm.Map((float)((1.0 - norm) * iters), 0f, iters));
+                else if (TintWeight[i] <= 0)
+                    f = UndefinedColor;
+                else if (source == BilliardRayColorSource.Gate)
+                {
+                    double k = 255.0 / TintWeight[i];
+                    f = 0xFF000000u | ((uint)Math.Min(255.0, Tint0[i] * k) << 16)
+                                    | ((uint)Math.Min(255.0, Tint1[i] * k) << 8)
+                                    | (uint)Math.Min(255.0, Tint2[i] * k);
+                }
+                else
+                    f = unchecked((uint)cm.Map((float)(Tint0[i] / TintWeight[i] * iters), 0f, iters));
                 double a = norm, b = 1.0 - a;
                 uint R = (uint)(((f >> 16) & 0xFF) * a + ((bg >> 16) & 0xFF) * b);
                 uint G = (uint)(((f >> 8) & 0xFF) * a + ((bg >> 8) & 0xFF) * b);

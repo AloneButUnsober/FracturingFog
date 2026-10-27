@@ -903,8 +903,8 @@
                            Minimum="1" Maximum="4096" Increment="16" FormatString="F0"
                            Value="{Binding BilliardMaxBounces, Mode=TwoWay}" Margin="0,2"
                            ToolTip.Tip="Reflection cap before a trajectory is declared trapped. Higher resolves the trapped (Cantor) set deeper at linear cost." />
-            <TextBlock Grid.Row="5" Grid.Column="0" Text="Gate count:" VerticalAlignment="Center" IsVisible="{Binding IsChaoticBilliard}" />
-            <NumericUpDown Grid.Row="5" Grid.Column="1" IsVisible="{Binding IsChaoticBilliard}"
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Gate count:" VerticalAlignment="Center" IsVisible="{Binding IsBilliardScene}" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1" IsVisible="{Binding IsBilliardScene}"
                            Minimum="2" Maximum="64" Increment="1" FormatString="F0"
                            Value="{Binding BilliardGateCount, Mode=TwoWay}" Margin="0,2"
                            ToolTip.Tip="Sector gate mode only: number of compass sectors the exit direction is bucketed into. ExitGap mode uses one gate per gap between ring disks." />
@@ -919,8 +919,8 @@
                       SelectedItem="{Binding BilliardLaunchMode, Mode=TwoWay}"
                       Margin="0,2"
                       ToolTip.Tip="FarField: rays come in from outside (x = impact offset, y = incoming angle). PhaseSpace: rays leave the surface of disk 0 (x = position around the disk, y = sine of the outgoing angle) — the chaotic set fills the view." />
-            <TextBlock Grid.Row="8" Grid.Column="0" Text="Gate mode:" VerticalAlignment="Center" IsVisible="{Binding IsChaoticBilliard}" />
-            <ComboBox Grid.Row="8" Grid.Column="1" IsVisible="{Binding IsChaoticBilliard}"
+            <TextBlock Grid.Row="8" Grid.Column="0" Text="Gate mode:" VerticalAlignment="Center" IsVisible="{Binding IsBilliardScene}" />
+            <ComboBox Grid.Row="8" Grid.Column="1" IsVisible="{Binding IsBilliardScene}"
                       ItemsSource="{Binding BilliardGateModes}"
                       SelectedItem="{Binding BilliardGateMode, Mode=TwoWay}"
                       Margin="0,2"
@@ -945,7 +945,7 @@
         <!-- Billiard Rays (#1506): the sweep that emits the rays -->
         <Grid IsVisible="{Binding IsBilliardRays}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Sweep:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding BilliardRaySweeps}"
@@ -994,7 +994,14 @@
             <CheckBox Grid.Row="9" Grid.Column="1" Content="Show disks"
                       IsChecked="{Binding BilliardRaysShowDisks, Mode=TwoWay}" Margin="0,2"
                       ToolTip.Tip="Draw the mirror disks over the ray density." />
-            <TextBlock Grid.Row="10" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Margin="0,4,0,2"
+            <!-- #1507: hue source; brightness is always the log density. -->
+            <TextBlock Grid.Row="10" Grid.Column="0" Text="Colour by:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="10" Grid.Column="1"
+                      ItemsSource="{Binding BilliardRayColorSources}"
+                      SelectedItem="{Binding BilliardRaysColorSource, Mode=TwoWay}"
+                      Margin="0,2"
+                      ToolTip.Tip="What sets the colour; brightness is always how much ray path crosses the pixel. Density: theme gradient over density. Gate: the exit-gate colours of the rays crossing it, mixed by length (trapped rays grey; uses Gate mode / Gate count). Bounces, PathLength, EntryAngle, ExitAngle, GateDistance (gates between entry and exit), SelfIntersects (share of rays crossing their own path): the average of that value through the theme gradient. Dark grey = no value (e.g. no exit for trapped rays)." />
+            <TextBlock Grid.Row="11" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Margin="0,4,0,2"
                        Text="Each pixel shows how much ray path crosses it (log scale). Emission order does not change the picture: rays do not interact." />
         </Grid>
 

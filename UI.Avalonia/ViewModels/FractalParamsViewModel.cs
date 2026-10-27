@@ -241,6 +241,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _raysSeed = _p.BilliardRaysSeed;
         _raysMinBounces = _p.BilliardRaysMinBounces;
         _raysShowDisks = _p.BilliardRaysShowDisks;
+        _raysColorSource = _p.BilliardRaysColorSource;
         _precLowTier = _p.PrecisionLowTier;
         _precHighTier = _p.PrecisionHighTier;
         _precMetric = _p.PrecisionDiffMetric;
@@ -2100,6 +2101,11 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public int BilliardRaysMinBounces { get => _raysMinBounces; set { Set(ref _raysMinBounces, (int)Clamp(value, 0, 4096)); _p.BilliardRaysMinBounces = _raysMinBounces; Fire(); } }
     private bool _raysShowDisks;
     public bool BilliardRaysShowDisks { get => _raysShowDisks; set { Set(ref _raysShowDisks, value); _p.BilliardRaysShowDisks = value; Fire(); } }
+    // #1507 — what sets the hue.
+    private BilliardRayColorSource _raysColorSource;
+    public BilliardRayColorSource BilliardRaysColorSource { get => _raysColorSource; set { Set(ref _raysColorSource, value); _p.BilliardRaysColorSource = value; Fire(); } }
+    public System.Array BilliardRayColorSources => s_BilliardRayColorSources;   // cached (see BilliardGeometries)
+    private static readonly System.Array s_BilliardRayColorSources = System.Enum.GetValues(typeof(BilliardRayColorSource));
 
     // ── Precision Field (#628) ──
     private PrecisionTier _precLowTier;
