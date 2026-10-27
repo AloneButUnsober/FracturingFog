@@ -289,6 +289,10 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _mirrorCameraTheta = _p.MirrorSpheresCameraTheta;
         _mirrorCameraPhi = _p.MirrorSpheresCameraPhi;
         _mirrorCameraDistance = _p.MirrorSpheresCameraDistance;
+        _mirrorMode = _p.MirrorSpheresMode;
+        _mirrorOpeningColors = _p.MirrorSpheresOpeningColors;
+        _mirrorViewerBlack = _p.MirrorSpheresViewerBlack;
+        _mirrorFresnel = _p.MirrorSpheresFresnel;
         _kleinCameraPhi = _p.KleinianCameraPhi;
         _kleinCameraDistance = _p.KleinianCameraDistance;
         _dlaParticles = _p.DlaParticles;
@@ -2709,6 +2713,18 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double MirrorSpheresCameraPhi { get => _mirrorCameraPhi; set { Set(ref _mirrorCameraPhi, Clamp(value, 0.01, 3.13)); _p.MirrorSpheresCameraPhi = _mirrorCameraPhi; Fire(); } }
     private double _mirrorCameraDistance;
     public double MirrorSpheresCameraDistance { get => _mirrorCameraDistance; set { Set(ref _mirrorCameraDistance, Clamp(value, 0.1, 500)); _p.MirrorSpheresCameraDistance = _mirrorCameraDistance; Fire(); } }
+    // #1441 — photo mode.
+    private MirrorSpheresMode _mirrorMode;
+    public MirrorSpheresMode MirrorSpheresMode { get => _mirrorMode; set { Set(ref _mirrorMode, value); _p.MirrorSpheresMode = value; this.RaisePropertyChanged(nameof(IsMirrorSpheresPhoto)); Fire(); } }
+    public System.Array MirrorSpheresModes => s_MirrorSpheresModes;   // cached (see BilliardGeometries)
+    private static readonly System.Array s_MirrorSpheresModes = System.Enum.GetValues(typeof(MirrorSpheresMode));
+    public bool IsMirrorSpheresPhoto => IsMirrorSpheres && _mirrorMode == MirrorSpheresMode.Photo;
+    private string _mirrorOpeningColors = "";
+    public string MirrorSpheresOpeningColors { get => _mirrorOpeningColors; set { Set(ref _mirrorOpeningColors, value ?? ""); _p.MirrorSpheresOpeningColors = _mirrorOpeningColors; Fire(); } }
+    private bool _mirrorViewerBlack;
+    public bool MirrorSpheresViewerBlack { get => _mirrorViewerBlack; set { Set(ref _mirrorViewerBlack, value); _p.MirrorSpheresViewerBlack = value; Fire(); } }
+    private bool _mirrorFresnel;
+    public bool MirrorSpheresFresnel { get => _mirrorFresnel; set { Set(ref _mirrorFresnel, value); _p.MirrorSpheresFresnel = value; Fire(); } }
 
     // ── Flame ──
     private string _flamePresetName = "Sierpinski Variation";

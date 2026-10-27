@@ -321,7 +321,7 @@
         <!-- Wada mirror spheres (#1440) -->
         <Grid IsVisible="{Binding IsMirrorSpheres}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Ball radius:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="0" Grid.Column="1"
                            Minimum="0.05" Maximum="1.0" Increment="0.01" FormatString="F2"
@@ -353,8 +353,27 @@
                            Minimum="0.1" Maximum="500" Increment="0.1" FormatString="F2"
                            Value="{Binding MirrorSpheresCameraDistance, Mode=TwoWay}" Margin="0,2" />
             <TextBlock Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="2"
-                       Text="Colours are the four exit openings. Pick a Billiard theme to recolour them."
+                       Text="Colours are the four exit openings. In Basins mode a Billiard theme recolours them."
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4,0,0" />
+            <TextBlock Grid.Row="8" Grid.Column="0" Text="Mode:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="8" Grid.Column="1" HorizontalAlignment="Stretch" Margin="0,2"
+                      ItemsSource="{Binding MirrorSpheresModes}"
+                      SelectedItem="{Binding MirrorSpheresMode, Mode=TwoWay}"
+                      ToolTip.Tip="Basins: each pixel in its exit opening's colour. Photo: the 1999 photograph's setup, with a coloured board or the open sky beyond each opening, the camera's opening dark and Fresnel mirrors." />
+            <TextBlock Grid.Row="9" Grid.Column="0" Text="Opening colours:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsMirrorSpheresPhoto}" />
+            <TextBox Grid.Row="9" Grid.Column="1" Margin="0,2"
+                     Text="{Binding MirrorSpheresOpeningColors, Mode=TwoWay}"
+                     IsVisible="{Binding IsMirrorSpheresPhoto}"
+                     ToolTip.Tip="Four comma-separated entries in opening order: #RRGGBB for a coloured board, or env to leave the opening open to the Lighting &amp; FX sky / HDRI." />
+            <CheckBox Grid.Row="10" Grid.Column="1" Content="Camera's opening is dark"
+                      IsChecked="{Binding MirrorSpheresViewerBlack, Mode=TwoWay}" Margin="0,2"
+                      IsVisible="{Binding IsMirrorSpheresPhoto}"
+                      ToolTip.Tip="The opening you look in through shows black, as in the photo (dark room, uncovered opening)." />
+            <CheckBox Grid.Row="11" Grid.Column="1" Content="Fresnel mirrors"
+                      IsChecked="{Binding MirrorSpheresFresnel, Mode=TwoWay}" Margin="0,2"
+                      IsVisible="{Binding IsMirrorSpheresPhoto}"
+                      ToolTip.Tip="Grazing reflections keep more light than head-on ones (Schlick's approximation). Off: every bounce keeps the reflectance." />
         </Grid>
 
         <Grid IsVisible="{Binding IsKleinian}"
