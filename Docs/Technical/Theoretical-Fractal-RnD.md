@@ -293,6 +293,17 @@ takes 13 ms. **GPU: not now.** The splat is what a GPU would speed up, but the i
 core counts and between live, batch and export because each pixel sums in a fixed order; GPU atomics add in
 any order, so keeping that would need fixed-point accumulation. With the preview keeping drags smooth, the
 gain does not justify that yet.
+S7 (#1512) adds three built-in presets (three-disk gate flow, ring crossings with relief, a custom five-disk
+divergence), the user guide (`Docs/User/Billiard-Guide.md`, with batch examples), and a **prior-art check**.
+Drawing billiard rays in real space is long established: ray tracing of reflecting scatterers, for example the
+MPI-PKS interactive tracer of the Sweet-Ott-Yorke spheres (Glasser 2007), and the density of many rays is ordinary
+accumulation rendering. Statistics of trajectory **self-crossings** are an established subject in periodic-orbit
+theory (Braun, Heusler, Müller and Haake 2002; Müller 2003). Neighbour divergence is the real-space reading of
+the launch map's sensitivity to initial conditions (the uncertainty exponent above). A limited search (web,
+arXiv) found no prior treatment of crossings *between different rays* in sweep order, coloured by their
+bounce-count difference, or of the escaped-without-crossing class. That is a note on what was searched, not a
+claim of originality: FF calls them visualisation choices built on the work above, and the check can be
+redone with a fuller literature search.
 
 **Status:** S1–S5 shipped (#1440–#1444); epic #1439 complete.
 
@@ -889,3 +900,4 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
 - **2026-10-28** — §2.5: Billiard Rays S4 #1509, sweep-neighbour divergence (real-space basin boundary).
 - **2026-10-28** — §2.5: Billiard Rays S5 #1510, the escaped / crossing / trapped classification.
 - **2026-10-28** — §2.5: Billiard Rays S6 #1511, sweep progress, progressive batches, drag preview, cost (GPU deferred).
+- **2026-10-28** — §2.5: Billiard Rays S7 #1512, presets, user guide, prior-art check (epic #1505 complete).
