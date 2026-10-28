@@ -1015,7 +1015,7 @@ namespace FracturingFog
         /// <c>BilliardGateCount</c>; #1508 <c>BilliardRaysMode</c>,
         /// <c>BilliardRaysCrossingWindow</c>, <c>BilliardRaysCrossingValue</c>,
         /// <c>BilliardRaysSelfCrossings</c>; #1509 <c>BilliardRaysDivergenceValue</c>; #1510
-        /// <c>BilliardRaysEscapedColour</c>.</summary>
+        /// <c>BilliardRaysEscapedColour</c>; #1511 <c>BilliardRaysProgress</c>.</summary>
         BilliardRays,
     }
 

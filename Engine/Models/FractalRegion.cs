@@ -619,6 +619,8 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysDivergenceValue { get; set; }
         // #1510 — int cast of BilliardEscapedColour.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysEscapedColour { get; set; }
+        // #1511 — fraction of the sweep emitted.
+        [JsonIgnore(Condition = OmitNull)] public double? BilliardRaysProgress { get; set; }
         // Precision-sensitivity field (#628). Tiers/metric stored as int casts of
         // PrecisionTier / PrecisionDiffMetric.
         [JsonIgnore(Condition = OmitNull)] public int? PrecisionLowTier { get; set; }
@@ -1060,6 +1062,7 @@ namespace FracturingFog.Models
                     BilliardRaysSelfCrossings = p.BilliardRaysSelfCrossings,
                     BilliardRaysDivergenceValue = (int)p.BilliardRaysDivergenceValue,
                     BilliardRaysEscapedColour = (int)p.BilliardRaysEscapedColour,
+                    BilliardRaysProgress = p.BilliardRaysProgress,
                 },
                 FractalType.PrecisionField => new RegionFractalParams
                 {
@@ -1789,6 +1792,7 @@ namespace FracturingFog.Models
             if (BilliardRaysSelfCrossings.HasValue) p.BilliardRaysSelfCrossings = BilliardRaysSelfCrossings.Value;
             if (BilliardRaysDivergenceValue.HasValue) p.BilliardRaysDivergenceValue = (FracturingFog.BilliardDivergenceValue)BilliardRaysDivergenceValue.Value;
             if (BilliardRaysEscapedColour.HasValue) p.BilliardRaysEscapedColour = (FracturingFog.BilliardEscapedColour)BilliardRaysEscapedColour.Value;
+            if (BilliardRaysProgress.HasValue)   p.BilliardRaysProgress = BilliardRaysProgress.Value;
             // #1445 — a full pre-#1445 billiard snapshot (all seven #627 fields, none of
             // the new ones) keeps the look it was saved with: compass sectors, no muting.
             if (IsLegacyBilliardSnapshot)

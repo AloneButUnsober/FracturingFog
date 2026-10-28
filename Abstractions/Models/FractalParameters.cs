@@ -1350,6 +1350,10 @@ namespace FracturingFog.Models
         /// <summary>#1510 — how Escaped mode colours the escaped rays (see
         /// <see cref="FracturingFog.BilliardEscapedColour"/>). Default GateDistance.</summary>
         public BilliardEscapedColour BilliardRaysEscapedColour { get; set; } = BilliardEscapedColour.GateDistance;
+        /// <summary>#1511 — fraction of the sweep emitted, in emission order (the first
+        /// floor(progress x count) rays). Animate it 0 to 1 to watch the rays arrive.
+        /// Clamped to [0, 1]. Default 1.</summary>
+        public double BilliardRaysProgress { get; set; } = 1.0;
 
         // Precision-sensitivity field (#628). Mandelbrot z² + c iterated at two
         // arithmetic tiers; the per-pixel divergence of the outcome is the image.
@@ -2233,6 +2237,7 @@ namespace FracturingFog.Models
                 BilliardRaysSelfCrossings = BilliardRaysSelfCrossings,
                 BilliardRaysDivergenceValue = BilliardRaysDivergenceValue,
                 BilliardRaysEscapedColour = BilliardRaysEscapedColour,
+                BilliardRaysProgress = BilliardRaysProgress,
                 PrecisionLowTier = PrecisionLowTier,
                 PrecisionHighTier = PrecisionHighTier,
                 PrecisionDiffMetric = PrecisionDiffMetric,
