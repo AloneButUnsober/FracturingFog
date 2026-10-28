@@ -129,8 +129,17 @@ namespace FracturingFog
     /// <summary>What <see cref="FractalType.BilliardRays"/> draws (#1508): the ray paths, the points
     /// where rays cross, or the crossings over the paths; #1509 <see cref="Divergence"/>: where
     /// each ray parts from its sweep neighbour (alone, or <see cref="DivergenceOverPaths"/>).
+    /// #1510 <see cref="Escaped"/>: each drawn ray is classed escaped (leaves through a gate without
+    /// crossing any of the window's previous rays), crossing (crosses one) or trapped (never leaves);
+    /// escaped rays' paths are drawn, crossings keep the crossing colouring.
     /// Appended: the region snapshot stores the int value.</summary>
-    public enum BilliardRayMode { Paths, Crossings, Both, Divergence, DivergenceOverPaths }
+    public enum BilliardRayMode { Paths, Crossings, Both, Divergence, DivergenceOverPaths, Escaped }
+
+    /// <summary>How <see cref="BilliardRayMode.Escaped"/> colours the escaped rays' paths (#1510):
+    /// by the gates between entry and exit, path length or bounces (as the matching
+    /// <see cref="BilliardRayColorSource"/>), plain grey, or not at all (<see cref="Hidden"/>: only
+    /// the crossings are drawn).</summary>
+    public enum BilliardEscapedColour { GateDistance, PathLength, Bounces, Grey, Hidden }
 
     /// <summary>What colours a divergence marker (#1509). Each ray is compared with the ray emitted
     /// just before it when their launches are neighbours (the same BSweep beam, or consecutive
@@ -1005,7 +1014,8 @@ namespace FracturingFog
         /// <c>BilliardRaysColorSource</c> with the shared <c>BilliardGateMode</c> /
         /// <c>BilliardGateCount</c>; #1508 <c>BilliardRaysMode</c>,
         /// <c>BilliardRaysCrossingWindow</c>, <c>BilliardRaysCrossingValue</c>,
-        /// <c>BilliardRaysSelfCrossings</c>; #1509 <c>BilliardRaysDivergenceValue</c>.</summary>
+        /// <c>BilliardRaysSelfCrossings</c>; #1509 <c>BilliardRaysDivergenceValue</c>; #1510
+        /// <c>BilliardRaysEscapedColour</c>.</summary>
         BilliardRays,
     }
 

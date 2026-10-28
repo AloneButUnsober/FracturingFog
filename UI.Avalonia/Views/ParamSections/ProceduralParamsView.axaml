@@ -945,7 +945,7 @@
         <!-- Billiard Rays (#1506): the sweep that emits the rays -->
         <Grid IsVisible="{Binding IsBilliardRays}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Sweep:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding BilliardRaySweeps}"
@@ -1007,7 +1007,7 @@
                       ItemsSource="{Binding BilliardRayModes}"
                       SelectedItem="{Binding BilliardRaysMode, Mode=TwoWay}"
                       Margin="0,2"
-                      ToolTip.Tip="Paths: the rays themselves. Crossings: only the points where a ray crosses one drawn shortly before it. Both: crossings over the paths. Divergence: where each ray parts from its sweep neighbour (the ray launched next to it) - the exit-basin boundary in real space; DivergenceOverPaths draws it over the paths. Crossings and divergence also become the relief height." />
+                      ToolTip.Tip="Paths: the rays themselves. Crossings: only the points where a ray crosses one drawn shortly before it. Both: crossings over the paths. Divergence: where each ray parts from its sweep neighbour (the ray launched next to it) - the exit-basin boundary in real space; DivergenceOverPaths draws it over the paths. Escaped: rays that leave through a gate without crossing any ray in the crossing window are drawn, the crossings of the rest are marked; the status bar shows how many rays escaped, crossed or were trapped. Crossings and divergence also become the relief height." />
             <TextBlock Grid.Row="12" Grid.Column="0" Text="Crossing window:" VerticalAlignment="Center" IsVisible="{Binding RaysShowsCrossings}" />
             <NumericUpDown Grid.Row="12" Grid.Column="1" IsVisible="{Binding RaysShowsCrossings}"
                            Minimum="0" Maximum="50000" Increment="10" FormatString="F0"
@@ -1029,7 +1029,14 @@
                       SelectedItem="{Binding BilliardRaysDivergenceValue, Mode=TwoWay}"
                       Margin="0,2"
                       ToolTip.Tip="Marks sit on the last mirror two neighbouring rays both hit before they part. BounceDifference: how different their bounce counts end up. GateChange: whether they leave through different gates. Separation: how far apart their next hits are. CommonBounces: how many mirrors they shared. Random sweeps have no neighbours, so they draw no marks." />
-            <TextBlock Grid.Row="16" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Margin="0,4,0,2"
+            <!-- #1510: escaped rays. -->
+            <TextBlock Grid.Row="16" Grid.Column="0" Text="Escaped colour:" VerticalAlignment="Center" IsVisible="{Binding RaysShowsEscaped}" />
+            <ComboBox Grid.Row="16" Grid.Column="1" IsVisible="{Binding RaysShowsEscaped}"
+                      ItemsSource="{Binding BilliardEscapedColours}"
+                      SelectedItem="{Binding BilliardRaysEscapedColour, Mode=TwoWay}"
+                      Margin="0,2"
+                      ToolTip.Tip="How the escaped rays (no crossing with an earlier ray in the window) are drawn: by the gates between entry and exit, path length or bounces; plain grey; or Hidden to show only the crossings. A ray's class is worked out over the whole play circle, not just the view." />
+            <TextBlock Grid.Row="17" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Margin="0,4,0,2"
                        Text="Each pixel shows how much ray path crosses it (log scale). Emission order does not change the paths, since rays do not interact; it does decide which rays count as previous for crossings." />
         </Grid>
 

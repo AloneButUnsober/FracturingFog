@@ -49,6 +49,14 @@
 // the legs trace the fractal basin boundary in real space. Every valid ray takes part
 // (Min bounces only filters what is drawn).
 //
+// #1510 (S5) — Escaped mode: each drawn ray is classed by the crossing search. A ray
+// that leaves through a gate without crossing any of the window's previous rays is
+// escaped; one that crosses a previous ray is crossing; one that never leaves is
+// trapped (self-crossings do not count). The class is a property of the ray, so the
+// search then covers the whole play circle, not just the view. Escaped rays' paths are
+// drawn (coloured by gate distance, path length or bounces, grey, or hidden); the
+// crossings keep the crossing colouring. The counts go to the status bar.
+//
 // Rasterisation: each segment is clipped to the row band with the parametric line
 // clip of Liang & Barsky (ACM TOG 3(1), 1984), then walked cell by cell with the
 // 2D form of the voxel traversal of Amanatides & Woo (Eurographics 1987). Each pixel
@@ -75,6 +83,9 @@ public readonly record struct BilliardRayTint(bool Defined, double C0, double C1
 /// last shared mirror point: its bounce number <see cref="CommonBounces"/>.</summary>
 public readonly record struct BilliardRayDivergence(double X, double Y, int Current, int Previous, int CommonBounces,
                                                     int BounceDifference, bool GateChanged, double Separation);
+
+/// <summary>#1510 — Escaped mode's class of a drawn ray.</summary>
+public enum BilliardRayClass { Escaped, Crossing, Trapped }
 
 /// <summary>One emitted ray of a <see cref="BilliardRaySweep"/> (#1506).</summary>
 public readonly record struct BilliardRayLaunch(BilliardRayLaunch.LaunchKind Kind, double A, double B, double C, double D)
@@ -124,6 +135,23 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
     /// <summary>#1509 — keep every divergence of the last render in <see cref="Divergences"/>.</summary>
     public bool RecordDivergences { get; set; }
     public IReadOnlyList<BilliardRayDivergence> Divergences { get; private set; } = Array.Empty<BilliardRayDivergence>();
+
+    /// <summary>#1510 — Escaped mode's class counts for the last render (drawn rays only; they add up
+    /// to <see cref="LastRaysDrawn"/>). Zero in other modes.</summary>
+    public int LastEscapedRays { get; private set; }
+    public int LastCrossingRays { get; private set; }
+    public int LastTrappedRays { get; private set; }
+
+    /// <summary>#1510 — the class of each drawn ray, in drawn order, when <see cref="RecordCrossings"/>
+    /// is on in Escaped mode.</summary>
+    public IReadOnlyList<BilliardRayClass> RayClasses { get; private set; } = Array.Empty<BilliardRayClass>();
+
+    /// <summary>#1510 — status-bar text: the Escaped mode's class counts; null in other modes. (The
+    /// host shows calculators' LastPrecisionLabel in the status bar.)</summary>
+    public string? LastPrecisionLabel { get; private set; }
+
+    /// <summary>#1510 — Escaped mode's Grey colour for escaped rays.</summary>
+    public const uint EscapedGreyColor = 0xFFB0B0B0;
 
     /// <summary>#1508 — ray-ray and self-crossings found in view by the last render.</summary>
     public int LastCrossings { get; private set; }
@@ -198,7 +226,19 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
         double cx = CenterX, cy = CenterY;
         var density = Density;
         Array.Clear(density);
-        var source = p.BilliardRaysColorSource;
+        var mode = p.BilliardRaysMode;
+        bool escapedMode = mode == BilliardRayMode.Escaped;
+        var escColour = p.BilliardRaysEscapedColour;
+        // Escaped mode colours the escaped rays from its own setting; Grey rides the Gate mix.
+        var source = !escapedMode ? p.BilliardRaysColorSource : escColour switch
+        {
+            BilliardEscapedColour.GateDistance => BilliardRayColorSource.GateDistance,
+            BilliardEscapedColour.PathLength => BilliardRayColorSource.PathLength,
+            BilliardEscapedColour.Bounces => BilliardRayColorSource.Bounces,
+            BilliardEscapedColour.Grey => BilliardRayColorSource.Gate,
+            _ => BilliardRayColorSource.Density,
+        };
+        bool greyTint = escapedMode && escColour == BilliardEscapedColour.Grey;
         bool tinted = source != BilliardRayColorSource.Density;
         int n = w * h;
         if (tinted)
@@ -219,10 +259,12 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
         var t2 = source == BilliardRayColorSource.Gate ? Tint2 : null;
         var tw = tinted ? TintWeight : null;
 
-        var mode = p.BilliardRaysMode;
-        bool crossings = mode is BilliardRayMode.Crossings or BilliardRayMode.Both;
+        bool crossings = mode is BilliardRayMode.Crossings or BilliardRayMode.Both or BilliardRayMode.Escaped;
         bool divergence = mode is BilliardRayMode.Divergence or BilliardRayMode.DivergenceOverPaths;
-        bool splatPaths = mode is BilliardRayMode.Paths or BilliardRayMode.Both or BilliardRayMode.DivergenceOverPaths;
+        bool splatPaths = mode is BilliardRayMode.Paths or BilliardRayMode.Both or BilliardRayMode.DivergenceOverPaths
+                          || (escapedMode && escColour != BilliardEscapedColour.Hidden);
+        int escapedRays = 0, crossingRays = 0, trappedRays = 0;
+        var classes = escapedMode && RecordCrossings ? new List<BilliardRayClass>() : null;
         var divValue = p.BilliardRaysDivergenceValue;
         if (divergence)
         {
@@ -248,7 +290,12 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
         // View rectangle in world space (pixel i spans [i, i + 1) in pixel units).
         double vx0 = cx - (w * 0.5 + 0.5) * pitch, vx1 = cx + (w * 0.5 - 0.5) * pitch;
         double vy0 = -(cy + (h * 0.5 - 0.5) * pitch), vy1 = -(cy - (h * 0.5 + 0.5) * pitch);
-        var finder = crossings ? new BilliardCrossingFinder(window, vx0, vx1, vy0, vy1, 4.0 * pitch) : null;
+        // Escaped mode classes whole rays, so its search covers the play circle; the other
+        // crossing modes only need the crossings they can draw.
+        double rp = scene.PlayRadius * 1.001;
+        var finder = !crossings ? null
+            : escapedMode ? new BilliardCrossingFinder(window, -rp, rp, -rp, rp, 4.0 * pitch)
+            : new BilliardCrossingFinder(window, vx0, vx1, vy0, vy1, 4.0 * pitch);
         var found = new List<BilliardRayCrossing>();
         int chunkRays = Math.Max(1, ChunkRays);
 
@@ -260,6 +307,7 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
         var paths = new BilliardPoint[]?[Math.Min(chunkRays, Math.Max(1, launches.Count))];
         var tints = new BilliardRayTint[paths.Length];
         var traces = divergence ? new RayTrace?[paths.Length] : null;
+        var gates = new int[paths.Length];
         var sweep = p.BilliardRaysSweep;
 
         for (int start = 0; start < launches.Count; start += chunkRays)
@@ -275,7 +323,9 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
                     var o = Launch(scene, launches[start + i], list);
                     bool keep = o.Valid && o.Bounces >= minBounces && list.Count >= 2;
                     paths[i] = keep ? list.ToArray() : null;
-                    if (keep && tinted) tints[i] = TintOf(source, scene, map, o, list);
+                    gates[i] = o.GateId;
+                    if (keep && tinted)
+                        tints[i] = greyTint ? GreyTint : TintOf(source, scene, map, o, list);
                     if (traces != null)
                         traces[i] = o.Valid && list.Count >= 2
                             ? new RayTrace(paths[i] ?? list.ToArray(), HitSequence(scene, list, o.Bounces), o.GateId)
@@ -283,6 +333,8 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
                     return list;
                 },
                 _ => { });
+
+            for (int i = 0; i < count; i++) if (paths[i] != null) drawn++;
 
             if (finder != null)
             {
@@ -293,15 +345,27 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
                     if ((i & 255) == 0 && ct.IsCancellationRequested) return;
                     found.Clear();
                     finder.Add(paths[i]!, found);
+                    bool crossed = false;
                     foreach (var c in found)
                     {
                         if (c.IsSelf) { selfCount++; if (!drawSelf) continue; }
-                        else crossCount++;
+                        else { crossCount++; crossed = true; }
                         recorded?.Add(c);
+                        if (c.X < vx0 || c.X >= vx1 || c.Y < vy0 || c.Y >= vy1) continue;   // Escaped mode searches beyond the view
                         int px = Math.Clamp((int)Math.Floor(ToPixelX(c.X, cx, pitch, w)), 0, w - 1);
                         int py = Math.Clamp((int)Math.Floor(ToPixelY(c.Y, cy, pitch, h)), 0, h - 1);
                         CrossCount[py * w + px] += 1.0;
                         CrossSum[py * w + px] += CrossingValue(crossValue, c, pathRef);
+                    }
+                    if (!escapedMode) continue;
+                    var cls = gates[i] < 0 ? BilliardRayClass.Trapped
+                            : crossed ? BilliardRayClass.Crossing : BilliardRayClass.Escaped;
+                    classes?.Add(cls);
+                    if (cls == BilliardRayClass.Escaped) escapedRays++;
+                    else
+                    {
+                        if (cls == BilliardRayClass.Crossing) crossingRays++; else trappedRays++;
+                        paths[i] = null;   // only escaped rays' paths are drawn
                     }
                 }
             }
@@ -330,8 +394,6 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
                 Array.Clear(traces);
             }
 
-            for (int i = 0; i < count; i++) if (paths[i] != null) drawn++;
-
             if (splatPaths)
             Parallel.For(0, bands, new ParallelOptions { CancellationToken = ct }, band =>
             {
@@ -359,6 +421,11 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
         Crossings = (IReadOnlyList<BilliardRayCrossing>?)recorded ?? Array.Empty<BilliardRayCrossing>();
         LastDivergences = divCount;
         Divergences = (IReadOnlyList<BilliardRayDivergence>?)divRecorded ?? Array.Empty<BilliardRayDivergence>();
+        LastEscapedRays = escapedRays;
+        LastCrossingRays = crossingRays;
+        LastTrappedRays = trappedRays;
+        RayClasses = (IReadOnlyList<BilliardRayClass>?)classes ?? Array.Empty<BilliardRayClass>();
+        LastPrecisionLabel = escapedMode ? StatusText(escapedRays, crossingRays, trappedRays) : null;
         Overlay? overlay = crossings
             ? new Overlay(CrossCount, CrossSum, crossValue switch
               {
@@ -372,6 +439,13 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
                 : null;
         Composite(scene, p.BilliardRaysShowDisks, pitch, cx, cy, source, overlay);
     }
+
+    /// <summary>#1510 — the status-bar text for Escaped mode's class counts.</summary>
+    public static string StatusText(int escaped, int crossing, int trapped)
+        => $"rays: {escaped} escaped / {crossing} crossing / {trapped} trapped";
+
+    private static readonly BilliardRayTint GreyTint = new(true,
+        ((EscapedGreyColor >> 16) & 0xFF) / 255.0, ((EscapedGreyColor >> 8) & 0xFF) / 255.0, (EscapedGreyColor & 0xFF) / 255.0);
 
     // #1509 — what a ray keeps for the neighbour comparison: its points, which disk each
     // bounce hit, and its exit gate (-1 trapped).

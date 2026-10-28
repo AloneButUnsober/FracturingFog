@@ -1347,6 +1347,9 @@ namespace FracturingFog.Models
         /// <summary>#1509 — what colours a divergence marker (see
         /// <see cref="FracturingFog.BilliardDivergenceValue"/>). Default BounceDifference.</summary>
         public BilliardDivergenceValue BilliardRaysDivergenceValue { get; set; } = BilliardDivergenceValue.BounceDifference;
+        /// <summary>#1510 — how Escaped mode colours the escaped rays (see
+        /// <see cref="FracturingFog.BilliardEscapedColour"/>). Default GateDistance.</summary>
+        public BilliardEscapedColour BilliardRaysEscapedColour { get; set; } = BilliardEscapedColour.GateDistance;
 
         // Precision-sensitivity field (#628). Mandelbrot z² + c iterated at two
         // arithmetic tiers; the per-pixel divergence of the outcome is the image.
@@ -2229,6 +2232,7 @@ namespace FracturingFog.Models
                 BilliardRaysCrossingValue = BilliardRaysCrossingValue,
                 BilliardRaysSelfCrossings = BilliardRaysSelfCrossings,
                 BilliardRaysDivergenceValue = BilliardRaysDivergenceValue,
+                BilliardRaysEscapedColour = BilliardRaysEscapedColour,
                 PrecisionLowTier = PrecisionLowTier,
                 PrecisionHighTier = PrecisionHighTier,
                 PrecisionDiffMetric = PrecisionDiffMetric,

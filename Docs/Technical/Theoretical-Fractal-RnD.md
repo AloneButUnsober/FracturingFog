@@ -274,6 +274,14 @@ where the exit basins meet, so the legs are the real-space counterpart of the la
 (and of the uncertainty exponent, #1127). Tests re-trace each pair through the ChaoticBilliard launch map.
 With more rays per beam the neighbours sit closer, so each beam crosses about the same number of boundaries;
 the count grows only as the sweep resolves finer boundary structure.
+S5 (#1510) adds the `Escaped` mode, the classification proposed in #1505: a drawn ray that leaves through a
+gate without crossing any of the window's previous rays is *escaped*, one that crosses a previous ray is
+*crossing*, one that never leaves is *trapped* (self-crossings do not count). The class belongs to the ray,
+so this mode's crossing search covers the whole play circle, not just the view. Escaped rays' paths are drawn
+(by gate distance, path length, bounces, grey, or hidden) and the other rays' crossings keep the S3 colouring;
+the status bar reports the three counts. In practice few rays escape a reflecting array: a ray leaving a
+convex mirror almost always crosses its sweep neighbour's incoming leg near the surface, so `escaped` mostly
+picks out rays that strike first and shadow their neighbours, and widening the window shrinks it fast.
 
 **Status:** S1–S5 shipped (#1440–#1444); epic #1439 complete.
 
@@ -868,3 +876,4 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
 - **2026-10-27** — §2.5: Billiard Rays S2 #1507, gate-coloured density and per-ray attribute colouring.
 - **2026-10-27** — §2.5: Billiard Rays S3 #1508, ray-ray crossings (delta N, angle, path lengths; heightfield).
 - **2026-10-28** — §2.5: Billiard Rays S4 #1509, sweep-neighbour divergence (real-space basin boundary).
+- **2026-10-28** — §2.5: Billiard Rays S5 #1510, the escaped / crossing / trapped classification.
