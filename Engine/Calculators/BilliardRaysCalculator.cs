@@ -38,6 +38,17 @@
 // to a sum grid, splatted in ray order. Crossings mode draws them alone, Both draws them
 // over the paths; the crossing value is then the relief height field.
 //
+// #1509 (S4) — neighbour divergence: each ray against the ray emitted just before it,
+// when their launches are neighbours (same BSweep beam; consecutive AngleSweep /
+// PointSource rays; random sweeps have no neighbours). Their disk-hit sequences are
+// compared. The pair parts at the last mirror point both bounced off; the current ray's
+// next leg (from that point to its next hit or exit) is drawn, length-weighted like the
+// paths, valued by the bounce difference, a gate change, the separation of their next
+// hits, or the number of mirrors shared. (A point mark would sit on a disk surface,
+// under the disk.) Neighbouring launches that split are where the exit basins meet, so
+// the legs trace the fractal basin boundary in real space. Every valid ray takes part
+// (Min bounces only filters what is drawn).
+//
 // Rasterisation: each segment is clipped to the row band with the parametric line
 // clip of Liang & Barsky (ACM TOG 3(1), 1984), then walked cell by cell with the
 // 2D form of the voxel traversal of Amanatides & Woo (Eurographics 1987). Each pixel
@@ -58,6 +69,12 @@ namespace FracturingFog;
 /// [0, 1], or one attribute in <see cref="C0"/>), weighted by its in-pixel length. A ray with
 /// <see cref="Defined"/> false adds density only.</summary>
 public readonly record struct BilliardRayTint(bool Defined, double C0, double C1, double C2);
+
+/// <summary>Where two sweep-neighbour rays part (#1509). <see cref="Current"/> and <see cref="Previous"/>
+/// are emission indices (previous = current - 1). (<see cref="X"/>, <see cref="Y"/>) is the current ray's
+/// last shared mirror point: its bounce number <see cref="CommonBounces"/>.</summary>
+public readonly record struct BilliardRayDivergence(double X, double Y, int Current, int Previous, int CommonBounces,
+                                                    int BounceDifference, bool GateChanged, double Separation);
 
 /// <summary>One emitted ray of a <see cref="BilliardRaySweep"/> (#1506).</summary>
 public readonly record struct BilliardRayLaunch(BilliardRayLaunch.LaunchKind Kind, double A, double B, double C, double D)
@@ -95,6 +112,18 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
     /// <summary>#1508 — crossings per pixel and the sum of their values. Empty in Paths mode.</summary>
     public double[] CrossCount { get; private set; } = Array.Empty<double>();
     public double[] CrossSum { get; private set; } = Array.Empty<double>();
+
+    /// <summary>#1509 — length of diverging legs per pixel and the length-weighted sum of their values.
+    /// Empty unless a divergence mode is on.</summary>
+    public double[] DivCount { get; private set; } = Array.Empty<double>();
+    public double[] DivSum { get; private set; } = Array.Empty<double>();
+
+    /// <summary>#1509 — divergence markers placed (in view or not) by the last render.</summary>
+    public int LastDivergences { get; private set; }
+
+    /// <summary>#1509 — keep every divergence of the last render in <see cref="Divergences"/>.</summary>
+    public bool RecordDivergences { get; set; }
+    public IReadOnlyList<BilliardRayDivergence> Divergences { get; private set; } = Array.Empty<BilliardRayDivergence>();
 
     /// <summary>#1508 — ray-ray and self-crossings found in view by the last render.</summary>
     public int LastCrossings { get; private set; }
@@ -191,8 +220,20 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
         var tw = tinted ? TintWeight : null;
 
         var mode = p.BilliardRaysMode;
-        bool crossings = mode != BilliardRayMode.Paths;
-        bool splatPaths = mode != BilliardRayMode.Crossings;
+        bool crossings = mode is BilliardRayMode.Crossings or BilliardRayMode.Both;
+        bool divergence = mode is BilliardRayMode.Divergence or BilliardRayMode.DivergenceOverPaths;
+        bool splatPaths = mode is BilliardRayMode.Paths or BilliardRayMode.Both or BilliardRayMode.DivergenceOverPaths;
+        var divValue = p.BilliardRaysDivergenceValue;
+        if (divergence)
+        {
+            if (DivCount.Length != n) { DivCount = new double[n]; DivSum = new double[n]; }
+            else { Array.Clear(DivCount); Array.Clear(DivSum); }
+        }
+        else { DivCount = DivSum = Array.Empty<double>(); }
+        var divRecorded = RecordDivergences ? new List<BilliardRayDivergence>() : null;
+        int divCount = 0;
+        // The previous chunk's last ray, so a neighbour pair can span a chunk boundary.
+        RayTrace? carryTrace = null;
         int window = Math.Clamp(p.BilliardRaysCrossingWindow, 0, BilliardCrossingFinder.MaxWindow);
         bool drawSelf = p.BilliardRaysSelfCrossings;
         var crossValue = p.BilliardRaysCrossingValue;
@@ -218,6 +259,8 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
         int drawn = 0;
         var paths = new BilliardPoint[]?[Math.Min(chunkRays, Math.Max(1, launches.Count))];
         var tints = new BilliardRayTint[paths.Length];
+        var traces = divergence ? new RayTrace?[paths.Length] : null;
+        var sweep = p.BilliardRaysSweep;
 
         for (int start = 0; start < launches.Count; start += chunkRays)
         {
@@ -233,6 +276,10 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
                     bool keep = o.Valid && o.Bounces >= minBounces && list.Count >= 2;
                     paths[i] = keep ? list.ToArray() : null;
                     if (keep && tinted) tints[i] = TintOf(source, scene, map, o, list);
+                    if (traces != null)
+                        traces[i] = o.Valid && list.Count >= 2
+                            ? new RayTrace(paths[i] ?? list.ToArray(), HitSequence(scene, list, o.Bounces), o.GateId)
+                            : null;
                     return list;
                 },
                 _ => { });
@@ -257,6 +304,30 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
                         CrossSum[py * w + px] += CrossingValue(crossValue, c, pathRef);
                     }
                 }
+            }
+
+            if (traces != null)
+            {
+                double pathRef = scene.PathReference;
+                for (int i = 0; i < count; i++)
+                {
+                    int g = start + i;
+                    var prevTrace = i > 0 ? traces[i - 1] : carryTrace;
+                    var curTrace = traces[i];
+                    if (g == 0 || prevTrace == null || curTrace == null
+                        || !AreNeighbours(sweep, launches[g - 1], launches[g])) continue;
+                    if (Diverge(prevTrace, curTrace, g) is not { } d) continue;
+                    divCount++;
+                    divRecorded?.Add(d);
+                    var a = curTrace.Points[d.CommonBounces];
+                    var b = curTrace.Points[Math.Min(d.CommonBounces + 1, curTrace.Points.Length - 1)];
+                    var leg = new BilliardRayTint(true, DivergenceValue(divValue, d, pathRef), 0, 0);
+                    Splat(DivCount, DivSum, null, null, null, leg, w, 0, h, pitch,
+                          ToPixelX(a.X, cx, pitch, w), ToPixelY(a.Y, cy, pitch, h),
+                          ToPixelX(b.X, cx, pitch, w), ToPixelY(b.Y, cy, pitch, h));
+                }
+                carryTrace = traces[count - 1];
+                Array.Clear(traces);
             }
 
             for (int i = 0; i < count; i++) if (paths[i] != null) drawn++;
@@ -286,8 +357,85 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
         LastCrossings = crossCount;
         LastSelfCrossings = selfCount;
         Crossings = (IReadOnlyList<BilliardRayCrossing>?)recorded ?? Array.Empty<BilliardRayCrossing>();
-        Composite(scene, p.BilliardRaysShowDisks, pitch, cx, cy, source, crossings ? crossValue : null);
+        LastDivergences = divCount;
+        Divergences = (IReadOnlyList<BilliardRayDivergence>?)divRecorded ?? Array.Empty<BilliardRayDivergence>();
+        Overlay? overlay = crossings
+            ? new Overlay(CrossCount, CrossSum, crossValue switch
+              {
+                  BilliardCrossingValue.Count => OverlayScale.Count,
+                  BilliardCrossingValue.DeltaN => OverlayScale.Signed,
+                  _ => OverlayScale.Unit,
+              }, 1.0)
+            : divergence
+                ? new Overlay(DivCount, DivSum, divValue is BilliardDivergenceValue.BounceDifference or BilliardDivergenceValue.CommonBounces
+                    ? OverlayScale.Positive : OverlayScale.Unit, pitch)
+                : null;
+        Composite(scene, p.BilliardRaysShowDisks, pitch, cx, cy, source, overlay);
     }
+
+    // #1509 — what a ray keeps for the neighbour comparison: its points, which disk each
+    // bounce hit, and its exit gate (-1 trapped).
+    private sealed record RayTrace(BilliardPoint[] Points, int[] Hits, int Gate);
+
+    /// <summary>#1509 — the disk each bounce of <paramref name="path"/> hit (points 1..bounces), found as
+    /// the disk whose surface the point lies on.</summary>
+    public static int[] HitSequence(BilliardScene scene, IReadOnlyList<BilliardPoint> path, int bounces)
+    {
+        int nb = Math.Min(bounces, path.Count - 1);
+        var hits = new int[Math.Max(0, nb)];
+        for (int k = 1; k <= nb; k++)
+        {
+            double best = double.PositiveInfinity;
+            for (int d = 0; d < scene.DiskCount; d++)
+            {
+                double dx = path[k].X - scene.DiskX(d), dy = path[k].Y - scene.DiskY(d);
+                double err = Math.Abs(Math.Sqrt(dx * dx + dy * dy) - scene.DiskR(d));
+                if (err < best) { best = err; hits[k - 1] = d; }
+            }
+        }
+        return hits;
+    }
+
+    /// <summary>#1509 — are launches <paramref name="a"/> then <paramref name="b"/> neighbours in
+    /// <paramref name="sweep"/>? Same BSweep beam (same angle); consecutive AngleSweep / PointSource
+    /// rays; never for the random sweeps.</summary>
+    public static bool AreNeighbours(BilliardRaySweep sweep, BilliardRayLaunch a, BilliardRayLaunch b) => sweep switch
+    {
+        BilliardRaySweep.BSweep => a.B == b.B,
+        BilliardRaySweep.AngleSweep or BilliardRaySweep.PointSource => true,
+        _ => false,
+    };
+
+    // Where two neighbours part: null when their hit sequences and gates agree, or when they
+    // share no mirror at all (they never travelled together).
+    private static BilliardRayDivergence? Diverge(RayTrace prev, RayTrace cur, int current)
+    {
+        int common = 0, m = Math.Min(prev.Hits.Length, cur.Hits.Length);
+        while (common < m && prev.Hits[common] == cur.Hits[common]) common++;
+        if (common == prev.Hits.Length && common == cur.Hits.Length && prev.Gate == cur.Gate) return null;
+        if (common == 0) return null;
+        var at = cur.Points[common];
+        double sep = common + 1 < prev.Points.Length && common + 1 < cur.Points.Length
+            ? Math.Sqrt(Math.Pow(prev.Points[common + 1].X - cur.Points[common + 1].X, 2)
+                      + Math.Pow(prev.Points[common + 1].Y - cur.Points[common + 1].Y, 2))
+            : 0.0;
+        return new BilliardRayDivergence(at.X, at.Y, current, current - 1, common,
+            Math.Abs(cur.Hits.Length - prev.Hits.Length), cur.Gate != prev.Gate, sep);
+    }
+
+    /// <summary>#1509 — the value divergence <paramref name="d"/> adds to <see cref="DivSum"/>.</summary>
+    public static double DivergenceValue(BilliardDivergenceValue v, BilliardRayDivergence d, double pathReference) => v switch
+    {
+        BilliardDivergenceValue.GateChange => d.GateChanged ? 1.0 : 0.0,
+        BilliardDivergenceValue.Separation => Math.Min(1.0, d.Separation / pathReference),
+        BilliardDivergenceValue.CommonBounces => d.CommonBounces,
+        _ => d.BounceDifference,
+    };
+
+    // How an overlay's mean value becomes a gradient position.
+    private enum OverlayScale { Count, Signed, Unit, Positive }
+    // Count is in units of Unit (1 for crossing counts, one pixel width for leg lengths).
+    private sealed record Overlay(double[] Count, double[] Sum, OverlayScale Scale, double Unit);
 
     /// <summary>#1508 — the value crossing <paramref name="c"/> adds to <see cref="CrossSum"/>: 1 for
     /// Count, the signed delta N, the angle as a fraction of a right angle, or a path length over
@@ -489,7 +637,7 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
                               BilliardRayTint tint, int w, int y0r, int y1r, double pitch,
                               double x0, double y0, double x1, double y1)
     {
-        bool tinted = gw != null && tint.Defined;
+        bool tinted = g0 != null && tint.Defined;
         if ((y0 < y0r && y1 < y0r) || (y0 >= y1r && y1 >= y1r)) return;
         if ((x0 < 0 && x1 < 0) || (x0 >= w && x1 >= w)) return;
         double dx = x1 - x0, dy = y1 - y0;
@@ -523,7 +671,7 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
             {
                 g0![cell] += dl * tint.C0;
                 if (g1 != null) { g1[cell] += dl * tint.C1; g2![cell] += dl * tint.C2; }
-                gw![cell] += dl;
+                if (gw != null) gw[cell] += dl;
             }
             t = tn;
             if (t >= t1) break;
@@ -549,7 +697,7 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
     // crossings, the chaotic spreading worth seeing, and norm^2 fades them out. Then
     // the disks.
     private void Composite(BilliardScene scene, bool showDisks, double pitch, double cx, double cy,
-                           BilliardRayColorSource source, BilliardCrossingValue? crossValue)
+                           BilliardRayColorSource source, Overlay? overlay)
     {
         int w = Width, h = Height, n = w * h;
         double max = 0.0;
@@ -594,7 +742,7 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
             }
         });
 
-        if (crossValue is { } cv) CompositeCrossings(cm, iters, cv);
+        if (overlay != null) CompositeOverlay(cm, iters, overlay);
 
         if (!showDisks) return;
         for (int k = 0; k < scene.DiskCount; k++)
@@ -614,40 +762,43 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
         }
     }
 
-    // #1508 — crossings over whatever the paths drew (the background in Crossings mode):
-    // brightness / alpha the log crossing count, hue the theme gradient over the mean
-    // crossing value (signed delta N centred, so equal bounce counts sit mid-gradient).
-    // The value becomes the relief height (SmoothBuffer).
-    private void CompositeCrossings(IColorMap cm, int iters, BilliardCrossingValue cv)
+    // #1508 / #1509 — crossings or divergence markers over whatever the paths drew (the
+    // background when paths are off): brightness / alpha the log marker count, hue the
+    // theme gradient over the mean value (signed delta N centred, so equal bounce counts
+    // sit mid-gradient; positive values over the frame's largest). The value becomes the
+    // relief height (SmoothBuffer).
+    private void CompositeOverlay(IColorMap cm, int iters, Overlay ov)
     {
         int n = Width * Height;
+        var count = ov.Count; var sum = ov.Sum;
         double maxCount = 0, maxAbs = 0;
         for (int i = 0; i < n; i++)
         {
-            if (CrossCount[i] <= 0) { if (Density.Length == n && Density[i] <= 0) SmoothBuffer[i] = 0f; continue; }
-            maxCount = Math.Max(maxCount, CrossCount[i]);
-            maxAbs = Math.Max(maxAbs, Math.Abs(CrossSum[i] / CrossCount[i]));
+            if (count[i] <= 0) { if (Density.Length == n && Density[i] <= 0) SmoothBuffer[i] = 0f; continue; }
+            maxCount = Math.Max(maxCount, count[i]);
+            maxAbs = Math.Max(maxAbs, Math.Abs(sum[i] / count[i]));
         }
         if (maxCount <= 0) return;
-        double inv = 1.0 / Math.Log(1.0 + maxCount);
+        double inv = 1.0 / Math.Log(1.0 + maxCount / ov.Unit);
         maxAbs = Math.Max(maxAbs, 1e-12);
         Parallel.For(0, Height, y =>
         {
             for (int x = 0; x < Width; x++)
             {
                 int i = y * Width + x;
-                double c = CrossCount[i];
+                double c = count[i];
                 if (c <= 0) { SmoothBuffer[i] = 0f; continue; }
-                double norm = Math.Log(1.0 + c) * inv;
-                double mean = CrossSum[i] / c;
-                double t = cv switch
+                double norm = Math.Log(1.0 + c / ov.Unit) * inv;
+                double mean = sum[i] / c;
+                double t = ov.Scale switch
                 {
-                    BilliardCrossingValue.Count => norm,
-                    BilliardCrossingValue.DeltaN => 0.5 + 0.5 * mean / maxAbs,
+                    OverlayScale.Count => norm,
+                    OverlayScale.Signed => 0.5 + 0.5 * mean / maxAbs,
+                    OverlayScale.Positive => Math.Clamp(mean / maxAbs, 0.0, 1.0),
                     _ => Math.Clamp(mean, 0.0, 1.0),
                 };
                 SmoothBuffer[i] = (float)t;
-                uint f = unchecked((uint)cm.Map((float)((cv == BilliardCrossingValue.Count ? 1.0 - t : t) * iters), 0f, iters));
+                uint f = unchecked((uint)cm.Map((float)((ov.Scale == OverlayScale.Count ? 1.0 - t : t) * iters), 0f, iters));
                 // At least half opacity, so a single crossing is visible over bright paths.
                 double a = 0.5 + 0.5 * norm, b = 1.0 - a;
                 uint under = ColorBuffer[i];

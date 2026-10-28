@@ -945,7 +945,7 @@
         <!-- Billiard Rays (#1506): the sweep that emits the rays -->
         <Grid IsVisible="{Binding IsBilliardRays}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Sweep:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding BilliardRaySweeps}"
@@ -1007,7 +1007,7 @@
                       ItemsSource="{Binding BilliardRayModes}"
                       SelectedItem="{Binding BilliardRaysMode, Mode=TwoWay}"
                       Margin="0,2"
-                      ToolTip.Tip="Paths: the rays themselves. Crossings: only the points where a ray crosses one drawn shortly before it. Both: crossings over the paths. Crossings also become the relief height." />
+                      ToolTip.Tip="Paths: the rays themselves. Crossings: only the points where a ray crosses one drawn shortly before it. Both: crossings over the paths. Divergence: where each ray parts from its sweep neighbour (the ray launched next to it) - the exit-basin boundary in real space; DivergenceOverPaths draws it over the paths. Crossings and divergence also become the relief height." />
             <TextBlock Grid.Row="12" Grid.Column="0" Text="Crossing window:" VerticalAlignment="Center" IsVisible="{Binding RaysShowsCrossings}" />
             <NumericUpDown Grid.Row="12" Grid.Column="1" IsVisible="{Binding RaysShowsCrossings}"
                            Minimum="0" Maximum="50000" Increment="10" FormatString="F0"
@@ -1022,7 +1022,14 @@
             <CheckBox Grid.Row="14" Grid.Column="1" Content="Include self-crossings" IsVisible="{Binding RaysShowsCrossings}"
                       IsChecked="{Binding BilliardRaysSelfCrossings, Mode=TwoWay}" Margin="0,2"
                       ToolTip.Tip="Also draw where a ray crosses its own path (always counted separately)." />
-            <TextBlock Grid.Row="15" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Margin="0,4,0,2"
+            <!-- #1509: neighbour divergence. -->
+            <TextBlock Grid.Row="15" Grid.Column="0" Text="Divergence colour:" VerticalAlignment="Center" IsVisible="{Binding RaysShowsDivergence}" />
+            <ComboBox Grid.Row="15" Grid.Column="1" IsVisible="{Binding RaysShowsDivergence}"
+                      ItemsSource="{Binding BilliardDivergenceValues}"
+                      SelectedItem="{Binding BilliardRaysDivergenceValue, Mode=TwoWay}"
+                      Margin="0,2"
+                      ToolTip.Tip="Marks sit on the last mirror two neighbouring rays both hit before they part. BounceDifference: how different their bounce counts end up. GateChange: whether they leave through different gates. Separation: how far apart their next hits are. CommonBounces: how many mirrors they shared. Random sweeps have no neighbours, so they draw no marks." />
+            <TextBlock Grid.Row="16" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Margin="0,4,0,2"
                        Text="Each pixel shows how much ray path crosses it (log scale). Emission order does not change the paths, since rays do not interact; it does decide which rays count as previous for crossings." />
         </Grid>
 
