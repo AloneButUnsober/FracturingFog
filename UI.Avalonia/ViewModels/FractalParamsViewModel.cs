@@ -247,6 +247,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _raysCrossValue = _p.BilliardRaysCrossingValue;
         _raysSelfCross = _p.BilliardRaysSelfCrossings;
         _raysDivValue = _p.BilliardRaysDivergenceValue;
+        _raysEscColour = _p.BilliardRaysEscapedColour;
         _precLowTier = _p.PrecisionLowTier;
         _precHighTier = _p.PrecisionHighTier;
         _precMetric = _p.PrecisionDiffMetric;
@@ -2113,11 +2114,17 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     private static readonly System.Array s_BilliardRayColorSources = System.Enum.GetValues(typeof(BilliardRayColorSource));
     // #1508 — crossings.
     private BilliardRayMode _raysMode;
-    public BilliardRayMode BilliardRaysMode { get => _raysMode; set { Set(ref _raysMode, value); _p.BilliardRaysMode = value; this.RaisePropertyChanged(nameof(RaysShowsCrossings)); this.RaisePropertyChanged(nameof(RaysShowsDivergence)); Fire(); } }
+    public BilliardRayMode BilliardRaysMode { get => _raysMode; set { Set(ref _raysMode, value); _p.BilliardRaysMode = value; this.RaisePropertyChanged(nameof(RaysShowsCrossings)); this.RaisePropertyChanged(nameof(RaysShowsDivergence)); this.RaisePropertyChanged(nameof(RaysShowsEscaped)); Fire(); } }
     public System.Array BilliardRayModes => s_BilliardRayModes;   // cached (see BilliardGeometries)
     private static readonly System.Array s_BilliardRayModes = System.Enum.GetValues(typeof(BilliardRayMode));
     /// <summary>The crossing controls apply (Crossings / Both).</summary>
-    public bool RaysShowsCrossings => _raysMode is BilliardRayMode.Crossings or BilliardRayMode.Both;
+    public bool RaysShowsCrossings => _raysMode is BilliardRayMode.Crossings or BilliardRayMode.Both or BilliardRayMode.Escaped;
+    /// <summary>#1510 — the escaped-ray colour applies.</summary>
+    public bool RaysShowsEscaped => _raysMode == BilliardRayMode.Escaped;
+    private BilliardEscapedColour _raysEscColour;
+    public BilliardEscapedColour BilliardRaysEscapedColour { get => _raysEscColour; set { Set(ref _raysEscColour, value); _p.BilliardRaysEscapedColour = value; Fire(); } }
+    public System.Array BilliardEscapedColours => s_BilliardEscapedColours;
+    private static readonly System.Array s_BilliardEscapedColours = System.Enum.GetValues(typeof(BilliardEscapedColour));
     /// <summary>#1509 — the divergence control applies.</summary>
     public bool RaysShowsDivergence => _raysMode is BilliardRayMode.Divergence or BilliardRayMode.DivergenceOverPaths;
     private BilliardDivergenceValue _raysDivValue;

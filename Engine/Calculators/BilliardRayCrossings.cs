@@ -83,7 +83,9 @@ public sealed class BilliardCrossingFinder
     {
         _window = Math.Clamp(window, 0, MaxWindow);
         _x0 = x0; _x1 = x1; _y0 = y0; _y1 = y1;
-        _cs = Math.Max(cellSize, Math.Max(x1 - x0, y1 - y0) / 4096.0);
+        // At most 1024 cells a side: Escaped mode's play-circle grid at a deep zoom would
+        // otherwise hold millions of cells.
+        _cs = Math.Max(cellSize, Math.Max(x1 - x0, y1 - y0) / 1024.0);
         _nx = Math.Max(1, (int)Math.Ceiling((x1 - x0) / _cs));
         _ny = Math.Max(1, (int)Math.Ceiling((y1 - y0) / _cs));
         _cells = new List<int>?[_nx * _ny];

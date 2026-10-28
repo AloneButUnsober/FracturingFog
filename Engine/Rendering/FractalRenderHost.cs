@@ -3282,6 +3282,7 @@ namespace FracturingFog.Rendering
                         FracturingFog.Calculators.Generated.MandelbrotZ5Calculator g5 => g5.LastPrecisionLabel,
                         FracturingFog.Calculators.Generated.TricornCalculator     tc => tc.LastPrecisionLabel,
                         FracturingFog.Calculators.Generated.BurningShipCalculator bs => bs.LastPrecisionLabel,
+                        BilliardRaysCalculator br => br.LastPrecisionLabel,   // #1510 escaped / crossing / trapped counts
                         _ => null
                     }
                     : calc.LastPrecisionLabel;
