@@ -2881,6 +2881,79 @@ namespace FracturingFog.Models
                     MirrorSpheresMaxBounces = 256,
                 },
             },
+            // #1512 — Billiard Rays presets (tracker #1505): one per kind of picture.
+            new()
+            {
+                Name        = "Billiard Rays - Three-Disk Gate Flow",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  0.6,
+                Iterations  = 256,
+                Description = "The classic three-disk scatterer seen from above, lit by three parallel beams. Each ray is drawn in the colour of the gap it finally leaves through, so the flow into each exit basin shows in its own colour, the incoming beams included.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.BilliardRays,
+                QualityPreset = QualityPreset.Standard,
+                Params      = new RegionFractalParams
+                {
+                    BilliardGeometry = (int)FracturingFog.BilliardGeometry.ThreeDisk,
+                    BilliardDiskRadius = 0.8, BilliardSeparation = 1.0, BilliardMaxBounces = 256,
+                    BilliardGateMode = (int)FracturingFog.BilliardGateMode.ExitGap,
+                    BilliardRaysSweep = (int)FracturingFog.BilliardRaySweep.BSweep,
+                    BilliardRaysCount = 200_000, BilliardRaysAngleCount = 3, BilliardRaysAngle = 90.0,
+                    BilliardRaysMinBounces = 2,
+                    BilliardRaysColorSource = (int)FracturingFog.BilliardRayColorSource.Gate,
+                    BilliardRaysMode = (int)FracturingFog.BilliardRayMode.Paths,
+                },
+            },
+            new()
+            {
+                Name        = "Billiard Rays - Ring Crossings",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  0.6,
+                Iterations  = 256,
+                Description = "Six mirrors on a ring, rays fired inward from all round it. Only the points where a ray crosses one fired just before it are drawn, coloured by the difference in their bounce counts there, with relief turning that difference into height.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.BilliardRays,
+                QualityPreset = QualityPreset.Standard,
+                Relief3D    = new Relief3DSettings { Enabled = true },
+                Params      = new RegionFractalParams
+                {
+                    BilliardGeometry = (int)FracturingFog.BilliardGeometry.Ring,
+                    BilliardDiskCount = 6, BilliardDiskRadius = 0.45, BilliardSeparation = 1.3, BilliardMaxBounces = 256,
+                    BilliardGateMode = (int)FracturingFog.BilliardGateMode.ExitGap,
+                    BilliardRaysSweep = (int)FracturingFog.BilliardRaySweep.AngleSweep,
+                    BilliardRaysCount = 60_000, BilliardRaysSpread = 40.0, BilliardRaysSeed = 1,
+                    BilliardRaysMinBounces = 2,
+                    BilliardRaysMode = (int)FracturingFog.BilliardRayMode.Crossings,
+                    BilliardRaysCrossingWindow = 100,
+                    BilliardRaysCrossingValue = (int)FracturingFog.BilliardCrossingValue.DeltaN,
+                },
+            },
+            new()
+            {
+                Name        = "Billiard Rays - Custom Five-Disk Divergence",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  0.6,
+                Iterations  = 256,
+                Description = "An irregular five-mirror layout (edit it by dragging disks in Ray paths). Each line is where a ray parts from the ray launched next to it; the ones that then leave through a different gap trace the boundary between the exit basins, drawn over the faint ray paths.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.BilliardRays,
+                QualityPreset = QualityPreset.Standard,
+                Params      = new RegionFractalParams
+                {
+                    BilliardGeometry = (int)FracturingFog.BilliardGeometry.Custom,
+                    BilliardCustomDisks = "0,1.1,0.55;1.05,0.2,0.5;0.55,-1,0.6;-0.75,-0.85,0.45;-1.1,0.35,0.5",
+                    BilliardDiskRadius = 0.5, BilliardMaxBounces = 256,
+                    BilliardGateMode = (int)FracturingFog.BilliardGateMode.ExitGap,
+                    BilliardRaysSweep = (int)FracturingFog.BilliardRaySweep.BSweep,
+                    BilliardRaysCount = 200_000, BilliardRaysAngleCount = 2, BilliardRaysAngle = 20.0,
+                    BilliardRaysMinBounces = 2,
+                    BilliardRaysMode = (int)FracturingFog.BilliardRayMode.DivergenceOverPaths,
+                    BilliardRaysDivergenceValue = (int)FracturingFog.BilliardDivergenceValue.GateChange,
+                },
+            },
             new()
             {
                 Name        = "Apollonian - L/R Kissing Cusp",

@@ -232,6 +232,33 @@ finite-size-Lyapunov literature, which these entries anchor.
   lists the article as *Complex topology in chaotic scattering: a laboratory observation*, which may be
   a preprint title.
 
+<a id="braun-heusler-muller-haake-2002"></a>
+
+- **Peter A. Braun, Stefan Heusler, Sebastian Müller, Fritz Haake.** *Statistics of self-crossings and avoided
+  crossings of periodic orbits in the Hadamard-Gutzwiller model.* European Physical Journal B 30, 189 (2002),
+  arXiv:nlin/0206023, <https://arxiv.org/abs/nlin/0206023>. Details checked against the arXiv record. Prior art
+  found by the Billiard Rays prior-art check (#1512): the statistics of trajectory self-crossings, and how
+  crossing angles relate to the orbit's loops, are an established subject in periodic-orbit theory. FF's
+  Billiard Rays counts self-crossings separately from crossings between rays (#1508) and does not claim them
+  as new.
+
+<a id="muller-2003"></a>
+
+- **Sebastian Müller.** *Classical basis for quantum spectral fluctuations in hyperbolic systems.* European
+  Physical Journal B 34, 305 (2003), arXiv:nlin/0303050, <https://arxiv.org/abs/nlin/0303050>. Details checked
+  against the arXiv record. Pairs of periodic orbits with self-crossings, backed by numerics in two billiards
+  (the abstract does not name them; not confirmed here). Same prior-art role as Braun et al. 2002 above (#1512).
+
+<a id="glasser-2007-mpipks"></a>
+
+- **Sylvia Glasser** (software), Max Planck Institute for the Physics of Complex Systems, Nonlinear Dynamics and
+  Time Series Analysis group. *Visualisation of a 3D billiard*, © 2007,
+  <https://pks.mpg.de/nonlinear-dynamics-and-time-series-analysis/visualization-of-dynamical-systems/visualisation-of-a-3d-billiard>.
+  An interactive tracer of individual light rays in the Sweet-Ott-Yorke four-mirror-ball scatterer (above),
+  with a mode that raises the number of reflections. No publication date beyond the copyright year. Prior art
+  for drawing billiard rays in real space; it traces individual rays and does not accumulate a density
+  (#1512, context for Billiard Rays #1506).
+
 <a id="schlick-fresnel"></a>
 
 - **Christophe Schlick.** *An inexpensive BRDF model for physically-based rendering.* Computer Graphics
