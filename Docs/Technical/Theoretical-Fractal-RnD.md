@@ -282,6 +282,17 @@ so this mode's crossing search covers the whole play circle, not just the view. 
 the status bar reports the three counts. In practice few rays escape a reflecting array: a ray leaving a
 convex mirror almost always crosses its sweep neighbour's incoming leg near the surface, so `escaped` mostly
 picks out rays that strike first and shadow their neighbours, and widening the window shrinks it fast.
+S6 (#1511) makes it animate and stay interactive. `BilliardRaysProgress` renders only the first fraction of
+the sweep, in emission order (animatable, so a video shows the rays arriving). Progressive batches composite
+after each batch, the Buddhabrot pattern, so a cancel leaves the last batch on screen; each batch equals a
+one-shot render at the matching progress, and the last equals the normal render. The drag preview renders at
+the preview size with every k-th ray (k = 1/scale^2, keeping the rays per pixel) and upscales it.
+Cost (release build, 12 threads, 1920x1080, three beams): 20 k rays 43 ms, 200 k rays 293 ms, 1 M rays 1.17 s;
+tracing alone is 62 ms of the 200 k case, so about 80 % is the length splat. The 1/4 drag preview of 200 k rays
+takes 13 ms. **GPU: not now.** The splat is what a GPU would speed up, but the image is bit-identical across
+core counts and between live, batch and export because each pixel sums in a fixed order; GPU atomics add in
+any order, so keeping that would need fixed-point accumulation. With the preview keeping drags smooth, the
+gain does not justify that yet.
 
 **Status:** S1–S5 shipped (#1440–#1444); epic #1439 complete.
 
@@ -877,3 +888,4 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
 - **2026-10-27** — §2.5: Billiard Rays S3 #1508, ray-ray crossings (delta N, angle, path lengths; heightfield).
 - **2026-10-28** — §2.5: Billiard Rays S4 #1509, sweep-neighbour divergence (real-space basin boundary).
 - **2026-10-28** — §2.5: Billiard Rays S5 #1510, the escaped / crossing / trapped classification.
+- **2026-10-28** — §2.5: Billiard Rays S6 #1511, sweep progress, progressive batches, drag preview, cost (GPU deferred).

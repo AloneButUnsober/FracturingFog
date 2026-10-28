@@ -348,6 +348,9 @@ public static class FractalAnimatableParamsMap
             Notes: "Disk size — larger disks trap rays longer."),
         new("BilliardRaysAngle", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 360.0,
             Notes: "Beam / fan direction in degrees — rotating it sweeps the beam round the array."),
+        // #1511 — the rays arrive in emission order as this runs 0 -> 1.
+        new("BilliardRaysProgress", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 1.0,
+            Notes: "Fraction of the sweep emitted — animate 0 to 1 to watch the rays arrive in order."),
     };
 
     // PrecisionField (#632, Renderer C2). The two tiers form a precision

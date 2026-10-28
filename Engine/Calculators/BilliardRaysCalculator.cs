@@ -57,6 +57,15 @@
 // drawn (coloured by gate distance, path length or bounces, grey, or hidden); the
 // crossings keep the crossing colouring. The counts go to the status bar.
 //
+// #1511 (S6) — BilliardRaysProgress renders only the first fraction of the sweep, in
+// emission order, so animating it from 0 to 1 shows the rays arriving. Progressive
+// batches (ProgressiveBatchesOverride + OnBatchComposited, the Buddhabrot pattern)
+// composite after each batch, so a cancelled render leaves the last batch on screen;
+// the final image is the same as a one-shot render. The host's drag preview
+// (ILowResPreviewCalculator, #1373) renders at the preview size with every k-th ray
+// of the sweep (k = 1 / scale^2, so the rays per pixel stay about the same) and
+// nearest-upscales the result.
+//
 // Rasterisation: each segment is clipped to the row band with the parametric line
 // clip of Liang & Barsky (ACM TOG 3(1), 1984), then walked cell by cell with the
 // 2D form of the voxel traversal of Amanatides & Woo (Eurographics 1987). Each pixel
@@ -70,6 +79,7 @@ using System.Threading.Tasks;
 
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
+using FracturingFog.Rendering;
 
 namespace FracturingFog;
 
@@ -101,7 +111,7 @@ public readonly record struct BilliardRayLaunch(BilliardRayLaunch.LaunchKind Kin
     }
 }
 
-public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSource
+public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSource, ILowResPreviewCalculator
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -195,7 +205,55 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
     /// <summary>#1507 — hue of pixels crossed only by rays with no value for the attribute.</summary>
     public const uint UndefinedColor = 0xFF5A5A5A;
 
+    /// <summary>#1511 — the host's drag preview: render the next frame smaller with fewer rays.</summary>
+    public bool LowResPreview { get; set; }
+    public double? LowResPreviewScaleOverride { get; set; }
+
+    /// <summary>#1511 — use every k-th ray of the sweep (the preview's thinning; 1 = all).</summary>
+    public int LaunchStride { get; set; } = 1;
+
+    /// <summary>#1511 — split the render into this many batches, compositing after each
+    /// (null = the normal chunking, composited once at the end).</summary>
+    public int? ProgressiveBatchesOverride { get; set; }
+
+    /// <summary>#1511 — called after each batch is composited into ColorBuffer with (done, total).
+    /// Setting it turns on per-batch compositing.</summary>
+    public Action<int, int>? OnBatchComposited { get; set; }
+
+    private BilliardRaysCalculator? _preview;
+
     public BilliardRaysCalculator(int width, int height) => Resize(width, height);
+
+    /// <summary>#1511 — the launches a render emits: the first <paramref name="progress"/> fraction of
+    /// the sweep (floor), then every <paramref name="stride"/>-th of those.</summary>
+    public static IReadOnlyList<BilliardRayLaunch> Emitted(IReadOnlyList<BilliardRayLaunch> sweep, double progress, int stride)
+    {
+        double f = double.IsFinite(progress) ? Math.Clamp(progress, 0.0, 1.0) : 1.0;
+        int count = Math.Min(sweep.Count, (int)Math.Floor(f * sweep.Count + 1e-9));
+        stride = Math.Max(1, stride);
+        var list = new List<BilliardRayLaunch>(count / stride + 1);
+        for (int i = 0; i < count; i += stride) list.Add(sweep[i]);
+        return list;
+    }
+
+    // #1511 — the drag-preview stage: a smaller sibling with thinned rays, upscaled.
+    private bool RenderPreview(CancellationToken ct)
+    {
+        double s = FracturingFog.Rendering.LowResPreview.EffectiveScale(true, LowResPreviewScaleOverride,
+                                                                         FractalParameters.LowResPreviewScale);
+        if (s >= 1.0) return false;
+        var dims = FracturingFog.Rendering.LowResPreview.ComputeDims(Width, Height, s);
+        if (_preview == null || _preview.Width != dims.Width || _preview.Height != dims.Height)
+            _preview = new BilliardRaysCalculator(dims.Width, dims.Height);
+        _preview.FractalParameters = FractalParameters;
+        _preview.CenterX = CenterX; _preview.CenterY = CenterY; _preview.Zoom = Zoom;
+        _preview.MaxIterations = MaxIterations; _preview.ColorMap = ColorMap; _preview.Quality = Quality;
+        _preview.LaunchStride = Math.Max(1, (int)Math.Round(1.0 / (s * s)));
+        _preview.Calculate(ct);
+        FracturingFog.Rendering.LowResPreview.UpscaleNearest(_preview.ColorBuffer, dims.Width, dims.Height, ColorBuffer, Width, Height);
+        LastPrecisionLabel = _preview.LastPrecisionLabel;
+        return true;
+    }
 
     public void Resize(int width, int height)
     {
@@ -216,9 +274,10 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
 
     public void Calculate(CancellationToken ct = default)
     {
+        if (LowResPreview && RenderPreview(ct)) return;
         var p = FractalParameters;
         var scene = BilliardScene.Build(p);
-        var launches = BuildSweep(p, scene);
+        var launches = Emitted(BuildSweep(p, scene), p.BilliardRaysProgress, LaunchStride);
         int minBounces = Math.Max(0, p.BilliardRaysMinBounces);
 
         int w = Width, h = Height;
@@ -297,7 +356,21 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
             : escapedMode ? new BilliardCrossingFinder(window, -rp, rp, -rp, rp, 4.0 * pitch)
             : new BilliardCrossingFinder(window, vx0, vx1, vy0, vy1, 4.0 * pitch);
         var found = new List<BilliardRayCrossing>();
-        int chunkRays = Math.Max(1, ChunkRays);
+        int chunkRays = Math.Max(1, ProgressiveBatchesOverride is int pb && pb > 0
+            ? (launches.Count + pb - 1) / pb
+            : ChunkRays);
+        int totalBatches = Math.Max(1, (launches.Count + chunkRays - 1) / chunkRays), batch = 0;
+        Overlay? overlay = crossings
+            ? new Overlay(CrossCount, CrossSum, crossValue switch
+              {
+                  BilliardCrossingValue.Count => OverlayScale.Count,
+                  BilliardCrossingValue.DeltaN => OverlayScale.Signed,
+                  _ => OverlayScale.Unit,
+              }, 1.0)
+            : divergence
+                ? new Overlay(DivCount, DivSum, divValue is BilliardDivergenceValue.BounceDifference or BilliardDivergenceValue.CommonBounces
+                    ? OverlayScale.Positive : OverlayScale.Unit, pitch)
+                : null;
 
         // Bands of rows for the parallel rasterise. The count depends only on the frame
         // height, never on the core count: a band edge clips segments, and the clip
@@ -412,6 +485,14 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
             });
             Array.Clear(paths);
             Array.Clear(tints);
+
+            // #1511 — progressive: put this batch on screen (a cancel leaves it there).
+            batch++;
+            if (OnBatchComposited != null && batch < totalBatches)
+            {
+                Composite(scene, p.BilliardRaysShowDisks, pitch, cx, cy, source, overlay);
+                OnBatchComposited(batch, totalBatches);
+            }
         }
 
         LastRaysEmitted = launches.Count;
@@ -426,18 +507,8 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
         LastTrappedRays = trappedRays;
         RayClasses = (IReadOnlyList<BilliardRayClass>?)classes ?? Array.Empty<BilliardRayClass>();
         LastPrecisionLabel = escapedMode ? StatusText(escapedRays, crossingRays, trappedRays) : null;
-        Overlay? overlay = crossings
-            ? new Overlay(CrossCount, CrossSum, crossValue switch
-              {
-                  BilliardCrossingValue.Count => OverlayScale.Count,
-                  BilliardCrossingValue.DeltaN => OverlayScale.Signed,
-                  _ => OverlayScale.Unit,
-              }, 1.0)
-            : divergence
-                ? new Overlay(DivCount, DivSum, divValue is BilliardDivergenceValue.BounceDifference or BilliardDivergenceValue.CommonBounces
-                    ? OverlayScale.Positive : OverlayScale.Unit, pitch)
-                : null;
         Composite(scene, p.BilliardRaysShowDisks, pitch, cx, cy, source, overlay);
+        OnBatchComposited?.Invoke(totalBatches, totalBatches);
     }
 
     /// <summary>#1510 — the status-bar text for Escaped mode's class counts.</summary>

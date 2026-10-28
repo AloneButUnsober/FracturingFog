@@ -248,6 +248,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _raysSelfCross = _p.BilliardRaysSelfCrossings;
         _raysDivValue = _p.BilliardRaysDivergenceValue;
         _raysEscColour = _p.BilliardRaysEscapedColour;
+        _raysProgress = _p.BilliardRaysProgress;
         _precLowTier = _p.PrecisionLowTier;
         _precHighTier = _p.PrecisionHighTier;
         _precMetric = _p.PrecisionDiffMetric;
@@ -2123,6 +2124,9 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool RaysShowsEscaped => _raysMode == BilliardRayMode.Escaped;
     private BilliardEscapedColour _raysEscColour;
     public BilliardEscapedColour BilliardRaysEscapedColour { get => _raysEscColour; set { Set(ref _raysEscColour, value); _p.BilliardRaysEscapedColour = value; Fire(); } }
+    // #1511 — fraction of the sweep emitted.
+    private double _raysProgress;
+    public double BilliardRaysProgress { get => _raysProgress; set { Set(ref _raysProgress, Clamp(value, 0.0, 1.0)); _p.BilliardRaysProgress = _raysProgress; Fire(); } }
     public System.Array BilliardEscapedColours => s_BilliardEscapedColours;
     private static readonly System.Array s_BilliardEscapedColours = System.Enum.GetValues(typeof(BilliardEscapedColour));
     /// <summary>#1509 — the divergence control applies.</summary>

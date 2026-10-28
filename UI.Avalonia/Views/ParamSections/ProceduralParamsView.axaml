@@ -945,7 +945,7 @@
         <!-- Billiard Rays (#1506): the sweep that emits the rays -->
         <Grid IsVisible="{Binding IsBilliardRays}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Sweep:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding BilliardRaySweeps}"
@@ -1036,7 +1036,13 @@
                       SelectedItem="{Binding BilliardRaysEscapedColour, Mode=TwoWay}"
                       Margin="0,2"
                       ToolTip.Tip="How the escaped rays (no crossing with an earlier ray in the window) are drawn: by the gates between entry and exit, path length or bounces; plain grey; or Hidden to show only the crossings. A ray's class is worked out over the whole play circle, not just the view." />
-            <TextBlock Grid.Row="17" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Margin="0,4,0,2"
+            <!-- #1511: sweep progress (animatable). -->
+            <TextBlock Grid.Row="17" Grid.Column="0" Text="Sweep progress:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="17" Grid.Column="1"
+                           Minimum="0" Maximum="1" Increment="0.05" FormatString="F2"
+                           Value="{Binding BilliardRaysProgress, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Fraction of the sweep emitted, in order (1 = all rays). Animate it from 0 to 1 to watch the rays arrive." />
+            <TextBlock Grid.Row="18" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Margin="0,4,0,2"
                        Text="Each pixel shows how much ray path crosses it (log scale). Emission order does not change the paths, since rays do not interact; it does decide which rays count as previous for crossings." />
         </Grid>
 
