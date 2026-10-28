@@ -127,8 +127,19 @@ namespace FracturingFog
     public enum BilliardRayColorSource { Density, Gate, Bounces, PathLength, EntryAngle, ExitAngle, GateDistance, SelfIntersects }
 
     /// <summary>What <see cref="FractalType.BilliardRays"/> draws (#1508): the ray paths, the points
-    /// where rays cross, or the crossings over the paths.</summary>
-    public enum BilliardRayMode { Paths, Crossings, Both }
+    /// where rays cross, or the crossings over the paths; #1509 <see cref="Divergence"/>: where
+    /// each ray parts from its sweep neighbour (alone, or <see cref="DivergenceOverPaths"/>).
+    /// Appended: the region snapshot stores the int value.</summary>
+    public enum BilliardRayMode { Paths, Crossings, Both, Divergence, DivergenceOverPaths }
+
+    /// <summary>What colours a divergence marker (#1509). Each ray is compared with the ray emitted
+    /// just before it when their launches are neighbours (the same BSweep beam, or consecutive
+    /// AngleSweep / PointSource rays); the marker sits on the last mirror point both rays bounced
+    /// off before their hit sequences differ. <see cref="BounceDifference"/>: |bounces - bounces|.
+    /// <see cref="GateChange"/>: 1 when they leave through different gates, else 0.
+    /// <see cref="Separation"/>: distance between their next hits (or exits), where they have
+    /// split. <see cref="CommonBounces"/>: how many mirrors they shared first.</summary>
+    public enum BilliardDivergenceValue { BounceDifference, GateChange, Separation, CommonBounces }
 
     /// <summary>What colours a crossing (#1508). The current ray is the later one in sweep order,
     /// the previous ray the earlier. <see cref="Count"/>: the theme gradient over crossing count.
@@ -994,7 +1005,7 @@ namespace FracturingFog
         /// <c>BilliardRaysColorSource</c> with the shared <c>BilliardGateMode</c> /
         /// <c>BilliardGateCount</c>; #1508 <c>BilliardRaysMode</c>,
         /// <c>BilliardRaysCrossingWindow</c>, <c>BilliardRaysCrossingValue</c>,
-        /// <c>BilliardRaysSelfCrossings</c>.</summary>
+        /// <c>BilliardRaysSelfCrossings</c>; #1509 <c>BilliardRaysDivergenceValue</c>.</summary>
         BilliardRays,
     }
 

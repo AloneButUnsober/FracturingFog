@@ -246,6 +246,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _raysCrossWindow = _p.BilliardRaysCrossingWindow;
         _raysCrossValue = _p.BilliardRaysCrossingValue;
         _raysSelfCross = _p.BilliardRaysSelfCrossings;
+        _raysDivValue = _p.BilliardRaysDivergenceValue;
         _precLowTier = _p.PrecisionLowTier;
         _precHighTier = _p.PrecisionHighTier;
         _precMetric = _p.PrecisionDiffMetric;
@@ -2112,11 +2113,17 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     private static readonly System.Array s_BilliardRayColorSources = System.Enum.GetValues(typeof(BilliardRayColorSource));
     // #1508 — crossings.
     private BilliardRayMode _raysMode;
-    public BilliardRayMode BilliardRaysMode { get => _raysMode; set { Set(ref _raysMode, value); _p.BilliardRaysMode = value; this.RaisePropertyChanged(nameof(RaysShowsCrossings)); Fire(); } }
+    public BilliardRayMode BilliardRaysMode { get => _raysMode; set { Set(ref _raysMode, value); _p.BilliardRaysMode = value; this.RaisePropertyChanged(nameof(RaysShowsCrossings)); this.RaisePropertyChanged(nameof(RaysShowsDivergence)); Fire(); } }
     public System.Array BilliardRayModes => s_BilliardRayModes;   // cached (see BilliardGeometries)
     private static readonly System.Array s_BilliardRayModes = System.Enum.GetValues(typeof(BilliardRayMode));
     /// <summary>The crossing controls apply (Crossings / Both).</summary>
-    public bool RaysShowsCrossings => _raysMode != BilliardRayMode.Paths;
+    public bool RaysShowsCrossings => _raysMode is BilliardRayMode.Crossings or BilliardRayMode.Both;
+    /// <summary>#1509 — the divergence control applies.</summary>
+    public bool RaysShowsDivergence => _raysMode is BilliardRayMode.Divergence or BilliardRayMode.DivergenceOverPaths;
+    private BilliardDivergenceValue _raysDivValue;
+    public BilliardDivergenceValue BilliardRaysDivergenceValue { get => _raysDivValue; set { Set(ref _raysDivValue, value); _p.BilliardRaysDivergenceValue = value; Fire(); } }
+    public System.Array BilliardDivergenceValues => s_BilliardDivergenceValues;
+    private static readonly System.Array s_BilliardDivergenceValues = System.Enum.GetValues(typeof(BilliardDivergenceValue));
     private int _raysCrossWindow;
     public int BilliardRaysCrossingWindow { get => _raysCrossWindow; set { Set(ref _raysCrossWindow, (int)Clamp(value, 0, 50_000)); _p.BilliardRaysCrossingWindow = _raysCrossWindow; Fire(); } }
     private BilliardCrossingValue _raysCrossValue;

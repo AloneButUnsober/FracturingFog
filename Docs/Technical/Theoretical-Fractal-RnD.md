@@ -265,6 +265,15 @@ each segment listed in the cells its cell walk visits, with rays that leave the 
 start pointers and compacted away; tests check it against a brute-force all-pairs search. This is the one
 place emission order matters. Crossing counts grow fast: about 4.6 M at window 100 and 27 M at window 1000 for
 60 k rays (0.45 s / 1.2 s release build, 800x600).
+S4 (#1509) adds neighbour divergence (`Divergence` / `DivergenceOverPaths` modes): each ray is compared with
+the ray emitted just before it when their launches are neighbours (same BSweep beam, consecutive AngleSweep /
+PointSource rays; random sweeps have none). Their disk-hit sequences are compared, and the current ray's leg
+leaving the last mirror both shared is drawn, valued by the bounce difference, a gate change, the separation of
+their next hits, or the mirrors shared (`BilliardRaysDivergenceValue`). Neighbouring launches that split are
+where the exit basins meet, so the legs are the real-space counterpart of the launch map's basin boundaries
+(and of the uncertainty exponent, #1127). Tests re-trace each pair through the ChaoticBilliard launch map.
+With more rays per beam the neighbours sit closer, so each beam crosses about the same number of boundaries;
+the count grows only as the sweep resolves finer boundary structure.
 
 **Status:** S1–S5 shipped (#1440–#1444); epic #1439 complete.
 
@@ -858,3 +867,4 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
 - **2026-10-27** — §2.5: Billiard Rays S1 #1506, the top-down ray-density render (tracker #1505).
 - **2026-10-27** — §2.5: Billiard Rays S2 #1507, gate-coloured density and per-ray attribute colouring.
 - **2026-10-27** — §2.5: Billiard Rays S3 #1508, ray-ray crossings (delta N, angle, path lengths; heightfield).
+- **2026-10-28** — §2.5: Billiard Rays S4 #1509, sweep-neighbour divergence (real-space basin boundary).

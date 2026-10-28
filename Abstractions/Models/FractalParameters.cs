@@ -1344,6 +1344,9 @@ namespace FracturingFog.Models
         /// <summary>#1508 — also draw where a ray crosses its own path. Default false (always
         /// counted separately).</summary>
         public bool BilliardRaysSelfCrossings { get; set; } = false;
+        /// <summary>#1509 — what colours a divergence marker (see
+        /// <see cref="FracturingFog.BilliardDivergenceValue"/>). Default BounceDifference.</summary>
+        public BilliardDivergenceValue BilliardRaysDivergenceValue { get; set; } = BilliardDivergenceValue.BounceDifference;
 
         // Precision-sensitivity field (#628). Mandelbrot z² + c iterated at two
         // arithmetic tiers; the per-pixel divergence of the outcome is the image.
@@ -2225,6 +2228,7 @@ namespace FracturingFog.Models
                 BilliardRaysCrossingWindow = BilliardRaysCrossingWindow,
                 BilliardRaysCrossingValue = BilliardRaysCrossingValue,
                 BilliardRaysSelfCrossings = BilliardRaysSelfCrossings,
+                BilliardRaysDivergenceValue = BilliardRaysDivergenceValue,
                 PrecisionLowTier = PrecisionLowTier,
                 PrecisionHighTier = PrecisionHighTier,
                 PrecisionDiffMetric = PrecisionDiffMetric,
