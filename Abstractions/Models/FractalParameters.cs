@@ -1333,6 +1333,17 @@ namespace FracturingFog.Models
         /// <summary>#1507 — what sets each pixel's hue (see <see cref="FracturingFog.BilliardRayColorSource"/>).
         /// Default Density (the S1 look).</summary>
         public BilliardRayColorSource BilliardRaysColorSource { get; set; } = BilliardRayColorSource.Density;
+        /// <summary>#1508 — paths, crossings, or both. Default Paths (the S1 / S2 look).</summary>
+        public BilliardRayMode BilliardRaysMode { get; set; } = BilliardRayMode.Paths;
+        /// <summary>#1508 — each ray is checked for crossings against this many rays drawn just
+        /// before it (0 = none). Clamped to [0, 50 000]; cost grows with it. Default 100.</summary>
+        public int BilliardRaysCrossingWindow { get; set; } = 100;
+        /// <summary>#1508 — what colours a crossing (see <see cref="FracturingFog.BilliardCrossingValue"/>).
+        /// Default DeltaN.</summary>
+        public BilliardCrossingValue BilliardRaysCrossingValue { get; set; } = BilliardCrossingValue.DeltaN;
+        /// <summary>#1508 — also draw where a ray crosses its own path. Default false (always
+        /// counted separately).</summary>
+        public bool BilliardRaysSelfCrossings { get; set; } = false;
 
         // Precision-sensitivity field (#628). Mandelbrot z² + c iterated at two
         // arithmetic tiers; the per-pixel divergence of the outcome is the image.
@@ -2210,6 +2221,10 @@ namespace FracturingFog.Models
                 BilliardRaysMinBounces = BilliardRaysMinBounces,
                 BilliardRaysShowDisks = BilliardRaysShowDisks,
                 BilliardRaysColorSource = BilliardRaysColorSource,
+                BilliardRaysMode = BilliardRaysMode,
+                BilliardRaysCrossingWindow = BilliardRaysCrossingWindow,
+                BilliardRaysCrossingValue = BilliardRaysCrossingValue,
+                BilliardRaysSelfCrossings = BilliardRaysSelfCrossings,
                 PrecisionLowTier = PrecisionLowTier,
                 PrecisionHighTier = PrecisionHighTier,
                 PrecisionDiffMetric = PrecisionDiffMetric,

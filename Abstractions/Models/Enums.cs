@@ -126,6 +126,19 @@ namespace FracturingFog
     /// brightness but not hue.</summary>
     public enum BilliardRayColorSource { Density, Gate, Bounces, PathLength, EntryAngle, ExitAngle, GateDistance, SelfIntersects }
 
+    /// <summary>What <see cref="FractalType.BilliardRays"/> draws (#1508): the ray paths, the points
+    /// where rays cross, or the crossings over the paths.</summary>
+    public enum BilliardRayMode { Paths, Crossings, Both }
+
+    /// <summary>What colours a crossing (#1508). The current ray is the later one in sweep order,
+    /// the previous ray the earlier. <see cref="Count"/>: the theme gradient over crossing count.
+    /// <see cref="DeltaN"/>: current minus previous bounce count at the crossing (the segment index
+    /// difference), signed. <see cref="Angle"/>: the acute angle between the two rays.
+    /// <see cref="PreviousFromEntry"/> / <see cref="PreviousToExit"/> /
+    /// <see cref="CurrentFromEntry"/> / <see cref="CurrentToExit"/>: path length along that ray from
+    /// where it entered to the crossing, or from the crossing to where it left.</summary>
+    public enum BilliardCrossingValue { Count, DeltaN, Angle, PreviousFromEntry, PreviousToExit, CurrentFromEntry, CurrentToExit }
+
     /// <summary>How the Wada mirror spheres (#1440) colour a pixel.
     /// <see cref="Basins"/> (S1): the exit opening's categorical colour, from the
     /// billiard theme or Okabe-Ito, darkened per bounce. <see cref="Photo"/> (#1441):
@@ -979,7 +992,9 @@ namespace FracturingFog
         /// <c>BilliardRaysSourceX/Y</c>, <c>BilliardRaysSeed</c>,
         /// <c>BilliardRaysMinBounces</c>, <c>BilliardRaysShowDisks</c>; #1507
         /// <c>BilliardRaysColorSource</c> with the shared <c>BilliardGateMode</c> /
-        /// <c>BilliardGateCount</c>.</summary>
+        /// <c>BilliardGateCount</c>; #1508 <c>BilliardRaysMode</c>,
+        /// <c>BilliardRaysCrossingWindow</c>, <c>BilliardRaysCrossingValue</c>,
+        /// <c>BilliardRaysSelfCrossings</c>.</summary>
         BilliardRays,
     }
 

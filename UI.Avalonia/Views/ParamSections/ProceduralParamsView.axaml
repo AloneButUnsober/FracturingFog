@@ -945,7 +945,7 @@
         <!-- Billiard Rays (#1506): the sweep that emits the rays -->
         <Grid IsVisible="{Binding IsBilliardRays}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Sweep:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding BilliardRaySweeps}"
@@ -1001,8 +1001,29 @@
                       SelectedItem="{Binding BilliardRaysColorSource, Mode=TwoWay}"
                       Margin="0,2"
                       ToolTip.Tip="What sets the colour; brightness is always how much ray path crosses the pixel. Density: theme gradient over density. Gate: the exit-gate colours of the rays crossing it, mixed by length (trapped rays grey; uses Gate mode / Gate count). Bounces, PathLength, EntryAngle, ExitAngle, GateDistance (gates between entry and exit), SelfIntersects (share of rays crossing their own path): the average of that value through the theme gradient. Dark grey = no value (e.g. no exit for trapped rays)." />
-            <TextBlock Grid.Row="11" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Margin="0,4,0,2"
-                       Text="Each pixel shows how much ray path crosses it (log scale). Emission order does not change the picture: rays do not interact." />
+            <!-- #1508: crossings between rays. -->
+            <TextBlock Grid.Row="11" Grid.Column="0" Text="Draw:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="11" Grid.Column="1"
+                      ItemsSource="{Binding BilliardRayModes}"
+                      SelectedItem="{Binding BilliardRaysMode, Mode=TwoWay}"
+                      Margin="0,2"
+                      ToolTip.Tip="Paths: the rays themselves. Crossings: only the points where a ray crosses one drawn shortly before it. Both: crossings over the paths. Crossings also become the relief height." />
+            <TextBlock Grid.Row="12" Grid.Column="0" Text="Crossing window:" VerticalAlignment="Center" IsVisible="{Binding RaysShowsCrossings}" />
+            <NumericUpDown Grid.Row="12" Grid.Column="1" IsVisible="{Binding RaysShowsCrossings}"
+                           Minimum="0" Maximum="50000" Increment="10" FormatString="F0"
+                           Value="{Binding BilliardRaysCrossingWindow, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Each ray is checked against this many rays drawn just before it in sweep order (0 = none). Larger finds more crossings and costs more; this is the one setting where emission order matters." />
+            <TextBlock Grid.Row="13" Grid.Column="0" Text="Crossing colour:" VerticalAlignment="Center" IsVisible="{Binding RaysShowsCrossings}" />
+            <ComboBox Grid.Row="13" Grid.Column="1" IsVisible="{Binding RaysShowsCrossings}"
+                      ItemsSource="{Binding BilliardCrossingValues}"
+                      SelectedItem="{Binding BilliardRaysCrossingValue, Mode=TwoWay}"
+                      Margin="0,2"
+                      ToolTip.Tip="Count: how many crossings. DeltaN: current minus previous ray's bounce count at the crossing (mid-gradient = equal). Angle: how steeply they cross. PreviousFromEntry / PreviousToExit / CurrentFromEntry / CurrentToExit: path length along that ray from where it entered to the crossing, or on to where it left." />
+            <CheckBox Grid.Row="14" Grid.Column="1" Content="Include self-crossings" IsVisible="{Binding RaysShowsCrossings}"
+                      IsChecked="{Binding BilliardRaysSelfCrossings, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Also draw where a ray crosses its own path (always counted separately)." />
+            <TextBlock Grid.Row="15" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Margin="0,4,0,2"
+                       Text="Each pixel shows how much ray path crosses it (log scale). Emission order does not change the paths, since rays do not interact; it does decide which rays count as previous for crossings." />
         </Grid>
 
         <!-- Precision Field (#628) -->
