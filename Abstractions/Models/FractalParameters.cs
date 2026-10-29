@@ -1303,6 +1303,10 @@ namespace FracturingFog.Models
         /// custom layout yet (Custom then falls back to ThreeDisk). Kept when the
         /// geometry is switched away, so switching back restores the layout.</summary>
         public string BilliardCustomDisks { get; set; } = string.Empty;
+        /// <summary>#1548 — the <see cref="FractalType.MathPlane"/> scene in its text
+        /// form (<see cref="MathPlaneScene"/>; one line, statements separated by ';').
+        /// Default: the basis vectors i and j.</summary>
+        public string MathPlaneScene { get; set; } = FracturingFog.Models.MathPlaneScene.DefaultText;
         /// <summary>#1538 — sides of the <see cref="BilliardGeometry.Polygon"/> layout (3 = triangle,
         /// 6 = hexagon, 8 = octagon ...). Clamped to [3, 12]. Default 6.</summary>
         public int BilliardPolygonSides { get; set; } = 6;
@@ -2229,6 +2233,7 @@ namespace FracturingFog.Models
                 BilliardGateMode = BilliardGateMode,
                 BilliardMuteMisses = BilliardMuteMisses,
                 BilliardCustomDisks = BilliardCustomDisks,
+                MathPlaneScene = MathPlaneScene,
                 BilliardPolygonSides = BilliardPolygonSides,
                 BilliardPolygonFill = BilliardPolygonFill,
                 BilliardLatticeRotation = BilliardLatticeRotation,

@@ -597,6 +597,9 @@ namespace FracturingFog.Models
         // #1504 — Custom geometry disk list ("x,y,r;..."); captured only when Custom is
         // the active geometry and has disks, so other billiard regions stay unchanged.
         [JsonIgnore(Condition = OmitNull)] public string? BilliardCustomDisks { get; set; }
+        // #1548 — the Math Plane scene text (always captured for MathPlane, even when
+        // empty: an empty scene is a real choice, not "unset").
+        [JsonIgnore(Condition = OmitNull)] public string? MathPlaneScene { get; set; }
         // #1538 — Polygon sides; captured only when Polygon is the active geometry.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardPolygonSides { get; set; }
         // #1539 — Polygon fill (captured with Polygon) and lattice rotation (captured with a lattice).
@@ -1036,6 +1039,14 @@ namespace FracturingFog.Models
                     BilliardPolygonSides = p.BilliardGeometry == FracturingFog.BilliardGeometry.Polygon ? p.BilliardPolygonSides : null,
                     BilliardPolygonFill = p.BilliardGeometry == FracturingFog.BilliardGeometry.Polygon ? p.BilliardPolygonFill : null,
                     BilliardLatticeRotation = FracturingFog.Models.BilliardLayout.IsLattice(p.BilliardGeometry) ? p.BilliardLatticeRotation : null,
+                },
+                // #1548 — the whole Math Plane scene is one text field.
+                FractalType.MathPlane => new RegionFractalParams
+                {
+                    // Canonical one-line form when it parses (a multi-line edit box
+                    // value would break a --param on the command line); else verbatim.
+                    MathPlaneScene = FracturingFog.Models.MathPlaneScene.TryParse(p.MathPlaneScene, out var mpScene, out _)
+                        ? mpScene.Serialize() : p.MathPlaneScene ?? string.Empty,
                 },
                 // #1506 — the shared billiard scene (no launch / gate / mute: those
                 // colour ChaoticBilliard only) plus the sweep.
@@ -1786,6 +1797,8 @@ namespace FracturingFog.Models
                 p.BilliardMuteMisses = BilliardMuteMisses.Value;
             if (BilliardCustomDisks != null)
                 p.BilliardCustomDisks = BilliardCustomDisks;
+            if (MathPlaneScene != null)
+                p.MathPlaneScene = MathPlaneScene;
             if (BilliardPolygonSides.HasValue)
                 p.BilliardPolygonSides = BilliardPolygonSides.Value;
             if (BilliardPolygonFill.HasValue)

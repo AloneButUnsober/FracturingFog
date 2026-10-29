@@ -90,6 +90,7 @@ public static class MiniMapDefaults
         FractalType.Apollonian       => new( 0.0,  0.0, 2.0),
         FractalType.ChaoticBilliard  => new( 0.0,  0.0, 1.0),
         FractalType.BilliardRays     => new( 0.0,  0.0, 0.6),
+        FractalType.MathPlane        => new( 0.0,  0.0, 0.5),
         FractalType.PrecisionField   => new(-0.5,  0.0, 1.0),
         FractalType.JulibrotPair  => new(-0.5,  0.0, 1.0),
         FractalType.Kleinian         => new( 0.0,  0.0, 1.0),

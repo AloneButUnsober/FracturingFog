@@ -244,6 +244,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _raysSeed = _p.BilliardRaysSeed;
         _raysMinBounces = _p.BilliardRaysMinBounces;
         _raysShowDisks = _p.BilliardRaysShowDisks;
+        _mathPlaneScene = _p.MathPlaneScene ?? string.Empty;
+        UpdateMathPlaneSceneError();
         _raysColorSource = _p.BilliardRaysColorSource;
         _raysMode = _p.BilliardRaysMode;
         _raysCrossWindow = _p.BilliardRaysCrossingWindow;
@@ -455,6 +457,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsBilliardRays => FractalType == FractalType.BilliardRays;
     /// <summary>Either billiard type: the shared scene controls (geometry, disks, bounces).</summary>
     public bool IsBilliardScene => IsChaoticBilliard || IsBilliardRays;
+    /// <summary>#1548 — Math Plane (Cartesian plotter).</summary>
+    public bool IsMathPlane => FractalType == FractalType.MathPlane;
 
     /// <summary>#1447 — opens / closes the ray-path inset (host-set; null hides nothing,
     /// the button just does nothing).</summary>
@@ -612,7 +616,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsLyapunov || IsTranscendentalJulia || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian || IsMirrorSpheres
-          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable
+          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsMathPlane || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -2122,6 +2126,26 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public int BilliardRaysSeed { get => _raysSeed; set { Set(ref _raysSeed, value); _p.BilliardRaysSeed = _raysSeed; Fire(); } }
     private int _raysMinBounces;
     public int BilliardRaysMinBounces { get => _raysMinBounces; set { Set(ref _raysMinBounces, (int)Clamp(value, 0, 4096)); _p.BilliardRaysMinBounces = _raysMinBounces; Fire(); } }
+    // #1548 — the Math Plane scene as text (S2 #1549 adds the object editor).
+    private string _mathPlaneScene = string.Empty;
+    public string MathPlaneSceneText
+    {
+        get => _mathPlaneScene;
+        set
+        {
+            Set(ref _mathPlaneScene, value ?? string.Empty);
+            _p.MathPlaneScene = _mathPlaneScene;
+            UpdateMathPlaneSceneError();
+            Fire();
+        }
+    }
+    private string? _mathPlaneSceneError;
+    /// <summary>The scene's parse error ("statement 2, col 9: ..."), or null.</summary>
+    public string? MathPlaneSceneError { get => _mathPlaneSceneError; private set => Set(ref _mathPlaneSceneError, value); }
+    private void UpdateMathPlaneSceneError()
+        => MathPlaneSceneError = FracturingFog.Models.MathPlaneScene.TryParse(_mathPlaneScene, out _, out var e)
+            ? null : e!.ToString();
+
     private bool _raysShowDisks;
     public bool BilliardRaysShowDisks { get => _raysShowDisks; set { Set(ref _raysShowDisks, value); _p.BilliardRaysShowDisks = value; Fire(); } }
     // #1507 — what sets the hue.

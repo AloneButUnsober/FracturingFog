@@ -100,6 +100,7 @@ namespace FracturingFog.Rendering
         private RandomTileCalculator _randomTileCalculator;
         private ChaoticBilliardCalculator _billiardCalculator;
         private BilliardRaysCalculator _billiardRaysCalculator;   // #1506
+        private MathPlaneCalculator _mathPlaneCalculator;         // #1548
         private PrecisionFieldCalculator _precisionFieldCalculator;
         private DualOrbitEscapeCalculator _dualOrbitCalculator;
         private IndrasPearlsCalculator _indrasPearlsCalculator;
@@ -536,6 +537,7 @@ namespace FracturingFog.Rendering
             _randomTileCalculator = new RandomTileCalculator(w, h);
             _billiardCalculator = new ChaoticBilliardCalculator(w, h);
             _billiardRaysCalculator = new BilliardRaysCalculator(w, h);
+            _mathPlaneCalculator = new MathPlaneCalculator(w, h);
             _precisionFieldCalculator = new PrecisionFieldCalculator(w, h);
             _dualOrbitCalculator = new DualOrbitEscapeCalculator(w, h);
             _indrasPearlsCalculator = new IndrasPearlsCalculator(w, h);
@@ -586,6 +588,7 @@ namespace FracturingFog.Rendering
                 _randomTileCalculator.ColorMap = initialColorMap;
                 _billiardCalculator.ColorMap = initialColorMap;
                 _billiardRaysCalculator.ColorMap = initialColorMap;
+                _mathPlaneCalculator.ColorMap = initialColorMap;
                 _precisionFieldCalculator.ColorMap = initialColorMap;
                 _dualOrbitCalculator.ColorMap = initialColorMap;
                 _indrasPearlsCalculator.ColorMap = initialColorMap;
@@ -1257,6 +1260,7 @@ namespace FracturingFog.Rendering
                 _randomTileCalculator.ColorMap = value;
                 _billiardCalculator.ColorMap = value;
                 _billiardRaysCalculator.ColorMap = value;
+                _mathPlaneCalculator.ColorMap = value;
                 _precisionFieldCalculator.ColorMap = value;
                 _dualOrbitCalculator.ColorMap = value;
                 _indrasPearlsCalculator.ColorMap = value;
@@ -3286,6 +3290,7 @@ namespace FracturingFog.Rendering
                         FracturingFog.Calculators.Generated.TricornCalculator     tc => tc.LastPrecisionLabel,
                         FracturingFog.Calculators.Generated.BurningShipCalculator bs => bs.LastPrecisionLabel,
                         BilliardRaysCalculator br => br.LastPrecisionLabel,   // #1510 escaped / crossing / trapped counts
+                        MathPlaneCalculator mp => mp.LastPrecisionLabel,      // #1548 scene parse error
                         _ => null
                     }
                     : calc.LastPrecisionLabel;
@@ -3443,6 +3448,7 @@ namespace FracturingFog.Rendering
             _randomTileCalculator.Resize(w, h);
             _billiardCalculator.Resize(w, h);
             _billiardRaysCalculator.Resize(w, h);
+            _mathPlaneCalculator.Resize(w, h);
             _precisionFieldCalculator.Resize(w, h);
             _dualOrbitCalculator.Resize(w, h);
             _indrasPearlsCalculator.Resize(w, h);
@@ -4195,6 +4201,7 @@ namespace FracturingFog.Rendering
                 case RandomTileCalculator rt: rt.FractalParameters = ViewState.FractalParameters; break;
                 case ChaoticBilliardCalculator cb: cb.FractalParameters = ViewState.FractalParameters; break;
                 case BilliardRaysCalculator br: br.FractalParameters = ViewState.FractalParameters; break;
+                case MathPlaneCalculator mp: mp.FractalParameters = ViewState.FractalParameters; break;
                 case PrecisionFieldCalculator pf: pf.FractalParameters = ViewState.FractalParameters; break;
                 case DualOrbitEscapeCalculator du: du.FractalParameters = ViewState.FractalParameters; break;
                 case FlameRenderer fr: fr.FractalParameters = ViewState.FractalParameters; break;
@@ -4402,6 +4409,7 @@ namespace FracturingFog.Rendering
             FractalType.RandomTile => _randomTileCalculator,
             FractalType.ChaoticBilliard => _billiardCalculator,
             FractalType.BilliardRays => _billiardRaysCalculator,
+            FractalType.MathPlane => _mathPlaneCalculator,
             FractalType.PrecisionField => _precisionFieldCalculator,
             FractalType.JulibrotPair => _dualOrbitCalculator,
             FractalType.IndrasPearls => _indrasPearlsCalculator,

@@ -148,6 +148,7 @@ namespace FracturingFog.Models
             {FractalType.Apollonian, "Apollonian" },
             {FractalType.ChaoticBilliard, "Chaotic Billiard" },
             {FractalType.BilliardRays, "Billiard Rays" },
+            {FractalType.MathPlane, "Math Plane" },
             {FractalType.PrecisionField, "Precision Field" },
             {FractalType.Kleinian, "Kleinian" },
             {FractalType.MirrorSpheres, "MirrorSpheres" },

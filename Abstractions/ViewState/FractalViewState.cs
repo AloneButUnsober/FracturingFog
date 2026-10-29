@@ -287,6 +287,7 @@ namespace FracturingFog.ViewState
                 FractalType.Apollonian            => ( 0.0,  0.0, 2.0),
                 FractalType.ChaoticBilliard       => ( 0.0,  0.0, 1.0),
                 FractalType.BilliardRays          => ( 0.0,  0.0, 0.6),   // the play circle (r 3) fits
+                FractalType.MathPlane             => ( 0.0,  0.0, 0.5),   // x in [-4, 4]
                 FractalType.PrecisionField        => (-0.5,  0.0, 1.0),
                 FractalType.JulibrotPair       => (-0.5,  0.0, 1.0),
                 FractalType.Kleinian              => ( 0.0,  0.0, 1.0),
