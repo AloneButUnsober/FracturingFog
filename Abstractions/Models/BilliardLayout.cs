@@ -11,6 +11,12 @@
 // 2 sep sin(pi / n) apart; once that is no more than 2R the disks touch or overlap
 // and the gaps between them, the exits, are closed.
 //
+// #1538 — the Polygon geometry: n disks on a regular k-gon of corner radius sep. With
+// n >= k there is a disk on every corner and the other n - k are shared out over the
+// edges as evenly as possible (the first (n - k) mod k edges get one more), evenly
+// spaced along each edge. With n < k the polygon cannot be completed: the disks go on
+// n corners spread as evenly as possible, and the panel says so.
+//
 // #1504 — the Custom geometry's disk list is a string, "x,y,r;x,y,r;...", so it
 // rides the region snapshot and `--param BilliardCustomDisks=...` like any other
 // per-family value. CanPlace is the editor's rule for a dragged / resized / added
@@ -27,6 +33,45 @@ namespace FracturingFog.Models
     {
         /// <summary>Most disks a layout holds (as the NDisk / Ring count cap).</summary>
         public const int MaxDisks = 64;
+
+        /// <summary>#1538 — Polygon side range.</summary>
+        public const int MinSides = 3, MaxSides = 12;
+
+        /// <summary>#1538 — centres of <paramref name="n"/> disks on a regular <paramref name="sides"/>-gon of
+        /// corner radius <paramref name="separation"/>, corner 0 on +x, going anticlockwise. Disk 0 is corner 0.
+        /// Corner j sits at the ring position of j (the same expression as a ring of <paramref name="sides"/>),
+        /// so a polygon with one disk per corner has exactly the ring's centres.</summary>
+        public static List<(double X, double Y)> PolygonCentres(int n, int sides, double separation)
+        {
+            n = Math.Clamp(n, 1, MaxDisks);
+            int k = Math.Clamp(sides, MinSides, MaxSides);
+            var corner = new (double X, double Y)[k];
+            for (int j = 0; j < k; j++)
+            {
+                double a = 0.0 + j * (2.0 * Math.PI / k);
+                corner[j] = (separation * Math.Cos(a), separation * Math.Sin(a));
+            }
+            var list = new List<(double X, double Y)>(n);
+            if (n < k)
+            {
+                // Fewer disks than corners: n corners spread as evenly as possible.
+                for (int i = 0; i < n; i++) list.Add(corner[(int)((long)i * k / n)]);
+                return list;
+            }
+            int extra = n - k;
+            for (int j = 0; j < k; j++)
+            {
+                list.Add(corner[j]);
+                int m = extra / k + (j < extra % k ? 1 : 0);
+                var a = corner[j]; var b = corner[(j + 1) % k];
+                for (int s = 1; s <= m; s++)
+                {
+                    double t = s / (double)(m + 1);
+                    list.Add((a.X + t * (b.X - a.X), a.Y + t * (b.Y - a.Y)));
+                }
+            }
+            return list;
+        }
 
         /// <summary>Editor radius range (as the params panel's radius control).</summary>
         public const double MinRadius = 0.05, MaxRadius = 1.5;
@@ -54,8 +99,21 @@ namespace FracturingFog.Models
 
         /// <summary>Warning text for the params panel, or empty when the layout is open.</summary>
         public static string Warning(BilliardGeometry geometry, int diskCount, double diskRadius, double separation,
-                                     string? customDisks = null)
+                                     string? customDisks = null, int polygonSides = 6)
         {
+            if (geometry == BilliardGeometry.Polygon)
+            {
+                int k = Math.Clamp(polygonSides, MinSides, MaxSides);
+                if (Math.Clamp(diskCount, 1, MaxDisks) < k)
+                    return $"Fewer disks than corners: {Math.Clamp(diskCount, 1, MaxDisks)} disks on a {k}-sided polygon go on some corners only. Use at least {k} disks to complete it.";
+                var c = PolygonCentres(diskCount, k, separation);
+                for (int i = 0; i < c.Count; i++)
+                    for (int j = i + 1; j < c.Count; j++)
+                        if (Math.Sqrt((c[i].X - c[j].X) * (c[i].X - c[j].X) + (c[i].Y - c[j].Y) * (c[i].Y - c[j].Y)) <= 2.0 * diskRadius)
+                            return "Neighbouring disks touch or overlap, so the gaps between them are closed. "
+                                 + "Reduce the radius, increase the separation or use fewer disks.";
+                return string.Empty;
+            }
             if (geometry == BilliardGeometry.Custom)
             {
                 var disks = ParseCustomDisks(customDisks);

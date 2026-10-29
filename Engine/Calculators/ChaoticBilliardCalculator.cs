@@ -260,6 +260,20 @@ public sealed class BilliardScene
                 ringBase = Math.Atan2(cy[0], cx[0]);
                 ring = true;
                 break;
+            case BilliardGeometry.Polygon:
+            {
+                // #1538 — disks on a regular polygon (BilliardLayout.PolygonCentres), then the
+                // Custom ordering and angular-gap gates: around a convex polygon the angle order
+                // from disk 0 is the perimeter order, so gate k is the gap between perimeter
+                // neighbours. One disk per corner gives the ring's centres exactly.
+                var pc = BilliardLayout.PolygonCentres(Math.Clamp(p.BilliardDiskCount, 1, 64), p.BilliardPolygonSides, sep);
+                var disks = new List<BilliardDisk>(pc.Count);
+                foreach (var (x, y) in pc) disks.Add(new BilliardDisk(x, y, diskR));
+                (cx, cy, r) = OrderByAngle(disks);
+                ringBase = Math.Atan2(cy[0], cx[0]);
+                ring = true;
+                break;
+            }
             case BilliardGeometry.ThreeDisk:
                 // Equilateral: centres at 90 deg, 210 deg, 330 deg on the sep circle.
                 ringBase = Math.PI / 2.0;
@@ -285,7 +299,7 @@ public sealed class BilliardScene
         bool exitGap = p.BilliardGateMode == BilliardGateMode.ExitGap && ring && cx.Length >= 2;
         int gateCount = exitGap ? cx.Length : Math.Clamp(p.BilliardGateCount, 2, 64);
         double[]? gateRel = null;
-        if (exitGap && geometry == BilliardGeometry.Custom)
+        if (exitGap && geometry is BilliardGeometry.Custom or BilliardGeometry.Polygon)
         {
             gateRel = new double[cx.Length + 1];
             for (int i = 0; i < cx.Length; i++) gateRel[i] = RelAngle(Math.Atan2(cy[i], cx[i]), ringBase);

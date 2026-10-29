@@ -20,8 +20,9 @@ In the fractal parameters panel:
 
 | Setting | What it does |
 |---|---|
-| **Geometry** | `ThreeDisk` (the classic scatterer), `Ring` (disks evenly on a circle), `NDisk` (a seeded random field), `Custom` (your own layout, see §2). |
-| **Disk count / radius / separation / seed** | Size and spacing of the generated layouts. A yellow note appears when ring neighbours touch, which closes the gaps. |
+| **Geometry** | `ThreeDisk` (the classic scatterer), `Ring` (disks evenly on a circle), `NDisk` (a seeded random field), `Custom` (your own layout, see §2), `Polygon` (disks on a triangle, square, hexagon, octagon ...). |
+| **Disk count / radius / separation / seed** | Size and spacing of the generated layouts. A yellow note appears when neighbours touch, which closes the gaps. |
+| **Sides** (Polygon) | 3 to 12. One disk goes on each corner and the rest are spread evenly along the edges, so changing the disk count re-arranges them. With fewer disks than corners they sit on some corners only, and a note says so. **Separation** is the corner radius. |
 | **Max bounces** | A ray still inside after this many reflections counts as *trapped*. |
 | **Gate mode / count** | `ExitGap`: the gates are the gaps between disks. `Sector`: equal compass sectors. |
 
@@ -54,7 +55,9 @@ The window is never part of a render or an export.
 | `PointSource` | A fan from (**Source X**, **Source Y**) over **Spread**, centred on **Angle**. |
 | `RandomFarField`, `PhaseSpace` | Random rays from outside, or random rays leaving disk 0 (**Ray seed**). |
 
-**Rays** is the total count. **Min bounces** hides rays with fewer reflections (2 hides straight misses and
+**Angle**, **Spread** and **Source X / Y** show and keep up to 10 decimals; type them in. The tracer works
+in doubles, so digits past about 15 significant figures change nothing (the command line accepts the full
+value too). **Rays** is the total count. **Min bounces** hides rays with fewer reflections (2 hides straight misses and
 single glances). **Sweep progress** draws only the first part of the sweep. Animate it from 0 to 1 to watch the
 rays arrive in order.
 

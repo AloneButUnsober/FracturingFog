@@ -1303,6 +1303,9 @@ namespace FracturingFog.Models
         /// custom layout yet (Custom then falls back to ThreeDisk). Kept when the
         /// geometry is switched away, so switching back restores the layout.</summary>
         public string BilliardCustomDisks { get; set; } = string.Empty;
+        /// <summary>#1538 — sides of the <see cref="BilliardGeometry.Polygon"/> layout (3 = triangle,
+        /// 6 = hexagon, 8 = octagon ...). Clamped to [3, 12]. Default 6.</summary>
+        public int BilliardPolygonSides { get; set; } = 6;
 
         // ── Billiard Rays (#1506) — ray-density render of the billiard scene ──
         /// <summary>How rays are emitted (see <see cref="FracturingFog.BilliardRaySweep"/>). Default BSweep.</summary>
@@ -2220,6 +2223,7 @@ namespace FracturingFog.Models
                 BilliardGateMode = BilliardGateMode,
                 BilliardMuteMisses = BilliardMuteMisses,
                 BilliardCustomDisks = BilliardCustomDisks,
+                BilliardPolygonSides = BilliardPolygonSides,
                 BilliardRaysSweep = BilliardRaysSweep,
                 BilliardRaysCount = BilliardRaysCount,
                 BilliardRaysAngleCount = BilliardRaysAngleCount,
