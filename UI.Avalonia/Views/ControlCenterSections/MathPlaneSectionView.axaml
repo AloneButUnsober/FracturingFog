@@ -32,6 +32,11 @@
                         <Button Classes="action neutral" Content="+ Segment"  Command="{Binding AddSegmentCommand}" />
                         <Button Classes="action neutral" Content="+ Polyline" Command="{Binding AddPolylineCommand}" />
                     </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Button Classes="action neutral" Content="+ y = f(x)"   Command="{Binding AddFunctionCommand}"   ToolTip.Tip="Add an explicit curve (starts as sin(x))" />
+                        <Button Classes="action neutral" Content="+ Parametric" Command="{Binding AddParametricCommand}" ToolTip.Tip="Add a parametric curve (starts as the unit circle)" />
+                        <Button Classes="action neutral" Content="+ Polar"      Command="{Binding AddPolarCommand}"      ToolTip.Tip="Add a polar curve r = f(theta) (starts as a cardioid)" />
+                    </StackPanel>
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
                         <ListBox Grid.Column="0" ItemsSource="{Binding Rows}" SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
                                  MinHeight="90" MaxHeight="220" FontFamily="Consolas, Menlo, monospace" FontSize="12" />
@@ -50,7 +55,7 @@
 
             <!-- Selected object -->
             <Border Classes="group" IsVisible="{Binding HasSelection}">
-                <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="4" ColumnSpacing="6">
+                <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="4" ColumnSpacing="6">
                     <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Classes="section" Text="{Binding SelectedKind}" />
                     <TextBlock Grid.Row="1" Text="Name" VerticalAlignment="Center" />
                     <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding SelectedName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Width="160" HorizontalAlignment="Left"
@@ -58,10 +63,17 @@
                     <TextBlock Grid.Row="2" Text="Colour" VerticalAlignment="Center" />
                     <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding SelectedColor, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Width="100" HorizontalAlignment="Left"
                              FontFamily="Consolas, Menlo, monospace" ToolTip.Tip="#RRGGBB" />
-                    <TextBlock Grid.Row="3" Text="Numbers" VerticalAlignment="Center" />
+                    <TextBlock Grid.Row="3" Text="{Binding SelectedCoordsLabel}" VerticalAlignment="Center" />
                     <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding SelectedCoords, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                              FontFamily="Consolas, Menlo, monospace"
-                             ToolTip.Tip="Point: x y. Vector: dx dy [x0 y0]. Segment: x1 y1 x2 y2. Polyline: x1 y1 x2 y2 ..." />
+                             ToolTip.Tip="Point: x y. Vector: dx dy [x0 y0]. Segment: x1 y1 x2 y2. Polyline: x1 y1 x2 y2 ... Curve: domain min max (empty = whole view, or theta 0..2pi)." />
+                    <TextBlock Grid.Row="6" Text="Expression" VerticalAlignment="Center" IsVisible="{Binding SelectedIsCurve}" />
+                    <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding SelectedExpression, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                             IsVisible="{Binding SelectedIsCurve}" FontFamily="Consolas, Menlo, monospace"
+                             ToolTip.Tip="Explicit: f(x). Parametric: x(t). Polar: r(theta). Functions: sin cos tan exp log sqrt abs pow min max ... constants pi e." />
+                    <TextBlock Grid.Row="7" Text="y(t)" VerticalAlignment="Center" IsVisible="{Binding SelectedIsParametric}" />
+                    <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding SelectedExpression2, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                             IsVisible="{Binding SelectedIsParametric}" FontFamily="Consolas, Menlo, monospace" />
                     <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Spacing="14">
                         <CheckBox Content="Visible" IsChecked="{Binding SelectedVisible}" />
                         <CheckBox Content="Label"   IsChecked="{Binding SelectedShowLabel}" />

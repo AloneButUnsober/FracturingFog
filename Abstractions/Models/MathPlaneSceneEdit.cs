@@ -75,6 +75,7 @@ namespace FracturingFog.Models
             MathPlaneObjectKind.Point => 1,
             MathPlaneObjectKind.Vector => 2,
             MathPlaneObjectKind.Segment => 2,
+            MathPlaneObjectKind.Curve => 0,   // a curve is edited by its expression
             _ => o.PointCount,
         };
 
@@ -190,6 +191,26 @@ namespace FracturingFog.Models
             return (scene with { Objects = list }, list.Count - 1);
         }
 
+        /// <summary>#1550 — add a curve with a starter expression: explicit sin(x),
+        /// parametric unit circle (cos t, sin t) over t 0..2pi, polar cardioid
+        /// 1 + cos(theta). Returns the scene and the new object's index.</summary>
+        public static (MathPlaneScene Scene, int Index) AddCurve(MathPlaneScene scene, MathPlaneCurveKind kind)
+        {
+            string name = FreshName(scene, MathPlaneObjectKind.Curve);
+            uint color = MathPlaneScene.DefaultPalette[scene.Objects.Count % MathPlaneScene.DefaultPalette.Length];
+            var (sources, domain) = kind switch
+            {
+                MathPlaneCurveKind.Explicit => (new[] { "sin(x)" }, Array.Empty<double>()),
+                MathPlaneCurveKind.Parametric => (new[] { "cos(t)", "sin(t)" }, new[] { 0.0, 2 * Math.PI }),
+                _ => (new[] { "1 + cos(theta)" }, Array.Empty<double>()),
+            };
+            var obj = new MathPlaneObject(MathPlaneObjectKind.Curve, name, domain, color,
+                                          CurveKind: kind, Sources: sources);
+            var list = scene.Objects.ToList();
+            list.Add(obj);
+            return (scene with { Objects = list }, list.Count - 1);
+        }
+
         /// <summary>A name not used by any object in the scene.</summary>
         public static string FreshName(MathPlaneScene scene, MathPlaneObjectKind kind)
         {
@@ -199,6 +220,7 @@ namespace FracturingFog.Models
                 MathPlaneObjectKind.Point => Letters("ABCDEFGHKLMNPQRSTUVWXYZ"),
                 MathPlaneObjectKind.Vector => Letters("uvwabcdefgh"),
                 MathPlaneObjectKind.Segment => Numbered("s"),
+                MathPlaneObjectKind.Curve => Letters("fghkqr"),
                 _ => Numbered("p"),
             };
             return candidates.First(n => !used.Contains(n));

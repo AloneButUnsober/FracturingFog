@@ -130,12 +130,19 @@ language. Escaping rules for quotes are fixed in S1 with a round-trip test.
 ### 3.3 Expressions: a third binder on the shared front end
 
 `EquationFrontEnd` owns syntax; each language supplies an `IEquationBuilder<T>`.
-Math Plane adds a **plot builder** with real variables `x, y, t, θ` (and `theta`) and
+Math Plane adds a **plot builder** with real variables `x, y, t, theta` and
 complex `z, c`, the existing function table (sin, cos, exp, log, abs, sqrt, pow …),
-and the existing *Did you mean* diagnostics. Compiled via the typed Expression-tree
-path (#1110) to `Func<double, double>` / `Func<double, double, double>` /
-`Func<Complex, Complex>`. No new grammar, so the 2D and bulb golden fingerprints
+and the existing *Did you mean* diagnostics. No new grammar, so the 2D and bulb golden fingerprints
 (`ParserBehaviourSnapshotTests`) stay untouched.
+
+*As built (S3, #1550):* `Equations/PlotExpression.cs` builds the 2D language's own
+AST (`SbxNode`) and evaluates it with the 2D interpreter, so the function
+semantics are exactly the 2D language's. A result whose imaginary part is not
+negligible is NaN, a gap in the curve. The typed Expression-tree compile (#1110)
+was planned but not used. A curve costs a few thousand evaluations per view
+(adaptive sampling), and the interpreter handles that well within a frame. It
+stays an option if per-pixel plot work (S4 shading, S6 phase portrait) turns
+out slow. Only ASCII `theta` is accepted (no `θ`), following the ASCII-names rule.
 
 ### 3.4 Curve algorithms
 
