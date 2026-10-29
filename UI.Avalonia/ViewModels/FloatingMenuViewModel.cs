@@ -26,6 +26,7 @@ using System.Linq;
 using System.Reactive;
 using Avalonia.Threading;
 using FracturingFog.Models;
+using FracturingFog.ViewState;
 using ReactiveUI;
 
 namespace FracturingFog.UI.Avalonia.ViewModels;
@@ -976,6 +977,50 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         }
     }
 
+    // #1559 — grid label precision. Persisted (GridLabelPrefsStore); the shell
+    // pushes the settings to the render host on every change.
+    private GridLabelSettings _gridLabels = GridLabelPrefsStore.Load();
+    public GridLabelSettings GridLabels => _gridLabels;
+
+    private static readonly IReadOnlyList<GridLabelMode> s_gridLabelModes =
+        (GridLabelMode[])Enum.GetValues(typeof(GridLabelMode));
+    public IReadOnlyList<GridLabelMode> GridLabelModes => s_gridLabelModes;
+
+    public GridLabelMode GridLabelMode
+    {
+        get => _gridLabels.Mode;
+        set
+        {
+            if (value == _gridLabels.Mode) return;
+            SetGridLabels(_gridLabels with { Mode = value });
+            this.RaisePropertyChanged(nameof(GridLabelDigitsEnabled));
+        }
+    }
+
+    /// <summary>Decimals (Fixed) or significant figures (Scientific).</summary>
+    public int GridLabelDigits
+    {
+        get => _gridLabels.Digits;
+        set
+        {
+            int v = Math.Clamp(value, GridLabelSettings.MinDigits, GridLabelSettings.MaxDigits);
+            if (v == _gridLabels.Digits) return;
+            SetGridLabels(_gridLabels with { Digits = v });
+        }
+    }
+
+    public bool GridLabelDigitsEnabled =>
+        _gridLabels.Mode is GridLabelMode.Fixed or GridLabelMode.Scientific;
+
+    private void SetGridLabels(GridLabelSettings s)
+    {
+        _gridLabels = s;
+        this.RaisePropertyChanged(nameof(GridLabelMode));
+        this.RaisePropertyChanged(nameof(GridLabelDigits));
+        GridLabelPrefsStore.Save(s);
+        GridLabelsChanged?.Invoke(this, s);
+    }
+
     // Diagnostic — bypass BLA + SA on legacy MandelbrotCalculator HP path.
     // Used to isolate deep-zoom pixelation regressions. Wire to RenderHost
     // via shell event handler.
@@ -1253,6 +1298,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
 
     public event EventHandler<bool>? StatusBarToggled;
     public event EventHandler<bool>? GridToggled;
+    public event EventHandler<GridLabelSettings>? GridLabelsChanged;
     public event EventHandler<bool>? BypassAccelerationToggled;
     public event EventHandler<bool>? BypassSeriesApproximationToggled;
     public event EventHandler<bool>? BypassDdBlaToggled;

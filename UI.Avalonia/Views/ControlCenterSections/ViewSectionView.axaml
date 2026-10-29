@@ -22,6 +22,17 @@
                     <ComboBox ItemsSource="{Binding Menu.ResolutionNames}"
                               SelectedItem="{Binding Menu.SelectedResolution}"
                               Width="160" ToolTip.Tip="Set window dimensions" />
+                </StackPanel>
+                <!-- #1559 — grid axis label precision. -->
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
+                    <TextBlock Text="Grid labels" VerticalAlignment="Center" Foreground="#9B9B9B" FontWeight="Bold" />
+                    <ComboBox ItemsSource="{Binding Menu.GridLabelModes}"
+                              SelectedItem="{Binding Menu.GridLabelMode}" Width="120"
+                              ToolTip.Tip="Auto: decimals follow the grid spacing; long labels switch to scientific, then to offsets from a full-precision anchor (deep zoom). Fixed: set decimals. Scientific: set significant figures. Offset: always anchor + offsets." />
+                    <NumericUpDown Value="{Binding Menu.GridLabelDigits}" Minimum="0" Maximum="30" Increment="1"
+                                   FormatString="0" Width="110"
+                                   IsEnabled="{Binding Menu.GridLabelDigitsEnabled}"
+                                   ToolTip.Tip="Decimals (Fixed) or significant figures (Scientific)" />
                 </StackPanel>    
                      <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto">
                          <!-- Global UI scale (#809 / S4 #813): shrink / percent / enlarge /
