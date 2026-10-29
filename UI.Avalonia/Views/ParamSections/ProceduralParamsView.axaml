@@ -882,20 +882,30 @@
                       ItemsSource="{Binding BilliardGeometries}"
                       SelectedItem="{Binding BilliardGeometry, Mode=TwoWay}"
                       Margin="0,2"
-                      ToolTip.Tip="Obstacle arrangement. ThreeDisk = classic scatterer; Ring = disks evenly on a circle; NDisk = seeded random field; Custom = your own layout, edited by dragging disks in Ray Paths; Polygon = disks on a triangle, square, hexagon ... (Sides): one per corner, the rest spread along the edges." />
+                      ToolTip.Tip="Obstacle arrangement. ThreeDisk = classic scatterer; Ring = disks evenly on a circle; NDisk = seeded random field; Custom = your own layout, edited by dragging disks in Ray Paths; Polygon = disks on a triangle, square, hexagon ... (Sides): one per corner, the rest spread along the edges, Fill adds the inside; SquareLattice / HexLattice = a patch of a square / triangular grid (Lorentz gas), Separation apart." />
             <TextBlock Grid.Row="1" Grid.Column="0" Text="Disk count:" VerticalAlignment="Center" />
-            <!-- #1538: Sides sits beside the count for the Polygon geometry. -->
-            <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto,Auto">
+            <!-- #1538: Sides (and #1539 Fill) sit beside the count for the Polygon geometry,
+                 #1539 Rotation for the lattices. -->
+            <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto">
                 <NumericUpDown Grid.Column="0"
-                               Minimum="1" Maximum="64" Increment="1" FormatString="F0"
+                               Minimum="1" Maximum="256" Increment="1" FormatString="F0"
                                Value="{Binding BilliardDiskCount, Mode=TwoWay}" Margin="0,2"
-                               ToolTip.Tip="Disk count for NDisk / Ring / Polygon. ThreeDisk ignores this (always 3). NDisk spreads its random field wider when the disks would not fit, so every disk is placed. Polygon puts one disk on each corner and spreads the rest along the edges." />
+                               ToolTip.Tip="Disk count for NDisk / Ring / Polygon / the lattices (up to 256; more disks trace slower). ThreeDisk ignores this (always 3). NDisk spreads its random field wider when the disks would not fit, so every disk is placed. Polygon puts one disk on each corner and spreads the rest along the edges. A lattice takes the sites nearest the centre, so it grows ring by ring." />
                 <TextBlock Grid.Column="1" Text="Sides:" VerticalAlignment="Center" Margin="8,0,4,0"
                            IsVisible="{Binding IsBilliardPolygon}" />
                 <NumericUpDown Grid.Column="2" Width="90" IsVisible="{Binding IsBilliardPolygon}"
                                Minimum="3" Maximum="12" Increment="1" FormatString="F0"
                                Value="{Binding BilliardPolygonSides, Mode=TwoWay}" Margin="0,2"
                                ToolTip.Tip="Polygon sides: 3 triangle, 4 square, 5 pentagon, 6 hexagon, 8 octagon (3-12). Separation is the corner radius." />
+                <CheckBox Grid.Column="3" Content="Fill" Margin="8,0,0,0" IsVisible="{Binding IsBilliardPolygon}"
+                          IsChecked="{Binding BilliardPolygonFill, Mode=TwoWay}"
+                          ToolTip.Tip="Also fill the inside with disks on a grid at the edge spacing (square grid for 4 and 8 sides, triangular otherwise). The disk count still sets the perimeter; the fill adds to it, up to 256 disks in all." />
+                <TextBlock Grid.Column="4" Text="Rotation:" VerticalAlignment="Center" Margin="8,0,4,0"
+                           IsVisible="{Binding IsBilliardLattice}" />
+                <NumericUpDown Grid.Column="5" Width="100" IsVisible="{Binding IsBilliardLattice}"
+                               Minimum="-180" Maximum="180" Increment="5" FormatString="0.##########"
+                               Value="{Binding BilliardLatticeRotation, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="Lattice rotation, degrees anticlockwise (-180 to 180)." />
             </Grid>
             <TextBlock Grid.Row="2" Grid.Column="0" Text="Disk radius:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="2" Grid.Column="1"
@@ -906,7 +916,7 @@
             <NumericUpDown Grid.Row="3" Grid.Column="1"
                            Minimum="0.1" Maximum="3.0" Increment="0.05" FormatString="F2"
                            Value="{Binding BilliardSeparation, Mode=TwoWay}" Margin="0,2"
-                           ToolTip.Tip="Centre-to-centre spacing (radius of the circle the disk centres sit on). Wider = simpler basins; tighter = deeper chaos." />
+                           ToolTip.Tip="Centre-to-centre spacing (radius of the circle the disk centres sit on; the corner radius for Polygon; the grid spacing for the lattices). Wider = simpler basins; tighter = deeper chaos." />
             <TextBlock Grid.Row="4" Grid.Column="0" Text="Max bounces:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="4" Grid.Column="1"
                            Minimum="1" Maximum="4096" Increment="16" FormatString="F0"

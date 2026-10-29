@@ -18,6 +18,7 @@ public class BilliardRaysPresetTests
     private const string GateFlow = "Billiard Rays - Three-Disk Gate Flow";
     private const string RingCrossings = "Billiard Rays - Ring Crossings";
     private const string CustomDivergence = "Billiard Rays - Custom Five-Disk Divergence";
+    private const string HexLorentz = "Billiard Rays - Hexagonal Lorentz Gas";
 
     private static (FractalRegion Region, FractalParameters P) Preset(string name)
     {
@@ -90,6 +91,7 @@ public class BilliardRaysPresetTests
     [InlineData(GateFlow)]
     [InlineData(RingCrossings)]
     [InlineData(CustomDivergence)]
+    [InlineData(HexLorentz)]
     public void Preset_Renders_Through_The_Poster_Renderer(string name)
     {
         var (region, p) = Preset(name);

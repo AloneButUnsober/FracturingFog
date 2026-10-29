@@ -242,6 +242,7 @@ public sealed class BilliardScene
         double[]? r = null;
         double ringBase = 0.0;
         bool ring = false;
+        int gateDisks = -1;   // #1539 — disks that bound the exit gaps (-1 = all of them)
         var geometry = p.BilliardGeometry;
         List<BilliardDisk>? custom = null;
         if (geometry == BilliardGeometry.Custom)
@@ -266,12 +267,40 @@ public sealed class BilliardScene
                 // Custom ordering and angular-gap gates: around a convex polygon the angle order
                 // from disk 0 is the perimeter order, so gate k is the gap between perimeter
                 // neighbours. One disk per corner gives the ring's centres exactly.
-                var pc = BilliardLayout.PolygonCentres(Math.Clamp(p.BilliardDiskCount, 1, 64), p.BilliardPolygonSides, sep);
+                int count = Math.Clamp(p.BilliardDiskCount, 1, BilliardLayout.MaxDisks);
+                var pc = BilliardLayout.PolygonCentres(count, p.BilliardPolygonSides, sep);
                 var disks = new List<BilliardDisk>(pc.Count);
                 foreach (var (x, y) in pc) disks.Add(new BilliardDisk(x, y, diskR));
                 (cx, cy, r) = OrderByAngle(disks);
                 ringBase = Math.Atan2(cy[0], cx[0]);
                 ring = true;
+                if (p.BilliardPolygonFill)
+                {
+                    // #1539 — the interior grid goes after the perimeter; the gates stay the
+                    // gaps between perimeter neighbours.
+                    var fill = BilliardLayout.PolygonFillCentres(count, p.BilliardPolygonSides, sep,
+                                                                 BilliardLayout.MaxDisks - cx.Length, out _);
+                    gateDisks = cx.Length;
+                    int n0 = cx.Length;
+                    Array.Resize(ref cx, n0 + fill.Count);
+                    Array.Resize(ref cy, n0 + fill.Count);
+                    Array.Resize(ref r, n0 + fill.Count);
+                    for (int i = 0; i < fill.Count; i++)
+                    {
+                        cx[n0 + i] = fill[i].X; cy[n0 + i] = fill[i].Y; r[n0 + i] = diskR;
+                    }
+                }
+                break;
+            }
+            case BilliardGeometry.SquareLattice:
+            case BilliardGeometry.HexLattice:
+            {
+                // #1539 — a Lorentz-gas patch. Not a ring: the gates are compass sectors
+                // (ExitGap falls back to them), which suit a filled patch better.
+                var lc = BilliardLayout.LatticeCentres(geometry, p.BilliardDiskCount, sep, p.BilliardLatticeRotation);
+                cx = new double[lc.Count];
+                cy = new double[lc.Count];
+                for (int i = 0; i < lc.Count; i++) { cx[i] = lc[i].X; cy[i] = lc[i].Y; }
                 break;
             }
             case BilliardGeometry.ThreeDisk:
@@ -281,11 +310,11 @@ public sealed class BilliardScene
                 ring = true;
                 break;
             case BilliardGeometry.Ring:
-                (cx, cy) = RingCentres(Math.Clamp(p.BilliardDiskCount, 1, 64), sep, 0.0);
+                (cx, cy) = RingCentres(Math.Clamp(p.BilliardDiskCount, 1, BilliardLayout.MaxDisks), sep, 0.0);
                 ring = true;
                 break;
             default: // NDisk — seeded pseudo-random, simple overlap reject.
-                (cx, cy) = RandomCentres(Math.Clamp(p.BilliardDiskCount, 1, 64), diskR, sep, p.BilliardSeed);
+                (cx, cy) = RandomCentres(Math.Clamp(p.BilliardDiskCount, 1, BilliardLayout.MaxDisks), diskR, sep, p.BilliardSeed);
                 break;
         }
         if (r == null)
@@ -296,14 +325,15 @@ public sealed class BilliardScene
 
         // ExitGap needs a ring (or a Custom layout) with at least two gaps; otherwise
         // compass sectors.
-        bool exitGap = p.BilliardGateMode == BilliardGateMode.ExitGap && ring && cx.Length >= 2;
-        int gateCount = exitGap ? cx.Length : Math.Clamp(p.BilliardGateCount, 2, 64);
+        if (gateDisks < 0) gateDisks = cx.Length;
+        bool exitGap = p.BilliardGateMode == BilliardGateMode.ExitGap && ring && gateDisks >= 2;
+        int gateCount = exitGap ? gateDisks : Math.Clamp(p.BilliardGateCount, 2, 64);
         double[]? gateRel = null;
         if (exitGap && geometry is BilliardGeometry.Custom or BilliardGeometry.Polygon)
         {
-            gateRel = new double[cx.Length + 1];
-            for (int i = 0; i < cx.Length; i++) gateRel[i] = RelAngle(Math.Atan2(cy[i], cx[i]), ringBase);
-            gateRel[cx.Length] = 2.0 * Math.PI;
+            gateRel = new double[gateDisks + 1];
+            for (int i = 0; i < gateDisks; i++) gateRel[i] = RelAngle(Math.Atan2(cy[i], cx[i]), ringBase);
+            gateRel[gateDisks] = 2.0 * Math.PI;
         }
 
         // Play region — a bounding circle the ray escapes through. Big enough to

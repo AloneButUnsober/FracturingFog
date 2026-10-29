@@ -902,3 +902,4 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
 - **2026-10-28** — §2.5: Billiard Rays S6 #1511, sweep progress, progressive batches, drag preview, cost (GPU deferred).
 - **2026-10-28** — §2.5: Billiard Rays S7 #1512, presets, user guide, prior-art check (epic #1505 complete).
 - **2026-10-29** — §2.5: `Polygon` billiard geometry (#1538, corners then evenly along the edges; one disk per corner = the ring); 10-decimal angle fields (#1540).
+- **2026-10-29** — §2.5: `SquareLattice` / `HexLattice` billiard geometries (#1539, n sites nearest the origin, the periodic Lorentz gas of Sinai 1970 / Bunimovich & Sinai 1981) and the filled `Polygon` (grid at the edge spacing); disk cap 64 → 256.

@@ -131,7 +131,7 @@ public class BilliardCustomLayoutTests
         Assert.Equal(disks, BilliardLayout.ParseCustomDisks(BilliardLayout.FormatCustomDisks(disks)));
         var parsed = BilliardLayout.ParseCustomDisks(" 1,2,0.5 ; bad ; 1,2 ; 3,4,-1 ; 5,NaN,1 ; 6,7,0.25 ;");
         Assert.Equal(new List<BilliardDisk> { new(1, 2, 0.5), new(6, 7, 0.25) }, parsed);
-        var many = string.Join(";", Enumerable.Range(0, 100).Select(i => $"{i},0,0.1"));
+        var many = string.Join(";", Enumerable.Range(0, BilliardLayout.MaxDisks + 36).Select(i => $"{i},0,0.1"));
         Assert.Equal(BilliardLayout.MaxDisks, BilliardLayout.ParseCustomDisks(many).Count);
     }
 

@@ -78,8 +78,11 @@ namespace FracturingFog
     /// (<c>BilliardCustomDisks</c>), edited by dragging disks in the ray-path inset.
     /// <see cref="Polygon"/> (#1538) puts <c>BilliardDiskCount</c> disks on a regular polygon of
     /// <c>BilliardPolygonSides</c> sides: one on each corner, the rest spread evenly along the edges.
+    /// <see cref="SquareLattice"/> / <see cref="HexLattice"/> (#1539) take the <c>BilliardDiskCount</c>
+    /// sites of a square / triangular grid nearest the origin, <c>BilliardSeparation</c> apart: the
+    /// periodic Lorentz gas, cut to a finite patch.
     /// Appended last: the region snapshot stores the int value.</summary>
-    public enum BilliardGeometry { ThreeDisk, NDisk, Ring, Custom, Polygon }
+    public enum BilliardGeometry { ThreeDisk, NDisk, Ring, Custom, Polygon, SquareLattice, HexLattice }
 
     /// <summary>How a ChaoticBilliard pixel maps to a launch initial condition (#1445).
     /// <see cref="FarField"/> launches from outside the scatterer: impact parameter b
