@@ -654,6 +654,9 @@ namespace FracturingFog.Rendering
         public bool ShowGrid { get; set; }
 
         /// <inheritdoc/>
+        public FracturingFog.ViewState.GridLabelSettings GridLabels { get; set; } = FracturingFog.ViewState.GridLabelSettings.Default;
+
+        /// <inheritdoc/>
         public FracturingFog.Abstractions.Explore.ExploreHeatmap? ExploreHeatmap { get; set; }
         public bool ShowWatermark { get; set; }
 
@@ -5067,7 +5070,7 @@ namespace FracturingFog.Rendering
                         ShowGrid, ShowWatermark, OverlayContrastLuma,
                         RegionName, ThemeName, ProgramName, ProgramVersion,
                         ActiveWatermark,
-                        selectionBox, exportGuideAspect);
+                        selectionBox, exportGuideAspect, GridLabels);
                 }
                 catch (Exception ex)
                 {

@@ -331,6 +331,10 @@ namespace FracturingFog.Render
         /// so the change shows up immediately.</summary>
         bool ShowGrid { get; set; }
 
+        /// <summary>#1559 — how the grid's axis labels are written (Auto / Fixed /
+        /// Scientific / Offset). Follow a change with <see cref="RepaintWithPostFx"/>.</summary>
+        FracturingFog.ViewState.GridLabelSettings GridLabels { get; set; }
+
         /// <summary>#1240 — interest-score heatmap to blend into the live frame
         /// (diagnostic; never exported). Drawn only while the view matches the
         /// one it was scored for. Null = off. Follow with

@@ -274,6 +274,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
         // Grid checkbox in the menu mirrors the toolbar toggle.
         FloatingMenu.GridToggled       += (_, v) => Main.ShowGrid = v;
+        // #1559 — grid label precision (persisted by the menu VM).
+        Main.RenderHost.GridLabels = FloatingMenu.GridLabels;
+        FloatingMenu.GridLabelsChanged += (_, s) =>
+        {
+            Main.RenderHost.GridLabels = s;
+            Main.RenderHost.RepaintWithPostFx();
+        };
         FloatingMenu.BypassAccelerationToggled += (_, v) =>
         {
             Main.RenderHost.MandelbrotDisableAcceleration = v;

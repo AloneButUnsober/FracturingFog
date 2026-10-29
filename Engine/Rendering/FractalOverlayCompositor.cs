@@ -17,6 +17,10 @@
 // the compositor so per-frame allocation stays small (one SKPaint per stroke /
 // fill colour change). The compositor itself is single-threaded — FractalRenderHost
 // only calls it from the calculator continuation, behind the same _d3dGate lock.
+//
+// #1559 — grid ticks + labels come from GridAxis / GridLabelFormatter
+// (Abstractions/ViewState/GridAxisLabels.cs): exact multi-limb centre, label
+// precision from the step (or the user's Fixed / Scientific / Offset choice).
 
 using System;
 using System.Drawing; // Color, RectangleF — System.Drawing.Primitives (portable)
@@ -89,7 +93,8 @@ namespace FracturingFog.Rendering
             string? programVersion,
             WatermarkDef? activeWatermark,
             (int X, int Y, int W, int H)? selectionRect = null,
-            double exportGuideAspect = 0.0)
+            double exportGuideAspect = 0.0,
+            GridLabelSettings? gridLabels = null)
         {
             if (bgra == null || bgra.Length < width * height) return;
             if (width <= 1 || height <= 1) return;
@@ -106,7 +111,7 @@ namespace FracturingFog.Rendering
             DrawOnto(bgra, width, height, canvas =>
             {
                 if (showGrid && state != null)
-                    DrawGrid(canvas, width, height, state, ink, halo);
+                    DrawGrid(canvas, width, height, state, ink, halo, gridLabels ?? GridLabelSettings.Default);
 
                 if (showWatermark)
                     DrawWatermark(canvas, width, height,
@@ -234,87 +239,98 @@ namespace FracturingFog.Rendering
 
         // ── Grid ──────────────────────────────────────────────────────────
 
-        private void DrawGrid(SKCanvas canvas, int w, int h, FractalViewState s, Color ink, Color halo)
+        private void DrawGrid(SKCanvas canvas, int w, int h, FractalViewState s, Color ink, Color halo,
+                              GridLabelSettings labels)
         {
-            double cx = s.CenterX, cy = s.CenterY, zoom = s.Zoom;
+            double zoom = s.Zoom;
             if (zoom <= 0 || double.IsNaN(zoom) || double.IsInfinity(zoom)) return;
 
+            // #1559 — ticks come from the exact multi-limb centre (GridAxis), so the
+            // grid keeps distinct lines and exact labels at any depth; positions are
+            // offsets from the centre, never sums of absolute doubles.
             double scale = 3.5 / (Math.Max(w, h) * zoom);
-            double xMin = cx - w * scale * 0.5, xMax = cx + w * scale * 0.5;
-            double yMin = cy - h * scale * 0.5, yMax = cy + h * scale * 0.5;
+            double halfW = w * scale * 0.5, halfH = h * scale * 0.5;
+            var (stepS, stepE) = GridAxis.NiceStep(2 * halfW / 7.0);
+            var xAxis = GridAxis.Build(
+                stackalloc double[] { s.CenterX, s.CenterXLo, s.CenterX2, s.CenterX3, s.CenterX4, s.CenterX5, s.CenterX6, s.CenterX7 },
+                halfW, stepS, stepE);
+            var yAxis = GridAxis.Build(
+                stackalloc double[] { s.CenterY, s.CenterYLo, s.CenterY2, s.CenterY3, s.CenterY4, s.CenterY5, s.CenterY6, s.CenterY7 },
+                halfH, stepS, stepE);
+            if (xAxis.Ticks.Count == 0 && yAxis.Ticks.Count == 0) return;
+            var xLabels = GridLabelFormatter.Format(xAxis, labels);
+            var yLabels = GridLabelFormatter.Format(yAxis, labels);
 
             using var gridPen  = new SKPaint { Style = SKPaintStyle.Stroke, StrokeWidth = 1.0f, IsAntialias = true, Color = ToSk(Color.FromArgb(140, ink)) };
             using var axisPen  = new SKPaint { Style = SKPaintStyle.Stroke, StrokeWidth = 1.6f, IsAntialias = true, Color = ToSk(Color.FromArgb(210, ink)) };
             using var lblBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = ToSk(Color.FromArgb(220, ink)) };
             using var shdBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = ToSk(halo) };
 
-            double gridStep = NiceStep((xMax - xMin) / 7.0);
-            if (gridStep <= 0) return;
-
             float lblHeight = LineHeight(_labelFont);
             float lblBaseline = Baseline(_labelFont);
 
-            // Vertical lines + their x-axis labels along the bottom.
-            for (double wx = Math.Ceiling(xMin / gridStep) * gridStep;
-                 wx <= xMax + gridStep * 0.01; wx += gridStep)
+            void Label(string text, float x, float top)
             {
-                double px = (wx - cx) / scale + w * 0.5;
-                if (px < 0 || px > w) continue;
-                bool isAxis = Math.Abs(wx) < gridStep * 0.01;
-                canvas.DrawLine((float)px, 0, (float)px, h, isAxis ? axisPen : gridPen);
+                canvas.DrawText(text, x + 1, top + 1 + lblBaseline, _labelFont, shdBrush);
+                canvas.DrawText(text, x,     top     + lblBaseline, _labelFont, lblBrush);
+            }
 
-                string lbl = FormatCoord(wx);
+            // Vertical lines + their x-axis labels along the bottom.
+            double? originPx = null, originPy = null;
+            for (int i = 0; i < xAxis.Ticks.Count; i++)
+            {
+                var t = xAxis.Ticks[i];
+                double px = t.OffsetFromCentre / scale + w * 0.5;
+                if (px < 0 || px > w) continue;
+                if (t.IsZero) originPx = px;
+                canvas.DrawLine((float)px, 0, (float)px, h, t.IsZero ? axisPen : gridPen);
+
+                // Offset form: the anchor tick reads "x0" (its value is in the corner).
+                string lbl = xLabels.Anchor != null && xLabels.Labels[i] == "0" ? "x0" : xLabels.Labels[i];
                 float lblW = _labelFont.MeasureText(lbl);
-                float lx = (float)px - lblW * 0.5f;
                 float ly = h - lblHeight - 2;
                 if (ly < 0) ly = 2;
-                canvas.DrawText(lbl, lx + 1, ly + 1 + lblBaseline, _labelFont, shdBrush);
-                canvas.DrawText(lbl, lx,     ly     + lblBaseline, _labelFont, lblBrush);
+                // Keep edge labels inside the frame (long offset labels clipped before).
+                float lx = Math.Clamp((float)px - lblW * 0.5f, 2f, Math.Max(2f, w - lblW - 2f));
+                Label(lbl, lx, ly);
             }
 
             // Horizontal lines + i-suffixed labels along the left edge.
-            for (double wy = Math.Ceiling(yMin / gridStep) * gridStep;
-                 wy <= yMax + gridStep * 0.01; wy += gridStep)
+            for (int i = 0; i < yAxis.Ticks.Count; i++)
             {
-                double py = -(wy - cy) / scale + h * 0.5;
+                var t = yAxis.Ticks[i];
+                double py = -t.OffsetFromCentre / scale + h * 0.5;
                 if (py < 0 || py > h) continue;
-                bool isAxis = Math.Abs(wy) < gridStep * 0.01;
-                canvas.DrawLine(0, (float)py, w, (float)py, isAxis ? axisPen : gridPen);
-                if (isAxis) continue;
+                if (t.IsZero) originPy = py;
+                canvas.DrawLine(0, (float)py, w, (float)py, t.IsZero ? axisPen : gridPen);
+                if (t.IsZero && yLabels.Anchor == null) continue;   // the origin marker reads 0
 
-                string lbl = FormatCoord(wy) + "i";
-                float top = (float)py - lblHeight * 0.5f;
-                canvas.DrawText(lbl, 4, top + 1 + lblBaseline, _labelFont, shdBrush);
-                canvas.DrawText(lbl, 3, top     + lblBaseline, _labelFont, lblBrush);
+                string lbl = yLabels.Anchor != null && yLabels.Labels[i] == "0" ? "y0" : yLabels.Labels[i] + "i";
+                Label(lbl, 3, (float)py - lblHeight * 0.5f);
+            }
+
+            // Offset form: the anchors the tick offsets are measured from, bottom
+            // right above the x labels (full precision, exact).
+            float anchorTop = h - 2 * lblHeight - 6;
+            if (yLabels.Anchor != null)
+            {
+                string a = "y0 = " + yLabels.Anchor + "i";
+                Label(a, w - _labelFont.MeasureText(a) - 4, anchorTop);
+                anchorTop -= lblHeight + 2;
+            }
+            if (xLabels.Anchor != null)
+            {
+                string a = "x0 = " + xLabels.Anchor;
+                Label(a, w - _labelFont.MeasureText(a) - 4, anchorTop);
             }
 
             // Origin marker.
-            double ox = (0 - cx) / scale + w * 0.5;
-            double oy = -(0 - cy) / scale + h * 0.5;
-            if (ox >= 0 && ox <= w && oy >= 0 && oy <= h)
+            if (originPx is double ox && originPy is double oy)
             {
                 float zb = Baseline(_zeroFont);
                 canvas.DrawText("0", (float)ox + 3, (float)oy + 3 + zb, _zeroFont, shdBrush);
                 canvas.DrawText("0", (float)ox + 2, (float)oy + 2 + zb, _zeroFont, lblBrush);
             }
-        }
-
-        private static double NiceStep(double raw)
-        {
-            if (raw <= 0) return 1.0;
-            double mag = Math.Pow(10, Math.Floor(Math.Log10(raw)));
-            double norm = raw / mag;
-            double nice = norm <= 1.0 ? 1.0 : norm <= 2.0 ? 2.0 : norm <= 5.0 ? 5.0 : 10.0;
-            return nice * mag;
-        }
-
-        private static string FormatCoord(double v)
-        {
-            if (v == 0.0) return "0";
-            double abs = Math.Abs(v);
-            int mag = (int)Math.Floor(Math.Log10(abs));
-            int decimals = Math.Clamp(6 - mag, 0, 15);
-            return v.ToString("F" + decimals, CultureInfo.InvariantCulture);
         }
 
         // ── Selection rectangle (right-drag zoom rubber band) ────────────
