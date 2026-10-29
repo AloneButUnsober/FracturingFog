@@ -599,6 +599,9 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public string? BilliardCustomDisks { get; set; }
         // #1538 — Polygon sides; captured only when Polygon is the active geometry.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardPolygonSides { get; set; }
+        // #1539 — Polygon fill (captured with Polygon) and lattice rotation (captured with a lattice).
+        [JsonIgnore(Condition = OmitNull)] public bool? BilliardPolygonFill { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BilliardLatticeRotation { get; set; }
         // #1506 — Billiard Rays sweep (BilliardRaysSweep = int cast of BilliardRaySweep).
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysSweep { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysCount { get; set; }
@@ -1031,6 +1034,8 @@ namespace FracturingFog.Models
                                           && !string.IsNullOrWhiteSpace(p.BilliardCustomDisks)
                         ? p.BilliardCustomDisks : null,
                     BilliardPolygonSides = p.BilliardGeometry == FracturingFog.BilliardGeometry.Polygon ? p.BilliardPolygonSides : null,
+                    BilliardPolygonFill = p.BilliardGeometry == FracturingFog.BilliardGeometry.Polygon ? p.BilliardPolygonFill : null,
+                    BilliardLatticeRotation = FracturingFog.Models.BilliardLayout.IsLattice(p.BilliardGeometry) ? p.BilliardLatticeRotation : null,
                 },
                 // #1506 — the shared billiard scene (no launch / gate / mute: those
                 // colour ChaoticBilliard only) plus the sweep.
@@ -1046,6 +1051,8 @@ namespace FracturingFog.Models
                                           && !string.IsNullOrWhiteSpace(p.BilliardCustomDisks)
                         ? p.BilliardCustomDisks : null,
                     BilliardPolygonSides = p.BilliardGeometry == FracturingFog.BilliardGeometry.Polygon ? p.BilliardPolygonSides : null,
+                    BilliardPolygonFill = p.BilliardGeometry == FracturingFog.BilliardGeometry.Polygon ? p.BilliardPolygonFill : null,
+                    BilliardLatticeRotation = FracturingFog.Models.BilliardLayout.IsLattice(p.BilliardGeometry) ? p.BilliardLatticeRotation : null,
                     BilliardRaysSweep = (int)p.BilliardRaysSweep,
                     BilliardRaysCount = p.BilliardRaysCount,
                     BilliardRaysAngleCount = p.BilliardRaysAngleCount,
@@ -1781,6 +1788,10 @@ namespace FracturingFog.Models
                 p.BilliardCustomDisks = BilliardCustomDisks;
             if (BilliardPolygonSides.HasValue)
                 p.BilliardPolygonSides = BilliardPolygonSides.Value;
+            if (BilliardPolygonFill.HasValue)
+                p.BilliardPolygonFill = BilliardPolygonFill.Value;
+            if (BilliardLatticeRotation.HasValue)
+                p.BilliardLatticeRotation = BilliardLatticeRotation.Value;
             if (BilliardRaysSweep.HasValue)      p.BilliardRaysSweep = (FracturingFog.BilliardRaySweep)BilliardRaysSweep.Value;
             if (BilliardRaysCount.HasValue)      p.BilliardRaysCount = BilliardRaysCount.Value;
             if (BilliardRaysAngleCount.HasValue) p.BilliardRaysAngleCount = BilliardRaysAngleCount.Value;
@@ -2958,6 +2969,29 @@ namespace FracturingFog.Models
                     BilliardRaysMinBounces = 2,
                     BilliardRaysMode = (int)FracturingFog.BilliardRayMode.DivergenceOverPaths,
                     BilliardRaysDivergenceValue = (int)FracturingFog.BilliardDivergenceValue.GateChange,
+                },
+            },
+            // #1539 — a finite patch of the periodic Lorentz gas (Sinai 1970; Bunimovich & Sinai 1981).
+            new()
+            {
+                Name        = "Billiard Rays - Hexagonal Lorentz Gas",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  0.25,
+                Iterations  = 256,
+                Description = "Sixty-one mirrors on a hexagonal grid, a patch of the periodic Lorentz gas, lit by one parallel beam from the left. Each ray is coloured by how many times it bounced, so the colour shifts from the side the beam comes in on, where rays leave after a few bounces, to the middle of the patch, where they bounce many times.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.BilliardRays,
+                QualityPreset = QualityPreset.Standard,
+                Params      = new RegionFractalParams
+                {
+                    BilliardGeometry = (int)FracturingFog.BilliardGeometry.HexLattice,
+                    BilliardDiskCount = 61, BilliardDiskRadius = 0.3, BilliardSeparation = 1.0, BilliardMaxBounces = 256,
+                    BilliardLatticeRotation = 0.0,
+                    BilliardRaysSweep = (int)FracturingFog.BilliardRaySweep.BSweep,
+                    BilliardRaysCount = 200_000, BilliardRaysAngleCount = 1, BilliardRaysAngle = 0.0,
+                    BilliardRaysColorSource = (int)FracturingFog.BilliardRayColorSource.Bounces,
+                    BilliardRaysMode = (int)FracturingFog.BilliardRayMode.Paths,
                 },
             },
             new()

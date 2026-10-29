@@ -259,6 +259,26 @@ finite-size-Lyapunov literature, which these entries anchor.
   for drawing billiard rays in real space; it traces individual rays and does not accumulate a density
   (#1512, context for Billiard Rays #1506).
 
+<a id="sinai-1970"></a>
+
+- **Yakov G. Sinai.** *Dynamical systems with elastic reflections. Ergodic properties of dispersing billiards.*
+  Russian Mathematical Surveys 25(2), 137–189 (1970), doi:10.1070/RM1970v025n02ABEH003794
+  (Russian original: Uspekhi Mat. Nauk 25(2(152)), 141–192, 1970), <https://mathnet.ru/eng/rm5322>. Details
+  checked against the Math-Net.Ru record. The ergodicity of dispersing billiards, the setting of the periodic
+  Lorentz gas. Background for the lattice billiard geometries (#1539): FF only arranges disks on a square or
+  hexagonal grid and traces rays through a finite patch with its existing billiard tracer; it claims nothing
+  about the gas's dynamics.
+
+<a id="bunimovich-sinai-1981"></a>
+
+- **Leonid A. Bunimovich, Yakov G. Sinai.** *Statistical properties of Lorentz gas with periodic configuration of
+  scatterers.* Communications in Mathematical Physics 78(4), 479–497 (1981), doi:10.1007/BF02046760,
+  <https://projecteuclid.org/journals/communications-in-mathematical-physics/volume-78/issue-4/Statistical-properties-of-Lorentz-gas-with-periodic-configuration-of-scatterers/cmp/1103908786.pdf>.
+  Volume, issue, pages and DOI checked against the Princeton and MaRDI records. The standard reference for the
+  periodic Lorentz gas (a particle among fixed scatterers on a lattice). Same role as Sinai 1970 above (#1539):
+  the name and the model behind the `SquareLattice` / `HexLattice` geometries and the Hexagonal Lorentz Gas
+  preset.
+
 <a id="schlick-fresnel"></a>
 
 - **Christophe Schlick.** *An inexpensive BRDF model for physically-based rendering.* Computer Graphics

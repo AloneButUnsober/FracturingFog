@@ -1306,6 +1306,12 @@ namespace FracturingFog.Models
         /// <summary>#1538 — sides of the <see cref="BilliardGeometry.Polygon"/> layout (3 = triangle,
         /// 6 = hexagon, 8 = octagon ...). Clamped to [3, 12]. Default 6.</summary>
         public int BilliardPolygonSides { get; set; } = 6;
+        /// <summary>#1539 — fill the <see cref="BilliardGeometry.Polygon"/> interior with disks on a grid
+        /// at the perimeter spacing, as well as the perimeter. Default off.</summary>
+        public bool BilliardPolygonFill { get; set; }
+        /// <summary>#1539 — rotation of the lattice geometries, degrees anticlockwise. Clamped to
+        /// [-180, 180]. Default 0.</summary>
+        public double BilliardLatticeRotation { get; set; }
 
         // ── Billiard Rays (#1506) — ray-density render of the billiard scene ──
         /// <summary>How rays are emitted (see <see cref="FracturingFog.BilliardRaySweep"/>). Default BSweep.</summary>
@@ -2224,6 +2230,8 @@ namespace FracturingFog.Models
                 BilliardMuteMisses = BilliardMuteMisses,
                 BilliardCustomDisks = BilliardCustomDisks,
                 BilliardPolygonSides = BilliardPolygonSides,
+                BilliardPolygonFill = BilliardPolygonFill,
+                BilliardLatticeRotation = BilliardLatticeRotation,
                 BilliardRaysSweep = BilliardRaysSweep,
                 BilliardRaysCount = BilliardRaysCount,
                 BilliardRaysAngleCount = BilliardRaysAngleCount,
