@@ -80,6 +80,15 @@ namespace FracturingFog.Batch
                     ?? throw new InvalidOperationException(paramError);
                 overlay.ApplyTo(fp);
             }
+            // #1548 — a Math Plane scene that does not parse would render as an empty
+            // plane with an error banner; refuse it so batch never writes that file.
+            {
+                var family = region != null && opts.FractalType == FractalType.Mandelbrot
+                    ? region.FractalType : opts.FractalType;
+                if (family == FractalType.MathPlane
+                    && !FracturingFog.Models.MathPlaneScene.TryParse(fp.MathPlaneScene, out _, out var sceneError))
+                    throw new InvalidOperationException("MathPlaneScene: " + sceneError);
+            }
             if (opts.BulbPower.HasValue)          fp.BulbPower          = opts.BulbPower.Value;
             if (opts.MultibrotExponent.HasValue)  fp.MultibrotExponent  = opts.MultibrotExponent.Value;
             if (!string.IsNullOrWhiteSpace(opts.LSystemPresetName))

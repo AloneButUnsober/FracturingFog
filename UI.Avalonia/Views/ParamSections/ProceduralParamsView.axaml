@@ -961,6 +961,20 @@
                        Text="Custom layout: open Ray paths and drag disks to move them, wheel to resize, double-click to add, right-click to remove. Disk count, separation and seed don't apply; disk radius sets the size of added disks. Pick another geometry to go back (the custom layout is kept)." />
         </Grid>
 
+        <!-- Math Plane (#1548): the scene as text. S2 (#1549) adds the object editor. -->
+        <StackPanel IsVisible="{Binding IsMathPlane}" Spacing="4">
+            <TextBlock Text="Scene" FontWeight="Bold" />
+            <TextBox Text="{Binding MathPlaneSceneText, Mode=TwoWay}"
+                     AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" MaxHeight="260"
+                     FontFamily="Consolas, Menlo, monospace"
+                     ToolTip.Tip="One statement per line or separated by ';'. point NAME x y | vector NAME x y [from x0 y0] | segment NAME x1 y1 x2 y2 | polyline NAME x1 y1 x2 y2 ... Options: #RRGGBB, hidden, nolabel. Settings: axes on|off, grid on|off, ticks on|off, labels auto|offset|fixed:N|sci:N." />
+            <TextBlock Text="{Binding MathPlaneSceneError}"
+                       IsVisible="{Binding MathPlaneSceneError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                       Foreground="#FFCC00" TextWrapping="Wrap" />
+            <TextBlock TextWrapping="Wrap" Foreground="#9B9B9B"
+                       Text="Example: vector v 2 1 #E69F00; point A -1 2; segment s 0 0 1 1; polyline p 0 0 1 1 2 0" />
+        </StackPanel>
+
         <!-- Billiard Rays (#1506): the sweep that emits the rays -->
         <Grid IsVisible="{Binding IsBilliardRays}"
               ColumnDefinitions="160,*"

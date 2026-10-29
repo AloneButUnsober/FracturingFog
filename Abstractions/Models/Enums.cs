@@ -1022,6 +1022,13 @@ namespace FracturingFog
         /// <c>BilliardRaysSelfCrossings</c>; #1509 <c>BilliardRaysDivergenceValue</c>; #1510
         /// <c>BilliardRaysEscapedColour</c>; #1511 <c>BilliardRaysProgress</c>.</summary>
         BilliardRays,
+        /// <summary>Math Plane (#1547 / #1548) — an interactive Cartesian plane: axes,
+        /// grid, tick labels and plotted objects (points, vectors, segments, polylines),
+        /// drawn by <c>MathPlaneCalculator</c>. The scene is the text parameter
+        /// <c>MathPlaneScene</c> (format in <c>MathPlaneScene.cs</c>). Not an escape-time
+        /// fractal: the "math behind fractals" companion view
+        /// (Docs/Technical/MathPlane-DesignPlan.md).</summary>
+        MathPlane,
     }
 
     public enum RenderProfile { Preview, Final }
