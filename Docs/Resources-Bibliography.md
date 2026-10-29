@@ -544,6 +544,39 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
   DBLP). Its parametric clip trims each Billiard Rays segment to the row band being rasterised before the
   cell walk (`BilliardRaysCalculator.Clip`, #1506).
 
+<a id="okabe-ito-cud"></a>
+
+- **Okabe–Ito colour-blind-safe palette** — Masataka Okabe, Kei Ito. *Color Universal Design (CUD): How
+  to make figures and presentations that are friendly to Colorblind people.* J*FLY, first version 2002,
+  later revised. <https://jfly.uni-koeln.de/color/>. Authors, title and URL checked; the revision date of
+  the current page was not confirmed. The eight-colour set already used for Billiard gate colours
+  (`BilliardRaysCalculator`, #1507; credit added with the Math Plane plan, which also defaults its object
+  colours to it, MathPlane-DesignPlan.md §4).
+
+<a id="lorensen-cline-marching-cubes"></a>
+
+- **Marching cubes / marching squares** — William E. Lorensen, Harvey E. Cline. *Marching Cubes: A High
+  Resolution 3D Surface Construction Algorithm.* ACM SIGGRAPH Computer Graphics 21(4), 163–169, 1987
+  (SIGGRAPH '87). Authors, title, venue, volume and pages checked against the paper's PDF and
+  bibliographic records; the DOI is given two ways across records (10.1145/37402.37422 vs
+  10.1145/37401.37422) and is left out until checked against the ACM Digital Library. Marching squares is
+  the 2D form (overview: <https://en.wikipedia.org/wiki/Marching_squares>, which names no original
+  paper for the 2D variant). Planned use: implicit curves `F(x, y) = 0` in the Math Plane render mode
+  (`Docs/Technical/MathPlane-DesignPlan.md` §3.4).
+
+<a id="wegert-visual-complex-functions"></a>
+
+- **Phase portraits of complex functions** — Elias Wegert. *Visual Complex Functions: An Introduction
+  with Phase Portraits.* Birkhäuser, 2012. doi:10.1007/978-3-0348-0180-5,
+  <https://link.springer.com/doi/10.1007/978-3-0348-0180-5>. Planned use: the phase-portrait background
+  (colour by `arg f(z)`) under the Math Plane's complex maps (MathPlane-DesignPlan.md §3.4).
+
+<a id="cobweb-plot"></a>
+
+- **Cobweb plot** — the standard graphical iteration of a real map `x → f(x)` against `y = x`. Overview:
+  <https://en.wikipedia.org/wiki/Cobweb_plot>; no single originating source is credited here. Planned
+  use: the Math Plane cobweb diagram of `x → x² + c` (MathPlane-DesignPlan.md §3.6).
+
 ### Scene Engine — camera splines, motion blur, cinematic moves
 
 <a id="catmull-rom"></a>
@@ -595,6 +628,30 @@ Programs and galleries the project measured itself against, learned from, or pay
   <https://docs.juliahub.com/General/Basins/>.
 - **Noah Spurrier.** *Acid Warp*, 1992. The DOS psychedelic-pattern program the clean-room Acid Warp
   mode pays homage to.
+
+<a id="manim"></a>
+
+- **Manim** — Grant Sanderson (3Blue1Brown). *Animation engine for explanatory math videos.*
+  <https://github.com/3b1b/manim> (package `manimgl`); community fork Manim Community Edition,
+  <https://github.com/ManimCommunity/manim>. The scripted engine behind the 3Blue1Brown videos. Inspiration
+  for the Math Plane render mode's look (grids morphing under a map) and for its later scripted-scenes
+  follow-up; no Manim code is used (MathPlane-DesignPlan.md).
+
+<a id="sanderson-linear-transformations"></a>
+
+- **Grant Sanderson.** *Linear transformations and matrices*, chapter 3 of *Essence of linear algebra*,
+  3Blue1Brown, 7 Aug 2016. <https://www.3blue1brown.com/lessons/linear-transformations>. The
+  grid-under-a-linear-map presentation the Math Plane matrix maps follow (MathPlane-DesignPlan.md §1,
+  §3.5).
+
+<a id="desmos-geogebra"></a>
+
+- **Desmos** graphing calculator, <https://www.desmos.com/calculator> (company and founding details not
+  verified here), and **GeoGebra** — Markus Hohenwarter, begun 2001 as his master's thesis at the
+  University of Salzburg (per GeoGebra's own introduction, <https://geogebra.org/m/vPVbbksj>, and
+  <https://en.wikipedia.org/wiki/GeoGebra>; the thesis record itself was not found). The general-purpose
+  plotters the Math Plane render mode deliberately does not try to replace; prior art for interactive
+  point/curve/transform plotting (MathPlane-DesignPlan.md §1).
 
 ---
 
