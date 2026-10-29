@@ -597,6 +597,8 @@ namespace FracturingFog.Models
         // #1504 — Custom geometry disk list ("x,y,r;..."); captured only when Custom is
         // the active geometry and has disks, so other billiard regions stay unchanged.
         [JsonIgnore(Condition = OmitNull)] public string? BilliardCustomDisks { get; set; }
+        // #1538 — Polygon sides; captured only when Polygon is the active geometry.
+        [JsonIgnore(Condition = OmitNull)] public int? BilliardPolygonSides { get; set; }
         // #1506 — Billiard Rays sweep (BilliardRaysSweep = int cast of BilliardRaySweep).
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysSweep { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysCount { get; set; }
@@ -1028,6 +1030,7 @@ namespace FracturingFog.Models
                     BilliardCustomDisks = p.BilliardGeometry == FracturingFog.BilliardGeometry.Custom
                                           && !string.IsNullOrWhiteSpace(p.BilliardCustomDisks)
                         ? p.BilliardCustomDisks : null,
+                    BilliardPolygonSides = p.BilliardGeometry == FracturingFog.BilliardGeometry.Polygon ? p.BilliardPolygonSides : null,
                 },
                 // #1506 — the shared billiard scene (no launch / gate / mute: those
                 // colour ChaoticBilliard only) plus the sweep.
@@ -1042,6 +1045,7 @@ namespace FracturingFog.Models
                     BilliardCustomDisks = p.BilliardGeometry == FracturingFog.BilliardGeometry.Custom
                                           && !string.IsNullOrWhiteSpace(p.BilliardCustomDisks)
                         ? p.BilliardCustomDisks : null,
+                    BilliardPolygonSides = p.BilliardGeometry == FracturingFog.BilliardGeometry.Polygon ? p.BilliardPolygonSides : null,
                     BilliardRaysSweep = (int)p.BilliardRaysSweep,
                     BilliardRaysCount = p.BilliardRaysCount,
                     BilliardRaysAngleCount = p.BilliardRaysAngleCount,
@@ -1775,6 +1779,8 @@ namespace FracturingFog.Models
                 p.BilliardMuteMisses = BilliardMuteMisses.Value;
             if (BilliardCustomDisks != null)
                 p.BilliardCustomDisks = BilliardCustomDisks;
+            if (BilliardPolygonSides.HasValue)
+                p.BilliardPolygonSides = BilliardPolygonSides.Value;
             if (BilliardRaysSweep.HasValue)      p.BilliardRaysSweep = (FracturingFog.BilliardRaySweep)BilliardRaysSweep.Value;
             if (BilliardRaysCount.HasValue)      p.BilliardRaysCount = BilliardRaysCount.Value;
             if (BilliardRaysAngleCount.HasValue) p.BilliardRaysAngleCount = BilliardRaysAngleCount.Value;

@@ -223,6 +223,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _rtShape = _p.RandomTileShape;
         _billiardGeometry = _p.BilliardGeometry;
         _billiardDiskCount = _p.BilliardDiskCount;
+        _billiardPolygonSides = _p.BilliardPolygonSides;
         _billiardDiskRadius = _p.BilliardDiskRadius;
         _billiardSeparation = _p.BilliardSeparation;
         _billiardMaxBounces = _p.BilliardMaxBounces;
@@ -2030,7 +2031,11 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     /// <summary>#1503 — non-empty when Ring / ThreeDisk neighbours touch or overlap (gaps closed);
     /// #1504 — also when Custom disks touch, or Custom has no layout yet.</summary>
     public string BilliardLayoutWarning => BilliardLayout.Warning(_billiardGeometry, _billiardDiskCount, _billiardDiskRadius, _billiardSeparation,
-                                                                  _p.BilliardCustomDisks);
+                                                                  _p.BilliardCustomDisks, _billiardPolygonSides);
+    /// <summary>#1538 — the Sides control applies.</summary>
+    public bool IsBilliardPolygon => _billiardGeometry == BilliardGeometry.Polygon;
+    private int _billiardPolygonSides;
+    public int BilliardPolygonSides { get => _billiardPolygonSides; set { Set(ref _billiardPolygonSides, (int)Clamp(value, BilliardLayout.MinSides, BilliardLayout.MaxSides)); _p.BilliardPolygonSides = _billiardPolygonSides; LayoutChanged(); Fire(); } }
     public bool HasBilliardLayoutWarning => BilliardLayoutWarning.Length > 0;
     /// <summary>#1504 — the Custom geometry is edited in the ray-path inset, not here.</summary>
     public bool IsBilliardCustom => _billiardGeometry == BilliardGeometry.Custom;
@@ -2039,6 +2044,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(BilliardLayoutWarning));
         this.RaisePropertyChanged(nameof(HasBilliardLayoutWarning));
         this.RaisePropertyChanged(nameof(IsBilliardCustom));
+        this.RaisePropertyChanged(nameof(IsBilliardPolygon));
     }
     public System.Array BilliardGeometries => s_BilliardGeometries;   // cached: a new array per read resets the ComboBox selection on Refresh()
     private static readonly System.Array s_BilliardGeometries = System.Enum.GetValues(typeof(BilliardGeometry));

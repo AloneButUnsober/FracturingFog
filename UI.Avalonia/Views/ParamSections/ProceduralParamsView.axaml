@@ -882,12 +882,21 @@
                       ItemsSource="{Binding BilliardGeometries}"
                       SelectedItem="{Binding BilliardGeometry, Mode=TwoWay}"
                       Margin="0,2"
-                      ToolTip.Tip="Obstacle arrangement. ThreeDisk = classic scatterer; Ring = disks evenly on a circle; NDisk = seeded random field; Custom = your own layout, edited by dragging disks in Ray Paths." />
+                      ToolTip.Tip="Obstacle arrangement. ThreeDisk = classic scatterer; Ring = disks evenly on a circle; NDisk = seeded random field; Custom = your own layout, edited by dragging disks in Ray Paths; Polygon = disks on a triangle, square, hexagon ... (Sides): one per corner, the rest spread along the edges." />
             <TextBlock Grid.Row="1" Grid.Column="0" Text="Disk count:" VerticalAlignment="Center" />
-            <NumericUpDown Grid.Row="1" Grid.Column="1"
-                           Minimum="1" Maximum="64" Increment="1" FormatString="F0"
-                           Value="{Binding BilliardDiskCount, Mode=TwoWay}" Margin="0,2"
-                           ToolTip.Tip="Disk count for NDisk / Ring. ThreeDisk ignores this (always 3). NDisk spreads its random field wider when the disks would not fit, so every disk is placed." />
+            <!-- #1538: Sides sits beside the count for the Polygon geometry. -->
+            <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto,Auto">
+                <NumericUpDown Grid.Column="0"
+                               Minimum="1" Maximum="64" Increment="1" FormatString="F0"
+                               Value="{Binding BilliardDiskCount, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="Disk count for NDisk / Ring / Polygon. ThreeDisk ignores this (always 3). NDisk spreads its random field wider when the disks would not fit, so every disk is placed. Polygon puts one disk on each corner and spreads the rest along the edges." />
+                <TextBlock Grid.Column="1" Text="Sides:" VerticalAlignment="Center" Margin="8,0,4,0"
+                           IsVisible="{Binding IsBilliardPolygon}" />
+                <NumericUpDown Grid.Column="2" Width="90" IsVisible="{Binding IsBilliardPolygon}"
+                               Minimum="3" Maximum="12" Increment="1" FormatString="F0"
+                               Value="{Binding BilliardPolygonSides, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="Polygon sides: 3 triangle, 4 square, 5 pentagon, 6 hexagon, 8 octagon (3-12). Separation is the corner radius." />
+            </Grid>
             <TextBlock Grid.Row="2" Grid.Column="0" Text="Disk radius:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="2" Grid.Column="1"
                            Minimum="0.05" Maximum="1.5" Increment="0.05" FormatString="F2"
@@ -964,23 +973,24 @@
                            ToolTip.Tip="Number of beam directions, evenly spaced round the circle from the beam angle. 1 = a single parallel beam; the rays are shared between the beams." />
             <TextBlock Grid.Row="3" Grid.Column="0" Text="Angle (deg):" VerticalAlignment="Center" IsVisible="{Binding RaysUsesAngle}" />
             <NumericUpDown Grid.Row="3" Grid.Column="1" IsVisible="{Binding RaysUsesAngle}"
-                           Minimum="-360" Maximum="360" Increment="5" FormatString="F1"
+                           Minimum="-360" Maximum="360" Increment="5" FormatString="0.##########"
                            Value="{Binding BilliardRaysAngle, Mode=TwoWay}" Margin="0,2"
-                           ToolTip.Tip="BSweep: direction the first beam travels (0 = left to right). AngleSweep: where the emitter starts round the circle. PointSource: the fan's centre direction." />
+                           ToolTip.Tip="BSweep: direction the first beam travels (0 = left to right). AngleSweep: where the emitter starts round the circle. PointSource: the fan's centre direction. Up to 10 decimals are shown and kept (type them in); the tracer works in doubles, so digits past about 15 significant figures change nothing." />
             <TextBlock Grid.Row="4" Grid.Column="0" Text="Spread (deg):" VerticalAlignment="Center" IsVisible="{Binding RaysUsesSpread}" />
             <NumericUpDown Grid.Row="4" Grid.Column="1" IsVisible="{Binding RaysUsesSpread}"
-                           Minimum="0" Maximum="360" Increment="5" FormatString="F1"
+                           Minimum="0" Maximum="360" Increment="5" FormatString="0.##########"
                            Value="{Binding BilliardRaysSpread, Mode=TwoWay}" Margin="0,2"
                            ToolTip.Tip="AngleSweep: rays aim within half this either side of the centre. PointSource: the fan's full width (360 = every direction)." />
             <TextBlock Grid.Row="5" Grid.Column="0" Text="Source X:" VerticalAlignment="Center" IsVisible="{Binding IsRaysPointSource}" />
             <NumericUpDown Grid.Row="5" Grid.Column="1" IsVisible="{Binding IsRaysPointSource}"
-                           Minimum="-20" Maximum="20" Increment="0.1" FormatString="F2"
+                           Minimum="-20" Maximum="20" Increment="0.1" FormatString="0.##########"
                            Value="{Binding BilliardRaysSourceX, Mode=TwoWay}" Margin="0,2"
                            ToolTip.Tip="Fan origin, world units. A point inside a disk emits nothing." />
             <TextBlock Grid.Row="6" Grid.Column="0" Text="Source Y:" VerticalAlignment="Center" IsVisible="{Binding IsRaysPointSource}" />
             <NumericUpDown Grid.Row="6" Grid.Column="1" IsVisible="{Binding IsRaysPointSource}"
-                           Minimum="-20" Maximum="20" Increment="0.1" FormatString="F2"
-                           Value="{Binding BilliardRaysSourceY, Mode=TwoWay}" Margin="0,2" />
+                           Minimum="-20" Maximum="20" Increment="0.1" FormatString="0.##########"
+                           Value="{Binding BilliardRaysSourceY, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Fan origin y, world units. Up to 10 decimals are shown and kept; the tracer works in doubles, so digits past about 15 significant figures change nothing." />
             <TextBlock Grid.Row="7" Grid.Column="0" Text="Ray seed:" VerticalAlignment="Center" IsVisible="{Binding RaysUsesSeed}" />
             <NumericUpDown Grid.Row="7" Grid.Column="1" IsVisible="{Binding RaysUsesSeed}"
                            Minimum="-2147483648" Maximum="2147483647" Increment="1" FormatString="F0"

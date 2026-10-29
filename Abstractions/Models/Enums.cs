@@ -76,8 +76,10 @@ namespace FracturingFog
     /// region; <see cref="Ring"/> places the disks evenly on a circle;
     /// <see cref="Custom"/> (#1504) is an explicit disk list
     /// (<c>BilliardCustomDisks</c>), edited by dragging disks in the ray-path inset.
+    /// <see cref="Polygon"/> (#1538) puts <c>BilliardDiskCount</c> disks on a regular polygon of
+    /// <c>BilliardPolygonSides</c> sides: one on each corner, the rest spread evenly along the edges.
     /// Appended last: the region snapshot stores the int value.</summary>
-    public enum BilliardGeometry { ThreeDisk, NDisk, Ring, Custom }
+    public enum BilliardGeometry { ThreeDisk, NDisk, Ring, Custom, Polygon }
 
     /// <summary>How a ChaoticBilliard pixel maps to a launch initial condition (#1445).
     /// <see cref="FarField"/> launches from outside the scatterer: impact parameter b
