@@ -184,6 +184,47 @@ path (#1110) to `Func<double, double>` / `Func<double, double, double>` /
   through `FractalOverlayCompositor`. This extends the existing grid overlay rather
   than adding a second compositor.
 
+### 3.7 Axis label precision (shared with the grid overlay)
+
+User request (2026-10-29): label precision should be configurable, or adjust
+itself when needed. Today's grid overlay (`FractalOverlayCompositor.FormatCoord`)
+picks decimals from the **magnitude of the label value** (`6 − ⌊log₁₀|v|⌋`, capped
+at 15). Three problems follow:
+
+- **Too long at normal zoom.** At step 0.5, the label 1.5 prints as `1.500000`.
+- **Not tied to the step.** Neighbouring labels differ in the step's last digit,
+  and nothing guarantees that digit is shown.
+- **Breaks at deep zoom.** The grid uses only the double `CenterX` / `CenterY`, so
+  once the step falls below about 1e-15 × |centre| the tick values collapse to the
+  same double and every label reads the same.
+
+One **shared label formatter** (Abstractions, used by the overlay and Math Plane)
+with three modes:
+
+1. **Auto (default).** Decimals come from the **grid step**:
+   `max(0, −⌊log₁₀ step⌋)`. That is the fewest digits that keep neighbouring
+   labels distinct; for nice steps of 1, 2 or 5 × 10ᵏ no extra digit is needed.
+   Trailing zeros are trimmed, and the origin prints as `0`.
+2. **Fixed.** A user-set number of decimals (0–30), or significant figures in
+   scientific form (`1.25e-8`).
+3. **Offset (automatic fallback, also selectable).** Used when Auto would need
+   more than a length cap (default 12 characters), or when the step is below
+   about 1e-12 × |centre|. One **anchor label** in a corner shows the view centre
+   at full precision, from the multi-limb centre via `CoordNotation`, never a
+   `(decimal)double`. Each tick then shows only its offset from the anchor, in
+   scientific form (`+3e-20`). Tick positions are computed as offsets from the
+   centre, never by summing absolute doubles, so the grid keeps working at any zoom.
+
+Where the setting lives:
+- **Math Plane:** a scene setting (`labels = auto | fixed:N | sci:N | offset`), so
+  it is in `MathPlaneScene` and batch reproduces it.
+- **Grid overlay on other views:** a display preference (the overlay is live-only;
+  it is not in batch output today). If S7 makes the overlay renderable headless, the
+  setting moves with it.
+
+Tracked as its own issue (#1559), because it fixes the existing overlay
+independent of Math Plane. S1 uses the formatter from that issue.
+
 ---
 
 ## 4. UI (Control Center only)
@@ -219,6 +260,10 @@ Every slice keeps the headless path in step (CLAUDE.md rule):
 ## 6. Tests (independent invariants, not self-consistency)
 
 - Axes: tick values are "nice" (1, 2, 5 × 10ᵏ) and every tick lies inside the view.
+- Labels (Auto): neighbouring labels are always distinct strings, and dropping one
+  more decimal would make two of them equal (minimal). Offset mode: anchor +
+  parsed offset equals the exact tick value computed independently in `decimal` /
+  BigInteger from the multi-limb centre, at zooms down to 1e-60.
 - Explicit curve: every drawn vertex satisfies `|y − f(x)| <` 1 px, and no segment
   crosses a known pole (`tan x` at `π/2`).
 - Implicit curve: every emitted vertex has `|F| ≈ 0` against an analytic F (circle:
@@ -273,7 +318,8 @@ Dependencies are stated per issue; no auto-blocking is configured.
 
 | Slice | Issue | Content | Depends on |
 |---|---|---|---|
-| S1 | #1548 | `FractalType.MathPlane`, calculator, scene param + text format, axes/grid/labels, points/vectors/segments, batch round-trip | — |
+| Labels | #1559 | Shared axis-label formatter (Auto / Fixed / Offset); fixes the existing grid overlay | — |
+| S1 | #1548 | `FractalType.MathPlane`, calculator, scene param + text format, axes/grid/labels, points/vectors/segments, batch round-trip | Labels |
 | S2 | #1549 | Control Center section + canvas editing (drag, add, delete, snap) | S1 |
 | S3 | #1550 | Plot builder on `EquationFrontEnd`; explicit / parametric / polar curves, adaptive sampling | S1 |
 | S4 | #1551 | Implicit curves (marching squares) + inequality shading | S3 |
