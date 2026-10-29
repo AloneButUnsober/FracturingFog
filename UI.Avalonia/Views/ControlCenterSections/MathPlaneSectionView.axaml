@@ -1,0 +1,101 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.ControlCenterSections.MathPlaneSectionView"
+        x:DataType="vm:ControlCenterViewModel"
+        Foreground="#DCDCDC">
+    <!-- ═══ Math Plane ═══ (#1549, epic #1547) — the object editor for the Math
+         Plane render mode. Edits write FractalParameters.MathPlaneScene, so they are
+         ordinary param changes (regions, batch, Command builder follow). Errors are
+         yellow (#FFCC00), never red — the user is red/green colour-blind. -->
+    <StackPanel Spacing="0" DataContext="{Binding Shell.MathPlane}" x:DataType="vm:MathPlaneSectionViewModel">
+
+        <!-- Not in Math Plane: one button to get there. -->
+        <Border Classes="group" IsVisible="{Binding IsInactive}">
+            <StackPanel Spacing="6">
+                <TextBlock Classes="section" Text="Math Plane" />
+                <TextBlock TextWrapping="Wrap" Foreground="#9A9A9A"
+                           Text="An interactive Cartesian plane: plot points, vectors, segments and polylines, and drag them on the render. Switch the render to Math Plane to edit." />
+                <Button Classes="action" Content="Switch to Math Plane" HorizontalAlignment="Left"
+                        Command="{Binding SwitchToMathPlaneCommand}" />
+            </StackPanel>
+        </Border>
+
+        <StackPanel Spacing="0" IsVisible="{Binding IsActive}">
+            <!-- Objects -->
+            <Border Classes="group">
+                <StackPanel Spacing="6">
+                    <TextBlock Classes="section" Text="Objects" />
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Button Classes="action neutral" Content="+ Point"    Command="{Binding AddPointCommand}"    ToolTip.Tip="Add a point at the view centre (or double-click the render)" />
+                        <Button Classes="action neutral" Content="+ Vector"   Command="{Binding AddVectorCommand}"   ToolTip.Tip="Add a vector from the view centre" />
+                        <Button Classes="action neutral" Content="+ Segment"  Command="{Binding AddSegmentCommand}" />
+                        <Button Classes="action neutral" Content="+ Polyline" Command="{Binding AddPolylineCommand}" />
+                    </StackPanel>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                        <ListBox Grid.Column="0" ItemsSource="{Binding Rows}" SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
+                                 MinHeight="90" MaxHeight="220" FontFamily="Consolas, Menlo, monospace" FontSize="12" />
+                        <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Top">
+                            <Button Classes="action neutral" Content="Up"     Command="{Binding MoveUpCommand}"   IsEnabled="{Binding HasSelection}" ToolTip.Tip="Draw earlier (further back)" />
+                            <Button Classes="action neutral" Content="Down"   Command="{Binding MoveDownCommand}" IsEnabled="{Binding HasSelection}" ToolTip.Tip="Draw later (on top)" />
+                            <Button Classes="action neutral" Content="Delete" Command="{Binding DeleteCommand}"   IsEnabled="{Binding HasSelection}" ToolTip.Tip="Remove the selected object (Delete key on the render)" />
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock TextWrapping="Wrap" Foreground="#8A8A8A" FontSize="11"
+                               Text="On the render: drag a point, vector tip or tail, segment end or polyline vertex (Shift snaps to the grid); double-click empty space to add a point; Delete removes the selected object. Elsewhere, drag pans as usual." />
+                    <CheckBox Content="Edit on the render" IsChecked="{Binding CanvasEditing}"
+                              ToolTip.Tip="Off: every drag pans, double-click recentres" />
+                </StackPanel>
+            </Border>
+
+            <!-- Selected object -->
+            <Border Classes="group" IsVisible="{Binding HasSelection}">
+                <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="4" ColumnSpacing="6">
+                    <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Classes="section" Text="{Binding SelectedKind}" />
+                    <TextBlock Grid.Row="1" Text="Name" VerticalAlignment="Center" />
+                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding SelectedName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Width="160" HorizontalAlignment="Left"
+                             ToolTip.Tip="Letters, digits and '_', optionally ending in ' (v'). Must be unique." />
+                    <TextBlock Grid.Row="2" Text="Colour" VerticalAlignment="Center" />
+                    <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding SelectedColor, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Width="100" HorizontalAlignment="Left"
+                             FontFamily="Consolas, Menlo, monospace" ToolTip.Tip="#RRGGBB" />
+                    <TextBlock Grid.Row="3" Text="Numbers" VerticalAlignment="Center" />
+                    <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding SelectedCoords, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                             FontFamily="Consolas, Menlo, monospace"
+                             ToolTip.Tip="Point: x y. Vector: dx dy [x0 y0]. Segment: x1 y1 x2 y2. Polyline: x1 y1 x2 y2 ..." />
+                    <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Spacing="14">
+                        <CheckBox Content="Visible" IsChecked="{Binding SelectedVisible}" />
+                        <CheckBox Content="Label"   IsChecked="{Binding SelectedShowLabel}" />
+                    </StackPanel>
+                    <TextBlock Grid.Row="5" Grid.ColumnSpan="2" Text="{Binding EditError}" Foreground="#FFCC00" TextWrapping="Wrap"
+                               IsVisible="{Binding EditError, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                </Grid>
+            </Border>
+
+            <!-- Read-outs + plane settings -->
+            <Border Classes="group">
+                <StackPanel Spacing="6">
+                    <TextBlock Classes="section" Text="Plane" />
+                    <StackPanel Orientation="Horizontal" Spacing="14">
+                        <CheckBox Content="Axes"   IsChecked="{Binding ShowAxes}" />
+                        <CheckBox Content="Grid"   IsChecked="{Binding ShowGrid}" />
+                        <CheckBox Content="Labels" IsChecked="{Binding ShowTicks}" ToolTip.Tip="Tick labels on the axes" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding PointerReadout}" FontFamily="Consolas, Menlo, monospace" Foreground="#B4B4B4" />
+                    <TextBlock Text="{Binding HoverReadout}"   FontFamily="Consolas, Menlo, monospace" Foreground="#B4B4B4" />
+                </StackPanel>
+            </Border>
+
+            <!-- Raw scene text -->
+            <Border Classes="group">
+                <StackPanel Spacing="4">
+                    <TextBlock Classes="section" Text="Scene text" />
+                    <TextBox Text="{Binding SceneText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" AcceptsReturn="True" TextWrapping="Wrap"
+                             MinHeight="60" MaxHeight="180" FontFamily="Consolas, Menlo, monospace" FontSize="11"
+                             ToolTip.Tip="The scene as stored (also what --param MathPlaneScene takes). Edit and leave the box to apply." />
+                    <TextBlock Text="{Binding SceneError}" Foreground="#FFCC00" TextWrapping="Wrap"
+                               IsVisible="{Binding SceneError, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

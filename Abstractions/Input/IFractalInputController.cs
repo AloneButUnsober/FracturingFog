@@ -83,6 +83,11 @@ namespace FracturingFog.Input
         /// the launch under the pointer. Must be cheap: it runs on the input thread.</summary>
         Action<PointerInput>? HoverObserver { get; set; }
 
+        /// <summary>#1549 — optional object editor (Math Plane). Left presses, drags,
+        /// double-clicks, hovers and keys are offered to it first; whatever it claims
+        /// does not pan, recentre or zoom. Null = no editor.</summary>
+        IPointerEditHandler? EditHandler { get; set; }
+
         // ── Keyboard ──────────────────────────────────────────────────────────
         /// <summary>Returns true when the controller consumed the key (so the
         /// shell adapter can set Handled=true on its KeyEventArgs).</summary>

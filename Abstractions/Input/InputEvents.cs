@@ -53,6 +53,8 @@ namespace FracturingFog.Input
         PageUp, PageDown, Home, End,
         // Window
         Escape,
+        // #1549 — Math Plane: remove the selected object
+        Delete,
     }
 
     /// <summary>One pointer-down / pointer-up / pointer-move / pointer-double-click event.</summary>
