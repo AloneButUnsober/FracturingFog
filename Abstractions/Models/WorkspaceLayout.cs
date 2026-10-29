@@ -67,6 +67,9 @@ namespace FracturingFog.Models
 
         // Chaotic-billiard ray-path inset (#1447).
         BilliardRayInset = 24,
+
+        // Detached Control Center "Math Plane" section (#1549).
+        DetachedMathPlanePanel = 25,
     }
 
     /// <summary>Render-window mode. Mirrors the Standard/Mini/Toy/Span shapes the

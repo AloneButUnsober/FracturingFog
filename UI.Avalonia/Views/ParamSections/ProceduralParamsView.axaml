@@ -973,6 +973,8 @@
                        Foreground="#FFCC00" TextWrapping="Wrap" />
             <TextBlock TextWrapping="Wrap" Foreground="#9B9B9B"
                        Text="Example: vector v 2 1 #E69F00; point A -1 2; segment s 0 0 1 1; polyline p 0 0 1 1 2 0" />
+            <TextBlock TextWrapping="Wrap" Foreground="#9B9B9B"
+                       Text="Control Center → Math Plane has the object editor; on the render, drag points and vector tips (Shift snaps), double-click to add a point, Delete removes the selected one." />
         </StackPanel>
 
         <!-- Billiard Rays (#1506): the sweep that emits the rays -->

@@ -92,6 +92,14 @@ namespace FracturingFog.Input
                 if (pick(e)) return;
             }
 
+            // #1549 — an object editor (Math Plane) claims presses on its objects;
+            // the drag then belongs to it until release.
+            if ((e.Buttons & PointerButton.Left) != 0 && EditHandler is { } editor && editor.OnPointerDown(e))
+            {
+                _editDragging = true;
+                return;
+            }
+
             // Ray-path inset (#1447): Ctrl+left pins the ray under the pointer.
             if ((e.Buttons & PointerButton.Left) != 0 && (e.Modifiers & InputModifiers.Control) != 0
                 && InspectClickHandler is { } inspect && inspect(e))
@@ -181,6 +189,8 @@ namespace FracturingFog.Input
             if (InputSuppressed) return;
 
             if (e.Buttons == PointerButton.None) HoverObserver?.Invoke(e);
+            if (_editDragging) { EditHandler?.OnPointerMove(e); return; }
+            if (e.Buttons == PointerButton.None) EditHandler?.OnHover(e);
 
             if (_boxSelecting)
             {
@@ -286,6 +296,12 @@ namespace FracturingFog.Input
 
         public void OnPointerUp(PointerInput e)
         {
+            if (_editDragging && (e.Buttons & PointerButton.Left) != 0)
+            {
+                _editDragging = false;
+                EditHandler?.OnPointerUp(e);
+                return;
+            }
             // Middle-button release ends a 3D marquee zoom (see OnPointerDown).
             // Checked before the right-button branch so a 3D middle-drag is
             // never confused with a 2D right-drag box.
@@ -413,6 +429,15 @@ namespace FracturingFog.Input
         /// <summary>#1447 — see <see cref="IFractalInputController.HoverObserver"/>.</summary>
         public Action<PointerInput>? HoverObserver { get; set; }
 
+        /// <summary>#1549 — see <see cref="IFractalInputController.EditHandler"/>.</summary>
+        public IPointerEditHandler? EditHandler
+        {
+            get => _editHandler;
+            set { _editHandler = value; _editDragging = false; }
+        }
+        private IPointerEditHandler? _editHandler;
+        private bool _editDragging;
+
         /// <summary>Finder click-mode (#1187): one-shot left-press hook; see
         /// <see cref="IFractalInputController.PointPickHandler"/>.</summary>
         public Func<PointerInput, bool>? PointPickHandler
@@ -429,6 +454,13 @@ namespace FracturingFog.Input
         {
             if (InputSuppressed) return;
             if ((e.Buttons & PointerButton.Left) == 0) return;
+
+            // #1549 — the object editor (e.g. add a point) before the recentre.
+            if (EditHandler is { } editor && editor.OnDoubleClick(e))
+            {
+                _panning = false;
+                return;
+            }
 
             // S3 click-to-focus: Alt+double-click picks the relief DOF focal plane.
             if ((e.Modifiers & InputModifiers.Alt) != 0
@@ -501,6 +533,9 @@ namespace FracturingFog.Input
 
             // Suppression: pan/zoom keys ignored during a slideshow.
             if (InputSuppressed) return false;
+
+            // #1549 — the object editor's keys (Delete).
+            if (EditHandler is { } editor && editor.OnKey(e)) return true;
 
             // Shift = precise/fine step. Allowed on pan keys (A/D/Q/E) and on the
             // zoom / 3D-distance keys (W/S) so Shift+W and Shift+S give finer

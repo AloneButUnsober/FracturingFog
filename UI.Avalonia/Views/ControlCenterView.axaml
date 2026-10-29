@@ -107,6 +107,7 @@
                 <sections:CommandSectionView    IsVisible="{Binding IsCommandSection}" />
                 <sections:AssetsSectionView     IsVisible="{Binding IsAssetsSection}" />
                 <sections:AdvancedSectionView   IsVisible="{Binding IsAdvancedSection}" />
+                <sections:MathPlaneSectionView  IsVisible="{Binding IsMathPlaneSection}" />
             </Panel>
         </ScrollViewer>
     </SplitView>

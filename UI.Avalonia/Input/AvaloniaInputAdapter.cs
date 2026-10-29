@@ -219,6 +219,7 @@ public static class AvaloniaInputAdapter
             Key.Home => InputKey.Home,
             Key.End => InputKey.End,
             Key.Escape => InputKey.Escape,
+            Key.Delete => InputKey.Delete,
             _ => InputKey.None,
         };
     }

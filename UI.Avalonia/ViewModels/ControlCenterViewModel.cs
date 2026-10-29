@@ -27,6 +27,8 @@ public enum ControlCenterSection
     Command,
     Assets,
     Advanced,
+    /// <summary>Math Plane object editor (#1549).</summary>
+    MathPlane,
 }
 
 /// <summary>A nav-rail entry. <see cref="IsAdvanced"/> items are hidden in
@@ -54,6 +56,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
         new(ControlCenterSection.Capture,    "Capture",       "◉", false),
         new(ControlCenterSection.Command,    "Command",       "⌨", false),
         new(ControlCenterSection.Assets,     "Assets",        "▤", false),
+        new(ControlCenterSection.MathPlane,  "Math Plane",    "✛", false),
         new(ControlCenterSection.Advanced,   "Advanced",      "⚙", true),
     };
 
@@ -315,6 +318,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
     public bool IsCommandSection    => _selectedSection == ControlCenterSection.Command;
     public bool IsAssetsSection     => _selectedSection == ControlCenterSection.Assets;
     public bool IsAdvancedSection   => _selectedSection == ControlCenterSection.Advanced;
+    public bool IsMathPlaneSection  => _selectedSection == ControlCenterSection.MathPlane;
 
     private void RaiseSectionFlags()
     {
@@ -325,6 +329,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(IsCommandSection));
         this.RaisePropertyChanged(nameof(IsAssetsSection));
         this.RaisePropertyChanged(nameof(IsAdvancedSection));
+        this.RaisePropertyChanged(nameof(IsMathPlaneSection));
     }
 
     private void RebuildNav()

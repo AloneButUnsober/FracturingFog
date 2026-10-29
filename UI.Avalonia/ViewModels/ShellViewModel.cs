@@ -149,6 +149,17 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
         Main = new MainViewModel(renderHost, input);
 
+        // #1549 — Math Plane object editor: the Control Center section VM and the
+        // render surface's edit handler (inactive unless the render is Math Plane).
+        MathPlane = new MathPlaneSectionViewModel(Main.ViewState, () => renderHost.Trigger(),
+            () => Main.SelectedFractalType = FractalType.MathPlane);
+        input.EditHandler = MathPlane;
+        renderHost.FrameCompleted += (_, _) => Dispatcher.UIThread.Post(MathPlane.Refresh);
+        Main.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.SelectedFractalType)) MathPlane.Refresh();
+        };
+
         // Animation Roadmap Phase 3b — app-scoped animation bus for
         // region-attached animations. Initialised once; the JumpToRegion path
         // below populates its dynamic animator set per recall. Render-completion
@@ -1237,6 +1248,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
     public MainViewModel Main { get; }
     public FloatingMenuViewModel FloatingMenu { get; }
+
+    /// <summary>#1549 — the Math Plane section / canvas editor.</summary>
+    public MathPlaneSectionViewModel MathPlane { get; }
 
     // ── Phase S1 Control Center shell ─────────────────────────────────────
     // Re-presents FloatingMenu + this shell's Show* commands into a nav-rail.
