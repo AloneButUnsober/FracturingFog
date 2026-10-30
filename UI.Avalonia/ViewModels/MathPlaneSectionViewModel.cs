@@ -53,6 +53,9 @@ public sealed class MathPlaneSectionViewModel : ViewModelBase, IPointerEditHandl
         AddVectorCommand = ReactiveCommand.Create(() => AddAtCentre(MathPlaneObjectKind.Vector));
         AddSegmentCommand = ReactiveCommand.Create(() => AddAtCentre(MathPlaneObjectKind.Segment));
         AddPolylineCommand = ReactiveCommand.Create(() => AddAtCentre(MathPlaneObjectKind.Polyline));
+        AddFunctionCommand = ReactiveCommand.Create(() => AddCurve(MathPlaneCurveKind.Explicit));
+        AddParametricCommand = ReactiveCommand.Create(() => AddCurve(MathPlaneCurveKind.Parametric));
+        AddPolarCommand = ReactiveCommand.Create(() => AddCurve(MathPlaneCurveKind.Polar));
         DeleteCommand = ReactiveCommand.Create(DeleteSelected);
         MoveUpCommand = ReactiveCommand.Create(() => MoveSelected(-1));
         MoveDownCommand = ReactiveCommand.Create(() => MoveSelected(+1));
@@ -64,6 +67,9 @@ public sealed class MathPlaneSectionViewModel : ViewModelBase, IPointerEditHandl
     public ReactiveCommand<Unit, Unit> AddVectorCommand { get; }
     public ReactiveCommand<Unit, Unit> AddSegmentCommand { get; }
     public ReactiveCommand<Unit, Unit> AddPolylineCommand { get; }
+    public ReactiveCommand<Unit, Unit> AddFunctionCommand { get; }
+    public ReactiveCommand<Unit, Unit> AddParametricCommand { get; }
+    public ReactiveCommand<Unit, Unit> AddPolarCommand { get; }
     public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
     public ReactiveCommand<Unit, Unit> MoveUpCommand { get; }
     public ReactiveCommand<Unit, Unit> MoveDownCommand { get; }
@@ -150,15 +156,54 @@ public sealed class MathPlaneSectionViewModel : ViewModelBase, IPointerEditHandl
                 MathPlaneObjectKind.Point => nums.Length == 2,
                 MathPlaneObjectKind.Vector => nums.Length is 2 or 4,
                 MathPlaneObjectKind.Segment => nums.Length == 4,
+                MathPlaneObjectKind.Curve => o.CurveKind == MathPlaneCurveKind.Parametric
+                    ? nums.Length == 2 && nums[1] > nums[0]
+                    : nums.Length == 0 || (nums.Length == 2 && nums[1] > nums[0]),
                 _ => nums.Length >= 4 && nums.Length % 2 == 0,
             };
-            if (!ok) { EditError = CoordsHint(o.Kind); return; }
+            if (!ok) { EditError = o.Kind == MathPlaneObjectKind.Curve ? DomainHint(o.CurveKind) : CoordsHint(o.Kind); return; }
             ApplySelected(x => x with
             {
                 Coords = nums,
                 HasFrom = x.Kind == MathPlaneObjectKind.Vector && nums.Length == 4,
             });
         }
+    }
+
+    // #1550 — a curve's expressions.
+    private string _selExpr = "", _selExpr2 = "";
+    private bool _selIsCurve, _selIsParametric;
+    public bool SelectedIsCurve { get => _selIsCurve; private set => this.RaiseAndSetIfChanged(ref _selIsCurve, value); }
+    public bool SelectedIsParametric { get => _selIsParametric; private set => this.RaiseAndSetIfChanged(ref _selIsParametric, value); }
+    /// <summary>"Numbers" means coordinates, except for a curve: its domain.</summary>
+    public string SelectedCoordsLabel => SelectedIsCurve ? "Domain" : "Numbers";
+
+    /// <summary>The curve's expression (y = f(x); x(t) for parametric; r(theta) for polar).</summary>
+    public string SelectedExpression
+    {
+        get => _selExpr;
+        set { this.RaiseAndSetIfChanged(ref _selExpr, value ?? ""); if (!_loadingSelection) ApplyExpressions(); }
+    }
+
+    /// <summary>A parametric curve's y(t).</summary>
+    public string SelectedExpression2
+    {
+        get => _selExpr2;
+        set { this.RaiseAndSetIfChanged(ref _selExpr2, value ?? ""); if (!_loadingSelection) ApplyExpressions(); }
+    }
+
+    private void ApplyExpressions()
+    {
+        if (!HasSelection || !SelectedIsCurve) return;
+        var o = _scene.Objects[_selectedIndex];
+        var sources = o.CurveKind == MathPlaneCurveKind.Parametric
+            ? new[] { _selExpr.Trim(), _selExpr2.Trim() } : new[] { _selExpr.Trim() };
+        var candidate = o with { Sources = sources };
+        // Validate through the scene parser, so the editor and the stored form agree.
+        var test = MathPlaneSceneEdit.Replace(_scene, _selectedIndex, candidate);
+        if (!MathPlaneScene.TryParse(test.Serialize(), out _, out var err))
+        { EditError = err!.Message; return; }
+        ApplySelected(_ => candidate);
     }
 
     public bool SelectedVisible
@@ -307,6 +352,8 @@ public sealed class MathPlaneSectionViewModel : ViewModelBase, IPointerEditHandl
             {
                 SelectedKind = ""; SelectedName = ""; SelectedColor = ""; SelectedCoords = "";
                 SelectedVisible = false; SelectedShowLabel = false;
+                SelectedIsCurve = false; SelectedIsParametric = false;
+                SelectedExpression = ""; SelectedExpression2 = "";
                 return;
             }
             var o = _scene.Objects[_selectedIndex];
@@ -316,6 +363,12 @@ public sealed class MathPlaneSectionViewModel : ViewModelBase, IPointerEditHandl
             SelectedCoords = string.Join(" ", o.Coords.Select(Num));
             SelectedVisible = o.Visible;
             SelectedShowLabel = o.ShowLabel;
+            SelectedIsCurve = o.Kind == MathPlaneObjectKind.Curve;
+            SelectedIsParametric = SelectedIsCurve && o.CurveKind == MathPlaneCurveKind.Parametric;
+            this.RaisePropertyChanged(nameof(SelectedCoordsLabel));
+            SelectedExpression = o.Expressions.Count > 0 ? o.Expressions[0] : "";
+            SelectedExpression2 = o.Expressions.Count > 1 ? o.Expressions[1] : "";
+            if (SelectedIsCurve) SelectedKind = o.CurveKind + " curve";
         }
         finally { _loadingSelection = false; }
     }
@@ -328,6 +381,13 @@ public sealed class MathPlaneSectionViewModel : ViewModelBase, IPointerEditHandl
         double x = _view.CenterX, y = -_view.CenterY;
         if (kind == MathPlaneObjectKind.Point && x == 0 && y == 0) { x = 1; y = 1; }
         var (scene, idx) = MathPlaneSceneEdit.Add(_scene, kind, x, y, NiceSize());
+        Commit(scene, idx);
+    }
+
+    private void AddCurve(MathPlaneCurveKind kind)
+    {
+        if (!_sceneValid) return;
+        var (scene, idx) = MathPlaneSceneEdit.AddCurve(_scene, kind);
         Commit(scene, idx);
     }
 
@@ -461,6 +521,8 @@ public sealed class MathPlaneSectionViewModel : ViewModelBase, IPointerEditHandl
             }
             case MathPlaneObjectKind.Point:
                 return $"{o.Name} = ({Num(o.Coords[0])}, {Num(o.Coords[1])})";
+            case MathPlaneObjectKind.Curve:
+                return $"{o.Name}: {CurveFormula(o)}";
             default:
                 return $"{o.Name}: {o.PointCount} points";
         }
@@ -475,10 +537,28 @@ public sealed class MathPlaneSectionViewModel : ViewModelBase, IPointerEditHandl
                 ? $"vector {o.Name} ({Num(o.Coords[0])}, {Num(o.Coords[1])}) from ({Num(o.Coords[2])}, {Num(o.Coords[3])})"
                 : $"vector {o.Name} ({Num(o.Coords[0])}, {Num(o.Coords[1])})",
             MathPlaneObjectKind.Segment => $"segment {o.Name} ({Num(o.Coords[0])}, {Num(o.Coords[1])}) to ({Num(o.Coords[2])}, {Num(o.Coords[3])})",
+            MathPlaneObjectKind.Curve => $"curve {o.Name}: {CurveFormula(o)}",
             _ => $"polyline {o.Name} ({o.PointCount} points)",
         };
         return o.Visible ? body : body + "  [hidden]";
     }
+
+    /// <summary>#1550 — a curve as a formula: y = sin(x), (x, y) = (cos(t), sin(t)), r = 1 + cos(theta).</summary>
+    public static string CurveFormula(MathPlaneObject o)
+    {
+        var e = o.Expressions;
+        string f = o.CurveKind switch
+        {
+            MathPlaneCurveKind.Explicit => $"y = {(e.Count > 0 ? e[0] : "")}",
+            MathPlaneCurveKind.Parametric => $"(x, y) = ({(e.Count > 0 ? e[0] : "")}, {(e.Count > 1 ? e[1] : "")})",
+            _ => $"r = {(e.Count > 0 ? e[0] : "")}",
+        };
+        return o.Domain is { } d ? $"{f}, {Num(d.Min)}..{Num(d.Max)}" : f;
+    }
+
+    private static string DomainHint(MathPlaneCurveKind k) => k == MathPlaneCurveKind.Parametric
+        ? "A parametric curve's domain is tmin tmax (max above min)."
+        : "The domain is empty (whole view / 0..2pi) or min max (max above min).";
 
     private static string CoordsHint(MathPlaneObjectKind k) => k switch
     {

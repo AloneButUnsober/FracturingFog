@@ -24,6 +24,9 @@
 //
 // Determinism: one Skia CPU raster pass in a fixed draw order (grid, axes,
 // labels, then objects in scene order), so live, batch and export match.
+//
+// #1550 — curves (explicit / parametric / polar) are sampled per view by
+// MathPlaneCurveSampler (adaptive, breaks at gaps and poles) and stroked.
 
 using System;
 using System.Runtime.InteropServices;
@@ -280,6 +283,31 @@ public sealed class MathPlaneCalculator : IFractalCalculator
                     Label(o, new SKPoint((a.X + b.X) * 0.5f, (a.Y + b.Y) * 0.5f));
                     break;
                 }
+                case MathPlaneObjectKind.Curve:
+                {
+                    stroke.StrokeWidth = 2.5f * ui;
+                    var lines = MathPlaneCurveSampler.Sample(o, ViewBox(w, h));
+                    SKPoint? labelAt = null;
+                    foreach (var poly in lines)
+                    {
+                        using var path = new SKPath();
+                        path.MoveTo(P(poly[0].X, poly[0].Y));
+                        for (int i = 1; i < poly.Count; i++) path.LineTo(P(poly[i].X, poly[i].Y));
+                        canvas.DrawPath(path, stroke);
+                        // Label at the last on-screen vertex (the right / far end).
+                        for (int i = poly.Count - 1; i >= 0; i--)
+                        {
+                            var q = P(poly[i].X, poly[i].Y);
+                            if (q.X >= 0 && q.X < w && q.Y >= 0 && q.Y < h) { labelAt ??= q; break; }
+                        }
+                    }
+                    if (labelAt is { } la)
+                    {
+                        float lx = Math.Min(la.X, w - 30f * ui), ly = Math.Max(la.Y, 24f * ui);
+                        Label(o, new SKPoint(lx, ly));
+                    }
+                    break;
+                }
                 case MathPlaneObjectKind.Polyline:
                 {
                     stroke.StrokeWidth = 2.5f * ui;
@@ -292,6 +320,15 @@ public sealed class MathPlaneCalculator : IFractalCalculator
                 }
             }
         }
+    }
+
+    /// <summary>#1550 — the visible world rectangle of the current view (y-up).</summary>
+    public MathPlaneViewBox ViewBox(int w, int h)
+    {
+        double pitch = Pitch(w, Zoom);
+        double wcy = -CenterY;
+        return new MathPlaneViewBox(CenterX - w * 0.5 * pitch, CenterX + w * 0.5 * pitch,
+                                    wcy - h * 0.5 * pitch, wcy + h * 0.5 * pitch, pitch);
     }
 
     /// <summary>Shaft plus a filled head whose point is exactly at <paramref name="tip"/>.

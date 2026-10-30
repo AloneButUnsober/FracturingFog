@@ -22,7 +22,16 @@
 //   vector   NAME x y [from x0 y0]     [options]
 //   segment  NAME x1 y1 x2 y2          [options]
 //   polyline NAME x1 y1 x2 y2 ...      [options]   (two or more points)
+//   curve NAME explicit   "f(x)"            [xmin xmax]          [options]  (#1550)
+//   curve NAME parametric "x(t)" "y(t)"     tmin tmax            [options]
+//   curve NAME polar      "r(theta)"        [thetamin thetamax]  [options]
 //   options: #RRGGBB (colour)  hidden  nolabel
+//
+// Curve expressions are the plot language (PlotExpression: the equation
+// language with real x / t / theta). They are double-quoted, and ';' or a newline
+// inside the quotes does not end the statement. An explicit curve reads only x, a
+// parametric one only t, a polar one only theta. With no domain, an explicit
+// curve spans the view and a polar one theta 0..2pi.
 //
 // Unknown statements and options are errors with their position, never ignored.
 
@@ -35,11 +44,16 @@ using FracturingFog.ViewState;
 
 namespace FracturingFog.Models
 {
-    public enum MathPlaneObjectKind { Point, Vector, Segment, Polyline }
+    public enum MathPlaneObjectKind { Point, Vector, Segment, Polyline, Curve }
+
+    /// <summary>#1550 — how a <see cref="MathPlaneObjectKind.Curve"/> is given.</summary>
+    public enum MathPlaneCurveKind { Explicit, Parametric, Polar }
 
     /// <summary>One plotted object. <see cref="Coords"/> holds x, y pairs: a point's
     /// position; a vector's tip then (if <see cref="HasFrom"/>) its tail; a segment's
-    /// two ends; a polyline's vertices.</summary>
+    /// two ends; a polyline's vertices. A curve (#1550) keeps its expressions in
+    /// <see cref="Sources"/> and its domain (min, max; empty = default) in
+    /// <see cref="Coords"/>.</summary>
     public sealed record MathPlaneObject(
         MathPlaneObjectKind Kind,
         string Name,
@@ -47,8 +61,17 @@ namespace FracturingFog.Models
         uint Color,
         bool Visible = true,
         bool ShowLabel = true,
-        bool HasFrom = false)
+        bool HasFrom = false,
+        MathPlaneCurveKind CurveKind = MathPlaneCurveKind.Explicit,
+        IReadOnlyList<string>? Sources = null)
     {
+        /// <summary>A curve's expressions (one; two for parametric); empty otherwise.</summary>
+        public IReadOnlyList<string> Expressions => Sources ?? Array.Empty<string>();
+
+        /// <summary>A curve's domain, or null for the default (see file header).</summary>
+        public (double Min, double Max)? Domain => Kind == MathPlaneObjectKind.Curve && Coords.Count == 2
+            ? (Coords[0], Coords[1]) : null;
+
         public (double X, double Y) Point(int i) => (Coords[2 * i], Coords[2 * i + 1]);
         public int PointCount => Coords.Count / 2;
 
@@ -58,7 +81,8 @@ namespace FracturingFog.Models
         public bool Equals(MathPlaneObject? o) =>
             o is not null && Kind == o.Kind && Name == o.Name && Color == o.Color
             && Visible == o.Visible && ShowLabel == o.ShowLabel && HasFrom == o.HasFrom
-            && Coords.SequenceEqual(o.Coords);
+            && Coords.SequenceEqual(o.Coords)
+            && CurveKind == o.CurveKind && Expressions.SequenceEqual(o.Expressions);
 
         public override int GetHashCode() => HashCode.Combine(Kind, Name, Color, Coords.Count);
     }
@@ -124,15 +148,28 @@ namespace FracturingFog.Models
         private static string SerializeObject(MathPlaneObject o)
         {
             var sb = new StringBuilder();
+            if (o.Kind == MathPlaneObjectKind.Curve)
+            {
+                sb.Append("curve ").Append(o.Name).Append(' ').Append(o.CurveKind.ToString().ToLowerInvariant());
+                foreach (var s in o.Expressions) sb.Append(" \"").Append(s).Append('"');
+                foreach (var v in o.Coords) sb.Append(' ').Append(Num(v));
+                AppendOptions(sb, o);
+                return sb.ToString();
+            }
             sb.Append(o.Kind.ToString().ToLowerInvariant()).Append(' ').Append(o.Name);
             int n = o.Kind == MathPlaneObjectKind.Vector ? 2 : o.Coords.Count;
             for (int i = 0; i < n; i++) sb.Append(' ').Append(Num(o.Coords[i]));
             if (o.Kind == MathPlaneObjectKind.Vector && o.HasFrom)
                 sb.Append(" from ").Append(Num(o.Coords[2])).Append(' ').Append(Num(o.Coords[3]));
+            AppendOptions(sb, o);
+            return sb.ToString();
+        }
+
+        private static void AppendOptions(StringBuilder sb, MathPlaneObject o)
+        {
             sb.Append(" #").Append((o.Color & 0xFFFFFF).ToString("X6", Inv));
             if (!o.Visible) sb.Append(" hidden");
             if (!o.ShowLabel) sb.Append(" nolabel");
-            return sb.ToString();
         }
 
         private static string Num(double v) => v.ToString("R", Inv);
@@ -191,8 +228,12 @@ namespace FracturingFog.Models
                     case "vector":
                     case "segment":
                     case "polyline":
+                    case "curve":
                     {
-                        if (!TryObject(head, toks, objects.Count, out var obj, out int badTok, out string msg))
+                        bool ok = head == "curve"
+                            ? TryCurve(toks, objects.Count, out var obj, out int badTok, out string msg)
+                            : TryObject(head, toks, objects.Count, out obj, out badTok, out msg);
+                        if (!ok)
                         { error = Err(badTok, msg); return false; }
                         if (!names.Add(obj!.Name))
                         { error = Err(1, $"name '{obj.Name}' is already used"); return false; }
@@ -200,7 +241,7 @@ namespace FracturingFog.Models
                         break;
                     }
                     default:
-                        error = Err(0, $"unknown statement '{toks[0].Text}' (expected point, vector, segment, polyline, axes, grid, ticks or labels)");
+                        error = Err(0, $"unknown statement '{toks[0].Text}' (expected point, vector, segment, polyline, curve, axes, grid, ticks or labels)");
                         return false;
                 }
             }
@@ -267,8 +308,17 @@ namespace FracturingFog.Models
                 return false;
             }
 
-            uint color = DefaultPalette[index % DefaultPalette.Length];
-            bool visible = true, showLabel = true;
+            if (!TryOptions(toks, i, index, out uint color, out bool visible, out bool showLabel, out badTok, out msg))
+                return false;
+            obj = new MathPlaneObject(kind, toks[1].Text, coords, color, visible, showLabel, hasFrom);
+            return true;
+        }
+
+        private static bool TryOptions(List<(string Text, int Col)> toks, int i, int index,
+                                       out uint color, out bool visible, out bool showLabel, out int badTok, out string msg)
+        {
+            color = DefaultPalette[index % DefaultPalette.Length];
+            visible = true; showLabel = true; badTok = 0; msg = "";
             for (; i < toks.Count; i++)
             {
                 string t = toks[i].Text;
@@ -287,16 +337,76 @@ namespace FracturingFog.Models
                     return false;
                 }
             }
-            obj = new MathPlaneObject(kind, toks[1].Text, coords, color, visible, showLabel, hasFrom);
+            return true;
+        }
+
+        /// <summary>#1550 — <c>curve NAME explicit|parametric|polar "expr" ["expr"] [min max] [options]</c>.</summary>
+        private static bool TryCurve(List<(string Text, int Col)> toks, int index,
+                                     out MathPlaneObject? obj, out int badTok, out string msg)
+        {
+            obj = null; badTok = 0; msg = "";
+            if (toks.Count < 2 || !IsName(toks[1].Text))
+            { badTok = 1; msg = "'curve' needs a name (letters, digits, '_', optional trailing ')"; return false; }
+            if (toks.Count < 3)
+            { badTok = 1; msg = "'curve' needs a kind: explicit, parametric or polar"; return false; }
+            MathPlaneCurveKind kind;
+            switch (toks[2].Text.ToLowerInvariant())
+            {
+                case "explicit": kind = MathPlaneCurveKind.Explicit; break;
+                case "parametric": kind = MathPlaneCurveKind.Parametric; break;
+                case "polar": kind = MathPlaneCurveKind.Polar; break;
+                default: badTok = 2; msg = $"unknown curve kind '{toks[2].Text}' (expected explicit, parametric or polar)"; return false;
+            }
+
+            int need = kind == MathPlaneCurveKind.Parametric ? 2 : 1;
+            string variable = kind switch { MathPlaneCurveKind.Explicit => "x", MathPlaneCurveKind.Parametric => "t", _ => "theta" };
+            var sources = new List<string>();
+            int i = 3;
+            for (int k = 0; k < need; k++, i++)
+            {
+                if (i >= toks.Count || !toks[i].Text.StartsWith('"'))
+                {
+                    badTok = Math.Min(i, toks.Count - 1);
+                    msg = kind == MathPlaneCurveKind.Parametric
+                        ? "a parametric curve needs two quoted expressions, \"x(t)\" \"y(t)\""
+                        : $"a {kind.ToString().ToLowerInvariant()} curve needs a quoted expression";
+                    return false;
+                }
+                string t = toks[i].Text;
+                if (t.Length < 2 || !t.EndsWith('"')) { badTok = i; msg = "unterminated quote"; return false; }
+                string src = t[1..^1];
+                if (src.Contains('\n') || src.Contains('\r')) { badTok = i; msg = "an expression must be on one line"; return false; }
+                if (!PlotExpression.TryParse(src, out var expr, out string? err))
+                { badTok = i; msg = "expression: " + err; return false; }
+                var wrong = expr!.UsedVariables().Where(v => v != variable).ToList();
+                if (wrong.Count > 0)
+                { badTok = i; msg = $"a {kind.ToString().ToLowerInvariant()} curve's expression reads only {variable}, not {string.Join(", ", wrong)}"; return false; }
+                sources.Add(src);
+            }
+
+            var domain = new List<double>();
+            while (i < toks.Count && TryNum(toks[i].Text, out double v)) { domain.Add(v); i++; }
+            if (domain.Count > 2) { badTok = i - domain.Count + 2; msg = "too many numbers"; return false; }
+            if (domain.Count == 1 || (domain.Count == 0 && kind == MathPlaneCurveKind.Parametric))
+            { badTok = Math.Min(i, toks.Count - 1); msg = kind == MathPlaneCurveKind.Parametric ? "a parametric curve needs tmin tmax" : "the domain needs min and max"; return false; }
+            if (domain.Count == 2 && !(domain[1] > domain[0]))
+            { badTok = i - 1; msg = "the domain's max must be above its min"; return false; }
+
+            if (!TryOptions(toks, i, index, out uint color, out bool visible, out bool showLabel, out badTok, out msg))
+                return false;
+            obj = new MathPlaneObject(MathPlaneObjectKind.Curve, toks[1].Text, domain, color, visible, showLabel,
+                                      CurveKind: kind, Sources: sources);
             return true;
         }
 
         private static IEnumerable<(string Text, int Start)> SplitStatements(string text)
         {
             int start = 0;
+            bool quoted = false;
             for (int i = 0; i <= text.Length; i++)
             {
-                if (i == text.Length || text[i] == ';' || text[i] == '\n' || text[i] == '\r')
+                if (i < text.Length && text[i] == '"') quoted = !quoted;
+                if (i == text.Length || (!quoted && (text[i] == ';' || text[i] == '\n' || text[i] == '\r')))
                 {
                     yield return (text[start..i], start);
                     start = i + 1;
@@ -312,7 +422,15 @@ namespace FracturingFog.Models
             {
                 while (i < stmt.Length && char.IsWhiteSpace(stmt[i])) i++;
                 int s = i;
-                while (i < stmt.Length && !char.IsWhiteSpace(stmt[i])) i++;
+                if (i < stmt.Length && stmt[i] == '"')
+                {
+                    // A quoted token runs to the closing quote (kept, so callers
+                    // can tell it is quoted and whether it was closed).
+                    int close = stmt.IndexOf('"', i + 1);
+                    i = close < 0 ? stmt.Length : close + 1;
+                }
+                else
+                    while (i < stmt.Length && !char.IsWhiteSpace(stmt[i])) i++;
                 if (i > s) list.Add((stmt[s..i], offset + s));
             }
             return list;
