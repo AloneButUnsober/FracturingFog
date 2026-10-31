@@ -29,7 +29,7 @@ using ReactiveUI;
 
 namespace FracturingFog.UI.Avalonia.ViewModels;
 
-public sealed class MathPlaneSectionViewModel : ViewModelBase, IPointerEditHandler
+public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerEditHandler
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
@@ -61,6 +61,7 @@ public sealed class MathPlaneSectionViewModel : ViewModelBase, IPointerEditHandl
         DeleteCommand = ReactiveCommand.Create(DeleteSelected);
         MoveUpCommand = ReactiveCommand.Create(() => MoveSelected(-1));
         MoveDownCommand = ReactiveCommand.Create(() => MoveSelected(+1));
+        InitMap();
         Refresh();
     }
 
@@ -254,6 +255,21 @@ public sealed class MathPlaneSectionViewModel : ViewModelBase, IPointerEditHandl
         get => _scene.ShowTicks;
         set { if (value != _scene.ShowTicks) Commit(_scene with { ShowTicks = value }); }
     }
+    public bool ShowDet
+    {
+        get => _scene.ShowDet;
+        set { if (value != _scene.ShowDet) Commit(_scene with { ShowDet = value }); }
+    }
+    public bool ShowEigen
+    {
+        get => _scene.ShowEigen;
+        set { if (value != _scene.ShowEigen) Commit(_scene with { ShowEigen = value }); }
+    }
+    public bool ShowLengths
+    {
+        get => _scene.ShowLengths;
+        set { if (value != _scene.ShowLengths) Commit(_scene with { ShowLengths = value }); }
+    }
 
     // ── Scene text (the raw form; also how a hand edit gets in) ──
 
@@ -287,6 +303,7 @@ public sealed class MathPlaneSectionViewModel : ViewModelBase, IPointerEditHandl
     {
         this.RaisePropertyChanged(nameof(IsActive));
         this.RaisePropertyChanged(nameof(IsInactive));
+        RaiseMapProperties();   // #1552 — region recall / batch-style param edits
         string text = _view.FractalParameters.MathPlaneScene ?? "";
         if (text == _lastText) return;
         _lastText = text;
@@ -309,6 +326,9 @@ public sealed class MathPlaneSectionViewModel : ViewModelBase, IPointerEditHandl
         this.RaisePropertyChanged(nameof(ShowAxes));
         this.RaisePropertyChanged(nameof(ShowGrid));
         this.RaisePropertyChanged(nameof(ShowTicks));
+        this.RaisePropertyChanged(nameof(ShowDet));
+        this.RaisePropertyChanged(nameof(ShowEigen));
+        this.RaisePropertyChanged(nameof(ShowLengths));
         this.RaisePropertyChanged(nameof(Scene));
     }
 
@@ -441,14 +461,44 @@ public sealed class MathPlaneSectionViewModel : ViewModelBase, IPointerEditHandl
 
     private double PixelPitch(PointerInput e) => MathPlaneSceneEdit.Pitch(e.ClientWidth, _view.Zoom);
 
+    /// <summary>#1552 — the map the view draws with (identity when off).</summary>
+    private Mat2 CurrentMap => MathPlaneMap.Current(_view.FractalParameters);
+
+    /// <summary>#1552 — the scene coordinates under the pointer: the preimage of the
+    /// world point under the map, snapped (Shift) in scene coordinates. Null when the
+    /// map is singular (the plane is squashed; there is no unique preimage).</summary>
+    private (double X, double Y)? SceneAt(PointerInput e)
+    {
+        var (wx, wy) = World(e);
+        var map = CurrentMap;
+        if (!map.IsIdentity)
+        {
+            if (map.Inverse() is not { } inv) return null;
+            (wx, wy) = inv.Apply(wx, wy);
+        }
+        if ((e.Modifiers & InputModifiers.Shift) != 0)
+        {
+            double step = MathPlaneSceneEdit.MinorStep(e.ClientWidth * PixelPitch(e));
+            wx = MathPlaneSceneEdit.Snap(wx, step);
+            wy = MathPlaneSceneEdit.Snap(wy, step);
+        }
+        return (wx, wy);
+    }
+
+    private MathPlaneHandle? HitAt(PointerInput e)
+    {
+        var (wx, wy) = World(e);
+        var map = CurrentMap;
+        return MathPlaneSceneEdit.HitTest(_scene, wx, wy, MathPlaneSceneEdit.HitRadiusPixels * PixelPitch(e),
+                                          map.IsIdentity ? null : map);
+    }
+
     public bool OnPointerDown(PointerInput e)
     {
         if (!IsActive) return false;
         Refresh();
         if (!Editing) return false;
-        var (wx, wy) = World(e);
-        var hit = MathPlaneSceneEdit.HitTest(_scene, wx, wy, MathPlaneSceneEdit.HitRadiusPixels * PixelPitch(e));
-        if (hit is not { } h) return false;
+        if (HitAt(e) is not { } h) return false;
         _drag = h;
         SelectedIndex = h.ObjectIndex;
         return true;
@@ -457,14 +507,8 @@ public sealed class MathPlaneSectionViewModel : ViewModelBase, IPointerEditHandl
     public void OnPointerMove(PointerInput e)
     {
         if (_drag is not { } h || !Editing || h.ObjectIndex >= _scene.Objects.Count) return;
-        var (wx, wy) = World(e);
-        if ((e.Modifiers & InputModifiers.Shift) != 0)
-        {
-            double step = MathPlaneSceneEdit.MinorStep(e.ClientWidth * PixelPitch(e));
-            wx = MathPlaneSceneEdit.Snap(wx, step);
-            wy = MathPlaneSceneEdit.Snap(wy, step);
-        }
-        CommitDrag(MathPlaneSceneEdit.MoveHandle(_scene, h, wx, wy), h.ObjectIndex);
+        if (SceneAt(e) is not { } at) return;
+        CommitDrag(MathPlaneSceneEdit.MoveHandle(_scene, h, at.X, at.Y), h.ObjectIndex);
         UpdateReadouts(e);
     }
 
@@ -475,19 +519,13 @@ public sealed class MathPlaneSectionViewModel : ViewModelBase, IPointerEditHandl
         if (!IsActive) return false;
         Refresh();
         if (!Editing) return false;
-        var (wx, wy) = World(e);
-        if (MathPlaneSceneEdit.HitTest(_scene, wx, wy, MathPlaneSceneEdit.HitRadiusPixels * PixelPitch(e)) is { } hit)
+        if (HitAt(e) is { } hit)
         {
             SelectedIndex = hit.ObjectIndex;
             return true;
         }
-        if ((e.Modifiers & InputModifiers.Shift) != 0)
-        {
-            double step = MathPlaneSceneEdit.MinorStep(e.ClientWidth * PixelPitch(e));
-            wx = MathPlaneSceneEdit.Snap(wx, step);
-            wy = MathPlaneSceneEdit.Snap(wy, step);
-        }
-        var (scene, idx) = MathPlaneSceneEdit.Add(_scene, MathPlaneObjectKind.Point, wx, wy);
+        if (SceneAt(e) is not { } at) return true;   // singular map: nothing to add, but no recentre
+        var (scene, idx) = MathPlaneSceneEdit.Add(_scene, MathPlaneObjectKind.Point, at.X, at.Y);
         Commit(scene, idx);
         return true;
     }
@@ -509,9 +547,7 @@ public sealed class MathPlaneSectionViewModel : ViewModelBase, IPointerEditHandl
     {
         var (wx, wy) = World(e);
         PointerReadout = $"x = {Num(wx)}, y = {Num(wy)}";
-        var hit = _sceneValid
-            ? MathPlaneSceneEdit.HitTest(_scene, wx, wy, MathPlaneSceneEdit.HitRadiusPixels * PixelPitch(e))
-            : null;
+        var hit = _sceneValid ? HitAt(e) : null;
         HoverReadout = hit is { } h ? Readout(_scene.Objects[h.ObjectIndex]) : "";
     }
 

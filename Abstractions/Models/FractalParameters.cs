@@ -1307,6 +1307,18 @@ namespace FracturingFog.Models
         /// form (<see cref="MathPlaneScene"/>; one line, statements separated by ';').
         /// Default: the basis vectors i and j.</summary>
         public string MathPlaneScene { get; set; } = FracturingFog.Models.MathPlaneScene.DefaultText;
+        /// <summary>#1552 — the Math Plane map (None = the plain plane).</summary>
+        public MathPlaneMapMode MathPlaneMapMode { get; set; } = MathPlaneMapMode.None;
+        /// <summary>#1552 — the map's matrix [[M11, M12], [M21, M22]] (columns are the
+        /// images of i-hat and j-hat). Default: the shear [[1, 1], [0, 1]].</summary>
+        public double MathPlaneM11 { get; set; } = 1.0;
+        public double MathPlaneM12 { get; set; } = 1.0;
+        public double MathPlaneM21 { get; set; } = 0.0;
+        public double MathPlaneM22 { get; set; } = 1.0;
+        /// <summary>#1552 — map progress: 0 = identity, 1 = the full map. Animatable.</summary>
+        public double MathPlaneT { get; set; } = 1.0;
+        /// <summary>#1552 — how <see cref="MathPlaneT"/> interpolates the map.</summary>
+        public MathPlaneInterpolation MathPlaneInterpolation { get; set; } = MathPlaneInterpolation.Linear;
         /// <summary>#1538 — sides of the <see cref="BilliardGeometry.Polygon"/> layout (3 = triangle,
         /// 6 = hexagon, 8 = octagon ...). Clamped to [3, 12]. Default 6.</summary>
         public int BilliardPolygonSides { get; set; } = 6;
@@ -2234,6 +2246,13 @@ namespace FracturingFog.Models
                 BilliardMuteMisses = BilliardMuteMisses,
                 BilliardCustomDisks = BilliardCustomDisks,
                 MathPlaneScene = MathPlaneScene,
+                MathPlaneMapMode = MathPlaneMapMode,
+                MathPlaneM11 = MathPlaneM11,
+                MathPlaneM12 = MathPlaneM12,
+                MathPlaneM21 = MathPlaneM21,
+                MathPlaneM22 = MathPlaneM22,
+                MathPlaneT = MathPlaneT,
+                MathPlaneInterpolation = MathPlaneInterpolation,
                 BilliardPolygonSides = BilliardPolygonSides,
                 BilliardPolygonFill = BilliardPolygonFill,
                 BilliardLatticeRotation = BilliardLatticeRotation,

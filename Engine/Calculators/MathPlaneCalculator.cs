@@ -32,6 +32,15 @@
 // a per-pixel condition (MathPlaneImplicitSampler). A region is blended straight
 // into ColorBuffer at its place in the draw order (the canvas is flushed first),
 // translucent so the grid and earlier objects show through.
+//
+// #1552 — the map: MathPlaneMap.Current(FractalParameters) (identity when the map
+// is off). Under a map the original grid stays, dimmed, as the reference, and the
+// image of the major grid and axes is drawn over it. Every object is drawn as its
+// image: points, vectors (tail and tip), segments and polylines are mapped point by
+// point; curves are sampled over the preimage of the view and mapped; a region
+// tests each pixel's preimage. Read-outs (scene flags): det shades the image of
+// the unit square and prints det; eigen draws the real eigenvector lines of the
+// current map with their eigenvalues; lengths prints each vector's mapped length.
 
 using System;
 using System.Runtime.InteropServices;
@@ -72,6 +81,13 @@ public sealed class MathPlaneCalculator : IFractalCalculator
     public const uint MinorGridColor  = 0x22FFFFFF;
     public const uint MajorGridColor  = 0x4DFFFFFF;
     public const uint AxisColor       = 0xD9FFFFFF;
+    /// <summary>#1552 — the original axes while a map is applied (the reference).</summary>
+    public const uint DimAxisColor    = 0x66FFFFFF;
+    /// <summary>#1552 — the image of the grid (Okabe-Ito sky blue).</summary>
+    public const uint MapGridColor    = 0x9956B4E9;
+    public const uint DetFillColor    = 0x40F0E442;
+    public const uint DetEdgeColor    = 0xFFF0E442;
+    public const uint EigenColor      = 0xFFCC79A7;
     public const uint TickLabelColor  = 0xCCDCDCDC;
     /// <summary>Errors are yellow, not red (colour-blind-safe convention).</summary>
     public const uint ErrorColor      = 0xFFFFCC00;
@@ -145,6 +161,9 @@ public sealed class MathPlaneCalculator : IFractalCalculator
         double Px(double off) => off / pitch + w * 0.5;
         double Py(double off) => h * 0.5 - off / pitch;
 
+        var map = MathPlaneMap.Current(FractalParameters);
+        bool mapped = !map.IsIdentity;
+
         using var line = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true };
 
         if (scene.ShowGrid)
@@ -158,7 +177,7 @@ public sealed class MathPlaneCalculator : IFractalCalculator
             foreach (var t in xMinor.Ticks) { float x = (float)Px(t.OffsetFromCentre); canvas.DrawLine(x, 0, x, h, line); }
             foreach (var t in yMinor.Ticks) { float y = (float)Py(t.OffsetFromCentre); canvas.DrawLine(0, y, w, y, line); }
 
-            line.Color = new SKColor(MajorGridColor);
+            line.Color = new SKColor(mapped ? MinorGridColor : MajorGridColor);
             foreach (var t in xAxis.Ticks) if (!t.IsZero || !scene.ShowAxes) { float x = (float)Px(t.OffsetFromCentre); canvas.DrawLine(x, 0, x, h, line); }
             foreach (var t in yAxis.Ticks) if (!t.IsZero || !scene.ShowAxes) { float y = (float)Py(t.OffsetFromCentre); canvas.DrawLine(0, y, w, y, line); }
         }
@@ -168,10 +187,14 @@ public sealed class MathPlaneCalculator : IFractalCalculator
         if (scene.ShowAxes)
         {
             line.StrokeWidth = 1.6f * ui;
-            line.Color = new SKColor(AxisColor);
+            line.Color = new SKColor(mapped ? DimAxisColor : AxisColor);
             if (axisY >= 0 && axisY <= h) canvas.DrawLine(0, axisY, w, axisY, line);
             if (axisX >= 0 && axisX <= w) canvas.DrawLine(axisX, 0, axisX, h, line);
         }
+
+        if (mapped) DrawMappedGrid(canvas, w, h, scene, map, xAxis.Step, ui);
+        if (scene.ShowDet) DrawDet(canvas, w, h, map, ui);
+        if (scene.ShowEigen) DrawEigen(canvas, w, h, map, ui);
 
         using var font = new SKFont(SKTypeface.Default, 12f * ui);
         using var halo = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(0xB0000000) };
@@ -219,7 +242,7 @@ public sealed class MathPlaneCalculator : IFractalCalculator
             if (xl.Anchor != null) { string a = "x0 = " + xl.Anchor; Text(a, w - font.MeasureText(a) - pad, aTop, ink); }
         }
 
-        DrawObjects(canvas, w, h, scene, ui);
+        DrawObjects(canvas, w, h, scene, map, ui);
 
         if (error != null)
         {
@@ -228,8 +251,11 @@ public sealed class MathPlaneCalculator : IFractalCalculator
         }
     }
 
-    private void DrawObjects(SKCanvas canvas, int w, int h, MathPlaneScene scene, float ui)
+    private void DrawObjects(SKCanvas canvas, int w, int h, MathPlaneScene scene, Mat2 map, float ui)
     {
+        bool mapped = !map.IsIdentity;
+        var view = ViewBox(w, h);
+        var pre = PreimageBox(view, map);
         using var stroke = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeCap = SKStrokeCap.Round, StrokeJoin = SKStrokeJoin.Round };
         using var fill = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true };
         using var outline = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 1.5f * ui, Color = new SKColor(0xFF000000) };
@@ -238,6 +264,7 @@ public sealed class MathPlaneCalculator : IFractalCalculator
 
         SKPoint P(double x, double y)
         {
+            (x, y) = map.Apply(x, y);
             var (px, py) = ToPixel(x, y, w, h, CenterX, CenterY, Zoom);
             // Far off-screen points are clamped so Skia's float maths stays sane;
             // anything past this is invisible anyway.
@@ -277,6 +304,13 @@ public sealed class MathPlaneCalculator : IFractalCalculator
                     var tip = P(tx + o.Coords[0], ty + o.Coords[1]);
                     DrawArrow(canvas, tail, tip, stroke, fill, ui);
                     Label(o, tip);
+                    if (scene.ShowLengths)
+                    {
+                        var (vx, vy) = map.Apply(o.Coords[0], o.Coords[1]);   // linear: image of the components
+                        string s = "|" + o.Name + "| = " + Fmt(Math.Sqrt(vx * vx + vy * vy));
+                        canvas.DrawText(s, tip.X + 7f * ui + ui, tip.Y + 13f * ui + ui, font, halo);
+                        canvas.DrawText(s, tip.X + 7f * ui, tip.Y + 13f * ui, font, fill);
+                    }
                     break;
                 }
                 case MathPlaneObjectKind.Segment:
@@ -291,7 +325,7 @@ public sealed class MathPlaneCalculator : IFractalCalculator
                 case MathPlaneObjectKind.Curve when o.CurveKind == MathPlaneCurveKind.Implicit:
                 {
                     stroke.StrokeWidth = 2.5f * ui;
-                    var segs = MathPlaneImplicitSampler.Segments(o, ViewBox(w, h));
+                    var segs = MathPlaneImplicitSampler.Segments(o, pre);
                     using var path = new SKPath();
                     SKPoint? labelAt = null;
                     foreach (var (a, b) in segs)
@@ -310,7 +344,10 @@ public sealed class MathPlaneCalculator : IFractalCalculator
                 }
                 case MathPlaneObjectKind.Region:
                 {
-                    var mask = MathPlaneImplicitSampler.RegionMask(o, ViewBox(w, h), w, h);
+                    bool[]? mask;
+                    if (!mapped) mask = MathPlaneImplicitSampler.RegionMask(o, view, w, h);
+                    else if (map.Inverse() is { } inv) mask = MathPlaneImplicitSampler.RegionMask(o, view, w, h, inv);
+                    else mask = null;   // a singular map squashes the region to a line: nothing to shade
                     if (mask == null) break;
                     canvas.Flush();
                     BlendRegion(ColorBuffer, mask, o.Color, RegionAlpha);
@@ -324,7 +361,7 @@ public sealed class MathPlaneCalculator : IFractalCalculator
                 case MathPlaneObjectKind.Curve:
                 {
                     stroke.StrokeWidth = 2.5f * ui;
-                    var lines = MathPlaneCurveSampler.Sample(o, ViewBox(w, h));
+                    var lines = MathPlaneCurveSampler.Sample(o, pre);
                     SKPoint? labelAt = null;
                     foreach (var poly in lines)
                     {
@@ -359,6 +396,126 @@ public sealed class MathPlaneCalculator : IFractalCalculator
             }
         }
     }
+
+    /// <summary>#1552 — the world box (and pitch) to sample curves in so their image
+    /// covers <paramref name="view"/>: the preimage of the view's corners, with the
+    /// pitch shrunk by the map's largest stretch so the image keeps sub-pixel detail.
+    /// A singular map has no preimage box; a box four times the view stands in.</summary>
+    public static MathPlaneViewBox PreimageBox(MathPlaneViewBox view, Mat2 map)
+    {
+        if (map.IsIdentity) return view;
+        double stretch = Math.Max(1e-9, map.MaxStretch);
+        if (map.Inverse() is not { } inv)
+        {
+            double cx = 0.5 * (view.XMin + view.XMax), cy = 0.5 * (view.YMin + view.YMax);
+            return new MathPlaneViewBox(cx - 2 * view.Width, cx + 2 * view.Width,
+                                        cy - 2 * view.Height, cy + 2 * view.Height, view.Pitch / stretch);
+        }
+        double x0 = double.MaxValue, x1 = double.MinValue, y0 = double.MaxValue, y1 = double.MinValue;
+        foreach (var (x, y) in new[] { (view.XMin, view.YMin), (view.XMax, view.YMin), (view.XMin, view.YMax), (view.XMax, view.YMax) })
+        {
+            var (px, py) = inv.Apply(x, y);
+            x0 = Math.Min(x0, px); x1 = Math.Max(x1, px); y0 = Math.Min(y0, py); y1 = Math.Max(y1, py);
+        }
+        return new MathPlaneViewBox(x0, x1, y0, y1, view.Pitch / stretch);
+    }
+
+    /// <summary>#1552 — the image of the major grid and axes under the map.</summary>
+    private void DrawMappedGrid(SKCanvas canvas, int w, int h, MathPlaneScene scene, Mat2 map, double step, float ui)
+    {
+        var view = ViewBox(w, h);
+        var pre = PreimageBox(view, map);
+        // Keep the line count sane under strong shrinking maps: coarsen the step.
+        while ((pre.Width / step) + (pre.Height / step) > 400) step *= 2;
+        using var line = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 1.2f * ui, Color = new SKColor(MapGridColor) };
+        using var axis = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 2f * ui, Color = new SKColor(AxisColor) };
+        SKPoint S(double x, double y)
+        {
+            var (mx, my) = map.Apply(x, y);
+            var (px, py) = ToPixel(mx, my, w, h, CenterX, CenterY, Zoom);
+            const double lim = 1e7;
+            return new SKPoint((float)Math.Clamp(px, -lim, lim), (float)Math.Clamp(py, -lim, lim));
+        }
+        if (scene.ShowGrid)
+        {
+            for (double x = Math.Ceiling(pre.XMin / step) * step; x <= pre.XMax; x += step)
+                if (Math.Abs(x) > step * 1e-9) canvas.DrawLine(S(x, pre.YMin), S(x, pre.YMax), line);
+            for (double y = Math.Ceiling(pre.YMin / step) * step; y <= pre.YMax; y += step)
+                if (Math.Abs(y) > step * 1e-9) canvas.DrawLine(S(pre.XMin, y), S(pre.XMax, y), line);
+        }
+        if (scene.ShowAxes)
+        {
+            double r = 2 * Math.Max(Math.Max(Math.Abs(pre.XMin), Math.Abs(pre.XMax)), Math.Max(Math.Abs(pre.YMin), Math.Abs(pre.YMax)));
+            canvas.DrawLine(S(-r, 0), S(r, 0), axis);
+            canvas.DrawLine(S(0, -r), S(0, r), axis);
+        }
+    }
+
+    /// <summary>#1552 — the unit square's image (a parallelogram on the images of
+    /// i-hat and j-hat), shaded, with det printed inside.</summary>
+    private void DrawDet(SKCanvas canvas, int w, int h, Mat2 map, float ui)
+    {
+        SKPoint S(double x, double y)
+        {
+            var (mx, my) = map.Apply(x, y);
+            var (px, py) = ToPixel(mx, my, w, h, CenterX, CenterY, Zoom);
+            return new SKPoint((float)Math.Clamp(px, -1e7, 1e7), (float)Math.Clamp(py, -1e7, 1e7));
+        }
+        using var path = new SKPath();
+        path.MoveTo(S(0, 0)); path.LineTo(S(1, 0)); path.LineTo(S(1, 1)); path.LineTo(S(0, 1)); path.Close();
+        using var fill = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(DetFillColor) };
+        using var edge = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 1.5f * ui, Color = new SKColor(DetEdgeColor) };
+        canvas.DrawPath(path, fill);
+        canvas.DrawPath(path, edge);
+        using var font = new SKFont(SKTypeface.Default, 14f * ui);
+        using var ink = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(DetEdgeColor) };
+        using var halo = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(0xC0000000) };
+        string s = "det = " + Fmt(map.Det);
+        var c = S(0.5, 0.5);
+        float x = c.X - font.MeasureText(s) / 2;
+        canvas.DrawText(s, x + ui, c.Y + ui, font, halo);
+        canvas.DrawText(s, x, c.Y, font, ink);
+    }
+
+    /// <summary>#1552 — the map's real eigenvector lines (through the origin) and eigenvalues.</summary>
+    private void DrawEigen(SKCanvas canvas, int w, int h, Mat2 map, float ui)
+    {
+        var eig = MathPlaneMap.Eigen(map, out bool all);
+        using var font = new SKFont(SKTypeface.Default, 14f * ui);
+        using var ink = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(EigenColor) };
+        using var halo = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(0xC0000000) };
+        void Text(string s, float x, float y) { canvas.DrawText(s, x + ui, y + ui, font, halo); canvas.DrawText(s, x, y, font, ink); }
+        if (all)
+        {
+            Text("every vector is an eigenvector, \u03BB = " + Fmt(map.A), 8f * ui, h - 30f * ui);
+            return;
+        }
+        if (eig.Count == 0)
+        {
+            Text("no real eigenvectors (the map turns every direction)", 8f * ui, h - 30f * ui);
+            return;
+        }
+        var view = ViewBox(w, h);
+        double r = 4 * Math.Max(view.Width, view.Height) + Math.Abs(view.XMin) + Math.Abs(view.YMin);
+        double labelR = 0.3 * Math.Min(view.Width, view.Height);
+        using var dash = SKPathEffect.CreateDash(new[] { 8f * ui, 6f * ui }, 0);
+        using var line = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 2f * ui, Color = new SKColor(EigenColor), PathEffect = dash };
+        SKPoint S(double x, double y)
+        {
+            var (px, py) = ToPixel(x, y, w, h, CenterX, CenterY, Zoom);
+            return new SKPoint((float)Math.Clamp(px, -1e7, 1e7), (float)Math.Clamp(py, -1e7, 1e7));
+        }
+        foreach (var e in eig)
+        {
+            canvas.DrawLine(S(-r * e.X, -r * e.Y), S(r * e.X, r * e.Y), line);
+            var at = S(labelR * e.X, labelR * e.Y);
+            Text("\u03BB = " + Fmt(e.Lambda), at.X + 6f * ui, at.Y - 6f * ui);
+        }
+    }
+
+    /// <summary>Read-out number: up to 4 decimals, no trailing zeros.</summary>
+    private static string Fmt(double v)
+        => Math.Abs(v) < 5e-5 ? "0" : v.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>#1551 — opacity of a region's shading.</summary>
     public const double RegionAlpha = 0.30;

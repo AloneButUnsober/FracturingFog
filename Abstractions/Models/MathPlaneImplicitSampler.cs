@@ -141,7 +141,8 @@ namespace FracturingFog.Models
         /// <paramref name="width"/> x <paramref name="height"/> render of
         /// <paramref name="view"/>, tested at pixel centres. Null when the object is
         /// not a region or does not parse.</summary>
-        public static bool[]? RegionMask(MathPlaneObject region, MathPlaneViewBox view, int width, int height)
+        public static bool[]? RegionMask(MathPlaneObject region, MathPlaneViewBox view, int width, int height,
+                                         Mat2? inverseMap = null)
         {
             if (region.Kind != MathPlaneObjectKind.Region || region.Expressions.Count < 1 || width <= 0 || height <= 0)
                 return null;
@@ -152,7 +153,10 @@ namespace FracturingFog.Models
                 double y = view.YMax - (py + 0.5) * view.Pitch;
                 for (int px = 0; px < width; px++)
                 {
-                    double val = f!.Eval(x: view.XMin + (px + 0.5) * view.Pitch, y: y);
+                    double x = view.XMin + (px + 0.5) * view.Pitch, yy = y;
+                    // #1552 — under a map, a pixel shows the region where its preimage lies.
+                    if (inverseMap is { } inv) (x, yy) = inv.Apply(x, yy);
+                    double val = f!.Eval(x: x, y: yy);
                     mask[py * width + px] = double.IsFinite(val) && val != 0;
                 }
             });

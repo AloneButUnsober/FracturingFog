@@ -85,6 +85,55 @@
                 </Grid>
             </Border>
 
+            <!-- Linear map (#1552) -->
+            <Border Classes="group">
+                <StackPanel Spacing="6">
+                    <TextBlock Classes="section" Text="Linear map" />
+                    <CheckBox Content="Apply the matrix" IsChecked="{Binding MapEnabled}"
+                              ToolTip.Tip="Transform the plane and every object by the matrix below; the original grid stays, dimmed, as the reference" />
+                    <ItemsControl ItemsSource="{Binding MapPresets}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:MathPlaneSectionViewModel+MapPreset">
+                                <Button Classes="action neutral" Content="{Binding Name}" Margin="0,0,6,6"
+                                        ToolTip.Tip="{Binding Hint}"
+                                        Command="{Binding $parent[ItemsControl].((vm:MathPlaneSectionViewModel)DataContext).ApplyPresetCommand}"
+                                        CommandParameter="{Binding}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Grid ColumnDefinitions="Auto,110,110" RowDefinitions="Auto,Auto" ColumnSpacing="6" RowSpacing="4">
+                        <TextBlock Grid.Row="0" Grid.RowSpan="2" Text="M =" VerticalAlignment="Center" FontFamily="Consolas, Menlo, monospace" />
+                        <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding M11}" Increment="0.1" FormatString="0.###" ToolTip.Tip="Row 1, column 1: i-hat's x" />
+                        <NumericUpDown Grid.Row="0" Grid.Column="2" Value="{Binding M12}" Increment="0.1" FormatString="0.###" ToolTip.Tip="Row 1, column 2: j-hat's x" />
+                        <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding M21}" Increment="0.1" FormatString="0.###" ToolTip.Tip="Row 2, column 1: i-hat's y" />
+                        <NumericUpDown Grid.Row="1" Grid.Column="2" Value="{Binding M22}" Increment="0.1" FormatString="0.###" ToolTip.Tip="Row 2, column 2: j-hat's y" />
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Interpolation" VerticalAlignment="Center" />
+                        <ComboBox ItemsSource="{Binding Interpolations}" SelectedItem="{Binding Interpolation}" Width="110"
+                                  ToolTip.Tip="Linear: (1 - t) I + t M, the grid morph. Polar: rotate and stretch separately, so a rotation turns instead of shrinking half-way (needs det M &gt; 0)." />
+                    </StackPanel>
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                        <TextBlock Text="t" VerticalAlignment="Center" FontFamily="Consolas, Menlo, monospace" />
+                        <Slider Grid.Column="1" Minimum="0" Maximum="1" Value="{Binding T}" SmallChange="0.01" LargeChange="0.1"
+                                ToolTip.Tip="Map progress: 0 = identity, 1 = the full matrix (keyframe MathPlaneT to make a video)" />
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                            <Button Classes="action" Content="{Binding PlayLabel}" Command="{Binding PlayCommand}" ToolTip.Tip="Run t from 0 to 1" />
+                            <CheckBox Content="Loop" IsChecked="{Binding Loop}" ToolTip.Tip="Play back and forth until stopped" />
+                        </StackPanel>
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Spacing="14">
+                        <CheckBox Content="det"          IsChecked="{Binding ShowDet}"     ToolTip.Tip="Shade the unit square's image and print the determinant" />
+                        <CheckBox Content="Eigenvectors" IsChecked="{Binding ShowEigen}"   ToolTip.Tip="Dashed lines along the real eigenvectors, with their eigenvalues" />
+                        <CheckBox Content="Lengths"      IsChecked="{Binding ShowLengths}" ToolTip.Tip="Print each vector's length after the map" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding MapReadout}" FontFamily="Consolas, Menlo, monospace" Foreground="#B4B4B4" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
             <!-- Read-outs + plane settings -->
             <Border Classes="group">
                 <StackPanel Spacing="6">
