@@ -164,6 +164,10 @@ namespace FracturingFog.Batch
         /// view adds while it is still, so the file equals the settled live frame.
         /// <c>--no-taa</c> renders the sub-pixel (MSAA) pass only, for speed.</summary>
         public bool TemporalAa { get; set; } = true;
+        /// <summary>#1554 — <c>--math-overlay RE,IM[,STEPS]</c>: draw the axes and the
+        /// orbit of the pinned point (Mandelbrot: c; Julia: z0) on the still, as the
+        /// live view's math overlay does. Null = off.</summary>
+        public FracturingFog.ViewState.MathOverlaySpec? MathOverlay { get; set; }
 
         // Keep PNG frame folder after successful video encode. Defaults to false
         // when --lossless is used (frames are intermediate), true otherwise.
@@ -792,6 +796,15 @@ namespace FracturingFog.Batch
                     case BatchFlags.NoTaa:   // #1380
                         opts.TemporalAa = false;
                         break;
+
+                    case BatchFlags.MathOverlay:   // #1554
+                    {
+                        if (!Next(args, ref i, a, out string mov, out error)) return false;
+                        if (!FracturingFog.ViewState.MathOverlaySpec.TryParse(mov, out var mo, out string? moErr))
+                        { error = $"{a} {moErr}."; return false; }
+                        opts.MathOverlay = mo;
+                        break;
+                    }
 
                     case BatchFlags.Verbose:
                     case "-v":

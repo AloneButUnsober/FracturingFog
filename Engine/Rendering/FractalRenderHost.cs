@@ -656,6 +656,55 @@ namespace FracturingFog.Rendering
 
         public bool ShowGrid { get; set; }
 
+        // #1554 — the math overlay (axes + the orbit of one point) on 2D views.
+        // The pinned point is a view setting (poster export and --math-overlay
+        // carry it); the hover point is live only and wins while the pointer is
+        // over the view.
+        public bool MathOverlayEnabled { get; set; }
+        public FracturingFog.ViewState.MathOverlaySpec? MathOverlayPin { get; set; }
+        public int MathOverlaySteps { get; set; } = FracturingFog.ViewState.MathOverlay.DefaultSteps;
+        private FracturingFog.ViewState.MathOverlaySpec? _mathOverlayHover;
+
+        /// <summary>#1554 — the hovered point (null: none); repaints the last frame
+        /// with it, without a recompute (the selection-box repaint worker).</summary>
+        public void SetMathOverlayHover(double? re, double? im)
+        {
+            if (_disposed) return;
+            _mathOverlayHover = re is double r && im is double i
+                ? new FracturingFog.ViewState.MathOverlaySpec(r, i, MathOverlaySteps) : null;
+            if (!MathOverlayEnabled) return;
+            RequestOverlayRepaint();
+        }
+
+        /// <summary>#1554 — repaint the last frame's overlays without a recompute.</summary>
+        public void RequestOverlayRepaint()
+        {
+            if (_disposed) return;
+            lock (_selBoxLock)
+            {
+                _selBoxRequestUploads = Interlocked.Read(ref _overlayUploads);
+                _selBoxRepaintPending = true;
+                if (_selBoxThread == null)
+                {
+                    _selBoxThread = new Thread(SelectionBoxRepaintLoop) { IsBackground = true, Name = "FF selection-box repaint" };
+                    _selBoxThread.Start();
+                }
+            }
+            _selBoxSignal.Set();
+        }
+
+        /// <summary>#1554 — the pinned overlay an export or command reproduces (null: none).</summary>
+        public FracturingFog.ViewState.MathOverlaySpec? CurrentMathOverlayPin()
+            => MathOverlayEnabled && !ViewState.Is3D && MathOverlayPin is { } p ? p with { Steps = MathOverlaySteps } : null;
+
+        /// <summary>#1554 — the overlay to draw now: hover, else the pin (steps from the setting).</summary>
+        public FracturingFog.ViewState.MathOverlaySpec? CurrentMathOverlay(out bool pinned)
+        {
+            pinned = _mathOverlayHover == null;
+            if (!MathOverlayEnabled || ViewState.Is3D) return null;
+            return _mathOverlayHover ?? (MathOverlayPin is { } p ? p with { Steps = MathOverlaySteps } : null);
+        }
+
         /// <inheritdoc/>
         public FracturingFog.ViewState.GridLabelSettings GridLabels { get; set; } = FracturingFog.ViewState.GridLabelSettings.Default;
 
@@ -1452,6 +1501,9 @@ namespace FracturingFog.Rendering
                 Watermark = watermark,
                 SubText = subText,
                 CustomWatermark = customWatermark,
+                // #1554 — a pinned math overlay is part of the picture (hover is not).
+                MathOverlay = MathOverlayEnabled && !ViewState.Is3D && MathOverlayPin is { } mop
+                    ? mop with { Steps = MathOverlaySteps } : null,
             };
         }
 
@@ -5085,6 +5137,17 @@ namespace FracturingFog.Rendering
                     // Overlay must never block the render pipeline.
                     Console.Error.WriteLine($"[FractalRenderHost] Overlay composite failed: {ex.Message}");
                 }
+            }
+
+            // #1554 — the math overlay, over the grid / watermark.
+            if (CurrentMathOverlay(out bool moPinned) is { } mo)
+            {
+                try
+                {
+                    FracturingFog.Rendering.MathOverlayRenderer.Draw(dst, w, h, ViewState.CenterX, ViewState.CenterY, ViewState.Zoom,
+                        ViewState.FractalType, ViewState.FractalParameters.EffectiveJuliaC, mo, moPinned);
+                }
+                catch (Exception ex) { Console.Error.WriteLine($"[FractalRenderHost] Math overlay failed: {ex.Message}"); }
             }
 
             // #988 — slideshow region cross-fade: blend the frozen outgoing frame

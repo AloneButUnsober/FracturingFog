@@ -90,6 +90,10 @@ namespace FracturingFog.Cli
         /// <summary>#1305 — the Control Center's fractal-QR settings when a payload
         /// is set (null = no QR). Emitted as the <c>--qr-*</c> flags.</summary>
         public QrCodeOptions? Qr { get; init; }
+        /// <summary>#1554 — the live math overlay: its pinned point (null when off or
+        /// not pinned), and whether it is on with only a hover point (a gap).</summary>
+        public FracturingFog.ViewState.MathOverlaySpec? MathOverlay { get; init; }
+        public bool MathOverlayHoverOnly { get; init; }
 
         /// <summary>#1411 — also write a QR tile mesh to this path (null = no mesh;
         /// the live seed leaves it null, the mesh is a Control Center button).</summary>
@@ -390,6 +394,13 @@ namespace FracturingFog.Cli
             {
                 parts.Add(BatchFlags.Exposure);
                 parts.Add(snap.ViewExposureEv.ToString("0.###", CultureInfo.InvariantCulture));
+            }
+
+            // #1554 — the pinned math overlay.
+            if (snap.MathOverlay is { } mo)
+            {
+                parts.Add(BatchFlags.MathOverlay);
+                parts.Add(mo.ToFlagValue());
             }
 
             // Fractal QR code (#1305) — payload plus the knobs that deviate from
@@ -710,6 +721,9 @@ namespace FracturingFog.Cli
             if (snap.AudioDrivenParams is { Count: > 0 } audio)
                 gaps.Add("Audio-driven parameters (" + string.Join(", ", audio)
                          + ") are live-only: the batch renders their current values without the audio drive (#1432)");
+            // #1554 — a hover-only math overlay follows the pointer; nothing to pin.
+            if (snap.MathOverlayHoverOnly)
+                gaps.Add("Math overlay with no pinned point (the hover orbit is live only) — pin a point to render it with --math-overlay");
             // #1380 — the quality's temporal AA is no longer a gap: a batch still runs
             // the same samples the live view settles with (--no-taa skips them).
             return gaps;

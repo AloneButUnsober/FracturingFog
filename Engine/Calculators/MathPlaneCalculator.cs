@@ -683,17 +683,8 @@ public sealed class MathPlaneCalculator : IFractalCalculator
     private static FractalType? FractalRegionBackdrop(MathPlaneBackdrop b) => FracturingFog.Models.RegionFractalParams.MathPlaneBackdropFamily(b);
 
     /// <summary>The orbit's colour at step <paramref name="n"/> of <paramref name="count"/>:
-    /// Okabe-Ito blue to sky blue to yellow to orange.</summary>
-    public static uint OrbitColor(int n, int count)
-    {
-        uint[] stops = { 0xFF0072B2, 0xFF56B4E9, 0xFFF0E442, 0xFFE69F00 };
-        double u = count <= 1 ? 0 : Math.Clamp(n / (double)(count - 1), 0, 1) * (stops.Length - 1);
-        int i = Math.Min((int)u, stops.Length - 2);
-        double f = u - i;
-        uint a = stops[i], b = stops[i + 1];
-        uint Ch(int sh) => (uint)Math.Round(((a >> sh) & 0xFF) * (1 - f) + ((b >> sh) & 0xFF) * f);
-        return 0xFF000000u | (Ch(16) << 16) | (Ch(8) << 8) | Ch(0);
-    }
+    /// Okabe-Ito blue to sky blue to yellow to orange (shared with the math overlay).</summary>
+    public static uint OrbitColor(int n, int count) => MathOverlay.StepColor(n, count);
 
     private SKPoint WorldPix(int w, int h, double x, double y)
     {

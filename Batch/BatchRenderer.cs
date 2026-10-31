@@ -389,6 +389,7 @@ namespace FracturingFog.Batch
                 // #1305 — fractal QR code; null without --qr-payload.
                 Qr = opts.BuildQrOptions(),
                 KeepPreQrPixels = opts.QrMesh != null && opts.QrPayload != null,   // #1411
+                MathOverlay = opts.MathOverlay,   // #1554 — pinned math overlay
             };
             // #1305 — fail before the (possibly long) render when the code cannot
             // fit: payload too large for the level, or image too small for it.

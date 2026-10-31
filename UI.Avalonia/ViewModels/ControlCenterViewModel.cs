@@ -401,6 +401,10 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
             ViewTransform  = vs.ViewTransform,           // S2 (#389) — output tonemap
             ViewExposureEv = vs.ViewExposureEv,
             Qr             = QrCode.Options,            // #1305 — fractal QR code
+            // #1554 — the math overlay: a pinned point is a flag, hover-only is a gap.
+            MathOverlay    = Shell.Main.RenderHost.CurrentMathOverlayPin(),
+            MathOverlayHoverOnly = Shell.Main.RenderHost.MathOverlayEnabled && Shell.Main.RenderHost.MathOverlayPin == null
+                                   && !vs.Is3D,
             Parameters  = fp,
             // #998 — a saved Lighting & FX preset equal to the live lighting carries
             // the settings no individual flag can; a playing animation is a gap.
