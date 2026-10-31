@@ -611,6 +611,9 @@ namespace FracturingFog.Models
         // #1553 — the c of a complex map.
         [JsonIgnore(Condition = OmitNull)] public double? MathPlaneCRe { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? MathPlaneCIm { get; set; }
+        // #1554 — the fractal backdrop (int cast of MathPlaneBackdrop); its family's own
+        // params are merged into the MathPlane block (see Snapshot).
+        [JsonIgnore(Condition = OmitNull)] public int? MathPlaneBackdrop { get; set; }
         // #1538 — Polygon sides; captured only when Polygon is the active geometry.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardPolygonSides { get; set; }
         // #1539 — Polygon fill (captured with Polygon) and lattice rotation (captured with a lattice).
@@ -1067,6 +1070,7 @@ namespace FracturingFog.Models
                     MathPlaneInterpolation = (int)p.MathPlaneInterpolation,
                     MathPlaneCRe = p.MathPlaneCRe,
                     MathPlaneCIm = p.MathPlaneCIm,
+                    MathPlaneBackdrop = (int)p.MathPlaneBackdrop,
                 },
                 // #1506 — the shared billiard scene (no launch / gate / mute: those
                 // colour ChaoticBilliard only) plus the sweep.
@@ -1525,11 +1529,46 @@ namespace FracturingFog.Models
                 }
             }
 
+            // #1554 — a Math Plane backdrop's own family params (Multibrot exponent,
+            // Phoenix p, a domain warp ...) ride in the MathPlane block, so a region or
+            // --param reproduces the backdrop. Julia's c is the plane's c, not JuliaC.
+            if (type == FractalType.MathPlane && rp != null
+                && MathPlaneBackdropFamily(p.MathPlaneBackdrop) is { } bt && bt != FractalType.Julia)
+                MergeMissing(rp, Snapshot(bt, p));
+
             // #961 — a family whose params are all at their defaults (every field
             // omitted) carries no block, so a stock region never saves an empty {}.
             if (rp != null && JsonSerializer.Serialize(rp, s_omitNull) == "{}") rp = null;
 
             return rp;
+        }
+
+        /// <summary>#1554 — the escape-time family a Math Plane backdrop draws, or null.</summary>
+        public static FractalType? MathPlaneBackdropFamily(MathPlaneBackdrop b) => b switch
+        {
+            FracturingFog.MathPlaneBackdrop.Mandelbrot => FractalType.Mandelbrot,
+            FracturingFog.MathPlaneBackdrop.Julia => FractalType.Julia,
+            FracturingFog.MathPlaneBackdrop.BurningShip => FractalType.BurningShip,
+            FracturingFog.MathPlaneBackdrop.Tricorn => FractalType.Tricorn,
+            FracturingFog.MathPlaneBackdrop.Multibrot => FractalType.Multibrot,
+            FracturingFog.MathPlaneBackdrop.Phoenix => FractalType.Phoenix,
+            FracturingFog.MathPlaneBackdrop.Magnet1 => FractalType.Magnet1,
+            FracturingFog.MathPlaneBackdrop.Magnet2 => FractalType.Magnet2,
+            FracturingFog.MathPlaneBackdrop.Glynn => FractalType.Glynn,
+            FracturingFog.MathPlaneBackdrop.Spider => FractalType.Spider,
+            _ => null,
+        };
+
+        /// <summary>Copy every field set in <paramref name="from"/> that is unset in <paramref name="into"/>.</summary>
+        private static void MergeMissing(RegionFractalParams into, RegionFractalParams? from)
+        {
+            if (from == null) return;
+            foreach (var pi in typeof(RegionFractalParams).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+            {
+                if (!pi.CanRead || !pi.CanWrite || pi.GetIndexParameters().Length > 0) continue;
+                var v = pi.GetValue(from);
+                if (v != null && pi.GetValue(into) == null) pi.SetValue(into, v);
+            }
         }
 
         // ── #960 authoritative family recall ─────────────────────────────────
@@ -1860,6 +1899,7 @@ namespace FracturingFog.Models
             if (MathPlaneInterpolation.HasValue) p.MathPlaneInterpolation = (FracturingFog.MathPlaneInterpolation)MathPlaneInterpolation.Value;
             if (MathPlaneCRe.HasValue) p.MathPlaneCRe = MathPlaneCRe.Value;
             if (MathPlaneCIm.HasValue) p.MathPlaneCIm = MathPlaneCIm.Value;
+            if (MathPlaneBackdrop.HasValue) p.MathPlaneBackdrop = (FracturingFog.MathPlaneBackdrop)MathPlaneBackdrop.Value;
             if (BilliardPolygonSides.HasValue)
                 p.BilliardPolygonSides = BilliardPolygonSides.Value;
             if (BilliardPolygonFill.HasValue)

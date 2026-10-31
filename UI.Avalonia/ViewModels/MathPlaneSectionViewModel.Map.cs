@@ -79,6 +79,7 @@ public sealed partial class MathPlaneSectionViewModel
         this.RaisePropertyChanged(nameof(Interpolation));
         this.RaisePropertyChanged(nameof(MapReadout));
         RaiseComplexProperties();
+        RaiseBridgeProperties();
     }
 
     /// <summary>Apply the matrix (MathPlaneMapMode Matrix) or show the plain plane.</summary>

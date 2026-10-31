@@ -137,6 +137,12 @@ namespace FracturingFog
     /// MathPlaneCRe + i MathPlaneCIm.</summary>
     public enum MathPlaneMapMode { None, Matrix, Complex }
 
+    /// <summary>#1554 — a 2D escape-time family drawn under a Math Plane scene (the
+    /// fractal backdrop), in the plain plane at the scene's view. Julia draws the
+    /// Julia set of the plane's c (MathPlaneCRe / MathPlaneCIm), so dragging c moves
+    /// both the orbit and the set; the others use their own params.</summary>
+    public enum MathPlaneBackdrop { None, Mandelbrot, Julia, BurningShip, Tricorn, Multibrot, Phoenix, Magnet1, Magnet2, Glynn, Spider }
+
     /// <summary>#1552 — how <c>MathPlaneT</c> runs the map from the identity (t = 0) to
     /// the matrix (t = 1). <see cref="Linear"/>: (1 - t) I + t M, the usual grid morph.
     /// <see cref="Polar"/>: M = R S (rotation times stretch); the rotation angle and the

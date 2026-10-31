@@ -333,6 +333,7 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
         this.RaisePropertyChanged(nameof(ShowLengths));
         this.RaisePropertyChanged(nameof(Scene));
         RaiseComplexProperties();
+        RaiseBridgeProperties();
     }
 
     private void Commit(MathPlaneScene scene, int? select = null)
@@ -511,6 +512,8 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
         if (!IsActive) return false;
         Refresh();
         if (!Editing) return false;
+        // #1554 — c (drawn with the orbit) is on top of the scene's objects.
+        if (HitsC(e)) { _dragC = true; return true; }
         if (HitAt(e) is not { } h) return false;
         _drag = h;
         SelectedIndex = h.ObjectIndex;
@@ -519,6 +522,11 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
 
     public void OnPointerMove(PointerInput e)
     {
+        if (_dragC)
+        {
+            if (Editing) DragCTo(e);
+            return;
+        }
         if (_drag is not { } h || !Editing || h.ObjectIndex >= _scene.Objects.Count) return;
         var from = MathPlaneSceneEdit.HandlePosition(_scene.Objects[h.ObjectIndex], h.Point);
         if (SceneAt(e, from) is not { } at) return;
@@ -526,7 +534,7 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
         UpdateReadouts(e);
     }
 
-    public void OnPointerUp(PointerInput e) => _drag = null;
+    public void OnPointerUp(PointerInput e) { _drag = null; _dragC = false; }
 
     public bool OnDoubleClick(PointerInput e)
     {
