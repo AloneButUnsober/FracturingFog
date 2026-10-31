@@ -730,7 +730,9 @@ namespace FracturingFog.Batch
                 Txt(BatchFlags.Param, Fp, ImgVid,
                     "Set any per-family setting by its saved-region key: Julia constant (JuliaCRe / JuliaCIm), dual-orbit knobs, "
                     + "the 3D camera (Cam3DDistance / Cam3DTheta / Cam3DPhi, family from --fractal), and so on. Repeatable. "
-                    + "Applied over --region, under the dedicated flags.", hint: "KEY=VALUE")
+                    + "Applied over --region, under the dedicated flags. A text value can come from a file: KEY=@path "
+                    + "(UTF-8; @@ for a literal @), the way to pass a Math Plane scene with quoted expressions from cmd "
+                    + "or Windows PowerShell 5.1.", hint: "KEY=VALUE")
                     with { Repeatable = true, Example = "JuliaCRe=-0.8", Source = BatchFlagSource.ParamKey },
 
                 // ── Domain warp ──

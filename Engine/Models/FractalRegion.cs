@@ -1653,6 +1653,35 @@ namespace FracturingFog.Models
         // knobs, the 3D camera, ...) as repeatable `--param Key=Value`, keyed on
         // this class's property names. Reusing the region snapshot means the CLI
         // covers exactly what a saved region does, with the same apply path.
+        //
+        // #1576 — `--param Key=@path` reads a text value from a UTF-8 file. Values with
+        // double quotes (a Math Plane scene's expressions) can't be passed through cmd
+        // or Windows PowerShell 5.1; a file sidesteps shell quoting entirely. Only
+        // text-typed keys read files (a number never starts with '@'); "@@" is a
+        // literal leading '@'.
+
+        /// <summary>#1576 — resolve a text value's <c>@path</c> form. Returns false with
+        /// <paramref name="error"/> when the file can't be read.</summary>
+        public static bool TryResolveFileValue(string key, string value, out string resolved, out string? error)
+        {
+            resolved = value; error = null;
+            if (value.StartsWith("@@", StringComparison.Ordinal)) { resolved = value[1..]; return true; }
+            if (!value.StartsWith('@')) return true;
+            string path = value[1..].Trim().Trim('"');
+            if (path.Length == 0) { error = $"--param {key}: '@' needs a file path (use @@ for a literal '@')."; return false; }
+            try
+            {
+                string full = System.IO.Path.GetFullPath(path);
+                resolved = System.IO.File.ReadAllText(full, System.Text.Encoding.UTF8).TrimEnd('\r', '\n');
+                return true;
+            }
+            catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException
+                                           or ArgumentException or NotSupportedException or System.Security.SecurityException)
+            {
+                error = $"--param {key}: can't read '{path}': {ex.Message}";
+                return false;
+            }
+        }
 
         /// <summary>The snapshot's non-null fields as <c>Key=Value</c> pairs, in
         /// declaration order: strings raw, numbers / booleans as their JSON text
@@ -1703,7 +1732,10 @@ namespace FracturingFog.Models
                 Type t = Nullable.GetUnderlyingType(pi.PropertyType) ?? pi.PropertyType;
                 System.Text.Json.Nodes.JsonNode? node;
                 if (t == typeof(string))
+                {
+                    if (!TryResolveFileValue(pi.Name, value, out value, out string? fileError)) { error = fileError; return null; }
                     node = System.Text.Json.Nodes.JsonValue.Create(value);
+                }
                 else if (pi.Name == nameof(Cam3DFamily) && FractalTypeNames.TryParse(value.Trim(), true, out var fam) && !int.TryParse(value, out _))
                     node = System.Text.Json.Nodes.JsonValue.Create((int)fam);
                 else

@@ -495,4 +495,47 @@
     <Folder Include="Tools\" />
   </ItemGroup>
 
+  <!-- #1576 — console launcher. FracturingFog.exe is a GUI-subsystem (WinExe) apphost,
+       so cmd / PowerShell start it and return to the prompt at once: batch output lands
+       after the prompt and the exit code is lost. FracturingFog.com is a copy of the
+       same apphost with its PE subsystem set to console (3). It runs the same
+       FracturingFog.dll, but the shell waits for it and its output arrives in order.
+       Typing `FracturingFog` (no extension) picks .com before .exe (PATHEXT), the
+       devenv.com / devenv.exe pattern. Written after Build and after Publish
+       (the installer harvests the publish folder). -->
+  <UsingTask TaskName="WriteConsoleLauncher" TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Source ParameterType="System.String" Required="true" />
+      <Destination ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        byte[] pe = File.ReadAllBytes(Source);
+        int lfanew = BitConverter.ToInt32(pe, 0x3C);
+        // PE signature "PE" + two zero bytes, then the 20-byte COFF header; the optional
+        // header's Subsystem field is at offset 68 into it.
+        if (pe[lfanew] != (byte)'P' || pe[lfanew + 1] != (byte)'E')
+        {
+          Log.LogError("WriteConsoleLauncher: " + Source + " is not a PE file.");
+          return false;
+        }
+        int subsystem = lfanew + 4 + 20 + 68;
+        pe[subsystem] = 3;        // IMAGE_SUBSYSTEM_WINDOWS_CUI
+        pe[subsystem + 1] = 0;
+        File.WriteAllBytes(Destination, pe);
+      ]]></Code>
+    </Task>
+  </UsingTask>
+  <Target Name="WriteConsoleLauncherAfterBuild" AfterTargets="Build"
+          Condition="'$(OS)' == 'Windows_NT' And Exists('$(OutDir)$(AssemblyName).exe')"
+          Inputs="$(OutDir)$(AssemblyName).exe" Outputs="$(OutDir)$(AssemblyName).com">
+    <WriteConsoleLauncher Source="$(OutDir)$(AssemblyName).exe" Destination="$(OutDir)$(AssemblyName).com" />
+  </Target>
+  <Target Name="WriteConsoleLauncherAfterPublish" AfterTargets="Publish"
+          Condition="'$(OS)' == 'Windows_NT' And Exists('$(PublishDir)$(AssemblyName).exe')">
+    <WriteConsoleLauncher Source="$(PublishDir)$(AssemblyName).exe" Destination="$(PublishDir)$(AssemblyName).com" />
+  </Target>
+
 </Project>

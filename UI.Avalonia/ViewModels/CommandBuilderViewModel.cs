@@ -395,6 +395,12 @@ public sealed class CommandBuilderViewModel : ViewModelBase
             notes.Add("Set an output path (Output → --out) before running.");
         if (HasModeValue && NotFoundNote(ModeValueSource, ModeValue) is { Length: > 0 } missing)
             notes.Add(char.ToUpperInvariant(missing[0]) + missing[1..] + " — the batch will stop with 'not found'.");
+        // #1576 — values with double quotes (a Math Plane scene) don't survive cmd or
+        // Windows PowerShell 5.1; Run passes arguments directly, so it is unaffected.
+        if (_shell != CommandShell.Bash && ShellQuoting.QuotedParamKeys(Composer.Args()) is { Count: > 0 } quoted)
+            notes.Add($"--param {string.Join(", ", quoted)} holds double quotes: Run works, but cmd and Windows PowerShell 5.1 "
+                      + "can't pass it from a copied line or script. Save the value to a file and use "
+                      + $"--param {quoted[0]}=@file.txt.");
         var parked = Composer.Parked.Select(s => s.Name).ToList();
         if (parked.Count > 0)
             notes.Add("Kept but not used in this mode/fractal: " + string.Join(", ", parked));
