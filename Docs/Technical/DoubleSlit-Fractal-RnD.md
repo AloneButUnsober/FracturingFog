@@ -99,6 +99,30 @@ I = 1 + cos(κΔG + 2πℓΔθ) / cosh(2πγκΔθ)
   measure them at ℓ ≠ 0 and pick a default that renders clean. If none does, ship ℓ = 0 as default
   and document the seam.
 
+#### 3.2.1 What S2 shipped and measured (#1568, 2026-10-31)
+
+- **Parameters.** `DualOrbitAngularMomentum` ℓ (int, default 0) and `DualOrbitWindingMode`
+  (`Same` / `Opposite`, default `Same`). Both are colour-only; ℓ is animatable (integer steps).
+- **Both fields.** Intensity uses the cross-term phase `wc − wz`. The phase field keeps the
+  common winding: arg(a·e^{i·wz} + b·e^{i·wc}). Opposite winding is shipped: each path's own lifted
+  angle is already in the cache, so no symmetrised form was needed.
+- **"|ℓ| arms" is exact.** On the phase field with `Same` winding, the phase winds exactly ℓ times
+  round a loop enclosing the set (measured 1.00 / 2.00 / 3.00 / −3.00 at κ = 1; now a test).
+  `Opposite` cancels the net winding to 0: its look is in the *intensity* field, as radial rays.
+- **Conjugate mirror.** With a real c-seed, (ℓ, s̄) equals (−ℓ, s) in both fields. The phase is
+  **equal**, not negated, because κG is real (a test).
+- **Seams (measured, not assumed).** Every jump between neighbouring pixels larger than ¼ was
+  counted at 360, 720 and 1440 px wide (κ = 1, ℓ = 3). The counts **double with resolution**, so
+  these are true discontinuities. About 85% lie below the critical level (G_c ≤ ½G_z, about 8% of
+  the pixels, the region the Böttcher domain pass already flags). The rest sit on the set's own
+  boundary. The outer field is clean. Integer ℓ makes the θ 0↔1 wrap harmless, but a lift flip
+  below the critical level moves θ by 1/2ᵏ, which no integer ℓ absorbs. This is the same cut γ > 0
+  shows.
+- **Default.** ℓ = 0, which is bit-identical to #1126 in either mode (a test). The control's
+  tooltip names the seam near the set.
+- Phase-field `Opposite` also shows π jumps along nodal lines, where the two equal amplitudes
+  cancel. That is genuine (a phase is undefined at a zero), not a cut.
+
 ---
 
 ## 4. Recursive-slit cascade calculator (S3 #1569)
@@ -315,7 +339,7 @@ physics new.
 |---|---|---|---|
 | S0 design + citations | #1566 | — | this doc |
 | S1 which-path η | #1567 | S0 | none |
-| S2 OAM winding ℓ (dual orbit) | #1568 | S0 | ℓ must be an integer (§3.2); opposite-winding mode needs individual θ |
+| S2 OAM winding ℓ (dual orbit) | #1568 | S0 | ℓ must be an integer (§3.2); shipped both modes, measured seams (§3.2.1) |
 | S3 slit cascade | #1569 | S0 | N ≥ 3 sampled children, fringe-sampled weights (§4.1); exact Fraunhofer product (§4.2); add aperture view |
 | S4 probability → dimension | #1571 | S3 | closed-form D_q for equal r (§5); α colouring on the aperture view |
 | S5 OAM filaments (cascade) | #1572 | S3 | ring layout with N ≥ 3; charge = ℓ mod N, to verify (§6); credit the devil's vortex lens |

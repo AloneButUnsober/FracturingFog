@@ -458,7 +458,8 @@ namespace FracturingFog
         /// Φ = G + 2πiθ: I/2 with I = 1 + cos(κ·ΔG)/cosh(2πγκ·Δθ) (#1126).
         /// κ = <c>DualOrbitInterferenceK</c> (animatable), γ =
         /// <c>DualOrbitInterferenceGamma</c>; η = <c>DualOrbitWhichPath</c> scales the
-        /// cosine by (1 − η) (#1567). Both orbits must escape.</summary>
+        /// cosine by (1 − η) (#1567); ℓ = <c>DualOrbitAngularMomentum</c> winds each
+        /// path's phase by e^{i2πℓθ} (#1568). Both orbits must escape.</summary>
         PathInterference,
         /// <summary>Phase (turns) of the summed two-path amplitude (#1126).</summary>
         PathInterferencePhase,
@@ -625,6 +626,16 @@ namespace FracturingFog
         /// <summary>The active theme. Small integers through a cycling theme can
         /// alias to one colour.</summary>
         Theme,
+    }
+
+    /// <summary>Direction of the c-path's angular-momentum winding relative to the
+    /// z-path in path interference (#1568). Append only.</summary>
+    public enum DualOrbitWindingMode
+    {
+        /// <summary>Both paths wind e^{+i2πℓθ}: the cross term follows θ_c − θ_z.</summary>
+        Same,
+        /// <summary>The c-path winds e^{−i2πℓθ_c}: the cross term follows θ_z + θ_c.</summary>
+        Opposite,
     }
 
     /// <summary>Hue source for <see cref="DualOrbitColorMode.BoettcherDomain"/>

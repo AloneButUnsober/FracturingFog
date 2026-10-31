@@ -20,6 +20,8 @@ namespace FracturingFog.Server.Tests;
 // normalised "4"); continuity across the Δθ wrap; bailout invariance (G and θ
 // are intrinsic, S6); κ / γ colour-only (recolour from the cache).
 // #1567: which-path η against the density-matrix sum.
+// #1568: winding ℓ against direct sums, the ℓ-fold phase winding round the set,
+// and the conjugate mirror ℓ ↔ −ℓ.
 public sealed class DualOrbitInterferenceTests
 {
     private const int W = 64, H = 48;
@@ -287,6 +289,192 @@ public sealed class DualOrbitInterferenceTests
         Assert.Contains(nameof(FractalParameters.DualOrbitWhichPath), names);
     }
 
+    // ── #1568 (double-slit S2) — angular-momentum winding ℓ ────────────────
+
+    // Same winding: the cross term turns by 2πℓ·Δθ. Oracle = direct complex sum
+    // with Δθ from the S6 domain pass (not the per-orbit angle cache).
+    [Theory]
+    [InlineData(20.0, 0.0, 0.0, 1)]
+    [InlineData(9.0, 0.5, 0.3, 3)]
+    [InlineData(1.0, 0.0, 0.0, -2)]
+    public void AngularMomentum_Same_MatchesTheDirectSum(double kappa, double gamma, double eta, int ell)
+    {
+        var p = P(q => { q.DualOrbitInterferenceK = kappa; q.DualOrbitInterferenceGamma = gamma; q.DualOrbitWhichPath = eta; q.DualOrbitAngularMomentum = ell; });
+        var calc = Calc(p);
+        var refs = Reference(p);
+        int checkedPx = 0;
+        for (int i = 0; i < refs.Length; i++)
+        {
+            var (gz, gc, dth, ok) = refs[i];
+            if (!ok) continue;
+            double w = dth - Math.Round(dth);
+            Complex a = Amp(gz, 0, kappa, gamma);
+            Complex b = Amp(gc, w, kappa, gamma) * Complex.Exp(Complex.ImaginaryOne * 2 * Math.PI * ell * w);
+            double diag = a.Magnitude * a.Magnitude + b.Magnitude * b.Magnitude;
+            double want = (diag + (1.0 - eta) * 2.0 * (a * Complex.Conjugate(b)).Real) / diag;
+            double got = 2.0 * calc.ColorScalarBuffer[i] / 400.0;
+            Assert.Equal(Math.Max(want, 2.0 * 1e-6), got, 2e-4);
+            checkedPx++;
+        }
+        Assert.True(checkedPx > W * H / 4, $"only {checkedPx} two-path pixels");
+    }
+
+    // Opposite winding and both phase forms need each path's own angle. Oracle:
+    // re-run each pixel's two orbits through ExternalAngleTurns (double, per
+    // pixel — not the float cache) and sum the amplitudes directly.
+    [Theory]
+    [InlineData(DualOrbitField.PathInterference, DualOrbitWindingMode.Opposite, 3)]
+    [InlineData(DualOrbitField.PathInterference, DualOrbitWindingMode.Opposite, -1)]
+    [InlineData(DualOrbitField.PathInterferencePhase, DualOrbitWindingMode.Same, 2)]
+    [InlineData(DualOrbitField.PathInterferencePhase, DualOrbitWindingMode.Opposite, 3)]
+    public void AngularMomentum_PerPathAngles_MatchTheDirectSum(DualOrbitField field, DualOrbitWindingMode mode, int ell)
+    {
+        const double kappa = 6, gamma = 0.25, cx = -0.6, cy = 0.05;
+        var p = P(q => { q.DualOrbitField = field; q.DualOrbitInterferenceK = kappa; q.DualOrbitInterferenceGamma = gamma; q.DualOrbitAngularMomentum = ell; q.DualOrbitWindingMode = mode; });
+        var calc = Calc(p);
+        var refs = Reference(p);
+        double pitch = 4.0 / W;
+        double sgnC = mode == DualOrbitWindingMode.Opposite ? -1 : 1;
+        int checkedPx = 0;
+        for (int i = 0; i < refs.Length; i += 3)
+        {
+            var (gz, gc, _, ok) = refs[i];
+            if (!ok) continue;
+            double sx = cx + (i % W - W * 0.5) * pitch, sy = cy + (i / W - H * 0.5) * pitch;
+            double tz = DualOrbitEscapeCalculator.ExternalAngleTurns(0, 0, sx, sy, 400, p.DualOrbitBailout);
+            double tc = DualOrbitEscapeCalculator.ExternalAngleTurns(p.DualOrbitCSeedX, p.DualOrbitCSeedY, sx, sy, 400, p.DualOrbitBailout);
+            if (double.IsNaN(tz) || double.IsNaN(tc)) continue;
+            double w = (tc - tz) - Math.Round(tc - tz);
+            Complex wz = Complex.Exp(Complex.ImaginaryOne * 2 * Math.PI * ell * tz);
+            Complex wc = Complex.Exp(Complex.ImaginaryOne * 2 * Math.PI * ell * sgnC * tc);
+            Complex a = Amp(gz, -w / 2, kappa, gamma) * wz, b = Amp(gc, w / 2, kappa, gamma) * wc;
+            if (field == DualOrbitField.PathInterference)
+            {
+                double want = (a + b).Magnitude * (a + b).Magnitude / (a.Magnitude * a.Magnitude + b.Magnitude * b.Magnitude);
+                Assert.Equal(Math.Max(want, 2.0 * 1e-6), 2.0 * calc.ColorScalarBuffer[i] / 400.0, 2e-4);
+            }
+            else
+            {
+                double want = (a + b).Phase / (2 * Math.PI); want -= Math.Floor(want);
+                double got = calc.ColorScalarBuffer[i] / 400.0;
+                double d = Math.Abs(want - got); d = Math.Min(d, 1 - d);
+                Assert.True(d < 5e-4 || got <= 1e-5 || (a + b).Magnitude < 1e-3, $"pixel {i}: phase {got} vs {want}");
+            }
+            checkedPx++;
+        }
+        Assert.True(checkedPx > W * H / 16, $"only {checkedPx} pixels checked");
+    }
+
+    // Topological check: with Same winding the phase field winds exactly ℓ times
+    // round a loop enclosing the set (the "|ℓ| arms"); Opposite cancels to 0.
+    [Theory]
+    [InlineData(DualOrbitWindingMode.Same, 1, 1)]
+    [InlineData(DualOrbitWindingMode.Same, 3, 3)]
+    [InlineData(DualOrbitWindingMode.Same, -2, -2)]
+    [InlineData(DualOrbitWindingMode.Opposite, 3, 0)]
+    [InlineData(DualOrbitWindingMode.Same, 0, 0)]
+    public void PhaseField_WindsEllTimesRoundTheSet(DualOrbitWindingMode mode, int ell, int expected)
+    {
+        const int w = 160, h = 120;
+        var c = new DualOrbitEscapeCalculator(w, h)
+        {
+            CenterX = -0.6, CenterY = 0, Zoom = 0.6, MaxIterations = 400, ColorMap = new RampMap(),
+            FractalParameters = P(q => { q.DualOrbitField = DualOrbitField.PathInterferencePhase; q.DualOrbitInterferenceK = 1; q.DualOrbitAngularMomentum = ell; q.DualOrbitWindingMode = mode; }),
+        };
+        c.Calculate();
+        var s = c.ColorScalarBuffer;
+        var loop = new System.Collections.Generic.List<int>();
+        for (int x = 2; x < w - 2; x++) loop.Add(2 * w + x);
+        for (int y = 2; y < h - 2; y++) loop.Add(y * w + w - 3);
+        for (int x = w - 3; x >= 2; x--) loop.Add((h - 3) * w + x);
+        for (int y = h - 3; y >= 2; y--) loop.Add(y * w + 2);
+        double total = 0;
+        for (int k = 0; k < loop.Count; k++)
+        {
+            double d = (s[loop[(k + 1) % loop.Count]] - s[loop[k]]) / 400.0;
+            d -= Math.Round(d);
+            total += d;
+        }
+        Assert.Equal(expected, total, 0.05);
+    }
+
+    // Conjugation: f_{s̄}(ū) = conj f_s(u), so with a real c-seed every angle
+    // flips sign (θ → −θ) and G is unchanged. The winding 2πℓθ is then the same
+    // at (−ℓ, s̄) as at (ℓ, s), and κG is real, so at γ = 0 (equal amplitudes)
+    // both the intensity and the phase are equal under the mirror. Rows y and
+    // H − y are exact mirrors when CenterY = 0. Lift ties may flip a few pixels.
+    [Theory]
+    [InlineData(DualOrbitField.PathInterference, DualOrbitWindingMode.Same)]
+    [InlineData(DualOrbitField.PathInterference, DualOrbitWindingMode.Opposite)]
+    [InlineData(DualOrbitField.PathInterferencePhase, DualOrbitWindingMode.Same)]
+    public void AngularMomentum_ConjugateMirror_FlipsTheSign(DualOrbitField field, DualOrbitWindingMode mode)
+    {
+        float[] Run(int ell)
+        {
+            var c = new DualOrbitEscapeCalculator(W, H)
+            {
+                CenterX = -0.6, CenterY = 0, Zoom = 1, MaxIterations = 400, ColorMap = new RampMap(),
+                FractalParameters = P(q => { q.DualOrbitField = field; q.DualOrbitCSeedY = 0; q.DualOrbitInterferenceK = 7; q.DualOrbitAngularMomentum = ell; q.DualOrbitWindingMode = mode; }),
+            };
+            c.Calculate();
+            return (float[])c.ColorScalarBuffer.Clone();
+        }
+        var plus = Run(3);
+        var minus = Run(-3);
+        bool phase = field == DualOrbitField.PathInterferencePhase;
+        int both = 0, off = 0;
+        for (int y = 1; y < H; y++)
+            for (int x = 0; x < W; x++)
+            {
+                float u = plus[y * W + x], v = minus[(H - y) * W + x];
+                if (u <= 0 || v <= 0) continue;
+                both++;
+                double d = (u - v) / 400.0;
+                if (phase) d -= Math.Round(d);   // cyclic
+                if (Math.Abs(d) > 1e-3) off++;
+            }
+        Assert.True(both > W * H / 4);
+        Assert.True(off <= both / 50, $"{off} of {both} mirrored pixels disagree");
+        Assert.NotEqual(plus, Run(0));   // ℓ actually did something
+    }
+
+    [Fact]
+    public void AngularMomentumZero_IsBitIdentical_InEitherMode()
+    {
+        foreach (var f in new[] { DualOrbitField.PathInterference, DualOrbitField.PathInterferencePhase })
+        {
+            var baseline = Calc(P(q => q.DualOrbitField = f)).ColorBuffer;
+            Assert.Equal(baseline, Calc(P(q => { q.DualOrbitField = f; q.DualOrbitWindingMode = DualOrbitWindingMode.Opposite; })).ColorBuffer);
+        }
+    }
+
+    [Fact]
+    public void Winding_IsSingleValuedAcrossAWholeTurn()
+    {
+        foreach (var mode in new[] { DualOrbitWindingMode.Same, DualOrbitWindingMode.Opposite })
+            foreach (int ell in new[] { 1, 2, -5 })
+            {
+                var (z0, c0) = DualOrbitEscapeCalculator.WindingPhases(ell, mode, 0.13, 0.71);
+                var (z1, c1) = DualOrbitEscapeCalculator.WindingPhases(ell, mode, 1.13, -0.29);
+                Assert.Equal(Math.Cos(c0 - z0), Math.Cos(c1 - z1), 9);
+                Assert.Equal(Math.Sin(z0), Math.Sin(z1), 9);
+                Assert.Equal(Math.Sin(c0), Math.Sin(c1), 9);
+            }
+    }
+
+    [Fact]
+    public void AngularMomentum_RecoloursFromTheCache_AndIsAnimatable()
+    {
+        var p = P();
+        var c = Calc(p);
+        p.DualOrbitAngularMomentum = 2; p.DualOrbitWindingMode = DualOrbitWindingMode.Opposite;
+        c.Calculate();
+        Assert.True(c.LastCalculateReusedOrbits);
+        Assert.Equal(Calc(p.Clone()).ColorBuffer, c.ColorBuffer);
+        var names = FracturingFog.Abstractions.Animation.FractalAnimatableParamsMap.For(FractalType.JulibrotPair).Select(d => d.ParamName);
+        Assert.Contains(nameof(FractalParameters.DualOrbitAngularMomentum), names);
+    }
+
     [Fact]
     public void LiveView_RoundTripsThroughTheCommandBuilder()
     {
@@ -295,6 +483,7 @@ public sealed class DualOrbitInterferenceTests
             DualOrbitField = DualOrbitField.PathInterferencePhase,
             DualOrbitInterferenceK = 31.5, DualOrbitInterferenceGamma = 0.25,
             DualOrbitWhichPath = 0.35,
+            DualOrbitAngularMomentum = -4, DualOrbitWindingMode = DualOrbitWindingMode.Opposite,
         };
         var report = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot
         {
@@ -308,5 +497,7 @@ public sealed class DualOrbitInterferenceTests
         Assert.Equal(31.5, fresh.DualOrbitInterferenceK);
         Assert.Equal(0.25, fresh.DualOrbitInterferenceGamma);
         Assert.Equal(0.35, fresh.DualOrbitWhichPath);   // #1567
+        Assert.Equal(-4, fresh.DualOrbitAngularMomentum);   // #1568
+        Assert.Equal(DualOrbitWindingMode.Opposite, fresh.DualOrbitWindingMode);
     }
 }

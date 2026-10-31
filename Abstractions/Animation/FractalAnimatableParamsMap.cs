@@ -466,6 +466,8 @@ public static class FractalAnimatableParamsMap
             Notes: "Path interference κ (the 'ħ' knob) — sweeping it makes the fringes shimmer (#1126). Recolour only."),
         new("DualOrbitWhichPath", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 1.0,
             Notes: "Path interference η (which-path measurement) — sweep 0 → 1 and the fringes collapse (#1567). Recolour only."),
+        new("DualOrbitAngularMomentum", AnimatableParamKind.ScalarInt, Min: -12.0, Max: 12.0,
+            Notes: "Path interference ℓ (angular-momentum winding) — steps the spiral-arm count (#1568). Recolour only."),
     };
 
     // Dual Buddhabrot (#1124). Sweeping the c-seed re-textures the c channels on

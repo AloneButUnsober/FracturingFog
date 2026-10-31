@@ -1485,6 +1485,15 @@ namespace FracturingFog.Models
         /// to #1126); 1 = no fringes. Intensity field only; colour-only, animatable
         /// (#1567, double-slit epic #1565).</summary>
         public double DualOrbitWhichPath { get; set; } = 0.0;
+        /// <summary>Path interference ℓ: angular-momentum winding — each path gets
+        /// e^{i·2πℓθ} from its external angle, twisting the fringes into |ℓ|-armed
+        /// spirals. Integer so the phase stays single-valued; 0 = off (the default,
+        /// identical to #1126). Colour-only (#1568, double-slit epic #1565).</summary>
+        public int DualOrbitAngularMomentum { get; set; } = 0;
+        /// <summary>Path interference: whether the c-path winds the same way as the
+        /// z-path (cross term follows θ_c − θ_z) or the opposite way (θ_z + θ_c)
+        /// (#1568). Colour-only.</summary>
+        public DualOrbitWindingMode DualOrbitWindingMode { get; set; } = DualOrbitWindingMode.Same;
         /// <summary>Ensemble fields: number of c-seeds per pixel (#1127). Cost ×N.</summary>
         public int DualOrbitEnsembleN { get; set; } = 32;
         /// <summary>Ensemble fields: radius ρ of the seed disc round c (#1127).</summary>
@@ -2318,6 +2327,8 @@ namespace FracturingFog.Models
                 DualOrbitInterferenceK = DualOrbitInterferenceK,
                 DualOrbitInterferenceGamma = DualOrbitInterferenceGamma,
                 DualOrbitWhichPath = DualOrbitWhichPath,
+                DualOrbitAngularMomentum = DualOrbitAngularMomentum,
+                DualOrbitWindingMode = DualOrbitWindingMode,
                 DualOrbitEnsembleN = DualOrbitEnsembleN,
                 DualOrbitEnsembleRadius = DualOrbitEnsembleRadius,
                 DualOrbitEnsembleSectors = DualOrbitEnsembleSectors,
