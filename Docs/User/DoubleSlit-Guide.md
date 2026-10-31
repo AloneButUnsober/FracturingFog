@@ -29,6 +29,7 @@ interfere.
 
 | Setting | What it does |
 |---|---|
+| **Field** | *PathInterference* (brightness), *PathInterferencePhase* (phase), or ***PathInterferenceDomain***: both at once, colour = phase on the colour-blind-safe Phase Wheel, brightness = intensity (ignores the theme). |
 | **Interference κ** | How fast the phase turns with escape potential: more fringes as κ grows. Animatable. |
 | **Angle damping γ** | Fringes fade where the two orbits' external angles differ. 0 = full fringes (default). |
 | **Which-path η** | The detector. 0 = nobody watches, full fringes; 1 = fully watched, the fringes vanish. Intensity field only. Animatable. |
@@ -51,7 +52,7 @@ level.
 | **Layout** | *Line*: a row of slits (a grating; the pattern is stripes). *Ring*: slits round a circle. |
 | **Scale ratio r**, **Depth** | The cascade's shape. Zooming the pattern out by 1/r shows the next level. |
 | **Slit separation d**, **Slit width w**, **Wavelength λ** | The fringe that decides the shares. Animate λ and the slits slide on and off dark fringes. |
-| **Show** | *Intensity* (log scale), *Phase*, *Aperture* (the slits, brighter where more light passes), *HolderAlpha*, *Spectrum* (§2.1). |
+| **Show** | *Intensity* (log scale), *Phase*, *Aperture* (the slits, brighter where more light passes), *HolderAlpha*, *Spectrum* (§2.1), *Domain* (§2.2). |
 | **Dynamic range** | How many powers of ten of brightness the colours span. |
 | **Vortex charge ℓ**, **Charge per level** | §2.2. |
 
@@ -80,7 +81,8 @@ On a **Ring**, **Vortex charge ℓ** gives each slit a phase twist from its angl
   further: the vortices spread into a constellation.
 - A row of slits has no angle, so the charge does nothing on *Line*.
 
-The *Phase* view shows the twist. For any phase view (this one, *PathInterferencePhase*, the Talbot
+The *Domain* view shows it best: colour = phase, brightness = intensity, so each vortex core is a dark point
+with the whole colour wheel turning round it (ℓ times for charge ℓ). The *Phase* view shows the twist alone. For any phase view (this one, *PathInterferencePhase*, the Talbot
 *Phase*) pick the **Phase Wheel (Blue-Amber)** theme: one full turn of colour per turn of phase at any
 iteration count, using only lightness and blue-amber, so it reads the same with red/green colour blindness. On the shipped layouts the pattern is real along one axis, so the phase colour
 wraps there in a straight line: that is the physics, not a glitch.
@@ -95,7 +97,7 @@ fractions, and as a fractal at irrational distances.
 |---|---|
 | **Grating** | *Ronchi* (bars, with an **Open fraction**), *DeltaComb* (infinitely thin slits, the sharpest carpet), *SlitCascade* (one period of the Slit Cascade's row of slits, using that type's settings). |
 | **Fourier modes M** | Sharper grating edges, finer carpet. Values far above the screen resolution only alias. |
-| **Show** | Intensity on a log scale about the average brightness, or phase. |
+| **Show** | Intensity on a log scale about the average brightness, phase, or *Domain* (both: colour = phase, brightness = intensity). |
 | **Dynamic range** | How far below the average brightness the dark end reaches. |
 
 **Tip:** carpets look best with **few iterations (16)** and a **plain theme such as Greyscale**. Fracturing Fog's
@@ -148,6 +150,12 @@ Intensity 0, Phase 1, Aperture 2, HolderAlpha 3, Spectrum 4:
 
 ```bash
 FracturingFog --batch --fractal SlitCascade --x 0 --y 0 --zoom 1.6 --param SlitCascadeView=4 --out spectrum.png
+```
+
+Brightness and phase in one image (the *Domain* view; views are numbered in list order, Domain = 5):
+
+```bash
+FracturingFog --batch --region "Slit Cascade - Vortex Core" --param SlitCascadeView=5 --out vortex-domain.png
 ```
 
 A phase view with the colour-blind-safe phase wheel:

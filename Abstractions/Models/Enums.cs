@@ -478,6 +478,10 @@ namespace FracturingFog
         /// <summary>ln(σ₁/σ₂) of the pair-map Jacobian — how unequally it stretches
         /// (#1128). Scaled by <c>DualOrbitAnisotropyScale</c>.</summary>
         JacobianAnisotropy,
+        /// <summary>Path interference as a domain colouring (#1592): hue = the phase of
+        /// the summed amplitude on the colour-blind-safe Phase Wheel, brightness = the
+        /// intensity I/2. The height (Relief) is the intensity.</summary>
+        PathInterferenceDomain,
     }
 
     /// <summary>Orientation field the Dual-Orbit LIC flow texture follows (#1128).
@@ -656,6 +660,9 @@ namespace FracturingFog
         Intensity,
         /// <summary>Phase arg ψ, in turns.</summary>
         Phase,
+        /// <summary>Amplitude and phase together (#1592): hue = phase on the Phase Wheel,
+        /// brightness = log intensity. Ignores the colour theme.</summary>
+        Domain,
     }
 
     /// <summary>How a <see cref="FractalType.SlitCascade"/> ring's vortex charge varies
@@ -683,6 +690,9 @@ namespace FracturingFog
         HolderAlpha,
         /// <summary>The aperture coloured by f(α): how many leaves share the point's α (#1571).</summary>
         Spectrum,
+        /// <summary>Amplitude and phase together (#1592): hue = phase on the Phase Wheel,
+        /// brightness = log intensity. Ignores the colour theme.</summary>
+        Domain,
     }
 
     /// <summary>Direction of the c-path's angular-momentum winding relative to the

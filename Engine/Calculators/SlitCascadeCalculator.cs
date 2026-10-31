@@ -87,6 +87,12 @@
 //                occurs in the address — the exact depth-D count of leaves that
 //                share this point's α, as a dimension; mapped over [0, D₀].
 //
+// Domain view (#1592): amplitude and phase in one image, as in the phase portraits
+// of complex functions (Wegert, Visual Complex Functions, 2012). Hue = arg A on the
+// colour-blind-safe Phase Wheel (PhaseWheelBlueAmberMap), brightness = the log
+// intensity t above (so vortex cores go dark). The SmoothBuffer keeps t for Relief;
+// the colour theme is not used.
+//
 // Pixel ↔ plane: the standard (4/W)/Zoom pitch round (CenterX, CenterY); the
 // screen view's plane is the spatial frequency u, the aperture view's is x.
 
@@ -366,6 +372,16 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
                         t = Math.Max(1e-9, alphaSpan > 1e-12 ? (Alpha(cascade, counts) - alphaMin) / alphaSpan : 0.5);
                     else
                         t = Math.Max(1e-9, d0 > 1e-12 ? Spectrum(cascade, counts) / d0 : 1.0);
+                }
+                else if (view == SlitCascadeView.Domain)
+                {
+                    var a = Amplitude(cascade, px, py);
+                    double mag2 = a.Real * a.Real + a.Imaginary * a.Imaginary;
+                    double ti = mag2 > 0.0 ? Math.Clamp(1.0 + (Math.Log10(mag2) - logI0) / decades, 0.0, 1.0) : 0.0;
+                    int di = row + x;
+                    smooth[di] = (float)(ti * maxIt);
+                    color[di] = PhaseWheelBlueAmberMap.ColorAt(a.Phase / (2.0 * Math.PI), ti);
+                    continue;
                 }
                 else
                 {

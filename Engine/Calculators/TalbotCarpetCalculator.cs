@@ -38,6 +38,10 @@
 // the pixel sum steps e^{2πi·n·ξ} by complex multiplication — O(M) per pixel
 // with no trig in the inner loop.
 //
+// Domain view (#1592): hue = arg ψ on the colour-blind-safe Phase Wheel,
+// brightness = the log-intensity scale below (Wegert-style phase portrait; the
+// theme is not used). The SmoothBuffer keeps the intensity for Relief.
+//
 // Scale: by Parseval the mean intensity over a period is Σ|cₙ|² at every ζ
 // (propagation conserves energy), and |ψ|² ≤ (Σ|cₙ|)². The log of I/mean is
 // mapped from −TalbotDynamicRange decades (dark) up to that bound (white), so
@@ -143,6 +147,7 @@ public sealed class TalbotCarpetCalculator : IFractalCalculator, IHeightFieldSou
         double logMean = Math.Log10(Math.Max(mean, 1e-300));
         double top = Math.Max(1e-6, 2.0 * Math.Log10(Math.Max(sumAbs, 1e-300)) - logMean);   // bound over mean, decades
         bool phase = fp.TalbotView == TalbotView.Phase;
+        bool domain = fp.TalbotView == TalbotView.Domain;   // #1592
         double decades = Math.Clamp(double.IsFinite(fp.TalbotDynamicRange) ? fp.TalbotDynamicRange : 2.0, 0.25, 30.0);
 
         double pitch = (4.0 / Math.Max(1, width)) / Math.Max(1e-300, Zoom);
@@ -183,6 +188,15 @@ public sealed class TalbotCarpetCalculator : IFractalCalculator, IHeightFieldSou
                     re += bk.Real * wn.Real - bk.Imaginary * wn.Imaginary;
                     im += bk.Real * wn.Imaginary + bk.Imaginary * wn.Real;
                     wn *= w;
+                }
+                if (domain)
+                {
+                    double m2 = re * re + im * im;
+                    double ti = m2 > 0.0 ? Math.Clamp((Math.Log10(m2) - logMean + decades) / (decades + top), 0.0, 1.0) : 0.0;
+                    int di = row + x;
+                    smooth[di] = (float)(ti * maxIt);
+                    color[di] = PhaseWheelBlueAmberMap.ColorAt(Math.Atan2(im, re) / (2.0 * Math.PI), ti);
+                    continue;
                 }
                 double t;
                 if (phase)

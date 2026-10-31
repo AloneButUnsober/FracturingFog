@@ -60,6 +60,9 @@
 // cuts show at ℓ ≠ 0 as they do at γ > 0.
 //
 // PathInterference = I/2; PathInterferencePhase = arg(a + b)/2π (turns).
+// PathInterferenceDomain (#1592) = both at once: the scalar (and Relief height) is
+// I/2, and the colour pass paints hue = the phase on the colour-blind-safe Phase
+// Wheel with brightness I/2 (Wegert-style phase portrait); the theme is not used.
 // Live where both orbits escape (two paths); a single bounded path has nothing to
 // interfere with → interior. κ and γ are colour-only: the scalar is rebuilt in
 // the colour pass from the cached smooth counts and lifted angles, so animating κ
@@ -73,7 +76,10 @@ namespace FracturingFog;
 public sealed partial class DualOrbitEscapeCalculator
 {
     internal static bool IsInterferenceField(DualOrbitField f)
-        => f is DualOrbitField.PathInterference or DualOrbitField.PathInterferencePhase;
+        => f is DualOrbitField.PathInterference or DualOrbitField.PathInterferencePhase or DualOrbitField.PathInterferenceDomain;
+
+    // #1592 — per-pixel phase (turns) for the domain field's colour pass.
+    private float[] _interfPhase = Array.Empty<float>();
 
     /// <summary>The normalised two-path intensity I ∈ [0, 2] (see header);
     /// <paramref name="whichPath"/> is η, the which-path measurement strength
@@ -120,6 +126,9 @@ public sealed partial class DualOrbitEscapeCalculator
         int ell = fp.DualOrbitAngularMomentum;
         var mode = fp.DualOrbitWindingMode;
         bool phase = key.Field == DualOrbitField.PathInterferencePhase;
+        bool domain = key.Field == DualOrbitField.PathInterferenceDomain;   // #1592
+        if (domain && _interfPhase.Length != n) _interfPhase = new float[n];
+        float[] ph = _interfPhase;
         int maxIter = key.MaxIter;
         double twoLogR = 2.0 * Math.Log(key.Bailout);
         float[] smZ = _smZ, smC = _smC, thZ = _thZ, thC = _thC, sc = _scalar; byte[] flags = _flags;
@@ -135,6 +144,8 @@ public sealed partial class DualOrbitEscapeCalculator
             double v = phase
                 ? InterferencePhase(gZ, gC, tc - tz, kappa, gamma, wz, wc)
                 : 0.5 * InterferenceIntensity(gC - gZ, tc - tz, kappa, gamma, eta, wc - wz);
+            if (domain)
+                ph[i] = (float)InterferencePhase(gZ, gC, tc - tz, kappa, gamma, wz, wc);
             float s = (float)Math.Clamp(v * maxIter, LiveFloor, maxIter);
             // #1591 — a phase just below one turn (≡ 0) rounds up to maxIter, which themes
             // read as "in the set": wrap it. (The intensity field reaches maxIter at I = 2

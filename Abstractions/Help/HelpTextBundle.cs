@@ -5052,7 +5052,8 @@ Two paths give complex amplitudes a and b; what you see is
 |a + b|^2, and the fringes are the cross term (Feynman,
 Leighton & Sands, Lectures Vol. III ch. 1).
 
-Julibrot Pair, field PathInterference / PathInterferencePhase:
+Julibrot Pair, field PathInterference / PathInterferencePhase /
+PathInterferenceDomain (brightness and phase together):
 each escaping orbit is a path with phase G + 2 pi i theta, and
 the two orbits interfere.
 
@@ -5087,7 +5088,8 @@ exactly level by level (Bak et al. 1998; Allain & Cloitre 1986).
   Children / ratio / depth   the shape of the cascade.
   Separation d, width w, wavelength   the fringe that sets
                    the shares. Animate the wavelength.
-  Show: Intensity, Phase, Aperture, HolderAlpha, Spectrum.
+  Show: Intensity, Phase, Aperture, HolderAlpha, Spectrum,
+        Domain (colour = phase, brightness = intensity).
 
 Probability sets the dimension: the status bar shows the
 generalized dimensions D0, D1, D2 and Dq of the light shares
@@ -5122,7 +5124,8 @@ Marzoli & Schleich 2001).
             the Slit Cascade aperture).
   Fourier modes M   sharper grating, finer carpet. Values far
             above the screen resolution just alias.
-  Show      intensity (log scale about the mean) or phase.
+  Show      intensity (log scale about the mean), phase, or
+            Domain (colour = phase, brightness = intensity).
 
 Looks best with few iterations (16) and a plain theme such as
 Greyscale: FF themes repeat over the iteration scale.

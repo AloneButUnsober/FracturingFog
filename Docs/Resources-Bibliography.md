@@ -627,7 +627,9 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
   (colour each point z by `arg f(z)`) under the Math Plane's complex maps (`scene phase on|contours`,
   `Abstractions/Models/MathPlaneComplexMap.cs`, #1553; MathPlane-DesignPlan.md §3.4). The colour wheel and
   the `contours` brightness steps where |f| crosses a power of 2 are FF's choices; they are not claimed
-  to reproduce the book's colour scheme.
+  to reproduce the book's colour scheme. #1592: the same idea (hue = phase, brightness = modulus) for the
+  wave views' *Domain* colouring (Julibrot Pair `PathInterferenceDomain`, Slit Cascade and Talbot Carpet
+  *Domain*), on FF's own colour-blind-safe Phase Wheel.
 
 <a id="cobweb-plot"></a>
 
