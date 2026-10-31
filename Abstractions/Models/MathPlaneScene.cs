@@ -25,12 +25,15 @@
 //   curve NAME explicit   "f(x)"            [xmin xmax]          [options]  (#1550)
 //   curve NAME parametric "x(t)" "y(t)"     tmin tmax            [options]
 //   curve NAME polar      "r(theta)"        [thetamin thetamax]  [options]
+//   curve NAME implicit   "F(x, y)"                              [options]  (#1551: F = 0)
+//   region NAME "condition(x, y)"                                [options]  (#1551: shaded where true)
 //   options: #RRGGBB (colour)  hidden  nolabel
 //
 // Curve expressions are the plot language (PlotExpression: the equation
 // language with real x / t / theta). They are double-quoted, and ';' or a newline
 // inside the quotes does not end the statement. An explicit curve reads only x, a
-// parametric one only t, a polar one only theta. With no domain, an explicit
+// parametric one only t, a polar one only theta, an implicit curve and a region
+// x and y. With no domain, an explicit
 // curve spans the view and a polar one theta 0..2pi.
 //
 // Unknown statements and options are errors with their position, never ignored.
@@ -44,10 +47,13 @@ using FracturingFog.ViewState;
 
 namespace FracturingFog.Models
 {
-    public enum MathPlaneObjectKind { Point, Vector, Segment, Polyline, Curve }
+    /// <summary>Object kinds. <see cref="Region"/> (#1551) shades where its condition
+    /// holds (non-zero), e.g. <c>"x^2 + y^2 &lt; 4"</c>.</summary>
+    public enum MathPlaneObjectKind { Point, Vector, Segment, Polyline, Curve, Region }
 
-    /// <summary>#1550 — how a <see cref="MathPlaneObjectKind.Curve"/> is given.</summary>
-    public enum MathPlaneCurveKind { Explicit, Parametric, Polar }
+    /// <summary>#1550 — how a <see cref="MathPlaneObjectKind.Curve"/> is given.
+    /// <see cref="Implicit"/> (#1551) is the zero set of F(x, y).</summary>
+    public enum MathPlaneCurveKind { Explicit, Parametric, Polar, Implicit }
 
     /// <summary>One plotted object. <see cref="Coords"/> holds x, y pairs: a point's
     /// position; a vector's tip then (if <see cref="HasFrom"/>) its tail; a segment's
@@ -148,6 +154,12 @@ namespace FracturingFog.Models
         private static string SerializeObject(MathPlaneObject o)
         {
             var sb = new StringBuilder();
+            if (o.Kind == MathPlaneObjectKind.Region)
+            {
+                sb.Append("region ").Append(o.Name).Append(" \"").Append(o.Expressions.Count > 0 ? o.Expressions[0] : "").Append('"');
+                AppendOptions(sb, o);
+                return sb.ToString();
+            }
             if (o.Kind == MathPlaneObjectKind.Curve)
             {
                 sb.Append("curve ").Append(o.Name).Append(' ').Append(o.CurveKind.ToString().ToLowerInvariant());
@@ -229,10 +241,11 @@ namespace FracturingFog.Models
                     case "segment":
                     case "polyline":
                     case "curve":
+                    case "region":
                     {
-                        bool ok = head == "curve"
-                            ? TryCurve(toks, objects.Count, out var obj, out int badTok, out string msg)
-                            : TryObject(head, toks, objects.Count, out obj, out badTok, out msg);
+                        bool ok = head == "curve" ? TryCurve(toks, objects.Count, out var obj, out int badTok, out string msg)
+                                : head == "region" ? TryRegion(toks, objects.Count, out obj, out badTok, out msg)
+                                : TryObject(head, toks, objects.Count, out obj, out badTok, out msg);
                         if (!ok)
                         { error = Err(badTok, msg); return false; }
                         if (!names.Add(obj!.Name))
@@ -241,7 +254,7 @@ namespace FracturingFog.Models
                         break;
                     }
                     default:
-                        error = Err(0, $"unknown statement '{toks[0].Text}' (expected point, vector, segment, polyline, curve, axes, grid, ticks or labels)");
+                        error = Err(0, $"unknown statement '{toks[0].Text}' (expected point, vector, segment, polyline, curve, region, axes, grid, ticks or labels)");
                         return false;
                 }
             }
@@ -348,18 +361,26 @@ namespace FracturingFog.Models
             if (toks.Count < 2 || !IsName(toks[1].Text))
             { badTok = 1; msg = "'curve' needs a name (letters, digits, '_', optional trailing ')"; return false; }
             if (toks.Count < 3)
-            { badTok = 1; msg = "'curve' needs a kind: explicit, parametric or polar"; return false; }
+            { badTok = 1; msg = "'curve' needs a kind: explicit, parametric, polar or implicit"; return false; }
             MathPlaneCurveKind kind;
             switch (toks[2].Text.ToLowerInvariant())
             {
                 case "explicit": kind = MathPlaneCurveKind.Explicit; break;
                 case "parametric": kind = MathPlaneCurveKind.Parametric; break;
                 case "polar": kind = MathPlaneCurveKind.Polar; break;
-                default: badTok = 2; msg = $"unknown curve kind '{toks[2].Text}' (expected explicit, parametric or polar)"; return false;
+                case "implicit": kind = MathPlaneCurveKind.Implicit; break;
+                default: badTok = 2; msg = $"unknown curve kind '{toks[2].Text}' (expected explicit, parametric, polar or implicit)"; return false;
             }
 
             int need = kind == MathPlaneCurveKind.Parametric ? 2 : 1;
-            string variable = kind switch { MathPlaneCurveKind.Explicit => "x", MathPlaneCurveKind.Parametric => "t", _ => "theta" };
+            string[] allowed = kind switch
+            {
+                MathPlaneCurveKind.Explicit => new[] { "x" },
+                MathPlaneCurveKind.Parametric => new[] { "t" },
+                MathPlaneCurveKind.Implicit => new[] { "x", "y" },
+                _ => new[] { "theta" },
+            };
+            string what = $"a {kind.ToString().ToLowerInvariant()} curve";
             var sources = new List<string>();
             int i = 3;
             for (int k = 0; k < need; k++, i++)
@@ -369,23 +390,17 @@ namespace FracturingFog.Models
                     badTok = Math.Min(i, toks.Count - 1);
                     msg = kind == MathPlaneCurveKind.Parametric
                         ? "a parametric curve needs two quoted expressions, \"x(t)\" \"y(t)\""
-                        : $"a {kind.ToString().ToLowerInvariant()} curve needs a quoted expression";
+                        : $"{what} needs a quoted expression";
                     return false;
                 }
-                string t = toks[i].Text;
-                if (t.Length < 2 || !t.EndsWith('"')) { badTok = i; msg = "unterminated quote"; return false; }
-                string src = t[1..^1];
-                if (src.Contains('\n') || src.Contains('\r')) { badTok = i; msg = "an expression must be on one line"; return false; }
-                if (!PlotExpression.TryParse(src, out var expr, out string? err))
-                { badTok = i; msg = "expression: " + err; return false; }
-                var wrong = expr!.UsedVariables().Where(v => v != variable).ToList();
-                if (wrong.Count > 0)
-                { badTok = i; msg = $"a {kind.ToString().ToLowerInvariant()} curve's expression reads only {variable}, not {string.Join(", ", wrong)}"; return false; }
+                if (!TryExpression(toks[i].Text, allowed, what, out string src, out msg)) { badTok = i; return false; }
                 sources.Add(src);
             }
 
             var domain = new List<double>();
             while (i < toks.Count && TryNum(toks[i].Text, out double v)) { domain.Add(v); i++; }
+            if (kind == MathPlaneCurveKind.Implicit && domain.Count > 0)
+            { badTok = i - domain.Count; msg = "an implicit curve has no domain (it is drawn across the view)"; return false; }
             if (domain.Count > 2) { badTok = i - domain.Count + 2; msg = "too many numbers"; return false; }
             if (domain.Count == 1 || (domain.Count == 0 && kind == MathPlaneCurveKind.Parametric))
             { badTok = Math.Min(i, toks.Count - 1); msg = kind == MathPlaneCurveKind.Parametric ? "a parametric curve needs tmin tmax" : "the domain needs min and max"; return false; }
@@ -396,6 +411,38 @@ namespace FracturingFog.Models
                 return false;
             obj = new MathPlaneObject(MathPlaneObjectKind.Curve, toks[1].Text, domain, color, visible, showLabel,
                                       CurveKind: kind, Sources: sources);
+            return true;
+        }
+
+        /// <summary>#1551 — <c>region NAME "condition(x, y)" [options]</c>.</summary>
+        private static bool TryRegion(List<(string Text, int Col)> toks, int index,
+                                      out MathPlaneObject? obj, out int badTok, out string msg)
+        {
+            obj = null; badTok = 0; msg = "";
+            if (toks.Count < 2 || !IsName(toks[1].Text))
+            { badTok = 1; msg = "'region' needs a name (letters, digits, '_', optional trailing ')"; return false; }
+            if (toks.Count < 3 || !toks[2].Text.StartsWith('"'))
+            { badTok = Math.Min(2, toks.Count - 1); msg = "a region needs a quoted condition, e.g. \"x^2 + y^2 < 4\""; return false; }
+            if (!TryExpression(toks[2].Text, new[] { "x", "y" }, "a region", out string src, out msg)) { badTok = 2; return false; }
+            if (!TryOptions(toks, 3, index, out uint color, out bool visible, out bool showLabel, out badTok, out msg))
+                return false;
+            obj = new MathPlaneObject(MathPlaneObjectKind.Region, toks[1].Text, Array.Empty<double>(), color, visible, showLabel,
+                                      Sources: new[] { src });
+            return true;
+        }
+
+        /// <summary>A quoted plot-language token: closed quotes, one line, parses, and
+        /// reads only <paramref name="allowed"/> variables.</summary>
+        private static bool TryExpression(string token, string[] allowed, string what, out string src, out string msg)
+        {
+            src = ""; msg = "";
+            if (token.Length < 2 || !token.EndsWith('"')) { msg = "unterminated quote"; return false; }
+            src = token[1..^1];
+            if (src.Contains('\n') || src.Contains('\r')) { msg = "an expression must be on one line"; return false; }
+            if (!PlotExpression.TryParse(src, out var expr, out string? err)) { msg = "expression: " + err; return false; }
+            var wrong = expr!.UsedVariables().Where(v => !allowed.Contains(v)).ToList();
+            if (wrong.Count > 0)
+            { msg = $"{what}'s expression reads only {string.Join(", ", allowed)}, not {string.Join(", ", wrong)}"; return false; }
             return true;
         }
 

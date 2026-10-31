@@ -561,8 +561,10 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
   bibliographic records; the DOI is given two ways across records (10.1145/37402.37422 vs
   10.1145/37401.37422) and is left out until checked against the ACM Digital Library. Marching squares is
   the 2D form (overview: <https://en.wikipedia.org/wiki/Marching_squares>, which names no original
-  paper for the 2D variant). Planned use: implicit curves `F(x, y) = 0` in the Math Plane render mode
-  (`Docs/Technical/MathPlane-DesignPlan.md` §3.4).
+  paper for the 2D variant). Used for implicit curves `F(x, y) = 0` in the Math Plane render mode
+  (`Abstractions/Models/MathPlaneImplicitSampler.cs`, #1551; design `Docs/Technical/MathPlane-DesignPlan.md`
+  §3.4). Saddle cells are resolved by the cell-centre value, and edge crossings are found by bisection so
+  that poles can be rejected. Both are FF's choices, not taken from the paper.
 
 <a id="wegert-visual-complex-functions"></a>
 

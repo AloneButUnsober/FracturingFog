@@ -76,6 +76,7 @@ namespace FracturingFog.Models
             MathPlaneObjectKind.Vector => 2,
             MathPlaneObjectKind.Segment => 2,
             MathPlaneObjectKind.Curve => 0,   // a curve is edited by its expression
+            MathPlaneObjectKind.Region => 0,
             _ => o.PointCount,
         };
 
@@ -202,10 +203,23 @@ namespace FracturingFog.Models
             {
                 MathPlaneCurveKind.Explicit => (new[] { "sin(x)" }, Array.Empty<double>()),
                 MathPlaneCurveKind.Parametric => (new[] { "cos(t)", "sin(t)" }, new[] { 0.0, 2 * Math.PI }),
+                MathPlaneCurveKind.Implicit => (new[] { "x^2 + y^2 - 4" }, Array.Empty<double>()),
                 _ => (new[] { "1 + cos(theta)" }, Array.Empty<double>()),
             };
             var obj = new MathPlaneObject(MathPlaneObjectKind.Curve, name, domain, color,
                                           CurveKind: kind, Sources: sources);
+            var list = scene.Objects.ToList();
+            list.Add(obj);
+            return (scene with { Objects = list }, list.Count - 1);
+        }
+
+        /// <summary>#1551 — add a shaded region (starts as the disk x^2 + y^2 &lt; 1).</summary>
+        public static (MathPlaneScene Scene, int Index) AddRegion(MathPlaneScene scene)
+        {
+            string name = FreshName(scene, MathPlaneObjectKind.Region);
+            uint color = MathPlaneScene.DefaultPalette[scene.Objects.Count % MathPlaneScene.DefaultPalette.Length];
+            var obj = new MathPlaneObject(MathPlaneObjectKind.Region, name, Array.Empty<double>(), color,
+                                          Sources: new[] { "x^2 + y^2 < 1" });
             var list = scene.Objects.ToList();
             list.Add(obj);
             return (scene with { Objects = list }, list.Count - 1);
@@ -221,6 +235,7 @@ namespace FracturingFog.Models
                 MathPlaneObjectKind.Vector => Letters("uvwabcdefgh"),
                 MathPlaneObjectKind.Segment => Numbered("s"),
                 MathPlaneObjectKind.Curve => Letters("fghkqr"),
+                MathPlaneObjectKind.Region => Letters("RSTUW"),
                 _ => Numbered("p"),
             };
             return candidates.First(n => !used.Contains(n));
