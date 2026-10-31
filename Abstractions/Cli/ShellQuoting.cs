@@ -142,6 +142,22 @@ namespace FracturingFog.Cli
             return sb.ToString();
         }
 
+        /// <summary>#1576 — the <c>--param</c> keys whose value holds a double quote.
+        /// Such a value can't be pasted into cmd (every quote toggles its quoting, so
+        /// ^ &lt; &gt; inside come alive) or Windows PowerShell 5.1 (it drops inner quotes
+        /// when calling a program); the reliable form is <c>KEY=@file</c>.</summary>
+        public static IReadOnlyList<string> QuotedParamKeys(IReadOnlyList<string> args)
+        {
+            var keys = new List<string>();
+            for (int i = 0; i + 1 < args.Count; i++)
+            {
+                if (args[i] != "--param" || !args[i + 1].Contains('"')) continue;
+                int eq = args[i + 1].IndexOf('=');
+                keys.Add(eq > 0 ? args[i + 1][..eq] : args[i + 1]);
+            }
+            return keys;
+        }
+
         private static bool AllPlainOrBackslash(string v)
             => v.Length > 0 && v.All(c => IsPlain(c) || c == '\\');
     }

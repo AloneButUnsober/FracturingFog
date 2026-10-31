@@ -148,6 +148,12 @@ namespace FracturingFog.Batch
             Console.WriteLine("Usage:");
             Console.WriteLine("  FracturingFog --batch [options]");
             Console.WriteLine();
+            // #1576 — the .com twin is the console-subsystem launcher (same program).
+            Console.WriteLine("From cmd or PowerShell, run FracturingFog.com (or just FracturingFog, which");
+            Console.WriteLine("picks the .com): the shell then waits for the render, shows its output in");
+            Console.WriteLine("order and gets the exit code. FracturingFog.exe returns to the prompt at once.");
+            Console.WriteLine("A --param text value can come from a file: --param KEY=@path (UTF-8).");
+            Console.WriteLine();
             Console.WriteLine("A render needs --out plus a view source: --region NAME, or all of");
             Console.WriteLine("--x --y --zoom. --slideshow / --scene / --regrade-exr / --relight-from");
             Console.WriteLine("bring their own source; --remote uses a saved render preset.");
