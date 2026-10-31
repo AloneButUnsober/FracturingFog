@@ -709,6 +709,8 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeView { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? SlitCascadeDynamicRange { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? SlitCascadeQ { get; set; }   // #1571
+        [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeCharge { get; set; }   // #1572
+        [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeChargePattern { get; set; }
         [JsonIgnore(Condition = OmitNull)] public string? LyapunovSequence { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? LyapunovWarmup { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? TranscendentalMap { get; set; }
@@ -1314,6 +1316,8 @@ namespace FracturingFog.Models
                     SlitCascadeView = (int)p.SlitCascadeView,
                     SlitCascadeDynamicRange = p.SlitCascadeDynamicRange,
                     SlitCascadeQ = p.SlitCascadeQ,
+                    SlitCascadeCharge = p.SlitCascadeCharge,
+                    SlitCascadeChargePattern = (int)p.SlitCascadeChargePattern,
                 },
                 FractalType.Lyapunov => new RegionFractalParams
                 {
@@ -2082,6 +2086,8 @@ namespace FracturingFog.Models
             if (this.SlitCascadeView.HasValue) p.SlitCascadeView = (FracturingFog.SlitCascadeView)this.SlitCascadeView.Value;
             if (SlitCascadeDynamicRange.HasValue) p.SlitCascadeDynamicRange = SlitCascadeDynamicRange.Value;
             if (SlitCascadeQ.HasValue) p.SlitCascadeQ = SlitCascadeQ.Value;
+            if (SlitCascadeCharge.HasValue) p.SlitCascadeCharge = SlitCascadeCharge.Value;
+            if (this.SlitCascadeChargePattern.HasValue) p.SlitCascadeChargePattern = (FracturingFog.SlitCascadeChargePattern)this.SlitCascadeChargePattern.Value;
             if (!string.IsNullOrEmpty(LyapunovSequence)) p.LyapunovSequence = LyapunovSequence;
             if (LyapunovWarmup.HasValue) p.LyapunovWarmup = LyapunovWarmup.Value;
             if (TranscendentalMap.HasValue) p.TranscendentalMap = (FracturingFog.TranscendentalMap)TranscendentalMap.Value;

@@ -266,6 +266,8 @@ public static class FractalAnimatableParamsMap
             Notes: "Two-slit separation d — more fringes across the children as d grows (#1569)."),
         new("SlitCascadeRatio", AnimatableParamKind.ScalarDouble, Min: 0.05, Max: 0.5,
             Notes: "Child scale r — the cascade tightens or opens (#1569)."),
+        new("SlitCascadeCharge", AnimatableParamKind.ScalarInt, Min: -12.0, Max: 12.0,
+            Notes: "Vortex charge ℓ on the ring children — steps the filament twist (#1572)."),
     };
 
     private static readonly AnimatableParamDescriptor[] _lyapunovList =
