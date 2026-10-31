@@ -64,6 +64,7 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
         MoveDownCommand = ReactiveCommand.Create(() => MoveSelected(+1));
         InitMap();
         InitComplex();
+        InitPresets();
         Refresh();
     }
 

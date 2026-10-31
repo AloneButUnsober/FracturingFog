@@ -5043,6 +5043,47 @@ Möbius-group composition are deferred to a later slice — this
 first cut ships only the tetrahedral preset.
 ";
 
+        // #1555 — Math Plane (render mode + demos). Full guide: Docs/User/MathPlane-Guide.md.
+        public const string MathPlaneText =
+@"=== Math Plane ===
+
+A Cartesian plane for the ideas behind the fractals: points,
+vectors, curves, matrix and complex maps, orbits and cobwebs.
+Not a computer-algebra system. Control Center -> Math Plane.
+
+Demos (top of the section) load a built-in example; each names
+the one idea it shows. Built-ins never change: save a region to
+keep an edited one.
+
+Objects: + Point / Vector / Segment / Polyline / Function /
+Parametric / Polar / Implicit / Region. Drag handles (Shift
+snaps), double-click to add a point, Delete removes.
+
+Linear map: the 2x2 matrix (columns = where i and j land),
+t from identity (0) to M (1), Play / Loop, Linear or Polar
+interpolation, det (unit square's image), eigenvectors, lengths.
+The grid-morph look follows 3Blue1Brown's Essence of linear
+algebra (Grant Sanderson).
+
+Complex map: z -> (1 - t) z + t f(z) for f in z and c (presets
+z^2, z^2 + c, 1/z, exp z, i z). Phase portrait colours each z by
+arg f(z), after Elias Wegert's Visual Complex Functions; the
+wheel uses Okabe-Ito colours (no red-green axis); Contours
+steps where |f| crosses a power of 2. Probe: a small square and
+its image, f'(z) as scale |f'| and turn arg f'.
+
+Fractal bridge: a backdrop (Mandelbrot, Julia of c, Burning Ship
+...), the orbit of 0 under z^2 + c with the escape circle and a
+draggable c, and the cobweb of x -> f(x) (default x^2 + c).
+
+View -> Math overlay draws the axes and the orbit of the pointer
+or a pinned point on Mandelbrot and Julia views.
+
+Batch: every setting is a --param (MathPlaneScene=@file keeps the
+quotes from cmd / PowerShell); --math-overlay RE,IM[,STEPS].
+Sources: Docs/Resources-Bibliography.md.
+";
+
         public const string MathMirrorSpheresText =
 @"=== Wada Mirror Spheres ===
 

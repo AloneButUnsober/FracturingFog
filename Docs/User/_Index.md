@@ -45,6 +45,7 @@ as your imagination wants to take you.
 | Write your own fractal formula in the equation DSL       | [User Equation & DSL Guide + Cookbook](CalcGen-UserGuide.md)    |
 | Explore Mandelbulb-style 3-D fractals                    | [User Bulb 3D Guide](UserBulb-Guide.md)                        |
 | Bounce rays between mirrors: Chaotic Billiard + Billiard Rays | [Billiards Guide](Billiard-Guide.md)                      |
+| See the math behind the fractals: plane, maps, orbits, cobwebs | [Math Plane Guide](MathPlane-Guide.md)                   |
 | Light a 3-D scene — point, spot, and soft area lights + shadows | [Lights Guide](Lights-Guide.md)                                |
 | Turn a 2-D fractal into lit relief or 3-D terrain (+ mesh export) | [Relief 3D Guide](Relief3D-Guide.md) + [Cookbook](Relief3D-Cookbook.md) |
 | Add god rays, cinematic fog, and volumetric clouds to 3-D scenes | [Volumetric Lighting Guide](Volumetric-Lighting-Guide.md) + [Cookbook](Volumetric-Lighting-Cookbook.md) |
