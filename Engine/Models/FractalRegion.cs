@@ -698,6 +698,16 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? DlaSeed { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? LogisticSeed { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? LogisticBurnIn { get; set; }
+        // #1569 — slit cascade (layout / view = int casts of their enums).
+        [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeChildren { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? SlitCascadeRatio { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeDepth { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? SlitCascadeSeparation { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? SlitCascadeWidth { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? SlitCascadeWavelength { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeLayout { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeView { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? SlitCascadeDynamicRange { get; set; }
         [JsonIgnore(Condition = OmitNull)] public string? LyapunovSequence { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? LyapunovWarmup { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? TranscendentalMap { get; set; }
@@ -1290,6 +1300,18 @@ namespace FracturingFog.Models
                 {
                     LogisticSeed = p.LogisticSeed,
                     LogisticBurnIn = p.LogisticBurnIn,
+                },
+                FractalType.SlitCascade => new RegionFractalParams
+                {
+                    SlitCascadeChildren = p.SlitCascadeChildren,
+                    SlitCascadeRatio = p.SlitCascadeRatio,
+                    SlitCascadeDepth = p.SlitCascadeDepth,
+                    SlitCascadeSeparation = p.SlitCascadeSeparation,
+                    SlitCascadeWidth = p.SlitCascadeWidth,
+                    SlitCascadeWavelength = p.SlitCascadeWavelength,
+                    SlitCascadeLayout = (int)p.SlitCascadeLayout,
+                    SlitCascadeView = (int)p.SlitCascadeView,
+                    SlitCascadeDynamicRange = p.SlitCascadeDynamicRange,
                 },
                 FractalType.Lyapunov => new RegionFractalParams
                 {
@@ -2048,6 +2070,15 @@ namespace FracturingFog.Models
             if (DlaSeed.HasValue) p.DlaSeed = DlaSeed.Value;
             if (LogisticSeed.HasValue) p.LogisticSeed = LogisticSeed.Value;
             if (LogisticBurnIn.HasValue) p.LogisticBurnIn = LogisticBurnIn.Value;
+            if (SlitCascadeChildren.HasValue) p.SlitCascadeChildren = SlitCascadeChildren.Value;   // #1569
+            if (SlitCascadeRatio.HasValue) p.SlitCascadeRatio = SlitCascadeRatio.Value;
+            if (SlitCascadeDepth.HasValue) p.SlitCascadeDepth = SlitCascadeDepth.Value;
+            if (SlitCascadeSeparation.HasValue) p.SlitCascadeSeparation = SlitCascadeSeparation.Value;
+            if (SlitCascadeWidth.HasValue) p.SlitCascadeWidth = SlitCascadeWidth.Value;
+            if (SlitCascadeWavelength.HasValue) p.SlitCascadeWavelength = SlitCascadeWavelength.Value;
+            if (this.SlitCascadeLayout.HasValue) p.SlitCascadeLayout = (FracturingFog.SlitCascadeLayout)this.SlitCascadeLayout.Value;
+            if (this.SlitCascadeView.HasValue) p.SlitCascadeView = (FracturingFog.SlitCascadeView)this.SlitCascadeView.Value;
+            if (SlitCascadeDynamicRange.HasValue) p.SlitCascadeDynamicRange = SlitCascadeDynamicRange.Value;
             if (!string.IsNullOrEmpty(LyapunovSequence)) p.LyapunovSequence = LyapunovSequence;
             if (LyapunovWarmup.HasValue) p.LyapunovWarmup = LyapunovWarmup.Value;
             if (TranscendentalMap.HasValue) p.TranscendentalMap = (FracturingFog.TranscendentalMap)TranscendentalMap.Value;

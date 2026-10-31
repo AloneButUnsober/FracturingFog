@@ -107,6 +107,9 @@ public static class FractalAnimatableParamsMap
         FractalType.MathPlane
             => _mathPlaneList,
 
+        FractalType.SlitCascade
+            => _slitCascadeList,
+
         FractalType.PrecisionField
             => _precisionFieldList,
 
@@ -252,6 +255,17 @@ public static class FractalAnimatableParamsMap
             Notes: "Real part of λ — morphs the exploding Julia set."),
         new("TranscendentalLambdaIm", AnimatableParamKind.ScalarDouble, Min: -2.0, Max: 2.0,
             Notes: "Imaginary part of λ — rotates the hairs / bouquet."),
+    };
+
+    // Slit cascade (#1569) — the fringe that weights the children, and the scale.
+    private static readonly AnimatableParamDescriptor[] _slitCascadeList =
+    {
+        new("SlitCascadeWavelength", AnimatableParamKind.ScalarDouble, Min: 0.05, Max: 4.0,
+            Notes: "Wavelength λ — the fringes breathe, children slide on and off dark fringes, the weights (and the dimension) change (#1569)."),
+        new("SlitCascadeSeparation", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 6.0,
+            Notes: "Two-slit separation d — more fringes across the children as d grows (#1569)."),
+        new("SlitCascadeRatio", AnimatableParamKind.ScalarDouble, Min: 0.05, Max: 0.5,
+            Notes: "Child scale r — the cascade tightens or opens (#1569)."),
     };
 
     private static readonly AnimatableParamDescriptor[] _lyapunovList =

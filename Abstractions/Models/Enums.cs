@@ -628,6 +628,27 @@ namespace FracturingFog
         Theme,
     }
 
+    /// <summary>Where a <see cref="FractalType.SlitCascade"/> level puts its children
+    /// (#1569). Append only.</summary>
+    public enum SlitCascadeLayout
+    {
+        /// <summary>Evenly spaced along x (a 1D grating; the image is stripes).</summary>
+        Line,
+        /// <summary>Evenly spaced round a circle (a 2D aperture).</summary>
+        Ring,
+    }
+
+    /// <summary>What a <see cref="FractalType.SlitCascade"/> pixel shows (#1569). Append only.</summary>
+    public enum SlitCascadeView
+    {
+        /// <summary>Far-field intensity I(u)/I(0) on a log scale.</summary>
+        Intensity,
+        /// <summary>Far-field phase arg A(u), in turns.</summary>
+        Phase,
+        /// <summary>The aperture: each point's share of the transmitted power (log scale).</summary>
+        Aperture,
+    }
+
     /// <summary>Direction of the c-path's angular-momentum winding relative to the
     /// z-path in path interference (#1568). Append only.</summary>
     public enum DualOrbitWindingMode
@@ -1060,6 +1081,16 @@ namespace FracturingFog
         /// fractal: the "math behind fractals" companion view
         /// (Docs/Technical/MathPlane-DesignPlan.md).</summary>
         MathPlane,
+        /// <summary>Slit cascade (#1569, double-slit epic #1565) — a recursive aperture
+        /// where every slit becomes N children whose power shares are the parent's
+        /// two-slit fringe intensities; rendered as its exact Fraunhofer diffraction
+        /// pattern (or the aperture itself) by <c>SlitCascadeCalculator</c>.
+        /// Tunables: <c>SlitCascadeChildren</c>, <c>SlitCascadeRatio</c>,
+        /// <c>SlitCascadeDepth</c>, <c>SlitCascadeSeparation</c>,
+        /// <c>SlitCascadeWidth</c>, <c>SlitCascadeWavelength</c>,
+        /// <c>SlitCascadeLayout</c>, <c>SlitCascadeView</c>,
+        /// <c>SlitCascadeDynamicRange</c>.</summary>
+        SlitCascade,
     }
 
     public enum RenderProfile { Preview, Final }
@@ -1219,6 +1250,7 @@ namespace FracturingFog
                 or FractalType.Lyapunov
                 or FractalType.ChaoticBilliard
                 or FractalType.BilliardRays
+                or FractalType.SlitCascade   // #1569 — log intensity on the SmoothBuffer
                 or FractalType.PrecisionField
                 // Dual-orbit escape-geometry (#864) — a derived escape-space scalar
                 // over the SmoothBuffer (PrecisionField precedent).

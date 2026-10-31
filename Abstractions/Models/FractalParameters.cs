@@ -1325,6 +1325,29 @@ namespace FracturingFog.Models
         public double MathPlaneCIm { get; set; } = 0.5;
         /// <summary>#1554 — the escape-time family drawn under the scene (None = the plain background).</summary>
         public MathPlaneBackdrop MathPlaneBackdrop { get; set; } = MathPlaneBackdrop.None;
+
+        // ── Slit cascade (#1569, double-slit epic #1565) ──────────────────
+        /// <summary>Slit cascade: children per slit, N (2..16). N ≥ 3 for the fringe
+        /// weights to differ (a symmetric pair is a plain Cantor set).</summary>
+        public int SlitCascadeChildren { get; set; } = 6;
+        /// <summary>Slit cascade: scale ratio r of a child to its parent (0.01..0.5).</summary>
+        public double SlitCascadeRatio { get; set; } = 0.3;
+        /// <summary>Slit cascade: number of levels D (1..12).</summary>
+        public int SlitCascadeDepth { get; set; } = 4;
+        /// <summary>Slit cascade: two-slit separation d of the fringe that weights the
+        /// children (aperture units).</summary>
+        public double SlitCascadeSeparation { get; set; } = 1.0;
+        /// <summary>Slit cascade: two-slit width w (the fringe envelope; 0 = no envelope).</summary>
+        public double SlitCascadeWidth { get; set; } = 0.2;
+        /// <summary>Slit cascade: wavelength λ (the screen distance folded in). Larger λ =
+        /// wider fringes, so fewer children fall on dark fringes.</summary>
+        public double SlitCascadeWavelength { get; set; } = 0.6;
+        /// <summary>Slit cascade: where each level's children sit (line or ring).</summary>
+        public SlitCascadeLayout SlitCascadeLayout { get; set; } = SlitCascadeLayout.Ring;
+        /// <summary>Slit cascade: what the pixel shows (intensity, phase, aperture).</summary>
+        public SlitCascadeView SlitCascadeView { get; set; } = SlitCascadeView.Intensity;
+        /// <summary>Slit cascade: decades of intensity (or aperture mass) the log scale spans.</summary>
+        public double SlitCascadeDynamicRange { get; set; } = 6.0;
         /// <summary>#1538 — sides of the <see cref="BilliardGeometry.Polygon"/> layout (3 = triangle,
         /// 6 = hexagon, 8 = octagon ...). Clamped to [3, 12]. Default 6.</summary>
         public int BilliardPolygonSides { get; set; } = 6;
@@ -2276,6 +2299,15 @@ namespace FracturingFog.Models
                 MathPlaneCRe = MathPlaneCRe,
                 MathPlaneCIm = MathPlaneCIm,
                 MathPlaneBackdrop = MathPlaneBackdrop,
+                SlitCascadeChildren = SlitCascadeChildren,
+                SlitCascadeRatio = SlitCascadeRatio,
+                SlitCascadeDepth = SlitCascadeDepth,
+                SlitCascadeSeparation = SlitCascadeSeparation,
+                SlitCascadeWidth = SlitCascadeWidth,
+                SlitCascadeWavelength = SlitCascadeWavelength,
+                SlitCascadeLayout = SlitCascadeLayout,
+                SlitCascadeView = SlitCascadeView,
+                SlitCascadeDynamicRange = SlitCascadeDynamicRange,
                 BilliardPolygonSides = BilliardPolygonSides,
                 BilliardPolygonFill = BilliardPolygonFill,
                 BilliardLatticeRotation = BilliardLatticeRotation,
