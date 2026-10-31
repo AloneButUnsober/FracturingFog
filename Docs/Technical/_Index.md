@@ -55,6 +55,7 @@ system. The codebase is a single .NET 10 solution.
 | Helping users find detail-rich locations (minibrots, Misiurewicz spirals, external angles, Julia morphing, auto-explore) | [Interesting-Location Finder Design Plan](Interesting-Location-Finder-DesignPlan.md) (epic #1184) |
 | Exporting a render that scans as a QR code (encoder, verifier, styles, view search, QArt shaping) | [Fractal QR Codes](Fractal-QR-Codes.md) (epic #1305) |
 | Colouring the dual-orbit family (pair-native fields, Dual Buddhabrot) | [Dual-Orbit Colouring R&D](DualOrbit-Coloring-RnD.md) (epic #1114) |
+| Double-slit fractals (interference, slit cascades, Talbot carpets, vortex filaments) | [Double-Slit Fractals R&D](DoubleSlit-Fractal-RnD.md) (epic #1565) |
 | Growing PaletteBuilder into a perceptual, colorblind-first color assistant | [PaletteBuilder Design](PaletteBuilder-Design.md) (roadmap S10, issue #392) |
 | Adding the Acid Warp palette-cycling mode + color-motion ideas | [Acid Warp Mode Design](AcidWarp-Mode-Design.md) |
 | Building the distributed master/worker rendering cluster   | [Distributed Rendering Development Plan](DistributedRendering-DevelopmentPlan.md) — phase notes: [D-1](D-1-Session-Notes.md), [D-2](D-2-Session-Notes.md) |

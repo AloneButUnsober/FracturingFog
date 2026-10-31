@@ -328,6 +328,53 @@ finite-size-Lyapunov literature, which these entries anchor.
   radius $r_i = r_{\max}/(i+1)^{1/\alpha}$ dropped at random positions and rejected on overlap until
   the plane fills. See [RandomTile dev plan](Technical/RandomTile-Plan.md).
 
+<a id="double-slit-fractals"></a>
+
+### Double-slit fractals: interference, fractal optics, multifractal measures
+
+References backing [Technical → Double-Slit Fractals R&D](Technical/DoubleSlit-Fractal-RnD.md)
+(epic #1565). Details below were confirmed against Crossref / publisher records on 2026-10-31.
+The physics is established; FF builds on it (see that doc's §9 novelty table).
+
+- **Richard P. Feynman, Robert B. Leighton, Matthew Sands.** *The Feynman Lectures on Physics*,
+  Vol. III, ch. 1 "Quantum Behavior", Addison-Wesley, 1965.
+  <https://www.feynmanlectures.caltech.edu/III_01.html>. The two-slit experiment as "amplitudes add,
+  then square", including watching which slit (§1-6): the organising rule of the epic and of the
+  which-path knob (#1567).
+- **C. Allain, M. Cloitre.** *Optical diffraction on fractals.* Physical Review B 33(5), 3566–3569,
+  1986. <https://doi.org/10.1103/PhysRevB.33.3566>. Diffraction intensity of Cantor bars and Vicsek
+  fractals is their optical Fourier transform and carries the fractal dimension. Basis of the
+  slit-cascade screen view (#1569).
+- **Dongsu Bak, Sang Pyo Kim, Sung Ku Kim, Kwang-Sup Soh, Jae Hyung Yee.** *Fractal Diffraction
+  Grating.* arXiv:physics/9802007, 1998. <https://arxiv.org/abs/physics/9802007>. Far-field pattern
+  of Cantor-type slit gratings factorises into single-slit term × structure factor: the exact
+  per-level Fraunhofer product the slit cascade renders (#1569).
+- **M. V. Berry, S. Klein.** *Integer, fractional and fractal Talbot effects.* Journal of Modern
+  Optics 43(10), 2139–2164, 1996. <https://doi.org/10.1080/09500349608232876>. Fractal intensity in
+  Talbot planes at irrational distances; the Talbot-carpet calculator (#1570).
+- **M. V. Berry.** *Quantum fractals in boxes.* Journal of Physics A: Mathematical and General
+  29(20), 6617–6629, 1996. <https://doi.org/10.1088/0305-4470/29/20/016>. Fractal probability density
+  (dimension D + ½) of a uniform state in a box; the quantum analogue of the Talbot carpet (#1570).
+- **Michael Berry, Irene Marzoli, Wolfgang Schleich.** *Quantum carpets, carpets of light.* Physics
+  World 14(6), 39–46, 2001. <https://doi.org/10.1088/2058-7058/14/6/30>. Overview of Talbot / quantum
+  carpets (#1570).
+- **L. Allen, M. W. Beijersbergen, R. J. C. Spreeuw, J. P. Woerdman.** *Orbital angular momentum of
+  light and the transformation of Laguerre-Gaussian laser modes.* Physical Review A 45(11),
+  8185–8189, 1992. <https://doi.org/10.1103/PhysRevA.45.8185>. Light with phase e^{iℓφ} carries
+  orbital angular momentum; the vortex phase behind the angular-momentum filaments (#1568, #1572).
+- **Walter D. Furlan, Fernando Giménez, Arnau Calatayud, Juan A. Monsoriu.** *Devil's
+  vortex-lenses.* Optics Express 17(24), 21891, 2009. <https://doi.org/10.1364/OE.17.021891>.
+  Cantor-function (devil's staircase) phase + spiral phase gives a self-similar chain of vortices
+  along the axis: closest prior art to the cascade's nested transverse vortices (#1572).
+- **H. G. E. Hentschel, Itamar Procaccia.** *The infinite number of generalized dimensions of
+  fractals and strange attractors.* Physica D 8(3), 435–444, 1983.
+  <https://doi.org/10.1016/0167-2789(83)90235-X>. Generalized (Rényi) dimensions D_q; the
+  probability-sets-dimension readout (#1571).
+- **Thomas C. Halsey, Mogens H. Jensen, Leo P. Kadanoff, Itamar Procaccia, Boris I. Shraiman.**
+  *Fractal measures and their singularities: the characterization of strange sets.* Physical
+  Review A 33(2), 1141–1151, 1986. <https://doi.org/10.1103/PhysRevA.33.1141>. The τ(q) / f(α)
+  multifractal formalism; D_q closed form and Hölder-α colouring of the cascade measure (#1571).
+
 <a id="deep-zoom-acceleration"></a>
 
 ### Deep zoom: perturbation, approximation, extended precision
@@ -699,6 +746,9 @@ entry above completed or corrected.
 - **Mariani–Silver** — primary description (Rico Mariani's algorithm; Robert Silver's formulation)
   isn't identified; it's commonly documented through Fractint-era material and Wikibooks *Fractals*.
 - **Earl F. Glynn** — the original publication of the fractional-power Julia set.
+- **H. F. Talbot** — the original 1836 report of the self-imaging effect (cited by name in
+  `Docs/Technical/DoubleSlit-Fractal-RnD.md`, #1565). The physics is credited through Berry & Klein
+  above; Talbot's own paper (journal, volume, pages) isn't yet traced to a primary record.
 - **Persistent threads (Aila & Laine 2009)** — the paper's details are confirmed (authors, venue,
   pages, URL); that it is where the persistent-thread work distribution the wavefront schedule follows
   was introduced is from memory, not yet checked against the paper's text.
