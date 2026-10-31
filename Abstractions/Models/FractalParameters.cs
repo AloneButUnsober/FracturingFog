@@ -1323,6 +1323,8 @@ namespace FracturingFog.Models
         /// parts. Separate numbers so keyframes can move c. Default -0.5 + 0.5i.</summary>
         public double MathPlaneCRe { get; set; } = -0.5;
         public double MathPlaneCIm { get; set; } = 0.5;
+        /// <summary>#1554 — the escape-time family drawn under the scene (None = the plain background).</summary>
+        public MathPlaneBackdrop MathPlaneBackdrop { get; set; } = MathPlaneBackdrop.None;
         /// <summary>#1538 — sides of the <see cref="BilliardGeometry.Polygon"/> layout (3 = triangle,
         /// 6 = hexagon, 8 = octagon ...). Clamped to [3, 12]. Default 6.</summary>
         public int BilliardPolygonSides { get; set; } = 6;
@@ -2259,6 +2261,7 @@ namespace FracturingFog.Models
                 MathPlaneInterpolation = MathPlaneInterpolation,
                 MathPlaneCRe = MathPlaneCRe,
                 MathPlaneCIm = MathPlaneCIm,
+                MathPlaneBackdrop = MathPlaneBackdrop,
                 BilliardPolygonSides = BilliardPolygonSides,
                 BilliardPolygonFill = BilliardPolygonFill,
                 BilliardLatticeRotation = BilliardLatticeRotation,

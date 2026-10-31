@@ -182,6 +182,38 @@
                 </StackPanel>
             </Border>
 
+            <!-- Fractal bridge (#1554) -->
+            <Border Classes="group">
+                <StackPanel Spacing="6">
+                    <TextBlock Classes="section" Text="Fractal bridge" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Backdrop" VerticalAlignment="Center" />
+                        <ComboBox ItemsSource="{Binding Backdrops}" SelectedItem="{Binding Backdrop}" Width="140"
+                                  ToolTip.Tip="Draw an escape-time fractal under the scene, at the same view. Julia draws the Julia set of c (above)." />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <CheckBox Content="Orbit of 0" IsChecked="{Binding OrbitEnabled}"
+                                  ToolTip.Tip="z0 = 0, z1, z2 ... under the scene's map (z^2 + c without one), with the escape circle |z| = 2. Drag c on the canvas." />
+                        <TextBlock Text="steps" VerticalAlignment="Center" />
+                        <NumericUpDown Value="{Binding OrbitSteps}" Minimum="1" Maximum="10000" Increment="10" FormatString="0" Width="110"
+                                       IsEnabled="{Binding OrbitEnabled}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <CheckBox Content="Cobweb" IsChecked="{Binding CobwebEnabled}"
+                                  ToolTip.Tip="Graphical iteration of a real map: y = f(x), y = x and the staircase from x0. c is the real part of the plane's c." />
+                        <TextBlock Text="x0" VerticalAlignment="Center" FontFamily="Consolas, Menlo, monospace" />
+                        <NumericUpDown Value="{Binding CobwebX0}" Increment="0.05" FormatString="0.###" Width="100" IsEnabled="{Binding CobwebEnabled}" />
+                        <TextBlock Text="steps" VerticalAlignment="Center" />
+                        <NumericUpDown Value="{Binding CobwebSteps}" Minimum="1" Maximum="10000" Increment="5" FormatString="0" Width="100" IsEnabled="{Binding CobwebEnabled}" />
+                    </StackPanel>
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" IsVisible="{Binding CobwebEnabled}">
+                        <TextBlock Text="f(x) =" VerticalAlignment="Center" FontFamily="Consolas, Menlo, monospace" />
+                        <TextBox Grid.Column="1" Text="{Binding CobwebSource}" FontFamily="Consolas, Menlo, monospace"
+                                 ToolTip.Tip="A real map in x and c, e.g. x^2 + c, 4*c*x*(1 - x) ..." />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
             <!-- Read-outs + plane settings -->
             <Border Classes="group">
                 <StackPanel Spacing="6">

@@ -54,6 +54,18 @@
 // "phase") colours each pixel z by arg f(z) of the scene's map, under everything
 // else. The probe draws a small square at z and its image, with f'(z) as a
 // rotate-and-scale.
+//
+// #1554 — the fractal bridge, all in the plain plane (no map applied):
+//   Backdrop: MathPlaneBackdrop renders an escape-time family (EscapeTimeCalculator,
+//     CPU) at the scene's view first; the scene draws on top. That calculator is
+//     y-down with pitch 3.5 / max(w, h) / zoom and samples at pixel corners, so it
+//     gets the matching zoom, the world centre moved half a pixel, and its rows
+//     are flipped. Dimmed to BackdropBrightness so the grid reads over it. Julia
+//     draws the Julia set of the plane's c. The phase portrait, when on, covers it.
+//   Orbit: z0 = 0, z1, z2 ... under the scene's map (z^2 + c without one), joined
+//     and coloured by step, with the escape circle |z| = 2, c as a handle, and a
+//     read-out (escape step, or the period it settles to).
+//   Cobweb: y = f(x), y = x and the staircase (MathPlaneDynamics.Cobweb).
 
 using System;
 using System.Numerics;
@@ -148,6 +160,11 @@ public sealed class MathPlaneCalculator : IFractalCalculator
         // #1553 — the complex map (null unless the mode is Complex), and the phase
         // portrait of the scene's f under everything else.
         var cmap = MathPlaneComplexMap.Current(FractalParameters, _scene);
+        if (FractalParameters.MathPlaneBackdrop != MathPlaneBackdrop.None)
+        {
+            DrawBackdrop(w, h, ct);
+            ct.ThrowIfCancellationRequested();
+        }
         if (LastSceneError == null && _scene.Phase != MathPlanePhase.Off
             && MathPlaneComplexMap.Create(_scene.MapSource, CParam(FractalParameters), 1.0) is { } pf)
         {
@@ -270,6 +287,8 @@ public sealed class MathPlaneCalculator : IFractalCalculator
         }
 
         DrawObjects(canvas, w, h, scene, map, cmap, ui);
+        if (scene.Cobweb is { } cobweb) DrawCobweb(canvas, w, h, cobweb, ui);
+        if (scene.OrbitSteps > 0) DrawOrbit(canvas, w, h, scene, ui);
         if (scene.Probe is { } probe) DrawProbe(canvas, w, h, probe, map, cmap, ui);
 
         if (cmap != null && (scene.ShowDet || scene.ShowEigen))
@@ -600,6 +619,167 @@ public sealed class MathPlaneCalculator : IFractalCalculator
             canvas.DrawText(s, tx, ty, font, ink);
             ty += lh;
         }
+    }
+
+    // ── #1554 — the fractal bridge ──────────────────────────────────────────
+
+    /// <summary>Brightness of the fractal backdrop under the scene.</summary>
+    public const double BackdropBrightness = 0.75;
+    public const uint EscapeCircleColor = 0x99FFFFFF;
+    public const uint CHandleColor = 0xFFFFFFFF;
+    public const uint CobwebCurveColor = 0xFFE69F00;
+    public const uint CobwebDiagonalColor = 0x99FFFFFF;
+    public const uint CobwebStairColor = 0xFF56B4E9;
+
+    private EscapeTimeCalculator? _backdrop;
+
+    /// <summary>The plane's c (MathPlaneCRe + i MathPlaneCIm).</summary>
+    public Complex PlaneC => CParam(FractalParameters);
+
+    /// <summary>The backdrop calculator's view for this one: the same world rectangle
+    /// on its y-down, corner-sampled grid (see file header). Rows come out flipped.</summary>
+    public static (double CenterX, double CenterY, double Zoom) BackdropView(int w, int h, double centerX, double centerY, double zoom)
+    {
+        double pitch = Pitch(w, zoom);
+        return (centerX + 0.5 * pitch, -centerY + 0.5 * pitch, 3.5 * w * zoom / (4.0 * Math.Max(w, h)));
+    }
+
+    private void DrawBackdrop(int w, int h, CancellationToken ct)
+    {
+        var p = FractalParameters;
+        if (FractalRegionBackdrop(p.MathPlaneBackdrop) is not { } type) return;
+        if (_backdrop == null || _backdrop.Width != w || _backdrop.Height != h) _backdrop = new EscapeTimeCalculator(w, h);
+        var bp = p;
+        if (type == FractalType.Julia)
+        {
+            bp = p.Clone();
+            bp.JuliaC = PlaneC;
+            bp.FaithfulImplosion = false;   // the plane's c, as given
+        }
+        var (cx, cy, z) = BackdropView(w, h, CenterX, CenterY, Zoom);
+        _backdrop.FractalType = type;
+        _backdrop.FractalParameters = bp;
+        _backdrop.ColorMap = ColorMap;
+        _backdrop.MaxIterations = MaxIterations;
+        _backdrop.Quality = Quality;
+        _backdrop.CenterX = cx;
+        _backdrop.CenterY = cy;
+        _backdrop.Zoom = z;
+        _backdrop.Calculate(ct);
+        var src = _backdrop.ColorBuffer;
+        int k = (int)Math.Round(BackdropBrightness * 256);
+        for (int y = 0; y < h; y++)
+        {
+            int from = (h - 1 - y) * w, to = y * w;
+            for (int x = 0; x < w; x++)
+            {
+                uint c = src[from + x];
+                uint r = ((c >> 16) & 0xFF) * (uint)k >> 8, g = ((c >> 8) & 0xFF) * (uint)k >> 8, b = (c & 0xFF) * (uint)k >> 8;
+                ColorBuffer[to + x] = 0xFF000000u | (r << 16) | (g << 8) | b;
+            }
+        }
+    }
+
+    private static FractalType? FractalRegionBackdrop(MathPlaneBackdrop b) => FracturingFog.Models.RegionFractalParams.MathPlaneBackdropFamily(b);
+
+    /// <summary>The orbit's colour at step <paramref name="n"/> of <paramref name="count"/>:
+    /// Okabe-Ito blue to sky blue to yellow to orange.</summary>
+    public static uint OrbitColor(int n, int count)
+    {
+        uint[] stops = { 0xFF0072B2, 0xFF56B4E9, 0xFFF0E442, 0xFFE69F00 };
+        double u = count <= 1 ? 0 : Math.Clamp(n / (double)(count - 1), 0, 1) * (stops.Length - 1);
+        int i = Math.Min((int)u, stops.Length - 2);
+        double f = u - i;
+        uint a = stops[i], b = stops[i + 1];
+        uint Ch(int sh) => (uint)Math.Round(((a >> sh) & 0xFF) * (1 - f) + ((b >> sh) & 0xFF) * f);
+        return 0xFF000000u | (Ch(16) << 16) | (Ch(8) << 8) | Ch(0);
+    }
+
+    private SKPoint WorldPix(int w, int h, double x, double y)
+    {
+        var (px, py) = ToPixel(x, y, w, h, CenterX, CenterY, Zoom);
+        return new SKPoint((float)Math.Clamp(px, -1e7, 1e7), (float)Math.Clamp(py, -1e7, 1e7));
+    }
+
+    private void DrawOrbit(SKCanvas canvas, int w, int h, MathPlaneScene scene, float ui)
+    {
+        var c = PlaneC;
+        var f = MathPlaneDynamics.OrbitMap(scene.MapSource, c);
+        var orbit = MathPlaneDynamics.Orbit(f, scene.OrbitSteps);
+        double pitch = Pitch(w, Zoom);
+
+        using var dash = SKPathEffect.CreateDash(new[] { 6f * ui, 5f * ui }, 0);
+        using var circle = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 1.2f * ui, Color = new SKColor(EscapeCircleColor), PathEffect = dash };
+        var o = WorldPix(w, h, 0, 0);
+        canvas.DrawCircle(o, (float)(2.0 / pitch), circle);
+
+        using var seg = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 1.6f * ui };
+        using var dot = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true };
+        for (int n = 1; n < orbit.Count; n++)
+        {
+            seg.Color = new SKColor(OrbitColor(n, orbit.Count));
+            canvas.DrawLine(WorldPix(w, h, orbit[n - 1].Real, orbit[n - 1].Imaginary), WorldPix(w, h, orbit[n].Real, orbit[n].Imaginary), seg);
+        }
+        float r = (orbit.Count > 200 ? 1.8f : 3f) * ui;
+        for (int n = 0; n < orbit.Count; n++)
+        {
+            dot.Color = new SKColor(OrbitColor(n, orbit.Count));
+            canvas.DrawCircle(WorldPix(w, h, orbit[n].Real, orbit[n].Imaginary), r, dot);
+        }
+
+        // c, the handle.
+        var cp = WorldPix(w, h, c.Real, c.Imaginary);
+        using var outline = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 1.5f * ui, Color = new SKColor(0xFF000000) };
+        dot.Color = new SKColor(CHandleColor);
+        canvas.DrawCircle(cp, 5.5f * ui, dot);
+        canvas.DrawCircle(cp, 5.5f * ui, outline);
+        using var font = new SKFont(SKTypeface.Default, 15f * ui);
+        using var halo = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(0xC0000000) };
+        canvas.DrawText("c", cp.X + 8f * ui + ui, cp.Y - 8f * ui + ui, font, halo);
+        canvas.DrawText("c", cp.X + 8f * ui, cp.Y - 8f * ui, font, dot);
+
+        string s = OrbitReadout(scene, c, orbit);
+        using var small = new SKFont(SKTypeface.Default, 13f * ui);
+        float y = h - 8f * ui;
+        canvas.DrawText(s, 8f * ui + ui, y + ui, small, halo);
+        canvas.DrawText(s, 8f * ui, y, small, dot);
+    }
+
+    /// <summary>#1554 — the orbit's read-out line.</summary>
+    public static string OrbitReadout(MathPlaneScene scene, Complex c, System.Collections.Generic.IReadOnlyList<Complex> orbit)
+    {
+        string map = scene.MapSource ?? "z^2 + c";
+        string head = $"orbit of 0 under {map}, c = {Cx(c.Real, c.Imaginary)}: ";
+        if (MathPlaneDynamics.EscapeStep(orbit) is int e) return head + $"leaves |z| <= 2 at step {e}";
+        int steps = orbit.Count - 1;
+        return MathPlaneDynamics.Period(orbit) is int p
+            ? head + $"bounded for {steps} steps, settles to period {p}"
+            : head + $"bounded for {steps} steps";
+    }
+
+    private void DrawCobweb(SKCanvas canvas, int w, int h, MathPlaneCobweb cw, float ui)
+    {
+        var f = MathPlaneDynamics.CobwebMap(cw.Source, PlaneC.Real);
+        if (f == null) return;
+        var view = ViewBox(w, h);
+        using var diag = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 1.4f * ui, Color = new SKColor(CobwebDiagonalColor) };
+        double lo = Math.Min(view.XMin, view.YMin) - view.Pitch, hi = Math.Max(view.XMax, view.YMax) + view.Pitch;
+        canvas.DrawLine(WorldPix(w, h, lo, lo), WorldPix(w, h, hi, hi), diag);
+
+        using var curve = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 2.2f * ui, Color = new SKColor(CobwebCurveColor) };
+        var lines = MathPlaneCurveSampler.SampleFunction(x => (x, f(x)), view.XMin - view.Pitch, view.XMax + view.Pitch, view);
+        DrawLines(canvas, lines, (x, y) => WorldPix(w, h, x, y), curve);
+
+        var v = MathPlaneDynamics.Cobweb(f, cw.X0, cw.Steps);
+        using var stair = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 1.6f * ui, Color = new SKColor(CobwebStairColor), StrokeJoin = SKStrokeJoin.Round };
+        using (var path = new SKPath())
+        {
+            path.MoveTo(WorldPix(w, h, v[0].X, v[0].Y));
+            for (int i = 1; i < v.Count; i++) path.LineTo(WorldPix(w, h, v[i].X, v[i].Y));
+            canvas.DrawPath(path, stair);
+        }
+        using var dot = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(CobwebStairColor) };
+        canvas.DrawCircle(WorldPix(w, h, cw.X0, cw.X0), 4f * ui, dot);
     }
 
     /// <summary>#1553 — the probe's two read-out lines.</summary>

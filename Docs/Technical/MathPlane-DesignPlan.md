@@ -209,6 +209,20 @@ out slow. Only ASCII `theta` is accepted (no `θ`), following the ASCII-names ru
 - **Fractal backdrop:** Math Plane can draw any 2D escape-time family's render under
   its objects (the backdrop calculator renders first, then the scene draws on top),
   so the orbit of `c` is drawn on the Mandelbrot set itself.
+- *As built (S7 part 1, #1554):* the orbit (scene `orbit N`), cobweb (scene
+  `cobweb x0 [N] ["f(x)"]`) and backdrop (param `MathPlaneBackdrop`) are drawn in the
+  plain plane; a matrix or complex map does not move them. The orbit uses the scene's
+  `map` when it has one, else `z² + c`, with `c = MathPlaneCRe + i·MathPlaneCIm`
+  (draggable on the canvas while the orbit is on). Its read-out gives the step where
+  it leaves `|z| ≤ 2`, or the period it settles to. The cobweb's map reads `x` and `c`
+  (the real part of the plane's c). The backdrop is one of the `EscapeTimeCalculator`
+  families (Mandelbrot, Julia, Burning Ship, Tricorn, Multibrot, Phoenix, Magnet 1/2,
+  Glynn, Spider), rendered on the CPU at the scene's view: that grid is y-down with
+  pitch `3.5 / max(w, h) / zoom` and samples pixel corners, so the zoom is converted,
+  the centre moved half a pixel, and the rows flipped. Julia draws the Julia set of
+  the plane's c, so dragging c moves the set and the critical orbit together. The
+  other families' own params ride in the MathPlane region block. When both are on,
+  the phase portrait covers the backdrop.
 - **Overlay on other views:** the reverse direction. On a normal 2D fractal view, a
   "Math overlay" toggle draws the axes plus the orbit of the hovered/pinned pixel,
   through `FractalOverlayCompositor`. This extends the existing grid overlay rather

@@ -36,6 +36,11 @@
 //   phase off|on|contours               #1553: phase-portrait background, colour by
 //                                        arg f(z); contours adds |f| = 2^k steps
 //   probe x y                           #1553: pinned f'(z) read-out at z = x + iy
+//   orbit N                             #1554: the orbit of 0 under the scene's map (else
+//                                        z^2 + c), N steps (1-10000); c is draggable
+//   cobweb x0 [N] ["f(x)"]              #1554: cobweb of a real map from x0, N steps
+//                                        (default 30); f reads x and c (c = the real
+//                                        part of the plane's c; default "x^2 + c")
 //
 // Curve expressions are the plot language (PlotExpression: the equation
 // language with real x / t / theta). They are double-quoted, and ';' or a newline
@@ -67,6 +72,14 @@ namespace FracturingFog.Models
     /// <see cref="On"/> colours each pixel z by arg f(z); <see cref="Contours"/> also
     /// steps the brightness where |f(z)| crosses a power of 2.</summary>
     public enum MathPlanePhase { Off, On, Contours }
+
+    /// <summary>#1554 — a cobweb diagram: start <see cref="X0"/>, <see cref="Steps"/>
+    /// iterations of the real map <see cref="Source"/> (plot language in x and c).</summary>
+    public sealed record MathPlaneCobweb(double X0, int Steps, string Source)
+    {
+        public const string DefaultSource = "x^2 + c";
+        public const int DefaultSteps = 30;
+    }
 
     /// <summary>One plotted object. <see cref="Coords"/> holds x, y pairs: a point's
     /// position; a vector's tip then (if <see cref="HasFrom"/>) its tail; a segment's
@@ -134,6 +147,10 @@ namespace FracturingFog.Models
         public MathPlanePhase Phase { get; init; }
         /// <summary>#1553 — the pinned f'(z) read-out point, or null.</summary>
         public (double X, double Y)? Probe { get; init; }
+        /// <summary>#1554 — orbit steps (0 = no orbit).</summary>
+        public int OrbitSteps { get; init; }
+        /// <summary>#1554 — the cobweb, or null.</summary>
+        public MathPlaneCobweb? Cobweb { get; init; }
 
         /// <summary>Okabe–Ito colours (colour-blind safe), the default object colours
         /// in order; see the bibliography's Okabe–Ito entry.</summary>
@@ -150,7 +167,8 @@ namespace FracturingFog.Models
             o is not null && ShowAxes == o.ShowAxes && ShowGrid == o.ShowGrid && ShowTicks == o.ShowTicks
             && ShowDet == o.ShowDet && ShowEigen == o.ShowEigen && ShowLengths == o.ShowLengths
             && Labels == o.Labels && Objects.SequenceEqual(o.Objects)
-            && MapSource == o.MapSource && Phase == o.Phase && Probe == o.Probe;
+            && MapSource == o.MapSource && Phase == o.Phase && Probe == o.Probe
+            && OrbitSteps == o.OrbitSteps && Cobweb == o.Cobweb;
 
         public override int GetHashCode() => HashCode.Combine(ShowAxes, ShowGrid, ShowTicks, Labels, Objects.Count);
 
@@ -172,6 +190,10 @@ namespace FracturingFog.Models
             if (MapSource != null) parts.Add("map \"" + MapSource + "\"");
             if (Phase != MathPlanePhase.Off) parts.Add("phase " + Phase.ToString().ToLowerInvariant());
             if (Probe is { } pr) parts.Add("probe " + Num(pr.X) + " " + Num(pr.Y));
+            if (OrbitSteps > 0) parts.Add("orbit " + OrbitSteps.ToString(Inv));
+            if (Cobweb is { } cw)
+                parts.Add("cobweb " + Num(cw.X0) + " " + cw.Steps.ToString(Inv)
+                          + (cw.Source == MathPlaneCobweb.DefaultSource ? "" : " \"" + cw.Source + "\""));
             foreach (var o in Objects) parts.Add(SerializeObject(o));
             return string.Join("; ", parts);
         }
@@ -235,6 +257,8 @@ namespace FracturingFog.Models
             string? mapSource = null;
             var phase = MathPlanePhase.Off;
             (double, double)? probe = null;
+            int orbit = 0;
+            MathPlaneCobweb? cobweb = null;
             var objects = new List<MathPlaneObject>();
             var names = new HashSet<string>(StringComparer.Ordinal);
 
@@ -312,6 +336,39 @@ namespace FracturingFog.Models
                         probe = (px, py);
                         break;
                     }
+                    case "orbit":
+                    {
+                        if (toks.Count != 2 || !int.TryParse(toks[1].Text, NumberStyles.None, Inv, out int n)
+                            || n < 1 || n > MathPlaneDynamics.MaxSteps)
+                        { error = Err(1, $"'orbit' takes a step count, 1 to {MathPlaneDynamics.MaxSteps}"); return false; }
+                        if (orbit > 0) { error = Err(0, "'orbit' is given twice"); return false; }
+                        orbit = n;
+                        break;
+                    }
+                    case "cobweb":
+                    {
+                        if (cobweb != null) { error = Err(0, "'cobweb' is given twice"); return false; }
+                        if (toks.Count < 2 || !TryNum(toks[1].Text, out double x0))
+                        { error = Err(1, "'cobweb' takes x0 [steps] [\"f(x)\"]"); return false; }
+                        int k = 2, steps = MathPlaneCobweb.DefaultSteps;
+                        if (k < toks.Count && !toks[k].Text.StartsWith('"'))
+                        {
+                            if (!int.TryParse(toks[k].Text, NumberStyles.None, Inv, out steps) || steps < 1 || steps > MathPlaneDynamics.MaxSteps)
+                            { error = Err(k, $"the cobweb's steps are 1 to {MathPlaneDynamics.MaxSteps}"); return false; }
+                            k++;
+                        }
+                        string src = MathPlaneCobweb.DefaultSource;
+                        if (k < toks.Count)
+                        {
+                            if (!toks[k].Text.StartsWith('"')) { error = Err(k, "the cobweb's map is a quoted expression in x (and c)"); return false; }
+                            if (!TryExpression(toks[k].Text, new[] { "x", "c" }, "the cobweb", out src, out string msg))
+                            { error = Err(k, msg); return false; }
+                            k++;
+                        }
+                        if (k < toks.Count) { error = Err(k, "unexpected text after the cobweb"); return false; }
+                        cobweb = new MathPlaneCobweb(x0, steps, src);
+                        break;
+                    }
                     case "point":
                     case "vector":
                     case "segment":
@@ -330,7 +387,7 @@ namespace FracturingFog.Models
                         break;
                     }
                     default:
-                        error = Err(0, $"unknown statement '{toks[0].Text}' (expected point, vector, segment, polyline, curve, region, axes, grid, ticks, labels, det, eigen, lengths, map, phase or probe)");
+                        error = Err(0, $"unknown statement '{toks[0].Text}' (expected point, vector, segment, polyline, curve, region, axes, grid, ticks, labels, det, eigen, lengths, map, phase, probe, orbit or cobweb)");
                         return false;
                 }
             }
@@ -340,6 +397,7 @@ namespace FracturingFog.Models
                 ShowAxes = axes, ShowGrid = grid, ShowTicks = ticks, Labels = labels, Objects = objects,
                 ShowDet = det, ShowEigen = eigen, ShowLengths = lengths,
                 MapSource = mapSource, Phase = phase, Probe = probe,
+                OrbitSteps = orbit, Cobweb = cobweb,
             };
             return true;
         }

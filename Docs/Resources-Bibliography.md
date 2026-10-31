@@ -581,8 +581,9 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
 <a id="cobweb-plot"></a>
 
 - **Cobweb plot** — the standard graphical iteration of a real map `x → f(x)` against `y = x`. Overview:
-  <https://en.wikipedia.org/wiki/Cobweb_plot>; no single originating source is credited here. Planned
-  use: the Math Plane cobweb diagram of `x → x² + c` (MathPlane-DesignPlan.md §3.6).
+  <https://en.wikipedia.org/wiki/Cobweb_plot>; no single originating source is credited here. Used for
+  the Math Plane cobweb diagram (scene `cobweb x0 [N] ["f(x)"]`, default `x² + c`;
+  `Abstractions/Models/MathPlaneDynamics.cs`, #1554; MathPlane-DesignPlan.md §3.6).
 
 ### Scene Engine — camera splines, motion blur, cinematic moves
 
