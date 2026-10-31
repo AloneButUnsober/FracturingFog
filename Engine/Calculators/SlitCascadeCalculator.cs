@@ -45,6 +45,27 @@
 // walking the levels, and its brightness is Π pᵢ/max p over the levels (log
 // scale), 0 outside the aperture.
 //
+// Probability sets the dimension (#1571, epic S4; design §5). The aperture
+// measure is self-similar with equal ratios r, so its generalized (Rényi)
+// dimensions (Hentschel & Procaccia, Physica D 8, 1983) and f(α) spectrum
+// (Halsey, Jensen, Kadanoff, Procaccia & Shraiman, Phys. Rev. A 33, 1986) are
+// closed form:
+//
+//     D_q = log Σ pᵢ^q / ((q − 1)·log r),   D₁ = Σ pᵢ log pᵢ / log r,
+//     D₀ = log N_eff / log(1/r)             (N_eff = children with pᵢ > 0)
+//
+// so λ, d and w set the fringes, the fringes set pᵢ, and pᵢ sets D_q. The
+// status bar shows D₀, D₁, D₂ and D_q (q = SlitCascadeQ). The formulas assume
+// the children don't overlap (the open set condition); when they do, the
+// label says so, since the numbers are then only similarity dimensions.
+//
+// Two more aperture views colour each point by its address i₁…i_D:
+//   HolderAlpha: α = log(p_{i₁}⋯p_{i_D}) / log(r^D), mapped from [α_min, α_max]
+//                (α_min = log p_max / log r, α_max = log p_min / log r);
+//   Spectrum:    f(α) = log(D! / Π kᵢ!) / (D·log(1/r)), kᵢ = how often child i
+//                occurs in the address — the exact depth-D count of leaves that
+//                share this point's α, as a dimension; mapped over [0, D₀].
+//
 // Pixel ↔ plane: the standard (4/W)/Zoom pitch round (CenterX, CenterY); the
 // screen view's plane is the spatial frequency u, the aperture view's is x.
 
@@ -121,6 +142,11 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
             pw[i] = FringeIntensity(bx[i], d, w, lambda);
             sum += pw[i];
         }
+        // A share below 1e-12 of the brightest is a dark fringe: cos(π/2) evaluates
+        // to ~6e-17, not 0, and would otherwise keep a dead branch in N_eff (#1571).
+        double pPeak = 0;
+        foreach (double v in pw) pPeak = Math.Max(pPeak, v);
+        for (int i = 0; i < n; i++) if (pw[i] < 1e-12 * pPeak) { sum -= pw[i]; pw[i] = 0.0; }
         // Every child on a dark fringe: no light gets through; fall back to equal
         // shares so the image stays defined (a plain Cantor set).
         for (int i = 0; i < n; i++) pw[i] = sum > 1e-300 ? pw[i] / sum : 1.0 / n;
@@ -156,18 +182,84 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
         double pMax = 0.0;
         foreach (double q in c.P) pMax = Math.Max(pMax, q);
         if (pMax <= 0.0) return 0.0;
+        var counts = new int[c.P.Length];
+        if (!Address(c, x, y, counts)) return 0.0;
         double mass = 1.0;
+        for (int i = 0; i < counts.Length; i++)
+            for (int k = 0; k < counts[i]; k++) mass *= c.P[i] / pMax;
+        return mass;
+    }
+
+    /// <summary>Walks the levels from (x, y): true when the point lies in a leaf,
+    /// with <paramref name="counts"/>[i] = how many levels chose child i (#1571).</summary>
+    public static bool Address(in Cascade c, double x, double y, int[] counts)
+    {
+        Array.Clear(counts);
         for (int level = 0; level < c.Depth; level++)
         {
             // Child squares have half-size r in the parent's frame [−1, 1]².
             int hit = -1;
             for (int i = 0; i < c.P.Length; i++)
                 if (Math.Abs(x - c.Bx[i]) <= c.Ratio && Math.Abs(y - c.By[i]) <= c.Ratio && c.P[i] > 0.0) { hit = i; break; }
-            if (hit < 0) return 0.0;
-            mass *= c.P[hit] / pMax;
+            if (hit < 0) return false;
+            counts[hit]++;
             x = (x - c.Bx[hit]) / c.Ratio; y = (y - c.By[hit]) / c.Ratio;
         }
-        return mass;
+        return true;
+    }
+
+    /// <summary>Generalized dimension D_q of the cascade measure (header); q = 1
+    /// is the information dimension, q = 0 the box dimension of the support.</summary>
+    public static double GeneralizedDimension(in Cascade c, double q)
+    {
+        double logR = Math.Log(c.Ratio);
+        if (Math.Abs(q - 1.0) < 1e-12)
+        {
+            double s = 0.0;
+            foreach (double p in c.P) if (p > 0.0) s += p * Math.Log(p);
+            return s / logR;
+        }
+        double sum = 0.0;
+        foreach (double p in c.P) if (p > 0.0) sum += Math.Pow(p, q);
+        return Math.Log(sum) / ((q - 1.0) * logR);
+    }
+
+    /// <summary>Coarse Hölder exponent α of an address (header).</summary>
+    public static double Alpha(in Cascade c, int[] counts)
+    {
+        double logMass = 0.0;
+        for (int i = 0; i < counts.Length; i++) if (counts[i] > 0) logMass += counts[i] * Math.Log(c.P[i]);
+        return logMass / (c.Depth * Math.Log(c.Ratio));
+    }
+
+    /// <summary>Depth-D spectrum f(α) of an address: log of the number of leaves
+    /// with the same child counts, as a dimension (header).</summary>
+    public static double Spectrum(in Cascade c, int[] counts)
+    {
+        double logMultinomial = LogFactorial(c.Depth);
+        foreach (int k in counts) logMultinomial -= LogFactorial(k);
+        return logMultinomial / (c.Depth * Math.Log(1.0 / c.Ratio));
+    }
+
+    /// <summary>True when two children's squares overlap (the D_q formulas then
+    /// give only similarity dimensions).</summary>
+    public static bool ChildrenOverlap(in Cascade c)
+    {
+        for (int i = 0; i < c.P.Length; i++)
+            for (int j = i + 1; j < c.P.Length; j++)
+                if (c.P[i] > 0 && c.P[j] > 0 && Math.Abs(c.Bx[i] - c.Bx[j]) < 2 * c.Ratio && Math.Abs(c.By[i] - c.By[j]) < 2 * c.Ratio)
+                    return true;
+        return false;
+    }
+
+    /// <summary>Status-bar text: D₀, D₁, D₂ and D_q for the current cascade (#1571).</summary>
+    public string? LastPrecisionLabel { get; private set; }
+
+    private static double LogFactorial(int n)
+    {
+        double s = 0.0;
+        for (int k = 2; k <= n; k++) s += Math.Log(k);
+        return s;
     }
 
     public void Calculate(CancellationToken ct)
@@ -182,6 +274,17 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
         foreach (double q in cascade.P) sumSqrt += Math.Sqrt(q);
         double logI0 = 2.0 * cascade.Depth * Math.Log10(sumSqrt);
 
+        // #1571 — the dimension readout, and the α / f(α) colour ranges.
+        double qOrder = Finite(fp.SlitCascadeQ, 3.0);
+        double d0 = GeneralizedDimension(cascade, 0), d1 = GeneralizedDimension(cascade, 1), d2 = GeneralizedDimension(cascade, 2);
+        LastPrecisionLabel = FormattableString.Invariant(
+            $"D0 {d0:F3}  D1 {d1:F3}  D2 {d2:F3}  Dq(q={qOrder:G3}) {GeneralizedDimension(cascade, qOrder):F3}")
+            + (ChildrenOverlap(cascade) ? "  (children overlap: similarity dimensions)" : "");
+        double pMaxAll = 0.0, pMinAll = double.MaxValue;
+        foreach (double p in cascade.P) if (p > 0.0) { pMaxAll = Math.Max(pMaxAll, p); pMinAll = Math.Min(pMinAll, p); }
+        double alphaMin = Math.Log(pMaxAll) / Math.Log(cascade.Ratio), alphaMax = Math.Log(pMinAll) / Math.Log(cascade.Ratio);
+        double alphaSpan = alphaMax - alphaMin;
+
         double pitch = (4.0 / Math.Max(1, width)) / Math.Max(1e-300, Zoom);
         double cx = CenterX, cy = CenterY;
         int maxIt = Math.Max(16, MaxIterations);
@@ -192,6 +295,7 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
+            var counts = new int[cascade.P.Length];
             double py = cy + (y - height * 0.5) * pitch;
             int row = y * width;
             for (int x = 0; x < width; x++)
@@ -202,6 +306,14 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
                 {
                     double m = ApertureMass(cascade, px, py);
                     t = m > 0.0 ? 1.0 + Math.Log10(m) / decades : 0.0;
+                }
+                else if (view is SlitCascadeView.HolderAlpha or SlitCascadeView.Spectrum)
+                {
+                    if (!Address(cascade, px, py, counts)) t = 0.0;
+                    else if (view == SlitCascadeView.HolderAlpha)
+                        t = Math.Max(1e-9, alphaSpan > 1e-12 ? (Alpha(cascade, counts) - alphaMin) / alphaSpan : 0.5);
+                    else
+                        t = Math.Max(1e-9, d0 > 1e-12 ? Spectrum(cascade, counts) / d0 : 1.0);
                 }
                 else
                 {

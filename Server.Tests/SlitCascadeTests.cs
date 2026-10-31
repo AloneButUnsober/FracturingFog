@@ -17,6 +17,8 @@ namespace FracturingFog.Server.Tests;
 // #1569 (double-slit epic #1565 S3) — the slit cascade. Oracles independent of
 // the calculator's per-level product: the textbook two-slit pattern, a brute
 // sum over every one of the N^D leaf slits, and Parseval (transmitted power).
+// #1571 (S4): generalized dimensions against box counting of the rendered
+// measure, monofractal equal shares, monotone D_q, α / f(α) of an address.
 public sealed class SlitCascadeTests
 {
     private sealed class RampMap : IColorMap
@@ -159,7 +161,8 @@ public sealed class SlitCascadeTests
     {
         foreach (var view in Enum.GetValues<SlitCascadeView>())
         {
-            var calc = new SlitCascadeCalculator(48, 32) { Zoom = view == SlitCascadeView.Aperture ? 1.6 : 0.25, ColorMap = new RampMap(), FractalParameters = P(q => q.SlitCascadeView = view) };
+            bool aperture = view is SlitCascadeView.Aperture or SlitCascadeView.HolderAlpha or SlitCascadeView.Spectrum;
+            var calc = new SlitCascadeCalculator(48, 32) { Zoom = aperture ? 1.6 : 0.25, ColorMap = new RampMap(), FractalParameters = P(q => q.SlitCascadeView = view) };
             calc.Calculate(CancellationToken.None);
             Assert.Contains(calc.SmoothBuffer, v => v > 0);
             Assert.All(calc.SmoothBuffer, v => Assert.False(float.IsNaN(v)));
@@ -182,6 +185,144 @@ public sealed class SlitCascadeTests
         Assert.Contains(nameof(FractalParameters.SlitCascadeRatio), names);
     }
 
+    // ── #1571 (double-slit S4) — probability sets the dimension ─────────────
+
+    // Equal shares make a monofractal: every D_q is log N / log(1/r).
+    [Theory]
+    [InlineData(0.2)]
+    [InlineData(0.35)]
+    public void EqualShares_AreMonofractal(double r)
+    {
+        var c = SlitCascadeCalculator.Build(P(q => { q.SlitCascadeChildren = 2; q.SlitCascadeLayout = SlitCascadeLayout.Line; q.SlitCascadeRatio = r; }));
+        double want = Math.Log(2) / Math.Log(1 / r);
+        foreach (double q in new[] { -3.0, 0.0, 0.5, 1.0, 2.0, 7.0 })
+            Assert.Equal(want, SlitCascadeCalculator.GeneralizedDimension(c, q), 10);
+    }
+
+    // D_q is non-increasing in q, strictly for unequal shares, and continuous at q = 1.
+    [Fact]
+    public void GeneralizedDimensions_DecreaseWithQ_AndAreContinuousAtOne()
+    {
+        var c = SlitCascadeCalculator.Build(P());
+        Assert.True(c.P.Max() / c.P.Min() > 3, "default shares should be unequal");
+        double prev = double.PositiveInfinity;
+        for (double q = -4; q <= 8; q += 0.25)
+        {
+            double d = SlitCascadeCalculator.GeneralizedDimension(c, q);
+            Assert.True(d < prev, $"D_{q} = {d} is not below D_{q - 0.25} = {prev}");
+            prev = d;
+        }
+        double d1 = SlitCascadeCalculator.GeneralizedDimension(c, 1);
+        Assert.Equal(d1, SlitCascadeCalculator.GeneralizedDimension(c, 1 + 1e-7), 5);
+        Assert.Equal(d1, SlitCascadeCalculator.GeneralizedDimension(c, 1 - 1e-7), 5);
+        Assert.Equal(Math.Log(6) / Math.Log(1 / 0.3), SlitCascadeCalculator.GeneralizedDimension(c, 0), 10);
+    }
+
+    // Independent oracle: box-count the rendered measure. Rasterise the aperture
+    // mass, sum it into boxes of side ε, and fit the slopes of log N(ε),
+    // −Σμ log μ and −log Σμ² against log(1/ε). No closed form involved.
+    [Fact]
+    public void BoxCounting_TheRenderedMeasure_MatchesTheClosedForm()
+    {
+        var c = SlitCascadeCalculator.Build(P(q => q.SlitCascadeDepth = 4));
+        Assert.False(SlitCascadeCalculator.ChildrenOverlap(c));
+        const int G = 1024;
+        var mass = new double[G * G];
+        double total = 0;
+        for (int y = 0; y < G; y++)
+            for (int x = 0; x < G; x++)
+            {
+                double m = SlitCascadeCalculator.ApertureMass(c, -1 + (x + 0.5) * 2.0 / G, -1 + (y + 0.5) * 2.0 / G);
+                mass[y * G + x] = m; total += m;
+            }
+        var xs = new System.Collections.Generic.List<double>();
+        var n0 = new System.Collections.Generic.List<double>();
+        var h1 = new System.Collections.Generic.List<double>();
+        var s2 = new System.Collections.Generic.List<double>();
+        foreach (int boxes in new[] { 8, 16, 32, 64 })   // ε = 2/boxes, between the leaf (r⁴ ≈ 0.008) and r
+        {
+            int side = G / boxes;
+            var mu = new double[boxes * boxes];
+            for (int y = 0; y < G; y++)
+                for (int x = 0; x < G; x++)
+                    mu[(y / side) * boxes + x / side] += mass[y * G + x] / total;
+            double count = 0, ent = 0, sq = 0;
+            foreach (double m in mu) if (m > 0) { count++; ent -= m * Math.Log(m); sq += m * m; }
+            xs.Add(Math.Log(boxes / 2.0)); n0.Add(Math.Log(count)); h1.Add(ent); s2.Add(-Math.Log(sq));
+        }
+        static double Slope(System.Collections.Generic.List<double> x, System.Collections.Generic.List<double> y)
+        {
+            double mx = x.Average(), my = y.Average(), num = 0, den = 0;
+            for (int i = 0; i < x.Count; i++) { num += (x[i] - mx) * (y[i] - my); den += (x[i] - mx) * (x[i] - mx); }
+            return num / den;
+        }
+        double d0 = SlitCascadeCalculator.GeneralizedDimension(c, 0), d1 = SlitCascadeCalculator.GeneralizedDimension(c, 1), d2 = SlitCascadeCalculator.GeneralizedDimension(c, 2);
+        Assert.True(d0 - d2 > 0.3, "the test needs a clearly multifractal measure");
+        Assert.Equal(d0, Slope(xs, n0), 0.1 * d0);
+        Assert.Equal(d1, Slope(xs, h1), 0.1 * d1);
+        Assert.Equal(d2, Slope(xs, s2), 0.1 * d2);
+    }
+
+    [Fact]
+    public void DarkFringes_LowerTheSupportDimension()
+    {
+        // λ = 1.6·d puts both outer children of a 3-child line on dark fringes.
+        var lit = SlitCascadeCalculator.Build(P(q => { q.SlitCascadeLayout = SlitCascadeLayout.Line; q.SlitCascadeChildren = 3; q.SlitCascadeRatio = 0.2; q.SlitCascadeWavelength = 1.2; }));
+        var dark = SlitCascadeCalculator.Build(P(q => { q.SlitCascadeLayout = SlitCascadeLayout.Line; q.SlitCascadeChildren = 3; q.SlitCascadeRatio = 0.2; q.SlitCascadeWavelength = 1.6; q.SlitCascadeWidth = 0; }));
+        Assert.Equal(Math.Log(3) / Math.Log(5), SlitCascadeCalculator.GeneralizedDimension(lit, 0), 10);
+        Assert.Equal(0.0, SlitCascadeCalculator.GeneralizedDimension(dark, 0), 10);   // one surviving branch: a point
+    }
+
+    // α of an address is the mass exponent; f(α) counts the leaves sharing it.
+    [Fact]
+    public void AlphaAndSpectrum_OfAnAddress()
+    {
+        var c = SlitCascadeCalculator.Build(P(q => q.SlitCascadeDepth = 4));
+        int n = c.P.Length;
+        // Address 0,0,1,3: counts k = [2,1,0,1,0,0].
+        var counts = new int[n]; counts[0] = 2; counts[1] = 1; counts[3] = 1;
+        double wantAlpha = (2 * Math.Log(c.P[0]) + Math.Log(c.P[1]) + Math.Log(c.P[3])) / (4 * Math.Log(c.Ratio));
+        Assert.Equal(wantAlpha, SlitCascadeCalculator.Alpha(c, counts), 12);
+        // 4!/(2!·1!·1!) = 12 leaves share this composition.
+        Assert.Equal(Math.Log(12) / (4 * Math.Log(1 / c.Ratio)), SlitCascadeCalculator.Spectrum(c, counts), 12);
+        // A point in that leaf walks back to the same counts.
+        double x = 0, y = 0, s = 1;
+        foreach (int i in new[] { 0, 0, 1, 3 }) { x += s * c.Bx[i]; y += s * c.By[i]; s *= c.Ratio; }
+        var walked = new int[n];
+        Assert.True(SlitCascadeCalculator.Address(c, x, y, walked));
+        Assert.Equal(counts, walked);
+        // A pure address (one child every level) has f = 0: a single leaf.
+        var pure = new int[n]; pure[2] = 4;
+        Assert.Equal(0.0, SlitCascadeCalculator.Spectrum(c, pure), 12);
+    }
+
+    [Fact]
+    public void StatusLabel_ShowsTheDimensions()
+    {
+        var calc = new SlitCascadeCalculator(32, 24) { ColorMap = new RampMap(), FractalParameters = P(q => q.SlitCascadeQ = 4) };
+        calc.Calculate(CancellationToken.None);
+        var c = SlitCascadeCalculator.Build(calc.FractalParameters);
+        string d1 = SlitCascadeCalculator.GeneralizedDimension(c, 1).ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
+        Assert.Contains("D1 " + d1, calc.LastPrecisionLabel);
+        Assert.Contains("Dq(q=4)", calc.LastPrecisionLabel);
+        Assert.DoesNotContain("overlap", calc.LastPrecisionLabel);
+        var crowded = new SlitCascadeCalculator(8, 8) { ColorMap = new RampMap(), FractalParameters = P(q => q.SlitCascadeRatio = 0.45) };
+        crowded.Calculate(CancellationToken.None);
+        Assert.Contains("overlap", crowded.LastPrecisionLabel);
+    }
+
+    [Fact]
+    public void AlphaAndSpectrumViews_StayInRange()
+    {
+        foreach (var view in new[] { SlitCascadeView.HolderAlpha, SlitCascadeView.Spectrum })
+        {
+            var calc = new SlitCascadeCalculator(96, 64) { Zoom = 1.6, ColorMap = new RampMap(), FractalParameters = P(q => q.SlitCascadeView = view) };
+            calc.Calculate(CancellationToken.None);
+            Assert.All(calc.SmoothBuffer, v => Assert.InRange(v, 0f, 400f));
+            Assert.True(calc.SmoothBuffer.Where(v => v > 0).Distinct().Count() > 3, $"{view} should show several α classes");
+        }
+    }
+
     [Fact]
     public void LiveView_RoundTripsThroughTheCommandBuilder()
     {
@@ -189,7 +330,7 @@ public sealed class SlitCascadeTests
         {
             SlitCascadeChildren = 7, SlitCascadeRatio = 0.21, SlitCascadeDepth = 5, SlitCascadeSeparation = 1.4,
             SlitCascadeWidth = 0.15, SlitCascadeWavelength = 0.77, SlitCascadeLayout = SlitCascadeLayout.Line,
-            SlitCascadeView = SlitCascadeView.Aperture, SlitCascadeDynamicRange = 9,
+            SlitCascadeView = SlitCascadeView.Aperture, SlitCascadeDynamicRange = 9, SlitCascadeQ = -1.5,
         };
         var report = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot
         {
@@ -208,5 +349,6 @@ public sealed class SlitCascadeTests
         Assert.Equal(SlitCascadeLayout.Line, fresh.SlitCascadeLayout);
         Assert.Equal(SlitCascadeView.Aperture, fresh.SlitCascadeView);
         Assert.Equal(9.0, fresh.SlitCascadeDynamicRange);
+        Assert.Equal(-1.5, fresh.SlitCascadeQ);   // #1571
     }
 }

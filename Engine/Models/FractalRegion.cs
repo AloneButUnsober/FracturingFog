@@ -708,6 +708,7 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeLayout { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeView { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? SlitCascadeDynamicRange { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? SlitCascadeQ { get; set; }   // #1571
         [JsonIgnore(Condition = OmitNull)] public string? LyapunovSequence { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? LyapunovWarmup { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? TranscendentalMap { get; set; }
@@ -1312,6 +1313,7 @@ namespace FracturingFog.Models
                     SlitCascadeLayout = (int)p.SlitCascadeLayout,
                     SlitCascadeView = (int)p.SlitCascadeView,
                     SlitCascadeDynamicRange = p.SlitCascadeDynamicRange,
+                    SlitCascadeQ = p.SlitCascadeQ,
                 },
                 FractalType.Lyapunov => new RegionFractalParams
                 {
@@ -2079,6 +2081,7 @@ namespace FracturingFog.Models
             if (this.SlitCascadeLayout.HasValue) p.SlitCascadeLayout = (FracturingFog.SlitCascadeLayout)this.SlitCascadeLayout.Value;
             if (this.SlitCascadeView.HasValue) p.SlitCascadeView = (FracturingFog.SlitCascadeView)this.SlitCascadeView.Value;
             if (SlitCascadeDynamicRange.HasValue) p.SlitCascadeDynamicRange = SlitCascadeDynamicRange.Value;
+            if (SlitCascadeQ.HasValue) p.SlitCascadeQ = SlitCascadeQ.Value;
             if (!string.IsNullOrEmpty(LyapunovSequence)) p.LyapunovSequence = LyapunovSequence;
             if (LyapunovWarmup.HasValue) p.LyapunovWarmup = LyapunovWarmup.Value;
             if (TranscendentalMap.HasValue) p.TranscendentalMap = (FracturingFog.TranscendentalMap)TranscendentalMap.Value;
