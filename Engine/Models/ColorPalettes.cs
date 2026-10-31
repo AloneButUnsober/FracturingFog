@@ -155,6 +155,7 @@ namespace FracturingFog.Models
             new PsychedelicMap(),
             new TwilightCyclicMap(),
             new PhaseWheelBlueAmberMap(),   // #1591 — colour-blind-safe one-turn phase wheel
+            new PrimeEscapeGoldCyanMap(),   // #1486 — prime escape counts, split by n mod 4
             new SolarWindMap(),
             new SolarWindMapMOD(),
 

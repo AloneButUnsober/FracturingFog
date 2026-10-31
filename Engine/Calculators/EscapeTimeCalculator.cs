@@ -1444,8 +1444,12 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
             FinalDrBuffer[idx] = fdr;
             FinalDiBuffer[idx] = fdi;
 
+            // #1486: honour IColorMapHandlesInSet like MandelbrotCalculator and the
+            // GPU writeback above — such themes get the true escape iteration (DSL
+            // `iter`, Prime Escape); every other theme keeps the maxIter contract.
+            int iterArg = colorMap is IColorMapHandlesInSet ? iters : maxIter;
             ColorBuffer[idx] = (uint)colorMap.Map(
-                smooth, dist, maxIter,
+                smooth, dist, iterArg,
                 nx, ny,
                 fzr, fzi, fdr, fdi);
         }
@@ -1459,7 +1463,9 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
             FinalZiBuffer[idx] = 0f;
             FinalDrBuffer[idx] = 0f;
             FinalDiBuffer[idx] = 0f;
-            ColorBuffer[idx] = colorMap.InSetColor;
+            ColorBuffer[idx] = colorMap is IColorMapHandlesInSet
+                ? (uint)colorMap.Map(0f, 0f, maxIter, 0f, 0f, 0f, 0f, 0f, 0f)
+                : colorMap.InSetColor;
         }
     }
 

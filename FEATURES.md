@@ -255,7 +255,7 @@ Fracturing Fog ships with **290+ built-in color palettes** organized into catego
 | **3D Relief (normal-mapped)** | Phong Stone, Molten Metal, Crystal Cave, Gold Relief, Marble, Volcanic Rock, Lunar Surface, Ancient Bronze, Neon |
 | **Algorithmic Phong 3D** | Bernstein, Copper Sheen, Digital Matrix, Fire, Golden Ratio, Pastelly, Psychedelic, Solar Wind, Twilight Cyclic, Vintage Sepia |
 | **PBR (physically-based)** | Cesium Spectrum (Standard / Realistic / Ultra-Glow), Radio Interference, Golden Ratio Phi |
-| **Escape Time** | Smooth-iter palettes — classic gradients |
+| **Escape Time** | Smooth-iter palettes — classic gradients; Prime Escape (Gold-Cyan) lights prime escape counts, split by n mod 4 |
 | **Distance Estimation** | Reveal fine filaments and dendrites |
 | **Orbit Traps & Orbit Trap Images** | Geometric or image-mapped traps |
 | **Argument / Binary Decomposition** | Phase-angle-based coloring |
