@@ -458,9 +458,33 @@ physics new.
 | S4 probability → dimension | #1571 | S3 | closed-form D_q for equal r (§5); α colouring on the aperture view; shipped (§5.1) |
 | S5 OAM filaments (cascade) | #1572 | S3 | ring layout with N ≥ 3; charge = ℓ mod N, verified (§6.1); credit the devil's vortex lens |
 | S6 Talbot carpet | #1570 | S0 | dimensionless (ξ, ζ); mean-normalised log scale; shipped (§7.1) |
-| S7 presets / close-out | #1573 | all | — |
+| S7 presets / close-out | #1573 | all | shipped (§10.1) |
 
 Parallel after S0: {S1, S2, S3, S6}. After S3: {S4, S5}.
+
+### 10.1 Close-out (S7 #1573, 2026-10-31)
+
+- **Presets:** nine built-in regions, three per type. *Double Slit - Which-Path Collapse /
+  Angular Momentum Spirals / Opposite Winding Rays*; *Slit Cascade - Ring Diffraction / Probability
+  Sets Dimension / Vortex Core*; *Talbot Carpet - Ronchi Grating / Fractal Comb / Cascade Grating*.
+  Three built-in animations are bound to presets: which-path collapse (η), angular momentum sweep
+  (ℓ), wavelength breathing (λ). Regions carry no colour theme, so the Talbot presets set 16
+  iterations and the guide recommends Greyscale.
+- **The probability preset runs at depth 4, not 5.** At depth 5 a leaf (r⁵ ≈ 0.0024) is about 2 px
+  at 1080p and the aperture views look sparse.
+- **Its α view has exactly D + 1 classes.** The ring's six shares take only two values (children at
+  x = ±0.7 and ±0.35), so α counts how many levels chose a bright child. The preset test asserts
+  this count. The preset runs at **40 iterations**: at 400, the five classes (at s = 0, 100, … 400)
+  sat on whole turns of HSV's 50-iteration hue cycle and all rendered red. The 960×540 render
+  caught this, and a test now requires D + 1 distinct colours in the default theme.
+- **User docs:** `Docs/User/DoubleSlit-Guide.md` (concepts, settings, demos, headless commands, all
+  run during S7) and three Help entries (`MathDoubleSlitText`, `MathSlitCascadeText`,
+  `MathTalbotCarpetText`) in a new "Double slit" group.
+- **Tests** (`DoubleSlitPresetTests`): every preset renders. Each preset's promise is checked by an
+  invariant: η = 1 flat, three spiral arms by winding, the centre peak, multifractal D₁ < D₀, a dark
+  core of charge 3, the ζ = 1 self-image. Bound animations exist, target their type and drive
+  animatable settings, and the guide and help name every preset. Three preset mutants are each
+  caught.
 
 **Standing rules for every slice:** batch parity (`RegionFractalParams` → `--param`,
 `BuildFractalParameters`, `BatchCommandBuilder` round-trip), recolour-guard classification (#981),

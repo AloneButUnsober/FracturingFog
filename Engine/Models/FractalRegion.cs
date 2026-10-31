@@ -3331,6 +3331,176 @@ namespace FracturingFog.Models
                 QualityPreset = QualityPreset.Standard,
                 Params      = new RegionFractalParams { JuliaCRe = -0.125, JuliaCIm = 0.6495 },
             },
+            // #1573 — double-slit epic #1565 presets (Docs/User/DoubleSlit-Guide.md). Three per
+            // type; the dual-orbit and cascade ones bind a built-in animation. Talbot carpets run
+            // at 16 iterations so FF's repeating themes span the scale about once.
+            new()
+            {
+                Name          = "Double Slit - Which-Path Collapse",
+                CenterX       = -0.6,
+                CenterY       =  0.05,
+                Zoom          =  1.0,
+                Iterations    =  400,
+                Description   = "Two orbits as the two slits: each escaping orbit is a path with a phase, and the paths interfere. Enable the bound 'Double slit: which-path collapse' animation to switch the which-path detector on and off: the fringes fade to a flat field and come back.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.JulibrotPair,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Double slit: which-path collapse",
+                Params        = new RegionFractalParams
+                {
+                    DualOrbitField = (int)FracturingFog.DualOrbitField.PathInterference,
+                    DualOrbitCSeedX = 0.3, DualOrbitCSeedY = 0.2, DualOrbitInterferenceK = 20.0,
+                },
+            },
+            new()
+            {
+                Name          = "Double Slit - Angular Momentum Spirals",
+                CenterX       = -0.6,
+                CenterY       =  0.0,
+                Zoom          =  0.6,
+                Iterations    =  400,
+                Description   = "The interference phase with an orbital-angular-momentum twist of 3: the rings round the set become three-armed spirals. The bound 'Double slit: angular momentum sweep' animation steps the twist from -4 to 4, so the arms change count and handedness.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.JulibrotPair,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Double slit: angular momentum sweep",
+                Params        = new RegionFractalParams
+                {
+                    DualOrbitField = (int)FracturingFog.DualOrbitField.PathInterferencePhase,
+                    DualOrbitCSeedX = 0.3, DualOrbitCSeedY = 0.2, DualOrbitInterferenceK = 2.0,
+                    DualOrbitAngularMomentum = 3,
+                },
+            },
+            new()
+            {
+                Name          = "Double Slit - Opposite Winding Rays",
+                CenterX       = -0.6,
+                CenterY       =  0.0,
+                Zoom          =  0.6,
+                Iterations    =  400,
+                Description   = "The two paths twist in opposite directions, so the intensity fringes follow the sum of their external angles and fan out from the set as radial rays.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.JulibrotPair,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    DualOrbitField = (int)FracturingFog.DualOrbitField.PathInterference,
+                    DualOrbitCSeedX = 0.3, DualOrbitCSeedY = 0.2, DualOrbitInterferenceK = 1.0,
+                    DualOrbitAngularMomentum = 3, DualOrbitWindingMode = (int)FracturingFog.DualOrbitWindingMode.Opposite,
+                },
+            },
+            new()
+            {
+                Name          = "Slit Cascade - Ring Diffraction",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.25,
+                Iterations    =  400,
+                Description   = "Six slits on a ring, each replaced by six smaller ones, four levels deep; each slit lets through the share of light the two-slit fringes put at its place. This is the far-field diffraction pattern. The bound 'Slit cascade: wavelength breathing' animation slides the fringes, so slits move on and off dark fringes.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.SlitCascade,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Slit cascade: wavelength breathing",
+                Params        = new RegionFractalParams
+                {
+                    SlitCascadeChildren = 6, SlitCascadeRatio = 0.3, SlitCascadeDepth = 4,
+                    SlitCascadeSeparation = 1.0, SlitCascadeWidth = 0.2, SlitCascadeWavelength = 0.6,
+                    SlitCascadeLayout = (int)FracturingFog.SlitCascadeLayout.Ring,
+                    SlitCascadeView = (int)FracturingFog.SlitCascadeView.Intensity, SlitCascadeDynamicRange = 6.0,
+                },
+            },
+            new()
+            {
+                Name          = "Slit Cascade - Probability Sets Dimension",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  1.6,
+                Iterations    =  40,    // HSV turns every 50: the 5 α classes land on 5 distinct hues (400 put them all on red)
+                Description   = "The cascade's slits coloured by the Hölder exponent: how concentrated the light is at each point. The status bar shows the fractal dimensions D0, D1, D2, Dq; change the wavelength and watch them move. The probabilities set the dimension.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.SlitCascade,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    SlitCascadeChildren = 6, SlitCascadeRatio = 0.3, SlitCascadeDepth = 4,
+                    SlitCascadeSeparation = 1.0, SlitCascadeWidth = 0.2, SlitCascadeWavelength = 0.6,
+                    SlitCascadeLayout = (int)FracturingFog.SlitCascadeLayout.Ring,
+                    SlitCascadeView = (int)FracturingFog.SlitCascadeView.HolderAlpha, SlitCascadeQ = 3.0,
+                },
+            },
+            new()
+            {
+                Name          = "Slit Cascade - Vortex Core",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  1.0,
+                Iterations    =  400,
+                Description   = "Five slits on a ring, three levels, each slit twisted by its angle (charge 1). With equal light through every slit the three levels' vortices stack into one dark core of charge 3 at the centre. Lower the wavelength and they drift apart into a constellation.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.SlitCascade,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    SlitCascadeChildren = 5, SlitCascadeRatio = 0.3, SlitCascadeDepth = 3,
+                    SlitCascadeSeparation = 1.0, SlitCascadeWidth = 0.0, SlitCascadeWavelength = 1e6,
+                    SlitCascadeLayout = (int)FracturingFog.SlitCascadeLayout.Ring,
+                    SlitCascadeView = (int)FracturingFog.SlitCascadeView.Intensity, SlitCascadeDynamicRange = 6.0,
+                    SlitCascadeCharge = 1, SlitCascadeChargePattern = (int)FracturingFog.SlitCascadeChargePattern.Constant,
+                },
+            },
+            new()
+            {
+                Name          = "Talbot Carpet - Ronchi Grating",
+                CenterX       =  0.0,
+                CenterY       =  0.5,
+                Zoom          =  1.9,
+                Iterations    =  16,
+                Description   = "The near field of a bar grating, one Talbot distance tall. The grating images itself at the top and bottom and shifted by half a period across the middle; in between the light weaves a quantum carpet. Looks best with a plain theme such as Greyscale.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.TalbotCarpet,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    TalbotProfile = (int)FracturingFog.TalbotProfile.Ronchi, TalbotDuty = 0.3, TalbotModes = 32,
+                    TalbotView = (int)FracturingFog.TalbotView.Intensity, TalbotDynamicRange = 2.0,
+                },
+            },
+            new()
+            {
+                Name          = "Talbot Carpet - Fractal Comb",
+                CenterX       =  0.0,
+                CenterY       =  0.5,
+                Zoom          =  1.9,
+                Iterations    =  16,
+                Description   = "Infinitely thin slits: the sharpest carpet, a lattice of straight light paths. At irrational distances the pattern is a fractal; zoom in on any row away from the simple fractions to see it.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.TalbotCarpet,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    TalbotProfile = (int)FracturingFog.TalbotProfile.DeltaComb, TalbotModes = 24,
+                    TalbotView = (int)FracturingFog.TalbotView.Intensity, TalbotDynamicRange = 2.0,
+                },
+            },
+            new()
+            {
+                Name          = "Talbot Carpet - Cascade Grating",
+                CenterX       =  0.0,
+                CenterY       =  0.5,
+                Zoom          =  1.9,
+                Iterations    =  16,
+                Description   = "A grating whose every period is the slit cascade (the row of slits from the Slit Cascade type). Its carpet carries the cascade's self-similar structure into the near field.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.TalbotCarpet,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    TalbotProfile = (int)FracturingFog.TalbotProfile.SlitCascade, TalbotModes = 64,
+                    TalbotView = (int)FracturingFog.TalbotView.Intensity, TalbotDynamicRange = 2.0,
+                    SlitCascadeChildren = 6, SlitCascadeRatio = 0.3, SlitCascadeDepth = 4,
+                    SlitCascadeSeparation = 1.0, SlitCascadeWidth = 0.2, SlitCascadeWavelength = 0.6,
+                },
+            },
             // #920 — faithful (Lavaurs-limit) parabolic implosion, one per parabolic
             // root p/q. Near-parabolic Julia sets on the cardioid boundary; each is bound
             // to its 'Parabolic implosion (cardioid, …)' animation, which sweeps c toward
