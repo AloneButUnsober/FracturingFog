@@ -182,6 +182,32 @@ with no aperture sampling and no FFT. The 2D version uses offsets bᵢ ∈ ℝ²
 `SlitCascadeLayout` (line / ring), `SlitCascadeView`. Follow the new-2D-calculator checklist from the
 chaotic-scattering epic (#626).
 
+### 4.3.1 What S3 shipped (#1569, 2026-10-31)
+
+`FractalType.SlitCascade`, `Engine/Calculators/SlitCascadeCalculator.cs`. Choices made beyond §4.1–4.3:
+
+- **Units.** The level-0 aperture is the square [−1, 1]². Children sit at bᵢ = (1 − r)·eᵢ, with eᵢ
+  evenly spaced on [−1, 1] along x (`Line`) or on the unit circle (`Ring`). Child squares have
+  half-size r in their parent's frame; the leaf transform is sinc·sinc of the square.
+- **Weights.** pᵢ ∝ I₀(bᵢ,ₓ) with the fringes running along x, in both layouts, so a ring's weights
+  are deliberately *not* rotationally symmetric. If every child falls on a dark fringe, the shares
+  fall back to equal (a plain Cantor set) instead of an empty image.
+- **The screen distance L is folded into λ.** Only λ·L appears in I₀, so a separate L parameter
+  would be redundant. The parameters are `SlitCascadeChildren` (default 6), `Ratio` (0.3), `Depth` (4),
+  `Separation` d (1.0), `Width` w (0.2), `Wavelength` λ (0.6), `Layout` (Ring), `View`
+  (Intensity / Phase / Aperture) and `DynamicRange` (6 decades).
+- **Normalisation.** I(u)/I(0) with I(0) = (Σ√pᵢ)^{2D}. Every coefficient is positive, so the centre
+  pixel is the maximum (a test).
+- **Phase view** is two-valued (0 or ½) for the shipped layouts. Both are point-symmetric
+  (b → −b maps the child set to itself with equal weights), so A(u) is real. This is the correct
+  physics; S5's vortex phases are what make the phase non-trivial.
+- **Aperture view:** log of Π pᵢ / max p along the point's address (the input to S4's α colouring).
+- **Cost:** O(D·N) complex terms per pixel, about 30–80 ms for 480×320 in a Debug build.
+- **Tests** (`SlitCascadeTests`): the two-slit closed form; product = brute-force sum over all Nᴰ
+  leaves; Parseval (∫|A|² = 1/(2a), which catches non-√p amplitudes); dark-fringe dropout; aperture
+  mass along an address; centre normalisation; clamping; the batch round trip. Four mutants
+  (p for √p, no level scaling, phase sign, unnormalised weights) are each caught.
+
 ### 4.4 Invariants to test (independent, not self-consistency)
 
 - D = 1, N = 2: matches the closed-form two-slit pattern `sinc²(πwx/λL)·cos²(πdx/λL)`.
@@ -340,7 +366,7 @@ physics new.
 | S0 design + citations | #1566 | — | this doc |
 | S1 which-path η | #1567 | S0 | none |
 | S2 OAM winding ℓ (dual orbit) | #1568 | S0 | ℓ must be an integer (§3.2); shipped both modes, measured seams (§3.2.1) |
-| S3 slit cascade | #1569 | S0 | N ≥ 3 sampled children, fringe-sampled weights (§4.1); exact Fraunhofer product (§4.2); add aperture view |
+| S3 slit cascade | #1569 | S0 | N ≥ 3 sampled children, fringe-sampled weights (§4.1); exact Fraunhofer product (§4.2); add aperture view; shipped (§4.3.1) |
 | S4 probability → dimension | #1571 | S3 | closed-form D_q for equal r (§5); α colouring on the aperture view |
 | S5 OAM filaments (cascade) | #1572 | S3 | ring layout with N ≥ 3; charge = ℓ mod N, to verify (§6); credit the devil's vortex lens |
 | S6 Talbot carpet | #1570 | S0 | none |

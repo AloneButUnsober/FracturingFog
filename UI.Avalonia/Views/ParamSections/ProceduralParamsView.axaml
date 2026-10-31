@@ -982,6 +982,55 @@
                        Text="Custom layout: open Ray paths and drag disks to move them, wheel to resize, double-click to add, right-click to remove. Disk count, separation and seed don't apply; disk radius sets the size of added disks. Pick another geometry to go back (the custom layout is kept)." />
         </Grid>
 
+        <!-- Slit cascade (#1569, double-slit epic #1565): the recursive aperture and its diffraction -->
+        <Grid IsVisible="{Binding IsSlitCascade}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Children per slit:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1"
+                           Minimum="2" Maximum="16" Increment="1" FormatString="F0"
+                           Value="{Binding SlitCascadeChildren, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="How many smaller slits replace each slit at every level. Use 3 or more: with a symmetric pair both children get the same share of light and the cascade is a plain Cantor set." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Layout:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="1" Grid.Column="1"
+                      ItemsSource="{Binding SlitCascadeLayouts}"
+                      SelectedItem="{Binding SlitCascadeLayout, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Line = the children sit in a row (a 1D grating, so the pattern is stripes). Ring = they sit round a circle (a 2D aperture)." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Scale ratio r:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1"
+                           Minimum="0.01" Maximum="0.5" Increment="0.01" FormatString="F3"
+                           Value="{Binding SlitCascadeRatio, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Size of a child slit relative to its parent. Zooming the pattern out by 1/r shows the next level's structure." />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Depth (levels):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1"
+                           Minimum="1" Maximum="12" Increment="1" FormatString="F0"
+                           Value="{Binding SlitCascadeDepth, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="How many times the slits are replaced. Render time grows with depth × children." />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Slit separation d:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1"
+                           Minimum="0" Maximum="100" Increment="0.05" FormatString="F3"
+                           Value="{Binding SlitCascadeSeparation, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Separation of the two slits whose fringe pattern decides how much light each child gets. Larger d = more fringes across the children." />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Slit width w:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1"
+                           Minimum="0" Maximum="100" Increment="0.05" FormatString="F3"
+                           Value="{Binding SlitCascadeWidth, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Width of those two slits: it sets the envelope that dims the outer fringes. 0 = no envelope." />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Wavelength λ:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="6" Grid.Column="1"
+                           Minimum="0.001" Maximum="100" Increment="0.05" FormatString="F3"
+                           Value="{Binding SlitCascadeWavelength, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Wavelength of the light (the screen distance is folded in). Changing it slides the fringes, so children move on and off dark fringes; a child on a dark fringe drops out. Animatable." />
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Show:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="7" Grid.Column="1"
+                      ItemsSource="{Binding SlitCascadeViews}"
+                      SelectedItem="{Binding SlitCascadeView, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Intensity = the far-field diffraction pattern on a log scale. Phase = its phase. Aperture = the slits themselves, brighter where more light gets through." />
+            <TextBlock Grid.Row="8" Grid.Column="0" Text="Dynamic range (decades):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="8" Grid.Column="1"
+                           Minimum="0.5" Maximum="30" Increment="0.5" FormatString="F1"
+                           Value="{Binding SlitCascadeDynamicRange, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="How many powers of ten of brightness the colours span. Raise it to see the faint outer orders." />
+        </Grid>
+
         <!-- Math Plane (#1548): the scene as text. S2 (#1549) adds the object editor. -->
         <StackPanel IsVisible="{Binding IsMathPlane}" Spacing="4">
             <TextBlock Text="Scene" FontWeight="Bold" />

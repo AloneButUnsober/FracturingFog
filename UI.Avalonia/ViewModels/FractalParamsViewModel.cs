@@ -459,6 +459,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsBilliardScene => IsChaoticBilliard || IsBilliardRays;
     /// <summary>#1548 — Math Plane (Cartesian plotter).</summary>
     public bool IsMathPlane => FractalType == FractalType.MathPlane;
+    public bool IsSlitCascade => FractalType == FractalType.SlitCascade;   // #1569
 
     /// <summary>#1447 — opens / closes the ray-path inset (host-set; null hides nothing,
     /// the button just does nothing).</summary>
@@ -616,7 +617,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsLyapunov || IsTranscendentalJulia || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian || IsMirrorSpheres
-          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsMathPlane || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable
+          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsMathPlane || IsSlitCascade || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -2332,6 +2333,20 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public OrbitTrapShapeDef DualOrbitTrapShape { get => _p.DualOrbitTrapShape; set { if (value == _p.DualOrbitTrapShape) return; _p.DualOrbitTrapShape = value; this.RaisePropertyChanged(); Fire(); } }
     public System.Array DualOrbitTrapShapes => s_DualOrbitTrapShapes;   // cached: a new array per read resets the ComboBox selection on Refresh()
     private static readonly System.Array s_DualOrbitTrapShapes = System.Enum.GetValues(typeof(OrbitTrapShapeDef));
+    /// <summary>#1569 — slit cascade rows.</summary>
+    public int SlitCascadeChildren { get => _p.SlitCascadeChildren; set { var v = Math.Clamp(value, 2, 16); if (v == _p.SlitCascadeChildren) return; _p.SlitCascadeChildren = v; this.RaisePropertyChanged(); Fire(); } }
+    public double SlitCascadeRatio { get => _p.SlitCascadeRatio; set { var v = Clamp(value, 0.01, 0.5); if (v == _p.SlitCascadeRatio) return; _p.SlitCascadeRatio = v; this.RaisePropertyChanged(); Fire(); } }
+    public int SlitCascadeDepth { get => _p.SlitCascadeDepth; set { var v = Math.Clamp(value, 1, 12); if (v == _p.SlitCascadeDepth) return; _p.SlitCascadeDepth = v; this.RaisePropertyChanged(); Fire(); } }
+    public double SlitCascadeSeparation { get => _p.SlitCascadeSeparation; set { var v = Clamp(value, 0, 100); if (v == _p.SlitCascadeSeparation) return; _p.SlitCascadeSeparation = v; this.RaisePropertyChanged(); Fire(); } }
+    public double SlitCascadeWidth { get => _p.SlitCascadeWidth; set { var v = Clamp(value, 0, 100); if (v == _p.SlitCascadeWidth) return; _p.SlitCascadeWidth = v; this.RaisePropertyChanged(); Fire(); } }
+    public double SlitCascadeWavelength { get => _p.SlitCascadeWavelength; set { var v = Clamp(value, 0.001, 100); if (v == _p.SlitCascadeWavelength) return; _p.SlitCascadeWavelength = v; this.RaisePropertyChanged(); Fire(); } }
+    public double SlitCascadeDynamicRange { get => _p.SlitCascadeDynamicRange; set { var v = Clamp(value, 0.5, 30); if (v == _p.SlitCascadeDynamicRange) return; _p.SlitCascadeDynamicRange = v; this.RaisePropertyChanged(); Fire(); } }
+    public SlitCascadeLayout SlitCascadeLayout { get => _p.SlitCascadeLayout; set { if (value == _p.SlitCascadeLayout) return; _p.SlitCascadeLayout = value; this.RaisePropertyChanged(); Fire(); } }
+    public System.Array SlitCascadeLayouts => s_SlitCascadeLayouts;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_SlitCascadeLayouts = System.Enum.GetValues(typeof(SlitCascadeLayout));
+    public SlitCascadeView SlitCascadeView { get => _p.SlitCascadeView; set { if (value == _p.SlitCascadeView) return; _p.SlitCascadeView = value; this.RaisePropertyChanged(); Fire(); } }
+    public System.Array SlitCascadeViews => s_SlitCascadeViews;
+    private static readonly System.Array s_SlitCascadeViews = System.Enum.GetValues(typeof(SlitCascadeView));
     /// <summary>#1126 — path-interference rows.</summary>
     public bool IsDualOrbitInterferenceField => IsDualOrbitFieldMode
         && _dualField is DualOrbitField.PathInterference or DualOrbitField.PathInterferencePhase;

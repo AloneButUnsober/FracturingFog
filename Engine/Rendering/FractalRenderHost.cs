@@ -74,6 +74,7 @@ namespace FracturingFog.Rendering
         private BuddhabrotCalculator _buddhabrotCalculator;
         private LogisticCalculator _logisticCalculator;
         private LyapunovCalculator _lyapunovCalculator;
+        private SlitCascadeCalculator _slitCascadeCalculator;   // #1569
         private TranscendentalJuliaCalculator _transcendentalCalculator;
         private HalleyCalculator _halleyCalculator;
         private SecantCalculator _secantCalculator;
@@ -511,6 +512,7 @@ namespace FracturingFog.Rendering
             _buddhabrotCalculator = new BuddhabrotCalculator(w, h);
             _logisticCalculator = new LogisticCalculator(w, h);
             _lyapunovCalculator = new LyapunovCalculator(w, h);
+            _slitCascadeCalculator = new SlitCascadeCalculator(w, h);
             _transcendentalCalculator = new TranscendentalJuliaCalculator(w, h);
             _halleyCalculator = new HalleyCalculator(w, h);
             _secantCalculator = new SecantCalculator(w, h);
@@ -562,6 +564,7 @@ namespace FracturingFog.Rendering
                 _buddhabrotCalculator.ColorMap = initialColorMap;
                 _logisticCalculator.ColorMap = initialColorMap;
                 _lyapunovCalculator.ColorMap = initialColorMap;
+                _slitCascadeCalculator.ColorMap = initialColorMap;
                 _transcendentalCalculator.ColorMap = initialColorMap;
                 _halleyCalculator.ColorMap = initialColorMap;
                 _secantCalculator.ColorMap = initialColorMap;
@@ -1283,6 +1286,7 @@ namespace FracturingFog.Rendering
                 _buddhabrotCalculator.ColorMap = value;
                 _logisticCalculator.ColorMap = value;
                 _lyapunovCalculator.ColorMap = value;
+                _slitCascadeCalculator.ColorMap = value;
                 _transcendentalCalculator.ColorMap = value;
                 _halleyCalculator.ColorMap = value;
                 _secantCalculator.ColorMap = value;
@@ -2670,6 +2674,7 @@ namespace FracturingFog.Rendering
             FractalType.RandomTile => new RandomTileCalculator(w, h),
             FractalType.ChaoticBilliard => new ChaoticBilliardCalculator(w, h),
             FractalType.BilliardRays => new BilliardRaysCalculator(w, h),
+            FractalType.SlitCascade => new SlitCascadeCalculator(w, h),   // #1569
             FractalType.PrecisionField => new PrecisionFieldCalculator(w, h),
             FractalType.JulibrotPair => new DualOrbitEscapeCalculator(w, h),
             // #726 slice 2 — interpreted DSL twin; SyncAltStateFromMandel copies the
@@ -3474,6 +3479,7 @@ namespace FracturingFog.Rendering
             _buddhabrotCalculator.Resize(w, h);
             _logisticCalculator.Resize(w, h);
             _lyapunovCalculator.Resize(w, h);
+            _slitCascadeCalculator.Resize(w, h);
             _transcendentalCalculator.Resize(w, h);
             _halleyCalculator.Resize(w, h);
             _secantCalculator.Resize(w, h);
@@ -4264,6 +4270,7 @@ namespace FracturingFog.Rendering
                 case UserBulbCalculator ub: ub.FractalParameters = ViewState.FractalParameters; break;
                 case LogisticCalculator lg: lg.FractalParameters = ViewState.FractalParameters; break;
                 case LyapunovCalculator ly: ly.FractalParameters = ViewState.FractalParameters; break;
+                case SlitCascadeCalculator slc: slc.FractalParameters = ViewState.FractalParameters; break;
                 case TranscendentalJuliaCalculator tj:
                     tj.FractalParameters = ViewState.FractalParameters;
                     tj.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;
@@ -4430,6 +4437,7 @@ namespace FracturingFog.Rendering
             FractalType.Spider => _escapeCalculator,
             FractalType.Logistic => _logisticCalculator,
             FractalType.Lyapunov => _lyapunovCalculator,
+            FractalType.SlitCascade => _slitCascadeCalculator,
             FractalType.TranscendentalJulia => _transcendentalCalculator,
             FractalType.Halley => _halleyCalculator,
             FractalType.Secant => _secantCalculator,
