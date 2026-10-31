@@ -166,6 +166,11 @@ out slow. Only ASCII `theta` is accepted (no `θ`), following the ASCII-names ru
   use. A pure rotation interpolates poorly that way (the grid shrinks mid-way), so
   offer a second mode, **polar interpolation**: split `M = R·S` (polar decomposition),
   interpolate the angle of `R` and the entries of `S`. The user picks the mode.
+  *As built (S5, #1552):* for 2×2 with det M > 0 the rotation angle is
+  `atan2(c − b, a + d)` and `S = R(−θ) M`. det M ≤ 0 has no rotation-only
+  factor, so polar falls back to linear, and the section says so. A pure rotation keeps
+  det = 1 in polar; in general det along the polar path is
+  det((1 − t) I + t S), which need not be monotone.
 - **Complex `f(z)`:** grid lines are sampled as polylines (adaptive, as above) and
   each sample is mapped by `(1 − t)·z + t·f(z)`. Read-outs at a hovered point:
   `f'(z)` as a local rotate-and-scale (the bridge back to linear maps).

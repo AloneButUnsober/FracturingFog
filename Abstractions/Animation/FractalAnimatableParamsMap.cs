@@ -104,6 +104,9 @@ public static class FractalAnimatableParamsMap
         FractalType.BilliardRays
             => _billiardRaysList,
 
+        FractalType.MathPlane
+            => _mathPlaneList,
+
         FractalType.PrecisionField
             => _precisionFieldList,
 
@@ -337,6 +340,18 @@ public static class FractalAnimatableParamsMap
             Notes: "Disk spacing — widening opens escape gaps, simplifying basins."),
         new("BilliardDiskRadius", AnimatableParamKind.ScalarDouble, Min: 0.1, Max: 0.9,
             Notes: "Disk size — larger disks narrow the gaps toward deeper chaos."),
+    };
+
+    // MathPlane (#1552) — the map's progress t (identity -> matrix) and the matrix
+    // itself. Animating t 0 -> 1 is the grid-morph video; the entries move M.
+    private static readonly AnimatableParamDescriptor[] _mathPlaneList =
+    {
+        new("MathPlaneT", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 1.0,
+            Notes: "Map progress: 0 = identity, 1 = the full matrix. Animate 0 to 1 to watch the plane transform."),
+        new("MathPlaneM11", AnimatableParamKind.ScalarDouble, Min: -4.0, Max: 4.0, Notes: "Matrix row 1, column 1 (i-hat's x)."),
+        new("MathPlaneM12", AnimatableParamKind.ScalarDouble, Min: -4.0, Max: 4.0, Notes: "Matrix row 1, column 2 (j-hat's x)."),
+        new("MathPlaneM21", AnimatableParamKind.ScalarDouble, Min: -4.0, Max: 4.0, Notes: "Matrix row 2, column 1 (i-hat's y)."),
+        new("MathPlaneM22", AnimatableParamKind.ScalarDouble, Min: -4.0, Max: 4.0, Notes: "Matrix row 2, column 2 (j-hat's y)."),
     };
 
     // BilliardRays (#1506) — the shared billiard scene plus the sweep's beam angle.

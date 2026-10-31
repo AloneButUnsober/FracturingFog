@@ -600,6 +600,14 @@ namespace FracturingFog.Models
         // #1548 — the Math Plane scene text (always captured for MathPlane, even when
         // empty: an empty scene is a real choice, not "unset").
         [JsonIgnore(Condition = OmitNull)] public string? MathPlaneScene { get; set; }
+        // #1552 — the map (int casts of MathPlaneMapMode / MathPlaneInterpolation).
+        [JsonIgnore(Condition = OmitNull)] public int? MathPlaneMapMode { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MathPlaneM11 { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MathPlaneM12 { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MathPlaneM21 { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MathPlaneM22 { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MathPlaneT { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? MathPlaneInterpolation { get; set; }
         // #1538 — Polygon sides; captured only when Polygon is the active geometry.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardPolygonSides { get; set; }
         // #1539 — Polygon fill (captured with Polygon) and lattice rotation (captured with a lattice).
@@ -1047,6 +1055,13 @@ namespace FracturingFog.Models
                     // value would break a --param on the command line); else verbatim.
                     MathPlaneScene = FracturingFog.Models.MathPlaneScene.TryParse(p.MathPlaneScene, out var mpScene, out _)
                         ? mpScene.Serialize() : p.MathPlaneScene ?? string.Empty,
+                    MathPlaneMapMode = (int)p.MathPlaneMapMode,
+                    MathPlaneM11 = p.MathPlaneM11,
+                    MathPlaneM12 = p.MathPlaneM12,
+                    MathPlaneM21 = p.MathPlaneM21,
+                    MathPlaneM22 = p.MathPlaneM22,
+                    MathPlaneT = p.MathPlaneT,
+                    MathPlaneInterpolation = (int)p.MathPlaneInterpolation,
                 },
                 // #1506 — the shared billiard scene (no launch / gate / mute: those
                 // colour ChaoticBilliard only) plus the sweep.
@@ -1799,6 +1814,13 @@ namespace FracturingFog.Models
                 p.BilliardCustomDisks = BilliardCustomDisks;
             if (MathPlaneScene != null)
                 p.MathPlaneScene = MathPlaneScene;
+            if (MathPlaneMapMode.HasValue) p.MathPlaneMapMode = (FracturingFog.MathPlaneMapMode)MathPlaneMapMode.Value;
+            if (MathPlaneM11.HasValue) p.MathPlaneM11 = MathPlaneM11.Value;
+            if (MathPlaneM12.HasValue) p.MathPlaneM12 = MathPlaneM12.Value;
+            if (MathPlaneM21.HasValue) p.MathPlaneM21 = MathPlaneM21.Value;
+            if (MathPlaneM22.HasValue) p.MathPlaneM22 = MathPlaneM22.Value;
+            if (MathPlaneT.HasValue) p.MathPlaneT = MathPlaneT.Value;
+            if (MathPlaneInterpolation.HasValue) p.MathPlaneInterpolation = (FracturingFog.MathPlaneInterpolation)MathPlaneInterpolation.Value;
             if (BilliardPolygonSides.HasValue)
                 p.BilliardPolygonSides = BilliardPolygonSides.Value;
             if (BilliardPolygonFill.HasValue)

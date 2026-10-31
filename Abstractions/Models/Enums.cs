@@ -131,6 +131,17 @@ namespace FracturingFog
     /// brightness but not hue.</summary>
     public enum BilliardRayColorSource { Density, Gate, Bounces, PathLength, EntryAngle, ExitAngle, GateDistance, SelfIntersects }
 
+    /// <summary>#1552 — the map a <see cref="FractalType.MathPlane"/> view applies to its
+    /// plane and objects. <see cref="Matrix"/>: the 2x2 matrix MathPlaneM11..M22.</summary>
+    public enum MathPlaneMapMode { None, Matrix }
+
+    /// <summary>#1552 — how <c>MathPlaneT</c> runs the map from the identity (t = 0) to
+    /// the matrix (t = 1). <see cref="Linear"/>: (1 - t) I + t M, the usual grid morph.
+    /// <see cref="Polar"/>: M = R S (rotation times stretch); the rotation angle and the
+    /// stretch are interpolated, so a rotation turns instead of shrinking mid-way. Polar
+    /// needs det M &gt; 0 and falls back to Linear otherwise.</summary>
+    public enum MathPlaneInterpolation { Linear, Polar }
+
     /// <summary>What <see cref="FractalType.BilliardRays"/> draws (#1508): the ray paths, the points
     /// where rays cross, or the crossings over the paths; #1509 <see cref="Divergence"/>: where
     /// each ray parts from its sweep neighbour (alone, or <see cref="DivergenceOverPaths"/>).

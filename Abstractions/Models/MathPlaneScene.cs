@@ -18,6 +18,9 @@
 //   v1                                   format version (optional, first)
 //   axes on|off   grid on|off   ticks on|off
 //   labels auto|offset|fixed:N|sci:N     axis label precision (#1559 modes)
+//   det on|off  eigen on|off  lengths on|off   map read-outs (#1552; default off):
+//                                        the unit square's image with det, the
+//                                        map's real eigenvectors, vector lengths
 //   point    NAME x y                  [options]
 //   vector   NAME x y [from x0 y0]     [options]
 //   segment  NAME x1 y1 x2 y2          [options]
@@ -107,6 +110,12 @@ namespace FracturingFog.Models
         public bool ShowAxes { get; init; } = true;
         public bool ShowGrid { get; init; } = true;
         public bool ShowTicks { get; init; } = true;
+        /// <summary>#1552 — shade the unit square's image under the map and print det.</summary>
+        public bool ShowDet { get; init; }
+        /// <summary>#1552 — draw the map's real eigenvector lines with their eigenvalues.</summary>
+        public bool ShowEigen { get; init; }
+        /// <summary>#1552 — print each vector's length (after the map) at its tip.</summary>
+        public bool ShowLengths { get; init; }
         public GridLabelSettings Labels { get; init; } = GridLabelSettings.Default;
         public IReadOnlyList<MathPlaneObject> Objects { get; init; } = Array.Empty<MathPlaneObject>();
 
@@ -123,6 +132,7 @@ namespace FracturingFog.Models
 
         public bool Equals(MathPlaneScene? o) =>
             o is not null && ShowAxes == o.ShowAxes && ShowGrid == o.ShowGrid && ShowTicks == o.ShowTicks
+            && ShowDet == o.ShowDet && ShowEigen == o.ShowEigen && ShowLengths == o.ShowLengths
             && Labels == o.Labels && Objects.SequenceEqual(o.Objects);
 
         public override int GetHashCode() => HashCode.Combine(ShowAxes, ShowGrid, ShowTicks, Labels, Objects.Count);
@@ -138,6 +148,9 @@ namespace FracturingFog.Models
             if (!ShowAxes) parts.Add("axes off");
             if (!ShowGrid) parts.Add("grid off");
             if (!ShowTicks) parts.Add("ticks off");
+            if (ShowDet) parts.Add("det on");
+            if (ShowEigen) parts.Add("eigen on");
+            if (ShowLengths) parts.Add("lengths on");
             if (Labels != GridLabelSettings.Default) parts.Add("labels " + LabelsToken(Labels));
             foreach (var o in Objects) parts.Add(SerializeObject(o));
             return string.Join("; ", parts);
@@ -197,6 +210,7 @@ namespace FracturingFog.Models
             if (string.IsNullOrWhiteSpace(text)) return true;
 
             bool axes = true, grid = true, ticks = true;
+            bool det = false, eigen = false, lengths = false;
             var labels = GridLabelSettings.Default;
             var objects = new List<MathPlaneObject>();
             var names = new HashSet<string>(StringComparer.Ordinal);
@@ -224,10 +238,21 @@ namespace FracturingFog.Models
                     case "axes":
                     case "grid":
                     case "ticks":
+                    case "det":
+                    case "eigen":
+                    case "lengths":
                     {
                         if (toks.Count != 2 || !TryOnOff(toks[1].Text, out bool on))
                         { error = Err(1, $"'{head}' takes on or off"); return false; }
-                        if (head == "axes") axes = on; else if (head == "grid") grid = on; else ticks = on;
+                        switch (head)
+                        {
+                            case "axes": axes = on; break;
+                            case "grid": grid = on; break;
+                            case "ticks": ticks = on; break;
+                            case "det": det = on; break;
+                            case "eigen": eigen = on; break;
+                            default: lengths = on; break;
+                        }
                         break;
                     }
                     case "labels":
@@ -254,12 +279,16 @@ namespace FracturingFog.Models
                         break;
                     }
                     default:
-                        error = Err(0, $"unknown statement '{toks[0].Text}' (expected point, vector, segment, polyline, curve, region, axes, grid, ticks or labels)");
+                        error = Err(0, $"unknown statement '{toks[0].Text}' (expected point, vector, segment, polyline, curve, region, axes, grid, ticks, labels, det, eigen or lengths)");
                         return false;
                 }
             }
 
-            scene = new MathPlaneScene { ShowAxes = axes, ShowGrid = grid, ShowTicks = ticks, Labels = labels, Objects = objects };
+            scene = new MathPlaneScene
+            {
+                ShowAxes = axes, ShowGrid = grid, ShowTicks = ticks, Labels = labels, Objects = objects,
+                ShowDet = det, ShowEigen = eigen, ShowLengths = lengths,
+            };
             return true;
         }
 

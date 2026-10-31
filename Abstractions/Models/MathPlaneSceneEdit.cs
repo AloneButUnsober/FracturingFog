@@ -93,8 +93,9 @@ namespace FracturingFog.Models
 
         /// <summary>The visible handle nearest (<paramref name="wx"/>, <paramref name="wy"/>)
         /// within <paramref name="tolerance"/> world units; ties go to the object drawn
-        /// last (on top). Null when none is close enough.</summary>
-        public static MathPlaneHandle? HitTest(MathPlaneScene scene, double wx, double wy, double tolerance)
+        /// last (on top). Null when none is close enough. #1552: under a map, handles are
+        /// compared where they are drawn, i.e. at their images under <paramref name="map"/>.</summary>
+        public static MathPlaneHandle? HitTest(MathPlaneScene scene, double wx, double wy, double tolerance, Mat2? map = null)
         {
             MathPlaneHandle? best = null;
             double bestD = tolerance * tolerance;
@@ -105,6 +106,7 @@ namespace FracturingFog.Models
                 for (int k = 0; k < HandleCount(o); k++)
                 {
                     var (hx, hy) = HandlePosition(o, k);
+                    if (map is { } m) (hx, hy) = m.Apply(hx, hy);
                     double d = (hx - wx) * (hx - wx) + (hy - wy) * (hy - wy);
                     if (d <= bestD) { bestD = d; best = new MathPlaneHandle(i, k); }
                 }
