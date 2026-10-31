@@ -476,7 +476,10 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
 <a id="linas-vepstas-smooth-iter"></a>
 
 - **Linas Vepstas.** *Renormalizing the Mandelbrot escape*, 1997.
-  <https://linas.org/art-gallery/escape/escape.html>. The smoothed (continuous) escape count.
+  <https://linas.org/art-gallery/escape/escape.html>. The smoothed (continuous) escape count. The
+  *Prime Escape (Gold-Cyan)* theme (#1486) colours by the integer count instead, using the smooth count
+  only for the drift of its dimmed composites and as its `n = floor(smooth)` fallback (which lags n by
+  log2 log2 of the bailout radius, per this formula).
 - **Garry T. Krollman.** *CIELAB and CIECAM02 conversions* — referenced by the from-image palette
   k-means sampler. Practical formulae from
   <https://www.brucelindbloom.com/index.html?Eqn_RGB_to_XYZ.html>.
@@ -567,6 +570,11 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
   *From Image…* button.
 - **Gaussian elimination with partial pivoting** — Numerical Recipes (Press et al., 3rd ed.). Used in
   the Newton calculator's polynomial-coefficient mode (roadmap).
+- **Trial division and the n mod 4 classes of odd primes** — classical elementary number theory, not
+  credited to a single source. *Prime Escape (Gold-Cyan)* (#1486, `PrimeEscapeGoldCyanMap`) tests each
+  escape count by trial division (CPU and GPU) and splits odd primes into n ≡ 1 / n ≡ 3 (mod 4). Prior-art
+  check (2026-10-31): a web search for colouring escape-time fractals by prime iteration counts found no
+  source, so no prior method is credited and no novelty is claimed.
 - **Smoothstep / quintic Hermite interpolation** — Ken Perlin. *Improving noise.* SIGGRAPH 2002.
   Used for the slideshow cross-fade and the video-zoom easing curve.
 - **Persistent threads** — Timo Aila, Samuli Laine. *Understanding the Efficiency of Ray Traversal on
