@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        xmlns:models="using:FracturingFog.Models"
         x:Class="FracturingFog.UI.Avalonia.Views.ControlCenterSections.MathPlaneSectionView"
         x:DataType="vm:ControlCenterViewModel"
         Foreground="#DCDCDC">
@@ -22,6 +23,25 @@
         </Border>
 
         <StackPanel Spacing="0" IsVisible="{Binding IsActive}">
+            <!-- Demos (#1555): read-only built-ins; loading one replaces the scene. -->
+            <Border Classes="group">
+                <StackPanel Spacing="6">
+                    <TextBlock Classes="section" Text="Demos: the math behind the fractals" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <ComboBox ItemsSource="{Binding Demos}" SelectedItem="{Binding SelectedDemo}" Width="260"
+                                  ToolTip.Tip="Built-in demos. Loading one replaces the scene, map, c, backdrop and view; the built-in itself never changes (save a region to keep your edits).">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:MathPlanePreset">
+                                    <TextBlock Text="{Binding Name}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Button Classes="action" Content="Load" Command="{Binding LoadDemoCommand}" ToolTip.Tip="Load the selected demo into the view" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding DemoIdea}" TextWrapping="Wrap" Foreground="#B4B4B4" />
+                </StackPanel>
+            </Border>
+
             <!-- Objects -->
             <Border Classes="group">
                 <StackPanel Spacing="6">

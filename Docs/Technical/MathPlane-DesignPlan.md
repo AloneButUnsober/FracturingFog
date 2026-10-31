@@ -240,6 +240,11 @@ out slow. Only ASCII `theta` is accepted (no `θ`), following the ASCII-names ru
   of the pixel that samples it on the escape-time grid (pitch
   `3.5 / max(w, h) / zoom`, imag down), in doubles, so it is meant for shallow views.
 
+*As built (S8, #1555):* 15 read-only demos (`Abstractions/Models/MathPlanePresets.cs`), each a
+scene plus params and a view that names one idea; loading one copies it into the view. Every demo
+renders headless through its `--param` list and round-trips through the Command builder (tests).
+User guide: [MathPlane-Guide.md](../User/MathPlane-Guide.md); in-app help: Help → Math → Math Plane.
+
 ### 3.7 Axis label precision (shared with the grid overlay)
 
 User request (2026-10-29): label precision should be configurable, or adjust
