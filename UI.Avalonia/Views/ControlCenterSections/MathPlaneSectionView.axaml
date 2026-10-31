@@ -36,6 +36,8 @@
                         <Button Classes="action neutral" Content="+ y = f(x)"   Command="{Binding AddFunctionCommand}"   ToolTip.Tip="Add an explicit curve (starts as sin(x))" />
                         <Button Classes="action neutral" Content="+ Parametric" Command="{Binding AddParametricCommand}" ToolTip.Tip="Add a parametric curve (starts as the unit circle)" />
                         <Button Classes="action neutral" Content="+ Polar"      Command="{Binding AddPolarCommand}"      ToolTip.Tip="Add a polar curve r = f(theta) (starts as a cardioid)" />
+                        <Button Classes="action neutral" Content="+ F(x,y) = 0" Command="{Binding AddImplicitCommand}"   ToolTip.Tip="Add an implicit curve, the zero set of F(x, y) (starts as a circle)" />
+                        <Button Classes="action neutral" Content="+ Region"     Command="{Binding AddRegionCommand}"     ToolTip.Tip="Add a shaded region where a condition in x, y holds (starts as x^2 + y^2 &lt; 1)" />
                     </StackPanel>
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
                         <ListBox Grid.Column="0" ItemsSource="{Binding Rows}" SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
@@ -70,7 +72,7 @@
                     <TextBlock Grid.Row="6" Text="Expression" VerticalAlignment="Center" IsVisible="{Binding SelectedIsCurve}" />
                     <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding SelectedExpression, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                              IsVisible="{Binding SelectedIsCurve}" FontFamily="Consolas, Menlo, monospace"
-                             ToolTip.Tip="Explicit: f(x). Parametric: x(t). Polar: r(theta). Functions: sin cos tan exp log sqrt abs pow min max ... constants pi e." />
+                             ToolTip.Tip="Explicit: f(x). Parametric: x(t). Polar: r(theta). Implicit: F(x, y), drawn where F = 0. Region: a condition in x, y (&lt; &gt; &lt;= &gt;= == != &amp;&amp; ||). Functions: sin cos tan exp log sqrt abs pow min max ... constants pi e." />
                     <TextBlock Grid.Row="7" Text="y(t)" VerticalAlignment="Center" IsVisible="{Binding SelectedIsParametric}" />
                     <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding SelectedExpression2, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                              IsVisible="{Binding SelectedIsParametric}" FontFamily="Consolas, Menlo, monospace" />

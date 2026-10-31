@@ -27,6 +27,11 @@
 //
 // #1550 — curves (explicit / parametric / polar) are sampled per view by
 // MathPlaneCurveSampler (adaptive, breaks at gaps and poles) and stroked.
+//
+// #1551 — implicit curves F(x, y) = 0 come from marching squares and regions from
+// a per-pixel condition (MathPlaneImplicitSampler). A region is blended straight
+// into ColorBuffer at its place in the draw order (the canvas is flushed first),
+// translucent so the grid and earlier objects show through.
 
 using System;
 using System.Runtime.InteropServices;
@@ -283,6 +288,39 @@ public sealed class MathPlaneCalculator : IFractalCalculator
                     Label(o, new SKPoint((a.X + b.X) * 0.5f, (a.Y + b.Y) * 0.5f));
                     break;
                 }
+                case MathPlaneObjectKind.Curve when o.CurveKind == MathPlaneCurveKind.Implicit:
+                {
+                    stroke.StrokeWidth = 2.5f * ui;
+                    var segs = MathPlaneImplicitSampler.Segments(o, ViewBox(w, h));
+                    using var path = new SKPath();
+                    SKPoint? labelAt = null;
+                    foreach (var (a, b) in segs)
+                    {
+                        var pa = P(a.X, a.Y); var pb = P(b.X, b.Y);
+                        path.MoveTo(pa);
+                        path.LineTo(pb);
+                        // Label at the right-most on-screen point.
+                        foreach (var q in new[] { pa, pb })
+                            if (q.X >= 0 && q.X < w && q.Y >= 0 && q.Y < h && (labelAt is not { } l || q.X > l.X)) labelAt = q;
+                    }
+                    canvas.DrawPath(path, stroke);
+                    if (labelAt is { } la)
+                        Label(o, new SKPoint(Math.Min(la.X, w - 30f * ui), Math.Max(la.Y, 24f * ui)));
+                    break;
+                }
+                case MathPlaneObjectKind.Region:
+                {
+                    var mask = MathPlaneImplicitSampler.RegionMask(o, ViewBox(w, h), w, h);
+                    if (mask == null) break;
+                    canvas.Flush();
+                    BlendRegion(ColorBuffer, mask, o.Color, RegionAlpha);
+                    // Label at the centre of the shaded pixels.
+                    long sx = 0, sy = 0, n = 0;
+                    for (int i = 0; i < mask.Length; i++)
+                        if (mask[i]) { sx += i % w; sy += i / w; n++; }
+                    if (n > 0) Label(o, new SKPoint(sx / (float)n, sy / (float)n));
+                    break;
+                }
                 case MathPlaneObjectKind.Curve:
                 {
                     stroke.StrokeWidth = 2.5f * ui;
@@ -319,6 +357,26 @@ public sealed class MathPlaneCalculator : IFractalCalculator
                     break;
                 }
             }
+        }
+    }
+
+    /// <summary>#1551 — opacity of a region's shading.</summary>
+    public const double RegionAlpha = 0.30;
+
+    /// <summary>#1551 — blend <paramref name="color"/> at <paramref name="alpha"/> over
+    /// the masked pixels (opaque result).</summary>
+    public static void BlendRegion(uint[] buffer, bool[] mask, uint color, double alpha)
+    {
+        int a = (int)Math.Round(alpha * 256), ia = 256 - a;
+        uint cr = (color >> 16) & 0xFF, cg = (color >> 8) & 0xFF, cb = color & 0xFF;
+        for (int i = 0; i < mask.Length && i < buffer.Length; i++)
+        {
+            if (!mask[i]) continue;
+            uint p = buffer[i];
+            uint r = (uint)((((p >> 16) & 0xFF) * ia + cr * a) >> 8);
+            uint g = (uint)((((p >> 8) & 0xFF) * ia + cg * a) >> 8);
+            uint b = (uint)(((p & 0xFF) * ia + cb * a) >> 8);
+            buffer[i] = 0xFF000000u | (r << 16) | (g << 8) | b;
         }
     }
 
