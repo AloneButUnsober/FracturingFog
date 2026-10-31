@@ -79,6 +79,8 @@ namespace FracturingFog.Batch
         public const string NoWatermark    = "--no-watermark";
         // #1380 — skip the quality preset's temporal AA on a still (MSAA only).
         public const string NoTaa          = "--no-taa";
+        // #1554 — the math overlay (axes + the orbit of a pinned point) on a 2D still.
+        public const string MathOverlay    = "--math-overlay";
         public const string Verbose        = "--verbose";
         public const string Help           = "--help";
 

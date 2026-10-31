@@ -42,7 +42,7 @@ using ReactiveUI;
 
 namespace FracturingFog.UI.Avalonia.ViewModels;
 
-public sealed class MainViewModel : ViewModelBase, IDisposable
+public sealed partial class MainViewModel : ViewModelBase, IDisposable
 {
     private readonly IFractalRenderHost _renderHost;
     private readonly IFractalInputController _input;
@@ -81,6 +81,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _renderHost = renderHost ?? throw new ArgumentNullException(nameof(renderHost));
         _input = input ?? throw new ArgumentNullException(nameof(input));
         ViewState = renderHost.ViewState;
+        InitMathOverlay();   // #1554
 
         QualityPresets = new ObservableCollection<QualityPreset>(QualityPreset.All);
         FractalTypes = new ObservableCollection<FractalType>(

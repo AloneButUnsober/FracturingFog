@@ -188,6 +188,10 @@ namespace FracturingFog.Imaging
         /// (after rotation, before the watermark + write). Null = no QR.</summary>
         public QrCodeOptions? Qr { get; init; }
 
+        /// <summary>#1554 — the math overlay (axes + the orbit of a pinned point),
+        /// drawn on the composed frame before rotation, QR and watermark. Null = none.</summary>
+        public FracturingFog.ViewState.MathOverlaySpec? MathOverlay { get; init; }
+
         /// <summary>#1410 — runtime state of a QR extruded into the relief (set by
         /// <see cref="PosterRenderer.RenderToFile"/> when <see cref="Qr"/> asks for it;
         /// filled by the relief stage, consumed when the QR is applied).</summary>
@@ -785,6 +789,7 @@ namespace FracturingFog.Imaging
         /// <summary>Watermark + write the composed poster buffer to the request path.</summary>
         private static PosterResult WritePoster(PosterRequest req, uint[] buffer, int w, int h, long elapsedMs)
         {
+            ApplyMathOverlay(req, buffer, w, h);
             if (req.Rotate)
             {
                 // 90° clockwise: landscape (w×h) becomes portrait (h×w).
@@ -816,6 +821,15 @@ namespace FracturingFog.Imaging
                     wm, poster: true, dpi: req.Dpi, exrCompression: req.ExrCompression);
                 return new PosterResult(w, h, elapsedMs) { Qr = VerifyQr(req, qr, buffer, w, h), PreQrPixels = preQr };
             }
+        }
+
+        /// <summary>#1554 — the pinned math overlay, on the frame as rendered (unrotated).</summary>
+        public static void ApplyMathOverlay(PosterRequest req, uint[] buffer, int w, int h)
+        {
+            if (req.MathOverlay is not { } mo) return;
+            var juliaC = req.FractalParameters?.EffectiveJuliaC ?? System.Numerics.Complex.Zero;
+            FracturingFog.Rendering.MathOverlayRenderer.Draw(buffer, w, h, req.CenterX, req.CenterY, req.Zoom,
+                req.FractalType, juliaC, mo, pinned: true);
         }
 
         // #1305 — the QR goes onto the final (rotated) display buffer so the

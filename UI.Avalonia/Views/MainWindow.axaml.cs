@@ -66,6 +66,7 @@ public sealed partial class MainWindow : Window
     private BilliardRayInsetWindow? _rayInsetWin;
     private MiniWindowTether? _rayInsetTether;
     private EventHandler<FracturingFog.Render.RenderFrameInfo>? _rayInsetFrameHandler;
+    private Action<FracturingFog.Input.PointerInput>? _rayInsetHover;   // #1554
     private SceneDebugHudWindow? _sceneDebugWin;     // #1051
     private MiniWindowTether? _sceneDebugTether;
     private StatusPanelWindow? _statusPanelWin;
@@ -1588,7 +1589,10 @@ public sealed partial class MainWindow : Window
                     FracturingFog.Models.WindowRole.BilliardRayInset, _rayInsetWin);
             }
             var input = shell.Main.Input;
-            input.HoverObserver = e => global::Avalonia.Threading.Dispatcher.UIThread.Post(() => vm.OnHover(e));
+            // #1554 — += / -=: the math overlay observes hover too.
+            if (_rayInsetHover != null) input.HoverObserver -= _rayInsetHover;
+            _rayInsetHover = e => global::Avalonia.Threading.Dispatcher.UIThread.Post(() => vm.OnHover(e));
+            input.HoverObserver += _rayInsetHover;
             input.InspectClickHandler = vm.Pin;
             if (_rayInsetFrameHandler == null)
             {
@@ -1620,7 +1624,8 @@ public sealed partial class MainWindow : Window
 
     private void DetachBilliardRayInsetHooks(ShellViewModel shell)
     {
-        shell.Main.Input.HoverObserver = null;
+        if (_rayInsetHover != null) shell.Main.Input.HoverObserver -= _rayInsetHover;
+        _rayInsetHover = null;
         shell.Main.Input.InspectClickHandler = null;
         if (_rayInsetFrameHandler != null)
             shell.Main.RenderHost.FrameCompleted -= _rayInsetFrameHandler;

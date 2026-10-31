@@ -335,6 +335,16 @@ namespace FracturingFog.Render
         /// Scientific / Offset). Follow a change with <see cref="RepaintWithPostFx"/>.</summary>
         FracturingFog.ViewState.GridLabelSettings GridLabels { get; set; }
 
+        /// <summary>#1554 — the math overlay on 2D views: on / off, the pinned point,
+        /// the orbit length, and the live hover point (repaints without a recompute).</summary>
+        bool MathOverlayEnabled { get; set; }
+        FracturingFog.ViewState.MathOverlaySpec? MathOverlayPin { get; set; }
+        int MathOverlaySteps { get; set; }
+        void SetMathOverlayHover(double? re, double? im);
+        void RequestOverlayRepaint();
+        /// <summary>#1554 — the pinned overlay an export or command reproduces (null: none).</summary>
+        FracturingFog.ViewState.MathOverlaySpec? CurrentMathOverlayPin();
+
         /// <summary>#1240 — interest-score heatmap to blend into the live frame
         /// (diagnostic; never exported). Drawn only while the view matches the
         /// one it was scored for. Null = off. Follow with

@@ -33,7 +33,25 @@
                                    FormatString="0" Width="110"
                                    IsEnabled="{Binding Menu.GridLabelDigitsEnabled}"
                                    ToolTip.Tip="Decimals (Fixed) or significant figures (Scientific)" />
-                </StackPanel>    
+                </StackPanel>
+                <!-- #1554 — math overlay: axes + the orbit of one point (Mandelbrot: c; Julia: z0). -->
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
+                    <CheckBox Content="Math overlay" IsChecked="{Binding Shell.Main.MathOverlay}" Foreground="#9B9B9B" FontWeight="Bold"
+                              ToolTip.Tip="Draw the axes and the orbit of a point under z^2 + c over 2D views (Mandelbrot: the point is c; Julia: the point is z0), with the escape circle |z| = 2" />
+                    <CheckBox Content="Follow pointer" IsChecked="{Binding Shell.Main.MathOverlayFollow}" IsEnabled="{Binding Shell.Main.MathOverlay}"
+                              ToolTip.Tip="The orbit follows the pixel under the pointer (live only). Off: it stays on the pinned point." />
+                    <TextBlock Text="steps" VerticalAlignment="Center" Foreground="#9B9B9B" />
+                    <NumericUpDown Value="{Binding Shell.Main.MathOverlaySteps}" Minimum="1" Maximum="10000" Increment="10" FormatString="0" Width="110"
+                                   IsEnabled="{Binding Shell.Main.MathOverlay}" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0" IsVisible="{Binding Shell.Main.MathOverlay}">
+                    <Button Classes="action neutral" Content="Pin last point" Command="{Binding Shell.Main.PinMathOverlayCommand}"
+                            ToolTip.Tip="Pin the last point the pointer was over; exports, the Command builder and --math-overlay draw the pinned orbit" />
+                    <TextBox Text="{Binding Shell.Main.MathOverlayPinText}" Width="200" FontFamily="Consolas, Menlo, monospace"
+                             ToolTip.Tip="The pinned point as re im (empty: none)" />
+                    <TextBlock Text="{Binding Shell.Main.MathOverlayPinError}" Foreground="#FFCC00" VerticalAlignment="Center"
+                               IsVisible="{Binding Shell.Main.MathOverlayPinError, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                </StackPanel>
                      <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto">
                          <!-- Global UI scale (#809 / S4 #813): shrink / percent / enlarge /
                          reset. Scales all dialogs + windows (not the render window).

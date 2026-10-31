@@ -227,6 +227,18 @@ out slow. Only ASCII `theta` is accepted (no `θ`), following the ASCII-names ru
   "Math overlay" toggle draws the axes plus the orbit of the hovered/pinned pixel,
   through `FractalOverlayCompositor`. This extends the existing grid overlay rather
   than adding a second compositor.
+  *As built (S7 part 2, #1554):* View section → Math overlay. It draws the real and
+  imaginary axes and the orbit of one point under `z² + c`: on Mandelbrot views the
+  point is `c` (from `z₀ = 0`), on Julia views it is `z₀` (with the view's c). Other
+  families iterate something else, so they get the axes and a note, not a wrong
+  orbit. "Follow pointer" tracks the hovered pixel (live only; the last frame is
+  repainted without a recompute, through the selection-box repaint worker); Pin
+  freezes a point, which poster export, the Command builder and
+  `--math-overlay RE,IM[,STEPS]` reproduce. A hover-only overlay is listed as a
+  fidelity gap. Drawing is `MathOverlayRenderer` (called next to the grid in the live
+  compositor and on the composed poster buffer). The point is placed at the centre
+  of the pixel that samples it on the escape-time grid (pitch
+  `3.5 / max(w, h) / zoom`, imag down), in doubles, so it is meant for shallow views.
 
 ### 3.7 Axis label precision (shared with the grid overlay)
 

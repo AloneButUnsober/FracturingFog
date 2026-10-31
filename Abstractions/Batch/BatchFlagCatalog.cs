@@ -516,6 +516,15 @@ namespace FracturingFog.Batch
                 Sw(BatchFlags.NoTaa, Output, BatchModes.Image,
                     "Skip the quality preset's temporal anti-aliasing on a still (High / Ultra / Extreme: "
                     + "8 / 16 / 32 samples, as the live view settles): sub-pixel anti-aliasing only, faster."),
+                new BatchFlagSpec
+                {
+                    Name = BatchFlags.MathOverlay, Kind = BatchFlagKind.Text, Group = Output, Modes = BatchModes.Image,
+                    ValueHint = "\"RE,IM[,STEPS]\"", Example = "-0.1226,0.7449",
+                    Help = "Math overlay on a 2D still: the axes and the orbit of the pinned point under z^2 + c "
+                           + "(Mandelbrot: the point is c, from z0 = 0; Julia: the point is z0, with the view's c), "
+                           + "with the escape circle and a read-out. STEPS 1-10000, default 50. Other families get "
+                           + "the axes only (#1554).",
+                },
 
                 // ── Video ──
                 Dbl(BatchFlags.Seconds, Video, BatchModes.Sequence,
