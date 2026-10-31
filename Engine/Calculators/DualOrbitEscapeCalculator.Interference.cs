@@ -135,7 +135,12 @@ public sealed partial class DualOrbitEscapeCalculator
             double v = phase
                 ? InterferencePhase(gZ, gC, tc - tz, kappa, gamma, wz, wc)
                 : 0.5 * InterferenceIntensity(gC - gZ, tc - tz, kappa, gamma, eta, wc - wz);
-            sc[i] = (float)Math.Clamp(v * maxIter, LiveFloor, maxIter);
+            float s = (float)Math.Clamp(v * maxIter, LiveFloor, maxIter);
+            // #1591 — a phase just below one turn (≡ 0) rounds up to maxIter, which themes
+            // read as "in the set": wrap it. (The intensity field reaches maxIter at I = 2
+            // by design and is left alone.)
+            if (phase && s >= maxIter) s = (float)LiveFloor;
+            sc[i] = s;
         });
     }
 }

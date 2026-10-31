@@ -62,7 +62,8 @@ public sealed partial class DualOrbitEscapeCalculator
     internal const double OutsideDomainDim = 0.6;
 
     // OkLab cyclic map (a = 0): L = 0.64 + 0.18·cos φ, b = 0.13·sin φ.
-    internal const float DomainLMid = 0.64f, DomainLAmp = 0.18f, DomainBAmp = 0.13f;
+    // #1591 — the path now lives in PhaseWheelBlueAmberMap (also a selectable theme).
+    internal const float DomainLMid = PhaseWheelBlueAmberMap.LMid, DomainLAmp = PhaseWheelBlueAmberMap.LAmp, DomainBAmp = PhaseWheelBlueAmberMap.BAmp;
 
     private void ColorizeDomain(in GeometryKey key, uint interiorColor, uint? oobColor, CancellationToken ct)
     {
@@ -133,14 +134,7 @@ public sealed partial class DualOrbitEscapeCalculator
 
     /// <summary>The built-in a = 0 cyclic OkLab colour for <paramref name="turns"/>,
     /// lightness scaled by <paramref name="k"/>.</summary>
-    internal static uint CycleDomain(double turns, double k)
-    {
-        double phi = 2.0 * Math.PI * turns;
-        float L = (float)((DomainLMid + DomainLAmp * Math.Cos(phi)) * k);
-        float B = (float)(DomainBAmp * Math.Sin(phi) * Math.Sqrt(k));   // keep chroma in gamut when dimmed
-        GradientColorSpaces.OkLabToRgb(L, 0f, B, out float r, out float g, out float b);
-        return 0xFF000000u | ((uint)(r + 0.5f) << 16) | ((uint)(g + 0.5f) << 8) | (uint)(b + 0.5f);
-    }
+    internal static uint CycleDomain(double turns, double k) => PhaseWheelBlueAmberMap.ColorAt(turns, k);
 
     private static uint ThemeDomain(Interefaces.IColorMap cm, double turns, double k, int maxIter)
     {
