@@ -52,6 +52,7 @@ namespace FracturingFog.Hosting
                 ColorOffset = def.ColorOffset,
                 ColorDensity = def.ColorDensity,
                 WrapMode = (ColorWrapMode)def.WrapMode,
+                ScaleMode = (ColorScaleMode)def.ScaleMode,   // #1590
                 SparkleStride = def.SparkleStride,
                 SparkleBoost = def.SparkleBoost,
                 SeamlessCycle = def.SeamlessCycle,
@@ -158,6 +159,7 @@ namespace FracturingFog.Hosting
                 ColorOffset = data.ColorOffset,
                 ColorDensity = data.ColorDensity,
                 WrapMode = (ColorWrapModeDef)data.WrapMode,
+                ScaleMode = (ColorScaleModeDef)data.ScaleMode,
                 SparkleStride = data.SparkleStride,
                 SparkleBoost = data.SparkleBoost,
                 SeamlessCycle = data.SeamlessCycle,

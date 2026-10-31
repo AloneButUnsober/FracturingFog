@@ -111,6 +111,24 @@ namespace FracturingFog.Models
     }
 
     /// <summary>
+    /// What the cycling parameter is measured in (#1590). <c>Iterations</c>
+    /// (historical default): <c>smooth·CycleSpeed</c>, so the palette repeats on
+    /// a fixed iteration rhythm. <c>FitToRange</c>: <c>smooth / MaxIterations</c>,
+    /// so density 1 spans the palette exactly once over 0..MaxIterations — for
+    /// calculators that normalise their value onto that range (Lyapunov,
+    /// PrecisionField, dual-orbit fields, Slit Cascade, Talbot Carpet). Offset,
+    /// density and wrap then work in range units: Clamp for intensities, Repeat
+    /// for phases (one turn per range).
+    /// </summary>
+    public enum ColorScaleMode
+    {
+        /// <summary>Cycle on the iteration axis (historical default).</summary>
+        Iterations,
+        /// <summary>Spread the palette over 0..MaxIterations.</summary>
+        FitToRange,
+    }
+
+    /// <summary>
     /// Shape of the blend within a gradient segment (Phase B / F2). Baked into
     /// the LUT — zero per-pixel cost. <c>Linear</c> is the historical default.
     /// <c>Cubic</c> is a Catmull-Rom spline through the stops (evaluated in
@@ -341,6 +359,10 @@ namespace FracturingFog.Models
         /// <see cref="ColorWrapMode.Repeat"/> (historical modulo wrap).
         /// </summary>
         public ColorWrapMode WrapMode { get; set; } = ColorWrapMode.Repeat;
+
+        /// <summary>What the cycling parameter is measured in (#1590). Default
+        /// <see cref="ColorScaleMode.Iterations"/> (historical).</summary>
+        public ColorScaleMode ScaleMode { get; set; } = ColorScaleMode.Iterations;
 
         /// <summary>
         /// Sparkle post-fx stride (#254 / IDEA-4). Every Nth of the 256 LUT

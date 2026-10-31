@@ -84,6 +84,13 @@ namespace FracturingFog.Models
         Clamp,
     }
 
+    /// <summary>UI-neutral mirror of <c>ColorScaleMode</c> (#1590).</summary>
+    public enum ColorScaleModeDef
+    {
+        Iterations,
+        FitToRange,
+    }
+
     /// <summary>UI-neutral mirror of <c>InterpolationCurve</c> (Phase B / F2).</summary>
     public enum InterpolationCurveDef
     {
@@ -218,6 +225,8 @@ namespace FracturingFog.Models
         public float ColorDensity { get; set; } = 1f;
         /// <summary>Boundary behaviour of the cycling parameter (F5). Default Repeat.</summary>
         public ColorWrapModeDef WrapMode { get; set; } = ColorWrapModeDef.Repeat;
+        /// <summary>#1590 — cycle on iterations (default) or fit to 0..MaxIterations.</summary>
+        public ColorScaleModeDef ScaleMode { get; set; } = ColorScaleModeDef.Iterations;
 
         // ── Palette post-fx (baked into the LUT) ─────────────────────────
         /// <summary>Sparkle stride (#254 / IDEA-4): brighten every Nth LUT
