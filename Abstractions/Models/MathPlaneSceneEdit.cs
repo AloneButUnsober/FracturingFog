@@ -96,6 +96,12 @@ namespace FracturingFog.Models
         /// last (on top). Null when none is close enough. #1552: under a map, handles are
         /// compared where they are drawn, i.e. at their images under <paramref name="map"/>.</summary>
         public static MathPlaneHandle? HitTest(MathPlaneScene scene, double wx, double wy, double tolerance, Mat2? map = null)
+            => HitTest(scene, wx, wy, tolerance, map is { } m ? m.Apply : null);
+
+        /// <summary>#1553 — <see cref="HitTest(MathPlaneScene, double, double, double, Mat2?)"/>
+        /// for any map (a complex map's frame): handles are compared at their images.</summary>
+        public static MathPlaneHandle? HitTest(MathPlaneScene scene, double wx, double wy, double tolerance,
+                                               Func<double, double, (double X, double Y)>? map)
         {
             MathPlaneHandle? best = null;
             double bestD = tolerance * tolerance;
@@ -106,7 +112,7 @@ namespace FracturingFog.Models
                 for (int k = 0; k < HandleCount(o); k++)
                 {
                     var (hx, hy) = HandlePosition(o, k);
-                    if (map is { } m) (hx, hy) = m.Apply(hx, hy);
+                    if (map != null) (hx, hy) = map(hx, hy);
                     double d = (hx - wx) * (hx - wx) + (hy - wy) * (hy - wy);
                     if (d <= bestD) { bestD = d; best = new MathPlaneHandle(i, k); }
                 }

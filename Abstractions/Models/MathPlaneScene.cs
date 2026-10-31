@@ -31,6 +31,11 @@
 //   curve NAME implicit   "F(x, y)"                              [options]  (#1551: F = 0)
 //   region NAME "condition(x, y)"                                [options]  (#1551: shaded where true)
 //   options: #RRGGBB (colour)  hidden  nolabel
+//   map "f(z)"                          #1553: the complex map (reads z and c); it applies
+//                                        when MathPlaneMapMode is Complex
+//   phase off|on|contours               #1553: phase-portrait background, colour by
+//                                        arg f(z); contours adds |f| = 2^k steps
+//   probe x y                           #1553: pinned f'(z) read-out at z = x + iy
 //
 // Curve expressions are the plot language (PlotExpression: the equation
 // language with real x / t / theta). They are double-quoted, and ';' or a newline
@@ -57,6 +62,11 @@ namespace FracturingFog.Models
     /// <summary>#1550 — how a <see cref="MathPlaneObjectKind.Curve"/> is given.
     /// <see cref="Implicit"/> (#1551) is the zero set of F(x, y).</summary>
     public enum MathPlaneCurveKind { Explicit, Parametric, Polar, Implicit }
+
+    /// <summary>#1553 — the phase-portrait background of a complex map:
+    /// <see cref="On"/> colours each pixel z by arg f(z); <see cref="Contours"/> also
+    /// steps the brightness where |f(z)| crosses a power of 2.</summary>
+    public enum MathPlanePhase { Off, On, Contours }
 
     /// <summary>One plotted object. <see cref="Coords"/> holds x, y pairs: a point's
     /// position; a vector's tip then (if <see cref="HasFrom"/>) its tail; a segment's
@@ -118,6 +128,12 @@ namespace FracturingFog.Models
         public bool ShowLengths { get; init; }
         public GridLabelSettings Labels { get; init; } = GridLabelSettings.Default;
         public IReadOnlyList<MathPlaneObject> Objects { get; init; } = Array.Empty<MathPlaneObject>();
+        /// <summary>#1553 — the complex map's source, e.g. <c>z^2 + c</c>; null = none.</summary>
+        public string? MapSource { get; init; }
+        /// <summary>#1553 — the phase-portrait background.</summary>
+        public MathPlanePhase Phase { get; init; }
+        /// <summary>#1553 — the pinned f'(z) read-out point, or null.</summary>
+        public (double X, double Y)? Probe { get; init; }
 
         /// <summary>Okabe–Ito colours (colour-blind safe), the default object colours
         /// in order; see the bibliography's Okabe–Ito entry.</summary>
@@ -133,7 +149,8 @@ namespace FracturingFog.Models
         public bool Equals(MathPlaneScene? o) =>
             o is not null && ShowAxes == o.ShowAxes && ShowGrid == o.ShowGrid && ShowTicks == o.ShowTicks
             && ShowDet == o.ShowDet && ShowEigen == o.ShowEigen && ShowLengths == o.ShowLengths
-            && Labels == o.Labels && Objects.SequenceEqual(o.Objects);
+            && Labels == o.Labels && Objects.SequenceEqual(o.Objects)
+            && MapSource == o.MapSource && Phase == o.Phase && Probe == o.Probe;
 
         public override int GetHashCode() => HashCode.Combine(ShowAxes, ShowGrid, ShowTicks, Labels, Objects.Count);
 
@@ -152,6 +169,9 @@ namespace FracturingFog.Models
             if (ShowEigen) parts.Add("eigen on");
             if (ShowLengths) parts.Add("lengths on");
             if (Labels != GridLabelSettings.Default) parts.Add("labels " + LabelsToken(Labels));
+            if (MapSource != null) parts.Add("map \"" + MapSource + "\"");
+            if (Phase != MathPlanePhase.Off) parts.Add("phase " + Phase.ToString().ToLowerInvariant());
+            if (Probe is { } pr) parts.Add("probe " + Num(pr.X) + " " + Num(pr.Y));
             foreach (var o in Objects) parts.Add(SerializeObject(o));
             return string.Join("; ", parts);
         }
@@ -212,6 +232,9 @@ namespace FracturingFog.Models
             bool axes = true, grid = true, ticks = true;
             bool det = false, eigen = false, lengths = false;
             var labels = GridLabelSettings.Default;
+            string? mapSource = null;
+            var phase = MathPlanePhase.Off;
+            (double, double)? probe = null;
             var objects = new List<MathPlaneObject>();
             var names = new HashSet<string>(StringComparer.Ordinal);
 
@@ -261,6 +284,34 @@ namespace FracturingFog.Models
                         { error = Err(1, "'labels' takes auto, offset, fixed:N or sci:N (N 0-30; sci needs 1+)"); return false; }
                         break;
                     }
+                    case "map":
+                    {
+                        if (mapSource != null) { error = Err(0, "'map' is given twice"); return false; }
+                        if (toks.Count < 2 || !toks[1].Text.StartsWith('"'))
+                        { error = Err(1, "'map' needs a quoted expression in z (and c), e.g. map \"z^2 + c\""); return false; }
+                        if (toks.Count > 2) { error = Err(2, "unexpected text after the map's expression"); return false; }
+                        if (!TryExpression(toks[1].Text, new[] { "z", "c" }, "the map", out string src, out string msg))
+                        { error = Err(1, msg); return false; }
+                        mapSource = src;
+                        break;
+                    }
+                    case "phase":
+                    {
+                        string v = toks.Count == 2 ? toks[1].Text.ToLowerInvariant() : "";
+                        if (v == "on") phase = MathPlanePhase.On;
+                        else if (v == "off") phase = MathPlanePhase.Off;
+                        else if (v == "contours") phase = MathPlanePhase.Contours;
+                        else { error = Err(1, "'phase' takes off, on or contours"); return false; }
+                        break;
+                    }
+                    case "probe":
+                    {
+                        if (probe != null) { error = Err(0, "'probe' is given twice"); return false; }
+                        if (toks.Count != 3 || !TryNum(toks[1].Text, out double px) || !TryNum(toks[2].Text, out double py))
+                        { error = Err(1, "'probe' takes x y"); return false; }
+                        probe = (px, py);
+                        break;
+                    }
                     case "point":
                     case "vector":
                     case "segment":
@@ -279,7 +330,7 @@ namespace FracturingFog.Models
                         break;
                     }
                     default:
-                        error = Err(0, $"unknown statement '{toks[0].Text}' (expected point, vector, segment, polyline, curve, region, axes, grid, ticks, labels, det, eigen or lengths)");
+                        error = Err(0, $"unknown statement '{toks[0].Text}' (expected point, vector, segment, polyline, curve, region, axes, grid, ticks, labels, det, eigen, lengths, map, phase or probe)");
                         return false;
                 }
             }
@@ -288,6 +339,7 @@ namespace FracturingFog.Models
             {
                 ShowAxes = axes, ShowGrid = grid, ShowTicks = ticks, Labels = labels, Objects = objects,
                 ShowDet = det, ShowEigen = eigen, ShowLengths = lengths,
+                MapSource = mapSource, Phase = phase, Probe = probe,
             };
             return true;
         }

@@ -41,8 +41,22 @@
 // tests each pixel's preimage. Read-outs (scene flags): det shades the image of
 // the unit square and prints det; eigen draws the real eigenvector lines of the
 // current map with their eigenvalues; lengths prints each vector's mapped length.
+//
+// #1553 — complex maps (MathPlaneComplexMap, MathPlaneMapMode.Complex): the frame
+// g_t(z) = (1 - t) z + t f(z). The grid's image is drawn from lines over a square
+// domain round the view (half the view diagonal each way, so a rotation still
+// fills the frame), each sampled adaptively in the image. Points and vector ends
+// are mapped; segments and polyline edges are sampled as curves; curves are
+// sampled over that domain and refined in the image; implicit curves are traced
+// in the domain and their segments mapped. A region stays where it is (a
+// non-linear map has no inverse to test pixels against), and det / eigen are
+// matrix read-outs, so a note says they are off. The phase portrait (scene
+// "phase") colours each pixel z by arg f(z) of the scene's map, under everything
+// else. The probe draws a small square at z and its image, with f'(z) as a
+// rotate-and-scale.
 
 using System;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Threading;
 
@@ -131,6 +145,16 @@ public sealed class MathPlaneCalculator : IFractalCalculator
         }
         ct.ThrowIfCancellationRequested();
 
+        // #1553 — the complex map (null unless the mode is Complex), and the phase
+        // portrait of the scene's f under everything else.
+        var cmap = MathPlaneComplexMap.Current(FractalParameters, _scene);
+        if (LastSceneError == null && _scene.Phase != MathPlanePhase.Off
+            && MathPlaneComplexMap.Create(_scene.MapSource, CParam(FractalParameters), 1.0) is { } pf)
+        {
+            pf.FillPhase(ColorBuffer, ViewBox(w, h), w, h, _scene.Phase == MathPlanePhase.Contours, BackgroundColor);
+            ct.ThrowIfCancellationRequested();
+        }
+
         var handle = GCHandle.Alloc(ColorBuffer, GCHandleType.Pinned);
         try
         {
@@ -138,7 +162,7 @@ public sealed class MathPlaneCalculator : IFractalCalculator
             using var bmp = new SKBitmap();
             bmp.InstallPixels(info, handle.AddrOfPinnedObject(), info.RowBytes);
             using var canvas = new SKCanvas(bmp);
-            Draw(canvas, w, h, _scene, LastSceneError);
+            Draw(canvas, w, h, _scene, LastSceneError, cmap);
             canvas.Flush();
         }
         finally { handle.Free(); }
@@ -146,7 +170,9 @@ public sealed class MathPlaneCalculator : IFractalCalculator
 
     // ── Drawing ──────────────────────────────────────────────────────────────
 
-    private void Draw(SKCanvas canvas, int w, int h, MathPlaneScene scene, MathPlaneSceneError? error)
+    private static Complex CParam(FractalParameters p) => new(p.MathPlaneCRe, p.MathPlaneCIm);
+
+    private void Draw(SKCanvas canvas, int w, int h, MathPlaneScene scene, MathPlaneSceneError? error, MathPlaneComplexMap? cmap)
     {
         // Sizes follow the output so a 4K batch still reads like the live view.
         float ui = (float)Math.Clamp(Math.Min(w, h) / 720.0, 1.0, 4.0);
@@ -162,7 +188,7 @@ public sealed class MathPlaneCalculator : IFractalCalculator
         double Py(double off) => h * 0.5 - off / pitch;
 
         var map = MathPlaneMap.Current(FractalParameters);
-        bool mapped = !map.IsIdentity;
+        bool mapped = !map.IsIdentity || cmap != null;
 
         using var line = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true };
 
@@ -192,9 +218,10 @@ public sealed class MathPlaneCalculator : IFractalCalculator
             if (axisX >= 0 && axisX <= w) canvas.DrawLine(axisX, 0, axisX, h, line);
         }
 
-        if (mapped) DrawMappedGrid(canvas, w, h, scene, map, xAxis.Step, ui);
-        if (scene.ShowDet) DrawDet(canvas, w, h, map, ui);
-        if (scene.ShowEigen) DrawEigen(canvas, w, h, map, ui);
+        if (cmap != null) DrawComplexGrid(canvas, w, h, scene, cmap, xAxis.Step / 2, ui);
+        else if (mapped) DrawMappedGrid(canvas, w, h, scene, map, xAxis.Step, ui);
+        if (cmap == null && scene.ShowDet) DrawDet(canvas, w, h, map, ui);
+        if (cmap == null && scene.ShowEigen) DrawEigen(canvas, w, h, map, ui);
 
         using var font = new SKFont(SKTypeface.Default, 12f * ui);
         using var halo = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(0xB0000000) };
@@ -242,7 +269,13 @@ public sealed class MathPlaneCalculator : IFractalCalculator
             if (xl.Anchor != null) { string a = "x0 = " + xl.Anchor; Text(a, w - font.MeasureText(a) - pad, aTop, ink); }
         }
 
-        DrawObjects(canvas, w, h, scene, map, ui);
+        DrawObjects(canvas, w, h, scene, map, cmap, ui);
+        if (scene.Probe is { } probe) DrawProbe(canvas, w, h, probe, map, cmap, ui);
+
+        if (cmap != null && (scene.ShowDet || scene.ShowEigen))
+            Text("det and eigen read-outs are for matrix maps", 6f * ui, h - lineH - 6f * ui, ink);
+        if (FractalParameters.MathPlaneMapMode == MathPlaneMapMode.Complex && cmap == null && error == null)
+            Text("Complex map: the scene has no map \"f(z)\" statement", 6f * ui, 6f * ui, ink);
 
         if (error != null)
         {
@@ -251,11 +284,13 @@ public sealed class MathPlaneCalculator : IFractalCalculator
         }
     }
 
-    private void DrawObjects(SKCanvas canvas, int w, int h, MathPlaneScene scene, Mat2 map, float ui)
+    private void DrawObjects(SKCanvas canvas, int w, int h, MathPlaneScene scene, Mat2 map, MathPlaneComplexMap? cmap, float ui)
     {
         bool mapped = !map.IsIdentity;
         var view = ViewBox(w, h);
         var pre = PreimageBox(view, map);
+        var domain = ComplexDomain(view);
+        Func<double, double, (double X, double Y)> apply = cmap != null ? cmap.Apply : map.Apply;
         using var stroke = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeCap = SKStrokeCap.Round, StrokeJoin = SKStrokeJoin.Round };
         using var fill = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true };
         using var outline = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 1.5f * ui, Color = new SKColor(0xFF000000) };
@@ -264,7 +299,13 @@ public sealed class MathPlaneCalculator : IFractalCalculator
 
         SKPoint P(double x, double y)
         {
-            (x, y) = map.Apply(x, y);
+            (x, y) = apply(x, y);
+            return Pix(x, y);
+        }
+
+        // An already-mapped world point.
+        SKPoint Pix(double x, double y)
+        {
             var (px, py) = ToPixel(x, y, w, h, CenterX, CenterY, Zoom);
             // Far off-screen points are clamped so Skia's float maths stays sane;
             // anything past this is invisible anyway.
@@ -307,6 +348,13 @@ public sealed class MathPlaneCalculator : IFractalCalculator
                     if (scene.ShowLengths)
                     {
                         var (vx, vy) = map.Apply(o.Coords[0], o.Coords[1]);   // linear: image of the components
+                        if (cmap != null)
+                        {
+                            // #1553 — non-linear: the distance between the mapped ends.
+                            var (ax, ay) = cmap.Apply(tx, ty);
+                            var (bx, by) = cmap.Apply(tx + o.Coords[0], ty + o.Coords[1]);
+                            (vx, vy) = (bx - ax, by - ay);
+                        }
                         string s = "|" + o.Name + "| = " + Fmt(Math.Sqrt(vx * vx + vy * vy));
                         canvas.DrawText(s, tip.X + 7f * ui + ui, tip.Y + 13f * ui + ui, font, halo);
                         canvas.DrawText(s, tip.X + 7f * ui, tip.Y + 13f * ui, font, fill);
@@ -316,6 +364,13 @@ public sealed class MathPlaneCalculator : IFractalCalculator
                 case MathPlaneObjectKind.Segment:
                 {
                     stroke.StrokeWidth = 2.5f * ui;
+                    if (cmap != null)
+                    {
+                        // #1553 — a straight segment's image is a curve.
+                        DrawLines(canvas, cmap.MapSegment(o.Point(0), o.Point(1), view), Pix, stroke);
+                        Label(o, P(0.5 * (o.Coords[0] + o.Coords[2]), 0.5 * (o.Coords[1] + o.Coords[3])));
+                        break;
+                    }
                     var a = P(o.Coords[0], o.Coords[1]);
                     var b = P(o.Coords[2], o.Coords[3]);
                     canvas.DrawLine(a, b, stroke);
@@ -325,7 +380,8 @@ public sealed class MathPlaneCalculator : IFractalCalculator
                 case MathPlaneObjectKind.Curve when o.CurveKind == MathPlaneCurveKind.Implicit:
                 {
                     stroke.StrokeWidth = 2.5f * ui;
-                    var segs = MathPlaneImplicitSampler.Segments(o, pre);
+                    // #1553 — under a complex map, traced in the domain and mapped.
+                    var segs = MathPlaneImplicitSampler.Segments(o, cmap != null ? domain : pre);
                     using var path = new SKPath();
                     SKPoint? labelAt = null;
                     foreach (var (a, b) in segs)
@@ -345,7 +401,8 @@ public sealed class MathPlaneCalculator : IFractalCalculator
                 case MathPlaneObjectKind.Region:
                 {
                     bool[]? mask;
-                    if (!mapped) mask = MathPlaneImplicitSampler.RegionMask(o, view, w, h);
+                    // #1553 — a complex map leaves regions in place (no inverse to test against).
+                    if (!mapped || cmap != null) mask = MathPlaneImplicitSampler.RegionMask(o, view, w, h);
                     else if (map.Inverse() is { } inv) mask = MathPlaneImplicitSampler.RegionMask(o, view, w, h, inv);
                     else mask = null;   // a singular map squashes the region to a line: nothing to shade
                     if (mask == null) break;
@@ -361,18 +418,22 @@ public sealed class MathPlaneCalculator : IFractalCalculator
                 case MathPlaneObjectKind.Curve:
                 {
                     stroke.StrokeWidth = 2.5f * ui;
-                    var lines = MathPlaneCurveSampler.Sample(o, pre);
+                    // #1553 — under a complex map the sampler maps each point itself
+                    // (refining the image), so its polylines are already mapped.
+                    var lines = cmap != null ? MathPlaneCurveSampler.Sample(o, view, cmap.Apply, domain)
+                                             : MathPlaneCurveSampler.Sample(o, pre);
+                    Func<double, double, SKPoint> draw = cmap != null ? Pix : P;
                     SKPoint? labelAt = null;
                     foreach (var poly in lines)
                     {
                         using var path = new SKPath();
-                        path.MoveTo(P(poly[0].X, poly[0].Y));
-                        for (int i = 1; i < poly.Count; i++) path.LineTo(P(poly[i].X, poly[i].Y));
+                        path.MoveTo(draw(poly[0].X, poly[0].Y));
+                        for (int i = 1; i < poly.Count; i++) path.LineTo(draw(poly[i].X, poly[i].Y));
                         canvas.DrawPath(path, stroke);
                         // Label at the last on-screen vertex (the right / far end).
                         for (int i = poly.Count - 1; i >= 0; i--)
                         {
-                            var q = P(poly[i].X, poly[i].Y);
+                            var q = draw(poly[i].X, poly[i].Y);
                             if (q.X >= 0 && q.X < w && q.Y >= 0 && q.Y < h) { labelAt ??= q; break; }
                         }
                     }
@@ -386,6 +447,13 @@ public sealed class MathPlaneCalculator : IFractalCalculator
                 case MathPlaneObjectKind.Polyline:
                 {
                     stroke.StrokeWidth = 2.5f * ui;
+                    if (cmap != null)
+                    {
+                        for (int i = 1; i < o.PointCount; i++)
+                            DrawLines(canvas, cmap.MapSegment(o.Point(i - 1), o.Point(i), view), Pix, stroke);
+                        Label(o, P(o.Coords[^2], o.Coords[^1]));
+                        break;
+                    }
                     using var path = new SKPath();
                     path.MoveTo(P(o.Coords[0], o.Coords[1]));
                     for (int i = 1; i < o.PointCount; i++) path.LineTo(P(o.Coords[2 * i], o.Coords[2 * i + 1]));
@@ -419,6 +487,144 @@ public sealed class MathPlaneCalculator : IFractalCalculator
         }
         return new MathPlaneViewBox(x0, x1, y0, y1, view.Pitch / stretch);
     }
+
+    private static void DrawLines(SKCanvas canvas, System.Collections.Generic.List<System.Collections.Generic.List<(double X, double Y)>> lines,
+                                  Func<double, double, SKPoint> pix, SKPaint paint)
+    {
+        foreach (var poly in lines)
+        {
+            using var path = new SKPath();
+            path.MoveTo(pix(poly[0].X, poly[0].Y));
+            for (int i = 1; i < poly.Count; i++) path.LineTo(pix(poly[i].X, poly[i].Y));
+            canvas.DrawPath(path, paint);
+        }
+    }
+
+    /// <summary>#1553 — the domain a complex map's grid and curves are drawn from: a
+    /// square round the view centre, half the view diagonal each way (so a rotation
+    /// of the view's own rectangle is covered), at the view's pitch.</summary>
+    public static MathPlaneViewBox ComplexDomain(MathPlaneViewBox view)
+    {
+        double cx = 0.5 * (view.XMin + view.XMax), cy = 0.5 * (view.YMin + view.YMax);
+        double r = 0.5 * Math.Sqrt(view.Width * view.Width + view.Height * view.Height);
+        return new MathPlaneViewBox(cx - r, cx + r, cy - r, cy + r, view.Pitch);
+    }
+
+    /// <summary>#1553 — the image of the grid and axes under a complex map. Each line
+    /// is sampled in the image (bends refined, poles break the line).</summary>
+    private void DrawComplexGrid(SKCanvas canvas, int w, int h, MathPlaneScene scene, MathPlaneComplexMap cmap, double step, float ui)
+    {
+        var view = ViewBox(w, h);
+        var dom = ComplexDomain(view);
+        while ((dom.Width / step) + (dom.Height / step) > 160) step *= 2;
+        using var line = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 1.2f * ui, Color = new SKColor(MapGridColor) };
+        using var axis = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 2f * ui, Color = new SKColor(AxisColor) };
+        SKPoint Pix(double x, double y)
+        {
+            var (px, py) = ToPixel(x, y, w, h, CenterX, CenterY, Zoom);
+            const double lim = 1e7;
+            return new SKPoint((float)Math.Clamp(px, -lim, lim), (float)Math.Clamp(py, -lim, lim));
+        }
+        if (scene.ShowGrid)
+        {
+            for (double x = Math.Ceiling(dom.XMin / step) * step; x <= dom.XMax; x += step)
+                if (Math.Abs(x) > step * 1e-9) DrawLines(canvas, cmap.MapSegment((x, dom.YMin), (x, dom.YMax), view), Pix, line);
+            for (double y = Math.Ceiling(dom.YMin / step) * step; y <= dom.YMax; y += step)
+                if (Math.Abs(y) > step * 1e-9) DrawLines(canvas, cmap.MapSegment((dom.XMin, y), (dom.XMax, y), view), Pix, line);
+        }
+        if (scene.ShowAxes)
+        {
+            if (dom.YMin <= 0 && dom.YMax >= 0) DrawLines(canvas, cmap.MapSegment((dom.XMin, 0), (dom.XMax, 0), view), Pix, axis);
+            if (dom.XMin <= 0 && dom.XMax >= 0) DrawLines(canvas, cmap.MapSegment((0, dom.YMin), (0, dom.YMax), view), Pix, axis);
+        }
+    }
+
+    /// <summary>#1553 — the probe: a small square at z (dim) and its image under the
+    /// current frame (bright), with the local map as a read-out. For a complex map
+    /// that is f'(z) as a rotate-and-scale; for a matrix it is the matrix itself.</summary>
+    private void DrawProbe(SKCanvas canvas, int w, int h, (double X, double Y) z, Mat2 map, MathPlaneComplexMap? cmap, float ui)
+    {
+        double pitch = Pitch(w, Zoom), half = ProbeSquarePixels * 0.5 * pitch;
+        Func<double, double, (double X, double Y)> apply = cmap != null ? cmap.Apply : map.Apply;
+        SKPoint Pix(double x, double y)
+        {
+            var (px, py) = ToPixel(x, y, w, h, CenterX, CenterY, Zoom);
+            return new SKPoint((float)Math.Clamp(px, -1e7, 1e7), (float)Math.Clamp(py, -1e7, 1e7));
+        }
+        var corners = new[] { (-half, -half), (half, -half), (half, half), (-half, half) };
+        using var dim = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 1.2f * ui, Color = new SKColor(ProbeDimColor) };
+        using var bright = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 2f * ui, Color = new SKColor(ProbeColor) };
+        using (var sq = new SKPath())
+        {
+            sq.MoveTo(Pix(z.X + corners[0].Item1, z.Y + corners[0].Item2));
+            for (int k = 1; k < 4; k++) sq.LineTo(Pix(z.X + corners[k].Item1, z.Y + corners[k].Item2));
+            sq.Close();
+            canvas.DrawPath(sq, dim);
+        }
+        // The image: each edge mapped at a few points, so it is the true image, not
+        // the linearised one (at this size they agree closely for a smooth map).
+        using (var img = new SKPath())
+        {
+            const int n = 8;
+            for (int k = 0; k < 4; k++)
+            {
+                var (ax, ay) = corners[k];
+                var (bx, by) = corners[(k + 1) % 4];
+                for (int s = 0; s < n; s++)
+                {
+                    double u = s / (double)n;
+                    var q = apply(z.X + ax + u * (bx - ax), z.Y + ay + u * (by - ay));
+                    if (k == 0 && s == 0) img.MoveTo(Pix(q.X, q.Y)); else img.LineTo(Pix(q.X, q.Y));
+                }
+            }
+            img.Close();
+            canvas.DrawPath(img, bright);
+        }
+        var (wx, wy) = apply(z.X, z.Y);
+        var at = Pix(wx, wy);
+        using var dot = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(ProbeColor) };
+        canvas.DrawCircle(at, 3f * ui, dot);
+
+        var (l1, l2) = ProbeText(z, map, cmap);
+        using var font = new SKFont(SKTypeface.Default, 13f * ui);
+        using var ink = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(ProbeColor) };
+        using var halo = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(0xC0000000) };
+        float lh = font.Spacing;
+        float widest = Math.Max(font.MeasureText(l1), font.MeasureText(l2));
+        float tx = Math.Clamp(at.X + 14f * ui, 4f * ui, Math.Max(4f * ui, w - widest - 4f * ui));
+        float ty = Math.Clamp(at.Y - 14f * ui - lh, lh, Math.Max(lh, h - 4f * ui - lh));
+        foreach (var s in new[] { l1, l2 })
+        {
+            if (s.Length == 0) continue;
+            canvas.DrawText(s, tx + ui, ty + ui, font, halo);
+            canvas.DrawText(s, tx, ty, font, ink);
+            ty += lh;
+        }
+    }
+
+    /// <summary>#1553 — the probe's two read-out lines.</summary>
+    public static (string Line1, string Line2) ProbeText((double X, double Y) z, Mat2 map, MathPlaneComplexMap? cmap)
+    {
+        if (cmap != null)
+        {
+            var d = cmap.Derivative(new Complex(z.X, z.Y));
+            string l1 = $"f'({Cx(z.X, z.Y)}) = {Cx(d.Real, d.Imaginary)}";
+            string l2 = double.IsFinite(d.Magnitude)
+                ? $"|f'| = {Fmt(d.Magnitude)} (scale), arg f' = {Fmt(Math.Atan2(d.Imaginary, d.Real) * 180 / Math.PI)} deg (turn)"
+                : "f' is not finite here";
+            return (l1, l2);
+        }
+        if (map.IsIdentity) return ("no map: the square is unchanged", "");
+        return ($"local map = [[{Fmt(map.A)}, {Fmt(map.B)}], [{Fmt(map.C)}, {Fmt(map.D)}]]",
+                "a linear map is the same everywhere");
+    }
+
+    private static string Cx(double re, double im) => $"{Fmt(re)} {(im < 0 ? "-" : "+")} {Fmt(Math.Abs(im))}i";
+
+    /// <summary>#1553 — the probe square's side in pixels.</summary>
+    public const double ProbeSquarePixels = 28;
+    public const uint ProbeColor = 0xFFFFFFFF;
+    public const uint ProbeDimColor = 0x99FFFFFF;
 
     /// <summary>#1552 — the image of the major grid and axes under the map.</summary>
     private void DrawMappedGrid(SKCanvas canvas, int w, int h, MathPlaneScene scene, Mat2 map, double step, float ui)

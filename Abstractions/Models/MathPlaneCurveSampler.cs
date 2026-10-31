@@ -42,8 +42,11 @@ namespace FracturingFog.Models
 
         /// <summary>Polylines (each two or more world points) for <paramref name="curve"/>
         /// in <paramref name="view"/>. Empty when the curve does not parse or has
-        /// nothing visible.</summary>
-        public static List<List<(double X, double Y)>> Sample(MathPlaneObject curve, MathPlaneViewBox view)
+        /// nothing visible. #1553: with <paramref name="map"/>, each point is mapped
+        /// before the tolerance tests (so the image is refined, not the preimage), and
+        /// an explicit curve spans <paramref name="domain"/> instead of the view.</summary>
+        public static List<List<(double X, double Y)>> Sample(MathPlaneObject curve, MathPlaneViewBox view,
+            Func<double, double, (double X, double Y)>? map = null, MathPlaneViewBox? domain = null)
         {
             var result = new List<List<(double, double)>>();
             if (curve.Kind != MathPlaneObjectKind.Curve || view.Pitch <= 0) return result;
@@ -64,7 +67,8 @@ namespace FracturingFog.Models
                     var fx = exprs[0];
                     f = x => (x, fx.Eval(x: x));
                     // One pixel of margin so a curve reaches the frame edges.
-                    a = view.XMin - view.Pitch; b = view.XMax + view.Pitch;
+                    var span = domain ?? view;
+                    a = span.XMin - span.Pitch; b = span.XMax + span.Pitch;
                     if (curve.Domain is { } d) { a = Math.Max(a, d.Min); b = Math.Min(b, d.Max); }
                     break;
                 }
@@ -87,7 +91,22 @@ namespace FracturingFog.Models
             }
             if (!(b > a) || !double.IsFinite(a) || !double.IsFinite(b)) return result;
 
-            var s = new Sampler(f, view);
+            if (map != null)
+            {
+                var g = f;
+                f = p => { var (x, y) = g(p); return map(x, y); };
+            }
+            return SampleFunction(f, a, b, view);
+        }
+
+        /// <summary>#1553 — polylines for any one-parameter map p -> (x, y) over [a, b],
+        /// refined against <paramref name="view"/> (the same tolerance, breaks and caps
+        /// as a curve).</summary>
+        public static List<List<(double X, double Y)>> SampleFunction(Func<double, (double X, double Y)> f,
+            double a, double b, MathPlaneViewBox view, int initialSegments = InitialSegments)
+        {
+            if (!(b > a) || view.Pitch <= 0) return new List<List<(double, double)>>();
+            var s = new Sampler(f, view, initialSegments);
             s.Run(a, b);
             return s.Lines;
         }
@@ -98,13 +117,14 @@ namespace FracturingFog.Models
             private readonly MathPlaneViewBox _v;
             private readonly double _tol2;
             private readonly double _jump;
+            private readonly int _initial;
             private int _samples;
             private List<(double, double)>? _line;
             public readonly List<List<(double, double)>> Lines = new();
 
-            public Sampler(Func<double, (double, double)> f, MathPlaneViewBox v)
+            public Sampler(Func<double, (double, double)> f, MathPlaneViewBox v, int initial)
             {
-                _f = f; _v = v;
+                _f = f; _v = v; _initial = Math.Max(1, initial);
                 double tol = TolerancePixels * v.Pitch;
                 _tol2 = tol * tol;
                 _jump = Math.Max(v.Width, v.Height);
@@ -116,11 +136,11 @@ namespace FracturingFog.Models
 
             public void Run(double a, double b)
             {
-                double h = (b - a) / InitialSegments;
+                double h = (b - a) / _initial;
                 var p0 = Eval(a);
-                for (int k = 1; k <= InitialSegments; k++)
+                for (int k = 1; k <= _initial; k++)
                 {
-                    double t1 = k == InitialSegments ? b : a + k * h;
+                    double t1 = k == _initial ? b : a + k * h;
                     var p1 = Eval(t1);
                     Segment(a + (k - 1) * h, p0, t1, p1, 0);
                     p0 = p1;

@@ -1319,6 +1319,10 @@ namespace FracturingFog.Models
         public double MathPlaneT { get; set; } = 1.0;
         /// <summary>#1552 — how <see cref="MathPlaneT"/> interpolates the map.</summary>
         public MathPlaneInterpolation MathPlaneInterpolation { get; set; } = MathPlaneInterpolation.Linear;
+        /// <summary>#1553 — the c a complex map reads (<c>z^2 + c</c>): real and imaginary
+        /// parts. Separate numbers so keyframes can move c. Default -0.5 + 0.5i.</summary>
+        public double MathPlaneCRe { get; set; } = -0.5;
+        public double MathPlaneCIm { get; set; } = 0.5;
         /// <summary>#1538 — sides of the <see cref="BilliardGeometry.Polygon"/> layout (3 = triangle,
         /// 6 = hexagon, 8 = octagon ...). Clamped to [3, 12]. Default 6.</summary>
         public int BilliardPolygonSides { get; set; } = 6;
@@ -2253,6 +2257,8 @@ namespace FracturingFog.Models
                 MathPlaneM22 = MathPlaneM22,
                 MathPlaneT = MathPlaneT,
                 MathPlaneInterpolation = MathPlaneInterpolation,
+                MathPlaneCRe = MathPlaneCRe,
+                MathPlaneCIm = MathPlaneCIm,
                 BilliardPolygonSides = BilliardPolygonSides,
                 BilliardPolygonFill = BilliardPolygonFill,
                 BilliardLatticeRotation = BilliardLatticeRotation,

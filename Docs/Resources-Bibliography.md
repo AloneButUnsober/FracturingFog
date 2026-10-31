@@ -551,7 +551,9 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
   later revised. <https://jfly.uni-koeln.de/color/>. Authors, title and URL checked; the revision date of
   the current page was not confirmed. The eight-colour set already used for Billiard gate colours
   (`BilliardRaysCalculator`, #1507; credit added with the Math Plane plan, which also defaults its object
-  colours to it, MathPlane-DesignPlan.md §4).
+  colours to it, MathPlane-DesignPlan.md §4). #1553: the Math Plane phase-portrait colour wheel blends six
+  of these colours in a cycle (`MathPlaneComplexMap.PhaseStops`). The wheel is FF's own construction from
+  the palette; it is not a cyclic map published by Okabe and Ito.
 
 <a id="lorensen-cline-marching-cubes"></a>
 
@@ -570,8 +572,11 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
 
 - **Phase portraits of complex functions** — Elias Wegert. *Visual Complex Functions: An Introduction
   with Phase Portraits.* Birkhäuser, 2012. doi:10.1007/978-3-0348-0180-5,
-  <https://link.springer.com/doi/10.1007/978-3-0348-0180-5>. Planned use: the phase-portrait background
-  (colour by `arg f(z)`) under the Math Plane's complex maps (MathPlane-DesignPlan.md §3.4).
+  <https://link.springer.com/doi/10.1007/978-3-0348-0180-5>. Used for the phase-portrait background
+  (colour each point z by `arg f(z)`) under the Math Plane's complex maps (`scene phase on|contours`,
+  `Abstractions/Models/MathPlaneComplexMap.cs`, #1553; MathPlane-DesignPlan.md §3.4). The colour wheel and
+  the `contours` brightness steps where |f| crosses a power of 2 are FF's choices; they are not claimed
+  to reproduce the book's colour scheme.
 
 <a id="cobweb-plot"></a>
 
