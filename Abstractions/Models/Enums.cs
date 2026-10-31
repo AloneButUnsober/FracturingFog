@@ -132,8 +132,10 @@ namespace FracturingFog
     public enum BilliardRayColorSource { Density, Gate, Bounces, PathLength, EntryAngle, ExitAngle, GateDistance, SelfIntersects }
 
     /// <summary>#1552 — the map a <see cref="FractalType.MathPlane"/> view applies to its
-    /// plane and objects. <see cref="Matrix"/>: the 2x2 matrix MathPlaneM11..M22.</summary>
-    public enum MathPlaneMapMode { None, Matrix }
+    /// plane and objects. <see cref="Matrix"/>: the 2x2 matrix MathPlaneM11..M22.
+    /// #1553 <see cref="Complex"/>: the scene's <c>map "f(z)"</c>, with c =
+    /// MathPlaneCRe + i MathPlaneCIm.</summary>
+    public enum MathPlaneMapMode { None, Matrix, Complex }
 
     /// <summary>#1552 — how <c>MathPlaneT</c> runs the map from the identity (t = 0) to
     /// the matrix (t = 1). <see cref="Linear"/>: (1 - t) I + t M, the usual grid morph.

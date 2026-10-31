@@ -78,6 +78,7 @@ public sealed partial class MathPlaneSectionViewModel
         this.RaisePropertyChanged(nameof(T));
         this.RaisePropertyChanged(nameof(Interpolation));
         this.RaisePropertyChanged(nameof(MapReadout));
+        RaiseComplexProperties();
     }
 
     /// <summary>Apply the matrix (MathPlaneMapMode Matrix) or show the plain plane.</summary>
@@ -149,7 +150,8 @@ public sealed partial class MathPlaneSectionViewModel
     private void TogglePlay()
     {
         if (IsPlaying) { StopPlay(); return; }
-        if (!MapEnabled) MapEnabled = true;
+        // #1553 — Play runs whichever map is on (matrix or complex); none: the matrix.
+        if (P.MathPlaneMapMode == MathPlaneMapMode.None) MapEnabled = true;
         _playClock.Restart();
         _playTimer ??= new DispatcherTimer(TimeSpan.FromMilliseconds(33), DispatcherPriority.Background, (_, _) => PlayTick());
         _playTimer.Start();

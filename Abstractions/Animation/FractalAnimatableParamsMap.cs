@@ -352,6 +352,9 @@ public static class FractalAnimatableParamsMap
         new("MathPlaneM12", AnimatableParamKind.ScalarDouble, Min: -4.0, Max: 4.0, Notes: "Matrix row 1, column 2 (j-hat's x)."),
         new("MathPlaneM21", AnimatableParamKind.ScalarDouble, Min: -4.0, Max: 4.0, Notes: "Matrix row 2, column 1 (i-hat's y)."),
         new("MathPlaneM22", AnimatableParamKind.ScalarDouble, Min: -4.0, Max: 4.0, Notes: "Matrix row 2, column 2 (j-hat's y)."),
+        // #1553 — the c of a complex map such as z^2 + c.
+        new("MathPlaneCRe", AnimatableParamKind.ScalarDouble, Min: -2.0, Max: 2.0, Notes: "Complex map: real part of c."),
+        new("MathPlaneCIm", AnimatableParamKind.ScalarDouble, Min: -2.0, Max: 2.0, Notes: "Complex map: imaginary part of c."),
     };
 
     // BilliardRays (#1506) — the shared billiard scene plus the sweep's beam angle.

@@ -20,6 +20,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Numerics;
 using System.Linq;
 using System.Reactive;
 using FracturingFog.Input;
@@ -62,6 +63,7 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
         MoveUpCommand = ReactiveCommand.Create(() => MoveSelected(-1));
         MoveDownCommand = ReactiveCommand.Create(() => MoveSelected(+1));
         InitMap();
+        InitComplex();
         Refresh();
     }
 
@@ -330,6 +332,7 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
         this.RaisePropertyChanged(nameof(ShowEigen));
         this.RaisePropertyChanged(nameof(ShowLengths));
         this.RaisePropertyChanged(nameof(Scene));
+        RaiseComplexProperties();
     }
 
     private void Commit(MathPlaneScene scene, int? select = null)
@@ -466,12 +469,21 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
 
     /// <summary>#1552 — the scene coordinates under the pointer: the preimage of the
     /// world point under the map, snapped (Shift) in scene coordinates. Null when the
-    /// map is singular (the plane is squashed; there is no unique preimage).</summary>
-    private (double X, double Y)? SceneAt(PointerInput e)
+    /// map is singular (the plane is squashed; there is no unique preimage).
+    /// #1553: under a complex map the preimage is found by Newton's method from
+    /// <paramref name="guess"/> (the dragged handle's place), so a drag follows one
+    /// branch; null when it does not converge.</summary>
+    private (double X, double Y)? SceneAt(PointerInput e, (double X, double Y)? guess = null)
     {
         var (wx, wy) = World(e);
         var map = CurrentMap;
-        if (!map.IsIdentity)
+        if (CurrentComplex is { } cmap)
+        {
+            var g = guess ?? (wx, wy);
+            if (cmap.Preimage(new Complex(wx, wy), new Complex(g.X, g.Y)) is not { } z) return null;
+            (wx, wy) = (z.Real, z.Imaginary);
+        }
+        else if (!map.IsIdentity)
         {
             if (map.Inverse() is not { } inv) return null;
             (wx, wy) = inv.Apply(wx, wy);
@@ -488,9 +500,10 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
     private MathPlaneHandle? HitAt(PointerInput e)
     {
         var (wx, wy) = World(e);
+        double tol = MathPlaneSceneEdit.HitRadiusPixels * PixelPitch(e);
+        if (CurrentComplex is { } cmap) return MathPlaneSceneEdit.HitTest(_scene, wx, wy, tol, cmap.Apply);
         var map = CurrentMap;
-        return MathPlaneSceneEdit.HitTest(_scene, wx, wy, MathPlaneSceneEdit.HitRadiusPixels * PixelPitch(e),
-                                          map.IsIdentity ? null : map);
+        return MathPlaneSceneEdit.HitTest(_scene, wx, wy, tol, map.IsIdentity ? null : map);
     }
 
     public bool OnPointerDown(PointerInput e)
@@ -507,7 +520,8 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
     public void OnPointerMove(PointerInput e)
     {
         if (_drag is not { } h || !Editing || h.ObjectIndex >= _scene.Objects.Count) return;
-        if (SceneAt(e) is not { } at) return;
+        var from = MathPlaneSceneEdit.HandlePosition(_scene.Objects[h.ObjectIndex], h.Point);
+        if (SceneAt(e, from) is not { } at) return;
         CommitDrag(MathPlaneSceneEdit.MoveHandle(_scene, h, at.X, at.Y), h.ObjectIndex);
         UpdateReadouts(e);
     }
@@ -547,6 +561,9 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
     {
         var (wx, wy) = World(e);
         PointerReadout = $"x = {Num(wx)}, y = {Num(wy)}";
+        // #1553 — f'(z) at the pointer, read as a point z of the plane (the phase
+        // portrait is coloured the same way: by f at each z).
+        if (CurrentComplex is { } cmap) PointerReadout += "    " + DerivativeReadout(cmap, new Complex(wx, wy));
         var hit = _sceneValid ? HitAt(e) : null;
         HoverReadout = hit is { } h ? Readout(_scene.Objects[h.ObjectIndex]) : "";
     }

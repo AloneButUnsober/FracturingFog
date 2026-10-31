@@ -158,6 +158,11 @@ out slow. Only ASCII `theta` is accepted (no `θ`), following the ASCII-names ru
   contours), in the style of Wegert's phase portraits
   [(Wegert 2012)](../Resources-Bibliography.md#wegert-visual-complex-functions).
   Per-pixel loops run row-parallel on CPU, with a fixed order per row for determinism.
+  *As built (S6, #1553):* the scene's `phase on|contours` colours each pixel z by
+  `arg f(z)` of the scene's `map "f(z)"`, whether or not the map is applied to the
+  grid. The wheel blends six Okabe–Ito colours, with no red–green axis; it is FF's own
+  construction. `contours` steps the brightness where |f| crosses a power of 2. A zero,
+  pole or non-finite value shows the plain background.
 
 ### 3.5 Maps and the animation parameter
 
@@ -174,6 +179,19 @@ out slow. Only ASCII `theta` is accepted (no `θ`), following the ASCII-names ru
 - **Complex `f(z)`:** grid lines are sampled as polylines (adaptive, as above) and
   each sample is mapped by `(1 − t)·z + t·f(z)`. Read-outs at a hovered point:
   `f'(z)` as a local rotate-and-scale (the bridge back to linear maps).
+  *As built (S6, #1553):* `MathPlaneMapMode = Complex` applies the scene's `map "f(z)"`
+  (plot language in `z` and `c`; `c = MathPlaneCRe + i·MathPlaneCIm`, both animatable).
+  Grid lines come from a square domain round the view (half the view diagonal each
+  way) and are sampled with the curve sampler in the image, so bends are refined and
+  poles break the line. Segments and polyline edges are sampled the same way; curves
+  are refined in the image; implicit curves are traced in the domain and mapped.
+  Regions stay where they are: a non-linear map has no inverse to test pixels
+  against. det and eigenvectors are matrix read-outs and show a note instead.
+  `f'(z)` is a central difference along the real axis. The pinned read-out is the
+  scene's `probe x y`: a small square at z and its true image, with `|f'|` and
+  `arg f'`. The section also shows `f'(z)` at the pointer, read as a point of the
+  plane (as the phase portrait is). Dragging under a complex map finds the preimage
+  by Newton's method from the dragged handle, so a drag stays on one branch.
 - Read-outs: `det M` (signed area of the unit square's image, shaded), real
   eigenvectors as lines through the origin, and `|v|`, `arg v` for the selected
   vector. Labels are drawn in screen space, so they do not shear.

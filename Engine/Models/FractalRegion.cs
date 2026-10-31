@@ -608,6 +608,9 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? MathPlaneM22 { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? MathPlaneT { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? MathPlaneInterpolation { get; set; }
+        // #1553 — the c of a complex map.
+        [JsonIgnore(Condition = OmitNull)] public double? MathPlaneCRe { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MathPlaneCIm { get; set; }
         // #1538 — Polygon sides; captured only when Polygon is the active geometry.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardPolygonSides { get; set; }
         // #1539 — Polygon fill (captured with Polygon) and lattice rotation (captured with a lattice).
@@ -1062,6 +1065,8 @@ namespace FracturingFog.Models
                     MathPlaneM22 = p.MathPlaneM22,
                     MathPlaneT = p.MathPlaneT,
                     MathPlaneInterpolation = (int)p.MathPlaneInterpolation,
+                    MathPlaneCRe = p.MathPlaneCRe,
+                    MathPlaneCIm = p.MathPlaneCIm,
                 },
                 // #1506 — the shared billiard scene (no launch / gate / mute: those
                 // colour ChaoticBilliard only) plus the sweep.
@@ -1853,6 +1858,8 @@ namespace FracturingFog.Models
             if (MathPlaneM22.HasValue) p.MathPlaneM22 = MathPlaneM22.Value;
             if (MathPlaneT.HasValue) p.MathPlaneT = MathPlaneT.Value;
             if (MathPlaneInterpolation.HasValue) p.MathPlaneInterpolation = (FracturingFog.MathPlaneInterpolation)MathPlaneInterpolation.Value;
+            if (MathPlaneCRe.HasValue) p.MathPlaneCRe = MathPlaneCRe.Value;
+            if (MathPlaneCIm.HasValue) p.MathPlaneCIm = MathPlaneCIm.Value;
             if (BilliardPolygonSides.HasValue)
                 p.BilliardPolygonSides = BilliardPolygonSides.Value;
             if (BilliardPolygonFill.HasValue)
