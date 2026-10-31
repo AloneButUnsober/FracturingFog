@@ -647,6 +647,10 @@ namespace FracturingFog
         Phase,
         /// <summary>The aperture: each point's share of the transmitted power (log scale).</summary>
         Aperture,
+        /// <summary>The aperture coloured by each point's Hölder exponent α (#1571).</summary>
+        HolderAlpha,
+        /// <summary>The aperture coloured by f(α): how many leaves share the point's α (#1571).</summary>
+        Spectrum,
     }
 
     /// <summary>Direction of the c-path's angular-momentum winding relative to the

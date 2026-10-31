@@ -253,6 +253,42 @@ What the *screen* view shows is the Fourier transform of μ, not μ. Allain & Cl
 the diffraction intensity carries the dimension (power-law decay of the structure factor), so the
 screen and aperture views are two readings of one D.
 
+
+### 5.1 What S4 shipped (#1571, 2026-10-31)
+
+- **Readout.** The status bar (through the calculators' `LastPrecisionLabel` hook) shows
+  `D0 · D1 · D2 · Dq(q)`, with q = `SlitCascadeQ` (default 3). When two children's squares overlap,
+  the open set condition fails and the numbers are only similarity dimensions; the label then
+  says *children overlap*.
+- **Views.** `HolderAlpha` colours each aperture point by α over [α_min, α_max] =
+  [log p_max, log p_min] / log r. `Spectrum` colours it by the exact depth-D
+  f(α) = log(D!/Π kᵢ!) / (D·log(1/r)), where kᵢ = how often child i appears in the point's
+  address, over [0, D₀].
+- **Dark fringes are exact.** A share below 10⁻¹² of the brightest is set to 0. cos(π/2)
+  evaluates to about 6·10⁻¹⁷, which would otherwise keep a dead branch in N_eff (found by the D₀
+  test).
+- **How the wavelength moves the dimension** (Ring, N = 6, r = 0.3, d = 1, w = 0.2; closed form).
+  No child is fully dark here, so D₀ stays at log 6 / log(1/0.3).
+
+  | λ | D₀ | D₁ | D₂ |
+  |---|---|---|---|
+  | 0.3 | 1.488 | 1.343 | 1.284 |
+  | 0.6 (default) | 1.488 | 1.052 | 0.868 |
+  | 0.9 | 1.488 | 1.253 | 1.091 |
+  | 1.2 | 1.488 | 1.337 | 1.278 |
+  | 2.0 | 1.488 | 1.390 | 1.337 |
+  | 4.0 | 1.488 | 1.483 | 1.478 |
+
+  As λ grows the fringes flatten across the children, the shares even out, and every D_q tends to
+  D₀ (monofractal). Around λ ≈ 0.6 the fringes put most of the light on two of the six children,
+  and D₁ and D₂ drop furthest.
+- **Tests** (`SlitCascadeTests`, 8 new): equal shares give a monofractal; D_q strictly decreases
+  in q and is continuous at q = 1. **Box counting of the rendered measure** fits D₀, D₁ and D₂ from
+  slopes over four box sizes and matches the closed form within 10%; this oracle never uses the
+  formula. Also tested: dark fringes lower D₀ to 0; α and f(α) of an explicit address, and the
+  address walk; the status label, including the overlap warning; the view ranges; and the batch
+  round trip of q. Five mutants are each caught: q for q − 1, α or f without the depth, D₁ without
+  the p weighting, and no dark threshold.
 ---
 
 ## 6. Angular-momentum filaments in the cascade (S5 #1572)
@@ -367,7 +403,7 @@ physics new.
 | S1 which-path η | #1567 | S0 | none |
 | S2 OAM winding ℓ (dual orbit) | #1568 | S0 | ℓ must be an integer (§3.2); shipped both modes, measured seams (§3.2.1) |
 | S3 slit cascade | #1569 | S0 | N ≥ 3 sampled children, fringe-sampled weights (§4.1); exact Fraunhofer product (§4.2); add aperture view; shipped (§4.3.1) |
-| S4 probability → dimension | #1571 | S3 | closed-form D_q for equal r (§5); α colouring on the aperture view |
+| S4 probability → dimension | #1571 | S3 | closed-form D_q for equal r (§5); α colouring on the aperture view; shipped (§5.1) |
 | S5 OAM filaments (cascade) | #1572 | S3 | ring layout with N ≥ 3; charge = ℓ mod N, to verify (§6); credit the devil's vortex lens |
 | S6 Talbot carpet | #1570 | S0 | none |
 | S7 presets / close-out | #1573 | all | — |

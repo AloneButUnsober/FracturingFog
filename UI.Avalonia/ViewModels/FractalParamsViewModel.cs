@@ -2340,6 +2340,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double SlitCascadeSeparation { get => _p.SlitCascadeSeparation; set { var v = Clamp(value, 0, 100); if (v == _p.SlitCascadeSeparation) return; _p.SlitCascadeSeparation = v; this.RaisePropertyChanged(); Fire(); } }
     public double SlitCascadeWidth { get => _p.SlitCascadeWidth; set { var v = Clamp(value, 0, 100); if (v == _p.SlitCascadeWidth) return; _p.SlitCascadeWidth = v; this.RaisePropertyChanged(); Fire(); } }
     public double SlitCascadeWavelength { get => _p.SlitCascadeWavelength; set { var v = Clamp(value, 0.001, 100); if (v == _p.SlitCascadeWavelength) return; _p.SlitCascadeWavelength = v; this.RaisePropertyChanged(); Fire(); } }
+    public double SlitCascadeQ { get => _p.SlitCascadeQ; set { var v = Clamp(value, -20, 20); if (v == _p.SlitCascadeQ) return; _p.SlitCascadeQ = v; this.RaisePropertyChanged(); Fire(); } }   // #1571
     public double SlitCascadeDynamicRange { get => _p.SlitCascadeDynamicRange; set { var v = Clamp(value, 0.5, 30); if (v == _p.SlitCascadeDynamicRange) return; _p.SlitCascadeDynamicRange = v; this.RaisePropertyChanged(); Fire(); } }
     public SlitCascadeLayout SlitCascadeLayout { get => _p.SlitCascadeLayout; set { if (value == _p.SlitCascadeLayout) return; _p.SlitCascadeLayout = value; this.RaisePropertyChanged(); Fire(); } }
     public System.Array SlitCascadeLayouts => s_SlitCascadeLayouts;   // cached: a new array per read resets the ComboBox selection on Refresh()

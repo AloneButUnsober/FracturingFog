@@ -1348,6 +1348,9 @@ namespace FracturingFog.Models
         public SlitCascadeView SlitCascadeView { get; set; } = SlitCascadeView.Intensity;
         /// <summary>Slit cascade: decades of intensity (or aperture mass) the log scale spans.</summary>
         public double SlitCascadeDynamicRange { get; set; } = 6.0;
+        /// <summary>Slit cascade: the order q of the generalized dimension D_q shown in
+        /// the status bar beside D₀, D₁, D₂ (#1571). Readout only.</summary>
+        public double SlitCascadeQ { get; set; } = 3.0;
         /// <summary>#1538 — sides of the <see cref="BilliardGeometry.Polygon"/> layout (3 = triangle,
         /// 6 = hexagon, 8 = octagon ...). Clamped to [3, 12]. Default 6.</summary>
         public int BilliardPolygonSides { get; set; } = 6;
@@ -2308,6 +2311,7 @@ namespace FracturingFog.Models
                 SlitCascadeLayout = SlitCascadeLayout,
                 SlitCascadeView = SlitCascadeView,
                 SlitCascadeDynamicRange = SlitCascadeDynamicRange,
+                SlitCascadeQ = SlitCascadeQ,
                 BilliardPolygonSides = BilliardPolygonSides,
                 BilliardPolygonFill = BilliardPolygonFill,
                 BilliardLatticeRotation = BilliardLatticeRotation,

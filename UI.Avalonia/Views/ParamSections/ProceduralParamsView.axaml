@@ -983,7 +983,7 @@
         </Grid>
 
         <!-- Slit cascade (#1569, double-slit epic #1565): the recursive aperture and its diffraction -->
-        <Grid IsVisible="{Binding IsSlitCascade}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+        <Grid IsVisible="{Binding IsSlitCascade}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Children per slit:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="0" Grid.Column="1"
                            Minimum="2" Maximum="16" Increment="1" FormatString="F0"
@@ -1023,12 +1023,17 @@
             <ComboBox Grid.Row="7" Grid.Column="1"
                       ItemsSource="{Binding SlitCascadeViews}"
                       SelectedItem="{Binding SlitCascadeView, Mode=TwoWay}" Margin="0,2"
-                      ToolTip.Tip="Intensity = the far-field diffraction pattern on a log scale. Phase = its phase. Aperture = the slits themselves, brighter where more light gets through." />
+                      ToolTip.Tip="Intensity = the far-field diffraction pattern on a log scale. Phase = its phase. Aperture = the slits themselves, brighter where more light gets through. HolderAlpha = the slits coloured by how concentrated the light is at each point (the Hölder exponent α). Spectrum = coloured by how many slits share that concentration, f(α)." />
             <TextBlock Grid.Row="8" Grid.Column="0" Text="Dynamic range (decades):" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="8" Grid.Column="1"
                            Minimum="0.5" Maximum="30" Increment="0.5" FormatString="F1"
                            Value="{Binding SlitCascadeDynamicRange, Mode=TwoWay}" Margin="0,2"
                            ToolTip.Tip="How many powers of ten of brightness the colours span. Raise it to see the faint outer orders." />
+            <TextBlock Grid.Row="9" Grid.Column="0" Text="Dimension order q:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="9" Grid.Column="1"
+                           Minimum="-20" Maximum="20" Increment="0.5" FormatString="F2"
+                           Value="{Binding SlitCascadeQ, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="The status bar shows the cascade's fractal dimensions D0 (the support), D1 (information), D2 (correlation) and Dq for this q. They come from the light shares: change the wavelength or separation and watch them move. The probabilities set the dimension." />
         </Grid>
 
         <!-- Math Plane (#1548): the scene as text. S2 (#1549) adds the object editor. -->
