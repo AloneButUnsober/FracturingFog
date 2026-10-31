@@ -83,6 +83,7 @@ public sealed class DualOrbitRecolorTests
         nameof(FractalParameters.DualOrbitSplitHeight), nameof(FractalParameters.DualOrbitHeightField),
         nameof(FractalParameters.DualOrbitInterferenceK), nameof(FractalParameters.DualOrbitInterferenceGamma),   // #1126
         nameof(FractalParameters.DualOrbitWhichPath),   // #1567
+        nameof(FractalParameters.DualOrbitAngularMomentum), nameof(FractalParameters.DualOrbitWindingMode),   // #1568
         nameof(FractalParameters.DualOrbitLicLength), nameof(FractalParameters.DualOrbitLicStrength),   // #1128
     };
 

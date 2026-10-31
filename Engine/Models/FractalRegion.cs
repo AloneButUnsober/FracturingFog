@@ -806,6 +806,8 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitInterferenceK { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitInterferenceGamma { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitWhichPath { get; set; }   // #1567
+        [JsonIgnore(Condition = OmitNull)] public int? DualOrbitAngularMomentum { get; set; }   // #1568
+        [JsonIgnore(Condition = OmitNull)] public int? DualOrbitWindingMode { get; set; }   // #1568
         // #1127 — ensemble fields.
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitEnsembleN { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitEnsembleRadius { get; set; }
@@ -1352,6 +1354,8 @@ namespace FracturingFog.Models
                     DualOrbitInterferenceK = p.DualOrbitInterferenceK != D.DualOrbitInterferenceK ? p.DualOrbitInterferenceK : (double?)null,
                     DualOrbitInterferenceGamma = p.DualOrbitInterferenceGamma != D.DualOrbitInterferenceGamma ? p.DualOrbitInterferenceGamma : (double?)null,
                     DualOrbitWhichPath = p.DualOrbitWhichPath != D.DualOrbitWhichPath ? p.DualOrbitWhichPath : (double?)null,
+                    DualOrbitAngularMomentum = p.DualOrbitAngularMomentum != D.DualOrbitAngularMomentum ? p.DualOrbitAngularMomentum : (int?)null,
+                    DualOrbitWindingMode = p.DualOrbitWindingMode != D.DualOrbitWindingMode ? (int)p.DualOrbitWindingMode : (int?)null,
                     DualOrbitEnsembleN = p.DualOrbitEnsembleN != D.DualOrbitEnsembleN ? p.DualOrbitEnsembleN : (int?)null,
                     DualOrbitEnsembleRadius = p.DualOrbitEnsembleRadius != D.DualOrbitEnsembleRadius ? p.DualOrbitEnsembleRadius : (double?)null,
                     DualOrbitEnsembleSectors = p.DualOrbitEnsembleSectors != D.DualOrbitEnsembleSectors ? p.DualOrbitEnsembleSectors : (int?)null,
@@ -2108,6 +2112,8 @@ namespace FracturingFog.Models
             if (DualOrbitInterferenceK.HasValue) p.DualOrbitInterferenceK = DualOrbitInterferenceK.Value;
             if (DualOrbitInterferenceGamma.HasValue) p.DualOrbitInterferenceGamma = DualOrbitInterferenceGamma.Value;
             if (DualOrbitWhichPath.HasValue) p.DualOrbitWhichPath = DualOrbitWhichPath.Value;
+            if (DualOrbitAngularMomentum.HasValue) p.DualOrbitAngularMomentum = DualOrbitAngularMomentum.Value;
+            if (this.DualOrbitWindingMode.HasValue) p.DualOrbitWindingMode = (FracturingFog.DualOrbitWindingMode)this.DualOrbitWindingMode.Value;
             if (DualOrbitEnsembleN.HasValue) p.DualOrbitEnsembleN = DualOrbitEnsembleN.Value;
             if (DualOrbitEnsembleRadius.HasValue) p.DualOrbitEnsembleRadius = DualOrbitEnsembleRadius.Value;
             if (DualOrbitEnsembleSectors.HasValue) p.DualOrbitEnsembleSectors = DualOrbitEnsembleSectors.Value;

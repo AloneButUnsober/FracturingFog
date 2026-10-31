@@ -2340,6 +2340,11 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     /// <summary>#1567 — η applies to the intensity field only (a mixed state has no single phase).</summary>
     public bool IsDualOrbitInterferenceIntensity => IsDualOrbitFieldMode && _dualField == DualOrbitField.PathInterference;
     public double DualOrbitWhichPath { get => _p.DualOrbitWhichPath; set { var v = Clamp(value, 0, 1); if (v == _p.DualOrbitWhichPath) return; _p.DualOrbitWhichPath = v; this.RaisePropertyChanged(); Fire(); } }
+    /// <summary>#1568 — angular-momentum winding ℓ (integer) and its direction.</summary>
+    public int DualOrbitAngularMomentum { get => _p.DualOrbitAngularMomentum; set { var v = Math.Clamp(value, -64, 64); if (v == _p.DualOrbitAngularMomentum) return; _p.DualOrbitAngularMomentum = v; this.RaisePropertyChanged(); Fire(); } }
+    public DualOrbitWindingMode DualOrbitWindingMode { get => _p.DualOrbitWindingMode; set { if (value == _p.DualOrbitWindingMode) return; _p.DualOrbitWindingMode = value; this.RaisePropertyChanged(); Fire(); } }
+    public System.Array DualOrbitWindingModes => s_DualOrbitWindingModes;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_DualOrbitWindingModes = System.Enum.GetValues(typeof(DualOrbitWindingMode));
     /// <summary>#1127 — ensemble rows (BasinEntropy / UncertaintyExponent).</summary>
     public bool IsDualOrbitEnsembleField => IsDualOrbitFieldMode
         && _dualField is DualOrbitField.BasinEntropy or DualOrbitField.UncertaintyExponent;
