@@ -80,7 +80,9 @@ On a **Ring**, **Vortex charge ℓ** gives each slit a phase twist from its angl
   further: the vortices spread into a constellation.
 - A row of slits has no angle, so the charge does nothing on *Line*.
 
-The *Phase* view shows the twist. On the shipped layouts the pattern is real along one axis, so the phase colour
+The *Phase* view shows the twist. For any phase view (this one, *PathInterferencePhase*, the Talbot
+*Phase*) pick the **Phase Wheel (Blue-Amber)** theme: one full turn of colour per turn of phase at any
+iteration count, using only lightness and blue-amber, so it reads the same with red/green colour blindness. On the shipped layouts the pattern is real along one axis, so the phase colour
 wraps there in a straight line: that is the physics, not a glitch.
 
 ## 3. Talbot Carpet
@@ -146,6 +148,12 @@ Intensity 0, Phase 1, Aperture 2, HolderAlpha 3, Spectrum 4:
 
 ```bash
 FracturingFog --batch --fractal SlitCascade --x 0 --y 0 --zoom 1.6 --param SlitCascadeView=4 --out spectrum.png
+```
+
+A phase view with the colour-blind-safe phase wheel:
+
+```bash
+FracturingFog --batch --region "Slit Cascade - Vortex Core" --param SlitCascadeView=1 --theme "Phase Wheel (Blue-Amber)" --out vortex-phase.png
 ```
 
 The Control Center **Command** builder writes the full command for whatever is on screen.

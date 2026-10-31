@@ -199,6 +199,8 @@ public sealed class TalbotCarpetCalculator : IFractalCalculator, IHeightFieldSou
                 int idx = row + x;
                 if (!(t > 0.0)) { smooth[idx] = 0f; color[idx] = inSet; continue; }
                 float s = (float)(Math.Min(1.0, t) * maxIt);
+                // #1591 — phase 1 ≡ 0: a value rounding up to maxIt would read as "in the set".
+                if (phase && s >= maxIt) s = (float)(1e-9 * maxIt);
                 smooth[idx] = s;
                 color[idx] = (uint)cm.Map(s, 0f, maxIt);
             }

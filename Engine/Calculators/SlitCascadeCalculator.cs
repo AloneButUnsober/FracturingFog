@@ -385,6 +385,9 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
                 int idx = row + x;
                 if (!(t > 0.0)) { smooth[idx] = 0f; color[idx] = inSet; continue; }
                 float s = (float)(Math.Min(1.0, t) * maxIt);
+                // #1591 — a phase a hair below 1 (≡ 0) rounds up to maxIt, which themes
+                // read as "in the set" (black): wrap it to the bottom of the wheel.
+                if (view == SlitCascadeView.Phase && s >= maxIt) s = (float)(1e-9 * maxIt);
                 smooth[idx] = s;
                 color[idx] = (uint)cm.Map(s, 0f, maxIt);
             }

@@ -154,6 +154,7 @@ namespace FracturingFog.Models
             new DigitalMatrixMap(),
             new PsychedelicMap(),
             new TwilightCyclicMap(),
+            new PhaseWheelBlueAmberMap(),   // #1591 — colour-blind-safe one-turn phase wheel
             new SolarWindMap(),
             new SolarWindMapMOD(),
 

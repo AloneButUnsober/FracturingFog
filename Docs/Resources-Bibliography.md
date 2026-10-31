@@ -481,7 +481,9 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
   k-means sampler. Practical formulae from
   <https://www.brucelindbloom.com/index.html?Eqn_RGB_to_XYZ.html>.
 - **Björn Ottosson.** *A perceptual color space for image processing* (Oklab), 2020.
-  <https://bottosson.github.io/posts/oklab/>. OkLab distance in palette extraction.
+  <https://bottosson.github.io/posts/oklab/>. OkLab distance in palette extraction. Also the space of the
+  colour-blind-safe phase wheel (a = 0 path; dual-orbit domain view #1120, the *Phase Wheel (Blue-Amber)*
+  theme #1591).
 - **Cynthia A. Brewer.** *ColorBrewer 2.* <https://colorbrewer2.org>. Reference for accessible
   sequential / diverging palettes, used for several built-in themes.
 - **Jamie R. Nuñez, Christopher R. Anderton, Ryan S. Renslow.** *Optimizing colormaps with
@@ -489,7 +491,9 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
   PLOS ONE 13(7), 2018. The Cividis colour map.
 - **Gustavo M. Machado, Manuel M. Oliveira, Leandro A. F. Fernandes.** *A physiologically-based model
   for simulation of color vision deficiency.* IEEE Transactions on Visualization and Computer Graphics
-  15(6), 2009. CVD simulation and the confusability linter (`CvdAnalysis.cs`).
+  15(6), 2009. CVD simulation and the confusability linter (`CvdAnalysis.cs`). #1591: the oracle that
+  checks the *Phase Wheel (Blue-Amber)* theme stays distinguishable under deutan / protan / tritan
+  simulation.
 - **Xiaodi Hou, Liqing Zhang.** *Saliency detection: a spectral residual approach.* CVPR 2007.
   PaletteBuilder's saliency map.
 - **D. Sculley.** *Web-scale k-means clustering.* WWW 2010. Mini-batch k-means palette extraction.
