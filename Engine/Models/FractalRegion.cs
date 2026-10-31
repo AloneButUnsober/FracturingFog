@@ -805,6 +805,7 @@ namespace FracturingFog.Models
         // #1126 — path interference.
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitInterferenceK { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitInterferenceGamma { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DualOrbitWhichPath { get; set; }   // #1567
         // #1127 — ensemble fields.
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitEnsembleN { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitEnsembleRadius { get; set; }
@@ -1350,6 +1351,7 @@ namespace FracturingFog.Models
                     DualOrbitHeightField = p.DualOrbitHeightField != D.DualOrbitHeightField ? (int)p.DualOrbitHeightField : (int?)null,
                     DualOrbitInterferenceK = p.DualOrbitInterferenceK != D.DualOrbitInterferenceK ? p.DualOrbitInterferenceK : (double?)null,
                     DualOrbitInterferenceGamma = p.DualOrbitInterferenceGamma != D.DualOrbitInterferenceGamma ? p.DualOrbitInterferenceGamma : (double?)null,
+                    DualOrbitWhichPath = p.DualOrbitWhichPath != D.DualOrbitWhichPath ? p.DualOrbitWhichPath : (double?)null,
                     DualOrbitEnsembleN = p.DualOrbitEnsembleN != D.DualOrbitEnsembleN ? p.DualOrbitEnsembleN : (int?)null,
                     DualOrbitEnsembleRadius = p.DualOrbitEnsembleRadius != D.DualOrbitEnsembleRadius ? p.DualOrbitEnsembleRadius : (double?)null,
                     DualOrbitEnsembleSectors = p.DualOrbitEnsembleSectors != D.DualOrbitEnsembleSectors ? p.DualOrbitEnsembleSectors : (int?)null,
@@ -2105,6 +2107,7 @@ namespace FracturingFog.Models
             if (this.DualOrbitHeightField.HasValue) p.DualOrbitHeightField = (FracturingFog.DualOrbitField)this.DualOrbitHeightField.Value;
             if (DualOrbitInterferenceK.HasValue) p.DualOrbitInterferenceK = DualOrbitInterferenceK.Value;
             if (DualOrbitInterferenceGamma.HasValue) p.DualOrbitInterferenceGamma = DualOrbitInterferenceGamma.Value;
+            if (DualOrbitWhichPath.HasValue) p.DualOrbitWhichPath = DualOrbitWhichPath.Value;
             if (DualOrbitEnsembleN.HasValue) p.DualOrbitEnsembleN = DualOrbitEnsembleN.Value;
             if (DualOrbitEnsembleRadius.HasValue) p.DualOrbitEnsembleRadius = DualOrbitEnsembleRadius.Value;
             if (DualOrbitEnsembleSectors.HasValue) p.DualOrbitEnsembleSectors = DualOrbitEnsembleSectors.Value;

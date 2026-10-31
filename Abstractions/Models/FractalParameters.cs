@@ -1480,6 +1480,11 @@ namespace FracturingFog.Models
         /// fringes, the default; 1 = Φ as written, which brings in the S6 angle branch
         /// cuts as seams; colour-only) (#1126).</summary>
         public double DualOrbitInterferenceGamma { get; set; } = 0.0;
+        /// <summary>Path interference η: which-path measurement strength — scales the
+        /// cross term by (1 − η). 0 = fully coherent fringes (the default, identical
+        /// to #1126); 1 = no fringes. Intensity field only; colour-only, animatable
+        /// (#1567, double-slit epic #1565).</summary>
+        public double DualOrbitWhichPath { get; set; } = 0.0;
         /// <summary>Ensemble fields: number of c-seeds per pixel (#1127). Cost ×N.</summary>
         public int DualOrbitEnsembleN { get; set; } = 32;
         /// <summary>Ensemble fields: radius ρ of the seed disc round c (#1127).</summary>
@@ -2312,6 +2317,7 @@ namespace FracturingFog.Models
                 DualOrbitHeightField = DualOrbitHeightField,
                 DualOrbitInterferenceK = DualOrbitInterferenceK,
                 DualOrbitInterferenceGamma = DualOrbitInterferenceGamma,
+                DualOrbitWhichPath = DualOrbitWhichPath,
                 DualOrbitEnsembleN = DualOrbitEnsembleN,
                 DualOrbitEnsembleRadius = DualOrbitEnsembleRadius,
                 DualOrbitEnsembleSectors = DualOrbitEnsembleSectors,

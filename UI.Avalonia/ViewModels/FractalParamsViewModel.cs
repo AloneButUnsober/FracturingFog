@@ -2286,7 +2286,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsDualOrbitAnisotropyField));
             this.RaisePropertyChanged(nameof(IsDualOrbitEnsembleField));
             this.RaisePropertyChanged(nameof(IsDualOrbitUncertaintyField));
-            this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceField)); this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceIntensity));
             this.RaisePropertyChanged(nameof(IsDualOrbitCoMovingTrap));
             this.RaisePropertyChanged(nameof(IsDualOrbitStripeField));
             this.RaisePropertyChanged(nameof(IsDualOrbitDistanceField));
@@ -2337,6 +2337,9 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         && _dualField is DualOrbitField.PathInterference or DualOrbitField.PathInterferencePhase;
     public double DualOrbitInterferenceK { get => _p.DualOrbitInterferenceK; set { var v = Clamp(value, -1000, 1000); if (v == _p.DualOrbitInterferenceK) return; _p.DualOrbitInterferenceK = v; this.RaisePropertyChanged(); Fire(); } }
     public double DualOrbitInterferenceGamma { get => _p.DualOrbitInterferenceGamma; set { var v = Clamp(value, 0, 100); if (v == _p.DualOrbitInterferenceGamma) return; _p.DualOrbitInterferenceGamma = v; this.RaisePropertyChanged(); Fire(); } }
+    /// <summary>#1567 — η applies to the intensity field only (a mixed state has no single phase).</summary>
+    public bool IsDualOrbitInterferenceIntensity => IsDualOrbitFieldMode && _dualField == DualOrbitField.PathInterference;
+    public double DualOrbitWhichPath { get => _p.DualOrbitWhichPath; set { var v = Clamp(value, 0, 1); if (v == _p.DualOrbitWhichPath) return; _p.DualOrbitWhichPath = v; this.RaisePropertyChanged(); Fire(); } }
     /// <summary>#1127 — ensemble rows (BasinEntropy / UncertaintyExponent).</summary>
     public bool IsDualOrbitEnsembleField => IsDualOrbitFieldMode
         && _dualField is DualOrbitField.BasinEntropy or DualOrbitField.UncertaintyExponent;
@@ -2435,7 +2438,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsDualOrbitAnisotropyField));
             this.RaisePropertyChanged(nameof(IsDualOrbitEnsembleField));
             this.RaisePropertyChanged(nameof(IsDualOrbitUncertaintyField));
-            this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceField));
+            this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceField)); this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceIntensity));
             this.RaisePropertyChanged(nameof(IsDualOrbitCoMovingTrap));
             this.RaisePropertyChanged(nameof(IsDualOrbitStripeField));
             this.RaisePropertyChanged(nameof(IsDualOrbitDistanceField));

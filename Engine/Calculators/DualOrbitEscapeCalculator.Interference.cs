@@ -30,11 +30,25 @@
 // level G_s(0), so any γ > 0 shows them as straight seams and washes large
 // regions flat. γ = 0 reads only ΔG (the Green functions: no cuts).
 //
+// Which-path measurement η (#1567, epic #1565 S1; design:
+// Docs/Technical/DoubleSlit-Fractal-RnD.md §3.1). Watching which slit a particle
+// takes removes the cross term of |a + b|² (Feynman, Leighton & Sands, Lectures
+// Vol. III ch. 1 §1-6); η ∈ [0, 1] scales the cross term by (1 − η), the
+// off-diagonal of the two-path density matrix:
+//
+//     I_η = (|a|² + |b|² + 2(1 − η)·Re(a·b̅)) / (|a|² + |b|²)
+//         = 1 + (1 − η)·cos(κ·ΔG) / cosh(2π·γ·κ·Δθ)
+//
+// η = 0 is the coherent intensity above (bit-identical); η = 1 is I ≡ 1, the
+// fringes gone. Unlike γ (coherence lost only where the external angles
+// differ), η removes coherence uniformly. A partly-mixed state has no single
+// phase, so η leaves PathInterferencePhase alone.
+//
 // PathInterference = I/2; PathInterferencePhase = arg(a + b)/2π (turns).
 // Live where both orbits escape (two paths); a single bounded path has nothing to
 // interfere with → interior. κ and γ are colour-only: the scalar is rebuilt in
 // the colour pass from the cached smooth counts and lifted angles, so animating κ
-// recolours without iterating ("fringes shimmer").
+// recolours without iterating ("fringes shimmer"). η is colour-only too.
 
 using System;
 using System.Threading.Tasks;
@@ -46,11 +60,14 @@ public sealed partial class DualOrbitEscapeCalculator
     internal static bool IsInterferenceField(DualOrbitField f)
         => f is DualOrbitField.PathInterference or DualOrbitField.PathInterferencePhase;
 
-    /// <summary>The normalised two-path intensity I ∈ [0, 2] (see header).</summary>
-    public static double InterferenceIntensity(double dG, double dTheta, double kappa, double gamma)
+    /// <summary>The normalised two-path intensity I ∈ [0, 2] (see header);
+    /// <paramref name="whichPath"/> is η, the which-path measurement strength
+    /// (0 = fully coherent, 1 = no fringes) (#1567).</summary>
+    public static double InterferenceIntensity(double dG, double dTheta, double kappa, double gamma, double whichPath = 0.0)
     {
         double w = Frac(dTheta + 0.5) - 0.5;
-        return 1.0 + Math.Cos(kappa * dG) / Math.Cosh(Math.Min(700.0, 2.0 * Math.PI * gamma * kappa * Math.Abs(w)));
+        double cross = Math.Cos(kappa * dG) / Math.Cosh(Math.Min(700.0, 2.0 * Math.PI * gamma * kappa * Math.Abs(w)));
+        return whichPath <= 0.0 ? 1.0 + cross : 1.0 + (1.0 - Math.Min(1.0, whichPath)) * cross;
     }
 
     /// <summary>arg(a + b) / 2π in turns [0, 1) (see header).</summary>
@@ -64,13 +81,14 @@ public sealed partial class DualOrbitEscapeCalculator
         return Frac(Math.Atan2(im, re) / (2.0 * Math.PI));
     }
 
-    // Rebuild the interference scalar from the cache with the current κ, γ.
+    // Rebuild the interference scalar from the cache with the current κ, γ, η.
     private void RefreshInterference(in GeometryKey key)
     {
         int n = Width * Height;
         if (_thZ.Length != n) return;
         var fp = FractalParameters;
         double kappa = fp.DualOrbitInterferenceK, gamma = Math.Max(0.0, fp.DualOrbitInterferenceGamma);
+        double eta = double.IsNaN(fp.DualOrbitWhichPath) ? 0.0 : Math.Clamp(fp.DualOrbitWhichPath, 0.0, 1.0);
         bool phase = key.Field == DualOrbitField.PathInterferencePhase;
         int maxIter = key.MaxIter;
         double twoLogR = 2.0 * Math.Log(key.Bailout);
@@ -85,7 +103,7 @@ public sealed partial class DualOrbitEscapeCalculator
             double gZ = twoLogR * Math.Pow(2.0, -smZ[i]), gC = twoLogR * Math.Pow(2.0, -smC[i]);
             double v = phase
                 ? InterferencePhase(gZ, gC, tc - tz, kappa, gamma)
-                : 0.5 * InterferenceIntensity(gC - gZ, tc - tz, kappa, gamma);
+                : 0.5 * InterferenceIntensity(gC - gZ, tc - tz, kappa, gamma, eta);
             sc[i] = (float)Math.Clamp(v * maxIter, LiveFloor, maxIter);
         });
     }

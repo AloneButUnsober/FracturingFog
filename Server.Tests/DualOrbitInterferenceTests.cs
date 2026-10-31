@@ -19,6 +19,7 @@ namespace FracturingFog.Server.Tests;
 // independent of the closed form the calculator uses; κ = 0 ⇒ I = 2 (the
 // normalised "4"); continuity across the Δθ wrap; bailout invariance (G and θ
 // are intrinsic, S6); κ / γ colour-only (recolour from the cache).
+// #1567: which-path η against the density-matrix sum.
 public sealed class DualOrbitInterferenceTests
 {
     private const int W = 64, H = 48;
@@ -201,6 +202,91 @@ public sealed class DualOrbitInterferenceTests
         Assert.Contains(nameof(FractalParameters.DualOrbitInterferenceK), names);
     }
 
+    // ── #1567 (double-slit S1) — which-path measurement η ──────────────────
+    // Oracle: the two-path density matrix with its off-diagonal scaled by
+    // (1 − η), summed directly from the reference amplitudes — not the closed
+    // form the calculator uses.
+    [Theory]
+    [InlineData(20.0, 0.0, 0.3)]
+    [InlineData(20.0, 1.0, 0.75)]
+    [InlineData(9.0, 0.3, 0.5)]
+    public void WhichPath_MatchesTheDensityMatrixSum(double kappa, double gamma, double eta)
+    {
+        var p = P(q => { q.DualOrbitInterferenceK = kappa; q.DualOrbitInterferenceGamma = gamma; q.DualOrbitWhichPath = eta; });
+        var calc = Calc(p);
+        var refs = Reference(p);
+        int checkedPx = 0;
+        for (int i = 0; i < refs.Length; i++)
+        {
+            var (gz, gc, dth, ok) = refs[i];
+            if (!ok) continue;
+            double w = dth - Math.Round(dth);
+            Complex a = Amp(gz, 0, kappa, gamma), b = Amp(gc, w, kappa, gamma);
+            double diag = a.Magnitude * a.Magnitude + b.Magnitude * b.Magnitude;
+            double cross = 2.0 * (a * Complex.Conjugate(b)).Real;
+            double want = (diag + (1.0 - eta) * cross) / diag;
+            double got = 2.0 * calc.ColorScalarBuffer[i] / 400.0;
+            Assert.Equal(Math.Max(want, 2.0 * 1e-6), got, 2e-4);
+            checkedPx++;
+        }
+        Assert.True(checkedPx > W * H / 4, $"only {checkedPx} two-path pixels");
+    }
+
+    [Fact]
+    public void WhichPathOne_RemovesEveryFringe()
+    {
+        var live = Calc(P(q => q.DualOrbitWhichPath = 1.0)).ColorScalarBuffer.Where(v => v > 0).Distinct().ToArray();
+        Assert.Single(live);
+        Assert.Equal(200f, live[0]);   // I = 1 → I/2 = 0.5 → maxIter/2
+    }
+
+    // Fringe visibility (I − 1) shrinks by exactly (1 − η) at every pixel.
+    [Fact]
+    public void WhichPath_ScalesFringeVisibilityLinearly()
+    {
+        var coherent = Calc(P()).ColorScalarBuffer;
+        var mixed = Calc(P(q => q.DualOrbitWhichPath = 0.6)).ColorScalarBuffer;
+        int n = 0;
+        for (int i = 0; i < coherent.Length; i++)
+        {
+            if (coherent[i] <= 0 || mixed[i] <= 0) continue;
+            double v0 = 2.0 * coherent[i] / 400.0 - 1.0, v1 = 2.0 * mixed[i] / 400.0 - 1.0;
+            if (Math.Abs(v0) < 0.01) continue;   // LiveFloor clamps near I = 0
+            Assert.Equal(0.4 * v0, v1, 1e-4);
+            n++;
+        }
+        Assert.True(n > W * H / 4);
+    }
+
+    [Fact]
+    public void WhichPath_RecoloursFromTheCache_AndLeavesPhaseAlone()
+    {
+        var p = P();
+        var c = Calc(p);
+        p.DualOrbitWhichPath = 0.5;
+        c.Calculate();
+        Assert.True(c.LastCalculateReusedOrbits);
+        Assert.Equal(Calc(p.Clone()).ColorBuffer, c.ColorBuffer);
+
+        // A partly-mixed state has no single phase: η does not touch the phase field.
+        var phase0 = Calc(P(q => q.DualOrbitField = DualOrbitField.PathInterferencePhase)).ColorScalarBuffer;
+        var phase1 = Calc(P(q => { q.DualOrbitField = DualOrbitField.PathInterferencePhase; q.DualOrbitWhichPath = 0.8; })).ColorScalarBuffer;
+        Assert.Equal(phase0, phase1);
+    }
+
+    [Fact]
+    public void WhichPath_NaNActsAsCoherent()
+    {
+        Assert.Equal(Calc(P()).ColorScalarBuffer, Calc(P(q => q.DualOrbitWhichPath = double.NaN)).ColorScalarBuffer);
+    }
+
+    [Fact]
+    public void WhichPath_IsAnimatable()
+    {
+        var names = FracturingFog.Abstractions.Animation.FractalAnimatableParamsMap.For(FractalType.JulibrotPair).Select(d => d.ParamName);
+        Assert.Contains(nameof(FractalParameters.DualOrbitWhichPath), names);
+    }
+
     [Fact]
     public void LiveView_RoundTripsThroughTheCommandBuilder()
     {
@@ -208,6 +294,7 @@ public sealed class DualOrbitInterferenceTests
         {
             DualOrbitField = DualOrbitField.PathInterferencePhase,
             DualOrbitInterferenceK = 31.5, DualOrbitInterferenceGamma = 0.25,
+            DualOrbitWhichPath = 0.35,
         };
         var report = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot
         {
@@ -220,5 +307,6 @@ public sealed class DualOrbitInterferenceTests
         Assert.Equal(DualOrbitField.PathInterferencePhase, fresh.DualOrbitField);
         Assert.Equal(31.5, fresh.DualOrbitInterferenceK);
         Assert.Equal(0.25, fresh.DualOrbitInterferenceGamma);
+        Assert.Equal(0.35, fresh.DualOrbitWhichPath);   // #1567
     }
 }
