@@ -325,6 +325,28 @@ Related idea, different geometry; S5 must credit it at the point of use.
 **Invariants.** ℓ ≡ 0 is byte-identical to S3; |A| = 0 at each core; the winding number of arg A
 round a core equals the expected charge.
 
+### 6.1 What S5 shipped and measured (#1572, 2026-10-31)
+
+- **Parameters.** `SlitCascadeCharge` ℓ (int, default 0, animatable) and `SlitCascadeChargePattern`:
+  Constant ℓₙ = ℓ, Alternating ℓₙ = (−1)ⁿℓ, Ramp ℓₙ = (n + 1)ℓ. Ring layout only; on Line the
+  charge is ignored (bit-identical, a test).
+- **Charge = ℓ mod N, confirmed.** By Jacobi–Anger, e^{−iz·cos(φ−ψ)} = Σₘ (−i)ᵐ Jₘ(z) e^{im(φ−ψ)},
+  and summing over the ring keeps only the orders m ≡ −ℓ (mod N). The lowest surviving order makes
+  a charge ℓ' = ℓ reduced into (−N/2, N/2] (there is no definite vortex at the tie ℓ' = N/2). With
+  equal shares every level's vortex sits exactly at the centre and the windings add. The test
+  checks hand-computed totals for N = 5, D = 3: Constant 1 → 3, Constant 4 → −3, Alternating 2 → 2,
+  Ramp 1 → 1 + 2 + (3 ≡ −2) = 1, Constant −2 → −6. It also checks that the core is dark.
+- **Unequal shares spread the vortices (measured).** Each charge is kept, but the vortex moves off
+  the centre, and level n's factor is F(rⁿu), so its vortex moves r⁻ⁿ times as far. At the
+  default λ = 0.6, a depth-1 vortex sits about 0.1 from the centre, while at depth 3 a radius-0.4
+  loop holds a total winding of only 2 (3 with equal shares). The nested vortices form a
+  constellation, not a stacked core. The equal-share ("detector-flat") limit λ → ∞ restacks them.
+- **Tests:** the winding sums above; a moved but intact single vortex; a brute-force leaf sum
+  including the phase Σ ℓₙφ over the address; the mirror A₋ℓ(u) = conj(Aℓ(−u)); charge 0 or Line
+  bit-identical; reduction and pattern helpers; batch round trip; animatable. Five mutants are each
+  caught: phase dropped, phase sign, Ramp off by one level, Alternating not alternating, child angle
+  halved.
+
 ---
 
 ## 7. Fractal Talbot carpet (S6 #1570)
@@ -404,7 +426,7 @@ physics new.
 | S2 OAM winding ℓ (dual orbit) | #1568 | S0 | ℓ must be an integer (§3.2); shipped both modes, measured seams (§3.2.1) |
 | S3 slit cascade | #1569 | S0 | N ≥ 3 sampled children, fringe-sampled weights (§4.1); exact Fraunhofer product (§4.2); add aperture view; shipped (§4.3.1) |
 | S4 probability → dimension | #1571 | S3 | closed-form D_q for equal r (§5); α colouring on the aperture view; shipped (§5.1) |
-| S5 OAM filaments (cascade) | #1572 | S3 | ring layout with N ≥ 3; charge = ℓ mod N, to verify (§6); credit the devil's vortex lens |
+| S5 OAM filaments (cascade) | #1572 | S3 | ring layout with N ≥ 3; charge = ℓ mod N, verified (§6.1); credit the devil's vortex lens |
 | S6 Talbot carpet | #1570 | S0 | none |
 | S7 presets / close-out | #1573 | all | — |
 

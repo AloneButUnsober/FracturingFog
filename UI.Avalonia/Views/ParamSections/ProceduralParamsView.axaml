@@ -983,7 +983,7 @@
         </Grid>
 
         <!-- Slit cascade (#1569, double-slit epic #1565): the recursive aperture and its diffraction -->
-        <Grid IsVisible="{Binding IsSlitCascade}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+        <Grid IsVisible="{Binding IsSlitCascade}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Children per slit:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="0" Grid.Column="1"
                            Minimum="2" Maximum="16" Increment="1" FormatString="F0"
@@ -1034,6 +1034,16 @@
                            Minimum="-20" Maximum="20" Increment="0.5" FormatString="F2"
                            Value="{Binding SlitCascadeQ, Mode=TwoWay}" Margin="0,2"
                            ToolTip.Tip="The status bar shows the cascade's fractal dimensions D0 (the support), D1 (information), D2 (correlation) and Dq for this q. They come from the light shares: change the wavelength or separation and watch them move. The probabilities set the dimension." />
+            <TextBlock Grid.Row="10" Grid.Column="0" Text="Vortex charge ℓ:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="10" Grid.Column="1"
+                           Minimum="-64" Maximum="64" Increment="1" FormatString="F0"
+                           Value="{Binding SlitCascadeCharge, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Gives each slit on a ring a phase twist from its angle, like light carrying orbital angular momentum: the pattern gets dark vortex cores with spiral filaments round them, and the Phase view shows the twist. Ring layout only (a row of slits has no angle). A ring of N slits can only carry charges up to N/2: larger values wrap round. 0 = off." />
+            <TextBlock Grid.Row="11" Grid.Column="0" Text="Charge per level:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="11" Grid.Column="1"
+                      ItemsSource="{Binding SlitCascadeChargePatterns}"
+                      SelectedItem="{Binding SlitCascadeChargePattern, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Constant = every level twists the same way, so the twists add up at the centre. Alternating = levels twist opposite ways (a braid). Ramp = deeper levels twist harder." />
         </Grid>
 
         <!-- Math Plane (#1548): the scene as text. S2 (#1549) adds the object editor. -->

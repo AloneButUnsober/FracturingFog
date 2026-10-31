@@ -45,6 +45,27 @@
 // walking the levels, and its brightness is Π pᵢ/max p over the levels (log
 // scale), 0 outside the aperture.
 //
+// Angular momentum sets the filament (#1572, epic S5; design §6). Light with
+// phase e^{iℓφ} carries orbital angular momentum and has a dark phase
+// singularity on its axis (Allen, Beijersbergen, Spreeuw & Woerdman, Phys.
+// Rev. A 45, 1992). On the Ring layout each level-n child at angle φᵢ = 2πi/N
+// gets the constant phase e^{iℓₙφᵢ}, so the level's array factor becomes
+//
+//     F(u) = Σᵢ √pᵢ · e^{iℓₙφᵢ} · e^{−2πi·bᵢ·u}
+//
+// and the exact product of §4.2 still holds. With ℓₙ = SlitCascadeCharge and
+// SlitCascadeChargePattern: Constant ℓₙ = ℓ, Alternating ℓₙ = (−1)ⁿℓ, Ramp
+// ℓₙ = (n + 1)ℓ. Near u = 0 the Jacobi–Anger expansion of F keeps only the
+// Bessel orders m ≡ −ℓₙ (mod N), so with equal shares each level has a vortex
+// of charge ℓₙ reduced into (−N/2, N/2] at the centre (none when the reduced
+// charge is exactly N/2: two orders tie), and the windings add over levels.
+// Unequal shares move the vortices off centre but keep their charges. A slit
+// pair cannot carry a vortex (e^{iℓφ} = ±1), and the Line layout has no angle,
+// so the charge applies to Ring only. Closest prior art: the devil's vortex
+// lens (Furlan, Giménez, Calatayud & Monsoriu, Opt. Express 17, 2009), a
+// Cantor-function phase plus a spiral phase making a self-similar chain of
+// vortices along the axis; the cascade nests them in the transverse plane.
+//
 // Probability sets the dimension (#1571, epic S4; design §5). The aperture
 // measure is self-similar with equal ratios r, so its generalized (Rényi)
 // dimensions (Hentschel & Procaccia, Physica D 8, 1983) and f(α) spectrum
@@ -113,7 +134,30 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
     }
 
     /// <summary>The resolved cascade: child offsets bᵢ and power shares pᵢ (Σ = 1).</summary>
-    public readonly record struct Cascade(double Ratio, int Depth, double[] Bx, double[] By, double[] P);
+    public readonly record struct Cascade(double Ratio, int Depth, double[] Bx, double[] By, double[] P,
+        double[] Phi, int[] Charges);
+
+    /// <summary>The per-level charges ℓₙ for a charge ℓ and pattern (#1572).</summary>
+    public static int[] LevelCharges(int ell, SlitCascadeChargePattern pattern, int depth)
+    {
+        var q = new int[depth];
+        for (int n = 0; n < depth; n++)
+            q[n] = pattern switch
+            {
+                SlitCascadeChargePattern.Alternating => (n % 2 == 0) ? ell : -ell,
+                SlitCascadeChargePattern.Ramp => (n + 1) * ell,
+                _ => ell,
+            };
+        return q;
+    }
+
+    /// <summary>A charge ℓ reduced into (−N/2, N/2]: the vortex an N-child ring
+    /// with phases e^{iℓφᵢ} actually carries (#1572).</summary>
+    public static int ReducedCharge(int ell, int n)
+    {
+        int m = ((ell % n) + n) % n;
+        return 2 * m > n ? m - n : m;
+    }
 
     /// <summary>Two-slit fringe intensity I₀(x) = sinc²(πwx/λ)·cos²(πdx/λ) (header).</summary>
     public static double FringeIntensity(double x, double separation, double width, double wavelength)
@@ -150,7 +194,13 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
         // Every child on a dark fringe: no light gets through; fall back to equal
         // shares so the image stays defined (a plain Cantor set).
         for (int i = 0; i < n; i++) pw[i] = sum > 1e-300 ? pw[i] / sum : 1.0 / n;
-        return new Cascade(r, depth, bx, by, pw);
+        // #1572 — vortex phases need an angle per child: Ring only.
+        bool ring = p.SlitCascadeLayout == SlitCascadeLayout.Ring;
+        var phi = new double[n];
+        if (ring) for (int i = 0; i < n; i++) phi[i] = 2.0 * Math.PI * i / n;
+        int ell = Math.Clamp(p.SlitCascadeCharge, -64, 64);
+        var charges = ring ? LevelCharges(ell, p.SlitCascadeChargePattern, depth) : new int[depth];
+        return new Cascade(r, depth, bx, by, pw, phi, charges);
     }
 
     /// <summary>Far-field amplitude A(u) (header), unnormalised: A(0) = (Σ√pᵢ)^D.</summary>
@@ -161,12 +211,14 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
         for (int level = 0; level < c.Depth; level++)
         {
             double fr = 0.0, fi = 0.0;
+            int charge = c.Charges[level];
             for (int i = 0; i < n; i++)
             {
                 double a = c.P[i];
                 if (a <= 0.0) continue;
                 double amp = Math.Sqrt(a);
                 double ph = -2.0 * Math.PI * scale * (c.Bx[i] * ux + c.By[i] * uy);
+                if (charge != 0) ph += charge * c.Phi[i];   // #1572 vortex phase
                 fr += amp * Math.Cos(ph); fi += amp * Math.Sin(ph);
             }
             double nr = re * fr - im * fi; im = re * fi + im * fr; re = nr;

@@ -19,6 +19,8 @@ namespace FracturingFog.Server.Tests;
 // sum over every one of the N^D leaf slits, and Parseval (transmitted power).
 // #1571 (S4): generalized dimensions against box counting of the rendered
 // measure, monofractal equal shares, monotone D_q, α / f(α) of an address.
+// #1572 (S5): vortex winding = Σ reduced level charges (Jacobi–Anger), the
+// dark core, a brute-force leaf sum with phases, and the ℓ ↔ −ℓ mirror.
 public sealed class SlitCascadeTests
 {
     private sealed class RampMap : IColorMap
@@ -183,6 +185,7 @@ public sealed class SlitCascadeTests
         var names = FracturingFog.Abstractions.Animation.FractalAnimatableParamsMap.For(FractalType.SlitCascade).Select(d => d.ParamName).ToArray();
         Assert.Contains(nameof(FractalParameters.SlitCascadeWavelength), names);
         Assert.Contains(nameof(FractalParameters.SlitCascadeRatio), names);
+        Assert.Contains(nameof(FractalParameters.SlitCascadeCharge), names);   // #1572
     }
 
     // ── #1571 (double-slit S4) — probability sets the dimension ─────────────
@@ -323,6 +326,138 @@ public sealed class SlitCascadeTests
         }
     }
 
+    // ── #1572 (double-slit S5) — vortex filaments ──────────────────────────
+
+    // Phase winding of A round a circle of radius rho about u = 0, in turns.
+    private static double Winding(in SlitCascadeCalculator.Cascade c, double rho)
+    {
+        const int steps = 720;
+        double total = 0, prev = SlitCascadeCalculator.Amplitude(c, rho, 0).Phase;
+        for (int k = 1; k <= steps; k++)
+        {
+            double a = 2 * Math.PI * k / steps;
+            double ph = SlitCascadeCalculator.Amplitude(c, rho * Math.Cos(a), rho * Math.Sin(a)).Phase;
+            double d = (ph - prev) / (2 * Math.PI);
+            d -= Math.Round(d);
+            total += d;
+            prev = ph;
+        }
+        return total;
+    }
+
+    // Equal shares (λ huge, no envelope) put every level's vortex exactly at the
+    // centre: the winding is the sum of the level charges, each reduced into
+    // (−N/2, N/2] (Jacobi–Anger: only Bessel orders m ≡ −ℓ mod N survive).
+    // Expected values worked by hand for N = 5, D = 3.
+    [Theory]
+    [InlineData(1, SlitCascadeChargePattern.Constant, 3)]        // 1 + 1 + 1
+    [InlineData(4, SlitCascadeChargePattern.Constant, -3)]       // 4 ≡ −1 (mod 5), three times
+    [InlineData(2, SlitCascadeChargePattern.Alternating, 2)]     // 2 − 2 + 2
+    [InlineData(1, SlitCascadeChargePattern.Ramp, 1)]            // 1 + 2 + (3 ≡ −2)
+    [InlineData(-2, SlitCascadeChargePattern.Constant, -6)]
+    [InlineData(0, SlitCascadeChargePattern.Ramp, 0)]
+    public void EqualShares_WindByTheSumOfReducedCharges(int ell, SlitCascadeChargePattern pattern, int expected)
+    {
+        var c = SlitCascadeCalculator.Build(P(q => { q.SlitCascadeChildren = 5; q.SlitCascadeDepth = 3; q.SlitCascadeCharge = ell; q.SlitCascadeChargePattern = pattern; q.SlitCascadeWavelength = 1e6; q.SlitCascadeWidth = 0; }));
+        Assert.True(c.P.Max() - c.P.Min() < 1e-9, "shares should be equal");
+        Assert.Equal(expected, Winding(c, 0.05), 0.02);
+        if (expected != 0)   // a phase singularity: the centre is dark
+            Assert.True(SlitCascadeCalculator.Amplitude(c, 0, 0).Magnitude < 1e-9);
+    }
+
+    // Unequal shares move a vortex off the centre but keep its charge. Level n's
+    // factor is F(rⁿu), so its vortex moves r⁻ⁿ times as far: with unequal shares
+    // the nested vortices spread into a constellation instead of stacking.
+    [Fact]
+    public void UnequalShares_MoveTheVortexButKeepItsCharge()
+    {
+        var one = SlitCascadeCalculator.Build(P(q => { q.SlitCascadeChildren = 5; q.SlitCascadeDepth = 1; q.SlitCascadeCharge = 1; }));
+        Assert.True(one.P.Max() / one.P.Min() > 1.5, "shares should differ");
+        Assert.True(SlitCascadeCalculator.Amplitude(one, 0, 0).Magnitude > 1e-3, "the vortex should have moved off centre");
+        Assert.Equal(0, Winding(one, 0.02), 0.02);   // no longer round the centre…
+        Assert.Equal(1, Winding(one, 0.3), 0.02);    // …but its charge is intact nearby
+        // Three levels: the deeper vortices land r⁻ⁿ further out, so a loop that
+        // holds all three when the shares are equal (winding 3) now holds fewer.
+        var three = SlitCascadeCalculator.Build(P(q => { q.SlitCascadeChildren = 5; q.SlitCascadeDepth = 3; q.SlitCascadeCharge = 1; }));
+        Assert.True(Winding(three, 0.4) < 3 - 0.5);
+    }
+
+    // Brute force with phases: every leaf carries Π √p and Σ ℓₙ·φ over its address.
+    [Fact]
+    public void Charges_MatchTheBruteForceLeafSum()
+    {
+        const int n = 5, depth = 3; const double r = 0.3;
+        var c = SlitCascadeCalculator.Build(P(q => { q.SlitCascadeChildren = n; q.SlitCascadeDepth = depth; q.SlitCascadeRatio = r; q.SlitCascadeCharge = 2; q.SlitCascadeChargePattern = SlitCascadeChargePattern.Ramp; }));
+        int[] ells = { 2, 4, 6 };
+        var rng = new Random(1572);
+        for (int k = 0; k < 10; k++)
+        {
+            double ux = rng.NextDouble() * 10 - 5, uy = rng.NextDouble() * 10 - 5;
+            Complex sum = Complex.Zero;
+            for (int leaf = 0; leaf < 125; leaf++)
+            {
+                double cx = 0, cy = 0, amp = 1, scale = 1, phase = 0;
+                int code = leaf;
+                for (int level = 0; level < depth; level++)
+                {
+                    int i = code % n; code /= n;
+                    cx += scale * c.Bx[i]; cy += scale * c.By[i];
+                    amp *= Math.Sqrt(c.P[i]);
+                    phase += ells[level] * 2 * Math.PI * i / n;
+                    scale *= r;
+                }
+                sum += amp * Complex.Exp(Complex.ImaginaryOne * (phase - 2 * Math.PI * (cx * ux + cy * uy)));
+            }
+            double a = Math.Pow(r, depth);
+            sum *= Sinc(2 * Math.PI * a * ux) * Sinc(2 * Math.PI * a * uy);
+            var got = SlitCascadeCalculator.Amplitude(c, ux, uy);
+            Assert.Equal(sum.Real, got.Real, 9);
+            Assert.Equal(sum.Imaginary, got.Imaginary, 9);
+        }
+    }
+
+    // ℓ → −ℓ conjugates every (real-share) coefficient, so A₋ℓ(u) = conj(Aℓ(−u)):
+    // mirrored handedness, mirrored intensity.
+    [Fact]
+    public void NegativeCharge_IsTheConjugateMirror()
+    {
+        var plus = SlitCascadeCalculator.Build(P(q => { q.SlitCascadeCharge = 2; q.SlitCascadeChargePattern = SlitCascadeChargePattern.Ramp; }));
+        var minus = SlitCascadeCalculator.Build(P(q => { q.SlitCascadeCharge = -2; q.SlitCascadeChargePattern = SlitCascadeChargePattern.Ramp; }));
+        foreach (var (ux, uy) in new[] { (0.3, 0.1), (-2.2, 1.7), (4.0, -3.3) })
+        {
+            var a = SlitCascadeCalculator.Amplitude(plus, ux, uy);
+            var b = SlitCascadeCalculator.Amplitude(minus, -ux, -uy);
+            Assert.Equal(a.Real, b.Real, 10);
+            Assert.Equal(a.Imaginary, -b.Imaginary, 10);
+        }
+    }
+
+    [Fact]
+    public void ZeroCharge_OrLineLayout_IsBitIdenticalToNoVortex()
+    {
+        float[] Render(Action<FractalParameters> t)
+        {
+            var calc = new SlitCascadeCalculator(48, 32) { Zoom = 0.25, ColorMap = new RampMap(), FractalParameters = P(t) };
+            calc.Calculate(CancellationToken.None);
+            return (float[])calc.SmoothBuffer.Clone();
+        }
+        Assert.Equal(Render(_ => { }), Render(q => q.SlitCascadeChargePattern = SlitCascadeChargePattern.Ramp));
+        Assert.Equal(Render(q => q.SlitCascadeLayout = SlitCascadeLayout.Line),
+                     Render(q => { q.SlitCascadeLayout = SlitCascadeLayout.Line; q.SlitCascadeCharge = 3; }));
+        Assert.NotEqual(Render(_ => { }), Render(q => q.SlitCascadeCharge = 1));
+    }
+
+    [Fact]
+    public void ReducedCharge_WrapsIntoTheRing()
+    {
+        Assert.Equal(1, SlitCascadeCalculator.ReducedCharge(6, 5));
+        Assert.Equal(-2, SlitCascadeCalculator.ReducedCharge(3, 5));
+        Assert.Equal(2, SlitCascadeCalculator.ReducedCharge(-3, 5));
+        Assert.Equal(3, SlitCascadeCalculator.ReducedCharge(3, 6));   // the tie keeps +N/2
+        Assert.Equal(new[] { 2, -2, 2, -2 }, SlitCascadeCalculator.LevelCharges(2, SlitCascadeChargePattern.Alternating, 4));
+        Assert.Equal(new[] { -1, -2, -3 }, SlitCascadeCalculator.LevelCharges(-1, SlitCascadeChargePattern.Ramp, 3));
+    }
+
     [Fact]
     public void LiveView_RoundTripsThroughTheCommandBuilder()
     {
@@ -331,6 +466,7 @@ public sealed class SlitCascadeTests
             SlitCascadeChildren = 7, SlitCascadeRatio = 0.21, SlitCascadeDepth = 5, SlitCascadeSeparation = 1.4,
             SlitCascadeWidth = 0.15, SlitCascadeWavelength = 0.77, SlitCascadeLayout = SlitCascadeLayout.Line,
             SlitCascadeView = SlitCascadeView.Aperture, SlitCascadeDynamicRange = 9, SlitCascadeQ = -1.5,
+            SlitCascadeCharge = -3, SlitCascadeChargePattern = SlitCascadeChargePattern.Alternating,
         };
         var report = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot
         {
@@ -350,5 +486,7 @@ public sealed class SlitCascadeTests
         Assert.Equal(SlitCascadeView.Aperture, fresh.SlitCascadeView);
         Assert.Equal(9.0, fresh.SlitCascadeDynamicRange);
         Assert.Equal(-1.5, fresh.SlitCascadeQ);   // #1571
+        Assert.Equal(-3, fresh.SlitCascadeCharge);   // #1572
+        Assert.Equal(SlitCascadeChargePattern.Alternating, fresh.SlitCascadeChargePattern);
     }
 }

@@ -1351,6 +1351,12 @@ namespace FracturingFog.Models
         /// <summary>Slit cascade: the order q of the generalized dimension D_q shown in
         /// the status bar beside D₀, D₁, D₂ (#1571). Readout only.</summary>
         public double SlitCascadeQ { get; set; } = 3.0;
+        /// <summary>Slit cascade: orbital-angular-momentum charge ℓ — each ring child
+        /// gets the phase e^{iℓφ} from its angle φ, making a vortex (Ring layout only;
+        /// the ring carries ℓ reduced into (−N/2, N/2]). 0 = off (#1572).</summary>
+        public int SlitCascadeCharge { get; set; } = 0;
+        /// <summary>Slit cascade: how the charge varies with level (#1572).</summary>
+        public SlitCascadeChargePattern SlitCascadeChargePattern { get; set; } = SlitCascadeChargePattern.Constant;
         /// <summary>#1538 — sides of the <see cref="BilliardGeometry.Polygon"/> layout (3 = triangle,
         /// 6 = hexagon, 8 = octagon ...). Clamped to [3, 12]. Default 6.</summary>
         public int BilliardPolygonSides { get; set; } = 6;
@@ -2312,6 +2318,8 @@ namespace FracturingFog.Models
                 SlitCascadeView = SlitCascadeView,
                 SlitCascadeDynamicRange = SlitCascadeDynamicRange,
                 SlitCascadeQ = SlitCascadeQ,
+                SlitCascadeCharge = SlitCascadeCharge,
+                SlitCascadeChargePattern = SlitCascadeChargePattern,
                 BilliardPolygonSides = BilliardPolygonSides,
                 BilliardPolygonFill = BilliardPolygonFill,
                 BilliardLatticeRotation = BilliardLatticeRotation,

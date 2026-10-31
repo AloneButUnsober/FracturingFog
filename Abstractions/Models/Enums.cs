@@ -638,6 +638,18 @@ namespace FracturingFog
         Ring,
     }
 
+    /// <summary>How a <see cref="FractalType.SlitCascade"/> ring's vortex charge varies
+    /// with level (#1572). Append only.</summary>
+    public enum SlitCascadeChargePattern
+    {
+        /// <summary>Every level carries ℓ: the windings add, one coil.</summary>
+        Constant,
+        /// <summary>Levels alternate ℓ, −ℓ: opposite twists nest (a braid).</summary>
+        Alternating,
+        /// <summary>Level n carries (n + 1)·ℓ: the twist tightens with depth.</summary>
+        Ramp,
+    }
+
     /// <summary>What a <see cref="FractalType.SlitCascade"/> pixel shows (#1569). Append only.</summary>
     public enum SlitCascadeView
     {
