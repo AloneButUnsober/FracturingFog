@@ -690,6 +690,8 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
             return;
         }
         if (!key.Layers && IsInterferenceField(field)) RefreshInterference(key);   // #1126
+        bool domainField = !layers && field == DualOrbitField.PathInterferenceDomain
+            && _interfPhase.Length == width * height;   // #1592
         if (key.Layers && IsBivariateMode(FractalParameters.DualOrbitColorMode))   // #1122
         {
             ColorizeBivariate(FractalParameters.DualOrbitColorMode, maxIter, interiorColor, oobColor);
@@ -744,6 +746,8 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                     ColorBuffer[idx] = CategoricalColor(field, _scalar[idx])!.Value;
                 else if (fieldOrbit)
                     ColorBuffer[idx] = _ocol[idx];
+                else if (domainField)   // #1592 — hue = phase, brightness = I/2
+                    ColorBuffer[idx] = PhaseWheelBlueAmberMap.ColorAt(_interfPhase[idx], Math.Clamp(_scalar[idx] / (double)maxIter, 0.0, 1.0));
                 else
                     ColorBuffer[idx] = unchecked((uint)ColorMap.Map(_scalar[idx], 0f, maxIter));
             }

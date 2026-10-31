@@ -1005,7 +1005,7 @@
             <ComboBox Grid.Row="3" Grid.Column="1"
                       ItemsSource="{Binding TalbotViews}"
                       SelectedItem="{Binding TalbotView, Mode=TwoWay}" Margin="0,2"
-                      ToolTip.Tip="Intensity on a log scale, or the phase of the light." />
+                      ToolTip.Tip="Intensity on a log scale, the phase of the light, or Domain: both at once (colour = phase on the colour-blind-safe Phase Wheel, brightness = intensity; ignores the colour theme)." />
             <TextBlock Grid.Row="4" Grid.Column="0" Text="Dynamic range (decades):" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="4" Grid.Column="1"
                            Minimum="0.25" Maximum="30" Increment="0.25" FormatString="F2"
@@ -1056,7 +1056,7 @@
             <ComboBox Grid.Row="7" Grid.Column="1"
                       ItemsSource="{Binding SlitCascadeViews}"
                       SelectedItem="{Binding SlitCascadeView, Mode=TwoWay}" Margin="0,2"
-                      ToolTip.Tip="Intensity = the far-field diffraction pattern on a log scale. Phase = its phase. Aperture = the slits themselves, brighter where more light gets through. HolderAlpha = the slits coloured by how concentrated the light is at each point (the Hölder exponent α). Spectrum = coloured by how many slits share that concentration, f(α)." />
+                      ToolTip.Tip="Intensity = the far-field diffraction pattern on a log scale. Phase = its phase. Aperture = the slits themselves, brighter where more light gets through. HolderAlpha = the slits coloured by how concentrated the light is at each point (the Hölder exponent α). Spectrum = coloured by how many slits share that concentration, f(α). Domain = brightness and phase together: colour = phase on the colour-blind-safe Phase Wheel, brightness = intensity, so vortex cores show as dark points with every colour round them (ignores the colour theme)." />
             <TextBlock Grid.Row="8" Grid.Column="0" Text="Dynamic range (decades):" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="8" Grid.Column="1"
                            Minimum="0.5" Maximum="30" Increment="0.5" FormatString="F1"

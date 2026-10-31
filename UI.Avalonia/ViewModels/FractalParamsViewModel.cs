@@ -2366,11 +2366,12 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     private static readonly System.Array s_SlitCascadeViews = System.Enum.GetValues(typeof(SlitCascadeView));
     /// <summary>#1126 — path-interference rows.</summary>
     public bool IsDualOrbitInterferenceField => IsDualOrbitFieldMode
-        && _dualField is DualOrbitField.PathInterference or DualOrbitField.PathInterferencePhase;
+        && _dualField is DualOrbitField.PathInterference or DualOrbitField.PathInterferencePhase or DualOrbitField.PathInterferenceDomain;
     public double DualOrbitInterferenceK { get => _p.DualOrbitInterferenceK; set { var v = Clamp(value, -1000, 1000); if (v == _p.DualOrbitInterferenceK) return; _p.DualOrbitInterferenceK = v; this.RaisePropertyChanged(); Fire(); } }
     public double DualOrbitInterferenceGamma { get => _p.DualOrbitInterferenceGamma; set { var v = Clamp(value, 0, 100); if (v == _p.DualOrbitInterferenceGamma) return; _p.DualOrbitInterferenceGamma = v; this.RaisePropertyChanged(); Fire(); } }
     /// <summary>#1567 — η applies to the intensity field only (a mixed state has no single phase).</summary>
-    public bool IsDualOrbitInterferenceIntensity => IsDualOrbitFieldMode && _dualField == DualOrbitField.PathInterference;
+    public bool IsDualOrbitInterferenceIntensity => IsDualOrbitFieldMode
+        && _dualField is DualOrbitField.PathInterference or DualOrbitField.PathInterferenceDomain;   // #1592: the domain field's brightness
     public double DualOrbitWhichPath { get => _p.DualOrbitWhichPath; set { var v = Clamp(value, 0, 1); if (v == _p.DualOrbitWhichPath) return; _p.DualOrbitWhichPath = v; this.RaisePropertyChanged(); Fire(); } }
     /// <summary>#1568 — angular-momentum winding ℓ (integer) and its direction.</summary>
     public int DualOrbitAngularMomentum { get => _p.DualOrbitAngularMomentum; set { var v = Math.Clamp(value, -64, 64); if (v == _p.DualOrbitAngularMomentum) return; _p.DualOrbitAngularMomentum = v; this.RaisePropertyChanged(); Fire(); } }
