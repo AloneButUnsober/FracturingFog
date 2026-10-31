@@ -225,6 +225,47 @@ namespace FracturingFog.Models
                 Tags = new List<string> { "calm", "2D" },
             };
 
+            // #1573 — double-slit epic #1565: one bound animation per moving idea.
+            yield return new AnimationData
+            {
+                Name = "Double slit: which-path collapse",
+                Category = "Built-in",
+                Description = "Ramps the which-path detector strength 0 → 1 → 0 on the path-interference "
+                            + "field: the fringes fade to a flat field and return. Recolour only.",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.JulibrotPair },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "DualOrbitWhichPath", Mode = AnimationMode.Triangle, Min = 0.0, Max = 1.0, FrequencyHz = 0.1, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "double-slit" },
+            };
+            yield return new AnimationData
+            {
+                Name = "Double slit: angular momentum sweep",
+                Category = "Built-in",
+                Description = "Steps the orbital-angular-momentum twist ℓ from −4 to 4 and back: the spiral "
+                            + "arms change count and handedness. Recolour only.",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.JulibrotPair },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "DualOrbitAngularMomentum", Mode = AnimationMode.Triangle, Min = -4, Max = 4, FrequencyHz = 0.05, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "double-slit" },
+            };
+            yield return new AnimationData
+            {
+                Name = "Slit cascade: wavelength breathing",
+                Category = "Built-in",
+                Description = "Swings the wavelength λ between 0.4 and 1.4: the fringes slide across the slits, "
+                            + "children move on and off dark fringes, and the dimension changes with them.",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.SlitCascade },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "SlitCascadeWavelength", Mode = AnimationMode.Sine, Min = 0.4, Max = 1.4, FrequencyHz = 0.05, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "double-slit" },
+            };
+
             // #632 (Renderer C2) — precision-sweep convergence. Ramps the low
             // tier up the ladder Float→QuadDouble while a Hold track pins the
             // reference tier at QuadDouble, so the divergence field dims toward

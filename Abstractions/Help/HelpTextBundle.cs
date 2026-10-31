@@ -5043,6 +5043,96 @@ Möbius-group composition are deferred to a later slice — this
 first cut ships only the tetrahedral preset.
 ";
 
+        // #1573 — double-slit epic #1565. Full guide: Docs/User/DoubleSlit-Guide.md.
+        public const string MathDoubleSlitText =
+@"=== Double slit: path interference ===
+
+The idea behind this family: amplitudes add, then square.
+Two paths give complex amplitudes a and b; what you see is
+|a + b|^2, and the fringes are the cross term (Feynman,
+Leighton & Sands, Lectures Vol. III ch. 1).
+
+Julibrot Pair, field PathInterference / PathInterferencePhase:
+each escaping orbit is a path with phase G + 2 pi i theta, and
+the two orbits interfere.
+
+  Interference k   how fast the phase turns (more fringes).
+  Angle damping    fringes fade where the angles differ.
+  Which-path eta   0 = no detector, full fringes; 1 = watched,
+                   the fringes vanish. Animate it.
+  Angular momentum l  each path twists by its external angle,
+                   like light with orbital angular momentum
+                   (Allen et al. 1992): rings become l-armed
+                   spirals; the sign sets the handedness.
+  Winding direction  Opposite twists fan the fringes into rays.
+
+Close to the set the angles have branch cuts, so l other than
+0 can show seams there.
+
+Demos:
+  Double Slit - Which-Path Collapse
+  Double Slit - Angular Momentum Spirals
+  Double Slit - Opposite Winding Rays
+";
+
+        public const string MathSlitCascadeText =
+@"=== Slit Cascade ===
+
+A recursive aperture: every slit becomes N smaller slits, and
+each lets through the share of light the parent's two-slit
+fringes put at its place. A slit on a dark fringe drops out.
+The image is the far-field diffraction pattern, computed
+exactly level by level (Bak et al. 1998; Allain & Cloitre 1986).
+
+  Children / ratio / depth   the shape of the cascade.
+  Separation d, width w, wavelength   the fringe that sets
+                   the shares. Animate the wavelength.
+  Show: Intensity, Phase, Aperture, HolderAlpha, Spectrum.
+
+Probability sets the dimension: the status bar shows the
+generalized dimensions D0, D1, D2 and Dq of the light shares
+(Hentschel & Procaccia 1983; Halsey et al. 1986). HolderAlpha
+colours each point by how concentrated the light is there,
+Spectrum by how many slits share that concentration.
+
+Angular momentum sets the filament: on a Ring, Vortex charge l
+twists each slit by its angle. With equal shares the levels
+stack into one dark core; otherwise the vortices spread out.
+A ring of N slits carries l wrapped into -N/2..N/2. Closest
+prior art: the devil's vortex lens (Furlan et al. 2009).
+
+Demos:
+  Slit Cascade - Ring Diffraction
+  Slit Cascade - Probability Sets Dimension
+  Slit Cascade - Vortex Core
+";
+
+        public const string MathTalbotCarpetText =
+@"=== Talbot Carpet ===
+
+The light just past a periodic grating. Across: position in
+grating periods. Down: distance in Talbot distances. The
+grating images itself at every whole distance, shifted by half
+a period at every half, as copies at simple fractions, and as
+a fractal at irrational distances (Berry & Klein 1996; Berry,
+Marzoli & Schleich 2001).
+
+  Grating   Ronchi (open fraction), DeltaComb (thin slits,
+            the sharpest carpet) or SlitCascade (one period of
+            the Slit Cascade aperture).
+  Fourier modes M   sharper grating, finer carpet. Values far
+            above the screen resolution just alias.
+  Show      intensity (log scale about the mean) or phase.
+
+Looks best with few iterations (16) and a plain theme such as
+Greyscale: FF themes repeat over the iteration scale.
+
+Demos:
+  Talbot Carpet - Ronchi Grating
+  Talbot Carpet - Fractal Comb
+  Talbot Carpet - Cascade Grating
+";
+
         // #1555 — Math Plane (render mode + demos). Full guide: Docs/User/MathPlane-Guide.md.
         public const string MathPlaneText =
 @"=== Math Plane ===
