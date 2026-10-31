@@ -982,6 +982,39 @@
                        Text="Custom layout: open Ray paths and drag disks to move them, wheel to resize, double-click to add, right-click to remove. Disk count, separation and seed don't apply; disk radius sets the size of added disks. Pick another geometry to go back (the custom layout is kept)." />
         </Grid>
 
+        <!-- Talbot carpet (#1570, double-slit epic #1565): the grating's near field -->
+        <Grid IsVisible="{Binding IsTalbotCarpet}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Grating:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="0" Grid.Column="1"
+                      ItemsSource="{Binding TalbotProfiles}"
+                      SelectedItem="{Binding TalbotProfile, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Ronchi = a ruling of bars with the open fraction below. DeltaComb = infinitely thin slits, the sharpest carpet (Berry and Klein's ideal case). SlitCascade = one period of the Slit Cascade aperture, using that type's settings." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Open fraction:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsTalbotRonchi}" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="0.001" Maximum="1" Increment="0.05" FormatString="F3"
+                           Value="{Binding TalbotDuty, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsTalbotRonchi}"
+                           ToolTip.Tip="How much of each grating period lets light through. At 0.5 every even order vanishes and the carpet simplifies." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Fourier modes M:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1"
+                           Minimum="1" Maximum="4096" Increment="16" FormatString="F0"
+                           Value="{Binding TalbotModes, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="How many Fourier orders each side are kept: more modes = sharper grating edges = finer carpet detail. The carpet is a true fractal only as M grows without bound. Render time grows with M." />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Show:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="3" Grid.Column="1"
+                      ItemsSource="{Binding TalbotViews}"
+                      SelectedItem="{Binding TalbotView, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Intensity on a log scale, or the phase of the light." />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Dynamic range (decades):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1"
+                           Minimum="0.25" Maximum="30" Increment="0.25" FormatString="F2"
+                           Value="{Binding TalbotDynamicRange, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="How many powers of ten of brightness the colours span. Small values look close to linear." />
+            <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Foreground="#9B9B9B" Margin="0,4,0,2"
+                       Text="Across = position in grating periods. Down = distance travelled, in Talbot distances: the grating images itself at every whole number and shifted by half a period at every half; at irrational distances the pattern is a fractal." />
+        </Grid>
+
         <!-- Slit cascade (#1569, double-slit epic #1565): the recursive aperture and its diffraction -->
         <Grid IsVisible="{Binding IsSlitCascade}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Children per slit:" VerticalAlignment="Center" />

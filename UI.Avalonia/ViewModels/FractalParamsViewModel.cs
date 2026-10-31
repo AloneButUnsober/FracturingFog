@@ -460,6 +460,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     /// <summary>#1548 — Math Plane (Cartesian plotter).</summary>
     public bool IsMathPlane => FractalType == FractalType.MathPlane;
     public bool IsSlitCascade => FractalType == FractalType.SlitCascade;   // #1569
+    public bool IsTalbotCarpet => FractalType == FractalType.TalbotCarpet; // #1570
 
     /// <summary>#1447 — opens / closes the ray-path inset (host-set; null hides nothing,
     /// the button just does nothing).</summary>
@@ -617,7 +618,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsLyapunov || IsTranscendentalJulia || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian || IsMirrorSpheres
-          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsMathPlane || IsSlitCascade || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable
+          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -2333,6 +2334,17 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public OrbitTrapShapeDef DualOrbitTrapShape { get => _p.DualOrbitTrapShape; set { if (value == _p.DualOrbitTrapShape) return; _p.DualOrbitTrapShape = value; this.RaisePropertyChanged(); Fire(); } }
     public System.Array DualOrbitTrapShapes => s_DualOrbitTrapShapes;   // cached: a new array per read resets the ComboBox selection on Refresh()
     private static readonly System.Array s_DualOrbitTrapShapes = System.Enum.GetValues(typeof(OrbitTrapShapeDef));
+    /// <summary>#1570 — Talbot carpet rows.</summary>
+    public TalbotProfile TalbotProfile { get => _p.TalbotProfile; set { if (value == _p.TalbotProfile) return; _p.TalbotProfile = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(IsTalbotRonchi)); Fire(); } }
+    public System.Array TalbotProfiles => s_TalbotProfiles;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_TalbotProfiles = System.Enum.GetValues(typeof(TalbotProfile));
+    public bool IsTalbotRonchi => _p.TalbotProfile == TalbotProfile.Ronchi;
+    public double TalbotDuty { get => _p.TalbotDuty; set { var v = Clamp(value, 0.001, 1); if (v == _p.TalbotDuty) return; _p.TalbotDuty = v; this.RaisePropertyChanged(); Fire(); } }
+    public int TalbotModes { get => _p.TalbotModes; set { var v = Math.Clamp(value, 1, 4096); if (v == _p.TalbotModes) return; _p.TalbotModes = v; this.RaisePropertyChanged(); Fire(); } }
+    public TalbotView TalbotView { get => _p.TalbotView; set { if (value == _p.TalbotView) return; _p.TalbotView = value; this.RaisePropertyChanged(); Fire(); } }
+    public System.Array TalbotViews => s_TalbotViews;
+    private static readonly System.Array s_TalbotViews = System.Enum.GetValues(typeof(TalbotView));
+    public double TalbotDynamicRange { get => _p.TalbotDynamicRange; set { var v = Clamp(value, 0.25, 30); if (v == _p.TalbotDynamicRange) return; _p.TalbotDynamicRange = v; this.RaisePropertyChanged(); Fire(); } }
     /// <summary>#1569 — slit cascade rows.</summary>
     public int SlitCascadeChildren { get => _p.SlitCascadeChildren; set { var v = Math.Clamp(value, 2, 16); if (v == _p.SlitCascadeChildren) return; _p.SlitCascadeChildren = v; this.RaisePropertyChanged(); Fire(); } }
     public double SlitCascadeRatio { get => _p.SlitCascadeRatio; set { var v = Clamp(value, 0.01, 0.5); if (v == _p.SlitCascadeRatio) return; _p.SlitCascadeRatio = v; this.RaisePropertyChanged(); Fire(); } }

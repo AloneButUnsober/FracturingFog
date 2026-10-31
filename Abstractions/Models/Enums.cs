@@ -638,6 +638,26 @@ namespace FracturingFog
         Ring,
     }
 
+    /// <summary>The grating a <see cref="FractalType.TalbotCarpet"/> propagates (#1570). Append only.</summary>
+    public enum TalbotProfile
+    {
+        /// <summary>A square wave (Ronchi ruling) with open fraction <c>TalbotDuty</c>.</summary>
+        Ronchi,
+        /// <summary>A comb of infinitely thin slits: every mode equal, the sharpest carpet.</summary>
+        DeltaComb,
+        /// <summary>One period of the slit cascade's aperture (Line layout).</summary>
+        SlitCascade,
+    }
+
+    /// <summary>What a <see cref="FractalType.TalbotCarpet"/> pixel shows (#1570). Append only.</summary>
+    public enum TalbotView
+    {
+        /// <summary>Intensity |ψ|² on a log scale.</summary>
+        Intensity,
+        /// <summary>Phase arg ψ, in turns.</summary>
+        Phase,
+    }
+
     /// <summary>How a <see cref="FractalType.SlitCascade"/> ring's vortex charge varies
     /// with level (#1572). Append only.</summary>
     public enum SlitCascadeChargePattern
@@ -1107,6 +1127,14 @@ namespace FracturingFog
         /// <c>SlitCascadeLayout</c>, <c>SlitCascadeView</c>,
         /// <c>SlitCascadeDynamicRange</c>.</summary>
         SlitCascade,
+        /// <summary>Fractal Talbot carpet (#1570, double-slit epic #1565) — the
+        /// paraxial near field of a periodic grating in grating periods (x) and
+        /// Talbot distances (y): self-images at whole Talbot distances, fractal at
+        /// irrational ones. <c>TalbotCarpetCalculator</c>. Tunables:
+        /// <c>TalbotProfile</c>, <c>TalbotDuty</c>, <c>TalbotModes</c>,
+        /// <c>TalbotView</c>, <c>TalbotDynamicRange</c> (the SlitCascade profile also
+        /// reads the <c>SlitCascade*</c> settings).</summary>
+        TalbotCarpet,
     }
 
     public enum RenderProfile { Preview, Final }
@@ -1267,6 +1295,7 @@ namespace FracturingFog
                 or FractalType.ChaoticBilliard
                 or FractalType.BilliardRays
                 or FractalType.SlitCascade   // #1569 — log intensity on the SmoothBuffer
+                or FractalType.TalbotCarpet  // #1570
                 or FractalType.PrecisionField
                 // Dual-orbit escape-geometry (#864) — a derived escape-space scalar
                 // over the SmoothBuffer (PrecisionField precedent).

@@ -1357,6 +1357,20 @@ namespace FracturingFog.Models
         public int SlitCascadeCharge { get; set; } = 0;
         /// <summary>Slit cascade: how the charge varies with level (#1572).</summary>
         public SlitCascadeChargePattern SlitCascadeChargePattern { get; set; } = SlitCascadeChargePattern.Constant;
+
+        // ── Talbot carpet (#1570, double-slit epic #1565) ─────────────────
+        /// <summary>Talbot carpet: the grating (Ronchi, δ-comb, or the slit cascade).</summary>
+        public TalbotProfile TalbotProfile { get; set; } = TalbotProfile.Ronchi;
+        /// <summary>Talbot carpet: the Ronchi grating's open fraction of each period (0..1).</summary>
+        public double TalbotDuty { get; set; } = 0.3;
+        /// <summary>Talbot carpet: Fourier modes kept each side, M (sum over |n| ≤ M).
+        /// More modes = sharper grating edges = finer fractal detail; cost is O(M) per pixel.</summary>
+        public int TalbotModes { get; set; } = 32;
+        /// <summary>Talbot carpet: intensity or phase.</summary>
+        public TalbotView TalbotView { get; set; } = TalbotView.Intensity;
+        /// <summary>Talbot carpet: decades below the mean intensity the log scale reaches
+        /// (the top is the brightest the grating allows).</summary>
+        public double TalbotDynamicRange { get; set; } = 2.0;
         /// <summary>#1538 — sides of the <see cref="BilliardGeometry.Polygon"/> layout (3 = triangle,
         /// 6 = hexagon, 8 = octagon ...). Clamped to [3, 12]. Default 6.</summary>
         public int BilliardPolygonSides { get; set; } = 6;
@@ -2320,6 +2334,11 @@ namespace FracturingFog.Models
                 SlitCascadeQ = SlitCascadeQ,
                 SlitCascadeCharge = SlitCascadeCharge,
                 SlitCascadeChargePattern = SlitCascadeChargePattern,
+                TalbotProfile = TalbotProfile,
+                TalbotDuty = TalbotDuty,
+                TalbotModes = TalbotModes,
+                TalbotView = TalbotView,
+                TalbotDynamicRange = TalbotDynamicRange,
                 BilliardPolygonSides = BilliardPolygonSides,
                 BilliardPolygonFill = BilliardPolygonFill,
                 BilliardLatticeRotation = BilliardLatticeRotation,
