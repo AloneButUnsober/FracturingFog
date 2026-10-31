@@ -146,7 +146,7 @@ namespace FracturingFog.Models
                 return unchecked((int)0xFF000000);
 
             // Sample gradient at cycling t (density / offset / wrap honoured).
-            float t       = CyclicT(smooth, CycleSpeed);
+            float t       = CyclicT(smooth, CycleSpeed, maxIterations);
             int   albedoI = MapNormalized(t, distance);
             // F10.4: carry the stop's alpha through as coverage. Lighting
             // modulates the covered RGB only; alpha is not a light term. Opaque

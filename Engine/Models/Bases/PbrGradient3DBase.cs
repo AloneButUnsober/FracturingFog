@@ -346,7 +346,7 @@ namespace FracturingFog.Models
 
             // 1. Sample gradient (sRGB), convert to linear for PBR math.
             //    Density / offset / wrap honoured via the shared CyclicT helper.
-            float t = CyclicT(smooth, CycleSpeed);
+            float t = CyclicT(smooth, CycleSpeed, maxIterations);
             int albedoI = MapNormalized(t, distance);
 
             // F10.4: carry the stop's alpha through as coverage. The PBR light

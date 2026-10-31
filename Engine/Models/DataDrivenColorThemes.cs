@@ -101,6 +101,7 @@ namespace FracturingFog.Models
                             ColorOffset = pbr.ExportColorOffset,
                             ColorDensity = pbr.ExportColorDensity,
                             WrapMode = pbr.ExportWrapMode,
+                            ScaleMode = pbr.ExportScaleMode,
                             Stops = StopsToData(pbr.ExportStops),
                             CycleSpeed = pbr.ExportCycleSpeed,
                             Steepness = pbr.ExportSteepness,
@@ -149,6 +150,7 @@ namespace FracturingFog.Models
                         ColorOffset = phong.ExportColorOffset,
                         ColorDensity = phong.ExportColorDensity,
                         WrapMode = phong.ExportWrapMode,
+                        ScaleMode = phong.ExportScaleMode,
                         Stops = StopsToData(phong.ExportStops),
                         CycleSpeed = phong.ExportCycleSpeed,
                         Steepness = phong.ExportSteepness,
@@ -189,6 +191,7 @@ namespace FracturingFog.Models
                         ColorOffset = cyc.ExportColorOffset,
                         ColorDensity = cyc.ExportColorDensity,
                         WrapMode = cyc.ExportWrapMode,
+                        ScaleMode = cyc.ExportScaleMode,
                         Stops = StopsToData(cyc.ExportStops),
                         CycleSpeed = cyc.ExportCycleSpeed,
                         Brightness = bright,
@@ -466,6 +469,7 @@ namespace FracturingFog.Models
             ColorOffset = data.ColorOffset;
             ColorDensity = data.ColorDensity;
             CycleWrap = data.WrapMode;
+            CycleScale = data.ScaleMode;   // #1590
             foreach (var s in data.Stops)
                 Stops.Add(s.ToColorStop());
         }
@@ -540,6 +544,7 @@ namespace FracturingFog.Models
             ColorOffset = data.ColorOffset;
             ColorDensity = data.ColorDensity;
             CycleWrap = data.WrapMode;
+            CycleScale = data.ScaleMode;   // #1590
 
             foreach (var s in data.Stops)
                 Stops.Add(s.ToColorStop());
@@ -646,6 +651,7 @@ namespace FracturingFog.Models
             ColorOffset = data.ColorOffset;
             ColorDensity = data.ColorDensity;
             CycleWrap = data.WrapMode;
+            CycleScale = data.ScaleMode;   // #1590
             _bands = (data.MaterialBands?.Count ?? 0) > 0
                                 ? data.MaterialBands!.ToArray()
                                 : new[]

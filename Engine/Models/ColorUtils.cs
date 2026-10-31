@@ -135,6 +135,9 @@ namespace FracturingFog.Models
         /// <summary>Boundary behaviour of the cycling parameter (F5).</summary>
         protected ColorWrapMode CycleWrap { get; set; } = ColorWrapMode.Repeat;
 
+        /// <summary>What the cycling parameter is measured in (#1590).</summary>
+        protected ColorScaleMode CycleScale { get; set; } = ColorScaleMode.Iterations;
+
         private InterpolationCurve _interpCurve = InterpolationCurve.Linear;
 
         /// <summary>Segment blend shape (F2). LUT-affecting → invalidates on change.</summary>
@@ -215,6 +218,7 @@ namespace FracturingFog.Models
         public float ExportColorOffset => ColorOffset;
         public float ExportColorDensity => ColorDensity;
         public ColorWrapMode ExportWrapMode => CycleWrap;
+        public ColorScaleMode ExportScaleMode => CycleScale;
         public InterpolationCurve ExportInterpolationCurve => _interpCurve;
         public TransferFunction ExportTransferFunction => Transfer;
         public float ExportTransferStrength => TransferStrength;
@@ -345,9 +349,22 @@ namespace FracturingFog.Models
         /// With defaults (offset 0, density 1, Repeat) this reduces to the
         /// historical <c>((smooth*cycleSpeed) mod 1)</c> for non-negative input.
         /// </summary>
-        protected float CyclicT(float smooth, float cycleSpeed)
+        protected float CyclicT(float smooth, float cycleSpeed) => CyclicT(smooth, cycleSpeed, 0);
+
+        /// <summary>
+        /// As <see cref="CyclicT(float, float)"/>, honouring the scale mode
+        /// (#1590): with <see cref="ColorScaleMode.FitToRange"/> and a positive
+        /// <paramref name="maxIterations"/> the parameter is
+        /// <c>smooth / maxIterations · density + offset</c> (CycleSpeed does not
+        /// apply), so density 1 spans the palette once over the calculator's range.
+        /// <see cref="ColorScaleMode.Iterations"/> is the historical arithmetic,
+        /// unchanged.
+        /// </summary>
+        protected float CyclicT(float smooth, float cycleSpeed, int maxIterations)
         {
-            float raw = smooth * cycleSpeed * ColorDensity + ColorOffset;
+            float raw = CycleScale == ColorScaleMode.FitToRange && maxIterations > 0
+                ? smooth / maxIterations * ColorDensity + ColorOffset
+                : smooth * cycleSpeed * ColorDensity + ColorOffset;
             switch (CycleWrap)
             {
                 case ColorWrapMode.Clamp:
@@ -696,7 +713,7 @@ namespace FracturingFog.Models
         {
             // Density / offset / wrap honoured via the shared CyclicT helper.
             // Defaults collapse to the historical ((smooth*speed) mod 1).
-            float t = ApplyTransfer(CyclicT(smooth, CycleSpeed));
+            float t = ApplyTransfer(CyclicT(smooth, CycleSpeed, maxIterations));
             return MapNormalized(t, distance);
         }
     }

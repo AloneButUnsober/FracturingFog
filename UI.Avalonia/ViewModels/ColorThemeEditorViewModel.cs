@@ -434,6 +434,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
     public InterpolationCurveDef[] CurveOptions { get; } = Enum.GetValues<InterpolationCurveDef>();
     public TransferFunctionDef[] TransferOptions { get; } = Enum.GetValues<TransferFunctionDef>();
     public ColorWrapModeDef[] WrapModeOptions { get; } = Enum.GetValues<ColorWrapModeDef>();
+    public ColorScaleModeDef[] ScaleModeOptions { get; } = Enum.GetValues<ColorScaleModeDef>();   // #1590
 
     private GradientColorSpaceDef _interpSpace = GradientColorSpaceDef.Srgb;
     public GradientColorSpaceDef InterpSpace
@@ -494,6 +495,14 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
     {
         get => _wrapMode;
         set { this.RaiseAndSetIfChanged(ref _wrapMode, value); FieldChanged(); }
+    }
+
+    // #1590 — cycle on iterations (historical) or spread over 0..MaxIterations.
+    private ColorScaleModeDef _scaleMode = ColorScaleModeDef.Iterations;
+    public ColorScaleModeDef ScaleMode
+    {
+        get => _scaleMode;
+        set { this.RaiseAndSetIfChanged(ref _scaleMode, value); FieldChanged(); }
     }
 
     // ── Palette post-fx: sparkle (#254) + seamless cycling (#255) ──────────
@@ -728,6 +737,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
                 ColorDensity = (decimal)def.ColorDensity;
                 CycleSpeed = (decimal)def.CycleSpeed;
                 WrapMode = def.WrapMode;
+                ScaleMode = def.ScaleMode;
                 SeamlessCycle = def.SeamlessCycle;
                 SparkleStride = def.SparkleStride;
                 SparkleBoost = def.SparkleBoost;
@@ -1739,6 +1749,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             ColorOffset = ClampDec((decimal)def.ColorOffset, -10M, 10M);
             ColorDensity = ClampDec((decimal)def.ColorDensity, 0M, 20M);
             WrapMode = def.WrapMode;
+            ScaleMode = def.ScaleMode;
             SparkleStride = Math.Max(0, def.SparkleStride);
             SparkleBoost = Math.Clamp((double)def.SparkleBoost, 0d, 1d);
             SeamlessCycle = def.SeamlessCycle;
@@ -1840,6 +1851,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             ColorOffset = (float)ColorOffset,
             ColorDensity = (float)ColorDensity,
             WrapMode = WrapMode,
+            ScaleMode = ScaleMode,
             SparkleStride = SparkleStride,
             SparkleBoost = (float)SparkleBoost,
             SeamlessCycle = SeamlessCycle,

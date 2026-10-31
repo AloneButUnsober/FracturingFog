@@ -198,7 +198,7 @@ The **🎲 Random** button (top of the Color Stops section) generates a complete
 |---|---|
 | Colour stops | Always. |
 | Interpolation (Space / Curve / Transfer / Strength / Gamma) | When **Interpolation** is ticked (default on). |
-| Cycle settings (offset / density / speed / wrap mode) | Every Kind **except** Gradient. |
+| Cycle settings (offset / density / speed / wrap mode / scale) | Every Kind **except** Gradient. |
 | 3D light rig + shared Steepness / Ambient | Phong3D and Pbr3D. Light **colours** only when **Theme light colour** is ticked (default on). |
 | Scene 3D lighting colours (Lighting-FX Light 1/2/3) | When **Scene light colour** is ticked (default on) and the editor is over a live view. Independent of Kind. |
 | Phong extras (key/fill/rim spec + diff scales) | Phong3D only. |
@@ -405,6 +405,15 @@ Pbr3D entries add a `pbrExtras` block with `lightingMode`, `glowExp`, `glowScale
 | `colorOffset` | float | `0` | Phase rotation of the palette along the iteration axis (Cycling / Phong3D / Pbr3D). |
 | `colorDensity` | float | `1` | Frequency multiplier — how many cycles fit, independent of `cycleSpeed`. |
 | `wrapMode` | `Repeat` / `PingPong` / `Clamp` | `Repeat` | Boundary behaviour. `PingPong` mirrors so there is no 1→0 seam. |
+| `scaleMode` | `Iterations` / `FitToRange` | `Iterations` | What the palette cycles over (#1590). `Iterations` = a fixed iteration rhythm (`cycleSpeed`), the classic look. `FitToRange` = density 1 spreads the palette **once over 0..max iterations**, ignoring `cycleSpeed`. Cycling / Phong3D / Pbr3D. |
+
+**When to use `FitToRange`.** Some fractal types scale their value onto 0..max iterations instead of
+counting iterations: Lyapunov, Precision Field, the Julibrot Pair fields, Slit Cascade and Talbot Carpet.
+With `Iterations`, a theme repeats many times across that range (at 400 iterations HSV wraps 8 times), so
+the picture speckles and depends on the iteration count. With `FitToRange` the colours stay the same at any
+iteration count. Pair it with **Clamp** for brightness-like values (intensity, dimension, Lyapunov
+exponent) and with **Repeat** for phases (one full turn of the palette = one turn of phase, no seam).
+The plain **Gradient** kind already maps this way, clamped; `FitToRange` adds density, offset and wrap.
 
 Each entry in `stops` also accepts an optional `midpoint` (float in (0,1),
 default `0.5`): the blend midpoint of the segment *starting* at that stop.

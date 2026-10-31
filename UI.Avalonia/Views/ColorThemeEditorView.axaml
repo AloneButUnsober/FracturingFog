@@ -444,6 +444,12 @@
                                               Width="135" HorizontalAlignment="Left"
                                               ToolTip.Tip="Boundary behaviour: Repeat (modulo), PingPong (seamless mirror), Clamp (F5)." />
                                 </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Classes="label" Text="Scale:" Width="56" />
+                                    <ComboBox ItemsSource="{Binding ScaleModeOptions}" SelectedItem="{Binding ScaleMode}"
+                                              Width="135" HorizontalAlignment="Left"
+                                              ToolTip.Tip="Iterations = the palette repeats on a fixed iteration rhythm (the classic look). FitToRange = density 1 spreads the palette once over 0..max iterations, for types that scale their value to that range (Lyapunov, Precision Field, Julibrot Pair fields, Slit Cascade, Talbot Carpet). Use Clamp for brightness, Repeat for phase (one turn)." />
+                                </StackPanel>
                                 <CheckBox IsChecked="{Binding SeamlessCycle}"
                                           Content="Seamless cycling (close the loop)"
                                           ToolTip.Tip="#255 — nudge the palette so its last colour ramps back to the first, so palette cycling shows no seam. Opt-in: leave off to keep a deliberate hard seam." />
