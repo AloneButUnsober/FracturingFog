@@ -377,6 +377,36 @@ the mode count M is the user-visible "how sharp" knob.
 **Invariants.** z = z_T reproduces the grating; z = z_T/2 reproduces it shifted by d/2; the output
 converges as M grows (vs a reference run with many more modes).
 
+### 7.1 What S6 shipped (#1570, 2026-10-31)
+
+`FractalType.TalbotCarpet`, `Engine/Calculators/TalbotCarpetCalculator.cs`.
+
+- **No free scale.** In grating periods ξ = x/d and Talbot distances ζ = z/z_T, the propagation
+  phase πλzn²/d² is exactly 2πn²ζ, so λ and d drop out. The view's x axis is ξ and its y axis is ζ
+  (propagation runs down the screen). The home view is one Talbot distance tall and about two
+  periods wide.
+- **Profiles.** Ronchi: cₙ = a·sinc(πna), duty `TalbotDuty` (default 0.3). δ-comb: cₙ = 1.
+  SlitCascade: one period (length 2) of the #1569 cascade on the Line layout,
+  cₙ = r^D·A(n/2), reading the `SlitCascade*` settings; the region snapshot carries them only for
+  this profile. `TalbotModes` M (default 32) truncates the sum.
+- **Scale (changed after the first renders).** By Parseval the mean intensity is Σ|cₙ|² at every ζ.
+  log(I/mean) is mapped from −`TalbotDynamicRange` decades (default 2) up to the bound (Σ|cₙ|)², so
+  the scale is the same everywhere in the carpet and under pan or animation. Normalising by the bound
+  alone left the carpet dim, because the bound grows like log M.
+- **Cost.** bₙ = cₙe^{−2πin²ζ} is built once per row and e^{2πinξ} is stepped by multiplication, so
+  there is no trig in the inner loop: about 35 ms for 480×270 at M = 32 (Debug).
+- **Aliasing is real detail.** The top mode has M cycles per period across and M² per Talbot
+  distance down, so M ≫ the screen resolution aliases the true fine structure. That is why the
+  default M is 32, not 128. FF themes repeat over the iteration scale, so the clean look needs a low
+  iteration count (e.g. `--iter 16`) and a monotone theme (Greyscale). S7's presets set both.
+- **Tests** (`TalbotCarpetTests`, 21): ζ = 1 self-image, ζ = ½ half-period shift, and the ζ = ¼
+  Gauss-sum superposition ψ = ((1−i)/2)ψ₀(ξ) + ((1+i)/2)ψ₀(ξ+½), for all three profiles. Also: the
+  Ronchi grating at ζ = 0; Parseval at ζ = 0, 1/π and the golden ratio; mirror symmetry; the
+  row recurrence equal to the direct sum on the documented scale; the cascade profile's c₀ and leaf
+  amplitude; clamping; animatable; the batch round trip. Six mutants are each caught. The convergence
+  check planned above was replaced by Parseval and the exact identities, which pin the field at every
+  M without needing a reference run.
+
 ---
 
 ## 8. Toolchain reach (per #850's standing rule)
@@ -427,7 +457,7 @@ physics new.
 | S3 slit cascade | #1569 | S0 | N ≥ 3 sampled children, fringe-sampled weights (§4.1); exact Fraunhofer product (§4.2); add aperture view; shipped (§4.3.1) |
 | S4 probability → dimension | #1571 | S3 | closed-form D_q for equal r (§5); α colouring on the aperture view; shipped (§5.1) |
 | S5 OAM filaments (cascade) | #1572 | S3 | ring layout with N ≥ 3; charge = ℓ mod N, verified (§6.1); credit the devil's vortex lens |
-| S6 Talbot carpet | #1570 | S0 | none |
+| S6 Talbot carpet | #1570 | S0 | dimensionless (ξ, ζ); mean-normalised log scale; shipped (§7.1) |
 | S7 presets / close-out | #1573 | all | — |
 
 Parallel after S0: {S1, S2, S3, S6}. After S3: {S4, S5}.

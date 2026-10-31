@@ -110,6 +110,9 @@ public static class FractalAnimatableParamsMap
         FractalType.SlitCascade
             => _slitCascadeList,
 
+        FractalType.TalbotCarpet
+            => _talbotList,
+
         FractalType.PrecisionField
             => _precisionFieldList,
 
@@ -255,6 +258,15 @@ public static class FractalAnimatableParamsMap
             Notes: "Real part of λ — morphs the exploding Julia set."),
         new("TranscendentalLambdaIm", AnimatableParamKind.ScalarDouble, Min: -2.0, Max: 2.0,
             Notes: "Imaginary part of λ — rotates the hairs / bouquet."),
+    };
+
+    // Talbot carpet (#1570) — the grating's opening and sharpness.
+    private static readonly AnimatableParamDescriptor[] _talbotList =
+    {
+        new("TalbotDuty", AnimatableParamKind.ScalarDouble, Min: 0.02, Max: 0.98,
+            Notes: "Ronchi open fraction — the carpet's weave changes; duty ½ kills every even order (#1570)."),
+        new("TalbotModes", AnimatableParamKind.ScalarInt, Min: 1.0, Max: 512.0,
+            Notes: "Fourier modes M — the carpet sharpens from smooth waves to its fractal limit (#1570)."),
     };
 
     // Slit cascade (#1569) — the fringe that weights the children, and the scale.

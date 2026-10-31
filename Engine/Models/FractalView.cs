@@ -149,6 +149,7 @@ namespace FracturingFog.Models
             {FractalType.ChaoticBilliard, "Chaotic Billiard" },
             {FractalType.BilliardRays, "Billiard Rays" },
             {FractalType.SlitCascade, "Slit Cascade" },
+            {FractalType.TalbotCarpet, "Talbot Carpet" },
             {FractalType.MathPlane, "Math Plane" },
             {FractalType.PrecisionField, "Precision Field" },
             {FractalType.Kleinian, "Kleinian" },

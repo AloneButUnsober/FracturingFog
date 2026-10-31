@@ -80,6 +80,7 @@ namespace FracturingFog.Models
             FractalType.ChaoticBilliard => FractalMotionClass.Zoomable2D,
             FractalType.BilliardRays => FractalMotionClass.Zoomable2D,
             FractalType.SlitCascade => FractalMotionClass.Zoomable2D,   // #1569
+            FractalType.TalbotCarpet => FractalMotionClass.Zoomable2D,  // #1570
             FractalType.MathPlane => FractalMotionClass.Zoomable2D,
             FractalType.PrecisionField => FractalMotionClass.Zoomable2D,
             // Dual-orbit escape-geometry (#864) — a 2D field over the s-plane.

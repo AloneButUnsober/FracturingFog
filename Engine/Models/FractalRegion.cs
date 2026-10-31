@@ -698,6 +698,12 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? DlaSeed { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? LogisticSeed { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? LogisticBurnIn { get; set; }
+        // #1570 — Talbot carpet (profile / view = int casts of their enums).
+        [JsonIgnore(Condition = OmitNull)] public int? TalbotProfile { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? TalbotDuty { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? TalbotModes { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? TalbotView { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? TalbotDynamicRange { get; set; }
         // #1569 — slit cascade (layout / view = int casts of their enums).
         [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeChildren { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? SlitCascadeRatio { get; set; }
@@ -1303,6 +1309,22 @@ namespace FracturingFog.Models
                 {
                     LogisticSeed = p.LogisticSeed,
                     LogisticBurnIn = p.LogisticBurnIn,
+                },
+                // #1570 — the SlitCascade profile reads the cascade's own settings, so they
+                // ride along only then.
+                FractalType.TalbotCarpet => new RegionFractalParams
+                {
+                    TalbotProfile = (int)p.TalbotProfile,
+                    TalbotDuty = p.TalbotDuty,
+                    TalbotModes = p.TalbotModes,
+                    TalbotView = (int)p.TalbotView,
+                    TalbotDynamicRange = p.TalbotDynamicRange,
+                    SlitCascadeChildren = p.TalbotProfile == FracturingFog.TalbotProfile.SlitCascade ? p.SlitCascadeChildren : null,
+                    SlitCascadeRatio = p.TalbotProfile == FracturingFog.TalbotProfile.SlitCascade ? p.SlitCascadeRatio : null,
+                    SlitCascadeDepth = p.TalbotProfile == FracturingFog.TalbotProfile.SlitCascade ? p.SlitCascadeDepth : null,
+                    SlitCascadeSeparation = p.TalbotProfile == FracturingFog.TalbotProfile.SlitCascade ? p.SlitCascadeSeparation : null,
+                    SlitCascadeWidth = p.TalbotProfile == FracturingFog.TalbotProfile.SlitCascade ? p.SlitCascadeWidth : null,
+                    SlitCascadeWavelength = p.TalbotProfile == FracturingFog.TalbotProfile.SlitCascade ? p.SlitCascadeWavelength : null,
                 },
                 FractalType.SlitCascade => new RegionFractalParams
                 {
@@ -2076,6 +2098,11 @@ namespace FracturingFog.Models
             if (DlaSeed.HasValue) p.DlaSeed = DlaSeed.Value;
             if (LogisticSeed.HasValue) p.LogisticSeed = LogisticSeed.Value;
             if (LogisticBurnIn.HasValue) p.LogisticBurnIn = LogisticBurnIn.Value;
+            if (this.TalbotProfile.HasValue) p.TalbotProfile = (FracturingFog.TalbotProfile)this.TalbotProfile.Value;   // #1570
+            if (TalbotDuty.HasValue) p.TalbotDuty = TalbotDuty.Value;
+            if (TalbotModes.HasValue) p.TalbotModes = TalbotModes.Value;
+            if (this.TalbotView.HasValue) p.TalbotView = (FracturingFog.TalbotView)this.TalbotView.Value;
+            if (TalbotDynamicRange.HasValue) p.TalbotDynamicRange = TalbotDynamicRange.Value;
             if (SlitCascadeChildren.HasValue) p.SlitCascadeChildren = SlitCascadeChildren.Value;   // #1569
             if (SlitCascadeRatio.HasValue) p.SlitCascadeRatio = SlitCascadeRatio.Value;
             if (SlitCascadeDepth.HasValue) p.SlitCascadeDepth = SlitCascadeDepth.Value;
