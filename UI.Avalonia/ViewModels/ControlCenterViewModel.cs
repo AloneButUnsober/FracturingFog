@@ -397,6 +397,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
             Brightness  = vs.Brightness,
             Contrast    = vs.Contrast,
             HistogramEq = vs.HistogramEq,
+            GpuCompute  = Shell.Main.RenderHost.UseGpuCompute,   // #1611 — Ctrl+G off → --gpu off
             InteriorAlpha = fp?.InteriorAlpha ?? 255,   // #363 — now emitted as a flag
             ViewTransform  = vs.ViewTransform,           // S2 (#389) — output tonemap
             ViewExposureEv = vs.ViewExposureEv,

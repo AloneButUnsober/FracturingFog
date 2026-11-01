@@ -5199,7 +5199,8 @@ namespace FracturingFog.Rendering
                     if (_calculator.UseGpuCompute
                         && _calculator.GpuKernel != null
                         && !_calculator.IsHighPrecisionActive
-                        && _calculator.Zoom <= MandelbrotCalculator.MaxGpuZoom)
+                        && MandelbrotCalculator.Fp32GpuResolves(_calculator.CenterX, _calculator.CenterY,
+                               _calculator.Zoom, _calculator.Width, _calculator.Height))   // #1611
                     {
                         lbl += " (GPU)";
                     }

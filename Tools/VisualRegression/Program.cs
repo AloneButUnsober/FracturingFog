@@ -303,6 +303,10 @@ internal static class Program
         psi.ArgumentList.Add("image");
         psi.ArgumentList.Add("--out");
         psi.ArgumentList.Add(outPng);
+        // #1611 — --batch computes on the GPU by default now; the baselines are
+        // CPU renders, so pin the CPU (a GPU would make them device-specific too).
+        psi.ArgumentList.Add("--gpu");
+        psi.ArgumentList.Add("off");
         foreach (var a in caseArgs) psi.ArgumentList.Add(a);
 
         using var p = Process.Start(psi)!;

@@ -68,6 +68,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--temporallightingprobe")
             return TemporalLightingProbe.Run(args);
 
+        // #1611 — fp32 shallow GPU kernel displacement vs the CPU, by pixels-per-ulp.
+        if (args.Length > 0 && args[0] == "--gpuprecisionprobe")
+            return GpuPrecisionProbe.Run(args);
+
         // #1613 — CPU deep-zoom per-pixel cost on bench-kit scenes, default vs acceleration off.
         if (args.Length > 0 && args[0] == "--deepcostprobe")
             return DeepCostProbe.Run(args);
@@ -1821,6 +1825,7 @@ static class Program
         if (args.Length > 0 && (args[0] == "--batch" || args[0] == "-b"))
         {
             FracturingFog.Win.WindowsBootstrap.InstallBatchVideoHook();
+            FracturingFog.Win.WindowsBootstrap.InstallBatchGpuHook();   // #1611
             return BatchEntry.Run(args);
         }
 

@@ -74,6 +74,11 @@ namespace FracturingFog.Cli
         /// flag); below 255 emits <c>--interior-alpha N</c>.</summary>
         public int InteriorAlpha { get; init; } = 255;
 
+        /// <summary>#1611 — the live view computes on the GPU (Ctrl+G). True (the
+        /// default) omits the flag, since --batch defaults to <c>--gpu auto</c>;
+        /// false emits <c>--gpu off</c>.</summary>
+        public bool GpuCompute { get; init; } = true;
+
         /// <summary>Output-stage view transform / tonemap (roadmap S2, #389).
         /// None (default) omits the flag; anything else emits
         /// <c>--view-transform NAME</c>.</summary>
@@ -383,6 +388,7 @@ namespace FracturingFog.Cli
             if (snap.Contrast != 0)    { parts.Add(BatchFlags.Contrast);   parts.Add(snap.Contrast.ToString(CultureInfo.InvariantCulture)); }
             if (snap.HistogramEq != 0) { parts.Add(BatchFlags.Adaptive);   parts.Add(snap.HistogramEq.ToString(CultureInfo.InvariantCulture)); }
             if (snap.InteriorAlpha < 255) { parts.Add(BatchFlags.InteriorAlpha); parts.Add(snap.InteriorAlpha.ToString(CultureInfo.InvariantCulture)); }
+            if (!snap.GpuCompute) { parts.Add(BatchFlags.Gpu); parts.Add("off"); }   // #1611
 
             // View transform / tonemap (S2, #389) — only when non-identity.
             if (snap.ViewTransform != ViewTransform.None)

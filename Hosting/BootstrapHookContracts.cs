@@ -42,6 +42,12 @@ public static class BootstrapHooks
     /// (UseGpuCompute stays off).</summary>
     public static Func<IFractalRenderer, object, IGpuKernel?>? GpuKernelFactoryHook { get; set; }
 
+    /// <summary>#1611 — headless (--batch) compute-kernel factory: a kernel on a device
+    /// of its own, since a headless process has no renderer. Windows installs
+    /// <c>MandelbrotGpuKernel.TryCreateWithOwnDevice</c> (D3D11); null elsewhere, where
+    /// the batch tries Vulkan instead.</summary>
+    public static Func<IGpuKernel?>? HeadlessGpuKernelFactoryHook { get; set; }
+
     /// <summary>#162 (Slice 3d) — D3D11 relief-raymarch kernel factory. Windows
     /// installs the DirectXRenderer downcast → <c>ReliefRaymarchGpuKernel</c>
     /// (same native handles as the escape-time kernel); null elsewhere (the CPU

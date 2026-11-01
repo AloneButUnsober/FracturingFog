@@ -28,6 +28,7 @@ code. Probes shared with other hosts live in `Engine/Diagnostics/` instead.
 | `D3DPerturbProbe.cs` | `--d3dpturbcalc` | #82 | D3D11 deep-zoom perturbation parity (twin of `--vulkanpturbcalc`) |
 | `DistanceFieldProbe.cs` | `--distancefieldprobe [W H]` | #1336, #1390 | 3D raymarch with and without the baked distance-field cache (KIFS, User Bulb, Mandelbulb, Mandelbox; the moving frames' level; `FF_DF_CASES` filters) |
 | `DynamicResolutionProbe.cs` | `--dynresprobe` | #1333 | Drag responsiveness through a real host, dynamic preview resolution off and on |
+| `GpuPrecisionProbe.cs` | `--gpuprecisionprobe` | #1611 | D3D11 fp32 shallow kernel vs the CPU: the picture's shift in pixels (from the smooth field) by pixel spacing in fp32 ulps, four views at 1080p and 4K; sets `MandelbrotCalculator.Fp32MinPixelUlps` |
 | `GpuBandProbe.cs` | `--gpubandprobe` | #1334 | Deep perturbation frames in TDR row bands (D3D11 and Vulkan) |
 | `GpuDeferredReadbackProbe.cs` | `--gpudeferprobe` | #1332 | D3D11 deferred readback |
 | `GpuGroupShapeProbe.cs` | `--gpugroupshapeprobe` | #1339, #1377 | Tuned compute thread-group shapes (D3D11 and Vulkan): the 2D kernels, the relief raymarch and the froxel passes |

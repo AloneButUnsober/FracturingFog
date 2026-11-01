@@ -296,6 +296,32 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     /// FP32-broken band.</summary>
     public const double MaxGpuZoom = 1e4;
 
+    /// <summary>#1611 — the fp32 shallow kernel also needs the pixel spacing to be at
+    /// least this many fp32 ulps of the frame's largest |c| coordinate. The zoom
+    /// ceiling alone let it draw visibly moved features near 1e4 (8000x: 1.3 ulps a
+    /// pixel at 4K, 2.6 at 1080p). --gpuprecisionprobe (GT 710, four views at 1080p
+    /// and 4K): at K ≥ 8 the picture moves by at most ~0.07 px (p95), at K ≈ 1 by up
+    /// to 0.55 px with a third of the smooth pixels past 0.25 px. 0 turns the check
+    /// off (probes); FF_GPU_FP32_MIN_ULPS sets the process default.</summary>
+    public static double Fp32MinPixelUlps { get; set; } =
+        double.TryParse(Environment.GetEnvironmentVariable("FF_GPU_FP32_MIN_ULPS"),
+            System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double u) && u >= 0
+            ? u : 8;
+
+    /// <summary>#1611 — whether the fp32 shallow GPU kernel resolves a view: zoom
+    /// within <see cref="MaxGpuZoom"/> and pixels at least
+    /// <see cref="Fp32MinPixelUlps"/> fp32 ulps apart at the frame's largest |c|.</summary>
+    public static bool Fp32GpuResolves(double cx, double cy, double zoom, int imageW, int imageH)
+    {
+        if (zoom > MaxGpuZoom) return false;
+        double scale = 3.5 / Math.Max(imageW, imageH) / zoom;
+        double m = Math.Max(Math.Abs(cx) + imageW * 0.5 * scale, Math.Abs(cy) + imageH * 0.5 * scale);
+        return scale >= Fp32MinPixelUlps * Math.Max(m, 1.0) * (1.0 / (1 << 23));
+    }
+
+    private bool Fp32GpuResolvesView
+        => Fp32GpuResolves(CenterX, CenterY, Zoom, EffectiveImageWidth, EffectiveImageHeight);
+
     /// <summary>V6 (#82): upper zoom for the GPU deep-zoom PERTURBATION path
     /// (<see cref="RunPerturb"/> on an FP64-capable kernel). Above
     /// <see cref="MaxGpuZoom"/> the FP32 escape-time kernel is unusable, but the
@@ -640,6 +666,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             return GpuRoute.Cpu("GPU compute off", "shallow zooms render on the CPU unless GPU compute is enabled");
         if (Zoom > MaxGpuZoom)
             return GpuRoute.Cpu("zoom > 1e4", "past the FP32 GPU zoom limit (1e4); deeper zooms render on the CPU");
+        if (!Fp32GpuResolvesView)   // #1611
+            return GpuRoute.Cpu("pixels below fp32", "pixels this small are below the FP32 GPU kernel's precision at this size; it renders on the CPU");
         return GpuRoute.Cpu("CPU-only path", "this render path runs on the CPU only");
     }
 
@@ -1805,7 +1833,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         //     Orbit-aware themes are still CPU-only — they need per-step z
         //     samples the shader doesn't produce; dispatched via the
         //     CalculateOrbitAware top-level switch.
-        if (UseGpuCompute && GpuKernel != null && Zoom <= MaxGpuZoom)
+        if (UseGpuCompute && GpuKernel != null && Fp32GpuResolvesView)   // #1611: zoom + pixel size
         {
             try
             {
@@ -2933,7 +2961,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         if (map is not FracturingFog.Interefaces.IGpuOrbitPalette orbit
             || orbit.OrbitInputs == FracturingFog.Interefaces.GpuOrbitInputs.None)
             return false;
-        if (!UseGpuCompute || GpuKernel == null || Zoom > MaxGpuZoom) return false;
+        if (!UseGpuCompute || GpuKernel == null || !Fp32GpuResolvesView) return false;   // #1611
         // GPU colours in-set via EvalPalette(isInSet=1); the CPU interior path uses
         // MapInteriorWithOrbit. Keep interior-colouring themes on the CPU.
         if (map.WantsInteriorColor) return false;

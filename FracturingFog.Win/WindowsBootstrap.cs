@@ -53,6 +53,16 @@ public static class WindowsBootstrap
         };
     }
 
+    /// <summary>#1611 — the headless (--batch) GPU kernel factory: D3D11 on a device
+    /// of its own (the batch has no renderer to borrow one from). Lazy: nothing is
+    /// created until the batch asks for it.</summary>
+    public static void InstallBatchGpuHook()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        BootstrapHooks.HeadlessGpuKernelFactoryHook =
+            () => FracturingFog.Rendering.MandelbrotGpuKernel.TryCreateWithOwnDevice();
+    }
+
     public static void Install()
     {
         if (!OperatingSystem.IsWindows()) return;
@@ -110,6 +120,7 @@ public static class WindowsBootstrap
         };
 
         InstallBatchVideoHook();
+        InstallBatchGpuHook();   // #1611
 
         BootstrapHooks.NativeInputBridge = new WindowsNativeInputBridge();
 
