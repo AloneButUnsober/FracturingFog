@@ -219,7 +219,7 @@ See [Docs/Keyboard-Shortcuts.md](Docs/Keyboard-Shortcuts.md) for the complete ta
 The Floating Menu exposes:
 
 - **CX / CY** — real and imaginary components of the view center. Accepts the **pipe-separated DD/QD limb format** for high-precision paste-back (e.g. `-0.7548...|1.2e-17|...`).
-- **Zoom** — scalar zoom factor. Accepts scientific notation up to ~1e58 (`1e48`, `2.5e30`, etc.).
+- **Zoom** — scalar zoom factor. Accepts scientific notation up to 1e100 (`1e48`, `2.5e30`, etc.), the Extreme tier's ceiling; `--batch` refuses deeper zooms with an error (#1612, deeper zoom is #1428).
 - **Iter** — maximum escape iteration count. Minimum 64. No upper cap.
 - **Go** — apply typed values.
 - **Flip Y** — mirror the view vertically (negate every CY limb) for symmetry experiments.

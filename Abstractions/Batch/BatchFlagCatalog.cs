@@ -483,7 +483,7 @@ namespace FracturingFog.Batch
                     "Centre real coordinate (with --y and --zoom). A deep centre takes octuple-double limbs "
                     + "Hi|Lo|... (up to 8, as the Command builder emits; quote it for the shell)."),
                 Dbl(BatchFlags.Y, Source, ImgVid, "Centre imaginary coordinate (a number or Hi|Lo|... limbs, as --x)."),
-                Dbl(BatchFlags.Zoom, Source, ImgVid, "Zoom.") with { Aliases = new[] { "--z" } },
+                Dbl(BatchFlags.Zoom, Source, ImgVid, "Zoom.", max: QualityPreset.Extreme.ZoomMax, enforced: true) with { Aliases = new[] { "--z" } },
                 Int(BatchFlags.Iter, Source, ImgVid, "Override the iteration count.", min: 1)
                     with { Aliases = new[] { "--i", "--iterations" } },
                 Txt(BatchFlags.Explore, Source, ImgVid,
@@ -532,7 +532,8 @@ namespace FracturingFog.Batch
                     0.5, 600, enforced: true, def: "20") with { Aliases = new[] { "--secs" } },
                 Int(BatchFlags.Fps, Video, BatchModes.Encoded, "Frames per second.", 1, 240, enforced: true, def: "30"),
                 Dbl(BatchFlags.StartZoom, Video, BatchModes.Sequence,
-                    "Starting zoom (0.5 = full set; 3D dolly picks its own wide zoom when omitted).", def: "0.5"),
+                    "Starting zoom (0.5 = full set; 3D dolly picks its own wide zoom when omitted).",
+                    max: QualityPreset.Extreme.ZoomMax, enforced: true, def: "0.5"),
                 Sw(BatchFlags.Reverse, Video, BatchModes.Sequence, "Zoom out from the target back to the full view."),
                 Pick(BatchFlags.VideoMotion, Video, BatchModes.Sequence,
                     "How the video moves. auto = per family (2D plane zoom, 3D dolly, Logistic/AcidWarp sweep, else kenburns). "

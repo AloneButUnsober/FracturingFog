@@ -208,7 +208,9 @@ public sealed class BatchFlagCatalogTests
         if (s.Max is double hi)
         {
             Assert.True(Parse(With(b, s, V(hi)), out _, out var e1), $"{name} rejected its max: {e1}");
-            Assert.False(Parse(With(b, s, V(hi + eps)), out _, out _), $"{name} accepted {hi + eps}");
+            // #1612 — an absolute step vanishes against a huge max (--zoom's 1e100).
+            double over = hi + Math.Max(eps, Math.Abs(hi) * 1e-12);
+            Assert.False(Parse(With(b, s, V(over)), out _, out _), $"{name} accepted {over}");
         }
     }
 
