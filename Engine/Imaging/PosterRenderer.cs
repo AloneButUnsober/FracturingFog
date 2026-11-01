@@ -922,7 +922,8 @@ namespace FracturingFog.Imaging
                     var dsrc = heightSource as FracturingFog.Interefaces.IDistanceFieldSource;
                     field = FracturingFog.Rendering.Lighting.ReliefHeightField.Build(
                         smooth, trap, fw * fh, p.Relief2DHeightSource, p.Relief2DHeightBlend,
-                        dsrc?.DistanceBuffer, fw, fh, dsrc?.DistancePixelScale ?? 0.0, p.Relief2DDistanceFalloff);
+                        dsrc?.DistanceBuffer, fw, fh, dsrc?.DistancePixelScale ?? 0.0, p.Relief2DDistanceFalloff,
+                        (dsrc as FracturingFog.Interefaces.IIterationFieldSource)?.IterationBuffer, (dsrc as FracturingFog.Interefaces.IIterationFieldSource)?.MaxIterations ?? 0, p.Relief2DTerraceRamp);   // #1489
                 }
 
                 // #185 (slice D) — bake the active theme ramp so the export's
@@ -1082,12 +1083,14 @@ namespace FracturingFog.Imaging
             // #1029 — the Distance source is built from the field calc's own distance
             // estimate at this grid (the hi-res field is used as-is downstream). Smooth
             // returns the smooth buffer itself; trap / blend never take this field.
-            if (p.Relief2DHeightSource == ReliefHeightSource.Distance)
+            // #1489 — PrimeTerrace likewise, from the field calc's own escape counts.
+            if (p.Relief2DHeightSource is ReliefHeightSource.Distance or ReliefHeightSource.PrimeTerrace)
             {
                 var dsrc = fieldSrc as FracturingFog.Interefaces.IDistanceFieldSource;
                 sb = FracturingFog.Rendering.Lighting.ReliefHeightField.Build(
                     sb, null, nfw * nfh, p.Relief2DHeightSource, p.Relief2DHeightBlend,
-                    dsrc?.DistanceBuffer, nfw, nfh, dsrc?.DistancePixelScale ?? 0.0, p.Relief2DDistanceFalloff);
+                    dsrc?.DistanceBuffer, nfw, nfh, dsrc?.DistancePixelScale ?? 0.0, p.Relief2DDistanceFalloff,
+                    (dsrc as FracturingFog.Interefaces.IIterationFieldSource)?.IterationBuffer, (dsrc as FracturingFog.Interefaces.IIterationFieldSource)?.MaxIterations ?? 0, p.Relief2DTerraceRamp);
             }
 
             // Copy — own the field independent of the transient field calc.

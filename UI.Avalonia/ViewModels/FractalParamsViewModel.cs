@@ -969,7 +969,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public FracturingFog.ReliefHeightSource Relief2DHeightSource
     {
         get => _p.Relief2DHeightSource;
-        set { if (_p.Relief2DHeightSource == value) return; _p.Relief2DHeightSource = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(Relief2DHeightBlendApplies)); this.RaisePropertyChanged(nameof(Relief2DDistanceFalloffApplies)); Fire(); }
+        set { if (_p.Relief2DHeightSource == value) return; _p.Relief2DHeightSource = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(Relief2DHeightBlendApplies)); this.RaisePropertyChanged(nameof(Relief2DDistanceFalloffApplies)); this.RaisePropertyChanged(nameof(Relief2DTerraceRampApplies)); Fire(); }
     }
     public System.Array Relief2DHeightSources => s_Relief2DHeightSources;   // cached: a new array per read resets the ComboBox selection on Refresh()
     private static readonly System.Array s_Relief2DHeightSources = System.Enum.GetValues(typeof(FracturingFog.ReliefHeightSource));
@@ -982,7 +982,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     }
 
     // #1029 — Distance source falloff, as a percentage of the view (0.2–20 %).
-    public bool Relief2DDistanceFalloffApplies => _p.Relief2DHeightSource == FracturingFog.ReliefHeightSource.Distance;
+    public bool Relief2DDistanceFalloffApplies => _p.Relief2DHeightSource is FracturingFog.ReliefHeightSource.Distance
+                                                                    or FracturingFog.ReliefHeightSource.PrimeTerrace;   // #1489: the terrace ramp's reach
     public double Relief2DDistanceFalloffPercent
     {
         get => _p.Relief2DDistanceFalloff * 100.0;
@@ -992,6 +993,14 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             if (_p.Relief2DDistanceFalloff == v) return;
             _p.Relief2DDistanceFalloff = v; this.RaisePropertyChanged(); Fire();
         }
+    }
+
+    // #1489 — PrimeTerrace: weight of the ramp that tilts each tread toward the set.
+    public bool Relief2DTerraceRampApplies => _p.Relief2DHeightSource == FracturingFog.ReliefHeightSource.PrimeTerrace;
+    public double Relief2DTerraceRamp
+    {
+        get => _p.Relief2DTerraceRamp;
+        set { double v = Clamp(value, 0.0, 8.0); if (_p.Relief2DTerraceRamp == v) return; _p.Relief2DTerraceRamp = v; this.RaisePropertyChanged(); Fire(); }
     }
 
     // #520 — far-detail (tighter distance cone → distant filaments stay tall).

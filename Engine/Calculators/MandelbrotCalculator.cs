@@ -70,7 +70,8 @@ namespace FracturingFog;
 public enum GpuDeepPrecision { Auto, Double, Fp32 }
 
 public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSource, Interefaces.ITrapFieldSource, Interefaces.ISupportsHistogramEq,
-    Interefaces.IDistanceFieldSource, FracturingFog.Render.IGpuRouteSource
+    Interefaces.IDistanceFieldSource, Interefaces.IIterationFieldSource,   // #1489
+    FracturingFog.Render.IGpuRouteSource
 {
     // ── Public state ──────────────────────────────────────────────────────────
 

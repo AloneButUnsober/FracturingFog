@@ -441,7 +441,8 @@ namespace FracturingFog.Batch
         public bool ReliefNoCanonicalField { get; set; }    // #1028 — Real height at the output size
         public global::FracturingFog.ReliefHeightSource? ReliefHeightSource { get; set; }  // #1029
         public double? ReliefHeightBlend { get; set; }      // #1029 — 0..1 (Blend source)
-        public double? ReliefDistanceFalloff { get; set; }  // #1029 — 0.002..0.2 (Distance source)
+        public double? ReliefDistanceFalloff { get; set; }  // #1029 — 0.002..0.2 (Distance / PrimeTerrace)
+        public double? ReliefTerraceRamp { get; set; }      // #1489 — 0..8 (PrimeTerrace source)
 
         // Depth of field on the relief raymarch camera (roadmap S3, #389). Any
         // DOF flag implies relief + raymarch (perspective camera only).
@@ -1419,8 +1420,9 @@ namespace FracturingFog.Batch
                             case "trap":     opts.ReliefHeightSource = global::FracturingFog.ReliefHeightSource.Trap; break;
                             case "blend":    opts.ReliefHeightSource = global::FracturingFog.ReliefHeightSource.Blend; break;
                             case "distance": opts.ReliefHeightSource = global::FracturingFog.ReliefHeightSource.Distance; break;
+                            case "primeterrace": opts.ReliefHeightSource = global::FracturingFog.ReliefHeightSource.PrimeTerrace; break;   // #1489
                             default:
-                                error = $"Unknown --relief-height-source '{rhs}'. Use smooth|trap|blend|distance.";
+                                error = $"Unknown --relief-height-source '{rhs}'. Use smooth|trap|blend|distance|primeterrace.";
                                 return false;
                         }
                         opts.Relief = true;
@@ -1435,6 +1437,12 @@ namespace FracturingFog.Batch
                     case BatchFlags.ReliefDistanceFalloff:
                         if (!NextDouble(args, ref i, a, out double rdf, out error)) return false;
                         opts.ReliefDistanceFalloff = rdf;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefTerraceRamp:   // #1489
+                        if (!NextDouble(args, ref i, a, out double rtr, out error)) return false;
+                        opts.ReliefTerraceRamp = rtr;
                         opts.Relief = true;
                         break;
 
@@ -2011,6 +2019,8 @@ namespace FracturingFog.Batch
                 { error = "--relief-height-blend must be 0..1 (0 = all smooth, 1 = all trap)."; return false; }
             if (opts.ReliefDistanceFalloff is < 0.002 or > 0.2)
                 { error = "--relief-distance-falloff must be 0.002..0.2 (fraction of the view's short axis)."; return false; }
+            if (opts.ReliefTerraceRamp is < 0 or > 8)
+                { error = "--relief-terrace-ramp must be 0..8 (terrace steps; 0 = flat treads)."; return false; }
             if (opts.ReliefTerrainSmoothing is < 0 or > 0.05)
                 { error = "--relief-terrain-smoothing must be 0..0.05 (fraction of the view's short axis; 0 = off)."; return false; }
             if (opts.ReliefHeightRef is <= 0)

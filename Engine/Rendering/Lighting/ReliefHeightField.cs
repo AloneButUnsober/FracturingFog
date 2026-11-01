@@ -50,15 +50,22 @@ public static class ReliefHeightField
     /// Falls back to <paramref name="smooth"/> when no usable distance field is
     /// supplied (a calculator without one, or a deep zoom where the float estimate
     /// underflowed to 0 for most escaped pixels).</summary>
+    /// <remarks>#1489 — <paramref name="iterations"/> / <paramref name="maxIter"/> are the
+    /// integer escape counts (maxIter = in set) for the PrimeTerrace source and
+    /// <paramref name="terraceRamp"/> its distance-ramp weight; without an iteration
+    /// field PrimeTerrace falls back to smooth.</remarks>
     public static float[] Build(float[] smooth, float[]? trap, int n,
         ReliefHeightSource source, double blend,
-        float[]? distance, int w, int h, double pixelScale, double falloff)
+        float[]? distance, int w, int h, double pixelScale, double falloff,
+        int[]? iterations = null, int maxIter = 0, double terraceRamp = DefaultTerraceRamp)
     {
         if (smooth == null) throw new ArgumentNullException(nameof(smooth));
         if (n <= 0 || n > smooth.Length) n = smooth.Length;
         if (source == ReliefHeightSource.Smooth) return smooth;
         if (source == ReliefHeightSource.Distance)
             return BuildDistance(smooth, n, distance, w, h, pixelScale, falloff) ?? smooth;
+        if (source == ReliefHeightSource.PrimeTerrace)
+            return BuildPrimeTerrace(iterations, maxIter, n, distance, w, h, pixelScale, falloff, terraceRamp) ?? smooth;
         if (trap == null || trap.Length < n) return smooth;
 
         // Normalise trap into smooth's raw range, inverted. First the finite trap
@@ -99,6 +106,41 @@ public static class ReliefHeightField
                 th = sMax * (1f - norm);               // invert: near-trap -> high ridge
             }
             outp[i] = blendMode ? smooth[i] * wSmooth + th * wTrap : th;
+        }
+        return outp;
+    }
+
+    /// <summary>#1489 — default weight of the PrimeTerrace distance ramp, in steps.</summary>
+    public const double DefaultTerraceRamp = 1.0;
+
+    /// <summary>#1489 — prime terraces. Escaped pixel with escape
+    /// count n: pi(n) + ramp·exp(−d / (span·falloff)), where pi is the prime-counting
+    /// function (constant between primes, so each tread's width is a prime gap) and d
+    /// the exterior distance estimate (no estimate → no ramp). In-set pixels sit at
+    /// pi(maxIter) + ramp, a plateau above the top tread. Needs the integer escape
+    /// count: floor(smooth) lags n by log2 log2 of the bailout radius.</summary>
+    public static float[]? BuildPrimeTerrace(int[]? iterations, int maxIter, int n,
+        float[]? distance, int w, int h, double pixelScale, double falloff, double ramp)
+    {
+        if (iterations == null || iterations.Length < n || maxIter <= 0) return null;
+        var composite = new bool[maxIter + 1];
+        var pi = new int[maxIter + 1];
+        for (int i = 2; (long)i * i <= maxIter; i++)
+            if (!composite[i]) for (int j = i * i; j <= maxIter; j += i) composite[j] = true;
+        for (int i = 2, c = 0; i <= maxIter; i++) { if (!composite[i]) c++; pi[i] = c; }
+
+        double span = pixelScale * Math.Min(w, h);
+        bool useDist = distance != null && distance.Length >= n && span > 0.0 && !double.IsInfinity(span);
+        double inv = useDist ? 1.0 / (span * Math.Clamp(falloff, 0.002, 0.2)) : 0.0;
+        float b = (float)Math.Clamp(ramp, 0.0, 8.0);
+        var outp = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            int it = iterations[i];
+            if (it >= maxIter) { outp[i] = pi[maxIter] + b; continue; }
+            float g = 0f;
+            if (useDist) { float d = distance![i]; if (d > 0f && !float.IsInfinity(d)) g = (float)Math.Exp(-d * inv); }
+            outp[i] = pi[Math.Max(it, 0)] + b * g;
         }
         return outp;
     }

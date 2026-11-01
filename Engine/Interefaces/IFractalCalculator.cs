@@ -42,6 +42,14 @@ namespace FracturingFog.Interefaces
     /// EscapeTimeCalculator family, and every CalcGen-generated escape-time
     /// calculator).
     /// </summary>
+    /// <summary>#1489 — calculators exposing the integer escape count per pixel
+    /// (maxIter for in-set), for the PrimeTerrace relief height source.</summary>
+    public interface IIterationFieldSource
+    {
+        int[] IterationBuffer { get; }
+        int MaxIterations { get; }
+    }
+
     public interface IHeightFieldSource
     {
         /// <summary>Per-pixel smooth (continuous) iteration count; in-set pixels

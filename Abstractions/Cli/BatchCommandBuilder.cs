@@ -183,6 +183,7 @@ namespace FracturingFog.Cli
         public ReliefHeightSource ReliefHeightSource { get; init; } = ReliefHeightSource.Smooth;
         public double ReliefHeightBlend { get; init; } = 0.5;
         public double ReliefDistanceFalloff { get; init; } = 0.02;
+        public double ReliefTerraceRamp { get; init; } = 1.0;   // #1489
 
         // Depth of field on the relief raymarch camera (roadmap S3, #389).
         // Aperture 0 = pinhole (omit both flags). Emitted only on the raymarch path.
@@ -441,8 +442,11 @@ namespace FracturingFog.Cli
                     parts.Add(snap.ReliefHeightSource.ToString().ToLowerInvariant());
                     if (snap.ReliefHeightSource == ReliefHeightSource.Blend && snap.ReliefHeightBlend != 0.5)
                     { parts.Add(BatchFlags.ReliefHeightBlend); parts.Add(Num(snap.ReliefHeightBlend)); }
-                    if (snap.ReliefHeightSource == ReliefHeightSource.Distance && snap.ReliefDistanceFalloff != 0.02)
+                    if (snap.ReliefHeightSource is ReliefHeightSource.Distance or ReliefHeightSource.PrimeTerrace
+                        && snap.ReliefDistanceFalloff != 0.02)
                     { parts.Add(BatchFlags.ReliefDistanceFalloff); parts.Add(Num(snap.ReliefDistanceFalloff)); }
+                    if (snap.ReliefHeightSource == ReliefHeightSource.PrimeTerrace && snap.ReliefTerraceRamp != 1.0)   // #1489
+                    { parts.Add(BatchFlags.ReliefTerraceRamp); parts.Add(Num(snap.ReliefTerraceRamp)); }
                 }
                 if (snap.ReliefStrength != 1.0)        { parts.Add(BatchFlags.ReliefStrength);       parts.Add(Num(snap.ReliefStrength)); }
                 if (snap.ReliefLightAzimuth != 135.0)  { parts.Add(BatchFlags.ReliefLightAzimuth);   parts.Add(Num(snap.ReliefLightAzimuth)); }

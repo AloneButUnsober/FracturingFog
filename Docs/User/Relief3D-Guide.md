@@ -197,7 +197,24 @@ measured in view units, so it looks the same at any window size and zoom depth.
 - **Supported fractals:** Mandelbrot and the escape-time family. Others fall back to Smooth.
 - **Very deep zooms:** past about 1e30 the distance estimate runs out of precision and it falls back to Smooth.
 - **Batch:** `--relief-height-source distance --relief-distance-falloff 0.02`. `--relief-height-source` also takes
-  `smooth|trap|blend`, with `--relief-height-blend`.
+  `smooth|trap|blend|primeterrace`, with `--relief-height-blend`.
+
+### Prime terraces (#1489)
+
+**PrimeTerrace** builds terraces from the escape count n. The height is π(n), the number of primes up to n, so the
+ground steps up by one at each prime escape count and each tread is as wide as the gap to the next prime. A **Terrace
+ramp** (default 1 step) then tilts each tread up toward the set, following the same distance estimate as the Distance
+source (its reach is **Distance falloff**). Where two parts of the set are equally near, the ramp changes direction,
+which gives gem-like creases. The set itself is a plateau one ramp above the top tread.
+
+- **To see the steps:** use **Real height** and lower **Terrain smoothing** (0 keeps the treads sharp; the default
+  0.02 blurs them into slopes). Height curve and height mode change little.
+- **Near the set** the treads get thinner than a pixel, so that zone reads as needle walls, like the Smooth source.
+  The steps are clearest in the outer bands.
+- **Ramp 0** gives a flat staircase. Larger ramps with a larger falloff tilt the outer treads too.
+- **Supported fractals:** Mandelbrot and the escape-time family (they expose the integer escape count). Others fall
+  back to Smooth.
+- **Batch:** `--relief-height-source primeterrace --relief-terrace-ramp 1 --relief-distance-falloff 0.02`.
 
 ### Toggles
 

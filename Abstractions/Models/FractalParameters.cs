@@ -900,6 +900,12 @@ namespace FracturingFog.Models
         /// and zoom depth.</summary>
         public double Relief2DDistanceFalloff { get; set; } = 0.02;
 
+        /// <summary>#1489 — PrimeTerrace height source: weight of the distance ramp that
+        /// tilts each tread toward the set, in terrace steps (0 = flat treads, pure
+        /// staircase; 1 = a ramp as tall as one step). Shares the ramp's reach with the
+        /// Distance source (<see cref="Relief2DDistanceFalloff"/>). Clamped 0..8.</summary>
+        public double Relief2DTerraceRamp { get; set; } = 1.0;
+
         /// <summary>#518 — local filament detail gain (unsharp high-pass on the
         /// height field). Raises/sharpens the fractal structure RELATIVE to the base
         /// "slab" it sits on, which the global <see cref="Relief2DHeightScale"/>
@@ -2246,6 +2252,7 @@ namespace FracturingFog.Models
                 Relief2DHeightSource = Relief2DHeightSource,
                 Relief2DHeightBlend = Relief2DHeightBlend,
                 Relief2DDistanceFalloff = Relief2DDistanceFalloff,
+                Relief2DTerraceRamp = Relief2DTerraceRamp,
                 Relief2DDetailGain = Relief2DDetailGain,
                 Relief2DDetailRadius = Relief2DDetailRadius,
                 Relief2DHeightGamma = Relief2DHeightGamma,
