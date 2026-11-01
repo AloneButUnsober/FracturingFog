@@ -469,7 +469,8 @@ namespace FracturingFog.Imaging
             if (req.FractalParameters != null)
             {
                 var moireFx = req.FractalParameters.Lighting;
-                FracturingFog.Rendering.CoprimeMoire.Apply(buffer, w, h, in moireFx);
+                FracturingFog.Rendering.CoprimeMoire.Apply(buffer, w, h, in moireFx,
+                    req.CenterX, req.CenterY, req.Zoom);   // #1633 view for the anchor
             }
 
             // S12.5 (#652) — relief STEREO (depth-parallax side-by-side), matching the

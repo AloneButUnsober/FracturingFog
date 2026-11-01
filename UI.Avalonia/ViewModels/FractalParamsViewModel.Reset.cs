@@ -248,7 +248,7 @@ public sealed partial class FractalParamsViewModel
         nameof(MoireStrength), nameof(MoireCellSize), nameof(MoireRotation),
         nameof(MoireOffsetX), nameof(MoireOffsetY), nameof(MoireAspect),
         nameof(MoireCondition), nameof(MoireConditionK), nameof(MoireBlend),
-        nameof(MoireInvert), nameof(MoireSamples),
+        nameof(MoireInvert), nameof(MoireSamples), nameof(MoireAnchor),
         nameof(MaxBounces), nameof(StereoMode), nameof(StereoEyeSeparation),
         nameof(StereoFovDegrees), nameof(StereoConvergence), nameof(StereoMaxDisparity),
         nameof(StereoLayout), nameof(StereoSwapEyes),

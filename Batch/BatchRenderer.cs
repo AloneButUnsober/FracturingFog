@@ -1301,7 +1301,7 @@ namespace FracturingFog.Batch
                     {
                         var (pw, ph) = StereoRender.OutputDims(w, h, tfx.StereoLayout);
                         CompositeInteriorAlpha(pair, pw, ph, theme, fp);
-                        ApplyMoire(pair, pw, ph, fp);   // #1488
+                        ApplyMoire(pair, pw, ph, fp, cx, cy, zoom);   // #1488
                         return pair;
                     }
                 }
@@ -1321,7 +1321,7 @@ namespace FracturingFog.Batch
                 FracturingFog.Rendering.Supersampling.FinishHistogramEq(alt, in altSs, adaptive);
                 var altBuf = CopyBuffer(alt.ColorBuffer, w, h);
                 CompositeInteriorAlpha(altBuf, w, h, theme, fp);
-                ApplyMoire(altBuf, w, h, fp);   // #1488
+                ApplyMoire(altBuf, w, h, fp, cx, cy, zoom);   // #1488
                 return altBuf;
             }
 
@@ -1345,7 +1345,7 @@ namespace FracturingFog.Batch
             FracturingFog.Rendering.Supersampling.FinishHistogramEq(calc, in ss, adaptive);
             var buf = CopyBuffer(calc.ColorBuffer, w, h);
             CompositeInteriorAlpha(buf, w, h, theme);
-            ApplyMoire(buf, w, h, fp);   // #1488
+            ApplyMoire(buf, w, h, fp, cx, cy, zoom);   // #1488
             return buf;
         }
 
@@ -1472,11 +1472,12 @@ namespace FracturingFog.Batch
 
         // #1488 — the coprime moiré layer, after the interior composite as on the live
         // and poster paths. No-op without parameters or at strength 0.
-        private static void ApplyMoire(uint[] buf, int w, int h, FractalParameters? fp)
+        private static void ApplyMoire(uint[] buf, int w, int h, FractalParameters? fp,
+            double cx = double.NaN, double cy = double.NaN, double zoom = double.NaN)
         {
             if (fp == null) return;
             var fx = fp.Lighting;
-            FracturingFog.Rendering.CoprimeMoire.Apply(buf, w, h, in fx);
+            FracturingFog.Rendering.CoprimeMoire.Apply(buf, w, h, in fx, cx, cy, zoom);   // #1633 view for the anchor
         }
 
         private static uint[] CopyBuffer(uint[] src, int w, int h)
@@ -1638,7 +1639,7 @@ namespace FracturingFog.Batch
             FracturingFog.Rendering.Supersampling.FinishHistogramEq(calc, in ss, adaptive);
             var buf = CopyBuffer(calc.ColorBuffer, w, h);
             CompositeInteriorAlpha(buf, w, h, theme);
-            ApplyMoire(buf, w, h, moireFp);   // #1488
+            ApplyMoire(buf, w, h, moireFp, region.CenterX, region.CenterY, zoom);   // #1488
             return buf;
         }
 
@@ -2600,7 +2601,7 @@ namespace FracturingFog.Batch
             FracturingFog.Rendering.Supersampling.FinishHistogramEq(calc, in ss, adaptive);
             var buf = CopyBuffer(calc.ColorBuffer, w, h);
             CompositeInteriorAlpha(buf, w, h, theme);
-            ApplyMoire(buf, w, h, moireFp);   // #1488
+            ApplyMoire(buf, w, h, moireFp, c.Re.X0, c.Im.X0, zoom);   // #1488
             return buf;
         }
 

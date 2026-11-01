@@ -433,7 +433,7 @@ Adaptive contrast is particularly powerful for revealing fine filament structure
 
 ### 11.3 Coprime Moiré (Lighting & FX)
 
-An artistic screen-space layer (#1488) in **Lighting & FX → Coprime moiré**. It lights the lattice points (i, j) with gcd(|i|, |j|) = 1, the "visible" lattice points, and blends that mask over the finished frame, 2D or 3D. The fine moiré is aliasing between the pattern and the pixel grid. The layer stays put when the fractal pans or zooms. It applies live, in exports and in batch; batch carries it inside a saved Lighting & FX preset (`--lighting-preset`).
+An artistic post layer (#1488) in **Lighting & FX → Coprime moiré**. It lights the lattice points (i, j) with gcd(|i|, |j|) = 1, the "visible" lattice points, and blends that mask over the finished frame, 2D or 3D. The fine moiré is aliasing between the pattern and the pixel grid. By default the layer stays put on the screen; **Anchor** can fix it to the fractal instead (#1633). It applies live, in exports and in batch; batch carries it inside a saved Lighting & FX preset (`--lighting-preset`).
 
 | Knob | Range | Effect |
 |---|---:|---|
@@ -446,6 +446,7 @@ An artistic screen-space layer (#1488) in **Lighting & FX → Coprime moiré**. 
 | Blend | Multiply / Screen / Overlay | Darken unlit points / lighten lit points / add contrast |
 | Samples | 1 … 4 | Subsamples per axis: 1 = raw aliasing (strongest moiré), higher fades it |
 | Invert | on / off | Light the non-matching points instead |
+| Anchor | Screen / Pan / Zoom | Screen = stays put (default). Pan = moves with the fractal when panning; zooming reshuffles it. Zoom = moves and grows with the fractal, re-fining at each zoom doubling with a cross-fade. Pan / Zoom hold to about 1e12 zoom. |
 
 ---
 
