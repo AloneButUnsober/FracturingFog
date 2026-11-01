@@ -42,6 +42,7 @@ namespace FracturingFog.Models
                 ColorThemeKind.Pbr3D => new DataDrivenPbr3D(data),
                 ColorThemeKind.OrbitTrap => new DataDrivenOrbitTrap(data),
                 ColorThemeKind.Categorical => new DataDrivenBilliard(data),   // #630
+                ColorThemeKind.PrimeBands => new DataDrivenPrimeBands(data),  // #1634
                 _ => null,
             };
         }
@@ -213,6 +214,9 @@ namespace FracturingFog.Models
                         TrapScale = trap.ExportTrapScale,
                         TrapPower = trap.ExportTrapPower,
                         ColorInterior = trap.ExportColorInterior,
+                        GaussianLatticeScale = trap.ExportGaussianLatticeScale,   // #1634
+                        GaussianTailBlock = trap.ExportGaussianTailBlock,
+                        GaussianInteriorHits = trap.ExportGaussianInteriorHits,
                         InterpolationSpace = trap.ExportInterpolationSpace,
                         InterpolationCurve = trap.ExportInterpolationCurve,
                         TransferFunction = trap.ExportTransferFunction,
@@ -240,6 +244,35 @@ namespace FracturingFog.Models
                         InSetColor = InSetFromMap(map),
                         BilliardDrive = bil.Drive,
                         Stops = bil.ExportStops,
+                        Brightness = bright,
+                        Contrast = contrast,
+                        Adaptive = adaptive,
+                    };
+
+                case DataDrivenPrimeBands pb:   // #1634 - before the generic gradient case
+                    return new ColorThemeData
+                    {
+                        Name = name,
+                        Category = category,
+                        Description = description,
+                        MaxRecommendedZoom = maxZoomField,
+                        Kind = ColorThemeKind.PrimeBands,
+                        InSetColor = InSetFromMap(map),
+                        OutOfBoundsColor = OutOfBoundsFromMap(map),
+                        PrimeColorA = pb.ExportColorA, PrimeColorB = pb.ExportColorB,
+                        PrimeColorSpecial = pb.ExportColorSpecial,
+                        PrimeCompositeDim = pb.ExportCompositeDim, PrimeModulus = pb.ExportModulus,
+                        InterpolationSpace = pb.ExportInterpolationSpace,
+                        InterpolationCurve = pb.ExportInterpolationCurve,
+                        TransferFunction = pb.ExportTransferFunction,
+                        TransferStrength = pb.ExportTransferStrength,
+                        PaletteGamma = pb.ExportPaletteGamma,
+                        SparkleStride = pb.ExportSparkleStride,
+                        SparkleBoost = pb.ExportSparkleBoost,
+                        SeamlessCycle = pb.ExportSeamlessCycle,
+                        XorLevels = pb.ExportXorLevels,
+                        XorMask = pb.ExportXorMask,
+                        Stops = StopsToData(pb.ExportStops),
                         Brightness = bright,
                         Contrast = contrast,
                         Adaptive = adaptive,
@@ -415,6 +448,101 @@ namespace FracturingFog.Models
             XorMask = data.XorMask;
             foreach (var s in data.Stops)
                 Stops.Add(s.ToColorStop());
+        }
+    }
+
+    // =========================================================================
+    // 1b. Prime bands (#1634)
+    // =========================================================================
+
+    /// <summary>
+    /// Editable form of the built-in Prime Escape (Gold-Cyan) (#1486): an escape
+    /// count n that is prime gets a flat colour by class (<see cref="PrimeBandModulus"/>),
+    /// every other count the theme's gradient (at smooth / MaxIterations, as the
+    /// Gradient kind) dimmed by <c>PrimeCompositeDim</c>. Needs the true escape count,
+    /// so it is <see cref="IColorMapHandlesInSet"/> like the built-in; calculators that
+    /// only pass maxIter fall back to n = floor(smooth). Primality: the built-in's
+    /// exact trial division.
+    /// </summary>
+    public sealed class DataDrivenPrimeBands : GradientColorMap, IColorMap, IColorMapHandlesInSet, INamedColorMap, IThemePostFx
+    {
+        public string DisplayName { get; }
+        public string DisplayCategory { get; }
+        public string DisplayDescription { get; }
+        public double DisplayMaxRecommendedZoom { get; }
+
+        public int? ThemeBrightness { get; }
+        public int? ThemeContrast { get; }
+        public int? ThemeAdaptive { get; }
+
+        private readonly uint _inSetColor;
+        uint IColorMap.InSetColor => _inSetColor;
+        private readonly uint? _oobColor;
+        uint? IColorMap.OutOfBoundsColor => _oobColor;
+
+        private readonly uint _colorA, _colorB, _colorSpecial;
+        public InSetColorData? ExportColorA { get; }
+        public InSetColorData? ExportColorB { get; }
+        public InSetColorData? ExportColorSpecial { get; }
+        public float ExportCompositeDim { get; }
+        public PrimeBandModulus ExportModulus { get; }
+
+        public DataDrivenPrimeBands(ColorThemeData data)
+        {
+            DisplayName = data.Name;
+            DisplayCategory = data.Category;
+            DisplayDescription = data.Description;
+            DisplayMaxRecommendedZoom = data.MaxRecommendedZoom ?? double.PositiveInfinity;
+            ThemeBrightness = data.Brightness;
+            ThemeContrast = data.Contrast;
+            ThemeAdaptive = data.Adaptive;
+            _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
+            _oobColor = data.OutOfBoundsColor?.ToPackedArgb();
+            ExportColorA = data.PrimeColorA; ExportColorB = data.PrimeColorB; ExportColorSpecial = data.PrimeColorSpecial;
+            ExportCompositeDim = Math.Clamp(data.PrimeCompositeDim, 0f, 1f);
+            ExportModulus = data.PrimeModulus;
+            _colorA = data.PrimeColorA?.ToPackedArgb() ?? PrimeEscapeGoldCyanMap.ColorFor(5, 5f);
+            _colorB = data.PrimeColorB?.ToPackedArgb() ?? PrimeEscapeGoldCyanMap.ColorFor(3, 3f);
+            _colorSpecial = data.PrimeColorSpecial?.ToPackedArgb() ?? PrimeEscapeGoldCyanMap.ColorFor(2, 2f);
+            InterpolationSpace = data.InterpolationSpace;
+            InterpCurve = data.InterpolationCurve;
+            Transfer = data.TransferFunction;
+            TransferStrength = data.TransferStrength;
+            PaletteGamma = data.PaletteGamma;
+            SparkleStride = data.SparkleStride;
+            SparkleBoost = data.SparkleBoost;
+            SeamlessCycle = data.SeamlessCycle;
+            XorLevels = data.XorLevels;
+            XorMask = data.XorMask;
+            foreach (var s in data.Stops)
+                Stops.Add(s.ToColorStop());
+        }
+
+        /// <summary>Which class prime <paramref name="n"/> falls in: 0 = special, 1 = A, 2 = B.</summary>
+        public static int PrimeClass(int n, PrimeBandModulus mod) => mod switch
+        {
+            PrimeBandModulus.Mod4 => n == 2 ? 0 : (n & 3) == 1 ? 1 : 2,
+            PrimeBandModulus.Mod6 => n is 2 or 3 ? 0 : n % 6 == 1 ? 1 : 2,
+            _ => n == 2 ? 0 : 1,
+        };
+
+        public override int Map(float smooth, float distance, int iterations)
+        {
+            int n;
+            if (iterations >= MaxIterations)
+            {
+                if (!(smooth > 0f)) return unchecked((int)_inSetColor);   // in-set sentinel
+                n = (int)MathF.Floor(smooth);                              // calculator passed maxIter
+            }
+            else n = iterations;
+
+            if (n >= 0 && PrimeEscapeGoldCyanMap.IsPrime((uint)n))
+                return unchecked((int)(PrimeClass(n, ExportModulus) switch { 0 => _colorSpecial, 1 => _colorA, _ => _colorB }));
+
+            uint g = unchecked((uint)base.Map(smooth, distance, MaxIterations));
+            float k = ExportCompositeDim;
+            uint r = (uint)(((g >> 16) & 0xFF) * k + 0.5f), gg = (uint)(((g >> 8) & 0xFF) * k + 0.5f), b = (uint)((g & 0xFF) * k + 0.5f);
+            return unchecked((int)((g & 0xFF000000u) | (r << 16) | (gg << 8) | b));
         }
     }
 
@@ -757,6 +885,10 @@ namespace FracturingFog.Models
         public float ExportTrapScale => _trapScale;
         public float ExportTrapPower => _trapPower;
         public bool ExportColorInterior => _colorInterior;
+        // #1634 — GaussianPrime shape settings (round-trip).
+        public float ExportGaussianLatticeScale { get; }
+        public int ExportGaussianTailBlock { get; }
+        public bool ExportGaussianInteriorHits { get; }
 
         protected override float TrapScale => _trapScale;
         protected override float TrapPower => _trapPower;
@@ -785,7 +917,12 @@ namespace FracturingFog.Models
             _trapScale = data.TrapScale > 0f ? data.TrapScale : 2f;
             _trapPower = data.TrapPower > 0f ? data.TrapPower : 0.35f;
             _colorInterior = data.ColorInterior;
-            _shape = ShapeImpl(data.TrapShape);
+            ExportGaussianLatticeScale = data.GaussianLatticeScale > 0f ? data.GaussianLatticeScale : 6f;
+            ExportGaussianTailBlock = Math.Max(0, data.GaussianTailBlock);
+            ExportGaussianInteriorHits = data.GaussianInteriorHits;
+            _shape = data.TrapShape == OrbitTrapShape.GaussianPrime   // #1634 — tunable sampler
+                ? new OrbitTrapGaussianPrimeMap(ExportGaussianLatticeScale, ExportGaussianTailBlock, ExportGaussianInteriorHits)
+                : ShapeImpl(data.TrapShape);
             _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
             _oobColor = data.OutOfBoundsColor?.ToPackedArgb();   // #615 null ⇒ no override
 
@@ -811,6 +948,15 @@ namespace FracturingFog.Models
         public override void Sample(ref OrbitAccumulator acc,
                                     double zr, double zi, double cr, double ci, int iter)
             => _shape.Sample(ref acc, zr, zi, cr, ci, iter);
+
+        // #1634 — GaussianPrime with interior hits: in-set pixels map the cycle's
+        // Gaussian-prime hit fraction (the built-in Gaussian Prime Hits) instead of the
+        // trap distance. A full hit share sits at the gradient start, where a trap
+        // distance of 0 (the orbit on a prime) also maps. Otherwise the interface default.
+        public int MapInteriorWithOrbit(int iterations, in OrbitAccumulator acc)
+            => Shape == OrbitTrapShape.GaussianPrime && ExportGaussianInteriorHits
+                ? MapNormalized(1f - GaussianPrimeHitsMap.HitFraction(acc), 0f)
+                : MapWithOrbit(0f, 0f, iterations, 0f, 0f, in acc);
 
         /// <summary>Maps a trap shape to the built-in sampler that measures it.
         /// Only single-channel (TrapMin) shapes are exposed — the bespoke
@@ -838,6 +984,7 @@ namespace FracturingFog.Models
             OrbitTrapShape.Grid          => new OrbitTrapGridMap(),
             OrbitTrapShape.Pinwheel      => new OrbitTrapPinwheelMap(),
             OrbitTrapShape.PolarRose     => new OrbitTrapPolarRoseMap(),
+            OrbitTrapShape.GaussianPrime => new OrbitTrapGaussianPrimeMap(),   // #1634 — built-in defaults
             _                            => new OrbitTrapPointMap(),
         };
     }

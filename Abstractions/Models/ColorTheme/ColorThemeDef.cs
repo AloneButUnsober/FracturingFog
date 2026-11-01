@@ -32,6 +32,16 @@ namespace FracturingFog.Models
         // colours, InSetColor is the trapped colour, BilliardDrive selects the
         // secondary modulation. Adapts to an IBilliardColorMap at runtime.
         Categorical,
+        PrimeBands,   // #1634
+    }
+
+    /// <summary>UI-neutral mirror of <c>PrimeBandModulus</c> (#1634). Member order must
+    /// match the Engine enum so the adapter can cast.</summary>
+    public enum PrimeBandModulusDef
+    {
+        Single,
+        Mod4,
+        Mod6,
     }
 
     /// <summary>UI-neutral mirror of <c>BilliardDrive</c> (#630). Selects how the
@@ -58,6 +68,7 @@ namespace FracturingFog.Models
         Square, Ring, Hyperbola, Lemniscate, Cardioid,
         DiagonalCross, Triangle, Hexagon, Heart, SineWave,
         Concentric, Grid, Pinwheel, PolarRose,
+        GaussianPrime,   // #1634
     }
 
     /// <summary>UI-neutral mirror of the PBR lighting profile enum.</summary>
@@ -196,6 +207,21 @@ namespace FracturingFog.Models
         /// <summary>Colour in-set (non-escaping) pixels by the accumulated orbit
         /// (F14). Default false ⇒ flat interior.</summary>
         public bool ColorInterior { get; set; } = false;
+        /// <summary>#1634 — GaussianPrime shape: lattice scale (0.5..16), tail block
+        /// (0 = whole orbit) and interior-by-hit-fraction.</summary>
+        public float GaussianLatticeScale { get; set; } = 6f;
+        public int GaussianTailBlock { get; set; } = 10;
+        public bool GaussianInteriorHits { get; set; } = false;
+
+        // ── Prime bands (#1634, Kind == PrimeBands) ───────────────────────
+        /// <summary>Class-A / class-B / special prime colours; null = the built-in's
+        /// gold / cyan / white.</summary>
+        public InSetColorDef? PrimeColorA { get; set; }
+        public InSetColorDef? PrimeColorB { get; set; }
+        public InSetColorDef? PrimeColorSpecial { get; set; }
+        /// <summary>Brightness of the gradient on non-prime counts, 0..1.</summary>
+        public float PrimeCompositeDim { get; set; } = 0.25f;
+        public PrimeBandModulusDef PrimeModulus { get; set; } = PrimeBandModulusDef.Mod4;
 
         // ── Categorical / Billiard (#630, Kind == Categorical) ────────────
         /// <summary>Secondary modulation for a categorical billiard theme. The

@@ -153,7 +153,7 @@
                     <Border Classes="group">
                         <StackPanel Spacing="6">
                             <TextBlock Classes="section" Text="Kind" />
-                            <Grid ColumnDefinitions="Auto,Auto,Auto" RowDefinitions="Auto,Auto">
+                            <Grid ColumnDefinitions="Auto,Auto,Auto" RowDefinitions="Auto,Auto,Auto">
                                 <RadioButton Grid.Column="0" Grid.Row="0" Margin="0,0,8,0"
                                              Content="Gradient" GroupName="kind" IsChecked="{Binding IsGradient}" Foreground="#DCDCDC" />
                                 <RadioButton Grid.Column="1" Grid.Row="0" Margin="0,0,8,0"
@@ -168,6 +168,9 @@
                                 <RadioButton Grid.Column="2" Grid.Row="1" Margin="0,0,8,0"
                                              Content="Categorical" GroupName="kind" IsChecked="{Binding IsCategorical}" Foreground="#DCDCDC"
                                              ToolTip.Tip="Per-gate categorical colouring for the chaotic-billiard scatterer. Colour stops below are the per-gate palette; the In-set colour is the trapped set." />
+                                <RadioButton Grid.Column="0" Grid.Row="2" Margin="0,0,8,0"
+                                             Content="Prime Bands" GroupName="kind" IsChecked="{Binding IsPrimeBands}" Foreground="#DCDCDC"
+                                             ToolTip.Tip="Escape counts that are prime get flat colours by class (n mod 4 or mod 6); every other count shows the gradient below, dimmed. The editable form of the built-in Prime Escape (Gold-Cyan)." />
                             </Grid>
                         </StackPanel>
                     </Border>
@@ -176,7 +179,7 @@
                     <Border Classes="group" IsVisible="{Binding ShowOrbitTrap}">
                         <StackPanel Spacing="6">
                             <TextBlock Classes="section" Text="Orbit Trap" />
-                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,4,0,0">
+                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0">
                                 <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Shape:" Margin="0,0,8,4" />
                                 <ComboBox Grid.Row="0" Grid.Column="1"
                                           ItemsSource="{Binding TrapShapeOptions}" SelectedItem="{Binding TrapShape}"
@@ -195,7 +198,56 @@
                                 <CheckBox Grid.Row="3" Grid.Column="1"
                                           Content="Colour interior (orbit)" IsChecked="{Binding ColorInterior}"
                                           Foreground="#B4B4B4"
-                                          ToolTip.Tip="Colour in-set (non-escaping) pixels by their orbit instead of a flat fill. Takes effect on the User-Equation path today; the native Mandelbrot path keeps a flat interior." />
+                                          ToolTip.Tip="Colour in-set (non-escaping) pixels by their orbit instead of a flat fill. Takes effect on the Mandelbrot and User-Equation paths." />
+
+                                <!-- #1634 — GaussianPrime shape settings -->
+                                <TextBlock Classes="label" Grid.Row="4" Grid.Column="0" Text="Lattice scale:" Margin="0,0,8,4"
+                                           IsVisible="{Binding ShowGaussianPrime}" />
+                                <NumericUpDown Grid.Row="4" Grid.Column="1" IsVisible="{Binding ShowGaussianPrime}"
+                                               Value="{Binding GaussianLatticeScale}" Minimum="0.5" Maximum="16" Increment="0.5"
+                                               FormatString="0.0" Width="135" HorizontalAlignment="Left" Margin="0,0,0,4"
+                                               ToolTip.Tip="The orbit is scaled by this before measuring to the Gaussian primes. Larger = a finer lattice, more and smaller domes. 6 = the built-in Gaussian Prime Trap." />
+                                <TextBlock Classes="label" Grid.Row="5" Grid.Column="0" Text="Tail window:" Margin="0,0,8,4"
+                                           IsVisible="{Binding ShowGaussianPrime}" />
+                                <NumericUpDown Grid.Row="5" Grid.Column="1" IsVisible="{Binding ShowGaussianPrime}"
+                                               Value="{Binding GaussianTailBlock}" Minimum="0" Maximum="1000" Increment="1"
+                                               FormatString="0" Width="135" HorizontalAlignment="Left" Margin="0,0,0,4"
+                                               ToolTip.Tip="Trap only the last N to 2N-1 iterations before escape (10 = the built-in). Keeps contrast when zoomed in. 0 = the whole orbit, which goes flat past shallow zoom." />
+                                <CheckBox Grid.Row="6" Grid.Column="1" IsVisible="{Binding ShowGaussianPrime}"
+                                          Content="Interior by prime hits" IsChecked="{Binding GaussianInteriorHits}"
+                                          Foreground="#B4B4B4"
+                                          ToolTip.Tip="With Colour interior on: colour the set by the share of its attracting cycle's points that land on a Gaussian prime (carves the cardioid into blocks, as the built-in Gaussian Prime Hits) instead of by trap distance." />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Prime bands (#1634) -->
+                    <Border Classes="group" IsVisible="{Binding ShowPrimeBands}">
+                        <StackPanel Spacing="6">
+                            <TextBlock Classes="section" Text="Prime Bands" />
+                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0">
+                                <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Classes:" Margin="0,0,8,4" />
+                                <ComboBox Grid.Row="0" Grid.Column="1"
+                                          ItemsSource="{Binding PrimeModulusOptions}" SelectedItem="{Binding PrimeModulus}"
+                                          HorizontalAlignment="Left" Width="170" Margin="0,0,0,4"
+                                          ToolTip.Tip="Mod4: primes 1 mod 4 get colour A, 3 mod 4 colour B, 2 the special colour (the built-in's split). Mod6: 1 mod 6 = A, 5 mod 6 = B, 2 and 3 special. Single: every odd prime A." />
+                                <TextBlock Classes="label" Grid.Row="1" Grid.Column="0" Text="Colour A (hex):" Margin="0,0,8,4" />
+                                <TextBox Grid.Row="1" Grid.Column="1" Width="135" HorizontalAlignment="Left" Margin="0,0,0,4"
+                                         Text="{Binding PrimeColorAHex, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                         ToolTip.Tip="RRGGBB. Empty = gold FFCC00 (the built-in)." />
+                                <TextBlock Classes="label" Grid.Row="2" Grid.Column="0" Text="Colour B (hex):" Margin="0,0,8,4" />
+                                <TextBox Grid.Row="2" Grid.Column="1" Width="135" HorizontalAlignment="Left" Margin="0,0,0,4"
+                                         Text="{Binding PrimeColorBHex, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                         ToolTip.Tip="RRGGBB. Empty = cyan 1A99FF (the built-in)." />
+                                <TextBlock Classes="label" Grid.Row="3" Grid.Column="0" Text="Special (hex):" Margin="0,0,8,4" />
+                                <TextBox Grid.Row="3" Grid.Column="1" Width="135" HorizontalAlignment="Left" Margin="0,0,0,4"
+                                         Text="{Binding PrimeColorSpecialHex, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                         ToolTip.Tip="RRGGBB colour for 2 (and 3 under Mod6). Empty = white." />
+                                <TextBlock Classes="label" Grid.Row="4" Grid.Column="0" Text="Others dim:" Margin="0,0,8,4" />
+                                <NumericUpDown Grid.Row="4" Grid.Column="1"
+                                               Value="{Binding PrimeCompositeDim}" Minimum="0" Maximum="1" Increment="0.05"
+                                               FormatString="0.00" Width="135" HorizontalAlignment="Left" Margin="0,0,0,4"
+                                               ToolTip.Tip="Brightness of the gradient on escape counts that are not prime (0 = black, 1 = full)." />
                             </Grid>
                         </StackPanel>
                     </Border>
