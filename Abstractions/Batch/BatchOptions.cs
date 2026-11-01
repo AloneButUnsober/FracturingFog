@@ -1868,6 +1868,23 @@ namespace FracturingFog.Batch
                 return false;
             }
 
+            // #1612 — past the deepest tier's ceiling the render collapses to one
+            // flat colour and used to exit 0, which a timing script can't tell from a
+            // real image. Refuse it until #1428 lifts the ceiling.
+            double zoomCeiling = QualityPreset.Extreme.ZoomMax;
+            if (opts.Zoom > zoomCeiling)
+            {
+                error = $"--zoom {opts.Zoom.Value.ToString("G4", CultureInfo.InvariantCulture)} is past the deepest supported zoom "
+                      + $"({zoomCeiling.ToString("G4", CultureInfo.InvariantCulture)}); deeper zoom is tracked in #1428.";
+                return false;
+            }
+            if (opts.VideoStartZoomSet && opts.VideoStartZoom > zoomCeiling)
+            {
+                error = $"--start-zoom {opts.VideoStartZoom.ToString("G4", CultureInfo.InvariantCulture)} is past the deepest supported zoom "
+                      + $"({zoomCeiling.ToString("G4", CultureInfo.InvariantCulture)}); deeper zoom is tracked in #1428.";
+                return false;
+            }
+
             // Post-FX range checks (parity with the interactive sliders).
             if (opts.Brightness is < -100 or > 100)
                 { error = "--brightness must be -100..100."; return false; }
