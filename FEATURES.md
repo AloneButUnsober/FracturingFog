@@ -257,7 +257,7 @@ Fracturing Fog ships with **290+ built-in color palettes** organized into catego
 | **PBR (physically-based)** | Cesium Spectrum (Standard / Realistic / Ultra-Glow), Radio Interference, Golden Ratio Phi |
 | **Escape Time** | Smooth-iter palettes — classic gradients; Prime Escape (Gold-Cyan) lights prime escape counts, split by n mod 4 |
 | **Distance Estimation** | Reveal fine filaments and dendrites |
-| **Orbit Traps & Orbit Trap Images** | Geometric or image-mapped traps |
+| **Orbit Traps & Orbit Trap Images** | Geometric or image-mapped traps; Gaussian Prime Trap (domes where the orbit's escape tail nears a Gaussian prime, interior included) |
 | **Argument / Binary Decomposition** | Phase-angle-based coloring |
 | **Domain Coloring** | Complex-plane phase + magnitude |
 | **Field Lines** | Equipotential contour visualization |

@@ -228,6 +228,7 @@ namespace FracturingFog.Models
             new CurvatureAverageMap(),
             new LyapunovExponentMap(),
             new GaussianIntegerMap(),
+            new GaussianPrimeTrapMap(),   // #1487 — trap against the Gaussian primes, tail window
             new ExponentialSmoothingMap(),
 
             // ── Distance Estimation ───────────────────────────────────────────

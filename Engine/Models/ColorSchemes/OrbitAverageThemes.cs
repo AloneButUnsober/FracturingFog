@@ -9,6 +9,8 @@
 //   • Curvature Average        — mean |Δ arg(seg_n)| between successive segments
 //   • Lyapunov Exponent        — mean log|f'(z_n)| = mean log|2 z_n|
 //   • Gaussian Integer Trap    — mean distance from z_n to nearest Gaussian integer
+//                                (the Gaussian-integer trap of Barrallo & Jones; see
+//                                Docs/Resources-Bibliography.md)
 //   • Exponential Smoothing    — mean of e^{−|z_n|}  (Kerry Mitchell)
 //
 // All themes implement IOrbitAwareColorMap and route through PATH C of the
