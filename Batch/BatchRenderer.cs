@@ -474,6 +474,7 @@ namespace FracturingFog.Batch
                 {
                     var result = PosterRenderer.RenderToFile(req, CancellationToken.None);
                     spinner.Stop($"saved {Path.GetFileName(outPath)} ({result.SavedWidth}x{result.SavedHeight}, {result.ElapsedMs} ms)");
+                    NoteGpuRoute(FracturingFog.Rendering.HeadlessGpu.LastAttached);   // #1611
                     if (rescueReport.RaisedTo > 0)
                         Console.WriteLine($"  note    : every pixel was in-set at {iter} iterations; re-rendered at {rescueReport.RaisedTo} (pass --iterations to fix the count)");
                     if (result.Qr is { } qr)
@@ -1335,7 +1336,9 @@ namespace FracturingFog.Batch
                 SolidRegionSkip = fp.SolidRegionSkip,   // #1343
                 SolidRegionAuto = fp.SolidRegionAuto,   // #1394
             };
+            FracturingFog.Rendering.HeadlessGpu.Attach(calc);   // #1611 — batch on the GPU
             calc.Calculate(CancellationToken.None);
+            NoteGpuRoute(calc);
             var ss = FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(calc, quality.AaSamples,
                 FracturingFog.Rendering.AdaptiveAa.From(fp), CancellationToken.None, adaptive);   // #1344, #1381
             FracturingFog.Rendering.Supersampling.FinishHistogramEq(calc, in ss, adaptive);
@@ -1351,7 +1354,7 @@ namespace FracturingFog.Batch
         // silent fallback is how #1164 went unnoticed.
         private static string? s_lastGpuNote;
 
-        private static void NoteGpuRoute(object calc)
+        private static void NoteGpuRoute(object? calc)
         {
             if (calc is not FracturingFog.Render.IGpuRouteSource src) return;
             var route = src.LastGpuRoute;
@@ -1626,7 +1629,9 @@ namespace FracturingFog.Batch
                 ColorMap = theme,
                 Quality = quality ?? region.QualityPreset ?? QualityPreset.Standard,
             };
+            FracturingFog.Rendering.HeadlessGpu.Attach(calc);   // #1611 — batch on the GPU
             calc.Calculate(CancellationToken.None);
+            NoteGpuRoute(calc);
             var ss = FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(calc, calc.Quality.AaSamples,
                 aa ?? FracturingFog.Rendering.AdaptiveAa.Off, CancellationToken.None, adaptive);   // #1344, #1381
             FracturingFog.Rendering.Supersampling.FinishHistogramEq(calc, in ss, adaptive);
@@ -2586,7 +2591,9 @@ namespace FracturingFog.Batch
                 ColorMap = theme,
                 Quality = quality,
             };
+            FracturingFog.Rendering.HeadlessGpu.Attach(calc);   // #1611 — batch on the GPU
             calc.Calculate(CancellationToken.None);
+            NoteGpuRoute(calc);
             var ss = FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(calc, quality.AaSamples,
                 aa ?? FracturingFog.Rendering.AdaptiveAa.Off, CancellationToken.None, adaptive);   // #1344, #1381
             FracturingFog.Rendering.Supersampling.FinishHistogramEq(calc, in ss, adaptive);

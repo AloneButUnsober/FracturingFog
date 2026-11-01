@@ -103,6 +103,15 @@ namespace FracturingFog.Batch
                     Console.WriteLine("  note     : --animation plays only in --mode video; ignored.");
             }
 
+            // #1611 — compute on the GPU as the live view does (--gpu). Remote
+            // renders compute on the server.
+            if (!opts.Remote && opts.Mode is not (BatchMode.Regrade or BatchMode.Relight)
+                && !BatchGpuSetup.Apply(opts.Gpu, out string? gpuError))
+            {
+                Console.Error.WriteLine($"batch: {gpuError}");
+                return 2;
+            }
+
             try
             {
                 if (opts.Remote)

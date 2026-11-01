@@ -459,6 +459,8 @@ Cartesian complex-plane grid with major/minor divisions and labeled coordinates.
 
 Region + theme + program label, CPU-composited into the BGRA buffer. Position / opacity / color configurable from Slideshow Settings → Watermark. Contrast-aware text color picks white on dark, near-black on light.
 
+Headless `--batch` renders compute on the **GPU** like the live view (#1611): `--gpu auto` (default) uses D3D11 on Windows or Vulkan on Linux when there is a device, `--gpu on` fails without one, `--gpu off` stays on the CPU. Shallow frames use the fp32 kernel while its precision holds for the output's pixel size; deep zoom moves to the GPU with `FF_GPU_PERTURB=1`, as in the live view. A stderr line names the route, and a frame that falls back to the CPU says why.
+
 Headless `--batch` renders (image / video / slideshow) carry the watermark **on by default** for parity with the interactive Save flow; pass `--watermark` (alias `--no-watermark`) to suppress it. See [Docs/User/Capture-Guide.md](Docs/User/Capture-Guide.md#watermark-on-by-default).
 
 ### 12.3 Mini-Map

@@ -679,6 +679,7 @@ namespace FracturingFog.Imaging
                     SubRectOffsetX = req.SubRectOffsetX,
                     SubRectOffsetY = req.SubRectOffsetY,
                 };
+                FracturingFog.Rendering.HeadlessGpu.Attach(calc);   // #1611 — batch on the GPU
                 if (req.SeededOrbit != null)
                 {
                     // Pre-fill the calculator's ref-orbit cache so its
@@ -1123,6 +1124,7 @@ namespace FracturingFog.Imaging
                     SolidRegionSkip = req.FractalParameters.SolidRegionSkip,   // #1343
                     SolidRegionAuto = req.FractalParameters.SolidRegionAuto,   // #1394
                 };
+                FracturingFog.Rendering.HeadlessGpu.Attach(m);   // #1611
                 m.Calculate(token);
                 return m;
             }
@@ -1431,6 +1433,7 @@ namespace FracturingFog.Imaging
                     g.CenterYLo = req.CenterYLo; g.CenterY2 = req.CenterY2; g.CenterY3 = req.CenterY3;
                     break;
             }
+            FracturingFog.Rendering.HeadlessGpu.Attach(c);   // #1611 — batch on the GPU
             return c;
         }
     }

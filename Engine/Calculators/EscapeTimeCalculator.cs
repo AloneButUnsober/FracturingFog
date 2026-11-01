@@ -412,10 +412,12 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
             : GpuKernel == null ? GpuRoute.Cpu("no GPU kernel", "the active renderer has no GPU compute kernel")
             : Zoom > MandelbrotCalculator.MaxGpuZoom
                 ? GpuRoute.Cpu("zoom > 1e4", "past the FP32 GPU zoom limit (1e4); deeper zooms render on the CPU")
+            : !MandelbrotCalculator.Fp32GpuResolves(CenterX, CenterY, Zoom, Width, Height)   // #1611
+                ? GpuRoute.Cpu("pixels below fp32", "pixels this small are below the FP32 GPU kernel's precision at this size; it renders on the CPU")
             : default;
 
         if (UseGpuCompute && GpuKernel != null
-            && Zoom <= MandelbrotCalculator.MaxGpuZoom
+            && MandelbrotCalculator.Fp32GpuResolves(CenterX, CenterY, Zoom, Width, Height)   // #1611: zoom + pixel size
             && TryDispatchGpu(ct))
         {
             // #615 — the out-of-bounds post-pass must use the radius the frame

@@ -79,6 +79,9 @@ namespace FracturingFog.Batch
         public const string NoWatermark    = "--no-watermark";
         // #1380 — skip the quality preset's temporal AA on a still (MSAA only).
         public const string NoTaa          = "--no-taa";
+        // #1611 — where the fractal is computed: auto (the GPU when there is one, as
+        // the live view) / on (the GPU or an error) / off (the CPU).
+        public const string Gpu            = "--gpu";
         // #1554 — the math overlay (axes + the orbit of a pinned point) on a 2D still.
         public const string MathOverlay    = "--math-overlay";
         public const string Verbose        = "--verbose";

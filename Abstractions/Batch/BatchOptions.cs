@@ -16,6 +16,17 @@ namespace FracturingFog.Batch
 {
     public enum BatchMode { Image, Video, Slideshow, Scene, Regrade, Relight }
 
+    /// <summary>#1611 — <c>--gpu</c>: where the fractal is computed.</summary>
+    public enum BatchGpuMode
+    {
+        /// <summary>The GPU when there is one, else the CPU (the live view's default).</summary>
+        Auto,
+        /// <summary>The GPU; an error exit when there is no GPU compute.</summary>
+        On,
+        /// <summary>The CPU only.</summary>
+        Off,
+    }
+
     /// <summary>Per-light point / spot override parsed from the <c>--lightN-*</c>
     /// flags (roadmap S8, #404). Every field is nullable so BatchRenderer applies
     /// only what the user actually passed onto <c>fp.Lighting.LightN</c>; unset
@@ -164,6 +175,9 @@ namespace FracturingFog.Batch
         /// view adds while it is still, so the file equals the settled live frame.
         /// <c>--no-taa</c> renders the sub-pixel (MSAA) pass only, for speed.</summary>
         public bool TemporalAa { get; set; } = true;
+        /// <summary>#1611 — <c>--gpu auto|on|off</c>. Shallow frames (and, with
+        /// FF_GPU_PERTURB=1, deep ones) compute on the GPU as in the live view.</summary>
+        public BatchGpuMode Gpu { get; set; } = BatchGpuMode.Auto;
         /// <summary>#1554 — <c>--math-overlay RE,IM[,STEPS]</c>: draw the axes and the
         /// orbit of the pinned point (Mandelbrot: c; Julia: z0) on the still, as the
         /// live view's math overlay does. Null = off.</summary>
@@ -796,6 +810,21 @@ namespace FracturingFog.Batch
                     case BatchFlags.NoTaa:   // #1380
                         opts.TemporalAa = false;
                         break;
+
+                    case BatchFlags.Gpu:   // #1611
+                    {
+                        if (!Next(args, ref i, a, out string gv, out error)) return false;
+                        switch (gv.ToLowerInvariant())
+                        {
+                            case "auto": opts.Gpu = BatchGpuMode.Auto; break;
+                            case "on":   opts.Gpu = BatchGpuMode.On;   break;
+                            case "off":  opts.Gpu = BatchGpuMode.Off;  break;
+                            default:
+                                error = $"--gpu must be auto|on|off (got '{gv}').";
+                                return false;
+                        }
+                        break;
+                    }
 
                     case BatchFlags.MathOverlay:   // #1554
                     {

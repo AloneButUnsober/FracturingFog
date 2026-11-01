@@ -236,6 +236,41 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
 
     private void BeginFrameTiming() { LastGpuStageTimes = null; _timer.BeginFrame(); }
 
+    // #1611 — the device / context a TryCreateWithOwnDevice kernel owns (null when
+    // the host lent them, as the live renderer does).
+    private ID3D11Device? _ownedDevice;
+    private ID3D11DeviceContext? _ownedContext;
+
+    /// <summary>#1611 — a kernel on a D3D11 device of its own (the default hardware
+    /// adapter), for headless renders (--batch), which have no renderer to borrow a
+    /// device from. Disposing the kernel releases the device. Null when there is no
+    /// D3D11 hardware device or the kernel cannot be built on it.</summary>
+    public static MandelbrotGpuKernel? TryCreateWithOwnDevice()
+    {
+        var hr = D3D11.D3D11CreateDevice(null, DriverType.Hardware, DeviceCreationFlags.None,
+            new[] { FeatureLevel.Level_11_1, FeatureLevel.Level_11_0 },
+            out ID3D11Device? device, out _, out ID3D11DeviceContext? context);
+        if (hr.Failure || device == null || context == null)
+        {
+            context?.Dispose();
+            device?.Dispose();
+            return null;
+        }
+        try
+        {
+            var k = new MandelbrotGpuKernel(device, context, new object());
+            k._ownedDevice = device;
+            k._ownedContext = context;
+            return k;
+        }
+        catch
+        {
+            context.Dispose();
+            device.Dispose();
+            return null;
+        }
+    }
+
     public MandelbrotGpuKernel(ID3D11Device device, ID3D11DeviceContext context, object d3dGate)
     {
         _device = device ?? throw new ArgumentNullException(nameof(device));
@@ -1128,6 +1163,13 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
                 finally { _ctx.Unmap(_trapStaging!, 0); }
             }
 
+            // #1611 — a frame that ran past the OS watchdog (TDR, #1481) can read back
+            // without an error but hold garbage; the device reports the loss. Throw, so
+            // the calculator renders this frame on the CPU instead of keeping it.
+            if (_device.DeviceRemovedReason.Failure)
+                throw new InvalidOperationException(
+                    $"GPU device removed during the frame ({_device.DeviceRemovedReason}); rendering it on the CPU");
+
             LastGpuStageTimes = _timer.EndFrame();
             long tEnd = System.Diagnostics.Stopwatch.GetTimestamp();
             double freq = System.Diagnostics.Stopwatch.Frequency;
@@ -2014,5 +2056,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
         }
         _csByPaletteKind.Clear();
         _hlslByPaletteId.Clear();
+        try { _ownedContext?.Dispose(); } catch { }   // #1611 — last: a device of its own
+        try { _ownedDevice?.Dispose(); } catch { }
     }
 }

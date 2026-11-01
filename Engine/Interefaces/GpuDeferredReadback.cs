@@ -25,10 +25,16 @@ namespace FracturingFog.Rendering
         // knobs, so a test toggling it cannot leak into parallel tests.
         [ThreadStatic] private static int t_override;
 
+        /// <summary>#1611 — a process-wide setting under the thread override: the
+        /// headless batch turns deferral off, so every readback (and the device-loss
+        /// check after it) happens inside the dispatch, where a lost device still
+        /// falls back to the CPU. Null = <see cref="Default"/>.</summary>
+        public static bool? ProcessSetting { get; set; }
+
         /// <summary>Whether the next SP dispatch on this thread defers.</summary>
         public static bool Enabled
         {
-            get => t_override != 0 ? t_override == 2 : Default;
+            get => t_override != 0 ? t_override == 2 : ProcessSetting ?? Default;
             set => t_override = value ? 2 : 1;
         }
 

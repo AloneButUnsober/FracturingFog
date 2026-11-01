@@ -513,6 +513,10 @@ namespace FracturingFog.Batch
                 Sw(BatchFlags.NoWatermark, Output, FR,
                     "Turn the region/theme + program watermark OFF (it is on by default).")
                     with { Aliases = new[] { "--watermark" } },
+                Pick(BatchFlags.Gpu, Output, BatchModes.FractalRender | BatchModes.Scene,
+                    "Where the fractal is computed. auto = the GPU when there is one (shallow frames; deep zoom "
+                    + "too with FF_GPU_PERTURB=1), as the live view; on = the GPU or an error exit; off = the CPU.",
+                    new[] { "auto", "on", "off" }, "auto", "MODE"),
                 Sw(BatchFlags.NoTaa, Output, BatchModes.Image,
                     "Skip the quality preset's temporal anti-aliasing on a still (High / Ultra / Extreme: "
                     + "8 / 16 / 32 samples, as the live view settles): sub-pixel anti-aliasing only, faster."),
