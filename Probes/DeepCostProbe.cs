@@ -5,7 +5,7 @@
 // path on benchmark scenes from the fractadyne bench-kit (WindySnowOwl,
 // https://github.com/WindySnowOwl/fractadyne/tree/main/bench-kit; centres
 // conjugated from the kit's .kfr files; the calculator takes the KF zoom as is).
-// The scenes come from rith's FF 0.7.1 benchmark report (fractalforums.org), which
+// The scenes come from rith's FF 0.7.1 benchmark report (a fractalforums.org direct message), which
 // found the period-448 one 3x slower than a deeper scene; both credited in
 // Docs/Resources-Bibliography.md (#fractadyne-bench-kit, #rith-ff-071-benchmark).
 // For each scene: frame time (best of FF_DEEPCOST_REPS, default 2), the pixels

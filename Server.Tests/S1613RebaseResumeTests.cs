@@ -9,7 +9,7 @@
 // reference index, at a BLA tolerance of at most QdBandBlaTolerance. Checked against
 // exact iteration (fixed-point BigInteger, no perturbation at all) on sampled pixels
 // of two bench-kit scenes (https://github.com/WindySnowOwl/fractadyne/tree/main/bench-kit,
-// as used in rith's FF 0.7.1 benchmark report on fractalforums.org; see the
+// as used in rith's FF 0.7.1 benchmark report, a fractalforums.org direct message; see the
 // bibliography): a period-448 minibrot at 5.2e33 and a spiral path at 1e33.
 // Mutants: QdBandBlaTolerance at 1e-6 (25x the frame disagreement) and a lookup one
 // reference step off are caught; a lookup by iteration count instead of m is not —
