@@ -20,6 +20,7 @@ code. Probes shared with other hosts live in `Engine/Diagnostics/` instead.
 |---|---|---|---|
 | `AdaptiveAaProbe.cs` | `--adaptiveaaprobe [threshold tolerance]` | #1344, #1382 | Adaptive anti-aliasing against full supersampling (CPU), Mandelbrot views and the ten 3D raymarchers: samples computed, wall times, error |
 | `D3DBuddhaProbe.cs` | `--d3dbuddhaprobe` | #838 | D3D11 half of the GPU Buddhabrot parity check |
+| `DeepCostProbe.cs` | `--deepcostprobe [W H]` | #1613 | CPU deep-zoom cost on bench-kit minibrot scenes: frame time, rebased pixels, iterations, default vs acceleration off and the pixels that differ (`FF_DEEPCOST_DUMP` / `_SCENE` / `_EPS` / `_REPS`) |
 | `D3DDeepOrbitProbe.cs` | `--d3ddeeporbitprobe` | #607 | D3D11 half of the deep-zoom orbit parity check |
 | `D3DDeviceLossProbe.cs` | `--d3ddevicelossprobe` | #1045 | The D3D11 presenter recovers from a device loss |
 | `D3DEscapeFamilyProbe.cs` | `--d3dfamilyprobe` | #1173 | D3D11 half of the Multibrot / Phoenix / domain-warp parity check |

@@ -68,6 +68,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--temporallightingprobe")
             return TemporalLightingProbe.Run(args);
 
+        // #1613 — CPU deep-zoom per-pixel cost on bench-kit scenes, default vs acceleration off.
+        if (args.Length > 0 && args[0] == "--deepcostprobe")
+            return DeepCostProbe.Run(args);
+
         // #1343 — Mariani–Silver solid-region skipping: speed, fill share, mismatches.
         if (args.Length > 0 && args[0] == "--solidregionprobe")
             return SolidRegionProbe.Run(args);
