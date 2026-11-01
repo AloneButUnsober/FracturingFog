@@ -594,6 +594,13 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
   escape count by trial division (CPU and GPU) and splits odd primes into n ≡ 1 / n ≡ 3 (mod 4). Prior-art
   check (2026-10-31): a web search for colouring escape-time fractals by prime iteration counts found no
   source, so no prior method is credited and no novelty is claimed.
+- **Visible lattice points (gcd(i, j) = 1) and Euclid's algorithm** — classical elementary number theory,
+  not credited to a single source. The *Coprime moiré* post layer (#1488, `CoprimeMoire`) lights the
+  lattice points with gcd(|i|, |j|) = 1 (or a chosen gcd condition) and blends that mask over the frame.
+  Related prior art: coprime-grid plots such as the CPAN module *Math::PlanePath::CoprimeColumns*
+  (release author handle KRYDE), <https://metacpan.org/pod/Math::PlanePath::CoprimeColumns>, which walks
+  the coprime points column by column. Prior-art check (2026-10-31): a web search found no coprime-lattice
+  moiré used as an image post-effect; no novelty is claimed for the coprime grid itself.
 - **Smoothstep / quintic Hermite interpolation** — Ken Perlin. *Improving noise.* SIGGRAPH 2002.
   Used for the slideshow cross-fade and the video-zoom easing curve.
 - **Persistent threads** — Timo Aila, Samuli Laine. *Understanding the Efficiency of Ray Traversal on

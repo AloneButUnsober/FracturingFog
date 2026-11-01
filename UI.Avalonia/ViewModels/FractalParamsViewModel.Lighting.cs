@@ -656,6 +656,67 @@ public sealed partial class FractalParamsViewModel
     }
     public System.Array EdgeKernels => s_EdgeKernels;   // cached: a new array per read resets the ComboBox selection on Refresh()
     private static readonly System.Array s_EdgeKernels = System.Enum.GetValues(typeof(EdgeKernelMode));
+
+    // ── Coprime moiré (#1488) — screen-space post layer, 2D and 3D ──
+    public double MoireStrength
+    {
+        get => _p.Lighting.MoireStrength;
+        set { MutateLighting(r => r.Fx.MoireStrength = Clamp(value, 0, 1)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double MoireCellSize
+    {
+        get => _p.Lighting.MoireCellSize;
+        set { MutateLighting(r => r.Fx.MoireCellSize = Clamp(value, 0.25, 64)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double MoireRotation
+    {
+        get => _p.Lighting.MoireRotation;
+        set { MutateLighting(r => r.Fx.MoireRotation = Clamp(value, -180, 180)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double MoireOffsetX
+    {
+        get => _p.Lighting.MoireOffsetX;
+        set { MutateLighting(r => r.Fx.MoireOffsetX = Clamp(value, -4096, 4096)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double MoireOffsetY
+    {
+        get => _p.Lighting.MoireOffsetY;
+        set { MutateLighting(r => r.Fx.MoireOffsetY = Clamp(value, -4096, 4096)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double MoireAspect
+    {
+        get => _p.Lighting.MoireAspect;
+        set { MutateLighting(r => r.Fx.MoireAspect = Clamp(value, 0.25, 4)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public MoireCondition MoireCondition
+    {
+        get => _p.Lighting.MoireCondition;
+        set { MutateLighting(r => r.Fx.MoireCondition = value); this.RaisePropertyChanged(); Fire(); }
+    }
+    public System.Array MoireConditions => s_MoireConditions;
+    private static readonly System.Array s_MoireConditions = System.Enum.GetValues(typeof(MoireCondition));
+    public int MoireConditionK
+    {
+        get => _p.Lighting.MoireConditionK;
+        set { MutateLighting(r => r.Fx.MoireConditionK = Math.Clamp(value, 1, 64)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public MoireBlendMode MoireBlend
+    {
+        get => _p.Lighting.MoireBlend;
+        set { MutateLighting(r => r.Fx.MoireBlend = value); this.RaisePropertyChanged(); Fire(); }
+    }
+    public System.Array MoireBlends => s_MoireBlends;
+    private static readonly System.Array s_MoireBlends = System.Enum.GetValues(typeof(MoireBlendMode));
+    public bool MoireInvert
+    {
+        get => _p.Lighting.MoireInvert;
+        set { MutateLighting(r => r.Fx.MoireInvert = value); this.RaisePropertyChanged(); Fire(); }
+    }
+    public int MoireSamples
+    {
+        get => _p.Lighting.MoireSamples;
+        set { MutateLighting(r => r.Fx.MoireSamples = Math.Clamp(value, 1, 4)); this.RaisePropertyChanged(); Fire(); }
+    }
     /// <summary>Phase 16b — N-bounce reflection chain depth. 1 = legacy single
     /// bounce; up to 6 for chrome / hall-of-mirrors effects. Higher counts
     /// scale linearly with per-pixel cost in the reflection path.</summary>

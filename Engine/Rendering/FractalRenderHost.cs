@@ -5047,6 +5047,15 @@ namespace FracturingFog.Rendering
                     _calculator?.ColorMap?.InSetColor ?? 0xFF000000u,
                     ViewState.AlphaPreview, srcAlreadyProcessed);
 
+            // #1488 — coprime moiré, a screen-space layer over the composited frame.
+            // Same choke point as PosterRenderer / the batch frames; snapshots
+            // (srcAlreadyProcessed) already carry it. Strength 0 = no-op.
+            if (!srcAlreadyProcessed)
+            {
+                var moireFx = ViewState.FractalParameters.Lighting;
+                FracturingFog.Rendering.CoprimeMoire.Apply(dst, w, h, in moireFx);
+            }
+
             // S12.5 (#652) — relief STEREO (side-by-side). Relief has no per-eye camera
             // (the 3D true-stereo path keys on ViewState.Is3D), so it reuses the single
             // composited mono buffer + its captured depth AOV for a depth-parallax warp

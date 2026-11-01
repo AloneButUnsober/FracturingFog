@@ -226,6 +226,31 @@ public enum EdgeKernelMode
     FreiChen,
 }
 
+/// <summary>Which lattice points the coprime moiré layer lights (#1488).
+/// g = gcd(|i|, |j|) of the pixel's lattice point.</summary>
+public enum MoireCondition
+{
+    /// <summary>g = 1: the visible lattice points (coprime pairs). Default.</summary>
+    Coprime,
+    /// <summary>g = K.</summary>
+    GcdEquals,
+    /// <summary>1 ≤ g ≤ K.</summary>
+    GcdAtMost,
+    /// <summary>Smooth: brightness 1/g (0 at the origin).</summary>
+    GcdIntensity,
+}
+
+/// <summary>How the coprime moiré layer combines with the image (#1488).</summary>
+public enum MoireBlendMode
+{
+    /// <summary>Darkens off-lattice pixels. Default.</summary>
+    Multiply,
+    /// <summary>Lightens lit lattice pixels.</summary>
+    Screen,
+    /// <summary>Contrast: multiply in the shadows, screen in the highlights.</summary>
+    Overlay,
+}
+
 public enum SkyMode
 {
     /// <summary>Two-color vertical gradient between BgBottomColor and BgTopColor
@@ -678,6 +703,35 @@ public struct LightingFxData
     /// preserves bit-identity with Phase 23.</summary>
     public EdgeKernelMode EdgeKernel;
 
+    // ── Coprime moiré (#1488) ─────────────────────────────────────────
+    // A screen-space post layer over the finished display frame (2D and 3D):
+    // each pixel maps through offset → rotation → cell size / aspect to a lattice
+    // point (i, j), lit by MoireCondition on gcd(|i|, |j|). The moiré is aliasing
+    // between that pattern and the pixel grid, so MoireSamples (supersampling)
+    // fades it. Strength 0 (default) leaves the frame byte-identical.
+
+    /// <summary>Layer opacity [0, 1]. 0 = off.</summary>
+    public double MoireStrength;
+    /// <summary>Lattice spacing in pixels [0.25, 64]; fractional values beat against the pixel grid.</summary>
+    public double MoireCellSize;
+    /// <summary>Lattice rotation in degrees.</summary>
+    public double MoireRotation;
+    /// <summary>Lattice origin offset from the frame centre, in pixels.</summary>
+    public double MoireOffsetX;
+    public double MoireOffsetY;
+    /// <summary>Vertical / horizontal spacing ratio [0.25, 4]; ≠ 1 gives directional moiré.</summary>
+    public double MoireAspect;
+    /// <summary>Which gcd values light a lattice point.</summary>
+    public MoireCondition MoireCondition;
+    /// <summary>K for GcdEquals / GcdAtMost [1, 64].</summary>
+    public int MoireConditionK;
+    /// <summary>How the layer combines with the image.</summary>
+    public MoireBlendMode MoireBlend;
+    /// <summary>Swap lit and unlit lattice points.</summary>
+    public bool MoireInvert;
+    /// <summary>Subsamples per axis [1, 4]: 1 = raw aliasing (strongest moiré).</summary>
+    public int MoireSamples;
+
     // ── Stereo (Phase 20) ─────────────────────────────────────────────
 
     /// <summary>Interpupillary distance for side-by-side stereo render.
@@ -957,6 +1011,18 @@ public struct LightingFxData
         EdgeColor          = 0xFF000000u,
         EdgeThreshold      = 0.4,
         EdgeKernel         = EdgeKernelMode.Sobel,
+
+        MoireStrength      = 0.0,
+        MoireCellSize      = 1.0,
+        MoireRotation      = 0.0,
+        MoireOffsetX       = 0.0,
+        MoireOffsetY       = 0.0,
+        MoireAspect        = 1.0,
+        MoireCondition     = MoireCondition.Coprime,
+        MoireConditionK    = 2,
+        MoireBlend         = MoireBlendMode.Multiply,
+        MoireInvert        = false,
+        MoireSamples       = 1,
 
         StereoEyeSeparation = 0.0,
         StereoFovDegrees    = 60.0,

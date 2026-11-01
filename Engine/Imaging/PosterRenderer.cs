@@ -465,6 +465,13 @@ namespace FracturingFog.Imaging
                     req.ColorMap?.InSetColor ?? 0xFF000000u,
                     alphaPreview: false, srcAlreadyProcessed: false);
 
+            // #1488 — coprime moiré, the same layer and choke point as the live path.
+            if (req.FractalParameters != null)
+            {
+                var moireFx = req.FractalParameters.Lighting;
+                FracturingFog.Rendering.CoprimeMoire.Apply(buffer, w, h, in moireFx);
+            }
+
             // S12.5 (#652) — relief STEREO (depth-parallax side-by-side), matching the
             // live path (FractalRenderHost). Runs LAST, on the fully composited display
             // buffer, and doubles the poster dims (Full-SBS) or keeps them (Half-SBS).

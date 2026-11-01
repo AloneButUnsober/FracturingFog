@@ -1047,6 +1047,87 @@
                     </Grid>
                 </Expander>
 
+                <!-- #1488 — coprime moiré: a screen-space post layer over the finished
+                     frame (2D and 3D). Applied live, in export and in batch. -->
+                <Expander Header="Coprime moiré (screen-space)" HorizontalAlignment="Stretch">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Moiré strength:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Lights the lattice points (i, j) with gcd(|i|, |j|) = 1 (the visible lattice points) and blends that mask over the frame. The fine moiré is aliasing between the pattern and the pixel grid. Screen-space: it stays put when the fractal pans or zooms. 0 = off." />
+                        <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
+                                    Value="{Binding MoireStrength, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding MoireStrength, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Cell size (px):" VerticalAlignment="Center"
+                                   ToolTip.Tip="Lattice spacing in pixels. Fractional values beat against the pixel grid and change the moiré most." />
+                        <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0.25" Maximum="16"
+                                    Value="{Binding MoireCellSize, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding MoireCellSize, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Rotation (°):" VerticalAlignment="Center"
+                                   ToolTip.Tip="Rotates the lattice against the pixel grid." />
+                        <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="-180" Maximum="180"
+                                    Value="{Binding MoireRotation, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding MoireRotation, StringFormat='F1'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Aspect (y/x):" VerticalAlignment="Center"
+                                   ToolTip.Tip="Vertical / horizontal spacing ratio. Values other than 1 give directional moiré." />
+                        <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0.25" Maximum="4"
+                                    Value="{Binding MoireAspect, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding MoireAspect, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Offset X (px):" VerticalAlignment="Center"
+                                   ToolTip.Tip="Moves the lattice origin from the frame centre." />
+                        <NumericUpDown Grid.Row="4" Grid.Column="1" Minimum="-4096" Maximum="4096" Increment="0.25"
+                                       FormatString="F2" Value="{Binding MoireOffsetX, Mode=TwoWay}" Margin="0,2" />
+
+                        <TextBlock Grid.Row="5" Grid.Column="0" Text="Offset Y (px):" VerticalAlignment="Center" />
+                        <NumericUpDown Grid.Row="5" Grid.Column="1" Minimum="-4096" Maximum="4096" Increment="0.25"
+                                       FormatString="F2" Value="{Binding MoireOffsetY, Mode=TwoWay}" Margin="0,2" />
+
+                        <TextBlock Grid.Row="6" Grid.Column="0" Text="Condition:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Which lattice points light, by g = gcd(|i|, |j|): Coprime (g = 1), GcdEquals (g = K), GcdAtMost (1 ≤ g ≤ K), GcdIntensity (brightness 1/g, a smooth version)." />
+                        <ComboBox Grid.Row="6" Grid.Column="1" HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding MoireConditions}"
+                                  SelectedItem="{Binding MoireCondition, Mode=TwoWay}" Margin="0,2" />
+
+                        <TextBlock Grid.Row="7" Grid.Column="0" Text="K:" VerticalAlignment="Center"
+                                   ToolTip.Tip="The gcd value for GcdEquals / GcdAtMost." />
+                        <NumericUpDown Grid.Row="7" Grid.Column="1" Minimum="1" Maximum="64" Increment="1"
+                                       FormatString="F0" Value="{Binding MoireConditionK, Mode=TwoWay}" Margin="0,2" />
+
+                        <TextBlock Grid.Row="8" Grid.Column="0" Text="Blend:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Multiply darkens unlit points, Screen lightens lit ones, Overlay adds contrast." />
+                        <ComboBox Grid.Row="8" Grid.Column="1" HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding MoireBlends}"
+                                  SelectedItem="{Binding MoireBlend, Mode=TwoWay}" Margin="0,2" />
+
+                        <TextBlock Grid.Row="9" Grid.Column="0" Text="Samples:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Subsamples per axis. 1 = raw aliasing (strongest moiré); higher values average the pattern and fade the moiré." />
+                        <Grid Grid.Row="9" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="1" Maximum="4"
+                                    IsSnapToTickEnabled="True" TickFrequency="1"
+                                    Value="{Binding MoireSamples, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding MoireSamples}" />
+                        </Grid>
+
+                        <CheckBox Grid.Row="10" Grid.Column="1" IsChecked="{Binding MoireInvert, Mode=TwoWay}"
+                                  Content="Invert (light the non-matching points)" Margin="0,2" />
+                    </Grid>
+                </Expander>
+
                 <!-- #1338 — Intel Open Image Denoise -->
                 <Expander Header="Denoise (Intel OIDN)" HorizontalAlignment="Stretch">
                     <Grid ColumnDefinitions="160,*" RowDefinitions="Auto">

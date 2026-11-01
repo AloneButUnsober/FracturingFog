@@ -155,6 +155,18 @@ public sealed class LightingFxPresetData
     public uint   EdgeColor           { get; set; } = 0xFF000000u;
     public double EdgeThreshold       { get; set; } = 0.4;
     public EdgeKernelMode EdgeKernel  { get; set; } = EdgeKernelMode.Sobel;
+    // #1488 — coprime moiré post layer (defaults = LightingFxData.CreateDefault).
+    public double MoireStrength       { get; set; } = 0.0;
+    public double MoireCellSize       { get; set; } = 1.0;
+    public double MoireRotation       { get; set; } = 0.0;
+    public double MoireOffsetX        { get; set; } = 0.0;
+    public double MoireOffsetY        { get; set; } = 0.0;
+    public double MoireAspect         { get; set; } = 1.0;
+    public MoireCondition MoireCondition { get; set; } = MoireCondition.Coprime;
+    public int    MoireConditionK     { get; set; } = 2;
+    public MoireBlendMode MoireBlend  { get; set; } = MoireBlendMode.Multiply;
+    public bool   MoireInvert         { get; set; }
+    public int    MoireSamples        { get; set; } = 1;
     public StereoMode StereoMode      { get; set; } = StereoMode.Off;
     public double StereoEyeSeparation { get; set; } = 0.0;
     public double StereoFovDegrees    { get; set; } = 60.0;
@@ -284,6 +296,10 @@ public sealed class LightingFxPresetData
         CausticsScale = fx.CausticsScale, CausticsColor = fx.CausticsColor,
         EdgeStrength = fx.EdgeStrength, EdgeColor = fx.EdgeColor,
         EdgeThreshold = fx.EdgeThreshold, EdgeKernel = fx.EdgeKernel,
+        MoireStrength = fx.MoireStrength, MoireCellSize = fx.MoireCellSize, MoireRotation = fx.MoireRotation,
+        MoireOffsetX = fx.MoireOffsetX, MoireOffsetY = fx.MoireOffsetY, MoireAspect = fx.MoireAspect,
+        MoireCondition = fx.MoireCondition, MoireConditionK = fx.MoireConditionK,
+        MoireBlend = fx.MoireBlend, MoireInvert = fx.MoireInvert, MoireSamples = fx.MoireSamples,
         StereoMode = fx.StereoMode, StereoLayout = fx.StereoLayout, StereoSwapEyes = fx.StereoSwapEyes,
         StereoAutoPattern = fx.StereoAutoPattern, StereoAutoEyeSep = fx.StereoAutoEyeSep,
         StereoAutoDepthOfField = fx.StereoAutoDepthOfField, StereoAutoCrossEyed = fx.StereoAutoCrossEyed,
@@ -372,6 +388,10 @@ public sealed class LightingFxPresetData
         CausticsScale = CausticsScale, CausticsColor = CausticsColor,
         EdgeStrength = EdgeStrength, EdgeColor = EdgeColor,
         EdgeThreshold = EdgeThreshold, EdgeKernel = EdgeKernel,
+        MoireStrength = MoireStrength, MoireCellSize = MoireCellSize, MoireRotation = MoireRotation,
+        MoireOffsetX = MoireOffsetX, MoireOffsetY = MoireOffsetY, MoireAspect = MoireAspect,
+        MoireCondition = MoireCondition, MoireConditionK = MoireConditionK,
+        MoireBlend = MoireBlend, MoireInvert = MoireInvert, MoireSamples = MoireSamples,
         StereoMode = StereoMode, StereoLayout = StereoLayout, StereoSwapEyes = StereoSwapEyes,
         StereoAutoPattern = StereoAutoPattern, StereoAutoEyeSep = StereoAutoEyeSep,
         StereoAutoDepthOfField = StereoAutoDepthOfField, StereoAutoCrossEyed = StereoAutoCrossEyed,
