@@ -136,6 +136,7 @@ namespace FracturingFog.Batch
             if (opts.ReliefHeightSource.HasValue) fp.Relief2DHeightSource  = opts.ReliefHeightSource.Value;    // #1029
             if (opts.ReliefHeightBlend.HasValue)  fp.Relief2DHeightBlend   = opts.ReliefHeightBlend.Value;
             if (opts.ReliefDistanceFalloff.HasValue) fp.Relief2DDistanceFalloff = opts.ReliefDistanceFalloff.Value;
+            if (opts.ReliefTerraceRamp.HasValue) fp.Relief2DTerraceRamp = opts.ReliefTerraceRamp.Value;   // #1489
             if (opts.ReliefDofAperture.HasValue)  fp.Relief2DDofApertureRadius = opts.ReliefDofAperture.Value;
             if (opts.ReliefDofFocus.HasValue)     fp.Relief2DDofFocusDistance  = opts.ReliefDofFocus.Value;
             if (opts.ReliefFroxel)                fp.Relief2DFroxelVolumetrics = true;   // S6 (#408)

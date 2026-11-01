@@ -28,7 +28,8 @@ using GpuRoute = FracturingFog.Render.GpuRoute;
 namespace FracturingFog;
 
 public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculator, Interefaces.IHeightFieldSource, Interefaces.ISupportsHistogramEq,
-    Interefaces.IDistanceFieldSource, FracturingFog.Render.IGpuRouteSource
+    Interefaces.IDistanceFieldSource, Interefaces.IIterationFieldSource,   // #1489
+    FracturingFog.Render.IGpuRouteSource
 {
     public bool SupportsZoomPan => true;
 

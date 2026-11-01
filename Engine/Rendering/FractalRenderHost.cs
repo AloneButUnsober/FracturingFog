@@ -2923,7 +2923,8 @@ namespace FracturingFog.Rendering
                 var dsrc = fieldSrc as Interefaces.IDistanceFieldSource;
                 var eff = FracturingFog.Rendering.Lighting.ReliefHeightField.Build(
                     field, trapField, hn, p.Relief2DHeightSource, p.Relief2DHeightBlend,
-                    dsrc?.DistanceBuffer, fw, fh, dsrc?.DistancePixelScale ?? 0.0, p.Relief2DDistanceFalloff);
+                    dsrc?.DistanceBuffer, fw, fh, dsrc?.DistancePixelScale ?? 0.0, p.Relief2DDistanceFalloff,
+                    (dsrc as Interefaces.IIterationFieldSource)?.IterationBuffer, (dsrc as Interefaces.IIterationFieldSource)?.MaxIterations ?? 0, p.Relief2DTerraceRamp);   // #1489
                 if (_reliefHeight == null || _reliefHeight.Length < hn)
                     _reliefHeight = new float[hn];
                 Array.Copy(eff, _reliefHeight, hn);
@@ -3035,7 +3036,10 @@ namespace FracturingFog.Rendering
                                 phs, previewTrap, pn,
                                 rp.Relief2DHeightSource, rp.Relief2DHeightBlend,
                                 previewDist?.DistanceBuffer, pw, ph,
-                                previewDist?.DistancePixelScale ?? 0.0, rp.Relief2DDistanceFalloff);
+                                previewDist?.DistancePixelScale ?? 0.0, rp.Relief2DDistanceFalloff,
+                                (previewDist as Interefaces.IIterationFieldSource)?.IterationBuffer,
+                                (previewDist as Interefaces.IIterationFieldSource)?.MaxIterations ?? 0,
+                                rp.Relief2DTerraceRamp);   // #1489
                             if (_reliefPreviewScratch == null || _reliefPreviewScratch.Length < pn)
                                 _reliefPreviewScratch = new uint[pn];
                             if (prp.Relief2DRaymarch)
@@ -3303,7 +3307,8 @@ namespace FracturingFog.Rendering
                                 srcH, trap, Math.Min(srcH.Length, hn),
                                 rp.Relief2DHeightSource, rp.Relief2DHeightBlend,
                                 dsrc?.DistanceBuffer, hw, hh, dsrc?.DistancePixelScale ?? 0.0,
-                                rp.Relief2DDistanceFalloff);
+                                rp.Relief2DDistanceFalloff,
+                                (dsrc as Interefaces.IIterationFieldSource)?.IterationBuffer, (dsrc as Interefaces.IIterationFieldSource)?.MaxIterations ?? 0, rp.Relief2DTerraceRamp);   // #1489
                             Array.Copy(eff, _reliefHeight, Math.Min(eff.Length, hn));
                             _reliefW = hw; _reliefH = hh; _reliefValid = true;
                         }

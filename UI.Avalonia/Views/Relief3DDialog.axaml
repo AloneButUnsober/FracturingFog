@@ -103,10 +103,10 @@
                 <Expander Header="Height source (smooth / orbit-trap / distance)" HorizontalAlignment="Stretch"
                           IsExpanded="False"
                           IsEnabled="{Binding Relief2DEnabled}"
-                          ToolTip.Tip="Which per-pixel field the relief height is built from. Smooth = the iteration count (original). Trap = the orbit-trap min-distance field, for literal 3D orbit-trap topography (Ring -> concentric ridges, Hexagon -> a hex lattice). Blend = a mix. Trap / Blend require an orbit-trap colour theme active; with none, relief falls back to Smooth. Distance = distance to the set: the set becomes a raised plateau and filaments ridges that fall away, the same at any zoom depth and window size (Mandelbrot and the escape-time family; others fall back to Smooth). Best with Real height on (Camera &amp; quality); the default plate look draws it as tall curtain walls.">
-                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto">
+                          ToolTip.Tip="Which per-pixel field the relief height is built from. Smooth = the iteration count (original). Trap = the orbit-trap min-distance field, for literal 3D orbit-trap topography (Ring -> concentric ridges, Hexagon -> a hex lattice). Blend = a mix. Trap / Blend require an orbit-trap colour theme active; with none, relief falls back to Smooth. Distance = distance to the set: the set becomes a raised plateau and filaments ridges that fall away, the same at any zoom depth and window size (Mandelbrot and the escape-time family; others fall back to Smooth). PrimeTerrace = terraces that step up at each prime escape count (tread width = the gap to the next prime), each tilted toward the set by the distance ramp, with gem-like creases where two parts of the set are equally near (Mandelbrot and the escape-time family). Best with Real height on (Camera &amp; quality); the default plate look draws it as tall curtain walls.">
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Height from:" VerticalAlignment="Center"
-                               ToolTip.Tip="Smooth = iteration count. Trap = orbit-trap min-distance (needs an orbit-trap theme). Blend = mix of the two. Distance = distance to the set (a raised plateau with ridge filaments)." />
+                               ToolTip.Tip="Smooth = iteration count. Trap = orbit-trap min-distance (needs an orbit-trap theme). Blend = mix of the two. Distance = distance to the set (a raised plateau with ridge filaments). PrimeTerrace = steps at each prime escape count, tilted toward the set." />
                     <ComboBox Grid.Row="0" Grid.Column="1" Margin="0,2" HorizontalAlignment="Stretch"
                               ItemsSource="{Binding Relief2DHeightSources}"
                               SelectedItem="{Binding Relief2DHeightSource, Mode=TwoWay}" />
@@ -125,6 +125,14 @@
                     <Slider Grid.Row="2" Grid.Column="1" Minimum="0.2" Maximum="20" Margin="0,2"
                             IsEnabled="{Binding Relief2DDistanceFalloffApplies}"
                             Value="{Binding Relief2DDistanceFalloffPercent, Mode=TwoWay}" />
+
+                    <!-- #1489 — PrimeTerrace ramp weight. -->
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Terrace ramp:" VerticalAlignment="Center"
+                               IsEnabled="{Binding Relief2DTerraceRampApplies}"
+                               ToolTip.Tip="PrimeTerrace source: how much each tread tilts toward the set, in terrace steps. 0 = a flat staircase; 1 = a ramp as tall as one step. Its reach is the Distance falloff above. To see the steps, use Real height and lower Terrain smoothing (the default blurs them into slopes)." />
+                    <Slider Grid.Row="3" Grid.Column="1" Minimum="0" Maximum="8" Margin="0,2"
+                            IsEnabled="{Binding Relief2DTerraceRampApplies}"
+                            Value="{Binding Relief2DTerraceRamp, Mode=TwoWay}" />
                 </Grid>
                 </Expander>
 

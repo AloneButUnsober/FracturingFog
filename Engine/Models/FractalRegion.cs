@@ -2387,6 +2387,7 @@ namespace FracturingFog.Models
         public ReliefHeightSource HeightSource { get; set; } = ReliefHeightSource.Smooth;
         public double HeightBlend { get; set; } = 0.5;
         public double DistanceFalloff { get; set; } = 0.02;   // #1029
+        public double TerraceRamp { get; set; } = 1.0;        // #1489
         public double DetailGain { get; set; } = 1.0;
         public int DetailRadius { get; set; } = 0;
         public double HeightGamma { get; set; } = 1.0;
@@ -2502,6 +2503,7 @@ namespace FracturingFog.Models
                 HeightSource       = p.Relief2DHeightSource,
                 HeightBlend        = p.Relief2DHeightBlend,
                 DistanceFalloff    = p.Relief2DDistanceFalloff,
+                TerraceRamp        = p.Relief2DTerraceRamp,
                 DetailGain         = p.Relief2DDetailGain,
                 DetailRadius       = p.Relief2DDetailRadius,
                 HeightGamma        = p.Relief2DHeightGamma,
@@ -2583,6 +2585,7 @@ namespace FracturingFog.Models
             p.Relief2DHeightSource           = HeightSource;
             p.Relief2DHeightBlend            = HeightBlend;
             p.Relief2DDistanceFalloff        = DistanceFalloff;
+            p.Relief2DTerraceRamp            = TerraceRamp;
             p.Relief2DDetailGain             = DetailGain;
             p.Relief2DDetailRadius           = DetailRadius;
             p.Relief2DHeightGamma            = HeightGamma;

@@ -216,6 +216,7 @@ namespace FracturingFog.Batch
         public const string ReliefHeightSource     = "--relief-height-source";
         public const string ReliefHeightBlend      = "--relief-height-blend";
         public const string ReliefDistanceFalloff  = "--relief-distance-falloff";
+        public const string ReliefTerraceRamp      = "--relief-terrace-ramp";   // #1489
 
         // Depth of field on the relief raymarch camera (roadmap S3, #389). Any
         // DOF flag implies --relief-raymarch (DOF is perspective-camera only).

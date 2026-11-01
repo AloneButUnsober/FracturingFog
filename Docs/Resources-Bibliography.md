@@ -608,6 +608,16 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
   escape count by trial division (CPU and GPU) and splits odd primes into n ≡ 1 / n ≡ 3 (mod 4). Prior-art
   check (2026-10-31): a web search for colouring escape-time fractals by prime iteration counts found no
   source, so no prior method is credited and no novelty is claimed.
+- **Prime-counting function π(n)** — classical, not credited to a single source. The *PrimeTerrace* relief height
+  source (#1489, `ReliefHeightField.BuildPrimeTerrace`) uses π of each pixel's escape count as terrace height, so
+  treads are as wide as prime gaps, plus a ramp from FF's existing distance-estimate height source (#1029).
+  Prior-art check (2026-11-01, one web search): related work found, none combining the two — escape-time heightfields
+  such as SideFX's Houdini *Heightfields and terrains* Mandelbrot page
+  (<https://www.sidefx.com/docs/houdini/heightfields/mandelbrot.html>) and the Fractal Forums thread *3d heightfield
+  rendering* (<https://www.fractalforums.com/3d-fractal-generation/3d-heightfield-rendering>), and prime-data terrains
+  not tied to fractals (*Prime Terrain Visualizations*, <https://fractal-core-c96.pages.dev/visualizations.html>).
+  Titles and URLs are from the search listing; the pages were not read in full and their authors are not checked
+  (see [Citations awaiting verification](#citations-awaiting-verification)). No novelty is claimed.
 - **Visible lattice points (gcd(i, j) = 1) and Euclid's algorithm** — classical elementary number theory,
   not credited to a single source. The *Coprime moiré* post layer (#1488, `CoprimeMoire`) lights the
   lattice points with gcd(|i|, |j|) = 1 (or a chosen gcd condition) and blends that mask over the frame.
@@ -853,6 +863,9 @@ entry above completed or corrected.
 - **Barrallo & Jones, *Coloring Algorithms for Dynamical Systems in the Complex Plane*** — authors and
   title are confirmed from the hosting page; the journal, volume and year are not stated there and are
   not yet traced.
+- **#1489 prior-art listing** (Houdini *Heightfields and terrains*, Fractal Forums *3d heightfield rendering*,
+  *Prime Terrain Visualizations*) — titles and URLs only, from a search listing; authors, dates and content not yet
+  checked.
 - **Gaussian primes characterisation** — classical (usually traced to Gauss's work on Z[i]); the primary
   source is not identified here, so none is named.
 - **Garry T. Krollman** — the CIELAB / CIECAM02 conversion attribution above; the formulae themselves

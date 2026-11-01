@@ -42,7 +42,12 @@ namespace FracturingFog
     /// that fall away with distance (<c>Relief2DDistanceFalloff</c>). Needs a
     /// calculator that fills a distance buffer (Mandelbrot, escape-time family);
     /// others fall back to Smooth.</summary>
-    public enum ReliefHeightSource { Smooth, Trap, Blend, Distance }
+    /// <see cref="PrimeTerrace"/> (#1489) = terraces that step up at each prime escape
+    /// count (height pi(n), tread width = prime gap) plus a distance-estimate ramp toward
+    /// the set, so each tread tilts toward the set; the distance ramp's direction gives
+    /// creases where two boundary points are equally near. Needs the integer escape count
+    /// (Mandelbrot, escape-time family); others fall back to Smooth.
+    public enum ReliefHeightSource { Smooth, Trap, Blend, Distance, PrimeTerrace }
 
     /// <summary>How the Relief 3D raymarch turns the processed height field into
     /// world height (#1026). <see cref="Peak"/> (default, the original) scales the
