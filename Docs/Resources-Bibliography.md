@@ -735,6 +735,22 @@ Programs and galleries the project measured itself against, learned from, or pay
 - **Wolfram Language** `MandelbrotSetBoettcher` — the Böttcher coordinate.
 - **Basins.jl** (JuliaDynamics) — basin entropy, uncertainty exponent.
   <https://docs.juliahub.com/General/Basins/>.
+<a id="imagina"></a>
+
+- **Imagina** — GitHub user **5E-324**. *Imagina: a fast fractal renderer & explorer*, AGPL-3.0,
+  <https://github.com/5E-324/Imagina> (repository last updated 2024-01-23; read 2026-11-01). Its
+  `HInfLAEvaluator` (hierarchical linear approximation in stages synchronised with detected periods,
+  plus an "approximation transform" for pixels deep in the top stage) is the method of the #1623 epic
+  (`Docs/Technical/Period-Synchronised-LA-DesignPlan.md`). It is also the comparison renderer in rith's
+  0.7.1 benchmark. The author's real name and any published description of the method are not
+  verified (see *Citations awaiting verification*).
+- **Robert P. Munafo.** *Bivariate Linear Approximation*, Mu-Ency (Encyclopedia of the Mandelbrot
+  Set), <https://mrob.com/pub/muency/bivariatelinearapproximati.html> (read 2026-11-01). Background on
+  BLA and on Zhuoran's rebasing tests, for #1623.
+- **Wikibooks.** *Fractals/software*, <https://en.wikibooks.org/wiki/Fractals/software> (read
+  2026-11-01). Notes that Imagina synchronises its approximation steps with minibrot periods; the
+  pointer that led to the #1623 approach.
+
 <a id="fractadyne-bench-kit"></a>
 
 - **WindySnowOwl.** *bench-kit* — deep-zoom benchmark scenes and harness in the *fractadyne*
@@ -816,6 +832,9 @@ entry above completed or corrected.
 - **Mariani–Silver** — primary description (Rico Mariani's algorithm; Robert Silver's formulation)
   isn't identified; it's commonly documented through Fractint-era material and Wikibooks *Fractals*.
 - **Earl F. Glynn** — the original publication of the fractional-power Julia set.
+- **Imagina's LA stages and AT (#1623)** — the author behind the GitHub handle 5E-324, and whether
+  the method was described in a forum thread or paper before or alongside the code, are not
+  verified. Trace them and credit the primary description.
 - **One-period reference orbit with rebasing (#1614)** — stopping a nucleus-centred reference at its
   period and rebasing there is likely prior art in deep-zoom renderers (e.g. Imagina, Kalles
   Fraktaler 2+, Fraktaler 3) or in the fractalforums.org rebasing threads, but no source stating it was

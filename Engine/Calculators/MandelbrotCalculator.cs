@@ -1125,6 +1125,13 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
 
     // Diagnostic counters — reset per Calculate, totalled after Parallel.For
     private long _blaSkipsTotal;
+    private long _ptStepsTotal;   // #1614 — plain vector steps of the PT4 / PT8 rows
+
+    /// <summary>#1614 — the last CPU deep frame's PT4 / PT8 row work: BLA skips,
+    /// iterations those skips saved, and plain (non-BLA) vector steps (each a step of
+    /// 4 or 8 lanes). Diagnostic / probe use.</summary>
+    public (long BlaSkips, long BlaIterSaved, long PlainSteps) LastPtWork
+        => (_blaSkipsTotal, _blaIterSkippedTotal, _ptStepsTotal);
     private long _blaIterSkippedTotal;
 
     // Series approximation prelude — third-order polynomial in dc, used to
@@ -2902,6 +2909,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
 
         _blaSkipsTotal = 0;
         _blaIterSkippedTotal = 0;
+        _ptStepsTotal = 0;
         _saAppliedTotal = 0;
         _saIterSkippedTotal = 0;
 
@@ -4889,6 +4897,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         // m == iter, as before.
         int period = _refPeriod;
         long rowBlaSkips = 0;
+        long rowSteps = 0;   // #1614 — plain (non-BLA) vector steps
         long rowBlaIterSaved = 0;
         long rowSaApplied = 0;
         long rowSaIterSaved = 0;
@@ -5106,6 +5115,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 dr = BlendActive(dr, newDr, active);
                 di = BlendActive(di, newDi, active);
                 m++;   // #1614
+                rowSteps++;
             }
 
             // Bulk-extract lanes via Vector256.CopyTo (one vmovupd per vector)
@@ -5217,6 +5227,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         if (rowBlaSkips != 0)
         {
             Interlocked.Add(ref _blaSkipsTotal, rowBlaSkips);
+            Interlocked.Add(ref _ptStepsTotal, rowSteps);
             Interlocked.Add(ref _blaIterSkippedTotal, rowBlaIterSaved);
         }
         if (rowSaApplied != 0)
@@ -5278,6 +5289,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         // m == iter, as before.
         int period = _refPeriod;
         long rowBlaSkips = 0;
+        long rowSteps = 0;   // #1614 — plain (non-BLA) vector steps
         long rowBlaIterSaved = 0;
         long rowSaApplied = 0;
         long rowSaIterSaved = 0;
@@ -5485,6 +5497,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 dr = BlendActive512(dr, newDr, active);
                 di = BlendActive512(di, newDi, active);
                 m++;   // #1614
+                rowSteps++;
             }
 
             // Scratch spans hoisted above loop (see CA2014 fix).
@@ -5589,6 +5602,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         if (rowBlaSkips != 0)
         {
             Interlocked.Add(ref _blaSkipsTotal, rowBlaSkips);
+            Interlocked.Add(ref _ptStepsTotal, rowSteps);
             Interlocked.Add(ref _blaIterSkippedTotal, rowBlaIterSaved);
         }
         if (rowSaApplied != 0)
