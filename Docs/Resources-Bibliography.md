@@ -480,6 +480,25 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
   *Prime Escape (Gold-Cyan)* theme (#1486) colours by the integer count instead, using the smooth count
   only for the drift of its dimmed composites and as its `n = floor(smooth)` fallback (which lags n by
   log2 log2 of the bailout radius, per this formula).
+<a id="barrallo-jones-gaussian-integer"></a>
+
+- **Javier Barrallo, Damien M. Jones.** *Coloring Algorithms for Dynamical Systems in the Complex
+  Plane.* Hosted on the Visual Mathematics site, <https://www.mi.sanu.ac.rs/vismath/javier/index.html>;
+  §VII *Gaussian Integers Algorithm* <https://www.mi.sanu.ac.rs/vismath/javier/b8.htm> and §VI *Orbit
+  Traps*. Authors and title checked against the page; the journal, volume and year are not stated there
+  (see [Citations awaiting verification](#citations-awaiting-verification)). The Gaussian-integer trap —
+  distance from each z_n to the nearest Gaussian integer — that FF's *Gaussian Integer* theme
+  (`GaussianIntegerMap`, mean distance) and ColorGen's `gaussian` input use. Credit added with #1487,
+  whose *Gaussian Prime Trap* (`GaussianPrimeTrapMap`) builds on it: the same lattice trap thinned to the
+  Gaussian primes, the orbit scaled ×6, and a minimum over the last 10–19 iterations before escape.
+- **Ultra Fractal — *Gaussian Integer* colouring** (Standard.ucl; also a trap shape in Standard.ulb).
+  <https://www.ultrafractal.com/help/coloring/standard/gaussianinteger.html>. The page names no author.
+  Prior art for the Gaussian-integer trap above. A prior-art search (2026-10-31) found no trap against the
+  Gaussian *primes*; no novelty is claimed beyond that.
+- **Gaussian primes** — classical characterisation: a+bi is prime in Z[i] iff a, b ≠ 0 and a² + b² is a
+  rational prime, or one of a, b is 0 and the other's |value| is a rational prime ≡ 3 (mod 4). Used by
+  `GaussianPrimeTrapMap` (#1487). Primary source not yet traced (see
+  [Citations awaiting verification](#citations-awaiting-verification)).
 - **Garry T. Krollman.** *CIELAB and CIECAM02 conversions* — referenced by the from-image palette
   k-means sampler. Practical formulae from
   <https://www.brucelindbloom.com/index.html?Eqn_RGB_to_XYZ.html>.
@@ -766,6 +785,11 @@ entry above completed or corrected.
 - **Persistent threads (Aila & Laine 2009)** — the paper's details are confirmed (authors, venue,
   pages, URL); that it is where the persistent-thread work distribution the wavefront schedule follows
   was introduced is from memory, not yet checked against the paper's text.
+- **Barrallo & Jones, *Coloring Algorithms for Dynamical Systems in the Complex Plane*** — authors and
+  title are confirmed from the hosting page; the journal, volume and year are not stated there and are
+  not yet traced.
+- **Gaussian primes characterisation** — classical (usually traced to Gauss's work on Z[i]); the primary
+  source is not identified here, so none is named.
 - **Garry T. Krollman** — the CIELAB / CIECAM02 conversion attribution above; the formulae themselves
   are Bruce Lindbloom's.
 - **NASA Ames perceptual papers** — which chromostereopsis papers.
