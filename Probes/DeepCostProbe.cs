@@ -74,6 +74,12 @@ namespace FracturingFog
                 var st = s_lastStages;
                 Console.WriteLine($"  {s.Name,-14} stages: orbit {st.RefOrbit,8:F0} ms ({1e3 * st.RefOrbit / s.Iter:F2} us/iter, period {s_lastPeriod})  " +
                                   $"BLA {st.Bla,6:F0} ms  SA {st.Sa,6:F0} ms  pixels {st.Pixels,7:F0} ms");
+                var wk = s_lastWork;
+                double batches = w * h / 4.0;
+                Console.WriteLine($"  {s.Name,-14} work  : per 4-px batch {wk.PlainSteps / batches,10:F0} plain steps, {wk.BlaSkips / batches,8:F0} BLA skips " +
+                                  $"(avg {(wk.BlaSkips == 0 ? 0 : wk.BlaIterSaved / (double)wk.BlaSkips + 1):F1} iter each); " +
+                                  $"iterations per px {aIt / (double)(w * h),10:F0}; rebased px {s_lastRebased:N0}; " +
+                                  $"CPU {s_lastCpuMs:F0} ms = {s_lastCpuMs / aMs:F1} threads busy of {Environment.ProcessorCount}");
                 // #1614 — FF_DEEPCOST_PERIODIC_AB=1: the same frame with the periodic
                 // reference off (full-length orbit), and the pixels that differ.
                 if (Environment.GetEnvironmentVariable("FF_DEEPCOST_PERIODIC_AB") == "1")
@@ -128,6 +134,9 @@ namespace FracturingFog
 
         private static MandelbrotCalculator.HpStageMs s_lastStages;
         private static int s_lastPeriod;
+        private static (long BlaSkips, long BlaIterSaved, long PlainSteps) s_lastWork;
+        private static long s_lastRebased;
+        private static double s_lastCpuMs;
 
         private static (int[] Iter, float[] Smooth, double Ms, long Rebased, long Iters) Render(Scene s, double zoom, int w, int h, int reps, bool noAccel)
         {
@@ -137,15 +146,17 @@ namespace FracturingFog
             {
                 var c = Make(s, zoom, w, h);
                 c.DisableAcceleration = noAccel;
+                var cpu0 = System.Diagnostics.Process.GetCurrentProcess().TotalProcessorTime;
                 if (double.TryParse(Environment.GetEnvironmentVariable("FF_DEEPCOST_EPS"), System.Globalization.NumberStyles.Float,
                         System.Globalization.CultureInfo.InvariantCulture, out double eps)) c.BlaTolerance = eps;
                 var sw = Stopwatch.StartNew();
                 c.Calculate();
                 best = Math.Min(best, sw.Elapsed.TotalMilliseconds);
+                if (!noAccel) s_lastCpuMs = (System.Diagnostics.Process.GetCurrentProcess().TotalProcessorTime - cpu0).TotalMilliseconds;
                 last = c;
             }
             long iters = last!.IterationBuffer.Sum(v => (long)v);
-            if (!noAccel) { s_lastStages = last.LastHpStageMs; s_lastPeriod = last.ReferencePeriod; }
+            if (!noAccel) { s_lastStages = last.LastHpStageMs; s_lastPeriod = last.ReferencePeriod; s_lastWork = last.LastPtWork; s_lastRebased = last.PtRebasedPixels; }
             return ((int[])last.IterationBuffer.Clone(), (float[])last.SmoothBuffer.Clone(), best, last.PtRebasedPixels, iters);
         }
 
