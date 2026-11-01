@@ -511,7 +511,8 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
 - **Gaussian primes** — classical characterisation: a+bi is prime in Z[i] iff a, b ≠ 0 and a² + b² is a
   rational prime, or one of a, b is 0 and the other's |value| is a rational prime ≡ 3 (mod 4). Used by
   `GaussianPrimeTrapMap` (#1487) and `GaussianPrimeHitsMap` (#1608, whose interior colours the share of
-  the attracting cycle's points on a Gaussian prime). Primary source not yet traced (see
+  the attracting cycle's points on a Gaussian prime), and by the Color Theme Editor's tunable GaussianPrime trap
+  shape (#1634). Primary source not yet traced (see
   [Citations awaiting verification](#citations-awaiting-verification)).
 - **Garry T. Krollman.** *CIELAB and CIECAM02 conversions* — referenced by the from-image palette
   k-means sampler. Practical formulae from
@@ -605,7 +606,8 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
   the Newton calculator's polynomial-coefficient mode (roadmap).
 - **Trial division and the n mod 4 classes of odd primes** — classical elementary number theory, not
   credited to a single source. *Prime Escape (Gold-Cyan)* (#1486, `PrimeEscapeGoldCyanMap`) tests each
-  escape count by trial division (CPU and GPU) and splits odd primes into n ≡ 1 / n ≡ 3 (mod 4). Prior-art
+  escape count by trial division (CPU and GPU) and splits odd primes into n ≡ 1 / n ≡ 3 (mod 4). The Color Theme
+  Editor's *Prime Bands* kind (#1634, `DataDrivenPrimeBands`) uses the same test, with mod 4 / mod 6 / single classes. Prior-art
   check (2026-10-31): a web search for colouring escape-time fractals by prime iteration counts found no
   source, so no prior method is credited and no novelty is claimed.
 - **Prime-counting function π(n)** — classical, not credited to a single source. The *PrimeTerrace* relief height

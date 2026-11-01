@@ -45,7 +45,12 @@ namespace FracturingFog.Models
         /// <see cref="ColorThemeData.BilliardDrive"/> selects the secondary
         /// modulation. Instantiates <c>DataDrivenBilliard</c>
         /// (an <c>IBilliardColorMap</c>).</summary>
-        Categorical
+        Categorical,
+        /// <summary>#1634 — prime escape-count bands: escape counts that are prime get
+        /// flat colours by class (<see cref="ColorThemeData.PrimeModulus"/>), every other
+        /// count the theme's gradient dimmed by <see cref="ColorThemeData.PrimeCompositeDim"/>.
+        /// The editable form of the built-in Prime Escape (Gold-Cyan) (#1486).</summary>
+        PrimeBands
     }
 
     /// <summary>#630 — how a categorical billiard theme's secondary channel
@@ -69,12 +74,26 @@ namespace FracturingFog.Models
     /// measured against; the runtime delegates the distance measurement to the
     /// matching built-in trap sampler, so no shape maths is duplicated.
     /// </summary>
+    /// <summary>#1634 — how the PrimeBands kind sorts primes into colour classes.</summary>
+    public enum PrimeBandModulus
+    {
+        /// <summary>Every odd prime in class A; 2 special.</summary>
+        Single,
+        /// <summary>p ≡ 1 (mod 4) class A, p ≡ 3 class B; 2 special (the built-in's split).</summary>
+        Mod4,
+        /// <summary>p ≡ 1 (mod 6) class A, p ≡ 5 class B; 2 and 3 special.</summary>
+        Mod6,
+    }
+
     public enum OrbitTrapShape
     {
         Point, Cross, Circle, Line, Star,
         Square, Ring, Hyperbola, Lemniscate, Cardioid,
         DiagonalCross, Triangle, Hexagon, Heart, SineWave,
-        Concentric, Grid, Pinwheel, PolarRose
+        Concentric, Grid, Pinwheel, PolarRose,
+        /// <summary>#1634 — the Gaussian primes (lattice scale / tail window /
+        /// interior hits set by the Gaussian* fields). Appended: saved values keep their meaning.</summary>
+        GaussianPrime
     }
 
     /// <summary>
@@ -328,6 +347,31 @@ namespace FracturingFog.Models
         /// ⇒ flat interior (byte-identical). Only meaningful for the OrbitTrap
         /// kind.</summary>
         public bool ColorInterior { get; set; } = false;
+
+        /// <summary>#1634 — GaussianPrime shape: the orbit is scaled by this before
+        /// measuring to the Gaussian primes (0.5..16; default 6 as the built-in).</summary>
+        public float GaussianLatticeScale { get; set; } = 6f;
+        /// <summary>#1634 — GaussianPrime shape: tail-window block length; the window is
+        /// the last block..2·block−1 iterations before escape. 0 = the whole orbit
+        /// (goes flat past shallow zoom). Default 10 as the built-in.</summary>
+        public int GaussianTailBlock { get; set; } = 10;
+        /// <summary>#1634 — GaussianPrime shape with <see cref="ColorInterior"/>: colour the
+        /// interior by the share of the attracting cycle's points that land on a Gaussian
+        /// prime (the built-in Gaussian Prime Hits) instead of by trap distance.</summary>
+        public bool GaussianInteriorHits { get; set; } = false;
+
+        // ── Prime bands (#1634, Kind == PrimeBands) ───────────────────────────
+
+        /// <summary>Colour of class-A primes; null = gold #FFCC00 (the built-in).</summary>
+        public InSetColorData? PrimeColorA { get; set; }
+        /// <summary>Colour of class-B primes; null = cyan (26, 153, 255) (the built-in).</summary>
+        public InSetColorData? PrimeColorB { get; set; }
+        /// <summary>Colour of the special primes (2, and 3 under Mod6); null = white.</summary>
+        public InSetColorData? PrimeColorSpecial { get; set; }
+        /// <summary>Brightness of the gradient on non-prime counts, 0..1. Default 0.25.</summary>
+        public float PrimeCompositeDim { get; set; } = 0.25f;
+        /// <summary>How primes split into classes. Default Mod4.</summary>
+        public PrimeBandModulus PrimeModulus { get; set; } = PrimeBandModulus.Mod4;
 
         // ── Categorical / Billiard (#630) ─────────────────────────────────────
         /// <summary>#630 — secondary modulation for a categorical billiard theme

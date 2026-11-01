@@ -62,9 +62,13 @@ namespace FracturingFog.Models
         /// <summary>Brightness falloff: t = exp(−Falloff·d).</summary>
         public const double Falloff = 3.0;
 
+        /// <summary>Largest lattice scale the grid covers (#1634: the scale is tunable in
+        /// the Color Theme Editor's Gaussian-prime trap shape).</summary>
+        public const double MaxLatticeScale = 16.0;
+
         // Gaussian-prime grid over [−Half, Half]². Scaled samples round to at most
-        // LatticeScale·SampleBox = 12 and the search reaches ±Reach beyond.
-        private const int Half = 16, Reach = 3;
+        // MaxLatticeScale·SampleBox = 32 and the search reaches ±Reach beyond.
+        private const int Half = 37, Reach = 4;
         private static readonly bool[] Grid = BuildGrid();
 
         private static bool[] BuildGrid()
@@ -86,7 +90,7 @@ namespace FracturingFog.Models
             return g;
         }
 
-        /// <summary>True when a+bi is a Gaussian prime (|a|, |b| ≤ 16).</summary>
+        /// <summary>True when a+bi is a Gaussian prime (|a|, |b| ≤ 37).</summary>
         public static bool IsGaussianPrime(int a, int b)
             => Math.Abs(a) <= Half && Math.Abs(b) <= Half && Grid[(a + Half) * (2 * Half + 1) + (b + Half)];
 
@@ -95,7 +99,7 @@ namespace FracturingFog.Models
         // distance to the square is at most U, the smallest farthest-corner distance
         // of any of them (every point of the square has a prime within U). This
         // keeps the search exact while checking ~6 primes instead of 49 cells.
-        private const int Cells = 13;
+        private const int Cells = 33;
         private static readonly (int[] Start, int[] A, int[] B) Candidates = BuildCandidates();
 
         private static (int[], int[], int[]) BuildCandidates()
@@ -126,10 +130,10 @@ namespace FracturingFog.Models
         private static double Sq(double v) => v * v;
 
         /// <summary>Distance from (wr, wi) to the nearest Gaussian prime. Exact for
-        /// |wr|, |wi| ≤ 12.5: every such point has a Gaussian prime within 2.5 (the
-        /// worst gap is √5, checked by the tests), which the ±3 search around the
-        /// rounded point reaches; the per-cell candidate lists prune that search
-        /// without changing its result.</summary>
+        /// |wr|, |wi| ≤ 32.5: every such point has a Gaussian prime within 3.5 (the
+        /// worst gap there is about 2.57, checked by the tests), which the ±4 search
+        /// around the rounded point reaches; the per-cell candidate lists prune that
+        /// search without changing its result.</summary>
         public static double NearestDistance(double wr, double wi)
         {
             int ra = (int)Math.Round(wr), rb = (int)Math.Round(wi);
@@ -185,8 +189,14 @@ namespace FracturingFog.Models
         /// <summary>The tail-window trap step, shared with <see cref="GaussianPrimeHitsMap"/>.
         /// Returns true when the sample was inside the trapped box.</summary>
         internal static bool SampleTrap(ref OrbitAccumulator acc, double zr, double zi, int iter)
+            => SampleTrap(ref acc, zr, zi, iter, LatticeScale, TailBlock);
+
+        /// <summary>#1634 — the same step for any lattice scale (≤ <see cref="MaxLatticeScale"/>)
+        /// and block length; <paramref name="block"/> ≤ 0 traps the whole orbit (no window).</summary>
+        internal static bool SampleTrap(ref OrbitAccumulator acc, double zr, double zi, int iter,
+                                        double scale, int block)
         {
-            if (iter > 0 && iter % TailBlock == 0)
+            if (block > 0 && iter > 0 && iter % block == 0)
             {
                 acc.TrapMin3 = acc.TrapMin2;
                 acc.TrapMin2 = float.MaxValue;
@@ -194,7 +204,7 @@ namespace FracturingFog.Models
             bool inBox = Math.Abs(zr) <= SampleBox && Math.Abs(zi) <= SampleBox;
             if (inBox)
             {
-                float d = (float)NearestDistance(zr * LatticeScale, zi * LatticeScale);
+                float d = (float)NearestDistance(zr * scale, zi * scale);
                 if (d < acc.TrapMin2) acc.TrapMin2 = d;
             }
             acc.TrapMin = Math.Min(acc.TrapMin2, acc.TrapMin3);
@@ -249,16 +259,21 @@ namespace FracturingFog.Models
         public void InitOrbit(out OrbitAccumulator acc) => GaussianPrimeTrapMap.InitTrap(out acc);
 
         public void Sample(ref OrbitAccumulator acc, double zr, double zi, double cr, double ci, int iter)
+            => SampleHits(ref acc, zr, zi, iter, GaussianPrimeTrapMap.LatticeScale, GaussianPrimeTrapMap.TailBlock);
+
+        /// <summary>#1634 — trap step plus hit window for any scale / block (block ≤ 0 =
+        /// whole orbit), shared with the editor's Gaussian-prime trap shape.</summary>
+        internal static void SampleHits(ref OrbitAccumulator acc, double zr, double zi, int iter,
+                                        double scale, int block)
         {
-            if (iter > 0 && iter % GaussianPrimeTrapMap.TailBlock == 0)
+            if (block > 0 && iter > 0 && iter % block == 0)
             {
                 acc.TrapMin5 = acc.TrapMin4; acc.TrapMin4 = 0f;
                 acc.LyapunovCount = acc.CurvatureCount; acc.CurvatureCount = 0;
             }
-            if (!GaussianPrimeTrapMap.SampleTrap(ref acc, zr, zi, iter)) return;
+            if (!GaussianPrimeTrapMap.SampleTrap(ref acc, zr, zi, iter, scale, block)) return;
             acc.CurvatureCount++;
-            double s = GaussianPrimeTrapMap.LatticeScale;
-            if (GaussianPrimeTrapMap.IsGaussianPrime((int)Math.Round(zr * s), (int)Math.Round(zi * s)))
+            if (GaussianPrimeTrapMap.IsGaussianPrime((int)Math.Round(zr * scale), (int)Math.Round(zi * scale)))
                 acc.TrapMin4++;
         }
 
@@ -280,6 +295,36 @@ namespace FracturingFog.Models
         {
             float t = maxIterations > 0 ? smooth / maxIterations : 0f;
             return MapNormalized(Math.Clamp(t, 0f, 1f), distance);
+        }
+    }
+
+    // #1634 — the Gaussian-prime trap as a configurable shape sampler, for the Color
+    // Theme Editor's OrbitTrap kind (OrbitTrapShape.GaussianPrime) and the ColorGen
+    // `trap` input. Same exact sampling as GaussianPrimeTrapMap / GaussianPrimeHitsMap
+    // (shared statics), with the lattice scale, the tail block (0 = whole orbit) and
+    // whether to also count hits (for an interior coloured by hit fraction) tunable.
+    // Colour comes from the hosting theme (its stops and TrapScale/TrapPower curve).
+    public sealed class OrbitTrapGaussianPrimeMap : OrbitTrapBaseMap
+    {
+        public double LatticeScale { get; }
+        public int TailBlock { get; }
+        public bool CountHits { get; }
+
+        public OrbitTrapGaussianPrimeMap(double latticeScale = GaussianPrimeTrapMap.LatticeScale,
+                                         int tailBlock = GaussianPrimeTrapMap.TailBlock, bool countHits = false)
+        {
+            LatticeScale = Math.Clamp(latticeScale, 0.5, GaussianPrimeTrapMap.MaxLatticeScale);
+            TailBlock = Math.Max(0, tailBlock);
+            CountHits = countHits;
+            GaussianPrimeTrapMap.AddStops(Stops);
+        }
+
+        public override void InitOrbit(out OrbitAccumulator acc) => GaussianPrimeTrapMap.InitTrap(out acc);
+
+        public override void Sample(ref OrbitAccumulator acc, double zr, double zi, double cr, double ci, int iter)
+        {
+            if (CountHits) GaussianPrimeHitsMap.SampleHits(ref acc, zr, zi, iter, LatticeScale, TailBlock);
+            else GaussianPrimeTrapMap.SampleTrap(ref acc, zr, zi, iter, LatticeScale, TailBlock);
         }
     }
 }

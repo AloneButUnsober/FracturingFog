@@ -167,6 +167,9 @@ Sections collapse when irrelevant — Phong3D / PBR3D extras hide for Gradient +
 | **Cycling** | Repeats the gradient N times along the iter axis. Best for revealing fine band structure in shallow + medium zooms. |
 | **Phong3D** | Cycling gradient + Blinn-Phong directional lighting computed from a synthesized surface normal (the Z component is built from the iter derivative). Gives a relief-mapped look. |
 | **Pbr3D** | Cycling gradient + Cook-Torrance physically-based shading + per-band metallic/roughness. Gives a real-material look (chrome, brushed steel, ceramic, glass). |
+| **Orbit Trap** | Colours by the closest distance from the orbit to a chosen **Shape**, mapped through the stops by **Scale** / **Power**. **Colour interior** colours the set from its orbit too. The **GaussianPrime** shape (#1634) traps against the Gaussian primes; it adds **Lattice scale** (6 = the built-in *Gaussian Prime Trap*; larger = more, smaller domes), **Tail window** (trap only the last N to 2N−1 iterations before escape, which keeps contrast when zoomed in; 0 = whole orbit) and **Interior by prime hits** (with Colour interior: carve the set into blocks by the share of its cycle on Gaussian primes, as the built-in *Gaussian Prime Hits*). |
+| **Categorical** | Per-gate colours for the chaotic-billiard scatterer; stops are the per-gate palette. |
+| **Prime Bands** | (#1634) Escape counts that are prime get flat colours by class, every other count the gradient (as Gradient) dimmed by **Others dim**. **Classes**: `Mod4` (1 mod 4 → colour A, 3 mod 4 → B, 2 → special; the built-in *Prime Escape (Gold-Cyan)*), `Mod6` (1 / 5 mod 6, with 2 and 3 special) or `Single`. Colours are RRGGBB hex; empty = the built-in's gold / cyan / white. |
 
 Changing Kind shows / hides the relevant lighting sections.
 
@@ -405,6 +408,8 @@ Pbr3D entries add a `pbrExtras` block with `lightingMode`, `glowExp`, `glowScale
 | `colorOffset` | float | `0` | Phase rotation of the palette along the iteration axis (Cycling / Phong3D / Pbr3D). |
 | `colorDensity` | float | `1` | Frequency multiplier — how many cycles fit, independent of `cycleSpeed`. |
 | `wrapMode` | `Repeat` / `PingPong` / `Clamp` | `Repeat` | Boundary behaviour. `PingPong` mirrors so there is no 1→0 seam. |
+| `gaussianLatticeScale` / `gaussianTailBlock` / `gaussianInteriorHits` | float `[0.5,16]` / int (0 = whole orbit) / bool | `6` / `10` / `false` | Orbit Trap kind with `trapShape: "GaussianPrime"` (#1634): lattice scale, tail window, interior by prime hits. |
+| `primeModulus` / `primeCompositeDim` / `primeColorA`, `primeColorB`, `primeColorSpecial` | `Single` / `Mod4` / `Mod6`; float `[0,1]`; `{R,G,B}` or omitted | `Mod4` / `0.25` / built-in colours | Prime Bands kind (#1634): class split, brightness of non-prime counts, prime colours. |
 | `scaleMode` | `Iterations` / `FitToRange` | `Iterations` | What the palette cycles over (#1590). `Iterations` = a fixed iteration rhythm (`cycleSpeed`), the classic look. `FitToRange` = density 1 spreads the palette **once over 0..max iterations**, ignoring `cycleSpeed`. Cycling / Phong3D / Pbr3D. |
 
 **When to use `FitToRange`.** Some fractal types scale their value onto 0..max iterations instead of

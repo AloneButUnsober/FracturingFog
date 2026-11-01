@@ -59,9 +59,9 @@ public sealed class GaussianPrimeTrapThemeTests
         Assert.False(GaussianPrimeTrapMap.IsGaussianPrime(2, 0));   // 2 = −i(1+i)²
     }
 
-    // The ±3 search is exact only if every point of the sampled box has a prime
-    // within 2.5 (a ±2 search would need 1.5, which fails: the worst gap is √5);
-    // check that precondition, then the search itself.
+    // Over the scale-6 box every point has a prime within 2.5 (a ±2 search would
+    // need 1.5, which fails: the worst gap is √5); the search (±4 since #1634, for
+    // the wider editor box — see PrimeThemesEditorTests) must match brute force.
     [Fact]
     public void NearestDistance_IsExactOverTheSampledBox()
     {

@@ -324,6 +324,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
                 this.RaisePropertyChanged(nameof(IsPbr));
                 this.RaisePropertyChanged(nameof(IsOrbitTrap));
                 this.RaisePropertyChanged(nameof(IsCategorical));
+                this.RaisePropertyChanged(nameof(IsPrimeBands));   // #1634
                 FieldChanged();
             }
         }
@@ -335,6 +336,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
     public bool IsPbr { get => Kind == ColorThemeKindDef.Pbr3D; set { if (value) Kind = ColorThemeKindDef.Pbr3D; } }
     public bool IsOrbitTrap { get => Kind == ColorThemeKindDef.OrbitTrap; set { if (value) Kind = ColorThemeKindDef.OrbitTrap; } }
     public bool IsCategorical { get => Kind == ColorThemeKindDef.Categorical; set { if (value) Kind = ColorThemeKindDef.Categorical; } }
+    public bool IsPrimeBands { get => Kind == ColorThemeKindDef.PrimeBands; set { if (value) Kind = ColorThemeKindDef.PrimeBands; } }   // #1634
 
     private bool _showCycle;
     public bool ShowCycle { get => _showCycle; private set => this.RaiseAndSetIfChanged(ref _showCycle, value); }
@@ -370,7 +372,84 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         ShowPbrExtras = Kind == ColorThemeKindDef.Pbr3D;
         ShowOrbitTrap = Kind == ColorThemeKindDef.OrbitTrap;
         ShowCategorical = Kind == ColorThemeKindDef.Categorical;   // #630
+        ShowPrimeBands = Kind == ColorThemeKindDef.PrimeBands;     // #1634
+        ShowGaussianPrime = ShowOrbitTrap && TrapShape == OrbitTrapShapeDef.GaussianPrime;
     }
+
+    private bool _showPrimeBands;
+    /// <summary>#1634 — the Prime bands section is visible only for the PrimeBands kind.</summary>
+    public bool ShowPrimeBands { get => _showPrimeBands; private set => this.RaiseAndSetIfChanged(ref _showPrimeBands, value); }
+
+    private bool _showGaussianPrime;
+    /// <summary>#1634 — the Gaussian-prime trap settings show for the OrbitTrap kind
+    /// with the GaussianPrime shape.</summary>
+    public bool ShowGaussianPrime { get => _showGaussianPrime; private set => this.RaiseAndSetIfChanged(ref _showGaussianPrime, value); }
+
+    // ── Gaussian-prime trap shape (#1634) ───────────────────────────────────
+    private double _gaussianLatticeScale = 6d;
+    /// <summary>The orbit is scaled by this before measuring to the Gaussian primes.</summary>
+    public double GaussianLatticeScale
+    {
+        get => _gaussianLatticeScale;
+        set { this.RaiseAndSetIfChanged(ref _gaussianLatticeScale, Math.Clamp(value, 0.5d, 16d)); FieldChanged(); }
+    }
+
+    private int _gaussianTailBlock = 10;
+    /// <summary>Tail window block (iterations); 0 = the whole orbit.</summary>
+    public int GaussianTailBlock
+    {
+        get => _gaussianTailBlock;
+        set { this.RaiseAndSetIfChanged(ref _gaussianTailBlock, Math.Clamp(value, 0, 1000)); FieldChanged(); }
+    }
+
+    private bool _gaussianInteriorHits;
+    /// <summary>Colour the interior by the cycle's Gaussian-prime hit share.</summary>
+    public bool GaussianInteriorHits
+    {
+        get => _gaussianInteriorHits;
+        set { this.RaiseAndSetIfChanged(ref _gaussianInteriorHits, value); FieldChanged(); }
+    }
+
+    // ── Prime bands (#1634) ─────────────────────────────────────────────────
+    public PrimeBandModulusDef[] PrimeModulusOptions { get; } = Enum.GetValues<PrimeBandModulusDef>();
+
+    private PrimeBandModulusDef _primeModulus = PrimeBandModulusDef.Mod4;
+    public PrimeBandModulusDef PrimeModulus
+    {
+        get => _primeModulus;
+        set { this.RaiseAndSetIfChanged(ref _primeModulus, value); FieldChanged(); }
+    }
+
+    private double _primeCompositeDim = 0.25d;
+    /// <summary>Brightness of the gradient on non-prime counts.</summary>
+    public double PrimeCompositeDim
+    {
+        get => _primeCompositeDim;
+        set { this.RaiseAndSetIfChanged(ref _primeCompositeDim, Math.Clamp(value, 0d, 1d)); FieldChanged(); }
+    }
+
+    private string _primeColorAHex = "", _primeColorBHex = "", _primeColorSpecialHex = "";
+    /// <summary>Class-A / class-B / special prime colours as RRGGBB hex; empty = the
+    /// built-in's gold / cyan / white.</summary>
+    public string PrimeColorAHex { get => _primeColorAHex; set { this.RaiseAndSetIfChanged(ref _primeColorAHex, NormHex(value)); FieldChanged(); } }
+    public string PrimeColorBHex { get => _primeColorBHex; set { this.RaiseAndSetIfChanged(ref _primeColorBHex, NormHex(value)); FieldChanged(); } }
+    public string PrimeColorSpecialHex { get => _primeColorSpecialHex; set { this.RaiseAndSetIfChanged(ref _primeColorSpecialHex, NormHex(value)); FieldChanged(); } }
+
+    /// <summary>"#ffcc00" / "FFCC00" → "FFCC00"; anything else (incl. empty) → "".</summary>
+    internal static string NormHex(string? s)
+    {
+        var h = (s ?? "").Trim().TrimStart('#');
+        return h.Length == 6 && uint.TryParse(h, System.Globalization.NumberStyles.HexNumber, null, out _) ? h.ToUpperInvariant() : "";
+    }
+
+    internal static InSetColorDef? HexToDef(string hex)
+    {
+        if (string.IsNullOrEmpty(hex)) return null;
+        uint v = uint.Parse(hex, System.Globalization.NumberStyles.HexNumber);
+        return new InSetColorDef { R = (byte)(v >> 16), G = (byte)(v >> 8), B = (byte)v, A = 255 };
+    }
+
+    internal static string DefToHex(InSetColorDef? c) => c == null ? "" : $"{c.R:X2}{c.G:X2}{c.B:X2}";
 
     // ── Categorical / Billiard (#630) ───────────────────────────────────────
     public BilliardDriveDef[] BilliardDriveOptions { get; } = Enum.GetValues<BilliardDriveDef>();
@@ -393,7 +472,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
     public OrbitTrapShapeDef TrapShape
     {
         get => _trapShape;
-        set { this.RaiseAndSetIfChanged(ref _trapShape, value); FieldChanged(); }
+        set { this.RaiseAndSetIfChanged(ref _trapShape, value); UpdateVisibleKindSections(); FieldChanged(); }
     }
 
     private double _trapScale = 2d;
@@ -1736,6 +1815,14 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             TrapScale = def.TrapScale <= 0f ? 2d : Math.Clamp((double)def.TrapScale, 0.05d, 100d);
             TrapPower = def.TrapPower <= 0f ? 0.35d : Math.Clamp((double)def.TrapPower, 0.05d, 8d);
             ColorInterior = def.ColorInterior;
+            GaussianLatticeScale = def.GaussianLatticeScale <= 0f ? 6d : def.GaussianLatticeScale;   // #1634
+            GaussianTailBlock = Math.Max(0, def.GaussianTailBlock);
+            GaussianInteriorHits = def.GaussianInteriorHits;
+            PrimeColorAHex = DefToHex(def.PrimeColorA);
+            PrimeColorBHex = DefToHex(def.PrimeColorB);
+            PrimeColorSpecialHex = DefToHex(def.PrimeColorSpecial);
+            PrimeCompositeDim = def.PrimeCompositeDim;
+            PrimeModulus = def.PrimeModulus;
 
             BilliardDrive = def.BilliardDrive;   // #630
 
@@ -1841,6 +1928,14 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             TrapScale = (float)TrapScale,
             TrapPower = (float)TrapPower,
             ColorInterior = ColorInterior,
+            GaussianLatticeScale = (float)GaussianLatticeScale,   // #1634
+            GaussianTailBlock = GaussianTailBlock,
+            GaussianInteriorHits = GaussianInteriorHits,
+            PrimeColorA = HexToDef(PrimeColorAHex),
+            PrimeColorB = HexToDef(PrimeColorBHex),
+            PrimeColorSpecial = HexToDef(PrimeColorSpecialHex),
+            PrimeCompositeDim = (float)PrimeCompositeDim,
+            PrimeModulus = PrimeModulus,
             BilliardDrive = BilliardDrive,   // #630
             InterpolationSpace = InterpSpace,
             InterpolationCurve = InterpCurve,

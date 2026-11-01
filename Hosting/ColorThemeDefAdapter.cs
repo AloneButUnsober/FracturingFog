@@ -38,6 +38,14 @@ namespace FracturingFog.Hosting
                 TrapScale = def.TrapScale,
                 TrapPower = def.TrapPower,
                 ColorInterior = def.ColorInterior,
+                GaussianLatticeScale = def.GaussianLatticeScale,   // #1634
+                GaussianTailBlock = def.GaussianTailBlock,
+                GaussianInteriorHits = def.GaussianInteriorHits,
+                PrimeColorA = ToData(def.PrimeColorA),   // #1634
+                PrimeColorB = ToData(def.PrimeColorB),
+                PrimeColorSpecial = ToData(def.PrimeColorSpecial),
+                PrimeCompositeDim = def.PrimeCompositeDim,
+                PrimeModulus = (PrimeBandModulus)def.PrimeModulus,
 
                 BilliardDrive = (BilliardDrive)def.BilliardDrive,   // #630
 
@@ -117,6 +125,7 @@ namespace FracturingFog.Hosting
             ColorThemeKindDef.Pbr3D     => ColorThemeKind.Pbr3D,
             ColorThemeKindDef.OrbitTrap => ColorThemeKind.OrbitTrap,
             ColorThemeKindDef.Categorical => ColorThemeKind.Categorical,   // #630
+            ColorThemeKindDef.PrimeBands => ColorThemeKind.PrimeBands,     // #1634
             _ => ColorThemeKind.Gradient,
         };
 
@@ -145,6 +154,14 @@ namespace FracturingFog.Hosting
                 TrapScale = data.TrapScale,
                 TrapPower = data.TrapPower,
                 ColorInterior = data.ColorInterior,
+                GaussianLatticeScale = data.GaussianLatticeScale,   // #1634
+                GaussianTailBlock = data.GaussianTailBlock,
+                GaussianInteriorHits = data.GaussianInteriorHits,
+                PrimeColorA = ToDef(data.PrimeColorA),   // #1634
+                PrimeColorB = ToDef(data.PrimeColorB),
+                PrimeColorSpecial = ToDef(data.PrimeColorSpecial),
+                PrimeCompositeDim = data.PrimeCompositeDim,
+                PrimeModulus = (PrimeBandModulusDef)data.PrimeModulus,
 
                 BilliardDrive = (BilliardDriveDef)data.BilliardDrive,   // #630
 
@@ -227,6 +244,7 @@ namespace FracturingFog.Hosting
             ColorThemeKind.Pbr3D     => ColorThemeKindDef.Pbr3D,
             ColorThemeKind.OrbitTrap => ColorThemeKindDef.OrbitTrap,
             ColorThemeKind.Categorical => ColorThemeKindDef.Categorical,   // #630
+            ColorThemeKind.PrimeBands => ColorThemeKindDef.PrimeBands,     // #1634
             _ => ColorThemeKindDef.Gradient,
         };
 
