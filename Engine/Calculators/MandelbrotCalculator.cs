@@ -977,6 +977,35 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     private int _refCachedMaxIter = -1;
     private bool _refCachedEscaped;  // true when orbit terminated by escape
 
+    // #1614 — periodic reference orbit. When the centre sits on a period-p nucleus
+    // the orbit returns to |Z_p| below the frame's pixel size and then repeats, so
+    // the CPU builders stop at Z_{p+1} (_refOrbitLen = p + 1) instead of running to
+    // maxIter: 30x fewer reference iterations on a period-121,984 minibrot at 1.7e66
+    // with a 3.66M cap. The rebased loops rebase at m + 1 >= refLen, i.e. at m = p,
+    // where z = Z_p + δ ≈ δ is as small as δ: the same exact step (δ := z, Z_0 = 0)
+    // as any rebase (Zhuoran 2021, see Docs/Resources-Bibliography.md; whether this
+    // one-period use is published is still being traced there). 0 = not periodic
+    // (escaped, the cap reached, detection off, or a frame the GPU deep path may take).
+    private int _refPeriod;
+    private double _refPeriodZ2;     // |Z_p|² of that orbit
+    private double _refPeriodTol2;   // the tolerance the next build uses ((pixel size)²; 0 = off)
+
+    /// <summary>#1614 — the reference orbit's period (0 when it is not periodic).
+    /// Diagnostic / probe use.</summary>
+    public int ReferencePeriod => _refPeriod;
+
+    /// <summary>#1614 — detect a periodic reference orbit and stop it at the period
+    /// (default on; FF_PERIODIC_REFERENCE=0 turns it off). Off: every reference runs to
+    /// the iteration cap, as before.</summary>
+    public static bool PeriodicReferenceOrbit { get; set; } =
+        Environment.GetEnvironmentVariable("FF_PERIODIC_REFERENCE") != "0";
+
+    // A cached periodic orbit serves any iteration cap...
+    private bool PeriodicOrbitFits() => _refPeriod > 0;
+    // ...while its |Z_p| is still below this frame's tolerance (a deeper frame has
+    // smaller pixels; detection off wants the full orbit).
+    private bool PeriodicOrbitStillValid() => _refPeriod == 0 || _refPeriodZ2 < _refPeriodTol2;
+
     // Wave 3.5 — reference-orbit recycling across frames. When the view centre
     // moves only slightly (pan/zoom video, interactive nudges), the cached
     // orbit at the PREVIOUS centre stays valid for the new frame provided every
@@ -1082,6 +1111,17 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     private bool ResumesInQdBand =>
         ResumeRebased && AllowPtRebasing && !UseDdRebaseReference
         && Zoom > QDZoomThreshold && Zoom <= ODZoomThreshold;
+
+    /// <summary>#1614 — wall time of the last CPU deep (perturbation) frame's stages:
+    /// the reference orbit, the BLA table, the series approximation and the pixel
+    /// rows. A stage the frame skipped (a cached orbit or table) reads near 0.
+    /// Diagnostic / probe use.</summary>
+    public readonly record struct HpStageMs(double RefOrbit, double Bla, double Sa, double Pixels);
+
+    /// <summary>#1614 — see <see cref="HpStageMs"/>.</summary>
+    public HpStageMs LastHpStageMs { get; private set; }
+
+    private static double Ms(long t0, long t1) => (t1 - t0) * 1000.0 / Stopwatch.Frequency;
 
     // Diagnostic counters — reset per Calculate, totalled after Parallel.For
     private long _blaSkipsTotal;
@@ -2785,7 +2825,10 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         // final image is always exact; only the transient preview reuses.
         bool recycled = (AllowRefOrbitRecycle || AllowRecycleThisRender)
                         && TryRecycleReferenceOrbit(maxIt, scale);
+        long tStage0 = Stopwatch.GetTimestamp();   // #1614 — LastHpStageMs
         if (!recycled) ComputeReferenceOrbitForCenter(maxIt);
+        long tStageOrbit = Stopwatch.GetTimestamp();
+        LastHpStageMs = new HpStageMs(Ms(tStage0, tStageOrbit), 0, 0, 0);
 
         // V6 (#82) — GPU deep-zoom perturbation. With the reference orbit built,
         // dispatch the whole frame's δ-rebased loop to an FP64 GPU kernel, then
@@ -2851,8 +2894,11 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             // recycled pixel's dc stays inside a valid linearisation.
             dcMaxAbs += Math.Sqrt(_refRecycleDx * _refRecycleDx + _refRecycleDy * _refRecycleDy);
         }
+        long tStageBla0 = Stopwatch.GetTimestamp();
         EnsureBlaTable(dcMaxAbs);
+        long tStageBla = Stopwatch.GetTimestamp();
         EnsureSeriesApproximation();
+        long tStageSa = Stopwatch.GetTimestamp();
 
         _blaSkipsTotal = 0;
         _blaIterSkippedTotal = 0;
@@ -2925,6 +2971,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             }
         });
         LastFrameComputedPixels += computed;   // #1343: a solid-region frame runs several masked passes
+        LastHpStageMs = new HpStageMs(Ms(tStage0, tStageOrbit), Ms(tStageBla0, tStageBla), Ms(tStageBla, tStageSa),
+                                      Ms(tStageSa, Stopwatch.GetTimestamp()));
         // #1330 — a complete lattice frame (whole, or panned from one) can be panned again.
         _panFrameComplete = LatticeAligned && !recycled && !useTileCap && !ct.IsCancellationRequested;
 
@@ -3802,12 +3850,15 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                        && cy.Hi == _refCyHi && cy.Lo == _refCyLo
                        && _refCy2 == 0 && _refCy3 == 0
                        && _refCy4 == 0 && _refCy5 == 0 && _refCy6 == 0 && _refCy7 == 0;
-        if (centerSame && (_refCachedEscaped || maxIter <= _refCachedMaxIter))
+        if (centerSame && (_refCachedEscaped || PeriodicOrbitFits() || maxIter <= _refCachedMaxIter)
+            && PeriodicOrbitStillValid())
             return;
 
         EnsureRefOrbitCapacity(maxIter);
         DD zr = DD.Zero, zi = DD.Zero;
         double logDerivSum = 0.0;   // Σ log₁₀|2·Zₙ| — δ-amplification decades
+        int period = 0;             // #1614
+        double periodZ2 = 0;
         int n;
         for (n = 0; n < maxIter; n++)
         {
@@ -3819,6 +3870,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             _refZiX4[n] = 0;    _refZiX5[n] = 0; _refZiX6[n] = 0; _refZiX7[n] = 0;
             double zmag2 = zr.Hi * zr.Hi + zi.Hi * zi.Hi;
             if (zmag2 >= EscapeRadius2) break;
+            // #1614 — back at the nucleus: |Z_n| below the pixel size. The orbit
+            // repeats from here, so keep Z_{n+1} and stop (see _refPeriod).
+            if (n > 0 && zmag2 < _refPeriodTol2) { period = n; periodZ2 = zmag2; }
             // Derivative product ∏|2·Zₙ| ⇒ Σ log₁₀|2·Zₙ|, INCLUDING contraction
             // steps (|2·Z|<1, negative), and frozen once |Z|>2: past the classic
             // escape radius the orbit blows up to the bailout and its derivative
@@ -3828,8 +3882,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             DD newZi = (zr * zi) * 2.0 + cy;
             zr = zr.Square() - zi.Square() + cx;
             zi = newZi;
+            if (period > 0) { n++; break; }
         }
-        MaxUsefulZoomLog10 = n < maxIter ? logDerivSum : double.PositiveInfinity;
+        MaxUsefulZoomLog10 = n < maxIter && period == 0 ? logDerivSum : double.PositiveInfinity;
         _refZr[n] = zr.Hi;  _refZrLo[n] = zr.Lo;
         _refZi[n] = zi.Hi;  _refZiLo[n] = zi.Lo;
         _refZrX2[n] = 0;    _refZrX3[n] = 0;
@@ -3844,7 +3899,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         _refCyHi = cy.Hi; _refCyLo = cy.Lo; _refCy2 = 0; _refCy3 = 0;
         _refCy4 = 0; _refCy5 = 0; _refCy6 = 0; _refCy7 = 0;
         _refCachedMaxIter = maxIter;
-        _refCachedEscaped = n < maxIter;
+        _refCachedEscaped = n < maxIter && period == 0;
+        _refPeriod = period;   // #1614
+        _refPeriodZ2 = periodZ2;
         _refCachedTier = 0;  // DD
     }
 
@@ -3886,12 +3943,15 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                        && cy.X0 == _refCyHi && cy.X1 == _refCyLo
                        && cy.X2 == _refCy2 && cy.X3 == _refCy3
                        && _refCy4 == 0 && _refCy5 == 0 && _refCy6 == 0 && _refCy7 == 0;
-        if (centerSame && (_refCachedEscaped || maxIter <= _refCachedMaxIter))
+        if (centerSame && (_refCachedEscaped || PeriodicOrbitFits() || maxIter <= _refCachedMaxIter)
+            && PeriodicOrbitStillValid())
             return;
 
         EnsureRefOrbitCapacity(maxIter);
         QD zr = QD.Zero, zi = QD.Zero;
         double logDerivSum = 0.0;   // Σ log₁₀|2·Zₙ| — δ-amplification decades
+        int period = 0;             // #1614
+        double periodZ2 = 0;
         int n;
         for (n = 0; n < maxIter; n++)
         {
@@ -3901,6 +3961,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             _refZiX4[n] = 0; _refZiX5[n] = 0; _refZiX6[n] = 0; _refZiX7[n] = 0;
             double zmag2 = zr.X0 * zr.X0 + zi.X0 * zi.X0;
             if (zmag2 >= EscapeRadius2) break;
+            // #1614 — back at the nucleus: |Z_n| below the pixel size. The orbit
+            // repeats from here, so keep Z_{n+1} and stop (see _refPeriod).
+            if (n > 0 && zmag2 < _refPeriodTol2) { period = n; periodZ2 = zmag2; }
             // Derivative product ∏|2·Zₙ| ⇒ Σ log₁₀|2·Zₙ|, INCLUDING contraction
             // steps (|2·Z|<1, negative), and frozen once |Z|>2: past the classic
             // escape radius the orbit blows up to the bailout and its derivative
@@ -3910,8 +3973,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             QD newZi = (zr * zi) * 2.0 + cy;
             zr = zr.Square() - zi.Square() + cx;
             zi = newZi;
+            if (period > 0) { n++; break; }
         }
-        MaxUsefulZoomLog10 = n < maxIter ? logDerivSum : double.PositiveInfinity;
+        MaxUsefulZoomLog10 = n < maxIter && period == 0 ? logDerivSum : double.PositiveInfinity;
         _refZr[n] = zr.X0;  _refZrLo[n] = zr.X1;  _refZrX2[n] = zr.X2;  _refZrX3[n] = zr.X3;
         _refZi[n] = zi.X0;  _refZiLo[n] = zi.X1;  _refZiX2[n] = zi.X2;  _refZiX3[n] = zi.X3;
         _refZrX4[n] = 0; _refZrX5[n] = 0; _refZrX6[n] = 0; _refZrX7[n] = 0;
@@ -3924,7 +3988,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         _refCyHi = cy.X0; _refCyLo = cy.X1; _refCy2 = cy.X2; _refCy3 = cy.X3;
         _refCy4 = 0; _refCy5 = 0; _refCy6 = 0; _refCy7 = 0;
         _refCachedMaxIter = maxIter;
-        _refCachedEscaped = n < maxIter;
+        _refCachedEscaped = n < maxIter && period == 0;
+        _refPeriod = period;   // #1614
+        _refPeriodZ2 = periodZ2;
         _refCachedTier = 1;  // QD
     }
 
@@ -3933,6 +3999,16 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     /// OD). A centre and length already cached are not recomputed.</summary>
     private void ComputeReferenceOrbitForCenter(int maxIt)
     {
+        // #1614 — a reference centred on a period-p nucleus returns to |Z_p| below
+        // the pixel size and repeats; building past that is wasted. The tolerance
+        // is the frame's pixel spacing (squared), so the wrap at Z_p moves no pixel.
+        double px = 3.5 / Math.Max(EffectiveImageWidth, EffectiveImageHeight) / Zoom;
+        // Only the CPU loops wrap at the period, so detection needs the rebased ones,
+        // and a frame the GPU deep kernels may take keeps the full orbit: they don't
+        // wrap (a truncated orbit moved 94 % of a p128 frame there) — #1621.
+        bool gpuDeepMayRun = UseGpuPerturbation && GpuKernel != null && Zoom <= MaxGpuPerturbZoom;
+        _refPeriodTol2 = PeriodicReferenceOrbit && AllowPtRebasing && !UseDdRebaseReference && !gpuDeepMayRun
+            ? px * px : 0;
         if (Zoom > ODZoomThreshold)
         {
             var cxOD = new OD(CenterX, CenterXLo, CenterX2, CenterX3,
@@ -4023,6 +4099,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         _refCy4 = 0; _refCy5 = 0; _refCy6 = 0; _refCy7 = 0;
         _refCachedMaxIter = maxIter;
         _refCachedEscaped = escaped;
+        _refPeriod = 0;   // #1614 — the GPU QD orbit runs to maxIter
         _refCachedTier = 1;  // QD (GPU)
         LastFrameBuiltGpuReferenceOrbit = true;   // #1166
         return true;
@@ -4043,12 +4120,15 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                        && cy.X2 == _refCy2 && cy.X3 == _refCy3
                        && cy.X4 == _refCy4 && cy.X5 == _refCy5
                        && cy.X6 == _refCy6 && cy.X7 == _refCy7;
-        if (centerSame && (_refCachedEscaped || maxIter <= _refCachedMaxIter))
+        if (centerSame && (_refCachedEscaped || PeriodicOrbitFits() || maxIter <= _refCachedMaxIter)
+            && PeriodicOrbitStillValid())
             return;
 
         EnsureRefOrbitCapacity(maxIter);
         OD zr = OD.Zero, zi = OD.Zero;
         double logDerivSum = 0.0;   // Σ log₁₀|2·Zₙ| — δ-amplification decades
+        int period = 0;             // #1614
+        double periodZ2 = 0;
         int n;
         for (n = 0; n < maxIter; n++)
         {
@@ -4062,6 +4142,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             _refZiX6[n] = zi.X6; _refZiX7[n] = zi.X7;
             double zmag2 = zr.X0 * zr.X0 + zi.X0 * zi.X0;
             if (zmag2 >= EscapeRadius2) break;
+            // #1614 — back at the nucleus: |Z_n| below the pixel size. The orbit
+            // repeats from here, so keep Z_{n+1} and stop (see _refPeriod).
+            if (n > 0 && zmag2 < _refPeriodTol2) { period = n; periodZ2 = zmag2; }
             // Derivative product ∏|2·Zₙ| ⇒ Σ log₁₀|2·Zₙ|, INCLUDING contraction
             // steps (|2·Z|<1, negative), and frozen once |Z|>2: past the classic
             // escape radius the orbit blows up to the bailout and its derivative
@@ -4071,8 +4154,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             OD newZi = (zr * zi) * 2.0 + cy;
             zr = zr.Square() - zi.Square() + cx;
             zi = newZi;
+            if (period > 0) { n++; break; }
         }
-        MaxUsefulZoomLog10 = n < maxIter ? logDerivSum : double.PositiveInfinity;
+        MaxUsefulZoomLog10 = n < maxIter && period == 0 ? logDerivSum : double.PositiveInfinity;
         _refZr[n] = zr.X0;   _refZrLo[n] = zr.X1;
         _refZrX2[n] = zr.X2; _refZrX3[n] = zr.X3;
         _refZrX4[n] = zr.X4; _refZrX5[n] = zr.X5;
@@ -4089,7 +4173,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         _refCyHi = cy.X0; _refCyLo = cy.X1; _refCy2 = cy.X2; _refCy3 = cy.X3;
         _refCy4 = cy.X4;  _refCy5 = cy.X5;  _refCy6 = cy.X6;  _refCy7 = cy.X7;
         _refCachedMaxIter = maxIter;
-        _refCachedEscaped = n < maxIter;
+        _refCachedEscaped = n < maxIter && period == 0;
+        _refPeriod = period;   // #1614
+        _refPeriodZ2 = periodZ2;
         _refCachedTier = 2;  // OD
     }
 
@@ -4667,10 +4753,31 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         FillAuxAndColorHP(idx, iter, maxIter, zr, zi, drv, div, colorMap);
     }
 
+    // #1614 — a row against a periodic reference (_refPeriod): every pixel runs the
+    // rebased loop with BLA by reference index (ResumePixelPTRebased), which wraps at
+    // the period. The PT4 / PT8 rows index the reference by iteration count and would
+    // run off its end at p + 1. Per pixel, so a lattice range (#1330) is exact.
+    private void ComputeRowPeriodic<TMap>(
+        int y, double scale, int maxIter, int rowBase, TMap colorMap, int xBegin, int xEnd)
+        where TMap : IColorMap
+    {
+        double halfW = EffectiveImageWidth * 0.5, halfH = EffectiveImageHeight * 0.5;
+        double dcY = (SubRectOffsetY + y - halfH) * scale + _refRecycleDy;
+        var bla = DisableAcceleration ? null : _blaTable;
+        for (int x = xBegin; x < xEnd; x++)
+        {
+            int idx = rowBase + x;
+            if (!Marked(idx)) continue;   // #1344
+            double dcX = (SubRectOffsetX + x - halfW) * scale + _refRecycleDx;
+            ResumePixelPTRebased(dcX, dcY, 0, 0, 0.0, 0.0, 1.0, 0.0, bla, maxIter, idx, colorMap);
+        }
+    }
+
     private void ComputeRowPTScalar<TMap>(
         int y, double scale, int maxIter, int rowBase, TMap colorMap, int xBegin, int xEnd)
         where TMap : IColorMap
     {
+        if (_refPeriod > 0) { ComputeRowPeriodic(y, scale, maxIter, rowBase, colorMap, xBegin, xEnd); return; }   // #1614
         // D-6b — halfH / halfW measure from the FULL image centre, and the
         // per-pixel offset adds SubRectOffsetY/X so dc reflects the pixel's
         // position in image coordinates (not tile-local). Inactive sub-rect
@@ -4777,6 +4884,10 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         // the DD / OD bands: as before — the absorption test in the QD band and the
         // #1274 restart through the queue / scalar loop).
         bool resume = bla != null && ResumesInQdBand;
+        // #1614 — a periodic reference (_refPeriod): the rows index it by m, which
+        // wraps at the period (δ += Z_p, the exact rebase at Z_p ≈ 0); without one
+        // m == iter, as before.
+        int period = _refPeriod;
         long rowBlaSkips = 0;
         long rowBlaIterSaved = 0;
         long rowSaApplied = 0;
@@ -4821,6 +4932,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             int escapedMask = 0;
             bool glitched = false;
             int glitchIter = -1;   // #1613 — iteration the rebase test tripped at
+            int glitchM = -1;      // #1614 — and its reference index
             int iterStart = 0;
 
             // ── SA prelude ─────────────────────────────────────────────────
@@ -4839,6 +4951,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 if (k1 < k) k = k1;
                 if (k2 < k) k = k2;
                 if (k3 < k) k = k3;
+                if (period > 0 && k > period) k = period;   // #1614 — m starts at k
                 if (k >= 4)   // amortise polynomial cost only when skip is meaningful
                 {
                     sa.EvalDelta(k, dcR0, dcY, out double d0r, out double d0i);
@@ -4862,9 +4975,19 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 }
             }
 
+            int m = iterStart;   // #1614 — reference index (== iter without a period)
             for (int iter = iterStart; iter < maxIter; iter++)
             {
-                if (iter > refLen) { glitched = true; break; }
+                if (m == period && period > 0)
+                {
+                    // #1614 — back at Z_p ~ 0: restart the reference (δ := z for the
+                    // lanes still iterating; escaped lanes keep their frozen δ).
+                    int act = ~escapedMask & 0b1111;
+                    dr = BlendActive(dr, dr + Vector256.Create(_refZr[period]), act);
+                    di = BlendActive(di, di + Vector256.Create(_refZi[period]), act);
+                    m = 0;
+                }
+                if (m > refLen) { glitched = true; break; }
 
                 // ── BLA skip attempt (per-lane via active-mask blending) ───
                 // Lookup uses max |δ|² over ACTIVE lanes only — escaped lanes
@@ -4878,7 +5001,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                     {
                         var dmag2v = Avx.Add(Avx.Multiply(dr, dr), Avx.Multiply(di, di));
                         double maxActiveDmag2 = HMaxMasked(dmag2v, activeBla);
-                        int blaIdx = bla.Lookup(iter, maxActiveDmag2, maxIter);
+                        int blaIdx = bla.Lookup(m, maxActiveDmag2,
+                            period > 0 ? Math.Min(period, m + (maxIter - iter)) : maxIter);   // #1614
                         if (blaIdx >= 0)
                         {
                             ref readonly var bEntry = ref bla.Data[blaIdx];
@@ -4912,6 +5036,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                                 var lVec = Vector256.Create((double)bEntry.L);
                                 iterCount = Avx.Add(iterCount, Avx.And(lVec, MaskToVector(activeBla)));
                                 iter += bEntry.L - 1;    // for-loop ++iter restores net +L
+                                m += bEntry.L;
                                 rowBlaSkips++;
                                 rowBlaIterSaved += bEntry.L - 1;
                                 continue;
@@ -4920,8 +5045,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                     }
                 }
 
-                var Zrv = Vector256.Create(_refZr[iter]);
-                var Ziv = Vector256.Create(_refZi[iter]);
+                var Zrv = Vector256.Create(_refZr[m]);
+                var Ziv = Vector256.Create(_refZi[m]);
                 var zr = Avx.Add(Zrv, dr);
                 var zi = Avx.Add(Ziv, di);
 
@@ -4946,13 +5071,13 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 {
                     var dm2 = Avx.Add(Avx.Multiply(dr, dr), Avx.Multiply(di, di));
                     if ((Avx.MoveMask(Avx.Compare(mag2, dm2, FloatComparisonMode.OrderedLessThanNonSignaling)) & active) != 0)
-                    { glitched = true; glitchIter = iter; break; }
+                    { glitched = true; glitchIter = iter; glitchM = m; break; }
                 }
                 // Precision glitch at extreme zoom: δ absorbed by Z in double arithmetic.
                 // Only check in QD range where dc << ULP(Z) always holds.
                 else if (useQD && !glitched)
                 {
-                    double Zr_s = _refZr[iter], Zi_s = _refZi[iter];
+                    double Zr_s = _refZr[m], Zi_s = _refZi[m];
                     for (int k = 0; k < 4; k++)
                     {
                         double drk = dr.GetElement(k), dik = di.GetElement(k);
@@ -4980,6 +5105,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 var newDi = Avx.Add(Avx.Add(Avx.Multiply(a, di), Avx.Multiply(b, dr)), dcYv);
                 dr = BlendActive(dr, newDr, active);
                 di = BlendActive(di, newDi, active);
+                m++;   // #1614
             }
 
             // Bulk-extract lanes via Vector256.CopyTo (one vmovupd per vector)
@@ -5005,7 +5131,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                     if (resume && glitchIter >= 0)
                     {
                         // #1613 — carry on from here (rebased, with BLA by reference index).
-                        ResumePixelPTRebased(colOffsetX * scale + _refRecycleDx, dcY, glitchIter, glitchIter,
+                        ResumePixelPTRebased(colOffsetX * scale + _refRecycleDx, dcY, glitchIter, glitchM,
                             drSpan[k], diSpan[k], drvSpan[k], divSpan[k], bla, maxIter, idx, colorMap);
                         continue;
                     }
@@ -5040,8 +5166,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 }
                 int iters = (int)icSpan[k];
                 // Reconstruct z at escape: Z_iters + δ_iters (δ frozen when lane escaped)
-                double zrF = (iters <= refLen ? _refZr[iters] : 0.0) + drSpan[k];
-                double ziF = (iters <= refLen ? _refZi[iters] : 0.0) + diSpan[k];
+                int ri = period > 0 ? iters % period : iters;   // #1614 — m at the escape
+                double zrF = (ri <= refLen ? _refZr[ri] : 0.0) + drSpan[k];
+                double ziF = (ri <= refLen ? _refZi[ri] : 0.0) + diSpan[k];
                 IterationBuffer[idx] = iters;
                 FillAuxAndColorHP(idx, iters, maxIter, zrF, ziF,
                     drvSpan[k], divSpan[k], colorMap);
@@ -5146,6 +5273,10 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         // the DD / OD bands: as before — the absorption test in the QD band and the
         // #1274 restart through the queue / scalar loop).
         bool resume = bla != null && ResumesInQdBand;
+        // #1614 — a periodic reference (_refPeriod): the rows index it by m, which
+        // wraps at the period (δ += Z_p, the exact rebase at Z_p ≈ 0); without one
+        // m == iter, as before.
+        int period = _refPeriod;
         long rowBlaSkips = 0;
         long rowBlaIterSaved = 0;
         long rowSaApplied = 0;
@@ -5193,6 +5324,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             int escapedMask = 0;
             bool glitched = false;
             int glitchIter = -1;   // #1613 — iteration the rebase test tripped at
+            int glitchM = -1;      // #1614 — and its reference index
             int iterStart = 0;
 
             // ── SA prelude (8 lanes) ───────────────────────────────────────
@@ -5214,6 +5346,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 if (k5 < k) k = k5;
                 if (k6 < k) k = k6;
                 if (k7 < k) k = k7;
+                if (period > 0 && k > period) k = period;   // #1614 — m starts at k
                 if (k >= 4)
                 {
                     sa.EvalDelta(k, dcR0, dcY, out double d0r, out double d0i);
@@ -5245,9 +5378,19 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 }
             }
 
+            int m = iterStart;   // #1614 — reference index (== iter without a period)
             for (int iter = iterStart; iter < maxIter; iter++)
             {
-                if (iter > refLen) { glitched = true; break; }
+                if (m == period && period > 0)
+                {
+                    // #1614 — back at Z_p ~ 0: restart the reference (δ := z for the
+                    // lanes still iterating; escaped lanes keep their frozen δ).
+                    int act = ~escapedMask & 0xFF;
+                    dr = BlendActive512(dr, dr + Vector512.Create(_refZr[period]), act);
+                    di = BlendActive512(di, di + Vector512.Create(_refZi[period]), act);
+                    m = 0;
+                }
+                if (m > refLen) { glitched = true; break; }
 
                 // ── BLA skip (8-lane, per-lane via active mask) ────────────
                 if (bla != null)
@@ -5257,7 +5400,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                     {
                         var dmag2v = dr * dr + di * di;
                         double maxActiveDmag2 = HMaxMasked8(dmag2v, activeBla);
-                        int blaIdx = bla.Lookup(iter, maxActiveDmag2, maxIter);
+                        int blaIdx = bla.Lookup(m, maxActiveDmag2,
+                            period > 0 ? Math.Min(period, m + (maxIter - iter)) : maxIter);   // #1614
                         if (blaIdx >= 0)
                         {
                             ref readonly var bEntry = ref bla.Data[blaIdx];
@@ -5283,6 +5427,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                                 var lVec = Vector512.Create((double)bEntry.L);
                                 iterCount += lVec & MaskToVector512(activeBla);
                                 iter += bEntry.L - 1;
+                                m += bEntry.L;
                                 rowBlaSkips++;
                                 rowBlaIterSaved += bEntry.L - 1;
                                 continue;
@@ -5291,8 +5436,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                     }
                 }
 
-                var Zrv = Vector512.Create(_refZr[iter]);
-                var Ziv = Vector512.Create(_refZi[iter]);
+                var Zrv = Vector512.Create(_refZr[m]);
+                var Ziv = Vector512.Create(_refZi[m]);
                 var zr = Zrv + dr;
                 var zi = Ziv + di;
 
@@ -5310,11 +5455,11 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 {
                     var dm2 = dr * dr + di * di;
                     if (((int)Vector512.LessThan(mag2, dm2).ExtractMostSignificantBits() & active) != 0)
-                    { glitched = true; glitchIter = iter; break; }
+                    { glitched = true; glitchIter = iter; glitchM = m; break; }
                 }
                 else if (useQD && !glitched)
                 {
-                    double Zr_s = _refZr[iter], Zi_s = _refZi[iter];
+                    double Zr_s = _refZr[m], Zi_s = _refZi[m];
                     for (int k = 0; k < 8; k++)
                     {
                         double drk = dr.GetElement(k), dik = di.GetElement(k);
@@ -5339,6 +5484,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 var newDi = a * di + b * dr + dcYv;
                 dr = BlendActive512(dr, newDr, active);
                 di = BlendActive512(di, newDi, active);
+                m++;   // #1614
             }
 
             // Scratch spans hoisted above loop (see CA2014 fix).
@@ -5358,7 +5504,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                     if (resume && glitchIter >= 0)
                     {
                         // #1613 — carry on from here (rebased, with BLA by reference index).
-                        ResumePixelPTRebased(colOffsetX * scale + _refRecycleDx, dcY, glitchIter, glitchIter,
+                        ResumePixelPTRebased(colOffsetX * scale + _refRecycleDx, dcY, glitchIter, glitchM,
                             drSpan[k], diSpan[k], drvSpan[k], divSpan[k], bla, maxIter, idx, colorMap);
                         continue;
                     }
@@ -5392,8 +5538,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                     continue;
                 }
                 int iters = (int)icSpan[k];
-                double zrF = (iters <= refLen ? _refZr[iters] : 0.0) + drSpan[k];
-                double ziF = (iters <= refLen ? _refZi[iters] : 0.0) + diSpan[k];
+                int ri = period > 0 ? iters % period : iters;   // #1614 — m at the escape
+                double zrF = (ri <= refLen ? _refZr[ri] : 0.0) + drSpan[k];
+                double ziF = (ri <= refLen ? _refZi[ri] : 0.0) + diSpan[k];
                 IterationBuffer[idx] = iters;
                 FillAuxAndColorHP(idx, iters, maxIter, zrF, ziF,
                     drvSpan[k], divSpan[k], colorMap);
@@ -5971,6 +6118,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         _refCy2 = 0; _refCy3 = 0; _refCy4 = 0; _refCy5 = 0; _refCy6 = 0; _refCy7 = 0;
         _refCachedMaxIter = orbit.MaxIter;
         _refCachedEscaped = orbit.Escaped;
+        _refPeriod = 0;   // #1614 — a seeded orbit runs to its own length
         _refCachedTier = 0;  // DD (seeded)
     }
 
@@ -6020,6 +6168,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         _refCy4 = 0; _refCy5 = 0; _refCy6 = 0; _refCy7 = 0;
         _refCachedMaxIter = orbit.MaxIter;
         _refCachedEscaped = orbit.Escaped;
+        _refPeriod = 0;   // #1614 — a seeded orbit runs to its own length
         _refCachedTier = 1;  // QD (seeded)
     }
 
@@ -6077,6 +6226,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         _refCy6  = orbit.CentreY6; _refCy7  = orbit.CentreY7;
         _refCachedMaxIter = orbit.MaxIter;
         _refCachedEscaped = orbit.Escaped;
+        _refPeriod = 0;   // #1614 — a seeded orbit runs to its own length
         _refCachedTier = 2;  // OD (seeded)
     }
 }

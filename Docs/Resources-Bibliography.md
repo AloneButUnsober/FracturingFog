@@ -392,6 +392,18 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
   Rebasing and bilinear approximation (BLA) — `Engine/Math/Bla.cs`, CalcGen's BLA emitter,
   `AllowPtRebasing`. Also the two combined (#1613): after a rebase, BLA skips are looked up by the
   reference index, so a pixel that rebases keeps its BLA (`MandelbrotCalculator.ResumePixelPTRebased`).
+  #1614 builds on the same rebase: a reference centred on a period-p nucleus is stopped at Z_{p+1}, and
+  the loops wrap the reference index at p (δ += Z_p), which is a rebase at Z_p ≈ 0
+  (`MandelbrotCalculator._refPeriod`). Whether this exact use is published is under *Citations awaiting
+  verification*.
+
+<a id="fractalshades-math"></a>
+
+- **gbillotey** (GitHub handle; Fractalshades author). *Mathematical background*, Fractalshades
+  documentation, accessed 2026-11-01. <https://gbillotey.github.io/Fractalshades-doc/math.html>.
+  Describes Zhuoran's rebase as resetting the reference index to 0, and notes the same reset can be
+  applied whenever the reference orbit diverges. Related practice for #1614's reference stopped at the
+  period. Author's full name not verified here.
 - **Claude Heiland-Allen.** *MandelbrotPerturbator* implementation notes and the Mandelbrot book draft.
   <https://mathr.co.uk/mandelbrot/book-draft/>. Practical writeup of perturbation theory + bilinear
   approximation, glitch detection, and rebase reference selection; maintainer of Kalles Fraktaler 2+
@@ -804,6 +816,11 @@ entry above completed or corrected.
 - **Mariani–Silver** — primary description (Rico Mariani's algorithm; Robert Silver's formulation)
   isn't identified; it's commonly documented through Fractint-era material and Wikibooks *Fractals*.
 - **Earl F. Glynn** — the original publication of the fractional-power Julia set.
+- **One-period reference orbit with rebasing (#1614)** — stopping a nucleus-centred reference at its
+  period and rebasing there is likely prior art in deep-zoom renderers (e.g. Imagina, Kalles
+  Fraktaler 2+, Fraktaler 3) or in the fractalforums.org rebasing threads, but no source stating it was
+  found on 2026-11-01. FF does not claim it as new; it builds on Zhuoran's rebase (above). Trace the
+  primary source and credit it.
 - **rith, FF 0.7.1 benchmark report** — settled 2026-11-01 (PR #1618): it was a private
   fractalforums.org direct message, not a thread, so there is no URL to trace. Credited above under
   [Fractal software and prior art](#rith-ff-071-benchmark); the correction is recorded under

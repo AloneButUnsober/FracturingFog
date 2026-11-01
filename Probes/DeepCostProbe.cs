@@ -12,6 +12,8 @@
 // the rebased loop resolved and total iterations, for the default path (SA + BLA,
 // rebased pixels keep BLA) and with acceleration off (plain rebasing, the slow
 // reference), plus the pixels whose iteration count differs between the two.
+// FF_DEEPCOST_PERIODIC_AB=1 adds the frame with the periodic reference orbit off
+// (#1614); FF_DEEPCOST_NOREF=1 skips the acceleration-off reference.
 // FF_DEEPCOST_DUMP=dir writes those pixels as CSV (x,y,default,reference) for an
 // exact check outside FF; FF_DEEPCOST_SCENE filters by name; FF_DEEPCOST_EPS sets
 // the BLA tolerance. Exit 0 always.
@@ -41,6 +43,19 @@ namespace FracturingFog
                 "-0.028041054305504548|1.3292199503012176e-18|-5.275751227722853e-35|-4.203746728154813e-51|-4.269596053996866e-68|1.9389949392385534e-84|6.25819023760954e-101|-2.6646795788290983e-117",
                 "-0.6948927538996524|5.189489838305484e-17|5.567887477024055e-34|1.3771597857226995e-50|-5.482812918750436e-67|4.692321383846679e-84|-2.313052339214723e-100|2.1139231852108862e-116",
                 1.342765e53, 28590),
+            // #1614 — the high-period minibrots of rith's report (10x Imagina there).
+            new("p15248 2.1e57",
+                "-0.028041054305504548|1.3292199503012176e-18|-5.275751227722853e-35|-4.198613498328184e-51|-2.6338819725348693e-68|-1.2531186861084395e-84|8.265175494285413e-101|-2.8428099960154152e-117",
+                "-0.6948927538996524|5.189489838305484e-17|5.567887477024055e-34|1.3770883977626e-50|-1.6692666809801752e-67|-4.583534842942509e-84|4.2910480785722876e-100|-1.016687227891797e-116",
+                2.142891e57, 457440),
+            new("p121984 1.7e66",
+                "-0.028041054305504548|1.3292199503012176e-18|-5.275751227722853e-35|-4.2016807295614754e-51|1.7176952655143277e-67|1.0180672183123456e-83|-1.5782574900160777e-100|8.451632690787226e-117",
+                "-0.6948927538996524|5.189489838305484e-17|5.567887477024055e-34|1.3766027088999295e-50|9.932823572218873e-67|2.5207480153941874e-83|-8.913322115858611e-100|2.182658649920256e-116",
+                1.682674e66, 3659520),
+            new("p951094 2.1e68",
+                "-0.028041054305504548|1.3292199503012176e-18|-5.275751227722853e-35|-4.2033498374722585e-51|2.1867860643118847e-67|-1.2673249633835861e-83|-2.7319253065659894e-100|-1.9376664330122738e-116",
+                "-0.6948927538996524|5.189489838305484e-17|5.567887477024055e-34|1.3765984796783024e-50|7.914053078872335e-67|-5.2156113374567495e-83|-1.2800174978852658e-99|-7.991933193373865e-116",
+                2.142891e68, 28532820),
         };
 
         public static int Run(string[] args)
@@ -56,6 +71,34 @@ namespace FracturingFog
                 // the width, so the .kfr zoom carries over for a landscape frame.
                 double zoom = s.KfZoom;
                 var (a, aSm, aMs, aReb, aIt) = Render(s, zoom, w, h, reps, noAccel: false);
+                var st = s_lastStages;
+                Console.WriteLine($"  {s.Name,-14} stages: orbit {st.RefOrbit,8:F0} ms ({1e3 * st.RefOrbit / s.Iter:F2} us/iter, period {s_lastPeriod})  " +
+                                  $"BLA {st.Bla,6:F0} ms  SA {st.Sa,6:F0} ms  pixels {st.Pixels,7:F0} ms");
+                // #1614 — FF_DEEPCOST_PERIODIC_AB=1: the same frame with the periodic
+                // reference off (full-length orbit), and the pixels that differ.
+                if (Environment.GetEnvironmentVariable("FF_DEEPCOST_PERIODIC_AB") == "1")
+                {
+                    MandelbrotCalculator.PeriodicReferenceOrbit = false;
+                    try
+                    {
+                        var (f, _, fMs, _, _) = Render(s, zoom, w, h, reps, noAccel: false);
+                        var fs = s_lastStages;
+                        int pd = 0;
+                        for (int i = 0; i < a.Length; i++) if (a[i] != f[i]) pd++;
+                        string? abDump = Environment.GetEnvironmentVariable("FF_DEEPCOST_DUMP");
+                        if (abDump != null && pd > 0)
+                        {
+                            var sb = new System.Text.StringBuilder().AppendLine($"# {w} {h} {zoom:R} {s.Iter}");
+                            for (int i = 0; i < a.Length; i++)
+                                if (a[i] != f[i]) sb.AppendLine($"{i % w},{i / w},{a[i]},{f[i]}");
+                            System.IO.File.WriteAllText(System.IO.Path.Combine(abDump, s.Name.Split(' ')[0] + "_periodic.csv"), sb.ToString());
+                        }
+                        Console.WriteLine($"  {s.Name,-14} periodic on {aMs,8:F0} ms | off {fMs,8:F0} ms (orbit {fs.RefOrbit:F0}, BLA {fs.Bla:F0}, pixels {fs.Pixels:F0}) | " +
+                                          $"iter diff {pd:N0} ({100.0 * pd / a.Length:F2} %)");
+                    }
+                    finally { MandelbrotCalculator.PeriodicReferenceOrbit = true; }
+                }
+                if (Environment.GetEnvironmentVariable("FF_DEEPCOST_NOREF") == "1") continue;
                 var (b, bSm, bMs, bReb, bIt) = Render(s, zoom, w, h, 1, noAccel: true);
                 int diff = 0, escDiff = 0, sm01 = 0, sm1 = 0;
                 for (int i = 0; i < a.Length; i++)
@@ -83,6 +126,9 @@ namespace FracturingFog
             return 0;
         }
 
+        private static MandelbrotCalculator.HpStageMs s_lastStages;
+        private static int s_lastPeriod;
+
         private static (int[] Iter, float[] Smooth, double Ms, long Rebased, long Iters) Render(Scene s, double zoom, int w, int h, int reps, bool noAccel)
         {
             double best = double.MaxValue;
@@ -99,6 +145,7 @@ namespace FracturingFog
                 last = c;
             }
             long iters = last!.IterationBuffer.Sum(v => (long)v);
+            if (!noAccel) { s_lastStages = last.LastHpStageMs; s_lastPeriod = last.ReferencePeriod; }
             return ((int[])last.IterationBuffer.Clone(), (float[])last.SmoothBuffer.Clone(), best, last.PtRebasedPixels, iters);
         }
 
