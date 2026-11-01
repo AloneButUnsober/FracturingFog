@@ -497,7 +497,8 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
   Gaussian *primes*; no novelty is claimed beyond that.
 - **Gaussian primes** — classical characterisation: a+bi is prime in Z[i] iff a, b ≠ 0 and a² + b² is a
   rational prime, or one of a, b is 0 and the other's |value| is a rational prime ≡ 3 (mod 4). Used by
-  `GaussianPrimeTrapMap` (#1487). Primary source not yet traced (see
+  `GaussianPrimeTrapMap` (#1487) and `GaussianPrimeHitsMap` (#1608, whose interior colours the share of
+  the attracting cycle's points on a Gaussian prime). Primary source not yet traced (see
   [Citations awaiting verification](#citations-awaiting-verification)).
 - **Garry T. Krollman.** *CIELAB and CIECAM02 conversions* — referenced by the from-image palette
   k-means sampler. Practical formulae from

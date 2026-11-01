@@ -229,6 +229,7 @@ namespace FracturingFog.Models
             new LyapunovExponentMap(),
             new GaussianIntegerMap(),
             new GaussianPrimeTrapMap(),   // #1487 — trap against the Gaussian primes, tail window
+            new GaussianPrimeHitsMap(),   // #1608 — same exterior; interior = cycle's Gaussian-prime hit share
             new ExponentialSmoothingMap(),
 
             // ── Distance Estimation ───────────────────────────────────────────
