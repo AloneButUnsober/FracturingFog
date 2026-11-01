@@ -1047,12 +1047,13 @@
                     </Grid>
                 </Expander>
 
-                <!-- #1488 — coprime moiré: a screen-space post layer over the finished
-                     frame (2D and 3D). Applied live, in export and in batch. -->
-                <Expander Header="Coprime moiré (screen-space)" HorizontalAlignment="Stretch">
-                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                <!-- #1488 — coprime moiré: a post layer over the finished frame (2D and
+                     3D), fixed to the screen or (#1633) to the fractal. Applied live, in
+                     export and in batch. -->
+                <Expander Header="Coprime moiré" HorizontalAlignment="Stretch">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Moiré strength:" VerticalAlignment="Center"
-                                   ToolTip.Tip="Lights the lattice points (i, j) with gcd(|i|, |j|) = 1 (the visible lattice points) and blends that mask over the frame. The fine moiré is aliasing between the pattern and the pixel grid. Screen-space: it stays put when the fractal pans or zooms. 0 = off." />
+                                   ToolTip.Tip="Lights the lattice points (i, j) with gcd(|i|, |j|) = 1 (the visible lattice points) and blends that mask over the frame. The fine moiré is aliasing between the pattern and the pixel grid. Anchor (below) sets whether it stays put on the screen or moves with the fractal. 0 = off." />
                         <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
                             <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
                                     Value="{Binding MoireStrength, Mode=TwoWay}" />
@@ -1125,6 +1126,12 @@
 
                         <CheckBox Grid.Row="10" Grid.Column="1" IsChecked="{Binding MoireInvert, Mode=TwoWay}"
                                   Content="Invert (light the non-matching points)" Margin="0,2" />
+
+                        <TextBlock Grid.Row="11" Grid.Column="0" Text="Anchor:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Screen = the pattern stays put on the screen (default). Pan = it moves with the fractal when you pan; zooming reshuffles it. Zoom = it moves and grows with the fractal, re-fining at each doubling of zoom with a cross-fade (no jump). Pan and Zoom hold to about 1e12 zoom; deeper the lattice jitters. Offset is in lattice pixels for these." />
+                        <ComboBox Grid.Row="11" Grid.Column="1" HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding MoireAnchors}"
+                                  SelectedItem="{Binding MoireAnchor, Mode=TwoWay}" Margin="0,2" />
                     </Grid>
                 </Expander>
 

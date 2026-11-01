@@ -717,6 +717,14 @@ public sealed partial class FractalParamsViewModel
         get => _p.Lighting.MoireSamples;
         set { MutateLighting(r => r.Fx.MoireSamples = Math.Clamp(value, 1, 4)); this.RaisePropertyChanged(); Fire(); }
     }
+    // #1633 — fix the lattice to the frame (default) or to the fractal.
+    public MoireAnchor MoireAnchor
+    {
+        get => _p.Lighting.MoireAnchor;
+        set { MutateLighting(r => r.Fx.MoireAnchor = value); this.RaisePropertyChanged(); Fire(); }
+    }
+    public System.Array MoireAnchors => s_MoireAnchors;
+    private static readonly System.Array s_MoireAnchors = System.Enum.GetValues(typeof(MoireAnchor));
     /// <summary>Phase 16b — N-bounce reflection chain depth. 1 = legacy single
     /// bounce; up to 6 for chrome / hall-of-mirrors effects. Higher counts
     /// scale linearly with per-pixel cost in the reflection path.</summary>

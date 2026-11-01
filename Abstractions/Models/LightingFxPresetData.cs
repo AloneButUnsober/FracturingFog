@@ -167,6 +167,7 @@ public sealed class LightingFxPresetData
     public MoireBlendMode MoireBlend  { get; set; } = MoireBlendMode.Multiply;
     public bool   MoireInvert         { get; set; }
     public int    MoireSamples        { get; set; } = 1;
+    public MoireAnchor MoireAnchor    { get; set; } = MoireAnchor.Screen;   // #1633
     public StereoMode StereoMode      { get; set; } = StereoMode.Off;
     public double StereoEyeSeparation { get; set; } = 0.0;
     public double StereoFovDegrees    { get; set; } = 60.0;
@@ -300,6 +301,7 @@ public sealed class LightingFxPresetData
         MoireOffsetX = fx.MoireOffsetX, MoireOffsetY = fx.MoireOffsetY, MoireAspect = fx.MoireAspect,
         MoireCondition = fx.MoireCondition, MoireConditionK = fx.MoireConditionK,
         MoireBlend = fx.MoireBlend, MoireInvert = fx.MoireInvert, MoireSamples = fx.MoireSamples,
+        MoireAnchor = fx.MoireAnchor,
         StereoMode = fx.StereoMode, StereoLayout = fx.StereoLayout, StereoSwapEyes = fx.StereoSwapEyes,
         StereoAutoPattern = fx.StereoAutoPattern, StereoAutoEyeSep = fx.StereoAutoEyeSep,
         StereoAutoDepthOfField = fx.StereoAutoDepthOfField, StereoAutoCrossEyed = fx.StereoAutoCrossEyed,
@@ -392,6 +394,7 @@ public sealed class LightingFxPresetData
         MoireOffsetX = MoireOffsetX, MoireOffsetY = MoireOffsetY, MoireAspect = MoireAspect,
         MoireCondition = MoireCondition, MoireConditionK = MoireConditionK,
         MoireBlend = MoireBlend, MoireInvert = MoireInvert, MoireSamples = MoireSamples,
+        MoireAnchor = MoireAnchor,
         StereoMode = StereoMode, StereoLayout = StereoLayout, StereoSwapEyes = StereoSwapEyes,
         StereoAutoPattern = StereoAutoPattern, StereoAutoEyeSep = StereoAutoEyeSep,
         StereoAutoDepthOfField = StereoAutoDepthOfField, StereoAutoCrossEyed = StereoAutoCrossEyed,

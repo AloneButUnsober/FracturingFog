@@ -240,6 +240,19 @@ public enum MoireCondition
     GcdIntensity,
 }
 
+/// <summary>What the coprime moiré lattice is fixed to (#1633).</summary>
+public enum MoireAnchor
+{
+    /// <summary>The frame: the pattern stays put when the fractal moves. Default.</summary>
+    Screen,
+    /// <summary>The fractal for panning: the pattern moves with the fractal when you pan;
+    /// cells stay in pixels, so zooming reshuffles it.</summary>
+    Pan,
+    /// <summary>The fractal for panning and zooming: anchored per zoom octave with the
+    /// neighbouring octave cross-faded in, so it moves and grows with the fractal.</summary>
+    Zoom,
+}
+
 /// <summary>How the coprime moiré layer combines with the image (#1488).</summary>
 public enum MoireBlendMode
 {
@@ -731,6 +744,8 @@ public struct LightingFxData
     public bool MoireInvert;
     /// <summary>Subsamples per axis [1, 4]: 1 = raw aliasing (strongest moiré).</summary>
     public int MoireSamples;
+    /// <summary>#1633 — what the lattice is fixed to: the frame (default) or the fractal.</summary>
+    public MoireAnchor MoireAnchor;
 
     // ── Stereo (Phase 20) ─────────────────────────────────────────────
 
@@ -1023,6 +1038,7 @@ public struct LightingFxData
         MoireBlend         = MoireBlendMode.Multiply,
         MoireInvert        = false,
         MoireSamples       = 1,
+        MoireAnchor        = MoireAnchor.Screen,
 
         StereoEyeSeparation = 0.0,
         StereoFovDegrees    = 60.0,

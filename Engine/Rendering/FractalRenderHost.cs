@@ -5058,7 +5058,8 @@ namespace FracturingFog.Rendering
             if (!srcAlreadyProcessed)
             {
                 var moireFx = ViewState.FractalParameters.Lighting;
-                FracturingFog.Rendering.CoprimeMoire.Apply(dst, w, h, in moireFx);
+                FracturingFog.Rendering.CoprimeMoire.Apply(dst, w, h, in moireFx,
+                    ViewState.CenterX, ViewState.CenterY, ViewState.Zoom);   // #1633 view for the anchor
             }
 
             // S12.5 (#652) — relief STEREO (side-by-side). Relief has no per-eye camera
