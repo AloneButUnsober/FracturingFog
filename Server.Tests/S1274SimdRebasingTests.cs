@@ -49,8 +49,11 @@ public sealed class S1274SimdRebasingTests(ITestOutputHelper output)
     private static Frame Render(View v, bool simd, int w, int h, int maxIter, bool saOff = false)
     {
         bool prevSimd = MandelbrotCalculator.UseSimdRebasing, prevAllow = MandelbrotCalculator.AllowPtRebasing;
+        bool prevResume = MandelbrotCalculator.ResumeRebased;
         MandelbrotCalculator.UseSimdRebasing = simd;
         MandelbrotCalculator.AllowPtRebasing = true;
+        // #1613 — glitched lanes restart through the queue / scalar loop under test.
+        MandelbrotCalculator.ResumeRebased = false;
         try
         {
             var c = new MandelbrotCalculator(w, h)
@@ -74,6 +77,7 @@ public sealed class S1274SimdRebasingTests(ITestOutputHelper output)
         {
             MandelbrotCalculator.UseSimdRebasing = prevSimd;
             MandelbrotCalculator.AllowPtRebasing = prevAllow;
+            MandelbrotCalculator.ResumeRebased = prevResume;
         }
     }
 

@@ -390,7 +390,8 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
 - **Zhuoran.** *Another solution to perturbation glitches*, fractalforums.org, 2021.
   <https://fractalforums.org/fractal-mathematics-and-new-theories/28/another-solution-to-perturbation-glitches/4360>.
   Rebasing and bilinear approximation (BLA) — `Engine/Math/Bla.cs`, CalcGen's BLA emitter,
-  `AllowPtRebasing`.
+  `AllowPtRebasing`. Also the two combined (#1613): after a rebase, BLA skips are looked up by the
+  reference index, so a pixel that rebases keeps its BLA (`MandelbrotCalculator.ResumePixelPTRebased`).
 - **Claude Heiland-Allen.** *MandelbrotPerturbator* implementation notes and the Mandelbrot book draft.
   <https://mathr.co.uk/mandelbrot/book-draft/>. Practical writeup of perturbation theory + bilinear
   approximation, glitch detection, and rebase reference selection; maintainer of Kalles Fraktaler 2+
@@ -722,6 +723,21 @@ Programs and galleries the project measured itself against, learned from, or pay
 - **Wolfram Language** `MandelbrotSetBoettcher` — the Böttcher coordinate.
 - **Basins.jl** (JuliaDynamics) — basin entropy, uncertainty exponent.
   <https://docs.juliahub.com/General/Basins/>.
+<a id="fractadyne-bench-kit"></a>
+
+- **WindySnowOwl.** *bench-kit* — deep-zoom benchmark scenes and harness in the *fractadyne*
+  repository, GitHub, accessed 2026-11-01. <https://github.com/WindySnowOwl/fractadyne/tree/main/bench-kit>.
+  Its scenes (Kalles Fraktaler `.kfr` locations) are the measurement set for #1613
+  (`Probes/DeepCostProbe.cs`, `Server.Tests/S1613RebaseResumeTests.cs`) and #1614. Author's real name
+  and the kit's first-publication date not verified here.
+
+<a id="rith-ff-071-benchmark"></a>
+
+- **rith** (fractalforums.org user). *Fracturing Fog 0.7.1 performance benchmark report*, submitted
+  2026 (received 2026-11-01). The first real-world benchmark of FF: 17 deep-zoom scenes at 3840x2160
+  timed against Imagina and checked against Fractadyne, run with the bench-kit above. Its findings
+  became #1611 (batch on the GPU), #1612 (zoom ceiling, PR #1616), #1613 (QD-band per-pixel cost) and
+  #1614/#1615. Thread URL and exact date not recorded (see *Citations awaiting verification*).
 - **Noah Spurrier.** *Acid Warp*, 1992. The DOS psychedelic-pattern program the clean-room Acid Warp
   mode pays homage to.
 
@@ -787,6 +803,9 @@ entry above completed or corrected.
 - **Mariani–Silver** — primary description (Rico Mariani's algorithm; Robert Silver's formulation)
   isn't identified; it's commonly documented through Fractint-era material and Wikibooks *Fractals*.
 - **Earl F. Glynn** — the original publication of the fractional-power Julia set.
+- **rith, FF 0.7.1 benchmark report** — the fractalforums.org thread (URL, title, post date) the
+  report was submitted in isn't recorded yet; credited above under
+  [Fractal software and prior art](#rith-ff-071-benchmark).
 - **H. F. Talbot** — the original 1836 report of the self-imaging effect (cited by name in
   `Docs/Technical/DoubleSlit-Fractal-RnD.md`, #1565). The physics is credited through Berry & Klein
   above; Talbot's own paper (journal, volume, pages) isn't yet traced to a primary record.

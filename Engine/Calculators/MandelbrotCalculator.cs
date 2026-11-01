@@ -1041,6 +1041,20 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     private int _blaForRefMaxIter = -1;
     private int _blaForRefOrbitLen = -1;
     private int _blaForRefOrbitGen = -1;
+    /// <summary>#1613 — the BLA tolerance ε ceiling in the QD band (1e25..1e50) when
+    /// its rows resume rebased pixels. Before #1613 the absorption test sent nearly
+    /// every QD-band pixel to the rebased loop without BLA, so those frames were as
+    /// accurate as no BLA. Resuming with BLA at the default 1e-6 left ~2.5 % of a
+    /// period-448 minibrot's pixels a few iterations off no-BLA rebasing (which matched
+    /// exact iteration on every sampled pixel); 1e-10 leaves ~0.2 %, at 4.5x the speed
+    /// of no BLA. A tighter BlaTolerance still wins; the GPU kernels are not affected.</summary>
+    public const double QdBandBlaTolerance = 1e-10;
+
+    // #1613 — the QD-band rows use the rebase test and resume (ComputeRowPT4 / PT8).
+    private bool ResumesInQdBand =>
+        ResumeRebased && AllowPtRebasing && !UseDdRebaseReference
+        && Zoom > QDZoomThreshold && Zoom <= ODZoomThreshold;
+
     // Diagnostic counters — reset per Calculate, totalled after Parallel.For
     private long _blaSkipsTotal;
     private long _blaIterSkippedTotal;
@@ -2988,7 +3002,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             if (UseGpuBla && kernel.SupportsPerturbationSA && !DisableAcceleration)
             {
                 double halfWS = effImgW * 0.5 * scale, halfHS = effImgH * 0.5 * scale;
-                EnsureBlaTable(Math.Sqrt(halfWS * halfWS + halfHS * halfHS));
+                EnsureBlaTable(Math.Sqrt(halfWS * halfWS + halfHS * halfHS), cpuRows: false);
                 useBla = _blaTable is { Levels: > 1 } && _blaTable.RefLen == _refOrbitLen;
                 // Without SA the coefficient arrays only fill the kernel's bindings
                 // (safeMax 0 never skips); the cached table is the cheapest source.
@@ -3282,7 +3296,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     /// reference orbit changes (maxIter, length) or when dcMaxAbs has drifted
     /// far enough that previously-merged validity radii are stale.
     /// </summary>
-    private void EnsureBlaTable(double dcMaxAbs)
+    // cpuRows: the table is for the CPU PT rows, which tighten ε in the QD band (#1613);
+    // the GPU kernels keep BlaTolerance as is.
+    private void EnsureBlaTable(double dcMaxAbs, bool cpuRows = true)
     {
         bool refChanged = _blaForRefMaxIter != _refCachedMaxIter
                        || _blaForRefOrbitLen != _refOrbitLen
@@ -3292,6 +3308,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         double dcDrift = _blaDcMaxAbs <= 0 ? double.PositiveInfinity
                                            : Math.Abs(dcMaxAbs - _blaDcMaxAbs) / _blaDcMaxAbs;
         double eps = BlaTolerance > 0 && double.IsFinite(BlaTolerance) ? BlaTolerance : BlaTable.DefaultEpsilon;
+        if (cpuRows && ResumesInQdBand) eps = Math.Min(eps, QdBandBlaTolerance);   // #1613
         if (!refChanged && _blaTable != null && dcDrift < 0.05 && _blaTable.Epsilon == eps) return;
 
         if (_refOrbitLen < 4) { _blaTable = null; return; }
@@ -4231,14 +4248,56 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         double dcR = colOffsetX * scale + _refRecycleDx;
         double dcI = rowOffsetY * scale + _refRecycleDy;
 
-        double dr = 0.0, di = 0.0;    // δ_0 = 0
-        double drv = 1.0, div = 0.0;  // dz/dc for surface normals (IQ convention)
-        int m = 0;                    // reference-orbit index (independent of iter)
+        // δ_0 = 0, dz/dc = 1 (IQ convention), reference index m = 0.
+        ResumePixelPTRebased(dcR, dcI, 0, 0, 0.0, 0.0, 1.0, 0.0, null, maxIter, idx, colorMap);
+    }
+
+    // #1613 — the rebased loop from any state: iteration iter0 at reference index
+    // m0 with perturbation δ and full-orbit derivative. ComputePixelPTRebased starts
+    // it from zero without BLA (the #1274 specification the 4-wide kernel matches
+    // bit for bit). The QD-band PT4 / PT8 rows hand a pixel over here when it trips
+    // the rebase test (|z| < |δ|), continuing from where it is instead of restarting,
+    // and pass their BLA table: skips are looked up by the reference index m, not the
+    // iteration count, so they keep working after a rebase. Rebasing combined with BLA
+    // as in Zhuoran, "Another solution to perturbation glitches" (fractalforums.org,
+    // 2021). A step never runs past refLen − 1 (the rebase test's own limit) nor past
+    // maxIter.
+    private void ResumePixelPTRebased<TMap>(
+        double dcR, double dcI, int iter0, int m0,
+        double dr, double di, double drv, double div,
+        BlaTable? bla, int maxIter, int idx, TMap colorMap)
+        where TMap : IColorMap
+    {
+        int refLen = _refOrbitLen;
+        int m = m0;                   // reference-orbit index (independent of iter)
         double zr = 0.0, zi = 0.0;    // full value z = Z[m] + δ (last is escape z)
 
         int iter;
-        for (iter = 0; iter < maxIter; iter++)
+        for (iter = iter0; iter < maxIter; iter++)
         {
+            if (bla != null)
+            {
+                int blaIdx = bla.Lookup(m, dr * dr + di * di, Math.Min(refLen - 1, m + (maxIter - iter)));
+                if (blaIdx >= 0)
+                {
+                    ref readonly var e = ref bla.Data[blaIdx];
+                    if (e.L >= 2)
+                    {
+                        double aRe = e.ARe, aIm = e.AIm, bRe = e.BRe, bIm = e.BIm;
+                        // δ' = A·δ + B·dc; derivative d' ≈ A·d, as the PT4 rows do.
+                        double nDr = aRe * dr - aIm * di + (bRe * dcR - bIm * dcI);
+                        double nDi = aRe * di + aIm * dr + (bRe * dcI + bIm * dcR);
+                        dr = nDr; di = nDi;
+                        double nDrv = aRe * drv - aIm * div;
+                        double nDiv = aRe * div + aIm * drv;
+                        drv = nDrv; div = nDiv;
+                        m += e.L;
+                        iter += e.L - 1;   // the loop's ++ makes it +L
+                        continue;
+                    }
+                }
+            }
+
             double Zr = _refZr[m];
             double Zi = _refZi[m];
             zr = Zr + dr;
@@ -4365,6 +4424,13 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     // UseSimdRebasing = false restores the scalar fallback (A/B, #1274 tests);
     // the DD-reference variant (SM-11a) stays scalar.
     public static bool UseSimdRebasing { get; set; } = true;
+
+    // #1613 — in the QD band with BLA on, a pixel that trips the rebase test in the
+    // PT4 / PT8 rows continues from its state with BLA (ResumePixelPTRebased, at
+    // QdBandBlaTolerance) instead of restarting in the queue above. False restores the
+    // absorption test and restart (the #1274 tests pin it, so the 4-wide kernel keeps
+    // its bit-for-bit check against the scalar loop on the frames it was measured on).
+    public static bool ResumeRebased { get; set; } = true;
 
     [ThreadStatic] private static double[]? t_rebaseCol;
     [ThreadStatic] private static int[]? t_rebaseIdx;
@@ -4678,6 +4744,11 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         int refLen = _refOrbitLen;
         var bla = DisableAcceleration ? null : _blaTable;
         var sa = (DisableAcceleration || DisableSeriesApproximation) ? null : _sa;
+        // #1613 — in the QD band with BLA on, a pixel that trips the rebase test
+        // continues in the rebased loop from its state, with BLA (otherwise, and in
+        // the DD / OD bands: as before — the absorption test in the QD band and the
+        // #1274 restart through the queue / scalar loop).
+        bool resume = bla != null && ResumesInQdBand;
         long rowBlaSkips = 0;
         long rowBlaIterSaved = 0;
         long rowSaApplied = 0;
@@ -4721,6 +4792,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             var iterCount = Vector256<double>.Zero;
             int escapedMask = 0;
             bool glitched = false;
+            int glitchIter = -1;   // #1613 — iteration the rebase test tripped at
             int iterStart = 0;
 
             // ── SA prelude ─────────────────────────────────────────────────
@@ -4836,9 +4908,21 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 int active = ~escapedMask & 0b1111;
                 if (active == 0) break;
 
+                // #1613 — QD band with BLA on: the rebase test, |z| < |δ| (the reference
+                // no longer anchors the pixel), and the pixel carries on from here in the
+                // rebased loop. The absorption test below (Z + δ == Z) fires on nearly
+                // every QD-band pixel while δ is still accurate, and its restart has no
+                // BLA: 4-5x the frame time on a period-448 minibrot at 5e33. Without BLA
+                // (bypass, the #1274 tests) the absorption test and restart stay as they were.
+                if (resume)
+                {
+                    var dm2 = Avx.Add(Avx.Multiply(dr, dr), Avx.Multiply(di, di));
+                    if ((Avx.MoveMask(Avx.Compare(mag2, dm2, FloatComparisonMode.OrderedLessThanNonSignaling)) & active) != 0)
+                    { glitched = true; glitchIter = iter; break; }
+                }
                 // Precision glitch at extreme zoom: δ absorbed by Z in double arithmetic.
                 // Only check in QD range where dc << ULP(Z) always holds.
-                if (useQD && !glitched)
+                else if (useQD && !glitched)
                 {
                     double Zr_s = _refZr[iter], Zi_s = _refZi[iter];
                     for (int k = 0; k < 4; k++)
@@ -4890,6 +4974,13 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 if (glitched && ((escapedMask >> k) & 1) == 0)
                 {
                     double colOffsetX = offX + x + k - halfW;
+                    if (resume && glitchIter >= 0)
+                    {
+                        // #1613 — carry on from here (rebased, with BLA by reference index).
+                        ResumePixelPTRebased(colOffsetX * scale + _refRecycleDx, dcY, glitchIter, glitchIter,
+                            drSpan[k], diSpan[k], drvSpan[k], divSpan[k], bla, maxIter, idx, colorMap);
+                        continue;
+                    }
                     if (AllowPtRebasing)
                     {
                         if (queueRebase) { rqCol[rqN] = colOffsetX; rqIdx[rqN++] = idx; }   // #1274
@@ -5022,6 +5113,11 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         int refLen = _refOrbitLen;
         var bla = DisableAcceleration ? null : _blaTable;
         var sa = (DisableAcceleration || DisableSeriesApproximation) ? null : _sa;
+        // #1613 — in the QD band with BLA on, a pixel that trips the rebase test
+        // continues in the rebased loop from its state, with BLA (otherwise, and in
+        // the DD / OD bands: as before — the absorption test in the QD band and the
+        // #1274 restart through the queue / scalar loop).
+        bool resume = bla != null && ResumesInQdBand;
         long rowBlaSkips = 0;
         long rowBlaIterSaved = 0;
         long rowSaApplied = 0;
@@ -5068,6 +5164,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             var iterCount = Vector512<double>.Zero;
             int escapedMask = 0;
             bool glitched = false;
+            int glitchIter = -1;   // #1613 — iteration the rebase test tripped at
             int iterStart = 0;
 
             // ── SA prelude (8 lanes) ───────────────────────────────────────
@@ -5179,7 +5276,15 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 int active = ~escapedMask & 0xFF;
                 if (active == 0) break;
 
-                if (useQD && !glitched)
+                // #1613 — the rebase test with BLA on, the absorption test without
+                // (see ComputeRowPT4).
+                if (resume)
+                {
+                    var dm2 = dr * dr + di * di;
+                    if (((int)Vector512.LessThan(mag2, dm2).ExtractMostSignificantBits() & active) != 0)
+                    { glitched = true; glitchIter = iter; break; }
+                }
+                else if (useQD && !glitched)
                 {
                     double Zr_s = _refZr[iter], Zi_s = _refZi[iter];
                     for (int k = 0; k < 8; k++)
@@ -5222,6 +5327,13 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 if (glitched && ((escapedMask >> k) & 1) == 0)
                 {
                     double colOffsetX = offX + x + k - halfW;
+                    if (resume && glitchIter >= 0)
+                    {
+                        // #1613 — carry on from here (rebased, with BLA by reference index).
+                        ResumePixelPTRebased(colOffsetX * scale + _refRecycleDx, dcY, glitchIter, glitchIter,
+                            drSpan[k], diSpan[k], drvSpan[k], divSpan[k], bla, maxIter, idx, colorMap);
+                        continue;
+                    }
                     if (AllowPtRebasing)
                     {
                         if (queueRebase) { rqCol[rqN] = colOffsetX; rqIdx[rqN++] = idx; }   // #1274
