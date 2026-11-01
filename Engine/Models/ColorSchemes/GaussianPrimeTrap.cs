@@ -155,39 +155,50 @@ namespace FracturingFog.Models
             return Math.Sqrt(best2);
         }
 
-        public GaussianPrimeTrapMap()
+        public GaussianPrimeTrapMap() => AddStops(Stops);
+
+        /// <summary>Navy → blue → sky → gold → cream: lightness and blue-yellow only.</summary>
+        internal static void AddStops(System.Collections.Generic.List<ColorStop> stops)
         {
-            // Navy → blue → sky → gold → cream: lightness and blue-yellow only.
-            Stops.Add(new ColorStop(0.00f, Color.FromArgb(10, 14, 30)));
-            Stops.Add(new ColorStop(0.30f, Color.FromArgb(40, 80, 160)));
-            Stops.Add(new ColorStop(0.60f, Color.FromArgb(90, 170, 220)));
-            Stops.Add(new ColorStop(0.85f, Color.FromArgb(255, 204, 0)));
-            Stops.Add(new ColorStop(1.00f, Color.FromArgb(255, 250, 230)));
+            stops.Add(new ColorStop(0.00f, Color.FromArgb(10, 14, 30)));
+            stops.Add(new ColorStop(0.30f, Color.FromArgb(40, 80, 160)));
+            stops.Add(new ColorStop(0.60f, Color.FromArgb(90, 170, 220)));
+            stops.Add(new ColorStop(0.85f, Color.FromArgb(255, 204, 0)));
+            stops.Add(new ColorStop(1.00f, Color.FromArgb(255, 250, 230)));
         }
 
         public bool WantsInteriorColor => true;
 
         // TrapMin2 = current block min, TrapMin3 = previous block min,
         // TrapMin = min of the two (the window minimum, kept current every sample).
-        public void InitOrbit(out OrbitAccumulator acc)
+        public void InitOrbit(out OrbitAccumulator acc) => InitTrap(out acc);
+
+        public void Sample(ref OrbitAccumulator acc, double zr, double zi, double cr, double ci, int iter)
+            => SampleTrap(ref acc, zr, zi, iter);
+
+        internal static void InitTrap(out OrbitAccumulator acc)
         {
             acc = default;
             acc.TrapMin = acc.TrapMin2 = acc.TrapMin3 = float.MaxValue;
         }
 
-        public void Sample(ref OrbitAccumulator acc, double zr, double zi, double cr, double ci, int iter)
+        /// <summary>The tail-window trap step, shared with <see cref="GaussianPrimeHitsMap"/>.
+        /// Returns true when the sample was inside the trapped box.</summary>
+        internal static bool SampleTrap(ref OrbitAccumulator acc, double zr, double zi, int iter)
         {
             if (iter > 0 && iter % TailBlock == 0)
             {
                 acc.TrapMin3 = acc.TrapMin2;
                 acc.TrapMin2 = float.MaxValue;
             }
-            if (Math.Abs(zr) <= SampleBox && Math.Abs(zi) <= SampleBox)
+            bool inBox = Math.Abs(zr) <= SampleBox && Math.Abs(zi) <= SampleBox;
+            if (inBox)
             {
                 float d = (float)NearestDistance(zr * LatticeScale, zi * LatticeScale);
                 if (d < acc.TrapMin2) acc.TrapMin2 = d;
             }
             acc.TrapMin = Math.Min(acc.TrapMin2, acc.TrapMin3);
+            return inBox;
         }
 
         /// <summary>Gradient position for a window minimum (0 when nothing was trapped).</summary>
@@ -197,6 +208,73 @@ namespace FracturingFog.Models
         public int MapWithOrbit(float smooth, float distance, int iterations,
                                 float nx, float ny, in OrbitAccumulator acc)
             => MapNormalized(T(acc.TrapMin), distance);
+
+        public override int Map(float smooth, float distance, int maxIterations)
+        {
+            float t = maxIterations > 0 ? smooth / maxIterations : 0f;
+            return MapNormalized(Math.Clamp(t, 0f, 1f), distance);
+        }
+    }
+
+    // Gaussian Prime Hits (#1608, follow-up to #1487): the same trap outside the set,
+    // and inside it the HIT FRACTION — the share of the window's samples whose
+    // rounded scaled point round(6·z) is itself a Gaussian prime. In-set orbits sit
+    // on their attracting cycle, so the fraction is how many of the cycle's points
+    // land on a prime; it is constant across each region that shares a cycle
+    // pattern, which carves the cardioid and bulbs into blocks (the #1485 mock's
+    // panel 6). Chosen by measurement (#1608): std of the value inside / outside the
+    // set over the full set and seahorse valley was .45 / .31 and .13 / .12 for the
+    // window fraction, .43 / .31 and .10 / .05 for a whole-orbit fraction; outside
+    // the set every hit variant was weak (the full view shows the first step z₁ = c
+    // landing on the grid as a checkerboard), so the exterior keeps the trap's domes.
+    public sealed class GaussianPrimeHitsMap : GradientColorMap, IOrbitAwareColorMap
+    {
+        public static string Name => "Gaussian Prime Hits";
+        public static string Category => "Orbit Trap";
+        public static string Description =>
+            "Outside the set: Gaussian Prime Trap domes. Inside: the share of the attracting cycle's points " +
+            "that land on a Gaussian prime (lattice scale 6), carving the cardioid and bulbs into blocks.";
+        public static ColorMapFeatures Features =>
+            ColorMapFeatures.UsesSmooth | ColorMapFeatures.UsesOrbitTrap | ColorMapFeatures.UsesInterior |
+            ColorMapFeatures.GradientBased;
+        public static double MaxRecommendedZoom => GaussianPrimeTrapMap.MaxRecommendedZoom;
+
+        public GaussianPrimeHitsMap() => GaussianPrimeTrapMap.AddStops(Stops);
+
+        public bool WantsInteriorColor => true;
+
+        // Trap fields as in GaussianPrimeTrapMap. Hit window, in fields no buffer reads:
+        // TrapMin4 / TrapMin5 = hits in the current / previous block,
+        // CurvatureCount / LyapunovCount = in-box samples in the current / previous block.
+        public void InitOrbit(out OrbitAccumulator acc) => GaussianPrimeTrapMap.InitTrap(out acc);
+
+        public void Sample(ref OrbitAccumulator acc, double zr, double zi, double cr, double ci, int iter)
+        {
+            if (iter > 0 && iter % GaussianPrimeTrapMap.TailBlock == 0)
+            {
+                acc.TrapMin5 = acc.TrapMin4; acc.TrapMin4 = 0f;
+                acc.LyapunovCount = acc.CurvatureCount; acc.CurvatureCount = 0;
+            }
+            if (!GaussianPrimeTrapMap.SampleTrap(ref acc, zr, zi, iter)) return;
+            acc.CurvatureCount++;
+            double s = GaussianPrimeTrapMap.LatticeScale;
+            if (GaussianPrimeTrapMap.IsGaussianPrime((int)Math.Round(zr * s), (int)Math.Round(zi * s)))
+                acc.TrapMin4++;
+        }
+
+        /// <summary>Share of the window's in-box samples that hit a Gaussian prime (0 when none sampled).</summary>
+        public static float HitFraction(in OrbitAccumulator acc)
+        {
+            int n = acc.CurvatureCount + acc.LyapunovCount;
+            return n > 0 ? (acc.TrapMin4 + acc.TrapMin5) / n : 0f;
+        }
+
+        public int MapWithOrbit(float smooth, float distance, int iterations,
+                                float nx, float ny, in OrbitAccumulator acc)
+            => MapNormalized(GaussianPrimeTrapMap.T(acc.TrapMin), distance);
+
+        public int MapInteriorWithOrbit(int iterations, in OrbitAccumulator acc)
+            => MapNormalized(HitFraction(acc), 0f);
 
         public override int Map(float smooth, float distance, int maxIterations)
         {
