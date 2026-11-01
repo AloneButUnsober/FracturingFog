@@ -431,6 +431,22 @@ Use to demo the effect, find the sweet spot for a region, or generate a slow-bui
 
 Adaptive contrast is particularly powerful for revealing fine filament structure in deep-zoom shots where iteration counts cluster in a narrow band.
 
+### 11.3 Coprime Moiré (Lighting & FX)
+
+An artistic screen-space layer (#1488) in **Lighting & FX → Coprime moiré**. It lights the lattice points (i, j) with gcd(|i|, |j|) = 1, the "visible" lattice points, and blends that mask over the finished frame, 2D or 3D. The fine moiré is aliasing between the pattern and the pixel grid. The layer stays put when the fractal pans or zooms. It applies live, in exports and in batch; batch carries it inside a saved Lighting & FX preset (`--lighting-preset`).
+
+| Knob | Range | Effect |
+|---|---:|---|
+| Strength | 0 … 1 | Layer opacity; 0 = off (default) |
+| Cell size | 0.25 … 16 px | Lattice spacing; fractional values beat against the pixel grid |
+| Rotation | −180 … 180° | Turns the lattice against the grid |
+| Aspect | 0.25 … 4 | y/x spacing; ≠ 1 gives directional moiré |
+| Offset X / Y | px | Moves the lattice origin from the frame centre |
+| Condition | Coprime / GcdEquals / GcdAtMost / GcdIntensity | Which gcd values light a point (K sets the gcd for Equals / AtMost); Intensity = brightness 1/gcd |
+| Blend | Multiply / Screen / Overlay | Darken unlit points / lighten lit points / add contrast |
+| Samples | 1 … 4 | Subsamples per axis: 1 = raw aliasing (strongest moiré), higher fades it |
+| Invert | on / off | Light the non-matching points instead |
+
 ---
 
 ## 12. Overlays & Mini Windows

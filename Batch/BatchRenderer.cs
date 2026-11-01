@@ -1031,10 +1031,10 @@ namespace FracturingFog.Batch
                 }
                 if (deepCentre is { } fd && frameCx == cx && frType == FractalType.Mandelbrot)
                     return RenderDeepMandelFrame(fd, outW, outH, fz, iter, theme, pfAdaptive, quality, fp.BlaTolerance,
-                        FracturingFog.Rendering.AdaptiveAa.From(fp), fp.SolidRegionSkip, fp.SolidRegionAuto);
+                        FracturingFog.Rendering.AdaptiveAa.From(fp), fp.SolidRegionSkip, fp.SolidRegionAuto, fp);
                 return limbRegion != null && frameCx == cx
                     ? RenderRegionMandelFrame(limbRegion, outW, outH, fz, iter, theme, pfAdaptive, quality, fp.BlaTolerance,
-                        FracturingFog.Rendering.AdaptiveAa.From(fp), fp.SolidRegionSkip, fp.SolidRegionAuto)
+                        FracturingFog.Rendering.AdaptiveAa.From(fp), fp.SolidRegionSkip, fp.SolidRegionAuto, fp)
                     : RenderOneFrame(frType, outW, outH, frameCx, cy, fz, iter, theme, quality, pfAdaptive,
                                      fp, limbSource, stereo, frameDepth);
             }
@@ -1299,6 +1299,7 @@ namespace FracturingFog.Batch
                     {
                         var (pw, ph) = StereoRender.OutputDims(w, h, tfx.StereoLayout);
                         CompositeInteriorAlpha(pair, pw, ph, theme, fp);
+                        ApplyMoire(pair, pw, ph, fp);   // #1488
                         return pair;
                     }
                 }
@@ -1318,6 +1319,7 @@ namespace FracturingFog.Batch
                 FracturingFog.Rendering.Supersampling.FinishHistogramEq(alt, in altSs, adaptive);
                 var altBuf = CopyBuffer(alt.ColorBuffer, w, h);
                 CompositeInteriorAlpha(altBuf, w, h, theme, fp);
+                ApplyMoire(altBuf, w, h, fp);   // #1488
                 return altBuf;
             }
 
@@ -1339,6 +1341,7 @@ namespace FracturingFog.Batch
             FracturingFog.Rendering.Supersampling.FinishHistogramEq(calc, in ss, adaptive);
             var buf = CopyBuffer(calc.ColorBuffer, w, h);
             CompositeInteriorAlpha(buf, w, h, theme);
+            ApplyMoire(buf, w, h, fp);   // #1488
             return buf;
         }
 
@@ -1461,6 +1464,15 @@ namespace FracturingFog.Batch
                 buf, buf, w, h, fp ?? s_defaultInteriorFp,
                 theme?.InSetColor ?? 0xFF000000u,
                 alphaPreview: false, srcAlreadyProcessed: false);
+        }
+
+        // #1488 — the coprime moiré layer, after the interior composite as on the live
+        // and poster paths. No-op without parameters or at strength 0.
+        private static void ApplyMoire(uint[] buf, int w, int h, FractalParameters? fp)
+        {
+            if (fp == null) return;
+            var fx = fp.Lighting;
+            FracturingFog.Rendering.CoprimeMoire.Apply(buf, w, h, in fx);
         }
 
         private static uint[] CopyBuffer(uint[] src, int w, int h)
@@ -1595,7 +1607,8 @@ namespace FracturingFog.Batch
         private static uint[] RenderRegionMandelFrame(
             FractalRegion region, int w, int h, double zoom, int iter, IColorMap theme, int adaptive,
             QualityPreset? quality = null, double blaTolerance = FracturingFog.FFMath.BlaTable.DefaultEpsilon,
-            FracturingFog.Rendering.AdaptiveAa? aa = null, bool solidRegionSkip = false, bool solidRegionAuto = true)
+            FracturingFog.Rendering.AdaptiveAa? aa = null, bool solidRegionSkip = false, bool solidRegionAuto = true,
+            FractalParameters? moireFp = null)
         {
             var calc = new MandelbrotCalculator(w, h)
             {
@@ -1619,6 +1632,7 @@ namespace FracturingFog.Batch
             FracturingFog.Rendering.Supersampling.FinishHistogramEq(calc, in ss, adaptive);
             var buf = CopyBuffer(calc.ColorBuffer, w, h);
             CompositeInteriorAlpha(buf, w, h, theme);
+            ApplyMoire(buf, w, h, moireFp);   // #1488
             return buf;
         }
 
@@ -1632,7 +1646,7 @@ namespace FracturingFog.Batch
         {
             if (region.FractalType == FractalType.Mandelbrot && centerXOverride == null)
                 return RenderRegionMandelFrame(region, w, h, zoom, iter, theme, adaptive, blaTolerance: fp.BlaTolerance,
-                    aa: FracturingFog.Rendering.AdaptiveAa.From(fp), solidRegionSkip: fp.SolidRegionSkip, solidRegionAuto: fp.SolidRegionAuto);
+                    aa: FracturingFog.Rendering.AdaptiveAa.From(fp), solidRegionSkip: fp.SolidRegionSkip, solidRegionAuto: fp.SolidRegionAuto, moireFp: fp);
             return RenderOneFrame(region.FractalType, w, h,
                 centerXOverride ?? region.CenterX, region.CenterY, zoom, iter, theme,
                 region.QualityPreset ?? QualityPreset.Standard, adaptive,
@@ -2555,7 +2569,8 @@ namespace FracturingFog.Batch
         private static uint[] RenderDeepMandelFrame(
             FracturingFog.FFMath.DeepComplex c, int w, int h, double zoom, int iter, IColorMap theme, int adaptive,
             QualityPreset quality, double blaTolerance = FracturingFog.FFMath.BlaTable.DefaultEpsilon,
-            FracturingFog.Rendering.AdaptiveAa? aa = null, bool solidRegionSkip = false, bool solidRegionAuto = true)
+            FracturingFog.Rendering.AdaptiveAa? aa = null, bool solidRegionSkip = false, bool solidRegionAuto = true,
+            FractalParameters? moireFp = null)
         {
             var calc = new MandelbrotCalculator(w, h)
             {
@@ -2577,6 +2592,7 @@ namespace FracturingFog.Batch
             FracturingFog.Rendering.Supersampling.FinishHistogramEq(calc, in ss, adaptive);
             var buf = CopyBuffer(calc.ColorBuffer, w, h);
             CompositeInteriorAlpha(buf, w, h, theme);
+            ApplyMoire(buf, w, h, moireFp);   // #1488
             return buf;
         }
 
