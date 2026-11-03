@@ -408,7 +408,7 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
   <https://mathr.co.uk/mandelbrot/book-draft/>. Practical writeup of perturbation theory + bilinear
   approximation, glitch detection, and rebase reference selection; maintainer of Kalles Fraktaler 2+
   (<https://mathr.co.uk/kf/kf.html>).
-- **Karl Runmo.** *Kalles Fraktaler.* <http://www.chillheimer.de/kallesfraktaler/>. The reference
+- <a id="kalles-fraktaler"></a>**Karl Runmo.** *Kalles Fraktaler.* <http://www.chillheimer.de/kallesfraktaler/>. The reference
   deep-zoom Mandelbrot renderer; pioneered many perturbation / SA / glitch techniques this engine
   uses, and Newton-Raphson zooming (location finder reference behaviour).
 - **Botond Kósa.** *Mandel Machine.* Perturbation deep-zoom renderer — prior art for reference-orbit
@@ -616,6 +616,17 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
   licence. <https://zlib.net/>, licence <https://zlib.net/zlib_license.html>. The Adler-32 of a concatenation from
   the two parts' checksums and the second part's length; `ParallelPngWriter.Adler32Combine` is a C# rewrite of it
   (see `THIRD-PARTY-NOTICES.md`) (#1640).
+- <a id="kf-kfr-format"></a>**Kalles Fraktaler location format (`.kfr`)** — Karl Runmo (Kalles Fraktaler) and
+  Claude Heiland-Allen (Kalles Fraktaler 2+), AGPL-3.0. *Kalles Fraktaler 2 + Manual*, 2022-06-07 (kf-2.15.5.2),
+  <https://mathr.co.uk/kf/manual.html>; source <https://code.mathr.co.uk/kalles-fraktaler-2>, read through the
+  GitHub fork by **smurfix** (handle), <https://github.com/smurfix/kf2> (last push 2022-02-03), files
+  `utils/kf-tile.cpp` and `fraktal_sft/fraktal_sft.cpp`, accessed 2026-11-03. What `KfrLocation` (#1615, `--kfr`
+  and Explore > *Import .kfr…*) takes from them: the `Key: value` line layout; the `Re` / `Im` / `Zoom` /
+  `Iterations` keys; the image height spanning 4 / zoom (pixel spacing 2·ZoomRadius / height, zoom =
+  2 / ZoomRadius); the pixel → c map running the same way down the image as FF's unless `ImagPointsUp: 1`
+  (the manual's kf-2.15.4 "imaginary axis points up" option); and `RotateAngle` / `StretchAngle` /
+  `StretchAmount` / `Rotate` / `Ratio` as view transforms. No KF code is used. The manual's own description of the
+  `.kfr` keys was not found; the key meanings above come from the source.
 
 - **k-means in CIELAB** — Stuart P. Lloyd. *Least squares quantization in PCM.* IEEE Transactions on
   Information Theory, 1982. Underlies `PaletteBuilder.Lib`'s palette extractor and the theme editor's
@@ -786,7 +797,9 @@ Programs and galleries the project measured itself against, learned from, or pay
 - **WindySnowOwl.** *bench-kit* — deep-zoom benchmark scenes and harness in the *fractadyne*
   repository, GitHub, accessed 2026-11-01. <https://github.com/WindySnowOwl/fractadyne/tree/main/bench-kit>.
   Its scenes (Kalles Fraktaler `.kfr` locations) are the measurement set for #1613
-  (`Probes/DeepCostProbe.cs`, `Server.Tests/S1613RebaseResumeTests.cs`) and #1614. Author's real name
+  (`Probes/DeepCostProbe.cs`, `Server.Tests/S1613RebaseResumeTests.cs`) and #1614. Its README's *Fracturing Fog* section
+  states the FF-side conventions #1615 checks (FF's zoom fixes the longer side at 3.5 / zoom; its imaginary axis
+  points down the image); `40-mini-p128-1e13.kfr` is the sample in `Server.Tests/S1615KfrImportTests.cs`. Author's real name
   and the kit's first-publication date not verified here.
 
 <a id="rith-ff-071-benchmark"></a>

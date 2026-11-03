@@ -161,7 +161,7 @@ public sealed class CommandBuilderViewModelTests
         var vm = new CommandBuilderViewModel
         {
             SavePathRequested = name => Task.FromResult<string?>(@"D:\out\" + name),
-            OpenPathRequested = () => Task.FromResult<string?>(@"D:\in\beauty.exr"),
+            OpenPathRequested = _ => Task.FromResult<string?>(@"D:\in\beauty.exr"),
         };
         await Row(vm, BatchFlags.Out).BrowseCommand.Execute();
         Assert.Equal(@"D:\out\render.png", vm.Composer.ValueOf(BatchFlags.Out));

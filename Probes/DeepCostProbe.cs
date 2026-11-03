@@ -4,7 +4,8 @@
 // #1613: --deepcostprobe [W H]. Per-pixel cost of the CPU deep-zoom perturbation
 // path on benchmark scenes from the fractadyne bench-kit (WindySnowOwl,
 // https://github.com/WindySnowOwl/fractadyne/tree/main/bench-kit; centres
-// conjugated from the kit's .kfr files; the calculator takes the KF zoom as is).
+// conjugated from the kit's .kfr files, a mirror view of the same cost; the KF zoom
+// converts as #1615's KfrLocation.FfZoom, KF spanning the height with 4/zoom).
 // The scenes come from rith's FF 0.7.1 benchmark report (a fractalforums.org direct message), which
 // found the period-448 one 3x slower than a deeper scene; both credited in
 // Docs/Resources-Bibliography.md (#fractadyne-bench-kit, #rith-ff-071-benchmark).
@@ -67,9 +68,10 @@ namespace FracturingFog
             foreach (var s in Scenes)
             {
                 if (only != null && !s.Name.Contains(only, StringComparison.OrdinalIgnoreCase)) continue;
-                // MandelbrotCalculator spans 3.5/zoom across max(W, H), as KF spans
-                // the width, so the .kfr zoom carries over for a landscape frame.
-                double zoom = s.KfZoom;
+                // #1615 — KF spans the height with 4/zoom, MandelbrotCalculator max(W, H)
+                // with 3.5/zoom (before #1615 the KF zoom was used as is: a view about
+                // 2x wider than the kit's).
+                double zoom = s.KfZoom * 3.5 * h / (4.0 * Math.Max(w, h));
                 var (a, aSm, aMs, aReb, aIt) = Render(s, zoom, w, h, reps, noAccel: false);
                 var st = s_lastStages;
                 Console.WriteLine($"  {s.Name,-14} stages: orbit {st.RefOrbit,8:F0} ms ({1e3 * st.RefOrbit / s.Iter:F2} us/iter, period {s_lastPeriod})  " +

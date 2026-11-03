@@ -2982,6 +2982,10 @@ namespace FracturingFog.Hosting
                         "Export Workspace", def, "JSON (*.json)|*.json|All files (*.*)|*.*");
                 cc.WorkspaceDeleteConfirmRequested = name =>
                     AvaloniaDialogs.ConfirmAsync("Delete Workspace", $"Delete saved workspace \"{name}\"?");
+                // #1615 Explore > Import .kfr.
+                cc.KfrImportPathRequested = () =>
+                    AvaloniaDialogs.PickOpenFileAsync(
+                        "Import Kalles Fraktaler Location", "KF location (*.kfr)|*.kfr|All files (*.*)|*.*");
                 // #946 Quick Record — folder for no-prompt saves.
                 cc.QuickRecordFolderPickRequested = () =>
                     AvaloniaDialogs.PickFolderAsync("Folder for Quick Record saves");
@@ -2990,9 +2994,12 @@ namespace FracturingFog.Hosting
                     AvaloniaDialogs.PickSaveFileAsync(
                         "Batch Output", def,
                         "PNG (*.png)|*.png|MP4 video (*.mp4)|*.mp4|OpenEXR (*.exr)|*.exr|All files (*.*)|*.*");
-                cc.CommandBuilder.OpenPathRequested = () =>
-                    AvaloniaDialogs.PickOpenFileAsync(
-                        "Input OpenEXR", "OpenEXR (*.exr)|*.exr|All files (*.*)|*.*");
+                cc.CommandBuilder.OpenPathRequested = hint =>
+                    hint.EndsWith(".kfr", StringComparison.OrdinalIgnoreCase)   // #1615
+                        ? AvaloniaDialogs.PickOpenFileAsync(
+                            "Kalles Fraktaler Location", "KF location (*.kfr)|*.kfr|All files (*.*)|*.*")
+                        : AvaloniaDialogs.PickOpenFileAsync(
+                            "Input OpenEXR", "OpenEXR (*.exr)|*.exr|All files (*.*)|*.*");
                 // #995 — saved names for the Command panel's library pickers.
                 // Read-only views of the in-memory libraries (loaded at startup);
                 // the remote stores are read from disk without creating them.

@@ -185,8 +185,9 @@ public sealed class CommandBuilderViewModel : ViewModelBase
 
     /// <summary>Host save-file picker (suggested file name → chosen path).</summary>
     public Func<string, Task<string?>>? SavePathRequested { get; set; }
-    /// <summary>Host open-file picker for input paths (.exr).</summary>
-    public Func<Task<string?>>? OpenPathRequested { get; set; }
+    /// <summary>Host open-file picker for input paths, given the flag's value hint
+    /// (<c>IN.exr</c>, <c>IN.kfr</c>) so the host can pick the file filter.</summary>
+    public Func<string, Task<string?>>? OpenPathRequested { get; set; }
 
     // ── Library pickers (#995) ───────────────────────────────────────────────
 
@@ -332,7 +333,7 @@ public sealed class CommandBuilderViewModel : ViewModelBase
     private async Task BrowseModeValueAsync()
     {
         if (OpenPathRequested is not { } pick) return;
-        var path = await pick();
+        var path = await pick("IN.exr");
         if (!string.IsNullOrWhiteSpace(path)) ModeValue = path!;
     }
 
@@ -442,7 +443,7 @@ public sealed class CommandBuilderViewModel : ViewModelBase
         if (row.Spec.PathIsInput)
         {
             if (OpenPathRequested is not { } open) return;
-            path = await open();
+            path = await open(row.Spec.ValueHint ?? "PATH");
         }
         else
         {

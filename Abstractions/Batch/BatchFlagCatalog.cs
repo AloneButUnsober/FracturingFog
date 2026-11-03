@@ -468,7 +468,7 @@ namespace FracturingFog.Batch
 
                 // ── Source ──
                 Txt(BatchFlags.Region, Source, ImgVid, "Load a saved built-in or user region by name.", BatchFlagSource.Region)
-                    with { Aliases = new[] { "-r" } },
+                    with { Aliases = new[] { "-r" }, ConflictsWith = new[] { BatchFlags.Kfr } },
                 Txt(BatchFlags.Equation, Source, ImgVid,
                     "UserEquation / Sandbox / UserBulb: load the saved equation of that name (a User Equation's escape radius, z0 seed, bailout and interior colouring come with it).",
                     BatchFlagSource.Equation)
@@ -486,6 +486,12 @@ namespace FracturingFog.Batch
                 Dbl(BatchFlags.Zoom, Source, ImgVid, "Zoom.", max: QualityPreset.Extreme.ZoomMax, enforced: true) with { Aliases = new[] { "--z" } },
                 Int(BatchFlags.Iter, Source, ImgVid, "Override the iteration count.", min: 1)
                     with { Aliases = new[] { "--i", "--iterations" } },
+                // #1615 — Kalles Fraktaler location (format: Karl Runmo / Claude Heiland-Allen, KF 2+).
+                PathFlag(BatchFlags.Kfr, Source, ImgVid,
+                    "Take the centre, zoom and iterations from a Kalles Fraktaler location (.kfr, Mandelbrot only). "
+                    + "The zoom converts for the output size (KF spans the height with 4/zoom, FF the longer side with 3.5/zoom); "
+                    + "--x / --y / --zoom / --iter override.",
+                    "IN.kfr") with { PathIsInput = true, ConflictsWith = new[] { BatchFlags.Region } },
                 Txt(BatchFlags.Explore, Source, ImgVid,
                     "Auto-explore: beam-search from the start view (region, --x --y --zoom, or the family's home view) "
                     + "for a detail-rich view and render that. Keys: seed, depth (levels), beam, grid, jitter, start "

@@ -92,6 +92,9 @@ namespace FracturingFog.Batch
         public double[]? CenterYLimbs { get; set; }
         public double? Zoom { get; set; }
         public int? Iterations { get; set; }
+        /// <summary>#1615 — a Kalles Fraktaler location (.kfr) supplying the centre,
+        /// zoom and iteration count; explicit --x / --y / --zoom / --iter win.</summary>
+        public string? KfrPath { get; set; }
 
         // Color theme by name. Default = HSV.
         public string ThemeName { get; set; } = BatchDefaults.ThemeName;
@@ -660,6 +663,11 @@ namespace FracturingFog.Batch
                         opts.CenterYLimbs = yl.Length > 1 ? Pad8(yl) : null;
                         break;
                     }
+
+                    case BatchFlags.Kfr:
+                        if (!Next(args, ref i, a, out string kp, out error)) return false;
+                        opts.KfrPath = kp;
+                        break;
 
                     case "--z":
                     case BatchFlags.Zoom:
@@ -1878,6 +1886,16 @@ namespace FracturingFog.Batch
                 return true;
             }
 
+            // #1615 — the .kfr is read by ResolveKfr after the parse; here only the
+            // combinations it can never satisfy.
+            if (opts.KfrPath != null)
+            {
+                if (!string.IsNullOrWhiteSpace(opts.RegionName))
+                    { error = $"{BatchFlags.Kfr} and {BatchFlags.Region} cannot be combined."; return false; }
+                if (opts.FractalType != FractalType.Mandelbrot)
+                    { error = $"{BatchFlags.Kfr} imports Mandelbrot locations only (got {BatchFlags.Fractal} {opts.FractalType})."; return false; }
+            }
+
             // Slideshow + scene modes pull their region/theme set from the named
             // config / scene shots — no region/coord requirement.
             if (opts.Mode != BatchMode.Slideshow && opts.Mode != BatchMode.Scene
@@ -1886,9 +1904,9 @@ namespace FracturingFog.Batch
                 // --explore may start from the family's home view (no coordinates).
                 bool noCoords = opts.CenterX == null && opts.CenterY == null && opts.Zoom == null;
                 if (opts.Explore != null && noCoords) { }
-                else if (opts.CenterX == null || opts.CenterY == null || opts.Zoom == null)
+                else if (opts.KfrPath == null && (opts.CenterX == null || opts.CenterY == null || opts.Zoom == null))
                 {
-                    error = "Must specify --region NAME, or all of --x --y --zoom (and optionally --iter), or --explore alone (starts at the family's home view).";
+                    error = "Must specify --region NAME, --kfr FILE, or all of --x --y --zoom (and optionally --iter), or --explore alone (starts at the family's home view).";
                     return false;
                 }
             }
@@ -2339,6 +2357,32 @@ namespace FracturingFog.Batch
 
         private static string CoordinateError(string flag, string value)
             => $"{flag}: '{value}' is not a coordinate (a number, or octuple-double limbs Hi|Lo|... up to 8).";
+
+        /// <summary>#1615 — fill the view from <see cref="KfrPath"/> (run after
+        /// <see cref="TryParse"/>, before any render). Explicit --x / --y / --zoom /
+        /// --iter keep their values; the zoom converts for the output frame (KF spans
+        /// the height with 4 / zoom, FF's Mandelbrot max(W, H) with 3.5 / zoom).
+        /// No-op without --kfr.</summary>
+        public static bool ResolveKfr(BatchOptions opts, out string? error)
+        {
+            error = null;
+            if (opts.KfrPath == null) return true;
+            string flag = BatchFlags.Kfr;
+            string text;
+            try { text = System.IO.File.ReadAllText(opts.KfrPath); }
+            catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+                { error = $"{flag}: can't read '{opts.KfrPath}': {ex.Message}"; return false; }
+            if (!FracturingFog.ViewState.KfrLocation.TryParse(text, out var kfr, out string? why))
+                { error = $"{flag} '{opts.KfrPath}': {why}"; return false; }
+            var (x, y) = kfr!.Centre();
+            if (opts.CenterX == null) { opts.CenterX = x[0]; opts.CenterXLimbs = x; }
+            if (opts.CenterY == null) { opts.CenterY = y[0]; opts.CenterYLimbs = y; }
+            opts.Zoom ??= kfr.FfZoom(opts.Width, opts.Height);
+            opts.Iterations ??= kfr.Iterations;
+            if (opts.Zoom > QualityPreset.Extreme.ZoomMax)
+                { error = $"{flag} '{opts.KfrPath}': zoom {opts.Zoom:G4} at {opts.Width}x{opts.Height} is past the deepest zoom ({QualityPreset.Extreme.ZoomMax:G3})."; return false; }
+            return true;
+        }
 
         private static double[] Pad8(double[] l)
         {
