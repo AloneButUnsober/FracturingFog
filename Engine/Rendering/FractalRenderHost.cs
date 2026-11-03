@@ -4716,6 +4716,17 @@ namespace FracturingFog.Rendering
         // denoised (#1392): a 3D frame's background OIDN result, shown in place of src.
         private void UploadProcessedBufferCore(uint[] src, int w, int h, bool srcAlreadyProcessed, uint[]? denoised)
         {
+            // #1563 — a calculator's Resize sets Width/Height before it reallocates
+            // ColorBuffer, and the final-frame upload reads the three separately on a
+            // thread-pool thread that DrainCalc does not wait for. A buffer shorter than
+            // w*h is a frame from the superseded size: drop it (the resize re-renders)
+            // instead of letting Array.Copy throw and kill the process.
+            if (src.Length < w * h)
+            {
+                System.Diagnostics.Debug.WriteLine($"[upload] dropped superseded frame: {src.Length} px for {w}x{h} (#1563)");
+                return;
+            }
+            if (denoised != null && denoised.Length < w * h) denoised = null;
             // #1013 — a new video leg starts a fresh autostereogram sequence.
             if (_autostereoSeqResetPending)
             {
