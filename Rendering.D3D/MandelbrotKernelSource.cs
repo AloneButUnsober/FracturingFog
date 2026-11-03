@@ -1450,7 +1450,11 @@ void CSPerturbSA(uint3 tid : SV_DispatchThreadID)
             }
 
             // Apply the skip only when it clears the CPU guard (k ≥ 16, k ≤ refLen).
-            if (k >= 16 && k <= gRefLen)
+            // #1621 — but stop one short of refLen: the reference buffer holds Z_0..
+            // Z_{refLen-1} (the CPU array also has Z_refLen), so m = refLen read past
+            // its end. A periodic reference (#1614, refLen = p + 1) reaches it often.
+            k = min(k, gRefLen - 1);
+            if (k >= 16)
             {
                 // EvalDelta(k): δ_k = A_k·dc + B_k·dc² + C_k·dc³.
                 double dc2R = dcR * dcR - dcI * dcI;

@@ -4028,11 +4028,10 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         // the pixel size and repeats; building past that is wasted. The tolerance
         // is the frame's pixel spacing (squared), so the wrap at Z_p moves no pixel.
         double px = 3.5 / Math.Max(EffectiveImageWidth, EffectiveImageHeight) / Zoom;
-        // Only the CPU loops wrap at the period, so detection needs the rebased ones,
-        // and a frame the GPU deep kernels may take keeps the full orbit: they don't
-        // wrap (a truncated orbit moved 94 % of a p128 frame there) — #1621.
-        bool gpuDeepMayRun = UseGpuPerturbation && GpuKernel != null && Zoom <= MaxGpuPerturbZoom;
-        _refPeriodTol2 = PeriodicReferenceOrbit && AllowPtRebasing && !UseDdRebaseReference && !gpuDeepMayRun
+        // Detection needs the rebased loops, which wrap at the period (CPU), as do
+        // the GPU deep kernels: they rebase when the reference runs out, and since
+        // #1621 their SA skip stops short of the buffer's end.
+        _refPeriodTol2 = PeriodicReferenceOrbit && AllowPtRebasing && !UseDdRebaseReference
             ? px * px : 0;
         if (Zoom > ODZoomThreshold)
         {
