@@ -178,6 +178,9 @@ namespace FracturingFog.Cli
         /// <summary>#1028 — canonical field (Real height); emitted when turned off.</summary>
         public bool ReliefCanonicalField { get; init; } = true;
 
+        /// <summary>#1620 — GPU relief raymarch (Ctrl+Shift+G); off emits --relief-cpu.</summary>
+        public bool ReliefGpu { get; init; } = true;
+
         /// <summary>#1029 — height source (emitted when not Smooth), its blend weight
         /// (Blend) and distance falloff (Distance), each only when non-default.</summary>
         public ReliefHeightSource ReliefHeightSource { get; init; } = ReliefHeightSource.Smooth;
@@ -457,6 +460,8 @@ namespace FracturingFog.Cli
                 if (snap.ReliefRaymarch)
                 {
                     if (snap.ReliefCameraOrtho) parts.Add(BatchFlags.ReliefCameraOrtho);
+                    // #1620 — --gpu off already traces on the CPU.
+                    if (!snap.ReliefGpu && snap.GpuCompute) parts.Add(BatchFlags.ReliefCpu);
                     if (snap.ReliefFarDetail != 1.0) { parts.Add(BatchFlags.ReliefFarDetail); parts.Add(Num(snap.ReliefFarDetail)); }
                     if (snap.ReliefTrueHeight)
                     {

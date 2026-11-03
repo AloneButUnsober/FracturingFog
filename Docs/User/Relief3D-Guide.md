@@ -307,6 +307,13 @@ parity for the surface (shadows, AO, PBR, IBL, reflections) and volumetric fog.
 Use the CPU path when you want the reference image, multi-light/palette fog, or
 are debugging a GPU artifact; otherwise leave GPU on for speed.
 
+**Batch (#1620).** `--batch` follows the same default: with a GPU device
+(`--gpu auto` / `on`) the relief raymarch and froxel fog run on it, so a batch
+frame matches the live view. `--relief-cpu` keeps the trace on the CPU (the live
+`Ctrl+Shift+G` off; the Command builder emits it), and `--gpu off` does as well. A
+stderr line says when the relief kernel opens. At 1080p on a GT 710 a relief frame
+took 1.2 s on the CPU and 0.3 s on the GPU; 4K took 3.7 s and 1.0 s.
+
 ---
 
 ## 8. Mesh export (3D print / DCC)

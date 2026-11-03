@@ -19,6 +19,11 @@
 // Attach of a calculator that can dispatch on it, so a run that never uses the GPU
 // (a deep frame without FF_GPU_PERTURB, a shallow frame below fp32 precision, a
 // family with no GPU kernel) doesn't pay the 0.1-1 s device open.
+//
+// #1620 — the relief raymarch and froxel kernels too (ReliefKernel / FroxelKernel),
+// which PosterRenderer hands to HeightfieldRaymarch2D as FractalRenderHost does
+// live. Built on first relief frame only; a GPU device loss mid-render drops the
+// relief to the CPU trace (HeightfieldRaymarch2D.MarkGpuReliefLost).
 
 namespace FracturingFog.Rendering
 {
@@ -41,7 +46,7 @@ namespace FracturingFog.Rendering
                     return s_kernel;
                 }
             }
-            set { lock (s_gate) { s_kernel = value; s_factory = null; } }
+            set { lock (s_gate) { s_kernel = value; s_factory = null; ResetRaymarchKernels(); } }
         }
 
         /// <summary>#1640 — opens the kernel on first use instead of up front; it runs
@@ -49,7 +54,78 @@ namespace FracturingFog.Rendering
         public static System.Func<IGpuKernel?>? KernelFactory
         {
             get => s_factory;
-            set { lock (s_gate) { s_kernel = null; s_factory = value; } }
+            set { lock (s_gate) { s_kernel = null; s_factory = value; ResetRaymarchKernels(); } }
+        }
+
+        // #1620 — the relief raymarch and froxel kernels, built once on first use from
+        // the escape-time kernel (D3D11 shares its device and gate, as the live
+        // renderer's handles are shared; Vulkan opens a context of its own, as live).
+        private static System.Func<IGpuKernel, Lighting.IReliefRaymarchKernel?>? s_reliefFactory;
+        private static System.Func<IGpuKernel, Lighting.IFroxelVolumeKernel?>? s_froxelFactory;
+        private static Lighting.IReliefRaymarchKernel? s_relief;
+        private static Lighting.IFroxelVolumeKernel? s_froxel;
+        private static bool s_reliefTried, s_froxelTried;
+
+        /// <summary>#1620 — builds the relief raymarch kernel from <see cref="Kernel"/>.
+        /// Setting it (or <see cref="Kernel"/> / <see cref="KernelFactory"/>) drops a
+        /// kernel already built.</summary>
+        public static System.Func<IGpuKernel, Lighting.IReliefRaymarchKernel?>? ReliefKernelFactory
+        {
+            get => s_reliefFactory;
+            set { lock (s_gate) { s_reliefFactory = value; s_relief = null; s_reliefTried = false; } }
+        }
+
+        /// <summary>#1620 — builds the froxel volume kernel from <see cref="Kernel"/>.</summary>
+        public static System.Func<IGpuKernel, Lighting.IFroxelVolumeKernel?>? FroxelKernelFactory
+        {
+            get => s_froxelFactory;
+            set { lock (s_gate) { s_froxelFactory = value; s_froxel = null; s_froxelTried = false; } }
+        }
+
+        /// <summary>#1620 — the relief raymarch kernel headless relief renders use; null
+        /// = the CPU trace. Built (at most once) on first read, opening the device if
+        /// it is still pending.</summary>
+        public static Lighting.IReliefRaymarchKernel? ReliefKernel
+        {
+            get
+            {
+                if (s_relief != null || s_reliefTried) return s_relief;
+                var k = Kernel;
+                lock (s_gate)
+                {
+                    if (!s_reliefTried)
+                    {
+                        s_reliefTried = true;
+                        if (k != null && s_reliefFactory is { } f) s_relief = f(k);
+                    }
+                    return s_relief;
+                }
+            }
+        }
+
+        /// <summary>#1620 — the froxel volume kernel; null = the CPU froxel post-pass.</summary>
+        public static Lighting.IFroxelVolumeKernel? FroxelKernel
+        {
+            get
+            {
+                if (s_froxel != null || s_froxelTried) return s_froxel;
+                var k = Kernel;
+                lock (s_gate)
+                {
+                    if (!s_froxelTried)
+                    {
+                        s_froxelTried = true;
+                        if (k != null && s_froxelFactory is { } f) s_froxel = f(k);
+                    }
+                    return s_froxel;
+                }
+            }
+        }
+
+        private static void ResetRaymarchKernels()
+        {
+            s_relief = null; s_froxel = null;
+            s_reliefTried = false; s_froxelTried = false;
         }
 
         /// <summary>#1640 — why the last <see cref="Attach"/> left a calculator on the

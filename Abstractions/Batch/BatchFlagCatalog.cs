@@ -825,6 +825,8 @@ namespace FracturingFog.Batch
                     with { Implies = ReliefOn, Requires = new[] { BatchFlags.ReliefTrueHeight } },
                 Sw(BatchFlags.ReliefNoCanonicalField, Cam, FR, "Real height: shape the terrain at the output size instead of on one fixed grid (the field floor), so the height varies a little with the output size (the #1035 behaviour).")
                     with { Implies = ReliefOn, Requires = new[] { BatchFlags.ReliefTrueHeight } },
+                Sw(BatchFlags.ReliefCpu, Cam, FR, "Trace the relief on the CPU even when the batch has a GPU device (the live view's Ctrl+Shift+G). By default the relief raymarch and froxel fog run on the GPU, as they do live; the two differ by about a level per pixel.")
+                    with { Implies = ReliefOn, Requires = new[] { BatchFlags.ReliefRaymarch } },
                 Pick(BatchFlags.ReliefDetailAnchor, Cam, FR,
                     "Where the hit tolerance is measured from: camera = grows with distance, so far filaments sink into the floor; uniform = measured at the nearest terrain and held, so far detail resolves like near detail (slower).",
                     new[] { "camera", "uniform" }, def: "camera", hint: "ANCHOR")
