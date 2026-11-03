@@ -48,6 +48,16 @@ public static class BootstrapHooks
     /// the batch tries Vulkan instead.</summary>
     public static Func<IGpuKernel?>? HeadlessGpuKernelFactoryHook { get; set; }
 
+    /// <summary>#1620 — headless relief-raymarch kernel over the device of the kernel
+    /// <see cref="HeadlessGpuKernelFactoryHook"/> built. Windows installs
+    /// <c>ReliefRaymarchGpuKernel</c> on <c>MandelbrotGpuKernel.SharedDevice</c>;
+    /// null elsewhere, where the batch opens the Vulkan relief kernel instead.</summary>
+    public static Func<IGpuKernel, FracturingFog.Rendering.Lighting.IReliefRaymarchKernel?>? HeadlessReliefKernelFactoryHook { get; set; }
+
+    /// <summary>#1620 — headless froxel-volume kernel, as
+    /// <see cref="HeadlessReliefKernelFactoryHook"/> (Windows: <c>FroxelGpuKernel</c>).</summary>
+    public static Func<IGpuKernel, FracturingFog.Rendering.Lighting.IFroxelVolumeKernel?>? HeadlessFroxelKernelFactoryHook { get; set; }
+
     /// <summary>#162 (Slice 3d) — D3D11 relief-raymarch kernel factory. Windows
     /// installs the DirectXRenderer downcast → <c>ReliefRaymarchGpuKernel</c>
     /// (same native handles as the escape-time kernel); null elsewhere (the CPU

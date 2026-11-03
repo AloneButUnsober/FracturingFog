@@ -61,6 +61,16 @@ public static class WindowsBootstrap
         if (!OperatingSystem.IsWindows()) return;
         BootstrapHooks.HeadlessGpuKernelFactoryHook =
             () => FracturingFog.Rendering.MandelbrotGpuKernel.TryCreateWithOwnDevice();
+        // #1620 — the relief and froxel kernels share that kernel's device, context
+        // and gate, as the live hooks below share the renderer's.
+        BootstrapHooks.HeadlessReliefKernelFactoryHook = k =>
+            k is FracturingFog.Rendering.MandelbrotGpuKernel mk
+                ? new FracturingFog.Rendering.ReliefRaymarchGpuKernel(mk.SharedDevice.Device, mk.SharedDevice.Context, mk.SharedDevice.Gate)
+                : null;
+        BootstrapHooks.HeadlessFroxelKernelFactoryHook = k =>
+            k is FracturingFog.Rendering.MandelbrotGpuKernel mk
+                ? new FracturingFog.Rendering.FroxelGpuKernel(mk.SharedDevice.Device, mk.SharedDevice.Context, mk.SharedDevice.Gate)
+                : null;
     }
 
     public static void Install()

@@ -271,6 +271,12 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         }
     }
 
+    /// <summary>#1620 — the device, immediate context and gate this kernel dispatches
+    /// on, so a headless render can build the relief / froxel kernels over the same
+    /// handles (as the live renderer shares its own). Still owned by this kernel.</summary>
+    public (ID3D11Device Device, ID3D11DeviceContext Context, object Gate) SharedDevice
+        => (_device, _ctx, _d3dGate);
+
     public MandelbrotGpuKernel(ID3D11Device device, ID3D11DeviceContext context, object d3dGate)
     {
         _device = device ?? throw new ArgumentNullException(nameof(device));

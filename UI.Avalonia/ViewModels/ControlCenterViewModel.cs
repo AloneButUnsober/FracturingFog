@@ -446,6 +446,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
             ReliefTrueHeight     = fp?.Relief2DTrueHeight ?? false,
             ReliefTerrainSmoothing = fp?.Relief2DTerrainSmoothing ?? 0.02,   // #1035
             ReliefCanonicalField = fp?.Relief2DCanonicalField ?? true,        // #1028
+            ReliefGpu            = fp?.Relief2DGpuRaymarch ?? true,           // #1620
             ReliefHeightSource   = fp?.Relief2DHeightSource ?? FracturingFog.ReliefHeightSource.Smooth,   // #1029
             ReliefHeightBlend    = fp?.Relief2DHeightBlend ?? 0.5,
             ReliefDistanceFalloff = fp?.Relief2DDistanceFalloff ?? 0.02,

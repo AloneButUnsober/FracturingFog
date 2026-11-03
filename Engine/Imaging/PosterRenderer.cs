@@ -966,6 +966,13 @@ namespace FracturingFog.Imaging
                 // float data. When neither denoise nor export asks, aov stays null and
                 // the GPU fast path + byte-identical beauty are preserved.
                 var aov = aovCapture ?? ReliefDenoisePass.MakeCapture(p, w, h);
+                // #1620 — a headless render (--batch) raymarches on its own GPU device,
+                // as the live host does (FractalRenderHost.EnsureReliefKernel); null in
+                // the live shell, whose exports keep the CPU trace. The froxel kernel
+                // attaches only alongside the GPU relief, as live.
+                var reliefKernel = p.Relief2DGpuRaymarch ? FracturingFog.Rendering.HeadlessGpu.ReliefKernel : null;
+                var froxelKernel = reliefKernel != null && p.Relief2DFroxelVolumetrics
+                    ? FracturingFog.Rendering.HeadlessGpu.FroxelKernel : null;
                 // S1 (#398) — vector motion blur needs the motion-vector AOV, which only
                 // fills when a previous-frame camera is supplied. Ensure a Motion-capable
                 // capture (only when no external capture target already owns the aov, so
@@ -978,7 +985,7 @@ namespace FracturingFog.Imaging
                 if (qrPlan != null && aov == null)
                     aov = new FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers(w, h);
                 FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
-                    buffer, field, w, h, fw, fh, p, dst, out _, null, aov, null, froxelHistory, fx, previousCamera,
+                    buffer, field, w, h, fw, fh, p, dst, out _, reliefKernel, aov, froxelKernel, froxelHistory, fx, previousCamera,
                     // #1255 — a family without a hi-res twin traces a display-res field.
                     displayResField: displayResField,
                     heightInjection: qrPlan == null ? null : qrPlan.Inject);
@@ -998,7 +1005,7 @@ namespace FracturingFog.Imaging
                         p = zp;
                         if (aov.HdrBeauty is { } hdr) Array.Fill(hdr, float.NaN);
                         FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
-                            buffer, field, w, h, fw, fh, p, dst, out _, null, aov, null, froxelHistory, fx, previousCamera,
+                            buffer, field, w, h, fw, fh, p, dst, out _, reliefKernel, aov, froxelKernel, froxelHistory, fx, previousCamera,
                             displayResField: displayResField, heightInjection: qrPlan.Inject);
                         qrPlan.CaptureTrace(aov);
                     }

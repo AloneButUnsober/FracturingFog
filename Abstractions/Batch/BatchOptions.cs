@@ -442,6 +442,7 @@ namespace FracturingFog.Batch
         public bool ReliefTrueHeight { get; set; }          // #1027 follow-up
         public double? ReliefTerrainSmoothing { get; set; } // #1035 — 0..0.05 of the short axis
         public bool ReliefNoCanonicalField { get; set; }    // #1028 — Real height at the output size
+        public bool ReliefCpu { get; set; }                 // #1620 — trace the relief on the CPU
         public global::FracturingFog.ReliefHeightSource? ReliefHeightSource { get; set; }  // #1029
         public double? ReliefHeightBlend { get; set; }      // #1029 — 0..1 (Blend source)
         public double? ReliefDistanceFalloff { get; set; }  // #1029 — 0.002..0.2 (Distance / PrimeTerrace)
@@ -1462,6 +1463,11 @@ namespace FracturingFog.Batch
 
                     case BatchFlags.ReliefNoCanonicalField:   // #1028
                         opts.ReliefNoCanonicalField = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefCpu:   // #1620
+                        opts.ReliefCpu = true;
                         opts.Relief = true;
                         break;
 

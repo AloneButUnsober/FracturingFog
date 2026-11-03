@@ -25,6 +25,8 @@ namespace FracturingFog.Batch
         {
             error = null;
             HeadlessGpu.Kernel = null;   // also clears a pending KernelFactory
+            HeadlessGpu.ReliefKernelFactory = null;
+            HeadlessGpu.FroxelKernelFactory = null;
             if (mode == BatchGpuMode.Off)
             {
                 Console.Error.WriteLine("batch: compute on the CPU (--gpu off)");
@@ -38,6 +40,7 @@ namespace FracturingFog.Batch
             // Deep zoom (past MandelbrotCalculator.MaxGpuZoom) — the live shell's opt-in.
             bool perturb = IsTruthyEnv("FF_GPU_PERTURB");
             if (perturb) MandelbrotCalculator.UseGpuPerturbation = true;
+            InstallRaymarchKernels();   // #1620 — built on the first relief frame
 
             if (mode == BatchGpuMode.Auto)
             {
@@ -101,6 +104,38 @@ namespace FracturingFog.Batch
             catch (Exception ex)
             {
                 return (null, $"the Vulkan kernel failed to start ({ex.Message})");
+            }
+        }
+
+        // #1620 — the relief raymarch and froxel kernels, as the live shell picks them:
+        // on Windows over the escape-time kernel's D3D11 device (it shares the handles
+        // live too), elsewhere a Vulkan context of their own. Built when the first
+        // relief frame asks (Relief2DGpuRaymarch), never for a flat render.
+        private static void InstallRaymarchKernels()
+        {
+            var d3dRelief = BootstrapHooks.HeadlessReliefKernelFactoryHook;
+            var d3dFroxel = BootstrapHooks.HeadlessFroxelKernelFactoryHook;
+            bool d3d = BootstrapHooks.HeadlessGpuKernelFactoryHook != null;
+            HeadlessGpu.ReliefKernelFactory = k => Build("relief raymarch",
+                () => d3d ? d3dRelief?.Invoke(k) : ReliefRaymarchVulkanKernel.TryCreateWithOwnContext());
+            HeadlessGpu.FroxelKernelFactory = k => Build("froxel volumetrics",
+                () => d3d ? d3dFroxel?.Invoke(k) : FroxelVolumeVulkanKernel.TryCreateWithOwnContext());
+        }
+
+        private static T? Build<T>(string what, Func<T?> create) where T : class
+        {
+            try
+            {
+                var k = create();
+                Console.Error.WriteLine(k != null
+                    ? $"batch: {what} on the GPU"
+                    : $"batch: {what} on the CPU: no GPU kernel for it on this device");
+                return k;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"batch: {what} on the CPU: the GPU kernel failed to start ({ex.Message})");
+                return null;
             }
         }
 

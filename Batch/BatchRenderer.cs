@@ -133,6 +133,7 @@ namespace FracturingFog.Batch
             if (opts.ReliefTrueHeight)            fp.Relief2DTrueHeight    = true;
             if (opts.ReliefTerrainSmoothing.HasValue) fp.Relief2DTerrainSmoothing = opts.ReliefTerrainSmoothing.Value;   // #1035
             if (opts.ReliefNoCanonicalField)      fp.Relief2DCanonicalField = false;   // #1028
+            if (opts.ReliefCpu)                   fp.Relief2DGpuRaymarch   = false;   // #1620
             if (opts.ReliefHeightSource.HasValue) fp.Relief2DHeightSource  = opts.ReliefHeightSource.Value;    // #1029
             if (opts.ReliefHeightBlend.HasValue)  fp.Relief2DHeightBlend   = opts.ReliefHeightBlend.Value;
             if (opts.ReliefDistanceFalloff.HasValue) fp.Relief2DDistanceFalloff = opts.ReliefDistanceFalloff.Value;
