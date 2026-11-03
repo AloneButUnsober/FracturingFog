@@ -817,6 +817,9 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
     private void LoadWorkingIntoBindings()
     {
         _type = _working.Type;
+        // #1545 — each saved slideshow carries its own Fractured Waves flag (Commit
+        // writes it); switching presets left the toggle at its last state.
+        _audioReactive = _working.AudioReactive;
         _useExtremeRegions = _working.Timing.UseExtremeRegions;
         _totalDisplaySec = Math.Clamp(_working.Timing.TotalDisplayMsPerRegion / 1000, 3, 600);
         _themeFadeMs = _working.Timing.ColorThemeFadeMs;
@@ -867,6 +870,9 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
             item.IsChecked = _working.IncludedAnimations.Contains(item.Name);
 
         this.RaisePropertyChanged(nameof(Type));
+        this.RaisePropertyChanged(nameof(AudioReactive));
+        this.RaisePropertyChanged(nameof(TimingEnabled));
+        this.RaisePropertyChanged(nameof(TimingNoteVisible));
         this.RaisePropertyChanged(nameof(IsVideo));
         this.RaisePropertyChanged(nameof(IsAnimation));
         this.RaisePropertyChanged(nameof(ShowEnableAnimationsToggle));
