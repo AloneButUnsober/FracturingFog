@@ -2953,6 +2953,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         ResetLaWork();
         bool useLa = LaActive;   // #1626 — the LA evaluator replaces the PT rows for the frame
         _lastFrameUsedLa = useLa;
+        if (useLa) SelectLaAt(dcMaxAbs);   // #1627
 
         // D-6b1 — SIMD PT4 / PT8 now honour sub-rect geometry; the legacy
         // single-render path (SubRectOffsetX/Y == 0, ImageWidth/Height ==

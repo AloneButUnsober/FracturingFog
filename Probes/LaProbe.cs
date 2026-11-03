@@ -16,7 +16,8 @@
 // THIRD-PARTY-NOTICES.md §3 and the bibliography #imagina). The maths is in
 // Docs/Technical/Period-Synchronised-LA-DesignPlan.md §2; §2.7 maps each function to
 // its Imagina counterpart. Since #1625 the stages come from Engine/Math/LaStageTable.cs; this file
-// keeps the AT and the evaluator (S3 / S4 move them into the engine). The places
+// keeps its own AT and evaluator, as S1 measured them; the engine's are
+// MandelbrotCalculator.La.cs (#1626) and Engine/Math/LaAt.cs (#1627). The places
 // they depart from Imagina are marked "FF:" and listed in §2.6 of the doc.
 //
 // Per scene: a reference orbit in fixed-point BigInteger, stopped at the period
@@ -260,7 +261,11 @@ namespace FracturingFog
                 double engMs = sw.Elapsed.TotalMilliseconds;
                 var engIt = (int[])eng.IterationBuffer.Clone();
                 var ew = eng.LastLaWork;
-                string engLine = ($"      eng  : {engMs,7:F0} ms (LA on {eng.LastFrameUsedLa}; pixels {eng.LastHpStageMs.Pixels:F0} ms); per px LA {ew.LaSteps / (double)Math.Max(1, ew.Pixels):F1} + plain {ew.PlainSteps / (double)Math.Max(1, ew.Pixels):F1} + BLA {ew.BlaSkips / (double)Math.Max(1, ew.Pixels):F1}" +
+                var eat = eng.LastLaAt; var eaw = eng.LastLaAtWork;
+                string engAt = eat is { } ea ? $"AT stage {ea.Stage} step {ea.Len:N0} esc r {Math.Sqrt(ea.Esc2):G3} x{ea.Loosen:G3}, view/offset {ea.ViewRatio(scale * Math.Sqrt(W * W + H * H) * 0.5):G3}, used by {100.0 * eaw.Pixels / Math.Max(1, ew.Pixels):F0} % px, {eaw.Steps / (double)Math.Max(1, ew.Pixels):F1} AT steps/px" : "no AT";
+                var eps = eng.LastLaStageSteps;
+                engAt += "; LA steps/px by stage " + string.Join(" / ", eps.Select(v => (v / (double)Math.Max(1, ew.Pixels)).ToString("F0")));
+                string engLine = ($"      eng  : {engMs,7:F0} ms (LA on {eng.LastFrameUsedLa}; pixels {eng.LastHpStageMs.Pixels:F0} ms; {engAt}); per px LA {ew.LaSteps / (double)Math.Max(1, ew.Pixels):F1} + plain {ew.PlainSteps / (double)Math.Max(1, ew.Pixels):F1} + BLA {ew.BlaSkips / (double)Math.Max(1, ew.Pixels):F1}" +
                                   $" (period test {eng.LaTable?.PeriodTest}, {eng.LaTable?.Stages} stages, first lengths " +
                                   string.Join(", ", Enumerable.Range(0, eng.LaTable?.Stages ?? 0).Select(k => eng.LaTable!.Stage(k)[0].Len)) + ")");
 
