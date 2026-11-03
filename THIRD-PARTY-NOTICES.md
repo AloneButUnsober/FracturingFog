@@ -70,6 +70,17 @@ are provided as scholarly attribution, not because any code was copied.
   Implemented independently in `Abstractions/Math/DoubleDouble.cs` and
   `Abstractions/Math/QuadDouble.cs`.
 
+- **Period-synchronised linear approximation (LA stages + AT)**
+  Imagina by GitHub user 5E-324, <https://github.com/5E-324/Imagina>,
+  `HInfLAEvaluator.{h,cpp}` (commit `cd046377`), **AGPL-3.0** — the same licence
+  as Fracturing Fog, so derived code is compatible. `Probes/LaProbe.cs` (the #1624
+  proof of concept, epic #1623) is written in C# from the maths in
+  `Docs/Technical/Period-Synchronised-LA-DesignPlan.md` §2, but its stage builders
+  follow the control flow of Imagina's `CreateLAFromOrbit` / `CreateNewLAStage`
+  (same length caps and next-index bookkeeping), so it is listed here as derived
+  from that file. No Imagina source is copied verbatim; the departures are listed
+  in the design doc §2.6.
+
 - **QR Code symbology + halftone QR**
   ISO/IEC 18004 (QR Code Model 2) for the symbol, Reed-Solomon and mask
   rules; the encoder layout follows the structure of Project Nayuki's

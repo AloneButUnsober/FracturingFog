@@ -76,6 +76,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--deepcostprobe")
             return DeepCostProbe.Run(args);
 
+        // #1624 — period-synchronised LA (stages + AT) proof of concept on the bench scenes.
+        if (args.Length > 0 && args[0] == "--laprobe")
+            return LaProbe.Run(args);
+
         // #1343 — Mariani–Silver solid-region skipping: speed, fill share, mismatches.
         if (args.Length > 0 && args[0] == "--solidregionprobe")
             return SolidRegionProbe.Run(args);

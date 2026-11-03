@@ -14,8 +14,9 @@
 
 The issues are the canonical task list. This doc is the maths and architecture context; link both ways.
 
-**Status: planned (2026-11-01).** §2–4 are written in S1. Until then they are an outline of
-what S1 has to pin down, not a specification.
+**Status: S1 done (2026-11-03).** §2 is the method, derived and checked against Imagina's code;
+§4.1 is the proof of concept (`--laprobe`) and the decision to go on with S2. §3 is still a plan
+where S1 did not settle it.
 
 ---
 
@@ -49,56 +50,154 @@ BLA's validity radius is ε·|Z_n|, so it collapses at those points, and no skip
 pixel that iterates 12.7M times therefore pays thousands of operations: about 1,561 iterations per
 skip, against a period of 951,094.
 
-## 2. Method (outline — S1 writes it out)
+## 2. Method
 
 The method is the one Imagina uses: https://github.com/5E-324/Imagina, AGPL-3.0,
-`HInfLAEvaluator.{h,cpp}`, read 2026-11-01. Its pieces:
+`HInfLAEvaluator.{h,cpp}` (commit `cd046377`, read 2026-11-03). Each rule below is derived from
+the perturbation recurrence first. §2.6 then lists where FF's proof of concept (`--laprobe`,
+`Probes/LaProbe.cs`) agrees with Imagina's code and where it departs.
 
-**LA step.** A linear map over l iterations of the perturbation recurrence:
+### 2.1 Notation
 
-  δ_{n+l} ≈ A·δ_n + B·δc
+- Reference orbit Z_n at the centre c₀: Z₀ = 0, Z_{n+1} = Z_n² + c₀, for n = 0..R. R is the period p when the reference returns within a pixel of 0 (#1614); otherwise it is the cap or the escape.
+- A pixel is c = c₀ + δc with z_n = Z_n + δ_n. Then exactly:
 
-It is valid while ‖δ_n‖ is under a z-threshold and ‖δc‖ is under a c-threshold. The thresholds use
-Chebyshev norms scaled by a tolerance (2⁻²⁴ in Imagina). Steps compose by multiplying A and
-accumulating B, with the thresholds tightened accordingly. This is the same family as BLA (#1346),
-but its validity is tracked per step rather than as a radius in a power-of-two table.
+  δ_{n+1} = 2·Z_n·δ_n + δ_n² + δc
 
-**Period detection and stages.** Building steps over the reference, a period shows up as a dip:
-the threshold of the step being built collapses relative to the one before (the orbit came back
-near zero).
-- That ends stage 0. Its steps run between consecutive near-zero points.
-- Stage 1 is built the same way, but its "iterations" are whole stage-0 steps, so one stage-1 step can span an ancestor period.
-- And so on, up to the top stage (Imagina allows up to 256).
-- Each step records its length and the index of the step to continue with in the stage below.
+- ‖x‖ is the Chebyshev norm max(|Re x|, |Im x|), within √2 of |x|. τ = 2⁻²⁴ is the validity tolerance; d = 2⁻¹⁰ is the period-dip factor.
+- **Rebasing (Zhuoran).** Z₀ = 0, so setting δ ← z and n_ref ← 0 is exact whenever it is done. FF already rebases when |z| < |δ| (#1274); the LA path keeps that rule.
 
-**Evaluation.** A pixel starts at the highest stage whose first step is valid for its δc. It
-applies steps while they are valid, drops a stage when they are not, and rebases as today when
-the reference no longer anchors it.
+### 2.2 One LA step
 
-**AT (approximation transform).** For pixels whose δc is under the top stage's c-threshold, a top
-stage step is close to a quadratic map in rescaled coordinates: renormalisation near the nucleus.
-The pixel then iterates
+A step anchored at reference index s covers L iterations. Its **first iteration is kept exact:**
 
-  z′ ← z′² + c′,  with c′ = RefC + CCoeff·δc
+  w = δ_s·(2·Z_s + δ_s),  so  δ_{s+1} = w + δc.
 
-one top-stage period per step, until it passes the AT escape radius. It then converts back
-(z = z′·InvZCoeff) and continues with the stages. This is what lets a 28.5M-iteration interior
-pixel finish in about 30 AT steps.
+The remaining L − 1 iterations drop the quadratic term, δ_{k+1} ≈ 2·Z_k·δ_k + δc. By induction, for 1 ≤ k ≤ L:
 
-S1 derives each of these from the recurrence on its own (not from the code), states every
-threshold and the tolerance, and notes where FF's choices differ from Imagina's.
+  δ_{s+k} = A_k·w + B_k·δc,  A₁ = B₁ = 1,  A_{k+1} = 2·Z_{s+k}·A_k,  B_{k+1} = 2·Z_{s+k}·B_k + 1.
 
-## 3. Architecture in FF (outline)
+The step stores (Ref = Z_s, A = A_L, B = B_L, L). Applying it is two complex multiply-adds:
 
-- **`LaStageTable`** (S2), next to `BlaTable` (`Engine/Math`). Built from the reference orbit, which #1622 truncates at the period. Cached per reference generation, dc radius and tolerance.
-- **Evaluator** (S3–S5), on the CPU deep path. A scalar version first (`ResumePixelPTRebased`'s shape), then SIMD.
-  - The rebased loop stays the fallback.
-  - The #1330 lattice and #1344 mask contracts hold.
-  - The derivative is carried for distance estimates and normals.
+  δ_{s+L} = A·w + B·δc
+
+**Validity.** Dropping δ² at iteration s + k is a relative error |δ_{s+k}| / (2|Z_{s+k}|) in that iteration. Requiring |δ_{s+k}| ≤ τ·|Z_{s+k}| keeps it under τ/2. It suffices that each term of δ_{s+k} stays under τ·|Z_{s+k}| on its own:
+
+  ‖w‖ < Thr = min_k τ·‖Z_{s+k}‖ / ‖A_k‖,  ‖δc‖ < ThrC = min_k τ·‖Z_{s+k}‖ / ‖B_k‖,  over 1 ≤ k < L.
+
+Two checks per step: one on w, which is computed anyway, and one on ‖δc‖, a per-pixel constant. This is the same family as BLA (#1346), which applies δ ← A·δ + B·δc over power-of-two runs with a validity radius on δ.
+
+The difference is the exact first iteration. BLA linearises every iteration, so a run cannot contain a point where |Z_k| is tiny: the validity radius ε·|Z_k| collapses there. That is why no BLA skip crosses an ancestor's near-zero point (§1). An LA step starts *at* such a point and handles it exactly, so the near-zero points are where steps begin, not barriers inside them.
+
+**Error.** The error per iteration is under τ/2, relative, and grows at most linearly over a step's L − 1 linear iterations. Composed steps (§2.3) add their bounds. τ = 2⁻²⁴ is Imagina's value. It is an engineering choice, not a proven bound: the escape count is what matters, and §4 measures it against exact iteration.
+
+### 2.3 Periods, stages and composition
+
+**Period dip.** While a step is being extended, its running threshold τ‖Z_{s+k}‖/‖A_k‖ falls slowly as |A_k| grows. When Z_{s+k} comes close to zero it drops sharply. The step ends just before index s + k if the new threshold is below d = 2⁻¹⁰ times the previous one; the next step then starts at that near-zero point, with its exact first iteration.
+
+**Stage 0** is built over the reference. Steps are cut at each dip, and also at a maximum length:
+- the first detected period P₀, if P₀ ≤ 64;
+- otherwise round(P₀^(1/r)) with r = round(log₂(P₀)/4), about 16 to 32 iterations.
+
+With no dip at all, one step covers the whole reference when R ≤ 64; otherwise the same cap applies, using R in place of P₀. The cap keeps steps short enough that the stages above form a balanced tree.
+
+**Composition.** Stage k + 1 is built from consecutive stage-k steps a (from s, length L_a), then b (anchored at t = s + L_a). Inside a stage-(k + 1) step, b's exact first iteration is itself linearised, w_b ≈ 2·Z_t·δ_t. Substituting δ_t = A_a·w + B_a·δc:
+
+  A = A_b·2Z_t·A_a,  B = A_b·2Z_t·B_a + B_b,  L = L_a + L_b
+
+Validity adds three bounds to a's:
+- linearising at t: ‖A_a·w‖ and ‖B_a·δc‖ < τ‖Z_t‖;
+- b's input bound: ‖2Z_t·A_a·w‖ < Thr_b and ‖2Z_t·B_a·δc‖ < Thr_b;
+- b's own δc bound: ‖δc‖ < ThrC_b.
+
+So:
+- Thr = min(Thr_a, τ‖Z_t‖/‖A_a‖, Thr_b/‖2Z_t·A_a‖)
+- ThrC = min(ThrC_a, τ‖Z_t‖/‖B_a‖, Thr_b/‖2Z_t·B_a‖, ThrC_b)
+
+A dip in the linearisation term τ‖Z_t‖/‖A_a‖ means Z_t is near zero *at the coarser scale*. That ends the stage-(k + 1) step, and the next one starts at b with b's own first iteration exact.
+
+**Why stages follow the minibrot chain.** A stage-(k + 1) step crosses stage-k anchors linearly. That is valid only for pixels whose δ stays far below those anchors' |Z_t|. Those are the pixels deep inside the descendant minibrot, which are exactly the ones paying millions of iterations.
+
+So each stage spans the next ancestor period, as far as the length cap allows. On the p951,094 scene the top steps of stages 0–3 are 31 (the fixed stage-0 length), 953, 30,496 and 951,094 (§4.1). 30,496 is 953 × 32: stage 2's first dip was at 951,094, past the ×64 cap (953 × 64), so that stage was cut at the fixed length round(√998) = 32 stage-1 steps, and stage 3 then found the 951,094 period. On p121,984 the same rule gives 953 × 11 = 10,483. The 15,248 dip is not deep enough at d = 2⁻¹⁰ to end a stage on its own there. A stage with no dip has one step over the whole reference and ends the hierarchy. The same fixed-length cap as stage 0 applies, counted in stage-k steps. Imagina allows 256 stages.
+
+**Next index.** Each step records where it begins one stage down: for stage k > 0, the index of its first stage-(k − 1) step; for stage 0, the reference index s. A pixel that cannot take a step continues one stage down from there.
+
+### 2.4 Evaluation
+
+For one pixel:
+1. **AT**, if usable (§2.5).
+2. **Stages**, from the top stage down at index j = 0.
+   - Skip a stage if ‖δc‖ ≥ ThrC of its first step.
+   - At step j: compute w = δ(2Ref + δ). If ‖w‖ ≥ Thr or ‖δc‖ ≥ ThrC, drop one stage, continuing at that step's next index.
+   - Otherwise δ ← A·w + B·δc, n += L, z = δ + Ref_{j+1}.
+   - **Rebase** (j ← 0, δ ← z) at the end of the stage's steps, or when ‖δ‖ > ‖z‖.
+3. **Plain perturbation** from the stage-0 next index: FF's step, escape test (|z| ≥ 512), and rebasing at |z| < |δ| or at the end of the reference.
+
+LA steps cannot pass the escape. Each keeps ‖δ‖ ≤ τ‖Z‖ at every iteration it covers, and |Z| ≤ 2, so the escape is always found by the plain phase.
+
+**Climbing back (FF).** j = 0 is reference index 0 in every stage, so after any rebase a pixel can restart at the top stage. Imagina keeps a pixel in the stage it fell to. Climbing back matters for pixels that rebase often; §4.1 measures both (`FF_LAPROBE_CLIMB`).
+
+### 2.5 The approximation transform (AT)
+
+Take the first step of a stage: anchored at Z₀ = 0, length L, coefficients (A, B), next anchor Z_L. From z₀ = 0 + δ₀, w = δ₀², so
+
+  z_L = Z_L + A·z₀² + B·δc.
+
+Rescale z′ = A·z. Then
+
+  z′_L = z′₀² + c′,  c′ = A·Z_L + (A·B)·δc,
+
+which is exactly the Mandelbrot iteration in renormalised coordinates. This is the standard renormalisation near a nucleus: a minibrot is a small, distorted copy of the whole set. A pixel with ‖δc‖ < ThrC can therefore iterate
+
+  z′ ← z′² + c′
+
+one step per L iterations. It stops when |z′|² > Esc² = |A|²·Thr, the edge of the step's validity, where ‖w‖ = ‖z₀²‖ reaches Thr. It then converts back (z = z′/A, δ ← z, j ← 0) and continues with the stages. An interior pixel finishes in maxIter/L AT steps.
+
+- **Which stage:** the highest stage whose first step gives a usable AT, from the top down.
+- **Usable when:**
+  - Esc² > 4, so the renormalised escape test outruns the |z′| ≤ 2 bulk;
+  - radius²·|A·B|²·2³² > |A·Z_L|², with the radius the view's half diagonal in δc. That is, the image's c′ extent is not negligible next to c′'s offset, so the view really sits in the renormalised copy.
+- **Range caps:** Esc² and ThrC are capped at 2²⁵⁶ (and 2²⁵⁶/‖A·B‖ for ThrC), as Imagina does.
+
+### 2.6 FF's proof of concept against Imagina's code
+
+**Agrees:**
+- the step and its thresholds (2.2), with Imagina's `LAInfo::Step`;
+- the dip test and its constants τ = 2⁻²⁴ and d = 2⁻¹⁰;
+- the stage-0 and stage-k builders, including the 64 / log₁₆ length caps and the next indices (`CreateLAFromOrbit`, `CreateNewLAStage`);
+- the stage-to-stage drop;
+- the AT's coefficients, escape radius, δc threshold and usability test (`CreateAT`, `CreateATFromLA`, `EvaluateAT`).
+
+**Departs** (each marked `FF:` in `LaProbe.cs`):
+1. **Composite δc threshold.** It also includes b's own ThrC_b; Imagina's `Composite` keeps only Thr_b for the δc term. The derivation needs both, though in practice b's term rarely binds.
+2. **δc checked on every step**, not only on the stage's first step.
+3. **Climbing back** to the top stage after a rebase (2.4), switchable.
+4. **The plain phase uses FF's rules:** bailout 512 and rebasing at |z| < |δ|. Imagina uses |z|² > 4096 and rebases at |δ|² · 64 > |z|².
+5. **Double precision only.** The bench scenes' δc (~10⁻⁷¹) and coefficients sit well inside double range. Imagina switches to a float-exp type below 2⁻⁸⁹⁶; FF needs the same for its 1e100+ views (S3).
+6. **The reference stops at |Z_p| < one pixel** (#1614), FF's existing rule, not Imagina's period search.
+
+## 3. Architecture in FF
+
+What S1 settled is in **bold**; the rest is still the plan.
+
+- **`LaStageTable`** (S2), next to `BlaTable` (`Engine/Math`).
+  - Built from FF's own reference orbit, stopped at the period (#1614).
+  - Cached per reference generation, δc radius and tolerance.
+  - **It is cheap:** the four stages of p951,094 take 13 ms to build, against 63 ms for FF's BLA table and 1.3 s for the orbit at 160×90.
+  - **The builder works from FF's double reference values, as the probe does.**
+- **Evaluator** (S3–S5), on the CPU deep path.
+  - A scalar version first, in the shape of `ResumePixelPTRebased`, then SIMD.
+  - The rebased loop stays the fallback. The #1330 lattice and #1344 mask contracts hold. The derivative is carried for distance estimates and normals.
+  - **Climb back to the top stage after a rebase:** −39 % steps on p951,094, −29 % on p121,984 (§4.1).
+  - **The plain tail costs about 300–480 steps per pixel on every scene.** That is the last stretch before escape, after the steps stop being valid. On the shallow scenes it is most of the work. S3 should try FF's BLA table for that tail before plain steps.
+- **AT** (S4) works where a stage's escape radius exceeds 2: p448, p953 and p15,248 (all pixels used it).
+  - On p121,984 and p951,094 the top stage's escape radius is 0.35 and 0.46, so no stage gives a usable AT. Those pixels pay LA steps instead, about 3,800 per pixel on p951,094.
+  - S4 starts by measuring whether a looser τ for the AT step, or an AT built from the period-953 copy with a float-exp c′, recovers it.
+- **Precision.** The probe runs in double (§2.6, item 5). FF's deep views go to 1e100 (#1428 later), where δc ≈ 10⁻¹⁰² still fits a double, but coefficients over long steps can leave its range. S3 checks the coefficient range per stage and falls back to the rebased loop (or float-exp) where they do.
 - **Selection** (S6). LA where it pays (measured), BLA otherwise, with a way back:
   - `FractalParameters` → region snapshot → `--param` → Command builder;
   - an env var for A/B.
-- **GPU** (S7), after #1621.
+- **GPU** (S7). #1621 is done, so the GPU deep kernels already take the periodic reference that the stages are built over.
 
 ## 4. Correctness
 
@@ -108,10 +207,45 @@ threshold and the tolerance, and notes where FF's choices differ from Imagina's.
 - **Self-consistency only as a second line:** composed steps against direct reference iteration (S2); SIMD byte-identical to scalar (S5).
 - **Mutants** (wrong stage index, skipped validity check, AT threshold off) must fail the tests. Mutants that are equivalent by construction are named in the test file, as #1614 did.
 
+### 4.1 Proof of concept (S1, `--laprobe`, 2026-11-03)
+
+Setup:
+- i5-13420H, 160×90, Release.
+- LA is scalar double (`System.Numerics.Complex`, `Parallel.For` over rows), climbing back after a rebase.
+- FF is today's default deep path (SA + BLA + rebasing, SIMD ×4), on the same pixel grid.
+- Exact samples: 12 pixels per scene, fixed-point BigInteger at 320 bits, seed 1624.
+- Both use the same reference length: FF's own detected period.
+
+| scene | stages (top step) | AT | LA steps / px (AT + LA + plain) | FF steps / 4-px batch (plain + BLA) | exact: LA | exact: FF |
+|---|---|---|---|---|---|---|
+| p448 5.2e33 | 2 (448) | 448 | 7 + 14 + 268 = 289 | 300 + 40 = 340 | 12/12 | 12/12 |
+| path 1e33 | 3 (2,817) | unused | 0 + 31 + 424 = 455 | 241 + 2 = 243 | 12/12 | 12/12 |
+| p953 1.3e53 | 2 (953) | 953 | 8 + 19 + 309 = 336 | 427 + 115 = 542 | 12/12 | 11/12 |
+| p15,248 2.1e57 | 3 (15,248) | 953 | 111 + 19 + 338 = 468 | 1,145 + 1,153 = 2,298 | 12/12 | 12/12 |
+| p121,984 1.7e66 | 4 (121,984) | none | 0 + 530 + 337 = 867 | 1,556 + 2,652 = 4,208 | 8/12, mean \|err\| 12 | 3/12, mean \|err\| 1,639 |
+| p951,094 2.1e68 | 4 (951,094) | none | 0 + 3,778 + 339 = 4,116 | 3,489 + 11,458 = 14,948 | 4/12, mean \|err\| 1,636 | 4/12, mean \|err\| 3,846 |
+
+How to read the columns:
+- **"Steps"** counts loop iterations. One LA step is about two complex multiply-adds plus two norm checks; one FF step advances 4 pixels in lockstep, so the batch count is what each of those pixels pays.
+- **Interior samples** match exactly in both.
+- **On the two chaotic scenes,** LA's errors are smaller than FF's, not just as small.
+
+Other findings:
+- **Stages follow the chain.** The top-stage steps are 953 / 15,248 / 121,984 / 951,094 (each scene's own period), with fixed-length steps between (31 at stage 0; 10,483 = 953 × 11 and 30,496 = 953 × 32 where the next dip was past the ×64 cap, §2.3).
+- **Climbing back** (2.4), steps per pixel with climb / without (`FF_LAPROBE_CLIMB=0`): p121,984 867 / 1,217, p951,094 4,116 / 6,735, the others within 10 %.
+- **Times** are indicative only (scalar `Complex`, JIT and scheduling noise at this size):
+  - pixel stage on p951,094: LA 66 ms against FF's 250 ms;
+  - p121,984: 15–93 ms against 218 ms;
+  - p15,248: about 280 ms against 153 ms, where AT and the plain tail dominate and FF's SIMD wins.
+- **Against FF's frame,** iteration counts differ on 1–8 % of pixels for the four shallow scenes, and on 70–80 % for the two chaotic ones (as FF against acceleration off, #1614). In/out disagrees on 1 pixel in 14,400.
+
+**Decision: go on with S2.** On the scenes that motivated the epic, LA cuts steps per pixel 3.6× (p951,094) and 4.9× (p121,984) before any SIMD, with no loss of accuracy against exact iteration. The open questions move to S3 and S4: the plain tail, and the missing AT on the deepest scenes.
+
 ## 5. Credit
 
 The method comes from Imagina; see `Docs/Resources-Bibliography.md#imagina`. FF re-implements it
-from its description and the maths. If any code is ported, it also goes into
-`THIRD-PARTY-NOTICES.md`; the AGPL-3.0 licences are compatible.
+from the maths (§2). The probe's stage builders follow the control flow of Imagina's
+`CreateLAFromOrbit` / `CreateNewLAStage` closely (same caps, same next indices), so
+`THIRD-PARTY-NOTICES.md` lists `Probes/LaProbe.cs` as derived from it; both are AGPL-3.0.
 - **Author:** the repository author's real name, and whether the method was published elsewhere (fractalforums.org threads), are not verified. Those entries sit under *Citations awaiting verification* until traced.
 - **Related background:** Zhuoran's rebasing and BLA (already credited), and Munafo's Mu-Ency entry on bivariate linear approximation.

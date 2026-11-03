@@ -782,7 +782,11 @@ Programs and galleries the project measured itself against, learned from, or pay
   <https://github.com/5E-324/Imagina> (repository last updated 2024-01-23; read 2026-11-01). Its
   `HInfLAEvaluator` (hierarchical linear approximation in stages synchronised with detected periods,
   plus an "approximation transform" for pixels deep in the top stage) is the method of the #1623 epic
-  (`Docs/Technical/Period-Synchronised-LA-DesignPlan.md`). It is also the comparison renderer in rith's
+  (`Docs/Technical/Period-Synchronised-LA-DesignPlan.md`). #1624 read `HInfLAEvaluator.{h,cpp}` at commit
+  `cd046377` (2026-11-03): the step and composite rules, the 2⁻²⁴ validity and 2⁻¹⁰ period-dip
+  constants, the stage builders' length caps and the AT; the doc's §2.6 lists where FF departs.
+  `Probes/LaProbe.cs` (`--laprobe`) re-implements it, its stage builders following Imagina's control
+  flow (see `THIRD-PARTY-NOTICES.md`). It is also the comparison renderer in rith's
   0.7.1 benchmark. The author's real name and any published description of the method are not
   verified (see *Citations awaiting verification*).
 - **Robert P. Munafo.** *Bivariate Linear Approximation*, Mu-Ency (Encyclopedia of the Mandelbrot

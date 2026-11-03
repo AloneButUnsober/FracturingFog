@@ -28,9 +28,9 @@ namespace FracturingFog
 {
     internal static class DeepCostProbe
     {
-        private sealed record Scene(string Name, string X, string Y, double KfZoom, int Iter);
+        internal sealed record Scene(string Name, string X, string Y, double KfZoom, int Iter);
 
-        private static readonly Scene[] Scenes =
+        internal static readonly Scene[] Scenes =
         {
             new("p448 5.2e33",
                 "-0.7145519151951202|-2.0790192891565988e-17|1.1753166641509792e-33|-8.102457136962753e-50|-1.0894092006534645e-66|-5.481175082318642e-83|-1.5340609125118276e-99|1.4285946495395532e-116",
@@ -162,7 +162,7 @@ namespace FracturingFog
             return ((int[])last.IterationBuffer.Clone(), (float[])last.SmoothBuffer.Clone(), best, last.PtRebasedPixels, iters);
         }
 
-        private static MandelbrotCalculator Make(Scene s, double zoom, int w, int h)
+        internal static MandelbrotCalculator Make(Scene s, double zoom, int w, int h)
         {
             double[] X = s.X.Split('|').Select(double.Parse).ToArray();
             double[] Y = s.Y.Split('|').Select(double.Parse).ToArray();
