@@ -1115,6 +1115,23 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     private int _blaForRefMaxIter = -1;
     private int _blaForRefOrbitLen = -1;
     private int _blaForRefOrbitGen = -1;
+
+    // #1625 (epic #1623) — the LA stage table (FFMath.LaStageTable) over the same
+    // reference, keyed on the orbit generation and the tolerance (its thresholds do
+    // not depend on the δc radius). Built only when BuildLaStages is on until the
+    // evaluator (S3, #1626) reads it.
+    private LaStageTable? _laTable;
+    private int _laForRefOrbitGen = -1;
+
+    /// <summary>#1625 — build the LA stages with the reference orbit on the CPU deep
+    /// path (off by default; FF_LA_STAGES=1). Nothing renders from them yet: S3 (#1626)
+    /// adds the evaluator.</summary>
+    public bool BuildLaStages { get; set; } = Environment.GetEnvironmentVariable("FF_LA_STAGES") == "1";
+
+    /// <summary>#1625 — the LA stage table of the last deep frame (null when not built).
+    /// Diagnostic / test use.</summary>
+    public LaStageTable? LaTable => _laTable;
+
     /// <summary>#1613 — the BLA tolerance ε ceiling in the QD band (1e25..1e50) when
     /// its rows resume rebased pixels. Before #1613 the absorption test sent nearly
     /// every QD-band pixel to the rebased loop without BLA, so those frames were as
@@ -2920,6 +2937,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         }
         long tStageBla0 = Stopwatch.GetTimestamp();
         EnsureBlaTable(dcMaxAbs);
+        if (BuildLaStages) EnsureLaTable();   // #1625
         long tStageBla = Stopwatch.GetTimestamp();
         EnsureSeriesApproximation();
         long tStageSa = Stopwatch.GetTimestamp();
@@ -3434,6 +3452,21 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         _blaForRefMaxIter = _refCachedMaxIter;
         _blaForRefOrbitLen = _refOrbitLen;
         _blaForRefOrbitGen = _refOrbitGen;
+    }
+
+    // #1625 — build or keep the LA stages for this reference. The stages cover Z_0 ..
+    // Z_R with R the period when the orbit is periodic (#1614: Z_p ≈ 0, the arrays run
+    // one further, to Z_{p+1}), else the orbit length (cap or escape). τ follows the
+    // ε the CPU rows use (BlaTolerance, tightened in the QD band, #1613).
+    private void EnsureLaTable()
+    {
+        double eps = BlaTolerance > 0 && double.IsFinite(BlaTolerance) ? BlaTolerance : BlaTable.DefaultEpsilon;
+        if (ResumesInQdBand) eps = Math.Min(eps, QdBandBlaTolerance);
+        double tol = LaStageTable.ToleranceFor(eps);
+        int r = _refPeriod > 0 ? _refPeriod : _refOrbitLen;
+        if (_laTable != null && _laForRefOrbitGen == _refOrbitGen && _laTable.Tolerance == tol && _laTable.RefLen == r) return;
+        _laTable = LaStageTable.Build(_refZr, _refZi, r, tol);
+        _laForRefOrbitGen = _refOrbitGen;
     }
 
     // ── Blend helpers (replaces VBLENDVPD masking) ────────────────────────────

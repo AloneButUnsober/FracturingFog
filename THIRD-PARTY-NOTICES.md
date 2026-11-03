@@ -70,17 +70,6 @@ are provided as scholarly attribution, not because any code was copied.
   Implemented independently in `Abstractions/Math/DoubleDouble.cs` and
   `Abstractions/Math/QuadDouble.cs`.
 
-- **Period-synchronised linear approximation (LA stages + AT)**
-  Imagina by GitHub user 5E-324, <https://github.com/5E-324/Imagina>,
-  `HInfLAEvaluator.{h,cpp}` (commit `cd046377`), **AGPL-3.0** — the same licence
-  as Fracturing Fog, so derived code is compatible. `Probes/LaProbe.cs` (the #1624
-  proof of concept, epic #1623) is written in C# from the maths in
-  `Docs/Technical/Period-Synchronised-LA-DesignPlan.md` §2, but its stage builders
-  follow the control flow of Imagina's `CreateLAFromOrbit` / `CreateNewLAStage`
-  (same length caps and next-index bookkeeping), so it is listed here as derived
-  from that file. No Imagina source is copied verbatim; the departures are listed
-  in the design doc §2.6.
-
 - **QR Code symbology + halftone QR**
   ISO/IEC 18004 (QR Code Model 2) for the symbol, Reed-Solomon and mask
   rules; the encoder layout follows the structure of Project Nayuki's
@@ -135,7 +124,37 @@ are provided as scholarly attribution, not because any code was copied.
 
 ---
 
-## 3. External binaries (not compiled in)
+## 3. Code derived from other projects
+
+Unlike section 2, these files contain code translated from another project's
+source, not only its published method. Each upstream project's licence is
+compatible with AGPL-3.0, and its copyright holder is named in the files' SPDX
+headers.
+
+- **Imagina** — period-synchronised linear approximation (LA stages + the
+  approximation transform, AT).
+  - **Upstream:** <https://github.com/5E-324/Imagina>, `HInfLAEvaluator.h` /
+    `HInfLAEvaluator.cpp` at commit `cd046377` (2024-01-23), read 2026-11-03.
+    **AGPL-3.0** (its `LICENSE.txt`), the same licence as Fracturing Fog.
+  - **Copyright holder:** GitHub user 5E-324, whose GitHub profile gives the name
+    "Yu, Zhuoran" (commits authored as "Zhuoran"; read 2026-11-03). Imagina's
+    source files carry no copyright line of their own.
+  - **`Engine/Math/LaStageTable.cs`** (#1625): the stage builders `Stage0` /
+    `NextStage` are a C# translation of `CreateLAFromOrbit` / `CreateNewLAStage`
+    (same branches, length caps, look-ahead and next-index bookkeeping). `La.Step`
+    / `La.Compose` / `La.DetectPeriod` translate `LAInfo::Step` / `Composite` /
+    `DetectPeriod`.
+  - **`Probes/LaProbe.cs`** (#1624): the evaluator and the AT translate
+    `EvaluateLA` / `EvaluatePT` / `EvaluateAT`, `LAInfo::CreateAT` and
+    `CreateATFromLA`.
+  - **Changes from upstream:** the function-by-function mapping and every change
+    (different period test, composite δc bound, per-step δc check, climbing back to
+    the top stage, FF's bailout and rebase rule, double precision only) are in
+    `Docs/Technical/Period-Synchronised-LA-DesignPlan.md` §2.6–2.7.
+
+---
+
+## 4. External binaries (not compiled in)
 
 - **FFmpeg** — invoked as an external executable for video/frame encoding, and
   optionally bundled with Windows releases. FFmpeg is distributed under the
@@ -166,7 +185,7 @@ are provided as scholarly attribution, not because any code was copied.
   licence), a permissive licence compatible with AGPL-3.0. It runs as a separate
   process; nothing of it is compiled into Fracturing Fog.
 
-## 4. Fonts
+## 5. Fonts
 
 - **Inter** (bundled via `Avalonia.Fonts.Inter`) — SIL Open Font License 1.1.
 

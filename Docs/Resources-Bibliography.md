@@ -778,17 +778,24 @@ Programs and galleries the project measured itself against, learned from, or pay
   <https://docs.juliahub.com/General/Basins/>.
 <a id="imagina"></a>
 
-- **Imagina** — GitHub user **5E-324**. *Imagina: a fast fractal renderer & explorer*, AGPL-3.0,
+- **Imagina** — GitHub user **5E-324** (profile name "Yu, Zhuoran"; commits authored as "Zhuoran";
+  read 2026-11-03). *Imagina: a fast fractal renderer & explorer*, AGPL-3.0,
   <https://github.com/5E-324/Imagina> (repository last updated 2024-01-23; read 2026-11-01). Its
   `HInfLAEvaluator` (hierarchical linear approximation in stages synchronised with detected periods,
   plus an "approximation transform" for pixels deep in the top stage) is the method of the #1623 epic
   (`Docs/Technical/Period-Synchronised-LA-DesignPlan.md`). #1624 read `HInfLAEvaluator.{h,cpp}` at commit
-  `cd046377` (2026-11-03): the step and composite rules, the 2⁻²⁴ validity and 2⁻¹⁰ period-dip
-  constants, the stage builders' length caps and the AT; the doc's §2.6 lists where FF departs.
-  `Probes/LaProbe.cs` (`--laprobe`) re-implements it, its stage builders following Imagina's control
-  flow (see `THIRD-PARTY-NOTICES.md`). It is also the comparison renderer in rith's
-  0.7.1 benchmark. The author's real name and any published description of the method are not
-  verified (see *Citations awaiting verification*).
+  `cd046377` (2026-11-03): the step and composite rules, the 2⁻²⁴ validity constant, the stage
+  builders' length caps and the AT.
+  - **FF code:** `Engine/Math/LaStageTable.cs` (#1625, the stages) and `Probes/LaProbe.cs`
+    (`--laprobe`, the evaluator and AT) contain C# translations of its functions.
+    - Both carry an SPDX copyright line for the upstream author.
+    - `THIRD-PARTY-NOTICES.md` §3 lists them as derived code.
+    - The design doc §2.7 maps each function to its Imagina counterpart; §2.6 lists the changes.
+  - **Period test:** FF uses Imagina's 2⁻¹⁰ threshold-dip test, the `#else` branch. Imagina's build
+    defines `PERIOD_DETECTION_METHOD2`, a minimum-|Z| test (§2.6, item 7, corrected in #1625).
+  - **Also:** the comparison renderer in rith's 0.7.1 benchmark.
+  - **Not verified:** whether the author is the fractalforums.org Zhuoran credited above for rebasing
+    and BLA, and any published description of the method (see *Citations awaiting verification*).
 - **Robert P. Munafo.** *Bivariate Linear Approximation*, Mu-Ency (Encyclopedia of the Mandelbrot
   Set), <https://mrob.com/pub/muency/bivariatelinearapproximati.html> (read 2026-11-01). Background on
   BLA and on Zhuoran's rebasing tests, for #1623.
@@ -888,9 +895,12 @@ entry above completed or corrected.
 - **Mariani–Silver** — primary description (Rico Mariani's algorithm; Robert Silver's formulation)
   isn't identified; it's commonly documented through Fractint-era material and Wikibooks *Fractals*.
 - **Earl F. Glynn** — the original publication of the fractional-power Julia set.
-- **Imagina's LA stages and AT (#1623)** — the author behind the GitHub handle 5E-324, and whether
-  the method was described in a forum thread or paper before or alongside the code, are not
-  verified. Trace them and credit the primary description.
+- **Imagina's LA stages and AT (#1623)** — the GitHub profile of 5E-324 gives the name "Yu, Zhuoran"
+  and Imagina's commits are authored as "Zhuoran" (read 2026-11-03, #1625). Not yet verified:
+  - whether this is the same person as the fractalforums.org user Zhuoran (rebasing and BLA, above);
+  - whether the method was described in a forum thread or paper before or alongside the code.
+
+  Trace both and credit the primary description.
 - **One-period reference orbit with rebasing (#1614)** — stopping a nucleus-centred reference at its
   period and rebasing there is likely prior art in deep-zoom renderers (e.g. Imagina, Kalles
   Fraktaler 2+, Fraktaler 3) or in the fractalforums.org rebasing threads, but no source stating it was
