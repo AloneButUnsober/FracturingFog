@@ -12,7 +12,8 @@
 //     most pixels (so the vector loop actually ran);
 //   • a mixed view where lanes finish at very different iterations (refill),
 //     plus maxIter 1 / 2 edge cases;
-//   • the SIMD path is not slower than the scalar one on a deep frame (loose).
+//   • the SIMD path is not slower than the scalar one on a deep frame (loose;
+//     optimised Engine builds only, #1617).
 
 using System;
 using System.Diagnostics;
@@ -172,7 +173,20 @@ public sealed class S1274SimdRebasingTests(ITestOutputHelper output)
             bestSimd = Math.Min(bestSimd, Render(v, true, 192, 144, 20000).Ms);
         }
         output.WriteLine($"192x144 @ 3e47, 20000 iter: scalar {bestScalar:F0} ms, simd {bestSimd:F0} ms ({bestScalar / bestSimd:F2}x)");
+        // #1617 — a Debug Engine runs with the JIT optimiser off: the Vector256 calls are
+        // not inlined and the 4-wide loop comes out ~0.6x the scalar one (Release ~2.9x on
+        // the same machine). The speed claim is about the shipped build only.
+        if (!EngineIsOptimized())
+            Assert.Skip($"Engine built without JIT optimisation (Debug); run -c Release to check the speedup");
         // Loose: the full suite runs other work in parallel. The speedup is reported, not pinned.
         Assert.True(bestSimd < bestScalar * 1.1, $"SIMD rebasing {bestSimd:F0} ms vs scalar {bestScalar:F0} ms");
+    }
+
+    private static bool EngineIsOptimized()
+    {
+        var d = typeof(MandelbrotCalculator).Assembly
+            .GetCustomAttributes(typeof(DebuggableAttribute), false)
+            .OfType<DebuggableAttribute>().FirstOrDefault();
+        return d is null || !d.IsJITOptimizerDisabled;
     }
 }
