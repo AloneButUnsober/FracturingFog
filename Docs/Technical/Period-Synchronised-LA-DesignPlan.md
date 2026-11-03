@@ -159,22 +159,49 @@ one step per L iterations. It stops when |z′|² > Esc² = |A|²·Thr, the edge
   - radius²·|A·B|²·2³² > |A·Z_L|², with the radius the view's half diagonal in δc. That is, the image's c′ extent is not negligible next to c′'s offset, so the view really sits in the renormalised copy.
 - **Range caps:** Esc² and ThrC are capped at 2²⁵⁶ (and 2²⁵⁶/‖A·B‖ for ThrC), as Imagina does.
 
-### 2.6 FF's proof of concept against Imagina's code
+### 2.6 FF's code against Imagina's
 
 **Agrees:**
-- the step and its thresholds (2.2), with Imagina's `LAInfo::Step`;
-- the dip test and its constants τ = 2⁻²⁴ and d = 2⁻¹⁰;
+- the step and its thresholds (2.2), with Imagina's `LAInfo::Step`, including τ = 2⁻²⁴;
 - the stage-0 and stage-k builders, including the 64 / log₁₆ length caps and the next indices (`CreateLAFromOrbit`, `CreateNewLAStage`);
 - the stage-to-stage drop;
 - the AT's coefficients, escape radius, δc threshold and usability test (`CreateAT`, `CreateATFromLA`, `EvaluateAT`).
 
-**Departs** (each marked `FF:` in `LaProbe.cs`):
+**Departs** (marked `FF:` in `LaStageTable.cs` / `LaProbe.cs`):
 1. **Composite δc threshold.** It also includes b's own ThrC_b; Imagina's `Composite` keeps only Thr_b for the δc term. The derivation needs both, though in practice b's term rarely binds.
 2. **δc checked on every step**, not only on the stage's first step.
 3. **Climbing back** to the top stage after a rebase (2.4), switchable.
 4. **The plain phase uses FF's rules:** bailout 512 and rebasing at |z| < |δ|. Imagina uses |z|² > 4096 and rebases at |δ|² · 64 > |z|².
 5. **Double precision only.** The bench scenes' δc (~10⁻⁷¹) and coefficients sit well inside double range. Imagina switches to a float-exp type below 2⁻⁸⁹⁶; FF needs the same for its 1e100+ views (S3).
 6. **The reference stops at |Z_p| < one pixel** (#1614), FF's existing rule, not Imagina's period search.
+7. **The period test.** FF uses the threshold dip of §2.3 (d = 2⁻¹⁰). In Imagina's source that is the `#else` branch of `Stage0DetectPeriod` / `DetectPeriod` / `Step` / `Composite`. Imagina's own build uses the other one: `HInfLAEvaluator.h` defines `PERIOD_DETECTION_METHOD2`, a minimum-|Z| test.
+   - Each step tracks MinMag, the smallest ‖Z‖ it has covered (starting at 4).
+   - A period ends a step when ‖Z‖ falls below MinMag · 2⁻⁶ at stage 0, or below MinMag · 2⁻³ at higher stages.
+
+   §2.6 as first written (PR #1651) said FF's dip test agreed with Imagina's. That was wrong, corrected in #1625. The two tests have not been compared on the bench scenes: whether they cut the same stages, and which gives fewer steps per pixel, is for S3 to measure.
+
+### 2.7 Function-by-function mapping
+
+A third party can check FF's code against Imagina's `HInfLAEvaluator.{h,cpp}` (commit `cd046377`) with this table. "Translation" means the same branches and arithmetic in C#, renamed and restructured but not independent work. The changes column refers to §2.6.
+
+| FF | Imagina | Relation | Changes |
+|---|---|---|---|
+| `LaStageTable.La.Start` | `LAInfo(complex z)` constructor | translation | — |
+| `LaStageTable.La.Step` | `LAInfo::Step` | translation | 7; the step length is carried in the step |
+| `LaStageTable.La.Compose` | `LAInfo::Composite` | translation | 1, 7 |
+| `LaStageTable.La.DetectPeriod` | `LAInfo::DetectPeriod` (`#else` branch) | translation | 7 |
+| `LaStageTable.Builder.FixedLen` | inline `round(pow(x, 1 / round(log2(x) / 4)))` in both builders | translation | — |
+| `LaStageTable.Builder.Stage0` | `ReferenceGenerationContext::CreateLAFromOrbit` | translation | no float-exp / double-stage flags |
+| `LaStageTable.Builder.NextStage` | `ReferenceGenerationContext::CreateNewLAStage` | translation | the same |
+| `LaStageTable.Build` | the stage loop of `GenerateApproximationData` | translation | no `ConvertStageToDouble`; the AT is built in the probe |
+| — | `CreateLAFromOrbit_MT` (multithreaded builder) | not translated | |
+| `LaStageTable.ToleranceFor`, `LaStep`, the table layout | — | FF's own | |
+| `MandelbrotCalculator.EnsureLaTable` (cache) | — | FF's own | |
+| `LaProbe.BuildAt` | `CreateATFromLA` + `LAInfo::CreateAT` + `ATInfo::Usable` | translation | adds a finiteness check |
+| `LaProbe.Evaluate`, AT part | the AT block of `HInfLAEvaluationTask::Evaluate` + `EvaluateAT` | translation, scalar | no derivatives |
+| `LaProbe.Evaluate`, stage loop | `EvaluateLA` | translation, scalar | 2, 3; no derivatives, no Julia sampling |
+| `LaProbe.Evaluate`, plain loop | `EvaluatePT` | adapted | 4 |
+| `LaProbe.Reference`, `Exact`, `Run` | — | FF's own (BigInteger reference, exact check, report) | 6 |
 
 ## 3. Architecture in FF
 
@@ -254,9 +281,11 @@ Other findings:
 
 ## 5. Credit
 
-The method comes from Imagina; see `Docs/Resources-Bibliography.md#imagina`. FF re-implements it
-from the maths (§2). The probe's stage builders follow the control flow of Imagina's
-`CreateLAFromOrbit` / `CreateNewLAStage` closely (same caps, same next indices), so
-`THIRD-PARTY-NOTICES.md` lists `Probes/LaProbe.cs` as derived from it; both are AGPL-3.0.
-- **Author:** the repository author's real name, and whether the method was published elsewhere (fractalforums.org threads), are not verified. Those entries sit under *Citations awaiting verification* until traced.
+The method and the code come from Imagina; see `Docs/Resources-Bibliography.md#imagina`.
+- **Code.** `Engine/Math/LaStageTable.cs` and `Probes/LaProbe.cs` contain C# translations of Imagina's functions (§2.7). They are not independent implementations.
+  - Both files carry an SPDX copyright line for the upstream author.
+  - `THIRD-PARTY-NOTICES.md` §3 lists them as code derived from another project.
+  - Imagina and Fracturing Fog are both AGPL-3.0.
+- **Maths.** §2 derives each rule from the recurrence independently, so the translation can be checked, not trusted.
+- **Author:** the GitHub profile of 5E-324 gives the name "Yu, Zhuoran", and Imagina's commits are authored as "Zhuoran" (read 2026-11-03). Two things are not verified and sit under *Citations awaiting verification*: whether this is the Zhuoran of the fractalforums.org rebasing and BLA thread, and whether the method was published apart from the code.
 - **Related background:** Zhuoran's rebasing and BLA (already credited), and Munafo's Mu-Ency entry on bivariate linear approximation.

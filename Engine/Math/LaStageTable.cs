@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Bradley Brown
+// SPDX-FileCopyrightText: Yu, Zhuoran (GitHub 5E-324), Imagina <https://github.com/5E-324/Imagina>, AGPL-3.0
 
 // Math/LaStageTable.cs
 //
 // #1625 (epic #1623, S2) — period-synchronised linear approximation: the stage
-// table. The method is Imagina's HInfLAEvaluator (GitHub user 5E-324,
-// https://github.com/5E-324/Imagina, AGPL-3.0, commit cd046377; see
-// Docs/Resources-Bibliography.md#imagina and THIRD-PARTY-NOTICES.md). The maths,
-// derived from the perturbation recurrence, is in
-// Docs/Technical/Period-Synchronised-LA-DesignPlan.md §2; this file follows §2.2–2.3
-// and the builders of the #1624 proof of concept (Probes/LaProbe.cs), whose control
-// flow follows Imagina's CreateLAFromOrbit / CreateNewLAStage.
+// table. DERIVED CODE: Stage0 / NextStage are a C# translation of Imagina's
+// CreateLAFromOrbit / CreateNewLAStage, and La.Step / Compose / DetectPeriod of its
+// LAInfo::Step / Composite / DetectPeriod (Imagina by GitHub user 5E-324, profile
+// name "Yu, Zhuoran", https://github.com/5E-324/Imagina, HInfLAEvaluator.{h,cpp} at
+// commit cd046377, AGPL-3.0; see THIRD-PARTY-NOTICES.md §3 and
+// Docs/Resources-Bibliography.md#imagina). The maths, derived from the perturbation
+// recurrence, is in Docs/Technical/Period-Synchronised-LA-DesignPlan.md §2; §2.7 maps
+// each function here to its Imagina counterpart.
 //
 // A step anchored at reference index s, length L:
 //      w = δ_s·(2·Z_s + δ_s)                 (the first iteration, exact)
@@ -24,8 +26,10 @@
 // spans the next ancestor period. Each step records where it starts one stage down
 // (stage 0: the reference index), so a pixel that cannot take a step drops a stage.
 //
-// FF departs from Imagina in one place here (design doc §2.6, item 1): a composite's
-// δc threshold also keeps the second step's own ThrC.
+// FF departs from Imagina here in two places (design doc §2.6): the period test is
+// the threshold dip (Imagina's #else branch; its build defines
+// PERIOD_DETECTION_METHOD2, a minimum-|Z| test), and a composite's δc threshold
+// also keeps the second step's own ThrC.
 //
 // The thresholds do not depend on the view's δc radius (only the AT, S4, will), so
 // the table is keyed on the reference orbit and the tolerance alone.
@@ -74,7 +78,8 @@ namespace FracturingFog.FFMath
         /// <summary>Validity tolerance τ at the default BLA tolerance (Imagina's 2⁻²⁴).</summary>
         public const double DefaultTolerance = 1.0 / (1 << 24);
         /// <summary>The dip that marks a period: a threshold falling below 2⁻¹⁰ of the
-        /// one before (Imagina's PeriodDetectionThreshold).</summary>
+        /// one before (Imagina's PeriodDetectionThreshold, used by its non-default
+        /// period test; design doc §2.6, item 7).</summary>
         public const double PeriodDip = 1.0 / (1 << 10);
         /// <summary>Stages are capped as in Imagina.</summary>
         public const int MaxStages = 256;

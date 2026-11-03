@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Bradley Brown
+// SPDX-FileCopyrightText: Yu, Zhuoran (GitHub 5E-324), Imagina <https://github.com/5E-324/Imagina>, AGPL-3.0
 
 // #1624 (epic #1623): --laprobe [W H]. Proof of concept of period-synchronised linear
 // approximation ("LA stages" + the approximation transform, AT) on the bench-kit
@@ -8,11 +9,13 @@
 // rith's FF 0.7.1 benchmark report; scenes shared with DeepCostProbe). Not wired
 // into the calculator.
 //
-// The method is Imagina's HInfLAEvaluator (GitHub user 5E-324,
-// https://github.com/5E-324/Imagina, AGPL-3.0, HInfLAEvaluator.{h,cpp} at
-// cd046377, read 2026-11-03), re-implemented here from the maths written out in
-// Docs/Technical/Period-Synchronised-LA-DesignPlan.md §2; see the bibliography
-// (#imagina). Since #1625 the stages come from Engine/Math/LaStageTable.cs; this file
+// DERIVED CODE: the evaluator and the AT are a C# translation of Imagina's
+// EvaluateLA / EvaluatePT / EvaluateAT, LAInfo::CreateAT and CreateATFromLA (Imagina
+// by GitHub user 5E-324, profile name "Yu, Zhuoran", https://github.com/5E-324/Imagina,
+// HInfLAEvaluator.{h,cpp} at commit cd046377, read 2026-11-03, AGPL-3.0; see
+// THIRD-PARTY-NOTICES.md §3 and the bibliography #imagina). The maths is in
+// Docs/Technical/Period-Synchronised-LA-DesignPlan.md §2; §2.7 maps each function to
+// its Imagina counterpart. Since #1625 the stages come from Engine/Math/LaStageTable.cs; this file
 // keeps the AT and the evaluator (S3 / S4 move them into the engine). The places
 // they depart from Imagina are marked "FF:" and listed in §2.6 of the doc.
 //
