@@ -787,7 +787,8 @@ Programs and galleries the project measured itself against, learned from, or pay
   `cd046377` (2026-11-03): the step and composite rules, the 2⁻²⁴ validity constant, the stage
   builders' length caps and the AT.
   - **FF code:** `Engine/Math/LaStageTable.cs` (#1625, the stages; #1626, the minimum-|Z| period
-    test), `Engine/Calculators/MandelbrotCalculator.La.cs` (#1626, the engine's evaluator) and
+    test), `Engine/Math/LaAt.cs` (#1627, the AT), `Engine/Calculators/MandelbrotCalculator.La.cs`
+    (#1626 / #1627, the engine's evaluator and AT) and
     `Probes/LaProbe.cs` (`--laprobe`, the probe's evaluator and AT) contain C# translations of its
     functions.
     - Both carry an SPDX copyright line for the upstream author.

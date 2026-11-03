@@ -14,8 +14,8 @@
 
 The issues are the canonical task list. This doc is the maths and architecture context; link both ways.
 
-**Status: S1 done (2026-11-03); S2 done (#1625); S3 done (#1626, opt-in).** §2 is the method, derived and checked against Imagina's code;
-§4.1 is the proof of concept (`--laprobe`) and the decision to go on with S2; §4.2 is the engine's evaluator. §3 is still a plan
+**Status: S1 done (2026-11-03); S2 done (#1625); S3 done (#1626, opt-in); S4 done (#1627).** §2 is the method, derived and checked against Imagina's code;
+§4.1 is the proof of concept (`--laprobe`) and the decision to go on with S2; §4.2 is the engine's evaluator; §4.3 the AT. §3 is still a plan
 where S1 did not settle it.
 
 ---
@@ -182,6 +182,8 @@ one step per L iterations. It stops when |z′|² > Esc² = |A|²·Thr, the edge
    §2.6 as first written (PR #1651) said FF's dip test agreed with Imagina's. That was wrong, corrected in #1625. #1626 adds Imagina's test as `LaPeriodTest.MinMagnitude` (`FF_LA_PERIOD=minmag`) and measures the two (§4.2); the dip stays the default.
 8. **No step past the iteration cap** (#1626). A step longer than the iterations left is refused like an invalid one, so the pixel drops a stage and the frame stops at the cap exactly. Imagina takes the step and stops after it.
 9. **The plain tail** (#1626) is FF's rebased loop: bailout 512, rebasing at |z| < |δ| or at the end of the reference, and, from a rebase, a climb back to the stages (item 3). BLA skips in the tail are optional (`LaTailBla`, off): §4.2 measured them.
+10. **The AT's precision margin** (#1627). c′ = RefC + C·δc is rounded in double, so its absolute error is about 2⁻⁵³·|RefC|. When the view's c′ extent is much smaller than |RefC|, the AT works from a coarser c′ than perturbation's exact δc. Imagina accepts a view down to 2⁻¹⁶ of |RefC| (radius²·|C|²·2³² > |RefC|²). FF's default accepts it only when the view is at least |RefC| (`LaAtOffsetBits` = 0; 16 is Imagina's, `FF_LA_AT_OFFSET_BITS`). §4.3 shows the difference against exact iteration.
+11. **A looser AT tolerance** (#1627, `LaAtLoosen`, `FF_LA_AT_LOOSEN`): the AT's Thr and ThrC scaled by s ≥ 1, as if the AT alone were built at s·τ. Measured and rejected (§4.3); the default s = 1 is Imagina's AT.
 
 ### 2.7 Function-by-function mapping
 
@@ -201,6 +203,8 @@ A third party can check FF's code against Imagina's `HInfLAEvaluator.{h,cpp}` (c
 | `LaStageTable.ToleranceFor`, `LaStep`, the table layout | — | FF's own | |
 | `MandelbrotCalculator.EnsureLaTable` (cache) | — | FF's own | |
 | `LaProbe.BuildAt` | `CreateATFromLA` + `LAInfo::CreateAT` + `ATInfo::Usable` | translation | adds a finiteness check |
+| `LaAt.Create` / `Usable` / `Select` (#1627, `Engine/Math/LaAt.cs`) | `LAInfo::CreateAT` / `ATInfo::Usable` / `CreateATFromLA` | translation | 10, 11; a finiteness check |
+| `MandelbrotCalculator.EvaluateLa`, AT block (#1627) | the AT block of `HInfLAEvaluationTask::Evaluate` + `EvaluateAT` | translation, scalar | the derivative as Imagina's dz′/dc′ · C / A |
 | `LaProbe.Evaluate`, AT part | the AT block of `HInfLAEvaluationTask::Evaluate` + `EvaluateAT` | translation, scalar | no derivatives |
 | `LaProbe.Evaluate`, stage loop | `EvaluateLA` | translation, scalar | 2, 3; no derivatives, no Julia sampling |
 | `LaProbe.Evaluate`, plain loop | `EvaluatePT` | adapted | 4 |
@@ -236,9 +240,13 @@ What S1 settled is in **bold**; the rest is still the plan.
   - **Climb back to the top stage after a rebase** (`LaClimbOnRebase`, `FF_LA_CLIMB=0` off): −39 % steps on p951,094, −29 % on p121,984 (§4.1).
   - **The plain tail** (about 250–550 steps per pixel on every scene): BLA skips there (`LaTailBla`, `FF_LA_TAIL_BLA=1`) cut it by about a fifth but cost exact matches and no time (§4.2), so they are off.
   - **Diagnostics:** `LastFrameUsedLa`, `LastLaWork` (pixels, LA steps, plain steps, BLA skips); `--laprobe` scores the engine's frame ("eng") against exact iteration, `--deepcostprobe` with `FF_DEEPCOST_LA_AB=1` times it.
-- **AT** (S4) works where a stage's escape radius exceeds 2: p448, p953 and p15,248 (all pixels used it).
-  - On p121,984 and p951,094 the top stage's escape radius is 0.35 and 0.46, so no stage gives a usable AT. Those pixels pay LA steps instead, about 3,800 per pixel on p951,094.
-  - S4 starts by measuring whether a looser τ for the AT step, or an AT built from the period-953 copy with a float-exp c′, recovers it.
+- **AT** (S4 done: #1627), `Engine/Math/LaAt.cs` + the AT block of `EvaluateLa`.
+  - On with the evaluator (`UseLaAt`, `FF_LA_AT=0` off). Chosen per frame after the table (`SelectLaAt`, radius = the view's half diagonal), so no cache key.
+  - A pixel under the AT's δc bound iterates z′ ← z′² + c′ until |z′|² > Esc² or the cap; it converts back (z = z′/A, a rebase) and continues with the stages from the top. The derivative is dz′/dc′ · C / A. Interior pixels finish in the AT in maxIter / L steps.
+  - FF's precision margin (§2.6, item 10) keeps the AT only where its rounded c′ is as fine as perturbation's δc.
+  - **What it gives on the bench scenes is small** (§4.3): p448 and p953 use it on every pixel with no measurable time change (the plain tail dominates); p15,248's AT is the stage-1 one, which FF's margin rejects; the path scene's δc bound is below a pixel; p121,984 and p951,094 have none.
+  - **Why the deepest scenes get none:** their top stage's escape radius is 0.35 and 0.46, and the lower stages' views are 10⁻¹¹–10⁻¹⁵ of their c′ offset. A looser AT tolerance makes the top stage usable but costs exact matches (§4.3). Per stage, 96 % of p951,094's LA steps are stage-1 (953-iteration) steps: escaping pixels leave the reference's copy at nearly every 953-anchor, so composite steps fail there. An AT from the 953 copy with a perturbed (or float-exp) c′ would also cost one exact step per 953 iterations, the same as those LA steps, so it is not pursued.
+  - **Diagnostics:** `LastLaAt`, `LastLaAtWork`, `LastLaStageSteps` (LA steps per stage); `--laprobe`'s "eng" line prints them.
 - **Precision.** The probe and the evaluator run in double (§2.6, item 5). FF's deep views go to 1e100 (#1428 later), where δc ≈ 10⁻¹⁰² still fits a double, but coefficients over long steps can leave its range. Since #1626 the table records whether every coefficient and threshold is finite (`LaStageTable.Finite`); when not, the frame keeps the rebased loop. A float-exp evaluator is later work.
 - **Selection** (S6). LA where it pays (measured), BLA otherwise, with a way back:
   - `FractalParameters` → region snapshot → `--param` → Command builder;
@@ -353,10 +361,63 @@ Neither test is better everywhere, so the threshold dip stays the default. S6 ch
 
 **Decision:** go on with S4 (the AT on the deepest scenes) and S5 (SIMD). S6 turns LA on by default, keeping the off switch.
 
+### 4.3 The AT in the engine (S4, #1627, 2026-11-03)
+
+Setup as §4.2.
+
+**Where it applies** (`--laprobe`, 160×90; `S1627LaAtTests`, 64×36):
+
+| scene | AT stage (step) | escape r | view / c′ offset | pixels using it |
+|---|---|---|---|---|
+| p448 | 1 (448) | 539 | 3.5·10¹⁶ | all |
+| path | 2 (2,147) | 3.1·10²⁶ | 1.4·10²² | the centre only (δc bound below a pixel) |
+| p953 | 1 (953) | 2.7·10⁹ | 4.3·10⁴³ | all |
+| p15,248 | 1 (953) with Imagina's margin; none with FF's | 2.7·10⁹ | 3.7·10⁻⁴ | all / — |
+| p121,984 | none (top stage 0.345) | | | |
+| p951,094 | none (top stage 0.462) | | | |
+
+**Time** (`--deepcostprobe`, 960×540, best of 5, AT on / off):
+- p448: 177 / 177 ms pixels; p953: 109–120 / 112–127 ms. The AT replaces 6–8 LA steps per pixel; the 300–550-step plain tail dominates.
+- p15,248 with Imagina's margin: 145–146 / 193–209 ms (−25 to −30 %), the only scene where the AT saves time.
+
+**Accuracy:**
+- With FF's margin, every exact-iteration check of §4.2 holds with the AT on (p953 16/16; interior samples interior; in / out identical to the stages-only frame over the frame).
+- **Imagina's margin on p15,248:** 48 exact samples at 160×90 still match (48/48). But on the pixels where its frame and the stages-only frame disagree (24 at 64×36), scored against exact smooth values (fixed-point BigInteger with the final z), the stages-only frame is closer on 23 and the AT frame on 0, with mean errors 5.6 and 8.3 iterations.
+  - Tightening the AT's own bounds by up to 10¹⁶ changed nothing, so the loss is not the approximation; it is c′'s rounding. The view is 1/2,700 of |c′|.
+  - With the AT on, `S1626LaEvaluatorTests` failed on p15,248: exact 7/8, and smooth 254 pixels off against 97.
+- **Looser AT tolerance** on the deepest scenes (12 exact samples; LA steps per pixel; `FF_LA_AT_LOOSEN`):
+
+  | s | p121,984 | p951,094 |
+  |---|---|---|
+  | 1 | no AT; 8/12, mean err 12; 530 | no AT; 4/12, mean err 1,637; 3,778 |
+  | 32 | no AT | AT (r 2.6); 4/12, mean err 10,472; 3,250 |
+  | 128 | AT (r 3.9); 2/12, mean err 204; 329 | AT (r 5.2); 3/12, mean err 3,455; 2,659 |
+  | 1,024 | AT (r 11); 2/12, mean err 1,244; 276 | AT (r 15); 3/12, mean err 6,245; 1,976 |
+
+  Every looser AT loses exact matches or grows the error several-fold, so it stays off.
+- **Steps per stage** (p121,984 / p951,094, LA steps per pixel, stages 0–3): 19 / 469 / 42 / 0 and 19 / 3,643 / 115 / 0.
+
+**`S1627LaAtTests`:**
+- **Exact iteration**, with the AT on path and p953: at least as good as BLA and as the stages alone.
+- **Interior pixels** reach the cap without drift (p953: in / out identical with and without the AT, interior samples interior, interior pixels finish in the AT).
+- **Normals** after the AT agree with plain rebasing (51 of 2,138 pixels off, as without it).
+- **The deepest scene** has no usable AT and its top escape radius is under 2.
+- **The margin test above.**
+- **Mutants:**
+
+  | mutant | failing tests |
+  |---|---|
+  | the AT's δc check removed | path's exact test |
+  | the renormalised escape test removed | 5 tests |
+  | converting back without 1/A | 4 tests |
+  | Imagina's margin as the default | 3 S1626 tests |
+
+**Decision:** keep the AT, with FF's margin, on with the evaluator. It is exact where it runs and, on these scenes, it does not hurt. The epic's pixel cost is now the plain tail (300–550 steps per pixel) on the shallow scenes and stage-1 steps on the deepest; S5 (SIMD) attacks both.
+
 ## 5. Credit
 
 The method and the code come from Imagina; see `Docs/Resources-Bibliography.md#imagina`.
-- **Code.** `Engine/Math/LaStageTable.cs`, `Engine/Calculators/MandelbrotCalculator.La.cs` (#1626) and `Probes/LaProbe.cs` contain C# translations of Imagina's functions (§2.7). They are not independent implementations.
+- **Code.** `Engine/Math/LaStageTable.cs`, `Engine/Math/LaAt.cs` (#1627), `Engine/Calculators/MandelbrotCalculator.La.cs` (#1626, #1627) and `Probes/LaProbe.cs` contain C# translations of Imagina's functions (§2.7). They are not independent implementations.
   - Each file carries an SPDX copyright line for the upstream author.
   - `THIRD-PARTY-NOTICES.md` §3 lists them as code derived from another project.
   - Imagina and Fracturing Fog are both AGPL-3.0.

@@ -20,7 +20,14 @@
 // departs (marked "FF:" below). The plain tail is FF's own rebased loop
 // (ResumePixelPTRebased, with Zhuoran's rebasing), not Imagina's EvaluatePT.
 //
+// #1627 (S4) adds the approximation transform first: a pixel with ‖δc‖ under the AT's
+// bound iterates z' ← z'² + c' (one step per top-stage period, Math/LaAt.cs) until
+// |z'|² exceeds the AT's escape radius or the cap is reached, then converts back
+// (z = z'/A, a rebase) and continues with the stages. That block is a translation of
+// the AT part of Imagina's HInfLAEvaluationTask::Evaluate and of EvaluateAT.
+//
 // One pixel:
+//   0. The AT, if the frame has a usable one (#1627).
 //   1. Stages from the top down at index j = 0. A stage whose first step's δc bound
 //      the pixel fails is skipped. At step j: w = δ(2·Ref + δ); if ‖w‖ ≥ Thr or
 //      ‖δc‖ ≥ ThrC, drop a stage at the step's next index; else δ ← A·w + B·δc,
@@ -63,8 +70,38 @@ public sealed partial class MandelbrotCalculator
         string.Equals(Environment.GetEnvironmentVariable("FF_LA_PERIOD"), "minmag", StringComparison.OrdinalIgnoreCase)
             ? LaPeriodTest.MinMagnitude : LaPeriodTest.ThresholdDip;
 
-    private long _laPixelsTotal, _laStepsTotal, _laPlainTotal, _laBlaTotal;
+    /// <summary>#1627 — the approximation transform before the stages (design doc §2.5).
+    /// On by default with the evaluator; FF_LA_AT=0 turns it off.</summary>
+    public bool UseLaAt { get; set; } = Environment.GetEnvironmentVariable("FF_LA_AT") != "0";
+
+    /// <summary>#1627 — the AT runs at tolerance s·τ, s ≥ 1 (its escape radius and δc
+    /// bound scale with s; design doc §2.6 item 10). 1 = Imagina's AT. FF_LA_AT_LOOSEN sets it.</summary>
+    public double LaAtLoosen { get; set; } =
+        double.TryParse(Environment.GetEnvironmentVariable("FF_LA_AT_LOOSEN"), System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out double s) && s >= 1 ? s : 1.0;
+
+    /// <summary>#1627 — the AT is usable when the view's c' extent is at least
+    /// 2^-bits of c''s offset (design doc §2.6 item 10). 0 (FF's default) keeps the AT's
+    /// rounded c' as fine as perturbation's δc; 16 is Imagina's margin.
+    /// FF_LA_AT_OFFSET_BITS sets it.</summary>
+    public int LaAtOffsetBits { get; set; } =
+        int.TryParse(Environment.GetEnvironmentVariable("FF_LA_AT_OFFSET_BITS"), out int b) && b >= 0 ? b : 0;
+
+    private long _laPixelsTotal, _laStepsTotal, _laPlainTotal, _laBlaTotal, _laAtStepsTotal, _laAtPixelsTotal;
     private bool _lastFrameUsedLa;
+    private LaAt? _laAt;
+    private long[] _laStageSteps = [];
+
+    /// <summary>#1627 — the last LA frame's steps per stage (index = stage), summed over
+    /// pixels. Diagnostic / probe use.</summary>
+    public long[] LastLaStageSteps => (long[])_laStageSteps.Clone();
+
+    /// <summary>#1627 — the AT the last LA frame used (null: none usable, or off).</summary>
+    public LaAt? LastLaAt => _laAt;
+
+    /// <summary>#1627 — the last LA frame's AT work: pixels that entered the AT and AT
+    /// steps, summed.</summary>
+    public (long Pixels, long Steps) LastLaAtWork => (_laAtPixelsTotal, _laAtStepsTotal);
 
     /// <summary>#1626 — the last CPU deep frame's LA work: pixels evaluated, LA steps,
     /// plain perturbation steps and BLA skips in the tail (all per pixel, summed).
@@ -80,7 +117,16 @@ public sealed partial class MandelbrotCalculator
 
     private void ResetLaWork()
     {
-        _laPixelsTotal = _laStepsTotal = _laPlainTotal = _laBlaTotal = 0;
+        _laPixelsTotal = _laStepsTotal = _laPlainTotal = _laBlaTotal = _laAtStepsTotal = _laAtPixelsTotal = 0;
+        _laAt = null;
+        _laStageSteps = new long[_laTable?.Stages ?? 0];
+    }
+
+    // #1627 — pick the frame's AT once the table is current (dcMaxAbs = the view's half
+    // diagonal in δc, as Imagina's CreateATFromLA radius).
+    private void SelectLaAt(double dcMaxAbs)
+    {
+        _laAt = UseLaAt && _laTable != null ? LaAt.Select(_laTable, dcMaxAbs, LaAtLoosen, LaAtOffsetBits) : null;
     }
 
     // A row through the LA evaluator. Per pixel, so a lattice range (#1330) and the
@@ -93,15 +139,22 @@ public sealed partial class MandelbrotCalculator
         double dcY = (SubRectOffsetY + y - halfH) * scale + _refRecycleDy;
         var t = _laTable!;
         var bla = LaTailBla ? _blaTable : null;
-        long la = 0, pt = 0, bs = 0, px = 0;
+        long la = 0, pt = 0, bs = 0, px = 0, ats = 0, atp = 0;
+        LaAt? at = _laAt;
+        var perStage = new long[t.Stages];
         for (int x = xBegin; x < xEnd; x++)
         {
             int idx = rowBase + x;
             if (!Marked(idx)) continue;   // #1344
             double dcX = (SubRectOffsetX + x - halfW) * scale + _refRecycleDx;
-            EvaluateLa(t, bla, dcX, dcY, maxIter, idx, colorMap, ref la, ref pt, ref bs);
+            EvaluateLa(t, at, bla, dcX, dcY, maxIter, idx, colorMap, ref la, ref pt, ref bs, ref ats, ref atp, perStage);
             px++;
         }
+        var tot = _laStageSteps;
+        if (tot.Length == perStage.Length)
+            for (int k = 0; k < perStage.Length; k++) Interlocked.Add(ref tot[k], perStage[k]);
+        Interlocked.Add(ref _laAtStepsTotal, ats);
+        Interlocked.Add(ref _laAtPixelsTotal, atp);
         Interlocked.Add(ref _laPixelsTotal, px);
         Interlocked.Add(ref _laStepsTotal, la);
         Interlocked.Add(ref _laPlainTotal, pt);
@@ -109,8 +162,8 @@ public sealed partial class MandelbrotCalculator
     }
 
     private void EvaluateLa<TMap>(
-        LaStageTable t, BlaTable? bla, double dcR, double dcI, int maxIter, int idx, TMap colorMap,
-        ref long laSteps, ref long plainSteps, ref long blaSkips)
+        LaStageTable t, LaAt? atOpt, BlaTable? bla, double dcR, double dcI, int maxIter, int idx, TMap colorMap,
+        ref long laSteps, ref long plainSteps, ref long blaSkips, ref long atSteps, ref long atPixels, long[] perStage)
         where TMap : IColorMap
     {
         var data = t.Data;
@@ -124,6 +177,41 @@ public sealed partial class MandelbrotCalculator
         double drv = 1, div = 0;        // dz/dc, as ResumePixelPTRebased (IQ convention)
         int n = 0;                      // iteration
         int stage = top, j = 0;         // step index in `stage`; for stage -1 a reference index
+
+        // ── 0. The AT (#1627; Imagina's AT block of Evaluate + EvaluateAT) ──
+        if (atOpt is { } at && mdc <= at.ThrC)
+        {
+            atPixels++;
+            long atMax = (maxIter - 1) / at.Len + 1;
+            double cr = dcR * at.CRe - dcI * at.CIm + at.RefCRe;
+            double ci = dcR * at.CIm + dcI * at.CRe + at.RefCIm;
+            double xr = 0, xi = 0;      // z'
+            double er = 0, ei = 0;      // dz'/dc'
+            long k = 0;
+            bool inSet = false;
+            while (true)
+            {
+                double nEr = 2.0 * (xr * er - xi * ei) + 1.0, nEi = 2.0 * (xr * ei + xi * er);
+                er = nEr; ei = nEi;
+                double nXr = xr * xr - xi * xi + cr, nXi = 2.0 * xr * xi + ci;
+                xr = nXr; xi = nXi;
+                k++; atSteps++;
+                if (k >= atMax) { inSet = true; break; }
+                if (xr * xr + xi * xi > at.Esc2) break;
+            }
+            // Back: z = z'/A (relative to Z_0 = 0, so δ = z), dz/dc = (dz'/dc')·(A·B)/A.
+            zr = xr * at.InvZRe - xi * at.InvZIm; zi = xr * at.InvZIm + xi * at.InvZRe;
+            double gr = er * at.CRe - ei * at.CIm, gi = er * at.CIm + ei * at.CRe;
+            drv = gr * at.InvZRe - gi * at.InvZIm; div = gr * at.InvZIm + gi * at.InvZRe;
+            dr = zr; di = zi;
+            if (inSet)
+            {
+                IterationBuffer[idx] = maxIter;
+                FillAuxAndColorHP(idx, maxIter, maxIter, zr, zi, drv, div, colorMap);
+                return;
+            }
+            n = (int)(k * at.Len);
+        }
 
         while (true)
         {
@@ -157,6 +245,7 @@ public sealed partial class MandelbrotCalculator
                     dr = nDr; di = nDi;
                     n += s.Len;
                     laSteps++;
+                    perStage[stage]++;
                     j++;
                     ref readonly var nx = ref data[s0 + j];
                     zr = nx.RefRe + dr; zi = nx.RefIm + di;
