@@ -774,11 +774,20 @@ Programs and galleries the project measured itself against, learned from, or pay
 <a id="rith-ff-071-benchmark"></a>
 
 - **rith** (fractalforums.org user). *Fracturing Fog 0.7.1 performance benchmark report*, a private
-  direct message to the FF author on fractalforums.org, received 2026-11-01. Not public, so there is
-  no URL. The first real-world benchmark of FF: 17 deep-zoom scenes at 3840x2160 timed against
-  Imagina and checked against Fractadyne, run with the bench-kit above. Its findings became #1611
-  (batch on the GPU), #1612 (zoom ceiling, PR #1616), #1613 (QD-band per-pixel cost, PR #1618) and
-  #1614/#1615.
+  direct message to the FF author on fractalforums.org, received 2026-11-01. The first real-world
+  benchmark of FF: 17 deep-zoom scenes at 3840x2160 timed against Imagina and checked against
+  Fractadyne, run with the bench-kit above. Its findings became #1611 (batch on the GPU), #1612 (zoom
+  ceiling, PR #1616), #1613 (QD-band per-pixel cost, PR #1618) and #1614/#1615.
+
+<a id="rith-benchmark-thread"></a>
+
+- **rith** (fractalforums.org user). Public benchmark write-up on fractalforums.org, topic 5686:
+  <https://fractalforums.org/index.php?topic=5686.0>. The URL comes from #1638, where the FF author
+  reproduced the post. FF did not open the page, so its title and post date are not verified (on or
+  before 2026-11-03). It times six deep-zoom renderers on 31 scenes at 3840x2160 (Fractadyne
+  0.3.0-beta.22, Fraktaler-3 3.1, FractalShark 0.545, Imagina 2024-01 source, Fractal Zoomer 1.0.9.6,
+  Fracturing Fog 0.7.1), on the same machine as the DM above. It is the basis of FF's analysis on
+  #1638.
 - **Noah Spurrier.** *Acid Warp*, 1992. The DOS psychedelic-pattern program the clean-room Acid Warp
   mode pays homage to.
 
@@ -852,10 +861,10 @@ entry above completed or corrected.
   Fraktaler 2+, Fraktaler 3) or in the fractalforums.org rebasing threads, but no source stating it was
   found on 2026-11-01. FF does not claim it as new; it builds on Zhuoran's rebase (above). Trace the
   primary source and credit it.
-- **rith, FF 0.7.1 benchmark report** — settled 2026-11-01 (PR #1618): it was a private
-  fractalforums.org direct message, not a thread, so there is no URL to trace. Credited above under
-  [Fractal software and prior art](#rith-ff-071-benchmark); the correction is recorded under
-  *Corrected attributions*.
+- **rith, FF 0.7.1 benchmark report** — the DM itself has no URL (settled 2026-11-01, PR #1618). rith
+  later posted the benchmark publicly: [above](#rith-benchmark-thread), topic 5686, URL from #1638.
+  That post's exact title and date are not verified, because FF did not open the page. Confirm them
+  from the thread when someone who can read it does.
 - **H. F. Talbot** — the original 1836 report of the self-imaging effect (cited by name in
   `Docs/Technical/DoubleSlit-Fractal-RnD.md`, #1565). The physics is credited through Berry & Klein
   above; Talbot's own paper (journal, volume, pages) isn't yet traced to a primary record.
@@ -907,6 +916,10 @@ Corrections so far:
   <https://github.com/edyoung/kalles-fraktaler-2>); now credited with *Mandel Machine*. Kalles
   Fraktaler is credited to **Karl Runmo** and KF2+ to Claude Heiland-Allen. The old link is under
   awaiting verification.
+- 2026-11-03 (#1638). **rith** — the report's entry said *"Not public, so there is no URL"*. That still
+  holds for the DM, but the benchmark has since been posted publicly, at
+  <https://fractalforums.org/index.php?topic=5686.0> (URL from #1638). That post is now its own entry,
+  `#rith-benchmark-thread`.
 - 2026-11-01 (PR #1618). **rith** — the 0.7.1 benchmark report was *"submitted 2026 (received
   2026-11-01) … Thread URL and exact date not recorded"*; now *a private direct message to the FF
   author on fractalforums.org, received 2026-11-01*, with no URL because it isn't public. Confirmed
