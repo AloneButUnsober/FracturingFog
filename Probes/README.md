@@ -20,8 +20,8 @@ code. Probes shared with other hosts live in `Engine/Diagnostics/` instead.
 |---|---|---|---|
 | `AdaptiveAaProbe.cs` | `--adaptiveaaprobe [threshold tolerance]` | #1344, #1382 | Adaptive anti-aliasing against full supersampling (CPU), Mandelbrot views and the ten 3D raymarchers: samples computed, wall times, error |
 | `D3DBuddhaProbe.cs` | `--d3dbuddhaprobe` | #838 | D3D11 half of the GPU Buddhabrot parity check |
-| `DeepCostProbe.cs` | `--deepcostprobe [W H]` | #1613 | CPU deep-zoom cost on bench-kit minibrot scenes: frame time, rebased pixels, iterations, default vs acceleration off and the pixels that differ (`FF_DEEPCOST_DUMP` / `_SCENE` / `_EPS` / `_REPS`) |
-| `LaProbe.cs` | `--laprobe [W H]` | #1624 | Period-synchronised LA (stages + AT, epic #1623) proof of concept on the bench-kit minibrots: the stages, steps per pixel, agreement with FF's deep path and with exact iteration (`FF_LAPROBE_SAMPLES` / `_BITS` / `_SCENE` / `_CLIMB`) |
+| `DeepCostProbe.cs` | `--deepcostprobe [W H]` | #1613 | CPU deep-zoom cost on bench-kit minibrot scenes: frame time, rebased pixels, iterations, default vs acceleration off and the pixels that differ (`FF_DEEPCOST_DUMP` / `_SCENE` / `_EPS` / `_REPS`); `FF_DEEPCOST_LA_AB=1` adds the LA evaluator's frame (#1626) |
+| `LaProbe.cs` | `--laprobe [W H]` | #1624 | Period-synchronised LA (stages + AT, epic #1623) proof of concept on the bench-kit minibrots: the stages, steps per pixel, agreement with FF's deep path and with exact iteration (`FF_LAPROBE_SAMPLES` / `_BITS` / `_SCENE` / `_CLIMB`); since #1626 also the engine's LA evaluator ("eng", `FF_LA_PERIOD` / `FF_LA_CLIMB` / `FF_LA_TAIL_BLA`) against the same exact samples |
 | `D3DDeepOrbitProbe.cs` | `--d3ddeeporbitprobe` | #607 | D3D11 half of the deep-zoom orbit parity check |
 | `D3DDeviceLossProbe.cs` | `--d3ddevicelossprobe` | #1045 | The D3D11 presenter recovers from a device loss |
 | `D3DEscapeFamilyProbe.cs` | `--d3dfamilyprobe` | #1173 | D3D11 half of the Multibrot / Phoenix / domain-warp parity check |

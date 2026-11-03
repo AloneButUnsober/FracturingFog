@@ -786,13 +786,16 @@ Programs and galleries the project measured itself against, learned from, or pay
   (`Docs/Technical/Period-Synchronised-LA-DesignPlan.md`). #1624 read `HInfLAEvaluator.{h,cpp}` at commit
   `cd046377` (2026-11-03): the step and composite rules, the 2⁻²⁴ validity constant, the stage
   builders' length caps and the AT.
-  - **FF code:** `Engine/Math/LaStageTable.cs` (#1625, the stages) and `Probes/LaProbe.cs`
-    (`--laprobe`, the evaluator and AT) contain C# translations of its functions.
+  - **FF code:** `Engine/Math/LaStageTable.cs` (#1625, the stages; #1626, the minimum-|Z| period
+    test), `Engine/Calculators/MandelbrotCalculator.La.cs` (#1626, the engine's evaluator) and
+    `Probes/LaProbe.cs` (`--laprobe`, the probe's evaluator and AT) contain C# translations of its
+    functions.
     - Both carry an SPDX copyright line for the upstream author.
     - `THIRD-PARTY-NOTICES.md` §3 lists them as derived code.
     - The design doc §2.7 maps each function to its Imagina counterpart; §2.6 lists the changes.
-  - **Period test:** FF uses Imagina's 2⁻¹⁰ threshold-dip test, the `#else` branch. Imagina's build
-    defines `PERIOD_DETECTION_METHOD2`, a minimum-|Z| test (§2.6, item 7, corrected in #1625).
+  - **Period test:** FF's default is Imagina's 2⁻¹⁰ threshold-dip test, the `#else` branch. Imagina's
+    build defines `PERIOD_DETECTION_METHOD2`, a minimum-|Z| test (§2.6, item 7, corrected in #1625);
+    #1626 adds it as `LaPeriodTest.MinMagnitude` and measures the two (design doc §4.2).
   - **Also:** the comparison renderer in rith's 0.7.1 benchmark.
   - **Not verified:** whether the author is the fractalforums.org Zhuoran credited above for rebasing
     and BLA, and any published description of the method (see *Citations awaiting verification*).

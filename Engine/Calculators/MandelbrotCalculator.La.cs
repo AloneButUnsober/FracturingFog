@@ -1,0 +1,233 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+// SPDX-FileCopyrightText: Yu, Zhuoran (GitHub 5E-324), Imagina <https://github.com/5E-324/Imagina>, AGPL-3.0
+
+// Calculators/MandelbrotCalculator.La.cs
+//
+// #1626 (epic #1623, S3) — the per-pixel LA stage evaluator, scalar double, opt-in
+// (UseLaEvaluator, FF_LA=1) on the CPU deep path. It reads the stage table of #1625
+// (FFMath.LaStageTable) and replaces the PT4 / PT8 rows for the frame; the BLA path
+// is unchanged when it is off.
+//
+// DERIVED CODE: the stage loop is a C# translation of Imagina's
+// HInfLAEvaluator::EvaluationContext::EvaluateLA, and the derivative update of
+// LAInfo::EvaluateDzdc (Imagina by GitHub user 5E-324, profile name "Yu, Zhuoran",
+// https://github.com/5E-324/Imagina, HInfLAEvaluator.{h,cpp} at commit cd046377, read
+// 2026-11-03, AGPL-3.0; see THIRD-PARTY-NOTICES.md §3 and
+// Docs/Resources-Bibliography.md#imagina). It came here from the S1 probe
+// (Probes/LaProbe.cs). The maths is in Docs/Technical/Period-Synchronised-LA-DesignPlan.md
+// §2.4; §2.7 maps each part to its Imagina counterpart and §2.6 lists where FF
+// departs (marked "FF:" below). The plain tail is FF's own rebased loop
+// (ResumePixelPTRebased, with Zhuoran's rebasing), not Imagina's EvaluatePT.
+//
+// One pixel:
+//   1. Stages from the top down at index j = 0. A stage whose first step's δc bound
+//      the pixel fails is skipped. At step j: w = δ(2·Ref + δ); if ‖w‖ ≥ Thr or
+//      ‖δc‖ ≥ ThrC, drop a stage at the step's next index; else δ ← A·w + B·δc,
+//      n += L, z = δ + Ref_{j+1}, and rebase (j ← 0, δ ← z) at the stage's end or when
+//      ‖δ‖ > ‖z‖ — then climb back to the top stage (FF).
+//   2. Plain perturbation from the stage-0 next index, with FF's escape test and
+//      rebasing (|z| < |δ| or the end of the reference), optionally BLA skips by
+//      reference index (LaTailBla, off); a rebase climbs back to the stages (FF).
+// LA steps keep ‖δ‖ ≤ τ‖Z‖ at every iteration they cover, so no step passes the
+// escape; the plain phase finds it. The derivative dz/dc rides along exactly
+// through each step: d ← A·2·z_s·d + B.
+
+using System;
+using System.Threading;
+using FracturingFog.FFMath;
+using FracturingFog.Interefaces;
+
+namespace FracturingFog;
+
+public sealed partial class MandelbrotCalculator
+{
+    /// <summary>#1626 — evaluate CPU deep frames with the LA stages (design doc §2.4)
+    /// instead of the PT4 / PT8 rows. Off by default (FF_LA=1 turns it on); implies
+    /// <see cref="BuildLaStages"/>. Inactive with acceleration off, rebasing off, the DD
+    /// rebase reference, or a table whose coefficients left double range.</summary>
+    public bool UseLaEvaluator { get; set; } = Environment.GetEnvironmentVariable("FF_LA") == "1";
+
+    /// <summary>#1626 — after a rebase, restart at the top stage (FF, design doc §2.4)
+    /// rather than stay in the stage the pixel fell to (Imagina). FF_LA_CLIMB=0 turns it off.</summary>
+    public bool LaClimbOnRebase { get; set; } = Environment.GetEnvironmentVariable("FF_LA_CLIMB") != "0";
+
+    /// <summary>#1626 — BLA skips in the plain tail (design doc §3). Off by default: measured
+    /// on the bench scenes they save about a fifth of the tail's steps but no time, and cost
+    /// exact matches (design doc §4.2). FF_LA_TAIL_BLA=1 turns them on.</summary>
+    public bool LaTailBla { get; set; } = Environment.GetEnvironmentVariable("FF_LA_TAIL_BLA") == "1";
+
+    /// <summary>#1626 — the period test the stages are cut with (design doc §2.6 item 7).
+    /// FF_LA_PERIOD=minmag selects Imagina's minimum-|Z| test.</summary>
+    public LaPeriodTest LaPeriodTest { get; set; } =
+        string.Equals(Environment.GetEnvironmentVariable("FF_LA_PERIOD"), "minmag", StringComparison.OrdinalIgnoreCase)
+            ? LaPeriodTest.MinMagnitude : LaPeriodTest.ThresholdDip;
+
+    private long _laPixelsTotal, _laStepsTotal, _laPlainTotal, _laBlaTotal;
+    private bool _lastFrameUsedLa;
+
+    /// <summary>#1626 — the last CPU deep frame's LA work: pixels evaluated, LA steps,
+    /// plain perturbation steps and BLA skips in the tail (all per pixel, summed).
+    /// Diagnostic / probe use.</summary>
+    public (long Pixels, long LaSteps, long PlainSteps, long BlaSkips) LastLaWork
+        => (_laPixelsTotal, _laStepsTotal, _laPlainTotal, _laBlaTotal);
+
+    /// <summary>#1626 — the last deep frame went through the LA evaluator.</summary>
+    public bool LastFrameUsedLa => _lastFrameUsedLa;
+
+    private bool LaActive =>
+        UseLaEvaluator && _laTable is { Finite: true } && !DisableAcceleration && AllowPtRebasing && !UseDdRebaseReference;
+
+    private void ResetLaWork()
+    {
+        _laPixelsTotal = _laStepsTotal = _laPlainTotal = _laBlaTotal = 0;
+    }
+
+    // A row through the LA evaluator. Per pixel, so a lattice range (#1330) and the
+    // pixel mask (#1344) are exact, as in ComputeRowPeriodic.
+    private void ComputeRowLa<TMap>(
+        int y, double scale, int maxIter, int rowBase, TMap colorMap, int xBegin, int xEnd)
+        where TMap : IColorMap
+    {
+        double halfW = EffectiveImageWidth * 0.5, halfH = EffectiveImageHeight * 0.5;
+        double dcY = (SubRectOffsetY + y - halfH) * scale + _refRecycleDy;
+        var t = _laTable!;
+        var bla = LaTailBla ? _blaTable : null;
+        long la = 0, pt = 0, bs = 0, px = 0;
+        for (int x = xBegin; x < xEnd; x++)
+        {
+            int idx = rowBase + x;
+            if (!Marked(idx)) continue;   // #1344
+            double dcX = (SubRectOffsetX + x - halfW) * scale + _refRecycleDx;
+            EvaluateLa(t, bla, dcX, dcY, maxIter, idx, colorMap, ref la, ref pt, ref bs);
+            px++;
+        }
+        Interlocked.Add(ref _laPixelsTotal, px);
+        Interlocked.Add(ref _laStepsTotal, la);
+        Interlocked.Add(ref _laPlainTotal, pt);
+        Interlocked.Add(ref _laBlaTotal, bs);
+    }
+
+    private void EvaluateLa<TMap>(
+        LaStageTable t, BlaTable? bla, double dcR, double dcI, int maxIter, int idx, TMap colorMap,
+        ref long laSteps, ref long plainSteps, ref long blaSkips)
+        where TMap : IColorMap
+    {
+        var data = t.Data;
+        int top = t.Stages - 1;
+        int refLen = _refOrbitLen;
+        bool climb = LaClimbOnRebase;
+        double mdc = Math.Max(Math.Abs(dcR), Math.Abs(dcI));
+
+        double dr = 0, di = 0;          // δ against the current reference index
+        double zr = 0, zi = 0;          // the full value z (the escape value on exit)
+        double drv = 1, div = 0;        // dz/dc, as ResumePixelPTRebased (IQ convention)
+        int n = 0;                      // iteration
+        int stage = top, j = 0;         // step index in `stage`; for stage -1 a reference index
+
+        while (true)
+        {
+            // ── 1. The stages, from `stage` down (Imagina's EvaluateLA, per stage) ──
+            bool climbNow = false;
+            for (; stage >= 0; stage--)
+            {
+                int s0 = t.StageStart[stage], last = t.StageCount[stage];   // last = the sentinel's index
+                if (mdc >= data[s0].ThrC) { j = data[s0 + j].Next; continue; }
+                while (true)
+                {
+                    ref readonly var s = ref data[s0 + j];
+                    double ar = 2.0 * s.RefRe + dr, ai = 2.0 * s.RefIm + di;
+                    double wr = dr * ar - di * ai, wi = dr * ai + di * ar;
+                    // FF: the step's own δc bound too (Imagina checks only the stage's first
+                    // step), and no step past maxIter, so the frame stops at the cap exactly.
+                    if (Math.Max(Math.Abs(wr), Math.Abs(wi)) >= s.Thr || mdc >= s.ThrC || s.Len > maxIter - n)
+                    {
+                        j = s.Next;
+                        break;
+                    }
+                    // dz/dc: d ← A·(2·z_s·d) + B, z_s = Ref + δ (LAInfo::EvaluateDzdc).
+                    double zsr = s.RefRe + dr, zsi = s.RefIm + di;
+                    double tr = 2.0 * (zsr * drv - zsi * div), ti = 2.0 * (zsr * div + zsi * drv);
+                    double nDrv = s.ARe * tr - s.AIm * ti + s.BRe;
+                    double nDiv = s.ARe * ti + s.AIm * tr + s.BIm;
+                    drv = nDrv; div = nDiv;
+                    // δ ← A·w + B·δc.
+                    double nDr = s.ARe * wr - s.AIm * wi + (s.BRe * dcR - s.BIm * dcI);
+                    double nDi = s.ARe * wi + s.AIm * wr + (s.BRe * dcI + s.BIm * dcR);
+                    dr = nDr; di = nDi;
+                    n += s.Len;
+                    laSteps++;
+                    j++;
+                    ref readonly var nx = ref data[s0 + j];
+                    zr = nx.RefRe + dr; zi = nx.RefIm + di;
+                    if (j == last || Math.Max(Math.Abs(dr), Math.Abs(di)) > Math.Max(Math.Abs(zr), Math.Abs(zi)))
+                    {
+                        j = 0; dr = zr; di = zi;   // rebase: Z_0 = 0, exact
+                        if (climb && stage < top) { climbNow = true; break; }
+                    }
+                }
+                if (climbNow) break;
+            }
+            if (climbNow) { stage = top; j = 0; continue; }
+
+            // ── 2. Plain perturbation from reference index j (FF's rebased loop) ──
+            int m = j;
+            bool back = false;
+            while (n < maxIter)
+            {
+                if (bla != null)
+                {
+                    int bi = bla.Lookup(m, dr * dr + di * di, Math.Min(refLen - 1, m + (maxIter - n)));
+                    if (bi >= 0)
+                    {
+                        ref readonly var e = ref bla.Data[bi];
+                        if (e.L >= 2)
+                        {
+                            double nDr = e.ARe * dr - e.AIm * di + (e.BRe * dcR - e.BIm * dcI);
+                            double nDi = e.ARe * di + e.AIm * dr + (e.BRe * dcI + e.BIm * dcR);
+                            dr = nDr; di = nDi;
+                            double nDrv = e.ARe * drv - e.AIm * div;   // d' ≈ A·d, as the BLA rows do
+                            double nDiv = e.ARe * div + e.AIm * drv;
+                            drv = nDrv; div = nDiv;
+                            m += e.L; n += e.L;
+                            blaSkips++;
+                            continue;
+                        }
+                    }
+                }
+
+                double Zr = _refZr[m], Zi = _refZi[m];
+                zr = Zr + dr; zi = Zi + di;
+                double zmag2 = zr * zr + zi * zi;
+                if (zmag2 >= EscapeRadius2) break;
+
+                double dmag2 = dr * dr + di * di;
+                bool rebase = zmag2 < dmag2 || m + 1 >= refLen;
+                if (rebase && climb && top >= 0)
+                {
+                    // FF: rebase and climb back to the stages at z_n (their step from Z_0
+                    // makes this iteration's update, derivative included).
+                    dr = zr; di = zi;
+                    back = true;
+                    break;
+                }
+
+                double nDrv2 = 2.0 * (zr * drv - zi * div) + 1.0;
+                double nDiv2 = 2.0 * (zr * div + zi * drv);
+                drv = nDrv2; div = nDiv2;
+                if (rebase) { dr = zr; di = zi; Zr = 0; Zi = 0; m = 0; }
+                double a = 2.0 * Zr + dr, b = 2.0 * Zi + di;
+                double nDr2 = a * dr - b * di + dcR;
+                double nDi2 = a * di + b * dr + dcI;
+                dr = nDr2; di = nDi2;
+                m++; n++;
+                plainSteps++;
+            }
+            if (back) { stage = top; j = 0; continue; }
+            break;
+        }
+
+        IterationBuffer[idx] = n;
+        FillAuxAndColorHP(idx, n, maxIter, zr, zi, drv, div, colorMap);
+    }
+}

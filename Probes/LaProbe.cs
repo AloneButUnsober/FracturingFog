@@ -28,7 +28,9 @@
 // per pixel (AT / LA / plain), agreement of LA and of FF's frame with exact
 // iteration, and LA vs FF on the whole frame. FF_LAPROBE_SCENE filters by name;
 // FF_LAPROBE_CLIMB=0 keeps a pixel in the stage it fell to after a rebase
-// (Imagina's behaviour) instead of climbing back to the top stage. Exit 0 always.
+// (Imagina's behaviour) instead of climbing back to the top stage. Since #1626 it also
+// renders the frame with the engine's LA evaluator (MandelbrotCalculator.UseLaEvaluator,
+// "eng") and scores it against the same exact samples. Exit 0 always.
 
 using System;
 using System.Collections.Generic;
@@ -250,6 +252,17 @@ namespace FracturingFog
                 double ffMs = sw.Elapsed.TotalMilliseconds;
                 var ffIt = (int[])ff.IterationBuffer.Clone();
                 var wk = ff.LastPtWork;
+                // #1626 — the engine's LA evaluator on the same grid.
+                var eng = DeepCostProbe.Make(s, zoom, W, H);
+                eng.UseLaEvaluator = true;
+                sw.Restart();
+                eng.Calculate();
+                double engMs = sw.Elapsed.TotalMilliseconds;
+                var engIt = (int[])eng.IterationBuffer.Clone();
+                var ew = eng.LastLaWork;
+                string engLine = ($"      eng  : {engMs,7:F0} ms (LA on {eng.LastFrameUsedLa}; pixels {eng.LastHpStageMs.Pixels:F0} ms); per px LA {ew.LaSteps / (double)Math.Max(1, ew.Pixels):F1} + plain {ew.PlainSteps / (double)Math.Max(1, ew.Pixels):F1} + BLA {ew.BlaSkips / (double)Math.Max(1, ew.Pixels):F1}" +
+                                  $" (period test {eng.LaTable?.PeriodTest}, {eng.LaTable?.Stages} stages, first lengths " +
+                                  string.Join(", ", Enumerable.Range(0, eng.LaTable?.Stages ?? 0).Select(k => eng.LaTable!.Stage(k)[0].Len)) + ")");
 
                 // Reference + LA table.
                 sw.Restart();
@@ -302,6 +315,7 @@ namespace FracturingFog
                 var fst = ff.LastHpStageMs;
                 Console.WriteLine($"      FF   : {ffMs,7:F0} ms (orbit {fst.RefOrbit:F0}, BLA {fst.Bla:F0}, SA {fst.Sa:F0}, pixels {fst.Pixels:F0}; period {ff.ReferencePeriod:N0}) SIMD x4; per 4-px batch {wk.PlainSteps / (px / 4.0):F0} plain + {wk.BlaSkips / (px / 4.0):F0} BLA = {ffOpsPx:F0} steps; " +
                                   $"iterations per px {ffIt.Average(v => (double)v):F0}");
+                Console.WriteLine(engLine);
                 Console.WriteLine($"      LA vs FF frame: iteration counts differ at {diff:N0} px ({100.0 * diff / px:F2} %), in/out {inOut:N0}");
 
                 // Exact samples.
@@ -315,20 +329,22 @@ namespace FracturingFog
                     exact[k] = Exact(cr + Fixed((x - W * 0.5) * scale, bits), ci + Fixed((y - H * 0.5) * scale, bits), s.Iter, bits);
                 });
                 double exMs = sw.Elapsed.TotalMilliseconds;
-                int laOk = 0, ffOk = 0; double laErr = 0, ffErr = 0;
+                int laOk = 0, ffOk = 0, engOk = 0; double laErr = 0, ffErr = 0, engErr = 0;
                 var sb = new System.Text.StringBuilder();
                 for (int k = 0; k < samples; k++)
                 {
                     int i = pts[k].y * W + pts[k].x;
                     if (laIt[i] == exact[k]) laOk++;
                     if (ffIt[i] == exact[k]) ffOk++;
+                    if (engIt[i] == exact[k]) engOk++;
+                    engErr += Math.Abs((double)engIt[i] - exact[k]);
                     laErr += Math.Abs((double)laIt[i] - exact[k]);
                     ffErr += Math.Abs((double)ffIt[i] - exact[k]);
-                    sb.Append($" {exact[k]}/{laIt[i]}/{ffIt[i]}");
+                    sb.Append($" {exact[k]}/{laIt[i]}/{ffIt[i]}/{engIt[i]}");
                 }
                 Console.WriteLine($"      exact ({exMs / 1000:F0} s): LA {laOk}/{samples} exact (mean |err| {laErr / samples:F0}), " +
-                                  $"FF {ffOk}/{samples} (mean |err| {ffErr / samples:F0})");
-                Console.WriteLine($"      samples exact/LA/FF:{sb}");
+                                  $"FF {ffOk}/{samples} (mean |err| {ffErr / samples:F0}), eng {engOk}/{samples} (mean |err| {engErr / samples:F0})");
+                Console.WriteLine($"      samples exact/LA/FF/eng:{sb}");
             }
             Console.WriteLine("laprobe done");
             return 0;

@@ -2839,6 +2839,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         LastFrameUsedGpuPerturbation = false;   // set true only on a successful GPU perturb dispatch below
         LastFrameUsedGpuSeriesApproximation = false;
         LastFrameUsedGpuBla = false;
+        _lastFrameUsedLa = false;   // #1626
 
         // One reference orbit at the view centre. Each pixel iterates only
         // the double-precision delta δ_n = z_n − Z_n.
@@ -2886,7 +2887,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 && UseGpuPerturbation && GpuKernel != null
                 && (GpuKernel.SupportsPerturbation || UseFloatExpKernel(GpuKernel))   // #1331: no fp64 needed
                 && AllowPtRebasing && !UseDdRebaseReference && !ForceScalarPtPath
-                && !tileCap && Zoom <= MaxGpuPerturbZoom && _refOrbitLen >= 1;
+                && !tileCap && Zoom <= MaxGpuPerturbZoom && _refOrbitLen >= 1
+                && !UseLaEvaluator;   // #1626: the LA evaluator is a CPU path (GPU = S7, #1630)
             Dbg86($"GATE zoom={Zoom:0e+0} gateOk={gateOk} recycled={recycled} " +
                   $"useGpuPerturb={UseGpuPerturbation} kernel={(GpuKernel != null)} " +
                   $"supports={(GpuKernel?.SupportsPerturbation ?? false)} allowRebase={AllowPtRebasing} " +
@@ -2899,6 +2901,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                     : LatticeAligned ? GpuRoute.Cpu("pan reuse", "pixel reuse while panning (#1330) renders deep frames on the CPU")
                     : !AllowPtRebasing || UseDdRebaseReference || ForceScalarPtPath
                         ? GpuRoute.Cpu("diagnostic toggle", "a perturbation diagnostic toggle (rebasing / DD reference / scalar path) keeps deep zoom on the CPU")
+                    : UseLaEvaluator ? GpuRoute.Cpu("LA evaluator", "the LA stage evaluator (#1626, opt-in) renders deep frames on the CPU")
                     : tileCap ? GpuRoute.Cpu("per-tile iter cap", "per-tile iteration caps render on the CPU only")
                     : Zoom > MaxGpuPerturbZoom ? GpuRoute.Cpu($"zoom > {MaxGpuPerturbZoom:0e0}", $"past the GPU perturbation zoom limit ({MaxGpuPerturbZoom:0e0})")
                     : GpuRoute.Cpu("no reference orbit", "the reference orbit is empty");
@@ -2937,7 +2940,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         }
         long tStageBla0 = Stopwatch.GetTimestamp();
         EnsureBlaTable(dcMaxAbs);
-        if (BuildLaStages) EnsureLaTable();   // #1625
+        if (BuildLaStages || UseLaEvaluator) EnsureLaTable();   // #1625; #1626 reads it
         long tStageBla = Stopwatch.GetTimestamp();
         EnsureSeriesApproximation();
         long tStageSa = Stopwatch.GetTimestamp();
@@ -2947,6 +2950,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         _ptStepsTotal = 0;
         _saAppliedTotal = 0;
         _saIterSkippedTotal = 0;
+        ResetLaWork();
+        bool useLa = LaActive;   // #1626 — the LA evaluator replaces the PT rows for the frame
+        _lastFrameUsedLa = useLa;
 
         // D-6b1 — SIMD PT4 / PT8 now honour sub-rect geometry; the legacy
         // single-render path (SubRectOffsetX/Y == 0, ImageWidth/Height ==
@@ -2995,7 +3001,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             int rowMaxIt = useTileCap ? perRow![y] : maxIt;
             if (rowMaxIt <= 0) rowMaxIt = maxIt;
             int rowBase = y * Width;
-            if (useSimd512)
+            if (useLa)
+                ComputeRowLa(y, scale, rowMaxIt, rowBase, colorMap, xBegin, xEnd);
+            else if (useSimd512)
                 ComputeRowPT8(y, scale, rowMaxIt, rowBase, colorMap, xBegin, xEnd);
             else if (useSimd)
                 ComputeRowPT4(y, scale, rowMaxIt, rowBase, colorMap, xBegin, xEnd);
@@ -3464,8 +3472,10 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         if (ResumesInQdBand) eps = Math.Min(eps, QdBandBlaTolerance);
         double tol = LaStageTable.ToleranceFor(eps);
         int r = _refPeriod > 0 ? _refPeriod : _refOrbitLen;
-        if (_laTable != null && _laForRefOrbitGen == _refOrbitGen && _laTable.Tolerance == tol && _laTable.RefLen == r) return;
-        _laTable = LaStageTable.Build(_refZr, _refZi, r, tol);
+        var test = LaPeriodTest;   // #1626
+        if (_laTable != null && _laForRefOrbitGen == _refOrbitGen && _laTable.Tolerance == tol && _laTable.RefLen == r
+            && _laTable.PeriodTest == test) return;
+        _laTable = LaStageTable.Build(_refZr, _refZi, r, tol, test);
         _laForRefOrbitGen = _refOrbitGen;
     }
 

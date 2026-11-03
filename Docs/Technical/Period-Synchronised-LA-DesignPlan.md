@@ -14,8 +14,8 @@
 
 The issues are the canonical task list. This doc is the maths and architecture context; link both ways.
 
-**Status: S1 done (2026-11-03); S2 done (#1625).** §2 is the method, derived and checked against Imagina's code;
-§4.1 is the proof of concept (`--laprobe`) and the decision to go on with S2. §3 is still a plan
+**Status: S1 done (2026-11-03); S2 done (#1625); S3 done (#1626, opt-in).** §2 is the method, derived and checked against Imagina's code;
+§4.1 is the proof of concept (`--laprobe`) and the decision to go on with S2; §4.2 is the engine's evaluator. §3 is still a plan
 where S1 did not settle it.
 
 ---
@@ -165,7 +165,8 @@ one step per L iterations. It stops when |z′|² > Esc² = |A|²·Thr, the edge
 - the step and its thresholds (2.2), with Imagina's `LAInfo::Step`, including τ = 2⁻²⁴;
 - the stage-0 and stage-k builders, including the 64 / log₁₆ length caps and the next indices (`CreateLAFromOrbit`, `CreateNewLAStage`);
 - the stage-to-stage drop;
-- the AT's coefficients, escape radius, δc threshold and usability test (`CreateAT`, `CreateATFromLA`, `EvaluateAT`).
+- the AT's coefficients, escape radius, δc threshold and usability test (`CreateAT`, `CreateATFromLA`, `EvaluateAT`);
+- the derivative through a step, d ← A·2z_s·d + B (`LAInfo::EvaluateDzdc`; #1626).
 
 **Departs** (marked `FF:` in `LaStageTable.cs` / `LaProbe.cs`):
 1. **Composite δc threshold.** It also includes b's own ThrC_b; Imagina's `Composite` keeps only Thr_b for the δc term. The derivation needs both, though in practice b's term rarely binds.
@@ -178,7 +179,9 @@ one step per L iterations. It stops when |z′|² > Esc² = |A|²·Thr, the edge
    - Each step tracks MinMag, the smallest ‖Z‖ it has covered (starting at 4).
    - A period ends a step when ‖Z‖ falls below MinMag · 2⁻⁶ at stage 0, or below MinMag · 2⁻³ at higher stages.
 
-   §2.6 as first written (PR #1651) said FF's dip test agreed with Imagina's. That was wrong, corrected in #1625. The two tests have not been compared on the bench scenes: whether they cut the same stages, and which gives fewer steps per pixel, is for S3 to measure.
+   §2.6 as first written (PR #1651) said FF's dip test agreed with Imagina's. That was wrong, corrected in #1625. #1626 adds Imagina's test as `LaPeriodTest.MinMagnitude` (`FF_LA_PERIOD=minmag`) and measures the two (§4.2); the dip stays the default.
+8. **No step past the iteration cap** (#1626). A step longer than the iterations left is refused like an invalid one, so the pixel drops a stage and the frame stops at the cap exactly. Imagina takes the step and stops after it.
+9. **The plain tail** (#1626) is FF's rebased loop: bailout 512, rebasing at |z| < |δ| or at the end of the reference, and, from a rebase, a climb back to the stages (item 3). BLA skips in the tail are optional (`LaTailBla`, off): §4.2 measured them.
 
 ### 2.7 Function-by-function mapping
 
@@ -202,6 +205,10 @@ A third party can check FF's code against Imagina's `HInfLAEvaluator.{h,cpp}` (c
 | `LaProbe.Evaluate`, stage loop | `EvaluateLA` | translation, scalar | 2, 3; no derivatives, no Julia sampling |
 | `LaProbe.Evaluate`, plain loop | `EvaluatePT` | adapted | 4 |
 | `LaProbe.Reference`, `Exact`, `Run` | — | FF's own (BigInteger reference, exact check, report) | 6 |
+| `LaStageTable.La` with `LaPeriodTest.MinMagnitude` (#1626) | the `PERIOD_DETECTION_METHOD2` branches of `LAInfo::Step` / `Composite` / `DetectPeriod` | translation | — |
+| `MandelbrotCalculator.EvaluateLa`, stage loop (#1626) | `EvaluateLA` + `LAInfo::EvaluateDzdc` | translation, scalar | 2, 3, 8; no Julia sampling |
+| `MandelbrotCalculator.EvaluateLa`, plain tail | — (FF's `ResumePixelPTRebased`) | FF's own | 4, 9 |
+| `MandelbrotCalculator.ComputeRowLa`, `UseLaEvaluator`, `LastLaWork` | — | FF's own | |
 
 ## 3. Architecture in FF
 
@@ -222,15 +229,17 @@ What S1 settled is in **bold**; the rest is still the plan.
 
     At 160×90, FF's BLA table takes 63 ms and the orbit 1.3 s.
   - `--laprobe` now runs on this table and reproduces the S1 numbers exactly.
-- **Evaluator** (S3–S5), on the CPU deep path.
-  - A scalar version first, in the shape of `ResumePixelPTRebased`, then SIMD.
-  - The rebased loop stays the fallback. The #1330 lattice and #1344 mask contracts hold. The derivative is carried for distance estimates and normals.
-  - **Climb back to the top stage after a rebase:** −39 % steps on p951,094, −29 % on p121,984 (§4.1).
-  - **The plain tail costs about 300–480 steps per pixel on every scene.** That is the last stretch before escape, after the steps stop being valid. On the shallow scenes it is most of the work. S3 should try FF's BLA table for that tail before plain steps.
+- **Evaluator** (S3 done: #1626; SIMD S5), `Engine/Calculators/MandelbrotCalculator.La.cs`, on the CPU deep path.
+  - `UseLaEvaluator` (`FF_LA=1`, off by default) sends the whole frame through `ComputeRowLa` → `EvaluateLa` instead of the PT4 / PT8 rows. It implies building the table. It is inactive with acceleration off, rebasing off, the DD rebase reference, or a table with a non-finite coefficient (`LaStageTable.Finite`); those frames are today's. GPU perturbation is skipped while it is on (the GPU is S7).
+  - Scalar double, per pixel, so the #1330 lattice and #1344 mask contracts hold as in `ComputeRowPeriodic`. No SA: the stages start at n = 0.
+  - **The derivative rides through each step exactly,** d ← A·2z_s·d + B, so normals and distance estimates agree with plain rebasing (§4.2). The BLA rows' d ← A·d drops B.
+  - **Climb back to the top stage after a rebase** (`LaClimbOnRebase`, `FF_LA_CLIMB=0` off): −39 % steps on p951,094, −29 % on p121,984 (§4.1).
+  - **The plain tail** (about 250–550 steps per pixel on every scene): BLA skips there (`LaTailBla`, `FF_LA_TAIL_BLA=1`) cut it by about a fifth but cost exact matches and no time (§4.2), so they are off.
+  - **Diagnostics:** `LastFrameUsedLa`, `LastLaWork` (pixels, LA steps, plain steps, BLA skips); `--laprobe` scores the engine's frame ("eng") against exact iteration, `--deepcostprobe` with `FF_DEEPCOST_LA_AB=1` times it.
 - **AT** (S4) works where a stage's escape radius exceeds 2: p448, p953 and p15,248 (all pixels used it).
   - On p121,984 and p951,094 the top stage's escape radius is 0.35 and 0.46, so no stage gives a usable AT. Those pixels pay LA steps instead, about 3,800 per pixel on p951,094.
   - S4 starts by measuring whether a looser τ for the AT step, or an AT built from the period-953 copy with a float-exp c′, recovers it.
-- **Precision.** The probe runs in double (§2.6, item 5). FF's deep views go to 1e100 (#1428 later), where δc ≈ 10⁻¹⁰² still fits a double, but coefficients over long steps can leave its range. S3 checks the coefficient range per stage and falls back to the rebased loop (or float-exp) where they do.
+- **Precision.** The probe and the evaluator run in double (§2.6, item 5). FF's deep views go to 1e100 (#1428 later), where δc ≈ 10⁻¹⁰² still fits a double, but coefficients over long steps can leave its range. Since #1626 the table records whether every coefficient and threshold is finite (`LaStageTable.Finite`); when not, the frame keeps the rebased loop. A float-exp evaluator is later work.
 - **Selection** (S6). LA where it pays (measured), BLA otherwise, with a way back:
   - `FractalParameters` → region snapshot → `--param` → Command builder;
   - an env var for A/B.
@@ -244,6 +253,7 @@ What S1 settled is in **bold**; the rest is still the plan.
 - **Composed steps against direct perturbation iteration** (S2, `S1625LaStageTableTests`): the full recurrence with δ² kept, at a quarter of each step's thresholds, for steps of every stage. The worst relative error is 6.1·10⁻⁸ against τ = 6.0·10⁻⁸; the test bound is 8τ.
 - **Self-consistency only as a second line:** SIMD byte-identical to scalar (S5).
 - **Mutants** (wrong stage index, skipped validity check, AT threshold off) must fail the tests. Mutants that are equivalent by construction are named in the test file, as #1614 did.
+- **The evaluator against exact iteration** (S3, `S1626LaEvaluatorTests`): see §4.2.
 
 ### 4.1 Proof of concept (S1, `--laprobe`, 2026-11-03)
 
@@ -279,11 +289,75 @@ Other findings:
 
 **Decision: go on with S2.** On the scenes that motivated the epic, LA cuts steps per pixel 3.6× (p951,094) and 4.9× (p121,984) before any SIMD, with no loss of accuracy against exact iteration. The open questions move to S3 and S4: the plain tail, and the missing AT on the deepest scenes.
 
+### 4.2 The engine's evaluator (S3, #1626, 2026-11-03)
+
+Setup:
+- i5-13420H, 12 threads, Release.
+- LA is `UseLaEvaluator`: scalar double, per pixel, climbing back, no tail BLA, threshold-dip period test.
+- FF is today's default deep path (SA + BLA + rebasing, SIMD ×4).
+
+**Time** (`--deepcostprobe`, 960×540, best of 3, `FF_DEEPCOST_LA_AB=1`):
+
+| scene | pixels: FF | pixels: LA | frame: FF | frame: LA | LA steps / px (LA + plain) | iteration counts differ |
+|---|---|---|---|---|---|---|
+| p448 5.2e33 | 220 ms | 180 ms | 229 ms | 183 ms | 23 + 555 | 0.27 % |
+| path 1e33 | 235 ms | 196 ms | 227 ms | 188 ms | 24 + 636 | 0.21 % |
+| p953 1.3e53 | 215 ms | 109 ms | 218 ms | 111 ms | 27 + 309 | 2.2 % |
+| p15,248 2.1e57 | 1,012 ms | 183 ms | 1,012 ms | 210 ms | 131 + 338 | 2.6 % |
+| p121,984 1.7e66 | 2,093 ms | 459 ms | 2,274 ms | 630 ms | 530 + 338 | 71 % |
+| p951,094 2.1e68 | 10,067 ms | 2,669 ms | 10,879 ms | 4,043 ms | 3,780 + 338 | 80 % |
+
+- Scalar LA beats SIMD FF on every scene: pixels 3.8× faster on p951,094, 4.6× on p121,984, 5.5× on p15,248, 2× on p953, about 1.2× on the two shallow scenes.
+- On p951,094 the frame is now about half reference orbit (1.3–2.3 s, single-threaded).
+- The 70–80 % differing counts on the two chaotic scenes are the same as FF against acceleration off (#1614); exact iteration decides (below). In / out differs at 0–8 pixels of 518,400.
+- The table build adds 0–14 ms (66 ms with the BLA table on p951,094).
+
+**Accuracy against exact iteration** (`--laprobe`, 160×90; "eng" is the engine's LA frame, FF today's frame):
+
+| scene | samples | exact: LA | exact: FF | mean \|err\|: LA | mean \|err\|: FF |
+|---|---|---|---|---|---|
+| p448, path, p953, p15,248 | 12 each | 12/12 each | 12, 12, 11, 12 | 0 | 0–1 |
+| p121,984 | 48 | 29/48 | 11/48 | 70 | 1,347 |
+| p951,094 | 48 | 17/48 | 11/48 | 9,563 | 22,221 |
+
+The engine's frame reproduces the S1 probe's numbers on every sample (the probe uses the AT where it can; the engine does not yet, S4), so the stage loop moved into the engine intact.
+
+**`S1626LaEvaluatorTests`** (64×36):
+- **Exact iteration:** on p953 (16 samples), p15,248 (8) and p121,984 (4), LA matches exact iteration at least as often as BLA, with no larger total error, and in / out matches on every sample. Measured: 16/16, 8/8, 4/4 for LA; 16/16, 8/8, 2/4 for BLA.
+- **Smooth value and normals** against the acceleration-off frame (plain rebasing, exact derivative), where counts agree. The normal is the direction of z / (dz/dc); the float distance buffer underflows at these zooms.
+  - Smooth off by > 10⁻³: LA 65 and 97 pixels on p953 and p15,248, BLA 112 and 181.
+  - Normal off by > 10⁻³ rad: LA 51 and 103 of about 2,100 pixels, BLA almost all of them (its d ← A·d drops B).
+- **Mutants:**
+
+  | mutant | failing tests |
+  |---|---|
+  | drop to the next stage one step off | 6 of 8 |
+  | validity check on w removed | 6 of 8 |
+  | + B dropped from the derivative step | 2 of 8 (smooth / normals) |
+
+  Equivalent by construction: a skipped stage keeping its index. A stage's first-step δc bound never exceeds the one below it, so stages are only skipped from the top at j = 0, where every next index is 0. The test asserts that ordering.
+
+**Tail BLA** (`FF_LA_TAIL_BLA=1`, p953, 160×90):
+- It cut the plain tail from 309 to 246 steps per pixel, with 6 BLA skips.
+- It cost an exact match (11/12, one sample 39 iterations off, against 12/12) and the frame was no faster.
+- The tail is where |δ| grows from τ|Z| to escape, which is where a BLA step's 10⁻⁶ tolerance shows (#1346). Off by default.
+
+**Period tests** (§2.6, item 7; `FF_LA_PERIOD=minmag` for Imagina's minimum-|Z| test):
+- **Same stages** on p448, path, p953, p15,248 and p121,984.
+- **p951,094:** stage 2 is cut at 37,167 (953 × 39) instead of 30,496. LA steps per pixel fall 43 %, from 3,780 to 2,140.
+  - Pixels: 1,671 ms against 2,669 ms (960×540), −37 %.
+  - Exact matches, 48 samples: 22/48 against 17/48, but mean error 16,522 against 9,563.
+- **p121,984:** 5 % fewer steps; exact 25/48 against 29/48, mean error 291 against 70.
+
+Neither test is better everywhere, so the threshold dip stays the default. S6 chooses with more samples.
+
+**Decision:** go on with S4 (the AT on the deepest scenes) and S5 (SIMD). S6 turns LA on by default, keeping the off switch.
+
 ## 5. Credit
 
 The method and the code come from Imagina; see `Docs/Resources-Bibliography.md#imagina`.
-- **Code.** `Engine/Math/LaStageTable.cs` and `Probes/LaProbe.cs` contain C# translations of Imagina's functions (§2.7). They are not independent implementations.
-  - Both files carry an SPDX copyright line for the upstream author.
+- **Code.** `Engine/Math/LaStageTable.cs`, `Engine/Calculators/MandelbrotCalculator.La.cs` (#1626) and `Probes/LaProbe.cs` contain C# translations of Imagina's functions (§2.7). They are not independent implementations.
+  - Each file carries an SPDX copyright line for the upstream author.
   - `THIRD-PARTY-NOTICES.md` §3 lists them as code derived from another project.
   - Imagina and Fracturing Fog are both AGPL-3.0.
 - **Maths.** §2 derives each rule from the recurrence independently, so the translation can be checked, not trusted.

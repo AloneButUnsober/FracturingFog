@@ -147,9 +147,16 @@ headers.
   - **`Probes/LaProbe.cs`** (#1624): the evaluator and the AT translate
     `EvaluateLA` / `EvaluatePT` / `EvaluateAT`, `LAInfo::CreateAT` and
     `CreateATFromLA`.
+  - **`Engine/Calculators/MandelbrotCalculator.La.cs`** (#1626): the engine's
+    per-pixel evaluator. Its stage loop translates `EvaluateLA` and its derivative
+    update `LAInfo::EvaluateDzdc`; the plain tail is FF's own rebased loop.
+  - **`LaPeriodTest.MinMagnitude`** in `Engine/Math/LaStageTable.cs` (#1626)
+    translates the `PERIOD_DETECTION_METHOD2` branches of `LAInfo::Step` /
+    `Composite` / `DetectPeriod` (the `MinMag` field and its 2⁻⁶ / 2⁻³ factors).
   - **Changes from upstream:** the function-by-function mapping and every change
-    (different period test, composite δc bound, per-step δc check, climbing back to
-    the top stage, FF's bailout and rebase rule, double precision only) are in
+    (a different default period test, composite δc bound, per-step δc check, climbing
+    back to the top stage, FF's bailout and rebase rule, double precision only, no
+    step past the iteration cap) are in
     `Docs/Technical/Period-Synchronised-LA-DesignPlan.md` §2.6–2.7.
 
 ---
