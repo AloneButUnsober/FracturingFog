@@ -323,6 +323,22 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     private bool Fp32GpuResolvesView
         => Fp32GpuResolves(CenterX, CenterY, Zoom, EffectiveImageWidth, EffectiveImageHeight);
 
+    /// <summary>#1640 — why this view renders on the CPU whatever the device (the
+    /// route's reasons that need no kernel), or null when a GPU could draw it. Lets a
+    /// headless render skip opening a device it would not use.</summary>
+    public string? CpuOnlyView()
+    {
+        if (Zoom > MaxGpuZoom)
+        {
+            if (!Quality.NeedsHighPrecision(Zoom))
+                return "past the FP32 GPU zoom limit (1e4); deeper zooms render on the CPU";
+            return UseGpuPerturbation ? null
+                : "deep zoom renders on the CPU unless GPU perturbation is enabled (FF_GPU_PERTURB=1)";
+        }
+        return Fp32GpuResolvesView ? null
+            : "pixels this small are below the FP32 GPU kernel's precision at this size; it renders on the CPU";
+    }
+
     /// <summary>V6 (#82): upper zoom for the GPU deep-zoom PERTURBATION path
     /// (<see cref="RunPerturb"/> on an FP64-capable kernel). Above
     /// <see cref="MaxGpuZoom"/> the FP32 escape-time kernel is unusable, but the

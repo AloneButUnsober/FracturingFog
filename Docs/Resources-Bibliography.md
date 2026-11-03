@@ -599,6 +599,24 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
 
 ### Algorithm references implemented in code
 
+- <a id="png-spec"></a>**PNG** — W3C. *Portable Network Graphics (PNG) Specification (Second Edition).* W3C
+  Recommendation, 10 November 2003. <https://www.w3.org/TR/2003/REC-PNG-20031110/>. Chunk layout, IHDR colour
+  types 2 / 6, filter type 2 (Up), several IDAT chunks read as one stream, and the CRC-32 (its sample code) used by
+  `Engine/Imaging/ParallelPngWriter.cs` (#1640).
+- <a id="zlib-deflate-rfcs"></a>**zlib and deflate formats** — P. Deutsch, J-L. Gailly. *ZLIB Compressed Data Format
+  Specification version 3.3.* RFC 1950, IETF, 1996. <https://www.rfc-editor.org/rfc/rfc1950>; P. Deutsch. *DEFLATE
+  Compressed Data Format Specification version 1.3.* RFC 1951, IETF, 1996. <https://www.rfc-editor.org/rfc/rfc1951>.
+  The zlib header and Adler-32 trailer `ParallelPngWriter` writes around its deflate strips, and the byte-aligned
+  sync-flushed blocks that let the strips concatenate (#1640).
+- <a id="pigz"></a>**pigz (parallel gzip)** — Mark Adler. <https://zlib.net/pigz/>. Compressing a stream in
+  independent chunks on several threads, each ended by a sync flush so the compressed chunks concatenate into one
+  deflate stream, with the checksum combined from per-chunk checksums. `ParallelPngWriter` applies the same
+  technique to PNG row strips (#1640: a 4K frame in ~65 ms against SkiaSharp's ~0.7 s). No pigz code is used.
+- <a id="zlib-adler32-combine"></a>**adler32_combine** — Jean-loup Gailly and Mark Adler, zlib (`adler32.c`), zlib
+  licence. <https://zlib.net/>, licence <https://zlib.net/zlib_license.html>. The Adler-32 of a concatenation from
+  the two parts' checksums and the second part's length; `ParallelPngWriter.Adler32Combine` is a C# rewrite of it
+  (see `THIRD-PARTY-NOTICES.md`) (#1640).
+
 - **k-means in CIELAB** — Stuart P. Lloyd. *Least squares quantization in PCM.* IEEE Transactions on
   Information Theory, 1982. Underlies `PaletteBuilder.Lib`'s palette extractor and the theme editor's
   *From Image…* button.

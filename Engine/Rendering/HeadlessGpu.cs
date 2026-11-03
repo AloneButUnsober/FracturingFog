@@ -14,13 +14,48 @@
 // calculator kinds: the kernel plus the per-calculator switch. Deep-zoom
 // perturbation stays behind its own opt-in (MandelbrotCalculator.UseGpuPerturbation,
 // FF_GPU_PERTURB), exactly as in the live shell.
+//
+// #1640 — with --gpu auto the device opens lazily (KernelFactory): on the first
+// Attach of a calculator that can dispatch on it, so a run that never uses the GPU
+// (a deep frame without FF_GPU_PERTURB, a shallow frame below fp32 precision, a
+// family with no GPU kernel) doesn't pay the 0.1-1 s device open.
 
 namespace FracturingFog.Rendering
 {
     public static class HeadlessGpu
     {
-        /// <summary>The kernel headless renders compute on; null = CPU.</summary>
-        public static IGpuKernel? Kernel { get; set; }
+        private static readonly object s_gate = new();
+        private static IGpuKernel? s_kernel;
+        private static System.Func<IGpuKernel?>? s_factory;
+
+        /// <summary>The kernel headless renders compute on; null = CPU. Reading it
+        /// opens the device if <see cref="KernelFactory"/> is pending.</summary>
+        public static IGpuKernel? Kernel
+        {
+            get
+            {
+                if (s_kernel != null || s_factory == null) return s_kernel;
+                lock (s_gate)
+                {
+                    if (s_factory is { } f) { s_factory = null; s_kernel = f(); }
+                    return s_kernel;
+                }
+            }
+            set { lock (s_gate) { s_kernel = value; s_factory = null; } }
+        }
+
+        /// <summary>#1640 — opens the kernel on first use instead of up front; it runs
+        /// at most once. Setting it clears <see cref="Kernel"/>.</summary>
+        public static System.Func<IGpuKernel?>? KernelFactory
+        {
+            get => s_factory;
+            set { lock (s_gate) { s_kernel = null; s_factory = value; } }
+        }
+
+        /// <summary>#1640 — why the last <see cref="Attach"/> left a calculator on the
+        /// CPU without opening the device (null when it attached, or had nothing to
+        /// attach).</summary>
+        public static string? LastNotOpened { get; private set; }
 
         /// <summary>The calculator <see cref="Attach"/> last handed the kernel to, so
         /// the batch can report its GPU route (a CPU fallback and why) after a render
@@ -32,6 +67,16 @@ namespace FracturingFog.Rendering
         /// with no kernel, for null, and for every other calculator.</summary>
         public static void Attach(object? calculator)
         {
+            LastNotOpened = null;
+            if (s_kernel == null && s_factory == null) return;
+            if (calculator is not (MandelbrotCalculator or EscapeTimeCalculator or BuddhaFamilyCalculator)) return;
+            // #1640 — a Mandelbrot view the GPU can't draw stays on the CPU without
+            // opening the device (the calculator is built for this one view).
+            if (s_kernel == null && calculator is MandelbrotCalculator mv && mv.CpuOnlyView() is { } why)
+            {
+                LastNotOpened = why;
+                return;
+            }
             if (Kernel is not { } k) return;
             switch (calculator)
             {
