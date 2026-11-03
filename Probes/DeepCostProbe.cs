@@ -17,7 +17,9 @@
 // (#1614); FF_DEEPCOST_NOREF=1 skips the acceleration-off reference.
 // FF_DEEPCOST_DUMP=dir writes those pixels as CSV (x,y,default,reference) for an
 // exact check outside FF; FF_DEEPCOST_SCENE filters by name; FF_DEEPCOST_EPS sets
-// the BLA tolerance. Exit 0 always.
+// the BLA tolerance. FF_DEEPCOST_LA_AB=1 (#1626) adds the frame through the LA stage
+// evaluator (UseLaEvaluator): its time, LA / plain / BLA work per pixel, and the pixels
+// whose iteration count differs from the default frame. Exit 0 always.
 
 using System;
 using System.Diagnostics;
@@ -106,6 +108,24 @@ namespace FracturingFog
                     }
                     finally { MandelbrotCalculator.PeriodicReferenceOrbit = true; }
                 }
+                // #1626 — FF_DEEPCOST_LA_AB=1: the same frame through the LA evaluator.
+                if (Environment.GetEnvironmentVariable("FF_DEEPCOST_LA_AB") == "1")
+                {
+                    var (l, lSm, lMs, _, lIt) = Render(s, zoom, w, h, reps, noAccel: false, la: true);
+                    var ls = s_lastStages;
+                    var lw = s_lastLaWork;
+                    double px = Math.Max(1, lw.Pixels);
+                    int ld = 0, lio = 0, lsm = 0;
+                    for (int i = 0; i < a.Length; i++)
+                    {
+                        if (a[i] != l[i]) ld++;
+                        if ((a[i] >= s.Iter) != (l[i] >= s.Iter)) lio++;
+                        if (a[i] == l[i] && Math.Abs(aSm[i] - lSm[i]) > 0.01f) lsm++;
+                    }
+                    Console.WriteLine($"  {s.Name,-14} LA     : {lMs,7:F0} ms (BLA+LA tables {ls.Bla:F0} ms, pixels {ls.Pixels:F0} ms; default {aMs:F0} ms) | per px " +
+                                      $"LA {lw.LaSteps / px:F0} + plain {lw.PlainSteps / px:F0} + BLA {lw.BlaSkips / px:F0} steps (LA on {s_lastUsedLa}) | " +
+                                      $"iter diff vs default {ld:N0} ({100.0 * ld / a.Length:F2} %), in/out {lio:N0}, smooth >0.01 where equal {lsm:N0}");
+                }
                 if (Environment.GetEnvironmentVariable("FF_DEEPCOST_NOREF") == "1") continue;
                 var (b, bSm, bMs, bReb, bIt) = Render(s, zoom, w, h, 1, noAccel: true);
                 int diff = 0, escDiff = 0, sm01 = 0, sm1 = 0;
@@ -139,8 +159,10 @@ namespace FracturingFog
         private static (long BlaSkips, long BlaIterSaved, long PlainSteps) s_lastWork;
         private static long s_lastRebased;
         private static double s_lastCpuMs;
+        private static (long Pixels, long LaSteps, long PlainSteps, long BlaSkips) s_lastLaWork;
+        private static bool s_lastUsedLa;
 
-        private static (int[] Iter, float[] Smooth, double Ms, long Rebased, long Iters) Render(Scene s, double zoom, int w, int h, int reps, bool noAccel)
+        private static (int[] Iter, float[] Smooth, double Ms, long Rebased, long Iters) Render(Scene s, double zoom, int w, int h, int reps, bool noAccel, bool la = false)
         {
             double best = double.MaxValue;
             MandelbrotCalculator? last = null;
@@ -148,6 +170,7 @@ namespace FracturingFog
             {
                 var c = Make(s, zoom, w, h);
                 c.DisableAcceleration = noAccel;
+                if (la) c.UseLaEvaluator = true;   // #1626
                 var cpu0 = System.Diagnostics.Process.GetCurrentProcess().TotalProcessorTime;
                 if (double.TryParse(Environment.GetEnvironmentVariable("FF_DEEPCOST_EPS"), System.Globalization.NumberStyles.Float,
                         System.Globalization.CultureInfo.InvariantCulture, out double eps)) c.BlaTolerance = eps;
@@ -158,6 +181,7 @@ namespace FracturingFog
                 last = c;
             }
             long iters = last!.IterationBuffer.Sum(v => (long)v);
+            s_lastLaWork = last.LastLaWork; s_lastUsedLa = last.LastFrameUsedLa;
             if (!noAccel) { s_lastStages = last.LastHpStageMs; s_lastPeriod = last.ReferencePeriod; s_lastWork = last.LastPtWork; s_lastRebased = last.PtRebasedPixels; }
             return ((int[])last.IterationBuffer.Clone(), (float[])last.SmoothBuffer.Clone(), best, last.PtRebasedPixels, iters);
         }

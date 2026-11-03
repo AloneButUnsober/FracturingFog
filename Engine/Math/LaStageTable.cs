@@ -26,10 +26,11 @@
 // spans the next ancestor period. Each step records where it starts one stage down
 // (stage 0: the reference index), so a pixel that cannot take a step drops a stage.
 //
-// FF departs from Imagina here in two places (design doc §2.6): the period test is
-// the threshold dip (Imagina's #else branch; its build defines
-// PERIOD_DETECTION_METHOD2, a minimum-|Z| test), and a composite's δc threshold
-// also keeps the second step's own ThrC.
+// FF departs from Imagina here in two places (design doc §2.6): the default period
+// test is the threshold dip (Imagina's #else branch), and a composite's δc threshold
+// also keeps the second step's own ThrC. #1626 adds Imagina's own default, the
+// minimum-|Z| test of its PERIOD_DETECTION_METHOD2 branch, as LaPeriodTest.MinMagnitude
+// (same source and commit), so the two can be measured against each other.
 //
 // The thresholds do not depend on the view's δc radius (only the AT, S4, will), so
 // the table is keyed on the reference orbit and the tolerance alone.
@@ -41,6 +42,19 @@ using System.Numerics;
 
 namespace FracturingFog.FFMath
 {
+    /// <summary>#1626 — how a step decides that the reference has come back near zero
+    /// (a period), design doc §2.3 and §2.6 item 7.</summary>
+    public enum LaPeriodTest
+    {
+        /// <summary>The running threshold falls below 2⁻¹⁰ of the one before (Imagina's
+        /// <c>#else</c> branch; FF's default since #1625).</summary>
+        ThresholdDip,
+        /// <summary>‖Z‖ falls below 2⁻⁶ (stage 0) or 2⁻³ (higher stages) of the smallest
+        /// ‖Z‖ the step has covered (Imagina's <c>PERIOD_DETECTION_METHOD2</c>, the branch
+        /// its own build uses).</summary>
+        MinMagnitude,
+    }
+
     /// <summary>One LA step: δ_{s+L} ≈ A·w + B·δc with w = δ_s(2·Ref + δ_s), valid while
     /// ‖w‖ &lt; <see cref="Thr"/> and ‖δc‖ &lt; <see cref="ThrC"/>.</summary>
     public readonly struct LaStep
@@ -83,6 +97,9 @@ namespace FracturingFog.FFMath
         public const double PeriodDip = 1.0 / (1 << 10);
         /// <summary>Stages are capped as in Imagina.</summary>
         public const int MaxStages = 256;
+        /// <summary>#1626 — the minimum-|Z| test's factors (Imagina's
+        /// Stage0PeriodDetectionThreshold2 / PeriodDetectionThreshold2).</summary>
+        public const double MinMagDipStage0 = 1.0 / (1 << 6), MinMagDip = 1.0 / (1 << 3);
 
         public readonly LaStep[] Data;
         public readonly int[] StageStart;
@@ -91,6 +108,12 @@ namespace FracturingFog.FFMath
         public readonly int RefLen;
         public readonly double Tolerance;
         public readonly double BuildMs;
+        /// <summary>#1626 — the period test the stages were cut with.</summary>
+        public readonly LaPeriodTest PeriodTest;
+        /// <summary>#1626 — every coefficient and threshold is a finite double, so the
+        /// evaluator can use the table. False when a long step's coefficients leave double
+        /// range (design doc §3, precision); the calculator then keeps the rebased loop.</summary>
+        public readonly bool Finite;
 
         public int Stages => StageStart.Length;
         public long Bytes => (long)Data.Length * System.Runtime.CompilerServices.Unsafe.SizeOf<LaStep>();
@@ -111,19 +134,26 @@ namespace FracturingFog.FFMath
             return Math.Clamp(t, Math.Pow(2, -52), Math.Pow(2, -8));
         }
 
-        private LaStageTable(List<LaStep> data, List<int> start, List<int> count, int refLen, double tol, double ms)
+        private LaStageTable(List<LaStep> data, List<int> start, List<int> count, int refLen, double tol, double ms, LaPeriodTest test)
         {
             Data = data.ToArray(); StageStart = start.ToArray(); StageCount = count.ToArray();
-            RefLen = refLen; Tolerance = tol; BuildMs = ms;
+            RefLen = refLen; Tolerance = tol; BuildMs = ms; PeriodTest = test;
+            bool ok = true;
+            foreach (ref readonly var d in Data.AsSpan())
+                if (!(double.IsFinite(d.RefRe) && double.IsFinite(d.RefIm) && double.IsFinite(d.ARe) && double.IsFinite(d.AIm)
+                      && double.IsFinite(d.BRe) && double.IsFinite(d.BIm) && !double.IsNaN(d.Thr) && !double.IsNaN(d.ThrC)))
+                { ok = false; break; }
+            Finite = ok;
         }
 
         /// <summary>Builds the stages over Z_0 .. Z_R (<paramref name="refZr"/> /
         /// <paramref name="refZi"/>, at least R + 1 entries). Null when R &lt; 2.</summary>
-        public static LaStageTable? Build(double[] refZr, double[] refZi, int refLen, double tolerance = DefaultTolerance)
+        public static LaStageTable? Build(double[] refZr, double[] refZi, int refLen, double tolerance = DefaultTolerance,
+                                          LaPeriodTest periodTest = LaPeriodTest.ThresholdDip)
         {
             if (refLen < 2 || refZr.Length <= refLen || refZi.Length <= refLen) return null;
             var sw = Stopwatch.StartNew();
-            var b = new Builder(refZr, refZi, refLen, tolerance);
+            var b = new Builder(refZr, refZi, refLen, tolerance, periodTest == LaPeriodTest.MinMagnitude);
             var stage = new List<La>();
             bool more = b.Stage0(stage);
             var stages = new List<List<La>> { stage };
@@ -142,7 +172,7 @@ namespace FracturingFog.FFMath
                 count.Add(st.Count - 1);
                 foreach (var la in st) data.Add(new LaStep(la.Ref, la.A, la.B, la.Thr, la.ThrC, la.Len, la.Next));
             }
-            return new LaStageTable(data, start, count, refLen, tolerance, sw.Elapsed.TotalMilliseconds);
+            return new LaStageTable(data, start, count, refLen, tolerance, sw.Elapsed.TotalMilliseconds, periodTest);
         }
 
         private static double Cheb(Complex z) => Math.Max(Math.Abs(z.Real), Math.Abs(z.Imaginary));
@@ -153,24 +183,27 @@ namespace FracturingFog.FFMath
             public Complex Ref, A, B;
             public double Thr, ThrC;
             public int Len, Next;
+            public double MinMag;   // #1626: smallest ‖Z‖ covered (the minimum-|Z| period test)
 
-            public static La Start(Complex z) => new() { Ref = z, A = 1, B = 1, Thr = 1, ThrC = 1, Len = 1 };
+            public static La Start(Complex z) => new() { Ref = z, A = 1, B = 1, Thr = 1, ThrC = 1, Len = 1, MinMag = 4 };
 
-            // One more iteration at reference value z; true = the threshold dipped.
-            public readonly bool Step(Complex z, double tol, out La o)
+            // One more iteration at reference value z; true = a period (the threshold
+            // dipped, or with minMag the smallest ‖Z‖ fell sharply).
+            public readonly bool Step(Complex z, double tol, bool minMag, out La o)
             {
                 double mz = Cheb(z);
                 o = this;
+                o.MinMag = Math.Min(mz, MinMag);
                 o.Thr = Math.Min(Thr, mz / Cheb(A) * tol);
                 o.ThrC = Math.Min(ThrC, mz / Cheb(B) * tol);
                 o.A = 2 * z * A;
                 o.B = 2 * z * B + 1;
                 o.Len = Len + 1;
-                return o.Thr < Thr * PeriodDip;
+                return minMag ? o.MinMag < MinMag * MinMagDipStage0 : o.Thr < Thr * PeriodDip;
             }
 
             // This step, then b; true = a dip at b's anchor.
-            public readonly bool Compose(in La b, double tol, out La o)
+            public readonly bool Compose(in La b, double tol, bool minMag, out La o)
             {
                 Complex z = b.Ref;
                 double mz = Cheb(z);
@@ -184,13 +217,16 @@ namespace FracturingFog.FFMath
                 o.A = a2 * b.A;
                 o.B = b2 * b.A + b.B;
                 o.Len = Len + b.Len;
-                return t < Thr * PeriodDip;
+                double mm = Math.Min(mz, MinMag);
+                o.MinMag = Math.Min(mm, b.MinMag);
+                return minMag ? mm < MinMag * MinMagDip : t < Thr * PeriodDip;
             }
 
-            public readonly bool DetectPeriod(Complex z, double tol) => Cheb(z) / Cheb(A) * tol < Thr * PeriodDip;
+            public readonly bool DetectPeriod(Complex z, double tol, bool minMag) =>
+                minMag ? Cheb(z) < MinMag * MinMagDip : Cheb(z) / Cheb(A) * tol < Thr * PeriodDip;
         }
 
-        private sealed class Builder(double[] zr, double[] zi, int r, double tol)
+        private sealed class Builder(double[] zr, double[] zi, int r, double tol, bool mm)
         {
             private Complex Z(int i) => new(zr[i], zi[i]);
 
@@ -204,15 +240,15 @@ namespace FracturingFog.FFMath
             public bool Stage0(List<La> st)
             {
                 int period = 0, i, next = 0;
-                La.Start(Z(0)).Step(Z(1), tol, out var la);
+                La.Start(Z(0)).Step(Z(1), tol, mm, out var la);
                 for (i = 2; i < r; i++)
                 {
-                    if (la.Step(Z(i), tol, out var nl))
+                    if (la.Step(Z(i), tol, mm, out var nl))
                     {
                         period = i;
                         st.Add(With(la, period, 0));
                         next = i;
-                        if (i + 1 < r) { La.Start(Z(i)).Step(Z(i + 1), tol, out la); i += 2; }
+                        if (i + 1 < r) { La.Start(Z(i)).Step(Z(i + 1), tol, mm, out la); i += 2; }
                         else { la = La.Start(Z(i)); i += 1; }
                         break;
                     }
@@ -227,25 +263,25 @@ namespace FracturingFog.FFMath
                         st.Add(La.Start(Z(r)));
                         return false;
                     }
-                    La.Start(Z(0)).Step(Z(1), tol, out la); next = 0; i = 2;
+                    La.Start(Z(0)).Step(Z(1), tol, mm, out la); next = 0; i = 2;
                     period = FixedLen(r); begin = 0;
                 }
                 else if (period > 64)
                 {
                     st.RemoveAt(st.Count - 1);
-                    La.Start(Z(0)).Step(Z(1), tol, out la); next = 0; i = 2;
+                    La.Start(Z(0)).Step(Z(1), tol, mm, out la); next = 0; i = 2;
                     period = FixedLen(period); begin = 0;
                 }
                 int end = begin + period;
                 for (; i < r; i++)
                 {
-                    bool dip = la.Step(Z(i), tol, out var nl);
+                    bool dip = la.Step(Z(i), tol, mm, out var nl);
                     if (dip || i >= end)
                     {
                         st.Add(With(la, i - begin, next));
                         next = i; begin = i; end = begin + period;
-                        if (nl.DetectPeriod(Z(i + 1), tol) || i + 1 >= r) la = La.Start(Z(i));
-                        else { La.Start(Z(i)).Step(Z(i + 1), tol, out la); i++; }
+                        if (nl.DetectPeriod(Z(i + 1), tol, mm) || i + 1 >= r) la = La.Start(Z(i));
+                        else { La.Start(Z(i)).Step(Z(i + 1), tol, mm, out la); i++; }
                     }
                     else la = nl;
                 }
@@ -258,18 +294,18 @@ namespace FracturingFog.FFMath
             {
                 int m = prev.Count - 1;   // without the sentinel
                 int period = 0, i, j, next = 0;
-                prev[0].Compose(prev[1], tol, out var la);
+                prev[0].Compose(prev[1], tol, mm, out var la);
                 i = prev[0].Len + prev[1].Len;
                 for (j = 2; j < m; j++)
                 {
-                    if (la.Compose(prev[j], tol, out var nl))
+                    if (la.Compose(prev[j], tol, mm, out var nl))
                     {
                         if (prev[j].Thr == 0.0) break;
                         period = i;
                         st.Add(With(la, period, 0));
                         next = j;
-                        if (nl.DetectPeriod(prev[j + 1].Ref, tol) || j + 1 >= m) { la = prev[j]; i += prev[j].Len; j++; }
-                        else { prev[j].Compose(prev[j + 1], tol, out la); i += prev[j].Len + prev[j + 1].Len; j += 2; }
+                        if (nl.DetectPeriod(prev[j + 1].Ref, tol, mm) || j + 1 >= m) { la = prev[j]; i += prev[j].Len; j++; }
+                        else { prev[j].Compose(prev[j + 1], tol, mm, out la); i += prev[j].Len + prev[j + 1].Len; j += 2; }
                         break;
                     }
                     la = nl; i += prev[j].Len;
@@ -283,25 +319,25 @@ namespace FracturingFog.FFMath
                         st.Add(La.Start(Z(r)));
                         return false;
                     }
-                    prev[0].Compose(prev[1], tol, out la); i = len0 + prev[1].Len; next = 0; j = 2;
+                    prev[0].Compose(prev[1], tol, mm, out la); i = len0 + prev[1].Len; next = 0; j = 2;
                     period = len0 * FixedLen((double)r / len0); begin = 0;
                 }
                 else if (period > len0 * 64)
                 {
                     st.RemoveAt(st.Count - 1);
-                    prev[0].Compose(prev[1], tol, out la); i = len0 + prev[1].Len; next = 0; j = 2;
+                    prev[0].Compose(prev[1], tol, mm, out la); i = len0 + prev[1].Len; next = 0; j = 2;
                     period = len0 * FixedLen((double)period / len0); begin = 0;
                 }
                 int end = begin + period;
                 for (; j < m; j++)
                 {
-                    bool dip = la.Compose(prev[j], tol, out var nl);
+                    bool dip = la.Compose(prev[j], tol, mm, out var nl);
                     if (dip || i >= end)
                     {
                         st.Add(With(la, i - begin, next));
                         next = j; begin = i; end = begin + period;
-                        if (nl.DetectPeriod(prev[j + 1].Ref, tol) || j + 1 >= m) la = prev[j];
-                        else { prev[j].Compose(prev[j + 1], tol, out la); i += prev[j].Len; j++; }
+                        if (nl.DetectPeriod(prev[j + 1].Ref, tol, mm) || j + 1 >= m) la = prev[j];
+                        else { prev[j].Compose(prev[j + 1], tol, mm, out la); i += prev[j].Len; j++; }
                     }
                     else la = nl;
                     i += prev[j].Len;
