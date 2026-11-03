@@ -253,6 +253,10 @@ namespace FracturingFog.Imaging
         /// <summary>#1411 — the display buffer before the QR (saved orientation), when
         /// <see cref="PosterRequest.KeepPreQrPixels"/> asked for it.</summary>
         public uint[]? PreQrPixels { get; init; }
+
+        /// <summary>#1640 — encoding and writing the file, after <see cref="ElapsedMs"/>
+        /// stops (shown by <c>--batch --verbose</c>).</summary>
+        public long EncodeMs { get; init; }
     }
 
     /// <summary>Offscreen high-resolution fractal renderer shared by both shells.</summary>
@@ -813,10 +817,12 @@ namespace FracturingFog.Imaging
                 var fontColor = ImageExport.ComputeContrastColor(
                     Color.White, watermark: true, pixels: rotated, imgW: savedW, imgH: savedH);
                 var wm = BuildPosterWatermark(req, fontColor);
+                long encodeStart = System.Diagnostics.Stopwatch.GetTimestamp();
                 ImageExport.SavePixelsToFile(
                     rotated, savedW, savedH, req.Path, req.Format,
                     wm, poster: true, dpi: req.Dpi, exrCompression: req.ExrCompression);
-                return new PosterResult(savedW, savedH, elapsedMs) { Qr = VerifyQr(req, qr, rotated, savedW, savedH), PreQrPixels = preQr };
+                long encodeMs = (long)System.Diagnostics.Stopwatch.GetElapsedTime(encodeStart).TotalMilliseconds;
+                return new PosterResult(savedW, savedH, elapsedMs) { Qr = VerifyQr(req, qr, rotated, savedW, savedH), PreQrPixels = preQr, EncodeMs = encodeMs };
             }
             else
             {
@@ -825,10 +831,12 @@ namespace FracturingFog.Imaging
                 var fontColor = ImageExport.ComputeContrastColor(
                     Color.White, watermark: true, pixels: buffer, imgW: w, imgH: h);
                 var wm = BuildPosterWatermark(req, fontColor);
+                long encodeStart = System.Diagnostics.Stopwatch.GetTimestamp();
                 ImageExport.SavePixelsToFile(
                     buffer, w, h, req.Path, req.Format,
                     wm, poster: true, dpi: req.Dpi, exrCompression: req.ExrCompression);
-                return new PosterResult(w, h, elapsedMs) { Qr = VerifyQr(req, qr, buffer, w, h), PreQrPixels = preQr };
+                long encodeMs = (long)System.Diagnostics.Stopwatch.GetElapsedTime(encodeStart).TotalMilliseconds;
+                return new PosterResult(w, h, elapsedMs) { Qr = VerifyQr(req, qr, buffer, w, h), PreQrPixels = preQr, EncodeMs = encodeMs };
             }
         }
 

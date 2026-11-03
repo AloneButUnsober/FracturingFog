@@ -24,26 +24,13 @@ namespace FracturingFog.Batch
         public static bool Apply(BatchGpuMode mode, out string? error)
         {
             error = null;
-            HeadlessGpu.Kernel = null;
+            HeadlessGpu.Kernel = null;   // also clears a pending KernelFactory
             if (mode == BatchGpuMode.Off)
             {
                 Console.Error.WriteLine("batch: compute on the CPU (--gpu off)");
                 return true;
             }
 
-            var (kernel, why) = CreateKernel();
-            if (kernel == null)
-            {
-                if (mode == BatchGpuMode.On)
-                {
-                    error = $"--gpu on, but there is no GPU compute: {why}";
-                    return false;
-                }
-                Console.Error.WriteLine($"batch: compute on the CPU: {why}");
-                return true;
-            }
-
-            HeadlessGpu.Kernel = kernel;
             // Read every frame back inside its dispatch (no #1332 deferral): the kernel's
             // device-loss check then sees a frame that tripped the OS watchdog, and that
             // frame renders on the CPU rather than being written out wrong.
@@ -51,10 +38,37 @@ namespace FracturingFog.Batch
             // Deep zoom (past MandelbrotCalculator.MaxGpuZoom) — the live shell's opt-in.
             bool perturb = IsTruthyEnv("FF_GPU_PERTURB");
             if (perturb) MandelbrotCalculator.UseGpuPerturbation = true;
-            Console.Error.WriteLine($"batch: {GpuComputeSelection.FromAttachedKernel(kernel).Status}; deep zoom "
-                + (perturb ? "on the GPU too (FF_GPU_PERTURB)" : "on the CPU (FF_GPU_PERTURB=1 moves it to the GPU)"));
+
+            if (mode == BatchGpuMode.Auto)
+            {
+                // #1640 — open the device when a calculator first needs it.
+                HeadlessGpu.KernelFactory = () => Open(perturb);
+                return true;
+            }
+
+            // --gpu on opens now, so a missing device fails before any render.
+            var (kernel, why) = CreateKernel();
+            if (kernel == null)
+            {
+                error = $"--gpu on, but there is no GPU compute: {why}";
+                return false;
+            }
+            HeadlessGpu.Kernel = kernel;
+            ReportOpened(kernel, perturb);
             return true;
         }
+
+        private static IGpuKernel? Open(bool perturb)
+        {
+            var (kernel, why) = CreateKernel();
+            if (kernel == null) Console.Error.WriteLine($"batch: compute on the CPU: {why}");
+            else ReportOpened(kernel, perturb);
+            return kernel;
+        }
+
+        private static void ReportOpened(IGpuKernel kernel, bool perturb) =>
+            Console.Error.WriteLine($"batch: {GpuComputeSelection.FromAttachedKernel(kernel).Status}; deep zoom "
+                + (perturb ? "on the GPU too (FF_GPU_PERTURB)" : "on the CPU (FF_GPU_PERTURB=1 moves it to the GPU)"));
 
         private static (IGpuKernel? Kernel, string Why) CreateKernel()
         {

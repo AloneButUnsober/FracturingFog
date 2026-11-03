@@ -30,6 +30,7 @@ namespace FracturingFog.Batch
 
         public static int Run(string[] args)
         {
+            BatchTiming.Start();   // #1640
             // Phase X.3 / Slice 3.2: gate Win32 console-attach so the call is
             // unreachable on non-Win hosts once this file follows the entry
             // point into FracturingFog.App (net10.0). On Linux/macOS
@@ -65,16 +66,26 @@ namespace FracturingFog.Batch
 
             // Load user-defined themes + regions so --region and --theme can
             // resolve names the user authored interactively in earlier runs.
+            // Themes always: a user theme can override a built-in of the same name.
             try { FracturingFog.Models.ColorPalette.LoadUserThemes(); } catch { }
-            try { FractalRegionLibrary.Instance.Load(); } catch { }
+            // #1640 — a still image reads the region library only for --region, and
+            // the user-code stores only for --region / --equation; skipping them
+            // otherwise saves ~0.2 s a run. Every other mode loads them all.
+            bool still = opts.Mode == BatchMode.Image;
+            bool hasRegion = !string.IsNullOrWhiteSpace(opts.RegionName);
+            if (!still || hasRegion)
+                try { FractalRegionLibrary.Instance.Load(); } catch { }
             // #947 — user-code regions (UserEquation / Sandbox / UserBulb) name their
             // equation in these stores; without loading them every lookup misses
             // and the frame renders blank. Read-only here: the interactive
             // startup's DSL migrations (which write) are deliberately not run.
-            try { UserEquationStore.Instance.Load(); } catch { }
-            try { SandboxEquationStore.Instance.Load(); } catch { }
-            FracturingFog.Models.BulbLanguageMigration.Register();   // #1100 — before the first bulb load
-            try { UserBulbStore.Instance.Load(); } catch { }
+            if (!still || hasRegion || opts.EquationName != null)
+            {
+                try { UserEquationStore.Instance.Load(); } catch { }
+                try { SandboxEquationStore.Instance.Load(); } catch { }
+                FracturingFog.Models.BulbLanguageMigration.Register();   // #1100 — before the first bulb load
+                try { UserBulbStore.Instance.Load(); } catch { }
+            }
             // Scene mode also needs the scene + animation libraries so --scene
             // names and shot-attached animations resolve.
             if (opts.Mode == BatchMode.Scene)
@@ -82,6 +93,8 @@ namespace FracturingFog.Batch
                 try { FracturingFog.Models.AnimationLibrary.Instance.Load(); } catch { }
                 try { FracturingFog.Models.SceneLibrary.Instance.Load(); } catch { }
             }
+
+            BatchTiming.Mark("stores");   // #1640
 
             // #998 — named Lighting & FX preset / animation: resolve before any
             // render starts so a typo fails fast (exit 2) instead of mid-run.
@@ -111,6 +124,7 @@ namespace FracturingFog.Batch
                 Console.Error.WriteLine($"batch: {gpuError}");
                 return 2;
             }
+            BatchTiming.Mark("gpu setup");   // #1640
 
             try
             {

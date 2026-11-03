@@ -475,6 +475,9 @@ namespace FracturingFog.Batch
                 {
                     var result = PosterRenderer.RenderToFile(req, CancellationToken.None);
                     spinner.Stop($"saved {Path.GetFileName(outPath)} ({result.SavedWidth}x{result.SavedHeight}, {result.ElapsedMs} ms)");
+                    if (opts.Verbose)   // #1640 — the time outside the render
+                        Console.WriteLine("  timing  : " + BatchTiming.Format(
+                            [("render", result.ElapsedMs), ("encode+write", result.EncodeMs)]));
                     NoteGpuRoute(FracturingFog.Rendering.HeadlessGpu.LastAttached);   // #1611
                     if (rescueReport.RaisedTo > 0)
                         Console.WriteLine($"  note    : every pixel was in-set at {iter} iterations; re-rendered at {rescueReport.RaisedTo} (pass --iterations to fix the count)");
@@ -1357,6 +1360,14 @@ namespace FracturingFog.Batch
 
         private static void NoteGpuRoute(object? calc)
         {
+            // #1640 — the device was never opened for this view.
+            if (FracturingFog.Rendering.HeadlessGpu.LastNotOpened is { } notOpened)
+            {
+                if (notOpened == s_lastGpuNote) return;
+                s_lastGpuNote = notOpened;
+                Console.Error.WriteLine($"batch: GPU not opened, rendering on the CPU: {notOpened}");
+                return;
+            }
             if (calc is not FracturingFog.Render.IGpuRouteSource src) return;
             var route = src.LastGpuRoute;
             if (route.State != FracturingFog.Render.GpuRouteState.CpuFallback) return;

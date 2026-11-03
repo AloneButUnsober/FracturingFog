@@ -94,6 +94,15 @@ are provided as scholarly attribution, not because any code was copied.
   sharpness), from his public articles on distance-estimated fractals and
   lighting. Used in the CalculatorGen shading templates and lighting pipeline.
 
+- **Parallel PNG encoding (pigz technique) + zlib's adler32_combine**
+  Mark Adler — *pigz* (<https://zlib.net/pigz/>), for compressing independent
+  sync-flushed chunks on several threads and concatenating them. The Adler-32
+  combine step in `Engine/Imaging/ParallelPngWriter.cs` (`Adler32Combine`) is a
+  C# rewrite, altered from the original, of `adler32_combine` in zlib's
+  `adler32.c` by Jean-loup Gailly and Mark Adler, used under the zlib licence
+  (<https://zlib.net/zlib_license.html>). No other pigz or zlib code is copied;
+  deflate itself is .NET's `System.IO.Compression` (#1640).
+
 - **Milnor / Hubbard derivative recurrences** for exterior distance, referenced
   in the CalculatorGen differentiator.
 

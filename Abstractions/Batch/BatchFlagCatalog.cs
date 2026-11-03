@@ -981,7 +981,7 @@ namespace FracturingFog.Batch
                     with { Requires = new[] { BatchFlags.Remote } },
 
                 // ── Misc ──
-                Sw(BatchFlags.Verbose, Misc, BatchModes.All, "Print extra diagnostics.") with { Aliases = new[] { "-v" } },
+                Sw(BatchFlags.Verbose, Misc, BatchModes.All, "Print extra diagnostics, including where the run's time went (start-up, stores, render, encode).") with { Aliases = new[] { "-v" } },
                 Sw(BatchFlags.Help, Misc, BatchModes.None, "Print this reference.") with { Aliases = new[] { "-?" } },
             };
 
