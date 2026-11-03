@@ -14,7 +14,7 @@
 
 The issues are the canonical task list. This doc is the maths and architecture context; link both ways.
 
-**Status: S1 done (2026-11-03).** §2 is the method, derived and checked against Imagina's code;
+**Status: S1 done (2026-11-03); S2 done (#1625).** §2 is the method, derived and checked against Imagina's code;
 §4.1 is the proof of concept (`--laprobe`) and the decision to go on with S2. §3 is still a plan
 where S1 did not settle it.
 
@@ -180,11 +180,21 @@ one step per L iterations. It stops when |z′|² > Esc² = |A|²·Thr, the edge
 
 What S1 settled is in **bold**; the rest is still the plan.
 
-- **`LaStageTable`** (S2), next to `BlaTable` (`Engine/Math`).
-  - Built from FF's own reference orbit, stopped at the period (#1614).
-  - Cached per reference generation, δc radius and tolerance.
-  - **It is cheap:** the four stages of p951,094 take 13 ms to build, against 63 ms for FF's BLA table and 1.3 s for the orbit at 160×90.
-  - **The builder works from FF's double reference values, as the probe does.**
+- **`LaStageTable`** (S2, done: #1625), `Engine/Math/LaStageTable.cs`, next to `BlaTable`.
+  - Built from FF's own double reference values Z₀..Z_R: R is the period when the reference is periodic (#1614; the arrays run one further, to Z_{p+1}), otherwise the orbit length.
+  - `MandelbrotCalculator.EnsureLaTable` builds it after the BLA table when `BuildLaStages` is on (`FF_LA_STAGES=1`). It is off by default until S3 reads it.
+  - **Cache key:** the reference generation and τ. The thresholds don't depend on the δc radius, so unlike BLA there is no radius key; the AT (S4) will need one.
+  - **τ follows the BLA tolerance:** τ = 2⁻²⁴·ε/10⁻⁶, clamped to [2⁻⁵², 2⁻⁸], from the ε the CPU rows use (tightened in the QD band, #1613). The Fast…Exact presets keep their meaning.
+  - **Size and build time** (i5-13420H):
+
+    | scene | stages | steps | memory | build |
+    |---|---|---|---|---|
+    | p15,248 | 3 | 516 | 36 KiB | 5 ms |
+    | p121,984 | 4 | 4,113 | 289 KiB | 3–49 ms |
+    | p951,094 | 4 | ~32,000 | 2.2 MiB | 13–21 ms |
+
+    At 160×90, FF's BLA table takes 63 ms and the orbit 1.3 s.
+  - `--laprobe` now runs on this table and reproduces the S1 numbers exactly.
 - **Evaluator** (S3–S5), on the CPU deep path.
   - A scalar version first, in the shape of `ResumePixelPTRebased`, then SIMD.
   - The rebased loop stays the fallback. The #1330 lattice and #1344 mask contracts hold. The derivative is carried for distance estimates and normals.
@@ -204,7 +214,8 @@ What S1 settled is in **bold**; the rest is still the plan.
 - **Independent invariant:** exact iteration (fixed-point BigInteger, no perturbation) on sampled pixels of the bench scenes, as `S1613RebaseResumeTests` / `S1614PeriodicReferenceTests` do.
   - LA must match exact iteration at least as often as today's BLA path.
   - Past ~10⁵ iterations, boundary pixels are chaotic and no double-precision method matches exact iteration (shown in #1614), so compare error size there, not exact matches.
-- **Self-consistency only as a second line:** composed steps against direct reference iteration (S2); SIMD byte-identical to scalar (S5).
+- **Composed steps against direct perturbation iteration** (S2, `S1625LaStageTableTests`): the full recurrence with δ² kept, at a quarter of each step's thresholds, for steps of every stage. The worst relative error is 6.1·10⁻⁸ against τ = 6.0·10⁻⁸; the test bound is 8τ.
+- **Self-consistency only as a second line:** SIMD byte-identical to scalar (S5).
 - **Mutants** (wrong stage index, skipped validity check, AT threshold off) must fail the tests. Mutants that are equivalent by construction are named in the test file, as #1614 did.
 
 ### 4.1 Proof of concept (S1, `--laprobe`, 2026-11-03)

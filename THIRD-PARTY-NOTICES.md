@@ -73,12 +73,13 @@ are provided as scholarly attribution, not because any code was copied.
 - **Period-synchronised linear approximation (LA stages + AT)**
   Imagina by GitHub user 5E-324, <https://github.com/5E-324/Imagina>,
   `HInfLAEvaluator.{h,cpp}` (commit `cd046377`), **AGPL-3.0** — the same licence
-  as Fracturing Fog, so derived code is compatible. `Probes/LaProbe.cs` (the #1624
-  proof of concept, epic #1623) is written in C# from the maths in
-  `Docs/Technical/Period-Synchronised-LA-DesignPlan.md` §2, but its stage builders
-  follow the control flow of Imagina's `CreateLAFromOrbit` / `CreateNewLAStage`
-  (same length caps and next-index bookkeeping), so it is listed here as derived
-  from that file. No Imagina source is copied verbatim; the departures are listed
+  as Fracturing Fog, so derived code is compatible. `Engine/Math/LaStageTable.cs`
+  (#1625; the stage builders, moved there from the #1624 proof of concept) and
+  `Probes/LaProbe.cs` (the evaluator and AT of that proof of concept, epic #1623) are
+  written in C# from the maths in `Docs/Technical/Period-Synchronised-LA-DesignPlan.md`
+  §2, but the builders follow the control flow of Imagina's `CreateLAFromOrbit` /
+  `CreateNewLAStage` (same length caps and next-index bookkeeping), so both are
+  listed here as derived from that file. No Imagina source is copied verbatim; the departures are listed
   in the design doc §2.6.
 
 - **QR Code symbology + halftone QR**
