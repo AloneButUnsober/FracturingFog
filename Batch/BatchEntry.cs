@@ -55,6 +55,13 @@ namespace FracturingFog.Batch
                 return 2;
             }
 
+            // #1615 — a --kfr location fills the view (read here, after the parse).
+            if (!BatchOptions.ResolveKfr(opts, out string? kfrError))
+            {
+                Console.Error.WriteLine($"batch: {kfrError}");
+                return 2;
+            }
+
             // #997 — reject an unknown --param key / bad value before any render
             // starts (the keys are region-snapshot names, resolved Engine-side).
             if (opts.Params.Count > 0

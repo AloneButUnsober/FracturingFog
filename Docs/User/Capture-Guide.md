@@ -700,6 +700,35 @@ FracturingFog.exe --batch --x "-0.24905543435932342|-6.604062758348074e-18" ^
                   --y "-0.7149922770539002|4.275119836666484e-17" --zoom 1e17 --out C:\out\deep.png
 ```
 
+### Kalles Fraktaler locations (#1615)
+
+`--kfr FILE` takes the centre, zoom and iteration count from a Kalles Fraktaler
+location (`.kfr`, the format of Karl Runmo's Kalles Fraktaler and Claude
+Heiland-Allen's KF 2+). The centre is split from the file's full decimal into limbs,
+so a deep location renders exactly. `--x`, `--y`, `--zoom` and `--iter` override the
+file's values. In the app, **Explore > Coordinates > Import .kfr…** does the same for
+the live view.
+
+```
+FracturingFog.exe --batch --kfr C:\kf\mini-p128.kfr --width 3840 --height 2160 --out C:\out\mini.png
+```
+
+Only Mandelbrot locations (KF `FractalType: 0`, `Power: 2`) import. A rotated or
+stretched view (`RotateAngle`, `StretchAmount`, …) is refused, because FF has no
+view rotation. Colouring keys are ignored.
+
+To convert a location by hand, two conventions differ:
+
+- **Zoom.** KF's zoom fixes the image *height* at 4 / zoom. FF's Mandelbrot zoom
+  fixes the *longer side* at 3.5 / zoom. So FF zoom = KF zoom × 3.5 × H / (4 × max(W, H)):
+  × 0.4921875 at 3840×2160, × 0.875 for a square or portrait frame.
+- **Imaginary axis.** By default both programs draw the imaginary axis growing
+  *down* the image, so `Im` carries over as it is. A file saved with KF's
+  "imaginary axis points up" option (`ImagPointsUp: 1`) needs `−Im`. A renderer
+  that follows the maths convention (imaginary axis up) draws the same file
+  mirrored top to bottom. The Mandelbrot set is symmetric about the real axis,
+  so `−Im` gives the mirrored view there.
+
 ### Misiurewicz loop (#1235)
 
 `--video-motion loop` renders a seamless self-similar loop at a spiral or branch

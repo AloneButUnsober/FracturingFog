@@ -95,6 +95,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
 
         InitQuickRecord();
         InitFinder();
+        InitKfr();   // #1615
 
         RebuildNav();
     }

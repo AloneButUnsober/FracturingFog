@@ -29,6 +29,7 @@ namespace FracturingFog.Batch
         public const string Y              = "--y";
         public const string Zoom           = "--zoom";
         public const string Iter           = "--iter";
+        public const string Kfr            = "--kfr";               // #1615
         public const string Theme          = "--theme";
         public const string Quality        = "--quality";
         public const string Width          = "--width";

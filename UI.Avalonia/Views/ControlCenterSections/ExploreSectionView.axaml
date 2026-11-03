@@ -72,11 +72,15 @@
                     <CheckBox Content="Lock Iterations" IsChecked="{Binding Menu.IterLocked}" Margin="80,0,0,0"
                               Foreground="#C8C878" FontWeight="Bold" ToolTip.Tip="Lock iteration count — pan/zoom won't recalc" />
                 
-                <Grid ColumnDefinitions="Auto,Auto,Auto" Margin="80,6,0,0">
+                <Grid ColumnDefinitions="Auto,Auto,Auto,Auto" Margin="80,6,0,0">
                     <Button Grid.Column="0" Classes="action go" Content="Go"     Command="{Binding Menu.GoCommand}"         Margin="0,0,4,0" />
                     <Button Grid.Column="1" Classes="action go" Content="Flip Y" Command="{Binding Menu.FlipCommand}"       Margin="0,0,4,0" />
-                    <Button Grid.Column="2" Classes="action go" Content="Copy"   Command="{Binding Menu.CopyCoordsCommand}" ToolTip.Tip="Copy CX/CY/Zoom/Iter to clipboard" />
+                    <Button Grid.Column="2" Classes="action go" Content="Copy"   Command="{Binding Menu.CopyCoordsCommand}" ToolTip.Tip="Copy CX/CY/Zoom/Iter to clipboard" Margin="0,0,4,0" />
+                    <Button Grid.Column="3" Classes="action neutral" Content="Import .kfr…" Command="{Binding ImportKfrCommand}"
+                            ToolTip.Tip="Open a Kalles Fraktaler location (.kfr, Mandelbrot): centre, zoom (converted for this window) and iterations" />
                 </Grid>
+                <TextBlock Text="{Binding KfrStatus}" Foreground="#9A9A9A" FontSize="11" TextWrapping="Wrap" Margin="80,4,0,0"
+                           IsVisible="{Binding KfrStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             </StackPanel>
         </Border>
 
