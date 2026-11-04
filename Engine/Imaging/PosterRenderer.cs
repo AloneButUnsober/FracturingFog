@@ -676,6 +676,7 @@ namespace FracturingFog.Imaging
                     BlaTolerance = req.FractalParameters.BlaTolerance,   // #1275
                     SolidRegionSkip = req.FractalParameters.SolidRegionSkip,   // #1343
                     SolidRegionAuto = req.FractalParameters.SolidRegionAuto,   // #1394
+                    LaMode = req.FractalParameters.DeepLa,                     // #1629
                     // D-6b — sub-rect + seeded orbit for cluster tile workers.
                     // All four properties default to 0 (= legacy full-image render);
                     // any non-zero value engages the sub-rect dc geometry.
@@ -1142,6 +1143,7 @@ namespace FracturingFog.Imaging
                     BlaTolerance = req.FractalParameters.BlaTolerance,   // #1275
                     SolidRegionSkip = req.FractalParameters.SolidRegionSkip,   // #1343
                     SolidRegionAuto = req.FractalParameters.SolidRegionAuto,   // #1394
+                    LaMode = req.FractalParameters.DeepLa,                     // #1629
                 };
                 FracturingFog.Rendering.HeadlessGpu.Attach(m);   // #1611
                 m.Calculate(token);

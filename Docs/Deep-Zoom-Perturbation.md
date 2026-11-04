@@ -68,6 +68,13 @@ limbs per iteration (`_refZr/_refZrLo/..X7`). Each pixel iterates only its
   - The DD-reference variant (SM-11a) stays scalar.
 - **SA (series approximation) + BLA** skip early/at-scale iterations. Toggle off
   with `DisableAcceleration` / `DisableSeriesApproximation` for A/B.
+- **LA stages (#1623, default from 1e30 since #1629).** At zoom ≥ 1e30 the CPU rows
+  are replaced by the period-synchronised LA evaluator (`MandelbrotCalculator.La.cs`,
+  Imagina's method): stages of approximation steps that start at the orbit's near-zero
+  points, an approximation transform for pixels deep in a minibrot, then FF's rebased
+  loop for the tail. `FractalParameters.DeepLa` (Auto / On / Off), `FF_LA=0|1`; the
+  precision label gains ` LA`. Measurements and the selection rule:
+  `Docs/Technical/Period-Synchronised-LA-DesignPlan.md` §4.5.
 - **BLA tolerance (#1346, `FractalParameters.BlaTolerance`, default 1e-6).** A BLA skip
   may drop a δ² term up to ε of the linear term. 1e-6 is a speed setting, not exact.
   - Measured on a period-998 minibrot at 1.6e15, 30 000 iterations: 12.8 % of pixels

@@ -157,6 +157,7 @@ For zooms past where naïve per-pixel iteration breaks down:
 - **Per-pixel deltas** are then iterated in cheap doubles relative to the reference.
 - **Series approximation** skips early iterations entirely using a Taylor-style polynomial of the reference orbit.
 - **Bilinear Approximation (BLA)** jumps over thousands of inner iterations at a time inside regions where the orbit derivative is well-behaved.
+- **Period-synchronised linear approximation (LA stages, #1623)**, the method of the Imagina renderer: approximation steps built from the reference orbit in stages that follow the periods of the minibrot chain, each step starting exactly at a near-zero point of the orbit, plus Imagina's approximation transform for pixels deep in a minibrot. On by default from zoom 10³⁰ on the CPU (**Fractal Params → Deep zoom → Evaluator**: Auto / LA stages / BLA): 1.2–1.7× on FF's deep built-in regions and 2–5× on deep minibrot scenes; shallower views keep BLA, whose 4-wide rows are faster there. Saved with regions and carried by `--batch` as `--param DeepLa=0` (BLA) / `=2` (LA); `FF_LA=0` / `FF_LA=1` override it for A/B. The status bar shows `QD-PT LA` when it rendered the frame.
 
 Result: deep zooms that would take minutes per frame become interactive.
 
@@ -179,7 +180,7 @@ Fracturing Fog automatically promotes the arithmetic precision based on the acti
 - **Auto-promotion** crosses each threshold transparently — no user action required.
 - The high-precision threshold (when DD engages) is set conservatively at zoom **10¹²**, leaving 1–2 guard digits before pixel-grid degradation would be visible.
 - Pan/zoom coordinate math itself promotes from `double` → `DD` → `QD` at zoom > 10²⁵, so cursor anchoring stays accurate even at extreme depth.
-- The status footer shows the active precision (`SP`, `DD`, or `QD`) plus the active execution path (`AVX2`, `PT`, `BLA`, `QD-PT`) so you always know which arithmetic mode is in play.
+- The status footer shows the active precision (`SP`, `DD`, or `QD`) plus the active execution path (`AVX2`, `PT`, `BLA`, `QD-PT`, and `QD-PT LA` when the LA stages rendered it) so you always know which arithmetic mode is in play.
 
 ---
 

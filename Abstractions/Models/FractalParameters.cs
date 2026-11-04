@@ -64,6 +64,15 @@ namespace FracturingFog.Models
         /// those views render ~0.91–0.97x rather than ~0.6–0.9x. Off = always subdivide.</summary>
         public bool SolidRegionAuto { get; set; } = true;
 
+        /// <summary>#1629 (epic #1623) — Mandelbrot deep zoom on the CPU: the
+        /// period-synchronised LA evaluator (stages built with the reference orbit, method
+        /// from Imagina) or the BLA rows. Auto (default) takes LA at zoom ≥ 1e30, where it
+        /// measured 1.2–5x faster on FF's regions and the bench scenes, and BLA below, where
+        /// BLA's SIMD rows were faster on 48 of 58 regions. On = LA at every deep zoom, also in place of GPU perturbation; Off =
+        /// the BLA rows (the path before #1629). A GPU perturbation frame is unaffected
+        /// unless On.</summary>
+        public DeepLaMode DeepLa { get; set; } = DeepLaMode.Auto;
+
         /// <summary>#1344 — channel difference (0–255) to a neighbour that marks a
         /// pixel for supersampling. Lower = more pixels sampled.</summary>
         public double AdaptiveAaThreshold { get; set; } = 12.0;
@@ -2064,6 +2073,7 @@ namespace FracturingFog.Models
                 AdaptiveAa = AdaptiveAa,                         // #1344
                 SolidRegionSkip = SolidRegionSkip,               // #1343
                 SolidRegionAuto = SolidRegionAuto,               // #1394
+                DeepLa = DeepLa,                                 // #1629
                 AdaptiveAaThreshold = AdaptiveAaThreshold,
                 AdaptiveAaTolerance = AdaptiveAaTolerance,
                 FaithfulImplosion = FaithfulImplosion,

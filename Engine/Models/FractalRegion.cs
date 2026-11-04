@@ -883,6 +883,8 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public bool? SolidRegionSkip { get; set; }
         // #1394 — its per-frame Auto decision; omitted at its default (on).
         [JsonIgnore(Condition = OmitNull)] public bool? SolidRegionAuto { get; set; }
+        // #1629 — Mandelbrot deep-zoom evaluator (DeepLaMode: 0 Off, 1 Auto, 2 On); omitted at Auto.
+        [JsonIgnore(Condition = OmitNull)] public int? DeepLa { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? AdaptiveAaThreshold { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? AdaptiveAaTolerance { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? IFSIterations { get; set; }
@@ -1541,6 +1543,7 @@ namespace FracturingFog.Models
                     AdaptiveAa = p.AdaptiveAa != D.AdaptiveAa ? p.AdaptiveAa : null,                      // #1344
                     SolidRegionSkip = p.SolidRegionSkip != D.SolidRegionSkip ? p.SolidRegionSkip : null,   // #1343
                     SolidRegionAuto = p.SolidRegionAuto != D.SolidRegionAuto ? p.SolidRegionAuto : null,   // #1394
+                    DeepLa = p.DeepLa != D.DeepLa ? (int)p.DeepLa : null,                                  // #1629
                     AdaptiveAaThreshold = Nd(p.AdaptiveAaThreshold, D.AdaptiveAaThreshold),
                     AdaptiveAaTolerance = Nd(p.AdaptiveAaTolerance, D.AdaptiveAaTolerance),
                 },
@@ -2236,6 +2239,7 @@ namespace FracturingFog.Models
             if (AdaptiveAa.HasValue) p.AdaptiveAa = AdaptiveAa.Value;                       // #1344
             if (SolidRegionSkip.HasValue) p.SolidRegionSkip = SolidRegionSkip.Value;         // #1343
             if (SolidRegionAuto.HasValue) p.SolidRegionAuto = SolidRegionAuto.Value;         // #1394
+            if (DeepLa is >= (int)DeepLaMode.Off and <= (int)DeepLaMode.On) p.DeepLa = (DeepLaMode)DeepLa.Value;   // #1629
             if (AdaptiveAaThreshold.HasValue) p.AdaptiveAaThreshold = AdaptiveAaThreshold.Value;
             if (AdaptiveAaTolerance.HasValue) p.AdaptiveAaTolerance = AdaptiveAaTolerance.Value;
             if (IFSIterations.HasValue) p.IFSIterations = IFSIterations.Value;

@@ -7,6 +7,11 @@ namespace FracturingFog
 {
     public enum QualityLevel { Fast, Normal, High, Ultra }
 
+    /// <summary>#1629 (epic #1623) — the CPU deep-zoom evaluator: the period-synchronised
+    /// LA stages or today's BLA rows. Auto uses LA where it was measured faster, at zoom ≥ 1e30
+    /// (Docs/Technical/Period-Synchronised-LA-DesignPlan.md §4.5).</summary>
+    public enum DeepLaMode { Off, Auto, On }
+
     /// <summary>#610 — how a poster / wallpaper render at an aspect different from
     /// the on-screen window reconciles the framing. The calculator maps the complex
     /// plane by the longest pixel axis (<c>scale = 3.5/max(W,H)/Zoom</c>), so a

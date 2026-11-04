@@ -1663,6 +1663,7 @@ namespace FracturingFog.Rendering
             // #1343 — solid-region skipping (opt-in).
             _calculator.SolidRegionSkip = ViewState.FractalParameters?.SolidRegionSkip ?? false;
             _calculator.SolidRegionAuto = ViewState.FractalParameters?.SolidRegionAuto ?? true;   // #1394
+            _calculator.LaMode = ViewState.FractalParameters?.DeepLa ?? DeepLaMode.Auto;           // #1629
 
             if (ViewState.IterLocked)
                 _calculator.MaxIterations = ViewState.LockedIterations;
@@ -2640,6 +2641,7 @@ namespace FracturingFog.Rendering
             dst.BlaTolerance = src.BlaTolerance;   // #1275
             dst.SolidRegionSkip = src.SolidRegionSkip;   // #1343
             dst.SolidRegionAuto = src.SolidRegionAuto;   // #1394
+            dst.LaMode = src.LaMode;                     // #1629
         }
 
         /// <summary>#328 — is <paramref name="type"/> a 2D height-field type whose

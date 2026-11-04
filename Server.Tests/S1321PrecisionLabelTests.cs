@@ -32,6 +32,11 @@ public sealed class S1321PrecisionLabelTests
         CenterX = Cx, CenterY = Cy, Zoom = zoom, MaxIterations = 500, ColorMap = map,
     };
 
+    // #1629 — from 1e30 the plain path renders with the LA stages by default (Auto), and
+    // the label says so; the orbit-aware path has no LA and keeps the bare tier.
+    private static string Plain(double zoom, string tier)
+        => tier != "SP" && zoom >= MandelbrotCalculator.LaAutoMinZoom && MandelbrotCalculator.LaModeOverride != DeepLaMode.Off ? tier + " LA" : tier;
+
     [Theory]
     [InlineData(1e3, "SP")]
     [InlineData(1e20, "DD-PT")]    // under the 1e25 QD threshold
@@ -42,7 +47,7 @@ public sealed class S1321PrecisionLabelTests
     {
         var plain = Calc(zoom, new HsvPalette());
         plain.Calculate(CancellationToken.None);
-        Assert.Equal(expected, plain.LastPrecisionLabel);
+        Assert.Equal(Plain(zoom, expected), plain.LastPrecisionLabel);
 
         // The orbit-aware path (trap / stripe themes) builds its own reference orbit.
         var trap = Calc(zoom, new OrbitTrapPointMap());
@@ -55,7 +60,7 @@ public sealed class S1321PrecisionLabelTests
     {
         var c = Calc(1e60, new HsvPalette());
         c.Calculate(CancellationToken.None);
-        Assert.Equal("OD-PT", c.LastPrecisionLabel);
+        Assert.Equal(Plain(1e60, "OD-PT"), c.LastPrecisionLabel);
         c.Zoom = 10;
         c.Calculate(CancellationToken.None);
         Assert.Equal("SP", c.LastPrecisionLabel);   // no stale deep label
@@ -86,6 +91,6 @@ public sealed class S1321PrecisionLabelTests
         host.FrameCompleted += (_, i) => { label = i.PrecisionLabel; done.Set(); };
         host.Trigger(progressive: false);
         Assert.True(done.Wait(TimeSpan.FromSeconds(60)), "no frame");
-        Assert.Equal("OD-PT", label);
+        Assert.Equal(Plain(1e60, "OD-PT"), label);   // #1629: the live host renders LA at 1e60
     }
 }

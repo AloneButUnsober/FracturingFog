@@ -14,8 +14,8 @@
 
 The issues are the canonical task list. This doc is the maths and architecture context; link both ways.
 
-**Status: S1 done (2026-11-03); S2 done (#1625); S3 done (#1626, opt-in); S4 done (#1627); S5 done (#1628, 4-lane path opt-in: no gain measured).** §2 is the method, derived and checked against Imagina's code;
-§4.1 is the proof of concept (`--laprobe`) and the decision to go on with S2; §4.2 is the engine's evaluator; §4.3 the AT; §4.4 SIMD. §3 is still a plan
+**Status: S1 done (2026-11-03); S2 done (#1625); S3 done (#1626, opt-in); S4 done (#1627); S5 done (#1628, 4-lane path opt-in: no gain measured); S6 done (#1629, LA on by default from zoom 1e30).** §2 is the method, derived and checked against Imagina's code;
+§4.1 is the proof of concept (`--laprobe`) and the decision to go on with S2; §4.2 is the engine's evaluator; §4.3 the AT; §4.4 SIMD; §4.5 the default. §3 is still a plan
 where S1 did not settle it.
 
 ---
@@ -251,9 +251,11 @@ What S1 settled is in **bold**; the rest is still the plan.
   - **Why the deepest scenes get none:** their top stage's escape radius is 0.35 and 0.46, and the lower stages' views are 10⁻¹¹–10⁻¹⁵ of their c′ offset. A looser AT tolerance makes the top stage usable but costs exact matches (§4.3). Per stage, 96 % of p951,094's LA steps are stage-1 (953-iteration) steps: escaping pixels leave the reference's copy at nearly every 953-anchor, so composite steps fail there. An AT from the 953 copy with a perturbed (or float-exp) c′ would also cost one exact step per 953 iterations, the same as those LA steps, so it is not pursued.
   - **Diagnostics:** `LastLaAt`, `LastLaAtWork`, `LastLaStageSteps` (LA steps per stage); `--laprobe`'s "eng" line prints them.
 - **Precision.** The probe and the evaluator run in double (§2.6, item 5). FF's deep views go to 1e100 (#1428 later), where δc ≈ 10⁻¹⁰² still fits a double, but coefficients over long steps can leave its range. Since #1626 the table records whether every coefficient and threshold is finite (`LaStageTable.Finite`); when not, the frame keeps the rebased loop. A float-exp evaluator is later work.
-- **Selection** (S6). LA where it pays (measured), BLA otherwise, with a way back:
-  - `FractalParameters` → region snapshot → `--param` → Command builder;
-  - an env var for A/B.
+- **Selection** (S6 done: #1629). `FractalParameters.DeepLa` (`DeepLaMode` Off / Auto / On), default Auto.
+  - **Auto = the LA stages at zoom ≥ 1e30 (`MandelbrotCalculator.LaAutoMinZoom`), the BLA rows below**, measured on FF's 76 deep built-in regions and the bench kit (§4.5). A periodic reference below 1e30 was measured neutral, so it is not part of the rule.
+  - An enabled GPU perturbation frame still runs on the GPU under Auto; On forces LA in its place.
+  - The way back: region snapshot (`DeepLa`, omitted at Auto) → `--param DeepLa=0|1|2` → Command builder seed; the Fractal Params → Deep zoom → Evaluator box; `FF_LA=0` / `FF_LA=1` override every calculator for A/B.
+  - The precision label gains ` LA` (`QD-PT LA`) when the LA rows rendered the frame.
 - **GPU** (S7). #1621 is done, so the GPU deep kernels already take the periodic reference that the stages are built over.
 
 ## 4. Correctness
@@ -462,6 +464,67 @@ Setup:
   - An escaping lane reporting the stored derivative: held lanes store the value from before the update, which is what it reports.
 
 **Decision:** the 4-lane path stays, off by default (`FF_LA_SIMD=1`), byte-identical, for S6 to measure on other CPUs (no SMT, AVX-512). S6 turns on the scalar evaluator, the one that pays (§4.2).
+
+### 4.5 The default (S6, #1629, 2026-11-04)
+
+Setup:
+- i5-13420H, 12 threads, Release, CPU only.
+- **Before** is `DeepLa` Off, the BLA rows as before #1629. **After** is the new default, Auto.
+- The two run alternately in one process (`--deepcostprobe`), so clock drift hits both. Separate processes drifted by up to 25 %.
+
+**Where LA pays: FF's 76 deep built-in regions** (`Installer/Stage/Resources/regions.json`, every Mandelbrot region at zoom ≥ 1e13, 480×270, best of 2, `FF_DEEPCOST_REGIONS`):
+- **Below 1e30:** the BLA rows were faster on 48 of the 58 regions (×0.48–0.97, LA's speed relative to BLA). The default path there seldom needs its scalar rebased loop, and its 4-wide rows beat LA's scalar tail. "Deep Lightning in Space" (7.6e26) was the worst at ×0.48.
+- **At zoom ≥ 1e30:** LA was faster on all but two regions, ×1.24–1.71. The two were Propellers (×0.83 / ×0.92 in two runs) and Flower Sun (×0.88 / ×1.03), both within run-to-run noise.
+- **All 76 references are non-periodic.**
+- **FF's own deep views at 960×540** (`FF_DEEPCOST_FFVIEWS`, the S1274 views):
+
+  | view | LA against default |
+  |---|---|
+  | Deeper and Deeper 4.5e46 | ×2.8 |
+  | 3E47 Test | ×1.2 |
+  | E45Test04 1.1e47 | about even |
+  | Deep Lightning 7.6e26 | ×0.5 |
+
+- **A periodic reference below 1e30 is neutral.** The period-3 nucleus at 1e14, 1e22 and 1e28 runs almost entirely in the set, with a 3-iteration table: LA ≈ BLA. Every periodic scene where LA wins big is above 1e30 anyway.
+
+**Rule: Auto = LA at zoom ≥ 1e30** (`LaAutoMinZoom`), the BLA rows below. Periodicity is not a condition.
+
+**Before / after on the bench kit: its 17 scenes inside FF's zoom range** (1e12–1e100), from the `.kfr` files, at 1920×1080, best of 3 with the order swapped each round (`FF_DEEPCOST_KFR`):
+- rith's benchmark report used 17 scenes at 3840×2160. These are the kit's 17 in-range scenes, not verified to be the same list.
+- Frame times include the reference orbit.
+
+| scene | zoom (FF) | iterations | before | after | speed-up | LA ran | iteration counts differ |
+|---|---|---|---|---|---|---|---|
+| 71 tip 1e12 | 5.4e11 | 1,080 | 103 ms | 102 ms | ×1.01 | no (shallow path) | 0 % |
+| 47 path 1e13 | 4.9e12 | 2,859 | 1,155 ms | 1,152 ms | ×1.00 | no | 0 % |
+| 40 mini p128 1e13 | 6.2e12 | 3,840 | 689 ms | 665 ms | ×1.04 | no | 0 % |
+| 21 m43 spar | 2.5e27 | 30,000 | 89 ms | 85 ms | ×1.05 | no | 0 % |
+| 23 nucleus p145 | 2.5e27 | 30,000 | 101 ms | 87 ms | ×1.16 | no | 0 % |
+| 24 nucleus p148 | 8.7e27 | 30,000 | 90 ms | 88 ms | ×1.02 | no | 0 % |
+| 72 tip 1e28 | 9.7e27 | 1,188 | 167 ms | 172 ms | ×0.98 | no | 0 % |
+| 62 fraqcel | 1.1e31 | 2,000 | 1,420 ms | 1,070 ms | ×1.33 | yes | 0 % |
+| 48 path 1e33 | 4.9e32 | 2,859 | 3,214 ms | 2,471 ms | ×1.30 | yes | 0.21 % |
+| 41 mini p448 | 2.5e33 | 13,440 | 889 ms | 717 ms | ×1.24 * | yes | 0.28 % |
+| 56 p953 | 6.6e52 | 28,590 | 2,681 ms | 1,342 ms | ×2.00 | yes | 2.3 % |
+| 57 p15,248 | 1.1e57 | 457,440 | 12,309 ms | 2,354 ms | ×5.23 | yes | 2.7 % |
+| 58 p121,984 | 8.3e65 | 3,659,520 | 26,286 ms | 5,707 ms | ×4.61 | yes | 70 % |
+| 59 p951,094 | 1.1e68 | 28,532,820 | 109,210 ms | 31,885 ms | ×3.43 | yes | 80 % |
+| 42 mini p2,066 | 1.7e96 | 61,980 | 3,014 ms | 1,570 ms | ×1.92 | yes | 2.4 % |
+| 49 path 1e100 | 4.9e99 | 10,293 | 1,391 ms | 1,111 ms | ×1.25 | yes | 3.5 % |
+| 73 tip 1e100 | 4.3e99 | 1,664 | 278 ms | 237 ms | ×1.17 | yes | 0 % |
+
+\* In the full run p448 measured 1,680 / 2,225 ms (×0.75), with both paths about 2× slower than when the scene ran alone. Rerun alone, best of 4: ×1.24 at 1920×1080 and ×1.26–1.29 at 960×540. The row shows the rerun.
+
+- **Where LA doesn't run**, the speed-up is noise: ×0.98–1.16, with identical frames.
+- **Where LA runs**, it is ×1.17–5.23.
+- **The two chaotic scenes** differ from the old frame on 70–80 % of pixels, as the old path differs from acceleration off (#1614). §4.2 measured LA closer to exact iteration on them.
+
+**Parity:**
+- **Live view, poster, scene video, batch and iteration rescue** all pass `DeepLa` to the calculator. `S1629LaDefaultTests` checks the poster against the live calculator for Auto and Off.
+- **Defaults elsewhere:** a calculator built without `FractalParameters` (thumbnails, probes) uses Auto.
+- **The visual-regression baseline (#1292) is unchanged.** Its cases render at zoom 0.5, so none reaches the deep path, let alone 1e30. A deep case would be needed to cover this path.
+
+**Tests that pin the BLA rows** set `DeepLa` Off explicitly: S1274 (SIMD rebasing), S1613 (resumed rebasing) and S1625 (table only). S1321 now expects the ` LA` label at ≥ 1e30.
 
 ## 5. Credit
 

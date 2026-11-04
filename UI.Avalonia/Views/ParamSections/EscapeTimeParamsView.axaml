@@ -219,6 +219,15 @@
                               SelectedItem="{Binding BlaTolerancePreset, Mode=TwoWay}"
                               HorizontalAlignment="Stretch" Margin="0,2" />
                 </Grid>
+                <!-- #1629 — the CPU deep-zoom evaluator: LA stages (epic #1623) or BLA. -->
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto">
+                    <TextBlock Grid.Column="0" Text="Evaluator:" VerticalAlignment="Center"
+                               ToolTip.Tip="How the CPU renders deep zoom. Auto (default) uses the LA stages (period-synchronised linear approximation, the method of the Imagina renderer) at zoom 1e30 and deeper: 1.2–5x faster there, most of all near deep minibrots. Shallower views keep BLA, whose 4-wide rows are faster at those depths. LA stages (on) = LA at every deep zoom, also instead of GPU perturbation; BLA (off) = the renderer before LA. The image is the same up to the last few iterations of chaotic pixels." />
+                    <ComboBox Grid.Column="1"
+                              ItemsSource="{Binding DeepLaModes}"
+                              SelectedItem="{Binding DeepLaChoice, Mode=TwoWay}"
+                              HorizontalAlignment="Stretch" Margin="0,2" />
+                </Grid>
             </StackPanel>
         </Border>
 
