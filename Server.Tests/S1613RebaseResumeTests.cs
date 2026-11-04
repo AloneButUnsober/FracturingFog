@@ -70,6 +70,7 @@ public sealed class S1613RebaseResumeTests(ITestOutputHelper output)
             Quality = QualityPreset.Extreme,
             ColorMap = new HsvPalette(),
             DisableAcceleration = noAccel,
+            LaMode = DeepLaMode.Off,   // #1629: these test the BLA rows' resumed rebasing
         };
         c.Calculate();
         return c;

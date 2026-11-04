@@ -568,17 +568,18 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
 
     /// <summary>#1321 — the precision path the last frame actually ran: "SP"
     /// (plain double), or the tier of the reference orbit it built + perturbation:
-    /// "DD-PT" (to 1e25), "QD-PT" (to 1e50), "OD-PT" (beyond). Read by the status
+    /// "DD-PT" (to 1e25), "QD-PT" (to 1e50), "OD-PT" (beyond), with " LA" appended when
+    /// the LA stage evaluator rendered it (#1629, e.g. "QD-PT LA"). Read by the status
     /// bar and perf HUD, which used to collapse every deep frame to "DD".</summary>
     public string LastPrecisionLabel { get; private set; } = "SP";
 
     // #1321 — label for the reference-orbit tier just built (_refCachedTier).
-    private string PerturbationLabel() => _refCachedTier switch
+    private string PerturbationLabel() => (_refCachedTier switch
     {
         2 => "OD-PT",
         1 => "QD-PT",
         _ => "DD-PT",
-    };
+    }) + (_lastFrameUsedLa ? " LA" : "");   // #1629: the LA stage evaluator rendered it
 
     /// <summary>V6 (#82) — true when the last high-precision frame actually ran
     /// the GPU perturbation kernel (not a CPU fallback). Read by the render host
@@ -1276,6 +1277,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         // single path-agnostic post-pass paints the beyond-escape-radius
         // surround, so every path is covered from one place.
         LastFrameUsedGpuCompute = false;   // set true only after a successful GpuKernel.Run (SP path)
+        _lastFrameUsedLa = false; _lastFrameUsedLaSimd = false;   // #1629: set by the LA rows only
         GpuFrameAnyEscaped = null;         // #1332: set by a counted deferred GPU frame
         // #607 — the GPU perturbation flags are also set by the deep orbit path, which
         // bypasses CalculateHighPrecision's reset, so clear them for every frame.
@@ -2895,7 +2897,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 && (GpuKernel.SupportsPerturbation || UseFloatExpKernel(GpuKernel))   // #1331: no fp64 needed
                 && AllowPtRebasing && !UseDdRebaseReference && !ForceScalarPtPath
                 && !tileCap && Zoom <= MaxGpuPerturbZoom && _refOrbitLen >= 1
-                && !UseLaEvaluator;   // #1626: the LA evaluator is a CPU path (GPU = S7, #1630)
+                && EffectiveLaMode != DeepLaMode.On;   // #1626 / #1629: LA forced On is a CPU path (GPU = S7, #1630)
             Dbg86($"GATE zoom={Zoom:0e+0} gateOk={gateOk} recycled={recycled} " +
                   $"useGpuPerturb={UseGpuPerturbation} kernel={(GpuKernel != null)} " +
                   $"supports={(GpuKernel?.SupportsPerturbation ?? false)} allowRebase={AllowPtRebasing} " +
@@ -2908,7 +2910,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                     : LatticeAligned ? GpuRoute.Cpu("pan reuse", "pixel reuse while panning (#1330) renders deep frames on the CPU")
                     : !AllowPtRebasing || UseDdRebaseReference || ForceScalarPtPath
                         ? GpuRoute.Cpu("diagnostic toggle", "a perturbation diagnostic toggle (rebasing / DD reference / scalar path) keeps deep zoom on the CPU")
-                    : UseLaEvaluator ? GpuRoute.Cpu("LA evaluator", "the LA stage evaluator (#1626, opt-in) renders deep frames on the CPU")
+                    : EffectiveLaMode == DeepLaMode.On ? GpuRoute.Cpu("LA evaluator", "the LA stage evaluator forced On (#1629) renders deep frames on the CPU")
                     : tileCap ? GpuRoute.Cpu("per-tile iter cap", "per-tile iteration caps render on the CPU only")
                     : Zoom > MaxGpuPerturbZoom ? GpuRoute.Cpu($"zoom > {MaxGpuPerturbZoom:0e0}", $"past the GPU perturbation zoom limit ({MaxGpuPerturbZoom:0e0})")
                     : GpuRoute.Cpu("no reference orbit", "the reference orbit is empty");
@@ -2947,7 +2949,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         }
         long tStageBla0 = Stopwatch.GetTimestamp();
         EnsureBlaTable(dcMaxAbs);
-        if (BuildLaStages || UseLaEvaluator) EnsureLaTable();   // #1625; #1626 reads it
+        if (BuildLaStages || (LaWanted && !DisableAcceleration)) EnsureLaTable();   // #1625; #1626 / #1629 read it
         long tStageBla = Stopwatch.GetTimestamp();
         EnsureSeriesApproximation();
         long tStageSa = Stopwatch.GetTimestamp();

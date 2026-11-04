@@ -648,6 +648,21 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         { "Fast (1e-6, default)", "Balanced (1e-8)", "Accurate (1e-10)", "Exact (1e-12)" };
     public IReadOnlyList<string> BlaTolerancePresets => s_blaTolerancePresets;   // cached: see Interior2DBackgroundModes
 
+    // #1629 — the CPU deep-zoom evaluator (FractalParameters.DeepLa), in DeepLaMode order.
+    private static readonly string[] s_deepLaModes = { "BLA (off)", "Auto", "LA stages (on)" };
+    public IReadOnlyList<string> DeepLaModes => s_deepLaModes;
+
+    public string DeepLaChoice
+    {
+        get => s_deepLaModes[System.Math.Clamp((int)_p.DeepLa, 0, s_deepLaModes.Length - 1)];
+        set
+        {
+            int i = System.Array.IndexOf(s_deepLaModes, value);
+            if (i < 0 || (int)_p.DeepLa == i) return;
+            _p.DeepLa = (DeepLaMode)i; this.RaisePropertyChanged(); Fire();
+        }
+    }
+
     public string BlaTolerancePreset
     {
         get

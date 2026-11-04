@@ -731,9 +731,11 @@ See [ClientServer-UserGuide.md](ClientServer-UserGuide.md) for a full walkthroug
 | Ultra | 5×10²⁷ | 1024 – 65536 | ×1.08 | SP → DD @ 10¹² |
 | Extreme | 5×10⁵⁸ | 2048 – 131072 | ×1.06 | SP → DD → QD |
 
-Auto-promotion is transparent — status bar shows the live label (SP / DD / QD / AVX2 / PT / BLA / QD-PT).
+Auto-promotion is transparent — status bar shows the live label (SP / DD / QD / AVX2 / PT / BLA / QD-PT; a trailing `LA` — e.g. `QD-PT LA` — when the LA stages rendered the frame).
 
 **BLA accuracy (Mandelbrot, Fractal Params → Deep zoom).** At deep zoom the renderer skips blocks of iterations with a bilinear approximation (BLA). The default, **Fast (1e-6)**, can leave some pixels near deep minibrots a few iterations off an un-skipped render, at high iteration counts. That's invisible on busy palettes, but can show on smooth ones. **Balanced (1e-8)**, **Accurate (1e-10)** and **Exact (1e-12)** trade speed for accuracy: on a period-998 minibrot at 1.6×10¹⁵ with 30 000 iterations, Exact took ~5× as long as Fast. Most views look identical at every setting. The choice is saved with regions and carried by `--batch` as `--param BlaTolerance=1e-10`.
+
+**Evaluator (Mandelbrot, Fractal Params → Deep zoom).** How the CPU renders deep zoom. **Auto** (default) uses the **LA stages** (period-synchronised linear approximation, the method of the Imagina renderer) from zoom 10³⁰: 1.2–1.7× faster on the deep built-in regions, 2–5× near deep minibrots. Below 10³⁰ it keeps **BLA**, whose 4-wide rows are faster there. **LA stages** uses LA at every deep zoom (and instead of GPU perturbation when that is on); **BLA** is the renderer before LA. The two agree except for the last few iterations of chaotic boundary pixels, where LA matched exact iteration more often in the tests. Saved with regions; `--batch` carries it as `--param DeepLa=0` (BLA) or `--param DeepLa=2` (LA stages).
 
 **GPU or CPU?** When GPU rendering is switched on (GPU compute for 2D, *Use GPU render* for 3D, Backend = GPU for User Bulb), the status bar also shows where the frame actually ran:
 

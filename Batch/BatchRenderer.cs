@@ -1340,6 +1340,7 @@ namespace FracturingFog.Batch
                 BlaTolerance = fp.BlaTolerance,   // #1275
                 SolidRegionSkip = fp.SolidRegionSkip,   // #1343
                 SolidRegionAuto = fp.SolidRegionAuto,   // #1394
+                LaMode = fp.DeepLa,                     // #1629
             };
             FracturingFog.Rendering.HeadlessGpu.Attach(calc);   // #1611 — batch on the GPU
             calc.Calculate(CancellationToken.None);
@@ -1632,6 +1633,7 @@ namespace FracturingFog.Batch
                 BlaTolerance = blaTolerance,   // #1275
                 SolidRegionSkip = solidRegionSkip,   // #1343
                 SolidRegionAuto = solidRegionAuto,   // #1394
+                LaMode = moireFp?.DeepLa ?? DeepLaMode.Auto,   // #1629
                 CenterX = region.CenterX, CenterXLo = region.CenterXLo,
                 CenterX2 = region.CenterX2, CenterX3 = region.CenterX3,
                 CenterY = region.CenterY, CenterYLo = region.CenterYLo,
@@ -2596,6 +2598,7 @@ namespace FracturingFog.Batch
                 BlaTolerance = blaTolerance,   // #1275
                 SolidRegionSkip = solidRegionSkip,   // #1343
                 SolidRegionAuto = solidRegionAuto,   // #1394
+                LaMode = moireFp?.DeepLa ?? DeepLaMode.Auto,   // #1629
                 CenterX = c.Re.X0, CenterXLo = c.Re.X1, CenterX2 = c.Re.X2, CenterX3 = c.Re.X3,
                 CenterX4 = c.Re.X4, CenterX5 = c.Re.X5, CenterX6 = c.Re.X6, CenterX7 = c.Re.X7,
                 CenterY = c.Im.X0, CenterYLo = c.Im.X1, CenterY2 = c.Im.X2, CenterY3 = c.Im.X3,

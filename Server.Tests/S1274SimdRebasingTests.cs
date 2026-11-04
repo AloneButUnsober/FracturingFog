@@ -65,6 +65,7 @@ public sealed class S1274SimdRebasingTests(ITestOutputHelper output)
                 Quality = QualityPreset.Extreme,
                 ColorMap = new HsvPalette(),
                 DisableSeriesApproximation = saOff,
+                LaMode = DeepLaMode.Off,   // #1629: these test the PT4 / scalar rebased rows
             };
             var sw = Stopwatch.StartNew();
             c.Calculate();

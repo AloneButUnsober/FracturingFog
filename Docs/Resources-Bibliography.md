@@ -814,7 +814,10 @@ Programs and galleries the project measured itself against, learned from, or pay
   Its scenes (Kalles Fraktaler `.kfr` locations) are the measurement set for #1613
   (`Probes/DeepCostProbe.cs`, `Server.Tests/S1613RebaseResumeTests.cs`) and #1614. Its README's *Fracturing Fog* section
   states the FF-side conventions #1615 checks (FF's zoom fixes the longer side at 3.5 / zoom; its imaginary axis
-  points down the image); `40-mini-p128-1e13.kfr` is the sample in `Server.Tests/S1615KfrImportTests.cs`. Author's real name
+  points down the image); `40-mini-p128-1e13.kfr` is the sample in `Server.Tests/S1615KfrImportTests.cs`. #1629 read the kit's 17
+  `.kfr` locations inside FF's zoom range (1e12–1e100: `ladder/40–42, 47–49, 56–59`, `points/71–73`, `scenes/21, 23, 24`,
+  `suggested/62`; GitHub API, 2026-11-04) for the LA before / after table (`--deepcostprobe` with `FF_DEEPCOST_KFR`,
+  `Docs/Technical/Period-Synchronised-LA-DesignPlan.md` §4.5); the files were not added to FF. Author's real name
   and the kit's first-publication date not verified here.
 
 <a id="rith-ff-071-benchmark"></a>

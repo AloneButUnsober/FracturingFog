@@ -736,6 +736,7 @@ namespace FracturingFog.Export
                 BlaTolerance = p.BlaTolerance,   // #1275
                 SolidRegionSkip = p.SolidRegionSkip,   // #1343
                 SolidRegionAuto = p.SolidRegionAuto,   // #1394
+                LaMode = p.DeepLa,                     // #1629
             };
             calc.Calculate(ct);
             if (shot.Quality != null)   // #1344 — the preset's sub-pixel AA (adaptive with AdaptiveAa)

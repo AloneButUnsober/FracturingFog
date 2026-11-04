@@ -21,7 +21,14 @@
 // evaluator (UseLaEvaluator): its time, LA / plain / BLA work per pixel, and the pixels
 // whose iteration count differs from the default frame. FF_DEEPCOST_LA_SIMD_AB=1 (#1628)
 // times the LA evaluator scalar and 4-lane, alternating frames in one process (best of
-// FF_DEEPCOST_REPS each), and checks the two frames are the same bytes. Exit 0 always.
+// FF_DEEPCOST_REPS each), and checks the two frames are the same bytes.
+// FF_DEEPCOST_REGIONS=<regions.json> (#1629) instead times FF's default deep path against
+// the LA evaluator on every Mandelbrot region of that file at zoom >= 1e13, alternating
+// the two in one process, and prints a sorted table (pixel stage, best of reps).
+// FF_DEEPCOST_KFR=<dir> does the same over every .kfr file in a directory (read with
+// FF's own KfrLocation, #1615): DeepLa Off ("before", the pre-#1629 path) against Auto,
+// whole-frame and pixel-stage times.
+// Exit 0 always.
 
 using System;
 using System.Diagnostics;
@@ -32,7 +39,27 @@ namespace FracturingFog
 {
     internal static class DeepCostProbe
     {
-        internal sealed record Scene(string Name, string X, string Y, double KfZoom, int Iter);
+        internal sealed record Scene(string Name, string X, string Y, double KfZoom, int Iter, bool FfZoom = false);
+
+        // #1629 — FF's own deep views (built-in regions in Installer/Stage/Resources/regions.json,
+        // as Server.Tests/S1274SimdRebasingTests.cs uses them; E45Test04's cap is FF's choice),
+        // added with FF_DEEPCOST_FFVIEWS=1. Their zoom is FF's, not KF's.
+        internal static readonly Scene[] FfViews =
+        {
+            new("lightning 7.6e26", "-1.4181949444785762|-7.4415882477902279E-17|0|0|0|0|0|0",
+                "-0.12700786443815276|-2.3429499355532375E-18|0|0|0|0|0|0", 7.58348E+26, 14786, true),
+            new("deeper 4.5e46", "-1.9918151296901943|-7.8219818188678307E-17|3.2454272033149852E-33|-2.6986232918289806E-49|0|0|0|0",
+                "-5.5240415753972429E-06|-2.8404793590633191E-22|1.5048294824547351E-38|-6.0649764033320806E-55|0|0|0|0", 4.49845E+46, 49820, true),
+            new("e45test04 1.1e47", "0.40679612541749072|1.0460588279145483E-17|-4.3674629952735269E-35|5.0770999219861446E-50|0|0|0|0",
+                "-0.56778808906247447|-4.0266051197805093E-17|1.5194922328871422E-33|5.0770999219861446E-50|0|0|0|0", 1.07808E+47, 20000, true),
+            new("3e47test 3e47", "-1.9918151296901943|-7.8219844803880472E-17|1.660139930392911E-34|8.217274172159319E-51|0|0|0|0",
+                "-5.5240415753972429E-06|-2.8659813126937928E-22|6.6910924119662832E-39|6.2394735914401016E-55|0|0|0|0", 3E+47, 100000, true),
+            // The period-3 nucleus (Newton in 60 digits, to double-double): periodic references
+            // below Auto's 1e30 threshold.
+            new("nucleus3 1e14", "-1.7548776662466927|-3.552187509647825e-17|0|0|0|0|0|0", "0|0|0|0|0|0|0|0", 1e14, 5000, true),
+            new("nucleus3 1e22", "-1.7548776662466927|-3.552187509647825e-17|0|0|0|0|0|0", "0|0|0|0|0|0|0|0", 1e22, 20000, true),
+            new("nucleus3 1e28", "-1.7548776662466927|-3.552187509647825e-17|0|0|0|0|0|0", "0|0|0|0|0|0|0|0", 1e28, 50000, true),
+        };
 
         internal static readonly Scene[] Scenes =
         {
@@ -69,13 +96,18 @@ namespace FracturingFog
             int reps = int.TryParse(Environment.GetEnvironmentVariable("FF_DEEPCOST_REPS"), out int r) && r > 0 ? r : 2;
             string? only = Environment.GetEnvironmentVariable("FF_DEEPCOST_SCENE");
             Console.WriteLine($"deepcostprobe {w}x{h}, CPU, best of {reps}");
-            foreach (var s in Scenes)
+            string? regionsPath = Environment.GetEnvironmentVariable("FF_DEEPCOST_REGIONS");
+            if (regionsPath != null) return RunRegions(regionsPath, w, h, reps);
+            string? kfrDir = Environment.GetEnvironmentVariable("FF_DEEPCOST_KFR");
+            if (kfrDir != null) return RunKfr(kfrDir, w, h, reps);
+            var all = Environment.GetEnvironmentVariable("FF_DEEPCOST_FFVIEWS") == "1" ? Scenes.Concat(FfViews) : Scenes;
+            foreach (var s in all)
             {
                 if (only != null && !s.Name.Contains(only, StringComparison.OrdinalIgnoreCase)) continue;
                 // #1615 — KF spans the height with 4/zoom, MandelbrotCalculator max(W, H)
                 // with 3.5/zoom (before #1615 the KF zoom was used as is: a view about
                 // 2x wider than the kit's).
-                double zoom = s.KfZoom * 3.5 * h / (4.0 * Math.Max(w, h));
+                double zoom = s.FfZoom ? s.KfZoom : s.KfZoom * 3.5 * h / (4.0 * Math.Max(w, h));
                 var (a, aSm, aMs, aReb, aIt) = Render(s, zoom, w, h, reps, noAccel: false);
                 var st = s_lastStages;
                 Console.WriteLine($"  {s.Name,-14} stages: orbit {st.RefOrbit,8:F0} ms ({1e3 * st.RefOrbit / s.Iter:F2} us/iter, period {s_lastPeriod})  " +
@@ -211,6 +243,88 @@ namespace FracturingFog
             s_lastLaWork = last.LastLaWork; s_lastUsedLa = last.LastFrameUsedLa; s_lastClimbs = last.LastLaTailClimbs;
             if (!noAccel) { s_lastStages = last.LastHpStageMs; s_lastPeriod = last.ReferencePeriod; s_lastWork = last.LastPtWork; s_lastRebased = last.PtRebasedPixels; }
             return ((int[])last.IterationBuffer.Clone(), (float[])last.SmoothBuffer.Clone(), best, last.PtRebasedPixels, iters);
+        }
+
+        // #1629 — DeepLa Off against Auto over a directory of .kfr locations.
+        private static int RunKfr(string dir, int w, int h, int reps)
+        {
+            Console.WriteLine("scene | zoom | iter | before: frame / pixels ms | after: frame / pixels ms | frame x | LA ran | iter diff");
+            foreach (var f in System.IO.Directory.GetFiles(dir, "*.kfr").OrderBy(x => x, StringComparer.Ordinal))
+            {
+                if (!FracturingFog.ViewState.KfrLocation.TryParse(System.IO.File.ReadAllText(f), out var loc, out var err) || loc == null)
+                { Console.WriteLine($"  {System.IO.Path.GetFileName(f)}: {err}"); continue; }
+                var (X, Y) = loc.Centre();
+                double zoom = loc.FfZoom(w, h);
+                int iter = loc.Iterations ?? 10000;
+                var sc = new Scene(System.IO.Path.GetFileNameWithoutExtension(f),
+                    string.Join("|", X.Select(v => v.ToString("R", System.Globalization.CultureInfo.InvariantCulture))),
+                    string.Join("|", Y.Select(v => v.ToString("R", System.Globalization.CultureInfo.InvariantCulture))), zoom, iter, true);
+                double bF = double.MaxValue, bP = 0, aF = double.MaxValue, aP = 0;
+                MandelbrotCalculator? cb = null, ca = null;
+                for (int k = 0; k < reps; k++)
+                    foreach (var mode in k % 2 == 0 ? new[] { DeepLaMode.Off, DeepLaMode.Auto } : new[] { DeepLaMode.Auto, DeepLaMode.Off })   // swap order: no first-run bias
+                    {
+                        var c = Make(sc, zoom, w, h);
+                        c.LaMode = mode;
+                        var sw = Stopwatch.StartNew();
+                        c.Calculate();
+                        double ms = sw.Elapsed.TotalMilliseconds;
+                        if (mode == DeepLaMode.Off) { if (ms < bF) { bF = ms; bP = c.LastHpStageMs.Pixels; } cb = c; }
+                        else { if (ms < aF) { aF = ms; aP = c.LastHpStageMs.Pixels; } ca = c; }
+                    }
+                int diff = 0;
+                for (int i = 0; i < cb!.IterationBuffer.Length; i++) if (cb.IterationBuffer[i] != ca!.IterationBuffer[i]) diff++;
+                Console.WriteLine($"| {sc.Name} | {zoom:0.0e0} | {iter:N0} | {bF:N0} / {bP:N0} | {aF:N0} / {aP:N0} | x{bF / Math.Max(1e-9, aF):F2} | {(ca!.LastFrameUsedLa ? "yes" : "no")} | {100.0 * diff / cb.IterationBuffer.Length:F2} % |");
+            }
+            Console.WriteLine("deepcostprobe done");
+            return 0;
+        }
+
+        // #1629 — default against LA over a regions file.
+        private static int RunRegions(string path, int w, int h, int reps)
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllText(path));
+            string L(System.Text.Json.JsonElement r, string axis)
+            {
+                string[] names = [$"Center{axis}", $"Center{axis}Lo", $"Center{axis}2", $"Center{axis}3", $"Center{axis}4", $"Center{axis}5", $"Center{axis}6", $"Center{axis}7"];
+                return string.Join("|", names.Select(n => r.TryGetProperty(n, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.Number
+                    ? v.GetDouble().ToString("R", System.Globalization.CultureInfo.InvariantCulture) : "0"));
+            }
+            var rows = new System.Collections.Generic.List<(string Name, double Zoom, int Iter, double Def, double La, int Period, double Diff, long LaSteps, long Plain)>();
+            foreach (var r in doc.RootElement.EnumerateArray())
+            {
+                if (r.TryGetProperty("FractalType", out var ft) && ft.ValueKind != System.Text.Json.JsonValueKind.Null && ft.ToString() != "Mandelbrot" && ft.ToString() != "0") continue;
+                double zoom = r.TryGetProperty("Zoom", out var z) ? z.GetDouble() : 0;
+                if (zoom < 1e13) continue;
+                int iter = r.TryGetProperty("Iterations", out var it) ? it.GetInt32() : 1000;
+                string name = r.TryGetProperty("Name", out var nm) ? nm.GetString() ?? "?" : "?";
+                var sc = new Scene(name, L(r, "X"), L(r, "Y"), zoom, iter, true);
+                double def = double.MaxValue, la = double.MaxValue;
+                MandelbrotCalculator? cd = null, cl = null;
+                for (int k = 0; k < reps; k++)
+                    foreach (bool useLa in new[] { false, true })
+                    {
+                        var c = Make(sc, zoom, w, h);
+                        c.UseLaEvaluator = useLa;
+                        c.Calculate();
+                        double ms = c.LastHpStageMs.Pixels;
+                        if (useLa) { la = Math.Min(la, ms); cl = c; } else { def = Math.Min(def, ms); cd = c; }
+                    }
+                int diff = 0;
+                for (int i = 0; i < cd!.IterationBuffer.Length; i++) if (cd.IterationBuffer[i] != cl!.IterationBuffer[i]) diff++;
+                var lw = cl!.LastLaWork;
+                rows.Add((name, zoom, iter, def, la, cd.ReferencePeriod, 100.0 * diff / cd.IterationBuffer.Length,
+                          lw.LaSteps / Math.Max(1, lw.Pixels), lw.PlainSteps / Math.Max(1, lw.Pixels)));
+                Console.WriteLine($"  {name,-24} {zoom,9:0.00e0} iter {iter,7} period {cd.ReferencePeriod,7} | default {def,7:F0} ms | LA {la,7:F0} ms (on {cl.LastFrameUsedLa}) | " +
+                                  $"x{def / Math.Max(1e-9, la):F2} | LA {lw.LaSteps / (double)Math.Max(1, lw.Pixels):F0} + plain {lw.PlainSteps / (double)Math.Max(1, lw.Pixels):F0} | iter diff {100.0 * diff / cd.IterationBuffer.Length:F2} %");
+            }
+            int wins = rows.Count(x => x.La < x.Def * 0.95), losses = rows.Count(x => x.La > x.Def * 1.05);
+            double geo = Math.Exp(rows.Average(x => Math.Log(x.Def / Math.Max(1e-9, x.La))));
+            Console.WriteLine($"regions: {rows.Count}; LA faster (>5 %) on {wins}, slower on {losses}; geometric mean speed-up x{geo:F2}");
+            foreach (var x in rows.Where(x => x.La > x.Def * 1.05).OrderBy(x => x.Def / x.La))
+                Console.WriteLine($"  slower: {x.Name} {x.Zoom:0.00e0} period {x.Period} x{x.Def / x.La:F2} (LA {x.LaSteps} + plain {x.Plain})");
+            Console.WriteLine("deepcostprobe done");
+            return 0;
         }
 
         internal static MandelbrotCalculator Make(Scene s, double zoom, int w, int h)

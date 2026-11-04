@@ -204,6 +204,7 @@ public sealed class S1625LaStageTableTests(ITestOutputHelper output)
             CenterY = Y[0], CenterYLo = Y[1], CenterY2 = Y[2], CenterY3 = Y[3], CenterY4 = Y[4], CenterY5 = Y[5], CenterY6 = Y[6], CenterY7 = Y[7],
             Zoom = 1.342765e53 * 3.5 * 36 / (4.0 * 64), MaxIterations = 28590,
             ColorMap = new HsvPalette(), BuildLaStages = build,
+            LaMode = DeepLaMode.Off,   // #1629: the table alone; the BLA rows render
         };
     }
 

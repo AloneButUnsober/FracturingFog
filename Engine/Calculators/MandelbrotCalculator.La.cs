@@ -49,11 +49,46 @@ namespace FracturingFog;
 
 public sealed partial class MandelbrotCalculator
 {
-    /// <summary>#1626 — evaluate CPU deep frames with the LA stages (design doc §2.4)
-    /// instead of the PT4 / PT8 rows. Off by default (FF_LA=1 turns it on); implies
-    /// <see cref="BuildLaStages"/>. Inactive with acceleration off, rebasing off, the DD
-    /// rebase reference, or a table whose coefficients left double range.</summary>
-    public bool UseLaEvaluator { get; set; } = Environment.GetEnvironmentVariable("FF_LA") == "1";
+    /// <summary>#1629 — which evaluator renders CPU deep frames (FractalParameters.DeepLa).
+    /// Auto (default) = the LA stages at zoom ≥ <see cref="LaAutoMinZoom"/>, the PT4 / PT8
+    /// BLA rows below (design doc §4.5); On =
+    /// LA at every deep zoom, also in place of GPU perturbation; Off = the BLA rows. The
+    /// environment overrides it for A/B: FF_LA=0 (Off) or FF_LA=1 (On).</summary>
+    public DeepLaMode LaMode { get; set; } = DeepLaMode.Auto;
+
+    /// <summary>#1629 — FF_LA, read once: Off / On for every calculator, or null.</summary>
+    public static readonly DeepLaMode? LaModeOverride = Environment.GetEnvironmentVariable("FF_LA") switch
+    {
+        "0" => DeepLaMode.Off,
+        "1" => DeepLaMode.On,
+        _ => null,
+    };
+
+    /// <summary>#1629 — Auto's zoom threshold: below it the BLA rows were faster on 48 of
+    /// FF's built-in regions, above it LA on all but two (within noise) — design doc §4.5.</summary>
+    public const double LaAutoMinZoom = 1e30;
+
+    /// <summary>#1629 — the mode this calculator renders with (the environment override,
+    /// else <see cref="LaMode"/>).</summary>
+    public DeepLaMode EffectiveLaMode => LaModeOverride ?? LaMode;
+
+    /// <summary>#1626 — LA forced on (true) or off (false); kept for probes and tests.
+    /// Since #1629 it maps to <see cref="LaMode"/> On / Off; reading it says whether the
+    /// effective mode is not Off.</summary>
+    public bool UseLaEvaluator
+    {
+        get => EffectiveLaMode != DeepLaMode.Off;
+        set => LaMode = value ? DeepLaMode.On : DeepLaMode.Off;
+    }
+
+    // #1629 — the mode wants LA for this frame. (A periodic reference below the threshold
+    // was measured neutral — the period-3 nucleus at 1e14..1e28 — so it is not a reason.)
+    private bool LaWanted => EffectiveLaMode switch
+    {
+        DeepLaMode.On => true,
+        DeepLaMode.Auto => Zoom >= LaAutoMinZoom,
+        _ => false,
+    };
 
     /// <summary>#1626 — after a rebase, restart at the top stage (FF, design doc §2.4)
     /// rather than stay in the stage the pixel fell to (Imagina). FF_LA_CLIMB=0 turns it off.</summary>
@@ -113,7 +148,7 @@ public sealed partial class MandelbrotCalculator
     public bool LastFrameUsedLa => _lastFrameUsedLa;
 
     private bool LaActive =>
-        UseLaEvaluator && _laTable is { Finite: true } && !DisableAcceleration && AllowPtRebasing && !UseDdRebaseReference;
+        LaWanted && _laTable is { Finite: true } && !DisableAcceleration && AllowPtRebasing && !UseDdRebaseReference;
 
     private void ResetLaWork()
     {
