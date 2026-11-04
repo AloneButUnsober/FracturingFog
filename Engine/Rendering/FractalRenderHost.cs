@@ -1577,16 +1577,23 @@ namespace FracturingFog.Rendering
             }
             int ox = (int)Math.Round(dxPix), oy = (int)Math.Round(dyPix);
 
-            // The view centre, put back after the frame.
-            double sx0 = calc.CenterX, sx1 = calc.CenterXLo, sx2 = calc.CenterX2, sx3 = calc.CenterX3,
-                   sx4 = calc.CenterX4, sx5 = calc.CenterX5, sx6 = calc.CenterX6, sx7 = calc.CenterX7;
-            double sy0 = calc.CenterY, sy1 = calc.CenterYLo, sy2 = calc.CenterY2, sy3 = calc.CenterY3,
-                   sy4 = calc.CenterY4, sy5 = calc.CenterY5, sy6 = calc.CenterY6, sy7 = calc.CenterY7;
+            // The view centre, put back after the frame. #1656 — the anchor goes in and
+            // the view comes back only while the centre is still this frame's (under
+            // ViewSync, as CentreJitter): a restore after Trigger's ApplyView wrote the
+            // previous view over the new one.
+            var orig = new CentreLimbs(re.X0, re.X1, re.X2, re.X3, re.X4, re.X5, re.X6, re.X7,
+                                       im.X0, im.X1, im.X2, im.X3, im.X4, im.X5, im.X6, im.X7);
             var a = _panAnchor;
-            calc.CenterX = a.Re.X0; calc.CenterXLo = a.Re.X1; calc.CenterX2 = a.Re.X2; calc.CenterX3 = a.Re.X3;
-            calc.CenterX4 = a.Re.X4; calc.CenterX5 = a.Re.X5; calc.CenterX6 = a.Re.X6; calc.CenterX7 = a.Re.X7;
-            calc.CenterY = a.Im.X0; calc.CenterYLo = a.Im.X1; calc.CenterY2 = a.Im.X2; calc.CenterY3 = a.Im.X3;
-            calc.CenterY4 = a.Im.X4; calc.CenterY5 = a.Im.X5; calc.CenterY6 = a.Im.X6; calc.CenterY7 = a.Im.X7;
+            CentreLimbs anchored;
+            lock (calc.ViewSync)
+            {
+                if (token.IsCancellationRequested || CentreLimbs.Capture(calc) != orig) return;   // the view moved on
+                calc.CenterX = a.Re.X0; calc.CenterXLo = a.Re.X1; calc.CenterX2 = a.Re.X2; calc.CenterX3 = a.Re.X3;
+                calc.CenterX4 = a.Re.X4; calc.CenterX5 = a.Re.X5; calc.CenterX6 = a.Re.X6; calc.CenterX7 = a.Re.X7;
+                calc.CenterY = a.Im.X0; calc.CenterYLo = a.Im.X1; calc.CenterY2 = a.Im.X2; calc.CenterY3 = a.Im.X3;
+                calc.CenterY4 = a.Im.X4; calc.CenterY5 = a.Im.X5; calc.CenterY6 = a.Im.X6; calc.CenterY7 = a.Im.X7;
+                anchored = CentreLimbs.Capture(calc);
+            }
             calc.ImageWidth = w; calc.ImageHeight = h;
             calc.LatticeAligned = true;
             calc.LatticeMaxOffset = maxOff;
@@ -1608,10 +1615,7 @@ namespace FracturingFog.Rendering
             }
             finally
             {
-                calc.CenterX = sx0; calc.CenterXLo = sx1; calc.CenterX2 = sx2; calc.CenterX3 = sx3;
-                calc.CenterX4 = sx4; calc.CenterX5 = sx5; calc.CenterX6 = sx6; calc.CenterX7 = sx7;
-                calc.CenterY = sy0; calc.CenterYLo = sy1; calc.CenterY2 = sy2; calc.CenterY3 = sy3;
-                calc.CenterY4 = sy4; calc.CenterY5 = sy5; calc.CenterY6 = sy6; calc.CenterY7 = sy7;
+                CentreJitter.RestoreIfOwned(calc, in orig, in anchored);
                 calc.ImageWidth = calc.ImageHeight = 0;
                 calc.SubRectOffsetX = calc.SubRectOffsetY = 0;
                 calc.LatticeAligned = false;
@@ -1621,6 +1625,14 @@ namespace FracturingFog.Rendering
         // ── ApplyView ─────────────────────────────────────────────────────────
 
         public void ApplyView(int maxIters = 0)
+        {
+            // #1656 — the calc thread's jitter / restore passes (MSAA, TAA, the #1330
+            // pan anchor) write the same centre limbs; they hold this lock and only
+            // write while the centre is still theirs, so the view written here sticks.
+            lock (_calculator.ViewSync) ApplyViewCore(maxIters);
+        }
+
+        private void ApplyViewCore(int maxIters)
         {
             _calculator.CenterX = ViewState.CenterX;
             _calculator.CenterXLo = ViewState.CenterXLo;
@@ -2423,15 +2435,19 @@ namespace FracturingFog.Rendering
             // #1270 — jitter through every centre limb, so it survives past the
             // double's precision (~1e10 zoom); the reference orbit is rebuilt at
             // the jittered centre like any other view.
+            // #1656 — jitter and restore only while the view is still this sample's: a
+            // restore after Trigger's ApplyView put the previous centre back under the
+            // newly recalled region (old centre at the new zoom; TAA settled there).
             var orig = CentreLimbs.Capture(calc);
-            CentreJitter.Apply(calc, in orig, jx, jy, scale);
+            var jittered = orig;
+            if (!CentreJitter.TryApply(calc, in orig, jx, jy, scale, token, ref jittered)) return false;
             try { calc.Calculate(token); }
             catch (OperationCanceledException)
             {
-                orig.Restore(calc);
+                CentreJitter.RestoreIfOwned(calc, in orig, in jittered);
                 return false;
             }
-            orig.Restore(calc);
+            CentreJitter.RestoreIfOwned(calc, in orig, in jittered);
             if (token.IsCancellationRequested) return false;
             equalizer?.Apply(calc);   // #1381 — the seed's CDF, before the blend
 
@@ -2538,10 +2554,16 @@ namespace FracturingFog.Rendering
 
             int from = calc.MaxIterations;
             int found = IterationRescue.FindEscapingIterations(calc, IterationRescue.Ceiling, token);
-            if (token.IsCancellationRequested) return;
-            _iterRescue = IterRescueMemo.For(calc, from, found);
-            if (found <= from) return;
-            calc.MaxIterations = found;
+            // #1656 — memo and cap under ViewSync, and only while this frame's token is
+            // live: Trigger cancels before ApplyView writes the next view, so a late
+            // write here would stamp the memo with, or raise the cap of, that view.
+            lock (calc.ViewSync)
+            {
+                if (token.IsCancellationRequested) return;
+                _iterRescue = IterRescueMemo.For(calc, from, found);
+                if (found <= from) return;
+                calc.MaxIterations = found;
+            }
             calc.Calculate(token);
         }
 
