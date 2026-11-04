@@ -19,7 +19,9 @@
 // exact check outside FF; FF_DEEPCOST_SCENE filters by name; FF_DEEPCOST_EPS sets
 // the BLA tolerance. FF_DEEPCOST_LA_AB=1 (#1626) adds the frame through the LA stage
 // evaluator (UseLaEvaluator): its time, LA / plain / BLA work per pixel, and the pixels
-// whose iteration count differs from the default frame. Exit 0 always.
+// whose iteration count differs from the default frame. FF_DEEPCOST_LA_SIMD_AB=1 (#1628)
+// times the LA evaluator scalar and 4-lane, alternating frames in one process (best of
+// FF_DEEPCOST_REPS each), and checks the two frames are the same bytes. Exit 0 always.
 
 using System;
 using System.Diagnostics;
@@ -123,8 +125,32 @@ namespace FracturingFog
                         if (a[i] == l[i] && Math.Abs(aSm[i] - lSm[i]) > 0.01f) lsm++;
                     }
                     Console.WriteLine($"  {s.Name,-14} LA     : {lMs,7:F0} ms (BLA+LA tables {ls.Bla:F0} ms, pixels {ls.Pixels:F0} ms; default {aMs:F0} ms) | per px " +
-                                      $"LA {lw.LaSteps / px:F0} + plain {lw.PlainSteps / px:F0} + BLA {lw.BlaSkips / px:F0} steps (LA on {s_lastUsedLa}) | " +
+                                      $"LA {lw.LaSteps / px:F0} + plain {lw.PlainSteps / px:F0} + BLA {lw.BlaSkips / px:F0} steps (LA on {s_lastUsedLa}, tail climbs/px {s_lastClimbs / px:F1}) | " +
                                       $"iter diff vs default {ld:N0} ({100.0 * ld / a.Length:F2} %), in/out {lio:N0}, smooth >0.01 where equal {lsm:N0}");
+                }
+                // #1628 — scalar against 4-lane LA, alternating so clock drift hits both.
+                if (Environment.GetEnvironmentVariable("FF_DEEPCOST_LA_SIMD_AB") == "1")
+                {
+                    double bestS = double.MaxValue, bestV = double.MaxValue, pxS = 0, pxV = 0;
+                    MandelbrotCalculator? cs = null, cv = null;
+                    for (int k = 0; k < reps; k++)
+                    {
+                        foreach (bool simd in new[] { false, true })
+                        {
+                            var c = Make(s, zoom, w, h);
+                            c.UseLaEvaluator = true; c.LaSimd = simd;
+                            var sw2 = Stopwatch.StartNew();
+                            c.Calculate();
+                            double ms = sw2.Elapsed.TotalMilliseconds;
+                            if (simd) { if (ms < bestV) { bestV = ms; pxV = c.LastHpStageMs.Pixels; } cv = c; }
+                            else { if (ms < bestS) { bestS = ms; pxS = c.LastHpStageMs.Pixels; } cs = c; }
+                        }
+                    }
+                    bool same = cs!.IterationBuffer.AsSpan().SequenceEqual(cv!.IterationBuffer)
+                                && cs.SmoothBuffer.AsSpan().SequenceEqual(cv.SmoothBuffer)
+                                && cs.ColorBuffer.AsSpan().SequenceEqual(cv.ColorBuffer);
+                    Console.WriteLine($"  {s.Name,-14} LA scalar {bestS,7:F0} ms (pixels {pxS:F0}) | 4-lane {bestV,7:F0} ms (pixels {pxV:F0}, on {cv.LastFrameUsedLaSimd}) | " +
+                                      $"pixels x{pxS / Math.Max(1e-9, pxV):F2} | bytes {(same ? "identical" : "DIFFER")}");
                 }
                 if (Environment.GetEnvironmentVariable("FF_DEEPCOST_NOREF") == "1") continue;
                 var (b, bSm, bMs, bReb, bIt) = Render(s, zoom, w, h, 1, noAccel: true);
@@ -161,6 +187,7 @@ namespace FracturingFog
         private static double s_lastCpuMs;
         private static (long Pixels, long LaSteps, long PlainSteps, long BlaSkips) s_lastLaWork;
         private static bool s_lastUsedLa;
+        private static long s_lastClimbs;
 
         private static (int[] Iter, float[] Smooth, double Ms, long Rebased, long Iters) Render(Scene s, double zoom, int w, int h, int reps, bool noAccel, bool la = false)
         {
@@ -181,7 +208,7 @@ namespace FracturingFog
                 last = c;
             }
             long iters = last!.IterationBuffer.Sum(v => (long)v);
-            s_lastLaWork = last.LastLaWork; s_lastUsedLa = last.LastFrameUsedLa;
+            s_lastLaWork = last.LastLaWork; s_lastUsedLa = last.LastFrameUsedLa; s_lastClimbs = last.LastLaTailClimbs;
             if (!noAccel) { s_lastStages = last.LastHpStageMs; s_lastPeriod = last.ReferencePeriod; s_lastWork = last.LastPtWork; s_lastRebased = last.PtRebasedPixels; }
             return ((int[])last.IterationBuffer.Clone(), (float[])last.SmoothBuffer.Clone(), best, last.PtRebasedPixels, iters);
         }

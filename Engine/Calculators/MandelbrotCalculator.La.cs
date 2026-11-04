@@ -117,7 +117,7 @@ public sealed partial class MandelbrotCalculator
 
     private void ResetLaWork()
     {
-        _laPixelsTotal = _laStepsTotal = _laPlainTotal = _laBlaTotal = _laAtStepsTotal = _laAtPixelsTotal = 0;
+        _laPixelsTotal = _laStepsTotal = _laPlainTotal = _laBlaTotal = _laAtStepsTotal = _laAtPixelsTotal = _laTailClimbs = 0;
         _laAt = null;
         _laStageSteps = new long[_laTable?.Stages ?? 0];
     }
@@ -182,82 +182,20 @@ public sealed partial class MandelbrotCalculator
         if (atOpt is { } at && mdc <= at.ThrC)
         {
             atPixels++;
-            long atMax = (maxIter - 1) / at.Len + 1;
-            double cr = dcR * at.CRe - dcI * at.CIm + at.RefCRe;
-            double ci = dcR * at.CIm + dcI * at.CRe + at.RefCIm;
-            double xr = 0, xi = 0;      // z'
-            double er = 0, ei = 0;      // dz'/dc'
-            long k = 0;
-            bool inSet = false;
-            while (true)
-            {
-                double nEr = 2.0 * (xr * er - xi * ei) + 1.0, nEi = 2.0 * (xr * ei + xi * er);
-                er = nEr; ei = nEi;
-                double nXr = xr * xr - xi * xi + cr, nXi = 2.0 * xr * xi + ci;
-                xr = nXr; xi = nXi;
-                k++; atSteps++;
-                if (k >= atMax) { inSet = true; break; }
-                if (xr * xr + xi * xi > at.Esc2) break;
-            }
-            // Back: z = z'/A (relative to Z_0 = 0, so δ = z), dz/dc = (dz'/dc')·(A·B)/A.
-            zr = xr * at.InvZRe - xi * at.InvZIm; zi = xr * at.InvZIm + xi * at.InvZRe;
-            double gr = er * at.CRe - ei * at.CIm, gi = er * at.CIm + ei * at.CRe;
-            drv = gr * at.InvZRe - gi * at.InvZIm; div = gr * at.InvZIm + gi * at.InvZRe;
-            dr = zr; di = zi;
-            if (inSet)
+            if (RunLaAt(in at, dcR, dcI, maxIter, out zr, out zi, out drv, out div, out n, ref atSteps))
             {
                 IterationBuffer[idx] = maxIter;
                 FillAuxAndColorHP(idx, maxIter, maxIter, zr, zi, drv, div, colorMap);
                 return;
             }
-            n = (int)(k * at.Len);
+            dr = zr; di = zi;
         }
 
         while (true)
         {
-            // ── 1. The stages, from `stage` down (Imagina's EvaluateLA, per stage) ──
-            bool climbNow = false;
-            for (; stage >= 0; stage--)
-            {
-                int s0 = t.StageStart[stage], last = t.StageCount[stage];   // last = the sentinel's index
-                if (mdc >= data[s0].ThrC) { j = data[s0 + j].Next; continue; }
-                while (true)
-                {
-                    ref readonly var s = ref data[s0 + j];
-                    double ar = 2.0 * s.RefRe + dr, ai = 2.0 * s.RefIm + di;
-                    double wr = dr * ar - di * ai, wi = dr * ai + di * ar;
-                    // FF: the step's own δc bound too (Imagina checks only the stage's first
-                    // step), and no step past maxIter, so the frame stops at the cap exactly.
-                    if (Math.Max(Math.Abs(wr), Math.Abs(wi)) >= s.Thr || mdc >= s.ThrC || s.Len > maxIter - n)
-                    {
-                        j = s.Next;
-                        break;
-                    }
-                    // dz/dc: d ← A·(2·z_s·d) + B, z_s = Ref + δ (LAInfo::EvaluateDzdc).
-                    double zsr = s.RefRe + dr, zsi = s.RefIm + di;
-                    double tr = 2.0 * (zsr * drv - zsi * div), ti = 2.0 * (zsr * div + zsi * drv);
-                    double nDrv = s.ARe * tr - s.AIm * ti + s.BRe;
-                    double nDiv = s.ARe * ti + s.AIm * tr + s.BIm;
-                    drv = nDrv; div = nDiv;
-                    // δ ← A·w + B·δc.
-                    double nDr = s.ARe * wr - s.AIm * wi + (s.BRe * dcR - s.BIm * dcI);
-                    double nDi = s.ARe * wi + s.AIm * wr + (s.BRe * dcI + s.BIm * dcR);
-                    dr = nDr; di = nDi;
-                    n += s.Len;
-                    laSteps++;
-                    perStage[stage]++;
-                    j++;
-                    ref readonly var nx = ref data[s0 + j];
-                    zr = nx.RefRe + dr; zi = nx.RefIm + di;
-                    if (j == last || Math.Max(Math.Abs(dr), Math.Abs(di)) > Math.Max(Math.Abs(zr), Math.Abs(zi)))
-                    {
-                        j = 0; dr = zr; di = zi;   // rebase: Z_0 = 0, exact
-                        if (climb && stage < top) { climbNow = true; break; }
-                    }
-                }
-                if (climbNow) break;
-            }
-            if (climbNow) { stage = top; j = 0; continue; }
+            // ── 1. The stages (LaRunStages; climbing back restarts them at the top) ──
+            LaRunStages(t, dcR, dcI, mdc, maxIter, climb, ref dr, ref di, ref zr, ref zi, ref drv, ref div,
+                ref n, ref stage, ref j, ref laSteps, perStage);
 
             // ── 2. Plain perturbation from reference index j (FF's rebased loop) ──
             int m = j;
@@ -318,5 +256,95 @@ public sealed partial class MandelbrotCalculator
 
         IterationBuffer[idx] = n;
         FillAuxAndColorHP(idx, n, maxIter, zr, zi, drv, div, colorMap);
+    }
+
+    // #1627 — the AT for one pixel: z' ← z'² + c' from z' = 0 until |z'|² > Esc² (false:
+    // continue with the stages from z, δ = z, iteration n) or the cap (true: in set).
+    // Shared by the scalar and the 4-lane evaluators (#1628), so both run the same
+    // operations.
+    private static bool RunLaAt(in LaAt at, double dcR, double dcI, int maxIter,
+        out double zr, out double zi, out double drv, out double div, out int n, ref long atSteps)
+    {
+        long atMax = (maxIter - 1) / at.Len + 1;
+        double cr = dcR * at.CRe - dcI * at.CIm + at.RefCRe;
+        double ci = dcR * at.CIm + dcI * at.CRe + at.RefCIm;
+        double xr = 0, xi = 0;      // z'
+        double er = 0, ei = 0;      // dz'/dc'
+        long k = 0;
+        bool inSet = false;
+        while (true)
+        {
+            double nEr = 2.0 * (xr * er - xi * ei) + 1.0, nEi = 2.0 * (xr * ei + xi * er);
+            er = nEr; ei = nEi;
+            double nXr = xr * xr - xi * xi + cr, nXi = 2.0 * xr * xi + ci;
+            xr = nXr; xi = nXi;
+            k++; atSteps++;
+            if (k >= atMax) { inSet = true; break; }
+            if (xr * xr + xi * xi > at.Esc2) break;
+        }
+        // Back: z = z'/A (relative to Z_0 = 0, so δ = z), dz/dc = (dz'/dc')·(A·B)/A.
+        zr = xr * at.InvZRe - xi * at.InvZIm; zi = xr * at.InvZIm + xi * at.InvZRe;
+        double gr = er * at.CRe - ei * at.CIm, gi = er * at.CIm + ei * at.CRe;
+        drv = gr * at.InvZRe - gi * at.InvZIm; div = gr * at.InvZIm + gi * at.InvZRe;
+        n = inSet ? maxIter : (int)(k * at.Len);
+        return inSet;
+    }
+
+    // #1626 — the stages, from `stage` down (Imagina's EvaluateLA, per stage), until a
+    // pixel drops below stage 0 (stage = -1; j is then its reference index for the plain
+    // tail). A rebase with climbing on restarts at the top stage. Shared by the scalar
+    // and the 4-lane evaluators (#1628), so both run the same operations.
+    private static void LaRunStages(LaStageTable t, double dcR, double dcI, double mdc, int maxIter, bool climb,
+        ref double dr, ref double di, ref double zr, ref double zi, ref double drv, ref double div,
+        ref int n, ref int stage, ref int j, ref long laSteps, long[] perStage)
+    {
+        var data = t.Data;
+        int top = t.Stages - 1;
+        while (true)
+        {
+            bool climbNow = false;
+            for (; stage >= 0; stage--)
+            {
+                int s0 = t.StageStart[stage], last = t.StageCount[stage];   // last = the sentinel's index
+                if (mdc >= data[s0].ThrC) { j = data[s0 + j].Next; continue; }
+                while (true)
+                {
+                    ref readonly var s = ref data[s0 + j];
+                    double ar = 2.0 * s.RefRe + dr, ai = 2.0 * s.RefIm + di;
+                    double wr = dr * ar - di * ai, wi = dr * ai + di * ar;
+                    // FF: the step's own δc bound too (Imagina checks only the stage's first
+                    // step), and no step past maxIter, so the frame stops at the cap exactly.
+                    if (Math.Max(Math.Abs(wr), Math.Abs(wi)) >= s.Thr || mdc >= s.ThrC || s.Len > maxIter - n)
+                    {
+                        j = s.Next;
+                        break;
+                    }
+                    // dz/dc: d ← A·(2·z_s·d) + B, z_s = Ref + δ (LAInfo::EvaluateDzdc).
+                    double zsr = s.RefRe + dr, zsi = s.RefIm + di;
+                    double tr = 2.0 * (zsr * drv - zsi * div), ti = 2.0 * (zsr * div + zsi * drv);
+                    double nDrv = s.ARe * tr - s.AIm * ti + s.BRe;
+                    double nDiv = s.ARe * ti + s.AIm * tr + s.BIm;
+                    drv = nDrv; div = nDiv;
+                    // δ ← A·w + B·δc.
+                    double nDr = s.ARe * wr - s.AIm * wi + (s.BRe * dcR - s.BIm * dcI);
+                    double nDi = s.ARe * wi + s.AIm * wr + (s.BRe * dcI + s.BIm * dcR);
+                    dr = nDr; di = nDi;
+                    n += s.Len;
+                    laSteps++;
+                    perStage[stage]++;
+                    j++;
+                    ref readonly var nx = ref data[s0 + j];
+                    zr = nx.RefRe + dr; zi = nx.RefIm + di;
+                    if (j == last || Math.Max(Math.Abs(dr), Math.Abs(di)) > Math.Max(Math.Abs(zr), Math.Abs(zi)))
+                    {
+                        j = 0; dr = zr; di = zi;   // rebase: Z_0 = 0, exact
+                        if (climb && stage < top) { climbNow = true; break; }
+                    }
+                }
+                if (climbNow) break;
+            }
+            if (!climbNow) return;
+            stage = top; j = 0;
+        }
     }
 }
