@@ -57,6 +57,10 @@ static class Program
             return GpuGroupShapeProbe.Run(args);
 
         // #1334 — deep perturbation in row bands, D3D11 + Vulkan: banded == one band, timing.
+        // #1630 — the LA stage kernel on the GPU against SA / BLA and the CPU paths.
+        if (args.Length > 0 && args[0] == "--gpulaprobe")
+            return GpuLaProbe.Run(args);
+
         if (args.Length > 0 && args[0] == "--gpubandprobe")
             return GpuBandProbe.Run();
 

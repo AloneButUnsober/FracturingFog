@@ -238,6 +238,26 @@ namespace FracturingFog.Rendering
             => throw new NotSupportedException(
                 "This GPU kernel has no perturbation path (SupportsPerturbation is false).");
 
+        /// <summary>#1630 (epic #1623, S7) — the LA stage perturbation kernel
+        /// (<see cref="RunPerturbLa"/>, fp64) is available.</summary>
+        bool SupportsPerturbationLa => false;
+
+        /// <summary>#1630 — the GPU twin of <c>MandelbrotCalculator.EvaluateLa</c> (AT,
+        /// stages, plain tail with climbing back): <paramref name="laSteps"/> /
+        /// <paramref name="laInts"/> are <c>LaStageTable.GpuSteps</c> / <c>GpuInts</c>,
+        /// <paramref name="at"/> the frame's AT (Len 0 = none). Same outputs as
+        /// <see cref="RunPerturb"/>. Only valid when <see cref="SupportsPerturbationLa"/>.</summary>
+        void RunPerturbLa(
+            int width, int height,
+            double scale, int maxIter, double escapeRadius2,
+            double offsetX0, double offsetY0,
+            double[] refZr, double[] refZi, int refLen,
+            double[] laSteps, uint[] laInts, int stages, GpuLaAt at,
+            int[] iterDst, float[] smoothDst,
+            float[] finalZrDst, float[] finalZiDst,
+            float[] finalDrDst, float[] finalDiDst)
+            => throw new NotSupportedException("This GPU kernel has no LA perturbation path.");
+
         /// <summary>#88 / G4.5 — true when this backend can run the perturbation kernel
         /// with a Series-Approximation prelude (<see cref="RunPerturbSA"/>).</summary>
         bool SupportsPerturbationSA => false;

@@ -215,6 +215,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     // #88 SA spike: iteration-skipping perturbation program + its coefficient
     // SSBOs (A/B/C/D complex = 8 double arrays); the 80-byte SA params go in the band UBO.
     private Program? _perturbSa;
+    private Program? _perturbLa;   // #1630
     private Allocated _saAR, _saAI, _saBR, _saBI, _saCR, _saCI, _saDR, _saDI;
     private int _saAlloc;
 
@@ -336,6 +337,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             case GpuGroupShapes.SlotPerturb:
                 if (_perturb != null) { DestroyProgram(_perturb); _perturb = null; }
                 if (_perturbSa != null) { DestroyProgram(_perturbSa); _perturbSa = null; }
+                if (_perturbLa != null) { DestroyProgram(_perturbLa); _perturbLa = null; }   // #1630
                 foreach (var p in _perturbOrbit.Values) DestroyProgram(p);
                 _perturbOrbit.Clear();
                 break;
@@ -1467,6 +1469,110 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
     }
 
+    // ── #1630 (epic #1623, S7) — the LA stage perturbation kernel ─────────────────
+
+    public bool SupportsPerturbationLa => SupportsPerturbation;
+
+    // 12 doubles then 12 ints: LaKernelSource's PerturbParams cbuffer, 144 bytes.
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LaParamsBlob
+    {
+        public double Scale, EscapeR2, OffX0, OffY0, AtThrC, AtEsc2, AtRefCR, AtRefCI, AtCR, AtCI, AtInvZR, AtInvZI;
+        public int Width, Height, MaxIter, RefLen, RowBase, Stages, AtLen, StepsBase, Wave, BandRows, Band, Pad0;
+    }
+
+    private Allocated _laStepBuf, _laIntBuf;
+    private int _laStepAlloc, _laIntAlloc;
+
+    public void RunPerturbLa(
+        int width, int height,
+        double scale, int maxIter, double escapeRadius2,
+        double offsetX0, double offsetY0,
+        double[] refZr, double[] refZi, int refLen,
+        double[] laSteps, uint[] laInts, int stages, GpuLaAt at,
+        int[] iterDst, float[] smoothDst,
+        float[] finalZrDst, float[] finalZiDst,
+        float[] finalDrDst, float[] finalDiDst)
+    {
+        using var sync = Sync();
+        if (_disposed) throw new ObjectDisposedException(nameof(VulkanComputeKernel));
+        if (!_ctx.SupportsFloat64)
+            throw new NotSupportedException("Vulkan device has no shaderFloat64 — cannot run the LA perturbation kernel.");
+        if (width <= 0 || height <= 0) return;
+        if (refLen < 1) throw new ArgumentException("reference orbit is empty", nameof(refLen));
+        if (stages < 1 || laInts.Length < 2 * stages || laSteps.Length < 8) throw new ArgumentException("empty LA table");
+
+        EnsureShape(GpuGroupShapes.SlotPerturb);
+        long t0 = Stopwatch.GetTimestamp();
+        BeginFrameTiming();
+        int n = width * height;
+        EnsureBuffers(width, height, iterDst);
+        EnsurePerturbBuffers(refLen);
+        if (_laStepBuf.Buffer.Handle == 0 || _laStepAlloc < laSteps.Length)
+        {
+            FreeBuffer(ref _laStepBuf);
+            _laStepBuf = AllocBuffer((ulong)(laSteps.Length * sizeof(double)), BufferUsageFlags.StorageBufferBit, Residency.Upload);
+            _laStepAlloc = laSteps.Length;
+        }
+        if (_laIntBuf.Buffer.Handle == 0 || _laIntAlloc < laInts.Length)
+        {
+            FreeBuffer(ref _laIntBuf);
+            _laIntBuf = AllocBuffer((ulong)(laInts.Length * sizeof(uint)), BufferUsageFlags.StorageBufferBit, Residency.Upload);
+            _laIntAlloc = laInts.Length;
+        }
+        _perturbLa ??= BuildBandProgram(GpuGroupShapes.SlotPerturb, LaKernelSource.Build(), LaKernelSource.EntryPoint,
+            0u, (uint)TShift, (uint)TShift + 1, (uint)TShift + 2, (uint)TShift + 3,
+            (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)UShift + 3);
+
+        bool wave = GpuWavefront.UsePerturb;
+        LastFrameWavefront = wave;
+        Buffer work = BandWork(BandCount(width, height, maxIter, _perturbLa.Shape));
+        var blob = new LaParamsBlob
+        {
+            Scale = scale, EscapeR2 = escapeRadius2, OffX0 = offsetX0, OffY0 = offsetY0,
+            AtThrC = at.ThrC, AtEsc2 = at.Esc2, AtRefCR = at.RefCRe, AtRefCI = at.RefCIm,
+            AtCR = at.CRe, AtCI = at.CIm, AtInvZR = at.InvZRe, AtInvZI = at.InvZIm,
+            Width = width, Height = height, MaxIter = maxIter, RefLen = refLen, RowBase = 0,
+            Stages = stages, AtLen = at.Len, StepsBase = 2 * stages,
+        };
+        fixed (double* pr = refZr) WriteBytes(_refZrBuf, pr, refLen * sizeof(double));
+        fixed (double* pi = refZi) WriteBytes(_refZiBuf, pi, refLen * sizeof(double));
+        fixed (double* p = laSteps) WriteBytes(_laStepBuf, p, laSteps.Length * sizeof(double));
+        fixed (uint* p = laInts) WriteBytes(_laIntBuf, p, laInts.Length * sizeof(uint));
+
+        _dispatchMask = ActiveMask(width, height);   // #1394
+        DispatchBands(_perturbLa, width, height, maxIter, " (LA)", sizeof(LaParamsBlob),
+            (rowBase, rows, band, dst) =>
+            {
+                var b = blob;
+                b.RowBase = rowBase; b.Wave = wave ? 1 : 0; b.BandRows = rows; b.Band = band;
+                *(LaParamsBlob*)dst = b;
+            },
+            stackalloc Buffer[]
+            {
+                _refZrBuf.Buffer, _refZiBuf.Buffer, _laStepBuf.Buffer, _laIntBuf.Buffer,
+                _buf[2].Buffer, _buf[3].Buffer, _buf[4].Buffer, work,
+            },
+            stackalloc uint[]
+            {
+                (uint)TShift, (uint)TShift + 1, (uint)TShift + 2, (uint)TShift + 3,
+                (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)UShift + 3,
+            },
+            wave,
+            Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)));
+
+        long tDispatch = Stopwatch.GetTimestamp();
+        var mask = ActiveMask(width, height);
+        ReadIter(_buf[2], iterDst, n, mask);
+        ReadFloats(_buf[3], smoothDst, n, mask);
+        ReadFinalZD(_buf[4], finalZrDst, finalZiDst, finalDrDst, finalDiDst, n, mask);
+        long tEnd = Stopwatch.GetTimestamp();
+        EndFrameTiming();
+        double freq = Stopwatch.Frequency;
+        LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
+        LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
+    }
+
     // #88 / G4.5b — the flattened BLA table (t10). Always bound; a 5-double
     // placeholder when the frame runs without BLA (gBlaLevels = 0).
     private Allocated _blaBuf;
@@ -1979,6 +2085,8 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         _baseByKind.Clear();
         if (_perturb != null) { DestroyProgram(_perturb); _perturb = null; }
         if (_perturbSa != null) { DestroyProgram(_perturbSa); _perturbSa = null; }
+        if (_perturbLa != null) { DestroyProgram(_perturbLa); _perturbLa = null; }   // #1630
+        FreeBuffer(ref _laStepBuf); FreeBuffer(ref _laIntBuf);
         foreach (var p in _perturbOrbit.Values) DestroyProgram(p);   // #607
         if (_buddha != null) { DestroyProgram(_buddha); _buddha = null; }   // #838
         if (_perturbFx != null) { DestroyProgram(_perturbFx); _perturbFx = null; }   // #1331

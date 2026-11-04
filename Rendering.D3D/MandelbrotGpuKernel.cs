@@ -392,6 +392,8 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
                 _csPerturb = null;
                 try { _csPerturbSa?.Dispose(); } catch { }
                 _csPerturbSa = null;
+                try { _csPerturbLa?.Dispose(); } catch { }   // #1630
+                _csPerturbLa = null;
                 foreach (var cs in _csPerturbOrbit.Values) { try { cs.Dispose(); } catch { } }
                 _csPerturbOrbit.Clear();
                 break;
@@ -1761,6 +1763,130 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
         }
     }
 
+    // ── #1630 (epic #1623, S7) — the LA stage perturbation kernel ─────────────────
+
+    // #1630 — OFF on D3D11 unless FF_D3D_LA=1: on a GeForce GT 710 (NVIDIA D3D11 driver)
+    // the LA kernel hung the device (TDR, even on an 8x8 frame), while the same HLSL ran
+    // correctly on WARP and on the same GPU under Vulkan (design doc §4.6).
+    private static readonly bool s_laAllowed = Environment.GetEnvironmentVariable("FF_D3D_LA") == "1";
+    public bool SupportsPerturbationLa => SupportsPerturbation && s_laAllowed;
+
+    // 12 doubles then 12 ints: LaKernelSource's PerturbParams cbuffer, 144 bytes.
+    private struct LaParams
+    {
+        public double Scale, EscapeR2, OffX0, OffY0, AtThrC, AtEsc2, AtRefCR, AtRefCI, AtCR, AtCI, AtInvZR, AtInvZI;
+        public int Width, Height, MaxIter, RefLen, RowBase, Stages, AtLen, StepsBase, Wave, BandRows, Band, Pad0;
+    }
+
+    private ID3D11Buffer? _laParamsBuf;
+    private ID3D11ComputeShader? _csPerturbLa;
+    private ID3D11Buffer? _laStepBuf, _laIntBuf;
+    private ID3D11ShaderResourceView? _laStepSrv, _laIntSrv;
+    private int _laStepAlloc, _laIntAlloc;
+
+    private void EnsureStructured(ref ID3D11Buffer? buf, ref ID3D11ShaderResourceView? srv, ref int alloc, int count, int stride)
+    {
+        if (buf != null && alloc >= count) return;
+        srv?.Dispose();
+        buf?.Dispose();
+        buf = _device.CreateBuffer(new BufferDescription
+        {
+            ByteWidth = (uint)(count * stride),
+            BindFlags = BindFlags.ShaderResource,
+            Usage = ResourceUsage.Dynamic,
+            CPUAccessFlags = CpuAccessFlags.Write,
+            MiscFlags = ResourceOptionFlags.BufferStructured,
+            StructureByteStride = (uint)stride,
+        });
+        srv = _device.CreateShaderResourceView(buf, new ShaderResourceViewDescription
+        {
+            Format = Vortice.DXGI.Format.Unknown,
+            ViewDimension = Vortice.Direct3D.ShaderResourceViewDimension.Buffer,
+            Buffer = new BufferShaderResourceView { FirstElement = 0, NumElements = (uint)count },
+        });
+        alloc = count;
+    }
+
+    private void UploadUInts(ID3D11Buffer buf, uint[] src)
+    {
+        var m = _ctx.Map(buf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
+        unsafe
+        {
+            uint* dst = (uint*)m.DataPointer;
+            fixed (uint* s = src) { for (int i = 0; i < src.Length; i++) dst[i] = s[i]; }
+        }
+        _ctx.Unmap(buf, 0);
+    }
+
+    public void RunPerturbLa(
+        int width, int height,
+        double scale, int maxIter, double escapeRadius2,
+        double offsetX0, double offsetY0,
+        double[] refZr, double[] refZi, int refLen,
+        double[] laSteps, uint[] laInts, int stages, GpuLaAt at,
+        int[] iterDst, float[] smoothDst,
+        float[] finalZrDst, float[] finalZiDst,
+        float[] finalDrDst, float[] finalDiDst)
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(MandelbrotGpuKernel));
+        if (!SupportsPerturbation)
+            throw new NotSupportedException("D3D device has no DoublePrecisionFloatShaderOps — cannot run the LA perturbation kernel.");
+        if (width <= 0 || height <= 0) return;
+        if (refLen < 1) throw new ArgumentException("reference orbit is empty", nameof(refLen));
+        if (stages < 1 || laInts.Length < 2 * stages || laSteps.Length < 8) throw new ArgumentException("empty LA table");
+
+        lock (_d3dGate)
+        {
+            EnsureShape(GpuGroupShapes.SlotPerturb);
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            BeginFrameTiming();
+            EnsureOutputBuffers(width, height, iterDst);
+            EnsureRefOrbitBuffers(refLen);
+            _laParamsBuf ??= _device.CreateBuffer(new BufferDescription(
+                byteWidth: 144, bindFlags: BindFlags.ConstantBuffer,
+                usage: ResourceUsage.Dynamic, cpuAccessFlags: CpuAccessFlags.Write));
+            EnsureStructured(ref _laStepBuf, ref _laStepSrv, ref _laStepAlloc, laSteps.Length, sizeof(double));
+            EnsureStructured(ref _laIntBuf, ref _laIntSrv, ref _laIntAlloc, laInts.Length, sizeof(uint));
+            _csPerturbLa ??= CompileShaped(GpuGroupShapes.SlotPerturb, FracturingFog.Rendering.LaKernelSource.Build(), label: "perturb-la",
+                entryPoint: FracturingFog.Rendering.LaKernelSource.EntryPoint);
+
+            UploadDoubles(_refZrBuf!, refZr, refLen);
+            UploadDoubles(_refZiBuf!, refZi, refLen);
+            UploadDoubles(_laStepBuf!, laSteps, laSteps.Length);
+            UploadUInts(_laIntBuf!, laInts);
+
+            var p = new LaParams
+            {
+                Scale = scale, EscapeR2 = escapeRadius2, OffX0 = offsetX0, OffY0 = offsetY0,
+                AtThrC = at.ThrC, AtEsc2 = at.Esc2, AtRefCR = at.RefCRe, AtRefCI = at.RefCIm,
+                AtCR = at.CRe, AtCI = at.CIm, AtInvZR = at.InvZRe, AtInvZI = at.InvZIm,
+                Width = width, Height = height, MaxIter = maxIter, RefLen = refLen, RowBase = 0,
+                Stages = stages, AtLen = at.Len, StepsBase = 2 * stages,
+            };
+
+            _ctx.CSSetShader(_csPerturbLa);
+            _ctx.CSSetShaderResource(0, _refZrSrv);   // t0
+            _ctx.CSSetShaderResource(1, _refZiSrv);   // t1
+            _ctx.CSSetShaderResource(2, _laStepSrv);  // t2
+            _ctx.CSSetShaderResource(3, _laIntSrv);   // t3
+            bool wave = GpuWavefront.UsePerturb;
+            LastFrameWavefront = wave;
+            p.Wave = wave ? 1 : 0;
+            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturb), width, height, maxIter, srvCount: 4, " (LA)", (rowBase, rows, band) =>
+            {
+                p.RowBase = rowBase;
+                p.BandRows = rows;
+                p.Band = band;
+                var mapped = _ctx.Map(_laParamsBuf!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
+                unsafe { *(LaParams*)mapped.DataPointer = p; }
+                _ctx.Unmap(_laParamsBuf!, 0);
+                _ctx.CSSetConstantBuffer(0, _laParamsBuf);
+            }, wave: wave, mask: ActiveMask(width, height));   // #1394
+            ReadPerturbOutputs(width * height, t0, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst,
+                mask: ActiveMask(width, height));
+        }
+    }
+
     /// <summary>TDR row-band tiling for the perturbation kernels (the shader + its
     /// SRVs are bound by the caller; <paramref name="writeParams"/> uploads the
     /// band's cbuffer). A deep-zoom full-image dispatch runs long enough on a
@@ -2006,6 +2132,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
         try { _perturbParamsBuf?.Dispose(); } catch { }
         try { _csPerturb?.Dispose(); } catch { }
         try { _csPerturbSa?.Dispose(); } catch { }
+        try { _csPerturbLa?.Dispose(); _laParamsBuf?.Dispose(); _laStepSrv?.Dispose(); _laStepBuf?.Dispose(); _laIntSrv?.Dispose(); _laIntBuf?.Dispose(); } catch { }   // #1630
         foreach (var cs in _csPerturbOrbit.Values) { try { cs.Dispose(); } catch { } }   // #607
         try { _csBuddha?.Dispose(); } catch { }   // #838
         try { _buddhaParamsBuf?.Dispose(); } catch { }
