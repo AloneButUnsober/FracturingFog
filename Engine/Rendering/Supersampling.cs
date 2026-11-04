@@ -367,13 +367,14 @@ namespace FracturingFog.Rendering
             var acc = new TemporalAccumulator();
             acc.Seed(calc.ColorBuffer, pixels);
             var orig = CentreLimbs.Capture(calc);
+            CentreLimbs jittered = orig;
             try
             {
                 for (int k = 1; k < taaMaxSamples; k++)
                 {
-                    if (token.IsCancellationRequested) break;
                     var (jx, jy) = TaaOffset(k);
-                    CentreJitter.Apply(calc, in orig, jx, jy, scale);
+                    // #1656 — jitter only while the view is still ours (see CentreJitter.TryApply).
+                    if (!CentreJitter.TryApply(calc, in orig, jx, jy, scale, token, ref jittered)) break;
                     var mean = (uint[])calc.ColorBuffer.Clone();   // the mean so far
                     try { calc.Calculate(token); }
                     catch (OperationCanceledException) { Array.Copy(mean, calc.ColorBuffer, pixels); break; }
@@ -381,7 +382,7 @@ namespace FracturingFog.Rendering
                     acc.AddAndWriteMean(calc.ColorBuffer);
                 }
             }
-            finally { orig.Restore(calc); }
+            finally { CentreJitter.RestoreIfOwned(calc, in orig, in jittered); }
             return acc.Count;
         }
 
@@ -433,13 +434,14 @@ namespace FracturingFog.Rendering
             // so it survives past the double's precision (~1e10 zoom).
             double scale = PixelScale(calc);
             var orig = CentreLimbs.Capture(calc);
+            CentreLimbs jittered = orig;
             int count = 1; // sample 0 already counted
             try
             {
                 foreach (var (jx, jy) in GridOffsets(side))
                 {
-                    if (token.IsCancellationRequested) break;
-                    CentreJitter.Apply(calc, in orig, jx, jy, scale);
+                    // #1656 — jitter only while the view is still ours (see CentreJitter.TryApply).
+                    if (!CentreJitter.TryApply(calc, in orig, jx, jy, scale, token, ref jittered)) break;
                     try { calc.Calculate(token); }
                     catch (OperationCanceledException) { break; }
                     eq?.Apply(calc);   // #1381
@@ -447,7 +449,7 @@ namespace FracturingFog.Rendering
                     count++;
                 }
             }
-            finally { orig.Restore(calc); }
+            finally { CentreJitter.RestoreIfOwned(calc, in orig, in jittered); }
             WriteMeans(calc.ColorBuffer, pixels, sumR, sumG, sumB, sumA, count);
             return new SupersampleStats(pixels, side * side, pixels, (long)pixels * count);
         }
@@ -456,11 +458,13 @@ namespace FracturingFog.Rendering
         {
             double scale = PixelScale(calc);
             var orig = CentreLimbs.Capture(calc);
+            CentreLimbs jittered = orig;
+            // #1656 — jitter / restore only while the view is still ours (CentreJitter.TryApply).
             return AdaptiveCore(calc.Width, calc.Height, () => calc.ColorBuffer, calc.IterationBuffer, calc.MaxIterations,
                 side, a, token,
                 m => calc.PixelMask = m,
-                (jx, jy) => CentreJitter.Apply(calc, in orig, jx, jy, scale),
-                () => orig.Restore(calc),
+                (jx, jy) => CentreJitter.TryApply(calc, in orig, jx, jy, scale, token, ref jittered),
+                () => CentreJitter.RestoreIfOwned(calc, in orig, in jittered),
                 ct => { calc.Calculate(ct); eq?.Apply(calc); });   // #1381
         }
 
@@ -470,7 +474,7 @@ namespace FracturingFog.Rendering
         // renders (and equalises) one jittered frame.
         private static SupersampleStats AdaptiveCore(int w, int h, Func<uint[]> color, int[]? iter, int maxIter,
             int side, AdaptiveAa a, CancellationToken token, Action<byte[]?> setMask,
-            Action<double, double> jitter, Action restore, Action<CancellationToken> sample)
+            Func<double, double, bool> jitter, Action restore, Action<CancellationToken> sample)
         {
             int pixels = w * h;
             var color0 = (uint[])color().Clone();
@@ -504,7 +508,7 @@ namespace FracturingFog.Rendering
                 foreach (var (jx, jy) in ProgressiveOffsets(side))
                 {
                     if (activeCount == 0 || token.IsCancellationRequested) break;
-                    jitter(jx, jy);
+                    if (!jitter(jx, jy)) break;   // #1656 — the view moved on
                     try { sample(token); }
                     catch (OperationCanceledException) { break; }
                     var buf = color();
@@ -571,7 +575,7 @@ namespace FracturingFog.Rendering
                 double cx0 = calc.CenterX, cy0 = calc.CenterY;
                 var st = AdaptiveCore(calc.Width, calc.Height, () => calc.ColorBuffer, null, 0, side, ad.AdaptiveAa, token,
                     m => ad.PixelMask = m,
-                    (jx, jy) => { calc.CenterX = cx0 + jx * s; calc.CenterY = cy0 + jy * s; },
+                    (jx, jy) => { calc.CenterX = cx0 + jx * s; calc.CenterY = cy0 + jy * s; return true; },
                     () => { calc.CenterX = cx0; calc.CenterY = cy0; },
                     ct => { calc.Calculate(ct); eq?.Apply(calc); });   // #1381
                 return st with { Equalizer = eq };

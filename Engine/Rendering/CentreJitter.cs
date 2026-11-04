@@ -58,6 +58,40 @@ namespace FracturingFog.Rendering
             calc.CenterY4 = y.X4; calc.CenterY5 = y.X5; calc.CenterY6 = y.X6; calc.CenterY7 = y.X7;
         }
 
+        /// <summary>#1656 — <see cref="Apply"/> for a pass on the calc thread while the
+        /// UI may move the view. <paramref name="owned"/> is the centre this pass last
+        /// left in the calculator: <paramref name="orig"/> before its first sample, then
+        /// each jitter it wrote. Under <see cref="MandelbrotCalculator.ViewSync"/>, jitter
+        /// only while <paramref name="token"/> is live and the centre is still
+        /// <paramref name="owned"/>, and record the new centre there. FractalRenderHost's
+        /// Trigger cancels the token before ApplyView writes the next view (under the
+        /// same lock), so false means the view has moved on, or is about to: stop the pass.</summary>
+        public static bool TryApply(MandelbrotCalculator calc, in CentreLimbs orig, double jx, double jy, double scale,
+            System.Threading.CancellationToken token, ref CentreLimbs owned)
+        {
+            lock (calc.ViewSync)
+            {
+                if (token.IsCancellationRequested || CentreLimbs.Capture(calc) != owned) return false;
+                Apply(calc, in orig, jx, jy, scale);
+                owned = CentreLimbs.Capture(calc);
+                return true;
+            }
+        }
+
+        /// <summary>#1656 — put <paramref name="orig"/> back only while the centre is
+        /// still <paramref name="owned"/>, the last centre this pass wrote (see
+        /// <see cref="TryApply"/>). Restoring unconditionally overwrote a region the
+        /// user had just recalled with the previous view's centre. The next frame
+        /// rendered the old centre at the new zoom (black or flat at depth), and TAA
+        /// settled there.</summary>
+        public static void RestoreIfOwned(MandelbrotCalculator calc, in CentreLimbs orig, in CentreLimbs owned)
+        {
+            lock (calc.ViewSync)
+            {
+                if (CentreLimbs.Capture(calc) == owned) orig.Restore(calc);
+            }
+        }
+
         /// <summary>True when a jitter of about one pixel still changes the
         /// centre: the pixel is above the OD centre's precision floor (~2⁻³⁷¹
         /// relative, eight 53-bit limbs, with headroom). Past it every jittered

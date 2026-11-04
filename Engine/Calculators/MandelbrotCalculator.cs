@@ -78,6 +78,12 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     public int Width { get; private set; }
     public int Height { get; private set; }
 
+    /// <summary>#1656 — guards the view (centre limbs, zoom, iteration cap) between the
+    /// UI thread's FractalRenderHost.ApplyView and the calc thread's jitter / restore
+    /// passes (CentreJitter.TryApply / RestoreIfOwned), so a pass that finishes after
+    /// the user moved the view never writes the old centre back.</summary>
+    public object ViewSync { get; } = new();
+
     public double CenterX { get; set; } = -0.5;
     public double CenterXLo { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
