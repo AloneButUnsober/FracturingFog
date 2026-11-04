@@ -14,8 +14,8 @@
 
 The issues are the canonical task list. This doc is the maths and architecture context; link both ways.
 
-**Status: S1 done (2026-11-03); S2 done (#1625); S3 done (#1626, opt-in); S4 done (#1627).** §2 is the method, derived and checked against Imagina's code;
-§4.1 is the proof of concept (`--laprobe`) and the decision to go on with S2; §4.2 is the engine's evaluator; §4.3 the AT. §3 is still a plan
+**Status: S1 done (2026-11-03); S2 done (#1625); S3 done (#1626, opt-in); S4 done (#1627); S5 done (#1628, 4-lane path opt-in: no gain measured).** §2 is the method, derived and checked against Imagina's code;
+§4.1 is the proof of concept (`--laprobe`) and the decision to go on with S2; §4.2 is the engine's evaluator; §4.3 the AT; §4.4 SIMD. §3 is still a plan
 where S1 did not settle it.
 
 ---
@@ -213,6 +213,8 @@ A third party can check FF's code against Imagina's `HInfLAEvaluator.{h,cpp}` (c
 | `MandelbrotCalculator.EvaluateLa`, stage loop (#1626) | `EvaluateLA` + `LAInfo::EvaluateDzdc` | translation, scalar | 2, 3, 8; no Julia sampling |
 | `MandelbrotCalculator.EvaluateLa`, plain tail | — (FF's `ResumePixelPTRebased`) | FF's own | 4, 9 |
 | `MandelbrotCalculator.ComputeRowLa`, `UseLaEvaluator`, `LastLaWork` | — | FF's own | |
+| `MandelbrotCalculator.LaRunStages`, `RunLaAt` (#1628) | the same functions as the stage loop and AT block above, moved into helpers | translation (unchanged) | |
+| `MandelbrotCalculator.ComputeRowLa4` / `LaTailStep4` (#1628, `MandelbrotCalculator.La4.cs`) | — (Imagina's vec4 evaluator not read) | FF's own; calls the two helpers | |
 
 ## 3. Architecture in FF
 
@@ -233,7 +235,8 @@ What S1 settled is in **bold**; the rest is still the plan.
 
     At 160×90, FF's BLA table takes 63 ms and the orbit 1.3 s.
   - `--laprobe` now runs on this table and reproduces the S1 numbers exactly.
-- **Evaluator** (S3 done: #1626; SIMD S5), `Engine/Calculators/MandelbrotCalculator.La.cs`, on the CPU deep path.
+- **Evaluator** (S3 done: #1626; S5 done: #1628), `Engine/Calculators/MandelbrotCalculator.La.cs`, on the CPU deep path.
+  - **SIMD** (#1628, `MandelbrotCalculator.La4.cs`, `LaSimd`, `FF_LA_SIMD=1`, off): the plain tail on 4 AVX2 lanes, the AT and the stages in scalar per lane (the same `RunLaAt` / `LaRunStages` code), byte-identical to the scalar evaluator. It measured no faster than scalar on the bench CPU (§4.4), so it is off; it stays for measuring on other CPUs (S6).
   - `UseLaEvaluator` (`FF_LA=1`, off by default) sends the whole frame through `ComputeRowLa` → `EvaluateLa` instead of the PT4 / PT8 rows. It implies building the table. It is inactive with acceleration off, rebasing off, the DD rebase reference, or a table with a non-finite coefficient (`LaStageTable.Finite`); those frames are today's. GPU perturbation is skipped while it is on (the GPU is S7).
   - Scalar double, per pixel, so the #1330 lattice and #1344 mask contracts hold as in `ComputeRowPeriodic`. No SA: the stages start at n = 0.
   - **The derivative rides through each step exactly,** d ← A·2z_s·d + B, so normals and distance estimates agree with plain rebasing (§4.2). The BLA rows' d ← A·d drops B.
@@ -413,6 +416,52 @@ Setup as §4.2.
   | Imagina's margin as the default | 3 S1626 tests |
 
 **Decision:** keep the AT, with FF's margin, on with the evaluator. It is exact where it runs and, on these scenes, it does not hurt. The epic's pixel cost is now the plain tail (300–550 steps per pixel) on the shallow scenes and stage-1 steps on the deepest; S5 (SIMD) attacks both.
+
+### 4.4 SIMD (S5, #1628, 2026-11-03)
+
+Setup:
+- i5-13420H: 4 P-cores with SMT + 4 E-cores, 12 threads, AVX2, no AVX-512.
+- 960×540, AT on, FF's defaults otherwise.
+- `--deepcostprobe` with `FF_DEEPCOST_LA_SIMD_AB=1` renders the scalar and the 4-lane frames alternately in one process, best of 4 each, so clock drift hits both. Separate runs drifted by up to 25 % on the same frame.
+
+**Two designs:**
+1. **Every lane takes its own step each iteration** — an LA step or a plain step, both computed for all four lanes and blended by mask. The step data is gathered per lane from the table (`LaStep` is 9 doubles), and the control runs per lane in scalar.
+   - Measured in separate runs: 1.9–3.7× slower than scalar on every scene, and 2.2–3.3× after skipping a block when no lane needs it.
+   - The per-lane control on every step costs as much as a scalar step. Replaced.
+2. **Grouped by phase** (kept): the plain tail on 4 lanes as the PT4 rows do (#1613). The AT and the stages run in scalar per lane, through the scalar evaluator's own `RunLaAt` / `LaRunStages`, when a lane loads a pixel and when it climbs back from the tail. That happens about 4 times per pixel on every scene (`LastLaTailClimbs`).
+
+**Results (design 2, pixel stage, scalar / 4-lane):**
+
+| scene | reference read by 4 scalar loads | by AVX2 gathers (`FF_LA_GATHER=1`) |
+|---|---|---|
+| p448 | 168 / 161 ms (×1.04) | 200 / 218 ms (×0.92) |
+| path | 192 / 184 ms (×1.05) | 231 / 234 ms (×0.99) |
+| p953 | 103 / 111 ms (×0.93) | 125 / 137 ms (×0.92) |
+| p15,248 | 185 / 202 ms (×0.92) | 210 / 243 ms (×0.86) |
+| p121,984 | 507 / 565 ms (×0.90) | 500 / 601 ms (×0.83) |
+| p951,094 | 2,692 / 3,135 ms (×0.86) | 2,743 / 3,224 ms (×0.85) |
+
+- The frames were byte-identical in every run.
+- The scalar evaluator already keeps this CPU busy: 12 threads with SMT hide most of a step's latency, so 4 lanes per thread add little. On the stage-heavy scenes the lane state's transfers to and from scalar for each climb cost more than the vector tail saves.
+- Gathers are slower than four scalar loads here, so the scalar loads are the default.
+
+**`S1628LaSimdTests`:**
+- Byte-identical to scalar on all five scenes up to p121,984, with the AT on and off, at a size whose rows do not fill the lanes (61×37). Compared: every buffer the frame writes (iterations, smooth, distance, normals, final z and derivative, colours) and the work counters.
+- The same through a sparse #1344 pixel mask (at the marked pixels: unmarked ones keep their buffers' contents, and those buffers are allocated uninitialised, so they hold whatever the process had there) and in a sub-rect tile of a larger image (#1330 geometry).
+- The options it does not cover (tail BLA, climbing off) keep the scalar evaluator.
+- **Mutants:**
+
+  | mutant | failing tests |
+  |---|---|
+  | the end-of-reference rebase one index late | 3 |
+  | the cap test one iteration late | 1 |
+  | a non-identical multiply in the step | all 6 |
+
+  Equivalent:
+  - `>` for `>=` at the escape radius, which needs |z|² exactly 512².
+  - An escaping lane reporting the stored derivative: held lanes store the value from before the update, which is what it reports.
+
+**Decision:** the 4-lane path stays, off by default (`FF_LA_SIMD=1`), byte-identical, for S6 to measure on other CPUs (no SMT, AVX-512). S6 turns on the scalar evaluator, the one that pays (§4.2).
 
 ## 5. Credit
 

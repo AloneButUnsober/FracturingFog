@@ -2840,6 +2840,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         LastFrameUsedGpuSeriesApproximation = false;
         LastFrameUsedGpuBla = false;
         _lastFrameUsedLa = false;   // #1626
+        _lastFrameUsedLaSimd = false;   // #1628
 
         // One reference orbit at the view centre. Each pixel iterates only
         // the double-precision delta δ_n = z_n − Z_n.
@@ -2954,6 +2955,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         bool useLa = LaActive;   // #1626 — the LA evaluator replaces the PT rows for the frame
         _lastFrameUsedLa = useLa;
         if (useLa) SelectLaAt(dcMaxAbs);   // #1627
+        bool useLa4 = useLa && LaSimdActive;   // #1628
+        _lastFrameUsedLaSimd = useLa4;
 
         // D-6b1 — SIMD PT4 / PT8 now honour sub-rect geometry; the legacy
         // single-render path (SubRectOffsetX/Y == 0, ImageWidth/Height ==
@@ -3002,7 +3005,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             int rowMaxIt = useTileCap ? perRow![y] : maxIt;
             if (rowMaxIt <= 0) rowMaxIt = maxIt;
             int rowBase = y * Width;
-            if (useLa)
+            if (useLa4)
+                ComputeRowLa4(y, scale, rowMaxIt, rowBase, colorMap, xBegin, xEnd);
+            else if (useLa)
                 ComputeRowLa(y, scale, rowMaxIt, rowBase, colorMap, xBegin, xEnd);
             else if (useSimd512)
                 ComputeRowPT8(y, scale, rowMaxIt, rowBase, colorMap, xBegin, xEnd);
