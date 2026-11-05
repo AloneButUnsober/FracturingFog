@@ -14,8 +14,8 @@
 
 The issues are the canonical task list. This doc is the maths and architecture context; link both ways.
 
-**Status: S1 done (2026-11-03); S2 done (#1625); S3 done (#1626, opt-in); S4 done (#1627); S5 done (#1628, 4-lane path opt-in: no gain measured); S6 done (#1629, LA on by default from zoom 1e30).** §2 is the method, derived and checked against Imagina's code;
-§4.1 is the proof of concept (`--laprobe`) and the decision to go on with S2; §4.2 is the engine's evaluator; §4.3 the AT; §4.4 SIMD; §4.5 the default. §3 is still a plan
+**Status: S1 done (2026-11-03); S2 done (#1625); S3 done (#1626, opt-in); S4 done (#1627); S5 done (#1628, 4-lane path opt-in: no gain measured); S6 done (#1629, LA on by default from zoom 1e30); S7 done (#1630, GPU kernel, opt-in).** §2 is the method, derived and checked against Imagina's code;
+§4.1 is the proof of concept (`--laprobe`) and the decision to go on with S2; §4.2 is the engine's evaluator; §4.3 the AT; §4.4 SIMD; §4.5 the default; §4.6 the GPU kernel. §3 is still a plan
 where S1 did not settle it.
 
 ---
@@ -215,6 +215,7 @@ A third party can check FF's code against Imagina's `HInfLAEvaluator.{h,cpp}` (c
 | `MandelbrotCalculator.ComputeRowLa`, `UseLaEvaluator`, `LastLaWork` | — | FF's own | |
 | `MandelbrotCalculator.LaRunStages`, `RunLaAt` (#1628) | the same functions as the stage loop and AT block above, moved into helpers | translation (unchanged) | |
 | `MandelbrotCalculator.ComputeRowLa4` / `LaTailStep4` (#1628, `MandelbrotCalculator.La4.cs`) | — (Imagina's vec4 evaluator not read) | FF's own; calls the two helpers | |
+| `LaKernelSource` `CSPerturbLA` (#1630, `Rendering.D3D/LaKernelSource.cs`) | `EvaluateAT`, `EvaluateLA`, `LAInfo::EvaluateDzdc`, via `RunLaAt` / `LaRunStages` | translation (HLSL of the C# translation), as a chunked state machine | 2, 3, 8, 10; plain tail FF's own (4, 9) |
 
 ## 3. Architecture in FF
 
@@ -256,7 +257,13 @@ What S1 settled is in **bold**; the rest is still the plan.
   - An enabled GPU perturbation frame still runs on the GPU under Auto; On forces LA in its place.
   - The way back: region snapshot (`DeepLa`, omitted at Auto) → `--param DeepLa=0|1|2` → Command builder seed; the Fractal Params → Deep zoom → Evaluator box; `FF_LA=0` / `FF_LA=1` override every calculator for A/B.
   - The precision label gains ` LA` (`QD-PT LA`) when the LA rows rendered the frame.
-- **GPU** (S7). #1621 is done, so the GPU deep kernels already take the periodic reference that the stages are built over.
+- **GPU** (S7 done: #1630). `Rendering.D3D/LaKernelSource.cs` (`CSPerturbLA`), one HLSL source for D3D11 (FXC) and Vulkan (DXC), `IGpuKernel.RunPerturbLa`, fp64.
+  - The kernel is the scalar evaluator as a state machine: AT, stages, plain tail with climbing back, the same steps in the same order. It runs PERTURB_CHUNK trips at a time so the #1340 wavefront schedule, the #1334 TDR bands and the #1394 mask work as for the SA / BLA kernel.
+  - Buffers: t2 the steps (`LaStageTable.GpuSteps`, 8 doubles each), t3 the integers (`GpuInts`: per stage first step and count, per step Len and Next; uints, so the shader needs no double-to-int conversion); the AT in the cbuffer.
+  - The calculator takes it when the frame wants LA (`LaMode`), GPU perturbation runs, the kernel has it (`SupportsPerturbationLa`) and `UseGpuLa` (`FF_GPU_LA=0` off); forced On now runs on the GPU too where the kernel has LA. `LastFrameUsedGpuLa`; the route reads "deep-zoom perturbation + LA stages".
+  - Range: the GPU deep path stops at `MaxGpuPerturbZoom` (1e50), so on the GPU LA covers 1e30..1e50; the deeper scenes stay on the CPU LA rows.
+  - **Off by default** (`UseGpuLa`, `FF_GPU_LA=1`): on the GT 710 under Vulkan it is slower than the SA / BLA kernel. D3D11 is gated off (`FF_D3D_LA=1`): the NVIDIA D3D11 driver hung on it (#1661). §4.6.
+  - Not done: the fp32 / float-exp kernels (#1331) keep their path (§4.6).
 
 ## 4. Correctness
 
@@ -526,10 +533,74 @@ Setup:
 
 **Tests that pin the BLA rows** set `DeepLa` Off explicitly: S1274 (SIMD rebasing), S1613 (resumed rebasing) and S1625 (table only). S1321 now expects the ` LA` label at ≥ 1e30.
 
+### 4.6 The GPU kernel (S7, #1630, 2026-11-04)
+
+**The kernel** (`LaKernelSource.CSPerturbLA`, §3) runs the CPU evaluator's steps in the same order, so its frames are the CPU LA frames up to the GPU's rounding.
+
+**Parity on the GT 710 under Vulkan** (`S1630GpuLaTests`, 64×36):
+
+| view | AT | pixels differing from CPU LA | in / out differences |
+|---|---|---|---|
+| p448 | on every pixel | 0.00 % | 0 |
+| path | none | 0.09 % | 0 |
+| 3E47 Test | none | 0.00 % | 0 |
+
+- **Exact iteration** (16 samples on p448): GPU LA 16/16, the GPU SA / BLA kernel 15/16 (total error 3).
+- **At 960×540**, the GPU LA frame differs from CPU LA on 0.00–0.01 % of pixels and the GPU SA / BLA frame on 0–3.6 %.
+
+**Time** (`--gpulaprobe 960 540`, best of 2; Vulkan, GeForce GT 710, fp64 at 1/24 rate):
+
+| view | CPU BLA | CPU LA | GPU SA / BLA | GPU LA | GPU LA against GPU SA / BLA |
+|---|---|---|---|---|---|
+| p448 5.2e33 | 233 ms | 186 ms | 1,056 ms | 1,249 ms | ×0.85 |
+| path 1e33 | 240 ms | 202 ms | 741 ms | 1,214 ms | ×0.61 |
+| deeper 4.5e46 | 65 ms | 44 ms | 144 ms | 214 ms | ×0.67 |
+| e45test04 1.1e47 | 189 ms | 149 ms | 381 ms | 855 ms | ×0.45 |
+| 3E47 Test | 174 ms | 117 ms | 407 ms | 605 ms | ×0.67 |
+
+- On this card every GPU deep path is 3–7× slower than the CPU, as before LA (`GPU-DeepZoom-Handoff.md`).
+- The LA kernel is slower than the SA / BLA kernel there.
+- Lanes of a warp sit in different phases and stages, so the steps diverge. The gathered steps are scattered reads.
+- **On WARP** (the software D3D11 device) the LA kernel was ×1.9 faster than SA / BLA on p448 (32×18), but WARP runs on the CPU.
+- **No GPU with fast fp64 was available to measure.**
+
+**Decisions:**
+- **`UseGpuLa` off** (`FF_GPU_LA=1` on). GPU deep perturbation is itself opt-in (`FF_GPU_PERTURB=1`).
+- **D3D11 off:** `MandelbrotGpuKernel.SupportsPerturbationLa` is false unless `FF_D3D_LA=1`, #1661.
+  - On the GT 710 under the NVIDIA D3D11 driver the kernel hung the device (TDR after ~7 s), even on an 8×8 frame. That happened with `continue`-based and with structured control flow.
+  - The FXC-compiled kernel is correct on WARP, and the same HLSL runs on the same GPU under Vulkan.
+- **Forced On** (`DeepLa` On) runs on the GPU only where the kernel is enabled; otherwise on the CPU LA rows, as in S6.
+
+**Tests** (`S1630GpuLaTests`):
+- parity with the CPU LA frame on three views, including the normals where the GPU's float derivative is finite;
+- exact iteration against the GPU SA / BLA frame;
+- the route under Auto (zoom 1e28 against 2.5e33), On, Off, acceleration off and `UseGpuLa` off, with the label and route text.
+
+**Mutants** (in the HLSL):
+
+| mutant | failing tests |
+|---|---|
+| next index one step off | 3 |
+| validity check on w removed | 3 |
+| AT converted back without 1/A | 2 |
+| + B dropped from the derivative | 1 (the normals check on path) |
+
+Not caught: removing the tail's \|z\| < \|δ\| rebase. With climbing back the tail is short, and none of the three views glitches without it.
+
+**Found on the way, filed:**
+- **#1660:** every GPU deep kernel returns z and dz/dc as `float4`, and |dz/dc| ≈ 1/pixel overflows float past ~1e35. GPU deep frames' normals and DE are inf there: 75–100 % of escaped pixels on the test views. Where finite, GPU and CPU normals agree exactly.
+- **#1661:** the D3D11 hang above.
+
+**Not done:**
+- **The fp32 / float-exp kernels (#1331)** keep their path. LA's thresholds (10⁻⁶⁸ on the bench scenes) need the float-exp type, and a fp32 port should wait for a GPU on which the fp64 LA kernel pays.
+- **The GPU deep range stops at 1e50** (`MaxGpuPerturbZoom`), so the deepest bench scenes stay on the CPU LA rows.
+
+**Epic status:** S1–S7 done. LA is on by default on the CPU from 1e30 (S6), which is where the epic's speed-up is: ×2–5.2 on the deep minibrot scenes. The GPU kernel is in place, correct, and opt-in.
+
 ## 5. Credit
 
 The method and the code come from Imagina; see `Docs/Resources-Bibliography.md#imagina`.
-- **Code.** `Engine/Math/LaStageTable.cs`, `Engine/Math/LaAt.cs` (#1627), `Engine/Calculators/MandelbrotCalculator.La.cs` (#1626, #1627) and `Probes/LaProbe.cs` contain C# translations of Imagina's functions (§2.7). They are not independent implementations.
+- **Code.** `Engine/Math/LaStageTable.cs`, `Engine/Math/LaAt.cs` (#1627), `Engine/Calculators/MandelbrotCalculator.La.cs` (#1626, #1627) and `Probes/LaProbe.cs` contain C# translations of Imagina's functions (§2.7); `Rendering.D3D/LaKernelSource.cs` (#1630) is their HLSL form. They are not independent implementations.
   - Each file carries an SPDX copyright line for the upstream author.
   - `THIRD-PARTY-NOTICES.md` §3 lists them as code derived from another project.
   - Imagina and Fracturing Fog are both AGPL-3.0.

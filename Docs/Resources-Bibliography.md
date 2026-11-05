@@ -788,7 +788,8 @@ Programs and galleries the project measured itself against, learned from, or pay
   builders' length caps and the AT.
   - **FF code:** `Engine/Math/LaStageTable.cs` (#1625, the stages; #1626, the minimum-|Z| period
     test), `Engine/Math/LaAt.cs` (#1627, the AT), `Engine/Calculators/MandelbrotCalculator.La.cs`
-    (#1626 / #1627, the engine's evaluator and AT) and
+    (#1626 / #1627, the engine's evaluator and AT), `Rendering.D3D/LaKernelSource.cs` (#1630, the
+    same evaluator as a GPU kernel) and
     `Probes/LaProbe.cs` (`--laprobe`, the probe's evaluator and AT) contain C# translations of its
     functions.
     - Both carry an SPDX copyright line for the upstream author.

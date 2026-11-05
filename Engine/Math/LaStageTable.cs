@@ -118,6 +118,40 @@ namespace FracturingFog.FFMath
         public int Stages => StageStart.Length;
         public long Bytes => (long)Data.Length * System.Runtime.CompilerServices.Unsafe.SizeOf<LaStep>();
 
+        private double[]? _gpuSteps;
+        private uint[]? _gpuInts;
+
+        /// <summary>#1630 — the steps for the GPU LA kernel: 8 doubles each (Ref re/im, A
+        /// re/im, B re/im, Thr, ThrC), in <see cref="Data"/> order, sentinels included.
+        /// Built once per table.</summary>
+        public double[] GpuSteps => _gpuSteps ??= BuildGpuSteps();
+
+        /// <summary>#1630 — the integers for the GPU LA kernel: 2 per stage (its first step's
+        /// index, its step count without the sentinel), then 2 per step (Len, Next).</summary>
+        public uint[] GpuInts => _gpuInts ??= BuildGpuInts();
+
+        private double[] BuildGpuSteps()
+        {
+            var a = new double[Data.Length * 8];
+            for (int i = 0; i < Data.Length; i++)
+            {
+                ref readonly var d = ref Data[i];
+                int o = i * 8;
+                a[o] = d.RefRe; a[o + 1] = d.RefIm; a[o + 2] = d.ARe; a[o + 3] = d.AIm;
+                a[o + 4] = d.BRe; a[o + 5] = d.BIm; a[o + 6] = d.Thr; a[o + 7] = d.ThrC;
+            }
+            return a;
+        }
+
+        private uint[] BuildGpuInts()
+        {
+            int s = Stages;
+            var a = new uint[2 * s + 2 * Data.Length];
+            for (int k = 0; k < s; k++) { a[2 * k] = (uint)StageStart[k]; a[2 * k + 1] = (uint)StageCount[k]; }
+            for (int i = 0; i < Data.Length; i++) { a[2 * s + 2 * i] = (uint)Data[i].Len; a[2 * s + 2 * i + 1] = (uint)Data[i].Next; }
+            return a;
+        }
+
         /// <summary>The steps of stage <paramref name="k"/>, without its sentinel.</summary>
         public ReadOnlySpan<LaStep> Stage(int k) => Data.AsSpan(StageStart[k], StageCount[k]);
 

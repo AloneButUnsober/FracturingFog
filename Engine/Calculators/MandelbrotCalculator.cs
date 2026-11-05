@@ -596,6 +596,16 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     /// with the BLA table. Reset at the start of every HP frame.</summary>
     public bool LastFrameUsedGpuBla { get; private set; }
 
+    /// <summary>#1630 — true when the last GPU perturbation frame ran the LA stage kernel
+    /// (<see cref="IGpuKernel.RunPerturbLa"/>). Reset at the start of every HP frame.</summary>
+    public bool LastFrameUsedGpuLa { get; private set; }
+
+    /// <summary>#1630 — run the LA stages in the GPU perturbation kernel when the frame
+    /// wants LA (<see cref="LaMode"/>) and the kernel has it. Off by default: on the only
+    /// GPU measured (GT 710, Vulkan) it was slower than the SA / BLA kernel (design doc
+    /// §4.6). FF_GPU_LA=1 turns it on.</summary>
+    public static bool UseGpuLa { get; set; } = Environment.GetEnvironmentVariable("FF_GPU_LA") == "1";
+
     /// <summary>#1166 — true when the last frame (or <see cref="BuildReferenceOrbit"/>)
     /// built its QD reference orbit on the GPU (<see cref="UseGpuReferenceOrbit"/>),
     /// false when it was built on the CPU, recycled or served from the cache.</summary>
@@ -667,6 +677,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 with { Mode = "fp32" };
         if (hp && LastFrameUsedGpuPerturbation)
             return GpuRoute.OnGpu(label, $"{label}: deep-zoom perturbation"
+                + (LastFrameUsedGpuLa ? " + LA stages" : "")   // #1630
                 + (LastFrameUsedGpuSeriesApproximation ? " + series approximation" : "")
                 + (LastFrameUsedGpuBla ? " + BLA" : "")
                 + (LastFrameUsedGpuWavefront ? " + wavefront" : ""));
@@ -2847,6 +2858,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         LastFrameUsedGpuPerturbation = false;   // set true only on a successful GPU perturb dispatch below
         LastFrameUsedGpuSeriesApproximation = false;
         LastFrameUsedGpuBla = false;
+        LastFrameUsedGpuLa = false;   // #1630
         _lastFrameUsedLa = false;   // #1626
         _lastFrameUsedLaSimd = false;   // #1628
 
@@ -2897,7 +2909,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 && (GpuKernel.SupportsPerturbation || UseFloatExpKernel(GpuKernel))   // #1331: no fp64 needed
                 && AllowPtRebasing && !UseDdRebaseReference && !ForceScalarPtPath
                 && !tileCap && Zoom <= MaxGpuPerturbZoom && _refOrbitLen >= 1
-                && EffectiveLaMode != DeepLaMode.On;   // #1626 / #1629: LA forced On is a CPU path (GPU = S7, #1630)
+                // #1626 / #1629 / #1630: LA forced On runs on the GPU only where the kernel has the LA stages.
+                && (EffectiveLaMode != DeepLaMode.On || (UseGpuLa && GpuKernel.SupportsPerturbationLa));
             Dbg86($"GATE zoom={Zoom:0e+0} gateOk={gateOk} recycled={recycled} " +
                   $"useGpuPerturb={UseGpuPerturbation} kernel={(GpuKernel != null)} " +
                   $"supports={(GpuKernel?.SupportsPerturbation ?? false)} allowRebase={AllowPtRebasing} " +
@@ -2910,7 +2923,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                     : LatticeAligned ? GpuRoute.Cpu("pan reuse", "pixel reuse while panning (#1330) renders deep frames on the CPU")
                     : !AllowPtRebasing || UseDdRebaseReference || ForceScalarPtPath
                         ? GpuRoute.Cpu("diagnostic toggle", "a perturbation diagnostic toggle (rebasing / DD reference / scalar path) keeps deep zoom on the CPU")
-                    : EffectiveLaMode == DeepLaMode.On ? GpuRoute.Cpu("LA evaluator", "the LA stage evaluator forced On (#1629) renders deep frames on the CPU")
+                    : EffectiveLaMode == DeepLaMode.On ? GpuRoute.Cpu("LA evaluator", "the LA stage evaluator forced On (#1629) runs on the CPU: this GPU kernel has no LA stages (or FF_GPU_LA=0)")
                     : tileCap ? GpuRoute.Cpu("per-tile iter cap", "per-tile iteration caps render on the CPU only")
                     : Zoom > MaxGpuPerturbZoom ? GpuRoute.Cpu($"zoom > {MaxGpuPerturbZoom:0e0}", $"past the GPU perturbation zoom limit ({MaxGpuPerturbZoom:0e0})")
                     : GpuRoute.Cpu("no reference orbit", "the reference orbit is empty");
@@ -3118,7 +3131,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     {
         var kernel = GpuKernel;
         if (kernel == null) return false;
-        bool useSa = false, useBla = false, wave = false;
+        bool useSa = false, useBla = false, wave = false, useLa = false;
         // #1340 — the deep kernels' schedule for this dispatch (Auto: the last frame's hint).
         // #1394 — a sparse solid-region pass takes the wavefront schedule: its threads pull
         // only marked pixels, while one thread per pixel idles a group's lanes around a 1-px
@@ -3130,9 +3143,40 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         {
             double offX0 = SubRectOffsetX - effImgW * 0.5;
             double offY0 = SubRectOffsetY - effImgH * 0.5;
+            // #1630 — the LA stages on the GPU, under the CPU evaluator's own conditions
+            // (LaActive): the frame wants LA, acceleration and rebasing are on, the table
+            // is finite; the kernel runs the evaluator with climbing back and no tail BLA.
+            if (LaWanted && UseGpuLa && kernel.SupportsPerturbationLa && !DisableAcceleration
+                && LaClimbOnRebase && !LaTailBla && AllowPtRebasing && !UseDdRebaseReference)
+            {
+                EnsureLaTable();
+                ResetLaWork();
+                double hW = effImgW * 0.5 * scale, hH = effImgH * 0.5 * scale;
+                SelectLaAt(Math.Sqrt(hW * hW + hH * hH));
+                useLa = _laTable is { Finite: true, Stages: >= 1 };
+            }
+            if (useLa)
+            {
+                var t = _laTable!;
+                var g = _laAt is { } a
+                    ? new FracturingFog.Rendering.GpuLaAt(a.Len, a.ThrC, a.Esc2, a.RefCRe, a.RefCIm, a.CRe, a.CIm, a.InvZRe, a.InvZIm)
+                    : default;
+                SeedWavefrontIfAsked((w, h, sc, ox, oy, it, sm, zr, zi, dr, di) => kernel.RunPerturbLa(   // #1386
+                    w, h, sc, maxIt, EscapeRadius2, ox, oy, _refZr, _refZi, _refOrbitLen,
+                    t.GpuSteps, t.GpuInts, t.Stages, g, it, sm, zr, zi, dr, di), scale, offX0, offY0);
+                GpuWavefront.PerturbHint = Hint();
+                wave = GpuWavefront.UsePerturb;
+                kernel.RunPerturbLa(
+                    Width, Height, scale, maxIt, EscapeRadius2,
+                    offX0, offY0,
+                    _refZr, _refZi, _refOrbitLen,
+                    t.GpuSteps, t.GpuInts, t.Stages, g,
+                    IterationBuffer, SmoothBuffer,
+                    FinalZrBuffer, FinalZiBuffer, FinalDrBuffer, FinalDiBuffer);
+            }
             // #88 / G4.5 — the SA prelude under the same conditions the CPU path
             // applies it (coefficients valid past 16 iterations, acceleration on).
-            if (UseGpuSeriesApproximation && kernel.SupportsPerturbationSA
+            if (!useLa && UseGpuSeriesApproximation && kernel.SupportsPerturbationSA
                 && !DisableAcceleration && !DisableSeriesApproximation)
             {
                 EnsureSeriesApproximation();
@@ -3140,7 +3184,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             }
             // #88 / G4.5b — the CPU's BLA table, built for the same worst-case pixel
             // offset (the image corner) the CPU path uses; applied in the SA kernel.
-            if (UseGpuBla && kernel.SupportsPerturbationSA && !DisableAcceleration)
+            if (!useLa && UseGpuBla && kernel.SupportsPerturbationSA && !DisableAcceleration)
             {
                 double halfWS = effImgW * 0.5 * scale, halfHS = effImgH * 0.5 * scale;
                 EnsureBlaTable(Math.Sqrt(halfWS * halfWS + halfHS * halfHS), cpuRows: false);
@@ -3149,7 +3193,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 // (safeMax 0 never skips); the cached table is the cheapest source.
                 if (useBla && !useSa) { EnsureSeriesApproximation(); useBla = _sa != null; }
             }
-            if (useSa || useBla)
+            if (!useLa && (useSa || useBla))
             {
                 var sa = _sa!;
                 var bla = useBla ? _blaTable : null;
@@ -3169,7 +3213,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                     FinalZrBuffer, FinalZiBuffer, FinalDrBuffer, FinalDiBuffer,
                     bla?.GpuCoefficients, bla?.Levels ?? 0);
             }
-            else if (UseFloatExpKernel(kernel))
+            else if (!useLa && UseFloatExpKernel(kernel))
             {
                 // #1331 — the all-fp32 float-exp kernel (weak / no fp64); #1384: wavefront too.
                 SeedWavefrontIfAsked((w, h, sc, ox, oy, it, sm, zr, zi, dr, di) => kernel.RunPerturbFloatExp(   // #1386
@@ -3185,7 +3229,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                     FinalZrBuffer, FinalZiBuffer, FinalDrBuffer, FinalDiBuffer);
                 LastFrameUsedGpuFloatExp = true;
             }
-            else
+            else if (!useLa)
             {
                 SeedWavefrontIfAsked((w, h, sc, ox, oy, it, sm, zr, zi, dr, di) => kernel.RunPerturb(   // #1386
                     w, h, sc, maxIt, EscapeRadius2, ox, oy, _refZr, _refZi, _refOrbitLen,
@@ -3225,6 +3269,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         LastFrameUsedGpuPerturbation = true;
         LastFrameUsedGpuSeriesApproximation = useSa;
         LastFrameUsedGpuBla = useBla;
+        LastFrameUsedGpuLa = useLa;   // #1630
+        if (useLa) _lastFrameUsedLa = true;   // the precision label's " LA"
         LastFrameUsedGpuWavefront = wave;
         // #1394 — a solid-region pass computed only its marked pixels: no warp-waste
         // sample for the next frame's hint.

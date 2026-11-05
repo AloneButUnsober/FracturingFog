@@ -154,6 +154,10 @@ headers.
     `LAInfo::CreateAT`, `ATInfo::Usable` and `CreateATFromLA`; the AT block of
     `EvaluateLa` translates the AT part of `HInfLAEvaluationTask::Evaluate` and
     `EvaluateAT`.
+  - **`Rendering.D3D/LaKernelSource.cs`** (#1630): the GPU LA kernel, HLSL for both
+    the D3D11 and the Vulkan backends. Its AT and stage loop are the HLSL form of the
+    engine's translations above (`RunLaAt`, `LaRunStages`), so they derive from
+    `EvaluateAT` / `EvaluateLA` / `LAInfo::EvaluateDzdc`; the plain tail is FF's own.
   - **`LaPeriodTest.MinMagnitude`** in `Engine/Math/LaStageTable.cs` (#1626)
     translates the `PERIOD_DETECTION_METHOD2` branches of `LAInfo::Step` /
     `Composite` / `DetectPeriod` (the `MinMag` field and its 2⁻⁶ / 2⁻³ factors).
