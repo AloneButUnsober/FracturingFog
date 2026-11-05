@@ -1861,6 +1861,12 @@ static class Program
         if (args.Length > 0 && args[0] == "--cluster-video-parity")
             return FracturingFog.ServerHost.ClusterVideoParitySelfTest.Run(args);
 
+        // #1669 — the interactive shell applies the FF_* switches saved in the Control
+        // Center's Environment panel, before anything below reads one. Headless paths
+        // (--batch, --server, probes) returned above: they stay reproducible from their
+        // own command line and environment.
+        FracturingFog.Cli.EnvironmentSettings.ApplyAtStartup();
+
         // Phase X.4 / Slice 4.1 — --renderer override. Default is RendererBackend.Auto
         // (DX on Win, Silk on Linux/macOS, picked by RendererFactory.Create
         // from the surface kind). Explicit values let the user parity-test
