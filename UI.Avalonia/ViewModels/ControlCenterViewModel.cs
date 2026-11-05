@@ -29,6 +29,8 @@ public enum ControlCenterSection
     Advanced,
     /// <summary>Math Plane object editor (#1549).</summary>
     MathPlane,
+    /// <summary>FF_* environment switches (#1669, epic #1667).</summary>
+    Environment,
 }
 
 /// <summary>A nav-rail entry. <see cref="IsAdvanced"/> items are hidden in
@@ -58,6 +60,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
         new(ControlCenterSection.Assets,     "Assets",        "▤", false),
         new(ControlCenterSection.MathPlane,  "Math Plane",    "✛", false),
         new(ControlCenterSection.Advanced,   "Advanced",      "⚙", true),
+        new(ControlCenterSection.Environment, "Environment",  "≡", true),
     };
 
     private ControlCenterSection _selectedSection = ControlCenterSection.View;
@@ -72,6 +75,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
         DetachSectionCommand = ReactiveCommand.Create(
             () => DetachRequested?.Invoke(this, _selectedSection));
         CommandBuilder = new CommandBuilderViewModel(BuildLiveSeed, shell.RequestCopyToClipboard);
+        Environment = new EnvironmentPanelViewModel();   // #1669
         QrCode = new QrCodeViewModel();
         // #1401 — a found QR view is plain navigation, like an explored one.
         QrCode.NavigateRequested = v => GoToExploreView(v, Shell.Main.ViewState.Quality);
@@ -320,6 +324,10 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
     public bool IsAssetsSection     => _selectedSection == ControlCenterSection.Assets;
     public bool IsAdvancedSection   => _selectedSection == ControlCenterSection.Advanced;
     public bool IsMathPlaneSection  => _selectedSection == ControlCenterSection.MathPlane;
+    public bool IsEnvironmentSection => _selectedSection == ControlCenterSection.Environment;
+
+    /// <summary>#1669 — the Environment section's view model.</summary>
+    public EnvironmentPanelViewModel Environment { get; }
 
     private void RaiseSectionFlags()
     {
@@ -331,6 +339,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(IsAssetsSection));
         this.RaisePropertyChanged(nameof(IsAdvancedSection));
         this.RaisePropertyChanged(nameof(IsMathPlaneSection));
+        this.RaisePropertyChanged(nameof(IsEnvironmentSection));
     }
 
     private void RebuildNav()

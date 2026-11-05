@@ -40,6 +40,7 @@ public static class ControlCenterDetachService
         ControlCenterSection.Assets     => WindowRole.DetachedAssetsPanel,
         ControlCenterSection.Advanced   => WindowRole.DetachedAdvancedPanel,
         ControlCenterSection.MathPlane  => WindowRole.DetachedMathPlanePanel,
+        ControlCenterSection.Environment => WindowRole.DetachedEnvironmentPanel,
         _                               => WindowRole.DetachedViewPanel,
     };
 
@@ -55,6 +56,7 @@ public static class ControlCenterDetachService
         WindowRole.DetachedAssetsPanel     => ControlCenterSection.Assets,
         WindowRole.DetachedAdvancedPanel   => ControlCenterSection.Advanced,
         WindowRole.DetachedMathPlanePanel  => ControlCenterSection.MathPlane,
+        WindowRole.DetachedEnvironmentPanel => ControlCenterSection.Environment,
         _                                  => null,
     };
 
@@ -68,6 +70,7 @@ public static class ControlCenterDetachService
         ControlCenterSection.Assets     => new AssetsSectionView(),
         ControlCenterSection.Advanced   => new AdvancedSectionView(),
         ControlCenterSection.MathPlane  => new MathPlaneSectionView(),
+        ControlCenterSection.Environment => new EnvironmentSectionView(),
         _                               => new ViewSectionView(),
     };
 

@@ -1,0 +1,83 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.ControlCenterSections.EnvironmentSectionView"
+        x:DataType="vm:ControlCenterViewModel"
+        Foreground="#DCDCDC">
+    <!-- ═══ Environment ═══ (#1669, epic #1667) FF_* switches from EnvVarCatalog.
+         Values are saved to environment.json and applied at the next launch; a value
+         set outside FF wins. Warnings are yellow (#FFCC00), never red: the user is
+         red/green colour-blind. -->
+    <UserControl.Styles>
+        <Style Selector="TextBlock.name">
+            <Setter Property="FontFamily" Value="Consolas,Menlo,monospace" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="TextBlock.meta">
+            <Setter Property="Foreground" Value="#8A8A8A" />
+            <Setter Property="FontSize" Value="10" />
+        </Style>
+        <Style Selector="TextBlock.warn">
+            <Setter Property="Foreground" Value="#FFCC00" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+    </UserControl.Styles>
+
+    <StackPanel Spacing="0" DataContext="{Binding Environment}" x:DataType="vm:EnvironmentPanelViewModel">
+        <Border Classes="group">
+            <StackPanel Spacing="6" Width="560" HorizontalAlignment="Left">
+                <TextBlock Classes="section" Text="Environment switches" />
+                <TextBlock Text="FF_* switches change render routes, GPU paths and diagnostics. Saved values apply the next time Fracturing Fog starts; a value set outside FF (shell, shortcut) wins. Checkboxes: blank = default, ticked = on, cleared = off."
+                           Foreground="#9A9A9A" FontSize="11" TextWrapping="Wrap" />
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBox Grid.Column="0" Text="{Binding Search}" Watermark="Search name, description or group" FontSize="11" />
+                    <CheckBox Grid.Column="1" Margin="10,0,0,0" Content="Advanced (probe / test / diagnostic)"
+                              IsChecked="{Binding ShowAdvanced}" FontSize="11" />
+                </Grid>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Content="Save" Command="{Binding SaveCommand}" />
+                    <Button Content="Revert" Command="{Binding RevertCommand}" />
+                    <Button Content="Reset all to default" Command="{Binding ResetAllCommand}" />
+                    <TextBlock Text="unsaved changes" Classes="warn" VerticalAlignment="Center"
+                               IsVisible="{Binding HasUnsavedChanges}" />
+                </StackPanel>
+                <TextBlock Text="{Binding Status}" Foreground="#B4B4B4" FontSize="11" TextWrapping="Wrap" />
+                <Border BorderBrush="#FFCC00" BorderThickness="1" Padding="6" IsVisible="{Binding RestartNeeded}">
+                    <TextBlock Text="{Binding RestartText}" Classes="warn" FontSize="11" />
+                </Border>
+            </StackPanel>
+        </Border>
+
+        <ItemsControl ItemsSource="{Binding Rows}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:EnvVarRowViewModel">
+                    <Border Classes="group">
+                        <Grid ColumnDefinitions="*,180" Width="560" HorizontalAlignment="Left">
+                            <StackPanel Grid.Column="0" Spacing="2">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Classes="name" Text="{Binding Name}" />
+                                    <TextBlock Classes="warn" FontWeight="Bold" Text="{Binding RiskBadge}" />
+                                </StackPanel>
+                                <TextBlock Text="{Binding Description}" FontSize="11" TextWrapping="Wrap" />
+                                <TextBlock Classes="meta" Text="{Binding Meta}" />
+                                <TextBlock Classes="meta" Text="{Binding CurrentText}" />
+                                <TextBlock Classes="warn" Text="{Binding Warning}" IsVisible="{Binding HasWarning}" />
+                                <TextBlock Classes="warn" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Top" Margin="8,0,0,0">
+                                <CheckBox IsThreeState="True" IsChecked="{Binding ToggleState}" IsVisible="{Binding IsToggle}"
+                                          Content="set" FontSize="11" />
+                                <ComboBox ItemsSource="{Binding ChoiceOptions}" SelectedItem="{Binding SelectedChoice}"
+                                          IsVisible="{Binding IsChoice}" FontSize="11" MinWidth="160" />
+                                <TextBox Text="{Binding TextValue}" Watermark="{Binding Watermark}"
+                                         IsVisible="{Binding IsTextual}" FontSize="11" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </StackPanel>
+</UserControl>

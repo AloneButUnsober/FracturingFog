@@ -113,6 +113,11 @@ for **whichever compute backend this session attached** (one backend per
 session, chosen at launch by `--renderer`). The box clears itself when no device
 can engage. Deep-zoom perturbation is a separate auto-enabled path and is
 unaffected by the checkbox.
+**Control Center → Environment** (#1669, power mode) lists every `FF_*` switch from
+`EnvVarCatalog` (#1668) with its description, default, risk warning and current value. Saved
+values go to `environment.json` in the data folder and apply the next time the interactive app
+starts; a value set outside FF (shell, shortcut) wins. `--batch`, `--server` and the probes
+never read the saved values.
 Performance work so far has been measured on low-end discrete GPUs and software
 rasterizers; validation on high-end discrete GPUs is still pending.
 
