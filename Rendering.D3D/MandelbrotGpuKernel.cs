@@ -1772,10 +1772,11 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
     public bool SupportsPerturbationLa => SupportsPerturbation && s_laAllowed;
 
     // 12 doubles then 12 ints: LaKernelSource's PerturbParams cbuffer, 144 bytes.
+    [StructLayout(LayoutKind.Sequential, Size = 144)]
     private struct LaParams
     {
         public double Scale, EscapeR2, OffX0, OffY0, AtThrC, AtEsc2, AtRefCR, AtRefCI, AtCR, AtCI, AtInvZR, AtInvZI;
-        public int Width, Height, MaxIter, RefLen, RowBase, Stages, AtLen, StepsBase, Wave, BandRows, Band, Pad0;
+        public int Width, Height, MaxIter, RefLen, RowBase, Stages, AtLen, StepsBase, Wave, BandRows, Band;   // the cbuffer's last int is padding: Size = 144 keeps it
     }
 
     private ID3D11Buffer? _laParamsBuf;
