@@ -40,6 +40,28 @@ internal static unsafe class RealKernelColorProbe
 {
     // gColor UAV register u3 -> binding UShift + 3.
     public const int ColorBinding = RealKernelProbe.UShift + 3;
+    // #1500 — gMask register t15 (#1394) -> binding TShift + 15. Every pixel reads its
+    // header, so it must be bound: lavapipe returned garbage for the unbound buffer, the
+    // kernel skipped ~all pixels and the colour output kept no alpha.
+    public const int MaskBinding = RealKernelProbe.TShift + 15;
+
+    /// <summary>#1500 — fail loudly when the kernel declares a t / u register that this
+    /// probe's (or --vulkanprobe's) descriptor set leaves unbound (Vulkan has no defined unbound reads).
+    /// gWork (u5) is exempt: only the wavefront schedule touches it (gWave = 0 here).</summary>
+    internal static void RequireBound(string hlsl, uint[] bindNums)
+    {
+        foreach (System.Text.RegularExpressions.Match m in
+                 System.Text.RegularExpressions.Regex.Matches(hlsl, @"register\(([tu])(\d+)\)"))
+        {
+            int reg = int.Parse(m.Groups[2].Value);
+            bool u = m.Groups[1].Value == "u";
+            if (u && reg == 5) continue;
+            uint binding = (uint)((u ? RealKernelProbe.UShift : RealKernelProbe.TShift) + reg);
+            if (Array.IndexOf(bindNums, binding) < 0)
+                throw new InvalidOperationException(
+                    $"probe: kernel declares {m.Value} (binding {binding}) but the probe does not bind it.");
+        }
+    }
 
     // Greyscale theme, verbatim from Engine GrayscalePalette (HlslPrelude is
     // empty; PaletteId "GrayscalePalette/v1"). Kept here as a literal so this
@@ -95,8 +117,9 @@ internal static unsafe class RealKernelColorProbe
     // ── Vulkan: compile the colour kernel + dispatch, read packed BGRA ────────
     public static void RunVulkan(VulkanContext ctx, Probe.View v, string paletteBody, out uint[] color)
     {
+        string hlsl = MandelbrotKernelSource.BuildColor(paletteHelpers: "", paletteBody: paletteBody);
         byte[] spirv = DxcCompiler.CompileToSpirv(
-            MandelbrotKernelSource.BuildColor(paletteHelpers: "", paletteBody: paletteBody),
+            hlsl,
             entry: MandelbrotKernelSource.EntryPoint,
             profile: "cs_6_0",
             "-fvk-b-shift", RealKernelProbe.BShift.ToString(), "0",
@@ -115,8 +138,8 @@ internal static unsafe class RealKernelColorProbe
         ulong colorSize = (ulong)(n * sizeof(uint));
         ulong perRowSize = (ulong)(Math.Max(H, 1) * sizeof(uint));
 
-        // 0=params,1=perRow,2=iter,3=smooth,4=finalZD,5=color
-        var buffers = new Probe.Allocated[6];
+        // 0=params,1=perRow,2=iter,3=smooth,4=finalZD,5=color,6=mask (#1394 / #1500)
+        var buffers = new Probe.Allocated[7];
         ShaderModule module = default;
         DescriptorSetLayout dsl = default;
         PipelineLayout layout = default;
@@ -133,9 +156,11 @@ internal static unsafe class RealKernelColorProbe
             buffers[3] = Probe.AllocBuffer(ctx, smoothSize, BufferUsageFlags.StorageBufferBit);
             buffers[4] = Probe.AllocBuffer(ctx, finalZDSize, BufferUsageFlags.StorageBufferBit);
             buffers[5] = Probe.AllocBuffer(ctx, colorSize, BufferUsageFlags.StorageBufferBit);
+            buffers[6] = Probe.AllocBuffer(ctx, 8, BufferUsageFlags.StorageBufferBit);   // #1500: gMask, zero header = no mask
 
             Probe.WriteBuffer(ctx, buffers[0], &blob, (int)paramsSize);
             Probe.ZeroBuffer(ctx, buffers[1], (int)perRowSize);
+            Probe.ZeroBuffer(ctx, buffers[6], 8);
 
             fixed (byte* code = spirv)
             {
@@ -148,8 +173,8 @@ internal static unsafe class RealKernelColorProbe
                 Probe.Check(vk.CreateShaderModule(device, in smci, null, out module), "vkCreateShaderModule");
             }
 
-            // Descriptor set layout: UBO@0, SSBO@100/200/201/202/203.
-            var bindings = stackalloc DescriptorSetLayoutBinding[6]
+            // Descriptor set layout: UBO@0, SSBO@100/200/201/202/203, #1500: gMask t15@115.
+            var bindings = stackalloc DescriptorSetLayoutBinding[7]
             {
                 Probe.LayoutBinding(0,                            DescriptorType.UniformBuffer),
                 Probe.LayoutBinding((uint)RealKernelProbe.TShift, DescriptorType.StorageBuffer),   // gPerRow t0
@@ -157,11 +182,12 @@ internal static unsafe class RealKernelColorProbe
                 Probe.LayoutBinding((uint)RealKernelProbe.UShift + 1, DescriptorType.StorageBuffer), // gSmooth u1
                 Probe.LayoutBinding((uint)RealKernelProbe.UShift + 2, DescriptorType.StorageBuffer), // gFinalZD u2
                 Probe.LayoutBinding((uint)ColorBinding,               DescriptorType.StorageBuffer), // gColor u3
+                Probe.LayoutBinding((uint)MaskBinding,                DescriptorType.StorageBuffer), // gMask t15 (#1500)
             };
             var dslci = new DescriptorSetLayoutCreateInfo
             {
                 SType = StructureType.DescriptorSetLayoutCreateInfo,
-                BindingCount = 6,
+                BindingCount = 7,
                 PBindings = bindings,
             };
             Probe.Check(vk.CreateDescriptorSetLayout(device, in dslci, null, out dsl), "vkCreateDescriptorSetLayout");
@@ -192,11 +218,11 @@ internal static unsafe class RealKernelColorProbe
             Probe.Check(vk.CreateComputePipelines(device, default, 1, &cpci, null, &created), "vkCreateComputePipelines");
             pipeline = created;
 
-            // Descriptor pool: 1 UBO + 5 SSBO in one set.
+            // Descriptor pool: 1 UBO + 6 SSBO in one set.
             var poolSizes = stackalloc DescriptorPoolSize[2]
             {
                 new DescriptorPoolSize { Type = DescriptorType.UniformBuffer, DescriptorCount = 1 },
-                new DescriptorPoolSize { Type = DescriptorType.StorageBuffer, DescriptorCount = 5 },
+                new DescriptorPoolSize { Type = DescriptorType.StorageBuffer, DescriptorCount = 6 },
             };
             var dpci = new DescriptorPoolCreateInfo
             {
@@ -216,21 +242,23 @@ internal static unsafe class RealKernelColorProbe
             };
             Probe.Check(vk.AllocateDescriptorSets(device, in dsai, out DescriptorSet set), "vkAllocateDescriptorSets");
 
-            var infos = stackalloc DescriptorBufferInfo[6];
-            var writes = stackalloc WriteDescriptorSet[6];
+            var infos = stackalloc DescriptorBufferInfo[7];
+            var writes = stackalloc WriteDescriptorSet[7];
             uint[] bindNums =
             {
                 0, (uint)RealKernelProbe.TShift,
                 (uint)RealKernelProbe.UShift, (uint)RealKernelProbe.UShift + 1,
-                (uint)RealKernelProbe.UShift + 2, (uint)ColorBinding,
+                (uint)RealKernelProbe.UShift + 2, (uint)ColorBinding, (uint)MaskBinding,
             };
+            RequireBound(hlsl, bindNums);   // #1500
             DescriptorType[] types =
             {
                 DescriptorType.UniformBuffer, DescriptorType.StorageBuffer,
                 DescriptorType.StorageBuffer, DescriptorType.StorageBuffer,
                 DescriptorType.StorageBuffer, DescriptorType.StorageBuffer,
+                DescriptorType.StorageBuffer,
             };
-            for (int i = 0; i < 6; i++)
+            for (int i = 0; i < 7; i++)
             {
                 infos[i] = new DescriptorBufferInfo { Buffer = buffers[i].Buffer, Offset = 0, Range = Vk.WholeSize };
                 writes[i] = new WriteDescriptorSet
@@ -243,7 +271,7 @@ internal static unsafe class RealKernelColorProbe
                     PBufferInfo = &infos[i],
                 };
             }
-            vk.UpdateDescriptorSets(device, 6, writes, 0, null);
+            vk.UpdateDescriptorSets(device, 7, writes, 0, null);
 
             var cmdPoolCi = new CommandPoolCreateInfo
             {

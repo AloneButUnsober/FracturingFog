@@ -163,8 +163,9 @@ internal static unsafe class RealKernelProbe
     // ── Vulkan: compile the real base kernel + dispatch, read iter/smooth ─────
     public static void RunVulkan(VulkanContext ctx, View v, out uint[] iter, out float[] smooth)
     {
+        string hlsl = MandelbrotKernelSource.BuildBase();
         byte[] spirv = DxcCompiler.CompileToSpirv(
-            MandelbrotKernelSource.BuildBase(),
+            hlsl,
             entry: MandelbrotKernelSource.EntryPoint,
             profile: "cs_6_0",
             "-fvk-b-shift", BShift.ToString(), "0",
@@ -288,6 +289,7 @@ internal static unsafe class RealKernelProbe
             var infos = stackalloc DescriptorBufferInfo[6];
             var writes = stackalloc WriteDescriptorSet[6];
             uint[] bindNums = { 0, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)TShift + 15 };
+            RealKernelColorProbe.RequireBound(hlsl, bindNums);   // #1500
             DescriptorType[] types =
             {
                 DescriptorType.UniformBuffer, DescriptorType.StorageBuffer,
