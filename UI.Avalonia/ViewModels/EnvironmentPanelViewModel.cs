@@ -61,19 +61,19 @@ public sealed class EnvVarRowViewModel : ViewModelBase
     public bool? ToggleState
     {
         get => _toggle;
-        set { this.RaiseAndSetIfChanged(ref _toggle, value); Changed(); }
+        set { this.RaiseAndSetIfChanged(ref _toggle, value); OnEdited(); }
     }
 
     public string SelectedChoice
     {
         get => _choice;
-        set { this.RaiseAndSetIfChanged(ref _choice, value ?? DefaultChoice); Changed(); }
+        set { this.RaiseAndSetIfChanged(ref _choice, value ?? DefaultChoice); OnEdited(); }
     }
 
     public string TextValue
     {
         get => _text;
-        set { this.RaiseAndSetIfChanged(ref _text, value ?? ""); Changed(); }
+        set { this.RaiseAndSetIfChanged(ref _text, value ?? ""); OnEdited(); }
     }
 
     /// <summary>The value to save; null = leave the switch unset.</summary>
@@ -113,7 +113,7 @@ public sealed class EnvVarRowViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(HasError));
     }
 
-    private void Changed()
+    private void OnEdited()
     {
         this.RaisePropertyChanged(nameof(Error));
         this.RaisePropertyChanged(nameof(HasError));
