@@ -5093,6 +5093,9 @@ exactly level by level (Bak et al. 1998; Allain & Cloitre 1986).
   Contour lines   Domain only: a line every 1/n turn of phase
                    and/or where the amplitude doubles. n|l|
                    phase lines meet at a vortex of charge l.
+  White light     Intensity only: sum over many wavelengths;
+                   TrueSpectrum (real colours) or BlueAmber
+                   (blue = short, amber = long: red/green safe).
   Detections      particle build-up: dots land with probability
                    proportional to the intensity and pile up into
                    the fringes (Tonomura et al. 1989). Raising the
@@ -5136,6 +5139,9 @@ Marzoli & Schleich 2001).
             Domain (colour = phase, brightness = intensity).
   Contour lines   Domain only: phase and/or modulus lines.
             Zoom in to follow them: the phase is a fractal.
+  White light  Intensity only: each colour images itself at a
+            different depth, so the carpet breaks into colour.
+            TrueSpectrum or BlueAmber (red/green safe).
   Detections   particle build-up: dots land where the light is,
             with the matching probability.
 

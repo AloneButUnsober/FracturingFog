@@ -386,6 +386,24 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
   add dots) and the exposure painting are FF's own. The accumulate-a-histogram approach is the one
   credited to Melinda Green's Buddhabrot above.
 
+<a id="wyman-cie-fit"></a>
+
+- **Chris Wyman, Peter-Pike Sloan, Peter Shirley.** *Simple Analytic Approximations to the CIE XYZ
+  Color Matching Functions.* Journal of Computer Graphics Techniques (JCGT) 2(2), 1–11, 2013.
+  <https://jcgt.org/published/0002/02/01/> (details read from the paper's own citation block,
+  2026-11-09). The multi-lobe piecewise-Gaussian fit to the CIE 1931 2° standard observer (Table 1
+  coefficients, Equation 4) gives the colour of each wavelength in the white-light views (#1597,
+  `Engine/Calculators/WhiteLight.cs`). Coefficients only; FF's code is its own (the paper is CC BY-ND 3.0).
+
+<a id="polychromatic-self-imaging"></a>
+
+- **Bernd Packross, Reiner Eschbach, Olof Bryngdahl.** *Self-Imaging In Polychromatic Illumination.*
+  Proc. SPIE 0492 (1984 European Conference on Optics, Optical Systems, and Applications), 215,
+  published 1985. <https://doi.org/10.1117/12.943702> (details confirmed against Crossref, 2026-11-09).
+  Prior art: the Talbot self-image in white (polychromatic) light. Cited for the effect the white-light
+  Talbot Carpet shows (#1597); only the title and abstract-level description were checked, and FF's
+  sampling and colour mapping are not taken from it.
+
 <a id="splitmix64"></a>
 
 - **Guy L. Steele, Doug Lea, Christine H. Flood.** *Fast splittable pseudorandom number
@@ -539,7 +557,8 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
 - **Björn Ottosson.** *A perceptual color space for image processing* (Oklab), 2020.
   <https://bottosson.github.io/posts/oklab/>. OkLab distance in palette extraction. Also the space of the
   colour-blind-safe phase wheel (a = 0 path; dual-orbit domain view #1120, the *Phase Wheel (Blue-Amber)*
-  theme #1591).
+  theme #1591). #1597: the post's XYZ → LMS (M1) and LMS′ → Lab (M2) matrices turn white-light spectra
+  into colour (`Engine/Calculators/WhiteLight.cs`); the von Kries balance in its LMS stage is FF's choice.
 - **Cynthia A. Brewer.** *ColorBrewer 2.* <https://colorbrewer2.org>. Reference for accessible
   sequential / diverging palettes, used for several built-in themes.
 - **Jamie R. Nuñez, Christopher R. Anderton, Ryan S. Renslow.** *Optimizing colormaps with

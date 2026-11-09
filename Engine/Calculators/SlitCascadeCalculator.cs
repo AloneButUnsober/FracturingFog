@@ -355,6 +355,22 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
         if (contours != DomainContourMode.Off) DomainContours.Ensure(ref _ctTurns, ref _ctK, ref _ctLog2, width * height);
         float[] ctTurns = _ctTurns, ctK = _ctK, ctLog2 = _ctLog2;
         double log2A0 = 0.5 * logI0 * Log2Of10;   // log₂ of the peak amplitude, the modulus reference
+        // #1597 — white light: the Intensity view summed over K wavelengths. Wavelength
+        // λ_k = λ·r_k (r_k = nm/550) re-weights the children AND scales the far field:
+        // I_k(s) = |A_k(s / r_k)|² / r_k² (each wavelength carries the same power).
+        var wlMode = view == SlitCascadeView.Intensity ? fp.SlitCascadeWhiteLight : WhiteLightMode.Off;
+        WhiteLight? wl = null; Cascade[]? wlCascades = null;
+        if (wlMode != WhiteLightMode.Off)
+        {
+            wl = new WhiteLight(fp.WhiteLightSamples);
+            wlCascades = new Cascade[wl.Count];
+            for (int k = 0; k < wl.Count; k++)
+            {
+                var pk = fp.Clone();
+                pk.SlitCascadeWavelength = Finite(fp.SlitCascadeWavelength, 0.6) * wl.Ratio[k];
+                wlCascades[k] = wl.Count == 1 ? cascade : Build(pk);
+            }
+        }
         // #1599 — Detections: the far-field intensity is the detection probability.
         bool detections = view == SlitCascadeView.Detections;
         if (detections && _detWeights.Length != width * height) { _detWeights = new double[width * height]; DetectionCounts = new int[width * height]; }
@@ -363,6 +379,7 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             var counts = new int[cascade.P.Length];
+            var wlI = wl != null ? new double[wl.Count] : null;
             double py = cy + (y - height * 0.5) * pitch;
             int row = y * width;
             for (int x = 0; x < width; x++)
@@ -381,6 +398,22 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
                         t = Math.Max(1e-9, alphaSpan > 1e-12 ? (Alpha(cascade, counts) - alphaMin) / alphaSpan : 0.5);
                     else
                         t = Math.Max(1e-9, d0 > 1e-12 ? Spectrum(cascade, counts) / d0 : 1.0);
+                }
+                else if (wl != null)
+                {
+                    for (int k = 0; k < wl.Count; k++)
+                    {
+                        double r = wl.Ratio[k];
+                        var ak = Amplitude(wlCascades![k], px / r, py / r);
+                        wlI![k] = (ak.Real * ak.Real + ak.Imaginary * ak.Imaginary) / (r * r);
+                    }
+                    double ieff = wl.EffectiveIntensity(wlI);
+                    double tw = ieff > 0.0 ? 1.0 + (Math.Log10(ieff) - logI0) / decades : 0.0;
+                    int wi = row + x;
+                    if (!(tw > 0.0)) { smooth[wi] = 0f; color[wi] = inSet; continue; }
+                    smooth[wi] = (float)(Math.Min(1.0, tw) * maxIt);
+                    color[wi] = wl.Colour(wlI, tw, wlMode);
+                    continue;
                 }
                 else if (detections)
                 {

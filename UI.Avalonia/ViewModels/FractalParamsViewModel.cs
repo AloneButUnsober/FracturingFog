@@ -2367,7 +2367,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsTalbotRonchi => _p.TalbotProfile == TalbotProfile.Ronchi;
     public double TalbotDuty { get => _p.TalbotDuty; set { var v = Clamp(value, 0.001, 1); if (v == _p.TalbotDuty) return; _p.TalbotDuty = v; this.RaisePropertyChanged(); Fire(); } }
     public int TalbotModes { get => _p.TalbotModes; set { var v = Math.Clamp(value, 1, 4096); if (v == _p.TalbotModes) return; _p.TalbotModes = v; this.RaisePropertyChanged(); Fire(); } }
-    public TalbotView TalbotView { get => _p.TalbotView; set { if (value == _p.TalbotView) return; _p.TalbotView = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(IsTalbotDomain)); this.RaisePropertyChanged(nameof(IsTalbotDetections)); Fire(); } }
+    public TalbotView TalbotView { get => _p.TalbotView; set { if (value == _p.TalbotView) return; _p.TalbotView = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(IsTalbotDomain)); this.RaisePropertyChanged(nameof(IsTalbotDetections)); this.RaisePropertyChanged(nameof(IsTalbotIntensity)); Fire(); } }
     public System.Array TalbotViews => s_TalbotViews;
     private static readonly System.Array s_TalbotViews = System.Enum.GetValues(typeof(TalbotView));
     public double TalbotDynamicRange { get => _p.TalbotDynamicRange; set { var v = Clamp(value, 0.25, 30); if (v == _p.TalbotDynamicRange) return; _p.TalbotDynamicRange = v; this.RaisePropertyChanged(); Fire(); } }
@@ -2387,7 +2387,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public SlitCascadeLayout SlitCascadeLayout { get => _p.SlitCascadeLayout; set { if (value == _p.SlitCascadeLayout) return; _p.SlitCascadeLayout = value; this.RaisePropertyChanged(); Fire(); } }
     public System.Array SlitCascadeLayouts => s_SlitCascadeLayouts;   // cached: a new array per read resets the ComboBox selection on Refresh()
     private static readonly System.Array s_SlitCascadeLayouts = System.Enum.GetValues(typeof(SlitCascadeLayout));
-    public SlitCascadeView SlitCascadeView { get => _p.SlitCascadeView; set { if (value == _p.SlitCascadeView) return; _p.SlitCascadeView = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(IsSlitCascadeDomain)); this.RaisePropertyChanged(nameof(IsSlitCascadeDetections)); Fire(); } }
+    public SlitCascadeView SlitCascadeView { get => _p.SlitCascadeView; set { if (value == _p.SlitCascadeView) return; _p.SlitCascadeView = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(IsSlitCascadeDomain)); this.RaisePropertyChanged(nameof(IsSlitCascadeDetections)); this.RaisePropertyChanged(nameof(IsSlitCascadeIntensity)); Fire(); } }
     /// <summary>#1598 — contour lines over the Domain views.</summary>
     public System.Array DomainContourModes => s_DomainContourModes;   // cached: a new array per read resets the ComboBox selection on Refresh()
     private static readonly System.Array s_DomainContourModes = System.Enum.GetValues(typeof(DomainContourMode));
@@ -2398,6 +2398,14 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public DomainContourMode TalbotDomainContours { get => _p.TalbotDomainContours; set { if (value == _p.TalbotDomainContours) return; _p.TalbotDomainContours = value; this.RaisePropertyChanged(); Fire(); } }
     public int TalbotContourCount { get => _p.TalbotContourCount; set { var v = Math.Clamp(value, 1, 64); if (v == _p.TalbotContourCount) return; _p.TalbotContourCount = v; this.RaisePropertyChanged(); Fire(); } }
     public bool IsDualOrbitInterferenceDomain => IsDualOrbitFieldMode && _dualField == DualOrbitField.PathInterferenceDomain;
+    /// <summary>#1597 — white light on the Intensity views.</summary>
+    public System.Array WhiteLightModes => s_WhiteLightModes;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_WhiteLightModes = System.Enum.GetValues(typeof(WhiteLightMode));
+    public bool IsSlitCascadeIntensity => _p.SlitCascadeView == SlitCascadeView.Intensity;
+    public bool IsTalbotIntensity => _p.TalbotView == TalbotView.Intensity;
+    public WhiteLightMode SlitCascadeWhiteLight { get => _p.SlitCascadeWhiteLight; set { if (value == _p.SlitCascadeWhiteLight) return; _p.SlitCascadeWhiteLight = value; this.RaisePropertyChanged(); Fire(); } }
+    public WhiteLightMode TalbotWhiteLight { get => _p.TalbotWhiteLight; set { if (value == _p.TalbotWhiteLight) return; _p.TalbotWhiteLight = value; this.RaisePropertyChanged(); Fire(); } }
+    public int WhiteLightSamples { get => _p.WhiteLightSamples; set { var v = Math.Clamp(value, 1, 81); if (v == _p.WhiteLightSamples) return; _p.WhiteLightSamples = v; this.RaisePropertyChanged(); Fire(); } }
     /// <summary>#1599 — detection build-up (shared settings, three views).</summary>
     public bool IsSlitCascadeDetections => _p.SlitCascadeView == SlitCascadeView.Detections;
     public bool IsTalbotDetections => _p.TalbotView == TalbotView.Detections;
