@@ -704,6 +704,8 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? TalbotModes { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? TalbotView { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? TalbotDynamicRange { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? TalbotDomainContours { get; set; }   // #1598
+        [JsonIgnore(Condition = OmitNull)] public int? TalbotContourCount { get; set; }
         // #1569 — slit cascade (layout / view = int casts of their enums).
         [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeChildren { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? SlitCascadeRatio { get; set; }
@@ -717,6 +719,8 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? SlitCascadeQ { get; set; }   // #1571
         [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeCharge { get; set; }   // #1572
         [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeChargePattern { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeDomainContours { get; set; }   // #1598
+        [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeContourCount { get; set; }
         [JsonIgnore(Condition = OmitNull)] public string? LyapunovSequence { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? LyapunovWarmup { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? TranscendentalMap { get; set; }
@@ -827,6 +831,8 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitWhichPath { get; set; }   // #1567
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitAngularMomentum { get; set; }   // #1568
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitWindingMode { get; set; }   // #1568
+        [JsonIgnore(Condition = OmitNull)] public int? DualOrbitInterferenceContours { get; set; }   // #1598
+        [JsonIgnore(Condition = OmitNull)] public int? DualOrbitInterferenceContourCount { get; set; }
         // #1127 — ensemble fields.
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitEnsembleN { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitEnsembleRadius { get; set; }
@@ -1321,6 +1327,8 @@ namespace FracturingFog.Models
                     TalbotModes = p.TalbotModes,
                     TalbotView = (int)p.TalbotView,
                     TalbotDynamicRange = p.TalbotDynamicRange,
+                    TalbotDomainContours = (int)p.TalbotDomainContours,
+                    TalbotContourCount = p.TalbotContourCount,
                     SlitCascadeChildren = p.TalbotProfile == FracturingFog.TalbotProfile.SlitCascade ? p.SlitCascadeChildren : null,
                     SlitCascadeRatio = p.TalbotProfile == FracturingFog.TalbotProfile.SlitCascade ? p.SlitCascadeRatio : null,
                     SlitCascadeDepth = p.TalbotProfile == FracturingFog.TalbotProfile.SlitCascade ? p.SlitCascadeDepth : null,
@@ -1342,6 +1350,8 @@ namespace FracturingFog.Models
                     SlitCascadeQ = p.SlitCascadeQ,
                     SlitCascadeCharge = p.SlitCascadeCharge,
                     SlitCascadeChargePattern = (int)p.SlitCascadeChargePattern,
+                    SlitCascadeDomainContours = (int)p.SlitCascadeDomainContours,
+                    SlitCascadeContourCount = p.SlitCascadeContourCount,
                 },
                 FractalType.Lyapunov => new RegionFractalParams
                 {
@@ -1408,6 +1418,8 @@ namespace FracturingFog.Models
                     DualOrbitWhichPath = p.DualOrbitWhichPath != D.DualOrbitWhichPath ? p.DualOrbitWhichPath : (double?)null,
                     DualOrbitAngularMomentum = p.DualOrbitAngularMomentum != D.DualOrbitAngularMomentum ? p.DualOrbitAngularMomentum : (int?)null,
                     DualOrbitWindingMode = p.DualOrbitWindingMode != D.DualOrbitWindingMode ? (int)p.DualOrbitWindingMode : (int?)null,
+                    DualOrbitInterferenceContours = p.DualOrbitInterferenceContours != D.DualOrbitInterferenceContours ? (int)p.DualOrbitInterferenceContours : (int?)null,
+                    DualOrbitInterferenceContourCount = p.DualOrbitInterferenceContourCount != D.DualOrbitInterferenceContourCount ? p.DualOrbitInterferenceContourCount : (int?)null,
                     DualOrbitEnsembleN = p.DualOrbitEnsembleN != D.DualOrbitEnsembleN ? p.DualOrbitEnsembleN : (int?)null,
                     DualOrbitEnsembleRadius = p.DualOrbitEnsembleRadius != D.DualOrbitEnsembleRadius ? p.DualOrbitEnsembleRadius : (double?)null,
                     DualOrbitEnsembleSectors = p.DualOrbitEnsembleSectors != D.DualOrbitEnsembleSectors ? p.DualOrbitEnsembleSectors : (int?)null,
@@ -2106,6 +2118,8 @@ namespace FracturingFog.Models
             if (TalbotModes.HasValue) p.TalbotModes = TalbotModes.Value;
             if (this.TalbotView.HasValue) p.TalbotView = (FracturingFog.TalbotView)this.TalbotView.Value;
             if (TalbotDynamicRange.HasValue) p.TalbotDynamicRange = TalbotDynamicRange.Value;
+            if (this.TalbotDomainContours.HasValue) p.TalbotDomainContours = (FracturingFog.DomainContourMode)this.TalbotDomainContours.Value;   // #1598
+            if (TalbotContourCount.HasValue) p.TalbotContourCount = TalbotContourCount.Value;
             if (SlitCascadeChildren.HasValue) p.SlitCascadeChildren = SlitCascadeChildren.Value;   // #1569
             if (SlitCascadeRatio.HasValue) p.SlitCascadeRatio = SlitCascadeRatio.Value;
             if (SlitCascadeDepth.HasValue) p.SlitCascadeDepth = SlitCascadeDepth.Value;
@@ -2118,6 +2132,8 @@ namespace FracturingFog.Models
             if (SlitCascadeQ.HasValue) p.SlitCascadeQ = SlitCascadeQ.Value;
             if (SlitCascadeCharge.HasValue) p.SlitCascadeCharge = SlitCascadeCharge.Value;
             if (this.SlitCascadeChargePattern.HasValue) p.SlitCascadeChargePattern = (FracturingFog.SlitCascadeChargePattern)this.SlitCascadeChargePattern.Value;
+            if (this.SlitCascadeDomainContours.HasValue) p.SlitCascadeDomainContours = (FracturingFog.DomainContourMode)this.SlitCascadeDomainContours.Value;   // #1598
+            if (SlitCascadeContourCount.HasValue) p.SlitCascadeContourCount = SlitCascadeContourCount.Value;
             if (!string.IsNullOrEmpty(LyapunovSequence)) p.LyapunovSequence = LyapunovSequence;
             if (LyapunovWarmup.HasValue) p.LyapunovWarmup = LyapunovWarmup.Value;
             if (TranscendentalMap.HasValue) p.TranscendentalMap = (FracturingFog.TranscendentalMap)TranscendentalMap.Value;
@@ -2184,6 +2200,8 @@ namespace FracturingFog.Models
             if (DualOrbitWhichPath.HasValue) p.DualOrbitWhichPath = DualOrbitWhichPath.Value;
             if (DualOrbitAngularMomentum.HasValue) p.DualOrbitAngularMomentum = DualOrbitAngularMomentum.Value;
             if (this.DualOrbitWindingMode.HasValue) p.DualOrbitWindingMode = (FracturingFog.DualOrbitWindingMode)this.DualOrbitWindingMode.Value;
+            if (this.DualOrbitInterferenceContours.HasValue) p.DualOrbitInterferenceContours = (FracturingFog.DomainContourMode)this.DualOrbitInterferenceContours.Value;   // #1598
+            if (DualOrbitInterferenceContourCount.HasValue) p.DualOrbitInterferenceContourCount = DualOrbitInterferenceContourCount.Value;
             if (DualOrbitEnsembleN.HasValue) p.DualOrbitEnsembleN = DualOrbitEnsembleN.Value;
             if (DualOrbitEnsembleRadius.HasValue) p.DualOrbitEnsembleRadius = DualOrbitEnsembleRadius.Value;
             if (DualOrbitEnsembleSectors.HasValue) p.DualOrbitEnsembleSectors = DualOrbitEnsembleSectors.Value;

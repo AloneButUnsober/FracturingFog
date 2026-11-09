@@ -705,6 +705,21 @@ namespace FracturingFog
         Domain,
     }
 
+    /// <summary>Contour lines drawn over a Domain (phase portrait) view (#1598):
+    /// thin darker lines every 1/n of a turn of phase and where the amplitude |A|
+    /// crosses a power of 2 (Wegert's phase-portrait contours). Append only.</summary>
+    public enum DomainContourMode
+    {
+        /// <summary>No lines (the plain Domain view).</summary>
+        Off,
+        /// <summary>Lines of constant phase, every 1/n of a turn: n·|ℓ| of them meet at a vortex of charge ℓ.</summary>
+        Phase,
+        /// <summary>Lines where |A| crosses each power of 2.</summary>
+        Modulus,
+        /// <summary>Phase and modulus lines together (a conformal-style grid).</summary>
+        Both,
+    }
+
     /// <summary>Direction of the c-path's angular-momentum winding relative to the
     /// z-path in path interference (#1568). Append only.</summary>
     public enum DualOrbitWindingMode

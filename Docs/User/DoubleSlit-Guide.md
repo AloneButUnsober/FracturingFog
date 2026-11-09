@@ -87,6 +87,14 @@ with the whole colour wheel turning round it (ℓ times for charge ℓ). The *Ph
 iteration count, using only lightness and blue-amber, so it reads the same with red/green colour blindness. On the shipped layouts the pattern is real along one axis, so the phase colour
 wraps there in a straight line: that is the physics, not a glitch.
 
+**Contour lines (#1598).** In any *Domain* view, **Contour lines** draws thin darker lines so the picture
+reads without telling colours apart: *Phase* puts a line every 1/n of a turn of phase (**Phase lines per
+turn**, default 8), *Modulus* a line wherever the amplitude halves or doubles, *Both* draws the two. At a
+vortex of charge ℓ, n·|ℓ| phase lines meet, so you can read the charge by counting lines: the Vortex Core
+preset has charge 3 at the centre, so 24 lines meet there at n = 8 (zoom in: the core itself is dark). The same setting is
+on the Julibrot Pair *PathInterferenceDomain* field and the Talbot *Domain* view. It recolours without
+recomputing. These are the contours of Wegert's "enhanced" phase portraits.
+
 ## 3. Talbot Carpet
 
 Across the screen: position in grating periods. Down: distance travelled, in Talbot distances. The grating
@@ -99,6 +107,7 @@ fractions, and as a fractal at irrational distances.
 | **Fourier modes M** | Sharper grating edges, finer carpet. Values far above the screen resolution only alias. |
 | **Show** | Intensity on a log scale about the average brightness, phase, or *Domain* (both: colour = phase, brightness = intensity). |
 | **Dynamic range** | How far below the average brightness the dark end reaches. |
+| **Contour lines** | *Domain* only: phase and/or modulus lines (§2.2). The carpet's phase is itself a fractal, so at the full view the lines crowd into speckle; zoom in, or use fewer Fourier modes, to follow them. |
 
 **Tip:** carpets look best with **few iterations (16)** and a **plain theme such as Greyscale**. Fracturing Fog's
 themes repeat over the iteration scale, so the default 400 iterations paint the carpet many times over. The
@@ -156,6 +165,14 @@ Brightness and phase in one image (the *Domain* view; views are numbered in list
 
 ```bash
 FracturingFog --batch --region "Slit Cascade - Vortex Core" --param SlitCascadeView=5 --out vortex-domain.png
+```
+
+The same with phase and modulus contour lines (Off = 0, Phase = 1, Modulus = 2, Both = 3). The Talbot and
+Julibrot Pair settings are `TalbotDomainContours` / `TalbotContourCount` and
+`DualOrbitInterferenceContours` / `DualOrbitInterferenceContourCount`:
+
+```bash
+FracturingFog --batch --region "Slit Cascade - Vortex Core" --param SlitCascadeView=5 --param SlitCascadeDomainContours=3 --param SlitCascadeContourCount=8 --out vortex-contours.png
 ```
 
 A phase view with the colour-blind-safe phase wheel:

@@ -1372,6 +1372,10 @@ namespace FracturingFog.Models
         public int SlitCascadeCharge { get; set; } = 0;
         /// <summary>Slit cascade: how the charge varies with level (#1572).</summary>
         public SlitCascadeChargePattern SlitCascadeChargePattern { get; set; } = SlitCascadeChargePattern.Constant;
+        /// <summary>Slit cascade: contour lines over the Domain view (#1598). Off = none.</summary>
+        public DomainContourMode SlitCascadeDomainContours { get; set; } = DomainContourMode.Off;
+        /// <summary>Slit cascade: phase lines per turn, n (1..64), for the Domain contours (#1598).</summary>
+        public int SlitCascadeContourCount { get; set; } = 8;
 
         // ── Talbot carpet (#1570, double-slit epic #1565) ─────────────────
         /// <summary>Talbot carpet: the grating (Ronchi, δ-comb, or the slit cascade).</summary>
@@ -1386,6 +1390,10 @@ namespace FracturingFog.Models
         /// <summary>Talbot carpet: decades below the mean intensity the log scale reaches
         /// (the top is the brightest the grating allows).</summary>
         public double TalbotDynamicRange { get; set; } = 2.0;
+        /// <summary>Talbot carpet: contour lines over the Domain view (#1598). Off = none.</summary>
+        public DomainContourMode TalbotDomainContours { get; set; } = DomainContourMode.Off;
+        /// <summary>Talbot carpet: phase lines per turn, n (1..64), for the Domain contours (#1598).</summary>
+        public int TalbotContourCount { get; set; } = 8;
         /// <summary>#1538 — sides of the <see cref="BilliardGeometry.Polygon"/> layout (3 = triangle,
         /// 6 = hexagon, 8 = octagon ...). Clamped to [3, 12]. Default 6.</summary>
         public int BilliardPolygonSides { get; set; } = 6;
@@ -1555,6 +1563,12 @@ namespace FracturingFog.Models
         /// z-path (cross term follows θ_c − θ_z) or the opposite way (θ_z + θ_c)
         /// (#1568). Colour-only.</summary>
         public DualOrbitWindingMode DualOrbitWindingMode { get; set; } = DualOrbitWindingMode.Same;
+        /// <summary>Path interference: contour lines over the PathInterferenceDomain field
+        /// (#1598). Off = none. Colour-only.</summary>
+        public DomainContourMode DualOrbitInterferenceContours { get; set; } = DomainContourMode.Off;
+        /// <summary>Path interference: phase lines per turn, n (1..64), for the domain
+        /// contours (#1598). Colour-only.</summary>
+        public int DualOrbitInterferenceContourCount { get; set; } = 8;
         /// <summary>Ensemble fields: number of c-seeds per pixel (#1127). Cost ×N.</summary>
         public int DualOrbitEnsembleN { get; set; } = 32;
         /// <summary>Ensemble fields: radius ρ of the seed disc round c (#1127).</summary>
@@ -2351,11 +2365,15 @@ namespace FracturingFog.Models
                 SlitCascadeQ = SlitCascadeQ,
                 SlitCascadeCharge = SlitCascadeCharge,
                 SlitCascadeChargePattern = SlitCascadeChargePattern,
+                SlitCascadeDomainContours = SlitCascadeDomainContours,
+                SlitCascadeContourCount = SlitCascadeContourCount,
                 TalbotProfile = TalbotProfile,
                 TalbotDuty = TalbotDuty,
                 TalbotModes = TalbotModes,
                 TalbotView = TalbotView,
                 TalbotDynamicRange = TalbotDynamicRange,
+                TalbotDomainContours = TalbotDomainContours,
+                TalbotContourCount = TalbotContourCount,
                 BilliardPolygonSides = BilliardPolygonSides,
                 BilliardPolygonFill = BilliardPolygonFill,
                 BilliardLatticeRotation = BilliardLatticeRotation,
@@ -2409,6 +2427,8 @@ namespace FracturingFog.Models
                 DualOrbitWhichPath = DualOrbitWhichPath,
                 DualOrbitAngularMomentum = DualOrbitAngularMomentum,
                 DualOrbitWindingMode = DualOrbitWindingMode,
+                DualOrbitInterferenceContours = DualOrbitInterferenceContours,
+                DualOrbitInterferenceContourCount = DualOrbitInterferenceContourCount,
                 DualOrbitEnsembleN = DualOrbitEnsembleN,
                 DualOrbitEnsembleRadius = DualOrbitEnsembleRadius,
                 DualOrbitEnsembleSectors = DualOrbitEnsembleSectors,

@@ -350,6 +350,11 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
         cm.MaxIterations = maxIt;
         uint inSet = cm.InSetColor;
         float[] smooth = SmoothBuffer; uint[] color = ColorBuffer;
+        // #1598 — contour lines over the Domain view: side buffers, then DomainContours.
+        var contours = view == SlitCascadeView.Domain ? fp.SlitCascadeDomainContours : DomainContourMode.Off;
+        if (contours != DomainContourMode.Off) DomainContours.Ensure(ref _ctTurns, ref _ctK, ref _ctLog2, width * height);
+        float[] ctTurns = _ctTurns, ctK = _ctK, ctLog2 = _ctLog2;
+        double log2A0 = 0.5 * logI0 * Log2Of10;   // log₂ of the peak amplitude, the modulus reference
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
@@ -381,6 +386,12 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
                     int di = row + x;
                     smooth[di] = (float)(ti * maxIt);
                     color[di] = PhaseWheelBlueAmberMap.ColorAt(a.Phase / (2.0 * Math.PI), ti);
+                    if (contours != DomainContourMode.Off)
+                    {
+                        ctTurns[di] = mag2 > 0.0 ? (float)(a.Phase / (2.0 * Math.PI)) : float.NaN;
+                        ctK[di] = (float)ti;
+                        ctLog2[di] = ti > 0.0 ? (float)(0.5 * Math.Log2(mag2) - log2A0) : float.NaN;
+                    }
                     continue;
                 }
                 else
@@ -408,7 +419,12 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
                 color[idx] = (uint)cm.Map(s, 0f, maxIt);
             }
         });
+        if (contours != DomainContourMode.Off)
+            DomainContours.Apply(color, ctTurns, ctK, ctLog2, width, height, contours, fp.SlitCascadeContourCount, ct);
     }
+
+    private const double Log2Of10 = 3.321928094887362;
+    private float[] _ctTurns = Array.Empty<float>(), _ctK = Array.Empty<float>(), _ctLog2 = Array.Empty<float>();   // #1598
 
     private static double Sinc(double t) => Math.Abs(t) < 1e-8 ? 1.0 - t * t / 6.0 : Math.Sin(t) / t;
     private static double Finite(double v, double fallback) => double.IsFinite(v) ? v : fallback;

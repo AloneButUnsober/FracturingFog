@@ -5090,6 +5090,9 @@ exactly level by level (Bak et al. 1998; Allain & Cloitre 1986).
                    the shares. Animate the wavelength.
   Show: Intensity, Phase, Aperture, HolderAlpha, Spectrum,
         Domain (colour = phase, brightness = intensity).
+  Contour lines   Domain only: a line every 1/n turn of phase
+                   and/or where the amplitude doubles. n|l|
+                   phase lines meet at a vortex of charge l.
 
 Probability sets the dimension: the status bar shows the
 generalized dimensions D0, D1, D2 and Dq of the light shares
@@ -5126,6 +5129,8 @@ Marzoli & Schleich 2001).
             above the screen resolution just alias.
   Show      intensity (log scale about the mean), phase, or
             Domain (colour = phase, brightness = intensity).
+  Contour lines   Domain only: phase and/or modulus lines.
+            Zoom in to follow them: the phase is a fractal.
 
 Looks best with few iterations (16) and a plain theme such as
 Greyscale: FF themes repeat over the iteration scale.
