@@ -1383,6 +1383,14 @@ namespace FracturingFog.Models
         public int DetectionDotRadius { get; set; } = 1;
         /// <summary>Detections: exposure per detection — brightness = 1 − exp(−gain·dots).</summary>
         public double DetectionGain { get; set; } = 0.5;
+        // ── White light (#1597): Slit Cascade / Talbot Carpet intensity views. ──
+        /// <summary>White light: wavelengths sampled across 380–720 nm (1..81). Cost ×K per
+        /// pixel; 1 = the 550 nm render.</summary>
+        public int WhiteLightSamples { get; set; } = 24;
+        /// <summary>Slit cascade: white-light colouring of the Intensity view (#1597).</summary>
+        public WhiteLightMode SlitCascadeWhiteLight { get; set; } = WhiteLightMode.Off;
+        /// <summary>Talbot carpet: white-light colouring of the Intensity view (#1597).</summary>
+        public WhiteLightMode TalbotWhiteLight { get; set; } = WhiteLightMode.Off;
         /// <summary>Slit cascade: contour lines over the Domain view (#1598). Off = none.</summary>
         public DomainContourMode SlitCascadeDomainContours { get; set; } = DomainContourMode.Off;
         /// <summary>Slit cascade: phase lines per turn, n (1..64), for the Domain contours (#1598).</summary>
@@ -2378,6 +2386,9 @@ namespace FracturingFog.Models
                 SlitCascadeChargePattern = SlitCascadeChargePattern,
                 SlitCascadeDomainContours = SlitCascadeDomainContours,
                 DetectionCount = DetectionCount,
+                WhiteLightSamples = WhiteLightSamples,
+                SlitCascadeWhiteLight = SlitCascadeWhiteLight,
+                TalbotWhiteLight = TalbotWhiteLight,
                 DetectionSeed = DetectionSeed,
                 DetectionDotRadius = DetectionDotRadius,
                 DetectionGain = DetectionGain,

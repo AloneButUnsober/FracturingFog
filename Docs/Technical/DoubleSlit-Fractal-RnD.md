@@ -530,6 +530,29 @@ Parallel after S0: {S1, S2, S3, S6}. After S3: {S4, S5}.
   `AnimationDataExtensions.ApplyAt` at t = 0), so a ramp from 0 shows the preset's 20,000 dots on
   frame 0 — the guide's command passes `--param DetectionCount=0`.
 
+### 10.4 White light (#1597, round 2 tracker #1605)
+
+- **What:** `WhiteLightMode` {Off, TrueSpectrum, BlueAmber} on the Intensity view
+  (`SlitCascadeWhiteLight`, `TalbotWhiteLight`) and shared `WhiteLightSamples` K (default 24), in
+  `Engine/Calculators/WhiteLight.cs`. K equal-energy wavelengths in 380–720 nm; the settings' λ / ζ mean 550 nm,
+  r_k = λ_k / 550. Slit: cascade rebuilt at λ·r_k, I_k(s) = |A_k(s/r_k)|²/r_k² (the Jacobian keeps each
+  wavelength's power equal). Talbot: ζ_k = ζ·r_k (z_T ∝ 1/λ), cₙ fixed, per-row K coefficient sets on the
+  monochrome recurrence.
+- **Colour:** CIE 1931 2° via the Wyman–Sloan–Shirley multi-lobe fit → Ottosson M1 → von Kries balance (white
+  ↦ l = m = s, exactly neutral) → cube root → M2. Brightness = the monochrome log scale of the ȳ-weighted
+  intensity, so K = 1 is bit-identical to the plain view; the spectrum sets only hue and chroma (L ↦ 0.75·k,
+  chroma ×k so dark colours stay in gamut — √k clipped dark amber and leaked into a).
+- **BlueAmber:** b = clamp(C_true · tanh(Δλ_centroid / 15 nm), ±0.13), a = 0. The first version (ȳ-weighted mean of
+  per-wavelength b) measured ~10× duller than TrueSpectrum (median C/L 0.025 vs 0.288 on Ring Diffraction); the
+  chroma-borrowing version measures 0.205.
+- **Measured (`WhiteLightTests`):** K = 1 equals the monochrome smooth buffer exactly; the brightness equals the
+  direct spectral sum (static `Build`/`Amplitude`, `Field`) to 1e-5; Talbot row means over one period equal
+  Σ|cₙ|² to 1e-4 at every ζ (Parseval, energy conserved); ζ = 0 is neutral in both mappings; BlueAmber |a| < 0.01
+  everywhere; fit within 0.06 of five CIE table values; under deutan/protan BlueAmber keeps ≥ 90 % of a long-vs-short
+  difference while true red-vs-green keeps ≥ 20 points less. Eight mutants each caught.
+- **Prior art:** white-light self-imaging is established (Packross, Eschbach & Bryngdahl 1985); FF's sampling and
+  colour mapping are its own.
+
 **Standing rules for every slice:** batch parity (`RegionFractalParams` → `--param`,
 `BuildFractalParameters`, `BatchCommandBuilder` round-trip), recolour-guard classification (#981),
 and citations in the Bibliography in the same PR.

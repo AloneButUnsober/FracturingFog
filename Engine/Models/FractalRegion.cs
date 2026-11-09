@@ -720,6 +720,10 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeCharge { get; set; }   // #1572
         [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeChargePattern { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeDomainContours { get; set; }   // #1598
+        // #1597 — white light (int casts of WhiteLightMode).
+        [JsonIgnore(Condition = OmitNull)] public int? WhiteLightSamples { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeWhiteLight { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? TalbotWhiteLight { get; set; }
         // #1599 — detection build-up, shared by SlitCascade / TalbotCarpet / JulibrotPair.
         [JsonIgnore(Condition = OmitNull)] public int? DetectionCount { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? DetectionSeed { get; set; }
@@ -1334,6 +1338,8 @@ namespace FracturingFog.Models
                     TalbotDynamicRange = p.TalbotDynamicRange,
                     TalbotDomainContours = (int)p.TalbotDomainContours,
                     TalbotContourCount = p.TalbotContourCount,
+                    TalbotWhiteLight = (int)p.TalbotWhiteLight,
+                    WhiteLightSamples = p.WhiteLightSamples,
                     DetectionCount = p.DetectionCount,
                     DetectionSeed = p.DetectionSeed,
                     DetectionDotRadius = p.DetectionDotRadius,
@@ -1361,6 +1367,8 @@ namespace FracturingFog.Models
                     SlitCascadeChargePattern = (int)p.SlitCascadeChargePattern,
                     SlitCascadeDomainContours = (int)p.SlitCascadeDomainContours,
                     SlitCascadeContourCount = p.SlitCascadeContourCount,
+                    SlitCascadeWhiteLight = (int)p.SlitCascadeWhiteLight,
+                    WhiteLightSamples = p.WhiteLightSamples,
                     DetectionCount = p.DetectionCount,
                     DetectionSeed = p.DetectionSeed,
                     DetectionDotRadius = p.DetectionDotRadius,
@@ -2152,6 +2160,9 @@ namespace FracturingFog.Models
             if (this.SlitCascadeDomainContours.HasValue) p.SlitCascadeDomainContours = (FracturingFog.DomainContourMode)this.SlitCascadeDomainContours.Value;   // #1598
             if (SlitCascadeContourCount.HasValue) p.SlitCascadeContourCount = SlitCascadeContourCount.Value;
             if (DetectionCount.HasValue) p.DetectionCount = DetectionCount.Value;   // #1599
+            if (WhiteLightSamples.HasValue) p.WhiteLightSamples = WhiteLightSamples.Value;   // #1597
+            if (this.SlitCascadeWhiteLight.HasValue) p.SlitCascadeWhiteLight = (FracturingFog.WhiteLightMode)this.SlitCascadeWhiteLight.Value;
+            if (this.TalbotWhiteLight.HasValue) p.TalbotWhiteLight = (FracturingFog.WhiteLightMode)this.TalbotWhiteLight.Value;
             if (DetectionSeed.HasValue) p.DetectionSeed = DetectionSeed.Value;
             if (DetectionDotRadius.HasValue) p.DetectionDotRadius = DetectionDotRadius.Value;
             if (DetectionGain.HasValue) p.DetectionGain = DetectionGain.Value;

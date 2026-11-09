@@ -1025,7 +1025,7 @@
         </Grid>
 
         <!-- Talbot carpet (#1570, double-slit epic #1565): the grating's near field -->
-        <Grid IsVisible="{Binding IsTalbotCarpet}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+        <Grid IsVisible="{Binding IsTalbotCarpet}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Grating:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding TalbotProfiles}"
@@ -1095,12 +1095,26 @@
                            Value="{Binding DetectionGain, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsTalbotDetections}"
                            ToolTip.Tip="How bright one detection is. Where dots pile up the brightness saturates, like film: brightness = 1 - exp(-exposure x dots)." />
+            <TextBlock Grid.Row="12" Grid.Column="0" Text="White light:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsTalbotIntensity}" />
+            <ComboBox Grid.Row="12" Grid.Column="1"
+                      ItemsSource="{Binding WhiteLightModes}"
+                      SelectedItem="{Binding TalbotWhiteLight, Mode=TwoWay}" Margin="0,2"
+                      IsVisible="{Binding IsTalbotIntensity}"
+                      ToolTip.Tip="Off = one wavelength, coloured by the theme. White light sums the pattern over many wavelengths across the visible band, as with a lamp: colours separate away from the centre. TrueSpectrum = real spectral colours (mostly a red-green axis). BlueAmber = the same physics with each wavelength placed from blue (short) to amber (long), readable with red/green colour blindness. Ignores the colour theme. About as many times slower as there are wavelengths." />
+            <TextBlock Grid.Row="13" Grid.Column="0" Text="Wavelengths:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsTalbotIntensity}" />
+            <NumericUpDown Grid.Row="13" Grid.Column="1"
+                           Minimum="1" Maximum="81" Increment="1" FormatString="F0"
+                           Value="{Binding WhiteLightSamples, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsTalbotIntensity}"
+                           ToolTip.Tip="How many wavelengths across 380-720 nm are summed (1 to 81). More = smoother colour, slower. 1 = the plain 550 nm pattern." />
             <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Foreground="#9B9B9B" Margin="0,4,0,2"
                        Text="Across = position in grating periods. Down = distance travelled, in Talbot distances: the grating images itself at every whole number and shifted by half a period at every half; at irrational distances the pattern is a fractal." />
         </Grid>
 
         <!-- Slit cascade (#1569, double-slit epic #1565): the recursive aperture and its diffraction -->
-        <Grid IsVisible="{Binding IsSlitCascade}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+        <Grid IsVisible="{Binding IsSlitCascade}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Children per slit:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="0" Grid.Column="1"
                            Minimum="2" Maximum="16" Increment="1" FormatString="F0"
@@ -1203,6 +1217,20 @@
                            Value="{Binding DetectionGain, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsSlitCascadeDetections}"
                            ToolTip.Tip="How bright one detection is. Where dots pile up the brightness saturates, like film: brightness = 1 - exp(-exposure x dots)." />
+            <TextBlock Grid.Row="18" Grid.Column="0" Text="White light:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsSlitCascadeIntensity}" />
+            <ComboBox Grid.Row="18" Grid.Column="1"
+                      ItemsSource="{Binding WhiteLightModes}"
+                      SelectedItem="{Binding SlitCascadeWhiteLight, Mode=TwoWay}" Margin="0,2"
+                      IsVisible="{Binding IsSlitCascadeIntensity}"
+                      ToolTip.Tip="Off = one wavelength, coloured by the theme. White light sums the pattern over many wavelengths across the visible band, as with a lamp: colours separate away from the centre. TrueSpectrum = real spectral colours (mostly a red-green axis). BlueAmber = the same physics with each wavelength placed from blue (short) to amber (long), readable with red/green colour blindness. Ignores the colour theme. About as many times slower as there are wavelengths." />
+            <TextBlock Grid.Row="19" Grid.Column="0" Text="Wavelengths:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsSlitCascadeIntensity}" />
+            <NumericUpDown Grid.Row="19" Grid.Column="1"
+                           Minimum="1" Maximum="81" Increment="1" FormatString="F0"
+                           Value="{Binding WhiteLightSamples, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsSlitCascadeIntensity}"
+                           ToolTip.Tip="How many wavelengths across 380-720 nm are summed (1 to 81). More = smoother colour, slower. 1 = the plain 550 nm pattern." />
         </Grid>
 
         <!-- Math Plane (#1548): the scene as text. S2 (#1549) adds the object editor. -->

@@ -715,6 +715,19 @@ namespace FracturingFog
         Detections,
     }
 
+    /// <summary>White-light (spectral) colouring of the Slit Cascade / Talbot Carpet
+    /// intensity view (#1597). Append only.</summary>
+    public enum WhiteLightMode
+    {
+        /// <summary>One wavelength: the plain intensity view through the colour theme.</summary>
+        Off,
+        /// <summary>White light, true spectral colour (CIE 1931 colour matching).</summary>
+        TrueSpectrum,
+        /// <summary>White light, each wavelength placed on a blue → amber axis (no red↔green):
+        /// readable with red/green colour blindness.</summary>
+        BlueAmber,
+    }
+
     /// <summary>Contour lines drawn over a Domain (phase portrait) view (#1598):
     /// thin darker lines every 1/n of a turn of phase and where the amplitude |A|
     /// crosses a power of 2 (Wegert's phase-portrait contours). Append only.</summary>

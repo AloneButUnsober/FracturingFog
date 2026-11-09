@@ -162,6 +162,10 @@ public sealed class TalbotCarpetCalculator : IFractalCalculator, IHeightFieldSou
         if (contours != DomainContourMode.Off) DomainContours.Ensure(ref _ctTurns, ref _ctK, ref _ctLog2, width * height);
         float[] ctTurns = _ctTurns, ctK = _ctK, ctLog2 = _ctLog2;
         double log2Ref = 0.5 * Math.Log2(Math.Max(mean, 1e-300));   // modulus reference: the rms amplitude (Parseval)
+        // #1597 — white light: ζ is measured in Talbot distances of 550 nm; z_T = 2d²/λ, so
+        // wavelength λ_k sees ζ_k = ζ·r_k (r_k = nm/550). The grating, hence cₙ, is fixed.
+        var wlMode = fp.TalbotView == TalbotView.Intensity ? fp.TalbotWhiteLight : WhiteLightMode.Off;
+        WhiteLight? wl = wlMode != WhiteLightMode.Off ? new WhiteLight(fp.WhiteLightSamples) : null;
         // #1599 — Detections: |ψ|² is the detection probability.
         bool detections = fp.TalbotView == TalbotView.Detections;
         if (detections && _detWeights.Length != width * height) { _detWeights = new double[width * height]; DetectionCounts = new int[width * height]; }
@@ -170,6 +174,7 @@ public sealed class TalbotCarpetCalculator : IFractalCalculator, IHeightFieldSou
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             double zeta = cy + (y - height * 0.5) * pitch;
+            if (wl != null) { WhiteLightRow(c, wl, wlMode, zeta, y, width, cx, pitch, logMean, decades, top, maxIt, inSet, smooth, color); return; }
             // bₙ = cₙ·e^{−2πi·n²·ζ}; n² mod a period keeps the angle small at large ζ·n².
             var b = new Complex[c.Length];
             double zf = zeta - Math.Floor(zeta);
@@ -241,6 +246,59 @@ public sealed class TalbotCarpetCalculator : IFractalCalculator, IHeightFieldSou
         {
             DetectionBuildUp.Sample(detW, fp.DetectionCount, fp.DetectionSeed, DetectionCounts, ct);
             DetectionBuildUp.Paint(DetectionCounts, width, height, fp.DetectionDotRadius, fp.DetectionGain, color, smooth, maxIt, ct);
+        }
+    }
+
+    // #1597 — one row of the white-light carpet: K per-wavelength coefficient sets
+    // bₙ,k = cₙ·e^{−2πi n² ζ r_k}, each summed with the same recurrence as the
+    // monochrome loop; brightness on the Intensity view's log scale.
+    private static void WhiteLightRow(Complex[] c, WhiteLight wl, WhiteLightMode mode, double zeta, int y, int width,
+        double cx, double pitch, double logMean, double decades, double top, int maxIt, uint inSet, float[] smooth, uint[] color)
+    {
+        int m = (c.Length - 1) / 2, K = wl.Count;
+        var b = new Complex[K][];
+        for (int k = 0; k < K; k++)
+        {
+            double zk = zeta * wl.Ratio[k];
+            double zf = zk - Math.Floor(zk);
+            b[k] = new Complex[c.Length];
+            for (int n = -m; n <= m; n++)
+            {
+                double ang = (double)n * n * zf;
+                ang -= Math.Floor(ang);
+                double ph = -2.0 * Math.PI * ang;
+                b[k][n + m] = c[n + m] * new Complex(Math.Cos(ph), Math.Sin(ph));
+            }
+        }
+        var inten = new double[K];
+        int row = y * width;
+        for (int x = 0; x < width; x++)
+        {
+            double xi = cx + (x - width * 0.5) * pitch;
+            double xf = xi - Math.Floor(xi);
+            double a0 = 2.0 * Math.PI * xf;
+            var w = new Complex(Math.Cos(a0), Math.Sin(a0));
+            double am = -2.0 * Math.PI * ((m * xf) - Math.Floor(m * xf));
+            var w0 = new Complex(Math.Cos(am), Math.Sin(am));
+            for (int k = 0; k < K; k++)
+            {
+                var wn = w0;
+                double re = 0.0, im = 0.0;
+                var bk = b[k];
+                for (int j = 0; j < bk.Length; j++)
+                {
+                    re += bk[j].Real * wn.Real - bk[j].Imaginary * wn.Imaginary;
+                    im += bk[j].Real * wn.Imaginary + bk[j].Imaginary * wn.Real;
+                    wn *= w;
+                }
+                inten[k] = re * re + im * im;
+            }
+            double ieff = wl.EffectiveIntensity(inten);
+            double t = ieff > 0.0 ? (Math.Log10(ieff) - logMean + decades) / (decades + top) : 0.0;
+            int idx = row + x;
+            if (!(t > 0.0)) { smooth[idx] = 0f; color[idx] = inSet; continue; }
+            smooth[idx] = (float)(Math.Min(1.0, t) * maxIt);
+            color[idx] = wl.Colour(inten, t, mode);
         }
     }
 

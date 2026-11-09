@@ -54,6 +54,7 @@ level.
 | **Slit separation d**, **Slit width w**, **Wavelength λ** | The fringe that decides the shares. Animate λ and the slits slide on and off dark fringes. |
 | **Show** | *Intensity* (log scale), *Phase*, *Aperture* (the slits, brighter where more light passes), *HolderAlpha*, *Spectrum* (§2.1), *Domain* (§2.2), *Detections* (§2.3). |
 | **Dynamic range** | How many powers of ten of brightness the colours span. |
+| **White light** | *Intensity* view only (§3.1): *TrueSpectrum* or *BlueAmber*. |
 | **Vortex charge ℓ**, **Charge per level** | §2.2. |
 
 ### 2.1 The probabilities set the dimension
@@ -126,6 +127,7 @@ fractions, and as a fractal at irrational distances.
 | **Grating** | *Ronchi* (bars, with an **Open fraction**), *DeltaComb* (infinitely thin slits, the sharpest carpet), *SlitCascade* (one period of the Slit Cascade's row of slits, using that type's settings). |
 | **Fourier modes M** | Sharper grating edges, finer carpet. Values far above the screen resolution only alias. |
 | **Show** | Intensity on a log scale about the average brightness, phase, *Domain* (both: colour = phase, brightness = intensity), or *Detections* (particle build-up, §2.3). |
+| **White light** | *Intensity* only: the carpet in white light, *TrueSpectrum* or *BlueAmber* (§3.1). |
 | **Dynamic range** | How far below the average brightness the dark end reaches. |
 | **Contour lines** | *Domain* only: phase and/or modulus lines (§2.2). The carpet's phase is itself a fractal, so at the full view the lines crowd into speckle; zoom in, or use fewer Fourier modes, to follow them. |
 
@@ -134,6 +136,36 @@ themes repeat over the iteration scale, so the default 400 iterations paint the 
 Talbot presets already use 16 iterations.
 
 ---
+
+### 3.1 White light
+
+In white light each wavelength diffracts by a different amount, so the fringes come out coloured. Set **White
+light** on the *Intensity* view of either type and Fracturing Fog sums the pattern over **Wavelengths** samples
+from 380 to 720 nm (equal energy at each). The settings' wavelength (Slit Cascade **Wavelength**) and distance
+(Talbot ζ) are taken to mean 550 nm; shorter wavelengths spread less, longer ones more:
+
+- **Slit Cascade:** each wavelength re-weights the children (the fringe that sets the shares moves) *and* scales
+  the far field, so colours separate away from the centre.
+- **Talbot Carpet:** the Talbot distance z_T = 2d²/λ depends on the wavelength, so each colour images itself at a
+  different depth. The grating plane (ζ = 0) is the same for every colour and stays white; the carpet below it
+  breaks into colour.
+
+Two colourings, same physics:
+
+- **TrueSpectrum:** the real colours (CIE 1931 colour matching). Mostly a red↔green axis, so hard to read with
+  red/green colour blindness.
+- **BlueAmber:** how strongly coloured each point is, shown on the blue → amber axis of the Phase Wheel: light
+  weighted toward short wavelengths is blue, toward long wavelengths amber. No red↔green, so it reads the same for
+  red/green colour-blind viewers. A mix of red and violet (no overall lean) shows grey.
+
+Brightness is the same log scale as the plain view (weighted by the eye's sensitivity), so **Wavelengths = 1** gives
+exactly the monochrome picture. Cost grows with the number of wavelengths: keep it low while exploring and raise it
+for stills. The colour theme is not used. The Slit Cascade centre is not white: with these settings shorter
+wavelengths concentrate more light there (cyan-blue centre); that follows from the model, not a colour error.
+
+```bash
+FracturingFog --batch --region "Talbot Carpet - Ronchi Grating" --param TalbotWhiteLight=2 --param WhiteLightSamples=31 --out carpet-white.png
+```
 
 ## 4. Demos (built-in regions)
 
@@ -217,5 +249,6 @@ Double slit and which-path: Feynman, Leighton & Sands. Diffraction by fractal gr
 Kim, Kim, Soh & Yee. Generalized dimensions and f(α): Hentschel & Procaccia; Halsey, Jensen, Kadanoff, Procaccia &
 Shraiman. Orbital angular momentum: Allen, Beijersbergen, Spreeuw & Woerdman. Devil's vortex lens: Furlan,
 Giménez, Calatayud & Monsoriu. Talbot effect and quantum carpets: Berry & Klein; Berry; Berry, Marzoli & Schleich. Single-particle build-up:
-Tonomura, Endo, Matsuda, Kawasaki & Ezawa. Phase-portrait contours: Wegert.
+Tonomura, Endo, Matsuda, Kawasaki & Ezawa. Phase-portrait contours: Wegert. White light: CIE colour-matching fit
+by Wyman, Sloan & Shirley; Oklab by Ottosson; polychromatic self-imaging by Packross, Eschbach & Bryngdahl.
 Full entries: [bibliography](../Resources-Bibliography.md#double-slit-fractals).
