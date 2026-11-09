@@ -718,7 +718,16 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
   the `contours` brightness steps where |f| crosses a power of 2 are FF's choices; they are not claimed
   to reproduce the book's colour scheme. #1592: the same idea (hue = phase, brightness = modulus) for the
   wave views' *Domain* colouring (Julibrot Pair `PathInterferenceDomain`, Slit Cascade and Talbot Carpet
-  *Domain*), on FF's own colour-blind-safe Phase Wheel.
+  *Domain*), on FF's own colour-blind-safe Phase Wheel. #1598: the *enhanced* phase portraits' contour
+  lines (lines of constant phase at fixed steps of the argument, and modulus lines where |f| roughly
+  doubles) as an option over those three Domain views (`Engine/Calculators/DomainContours.cs`). That the
+  book uses phase and modulus contours ("enhanced phase portraits") is confirmed here only through a
+  secondary source, J. C. Ponce Campuzano, *Complex Analysis — A Visual and Interactive Introduction*,
+  §3.4 "Domain coloring" (LibreTexts,
+  <https://math.libretexts.org/Bookshelves/Analysis/Complex_Analysis_-_A_Visual_and_Interactive_Introduction_(Ponce_Campuzano)/03%3A_Chapter_3/3.04%3A_Domain_coloring>;
+  edition year not confirmed); the book's own text was not checked. FF's lines (every 1/n turn of
+  phase and at exact powers of 2 of |A|, one pixel wide where a pixel's band differs from its right
+  or lower neighbour, drawn by dimming the wheel's lightness) are FF's choices.
 
 <a id="cobweb-plot"></a>
 

@@ -692,6 +692,15 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         if (!key.Layers && IsInterferenceField(field)) RefreshInterference(key);   // #1126
         bool domainField = !layers && field == DualOrbitField.PathInterferenceDomain
             && _interfPhase.Length == width * height;   // #1592
+        // #1598 — contour lines over the domain field: side buffers (NaN = not a
+        // domain pixel), then DomainContours after the pass.
+        var contours = domainField ? FractalParameters.DualOrbitInterferenceContours : DomainContourMode.Off;
+        if (contours != DomainContourMode.Off)
+        {
+            DomainContours.Ensure(ref _ctTurns, ref _ctK, ref _ctLog2, width * height);
+            Array.Fill(_ctTurns, float.NaN);
+        }
+        float[] ctTurns = _ctTurns, ctK = _ctK, ctLog2 = _ctLog2;
         if (key.Layers && IsBivariateMode(FractalParameters.DualOrbitColorMode))   // #1122
         {
             ColorizeBivariate(FractalParameters.DualOrbitColorMode, maxIter, interiorColor, oobColor);
@@ -747,12 +756,26 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                 else if (fieldOrbit)
                     ColorBuffer[idx] = _ocol[idx];
                 else if (domainField)   // #1592 — hue = phase, brightness = I/2
-                    ColorBuffer[idx] = PhaseWheelBlueAmberMap.ColorAt(_interfPhase[idx], Math.Clamp(_scalar[idx] / (double)maxIter, 0.0, 1.0));
+                {
+                    double kk = Math.Clamp(_scalar[idx] / (double)maxIter, 0.0, 1.0);
+                    ColorBuffer[idx] = PhaseWheelBlueAmberMap.ColorAt(_interfPhase[idx], kk);
+                    if (contours != DomainContourMode.Off)
+                    {
+                        // |A|² = I = 2·(I/2) for the two unit paths; log₂|A| = ½·log₂ I.
+                        ctTurns[idx] = _interfPhase[idx]; ctK[idx] = (float)kk;
+                        ctLog2[idx] = kk > 0.0 ? (float)(0.5 * Math.Log2(2.0 * kk)) : float.NaN;
+                    }
+                }
                 else
                     ColorBuffer[idx] = unchecked((uint)ColorMap.Map(_scalar[idx], 0f, maxIter));
             }
         });
+        if (contours != DomainContourMode.Off)
+            DomainContours.Apply(ColorBuffer, ctTurns, ctK, ctLog2, width, height, contours,
+                FractalParameters.DualOrbitInterferenceContourCount, ct);
     }
+
+    private float[] _ctTurns = Array.Empty<float>(), _ctK = Array.Empty<float>(), _ctLog2 = Array.Empty<float>();   // #1598
 
     // 4D escape-geometry scalar (quaternion mode). s lives at the pure-imaginary
     // point (0, sx, sy, sz); distances / angles use the Euclidean 4D metric.

@@ -486,6 +486,26 @@ Parallel after S0: {S1, S2, S3, S6}. After S3: {S4, S5}.
   animatable settings, and the guide and help name every preset. Three preset mutants are each
   caught.
 
+### 10.2 Domain contour lines (#1598, round 2 tracker #1605)
+
+- **What:** `DomainContourMode` {Off, Phase, Modulus, Both} + n per family (`SlitCascadeDomainContours`,
+  `TalbotDomainContours`, `DualOrbitInterferenceContours`, each with a `…ContourCount`), drawn by one
+  shared pass (`Engine/Calculators/DomainContours.cs`). The contours of Wegert's enhanced phase
+  portraits; FF's rule: a pixel is on a line when its phase band ⌊n·frac φ⌋ or modulus octave
+  ⌊log₂|A|⌋ differs from its right or lower neighbour, and a line pixel is the wheel colour at
+  lightness ×0.55. One-pixel lines at any zoom, no extra amplitude evaluation; Off never runs the
+  pass (byte-identical).
+- **Modulus reference:** Slit Cascade |A| over the peak amplitude (Σ√pᵢ)ᴰ; Talbot |ψ| over the rms
+  amplitude √Σ|cₙ|² (Parseval); Julibrot Pair |A| = √I for the two unit paths.
+- **Measured (`DomainContoursTests`):** line pixels match the direct sums (`Amplitude`, `Field`, the
+  dual-orbit phase and intensity fields) to within rounding; round the equal-share core of depth D
+  (charge D·ℓ by the direct-sum winding), a closed 4-connected path crosses exactly n·D lines
+  (D = 1, 2, 3); lines stay ΔE_OK ≥ 0.2 from the wheel under deutan and protan simulation. Six
+  mutants (no vertical neighbour, no dimming, wrong references ×3, wrong band count) are each caught.
+- **Gotcha:** rows at ζ = 0 and ½ in the Talbot carpet are real-valued, so Im ψ is rounding noise and
+  the phase flips between 0 and ½ there: a speckled row of phase lines is that, not a bug. At the full
+  view the carpet's phase is finer than a pixel and the lines crowd; zoomed in they are clean.
+
 **Standing rules for every slice:** batch parity (`RegionFractalParams` → `--param`,
 `BuildFractalParameters`, `BatchCommandBuilder` round-trip), recolour-guard classification (#981),
 and citations in the Bibliography in the same PR.

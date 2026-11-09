@@ -519,7 +519,7 @@
         <!-- Julibrot Pair, was Dual-Orbit Escape (#864 / #866; renamed #1155) -->
         <Grid IsVisible="{Binding IsDualOrbitEscape}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Map:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding DualOrbitMaps}"
@@ -888,6 +888,20 @@
                       IsChecked="{Binding DualOrbitLyapunovSmooth, Mode=TwoWay}" Margin="0,2"
                       IsVisible="{Binding IsDualOrbitSmoothableField}"
                       ToolTip.Tip="The value is an average (or total) over the steps before the first escape, so it jumps wherever that step count changes — visible as thin terrace lines, especially as Relief height. On = blend across each jump using the fractional escape count, so the field is continuous." />
+            <TextBlock Grid.Row="58" Grid.Column="0" Text="Contour lines:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitInterferenceDomain}" />
+            <ComboBox Grid.Row="58" Grid.Column="1"
+                      ItemsSource="{Binding DomainContourModes}"
+                      SelectedItem="{Binding DualOrbitInterferenceContours, Mode=TwoWay}" Margin="0,2"
+                      IsVisible="{Binding IsDualOrbitInterferenceDomain}"
+                      ToolTip.Tip="Thin darker lines over the Domain colours, so the picture reads without telling hues apart. Phase = a line every 1/n of a turn of phase: n lines meet at a vortex of charge 1, n·|ℓ| at charge ℓ. Modulus = a line wherever the amplitude halves or doubles. Both = the two together. Recolours without recomputing." />
+            <TextBlock Grid.Row="59" Grid.Column="0" Text="Phase lines per turn:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitInterferenceDomain}" />
+            <NumericUpDown Grid.Row="59" Grid.Column="1"
+                           Minimum="1" Maximum="64" Increment="1" FormatString="F0"
+                           Value="{Binding DualOrbitInterferenceContourCount, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsDualOrbitInterferenceDomain}"
+                           ToolTip.Tip="How many phase lines per turn (1 to 64). A vortex of charge ℓ has n·|ℓ| lines meeting at its core." />
             <TextBlock Grid.Row="24" Grid.Column="0" Grid.ColumnSpan="2"
                        Text="Böttcher domain colouring: inside the Mandelbrot set (critical orbit bounded) it shows the c-orbit's own angle and potential. ComplexPlane map only."
                        IsVisible="{Binding IsDualOrbitDomain}"
@@ -983,7 +997,7 @@
         </Grid>
 
         <!-- Talbot carpet (#1570, double-slit epic #1565): the grating's near field -->
-        <Grid IsVisible="{Binding IsTalbotCarpet}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+        <Grid IsVisible="{Binding IsTalbotCarpet}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Grating:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding TalbotProfiles}"
@@ -1011,12 +1025,26 @@
                            Minimum="0.25" Maximum="30" Increment="0.25" FormatString="F2"
                            Value="{Binding TalbotDynamicRange, Mode=TwoWay}" Margin="0,2"
                            ToolTip.Tip="How many powers of ten of brightness the colours span. Small values look close to linear." />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Contour lines:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsTalbotDomain}" />
+            <ComboBox Grid.Row="6" Grid.Column="1"
+                      ItemsSource="{Binding DomainContourModes}"
+                      SelectedItem="{Binding TalbotDomainContours, Mode=TwoWay}" Margin="0,2"
+                      IsVisible="{Binding IsTalbotDomain}"
+                      ToolTip.Tip="Thin darker lines over the Domain colours, so the picture reads without telling hues apart. Phase = a line every 1/n of a turn of phase: n lines meet at a vortex of charge 1, n·|ℓ| at charge ℓ. Modulus = a line wherever the amplitude halves or doubles. Both = the two together. Recolours without recomputing." />
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Phase lines per turn:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsTalbotDomain}" />
+            <NumericUpDown Grid.Row="7" Grid.Column="1"
+                           Minimum="1" Maximum="64" Increment="1" FormatString="F0"
+                           Value="{Binding TalbotContourCount, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsTalbotDomain}"
+                           ToolTip.Tip="How many phase lines per turn (1 to 64). A vortex of charge ℓ has n·|ℓ| lines meeting at its core." />
             <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Foreground="#9B9B9B" Margin="0,4,0,2"
                        Text="Across = position in grating periods. Down = distance travelled, in Talbot distances: the grating images itself at every whole number and shifted by half a period at every half; at irrational distances the pattern is a fractal." />
         </Grid>
 
         <!-- Slit cascade (#1569, double-slit epic #1565): the recursive aperture and its diffraction -->
-        <Grid IsVisible="{Binding IsSlitCascade}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+        <Grid IsVisible="{Binding IsSlitCascade}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Children per slit:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="0" Grid.Column="1"
                            Minimum="2" Maximum="16" Increment="1" FormatString="F0"
@@ -1077,6 +1105,20 @@
                       ItemsSource="{Binding SlitCascadeChargePatterns}"
                       SelectedItem="{Binding SlitCascadeChargePattern, Mode=TwoWay}" Margin="0,2"
                       ToolTip.Tip="Constant = every level twists the same way, so the twists add up at the centre. Alternating = levels twist opposite ways (a braid). Ramp = deeper levels twist harder." />
+            <TextBlock Grid.Row="12" Grid.Column="0" Text="Contour lines:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsSlitCascadeDomain}" />
+            <ComboBox Grid.Row="12" Grid.Column="1"
+                      ItemsSource="{Binding DomainContourModes}"
+                      SelectedItem="{Binding SlitCascadeDomainContours, Mode=TwoWay}" Margin="0,2"
+                      IsVisible="{Binding IsSlitCascadeDomain}"
+                      ToolTip.Tip="Thin darker lines over the Domain colours, so the picture reads without telling hues apart. Phase = a line every 1/n of a turn of phase: n lines meet at a vortex of charge 1, n·|ℓ| at charge ℓ. Modulus = a line wherever the amplitude halves or doubles. Both = the two together. Recolours without recomputing." />
+            <TextBlock Grid.Row="13" Grid.Column="0" Text="Phase lines per turn:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsSlitCascadeDomain}" />
+            <NumericUpDown Grid.Row="13" Grid.Column="1"
+                           Minimum="1" Maximum="64" Increment="1" FormatString="F0"
+                           Value="{Binding SlitCascadeContourCount, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsSlitCascadeDomain}"
+                           ToolTip.Tip="How many phase lines per turn (1 to 64). A vortex of charge ℓ has n·|ℓ| lines meeting at its core." />
         </Grid>
 
         <!-- Math Plane (#1548): the scene as text. S2 (#1549) adds the object editor. -->

@@ -2313,6 +2313,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsDualOrbitEnsembleField));
             this.RaisePropertyChanged(nameof(IsDualOrbitUncertaintyField));
             this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceField)); this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceIntensity));
+            this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceDomain));   // #1598
             this.RaisePropertyChanged(nameof(IsDualOrbitCoMovingTrap));
             this.RaisePropertyChanged(nameof(IsDualOrbitStripeField));
             this.RaisePropertyChanged(nameof(IsDualOrbitDistanceField));
@@ -2365,7 +2366,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsTalbotRonchi => _p.TalbotProfile == TalbotProfile.Ronchi;
     public double TalbotDuty { get => _p.TalbotDuty; set { var v = Clamp(value, 0.001, 1); if (v == _p.TalbotDuty) return; _p.TalbotDuty = v; this.RaisePropertyChanged(); Fire(); } }
     public int TalbotModes { get => _p.TalbotModes; set { var v = Math.Clamp(value, 1, 4096); if (v == _p.TalbotModes) return; _p.TalbotModes = v; this.RaisePropertyChanged(); Fire(); } }
-    public TalbotView TalbotView { get => _p.TalbotView; set { if (value == _p.TalbotView) return; _p.TalbotView = value; this.RaisePropertyChanged(); Fire(); } }
+    public TalbotView TalbotView { get => _p.TalbotView; set { if (value == _p.TalbotView) return; _p.TalbotView = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(IsTalbotDomain)); Fire(); } }
     public System.Array TalbotViews => s_TalbotViews;
     private static readonly System.Array s_TalbotViews = System.Enum.GetValues(typeof(TalbotView));
     public double TalbotDynamicRange { get => _p.TalbotDynamicRange; set { var v = Clamp(value, 0.25, 30); if (v == _p.TalbotDynamicRange) return; _p.TalbotDynamicRange = v; this.RaisePropertyChanged(); Fire(); } }
@@ -2385,7 +2386,19 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public SlitCascadeLayout SlitCascadeLayout { get => _p.SlitCascadeLayout; set { if (value == _p.SlitCascadeLayout) return; _p.SlitCascadeLayout = value; this.RaisePropertyChanged(); Fire(); } }
     public System.Array SlitCascadeLayouts => s_SlitCascadeLayouts;   // cached: a new array per read resets the ComboBox selection on Refresh()
     private static readonly System.Array s_SlitCascadeLayouts = System.Enum.GetValues(typeof(SlitCascadeLayout));
-    public SlitCascadeView SlitCascadeView { get => _p.SlitCascadeView; set { if (value == _p.SlitCascadeView) return; _p.SlitCascadeView = value; this.RaisePropertyChanged(); Fire(); } }
+    public SlitCascadeView SlitCascadeView { get => _p.SlitCascadeView; set { if (value == _p.SlitCascadeView) return; _p.SlitCascadeView = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(IsSlitCascadeDomain)); Fire(); } }
+    /// <summary>#1598 — contour lines over the Domain views.</summary>
+    public System.Array DomainContourModes => s_DomainContourModes;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_DomainContourModes = System.Enum.GetValues(typeof(DomainContourMode));
+    public bool IsSlitCascadeDomain => _p.SlitCascadeView == SlitCascadeView.Domain;
+    public DomainContourMode SlitCascadeDomainContours { get => _p.SlitCascadeDomainContours; set { if (value == _p.SlitCascadeDomainContours) return; _p.SlitCascadeDomainContours = value; this.RaisePropertyChanged(); Fire(); } }
+    public int SlitCascadeContourCount { get => _p.SlitCascadeContourCount; set { var v = Math.Clamp(value, 1, 64); if (v == _p.SlitCascadeContourCount) return; _p.SlitCascadeContourCount = v; this.RaisePropertyChanged(); Fire(); } }
+    public bool IsTalbotDomain => _p.TalbotView == TalbotView.Domain;
+    public DomainContourMode TalbotDomainContours { get => _p.TalbotDomainContours; set { if (value == _p.TalbotDomainContours) return; _p.TalbotDomainContours = value; this.RaisePropertyChanged(); Fire(); } }
+    public int TalbotContourCount { get => _p.TalbotContourCount; set { var v = Math.Clamp(value, 1, 64); if (v == _p.TalbotContourCount) return; _p.TalbotContourCount = v; this.RaisePropertyChanged(); Fire(); } }
+    public bool IsDualOrbitInterferenceDomain => IsDualOrbitFieldMode && _dualField == DualOrbitField.PathInterferenceDomain;
+    public DomainContourMode DualOrbitInterferenceContours { get => _p.DualOrbitInterferenceContours; set { if (value == _p.DualOrbitInterferenceContours) return; _p.DualOrbitInterferenceContours = value; this.RaisePropertyChanged(); Fire(); } }
+    public int DualOrbitInterferenceContourCount { get => _p.DualOrbitInterferenceContourCount; set { var v = Math.Clamp(value, 1, 64); if (v == _p.DualOrbitInterferenceContourCount) return; _p.DualOrbitInterferenceContourCount = v; this.RaisePropertyChanged(); Fire(); } }
     public System.Array SlitCascadeViews => s_SlitCascadeViews;
     private static readonly System.Array s_SlitCascadeViews = System.Enum.GetValues(typeof(SlitCascadeView));
     /// <summary>#1126 — path-interference rows.</summary>
@@ -2501,6 +2514,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsDualOrbitEnsembleField));
             this.RaisePropertyChanged(nameof(IsDualOrbitUncertaintyField));
             this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceField)); this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceIntensity));
+            this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceDomain));   // #1598
             this.RaisePropertyChanged(nameof(IsDualOrbitCoMovingTrap));
             this.RaisePropertyChanged(nameof(IsDualOrbitStripeField));
             this.RaisePropertyChanged(nameof(IsDualOrbitDistanceField));

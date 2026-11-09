@@ -157,6 +157,11 @@ public sealed class TalbotCarpetCalculator : IFractalCalculator, IHeightFieldSou
         cm.MaxIterations = maxIt;
         uint inSet = cm.InSetColor;
         float[] smooth = SmoothBuffer; uint[] color = ColorBuffer;
+        // #1598 — contour lines over the Domain view: side buffers, then DomainContours.
+        var contours = domain ? fp.TalbotDomainContours : DomainContourMode.Off;
+        if (contours != DomainContourMode.Off) DomainContours.Ensure(ref _ctTurns, ref _ctK, ref _ctLog2, width * height);
+        float[] ctTurns = _ctTurns, ctK = _ctK, ctLog2 = _ctLog2;
+        double log2Ref = 0.5 * Math.Log2(Math.Max(mean, 1e-300));   // modulus reference: the rms amplitude (Parseval)
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
@@ -196,6 +201,12 @@ public sealed class TalbotCarpetCalculator : IFractalCalculator, IHeightFieldSou
                     int di = row + x;
                     smooth[di] = (float)(ti * maxIt);
                     color[di] = PhaseWheelBlueAmberMap.ColorAt(Math.Atan2(im, re) / (2.0 * Math.PI), ti);
+                    if (contours != DomainContourMode.Off)
+                    {
+                        ctTurns[di] = m2 > 0.0 ? (float)(Math.Atan2(im, re) / (2.0 * Math.PI)) : float.NaN;
+                        ctK[di] = (float)ti;
+                        ctLog2[di] = ti > 0.0 ? (float)(0.5 * Math.Log2(m2) - log2Ref) : float.NaN;
+                    }
                     continue;
                 }
                 double t;
@@ -219,5 +230,9 @@ public sealed class TalbotCarpetCalculator : IFractalCalculator, IHeightFieldSou
                 color[idx] = (uint)cm.Map(s, 0f, maxIt);
             }
         });
+        if (contours != DomainContourMode.Off)
+            DomainContours.Apply(color, ctTurns, ctK, ctLog2, width, height, contours, fp.TalbotContourCount, ct);
     }
+
+    private float[] _ctTurns = Array.Empty<float>(), _ctK = Array.Empty<float>(), _ctLog2 = Array.Empty<float>();   // #1598
 }
