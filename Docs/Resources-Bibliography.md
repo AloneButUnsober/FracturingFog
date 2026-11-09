@@ -375,6 +375,25 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
   Review A 33(2), 1141–1151, 1986. <https://doi.org/10.1103/PhysRevA.33.1141>. The τ(q) / f(α)
   multifractal formalism; D_q closed form and Hölder-α colouring of the cascade measure (#1571).
 
+<a id="tonomura-buildup"></a>
+
+- **A. Tonomura, J. Endo, T. Matsuda, T. Kawasaki, H. Ezawa.** *Demonstration of single-electron
+  buildup of an interference pattern.* American Journal of Physics 57(2), 117–120, 1989.
+  <https://doi.org/10.1119/1.16104> (details confirmed against Crossref, 2026-11-09). The
+  single-electron double-slit picture of dots accumulating into fringes: the idea of the
+  *Detections* views (#1599, `Engine/Calculators/DetectionBuildUp.cs`). FF only borrows the
+  picture; its sampler (inverse CDF over the screen's pixels, chunk-seeded so more detections only
+  add dots) and the exposure painting are FF's own. The accumulate-a-histogram approach is the one
+  credited to Melinda Green's Buddhabrot above.
+
+<a id="splitmix64"></a>
+
+- **Guy L. Steele, Doug Lea, Christine H. Flood.** *Fast splittable pseudorandom number
+  generators.* Proceedings of the 2014 ACM International Conference on Object Oriented Programming
+  Systems Languages & Applications (OOPSLA 2014), 453–472. <https://doi.org/10.1145/2660193.2660195>
+  (details confirmed against Crossref, 2026-11-09). SplitMix64, the per-chunk random streams of the
+  detection build-up (#1599).
+
 <a id="deep-zoom-acceleration"></a>
 
 ### Deep zoom: perturbation, approximation, extended precision

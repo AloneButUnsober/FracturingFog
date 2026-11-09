@@ -355,6 +355,10 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
         if (contours != DomainContourMode.Off) DomainContours.Ensure(ref _ctTurns, ref _ctK, ref _ctLog2, width * height);
         float[] ctTurns = _ctTurns, ctK = _ctK, ctLog2 = _ctLog2;
         double log2A0 = 0.5 * logI0 * Log2Of10;   // log₂ of the peak amplitude, the modulus reference
+        // #1599 — Detections: the far-field intensity is the detection probability.
+        bool detections = view == SlitCascadeView.Detections;
+        if (detections && _detWeights.Length != width * height) { _detWeights = new double[width * height]; DetectionCounts = new int[width * height]; }
+        double[] detW = _detWeights;
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
@@ -377,6 +381,12 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
                         t = Math.Max(1e-9, alphaSpan > 1e-12 ? (Alpha(cascade, counts) - alphaMin) / alphaSpan : 0.5);
                     else
                         t = Math.Max(1e-9, d0 > 1e-12 ? Spectrum(cascade, counts) / d0 : 1.0);
+                }
+                else if (detections)
+                {
+                    var a = Amplitude(cascade, px, py);
+                    detW[row + x] = a.Real * a.Real + a.Imaginary * a.Imaginary;
+                    continue;
                 }
                 else if (view == SlitCascadeView.Domain)
                 {
@@ -421,7 +431,17 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
         });
         if (contours != DomainContourMode.Off)
             DomainContours.Apply(color, ctTurns, ctK, ctLog2, width, height, contours, fp.SlitCascadeContourCount, ct);
+        if (detections)
+        {
+            DetectionBuildUp.Sample(detW, fp.DetectionCount, fp.DetectionSeed, DetectionCounts, ct);
+            DetectionBuildUp.Paint(DetectionCounts, width, height, fp.DetectionDotRadius, fp.DetectionGain, color, smooth, maxIt, ct);
+        }
     }
+
+    // #1599 — detection weights (|A|² per pixel) and the last build-up's per-pixel counts.
+    private double[] _detWeights = Array.Empty<double>();
+    /// <summary>Detections view: how many detections landed on each pixel in the last render (#1599).</summary>
+    public int[] DetectionCounts { get; private set; } = Array.Empty<int>();
 
     private const double Log2Of10 = 3.321928094887362;
     private float[] _ctTurns = Array.Empty<float>(), _ctK = Array.Empty<float>(), _ctLog2 = Array.Empty<float>();   // #1598

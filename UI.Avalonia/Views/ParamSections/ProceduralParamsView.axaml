@@ -519,7 +519,7 @@
         <!-- Julibrot Pair, was Dual-Orbit Escape (#864 / #866; renamed #1155) -->
         <Grid IsVisible="{Binding IsDualOrbitEscape}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Map:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding DualOrbitMaps}"
@@ -902,6 +902,34 @@
                            Value="{Binding DualOrbitInterferenceContourCount, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsDualOrbitInterferenceDomain}"
                            ToolTip.Tip="How many phase lines per turn (1 to 64). A vortex of charge ℓ has n·|ℓ| lines meeting at its core." />
+            <TextBlock Grid.Row="60" Grid.Column="0" Text="Detections:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitInterferenceDetections}" />
+            <NumericUpDown Grid.Row="60" Grid.Column="1"
+                           Minimum="0" Maximum="50000000" Increment="1000" FormatString="F0"
+                           Value="{Binding DetectionCount, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsDualOrbitInterferenceDetections}"
+                           ToolTip.Tip="How many particles have landed. Each lands on a pixel with probability proportional to the intensity there, as in the single-electron double-slit experiment: a few hundred look random, tens of thousands show the fringes. Raising it only adds dots, so animating it shows the pattern building up." />
+            <TextBlock Grid.Row="61" Grid.Column="0" Text="Random seed:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitInterferenceDetections}" />
+            <NumericUpDown Grid.Row="61" Grid.Column="1"
+                           Minimum="-2147483648" Maximum="2147483647" Increment="1" FormatString="F0"
+                           Value="{Binding DetectionSeed, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsDualOrbitInterferenceDetections}"
+                           ToolTip.Tip="The same seed always gives the same dots, live and in exported images. Change it for a different random run." />
+            <TextBlock Grid.Row="62" Grid.Column="0" Text="Dot radius (px):" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitInterferenceDetections}" />
+            <NumericUpDown Grid.Row="62" Grid.Column="1"
+                           Minimum="0" Maximum="8" Increment="1" FormatString="F0"
+                           Value="{Binding DetectionDotRadius, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsDualOrbitInterferenceDetections}"
+                           ToolTip.Tip="0 = each detection lights one pixel; larger values draw bigger dots (easier to see at high resolution)." />
+            <TextBlock Grid.Row="63" Grid.Column="0" Text="Exposure per dot:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitInterferenceDetections}" />
+            <NumericUpDown Grid.Row="63" Grid.Column="1"
+                           Minimum="0.01" Maximum="20" Increment="0.1" FormatString="F2"
+                           Value="{Binding DetectionGain, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsDualOrbitInterferenceDetections}"
+                           ToolTip.Tip="How bright one detection is. Where dots pile up the brightness saturates, like film: brightness = 1 - exp(-exposure x dots)." />
             <TextBlock Grid.Row="24" Grid.Column="0" Grid.ColumnSpan="2"
                        Text="Böttcher domain colouring: inside the Mandelbrot set (critical orbit bounded) it shows the c-orbit's own angle and potential. ComplexPlane map only."
                        IsVisible="{Binding IsDualOrbitDomain}"
@@ -997,7 +1025,7 @@
         </Grid>
 
         <!-- Talbot carpet (#1570, double-slit epic #1565): the grating's near field -->
-        <Grid IsVisible="{Binding IsTalbotCarpet}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+        <Grid IsVisible="{Binding IsTalbotCarpet}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Grating:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding TalbotProfiles}"
@@ -1039,12 +1067,40 @@
                            Value="{Binding TalbotContourCount, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsTalbotDomain}"
                            ToolTip.Tip="How many phase lines per turn (1 to 64). A vortex of charge ℓ has n·|ℓ| lines meeting at its core." />
+            <TextBlock Grid.Row="8" Grid.Column="0" Text="Detections:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsTalbotDetections}" />
+            <NumericUpDown Grid.Row="8" Grid.Column="1"
+                           Minimum="0" Maximum="50000000" Increment="1000" FormatString="F0"
+                           Value="{Binding DetectionCount, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsTalbotDetections}"
+                           ToolTip.Tip="How many particles have landed. Each lands on a pixel with probability proportional to the intensity there, as in the single-electron double-slit experiment: a few hundred look random, tens of thousands show the fringes. Raising it only adds dots, so animating it shows the pattern building up." />
+            <TextBlock Grid.Row="9" Grid.Column="0" Text="Random seed:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsTalbotDetections}" />
+            <NumericUpDown Grid.Row="9" Grid.Column="1"
+                           Minimum="-2147483648" Maximum="2147483647" Increment="1" FormatString="F0"
+                           Value="{Binding DetectionSeed, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsTalbotDetections}"
+                           ToolTip.Tip="The same seed always gives the same dots, live and in exported images. Change it for a different random run." />
+            <TextBlock Grid.Row="10" Grid.Column="0" Text="Dot radius (px):" VerticalAlignment="Center"
+                       IsVisible="{Binding IsTalbotDetections}" />
+            <NumericUpDown Grid.Row="10" Grid.Column="1"
+                           Minimum="0" Maximum="8" Increment="1" FormatString="F0"
+                           Value="{Binding DetectionDotRadius, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsTalbotDetections}"
+                           ToolTip.Tip="0 = each detection lights one pixel; larger values draw bigger dots (easier to see at high resolution)." />
+            <TextBlock Grid.Row="11" Grid.Column="0" Text="Exposure per dot:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsTalbotDetections}" />
+            <NumericUpDown Grid.Row="11" Grid.Column="1"
+                           Minimum="0.01" Maximum="20" Increment="0.1" FormatString="F2"
+                           Value="{Binding DetectionGain, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsTalbotDetections}"
+                           ToolTip.Tip="How bright one detection is. Where dots pile up the brightness saturates, like film: brightness = 1 - exp(-exposure x dots)." />
             <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Foreground="#9B9B9B" Margin="0,4,0,2"
                        Text="Across = position in grating periods. Down = distance travelled, in Talbot distances: the grating images itself at every whole number and shifted by half a period at every half; at irrational distances the pattern is a fractal." />
         </Grid>
 
         <!-- Slit cascade (#1569, double-slit epic #1565): the recursive aperture and its diffraction -->
-        <Grid IsVisible="{Binding IsSlitCascade}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+        <Grid IsVisible="{Binding IsSlitCascade}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Children per slit:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="0" Grid.Column="1"
                            Minimum="2" Maximum="16" Increment="1" FormatString="F0"
@@ -1119,6 +1175,34 @@
                            Value="{Binding SlitCascadeContourCount, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsSlitCascadeDomain}"
                            ToolTip.Tip="How many phase lines per turn (1 to 64). A vortex of charge ℓ has n·|ℓ| lines meeting at its core." />
+            <TextBlock Grid.Row="14" Grid.Column="0" Text="Detections:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsSlitCascadeDetections}" />
+            <NumericUpDown Grid.Row="14" Grid.Column="1"
+                           Minimum="0" Maximum="50000000" Increment="1000" FormatString="F0"
+                           Value="{Binding DetectionCount, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsSlitCascadeDetections}"
+                           ToolTip.Tip="How many particles have landed. Each lands on a pixel with probability proportional to the intensity there, as in the single-electron double-slit experiment: a few hundred look random, tens of thousands show the fringes. Raising it only adds dots, so animating it shows the pattern building up." />
+            <TextBlock Grid.Row="15" Grid.Column="0" Text="Random seed:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsSlitCascadeDetections}" />
+            <NumericUpDown Grid.Row="15" Grid.Column="1"
+                           Minimum="-2147483648" Maximum="2147483647" Increment="1" FormatString="F0"
+                           Value="{Binding DetectionSeed, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsSlitCascadeDetections}"
+                           ToolTip.Tip="The same seed always gives the same dots, live and in exported images. Change it for a different random run." />
+            <TextBlock Grid.Row="16" Grid.Column="0" Text="Dot radius (px):" VerticalAlignment="Center"
+                       IsVisible="{Binding IsSlitCascadeDetections}" />
+            <NumericUpDown Grid.Row="16" Grid.Column="1"
+                           Minimum="0" Maximum="8" Increment="1" FormatString="F0"
+                           Value="{Binding DetectionDotRadius, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsSlitCascadeDetections}"
+                           ToolTip.Tip="0 = each detection lights one pixel; larger values draw bigger dots (easier to see at high resolution)." />
+            <TextBlock Grid.Row="17" Grid.Column="0" Text="Exposure per dot:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsSlitCascadeDetections}" />
+            <NumericUpDown Grid.Row="17" Grid.Column="1"
+                           Minimum="0.01" Maximum="20" Increment="0.1" FormatString="F2"
+                           Value="{Binding DetectionGain, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsSlitCascadeDetections}"
+                           ToolTip.Tip="How bright one detection is. Where dots pile up the brightness saturates, like film: brightness = 1 - exp(-exposure x dots)." />
         </Grid>
 
         <!-- Math Plane (#1548): the scene as text. S2 (#1549) adds the object editor. -->

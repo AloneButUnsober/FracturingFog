@@ -1372,6 +1372,17 @@ namespace FracturingFog.Models
         public int SlitCascadeCharge { get; set; } = 0;
         /// <summary>Slit cascade: how the charge varies with level (#1572).</summary>
         public SlitCascadeChargePattern SlitCascadeChargePattern { get; set; } = SlitCascadeChargePattern.Constant;
+        // ── Detection build-up (#1599): shared by the Detections views of Slit Cascade,
+        // Talbot Carpet and Julibrot Pair (PathInterferenceDetections). ──
+        /// <summary>Detections: how many particles have landed (0..50,000,000). Raising it
+        /// only adds dots (the same seed gives the same first detections).</summary>
+        public int DetectionCount { get; set; } = 20000;
+        /// <summary>Detections: random seed (same seed = same image, live or poster).</summary>
+        public int DetectionSeed { get; set; } = 1;
+        /// <summary>Detections: dot radius in pixels (0 = one pixel, max 8).</summary>
+        public int DetectionDotRadius { get; set; } = 1;
+        /// <summary>Detections: exposure per detection — brightness = 1 − exp(−gain·dots).</summary>
+        public double DetectionGain { get; set; } = 0.5;
         /// <summary>Slit cascade: contour lines over the Domain view (#1598). Off = none.</summary>
         public DomainContourMode SlitCascadeDomainContours { get; set; } = DomainContourMode.Off;
         /// <summary>Slit cascade: phase lines per turn, n (1..64), for the Domain contours (#1598).</summary>
@@ -2366,6 +2377,10 @@ namespace FracturingFog.Models
                 SlitCascadeCharge = SlitCascadeCharge,
                 SlitCascadeChargePattern = SlitCascadeChargePattern,
                 SlitCascadeDomainContours = SlitCascadeDomainContours,
+                DetectionCount = DetectionCount,
+                DetectionSeed = DetectionSeed,
+                DetectionDotRadius = DetectionDotRadius,
+                DetectionGain = DetectionGain,
                 SlitCascadeContourCount = SlitCascadeContourCount,
                 TalbotProfile = TalbotProfile,
                 TalbotDuty = TalbotDuty,

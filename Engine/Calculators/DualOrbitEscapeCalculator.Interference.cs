@@ -76,7 +76,8 @@ namespace FracturingFog;
 public sealed partial class DualOrbitEscapeCalculator
 {
     internal static bool IsInterferenceField(DualOrbitField f)
-        => f is DualOrbitField.PathInterference or DualOrbitField.PathInterferencePhase or DualOrbitField.PathInterferenceDomain;
+        => f is DualOrbitField.PathInterference or DualOrbitField.PathInterferencePhase or DualOrbitField.PathInterferenceDomain
+            or DualOrbitField.PathInterferenceDetections;   // #1599: the scalar is I/2, as PathInterference
 
     // #1592 — per-pixel phase (turns) for the domain field's colour pass.
     private float[] _interfPhase = Array.Empty<float>();

@@ -720,6 +720,11 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeCharge { get; set; }   // #1572
         [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeChargePattern { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeDomainContours { get; set; }   // #1598
+        // #1599 — detection build-up, shared by SlitCascade / TalbotCarpet / JulibrotPair.
+        [JsonIgnore(Condition = OmitNull)] public int? DetectionCount { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? DetectionSeed { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? DetectionDotRadius { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DetectionGain { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeContourCount { get; set; }
         [JsonIgnore(Condition = OmitNull)] public string? LyapunovSequence { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? LyapunovWarmup { get; set; }
@@ -1329,6 +1334,10 @@ namespace FracturingFog.Models
                     TalbotDynamicRange = p.TalbotDynamicRange,
                     TalbotDomainContours = (int)p.TalbotDomainContours,
                     TalbotContourCount = p.TalbotContourCount,
+                    DetectionCount = p.DetectionCount,
+                    DetectionSeed = p.DetectionSeed,
+                    DetectionDotRadius = p.DetectionDotRadius,
+                    DetectionGain = p.DetectionGain,
                     SlitCascadeChildren = p.TalbotProfile == FracturingFog.TalbotProfile.SlitCascade ? p.SlitCascadeChildren : null,
                     SlitCascadeRatio = p.TalbotProfile == FracturingFog.TalbotProfile.SlitCascade ? p.SlitCascadeRatio : null,
                     SlitCascadeDepth = p.TalbotProfile == FracturingFog.TalbotProfile.SlitCascade ? p.SlitCascadeDepth : null,
@@ -1352,6 +1361,10 @@ namespace FracturingFog.Models
                     SlitCascadeChargePattern = (int)p.SlitCascadeChargePattern,
                     SlitCascadeDomainContours = (int)p.SlitCascadeDomainContours,
                     SlitCascadeContourCount = p.SlitCascadeContourCount,
+                    DetectionCount = p.DetectionCount,
+                    DetectionSeed = p.DetectionSeed,
+                    DetectionDotRadius = p.DetectionDotRadius,
+                    DetectionGain = p.DetectionGain,
                 },
                 FractalType.Lyapunov => new RegionFractalParams
                 {
@@ -1420,6 +1433,10 @@ namespace FracturingFog.Models
                     DualOrbitWindingMode = p.DualOrbitWindingMode != D.DualOrbitWindingMode ? (int)p.DualOrbitWindingMode : (int?)null,
                     DualOrbitInterferenceContours = p.DualOrbitInterferenceContours != D.DualOrbitInterferenceContours ? (int)p.DualOrbitInterferenceContours : (int?)null,
                     DualOrbitInterferenceContourCount = p.DualOrbitInterferenceContourCount != D.DualOrbitInterferenceContourCount ? p.DualOrbitInterferenceContourCount : (int?)null,
+                    DetectionCount = p.DetectionCount != D.DetectionCount ? p.DetectionCount : (int?)null,   // #1599
+                    DetectionSeed = p.DetectionSeed != D.DetectionSeed ? p.DetectionSeed : (int?)null,
+                    DetectionDotRadius = p.DetectionDotRadius != D.DetectionDotRadius ? p.DetectionDotRadius : (int?)null,
+                    DetectionGain = p.DetectionGain != D.DetectionGain ? p.DetectionGain : (double?)null,
                     DualOrbitEnsembleN = p.DualOrbitEnsembleN != D.DualOrbitEnsembleN ? p.DualOrbitEnsembleN : (int?)null,
                     DualOrbitEnsembleRadius = p.DualOrbitEnsembleRadius != D.DualOrbitEnsembleRadius ? p.DualOrbitEnsembleRadius : (double?)null,
                     DualOrbitEnsembleSectors = p.DualOrbitEnsembleSectors != D.DualOrbitEnsembleSectors ? p.DualOrbitEnsembleSectors : (int?)null,
@@ -2134,6 +2151,10 @@ namespace FracturingFog.Models
             if (this.SlitCascadeChargePattern.HasValue) p.SlitCascadeChargePattern = (FracturingFog.SlitCascadeChargePattern)this.SlitCascadeChargePattern.Value;
             if (this.SlitCascadeDomainContours.HasValue) p.SlitCascadeDomainContours = (FracturingFog.DomainContourMode)this.SlitCascadeDomainContours.Value;   // #1598
             if (SlitCascadeContourCount.HasValue) p.SlitCascadeContourCount = SlitCascadeContourCount.Value;
+            if (DetectionCount.HasValue) p.DetectionCount = DetectionCount.Value;   // #1599
+            if (DetectionSeed.HasValue) p.DetectionSeed = DetectionSeed.Value;
+            if (DetectionDotRadius.HasValue) p.DetectionDotRadius = DetectionDotRadius.Value;
+            if (DetectionGain.HasValue) p.DetectionGain = DetectionGain.Value;
             if (!string.IsNullOrEmpty(LyapunovSequence)) p.LyapunovSequence = LyapunovSequence;
             if (LyapunovWarmup.HasValue) p.LyapunovWarmup = LyapunovWarmup.Value;
             if (TranscendentalMap.HasValue) p.TranscendentalMap = (FracturingFog.TranscendentalMap)TranscendentalMap.Value;
@@ -3471,6 +3492,28 @@ namespace FracturingFog.Models
                     SlitCascadeLayout = (int)FracturingFog.SlitCascadeLayout.Ring,
                     SlitCascadeView = (int)FracturingFog.SlitCascadeView.Intensity, SlitCascadeDynamicRange = 6.0,
                     SlitCascadeCharge = 1, SlitCascadeChargePattern = (int)FracturingFog.SlitCascadeChargePattern.Constant,
+                },
+            },
+            new()
+            {
+                // #1599 — the single-particle build-up (Tonomura et al. 1989).
+                Name          = "Slit Cascade - Particle Build-Up",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.25,
+                Iterations    =  400,
+                Description   = "The Ring Diffraction pattern recorded one particle at a time: each dot lands where the light is bright with the matching probability. A few hundred dots look random; tens of thousands draw the fringes. The bound 'Slit cascade: particle build-up' animation raises the count from 0, so the pattern builds up out of single dots.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.SlitCascade,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Slit cascade: particle build-up",
+                Params        = new RegionFractalParams
+                {
+                    SlitCascadeChildren = 6, SlitCascadeRatio = 0.3, SlitCascadeDepth = 4,
+                    SlitCascadeSeparation = 1.0, SlitCascadeWidth = 0.2, SlitCascadeWavelength = 0.6,
+                    SlitCascadeLayout = (int)FracturingFog.SlitCascadeLayout.Ring,
+                    SlitCascadeView = (int)FracturingFog.SlitCascadeView.Detections, SlitCascadeDynamicRange = 6.0,
+                    DetectionCount = 20000, DetectionSeed = 1, DetectionDotRadius = 1, DetectionGain = 0.5,
                 },
             },
             new()

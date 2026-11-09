@@ -5093,6 +5093,10 @@ exactly level by level (Bak et al. 1998; Allain & Cloitre 1986).
   Contour lines   Domain only: a line every 1/n turn of phase
                    and/or where the amplitude doubles. n|l|
                    phase lines meet at a vortex of charge l.
+  Detections      particle build-up: dots land with probability
+                   proportional to the intensity and pile up into
+                   the fringes (Tonomura et al. 1989). Raising the
+                   count only adds dots; animate it.
 
 Probability sets the dimension: the status bar shows the
 generalized dimensions D0, D1, D2 and Dq of the light shares
@@ -5110,6 +5114,7 @@ Demos:
   Slit Cascade - Ring Diffraction
   Slit Cascade - Probability Sets Dimension
   Slit Cascade - Vortex Core
+  Slit Cascade - Particle Build-Up
 ";
 
         public const string MathTalbotCarpetText =
@@ -5131,6 +5136,8 @@ Marzoli & Schleich 2001).
             Domain (colour = phase, brightness = intensity).
   Contour lines   Domain only: phase and/or modulus lines.
             Zoom in to follow them: the phase is a fractal.
+  Detections   particle build-up: dots land where the light is,
+            with the matching probability.
 
 Looks best with few iterations (16) and a plain theme such as
 Greyscale: FF themes repeat over the iteration scale.

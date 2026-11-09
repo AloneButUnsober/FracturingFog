@@ -29,10 +29,12 @@ public sealed class DoubleSlitPresetTests
     private const string Ronchi = "Talbot Carpet - Ronchi Grating";
     private const string Comb = "Talbot Carpet - Fractal Comb";
     private const string CascadeGrating = "Talbot Carpet - Cascade Grating";
+    private const string BuildUp = "Slit Cascade - Particle Build-Up";   // #1599
 
-    private static readonly string[] All = { WhichPath, Spirals, Rays, Ring, Dimension, Vortex, Ronchi, Comb, CascadeGrating };
+    private static readonly string[] All = { WhichPath, Spirals, Rays, Ring, Dimension, Vortex, Ronchi, Comb, CascadeGrating, BuildUp };
     private static readonly string[] Animations =
-        { "Double slit: which-path collapse", "Double slit: angular momentum sweep", "Slit cascade: wavelength breathing" };
+        { "Double slit: which-path collapse", "Double slit: angular momentum sweep", "Slit cascade: wavelength breathing",
+          "Slit cascade: particle build-up" };
 
     private sealed class RampMap : IColorMap
     {

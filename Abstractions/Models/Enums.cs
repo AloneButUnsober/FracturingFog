@@ -492,6 +492,10 @@ namespace FracturingFog
         /// the summed amplitude on the colour-blind-safe Phase Wheel, brightness = the
         /// intensity I/2. The height (Relief) is the intensity.</summary>
         PathInterferenceDomain,
+        /// <summary>Path interference as a particle build-up (#1599): detections land with
+        /// probability ∝ the intensity I and accumulate into the fringes (DetectionCount,
+        /// DetectionSeed, DetectionDotRadius, DetectionGain). The height is the intensity.</summary>
+        PathInterferenceDetections,
     }
 
     /// <summary>Orientation field the Dual-Orbit LIC flow texture follows (#1128).
@@ -673,6 +677,9 @@ namespace FracturingFog
         /// <summary>Amplitude and phase together (#1592): hue = phase on the Phase Wheel,
         /// brightness = log intensity. Ignores the colour theme.</summary>
         Domain,
+        /// <summary>Particle build-up (#1599): detections land with probability ∝ |ψ|² and
+        /// accumulate. Ignores the colour theme.</summary>
+        Detections,
     }
 
     /// <summary>How a <see cref="FractalType.SlitCascade"/> ring's vortex charge varies
@@ -703,6 +710,9 @@ namespace FracturingFog
         /// <summary>Amplitude and phase together (#1592): hue = phase on the Phase Wheel,
         /// brightness = log intensity. Ignores the colour theme.</summary>
         Domain,
+        /// <summary>Particle build-up (#1599): detections land with probability ∝ the
+        /// far-field intensity and accumulate. Ignores the colour theme.</summary>
+        Detections,
     }
 
     /// <summary>Contour lines drawn over a Domain (phase portrait) view (#1598):
