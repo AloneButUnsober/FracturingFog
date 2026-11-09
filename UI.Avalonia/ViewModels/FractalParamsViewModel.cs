@@ -2314,6 +2314,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsDualOrbitUncertaintyField));
             this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceField)); this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceIntensity));
             this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceDomain));   // #1598
+            this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceDetections));   // #1599
             this.RaisePropertyChanged(nameof(IsDualOrbitCoMovingTrap));
             this.RaisePropertyChanged(nameof(IsDualOrbitStripeField));
             this.RaisePropertyChanged(nameof(IsDualOrbitDistanceField));
@@ -2366,7 +2367,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsTalbotRonchi => _p.TalbotProfile == TalbotProfile.Ronchi;
     public double TalbotDuty { get => _p.TalbotDuty; set { var v = Clamp(value, 0.001, 1); if (v == _p.TalbotDuty) return; _p.TalbotDuty = v; this.RaisePropertyChanged(); Fire(); } }
     public int TalbotModes { get => _p.TalbotModes; set { var v = Math.Clamp(value, 1, 4096); if (v == _p.TalbotModes) return; _p.TalbotModes = v; this.RaisePropertyChanged(); Fire(); } }
-    public TalbotView TalbotView { get => _p.TalbotView; set { if (value == _p.TalbotView) return; _p.TalbotView = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(IsTalbotDomain)); Fire(); } }
+    public TalbotView TalbotView { get => _p.TalbotView; set { if (value == _p.TalbotView) return; _p.TalbotView = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(IsTalbotDomain)); this.RaisePropertyChanged(nameof(IsTalbotDetections)); Fire(); } }
     public System.Array TalbotViews => s_TalbotViews;
     private static readonly System.Array s_TalbotViews = System.Enum.GetValues(typeof(TalbotView));
     public double TalbotDynamicRange { get => _p.TalbotDynamicRange; set { var v = Clamp(value, 0.25, 30); if (v == _p.TalbotDynamicRange) return; _p.TalbotDynamicRange = v; this.RaisePropertyChanged(); Fire(); } }
@@ -2386,7 +2387,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public SlitCascadeLayout SlitCascadeLayout { get => _p.SlitCascadeLayout; set { if (value == _p.SlitCascadeLayout) return; _p.SlitCascadeLayout = value; this.RaisePropertyChanged(); Fire(); } }
     public System.Array SlitCascadeLayouts => s_SlitCascadeLayouts;   // cached: a new array per read resets the ComboBox selection on Refresh()
     private static readonly System.Array s_SlitCascadeLayouts = System.Enum.GetValues(typeof(SlitCascadeLayout));
-    public SlitCascadeView SlitCascadeView { get => _p.SlitCascadeView; set { if (value == _p.SlitCascadeView) return; _p.SlitCascadeView = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(IsSlitCascadeDomain)); Fire(); } }
+    public SlitCascadeView SlitCascadeView { get => _p.SlitCascadeView; set { if (value == _p.SlitCascadeView) return; _p.SlitCascadeView = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(IsSlitCascadeDomain)); this.RaisePropertyChanged(nameof(IsSlitCascadeDetections)); Fire(); } }
     /// <summary>#1598 — contour lines over the Domain views.</summary>
     public System.Array DomainContourModes => s_DomainContourModes;   // cached: a new array per read resets the ComboBox selection on Refresh()
     private static readonly System.Array s_DomainContourModes = System.Enum.GetValues(typeof(DomainContourMode));
@@ -2397,18 +2398,28 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public DomainContourMode TalbotDomainContours { get => _p.TalbotDomainContours; set { if (value == _p.TalbotDomainContours) return; _p.TalbotDomainContours = value; this.RaisePropertyChanged(); Fire(); } }
     public int TalbotContourCount { get => _p.TalbotContourCount; set { var v = Math.Clamp(value, 1, 64); if (v == _p.TalbotContourCount) return; _p.TalbotContourCount = v; this.RaisePropertyChanged(); Fire(); } }
     public bool IsDualOrbitInterferenceDomain => IsDualOrbitFieldMode && _dualField == DualOrbitField.PathInterferenceDomain;
+    /// <summary>#1599 — detection build-up (shared settings, three views).</summary>
+    public bool IsSlitCascadeDetections => _p.SlitCascadeView == SlitCascadeView.Detections;
+    public bool IsTalbotDetections => _p.TalbotView == TalbotView.Detections;
+    public bool IsDualOrbitInterferenceDetections => IsDualOrbitFieldMode && _dualField == DualOrbitField.PathInterferenceDetections;
+    public int DetectionCount { get => _p.DetectionCount; set { var v = Math.Clamp(value, 0, 50_000_000); if (v == _p.DetectionCount) return; _p.DetectionCount = v; this.RaisePropertyChanged(); Fire(); } }
+    public int DetectionSeed { get => _p.DetectionSeed; set { if (value == _p.DetectionSeed) return; _p.DetectionSeed = value; this.RaisePropertyChanged(); Fire(); } }
+    public int DetectionDotRadius { get => _p.DetectionDotRadius; set { var v = Math.Clamp(value, 0, 8); if (v == _p.DetectionDotRadius) return; _p.DetectionDotRadius = v; this.RaisePropertyChanged(); Fire(); } }
+    public double DetectionGain { get => _p.DetectionGain; set { var v = Clamp(value, 0.01, 20); if (v == _p.DetectionGain) return; _p.DetectionGain = v; this.RaisePropertyChanged(); Fire(); } }
     public DomainContourMode DualOrbitInterferenceContours { get => _p.DualOrbitInterferenceContours; set { if (value == _p.DualOrbitInterferenceContours) return; _p.DualOrbitInterferenceContours = value; this.RaisePropertyChanged(); Fire(); } }
     public int DualOrbitInterferenceContourCount { get => _p.DualOrbitInterferenceContourCount; set { var v = Math.Clamp(value, 1, 64); if (v == _p.DualOrbitInterferenceContourCount) return; _p.DualOrbitInterferenceContourCount = v; this.RaisePropertyChanged(); Fire(); } }
     public System.Array SlitCascadeViews => s_SlitCascadeViews;
     private static readonly System.Array s_SlitCascadeViews = System.Enum.GetValues(typeof(SlitCascadeView));
     /// <summary>#1126 — path-interference rows.</summary>
     public bool IsDualOrbitInterferenceField => IsDualOrbitFieldMode
-        && _dualField is DualOrbitField.PathInterference or DualOrbitField.PathInterferencePhase or DualOrbitField.PathInterferenceDomain;
+        && _dualField is DualOrbitField.PathInterference or DualOrbitField.PathInterferencePhase or DualOrbitField.PathInterferenceDomain
+            or DualOrbitField.PathInterferenceDetections;   // #1599
     public double DualOrbitInterferenceK { get => _p.DualOrbitInterferenceK; set { var v = Clamp(value, -1000, 1000); if (v == _p.DualOrbitInterferenceK) return; _p.DualOrbitInterferenceK = v; this.RaisePropertyChanged(); Fire(); } }
     public double DualOrbitInterferenceGamma { get => _p.DualOrbitInterferenceGamma; set { var v = Clamp(value, 0, 100); if (v == _p.DualOrbitInterferenceGamma) return; _p.DualOrbitInterferenceGamma = v; this.RaisePropertyChanged(); Fire(); } }
     /// <summary>#1567 — η applies to the intensity field only (a mixed state has no single phase).</summary>
     public bool IsDualOrbitInterferenceIntensity => IsDualOrbitFieldMode
-        && _dualField is DualOrbitField.PathInterference or DualOrbitField.PathInterferenceDomain;   // #1592: the domain field's brightness
+        && _dualField is DualOrbitField.PathInterference or DualOrbitField.PathInterferenceDomain   // #1592: the domain field's brightness
+            or DualOrbitField.PathInterferenceDetections;   // #1599: the detection probability
     public double DualOrbitWhichPath { get => _p.DualOrbitWhichPath; set { var v = Clamp(value, 0, 1); if (v == _p.DualOrbitWhichPath) return; _p.DualOrbitWhichPath = v; this.RaisePropertyChanged(); Fire(); } }
     /// <summary>#1568 — angular-momentum winding ℓ (integer) and its direction.</summary>
     public int DualOrbitAngularMomentum { get => _p.DualOrbitAngularMomentum; set { var v = Math.Clamp(value, -64, 64); if (v == _p.DualOrbitAngularMomentum) return; _p.DualOrbitAngularMomentum = v; this.RaisePropertyChanged(); Fire(); } }
@@ -2515,6 +2526,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsDualOrbitUncertaintyField));
             this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceField)); this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceIntensity));
             this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceDomain));   // #1598
+            this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceDetections));   // #1599
             this.RaisePropertyChanged(nameof(IsDualOrbitCoMovingTrap));
             this.RaisePropertyChanged(nameof(IsDualOrbitStripeField));
             this.RaisePropertyChanged(nameof(IsDualOrbitDistanceField));

@@ -265,6 +265,21 @@ namespace FracturingFog.Models
                 },
                 Tags = new List<string> { "2D", "double-slit" },
             };
+            // #1599 — detections accumulate into the fringes (Tonomura et al. 1989).
+            yield return new AnimationData
+            {
+                Name = "Slit cascade: particle build-up",
+                Category = "Built-in",
+                Description = "Raises the detection count from 0 to 60,000 over 20 seconds on a Detections view: "
+                            + "single random dots pile up into the diffraction fringes. More detections only add "
+                            + "dots, so earlier ones stay put.",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.SlitCascade },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "DetectionCount", Mode = AnimationMode.Linear, Min = 0, Max = 60000, FrequencyHz = 0.05, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "double-slit" },
+            };
 
             // #632 (Renderer C2) — precision-sweep convergence. Ramps the low
             // tier up the ladder Float→QuadDouble while a Hold track pins the

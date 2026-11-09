@@ -162,6 +162,10 @@ public sealed class TalbotCarpetCalculator : IFractalCalculator, IHeightFieldSou
         if (contours != DomainContourMode.Off) DomainContours.Ensure(ref _ctTurns, ref _ctK, ref _ctLog2, width * height);
         float[] ctTurns = _ctTurns, ctK = _ctK, ctLog2 = _ctLog2;
         double log2Ref = 0.5 * Math.Log2(Math.Max(mean, 1e-300));   // modulus reference: the rms amplitude (Parseval)
+        // #1599 — Detections: |ψ|² is the detection probability.
+        bool detections = fp.TalbotView == TalbotView.Detections;
+        if (detections && _detWeights.Length != width * height) { _detWeights = new double[width * height]; DetectionCounts = new int[width * height]; }
+        double[] detW = _detWeights;
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
@@ -194,6 +198,7 @@ public sealed class TalbotCarpetCalculator : IFractalCalculator, IHeightFieldSou
                     im += bk.Real * wn.Imaginary + bk.Imaginary * wn.Real;
                     wn *= w;
                 }
+                if (detections) { detW[row + x] = re * re + im * im; continue; }
                 if (domain)
                 {
                     double m2 = re * re + im * im;
@@ -232,7 +237,17 @@ public sealed class TalbotCarpetCalculator : IFractalCalculator, IHeightFieldSou
         });
         if (contours != DomainContourMode.Off)
             DomainContours.Apply(color, ctTurns, ctK, ctLog2, width, height, contours, fp.TalbotContourCount, ct);
+        if (detections)
+        {
+            DetectionBuildUp.Sample(detW, fp.DetectionCount, fp.DetectionSeed, DetectionCounts, ct);
+            DetectionBuildUp.Paint(DetectionCounts, width, height, fp.DetectionDotRadius, fp.DetectionGain, color, smooth, maxIt, ct);
+        }
     }
+
+    // #1599 — detection weights (|ψ|² per pixel) and the last build-up's per-pixel counts.
+    private double[] _detWeights = Array.Empty<double>();
+    /// <summary>Detections view: how many detections landed on each pixel in the last render (#1599).</summary>
+    public int[] DetectionCounts { get; private set; } = Array.Empty<int>();
 
     private float[] _ctTurns = Array.Empty<float>(), _ctK = Array.Empty<float>(), _ctLog2 = Array.Empty<float>();   // #1598
 }

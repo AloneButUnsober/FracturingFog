@@ -701,6 +701,15 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
             Array.Fill(_ctTurns, float.NaN);
         }
         float[] ctTurns = _ctTurns, ctK = _ctK, ctLog2 = _ctLog2;
+        // #1599 — detection build-up: weights = the intensity I/2 on live pixels; −1 marks
+        // pixels off the detector (interior, surround), which keep their colour.
+        bool detField = !layers && field == DualOrbitField.PathInterferenceDetections;
+        if (detField)
+        {
+            if (_detWeights.Length != width * height) { _detWeights = new double[width * height]; DetectionCounts = new int[width * height]; }
+            Array.Fill(_detWeights, -1.0);
+        }
+        double[] detW = _detWeights;
         if (key.Layers && IsBivariateMode(FractalParameters.DualOrbitColorMode))   // #1122
         {
             ColorizeBivariate(FractalParameters.DualOrbitColorMode, maxIter, interiorColor, oobColor);
@@ -755,6 +764,8 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                     ColorBuffer[idx] = CategoricalColor(field, _scalar[idx])!.Value;
                 else if (fieldOrbit)
                     ColorBuffer[idx] = _ocol[idx];
+                else if (detField)   // #1599 — painted after sampling
+                    detW[idx] = _scalar[idx];
                 else if (domainField)   // #1592 — hue = phase, brightness = I/2
                 {
                     double kk = Math.Clamp(_scalar[idx] / (double)maxIter, 0.0, 1.0);
@@ -773,7 +784,18 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         if (contours != DomainContourMode.Off)
             DomainContours.Apply(ColorBuffer, ctTurns, ctK, ctLog2, width, height, contours,
                 FractalParameters.DualOrbitInterferenceContourCount, ct);
+        if (detField)
+        {
+            var fp = FractalParameters;
+            DetectionBuildUp.Sample(detW, fp.DetectionCount, fp.DetectionSeed, DetectionCounts, ct);
+            DetectionBuildUp.Paint(DetectionCounts, width, height, fp.DetectionDotRadius, fp.DetectionGain, ColorBuffer, null, maxIter, ct, only: detW);
+        }
     }
+
+    // #1599 — detection weights (I/2 per live pixel) and the last build-up's per-pixel counts.
+    private double[] _detWeights = Array.Empty<double>();
+    /// <summary>PathInterferenceDetections: detections per pixel in the last colour pass (#1599).</summary>
+    public int[] DetectionCounts { get; private set; } = Array.Empty<int>();
 
     private float[] _ctTurns = Array.Empty<float>(), _ctK = Array.Empty<float>(), _ctLog2 = Array.Empty<float>();   // #1598
 

@@ -165,6 +165,7 @@ public sealed class DualOrbitVolumeQuatParityTests
         DualOrbitField.DistanceZ, DualOrbitField.DistanceC, DualOrbitField.DualOutline, DualOrbitField.BinaryXor,
         DualOrbitField.FinalAngleDelta, DualOrbitField.PathInterference, DualOrbitField.PathInterferencePhase,
         DualOrbitField.PathInterferenceDomain,   // #1592 — like its siblings, no quaternion value
+        DualOrbitField.PathInterferenceDetections,   // #1599 — likewise
         DualOrbitField.BasinEntropy, DualOrbitField.UncertaintyExponent, DualOrbitField.Ftle, DualOrbitField.JacobianAnisotropy,
     };
 

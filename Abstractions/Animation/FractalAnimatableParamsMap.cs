@@ -267,6 +267,9 @@ public static class FractalAnimatableParamsMap
             Notes: "Ronchi open fraction — the carpet's weave changes; duty ½ kills every even order (#1570)."),
         new("TalbotModes", AnimatableParamKind.ScalarInt, Min: 1.0, Max: 512.0,
             Notes: "Fourier modes M — the carpet sharpens from smooth waves to its fractal limit (#1570)."),
+        new("DetectionCount", AnimatableParamKind.ScalarInt, Min: 0.0, Max: 2000000.0,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Detections view: particles landed so far — sweep it up and the fringes build out of single dots (#1599)."),
     };
 
     // Slit cascade (#1569) — the fringe that weights the children, and the scale.
@@ -280,6 +283,9 @@ public static class FractalAnimatableParamsMap
             Notes: "Child scale r — the cascade tightens or opens (#1569)."),
         new("SlitCascadeCharge", AnimatableParamKind.ScalarInt, Min: -12.0, Max: 12.0,
             Notes: "Vortex charge ℓ on the ring children — steps the filament twist (#1572)."),
+        new("DetectionCount", AnimatableParamKind.ScalarInt, Min: 0.0, Max: 2000000.0,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Detections view: particles landed so far — sweep it up and the fringes build out of single dots (#1599)."),
     };
 
     private static readonly AnimatableParamDescriptor[] _lyapunovList =
@@ -496,6 +502,8 @@ public static class FractalAnimatableParamsMap
             Notes: "Path interference η (which-path measurement) — sweep 0 → 1 and the fringes collapse (#1567). Recolour only."),
         new("DualOrbitAngularMomentum", AnimatableParamKind.ScalarInt, Min: -12.0, Max: 12.0,
             Notes: "Path interference ℓ (angular-momentum winding) — steps the spiral-arm count (#1568). Recolour only."),
+        new("DetectionCount", AnimatableParamKind.ScalarInt, Min: 0.0, Max: 2000000.0,
+            Notes: "PathInterferenceDetections: particles landed so far — the fringes build out of single dots (#1599). Recolour only."),
     };
 
     // Dual Buddhabrot (#1124). Sweeping the c-seed re-textures the c channels on

@@ -506,6 +506,30 @@ Parallel after S0: {S1, S2, S3, S6}. After S3: {S4, S5}.
   the phase flips between 0 and ½ there: a speckled row of phase lines is that, not a bug. At the full
   view the carpet's phase is finer than a pixel and the lines crowd; zoomed in they are clean.
 
+### 10.3 Particle build-up (#1599, round 2 tracker #1605)
+
+- **What:** a *Detections* view on all three types (`SlitCascadeView.Detections`,
+  `TalbotView.Detections`, `DualOrbitField.PathInterferenceDetections` = 40) with shared settings
+  `DetectionCount` / `DetectionSeed` / `DetectionDotRadius` / `DetectionGain`, drawn by
+  `Engine/Calculators/DetectionBuildUp.cs`. The picture is Tonomura et al.'s 1989 single-electron
+  build-up; the sampler is FF's: inverse CDF over the view's pixels (the screen is the detector),
+  chunks of 4096 samples each with its own SplitMix64 stream seeded from (seed, chunk), atomic
+  histogram. Deterministic at any thread count, and sample j does not depend on the total, so raising
+  the count only adds dots. Painted as achromatic OkLab lightness 1 − exp(−gain·dots in the disk).
+- **Measured (`DetectionBuildUpTests`):** at 2,000,000 detections the histogram matches |A|² from the
+  direct sums (Slit `Amplitude`, Talbot `Field`, the dual-orbit `PathInterference` field) with χ²/dof
+  in (0.4, 1.9) over ≥ 40 blocks of 4×4 px; the uniform distribution gives χ²/dof > 10; zero-intensity
+  pixels get no detections; prefix property across chunk boundaries; painting equals the exposure
+  formula; dots stay grey under deutan/protan simulation. Six of seven mutants caught; the survivor
+  (`>` → `>=` in the CDF search) differs only when u equals a cumulative weight exactly
+  (probability ≈ 2⁻⁵³).
+- **Preset + animation:** *Slit Cascade - Particle Build-Up* bound to *Slit cascade: particle
+  build-up* (Linear 0 → 60,000 over 20 s). Batch video verified (frames brighten monotonically after
+  the first).
+- **Gotcha:** batch `--animation` leaves frame 0 at the region's own values by design (#998,
+  `AnimationDataExtensions.ApplyAt` at t = 0), so a ramp from 0 shows the preset's 20,000 dots on
+  frame 0 — the guide's command passes `--param DetectionCount=0`.
+
 **Standing rules for every slice:** batch parity (`RegionFractalParams` → `--param`,
 `BuildFractalParameters`, `BatchCommandBuilder` round-trip), recolour-guard classification (#981),
 and citations in the Bibliography in the same PR.

@@ -29,7 +29,7 @@ interfere.
 
 | Setting | What it does |
 |---|---|
-| **Field** | *PathInterference* (brightness), *PathInterferencePhase* (phase), or ***PathInterferenceDomain***: both at once, colour = phase on the colour-blind-safe Phase Wheel, brightness = intensity (ignores the theme). |
+| **Field** | *PathInterference* (brightness), *PathInterferencePhase* (phase), or ***PathInterferenceDomain***: both at once, colour = phase on the colour-blind-safe Phase Wheel, brightness = intensity (ignores the theme). ***PathInterferenceDetections***: the intensity recorded one particle at a time (§2.3). |
 | **Interference κ** | How fast the phase turns with escape potential: more fringes as κ grows. Animatable. |
 | **Angle damping γ** | Fringes fade where the two orbits' external angles differ. 0 = full fringes (default). |
 | **Which-path η** | The detector. 0 = nobody watches, full fringes; 1 = fully watched, the fringes vanish. Intensity field only. Animatable. |
@@ -52,7 +52,7 @@ level.
 | **Layout** | *Line*: a row of slits (a grating; the pattern is stripes). *Ring*: slits round a circle. |
 | **Scale ratio r**, **Depth** | The cascade's shape. Zooming the pattern out by 1/r shows the next level. |
 | **Slit separation d**, **Slit width w**, **Wavelength λ** | The fringe that decides the shares. Animate λ and the slits slide on and off dark fringes. |
-| **Show** | *Intensity* (log scale), *Phase*, *Aperture* (the slits, brighter where more light passes), *HolderAlpha*, *Spectrum* (§2.1), *Domain* (§2.2). |
+| **Show** | *Intensity* (log scale), *Phase*, *Aperture* (the slits, brighter where more light passes), *HolderAlpha*, *Spectrum* (§2.1), *Domain* (§2.2), *Detections* (§2.3). |
 | **Dynamic range** | How many powers of ten of brightness the colours span. |
 | **Vortex charge ℓ**, **Charge per level** | §2.2. |
 
@@ -95,6 +95,26 @@ preset has charge 3 at the centre, so 24 lines meet there at n = 8 (zoom in: the
 on the Julibrot Pair *PathInterferenceDomain* field and the Talbot *Domain* view. It recolours without
 recomputing. These are the contours of Wegert's "enhanced" phase portraits.
 
+### 2.3 Particle build-up: the image is the probability
+
+The *Detections* view (Slit Cascade and Talbot Carpet *Show*, Julibrot Pair field *PathInterferenceDetections*)
+records the pattern the way the single-electron double-slit experiment does (Tonomura et al., 1989): particles
+arrive one at a time, each lands on one spot, and the chance of landing on a pixel is proportional to the
+intensity there. A few hundred dots look random; tens of thousands draw the fringes. The picture is the
+probability, revealed by sampling. Grey dots on black, so it reads the same for every colour vision; it ignores
+the colour theme.
+
+| Setting | What it does |
+|---|---|
+| **Detections** | How many particles have landed (up to 50 million). Raising it only adds dots: the first 1,000 are the same whatever the total, so animating it shows the pattern building up. Animatable. |
+| **Random seed** | Same seed, same dots, live and in exported images. |
+| **Dot radius** | 0 = one pixel per detection; larger draws bigger dots (useful at high resolution). |
+| **Exposure per dot** | Brightness of one detection; where dots pile up the brightness saturates like film (1 − e^(−exposure × dots)). Lower it for large counts. |
+
+The screen is the detector: dots land only inside the current view, and pixels with no light (the Julibrot
+Pair interior) never get one. Demo: **Slit Cascade - Particle Build-Up**, with its bound animation
+*Slit cascade: particle build-up* (0 → 60,000 detections over 20 seconds).
+
 ## 3. Talbot Carpet
 
 Across the screen: position in grating periods. Down: distance travelled, in Talbot distances. The grating
@@ -105,7 +125,7 @@ fractions, and as a fractal at irrational distances.
 |---|---|
 | **Grating** | *Ronchi* (bars, with an **Open fraction**), *DeltaComb* (infinitely thin slits, the sharpest carpet), *SlitCascade* (one period of the Slit Cascade's row of slits, using that type's settings). |
 | **Fourier modes M** | Sharper grating edges, finer carpet. Values far above the screen resolution only alias. |
-| **Show** | Intensity on a log scale about the average brightness, phase, or *Domain* (both: colour = phase, brightness = intensity). |
+| **Show** | Intensity on a log scale about the average brightness, phase, *Domain* (both: colour = phase, brightness = intensity), or *Detections* (particle build-up, §2.3). |
 | **Dynamic range** | How far below the average brightness the dark end reaches. |
 | **Contour lines** | *Domain* only: phase and/or modulus lines (§2.2). The carpet's phase is itself a fractal, so at the full view the lines crowd into speckle; zoom in, or use fewer Fourier modes, to follow them. |
 
@@ -127,6 +147,7 @@ Open them from the region list; each says what it shows. Built-ins never change:
 | **Slit Cascade - Ring Diffraction** | Slit Cascade | *Slit cascade: wavelength breathing*: λ 0.4 ↔ 1.4 |
 | **Slit Cascade - Probability Sets Dimension** | Slit Cascade | — (watch the status bar) |
 | **Slit Cascade - Vortex Core** | Slit Cascade | — |
+| **Slit Cascade - Particle Build-Up** | Slit Cascade | *Slit cascade: particle build-up*: 0 → 60,000 detections |
 | **Talbot Carpet - Ronchi Grating** | Talbot Carpet | — |
 | **Talbot Carpet - Fractal Comb** | Talbot Carpet | — |
 | **Talbot Carpet - Cascade Grating** | Talbot Carpet | — |
@@ -151,6 +172,13 @@ Play a bound animation as a video (the view holds still, the setting moves):
 
 ```bash
 FracturingFog --batch --mode video --region "Double Slit - Which-Path Collapse" --animation "Double slit: which-path collapse" --video-motion hold --seconds 10 --out C:\out\
+```
+
+The particle build-up as a video. A video's first frame shows the region's own settings and the animation
+takes over from the second, so start the count at 0 to match the ramp:
+
+```bash
+FracturingFog --batch --mode video --region "Slit Cascade - Particle Build-Up" --animation "Slit cascade: particle build-up" --param DetectionCount=0 --video-motion hold --seconds 20 --out C:\out\
 ```
 
 Any setting can be given with `--param Key=Value` (names as in the tables, e.g. `SlitCascadeWavelength`,
@@ -188,5 +216,6 @@ The Control Center **Command** builder writes the full command for whatever is o
 Double slit and which-path: Feynman, Leighton & Sands. Diffraction by fractal gratings: Allain & Cloitre; Bak,
 Kim, Kim, Soh & Yee. Generalized dimensions and f(α): Hentschel & Procaccia; Halsey, Jensen, Kadanoff, Procaccia &
 Shraiman. Orbital angular momentum: Allen, Beijersbergen, Spreeuw & Woerdman. Devil's vortex lens: Furlan,
-Giménez, Calatayud & Monsoriu. Talbot effect and quantum carpets: Berry & Klein; Berry; Berry, Marzoli & Schleich.
+Giménez, Calatayud & Monsoriu. Talbot effect and quantum carpets: Berry & Klein; Berry; Berry, Marzoli & Schleich. Single-particle build-up:
+Tonomura, Endo, Matsuda, Kawasaki & Ezawa. Phase-portrait contours: Wegert.
 Full entries: [bibliography](../Resources-Bibliography.md#double-slit-fractals).
