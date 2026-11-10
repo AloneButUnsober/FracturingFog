@@ -496,6 +496,8 @@ The **Fractured Waves** expander in the Fractal Parameters dialog (and the matri
 
 Example (Acid Fog, music pushes the patterns from one to the next): `AcidWarpFlow`, Signal RMS, Mode Rate, Min/s 0.05, Max/s 1.5, Edge Wrap, Release 0.8. Enabling an audio drive on `AcidWarpFlow` turns **Morph** on automatically.
 
+Which signal, curve, mode and range to use for a given look: see the [Fractured Audio Cookbook](Fractured-Audio-Cookbook.md) (#1433).
+
 **Recipes** (#1434): the picker above the binding rows (Fractured Waves expander and Audio Settings) sets a whole recipe in one click. It lists the recipes that fit the current fractal: built-ins first, then your own. A fractal with no recipe yet shows a hint instead of the list, and **Save** still makes its first one.
 - **Apply** sets the recipe's bindings, plus any setting it needs to show (Acid Fog Morph, the Domain-warp toggle). Bindings this fractal can't animate are skipped. With **Replace this fractal's other bindings** on, the fractal's other bindings are turned off; with it off, the recipe is laid over them.
 - **Undo** puts back the bindings and settings from before the last Apply.

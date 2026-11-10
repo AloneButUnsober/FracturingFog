@@ -86,7 +86,7 @@ namespace FracturingFog.Audio
         };
 
         // ── built-ins ────────────────────────────────────────────────────────
-        // Recipes from the #1433 cookbook sketch. Ranges sit inside each target's
+        // The ★ recipes of Docs/User/Fractured-Audio-Cookbook.md (#1433). Ranges sit inside each target's
         // FractalAnimatableParamsMap range; Rate-mode ranges are units per second.
 
         private static AudioParamBinding B(string param, AudioSignalKind src, double min, double max,

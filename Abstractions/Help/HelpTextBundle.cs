@@ -556,6 +556,11 @@ Morph), Undo puts back what was there, Save stores the bindings
 that are on now as your own recipe. Only recipes that fit the
 current fractal are listed; built-ins can't be overwritten.
 
+Which signal, curve, mode and range give which look (endless
+flow, beat punches, downbeat accents, spins, calm stillness),
+one recipe per fractal family, and the pitfalls: see
+Docs/User/Fractured-Audio-Cookbook.md (#1433).
+
 === Master Enable ===
 
 The Fractured Waves checkbox in Slideshow Settings (next to the
