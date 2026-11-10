@@ -421,7 +421,8 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
             // the settings no individual flag can; a playing animation is a gap.
             LightingPresetName = fp != null ? MatchLightingPreset(fp) : null,
             LiveAnimationName  = FracturingFog.UI.Avalonia.ViewModels.Animation.AnimationBusHost.CurrentAnimationName,
-            AudioDrivenParams  = Shell.AudioModulation?.ActiveParamNames(),   // #1432 — live-only gap
+            AudioDrivenParams  = Shell.AudioModulation?.ActiveParamNames(),   // #1432 — gap: the music is not in the command
+            AudioBindings      = Shell.AudioModulation?.ActiveBindings(),     // #1432 — emitted as --audio-bind
             // #1249 — user-code equation: by saved name when it reproduces the
             // live one exactly, else the source inline.
             EquationName   = fp != null ? FracturingFog.Models.UserCodeSource.SavedNameMatching(main.SelectedFractalType, fp) : null,

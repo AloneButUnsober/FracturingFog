@@ -292,6 +292,11 @@ namespace FracturingFog.Cli
         /// they are reported as a fidelity gap.</summary>
         public IReadOnlyList<string>? AudioDrivenParams { get; init; }
 
+        /// <summary>#1432 — the live audio→param bindings themselves (enabled and
+        /// driving), emitted as <c>--audio-bind</c> so a video with <c>--audio FILE</c>
+        /// reproduces the drive.</summary>
+        public IReadOnlyList<FracturingFog.Audio.AudioParamBinding>? AudioBindings { get; init; }
+
         /// <summary>The active theme is a custom/edited palette with no saved
         /// name to reference. The command cannot emit <c>--theme</c> for it, so
         /// the poster falls back to the batch default (HSV).</summary>
@@ -631,6 +636,15 @@ namespace FracturingFog.Cli
                 parts.Add(key + "=" + value);
             }
 
+            // #1432 — the live audio bindings, one --audio-bind each (name order).
+            if (snap.AudioBindings != null)
+                foreach (var ab in snap.AudioBindings.Where(b => b != null && b.Enabled)
+                                                     .OrderBy(b => b.ParamName, StringComparer.Ordinal))
+                {
+                    parts.Add(BatchFlags.AudioBind);
+                    parts.Add(FracturingFog.Audio.AudioBindSpec.Format(ab));
+                }
+
             // Output path placeholder — always last, always a placeholder.
             parts.Add(BatchFlags.Out);
             parts.Add(snap.OutputPlaceholder);
@@ -739,11 +753,13 @@ namespace FracturingFog.Cli
                 gaps.Add($"{snap.Fractal} has no equation (the render is blank) — write or load one first");
             if (!string.IsNullOrWhiteSpace(snap.LiveAnimationName))
                 gaps.Add($"Live animation '{snap.LiveAnimationName}' (a still shows one moment of it; for a video choose it under --animation)");
-            // #1432 — audio→param bindings are live-only: batch renders the
-            // parameters at their current values, with no audio drive.
+            // #1432 — audio→param bindings follow live capture. The command carries them
+            // (--audio-bind) when it has them, but the music itself is not in it: a video
+            // needs --audio FILE, and a still renders the settings' current values.
             if (snap.AudioDrivenParams is { Count: > 0 } audio)
-                gaps.Add("Audio-driven parameters (" + string.Join(", ", audio)
-                         + ") are live-only: the batch renders their current values without the audio drive (#1432)");
+                gaps.Add("Audio-driven parameters (" + string.Join(", ", audio) + ") follow the live audio input: "
+                         + (snap.AudioBindings is { Count: > 0 } ? "the command carries their --audio-bind; " : "")
+                         + "render a video with --mode video --audio FILE to drive them (a still renders their current values) (#1432)");
             // #1554 — a hover-only math overlay follows the pointer; nothing to pin.
             if (snap.MathOverlayHoverOnly)
                 gaps.Add("Math overlay with no pinned point (the hover orbit is live only) — pin a point to render it with --math-overlay");

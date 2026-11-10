@@ -496,7 +496,7 @@ The **Fractured Waves** expander in the Fractal Parameters dialog (and the matri
 
 Example (Acid Fog, music pushes the patterns from one to the next): `AcidWarpFlow`, Signal RMS, Mode Rate, Min/s 0.05, Max/s 1.5, Edge Wrap, Release 0.8. Enabling an audio drive on `AcidWarpFlow` turns **Morph** on automatically.
 
-Audio drive is saved with the region. It is live-only for now: `--batch` renders the knobs at their current values, and the Command builder flags this (#1432).
+Audio drive is saved with the region. A batch **video** plays it from a music file: `--batch --mode video --region "<name>" --audio music.wav` drives the region's bindings at each frame's time (same attack / release / Rate / Edge as live) and muxes the music into the video (#1432). `--audio-bind PARAM=SIGNAL,min=…,max=…` adds or replaces one binding, and the Control Center **Command** builder writes one per live binding. An uncompressed WAV needs nothing else; other formats, and the mux, need ffmpeg. A still image renders the knobs at their current values.
 
 ---
 

@@ -286,6 +286,8 @@ namespace FracturingFog.Batch
             var (cx, cy, zoom, iter, frType, quality, regionDispName) = ResolveRegion(opts);
             var theme = ResolveTheme(opts.ThemeName);
             string outPath = ResolveImageOutputPath(opts, regionDispName, frType);
+            if (!string.IsNullOrWhiteSpace(opts.AudioPath) || opts.AudioBinds.Count > 0)   // #1432
+                Console.WriteLine("  note    : --audio / --audio-bind drive a video (--mode video); a still renders the settings' own values.");
 
             EnsureDirectoryForFile(outPath);
 
@@ -940,6 +942,9 @@ namespace FracturingFog.Batch
                 if (animation.TargetFractalTypes.Count > 0 && !animation.TargetFractalTypes.Contains(frType))
                     Console.WriteLine($"  note     : '{animation.Name}' was authored for {string.Join(", ", animation.TargetFractalTypes)}.");
             }
+            // #1432 — audio→param bindings (the region's, with --audio-bind laid over
+            // them) driven from the --audio file, read at each frame's time.
+            var audioDrive = BuildAudioDrive(opts, namedRegion, fp, frType);
             // The animation owns param motion: no default constant drift beside it.
             var drift = (motion == VideoMotionKind.Zoom && !opts.VideoNoDrift && animation == null && loop == null)
                 ? FracturingFog.Abstractions.Animation.ConstantDriftResolver.TryBuild(
@@ -948,7 +953,7 @@ namespace FracturingFog.Batch
             if (drift != null) Console.WriteLine($"  drift    : {drift.Name} (disable with --no-drift)");
             // Hold / Ken-Burns render the fractal ONCE (safe for slow generators:
             // Flame, DLA, Buddhabrot); an orbit forces per-frame renders.
-            bool singleRender = orbitSnap == null && animation == null
+            bool singleRender = orbitSnap == null && animation == null && audioDrive == null
                 && motion is VideoMotionKind.Hold or VideoMotionKind.KenBurns;
             if (animation != null && motion == VideoMotionKind.KenBurns)
                 Console.WriteLine("  note     : Ken-Burns pans a single rendered frame; with --animation every frame re-renders, so the view holds.");
@@ -960,6 +965,7 @@ namespace FracturingFog.Batch
                 if (animation != null)
                     FracturingFog.Abstractions.Animation.AnimationDataExtensions.ApplyAt(
                         animation, fp, frame / (double)Math.Max(opts.VideoFps, 1));
+                audioDrive?.ApplyFrame(frame);   // #1432 — after the animation: audio wins on a shared setting
                 if (motion == VideoMotionKind.Sweep)
                 {
                     if (frType == FractalType.Logistic)
@@ -1233,6 +1239,23 @@ namespace FracturingFog.Batch
                 }
             }
 
+            // #1432 — mux the --audio file into the video (non-fatal: keep the silent one).
+            if (!string.IsNullOrWhiteSpace(opts.AudioPath) && File.Exists(opts.AudioPath) && File.Exists(finalVideoPath))
+            {
+                string muxed = finalVideoPath + ".audio" + Path.GetExtension(finalVideoPath);
+                var (mok, mlog) = FfmpegEncoder.MuxAudioAsync(finalVideoPath, opts.AudioPath!, muxed).GetAwaiter().GetResult();
+                if (mok)
+                {
+                    try { File.Delete(finalVideoPath); File.Move(muxed, finalVideoPath); Console.WriteLine("  audio  : muxed"); }
+                    catch (Exception ex) { Console.WriteLine($"  audio  : mux could not replace the video: {ex.Message}"); try { File.Delete(muxed); } catch { } }
+                }
+                else
+                {
+                    Console.WriteLine($"  audio  : mux failed, video kept silent: {TailLog(mlog, 300)}");
+                    try { File.Delete(muxed); } catch { }
+                }
+            }
+
             // ── Cleanup ──────────────────────────────────────────────────────
             if (!opts.KeepFrames)
             {
@@ -1249,6 +1272,45 @@ namespace FracturingFog.Batch
             if (Directory.Exists(pngFolder))
                 Console.WriteLine($"  frames : {pngFolder}");
             return 0;
+        }
+
+        // #1432 — the audio drive for a video: null when there is no --audio, or no
+        // enabled binding, or the file can't be analysed (each reported).
+        private static FracturingFog.Abstractions.Animation.BatchAudioDrive? BuildAudioDrive(
+            BatchOptions opts, FractalRegion? region, FractalParameters fp, FractalType frType)
+        {
+            var bindings = FracturingFog.Abstractions.Animation.BatchAudioDrive.Merge(region?.AudioBindings, opts.AudioBinds);
+            if (string.IsNullOrWhiteSpace(opts.AudioPath))
+            {
+                if (bindings.Count > 0)
+                    Console.WriteLine($"  audio    : {bindings.Count} binding(s) ({string.Join(", ", System.Linq.Enumerable.Select(bindings, b => b.ParamName))}) need --audio FILE; rendering their own values.");
+                return null;
+            }
+            if (!File.Exists(opts.AudioPath))
+                throw new InvalidOperationException($"--audio: file not found: {opts.AudioPath}");
+            if (bindings.Count == 0)
+            {
+                Console.WriteLine($"  audio    : {opts.AudioPath} (no bindings to drive; muxed only)");
+                return null;
+            }
+            // An uncompressed WAVE file is read in-process (no ffmpeg); anything else, or a
+            // WAVE encoding the reader refuses, goes through ffmpeg.
+            var baked = FracturingFog.Audio.OfflineAudioAnalysis.AnalyzeWav(opts.AudioPath!, out string? wavError);
+            string? ff = baked == null ? FfmpegEncoder.FindFfmpeg() : null;
+            if (baked == null && ff != null) baked = FracturingFog.Audio.OfflineAudioAnalysis.AnalyzeFile(opts.AudioPath!, ff);
+            if (baked == null)
+            {
+                Console.WriteLine(ff == null
+                    ? $"  audio    : '{opts.AudioPath}' is not an uncompressed WAVE file{(wavError != null ? $" ({wavError})" : "")} and ffmpeg was not found — rendering the bindings' own values."
+                    : $"  audio    : could not analyse '{opts.AudioPath}' — rendering the bindings' own values.");
+                return null;
+            }
+            var skipped = new System.Collections.Generic.List<string>();
+            var drive = FracturingFog.Abstractions.Animation.BatchAudioDrive.Create(fp, frType, baked, bindings, opts.VideoFps, skipped);
+            foreach (var s in skipped) Console.WriteLine($"  audio    : skipped {s}");
+            if (drive.Driven.Count == 0) return null;
+            Console.WriteLine($"  audio    : {opts.AudioPath} drives {string.Join(", ", drive.Driven)}");
+            return drive;
         }
 
         private static string TailLog(string log, int maxChars)

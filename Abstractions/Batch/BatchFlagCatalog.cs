@@ -565,6 +565,16 @@ namespace FracturingFog.Batch
                 Txt(BatchFlags.Animation, Video, BatchModes.Video,
                     "Play a saved animation across the video (every frame re-renders; use --video-motion hold for an animated still).",
                     BatchFlagSource.Animation),
+                PathFlag(BatchFlags.Audio, Video, BatchModes.Video,
+                    "Audio file (any format ffmpeg reads) that drives the region's audio bindings and every --audio-bind "
+                    + "across the video, read at each frame's time; muxed into the output. Needs ffmpeg.", "FILE")
+                    with { PathIsInput = true, Example = "music.wav" },
+                Txt(BatchFlags.AudioBind, Video, BatchModes.Video,
+                    "Drive a setting from --audio: PARAM=SIGNAL[,key=value…], keys min, max, gain, bias, curve, invert, "
+                    + "mode (position|rate), edge (clamp|wrap|pingpong), attack, release. Replaces the region's binding for "
+                    + "the same setting. Repeatable.", hint: "PARAM=SIGNAL")
+                    with { Repeatable = true, Example = "DualOrbitWhichPath=BeatPulse,min=0,max=1,release=0.15",
+                           Requires = new[] { BatchFlags.Audio } },
                 Sw(BatchFlags.NoDrift, Video, BatchModes.Sequence,
                     "Julia/Phoenix/Glynn zooms: keep the constant fixed (default drifts it gently)."),
                 Int(BatchFlags.VideoSeed, Video, BatchModes.Sequence, "Seed for Ken-Burns / drift paths.", def: "0"),

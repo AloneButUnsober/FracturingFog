@@ -97,6 +97,15 @@ public sealed class AudioModulationManager
                    .OrderBy(n => n, StringComparer.Ordinal)
                    .ToList();
 
+    /// <summary>#1432 — the bindings audio is driving right now (as
+    /// <see cref="ActiveParamNames"/>), cloned, for the Command builder's
+    /// <c>--audio-bind</c>.</summary>
+    public IReadOnlyList<AudioParamBinding> ActiveBindings()
+        => _entries.Where(kv => kv.Value.Enabled && kv.Value.Animator != null)
+                   .OrderBy(kv => kv.Key, StringComparer.Ordinal)
+                   .Select(kv => new AudioParamBinding { ParamName = kv.Key, Enabled = true, Binding = CloneBinding(kv.Value.Binding) })
+                   .ToList();
+
     /// <summary>#277 — true when at least one binding is enabled. Feeds the
     /// host's audio-capture demand predicate.</summary>
     public bool HasEnabledBindings => _entries.Values.Any(e => e.Enabled);

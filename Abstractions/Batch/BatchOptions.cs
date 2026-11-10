@@ -349,6 +349,13 @@ namespace FracturingFog.Batch
         /// <summary>Saved animation name (#998), played across a video's frames.</summary>
         public string? AnimationName { get; set; }
 
+        /// <summary>#1432 — audio file analysed offline to drive the audio→param
+        /// bindings across a video (and muxed into it).</summary>
+        public string? AudioPath { get; set; }
+
+        /// <summary>#1432 — <c>--audio-bind</c> bindings, laid over the region's own.</summary>
+        public List<FracturingFog.Audio.AudioParamBinding> AudioBinds { get; } = new();
+
         /// <summary>#1235 — <c>--video-motion loop</c>: a seamless Misiurewicz
         /// self-similar loop (zoom ×|λ|^n, turn −n·arg λ) instead of a plain zoom.
         /// The video path treats it as Zoom motion with its own endpoints.</summary>
@@ -1106,6 +1113,18 @@ namespace FracturingFog.Batch
                     case BatchFlags.Animation:
                         if (!Next(args, ref i, a, out string anv, out error)) return false;
                         opts.AnimationName = anv;
+                        break;
+
+                    case BatchFlags.Audio:
+                        if (!Next(args, ref i, a, out string auv, out error)) return false;
+                        opts.AudioPath = auv;
+                        break;
+
+                    case BatchFlags.AudioBind:
+                        if (!Next(args, ref i, a, out string abv, out error)) return false;
+                        if (!FracturingFog.Audio.AudioBindSpec.TryParse(abv, out var abb, out string? aberr))
+                            { error = $"{a}: {aberr}"; return false; }
+                        opts.AudioBinds.Add(abb);
                         break;
 
                     case BatchFlags.LoopMultiplier:

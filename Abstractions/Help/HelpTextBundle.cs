@@ -534,6 +534,17 @@ The dialog is MODELESS — you can leave it open while you start the
 slideshow, browse the main view, or change regions. Settings are
 applied only when you click OK; clicking Cancel discards changes.
 
+=== Headless (batch) ===
+
+Audio-driven settings saved on a region play in a batch VIDEO
+from a music file (#1432):
+  --batch --mode video --region ""<name>"" --audio music.wav
+Each frame reads the file at its own time (same attack, release,
+Rate and Edge as live); the music is muxed into the video.
+--audio-bind PARAM=SIGNAL,min=..,max=.. adds or replaces one
+binding. A WAV needs nothing else; other formats and the mux
+need ffmpeg. A still renders the settings' own values.
+
 === Master Enable ===
 
 The Fractured Waves checkbox in Slideshow Settings (next to the
