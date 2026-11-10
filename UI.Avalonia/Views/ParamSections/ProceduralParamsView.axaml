@@ -519,7 +519,7 @@
         <!-- Julibrot Pair, was Dual-Orbit Escape (#864 / #866; renamed #1155) -->
         <Grid IsVisible="{Binding IsDualOrbitEscape}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Map:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding DualOrbitMaps}"
@@ -822,110 +822,124 @@
                       SelectedItem="{Binding DualOrbitWindingMode, Mode=TwoWay}" Margin="0,2"
                       IsVisible="{Binding IsDualOrbitInterferenceField}"
                       ToolTip.Tip="Same = both paths twist the same way (spiral arms on the phase field). Opposite = the c-path twists the other way: the intensity fringes become radial rays, while the phase field's twists cancel." />
-            <TextBlock Grid.Row="48" Grid.Column="0" Text="Ensemble seeds (N):" VerticalAlignment="Center"
-                       IsVisible="{Binding IsDualOrbitEnsembleField}" />
+            <TextBlock Grid.Row="48" Grid.Column="0" Text="Paths (N):" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitInterferenceField}" />
             <NumericUpDown Grid.Row="48" Grid.Column="1"
+                           Minimum="2" Maximum="12" Increment="1" FormatString="F0"
+                           Value="{Binding DualOrbitInterferencePaths, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsDualOrbitInterferenceField}"
+                           ToolTip.Tip="How many paths interfere. 2 = the two orbits (default). More paths act like a grating with more slits: the bright fringes stay in place but get thinner, with faint ones between. Re-runs the orbits when changed." />
+            <TextBlock Grid.Row="49" Grid.Column="0" Text="Path layout:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitMultiPath}" />
+            <ComboBox Grid.Row="49" Grid.Column="1"
+                      ItemsSource="{Binding DualOrbitPathLayouts}"
+                      SelectedItem="{Binding DualOrbitPathLayout, Mode=TwoWay}" Margin="0,2"
+                      IsVisible="{Binding IsDualOrbitMultiPath}"
+                      ToolTip.Tip="Grating = an ideal grating built from the two orbits: the textbook N-slit pattern, no extra cost. Ray = extra orbits started at 2c, 3c, …: real orbits with uneven steps, so rippled patterns instead of clean fringes. Segment = extra orbits started between 0 and c: a broad bright lobe. Ray and Segment run one more orbit per extra path." />
+            <TextBlock Grid.Row="50" Grid.Column="0" Text="Ensemble seeds (N):" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitEnsembleField}" />
+            <NumericUpDown Grid.Row="50" Grid.Column="1"
                            Minimum="1" Maximum="4096" Increment="8" FormatString="F0"
                            Value="{Binding DualOrbitEnsembleN, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsDualOrbitEnsembleField}"
                            ToolTip.Tip="How many c-orbit seeds are spread over a small disc round c for every pixel. Render time grows with N — keep it low while exploring, raise it for export." />
-            <TextBlock Grid.Row="49" Grid.Column="0" Text="Seed disc radius:" VerticalAlignment="Center"
+            <TextBlock Grid.Row="51" Grid.Column="0" Text="Seed disc radius:" VerticalAlignment="Center"
                        IsVisible="{Binding IsDualOrbitEnsembleField}" />
-            <NumericUpDown Grid.Row="49" Grid.Column="1"
+            <NumericUpDown Grid.Row="51" Grid.Column="1"
                            Minimum="0.000000001" Maximum="4" Increment="0.005" FormatString="G4"
                            Value="{Binding DualOrbitEnsembleRadius, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsDualOrbitEnsembleField}"
                            ToolTip.Tip="Radius of the seed disc round c, in c units (not pixels). Shrink it when you zoom in, or the boundary band gets wide." />
-            <TextBlock Grid.Row="50" Grid.Column="0" Text="Angle sectors:" VerticalAlignment="Center"
+            <TextBlock Grid.Row="52" Grid.Column="0" Text="Angle sectors:" VerticalAlignment="Center"
                        IsVisible="{Binding IsDualOrbitEnsembleField}" />
-            <NumericUpDown Grid.Row="50" Grid.Column="1"
+            <NumericUpDown Grid.Row="52" Grid.Column="1"
                            Minimum="0" Maximum="64" Increment="1" FormatString="F0"
                            Value="{Binding DualOrbitEnsembleSectors, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsDualOrbitEnsembleField}"
                            ToolTip.Tip="Outcome classes. 0 = bounded or escaped. K = bounded, or escaped through one of K equal external-angle sectors (more classes; ray boundaries appear)." />
-            <TextBlock Grid.Row="51" Grid.Column="0" Text="Uncertainty levels:" VerticalAlignment="Center"
+            <TextBlock Grid.Row="53" Grid.Column="0" Text="Uncertainty levels:" VerticalAlignment="Center"
                        IsVisible="{Binding IsDualOrbitUncertaintyField}" />
-            <NumericUpDown Grid.Row="51" Grid.Column="1"
+            <NumericUpDown Grid.Row="53" Grid.Column="1"
                            Minimum="2" Maximum="12" Increment="1" FormatString="F0"
                            Value="{Binding DualOrbitUncertaintyLevels, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsDualOrbitUncertaintyField}"
                            ToolTip.Tip="How many pair distances (each half the last) the exponent is fitted over. Each level costs another N orbits per pixel." />
-            <TextBlock Grid.Row="52" Grid.Column="0" Text="FTLE span:" VerticalAlignment="Center"
+            <TextBlock Grid.Row="54" Grid.Column="0" Text="FTLE span:" VerticalAlignment="Center"
                        IsVisible="{Binding IsDualOrbitFtleField}" />
-            <NumericUpDown Grid.Row="52" Grid.Column="1"
+            <NumericUpDown Grid.Row="54" Grid.Column="1"
                            Minimum="0.01" Maximum="100" Increment="0.1" FormatString="F2"
                            Value="{Binding DualOrbitFtleSpan, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsDualOrbitFtleField}"
                            ToolTip.Tip="Stretching rate (per step) that maps to the palette ends: ±span, with 0 at mid-palette. Ridges mark where nearby pairs separate fastest." />
-            <TextBlock Grid.Row="53" Grid.Column="0" Text="Anisotropy scale:" VerticalAlignment="Center"
+            <TextBlock Grid.Row="55" Grid.Column="0" Text="Anisotropy scale:" VerticalAlignment="Center"
                        IsVisible="{Binding IsDualOrbitAnisotropyField}" />
-            <NumericUpDown Grid.Row="53" Grid.Column="1"
+            <NumericUpDown Grid.Row="55" Grid.Column="1"
                            Minimum="0.01" Maximum="10000" Increment="1" FormatString="F2"
                            Value="{Binding DualOrbitAnisotropyScale, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsDualOrbitAnisotropyField}"
                            ToolTip.Tip="Log stretch ratio at which the palette is half-way: A maps to A / (A + scale)." />
-            <TextBlock Grid.Row="54" Grid.Column="0" Text="Flow texture (LIC):" VerticalAlignment="Center" Margin="0,8,0,2" />
-            <ComboBox Grid.Row="54" Grid.Column="1"
+            <TextBlock Grid.Row="56" Grid.Column="0" Text="Flow texture (LIC):" VerticalAlignment="Center" Margin="0,8,0,2" />
+            <ComboBox Grid.Row="56" Grid.Column="1"
                       ItemsSource="{Binding DualOrbitLicSources}"
                       SelectedItem="{Binding DualOrbitLicSource, Mode=TwoWay}" Margin="0,8,0,2"
                       ToolTip.Tip="Overlay a streaky flow texture that follows a direction field. SeparationDirection = the direction from the z-orbit to the c-orbit at the end. FieldGradient = up the coloured value's slope. FieldContour = along its level lines. Works in every colour mode." />
-            <TextBlock Grid.Row="55" Grid.Column="0" Text="Streak length (px):" VerticalAlignment="Center"
+            <TextBlock Grid.Row="57" Grid.Column="0" Text="Streak length (px):" VerticalAlignment="Center"
                        IsVisible="{Binding IsDualOrbitLicOn}" />
-            <NumericUpDown Grid.Row="55" Grid.Column="1"
+            <NumericUpDown Grid.Row="57" Grid.Column="1"
                            Minimum="1" Maximum="256" Increment="2" FormatString="F0"
                            Value="{Binding DualOrbitLicLength, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsDualOrbitLicOn}"
                            ToolTip.Tip="How far each streak runs either way. Recolours without re-iterating." />
-            <TextBlock Grid.Row="56" Grid.Column="0" Text="Texture strength:" VerticalAlignment="Center"
+            <TextBlock Grid.Row="58" Grid.Column="0" Text="Texture strength:" VerticalAlignment="Center"
                        IsVisible="{Binding IsDualOrbitLicOn}" />
-            <NumericUpDown Grid.Row="56" Grid.Column="1"
+            <NumericUpDown Grid.Row="58" Grid.Column="1"
                            Minimum="0" Maximum="1" Increment="0.05" FormatString="F2"
                            Value="{Binding DualOrbitLicStrength, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsDualOrbitLicOn}"
                            ToolTip.Tip="0 = no texture, 1 = full light/dark streaks over the colour. Recolours without re-iterating." />
-            <CheckBox Grid.Row="57" Grid.Column="0" Grid.ColumnSpan="2"
+            <CheckBox Grid.Row="59" Grid.Column="0" Grid.ColumnSpan="2"
                       Content="Smooth across escape bands"
                       IsChecked="{Binding DualOrbitLyapunovSmooth, Mode=TwoWay}" Margin="0,2"
                       IsVisible="{Binding IsDualOrbitSmoothableField}"
                       ToolTip.Tip="The value is an average (or total) over the steps before the first escape, so it jumps wherever that step count changes — visible as thin terrace lines, especially as Relief height. On = blend across each jump using the fractional escape count, so the field is continuous." />
-            <TextBlock Grid.Row="58" Grid.Column="0" Text="Contour lines:" VerticalAlignment="Center"
+            <TextBlock Grid.Row="60" Grid.Column="0" Text="Contour lines:" VerticalAlignment="Center"
                        IsVisible="{Binding IsDualOrbitInterferenceDomain}" />
-            <ComboBox Grid.Row="58" Grid.Column="1"
+            <ComboBox Grid.Row="60" Grid.Column="1"
                       ItemsSource="{Binding DomainContourModes}"
                       SelectedItem="{Binding DualOrbitInterferenceContours, Mode=TwoWay}" Margin="0,2"
                       IsVisible="{Binding IsDualOrbitInterferenceDomain}"
                       ToolTip.Tip="Thin darker lines over the Domain colours, so the picture reads without telling hues apart. Phase = a line every 1/n of a turn of phase: n lines meet at a vortex of charge 1, n·|ℓ| at charge ℓ. Modulus = a line wherever the amplitude halves or doubles. Both = the two together. Recolours without recomputing." />
-            <TextBlock Grid.Row="59" Grid.Column="0" Text="Phase lines per turn:" VerticalAlignment="Center"
+            <TextBlock Grid.Row="61" Grid.Column="0" Text="Phase lines per turn:" VerticalAlignment="Center"
                        IsVisible="{Binding IsDualOrbitInterferenceDomain}" />
-            <NumericUpDown Grid.Row="59" Grid.Column="1"
+            <NumericUpDown Grid.Row="61" Grid.Column="1"
                            Minimum="1" Maximum="64" Increment="1" FormatString="F0"
                            Value="{Binding DualOrbitInterferenceContourCount, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsDualOrbitInterferenceDomain}"
                            ToolTip.Tip="How many phase lines per turn (1 to 64). A vortex of charge ℓ has n·|ℓ| lines meeting at its core." />
-            <TextBlock Grid.Row="60" Grid.Column="0" Text="Detections:" VerticalAlignment="Center"
+            <TextBlock Grid.Row="62" Grid.Column="0" Text="Detections:" VerticalAlignment="Center"
                        IsVisible="{Binding IsDualOrbitInterferenceDetections}" />
-            <NumericUpDown Grid.Row="60" Grid.Column="1"
+            <NumericUpDown Grid.Row="62" Grid.Column="1"
                            Minimum="0" Maximum="50000000" Increment="1000" FormatString="F0"
                            Value="{Binding DetectionCount, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsDualOrbitInterferenceDetections}"
                            ToolTip.Tip="How many particles have landed. Each lands on a pixel with probability proportional to the intensity there, as in the single-electron double-slit experiment: a few hundred look random, tens of thousands show the fringes. Raising it only adds dots, so animating it shows the pattern building up." />
-            <TextBlock Grid.Row="61" Grid.Column="0" Text="Random seed:" VerticalAlignment="Center"
+            <TextBlock Grid.Row="63" Grid.Column="0" Text="Random seed:" VerticalAlignment="Center"
                        IsVisible="{Binding IsDualOrbitInterferenceDetections}" />
-            <NumericUpDown Grid.Row="61" Grid.Column="1"
+            <NumericUpDown Grid.Row="63" Grid.Column="1"
                            Minimum="-2147483648" Maximum="2147483647" Increment="1" FormatString="F0"
                            Value="{Binding DetectionSeed, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsDualOrbitInterferenceDetections}"
                            ToolTip.Tip="The same seed always gives the same dots, live and in exported images. Change it for a different random run." />
-            <TextBlock Grid.Row="62" Grid.Column="0" Text="Dot radius (px):" VerticalAlignment="Center"
+            <TextBlock Grid.Row="64" Grid.Column="0" Text="Dot radius (px):" VerticalAlignment="Center"
                        IsVisible="{Binding IsDualOrbitInterferenceDetections}" />
-            <NumericUpDown Grid.Row="62" Grid.Column="1"
+            <NumericUpDown Grid.Row="64" Grid.Column="1"
                            Minimum="0" Maximum="8" Increment="1" FormatString="F0"
                            Value="{Binding DetectionDotRadius, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsDualOrbitInterferenceDetections}"
                            ToolTip.Tip="0 = each detection lights one pixel; larger values draw bigger dots (easier to see at high resolution)." />
-            <TextBlock Grid.Row="63" Grid.Column="0" Text="Exposure per dot:" VerticalAlignment="Center"
+            <TextBlock Grid.Row="65" Grid.Column="0" Text="Exposure per dot:" VerticalAlignment="Center"
                        IsVisible="{Binding IsDualOrbitInterferenceDetections}" />
-            <NumericUpDown Grid.Row="63" Grid.Column="1"
+            <NumericUpDown Grid.Row="65" Grid.Column="1"
                            Minimum="0.01" Maximum="20" Increment="0.1" FormatString="F2"
                            Value="{Binding DetectionGain, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsDualOrbitInterferenceDetections}"

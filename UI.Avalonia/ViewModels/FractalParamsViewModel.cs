@@ -2312,7 +2312,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsDualOrbitAnisotropyField));
             this.RaisePropertyChanged(nameof(IsDualOrbitEnsembleField));
             this.RaisePropertyChanged(nameof(IsDualOrbitUncertaintyField));
-            this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceField)); this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceIntensity));
+            this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceField)); this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceIntensity)); this.RaisePropertyChanged(nameof(IsDualOrbitMultiPath));
             this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceDomain));   // #1598
             this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceDetections));   // #1599
             this.RaisePropertyChanged(nameof(IsDualOrbitCoMovingTrap));
@@ -2446,6 +2446,12 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public DualOrbitWindingMode DualOrbitWindingMode { get => _p.DualOrbitWindingMode; set { if (value == _p.DualOrbitWindingMode) return; _p.DualOrbitWindingMode = value; this.RaisePropertyChanged(); Fire(); } }
     public System.Array DualOrbitWindingModes => s_DualOrbitWindingModes;   // cached: a new array per read resets the ComboBox selection on Refresh()
     private static readonly System.Array s_DualOrbitWindingModes = System.Enum.GetValues(typeof(DualOrbitWindingMode));
+    /// <summary>#1602 — N-path interference: path count and the layout of the extra paths.</summary>
+    public int DualOrbitInterferencePaths { get => _p.DualOrbitInterferencePaths; set { var v = Math.Clamp(value, 2, 12); if (v == _p.DualOrbitInterferencePaths) return; _p.DualOrbitInterferencePaths = v; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(IsDualOrbitMultiPath)); Fire(); } }
+    public bool IsDualOrbitMultiPath => IsDualOrbitInterferenceField && _p.DualOrbitInterferencePaths > 2;
+    public DualOrbitPathLayout DualOrbitPathLayout { get => _p.DualOrbitPathLayout; set { if (value == _p.DualOrbitPathLayout) return; _p.DualOrbitPathLayout = value; this.RaisePropertyChanged(); Fire(); } }
+    public System.Array DualOrbitPathLayouts => s_DualOrbitPathLayouts;   // cached (see DualOrbitWindingModes)
+    private static readonly System.Array s_DualOrbitPathLayouts = System.Enum.GetValues(typeof(DualOrbitPathLayout));
     /// <summary>#1127 — ensemble rows (BasinEntropy / UncertaintyExponent).</summary>
     public bool IsDualOrbitEnsembleField => IsDualOrbitFieldMode
         && _dualField is DualOrbitField.BasinEntropy or DualOrbitField.UncertaintyExponent;
@@ -2544,7 +2550,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsDualOrbitAnisotropyField));
             this.RaisePropertyChanged(nameof(IsDualOrbitEnsembleField));
             this.RaisePropertyChanged(nameof(IsDualOrbitUncertaintyField));
-            this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceField)); this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceIntensity));
+            this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceField)); this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceIntensity)); this.RaisePropertyChanged(nameof(IsDualOrbitMultiPath));
             this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceDomain));   // #1598
             this.RaisePropertyChanged(nameof(IsDualOrbitInterferenceDetections));   // #1599
             this.RaisePropertyChanged(nameof(IsDualOrbitCoMovingTrap));

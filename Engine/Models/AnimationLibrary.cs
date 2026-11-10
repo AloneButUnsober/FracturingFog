@@ -252,6 +252,21 @@ namespace FracturingFog.Models
                 },
                 Tags = new List<string> { "2D", "double-slit" },
             };
+            // #1602 — N-path interference: the fringes thin out as slits are added.
+            yield return new AnimationData
+            {
+                Name = "Double slit: more slits",
+                Category = "Built-in",
+                Description = "Steps the number of interfering paths from 2 to 12 and back: the bright fringes "
+                            + "stay in place and get thinner, like a grating with more slits. Re-runs the orbits "
+                            + "only for the Ray and Segment layouts.",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.JulibrotPair },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "DualOrbitInterferencePaths", Mode = AnimationMode.Triangle, Min = 2, Max = 12, FrequencyHz = 0.05, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "double-slit" },
+            };
             yield return new AnimationData
             {
                 Name = "Slit cascade: wavelength breathing",

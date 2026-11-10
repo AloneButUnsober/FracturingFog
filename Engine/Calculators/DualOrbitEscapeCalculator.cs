@@ -239,7 +239,8 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         int TrapShape, double TrapScale, double StripeDensity, double DEScale,
         DualOrbitTrapFrame TrapFrame, bool TrapRotate, bool TrapScaleByOrbit, double TrapAngle,
         int EnsembleN, double EnsembleRadius, int EnsembleSectors, int UncertaintyLevels,
-        double FtleSpan, double AnisotropyScale, bool LicSeparation, bool LyapunovSmooth);
+        double FtleSpan, double AnisotropyScale, bool LicSeparation, bool LyapunovSmooth,
+        int InterfPaths, DualOrbitPathLayout PathLayout);
 
     private GeometryKey? _cacheKey;
     private float[] _smZ = Array.Empty<float>(), _smC = Array.Empty<float>();
@@ -292,7 +293,9 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
             // separation source needs iteration data (gradient sources recolour).
             Math.Max(1e-6, fp.DualOrbitFtleSpan), Math.Max(1e-6, fp.DualOrbitAnisotropyScale),
             fp.DualOrbitLicSource == DualOrbitLicSource.SeparationDirection,
-            fp.DualOrbitLyapunovSmooth);   // #1144 — always keyed (geometry)
+            fp.DualOrbitLyapunovSmooth,   // #1144 — always keyed (geometry)
+            // #1602 — always keyed (reflection guard: geometry; real layouts add orbits).
+            ClampPaths(fp.DualOrbitInterferencePaths), fp.DualOrbitPathLayout);
     }
 
     public void Calculate(CancellationToken ct = default)
@@ -356,6 +359,12 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         float[] sepArr = _sepDir;
         double ftleSpan = key.FtleSpan, anisoScale = key.AnisotropyScale;
         bool storeAngles = domain || interfField;
+        // #1602 — extra real-orbit paths (Ray / Segment layouts, N > 2).
+        int extraPaths = interfField && !quat && key.PathLayout != DualOrbitPathLayout.Grating ? key.InterfPaths - 2 : 0;
+        bool rayLayout = key.PathLayout == DualOrbitPathLayout.Ray;
+        if (extraPaths > 0 && _smX.Length != n * extraPaths) { _smX = new float[n * extraPaths]; _thX = new float[n * extraPaths]; }
+        if (extraPaths == 0) { _smX = Array.Empty<float>(); _thX = Array.Empty<float>(); }
+        float[] smXArr = _smX, thXArr = _thX;
         bool angles = !quat && (storeAngles || (!fieldOff && field == DualOrbitField.ExternalAngleDelta));
         float[] smZArr = _smZ, smCArr = _smC; byte[] flagArr = _flags;
         // #1120 — level-1 external angles per orbit (turns; NaN = bounded).
@@ -591,6 +600,18 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                         thZArr[rowBase + x] = nZ >= 0 ? (float)LiftToLevel1(argsZ, nZ) : float.NaN;
                         thCArr[rowBase + x] = nC >= 0 ? (float)LiftToLevel1(argsC, nC) : float.NaN;
                     }
+                    if (extraPaths > 0)   // #1602 — after the c lift: argsC is scratch now
+                    {
+                        double ux = cEqualsS ? sx : cSeedX, uy = cEqualsS ? sy : cSeedY;
+                        for (int j = 0; j < extraPaths; j++)
+                        {
+                            double t = ExtraPathSeed(j, extraPaths + 2, rayLayout);
+                            var o = Run(t * ux, t * uy, sx, sy, maxIter, bail, argsC, out int nk);
+                            int slot = pix * extraPaths + j;
+                            smXArr[slot] = (float)Math.Max(LiveFloor, o.SmoothN);
+                            thXArr[slot] = nk >= 0 ? (float)LiftToLevel1(argsC, nk) : float.NaN;
+                        }
+                    }
                     if (interiorField) pairScalar = InteriorScalar(field, oz, oc, sx, sy, maxIter, out pairLive);
                     if (jacField || licSep)   // #1128
                     {
@@ -692,6 +713,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         if (!key.Layers && IsInterferenceField(field)) RefreshInterference(key);   // #1126
         bool domainField = !layers && field == DualOrbitField.PathInterferenceDomain
             && _interfPhase.Length == width * height;   // #1592
+        double paths = key.InterfPaths;   // #1602
         // #1598 — contour lines over the domain field: side buffers (NaN = not a
         // domain pixel), then DomainContours after the pass.
         var contours = domainField ? FractalParameters.DualOrbitInterferenceContours : DomainContourMode.Off;
@@ -772,9 +794,9 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                     ColorBuffer[idx] = PhaseWheelBlueAmberMap.ColorAt(_interfPhase[idx], kk);
                     if (contours != DomainContourMode.Off)
                     {
-                        // |A|² = I = 2·(I/2) for the two unit paths; log₂|A| = ½·log₂ I.
+                        // |A|² = I = N·(I/N) for N unit paths (#1602); log₂|A| = ½·log₂ I.
                         ctTurns[idx] = _interfPhase[idx]; ctK[idx] = (float)kk;
-                        ctLog2[idx] = kk > 0.0 ? (float)(0.5 * Math.Log2(2.0 * kk)) : float.NaN;
+                        ctLog2[idx] = kk > 0.0 ? (float)(0.5 * Math.Log2(paths * kk)) : float.NaN;
                     }
                 }
                 else

@@ -229,10 +229,14 @@ public sealed class DomainContoursTests
 
     // The dual-orbit domain field: lines where its own phase / intensity fields
     // (PathInterferencePhase, PathInterference) change band.
+    // #1602: with N paths the field is I/N and |A|² = I = N·(I/N).
     [Theory]
-    [InlineData(DomainContourMode.Phase)]
-    [InlineData(DomainContourMode.Modulus)]
-    public void JulibrotPair_LinesFollowThePhaseAndIntensityFields(DomainContourMode mode)
+    [InlineData(DomainContourMode.Phase, 2)]
+    [InlineData(DomainContourMode.Modulus, 2)]
+    [InlineData(DomainContourMode.Phase, 4)]
+    [InlineData(DomainContourMode.Modulus, 4)]
+    [InlineData(DomainContourMode.Modulus, 7)]
+    public void JulibrotPair_LinesFollowThePhaseAndIntensityFields(DomainContourMode mode, int paths)
     {
         const int w = 160, h = 108, it = 400, n = 8;
         DualOrbitEscapeCalculator Run(DualOrbitField f, DomainContourMode m)
@@ -244,6 +248,7 @@ public sealed class DomainContoursTests
                 {
                     DualOrbitField = f, DualOrbitCSeedX = 0.3, DualOrbitCSeedY = 0.2, DualOrbitInterferenceK = 8, DualOrbitAngularMomentum = 3,
                     DualOrbitInterferenceContours = m, DualOrbitInterferenceContourCount = n,
+                    DualOrbitInterferencePaths = paths,
                 },
             };
             calc.Calculate();
@@ -260,9 +265,9 @@ public sealed class DomainContoursTests
             k[i] = inten[i] / (double)it;
             band[i] = mode == DomainContourMode.Phase
                 ? DomainContours.PhaseBand(phase[i] / (double)it, n)
-                : (int)Math.Floor(0.5 * Math.Log2(2.0 * inten[i] / it));   // |A| = √I for two unit paths
+                : (int)Math.Floor(0.5 * Math.Log2(paths * inten[i] / it));   // |A| = √I for N unit paths
         }
-        AssertLinesMatch(off, on, ExpectedLines(band, w, h), k, $"dual {mode}");
+        AssertLinesMatch(off, on, ExpectedLines(band, w, h), k, $"dual {mode} N={paths}");
     }
 
     // Colour-blind check (Machado 2009 simulation, as #1591): a line pixel stays

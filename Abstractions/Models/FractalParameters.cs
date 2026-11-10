@@ -1605,6 +1605,12 @@ namespace FracturingFog.Models
         /// <summary>Path interference: phase lines per turn, n (1..64), for the domain
         /// contours (#1598). Colour-only.</summary>
         public int DualOrbitInterferenceContourCount { get; set; } = 8;
+        /// <summary>Path interference: number of paths N (2..12). 2 = the two-path field
+        /// (the default, identical to #1126); more paths sharpen the bright fringes like
+        /// an N-slit grating. Re-iterates when changed (#1602).</summary>
+        public int DualOrbitInterferencePaths { get; set; } = 2;
+        /// <summary>Path interference: layout of the paths beyond the first two (#1602).</summary>
+        public DualOrbitPathLayout DualOrbitPathLayout { get; set; } = DualOrbitPathLayout.Grating;
         /// <summary>Ensemble fields: number of c-seeds per pixel (#1127). Cost ×N.</summary>
         public int DualOrbitEnsembleN { get; set; } = 32;
         /// <summary>Ensemble fields: radius ρ of the seed disc round c (#1127).</summary>
@@ -2478,6 +2484,8 @@ namespace FracturingFog.Models
                 DualOrbitWindingMode = DualOrbitWindingMode,
                 DualOrbitInterferenceContours = DualOrbitInterferenceContours,
                 DualOrbitInterferenceContourCount = DualOrbitInterferenceContourCount,
+                DualOrbitInterferencePaths = DualOrbitInterferencePaths,   // #1602
+                DualOrbitPathLayout = DualOrbitPathLayout,
                 DualOrbitEnsembleN = DualOrbitEnsembleN,
                 DualOrbitEnsembleRadius = DualOrbitEnsembleRadius,
                 DualOrbitEnsembleSectors = DualOrbitEnsembleSectors,

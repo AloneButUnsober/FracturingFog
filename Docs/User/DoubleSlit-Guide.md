@@ -35,9 +35,31 @@ interfere.
 | **Which-path η** | The detector. 0 = nobody watches, full fringes; 1 = fully watched, the fringes vanish. Intensity field only. Animatable. |
 | **Angular momentum ℓ** | Each path twists by its own external angle, like light carrying orbital angular momentum. On the phase field the rings become ℓ-armed spirals; the sign sets the handedness. Whole numbers only. |
 | **Winding direction** | *Same*: both paths twist the same way (spirals on the phase field). *Opposite*: the intensity fringes fan out as radial rays. |
+| **Paths (N)**, **Path layout** | §1.1: more than two paths, like a grating with more slits. |
 
 Close to the set, below the critical level, the external angles have branch cuts. With ℓ other than 0 they show
 as seams there; the rest of the plane is clean.
+
+### 1.1 More paths: an orbit grating
+
+A grating is a double slit with more slits. With N equal slits the bright fringes stay where the two-slit fringes
+peak but get N/2 times thinner, and N − 2 faint fringes appear between each pair (Feynman, Leighton & Sands,
+Lectures Vol. I ch. 30). **Paths (N)** does this for the two orbits; the brightness is shown as I/N, so a bright
+fringe is 1 for any N. **Path layout** says where the extra paths come from:
+
+- **Grating** (default): an ideal grating built from the two orbits. Each extra path adds the same phase step as
+  the step from the z-orbit to the c-orbit. This is the textbook N-slit pattern, and it costs nothing extra.
+- **Ray**: real orbits started at 2c, 3c, …, (N − 1)c. The seeds are evenly spaced but their escape potentials
+  are not, so the phase steps are unequal: you get rippled, speckle-like fringes rather than a clean grating.
+- **Segment**: real orbits started between 0 and c. The steps are nearly equal but small, so the main fringes
+  move far apart and you mostly see one broad bright lobe.
+
+Ray and Segment run one more orbit per extra path (cost up to ×N/2). An extra orbit that stays bounded has no phase
+and counts as a blocked slit. κ, γ, η and ℓ still recolour without re-running the orbits; changing N or the layout
+re-runs them. N = 2 is the two-path picture exactly.
+
+Measured on a cross-section (κ = 200, Grating): the share of the phase cycle that is bright (I/N ≥ ½) is
+0.54, 0.23 and 0.11 for N = 2, 4 and 8, against the exact 0.50, 0.23 and 0.11: the fringe width falls as about 1/N.
 
 ## 2. Slit Cascade
 
@@ -228,6 +250,7 @@ Open them from the region list; each says what it shows. Built-ins never change:
 | **Double Slit - Which-Path Collapse** | Julibrot Pair | *Double slit: which-path collapse*: η 0 → 1 → 0, the fringes fade and return |
 | **Double Slit - Angular Momentum Spirals** | Julibrot Pair | *Double slit: angular momentum sweep*: ℓ −4 → 4, arm count and handedness change |
 | **Double Slit - Opposite Winding Rays** | Julibrot Pair | — |
+| **Double Slit - Orbit Grating** | Julibrot Pair | *Double slit: more slits*: N 2 → 12, the bright fringes thin out |
 | **Slit Cascade - Ring Diffraction** | Slit Cascade | *Slit cascade: wavelength breathing*: λ 0.4 ↔ 1.4 |
 | **Slit Cascade - Probability Sets Dimension** | Slit Cascade | — (watch the status bar) |
 | **Slit Cascade - Vortex Core** | Slit Cascade | — |
@@ -251,6 +274,12 @@ FracturingFog --batch --region "Slit Cascade - Vortex Core" --out vortex-core.pn
 
 ```bash
 FracturingFog --batch --region "Talbot Carpet - Ronchi Grating" --theme Greyscale --out carpet.png
+```
+
+The orbit grating with twelve real Ray paths instead (the layout is the enum's integer: Grating 0, Ray 1, Segment 2):
+
+```bash
+FracturingFog --batch --region "Double Slit - Orbit Grating" --theme Greyscale --param DualOrbitInterferencePaths=12 --param DualOrbitPathLayout=1 --out orbit-grating.png
 ```
 
 Play a bound animation as a video (the view holds still, the setting moves):
@@ -311,4 +340,5 @@ Giménez, Calatayud & Monsoriu. Talbot effect and quantum carpets: Berry & Klein
 Tonomura, Endo, Matsuda, Kawasaki & Ezawa. Phase-portrait contours: Wegert. White light: CIE colour-matching fit
 by Wyman, Sloan & Shirley; Oklab by Ottosson; polychromatic self-imaging by Packross, Eschbach & Bryngdahl.
 Profile overlay and its dimension: Berry & Klein; Berry (quantum fractals in boxes); Rosu, Murguia & Ludu.
+N-path orbit grating: the N-slit intensity in Feynman, Leighton & Sands (Lectures Vol. I ch. 30).
 Full entries: [bibliography](../Resources-Bibliography.md#double-slit-fractals).
