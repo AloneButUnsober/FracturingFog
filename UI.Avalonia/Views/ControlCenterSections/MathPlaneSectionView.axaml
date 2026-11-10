@@ -29,7 +29,7 @@
                     <TextBlock Classes="section" Text="Demos: the math behind the fractals" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <ComboBox ItemsSource="{Binding Demos}" SelectedItem="{Binding SelectedDemo}" Width="260"
-                                  ToolTip.Tip="Built-in demos. Loading one replaces the scene, map, c, backdrop and view; the built-in itself never changes (save a region to keep your edits).">
+                                  ToolTip.Tip="Built-in demos. Loading one replaces the scene, map, c, backdrop and view; the built-in itself never changes (save to My scenes to keep your edits).">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate x:DataType="models:MathPlanePreset">
                                     <TextBlock Text="{Binding Name}" />
@@ -39,6 +39,37 @@
                         <Button Classes="action" Content="Load" Command="{Binding LoadDemoCommand}" ToolTip.Tip="Load the selected demo into the view" />
                     </StackPanel>
                     <TextBlock Text="{Binding DemoIdea}" TextWrapping="Wrap" Foreground="#B4B4B4" />
+                </StackPanel>
+            </Border>
+
+            <!-- My scenes (#1637): the user's saved scenes, kept apart from the read-only demos. -->
+            <Border Classes="group">
+                <StackPanel Spacing="6">
+                    <TextBlock Classes="section" Text="My scenes" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <ComboBox ItemsSource="{Binding MyScenes}" SelectedItem="{Binding SelectedMyScene}" Width="260"
+                                  PlaceholderText="(no saved scenes)"
+                                  ToolTip.Tip="Your saved scenes. Loading one replaces the scene, map, c, backdrop and view.">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:MathPlanePreset">
+                                    <TextBlock Text="{Binding Name}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Button Classes="action" Content="Load" Command="{Binding LoadMySceneCommand}" IsEnabled="{Binding HasSelectedMyScene}"
+                                ToolTip.Tip="Load the selected saved scene into the view" />
+                        <Button Content="Delete" Command="{Binding DeleteMySceneCommand}" IsEnabled="{Binding HasSelectedMyScene}"
+                                ToolTip.Tip="Delete the selected saved scene" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBox Text="{Binding MySceneName}" Width="260" PlaceholderText="Scene name" />
+                        <Button Classes="action" Content="Save" Command="{Binding SaveMySceneCommand}"
+                                ToolTip.Tip="Save the current scene, map, c, backdrop and view under this name. An existing name is overwritten; built-in demo names are refused." />
+                        <Button Content="Rename" Command="{Binding RenameMySceneCommand}" IsEnabled="{Binding HasSelectedMyScene}"
+                                ToolTip.Tip="Rename the selected saved scene to this name" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding MySceneError}" Foreground="#FFCC00" TextWrapping="Wrap"
+                               IsVisible="{Binding MySceneError, Converter={x:Static ObjectConverters.IsNotNull}}" />
                 </StackPanel>
             </Border>
 

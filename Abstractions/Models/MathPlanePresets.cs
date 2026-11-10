@@ -53,6 +53,14 @@ namespace FracturingFog.Models
             p.MathPlaneBackdrop = Backdrop;
         }
 
+        /// <summary>#1637 — the reverse of <see cref="Apply"/>: a scene holding every Math Plane
+        /// param of <paramref name="p"/> and the view (world y-up centre), for My scenes.</summary>
+        public static MathPlanePreset Capture(string name, FractalParameters p,
+                                              double viewWorldX, double viewWorldY, double zoom, string idea = "")
+            => new(name, idea, p.MathPlaneScene ?? "", viewWorldX, viewWorldY, zoom,
+                   p.MathPlaneMapMode, p.MathPlaneM11, p.MathPlaneM12, p.MathPlaneM21, p.MathPlaneM22,
+                   p.MathPlaneT, p.MathPlaneInterpolation, p.MathPlaneCRe, p.MathPlaneCIm, p.MathPlaneBackdrop);
+
         /// <summary>The <c>--param KEY=VALUE</c> values that reproduce the demo.</summary>
         public IReadOnlyList<string> ParamArgs()
         {

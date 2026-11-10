@@ -5236,8 +5236,11 @@ vectors, curves, matrix and complex maps, orbits and cobwebs.
 Not a computer-algebra system. Control Center -> Math Plane.
 
 Demos (top of the section) load a built-in example; each names
-the one idea it shows. Built-ins never change: save a region to
-keep an edited one.
+the one idea it shows. Built-ins never change.
+
+My scenes: type a name and Save to keep the current scene, map,
+c, backdrop and view; Load, Rename or Delete it later. Saving
+under an existing name overwrites it; demo names are refused.
 
 Objects: + Point / Vector / Segment / Polyline / Function /
 Parametric / Polar / Implicit / Region. Drag handles (Shift

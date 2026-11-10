@@ -370,6 +370,13 @@ Every slice keeps the headless path in step (CLAUDE.md rule):
   wait, fade) driven by the Scene Engine / animation timeline, for Manim-style
   narrated sequences rendered to video. Today's single animatable `t` covers one
   transform.
+- **My scenes** (#1637). *As built:* a "My scenes" group under Demos saves the
+  current Math Plane settings under a name and loads them back. Entries are
+  `MathPlanePreset` records (`MathPlanePreset.Capture` is the reverse of `Apply`)
+  in `MathPlaneSceneStore` (`mathplanescenes.json`, per-entry tolerant load,
+  atomic write, enums by name). Built-in demo names are refused, so the demos stay
+  read-only. No batch change: a saved scene is only Math Plane params and a view,
+  which `--param` / `--x` / `--y` / `--zoom` and the Command builder already carry.
 
 ---
 

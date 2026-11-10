@@ -5,7 +5,7 @@
 //
 // #1555 (Math Plane S8) — the built-in demos (MathPlanePresets). Loading one
 // copies its scene, params and view into the live view; the built-ins themselves
-// never change. Save a region to keep an edited demo.
+// never change. Save to My scenes (#1637) to keep an edited demo.
 
 using System.Collections.Generic;
 using System.Reactive;
