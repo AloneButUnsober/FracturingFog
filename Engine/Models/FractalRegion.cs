@@ -2722,6 +2722,23 @@ namespace FracturingFog.Models
         // light high (55°) with soft shadows so the pit walls stay lit, and +3 EV because the
         // Domain view's brightness is the log intensity, dim round the vortices. A new
         // instance per preset (regions must not share a mutable settings object).
+        // #1604 — one enabled audio→param binding (#268), for the music-driven presets.
+        private static List<FracturingFog.Audio.AudioParamBinding> AudioDrive(string param,
+            FracturingFog.Audio.AudioSignalKind source, double outMin, double outMax,
+            FracturingFog.Audio.AudioResponseCurve curve = FracturingFog.Audio.AudioResponseCurve.Linear,
+            double attack = 0.0, double release = 0.0) =>
+        [
+            new()
+            {
+                ParamName = param, Enabled = true,
+                Binding = new FracturingFog.Audio.AudioModulationBinding
+                {
+                    Source = source, Curve = curve, OutMin = outMin, OutMax = outMax,
+                    AttackSeconds = attack, ReleaseSeconds = release,
+                },
+            },
+        ];
+
         private static Relief3DSettings VortexWellRelief() => new()
         {
             Enabled = true, Raymarch = true, CameraElevationDeg = 50.0,
@@ -3484,6 +3501,46 @@ namespace FracturingFog.Models
             },
             new()
             {
+                // #1604 — the which-path detector switched by the music (#1567).
+                Name          = "Double Slit - Beat Collapse",
+                CenterX       = -0.6,
+                CenterY       =  0.05,
+                Zoom          =  1.0,
+                Iterations    =  400,
+                Description   = "Which-Path Collapse played by the music: every beat switches the which-path detector on, so the fringes flash flat on the beat and come back between beats. Needs audio input (Audio Settings); without it the fringes stay.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.JulibrotPair,
+                QualityPreset = QualityPreset.Standard,
+                AudioBindings = AudioDrive("DualOrbitWhichPath", FracturingFog.Audio.AudioSignalKind.BeatPulse, 0.0, 1.0,
+                                           release: 0.15),
+                Params        = new RegionFractalParams
+                {
+                    DualOrbitField = (int)FracturingFog.DualOrbitField.PathInterference,
+                    DualOrbitCSeedX = 0.3, DualOrbitCSeedY = 0.2, DualOrbitInterferenceK = 20.0,
+                },
+            },
+            new()
+            {
+                // #1604 — the spiral-arm count stepped by the beat (#1568).
+                Name          = "Double Slit - Spiral Beat",
+                CenterX       = -0.6,
+                CenterY       =  0.0,
+                Zoom          =  0.6,
+                Iterations    =  400,
+                Description   = "Angular Momentum Spirals played by the music: the beat pulse sets the twist, so the phase rings jump from two to five spiral arms on every beat and fall back in steps as the pulse decays. Needs audio input (Audio Settings); without it the spirals keep three arms.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.JulibrotPair,
+                QualityPreset = QualityPreset.Standard,
+                AudioBindings = AudioDrive("DualOrbitAngularMomentum", FracturingFog.Audio.AudioSignalKind.BeatPulse, 2.0, 5.0),
+                Params        = new RegionFractalParams
+                {
+                    DualOrbitField = (int)FracturingFog.DualOrbitField.PathInterferencePhase,
+                    DualOrbitCSeedX = 0.3, DualOrbitCSeedY = 0.2, DualOrbitInterferenceK = 2.0,
+                    DualOrbitAngularMomentum = 3,
+                },
+            },
+            new()
+            {
                 // #1602 — N-path interference: the two orbits as a six-slit grating.
                 Name          = "Double Slit - Orbit Grating",
                 CenterX       = -0.6,
@@ -3559,6 +3616,28 @@ namespace FracturingFog.Models
                     SlitCascadeLayout = (int)FracturingFog.SlitCascadeLayout.Ring,
                     SlitCascadeView = (int)FracturingFog.SlitCascadeView.Intensity, SlitCascadeDynamicRange = 6.0,
                     SlitCascadeCharge = 1, SlitCascadeChargePattern = (int)FracturingFog.SlitCascadeChargePattern.Constant,
+                },
+            },
+            new()
+            {
+                // #1604 — the wavelength breathing with the bass (#1571: the dimension moves with it).
+                Name          = "Slit Cascade - Music Breathing",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.25,
+                Iterations    =  400,
+                Description   = "Ring Diffraction played by the music: the bass sets the wavelength between 0.4 and 1.4, so on every kick the fringes swell outward and slits move on and off dark fringes, and the dimension in the status bar moves with them. Smoothed so it breathes rather than flickers. Needs audio input (Audio Settings).",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.SlitCascade,
+                QualityPreset = QualityPreset.Standard,
+                AudioBindings = AudioDrive("SlitCascadeWavelength", FracturingFog.Audio.AudioSignalKind.Bass, 0.4, 1.4,
+                                           FracturingFog.Audio.AudioResponseCurve.Smoothstep, attack: 0.05, release: 0.4),
+                Params        = new RegionFractalParams
+                {
+                    SlitCascadeChildren = 6, SlitCascadeRatio = 0.3, SlitCascadeDepth = 4,
+                    SlitCascadeSeparation = 1.0, SlitCascadeWidth = 0.2, SlitCascadeWavelength = 0.6,
+                    SlitCascadeLayout = (int)FracturingFog.SlitCascadeLayout.Ring,
+                    SlitCascadeView = (int)FracturingFog.SlitCascadeView.Intensity, SlitCascadeDynamicRange = 6.0,
                 },
             },
             new()

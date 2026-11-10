@@ -35,8 +35,11 @@ public sealed class DoubleSlitPresetTests
     private const string VortexWells = "Slit Cascade - Vortex Wells";   // #1603
     private const string VortexConstellation = "Slit Cascade - Vortex Constellation";
     private const string TalbotRelief = "Talbot Carpet - Relief";
+    private const string BeatCollapse = "Double Slit - Beat Collapse";   // #1604
+    private const string SpiralBeat = "Double Slit - Spiral Beat";
+    private const string MusicBreathing = "Slit Cascade - Music Breathing";
 
-    private static readonly string[] All = { WhichPath, Spirals, Rays, Ring, Dimension, Vortex, Ronchi, Comb, CascadeGrating, BuildUp, ProfileWalk, OrbitGrating, VortexWells, VortexConstellation, TalbotRelief };
+    private static readonly string[] All = { WhichPath, Spirals, Rays, Ring, Dimension, Vortex, Ronchi, Comb, CascadeGrating, BuildUp, ProfileWalk, OrbitGrating, VortexWells, VortexConstellation, TalbotRelief, BeatCollapse, SpiralBeat, MusicBreathing };
     private static readonly string[] Animations =
         { "Double slit: which-path collapse", "Double slit: angular momentum sweep", "Slit cascade: wavelength breathing",
           "Slit cascade: particle build-up", "Talbot carpet: profile walk", "Double slit: more slits" };

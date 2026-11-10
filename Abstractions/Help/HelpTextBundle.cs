@@ -5083,6 +5083,9 @@ Demos:
   Double Slit - Angular Momentum Spirals
   Double Slit - Opposite Winding Rays
   Double Slit - Orbit Grating
+  Double Slit - Beat Collapse   (audio: the beat switches
+                   the which-path detector on)
+  Double Slit - Spiral Beat     (audio: the beat sets l, 2..5)
 ";
 
         public const string MathSlitCascadeText =
@@ -5136,6 +5139,8 @@ Demos:
   Slit Cascade - Particle Build-Up
   Slit Cascade - Vortex Wells
   Slit Cascade - Vortex Constellation
+  Slit Cascade - Music Breathing (audio: the bass sets the
+            wavelength, 0.4..1.4)
 ";
 
         public const string MathTalbotCarpetText =

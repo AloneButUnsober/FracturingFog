@@ -660,6 +660,23 @@ Parallel after S0: {S1, S2, S3, S6}. After S3: {S4, S5}.
   the ζ = 1 self-image row is a ridge; each preset owns its relief object. Checked by breaking them: equal shares
   for the constellation and an inverted height both fail.
 
+### 10.9 Music-driven fringes (#1604, round 2 tracker #1605)
+
+- **What:** presets only, built-in regions carrying `AudioBindings` (#268): *Double Slit - Beat Collapse*
+  (BeatPulse → `DualOrbitWhichPath` 0 → 1, release 0.15 s), *Double Slit - Spiral Beat* (BeatPulse →
+  `DualOrbitAngularMomentum` 2 → 5, rounded by the int setter) and *Slit Cascade - Music Breathing* (Bass →
+  `SlitCascadeWavelength` 0.4 → 1.4, smoothstep, attack 0.05 s / release 0.4 s). Recall hydrates the live
+  `AudioModulationManager` (bindings cloned, so the read-only built-ins never change) and starts capture.
+  Audio recipe presets (#1434) are not built yet; when they are, these three bindings are natural recipes.
+- **Batch gap:** region audio bindings are live-only (#1432, open); `BatchCommandBuilder.DetectGaps` already
+  reports enabled audio drives, and a test checks it does so for each preset.
+- **Tests (`MusicFringesPresetTests`, 15):** each binding targets an animatable setting of its type within the
+  descriptor range, with no timeline animation bound; driven through `AudioModulatorAnimator.TryCreate` from a
+  fake source, η = 1 on the beat gives a flat field and η → 0 between beats brings > 50 levels back; the
+  spiral-arm count measured by the phase winding round the frame equals the pulse-mapped ℓ (2, 3, 4, 5); the
+  bass maps to λ 0.4 / 0.9 / 1.4 and the status-bar dimension changes; an inactive source leaves the base
+  value; the Command builder names the driven setting and #1432.
+
 **Standing rules for every slice:** batch parity (`RegionFractalParams` → `--param`,
 `BuildFractalParameters`, `BatchCommandBuilder` round-trip), recolour-guard classification (#981),
 and citations in the Bibliography in the same PR.
