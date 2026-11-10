@@ -155,6 +155,21 @@ public sealed class AudioBindingRowViewModel : ViewModelBase
         set { _binding.ReleaseSeconds = Math.Max(0.0, value); this.RaisePropertyChanged(); }
     }
 
+    /// <summary>#1431 / #1691 — <c>AcidWarpFlow</c> only shows with Acid Warp Morph
+    /// on, so turning on its audio drive calls <paramref name="turnMorphOn"/>. No-op
+    /// for any other row. Shared by the Fractured Waves expander and Audio Settings
+    /// so both binding matrices behave the same.</summary>
+    public static void TurnMorphOnWithFlow(AudioBindingRowViewModel row, Action turnMorphOn)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        ArgumentNullException.ThrowIfNull(turnMorphOn);
+        if (row.ParamName != "AcidWarpFlow") return;
+        row.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Enabled) && row.Enabled) turnMorphOn();
+        };
+    }
+
     /// <summary>#1434 — re-read the binding and the enabled flag after the manager
     /// changed them underneath this row (a recipe applied, or undone).</summary>
     public void Refresh()

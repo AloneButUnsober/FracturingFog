@@ -386,6 +386,31 @@ public sealed class AudioRecipePresetTests
         Assert.False(new AudioSettingsViewModel(new AudioSettings(), null, audioRecipes: picker).HasAudioRecipes);   // nested: no matrix
     }
 
+    [Fact]
+    public void Enabling_Flow_Turns_Morph_On_From_Either_Binding_Matrix()
+    {
+        // #1691 — the Audio Settings rows use the same hook as the Fractured Waves
+        // rows: only turning the AcidWarpFlow drive ON calls it.
+        var (mgr, p) = Live(FractalType.AcidWarp);
+        var rows = mgr.DescriptorsForCurrentType().Select(d => new AudioBindingRowViewModel(d, mgr)).ToList();
+        int calls = 0;
+        foreach (var r in rows) AudioBindingRowViewModel.TurnMorphOnWithFlow(r, () => calls++);
+        rows.Single(r => r.ParamName == "AcidWarpFrequency").Enabled = true;
+        Assert.Equal(0, calls);
+        var flow = rows.Single(r => r.ParamName == "AcidWarpFlow");
+        flow.Enabled = true;
+        Assert.Equal(1, calls);
+        flow.Enabled = false;
+        Assert.Equal(1, calls);
+
+        // The Fractured Waves panel wires it to its own Morph property.
+        var p2 = new FractalParameters { AcidWarpMorph = false };
+        var (mgr2, _) = Live(FractalType.AcidWarp);
+        var panel = new FractalParamsViewModel(FractalType.AcidWarp, p2, audioModulation: mgr2);
+        panel.AudioDrivableParams.Single(r => r.ParamName == "AcidWarpFlow").Enabled = true;
+        Assert.True(p2.AcidWarpMorph);
+    }
+
     // ── batch ──────────────────────────────────────────────────────────────
 
     [Fact]

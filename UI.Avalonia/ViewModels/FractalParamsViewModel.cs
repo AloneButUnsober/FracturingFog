@@ -70,12 +70,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
                 var row = new AudioBindingRowViewModel(d, audioModulation);
                 // #1431 — Flow only shows with Morph on; turning on its audio
                 // drive turns Morph on so the binding is visible at once.
-                if (d.ParamName == nameof(AcidWarpFlow))
-                    row.PropertyChanged += (_, e) =>
-                    {
-                        if (e.PropertyName == nameof(AudioBindingRowViewModel.Enabled) && row.Enabled)
-                            AcidWarpMorph = true;
-                    };
+                AudioBindingRowViewModel.TurnMorphOnWithFlow(row, () => AcidWarpMorph = true);
                 rows.Add(row);
             }
             AudioDrivableParams = rows;
