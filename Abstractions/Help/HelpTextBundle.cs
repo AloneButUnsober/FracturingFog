@@ -5066,6 +5066,14 @@ the two orbits interfere.
                    (Allen et al. 1992): rings become l-armed
                    spirals; the sign sets the handedness.
   Winding direction  Opposite twists fan the fringes into rays.
+  Paths (N)        more paths, like a grating with more slits:
+                   the bright fringes get thinner (about 1/N),
+                   with faint ones between (Feynman Lectures
+                   Vol. I ch. 30). Shown as I/N.
+  Path layout      Grating = ideal grating from the two orbits
+                   (no cost); Ray = real orbits from 2c, 3c, ...
+                   (rippled); Segment = orbits between 0 and c
+                   (a broad lobe). Ray / Segment cost more.
 
 Close to the set the angles have branch cuts, so l other than
 0 can show seams there.
@@ -5074,6 +5082,7 @@ Demos:
   Double Slit - Which-Path Collapse
   Double Slit - Angular Momentum Spirals
   Double Slit - Opposite Winding Rays
+  Double Slit - Orbit Grating
 ";
 
         public const string MathSlitCascadeText =

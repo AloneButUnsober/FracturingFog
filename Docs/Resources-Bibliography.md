@@ -341,7 +341,12 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
   <https://www.feynmanlectures.caltech.edu/III_01.html>. The two-slit experiment as "amplitudes add,
   then square", including watching which slit (§1-6): the organising rule of the epic and of the
   which-path knob (#1567), and of the per-level which-path of the Slit Cascade (#1600,
-  `Engine/Calculators/SlitCascadeCalculator.cs`).
+  `Engine/Calculators/SlitCascadeCalculator.cs`). Also Vol. I, ch. 30 "Diffraction", §30-1 "The
+  resultant amplitude due to n equal oscillators", <https://www.feynmanlectures.caltech.edu/I_30.html>
+  (read 2026-11-10): Eq. (30.3) I = I₀ sin²(nφ/2)/sin²(φ/2), peak n²I₀ at φ = 0 and first minimum at
+  φ = 2π/n. The N-path interference of the Julibrot Pair (#1602,
+  `Engine/Calculators/DualOrbitEscapeCalculator.Interference.cs`) is this sum over orbit paths; its Grating
+  layout is exactly Eq. (30.3), normalised by n². (Vol. I's publication year was not re-checked here.)
 - **C. Allain, M. Cloitre.** *Optical diffraction on fractals.* Physical Review B 33(5), 3566–3569,
   1986. <https://doi.org/10.1103/PhysRevB.33.3566>. Diffraction intensity of Cantor bars and Vicsek
   fractals is their optical Fourier transform and carries the fractal dimension. Basis of the

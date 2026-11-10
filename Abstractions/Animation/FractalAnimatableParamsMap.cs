@@ -506,6 +506,9 @@ public static class FractalAnimatableParamsMap
             Notes: "Path interference η (which-path measurement) — sweep 0 → 1 and the fringes collapse (#1567). Recolour only."),
         new("DualOrbitAngularMomentum", AnimatableParamKind.ScalarInt, Min: -12.0, Max: 12.0,
             Notes: "Path interference ℓ (angular-momentum winding) — steps the spiral-arm count (#1568). Recolour only."),
+        new("DualOrbitInterferencePaths", AnimatableParamKind.ScalarInt, Min: 2.0, Max: 12.0,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Path interference N (number of paths) — the bright fringes narrow like an N-slit grating as N steps up (#1602). Re-iterates."),
         new("DetectionCount", AnimatableParamKind.ScalarInt, Min: 0.0, Max: 2000000.0,
             Notes: "PathInterferenceDetections: particles landed so far — the fringes build out of single dots (#1599). Recolour only."),
     };

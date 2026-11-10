@@ -602,6 +602,44 @@ Parallel after S0: {S1, S2, S3, S6}. After S3: {S4, S5}.
   box-counts to 1; the dimension ordering above; Command-builder round trip. Preset *Talbot Carpet - Profile
   Walk* with bound animation *Talbot carpet: profile walk* (ζ₀ 0 → 1 over 20 s).
 
+### 10.7 N-path interference (#1602, round 2 tracker #1605)
+
+- **What:** `DualOrbitInterferencePaths` N (2..12, default 2 = the two-path field, byte-identical) and
+  `DualOrbitPathLayout` {Grating, Ray, Segment}. Paths a_k = e^{−2πγκ(w_k − w̄)}·e^{iφ_k}; I = |Σa_k|²/Σ|a_k|²
+  ∈ [0, N], scalar I/N; η as I_η = 1 + (1 − η)(I − 1). With equal amplitudes and steps this is the N-slit
+  function sin²(Nφ/2)/(N² sin²(φ/2)) (Feynman Lectures Vol. I §30-1, Eq. 30.3): principal maxima fixed at
+  φ = 2πm, first zero at 2π/N, N − 2 secondary maxima. Both settings are geometry in the #981 key (Ray /
+  Segment add orbits); κ, γ, η, ℓ stay colour-only for every layout (extra paths cached as smooth count +
+  lifted angle, 8 bytes per pixel per extra path).
+- **Probe first (the issue asked for one):** region of *Which-Path Collapse*, κ = 40, share of the oscillating
+  area with I/N > ½ for N = 2 / 4 / 8, and the spread of the phase steps:
+
+  | Layout | N = 2 | N = 4 | N = 8 | step spread (N = 8) | Verdict |
+  |---|---|---|---|---|---|
+  | ideal grating φ_k = κ(G_z + kΔG) | 0.188 | 0.048 | 0.021 | 0 | textbook grating — **Grating** |
+  | seeds 0, c, 2c, … | 0.188 | 0.061 | 0.033 | 5.3 rad | new rippled families, not a grating — **Ray** |
+  | seeds k·c/(N − 1) | 0.188 | 0.002 | 0.000 | 0.28 rad | equal small steps, maxima move out — **Segment** |
+  | z + N − 1 seeds on a circle ρ = 0.02 round c (the issue's idea) | — | 0.204 | 0.880 | 0.7 rad | fringes wash out; **not built** |
+
+  The circle fails because the c-family adds nearly in phase and swamps the single z-path (an unequal
+  two-beam sum, visibility falling with N); summed without the z-path it is a ring-aperture pattern in |∇G|,
+  unrelated to the two-path fringes. Only the ideal grating gives the 1/N sharpening, so it is the default; the
+  two real-orbit layouts are kept as their own looks.
+- **Measured sharpening** (`Grating_FringesNarrowAsOneOverN_OnACrossSection`): along one row at κ = 200,
+  steps weighted by |Δφ| of the two-path phase, the bright share (I/N ≥ ½) is 0.536 / 0.233 / 0.107 for
+  N = 2 / 4 / 8 against the exact FWHM/2π 0.500 / 0.228 / 0.111 (N·FWHM within 11 % of constant).
+- **Tests (`NPathInterferenceTests`, 24):** N = 2 byte-identical for every layout and field; `PathsIntensity`
+  equals the two-path closed forms (400 random cases) and a hand sum with a blocked slit; Grating equals the
+  N-slit function of φ read back from an N = 2 render (N = 3, 4, 8, 12); Ray / Segment equal a direct sum over
+  orbits iterated in the test; γ + ℓ (Same and Opposite) intensity and phase against a sum assembled from
+  the public `ExternalAngleTurns`; η mixing; κ recolours from the cache for every layout; Command-builder round
+  trip; `DomainContoursTests` modulus lines at |A|² = N·(I/N) for N = 4, 7. Recolour guard: both new settings
+  classified as geometry. Mutation check: 14 of 16 caught; the two left are an equivalent mutant (dropping the
+  amplitude centring: a common factor cancels in the ratio and the phase) and bypassing the shared phase-wrap
+  helper in the N-path pass (only reachable within ~1e-7 of a turn; the helper itself is tested).
+- **Preset:** *Double Slit - Orbit Grating* (Grating, N = 6) with bound animation *Double slit: more slits*
+  (N 2 → 12).
+
 **Standing rules for every slice:** batch parity (`RegionFractalParams` → `--param`,
 `BuildFractalParameters`, `BatchCommandBuilder` round-trip), recolour-guard classification (#981),
 and citations in the Bibliography in the same PR.
@@ -614,6 +652,8 @@ All are in [Resources-Bibliography → Double-slit fractals](../Resources-Biblio
 
 - R. P. Feynman, R. B. Leighton, M. Sands, *The Feynman Lectures on Physics* Vol. III, ch. 1
   "Quantum Behavior", 1965.
+- R. P. Feynman, R. B. Leighton, M. Sands, *The Feynman Lectures on Physics* Vol. I, ch. 30 "Diffraction",
+  §30-1, Eq. (30.3) (N-path interference, §10.7).
 - C. Allain, M. Cloitre, "Optical diffraction on fractals," *Phys. Rev. B* 33(5), 3566–3569, 1986.
 - D. Bak, S. P. Kim, S. K. Kim, K.-S. Soh, J. H. Yee, "Fractal Diffraction Grating," arXiv:physics/9802007, 1998.
 - M. V. Berry, S. Klein, "Integer, fractional and fractal Talbot effects," *J. Mod. Opt.* 43(10),

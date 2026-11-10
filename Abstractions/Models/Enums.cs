@@ -771,6 +771,22 @@ namespace FracturingFog
         Opposite,
     }
 
+    /// <summary>How the paths beyond the first two are laid out in N-path interference
+    /// (#1602, <c>DualOrbitInterferencePaths</c> &gt; 2). Append only.</summary>
+    public enum DualOrbitPathLayout
+    {
+        /// <summary>An ideal grating: path k has the z-path's phase plus k times the
+        /// two-path phase step (and k times the angle offset), so the intensity is the
+        /// N-slit grating function of the two-path phase difference. No extra orbits.</summary>
+        Grating,
+        /// <summary>Real orbits seeded at 0, c, 2c, …, (N − 1)c: equal seed spacing, but
+        /// the phase steps are not equal (G is not linear in the seed). Cost ×N/2.</summary>
+        Ray,
+        /// <summary>Real orbits seeded at k·c/(N − 1), k = 0 … N − 1: N seeds between the
+        /// two paths, nearly equal phase steps of ΔG/(N − 1). Cost ×N/2.</summary>
+        Segment,
+    }
+
     /// <summary>Hue source for <see cref="DualOrbitColorMode.BoettcherDomain"/>
     /// (#1120). Append only.</summary>
     public enum DualOrbitDomainPalette

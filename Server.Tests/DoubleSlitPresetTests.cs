@@ -31,11 +31,12 @@ public sealed class DoubleSlitPresetTests
     private const string CascadeGrating = "Talbot Carpet - Cascade Grating";
     private const string BuildUp = "Slit Cascade - Particle Build-Up";   // #1599
     private const string ProfileWalk = "Talbot Carpet - Profile Walk";   // #1601
+    private const string OrbitGrating = "Double Slit - Orbit Grating";   // #1602
 
-    private static readonly string[] All = { WhichPath, Spirals, Rays, Ring, Dimension, Vortex, Ronchi, Comb, CascadeGrating, BuildUp, ProfileWalk };
+    private static readonly string[] All = { WhichPath, Spirals, Rays, Ring, Dimension, Vortex, Ronchi, Comb, CascadeGrating, BuildUp, ProfileWalk, OrbitGrating };
     private static readonly string[] Animations =
         { "Double slit: which-path collapse", "Double slit: angular momentum sweep", "Slit cascade: wavelength breathing",
-          "Slit cascade: particle build-up", "Talbot carpet: profile walk" };
+          "Slit cascade: particle build-up", "Talbot carpet: profile walk", "Double slit: more slits" };
 
     private sealed class RampMap : IColorMap
     {
@@ -121,6 +122,23 @@ public sealed class DoubleSlitPresetTests
             total += d - Math.Round(d);
         }
         Assert.Equal(3, total, 0.05);
+    }
+
+    // Six slits: the bright fringes (I/N ≥ ½) cover much less of the picture than the
+    // two-path fringes of the same view, and none of the live pixels gets brighter
+    // than the two-path peak allows (I/N ≤ 1).
+    [Fact]
+    public void Orbit_Grating_Thins_The_Bright_Fringes()
+    {
+        var (region, p) = Preset(OrbitGrating);
+        Assert.Equal(6, p.DualOrbitInterferencePaths);
+        Assert.Equal(DualOrbitPathLayout.Grating, p.DualOrbitPathLayout);
+        var six = RenderDual(region, p);
+        p.DualOrbitInterferencePaths = 2;
+        var two = RenderDual(region, p);
+        double Bright(float[] s) => s.Count(v => v / region.Iterations >= 0.5) / (double)s.Count(v => v > 0);
+        Assert.True(Bright(six) < 0.5 * Bright(two), $"bright share {Bright(six)} (N = 6) vs {Bright(two)} (N = 2)");
+        Assert.All(six, v => Assert.True(v <= region.Iterations));
     }
 
     [Fact]

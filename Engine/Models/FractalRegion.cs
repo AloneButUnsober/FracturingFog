@@ -849,6 +849,9 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitWindingMode { get; set; }   // #1568
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitInterferenceContours { get; set; }   // #1598
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitInterferenceContourCount { get; set; }
+        // #1602 — N-path interference (layout = int cast of DualOrbitPathLayout).
+        [JsonIgnore(Condition = OmitNull)] public int? DualOrbitInterferencePaths { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? DualOrbitPathLayout { get; set; }
         // #1127 — ensemble fields.
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitEnsembleN { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitEnsembleRadius { get; set; }
@@ -1454,6 +1457,8 @@ namespace FracturingFog.Models
                     DualOrbitWindingMode = p.DualOrbitWindingMode != D.DualOrbitWindingMode ? (int)p.DualOrbitWindingMode : (int?)null,
                     DualOrbitInterferenceContours = p.DualOrbitInterferenceContours != D.DualOrbitInterferenceContours ? (int)p.DualOrbitInterferenceContours : (int?)null,
                     DualOrbitInterferenceContourCount = p.DualOrbitInterferenceContourCount != D.DualOrbitInterferenceContourCount ? p.DualOrbitInterferenceContourCount : (int?)null,
+                    DualOrbitInterferencePaths = p.DualOrbitInterferencePaths != D.DualOrbitInterferencePaths ? p.DualOrbitInterferencePaths : (int?)null,   // #1602
+                    DualOrbitPathLayout = p.DualOrbitPathLayout != D.DualOrbitPathLayout ? (int)p.DualOrbitPathLayout : (int?)null,
                     DetectionCount = p.DetectionCount != D.DetectionCount ? p.DetectionCount : (int?)null,   // #1599
                     DetectionSeed = p.DetectionSeed != D.DetectionSeed ? p.DetectionSeed : (int?)null,
                     DetectionDotRadius = p.DetectionDotRadius != D.DetectionDotRadius ? p.DetectionDotRadius : (int?)null,
@@ -2253,6 +2258,8 @@ namespace FracturingFog.Models
             if (this.DualOrbitWindingMode.HasValue) p.DualOrbitWindingMode = (FracturingFog.DualOrbitWindingMode)this.DualOrbitWindingMode.Value;
             if (this.DualOrbitInterferenceContours.HasValue) p.DualOrbitInterferenceContours = (FracturingFog.DomainContourMode)this.DualOrbitInterferenceContours.Value;   // #1598
             if (DualOrbitInterferenceContourCount.HasValue) p.DualOrbitInterferenceContourCount = DualOrbitInterferenceContourCount.Value;
+            if (DualOrbitInterferencePaths.HasValue) p.DualOrbitInterferencePaths = DualOrbitInterferencePaths.Value;   // #1602
+            if (this.DualOrbitPathLayout.HasValue) p.DualOrbitPathLayout = (FracturingFog.DualOrbitPathLayout)this.DualOrbitPathLayout.Value;
             if (DualOrbitEnsembleN.HasValue) p.DualOrbitEnsembleN = DualOrbitEnsembleN.Value;
             if (DualOrbitEnsembleRadius.HasValue) p.DualOrbitEnsembleRadius = DualOrbitEnsembleRadius.Value;
             if (DualOrbitEnsembleSectors.HasValue) p.DualOrbitEnsembleSectors = DualOrbitEnsembleSectors.Value;
@@ -3463,6 +3470,26 @@ namespace FracturingFog.Models
                     DualOrbitField = (int)FracturingFog.DualOrbitField.PathInterference,
                     DualOrbitCSeedX = 0.3, DualOrbitCSeedY = 0.2, DualOrbitInterferenceK = 1.0,
                     DualOrbitAngularMomentum = 3, DualOrbitWindingMode = (int)FracturingFog.DualOrbitWindingMode.Opposite,
+                },
+            },
+            new()
+            {
+                // #1602 — N-path interference: the two orbits as a six-slit grating.
+                Name          = "Double Slit - Orbit Grating",
+                CenterX       = -0.6,
+                CenterY       =  0.05,
+                Zoom          =  1.0,
+                Iterations    =  400,
+                Description   = "Six paths instead of two, like a grating with six slits: the bright fringes stay where the two-path fringes peak but get about three times thinner, with faint fringes between. The bound 'Double slit: more slits' animation steps the number of paths from 2 to 12 and back.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.JulibrotPair,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Double slit: more slits",
+                Params        = new RegionFractalParams
+                {
+                    DualOrbitField = (int)FracturingFog.DualOrbitField.PathInterference,
+                    DualOrbitCSeedX = 0.3, DualOrbitCSeedY = 0.2, DualOrbitInterferenceK = 20.0,
+                    DualOrbitInterferencePaths = 6, DualOrbitPathLayout = (int)FracturingFog.DualOrbitPathLayout.Grating,
                 },
             },
             new()
