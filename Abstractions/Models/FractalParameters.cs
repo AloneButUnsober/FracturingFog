@@ -1423,6 +1423,13 @@ namespace FracturingFog.Models
         public DomainContourMode TalbotDomainContours { get; set; } = DomainContourMode.Off;
         /// <summary>Talbot carpet: phase lines per turn, n (1..64), for the Domain contours (#1598).</summary>
         public int TalbotContourCount { get; set; } = 8;
+        /// <summary>Talbot carpet: draw the transverse intensity |ψ(ξ, ζ₀)|² at ζ₀ =
+        /// TalbotSliceZeta as a curve over the carpet, and show its box-counting graph
+        /// dimension in the status bar (#1601). Off by default.</summary>
+        public bool TalbotSliceOverlay { get; set; } = false;
+        /// <summary>Talbot carpet: the distance ζ₀ (in Talbot distances) of the slice
+        /// overlay (#1601). Default (3 − √5)/2, Berry &amp; Klein's golden distance. Animatable.</summary>
+        public double TalbotSliceZeta { get; set; } = 0.3819660112501051;
         /// <summary>#1538 — sides of the <see cref="BilliardGeometry.Polygon"/> layout (3 = triangle,
         /// 6 = hexagon, 8 = octagon ...). Clamped to [3, 12]. Default 6.</summary>
         public int BilliardPolygonSides { get; set; } = 6;
@@ -2403,6 +2410,8 @@ namespace FracturingFog.Models
                 WhiteLightSamples = WhiteLightSamples,
                 SlitCascadeWhiteLight = SlitCascadeWhiteLight,
                 TalbotWhiteLight = TalbotWhiteLight,
+                TalbotSliceOverlay = TalbotSliceOverlay,
+                TalbotSliceZeta = TalbotSliceZeta,
                 DetectionSeed = DetectionSeed,
                 DetectionDotRadius = DetectionDotRadius,
                 DetectionGain = DetectionGain,

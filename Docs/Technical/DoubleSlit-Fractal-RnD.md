@@ -579,6 +579,29 @@ Parallel after S0: {S1, S2, S3, S6}. After S3: {S4, S5}.
 - **Prior art:** the which-path / partial-coherence rule is textbook (Feynman III §1-6); applying it per level of
   the cascade is FF's construction, and no novelty is claimed for the physics.
 
+### 10.6 Transverse-profile overlay (#1601, round 2 tracker #1605)
+
+- **What:** `TalbotSliceOverlay` (bool) and `TalbotSliceZeta` ζ₀ (animatable, default the golden distance
+  (3 − √5)/2). Named *Slice* rather than the issue's *Profile*, because `TalbotProfile` is already the grating
+  shape. The curve |ψ(ξ, ζ₀)|² is drawn into the ColorBuffer after every other pass (white core, black halo,
+  dashed marker at the ζ₀ row); height = I / max over one period, a quarter of the view tall; line width
+  ≈ h/400 so supersampled exports keep it. The SmoothBuffer (Relief heights) is untouched. Talbot is an alt
+  calculator, so a theme change recomputes and the overlay survives recolouring.
+- **Dimension:** `GraphDimension` box-counts one period sampled at S = 256..8192 points (≈16 per mode): for ε = k/S,
+  N(ε) = Σ_columns ⌊range/ε⌋ + 1, values scaled to [0, 1]; slope of ln N on ln 1/ε over ε = 1/8 … 1/(2M). Status bar:
+  `slice ζ0 … graph dim … (box count, 1/8..1/2M)`.
+- **Measured (Ronchi a = 0.3):** M = 1024: ζ = 0, ½, 1 → 1.127 (the bar-edge ringing keeps it a little above 1);
+  ⅓ → 1.204; golden → 1.386; √2 − 1 → 1.400. M = 32 → 256 → 1024: golden 1.324 → 1.356 → 1.386 (rising toward
+  3/2), ⅓ 1.359 → 1.275 → 1.204 (falling toward 1). 3/2 is Berry & Klein's transverse value as summarised by
+  Rosu, Murguia & Ludu (2013, §2), equal to Berry's box D + ½; the primary text is under *Citations awaiting
+  verification*.
+- **Tests (`TalbotSliceTests`, preset test):** per-column profile equals a Ronchi sum written in the test (own
+  sinc coefficients) to 1e-9, and the white core sits at the predicted row in every column; the peak matches an
+  independent period maximum; overlay off is byte-identical and on changes only white/black pixels, never the
+  SmoothBuffer; ζ = ½ is the ζ = 0 profile shifted by half a period, ζ = 1 equals ζ = 0; a straight line
+  box-counts to 1; the dimension ordering above; Command-builder round trip. Preset *Talbot Carpet - Profile
+  Walk* with bound animation *Talbot carpet: profile walk* (ζ₀ 0 → 1 over 20 s).
+
 **Standing rules for every slice:** batch parity (`RegionFractalParams` → `--param`,
 `BuildFractalParameters`, `BatchCommandBuilder` round-trip), recolour-guard classification (#981),
 and citations in the Bibliography in the same PR.

@@ -1025,7 +1025,7 @@
         </Grid>
 
         <!-- Talbot carpet (#1570, double-slit epic #1565): the grating's near field -->
-        <Grid IsVisible="{Binding IsTalbotCarpet}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+        <Grid IsVisible="{Binding IsTalbotCarpet}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Grating:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding TalbotProfiles}"
@@ -1109,6 +1109,17 @@
                            Value="{Binding WhiteLightSamples, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsTalbotIntensity}"
                            ToolTip.Tip="How many wavelengths across 380-720 nm are summed (1 to 81). More = smoother colour, slower. 1 = the plain 550 nm pattern." />
+            <!-- #1601 — transverse-profile overlay. -->
+            <TextBlock Grid.Row="14" Grid.Column="0" Text="Profile overlay:" VerticalAlignment="Center" />
+            <CheckBox Grid.Row="14" Grid.Column="1" IsChecked="{Binding TalbotSliceOverlay, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Draws the brightness across the grating at one distance as a white curve over the carpet (rising from a dashed line at that distance), and shows the curve's fractal dimension in the status bar. At whole and half distances the curve is the grating's own steps; at simple fractions it is a few shifted copies; at irrational distances it is jagged." />
+            <TextBlock Grid.Row="15" Grid.Column="0" Text="Profile distance:" VerticalAlignment="Center"
+                       IsVisible="{Binding TalbotSliceOverlay}" />
+            <NumericUpDown Grid.Row="15" Grid.Column="1"
+                           Minimum="-1000" Maximum="1000" Increment="0.01" FormatString="F5"
+                           Value="{Binding TalbotSliceZeta, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding TalbotSliceOverlay}"
+                           ToolTip.Tip="Where the profile is taken, in Talbot distances (the carpet's vertical axis). The default 0.38197 is the golden distance (3 - square root of 5) / 2, irrational, so the profile is a fractal. Animate it to walk the profile down the carpet." />
             <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Foreground="#9B9B9B" Margin="0,4,0,2"
                        Text="Across = position in grating periods. Down = distance travelled, in Talbot distances: the grating images itself at every whole number and shifted by half a period at every half; at irrational distances the pattern is a fractal." />
         </Grid>

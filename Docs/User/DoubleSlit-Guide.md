@@ -157,6 +157,7 @@ fractions, and as a fractal at irrational distances.
 | **Show** | Intensity on a log scale about the average brightness, phase, *Domain* (both: colour = phase, brightness = intensity), or *Detections* (particle build-up, §2.3). |
 | **White light** | *Intensity* only: the carpet in white light, *TrueSpectrum* or *BlueAmber* (§3.1). |
 | **Dynamic range** | How far below the average brightness the dark end reaches. |
+| **Profile overlay**, **Profile distance** | §3.2: the brightness across the grating at one distance, drawn as a curve. |
 | **Contour lines** | *Domain* only: phase and/or modulus lines (§2.2). The carpet's phase is itself a fractal, so at the full view the lines crowd into speckle; zoom in, or use fewer Fourier modes, to follow them. |
 
 **Tip:** carpets look best with **few iterations (16)** and a **plain theme such as Greyscale**. Fracturing Fog's
@@ -195,6 +196,29 @@ wavelengths concentrate more light there (cyan-blue centre); that follows from t
 FracturingFog --batch --region "Talbot Carpet - Ronchi Grating" --param TalbotWhiteLight=2 --param WhiteLightSamples=31 --out carpet-white.png
 ```
 
+### 3.2 The profile at one distance
+
+Turn on **Profile overlay** and the brightness across the grating at **Profile distance** ζ₀ is drawn as a white
+curve with a black edge (readable on any theme and with any colour vision), rising from a dashed line at the
+row of ζ₀. The curve's full height is the brightest point over one grating period, so it doesn't jump as you pan.
+This is Berry & Klein's picture:
+
+- at ζ₀ = 0, ½ and 1 the curve is the grating itself (shifted by half a period at ½): flat steps;
+- at simple fractions it is a few shifted copies of the grating (at ⅓, three);
+- at irrational distances it is jagged at every scale, a fractal. The default 0.38197 is the golden distance
+  (3 − √5)/2, where Berry & Klein confirmed the fractal with a real Ronchi grating.
+
+The status bar shows the curve's **graph dimension**, measured by box counting over one period from 1/8 of a period
+down to the finest detail the Fourier modes allow (1/2M). A smooth curve has dimension 1; a curve rough enough to
+start filling the plane has more. For a sharp-edged grating like Ronchi, theory gives 3/2 at irrational
+distances (Berry & Klein, as summarised by Rosu, Murguia & Ludu; the same as Berry's box result). With finitely many modes the measured value stays
+below that and climbs toward it as **Fourier modes** grows; at the grating planes it stays near 1 (a little above,
+from the ripples at the bar edges). With 1024 modes the golden distance measures about 1.39 against 1.13 at the grating.
+
+Animate **Profile distance** to walk the curve down the carpet: the **Talbot Carpet - Profile Walk** preset has the
+overlay on, and its bound animation *Talbot carpet: profile walk* moves ζ₀ from 0 to 1. The overlay changes only
+the picture's colours, not Relief heights; in white light the curve is the 550 nm brightness.
+
 ## 4. Demos (built-in regions)
 
 Open them from the region list; each says what it shows. Built-ins never change: save a copy to keep edits.
@@ -211,6 +235,7 @@ Open them from the region list; each says what it shows. Built-ins never change:
 | **Talbot Carpet - Ronchi Grating** | Talbot Carpet | — |
 | **Talbot Carpet - Fractal Comb** | Talbot Carpet | — |
 | **Talbot Carpet - Cascade Grating** | Talbot Carpet | — |
+| **Talbot Carpet - Profile Walk** | Talbot Carpet | *Talbot carpet: profile walk*: the profile overlay's ζ₀ 0 → 1 |
 
 ## 5. Headless commands
 
@@ -232,6 +257,12 @@ Play a bound animation as a video (the view holds still, the setting moves):
 
 ```bash
 FracturingFog --batch --mode video --region "Double Slit - Which-Path Collapse" --animation "Double slit: which-path collapse" --video-motion hold --seconds 10 --out C:\out\
+```
+
+The profile walk as a video (start ζ₀ at 0 so the first frame matches the ramp, as below for the build-up):
+
+```bash
+FracturingFog --batch --mode video --region "Talbot Carpet - Profile Walk" --animation "Talbot carpet: profile walk" --video-motion hold --param TalbotSliceZeta=0 --seconds 20 --out C:\out\
 ```
 
 The particle build-up as a video. A video's first frame shows the region's own settings and the animation
@@ -279,4 +310,5 @@ Shraiman. Orbital angular momentum: Allen, Beijersbergen, Spreeuw & Woerdman. De
 Giménez, Calatayud & Monsoriu. Talbot effect and quantum carpets: Berry & Klein; Berry; Berry, Marzoli & Schleich. Single-particle build-up:
 Tonomura, Endo, Matsuda, Kawasaki & Ezawa. Phase-portrait contours: Wegert. White light: CIE colour-matching fit
 by Wyman, Sloan & Shirley; Oklab by Ottosson; polychromatic self-imaging by Packross, Eschbach & Bryngdahl.
+Profile overlay and its dimension: Berry & Klein; Berry (quantum fractals in boxes); Rosu, Murguia & Ludu.
 Full entries: [bibliography](../Resources-Bibliography.md#double-slit-fractals).
