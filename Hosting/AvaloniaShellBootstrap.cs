@@ -2178,6 +2178,17 @@ namespace FracturingFog.Hosting
                     var rows = mgr?.DescriptorsForCurrentType()
                         .Select(d => new FracturingFog.UI.Avalonia.ViewModels.AudioBindingRowViewModel(d, mgr))
                         .ToList();
+                    // #1691 — same as the Fractured Waves rows: turning on the
+                    // AcidWarpFlow drive turns Morph on (Flow only shows with it).
+                    foreach (var row in rows ?? new())
+                        FracturingFog.UI.Avalonia.ViewModels.AudioBindingRowViewModel.TurnMorphOnWithFlow(row, () =>
+                        {
+                            var fp = s_renderHost?.ViewState?.FractalParameters;
+                            if (fp == null || fp.AcidWarpMorph) return;
+                            fp.AcidWarpMorph = true;
+                            RefreshOpenParamEditor(s_paramsWin);
+                            s_renderHost?.Trigger();
+                        });
                     // #1434 — recipe presets above the matrix; a recipe's side
                     // settings (e.g. Morph) land on the live params and re-render.
                     var vsr = s_renderHost?.ViewState;
