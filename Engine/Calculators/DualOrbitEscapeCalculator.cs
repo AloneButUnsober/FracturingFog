@@ -714,6 +714,12 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         bool domainField = !layers && field == DualOrbitField.PathInterferenceDomain
             && _interfPhase.Length == width * height;   // #1592
         double paths = key.InterfPaths;   // #1602
+        // #1593 — a wave theme colours the theme-coloured interference fields from the
+        // pixel's wave quantities (RefreshInterference filled _interfI / _interfPhase).
+        var waveMap = WaveTheme(key);
+        bool waveField = !layers && waveMap != null && _interfI.Length == width * height;
+        var waveFp = FractalParameters;
+        double waveTwoLogR = 2.0 * Math.Log(key.Bailout);
         // #1598 — contour lines over the domain field: side buffers (NaN = not a
         // domain pixel), then DomainContours after the pass.
         var contours = domainField ? FractalParameters.DualOrbitInterferenceContours : DomainContourMode.Off;
@@ -799,6 +805,8 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
                         ctLog2[idx] = kk > 0.0 ? (float)(0.5 * Math.Log2(paths * kk)) : float.NaN;
                     }
                 }
+                else if (waveField)   // #1593
+                    ColorBuffer[idx] = unchecked((uint)waveMap!.MapWave(PairWave(idx, (int)paths, waveFp, waveTwoLogR)));
                 else
                     ColorBuffer[idx] = unchecked((uint)ColorMap.Map(_scalar[idx], 0f, maxIter));
             }

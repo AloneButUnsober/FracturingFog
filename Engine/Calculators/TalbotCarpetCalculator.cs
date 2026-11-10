@@ -172,6 +172,8 @@ public sealed class TalbotCarpetCalculator : IFractalCalculator, IHeightFieldSou
         var cm = ColorMap;
         cm.MaxIterations = maxIt;
         uint inSet = cm.InSetColor;
+        var wave = cm as IWaveColorMap;   // #1593 — colours the theme-coloured views
+        double logBound = 2.0 * Math.Log10(Math.Max(sumAbs, 1e-300));   // the largest |ψ|², (Σ|cₙ|)²
         float[] smooth = SmoothBuffer; uint[] color = ColorBuffer;
         // #1598 — contour lines over the Domain view: side buffers, then DomainContours.
         var contours = domain ? fp.TalbotDomainContours : DomainContourMode.Off;
@@ -248,6 +250,14 @@ public sealed class TalbotCarpetCalculator : IFractalCalculator, IHeightFieldSou
                     t = mag2 > 0.0 ? (Math.Log10(mag2) - logMean + decades) / (decades + top) : 0.0;
                 }
                 int idx = row + x;
+                if (wave != null)   // #1593 — the theme sees every pixel, dark ones too
+                {
+                    float sw = t > 0.0 ? (float)(Math.Min(1.0, t) * maxIt) : 0f;
+                    if (phase && sw >= maxIt) sw = (float)(1e-9 * maxIt);
+                    smooth[idx] = sw;
+                    color[idx] = (uint)wave.MapWave(WaveAt(re, im, logBound, logMean, decades, top, xi, zeta));
+                    continue;
+                }
                 if (!(t > 0.0)) { smooth[idx] = 0f; color[idx] = inSet; continue; }
                 float s = (float)(Math.Min(1.0, t) * maxIt);
                 // #1591 — phase 1 ≡ 0: a value rounding up to maxIt would read as "in the set".
@@ -472,6 +482,26 @@ public sealed class TalbotCarpetCalculator : IFractalCalculator, IHeightFieldSou
             smooth[idx] = (float)(Math.Min(1.0, t) * maxIt);
             color[idx] = wl.Colour(inten, t, mode);
         }
+    }
+
+    /// <summary>#1593 — the wave sample of ψ = re + i·im at (ξ, ζ): |ψ|² as a fraction
+    /// of its bound (Σ|cₙ|)², the Intensity view's level, the phase in turns, and the
+    /// coordinates.</summary>
+    public static WaveSample WaveAt(double re, double im, double logBound, double logMean, double decades, double top,
+        double xi, double zeta)
+    {
+        var w = new WaveSample { Xi = xi, Zeta = zeta };
+        double m2 = re * re + im * im;
+        if (m2 > 0.0)
+        {
+            double lg = Math.Log10(m2);
+            w.Intensity = Math.Min(1.0, Math.Pow(10.0, lg - logBound));
+            w.Level = Math.Clamp((lg - logMean + decades) / (decades + top), 0.0, 1.0);
+            double turns = Math.Atan2(im, re) / (2.0 * Math.PI);
+            turns -= Math.Floor(turns);
+            w.Phase = turns >= 1.0 ? 0.0 : turns;
+        }
+        return w;
     }
 
     // #1599 — detection weights (|ψ|² per pixel) and the last build-up's per-pixel counts.

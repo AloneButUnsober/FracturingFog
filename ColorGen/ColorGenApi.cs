@@ -95,6 +95,14 @@ public static class ColorGenApi
                 "the interpreter only and cannot be exported to C#. Save the theme " +
                 "to your library to use it.");
 
+        // #1593 — double-slit wave inputs: the same split as billiard (the per-pixel
+        // wave quantities come from the calculator through IWaveColorMap.MapWave).
+        if (UsesInputs(prog, CgInputs.WaveScalars))
+            return new GenerateResult(sanitized, "",
+                "Double-slit wave themes (waveIntensity / wavePhase / waveAlpha …) run on " +
+                "the interpreter only and cannot be exported to C#. Save the theme " +
+                "to your library to use it.");
+
         string body = new ColorGenEmitter(indent: "        ").EmitBody(prog);
 
         // T3.1 phase 2: also emit HLSL body + prelude so the generated theme
@@ -224,6 +232,28 @@ public static class ColorGenApi
             case CgCall c: foreach (var a in c.Args) CollectBilliard(a, found); break;
         }
     }
+
+    // #1593 — true when the program reads any input in <paramref name="names"/>.
+    internal static bool UsesInputs(CgProgram prog, System.Collections.Generic.ISet<string> names)
+    {
+        foreach (var s in prog.Statements)
+        {
+            CgNode? node = s switch { CgLet l => l.Value, CgReturn r => r.Value, _ => null };
+            if (node != null && Uses(node, names)) return true;
+        }
+        return false;
+    }
+
+    private static bool Uses(CgNode n, System.Collections.Generic.ISet<string> names) => n switch
+    {
+        CgVar v => v.IsBuiltIn && names.Contains(v.Name),
+        CgChannel ch => Uses(ch.Target, names),
+        CgUnary u => Uses(u.Operand, names),
+        CgBinary b => Uses(b.Lhs, names) || Uses(b.Rhs, names),
+        CgTernary t => Uses(t.Cond, names) || Uses(t.IfTrue, names) || Uses(t.IfFalse, names),
+        CgCall c => System.Linq.Enumerable.Any(c.Args, a => Uses(a, names)),
+        _ => false,
+    };
 
     private static string LoadTemplate(string fileName)
     {

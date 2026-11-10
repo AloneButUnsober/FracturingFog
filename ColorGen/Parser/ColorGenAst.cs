@@ -151,6 +151,26 @@ public static class CgInputs
         // them from the calculator's per-pixel outcome (there is no escape-time /
         // orbit data for a billiard pixel). CPU-only (no GPU/HLSL billiard path).
         "gateId", "gateCount", "bounceCount", "maxBounces", "pathLength",
+        // #1593 — double-slit wave inputs (Julibrot Pair path interference, Slit
+        // Cascade, Talbot Carpet). A program referencing any of these renders through
+        // the wave-aware interpreter path (IWaveColorMap). CPU-only (no HLSL path).
+        "waveIntensity", "waveLevel", "wavePhase",
+        "waveDeltaG", "waveDeltaTheta", "waveWhichPath", "waveAngularMomentum", "wavePaths",
+        "waveAlpha", "waveFAlpha", "waveAlphaMin", "waveAlphaMax", "waveOnSet",
+        "waveFirstChild", "waveLastChild", "waveChildren",
+        "waveXi", "waveZeta",
+    };
+
+    /// <summary>#1593 — subset of <see cref="Scalars"/> that are double-slit wave
+    /// inputs. A ColorGen program referencing any of these is rendered through the
+    /// wave-aware interpreter path (<c>IWaveColorMap</c>).</summary>
+    public static readonly HashSet<string> WaveScalars = new(StringComparer.Ordinal)
+    {
+        "waveIntensity", "waveLevel", "wavePhase",
+        "waveDeltaG", "waveDeltaTheta", "waveWhichPath", "waveAngularMomentum", "wavePaths",
+        "waveAlpha", "waveFAlpha", "waveAlphaMin", "waveAlphaMax", "waveOnSet",
+        "waveFirstChild", "waveLastChild", "waveChildren",
+        "waveXi", "waveZeta",
     };
 
     /// <summary>#633 — subset of <see cref="Scalars"/> that are chaotic-billiard

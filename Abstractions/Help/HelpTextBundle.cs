@@ -3416,6 +3416,14 @@ side Vec3). Comparisons and logical ops require scalars; yield 1.0/0.0.
 
   Scalars: smooth dist iter maxIter t nx ny zr zi dzr dzi arg mag isInSet pxScale
 
+  Wave (#1593; Julibrot Pair interference fields, Slit Cascade,
+  Talbot Carpet; CPU interpreter only, no C# export):
+    waveIntensity waveLevel wavePhase
+    waveDeltaG waveDeltaTheta waveWhichPath waveAngularMomentum wavePaths
+    waveAlpha waveFAlpha waveAlphaMin waveAlphaMax waveOnSet
+    waveFirstChild waveLastChild waveChildren   waveXi waveZeta
+  0 on other fractals. See Docs\User\ColorGen-UserGuide.md 2.3.
+
   Constants: pi  tau (=2π)  e  phi (golden ratio)
 
 === Operators (high → low) ===
@@ -5086,6 +5094,10 @@ Demos:
   Double Slit - Beat Collapse   (audio: the beat switches
                    the which-path detector on)
   Double Slit - Spiral Beat     (audio: the beat sets l, 2..5)
+
+Own colourings: a ColorGen theme can read waveIntensity,
+wavePhase, waveDeltaG (kappa x dG), waveWhichPath and more
+(ColorGen help; Docs\User\DoubleSlit-Guide.md 5).
 ";
 
         public const string MathSlitCascadeText =

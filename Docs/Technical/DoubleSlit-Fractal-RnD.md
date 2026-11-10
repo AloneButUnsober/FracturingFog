@@ -413,9 +413,9 @@ converges as M grows (vs a reference run with many more modes).
 
 | Piece | CalcGen / DSL | ColorGen / Colour Theme Editor |
 |---|---|---|
-| S1 η, S2 ℓ | n/a (colour-only on cached data) | A ColorGen input for the #1126 scalar with η, ℓ as inputs would let users write their own interference blends |
+| S1 η, S2 ℓ | n/a (colour-only on cached data) | A ColorGen input for the #1126 scalar with η, ℓ as inputs would let users write their own interference blends — **done in #1593 (§10.10)** |
 | S3 cascade | A per-pixel product over D levels of an N-term complex sum. That needs loops over constant-size arrays in the DSL; assess against the equation language (#937) before choosing hardcoded vs DSL | Phase input (arg A) on the blue/amber axis |
-| S4 D_q | Closed form; HUD only | α / f(α) as ColorGen inputs |
+| S4 D_q | Closed form; HUD only | α / f(α) as ColorGen inputs — **done in #1593 (§10.10)** |
 | S6 Talbot | A Fourier sum over M modes: same DSL loop question as S3 | Intensity + phase inputs |
 
 The DSL loop question is shared by S3 and S6. Whichever lands first answers it for both.
@@ -682,6 +682,43 @@ Parallel after S0: {S1, S2, S3, S6}. After S3: {S4, S5}.
 and citations in the Bibliography in the same PR.
 
 ---
+
+### 10.10 ColorGen wave inputs (#1593)
+
+- **What:** 18 ColorGen inputs (`wave*`) carrying each renderer's per-pixel wave quantities, through a new
+  `IWaveColorMap.MapWave(in WaveSample)` (Engine/Interefaces). Same split as the billiard inputs (#633): a program
+  using any of them becomes `InterpretedWaveColorMap` (CPU interpreter, empty HLSL, so never a GPU palette), and
+  `ColorGenApi.Generate` refuses C# export. `Needs` (a `WaveInputs` flag set from the program) tells the
+  calculator which groups to compute: on the Slit Cascade the far field (`FarField`) and the aperture address are
+  computed only when read.
+- **Quantities:**
+  - shared: `waveIntensity` (fraction of the bound: Pair I/N; cascade |A|²/(Σ√pᵢ)^{2D}, the on-axis peak, or the
+    which-path peak `LogPeak`; Talbot |ψ|²/(Σ|cₙ|)²), `waveLevel` (the Intensity view's value), `wavePhase` (turns);
+  - Pair: κΔG, Δθ wrapped to [−½, ½), η, ℓ, N. The refresh pass keeps I/N and the phase in side buffers only while
+    a wave theme is active; for N > 2 the intensity is the same `PathsIntensity` value the field uses (η is now
+    always passed in: it changes the intensity only, so the phase field is unchanged);
+  - cascade: α, f(α), the α range, on-set, the first- and last-level child (`Address` gained an overload with
+    out-params; the old one forwards);
+  - Talbot: ξ, ζ.
+- **Rules:** a wave theme colours the views that used the theme (Pair: PathInterference / PathInterferencePhase;
+  cascade: Intensity, Phase, Aperture, α, f(α); Talbot: Intensity, Phase) and every pixel of them, including those
+  below the dynamic range. Domain, white light and Detections paint their own colour. The smooth / relief buffer
+  still holds the view's value, so Relief 3D is unchanged.
+- **Batch:** batch never loads ColorGen themes (pre-existing, every ColorGen theme), filed as #1684. The Command
+  builder now reports a ColorGen theme loaded this session as a gap (`SessionColorGenThemes`, filled by the
+  hot-load bridge), instead of emitting a `--theme` the batch would replace with HSV.
+- **Tests (`WaveColorGenTests`, 24):** routing and `Needs`; reserved names; C# export refused; inputs read 0 off
+  the double-slit renderers. Independent references: Talbot intensity and phase against
+  `TalbotCarpetCalculator.Field` (a direct sum, not the render loop); cascade first/last child, α and f(α) at a
+  hand-picked leaf (α = (ln pᵢ + ln pⱼ)/(2 ln r), f(α) = ln 2/(2 ln 1/r) for i ≠ j, else 0); the cascade's
+  on-axis peak = 1 and the far field against `Amplitude`; render-level α against the aperture mass from the plain
+  Aperture view (ln m = D·ln r·α − D·ln p_max); the Pair intensity against the closed form ½(1 + (1 − η)·cos κΔG)
+  at γ = 0, ℓ = 0, using the theme's own `waveDeltaG`. Consistency: `waveLevel` / `wavePhase` equal the plain
+  views' values, and the relief buffer is unchanged. N-path which-path: I_η = 1 + (1 − η)(I₀ − 1) between an
+  η = 0.4 and an η = 0 render.
+- **Mutation check:** 17 mutants over the three calculators, the interpreter routing and the gap. The first pass
+  caught 16. The survivor (η not applied for N > 2) also changed the plain field that test compared against;
+  the which-path law above was added and catches it.
 
 ## 11. References
 

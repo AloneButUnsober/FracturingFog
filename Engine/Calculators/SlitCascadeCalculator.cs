@@ -350,7 +350,13 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
     /// <summary>Walks the levels from (x, y): true when the point lies in a leaf,
     /// with <paramref name="counts"/>[i] = how many levels chose child i (#1571).</summary>
     public static bool Address(in Cascade c, double x, double y, int[] counts)
+        => Address(c, x, y, counts, out _, out _);
+
+    /// <summary>As above, with the child chosen at the first and the last level
+    /// (−1 when the point is off the set) (#1593).</summary>
+    public static bool Address(in Cascade c, double x, double y, int[] counts, out int first, out int last)
     {
+        first = last = -1;
         Array.Clear(counts);
         for (int level = 0; level < c.Depth; level++)
         {
@@ -358,7 +364,9 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
             int hit = -1;
             for (int i = 0; i < c.P.Length; i++)
                 if (Math.Abs(x - c.Bx[i]) <= c.Ratio && Math.Abs(y - c.By[i]) <= c.Ratio && c.P[i] > 0.0) { hit = i; break; }
-            if (hit < 0) return false;
+            if (hit < 0) { first = last = -1; return false; }
+            if (level == 0) first = hit;
+            last = hit;
             counts[hit]++;
             x = (x - c.Bx[hit]) / c.Ratio; y = (y - c.By[hit]) / c.Ratio;
         }
@@ -451,6 +459,7 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
         var cm = ColorMap;
         cm.MaxIterations = maxIt;
         uint inSet = cm.InSetColor;
+        var wave = cm as IWaveColorMap;   // #1593 — colours the theme-coloured views
         float[] smooth = SmoothBuffer; uint[] color = ColorBuffer;
         // #1598 — contour lines over the Domain view: side buffers, then DomainContours.
         var contours = view == SlitCascadeView.Domain ? fp.SlitCascadeDomainContours : DomainContourMode.Off;
@@ -551,6 +560,14 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
                     }
                 }
                 int idx = row + x;
+                if (wave != null)   // #1593 — the theme sees every pixel, dark ones too
+                {
+                    float sw = t > 0.0 ? (float)(Math.Min(1.0, t) * maxIt) : 0f;
+                    if (view == SlitCascadeView.Phase && sw >= maxIt) sw = (float)(1e-9 * maxIt);
+                    smooth[idx] = sw;
+                    color[idx] = (uint)wave.MapWave(WaveAt(cascade, eta, px, py, counts, wave.Needs, logI0, decades, alphaMin, alphaMax));
+                    continue;
+                }
                 if (!(t > 0.0)) { smooth[idx] = 0f; color[idx] = inSet; continue; }
                 float s = (float)(Math.Min(1.0, t) * maxIt);
                 // #1591 — a phase a hair below 1 (≡ 0) rounds up to maxIt, which themes
@@ -567,6 +584,37 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
             DetectionBuildUp.Sample(detW, fp.DetectionCount, fp.DetectionSeed, DetectionCounts, ct);
             DetectionBuildUp.Paint(DetectionCounts, width, height, fp.DetectionDotRadius, fp.DetectionGain, color, smooth, maxIt, ct);
         }
+    }
+
+    /// <summary>#1593 — the wave sample at (x, y): the far field (intensity as a fraction
+    /// of the peak, the Intensity view's level, the phase) and the aperture address
+    /// (α, f(α), the α range, on-set, first / last child), each only when the theme
+    /// reads it. Both use the pixel's coordinates, as the views do.</summary>
+    public static WaveSample WaveAt(in Cascade c, double[]? eta, double x, double y, int[] counts, WaveInputs needs,
+        double logI0, double decades, double alphaMin, double alphaMax)
+    {
+        var w = new WaveSample { Children = c.P.Length, AlphaMin = alphaMin, AlphaMax = alphaMax, FirstChild = -1, LastChild = -1 };
+        if ((needs & WaveInputs.Field) != 0)
+        {
+            double mag2 = FarField(c, eta, x, y, out var a);
+            if (mag2 > 0.0)
+            {
+                double lg = Math.Log10(mag2) - logI0;
+                w.Intensity = Math.Min(1.0, Math.Pow(10.0, lg));
+                w.Level = Math.Clamp(1.0 + lg / decades, 0.0, 1.0);
+                double turns = a.Phase / (2.0 * Math.PI);
+                turns -= Math.Floor(turns);
+                w.Phase = turns >= 1.0 ? 0.0 : turns;
+            }
+        }
+        if ((needs & WaveInputs.Address) != 0 && Address(c, x, y, counts, out int first, out int last))
+        {
+            w.OnSet = 1.0;
+            w.Alpha = Alpha(c, counts);
+            w.FAlpha = Spectrum(c, counts);
+            w.FirstChild = first; w.LastChild = last;
+        }
+        return w;
     }
 
     // #1599 — detection weights (|A|² per pixel) and the last build-up's per-pixel counts.
