@@ -2718,6 +2718,16 @@ namespace FracturingFog.Models
 
         // ── Built-in regions ──────────────────────────────────────────────────
 
+        // #1603 — the vortex-well presets' Relief 3D: an oblique raymarch from 50° up, the
+        // light high (55°) with soft shadows so the pit walls stay lit, and +3 EV because the
+        // Domain view's brightness is the log intensity, dim round the vortices. A new
+        // instance per preset (regions must not share a mutable settings object).
+        private static Relief3DSettings VortexWellRelief() => new()
+        {
+            Enabled = true, Raymarch = true, CameraElevationDeg = 50.0,
+            LightElevationDeg = 55.0, ShadowStrength = 0.3, CameraExposureEv = 3.0,
+        };
+
         private static readonly FractalRegion[] _builtIns =
         [
             new()
@@ -3553,6 +3563,50 @@ namespace FracturingFog.Models
             },
             new()
             {
+                // #1603 — Domain colouring (#1592) + Relief 3D on the unchanged log-intensity height.
+                Name          = "Slit Cascade - Vortex Wells",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  1.5,
+                Iterations    =  400,
+                Description   = "The Vortex Core in 3D: height is the brightness, so the dark charge-3 vortex at the centre is a deep pit, and the colour wheel (blue and amber, readable with red/green colour blindness) turns three times round its walls. Domain colouring with Relief 3D.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.SlitCascade,
+                QualityPreset = QualityPreset.Standard,
+                Relief3D      = VortexWellRelief(),
+                Params        = new RegionFractalParams
+                {
+                    SlitCascadeChildren = 5, SlitCascadeRatio = 0.3, SlitCascadeDepth = 3,
+                    SlitCascadeSeparation = 1.0, SlitCascadeWidth = 0.0, SlitCascadeWavelength = 1e6,
+                    SlitCascadeLayout = (int)FracturingFog.SlitCascadeLayout.Ring,
+                    SlitCascadeView = (int)FracturingFog.SlitCascadeView.Domain, SlitCascadeDynamicRange = 6.0,
+                    SlitCascadeCharge = 1, SlitCascadeChargePattern = (int)FracturingFog.SlitCascadeChargePattern.Constant,
+                },
+            },
+            new()
+            {
+                // #1603 — the same cascade with unequal shares: the core splits into single vortices.
+                Name          = "Slit Cascade - Vortex Constellation",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  1.0,
+                Iterations    =  400,
+                Description   = "Vortex Wells with real slits (width 0.2, wavelength 0.6), so the slits pass unequal shares of light: the charge-3 core breaks up into separate charge-1 vortices, each its own pit with the colour wheel turning once round it. Domain colouring with Relief 3D.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.SlitCascade,
+                QualityPreset = QualityPreset.Standard,
+                Relief3D      = VortexWellRelief(),
+                Params        = new RegionFractalParams
+                {
+                    SlitCascadeChildren = 5, SlitCascadeRatio = 0.3, SlitCascadeDepth = 3,
+                    SlitCascadeSeparation = 1.0, SlitCascadeWidth = 0.2, SlitCascadeWavelength = 0.6,
+                    SlitCascadeLayout = (int)FracturingFog.SlitCascadeLayout.Ring,
+                    SlitCascadeView = (int)FracturingFog.SlitCascadeView.Domain, SlitCascadeDynamicRange = 6.0,
+                    SlitCascadeCharge = 1, SlitCascadeChargePattern = (int)FracturingFog.SlitCascadeChargePattern.Constant,
+                },
+            },
+            new()
+            {
                 // #1599 — the single-particle build-up (Tonomura et al. 1989).
                 Name          = "Slit Cascade - Particle Build-Up",
                 CenterX       =  0.0,
@@ -3588,6 +3642,28 @@ namespace FracturingFog.Models
                 {
                     TalbotProfile = (int)FracturingFog.TalbotProfile.Ronchi, TalbotDuty = 0.3, TalbotModes = 32,
                     TalbotView = (int)FracturingFog.TalbotView.Intensity, TalbotDynamicRange = 2.0,
+                },
+            },
+            new()
+            {
+                // #1603 — the carpet as terrain: Domain colouring + Relief 3D.
+                Name          = "Talbot Carpet - Relief",
+                CenterX       =  0.0,
+                CenterY       =  0.5,
+                Zoom          =  1.9,
+                Iterations    =  16,
+                Description   = "The Ronchi carpet as a landscape: height is the brightness, so the self-images at the top, middle and bottom are ridges and the dark gaps between the woven threads are valleys, coloured by the phase on the blue-amber wheel. Domain colouring with Relief 3D.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.TalbotCarpet,
+                QualityPreset = QualityPreset.Standard,
+                Relief3D      = new Relief3DSettings
+                {
+                    Enabled = true, Raymarch = true, CameraElevationDeg = 35.0, CameraZoom = 1.6, CameraExposureEv = 1.5,
+                },
+                Params        = new RegionFractalParams
+                {
+                    TalbotProfile = (int)FracturingFog.TalbotProfile.Ronchi, TalbotDuty = 0.3, TalbotModes = 32,
+                    TalbotView = (int)FracturingFog.TalbotView.Domain, TalbotDynamicRange = 2.0,
                 },
             },
             new()

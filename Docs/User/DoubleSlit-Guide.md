@@ -166,6 +166,23 @@ glow of a single smallest slit is left.
 FracturingFog --batch --region "Slit Cascade - Ring Diffraction" --param SlitCascadeWhichPath=1 --param SlitCascadeWhichPathPattern=3 --param SlitCascadeWhichPathLevel=1 --out ring-watched.png
 ```
 
+### 2.5 Vortex wells in 3D
+
+The *Domain* view keeps the brightness (log intensity) as the Relief height and only changes the colour, so
+**Relief 3D** turns it into a landscape: bright fringes are hills and a vortex, where the light is exactly zero,
+is a pit. The colour wheel turns round the pit's walls once per unit of charge, and the pit is wider the higher
+the charge, because the light rises from zero more slowly.
+
+- **Slit Cascade - Vortex Wells**: the Vortex Core in 3D. One deep, wide pit at the centre with the wheel turning
+  three times round it (charge 3).
+- **Slit Cascade - Vortex Constellation**: the same cascade with real slits (width 0.2, wavelength 0.6). The slits
+  pass unequal shares of light, the charge-3 core breaks apart, and you get several charge-1 pits, each with the
+  wheel turning once.
+
+Both use the oblique Relief 3D view with the light high and +3 EV exposure, because the Domain view is dim round
+the vortices. Turn the camera with the Relief settings. The colours are the blue-amber Phase Wheel, readable with
+red/green colour blindness.
+
 ## 3. Talbot Carpet
 
 Across the screen: position in grating periods. Down: distance travelled, in Talbot distances. The grating
@@ -241,6 +258,12 @@ Animate **Profile distance** to walk the curve down the carpet: the **Talbot Car
 overlay on, and its bound animation *Talbot carpet: profile walk* moves ζ₀ from 0 to 1. The overlay changes only
 the picture's colours, not Relief heights; in white light the curve is the 550 nm brightness.
 
+### 3.3 The carpet as terrain
+
+**Talbot Carpet - Relief** shows the Ronchi carpet in the *Domain* view with Relief 3D. The height is the
+brightness, so the self-images at the top, middle and bottom are ridge lines and the woven threads between them
+are a range of peaks over dark valleys, coloured by the phase.
+
 ## 4. Demos (built-in regions)
 
 Open them from the region list; each says what it shows. Built-ins never change: save a copy to keep edits.
@@ -255,10 +278,13 @@ Open them from the region list; each says what it shows. Built-ins never change:
 | **Slit Cascade - Probability Sets Dimension** | Slit Cascade | — (watch the status bar) |
 | **Slit Cascade - Vortex Core** | Slit Cascade | — |
 | **Slit Cascade - Particle Build-Up** | Slit Cascade | *Slit cascade: particle build-up*: 0 → 60,000 detections |
+| **Slit Cascade - Vortex Wells** | Slit Cascade | — (Relief 3D) |
+| **Slit Cascade - Vortex Constellation** | Slit Cascade | — (Relief 3D) |
 | **Talbot Carpet - Ronchi Grating** | Talbot Carpet | — |
 | **Talbot Carpet - Fractal Comb** | Talbot Carpet | — |
 | **Talbot Carpet - Cascade Grating** | Talbot Carpet | — |
 | **Talbot Carpet - Profile Walk** | Talbot Carpet | *Talbot carpet: profile walk*: the profile overlay's ζ₀ 0 → 1 |
+| **Talbot Carpet - Relief** | Talbot Carpet | — (Relief 3D) |
 
 ## 5. Headless commands
 
@@ -321,6 +347,12 @@ Julibrot Pair settings are `TalbotDomainContours` / `TalbotContourCount` and
 
 ```bash
 FracturingFog --batch --region "Slit Cascade - Vortex Core" --param SlitCascadeView=5 --param SlitCascadeDomainContours=3 --param SlitCascadeContourCount=8 --out vortex-contours.png
+```
+
+A preset's Relief 3D comes with it, so the vortex wells render in 3D as they are:
+
+```bash
+FracturingFog --batch --region "Slit Cascade - Vortex Wells" --out vortex-wells.png
 ```
 
 A phase view with the colour-blind-safe phase wheel:
