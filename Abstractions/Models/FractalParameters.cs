@@ -1372,6 +1372,16 @@ namespace FracturingFog.Models
         public int SlitCascadeCharge { get; set; } = 0;
         /// <summary>Slit cascade: how the charge varies with level (#1572).</summary>
         public SlitCascadeChargePattern SlitCascadeChargePattern { get; set; } = SlitCascadeChargePattern.Constant;
+        /// <summary>Slit cascade: which-path strength η ∈ [0, 1] at the marked levels
+        /// (#1600). A marked level's cross terms are scaled by 1 − η: 0 = interferes as
+        /// before, 1 = its children add as intensities. Default 0 (off).</summary>
+        public double SlitCascadeWhichPath { get; set; } = 0.0;
+        /// <summary>Slit cascade: which levels carry η (#1600).</summary>
+        public SlitCascadeWhichPathPattern SlitCascadeWhichPathPattern { get; set; } = SlitCascadeWhichPathPattern.Constant;
+        /// <summary>Slit cascade: the cut level L of DeepOnly / ShallowOnly (#1600).</summary>
+        public int SlitCascadeWhichPathLevel { get; set; } = 1;
+        /// <summary>Slit cascade: the Chosen pattern's levels, bit n = level n (#1600).</summary>
+        public int SlitCascadeWhichPathMask { get; set; } = 1;
         // ── Detection build-up (#1599): shared by the Detections views of Slit Cascade,
         // Talbot Carpet and Julibrot Pair (PathInterferenceDetections). ──
         /// <summary>Detections: how many particles have landed (0..50,000,000). Raising it
@@ -2384,6 +2394,10 @@ namespace FracturingFog.Models
                 SlitCascadeQ = SlitCascadeQ,
                 SlitCascadeCharge = SlitCascadeCharge,
                 SlitCascadeChargePattern = SlitCascadeChargePattern,
+                SlitCascadeWhichPath = SlitCascadeWhichPath,
+                SlitCascadeWhichPathPattern = SlitCascadeWhichPathPattern,
+                SlitCascadeWhichPathLevel = SlitCascadeWhichPathLevel,
+                SlitCascadeWhichPathMask = SlitCascadeWhichPathMask,
                 SlitCascadeDomainContours = SlitCascadeDomainContours,
                 DetectionCount = DetectionCount,
                 WhiteLightSamples = WhiteLightSamples,

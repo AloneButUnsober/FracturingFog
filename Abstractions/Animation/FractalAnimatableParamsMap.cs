@@ -283,6 +283,8 @@ public static class FractalAnimatableParamsMap
             Notes: "Child scale r — the cascade tightens or opens (#1569)."),
         new("SlitCascadeCharge", AnimatableParamKind.ScalarInt, Min: -12.0, Max: 12.0,
             Notes: "Vortex charge ℓ on the ring children — steps the filament twist (#1572)."),
+        new("SlitCascadeWhichPath", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 1.0,
+            Notes: "Which-path strength η at the marked levels — those levels' fringes wash out while the rest keep theirs (#1600)."),
         new("DetectionCount", AnimatableParamKind.ScalarInt, Min: 0.0, Max: 2000000.0,
             Cost: AnimatableParamCost.Expensive,
             Notes: "Detections view: particles landed so far — sweep it up and the fringes build out of single dots (#1599)."),

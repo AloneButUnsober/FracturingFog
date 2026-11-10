@@ -56,6 +56,7 @@ level.
 | **Dynamic range** | How many powers of ten of brightness the colours span. |
 | **White light** | *Intensity* view only (§3.1): *TrueSpectrum* or *BlueAmber*. |
 | **Vortex charge ℓ**, **Charge per level** | §2.2. |
+| **Which-path η**, **Which-path levels** | §2.4: watch which slit, level by level. |
 
 ### 2.1 The probabilities set the dimension
 
@@ -115,6 +116,33 @@ the colour theme.
 The screen is the detector: dots land only inside the current view, and pixels with no light (the Julibrot
 Pair interior) never get one. Demo: **Slit Cascade - Particle Build-Up**, with its bound animation
 *Slit cascade: particle build-up* (0 → 60,000 detections over 20 seconds).
+
+### 2.4 Which-path, level by level
+
+Watching which slit the light went through removes the interference between the slits (Feynman's "watching the
+electrons"). In the cascade you can watch at some levels and not others. **Which-path η** sets how strongly the
+chosen levels are watched: 0 = not at all (the default; the picture is unchanged), 1 = fully, so that level's
+children add as intensities and *its* fringes wash out while every other level keeps its own. Between 0 and 1 the
+fringes fade partway.
+
+**Which-path levels** picks the levels: *Constant* (all), *Ramp* (deeper levels more, the deepest gets the full
+η), *DeepOnly* (levels from **Cut level L** down), *ShallowOnly* (the levels above L), *Chosen* (a **Level mask**:
+1 = level 0, 2 = level 1, 4 = level 2 and so on, added up). Level 0 is the outermost, widest-spaced set of slits:
+it makes the finest fringes, and deeper levels make coarser ones. So *ShallowOnly* with L = 1 blurs the fine
+ripples and leaves the broad pattern, and *DeepOnly* does the opposite. With η = 1 everywhere only the smooth
+glow of a single smallest slit is left.
+
+- The result is exact, and as fast as the plain view: each level's fringe factor |F|² becomes
+  (1 − η)·|F|² + η.
+- A partly watched light has no single phase. *Phase* and *Domain* show the phase of the part that still
+  interferes: partly watched levels keep theirs, fully watched levels add none. So *Phase* only changes when a
+  level reaches η = 1.
+- The aperture views (*Aperture*, *HolderAlpha*, *Spectrum*) show the slits, which watching doesn't change.
+- It works with white light and *Detections* too: the dots land on the washed-out pattern. η is animatable.
+
+```bash
+FracturingFog --batch --region "Slit Cascade - Ring Diffraction" --param SlitCascadeWhichPath=1 --param SlitCascadeWhichPathPattern=3 --param SlitCascadeWhichPathLevel=1 --out ring-watched.png
+```
 
 ## 3. Talbot Carpet
 

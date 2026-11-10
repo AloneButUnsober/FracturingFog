@@ -1114,7 +1114,7 @@
         </Grid>
 
         <!-- Slit cascade (#1569, double-slit epic #1565): the recursive aperture and its diffraction -->
-        <Grid IsVisible="{Binding IsSlitCascade}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+        <Grid IsVisible="{Binding IsSlitCascade}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Children per slit:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="0" Grid.Column="1"
                            Minimum="2" Maximum="16" Increment="1" FormatString="F0"
@@ -1231,6 +1231,31 @@
                            Value="{Binding WhiteLightSamples, Mode=TwoWay}" Margin="0,2"
                            IsVisible="{Binding IsSlitCascadeIntensity}"
                            ToolTip.Tip="How many wavelengths across 380-720 nm are summed (1 to 81). More = smoother colour, slower. 1 = the plain 550 nm pattern." />
+            <!-- #1600 — per-level which-path. -->
+            <TextBlock Grid.Row="20" Grid.Column="0" Text="Which-path η:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="20" Grid.Column="1"
+                           Minimum="0" Maximum="1" Increment="0.05" FormatString="F2"
+                           Value="{Binding SlitCascadeWhichPath, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Watches which child the light went through, at the levels picked below. 0 = off: every level interferes. 1 = those levels' children add as intensities, so their fringes wash out while the other levels keep theirs. Between = partly. Phase and Domain show the phase of the part that still interferes. The aperture views are unchanged." />
+            <TextBlock Grid.Row="21" Grid.Column="0" Text="Which-path levels:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="21" Grid.Column="1"
+                      ItemsSource="{Binding SlitCascadeWhichPathPatterns}"
+                      SelectedItem="{Binding SlitCascadeWhichPathPattern, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Constant = every level. Ramp = deeper levels more (the deepest gets the full η). DeepOnly = levels from the cut level down. ShallowOnly = levels above the cut level. Chosen = the levels in the mask below. Level 0 is the outermost (widest-spaced) set of slits." />
+            <TextBlock Grid.Row="22" Grid.Column="0" Text="Cut level L:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsSlitCascadeWhichPathCut}" />
+            <NumericUpDown Grid.Row="22" Grid.Column="1"
+                           Minimum="0" Maximum="12" Increment="1" FormatString="F0"
+                           Value="{Binding SlitCascadeWhichPathLevel, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsSlitCascadeWhichPathCut}"
+                           ToolTip.Tip="DeepOnly marks levels L and deeper; ShallowOnly marks the levels above L. Level 0 is the outermost." />
+            <TextBlock Grid.Row="23" Grid.Column="0" Text="Level mask:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsSlitCascadeWhichPathChosen}" />
+            <NumericUpDown Grid.Row="23" Grid.Column="1"
+                           Minimum="0" Maximum="4095" Increment="1" FormatString="F0"
+                           Value="{Binding SlitCascadeWhichPathMask, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding IsSlitCascadeWhichPathChosen}"
+                           ToolTip.Tip="Which levels are marked, one bit per level: 1 = level 0, 2 = level 1, 4 = level 2, 8 = level 3, and so on; add them up. For example 5 = levels 0 and 2." />
         </Grid>
 
         <!-- Math Plane (#1548): the scene as text. S2 (#1549) adds the object editor. -->

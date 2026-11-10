@@ -93,6 +93,26 @@
 // intensity t above (so vortex cores go dark). The SmoothBuffer keeps t for Relief;
 // the colour theme is not used.
 //
+// Per-level which-path (#1600). The which-path rule of the dual-orbit views (#1567;
+// Feynman Lectures III §1-6: watching which slit removes the cross terms) applied to
+// one level of the cascade: mark level n with a which-path state of overlap 1 − ηₙ
+// between different children. Every leaf amplitude is a product of per-level terms,
+// so the intensity is a double sum over leaf pairs whose cross terms pick up a factor
+// (1 − ηₙ) at every level where the two addresses differ, and that sum factorises
+// level by level exactly as the amplitude does:
+//
+//     I(u) = |S(r^D·u)|² · Π_n [ (1 − ηₙ)·|F(rⁿu)|² + ηₙ·Σᵢ pᵢ ]      (Σᵢ pᵢ = 1)
+//
+// ηₙ = 0 keeps the level's fringes, ηₙ = 1 adds its children as intensities, so that
+// level's factor is flat and its fringes wash out while the other levels keep theirs.
+// Normalised by the same bound as the coherent image, Π_n [(1 − ηₙ)(Σ√pᵢ)² + ηₙ].
+// ηₙ = SlitCascadeWhichPath at the levels picked by SlitCascadeWhichPathPattern
+// (Constant, Ramp ηₙ = η(n+1)/D, DeepOnly n ≥ L, ShallowOnly n < L, Chosen bit mask).
+// When every ηₙ is 0 the plain amplitude path runs (byte-identical). A mixed state
+// has no single phase: the Phase and Domain views show the phase of the coherent part,
+// S · Π_{ηₙ<1} F(rⁿu) (each partly coherent level's cross terms keep arg F; a fully
+// marked level contributes no phase). The aperture views are unchanged.
+//
 // Pixel ↔ plane: the standard (4/W)/Zoom pitch round (CenterX, CenterY); the
 // screen view's plane is the spatial frequency u, the aperture view's is x.
 
@@ -234,6 +254,85 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
         return new Complex(re * leaf, im * leaf);
     }
 
+    /// <summary>The per-level which-path strengths ηₙ (#1600, header), or null when every
+    /// level is fully coherent (the plain amplitude path then runs).</summary>
+    public static double[]? LevelWhichPath(FractalParameters p, int depth)
+    {
+        double eta = double.IsFinite(p.SlitCascadeWhichPath) ? Math.Clamp(p.SlitCascadeWhichPath, 0.0, 1.0) : 0.0;
+        if (eta <= 0.0 || depth < 1) return null;
+        int cut = p.SlitCascadeWhichPathLevel, mask = p.SlitCascadeWhichPathMask;
+        var e = new double[depth];
+        bool any = false;
+        for (int n = 0; n < depth; n++)
+        {
+            e[n] = p.SlitCascadeWhichPathPattern switch
+            {
+                SlitCascadeWhichPathPattern.Ramp => eta * (n + 1) / depth,
+                SlitCascadeWhichPathPattern.DeepOnly => n >= cut ? eta : 0.0,
+                SlitCascadeWhichPathPattern.ShallowOnly => n < cut ? eta : 0.0,
+                SlitCascadeWhichPathPattern.Chosen => n < 31 && ((mask >> n) & 1) != 0 ? eta : 0.0,
+                _ => eta,
+            };
+            any |= e[n] > 0.0;
+        }
+        return any ? e : null;
+    }
+
+    /// <summary>Far-field intensity with per-level which-path ηₙ (#1600, header),
+    /// unnormalised; <paramref name="coherent"/> = the coherent part S·Π_{ηₙ&lt;1} F,
+    /// whose phase the Phase / Domain views show.</summary>
+    public static double MixedIntensity(in Cascade c, double[] eta, double ux, double uy, out Complex coherent)
+    {
+        double intensity = 1.0, re = 1.0, im = 0.0, scale = 1.0;
+        int n = c.P.Length;
+        for (int level = 0; level < c.Depth; level++)
+        {
+            double fr = 0.0, fi = 0.0, sumP = 0.0;
+            int charge = c.Charges[level];
+            for (int i = 0; i < n; i++)
+            {
+                double a = c.P[i];
+                if (a <= 0.0) continue;
+                sumP += a;
+                double amp = Math.Sqrt(a);
+                double ph = -2.0 * Math.PI * scale * (c.Bx[i] * ux + c.By[i] * uy);
+                if (charge != 0) ph += charge * c.Phi[i];
+                fr += amp * Math.Cos(ph); fi += amp * Math.Sin(ph);
+            }
+            double e = eta[level];
+            intensity *= (1.0 - e) * (fr * fr + fi * fi) + e * sumP;
+            if (e < 1.0) { double nr = re * fr - im * fi; im = re * fi + im * fr; re = nr; }
+            scale *= c.Ratio;
+        }
+        double leaf = Sinc(2.0 * Math.PI * scale * ux) * Sinc(2.0 * Math.PI * scale * uy);
+        coherent = new Complex(re * leaf, im * leaf);
+        return intensity * leaf * leaf;
+    }
+
+    /// <summary>log₁₀ of the normalising peak Π_n [(1 − ηₙ)(Σ√pᵢ)² + ηₙ] (#1600); with
+    /// every ηₙ = 0 it is the coherent 2D·log₁₀ Σ√pᵢ.</summary>
+    public static double LogPeak(in Cascade c, double[]? eta)
+    {
+        double sumSqrt = 0.0;
+        foreach (double q in c.P) sumSqrt += Math.Sqrt(q);
+        if (eta == null) return 2.0 * c.Depth * Math.Log10(sumSqrt);
+        double s = 0.0;
+        for (int n = 0; n < c.Depth; n++) s += Math.Log10((1.0 - eta[n]) * sumSqrt * sumSqrt + eta[n]);
+        return s;
+    }
+
+    /// <summary>The intensity the views use: |A|² when coherent (byte-identical to the
+    /// plain path), else <see cref="MixedIntensity"/>; <paramref name="a"/> carries the phase.</summary>
+    private static double FarField(in Cascade c, double[]? eta, double ux, double uy, out Complex a)
+    {
+        if (eta == null)
+        {
+            a = Amplitude(c, ux, uy);
+            return a.Real * a.Real + a.Imaginary * a.Imaginary;
+        }
+        return MixedIntensity(c, eta, ux, uy, out a);
+    }
+
     /// <summary>Aperture mass at x relative to the brightest leaf, in (0, 1]; 0 outside.</summary>
     public static double ApertureMass(in Cascade c, double x, double y)
     {
@@ -331,6 +430,9 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
         double sumSqrt = 0.0;
         foreach (double q in cascade.P) sumSqrt += Math.Sqrt(q);
         double logI0 = 2.0 * cascade.Depth * Math.Log10(sumSqrt);
+        // #1600 — per-level which-path: null = fully coherent (the plain path, unchanged).
+        double[]? eta = LevelWhichPath(fp, cascade.Depth);
+        if (eta != null) logI0 = LogPeak(cascade, eta);
 
         // #1571 — the dimension readout, and the α / f(α) colour ranges.
         double qOrder = Finite(fp.SlitCascadeQ, 3.0);
@@ -404,8 +506,7 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
                     for (int k = 0; k < wl.Count; k++)
                     {
                         double r = wl.Ratio[k];
-                        var ak = Amplitude(wlCascades![k], px / r, py / r);
-                        wlI![k] = (ak.Real * ak.Real + ak.Imaginary * ak.Imaginary) / (r * r);
+                        wlI![k] = FarField(wlCascades![k], eta, px / r, py / r, out _) / (r * r);
                     }
                     double ieff = wl.EffectiveIntensity(wlI);
                     double tw = ieff > 0.0 ? 1.0 + (Math.Log10(ieff) - logI0) / decades : 0.0;
@@ -417,14 +518,12 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
                 }
                 else if (detections)
                 {
-                    var a = Amplitude(cascade, px, py);
-                    detW[row + x] = a.Real * a.Real + a.Imaginary * a.Imaginary;
+                    detW[row + x] = FarField(cascade, eta, px, py, out _);
                     continue;
                 }
                 else if (view == SlitCascadeView.Domain)
                 {
-                    var a = Amplitude(cascade, px, py);
-                    double mag2 = a.Real * a.Real + a.Imaginary * a.Imaginary;
+                    double mag2 = FarField(cascade, eta, px, py, out var a);
                     double ti = mag2 > 0.0 ? Math.Clamp(1.0 + (Math.Log10(mag2) - logI0) / decades, 0.0, 1.0) : 0.0;
                     int di = row + x;
                     smooth[di] = (float)(ti * maxIt);
@@ -439,7 +538,7 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
                 }
                 else
                 {
-                    var a = Amplitude(cascade, px, py);
+                    double mag2 = FarField(cascade, eta, px, py, out var a);
                     if (view == SlitCascadeView.Phase)
                     {
                         t = a.Phase / (2.0 * Math.PI);
@@ -448,7 +547,6 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
                     }
                     else
                     {
-                        double mag2 = a.Real * a.Real + a.Imaginary * a.Imaginary;
                         t = mag2 > 0.0 ? 1.0 + (Math.Log10(mag2) - logI0) / decades : 0.0;
                     }
                 }

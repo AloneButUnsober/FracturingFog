@@ -553,6 +553,32 @@ Parallel after S0: {S1, S2, S3, S6}. After S3: {S4, S5}.
 - **Prior art:** white-light self-imaging is established (Packross, Eschbach & Bryngdahl 1985); FF's sampling and
   colour mapping are its own.
 
+### 10.5 Per-level coherence (#1600, round 2 tracker #1605)
+
+- **What:** `SlitCascadeWhichPath` η ∈ [0, 1] (default 0), `SlitCascadeWhichPathPattern` {Constant, Ramp
+  ηₙ = η(n+1)/D, DeepOnly n ≥ L, ShallowOnly n < L, Chosen bit mask}, `SlitCascadeWhichPathLevel` L,
+  `SlitCascadeWhichPathMask`. The #1567 rule per level: a which-path state on level n with overlap 1 − ηₙ
+  between different children.
+- **Maths:** every leaf amplitude is a product of level terms, so the double sum over leaf pairs, each cross term
+  scaled by Π (1 − ηₙ) over the levels where the addresses differ, factorises exactly:
+  I = |S|²·Π [(1 − ηₙ)|Fₙ|² + ηₙ Σpᵢ], Σpᵢ = 1. Same O(D·N) cost as the coherent product. Normalised by
+  Π [(1 − ηₙ)(Σ√pᵢ)² + ηₙ] (the coherent bound per level), so η = 1 everywhere gives the leaf envelope
+  sinc²·sinc² with peak 1.
+- **Phase / Domain:** the phase of the coherent part S·Π_{ηₙ<1} Fₙ. A partly marked level's cross terms still
+  carry arg Fₙ, so the Phase view changes only when a level reaches ηₙ = 1 (tested both ways). Aperture views
+  unchanged. White light and Detections take the mixed intensity.
+- **Byte-identity:** every ηₙ = 0 (η = 0, or a pattern that marks no level) returns null from
+  `LevelWhichPath` and runs the plain `Amplitude` path.
+- **Measured (`LevelCoherenceTests`):** `MixedIntensity` equals a brute-force sum over all N^{2D} leaf pairs to
+  1e-9 (Ring with vortex charge and Line, unequal shares, mixed ηₙ); η = 1 equals the hand-written sinc²
+  envelope; unmarked patterns byte-identical in Intensity / Phase / Domain / Detections / Aperture; a fully marked
+  level hides its children's vortex phases (Constant vs Alternating charge identical at η = 1 on level 1 only,
+  different at 0 and 0.5); the centre pixel reaches the top of the scale for any η; Command-builder round trip.
+  Eleven mutants (cross-term scale, phase keep, ramp, cuts, mask bit, peak, leaf square, detections / white-light
+  wiring) each caught.
+- **Prior art:** the which-path / partial-coherence rule is textbook (Feynman III §1-6); applying it per level of
+  the cascade is FF's construction, and no novelty is claimed for the physics.
+
 **Standing rules for every slice:** batch parity (`RegionFractalParams` → `--param`,
 `BuildFractalParameters`, `BatchCommandBuilder` round-trip), recolour-guard classification (#981),
 and citations in the Bibliography in the same PR.
