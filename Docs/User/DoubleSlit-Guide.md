@@ -329,8 +329,8 @@ let swing = 0.5 + 0.5 * cos(tau * wavePhase);
 return mix(rgb(0.15, 0.35, 1.0), rgb(1.0, 0.7, 0.1), swing) * waveLevel;
 ```
 
-Wave themes run on the CPU interpreter only (no GPU palette, no C# export), and the command line can't load
-ColorGen themes yet (#1684). Full input table and more examples:
+Wave themes run on the CPU interpreter only (no GPU palette, no C# export). Save one in the editor and the command
+line renders it by name (`--theme "<name>"`, #1684). Full input table and more examples:
 [ColorGen guide §2.3 and §4.20](ColorGen-UserGuide.md).
 
 ## 6. Headless commands

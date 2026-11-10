@@ -948,9 +948,12 @@ why it is instant and why an error there is always a *parse/type* error
 > §2.3 ¶) come from the renderer per pixel, exactly like the billiard outcome:
 > *Compile & Load* only, and *Generate via ColorGen* refuses them.
 
-> **Batch.** Command-line renders (`--batch --theme`) don't load ColorGen themes
-> yet (#1684): a ColorGen theme falls back to HSV there, and the Control Center
-> **Command** builder warns about it.
+> **Batch.** Command-line renders (`--batch --theme "<name>"`) load your **saved**
+> ColorGen library (`colorgen.json`, #1684), so a theme you have *Save…*d renders
+> headless by its name, with the same trap shape and out-of-bounds colour. A theme
+> you only *Compile & Load*ed, or changed since saving, is not what batch reads: the
+> Control Center **Command** builder warns until you save it under the same name.
+> A saved theme that no longer parses is skipped with a message.
 
 **Generate via ColorGen** is the only path that emits C#. The file lands at
 `Models/ColorSchemes/Generated/{Name}Theme.cs`; a `dotnet build` of the main

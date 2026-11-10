@@ -3394,6 +3394,8 @@ Buttons:
                         palette. Session lifetime.
   Save…                 Persist DSL source to
                         %APPDATA%\FracturingFog\colorgen.json.
+                        Batch loads it: --batch --theme ""<name>""
+                        renders a saved theme headless (#1684).
   Generate via ColorGen Write Models\ColorSchemes\Generated\{Name}Theme.cs.
                         Rebuild to ship.
 
