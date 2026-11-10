@@ -352,10 +352,21 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
   per-level Fraunhofer product the slit cascade renders (#1569).
 - **M. V. Berry, S. Klein.** *Integer, fractional and fractal Talbot effects.* Journal of Modern
   Optics 43(10), 2139–2164, 1996. <https://doi.org/10.1080/09500349608232876>. Fractal intensity in
-  Talbot planes at irrational distances; the Talbot-carpet calculator (#1570).
+  Talbot planes at irrational distances; the Talbot-carpet calculator (#1570). The profile overlay (#1601)
+  shows that transverse profile; its default distance is the paper's golden distance (3 − √5)/2, where the
+  abstract reports a Ronchi-grating experiment confirming the transverse fractal. Its dimension values are
+  quoted via Rosu, Murguia & Ludu (below); the primary text is under *Citations awaiting verification*.
 - **M. V. Berry.** *Quantum fractals in boxes.* Journal of Physics A: Mathematical and General
   29(20), 6617–6629, 1996. <https://doi.org/10.1088/0305-4470/29/20/016>. Fractal probability density
-  (dimension D + ½) of a uniform state in a box; the quantum analogue of the Talbot carpet (#1570).
+  (dimension D + ½) of a uniform state in a box; the quantum analogue of the Talbot carpet (#1570). With
+  D = 1 this is the 3/2 the profile overlay's measured graph dimension approaches at irrational distances
+  (#1601, `Engine/Calculators/TalbotCarpetCalculator.cs`).
+- **H. C. Rosu, J. S. Murguia, A. Ludu.** *Scaling analyses based on wavelet transforms for the Talbot
+  effect.* Physica A 392, 3780–3788, 2013; arXiv:1301.4150. <https://arxiv.org/abs/1301.4150> (journal
+  reference as given on the arXiv page; §2 read from the arXiv PDF, 2026-11-09). Its §2 summarises Berry &
+  Klein's dimensions: graph dimension 3/2 for the transverse intensity at irrational ζ (from D = (5 − β)/2 with
+  spectral parameter β = 2), 7/4 for longitudinal and almost all oblique planes, 5/4 minimum on special
+  diagonal planes. Source of the 3/2 the Talbot profile overlay's readout is compared against (#1601).
 - **Michael Berry, Irene Marzoli, Wolfgang Schleich.** *Quantum carpets, carpets of light.* Physics
   World 14(6), 39–46, 2001. <https://doi.org/10.1088/2058-7058/14/6/30>. Overview of Talbot / quantum
   carpets (#1570).
@@ -966,6 +977,11 @@ entry above completed or corrected.
   later posted the benchmark publicly: [above](#rith-benchmark-thread), topic 5686, URL from #1638.
   That post's exact title and date are not verified, because FF did not open the page. Confirm them
   from the thread when someone who can read it does.
+- **Berry & Klein's dimension values, primary text (#1601)** — FF quotes 3/2 for the transverse profile at
+  irrational distances (7/4 longitudinal and almost all oblique planes, 5/4 special diagonal planes) from Rosu,
+  Murguia & Ludu's summary of Berry & Klein (above), which agrees with Berry's box result D + ½. The primary
+  paper's own text was not legible in the copies read on 2026-11-09 (Bristol research portal: no abstract; a
+  third-party PDF extract: garbled). Read the published paper and confirm.
 - **H. F. Talbot** — the original 1836 report of the self-imaging effect (cited by name in
   `Docs/Technical/DoubleSlit-Fractal-RnD.md`, #1565). The physics is credited through Berry & Klein
   above; Talbot's own paper (journal, volume, pages) isn't yet traced to a primary record.

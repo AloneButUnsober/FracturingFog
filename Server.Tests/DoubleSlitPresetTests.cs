@@ -30,11 +30,12 @@ public sealed class DoubleSlitPresetTests
     private const string Comb = "Talbot Carpet - Fractal Comb";
     private const string CascadeGrating = "Talbot Carpet - Cascade Grating";
     private const string BuildUp = "Slit Cascade - Particle Build-Up";   // #1599
+    private const string ProfileWalk = "Talbot Carpet - Profile Walk";   // #1601
 
-    private static readonly string[] All = { WhichPath, Spirals, Rays, Ring, Dimension, Vortex, Ronchi, Comb, CascadeGrating, BuildUp };
+    private static readonly string[] All = { WhichPath, Spirals, Rays, Ring, Dimension, Vortex, Ronchi, Comb, CascadeGrating, BuildUp, ProfileWalk };
     private static readonly string[] Animations =
         { "Double slit: which-path collapse", "Double slit: angular momentum sweep", "Slit cascade: wavelength breathing",
-          "Slit cascade: particle build-up" };
+          "Slit cascade: particle build-up", "Talbot carpet: profile walk" };
 
     private sealed class RampMap : IColorMap
     {
@@ -192,6 +193,7 @@ public sealed class DoubleSlitPresetTests
     [InlineData(Ronchi, TalbotProfile.Ronchi)]
     [InlineData(Comb, TalbotProfile.DeltaComb)]
     [InlineData(CascadeGrating, TalbotProfile.SlitCascade)]
+    [InlineData(ProfileWalk, TalbotProfile.Ronchi)]
     public void Talbot_Presets_Show_One_Talbot_Distance(string name, TalbotProfile profile)
     {
         var (region, p) = Preset(name);
@@ -201,6 +203,28 @@ public sealed class DoubleSlitPresetTests
         Assert.Equal(0.5, region.CenterY);
         var c = TalbotCarpetCalculator.Coefficients(p);
         Assert.Equal(TalbotCarpetCalculator.Field(c, 0.2, 0).Magnitude, TalbotCarpetCalculator.Field(c, 0.2, 1).Magnitude, 9);
+    }
+
+    // #1601 — the overlay is on at the golden distance, its dimension readout is above the
+    // square-wave planes', and the bound walk spans exactly one Talbot distance.
+    [Fact]
+    public void Profile_Walk_Starts_On_A_Fractal_Slice()
+    {
+        var (region, p) = Preset(ProfileWalk);
+        Assert.True(p.TalbotSliceOverlay);
+        var calc = Render(new TalbotCarpetCalculator(160, 100) { FractalParameters = p }, region);
+        Assert.Contains("graph dim", calc.LastPrecisionLabel);
+        var c = TalbotCarpetCalculator.Coefficients(p);
+        int s = TalbotCarpetCalculator.ProfileSamples(p.TalbotModes);
+        double dGolden = TalbotCarpetCalculator.GraphDimension(TalbotCarpetCalculator.PeriodProfile(c, p.TalbotSliceZeta, s), p.TalbotModes);
+        double dGrating = TalbotCarpetCalculator.GraphDimension(TalbotCarpetCalculator.PeriodProfile(c, 0.0, s), p.TalbotModes);
+        Assert.True(dGolden > dGrating + 0.1, $"golden {dGolden} vs grating {dGrating}");
+        var lib = AnimationLibrary.Instance;
+        lib.Load();
+        var track = Assert.Single(lib.GetByName(region.AnimationName!)!.Tracks);
+        Assert.Equal("TalbotSliceZeta", track.ParamName);
+        Assert.Equal(0.0, track.Min);
+        Assert.Equal(1.0, track.Max);
     }
 
     [Fact]

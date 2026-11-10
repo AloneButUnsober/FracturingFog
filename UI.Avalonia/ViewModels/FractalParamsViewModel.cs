@@ -2405,6 +2405,9 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public int SlitCascadeContourCount { get => _p.SlitCascadeContourCount; set { var v = Math.Clamp(value, 1, 64); if (v == _p.SlitCascadeContourCount) return; _p.SlitCascadeContourCount = v; this.RaisePropertyChanged(); Fire(); } }
     public bool IsTalbotDomain => _p.TalbotView == TalbotView.Domain;
     public DomainContourMode TalbotDomainContours { get => _p.TalbotDomainContours; set { if (value == _p.TalbotDomainContours) return; _p.TalbotDomainContours = value; this.RaisePropertyChanged(); Fire(); } }
+    /// <summary>#1601 — transverse-profile overlay.</summary>
+    public bool TalbotSliceOverlay { get => _p.TalbotSliceOverlay; set { if (value == _p.TalbotSliceOverlay) return; _p.TalbotSliceOverlay = value; this.RaisePropertyChanged(); Fire(); } }
+    public double TalbotSliceZeta { get => _p.TalbotSliceZeta; set { var v = Clamp(value, -1000, 1000); if (v == _p.TalbotSliceZeta) return; _p.TalbotSliceZeta = v; this.RaisePropertyChanged(); Fire(); } }
     public int TalbotContourCount { get => _p.TalbotContourCount; set { var v = Math.Clamp(value, 1, 64); if (v == _p.TalbotContourCount) return; _p.TalbotContourCount = v; this.RaisePropertyChanged(); Fire(); } }
     public bool IsDualOrbitInterferenceDomain => IsDualOrbitFieldMode && _dualField == DualOrbitField.PathInterferenceDomain;
     /// <summary>#1597 — white light on the Intensity views.</summary>

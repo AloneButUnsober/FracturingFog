@@ -267,6 +267,8 @@ public static class FractalAnimatableParamsMap
             Notes: "Ronchi open fraction — the carpet's weave changes; duty ½ kills every even order (#1570)."),
         new("TalbotModes", AnimatableParamKind.ScalarInt, Min: 1.0, Max: 512.0,
             Notes: "Fourier modes M — the carpet sharpens from smooth waves to its fractal limit (#1570)."),
+        new("TalbotSliceZeta", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 1.0,
+            Notes: "Talbot carpet slice distance ζ₀ — the profile overlay walks down the carpet: shifted copies at simple fractions, fractal in between (#1601)."),
         new("DetectionCount", AnimatableParamKind.ScalarInt, Min: 0.0, Max: 2000000.0,
             Cost: AnimatableParamCost.Expensive,
             Notes: "Detections view: particles landed so far — sweep it up and the fringes build out of single dots (#1599)."),

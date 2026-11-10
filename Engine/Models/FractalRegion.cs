@@ -706,6 +706,8 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? TalbotDynamicRange { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? TalbotDomainContours { get; set; }   // #1598
         [JsonIgnore(Condition = OmitNull)] public int? TalbotContourCount { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? TalbotSliceOverlay { get; set; }   // #1601
+        [JsonIgnore(Condition = OmitNull)] public double? TalbotSliceZeta { get; set; }
         // #1569 — slit cascade (layout / view = int casts of their enums).
         [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeChildren { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? SlitCascadeRatio { get; set; }
@@ -1343,6 +1345,8 @@ namespace FracturingFog.Models
                     TalbotDynamicRange = p.TalbotDynamicRange,
                     TalbotDomainContours = (int)p.TalbotDomainContours,
                     TalbotContourCount = p.TalbotContourCount,
+                    TalbotSliceOverlay = p.TalbotSliceOverlay,
+                    TalbotSliceZeta = p.TalbotSliceZeta,
                     TalbotWhiteLight = (int)p.TalbotWhiteLight,
                     WhiteLightSamples = p.WhiteLightSamples,
                     DetectionCount = p.DetectionCount,
@@ -2154,6 +2158,8 @@ namespace FracturingFog.Models
             if (TalbotDynamicRange.HasValue) p.TalbotDynamicRange = TalbotDynamicRange.Value;
             if (this.TalbotDomainContours.HasValue) p.TalbotDomainContours = (FracturingFog.DomainContourMode)this.TalbotDomainContours.Value;   // #1598
             if (TalbotContourCount.HasValue) p.TalbotContourCount = TalbotContourCount.Value;
+            if (TalbotSliceOverlay.HasValue) p.TalbotSliceOverlay = TalbotSliceOverlay.Value;   // #1601
+            if (TalbotSliceZeta.HasValue) p.TalbotSliceZeta = TalbotSliceZeta.Value;
             if (SlitCascadeChildren.HasValue) p.SlitCascadeChildren = SlitCascadeChildren.Value;   // #1569
             if (SlitCascadeRatio.HasValue) p.SlitCascadeRatio = SlitCascadeRatio.Value;
             if (SlitCascadeDepth.HasValue) p.SlitCascadeDepth = SlitCascadeDepth.Value;
@@ -3555,6 +3561,26 @@ namespace FracturingFog.Models
                 {
                     TalbotProfile = (int)FracturingFog.TalbotProfile.Ronchi, TalbotDuty = 0.3, TalbotModes = 32,
                     TalbotView = (int)FracturingFog.TalbotView.Intensity, TalbotDynamicRange = 2.0,
+                },
+            },
+            new()
+            {
+                // #1601 — the transverse profile walks down the carpet (Berry & Klein 1996).
+                Name          = "Talbot Carpet - Profile Walk",
+                CenterX       =  0.0,
+                CenterY       =  0.5,
+                Zoom          =  1.9,
+                Iterations    =  16,
+                Description   = "The Ronchi carpet with the brightness across the grating drawn as a white curve at one distance, starting at the golden distance where the profile is a fractal (the status bar shows its dimension). The bound 'Talbot carpet: profile walk' animation moves the curve down one Talbot distance: the grating's own steps at the top, middle and bottom, a few shifted copies at simple fractions, jagged in between.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.TalbotCarpet,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Talbot carpet: profile walk",
+                Params        = new RegionFractalParams
+                {
+                    TalbotProfile = (int)FracturingFog.TalbotProfile.Ronchi, TalbotDuty = 0.3, TalbotModes = 256,
+                    TalbotView = (int)FracturingFog.TalbotView.Intensity, TalbotDynamicRange = 2.0,
+                    TalbotSliceOverlay = true, TalbotSliceZeta = 0.3819660112501051,
                 },
             },
             new()

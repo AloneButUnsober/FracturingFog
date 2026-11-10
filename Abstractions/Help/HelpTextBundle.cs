@@ -5151,6 +5151,13 @@ Marzoli & Schleich 2001).
             TrueSpectrum or BlueAmber (red/green safe).
   Detections   particle build-up: dots land where the light is,
             with the matching probability.
+  Profile overlay   the brightness across the grating at one
+            distance, as a white curve. Steps at 0, 1/2, 1;
+            shifted copies at simple fractions; a fractal at
+            irrational distances. The status bar shows its
+            box-counting dimension (theory: 3/2 for Ronchi at
+            irrational distances; lower with few modes).
+            Animate Profile distance to walk it down.
 
 Looks best with few iterations (16) and a plain theme such as
 Greyscale: FF themes repeat over the iteration scale.
@@ -5159,6 +5166,7 @@ Demos:
   Talbot Carpet - Ronchi Grating
   Talbot Carpet - Fractal Comb
   Talbot Carpet - Cascade Grating
+  Talbot Carpet - Profile Walk
 ";
 
         // #1555 — Math Plane (render mode + demos). Full guide: Docs/User/MathPlane-Guide.md.

@@ -3383,6 +3383,7 @@ namespace FracturingFog.Rendering
                         BilliardRaysCalculator br => br.LastPrecisionLabel,   // #1510 escaped / crossing / trapped counts
                         MathPlaneCalculator mp => mp.LastPrecisionLabel,      // #1548 scene parse error
                         SlitCascadeCalculator sc => sc.LastPrecisionLabel,    // #1571 D0 / D1 / D2 / Dq
+                        TalbotCarpetCalculator tc2 => tc2.LastPrecisionLabel, // #1601 slice graph dimension
                         _ => null
                     }
                     : calc.LastPrecisionLabel;

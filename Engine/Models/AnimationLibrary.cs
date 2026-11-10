@@ -280,6 +280,22 @@ namespace FracturingFog.Models
                 },
                 Tags = new List<string> { "2D", "double-slit" },
             };
+            // #1601 — the transverse profile walks one Talbot distance (Berry & Klein 1996).
+            yield return new AnimationData
+            {
+                Name = "Talbot carpet: profile walk",
+                Category = "Built-in",
+                Description = "Moves the profile overlay's distance from 0 to 1 Talbot distance over 20 seconds: "
+                            + "the curve is the grating's own steps at 0, ½ and 1, a few shifted copies at simple "
+                            + "fractions and a jagged fractal in between. Turn on Profile overlay (the Profile Walk "
+                            + "preset does).",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.TalbotCarpet },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "TalbotSliceZeta", Mode = AnimationMode.Linear, Min = 0, Max = 1, FrequencyHz = 0.05, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "double-slit" },
+            };
 
             // #632 (Renderer C2) — precision-sweep convergence. Ramps the low
             // tier up the ladder Float→QuadDouble while a Hold track pins the
