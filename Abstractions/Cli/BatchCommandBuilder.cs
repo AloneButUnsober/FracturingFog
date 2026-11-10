@@ -296,6 +296,11 @@ namespace FracturingFog.Cli
         /// name to reference. The command cannot emit <c>--theme</c> for it, so
         /// the poster falls back to the batch default (HSV).</summary>
         public bool ThemeIsUnsaved { get; init; }
+
+        /// <summary>#1684 — the active theme is a ColorGen theme loaded this session
+        /// (Compile &amp; Load). Batch does not load ColorGen themes yet, so it falls
+        /// back to HSV: reported as a fidelity gap.</summary>
+        public bool ThemeIsColorGen { get; init; }
     }
 
     /// <summary>Result of <see cref="BatchCommandBuilder.BuildWithReport"/>:
@@ -715,6 +720,8 @@ namespace FracturingFog.Cli
             var gaps = new List<string>();
             if (snap.ThemeIsUnsaved)
                 gaps.Add("Custom/unsaved theme (save it first so the command can reference it by name; falls back to HSV)");
+            else if (snap.ThemeIsColorGen)
+                gaps.Add($"ColorGen theme '{snap.ThemeName}' (batch does not load ColorGen themes yet, so it falls back to HSV) (#1684)");
             // #998 — Lighting & FX settings no flag carries, unless a saved preset
             // reproduces the whole block.
             if (string.IsNullOrWhiteSpace(snap.LightingPresetName) && snap.Parameters != null)

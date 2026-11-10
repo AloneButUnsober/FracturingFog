@@ -3781,6 +3781,7 @@ namespace FracturingFog.Hosting
                         .TryCreate(source, opts, out string? cgError);
                     if (map == null) return cgError ?? "Theme failed to parse.";
                     FracturingFog.Models.ColorPalette.RegisterHotLoaded(map);
+                    FracturingFog.Cli.SessionColorGenThemes.Add(map.DisplayName);   // #1684 — Command builder gap
                     s_renderHost!.ApplyColorMap(map);
                     // Refresh the FloatingMenu theme combo so the freshly
                     // registered entry appears in the dropdown without

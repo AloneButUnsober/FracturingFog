@@ -166,6 +166,17 @@ operands and yield `1.0` / `0.0`.
 | `bounceCount` | scalar | **Billiard** — reflections before escape (or the bounce cap if trapped). §|
 | `maxBounces`  | scalar | **Billiard** — bounce cap for the frame. §|
 | `pathLength`  | scalar | **Billiard** — total path length travelled, normalised to ~`[0, 1]`. §|
+| `waveIntensity` | scalar | **Wave** — intensity as a fraction of the largest possible, `[0, 1]` (Pair: I/N; Slit Cascade: \|A\|² over the on-axis peak; Talbot: \|ψ\|² over (Σ\|cₙ\|)²). ¶|
+| `waveLevel`   | scalar | **Wave** — what the renderer's Intensity view shows, `[0, 1]`: log-scaled by the dynamic range on Slit Cascade and Talbot (0 = that many decades below the peak), linear (= `waveIntensity`) on the Pair. ¶|
+| `wavePhase`   | scalar | **Wave** — phase of the summed amplitude, turns `[0, 1)`. ¶|
+| `waveDeltaG`  | scalar | **Wave, Pair** — κ·(G_c − G_z): the cross-term phase of the two paths (radians); at γ = 0, ℓ = 0, N = 2 the intensity is ½(1 + (1 − η)·cos `waveDeltaG`). ¶|
+| `waveDeltaTheta` | scalar | **Wave, Pair** — θ_c − θ_z, the external-angle difference, wrapped to `[−½, ½)` turns. ¶|
+| `waveWhichPath`, `waveAngularMomentum`, `wavePaths` | scalar | **Wave, Pair** — the settings η, ℓ and N. ¶|
+| `waveAlpha`, `waveFAlpha` | scalar | **Wave, Slit Cascade** — the pixel's Hölder exponent α and f(α) (as the α and f(α) views; 0 off the set). ¶|
+| `waveAlphaMin`, `waveAlphaMax` | scalar | **Wave, Slit Cascade** — the cascade's α range, for `(waveAlpha − waveAlphaMin) / (waveAlphaMax − waveAlphaMin)`. ¶|
+| `waveOnSet`   | scalar | **Wave, Slit Cascade** — `1` when the pixel lies on the aperture set, else `0`. ¶|
+| `waveFirstChild`, `waveLastChild`, `waveChildren` | scalar | **Wave, Slit Cascade** — the child chosen at the first and the deepest level (`0 … waveChildren − 1`; `−1` off the set), and the number of children. ¶|
+| `waveXi`, `waveZeta` | scalar | **Wave, Talbot** — the pixel's ξ (grating periods) and ζ (Talbot distances). ¶|
 
 > **† Orbit inputs (F15).** These read the *whole orbit*, not just the
 > escape point, so a program using any of them is rendered on the CPU
@@ -195,6 +206,22 @@ operands and yield `1.0` / `0.0`.
 > is not supported** — use *Compile & Load* to render it live and save it to your
 > library. This mirrors the hand-written *Billiard - …* themes in the Color
 > Theme Editor, but lets you author the mapping in the DSL.
+
+> **¶ Wave inputs (#1593).** These are the per-pixel quantities of the three
+> double-slit renderers: **Julibrot Pair** (on the *Path Interference* and *Path
+> Interference Phase* fields), **Slit Cascade** and **Talbot Carpet** (on every
+> view the theme colours: Intensity, Phase, and on the cascade Aperture, α and
+> f(α)). The views that paint their own colours keep them: Domain, white light and
+> Detections. Inputs a renderer doesn't have read `0`, and on any other fractal
+> they all read `0`. A wave theme sees **every** pixel of those views, including
+> the ones below the dynamic range (`waveLevel` = 0), so it decides how dark
+> they are. The Relief 3D height still follows the view, not the theme. On the
+> Slit Cascade every input is evaluated at the pixel's own coordinates, so a
+> theme can mix the far field (`waveIntensity`, `wavePhase`) with the aperture
+> (`waveAlpha`, `waveOnSet`); only the inputs the program uses are computed. Like
+> the billiard inputs, wave themes run on the CPU interpreter only: no GPU
+> palette and no C# export (*Generate via ColorGen* refuses them). Details:
+> [DoubleSlit-Guide.md §5](DoubleSlit-Guide.md#5-your-own-colourings-colorgen).
 
 > **Out-of-bounds colour (#615).** The **Out-of-bounds colour** toggle + picker
 > in the ColorGen editor sets a dedicated colour for the beyond-escape-radius
@@ -863,6 +890,32 @@ Swap the secondary drive by keying on `pathLength` instead — e.g.
 `return hsv(gateId / gateCount, 0.9, 1.0) * (0.3 + 0.7 * pathLength);` glows the
 long-wandering trajectories near the fractal set.
 
+### 4.20 Double-slit waves — `waveLevel` / `wavePhase` / `waveAlpha`
+
+For the **Julibrot Pair** (Path Interference fields), **Slit Cascade** and
+**Talbot Carpet** (¶ inputs). Brightness from the intensity, a blue ↔ amber
+swing from the phase (readable without red/green), so fringes and phase steps
+show at once. CPU interpreter only — *Compile & Load* to render it live.
+
+```cg
+// 1 at phase 0, 0 half a turn away: blue <-> amber, scaled by the intensity.
+let swing = 0.5 + 0.5 * cos(tau * wavePhase);
+return mix(rgb(0.15, 0.35, 1.0), rgb(1.0, 0.7, 0.1), swing) * waveLevel;
+```
+
+On the **Slit Cascade** the aperture inputs paint the multifractal itself: the
+first-level child as a band of grey, brightened by the normalised α:
+
+```cg
+let a = (waveAlpha - waveAlphaMin) / max(waveAlphaMax - waveAlphaMin, 0.000001);
+let band = (waveFirstChild + 1.0) / waveChildren;
+return waveOnSet > 0.5 ? rgb(band, band, band) * (0.4 + 0.6 * a) : rgb(0, 0, 0);
+```
+
+On the **Julibrot Pair**, `0.5 + 0.5 * cos(waveDeltaG)` is the bare two-path
+fringe (no which-path or damping): `return rgb(waveIntensity, 0.5 + 0.5 *
+cos(waveDeltaG), 0.0)` shows where η and γ wash the fringes out.
+
 ---
 
 ## 5. Compile & Load vs Generate via ColorGen
@@ -890,6 +943,14 @@ why it is instant and why an error there is always a *parse/type* error
 > runs on *Compile & Load* only. There is no C# template or GPU/HLSL shape for a
 > billiard pixel, so *Generate via ColorGen* refuses it with a clear message —
 > *Save…* the DSL source instead to keep the theme.
+
+> **Wave inputs are interpreter-only too.** The double-slit wave inputs (`wave*`,
+> §2.3 ¶) come from the renderer per pixel, exactly like the billiard outcome:
+> *Compile & Load* only, and *Generate via ColorGen* refuses them.
+
+> **Batch.** Command-line renders (`--batch --theme`) don't load ColorGen themes
+> yet (#1684): a ColorGen theme falls back to HSV there, and the Control Center
+> **Command** builder warns about it.
 
 **Generate via ColorGen** is the only path that emits C#. The file lands at
 `Models/ColorSchemes/Generated/{Name}Theme.cs`; a `dotnet build` of the main
@@ -936,6 +997,10 @@ Inputs    smooth dist iter maxIter t nx ny zr zi dzr dzi arg mag isInSet pxScale
                                      // orbit inputs (F15): CPU only (no GPU); Compile & Load + C# export
           gateId gateCount bounceCount maxBounces pathLength
                                      // billiard inputs (#633): Chaotic Billiard only; interpreter only (no C# export)
+          waveIntensity waveLevel wavePhase waveDeltaG waveDeltaTheta waveWhichPath
+          waveAngularMomentum wavePaths waveAlpha waveFAlpha waveAlphaMin waveAlphaMax
+          waveOnSet waveFirstChild waveLastChild waveChildren waveXi waveZeta
+                                     // wave inputs (#1593): Julibrot Pair / Slit Cascade / Talbot; interpreter only
 Const     pi tau e phi
 Ctors     rgb(r,g,b) hsv(h,s,v) hsl(h,s,l) oklab(L,a,b) oklch(L,C,h)
 Palette   palette(t, c0, c1, …)                  // n cyclic stops

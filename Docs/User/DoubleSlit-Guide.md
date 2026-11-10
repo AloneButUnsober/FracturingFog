@@ -305,7 +305,35 @@ Open them from the region list; each says what it shows. Built-ins never change:
 | **Talbot Carpet - Profile Walk** | Talbot Carpet | *Talbot carpet: profile walk*: the profile overlay's ζ₀ 0 → 1 |
 | **Talbot Carpet - Relief** | Talbot Carpet | — (Relief 3D) |
 
-## 5. Headless commands
+## 5. Your own colourings (ColorGen)
+
+The ColorGen editor (right-click → **ColorGen Editor…**) can read the wave quantities directly, so you can write
+your own colouring of the fringes, the phase or the multifractal. Any program that uses a `wave*` input becomes a
+wave theme: *Compile & Load* it and pick it as the theme.
+
+| Renderer | Inputs | Where the theme is used |
+|---|---|---|
+| all three | `waveIntensity` (fraction of the brightest possible), `waveLevel` (what the Intensity view shows), `wavePhase` (turns) | |
+| **Julibrot Pair** | `waveDeltaG` (κΔG, the two paths' phase difference), `waveDeltaTheta` (Δθ), `waveWhichPath` (η), `waveAngularMomentum` (ℓ), `wavePaths` (N) | *Path Interference* and *Path Interference Phase* fields |
+| **Slit Cascade** | `waveAlpha`, `waveFAlpha` (α and f(α)), `waveAlphaMin`, `waveAlphaMax`, `waveOnSet`, `waveFirstChild`, `waveLastChild`, `waveChildren` | Intensity, Phase, Aperture, α and f(α) views |
+| **Talbot Carpet** | `waveXi` (ξ), `waveZeta` (ζ) | Intensity and Phase views |
+
+Domain, white light and Detections keep their own colours. A wave theme sees every pixel, including the ones below
+the dynamic range (`waveLevel` = 0), and the Relief 3D height still follows the view. On the Slit Cascade the far-field
+and aperture inputs are both measured at the pixel, so one theme can mix the far field with the aperture.
+
+A blue ↔ amber phase over the intensity, readable without red/green:
+
+```
+let swing = 0.5 + 0.5 * cos(tau * wavePhase);
+return mix(rgb(0.15, 0.35, 1.0), rgb(1.0, 0.7, 0.1), swing) * waveLevel;
+```
+
+Wave themes run on the CPU interpreter only (no GPU palette, no C# export), and the command line can't load
+ColorGen themes yet (#1684). Full input table and more examples:
+[ColorGen guide §2.3 and §4.20](ColorGen-UserGuide.md).
+
+## 6. Headless commands
 
 Every demo renders from the command line (Windows: `FracturingFog.exe`, or `.\FracturingFog` in a console):
 
@@ -382,7 +410,7 @@ FracturingFog --batch --region "Slit Cascade - Vortex Core" --param SlitCascadeV
 
 The Control Center **Command** builder writes the full command for whatever is on screen.
 
-## 6. Credits
+## 7. Credits
 
 Double slit and which-path: Feynman, Leighton & Sands. Diffraction by fractal gratings: Allain & Cloitre; Bak,
 Kim, Kim, Soh & Yee. Generalized dimensions and f(α): Hentschel & Procaccia; Halsey, Jensen, Kadanoff, Procaccia &

@@ -54,6 +54,8 @@ public sealed class ColorGenEditorViewModel : ViewModelBase
         "//                  (same 19 shapes as the Color Theme Editor). Point == trapMin.\n" +
         "// Billiard (Chaotic Billiard / Wada Mirror Spheres, CPU-only): gateId, gateCount,\n" +
         "//                  bounceCount, maxBounces, pathLength (gateId < 0 = trapped)\n" +
+        "// Wave (Julibrot Pair / Slit Cascade / Talbot, CPU-only): waveIntensity, waveLevel,\n" +
+        "//                  wavePhase, waveDeltaG, waveAlpha, waveXi … (ColorGen guide 2.3)\n" +
         "// Funcs:  rgb(r,g,b), hsv(h,s,v), hsl(h,s,l), palette(t, c0, c1, …)\n" +
         "//         mix(a,b,t), brightness(c,s), contrast(c,s), gamma(c,g)\n" +
         "//         sin/cos/exp/log/pow/abs/clamp/smoothstep/hash/hash2 …\n" +

@@ -94,9 +94,17 @@
 // was not built. Real paths: φ_k = κG_k + 2πℓθ_k (the c-family winds −ℓ in Opposite
 // mode); an extra orbit that stays bounded has no Böttcher phase and counts as a
 // blocked slit (amplitude 0). N = 2 runs the two-path code above (byte-identical).
+//
+// Wave themes (#1593; ColorGen `wave*` inputs, IWaveColorMap): on PathInterference
+// and PathInterferencePhase a wave theme gets, per live pixel, waveIntensity =
+// waveLevel = I/N (with η), wavePhase = arg Σa in turns, waveDeltaG = κ(G_c − G_z),
+// waveDeltaTheta = θ_c − θ_z wrapped to [−½, ½), and the settings η, ℓ and N. The
+// refresh pass then keeps both I/N and the phase in side buffers.
 
 using System;
 using System.Threading.Tasks;
+using FracturingFog.Interefaces;
+using FracturingFog.Models;
 
 namespace FracturingFog;
 
@@ -108,6 +116,30 @@ public sealed partial class DualOrbitEscapeCalculator
 
     // #1592 — per-pixel phase (turns) for the domain field's colour pass.
     private float[] _interfPhase = Array.Empty<float>();
+    // #1593 — per-pixel I/N for a wave theme (empty when none is active).
+    private float[] _interfI = Array.Empty<float>();
+
+    /// <summary>#1593 — the active wave theme when the field is one a theme colours
+    /// (PathInterference / PathInterferencePhase), else null.</summary>
+    private IWaveColorMap? WaveTheme(in GeometryKey key)
+        => !key.Layers && key.Field is DualOrbitField.PathInterference or DualOrbitField.PathInterferencePhase
+            ? ColorMap as IWaveColorMap : null;
+
+    /// <summary>#1593 — the wave sample of a live interference pixel (header).</summary>
+    private WaveSample PairWave(int i, int paths, FractalParameters fp, double twoLogR)
+    {
+        double gZ = twoLogR * Math.Pow(2.0, -_smZ[i]), gC = twoLogR * Math.Pow(2.0, -_smC[i]);
+        double v = _interfI[i];
+        return new WaveSample
+        {
+            Intensity = v, Level = v, Phase = _interfPhase[i],
+            DeltaG = fp.DualOrbitInterferenceK * (gC - gZ),
+            DeltaTheta = Frac(_thC[i] - _thZ[i] + 0.5) - 0.5,
+            WhichPath = double.IsNaN(fp.DualOrbitWhichPath) ? 0.0 : Math.Clamp(fp.DualOrbitWhichPath, 0.0, 1.0),
+            AngularMomentum = fp.DualOrbitAngularMomentum,
+            Paths = paths,
+        };
+    }
     // #1602 — extra real-orbit paths: smooth count and lifted angle (NaN = bounded),
     // [pixel · (N − 2) + j].
     private float[] _smX = Array.Empty<float>(), _thX = Array.Empty<float>();
@@ -204,12 +236,15 @@ public sealed partial class DualOrbitEscapeCalculator
         var mode = fp.DualOrbitWindingMode;
         bool phase = key.Field == DualOrbitField.PathInterferencePhase;
         bool domain = key.Field == DualOrbitField.PathInterferenceDomain;   // #1592
-        if (domain && _interfPhase.Length != n) _interfPhase = new float[n];
-        float[] ph = _interfPhase;
+        bool wave = WaveTheme(key) != null;   // #1593 — keep I/N and the phase for the theme
+        if (wave) { if (_interfI.Length != n) _interfI = new float[n]; }
+        else _interfI = Array.Empty<float>();
+        if ((domain || wave) && _interfPhase.Length != n) _interfPhase = new float[n];
+        float[] ph = _interfPhase, wi = _interfI;
         int maxIter = key.MaxIter;
         double twoLogR = 2.0 * Math.Log(key.Bailout);
         float[] smZ = _smZ, smC = _smC, thZ = _thZ, thC = _thC, sc = _scalar; byte[] flags = _flags;
-        if (key.InterfPaths > 2) { RefreshPaths(key, phase, domain, ph, kappa, gamma, eta, ell, mode, twoLogR); return; }   // #1602
+        if (key.InterfPaths > 2) { RefreshPaths(key, phase, domain, wave, ph, wi, kappa, gamma, eta, ell, mode, twoLogR); return; }   // #1602
         Parallel.For(0, n, i =>
         {
             byte f = flags[i];
@@ -222,14 +257,16 @@ public sealed partial class DualOrbitEscapeCalculator
             double v = phase
                 ? InterferencePhase(gZ, gC, tc - tz, kappa, gamma, wz, wc)
                 : 0.5 * InterferenceIntensity(gC - gZ, tc - tz, kappa, gamma, eta, wc - wz);
-            if (domain)
+            if (domain || wave)
                 ph[i] = (float)InterferencePhase(gZ, gC, tc - tz, kappa, gamma, wz, wc);
+            if (wave)
+                wi[i] = (float)(0.5 * InterferenceIntensity(gC - gZ, tc - tz, kappa, gamma, eta, wc - wz));
             sc[i] = InterferenceScalar(v, maxIter, phase);
         });
     }
 
     // #1602 — N > 2 paths (see header).
-    private void RefreshPaths(in GeometryKey key, bool phase, bool domain, float[] ph, double kappa, double gamma,
+    private void RefreshPaths(in GeometryKey key, bool phase, bool domain, bool wave, float[] ph, float[] wi, double kappa, double gamma,
         double eta, int ell, DualOrbitWindingMode mode, double twoLogR)
     {
         int n = Width * Height, paths = key.InterfPaths, maxIter = key.MaxIter;
@@ -266,9 +303,11 @@ public sealed partial class DualOrbitEscapeCalculator
                     phi[j + 2] = kappa * g + w; off[j + 2] = Frac(t - tz + 0.5) - 0.5;
                 }
             }
-            double inten = PathsIntensity(phi, off, gamma * kappa, phase ? 0.0 : eta, out double turns);
+            // η changes only the intensity, never the phase (header).
+            double inten = PathsIntensity(phi, off, gamma * kappa, eta, out double turns);
             double v = phase ? turns : inten / paths;
-            if (domain) ph[i] = (float)turns;
+            if (domain || wave) ph[i] = (float)turns;
+            if (wave) wi[i] = (float)(inten / paths);   // #1593
             sc[i] = InterferenceScalar(v, maxIter, phase);
             return buf;
         }, _ => { });

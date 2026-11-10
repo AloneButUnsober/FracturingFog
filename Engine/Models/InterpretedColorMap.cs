@@ -97,6 +97,19 @@ public class InterpretedColorMap :
             };
         }
 
+        // #1593 — a program referencing a double-slit wave input renders through the
+        // wave-aware interpreter (CPU): its inputs come from the double-slit
+        // calculators' per-pixel wave quantities (IWaveColorMap.MapWave). Checked
+        // before orbit: a mixed program gets 0 for the orbit inputs.
+        var waveNeeds = WaveNeeds(prog);
+        if (waveNeeds != FracturingFog.Interefaces.WaveInputs.None)
+        {
+            return new InterpretedWaveColorMap(prog, opts.ThemeName, opts.Category, opts.Description, waveNeeds)
+            {
+                OutOfBoundsColorOverride = opts.OutOfBoundsColor,   // #615
+            };
+        }
+
         // F15 (#591) — a program referencing an orbit-accumulator input needs
         // per-iteration orbit sampling, so it runs on the orbit-aware interpreter
         // (CPU) and advertises NO GPU palette (the HLSL escape-only path can't
@@ -209,6 +222,43 @@ public class InterpretedColorMap :
             case CgBinary b: CollectBilliard(b.Lhs, found); CollectBilliard(b.Rhs, found); break;
             case CgTernary t: CollectBilliard(t.Cond, found); CollectBilliard(t.IfTrue, found); CollectBilliard(t.IfFalse, found); break;
             case CgCall c: foreach (var a in c.Args) CollectBilliard(a, found); break;
+        }
+    }
+
+    /// <summary>#1593 — the groups of wave inputs the program reads (None ⇒ not a
+    /// wave theme).</summary>
+    private static FracturingFog.Interefaces.WaveInputs WaveNeeds(CgProgram prog)
+    {
+        var found = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var s in prog.Statements)
+        {
+            CgNode? node = s switch { CgLet l => l.Value, CgReturn r => r.Value, _ => null };
+            if (node != null) CollectWave(node, found);
+        }
+        var needs = FracturingFog.Interefaces.WaveInputs.None;
+        foreach (string name in found) needs |= WaveGroup(name);
+        return needs;
+    }
+
+    internal static FracturingFog.Interefaces.WaveInputs WaveGroup(string name) => name switch
+    {
+        "waveIntensity" or "waveLevel" or "wavePhase" => FracturingFog.Interefaces.WaveInputs.Field,
+        "waveDeltaG" or "waveDeltaTheta" or "waveWhichPath" or "waveAngularMomentum" or "wavePaths"
+            => FracturingFog.Interefaces.WaveInputs.Paths,
+        "waveXi" or "waveZeta" => FracturingFog.Interefaces.WaveInputs.Coords,
+        _ => FracturingFog.Interefaces.WaveInputs.Address,
+    };
+
+    private static void CollectWave(CgNode n, HashSet<string> found)
+    {
+        switch (n)
+        {
+            case CgVar v: if (v.IsBuiltIn && CgInputs.WaveScalars.Contains(v.Name)) found.Add(v.Name); break;
+            case CgChannel ch: CollectWave(ch.Target, found); break;
+            case CgUnary u: CollectWave(u.Operand, found); break;
+            case CgBinary b: CollectWave(b.Lhs, found); CollectWave(b.Rhs, found); break;
+            case CgTernary t: CollectWave(t.Cond, found); CollectWave(t.IfTrue, found); CollectWave(t.IfFalse, found); break;
+            case CgCall c: foreach (var a in c.Args) CollectWave(a, found); break;
         }
     }
 
@@ -538,6 +588,25 @@ public class InterpretedColorMap :
         "bounceCount" => inp.BounceCount,
         "maxBounces"  => inp.MaxBounces,
         "pathLength"  => inp.PathLength,
+        // #1593 double-slit wave inputs (0 on the non-wave path).
+        "waveIntensity"       => inp.Wave.Intensity,
+        "waveLevel"           => inp.Wave.Level,
+        "wavePhase"           => inp.Wave.Phase,
+        "waveDeltaG"          => inp.Wave.DeltaG,
+        "waveDeltaTheta"      => inp.Wave.DeltaTheta,
+        "waveWhichPath"       => inp.Wave.WhichPath,
+        "waveAngularMomentum" => inp.Wave.AngularMomentum,
+        "wavePaths"           => inp.Wave.Paths,
+        "waveAlpha"           => inp.Wave.Alpha,
+        "waveFAlpha"          => inp.Wave.FAlpha,
+        "waveAlphaMin"        => inp.Wave.AlphaMin,
+        "waveAlphaMax"        => inp.Wave.AlphaMax,
+        "waveOnSet"           => inp.Wave.OnSet,
+        "waveFirstChild"      => inp.Wave.FirstChild,
+        "waveLastChild"       => inp.Wave.LastChild,
+        "waveChildren"        => inp.Wave.Children,
+        "waveXi"              => inp.Wave.Xi,
+        "waveZeta"            => inp.Wave.Zeta,
         _ => throw new InvalidOperationException($"Unknown built-in input '{name}'."),
     };
 
@@ -550,6 +619,8 @@ public class InterpretedColorMap :
         public double StripeAvg, TiaAvg, Curvature, Lyapunov, Gaussian, ExpSmooth;
         // #633 — chaotic-billiard outcome inputs, filled by the billiard-aware subclass.
         public double GateId, GateCount, BounceCount, MaxBounces, PathLength;
+        // #1593 — double-slit wave inputs, filled by the wave-aware subclass.
+        public FracturingFog.Interefaces.WaveSample Wave;
     }
 
     private static string ShortHash(string s)
@@ -860,6 +931,34 @@ public sealed class InterpretedBilliardColorMap : InterpretedColorMap, IBilliard
         inp.BounceCount = bounces;
         inp.MaxBounces  = maxBounces;
         inp.PathLength  = pathLength;
+        return Evaluate(in inp);
+    }
+}
+
+/// <summary>
+/// #1593 — double-slit wave ColorGen theme. Produced by
+/// <see cref="InterpretedColorMap.TryCreate"/> when the program references a wave
+/// input (waveIntensity / wavePhase / waveAlpha / …). The Julibrot Pair, Slit
+/// Cascade and Talbot Carpet calculators route it through
+/// <see cref="IWaveColorMap.MapWave"/>: the pixel's wave quantities are bound and
+/// the same interpreter body evaluates the colour. CPU-only, like the billiard
+/// themes (#633): no GPU palette (empty HLSL body), no C# export.
+/// </summary>
+public sealed class InterpretedWaveColorMap : InterpretedColorMap, IWaveColorMap
+{
+    internal InterpretedWaveColorMap(CgProgram prog, string name, string category, string description, WaveInputs needs)
+        : base(prog, name, category, description, hlslBody: "", hlslPrelude: "", paletteId: "Interp_none")
+    {
+        Needs = needs;
+    }
+
+    public WaveInputs Needs { get; }
+
+    public int MapWave(in WaveSample s)
+    {
+        // Escape-time / orbit inputs are meaningless for a wave pixel — leave them at 0.
+        In inp = BuildIn(0f, 0f, 0, 0f, 0f, 0f, 0f, 0f, 0f);
+        inp.Wave = s;
         return Evaluate(in inp);
     }
 }
