@@ -2178,9 +2178,20 @@ namespace FracturingFog.Hosting
                     var rows = mgr?.DescriptorsForCurrentType()
                         .Select(d => new FracturingFog.UI.Avalonia.ViewModels.AudioBindingRowViewModel(d, mgr))
                         .ToList();
+                    // #1434 — recipe presets above the matrix; a recipe's side
+                    // settings (e.g. Morph) land on the live params and re-render.
+                    var vsr = s_renderHost?.ViewState;
+                    var recipes = mgr != null && rows is { Count: > 0 } && vsr != null
+                        ? new FracturingFog.UI.Avalonia.ViewModels.AudioRecipePickerViewModel(mgr, vsr.FractalType, rows,
+                            FracturingFog.UI.Avalonia.ViewModels.AudioRecipePickerViewModel.SettingsOn(vsr.FractalParameters, () =>
+                            {
+                                RefreshOpenParamEditor(s_paramsWin);
+                                s_renderHost?.Trigger();
+                            }))
+                        : null;
                     var before = AudioSettingsStore.Load();
                     await AvaloniaDialogs.ShowAudioSettingsAsync(
-                        owner: null, liveSource: s_audioDriver?.BeatSource, bindingRows: rows);
+                        owner: null, liveSource: s_audioDriver?.BeatSource, bindingRows: rows, audioRecipes: recipes);
                     // #277 — only reconfigure a *running* driver, and only when the
                     // capture-relevant settings actually changed. The old code
                     // reconfigured unconditionally after every close (incl. Cancel),
@@ -3881,6 +3892,8 @@ namespace FracturingFog.Hosting
                         return global::FracturingFog.Models.LightingFxPresetLibrary.Load().Presets.Select(p => p.Name).ToList();
                     case global::FracturingFog.Batch.BatchFlagSource.Animation:
                         return global::FracturingFog.Models.AnimationLibrary.Instance.Animations.Select(a => a.Name).ToList();
+                    case global::FracturingFog.Batch.BatchFlagSource.AudioRecipe:   // #1434
+                        return global::FracturingFog.Audio.AudioRecipeLibrary.All().Select(r => r.Name).ToList();
                     case global::FracturingFog.Batch.BatchFlagSource.Equation:   // #1249
                         return fractal switch
                         {

@@ -79,6 +79,11 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
                 rows.Add(row);
             }
             AudioDrivableParams = rows;
+            // #1434 — recipe presets above the rows; side settings (e.g. Morph)
+            // land on this VM's params and re-render.
+            if (rows.Count > 0)
+                AudioRecipes = new AudioRecipePickerViewModel(audioModulation, type, rows,
+                    AudioRecipePickerViewModel.SettingsOn(_p, () => { Refresh(); Fire(); }));
         }
 
         CloseCommand = ReactiveCommand.Create(() =>
@@ -402,6 +407,12 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public IReadOnlyList<AudioBindingRowViewModel> AudioDrivableParams { get; }
         = Array.Empty<AudioBindingRowViewModel>();
     public bool HasAudioReactiveParams => AudioDrivableParams.Count > 0;
+
+    /// <summary>#1434 — audio recipe presets for this type (null without a manager).</summary>
+    public AudioRecipePickerViewModel? AudioRecipes { get; }
+    // Shown whenever the type has binding rows, even with no recipe on file yet,
+    // so the user can save the first one.
+    public bool HasAudioRecipes => AudioRecipes != null;
 
     public IReadOnlyList<string> IfsPresets { get; }
     public IReadOnlyList<string> LSystemPresets { get; }

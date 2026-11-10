@@ -419,7 +419,8 @@ namespace FracturingFog.Hosting
             Window? owner,
             global::FracturingFog.Audio.IBeatSource? liveSource = null,
             System.Collections.Generic.IReadOnlyList<
-                global::FracturingFog.UI.Avalonia.ViewModels.AudioBindingRowViewModel>? bindingRows = null)
+                global::FracturingFog.UI.Avalonia.ViewModels.AudioBindingRowViewModel>? bindingRows = null,
+            global::FracturingFog.UI.Avalonia.ViewModels.AudioRecipePickerViewModel? audioRecipes = null)
         {
             var tcs = new TaskCompletionSource<bool>();
 
@@ -440,7 +441,8 @@ namespace FracturingFog.Hosting
                 var current = AudioSettingsStore.Load();
                 var vm = new AudioSettingsViewModel(current, liveSource,
                     capabilities: AudioCapabilityProbe.Detect(),
-                    bindingRows: bindingRows);
+                    bindingRows: bindingRows,
+                    audioRecipes: audioRecipes);
                 var panel = new AudioSettingsView { DataContext = vm };
 
                 // Live meter pump — while a beat source is active, refresh the

@@ -229,6 +229,24 @@ pattern.
 Phase 1 lands the foundation with zero UI and full unit coverage; phases 2–3 are
 quick wins on top; the fractal-param work and export determinism come last.
 
+### 5.1 Audio recipe presets (#1434)
+
+`Abstractions/Audio/AudioRecipeLibrary.cs` holds named sets of `AudioParamBinding`
+plus side settings (`AudioRecipeSetting`, e.g. `AcidWarpMorph = true`). Built-ins
+are read-only and follow the #1433 cookbook sketch; user presets live in
+`audio-recipes.json`, read per entry with `TolerantJsonList` (#966). A recipe
+applies to a type when one of its bindings targets that type's animatable scalars
+(`FractalAnimatableParamsMap`); the rest are skipped, so one recipe can cover
+every type with, say, an angle knob.
+
+- **Live:** `AudioRecipePickerViewModel` (Fractured Waves expander + Audio
+  Settings). `AudioModulationManager.ApplyRecipe` copies each binding INTO the
+  existing binding object, so open matrix rows stay bound; `RestoreBindings` puts
+  back an `ExportBindings` snapshot for Undo.
+- **Batch:** `--audio-preset NAME` (requires `--audio`). Merge order: region
+  bindings, then the recipe, then `--audio-bind`. The Command builder needs no new
+  flag: an applied recipe is ordinary bindings and is emitted as `--audio-bind`.
+
 ## 6. Cross-references
 
 - [`Animation-Roadmap.md`](../Animation-Roadmap.md) — D.4 is the parked bullet

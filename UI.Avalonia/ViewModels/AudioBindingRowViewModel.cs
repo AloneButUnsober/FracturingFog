@@ -154,4 +154,16 @@ public sealed class AudioBindingRowViewModel : ViewModelBase
         get => _binding.ReleaseSeconds;
         set { _binding.ReleaseSeconds = Math.Max(0.0, value); this.RaisePropertyChanged(); }
     }
+
+    /// <summary>#1434 — re-read the binding and the enabled flag after the manager
+    /// changed them underneath this row (a recipe applied, or undone).</summary>
+    public void Refresh()
+    {
+        bool en = _mgr.IsEnabled(ParamName);
+        if (_enabled != en) { _enabled = en; this.RaisePropertyChanged(nameof(Enabled)); }
+        foreach (var n in new[] { nameof(Source), nameof(Curve), nameof(Invert), nameof(Gain), nameof(OutMin),
+                                  nameof(OutMax), nameof(Mode), nameof(IsRate), nameof(MinLabel), nameof(MaxLabel),
+                                  nameof(Edge), nameof(AttackSeconds), nameof(ReleaseSeconds) })
+            this.RaisePropertyChanged(n);
+    }
 }

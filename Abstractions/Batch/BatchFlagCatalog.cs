@@ -122,6 +122,8 @@ namespace FracturingFog.Batch
         Animation,
         /// <summary>Saved equations of the rendered user-code family (#1249).</summary>
         Equation,
+        /// <summary>Audio recipe presets, built-in and saved (#1434).</summary>
+        AudioRecipe,
     }
 
     /// <summary>A flag that only has an effect while another (choice) flag
@@ -566,8 +568,9 @@ namespace FracturingFog.Batch
                     "Play a saved animation across the video (every frame re-renders; use --video-motion hold for an animated still).",
                     BatchFlagSource.Animation),
                 PathFlag(BatchFlags.Audio, Video, BatchModes.Video,
-                    "Audio file (any format ffmpeg reads) that drives the region's audio bindings and every --audio-bind "
-                    + "across the video, read at each frame's time; muxed into the output. Needs ffmpeg.", "FILE")
+                    "Audio file that drives the region's audio bindings, an --audio-preset and every --audio-bind "
+                    + "across the video, read at each frame's time; muxed into the output. An uncompressed WAV is read "
+                    + "directly; other formats, and the mux, need ffmpeg.", "FILE")
                     with { PathIsInput = true, Example = "music.wav" },
                 Txt(BatchFlags.AudioBind, Video, BatchModes.Video,
                     "Drive a setting from --audio: PARAM=SIGNAL[,key=value…], keys min, max, gain, bias, curve, invert, "
@@ -575,6 +578,11 @@ namespace FracturingFog.Batch
                     + "the same setting. Repeatable.", hint: "PARAM=SIGNAL")
                     with { Repeatable = true, Example = "DualOrbitWhichPath=BeatPulse,min=0,max=1,release=0.15",
                            Requires = new[] { BatchFlags.Audio } },
+                Txt(BatchFlags.AudioPreset, Video, BatchModes.Video,
+                    "Drive the bindings of an audio recipe preset (built-in or saved in the Recipes picker) from --audio, "
+                    + "with any setting it needs (e.g. Acid Warp Morph). Lies over the region's bindings; --audio-bind "
+                    + "lies over it. Bindings this fractal can't animate are skipped.", BatchFlagSource.AudioRecipe)
+                    with { Example = "Spin with the music", Requires = new[] { BatchFlags.Audio } },
                 Sw(BatchFlags.NoDrift, Video, BatchModes.Sequence,
                     "Julia/Phoenix/Glynn zooms: keep the constant fixed (default drifts it gently)."),
                 Int(BatchFlags.VideoSeed, Video, BatchModes.Sequence, "Seed for Ken-Burns / drift paths.", def: "0"),

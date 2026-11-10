@@ -44,10 +44,12 @@ public sealed class AudioSettingsViewModel : ViewModelBase, IClosableDialog
             AudioBackendCapabilities.Microphone |
             AudioBackendCapabilities.FilePlayback |
             AudioBackendCapabilities.SynthPlayback,
-        IReadOnlyList<AudioBindingRowViewModel>? bindingRows = null)
+        IReadOnlyList<AudioBindingRowViewModel>? bindingRows = null,
+        AudioRecipePickerViewModel? audioRecipes = null)
     {
         ArgumentNullException.ThrowIfNull(current);
         BindingRows = bindingRows ?? Array.Empty<AudioBindingRowViewModel>();
+        AudioRecipes = audioRecipes;
         _working = Clone(current);
         _liveSource = liveSource;
         _slideshowToggle = slideshowToggle;
@@ -112,6 +114,11 @@ public sealed class AudioSettingsViewModel : ViewModelBase, IClosableDialog
 
     /// <summary>True when the modulation matrix has any rows to show.</summary>
     public bool HasBindings => BindingRows.Count > 0;
+
+    /// <summary>#1434 — audio recipe presets above the matrix (null when nested
+    /// from Slideshow Settings).</summary>
+    public AudioRecipePickerViewModel? AudioRecipes { get; }
+    public bool HasAudioRecipes => HasBindings && AudioRecipes != null;   // even with no recipe yet: Save makes the first
     public bool ShowSlideshowToggle => _slideshowToggle != null && _slideshowIsRunning != null;
 
     public ObservableCollection<AudioSourceOption> Sources { get; }

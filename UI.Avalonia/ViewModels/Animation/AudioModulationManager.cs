@@ -169,6 +169,68 @@ public sealed class AudioModulationManager
         _reconcile();
     }
 
+    /// <summary>#1434 — apply a recipe's bindings to the current fractal type. Each
+    /// binding the type can animate is copied INTO the existing binding object (so
+    /// open matrix rows stay bound to it) and enabled as the recipe says; the rest
+    /// are skipped. <paramref name="replace"/> first turns off every other binding
+    /// of this type; otherwise the recipe merges over them. Returns the params it set.</summary>
+    public IReadOnlyList<string> ApplyRecipe(IEnumerable<AudioParamBinding>? bindings, bool replace)
+    {
+        var byName = DescriptorsForCurrentType().ToDictionary(d => d.ParamName, StringComparer.Ordinal);
+        if (replace)
+            foreach (var (name, e) in _entries)
+                if (byName.ContainsKey(name)) e.Enabled = false;
+        var applied = new List<string>();
+        foreach (var b in bindings ?? Array.Empty<AudioParamBinding>())
+        {
+            if (b == null || !byName.TryGetValue(b.ParamName ?? string.Empty, out var d)) continue;
+            CopyInto(b.Binding ?? new AudioModulationBinding(), GetOrCreateBinding(d));
+            _entries[d.ParamName].Enabled = b.Enabled;
+            if (!applied.Contains(d.ParamName)) applied.Add(d.ParamName);
+        }
+        _reconcile();
+        Rebind();
+        _reconcile();
+        return applied;
+    }
+
+    /// <summary>#1434 — undo for <see cref="ApplyRecipe"/>: put back a snapshot taken
+    /// with <see cref="ExportBindings"/>, in place. A binding created since the
+    /// snapshot is turned off.</summary>
+    public void RestoreBindings(IReadOnlyList<AudioParamBinding> snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        var saved = snapshot.Where(b => !string.IsNullOrEmpty(b?.ParamName))
+                            .GroupBy(b => b.ParamName, StringComparer.Ordinal)
+                            .ToDictionary(g => g.Key, g => g.Last(), StringComparer.Ordinal);
+        foreach (var (name, e) in _entries)
+            if (!saved.ContainsKey(name)) e.Enabled = false;
+        foreach (var (name, b) in saved)
+        {
+            if (_entries.TryGetValue(name, out var e)) CopyInto(b.Binding ?? new AudioModulationBinding(), e.Binding);
+            else _entries[name] = e = new Entry { Binding = CloneBinding(b.Binding ?? new AudioModulationBinding()) };
+            e.Enabled = b.Enabled;
+        }
+        _reconcile();
+        Rebind();
+        _reconcile();
+    }
+
+    private static void CopyInto(AudioModulationBinding from, AudioModulationBinding to)
+    {
+        to.Source = from.Source;
+        to.Gain = from.Gain;
+        to.Bias = from.Bias;
+        to.Curve = from.Curve;
+        to.Invert = from.Invert;
+        to.OutMin = from.OutMin;
+        to.OutMax = from.OutMax;
+        to.Mode = from.Mode;
+        to.Edge = from.Edge;
+        to.AttackSeconds = from.AttackSeconds;
+        to.ReleaseSeconds = from.ReleaseSeconds;
+    }
+
     private static AudioModulationBinding CloneBinding(AudioModulationBinding b) => new()
     {
         Source = b.Source,

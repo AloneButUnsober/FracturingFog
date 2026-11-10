@@ -76,6 +76,8 @@ namespace FracturingFog.Batch
         // one binding in command-line form (repeatable).
         public const string Audio          = "--audio";
         public const string AudioBind      = "--audio-bind";
+        // #1434 — a named audio recipe preset (built-in or saved) as bindings.
+        public const string AudioPreset    = "--audio-preset";
         public const string Shutter        = "--shutter";
         // #1065 — burn the scene debug overlay into every exported scene frame.
         public const string SceneDebugOverlay = "--scene-debug-overlay";

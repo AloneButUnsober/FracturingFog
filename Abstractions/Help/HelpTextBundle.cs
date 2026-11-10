@@ -544,6 +544,17 @@ Rate and Edge as live); the music is muxed into the video.
 --audio-bind PARAM=SIGNAL,min=..,max=.. adds or replaces one
 binding. A WAV needs nothing else; other formats and the mux
 need ffmpeg. A still renders the settings' own values.
+--audio-preset ""<recipe>"" adds an audio recipe's bindings
+(#1434); --audio-bind still lies over them.
+
+=== Recipes ===
+
+The Recipes picker above the binding rows (Fractured Waves
+expander, Audio Settings) sets a whole audio recipe in one click:
+Apply sets its bindings (and any setting it needs, e.g. Acid Fog
+Morph), Undo puts back what was there, Save stores the bindings
+that are on now as your own recipe. Only recipes that fit the
+current fractal are listed; built-ins can't be overwritten.
 
 === Master Enable ===
 

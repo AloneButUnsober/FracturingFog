@@ -1,0 +1,43 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+             xmlns:au="using:FracturingFog.Audio"
+             x:Class="FracturingFog.UI.Avalonia.Views.AudioRecipePickerView"
+             x:DataType="vm:AudioRecipePickerViewModel">
+    <!-- #1434 — one-click audio recipe presets above the binding matrix. Shared by
+         the Fractured Waves expander and Audio Settings. -->
+    <Border Background="#1A1F1A" CornerRadius="3" Padding="6" Margin="0,0,0,6">
+        <StackPanel Spacing="4">
+            <TextBlock Text="Recipes" FontWeight="Bold" />
+            <TextBlock Text="{x:Static vm:AudioRecipePickerViewModel.NoRecipesHint}" IsVisible="{Binding HasNoRecipes}"
+                       Foreground="#9AACA0" FontSize="11" TextWrapping="Wrap" />
+            <Grid ColumnDefinitions="*,Auto,Auto" IsVisible="{Binding HasRecipes}">
+                <ComboBox Grid.Column="0" ItemsSource="{Binding Recipes}"
+                          SelectedItem="{Binding SelectedRecipe, Mode=TwoWay}" HorizontalAlignment="Stretch"
+                          ToolTip.Tip="Audio recipe presets that fit this fractal: built-ins first, then your saved ones.">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="au:AudioRecipePreset">
+                            <TextBlock Text="{Binding Name}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <Button Grid.Column="1" Content="Apply" Command="{Binding ApplyCommand}" Margin="4,0,0,0"
+                        ToolTip.Tip="Set the recipe's audio bindings (and any setting it needs, e.g. Morph) on this fractal." />
+                <Button Grid.Column="2" Content="Undo" Command="{Binding UndoCommand}" Margin="4,0,0,0"
+                        ToolTip.Tip="Put back the bindings from before the last Apply." />
+            </Grid>
+            <TextBlock Text="{Binding SelectedDescription}" Foreground="#9AACA0" FontSize="11" TextWrapping="Wrap" />
+            <CheckBox IsVisible="{Binding HasRecipes}" IsChecked="{Binding ReplaceExisting, Mode=TwoWay}" Content="Replace this fractal's other bindings"
+                      ToolTip.Tip="On: the recipe's bindings replace the rest (others turned off). Off: the recipe is laid over them." />
+            <Grid ColumnDefinitions="*,Auto,Auto">
+                <TextBox Grid.Column="0" Text="{Binding SaveName, Mode=TwoWay}" Watermark="Name for the current bindings" />
+                <Button Grid.Column="1" Content="Save" Command="{Binding SaveCommand}" Margin="4,0,0,0"
+                        ToolTip.Tip="Save the bindings that are on now as your own recipe. Built-in names can't be reused." />
+                <Button Grid.Column="2" Content="Delete" Command="{Binding DeleteCommand}" Margin="4,0,0,0"
+                        ToolTip.Tip="Delete the selected saved recipe (built-ins can't be deleted)." />
+            </Grid>
+            <TextBlock Text="{Binding StatusText}" Foreground="#C8C8C8" FontSize="11" TextWrapping="Wrap"
+                       IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        </StackPanel>
+    </Border>
+</UserControl>
