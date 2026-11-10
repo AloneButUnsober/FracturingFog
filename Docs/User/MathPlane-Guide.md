@@ -17,7 +17,7 @@ Open it from **Control Center → Math Plane**. Press **Switch to Math Plane** i
 
 The **Demos** box at the top loads a built-in example. Each one shows a single idea, and its description
 appears under the list. Loading a demo replaces the scene, the map, c, the backdrop and the view. The built-in
-demos never change: to keep an edited demo, save it as a region.
+demos never change: to keep an edited demo, save it to **My scenes**.
 
 | Demo | The idea |
 |---|---|
@@ -31,6 +31,19 @@ demos never change: to keep an edited demo, save it as a region.
 | Period 3: the rabbit | The orbit closes a triangle, drawn over the Julia set of the same c. |
 | Cobweb: fixed point / period 2 / period 4 / chaos | The real map x → x² + c at c = −0.5, −1, −1.3 and −1.9: period doubling along the real axis of the Mandelbrot set. |
 | Shear, Rotation by 90 degrees, Projection | Three 2×2 matrices, with det and eigenvectors. |
+
+### My scenes
+
+The **My scenes** box, under Demos, keeps your own scenes.
+
+- **Save:** type a name and press **Save**. It stores the scene text, the map, c, the backdrop and the view.
+  Saving under a name you already used overwrites that scene. A built-in demo's name is refused, so the demos
+  stay as they are.
+- **Load:** pick a scene and press **Load**. Like a demo, it replaces every Math Plane setting.
+- **Rename / Delete:** pick a scene, then type the new name and press **Rename**, or press **Delete**.
+
+Saved scenes are kept in `mathplanescenes.json` in FF's data folder. A saved region also keeps every Math
+Plane setting, if you want the scene in the region list instead.
 
 ## 2. Objects
 

@@ -45,8 +45,11 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
     /// <param name="view">The live view state (scene text, centre, zoom, type).</param>
     /// <param name="trigger">Re-render after an edit.</param>
     /// <param name="switchToMathPlane">Switch the render to Math Plane (the shell's type setter).</param>
-    public MathPlaneSectionViewModel(FractalViewState view, Action trigger, Action switchToMathPlane)
+    /// <param name="sceneStore">My scenes (#1637); null = the app's <see cref="MathPlaneSceneStore.Instance"/>.</param>
+    public MathPlaneSectionViewModel(FractalViewState view, Action trigger, Action switchToMathPlane,
+                                     MathPlaneSceneStore? sceneStore = null)
     {
+        _sceneStore = sceneStore;
         _view = view ?? throw new ArgumentNullException(nameof(view));
         _trigger = trigger ?? throw new ArgumentNullException(nameof(trigger));
         SwitchToMathPlaneCommand = ReactiveCommand.Create(() => { switchToMathPlane(); Refresh(); });
@@ -65,6 +68,7 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
         InitMap();
         InitComplex();
         InitPresets();
+        InitMyScenes();
         Refresh();
     }
 
