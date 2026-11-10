@@ -3761,19 +3761,9 @@ namespace FracturingFog.Hosting
             {
                 try
                 {
-                    uint? oob = null;   // #615 — packed "AARRGGBB" hex, or "" for none
-                    if (!string.IsNullOrWhiteSpace(oobArgb) &&
-                        uint.TryParse(oobArgb, System.Globalization.NumberStyles.HexNumber,
-                                      System.Globalization.CultureInfo.InvariantCulture, out uint packed))
-                        oob = packed;
-                    var opts = new FracturingFog.ColorGen.GenerateOptions
-                    {
-                        ThemeName = themeName,
-                        Category = "User",
-                        Description = description ?? "",
-                        TrapShape = trapShape ?? "Point",   // #611
-                        OutOfBoundsColor = oob,             // #615
-                    };
+                    // #1684 — the same options batch builds for a saved theme (name,
+                    // description, #611 trap shape, #615 out-of-bounds "AARRGGBB").
+                    var opts = FracturingFog.Models.ColorGenThemeLoader.Options(themeName, description, trapShape, oobArgb);
                     // #27 Phase 4 — the theme runs on the safe DSL INTERPRETER
                     // (InterpretedColorMap), not Roslyn codegen + AssemblyLoadContext.
                     // No compile, no assembly load: a custom theme is a data object.
@@ -3781,7 +3771,8 @@ namespace FracturingFog.Hosting
                         .TryCreate(source, opts, out string? cgError);
                     if (map == null) return cgError ?? "Theme failed to parse.";
                     FracturingFog.Models.ColorPalette.RegisterHotLoaded(map);
-                    FracturingFog.Cli.SessionColorGenThemes.Add(map.DisplayName);   // #1684 — Command builder gap
+                    // #1684 — the Command builder compares this load with the saved library.
+                    FracturingFog.Cli.SessionColorGenThemes.Add(map.DisplayName, source, trapShape, oobArgb);
                     s_renderHost!.ApplyColorMap(map);
                     // Refresh the FloatingMenu theme combo so the freshly
                     // registered entry appears in the dropdown without

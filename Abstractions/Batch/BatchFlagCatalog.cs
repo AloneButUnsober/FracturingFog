@@ -501,7 +501,7 @@ namespace FracturingFog.Batch
                 PathFlag(BatchFlags.ExploreRegions, Source, ImgVid,
                     "With --explore: also write the finalist views as a regions JSON (Control Center > Regions > Import).",
                     "OUT.json") with { Requires = new[] { BatchFlags.Explore } },
-                Txt(BatchFlags.Theme, Source, ImgVid, "Colour theme name.", BatchFlagSource.Theme, def: BatchDefaults.ThemeName)
+                Txt(BatchFlags.Theme, Source, ImgVid, "Colour theme name: a built-in, or a saved Colour Theme Editor or ColorGen theme.", BatchFlagSource.Theme, def: BatchDefaults.ThemeName)
                     with { Aliases = new[] { "-t" } },
                 Pick(BatchFlags.Quality, Source, ImgVid, "Quality preset.",
                     new[] { "Draft", "Standard", "High", "Ultra", "Extreme" }, BatchDefaults.QualityName)

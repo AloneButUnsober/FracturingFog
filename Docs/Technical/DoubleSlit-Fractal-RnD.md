@@ -704,7 +704,8 @@ and citations in the Bibliography in the same PR.
   cascade: Intensity, Phase, Aperture, α, f(α); Talbot: Intensity, Phase) and every pixel of them, including those
   below the dynamic range. Domain, white light and Detections paint their own colour. The smooth / relief buffer
   still holds the view's value, so Relief 3D is unchanged.
-- **Batch:** batch never loads ColorGen themes (pre-existing, every ColorGen theme), filed as #1684. The Command
+- **Batch:** batch never loaded ColorGen themes (pre-existing, every ColorGen theme), filed as #1684 and since fixed
+  there: batch loads the saved library, and the gap below now fires only for a theme not saved as loaded. The Command
   builder now reports a ColorGen theme loaded this session as a gap (`SessionColorGenThemes`, filled by the
   hot-load bridge), instead of emitting a `--theme` the batch would replace with HSV.
 - **Tests (`WaveColorGenTests`, 24):** routing and `Needs`; reserved names; C# export refused; inputs read 0 off

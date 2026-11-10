@@ -360,7 +360,7 @@ public sealed class WaveColorGenTests
         Assert.True(SessionColorGenThemes.Contains(name));
         Assert.False(SessionColorGenThemes.Contains("HSV"));
         var p = new FractalParameters();
-        var gaps = BatchCommandBuilder.DetectGaps(new BatchCommandSnapshot { ThemeName = name, ThemeIsColorGen = true, Parameters = p });
+        var gaps = BatchCommandBuilder.DetectGaps(new BatchCommandSnapshot { ThemeName = name, ThemeColorGenUnsaved = true, Parameters = p });
         Assert.Contains(gaps, g => g.Contains(name) && g.Contains("#1684"));
         var none = BatchCommandBuilder.DetectGaps(new BatchCommandSnapshot { ThemeName = "Fire", Parameters = p });
         Assert.DoesNotContain(none, g => g.Contains("#1684"));

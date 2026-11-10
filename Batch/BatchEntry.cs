@@ -28,6 +28,16 @@ namespace FracturingFog.Batch
         private static extern bool AllocConsole();
         private const int ATTACH_PARENT_PROCESS = -1;
 
+        // #1684 — the theme already resolves (built-in or saved colour theme; the
+        // same case-insensitive match BatchRenderer.ResolveTheme makes).
+        private static bool ThemeKnown(string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return true;
+            foreach (var n in ColorPalette.GetPaletteNames())
+                if (string.Equals(n, name, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
         public static int Run(string[] args)
         {
             BatchTiming.Start();   // #1640
@@ -75,6 +85,18 @@ namespace FracturingFog.Batch
             // resolve names the user authored interactively in earlier runs.
             // Themes always: a user theme can override a built-in of the same name.
             try { FracturingFog.Models.ColorPalette.LoadUserThemes(); } catch { }
+            // #1684 — saved ColorGen themes (colorgen.json) too, so --theme resolves
+            // them. A still image skips the parse unless its theme is not found yet.
+            if (opts.Mode != BatchMode.Image || !ThemeKnown(opts.ThemeName))
+            {
+                try
+                {
+                    foreach (var (name, error) in FracturingFog.Models.ColorGenThemeLoader.RegisterSaved())
+                        if (string.Equals(name, opts.ThemeName, StringComparison.OrdinalIgnoreCase))
+                            Console.Error.WriteLine($"batch: ColorGen theme '{name}' does not parse: {error}");
+                }
+                catch (Exception ex) { Console.Error.WriteLine($"batch: could not load ColorGen themes: {ex.Message}"); }
+            }
             // #1640 — a still image reads the region library only for --region, and
             // the user-code stores only for --region / --equation; skipping them
             // otherwise saves ~0.2 s a run. Every other mode loads them all.
