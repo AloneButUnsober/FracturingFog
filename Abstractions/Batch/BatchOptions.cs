@@ -356,6 +356,10 @@ namespace FracturingFog.Batch
         /// <summary>#1432 — <c>--audio-bind</c> bindings, laid over the region's own.</summary>
         public List<FracturingFog.Audio.AudioParamBinding> AudioBinds { get; } = new();
 
+        /// <summary>#1434 — <c>--audio-preset</c>: an audio recipe preset whose bindings
+        /// sit between the region's and the <c>--audio-bind</c> ones.</summary>
+        public string? AudioPresetName { get; set; }
+
         /// <summary>#1235 — <c>--video-motion loop</c>: a seamless Misiurewicz
         /// self-similar loop (zoom ×|λ|^n, turn −n·arg λ) instead of a plain zoom.
         /// The video path treats it as Zoom motion with its own endpoints.</summary>
@@ -1125,6 +1129,11 @@ namespace FracturingFog.Batch
                         if (!FracturingFog.Audio.AudioBindSpec.TryParse(abv, out var abb, out string? aberr))
                             { error = $"{a}: {aberr}"; return false; }
                         opts.AudioBinds.Add(abb);
+                        break;
+
+                    case BatchFlags.AudioPreset:
+                        if (!Next(args, ref i, a, out string arpv, out error)) return false;
+                        opts.AudioPresetName = arpv;
                         break;
 
                     case BatchFlags.LoopMultiplier:

@@ -286,8 +286,8 @@ namespace FracturingFog.Batch
             var (cx, cy, zoom, iter, frType, quality, regionDispName) = ResolveRegion(opts);
             var theme = ResolveTheme(opts.ThemeName);
             string outPath = ResolveImageOutputPath(opts, regionDispName, frType);
-            if (!string.IsNullOrWhiteSpace(opts.AudioPath) || opts.AudioBinds.Count > 0)   // #1432
-                Console.WriteLine("  note    : --audio / --audio-bind drive a video (--mode video); a still renders the settings' own values.");
+            if (!string.IsNullOrWhiteSpace(opts.AudioPath) || opts.AudioBinds.Count > 0 || !string.IsNullOrWhiteSpace(opts.AudioPresetName))   // #1432 / #1434
+                Console.WriteLine("  note    : --audio / --audio-bind / --audio-preset drive a video (--mode video); a still renders the settings' own values.");
 
             EnsureDirectoryForFile(outPath);
 
@@ -1279,7 +1279,11 @@ namespace FracturingFog.Batch
         private static FracturingFog.Abstractions.Animation.BatchAudioDrive? BuildAudioDrive(
             BatchOptions opts, FractalRegion? region, FractalParameters fp, FractalType frType)
         {
-            var bindings = FracturingFog.Abstractions.Animation.BatchAudioDrive.Merge(region?.AudioBindings, opts.AudioBinds);
+            // #1434 — an audio recipe preset lies between the region's bindings and
+            // the --audio-bind ones; its side settings (e.g. Morph) apply to the params.
+            var bindings = FracturingFog.Abstractions.Animation.BatchAudioDrive.Merge(
+                FracturingFog.Abstractions.Animation.BatchAudioDrive.Merge(region?.AudioBindings, ResolveAudioPreset(opts, fp, frType)),
+                opts.AudioBinds);
             if (string.IsNullOrWhiteSpace(opts.AudioPath))
             {
                 if (bindings.Count > 0)
@@ -1311,6 +1315,29 @@ namespace FracturingFog.Batch
             if (drive.Driven.Count == 0) return null;
             Console.WriteLine($"  audio    : {opts.AudioPath} drives {string.Join(", ", drive.Driven)}");
             return drive;
+        }
+
+        // #1434 — the --audio-preset bindings this fractal can animate (null without the
+        // flag); applies the preset's side settings to fp. An unknown name throws.
+        internal static System.Collections.Generic.List<FracturingFog.Audio.AudioParamBinding>? ResolveAudioPreset(
+            BatchOptions opts, FractalParameters fp, FractalType frType)
+        {
+            if (string.IsNullOrWhiteSpace(opts.AudioPresetName)) return null;
+            var preset = FracturingFog.Audio.AudioRecipeLibrary.Find(opts.AudioPresetName)
+                ?? throw new InvalidOperationException($"--audio-preset: no audio recipe named '{opts.AudioPresetName}'. Known: "
+                    + string.Join(", ", System.Linq.Enumerable.Select(FracturingFog.Audio.AudioRecipeLibrary.All(), r => r.Name)));
+            var bindings = preset.BindingsFor(frType);
+            if (bindings.Count == 0)
+            {
+                Console.WriteLine($"  audio    : recipe '{preset.Name}' has no binding {frType} can animate; skipped.");
+                return null;
+            }
+            var skipped = new System.Collections.Generic.List<string>();
+            var set = FracturingFog.Audio.AudioRecipeLibrary.ApplySettings(preset, fp, skipped);
+            Console.WriteLine($"  audio    : recipe '{preset.Name}' binds {string.Join(", ", System.Linq.Enumerable.Select(bindings, b => b.ParamName))}"
+                + (set.Count > 0 ? $"; sets {string.Join(", ", set)}" : ""));
+            foreach (var s in skipped) Console.WriteLine($"  audio    : recipe setting {s} skipped");
+            return bindings;
         }
 
         private static string TailLog(string log, int maxChars)

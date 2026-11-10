@@ -496,6 +496,14 @@ The **Fractured Waves** expander in the Fractal Parameters dialog (and the matri
 
 Example (Acid Fog, music pushes the patterns from one to the next): `AcidWarpFlow`, Signal RMS, Mode Rate, Min/s 0.05, Max/s 1.5, Edge Wrap, Release 0.8. Enabling an audio drive on `AcidWarpFlow` turns **Morph** on automatically.
 
+**Recipes** (#1434): the picker above the binding rows (Fractured Waves expander and Audio Settings) sets a whole recipe in one click. It lists the recipes that fit the current fractal: built-ins first, then your own.
+- **Apply** sets the recipe's bindings, plus any setting it needs to show (Acid Fog Morph, the Domain-warp toggle). Bindings this fractal can't animate are skipped. With **Replace this fractal's other bindings** on, the fractal's other bindings are turned off; with it off, the recipe is laid over them.
+- **Undo** puts back the bindings and settings from before the last Apply.
+- **Save** stores the bindings that are on now as your own recipe (in `audio-recipes.json`). Built-in names can't be reused, and built-ins can't be deleted.
+- Built-ins: *Acid Fog - Endless flow*, *Acid Fog - Beat nudge*, *Acid Fog - Breathe between patterns*, *Bass-swelled domain warp*, *Spin with the music*, *Fringes collapse on the beat*, *Calm passages hold still*, *Bulb breathes with the bass*, *Downbeat slice*.
+
+An applied recipe is ordinary bindings, so it saves with the region and the Command builder writes it as `--audio-bind`. A batch video can also name a recipe: `--audio-preset "Spin with the music"` (needs `--audio`). Its bindings lie over the region's, and `--audio-bind` lies over both.
+
 Audio drive is saved with the region. A batch **video** plays it from a music file: `--batch --mode video --region "<name>" --audio music.wav` drives the region's bindings at each frame's time (same attack / release / Rate / Edge as live) and muxes the music into the video (#1432). `--audio-bind PARAM=SIGNAL,min=…,max=…` adds or replaces one binding, and the Control Center **Command** builder writes one per live binding. An uncompressed WAV needs nothing else; other formats, and the mux, need ffmpeg. A still image renders the knobs at their current values.
 
 ---
