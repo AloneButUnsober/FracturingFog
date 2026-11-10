@@ -61,6 +61,22 @@ re-runs them. N = 2 is the two-path picture exactly.
 Measured on a cross-section (κ = 200, Grating): the share of the phase cycle that is bright (I/N ≥ ½) is
 0.54, 0.23 and 0.11 for N = 2, 4 and 8, against the exact 0.50, 0.23 and 0.11: the fringe width falls as about 1/N.
 
+### 1.2 Music-driven fringes
+
+Any animatable setting can follow the music (Audio Settings: pick an input, then the binding matrix). Three demos
+come with a binding already set; recalling one starts audio capture, and your own edits to the binding stay in
+the session, not in the demo:
+
+| Demo | Signal → setting | What you see |
+|---|---|---|
+| **Double Slit - Beat Collapse** | beat pulse → which-path η, 0 → 1 | the fringes flash flat on every beat and come back between beats |
+| **Double Slit - Spiral Beat** | beat pulse → angular momentum ℓ, 2 → 5 | the spiral-arm count jumps to five on the beat and steps back down as the pulse decays |
+| **Slit Cascade - Music Breathing** | bass → wavelength λ, 0.4 → 1.4 (smoothed) | the fringes swell on each kick, slits move on and off dark fringes, and the dimension in the status bar moves with them (§2.1) |
+
+Without audio input the demos show their base settings. The command line can't play audio into a region yet
+(#1432): a batch render of these demos shows the base settings, and the Control Center **Command** builder warns
+about it.
+
 ## 2. Slit Cascade
 
 A slit is replaced by N smaller slits at scale r, again and again (**depth** levels). Each child slit lets
@@ -274,12 +290,15 @@ Open them from the region list; each says what it shows. Built-ins never change:
 | **Double Slit - Angular Momentum Spirals** | Julibrot Pair | *Double slit: angular momentum sweep*: ℓ −4 → 4, arm count and handedness change |
 | **Double Slit - Opposite Winding Rays** | Julibrot Pair | — |
 | **Double Slit - Orbit Grating** | Julibrot Pair | *Double slit: more slits*: N 2 → 12, the bright fringes thin out |
+| **Double Slit - Beat Collapse** | Julibrot Pair | — (audio: beat → η, §1.2) |
+| **Double Slit - Spiral Beat** | Julibrot Pair | — (audio: beat → ℓ, §1.2) |
 | **Slit Cascade - Ring Diffraction** | Slit Cascade | *Slit cascade: wavelength breathing*: λ 0.4 ↔ 1.4 |
 | **Slit Cascade - Probability Sets Dimension** | Slit Cascade | — (watch the status bar) |
 | **Slit Cascade - Vortex Core** | Slit Cascade | — |
 | **Slit Cascade - Particle Build-Up** | Slit Cascade | *Slit cascade: particle build-up*: 0 → 60,000 detections |
 | **Slit Cascade - Vortex Wells** | Slit Cascade | — (Relief 3D) |
 | **Slit Cascade - Vortex Constellation** | Slit Cascade | — (Relief 3D) |
+| **Slit Cascade - Music Breathing** | Slit Cascade | — (audio: bass → λ, §1.2) |
 | **Talbot Carpet - Ronchi Grating** | Talbot Carpet | — |
 | **Talbot Carpet - Fractal Comb** | Talbot Carpet | — |
 | **Talbot Carpet - Cascade Grating** | Talbot Carpet | — |
