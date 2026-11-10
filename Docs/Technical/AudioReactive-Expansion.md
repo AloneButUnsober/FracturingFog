@@ -255,5 +255,8 @@ every type with, say, an angle knob.
   (Phase 6).
 - [`AcidWarp-Mode-Design.md`](AcidWarp-Mode-Design.md) — auto-VJ director reused
   in Phase 3.
+- [`Fractured-Audio-Cookbook.md`](../User/Fractured-Audio-Cookbook.md) — the
+  user-facing cookbook (#1433): signal character, shaping, recipes by outcome and
+  per family, pitfalls. The §5.1 built-in recipes are its ★ entries.
 - [`Slideshow-AudioReactive-Guide.md`](../User/Slideshow-AudioReactive-Guide.md)
   — the existing (only) audio consumer; unchanged by this work.
