@@ -668,8 +668,9 @@ Parallel after S0: {S1, S2, S3, S6}. After S3: {S4, S5}.
   `SlitCascadeWavelength` 0.4 → 1.4, smoothstep, attack 0.05 s / release 0.4 s). Recall hydrates the live
   `AudioModulationManager` (bindings cloned, so the read-only built-ins never change) and starts capture.
   Audio recipe presets (#1434) are not built yet; when they are, these three bindings are natural recipes.
-- **Batch gap:** region audio bindings are live-only (#1432, open); `BatchCommandBuilder.DetectGaps` already
-  reports enabled audio drives, and a test checks it does so for each preset.
+- **Batch gap:** region audio bindings were live-only when this shipped (#1432); `BatchCommandBuilder.DetectGaps`
+  reports enabled audio drives, and a test checks it does so for each preset. #1432 has since added
+  `--audio FILE` / `--audio-bind` for videos (`BatchAudioDrive`), so the presets now play headless from a file.
 - **Tests (`MusicFringesPresetTests`, 15):** each binding targets an animatable setting of its type within the
   descriptor range, with no timeline animation bound; driven through `AudioModulatorAnimator.TryCreate` from a
   fake source, η = 1 on the beat gives a flat field and η → 0 between beats brings > 50 levels back; the

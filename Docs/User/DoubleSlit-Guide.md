@@ -73,9 +73,15 @@ the session, not in the demo:
 | **Double Slit - Spiral Beat** | beat pulse → angular momentum ℓ, 2 → 5 | the spiral-arm count jumps to five on the beat and steps back down as the pulse decays |
 | **Slit Cascade - Music Breathing** | bass → wavelength λ, 0.4 → 1.4 (smoothed) | the fringes swell on each kick, slits move on and off dark fringes, and the dimension in the status bar moves with them (§2.1) |
 
-Without audio input the demos show their base settings. The command line can't play audio into a region yet
-(#1432): a batch render of these demos shows the base settings, and the Control Center **Command** builder warns
-about it.
+Without audio input the demos show their base settings. On the command line a **video** plays them from a music
+file (#1432): `--audio` drives the demo's own binding at each frame's time and muxes the music in (a still shows
+the base settings):
+
+```bash
+FracturingFog --batch --mode video --region "Double Slit - Beat Collapse" --audio music.wav --seconds 20 --video-motion hold --out beat-collapse.mp4
+```
+
+`--audio-bind` adds or replaces a binding, e.g. `--audio-bind DualOrbitWhichPath=Bass,min=0,max=1,release=0.3`.
 
 ## 2. Slit Cascade
 

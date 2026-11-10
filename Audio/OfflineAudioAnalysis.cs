@@ -113,6 +113,17 @@ namespace FracturingFog.Audio
             return AnalyzePcm(samples, DecodeSampleRate, DecodeChannels, sensitivity, bandWeights);
         }
 
+        /// <summary>#1432 — bake a timeline from an uncompressed WAVE file without
+        /// ffmpeg (<see cref="WavPcm"/>). Null with <paramref name="error"/> set when the
+        /// file is not a WAVE file this reader handles.</summary>
+        public static OfflineAudioModulationSource? AnalyzeWav(string audioPath, out string? error,
+            float sensitivity = 0.5f, float[]? bandWeights = null)
+        {
+            if (!WavPcm.TryRead(audioPath, out var samples, out int rate, out int ch, out error)) return null;
+            if (samples.Length < ch) { error = "the WAVE file has no samples"; return null; }
+            return AnalyzePcm(samples, rate, ch, sensitivity, bandWeights);
+        }
+
         // Shell ffmpeg to stream raw interleaved f32le stereo @ 44.1 kHz on stdout.
         private static byte[]? DecodePcm(string audioPath, string ffmpegExe, CancellationToken ct)
         {

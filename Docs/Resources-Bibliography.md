@@ -622,6 +622,19 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
   Proceedings of DAFx-13, 2013. Spectral-flux beat detection underpins the audio-reactive engine.
 - **Brian C. J. Moore.** *An Introduction to the Psychology of Hearing.* Brill, 6th ed., 2012.
   Source for the band-weighted detector EQ (bass / lo-mid / mid / hi-mid / high) bands.
+- <a id="wave-file-format"></a>**WAVE (RIFF) audio file format** — read in-process by `Audio/WavPcm.cs` so
+  `--batch --audio x.wav` needs no ffmpeg (#1432). Layout, field order and format codes from:
+  - **Microsoft.** *WAVEFORMATEX structure (mmreg.h)* and *WAVEFORMATEXTENSIBLE structure (mmreg.h)*.
+    Microsoft Learn, Win32 API reference.
+    <https://learn.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatex>,
+    <https://learn.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible>.
+    The `fmt ` fields, PCM vs IEEE float vs EXTENSIBLE, and the SubFormat GUID.
+  - **Peter Kabal.** *Wave File Specifications* (Audio File Format Specifications). MMSP Lab, ECE, McGill
+    University, page updated 2022-09-27. <https://www.mmsp.ece.mcgill.ca/Documents/AudioFormats/WAVE/WAVE.html>.
+    The chunk IDs (`RIFF` / `WAVE` / `fmt ` / `data`), the numeric codes 0x0001 / 0x0003 / 0xFFFE, the format
+    code in the SubFormat's first two bytes, 8-bit PCM as offset binary, and the data chunk's pad byte. The page
+    names the original specification as Microsoft's *WAVE Specifications Version 1.0* (1991) in *Multimedia
+    Programming Interface and Data Specifications 1.0*; FF has not consulted that document itself.
 
 ---
 

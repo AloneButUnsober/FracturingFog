@@ -72,6 +72,10 @@ namespace FracturingFog.Batch
         public const string MotionBlur     = "--motion-blur";
         // A saved animation played across the video's frames (#998).
         public const string Animation      = "--animation";
+        // #1432 — an audio file that drives audio→param bindings across a video, and
+        // one binding in command-line form (repeatable).
+        public const string Audio          = "--audio";
+        public const string AudioBind      = "--audio-bind";
         public const string Shutter        = "--shutter";
         // #1065 — burn the scene debug overlay into every exported scene frame.
         public const string SceneDebugOverlay = "--scene-debug-overlay";
