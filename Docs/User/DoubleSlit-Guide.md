@@ -141,7 +141,7 @@ glow of a single smallest slit is left.
 - It works with white light and *Detections* too: the dots land on the washed-out pattern. η is animatable.
 
 ```bash
-FracturingFog --batch --region "Slit Cascade - Ring Diffraction" --param SlitCascadeWhichPath=1 --param SlitCascadeWhichPathPattern=ShallowOnly --param SlitCascadeWhichPathLevel=1 --out ring-watched.png
+FracturingFog --batch --region "Slit Cascade - Ring Diffraction" --param SlitCascadeWhichPath=1 --param SlitCascadeWhichPathPattern=3 --param SlitCascadeWhichPathLevel=1 --out ring-watched.png
 ```
 
 ## 3. Talbot Carpet
