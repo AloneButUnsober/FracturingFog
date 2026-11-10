@@ -118,7 +118,7 @@ public sealed class AudioSettingsViewModel : ViewModelBase, IClosableDialog
     /// <summary>#1434 — audio recipe presets above the matrix (null when nested
     /// from Slideshow Settings).</summary>
     public AudioRecipePickerViewModel? AudioRecipes { get; }
-    public bool HasAudioRecipes => HasBindings && AudioRecipes is { HasRecipes: true };
+    public bool HasAudioRecipes => HasBindings && AudioRecipes != null;   // even with no recipe yet: Save makes the first
     public bool ShowSlideshowToggle => _slideshowToggle != null && _slideshowIsRunning != null;
 
     public ObservableCollection<AudioSourceOption> Sources { get; }

@@ -9,7 +9,9 @@
     <Border Background="#1A1F1A" CornerRadius="3" Padding="6" Margin="0,0,0,6">
         <StackPanel Spacing="4">
             <TextBlock Text="Recipes" FontWeight="Bold" />
-            <Grid ColumnDefinitions="*,Auto,Auto">
+            <TextBlock Text="{x:Static vm:AudioRecipePickerViewModel.NoRecipesHint}" IsVisible="{Binding HasNoRecipes}"
+                       Foreground="#9AACA0" FontSize="11" TextWrapping="Wrap" />
+            <Grid ColumnDefinitions="*,Auto,Auto" IsVisible="{Binding HasRecipes}">
                 <ComboBox Grid.Column="0" ItemsSource="{Binding Recipes}"
                           SelectedItem="{Binding SelectedRecipe, Mode=TwoWay}" HorizontalAlignment="Stretch"
                           ToolTip.Tip="Audio recipe presets that fit this fractal: built-ins first, then your saved ones.">
@@ -25,7 +27,7 @@
                         ToolTip.Tip="Put back the bindings from before the last Apply." />
             </Grid>
             <TextBlock Text="{Binding SelectedDescription}" Foreground="#9AACA0" FontSize="11" TextWrapping="Wrap" />
-            <CheckBox IsChecked="{Binding ReplaceExisting, Mode=TwoWay}" Content="Replace this fractal's other bindings"
+            <CheckBox IsVisible="{Binding HasRecipes}" IsChecked="{Binding ReplaceExisting, Mode=TwoWay}" Content="Replace this fractal's other bindings"
                       ToolTip.Tip="On: the recipe's bindings replace the rest (others turned off). Off: the recipe is laid over them." />
             <Grid ColumnDefinitions="*,Auto,Auto">
                 <TextBox Grid.Column="0" Text="{Binding SaveName, Mode=TwoWay}" Watermark="Name for the current bindings" />

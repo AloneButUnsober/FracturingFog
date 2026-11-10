@@ -410,7 +410,9 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
 
     /// <summary>#1434 — audio recipe presets for this type (null without a manager).</summary>
     public AudioRecipePickerViewModel? AudioRecipes { get; }
-    public bool HasAudioRecipes => AudioRecipes is { HasRecipes: true };
+    // Shown whenever the type has binding rows, even with no recipe on file yet,
+    // so the user can save the first one.
+    public bool HasAudioRecipes => AudioRecipes != null;
 
     public IReadOnlyList<string> IfsPresets { get; }
     public IReadOnlyList<string> LSystemPresets { get; }

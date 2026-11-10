@@ -68,6 +68,13 @@ public sealed class AudioRecipePickerViewModel : ViewModelBase
 
     public bool HasRecipes => Recipes.Count > 0;
 
+    /// <summary>No recipe fits this fractal yet: the view shows a hint in place of
+    /// the list, and Save stays available to make the first one.</summary>
+    public bool HasNoRecipes => Recipes.Count == 0;
+
+    public const string NoRecipesHint =
+        "No recipes for this fractal yet: turn on bindings below and Save.";
+
     private bool _replace = true;
     /// <summary>True: the recipe replaces this type's bindings (others turned off).
     /// False: it merges over them.</summary>
@@ -94,6 +101,7 @@ public sealed class AudioRecipePickerViewModel : ViewModelBase
         SelectedRecipe = Recipes.FirstOrDefault(r => string.Equals(r.Name, select, StringComparison.OrdinalIgnoreCase))
                          ?? Recipes.FirstOrDefault();
         this.RaisePropertyChanged(nameof(HasRecipes));
+        this.RaisePropertyChanged(nameof(HasNoRecipes));
     }
 
     public void Apply()

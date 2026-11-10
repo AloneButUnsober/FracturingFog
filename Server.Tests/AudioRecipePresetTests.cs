@@ -345,6 +345,47 @@ public sealed class AudioRecipePresetTests
         finally { AudioRecipeLibrary.DeleteUser(name); }
     }
 
+    [Fact]
+    public void A_Fractal_With_No_Recipe_Still_Shows_The_Picker_So_The_First_Can_Be_Saved()
+    {
+        // Flame has audio binding rows (FlameGamma, FlameVibrancy) but no built-in
+        // recipe: the picker must still show, with the hint, so Save can make one.
+        var (mgr, p) = Live(FractalType.Flame);
+        Assert.Empty(AudioRecipeLibrary.ForType(FractalType.Flame));
+        var panel = new FractalParamsViewModel(FractalType.Flame, p, audioModulation: mgr);
+        Assert.True(panel.HasAudioReactiveParams);
+        Assert.True(panel.HasAudioRecipes);
+        var picker = panel.AudioRecipes!;
+        Assert.True(picker.HasNoRecipes);
+        Assert.False(picker.HasRecipes);
+        Assert.Null(picker.SelectedRecipe);
+
+        string name = "First flame " + Guid.NewGuid().ToString("N")[..8];
+        try
+        {
+            var gamma = panel.AudioDrivableParams.Single(r => r.ParamName == "FlameGamma");
+            gamma.Source = AudioSignalKind.Bass;
+            gamma.Enabled = true;
+            picker.SaveName = name;
+            picker.Save();
+            Assert.Equal(name, picker.SelectedRecipe?.Name);
+            Assert.True(picker.HasRecipes);
+            Assert.False(picker.HasNoRecipes);
+            Assert.Equal(new[] { "FlameGamma" }, AudioRecipeLibrary.Find(name)!.Bindings.Select(b => b.ParamName));
+        }
+        finally { AudioRecipeLibrary.DeleteUser(name); }
+    }
+
+    [Fact]
+    public void Audio_Settings_Shows_The_Picker_Whenever_It_Has_Rows()
+    {
+        var (mgr, _) = Live(FractalType.Flame);
+        var rows = mgr.DescriptorsForCurrentType().Select(d => new AudioBindingRowViewModel(d, mgr)).ToList();
+        var picker = new AudioRecipePickerViewModel(mgr, FractalType.Flame, rows, _ => null);
+        Assert.True(new AudioSettingsViewModel(new AudioSettings(), null, bindingRows: rows, audioRecipes: picker).HasAudioRecipes);
+        Assert.False(new AudioSettingsViewModel(new AudioSettings(), null, audioRecipes: picker).HasAudioRecipes);   // nested: no matrix
+    }
+
     // ── batch ──────────────────────────────────────────────────────────────
 
     [Fact]
