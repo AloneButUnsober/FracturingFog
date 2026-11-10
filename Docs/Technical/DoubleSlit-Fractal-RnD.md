@@ -640,6 +640,26 @@ Parallel after S0: {S1, S2, S3, S6}. After S3: {S4, S5}.
 - **Preset:** *Double Slit - Orbit Grating* (Grating, N = 6) with bound animation *Double slit: more slits*
   (N 2 → 12).
 
+### 10.8 Vortex wells and carpet terrain (#1603, round 2 tracker #1605)
+
+- **What:** presets only. *Slit Cascade - Vortex Wells* (the Vortex Core: equal shares, one charge-3 core),
+  *Slit Cascade - Vortex Constellation* (width 0.2, λ 0.6: unequal shares, the core splits into charge-1
+  vortices) and *Talbot Carpet - Relief* (the Ronchi carpet), all in the Domain view (#1592) with an oblique
+  Relief 3D raymarch. Domain leaves the SmoothBuffer (the log-intensity height) unchanged, so a vortex (I = 0)
+  is a pit; I ∝ r^(2|q|) near a charge-q zero, so the charge-3 pit is flat-bottomed below the 6-decade floor for
+  a few pixels.
+- **Look:** headless raymarch renders are dark for these views (log-intensity brightness is low round the
+  vortices; the Billiard ring-crossings raymarch is dark headless too). Lower dynamic range made it worse (most
+  of the view falls below the floor), so the slit-cascade presets keep 6 decades and use +3 EV camera exposure,
+  light at 55° and shadow 0.3; Talbot +1.5 EV. Colours are the Phase Wheel (CVD-checked in #1591).
+- **Tests (`VortexWellPresetTests`, 6):** vortices located independently by the phase winding of
+  `SlitCascadeCalculator.Amplitude` round each pixel cell (cells shifted 0.37 px so the centre zero is inside
+  one); Wells: exactly one |q| ≥ 2 vortex, q = 3, at the centre; Constellation: all |q| = 1, at least three;
+  at each vortex the rendered height has a surrounding wall (some ring ≤ 25 px, everywhere ≥ the pit and 5 % of
+  the scale higher on average) and the pixel is dark; Talbot: Domain height = Intensity height, colours differ,
+  the ζ = 1 self-image row is a ridge; each preset owns its relief object. Checked by breaking them: equal shares
+  for the constellation and an inverted height both fail.
+
 **Standing rules for every slice:** batch parity (`RegionFractalParams` → `--param`,
 `BuildFractalParameters`, `BatchCommandBuilder` round-trip), recolour-guard classification (#981),
 and citations in the Bibliography in the same PR.

@@ -5134,6 +5134,8 @@ Demos:
   Slit Cascade - Probability Sets Dimension
   Slit Cascade - Vortex Core
   Slit Cascade - Particle Build-Up
+  Slit Cascade - Vortex Wells
+  Slit Cascade - Vortex Constellation
 ";
 
         public const string MathTalbotCarpetText =
@@ -5176,6 +5178,7 @@ Demos:
   Talbot Carpet - Fractal Comb
   Talbot Carpet - Cascade Grating
   Talbot Carpet - Profile Walk
+  Talbot Carpet - Relief
 ";
 
         // #1555 — Math Plane (render mode + demos). Full guide: Docs/User/MathPlane-Guide.md.

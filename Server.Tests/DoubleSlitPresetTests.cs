@@ -32,8 +32,11 @@ public sealed class DoubleSlitPresetTests
     private const string BuildUp = "Slit Cascade - Particle Build-Up";   // #1599
     private const string ProfileWalk = "Talbot Carpet - Profile Walk";   // #1601
     private const string OrbitGrating = "Double Slit - Orbit Grating";   // #1602
+    private const string VortexWells = "Slit Cascade - Vortex Wells";   // #1603
+    private const string VortexConstellation = "Slit Cascade - Vortex Constellation";
+    private const string TalbotRelief = "Talbot Carpet - Relief";
 
-    private static readonly string[] All = { WhichPath, Spirals, Rays, Ring, Dimension, Vortex, Ronchi, Comb, CascadeGrating, BuildUp, ProfileWalk, OrbitGrating };
+    private static readonly string[] All = { WhichPath, Spirals, Rays, Ring, Dimension, Vortex, Ronchi, Comb, CascadeGrating, BuildUp, ProfileWalk, OrbitGrating, VortexWells, VortexConstellation, TalbotRelief };
     private static readonly string[] Animations =
         { "Double slit: which-path collapse", "Double slit: angular momentum sweep", "Slit cascade: wavelength breathing",
           "Slit cascade: particle build-up", "Talbot carpet: profile walk", "Double slit: more slits" };
@@ -212,6 +215,7 @@ public sealed class DoubleSlitPresetTests
     [InlineData(Comb, TalbotProfile.DeltaComb)]
     [InlineData(CascadeGrating, TalbotProfile.SlitCascade)]
     [InlineData(ProfileWalk, TalbotProfile.Ronchi)]
+    [InlineData(TalbotRelief, TalbotProfile.Ronchi)]
     public void Talbot_Presets_Show_One_Talbot_Distance(string name, TalbotProfile profile)
     {
         var (region, p) = Preset(name);
