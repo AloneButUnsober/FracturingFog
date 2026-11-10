@@ -84,8 +84,7 @@ Ranges are starting points; tune them with the music you use.
 *Acid Fog - Endless flow.* `AcidWarpFlow`, **Rate**, Edge **Wrap**, **Rms**,
 Min/s 0.05, Max/s 1.5, Release 0.8. The patterns morph into each other
 non-stop; louder passages flow faster, quiet ones still drift. Needs **Morph**
-on: the recipe turns it on, and so does enabling the row in the Fractured
-Waves expander.
+on: the recipe turns it on, and so does enabling the row.
 
 ### 3.2 Acid Fog: a nudge forward on every beat ★
 
@@ -211,9 +210,9 @@ favour slow signals (Bass, Rms, Downbeat) and longer release there.
 - **Rate mode slows down on slow frames (live).** Each update adds at most
   0.1 s of motion, so when frames take longer than that the knob moves more
   slowly than Min/s..Max/s. Batch videos are exact (one frame = 1/fps).
-- **Acid Fog flow needs Morph.** `AcidWarpFlow` only shows with **Morph** on.
-  A flow recipe, or enabling the row in the Fractured Waves expander, turns it
-  on; enabling the row in Audio Settings does not, so check Morph there.
+- **Acid Fog flow needs Morph.** `AcidWarpFlow` only shows with **Morph** on;
+  enabling its row (in either matrix) or a flow recipe turns Morph on for you
+  (#1691). If you later turn Morph off, the flow binding keeps running unseen.
 - **Domain warp needs its toggle and a shallow zoom.** `DomainWarpStrength`
   does nothing with the Domain-warp toggle off or past zoom 1e6.
 - **No audio, no motion.** Without an active audio source the knobs stay at
