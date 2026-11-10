@@ -2382,6 +2382,15 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public SlitCascadeChargePattern SlitCascadeChargePattern { get => _p.SlitCascadeChargePattern; set { if (value == _p.SlitCascadeChargePattern) return; _p.SlitCascadeChargePattern = value; this.RaisePropertyChanged(); Fire(); } }
     public System.Array SlitCascadeChargePatterns => s_SlitCascadeChargePatterns;   // cached: a new array per read resets the ComboBox selection on Refresh()
     private static readonly System.Array s_SlitCascadeChargePatterns = System.Enum.GetValues(typeof(SlitCascadeChargePattern));
+    /// <summary>#1600 — per-level which-path.</summary>
+    public double SlitCascadeWhichPath { get => _p.SlitCascadeWhichPath; set { var v = Clamp(value, 0, 1); if (v == _p.SlitCascadeWhichPath) return; _p.SlitCascadeWhichPath = v; this.RaisePropertyChanged(); Fire(); } }
+    public SlitCascadeWhichPathPattern SlitCascadeWhichPathPattern { get => _p.SlitCascadeWhichPathPattern; set { if (value == _p.SlitCascadeWhichPathPattern) return; _p.SlitCascadeWhichPathPattern = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(IsSlitCascadeWhichPathCut)); this.RaisePropertyChanged(nameof(IsSlitCascadeWhichPathChosen)); Fire(); } }
+    public System.Array SlitCascadeWhichPathPatterns => s_SlitCascadeWhichPathPatterns;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_SlitCascadeWhichPathPatterns = System.Enum.GetValues(typeof(SlitCascadeWhichPathPattern));
+    public bool IsSlitCascadeWhichPathCut => _p.SlitCascadeWhichPathPattern is SlitCascadeWhichPathPattern.DeepOnly or SlitCascadeWhichPathPattern.ShallowOnly;
+    public bool IsSlitCascadeWhichPathChosen => _p.SlitCascadeWhichPathPattern == SlitCascadeWhichPathPattern.Chosen;
+    public int SlitCascadeWhichPathLevel { get => _p.SlitCascadeWhichPathLevel; set { var v = Math.Clamp(value, 0, 12); if (v == _p.SlitCascadeWhichPathLevel) return; _p.SlitCascadeWhichPathLevel = v; this.RaisePropertyChanged(); Fire(); } }
+    public int SlitCascadeWhichPathMask { get => _p.SlitCascadeWhichPathMask; set { var v = Math.Clamp(value, 0, 4095); if (v == _p.SlitCascadeWhichPathMask) return; _p.SlitCascadeWhichPathMask = v; this.RaisePropertyChanged(); Fire(); } }
     public double SlitCascadeQ { get => _p.SlitCascadeQ; set { var v = Clamp(value, -20, 20); if (v == _p.SlitCascadeQ) return; _p.SlitCascadeQ = v; this.RaisePropertyChanged(); Fire(); } }   // #1571
     public double SlitCascadeDynamicRange { get => _p.SlitCascadeDynamicRange; set { var v = Clamp(value, 0.5, 30); if (v == _p.SlitCascadeDynamicRange) return; _p.SlitCascadeDynamicRange = v; this.RaisePropertyChanged(); Fire(); } }
     public SlitCascadeLayout SlitCascadeLayout { get => _p.SlitCascadeLayout; set { if (value == _p.SlitCascadeLayout) return; _p.SlitCascadeLayout = value; this.RaisePropertyChanged(); Fire(); } }

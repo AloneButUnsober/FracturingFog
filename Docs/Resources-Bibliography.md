@@ -340,7 +340,8 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
   Vol. III, ch. 1 "Quantum Behavior", Addison-Wesley, 1965.
   <https://www.feynmanlectures.caltech.edu/III_01.html>. The two-slit experiment as "amplitudes add,
   then square", including watching which slit (§1-6): the organising rule of the epic and of the
-  which-path knob (#1567).
+  which-path knob (#1567), and of the per-level which-path of the Slit Cascade (#1600,
+  `Engine/Calculators/SlitCascadeCalculator.cs`).
 - **C. Allain, M. Cloitre.** *Optical diffraction on fractals.* Physical Review B 33(5), 3566–3569,
   1986. <https://doi.org/10.1103/PhysRevB.33.3566>. Diffraction intensity of Cantor bars and Vicsek
   fractals is their optical Fourier transform and carries the fractal dimension. Basis of the

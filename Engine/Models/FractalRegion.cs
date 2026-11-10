@@ -719,6 +719,11 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? SlitCascadeQ { get; set; }   // #1571
         [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeCharge { get; set; }   // #1572
         [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeChargePattern { get; set; }
+        // #1600 — per-level which-path (pattern = int cast of SlitCascadeWhichPathPattern).
+        [JsonIgnore(Condition = OmitNull)] public double? SlitCascadeWhichPath { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeWhichPathPattern { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeWhichPathLevel { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeWhichPathMask { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? SlitCascadeDomainContours { get; set; }   // #1598
         // #1597 — white light (int casts of WhiteLightMode).
         [JsonIgnore(Condition = OmitNull)] public int? WhiteLightSamples { get; set; }
@@ -1365,6 +1370,10 @@ namespace FracturingFog.Models
                     SlitCascadeQ = p.SlitCascadeQ,
                     SlitCascadeCharge = p.SlitCascadeCharge,
                     SlitCascadeChargePattern = (int)p.SlitCascadeChargePattern,
+                    SlitCascadeWhichPath = p.SlitCascadeWhichPath,
+                    SlitCascadeWhichPathPattern = (int)p.SlitCascadeWhichPathPattern,
+                    SlitCascadeWhichPathLevel = p.SlitCascadeWhichPathLevel,
+                    SlitCascadeWhichPathMask = p.SlitCascadeWhichPathMask,
                     SlitCascadeDomainContours = (int)p.SlitCascadeDomainContours,
                     SlitCascadeContourCount = p.SlitCascadeContourCount,
                     SlitCascadeWhiteLight = (int)p.SlitCascadeWhiteLight,
@@ -2157,6 +2166,10 @@ namespace FracturingFog.Models
             if (SlitCascadeQ.HasValue) p.SlitCascadeQ = SlitCascadeQ.Value;
             if (SlitCascadeCharge.HasValue) p.SlitCascadeCharge = SlitCascadeCharge.Value;
             if (this.SlitCascadeChargePattern.HasValue) p.SlitCascadeChargePattern = (FracturingFog.SlitCascadeChargePattern)this.SlitCascadeChargePattern.Value;
+            if (SlitCascadeWhichPath.HasValue) p.SlitCascadeWhichPath = SlitCascadeWhichPath.Value;   // #1600
+            if (this.SlitCascadeWhichPathPattern.HasValue) p.SlitCascadeWhichPathPattern = (FracturingFog.SlitCascadeWhichPathPattern)this.SlitCascadeWhichPathPattern.Value;
+            if (SlitCascadeWhichPathLevel.HasValue) p.SlitCascadeWhichPathLevel = SlitCascadeWhichPathLevel.Value;
+            if (SlitCascadeWhichPathMask.HasValue) p.SlitCascadeWhichPathMask = SlitCascadeWhichPathMask.Value;
             if (this.SlitCascadeDomainContours.HasValue) p.SlitCascadeDomainContours = (FracturingFog.DomainContourMode)this.SlitCascadeDomainContours.Value;   // #1598
             if (SlitCascadeContourCount.HasValue) p.SlitCascadeContourCount = SlitCascadeContourCount.Value;
             if (DetectionCount.HasValue) p.DetectionCount = DetectionCount.Value;   // #1599

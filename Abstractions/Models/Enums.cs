@@ -715,6 +715,24 @@ namespace FracturingFog
         Detections,
     }
 
+    /// <summary>Which levels of a <see cref="FractalType.SlitCascade"/> carry the
+    /// which-path marker η (#1600). Append only.</summary>
+    public enum SlitCascadeWhichPathPattern
+    {
+        /// <summary>Every level gets η.</summary>
+        Constant,
+        /// <summary>Level n gets η·(n + 1)/D: coherence fades with depth.</summary>
+        Ramp,
+        /// <summary>Levels n ≥ L get η (L = SlitCascadeWhichPathLevel): the deep, coarse
+        /// fringes wash out, the shallow, fine ones stay.</summary>
+        DeepOnly,
+        /// <summary>Levels n &lt; L get η: the shallow, fine fringes wash out.</summary>
+        ShallowOnly,
+        /// <summary>The levels whose bit is set in SlitCascadeWhichPathMask get η
+        /// (bit 0 = level 0).</summary>
+        Chosen,
+    }
+
     /// <summary>White-light (spectral) colouring of the Slit Cascade / Talbot Carpet
     /// intensity view (#1597). Append only.</summary>
     public enum WhiteLightMode

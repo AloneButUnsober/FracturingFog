@@ -5096,6 +5096,13 @@ exactly level by level (Bak et al. 1998; Allain & Cloitre 1986).
   White light     Intensity only: sum over many wavelengths;
                    TrueSpectrum (real colours) or BlueAmber
                    (blue = short, amber = long: red/green safe).
+  Which-path      watch which slit at chosen levels: eta 0 = off,
+                   1 = those levels add as intensities, so their
+                   fringes wash out and the others keep theirs.
+                   Levels: Constant, Ramp, DeepOnly / ShallowOnly
+                   (cut level L), Chosen (mask: 1 = level 0, 2 =
+                   level 1, 4 = level 2 ...). Level 0 = the finest
+                   fringes. Phase shows the part that interferes.
   Detections      particle build-up: dots land with probability
                    proportional to the intensity and pile up into
                    the fringes (Tonomura et al. 1989). Raising the
