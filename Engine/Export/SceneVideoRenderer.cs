@@ -611,6 +611,9 @@ namespace FracturingFog.Export
                 }
             }
 
+            // #1700 — a Math Plane region's script plays on shot-local time.
+            if (shot.PlayScript) p.MathPlaneScriptTime = global::System.Math.Max(0, localTime);
+
             // Keyframed orbit camera at this local time (looped over its own
             // duration, mirroring the S6 CameraTrackAnimator Loop=true).
             if (shot.Camera != null && shot.Camera.Keys.Count > 0
@@ -838,6 +841,7 @@ namespace FracturingFog.Export
                 Animation = anim,
                 Camera = shot.Camera,
                 ToneMap = shot.ToneMap,
+                PlayScript = FracturingFog.Abstractions.Animation.SceneShotScript.Plays(shot, type, p.MathPlaneScene),
             };
         }
 
@@ -922,6 +926,8 @@ namespace FracturingFog.Export
             public AnimationData? Animation;
             public CameraTrack? Camera;
             public Rendering.Lighting.ToneMapOperator? ToneMap;
+            /// <summary>#1700 — the shot plays its Math Plane region's script on local time.</summary>
+            public bool PlayScript;
         }
     }
 }

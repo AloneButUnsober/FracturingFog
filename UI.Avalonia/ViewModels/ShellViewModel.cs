@@ -2960,6 +2960,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
         // Apply the opening shot immediately so playback starts on-frame.
         ApplySceneSample(timeline.Sample(0));
+        ApplySceneShotScript(timeline.Sample(0));   // #1700
         UpdateSceneDebug(timeline.Sample(0));
 
         _sceneTimer = new DispatcherTimer(
@@ -3003,8 +3004,24 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
         var sample = tl.Sample(_sceneClock);
         ApplySceneSample(sample);
+        ApplySceneShotScript(sample);
         AdvanceSceneShotTheme(sample.LocalTime);
         UpdateSceneDebug(sample);
+    }
+
+    // #1700 — a Math Plane shot plays its region's script on shot-local time, as the
+    // export does (SceneVideoRenderer.ShotParamsAt). Through the section VM so its Script
+    // group follows; Refresh first so a just-jumped-to region's scene is loaded.
+    private void ApplySceneShotScript(FracturingFog.Abstractions.Animation.SceneSample sample)
+    {
+        var scene = _scenePlaying;
+        if (scene == null || sample.OriginalIndex < 0 || sample.OriginalIndex >= scene.Shots.Count) return;
+        var p = Main.ViewState.FractalParameters;
+        if (FracturingFog.Abstractions.Animation.SceneShotScript.TimeFor(
+                scene.Shots[sample.OriginalIndex], Main.ViewState.FractalType, p.MathPlaneScene, sample.LocalTime) is not double s)
+            return;
+        MathPlane.Refresh();
+        MathPlane.ScriptTime = s;
     }
 
     // ── #1051 — scene debug overlay ─────────────────────────────────────────

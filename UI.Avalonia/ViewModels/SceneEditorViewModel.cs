@@ -433,6 +433,16 @@ public sealed class SceneShotRowViewModel : ReactiveObject
     {
         var info = HasRegion ? _source.RegionInfo(_selectedRegion) : null;
         _isRelief3D = info?.Relief3D ?? false;
+        // #1700 — a scripted Math Plane region: offer Play script, and length the shot to
+        // the script while it still has the default length.
+        _regionScriptSeconds = HasRegion ? _source.RegionScriptSeconds(_selectedRegion) : 0;
+        if (!_populating && _regionScriptSeconds > 0 && _durationSeconds == DefaultShotSeconds)
+        {
+            _durationSeconds = _regionScriptSeconds;
+            this.RaisePropertyChanged(nameof(DurationSeconds));
+        }
+        this.RaisePropertyChanged(nameof(HasRegionScript));
+        this.RaisePropertyChanged(nameof(RegionScriptHint));
         if (info is { } i && i.Type != _fractalType) FractalType = i.Type; // raises Supports3DCamera
         if (!_fractalTypes.Contains(_fractalType)) RebuildFractalTypes();
         this.RaisePropertyChanged(nameof(IsRelief3D));
@@ -516,12 +526,34 @@ public sealed class SceneShotRowViewModel : ReactiveObject
 
     public string PreviewButtonText => _isPreviewing ? "■ Stop" : "Preview";
 
-    private double _durationSeconds = 5.0;
+    /// <summary>A new shot's length (SceneShot.DurationSeconds default).</summary>
+    public const double DefaultShotSeconds = 5.0;
+
+    private double _durationSeconds = DefaultShotSeconds;
     public double DurationSeconds
     {
         get => _durationSeconds;
         set { this.RaiseAndSetIfChanged(ref _durationSeconds, value); _onChanged(); }
     }
+
+    // #1700 — Play script (Math Plane regions with a script).
+    private double _regionScriptSeconds;
+    private bool _populating;   // loading a saved shot never re-lengths it
+    private bool _playScript = true;
+    /// <summary>Play the region's Math Plane script on this shot's local time.</summary>
+    public bool PlayScript
+    {
+        get => _playScript;
+        set { this.RaiseAndSetIfChanged(ref _playScript, value); _onChanged(); }
+    }
+
+    /// <summary>The shot's region is a Math Plane scene with a script.</summary>
+    public bool HasRegionScript => _regionScriptSeconds > 0;
+
+    /// <summary>"script 12.5 s".</summary>
+    public string RegionScriptHint => HasRegionScript
+        ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"script {_regionScriptSeconds:0.##} s")
+        : "";
 
     private SceneTransitionKind _transition = SceneTransitionKind.Crossfade;
     public SceneTransitionKind Transition
@@ -665,6 +697,7 @@ public sealed class SceneShotRowViewModel : ReactiveObject
             DurationSeconds = _durationSeconds,
             Transition = _transition,
             TransitionSeconds = _transitionSeconds,
+            PlayScript = _playScript,
         };
 
         if (Supports3DCamera && CameraKeys.Count > 0)
@@ -708,6 +741,7 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         _durationSeconds = shot.DurationSeconds;
         _transition = shot.Transition;
         _transitionSeconds = shot.TransitionSeconds;
+        _playScript = shot.PlayScript;
 
         CameraKeys.Clear();
         if (shot.Camera != null)
@@ -717,7 +751,8 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         }
 
         RebuildPickers();
-        SyncFromRegion();
+        _populating = true;
+        try { SyncFromRegion(); } finally { _populating = false; }
         this.RaisePropertyChanged(nameof(Name));
         this.RaisePropertyChanged(nameof(SelectedRegion));
         this.RaisePropertyChanged(nameof(SelectedTheme));
@@ -732,6 +767,7 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(Transition));
         this.RaisePropertyChanged(nameof(TransitionSeconds));
         this.RaisePropertyChanged(nameof(Interpolation));
+        this.RaisePropertyChanged(nameof(PlayScript));
     }
 }
 

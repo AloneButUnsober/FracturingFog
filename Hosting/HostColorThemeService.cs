@@ -647,6 +647,15 @@ namespace FracturingFog.Hosting
         }
 
         /// <inheritdoc/>
+        public double GetRegionScriptSeconds(string regionName)
+        {
+            if (string.IsNullOrWhiteSpace(regionName)) return 0;
+            var r = FractalRegionLibrary.Instance.FindByName(regionName);
+            if (r == null || r.FractalType != FractalType.MathPlane) return 0;
+            return FracturingFog.Abstractions.Animation.SceneShotScript.ScriptSeconds(r.Params?.MathPlaneScene);
+        }
+
+        /// <inheritdoc/>
         public SceneThemePlan? ResolveSceneShotThemes(SceneShot shot)
             => shot == null ? null : SceneThemeResolver.Plan(shot);
 

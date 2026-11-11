@@ -299,6 +299,11 @@ namespace FracturingFog.Models
         /// camera keys). Null when the region doesn't exist (or no host).</summary>
         (FractalType Type, bool Relief3D)? GetRegionSceneInfo(string regionName) => null;
 
+        /// <summary>#1700 — the length in seconds of a Math Plane region's script (0 when the
+        /// region is not Math Plane, has no script, or doesn't exist). A scene shot on it
+        /// defaults to this length.</summary>
+        double GetRegionScriptSeconds(string regionName) => 0;
+
         /// <summary>Fetch a saved scene by name (case-insensitive). Null when the
         /// library has no entry by that name.</summary>
         SceneData? GetScene(string sceneName) => null;
