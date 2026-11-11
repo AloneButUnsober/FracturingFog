@@ -194,6 +194,7 @@ public sealed class CameraTrackTests
         FractalType.Julibrot,
         FractalType.UserBulb,
         FractalType.MirrorSpheres,   // #1440 — same orbit camera, analytic ray trace
+        FractalType.MathPlane3D,     // #1713 — same orbit camera, CPU mesh renderer
     };
 
     [Fact]

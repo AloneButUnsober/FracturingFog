@@ -113,6 +113,8 @@ namespace FracturingFog.Models
             FractalType.Kleinian => FractalMotionClass.Raymarch3D,
             // #1440 — analytic ray trace, but the same orbit camera: zoom is a dolly.
             FractalType.MirrorSpheres => FractalMotionClass.Raymarch3D,
+            // #1713 — a mesh renderer, but the same orbit camera contract: zoom is a dolly.
+            FractalType.MathPlane3D => FractalMotionClass.Raymarch3D,
             FractalType.BicomplexMandelbrot => FractalMotionClass.Raymarch3D,
             FractalType.Coquaternion => FractalMotionClass.Raymarch3D,
             FractalType.Julibrot => FractalMotionClass.Raymarch3D,

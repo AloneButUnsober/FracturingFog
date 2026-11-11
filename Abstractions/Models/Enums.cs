@@ -1227,6 +1227,11 @@ namespace FracturingFog
         /// <c>TalbotView</c>, <c>TalbotDynamicRange</c> (the SlitCascade profile also
         /// reads the <c>SlitCascade*</c> settings).</summary>
         TalbotCarpet,
+        /// <summary>#1713 (Math Plane 3D T1, #1556) — points, vectors, segments and
+        /// polylines in space with axes and grid planes, drawn by a CPU z-buffer
+        /// renderer under an orbit camera. Scene text <c>MathPlane3DScene</c>; camera
+        /// <c>MathPlane3DCamera*</c>. Design: Docs/Technical/MathPlane3D-DesignPlan.md.</summary>
+        MathPlane3D,
     }
 
     public enum RenderProfile { Preview, Final }
@@ -1366,6 +1371,9 @@ namespace FracturingFog
             // Wada mirror spheres (#1440) — categorical exit opening through
             // IBilliardColorMap only; no normals / DE / orbit data for themes.
             FractalType.MirrorSpheres => FractalCapabilities.None,
+
+            // #1713 — Math Plane 3D draws its own colours (a diagram, no per-pixel data).
+            FractalType.MathPlane3D => FractalCapabilities.None,
 
             // Histogram / chaos-game families — no normals, no orbit data
             // surfaced to per-pixel themes (each calculator paints through the

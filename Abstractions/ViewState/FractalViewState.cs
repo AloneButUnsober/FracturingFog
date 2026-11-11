@@ -294,6 +294,7 @@ namespace FracturingFog.ViewState
                 FractalType.JulibrotPair       => (-0.5,  0.0, 1.0),
                 FractalType.Kleinian              => ( 0.0,  0.0, 1.0),
                 FractalType.MirrorSpheres         => ( 0.0,  0.0, 1.0),
+                FractalType.MathPlane3D           => ( 0.0,  0.0, 1.0),   // #1713
                 FractalType.BicomplexMandelbrot   => ( 0.0,  0.0, 1.0),
                 FractalType.Coquaternion          => ( 0.0,  0.0, 1.0),
                 FractalType.Julibrot       => ( 0.0,  0.0, 1.0),
@@ -340,6 +341,7 @@ namespace FracturingFog.ViewState
             || t == FractalType.QuaternionMandelbrot
             || t == FractalType.Kleinian
             || t == FractalType.MirrorSpheres
+            || t == FractalType.MathPlane3D        // #1713
             || t == FractalType.BicomplexMandelbrot
             || t == FractalType.Coquaternion
             || t == FractalType.Julibrot

@@ -1344,6 +1344,18 @@ namespace FracturingFog.Models
         /// as written; past the script's end holds its final state). Ignored without steps.</summary>
         public double MathPlaneScriptTime { get; set; }
 
+        /// <summary>#1713 — the <see cref="FractalType.MathPlane3D"/> scene (MathPlane3DScene text format).</summary>
+        public string MathPlane3DScene { get; set; } = FracturingFog.Models.MathPlane3DScene.DefaultText;
+        /// <summary>#1713 — the orbit camera: distance from the target (divided by the view's Zoom),
+        /// azimuth theta about +z and polar angle phi from +z (z up), in radians.</summary>
+        public double MathPlane3DCameraDistance { get; set; } = 9.0;
+        public double MathPlane3DCameraTheta { get; set; } = 0.9;
+        public double MathPlane3DCameraPhi { get; set; } = 1.1;
+        /// <summary>#1713 — the point the camera orbits and looks at.</summary>
+        public double MathPlane3DTargetX { get; set; }
+        public double MathPlane3DTargetY { get; set; }
+        public double MathPlane3DTargetZ { get; set; }
+
         // ── Slit cascade (#1569, double-slit epic #1565) ──────────────────
         /// <summary>Slit cascade: children per slit, N (2..16). N ≥ 3 for the fringe
         /// weights to differ (a symmetric pair is a plain Cantor set).</summary>
@@ -2399,6 +2411,13 @@ namespace FracturingFog.Models
                 MathPlaneCIm = MathPlaneCIm,
                 MathPlaneBackdrop = MathPlaneBackdrop,
                 MathPlaneScriptTime = MathPlaneScriptTime,
+                MathPlane3DScene = MathPlane3DScene,
+                MathPlane3DCameraDistance = MathPlane3DCameraDistance,
+                MathPlane3DCameraTheta = MathPlane3DCameraTheta,
+                MathPlane3DCameraPhi = MathPlane3DCameraPhi,
+                MathPlane3DTargetX = MathPlane3DTargetX,
+                MathPlane3DTargetY = MathPlane3DTargetY,
+                MathPlane3DTargetZ = MathPlane3DTargetZ,
                 SlitCascadeChildren = SlitCascadeChildren,
                 SlitCascadeRatio = SlitCascadeRatio,
                 SlitCascadeDepth = SlitCascadeDepth,

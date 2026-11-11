@@ -88,6 +88,10 @@ namespace FracturingFog.Batch
                 if (family == FractalType.MathPlane
                     && !FracturingFog.Models.MathPlaneScene.TryParse(fp.MathPlaneScene, out _, out var sceneError))
                     throw new InvalidOperationException("MathPlaneScene: " + sceneError);
+                // #1713 — the same for a Math Plane 3D scene.
+                if (family == FractalType.MathPlane3D
+                    && !FracturingFog.Models.MathPlane3DScene.TryParse(fp.MathPlane3DScene, out _, out var scene3Error))
+                    throw new InvalidOperationException("MathPlane3DScene: " + scene3Error);
             }
             if (opts.BulbPower.HasValue)          fp.BulbPower          = opts.BulbPower.Value;
             if (opts.MultibrotExponent.HasValue)  fp.MultibrotExponent  = opts.MultibrotExponent.Value;

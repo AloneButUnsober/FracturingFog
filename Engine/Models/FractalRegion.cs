@@ -616,6 +616,12 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? MathPlaneBackdrop { get; set; }
         // #1695 — the scene script's clock (seconds).
         [JsonIgnore(Condition = OmitNull)] public double? MathPlaneScriptTime { get; set; }
+        // #1713 — Math Plane 3D: the scene text and the camera target (the camera triple
+        // rides the Cam3D* block).
+        [JsonIgnore(Condition = OmitNull)] public string? MathPlane3DScene { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MathPlane3DTargetX { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MathPlane3DTargetY { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MathPlane3DTargetZ { get; set; }
         // #1538 — Polygon sides; captured only when Polygon is the active geometry.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardPolygonSides { get; set; }
         // #1539 — Polygon fill (captured with Polygon) and lattice rotation (captured with a lattice).
@@ -1260,6 +1266,20 @@ namespace FracturingFog.Models
                     KleinianDeFactor = p.KleinianDeFactor != 1.0 ? p.KleinianDeFactor : (double?)null,
                     KleinianSphereScale = Nd(p.KleinianSphereScale, D.KleinianSphereScale),   // #961
                     KleinianIterations = Ni(p.KleinianIterations, D.KleinianIterations),
+                },
+                // #1713 — Math Plane 3D: scene (canonical one-line form when it parses),
+                // target, and the orbit camera in the generic Cam3D block.
+                FractalType.MathPlane3D => new RegionFractalParams
+                {
+                    Cam3DFamily = (int)type,
+                    Cam3DDistance = p.MathPlane3DCameraDistance,
+                    Cam3DTheta = p.MathPlane3DCameraTheta,
+                    Cam3DPhi = p.MathPlane3DCameraPhi,
+                    MathPlane3DScene = FracturingFog.Models.MathPlane3DScene.TryParse(p.MathPlane3DScene, out var mp3Scene, out _)
+                        ? mp3Scene.Serialize() : p.MathPlane3DScene ?? string.Empty,
+                    MathPlane3DTargetX = p.MathPlane3DTargetX,
+                    MathPlane3DTargetY = p.MathPlane3DTargetY,
+                    MathPlane3DTargetZ = p.MathPlane3DTargetZ,
                 },
                 FractalType.MirrorSpheres => new RegionFractalParams   // #1440
                 {
@@ -2018,6 +2038,10 @@ namespace FracturingFog.Models
             if (MathPlaneCIm.HasValue) p.MathPlaneCIm = MathPlaneCIm.Value;
             if (MathPlaneBackdrop.HasValue) p.MathPlaneBackdrop = (FracturingFog.MathPlaneBackdrop)MathPlaneBackdrop.Value;
             if (MathPlaneScriptTime.HasValue) p.MathPlaneScriptTime = MathPlaneScriptTime.Value;
+            if (MathPlane3DScene != null) p.MathPlane3DScene = MathPlane3DScene;
+            if (MathPlane3DTargetX.HasValue) p.MathPlane3DTargetX = MathPlane3DTargetX.Value;
+            if (MathPlane3DTargetY.HasValue) p.MathPlane3DTargetY = MathPlane3DTargetY.Value;
+            if (MathPlane3DTargetZ.HasValue) p.MathPlane3DTargetZ = MathPlane3DTargetZ.Value;
             if (BilliardPolygonSides.HasValue)
                 p.BilliardPolygonSides = BilliardPolygonSides.Value;
             if (BilliardPolygonFill.HasValue)
@@ -2106,6 +2130,9 @@ namespace FracturingFog.Models
                         break;
                     case FractalType.MirrorSpheres:
                         p.MirrorSpheresCameraDistance = d; p.MirrorSpheresCameraTheta = th; p.MirrorSpheresCameraPhi = ph;
+                        break;
+                    case FractalType.MathPlane3D:   // #1713
+                        p.MathPlane3DCameraDistance = d; p.MathPlane3DCameraTheta = th; p.MathPlane3DCameraPhi = ph;
                         break;
                     case FractalType.BicomplexMandelbrot:
                         p.BicomplexCameraDistance = d; p.BicomplexCameraTheta = th; p.BicomplexCameraPhi = ph;
