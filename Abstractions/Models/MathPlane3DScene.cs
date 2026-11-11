@@ -26,7 +26,10 @@
 // An explicit surface without a domain spans [-3, 3] x [-3, 3]. mesh N is the cells a
 // side (2-256, default 64). A #RRGGBBAA surface is drawn in the translucent pass.
 //
-// Maps (T3, #1715) come later.
+// #1715 (T3) adds the map read-outs (the map itself is params, MathPlane3DMap):
+//   det on|off       the unit cube's image as a shaded parallelepiped, with det
+//   eigen on|off     the real eigenvectors as lines through the origin, with eigenvalues
+//   lengths on|off   vector lengths after the map
 // Design: Docs/Technical/MathPlane3D-DesignPlan.md §3.2.
 
 using System;
@@ -57,6 +60,10 @@ namespace FracturingFog.Models
         public FracturingFog.ViewState.GridLabelSettings Labels { get; init; } = FracturingFog.ViewState.GridLabelSettings.Default;
         /// <summary>#1714 — flat shading instead of Gouraud.</summary>
         public bool FlatShading { get; init; }
+        /// <summary>#1715 — map read-outs.</summary>
+        public bool ShowDet { get; init; }
+        public bool ShowEigen { get; init; }
+        public bool ShowLengths { get; init; }
         /// <summary>#1714 — grid planes filled with a translucent tint.</summary>
         public MathPlane3DGrid Fill { get; init; } = MathPlane3DGrid.None;
         public IReadOnlyList<MathPlaneObject> Objects { get; init; } = Array.Empty<MathPlaneObject>();
@@ -68,7 +75,8 @@ namespace FracturingFog.Models
 
         public bool Equals(MathPlane3DScene? o) =>
             o is not null && ShowAxes == o.ShowAxes && ShowTicks == o.ShowTicks && Grid == o.Grid
-            && Labels == o.Labels && FlatShading == o.FlatShading && Fill == o.Fill && Objects.SequenceEqual(o.Objects);
+            && Labels == o.Labels && FlatShading == o.FlatShading && Fill == o.Fill
+            && ShowDet == o.ShowDet && ShowEigen == o.ShowEigen && ShowLengths == o.ShowLengths && Objects.SequenceEqual(o.Objects);
 
         public override int GetHashCode() => HashCode.Combine(ShowAxes, ShowTicks, Grid, Objects.Count);
 
@@ -108,6 +116,9 @@ namespace FracturingFog.Models
             if (Grid != MathPlane3DGrid.XY) parts.Add("grid " + GridToken(Grid));
             if (Labels != FracturingFog.ViewState.GridLabelSettings.Default) parts.Add("labels " + MathPlaneScene.LabelsToken(Labels));
             if (FlatShading) parts.Add("shading flat");
+            if (ShowDet) parts.Add("det on");
+            if (ShowEigen) parts.Add("eigen on");
+            if (ShowLengths) parts.Add("lengths on");
             if (Fill != MathPlane3DGrid.None) parts.Add("fill " + GridToken(Fill));
             foreach (var o in Objects) parts.Add(SerializeObject(o));
             return string.Join("; ", parts);
@@ -153,7 +164,7 @@ namespace FracturingFog.Models
             error = null;
             if (string.IsNullOrWhiteSpace(text)) return true;
 
-            bool axes = true, ticks = true, flat = false;
+            bool axes = true, ticks = true, flat = false, det = false, eigen = false, lengths = false;
             var grid = MathPlane3DGrid.XY;
             var fill = MathPlane3DGrid.None;
             var labels = FracturingFog.ViewState.GridLabelSettings.Default;
@@ -182,10 +193,20 @@ namespace FracturingFog.Models
                 {
                     case "axes":
                     case "ticks":
+                    case "det":
+                    case "eigen":
+                    case "lengths":
                     {
                         if (toks.Count != 2 || !MathPlaneScene.TryOnOff(toks[1].Text, out bool on))
                         { error = Err(1, $"'{head}' takes on or off"); return false; }
-                        if (head == "axes") axes = on; else ticks = on;
+                        switch (head)
+                        {
+                            case "axes": axes = on; break;
+                            case "ticks": ticks = on; break;
+                            case "det": det = on; break;
+                            case "eigen": eigen = on; break;
+                            default: lengths = on; break;
+                        }
                         break;
                     }
                     case "labels":
@@ -233,12 +254,13 @@ namespace FracturingFog.Models
                         break;
                     }
                     default:
-                        error = Err(0, $"unknown statement '{toks[0].Text}' (expected point, vector, segment, polyline, curve, surface, axes, grid, fill, shading, ticks or labels)");
+                        error = Err(0, $"unknown statement '{toks[0].Text}' (expected point, vector, segment, polyline, curve, surface, axes, grid, fill, shading, ticks, labels, det, eigen or lengths)");
                         return false;
                 }
             }
 
-            scene = new MathPlane3DScene { ShowAxes = axes, ShowTicks = ticks, Grid = grid, Labels = labels, FlatShading = flat, Fill = fill, Objects = objects };
+            scene = new MathPlane3DScene { ShowAxes = axes, ShowTicks = ticks, Grid = grid, Labels = labels, FlatShading = flat, Fill = fill,
+                                       ShowDet = det, ShowEigen = eigen, ShowLengths = lengths, Objects = objects };
             return true;
         }
 

@@ -832,7 +832,9 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
   Free copy: MIMS EPrint 2007.9, <https://eprints.maths.manchester.ac.uk/694/>. A quadratically
   convergent Newton method for the polar decomposition of a full-rank matrix. Planned for the polar
   `t`-interpolation of 3×3 maps in Math Plane 3D, `M = R·S` (#1556, `MathPlane3D-DesignPlan.md` §3.4).
-  The 2D Math Plane uses a closed form instead.
+  The 2D Math Plane uses a closed form instead. Used since #1715:
+  `Abstractions/Models/MathPlane3DMap.cs` (`PolarDecompose`) runs the unscaled iteration
+  X ← ½ (X + X⁻ᵀ) from X₀ = M and takes S = sym(Rᵀ M); the paper's acceleration (scaling) is not used.
 
 <a id="shoemake-slerp"></a>
 
@@ -841,7 +843,9 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
   most records; one record gives 10.1145/325334.325242. Not checked against the ACM Digital Library.
   SIGGRAPH history record: <https://history.siggraph.org/?p=107413>. Planned for interpolating the
   rotation factor R from the identity in Math Plane 3D's polar `t` (#1556, `MathPlane3D-DesignPlan.md`
-  §3.4).
+  §3.4). Used since #1715: `MathPlaneQuat.Slerp` in `Abstractions/Models/MathPlane3DMap.cs`
+  (sin((1 − t)θ) a + sin(tθ) b) / sin θ along the shorter arc. The matrix-to-quaternion conversion
+  there is FF's own inversion of the quaternion's rotation matrix, not taken from the paper.
 
 <a id="wegert-visual-complex-functions"></a>
 

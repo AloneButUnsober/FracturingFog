@@ -645,6 +645,17 @@ public static class FractalAnimatableParamsMap
         new("MathPlane3DCameraDistance", AnimatableParamKind.ScalarDouble, Min: 1.0, Max: 60.0, Notes: "Camera distance from the target."),
         new("MathPlane3DCameraTheta", AnimatableParamKind.ScalarDouble, Min: -System.Math.PI, Max: System.Math.PI, Notes: "Camera azimuth about +z (radians)."),
         new("MathPlane3DCameraPhi", AnimatableParamKind.ScalarDouble, Min: 0.05, Max: System.Math.PI - 0.05, Notes: "Camera polar angle from +z (radians)."),
+        new("MathPlane3DT", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 1.0,
+            Notes: "Map progress: 0 = identity, 1 = the full 3x3 matrix. Animate 0 to 1 to watch space transform."),
+        new("MathPlane3DM11", AnimatableParamKind.ScalarDouble, Min: -4.0, Max: 4.0, Notes: "Matrix row 1, column 1 (i-hat's x)."),
+        new("MathPlane3DM12", AnimatableParamKind.ScalarDouble, Min: -4.0, Max: 4.0, Notes: "Matrix row 1, column 2 (j-hat's x)."),
+        new("MathPlane3DM13", AnimatableParamKind.ScalarDouble, Min: -4.0, Max: 4.0, Notes: "Matrix row 1, column 3 (k-hat's x)."),
+        new("MathPlane3DM21", AnimatableParamKind.ScalarDouble, Min: -4.0, Max: 4.0, Notes: "Matrix row 2, column 1 (i-hat's y)."),
+        new("MathPlane3DM22", AnimatableParamKind.ScalarDouble, Min: -4.0, Max: 4.0, Notes: "Matrix row 2, column 2 (j-hat's y)."),
+        new("MathPlane3DM23", AnimatableParamKind.ScalarDouble, Min: -4.0, Max: 4.0, Notes: "Matrix row 2, column 3 (k-hat's y)."),
+        new("MathPlane3DM31", AnimatableParamKind.ScalarDouble, Min: -4.0, Max: 4.0, Notes: "Matrix row 3, column 1 (i-hat's z)."),
+        new("MathPlane3DM32", AnimatableParamKind.ScalarDouble, Min: -4.0, Max: 4.0, Notes: "Matrix row 3, column 2 (j-hat's z)."),
+        new("MathPlane3DM33", AnimatableParamKind.ScalarDouble, Min: -4.0, Max: 4.0, Notes: "Matrix row 3, column 3 (k-hat's z)."),
     };
 
     private static readonly AnimatableParamDescriptor[] _mirrorSpheresList =

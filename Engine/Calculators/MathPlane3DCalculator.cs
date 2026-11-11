@@ -37,6 +37,12 @@
 // Single-threaded and deterministic: the same params give the same pixels live and
 // in batch.
 //
+// #1715 (T3): the 3×3 map (MathPlane3DMap.Current) moves every object, the grid
+// planes (drawn again in blue over the dimmed originals) and every surface vertex;
+// surface normals come from the mapped triangles. Read-outs: det (the unit cube's
+// image, translucent, with its det), eigen (dashed lines through the origin with λ)
+// and lengths (|M v| beside each vector).
+//
 // Camera (z up): eye = target + (distance / Zoom) · (sinφ cosθ, sinφ sinθ, cosφ),
 // looking at the target; perspective with a 45° vertical field of view.
 
@@ -156,11 +162,22 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
     /// <summary>#1714 — the tint of a filled grid plane (<c>fill xy</c>).</summary>
     public const uint GridFillColor = 0x2E9FB8D8;
     public const uint AxisColor = 0xB3FFFFFF;
+    /// <summary>#1715 — the original axes while a map is drawn, and the map's colours (as 2D).</summary>
+    public const uint DimAxisColor = 0x66FFFFFF;
+    public const uint MapGridColor = MathPlaneCalculator.MapGridColor;
+    public const uint DetFillColor = MathPlaneCalculator.DetFillColor;
+    public const uint DetEdgeColor = MathPlaneCalculator.DetEdgeColor;
+    public const uint EigenColor = MathPlaneCalculator.EigenColor;
     public const uint TickLabelColor = MathPlaneCalculator.TickLabelColor;
     /// <summary>Relative depth bias for lines and points against the z-buffer.</summary>
     public const double DepthBias = 2e-3;
     /// <summary>#1714 — segments of a space curve.</summary>
     public const int CurveSegments = 512;
+
+    /// <summary>#1715 — the map of the frame being drawn (identity when off).</summary>
+    public Mat3 LastMap { get; private set; } = Mat3.Identity;
+    private Mat3 _map = Mat3.Identity;
+    private bool _mapped;
 
     private string? _parsedText;
     private MathPlane3DScene _scene = new();
@@ -224,20 +241,27 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
             cam = cam with { Eye = (cam.Eye.X + cam.Right.X * o, cam.Eye.Y + cam.Right.Y * o, cam.Eye.Z + cam.Right.Z * o) };
         }
         float ui = (float)Math.Clamp(Math.Min(w, h) / 720.0, 1.0, 4.0);
+        // The grid's size comes from the unmapped scene, so it holds still while t animates.
         double extent = Extent(scene, FractalParameters, Zoom, Bounds(scene));
+        _map = MathPlane3DMap.Current(FractalParameters);
+        if (!IsFinite(_map)) _map = Mat3.Identity;
+        _mapped = !_map.IsIdentity;
+        LastMap = _map;
         ct.ThrowIfCancellationRequested();
 
-        // Triangles: opaque (arrowheads, opaque surfaces) and translucent (alpha surfaces, fills).
+        // Triangles: opaque (arrowheads, opaque surfaces) and translucent (alpha surfaces, fills, det).
         var opaque = new List<ScreenTriangle>();
         var translucent = new List<ScreenTriangle>();
         foreach (var o in scene.Objects)
         {
             if (!o.Visible) continue;
-            if (o.Kind == MathPlaneObjectKind.Vector) AddArrowhead(opaque, cam, o, extent);
+            if (o.Kind == MathPlaneObjectKind.Vector)
+                AddArrowhead(opaque, cam, X(MathPlane3DScene.Tail(o)), X(MathPlane3DScene.Tip(o)), o.Color, extent);
             else if (o.Kind == MathPlaneObjectKind.Surface && _meshes.TryGetValue(o, out var mesh))
-                AddSurface((o.Color >> 24) == 0xFF ? opaque : translucent, cam, mesh, o.Color, scene.FlatShading);
+                AddSurface((o.Color >> 24) == 0xFF ? opaque : translucent, cam, MapMesh(mesh, _map), o.Color, scene.FlatShading);
         }
-        AddFills(translucent, cam, scene.Fill, extent);
+        AddFills(translucent, cam, scene.Fill, extent, _map);
+        if (scene.ShowDet) AddDet(translucent, cam, _map);
         ct.ThrowIfCancellationRequested();
 
         // Pass 1: opaque into colour + depth.
@@ -270,6 +294,35 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
             canvas.Flush();
         }
         finally { handle.Free(); }
+    }
+
+    /// <summary>#1715 — a world point through the frame's map.</summary>
+    private (double X, double Y, double Z) X((double X, double Y, double Z) p) => _mapped ? _map.Apply(p) : p;
+
+    private static bool IsFinite(Mat3 m) => double.IsFinite(m.M11) && double.IsFinite(m.M12) && double.IsFinite(m.M13)
+        && double.IsFinite(m.M21) && double.IsFinite(m.M22) && double.IsFinite(m.M23)
+        && double.IsFinite(m.M31) && double.IsFinite(m.M32) && double.IsFinite(m.M33);
+
+    /// <summary>#1715 — a surface mesh with every vertex mapped (the drawn cells unchanged).</summary>
+    public static MathPlane3DSurfaceMesh MapMesh(MathPlane3DSurfaceMesh m, Mat3 map)
+    {
+        if (map.IsIdentity) return m;
+        var v = new (double X, double Y, double Z)[m.Vertices.Length];
+        for (int k = 0; k < v.Length; k++) v[k] = map.Apply(m.Vertices[k]);
+        return new MathPlane3DSurfaceMesh { N = m.N, Vertices = v, CellOk = m.CellOk, RobustExtent = m.RobustExtent };
+    }
+
+    /// <summary>#1715 — the unit cube's image: six translucent faces (two triangles each).</summary>
+    private static void AddDet(List<ScreenTriangle> dst, MathPlane3DCamera cam, Mat3 map)
+    {
+        var v = MathPlane3DMap.Parallelepiped(map);
+        // Faces by corner index a + 2b + 4c.
+        int[][] faces = { new[] { 0, 1, 3, 2 }, new[] { 4, 5, 7, 6 }, new[] { 0, 1, 5, 4 }, new[] { 2, 3, 7, 6 }, new[] { 0, 2, 6, 4 }, new[] { 1, 3, 7, 5 } };
+        foreach (var f in faces)
+        {
+            AddWorld(dst, cam, v[f[0]], v[f[1]], v[f[2]], DetFillColor);
+            AddWorld(dst, cam, v[f[0]], v[f[2]], v[f[3]], DetFillColor);
+        }
     }
 
     /// <summary>Ray distance per pixel from a 1/z buffer: z / cos(angle off the view axis).</summary>
@@ -445,7 +498,7 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
     }
 
     // Filled grid planes: one quad per grid cell, so near-plane clipping stays local.
-    private static void AddFills(List<ScreenTriangle> dst, MathPlane3DCamera cam, MathPlane3DGrid fill, double extent)
+    private static void AddFills(List<ScreenTriangle> dst, MathPlane3DCamera cam, MathPlane3DGrid fill, double extent, Mat3 map)
     {
         if (fill == MathPlane3DGrid.None) return;
         var (sS, sE) = GridAxis.NiceStep(extent / 4);
@@ -459,11 +512,12 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
                 if ((fill & MathPlane3DGrid.XZ) != 0) Quad(dst, cam, (u0, 0, v0), (u1, 0, v0), (u1, 0, v1), (u0, 0, v1));
                 if ((fill & MathPlane3DGrid.YZ) != 0) Quad(dst, cam, (0, u0, v0), (0, u1, v0), (0, u1, v1), (0, u0, v1));
             }
-        static void Quad(List<ScreenTriangle> d, MathPlane3DCamera c, (double, double, double) p0, (double, double, double) p1,
-                         (double, double, double) p2, (double, double, double) p3)
+        void Quad(List<ScreenTriangle> d, MathPlane3DCamera c, (double X, double Y, double Z) p0, (double X, double Y, double Z) p1,
+                  (double X, double Y, double Z) p2, (double X, double Y, double Z) p3)
         {
-            AddWorld(d, c, p0, p1, p2, GridFillColor);
-            AddWorld(d, c, p0, p2, p3, GridFillColor);
+            var (q0, q1, q2, q3) = (map.Apply(p0), map.Apply(p1), map.Apply(p2), map.Apply(p3));
+            AddWorld(d, c, q0, q1, q2, GridFillColor);
+            AddWorld(d, c, q0, q2, q3, GridFillColor);
         }
     }
 
@@ -568,10 +622,10 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
         return invZ * (1 + bias) >= depth[iy * w + ix];
     }
 
-    private static void AddArrowhead(List<ScreenTriangle> tris, MathPlane3DCamera cam, MathPlaneObject o, double extent)
+    private static void AddArrowhead(List<ScreenTriangle> tris, MathPlane3DCamera cam,
+                                     (double X, double Y, double Z) tail, (double X, double Y, double Z) tip, uint color, double extent)
     {
-        var tip = MathPlane3DScene.Tip(o);
-        var d = (X: o.Coords[0], Y: o.Coords[1], Z: o.Coords[2]);
+        var d = (X: tip.X - tail.X, Y: tip.Y - tail.Y, Z: tip.Z - tail.Z);
         double len = Math.Sqrt(d.X * d.X + d.Y * d.Y + d.Z * d.Z);
         if (len < 1e-12) return;
         var dir = (d.X / len, d.Y / len, d.Z / len);
@@ -589,7 +643,7 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
             ring[k] = (baseC.X + r * (ca * u.X + sa * v.X), baseC.Y + r * (ca * u.Y + sa * v.Y), baseC.Z + r * (ca * u.Z + sa * v.Z));
         }
         var light = LightDir(cam);
-        uint col = 0xFF000000u | o.Color;   // arrowheads are always opaque
+        uint col = 0xFF000000u | color;   // arrowheads are always opaque
         for (int k = 0; k < n; k++)
         {
             var p0 = ring[k]; var p1 = ring[(k + 1) % n];
@@ -692,29 +746,33 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
         double step = sS * Math.Pow(10, sE);
         var axis = GridAxis.Build(stackalloc double[] { 0.0 }, extent, sS, sE);
 
-        // Grid planes.
+        // Grid planes: the originals, then (#1715) their image under the map in blue.
         if (!labels)
         {
-            line.StrokeWidth = 1f * ui;
-            line.Color = new SKColor(GridColor);
             int nLines = (int)Math.Round(extent / step);
-            for (int k = -nLines; k <= nLines; k++)
+            foreach (bool image in _mapped ? new[] { false, true } : new[] { false })
             {
-                double c = k * step;
-                if ((scene.Grid & MathPlane3DGrid.XY) != 0)
+                line.StrokeWidth = (image ? 1.2f : 1f) * ui;
+                line.Color = new SKColor(image ? MapGridColor : GridColor);
+                Func<(double X, double Y, double Z), (double X, double Y, double Z)> f = image ? X : p => p;
+                for (int k = -nLines; k <= nLines; k++)
                 {
-                    DrawLine3D(canvas, ctx, (c, -extent, 0), (c, extent, 0), line);
-                    DrawLine3D(canvas, ctx, (-extent, c, 0), (extent, c, 0), line);
-                }
-                if ((scene.Grid & MathPlane3DGrid.XZ) != 0)
-                {
-                    DrawLine3D(canvas, ctx, (c, 0, -extent), (c, 0, extent), line);
-                    DrawLine3D(canvas, ctx, (-extent, 0, c), (extent, 0, c), line);
-                }
-                if ((scene.Grid & MathPlane3DGrid.YZ) != 0)
-                {
-                    DrawLine3D(canvas, ctx, (0, c, -extent), (0, c, extent), line);
-                    DrawLine3D(canvas, ctx, (0, -extent, c), (0, extent, c), line);
+                    double c = k * step;
+                    if ((scene.Grid & MathPlane3DGrid.XY) != 0)
+                    {
+                        DrawLine3D(canvas, ctx, f((c, -extent, 0)), f((c, extent, 0)), line);
+                        DrawLine3D(canvas, ctx, f((-extent, c, 0)), f((extent, c, 0)), line);
+                    }
+                    if ((scene.Grid & MathPlane3DGrid.XZ) != 0)
+                    {
+                        DrawLine3D(canvas, ctx, f((c, 0, -extent)), f((c, 0, extent)), line);
+                        DrawLine3D(canvas, ctx, f((-extent, 0, c)), f((extent, 0, c)), line);
+                    }
+                    if ((scene.Grid & MathPlane3DGrid.YZ) != 0)
+                    {
+                        DrawLine3D(canvas, ctx, f((0, c, -extent)), f((0, c, extent)), line);
+                        DrawLine3D(canvas, ctx, f((0, -extent, c)), f((0, extent, c)), line);
+                    }
                 }
             }
         }
@@ -725,7 +783,7 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
             if (!labels)
             {
                 line.StrokeWidth = 1.6f * ui;
-                line.Color = new SKColor(AxisColor);
+                line.Color = new SKColor(_mapped ? DimAxisColor : AxisColor);
                 DrawLine3D(canvas, ctx, (-extent, 0, 0), (extent, 0, 0), line);
                 DrawLine3D(canvas, ctx, (0, -extent, 0), (0, extent, 0), line);
                 DrawLine3D(canvas, ctx, (0, 0, -extent), (0, 0, extent), line);
@@ -767,7 +825,7 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
             {
                 case MathPlaneObjectKind.Point:
                 {
-                    var p = MathPlane3DScene.Point(o, 0);
+                    var p = X(MathPlane3DScene.Point(o, 0));
                     if (labels) { if (o.ShowLabel) Text(canvas, cam, p, o.Name, font, halo, ink, ui); break; }
                     if (cam.Project(p.X, p.Y, p.Z) is { } pp && PassesDepth(ZBuffer, w, h, pp.X, pp.Y, pp.InvZ)
                         && InPhase(ctx, pp.X, pp.Y, pp.InvZ))
@@ -780,14 +838,20 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
                 }
                 case MathPlaneObjectKind.Vector:
                 {
-                    var tail = MathPlane3DScene.Tail(o);
-                    var tip = MathPlane3DScene.Tip(o);
-                    if (labels) { if (o.ShowLabel) Text(canvas, cam, tip, o.Name, font, halo, ink, ui); break; }
-                    double len = Math.Sqrt(o.Coords[0] * o.Coords[0] + o.Coords[1] * o.Coords[1] + o.Coords[2] * o.Coords[2]);
+                    var tail = X(MathPlane3DScene.Tail(o));
+                    var tip = X(MathPlane3DScene.Tip(o));
+                    var d = (X: tip.X - tail.X, Y: tip.Y - tail.Y, Z: tip.Z - tail.Z);
+                    double len = Math.Sqrt(d.X * d.X + d.Y * d.Y + d.Z * d.Z);
+                    if (labels)
+                    {
+                        if (o.ShowLabel) Text(canvas, cam, tip, o.Name, font, halo, ink, ui);
+                        if (scene.ShowLengths) Text(canvas, cam, tip, "|" + o.Name + "| = " + Fmt(len), font, halo, ink, ui, 0, 15f);
+                        break;
+                    }
                     if (len > 1e-12)
                     {
                         double k = 1 - ArrowheadLength(len, extent) / len;
-                        var shaftEnd = (tail.X + o.Coords[0] * k, tail.Y + o.Coords[1] * k, tail.Z + o.Coords[2] * k);
+                        var shaftEnd = (tail.X + d.X * k, tail.Y + d.Y * k, tail.Z + d.Z * k);
                         DrawLine3D(canvas, ctx, tail, shaftEnd, line);
                     }
                     break;
@@ -796,27 +860,35 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
                 case MathPlaneObjectKind.Polyline:
                 {
                     int n = o.Coords.Count / 3;
-                    if (labels) { if (o.ShowLabel) Text(canvas, cam, MathPlane3DScene.Point(o, n - 1), o.Name, font, halo, ink, ui); break; }
-                    for (int i = 1; i < n; i++) DrawLine3D(canvas, ctx, MathPlane3DScene.Point(o, i - 1), MathPlane3DScene.Point(o, i), line);
+                    if (labels) { if (o.ShowLabel) Text(canvas, cam, X(MathPlane3DScene.Point(o, n - 1)), o.Name, font, halo, ink, ui); break; }
+                    for (int i = 1; i < n; i++) DrawLine3D(canvas, ctx, X(MathPlane3DScene.Point(o, i - 1)), X(MathPlane3DScene.Point(o, i)), line);
                     break;
                 }
                 case MathPlaneObjectKind.Curve when _curves.TryGetValue(o, out var pieces):
                 {
                     if (labels)
                     {
-                        if (o.ShowLabel && pieces.Count > 0) Text(canvas, cam, pieces[^1][^1], o.Name, font, halo, ink, ui);
+                        if (o.ShowLabel && pieces.Count > 0) Text(canvas, cam, X(pieces[^1][^1]), o.Name, font, halo, ink, ui);
                         break;
                     }
                     foreach (var piece in pieces)
-                        for (int i = 1; i < piece.Count; i++) DrawLine3D(canvas, ctx, piece[i - 1], piece[i], line);
+                        for (int i = 1; i < piece.Count; i++) DrawLine3D(canvas, ctx, X(piece[i - 1]), X(piece[i]), line);
                     break;
                 }
                 case MathPlaneObjectKind.Surface when labels && o.ShowLabel && _meshes.TryGetValue(o, out var mesh):
                 {
-                    if (LabelVertex(mesh) is { } at) Text(canvas, cam, at, o.Name, font, halo, ink, ui);
+                    if (LabelVertex(mesh) is { } at) Text(canvas, cam, X(at), o.Name, font, halo, ink, ui);
                     break;
                 }
             }
+        }
+
+        if (scene.ShowDet) DrawDetEdges(canvas, ctx, scene, ui, labels, font, halo, ink);
+        if (scene.ShowEigen) DrawEigen(canvas, ctx, extent, ui, labels, font, halo, ink);
+        if (labels && MathPlane3DMap.PolarFallsBack(FractalParameters))
+        {
+            ink.Color = new SKColor(TickLabelColor);
+            canvas.DrawText("polar needs det > 0: drawn linear", 6f * ui, h - 8f * ui, font, ink);
         }
 
         if (labels && LastSceneError is { } err)
@@ -825,6 +897,48 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
             canvas.DrawText("Scene error: " + err, 6f * ui, 6f * ui - font.Metrics.Ascent, font, ink);
         }
     }
+
+    /// <summary>#1715 — the parallelepiped's 12 edges and its det value.</summary>
+    private void DrawDetEdges(SKCanvas canvas, in LineContext ctx, MathPlane3DScene scene, float ui, bool labels,
+                              SKFont font, SKPaint halo, SKPaint ink)
+    {
+        var v = MathPlane3DMap.Parallelepiped(_map);
+        if (labels)
+        {
+            ink.Color = new SKColor(DetEdgeColor);
+            Text(canvas, ctx.Cam, v[7], "det = " + Fmt(_map.Det), font, halo, ink, ui);
+            return;
+        }
+        using var edge = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 1.5f * ui, Color = new SKColor(DetEdgeColor), StrokeCap = SKStrokeCap.Round };
+        for (int a = 0; a < 8; a++)
+            for (int bit = 1; bit < 8; bit <<= 1)
+                if ((a & bit) == 0) DrawLine3D(canvas, ctx, v[a], v[a | bit], edge);
+    }
+
+    /// <summary>#1715 — the real eigenvector lines through the origin (dashed) with their λ.</summary>
+    private void DrawEigen(SKCanvas canvas, in LineContext ctx, double extent, float ui, bool labels,
+                           SKFont font, SKPaint halo, SKPaint ink)
+    {
+        var eig = MathPlane3DMap.Eigen(_map, out bool all);
+        if (labels)
+        {
+            ink.Color = new SKColor(EigenColor);
+            string? note = all ? "every vector is an eigenvector, \u03BB = " + Fmt(_map.M11)
+                         : eig.Count == 0 ? "no real eigenvectors" : null;
+            if (note != null) { canvas.DrawText(note, 6f * ui, Height - 26f * ui, font, ink); return; }
+            foreach (var e in eig)
+                Text(canvas, ctx.Cam, (0.6 * extent * e.X, 0.6 * extent * e.Y, 0.6 * extent * e.Z), "\u03BB = " + Fmt(e.Lambda), font, halo, ink, ui);
+            return;
+        }
+        using var dash = SKPathEffect.CreateDash(new[] { 8f * ui, 6f * ui }, 0);
+        using var line = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 2f * ui, Color = new SKColor(EigenColor), PathEffect = dash };
+        double r = 1.5 * extent;
+        foreach (var e in eig) DrawLine3D(canvas, ctx, (-r * e.X, -r * e.Y, -r * e.Z), (r * e.X, r * e.Y, r * e.Z), line);
+    }
+
+    /// <summary>Read-out number: up to 4 decimals, no trailing zeros (as 2D).</summary>
+    private static string Fmt(double v)
+        => Math.Abs(v) < 5e-5 ? "0" : v.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
 
     // A surface's label anchor: the drawn vertex nearest the grid centre.
     private static (double X, double Y, double Z)? LabelVertex(MathPlane3DSurfaceMesh m)
@@ -893,10 +1007,10 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
     }
 
     private void Text(SKCanvas canvas, MathPlane3DCamera cam, (double X, double Y, double Z) at, string s,
-                      SKFont font, SKPaint halo, SKPaint ink, float ui)
+                      SKFont font, SKPaint halo, SKPaint ink, float ui, float dx = 0, float dy = 0)
     {
         if (cam.Project(at.X, at.Y, at.Z) is not { } p || !PassesDepth(ZBuffer, Width, Height, p.X, p.Y, p.InvZ)) return;
-        float x = (float)p.X + 6f * ui, y = (float)p.Y - 6f * ui;
+        float x = (float)p.X + (6f + dx) * ui, y = (float)p.Y + (dy - 6f) * ui;
         canvas.DrawText(s, x + ui, y + ui, font, halo);
         canvas.DrawText(s, x, y, font, ink);
     }
