@@ -69,6 +69,7 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
         InitComplex();
         InitPresets();
         InitMyScenes();
+        InitScript();
         Refresh();
     }
 
@@ -311,6 +312,7 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
         this.RaisePropertyChanged(nameof(IsActive));
         this.RaisePropertyChanged(nameof(IsInactive));
         RaiseMapProperties();   // #1552 — region recall / batch-style param edits
+        RaiseScriptTime();      // #1698 — the script time may have moved (recall, animation)
         string text = _view.FractalParameters.MathPlaneScene ?? "";
         if (text == _lastText) return;
         _lastText = text;
@@ -339,6 +341,7 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
         this.RaisePropertyChanged(nameof(Scene));
         RaiseComplexProperties();
         RaiseBridgeProperties();
+        RebuildScript(scene);   // #1698
     }
 
     private void Commit(MathPlaneScene scene, int? select = null)
@@ -462,7 +465,9 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
 
     // ── IPointerEditHandler (the render surface) ──
 
-    private bool Editing => IsActive && CanvasEditing && _sceneValid;
+    // #1698 — mid-script the drawn scene differs from the written one, so canvas edits
+    // (which change the written scene) only work at the script's start.
+    private bool Editing => IsActive && CanvasEditing && _sceneValid && (!HasScript || ScriptTime == 0);
 
     private (double X, double Y) World(PointerInput e)
         => MathPlaneSceneEdit.ClientToWorld(e.X + 0.5, e.Y + 0.5, e.ClientWidth, e.ClientHeight,

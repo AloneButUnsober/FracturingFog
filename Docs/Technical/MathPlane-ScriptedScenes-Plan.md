@@ -212,6 +212,24 @@ A **Script** group in the Math Plane section, shown when the scene has steps:
 - Live recording is the existing instant record; the offline export is the
   Scene Editor or `--batch`.
 
+*As built (SS4, #1698):* `MathPlaneSectionViewModel.Script.cs` and a Script group
+under My scenes. It has:
+- Play / Pause, Restart and Loop. Play runs from the current time, or from 0 when
+  at the end; Loop starts over.
+- A time slider (0..D) whose ticks mark every step start and end, and an `s / D`
+  read-out.
+- The current step is marked in a **list of the script's members** rather than in
+  the Scene box. Each row shows its time span and its statement, and the members
+  running now are bold. Clicking a row jumps to its start.
+  - Why a list: after any canvas edit the scene text is re-serialised on one line,
+    so a line highlight in the box would usually mark the whole scene.
+- **Canvas editing works only at 0 s.** Mid-script the drawn scene differs from the
+  written one (moved, faded or part-drawn objects), so a drag would edit something
+  other than what is under the pointer. The group says so.
+- Loading a demo pauses playback, and its script starts at 0.
+- Playback is a `DispatcherTimer` that feeds `AdvanceScript(elapsed)`; tests drive
+  `AdvanceScript` directly.
+
 ## 5. Tests (independent invariants)
 
 - **s = 0 is the authored scene:** a scripted scene at `s = 0` renders the same

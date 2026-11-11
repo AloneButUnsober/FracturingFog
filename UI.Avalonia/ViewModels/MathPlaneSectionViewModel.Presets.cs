@@ -43,6 +43,7 @@ public sealed partial class MathPlaneSectionViewModel
     public void LoadDemo(MathPlanePreset d)
     {
         StopPlay();
+        PauseScript();   // #1698
         d.Apply(_view.FractalParameters);
         _view.CenterX = d.ViewWorldX; _view.CenterXLo = 0; _view.CenterX2 = 0; _view.CenterX3 = 0;
         _view.CenterX4 = 0; _view.CenterX5 = 0; _view.CenterX6 = 0; _view.CenterX7 = 0;

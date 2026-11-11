@@ -141,6 +141,10 @@ options after an object: #RRGGBB  hidden  nolabel
 - **Order:** a `step` starts when the previous one ends, and a `with` runs alongside the step before it.
 - **Time:** the setting `MathPlaneScriptTime` (seconds) picks the moment drawn. At 0 you see the scene as
   written.
+- **Player:** when the scene has steps, a **Script** group appears under My scenes. Use Play / Pause, Restart
+  and Loop, or drag the time slider (its ticks mark where steps start and end). The list shows each step with
+  its time span; the steps running now are bold, and clicking one jumps to its start. Dragging objects on the
+  canvas works at 0 s only, so press Restart first.
 - **Fading in:** objects marked `hidden` can be faded in with `show`, or drawn along their length with
   `draw` (curves, segments, polylines and vectors).
 - **Orbits and cobwebs:** `orbit N` and `cobweb N` reveal steps one at a time, starting from the scene's own
