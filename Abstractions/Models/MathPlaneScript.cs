@@ -13,6 +13,7 @@
 //
 //   wait | show NAME... | hide NAME... | t VALUE | matrix A B C D | c RE IM | move NAME X Y
 //   draw NAME | orbit N | cobweb N | phase on|contours|off | caption "TEXT"   (#1696, SS2)
+//   camera X Y [ZOOM]                                                       (#1697, SS3)
 //
 // #1696 reveals: `draw` grows a curve, segment, polyline or vector along its drawn
 // length (Manim's "Create"); it makes the object visible when it begins, so it is
@@ -22,6 +23,12 @@
 // orbit statement; cobweb needs its statement for x0 and f). `phase` fades the phase
 // portrait in or out. `caption` cross-fades a screen-space caption with the last
 // one; `caption ""` fades it out.
+//
+// #1697 camera: `camera X Y [ZOOM]` moves the view by (X, Y) world units (y up) and
+// multiplies its zoom by ZOOM (default 1), relative to the view the user set; it
+// starts at (0, 0, 1). Applied inside the calculator, so the user can still pan and
+// zoom underneath. The offset interpolates linearly and the zoom geometrically
+// (log-linear), so a zoom-in reads as a steady push.
 //
 // A `with` without a duration / ease takes its step's. A step lasts as long as its
 // longest member; the script's duration D is the end of the last step. Each member
@@ -43,7 +50,7 @@ using FracturingFog.Render;
 namespace FracturingFog.Models
 {
     /// <summary>#1695 — what a script member does.</summary>
-    public enum MathPlaneStepAction { Wait, Show, Hide, T, Matrix, C, Move, Draw, Orbit, Cobweb, Phase, Caption }
+    public enum MathPlaneStepAction { Wait, Show, Hide, T, Matrix, C, Move, Draw, Orbit, Cobweb, Phase, Caption, Camera }
 
     /// <summary>#1695 — one script member: a <c>step</c> (<see cref="With"/> false) or a
     /// <c>with</c>. <see cref="Duration"/> / <see cref="Ease"/> null on a <c>with</c> =
@@ -94,9 +101,18 @@ namespace FracturingFog.Models
         public double DrawnFraction(string name) => Draw.TryGetValue(name, out double f) ? f : 1;
     }
 
-    /// <summary>#1695 — the scene and params at one script time; #1696 adds the reveal state.</summary>
+    /// <summary>#1697 — the script camera: an offset (world units, y up) and a zoom factor
+    /// applied on top of the user's view. <see cref="Identity"/> leaves the view alone.</summary>
+    public readonly record struct MathPlaneCamera(double Dx, double Dy, double Zoom)
+    {
+        public static readonly MathPlaneCamera Identity = new(0, 0, 1);
+        public bool IsIdentity => Dx == 0 && Dy == 0 && Zoom == 1;
+    }
+
+    /// <summary>#1695 — the scene and params at one script time; #1696 adds the reveal state,
+    /// #1697 the camera (null = identity).</summary>
     public sealed record MathPlaneScriptState(MathPlaneScene Scene, FractalParameters Params, double Time, double Duration,
-                                              MathPlaneReveal? Reveal = null);
+                                              MathPlaneReveal? Reveal = null, MathPlaneCamera? Camera = null);
 
     public static class MathPlaneScript
     {
@@ -152,6 +168,7 @@ namespace FracturingFog.Models
             MathPlaneStepAction.Cobweb => new[] { "cobweb" },
             MathPlaneStepAction.Phase => new[] { "phase" },
             MathPlaneStepAction.Caption => new[] { "caption" },
+            MathPlaneStepAction.Camera => new[] { "camera" },
             _ => Array.Empty<string>(),
         };
 
@@ -177,6 +194,7 @@ namespace FracturingFog.Models
         {
             "t" => "t", "matrix" => "the matrix", "c" => "c",
             "orbit" => "the orbit", "cobweb" => "the cobweb", "phase" => "the phase portrait", "caption" => "the caption",
+            "camera" => "the camera",
             _ when prop.StartsWith("alpha:", StringComparison.Ordinal) => "the visibility of " + prop[6..],
             _ when prop.StartsWith("reveal:", StringComparison.Ordinal) => "the drawing of " + prop[7..],
             _ => "the position of " + prop[4..],
@@ -258,6 +276,8 @@ namespace FracturingFog.Models
             string? caption = null, captionAt = null, prevCaptionAt = null;
             double captionAlphaAt = 0, prevCaptionAlphaAt = 0;
             bool reveals = false;
+            var camera = MathPlaneCamera.Identity;   // #1697
+            MathPlaneCamera? cameraAt = null;
 
             double Lerp(double a, double b, double u) => a + (b - a) * u;
 
@@ -350,6 +370,16 @@ namespace FracturingFog.Models
                         caption = text;
                         break;
                     }
+                    case MathPlaneStepAction.Camera:
+                    {
+                        var to = new MathPlaneCamera(st.Values[0], st.Values[1], st.Values.Count > 2 ? st.Values[2] : 1);
+                        if (begun)
+                            cameraAt = new MathPlaneCamera(Lerp(camera.Dx, to.Dx, u), Lerp(camera.Dy, to.Dy, u),
+                                                           u <= 0 ? camera.Zoom : u >= 1 ? to.Zoom
+                                                           : Math.Exp(Lerp(Math.Log(camera.Zoom), Math.Log(to.Zoom), u)));
+                        camera = to;
+                        break;
+                    }
                 }
             }
 
@@ -399,7 +429,8 @@ namespace FracturingFog.Models
                 outParams.MathPlaneM21 = mAt[2]; outParams.MathPlaneM22 = mAt[3];
                 outParams.MathPlaneCRe = cReAt; outParams.MathPlaneCIm = cImAt;
             }
-            return new MathPlaneScriptState(outScene, outParams, s, duration, reveal);
+            if (cameraAt is { IsIdentity: true }) cameraAt = null;
+            return new MathPlaneScriptState(outScene, outParams, s, duration, reveal, cameraAt);
         }
 
         /// <summary>The point <c>move</c> drives: a point itself, a vector's tip (tail +

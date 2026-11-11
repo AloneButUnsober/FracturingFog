@@ -180,6 +180,18 @@ view: effective centre = view centre + script offset, effective zoom = view zoom
 × script factor. The user can still pan and zoom; the script moves relative to
 that. Headless renders of the same view and `s` are identical.
 
+*As built (SS3, #1697):* `camera X Y [ZOOM]` targets an offset (world units, y up)
+and a zoom factor relative to the user's view (default 1, range 1e-6..1e6). The
+camera starts at (0, 0, 1). The offset interpolates linearly and the zoom
+geometrically (log-linear), so a push-in reads as steady speed. `Evaluate` returns
+a `MathPlaneCamera`. For one frame the calculator sets its `CenterX` / `CenterY` /
+`Zoom` to the effective view and restores them afterwards, so the grid, labels,
+backdrop (its cache key reads the effective view), phase portrait and objects all
+follow, and the view state is never written. `LastScriptCamera` reports the camera
+used. Known gap: the section's pointer read-out still maps the pointer through the
+user's view. Canvas editing is off mid-script anyway (SS4), but mid-script the
+read-out is off by the camera.
+
 ### 3.7 Scene Engine
 
 A Scene Engine shot on a Math Plane region gets a **Play script** option (on by
