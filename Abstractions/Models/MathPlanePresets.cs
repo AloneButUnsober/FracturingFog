@@ -13,6 +13,9 @@
 //   FracturingFog --batch --fractal MathPlane --x X --y Y --zoom Z --param ... --out a.png
 // with --y = -(world y), the Math Plane's y-up convention.
 //
+// #1701 — the "Script:" demos play timed step / with sequences (scripted scenes,
+// #1557); their step model follows Manim (bibliography #manim).
+//
 // The ideas are standard textbook material (complex multiplication, the
 // quadratic family's orbits and cobwebs, 2x2 linear maps, the derivative as the
 // local linear map); sources FF builds on are in Docs/Resources-Bibliography.md
@@ -165,6 +168,46 @@ namespace FracturingFog.Models
                 + "1 (along x) and 0 (along y).",
                 "det on; eigen on; " + Basis,
                 MapMode: MathPlaneMapMode.Matrix, M11: 1, M12: 0, M21: 0, M22: 0),
+
+            // ── Scripts (#1701): timed step / with sequences; open the Script group to play ──
+            new("Script: multiply by 1 + i",
+                "A script: show a vector, then play the map z -> (1 + i) z. Every vector turns by 45 degrees and "
+                + "grows by sqrt 2; the unit square's area doubles (det = 2).",
+                "det on; lengths on; " + Basis + "; vector z 2 1 #009E73 hidden; "
+                + "step 1 caption \"The basis: i and j\"; "
+                + "step 1 show z; with caption \"A vector z = 2 + i\"; "
+                + "step 3 t 1; with caption \"Multiply by 1 + i: turn 45 degrees, scale by sqrt 2\"; "
+                + "step 1.5 wait; step 1 caption \"\"",
+                MapMode: MathPlaneMapMode.Matrix, M11: 1, M12: -1, M21: 1, M22: 1, T: 0,
+                Interpolation: MathPlaneInterpolation.Polar),
+            new("Script: period doubling",
+                "A script: the cobweb of x -> x^2 + c builds up, then c slides left along the real axis. The fixed "
+                + "point gives way to a 2-cycle, a 4-cycle and then chaos.",
+                "cobweb 0.1 1; "
+                + "step 1 caption \"x -> x^2 + c at c = -0.5\"; "
+                + "step 3 ease none cobweb 40; with caption \"The staircase closes in on a fixed point\"; "
+                + "step 2 c -1 0; with caption \"c = -1: a 2-cycle\"; step 1 wait; "
+                + "step 2 c -1.3 0; with caption \"c = -1.3: a 4-cycle\"; step 1 wait; "
+                + "step 2 c -1.9 0; with caption \"c = -1.9: chaos\"; step 1.5 wait; step 1 caption \"\"",
+                Zoom: 0.8, CRe: -0.5, CIm: 0),
+            new("Script: c leaves the set",
+                "A script: the orbit of 0 for c inside the Mandelbrot set stays bounded; drag c out past the edge "
+                + "and the same orbit escapes the circle |z| = 2.",
+                "orbit 1; "
+                + "step 1 caption \"c inside M\"; "
+                + "step 3 ease none orbit 40; with caption \"The orbit of 0 stays bounded\"; "
+                + "step 4 c 0.5 0.5; with caption \"Move c out past the edge\"; "
+                + "step 2 wait; with caption \"c outside M: the orbit escapes\"; step 1 caption \"\"",
+                ViewWorldX: -0.5, Zoom: 0.6, CRe: -0.2, CIm: 0.3, Backdrop: MathPlaneBackdrop.Mandelbrot),
+            new("Script: the rabbit orbit",
+                "A script: over the Douady rabbit (the Julia set of the period-3 centre c), the orbit of 0 is "
+                + "revealed step by step, then the camera moves in on its three-point cycle.",
+                "orbit 1; "
+                + "step 1 caption \"The Douady rabbit: the Julia set of c\"; "
+                + "step 3 ease none orbit 30; with caption \"The orbit of 0 visits its three ears\"; "
+                + "step 3 camera -0.12 0.35 2.5; with caption \"Period 3\"; "
+                + "step 1 wait; step 2 camera 0 0; with caption \"\"",
+                Zoom: 0.5, CRe: RabbitRe, CIm: RabbitIm, Backdrop: MathPlaneBackdrop.Julia),
         };
     }
 }

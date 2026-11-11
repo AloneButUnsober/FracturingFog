@@ -31,6 +31,13 @@ demos never change: to keep an edited demo, save it to **My scenes**.
 | Period 3: the rabbit | The orbit closes a triangle, drawn over the Julia set of the same c. |
 | Cobweb: fixed point / period 2 / period 4 / chaos | The real map x → x² + c at c = −0.5, −1, −1.3 and −1.9: period doubling along the real axis of the Mandelbrot set. |
 | Shear, Rotation by 90 degrees, Projection | Three 2×2 matrices, with det and eigenvectors. |
+| Script: multiply by 1 + i | A script: show a vector, then play the map z → (1 + i) z. Every vector turns 45° and grows by √2. |
+| Script: period doubling | A script: the cobweb builds up, then c slides from −0.5 to −1.9 through a 2-cycle and a 4-cycle to chaos. |
+| Script: c leaves the set | A script: the orbit of 0 stays bounded for c inside M, then escapes as c moves out past the edge. |
+| Script: the rabbit orbit | A script: the rabbit's orbit is revealed step by step, then the camera moves in on its 3-cycle. |
+
+The **Script:** demos are timed sequences: load one, then press **Play** in the Script group (see
+[Scripts](#scripts)).
 
 ### My scenes
 
@@ -137,24 +144,64 @@ step DURATION [ease none|in|out|inout] ACTION ...    with [DURATION] [ease ...] 
 options after an object: #RRGGBB  hidden  nolabel
 ```
 
-**Scripts.** `step` and `with` lines make a timed script; this part is still being built.
-- **Order:** a `step` starts when the previous one ends, and a `with` runs alongside the step before it.
-- **Time:** the setting `MathPlaneScriptTime` (seconds) picks the moment drawn. At 0 you see the scene as
-  written.
-- **Player:** when the scene has steps, a **Script** group appears under My scenes. Use Play / Pause, Restart
-  and Loop, or drag the time slider (its ticks mark where steps start and end). The list shows each step with
-  its time span; the steps running now are bold, and clicking one jumps to its start. Dragging objects on the
-  canvas works at 0 s only, so press Restart first.
-- **Fading in:** objects marked `hidden` can be faded in with `show`, or drawn along their length with
-  `draw` (curves, segments, polylines and vectors).
-- **Orbits and cobwebs:** `orbit N` and `cobweb N` reveal steps one at a time, starting from the scene's own
-  `orbit` / `cobweb` statement. A cobweb needs its `cobweb x0 ...` statement.
-- **Phase:** `phase on` and `phase off` fade the phase portrait in and out. The scene needs a `map`.
-- **Camera:** `camera X Y [ZOOM]` pans the view by (X, Y) and zooms it by ZOOM (default 1), on top of
-  your own view; `camera 0 0` goes back. The zoom changes at a steady rate.
-- **Captions:** `caption "TEXT"` shows a caption at the bottom, fading from the previous one. `caption ""`
-  fades it out, and `\n` in the text starts a new line.
-- **The matrix:** `matrix` steps show only when the map mode is Matrix.
+### Scripts
+
+`step` and `with` lines turn a scene into a timed sequence, like the animations in 3Blue1Brown's videos.
+The step model (steps one after another, groups played together, each with a duration and an easing)
+follows Manim, the engine those videos are made with.
+
+```
+step DURATION [ease none|in|out|inout] ACTION ...    starts when the previous step ends
+with [DURATION] [ease ...] ACTION ...                runs alongside the step before it
+```
+
+- **Timing:** a `with` without a duration or ease takes its step's. A step lasts as long as its longest
+  member, and the script's length is the end of its last step.
+- **Easing:** `inout` (smooth start and stop) is the default. `none` is linear. `in` starts slowly and
+  `out` stops slowly.
+- **Values:** each step moves a value from wherever the earlier steps left it to its target.
+- **Overlaps:** two steps changing the same thing at the same time are an error.
+
+| Action | What it does over the step |
+|---|---|
+| `wait` | Nothing: a pause. |
+| `show NAME...` / `hide NAME...` | Fades objects in or out. Mark an object `hidden` to start it invisible. |
+| `move NAME X Y` | Moves a point (or a vector's tip, keeping its tail; or a whole segment or polyline) to (X, Y). |
+| `draw NAME` | Draws a curve, segment, polyline or vector along its length. Meant for objects marked `hidden`. |
+| `t V` | Moves the map's progress t to V. |
+| `matrix A B C D` | Moves the matrix to [[A, B], [C, D]]. It shows only when the map mode is Matrix. |
+| `c RE IM` | Moves c, which also moves the orbit, the Julia backdrop and `z^2 + c`. |
+| `orbit N` / `cobweb N` | Reveals the orbit's or cobweb's steps up to N, one at a time, starting from the scene's own `orbit` / `cobweb` line. A cobweb needs its `cobweb x0 ...` line. |
+| `phase on`, `phase contours`, `phase off` | Fades the phase portrait in or out. The scene needs a `map`. |
+| `caption "TEXT"` | Shows a caption at the bottom, cross-fading from the previous one. `caption ""` fades it out, and `\n` starts a new line. |
+| `camera X Y [ZOOM]` | Pans the view by (X, Y) and zooms by ZOOM (default 1), on top of your own view. `camera 0 0` goes back. |
+
+**Playing a script:** when the scene has steps, a **Script** group appears under My scenes.
+- **Controls:** Play / Pause, Restart and Loop, or drag the time slider. Its ticks mark where steps start and
+  end.
+- **Step list:** each step with its time span. The steps running now are bold, and clicking one jumps to its
+  start.
+- **Editing:** dragging objects on the canvas works at 0 s only, so press **Restart** first.
+- **Time setting:** the moment drawn is the setting `MathPlaneScriptTime` (seconds). At 0 you see the scene
+  as written.
+
+**Making a video:**
+- **Batch:** `--mode video --video-motion script` renders the script, one frame per 1 / fps (see
+  [Batch](#8-batch)). The Script group's **Video command** button loads that command into the Command panel.
+- **Scene Editor:** a shot on a scripted region plays the script on the shot's own time.
+
+**Example:**
+
+```
+v1
+vector i 1 0; vector j 0 1
+vector z 2 1 #009E73 hidden
+step 1 caption "The basis"
+step 1 show z
+with caption "z = 2 + i"
+step 2 camera 1 0.5 1.5
+step 1 caption ""
+```
 
 ## 8. Batch
 

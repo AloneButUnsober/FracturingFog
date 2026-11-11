@@ -5266,6 +5266,17 @@ draggable c, and the cobweb of x -> f(x) (default x^2 + c).
 View -> Math overlay draws the axes and the orbit of the pointer
 or a pinned point on Mandelbrot and Julia views.
 
+Scripts: step / with lines in the scene text make a timed sequence
+(step model after Manim, the engine behind the 3Blue1Brown videos).
+  step DURATION [ease none|in|out|inout] ACTION ...
+  with [DURATION] [ease ...] ACTION ...   (runs alongside its step)
+Actions: wait, show / hide NAME, move NAME X Y, draw NAME, t V,
+matrix A B C D, c RE IM, orbit N, cobweb N, phase on|contours|off,
+caption ""TEXT"", camera X Y [ZOOM]. The Script group plays,
+scrubs and loops it (canvas editing at 0 s only); its Video
+command makes --mode video --video-motion script. Try the
+Script: demos.
+
 Batch: every setting is a --param (MathPlaneScene=@file keeps the
 quotes from cmd / PowerShell); --math-overlay RE,IM[,STEPS].
 Sources: Docs/Resources-Bibliography.md.

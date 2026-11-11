@@ -328,3 +328,14 @@ Dependencies are stated per issue; no auto-blocking is configured.
 | SS5 | #1699 | Headless video: `--video-motion script`, `--seconds` default, Command builder seed | SS1 |
 | SS6 | #1700 | Scene Engine: Math Plane shots play their script on shot-local time | SS1, SS5 |
 | SS7 | #1701 | Scripted demos, help text, user-guide section | SS1–SS5 |
+
+*As built (SS7, #1701):* four **Script:** demos in `MathPlanePresets`:
+- multiply by 1 + i;
+- period doubling (the cobweb, with c sliding from −0.5 to −1.9);
+- c leaves the set (the orbit escapes as c crosses the edge);
+- the rabbit orbit (a reveal, then a camera push).
+
+Only these demos carry steps; the plain demos stay single-state. Each one ends by fading its caption,
+so its last frame is a clean picture. The user guide gained a full **Scripts** section (statement
+forms, the actions table, playing, video, the Scene Editor and an example), and the in-app help gained
+a Scripts paragraph.
