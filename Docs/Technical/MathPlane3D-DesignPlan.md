@@ -274,6 +274,46 @@ A **Math Plane 3D** section, structured like the 2D one:
 - **Scene box:** the scene text, with errors in yellow.
 - **Demos:** later.
 
+*As built (T4, #1716):*
+- **Where it lives:**
+  - `UI.Avalonia/ViewModels/MathPlane3DSectionViewModel.cs` and
+    `Views/ControlCenterSections/MathPlane3DSectionView.axaml`: a nav entry of its own,
+    "Math Plane 3D", which detaches to its own window (`WindowRole.DetachedMathPlane3DPanel`
+    = 27);
+  - the pure edits are in `Abstractions/Models/MathPlane3DSceneEdit.cs`.
+- **Owned by the shell**, like the 2D section, so canvas editing works before the Control Center
+  opens. Both editors share the input controller's single edit slot through
+  `PointerEditHandlerChain`: each ignores views of the other type, and the handler that claimed
+  a press gets that drag.
+- **Camera code:** `MathPlane3DCamera` and `Projected3D` moved from the calculator to
+  `Abstractions/Models/MathPlane3DCamera.cs` (same namespace), so the editor projects and
+  un-projects exactly as the renderer does. `MathPlane3DCamera.RayDirection` is the inverse
+  projection.
+- **Every edit is a param change:**
+  - scene text, map params and camera params, so regions, `--batch` and the Command builder
+    follow with nothing new to wire;
+  - an edit is written only if the scene it produces parses again, and the parser's message
+    shows in yellow otherwise.
+- **Input:**
+  - **Handles:** points, vector tips and tails, segment ends and polyline vertices. They are
+    hit-tested where they are drawn (through the map), within 9 px, the nearer one winning a
+    tie.
+  - **Dragging a handle:** the pointer's ray meets the camera-facing plane through the handle's
+    drawn place (the view depth is kept), and the point goes back through M⁻¹. A singular
+    map doesn't move it.
+  - **Shift** snaps to the 2D editor's minor step for the visible width at that depth.
+  - **Alt** keeps the largest change from the drag's start.
+  - **Left-drag on empty space orbits** with the controller's right-drag rule: π per width or
+    height, drag down looks up, φ kept in (0.01, π − 0.01). With "Drag objects" off, every
+    left-drag orbits. The wheel and right-drag are unchanged.
+  - **Double-click** selects a handle; it never recentres, which has no meaning in 3D.
+  - **Delete** removes the selected object.
+- **Presets:**
+  - quarter turns about x, y and z;
+  - shear, scale 2 and stretch;
+  - reflect in x-y;
+  - project onto x-y.
+
 ## 5. Tests (independent invariants)
 
 - **Projection:** a point's pixel equals the pinhole formula computed independently from the

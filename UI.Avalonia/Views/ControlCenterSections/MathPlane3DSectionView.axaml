@@ -1,0 +1,187 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        xmlns:models="using:FracturingFog.Models"
+        x:Class="FracturingFog.UI.Avalonia.Views.ControlCenterSections.MathPlane3DSectionView"
+        x:DataType="vm:ControlCenterViewModel"
+        Foreground="#DCDCDC">
+    <!-- ═══ Math Plane 3D ═══ (#1716, epic #1556) — the object editor for the Math
+         Plane 3D render mode, laid out like the 2D section. Edits write the scene text,
+         map and camera params, so regions, batch and the Command builder follow.
+         Errors are yellow (#FFCC00), never red: the user is red/green colour-blind. -->
+    <StackPanel Spacing="0" DataContext="{Binding Shell.MathPlane3D}" x:DataType="vm:MathPlane3DSectionViewModel">
+
+        <!-- Not in Math Plane 3D: one button to get there. -->
+        <Border Classes="group" IsVisible="{Binding IsInactive}">
+            <StackPanel Spacing="6">
+                <TextBlock Classes="section" Text="Math Plane 3D" />
+                <TextBlock TextWrapping="Wrap" Foreground="#9A9A9A"
+                           Text="Space with a z axis: points, vectors, curves and surfaces, and 3×3 matrices acting on them. Switch the render to Math Plane 3D to edit." />
+                <Button Classes="action" Content="Switch to Math Plane 3D" HorizontalAlignment="Left"
+                        Command="{Binding SwitchCommand}" />
+            </StackPanel>
+        </Border>
+
+        <StackPanel Spacing="0" IsVisible="{Binding IsActive}">
+            <!-- Objects -->
+            <Border Classes="group">
+                <StackPanel Spacing="6">
+                    <TextBlock Classes="section" Text="Objects" />
+                    <WrapPanel>
+                        <Button Classes="action neutral" Content="+ Point"    Command="{Binding AddPointCommand}"    Margin="0,0,6,6" ToolTip.Tip="Add a point at the camera target" />
+                        <Button Classes="action neutral" Content="+ Vector"   Command="{Binding AddVectorCommand}"   Margin="0,0,6,6" ToolTip.Tip="Add a vector (from the target when it is not the origin)" />
+                        <Button Classes="action neutral" Content="+ Segment"  Command="{Binding AddSegmentCommand}"  Margin="0,0,6,6" />
+                        <Button Classes="action neutral" Content="+ Polyline" Command="{Binding AddPolylineCommand}" Margin="0,0,6,6" />
+                        <Button Classes="action neutral" Content="+ Curve"    Command="{Binding AddCurveCommand}"    Margin="0,0,6,6" ToolTip.Tip="Add a space curve (x(t), y(t), z(t)); starts as a helix" />
+                        <Button Classes="action neutral" Content="+ Surface"  Command="{Binding AddSurfaceCommand}"  Margin="0,0,6,6" ToolTip.Tip="Add a surface z = f(x, y); starts as a gentle wave" />
+                    </WrapPanel>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                        <ListBox Grid.Column="0" ItemsSource="{Binding Rows}" SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
+                                 MinHeight="90" MaxHeight="220" FontFamily="Consolas, Menlo, monospace" FontSize="12" />
+                        <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Top">
+                            <Button Classes="action neutral" Content="Up"     Command="{Binding MoveUpCommand}"   IsEnabled="{Binding HasSelection}" />
+                            <Button Classes="action neutral" Content="Down"   Command="{Binding MoveDownCommand}" IsEnabled="{Binding HasSelection}" />
+                            <Button Classes="action neutral" Content="Delete" Command="{Binding DeleteCommand}"   IsEnabled="{Binding HasSelection}" ToolTip.Tip="Remove the selected object (Delete key on the render)" />
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock TextWrapping="Wrap" Foreground="#8A8A8A" FontSize="11"
+                               Text="On the render: drag a point, vector tip or tail, segment end or polyline vertex to move it in the plane facing you (Shift snaps to the grid, Alt keeps the nearest axis). Drag anywhere else to orbit; the wheel zooms; Delete removes the selected object." />
+                    <CheckBox Content="Drag objects on the render" IsChecked="{Binding CanvasEditing}"
+                              ToolTip.Tip="Off: every left-drag orbits the camera" />
+                </StackPanel>
+            </Border>
+
+            <!-- Selected object -->
+            <Border Classes="group" IsVisible="{Binding HasSelection}">
+                <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="4" ColumnSpacing="6">
+                    <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Classes="section" Text="{Binding SelectedKind}" />
+                    <TextBlock Grid.Row="1" Text="Name" VerticalAlignment="Center" />
+                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding SelectedName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Width="160" HorizontalAlignment="Left" />
+                    <TextBlock Grid.Row="2" Text="Colour" VerticalAlignment="Center" />
+                    <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding SelectedColor, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Width="110" HorizontalAlignment="Left"
+                             FontFamily="Consolas, Menlo, monospace" ToolTip.Tip="#RRGGBB, or #RRGGBBAA to make it see-through" />
+                    <TextBlock Grid.Row="3" Text="Numbers" VerticalAlignment="Center" />
+                    <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding SelectedCoords, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                             FontFamily="Consolas, Menlo, monospace" ToolTip.Tip="{Binding SelectedCoordsHint}" />
+                    <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedCoordsHint}" Foreground="#8A8A8A" FontSize="11" />
+                    <TextBlock Grid.Row="5" Text="{Binding Expression1Label}" VerticalAlignment="Center" IsVisible="{Binding HasExpression1}" />
+                    <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding SelectedExpression1, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                             IsVisible="{Binding HasExpression1}" FontFamily="Consolas, Menlo, monospace"
+                             ToolTip.Tip="The plot language: sin cos tan exp log sqrt abs pow min max ... constants pi e" />
+                    <TextBlock Grid.Row="6" Text="{Binding Expression2Label}" VerticalAlignment="Center" IsVisible="{Binding HasExpression3}" />
+                    <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding SelectedExpression2, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                             IsVisible="{Binding HasExpression3}" FontFamily="Consolas, Menlo, monospace" />
+                    <TextBlock Grid.Row="7" Text="{Binding Expression3Label}" VerticalAlignment="Center" IsVisible="{Binding HasExpression3}" />
+                    <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding SelectedExpression3, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                             IsVisible="{Binding HasExpression3}" FontFamily="Consolas, Menlo, monospace" />
+                    <StackPanel Grid.Row="8" Grid.Column="1" Orientation="Horizontal" Spacing="14">
+                        <CheckBox Content="Visible" IsChecked="{Binding SelectedVisible}" />
+                        <CheckBox Content="Label"   IsChecked="{Binding SelectedShowLabel}" />
+                        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding SelectedIsSurface}">
+                            <TextBlock Text="Mesh" VerticalAlignment="Center" />
+                            <NumericUpDown Value="{Binding SelectedMesh}" Minimum="2" Maximum="256" Increment="8" FormatString="0" Width="110"
+                                           ToolTip.Tip="Cells a side (2-256). More is smoother and slower." />
+                        </StackPanel>
+                    </StackPanel>
+                    <TextBlock Grid.Row="9" Grid.ColumnSpan="2" Text="{Binding EditError}" Foreground="#FFCC00" TextWrapping="Wrap"
+                               IsVisible="{Binding EditError, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                </Grid>
+            </Border>
+
+            <!-- Linear map -->
+            <Border Classes="group">
+                <StackPanel Spacing="6">
+                    <TextBlock Classes="section" Text="Linear map" />
+                    <CheckBox Content="Apply the matrix" IsChecked="{Binding MapEnabled}"
+                              ToolTip.Tip="Transform space and every object by the matrix; the original grid stays, dimmed" />
+                    <ItemsControl ItemsSource="{Binding MapPresets}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:MathPlane3DSceneEdit+MapPreset">
+                                <Button Classes="action neutral" Content="{Binding Name}" Margin="0,0,6,6" ToolTip.Tip="{Binding Hint}"
+                                        Command="{Binding $parent[ItemsControl].((vm:MathPlane3DSectionViewModel)DataContext).ApplyPresetCommand}"
+                                        CommandParameter="{Binding}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Grid ColumnDefinitions="Auto,100,100,100" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="6" RowSpacing="4">
+                        <TextBlock Grid.Row="0" Grid.RowSpan="3" Text="M =" VerticalAlignment="Center" FontFamily="Consolas, Menlo, monospace" />
+                        <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding M11}" Increment="0.1" FormatString="0.###" ToolTip.Tip="i-hat's x" />
+                        <NumericUpDown Grid.Row="0" Grid.Column="2" Value="{Binding M12}" Increment="0.1" FormatString="0.###" ToolTip.Tip="j-hat's x" />
+                        <NumericUpDown Grid.Row="0" Grid.Column="3" Value="{Binding M13}" Increment="0.1" FormatString="0.###" ToolTip.Tip="k-hat's x" />
+                        <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding M21}" Increment="0.1" FormatString="0.###" ToolTip.Tip="i-hat's y" />
+                        <NumericUpDown Grid.Row="1" Grid.Column="2" Value="{Binding M22}" Increment="0.1" FormatString="0.###" ToolTip.Tip="j-hat's y" />
+                        <NumericUpDown Grid.Row="1" Grid.Column="3" Value="{Binding M23}" Increment="0.1" FormatString="0.###" ToolTip.Tip="k-hat's y" />
+                        <NumericUpDown Grid.Row="2" Grid.Column="1" Value="{Binding M31}" Increment="0.1" FormatString="0.###" ToolTip.Tip="i-hat's z" />
+                        <NumericUpDown Grid.Row="2" Grid.Column="2" Value="{Binding M32}" Increment="0.1" FormatString="0.###" ToolTip.Tip="j-hat's z" />
+                        <NumericUpDown Grid.Row="2" Grid.Column="3" Value="{Binding M33}" Increment="0.1" FormatString="0.###" ToolTip.Tip="k-hat's z" />
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Interpolation" VerticalAlignment="Center" />
+                        <ComboBox ItemsSource="{Binding Interpolations}" SelectedItem="{Binding Interpolation}" Width="110"
+                                  ToolTip.Tip="Linear: (1 - t) I + t M. Polar: rotate (slerp) and stretch separately, so a rotation turns instead of shrinking half-way (needs det M &gt; 0)." />
+                    </StackPanel>
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                        <TextBlock Text="t" VerticalAlignment="Center" FontFamily="Consolas, Menlo, monospace" />
+                        <Slider Grid.Column="1" Minimum="0" Maximum="1" Value="{Binding T}" SmallChange="0.01" LargeChange="0.1"
+                                ToolTip.Tip="Map progress: 0 = identity, 1 = the full matrix (keyframe MathPlane3DT to make a video)" />
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                            <Button Classes="action" Content="{Binding PlayLabel}" Command="{Binding PlayCommand}" ToolTip.Tip="Run t from 0 to 1" />
+                            <CheckBox Content="Loop" IsChecked="{Binding Loop}" ToolTip.Tip="Play back and forth until stopped" />
+                        </StackPanel>
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Spacing="14">
+                        <CheckBox Content="det"          IsChecked="{Binding ShowDet}"     ToolTip.Tip="Shade the unit cube's image and print the determinant (its signed volume)" />
+                        <CheckBox Content="Eigenvectors" IsChecked="{Binding ShowEigen}"   ToolTip.Tip="Dashed lines along the real eigenvectors, with their eigenvalues" />
+                        <CheckBox Content="Lengths"      IsChecked="{Binding ShowLengths}" ToolTip.Tip="Print each vector's length after the map" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding MapReadout}" FontFamily="Consolas, Menlo, monospace" Foreground="#B4B4B4" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <!-- Display -->
+            <Border Classes="group">
+                <StackPanel Spacing="6">
+                    <TextBlock Classes="section" Text="Space" />
+                    <StackPanel Orientation="Horizontal" Spacing="14">
+                        <CheckBox Content="Axes"   IsChecked="{Binding ShowAxes}" />
+                        <CheckBox Content="Labels" IsChecked="{Binding ShowTicks}" ToolTip.Tip="Tick labels on the axes" />
+                        <CheckBox Content="Flat shading" IsChecked="{Binding FlatShading}" ToolTip.Tip="Off: smooth (Gouraud) surfaces" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="14">
+                        <TextBlock Text="Grid planes" VerticalAlignment="Center" />
+                        <CheckBox Content="xy" IsChecked="{Binding GridXY}" />
+                        <CheckBox Content="xz" IsChecked="{Binding GridXZ}" />
+                        <CheckBox Content="yz" IsChecked="{Binding GridYZ}" />
+                        <CheckBox Content="Fill xy" IsChecked="{Binding FillXY}" ToolTip.Tip="A see-through floor on the x-y plane" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding PointerReadout}" FontFamily="Consolas, Menlo, monospace" Foreground="#B4B4B4" />
+                </StackPanel>
+            </Border>
+
+            <!-- Camera -->
+            <Border Classes="group">
+                <StackPanel Spacing="6">
+                    <TextBlock Classes="section" Text="Camera" />
+                    <TextBlock Text="{Binding CameraReadout}" FontFamily="Consolas, Menlo, monospace" Foreground="#B4B4B4" TextWrapping="Wrap" />
+                    <Button Classes="action neutral" Content="Reset view" Command="{Binding ResetViewCommand}" HorizontalAlignment="Left"
+                            ToolTip.Tip="Back to the default orbit: distance 9, looking at the origin" />
+                </StackPanel>
+            </Border>
+
+            <!-- Raw scene text -->
+            <Border Classes="group">
+                <StackPanel Spacing="4">
+                    <TextBlock Classes="section" Text="Scene text" />
+                    <TextBox Text="{Binding SceneText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" AcceptsReturn="True" TextWrapping="Wrap"
+                             MinHeight="60" MaxHeight="180" FontFamily="Consolas, Menlo, monospace" FontSize="11"
+                             ToolTip.Tip="The scene as stored (also what --param MathPlane3DScene takes). Edit and leave the box to apply." />
+                    <TextBlock Text="{Binding SceneError}" Foreground="#FFCC00" TextWrapping="Wrap"
+                               IsVisible="{Binding SceneError, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

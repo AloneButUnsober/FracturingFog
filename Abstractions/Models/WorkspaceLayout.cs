@@ -73,6 +73,9 @@ namespace FracturingFog.Models
 
         // Detached Control Center "Environment" section (FF_* switches, #1669).
         DetachedEnvironmentPanel = 26,
+
+        // Detached Control Center "Math Plane 3D" section (#1716).
+        DetachedMathPlane3DPanel = 27,
     }
 
     /// <summary>Render-window mode. Mirrors the Standard/Mini/Toy/Span shapes the

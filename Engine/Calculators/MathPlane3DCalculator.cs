@@ -59,44 +59,6 @@ using SkiaSharp;
 
 namespace FracturingFog;
 
-/// <summary>#1713 — a point projected to the screen: pixel position and 1/z (view depth).</summary>
-public readonly record struct Projected3D(double X, double Y, double InvZ);
-
-/// <summary>#1713 — the orbit camera of a Math Plane 3D view.</summary>
-public readonly record struct MathPlane3DCamera(
-    (double X, double Y, double Z) Eye,
-    (double X, double Y, double Z) Right,
-    (double X, double Y, double Z) Up,
-    (double X, double Y, double Z) Forward,
-    double Focal, int Width, int Height)
-{
-    /// <summary>Near-plane distance in view space; geometry closer is clipped.</summary>
-    public const double Near = 1e-3;
-
-    public const double VerticalFovDegrees = 45.0;
-
-    /// <summary>View-space (right, up, forward) coordinates of a world point.</summary>
-    public (double X, double Y, double Z) View(double x, double y, double z)
-    {
-        double dx = x - Eye.X, dy = y - Eye.Y, dz = z - Eye.Z;
-        return (dx * Right.X + dy * Right.Y + dz * Right.Z,
-                dx * Up.X + dy * Up.Y + dz * Up.Z,
-                dx * Forward.X + dy * Forward.Y + dz * Forward.Z);
-    }
-
-    /// <summary>A view-space point to the screen; null behind the near plane.</summary>
-    public Projected3D? FromView(double vx, double vy, double vz)
-        => vz <= Near ? null
-         : new Projected3D(Width * 0.5 + Focal * vx / vz, Height * 0.5 - Focal * vy / vz, 1.0 / vz);
-
-    /// <summary>A world point to the screen; null behind the near plane.</summary>
-    public Projected3D? Project(double x, double y, double z)
-    {
-        var (vx, vy, vz) = View(x, y, z);
-        return FromView(vx, vy, vz);
-    }
-}
-
 /// <summary>#1713 — one screen-space triangle for the z-buffer pass. #1714: the vertex
 /// colours <see cref="Color"/>, <see cref="ColorB"/>, <see cref="ColorC"/> (ARGB) are
 /// interpolated across it (Gouraud); equal colours fill it flat.</summary>
@@ -195,21 +157,10 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
         TranslucentBuffer = new float[Math.Max(0, width * height)];
     }
 
-    /// <summary>The camera for <paramref name="p"/> at view <paramref name="zoom"/>.</summary>
+    /// <summary>The camera for <paramref name="p"/> at view <paramref name="zoom"/>
+    /// (<see cref="MathPlane3DCamera.For"/>; #1716 moved it to Abstractions for the UI).</summary>
     public static MathPlane3DCamera CameraFor(FractalParameters p, double zoom, int w, int h)
-    {
-        double dist = Math.Max(1e-6, p.MathPlane3DCameraDistance) / Math.Max(1e-9, zoom);
-        double th = p.MathPlane3DCameraTheta, ph = Math.Clamp(p.MathPlane3DCameraPhi, 1e-4, Math.PI - 1e-4);
-        var target = (X: p.MathPlane3DTargetX, Y: p.MathPlane3DTargetY, Z: p.MathPlane3DTargetZ);
-        var eye = (X: target.X + dist * Math.Sin(ph) * Math.Cos(th),
-                   Y: target.Y + dist * Math.Sin(ph) * Math.Sin(th),
-                   Z: target.Z + dist * Math.Cos(ph));
-        var fwd = Normalize((target.X - eye.X, target.Y - eye.Y, target.Z - eye.Z));
-        var right = Normalize(Cross(fwd, (0, 0, 1)));
-        var up = Cross(right, fwd);
-        double focal = h * 0.5 / Math.Tan(MathPlane3DCamera.VerticalFovDegrees * Math.PI / 360.0);
-        return new MathPlane3DCamera(eye, right, up, fwd, focal, w, h);
-    }
+        => MathPlane3DCamera.For(p, zoom, w, h);
 
     public void Calculate(CancellationToken ct = default)
     {
