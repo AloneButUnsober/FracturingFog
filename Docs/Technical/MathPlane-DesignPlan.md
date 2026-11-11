@@ -369,7 +369,7 @@ Every slice keeps the headless path in step (CLAUDE.md rule):
 - **Scripted scenes** (#1557). A sequence of steps (show object, apply map,
   wait, fade) driven by the Scene Engine / animation timeline, for Manim-style
   narrated sequences rendered to video. Today's single animatable `t` covers one
-  transform.
+  transform. Plan: [MathPlane-ScriptedScenes-Plan.md](MathPlane-ScriptedScenes-Plan.md).
 - **My scenes** (#1637). *As built:* a "My scenes" group under Demos saves the
   current Math Plane settings under a name and loads them back. Entries are
   `MathPlanePreset` records (`MathPlanePreset.Capture` is the reverse of `Apply`)
