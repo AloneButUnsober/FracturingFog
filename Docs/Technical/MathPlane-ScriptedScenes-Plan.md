@@ -200,6 +200,21 @@ default when the region's scene has steps). Shot-local time drives
 The shot's default length is the script duration. Nothing else in the Scene
 Engine changes.
 
+*As built (SS6, #1700):*
+- **The flag:** `SceneShot.PlayScript`, default `true`. Old scene files without the field load as `true`.
+  `Abstractions/Animation/SceneShotScript` decides when it applies: a Math Plane render type whose
+  scene has valid steps.
+- **Offline:** `SceneVideoRenderer.ShotParamsAt` sets `MathPlaneScriptTime` to the sub-frame's
+  shot-local time, after the shot's animation. Scene Engine frames sample at frame start plus half
+  the shutter (`SceneRenderPlan`), so frame k plays the script at exactly that local time, not at
+  k / fps as a `--video-motion script` video does.
+- **Live:** the scene tick sets it through the section VM (`MathPlaneSectionViewModel.ScriptTime`),
+  so the Script group follows. That path is covered by the build, not by a test.
+- **Scene Editor:** a **Play script** check box with the script's length, shown only for a scripted
+  Math Plane region (`IColorThemeService.GetRegionScriptSeconds`). Picking such a region sets a
+  shot that still has the default 5 s to the script's length. Loading a saved shot never changes it.
+- **Batch:** `--mode scene` uses the same renderer, so it needs no new flag.
+
 ### 3.8 Batch and video
 
 - **Stills:** `--param MathPlaneScriptTime=S` (region snapshot). No new flag.

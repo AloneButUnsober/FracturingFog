@@ -195,7 +195,7 @@
                                             </Grid>
 
                                             <!-- Shot fields -->
-                                            <Grid ColumnDefinitions="Auto,*,Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                                            <Grid ColumnDefinitions="Auto,*,Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
                                                 <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Region:" Margin="0,0,8,4" />
                                                 <ComboBox Grid.Row="0" Grid.Column="1"
                                                           ItemsSource="{Binding RegionNames}"
@@ -280,6 +280,14 @@
                                                     <NumericUpDown Value="{Binding ThemeRotateSeconds}" IsEnabled="{Binding RotateThemes}"
                                                                    Minimum="0.25" Maximum="600" Increment="0.5"
                                                                    FormatString="0.##" MinWidth="90" />
+                                                </StackPanel>
+
+                                                <!-- #1700 — a Math Plane region's script plays on the shot's local time -->
+                                                <StackPanel Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="4" Orientation="Horizontal"
+                                                            Spacing="6" Margin="0,4,0,0" IsVisible="{Binding HasRegionScript}">
+                                                    <CheckBox Content="Play script" IsChecked="{Binding PlayScript}"
+                                                              ToolTip.Tip="Play the region's Math Plane script on this shot's time (MathPlaneScriptTime = shot time). Off holds the region's own script time. Same live and in export." />
+                                                    <TextBlock Classes="label" Text="{Binding RegionScriptHint}" Foreground="#B4B4B4" />
                                                 </StackPanel>
                                             </Grid>
 

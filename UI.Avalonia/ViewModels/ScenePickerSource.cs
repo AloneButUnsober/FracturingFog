@@ -88,6 +88,10 @@ public sealed class ScenePickerSource
     // deleted one (which would silently reset the shot's pick).
 
     /// <summary>True when a region with this name exists (any sort / filter).</summary>
+    /// <summary>#1700 — a Math Plane region's script length (0 = none).</summary>
+    public double RegionScriptSeconds(string? name)
+        => string.IsNullOrEmpty(name) ? 0 : _service.GetRegionScriptSeconds(name);
+
     public bool RegionExists(string name)
         => (_regionSet ??= new HashSet<string>(_service.EnumerateRegionNames(), StringComparer.Ordinal)).Contains(name);
 

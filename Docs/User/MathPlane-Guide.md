@@ -189,6 +189,11 @@ FracturingFog --batch --mode video --fractal MathPlane --x 0 --y 0 --zoom 0.35 -
 - **Auto:** `--video-motion auto` picks `script` for a scene with steps.
 - **From the app:** the Script group's **Video command** button loads this command into the Command panel.
 
+**In the Scene Editor:** save the scripted scene as a region and use it in a shot.
+- **Play script:** the shot plays the script on its own time, live and in export. Turn it off to hold
+  the region's saved script time.
+- **Length:** a new shot on such a region takes the script's length.
+
 **y axis:** Math Plane's y axis points up, so `--y` is minus the world y of the view centre.
 
 **Command builder:** the Control Center **Command** builder writes the full command for the current view.

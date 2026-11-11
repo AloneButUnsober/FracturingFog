@@ -124,6 +124,11 @@ public sealed class SceneShot
     /// play across this window). Must be &gt; 0 to contribute to the scene.</summary>
     public double DurationSeconds { get; set; } = 5.0;
 
+    /// <summary>#1700 — on a Math Plane region with a script, play the script on this
+    /// shot's local time (MathPlaneScriptTime = local time). On by default; off holds the
+    /// region's own script time. No effect on other fractal types or scenes without steps.</summary>
+    public bool PlayScript { get; set; } = true;
+
     /// <summary>How this shot enters from the previous one. The first shot's
     /// transition is ignored (nothing precedes it).</summary>
     public SceneTransitionKind Transition { get; set; } = SceneTransitionKind.Crossfade;
