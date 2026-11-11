@@ -614,6 +614,8 @@ namespace FracturingFog.Models
         // #1554 — the fractal backdrop (int cast of MathPlaneBackdrop); its family's own
         // params are merged into the MathPlane block (see Snapshot).
         [JsonIgnore(Condition = OmitNull)] public int? MathPlaneBackdrop { get; set; }
+        // #1695 — the scene script's clock (seconds).
+        [JsonIgnore(Condition = OmitNull)] public double? MathPlaneScriptTime { get; set; }
         // #1538 — Polygon sides; captured only when Polygon is the active geometry.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardPolygonSides { get; set; }
         // #1539 — Polygon fill (captured with Polygon) and lattice rotation (captured with a lattice).
@@ -1120,6 +1122,7 @@ namespace FracturingFog.Models
                     MathPlaneCRe = p.MathPlaneCRe,
                     MathPlaneCIm = p.MathPlaneCIm,
                     MathPlaneBackdrop = (int)p.MathPlaneBackdrop,
+                    MathPlaneScriptTime = p.MathPlaneScriptTime,
                 },
                 // #1506 — the shared billiard scene (no launch / gate / mute: those
                 // colour ChaoticBilliard only) plus the sweep.
@@ -2014,6 +2017,7 @@ namespace FracturingFog.Models
             if (MathPlaneCRe.HasValue) p.MathPlaneCRe = MathPlaneCRe.Value;
             if (MathPlaneCIm.HasValue) p.MathPlaneCIm = MathPlaneCIm.Value;
             if (MathPlaneBackdrop.HasValue) p.MathPlaneBackdrop = (FracturingFog.MathPlaneBackdrop)MathPlaneBackdrop.Value;
+            if (MathPlaneScriptTime.HasValue) p.MathPlaneScriptTime = MathPlaneScriptTime.Value;
             if (BilliardPolygonSides.HasValue)
                 p.BilliardPolygonSides = BilliardPolygonSides.Value;
             if (BilliardPolygonFill.HasValue)

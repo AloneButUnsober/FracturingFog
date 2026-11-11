@@ -40,7 +40,7 @@ Non-goals:
 |---|---|---|
 | All Math Plane state as one text param | `MathPlaneScene` (+ map, c, backdrop params), region snapshot → `--param` | `Abstractions/Models/MathPlaneScene.cs`, `Engine/Models/FractalRegion.cs` |
 | Animatable scalar params | `FractalAnimatableParamsMap` (`MathPlaneT`, `MathPlaneCRe/CIm`, matrix) | `Abstractions/Animation/FractalAnimatableParamsMap.cs` |
-| Easing curves | `CameraEase` None / EaseIn (u²) / EaseOut / EaseInOut (smoothstep) | `Abstractions/Render/CameraTrack.cs` (`CameraTrack.ApplyEase`) |
+| Easing curves | `CameraEase` None / EaseIn (u²) / EaseOut / EaseInOut (smoothstep) | `Abstractions/Render/CameraTrack.cs` (`CameraKey.ApplyEase`) |
 | Live play of one parameter | S5 Play / Loop of `t` in the section | `UI.Avalonia/ViewModels/MathPlaneSectionViewModel.Map.cs` |
 | Deterministic headless video | `--mode video`, each frame posed at `frame / fps` (`ApplyFrameState`) | `Batch/BatchRenderer.cs` |
 | Multi-shot timelines | Scene Engine shots (region + animation at shot-local time), `--mode scene` | `Abstractions/Animation/SceneData.cs`, `Engine/Export/SceneVideoRenderer.cs` |
@@ -97,7 +97,7 @@ with [DURATION] [ease ...] ACTION ARGS...
   without a duration takes its step's duration and ease.
 - A step lasts as long as its longest member. `D` is the end of the last step.
 - `ease` defaults to `inout` (smoothstep, `CameraEase.EaseInOut`), so a step
-  starts and settles gently; `none` is linear. The curves are `CameraTrack.ApplyEase`, not new
+  starts and settles gently; `none` is linear. The curves are `CameraKey.ApplyEase`, not new
   ones.
 - Durations are seconds, `0 ≤ d ≤ 600`. A zero duration is a cut.
 
@@ -139,6 +139,19 @@ params** for the calculator:
 
 The result goes through the existing draw path. Visibility becomes an alpha per
 object (today it is a bool), which the calculator applies to the object's colour.
+
+*As built (SS1, #1695):* `Abstractions/Models/MathPlaneScript.cs` holds the step
+records, `Layout`, `Validate` (unknown names, `move` on a curve or region, a leading
+`with`, overlapping members) and `Evaluate`. The calculator evaluates the parsed scene
+at `MathPlaneScriptTime` and draws the result. Fades lower the object colour's alpha;
+labels' halos, point outlines and region shading fade with it. Values that equal the
+authored ones leave the object untouched, so `s = 0` is bit-identical to the scene
+with its steps removed. `matrix` animates the matrix params, which show only while
+`MathPlaneMapMode` is Matrix (as before). Errors name the statement and column.
+The backdrop is cached only for scripted scenes, keyed on its family, the whole
+parameter set except the Math Plane's own animated values (t, matrix, script time,
+scene text), c, the view, size, iterations, quality and colour map; any other scene
+recomputes it as before.
 
 ### 3.6 Camera
 

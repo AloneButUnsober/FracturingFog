@@ -120,6 +120,12 @@ public sealed class MathPlaneCalculator : IFractalCalculator
 
     private string? _parsedText;
     private MathPlaneScene _scene = new();
+    /// <summary>#1695 — the params drawn this frame: <see cref="FractalParameters"/>, or a
+    /// script-evaluated copy (t, matrix, c at the script time).</summary>
+    private FractalParameters _p = new();
+
+    /// <summary>#1695 — the script's duration in seconds (0 without steps) at the last render.</summary>
+    public double LastScriptDuration { get; private set; }
 
     public MathPlaneCalculator(int width, int height) => Resize(width, height);
 
@@ -157,18 +163,31 @@ public sealed class MathPlaneCalculator : IFractalCalculator
         }
         ct.ThrowIfCancellationRequested();
 
+        // #1695 — a scripted scene is drawn as it stands at the script time: objects
+        // moved / faded, t, matrix and c moved. Pure in (scene, params, time).
+        var scene = _scene;
+        _p = FractalParameters;
+        LastScriptDuration = 0;
+        if (LastSceneError == null && _scene.Steps.Count > 0)
+        {
+            var state = MathPlaneScript.Evaluate(_scene, FractalParameters, FractalParameters.MathPlaneScriptTime);
+            scene = state.Scene;
+            _p = state.Params;
+            LastScriptDuration = state.Duration;
+        }
+
         // #1553 — the complex map (null unless the mode is Complex), and the phase
         // portrait of the scene's f under everything else.
-        var cmap = MathPlaneComplexMap.Current(FractalParameters, _scene);
-        if (FractalParameters.MathPlaneBackdrop != MathPlaneBackdrop.None)
+        var cmap = MathPlaneComplexMap.Current(_p, scene);
+        if (_p.MathPlaneBackdrop != MathPlaneBackdrop.None)
         {
             DrawBackdrop(w, h, ct);
             ct.ThrowIfCancellationRequested();
         }
-        if (LastSceneError == null && _scene.Phase != MathPlanePhase.Off
-            && MathPlaneComplexMap.Create(_scene.MapSource, CParam(FractalParameters), 1.0) is { } pf)
+        if (LastSceneError == null && scene.Phase != MathPlanePhase.Off
+            && MathPlaneComplexMap.Create(scene.MapSource, CParam(_p), 1.0) is { } pf)
         {
-            pf.FillPhase(ColorBuffer, ViewBox(w, h), w, h, _scene.Phase == MathPlanePhase.Contours, BackgroundColor);
+            pf.FillPhase(ColorBuffer, ViewBox(w, h), w, h, scene.Phase == MathPlanePhase.Contours, BackgroundColor);
             ct.ThrowIfCancellationRequested();
         }
 
@@ -179,7 +198,7 @@ public sealed class MathPlaneCalculator : IFractalCalculator
             using var bmp = new SKBitmap();
             bmp.InstallPixels(info, handle.AddrOfPinnedObject(), info.RowBytes);
             using var canvas = new SKCanvas(bmp);
-            Draw(canvas, w, h, _scene, LastSceneError, cmap);
+            Draw(canvas, w, h, scene, LastSceneError, cmap);
             canvas.Flush();
         }
         finally { handle.Free(); }
@@ -204,7 +223,7 @@ public sealed class MathPlaneCalculator : IFractalCalculator
         double Px(double off) => off / pitch + w * 0.5;
         double Py(double off) => h * 0.5 - off / pitch;
 
-        var map = MathPlaneMap.Current(FractalParameters);
+        var map = MathPlaneMap.Current(_p);
         bool mapped = !map.IsIdentity || cmap != null;
 
         using var line = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true };
@@ -293,7 +312,7 @@ public sealed class MathPlaneCalculator : IFractalCalculator
 
         if (cmap != null && (scene.ShowDet || scene.ShowEigen))
             Text("det and eigen read-outs are for matrix maps", 6f * ui, h - lineH - 6f * ui, ink);
-        if (FractalParameters.MathPlaneMapMode == MathPlaneMapMode.Complex && cmap == null && error == null)
+        if (_p.MathPlaneMapMode == MathPlaneMapMode.Complex && cmap == null && error == null)
             Text("Complex map: the scene has no map \"f(z)\" statement", 6f * ui, 6f * ui, ink);
 
         if (error != null)
@@ -347,6 +366,10 @@ public sealed class MathPlaneCalculator : IFractalCalculator
             var c = new SKColor(o.Color);
             stroke.Color = c;
             fill.Color = c;
+            // #1695 — a script fade lowers the colour's alpha; the halo and outline fade with it.
+            byte fade = c.Alpha;
+            halo.Color = new SKColor(0, 0, 0, (byte)(0xC0 * fade / 255));
+            outline.Color = new SKColor(0, 0, 0, fade);
             switch (o.Kind)
             {
                 case MathPlaneObjectKind.Point:
@@ -426,7 +449,7 @@ public sealed class MathPlaneCalculator : IFractalCalculator
                     else mask = null;   // a singular map squashes the region to a line: nothing to shade
                     if (mask == null) break;
                     canvas.Flush();
-                    BlendRegion(ColorBuffer, mask, o.Color, RegionAlpha);
+                    BlendRegion(ColorBuffer, mask, o.Color, RegionAlpha * (o.Color >> 24) / 255.0);
                     // Label at the centre of the shaded pixels.
                     long sx = 0, sy = 0, n = 0;
                     for (int i = 0; i < mask.Length; i++)
@@ -632,9 +655,16 @@ public sealed class MathPlaneCalculator : IFractalCalculator
     public const uint CobwebStairColor = 0xFF56B4E9;
 
     private EscapeTimeCalculator? _backdrop;
+    // #1695 — the last backdrop (already dimmed) and what it was drawn for.
+    private uint[]? _backdropCache;
+    private string? _backdropKey;
+    private static readonly System.Text.Json.JsonSerializerOptions BackdropKeyJson = new()
+    {
+        NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals,
+    };
 
     /// <summary>The plane's c (MathPlaneCRe + i MathPlaneCIm).</summary>
-    public Complex PlaneC => CParam(FractalParameters);
+    public Complex PlaneC => CParam(_p);
 
     /// <summary>The backdrop calculator's view for this one: the same world rectangle
     /// on its y-down, corner-sampled grid (see file header). Rows come out flipped.</summary>
@@ -646,8 +676,19 @@ public sealed class MathPlaneCalculator : IFractalCalculator
 
     private void DrawBackdrop(int w, int h, CancellationToken ct)
     {
-        var p = FractalParameters;
+        var p = _p;
         if (FractalRegionBackdrop(p.MathPlaneBackdrop) is not { } type) return;
+        // Only a playing script redraws the same backdrop frame after frame; anything else
+        // recomputes as before.
+        string? key = null;
+        if (_scene.Steps.Count > 0)
+            try { key = BackdropKey(type, p, w, h); }
+            catch (Exception) { key = null; }   // a param that won't serialise: no cache, still correct
+        if (key != null && _backdropCache != null && _backdropCache.Length == ColorBuffer.Length && key == _backdropKey)
+        {
+            Array.Copy(_backdropCache, ColorBuffer, ColorBuffer.Length);
+            return;
+        }
         if (_backdrop == null || _backdrop.Width != w || _backdrop.Height != h) _backdrop = new EscapeTimeCalculator(w, h);
         var bp = p;
         if (type == FractalType.Julia)
@@ -678,6 +719,32 @@ public sealed class MathPlaneCalculator : IFractalCalculator
                 ColorBuffer[to + x] = 0xFF000000u | (r << 16) | (g << 8) | b;
             }
         }
+        if (key == null) { _backdropKey = null; return; }
+        if (_backdropCache == null || _backdropCache.Length != ColorBuffer.Length) _backdropCache = new uint[ColorBuffer.Length];
+        Array.Copy(ColorBuffer, _backdropCache, ColorBuffer.Length);
+        _backdropKey = key;
+    }
+
+    /// <summary>#1695 — everything the backdrop depends on: its family, every param except
+    /// the Math Plane's own animated ones (t, matrix, script time, scene text), c, the view,
+    /// the size, iterations, quality and the colour map instance.</summary>
+    private string BackdropKey(FractalType type, FractalParameters p, int w, int h)
+    {
+        var norm = p.Clone();
+        norm.MathPlaneScene = "";
+        norm.MathPlaneScriptTime = 0;
+        norm.MathPlaneT = 0;
+        norm.MathPlaneM11 = norm.MathPlaneM12 = norm.MathPlaneM21 = norm.MathPlaneM22 = 0;
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        var sb = new System.Text.StringBuilder();
+        sb.Append(type).Append('|').Append(w).Append('x').Append(h)
+          .Append('|').Append(CenterX.ToString("R", inv)).Append(',').Append(CenterY.ToString("R", inv))
+          .Append(',').Append(Zoom.ToString("R", inv))
+          .Append('|').Append(MaxIterations).Append('|').Append(Quality)
+          .Append('|').Append(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(ColorMap))
+          .Append('|').Append(p.MathPlaneCRe.ToString("R", inv)).Append(',').Append(p.MathPlaneCIm.ToString("R", inv));
+        sb.Append('|').Append(System.Text.Json.JsonSerializer.Serialize(norm, BackdropKeyJson));
+        return sb.ToString();
     }
 
     private static FractalType? FractalRegionBackdrop(MathPlaneBackdrop b) => FracturingFog.Models.RegionFractalParams.MathPlaneBackdropFamily(b);

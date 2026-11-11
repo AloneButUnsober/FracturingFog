@@ -1340,6 +1340,9 @@ namespace FracturingFog.Models
         public double MathPlaneCIm { get; set; } = 0.5;
         /// <summary>#1554 — the escape-time family drawn under the scene (None = the plain background).</summary>
         public MathPlaneBackdrop MathPlaneBackdrop { get; set; } = MathPlaneBackdrop.None;
+        /// <summary>#1695 — the moment of the scene's script drawn, in seconds (0 = the scene
+        /// as written; past the script's end holds its final state). Ignored without steps.</summary>
+        public double MathPlaneScriptTime { get; set; }
 
         // ── Slit cascade (#1569, double-slit epic #1565) ──────────────────
         /// <summary>Slit cascade: children per slit, N (2..16). N ≥ 3 for the fringe
@@ -2395,6 +2398,7 @@ namespace FracturingFog.Models
                 MathPlaneCRe = MathPlaneCRe,
                 MathPlaneCIm = MathPlaneCIm,
                 MathPlaneBackdrop = MathPlaneBackdrop,
+                MathPlaneScriptTime = MathPlaneScriptTime,
                 SlitCascadeChildren = SlitCascadeChildren,
                 SlitCascadeRatio = SlitCascadeRatio,
                 SlitCascadeDepth = SlitCascadeDepth,
