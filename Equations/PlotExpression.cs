@@ -12,6 +12,10 @@
 // exactly the 2D language's; no grammar changes, and the 2D / bulb parse trees are
 // untouched (ParserBehaviourSnapshotTests). Only the identifier set differs.
 //
+// #1714 (Math Plane 3D T2): a parametric surface reads u and v. They are opt-in
+// (TryParse(..., surface: true)), so the 2D language keeps 'u' and 'v' as free
+// let-names; with them, slots 6 and 7 hold u and v and EvalUV sets them.
+//
 // Real results: a plot value is real. A complex result whose imaginary part is
 // negligible counts as real; otherwise the value is NaN (a gap in the curve),
 // e.g. sqrt(x) for x < 0.
@@ -25,44 +29,55 @@ namespace FracturingFog.Models
     public sealed class PlotExpression
     {
         public const int SlotX = 0, SlotY = 1, SlotT = 2, SlotTheta = 3, SlotZ = 4, SlotC = 5;
-        private const int ReservedSlots = 6;
+        /// <summary>#1714 — slots of the surface parameters u, v (with <c>surface: true</c>).</summary>
+        public const int SlotU = 6, SlotV = 7;
 
         /// <summary>The plot language's input variables, in slot order.</summary>
         public static readonly IReadOnlyList<string> Variables = new[] { "x", "y", "t", "theta", "z", "c" };
 
+        /// <summary>#1714 — the variables of a surface expression: <see cref="Variables"/>, then u, v.</summary>
+        public static readonly IReadOnlyList<string> SurfaceVariables = new[] { "x", "y", "t", "theta", "z", "c", "u", "v" };
+
         private readonly SbxNode _root;
         private readonly int _envSize;
         private readonly bool[] _uses;
+        private readonly IReadOnlyList<string> _names;
         [ThreadStatic] private static SbxVal[]? t_env;
 
-        private PlotExpression(SbxNode root, int envSize, bool[] uses)
-        { _root = root; _envSize = envSize; _uses = uses; }
+        private PlotExpression(SbxNode root, int envSize, bool[] uses, IReadOnlyList<string> names)
+        { _root = root; _envSize = envSize; _uses = uses; _names = names; }
 
         /// <summary>True when the source reads <paramref name="variable"/> (one of
-        /// <see cref="Variables"/>).</summary>
+        /// <see cref="Variables"/>, or of <see cref="SurfaceVariables"/> for a surface).</summary>
         public bool Uses(string variable)
         {
-            int i = ((IList<string>)Variables).IndexOf(variable);
+            int i = ((IList<string>)_names).IndexOf(variable);
             return i >= 0 && _uses[i];
         }
 
         /// <summary>The variables the source reads.</summary>
         public IEnumerable<string> UsedVariables()
         {
-            for (int i = 0; i < Variables.Count; i++) if (_uses[i]) yield return Variables[i];
+            for (int i = 0; i < _names.Count; i++) if (_uses[i]) yield return _names[i];
         }
 
         /// <summary>Parse <paramref name="source"/>; on failure <paramref name="error"/>
         /// is the language's message ("Unknown identifier 'q' at line 1, col 3. Did you mean 'x'?").</summary>
         public static bool TryParse(string? source, out PlotExpression? expr, out string? error)
+            => TryParse(source, surface: false, out expr, out error);
+
+        /// <summary>#1714 — as <see cref="TryParse(string?, out PlotExpression?, out string?)"/>;
+        /// with <paramref name="surface"/> the source may also read u and v (<see cref="EvalUV"/>).</summary>
+        public static bool TryParse(string? source, bool surface, out PlotExpression? expr, out string? error)
         {
             expr = null; error = null;
             if (string.IsNullOrWhiteSpace(source)) { error = "The expression is empty."; return false; }
             try
             {
-                var b = new Builder(source);
+                var names = surface ? SurfaceVariables : Variables;
+                var b = new Builder(source, names);
                 var root = new EquationFrontEnd<SbxNode>(source, b, Syntax, legacy: false, edits: null).ParseProgram();
-                expr = new PlotExpression(root, b.EnvSize, b.Uses);
+                expr = new PlotExpression(root, b.EnvSize, b.Uses, names);
                 return true;
             }
             catch (FormatException ex) { error = ex.Message; return false; }
@@ -79,6 +94,25 @@ namespace FracturingFog.Models
             env[SlotTheta] = SbxVal.Real(theta);
             env[SlotZ] = SbxVal.Cx(new Complex(x, y));
             env[SlotC] = SbxVal.Cx(Complex.Zero);
+            return ToReal(_root.Eval(env));
+        }
+
+        /// <summary>#1714 — the real value at surface parameters (u, v), for an expression
+        /// parsed with <c>surface: true</c>; the other inputs are 0.</summary>
+        public double EvalUV(double u, double v)
+        {
+            var env = Env();
+            env[SlotX] = SbxVal.Real(0);
+            env[SlotY] = SbxVal.Real(0);
+            env[SlotT] = SbxVal.Real(0);
+            env[SlotTheta] = SbxVal.Real(0);
+            env[SlotZ] = SbxVal.Cx(Complex.Zero);
+            env[SlotC] = SbxVal.Cx(Complex.Zero);
+            if (_names.Count > SlotV)
+            {
+                env[SlotU] = SbxVal.Real(u);
+                env[SlotV] = SbxVal.Real(v);
+            }
             return ToReal(_root.Eval(env));
         }
 
@@ -120,13 +154,17 @@ namespace FracturingFog.Models
         {
             private readonly string _src;
             private readonly Dictionary<string, int> _scope = new(StringComparer.Ordinal);
-            public readonly bool[] Uses = new bool[ReservedSlots];
-            public int EnvSize = ReservedSlots;
+            private readonly IReadOnlyList<string> _names;
+            public readonly bool[] Uses;
+            public int EnvSize;
 
-            public Builder(string src)
+            public Builder(string src, IReadOnlyList<string> names)
             {
                 _src = src;
-                for (int i = 0; i < Variables.Count; i++) _scope[Variables[i]] = i;
+                _names = names;
+                Uses = new bool[names.Count];
+                EnvSize = names.Count;
+                for (int i = 0; i < names.Count; i++) _scope[names[i]] = i;
             }
 
             private string At(int pos) => EquationSyntax.At(_src, pos);
@@ -138,7 +176,7 @@ namespace FracturingFog.Models
             {
                 if (_scope.TryGetValue(name, out int slot))
                 {
-                    if (slot < ReservedSlots) Uses[slot] = true;
+                    if (slot < _names.Count) Uses[slot] = true;
                     return new SbxSlot(slot);
                 }
                 switch (name.ToLowerInvariant())
@@ -153,7 +191,7 @@ namespace FracturingFog.Models
 
             private IEnumerable<string> Candidates()
             {
-                foreach (var v in Variables) yield return v;
+                foreach (var v in _names) yield return v;
                 yield return "pi"; yield return "e"; yield return "i";
                 foreach (var k in _scope.Keys) yield return k;
                 foreach (var f in SandboxExpression.FunctionNames) yield return f;
@@ -180,7 +218,7 @@ namespace FracturingFog.Models
 
             public void CheckLetName(string name, int position)
             {
-                if (((IList<string>)Variables).Contains(name) || name is "pi" or "e" or "i" or "let" or "in")
+                if (((IList<string>)_names).Contains(name) || name is "pi" or "e" or "i" or "let" or "in")
                     throw new FormatException($"Cannot rebind reserved name '{name}' at {At(position)}.");
             }
 

@@ -799,6 +799,32 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
   `MathPlane3D-DesignPlan.md` §3.3). FF sorts by centroid and does **not** split faces, accepting the
   artefact the paper's splitting removes.
 
+<a id="gouraud-shading"></a>
+
+- **Gouraud shading** — Henri Gouraud. *Continuous Shading of Curved Surfaces.* IEEE Transactions on
+  Computers C-20(6), 623–629, June 1971. doi:10.1109/T-C.1971.223313. Shades a polygon approximation of a
+  curved surface so the shade has no breaks across polygon edges: intensities are computed at the
+  vertices (from normals averaged over the adjacent polygons) and interpolated across each polygon. Used
+  for the smooth surface shading of Math Plane 3D (#1714, `Engine/Calculators/MathPlane3DCalculator.cs`,
+  `MathPlane3DCalculator.AddSurface` / `Scan`). FF interpolates linearly in screen space, not
+  perspective-correctly.
+
+<a id="sutherland-hodgman-clipping"></a>
+
+- **Polygon clipping** — Ivan E. Sutherland, Gary W. Hodgman. *Reentrant Polygon Clipping.*
+  Communications of the ACM 17(1), 32–42, January 1974. doi:10.1145/360767.360802. Clips a polygon
+  against one plane at a time, emitting kept vertices and edge crossings. Math Plane 3D clips each
+  triangle against the near plane only, giving 0, 1 or 2 triangles (#1714,
+  `MathPlane3DCalculator.AddWorld`).
+
+<a id="lambert-cosine-law"></a>
+
+- **Lambert's cosine law (diffuse reflection)** — Johann Heinrich Lambert. *Photometria sive de mensura
+  et gradibus luminis, colorum et umbrae.* Augsburg (Eberhard Klett), 1760. A perfectly diffuse surface
+  appears with brightness proportional to the cosine of the angle between its normal and the light.
+  Math Plane 3D shades arrowheads and surfaces with this term (two-sided, plus an ambient floor;
+  #1713, #1714, `MathPlane3DCalculator.Lambert`). Wikipedia: <https://en.wikipedia.org/wiki/Photometria>.
+
 <a id="higham-polar-decomposition"></a>
 
 - **Polar decomposition** — Nicholas J. Higham. *Computing the Polar Decomposition—with Applications.*

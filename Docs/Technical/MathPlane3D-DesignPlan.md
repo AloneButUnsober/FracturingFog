@@ -139,7 +139,7 @@ orthographic` statement is cheap to add and helps reading coordinates.
 - **Rasterizer:** 1/z depth (nearer = larger); pixel centres; the top-left fill rule, so a
   closed fan covers each pixel exactly once; strict depth test.
 - **Arrowheads:** flat-Lambert cones, the only triangles in T1. Triangles crossing the near
-  plane are skipped for now.
+  plane were skipped in T1; T2 clips them.
 - **Lines:** clipped to the near plane, cut into ~3 px pieces, depth-tested at each piece's
   mid-1/z with a 0.2 % relative bias.
 - **Labels and tick numbers:** shown only where their anchor passes the depth test.
@@ -180,6 +180,31 @@ orthographic` statement is cheap to add and helps reading coordinates.
   used for implicit curves). This is a later slice.
 - **Under a map:** a surface is mapped vertex by vertex, which is exact for a linear map.
   Normals are recomputed from the mapped triangles.
+
+*As built (T2, #1714):*
+- **Text:** `surface NAME explicit "f(x, y)" [xmin xmax ymin ymax]` (default domain [-3, 3]²),
+  `surface NAME parametric "x(u,v)" "y(u,v)" "z(u,v)" umin umax vmin vmax`,
+  `curve NAME "x(t)" "y(t)" "z(t)" tmin tmax`, the option `mesh N` (2–256, default 64) on
+  surfaces, `shading smooth|flat` and `fill xy|xz|yz|off`.
+- **u and v** are opt-in plot variables (`PlotExpression.TryParse(..., surface: true)`), so the
+  2D language keeps `u` and `v` free as `let` names.
+- **Sampling:** a cell is dropped when a vertex is not finite, or when one coordinate spans more
+  across the cell than the central 90 % range of that coordinate's samples (a jump across a
+  pole). The grid size counts a surface by that central range, so a pole's walls don't inflate
+  it. Space curves are 512 uniform steps in t, broken at non-finite samples.
+- **Shading:** two-sided Lambert ([bibliography](../Resources-Bibliography.md#lambert-cosine-law))
+  plus a 0.35 ambient floor, light over the camera's shoulder. Smooth is Gouraud
+  ([bibliography](../Resources-Bibliography.md#gouraud-shading)): vertex normals averaged from the
+  drawn cells, colours interpolated linearly in screen space.
+- **Near plane:** triangles are clipped to it (Sutherland–Hodgman against one plane,
+  [bibliography](../Resources-Bibliography.md#sutherland-hodgman-clipping)), which lifts T1's
+  "skipped" limit.
+- **Translucent pass:** `#RRGGBBAA` surfaces and filled grid planes, sorted farthest-first by
+  centroid depth (stable), blended straight-alpha over the colour buffer where they pass the
+  opaque depth, no depth write. Lines and points are split by the nearest translucent depth:
+  those behind it are drawn before the blend (tinted), the rest after it. Labels come last.
+- **Known limits:** intersecting translucent triangles can sort wrongly (no face splitting); the
+  depth AOV for stereo holds the opaque surfaces only.
 
 ### 3.6 Camera and input
 

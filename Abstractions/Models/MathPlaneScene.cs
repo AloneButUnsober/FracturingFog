@@ -69,7 +69,7 @@ namespace FracturingFog.Models
 {
     /// <summary>Object kinds. <see cref="Region"/> (#1551) shades where its condition
     /// holds (non-zero), e.g. <c>"x^2 + y^2 &lt; 4"</c>.</summary>
-    public enum MathPlaneObjectKind { Point, Vector, Segment, Polyline, Curve, Region }
+    public enum MathPlaneObjectKind { Point, Vector, Segment, Polyline, Curve, Region, Surface }
 
     /// <summary>#1550 — how a <see cref="MathPlaneObjectKind.Curve"/> is given.
     /// <see cref="Implicit"/> (#1551) is the zero set of F(x, y).</summary>
@@ -102,7 +102,8 @@ namespace FracturingFog.Models
         bool ShowLabel = true,
         bool HasFrom = false,
         MathPlaneCurveKind CurveKind = MathPlaneCurveKind.Explicit,
-        IReadOnlyList<string>? Sources = null)
+        IReadOnlyList<string>? Sources = null,
+        int Mesh = 0)
     {
         /// <summary>A curve's expressions (one; two for parametric); empty otherwise.</summary>
         public IReadOnlyList<string> Expressions => Sources ?? Array.Empty<string>();
@@ -121,7 +122,7 @@ namespace FracturingFog.Models
             o is not null && Kind == o.Kind && Name == o.Name && Color == o.Color
             && Visible == o.Visible && ShowLabel == o.ShowLabel && HasFrom == o.HasFrom
             && Coords.SequenceEqual(o.Coords)
-            && CurveKind == o.CurveKind && Expressions.SequenceEqual(o.Expressions);
+            && CurveKind == o.CurveKind && Expressions.SequenceEqual(o.Expressions) && Mesh == o.Mesh;
 
         public override int GetHashCode() => HashCode.Combine(Kind, Name, Color, Coords.Count);
     }
@@ -626,13 +627,14 @@ namespace FracturingFog.Models
 
         /// <summary>A quoted plot-language token: closed quotes, one line, parses, and
         /// reads only <paramref name="allowed"/> variables.</summary>
-        private static bool TryExpression(string token, string[] allowed, string what, out string src, out string msg)
+        internal static bool TryExpression(string token, string[] allowed, string what, out string src, out string msg)
         {
             src = ""; msg = "";
             if (token.Length < 2 || !token.EndsWith('"')) { msg = "unterminated quote"; return false; }
             src = token[1..^1];
             if (src.Contains('\n') || src.Contains('\r')) { msg = "an expression must be on one line"; return false; }
-            if (!PlotExpression.TryParse(src, out var expr, out string? err)) { msg = "expression: " + err; return false; }
+            bool surface = allowed.Contains("u") || allowed.Contains("v"); // #1714
+            if (!PlotExpression.TryParse(src, surface, out var expr, out string? err)) { msg = "expression: " + err; return false; }
             var wrong = expr!.UsedVariables().Where(v => !allowed.Contains(v)).ToList();
             if (wrong.Count > 0)
             { msg = $"{what}'s expression reads only {string.Join(", ", allowed)}, not {string.Join(", ", wrong)}"; return false; }
