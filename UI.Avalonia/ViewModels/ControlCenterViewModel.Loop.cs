@@ -105,6 +105,17 @@ public sealed partial class ControlCenterViewModel
         return bmp;
     }
 
+    // #1699 — the Math Plane Script group's "Video command": the live command plus
+    // --mode video --video-motion script (the script's length; frame k at k / fps).
+    private void SeedScriptVideo()
+    {
+        var seed = BuildLiveSeed(FracturingFog.Batch.BatchDefaults.Width, FracturingFog.Batch.BatchDefaults.Height);
+        var args = seed.Args.ToList();
+        args.AddRange(FracturingFog.Cli.BatchCommandBuilder.ScriptVideoArgs());
+        CommandBuilder.Composer.Load(args);
+        SelectedSection = ControlCenterSection.Command;
+    }
+
     // Load the Command panel with the live command re-centred on the snapped
     // point (full limbs) plus the loop tokens, and switch to it.
     private void SeedLoopVideo()

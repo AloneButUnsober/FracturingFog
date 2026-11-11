@@ -178,6 +178,17 @@ FracturingFog --batch --fractal MathPlane --x -0.5 --y 0 --zoom 0.6 --param Math
 
 **Math overlay:** for the overlay on a 2D view, add `--math-overlay RE,IM[,STEPS]`.
 
+**Script video:** a scene with `step` lines renders as a video of its script.
+
+```bash
+FracturingFog --batch --mode video --fractal MathPlane --x 0 --y 0 --zoom 0.35 --param MathPlaneScene=@scene.txt --video-motion script --fps 30 --out script.mp4
+```
+
+- **Timing:** frame k shows the script at k / fps, and the last frame is the script's end. Leave out
+  `--seconds` to get the script's own length.
+- **Auto:** `--video-motion auto` picks `script` for a scene with steps.
+- **From the app:** the Script group's **Video command** button loads this command into the Command panel.
+
 **y axis:** Math Plane's y axis points up, so `--y` is minus the world y of the view centre.
 
 **Command builder:** the Control Center **Command** builder writes the full command for the current view.

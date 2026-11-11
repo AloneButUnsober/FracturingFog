@@ -96,6 +96,8 @@
                                 ToolTip.Tip="Play the script from the current time (from the start when at the end)" />
                         <Button Content="Restart" Command="{Binding RestartScriptCommand}" ToolTip.Tip="Back to 0 s, the scene as written" />
                         <CheckBox Content="Loop" IsChecked="{Binding ScriptLoop}" ToolTip.Tip="Start over at the end until paused" />
+                        <Button Content="Video command" Command="{Binding ScriptVideoCommand}"
+                                ToolTip.Tip="Load the Command panel with a headless video of this script (--mode video --video-motion script); set --out and press Run" />
                     </StackPanel>
                     <ListBox ItemsSource="{Binding ScriptRows}" SelectedItem="{Binding SelectedScriptRow, Mode=TwoWay}"
                              MaxHeight="200" FontFamily="Consolas, Menlo, monospace" FontSize="12"

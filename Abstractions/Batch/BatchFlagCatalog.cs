@@ -548,9 +548,11 @@ namespace FracturingFog.Batch
                     max: QualityPreset.Extreme.ZoomMax, enforced: true, def: "0.5"),
                 Sw(BatchFlags.Reverse, Video, BatchModes.Sequence, "Zoom out from the target back to the full view."),
                 Pick(BatchFlags.VideoMotion, Video, BatchModes.Sequence,
-                    "How the video moves. auto = per family (2D plane zoom, 3D dolly, Logistic/AcidWarp sweep, else kenburns). "
-                    + "loop = seamless Misiurewicz loop at --x/--y (needs --loop-multiplier; video mode).",
-                    new[] { "auto", "zoom", "hold", "kenburns", "sweep", "loop" }, "auto", "MODE"),
+                    "How the video moves. auto = per family (2D plane zoom, 3D dolly, Logistic/AcidWarp sweep, else kenburns; "
+                    + "a Math Plane scene with a script plays it). "
+                    + "loop = seamless Misiurewicz loop at --x/--y (needs --loop-multiplier; video mode). "
+                    + "script = play the Math Plane script, frame k at script time k / fps (--seconds defaults to the script's length).",
+                    new[] { "auto", "zoom", "hold", "kenburns", "sweep", "loop", "script" }, "auto", "MODE"),
                 Txt(BatchFlags.LoopMultiplier, Video, BatchModes.Video,
                     "Loop multiplier λ of the Misiurewicz point as MAG,DEG (|λ| > 1, arg λ in degrees; "
                     + "Explore > Find > Snap to spiral reports it). One loop zooms x|λ|^n and turns -n*arg λ.",
