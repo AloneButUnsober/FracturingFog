@@ -366,6 +366,7 @@ Every slice keeps the headless path in step (CLAUDE.md rule):
   path, not raymarching: tessellate and draw lines/triangles with depth. Open
   questions are depth sorting for translucent planes, 3D label placement, and
   whether it reuses the mesh export (S9) path.
+  Plan: [MathPlane3D-DesignPlan.md](MathPlane3D-DesignPlan.md).
 - **Scripted scenes** (#1557). A sequence of steps (show object, apply map,
   wait, fade) driven by the Scene Engine / animation timeline, for Manim-style
   narrated sequences rendered to video. Today's single animatable `t` covers one
