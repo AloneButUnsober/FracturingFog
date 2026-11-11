@@ -775,6 +775,47 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
   (`Abstractions/Models/MathPlaneImplicitSampler.cs`, #1551; design `Docs/Technical/MathPlane-DesignPlan.md`
   §3.4). Saddle cells are resolved by the cell-centre value, and edge crossings are found by bisection so
   that poles can be rejected. Both are FF's choices, not taken from the paper.
+  Also planned for implicit surfaces `F(x, y, z) = 0` in Math Plane 3D (#1556,
+  `Docs/Technical/MathPlane3D-DesignPlan.md` §3.5).
+
+<a id="catmull-zbuffer"></a>
+
+- **Z-buffer (depth buffer)** — Edwin Earl Catmull. *A Subdivision Algorithm for Computer Display of
+  Curved Surfaces.* PhD dissertation, University of Utah, 1974. A University of Utah technical report
+  with the same title is catalogued as CSTD-74-006 (December 1974). Records:
+  <https://collections.lib.utah.edu/details?id=2111909>, <https://collections.lib.utah.edu/details?id=712681>.
+  The z-buffer is usually credited to this thesis. Wolfgang Straßer described it independently the same year
+  (see *Citations awaiting verification*). Planned for the opaque pass of the Math Plane 3D CPU renderer
+  (#1556, `Docs/Technical/MathPlane3D-DesignPlan.md` §3.3). The catalogue records checked here describe
+  the thesis's patch subdivision. The z-buffer attribution comes from secondary histories and was not
+  read in the thesis itself.
+
+<a id="newell-depth-sort"></a>
+
+- **Depth sort (painter's algorithm)** — M. E. Newell, R. G. Newell, T. L. Sancha. *A solution to the
+  hidden surface problem.* Proceedings of the ACM Annual Conference (ACM '72), vol. 1, pp. 443–450, 1972.
+  doi:10.1145/800193.569954. Sorts faces by depth and draws far to near, splitting faces that intersect or
+  overlap cyclically. Planned for the back-to-front order of the translucent pass in Math Plane 3D (#1556,
+  `MathPlane3D-DesignPlan.md` §3.3). FF sorts by centroid and does **not** split faces, accepting the
+  artefact the paper's splitting removes.
+
+<a id="higham-polar-decomposition"></a>
+
+- **Polar decomposition** — Nicholas J. Higham. *Computing the Polar Decomposition—with Applications.*
+  SIAM Journal on Scientific and Statistical Computing 7(4), 1160–1174, 1986. doi:10.1137/0907079.
+  Free copy: MIMS EPrint 2007.9, <https://eprints.maths.manchester.ac.uk/694/>. A quadratically
+  convergent Newton method for the polar decomposition of a full-rank matrix. Planned for the polar
+  `t`-interpolation of 3×3 maps in Math Plane 3D, `M = R·S` (#1556, `MathPlane3D-DesignPlan.md` §3.4).
+  The 2D Math Plane uses a closed form instead.
+
+<a id="shoemake-slerp"></a>
+
+- **Quaternion slerp** — Ken Shoemake. *Animating rotation with quaternion curves.* ACM SIGGRAPH
+  Computer Graphics 19(3), 245–254, 1985 (SIGGRAPH '85). The DOI is given as 10.1145/325165.325242 in
+  most records; one record gives 10.1145/325334.325242. Not checked against the ACM Digital Library.
+  SIGGRAPH history record: <https://history.siggraph.org/?p=107413>. Planned for interpolating the
+  rotation factor R from the identity in Math Plane 3D's polar `t` (#1556, `MathPlane3D-DesignPlan.md`
+  §3.4).
 
 <a id="wegert-visual-complex-functions"></a>
 
@@ -939,6 +980,14 @@ Programs and galleries the project measured itself against, learned from, or pay
   grid-under-a-linear-map presentation the Math Plane matrix maps follow (MathPlane-DesignPlan.md §1,
   §3.5).
 
+<a id="sanderson-3d-transformations"></a>
+
+- **Grant Sanderson.** *Three-dimensional linear transformations*, chapter 5 of *Essence of linear
+  algebra*, 3Blue1Brown, 2016. <https://www.3blue1brown.com/lessons/3d-transformations>. The release
+  date (10 Aug 2016) comes from secondary listings and is not confirmed on the lesson page. Space's grid
+  morphing under a 3×3 matrix with the origin fixed: the look Math Plane 3D's maps follow (#1556,
+  `Docs/Technical/MathPlane3D-DesignPlan.md` §1, §3.4).
+
 <a id="desmos-geogebra"></a>
 
 - **Desmos** graphing calculator, <https://www.desmos.com/calculator> (company and founding details not
@@ -986,6 +1035,11 @@ entry above completed or corrected.
 - **Mariani–Silver** — primary description (Rico Mariani's algorithm; Robert Silver's formulation)
   isn't identified; it's commonly documented through Fractint-era material and Wikibooks *Fractals*.
 - **Earl F. Glynn** — the original publication of the fractional-power Julia set.
+- **Wolfgang Straßer 1974** — PhD thesis, TU Berlin, 1974, said to describe the z-buffer independently
+  of Catmull (see [Catmull](#catmull-zbuffer)). Source: the TU Wien obituary
+  (<https://www.cg.tuwien.ac.at/sites/default/files/lost-colleague/Wolfgang%20Strasser/WolfgangStrasser-Obituary.pdf>).
+  The thesis title was truncated in the record seen ("Schnelle …"), so the full title and pages are
+  unverified. Cited by `Docs/Technical/MathPlane3D-DesignPlan.md` §3.3 (#1556).
 - **Imagina's LA stages and AT (#1623)** — the GitHub profile of 5E-324 gives the name "Yu, Zhuoran"
   and Imagina's commits are authored as "Zhuoran" (read 2026-11-03, #1625). Not yet verified:
   - whether this is the same person as the fractalforums.org user Zhuoran (rebasing and BLA, above);
