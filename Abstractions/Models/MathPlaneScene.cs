@@ -241,6 +241,9 @@ namespace FracturingFog.Models
             return sb.ToString();
         }
 
+        /// <summary>#1698 — one script member as scene text (what the Script list shows).</summary>
+        public static string StepText(MathPlaneStep s) => SerializeStep(s);
+
         private static string SerializeStep(MathPlaneStep s)
         {
             var sb = new StringBuilder(s.With ? "with" : "step");
