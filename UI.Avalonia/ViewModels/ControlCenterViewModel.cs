@@ -75,6 +75,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
         DetachSectionCommand = ReactiveCommand.Create(
             () => DetachRequested?.Invoke(this, _selectedSection));
         CommandBuilder = new CommandBuilderViewModel(BuildLiveSeed, shell.RequestCopyToClipboard);
+        shell.MathPlane.ScriptVideoRequested += SeedScriptVideo;   // #1699
         Environment = new EnvironmentPanelViewModel();   // #1669
         QrCode = new QrCodeViewModel();
         // #1401 — a found QR view is plain navigation, like an explored one.

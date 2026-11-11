@@ -60,11 +60,18 @@ public sealed partial class MathPlaneSectionViewModel
 
     public ReactiveCommand<Unit, Unit> PlayScriptCommand { get; private set; } = null!;
     public ReactiveCommand<Unit, Unit> RestartScriptCommand { get; private set; } = null!;
+    /// <summary>#1699 — load the Command panel with a headless video of this script.</summary>
+    public ReactiveCommand<Unit, Unit> ScriptVideoCommand { get; private set; } = null!;
+
+    /// <summary>#1699 — raised by <see cref="ScriptVideoCommand"/>; the Control Center seeds
+    /// its Command builder with the live command plus <c>--mode video --video-motion script</c>.</summary>
+    public event Action? ScriptVideoRequested;
 
     private void InitScript()
     {
         PlayScriptCommand = ReactiveCommand.Create(() => { if (_scriptPlaying) PauseScript(); else PlayScript(); });
         RestartScriptCommand = ReactiveCommand.Create(() => { ScriptTime = 0; });
+        ScriptVideoCommand = ReactiveCommand.Create(() => { PauseScript(); ScriptVideoRequested?.Invoke(); });
     }
 
     private double _scriptDuration;

@@ -1034,6 +1034,11 @@ namespace FracturingFog.Cli
             return a;
         }
 
+        /// <summary>#1699 — the tokens that turn a live Math Plane command into a video of its
+        /// script: <c>--mode video --video-motion script</c> (the length defaults to the script's).</summary>
+        public static IReadOnlyList<string> ScriptVideoArgs()
+            => new[] { BatchFlags.Mode, "video", BatchFlags.VideoMotion, "script" };
+
         /// <summary>#1233 — a centre coordinate: the plain decimal when the lower
         /// limbs are all zero (byte-identical to before), else <c>Hi|Lo|…</c> up to
         /// the last non-zero limb, every limb round-trippable.</summary>

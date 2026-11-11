@@ -40,6 +40,9 @@ namespace FracturingFog.Models
         /// <summary>Re-render with a swept family param (Logistic r-window,
         /// AcidWarp flow). Other families fall back to Ken-Burns.</summary>
         Sweep,
+        /// <summary>#1699 — play a Math Plane scene's script: frame k is drawn at script
+        /// time k / fps, with the authored view (no zoom or drift).</summary>
+        Script,
     }
 
     /// <summary>A resolved per-video motion for one fractal family.</summary>
@@ -55,6 +58,8 @@ namespace FracturingFog.Models
         KenBurns,
         /// <summary>Per-frame re-render with a swept family param.</summary>
         Sweep,
+        /// <summary>#1699 — per-frame re-render at script time frame / fps.</summary>
+        Script,
     }
 
     public static class VideoMotionPlan
@@ -88,11 +93,24 @@ namespace FracturingFog.Models
         /// adapted (Zoom on a non-spatial type → Ken-Burns, Sweep on a non-sweepable
         /// type → Ken-Burns) and <paramref name="note"/> explains why.
         /// </summary>
-        public static VideoMotionKind Resolve(FractalType type, VideoMotionMode requested, out string? note)
+        /// <param name="hasScript">#1699 — the view is a Math Plane scene with a script:
+        /// Auto plays it; an explicit Script without one falls back to Auto.</param>
+        public static VideoMotionKind Resolve(FractalType type, VideoMotionMode requested, out string? note, bool hasScript = false)
         {
             note = null;
             var cls = FractalMotionCapabilities.MotionClass(type);
             bool sweepable = FractalMotionCapabilities.SupportsVideoParamSweep(type);
+            bool scripted = hasScript && type == FractalType.MathPlane;
+            if (requested == VideoMotionMode.Script)
+            {
+                if (scripted) return VideoMotionKind.Script;
+                note = type == FractalType.MathPlane
+                    ? "the Math Plane scene has no script (step / with lines) — using auto."
+                    : $"script motion plays a Math Plane script, not {type} — using auto.";
+                requested = VideoMotionMode.Auto;
+            }
+            else if (requested == VideoMotionMode.Auto && scripted)
+                return VideoMotionKind.Script;
             switch (requested)
             {
                 case VideoMotionMode.Hold: return VideoMotionKind.Hold;
@@ -117,6 +135,14 @@ namespace FracturingFog.Models
                     };
             }
         }
+
+        /// <summary>#1699 — frames in a script video of <paramref name="scriptSeconds"/>: one per
+        /// 1 / fps from s = 0, the last on the final state (s = D); at least 2.</summary>
+        public static int ScriptFrameCount(double scriptSeconds, int fps)
+            => System.Math.Max(2, (int)System.Math.Round(System.Math.Max(0, scriptSeconds) * System.Math.Max(fps, 1)) + 1);
+
+        /// <summary>#1699 — the script time of frame <paramref name="frame"/>: frame / fps.</summary>
+        public static double ScriptFrameTime(int frame, int fps) => frame / (double)System.Math.Max(fps, 1);
 
         /// <summary>3D dolly endpoints: (wide establishing zoom, authored zoom).</summary>
         public static (double Wide, double Authored) CameraDolly(double authoredZoom)

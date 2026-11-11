@@ -212,6 +212,20 @@ Engine changes.
   `--video-motion script`.
 - **Scene:** `--mode scene` plays scripted shots as in §3.7.
 
+*As built (SS5, #1699):*
+- **Motion:** `VideoMotionMode.Script` and `VideoMotionKind.Script`. `VideoMotionPlan.Resolve` takes `hasScript`:
+  - `auto` on a scripted Math Plane scene plays the script;
+  - an explicit `script` without one, or on another family, falls back to `auto` with a note;
+  - an explicit hold, zoom and so on still wins.
+- **Frames:** the renderer sets `MathPlaneScriptTime = ScriptFrameTime(k, fps) = k / fps` per frame, with the
+  authored view (no zoom, drift or Ken-Burns).
+- **Length:** without `--seconds` the video has `ScriptFrameCount(D, fps) = round(D · fps) + 1` frames, so its
+  last frame is the final state at s = D. `BatchOptions.VideoSecondsSet` records whether `--seconds` was given.
+- **Checked:** every kept frame of a 12.5 s, 10 fps video is pixel-identical to the batch still at
+  `--param MathPlaneScriptTime=k/10` (frames 0, 23, 50, 77 and 125 checked).
+- **Command builder:** `BatchCommandBuilder.ScriptVideoArgs()`. The Script group's **Video command** button
+  loads the live command plus `--mode video --video-motion script` into the Command panel.
+
 ## 4. UI (Control Center only)
 
 A **Script** group in the Math Plane section, shown when the scene has steps:

@@ -671,7 +671,24 @@ namespace FracturingFog.Batch
                 limbSource = null;
                 deepCentre = best.Value.Center;
             }
-            var motion = VideoMotionPlan.Resolve(frType, opts.VideoMotion, out string? motionNote);
+            // #1699 — a Math Plane scene with a script plays it: frame k at script time k / fps.
+            double scriptSeconds = 0;
+            bool hasScript = false;
+            if (frType == FractalType.MathPlane
+                && MathPlaneScene.TryParse(BuildFractalParameters(opts, namedRegion).MathPlaneScene, out var scriptScene, out _)
+                && scriptScene.Steps.Count > 0)
+            {
+                hasScript = true;
+                scriptSeconds = MathPlaneScript.Duration(scriptScene);
+            }
+            var motion = VideoMotionPlan.Resolve(frType, opts.VideoMotion, out string? motionNote, hasScript);
+            if (motion == VideoMotionKind.Script)
+                Console.WriteLine($"  script   : {scriptSeconds:0.###} s (frame k at script time k / {opts.VideoFps})");
+            if (motion == VideoMotionKind.Script && !opts.VideoSecondsSet)
+            {
+                // The whole script, its last frame on the final state (s = D).
+                totalFrames = VideoMotionPlan.ScriptFrameCount(scriptSeconds, opts.VideoFps);
+            }
             var motionRng = new Random(opts.VideoSeed);
 
             // #1235 — Misiurewicz loop: --x/--y is the point, --zoom the loop's
@@ -966,6 +983,9 @@ namespace FracturingFog.Batch
                     FracturingFog.Abstractions.Animation.AnimationDataExtensions.ApplyAt(
                         animation, fp, frame / (double)Math.Max(opts.VideoFps, 1));
                 audioDrive?.ApplyFrame(frame);   // #1432 — after the animation: audio wins on a shared setting
+                // #1699 — the script clock: frame k is the still at --param MathPlaneScriptTime=k/fps.
+                if (motion == VideoMotionKind.Script)
+                    fp.MathPlaneScriptTime = VideoMotionPlan.ScriptFrameTime(frame, opts.VideoFps);
                 if (motion == VideoMotionKind.Sweep)
                 {
                     if (frType == FractalType.Logistic)

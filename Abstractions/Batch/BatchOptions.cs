@@ -112,6 +112,8 @@ namespace FracturingFog.Batch
 
         // Video-specific.
         public double VideoSeconds { get; set; } = 20.0;
+        /// <summary>#1699 — --seconds was given (a script video otherwise lasts the script).</summary>
+        public bool VideoSecondsSet { get; set; }
         public int VideoFps { get; set; } = 30;
         // Start zoom for video. Defaults to 0.5 (classic full view).
         public double VideoStartZoom { get; set; } = 0.5;
@@ -734,6 +736,7 @@ namespace FracturingFog.Batch
                     case "--secs":
                         if (!NextDouble(args, ref i, a, out double sv, out error)) return false;
                         opts.VideoSeconds = sv;
+                        opts.VideoSecondsSet = true;   // #1699 — a script video takes the script's length otherwise
                         break;
 
                     case BatchFlags.Fps:
@@ -756,10 +759,12 @@ namespace FracturingFog.Batch
                             case "hold":     opts.VideoMotion = VideoMotionMode.Hold; break;
                             case "kenburns": opts.VideoMotion = VideoMotionMode.KenBurns; break;
                             case "sweep":    opts.VideoMotion = VideoMotionMode.Sweep; break;
+                            // #1699 — play the Math Plane scene's script (frame k at s = k / fps).
+                            case "script":   opts.VideoMotion = VideoMotionMode.Script; break;
                             // #1235 — a zoom with the loop's endpoints, turn and palette shift.
                             case "loop":     opts.VideoMotion = VideoMotionMode.Zoom; opts.VideoLoop = true; break;
                             default:
-                                error = $"--video-motion must be auto|zoom|hold|kenburns|sweep|loop (got '{vmv}').";
+                                error = $"--video-motion must be auto|zoom|hold|kenburns|sweep|loop|script (got '{vmv}').";
                                 return false;
                         }
                         break;
