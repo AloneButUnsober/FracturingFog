@@ -123,6 +123,8 @@ public sealed class MathPlaneCalculator : IFractalCalculator
     /// <summary>#1695 — the params drawn this frame: <see cref="FractalParameters"/>, or a
     /// script-evaluated copy (t, matrix, c at the script time).</summary>
     private FractalParameters _p = new();
+    /// <summary>#1696 — what the script's reveal actions leave drawn this frame.</summary>
+    private MathPlaneReveal _reveal = MathPlaneReveal.None;
 
     /// <summary>#1695 — the script's duration in seconds (0 without steps) at the last render.</summary>
     public double LastScriptDuration { get; private set; }
@@ -167,12 +169,14 @@ public sealed class MathPlaneCalculator : IFractalCalculator
         // moved / faded, t, matrix and c moved. Pure in (scene, params, time).
         var scene = _scene;
         _p = FractalParameters;
+        _reveal = MathPlaneReveal.None;
         LastScriptDuration = 0;
         if (LastSceneError == null && _scene.Steps.Count > 0)
         {
             var state = MathPlaneScript.Evaluate(_scene, FractalParameters, FractalParameters.MathPlaneScriptTime);
             scene = state.Scene;
             _p = state.Params;
+            _reveal = state.Reveal ?? MathPlaneReveal.None;
             LastScriptDuration = state.Duration;
         }
 
@@ -187,7 +191,10 @@ public sealed class MathPlaneCalculator : IFractalCalculator
         if (LastSceneError == null && scene.Phase != MathPlanePhase.Off
             && MathPlaneComplexMap.Create(scene.MapSource, CParam(_p), 1.0) is { } pf)
         {
+            // #1696 — a script fade blends the portrait over what is under it.
+            uint[]? under = _reveal.PhaseAlpha < 1 ? (uint[])ColorBuffer.Clone() : null;
             pf.FillPhase(ColorBuffer, ViewBox(w, h), w, h, scene.Phase == MathPlanePhase.Contours, BackgroundColor);
+            if (under != null) BlendOver(ColorBuffer, under, _reveal.PhaseAlpha);
             ct.ThrowIfCancellationRequested();
         }
 
@@ -315,6 +322,12 @@ public sealed class MathPlaneCalculator : IFractalCalculator
         if (_p.MathPlaneMapMode == MathPlaneMapMode.Complex && cmap == null && error == null)
             Text("Complex map: the scene has no map \"f(z)\" statement", 6f * ui, 6f * ui, ink);
 
+        // #1696 — the script's caption (cross-fading with the one it replaces).
+        if (_reveal.PreviousCaption is { } prevCap && _reveal.PreviousCaptionAlpha > 0)
+            DrawCaption(canvas, w, h, prevCap, _reveal.PreviousCaptionAlpha, ui);
+        if (_reveal.Caption is { } cap && _reveal.CaptionAlpha > 0)
+            DrawCaption(canvas, w, h, cap, _reveal.CaptionAlpha, ui);
+
         if (error != null)
         {
             using var errInk = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(ErrorColor) };
@@ -363,6 +376,9 @@ public sealed class MathPlaneCalculator : IFractalCalculator
         foreach (var o in scene.Objects)
         {
             if (!o.Visible) continue;
+            // #1696 — a script 'draw' reveals the object along its length.
+            double drawn = _reveal.DrawnFraction(o.Name);
+            if (drawn <= 0) continue;
             var c = new SKColor(o.Color);
             stroke.Color = c;
             fill.Color = c;
@@ -384,7 +400,8 @@ public sealed class MathPlaneCalculator : IFractalCalculator
                 {
                     var (tx, ty) = o.Tail;
                     var tail = P(tx, ty);
-                    var tip = P(tx + o.Coords[0], ty + o.Coords[1]);
+                    var tip = drawn < 1 ? P(tx + o.Coords[0] * drawn, ty + o.Coords[1] * drawn)
+                                        : P(tx + o.Coords[0], ty + o.Coords[1]);
                     DrawArrow(canvas, tail, tip, stroke, fill, ui);
                     Label(o, tip);
                     if (scene.ShowLengths)
@@ -401,6 +418,17 @@ public sealed class MathPlaneCalculator : IFractalCalculator
                         canvas.DrawText(s, tip.X + 7f * ui + ui, tip.Y + 13f * ui + ui, font, halo);
                         canvas.DrawText(s, tip.X + 7f * ui, tip.Y + 13f * ui, font, fill);
                     }
+                    break;
+                }
+                case MathPlaneObjectKind.Segment when drawn < 1:
+                {
+                    // #1696 — part-drawn: the first part of the segment, as a shorter segment.
+                    stroke.StrokeWidth = 2.5f * ui;
+                    var (ax, ay) = o.Point(0);
+                    var (bx, by) = o.Point(1);
+                    var end = (ax + (bx - ax) * drawn, ay + (by - ay) * drawn);
+                    if (cmap != null) DrawLines(canvas, cmap.MapSegment((ax, ay), end, view), Pix, stroke);
+                    else canvas.DrawLine(P(ax, ay), P(end.Item1, end.Item2), stroke);
                     break;
                 }
                 case MathPlaneObjectKind.Segment:
@@ -464,6 +492,7 @@ public sealed class MathPlaneCalculator : IFractalCalculator
                     // (refining the image), so its polylines are already mapped.
                     var lines = cmap != null ? MathPlaneCurveSampler.Sample(o, view, cmap.Apply, domain)
                                              : MathPlaneCurveSampler.Sample(o, pre);
+                    if (drawn < 1) lines = TruncateLines(lines, drawn);   // #1696
                     Func<double, double, SKPoint> draw = cmap != null ? Pix : P;
                     SKPoint? labelAt = null;
                     foreach (var poly in lines)
@@ -484,6 +513,20 @@ public sealed class MathPlaneCalculator : IFractalCalculator
                         float lx = Math.Min(la.X, w - 30f * ui), ly = Math.Max(la.Y, 24f * ui);
                         Label(o, new SKPoint(lx, ly));
                     }
+                    break;
+                }
+                case MathPlaneObjectKind.Polyline when drawn < 1:
+                {
+                    // #1696 — part-drawn: the first part of the polyline by length.
+                    stroke.StrokeWidth = 2.5f * ui;
+                    var verts = new System.Collections.Generic.List<(double X, double Y)>();
+                    for (int i = 0; i < o.PointCount; i++) verts.Add(o.Point(i));
+                    foreach (var part in TruncateLines(new() { verts }, drawn))
+                        for (int i = 1; i < part.Count; i++)
+                        {
+                            if (cmap != null) DrawLines(canvas, cmap.MapSegment(part[i - 1], part[i], view), Pix, stroke);
+                            else canvas.DrawLine(P(part[i - 1].X, part[i - 1].Y), P(part[i].X, part[i].Y), stroke);
+                        }
                     break;
                 }
                 case MathPlaneObjectKind.Polyline:
@@ -773,15 +816,21 @@ public sealed class MathPlaneCalculator : IFractalCalculator
 
         using var seg = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 1.6f * ui };
         using var dot = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true };
+        // #1696 — a script reveal shows whole steps up to floor(k); step floor(k) + 1 fades in.
+        double shown = _reveal.Orbit ?? double.PositiveInfinity;
+        SKColor Faded(uint col, int n) => n <= shown ? new SKColor(col)
+            : new SKColor(col).WithAlpha((byte)Math.Round(255 * Math.Clamp(shown - (n - 1), 0, 1)));
         for (int n = 1; n < orbit.Count; n++)
         {
-            seg.Color = new SKColor(OrbitColor(n, orbit.Count));
+            if (n - 1 >= shown) break;
+            seg.Color = Faded(OrbitColor(n, orbit.Count), n);
             canvas.DrawLine(WorldPix(w, h, orbit[n - 1].Real, orbit[n - 1].Imaginary), WorldPix(w, h, orbit[n].Real, orbit[n].Imaginary), seg);
         }
         float r = (orbit.Count > 200 ? 1.8f : 3f) * ui;
         for (int n = 0; n < orbit.Count; n++)
         {
-            dot.Color = new SKColor(OrbitColor(n, orbit.Count));
+            if (n > 0 && n - 1 >= shown) break;
+            dot.Color = Faded(OrbitColor(n, orbit.Count), n);
             canvas.DrawCircle(WorldPix(w, h, orbit[n].Real, orbit[n].Imaginary), r, dot);
         }
 
@@ -830,12 +879,31 @@ public sealed class MathPlaneCalculator : IFractalCalculator
 
         var v = MathPlaneDynamics.Cobweb(f, cw.X0, cw.Steps);
         using var stair = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 1.6f * ui, Color = new SKColor(CobwebStairColor), StrokeJoin = SKStrokeJoin.Round };
-        using (var path = new SKPath())
+        // #1696 — a script reveal: whole steps (up and across: two segments each) up to
+        // floor(k), then the next step fading in.
+        int last = v.Count - 1;
+        double fade = 0;
+        if (_reveal.Cobweb is double k)
         {
-            path.MoveTo(WorldPix(w, h, v[0].X, v[0].Y));
-            for (int i = 1; i < v.Count; i++) path.LineTo(WorldPix(w, h, v[i].X, v[i].Y));
-            canvas.DrawPath(path, stair);
+            int whole = (int)Math.Floor(Math.Max(0, k));
+            last = Math.Min(v.Count - 1, 2 * whole);
+            fade = Math.Min(v.Count - 1, 2 * whole + 2) > last ? k - whole : 0;
         }
+        if (last > 0)
+            using (var path = new SKPath())
+            {
+                path.MoveTo(WorldPix(w, h, v[0].X, v[0].Y));
+                for (int i = 1; i <= last; i++) path.LineTo(WorldPix(w, h, v[i].X, v[i].Y));
+                canvas.DrawPath(path, stair);
+            }
+        if (fade > 0)
+            using (var path = new SKPath())
+            {
+                path.MoveTo(WorldPix(w, h, v[last].X, v[last].Y));
+                for (int i = last + 1; i <= Math.Min(v.Count - 1, last + 2); i++) path.LineTo(WorldPix(w, h, v[i].X, v[i].Y));
+                stair.Color = new SKColor(CobwebStairColor).WithAlpha((byte)Math.Round(255 * fade));
+                canvas.DrawPath(path, stair);
+            }
         using var dot = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(CobwebStairColor) };
         canvas.DrawCircle(WorldPix(w, h, cw.X0, cw.X0), 4f * ui, dot);
     }
@@ -960,6 +1028,89 @@ public sealed class MathPlaneCalculator : IFractalCalculator
     /// <summary>Read-out number: up to 4 decimals, no trailing zeros.</summary>
     private static string Fmt(double v)
         => Math.Abs(v) < 5e-5 ? "0" : v.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
+
+    public const uint CaptionColor = 0xFFF0F0F0;
+    public const uint CaptionBoxColor = 0xB0000000;
+
+    /// <summary>#1696 — a caption at the bottom centre, word-wrapped to 80% of the width,
+    /// on a dark box, at <paramref name="alpha"/>. Sits above the orbit read-out line.</summary>
+    private static void DrawCaption(SKCanvas canvas, int w, int h, string text, double alpha, float ui)
+    {
+        byte A(uint c) => (byte)Math.Round((c >> 24) * Math.Clamp(alpha, 0, 1));
+        using var font = new SKFont(SKTypeface.Default, 20f * ui);
+        float maxW = w * 0.8f, lineH = font.Spacing;
+        var lines = new System.Collections.Generic.List<string>();
+        foreach (var para in text.Split("\\n"))
+        {
+            string cur = "";
+            foreach (var word in para.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            {
+                string next = cur.Length == 0 ? word : cur + " " + word;
+                if (cur.Length > 0 && font.MeasureText(next) > maxW) { lines.Add(cur); cur = word; }
+                else cur = next;
+            }
+            lines.Add(cur);
+        }
+        float widest = 0;
+        foreach (var l in lines) widest = Math.Max(widest, font.MeasureText(l));
+        float pad = 8f * ui, boxH = lines.Count * lineH + 2 * pad, boxW = widest + 2 * pad;
+        float bottom = h - 34f * ui, top = bottom - boxH, left = (w - boxW) * 0.5f;
+        using var box = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(CaptionBoxColor).WithAlpha(A(CaptionBoxColor)) };
+        canvas.DrawRoundRect(new SKRect(left, top, left + boxW, bottom), 6f * ui, 6f * ui, box);
+        using var ink = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(CaptionColor).WithAlpha(A(CaptionColor)) };
+        float y = top + pad - font.Metrics.Ascent;
+        foreach (var l in lines)
+        {
+            canvas.DrawText(l, (w - font.MeasureText(l)) * 0.5f, y, font, ink);
+            y += lineH;
+        }
+    }
+
+    /// <summary>#1696 — <paramref name="top"/> := under + (top − under) · alpha, per channel (opaque).</summary>
+    public static void BlendOver(uint[] top, uint[] under, double alpha)
+    {
+        int a = (int)Math.Round(Math.Clamp(alpha, 0, 1) * 256), ia = 256 - a;
+        for (int i = 0; i < top.Length && i < under.Length; i++)
+        {
+            uint t = top[i], u = under[i];
+            uint r = (uint)((((u >> 16) & 0xFF) * ia + ((t >> 16) & 0xFF) * a) >> 8);
+            uint g = (uint)((((u >> 8) & 0xFF) * ia + ((t >> 8) & 0xFF) * a) >> 8);
+            uint b = (uint)(((u & 0xFF) * ia + (t & 0xFF) * a) >> 8);
+            top[i] = 0xFF000000u | (r << 16) | (g << 8) | b;
+        }
+    }
+
+    /// <summary>#1696 — the first <paramref name="fraction"/> of <paramref name="lines"/> by
+    /// length (in their own coordinates), cutting the last kept segment part-way. Pieces
+    /// keep their order; a fraction of 1 or more returns the input.</summary>
+    public static System.Collections.Generic.List<System.Collections.Generic.List<(double X, double Y)>> TruncateLines(
+        System.Collections.Generic.List<System.Collections.Generic.List<(double X, double Y)>> lines, double fraction)
+    {
+        if (fraction >= 1) return lines;
+        var result = new System.Collections.Generic.List<System.Collections.Generic.List<(double X, double Y)>>();
+        if (fraction <= 0) return result;
+        static double Len((double X, double Y) a, (double X, double Y) b) => Math.Sqrt((b.X - a.X) * (b.X - a.X) + (b.Y - a.Y) * (b.Y - a.Y));
+        double total = 0;
+        foreach (var l in lines) for (int i = 1; i < l.Count; i++) total += Len(l[i - 1], l[i]);
+        double left = total * fraction;
+        foreach (var l in lines)
+        {
+            if (l.Count == 0) continue;
+            var kept = new System.Collections.Generic.List<(double X, double Y)> { l[0] };
+            for (int i = 1; i < l.Count; i++)
+            {
+                double d = Len(l[i - 1], l[i]);
+                if (d <= left) { kept.Add(l[i]); left -= d; continue; }
+                double u = d > 0 ? left / d : 0;
+                kept.Add((l[i - 1].X + (l[i].X - l[i - 1].X) * u, l[i - 1].Y + (l[i].Y - l[i - 1].Y) * u));
+                left = 0;
+                break;
+            }
+            if (kept.Count > 1) result.Add(kept);
+            if (left <= 0) break;
+        }
+        return result;
+    }
 
     /// <summary>#1551 — opacity of a region's shading.</summary>
     public const double RegionAlpha = 0.30;

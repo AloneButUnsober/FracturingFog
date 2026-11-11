@@ -45,7 +45,8 @@
 //   with [DURATION] [ease ...] ACTION ...               MathPlaneScript.cs); with runs
 //                                        alongside the step before it. Actions: wait,
 //                                        show/hide NAME..., t V, matrix A B C D, c RE IM,
-//                                        move NAME X Y
+//                                        move NAME X Y; #1696: draw NAME, orbit N,
+//                                        cobweb N, phase on|contours|off, caption "TEXT"
 //
 // Curve expressions are the plot language (PlotExpression: the equation
 // language with real x / t / theta). They are double-quoted, and ';' or a newline
@@ -248,6 +249,8 @@ namespace FracturingFog.Models
             sb.Append(' ').Append(s.Action.ToString().ToLowerInvariant());
             foreach (var n in s.Names) sb.Append(' ').Append(n);
             foreach (var v in s.Values) sb.Append(' ').Append(Num(v));
+            if (s.Action == MathPlaneStepAction.Phase) sb.Append(' ').Append(s.Text);
+            else if (s.Action == MathPlaneStepAction.Caption) sb.Append(" \"").Append(s.Text).Append('"');
             return sb.ToString();
         }
 
@@ -432,7 +435,7 @@ namespace FracturingFog.Models
 
             // #1695 — steps name objects anywhere in the scene, and may not animate one
             // property twice at once; both checks need the whole scene.
-            if (MathPlaneScript.Validate(script, objects) is { } bad)
+            if (MathPlaneScript.Validate(script, objects, hasMap: mapSource != null, hasCobweb: cobweb != null) is { } bad)
             {
                 var (st, col) = stepAt[bad.Index];
                 error = new MathPlaneSceneError(st, col, bad.Message);
@@ -647,6 +650,9 @@ namespace FracturingFog.Models
             }
         }
 
+        /// <summary>#1696 — the longest caption a step may show.</summary>
+        public const int MaxCaptionLength = 200;
+
         /// <summary>#1695 — <c>step DURATION [ease E] ACTION ...</c> or
         /// <c>with [DURATION] [ease E] ACTION ...</c>.</summary>
         private static bool TryStep(List<(string Text, int Col)> toks, bool with,
@@ -681,13 +687,14 @@ namespace FracturingFog.Models
                 k += 2;
             }
 
-            const string actions = "wait, show, hide, t, matrix, c or move";
+            const string actions = "wait, show, hide, t, matrix, c, move, draw, orbit, cobweb, phase or caption";
             if (k >= toks.Count) { badTok = toks.Count - 1; msg = $"'{head}' needs an action ({actions})"; return false; }
             string a = toks[k].Text.ToLowerInvariant();
             int actionTok = k++;
             MathPlaneStepAction action;
             var names = new List<string>();
             var values = new List<double>();
+            string? text = null;
             bool Numbers(int count, string usage, out int bad, out string why)
             {
                 bad = 0; why = "";
@@ -727,11 +734,47 @@ namespace FracturingFog.Models
                     names.Add(toks[k++].Text);
                     if (!Numbers(2, "'move' takes an object name, then x y", out badTok, out msg)) return false;
                     break;
+                case "draw":
+                    action = MathPlaneStepAction.Draw;
+                    if (k >= toks.Count || !IsName(toks[k].Text))
+                    { badTok = Math.Min(k, toks.Count - 1); msg = "'draw' takes an object name"; return false; }
+                    names.Add(toks[k++].Text);
+                    break;
+                case "orbit":
+                case "cobweb":
+                {
+                    action = a == "orbit" ? MathPlaneStepAction.Orbit : MathPlaneStepAction.Cobweb;
+                    if (k >= toks.Count || !int.TryParse(toks[k].Text, NumberStyles.None, Inv, out int n) || n > MathPlaneDynamics.MaxSteps)
+                    { badTok = Math.Min(k, toks.Count - 1); msg = $"'{a}' takes a step count, 0 to {MathPlaneDynamics.MaxSteps}"; return false; }
+                    values.Add(n); k++;
+                    break;
+                }
+                case "phase":
+                {
+                    action = MathPlaneStepAction.Phase;
+                    string v = k < toks.Count ? toks[k].Text.ToLowerInvariant() : "";
+                    if (v is not ("on" or "contours" or "off"))
+                    { badTok = Math.Min(k, toks.Count - 1); msg = "'phase' takes on, contours or off"; return false; }
+                    text = v; k++;
+                    break;
+                }
+                case "caption":
+                {
+                    action = MathPlaneStepAction.Caption;
+                    string q = k < toks.Count ? toks[k].Text : "";
+                    if (q.Length < 2 || q[0] != '"' || q[^1] != '"')
+                    { badTok = Math.Min(k, toks.Count - 1); msg = "'caption' takes quoted text, e.g. caption \"Period 2\" (\"\" fades it out)"; return false; }
+                    text = q[1..^1];
+                    if (text.Length > MaxCaptionLength)
+                    { badTok = k; msg = $"a caption is at most {MaxCaptionLength} characters"; return false; }
+                    k++;
+                    break;
+                }
                 default:
                     badTok = actionTok; msg = $"unknown action '{toks[actionTok].Text}' (expected {actions})"; return false;
             }
             if (k < toks.Count) { badTok = k; msg = $"unexpected text after the '{a}' action"; return false; }
-            step = new MathPlaneStep(with, duration, ease, action, names, values);
+            step = new MathPlaneStep(with, duration, ease, action, names, values, text);
             return true;
         }
 

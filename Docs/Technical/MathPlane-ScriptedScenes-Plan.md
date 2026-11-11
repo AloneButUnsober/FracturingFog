@@ -153,6 +153,25 @@ parameter set except the Math Plane's own animated values (t, matrix, script tim
 scene text), c, the view, size, iterations, quality and colour map; any other scene
 recomputes it as before.
 
+*As built (SS2, #1696):* `draw`, `orbit`, `cobweb`, `phase` and `caption`. `Evaluate`
+also returns a `MathPlaneReveal`: how much of each object is drawn, fractional orbit
+and cobweb step counts, the phase portrait's opacity and the caption pair. Details:
+- **`draw`** reveals curves (explicit, parametric, polar), segments, polylines and
+  vectors along their length. Curves are cut by the length of their sampled polylines;
+  segments, polylines and vectors by world length. Points, regions and implicit curves
+  are refused: implicit curves come from marching squares as unordered pieces, so
+  "along its length" has no meaning. A draw makes its object visible when it begins
+  and begins strictly after its start time, so `s = 0` stays the authored scene. A
+  draw of a visible object therefore jumps to undrawn as it starts; the intended use
+  is on objects written `hidden`.
+- **`orbit` / `cobweb`** start from the scene's own statement (0 without an `orbit`;
+  `cobweb` needs its statement for x0 and f). Whole steps up to floor(k) are solid and
+  the next one fades in with the fractional part.
+- **`phase`** blends the portrait over what is under it, per channel.
+- **`caption`** cross-fades with the caption it replaces. It is drawn at the bottom
+  centre on a dark box, word-wrapped to 80% of the width, above the orbit read-out;
+  a literal `\n` breaks a line. Captions are at most 200 characters.
+
 ### 3.6 Camera
 
 The view centre and zoom belong to the view (`FractalViewState`), not the scene.
