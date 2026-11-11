@@ -925,6 +925,12 @@ Programs and galleries the project measured itself against, learned from, or pay
   <https://github.com/ManimCommunity/manim>. The scripted engine behind the 3Blue1Brown videos. Inspiration
   for the Math Plane render mode's look (grids morphing under a map) and for its later scripted-scenes
   follow-up; no Manim code is used (MathPlane-DesignPlan.md).
+  The scripted-scenes plan (#1557, MathPlane-ScriptedScenes-Plan.md) borrows Manim's step vocabulary:
+  animations played in succession, groups played together, each with a run time and a rate function.
+  References: Manim Community reference manual, *AnimationGroup*
+  <https://docs.manim.community/en/stable/reference/manim.animation.composition.AnimationGroup.html>
+  and *rate_functions* <https://docs.manim.community/en/stable/reference/manim.utils.rate_functions.html>
+  (consulted 2026-11-10, v0.22.1 docs).
 
 <a id="sanderson-linear-transformations"></a>
 
