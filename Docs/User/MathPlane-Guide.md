@@ -133,6 +133,7 @@ map "f(z)"   phase off|on|contours   probe x y
 orbit N      cobweb x0 [N] ["f(x)"]
 step DURATION [ease none|in|out|inout] ACTION ...    with [DURATION] [ease ...] ACTION ...
   actions: wait | show NAME... | hide NAME... | t V | matrix A B C D | c RE IM | move NAME X Y
+           draw NAME | orbit N | cobweb N | phase on|contours|off | caption "TEXT"
 options after an object: #RRGGBB  hidden  nolabel
 ```
 
@@ -140,7 +141,13 @@ options after an object: #RRGGBB  hidden  nolabel
 - **Order:** a `step` starts when the previous one ends, and a `with` runs alongside the step before it.
 - **Time:** the setting `MathPlaneScriptTime` (seconds) picks the moment drawn. At 0 you see the scene as
   written.
-- **Fading in:** objects marked `hidden` can be faded in with `show`.
+- **Fading in:** objects marked `hidden` can be faded in with `show`, or drawn along their length with
+  `draw` (curves, segments, polylines and vectors).
+- **Orbits and cobwebs:** `orbit N` and `cobweb N` reveal steps one at a time, starting from the scene's own
+  `orbit` / `cobweb` statement. A cobweb needs its `cobweb x0 ...` statement.
+- **Phase:** `phase on` and `phase off` fade the phase portrait in and out. The scene needs a `map`.
+- **Captions:** `caption "TEXT"` shows a caption at the bottom, fading from the previous one. `caption ""`
+  fades it out, and `\n` in the text starts a new line.
 - **The matrix:** `matrix` steps show only when the map mode is Matrix.
 
 ## 8. Batch
