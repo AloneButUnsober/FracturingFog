@@ -12,6 +12,12 @@
 //
 // Batch parity: a saved scene is only Math Plane params plus a view, all of which
 // --param / --x / --y / --zoom and the Command builder already carry.
+//
+// #1694 — import / export for sharing: ExportJson writes the same array shape as
+// the store file; ImportFile reads through the ImportedJson safeguard (#1212), skips
+// entries it can't read (counted, never blocking the readable ones) and never
+// overwrites: a name that clashes with a saved scene or a built-in demo gets a
+// " (2)", " (3)" ... suffix, so the demos stay read-only and nothing is lost.
 
 using System;
 using System.Collections.Generic;
@@ -97,6 +103,92 @@ namespace FracturingFog.Models
             => string.IsNullOrWhiteSpace(name) ? "Type a name for the scene."
              : IsBuiltInName(name) ? $"'{name!.Trim()}' is a built-in demo; built-ins are read-only, so pick another name."
              : null;
+
+        /// <summary>#1694 — what an import did.</summary>
+        public sealed record ImportResult(int Added, int Renamed, int Skipped, IReadOnlyList<string> Names, string? Error = null)
+        {
+            /// <summary>One line for the section, e.g. "Imported 3 scenes (1 renamed, 1 skipped)."</summary>
+            public string Describe()
+            {
+                if (Error != null) return Error;
+                string s = $"Imported {Added} scene{(Added == 1 ? "" : "s")}";
+                var extra = new List<string>();
+                if (Renamed > 0) extra.Add($"{Renamed} renamed to avoid a clash");
+                if (Skipped > 0) extra.Add($"{Skipped} unreadable, skipped");
+                return extra.Count > 0 ? s + " (" + string.Join(", ", extra) + ")." : s + ".";
+            }
+        }
+
+        /// <summary>#1694 — <paramref name="scenes"/> as JSON, the same shape as the store file.</summary>
+        public static string ExportJson(IEnumerable<MathPlanePreset> scenes)
+            => JsonSerializer.Serialize(scenes.ToList(), BuildJsonOptions());
+
+        /// <summary>#1694 — write <paramref name="scenes"/> to <paramref name="path"/> (atomic).</summary>
+        public static void ExportFile(string path, IEnumerable<MathPlanePreset> scenes)
+            => AtomicFile.WriteAllText(path, ExportJson(scenes));
+
+        /// <summary>#1694 — import a file written by <see cref="ExportFile"/> (or the store file
+        /// itself), through the ImportedJson safeguard. See <see cref="ImportJson"/>.</summary>
+        public ImportResult ImportFile(string path)
+        {
+            string text;
+            try { text = ImportedJson.ReadFile(path); }
+            catch (Exception ex) { return new ImportResult(0, 0, 0, Array.Empty<string>(), "Could not read the file: " + ex.Message); }
+            return ImportJson(text);
+        }
+
+        /// <summary>#1694 — add the scenes in <paramref name="json"/> (an array of scenes, or one
+        /// scene object). Unreadable entries are skipped and counted; a name that clashes with a
+        /// saved scene or a built-in demo is given a numbered suffix. Persists once.</summary>
+        public ImportResult ImportJson(string json)
+        {
+            JsonDocument doc;
+            try { doc = JsonDocument.Parse(ImportedJson.Sanitize(json), new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip }); }
+            catch (JsonException ex) { return new ImportResult(0, 0, 0, Array.Empty<string>(), "Not a Math Plane scenes file: " + ex.Message); }
+            using (doc)
+            {
+                var elements = doc.RootElement.ValueKind switch
+                {
+                    JsonValueKind.Array => doc.RootElement.EnumerateArray().ToList(),
+                    JsonValueKind.Object => new List<JsonElement> { doc.RootElement },
+                    _ => null,
+                };
+                if (elements == null)
+                    return new ImportResult(0, 0, 0, Array.Empty<string>(), "Not a Math Plane scenes file: expected a list of scenes.");
+                var options = BuildJsonOptions();
+                int added = 0, renamed = 0, skipped = 0;
+                var names = new List<string>();
+                foreach (var e in elements)
+                {
+                    MathPlanePreset? s;
+                    try { s = e.Deserialize<MathPlanePreset>(options); }
+                    catch (Exception) { s = null; }
+                    if (s == null || string.IsNullOrWhiteSpace(s.Name)) { skipped++; continue; }
+                    string want = s.Name.Trim();
+                    string name = UniqueName(want);
+                    if (name != want) renamed++;
+                    Scenes.Add(s with { Name = name, Scene = s.Scene ?? "", Idea = s.Idea ?? "" });
+                    names.Add(name);
+                    added++;
+                }
+                if (added > 0) Save();
+                return new ImportResult(added, renamed, skipped, names);
+            }
+        }
+
+        /// <summary>#1694 — <paramref name="name"/>, or "name (2)", "name (3)" ... when it is a
+        /// built-in demo's name or already saved (case-insensitive).</summary>
+        public string UniqueName(string name)
+        {
+            string baseName = string.IsNullOrWhiteSpace(name) ? "Imported scene" : name.Trim();
+            bool Taken(string n) => IsBuiltInName(n) || Exists(n);
+            if (!Taken(baseName)) return baseName;
+            for (int k = 2; ; k++)
+            {
+                string candidate = $"{baseName} ({k})";
+                if (!Taken(candidate)) return candidate;
+            }
+        }
 
         public MathPlanePreset? GetByName(string? name)
         {

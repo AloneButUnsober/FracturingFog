@@ -5241,6 +5241,9 @@ the one idea it shows. Built-ins never change.
 My scenes: type a name and Save to keep the current scene, map,
 c, backdrop and view; Load, Rename or Delete it later. Saving
 under an existing name overwrites it; demo names are refused.
+Export... / Export all... write a .json file to share; Import...
+adds a file's scenes (clashing names get a number, nothing is
+overwritten; unreadable entries are skipped).
 
 Objects: + Point / Vector / Segment / Polyline / Function /
 Parametric / Polar / Implicit / Region. Drag handles (Shift

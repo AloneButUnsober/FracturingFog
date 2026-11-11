@@ -48,6 +48,13 @@ The **My scenes** box, under Demos, keeps your own scenes.
   stay as they are.
 - **Load:** pick a scene and press **Load**. Like a demo, it replaces every Math Plane setting.
 - **Rename / Delete:** pick a scene, then type the new name and press **Rename**, or press **Delete**.
+- **Share:** **Export…** saves the selected scene to a `.json` file; **Export all…** saves every one.
+  **Import…** adds the scenes from such a file:
+  - **Name clashes:** a name you already use, or a demo's name, gets a number added ("Orbit (2)"), so
+    nothing is overwritten.
+  - **Unreadable entries:** they are skipped, and the rest still import.
+  - **Damaged files:** files saved in another encoding, or with comments or trailing commas, are repaired
+    on the way in.
 
 Saved scenes are kept in `mathplanescenes.json` in FF's data folder. A saved region also keeps every Math
 Plane setting, if you want the scene in the region list instead.

@@ -3168,6 +3168,14 @@ namespace FracturingFog.Hosting
                 });
             };
 
+            // #1694 — Math Plane My scenes import / export: the host supplies the file
+            // pickers; the section VM reads / writes through MathPlaneSceneStore.
+            const string mathPlaneScenesFilter = "Math Plane scenes (*.json)|*.json|All files (*.*)|*";
+            shell.MathPlane.PickSaveFile = (title, suggested) =>
+                AvaloniaDialogs.PickSaveFileAsync(title, suggested, mathPlaneScenesFilter);
+            shell.MathPlane.PickOpenFile = title =>
+                AvaloniaDialogs.PickOpenFileAsync(title, mathPlaneScenesFilter);
+
             // Asset Manager bulk import (A3 import) — the host owns the open
             // picker + overwrite prompt + file read; the VM owns the zip parse and
             // per-source routing (shell.ImportAssetBundle forwards to it).

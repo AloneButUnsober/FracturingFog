@@ -377,6 +377,16 @@ Every slice keeps the headless path in step (CLAUDE.md rule):
   atomic write, enums by name). Built-in demo names are refused, so the demos stay
   read-only. No batch change: a saved scene is only Math Plane params and a view,
   which `--param` / `--x` / `--y` / `--zoom` and the Command builder already carry.
+- **Scene import / export** (#1694). *As built:* My scenes has **Export…** (the selected
+  scene), **Export all…** and **Import…**.
+  - **Files:** `MathPlaneSceneStore.ExportFile` writes the store's own array shape;
+    `ImportFile` reads through `ImportedJson` (#1212: encodings, comments, trailing
+    commas) and accepts an array or a single scene.
+  - **Unreadable entries:** skipped and counted; the readable ones still import.
+  - **Names:** a name already saved, or a built-in demo's name, gets a " (2)", " (3)" …
+    suffix (`UniqueName`), so an import never overwrites and the demos stay read-only.
+  - **Pickers:** the host supplies them (`PickSaveFile` / `PickOpenFile`).
+  - **Not done:** the optional plain-text / batch-command export.
 
 ---
 

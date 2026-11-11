@@ -68,6 +68,17 @@
                         <Button Content="Rename" Command="{Binding RenameMySceneCommand}" IsEnabled="{Binding HasSelectedMyScene}"
                                 ToolTip.Tip="Rename the selected saved scene to this name" />
                     </StackPanel>
+                    <!-- #1694 — share scenes as files -->
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Export…" Command="{Binding ExportMySceneCommand}" IsEnabled="{Binding HasSelectedMyScene}"
+                                ToolTip.Tip="Save the selected scene to a .json file to share it" />
+                        <Button Content="Export all…" Command="{Binding ExportAllMyScenesCommand}"
+                                ToolTip.Tip="Save all your scenes to one .json file" />
+                        <Button Content="Import…" Command="{Binding ImportMyScenesCommand}"
+                                ToolTip.Tip="Add the scenes in a .json file to My scenes. A name you already use, or a demo's name, gets a number added; nothing is overwritten." />
+                    </StackPanel>
+                    <TextBlock Text="{Binding MySceneStatus}" TextWrapping="Wrap" Foreground="#B4B4B4"
+                               IsVisible="{Binding MySceneStatus, Converter={x:Static ObjectConverters.IsNotNull}}" />
                     <TextBlock Text="{Binding MySceneError}" Foreground="#FFCC00" TextWrapping="Wrap"
                                IsVisible="{Binding MySceneError, Converter={x:Static ObjectConverters.IsNotNull}}" />
                 </StackPanel>
