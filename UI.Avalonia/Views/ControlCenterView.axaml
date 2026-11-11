@@ -108,6 +108,7 @@
                 <sections:AssetsSectionView     IsVisible="{Binding IsAssetsSection}" />
                 <sections:AdvancedSectionView   IsVisible="{Binding IsAdvancedSection}" />
                 <sections:MathPlaneSectionView  IsVisible="{Binding IsMathPlaneSection}" />
+                <sections:MathPlane3DSectionView IsVisible="{Binding IsMathPlane3DSection}" />
                 <sections:EnvironmentSectionView IsVisible="{Binding IsEnvironmentSection}" />
             </Panel>
         </ScrollViewer>

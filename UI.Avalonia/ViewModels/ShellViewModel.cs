@@ -153,11 +153,15 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // render surface's edit handler (inactive unless the render is Math Plane).
         MathPlane = new MathPlaneSectionViewModel(Main.ViewState, () => renderHost.Trigger(),
             () => Main.SelectedFractalType = FractalType.MathPlane);
-        input.EditHandler = MathPlane;
-        renderHost.FrameCompleted += (_, _) => Dispatcher.UIThread.Post(MathPlane.Refresh);
+        // #1716 — the Math Plane 3D section / editor; both editors share the input
+        // controller's edit slot through a chain (each ignores the other's type).
+        MathPlane3D = new MathPlane3DSectionViewModel(Main.ViewState, () => renderHost.Trigger(),
+            () => Main.SelectedFractalType = FractalType.MathPlane3D);
+        input.EditHandler = new FracturingFog.Input.PointerEditHandlerChain(MathPlane, MathPlane3D);
+        renderHost.FrameCompleted += (_, _) => Dispatcher.UIThread.Post(() => { MathPlane.Refresh(); MathPlane3D.Refresh(); });
         Main.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(MainViewModel.SelectedFractalType)) MathPlane.Refresh();
+            if (e.PropertyName == nameof(MainViewModel.SelectedFractalType)) { MathPlane.Refresh(); MathPlane3D.Refresh(); }
         };
 
         // Animation Roadmap Phase 3b — app-scoped animation bus for
@@ -1251,6 +1255,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
     /// <summary>#1549 — the Math Plane section / canvas editor.</summary>
     public MathPlaneSectionViewModel MathPlane { get; }
+
+    /// <summary>#1716 — the Math Plane 3D section / canvas editor.</summary>
+    public MathPlane3DSectionViewModel MathPlane3D { get; }
 
     // ── Phase S1 Control Center shell ─────────────────────────────────────
     // Re-presents FloatingMenu + this shell's Show* commands into a nav-rail.

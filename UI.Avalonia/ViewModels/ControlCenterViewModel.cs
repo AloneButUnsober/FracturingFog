@@ -31,6 +31,8 @@ public enum ControlCenterSection
     MathPlane,
     /// <summary>FF_* environment switches (#1669, epic #1667).</summary>
     Environment,
+    /// <summary>Math Plane 3D object editor (#1716).</summary>
+    MathPlane3D,
 }
 
 /// <summary>A nav-rail entry. <see cref="IsAdvanced"/> items are hidden in
@@ -59,6 +61,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
         new(ControlCenterSection.Command,    "Command",       "⌨", false),
         new(ControlCenterSection.Assets,     "Assets",        "▤", false),
         new(ControlCenterSection.MathPlane,  "Math Plane",    "✛", false),
+        new(ControlCenterSection.MathPlane3D, "Math Plane 3D", "⬚", false),
         new(ControlCenterSection.Advanced,   "Advanced",      "⚙", true),
         new(ControlCenterSection.Environment, "Environment",  "≡", true),
     };
@@ -325,6 +328,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
     public bool IsAssetsSection     => _selectedSection == ControlCenterSection.Assets;
     public bool IsAdvancedSection   => _selectedSection == ControlCenterSection.Advanced;
     public bool IsMathPlaneSection  => _selectedSection == ControlCenterSection.MathPlane;
+    public bool IsMathPlane3DSection => _selectedSection == ControlCenterSection.MathPlane3D;
     public bool IsEnvironmentSection => _selectedSection == ControlCenterSection.Environment;
 
     /// <summary>#1669 — the Environment section's view model.</summary>
@@ -340,6 +344,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(IsAssetsSection));
         this.RaisePropertyChanged(nameof(IsAdvancedSection));
         this.RaisePropertyChanged(nameof(IsMathPlaneSection));
+        this.RaisePropertyChanged(nameof(IsMathPlane3DSection));
         this.RaisePropertyChanged(nameof(IsEnvironmentSection));
     }
 

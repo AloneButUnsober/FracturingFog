@@ -41,6 +41,7 @@ public static class ControlCenterDetachService
         ControlCenterSection.Advanced   => WindowRole.DetachedAdvancedPanel,
         ControlCenterSection.MathPlane  => WindowRole.DetachedMathPlanePanel,
         ControlCenterSection.Environment => WindowRole.DetachedEnvironmentPanel,
+        ControlCenterSection.MathPlane3D => WindowRole.DetachedMathPlane3DPanel,
         _                               => WindowRole.DetachedViewPanel,
     };
 
@@ -57,6 +58,7 @@ public static class ControlCenterDetachService
         WindowRole.DetachedAdvancedPanel   => ControlCenterSection.Advanced,
         WindowRole.DetachedMathPlanePanel  => ControlCenterSection.MathPlane,
         WindowRole.DetachedEnvironmentPanel => ControlCenterSection.Environment,
+        WindowRole.DetachedMathPlane3DPanel => ControlCenterSection.MathPlane3D,
         _                                  => null,
     };
 
@@ -71,6 +73,7 @@ public static class ControlCenterDetachService
         ControlCenterSection.Advanced   => new AdvancedSectionView(),
         ControlCenterSection.MathPlane  => new MathPlaneSectionView(),
         ControlCenterSection.Environment => new EnvironmentSectionView(),
+        ControlCenterSection.MathPlane3D => new MathPlane3DSectionView(),
         _                               => new ViewSectionView(),
     };
 
