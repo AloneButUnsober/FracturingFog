@@ -1355,6 +1355,23 @@ namespace FracturingFog.Models
         public double MathPlane3DTargetX { get; set; }
         public double MathPlane3DTargetY { get; set; }
         public double MathPlane3DTargetZ { get; set; }
+        /// <summary>#1715 — the 3×3 map is drawn (off = the plain space).</summary>
+        public bool MathPlane3DMapOn { get; set; }
+        /// <summary>#1715 — the map's matrix, row r column c (columns are the images of i, j and k).
+        /// Default: the shear with i ↦ i, j ↦ i + j, k ↦ k.</summary>
+        public double MathPlane3DM11 { get; set; } = 1.0;
+        public double MathPlane3DM12 { get; set; } = 1.0;
+        public double MathPlane3DM13 { get; set; }
+        public double MathPlane3DM21 { get; set; }
+        public double MathPlane3DM22 { get; set; } = 1.0;
+        public double MathPlane3DM23 { get; set; }
+        public double MathPlane3DM31 { get; set; }
+        public double MathPlane3DM32 { get; set; }
+        public double MathPlane3DM33 { get; set; } = 1.0;
+        /// <summary>#1715 — map progress: 0 = identity, 1 = the full map. Animatable.</summary>
+        public double MathPlane3DT { get; set; } = 1.0;
+        /// <summary>#1715 — how <see cref="MathPlane3DT"/> interpolates the map (polar: Higham + slerp).</summary>
+        public MathPlaneInterpolation MathPlane3DInterpolation { get; set; } = MathPlaneInterpolation.Linear;
 
         // ── Slit cascade (#1569, double-slit epic #1565) ──────────────────
         /// <summary>Slit cascade: children per slit, N (2..16). N ≥ 3 for the fringe
@@ -2418,6 +2435,18 @@ namespace FracturingFog.Models
                 MathPlane3DTargetX = MathPlane3DTargetX,
                 MathPlane3DTargetY = MathPlane3DTargetY,
                 MathPlane3DTargetZ = MathPlane3DTargetZ,
+                MathPlane3DMapOn = MathPlane3DMapOn,
+                MathPlane3DM11 = MathPlane3DM11,
+                MathPlane3DM12 = MathPlane3DM12,
+                MathPlane3DM13 = MathPlane3DM13,
+                MathPlane3DM21 = MathPlane3DM21,
+                MathPlane3DM22 = MathPlane3DM22,
+                MathPlane3DM23 = MathPlane3DM23,
+                MathPlane3DM31 = MathPlane3DM31,
+                MathPlane3DM32 = MathPlane3DM32,
+                MathPlane3DM33 = MathPlane3DM33,
+                MathPlane3DT = MathPlane3DT,
+                MathPlane3DInterpolation = MathPlane3DInterpolation,
                 SlitCascadeChildren = SlitCascadeChildren,
                 SlitCascadeRatio = SlitCascadeRatio,
                 SlitCascadeDepth = SlitCascadeDepth,

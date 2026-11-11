@@ -170,6 +170,35 @@ orthographic` statement is cheap to add and helps reading coordinates.
   - the real eigenvectors (one to three) as lines through the origin, with eigenvalues;
   - vector lengths after the map.
 
+*As built (T3, #1715):*
+- **Params** (region snapshot, so `--param` and the Command builder carry them):
+  `MathPlane3DMapOn`, `MathPlane3DM11` … `MathPlane3DM33` (default: the shear j ↦ i + j),
+  `MathPlane3DT` and `MathPlane3DInterpolation` (the 2D enum). `t` and the nine entries are
+  animatable.
+- **Scene text:** `det on|off`, `eigen on|off`, `lengths on|off`.
+- **Maths** (`Abstractions/Models/MathPlane3DMap.cs`): `Mat3`, `MathPlaneQuat`.
+  - Polar: Higham's unscaled Newton iteration (up to 100 steps, stops when a step moves X by
+    less than 1e-15 of its norm), S symmetrised. R(t) is slerped from the identity, and the
+    frame is R(t)·((1 − t) I + t S).
+  - The quaternion of R is FF's inversion of the quaternion-to-matrix formula, branching on the
+    largest diagonal term so half-turns stay accurate.
+- **Eigenpairs:**
+  - **Roots:** bisection on the characteristic cubic between its turning points, within ±(‖M‖_F + 1).
+    A triple root is taken exactly at tr/3, and a double root where a turning point touches zero.
+  - **Eigenvectors:** the largest cross product of two rows of M − λI. When M − λI has rank 1,
+    two orthonormal vectors span its plane; a multiple of I reports "every vector".
+- **Renderer:**
+  - the grid size comes from the unmapped scene, so it holds still while `t` animates;
+  - the original grid planes stay, the axes dim, and the mapped grid is drawn in the 2D map
+    blue;
+  - objects, surface vertices (normals recomputed from the mapped triangles), curves, fills and
+    arrowheads are mapped;
+  - det is the parallelepiped (translucent faces in the translucent pass, depth-tested edges)
+    with "det = …" at its far corner;
+  - eigen lines are dashed through the origin, with λ labels;
+  - lengths are |M v| under each vector's name;
+  - polar with det ≤ 0 draws linear and says so in the corner.
+
 ### 3.5 Surfaces
 
 - **Explicit z = f(x, y):** sampled on a regular grid, `mesh N` cells a side (default 64).

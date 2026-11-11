@@ -622,6 +622,19 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? MathPlane3DTargetX { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? MathPlane3DTargetY { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? MathPlane3DTargetZ { get; set; }
+        // #1715 — the 3×3 map (int cast of MathPlaneInterpolation).
+        [JsonIgnore(Condition = OmitNull)] public bool? MathPlane3DMapOn { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MathPlane3DM11 { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MathPlane3DM12 { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MathPlane3DM13 { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MathPlane3DM21 { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MathPlane3DM22 { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MathPlane3DM23 { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MathPlane3DM31 { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MathPlane3DM32 { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MathPlane3DM33 { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MathPlane3DT { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? MathPlane3DInterpolation { get; set; }
         // #1538 — Polygon sides; captured only when Polygon is the active geometry.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardPolygonSides { get; set; }
         // #1539 — Polygon fill (captured with Polygon) and lattice rotation (captured with a lattice).
@@ -1280,6 +1293,18 @@ namespace FracturingFog.Models
                     MathPlane3DTargetX = p.MathPlane3DTargetX,
                     MathPlane3DTargetY = p.MathPlane3DTargetY,
                     MathPlane3DTargetZ = p.MathPlane3DTargetZ,
+                    MathPlane3DMapOn = p.MathPlane3DMapOn,
+                    MathPlane3DM11 = p.MathPlane3DM11,
+                    MathPlane3DM12 = p.MathPlane3DM12,
+                    MathPlane3DM13 = p.MathPlane3DM13,
+                    MathPlane3DM21 = p.MathPlane3DM21,
+                    MathPlane3DM22 = p.MathPlane3DM22,
+                    MathPlane3DM23 = p.MathPlane3DM23,
+                    MathPlane3DM31 = p.MathPlane3DM31,
+                    MathPlane3DM32 = p.MathPlane3DM32,
+                    MathPlane3DM33 = p.MathPlane3DM33,
+                    MathPlane3DT = p.MathPlane3DT,
+                    MathPlane3DInterpolation = (int)p.MathPlane3DInterpolation,
                 },
                 FractalType.MirrorSpheres => new RegionFractalParams   // #1440
                 {
@@ -2042,6 +2067,18 @@ namespace FracturingFog.Models
             if (MathPlane3DTargetX.HasValue) p.MathPlane3DTargetX = MathPlane3DTargetX.Value;
             if (MathPlane3DTargetY.HasValue) p.MathPlane3DTargetY = MathPlane3DTargetY.Value;
             if (MathPlane3DTargetZ.HasValue) p.MathPlane3DTargetZ = MathPlane3DTargetZ.Value;
+            if (MathPlane3DMapOn.HasValue) p.MathPlane3DMapOn = MathPlane3DMapOn.Value;
+            if (MathPlane3DM11.HasValue) p.MathPlane3DM11 = MathPlane3DM11.Value;
+            if (MathPlane3DM12.HasValue) p.MathPlane3DM12 = MathPlane3DM12.Value;
+            if (MathPlane3DM13.HasValue) p.MathPlane3DM13 = MathPlane3DM13.Value;
+            if (MathPlane3DM21.HasValue) p.MathPlane3DM21 = MathPlane3DM21.Value;
+            if (MathPlane3DM22.HasValue) p.MathPlane3DM22 = MathPlane3DM22.Value;
+            if (MathPlane3DM23.HasValue) p.MathPlane3DM23 = MathPlane3DM23.Value;
+            if (MathPlane3DM31.HasValue) p.MathPlane3DM31 = MathPlane3DM31.Value;
+            if (MathPlane3DM32.HasValue) p.MathPlane3DM32 = MathPlane3DM32.Value;
+            if (MathPlane3DM33.HasValue) p.MathPlane3DM33 = MathPlane3DM33.Value;
+            if (MathPlane3DT.HasValue) p.MathPlane3DT = MathPlane3DT.Value;
+            if (MathPlane3DInterpolation.HasValue) p.MathPlane3DInterpolation = (FracturingFog.MathPlaneInterpolation)MathPlane3DInterpolation.Value;
             if (BilliardPolygonSides.HasValue)
                 p.BilliardPolygonSides = BilliardPolygonSides.Value;
             if (BilliardPolygonFill.HasValue)
