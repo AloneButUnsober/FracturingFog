@@ -123,6 +123,9 @@ public sealed class MathPlaneCalculator : IFractalCalculator
     /// <summary>#1695 — the params drawn this frame: <see cref="FractalParameters"/>, or a
     /// script-evaluated copy (t, matrix, c at the script time).</summary>
     private FractalParameters _p = new();
+    /// <summary>#1697 — the script camera applied this frame (identity without one).</summary>
+    public MathPlaneCamera LastScriptCamera { get; private set; } = MathPlaneCamera.Identity;
+
     /// <summary>#1696 — what the script's reveal actions leave drawn this frame.</summary>
     private MathPlaneReveal _reveal = MathPlaneReveal.None;
 
@@ -170,6 +173,7 @@ public sealed class MathPlaneCalculator : IFractalCalculator
         var scene = _scene;
         _p = FractalParameters;
         _reveal = MathPlaneReveal.None;
+        LastScriptCamera = MathPlaneCamera.Identity;
         LastScriptDuration = 0;
         if (LastSceneError == null && _scene.Steps.Count > 0)
         {
@@ -177,38 +181,55 @@ public sealed class MathPlaneCalculator : IFractalCalculator
             scene = state.Scene;
             _p = state.Params;
             _reveal = state.Reveal ?? MathPlaneReveal.None;
+            LastScriptCamera = state.Camera ?? MathPlaneCamera.Identity;
             LastScriptDuration = state.Duration;
         }
 
-        // #1553 — the complex map (null unless the mode is Complex), and the phase
-        // portrait of the scene's f under everything else.
-        var cmap = MathPlaneComplexMap.Current(_p, scene);
-        if (_p.MathPlaneBackdrop != MathPlaneBackdrop.None)
+        // #1697 — the script camera shifts and zooms the view for this frame only; every
+        // draw below (grid, labels, backdrop, phase, objects) reads the effective view.
+        double viewX = CenterX, viewY = CenterY, viewZoom = Zoom;
+        if (LastScriptCamera is { IsIdentity: false } cam)
         {
-            DrawBackdrop(w, h, ct);
-            ct.ThrowIfCancellationRequested();
+            CenterX = viewX + cam.Dx;
+            CenterY = viewY - cam.Dy;   // CenterY is the y-down centre; the camera is y-up
+            Zoom = viewZoom * cam.Zoom;
         }
-        if (LastSceneError == null && scene.Phase != MathPlanePhase.Off
-            && MathPlaneComplexMap.Create(scene.MapSource, CParam(_p), 1.0) is { } pf)
-        {
-            // #1696 — a script fade blends the portrait over what is under it.
-            uint[]? under = _reveal.PhaseAlpha < 1 ? (uint[])ColorBuffer.Clone() : null;
-            pf.FillPhase(ColorBuffer, ViewBox(w, h), w, h, scene.Phase == MathPlanePhase.Contours, BackgroundColor);
-            if (under != null) BlendOver(ColorBuffer, under, _reveal.PhaseAlpha);
-            ct.ThrowIfCancellationRequested();
-        }
-
-        var handle = GCHandle.Alloc(ColorBuffer, GCHandleType.Pinned);
         try
         {
-            var info = new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
-            using var bmp = new SKBitmap();
-            bmp.InstallPixels(info, handle.AddrOfPinnedObject(), info.RowBytes);
-            using var canvas = new SKCanvas(bmp);
-            Draw(canvas, w, h, scene, LastSceneError, cmap);
-            canvas.Flush();
+            // #1553 — the complex map (null unless the mode is Complex), and the phase
+            // portrait of the scene's f under everything else.
+            var cmap = MathPlaneComplexMap.Current(_p, scene);
+            if (_p.MathPlaneBackdrop != MathPlaneBackdrop.None)
+            {
+                DrawBackdrop(w, h, ct);
+                ct.ThrowIfCancellationRequested();
+            }
+            if (LastSceneError == null && scene.Phase != MathPlanePhase.Off
+                && MathPlaneComplexMap.Create(scene.MapSource, CParam(_p), 1.0) is { } pf)
+            {
+                // #1696 — a script fade blends the portrait over what is under it.
+                uint[]? under = _reveal.PhaseAlpha < 1 ? (uint[])ColorBuffer.Clone() : null;
+                pf.FillPhase(ColorBuffer, ViewBox(w, h), w, h, scene.Phase == MathPlanePhase.Contours, BackgroundColor);
+                if (under != null) BlendOver(ColorBuffer, under, _reveal.PhaseAlpha);
+                ct.ThrowIfCancellationRequested();
+            }
+
+            var handle = GCHandle.Alloc(ColorBuffer, GCHandleType.Pinned);
+            try
+            {
+                var info = new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
+                using var bmp = new SKBitmap();
+                bmp.InstallPixels(info, handle.AddrOfPinnedObject(), info.RowBytes);
+                using var canvas = new SKCanvas(bmp);
+                Draw(canvas, w, h, scene, LastSceneError, cmap);
+                canvas.Flush();
+            }
+            finally { handle.Free(); }
         }
-        finally { handle.Free(); }
+        finally
+        {
+            CenterX = viewX; CenterY = viewY; Zoom = viewZoom;
+        }
     }
 
     // ── Drawing ──────────────────────────────────────────────────────────────

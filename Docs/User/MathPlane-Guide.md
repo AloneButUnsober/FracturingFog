@@ -133,7 +133,7 @@ map "f(z)"   phase off|on|contours   probe x y
 orbit N      cobweb x0 [N] ["f(x)"]
 step DURATION [ease none|in|out|inout] ACTION ...    with [DURATION] [ease ...] ACTION ...
   actions: wait | show NAME... | hide NAME... | t V | matrix A B C D | c RE IM | move NAME X Y
-           draw NAME | orbit N | cobweb N | phase on|contours|off | caption "TEXT"
+           draw NAME | orbit N | cobweb N | phase on|contours|off | caption "TEXT" | camera X Y [ZOOM]
 options after an object: #RRGGBB  hidden  nolabel
 ```
 
@@ -150,6 +150,8 @@ options after an object: #RRGGBB  hidden  nolabel
 - **Orbits and cobwebs:** `orbit N` and `cobweb N` reveal steps one at a time, starting from the scene's own
   `orbit` / `cobweb` statement. A cobweb needs its `cobweb x0 ...` statement.
 - **Phase:** `phase on` and `phase off` fade the phase portrait in and out. The scene needs a `map`.
+- **Camera:** `camera X Y [ZOOM]` pans the view by (X, Y) and zooms it by ZOOM (default 1), on top of
+  your own view; `camera 0 0` goes back. The zoom changes at a steady rate.
 - **Captions:** `caption "TEXT"` shows a caption at the bottom, fading from the previous one. `caption ""`
   fades it out, and `\n` in the text starts a new line.
 - **The matrix:** `matrix` steps show only when the map mode is Matrix.

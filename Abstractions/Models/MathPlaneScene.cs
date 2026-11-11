@@ -46,7 +46,8 @@
 //                                        alongside the step before it. Actions: wait,
 //                                        show/hide NAME..., t V, matrix A B C D, c RE IM,
 //                                        move NAME X Y; #1696: draw NAME, orbit N,
-//                                        cobweb N, phase on|contours|off, caption "TEXT"
+//                                        cobweb N, phase on|contours|off, caption "TEXT";
+//                                        #1697: camera X Y [ZOOM]
 //
 // Curve expressions are the plot language (PlotExpression: the equation
 // language with real x / t / theta). They are double-quoted, and ';' or a newline
@@ -653,6 +654,9 @@ namespace FracturingFog.Models
             }
         }
 
+        /// <summary>#1697 — the camera's zoom factor range (relative to the user's zoom).</summary>
+        public const double MinCameraZoom = 1e-6, MaxCameraZoom = 1e6;
+
         /// <summary>#1696 — the longest caption a step may show.</summary>
         public const int MaxCaptionLength = 200;
 
@@ -690,7 +694,7 @@ namespace FracturingFog.Models
                 k += 2;
             }
 
-            const string actions = "wait, show, hide, t, matrix, c, move, draw, orbit, cobweb, phase or caption";
+            const string actions = "wait, show, hide, t, matrix, c, move, draw, orbit, cobweb, phase, caption or camera";
             if (k >= toks.Count) { badTok = toks.Count - 1; msg = $"'{head}' needs an action ({actions})"; return false; }
             string a = toks[k].Text.ToLowerInvariant();
             int actionTok = k++;
@@ -771,6 +775,18 @@ namespace FracturingFog.Models
                     if (text.Length > MaxCaptionLength)
                     { badTok = k; msg = $"a caption is at most {MaxCaptionLength} characters"; return false; }
                     k++;
+                    break;
+                }
+                case "camera":
+                {
+                    action = MathPlaneStepAction.Camera;
+                    if (!Numbers(2, "'camera' takes x y [zoom]: the view's shift and zoom factor", out badTok, out msg)) return false;
+                    if (k < toks.Count && TryNum(toks[k].Text, out double z))
+                    {
+                        if (!(z >= MinCameraZoom && z <= MaxCameraZoom))
+                        { badTok = k; msg = $"the camera's zoom factor is {MinCameraZoom.ToString(Inv)} to {MaxCameraZoom.ToString(Inv)}"; return false; }
+                        values.Add(z); k++;
+                    }
                     break;
                 }
                 default:
