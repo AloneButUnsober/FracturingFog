@@ -188,9 +188,9 @@ a `MathPlaneCamera`. For one frame the calculator sets its `CenterX` / `CenterY`
 `Zoom` to the effective view and restores them afterwards, so the grid, labels,
 backdrop (its cache key reads the effective view), phase portrait and objects all
 follow, and the view state is never written. `LastScriptCamera` reports the camera
-used. Known gap: the section's pointer read-out still maps the pointer through the
-user's view. Canvas editing is off mid-script anyway (SS4), but mid-script the
-read-out is off by the camera.
+used. The section's pointer and hover read-outs read the pointer against what is
+drawn: the camera's view, the evaluated map and c, and the objects where the script
+has put them (follow-up to #1697).
 
 ### 3.7 Scene Engine
 

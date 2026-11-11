@@ -469,11 +469,26 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
     // (which change the written scene) only work at the script's start.
     private bool Editing => IsActive && CanvasEditing && _sceneValid && (!HasScript || ScriptTime == 0);
 
-    private (double X, double Y) World(PointerInput e)
-        => MathPlaneSceneEdit.ClientToWorld(e.X + 0.5, e.Y + 0.5, e.ClientWidth, e.ClientHeight,
-                                            _view.CenterX, _view.CenterY, _view.Zoom);
+    /// <summary>#1697 follow-up — what the calculator draws now: the scene and params at the
+    /// script time and the script camera (the written scene and identity without a script,
+    /// or at 0 s). The pointer is read through it so the read-outs match the picture.</summary>
+    private MathPlaneScriptState Drawn()
+        => _sceneValid && _scene.Steps.Count > 0
+            ? MathPlaneScript.Evaluate(_scene, P, P.MathPlaneScriptTime)
+            : new MathPlaneScriptState(_scene, P, 0, 0);
 
-    private double PixelPitch(PointerInput e) => MathPlaneSceneEdit.Pitch(e.ClientWidth, _view.Zoom);
+    private MathPlaneCamera DrawnCamera => Drawn().Camera ?? MathPlaneCamera.Identity;
+
+    /// <summary>The world point under the pointer, through the view and the script camera
+    /// (the calculator's effective view: centre + offset, y-down centre minus the y offset,
+    /// zoom times the factor).</summary>
+    private (double X, double Y) World(PointerInput e) => World(e, DrawnCamera);
+
+    private (double X, double Y) World(PointerInput e, MathPlaneCamera cam)
+        => MathPlaneSceneEdit.ClientToWorld(e.X + 0.5, e.Y + 0.5, e.ClientWidth, e.ClientHeight,
+                                            _view.CenterX + cam.Dx, _view.CenterY - cam.Dy, _view.Zoom * cam.Zoom);
+
+    private double PixelPitch(PointerInput e) => MathPlaneSceneEdit.Pitch(e.ClientWidth, _view.Zoom * DrawnCamera.Zoom);
 
     /// <summary>#1552 — the map the view draws with (identity when off).</summary>
     private Mat2 CurrentMap => MathPlaneMap.Current(_view.FractalParameters);
@@ -577,13 +592,24 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
 
     private void UpdateReadouts(PointerInput e)
     {
-        var (wx, wy) = World(e);
+        // #1697 follow-up — mid-script, read the pointer against what is drawn: the camera's
+        // view, the evaluated map and c, and the objects where they are now.
+        var drawn = Drawn();
+        var cam = drawn.Camera ?? MathPlaneCamera.Identity;
+        var (wx, wy) = World(e, cam);
         PointerReadout = $"x = {Num(wx)}, y = {Num(wy)}";
         // #1553 — f'(z) at the pointer, read as a point z of the plane (the phase
         // portrait is coloured the same way: by f at each z).
-        if (CurrentComplex is { } cmap) PointerReadout += "    " + DerivativeReadout(cmap, new Complex(wx, wy));
-        var hit = _sceneValid ? HitAt(e) : null;
-        HoverReadout = hit is { } h ? Readout(_scene.Objects[h.ObjectIndex]) : "";
+        if (MathPlaneComplexMap.Current(drawn.Params, drawn.Scene) is { } cmap)
+            PointerReadout += "    " + DerivativeReadout(cmap, new Complex(wx, wy));
+        HoverReadout = "";
+        if (!_sceneValid) return;
+        double tol = MathPlaneSceneEdit.HitRadiusPixels * MathPlaneSceneEdit.Pitch(e.ClientWidth, _view.Zoom * cam.Zoom);
+        var dc = MathPlaneComplexMap.Current(drawn.Params, drawn.Scene);
+        var dm = MathPlaneMap.Current(drawn.Params);
+        var hit = dc != null ? MathPlaneSceneEdit.HitTest(drawn.Scene, wx, wy, tol, dc.Apply)
+                             : MathPlaneSceneEdit.HitTest(drawn.Scene, wx, wy, tol, dm.IsIdentity ? null : dm);
+        if (hit is { } h) HoverReadout = Readout(drawn.Scene.Objects[h.ObjectIndex]);
     }
 
     // ── Formatting ──
