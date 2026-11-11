@@ -393,6 +393,8 @@ public static class FractalAnimatableParamsMap
         // #1553 — the c of a complex map such as z^2 + c.
         new("MathPlaneCRe", AnimatableParamKind.ScalarDouble, Min: -2.0, Max: 2.0, Notes: "Complex map: real part of c."),
         new("MathPlaneCIm", AnimatableParamKind.ScalarDouble, Min: -2.0, Max: 2.0, Notes: "Complex map: imaginary part of c."),
+        // #1695 — the scene script's clock (seconds); a Linear track plays the script.
+        new("MathPlaneScriptTime", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 60.0, Notes: "Script time in seconds (scripted scenes)."),
     };
 
     // BilliardRays (#1506) — the shared billiard scene plus the sweep's beam angle.

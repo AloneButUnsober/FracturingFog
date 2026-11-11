@@ -51,6 +51,7 @@ namespace FracturingFog.Models
             p.MathPlaneInterpolation = Interpolation;
             p.MathPlaneCRe = CRe; p.MathPlaneCIm = CIm;
             p.MathPlaneBackdrop = Backdrop;
+            p.MathPlaneScriptTime = 0;   // #1695 — a loaded scene starts its script at the beginning
         }
 
         /// <summary>#1637 — the reverse of <see cref="Apply"/>: a scene holding every Math Plane

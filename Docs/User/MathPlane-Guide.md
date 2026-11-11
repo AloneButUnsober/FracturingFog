@@ -131,8 +131,17 @@ curve NAME implicit "F(x, y)"
 region NAME "condition(x, y)"
 map "f(z)"   phase off|on|contours   probe x y
 orbit N      cobweb x0 [N] ["f(x)"]
+step DURATION [ease none|in|out|inout] ACTION ...    with [DURATION] [ease ...] ACTION ...
+  actions: wait | show NAME... | hide NAME... | t V | matrix A B C D | c RE IM | move NAME X Y
 options after an object: #RRGGBB  hidden  nolabel
 ```
+
+**Scripts.** `step` and `with` lines make a timed script; this part is still being built.
+- **Order:** a `step` starts when the previous one ends, and a `with` runs alongside the step before it.
+- **Time:** the setting `MathPlaneScriptTime` (seconds) picks the moment drawn. At 0 you see the scene as
+  written.
+- **Fading in:** objects marked `hidden` can be faded in with `show`.
+- **The matrix:** `matrix` steps show only when the map mode is Matrix.
 
 ## 8. Batch
 
@@ -152,6 +161,7 @@ FracturingFog --batch --fractal MathPlane --x -0.5 --y 0 --zoom 0.6 --param Math
 | `MathPlaneInterpolation` | 0 linear, 1 polar |
 | `MathPlaneCRe`, `MathPlaneCIm` | c |
 | `MathPlaneBackdrop` | 0 none, 1 Mandelbrot, 2 Julia, 3 Burning Ship, 4 Tricorn, 5 Multibrot, 6 Phoenix, 7 Magnet 1, 8 Magnet 2, 9 Glynn, 10 Spider |
+| `MathPlaneScriptTime` | the moment of the scene's script drawn, in seconds (0 = the scene as written) |
 
 **Math overlay:** for the overlay on a 2D view, add `--math-overlay RE,IM[,STEPS]`.
 

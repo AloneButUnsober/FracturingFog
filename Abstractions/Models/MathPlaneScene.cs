@@ -41,6 +41,11 @@
 //   cobweb x0 [N] ["f(x)"]              #1554: cobweb of a real map from x0, N steps
 //                                        (default 30); f reads x and c (c = the real
 //                                        part of the plane's c; default "x^2 + c")
+//   step DURATION [ease none|in|out|inout] ACTION ...   #1695: a timed script step (see
+//   with [DURATION] [ease ...] ACTION ...               MathPlaneScript.cs); with runs
+//                                        alongside the step before it. Actions: wait,
+//                                        show/hide NAME..., t V, matrix A B C D, c RE IM,
+//                                        move NAME X Y
 //
 // Curve expressions are the plot language (PlotExpression: the equation
 // language with real x / t / theta). They are double-quoted, and ';' or a newline
@@ -151,6 +156,8 @@ namespace FracturingFog.Models
         public int OrbitSteps { get; init; }
         /// <summary>#1554 — the cobweb, or null.</summary>
         public MathPlaneCobweb? Cobweb { get; init; }
+        /// <summary>#1695 — the script's members (<c>step</c> / <c>with</c>), in order; empty = no script.</summary>
+        public IReadOnlyList<MathPlaneStep> Steps { get; init; } = Array.Empty<MathPlaneStep>();
 
         /// <summary>Okabe–Ito colours (colour-blind safe), the default object colours
         /// in order; see the bibliography's Okabe–Ito entry.</summary>
@@ -168,7 +175,7 @@ namespace FracturingFog.Models
             && ShowDet == o.ShowDet && ShowEigen == o.ShowEigen && ShowLengths == o.ShowLengths
             && Labels == o.Labels && Objects.SequenceEqual(o.Objects)
             && MapSource == o.MapSource && Phase == o.Phase && Probe == o.Probe
-            && OrbitSteps == o.OrbitSteps && Cobweb == o.Cobweb;
+            && OrbitSteps == o.OrbitSteps && Cobweb == o.Cobweb && Steps.SequenceEqual(o.Steps);
 
         public override int GetHashCode() => HashCode.Combine(ShowAxes, ShowGrid, ShowTicks, Labels, Objects.Count);
 
@@ -195,6 +202,7 @@ namespace FracturingFog.Models
                 parts.Add("cobweb " + Num(cw.X0) + " " + cw.Steps.ToString(Inv)
                           + (cw.Source == MathPlaneCobweb.DefaultSource ? "" : " \"" + cw.Source + "\""));
             foreach (var o in Objects) parts.Add(SerializeObject(o));
+            foreach (var s in Steps) parts.Add(SerializeStep(s));
             return string.Join("; ", parts);
         }
 
@@ -232,6 +240,25 @@ namespace FracturingFog.Models
             return sb.ToString();
         }
 
+        private static string SerializeStep(MathPlaneStep s)
+        {
+            var sb = new StringBuilder(s.With ? "with" : "step");
+            if (s.Duration is double d) sb.Append(' ').Append(Num(d));
+            if (s.Ease is { } e) sb.Append(" ease ").Append(EaseToken(e));
+            sb.Append(' ').Append(s.Action.ToString().ToLowerInvariant());
+            foreach (var n in s.Names) sb.Append(' ').Append(n);
+            foreach (var v in s.Values) sb.Append(' ').Append(Num(v));
+            return sb.ToString();
+        }
+
+        private static string EaseToken(FracturingFog.Render.CameraEase e) => e switch
+        {
+            FracturingFog.Render.CameraEase.None => "none",
+            FracturingFog.Render.CameraEase.EaseIn => "in",
+            FracturingFog.Render.CameraEase.EaseOut => "out",
+            _ => "inout",
+        };
+
         private static void AppendOptions(StringBuilder sb, MathPlaneObject o)
         {
             sb.Append(" #").Append((o.Color & 0xFFFFFF).ToString("X6", Inv));
@@ -261,6 +288,8 @@ namespace FracturingFog.Models
             MathPlaneCobweb? cobweb = null;
             var objects = new List<MathPlaneObject>();
             var names = new HashSet<string>(StringComparer.Ordinal);
+            var script = new List<MathPlaneStep>();
+            var stepAt = new List<(int Stmt, int Col)>();   // #1695 — where each member was written
 
             int stmtNo = 0;
             foreach (var (stmtText, stmtStart) in SplitStatements(text))
@@ -369,6 +398,15 @@ namespace FracturingFog.Models
                         cobweb = new MathPlaneCobweb(x0, steps, src);
                         break;
                     }
+                    case "step":
+                    case "with":
+                    {
+                        if (!TryStep(toks, head == "with", out var step, out int badTok, out string msg))
+                        { error = Err(badTok, msg); return false; }
+                        script.Add(step!);
+                        stepAt.Add((stmtNo, toks[0].Col + 1));
+                        break;
+                    }
                     case "point":
                     case "vector":
                     case "segment":
@@ -387,9 +425,18 @@ namespace FracturingFog.Models
                         break;
                     }
                     default:
-                        error = Err(0, $"unknown statement '{toks[0].Text}' (expected point, vector, segment, polyline, curve, region, axes, grid, ticks, labels, det, eigen, lengths, map, phase, probe, orbit or cobweb)");
+                        error = Err(0, $"unknown statement '{toks[0].Text}' (expected point, vector, segment, polyline, curve, region, axes, grid, ticks, labels, det, eigen, lengths, map, phase, probe, orbit, cobweb, step or with)");
                         return false;
                 }
+            }
+
+            // #1695 — steps name objects anywhere in the scene, and may not animate one
+            // property twice at once; both checks need the whole scene.
+            if (MathPlaneScript.Validate(script, objects) is { } bad)
+            {
+                var (st, col) = stepAt[bad.Index];
+                error = new MathPlaneSceneError(st, col, bad.Message);
+                return false;
             }
 
             scene = new MathPlaneScene
@@ -397,7 +444,7 @@ namespace FracturingFog.Models
                 ShowAxes = axes, ShowGrid = grid, ShowTicks = ticks, Labels = labels, Objects = objects,
                 ShowDet = det, ShowEigen = eigen, ShowLengths = lengths,
                 MapSource = mapSource, Phase = phase, Probe = probe,
-                OrbitSteps = orbit, Cobweb = cobweb,
+                OrbitSteps = orbit, Cobweb = cobweb, Steps = script,
             };
             return true;
         }
@@ -598,6 +645,94 @@ namespace FracturingFog.Models
                     start = i + 1;
                 }
             }
+        }
+
+        /// <summary>#1695 — <c>step DURATION [ease E] ACTION ...</c> or
+        /// <c>with [DURATION] [ease E] ACTION ...</c>.</summary>
+        private static bool TryStep(List<(string Text, int Col)> toks, bool with,
+                                    out MathPlaneStep? step, out int badTok, out string msg)
+        {
+            step = null; badTok = 0; msg = "";
+            string head = with ? "with" : "step";
+            int k = 1;
+            double? duration = null;
+            if (k < toks.Count && TryNum(toks[k].Text, out double d))
+            {
+                if (d < 0 || d > MathPlaneScript.MaxStepSeconds)
+                { badTok = k; msg = $"a duration is 0 to {MathPlaneScript.MaxStepSeconds.ToString(Inv)} seconds"; return false; }
+                duration = d; k++;
+            }
+            else if (!with)
+            { badTok = Math.Min(k, toks.Count - 1); msg = "'step' takes a duration in seconds, then an action, e.g. step 1 show v"; return false; }
+
+            FracturingFog.Render.CameraEase? ease = null;
+            if (k < toks.Count && toks[k].Text.Equals("ease", StringComparison.OrdinalIgnoreCase))
+            {
+                string e = k + 1 < toks.Count ? toks[k + 1].Text.ToLowerInvariant() : "";
+                ease = e switch
+                {
+                    "none" => FracturingFog.Render.CameraEase.None,
+                    "in" => FracturingFog.Render.CameraEase.EaseIn,
+                    "out" => FracturingFog.Render.CameraEase.EaseOut,
+                    "inout" => FracturingFog.Render.CameraEase.EaseInOut,
+                    _ => null,
+                };
+                if (ease == null) { badTok = Math.Min(k + 1, toks.Count - 1); msg = "'ease' takes none, in, out or inout"; return false; }
+                k += 2;
+            }
+
+            const string actions = "wait, show, hide, t, matrix, c or move";
+            if (k >= toks.Count) { badTok = toks.Count - 1; msg = $"'{head}' needs an action ({actions})"; return false; }
+            string a = toks[k].Text.ToLowerInvariant();
+            int actionTok = k++;
+            MathPlaneStepAction action;
+            var names = new List<string>();
+            var values = new List<double>();
+            bool Numbers(int count, string usage, out int bad, out string why)
+            {
+                bad = 0; why = "";
+                for (int i = 0; i < count; i++, k++)
+                {
+                    if (k >= toks.Count || !TryNum(toks[k].Text, out double v))
+                    { bad = Math.Min(k, toks.Count - 1); why = usage; return false; }
+                    values.Add(v);
+                }
+                return true;
+            }
+            switch (a)
+            {
+                case "wait": action = MathPlaneStepAction.Wait; break;
+                case "show":
+                case "hide":
+                    action = a == "show" ? MathPlaneStepAction.Show : MathPlaneStepAction.Hide;
+                    while (k < toks.Count && IsName(toks[k].Text)) names.Add(toks[k++].Text);
+                    if (names.Count == 0) { badTok = Math.Min(k, toks.Count - 1); msg = $"'{a}' takes one or more object names"; return false; }
+                    break;
+                case "t":
+                    action = MathPlaneStepAction.T;
+                    if (!Numbers(1, "'t' takes a value, e.g. t 1", out badTok, out msg)) return false;
+                    break;
+                case "matrix":
+                    action = MathPlaneStepAction.Matrix;
+                    if (!Numbers(4, "'matrix' takes four numbers: a b c d for [[a, b], [c, d]]", out badTok, out msg)) return false;
+                    break;
+                case "c":
+                    action = MathPlaneStepAction.C;
+                    if (!Numbers(2, "'c' takes re im", out badTok, out msg)) return false;
+                    break;
+                case "move":
+                    action = MathPlaneStepAction.Move;
+                    if (k >= toks.Count || !IsName(toks[k].Text))
+                    { badTok = Math.Min(k, toks.Count - 1); msg = "'move' takes an object name, then x y"; return false; }
+                    names.Add(toks[k++].Text);
+                    if (!Numbers(2, "'move' takes an object name, then x y", out badTok, out msg)) return false;
+                    break;
+                default:
+                    badTok = actionTok; msg = $"unknown action '{toks[actionTok].Text}' (expected {actions})"; return false;
+            }
+            if (k < toks.Count) { badTok = k; msg = $"unexpected text after the '{a}' action"; return false; }
+            step = new MathPlaneStep(with, duration, ease, action, names, values);
+            return true;
         }
 
         private static List<(string Text, int Col)> Tokenize(string stmt, int offset)
