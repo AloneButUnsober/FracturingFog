@@ -151,6 +151,7 @@ namespace FracturingFog.Models
             {FractalType.SlitCascade, "Slit Cascade" },
             {FractalType.TalbotCarpet, "Talbot Carpet" },
             {FractalType.MathPlane, "Math Plane" },
+            {FractalType.MathPlane3D, "Math Plane 3D" },
             {FractalType.PrecisionField, "Precision Field" },
             {FractalType.Kleinian, "Kleinian" },
             {FractalType.MirrorSpheres, "MirrorSpheres" },

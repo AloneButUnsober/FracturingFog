@@ -150,6 +150,9 @@ public static class FractalAnimatableParamsMap
         FractalType.MirrorSpheres
             => _mirrorSpheresList,
 
+        FractalType.MathPlane3D
+            => _mathPlane3DList,
+
         FractalType.BicomplexMandelbrot
             => _bicomplexList,
 
@@ -636,6 +639,14 @@ public static class FractalAnimatableParamsMap
 
     // Wada mirror spheres (#1440): shrinking the balls opens the gaps and the
     // basins simplify; reflectance fades the deep-scattered boundary.
+    // #1713 — Math Plane 3D: the orbit camera.
+    private static readonly AnimatableParamDescriptor[] _mathPlane3DList =
+    {
+        new("MathPlane3DCameraDistance", AnimatableParamKind.ScalarDouble, Min: 1.0, Max: 60.0, Notes: "Camera distance from the target."),
+        new("MathPlane3DCameraTheta", AnimatableParamKind.ScalarDouble, Min: -System.Math.PI, Max: System.Math.PI, Notes: "Camera azimuth about +z (radians)."),
+        new("MathPlane3DCameraPhi", AnimatableParamKind.ScalarDouble, Min: 0.05, Max: System.Math.PI - 0.05, Notes: "Camera polar angle from +z (radians)."),
+    };
+
     private static readonly AnimatableParamDescriptor[] _mirrorSpheresList =
     {
         new("MirrorSpheresRadiusScale", AnimatableParamKind.ScalarDouble, Min: 0.5, Max: 1.0,

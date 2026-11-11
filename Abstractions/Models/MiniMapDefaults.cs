@@ -33,6 +33,7 @@ public static class MiniMapDefaults
         FractalType.QuaternionMandelbrot => false,
         FractalType.Kleinian   => false,
         FractalType.MirrorSpheres => false,
+        FractalType.MathPlane3D => false,   // #1713
         FractalType.BicomplexMandelbrot => false,
         FractalType.Coquaternion => false,
         FractalType.Julibrot => false,
@@ -97,6 +98,7 @@ public static class MiniMapDefaults
         FractalType.JulibrotPair  => new(-0.5,  0.0, 1.0),
         FractalType.Kleinian         => new( 0.0,  0.0, 1.0),
         FractalType.MirrorSpheres    => new( 0.0,  0.0, 1.0),
+        FractalType.MathPlane3D      => new( 0.0,  0.0, 1.0),   // #1713
         FractalType.BicomplexMandelbrot => new( 0.0,  0.0, 1.0),
         FractalType.Coquaternion => new( 0.0,  0.0, 1.0),
         FractalType.Julibrot => new( 0.0,  0.0, 1.0),

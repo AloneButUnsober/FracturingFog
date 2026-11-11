@@ -130,6 +130,30 @@ options: #RRGGBB  #RRGGBBAA (translucent)  hidden  nolabel  mesh N (surface reso
 **Projection:** perspective, with the vertical field of view fixed at 45°. A `projection
 orthographic` statement is cheap to add and helps reading coordinates.
 
+*As built (T1, #1713):*
+- **Where it lives:** `Engine/Calculators/MathPlane3DCalculator.cs` holds the renderer;
+  `Abstractions/Models/MathPlane3DScene.cs` holds the scene, which reuses the 2D parser's
+  tokenizer, numbers, names and labels.
+- **Camera:** z up; eye = target + (distance / Zoom)·(sinφ cosθ, sinφ sinθ, cosφ), with a 45°
+  vertical FOV.
+- **Rasterizer:** 1/z depth (nearer = larger); pixel centres; the top-left fill rule, so a
+  closed fan covers each pixel exactly once; strict depth test.
+- **Arrowheads:** flat-Lambert cones, the only triangles in T1. Triangles crossing the near
+  plane are skipped for now.
+- **Lines:** clipped to the near plane, cut into ~3 px pieces, depth-tested at each piece's
+  mid-1/z with a 0.2 % relative bias.
+- **Labels and tick numbers:** shown only where their anchor passes the depth test.
+- **Grid:** the extent covers the objects (×1.2, nice-rounded); with no objects it follows the
+  camera distance.
+- **Registration** follows the 3D families:
+  - `CameraParamBinding`, the `Cam3D*` snapshot block and `FractalViewState.Is3D` (right-drag
+    orbits as in the other 3D types);
+  - the `Raymarch3D` motion class (video dolly);
+  - the animatable camera, `PosterRenderer` and the render host.
+- **Excluded from DE mesh export** (`MeshExportCapabilityTests`): its surfaces export through
+  T6.
+- **Matrix params:** `t` and the matrix arrive with T3, not as stubs in T1.
+
 ### 3.4 Maps and `t`
 
 - **Linear:** `(1 − t)·I + t·M`, as in 2D.

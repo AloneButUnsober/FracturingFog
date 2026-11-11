@@ -208,7 +208,7 @@ namespace FracturingFog.Models
             return string.Join("; ", parts);
         }
 
-        private static string LabelsToken(GridLabelSettings s) => s.Mode switch
+        internal static string LabelsToken(GridLabelSettings s) => s.Mode switch
         {
             GridLabelMode.Fixed => "fixed:" + s.ClampedDigits.ToString(Inv),
             GridLabelMode.Scientific => "sci:" + s.ClampedDigits.ToString(Inv),
@@ -273,7 +273,7 @@ namespace FracturingFog.Models
             if (!o.ShowLabel) sb.Append(" nolabel");
         }
 
-        private static string Num(double v) => v.ToString("R", Inv);
+        internal static string Num(double v) => v.ToString("R", Inv);
 
         // ── Parse ────────────────────────────────────────────────────────────
 
@@ -639,7 +639,7 @@ namespace FracturingFog.Models
             return true;
         }
 
-        private static IEnumerable<(string Text, int Start)> SplitStatements(string text)
+        internal static IEnumerable<(string Text, int Start)> SplitStatements(string text)
         {
             int start = 0;
             bool quoted = false;
@@ -797,7 +797,7 @@ namespace FracturingFog.Models
             return true;
         }
 
-        private static List<(string Text, int Col)> Tokenize(string stmt, int offset)
+        internal static List<(string Text, int Col)> Tokenize(string stmt, int offset)
         {
             var list = new List<(string, int)>();
             int i = 0;
@@ -819,16 +819,16 @@ namespace FracturingFog.Models
             return list;
         }
 
-        private static bool TryNum(string t, out double v)
+        internal static bool TryNum(string t, out double v)
             => double.TryParse(t, NumberStyles.Float, Inv, out v) && double.IsFinite(v);
 
-        private static bool TryOnOff(string t, out bool on)
+        internal static bool TryOnOff(string t, out bool on)
         {
             on = t.Equals("on", StringComparison.OrdinalIgnoreCase);
             return on || t.Equals("off", StringComparison.OrdinalIgnoreCase);
         }
 
-        private static bool TryLabels(string t, out GridLabelSettings s)
+        internal static bool TryLabels(string t, out GridLabelSettings s)
         {
             s = GridLabelSettings.Default;
             string l = t.ToLowerInvariant();

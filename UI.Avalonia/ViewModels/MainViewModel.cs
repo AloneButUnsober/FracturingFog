@@ -252,6 +252,7 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
         (FractalType.SlitCascade,           "Slit Cascade (Double-Slit Diffraction)"),   // #1569
         (FractalType.TalbotCarpet,          "Talbot Carpet (Quantum Carpet)"),           // #1570
         (FractalType.MathPlane,             "Math Plane (Cartesian)"),        // #1548
+        (FractalType.MathPlane3D,           "Math Plane 3D"),                 // #1713
         (FractalType.PrecisionField,        "Precision Field (Fragility)"),
         (FractalType.JulibrotPair,       "Julibrot Pair"),          // #1155 (was Dual-Orbit Escape)
         (FractalType.IndrasPearls,          "Indra's Pearls (2D Kleinian)"),

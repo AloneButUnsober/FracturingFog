@@ -465,6 +465,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsBilliardScene => IsChaoticBilliard || IsBilliardRays;
     /// <summary>#1548 — Math Plane (Cartesian plotter).</summary>
     public bool IsMathPlane => FractalType == FractalType.MathPlane;
+    /// <summary>#1713 — Math Plane 3D.</summary>
+    public bool IsMathPlane3D => FractalType == FractalType.MathPlane3D;
     public bool IsSlitCascade => FractalType == FractalType.SlitCascade;   // #1569
     public bool IsTalbotCarpet => FractalType == FractalType.TalbotCarpet; // #1570
 

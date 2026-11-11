@@ -35,6 +35,7 @@ public sealed class MeshExportCapabilityTests
             .Where(t => FractalMotionCapabilities.MotionClass(t) == FractalMotionClass.Raymarch3D)
             .Where(t => t != FractalType.UserBulb)   // compiled-kernel DE, exports via its editor
             .Where(t => t != FractalType.MirrorSpheres)   // #1440: no DE, no surface to mesh — the image is the reflections
+            .Where(t => t != FractalType.MathPlane3D)     // #1713: a mesh diagram, not a DE raymarcher; its surfaces export through T6 (#1718)
             .ToArray();
         Assert.NotEmpty(raymarch);
         foreach (var t in raymarch)
