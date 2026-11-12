@@ -86,42 +86,6 @@ fractal NAME TYPE [KEY=VALUE ...] [options] [mesh N]
 - **Cost:** a DE mesh at 64³ is about 0.27 M DE evaluations, done once per geometry.
   - B1 measures it on the slowest types (Kleinian, Julibrot) and states the numbers in the as-built note.
 
-*As built (B1, #1731):*
-- **Model:** a fractal is a **surface** with the new `MathPlaneCurveKind.Fractal`. Its `Sources` hold
-  the type name, then the `KEY=VALUE` tokens.
-  - It is meshed into the same indexed-mesh type as T5's implicit surfaces
-    (`Engine/Calculators/MathPlane3DFractalMesher.cs`).
-  - Rendering, labels, bounds, translucency, the cache, cancellation and T6 mesh export therefore follow
-    the implicit path.
-  - Statement: `fractal NAME TYPE [KEY=VALUE ...] [options] [mesh N]`. The type is case-insensitive, and
-    the canonical name is written back.
-- **Where the keys are checked (a change from §3.1):**
-  - The scene parser lives in Abstractions and cannot see `RegionFractalParams`. So the parser checks
-    only the syntax: KEY=VALUE, no spaces, quotes, `;` or a leading `@` / `#`, no repeated key, no
-    `Cam3D*` / `MathPlane*` key.
-  - The Engine checks the keys with `RegionFractalParams.FromKeyValues` when meshing. An unknown key or a
-    bad value becomes the render's scene error, shown as the message only (`MathPlaneSceneError`
-    Statement 0).
-  - `--batch` refuses it before rendering.
-  - As with `--param`, a key of another family is accepted and changes nothing. A per-family key list
-    does not exist; the region snapshot omits keys at their default values.
-- **Mesh:** `UserBulbMeshExporter.BuildMarchingCubes` (now `internal`) with the export's defaults: iso
-  half a cell, faces capped. A test checks that it equals the STL that `ExportMarchingCubes` writes,
-  through the rotation. The core's minimum grid is 8, so `mesh N` below 8 meshes at 8.
-- **Measured** (Debug build, author's machine, default settings):
-  - mesh 64 builds in 0.01-0.04 s for every type;
-  - mesh 128 builds in 0.10-0.25 s.
-
-  So the default of 64 stays for every type. Mandelbox scale 2 is a solid box of half-size 6 with a
-  pitted skin, as its raymarched view is.
-- **A fix in the S9 core:** a corner whose distance estimate is NaN broke the mesh. The Mandelbulb's
-  estimate is 0 · log 0 at r = 0, which is inside the set.
-  - Such a corner read as "outside". Marching cubes then wrapped a one-cell cavity round it, and the edge
-    interpolation made its vertices NaN. Those NaN vertices also went into S9 STL / OBJ / glTF files.
-  - A non-finite sample now takes the mean of its finite axis neighbours (or +∞ with none), and an edge
-    with a non-finite end uses its midpoint.
-- **Not done here:** User Bulb (no `RaymarchMeshSampler` entry; §6).
-
 ### 3.2 Orbit / fold-step object (B2, #1732)
 
 ```
