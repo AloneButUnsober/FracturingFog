@@ -293,6 +293,38 @@ Surfaces can be exported through the S9 writers:
 - run through `MeshValidator`;
 - export only: FF is a mesh exporter, not an editor (S9 framing).
 
+*As built (T6, #1718):*
+- **What is exported:** `Engine/Export/MathPlane3DMeshExporter.cs` exports every visible surface
+  (explicit, parametric and implicit) after the map at the current t, as the view shows it.
+  - Points, vectors, segments, curves, grids and fills are left out.
+  - Explicit and parametric surfaces are the drawn cells of `BuildSurface`: two triangles a cell,
+    wound as the render winds them, over shared grid vertices. A full grid is therefore one connected,
+    consistently oriented sheet: 2n² triangles, with only its 4n rim edges open.
+  - Implicit surfaces are the T5 marching-cubes mesh.
+  - A map with det < 0 mirrors space, so the winding is reversed and a closed surface still faces
+    outward.
+- **Formats:**
+  - .glb / .gltf go through `GltfMeshWriter`, with area-weighted vertex normals. They are written Y up,
+    as the [glTF 2.0 spec](../Resources-Bibliography.md#khronos-gltf-2) defines: (x, y, z) is stored as
+    (x, z, -y).
+  - Colour: one colour across the surfaces becomes the material's base colour; several become
+    per-vertex COLOR_0 with a white base. Alpha is dropped, as in S9.
+  - .stl is [binary STL](../Resources-Bibliography.md#loc-stl-binary) with z up, through the S9 writer
+    (`WriteStlBinary`, now shared). It carries geometry only.
+  - 3MF / OBJ / PLY are not offered. The issue asked for glTF and STL.
+- **Check:** `MeshValidator` runs on the result. The UI and batch show one line, for example
+  "2 surfaces, 16144 triangles, open (has edges)". A scene without visible surfaces is an error, and no
+  file is written.
+- **UI:** an "Export" group in the Control Center section holds **Export mesh...**. It is enabled when a
+  visible surface exists. A save dialog (.glb / .gltf / .stl) opens and the export runs off the UI
+  thread on a copy of the parameters. The result line is grey, and problems are yellow.
+- **Batch:** `--math-plane-3d-mesh PATH` (image mode) writes the mesh from the same parameters as the
+  still. It is new, because there was no S9 mesh flag to reuse; only `--qr-mesh` exists, and that is
+  QR-specific.
+  - Another fractal type, or a scene without surfaces, exits 2.
+  - The Command builder emits the flag when a snapshot carries a path. The live seed has none, since an
+    export path is not view state.
+
 ## 4. UI (Control Center only)
 
 A **Math Plane 3D** section, structured like the 2D one:

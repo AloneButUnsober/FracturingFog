@@ -790,6 +790,36 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
   in code comments without a bibliography entry. #1717 adds the credit when Math Plane 3D's implicit
   surfaces reuse them.
 
+<a id="khronos-gltf-2"></a>
+
+- **glTF 2.0 mesh format** — The Khronos 3D Formats Working Group. *glTF 2.0 Specification*, version 2.0.1,
+  The Khronos Group, 2021-10-11. <https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html>. The
+  specification is © 2013-2021 The Khronos Group Inc. Khronos grants a conditional licence to use and
+  reproduce it unmodified (page read 2026-11-12). FF's `Engine/Export/GltfMeshWriter.cs` (S9.4, #391) writes
+  the format: .glb / .gltf, POSITION / NORMAL / COLOR_0 accessors and a metallic-roughness material.
+  `GltfMeshReader` reads it back in tests. The S9 writer had no bibliography entry until #1718.
+  - For #1718 (Math Plane 3D mesh export), FF follows the spec's axes: "glTF defines +Y as up, +Z as
+    forward, and -X as right" (right-handed). Scene points (x, y, z) with z up are therefore written as
+    (x, z, -y).
+  - The S9 fractal exporters still write their own axes unchanged.
+
+<a id="loc-stl-binary"></a>
+
+- **Binary STL format** — Library of Congress, Sustainability of Digital Formats. *STL (STereoLithography)
+  File Format, Binary*, format description fdd000505, last updated 2025-02-27.
+  <https://www.loc.gov/preservation/digital/formats/fdd/fdd000505.shtml>.
+  - The description credits the format to Charles Hull of 3D Systems, Inc. It was introduced in the late
+    1980s and documented in 3D Systems' *StereoLithography Interface Specification* (1988; the page also
+    lists October 1989). The page's authors could not locate that original document, and FF has not seen
+    it either.
+  - Layout:
+    - an 80-byte header;
+    - a little-endian uint32 triangle count;
+    - for each triangle, a float32 normal, three float32 vertices and a uint16 attribute count.
+  - FF's binary STL writers (`UserBulbMeshExporter.WriteStlBinary`, shared by the Math Plane 3D export
+    #1718; the relief and QR-tile writers) and `StlMeshReader` use this layout. They had no bibliography
+    entry until #1718.
+
 <a id="catmull-zbuffer"></a>
 
 - **Z-buffer (depth buffer)** — Edwin Earl Catmull. *A Subdivision Algorithm for Computer Display of

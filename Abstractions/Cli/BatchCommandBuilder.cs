@@ -103,6 +103,8 @@ namespace FracturingFog.Cli
         /// <summary>#1411 — also write a QR tile mesh to this path (null = no mesh;
         /// the live seed leaves it null, the mesh is a Control Center button).</summary>
         public string? QrMeshPath { get; init; }
+        /// <summary>#1718 — <c>--math-plane-3d-mesh</c> output path (null = no mesh).</summary>
+        public string? MathPlane3DMeshPath { get; init; }
 
         /// <summary>The live per-family settings as region-snapshot
         /// <c>Key=Value</c> pairs (#997) — Julia constant, 3D camera, … — emitted
@@ -427,6 +429,13 @@ namespace FracturingFog.Cli
             // Fractal QR code (#1305) — payload plus the knobs that deviate from
             // their defaults.
             AppendQr(parts, snap.Qr, snap.QrMeshPath);
+
+            // #1718 — the Math Plane 3D mesh export.
+            if (!string.IsNullOrEmpty(snap.MathPlane3DMeshPath))
+            {
+                parts.Add(BatchFlags.MathPlane3DMesh);
+                parts.Add(snap.MathPlane3DMeshPath);
+            }
 
             // Domain-warp post-fx (any fractal). Emit the toggle, plus knobs when
             // they deviate from their defaults.

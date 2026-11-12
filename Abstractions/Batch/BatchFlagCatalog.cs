@@ -537,6 +537,12 @@ namespace FracturingFog.Batch
                            + "with the escape circle and a read-out. STEPS 1-10000, default 50. Other families get "
                            + "the axes only (#1554).",
                 },
+                // #1718 — Math Plane 3D mesh export.
+                Txt(BatchFlags.MathPlane3DMesh, Output, BatchModes.Image,
+                    "Math Plane 3D: also write the scene's visible surfaces (explicit, parametric, implicit), after the "
+                    + "map at the current t, as a mesh: .glb / .gltf (Y up, surface colours) or .stl (Z up, geometry). "
+                    + "Validated with the mesh checker; a scene without surfaces is an error.", hint: "PATH")
+                    with { Example = "scene.glb" },
 
                 // ── Video ──
                 Dbl(BatchFlags.Seconds, Video, BatchModes.Sequence,

@@ -26,6 +26,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Reactive;
+using System.Threading.Tasks;
 using Avalonia.Threading;
 using FracturingFog.Input;
 using FracturingFog.Models;
@@ -69,6 +70,7 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
         ApplyPresetCommand = ReactiveCommand.Create<MathPlane3DSceneEdit.MapPreset>(ApplyPreset);
         PlayCommand = ReactiveCommand.Create(TogglePlay);
         ResetViewCommand = ReactiveCommand.Create(ResetView);
+        ExportMeshCommand = ReactiveCommand.CreateFromTask(ExportMeshAsync);
         Refresh();
     }
 
@@ -86,6 +88,63 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
     public ReactiveCommand<MathPlane3DSceneEdit.MapPreset, Unit> ApplyPresetCommand { get; }
     public ReactiveCommand<Unit, Unit> PlayCommand { get; }
     public ReactiveCommand<Unit, Unit> ResetViewCommand { get; }
+
+    // ── #1718: mesh export ──
+
+    /// <summary>Export the scene's surfaces (wired by the host: picks the file, writes it,
+    /// returns the outcome; null when the user cancelled).</summary>
+    public ReactiveCommand<Unit, Unit> ExportMeshCommand { get; }
+
+    /// <summary>Set by the host: pick a path and export. Null leaves the button disabled.</summary>
+    public Func<Task<MathPlane3DMeshOutcome?>>? MeshExportRequested
+    {
+        get => _meshExportRequested;
+        set { _meshExportRequested = value; this.RaisePropertyChanged(nameof(CanExportMesh)); }
+    }
+    private Func<Task<MathPlane3DMeshOutcome?>>? _meshExportRequested;
+
+    private bool _isExportingMesh;
+    /// <summary>True while an export runs.</summary>
+    public bool IsExportingMesh
+    {
+        get => _isExportingMesh;
+        private set { this.RaiseAndSetIfChanged(ref _isExportingMesh, value); this.RaisePropertyChanged(nameof(CanExportMesh)); }
+    }
+
+    /// <summary>True when the scene has a visible surface to export.</summary>
+    public bool HasVisibleSurface => _scene.Objects.Any(o => o.Visible && o.Kind == MathPlaneObjectKind.Surface);
+
+    /// <summary>The Export mesh button is enabled.</summary>
+    public bool CanExportMesh => _meshExportRequested != null && !_isExportingMesh && HasVisibleSurface;
+
+    private string? _meshMessage;
+    /// <summary>The last export's result line (neutral).</summary>
+    public string? MeshMessage { get => _meshMessage; private set => this.RaiseAndSetIfChanged(ref _meshMessage, value); }
+
+    private string? _meshWarning;
+    /// <summary>The last export's problem (yellow).</summary>
+    public string? MeshWarning { get => _meshWarning; private set => this.RaiseAndSetIfChanged(ref _meshWarning, value); }
+
+    private async Task ExportMeshAsync()
+    {
+        if (!CanExportMesh || _meshExportRequested is not { } export) return;
+        IsExportingMesh = true;
+        MeshWarning = null;
+        MeshMessage = "Building the mesh...";
+        try
+        {
+            var outcome = await export();
+            if (outcome == null) { MeshMessage = null; return; }
+            MeshMessage = outcome.Ok ? outcome.Message : null;
+            MeshWarning = outcome.Ok ? null : outcome.Message;
+        }
+        catch (Exception ex)
+        {
+            MeshMessage = null;
+            MeshWarning = "Mesh export failed: " + ex.Message;
+        }
+        finally { IsExportingMesh = false; }
+    }
 
     private FractalParameters P => _view.FractalParameters;
 
@@ -454,6 +513,10 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
         _selectedIndex = -2;   // force the setter to reload
         SelectedIndex = idx;
         RaiseDisplay();
+        // #1718 — every scene change (an add, a delete, a hide, a region recall) can change
+        // whether there is a surface to export; the button binds to the notification.
+        this.RaisePropertyChanged(nameof(HasVisibleSurface));
+        this.RaisePropertyChanged(nameof(CanExportMesh));
     }
 
     /// <summary>Write <paramref name="scene"/> if it re-parses (the parser's error otherwise).</summary>
@@ -707,3 +770,6 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
         return o.Visible ? body : body + "  [hidden]";
     }
 }
+
+/// <summary>#1718 — what a mesh export did: Ok with the summary, or the problem.</summary>
+public sealed record MathPlane3DMeshOutcome(bool Ok, string Message);
