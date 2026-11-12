@@ -71,6 +71,7 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
         PlayCommand = ReactiveCommand.Create(TogglePlay);
         ResetViewCommand = ReactiveCommand.Create(ResetView);
         ExportMeshCommand = ReactiveCommand.CreateFromTask(ExportMeshAsync);
+        LoadDemoCommand = ReactiveCommand.Create(() => { if (_selectedDemo is { } d) LoadDemo(d); });
         Refresh();
     }
 
@@ -88,6 +89,40 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
     public ReactiveCommand<MathPlane3DSceneEdit.MapPreset, Unit> ApplyPresetCommand { get; }
     public ReactiveCommand<Unit, Unit> PlayCommand { get; }
     public ReactiveCommand<Unit, Unit> ResetViewCommand { get; }
+
+    // ── #1719: demos ──
+
+    /// <summary>The built-in demos (read-only).</summary>
+    public IReadOnlyList<MathPlane3DPreset> Demos => MathPlane3DPresets.All;
+
+    /// <summary>Load the selected demo into the view.</summary>
+    public ReactiveCommand<Unit, Unit> LoadDemoCommand { get; }
+
+    private MathPlane3DPreset? _selectedDemo;
+    public MathPlane3DPreset? SelectedDemo
+    {
+        get => _selectedDemo;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _selectedDemo, value);
+            this.RaisePropertyChanged(nameof(DemoIdea));
+        }
+    }
+
+    /// <summary>What the selected demo shows.</summary>
+    public string DemoIdea => _selectedDemo?.Idea ?? "Pick a demo: each one shows one idea behind the 3D fractals.";
+
+    /// <summary>Load <paramref name="d"/> into the live view: scene, map, t, camera and zoom.
+    /// The built-in itself never changes.</summary>
+    public void LoadDemo(MathPlane3DPreset d)
+    {
+        StopPlay();
+        d.Apply(P);
+        _view.Zoom = d.Zoom;
+        EditError = null;
+        Refresh();
+        _trigger();
+    }
 
     // ── #1718: mesh export ──
 
