@@ -587,6 +587,9 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
 
     private MathPlane3DHandle? _drag;
     private (double X, double Y, double Z) _dragStart;
+    private (int X, int Y) _dragFrom;
+    private int _lockAxis = -1;              // Alt axis lock: 0 = x, 1 = y, 2 = z, -1 = not chosen
+    private const int AxisLockDeadZonePx = 4;
     private bool _orbiting;
     private (int X, int Y) _orbitFrom;
     private (double Theta, double Phi) _orbitStart;
@@ -606,6 +609,8 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
         {
             _drag = h;
             _dragStart = MathPlane3DSceneEdit.HandlePosition(_scene.Objects[h.ObjectIndex], h.Point);
+            _dragFrom = (e.X, e.Y);
+            _lockAxis = -1;
             SelectedIndex = h.ObjectIndex;
             return true;
         }
@@ -627,10 +632,23 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
         }
         if (_drag is not { } h || !Editing || h.ObjectIndex >= _scene.Objects.Count) return;
         bool snap = (e.Modifiers & InputModifiers.Shift) != 0, axis = (e.Modifiers & InputModifiers.Alt) != 0;
-        if (MathPlane3DSceneEdit.DragTo(Camera(e), CurrentMap, _dragStart, e.X + 0.5, e.Y + 0.5, snap, axis) is not { } at) return;
+        var cam = Camera(e);
+        if (!axis) _lockAxis = -1;
+        else if (_lockAxis < 0)
+        {
+            // Pick the axis once, when the pointer leaves the dead zone, and keep it while Alt
+            // is held; re-picking every move hops the handle between the three axis lines.
+            int mx = e.X - _dragFrom.X, my = e.Y - _dragFrom.Y;
+            if (mx * mx + my * my < AxisLockDeadZonePx * AxisLockDeadZonePx) return;
+            if (MathPlane3DSceneEdit.DragTo(cam, CurrentMap, _dragStart, e.X + 0.5, e.Y + 0.5) is not { } free) return;
+            _lockAxis = MathPlane3DSceneEdit.DominantAxis(_dragStart, free);
+            if (_lockAxis < 0) return;
+        }
+        if (MathPlane3DSceneEdit.DragTo(cam, CurrentMap, _dragStart, e.X + 0.5, e.Y + 0.5, snap, axis, _lockAxis) is not { } at) return;
         CommitDrag(MathPlane3DSceneEdit.MoveHandle(_scene, h, at.X, at.Y, at.Z), h.ObjectIndex);
         string N(double v) => MathPlaneSectionViewModel.Num(v);
-        PointerReadout = $"{_scene.Objects[h.ObjectIndex].Name}: ({N(at.X)}, {N(at.Y)}, {N(at.Z)})";
+        string locked = axis ? $"  [{"xyz"[_lockAxis]} only]" : "";
+        PointerReadout = $"{_scene.Objects[h.ObjectIndex].Name}: ({N(at.X)}, {N(at.Y)}, {N(at.Z)}){locked}";
     }
 
     public void OnPointerUp(PointerInput e) { _drag = null; _orbiting = false; }

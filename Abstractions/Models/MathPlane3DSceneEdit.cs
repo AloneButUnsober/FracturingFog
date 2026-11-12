@@ -91,6 +91,15 @@ namespace FracturingFog.Models
 
         /// <summary>The grid step to snap to at view depth <paramref name="depth"/>: the 2D
         /// editor's minor step for the visible width there.</summary>
+        /// <summary>The axis (0 = x, 1 = y, 2 = z) along which <paramref name="to"/> differs most
+        /// from <paramref name="from"/>; -1 when they are equal.</summary>
+        public static int DominantAxis((double X, double Y, double Z) from, (double X, double Y, double Z) to)
+        {
+            double ax = Math.Abs(to.X - from.X), ay = Math.Abs(to.Y - from.Y), az = Math.Abs(to.Z - from.Z);
+            if (ax == 0 && ay == 0 && az == 0) return -1;
+            return ax >= ay && ax >= az ? 0 : ay >= az ? 1 : 2;
+        }
+
         public static double SnapStep(MathPlane3DCamera cam, double depth)
             => MathPlaneSceneEdit.MinorStep(depth * cam.Width / cam.Focal);
 
@@ -98,10 +107,12 @@ namespace FracturingFog.Models
         /// where the drag began) reaches at screen point (<paramref name="px"/>, <paramref name="py"/>):
         /// on the camera-facing plane through its drawn place, back through the map. Shift
         /// (<paramref name="snap"/>) rounds each coordinate to the grid; Alt
-        /// (<paramref name="axisLock"/>) keeps only the largest change. Null when the map is
-        /// singular or the plane is behind the camera.</summary>
+        /// (<paramref name="axisLock"/>) keeps only one coordinate's change: axis
+        /// <paramref name="lockAxis"/> (0 = x, 1 = y, 2 = z) when given, else the largest change.
+        /// Null when the map is singular or the plane is behind the camera.</summary>
         public static (double X, double Y, double Z)? DragTo(MathPlane3DCamera cam, Mat3 map, (double X, double Y, double Z) start,
-                                                             double px, double py, bool snap = false, bool axisLock = false)
+                                                             double px, double py, bool snap = false, bool axisLock = false,
+                                                             int lockAxis = -1)
         {
             var drawn = map.Apply(start);
             if (OnViewPlane(cam, drawn, px, py) is not { } w) return null;
@@ -111,10 +122,9 @@ namespace FracturingFog.Models
             else return null;
             if (axisLock)
             {
-                double dx = s.X - start.X, dy = s.Y - start.Y, dz = s.Z - start.Z;
-                double ax = Math.Abs(dx), ay = Math.Abs(dy), az = Math.Abs(dz);
-                s = ax >= ay && ax >= az ? (s.X, start.Y, start.Z)
-                  : ay >= az ? (start.X, s.Y, start.Z)
+                int a = lockAxis is >= 0 and <= 2 ? lockAxis : DominantAxis(start, s);
+                s = a == 0 ? (s.X, start.Y, start.Z)
+                  : a == 1 ? (start.X, s.Y, start.Z)
                   : (start.X, start.Y, s.Z);
             }
             if (snap)
