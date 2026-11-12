@@ -260,8 +260,17 @@ namespace FracturingFog.Hosting
             var m = InputModifiers.None;
             if ((f & MK_SHIFT) != 0)   m |= InputModifiers.Shift;
             if ((f & MK_CONTROL) != 0) m |= InputModifiers.Control;
+            // Mouse-message wParam has no Alt bit (MK_* covers Shift/Control only), so read the
+            // key state queued with this message. Without it Alt-drag axis lock (#1716) and
+            // Alt+double-click focus pick never saw Alt on the native render window.
+            if ((GetKeyState(VK_MENU) & 0x8000) != 0) m |= InputModifiers.Alt;
             return m;
         }
+
+        private const int VK_MENU = 0x12;
+
+        [DllImport("user32.dll")]
+        private static extern short GetKeyState(int nVirtKey);
 
         private static void GetClientSize(IntPtr h, out int w, out int hgt)
         {
