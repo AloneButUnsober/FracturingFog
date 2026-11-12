@@ -5285,6 +5285,44 @@ quotes from cmd / PowerShell); --math-overlay RE,IM[,STEPS].
 Sources: Docs/Resources-Bibliography.md.
 ";
 
+        // #1719 — Math Plane 3D (render mode + demos). Full guide: Docs/User/MathPlane3D-Guide.md.
+        public const string MathPlane3DText =
+@"=== Math Plane 3D ===
+
+Space with a z axis, for the ideas behind the 3D fractals:
+points, vectors, curves and surfaces, and 3x3 matrices acting
+on them. Not a CAD tool or a modeller. Control Center -> Math
+Plane 3D.
+
+Demos (top of the section) load a built-in example; each names
+the one idea it shows. Built-ins never change. Rotations about
+x, y and z (polar vs linear frames at t = 1/2), the KIFS fold
+as a reflection (det -1), the Mandelbox's scale step (det 8),
+det as the volume of the cube's image, a saddle z = x^2 - y^2
+and a parametric torus.
+
+Objects: + Point / Vector / Segment / Polyline / Curve /
+Surface (z = f(x, y)) / Implicit (F(x, y, z) = 0, marching
+cubes). Drag a handle to move it (Shift snaps, Alt keeps one
+axis); left-drag on empty space orbits; Delete removes.
+
+Map: the 3x3 matrix (columns = where i, j and k land), t from
+identity (0) to M (1), Play / Loop, Linear or Polar frames
+(polar keeps a rotation rigid), det (the unit cube's image),
+eigenvectors and lengths. The grid-of-space look follows
+3Blue1Brown's Essence of linear algebra (Grant Sanderson).
+
+Camera: orbit with left-drag on empty space or right-drag,
+wheel to zoom, Reset view for the default orbit.
+
+Export: Export mesh... saves the visible surfaces, as the view
+shows them, as .glb / .gltf (colours) or .stl (for printing).
+
+Batch: every setting is a --param (MathPlane3DScene=@file keeps
+the quotes from cmd / PowerShell); --math-plane-3d-mesh PATH
+also writes the mesh. Sources: Docs/Resources-Bibliography.md.
+";
+
         public const string MathMirrorSpheresText =
 @"=== Wada Mirror Spheres ===
 

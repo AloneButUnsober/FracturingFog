@@ -72,11 +72,14 @@ on record — see [Corrected attributions](#corrected-attributions).
 - **Paul Nylander.** *Hypercomplex fractals* gallery and notes.
   <https://www.bugman123.com/Hypercomplex/>. Companion to White's Mandelbulb explorations.
 - **Tom Lowe.** *The Mandelbox* ("Amazing Fractal" thread), fractalforums.com, 2010. Box fold +
-  sphere fold + scale — the Mandelbox family.
+  sphere fold + scale — the Mandelbox family. Also the Math Plane 3D demo "Uniform scale: the
+  Mandelbox step" (#1719), which shows the scale step z → s·z on its own (det s³).
 - **Knighty.** *Kaleidoscopic (escape time) IFS*, fractalforums.com, 2010.
   <http://www.fractalforums.com/3d-fractal-generation/kaleidoscopic-%28escape-time-ifs%29/>. The
   KIFS fold scheme (sort-3 Menger, Octahedron, Dodecahedron folds; #1197), and the rotated
-  pseudo-Kleinian DE used by the Kleinian family.
+  pseudo-Kleinian DE used by the Kleinian family. Also the Math Plane 3D demo "KIFS fold: a
+  reflection" (#1719), which shows FF's Sierpinski fold (`KifsCalculator.SierpDE`) as a reflection
+  matrix with det −1.
 - **Amoser.** *Complex sine 3D formula* (fractalforums.org, topic 5591; login-walled, content from a
   user paste). <https://fractalforums.org/index.php?topic=5591.0>. Origin of the non-escaping DE work
   (`Docs/Technical/NonEscaping-DE-DevPlan.md`, #279).
