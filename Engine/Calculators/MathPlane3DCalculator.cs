@@ -156,9 +156,10 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
     /// <summary>#1717 — the number of marching-cubes runs so far (tests check that a mesh is reused).</summary>
     public int ImplicitBuilds { get; private set; }
 
-    // What an implicit mesh depends on: F, the box and the resolution.
+    // What an implicit (or #1731 fractal) mesh depends on: the kind, F or the fractal's type and
+    // settings, the box and the resolution.
     private static string ImplicitKey(MathPlaneObject o)
-        => string.Join('\u0001', o.Expressions) + "\u0002" + string.Join(",", o.Coords.Select(c => c.ToString("R", System.Globalization.CultureInfo.InvariantCulture)))
+        => o.CurveKind + "\u0003" + string.Join('\u0001', o.Expressions) + "\u0002" + string.Join(",", o.Coords.Select(c => c.ToString("R", System.Globalization.CultureInfo.InvariantCulture)))
            + "\u0002" + MathPlane3DScene.MeshOf(o);
 
     public MathPlane3DCalculator(int width, int height) => Resize(width, height);
@@ -194,9 +195,10 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
             var curves = new Dictionary<MathPlaneObject, List<List<(double X, double Y, double Z)>>>(ReferenceEqualityComparer.Instance);
             var implicits = new Dictionary<MathPlaneObject, MathPlane3DImplicitMesh>(ReferenceEqualityComparer.Instance);
             var implicitByGeometry = new Dictionary<string, MathPlane3DImplicitMesh>(StringComparer.Ordinal);
+            string? fractalError = null;
             foreach (var o in parsed.Objects)
             {
-                if (o.Kind == MathPlaneObjectKind.Surface && o.CurveKind == MathPlaneCurveKind.Implicit)
+                if (o.Kind == MathPlaneObjectKind.Surface && o.CurveKind is MathPlaneCurveKind.Implicit or MathPlaneCurveKind.Fractal)
                 {
                     // #1717 — marching cubes is the costly part, so a mesh is kept while its
                     // geometry is unchanged (an edit to another object, a colour, a name).
@@ -204,7 +206,13 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
                     if (!implicitByGeometry.TryGetValue(key, out var im)
                         && !_implicitByGeometry.TryGetValue(key, out im))
                     {
-                        im = MathPlane3DImplicitMesher.Build(o, ct);
+                        // #1731 — a fractal is meshed from its distance estimate; bad settings are a scene error.
+                        if (o.CurveKind == MathPlaneCurveKind.Fractal)
+                        {
+                            im = MathPlane3DFractalMesher.Build(o, out string? ferr, ct);
+                            if (ferr != null) fractalError ??= ferr;
+                        }
+                        else im = MathPlane3DImplicitMesher.Build(o, ct);
                         ImplicitBuilds++;
                     }
                     if (im is null) continue;
@@ -214,6 +222,7 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
                 else if (o.Kind == MathPlaneObjectKind.Surface && BuildSurface(o) is { } m) meshes[o] = m;
                 else if (o.Kind == MathPlaneObjectKind.Curve) curves[o] = SampleCurve(o);
             }
+            if (LastSceneError == null && fractalError != null) LastSceneError = new MathPlaneSceneError(0, 0, fractalError);
             // Committed only when every mesh is built, so a cancelled render re-meshes next time.
             (_scene, _meshes, _curves, _implicits, _implicitByGeometry) = (parsed, meshes, curves, implicits, implicitByGeometry);
             _parsedText = text;

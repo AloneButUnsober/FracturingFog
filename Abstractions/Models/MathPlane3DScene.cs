@@ -33,6 +33,12 @@
 //   eigen on|off     the real eigenvectors as lines through the origin, with eigenvalues
 //   lengths on|off   vector lengths after the map
 // Design: Docs/Technical/MathPlane3D-DesignPlan.md §3.2.
+//
+// #1731 (fractal bridge B1) adds a 3D fractal as a surface, meshed from its distance estimate:
+//   fractal NAME TYPE [KEY=VALUE ...] [options] [mesh N]
+// TYPE is a mesh-exportable 3D type (MeshExportCapabilities). KEY=VALUE are --param keys (the
+// region snapshot's), checked by the Engine when the mesh is built; values have no spaces,
+// quotes, ';' or a leading '@' / '#'. Design: Docs/Technical/MathPlane3D-FractalBridge-DesignPlan.md §3.1.
 
 using System;
 using System.Collections.Generic;
@@ -146,6 +152,8 @@ namespace FracturingFog.Models
 
         private static string SerializeObject(MathPlaneObject o)
         {
+            if (o.Kind == MathPlaneObjectKind.Surface && o.CurveKind == MathPlaneCurveKind.Fractal)
+                return SerializeFractal(o);
             var sb = new StringBuilder(o.Kind.ToString().ToLowerInvariant()).Append(' ').Append(o.Name);
             if (o.Kind == MathPlaneObjectKind.Surface)
                 sb.Append(' ').Append(o.CurveKind switch
@@ -167,6 +175,54 @@ namespace FracturingFog.Models
             if (!o.ShowLabel) sb.Append(" nolabel");
             if (o.Mesh > 0) sb.Append(" mesh ").Append(o.Mesh.ToString(Inv));
             return sb.ToString();
+        }
+
+        /// <summary>#1731 — <c>fractal NAME TYPE KEY=VALUE ... options</c> (no quotes).</summary>
+        private static string SerializeFractal(MathPlaneObject o)
+        {
+            var sb = new StringBuilder("fractal ").Append(o.Name);
+            foreach (var src in o.Expressions) sb.Append(' ').Append(src);
+            uint a = o.Color >> 24;
+            sb.Append(" #").Append((o.Color & 0xFFFFFF).ToString("X6", Inv));
+            if (a != 0xFF) sb.Append(a.ToString("X2", Inv));
+            if (!o.Visible) sb.Append(" hidden");
+            if (!o.ShowLabel) sb.Append(" nolabel");
+            if (o.Mesh > 0) sb.Append(" mesh ").Append(o.Mesh.ToString(Inv));
+            return sb.ToString();
+        }
+
+        /// <summary>#1731 — a fractal object's type (null when it is not one).</summary>
+        public static FractalType? FractalTypeOf(MathPlaneObject o)
+            => o.Kind == MathPlaneObjectKind.Surface && o.CurveKind == MathPlaneCurveKind.Fractal && o.Expressions.Count > 0
+               && FractalTypeNames.TryParse(o.Expressions[0], true, out var t) ? t : null;
+
+        /// <summary>#1731 — a fractal object's KEY=VALUE pairs, in order.</summary>
+        public static IReadOnlyList<KeyValuePair<string, string>> FractalKeys(MathPlaneObject o)
+        {
+            var list = new List<KeyValuePair<string, string>>();
+            for (int k = 1; k < o.Expressions.Count; k++)
+            {
+                string s = o.Expressions[k];
+                int eq = s.IndexOf('=');
+                if (eq > 0) list.Add(new(s[..eq], s[(eq + 1)..]));
+            }
+            return list;
+        }
+
+        /// <summary>#1731 — the types a fractal object can be, in the menu's order.</summary>
+        public static IReadOnlyList<FractalType> FractalTypes => MeshExportCapabilities.Types;
+
+        /// <summary>#1731 — true when <paramref name="token"/> is a KEY=VALUE pair a scene can hold.</summary>
+        public static bool IsFractalKeyToken(string token)
+        {
+            int eq = token.IndexOf('=');
+            if (eq <= 0 || eq == token.Length - 1 || !char.IsLetter(token[0])) return false;
+            for (int k = 0; k < eq; k++) if (!char.IsLetterOrDigit(token[k])) return false;
+            char v0 = token[eq + 1];
+            if (v0 is '@' or '#') return false;
+            for (int k = eq + 1; k < token.Length; k++)
+                if (token[k] is '"' or ';' or '=' || char.IsWhiteSpace(token[k])) return false;
+            return true;
         }
 
         // ── Parse ────────────────────────────────────────────────────────────
@@ -258,10 +314,12 @@ namespace FracturingFog.Models
                     case "polyline":
                     case "curve":
                     case "surface":
+                    case "fractal":
                     {
                         MathPlaneObject? obj; int badTok; string msg;
                         bool ok = head == "curve" ? TryCurve(toks, objects.Count, out obj, out badTok, out msg)
                                 : head == "surface" ? TrySurface(toks, objects.Count, out obj, out badTok, out msg)
+                                : head == "fractal" ? TryFractal(toks, objects.Count, out obj, out badTok, out msg)
                                 : TryObject(head, toks, objects.Count, out obj, out badTok, out msg);
                         if (!ok) { error = Err(badTok, msg); return false; }
                         if (!names.Add(obj!.Name)) { error = Err(1, $"name '{obj.Name}' is already used"); return false; }
@@ -269,7 +327,7 @@ namespace FracturingFog.Models
                         break;
                     }
                     default:
-                        error = Err(0, $"unknown statement '{toks[0].Text}' (expected point, vector, segment, polyline, curve, surface, axes, grid, fill, shading, ticks, labels, det, eigen or lengths)");
+                        error = Err(0, $"unknown statement '{toks[0].Text}' (expected point, vector, segment, polyline, curve, surface, fractal, axes, grid, fill, shading, ticks, labels, det, eigen or lengths)");
                         return false;
                 }
             }
@@ -441,6 +499,38 @@ namespace FracturingFog.Models
                                       CurveKind: param ? MathPlaneCurveKind.Parametric
                                                : implicitF ? MathPlaneCurveKind.Implicit : MathPlaneCurveKind.Explicit,
                                       Sources: sources, Mesh: mesh);
+            return true;
+        }
+
+        /// <summary>#1731 — <c>fractal NAME TYPE [KEY=VALUE ...] [options] [mesh N]</c>.</summary>
+        private static bool TryFractal(List<(string Text, int Col)> toks, int index,
+                                       out MathPlaneObject? obj, out int badTok, out string msg)
+        {
+            obj = null; badTok = 0; msg = "";
+            if (toks.Count < 2 || !MathPlaneScene.IsName(toks[1].Text))
+            { badTok = 1; msg = "'fractal' needs a name (letters, digits, '_', optional trailing ')"; return false; }
+            string typeList = string.Join(", ", FractalTypes);
+            if (toks.Count < 3 || !FractalTypeNames.TryParse(toks[2].Text, true, out var type)
+                || !MeshExportCapabilities.IsMeshExportable(type))
+            { badTok = Math.Min(2, toks.Count - 1); msg = $"'fractal' needs a 3D type: {typeList}"; return false; }
+            var sources = new List<string> { type.ToString() };
+            var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int i = 3;
+            for (; i < toks.Count && toks[i].Text.Contains('='); i++)
+            {
+                string t = toks[i].Text;
+                if (!IsFractalKeyToken(t))
+                { badTok = i; msg = "a fractal setting is KEY=VALUE, e.g. BulbPower=8 (no spaces, quotes or ';')"; return false; }
+                string key = t[..t.IndexOf('=')];
+                if (!keys.Add(key)) { badTok = i; msg = $"'{key}' is given twice"; return false; }
+                if (key.StartsWith("Cam3D", StringComparison.OrdinalIgnoreCase) || key.StartsWith("MathPlane", StringComparison.OrdinalIgnoreCase))
+                { badTok = i; msg = $"'{key}' is a view setting, not one of the fractal's"; return false; }
+                sources.Add(t);
+            }
+            if (!TryOptions(toks, i, index, allowMesh: true, out uint color, out bool visible, out bool label, out int mesh, out badTok, out msg))
+                return false;
+            obj = new MathPlaneObject(MathPlaneObjectKind.Surface, toks[1].Text, Array.Empty<double>(), color, visible, label,
+                                      CurveKind: MathPlaneCurveKind.Fractal, Sources: sources, Mesh: mesh);
             return true;
         }
 

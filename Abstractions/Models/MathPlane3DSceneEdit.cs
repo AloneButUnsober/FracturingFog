@@ -203,7 +203,7 @@ namespace FracturingFog.Models
         }
 
         /// <summary>The kinds the Add buttons make (a curve is a space curve; a surface is z = f(x, y)).</summary>
-        public enum AddKind { Point, Vector, Segment, Polyline, Curve, Surface, Implicit }
+        public enum AddKind { Point, Vector, Segment, Polyline, Curve, Surface, Implicit, Fractal }
 
         /// <summary>A new object of <paramref name="kind"/> near <paramref name="at"/>, sized
         /// <paramref name="size"/>, with a fresh name and the next palette colour.</summary>
@@ -226,6 +226,9 @@ namespace FracturingFog.Models
                 // #1717 — an implicit surface starts as the unit sphere.
                 AddKind.Implicit => new(MathPlaneObjectKind.Surface, "", Array.Empty<double>(), color,
                                         CurveKind: MathPlaneCurveKind.Implicit, Sources: new[] { "x^2 + y^2 + z^2 - 1" }),
+                // #1731 — a fractal starts as the power-8 Mandelbulb (its defaults).
+                AddKind.Fractal => new(MathPlaneObjectKind.Surface, "", Array.Empty<double>(), color,
+                                       CurveKind: MathPlaneCurveKind.Fractal, Sources: new[] { nameof(FractalType.Mandelbulb) }),
                 _ => new(MathPlaneObjectKind.Surface, "", Array.Empty<double>(), color,
                          CurveKind: MathPlaneCurveKind.Explicit, Sources: new[] { "0.5*sin(x)*cos(y)" }),
             };

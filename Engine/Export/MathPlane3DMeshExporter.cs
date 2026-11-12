@@ -14,6 +14,7 @@
 //     two triangles a cell, wound as the render winds them, over shared grid vertices, so a
 //     full grid is one connected, consistently oriented sheet.
 //   - Implicit surfaces: the marching-cubes mesh of MathPlane3DImplicitMesher (outward).
+//   - Fractal surfaces (#1731): MathPlane3DFractalMesher's distance-estimate mesh.
 //   - A map with det < 0 mirrors space, which would turn every face inside out; the
 //     winding is reversed then, so a closed surface still faces outward.
 //   - Normals: area-weighted per-vertex sums of the mapped triangles' normals (glTF).
@@ -101,9 +102,12 @@ public static class MathPlane3DMeshExporter
             ct.ThrowIfCancellationRequested();
             if (!o.Visible || o.Kind != MathPlaneObjectKind.Surface) continue;
             int before = mesh.Triangles.Count;
-            if (o.CurveKind == MathPlaneCurveKind.Implicit)
+            if (o.CurveKind is MathPlaneCurveKind.Implicit or MathPlaneCurveKind.Fractal)
             {
-                if (MathPlane3DImplicitMesher.Build(o, ct) is not { } im) continue;
+                var im = o.CurveKind == MathPlaneCurveKind.Fractal
+                    ? MathPlane3DFractalMesher.Build(o, out _, ct)   // #1731
+                    : MathPlane3DImplicitMesher.Build(o, ct);
+                if (im is null) continue;
                 int b = mesh.Positions.Count;
                 foreach (var v in im.Vertices) { mesh.Positions.Add(map.Apply(v)); mesh.Colors.Add(o.Color); }
                 foreach (var (a, c, d) in im.Triangles) Add(mesh, b + a, b + c, b + d, mirror);

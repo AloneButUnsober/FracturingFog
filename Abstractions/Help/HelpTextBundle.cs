@@ -5303,8 +5303,11 @@ and a parametric torus.
 
 Objects: + Point / Vector / Segment / Polyline / Curve /
 Surface (z = f(x, y)) / Implicit (F(x, y, z) = 0, marching
-cubes). Drag a handle to move it (Shift snaps, Alt keeps one
-axis); left-drag on empty space orbits; Delete removes.
+cubes) / Fractal (a 3D fractal meshed from its distance
+estimate; pick the type, settings are --param keys such as
+BulbPower=6). Drag a handle to move it (Shift snaps, Alt
+keeps one axis); left-drag on empty space orbits; Delete
+removes.
 
 Map: the 3x3 matrix (columns = where i, j and k land), t from
 identity (0) to M (1), Play / Loop, Linear or Polar frames
