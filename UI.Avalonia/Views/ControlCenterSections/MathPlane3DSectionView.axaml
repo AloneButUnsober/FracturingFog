@@ -172,6 +172,20 @@
                 </StackPanel>
             </Border>
 
+            <!-- Mesh export (#1718) -->
+            <Border Classes="group">
+                <StackPanel Spacing="6">
+                    <TextBlock Classes="section" Text="Export" />
+                    <Button Classes="action neutral" Content="Export mesh..." Command="{Binding ExportMeshCommand}"
+                            IsEnabled="{Binding CanExportMesh}" HorizontalAlignment="Left"
+                            ToolTip.Tip="Save the visible surfaces, as the view shows them (after the map at the current t): .glb / .gltf with the surface colours, or .stl for printing" />
+                    <TextBlock Text="{Binding MeshMessage}" Foreground="#B4B4B4" TextWrapping="Wrap"
+                               IsVisible="{Binding MeshMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    <TextBlock Text="{Binding MeshWarning}" Foreground="#FFCC00" TextWrapping="Wrap"
+                               IsVisible="{Binding MeshWarning, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                </StackPanel>
+            </Border>
+
             <!-- Raw scene text -->
             <Border Classes="group">
                 <StackPanel Spacing="4">

@@ -294,6 +294,12 @@ namespace FracturingFog.Batch
                 Console.WriteLine("  note    : --audio / --audio-bind / --audio-preset drive a video (--mode video); a still renders the settings' own values.");
 
             EnsureDirectoryForFile(outPath);
+            // #1718 — the mesh is of a Math Plane 3D scene only; refuse before the render.
+            if (opts.MathPlane3DMesh != null && frType != FractalType.MathPlane3D)
+            {
+                Console.Error.WriteLine($"batch: {BatchFlags.MathPlane3DMesh} needs the Math Plane 3D type (--fractal MathPlane3D); this render is {frType}.");
+                return 2;
+            }
 
             FracturingFog.Imaging.ImageFileFormat format = GuessImageFormat(outPath);
 
@@ -529,6 +535,22 @@ namespace FracturingFog.Batch
             {
                 spinner.Stop("FAILED");
                 throw;
+            }
+            // #1718 — the scene's surfaces as a mesh, from the same parameters.
+            if (opts.MathPlane3DMesh != null && req.FractalParameters is { } mfp)
+            {
+                EnsureDirectoryForFile(opts.MathPlane3DMesh);
+                try
+                {
+                    var mesh = FracturingFog.Export.MathPlane3DMeshExporter.Export(opts.MathPlane3DMesh, mfp, CancellationToken.None);
+                    Console.WriteLine($"  mesh    : {opts.MathPlane3DMesh}");
+                    Console.WriteLine($"            {mesh.Summary}");
+                }
+                catch (InvalidOperationException meshErr)
+                {
+                    Console.Error.WriteLine($"batch: {BatchFlags.MathPlane3DMesh}: {meshErr.Message}");
+                    return 2;
+                }
             }
             return 0;
         }

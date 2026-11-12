@@ -724,16 +724,18 @@ public static class UserBulbMeshExporter
         }
     }
 
-    private static void WriteStlBinary(
+    // #1718: shared with the Math Plane 3D exporter (its own header tag).
+    internal static void WriteStlBinary(
         string filePath,
-        List<(double X, double Y, double Z)> verts,
-        List<(int A, int B, int C)> tris)
+        IReadOnlyList<(double X, double Y, double Z)> verts,
+        IReadOnlyList<(int A, int B, int C)> tris,
+        string headerTag = "FracturingFog UserBulb MC")
     {
         using var fs = File.Create(filePath);
         using var bw = new BinaryWriter(fs);
         // 80-byte header.
         var header = new byte[80];
-        var tag = System.Text.Encoding.ASCII.GetBytes("FracturingFog UserBulb MC");
+        var tag = System.Text.Encoding.ASCII.GetBytes(headerTag);
         Buffer.BlockCopy(tag, 0, header, 0, Math.Min(tag.Length, 80));
         bw.Write(header);
         bw.Write((uint)tris.Count);

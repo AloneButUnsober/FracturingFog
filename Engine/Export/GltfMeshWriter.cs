@@ -29,6 +29,8 @@ using System.Text;
 
 namespace FracturingFog.Export;
 
+// Format: Khronos glTF 2.0 Specification (Docs/Resources-Bibliography.md#khronos-gltf-2).
+
 /// <summary>Self-contained glTF 2.0 (.glb / .gltf) writer with a PBR
 /// metallic-roughness material and optional per-vertex COLOR_0 (roadmap S9.4,
 /// #391).</summary>

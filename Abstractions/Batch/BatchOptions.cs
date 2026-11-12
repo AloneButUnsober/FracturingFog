@@ -188,6 +188,14 @@ namespace FracturingFog.Batch
         /// live view's math overlay does. Null = off.</summary>
         public FracturingFog.ViewState.MathOverlaySpec? MathOverlay { get; set; }
 
+        /// <summary>#1718 — <c>--math-plane-3d-mesh PATH</c>: also write the Math Plane 3D
+        /// scene's visible surfaces, after the map at the current t, as a mesh
+        /// (.glb / .gltf / .stl). Null = off.</summary>
+        public string? MathPlane3DMesh { get; set; }
+
+        /// <summary>#1718 — the file types <see cref="MathPlane3DMesh"/> writes.</summary>
+        public static readonly string[] MathPlane3DMeshExtensions = { ".glb", ".gltf", ".stl" };
+
         // Keep PNG frame folder after successful video encode. Defaults to false
         // when --lossless is used (frames are intermediate), true otherwise.
         public bool KeepFrames { get; set; }
@@ -860,6 +868,11 @@ namespace FracturingFog.Batch
                         opts.MathOverlay = mo;
                         break;
                     }
+
+                    case BatchFlags.MathPlane3DMesh:   // #1718
+                        if (!Next(args, ref i, a, out string m3p, out error)) return false;
+                        opts.MathPlane3DMesh = m3p;
+                        break;
 
                     case BatchFlags.Verbose:
                     case "-v":
@@ -2015,6 +2028,9 @@ namespace FracturingFog.Batch
                 { error = $"--qr-relief-height must be {QrCodeOptions.MinReliefHeight}..{QrCodeOptions.MaxReliefHeight}."; return false; }
             if (opts.QrReliefTerrain is < 0 or > 1)
                 { error = "--qr-relief-terrain must be 0..1."; return false; }
+            if (opts.MathPlane3DMesh != null
+                && System.Array.IndexOf(MathPlane3DMeshExtensions, System.IO.Path.GetExtension(opts.MathPlane3DMesh).ToLowerInvariant()) < 0)
+                { error = "--math-plane-3d-mesh must be a .glb, .gltf or .stl path."; return false; }
             if (opts.QrMesh != null)
             {
                 string mext = System.IO.Path.GetExtension(opts.QrMesh).ToLowerInvariant();

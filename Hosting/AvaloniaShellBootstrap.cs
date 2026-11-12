@@ -3047,6 +3047,9 @@ namespace FracturingFog.Hosting
                 cc.QrCode.HooksAttached();
             };
 
+            // #1718 — Math Plane 3D mesh export (Control Center > Math Plane 3D > Export).
+            shell.MathPlane3D.MeshExportRequested = () => ExportMathPlane3DMeshAsync(shell);
+
             // #493 — a region jump mutates FractalParameters in place; refresh any
             // open param-editor windows so Relief 3D / Lighting & FX / Fractal
             // Params reflect the region's saved settings instead of stale values.
@@ -5016,6 +5019,34 @@ namespace FracturingFog.Hosting
         /// (same framing as Export QR Image): pick a path, render the display buffer,
         /// build + write the mesh, and report the watertight check and the top-down
         /// scan. Null = the save dialog was cancelled.</summary>
+        // #1718 — pick a path and write the Math Plane 3D scene's surfaces through the S9 writers.
+        private static async Task<FracturingFog.UI.Avalonia.ViewModels.MathPlane3DMeshOutcome?> ExportMathPlane3DMeshAsync(
+            ShellViewModel shell)
+        {
+            string? path = await AvaloniaDialogs.PickSaveFileAsync(
+                "Save Math Plane 3D Mesh",
+                suggestedName: BuildSuggestedFileName("glb", suffix: "_mesh"),
+                filter: "glTF binary, colour (*.glb)|*.glb|glTF text, colour (*.gltf)|*.gltf|STL, geometry (*.stl)|*.stl");
+            if (string.IsNullOrEmpty(path)) return null;
+            if (!global::FracturingFog.Export.MathPlane3DMeshExporter.IsSupportedPath(path)) path += ".glb";
+
+            // A copy, so the export reads one consistent scene and map while the view goes on.
+            var fp = shell.Main.ViewState.FractalParameters.Clone();
+            var busy = shell.BeginRenderBusy("Building the mesh...");
+            try
+            {
+                var result = await Task.Run(() =>
+                    global::FracturingFog.Export.MathPlane3DMeshExporter.Export(path, fp, CancellationToken.None));
+                return new FracturingFog.UI.Avalonia.ViewModels.MathPlane3DMeshOutcome(true,
+                    $"Saved {System.IO.Path.GetFileName(path)}: {result.Summary}.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                return new FracturingFog.UI.Avalonia.ViewModels.MathPlane3DMeshOutcome(false, ex.Message);
+            }
+            finally { busy.Dispose(); }
+        }
+
         private static async Task<FracturingFog.UI.Avalonia.ViewModels.QrExportOutcome?> ExportQrMeshAsync(
             ShellViewModel shell, FracturingFog.Imaging.QrCodeOptions opt, int size)
         {
