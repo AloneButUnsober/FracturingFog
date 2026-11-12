@@ -53,8 +53,11 @@ using GpuRoute = FracturingFog.Render.GpuRoute;
 
 namespace FracturingFog;
 
-public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource, FracturingFog.Rendering.ILowResPreviewCalculator, FracturingFog.Rendering.IAdaptiveAaCalculator, FracturingFog.Render.IGpuRouteSource
+public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource, FracturingFog.Rendering.ILowResPreviewCalculator, FracturingFog.Rendering.IAdaptiveAaCalculator, FracturingFog.Render.IGpuRouteSource, FracturingFog.Rendering.IRaymarch3DCameraSource
 {
+    /// <summary>#1733 — the camera of the last frame (B3: overlays draw with it).</summary>
+    public FracturingFog.Rendering.Raymarch3DCamera? LastCamera { get; private set; }
+
     public int Width { get; private set; }
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
@@ -786,6 +789,7 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         // orbit target, so no NDC pan).
         var froxelView = ScreenSpacePost.Froxel3DViewOf(camX, camY, camZ, fwd.X, fwd.Y, fwd.Z,
             right.X, right.Y, right.Z, up.X, up.Y, up.Z, fovScale, 0.0, 0.0, camDist);
+        LastCamera = FracturingFog.Rendering.Raymarch3DCamera.From(froxelView, width, height);   // #1733
 
         var light = Normalize3(
             Math.Sin(FractalParameters.UserBulbLightPhi) * Math.Cos(FractalParameters.UserBulbLightTheta),

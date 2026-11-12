@@ -24,8 +24,11 @@ using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
 
-public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource, FracturingFog.Rendering.ILowResPreviewCalculator, FracturingFog.Rendering.IAdaptiveAaCalculator, FracturingFog.Render.IGpuRouteSource
+public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource, FracturingFog.Rendering.ILowResPreviewCalculator, FracturingFog.Rendering.IAdaptiveAaCalculator, FracturingFog.Render.IGpuRouteSource, FracturingFog.Rendering.IRaymarch3DCameraSource
 {
+    /// <summary>#1733 — the camera of the last frame (B3: overlays draw with it).</summary>
+    public FracturingFog.Rendering.Raymarch3DCamera? LastCamera { get; private set; }
+
     public int Width { get; private set; }
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
@@ -173,6 +176,7 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
         // eye offset, zoom lens, pan).
         var froxelView = ScreenSpacePost.Froxel3DViewOf(camX, camY, camZ, fwd[0], fwd[1], fwd[2],
             right[0], right[1], right[2], up[0], up[1], up[2], fovScale, panU, panV, camDist);
+        LastCamera = FracturingFog.Rendering.Raymarch3DCamera.From(froxelView, width, height);   // #1733
 
         double[] light = Normalize3(
             Math.Sin(FractalParameters.KifsLightPhi) * Math.Cos(FractalParameters.KifsLightTheta),
