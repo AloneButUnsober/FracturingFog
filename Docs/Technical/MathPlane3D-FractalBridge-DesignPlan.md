@@ -214,6 +214,40 @@ The two cameras differ, and this is the hard part of the epic:
   the final image, as the 2D overlay is.
 - **Colours:** Okabe-Ito, never a red/green distinction.
 
+*As built (B4, #1734):*
+- **Renderer:** `Engine/Rendering/MathOverlay3DRenderer.cs` draws onto the finished frame, with B3's
+  `LastCamera`. It draws:
+  - the axes, out to min(escape radius, 1.5 × range), which is B2's display ball;
+  - the bailout sphere's silhouette, drawn only when the escape radius is that ball. That is the tangent
+    circle, centre E·r²/|E|² and radius r·√(1 − r²/|E|²);
+  - B2's object-space orbit, clipped to the ball, plus the point and a read-out.
+- **Depth test:** each line is cut into pieces about two pixels long. A piece whose ray distance is
+  beyond the frame's depth at its pixel, plus 1e-3 + 1 % of the depth, is drawn dimmed (alpha 0xA8) and
+  dashed. A thin dark halo keeps every line readable over the texture.
+  - Consecutive pieces of the same kind share one contour, because Skia restarts a dash at every
+    `MoveTo`. Drawing each piece as its own contour made hidden lines solid; this was caught visually,
+    and a test now checks it.
+- **Depth on request (no change to the user's settings):**
+  - `IDepthAovSource.DepthRequested` is set by the host in `SyncAltStateFromMandel` while the overlay is
+    on a 3D view.
+  - Each calculator then sets the runtime-only `LightingFxData.OverlayDepth` on its own copy of the
+    block. `FromFx` does not map it, so it is never saved, and `WantsDepthOutput` honours it.
+  - Capturing depth leaves the image byte-identical, as the Fake-stereo capture already did (tested on
+    every raymarcher). Like stereo, it turns off masked adaptive AA (`PixelLocal3D`) while on.
+- **Host:**
+  - At a fresh upload, the frame's camera and a copy of its depth are captured, only while the overlay
+    is on. Hover repaints, which do not recompute, draw on that captured frame.
+  - `PickSurface3D` maps a client pixel to the frame and returns the depth along the camera ray
+    (`MathOverlay3DRenderer.Pick`).
+  - The same View controls as 2D drive it: Follow pointer, Pin last point, steps, and the pin text as
+    `x y z` on a 3D view. Turning the overlay on in 3D triggers one render, so the frame has depth.
+- **Not drawn:**
+  - on side-by-side stereo frames: the composed frame is wider than the camera's;
+  - depth-dimming under thin-lens DoF: no depth exists then, and a yellow note says so.
+  - The marker, the axis labels and the read-out are always drawn at full strength.
+- **Batch:** a pinned 3D overlay is reported by `BatchCommandBuilder.DetectGaps` until B5 (#1735).
+  Hover-only needs nothing.
+
 ### 3.5 Poster and batch (B5, #1735)
 
 - **Flag decision:** a separate flag, `--math-overlay-3d X,Y,Z[,STEPS]`, rather than a third coordinate on

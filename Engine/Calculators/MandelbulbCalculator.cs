@@ -60,6 +60,8 @@ public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera,
 
     /// <inheritdoc/>
     public float[]? DepthBuffer { get; private set; }
+    /// <summary>#1734 — publish the depth for the 3D math overlay.</summary>
+    public bool DepthRequested { get; set; }
 
     // P7a — lazily constructed GPU calculator. Borrows GpuAcceleratorHost's
     // shared accelerator; Dispose is a no-op for the host so leaving this
@@ -151,6 +153,7 @@ public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera,
         // the legacy fields will reflect the Lighting struct values they were
         // saved under (Phase 9 region preset captures Lighting too).
         var fx = FractalParameters.Lighting;
+        if (DepthRequested) fx.OverlayDepth = true;   // #1734 — the 3D math overlay wants the depth
         // #1068 — froxel volumetrics: shade fog-free + arm the depth G-buffer;
         // the volume is composited after SSAO from the unstripped froxelFx.
         var froxelFx = fx;

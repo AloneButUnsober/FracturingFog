@@ -313,7 +313,8 @@ public static partial class ScreenSpacePost
     /// so).</summary>
     public static bool WantsDepthOutput(in LightingFxData fx)
         => (fx.StereoMode == StereoMode.Fake && fx.StereoEyeSeparation > 0.0)
-        || fx.StereoMode == StereoMode.Autostereogram;
+        || fx.StereoMode == StereoMode.Autostereogram
+        || fx.OverlayDepth;   // #1734 — the 3D math overlay depth-tests against it
 
     /// <summary>#1011 — the post-frame stereo step for a finished display
     /// buffer and its depth (+Infinity = sky), shared by the live host, the

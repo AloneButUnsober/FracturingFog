@@ -88,6 +88,8 @@ public sealed class DualOrbitVolumeCalculator : IFractalCalculator, IStereoEyeCa
 
     /// <inheritdoc/>
     public float[]? DepthBuffer { get; private set; }
+    /// <summary>#1734 — publish the depth for the 3D math overlay.</summary>
+    public bool DepthRequested { get; set; }
 
     // Iterations for the per-layer critical orbit (colour only).
     private const int CriticalIter = 256;
@@ -176,6 +178,7 @@ public sealed class DualOrbitVolumeCalculator : IFractalCalculator, IStereoEyeCa
         LastCamera = FracturingFog.Rendering.Raymarch3DCamera.From(froxelView, width, height);   // #1733
 
         var fx = fp.Lighting;
+        if (DepthRequested) fx.OverlayDepth = true;   // #1734 — the 3D math overlay wants the depth
         // #1068 — froxel volumetrics: shade fog-free + arm the depth G-buffer;
         // the volume is composited after SSAO from the unstripped froxelFx.
         var froxelFx = fx;

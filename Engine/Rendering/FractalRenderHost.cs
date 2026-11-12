@@ -714,6 +714,58 @@ namespace FracturingFog.Rendering
             return _mathOverlayHover ?? (MathOverlayPin is { } p ? p with { Steps = MathOverlaySteps } : null);
         }
 
+        // ── #1734 — the math overlay on 3D views (axes, bailout sphere, orbit; B4 of #1730) ──
+        // The same toggle as 2D (MathOverlayEnabled) and steps; the point is in the fractal's object
+        // space. The frame it is drawn on is captured with its camera and depth at upload, so a
+        // hover repaint (no recompute) draws on the same frame.
+
+        /// <summary>#1734 — the pinned 3D point (object space).</summary>
+        public FracturingFog.ViewState.MathOverlay3DSpec? MathOverlay3DPin { get; set; }
+        private FracturingFog.ViewState.MathOverlay3DSpec? _mathOverlay3DHover;
+
+        private sealed record Overlay3DFrame(FracturingFog.Rendering.Raymarch3DCamera Camera, float[]? Depth, int Width, int Height);
+        private volatile Overlay3DFrame? _overlay3DFrame;
+
+        /// <summary>#1734 — the surface point under client pixel (x, y) of the last 3D frame
+        /// (object space), or null (sky, no depth, or not a 3D raymarcher frame).</summary>
+        public (double X, double Y, double Z)? PickSurface3D(double clientX, double clientY, int clientWidth, int clientHeight)
+        {
+            if (_overlay3DFrame is not { } f || clientWidth <= 0 || clientHeight <= 0) return null;
+            return FracturingFog.Rendering.MathOverlay3DRenderer.Pick(f.Camera, f.Depth,
+                clientX * f.Width / clientWidth, clientY * f.Height / clientHeight);
+        }
+
+        /// <summary>#1734 — the hovered 3D point (null: none); repaints without a recompute.</summary>
+        public void SetMathOverlayHover3D((double X, double Y, double Z)? p)
+        {
+            if (_disposed) return;
+            _mathOverlay3DHover = p is { } q ? new FracturingFog.ViewState.MathOverlay3DSpec(q.X, q.Y, q.Z, MathOverlaySteps) : null;
+            if (MathOverlayEnabled) RequestOverlayRepaint();
+        }
+
+        /// <summary>#1734 — the 3D overlay to draw now: hover, else the pin.</summary>
+        public FracturingFog.ViewState.MathOverlay3DSpec? CurrentMathOverlay3D(out bool pinned)
+        {
+            pinned = _mathOverlay3DHover == null;
+            if (!MathOverlayEnabled || !ViewState.Is3D) return null;
+            return _mathOverlay3DHover ?? (MathOverlay3DPin is { } p ? p with { Steps = MathOverlaySteps } : null);
+        }
+
+        /// <summary>#1734 — the pinned 3D overlay an export or command would reproduce (null: none).</summary>
+        public FracturingFog.ViewState.MathOverlay3DSpec? CurrentMathOverlay3DPin()
+            => MathOverlayEnabled && ViewState.Is3D && MathOverlay3DPin is { } p ? p with { Steps = MathOverlaySteps } : null;
+
+        // #1734 — the frame src is: the active 3D raymarcher's fresh buffer, with its camera and depth.
+        private void CaptureOverlay3DFrame(uint[] src, int w, int h)
+        {
+            if (!MathOverlayEnabled || ViewState?.Is3D != true) { _overlay3DFrame = null; return; }
+            if (SelectAltCalculator(ViewState.FractalType) is not { } alt || !ReferenceEquals(alt.ColorBuffer, src)
+                || alt is not FracturingFog.Rendering.IRaymarch3DCameraSource { LastCamera: { } cam }
+                || cam.Width != w || cam.Height != h) return;   // keep the last one (a snapshot re-upload)
+            float[]? depth = alt is IDepthAovSource { DepthBuffer: { } d } && d.Length >= w * h ? (float[])d.Clone() : null;
+            _overlay3DFrame = new Overlay3DFrame(cam, depth, w, h);
+        }
+
         /// <inheritdoc/>
         public FracturingFog.ViewState.GridLabelSettings GridLabels { get; set; } = FracturingFog.ViewState.GridLabelSettings.Default;
 
@@ -4344,6 +4396,8 @@ namespace FracturingFog.Rendering
                 case FracturingFog.Calculators.Generated.BurningShipCalculator gbs:
                     gbs.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255; break;
             }
+            // #1734 — the 3D math overlay depth-tests against the frame's depth.
+            if (alt is IDepthAovSource depthSource) depthSource.DepthRequested = MathOverlayEnabled && ViewState.Is3D;
         }
 
         /// <summary>Render <paramref name="region"/> into an off-screen colour
@@ -4768,6 +4822,7 @@ namespace FracturingFog.Rendering
             }
             // #1009 — resolve before any pass swaps src for a scratch buffer.
             float[]? depthStereo3D = srcAlreadyProcessed ? null : DepthStereoDepthFor(src, w, h);
+            if (!srcAlreadyProcessed) CaptureOverlay3DFrame(src, w, h);   // #1734 — before src is swapped
             if (denoised != null) src = denoised;   // #1392 — after the depth lookup (it keys on the calc's buffer)
             int n = w * h;
             long uploadStart = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
@@ -5213,6 +5268,18 @@ namespace FracturingFog.Rendering
                     // Overlay must never block the render pipeline.
                     Console.Error.WriteLine($"[FractalRenderHost] Overlay composite failed: {ex.Message}");
                 }
+            }
+
+            // #1734 — the math overlay on a 3D view, on the frame it was captured with (same size:
+            // a stereo side-by-side frame is wider and is not drawn on).
+            if (MathOverlayEnabled && ViewState.Is3D && _overlay3DFrame is { } of && of.Width == w && of.Height == h)
+            {
+                try
+                {
+                    FracturingFog.Rendering.MathOverlay3DRenderer.Draw(dst, of.Camera, of.Depth, ViewState.FractalType,
+                        ViewState.FractalParameters, CurrentMathOverlay3D(out bool mo3Pinned), mo3Pinned);
+                }
+                catch (Exception ex) { Console.Error.WriteLine($"[FractalRenderHost] 3D math overlay failed: {ex.Message}"); }
             }
 
             // #1554 — the math overlay, over the grid / watermark.

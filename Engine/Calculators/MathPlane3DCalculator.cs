@@ -123,6 +123,8 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
     /// nearest opaque triangle (<see cref="ScreenSpacePost.DepthMiss"/> where none), published
     /// only when <see cref="ScreenSpacePost.WantsDepthOutput"/> asks; null otherwise.</summary>
     public float[]? DepthBuffer { get; private set; }
+    /// <summary>#1734 — publish the depth for the 3D math overlay.</summary>
+    public bool DepthRequested { get; set; }
 
     public const uint BackgroundColor = MathPlaneCalculator.BackgroundColor;
     public const uint GridColor = 0x33FFFFFF;
@@ -274,6 +276,7 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
         RasterizeAll(opaque, ColorBuffer, ZBuffer, w, h);
         ct.ThrowIfCancellationRequested();
         var fx = FractalParameters.Lighting;
+        if (DepthRequested) fx.OverlayDepth = true;   // #1734 — the 3D math overlay wants the depth
         if (ScreenSpacePost.WantsDepthOutput(in fx)) DepthBuffer = RayDepth(ZBuffer, cam, w, h);
 
         // Pass 2 (prepared): back-to-front order and the nearest translucent depth per pixel.

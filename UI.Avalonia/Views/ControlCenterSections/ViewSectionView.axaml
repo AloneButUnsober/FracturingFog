@@ -37,7 +37,7 @@
                 <!-- #1554 — math overlay: axes + the orbit of one point (Mandelbrot: c; Julia: z0). -->
                 <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
                     <CheckBox Content="Math overlay" IsChecked="{Binding Shell.Main.MathOverlay}" Foreground="#9B9B9B" FontWeight="Bold"
-                              ToolTip.Tip="Draw the axes and the orbit of a point under z^2 + c over 2D views (Mandelbrot: the point is c; Julia: the point is z0), with the escape circle |z| = 2" />
+                              ToolTip.Tip="Draw the axes and the orbit of a point: on 2D views under z^2 + c (Mandelbrot: the point is c; Julia: z0) with the escape circle |z| = 2; on 3D views under the fractal's own step (Mandelbulb, Mandelbox, KIFS, quaternions) with the bailout sphere, parts behind the fractal dimmed and dashed" />
                     <CheckBox Content="Follow pointer" IsChecked="{Binding Shell.Main.MathOverlayFollow}" IsEnabled="{Binding Shell.Main.MathOverlay}"
                               ToolTip.Tip="The orbit follows the pixel under the pointer (live only). Off: it stays on the pinned point." />
                     <TextBlock Text="steps" VerticalAlignment="Center" Foreground="#9B9B9B" />
@@ -46,9 +46,9 @@
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0" IsVisible="{Binding Shell.Main.MathOverlay}">
                     <Button Classes="action neutral" Content="Pin last point" Command="{Binding Shell.Main.PinMathOverlayCommand}"
-                            ToolTip.Tip="Pin the last point the pointer was over; exports, the Command builder and --math-overlay draw the pinned orbit" />
+                            ToolTip.Tip="Pin the last point the pointer was over (on a 3D view, the point on the fractal's surface); exports, the Command builder and --math-overlay draw the pinned 2D orbit" />
                     <TextBox Text="{Binding Shell.Main.MathOverlayPinText}" Width="200" FontFamily="Consolas, Menlo, monospace"
-                             ToolTip.Tip="The pinned point as re im (empty: none)" />
+                             ToolTip.Tip="The pinned point: re im on a 2D view, x y z (the fractal's own axes) on a 3D view (empty: none)" />
                     <TextBlock Text="{Binding Shell.Main.MathOverlayPinError}" Foreground="#FFCC00" VerticalAlignment="Center"
                                IsVisible="{Binding Shell.Main.MathOverlayPinError, Converter={x:Static ObjectConverters.IsNotNull}}" />
                 </StackPanel>
