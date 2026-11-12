@@ -99,6 +99,8 @@ namespace FracturingFog.Cli
         /// not pinned), and whether it is on with only a hover point (a gap).</summary>
         public FracturingFog.ViewState.MathOverlaySpec? MathOverlay { get; init; }
         public bool MathOverlayHoverOnly { get; init; }
+        /// <summary>#1734 — the pinned 3D math overlay (live only until --math-overlay-3d, #1735).</summary>
+        public FracturingFog.ViewState.MathOverlay3DSpec? MathOverlay3D { get; init; }
 
         /// <summary>#1411 — also write a QR tile mesh to this path (null = no mesh;
         /// the live seed leaves it null, the mesh is a Control Center button).</summary>
@@ -772,6 +774,9 @@ namespace FracturingFog.Cli
             // #1554 — a hover-only math overlay follows the pointer; nothing to pin.
             if (snap.MathOverlayHoverOnly)
                 gaps.Add("Math overlay with no pinned point (the hover orbit is live only) — pin a point to render it with --math-overlay");
+            // #1734 — the 3D overlay is live only until --math-overlay-3d (#1735).
+            if (snap.MathOverlay3D is { } m3)
+                gaps.Add($"3D math overlay (pinned {m3.ToFlagValue()}) is live only for now; batch and poster export do not draw it yet (#1735)");
             // #1380 — the quality's temporal AA is no longer a gap: a batch still runs
             // the same samples the live view settles with (--no-taa skips them).
             return gaps;

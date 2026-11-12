@@ -79,6 +79,8 @@ public sealed class KleinianCalculator : IFractalCalculator, IStereoEyeCamera, I
 
     /// <inheritdoc/>
     public float[]? DepthBuffer { get; private set; }
+    /// <summary>#1734 — publish the depth for the 3D math overlay.</summary>
+    public bool DepthRequested { get; set; }
 
     public KleinianCalculator(int width, int height) => Resize(width, height);
 
@@ -193,6 +195,7 @@ public sealed class KleinianCalculator : IFractalCalculator, IStereoEyeCamera, I
 
         // Phase 1c — Lighting struct is authoritative for Light1/2/3.
         var fx = FractalParameters.Lighting;
+        if (DepthRequested) fx.OverlayDepth = true;   // #1734 — the 3D math overlay wants the depth
         // #1068 — froxel volumetrics: shade fog-free + arm the depth G-buffer;
         // the volume is composited after SSAO from the unstripped froxelFx.
         var froxelFx = fx;

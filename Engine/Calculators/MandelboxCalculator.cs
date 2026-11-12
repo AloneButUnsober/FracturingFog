@@ -59,6 +59,8 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, 
 
     /// <inheritdoc/>
     public float[]? DepthBuffer { get; private set; }
+    /// <summary>#1734 — publish the depth for the 3D math overlay.</summary>
+    public bool DepthRequested { get; set; }
 
     // P7a — lazily-constructed GPU calculator (see MandelbulbCalculator for contract).
     private MandelboxGpuCalculator? _gpu;
@@ -162,6 +164,7 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, 
 
         // Phase 1c — Lighting struct is authoritative for Light1/2/3.
         var fx = FractalParameters.Lighting;
+        if (DepthRequested) fx.OverlayDepth = true;   // #1734 — the 3D math overlay wants the depth
         // #1068 — froxel volumetrics: shade fog-free + arm the depth G-buffer;
         // the volume is composited after SSAO from the unstripped froxelFx.
         var froxelFx = fx;

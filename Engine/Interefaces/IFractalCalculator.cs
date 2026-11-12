@@ -107,5 +107,10 @@ namespace FracturingFog.Interefaces
         /// thin-lens / cached frame, or cancelled). Reset at the start of every
         /// <c>Calculate</c>, so it never describes an older frame.</summary>
         float[]? DepthBuffer { get; }
+
+        /// <summary>#1734 — publish the depth even when no lighting setting wants it (the 3D math
+        /// overlay depth-tests against it). Set by the host before a frame; capturing depth does not
+        /// change the image.</summary>
+        bool DepthRequested { get; set; }
     }
 }

@@ -127,6 +127,30 @@ orbit of one point.
 **Follow pointer** tracks the pixel under the pointer. **Pin last point** freezes it. A pinned orbit is
 included when you export an image.
 
+### On 3D fractal views
+
+The same toggle works on the 3D raymarched fractals. It draws:
+- **Axes:** x, y and z, in the fractal's own axes, where y is up.
+- **The bailout sphere:** shown as its outline, when its radius is in view.
+- **The orbit of a point:** under the fractal's own step (the same arithmetic as its renderer), for Mandelbulb,
+  Mandelbox, Kifs, QuaternionJulia and QuaternionMandelbrot. The quaternion orbits are 4D, so w is dropped.
+  Other 3D types get the axes only.
+
+Lines are drawn with the renderer's own camera:
+- **In front of the fractal:** solid.
+- **Behind its surface, or inside it:** dimmed and dashed, so an orbit inside the set stays readable.
+
+Choosing the point:
+- **Follow pointer** uses the point on the fractal's surface under the pointer. The sky has none.
+- **Pin last point** freezes that point.
+- You can type a pin as `x y z`.
+
+Where it isn't drawn yet:
+- **Exports and `--batch` don't draw the 3D overlay yet.** The Command builder reports it as a gap until
+  that lands (#1735).
+- **Stereo:** the overlay is not drawn on side-by-side stereo frames.
+- **Thin-lens depth of field:** no depth is available, so hidden parts are not dimmed. A yellow note says so.
+
 ## 7. Scene text
 
 Everything in sections 1–5 is stored as one line of text, which you can see and edit in the **Scene** box.

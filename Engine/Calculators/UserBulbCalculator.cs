@@ -79,6 +79,8 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
 
     /// <inheritdoc/>
     public float[]? DepthBuffer { get; private set; }
+    /// <summary>#1734 — publish the depth for the 3D math overlay.</summary>
+    public bool DepthRequested { get; set; }
 
     public string LastError { get; private set; } = string.Empty;
     /// <summary>0-based character index into the most-recent source where the
@@ -802,6 +804,7 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         // drives Light1/2/3, ambient, AO, fog, and sky colours. The User Bulb
         // dialog's own AO / Fog knobs override it when set (#536, below).
         var fx = FractalParameters.Lighting;
+        if (DepthRequested) fx.OverlayDepth = true;   // #1734 — the 3D math overlay wants the depth
         // #536 — the dialog's Fog, when set, is the scene's fog: it wins over the
         // Lighting value (which used to win, leaving the dialog knob dead), and it
         // fogs the background as well as the object — rays that miss get the

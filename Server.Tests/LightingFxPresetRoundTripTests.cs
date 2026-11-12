@@ -101,7 +101,9 @@ public sealed class LightingFxPresetRoundTripTests
     public void EveryLightingFxDataField_HasMatchingDtoProperty()
     {
         var flattened = new[] { "Light1", "Light2", "Light3" };
-        var intentionallyUnpersisted = new[] { "VolumePalette" };
+        // #1734 — OverlayDepth is a runtime request (the 3D math overlay wants the frame's depth),
+        // set by a calculator on its own copy; saving it in a preset would be wrong.
+        var intentionallyUnpersisted = new[] { "VolumePalette", "OverlayDepth" };
 
         var fxFields = typeof(LightingFxData)
             .GetFields(BindingFlags.Public | BindingFlags.Instance)

@@ -345,6 +345,14 @@ namespace FracturingFog.Render
         /// <summary>#1554 — the pinned overlay an export or command reproduces (null: none).</summary>
         FracturingFog.ViewState.MathOverlaySpec? CurrentMathOverlayPin();
 
+        /// <summary>#1734 — the math overlay on 3D views: the pinned point (object space), the
+        /// surface point under a client pixel of the last frame, the live hover point, and the pin
+        /// an export or command would reproduce.</summary>
+        FracturingFog.ViewState.MathOverlay3DSpec? MathOverlay3DPin { get; set; }
+        (double X, double Y, double Z)? PickSurface3D(double clientX, double clientY, int clientWidth, int clientHeight);
+        void SetMathOverlayHover3D((double X, double Y, double Z)? p);
+        FracturingFog.ViewState.MathOverlay3DSpec? CurrentMathOverlay3DPin();
+
         /// <summary>#1240 — interest-score heatmap to blend into the live frame
         /// (diagnostic; never exported). Drawn only while the view matches the
         /// one it was scored for. Null = off. Follow with

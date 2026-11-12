@@ -88,6 +88,8 @@ public sealed class MirrorSpheresCalculator : IFractalCalculator, IStereoEyeCame
 
     /// <inheritdoc/>
     public float[]? DepthBuffer { get; private set; }
+    /// <summary>#1734 — publish the depth for the 3D math overlay.</summary>
+    public bool DepthRequested { get; set; }
 
     /// <summary>Low-res interactive preview (camera drags). See Mandelbulb for the contract.</summary>
     public bool LowResPreview { get; set; }
@@ -199,6 +201,7 @@ public sealed class MirrorSpheresCalculator : IFractalCalculator, IStereoEyeCame
         var cam = MirrorSpheresCamera.From(p, Zoom, CenterX, CenterY, StereoEyeOffset, scene.BoundingRadius);
 
         var fx = p.Lighting;
+        if (DepthRequested) fx.OverlayDepth = true;   // #1734 — the 3D math overlay wants the depth
         float[]? depthBuf = ScreenSpacePost.WantsDepthOutput(in fx) ? new float[width * height] : null;
         bool photo = p.MirrorSpheresMode == MirrorSpheresMode.Photo;
 

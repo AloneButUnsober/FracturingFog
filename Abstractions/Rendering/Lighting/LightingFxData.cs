@@ -766,6 +766,12 @@ public struct LightingFxData
     /// saved scenes still pick up the warp.</summary>
     public StereoMode StereoMode;
 
+    /// <summary>#1734 — runtime only, never saved (LightingFxPresetData.FromFx does not map it):
+    /// a 3D raymarcher publishes its depth for the math overlay. The calculator sets it on its own
+    /// copy of the block when the host asks (<c>IDepthAovSource.DepthRequested</c>); the user's
+    /// Lighting is never changed.</summary>
+    public bool OverlayDepth;
+
     // The per-eye camera offset used to live here as a transient field that
     // RenderTrueStereo wrote into the shared params around each eye pass; it
     // now lives on the calculator (IStereoEyeCamera, #1008) so it can neither

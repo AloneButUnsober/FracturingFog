@@ -422,6 +422,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
             MathOverlay    = Shell.Main.RenderHost.CurrentMathOverlayPin(),
             MathOverlayHoverOnly = Shell.Main.RenderHost.MathOverlayEnabled && Shell.Main.RenderHost.MathOverlayPin == null
                                    && !vs.Is3D,
+            MathOverlay3D  = Shell.Main.RenderHost.CurrentMathOverlay3DPin(),   // #1734 — a gap until #1735
             Parameters  = fp,
             // #998 — a saved Lighting & FX preset equal to the live lighting carries
             // the settings no individual flag can; a playing animation is a gap.
