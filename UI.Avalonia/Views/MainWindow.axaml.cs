@@ -588,6 +588,7 @@ public sealed partial class MainWindow : Window
             // shortcuts work consistently regardless of selected mode.
             //   G  = Grid           K  = Watermark    H = Perf HUD (Shift+H = reset)
             //   P  = Params dialog  F1 = Help window  X = Post-FX HUD overlay
+            //   O  = pin the math overlay's point under the pointer (#1748)
             switch (e.Key)
             {
                 case Key.G:
@@ -609,6 +610,9 @@ public sealed partial class MainWindow : Window
                 case Key.P:
                     _shell.ShowFractalParamsCommand.Execute().Subscribe();
                     e.Handled = true;
+                    return;
+                case Key.O:   // #1748 — no-op (unhandled) while the math overlay is off
+                    if (_shell.Main.PinMathOverlayAtPointer()) e.Handled = true;
                     return;
                 case Key.F1:
                     _shell.ShowHelpCommand.Execute().Subscribe();

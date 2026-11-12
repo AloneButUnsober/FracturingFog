@@ -5267,6 +5267,7 @@ Fractal bridge: a backdrop (Mandelbrot, Julia of c, Burning Ship
 draggable c, and the cobweb of x -> f(x) (default x^2 + c).
 
 View -> Math overlay draws the axes and the orbit of the pointer
+(press O in the render window to pin the point under the pointer)
 or a pinned point on Mandelbrot and Julia views. On 3D views
 (Mandelbulb, Mandelbox, KIFS, quaternions) it draws the axes, the
 bailout sphere and the orbit of the surface point under the

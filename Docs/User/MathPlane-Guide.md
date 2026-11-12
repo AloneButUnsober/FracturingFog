@@ -127,6 +127,9 @@ orbit of one point.
 **Follow pointer** tracks the pixel under the pointer. **Pin last point** freezes it. A pinned orbit is
 included when you export an image.
 
+**Shortcut:** press **O** in the render window to pin the point under the pointer. You don't have to move the
+pointer to the button, which would drag the point along the way. Press O again to re-pin somewhere else.
+
 ### On 3D fractal views
 
 The same toggle works on the 3D raymarched fractals. It draws:
