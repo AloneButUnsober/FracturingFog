@@ -218,8 +218,8 @@ Every setting is a `--param`, so any view renders headless. For example, the tor
 FracturingFog --batch --fractal MathPlane3D --x 0 --y 0 --zoom 1 --out torus.png --param "MathPlane3DScene=surface torus parametric \"(2 + 0.6*cos(v))*cos(u)\" \"(2 + 0.6*cos(v))*sin(u)\" \"0.6*sin(v)\" 0 6.283185307179586 0 6.283185307179586 #E69F00 mesh 48" --param Cam3DDistance=10 --param Cam3DTheta=0.9 --param Cam3DPhi=1.1
 ```
 
-The camera takes all three keys, `Cam3DDistance`, `Cam3DTheta` and `Cam3DPhi`. Given only some of them,
-the camera is left unchanged.
+The camera keys `Cam3DDistance`, `Cam3DTheta` and `Cam3DPhi` each apply on their own. A key left out keeps
+the current value, so `--param Cam3DDistance=10` alone moves the camera back at the default angles.
 
 - `MathPlane3DScene=@file` reads the scene from a file. This avoids quoting trouble in cmd or PowerShell.
 - `--math-plane-3d-mesh PATH` also writes the surfaces as a .glb, .gltf or .stl mesh.

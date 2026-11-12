@@ -1002,6 +1002,25 @@ namespace FracturingFog.Models
               or FractalType.Multibrot or FractalType.Magnet1 or FractalType.Magnet2
               or FractalType.Glynn or FractalType.Phoenix or FractalType.Spider;
 
+        /// <summary>#1738 — the family's current orbit camera (distance, theta, phi), the values a
+        /// partial Cam3D* set keeps for its missing keys. Null for a type without one; the switch
+        /// in <see cref="ApplyTo"/> covers the same families.</summary>
+        internal static (double Distance, double Theta, double Phi)? CameraOf(FractalType type, FractalParameters p) => type switch
+        {
+            FractalType.Mandelbulb => (p.BulbCameraDistance, p.BulbCameraTheta, p.BulbCameraPhi),
+            FractalType.Mandelbox => (p.MandelboxCameraDistance, p.MandelboxCameraTheta, p.MandelboxCameraPhi),
+            FractalType.Kifs => (p.KifsCameraDistance, p.KifsCameraTheta, p.KifsCameraPhi),
+            FractalType.QuaternionJulia => (p.QJuliaCameraDistance, p.QJuliaCameraTheta, p.QJuliaCameraPhi),
+            FractalType.QuaternionMandelbrot => (p.QMandelCameraDistance, p.QMandelCameraTheta, p.QMandelCameraPhi),
+            FractalType.Kleinian => (p.KleinianCameraDistance, p.KleinianCameraTheta, p.KleinianCameraPhi),
+            FractalType.MirrorSpheres => (p.MirrorSpheresCameraDistance, p.MirrorSpheresCameraTheta, p.MirrorSpheresCameraPhi),
+            FractalType.MathPlane3D => (p.MathPlane3DCameraDistance, p.MathPlane3DCameraTheta, p.MathPlane3DCameraPhi),
+            FractalType.BicomplexMandelbrot => (p.BicomplexCameraDistance, p.BicomplexCameraTheta, p.BicomplexCameraPhi),
+            FractalType.Coquaternion => (p.CoquaternionCameraDistance, p.CoquaternionCameraTheta, p.CoquaternionCameraPhi),
+            FractalType.Julibrot => (p.DualOrbitVolumeCameraDistance, p.DualOrbitVolumeCameraTheta, p.DualOrbitVolumeCameraPhi),
+            _ => null,
+        };
+
         /// <summary>#954 — just the generic 3D camera block (family + distance /
         /// azimuth / elevation / slice) of <see cref="Snapshot"/>, or null when the
         /// type has none. <see cref="ApplyTo"/> is null-guarded per field, so
@@ -2172,10 +2191,13 @@ namespace FracturingFog.Models
 
             // #93 (P3) — route the generic 3D camera baseline back to the family
             // it was captured from. No-op when Cam3DFamily is absent (2D regions).
-            if (Cam3DFamily.HasValue && Cam3DDistance.HasValue
-                && Cam3DTheta.HasValue && Cam3DPhi.HasValue)
+            // #1738 — each key applies on its own: a missing distance / theta / phi keeps
+            // the family's current value (a lone --param Cam3DDistance=30 used to be
+            // dropped silently, because the block needed all three).
+            if (Cam3DFamily.HasValue && CameraOf((FractalType)Cam3DFamily.Value, p) is var (d0, th0, ph0)
+                && (Cam3DDistance.HasValue || Cam3DTheta.HasValue || Cam3DPhi.HasValue || Cam3DSliceW.HasValue))
             {
-                double d = Cam3DDistance.Value, th = Cam3DTheta.Value, ph = Cam3DPhi.Value;
+                double d = Cam3DDistance ?? d0, th = Cam3DTheta ?? th0, ph = Cam3DPhi ?? ph0;
                 switch ((FractalType)Cam3DFamily.Value)
                 {
                     case FractalType.Mandelbulb:
