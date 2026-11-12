@@ -302,7 +302,7 @@ A **Math Plane 3D** section, structured like the 2D one:
     drawn place (the view depth is kept), and the point goes back through M⁻¹. A singular
     map doesn't move it.
   - **Shift** snaps to the 2D editor's minor step for the visible width at that depth.
-  - **Alt** keeps the largest change from the drag's start.
+  - **Alt** keeps the largest change from the drag's start The axis is chosen once, when the pointer leaves a 4 px dead zone, and kept while Alt is held (re-choosing it every move made the handle hop between the three axis lines). The read-out shows `[x only]`. The Win32 render window reads Alt with `GetKeyState`, since mouse messages carry no Alt flag.
   - **Left-drag on empty space orbits** with the controller's right-drag rule: π per width or
     height, drag down looks up, φ kept in (0.01, π − 0.01). With "Drag objects" off, every
     left-drag orbits. The wheel and right-drag are unchanged.
