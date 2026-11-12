@@ -162,6 +162,41 @@ The two cameras differ, and this is the hard part of the epic:
 - The stereo eye offset and the aspect ratio are included.
 - The independent check: the calculator's own ray for a pixel, projected back, lands on that pixel.
 
+*As built (B3, #1733):*
+- **The type:** `Engine/Rendering/Raymarch3DCamera.cs`. `Raymarch3DCamera` holds the eye, the forward,
+  right and up vectors, fovScale, pan and the frame's width and height. It has:
+  - `RayDirection(x, y)`;
+  - `PointAt(x, y, distance)`;
+  - `Project(world) → (x, y, ray distance)`, which returns null behind the eye.
+
+  Coordinates are continuous pixel positions: the centre of pixel (i, j) is (i + ½, j + ½).
+- **The pixel ray formula is shared.** All ten raymarchers cast the ray of pixel (x, y) the same way:
+  u = (2(x + ½)/W − 1)·fovScale·aspect + panU, v = (1 − 2(y + ½)/H)·fovScale + panV, and
+  dir = normalize(F + u·R + v·U).
+- **One source of truth for the camera.** Each calculator sets `LastCamera`
+  (`IRaymarch3DCameraSource`) from the `Froxel3DView` it already builds every frame, right after
+  `ScreenSpacePost.Froxel3DViewOf`. That view holds the eye after the distance clamp and the stereo
+  offset, fovScale after the zoom lens, and the pan.
+  - The GPU kernels' parameters are filled from the same local variables in the same method, so the CPU
+    and GPU paths share the camera by construction.
+  - Not tested on a GPU here: CI has none, and the test host's calculators may route to either path.
+- **Which calculators:**
+  - Mandelbulb, Mandelbox, KIFS, quaternion Julia and Mandelbrot, bicomplex, coquaternion, Kleinian,
+    Julibrot (DualOrbitVolume) and User Bulb.
+  - The User Bulb has no pan; its pan is in its orbit target.
+  - Mirror Spheres (a ray tracer) and Math Plane 3D (its own camera) are not included.
+- **Measured differences from §3.3's table:**
+  - The Mandelbulb has **no zoom lens**: zooming moves its eye in (distance / zoom), at a fixed 60°.
+  - The eight other DE types narrow their field of view inside the clamp.
+- **The test is independent of the camera code.** Each renderer's own published depth (ray distance to
+  its march hit) is laid along `LastCamera`'s ray for the same pixel, and the point must be on the
+  fractal.
+  - It runs for all 9 DE raymarchers in 4 cases: plain, pan, zoom (lens), and stereo eye.
+  - Every hit point's |DE| is ≤ 0.0015, the march's own hit epsilon.
+  - The `Project` round trip is within 1e-13 px.
+  - The test fails if the pan sign, the aspect, the v direction, the half-pixel centre or the
+    normalisation is wrong.
+
 ### 3.4 Math overlay on 3D views (B4, #1734)
 
 - **What it draws:** View → Math overlay on a 3D view shows the axes, the bailout sphere (as a wire ring)
