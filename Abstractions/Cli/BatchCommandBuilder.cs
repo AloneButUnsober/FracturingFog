@@ -99,7 +99,8 @@ namespace FracturingFog.Cli
         /// not pinned), and whether it is on with only a hover point (a gap).</summary>
         public FracturingFog.ViewState.MathOverlaySpec? MathOverlay { get; init; }
         public bool MathOverlayHoverOnly { get; init; }
-        /// <summary>#1734 — the pinned 3D math overlay (live only until --math-overlay-3d, #1735).</summary>
+        /// <summary>#1734 / #1735 — the pinned 3D math overlay (null when off, not pinned or 2D);
+        /// emitted as --math-overlay-3d.</summary>
         public FracturingFog.ViewState.MathOverlay3DSpec? MathOverlay3D { get; init; }
 
         /// <summary>#1411 — also write a QR tile mesh to this path (null = no mesh;
@@ -426,6 +427,12 @@ namespace FracturingFog.Cli
             {
                 parts.Add(BatchFlags.MathOverlay);
                 parts.Add(mo.ToFlagValue());
+            }
+            // #1735 — the pinned 3D math overlay.
+            else if (snap.MathOverlay3D is { } m3)
+            {
+                parts.Add(BatchFlags.MathOverlay3D);
+                parts.Add(m3.ToFlagValue());
             }
 
             // Fractal QR code (#1305) — payload plus the knobs that deviate from
@@ -773,10 +780,7 @@ namespace FracturingFog.Cli
                          + "render a video with --mode video --audio FILE to drive them (a still renders their current values) (#1432)");
             // #1554 — a hover-only math overlay follows the pointer; nothing to pin.
             if (snap.MathOverlayHoverOnly)
-                gaps.Add("Math overlay with no pinned point (the hover orbit is live only) — pin a point to render it with --math-overlay");
-            // #1734 — the 3D overlay is live only until --math-overlay-3d (#1735).
-            if (snap.MathOverlay3D is { } m3)
-                gaps.Add($"3D math overlay (pinned {m3.ToFlagValue()}) is live only for now; batch and poster export do not draw it yet (#1735)");
+                gaps.Add("Math overlay with no pinned point (the hover orbit is live only) — pin a point to render it with --math-overlay (2D) or --math-overlay-3d (3D)");
             // #1380 — the quality's temporal AA is no longer a gap: a batch still runs
             // the same samples the live view settles with (--no-taa skips them).
             return gaps;

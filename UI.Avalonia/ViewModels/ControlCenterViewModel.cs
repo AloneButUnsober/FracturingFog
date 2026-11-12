@@ -420,9 +420,11 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
             Qr             = QrCode.Options,            // #1305 — fractal QR code
             // #1554 — the math overlay: a pinned point is a flag, hover-only is a gap.
             MathOverlay    = Shell.Main.RenderHost.CurrentMathOverlayPin(),
-            MathOverlayHoverOnly = Shell.Main.RenderHost.MathOverlayEnabled && Shell.Main.RenderHost.MathOverlayPin == null
-                                   && !vs.Is3D,
-            MathOverlay3D  = Shell.Main.RenderHost.CurrentMathOverlay3DPin(),   // #1734 — a gap until #1735
+            // #1735 — on a 3D view the pin is the 3D one.
+            MathOverlayHoverOnly = Shell.Main.RenderHost.MathOverlayEnabled
+                                   && (vs.Is3D ? Shell.Main.RenderHost.MathOverlay3DPin == null
+                                               : Shell.Main.RenderHost.MathOverlayPin == null),
+            MathOverlay3D  = Shell.Main.RenderHost.CurrentMathOverlay3DPin(),   // #1735 — --math-overlay-3d
             Parameters  = fp,
             // #998 — a saved Lighting & FX preset equal to the live lighting carries
             // the settings no individual flag can; a playing animation is a gap.

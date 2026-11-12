@@ -10,7 +10,7 @@
 //
 // The point is in the fractal's own object space (the raymarcher's, y up): the point the
 // pointer is over on the surface (live), or a pinned one. --math-overlay-3d X,Y,Z[,STEPS]
-// (B5, #1735) will carry the pin.
+// (B5, #1735) carries the pin to poster export and the batch.
 
 using System.Globalization;
 using FracturingFog.Models;

@@ -260,6 +260,32 @@ The two cameras differ, and this is the hard part of the epic:
   (`BatchCommandBuilder.DetectGaps`) with a follow-up issue.
 - The Command builder emits it from the live pin.
 
+*As built (B5, #1735):*
+- **Flag:** `--math-overlay-3d X,Y,Z[,STEPS]` (`BatchFlags.MathOverlay3D`, parsed by
+  `MathOverlay3DSpec.TryParse`). The catalog entry is image-mode only and conflicts with `--math-overlay`,
+  both ways. The batch refuses it:
+  - on a 2D fractal type (exit 2);
+  - together with `--math-overlay`;
+  - in video, slideshow and scene modes (#1746). That is an error rather than a silent drop.
+- **Poster path:** `PosterRequest.MathOverlay3D`.
+  - While it is set on a 3D type, `RenderComposedBuffer` sets `DepthRequested` on the capture calculator.
+    It then keeps the camera and a copy of the depth from the **first, unjittered** sample, before the AA
+    samples pan the camera by sub-pixel offsets.
+  - `ApplyMathOverlay3D` draws it pinned, last in `RenderDisplayBuffer`, on the finished display buffer,
+    as the live host does after its post chain. The letterbox path renders the inner rect through the same
+    function, so the overlay lands on the fractal, not on the bars.
+  - A stereo side-by-side frame is not drawn on, as live.
+  - `MathOverlay3DReport` says what happened, and the batch prints a note when the overlay was not drawn
+    or had no depth (thin-lens DoF).
+- **Live export:** `FractalRenderHost.CreatePosterRequest` carries `CurrentMathOverlay3DPin()`, so a
+  pinned 3D overlay is part of an exported image. Hover is not.
+- **Command builder:** emits `--math-overlay-3d` from the live 3D pin, and B4's gap is gone. A 3D overlay
+  with no pin is now reported as hover-only, as in 2D.
+- **Tests:**
+  - for Mandelbulb, Mandelbox, KIFS and Kleinian, a poster equals the host's own calculator frame with
+    the live draw call applied (pixels identical);
+  - with AA, the drawn overlay equals one drawn with the unjittered camera.
+
 ### 3.6 Demos and guide (B6, #1736)
 
 - **New Math Plane 3D demos:**
@@ -274,8 +300,8 @@ The two cameras differ, and this is the hard part of the epic:
 
 - **B1 and B2** are scene statements, so the region snapshot and `--param MathPlane3DScene=...` carry
   them. The Command builder needs nothing new; B1 and B2 each add a round-trip test.
-- **B4** is live-only until **B5** lands. That gap is reported in `DetectGaps` from B4 onward, never
-  dropped silently.
+- **B4** was live-only until **B5** landed. That gap was reported in `DetectGaps` until B5 replaced it
+  with `--math-overlay-3d`, which is for stills only for now (#1746).
 
 ## 5. Tests (independent invariants)
 

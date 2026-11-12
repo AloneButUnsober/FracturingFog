@@ -5271,7 +5271,8 @@ or a pinned point on Mandelbrot and Julia views. On 3D views
 (Mandelbulb, Mandelbox, KIFS, quaternions) it draws the axes, the
 bailout sphere and the orbit of the surface point under the
 pointer under the fractal's own step, dashed where it is behind
-the fractal (live only for now).
+the fractal. A pinned 3D point is drawn on exports, and on
+--batch stills with --math-overlay-3d X,Y,Z[,STEPS].
 
 Scripts: step / with lines in the scene text make a timed sequence
 (step model after Manim, the engine behind the 3Blue1Brown videos).

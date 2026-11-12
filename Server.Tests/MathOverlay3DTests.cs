@@ -18,7 +18,9 @@ using System.Linq;
 using System.Reflection;
 using FracturingFog;
 using FracturingFog.Cli;
+using FracturingFog.Batch;
 using FracturingFog.Export;
+using FracturingFog.Imaging;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using FracturingFog.Rendering;
@@ -277,13 +279,161 @@ public sealed class MathOverlay3DTests
     [InlineData("1,2,NaN")]
     public void BadSpecs_AreRefused(string text) => Assert.False(MathOverlay3DSpec.TryParse(text, out _, out _));
 
-    [Fact]
-    public void APinned3DOverlay_IsReportedAsAGap_UntilBatchDrawsIt()
+    // ── #1735 (B5) — poster export and --batch ──
+
+    private static PosterRequest PosterOf(FractalType type, FractalParameters fp, MathOverlay3DSpec? spec,
+                                          MathOverlay3DReport? report = null, QualityPreset? quality = null)
+        => new()
+        {
+            FractalType = type, Width = W, Height = H, CenterX = 0, CenterY = 0, Zoom = 1, MaxIterations = 64,
+            ColorMap = ColorPalette.BuiltIns[0], FractalParameters = fp, Quality = quality,
+            MathOverlay3D = spec, MathOverlay3DReport = report,
+        };
+
+    [Theory]
+    [InlineData(FractalType.Mandelbulb, 0.6, 0.4, 0.5)]
+    [InlineData(FractalType.Mandelbox, 0.5, 0.3, 0.2)]
+    [InlineData(FractalType.Kifs, 0.3, 0.2, 0.4)]
+    [InlineData(FractalType.Kleinian, 0.1, 0.2, 0.3)]
+    public void APosterWithThe3DOverlay_EqualsTheLiveRenderWithTheOverlayDrawnOnIt(FractalType type, double x, double y, double z)
     {
-        var with = BatchCommandBuilder.DetectGaps(new BatchCommandSnapshot { Fractal = FractalType.Mandelbulb, MathOverlay3D = new MathOverlay3DSpec(0.1, 0.2, 0.3) });
-        Assert.Contains(with, g => g.Contains("3D math overlay") && g.Contains("0.1,0.2,0.3") && g.Contains("#1735"));
-        var without = BatchCommandBuilder.DetectGaps(new BatchCommandSnapshot { Fractal = FractalType.Mandelbulb });
-        Assert.DoesNotContain(without, g => g.Contains("3D math overlay"));
+        // The live side: the host's own calculator for the type, its camera and depth, and the
+        // live compositor's draw call. The poster side never sees any of these.
+        using var host = new FractalRenderHost(new NullRenderer(), new FractalViewState(), W, H, ColorPalette.BuiltIns[0]);
+        var c = Calc(host, type);
+        var fp = Render(c, depth: true);
+        var cam = ((IRaymarch3DCameraSource)c).LastCamera!.Value;
+        var spec = new MathOverlay3DSpec(x, y, z, 20);
+        var live = (uint[])c.ColorBuffer.Clone();
+        MathOverlay3DRenderer.Draw(live, cam, ((IDepthAovSource)c).DepthBuffer, type, fp, spec, pinned: true);
+
+        var report = new MathOverlay3DReport();
+        var with = PosterRenderer.RenderDisplayPixels(PosterOf(type, fp, spec, report), default, out int w, out int h);
+        var without = PosterRenderer.RenderDisplayPixels(PosterOf(type, fp, null), default, out _, out _);
+        Assert.Equal((W, H), (w, h));
+        Assert.True(report.Drawn, report.Reason);
+        Assert.False(report.NoDepth);
+        Assert.True(without.SequenceEqual(c.ColorBuffer), $"{type}: the poster frame is not the live frame");
+        Assert.True(live.SequenceEqual(with), $"{type}: the poster overlay differs from the live one "
+            + $"({live.Zip(with).Count(p => p.First != p.Second)} px)");
+        Assert.True(with.Zip(without).Count(p => p.First != p.Second) > 50, $"{type}: nothing drawn");
+    }
+
+    [Fact]
+    public void WithAntiAliasing_TheOverlayUsesTheViewsOwnCamera_NotAJitteredSample()
+    {
+        var quality = QualityPreset.All.First(q => q.AaSamples >= 4);
+        using var host = new FractalRenderHost(new NullRenderer(), new FractalViewState(), W, H, ColorPalette.BuiltIns[0]);
+        var c = Calc(host, FractalType.Mandelbulb);
+        var fp = Render(c, depth: true);   // unjittered: the view's own camera and depth
+        var cam = ((IRaymarch3DCameraSource)c).LastCamera!.Value;
+        var depth = (float[])((IDepthAovSource)c).DepthBuffer!.Clone();
+        var spec = new MathOverlay3DSpec(0.6, 0.4, 0.5, 20);
+
+        // The image under the overlay is the AA poster's own (same depth request, no overlay).
+        var under = PosterRenderer.RenderDisplayPixels(PosterOf(FractalType.Mandelbulb, fp, spec, quality: quality) with
+            { MathOverlay3D = null }, default, out _, out _);
+        var report = new MathOverlay3DReport();
+        var with = PosterRenderer.RenderDisplayPixels(PosterOf(FractalType.Mandelbulb, fp, spec, report, quality), default, out _, out _);
+        Assert.True(report.Drawn, report.Reason);
+        var expect = (uint[])under.Clone();
+        MathOverlay3DRenderer.Draw(expect, cam, depth, FractalType.Mandelbulb, fp, spec, pinned: true);
+        // Pixels the overlay does not touch come from the AA image; touched ones must match the
+        // draw with the unjittered camera exactly.
+        Assert.True(Diff(under, with) > 50, "nothing drawn");
+        Assert.True(Diff(expect, with) == 0, $"{Diff(expect, with)} px differ from the overlay drawn with the view's own camera");
+    }
+
+    private static int Diff(uint[] a, uint[] b) => a.Zip(b).Count(p => p.First != p.Second);
+
+    [Fact]
+    public void ThePoster_SaysWhyThe3DOverlayWasNotDrawn()
+    {
+        var spec = new MathOverlay3DSpec(0.1, 0.2, 0.3);
+        var flat = new MathOverlay3DReport();
+        var buf = new uint[W * H];
+        PosterRenderer.ApplyMathOverlay3D(PosterOf(FractalType.Mandelbrot, new FractalParameters(), spec, flat), null, buf, W, H);
+        Assert.False(flat.Drawn);
+        Assert.Contains("not a 3D fractal type", flat.Reason);
+        Assert.All(buf, v => Assert.Equal(0u, v));
+
+        var noCam = new MathOverlay3DReport();
+        PosterRenderer.ApplyMathOverlay3D(PosterOf(FractalType.Mandelbulb, new FractalParameters(), spec, noCam), new PosterRenderer.Overlay3DCapture(), buf, W, H);
+        Assert.False(noCam.Drawn);
+        Assert.Contains("no camera", noCam.Reason);
+
+        var sbs = new MathOverlay3DReport();
+        var cap = new PosterRenderer.Overlay3DCapture { Camera = Camera() };
+        PosterRenderer.ApplyMathOverlay3D(PosterOf(FractalType.Mandelbulb, new FractalParameters(), spec, sbs), cap, new uint[2 * W * H], 2 * W, H);
+        Assert.False(sbs.Drawn);
+        Assert.Contains("side-by-side", sbs.Reason);
+
+        var noDepth = new MathOverlay3DReport();
+        PosterRenderer.ApplyMathOverlay3D(PosterOf(FractalType.Mandelbulb, new FractalParameters(), spec, noDepth), cap, buf, W, H);
+        Assert.True(noDepth.Drawn);
+        Assert.True(noDepth.NoDepth);
+        Assert.Contains(buf, v => v != 0);
+    }
+
+    private static string[] Args(params string[] extra)
+        => new[] { "app.exe", "--batch", "--fractal", "Mandelbulb", "--x", "0", "--y", "0", "--zoom", "1", "--out", "o.png" }.Concat(extra).ToArray();
+
+    [Fact]
+    public void TheFlag_Parses_AndRejectsBadValuesAndThe2DFlag()
+    {
+        Assert.True(BatchOptions.TryParse(Args(BatchFlags.MathOverlay3D, "0.4,-0.6,0.3,30"), 2, out var o, out var e), e);
+        Assert.Equal(new MathOverlay3DSpec(0.4, -0.6, 0.3, 30), o.MathOverlay3D);
+        Assert.True(BatchOptions.TryParse(Args(), 2, out var none, out _));
+        Assert.Null(none.MathOverlay3D);
+        foreach (var bad in new[] { "1,2", "1,2,x", "1,2,3,0", "1,2,3,10001" })
+        {
+            Assert.False(BatchOptions.TryParse(Args(BatchFlags.MathOverlay3D, bad), 2, out _, out var err), bad);
+            Assert.Contains(BatchFlags.MathOverlay3D, err);
+        }
+        Assert.False(BatchOptions.TryParse(Args(BatchFlags.MathOverlay3D, "1,2,3", BatchFlags.MathOverlay, "0,0"), 2, out _, out var both));
+        Assert.Contains("cannot be combined", both);
+        Assert.False(BatchOptions.TryParse(Args(BatchFlags.MathOverlay3D, "1,2,3", "--mode", "video"), 2, out _, out var vid));
+        Assert.Contains("stills only", vid);
+        var spec = BatchFlagCatalog.Find(BatchFlags.MathOverlay3D)!;
+        Assert.Contains(BatchFlags.MathOverlay, spec.ConflictsWith);
+        Assert.Equal(BatchModes.Image, spec.Modes);
+        Assert.Contains(BatchFlags.MathOverlay3D, BatchFlagCatalog.FormatUsage());
+    }
+
+    [Fact]
+    public void TheCommandBuilder_EmitsThePinned3DOverlay_AndItRoundTrips()
+    {
+        var spec = new MathOverlay3DSpec(0.4, -0.6, 0.3, 30);
+        var report = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot
+        {
+            Fractal = FractalType.Mandelbulb, CenterX = 0, CenterY = 0, Zoom = 1, MathOverlay3D = spec,
+        });
+        int i = report.Args.ToList().IndexOf(BatchFlags.MathOverlay3D);
+        Assert.True(i >= 0, report.Command);
+        Assert.True(BatchOptions.TryParse(new[] { "app.exe" }.Concat(report.Args).ToArray(), 1, out var back, out var err), err);
+        Assert.Equal(spec, back.MathOverlay3D);
+        Assert.DoesNotContain(report.Gaps, g => g.Contains("ath overlay"));
+
+        var hover = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot
+        {
+            Fractal = FractalType.Mandelbulb, CenterX = 0, CenterY = 0, Zoom = 1, MathOverlayHoverOnly = true,
+        });
+        Assert.DoesNotContain(BatchFlags.MathOverlay3D, hover.Args);
+        Assert.Contains(hover.Gaps, g => g.Contains("--math-overlay-3d"));
+    }
+
+    [Fact]
+    public void ALiveExport_CarriesThePinned3DOverlay()
+    {
+        var vs = new FractalViewState { FractalType = FractalType.Mandelbulb };
+        using var host = new FractalRenderHost(new NullRenderer(), vs, W, H, ColorPalette.BuiltIns[0]);
+        host.MathOverlay3DPin = new MathOverlay3DSpec(0.1, 0.2, 0.3);
+        host.MathOverlaySteps = 40;
+        Assert.Null(host.CreatePosterRequest(W, H, false, "o.png", FracturingFog.Imaging.ImageFileFormat.Png).MathOverlay3D);
+        host.MathOverlayEnabled = true;
+        var req = host.CreatePosterRequest(W, H, false, "o.png", FracturingFog.Imaging.ImageFileFormat.Png);
+        Assert.Equal(new MathOverlay3DSpec(0.1, 0.2, 0.3, 40), req.MathOverlay3D);
+        Assert.Null(req.MathOverlay);
     }
 
     private static (double X, double Y, double Z) Norm((double X, double Y, double Z) v)
