@@ -249,6 +249,58 @@ namespace FracturingFog.Models
         /// <summary>#1731 — the types a fractal object can be, in the menu's order.</summary>
         public static IReadOnlyList<FractalType> FractalTypes => MeshExportCapabilities.Types;
 
+        /// <summary>#1741 — a type's sub-type setting: the --param key, its enum, the names offered
+        /// (declaration order, minus any that need more than a name) and the default.</summary>
+        public sealed record FractalVariant(FractalType Type, string Key, Type Enum, IReadOnlyList<string> Names, string Default);
+
+        /// <summary>#1741 — the types with a sub-type, as the params window offers them. One row each.</summary>
+        public static IReadOnlyList<FractalVariant> FractalVariants { get; } = new[]
+        {
+            Variant(FractalType.Kifs, nameof(FractalParameters.KifsFold), typeof(KifsFoldKind)),
+            // Custom needs a sphere list (KleinianCustomSpheres), not just a name.
+            Variant(FractalType.Kleinian, nameof(FractalParameters.KleinianPreset), typeof(KleinianPreset), nameof(KleinianPreset.Custom)),
+            Variant(FractalType.BicomplexMandelbrot, nameof(FractalParameters.BicomplexSliceAxis), typeof(BicomplexSliceAxis)),
+        };
+
+        private static FractalVariant Variant(FractalType type, string key, Type enumType, params string[] leaveOut)
+        {
+            var def = typeof(FractalParameters).GetProperty(key)!.GetValue(new FractalParameters())!.ToString()!;
+            var names = System.Enum.GetNames(enumType).Where(n => !leaveOut.Contains(n)).ToArray();
+            return new FractalVariant(type, key, enumType, names, def);
+        }
+
+        /// <summary>#1741 — the sub-type setting of <paramref name="type"/>, or null.</summary>
+        public static FractalVariant? VariantOf(FractalType? type)
+            => type is { } t ? FractalVariants.FirstOrDefault(v => v.Type == t) : null;
+
+        /// <summary>#1741 — the object's sub-type as a name: its setting (a name or a number), else
+        /// the default; null when its type has none. An unreadable value is returned as written.</summary>
+        public static string? VariantValue(MathPlaneObject o)
+        {
+            if (VariantOf(FractalTypeOf(o)) is not { } v) return null;
+            foreach (var (key, value) in FractalKeys(o))
+            {
+                if (!key.Equals(v.Key, StringComparison.OrdinalIgnoreCase)) continue;
+                if (int.TryParse(value, NumberStyles.Integer, Inv, out int n))
+                    return System.Enum.IsDefined(v.Enum, n) ? System.Enum.GetName(v.Enum, n) : value;
+                return !value.Contains(',') && System.Enum.TryParse(v.Enum, value, true, out object? e) && e != null
+                       && System.Enum.IsDefined(v.Enum, e) ? e.ToString() : value;
+            }
+            return v.Default;
+        }
+
+        /// <summary>#1741 — the object with its sub-type set to <paramref name="name"/>: the KEY=Name
+        /// setting replaced in place, or added after the others.</summary>
+        public static MathPlaneObject WithVariant(MathPlaneObject o, string name)
+        {
+            if (VariantOf(FractalTypeOf(o)) is not { } v) return o;
+            var src = o.Expressions.ToList();
+            string token = v.Key + "=" + name;
+            int at = src.FindIndex(1, s => s.StartsWith(v.Key + "=", StringComparison.OrdinalIgnoreCase));
+            if (at > 0) src[at] = token; else src.Add(token);
+            return o with { Sources = src };
+        }
+
         /// <summary>#1731 — true when <paramref name="token"/> is a KEY=VALUE pair a scene can hold.</summary>
         public static bool IsFractalKeyToken(string token)
         {

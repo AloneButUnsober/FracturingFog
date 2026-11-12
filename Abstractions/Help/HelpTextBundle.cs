@@ -5304,8 +5304,10 @@ and a parametric torus.
 Objects: + Point / Vector / Segment / Polyline / Curve /
 Surface (z = f(x, y)) / Implicit (F(x, y, z) = 0, marching
 cubes) / Fractal (a 3D fractal meshed from its distance
-estimate; pick the type, settings are --param keys such as
-BulbPower=6) / Orbit (z0, z1, z2 ... of a point under a
+estimate; pick the type, and the variant for KIFS folds,
+Kleinian presets and bicomplex slice axes; settings are
+--param keys such as BulbPower=6, and an enum takes its name
+or number: KifsFold=Dodecahedron or 3) / Orbit (z0, z1, z2 ... of a point under a
 fractal's own step: Mandelbulb, Mandelbox, Kifs, quaternion
 Julia / Mandelbrot; drag its start point; a ring marks where
 it escapes). Drag a handle to move it (Shift snaps, Alt

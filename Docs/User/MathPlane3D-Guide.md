@@ -91,6 +91,18 @@ QuaternionJulia, QuaternionMandelbrot, Kleinian, BicomplexMandelbrot, Coquaterni
 - **Type and settings:** pick the type in the **Type** list, and give settings in **Settings** as
   `KEY=VALUE` pairs. These are the same keys `--param` takes, such as `BulbPower=6`, `BulbIterations=12`
   or `MandelboxScale=-1.5`. Empty settings mean the type's defaults.
+  - **Variant:** for a type with sub-types, a second list next to **Type** picks one, as the params window
+    does. It writes the setting for you and keeps the others:
+
+    | Type | Setting written |
+    |---|---|
+    | Kifs | the fold, `KifsFold=Dodecahedron` |
+    | Kleinian | the preset, `KleinianPreset=CubeCorner8` |
+    | BicomplexMandelbrot | the slice axis, `BicomplexSliceAxis=I` |
+
+    Kleinian's Custom preset needs a sphere list, so it isn't offered there.
+  - An enum setting takes its name or its number, in Settings and in `--param` alike: `KifsFold=Dodecahedron`
+    and `KifsFold=3` are the same.
   - Camera and Math Plane keys are refused.
   - As with `--param`, another family's key is accepted and changes nothing.
   - An unknown key is shown as a scene error on the render, and `--batch` refuses it.
