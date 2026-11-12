@@ -449,3 +449,26 @@ Dependencies are stated per issue; no auto-blocking is configured.
 | T5 | #1717 | Implicit surfaces F(x, y, z) = 0 via marching cubes | T2 |
 | T6 | #1718 | Mesh export of surfaces (glTF/GLB, STL) through the S9 writers + validator | T2 |
 | T7 | #1719 | Demos ("math behind 3D fractals": rotations, a KIFS fold as a reflection, scale, det as volume), help, user guide | T1–T4 |
+
+*As built (T7, #1719):*
+- **Demos:** `Abstractions/Models/MathPlane3DPresets.cs` holds nine read-only demos, each a scene, a map,
+  t, interpolation, camera and zoom. `Apply` sets every Math Plane 3D param, and `ParamArgs()` is the
+  `--param` list, with the camera on the shared `Cam3DDistance / Cam3DTheta / Cam3DPhi` keys.
+  - **Rotations:**
+    - about z at t = 1/2 twice: polar keeps |i| = 1 at 45°, while linear shrinks it to 0.71 (det 1/2);
+    - about x and about y.
+  - **The KIFS fold as a reflection:** FF's Sierpinski fold, the plane x + y = 0, det −1. A test
+    checks it against the fold code itself.
+  - **Uniform scale:** the Mandelbox step, scale 2, det 8.
+  - **det as volume:** det 3.
+  - **Surfaces:** the saddle z = x² − y², and a parametric torus (tube 0.6, ring 2).
+- **UI:** a **Demos** group at the top of the Control Center section (list, Load, the idea). Loading a
+  demo stops Play, applies the demo, sets the zoom and renders once. The built-ins never change.
+- **Help:** `HelpTextBundle.MathPlane3DText`, registered in both help trees next to Math Plane.
+- **Guide:** `Docs/User/MathPlane3D-Guide.md`, linked from `_Index.md`. A test checks that it names
+  every demo.
+- **Tests:** each demo:
+  - parses and renders headless;
+  - renders the same through its `--param` list and through the Command builder (no gaps);
+  - is checked against an independent fact: its det, a rotation's orthonormality and fixed axis, the
+    halfway lengths, the fold against `SierpDE`, the saddle's equation, the torus's tube radius.
