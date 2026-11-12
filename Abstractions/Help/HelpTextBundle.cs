@@ -5305,7 +5305,17 @@ the one idea it shows. Built-ins never change. Rotations about
 x, y and z (polar vs linear frames at t = 1/2), the KIFS fold
 as a reflection (det -1), the Mandelbox's scale step (det 8),
 det as the volume of the cube's image, a saddle z = x^2 - y^2
-and a parametric torus.
+and a parametric torus. Four demos put a 3D fractal mesh in the
+scene with the orbit of one point under its own step:
+'Mandelbulb: an escaping orbit',
+'Mandelbox: fold, then scale',
+'KIFS fold step beside the mesh' and
+'Quaternion Julia slice and its orbit'.
+
+On a 3D fractal view itself, View -> Math overlay draws the axes,
+the bailout sphere and the orbit of the surface point under the
+pointer (O pins it); --math-overlay-3d X,Y,Z draws it on a
+--batch still.
 
 Objects: + Point / Vector / Segment / Polyline / Curve /
 Surface (z = f(x, y)) / Implicit (F(x, y, z) = 0, marching

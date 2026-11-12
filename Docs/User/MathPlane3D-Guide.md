@@ -33,9 +33,18 @@ demos never change. To keep an edited demo, save the view as a region.
 | det is the volume of the cube's image | The unit cube's image is the parallelepiped on the matrix's columns. Its volume is \|det\| = 3. |
 | Saddle z = x^2 - y^2 | The surface curves up along x and down along y. The origin is a saddle point. |
 | Parametric torus | A circle of radius 0.6 swept round a circle of radius 2. u goes round the ring and v round the tube. |
+| Mandelbulb: an escaping orbit | The power-8 Mandelbulb as a mesh, and the orbit of one point under its own step. The orbit stays within \|z\| ≈ 1.2 for three steps, then jumps to \|z\| = 4.9 and escapes at step 4. |
+| Mandelbox: fold, then scale | One Mandelbox step folds, scales by 2, then adds c. From (0.9, 0.6, −0.3), step 1 only scales and adds c, giving (2.7, 1.8, −0.9). Step 2 folds x and y back to −0.7 and 0.2 first, giving (−0.5, 1, −2.1). The grey cube is the fold box and the green ball the unit sphere. The s = 2 Mandelbox itself is a solid block 12 wide that would hide them, so it is left out. |
+| KIFS fold step beside the mesh | The Sierpinski step: three mirror folds, then z → 2z − (1, 1, 1). The point (−0.8, 0.3, 0.6) is behind the x + y = 0 mirror. It is reflected to (−0.3, 0.8, 0.6), then scaled to (−1.6, 0.6, 0.2). |
+| Quaternion Julia slice and its orbit | The quaternion Julia set of q² + c, sliced at w = 0, and an orbit that escapes at step 7. c has w = −0.4, so the orbit leaves the slice at once; the scene drops w. |
 
 The rotation, fold and scale demos start at their final frame, except the two halfway ones. Press **Play**
 in the Map group to watch t run from the identity (0) to the matrix (1).
+
+The four fractal demos give their numbers in the fractal's own axes, where y is up, as the fractal views
+use. The scene is z up, so it shows the same points turned: (x, y, z) in the fractal is (x, −z, y) in the
+scene. For example, the Mandelbox demo's start point is typed as `0.9 0.3 0.6`. See
+[Fractals in the scene](#fractals-in-the-scene) and [Orbits](#orbits).
 
 ### Where these come from in the fractals
 
@@ -132,6 +141,22 @@ point is in the fractal when its orbit stays bounded.
 - **Steps** caps how many steps are drawn. 0 means the fractal's own iteration count.
 - **Type and settings** work as for a fractal object. A fractal and an orbit with the same type and
   settings line up in the scene.
+
+### The math overlay on the fractal views
+
+The same orbits can be drawn over the 3D fractal's own raymarched view, without Math Plane 3D:
+- **View → Math overlay** on a Mandelbulb, Mandelbox, KIFS or quaternion view draws:
+  - the axes;
+  - the bailout sphere;
+  - the orbit of the surface point under the pointer.
+
+  Parts behind the fractal are dimmed and dashed.
+- **Pinning:** press **O**, or use **Pin last point**, to pin that point.
+- **Exports and batch:** a pinned point is drawn on exports, and `--math-overlay-3d X,Y,Z[,STEPS]` draws it on
+  a `--batch` still.
+
+The point is in the fractal's own axes, as in the views. See the Math Plane guide,
+[On 3D fractal views](MathPlane-Guide.md#on-3d-fractal-views).
 
 ## 3. Linear map
 
