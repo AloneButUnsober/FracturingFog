@@ -283,6 +283,40 @@ public sealed class MathPlane3DSectionTests
         Assert.Equal(1, changed);
     }
 
+    [Fact]
+    public void Alt_KeepsTheFirstAxisForTheWholeDrag()
+    {
+        // The axis is chosen once; a later swing that would favour another axis must not
+        // hop the point onto that axis's line (that read as "moves freely").
+        var start = (X: 1.0, Y: 0.5, Z: 0.8);
+        var r = new Rig("v1; point A 1 0.5 0.8");
+        var q0 = r.Pin.Pixel(start);
+        r.Input.OnPointerDown(r.At(q0));
+        r.Input.OnPointerMove(r.At((q0.X + 2, q0.Y), m: InputModifiers.Alt));     // inside the dead zone
+        Assert.Equal(start, MathPlane3DScene.Point(r.Scene.Objects[0], 0));
+
+        r.Input.OnPointerMove(r.At((q0.X + 80, q0.Y + 5), m: InputModifiers.Alt));
+        var b = MathPlane3DScene.Point(r.Scene.Objects[0], 0);
+        bool[] first = { b.X != start.X, b.Y != start.Y, b.Z != start.Z };
+        Assert.Equal(1, first.Count(c => c));
+
+        // Precondition: a free drag to the second pixel changes another coordinate most.
+        var far = (q0.X + 80, q0.Y + 160);
+        var free = MathPlane3DSceneEdit.DragTo(MathPlane3DCamera.For(r.P, 1, W, H), Mat3.Identity, start, far.Item1 + 0.5, far.Item2 + 0.5)!.Value;
+        Assert.NotEqual(Array.IndexOf(first, true), MathPlane3DSceneEdit.DominantAxis(start, free));
+
+        r.Input.OnPointerMove(r.At(far, m: InputModifiers.Alt));
+        var c2 = MathPlane3DScene.Point(r.Scene.Objects[0], 0);
+        bool[] later = { c2.X != start.X, c2.Y != start.Y, c2.Z != start.Z };
+        Assert.Equal(first, later);
+        Assert.Contains("only]", r.Vm.PointerReadout);
+
+        // Releasing Alt mid-drag frees the point.
+        r.Input.OnPointerMove(r.At(far));
+        var d = MathPlane3DScene.Point(r.Scene.Objects[0], 0);
+        Assert.True((d.X != start.X ? 1 : 0) + (d.Y != start.Y ? 1 : 0) + (d.Z != start.Z ? 1 : 0) >= 2);
+    }
+
     // ── The canvas: orbit ──
 
     [Fact]
