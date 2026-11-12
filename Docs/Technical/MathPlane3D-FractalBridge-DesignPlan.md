@@ -108,6 +108,42 @@ orbit NAME TYPE x y z [steps N] [KEY=VALUE ...] [options]
 - **Coordinates:** the orbit uses the fractal's own axes, placed with the same rotation as §3.1. A fractal
   object and an orbit of the same TYPE and keys therefore line up.
 
+*As built (B2, #1732):*
+- **Model:** an orbit is a **curve** with `MathPlaneCurveKind.Fractal`.
+  - Sources hold the type, then KEY=VALUE. Coords hold the start point in scene axes. `Mesh` holds the
+    step cap (0 means the family's iteration count; at most 1000).
+  - It reuses curve drawing, the map and labels.
+  - Its start point is a handle (`MathPlane3DSceneEdit.HandleCount` is 1), so dragging it re-runs the
+    orbit.
+  - Settings are parsed and checked as for B1. Bad keys become the render's scene error, and `--batch`
+    refuses them.
+- **The step functions are exact CPU twins** (`Engine/Calculators/MathPlane3DOrbit.cs`), not shared
+  code. The calculators' DE loops are left untouched, so no render path changed and no visual baseline
+  moved. The parameters are derived as `RaymarchMeshSampler.For` derives them.
+- **Agreement is tested against the calculators' own code.** Neither test can pass with a wrong copy:
+  - Mandelbulb, Mandelbox and the quaternion Julia and Mandelbrot: the closest the orbit passes to the
+    origin equals the calculator's orbit-trap estimator **bit for bit** (`IOrbitTrapEstimator`, the same
+    loop), on 300 random points each. The traps cover z₀ to the escaping point (Mandelbulb), or every
+    post-step point (the others).
+  - KIFS, every fold kind, plus Menger with a negative z offset so its corner mirror fires: the DE read
+    off the orbit's last point equals `KifsCalculator`'s DE bit for bit. That is (r − 2)·s⁻ⁿ, r·s⁻ⁿ,
+    r·s^−(it+1), or r/|dr| for Mandelbox-rot, whose orbit also carries dr.
+  - This replaces §3.2's "step count to escape" check. The Mandelbulb's escape count is private to its
+    DE, and the traps compare every point rather than one count.
+- **Escape semantics follow each loop exactly.**
+  - The Mandelbulb tests |z| > 2 before stepping, so an orbit that runs out of iterations can end
+    outside without having "escaped".
+  - The others test after the step.
+- **Display ball:** the radius is min(escape radius, 1.5 × `SuggestedRange`).
+  - The polyline is clipped to it (`MathPlane3DOrbit.Clip`, a segment-sphere intersection), and a
+    segment that passes through the ball keeps its chord.
+  - Each step is a dot (the start larger), and a ring marks an escape.
+  - Bounds come from the clipped pieces, so the grid keeps to the fractal's scale.
+- **Measured:** an orbit is at most a few hundred steps of a few flops each, so it is rebuilt on every
+  scene parse without a cache.
+- **UI:** a **+ Orbit** button. A selected orbit shows Type (the five orbit types), Settings, Numbers
+  (x y z) and Steps.
+
 ### 3.3 Exact camera for each raymarcher (B3, #1733)
 
 The two cameras differ, and this is the hard part of the epic:

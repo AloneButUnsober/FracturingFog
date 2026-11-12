@@ -5305,7 +5305,10 @@ Objects: + Point / Vector / Segment / Polyline / Curve /
 Surface (z = f(x, y)) / Implicit (F(x, y, z) = 0, marching
 cubes) / Fractal (a 3D fractal meshed from its distance
 estimate; pick the type, settings are --param keys such as
-BulbPower=6). Drag a handle to move it (Shift snaps, Alt
+BulbPower=6) / Orbit (z0, z1, z2 ... of a point under a
+fractal's own step: Mandelbulb, Mandelbox, Kifs, quaternion
+Julia / Mandelbrot; drag its start point; a ring marks where
+it escapes). Drag a handle to move it (Shift snaps, Alt
 keeps one axis); left-drag on empty space orbits; Delete
 removes.
 

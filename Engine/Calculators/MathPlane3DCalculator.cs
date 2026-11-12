@@ -150,6 +150,8 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
     private MathPlane3DScene _scene = new();
     private Dictionary<MathPlaneObject, MathPlane3DSurfaceMesh> _meshes = new(ReferenceEqualityComparer.Instance);
     private Dictionary<MathPlaneObject, List<List<(double X, double Y, double Z)>>> _curves = new(ReferenceEqualityComparer.Instance);
+    // #1732 — orbit objects: the full orbit (for the step markers); their clipped polylines are in _curves.
+    private Dictionary<MathPlaneObject, MathPlane3DOrbitPath> _orbits = new(ReferenceEqualityComparer.Instance);
     private Dictionary<MathPlaneObject, MathPlane3DImplicitMesh> _implicits = new(ReferenceEqualityComparer.Instance);
     private Dictionary<string, MathPlane3DImplicitMesh> _implicitByGeometry = new(StringComparer.Ordinal);
 
@@ -193,6 +195,7 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
             LastSceneError = MathPlane3DScene.TryParse(text, out var parsed, out var err) ? null : err;
             var meshes = new Dictionary<MathPlaneObject, MathPlane3DSurfaceMesh>(ReferenceEqualityComparer.Instance);
             var curves = new Dictionary<MathPlaneObject, List<List<(double X, double Y, double Z)>>>(ReferenceEqualityComparer.Instance);
+            var orbits = new Dictionary<MathPlaneObject, MathPlane3DOrbitPath>(ReferenceEqualityComparer.Instance);
             var implicits = new Dictionary<MathPlaneObject, MathPlane3DImplicitMesh>(ReferenceEqualityComparer.Instance);
             var implicitByGeometry = new Dictionary<string, MathPlane3DImplicitMesh>(StringComparer.Ordinal);
             string? fractalError = null;
@@ -220,11 +223,18 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
                     implicits[o] = im;
                 }
                 else if (o.Kind == MathPlaneObjectKind.Surface && BuildSurface(o) is { } m) meshes[o] = m;
+                else if (MathPlane3DScene.IsOrbit(o))
+                {
+                    // #1732 — the orbit of a point under a fractal's own step; bad settings are a scene error.
+                    if (MathPlane3DOrbit.Build(o, out string? oerr) is { } path) { orbits[o] = path; curves[o] = path.Pieces; }
+                    else fractalError ??= oerr;
+                }
                 else if (o.Kind == MathPlaneObjectKind.Curve) curves[o] = SampleCurve(o);
             }
             if (LastSceneError == null && fractalError != null) LastSceneError = new MathPlaneSceneError(0, 0, fractalError);
             // Committed only when every mesh is built, so a cancelled render re-meshes next time.
             (_scene, _meshes, _curves, _implicits, _implicitByGeometry) = (parsed, meshes, curves, implicits, implicitByGeometry);
+            _orbits = orbits;
             _parsedText = text;
         }
         var scene = _scene;
@@ -896,11 +906,44 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
                 {
                     if (labels)
                     {
-                        if (o.ShowLabel && pieces.Count > 0) Text(canvas, cam, X(pieces[^1][^1]), o.Name, font, halo, ink, ui);
+                        // #1732 — an orbit is labelled at its start point.
+                        if (o.ShowLabel && _orbits.TryGetValue(o, out var lo) && lo.Points.Count > 0)
+                            Text(canvas, cam, X(lo.Points[0]), o.Name, font, halo, ink, ui);
+                        else if (o.ShowLabel && pieces.Count > 0) Text(canvas, cam, X(pieces[^1][^1]), o.Name, font, halo, ink, ui);
                         break;
                     }
                     foreach (var piece in pieces)
                         for (int i = 1; i < piece.Count; i++) DrawLine3D(canvas, ctx, X(piece[i - 1]), X(piece[i]), line);
+                    // #1732 — an orbit marks each step inside the display ball (the start larger) and,
+                    // when it escaped, rings the point where it leaves the ball.
+                    if (_orbits.TryGetValue(o, out var orbit))
+                    {
+                        dot.Color = col;
+                        double rd2 = orbit.DisplayRadius * orbit.DisplayRadius;
+                        for (int i = 0; i < orbit.Points.Count; i++)
+                        {
+                            var q = orbit.Points[i];
+                            if (!(q.X * q.X + q.Y * q.Y + q.Z * q.Z <= rd2)) continue;
+                            var mq = X(q);
+                            if (cam.Project(mq.X, mq.Y, mq.Z) is { } pq && PassesDepth(ZBuffer, w, h, pq.X, pq.Y, pq.InvZ)
+                                && InPhase(ctx, pq.X, pq.Y, pq.InvZ))
+                            {
+                                float rad = (i == 0 ? 5f : 3f) * ui;
+                                canvas.DrawCircle((float)pq.X, (float)pq.Y, rad, dot);
+                                canvas.DrawCircle((float)pq.X, (float)pq.Y, rad, outline);
+                            }
+                        }
+                        if (orbit.Escaped && pieces.Count > 0 && pieces[^1].Count > 0)
+                        {
+                            var e = X(pieces[^1][^1]);
+                            if (cam.Project(e.X, e.Y, e.Z) is { } pe && PassesDepth(ZBuffer, w, h, pe.X, pe.Y, pe.InvZ)
+                                && InPhase(ctx, pe.X, pe.Y, pe.InvZ))
+                            {
+                                line.StrokeWidth = 2f * ui;
+                                canvas.DrawCircle((float)pe.X, (float)pe.Y, 8f * ui, line);
+                            }
+                        }
+                    }
                     break;
                 }
                 case MathPlaneObjectKind.Surface when labels && o.ShowLabel && _meshes.TryGetValue(o, out var mesh):

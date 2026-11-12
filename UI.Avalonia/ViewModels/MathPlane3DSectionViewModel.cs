@@ -65,6 +65,7 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
         AddSurfaceCommand = ReactiveCommand.Create(() => Add(MathPlane3DSceneEdit.AddKind.Surface));
         AddImplicitCommand = ReactiveCommand.Create(() => Add(MathPlane3DSceneEdit.AddKind.Implicit));
         AddFractalCommand = ReactiveCommand.Create(() => Add(MathPlane3DSceneEdit.AddKind.Fractal));
+        AddOrbitCommand = ReactiveCommand.Create(() => Add(MathPlane3DSceneEdit.AddKind.Orbit));
         DeleteCommand = ReactiveCommand.Create(DeleteSelected);
         MoveUpCommand = ReactiveCommand.Create(() => MoveSelected(-1));
         MoveDownCommand = ReactiveCommand.Create(() => MoveSelected(+1));
@@ -86,6 +87,8 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
     public ReactiveCommand<Unit, Unit> AddImplicitCommand { get; }
     /// <summary>#1731 — add a 3D fractal (a Mandelbulb) meshed from its distance estimate.</summary>
     public ReactiveCommand<Unit, Unit> AddFractalCommand { get; }
+    /// <summary>#1732 — add the orbit of a point under a fractal's step (a Mandelbulb point).</summary>
+    public ReactiveCommand<Unit, Unit> AddOrbitCommand { get; }
     public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
     public ReactiveCommand<Unit, Unit> MoveUpCommand { get; }
     public ReactiveCommand<Unit, Unit> MoveDownCommand { get; }
@@ -271,6 +274,8 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
             var o = _scene.Objects[_selectedIndex];
             if (o.Kind == MathPlaneObjectKind.Vector && nums.Length is not (3 or 6))
             { EditError = "A vector takes dx dy dz, or dx dy dz x0 y0 z0 (drawn from x0, y0, z0)."; return; }
+            if (MathPlane3DScene.IsOrbit(o) && nums.Length != 3)
+            { EditError = "An orbit takes its start point, x y z."; return; }
             ApplySelected(x => x with { Coords = nums, HasFrom = x.Kind == MathPlaneObjectKind.Vector && nums.Length == 6 });
         }
     }
@@ -305,14 +310,45 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
 
     // ── #1731: a selected fractal's type and settings ──
 
-    /// <summary>The 3D types a fractal object can be.</summary>
-    public IReadOnlyList<string> FractalTypeChoices { get; } = MathPlane3DScene.FractalTypes.Select(t => t.ToString()).ToList();
+    private static readonly IReadOnlyList<string> SurfaceTypeChoices = MathPlane3DScene.FractalTypes.Select(t => t.ToString()).ToList();
+    private static readonly IReadOnlyList<string> OrbitTypeChoices = MathPlane3DScene.OrbitTypes.Select(t => t.ToString()).ToList();
+
+    /// <summary>The 3D types the selected fractal (#1731) or orbit (#1732) can be.</summary>
+    public IReadOnlyList<string> FractalTypeChoices => _selIsOrbit ? OrbitTypeChoices : SurfaceTypeChoices;
 
     private bool _selIsFractal;
+    /// <summary>A fractal surface or an orbit: the Type and Settings rows show.</summary>
     public bool SelectedIsFractal { get => _selIsFractal; private set { this.RaiseAndSetIfChanged(ref _selIsFractal, value); this.RaisePropertyChanged(nameof(HasCoords)); } }
 
-    /// <summary>The Numbers box: every object but a fractal (whose cube comes from its type).</summary>
-    public bool HasCoords => !_selIsFractal;
+    private bool _selIsOrbit;
+    /// <summary>#1732 — an orbit: the Steps box shows.</summary>
+    public bool SelectedIsOrbit
+    {
+        get => _selIsOrbit;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _selIsOrbit, value);
+            this.RaisePropertyChanged(nameof(HasCoords));
+            this.RaisePropertyChanged(nameof(FractalTypeChoices));
+        }
+    }
+
+    /// <summary>The Numbers box: every object but a fractal surface (whose cube comes from its type).</summary>
+    public bool HasCoords => !_selIsFractal || _selIsOrbit;
+
+    private int _selSteps;
+    /// <summary>#1732 — an orbit's step cap (0 = the fractal's own iteration count).</summary>
+    public int SelectedSteps
+    {
+        get => _selSteps;
+        set
+        {
+            if (_selSteps == value) return;
+            this.RaiseAndSetIfChanged(ref _selSteps, value);
+            if (_loadingSelection || !HasSelection || !_selIsOrbit) return;
+            ApplySelected(o => o with { Mesh = Math.Clamp(value, 0, MathPlane3DScene.MaxOrbitSteps) });
+        }
+    }
 
     private string _selFractalType = "";
     /// <summary>The selected fractal's type name.</summary>
@@ -658,7 +694,7 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
             {
                 SelectedKind = ""; SelectedName = ""; SelectedColor = ""; SelectedCoords = ""; SelectedCoordsHint = "";
                 SelectedVisible = false; SelectedShowLabel = false; SelectedIsSurface = false; SelectedExpressionCount = 0;
-                SelectedIsFractal = false; SelectedFractalType = ""; SelectedFractalSettings = "";
+                SelectedIsFractal = false; SelectedIsOrbit = false; SelectedFractalType = ""; SelectedFractalSettings = ""; SelectedSteps = 0;
                 _selImplicit = false;
                 _selExpr1 = _selExpr2 = _selExpr3 = ""; _selMesh = 0;
                 RaiseExpressions();
@@ -674,6 +710,7 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
                     MathPlaneCurveKind.Fractal => "3D fractal (meshed from its distance estimate)",
                     _ => "Surface z = f(x, y)",
                 },
+                MathPlaneObjectKind.Curve when MathPlane3DScene.IsOrbit(o) => "Orbit of a point under a fractal's step",
                 MathPlaneObjectKind.Curve => "Space curve",
                 _ => o.Kind.ToString(),
             };
@@ -688,7 +725,9 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
             SelectedIsSurface = o.Kind == MathPlaneObjectKind.Surface;
             _selImplicit = SelectedIsSurface && o.CurveKind == MathPlaneCurveKind.Implicit;
             // #1731 — a fractal's sources are its type and settings, not formulas.
-            SelectedIsFractal = SelectedIsSurface && o.CurveKind == MathPlaneCurveKind.Fractal;
+            SelectedIsOrbit = MathPlane3DScene.IsOrbit(o);   // #1732 (before the type, so its list is the orbit's)
+            SelectedIsFractal = o.CurveKind == MathPlaneCurveKind.Fractal && (SelectedIsSurface || _selIsOrbit);
+            SelectedSteps = _selIsOrbit ? o.Mesh : 0;
             SelectedFractalType = _selIsFractal && o.Expressions.Count > 0 ? o.Expressions[0] : "";
             SelectedFractalSettings = _selIsFractal ? string.Join(" ", o.Expressions.Skip(1)) : "";
             SelectedExpressionCount = _selIsFractal ? 0 : o.Expressions.Count;
@@ -714,6 +753,7 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
         MathPlaneObjectKind.Vector => "dx dy dz [x0 y0 z0]",
         MathPlaneObjectKind.Segment => "x1 y1 z1 x2 y2 z2",
         MathPlaneObjectKind.Polyline => "x y z for each point",
+        MathPlaneObjectKind.Curve when MathPlane3DScene.IsOrbit(o) => "x y z (the start point; drag it on the render)",
         MathPlaneObjectKind.Curve => "tmin tmax",
         MathPlaneObjectKind.Surface when o.CurveKind == MathPlaneCurveKind.Parametric => "umin umax vmin vmax",
         MathPlaneObjectKind.Surface when o.CurveKind == MathPlaneCurveKind.Implicit => "xmin xmax ymin ymax zmin zmax (empty: -3 3 on each)",
@@ -853,6 +893,8 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
             MathPlaneObjectKind.Vector => o.HasFrom ? $"vector {o.Name} {P3(0)} from {P3(1)}" : $"vector {o.Name} {P3(0)}",
             MathPlaneObjectKind.Segment => $"segment {o.Name} {P3(0)} to {P3(1)}",
             MathPlaneObjectKind.Polyline => $"polyline {o.Name} ({o.Coords.Count / 3} points)",
+            MathPlaneObjectKind.Curve when MathPlane3DScene.IsOrbit(o)
+                => $"orbit {o.Name}: {(o.Expressions.Count > 0 ? o.Expressions[0] : "")} from {P3(0)}",
             MathPlaneObjectKind.Curve => $"curve {o.Name}: ({string.Join(", ", o.Expressions)})",
             MathPlaneObjectKind.Surface when o.CurveKind == MathPlaneCurveKind.Parametric => $"surface {o.Name}: ({string.Join(", ", o.Expressions)})",
             MathPlaneObjectKind.Surface when o.CurveKind == MathPlaneCurveKind.Implicit => $"surface {o.Name}: {(o.Expressions.Count > 0 ? o.Expressions[0] : "")} = 0",
