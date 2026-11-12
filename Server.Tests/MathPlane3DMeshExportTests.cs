@@ -361,6 +361,36 @@ public sealed class MathPlane3DMeshExportTests : IDisposable
     }
 
     [Fact]
+    public void TheExportButton_IsNotified_WhenTheEditorAddsHidesOrDeletesASurface()
+    {
+        // The button binds to CanExportMesh, so every edit that changes it must raise it;
+        // reading the getter alone would pass while the button stayed stale.
+        var vm = Vm("point A 1 2 3", out _);
+        vm.MeshExportRequested = () => Task.FromResult<MathPlane3DMeshOutcome?>(null);
+        bool? seen = null;
+        vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(vm.CanExportMesh)) seen = vm.CanExportMesh; };
+
+        vm.AddImplicitCommand.Execute().Subscribe();
+        Assert.True(seen);
+
+        seen = null;
+        vm.SelectedVisible = false;
+        Assert.False(seen);
+
+        seen = null;
+        vm.SelectedVisible = true;
+        Assert.True(seen);
+
+        seen = null;
+        vm.DeleteCommand.Execute().Subscribe();
+        Assert.False(seen);
+
+        seen = null;
+        vm.AddSurfaceCommand.Execute().Subscribe();
+        Assert.True(seen);
+    }
+
+    [Fact]
     public async Task TheExportButton_ShowsTheOutcome_NeutralOrYellow()
     {
         var vm = Vm(Sphere, out _);

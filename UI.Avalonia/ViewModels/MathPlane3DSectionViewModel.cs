@@ -501,8 +501,6 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
         _sceneValid = MathPlane3DScene.TryParse(text, out var scene, out var err);
         SceneError = _sceneValid ? null : err!.ToString();
         if (_sceneValid) LoadScene(scene, keepSelectionByName: true);
-        this.RaisePropertyChanged(nameof(HasVisibleSurface));
-        this.RaisePropertyChanged(nameof(CanExportMesh));
     }
 
     private void LoadScene(MathPlane3DScene scene, bool keepSelectionByName)
@@ -515,6 +513,10 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
         _selectedIndex = -2;   // force the setter to reload
         SelectedIndex = idx;
         RaiseDisplay();
+        // #1718 — every scene change (an add, a delete, a hide, a region recall) can change
+        // whether there is a surface to export; the button binds to the notification.
+        this.RaisePropertyChanged(nameof(HasVisibleSurface));
+        this.RaisePropertyChanged(nameof(CanExportMesh));
     }
 
     /// <summary>Write <paramref name="scene"/> if it re-parses (the parser's error otherwise).</summary>
