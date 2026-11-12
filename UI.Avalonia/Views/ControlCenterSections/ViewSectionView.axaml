@@ -46,7 +46,7 @@
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0" IsVisible="{Binding Shell.Main.MathOverlay}">
                     <Button Classes="action neutral" Content="Pin last point" Command="{Binding Shell.Main.PinMathOverlayCommand}"
-                            ToolTip.Tip="Pin the last point the pointer was over (on a 3D view, the point on the fractal's surface); exports, the Command builder and --math-overlay / --math-overlay-3d draw the pinned orbit" />
+                            ToolTip.Tip="Pin the last point the pointer was over (on a 3D view, the point on the fractal's surface). Shortcut: O in the render window pins the point under the pointer; exports, the Command builder and --math-overlay / --math-overlay-3d draw the pinned orbit" />
                     <TextBox Text="{Binding Shell.Main.MathOverlayPinText}" Width="200" FontFamily="Consolas, Menlo, monospace"
                              ToolTip.Tip="The pinned point: re im on a 2D view, x y z (the fractal's own axes) on a 3D view (empty: none)" />
                     <TextBlock Text="{Binding Shell.Main.MathOverlayPinError}" Foreground="#FFCC00" VerticalAlignment="Center"

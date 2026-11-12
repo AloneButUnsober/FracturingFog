@@ -36,6 +36,7 @@ ignored while a text box has focus (see [Focus Behavior](#focus-behavior)).
 | `X` | Toggle the **Post-FX HUD** overlay (live brightness / contrast / adaptive readout) |
 | `Ctrl + H` | Toggle the **Post-FX HUD** — a second, discoverable binding for the same overlay as `X` (mnemonic: *H = HUD*) |
 | `P` | Open the **Fractal Parameters** dialog |
+| `O` | **Pin** the math overlay's point under the pointer (View → Math overlay must be on; on a 3D view, the point on the fractal's surface) |
 | `F1` | Open the **Help** window |
 
 ---

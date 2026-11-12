@@ -28,6 +28,8 @@ public sealed partial class MainViewModel
 
     private (double Re, double Im)? _lastOverlayHover;
     private (double X, double Y, double Z)? _lastOverlayHover3D;   // #1734
+    // #1748 — the pointer's latest 3D hover was over the sky (no surface point under it).
+    private bool _hoverOverSky3D;
 
     private void InitMathOverlay()
     {
@@ -158,6 +160,18 @@ public sealed partial class MainViewModel
         MathOverlayFollow = false;
     }
 
+    /// <summary>#1748 — the O key: pin the point under the pointer now, so pinning needs no trip
+    /// to the Control Center button (which drags the hover point along the way). Returns false
+    /// (key not used) when the overlay is off.</summary>
+    public bool PinMathOverlayAtPointer()
+    {
+        if (!_renderHost.MathOverlayEnabled) return false;
+        if (ViewState.Is3D && _hoverOverSky3D)
+        { MathOverlayPinError = "The pointer is over the sky; point at the fractal to pin."; return true; }
+        PinMathOverlay();
+        return true;
+    }
+
     private void OnMathOverlayHover(PointerInput e)
     {
         if (!_renderHost.MathOverlayEnabled) return;
@@ -165,6 +179,7 @@ public sealed partial class MainViewModel
         {
             var p3 = _renderHost.PickSurface3D(e.X, e.Y, e.ClientWidth, e.ClientHeight);
             if (p3 != null) _lastOverlayHover3D = p3;
+            _hoverOverSky3D = p3 == null;
             if (_mathOverlayFollow) _renderHost.SetMathOverlayHover3D(p3);
             return;
         }
