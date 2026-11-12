@@ -91,6 +91,9 @@ namespace FracturingFog.Batch
         public const string Gpu            = "--gpu";
         // #1554 — the math overlay (axes + the orbit of a pinned point) on a 2D still.
         public const string MathOverlay    = "--math-overlay";
+        // #1735 — the math overlay on a 3D still: axes, bailout sphere and the orbit of a pinned
+        // object-space point under the fractal's own step, depth-tested against the render.
+        public const string MathOverlay3D  = "--math-overlay-3d";
         // #1718 — also write a Math Plane 3D scene's surfaces as a mesh (.glb / .gltf / .stl).
         public const string MathPlane3DMesh = "--math-plane-3d-mesh";
         public const string Verbose        = "--verbose";

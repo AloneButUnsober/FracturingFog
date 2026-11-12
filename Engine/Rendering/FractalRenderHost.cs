@@ -1568,6 +1568,8 @@ namespace FracturingFog.Rendering
                 // #1554 — a pinned math overlay is part of the picture (hover is not).
                 MathOverlay = MathOverlayEnabled && !ViewState.Is3D && MathOverlayPin is { } mop
                     ? mop with { Steps = MathOverlaySteps } : null,
+                // #1735 — so is a pinned 3D one (drawn with the export's own camera and depth).
+                MathOverlay3D = CurrentMathOverlay3DPin(),
             };
         }
 

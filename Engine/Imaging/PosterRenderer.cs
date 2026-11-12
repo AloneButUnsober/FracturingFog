@@ -192,6 +192,15 @@ namespace FracturingFog.Imaging
         /// drawn on the composed frame before rotation, QR and watermark. Null = none.</summary>
         public FracturingFog.ViewState.MathOverlaySpec? MathOverlay { get; init; }
 
+        /// <summary>#1735 — the math overlay on a 3D view (axes, bailout sphere and the orbit of
+        /// this object-space point), drawn with the render's own camera and depth on the finished
+        /// display buffer, as the live host does. Null = none.</summary>
+        public FracturingFog.ViewState.MathOverlay3DSpec? MathOverlay3D { get; init; }
+
+        /// <summary>#1735 — filled by the render: whether <see cref="MathOverlay3D"/> was drawn,
+        /// and why not. A reference, so <c>with</c> copies share it.</summary>
+        public MathOverlay3DReport? MathOverlay3DReport { get; init; }
+
         /// <summary>#1410 — runtime state of a QR extruded into the relief (set by
         /// <see cref="PosterRenderer.RenderToFile"/> when <see cref="Qr"/> asks for it;
         /// filled by the relief stage, consumed when the QR is applied).</summary>
@@ -260,6 +269,17 @@ namespace FracturingFog.Imaging
     }
 
     /// <summary>Offscreen high-resolution fractal renderer shared by both shells.</summary>
+    /// <summary>#1735 — what a render did with <see cref="PosterRequest.MathOverlay3D"/>.</summary>
+    public sealed class MathOverlay3DReport
+    {
+        /// <summary>The overlay was drawn.</summary>
+        public bool Drawn { get; set; }
+        /// <summary>Drawn without depth (thin-lens DoF): nothing dimmed, a note on the image.</summary>
+        public bool NoDepth { get; set; }
+        /// <summary>Why it was not drawn (null when drawn).</summary>
+        public string? Reason { get; set; }
+    }
+
     public static class PosterRenderer
     {
         /// <summary>#189 (performance safety) — a conservative estimate of the peak
@@ -393,8 +413,13 @@ namespace FracturingFog.Imaging
                 && FracturingFog.Rendering.Lighting.ScreenSpacePost.WantsDepthOutput(dfp.Lighting)
                 ? new System.Runtime.CompilerServices.StrongBox<float[]?>()
                 : null;
+            // #1735 — the 3D math overlay needs the render's camera and depth (sample 0).
+            var overlay3D = req.MathOverlay3D != null
+                && FracturingFog.ViewState.FractalViewState.IsThreeD(req.FractalType)
+                ? new Overlay3DCapture()
+                : null;
 
-            uint[] buffer = RenderComposedBuffer(req, token, out w, out h, hdrAov, depth3D);
+            uint[] buffer = RenderComposedBuffer(req, token, out w, out h, hdrAov, depth3D, overlay3D);
 
             sw.Stop();
 
@@ -499,8 +524,43 @@ namespace FracturingFog.Imaging
                 if (stereo != null) { buffer = stereo; w = stereoW; h = stereoH; }
             }
 
+            // #1735 — the 3D math overlay, last, on the finished display buffer, as the live host
+            // draws it (FractalRenderHost, after the post chain). A stereo side-by-side frame is
+            // wider than the camera's and is not drawn on, as live.
+            ApplyMathOverlay3D(req, overlay3D, buffer, w, h);
+
             elapsedMs = sw.ElapsedMilliseconds;
             return buffer;
+        }
+
+        /// <summary>#1735 — the camera and depth of a 3D render's first (unjittered) sample.</summary>
+        public sealed class Overlay3DCapture
+        {
+            public FracturingFog.Rendering.Raymarch3DCamera? Camera;
+            public float[]? Depth;
+        }
+
+        /// <summary>#1735 — draw <see cref="PosterRequest.MathOverlay3D"/> on <paramref name="buffer"/>
+        /// with the captured camera and depth (pinned), and record the outcome.</summary>
+        public static void ApplyMathOverlay3D(PosterRequest req, Overlay3DCapture? cap, uint[] buffer, int w, int h)
+        {
+            if (req.MathOverlay3D is not { } spec) return;
+            var report = req.MathOverlay3DReport;
+            string? why = null;
+            if (!FracturingFog.ViewState.FractalViewState.IsThreeD(req.FractalType) || req.FractalParameters == null)
+                why = $"{req.FractalType} is not a 3D fractal type";
+            else if (cap?.Camera is not { } cam)
+                why = $"{req.FractalType} published no camera (true stereo, or no raymarch camera)";
+            else if (cam.Width != w || cam.Height != h)
+                why = "the frame is a stereo side-by-side pair";
+            else
+            {
+                FracturingFog.Rendering.MathOverlay3DRenderer.Draw(buffer, cam, cap.Depth, req.FractalType,
+                    req.FractalParameters, spec, pinned: true);
+                if (report != null) { report.Drawn = true; report.NoDepth = cap.Depth == null; }
+                return;
+            }
+            if (report != null) report.Reason = why;
         }
 
         /// <summary>#610 — centre a <paramref name="sw"/>×<paramref name="sh"/> source
@@ -560,7 +620,8 @@ namespace FracturingFog.Imaging
         /// depth), so they are applied only on the file path above.</summary>
         internal static uint[] RenderComposedBuffer(PosterRequest req, CancellationToken token, out int w, out int h,
             FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers? aovCapture = null,
-            System.Runtime.CompilerServices.StrongBox<float[]?>? depthCapture = null)
+            System.Runtime.CompilerServices.StrongBox<float[]?>? depthCapture = null,
+            Overlay3DCapture? overlay3D = null)
         {
             uint[] buffer;
 
@@ -583,6 +644,8 @@ namespace FracturingFog.Imaging
             float[]? reliefField = ResolveReliefField(req, req.Width, req.Height, token, out int reliefFw, out int reliefFh);
 
             IFractalCalculator? alt = BuildCaptureCalculator(req);
+            // #1735 — the 3D math overlay asks the raymarcher for its depth (image unchanged).
+            if (overlay3D != null && alt is IDepthAovSource overlayDepth) overlayDepth.DepthRequested = true;
             // #1012 — True stereo on a 3D raymarcher: both eye renders; the composed
             // buffer is the side-by-side pair and the post-pipeline (grade / view
             // transform / interior composite, all per-pixel) runs on it at its size.
@@ -604,6 +667,14 @@ namespace FracturingFog.Imaging
             {
                 alt.Calculate(token);
                 token.ThrowIfCancellationRequested();
+                // #1735 — the overlay's camera and depth: this first, unjittered sample is the
+                // view's own camera (the AA samples below pan it by sub-pixel offsets).
+                if (overlay3D != null && alt is FracturingFog.Rendering.IRaymarch3DCameraSource { LastCamera: { } ocam })
+                {
+                    overlay3D.Camera = ocam;
+                    overlay3D.Depth = alt is IDepthAovSource { DepthBuffer: { } od } && od.Length >= ocam.Width * ocam.Height
+                        ? (float[])od.Clone() : null;
+                }
                 // #1344 — the quality preset's sub-pixel AA, as the live view runs it
                 // (export and --batch used to skip it).
                 // #1381 — adaptive contrast per sample, before the average.

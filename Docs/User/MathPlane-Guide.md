@@ -145,9 +145,16 @@ Choosing the point:
 - **Pin last point** freezes that point.
 - You can type a pin as `x y z`.
 
+A pinned 3D overlay is part of the picture:
+- **Exports** draw it with the export's own camera and depth.
+- **`--batch`:** `--math-overlay-3d X,Y,Z[,STEPS]` draws it on a 3D still, and the Command builder emits it
+  from the pin. For example:
+  `--batch --fractal Mandelbulb --x 0 --y 0 --zoom 1 --math-overlay-3d 0.6,0.4,0.5,20 --out bulb.png`
+- It cannot be combined with the 2D `--math-overlay`, and a 2D fractal type is refused.
+
 Where it isn't drawn yet:
-- **Exports and `--batch` don't draw the 3D overlay yet.** The Command builder reports it as a gap until
-  that lands (#1735).
+- **Video and slideshow frames:** `--math-overlay-3d` is for stills only, and a video or slideshow command
+  with it is refused (#1746).
 - **Stereo:** the overlay is not drawn on side-by-side stereo frames.
 - **Thin-lens depth of field:** no depth is available, so hidden parts are not dimmed. A yellow note says so.
 

@@ -360,6 +360,13 @@ namespace FracturingFog.Batch
                 (opts.CenterX == null && opts.CenterY == null && explored == null) ? namedRegion : null;
 
             var rescueReport = new FracturingFog.IterationRescueReport();   // SM-1 (#1267)
+            // #1735 — the 3D overlay draws on 3D types only; say so before rendering.
+            if (opts.MathOverlay3D != null && !FracturingFog.ViewState.FractalViewState.IsThreeD(frType))
+            {
+                Console.Error.WriteLine($"batch: {BatchFlags.MathOverlay3D} needs a 3D fractal type (got {frType}); use {BatchFlags.MathOverlay} on 2D views.");
+                return 2;
+            }
+            var overlay3DReport = opts.MathOverlay3D != null ? new MathOverlay3DReport() : null;
             var req = new PosterRequest
             {
                 FractalType = frType,
@@ -413,6 +420,8 @@ namespace FracturingFog.Batch
                 Qr = opts.BuildQrOptions(),
                 KeepPreQrPixels = opts.QrMesh != null && opts.QrPayload != null,   // #1411
                 MathOverlay = opts.MathOverlay,   // #1554 — pinned math overlay
+                MathOverlay3D = opts.MathOverlay3D,   // #1735 — pinned 3D math overlay
+                MathOverlay3DReport = overlay3DReport,
             };
             // #1305 — fail before the (possibly long) render when the code cannot
             // fit: payload too large for the level, or image too small for it.
@@ -501,7 +510,11 @@ namespace FracturingFog.Batch
                         Console.WriteLine("  timing  : " + BatchTiming.Format(
                             [("render", result.ElapsedMs), ("encode+write", result.EncodeMs)]));
                     NoteGpuRoute(FracturingFog.Rendering.HeadlessGpu.LastAttached);   // #1611
-                    if (rescueReport.RaisedTo > 0)
+                    if (overlay3DReport is { Drawn: false, Reason: { } o3Why })
+                Console.WriteLine($"  note    : {BatchFlags.MathOverlay3D} was not drawn: {o3Why}");
+            else if (overlay3DReport is { Drawn: true, NoDepth: true })
+                Console.WriteLine($"  note    : {BatchFlags.MathOverlay3D}: no depth (thin-lens depth of field), so hidden parts are not dimmed");
+            if (rescueReport.RaisedTo > 0)
                         Console.WriteLine($"  note    : every pixel was in-set at {iter} iterations; re-rendered at {rescueReport.RaisedTo} (pass --iterations to fix the count)");
                     if (result.Qr is { } qr)
                     {

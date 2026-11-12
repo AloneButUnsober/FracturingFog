@@ -188,6 +188,12 @@ namespace FracturingFog.Batch
         /// live view's math overlay does. Null = off.</summary>
         public FracturingFog.ViewState.MathOverlaySpec? MathOverlay { get; set; }
 
+        /// <summary>#1735 — <c>--math-overlay-3d X,Y,Z[,STEPS]</c>: draw the 3D math overlay
+        /// (axes, bailout sphere, the orbit of the pinned object-space point under the
+        /// fractal's own step, hidden parts dimmed and dashed) on a 3D still, as the live
+        /// view does. Null = off.</summary>
+        public FracturingFog.ViewState.MathOverlay3DSpec? MathOverlay3D { get; set; }
+
         /// <summary>#1718 — <c>--math-plane-3d-mesh PATH</c>: also write the Math Plane 3D
         /// scene's visible surfaces, after the map at the current t, as a mesh
         /// (.glb / .gltf / .stl). Null = off.</summary>
@@ -866,6 +872,15 @@ namespace FracturingFog.Batch
                         if (!FracturingFog.ViewState.MathOverlaySpec.TryParse(mov, out var mo, out string? moErr))
                         { error = $"{a} {moErr}."; return false; }
                         opts.MathOverlay = mo;
+                        break;
+                    }
+
+                    case BatchFlags.MathOverlay3D:   // #1735
+                    {
+                        if (!Next(args, ref i, a, out string m3v, out error)) return false;
+                        if (!FracturingFog.ViewState.MathOverlay3DSpec.TryParse(m3v, out var m3, out string? m3Err))
+                        { error = $"{a} {m3Err}."; return false; }
+                        opts.MathOverlay3D = m3;
                         break;
                     }
 
@@ -2028,6 +2043,11 @@ namespace FracturingFog.Batch
                 { error = $"--qr-relief-height must be {QrCodeOptions.MinReliefHeight}..{QrCodeOptions.MaxReliefHeight}."; return false; }
             if (opts.QrReliefTerrain is < 0 or > 1)
                 { error = "--qr-relief-terrain must be 0..1."; return false; }
+            if (opts.MathOverlay3D != null && opts.MathOverlay != null)
+                { error = $"{BatchFlags.MathOverlay3D} and {BatchFlags.MathOverlay} cannot be combined (one is for 3D views, the other for 2D)."; return false; }
+            // #1735 — stills only for now; a sequence must not drop it silently (#1746).
+            if (opts.MathOverlay3D != null && opts.Mode != BatchMode.Image)
+                { error = $"{BatchFlags.MathOverlay3D} draws on stills only (--mode image); video and slideshow frames are #1746."; return false; }
             if (opts.MathPlane3DMesh != null
                 && System.Array.IndexOf(MathPlane3DMeshExtensions, System.IO.Path.GetExtension(opts.MathPlane3DMesh).ToLowerInvariant()) < 0)
                 { error = "--math-plane-3d-mesh must be a .glb, .gltf or .stl path."; return false; }
