@@ -92,6 +92,13 @@ namespace FracturingFog.Batch
                 if (family == FractalType.MathPlane3D
                     && !FracturingFog.Models.MathPlane3DScene.TryParse(fp.MathPlane3DScene, out _, out var scene3Error))
                     throw new InvalidOperationException("MathPlane3DScene: " + scene3Error);
+                // #1731 — a fractal object's settings are checked when it is meshed; refuse bad ones here.
+                if (family == FractalType.MathPlane3D
+                    && FracturingFog.Models.MathPlane3DScene.TryParse(fp.MathPlane3DScene, out var scene3, out _))
+                    foreach (var o in scene3.Objects)
+                        if (o.CurveKind == FracturingFog.Models.MathPlaneCurveKind.Fractal
+                            && FracturingFog.MathPlane3DFractalMesher.Validate(o) is { } fractalErr)
+                            throw new InvalidOperationException("MathPlane3DScene: " + fractalErr);
             }
             if (opts.BulbPower.HasValue)          fp.BulbPower          = opts.BulbPower.Value;
             if (opts.MultibrotExponent.HasValue)  fp.MultibrotExponent  = opts.MultibrotExponent.Value;

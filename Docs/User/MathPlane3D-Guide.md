@@ -58,6 +58,8 @@ The **Objects** group adds objects:
 - **+ Surface**: an explicit surface z = f(x, y). It starts as a gentle wave.
 - **+ Implicit**: an implicit surface F(x, y, z) = 0, meshed by marching cubes. It starts as the unit
   sphere.
+- **+ Fractal**: a 3D fractal as a surface (see [Fractals in the scene](#fractals-in-the-scene)). It starts
+  as the power-8 Mandelbulb.
 
 Pick an object in the list to edit its name, formulas, numbers, colour and visibility. Bad input is shown
 in yellow, and the scene is left unchanged.
@@ -72,6 +74,24 @@ On the render:
 - **Left-drag on empty space** orbits the camera. Untick **Drag objects on the render** to make every left-drag orbit.
 - **Double-click** a handle to select it.
 - **Delete** removes the selected object.
+
+### Fractals in the scene
+
+A **fractal** object puts one of FF's 3D fractals into the scene as a mesh. Points, vectors and the map
+then act on it like any other surface. The supported types are Mandelbulb, Mandelbox, Kifs,
+QuaternionJulia, QuaternionMandelbrot, Kleinian, BicomplexMandelbrot, Coquaternion and Julibrot.
+- **The mesh** is the one the fractal's own **Export Mesh (OBJ / STL)…** (Fractal Params) writes: its distance estimate, meshed by
+  marching cubes on the cube the fractal fits in.
+  - It is a mesh, not the raymarched picture: fine detail below a cell is lost.
+  - Raise **Mesh** for more detail. 64 builds in well under a second on a desktop machine.
+- **Axes:** the fractal views are y up and Math Plane 3D is z up, so the fractal is turned to stand as it
+  does in its own view.
+- **Type and settings:** pick the type in the **Type** list, and give settings in **Settings** as
+  `KEY=VALUE` pairs. These are the same keys `--param` takes, such as `BulbPower=6`, `BulbIterations=12`
+  or `MandelboxScale=-1.5`. Empty settings mean the type's defaults.
+  - Camera and Math Plane keys are refused.
+  - As with `--param`, another family's key is accepted and changes nothing.
+  - An unknown key is shown as a scene error on the render, and `--batch` refuses it.
 
 ## 3. Linear map
 
@@ -119,6 +139,7 @@ curve    NAME "x(t)" "y(t)" "z(t)" tmin tmax                     [options]
 surface  NAME explicit "f(x, y)" [xmin xmax ymin ymax]            [options] [mesh N]
 surface  NAME parametric "x(u,v)" "y(u,v)" "z(u,v)" umin umax vmin vmax  [options] [mesh N]
 surface  NAME implicit "F(x, y, z)" [xmin xmax ymin ymax zmin zmax]       [options] [mesh N]
+fractal  NAME TYPE [KEY=VALUE ...]                                         [options] [mesh N]
 shading smooth|flat     det on|off     eigen on|off     lengths on|off
 options: #RRGGBB  #RRGGBBAA  hidden  nolabel
 ```
@@ -128,8 +149,11 @@ options: #RRGGBB  #RRGGBBAA  hidden  nolabel
 Every setting is a `--param`, so any view renders headless. For example, the torus demo:
 
 ```bash
-FracturingFog --batch --fractal MathPlane3D --x 0 --y 0 --zoom 1 --out torus.png --param "MathPlane3DScene=surface torus parametric \"(2 + 0.6*cos(v))*cos(u)\" \"(2 + 0.6*cos(v))*sin(u)\" \"0.6*sin(v)\" 0 6.283185307179586 0 6.283185307179586 #E69F00 mesh 48" --param Cam3DDistance=10
+FracturingFog --batch --fractal MathPlane3D --x 0 --y 0 --zoom 1 --out torus.png --param "MathPlane3DScene=surface torus parametric \"(2 + 0.6*cos(v))*cos(u)\" \"(2 + 0.6*cos(v))*sin(u)\" \"0.6*sin(v)\" 0 6.283185307179586 0 6.283185307179586 #E69F00 mesh 48" --param Cam3DDistance=10 --param Cam3DTheta=0.9 --param Cam3DPhi=1.1
 ```
+
+The camera takes all three keys, `Cam3DDistance`, `Cam3DTheta` and `Cam3DPhi`. Given only some of them,
+the camera is left unchanged.
 
 - `MathPlane3DScene=@file` reads the scene from a file. This avoids quoting trouble in cmd or PowerShell.
 - `--math-plane-3d-mesh PATH` also writes the surfaces as a .glb, .gltf or .stl mesh.

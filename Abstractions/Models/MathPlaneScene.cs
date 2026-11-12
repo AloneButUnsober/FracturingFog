@@ -72,8 +72,10 @@ namespace FracturingFog.Models
     public enum MathPlaneObjectKind { Point, Vector, Segment, Polyline, Curve, Region, Surface }
 
     /// <summary>#1550 — how a <see cref="MathPlaneObjectKind.Curve"/> is given.
-    /// <see cref="Implicit"/> (#1551) is the zero set of F(x, y).</summary>
-    public enum MathPlaneCurveKind { Explicit, Parametric, Polar, Implicit }
+    /// <see cref="Implicit"/> (#1551) is the zero set of F(x, y).
+    /// <see cref="Fractal"/> (#1731) is a Math Plane 3D surface meshed from a 3D fractal's distance
+    /// estimate; its <see cref="MathPlaneObject.Sources"/> are the type name, then KEY=VALUE pairs.</summary>
+    public enum MathPlaneCurveKind { Explicit, Parametric, Polar, Implicit, Fractal }
 
     /// <summary>#1553 — the phase-portrait background of a complex map:
     /// <see cref="On"/> colours each pixel z by arg f(z); <see cref="Contours"/> also
@@ -130,7 +132,9 @@ namespace FracturingFog.Models
     /// <summary>A parse failure: the 1-based statement and column, and why.</summary>
     public sealed record MathPlaneSceneError(int Statement, int Column, string Message)
     {
-        public override string ToString() => $"statement {Statement}, col {Column}: {Message}";
+        /// <summary>#1731 — <see cref="Statement"/> below 1 means the error is not tied to one
+        /// statement's text (a render-time check), so only the message is shown.</summary>
+        public override string ToString() => Statement < 1 ? Message : $"statement {Statement}, col {Column}: {Message}";
     }
 
     /// <summary>#1548 — the Math Plane scene. See file header for the text format.</summary>

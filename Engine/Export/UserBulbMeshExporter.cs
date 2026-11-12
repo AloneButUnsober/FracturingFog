@@ -313,7 +313,7 @@ public static class UserBulbMeshExporter
 
     // ── Marching Cubes core ─────────────────────────────────────────────────
 
-    private static (List<(double X, double Y, double Z)> verts,
+    internal static (List<(double X, double Y, double Z)> verts,
                     List<(double X, double Y, double Z)> norms,
                     List<(int A, int B, int C)> tris)
         BuildMarchingCubes(SampleDistance sample,
@@ -376,6 +376,24 @@ public static class UserBulbMeshExporter
             return (new List<(double, double, double)>(),
                     new List<(double, double, double)>(),
                     new List<(int, int, int)>());
+        }
+
+        // #1731 — a non-finite sample (a DE that divides 0 by 0, e.g. the Mandelbulb's at r = 0,
+        // which is inside the set) read as "outside" and wrapped a one-cell cavity round it. Give
+        // it the mean of its finite axis neighbours; with none, it stays outside (+infinity).
+        for (int idx = 0; idx < field.Length; idx++)
+        {
+            if (double.IsFinite(field[idx])) continue;
+            int fi = idx / (side * side), fj = idx / side % side, fk = idx % side;
+            double sum = 0; int cnt = 0;
+            foreach (var (di, dj, dk) in new[] { (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1) })
+            {
+                int ni = fi + di, nj = fj + dj, nk = fk + dk;
+                if (ni < 0 || nj < 0 || nk < 0 || ni >= side || nj >= side || nk >= side) continue;
+                double nv = field[(ni * side + nj) * side + nk];
+                if (double.IsFinite(nv)) { sum += nv; cnt++; }
+            }
+            field[idx] = cnt > 0 ? sum / cnt : double.PositiveInfinity;
         }
 
         var verts = new List<(double, double, double)>();
@@ -532,9 +550,13 @@ public static class UserBulbMeshExporter
         // Linear interp toward iso. Guard div-zero when corners exactly
         // tie; clamp t to [0,1] so degenerate cases don't shoot a vertex
         // out of the cell.
+        // #1731 — a non-finite end (the DE is NaN where it divides 0 by 0, e.g. a Mandelbulb's
+        // log(r)·r at r = 0) made t NaN, which the clamp below lets through: the vertex came out
+        // (NaN, NaN, NaN) in the mesh and in exported files. Take the edge's midpoint instead.
         double t;
         double denom = vb - va;
-        if (Math.Abs(denom) < 1e-20) t = 0.5;
+        if (!double.IsFinite(va) || !double.IsFinite(vb)) t = 0.5;
+        else if (Math.Abs(denom) < 1e-20) t = 0.5;
         else { t = (iso - va) / denom; if (t < 0) t = 0; else if (t > 1) t = 1; }
         double x = ax + t * (bx - ax);
         double y = ay + t * (by - ay);
@@ -553,7 +575,7 @@ public static class UserBulbMeshExporter
     // normal is the average of the incident face normals within creaseDegrees of
     // THAT triangle's face normal; corners that resolve to the same
     // (vertex, quantised-normal) are welded, so smooth areas don't bloat.
-    private static (List<(double X, double Y, double Z)> verts,
+    internal static (List<(double X, double Y, double Z)> verts,
                     List<(double X, double Y, double Z)> norms,
                     List<(int A, int B, int C)> tris)
         ApplyCreaseNormals(

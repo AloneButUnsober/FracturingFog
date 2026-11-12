@@ -54,6 +54,7 @@
                         <Button Classes="action neutral" Content="+ Curve"    Command="{Binding AddCurveCommand}"    Margin="0,0,6,6" ToolTip.Tip="Add a space curve (x(t), y(t), z(t)); starts as a helix" />
                         <Button Classes="action neutral" Content="+ Surface"  Command="{Binding AddSurfaceCommand}"  Margin="0,0,6,6" ToolTip.Tip="Add a surface z = f(x, y); starts as a gentle wave" />
                         <Button Classes="action neutral" Content="+ Implicit" Command="{Binding AddImplicitCommand}" Margin="0,0,6,6" ToolTip.Tip="Add an implicit surface F(x, y, z) = 0, meshed by marching cubes; starts as the unit sphere" />
+                        <Button Classes="action neutral" Content="+ Fractal" Command="{Binding AddFractalCommand}" Margin="0,0,6,6" ToolTip.Tip="Add a 3D fractal, meshed from its distance estimate (the mesh export's mesh); starts as the power-8 Mandelbulb. Pick the type and settings below." />
                     </WrapPanel>
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
                         <ListBox Grid.Column="0" ItemsSource="{Binding Rows}" SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
@@ -80,14 +81,23 @@
                     <TextBlock Grid.Row="2" Text="Colour" VerticalAlignment="Center" />
                     <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding SelectedColor, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Width="110" HorizontalAlignment="Left"
                              FontFamily="Consolas, Menlo, monospace" ToolTip.Tip="#RRGGBB, or #RRGGBBAA to make it see-through" />
-                    <TextBlock Grid.Row="3" Text="Numbers" VerticalAlignment="Center" />
+                    <TextBlock Grid.Row="3" Text="Numbers" VerticalAlignment="Center" IsVisible="{Binding HasCoords}" />
                     <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding SelectedCoords, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                             FontFamily="Consolas, Menlo, monospace" ToolTip.Tip="{Binding SelectedCoordsHint}" />
+                             IsVisible="{Binding HasCoords}" FontFamily="Consolas, Menlo, monospace" ToolTip.Tip="{Binding SelectedCoordsHint}" />
                     <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedCoordsHint}" Foreground="#8A8A8A" FontSize="11" />
                     <TextBlock Grid.Row="5" Text="{Binding Expression1Label}" VerticalAlignment="Center" IsVisible="{Binding HasExpression1}" />
                     <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding SelectedExpression1, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                              IsVisible="{Binding HasExpression1}" FontFamily="Consolas, Menlo, monospace"
                              ToolTip.Tip="The plot language: sin cos tan exp log sqrt abs pow min max ... constants pi e" />
+                    <!-- #1731: a fractal's type and settings (rows 5-6; it has no formulas) -->
+                    <TextBlock Grid.Row="5" Text="Type" VerticalAlignment="Center" IsVisible="{Binding SelectedIsFractal}" />
+                    <ComboBox Grid.Row="5" Grid.Column="1" ItemsSource="{Binding FractalTypeChoices}" SelectedItem="{Binding SelectedFractalType}"
+                              IsVisible="{Binding SelectedIsFractal}" Width="200" ToolTip.Tip="The 3D fractal to mesh" />
+                    <TextBlock Grid.Row="6" Text="Settings" VerticalAlignment="Center" IsVisible="{Binding SelectedIsFractal}" />
+                    <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding SelectedFractalSettings, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                             IsVisible="{Binding SelectedIsFractal}" FontFamily="Consolas, Menlo, monospace"
+                             Watermark="KEY=VALUE ..., e.g. BulbPower=6"
+                             ToolTip.Tip="The fractal's --param keys, space-separated (e.g. BulbPower=6 BulbIterations=12). Empty: the type's defaults." />
                     <TextBlock Grid.Row="6" Text="{Binding Expression2Label}" VerticalAlignment="Center" IsVisible="{Binding HasExpression3}" />
                     <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding SelectedExpression2, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                              IsVisible="{Binding HasExpression3}" FontFamily="Consolas, Menlo, monospace" />
