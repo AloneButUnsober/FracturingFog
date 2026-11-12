@@ -336,6 +336,35 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
     /// <summary>The Numbers box: every object but a fractal surface (whose cube comes from its type).</summary>
     public bool HasCoords => !_selIsFractal || _selIsOrbit;
 
+    // ── #1741: the sub-type dropdown (KifsFold, KleinianPreset, BicomplexSliceAxis) ──
+
+    private IReadOnlyList<string> _variantChoices = Array.Empty<string>();
+    /// <summary>The selected fractal / orbit type's sub-types (empty when it has none).</summary>
+    public IReadOnlyList<string> VariantChoices { get => _variantChoices; private set { this.RaiseAndSetIfChanged(ref _variantChoices, value); this.RaisePropertyChanged(nameof(HasVariant)); } }
+    public bool HasVariant => _variantChoices.Count > 0;
+
+    private string? _selVariant;
+    /// <summary>The selected sub-type; setting it writes KEY=Name and keeps the other settings.</summary>
+    public string? SelectedVariant
+    {
+        get => _selVariant;
+        set
+        {
+            if (_selVariant == value) return;
+            this.RaiseAndSetIfChanged(ref _selVariant, value);
+            if (_loadingSelection || !HasSelection || !_selIsFractal || string.IsNullOrEmpty(value)) return;
+            ApplySelected(o => MathPlane3DScene.WithVariant(o, value));
+        }
+    }
+
+    private void LoadVariant(MathPlaneObject? o)
+    {
+        var v = o == null ? null : MathPlane3DScene.VariantOf(MathPlane3DScene.FractalTypeOf(o));
+        VariantChoices = v?.Names ?? Array.Empty<string>();
+        _selVariant = v == null ? null : MathPlane3DScene.VariantValue(o!);
+        this.RaisePropertyChanged(nameof(SelectedVariant));
+    }
+
     private int _selSteps;
     /// <summary>#1732 — an orbit's step cap (0 = the fractal's own iteration count).</summary>
     public int SelectedSteps
@@ -695,6 +724,7 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
                 SelectedKind = ""; SelectedName = ""; SelectedColor = ""; SelectedCoords = ""; SelectedCoordsHint = "";
                 SelectedVisible = false; SelectedShowLabel = false; SelectedIsSurface = false; SelectedExpressionCount = 0;
                 SelectedIsFractal = false; SelectedIsOrbit = false; SelectedFractalType = ""; SelectedFractalSettings = ""; SelectedSteps = 0;
+                LoadVariant(null);
                 _selImplicit = false;
                 _selExpr1 = _selExpr2 = _selExpr3 = ""; _selMesh = 0;
                 RaiseExpressions();
@@ -728,6 +758,7 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
             SelectedIsOrbit = MathPlane3DScene.IsOrbit(o);   // #1732 (before the type, so its list is the orbit's)
             SelectedIsFractal = o.CurveKind == MathPlaneCurveKind.Fractal && (SelectedIsSurface || _selIsOrbit);
             SelectedSteps = _selIsOrbit ? o.Mesh : 0;
+            LoadVariant(_selIsFractal ? o : null);   // #1741
             SelectedFractalType = _selIsFractal && o.Expressions.Count > 0 ? o.Expressions[0] : "";
             SelectedFractalSettings = _selIsFractal ? string.Join(" ", o.Expressions.Skip(1)) : "";
             SelectedExpressionCount = _selIsFractal ? 0 : o.Expressions.Count;

@@ -1914,8 +1914,35 @@ namespace FracturingFog.Models
                 .Where(pi => pi.CanWrite && pi.GetIndexParameters().Length == 0)
                 .Select(pi => pi.Name).ToArray();
 
+        /// <summary>#1741 — the enum behind an enum-valued key: a whole-number key whose
+        /// <see cref="FractalParameters"/> property of the same name is an enum (KifsFold,
+        /// KleinianPreset, BicomplexSliceAxis, BilliardGeometry, ...). Null for other keys.</summary>
+        public static Type? EnumTypeOf(string key)
+        {
+            var pi = typeof(RegionFractalParams).GetProperty(key ?? "",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.IgnoreCase);
+            if (pi == null || (Nullable.GetUnderlyingType(pi.PropertyType) ?? pi.PropertyType) != typeof(int)) return null;
+            var fp = typeof(FractalParameters).GetProperty(pi.Name, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            var t = fp == null ? null : Nullable.GetUnderlyingType(fp.PropertyType) ?? fp.PropertyType;
+            return t is { IsEnum: true } ? t : null;
+        }
+
+        /// <summary>#1741 — an enum key's value given by member name (case-insensitive) as its
+        /// number; false with the valid names when the name is not one of them.</summary>
+        private static bool TryEnumName(Type enumType, string value, out int number, out string? error)
+        {
+            number = 0; error = null;
+            string v = value.Trim();
+            if (v.Length > 0 && !v.Contains(',') && Enum.TryParse(enumType, v, ignoreCase: true, out object? e)
+                && e != null && Enum.IsDefined(enumType, e))
+            { number = Convert.ToInt32(e, System.Globalization.CultureInfo.InvariantCulture); return true; }
+            error = $"'{value}' is not one of {string.Join(", ", Enum.GetNames(enumType))} (or its number).";
+            return false;
+        }
+
         /// <summary>Build a snapshot from <c>Key=Value</c> pairs (keys are
-        /// case-insensitive; later pairs win). <c>Cam3DFamily</c> also accepts a
+        /// case-insensitive; later pairs win). #1741: an enum-valued key also takes the
+        /// member's name (KifsFold=Dodecahedron as well as KifsFold=3). <c>Cam3DFamily</c> also accepts a
         /// fractal-type name, and defaults to <paramref name="cameraFamily"/> when
         /// camera fields are given without it. Returns null with a message on an
         /// unknown key or a value of the wrong type.</summary>
@@ -1944,6 +1971,12 @@ namespace FracturingFog.Models
                 }
                 else if (pi.Name == nameof(Cam3DFamily) && FractalTypeNames.TryParse(value.Trim(), true, out var fam) && !int.TryParse(value, out _))
                     node = System.Text.Json.Nodes.JsonValue.Create((int)fam);
+                else if (t == typeof(int) && !int.TryParse(value.Trim(), out _) && EnumTypeOf(pi.Name) is { } enumType)   // #1741
+                {
+                    if (!TryEnumName(enumType, value, out int number, out string? enumError))
+                    { error = $"--param {pi.Name}: {enumError}"; return null; }
+                    node = System.Text.Json.Nodes.JsonValue.Create(number);
+                }
                 else
                 {
                     try { node = System.Text.Json.Nodes.JsonNode.Parse(value.Trim()); }
