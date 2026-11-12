@@ -286,7 +286,8 @@ public sealed class MathOverlay3DTests
         => new()
         {
             FractalType = type, Width = W, Height = H, CenterX = 0, CenterY = 0, Zoom = 1, MaxIterations = 64,
-            ColorMap = ColorPalette.BuiltIns[0], FractalParameters = fp, Quality = quality,
+            // Quality null = no AA: the renderer checks req.Quality != null (its default is null! too).
+            ColorMap = ColorPalette.BuiltIns[0], FractalParameters = fp, Quality = quality!,
             MathOverlay3D = spec, MathOverlay3DReport = report,
         };
 

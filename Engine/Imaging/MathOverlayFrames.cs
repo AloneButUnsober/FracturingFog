@@ -57,8 +57,9 @@ namespace FracturingFog.Imaging
         }
 
         /// <summary>Draw on the finished <paramref name="w"/>×<paramref name="h"/> frame whose view
-        /// is (<paramref name="cx"/>, <paramref name="cy"/>, <paramref name="zoom"/>).</summary>
-        public void Draw(uint[] frame, int w, int h, FractalType type, FractalParameters? fp,
+        /// is (<paramref name="cx"/>, <paramref name="cy"/>, <paramref name="zoom"/>), with the
+        /// frame's own parameters (the 2D Julia c; the 3D family settings and camera).</summary>
+        public void Draw(uint[] frame, int w, int h, FractalType type, FractalParameters fp,
                          double cx, double cy, double zoom)
         {
             if (Spec2D is { } s2)

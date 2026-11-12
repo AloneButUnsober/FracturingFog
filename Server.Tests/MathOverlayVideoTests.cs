@@ -81,8 +81,8 @@ public sealed class MathOverlayVideoTests
             MathOverlayRenderer.Draw(expect, W, H, -0.5, 0, zoom, FractalType.Mandelbrot, Complex.Zero, spec, pinned: true);
             Assert.Equal(expect, frame);
         }
-        var z1 = new uint[W * H]; ov.Draw(z1, W, H, FractalType.Mandelbrot, null, -0.5, 0, 1);
-        var z9 = new uint[W * H]; ov.Draw(z9, W, H, FractalType.Mandelbrot, null, -0.5, 0, 9);
+        var z1 = new uint[W * H]; ov.Draw(z1, W, H, FractalType.Mandelbrot, new FractalParameters(), -0.5, 0, 1);
+        var z9 = new uint[W * H]; ov.Draw(z9, W, H, FractalType.Mandelbrot, new FractalParameters(), -0.5, 0, 9);
         Assert.NotEqual(z1, z9);
         Assert.Equal(5, ov.FramesDrawn);
     }
