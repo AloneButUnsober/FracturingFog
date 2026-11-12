@@ -759,6 +759,19 @@ namespace FracturingFog.Batch
                 if (opts.VideoReverse)
                     Console.WriteLine("  note     : --reverse is ignored for a loop (it already wraps).");
             }
+            // #1746 — the pinned math overlay on every frame, with that frame's view / camera.
+            if (opts.MathOverlay3D != null && !FracturingFog.ViewState.FractalViewState.IsThreeD(frType))
+            {
+                Console.Error.WriteLine($"batch: {BatchFlags.MathOverlay3D} needs a 3D fractal type (got {frType}); use {BatchFlags.MathOverlay} on 2D views.");
+                return 2;
+            }
+            if (opts.MathOverlay != null && loop != null)
+            {
+                Console.Error.WriteLine($"batch: {BatchFlags.MathOverlay} can't follow a Misiurewicz loop (the frame turns in image space) — drop one of them.");
+                return 2;
+            }
+            var mathOverlay = opts.MathOverlay != null || opts.MathOverlay3D != null
+                ? new MathOverlayFrames(opts.MathOverlay, opts.MathOverlay3D) : null;
 
             double startZoom, endZoom;
             switch (motion)
@@ -1116,7 +1129,7 @@ namespace FracturingFog.Batch
                     ? RenderRegionMandelFrame(limbRegion, outW, outH, fz, iter, theme, pfAdaptive, quality, fp.BlaTolerance,
                         FracturingFog.Rendering.AdaptiveAa.From(fp), fp.SolidRegionSkip, fp.SolidRegionAuto, fp)
                     : RenderOneFrame(frType, outW, outH, frameCx, cy, fz, iter, theme, quality, pfAdaptive,
-                                     fp, limbSource, stereo, frameDepth);
+                                     fp, limbSource, stereo, frameDepth, mathOverlay);
             }
 
             // #1235 — one Misiurewicz-loop frame: the loop's first frame (centre on
@@ -1163,7 +1176,17 @@ namespace FracturingFog.Batch
                     {
                         // Render once, then hold or Ken-Burns the frame in image
                         // space — no recompute. Frame 0 is the full frame.
-                        heldBase ??= RenderZoomFrame(0.0, reliefHistory, captureHdr: false);
+                        if (heldBase == null)
+                        {
+                            heldBase = RenderZoomFrame(0.0, reliefHistory, captureHdr: false);
+                            // #1746 — Ken-Burns pans the one rendered frame, so the overlay is drawn on it
+                            // once and pans with the picture.
+                            if (mathOverlay != null && motion == VideoMotionKind.KenBurns)
+                            {
+                                if (stereo != null) mathOverlay.Skip("stereo frames are not drawn on");
+                                else mathOverlay.Draw(heldBase, outW, outH, frType, fp, frameCx, cy, startZoom);
+                            }
+                        }
                         // #1012 — a True-stereo held frame is the pair (frame size).
                         buffer = new uint[heldBase.Length];
                         if (motion == VideoMotionKind.KenBurns)
@@ -1214,6 +1237,15 @@ namespace FracturingFog.Batch
                         opts.ViewTransform ?? FracturingFog.Imaging.ViewTransform.None, opts.ViewExposureEv ?? 0.0,
                         motionBlur ? null : zoomHdr, gradeW, gradeH);
 
+                    // #1746 — the pinned math overlay, last on the graded frame as the still draws
+                    // it, with this frame's view (2D) or camera and depth (3D). A stereo frame is
+                    // not drawn on, as live and the still.
+                    if (mathOverlay != null && motion != VideoMotionKind.KenBurns)
+                    {
+                        if (stereo != null) mathOverlay.Skip("stereo frames are not drawn on");
+                        else mathOverlay.Draw(buffer, outW, outH, frType, fp, frameCx, cy, frameZoom);
+                    }
+
                     // #1012 — stereo, last on the graded frame as live: the Fake warp /
                     // autostereogram over this frame's depth, or a frame that must still
                     // be fitted to the stereo writer size.
@@ -1259,6 +1291,16 @@ namespace FracturingFog.Batch
                 }
 
                 progress.Finish($"frames={framesWritten}  elapsed={sw.Elapsed.TotalSeconds:F1}s");
+                if (mathOverlay != null)
+                {
+                    string flag = opts.MathOverlay3D != null ? BatchFlags.MathOverlay3D : BatchFlags.MathOverlay;
+                    if (mathOverlay.FramesDrawn == 0)
+                        Console.WriteLine($"  note    : {flag} was not drawn: {mathOverlay.SkipReason ?? "no frame could carry it"}");
+                    else if (mathOverlay.SkipReason != null)
+                        Console.WriteLine($"  note    : {flag} was drawn on {mathOverlay.FramesDrawn} frame(s); not on others: {mathOverlay.SkipReason}");
+                    if (mathOverlay.FramesWithoutDepth > 0)
+                        Console.WriteLine($"  note    : {flag}: {mathOverlay.FramesWithoutDepth} frame(s) had no depth (thin-lens depth of field), so hidden parts are not dimmed");
+                }
             }
             finally
             {
@@ -1424,7 +1466,8 @@ namespace FracturingFog.Batch
             double cx, double cy, double zoom, int iter,
             IColorMap theme, QualityPreset quality, int adaptive = 0,
             FractalParameters? fp = null, FractalRegion? limbs = null,
-            BatchStereo? stereo = null, System.Runtime.CompilerServices.StrongBox<float[]?>? depthOut = null)
+            BatchStereo? stereo = null, System.Runtime.CompilerServices.StrongBox<float[]?>? depthOut = null,
+            MathOverlayFrames? overlay = null)
         {
             fp ??= new FractalParameters();
             IFractalCalculator? alt = PosterRenderer.BuildCaptureCalculator(new PosterRequest
@@ -1470,7 +1513,9 @@ namespace FracturingFog.Batch
                 // HistogramEqualizer core just like Mandelbrot; non-escape-time
                 // families don't implement the capability and carry no HE.
                 // Brightness/contrast still apply downstream on the buffer.
+                overlay?.BeforeCalculate(alt);   // #1746 — a 3D overlay asks for depth
                 alt.Calculate(CancellationToken.None);
+                overlay?.AfterCalculate(alt);    // #1746 — this unjittered sample's camera + depth
                 // #1344 — the quality preset's sub-pixel AA, as the live view runs it;
                 // #1381 — adaptive contrast per sample, before the average.
                 var altSs = alt.SupportsZoomPan

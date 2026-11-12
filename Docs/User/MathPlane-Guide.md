@@ -156,8 +156,14 @@ A pinned 3D overlay is part of the picture:
 - It cannot be combined with the 2D `--math-overlay`, and a 2D fractal type is refused.
 
 Where it isn't drawn yet:
-- **Video and slideshow frames:** `--math-overlay-3d` is for stills only, and a video or slideshow command
-  with it is refused (#1746).
+- **Slideshows and scenes:** these show many regions, and a pinned point belongs to one view, so
+  `--math-overlay-3d` and `--math-overlay` are refused there.
+
+**Video:** `--mode video` draws the overlay on every frame, with that frame's own camera and depth. With
+`--orbit`, the camera circles the pinned point's orbit. For example:
+`--batch --mode video --fractal Mandelbulb --x 0 --y 0 --zoom 1 --video-motion hold --orbit 180 --math-overlay-3d 0.6,0.4,0.5,20 --out bulb.mp4`
+- **Ken-Burns:** the video pans one rendered frame, so the overlay is drawn on that frame and pans with the
+  picture.
 - **Stereo:** the overlay is not drawn on side-by-side stereo frames.
 - **Thin-lens depth of field:** no depth is available, so hidden parts are not dimmed. A yellow note says so.
 
@@ -265,6 +271,10 @@ FracturingFog --batch --fractal MathPlane --x -0.5 --y 0 --zoom 0.6 --param Math
 | `MathPlaneScriptTime` | the moment of the scene's script drawn, in seconds (0 = the scene as written) |
 
 **Math overlay:** for the overlay on a 2D view, add `--math-overlay RE,IM[,STEPS]`.
+- **Video:** `--mode video` draws it on every frame, with that frame's centre and zoom, so a zoom keeps the
+  orbit of the same point.
+- **Not with a Misiurewicz loop:** the frame turns in image space, so the overlay is refused there.
+- **Slideshows and scenes:** refused.
 
 **Script video:** a scene with `step` lines renders as a video of its script.
 

@@ -392,11 +392,12 @@ public sealed class MathOverlay3DTests
         }
         Assert.False(BatchOptions.TryParse(Args(BatchFlags.MathOverlay3D, "1,2,3", BatchFlags.MathOverlay, "0,0"), 2, out _, out var both));
         Assert.Contains("cannot be combined", both);
-        Assert.False(BatchOptions.TryParse(Args(BatchFlags.MathOverlay3D, "1,2,3", "--mode", "video"), 2, out _, out var vid));
-        Assert.Contains("stills only", vid);
+        // #1746 — video frames draw it; a slideshow refuses it (MathOverlayVideoTests covers both).
+        Assert.False(BatchOptions.TryParse(Args(BatchFlags.MathOverlay3D, "1,2,3", "--mode", "slideshow"), 2, out _, out var show));
+        Assert.Contains("slideshow or scene", show);
         var spec = BatchFlagCatalog.Find(BatchFlags.MathOverlay3D)!;
         Assert.Contains(BatchFlags.MathOverlay, spec.ConflictsWith);
-        Assert.Equal(BatchModes.Image, spec.Modes);
+        Assert.Equal(BatchModes.Image | BatchModes.Video, spec.Modes);
         Assert.Contains(BatchFlags.MathOverlay3D, BatchFlagCatalog.FormatUsage());
     }
 

@@ -2045,9 +2045,10 @@ namespace FracturingFog.Batch
                 { error = "--qr-relief-terrain must be 0..1."; return false; }
             if (opts.MathOverlay3D != null && opts.MathOverlay != null)
                 { error = $"{BatchFlags.MathOverlay3D} and {BatchFlags.MathOverlay} cannot be combined (one is for 3D views, the other for 2D)."; return false; }
-            // #1735 — stills only for now; a sequence must not drop it silently (#1746).
-            if (opts.MathOverlay3D != null && opts.Mode != BatchMode.Image)
-                { error = $"{BatchFlags.MathOverlay3D} draws on stills only (--mode image); video and slideshow frames are #1746."; return false; }
+            // #1746 — stills and video frames draw the pinned overlay. A slideshow or scene shows many
+            // regions, and a pinned point belongs to one view, so it is an error there, never a silent drop.
+            if ((opts.MathOverlay3D != null || opts.MathOverlay != null) && opts.Mode is BatchMode.Slideshow or BatchMode.Scene)
+                { error = $"{(opts.MathOverlay3D != null ? BatchFlags.MathOverlay3D : BatchFlags.MathOverlay)} draws on a still or a --mode video; a slideshow or scene shows many views, and a pinned point belongs to one."; return false; }
             if (opts.MathPlane3DMesh != null
                 && System.Array.IndexOf(MathPlane3DMeshExtensions, System.IO.Path.GetExtension(opts.MathPlane3DMesh).ToLowerInvariant()) < 0)
                 { error = "--math-plane-3d-mesh must be a .glb, .gltf or .stl path."; return false; }

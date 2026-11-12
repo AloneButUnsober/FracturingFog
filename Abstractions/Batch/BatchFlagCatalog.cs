@@ -530,22 +530,23 @@ namespace FracturingFog.Batch
                     + "8 / 16 / 32 samples, as the live view settles): sub-pixel anti-aliasing only, faster."),
                 new BatchFlagSpec
                 {
-                    Name = BatchFlags.MathOverlay, Kind = BatchFlagKind.Text, Group = Output, Modes = BatchModes.Image,
+                    Name = BatchFlags.MathOverlay, Kind = BatchFlagKind.Text, Group = Output, Modes = BatchModes.Image | BatchModes.Video,
                     ValueHint = "\"RE,IM[,STEPS]\"", Example = "-0.1226,0.7449",
                     Help = "Math overlay on a 2D still: the axes and the orbit of the pinned point under z^2 + c "
                            + "(Mandelbrot: the point is c, from z0 = 0; Julia: the point is z0, with the view's c), "
                            + "with the escape circle and a read-out. STEPS 1-10000, default 50. Other families get "
-                           + "the axes only (#1554).",
+                           + "the axes only (#1554). A video draws it on every frame with that frame's view (#1746).",
                     ConflictsWith = new[] { BatchFlags.MathOverlay3D },
                 },
                 new BatchFlagSpec
                 {
-                    Name = BatchFlags.MathOverlay3D, Kind = BatchFlagKind.Text, Group = Output, Modes = BatchModes.Image,
+                    Name = BatchFlags.MathOverlay3D, Kind = BatchFlagKind.Text, Group = Output, Modes = BatchModes.Image | BatchModes.Video,
                     ValueHint = "\"X,Y,Z[,STEPS]\"", Example = "0.4,0.6,0.3",
                     Help = "Math overlay on a 3D still: the axes, the bailout sphere and the orbit of the pinned point "
                            + "(the fractal's own axes, y up) under the fractal's own step (Mandelbulb, Mandelbox, Kifs, "
                            + "quaternions with w dropped; other 3D types get the axes only). Parts behind or inside the "
-                           + "fractal are dimmed and dashed. STEPS 1-10000, default 50. 3D fractal types only (#1735).",
+                           + "fractal are dimmed and dashed. STEPS 1-10000, default 50. 3D fractal types only (#1735). "
+                           + "A video draws it on every frame with that frame's camera, so --orbit circles the point (#1746).",
                     ConflictsWith = new[] { BatchFlags.MathOverlay },
                 },
                 // #1718 — Math Plane 3D mesh export.

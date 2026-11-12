@@ -153,7 +153,7 @@ The same orbits can be drawn over the 3D fractal's own raymarched view, without 
   Parts behind the fractal are dimmed and dashed.
 - **Pinning:** press **O**, or use **Pin last point**, to pin that point.
 - **Exports and batch:** a pinned point is drawn on exports, and `--math-overlay-3d X,Y,Z[,STEPS]` draws it on
-  a `--batch` still.
+  a `--batch` still. In `--mode video` it is drawn on every frame, with that frame's camera.
 
 The point is in the fractal's own axes, as in the views. See the Math Plane guide,
 [On 3D fractal views](MathPlane-Guide.md#on-3d-fractal-views).
