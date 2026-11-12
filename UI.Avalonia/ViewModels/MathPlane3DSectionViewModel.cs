@@ -62,6 +62,7 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
         AddPolylineCommand = ReactiveCommand.Create(() => Add(MathPlane3DSceneEdit.AddKind.Polyline));
         AddCurveCommand = ReactiveCommand.Create(() => Add(MathPlane3DSceneEdit.AddKind.Curve));
         AddSurfaceCommand = ReactiveCommand.Create(() => Add(MathPlane3DSceneEdit.AddKind.Surface));
+        AddImplicitCommand = ReactiveCommand.Create(() => Add(MathPlane3DSceneEdit.AddKind.Implicit));
         DeleteCommand = ReactiveCommand.Create(DeleteSelected);
         MoveUpCommand = ReactiveCommand.Create(() => MoveSelected(-1));
         MoveDownCommand = ReactiveCommand.Create(() => MoveSelected(+1));
@@ -78,6 +79,7 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
     public ReactiveCommand<Unit, Unit> AddPolylineCommand { get; }
     public ReactiveCommand<Unit, Unit> AddCurveCommand { get; }
     public ReactiveCommand<Unit, Unit> AddSurfaceCommand { get; }
+    public ReactiveCommand<Unit, Unit> AddImplicitCommand { get; }
     public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
     public ReactiveCommand<Unit, Unit> MoveUpCommand { get; }
     public ReactiveCommand<Unit, Unit> MoveDownCommand { get; }
@@ -119,7 +121,7 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
     private string _selKind = "", _selName = "", _selColor = "", _selCoords = "", _selCoordsHint = "";
     private string _selExpr1 = "", _selExpr2 = "", _selExpr3 = "";
     private int _selExprCount, _selMesh;
-    private bool _selVisible, _selLabel, _selIsSurface;
+    private bool _selVisible, _selLabel, _selIsSurface, _selImplicit;
     private string? _editError;
 
     public string SelectedKind { get => _selKind; private set => this.RaiseAndSetIfChanged(ref _selKind, value); }
@@ -186,7 +188,7 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
     public string SelectedExpression3 { get => _selExpr3; set => SetExpression(2, value, ref _selExpr3); }
 
     /// <summary>The expression boxes' labels for the selected kind.</summary>
-    public string Expression1Label => _selExprCount == 1 ? "z = f(x, y)" : SelectedIsSurface ? "x(u, v)" : "x(t)";
+    public string Expression1Label => _selImplicit ? "F(x, y, z) = 0" : _selExprCount == 1 ? "z = f(x, y)" : SelectedIsSurface ? "x(u, v)" : "x(t)";
     public string Expression2Label => SelectedIsSurface ? "y(u, v)" : "y(t)";
     public string Expression3Label => SelectedIsSurface ? "z(u, v)" : "z(t)";
 
@@ -508,6 +510,7 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
             {
                 SelectedKind = ""; SelectedName = ""; SelectedColor = ""; SelectedCoords = ""; SelectedCoordsHint = "";
                 SelectedVisible = false; SelectedShowLabel = false; SelectedIsSurface = false; SelectedExpressionCount = 0;
+                _selImplicit = false;
                 _selExpr1 = _selExpr2 = _selExpr3 = ""; _selMesh = 0;
                 RaiseExpressions();
                 return;
@@ -515,7 +518,12 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
             var o = _scene.Objects[_selectedIndex];
             SelectedKind = o.Kind switch
             {
-                MathPlaneObjectKind.Surface => o.CurveKind == MathPlaneCurveKind.Parametric ? "Parametric surface" : "Surface z = f(x, y)",
+                MathPlaneObjectKind.Surface => o.CurveKind switch
+                {
+                    MathPlaneCurveKind.Parametric => "Parametric surface",
+                    MathPlaneCurveKind.Implicit => "Implicit surface F = 0",
+                    _ => "Surface z = f(x, y)",
+                },
                 MathPlaneObjectKind.Curve => "Space curve",
                 _ => o.Kind.ToString(),
             };
@@ -528,6 +536,7 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
             SelectedVisible = o.Visible;
             SelectedShowLabel = o.ShowLabel;
             SelectedIsSurface = o.Kind == MathPlaneObjectKind.Surface;
+            _selImplicit = SelectedIsSurface && o.CurveKind == MathPlaneCurveKind.Implicit;
             SelectedExpressionCount = o.Expressions.Count;
             _selExpr1 = o.Expressions.Count > 0 ? o.Expressions[0] : "";
             _selExpr2 = o.Expressions.Count > 1 ? o.Expressions[1] : "";
@@ -553,6 +562,7 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
         MathPlaneObjectKind.Polyline => "x y z for each point",
         MathPlaneObjectKind.Curve => "tmin tmax",
         MathPlaneObjectKind.Surface when o.CurveKind == MathPlaneCurveKind.Parametric => "umin umax vmin vmax",
+        MathPlaneObjectKind.Surface when o.CurveKind == MathPlaneCurveKind.Implicit => "xmin xmax ymin ymax zmin zmax (empty: -3 3 on each)",
         _ => "xmin xmax ymin ymax (empty: -3 3 -3 3)",
     };
 
@@ -690,6 +700,7 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
             MathPlaneObjectKind.Polyline => $"polyline {o.Name} ({o.Coords.Count / 3} points)",
             MathPlaneObjectKind.Curve => $"curve {o.Name}: ({string.Join(", ", o.Expressions)})",
             MathPlaneObjectKind.Surface when o.CurveKind == MathPlaneCurveKind.Parametric => $"surface {o.Name}: ({string.Join(", ", o.Expressions)})",
+            MathPlaneObjectKind.Surface when o.CurveKind == MathPlaneCurveKind.Implicit => $"surface {o.Name}: {(o.Expressions.Count > 0 ? o.Expressions[0] : "")} = 0",
             MathPlaneObjectKind.Surface => $"surface {o.Name}: z = {(o.Expressions.Count > 0 ? o.Expressions[0] : "")}",
             _ => o.Name,
         };

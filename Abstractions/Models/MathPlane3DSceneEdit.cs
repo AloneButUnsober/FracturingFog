@@ -203,7 +203,7 @@ namespace FracturingFog.Models
         }
 
         /// <summary>The kinds the Add buttons make (a curve is a space curve; a surface is z = f(x, y)).</summary>
-        public enum AddKind { Point, Vector, Segment, Polyline, Curve, Surface }
+        public enum AddKind { Point, Vector, Segment, Polyline, Curve, Surface, Implicit }
 
         /// <summary>A new object of <paramref name="kind"/> near <paramref name="at"/>, sized
         /// <paramref name="size"/>, with a fresh name and the next palette colour.</summary>
@@ -223,6 +223,9 @@ namespace FracturingFog.Models
                 AddKind.Polyline => new(MathPlaneObjectKind.Polyline, "", new[] { x, y, z, x + s, y, z, x + s, y + s, z + s }, color),
                 AddKind.Curve => new(MathPlaneObjectKind.Curve, "", new[] { 0.0, 4 * Math.PI }, color,
                                      CurveKind: MathPlaneCurveKind.Parametric, Sources: new[] { "cos(t)", "sin(t)", "t/4" }),
+                // #1717 — an implicit surface starts as the unit sphere.
+                AddKind.Implicit => new(MathPlaneObjectKind.Surface, "", Array.Empty<double>(), color,
+                                        CurveKind: MathPlaneCurveKind.Implicit, Sources: new[] { "x^2 + y^2 + z^2 - 1" }),
                 _ => new(MathPlaneObjectKind.Surface, "", Array.Empty<double>(), color,
                          CurveKind: MathPlaneCurveKind.Explicit, Sources: new[] { "0.5*sin(x)*cos(y)" }),
             };

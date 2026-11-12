@@ -34,6 +34,7 @@
                         <Button Classes="action neutral" Content="+ Polyline" Command="{Binding AddPolylineCommand}" Margin="0,0,6,6" />
                         <Button Classes="action neutral" Content="+ Curve"    Command="{Binding AddCurveCommand}"    Margin="0,0,6,6" ToolTip.Tip="Add a space curve (x(t), y(t), z(t)); starts as a helix" />
                         <Button Classes="action neutral" Content="+ Surface"  Command="{Binding AddSurfaceCommand}"  Margin="0,0,6,6" ToolTip.Tip="Add a surface z = f(x, y); starts as a gentle wave" />
+                        <Button Classes="action neutral" Content="+ Implicit" Command="{Binding AddImplicitCommand}" Margin="0,0,6,6" ToolTip.Tip="Add an implicit surface F(x, y, z) = 0, meshed by marching cubes; starts as the unit sphere" />
                     </WrapPanel>
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
                         <ListBox Grid.Column="0" ItemsSource="{Binding Rows}" SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"

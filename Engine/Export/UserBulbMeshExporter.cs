@@ -783,8 +783,11 @@ public static class UserBulbMeshExporter
     }
 
     // ── Lorensen-Cline tables (Paul Bourke layout) ──────────────────────────
+    // Paul Bourke, "Polygonising a scalar field (Marching Cubes)", 1994, tables "based on
+    // tables by Cory Gene Bloyd": Docs/Resources-Bibliography.md#bourke-polygonise.
+    // Internal so Math Plane 3D's implicit mesher (#1717) shares them.
 
-    private static readonly int[] EdgeTable = new int[256]
+    internal static readonly int[] EdgeTable = new int[256]
     {
         0x0  , 0x109, 0x203, 0x30a, 0x406, 0x50f, 0x605, 0x70c,
         0x80c, 0x905, 0xa0f, 0xb06, 0xc0a, 0xd03, 0xe09, 0xf00,
@@ -820,7 +823,7 @@ public static class UserBulbMeshExporter
         0x70c, 0x605, 0x50f, 0x406, 0x30a, 0x203, 0x109, 0x0
     };
 
-    private static readonly int[,] TriTable = new int[256, 16]
+    internal static readonly int[,] TriTable = new int[256, 16]
     {
         {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1},
         {0,8,3,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1},
