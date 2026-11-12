@@ -35,7 +35,8 @@ Non-goals:
 - A CAS, a CAD tool or a general 3D modeller.
 - Raymarched rendering: this is a mesh path (lines and triangles with depth).
 - Complex maps and the fractal bridge (orbit, cobweb, backdrop) in 3D. They are 2D ideas and
-  stay in the 2D mode.
+  stay in the 2D mode. *(Later reversed for the fractal bridge, without the cobweb, by its own epic
+  #1730: [MathPlane3D-FractalBridge-DesignPlan.md](MathPlane3D-FractalBridge-DesignPlan.md).)*
 - Scripted 3D scenes. They are possible later (the scripted-scenes engine is
   dimension-agnostic, §8), not in this epic.
 
