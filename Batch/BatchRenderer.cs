@@ -97,7 +97,9 @@ namespace FracturingFog.Batch
                     && FracturingFog.Models.MathPlane3DScene.TryParse(fp.MathPlane3DScene, out var scene3, out _))
                     foreach (var o in scene3.Objects)
                         if (o.CurveKind == FracturingFog.Models.MathPlaneCurveKind.Fractal
-                            && FracturingFog.MathPlane3DFractalMesher.Validate(o) is { } fractalErr)
+                            && (FracturingFog.Models.MathPlane3DScene.IsOrbit(o)
+                                ? FracturingFog.MathPlane3DOrbit.Validate(o)   // #1732
+                                : FracturingFog.MathPlane3DFractalMesher.Validate(o)) is { } fractalErr)
                             throw new InvalidOperationException("MathPlane3DScene: " + fractalErr);
             }
             if (opts.BulbPower.HasValue)          fp.BulbPower          = opts.BulbPower.Value;

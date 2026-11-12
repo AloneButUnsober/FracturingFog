@@ -40,17 +40,18 @@ public static class MathPlane3DFractalMesher
     public static bool TryParameters(MathPlaneObject o, out FractalType type, out FractalParameters p, out string? error)
     {
         type = default; p = new FractalParameters(); error = null;
+        string what = MathPlane3DScene.IsOrbit(o) ? "orbit" : "fractal";   // #1732 — orbits share the settings
         if (MathPlane3DScene.FractalTypeOf(o) is not { } t || !MeshExportCapabilities.IsMeshExportable(t))
-        { error = $"fractal {o.Name}: not a 3D fractal type"; return false; }
+        { error = $"{what} {o.Name}: not a 3D fractal type"; return false; }
         type = t;
         var keys = MathPlane3DScene.FractalKeys(o);
         if (keys.Count > 0)
         {
             var rp = RegionFractalParams.FromKeyValues(keys, t, out string? kerr);
-            if (rp == null) { error = $"fractal {o.Name}: {kerr}"; return false; }
+            if (rp == null) { error = $"{what} {o.Name}: {kerr}"; return false; }
             rp.ApplyTo(p);
         }
-        if (RaymarchMeshSampler.For(t, p) == null) { error = $"fractal {o.Name}: {t} has no distance estimate to mesh"; return false; }
+        if (RaymarchMeshSampler.For(t, p) == null) { error = $"{what} {o.Name}: {t} has no distance estimate"; return false; }
         return true;
     }
 

@@ -41,6 +41,7 @@ namespace FracturingFog.Models
             MathPlaneObjectKind.Vector => o.HasFrom ? 2 : 1,
             MathPlaneObjectKind.Segment => 2,
             MathPlaneObjectKind.Polyline => o.Coords.Count / 3,
+            MathPlaneObjectKind.Curve when MathPlane3DScene.IsOrbit(o) => 1,   // #1732 — the start point
             _ => 0,
         };
 
@@ -203,7 +204,7 @@ namespace FracturingFog.Models
         }
 
         /// <summary>The kinds the Add buttons make (a curve is a space curve; a surface is z = f(x, y)).</summary>
-        public enum AddKind { Point, Vector, Segment, Polyline, Curve, Surface, Implicit, Fractal }
+        public enum AddKind { Point, Vector, Segment, Polyline, Curve, Surface, Implicit, Fractal, Orbit }
 
         /// <summary>A new object of <paramref name="kind"/> near <paramref name="at"/>, sized
         /// <paramref name="size"/>, with a fresh name and the next palette colour.</summary>
@@ -229,13 +230,23 @@ namespace FracturingFog.Models
                 // #1731 — a fractal starts as the power-8 Mandelbulb (its defaults).
                 AddKind.Fractal => new(MathPlaneObjectKind.Surface, "", Array.Empty<double>(), color,
                                        CurveKind: MathPlaneCurveKind.Fractal, Sources: new[] { nameof(FractalType.Mandelbulb) }),
+                // #1732 — an orbit starts as a Mandelbulb point that escapes after a few steps.
+                AddKind.Orbit => new(MathPlaneObjectKind.Curve, "", new[] { 0.6, 0.4, 0.5 }, color,
+                                     CurveKind: MathPlaneCurveKind.Fractal, Sources: new[] { nameof(FractalType.Mandelbulb) }),
                 _ => new(MathPlaneObjectKind.Surface, "", Array.Empty<double>(), color,
                          CurveKind: MathPlaneCurveKind.Explicit, Sources: new[] { "0.5*sin(x)*cos(y)" }),
             };
-            o = o with { Name = FreshName(scene, o.Kind) };
+            o = o with { Name = kind == AddKind.Orbit ? FreshOrbitName(scene) : FreshName(scene, o.Kind) };
             var list = scene.Objects.ToList();
             list.Add(o);
             return (scene with { Objects = list }, list.Count - 1);
+        }
+
+        /// <summary>#1732 — o1, o2, ... for orbits.</summary>
+        public static string FreshOrbitName(MathPlane3DScene scene)
+        {
+            var used = new HashSet<string>(scene.Objects.Select(o => o.Name), StringComparer.Ordinal);
+            for (int i = 1; ; i++) if (!used.Contains("o" + i)) return "o" + i;
         }
 
         /// <summary>A name not used by any object in the scene.</summary>

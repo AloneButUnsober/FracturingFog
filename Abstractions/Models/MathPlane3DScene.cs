@@ -39,6 +39,12 @@
 // TYPE is a mesh-exportable 3D type (MeshExportCapabilities). KEY=VALUE are --param keys (the
 // region snapshot's), checked by the Engine when the mesh is built; values have no spaces,
 // quotes, ';' or a leading '@' / '#'. Design: Docs/Technical/MathPlane3D-FractalBridge-DesignPlan.md §3.1.
+//
+// #1732 (fractal bridge B2) adds the orbit of a point under a 3D fractal's own iteration:
+//   orbit NAME TYPE x y z [steps N] [KEY=VALUE ...] [options]
+// TYPE is one of OrbitTypes; (x, y, z) is the point in scene axes; steps N (1-1000) caps the
+// orbit (default: the fractal's own iteration count). Stored as a Curve with CurveKind.Fractal:
+// Sources = type then KEY=VALUE, Coords = x y z, Mesh = steps (0 = default). Design §3.2.
 
 using System;
 using System.Collections.Generic;
@@ -154,6 +160,7 @@ namespace FracturingFog.Models
         {
             if (o.Kind == MathPlaneObjectKind.Surface && o.CurveKind == MathPlaneCurveKind.Fractal)
                 return SerializeFractal(o);
+            if (IsOrbit(o)) return SerializeOrbit(o);
             var sb = new StringBuilder(o.Kind.ToString().ToLowerInvariant()).Append(' ').Append(o.Name);
             if (o.Kind == MathPlaneObjectKind.Surface)
                 sb.Append(' ').Append(o.CurveKind switch
@@ -193,8 +200,38 @@ namespace FracturingFog.Models
 
         /// <summary>#1731 — a fractal object's type (null when it is not one).</summary>
         public static FractalType? FractalTypeOf(MathPlaneObject o)
-            => o.Kind == MathPlaneObjectKind.Surface && o.CurveKind == MathPlaneCurveKind.Fractal && o.Expressions.Count > 0
+            => o.Kind is MathPlaneObjectKind.Surface or MathPlaneObjectKind.Curve
+               && o.CurveKind == MathPlaneCurveKind.Fractal && o.Expressions.Count > 0
                && FractalTypeNames.TryParse(o.Expressions[0], true, out var t) ? t : null;
+
+        /// <summary>#1732 — true for an orbit object (a Curve of CurveKind.Fractal).</summary>
+        public static bool IsOrbit(MathPlaneObject o) => o.Kind == MathPlaneObjectKind.Curve && o.CurveKind == MathPlaneCurveKind.Fractal;
+
+        /// <summary>#1732 — the 3D types an orbit can follow.</summary>
+        public static IReadOnlyList<FractalType> OrbitTypes { get; } = new[]
+        {
+            FractalType.Mandelbulb, FractalType.Mandelbox, FractalType.Kifs,
+            FractalType.QuaternionJulia, FractalType.QuaternionMandelbrot,
+        };
+
+        /// <summary>#1732 — an orbit's step cap.</summary>
+        public const int MaxOrbitSteps = 1000;
+
+        /// <summary>#1732 — <c>orbit NAME TYPE x y z [steps N] KEY=VALUE ... options</c>.</summary>
+        private static string SerializeOrbit(MathPlaneObject o)
+        {
+            var sb = new StringBuilder("orbit ").Append(o.Name);
+            if (o.Expressions.Count > 0) sb.Append(' ').Append(o.Expressions[0]);
+            for (int i = 0; i < 3 && i < o.Coords.Count; i++) sb.Append(' ').Append(MathPlaneScene.Num(o.Coords[i]));
+            if (o.Mesh > 0) sb.Append(" steps ").Append(o.Mesh.ToString(Inv));
+            for (int k = 1; k < o.Expressions.Count; k++) sb.Append(' ').Append(o.Expressions[k]);
+            uint a = o.Color >> 24;
+            sb.Append(" #").Append((o.Color & 0xFFFFFF).ToString("X6", Inv));
+            if (a != 0xFF) sb.Append(a.ToString("X2", Inv));
+            if (!o.Visible) sb.Append(" hidden");
+            if (!o.ShowLabel) sb.Append(" nolabel");
+            return sb.ToString();
+        }
 
         /// <summary>#1731 — a fractal object's KEY=VALUE pairs, in order.</summary>
         public static IReadOnlyList<KeyValuePair<string, string>> FractalKeys(MathPlaneObject o)
@@ -315,11 +352,13 @@ namespace FracturingFog.Models
                     case "curve":
                     case "surface":
                     case "fractal":
+                    case "orbit":
                     {
                         MathPlaneObject? obj; int badTok; string msg;
                         bool ok = head == "curve" ? TryCurve(toks, objects.Count, out obj, out badTok, out msg)
                                 : head == "surface" ? TrySurface(toks, objects.Count, out obj, out badTok, out msg)
                                 : head == "fractal" ? TryFractal(toks, objects.Count, out obj, out badTok, out msg)
+                                : head == "orbit" ? TryOrbit(toks, objects.Count, out obj, out badTok, out msg)
                                 : TryObject(head, toks, objects.Count, out obj, out badTok, out msg);
                         if (!ok) { error = Err(badTok, msg); return false; }
                         if (!names.Add(obj!.Name)) { error = Err(1, $"name '{obj.Name}' is already used"); return false; }
@@ -327,7 +366,7 @@ namespace FracturingFog.Models
                         break;
                     }
                     default:
-                        error = Err(0, $"unknown statement '{toks[0].Text}' (expected point, vector, segment, polyline, curve, surface, fractal, axes, grid, fill, shading, ticks, labels, det, eigen or lengths)");
+                        error = Err(0, $"unknown statement '{toks[0].Text}' (expected point, vector, segment, polyline, curve, surface, fractal, orbit, axes, grid, fill, shading, ticks, labels, det, eigen or lengths)");
                         return false;
                 }
             }
@@ -514,8 +553,21 @@ namespace FracturingFog.Models
                 || !MeshExportCapabilities.IsMeshExportable(type))
             { badTok = Math.Min(2, toks.Count - 1); msg = $"'fractal' needs a 3D type: {typeList}"; return false; }
             var sources = new List<string> { type.ToString() };
-            var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             int i = 3;
+            if (!TryFractalKeys(toks, ref i, sources, out badTok, out msg)) return false;
+            if (!TryOptions(toks, i, index, allowMesh: true, out uint color, out bool visible, out bool label, out int mesh, out badTok, out msg))
+                return false;
+            obj = new MathPlaneObject(MathPlaneObjectKind.Surface, toks[1].Text, Array.Empty<double>(), color, visible, label,
+                                      CurveKind: MathPlaneCurveKind.Fractal, Sources: sources, Mesh: mesh);
+            return true;
+        }
+
+        /// <summary>#1731 — KEY=VALUE settings from token <paramref name="i"/> on, into <paramref name="sources"/>.</summary>
+        private static bool TryFractalKeys(List<(string Text, int Col)> toks, ref int i, List<string> sources,
+                                           out int badTok, out string msg)
+        {
+            badTok = 0; msg = "";
+            var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (; i < toks.Count && toks[i].Text.Contains('='); i++)
             {
                 string t = toks[i].Text;
@@ -527,10 +579,40 @@ namespace FracturingFog.Models
                 { badTok = i; msg = $"'{key}' is a view setting, not one of the fractal's"; return false; }
                 sources.Add(t);
             }
-            if (!TryOptions(toks, i, index, allowMesh: true, out uint color, out bool visible, out bool label, out int mesh, out badTok, out msg))
+            return true;
+        }
+
+        /// <summary>#1732 — <c>orbit NAME TYPE x y z [steps N] [KEY=VALUE ...] [options]</c>.</summary>
+        private static bool TryOrbit(List<(string Text, int Col)> toks, int index,
+                                     out MathPlaneObject? obj, out int badTok, out string msg)
+        {
+            obj = null; badTok = 0; msg = "";
+            if (toks.Count < 2 || !MathPlaneScene.IsName(toks[1].Text))
+            { badTok = 1; msg = "'orbit' needs a name (letters, digits, '_', optional trailing ')"; return false; }
+            if (toks.Count < 3 || !FractalTypeNames.TryParse(toks[2].Text, true, out var type) || !OrbitTypes.Contains(type))
+            { badTok = Math.Min(2, toks.Count - 1); msg = $"'orbit' needs a type: {string.Join(", ", OrbitTypes)}"; return false; }
+            int i = 3;
+            var coords = new List<double>();
+            for (int k = 0; k < 3; k++, i++)
+            {
+                if (i >= toks.Count || !MathPlaneScene.TryNum(toks[i].Text, out double v))
+                { badTok = Math.Min(i, toks.Count - 1); msg = "'orbit' needs the start point x y z after the type"; return false; }
+                coords.Add(v);
+            }
+            int steps = 0;
+            if (i < toks.Count && toks[i].Text.Equals("steps", StringComparison.OrdinalIgnoreCase))
+            {
+                if (i + 1 >= toks.Count || !int.TryParse(toks[i + 1].Text, NumberStyles.None, Inv, out steps)
+                    || steps < 1 || steps > MaxOrbitSteps)
+                { badTok = Math.Min(i + 1, toks.Count - 1); msg = $"'steps' takes a whole number, 1-{MaxOrbitSteps}"; return false; }
+                i += 2;
+            }
+            var sources = new List<string> { type.ToString() };
+            if (!TryFractalKeys(toks, ref i, sources, out badTok, out msg)) return false;
+            if (!TryOptions(toks, i, index, allowMesh: false, out uint color, out bool visible, out bool label, out _, out badTok, out msg))
                 return false;
-            obj = new MathPlaneObject(MathPlaneObjectKind.Surface, toks[1].Text, Array.Empty<double>(), color, visible, label,
-                                      CurveKind: MathPlaneCurveKind.Fractal, Sources: sources, Mesh: mesh);
+            obj = new MathPlaneObject(MathPlaneObjectKind.Curve, toks[1].Text, coords, color, visible, label,
+                                      CurveKind: MathPlaneCurveKind.Fractal, Sources: sources, Mesh: steps);
             return true;
         }
 

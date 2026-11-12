@@ -54,6 +54,7 @@
                         <Button Classes="action neutral" Content="+ Curve"    Command="{Binding AddCurveCommand}"    Margin="0,0,6,6" ToolTip.Tip="Add a space curve (x(t), y(t), z(t)); starts as a helix" />
                         <Button Classes="action neutral" Content="+ Surface"  Command="{Binding AddSurfaceCommand}"  Margin="0,0,6,6" ToolTip.Tip="Add a surface z = f(x, y); starts as a gentle wave" />
                         <Button Classes="action neutral" Content="+ Implicit" Command="{Binding AddImplicitCommand}" Margin="0,0,6,6" ToolTip.Tip="Add an implicit surface F(x, y, z) = 0, meshed by marching cubes; starts as the unit sphere" />
+                        <Button Classes="action neutral" Content="+ Orbit" Command="{Binding AddOrbitCommand}" Margin="0,0,6,6" ToolTip.Tip="Add the orbit of a point under a 3D fractal's own step (z0, z1, z2 ...); starts as a Mandelbulb point. Drag its start point on the render." />
                         <Button Classes="action neutral" Content="+ Fractal" Command="{Binding AddFractalCommand}" Margin="0,0,6,6" ToolTip.Tip="Add a 3D fractal, meshed from its distance estimate (the mesh export's mesh); starts as the power-8 Mandelbulb. Pick the type and settings below." />
                     </WrapPanel>
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
@@ -92,7 +93,7 @@
                     <!-- #1731: a fractal's type and settings (rows 5-6; it has no formulas) -->
                     <TextBlock Grid.Row="5" Text="Type" VerticalAlignment="Center" IsVisible="{Binding SelectedIsFractal}" />
                     <ComboBox Grid.Row="5" Grid.Column="1" ItemsSource="{Binding FractalTypeChoices}" SelectedItem="{Binding SelectedFractalType}"
-                              IsVisible="{Binding SelectedIsFractal}" Width="200" ToolTip.Tip="The 3D fractal to mesh" />
+                              IsVisible="{Binding SelectedIsFractal}" Width="200" ToolTip.Tip="The 3D fractal (to mesh, or whose step the orbit follows)" />
                     <TextBlock Grid.Row="6" Text="Settings" VerticalAlignment="Center" IsVisible="{Binding SelectedIsFractal}" />
                     <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding SelectedFractalSettings, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                              IsVisible="{Binding SelectedIsFractal}" FontFamily="Consolas, Menlo, monospace"
@@ -107,6 +108,11 @@
                     <StackPanel Grid.Row="8" Grid.Column="1" Orientation="Horizontal" Spacing="14">
                         <CheckBox Content="Visible" IsChecked="{Binding SelectedVisible}" />
                         <CheckBox Content="Label"   IsChecked="{Binding SelectedShowLabel}" />
+                        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding SelectedIsOrbit}">
+                            <TextBlock Text="Steps" VerticalAlignment="Center" />
+                            <NumericUpDown Value="{Binding SelectedSteps}" Minimum="0" Maximum="1000" Increment="1" FormatString="0" Width="110"
+                                           ToolTip.Tip="Most steps to draw (0: the fractal's own iteration count). The orbit stops sooner when it escapes." />
+                        </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding SelectedIsSurface}">
                             <TextBlock Text="Mesh" VerticalAlignment="Center" />
                             <NumericUpDown Value="{Binding SelectedMesh}" Minimum="2" Maximum="256" Increment="8" FormatString="0" Width="110"

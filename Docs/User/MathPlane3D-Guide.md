@@ -60,6 +60,8 @@ The **Objects** group adds objects:
   sphere.
 - **+ Fractal**: a 3D fractal as a surface (see [Fractals in the scene](#fractals-in-the-scene)). It starts
   as the power-8 Mandelbulb.
+- **+ Orbit**: the orbit of a point under a fractal's own step (see [Orbits](#orbits)). It starts as a
+  Mandelbulb point that escapes.
 
 Pick an object in the list to edit its name, formulas, numbers, colour and visibility. Bad input is shown
 in yellow, and the scene is left unchanged.
@@ -92,6 +94,32 @@ QuaternionJulia, QuaternionMandelbrot, Kleinian, BicomplexMandelbrot, Coquaterni
   - Camera and Math Plane keys are refused.
   - As with `--param`, another family's key is accepted and changes nothing.
   - An unknown key is shown as a scene error on the render, and `--batch` refuses it.
+
+### Orbits
+
+An **orbit** shows what one iteration of a 3D fractal does to a point, by drawing z₀, z₁, z₂ and so on. A
+point is in the fractal when its orbit stays bounded.
+- **The step is the fractal's own**, the same arithmetic its renderer uses:
+
+  | Fractal | z₀ | Each step | Stops when |
+  |---|---|---|---|
+  | Mandelbulb | the point | the triplex power, plus the point | \|z\| > 2 |
+  | Mandelbox | the point | box fold, sphere fold, times the scale, plus the point | \|z\|² passes the bailout |
+  | Kifs | the point | the fold kind's mirrors, then the scale about the offset | after the iteration count (Dodecahedron and Mandelbox-rot stop at their escape radius) |
+  | QuaternionJulia | (x, y, z, slice w) | q² + c | \|q\|² passes the bailout |
+  | QuaternionMandelbrot | 0, with c = (x, y, z, slice w) | q² + c | \|q\|² passes the bailout |
+
+  The quaternion orbits are 4D, and the scene draws (x, y, z), so the fourth component w is dropped.
+- **Drawing:**
+  - Each step is a dot, and the start dot is larger.
+  - The orbit is drawn only inside a ball around the origin: the escape radius, or 1.5 times the
+    fractal's size if that is smaller. One escaping step (a Mandelbulb's can reach |z| of about 256) then
+    doesn't shrink the rest of the scene.
+  - A ring marks where an escaping orbit leaves the ball.
+- **Start point:** set it in **Numbers** (x y z), or drag it on the render like a point.
+- **Steps** caps how many steps are drawn. 0 means the fractal's own iteration count.
+- **Type and settings** work as for a fractal object. A fractal and an orbit with the same type and
+  settings line up in the scene.
 
 ## 3. Linear map
 
@@ -140,6 +168,7 @@ surface  NAME explicit "f(x, y)" [xmin xmax ymin ymax]            [options] [mes
 surface  NAME parametric "x(u,v)" "y(u,v)" "z(u,v)" umin umax vmin vmax  [options] [mesh N]
 surface  NAME implicit "F(x, y, z)" [xmin xmax ymin ymax zmin zmax]       [options] [mesh N]
 fractal  NAME TYPE [KEY=VALUE ...]                                         [options] [mesh N]
+orbit    NAME TYPE x y z [steps N] [KEY=VALUE ...]                         [options]
 shading smooth|flat     det on|off     eigen on|off     lengths on|off
 options: #RRGGBB  #RRGGBBAA  hidden  nolabel
 ```
