@@ -150,6 +150,33 @@ public sealed class MathPlane3DSectionTests
     }
 
     [Fact]
+    public void AnImplicitSurface_IsAddedAsTheUnitSphere_AndEditsItsFormulaAndBox()
+    {
+        // #1717
+        var r = new Rig("v1");
+        r.Vm.AddImplicitCommand.Execute().Subscribe();
+        var o = r.Scene.Objects.Single();
+        Assert.Equal((MathPlaneObjectKind.Surface, MathPlaneCurveKind.Implicit), (o.Kind, o.CurveKind));
+        Assert.Equal("x^2 + y^2 + z^2 - 1", o.Expressions.Single());
+        Assert.Equal(0, r.Vm.SelectedIndex);
+        Assert.Equal("F(x, y, z) = 0", r.Vm.Expression1Label);
+        Assert.Contains("Implicit", r.Vm.SelectedKind);
+
+        r.Vm.SelectedExpression1 = "x*y*z - 0.5";
+        r.Vm.SelectedCoords = "-2 2 -2 2 -1 1";
+        o = r.Scene.Objects.Single();
+        Assert.Equal("x*y*z - 0.5", o.Expressions[0]);
+        Assert.Equal((-2.0, 2.0, -2.0, 2.0, -1.0, 1.0), MathPlane3DScene.ImplicitBox(o));
+
+        string before = r.P.MathPlane3DScene;
+        r.Vm.SelectedCoords = "-1 1 -1 1";          // a box needs six numbers
+        Assert.NotNull(r.Vm.EditError);
+        r.Vm.SelectedExpression1 = "x + t";         // F reads only x, y, z
+        Assert.Contains("reads only x, y, z", r.Vm.EditError);
+        Assert.Equal(before, r.P.MathPlane3DScene);
+    }
+
+    [Fact]
     public void Delete_Up_Down_AndTheDisplayToggles_EditTheScene()
     {
         var r = new Rig("v1; point A 0 0 1; point B 0 1 0; point C 1 0 0");

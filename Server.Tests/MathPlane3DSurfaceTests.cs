@@ -83,7 +83,7 @@ public sealed class MathPlane3DSurfaceTests
     [InlineData("surface s parametric \"u\" \"v\" 0 1 0 1", "three quoted expressions")]
     [InlineData("surface s explicit \"x\" -1 1 2", "xmin xmax ymin ymax")]
     [InlineData("surface s explicit \"x\" 1 -1 0 1", "max must be above")]
-    [InlineData("surface s conic \"x\"", "explicit or parametric")]
+    [InlineData("surface s conic \"x\"", "explicit, parametric or implicit")]
     [InlineData("surface s explicit \"x\" mesh 1", "2-256")]
     [InlineData("surface s explicit \"x\" mesh 300", "2-256")]
     [InlineData("point P 0 0 0 mesh 4", "unknown option 'mesh'")]

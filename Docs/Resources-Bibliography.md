@@ -775,8 +775,20 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
   (`Abstractions/Models/MathPlaneImplicitSampler.cs`, #1551; design `Docs/Technical/MathPlane-DesignPlan.md`
   §3.4). Saddle cells are resolved by the cell-centre value, and edge crossings are found by bisection so
   that poles can be rejected. Both are FF's choices, not taken from the paper.
-  Also planned for implicit surfaces `F(x, y, z) = 0` in Math Plane 3D (#1556,
-  `Docs/Technical/MathPlane3D-DesignPlan.md` §3.5).
+  Also used for implicit surfaces `F(x, y, z) = 0` in Math Plane 3D (#1717,
+  `Engine/Calculators/MathPlane3DImplicitMesher.cs`; design `Docs/Technical/MathPlane3D-DesignPlan.md`
+  §3.5), with the lookup tables of [Bourke's write-up](#bourke-polygonise). Rejecting poles by bisection
+  carries over from the 2D sampler and is FF's choice, not the paper's.
+
+<a id="bourke-polygonise"></a>
+
+- **Marching-cubes lookup tables** — Paul Bourke. *Polygonising a scalar field (Marching Cubes).*
+  <https://paulbourke.net/geometry/polygonise/>, May 1994. The page says its tables are "Based on tables
+  by Cory Gene Bloyd". It states no licence for its code (page read 2026-11-11). FF's `EdgeTable` /
+  `TriTable` in `Engine/Export/UserBulbMeshExporter.cs` are in this layout: corner order, edge numbering
+  and the 256-entry tables. They were already used by the S9 mesh export, which named "Paul Bourke layout"
+  in code comments without a bibliography entry. #1717 adds the credit when Math Plane 3D's implicit
+  surfaces reuse them.
 
 <a id="catmull-zbuffer"></a>
 

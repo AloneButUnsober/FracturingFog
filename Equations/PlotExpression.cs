@@ -97,6 +97,20 @@ namespace FracturingFog.Models
             return ToReal(_root.Eval(env));
         }
 
+        /// <summary>#1717 — the real value of an implicit surface's F at the point (x, y, z):
+        /// z is a real input here, not the complex x + iy of the 2D language. t, theta and c are 0.</summary>
+        public double EvalXYZ(double x, double y, double z)
+        {
+            var env = Env();
+            env[SlotX] = SbxVal.Real(x);
+            env[SlotY] = SbxVal.Real(y);
+            env[SlotT] = SbxVal.Real(0);
+            env[SlotTheta] = SbxVal.Real(0);
+            env[SlotZ] = SbxVal.Real(z);
+            env[SlotC] = SbxVal.Cx(Complex.Zero);
+            return ToReal(_root.Eval(env));
+        }
+
         /// <summary>#1714 — the real value at surface parameters (u, v), for an expression
         /// parsed with <c>surface: true</c>; the other inputs are 0.</summary>
         public double EvalUV(double u, double v)

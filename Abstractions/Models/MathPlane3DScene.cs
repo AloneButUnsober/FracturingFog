@@ -21,9 +21,11 @@
 //   curve    NAME "x(t)" "y(t)" "z(t)" tmin tmax                 [options]
 //   surface  NAME explicit "f(x, y)" [xmin xmax ymin ymax]        [options] [mesh N]
 //   surface  NAME parametric "x(u,v)" "y(u,v)" "z(u,v)" umin umax vmin vmax  [options] [mesh N]
+//   surface  NAME implicit "F(x, y, z)" [xmin xmax ymin ymax zmin zmax]       [options] [mesh N]   (#1717)
 //   shading smooth|flat                  Gouraud (default) or flat surface shading
 //   fill xy|xz|yz ... | fill off         translucent filled grid planes (default off)
-// An explicit surface without a domain spans [-3, 3] x [-3, 3]. mesh N is the cells a
+// An explicit surface without a domain spans [-3, 3] x [-3, 3]; an implicit one without a
+// box spans [-3, 3]^3 (#1717), meshed by marching cubes on mesh N cells a side. mesh N is the cells a
 // side (2-256, default 64). A #RRGGBBAA surface is drawn in the translucent pass.
 //
 // #1715 (T3) adds the map read-outs (the map itself is params, MathPlane3DMap):
@@ -89,6 +91,14 @@ namespace FracturingFog.Models
             => o.Coords.Count == 4 ? (o.Coords[0], o.Coords[1], o.Coords[2], o.Coords[3])
              : (-DefaultSurfaceHalfSize, DefaultSurfaceHalfSize, -DefaultSurfaceHalfSize, DefaultSurfaceHalfSize);
 
+        /// <summary>#1717 — an implicit surface's box (xmin, xmax, ymin, ymax, zmin, zmax).</summary>
+        public static (double X0, double X1, double Y0, double Y1, double Z0, double Z1) ImplicitBox(MathPlaneObject o)
+        {
+            const double h = DefaultSurfaceHalfSize;
+            return o.Coords.Count == 6 ? (o.Coords[0], o.Coords[1], o.Coords[2], o.Coords[3], o.Coords[4], o.Coords[5])
+                                       : (-h, h, -h, h, -h, h);
+        }
+
         public static (double X, double Y, double Z) Point(MathPlaneObject o, int i)
             => (o.Coords[3 * i], o.Coords[3 * i + 1], o.Coords[3 * i + 2]);
 
@@ -138,7 +148,12 @@ namespace FracturingFog.Models
         {
             var sb = new StringBuilder(o.Kind.ToString().ToLowerInvariant()).Append(' ').Append(o.Name);
             if (o.Kind == MathPlaneObjectKind.Surface)
-                sb.Append(' ').Append(o.CurveKind == MathPlaneCurveKind.Parametric ? "parametric" : "explicit");
+                sb.Append(' ').Append(o.CurveKind switch
+                {
+                    MathPlaneCurveKind.Parametric => "parametric",
+                    MathPlaneCurveKind.Implicit => "implicit",
+                    _ => "explicit",
+                });
             foreach (var src in o.Expressions) sb.Append(" \"").Append(src).Append('"');
             int n = o.Kind == MathPlaneObjectKind.Vector ? 3 : o.Coords.Count;
             for (int i = 0; i < n; i++) sb.Append(' ').Append(MathPlaneScene.Num(o.Coords[i]));
@@ -387,8 +402,9 @@ namespace FracturingFog.Models
             return true;
         }
 
-        /// <summary>#1714 — <c>surface NAME explicit "f(x, y)" [xmin xmax ymin ymax]</c> or
-        /// <c>surface NAME parametric "x(u,v)" "y(u,v)" "z(u,v)" umin umax vmin vmax</c>, then options.</summary>
+        /// <summary>#1714 — <c>surface NAME explicit "f(x, y)" [xmin xmax ymin ymax]</c>,
+        /// <c>surface NAME parametric "x(u,v)" "y(u,v)" "z(u,v)" umin umax vmin vmax</c> or (#1717)
+        /// <c>surface NAME implicit "F(x, y, z)" [xmin xmax ymin ymax zmin zmax]</c>, then options.</summary>
         private static bool TrySurface(List<(string Text, int Col)> toks, int index,
                                        out MathPlaneObject? obj, out int badTok, out string msg)
         {
@@ -396,14 +412,17 @@ namespace FracturingFog.Models
             if (toks.Count < 2 || !MathPlaneScene.IsName(toks[1].Text))
             { badTok = 1; msg = "'surface' needs a name (letters, digits, '_', optional trailing ')"; return false; }
             string kindText = toks.Count > 2 ? toks[2].Text.ToLowerInvariant() : "";
-            if (kindText != "explicit" && kindText != "parametric")
-            { badTok = Math.Min(2, toks.Count - 1); msg = "'surface' needs a kind: explicit or parametric"; return false; }
-            bool param = kindText == "parametric";
+            if (kindText != "explicit" && kindText != "parametric" && kindText != "implicit")
+            { badTok = Math.Min(2, toks.Count - 1); msg = "'surface' needs a kind: explicit, parametric or implicit"; return false; }
+            bool param = kindText == "parametric", implicitF = kindText == "implicit";
             int i = 3;
             var sources = new List<string>();
             bool ok = param
                 ? TryExpressions(toks, ref i, 3, new[] { "u", "v" }, "a parametric surface",
                                  "a parametric surface needs three quoted expressions, \"x(u,v)\" \"y(u,v)\" \"z(u,v)\"", sources, out badTok, out msg)
+                : implicitF
+                ? TryExpressions(toks, ref i, 1, new[] { "x", "y", "z" }, "an implicit surface",
+                                 "an implicit surface needs a quoted expression F(x, y, z), e.g. \"x^2 + y^2 + z^2 - 1\"", sources, out badTok, out msg)
                 : TryExpressions(toks, ref i, 1, new[] { "x", "y" }, "an explicit surface",
                                  "an explicit surface needs a quoted expression in x and y, e.g. \"x^2 - y^2\"", sources, out badTok, out msg);
             if (!ok) return false;
@@ -411,13 +430,16 @@ namespace FracturingFog.Models
             bool hasRange = i < toks.Count && MathPlaneScene.TryNum(toks[i].Text, out _);
             if (param || hasRange)
             {
-                string need = param ? "a parametric surface needs umin umax vmin vmax" : "the domain needs xmin xmax ymin ymax";
-                if (!TryRange(toks, ref i, 2, need, out domain, out badTok, out msg)) return false;
+                string need = param ? "a parametric surface needs umin umax vmin vmax"
+                            : implicitF ? "the box needs xmin xmax ymin ymax zmin zmax"
+                            : "the domain needs xmin xmax ymin ymax";
+                if (!TryRange(toks, ref i, implicitF ? 3 : 2, need, out domain, out badTok, out msg)) return false;
             }
             if (!TryOptions(toks, i, index, allowMesh: true, out uint color, out bool visible, out bool label, out int mesh, out badTok, out msg))
                 return false;
             obj = new MathPlaneObject(MathPlaneObjectKind.Surface, toks[1].Text, domain, color, visible, label,
-                                      CurveKind: param ? MathPlaneCurveKind.Parametric : MathPlaneCurveKind.Explicit,
+                                      CurveKind: param ? MathPlaneCurveKind.Parametric
+                                               : implicitF ? MathPlaneCurveKind.Implicit : MathPlaneCurveKind.Explicit,
                                       Sources: sources, Mesh: mesh);
             return true;
         }

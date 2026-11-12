@@ -207,6 +207,38 @@ orthographic` statement is cheap to add and helps reading coordinates.
 - **Implicit F = 0:** marching cubes on a box grid
   ([Lorensen & Cline](../Resources-Bibliography.md#lorensen-cline-marching-cubes), already
   used for implicit curves). This is a later slice.
+
+*As built (T5, #1717):*
+- **Text:** `surface NAME implicit "F(x, y, z)" [xmin xmax ymin ymax zmin zmax]`, default box
+  [-3, 3]³, and `mesh N` (2-256, default 64) cells a side. F reads only x, y and z. Here z is
+  a real input (`PlotExpression.EvalXYZ`), not the 2D language's complex x + iy.
+- **Mesher:** `Engine/Calculators/MathPlane3DImplicitMesher.cs` does marching cubes with the
+  edge and triangle tables of
+  [Bourke's write-up](../Resources-Bibliography.md#bourke-polygonise). It shares them with the
+  S9 exporter, which already used them uncredited; the bibliography entry is added here.
+  - A corner is inside where F < 0, and triangles face F > 0, so a closed surface faces outward.
+  - Each edge's vertex is made once and shared, so a closed surface inside the box is watertight
+    (checked with `MeshValidator`). A surface that leaves the box is cut open at its faces.
+- **Poles,** as in 2D: every crossing is found by bisection (10 halvings, then a linear step).
+  - A crossing whose final |F| is not below 0.05 of the larger end value is a pole, and every
+    cell using that edge is dropped. `1/x` therefore meshes nothing, and `1/x - 1` meshes only
+    x = 1.
+  - A cell with a non-finite corner is dropped too.
+- **Render:** index triangles go into the same opaque or translucent pass as the other surfaces.
+  - Under a map, the vertices are mapped one by one.
+  - Gouraud normals are the area-weighted sums of the mapped triangles' normals round each vertex.
+  - The label sits on the highest vertex. The grid is sized by the largest |coordinate| of the
+    vertices.
+- **Cost:**
+  - `mesh N` costs (N+1)³ evaluations, run in parallel: 64 is about 0.3 M, and 256 about 17 M.
+    A unit-sphere still took 0.18 s at 64 and 1.8 s at 256 (900×600, Debug build, author's machine). The triangle cap is 4 M.
+  - A mesh is kept while its formula, box and resolution are unchanged. Colour, name and
+    visibility edits, other objects and orbiting therefore never re-mesh it.
+  - A render cancelled mid-mesh commits nothing, so the next render meshes again.
+- **UI:** a "+ Implicit" button adds the unit sphere. The selected object's box is edited in the
+  numbers field, as six numbers.
+- **Batch:** the scene text carries the statement, so `--batch` and the Command builder need no
+  new flags. A round-trip test renders both sides identical.
 - **Under a map:** a surface is mapped vertex by vertex, which is exact for a linear map.
   Normals are recomputed from the mapped triangles.
 

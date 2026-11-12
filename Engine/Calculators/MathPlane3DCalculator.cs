@@ -43,6 +43,11 @@
 // image, translucent, with its det), eigen (dashed lines through the origin with λ)
 // and lengths (|M v| beside each vector).
 //
+// #1717 (T5): implicit surfaces F(x, y, z) = 0, meshed by marching cubes in
+// MathPlane3DImplicitMesher and drawn as index triangles (mapped vertex by vertex,
+// Gouraud normals from the mapped triangles). A mesh is kept while its formula, box and
+// resolution are unchanged, so edits elsewhere and orbiting don't re-mesh it.
+//
 // Camera (z up): eye = target + (distance / Zoom) · (sinφ cosθ, sinφ sinθ, cosφ),
 // looking at the target; perspective with a 45° vertical field of view.
 
@@ -145,6 +150,16 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
     private MathPlane3DScene _scene = new();
     private Dictionary<MathPlaneObject, MathPlane3DSurfaceMesh> _meshes = new(ReferenceEqualityComparer.Instance);
     private Dictionary<MathPlaneObject, List<List<(double X, double Y, double Z)>>> _curves = new(ReferenceEqualityComparer.Instance);
+    private Dictionary<MathPlaneObject, MathPlane3DImplicitMesh> _implicits = new(ReferenceEqualityComparer.Instance);
+    private Dictionary<string, MathPlane3DImplicitMesh> _implicitByGeometry = new(StringComparer.Ordinal);
+
+    /// <summary>#1717 — the number of marching-cubes runs so far (tests check that a mesh is reused).</summary>
+    public int ImplicitBuilds { get; private set; }
+
+    // What an implicit mesh depends on: F, the box and the resolution.
+    private static string ImplicitKey(MathPlaneObject o)
+        => string.Join('\u0001', o.Expressions) + "\u0002" + string.Join(",", o.Coords.Select(c => c.ToString("R", System.Globalization.CultureInfo.InvariantCulture)))
+           + "\u0002" + MathPlane3DScene.MeshOf(o);
 
     public MathPlane3DCalculator(int width, int height) => Resize(width, height);
 
@@ -174,15 +189,34 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
         string text = FractalParameters.MathPlane3DScene ?? "";
         if (text != _parsedText)
         {
-            LastSceneError = MathPlane3DScene.TryParse(text, out _scene, out var err) ? null : err;
-            _parsedText = text;
-            _meshes = new(ReferenceEqualityComparer.Instance);
-            _curves = new(ReferenceEqualityComparer.Instance);
-            foreach (var o in _scene.Objects)
+            LastSceneError = MathPlane3DScene.TryParse(text, out var parsed, out var err) ? null : err;
+            var meshes = new Dictionary<MathPlaneObject, MathPlane3DSurfaceMesh>(ReferenceEqualityComparer.Instance);
+            var curves = new Dictionary<MathPlaneObject, List<List<(double X, double Y, double Z)>>>(ReferenceEqualityComparer.Instance);
+            var implicits = new Dictionary<MathPlaneObject, MathPlane3DImplicitMesh>(ReferenceEqualityComparer.Instance);
+            var implicitByGeometry = new Dictionary<string, MathPlane3DImplicitMesh>(StringComparer.Ordinal);
+            foreach (var o in parsed.Objects)
             {
-                if (o.Kind == MathPlaneObjectKind.Surface && BuildSurface(o) is { } m) _meshes[o] = m;
-                else if (o.Kind == MathPlaneObjectKind.Curve) _curves[o] = SampleCurve(o);
+                if (o.Kind == MathPlaneObjectKind.Surface && o.CurveKind == MathPlaneCurveKind.Implicit)
+                {
+                    // #1717 — marching cubes is the costly part, so a mesh is kept while its
+                    // geometry is unchanged (an edit to another object, a colour, a name).
+                    string key = ImplicitKey(o);
+                    if (!implicitByGeometry.TryGetValue(key, out var im)
+                        && !_implicitByGeometry.TryGetValue(key, out im))
+                    {
+                        im = MathPlane3DImplicitMesher.Build(o, ct);
+                        ImplicitBuilds++;
+                    }
+                    if (im is null) continue;
+                    implicitByGeometry[key] = im;
+                    implicits[o] = im;
+                }
+                else if (o.Kind == MathPlaneObjectKind.Surface && BuildSurface(o) is { } m) meshes[o] = m;
+                else if (o.Kind == MathPlaneObjectKind.Curve) curves[o] = SampleCurve(o);
             }
+            // Committed only when every mesh is built, so a cancelled render re-meshes next time.
+            (_scene, _meshes, _curves, _implicits, _implicitByGeometry) = (parsed, meshes, curves, implicits, implicitByGeometry);
+            _parsedText = text;
         }
         var scene = _scene;
         var cam = CameraFor(FractalParameters, Zoom, w, h);
@@ -210,6 +244,8 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
                 AddArrowhead(opaque, cam, X(MathPlane3DScene.Tail(o)), X(MathPlane3DScene.Tip(o)), o.Color, extent);
             else if (o.Kind == MathPlaneObjectKind.Surface && _meshes.TryGetValue(o, out var mesh))
                 AddSurface((o.Color >> 24) == 0xFF ? opaque : translucent, cam, MapMesh(mesh, _map), o.Color, scene.FlatShading);
+            else if (o.Kind == MathPlaneObjectKind.Surface && _implicits.TryGetValue(o, out var im))
+                AddImplicit((o.Color >> 24) == 0xFF ? opaque : translucent, cam, im, _map, o.Color, scene.FlatShading);
         }
         AddFills(translucent, cam, scene.Fill, extent, _map);
         if (scene.ShowDet) AddDet(translucent, cam, _map);
@@ -322,6 +358,8 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
             if (!o.Visible) continue;
             if (_meshes.TryGetValue(o, out var mesh))
                 yield return (mesh.RobustExtent, 0, 0);
+            else if (_implicits.TryGetValue(o, out var im))
+                yield return (im.Extent, 0, 0);
             else if (_curves.TryGetValue(o, out var pieces))
                 foreach (var piece in pieces) foreach (var q in piece) yield return q;
         }
@@ -335,6 +373,7 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
     /// the surface instead of spiking it. Null when an expression does not parse.</summary>
     public static MathPlane3DSurfaceMesh? BuildSurface(MathPlaneObject o)
     {
+        if (o.CurveKind == MathPlaneCurveKind.Implicit) return null;   // #1717: MathPlane3DImplicitMesher
         bool param = o.CurveKind == MathPlaneCurveKind.Parametric;
         var ex = new PlotExpression[o.Expressions.Count];
         for (int k = 0; k < ex.Length; k++)
@@ -408,6 +447,35 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
         }
         if (cur is { Count: >= 2 }) result.Add(cur);
         return result;
+    }
+
+    /// <summary>#1717 — an implicit mesh, each vertex through the map; Gouraud normals are the
+    /// area-weighted sums of the mapped triangles' normals round each vertex.</summary>
+    private static void AddImplicit(List<ScreenTriangle> dst, MathPlane3DCamera cam, MathPlane3DImplicitMesh m,
+                                    Mat3 map, uint color, bool flat)
+    {
+        var v = m.Vertices;
+        if (!map.IsIdentity)
+        {
+            v = new (double X, double Y, double Z)[m.Vertices.Length];
+            for (int k = 0; k < v.Length; k++) v[k] = map.Apply(m.Vertices[k]);
+        }
+        var light = LightDir(cam);
+        if (flat)
+        {
+            foreach (var (a, b, c) in m.Triangles)
+                AddWorld(dst, cam, v[a], v[b], v[c], Shade(color, Lambert(FaceNormal(v[a], v[b], v[c]), light)));
+            return;
+        }
+        var vn = new (double X, double Y, double Z)[v.Length];
+        foreach (var (a, b, c) in m.Triangles)
+        {
+            var n = Cross(Sub(v[b], v[a]), Sub(v[c], v[a]));
+            foreach (int idx in new[] { a, b, c }) vn[idx] = (vn[idx].X + n.X, vn[idx].Y + n.Y, vn[idx].Z + n.Z);
+        }
+        var shade = new uint[v.Length];
+        for (int k = 0; k < v.Length; k++) shade[k] = Shade(color, Lambert(Normalize(vn[k]), light));
+        foreach (var (a, b, c) in m.Triangles) AddWorld(dst, cam, v[a], v[b], v[c], shade[a], shade[b], shade[c]);
     }
 
     private static void AddSurface(List<ScreenTriangle> dst, MathPlane3DCamera cam, MathPlane3DSurfaceMesh m, uint color, bool flat)
@@ -829,6 +897,15 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
                 case MathPlaneObjectKind.Surface when labels && o.ShowLabel && _meshes.TryGetValue(o, out var mesh):
                 {
                     if (LabelVertex(mesh) is { } at) Text(canvas, cam, X(at), o.Name, font, halo, ink, ui);
+                    break;
+                }
+                case MathPlaneObjectKind.Surface when labels && o.ShowLabel && _implicits.TryGetValue(o, out var im)
+                                                      && im.Vertices.Length > 0:
+                {
+                    // #1717 — the highest vertex.
+                    var top = im.Vertices[0];
+                    foreach (var q in im.Vertices) if (q.Z > top.Z) top = q;
+                    Text(canvas, cam, X(top), o.Name, font, halo, ink, ui);
                     break;
                 }
             }
