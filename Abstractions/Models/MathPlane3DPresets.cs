@@ -158,6 +158,44 @@ namespace FracturingFog.Models
                 "surface torus parametric \"(2 + 0.6*cos(v))*cos(u)\" \"(2 + 0.6*cos(v))*sin(u)\" \"0.6*sin(v)\" "
                 + "0 6.283185307179586 0 6.283185307179586 #E69F00 mesh 48",
                 Distance: 10),
+
+            // ── #1736 (bridge B6) — the 3D fractals themselves, with orbits under their own step ──
+            // Orbit numbers below are in the fractal's own axes (y up), as the fractal views use;
+            // the scene shows them turned to z up, (x, y, z) -> (x, -z, y). Each is checked
+            // against MathPlane3DOrbit by MathPlane3DBridgeDemoTests.
+            new("Mandelbulb: an escaping orbit",
+                "The power-8 Mandelbulb as a mesh, and the orbit of one point under its own step: the triplex power, "
+                + "then plus the point. The orbit stays within |z| of about 1.2 for three steps, then jumps to |z| = 4.9 "
+                + "and escapes at step 4 (|z| > 2). A point is in the Mandelbulb when its orbit never does.",
+                "fractal bulb Mandelbulb #56B4E980 nolabel mesh 64; orbit o Mandelbulb 0.6 0.4 0.5 #E69F00",
+                Distance: 4.5),
+            new("Mandelbox: fold, then scale",
+                "One Mandelbox step is a box fold (a coordinate past 1 is reflected back), a sphere fold, a scale by s = 2, "
+                + "then plus the start point c. From (0.9, 0.6, -0.3): step 1 folds nothing (inside the box, outside the "
+                + "unit sphere), so it only scales and adds c: (2.7, 1.8, -0.9). Step 2 folds x = 2.7 and y = 1.8 back to "
+                + "-0.7 and 0.2, then scales and adds c: (-0.5, 1, -2.1). The grey cube is the fold box |x|, |y|, |z| <= 1 "
+                + "and the green ball the unit sphere (the sphere fold's fixed radius); the s = 2 Mandelbox itself is a "
+                + "solid block filling its 12-wide meshing cube, which would hide them, so it is left out.",
+                "surface sphere implicit \"x^2 + y^2 + z^2 - 1\" -1.2 1.2 -1.2 1.2 -1.2 1.2 #009E7340 nolabel mesh 32; "
+                + "polyline box -1 -1 -1 1 -1 -1 1 1 -1 -1 1 -1 -1 -1 -1 -1 -1 1 1 -1 1 1 1 1 -1 1 1 -1 -1 1 #9A9A9A nolabel; "
+                + "segment e1 1 -1 -1 1 -1 1 #9A9A9A nolabel; segment e2 1 1 -1 1 1 1 #9A9A9A nolabel; "
+                + "segment e3 -1 1 -1 -1 1 1 #9A9A9A nolabel; "
+                + "orbit o Mandelbox 0.9 0.3 0.6 steps 3 #E69F00",
+                Distance: 9),
+            new("KIFS fold step beside the mesh",
+                "The Sierpinski KIFS step: three mirror folds (x + y < 0, x + z < 0, y + z < 0), then z -> 2 z - (1, 1, 1), "
+                + "a scale by 2 about the corner (1, 1, 1). The point (-0.8, 0.3, 0.6) is behind the x + y = 0 mirror, so the "
+                + "fold reflects it to (-0.3, 0.8, 0.6), and the scale sends it to (-1.6, 0.6, 0.2). Points of the "
+                + "tetrahedron stay bounded under these steps; this one is pushed away.",
+                "fractal tet Kifs KifsFold=Sierpinski #56B4E980 nolabel mesh 64; "
+                + "orbit o Kifs -0.8 -0.6 0.3 steps 2 KifsFold=Sierpinski #E69F00",
+                Distance: 6),
+            new("Quaternion Julia slice and its orbit",
+                "The quaternion Julia set of q^2 + c, c = (-0.2, 0.4, -0.4, -0.4), sliced at w = 0, and the orbit of a point "
+                + "on the slice. Quaternions are 4D, so the scene draws (x, y, z) and drops w: c's w = -0.4 moves the orbit "
+                + "off the slice at the first step. It wanders for six steps and escapes at step 7.",
+                "fractal julia QuaternionJulia #56B4E980 nolabel mesh 64; orbit o QuaternionJulia 0.3 0.2 0.4 #E69F00",
+                Distance: 4.5),
         };
 
         /// <summary>The demo named <paramref name="name"/> (ordinal), or null.</summary>

@@ -296,6 +296,27 @@ The two cameras differ, and this is the hard part of the epic:
 - **Guide:** sections for the fractal object, the orbit object and the 3D overlay in
   `Docs/User/MathPlane3D-Guide.md`, plus updated help text.
 
+*As built (B6, #1736):*
+- **Four demos** were added to `MathPlane3DPresets.All`. Each has an orbit, and three also have a
+  translucent fractal mesh of the same type and settings. The Mandelbox demo shows the fold box and the unit
+  sphere instead: the s = 2 Mandelbox's mesh is a solid block filling its 12-wide meshing cube (measured), which hid the orbit in the visual
+  check.
+  - "Mandelbulb: an escaping orbit": escapes at step 4;
+  - "Mandelbox: fold, then scale": step 1 only scales, step 2 box-folds x and y first;
+  - "KIFS fold step beside the mesh": Sierpinski, one x + y mirror fold, then 2z − (1, 1, 1);
+  - "Quaternion Julia slice and its orbit": escapes at step 7, with w dropped.
+- **Coordinates:** the idea texts give their numbers in the fractal's own axes (y up). The guide says how
+  they map to the scene's z-up axes.
+- **Tests:**
+  - The generic demo tests cover them: parse, headless render, the `--param` list, the Command builder, and
+    the guide naming them.
+  - `MathPlane3DBridgeDemoTests` checks each stated number against the scene's own orbit object. The
+    numbers are worked by hand from each family's step, and each test checks that the mesh builds.
+- **Docs:**
+  - guide rows, an axes note and a section pointing to the 3D math overlay;
+  - help text for the demos, the overlay, O and `--math-overlay-3d`.
+  - There are no new sources: the families' steps are credited from B2.
+
 ## 4. Batch parity
 
 - **B1 and B2** are scene statements, so the region snapshot and `--param MathPlane3DScene=...` carry
