@@ -76,6 +76,7 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
     // #1757 — pointer-driven renders (pan, right-drag orbit, Math Plane editor drags) go through
     // the pacer: one in flight, later moves collapse into one, fired when the frame lands.
     private readonly FracturingFog.Render.InteractiveTriggerPacer _interactivePacer;
+    private readonly IDisposable? _uiLagProbe;   // #1762 — only while FF_INTERACTION_TRACE is on
 
     private int _adaptiveRepaintBusy;    // 0 = idle, 1 = running
     private int _adaptiveRepaintPending; // 0 = none, 1 = newer value arrived
@@ -127,6 +128,7 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
         // with 100-230 ms frames showed one image in 1.2 s that way).
         _interactivePacer = new FracturingFog.Render.InteractiveTriggerPacer(FirePacedRender);
         _renderHost.FrameLanded += (_, _) => _interactivePacer.FrameDone();
+        _uiLagProbe = FracturingFog.UI.Avalonia.Services.UiLagProbe.StartIfTracing();   // #1762
         _overlayContrastLuma = _renderHost.OverlayContrastLuma;
 
         _panStopDebounce = new System.Threading.Timer(_ =>
@@ -1228,6 +1230,8 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
         if (!ReferenceEquals(_selectedQuality, ViewState.Quality))
             SetQualitySilent(ViewState.Quality);
 
+        FracturingFog.Render.InteractionTrace.Mark(FracturingFog.Render.TraceKind.RenderHint,
+            a: e.Hint == RenderHint.Fast ? 1 : 0);   // #1762
         switch (e.Hint)
         {
             case RenderHint.Full:
@@ -1275,7 +1279,11 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
 
     /// <summary>#1757 — a render for a pointer-driven change (a Math Plane editor drag or orbit),
     /// paced to the pipeline like the pan and orbit drags.</summary>
-    public void RequestInteractiveRender() => _interactivePacer.Request(progressive: false);
+    public void RequestInteractiveRender()
+    {
+        FracturingFog.Render.InteractionTrace.Mark(FracturingFog.Render.TraceKind.RenderHint, a: 2);   // #1762
+        _interactivePacer.Request(progressive: false);
+    }
 
     /// <summary>#1757 — the paced render: may run on the upload thread that reported the previous
     /// frame, so a failure is logged rather than thrown into the render pipeline.</summary>
@@ -1985,6 +1993,7 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
     public void Dispose()
     {
         _interactivePacer.Dispose();   // #1757
+        _uiLagProbe?.Dispose();   // #1762
         _acidIntroTimer?.Stop();
         _acidIntroTimer = null;
         _acidAmbientTimer?.Stop();

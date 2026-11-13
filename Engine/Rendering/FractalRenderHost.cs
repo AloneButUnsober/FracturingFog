@@ -428,8 +428,13 @@ namespace FracturingFog.Rendering
 
         private static readonly Action<UploadCtx> s_uploadCallback = static ctx =>
         {
+            InteractionTrace.Mark(TraceKind.UploadStart, ctx.Job.Seq, ctx.Job.ProgressiveStage);   // #1762
             try { ctx.Host.RunFrameJobUpload(ctx.Job, ctx.Ms, ctx.StartTicks, ctx.Equalizer); }
-            finally { ctx.Host._uploadIdle.Set(); }   // #1754 — the calc thread may write again
+            finally
+            {
+                InteractionTrace.Mark(TraceKind.UploadEnd, ctx.Job.Seq, ctx.Job.ProgressiveStage);   // #1762
+                ctx.Host._uploadIdle.Set();   // #1754 — the calc thread may write again
+            }
         };
 
         // #1754 — the upload barrier. The upload tail reads the calculator's buffers on the
@@ -447,6 +452,7 @@ namespace FracturingFog.Rendering
         private void QueueUpload(in UploadCtx ctx)
         {
             _uploadIdle.Reset();
+            InteractionTrace.Mark(TraceKind.UploadQueued, ctx.Job.Seq, ctx.Job.ProgressiveStage);   // #1762
             ThreadPool.UnsafeQueueUserWorkItem(s_uploadCallback, ctx, preferLocal: false);
         }
 
@@ -1876,6 +1882,8 @@ namespace FracturingFog.Rendering
         public void Trigger(bool progressive = false)
         {
             if (_disposed) return;
+            InteractionTrace.Mark(TraceKind.TriggerEnter, 0, 0, (long)ViewState.FractalType);   // #1762
+            var trigFlags = progressive ? TriggerFlags.Progressive : TriggerFlags.None;
             _oidnAsync.Cancel();   // #1392 — the view moves on: stop denoising the old frame
 
             // Phase 18b fix — mark a frame as in flight so the animation tick
@@ -1923,8 +1931,14 @@ namespace FracturingFog.Rendering
                 {
                     _calcCts.Token.Register(static s => ((CancellationTokenSource)s!).Cancel(), prev);
                     Dbg86($"KEEP-INFLIGHT stage={inFlightStage} (last full frame {_hudLastFrameMs:0} ms)");
+                    trigFlags |= TriggerFlags.KeptInFlight;
                 }
-                else prev?.Cancel();
+                else
+                {
+                    if (prev != null && !prev.IsCancellationRequested && !_calcIdle.IsSet)
+                        trigFlags |= TriggerFlags.CancelledInFlight;   // #1762
+                    prev?.Cancel();
+                }
                 cts = _calcCts;
             }
 
@@ -1945,7 +1959,9 @@ namespace FracturingFog.Rendering
                     ViewState.BreatheOffsetXFrac * ext, ViewState.BreatheOffsetYFrac * ext));
             }
 
+            long applyT0 = InteractionTrace.Enabled ? InteractionTrace.Now() : 0;   // #1762
             ApplyView();
+            long applyUs = applyT0 != 0 ? InteractionTrace.MicrosSince(applyT0) : 0;
 
             var token = cts.Token;
             var calc = _calculator;
@@ -2079,6 +2095,12 @@ namespace FracturingFog.Rendering
             while (_calcQueue.TryTake(out _)) { }
             try { _calcQueue.Add(job); }
             catch (InvalidOperationException) { /* CompleteAdding during Dispose */ }
+            if (InteractionTrace.Enabled)   // #1762
+            {
+                if (ViewState.Is3D) trigFlags |= TriggerFlags.Is3D;
+                if (Environment.CurrentManagedThreadId == InteractionTrace.UiThreadId) trigFlags |= TriggerFlags.OnUiThread;
+                InteractionTrace.Mark(TraceKind.TriggerExit, seq0, applyUs, (long)trigFlags);
+            }
         }
 
         // Long-lived background thread. Owns the stale-frame re-upload + the
@@ -2098,12 +2120,18 @@ namespace FracturingFog.Rendering
                     // #1392 — a 3D frame's OIDN pass defers to the background session.
                     FracturingFog.Imaging.OidnAsync.Scope? oidn = LiveOidnOnCalc(in job) ? _oidnAsync.Enter(job.Seq) : null;
                     _inFlightStage = job.ProgressiveStage;   // #1754
+                    InteractionTrace.Mark(TraceKind.CalcStart, job.Seq, job.ProgressiveStage);   // #1762
                     try { RunFrameJobCalc(in job); }
                     catch (OperationCanceledException) { }
                     catch { /* swallow — token-driven cancellation is the only
                               expected failure mode; surface anything else via
                               the calc's own error path if it has one. */ }
-                    finally { _inFlightStage = -1; oidn?.Dispose(); _calcIdle.Set(); }
+                    finally
+                    {
+                        InteractionTrace.Mark(TraceKind.CalcEnd, job.Seq, job.ProgressiveStage,
+                            job.Token.IsCancellationRequested ? 1 : 0);   // #1762
+                        _inFlightStage = -1; oidn?.Dispose(); _calcIdle.Set();
+                    }
                 }
             }
             catch (OperationCanceledException) { }
@@ -2124,8 +2152,10 @@ namespace FracturingFog.Rendering
         private void RunFrameJobCalc(in FrameJob job)
         {
             // #1754 — don't overwrite the buffers the previous frame's upload is still reading.
+            long barrierT0 = InteractionTrace.Enabled && !_uploadIdle.IsSet ? InteractionTrace.Now() : 0;   // #1762
             if (!_uploadIdle.Wait(UploadBarrierTimeoutMs))
                 Dbg86($"UPLOAD-BARRIER timeout seq={job.Seq} (calc proceeds)");
+            if (barrierT0 != 0) InteractionTrace.Mark(TraceKind.UploadBarrier, job.Seq, InteractionTrace.MicrosSince(barrierT0));
             ApplyBandDitherState();
             var token = job.Token;
             var calc = job.Calc;
@@ -2347,7 +2377,12 @@ namespace FracturingFog.Rendering
                             stereoLanded = true;
                         }
                     }
-                    if (stereoLanded) FrameLanded?.Invoke(this, EventArgs.Empty);   // #1757
+                    if (stereoLanded)
+                    {
+                        InteractionTrace.Mark(TraceKind.Landed, job.Seq, 0);   // #1762
+                        FrameLanded?.Invoke(this, EventArgs.Empty);   // #1757
+                    }
+                    else InteractionTrace.Mark(TraceKind.Dropped, job.Seq, (long)DropReason.FinalSuperseded);
                     _lastGpuRoute = FrameGpuRoute(_calculator, altCalc, useAlt: true);   // #1173-M
                     FrameCompleted?.Invoke(this, new RenderFrameInfo(
                         altCalc.CenterX, altCalc.CenterY, altCalc.Zoom, altCalc.MaxIterations,
@@ -3087,6 +3122,7 @@ namespace FracturingFog.Rendering
                     // before the final stage queued. Status bar would stay
                     // "Calculating…" until next user input; raise
                     // RenderCancelled so the consumer clears it now.
+                    InteractionTrace.Mark(TraceKind.Dropped, job.Seq, (long)DropReason.Cancelled);   // #1762
                     AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
                     RenderCancelled?.Invoke(this, EventArgs.Empty);
                     return;
@@ -3136,6 +3172,7 @@ namespace FracturingFog.Rendering
                     // would pop the incoming region on screen un-blended.
                     bool claimedP = !TransitionOverlayActive && TryClaimPresent(job.Seq);
                     Dbg86($"PREVIEW  seq={job.Seq} stage={job.ProgressiveStage} claimed={claimedP} lastSeq={_lastPresentedUploadSeq} {pw}x{ph}");
+                    if (!claimedP) InteractionTrace.Mark(TraceKind.Dropped, job.Seq, (long)DropReason.PreviewSuperseded);   // #1762
                     if (claimedP)
                     {
                     // #131 — apply the heightfield relief to the PREVIEW buffer at
@@ -3216,8 +3253,10 @@ namespace FracturingFog.Rendering
                     if (previewSrc != null)
                     lock (_d3dGate)
                     {
+                        long presT0 = InteractionTrace.Enabled ? InteractionTrace.Now() : 0;   // #1762
                         _renderer.UpdateTexture(previewSrc, pw, ph);
                         _renderer.Render();
+                        if (presT0 != 0) InteractionTrace.Mark(TraceKind.Present, job.Seq, InteractionTrace.MicrosSince(presT0), level);
                         // #1333 — timed at the present: the next drag step cancels
                         // this chain at once, so a later check would never see it.
                         if (startTicks != 0)
@@ -3250,7 +3289,11 @@ namespace FracturingFog.Rendering
                 // screen count.
                 if (previewPixels > 0)
                     DynamicResolution.RecordPreview(previewPixels, previewMs, previewFixedMs);
-                if (previewPixels > 0) FrameLanded?.Invoke(this, EventArgs.Empty);   // #1757 — the preview is on screen
+                if (previewPixels > 0)
+                {
+                    InteractionTrace.Mark(TraceKind.Landed, job.Seq, level);   // #1762
+                    FrameLanded?.Invoke(this, EventArgs.Empty);   // #1757 — the preview is on screen
+                }
                 AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
 
                 int nextStage = DynamicResolution.NextLevel(job.ProgressiveStage);
@@ -3279,6 +3322,7 @@ namespace FracturingFog.Rendering
                     // entry. Without this, a cancelled deep-Extreme frame
                     // leaves the status string stuck indefinitely.
                     Dbg86($"FINAL-CANCELLED seq={job.Seq} (token cancelled before present)");
+                    InteractionTrace.Mark(TraceKind.Dropped, job.Seq, (long)DropReason.Cancelled);   // #1762
                     AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
                     RenderCancelled?.Invoke(this, EventArgs.Empty);
                     return;
@@ -3469,7 +3513,12 @@ namespace FracturingFog.Rendering
                 if (finalMs >= 0)
                     DynamicResolution.Record(useAlt ? altCalc!.Width * altCalc.Height : calc.Width * calc.Height,
                         finalMs, final: true);
-                if (finalLanded) FrameLanded?.Invoke(this, EventArgs.Empty);   // #1757
+                if (finalLanded)
+                {
+                    InteractionTrace.Mark(TraceKind.Landed, job.Seq, 0);   // #1762
+                    FrameLanded?.Invoke(this, EventArgs.Empty);   // #1757
+                }
+                else InteractionTrace.Mark(TraceKind.Dropped, job.Seq, (long)DropReason.FinalSuperseded);
 
                 // Pull the richer LastPrecisionLabel from the generated calcs
                 // (PT, QD-PT, DD-HP4, etc.) and from MandelbrotCalculator (#1321:
@@ -3567,6 +3616,7 @@ namespace FracturingFog.Rendering
             if (_disposed) return;
             int w = Math.Max(1, width);
             int h = Math.Max(1, height);
+            InteractionTrace.Mark(TraceKind.Resize, 0, w, h);   // #1762
             _lastUploadedBuffer = null;
             // S-X9d — kill stale full-res snapshot on resize too; old buffer
             // is sized for old dims and would fail the stale-upload size gate.
@@ -3593,7 +3643,9 @@ namespace FracturingFog.Rendering
                 _renderer.Resize(w, h);
                 // Present once so the new back-buffer dimensions become
                 // visible immediately even before the next calc finishes.
+                long presT0 = InteractionTrace.Enabled ? InteractionTrace.Now() : 0;   // #1762
                 _renderer.Render();
+                if (presT0 != 0) InteractionTrace.Mark(TraceKind.Present, -1, InteractionTrace.MicrosSince(presT0), PresentStageResize);
             }
             // Cancel any in-flight calc BEFORE reallocating its buffers below —
             // _calculator.Resize swaps IterationBuffer/aux arrays, and a calc
@@ -4874,6 +4926,7 @@ namespace FracturingFog.Rendering
             if (denoised != null) src = denoised;   // #1392 — after the depth lookup (it keys on the calc's buffer)
             int n = w * h;
             long uploadStart = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
+            long traceUploadT0 = InteractionTrace.Enabled ? InteractionTrace.Now() : 0;   // #1762
             if (s_leakDiag) LeakDiagSample(w, h);
             lock (_uploadGate)
             {
@@ -5398,11 +5451,20 @@ namespace FracturingFog.Rendering
                 _perfStats.RecordUpload((uploadEnd - uploadStart) * 1000.0 / Stopwatch.Frequency);
             }
             long presentStart = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
+            long tracePresentT0 = 0;
+            if (traceUploadT0 != 0)   // #1762 — the post pipeline (post-FX, overlays, HUD) is done
+            {
+                tracePresentT0 = InteractionTrace.Now();
+                InteractionTrace.Mark(TraceKind.PostPipeline, _lastPresentedUploadSeq,
+                    (tracePresentT0 - traceUploadT0) * 1_000_000 / Stopwatch.Frequency);
+            }
             lock (_d3dGate)
             {
                 PresentTexture(dst, w, h);
                 _renderer.Render();
             }
+            if (tracePresentT0 != 0)
+                InteractionTrace.Mark(TraceKind.Present, _lastPresentedUploadSeq, InteractionTrace.MicrosSince(tracePresentT0), 0);
             if (ShowPerfHud)
             {
                 long presentEnd = Stopwatch.GetTimestamp();
@@ -5623,8 +5685,16 @@ namespace FracturingFog.Rendering
         public void Present()
         {
             if (_disposed) return;
-            lock (_d3dGate) _renderer.Render();
+            lock (_d3dGate)
+            {
+                long presT0 = InteractionTrace.Enabled ? InteractionTrace.Now() : 0;   // #1762
+                _renderer.Render();
+                if (presT0 != 0) InteractionTrace.Mark(TraceKind.Present, -1, InteractionTrace.MicrosSince(presT0), PresentStageRepresent);
+            }
         }
+
+        // #1762 — Present records that are not a calculated frame (B; stages are >= 0).
+        private const int PresentStageRepresent = -1, PresentStageResize = -2, PresentStageExternal = -3;
 
         /// <inheritdoc/>
         public uint[] SnapshotFrame(out int width, out int height)
@@ -5661,8 +5731,10 @@ namespace FracturingFog.Rendering
             if (bgra.Length < (long)width * height) return;
             lock (_d3dGate)
             {
+                long presT0 = InteractionTrace.Enabled ? InteractionTrace.Now() : 0;   // #1762
                 PresentTexture(bgra, width, height);
                 _renderer.Render();
+                if (presT0 != 0) InteractionTrace.Mark(TraceKind.Present, -1, InteractionTrace.MicrosSince(presT0), PresentStageExternal);
             }
             _lastUploadedBuffer = bgra;
             _lastUploadedWidth = width;

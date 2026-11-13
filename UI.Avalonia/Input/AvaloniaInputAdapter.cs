@@ -22,6 +22,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using FracturingFog.Input;
+using FracturingFog.Render;
 
 namespace FracturingFog.UI.Avalonia.Input;
 
@@ -50,18 +51,44 @@ public static class AvaloniaInputAdapter
             // QE pan-zoom and 3D camera/light keys route here. A Focusable
             // Border is not auto-focused on click in Avalonia, so do it
             // explicitly — otherwise the controller never sees a KeyDown.
+            long t0 = TraceIn(InputKind.Press, e.Timestamp);
             target.Focus();
             controller.OnPointerDown(ToPointer(e, target));
+            TraceOut(InputKind.Press, t0);
         }
-        void OnMoved(object? s, PointerEventArgs e)        => controller.OnPointerMove(ToPointer(e, target));
-        void OnReleased(object? s, PointerReleasedEventArgs e) => controller.OnPointerUp(ToPointerReleased(e, target));
+        void OnMoved(object? s, PointerEventArgs e)
+        {
+            long t0 = 0;
+            if (InteractionTrace.Enabled)   // #1762 — arrival, OS delay, points coalesced into this move
+            {
+                int coalesced = 1;
+                try { coalesced = e.GetIntermediatePoints(target).Count; } catch { }
+                InteractionTrace.Mark(TraceKind.PointerMove, 0, OsDelayMs(e.Timestamp), coalesced);
+                t0 = InteractionTrace.Now();
+            }
+            controller.OnPointerMove(ToPointer(e, target));
+            TraceOut(InputKind.Move, t0);
+        }
+        void OnReleased(object? s, PointerReleasedEventArgs e)
+        {
+            long t0 = TraceIn(InputKind.Release, e.Timestamp);
+            controller.OnPointerUp(ToPointerReleased(e, target));
+            TraceOut(InputKind.Release, t0);
+        }
         void OnDouble(object? s, TappedEventArgs e)         => controller.OnPointerDoubleClick(ToPointerFromTap(e, target));
-        void OnWheel(object? s, PointerWheelEventArgs e)    => controller.OnWheel(ToWheel(e, target));
+        void OnWheel(object? s, PointerWheelEventArgs e)
+        {
+            long t0 = TraceIn(InputKind.Wheel, e.Timestamp);
+            controller.OnWheel(ToWheel(e, target));
+            TraceOut(InputKind.Wheel, t0);
+        }
         void OnKey(object? s, KeyEventArgs e)
         {
             var ki = ToKey(e, target);
             if (ki.Key == InputKey.None) return;
+            long t0 = TraceIn(InputKind.Key, 0);   // KeyEventArgs carries no OS time stamp
             if (controller.OnKeyDown(ki)) e.Handled = true;
+            TraceOut(InputKind.Key, t0);
         }
 
         void OnCursor(object? s, InputCursorRequest req)
@@ -232,6 +259,30 @@ public static class AvaloniaInputAdapter
         InputCursor.NoMove2D => new Cursor(StandardCursorType.None),
         _ => Cursor.Default,
     };
+
+    // #1762 — interaction trace (FF_INTERACTION_TRACE): input arrival and handler time.
+    private static long TraceIn(InputKind kind, ulong osTimestamp)
+    {
+        if (!InteractionTrace.Enabled) return 0;
+        InteractionTrace.Mark(TraceKind.InputOther, 0, OsDelayMs(osTimestamp), (long)kind);
+        return InteractionTrace.Now();
+    }
+
+    private static void TraceOut(InputKind kind, long t0)
+    {
+        if (t0 != 0) InteractionTrace.Mark(TraceKind.InputHandled, 0, InteractionTrace.MicrosSince(t0), (long)kind);
+    }
+
+    // The event's OS time stamp against the tick count, in ms. On Windows both count milliseconds
+    // since boot (GetMessageTime vs GetTickCount, ~15.6 ms steps), so the difference is how long the
+    // event waited before the UI thread handled it. Other platforms stamp from other clocks; an
+    // implausible difference is reported as -1 (unknown).
+    private static long OsDelayMs(ulong osTimestamp)
+    {
+        if (osTimestamp == 0) return -1;
+        long d = unchecked((uint)Environment.TickCount - (uint)osTimestamp);
+        return d is >= 0 and <= 10_000 ? d : -1;
+    }
 
     private sealed class DisposableAction : IDisposable
     {

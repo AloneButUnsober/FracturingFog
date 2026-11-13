@@ -66,19 +66,22 @@ namespace FracturingFog.Render
         public void Request(bool progressive)
         {
             bool fireNow = false;
+            int decision;   // #1762 trace: 0 started, 1 forced, 2 pending
             lock (_gate)
             {
                 if (_disposed) return;
                 long now = _nowMs();
-                if (!_inFlight) { Start(now, forced: false); fireNow = true; }
-                else if (now - _inFlightSinceMs >= ForceAfterMs) { _pending = false; Start(now, forced: true); fireNow = true; }
+                if (!_inFlight) { Start(now, forced: false); fireNow = true; decision = 0; }
+                else if (now - _inFlightSinceMs >= ForceAfterMs) { _pending = false; Start(now, forced: true); fireNow = true; decision = 1; }
                 else
                 {
                     _pending = true;
                     _pendingProgressive = progressive;   // the latest request wins
                     Arm(now);
+                    decision = 2;
                 }
             }
+            InteractionTrace.Mark(TraceKind.PacerRequest, a: decision);
             if (fireNow) Fire(progressive);
         }
 
@@ -95,6 +98,7 @@ namespace FracturingFog.Render
                 _pending = false;
                 Start(_nowMs(), forced: false);
             }
+            InteractionTrace.Mark(TraceKind.PacerFire, a: 0);   // #1762
             Fire(p);
         }
 
@@ -140,6 +144,7 @@ namespace FracturingFog.Render
                 _pending = false;
                 Start(now, forced: true);
             }
+            InteractionTrace.Mark(TraceKind.PacerFire, a: 1);   // #1762
             Fire(p);
         }
 
