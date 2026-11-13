@@ -296,6 +296,12 @@ namespace FracturingFog.Render
         /// completes.</summary>
         event EventHandler? AnimationFrameUploaded;
 
+        /// <summary>#1757 — raised when a frame job's image reaches the screen (a progressive
+        /// preview, a final, a stereo pair): not for a cancelled or superseded frame, unlike
+        /// <see cref="AnimationFrameUploaded"/>. Paces interactive renders. May fire on a
+        /// background thread.</summary>
+        event EventHandler? FrameLanded;
+
         /// <summary>Raised when the host wants the status bar updated with
         /// a string ("Calculating…", "Quality → Ultra (zoom 1.2e22)", etc.).</summary>
         event EventHandler<string>? StatusRequested;

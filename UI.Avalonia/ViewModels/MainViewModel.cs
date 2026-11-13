@@ -73,6 +73,10 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
     // second concurrent RepaintWithAdaptive. The in-flight repaint reschedules
     // itself once on completion if a newer value arrived mid-render. Keeps the
     // adaptive sweep paced to actual render capacity instead of piling up.
+    // #1757 — pointer-driven renders (pan, right-drag orbit, Math Plane editor drags) go through
+    // the pacer: one in flight, later moves collapse into one, fired when the frame lands.
+    private readonly FracturingFog.Render.InteractiveTriggerPacer _interactivePacer;
+
     private int _adaptiveRepaintBusy;    // 0 = idle, 1 = running
     private int _adaptiveRepaintPending; // 0 = none, 1 = newer value arrived
 
@@ -118,6 +122,11 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
         _renderHost.ColorMapChanged += OnRenderHostColorMapChanged;
         _renderHost.RenderCancelled += OnRenderCancelled;
         _renderHost.RefineProgress += OnRefineProgress;   // SM-3 (#1268)
+        // #1757 — a frame reaching the screen releases the next paced render. Not a cancelled
+        // frame: on 2D the released render would cancel the frame just started (a live 2D drag
+        // with 100-230 ms frames showed one image in 1.2 s that way).
+        _interactivePacer = new FracturingFog.Render.InteractiveTriggerPacer(FirePacedRender);
+        _renderHost.FrameLanded += (_, _) => _interactivePacer.FrameDone();
         _overlayContrastLuma = _renderHost.OverlayContrastLuma;
 
         _panStopDebounce = new System.Threading.Timer(_ =>
@@ -125,6 +134,7 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
             if (_renderHintFastInFlight)
             {
                 _renderHintFastInFlight = false;
+                _interactivePacer.Reset();   // #1757 — the full render covers any paced move
                 _renderHost.Trigger();
             }
         }, null, System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
@@ -163,6 +173,7 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
             {
                 System.Threading.Volatile.Write(ref _lastFullEmitTicks, 0);
                 _renderHintFastInFlight = false;
+                _interactivePacer.Reset();   // #1757
                 _renderHost.Trigger();
             }
         }, null, System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
@@ -1238,6 +1249,7 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
                     // First click of a (possibly new) burst — render now.
                     System.Threading.Volatile.Write(ref _lastFullEmitTicks, now);
                     _renderHintFastInFlight = false;
+                    _interactivePacer.Reset();   // #1757
                     _renderHost.Trigger();
                     // Re-arm trailing timer in case more clicks arrive within
                     // the window — the trailing fire then renders the final
@@ -1254,10 +1266,23 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
                 // pan-stop debounce below is kept as a backstop for callers
                 // that emit a single Fast without a follow-up Full.
                 _renderHintFastInFlight = true;
-                _renderHost.Trigger(progressive: true);
+                // #1757 — paced: one render in flight, the latest move fires when it lands.
+                _interactivePacer.Request(progressive: true);
                 _panStopDebounce.Change(PanStopDebounceMs, System.Threading.Timeout.Infinite);
                 break;
         }
+    }
+
+    /// <summary>#1757 — a render for a pointer-driven change (a Math Plane editor drag or orbit),
+    /// paced to the pipeline like the pan and orbit drags.</summary>
+    public void RequestInteractiveRender() => _interactivePacer.Request(progressive: false);
+
+    /// <summary>#1757 — the paced render: may run on the upload thread that reported the previous
+    /// frame, so a failure is logged rather than thrown into the render pipeline.</summary>
+    private void FirePacedRender(bool progressive)
+    {
+        try { _renderHost.Trigger(progressive); }
+        catch (Exception ex) { Console.Error.WriteLine($"[MainViewModel] paced render failed: {ex.Message}"); }
     }
 
     private void OnRenderHostColorMapChanged(object? sender, EventArgs e)
@@ -1959,6 +1984,7 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
 
     public void Dispose()
     {
+        _interactivePacer.Dispose();   // #1757
         _acidIntroTimer?.Stop();
         _acidIntroTimer = null;
         _acidAmbientTimer?.Stop();

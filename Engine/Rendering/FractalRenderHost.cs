@@ -671,6 +671,7 @@ namespace FracturingFog.Rendering
         public event EventHandler<RenderFrameInfo>? FrameCompleted;
         public event EventHandler? FrameBufferChanged;
         public event EventHandler? AnimationFrameUploaded;
+        public event EventHandler? FrameLanded;   // #1757
         public event EventHandler<string>? StatusRequested;
         public event EventHandler? ColorMapChanged;
         public event EventHandler? RenderCancelled;
@@ -2337,11 +2338,16 @@ namespace FracturingFog.Rendering
                 {
                     var (outW, outH) = FracturingFog.Rendering.Lighting.StereoRender
                         .OutputDims(altCalc!.Width, altCalc.Height, stFx.StereoLayout);
+                    bool stereoLanded = false;
                     lock (_uploadGate)
                     {
                         if (TryClaimPresent(job.Seq))
+                        {
                             UploadProcessedBuffer(sbs, outW, outH);
+                            stereoLanded = true;
+                        }
                     }
+                    if (stereoLanded) FrameLanded?.Invoke(this, EventArgs.Empty);   // #1757
                     _lastGpuRoute = FrameGpuRoute(_calculator, altCalc, useAlt: true);   // #1173-M
                     FrameCompleted?.Invoke(this, new RenderFrameInfo(
                         altCalc.CenterX, altCalc.CenterY, altCalc.Zoom, altCalc.MaxIterations,
@@ -3244,6 +3250,7 @@ namespace FracturingFog.Rendering
                 // screen count.
                 if (previewPixels > 0)
                     DynamicResolution.RecordPreview(previewPixels, previewMs, previewFixedMs);
+                if (previewPixels > 0) FrameLanded?.Invoke(this, EventArgs.Empty);   // #1757 — the preview is on screen
                 AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
 
                 int nextStage = DynamicResolution.NextLevel(job.ProgressiveStage);
@@ -3439,9 +3446,11 @@ namespace FracturingFog.Rendering
                 // final still runs its bookkeeping below (status label, events,
                 // TAA seed) so gates never stick — it just doesn't paint.
                 double finalMs = -1;   // #1333: set when the final reached the screen
+                bool finalLanded = false;   // #1757
                 lock (_uploadGate)
                 {
                     bool claimedF = TryClaimPresent(job.Seq);
+                    finalLanded = claimedF;
                     Dbg86($"FINAL    seq={job.Seq} claimed={claimedF} lastSeq={_lastPresentedUploadSeq} " +
                           $"hp={calc.IsHighPrecisionActive} gpu={calc.LastFrameUsedGpuPerturbation} {calc.Width}x{calc.Height}");
                     if (claimedF)
@@ -3460,6 +3469,7 @@ namespace FracturingFog.Rendering
                 if (finalMs >= 0)
                     DynamicResolution.Record(useAlt ? altCalc!.Width * altCalc.Height : calc.Width * calc.Height,
                         finalMs, final: true);
+                if (finalLanded) FrameLanded?.Invoke(this, EventArgs.Empty);   // #1757
 
                 // Pull the richer LastPrecisionLabel from the generated calcs
                 // (PT, QD-PT, DD-HP4, etc.) and from MandelbrotCalculator (#1321:
