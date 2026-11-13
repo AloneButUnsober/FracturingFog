@@ -426,8 +426,29 @@ namespace FracturingFog.Rendering
             { Host = host; Job = job; Ms = ms; StartTicks = startTicks; Equalizer = equalizer; }
         }
 
-        private static readonly Action<UploadCtx> s_uploadCallback =
-            static ctx => ctx.Host.RunFrameJobUpload(ctx.Job, ctx.Ms, ctx.StartTicks, ctx.Equalizer);
+        private static readonly Action<UploadCtx> s_uploadCallback = static ctx =>
+        {
+            try { ctx.Host.RunFrameJobUpload(ctx.Job, ctx.Ms, ctx.StartTicks, ctx.Equalizer); }
+            finally { ctx.Host._uploadIdle.Set(); }   // #1754 — the calc thread may write again
+        };
+
+        // #1754 — the upload barrier. The upload tail reads the calculator's buffers on the
+        // threadpool while the calc thread loops to the next job; set while no upload is in
+        // flight. The calc thread waits for it before writing those buffers again. The
+        // stale-hold's lock used to give that ordering by accident (it waited for the previous
+        // upload's present); with that redundant present gone, and a 3D frame now kept running
+        // across a Trigger, the barrier states it. It is held through the Present: releasing it
+        // earlier lets the next upload refill the pooled dst buffer while this one is still being
+        // copied to the texture (a torn frame, caught by DragFrameStarvationTests). Bounded so a
+        // wedged upload can't stall rendering.
+        private readonly ManualResetEventSlim _uploadIdle = new(true);
+        private const int UploadBarrierTimeoutMs = 1000;
+
+        private void QueueUpload(in UploadCtx ctx)
+        {
+            _uploadIdle.Reset();
+            ThreadPool.UnsafeQueueUserWorkItem(s_uploadCallback, ctx, preferLocal: false);
+        }
 
         // #86 — newest-wins present gate. MUST be called while holding
         // _uploadGate. Returns false when a frame with a higher Seq has already
@@ -801,6 +822,13 @@ namespace FracturingFog.Rendering
         // Independent of ShowPerfHud (which gates the Skia perf overlay) so the
         // baked FPS readout works whenever the telemetry panel is enabled.
         private double _hudLastFrameMs;
+        // #1754 — keep-in-flight: the last Trigger's type, and the frame cost under which a
+        // 3D frame in flight is finished rather than cancelled.
+        private FractalType? _lastTriggerType;
+        private const double FinishInFlightMaxMs = 50;
+        // #1754 — the progressive stage of the job on the calc thread (-1 = idle). A preview stage
+        // is sized by DynamicResolution to fit the interactive frame budget, so it is always finished.
+        private volatile int _inFlightStage = -1;
 
         /// <summary>Clear the perf HUD's rolling buffers + reset the
         /// GC-rate baseline. Used to start a clean capture window when
@@ -925,12 +953,20 @@ namespace FracturingFog.Rendering
             var next = new FrameJob(job.Token, job.Calc, job.AltCalc, Stopwatch.StartNew(),
                 staleBuf: null, staleW: 0, staleH: 0, calcW: job.CalcW, calcH: job.CalcH,
                 seq: Interlocked.Increment(ref _uploadSeq), settle: true);
-            try { _calcQueue.Add(next); }
-            catch (InvalidOperationException) { /* CompleteAdding during Dispose */ }
-            catch (ArgumentException)
-            {
-                // Bounded(1) full: a newer job is already queued, and it supersedes us.
-            }
+            TryEnqueueFollowOn(in next);   // #1754 — never blocks; a newer job supersedes us
+        }
+
+        /// <summary>#1754 — queue a follow-on job (the next preview stage, a TAA sample, a temporal
+        /// settle) from the upload thread. Never blocks: <c>Add</c> on the bounded(1) queue waits
+        /// while a newer job sits in it, and the calc thread is waiting on this upload's barrier
+        /// (seen live as one-second stalls). A follow-on of a chain a newer Trigger superseded (a
+        /// kept 3D frame's) is dropped: the newer job runs its own chain.</summary>
+        private bool TryEnqueueFollowOn(in FrameJob next)
+        {
+            lock (_calcLock)
+                if (_calcCts == null || next.Token != _calcCts.Token) return false;
+            try { return _calcQueue.TryAdd(next); }
+            catch (InvalidOperationException) { return false; /* CompleteAdding during Dispose */ }
         }
 
         /// <summary>#1333 — the interactive frame-time target, ms.</summary>
@@ -1861,8 +1897,33 @@ namespace FracturingFog.Rendering
             CancellationTokenSource cts;
             lock (_calcLock)
             {
-                _calcCts?.Cancel();
+                // #1754 — on a 3D view whose frames are cheap, let the frame being calculated
+                // finish instead of cancelling it: a drag moves faster than a frame takes, so
+                // cancel-and-restart left almost nothing on screen. The new job is queued
+                // behind it (latest-only) and the finished frame is shown. 3D only: the
+                // raymarchers and Math Plane 3D build their camera once at frame start, so a
+                // frame that overlaps this Trigger's view update stays whole (a 2D calculator
+                // reads its centre per row). Slow frames (deep zoom, heavy scenes) still cancel.
+                // The kept frame's source is chained to the new one, so a later cancel (another
+                // slow Trigger, Resize, Dispose) still reaches it.
+                var prev = _calcCts;
+                bool sameType = _lastTriggerType == ViewState.FractalType;
+                _lastTriggerType = ViewState.FractalType;
+                // The cost test is the frame in flight: a preview stage is budgeted to be cheap; a
+                // full frame is judged by the last full frame (a live trace at 1280x744 had every
+                // Mandelbulb preview cancelled because the full frame cost more than the cutoff).
+                int inFlightStage = _inFlightStage;
+                bool cheapInFlight = inFlightStage > 0
+                    || (inFlightStage == 0 && _hudLastFrameMs > 0 && _hudLastFrameMs <= FinishInFlightMaxMs);
+                bool finishInFlight = prev != null && !prev.IsCancellationRequested && !_calcIdle.IsSet
+                    && sameType && ViewState.Is3D && cheapInFlight;
                 _calcCts = new CancellationTokenSource();
+                if (finishInFlight)
+                {
+                    _calcCts.Token.Register(static s => ((CancellationTokenSource)s!).Cancel(), prev);
+                    Dbg86($"KEEP-INFLIGHT stage={inFlightStage} (last full frame {_hudLastFrameMs:0} ms)");
+                }
+                else prev?.Cancel();
                 cts = _calcCts;
             }
 
@@ -2035,12 +2096,13 @@ namespace FracturingFog.Rendering
                     _calcIdle.Reset();
                     // #1392 — a 3D frame's OIDN pass defers to the background session.
                     FracturingFog.Imaging.OidnAsync.Scope? oidn = LiveOidnOnCalc(in job) ? _oidnAsync.Enter(job.Seq) : null;
+                    _inFlightStage = job.ProgressiveStage;   // #1754
                     try { RunFrameJobCalc(in job); }
                     catch (OperationCanceledException) { }
                     catch { /* swallow — token-driven cancellation is the only
                               expected failure mode; surface anything else via
                               the calc's own error path if it has one. */ }
-                    finally { oidn?.Dispose(); _calcIdle.Set(); }
+                    finally { _inFlightStage = -1; oidn?.Dispose(); _calcIdle.Set(); }
                 }
             }
             catch (OperationCanceledException) { }
@@ -2060,6 +2122,9 @@ namespace FracturingFog.Rendering
 
         private void RunFrameJobCalc(in FrameJob job)
         {
+            // #1754 — don't overwrite the buffers the previous frame's upload is still reading.
+            if (!_uploadIdle.Wait(UploadBarrierTimeoutMs))
+                Dbg86($"UPLOAD-BARRIER timeout seq={job.Seq} (calc proceeds)");
             ApplyBandDitherState();
             var token = job.Token;
             var calc = job.Calc;
@@ -2155,8 +2220,7 @@ namespace FracturingFog.Rendering
                 }
 
                 long pMs = job.Sw.ElapsedMilliseconds;
-                ThreadPool.UnsafeQueueUserWorkItem(s_uploadCallback,
-                    new UploadCtx(this, job, pMs, pCalcStart), preferLocal: false);
+                QueueUpload(new UploadCtx(this, job, pMs, pCalcStart));
                 return;
             }
 
@@ -2197,8 +2261,7 @@ namespace FracturingFog.Rendering
                 }
 
                 long taaMs = job.Sw.ElapsedMilliseconds;
-                ThreadPool.UnsafeQueueUserWorkItem(s_uploadCallback,
-                    new UploadCtx(this, job, taaMs, equalizer: taaEq), preferLocal: false);
+                QueueUpload(new UploadCtx(this, job, taaMs, equalizer: taaEq));
                 return;
             }
 
@@ -2215,24 +2278,14 @@ namespace FracturingFog.Rendering
             // POSITION correct through a pan-stop debounce; pre-fix the gate
             // skipped the preview because StaleW != CalcW, and the fallback
             // to the pre-pan full-res frame produced the visible snap-back.
+            //
+            // #1754 — no longer presented. The stale buffer is _lastPresentedBuffer, which every
+            // present path sets, so it is already the image on screen (Resize clears it). Showing
+            // it again cost a vsync'd Present before every calculation, and its TryClaimPresent
+            // claimed this job's Seq up front, so the frame still finishing (older Seq) was refused
+            // by the newest-wins gate. During a drag that left 2-6 frames a second on screen.
             if (job.StaleBuf != null)
-            {
-                lock (_uploadGate)
-                {
-                    // #86 — drop the stale-hold present if a newer frame already
-                    // reached the screen, so this old buffer can't clobber it.
-                    // #988 — suppressed during a slideshow region cross-fade
-                    // (this path bypasses the transition-overlay blend).
-                    bool claimed = !TransitionOverlayActive && TryClaimPresent(job.Seq);
-                    Dbg86($"STALE-HOLD seq={job.Seq} claimed={claimed} lastSeq={_lastPresentedUploadSeq} {job.StaleW}x{job.StaleH}");
-                    if (claimed)
-                    lock (_d3dGate)
-                    {
-                        PresentTexture(job.StaleBuf, job.StaleW, job.StaleH);
-                        _renderer.Render();
-                    }
-                }
-            }
+                Dbg86($"STALE-HOLD seq={job.Seq} skipped (already on screen) {job.StaleW}x{job.StaleH}");
 
             SyncGpuKernelsWithDevice();   // #1045 — a rebuilt device needs fresh kernels
 
@@ -2424,8 +2477,7 @@ namespace FracturingFog.Rendering
             // Hand the post-calc upload to the threadpool so this calc
             // thread loops back for the next queued frame without blocking
             // on UploadProcessedBuffer (post-FX + GPU upload).
-            ThreadPool.UnsafeQueueUserWorkItem(s_uploadCallback,
-                new UploadCtx(this, job, ms, calcStart, frameEq), preferLocal: false);
+            QueueUpload(new UploadCtx(this, job, ms, calcStart, frameEq));
         }
 
         /// <summary>#1344 — the last frame's sub-pixel AA pass (pixels marked and
@@ -2565,18 +2617,8 @@ namespace FracturingFog.Rendering
                 calcW: calc.Width, calcH: calc.Height,
                 seq: System.Threading.Interlocked.Increment(ref _uploadSeq),
                 taaSampleIndex: _taaSampleCount);
-            try { _calcQueue.Add(nextJob); }
-            catch (InvalidOperationException) { return false; /* CompleteAdding during Dispose */ }
-            catch (ArgumentException)
-            {
-                // Bounded(1) full — drain stale entry then re-enqueue. A user
-                // Trigger between the drain and add would just supersede us
-                // with a fresh frame, which is desired.
-                while (_calcQueue.TryTake(out _)) { }
-                try { _calcQueue.Add(nextJob); }
-                catch { return false; /* shutdown race */ }
-            }
-            return true;
+            // #1754 — non-blocking; a full queue holds a newer user job, which supersedes us.
+            return TryEnqueueFollowOn(in nextJob);
         }
 
         /// <summary>SM-1 (#1267) — the outcome of the last solid-frame rescue: the
@@ -3215,13 +3257,7 @@ namespace FracturingFog.Rendering
                     calcW: job.CalcW, calcH: job.CalcH,
                     seq: System.Threading.Interlocked.Increment(ref _uploadSeq),
                     taaSampleIndex: 0, progressiveStage: nextStage);
-                try { _calcQueue.Add(nextJob); }
-                catch (InvalidOperationException) { /* shutdown */ }
-                catch (ArgumentException)
-                {
-                    while (_calcQueue.TryTake(out _)) { }
-                    try { _calcQueue.Add(nextJob); } catch { }
-                }
+                TryEnqueueFollowOn(in nextJob);   // #1754 — never blocks; dropped if superseded
                 return;
             }
 
