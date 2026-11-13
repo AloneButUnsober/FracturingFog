@@ -82,7 +82,9 @@ trace which thread is the UI thread.
 ## What the analyser reports
 
 The analyser splits the trace into interactions: runs of input with no pause longer than
-`--gap-ms`. It follows each one for up to 1.5 s, so that its last frames land. For each
+`--gap-ms`. Input here means presses and releases, wheel steps, keys, render requests and window
+resizes. A bare pointer move doesn't count, because hovering over the image moves the mouse
+without rendering. It follows each one for up to 1.5 s, so that its last frames land. For each
 interaction it gives the p50 / p95 / max of:
 
 - **Input.** Moves per second, coalesced points, OS-to-handler delay, handler time by input kind,
@@ -96,8 +98,9 @@ interaction it gives the p50 / p95 / max of:
 - **Upload.** Thread-pool delay, post pipeline, Present time by stage, total upload time, and the
   share of the drag Present was busy.
 - **Screen.** Frames landed and per second, the gaps between them, and frames dropped by reason.
-- **Input to screen.** For each move, the time until the first landed frame that comes from a
-  Trigger started after the move. With the OS stamp added, this is OS-to-screen. It does not
+- **Input to screen.** For each move made with a button held (or, when there are none, each
+  render request), the time until the first landed frame that comes from a Trigger started after
+  it. With the OS stamp added, this is OS-to-screen. It does not
   include the display's own scan-out.
 
 It then prints verdicts that tie the numbers to the epic's slices:
@@ -171,6 +174,39 @@ What it says about the remaining slices:
   the old size were shown after the swap chain was resized (the flashing). 6 uploads were reading
   the calculator's buffers when a resize swapped them (the likely cause of the banding).
 
+## Second live reading: window resize (#1768)
+
+The second trace was recorded on 2026-11-13 with native mouse tracing. While a window edge was
+dragged (110 resize steps):
+- 24 frames calculated at the old size were shown after the swap chain had been resized;
+- 14 uploads were still reading the calculators' buffers when a resize swapped them;
+- the UI thread stalled for up to 135 ms.
+
+The first trace showed the same pattern: 41 of 116 frames, 6 uploads, and stalls of up to 195 ms.
+
+Before the fix, `FractalRenderHost.Resize` did four things in this order:
+1. resized the swap chain and presented it;
+2. cancelled the frame in flight;
+3. waited for the calc thread only;
+4. reallocated the buffers.
+
+Each window size step also posted its own `Resize` to the UI thread, so stale steps queued up
+behind a slow one. With #1768:
+- a frame job (calc thread) and its upload (thread pool) hold a shared buffer gate. `Resize`
+  cancels the frame, then takes the gate exclusively, so it waits for both before it resizes the
+  swap chain or any buffer. The calc thread waits for the upload barrier before it takes the
+  gate; otherwise it would deadlock against a waiting resize.
+- the bootstrap keeps one resize post pending at a time, and that post applies the newest size.
+
+`ResizeTearTests` resizes the real host in a burst between sizes of different aspect, with a
+vsync-blocking renderer stub. It checks:
+- every image after a swap-chain resize has the new size, apart from the one re-present that
+  bridges the resize;
+- the plain view's images are byte-equal to a fresh host's settled frames;
+- the last image is the settled frame of the last size.
+
+Before the fix, the three cases showed 47, 23 and 45 old-size images; after it, 0.
+
 ## Files
 
 - `Abstractions/Render/InteractionTrace.cs`: switch, record kinds and the ring writer.
@@ -187,3 +223,4 @@ What it says about the remaining slices:
   [README](../../Tools/InteractionTrace/README.md).
 - `Server.Tests/InteractionTraceTests.cs`: allocation guard, ring round-trip and lap, and the
   host-drag invariants.
+- `Server.Tests/ResizeTearTests.cs`: resize bursts against the real host (#1768).

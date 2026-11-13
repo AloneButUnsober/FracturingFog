@@ -32,7 +32,9 @@ KINDS = {
     11: 'CalcEnd', 12: 'UploadQueued', 13: 'UploadStart', 14: 'PostPipeline', 15: 'Present',
     16: 'Landed', 17: 'Dropped', 18: 'UploadEnd', 19: 'UiLag', 20: 'Resize',
 }
-INPUT_KINDS = {'PointerMove', 'InputOther', 'RenderHint', 'PacerRequest', 'Resize'}
+# What starts or extends an interaction. A bare pointer move is not one: the mouse hovering over
+# the image moves without rendering anything.
+INPUT_KINDS = {'InputOther', 'RenderHint', 'PacerRequest', 'Resize'}
 INPUT_NAMES = {0: 'move', 1: 'press', 2: 'release', 3: 'wheel', 4: 'key'}
 HINT_NAMES = {0: 'full', 1: 'fast', 2: 'interactive'}
 DROP_NAMES = {1: 'cancelled', 2: 'final superseded', 3: 'preview superseded'}
@@ -222,7 +224,18 @@ def analyse_segment(win, s0, s1, types, g_cstart=None, g_ustart=None):
     trig_t = [t for t, _, _ in trig_sorted]
     land_sorted = sorted(landed, key=lambda r: r.t)
     lat, lat_os, unshown = [], [], 0
-    drivers = moves or by['RenderHint'] or pr
+    # Drivers: moves made with a button held (between a press and its release), else the render
+    # requests themselves (wheel, Math Plane editor drags, keys).
+    held, down = [], None
+    for r in win:
+        if r.kind == 'InputOther' and r.b == 1:
+            down = r.t
+        elif r.kind == 'InputOther' and r.b == 2 and down is not None:
+            held.append((down, r.t)); down = None
+    if down is not None:
+        held.append((down, win[-1].t if win else down))
+    dragged = [m for m in moves if any(a <= m.t <= b for a, b in held)]
+    drivers = dragged or by['RenderHint'] or pr
     for m in drivers:
         i = bisect.bisect_left(trig_t, m.t)
         if i >= len(trig_sorted):
@@ -399,6 +412,8 @@ SAMPLE = """# FF interaction trace #1762 v1, started 2026-11-13 10:00:00.000
 # fractal_types: 0=Mandelbrot 1=Julia
 t_us,thread,kind,seq,a,b
 0,1,UiLag,0,500,0
+50000,1,PointerMove,0,3,1
+99000,1,InputOther,0,-1,1
 100000,1,PointerMove,0,8,2
 100050,1,TriggerEnter,0,0,0
 101050,1,TriggerExit,5,600,16
@@ -421,6 +436,7 @@ t_us,thread,kind,seq,a,b
 140000,7,UploadBarrier,6,3000,0
 160000,7,CalcEnd,6,0,1
 160100,7,Dropped,6,1,0
+161000,1,InputOther,0,-1,2
 130000,1,UiLag,0,12000,0
 2000000,1,UiLag,0,1000,0
 5000000,1,Resize,0,800,600
@@ -452,7 +468,7 @@ def selftest():
             ok = False
             print(f'FAIL {name}: got {got!r}, want {want!r}')
 
-    check('records', len(rows), 34)
+    check('records', len(rows), 37)   # a hover move at 50 ms is not an interaction
     check('interactions', len(res['interactions']), 2)
     z = res['interactions'][1]
     check('resizes', z['resizes'], 1)
