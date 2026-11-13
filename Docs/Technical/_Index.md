@@ -28,6 +28,7 @@ system. The codebase is a single .NET 10 solution.
 | `ColorGen/`                      | Library + tool that compiles ColorGen DSL palette source into runtime themes.         |
 | `PaletteBuilder/`                | Standalone Avalonia palette-authoring tool + extraction library.                      |
 | `Tools/DocSiteGen/`              | Markdown → static HTML site generator for these docs.                                 |
+| `Tools/InteractionTrace/`        | Analyser for the opt-in drag trace (`FF_INTERACTION_TRACE`, #1762).                   |
 
 ---
 
@@ -42,6 +43,7 @@ system. The codebase is a single .NET 10 solution.
 | Tracking the GPU JIT / perturbation roadmap                | [Performance Development Plan](Performance-DevelopmentPlan.md) |
 | Closing GPU/CPU parity gaps — phase/slice order            | [GPU Parity Development Plan](GPU-Parity-DevelopmentPlan.md) (tracker #1173) |
 | Measuring perf — running/reading the benchmark harness     | [Benchmark Subsystem](Benchmark-Subsystem.md)               |
+| Finding why a drag or pan feels slow (input to screen)     | [Interaction Trace](Interaction-Trace.md) (#1762, epic #1756) |
 | Porting away from Direct3D                                 | [Cross-Platform Roadmap](CrossPlatform-Roadmap.md) and [Implementation Plan](CrossPlatform-ImplementationPlan.md) |
 | Extending the 3-D Mandelbulb / User Bulb engine            | [User Bulb 3D Development Plan](UserBulb3D-DevelopmentPlan.md) and [Sandbox](UserBulbSandbox-DevPlan.md) |
 | Adding non-escaping / user-supplied DE (pseudo-Kleinian, Amoser sine) | [Non-Escaping DE Dev Plan](NonEscaping-DE-DevPlan.md) |

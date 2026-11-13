@@ -1,0 +1,35 @@
+# Self-tests of the Python developer tools under Tools/.
+# Pure Python, no build: runs in seconds when a tool changes.
+
+name: Tools self-test
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Tools/InteractionTrace/**'
+      - '.github/workflows/tools-selftest.yml'
+  pull_request:
+    paths:
+      - 'Tools/InteractionTrace/**'
+      - '.github/workflows/tools-selftest.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Interaction trace analyser (#1762)
+        run: python Tools/InteractionTrace/analyze_interaction_trace.py --selftest
