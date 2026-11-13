@@ -428,11 +428,13 @@ namespace FracturingFog.Rendering
 
         private static readonly Action<UploadCtx> s_uploadCallback = static ctx =>
         {
+            ctx.Host._bufferGate.EnterReadLock();   // #1768 — a Resize waits for this upload
             InteractionTrace.Mark(TraceKind.UploadStart, ctx.Job.Seq, ctx.Job.ProgressiveStage);   // #1762
             try { ctx.Host.RunFrameJobUpload(ctx.Job, ctx.Ms, ctx.StartTicks, ctx.Equalizer); }
             finally
             {
                 InteractionTrace.Mark(TraceKind.UploadEnd, ctx.Job.Seq, ctx.Job.ProgressiveStage);   // #1762
+                ctx.Host._bufferGate.ExitReadLock();
                 ctx.Host._uploadIdle.Set();   // #1754 — the calc thread may write again
             }
         };
@@ -447,6 +449,16 @@ namespace FracturingFog.Rendering
         // copied to the texture (a torn frame, caught by DragFrameStarvationTests). Bounded so a
         // wedged upload can't stall rendering.
         private readonly ManualResetEventSlim _uploadIdle = new(true);
+
+        // #1768 — the buffer gate. A frame job on the calc thread and its upload on the thread pool
+        // read the calculators' buffers and dimensions; Resize reallocates them. Both hold the gate
+        // shared, Resize holds it exclusive, so a resize waits for the frame in flight and its
+        // upload, and no frame of the old size is presented after the swap chain is resized. Before
+        // it, Resize waited for the calc thread only (DrainCalc): an upload still copying a buffer
+        // read it at the new width (horizontal bands), and old-size frames reached the resized
+        // swap chain (flashing while a window edge was dragged). Recursion is allowed because the
+        // stereo path uploads on the calc thread.
+        private readonly ReaderWriterLockSlim _bufferGate = new(LockRecursionPolicy.SupportsRecursion);
         private const int UploadBarrierTimeoutMs = 1000;
 
         private void QueueUpload(in UploadCtx ctx)
@@ -2121,6 +2133,15 @@ namespace FracturingFog.Rendering
                     FracturingFog.Imaging.OidnAsync.Scope? oidn = LiveOidnOnCalc(in job) ? _oidnAsync.Enter(job.Seq) : null;
                     _inFlightStage = job.ProgressiveStage;   // #1754
                     InteractionTrace.Mark(TraceKind.CalcStart, job.Seq, job.ProgressiveStage);   // #1762
+                    // #1754 — don't overwrite the buffers the previous frame's upload is still
+                    // reading. Waited before taking the buffer gate (#1768): a Resize waiting for
+                    // the gate holds new readers back, so the upload this thread waits for could
+                    // not take it, and the two would stall until the barrier's timeout.
+                    long barrierT0 = InteractionTrace.Enabled && !_uploadIdle.IsSet ? InteractionTrace.Now() : 0;   // #1762
+                    if (!_uploadIdle.Wait(UploadBarrierTimeoutMs))
+                        Dbg86($"UPLOAD-BARRIER timeout seq={job.Seq} (calc proceeds)");
+                    if (barrierT0 != 0) InteractionTrace.Mark(TraceKind.UploadBarrier, job.Seq, InteractionTrace.MicrosSince(barrierT0));
+                    _bufferGate.EnterReadLock();   // #1768 — a Resize waits for this job
                     try { RunFrameJobCalc(in job); }
                     catch (OperationCanceledException) { }
                     catch { /* swallow — token-driven cancellation is the only
@@ -2128,6 +2149,7 @@ namespace FracturingFog.Rendering
                               the calc's own error path if it has one. */ }
                     finally
                     {
+                        _bufferGate.ExitReadLock();
                         InteractionTrace.Mark(TraceKind.CalcEnd, job.Seq, job.ProgressiveStage,
                             job.Token.IsCancellationRequested ? 1 : 0);   // #1762
                         _inFlightStage = -1; oidn?.Dispose(); _calcIdle.Set();
@@ -2151,11 +2173,7 @@ namespace FracturingFog.Rendering
 
         private void RunFrameJobCalc(in FrameJob job)
         {
-            // #1754 — don't overwrite the buffers the previous frame's upload is still reading.
-            long barrierT0 = InteractionTrace.Enabled && !_uploadIdle.IsSet ? InteractionTrace.Now() : 0;   // #1762
-            if (!_uploadIdle.Wait(UploadBarrierTimeoutMs))
-                Dbg86($"UPLOAD-BARRIER timeout seq={job.Seq} (calc proceeds)");
-            if (barrierT0 != 0) InteractionTrace.Mark(TraceKind.UploadBarrier, job.Seq, InteractionTrace.MicrosSince(barrierT0));
+            // (#1754's upload barrier is waited in CalcThreadLoop, before the #1768 buffer gate.)
             ApplyBandDitherState();
             var token = job.Token;
             var calc = job.Calc;
@@ -3599,17 +3617,10 @@ namespace FracturingFog.Rendering
 
         // ── Resize ────────────────────────────────────────────────────────────
 
-        // #85 — wait for the calc thread to leave its current job's write
-        // region so a caller can safely swap the calculator's buffer arrays.
-        // The caller must cancel the in-flight token FIRST; the calc then exits
-        // at its next row/stage boundary and sets _calcIdle. Bounded wait keeps
-        // a wedged calc from hanging the UI thread — on timeout we fall back to
-        // the old cancel-only (racy) behaviour, no worse than before. Runs on
-        // the UI thread holding no locks, so it cannot deadlock the calc.
-        private void DrainCalc()
-        {
-            try { _calcIdle.Wait(2000); } catch { }
-        }
+        // #85 / #1768 — bound on Resize's wait for the frame in flight and its upload. A wedged
+        // calc must not hang the UI thread: on timeout the resize goes ahead ungated (the old
+        // cancel-only behaviour, which may tear that one frame).
+        private const int ResizeGateTimeoutMs = 2000;
 
         public void Resize(int width, int height)
         {
@@ -3617,6 +3628,22 @@ namespace FracturingFog.Rendering
             int w = Math.Max(1, width);
             int h = Math.Max(1, height);
             InteractionTrace.Mark(TraceKind.Resize, 0, w, h);   // #1762
+            // #1768 — stop the frame in flight, then wait for it and its upload (the buffer gate);
+            // a cancelled job leaves the calc thread at its next row or stage check.
+            lock (_calcLock) _calcCts?.Cancel();
+            bool gated = _bufferGate.TryEnterWriteLock(ResizeGateTimeoutMs);
+            if (!gated) Dbg86($"RESIZE-GATE timeout {w}x{h} (resize proceeds ungated)");
+            try { ResizeLocked(w, h); }
+            finally { if (gated) _bufferGate.ExitWriteLock(); }
+            Trigger();
+        }
+
+        private void ResizeLocked(int w, int h)
+        {
+            // A Trigger that slipped in before the gate (a paced render started by the frame that
+            // just landed) is for the old size: cancel it and drop it from the queue.
+            lock (_calcLock) _calcCts?.Cancel();
+            while (_calcQueue.TryTake(out _)) { }
             _lastUploadedBuffer = null;
             // S-X9d — kill stale full-res snapshot on resize too; old buffer
             // is sized for old dims and would fail the stale-upload size gate.
@@ -3647,16 +3674,9 @@ namespace FracturingFog.Rendering
                 _renderer.Render();
                 if (presT0 != 0) InteractionTrace.Mark(TraceKind.Present, -1, InteractionTrace.MicrosSince(presT0), PresentStageResize);
             }
-            // Cancel any in-flight calc BEFORE reallocating its buffers below —
-            // _calculator.Resize swaps IterationBuffer/aux arrays, and a calc
-            // thread mid-write (CPU rows OR the GPU-perturbation readback +
-            // FillAuxAndColorHP pass) would tear against the new arrays. The old
-            // frame is for the old dims and about to be superseded anyway, so
-            // cancelling it is strictly correct. Cooperative cancellation
-            // narrows the window; DrainCalc then closes it by waiting for the
-            // calc thread to actually leave its write region before the swap.
-            lock (_calcLock) _calcCts?.Cancel();
-            DrainCalc();
+            // The frame in flight was cancelled and has left its write region, and its upload is
+            // done: Resize holds the buffer gate (#1768), which replaced DrainCalc here. (The calc
+            // thread may sit at the gate with _calcIdle reset, so waiting for idle would stall.)
             _calculator.Resize(w, h);
             // Wave 2.5 — keep progressive sidecars in sync with main surface.
             for (int level = 1; level <= DynamicResolution.MaxLevel; level++)
@@ -3717,7 +3737,6 @@ namespace FracturingFog.Rendering
             _generatedBurningShipCalculator.Resize(w, h);
 
             ApplyView();
-            Trigger();
         }
 
         // ── Repaint ───────────────────────────────────────────────────────────

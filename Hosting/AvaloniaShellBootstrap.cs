@@ -5190,8 +5190,28 @@ namespace FracturingFog.Hosting
 
             int w = Math.Max(1, surf.PixelWidth);
             int h = Math.Max(1, surf.PixelHeight);
-            Dispatcher.UIThread.Post(() => host.Resize(w, h));
+            // #1768 — latest size wins. Each size step used to post its own Resize; while one
+            // waited for the frame in flight, the steps behind it queued up and each waited in
+            // turn (the UI thread stalled up to ~200 ms a step during a window-edge drag). Now one
+            // post is pending at a time, and it applies the newest size.
+            System.Threading.Interlocked.Exchange(ref s_pendingResize, ((long)w << 32) | (uint)h);
+            if (System.Threading.Interlocked.Exchange(ref s_resizePosted, 1) == 0)
+                Dispatcher.UIThread.Post(() => ApplyPendingResize(host));
         }
+
+        private static long s_pendingResize;
+        private static int s_resizePosted;
+
+        private static void ApplyPendingResize(FractalRenderHost host)
+        {
+            System.Threading.Volatile.Write(ref s_resizePosted, 0);   // a size arriving from here on posts again
+            long packed = System.Threading.Interlocked.Read(ref s_pendingResize);
+            if (packed == s_appliedResize) return;   // a second post raced the first; same size
+            s_appliedResize = packed;
+            host.Resize((int)(packed >> 32), (int)(uint)packed);
+        }
+
+        private static long s_appliedResize;   // UI thread only
 
         public static void Shutdown()
         {

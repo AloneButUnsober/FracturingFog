@@ -32,7 +32,9 @@ KINDS = {
     11: 'CalcEnd', 12: 'UploadQueued', 13: 'UploadStart', 14: 'PostPipeline', 15: 'Present',
     16: 'Landed', 17: 'Dropped', 18: 'UploadEnd', 19: 'UiLag', 20: 'Resize',
 }
-INPUT_KINDS = {'PointerMove', 'InputOther', 'RenderHint', 'PacerRequest'}
+# What starts or extends an interaction. A bare pointer move is not one: the mouse hovering over
+# the image moves without rendering anything.
+INPUT_KINDS = {'InputOther', 'RenderHint', 'PacerRequest', 'Resize'}
 INPUT_NAMES = {0: 'move', 1: 'press', 2: 'release', 3: 'wheel', 4: 'key'}
 HINT_NAMES = {0: 'full', 1: 'fast', 2: 'interactive'}
 DROP_NAMES = {1: 'cancelled', 2: 'final superseded', 3: 'preview superseded'}
@@ -104,6 +106,9 @@ def analyse(rows, types, gap_ms=400.0, tail_ms=1500.0):
     segs = segments(rows, gap_us)
     out = []
     in_any = []
+    # Frames begun before an interaction's first input (a resize lands a frame started earlier).
+    g_cstart = {r.seq: r for r in rows if r.kind == 'CalcStart'}
+    g_ustart = {r.seq: r for r in rows if r.kind == 'UploadStart'}
     for idx, (s0, s1) in enumerate(segs):
         end = s1 + tail_us
         nxt = segs[idx + 1][0] if idx + 1 < len(segs) else None
@@ -111,13 +116,13 @@ def analyse(rows, types, gap_ms=400.0, tail_ms=1500.0):
             end = min(end, nxt)
         win = [r for r in rows if s0 <= r.t <= end]
         in_any.append((s0, end))
-        out.append(analyse_segment(win, s0, s1, types))
+        out.append(analyse_segment(win, s0, s1, types, g_cstart, g_ustart))
     # UI lag outside interactions: the idle baseline the in-drag lag is compared with.
     idle = [r.a for r in rows if r.kind == 'UiLag' and not any(a <= r.t <= b for a, b in in_any)]
     return {'interactions': out, 'ui_lag_idle_ms': summary(idle, 1e-3)}
 
 
-def analyse_segment(win, s0, s1, types):
+def analyse_segment(win, s0, s1, types, g_cstart=None, g_ustart=None):
     by = defaultdict(list)
     for r in win:
         by[r.kind].append(r)
@@ -219,7 +224,18 @@ def analyse_segment(win, s0, s1, types):
     trig_t = [t for t, _, _ in trig_sorted]
     land_sorted = sorted(landed, key=lambda r: r.t)
     lat, lat_os, unshown = [], [], 0
-    drivers = moves or by['RenderHint'] or pr
+    # Drivers: moves made with a button held (between a press and its release), else the render
+    # requests themselves (wheel, Math Plane editor drags, keys).
+    held, down = [], None
+    for r in win:
+        if r.kind == 'InputOther' and r.b == 1:
+            down = r.t
+        elif r.kind == 'InputOther' and r.b == 2 and down is not None:
+            held.append((down, r.t)); down = None
+    if down is not None:
+        held.append((down, win[-1].t if win else down))
+    dragged = [m for m in moves if any(a <= m.t <= b for a, b in held)]
+    drivers = dragged or by['RenderHint'] or pr
     for m in drivers:
         i = bisect.bisect_left(trig_t, m.t)
         if i >= len(trig_sorted):
@@ -242,6 +258,36 @@ def analyse_segment(win, s0, s1, types):
     res['calc_busy_pct'] = round(100.0 * busy / span, 1)
     res['barrier_wait_pct'] = round(100.0 * sum(barrier) / span, 1)
     res['present_busy_pct'] = round(100.0 * present_busy / span, 1)
+    # -- Window resize --
+    # A resize presents the resized swap chain (Present stage -2), then re-renders. A frame begun
+    # before that present and shown after it was calculated for the old size and is stretched
+    # into the new one.
+    rs = by['Resize']
+    res['resizes'] = len(rs)
+    if rs:
+        rp = sorted(r.t for r in by['Present'] if r.b == -2)
+        block = []
+        for x in rs:
+            i = bisect.bisect_left(rp, x.t)
+            if i < len(rp):
+                block.append(rp[i] - x.t)
+        res['resize_to_swapchain_ms'] = summary(block, 1e-3)
+        gcs = g_cstart or cstart
+        gus = g_ustart or ustart
+        stale = 0
+        for l in landed:
+            st = gcs.get(l.seq)
+            if st is None:
+                continue
+            i = bisect.bisect_right(rp, st.t)
+            if i < len(rp) and rp[i] < l.t:
+                stale += 1
+        res['old_size_frames_after_resize'] = stale
+        # Uploads still running when the swap chain was resized (the resized Present). Since #1768
+        # a resize waits for them at its entry, so this counts the race, not the wait.
+        res['upload_running_at_resize'] = sum(
+            1 for r in by['UploadEnd'] if r.seq in gus
+            and any(gus[r.seq].t < p < r.t for p in rp))
     res['hints'] = hints(res)
     return res
 
@@ -305,6 +351,12 @@ def hints(r):
         h.append(f'The longest time with no new frame was {gap:.0f} ms.')
     if r.get('trigger_on_ui_thread') and (_g(r, 'trigger_ms', 'p95') or 0) > 4:
         h.append(f"S5: Trigger costs {_g(r, 'trigger_ms', 'p95'):.1f} ms (p95) and ran on the UI thread {r['trigger_on_ui_thread']} times.")
+    if r.get('resizes'):
+        lag_max = _g(r, 'ui_lag_ms', 'max') or 0
+        h.append(f"S8 resize: {r['resizes']} resize steps; UI lag up to {lag_max:.0f} ms; "
+                 f"{r.get('old_size_frames_after_resize', 0)} frames calculated at the old size were shown after the "
+                 f"swap chain was resized; {r.get('upload_running_at_resize', 0)} uploads were reading the buffers when "
+                 f"the swap chain was resized.")
     if not h:
         h.append('No bottleneck past the thresholds.')
     return h
@@ -346,6 +398,9 @@ def report(res):
         lines.append(f"  dropped      {r['dropped'] or '-'}")
         lines.append(f"  to screen    handler->screen {fmt(r['handler_to_screen_ms'])}")
         lines.append(f"               OS->screen {fmt(r['os_to_screen_ms'])}; not shown {r['input_not_shown']}")
+        if r.get('resizes'):
+            lines.append(f"  resize       {r['resizes']} steps; to swap chain {fmt(r.get('resize_to_swapchain_ms'))}")
+            lines.append(f"               old-size frames shown after resize {r['old_size_frames_after_resize']}, uploads running at the swap-chain resize {r['upload_running_at_resize']}")
         for x in r['hints']:
             lines.append(f"  > {x}")
         lines.append('')
@@ -359,6 +414,8 @@ SAMPLE = """# FF interaction trace #1762 v1, started 2026-11-13 10:00:00.000
 # fractal_types: 0=Mandelbrot 1=Julia
 t_us,thread,kind,seq,a,b
 0,1,UiLag,0,500,0
+50000,1,PointerMove,0,3,1
+99000,1,InputOther,0,-1,1
 100000,1,PointerMove,0,8,2
 100050,1,TriggerEnter,0,0,0
 101050,1,TriggerExit,5,600,16
@@ -381,8 +438,18 @@ t_us,thread,kind,seq,a,b
 140000,7,UploadBarrier,6,3000,0
 160000,7,CalcEnd,6,0,1
 160100,7,Dropped,6,1,0
+161000,1,InputOther,0,-1,2
 130000,1,UiLag,0,12000,0
 2000000,1,UiLag,0,1000,0
+5000000,1,Resize,0,800,600
+5001000,1,Present,-1,300,-2
+5001500,1,TriggerEnter,0,0,0
+5002000,1,TriggerExit,9,0,16
+4990000,7,CalcStart,8,0,0
+4999000,9,UploadStart,8,0,0
+5003000,9,Present,8,500,0
+5003100,9,Landed,8,0,0
+5003200,9,UploadEnd,8,0,0
 """
 
 
@@ -403,8 +470,13 @@ def selftest():
             ok = False
             print(f'FAIL {name}: got {got!r}, want {want!r}')
 
-    check('records', len(rows), 25)
-    check('interactions', len(res['interactions']), 1)
+    check('records', len(rows), 37)   # a hover move at 50 ms is not an interaction
+    check('interactions', len(res['interactions']), 2)
+    z = res['interactions'][1]
+    check('resizes', z['resizes'], 1)
+    check('resize to swapchain', z['resize_to_swapchain_ms']['max'], 1.0)
+    check('old-size frame after resize', z['old_size_frames_after_resize'], 1)
+    check('upload running at resize', z['upload_running_at_resize'], 1)
     r = res['interactions'][0]
     check('moves', r['pointer_moves'], 2)
     check('os delay p50', r['os_to_handler_ms']['p50'], 8)      # [8, 24] -> index round(0.5) = 0
@@ -433,7 +505,7 @@ def selftest():
     check('os to screen', r['os_to_screen_ms']['max'], 46.5)
     check('not shown', r['input_not_shown'], 1)
     check('ui lag in drag', r['ui_lag_ms']['max'], 12.0)
-    check('ui lag idle', (res['ui_lag_idle_ms']['n'], res['ui_lag_idle_ms']['max']), (2, 1.0))
+    check('ui lag idle', (res['ui_lag_idle_ms']['n'], res['ui_lag_idle_ms']['max']), (2, 1.0))   # t=0 and t=2 s
     check('hint S3', any(x.startswith('S3:') for x in r['hints']), True)
     check('hint S5 os', any(x.startswith('S5/S6:') for x in r['hints']), True)
     print('selftest', 'ok' if ok else 'FAILED')

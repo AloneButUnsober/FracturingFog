@@ -42,7 +42,7 @@ the #86 trace and the newest-wins gate use. The header names the fractal types.
 
 | Kind | Where | `a` | `b` |
 |---|---|---|---|
-| `PointerMove` | render surface, UI thread | OS-to-handler delay, ms (-1 unknown) | points coalesced into the event |
+| `PointerMove` | render surface, UI thread | OS-to-handler delay, ms (-1 unknown) | points coalesced into the event (1 on the Windows native surface) |
 | `InputOther` | press / release / wheel / key | OS-to-handler delay, ms | input kind (1 press, 2 release, 3 wheel, 4 key) |
 | `InputHandled` | handler returned | handler time, µs | input kind (0 move) |
 | `RenderHint` | `MainViewModel` | 0 full, 1 fast (progressive), 2 interactive (Math Plane editor) | |
@@ -60,6 +60,12 @@ the #86 trace and the newest-wins gate use. The header names the fractal types.
 | `UiLag` | UI-thread probe | post-to-run delay, µs | |
 | `Resize` | host resize | width | height |
 
+**Where the render surface's input arrives.** On Windows the swap chain is a native child HWND
+that receives every mouse message itself, so the Avalonia `InputSponge` never sees them.
+`FracturingFog.Win/NativeMouseForwarder.cs` subclasses that HWND and forwards the messages to the
+input controller. The trace marks them there, using `GetMessageTime` for the OS stamp. On the
+other platforms `AvaloniaInputAdapter` marks them, using the Avalonia event's time stamp.
+
 **OS-to-handler delay.** Avalonia stamps a pointer event with the OS message time. On Windows
 that is `GetMessageTime`, milliseconds since boot. The trace subtracts it from
 `Environment.TickCount`, which counts on the same clock, and both move in steps of about 15.6 ms.
@@ -76,7 +82,9 @@ trace which thread is the UI thread.
 ## What the analyser reports
 
 The analyser splits the trace into interactions: runs of input with no pause longer than
-`--gap-ms`. It follows each one for up to 1.5 s, so that its last frames land. For each
+`--gap-ms`. Input here means presses and releases, wheel steps, keys, render requests and window
+resizes. A bare pointer move doesn't count, because hovering over the image moves the mouse
+without rendering. It follows each one for up to 1.5 s, so that its last frames land. For each
 interaction it gives the p50 / p95 / max of:
 
 - **Input.** Moves per second, coalesced points, OS-to-handler delay, handler time by input kind,
@@ -90,8 +98,9 @@ interaction it gives the p50 / p95 / max of:
 - **Upload.** Thread-pool delay, post pipeline, Present time by stage, total upload time, and the
   share of the drag Present was busy.
 - **Screen.** Frames landed and per second, the gaps between them, and frames dropped by reason.
-- **Input to screen.** For each move, the time until the first landed frame that comes from a
-  Trigger started after the move. With the OS stamp added, this is OS-to-screen. It does not
+- **Input to screen.** For each move made with a button held (or, when there are none, each
+  render request), the time until the first landed frame that comes from a Trigger started after
+  it. With the OS stamp added, this is OS-to-screen. It does not
   include the display's own scan-out.
 
 It then prints verdicts that tie the numbers to the epic's slices:
@@ -108,6 +117,7 @@ It then prints verdicts that tie the numbers to the epic's slices:
 | S4: Math Plane 3D | a Math Plane 3D frame's median calculation is longer than one refresh |
 | S7: post pipeline | the post pipeline is over 25% of a final frame |
 | S7: pool delay | uploads waited over 4 ms (p95) for a thread-pool thread |
+| S8 resize | the interaction had window resizes. The verdict gives the UI lag, the frames calculated at the old size and shown after the swap chain was resized, and the uploads still running when the swap chain was resized. |
 
 `--selftest` checks the analysis against a small hand-built trace with known answers. CI runs it
 in the tools workflow.
@@ -131,16 +141,86 @@ its Present. So calculation and Present run one after the other, never at the sa
 the S2 headroom (#1758): overlapping the next calculation with the current Present. It needs a
 second upload buffer and a pacer release at upload start, not at landing.
 
+## First live reading (2026-11-13, user's machine, about 1280×744, 60 Hz)
+
+This trace was recorded before the native mouse forwarder was traced, so it has no pointer-move
+records. The input side is read from the render hints instead.
+
+| Interaction | Frames shown / s | Longest gap | Calc median | Present median | Handler to screen p50 / p95 | UI lag p95 |
+|---|---|---|---|---|---|---|
+| 2D pan | 59 | 37 ms | 14.6 ms final | 0.4 ms | 25 / 33 ms | 0.5 ms |
+| 2D wheel zoom (2 bursts) | 4–10 | **1071 ms** | 15–23 ms | 0.4 ms | 46–208 / 101–1052 ms | 0.6 ms |
+| 2D deep pan (previews) | 52 | 42 ms | 15.5 ms preview | 0.4 ms | 29 / 37 ms | 0.4 ms |
+| Mandelbulb orbit | 46–48 | 28 ms | 19 ms preview, 240 ms final | 0.5 ms | 31 / 41 ms | 0.5 ms |
+| Quaternion Julia orbit | 45–53 | 55 ms (307 once) | 19 ms preview, 63 ms final | 0.4 ms | 31 / 41 ms | 0.5 ms |
+| Math Plane 3D orbit | 62–64 | 33 ms | 2.2 ms | 12.7 ms (vsync wait) | 25 / 32 ms | 0.4 ms |
+| Math Plane 2D drag | 60–62 | 84 ms | 1.1 ms | 13.8 ms (vsync wait) | 25 / 32 ms | 0.4 ms |
+| Window resize (9 drags, 116 steps) | 0–20 | 256 ms | 13–27 ms | — | — | 35–66 ms (max 195) |
+| 2D pan, perf HUD on | 60 | 52 ms | 4.1 ms preview | 9.6 ms preview | 25 / 33 ms | 0.8 ms |
+
+What it says about the remaining slices:
+- **Drags and pans are at the display rate,** limited by the calculation or by vsync. Latency is
+  about 1.5 refreshes from handler to screen. The UI thread is idle during drags (lag p95
+  under 1 ms), so S5 (#1761) has little to win for drags.
+- **S2 (#1758):** this only gains where Present waits for vsync (Math Plane at 60–64/s) or where
+  calculation is about one refresh long. The 2D and 3D drags here are calc-bound, at 14–19 ms
+  per frame, so S2 alone won't raise them.
+- **S3 (#1759):** few 2D frames were cancelled while dragging, because the S1 pacer already keeps
+  the view still under a frame. Wheel zoom is a different story: it isn't paced, and it cancels
+  frame after frame (#1769).
+- **S4 (#1760):** Math Plane 3D already runs at the refresh rate (2.2 ms calc).
+- **S7 (#1763):** the post pipeline is 0.7–1.0 ms. That is small next to a 15 ms calculation.
+- **Resize (#1768):** blocks the UI thread up to 195 ms a step. 41 of 116 frames calculated at
+  the old size were shown after the swap chain was resized (the flashing). 6 uploads were reading
+  the calculator's buffers when a resize swapped them (the likely cause of the banding).
+
+## Second live reading: window resize (#1768)
+
+The second trace was recorded on 2026-11-13 with native mouse tracing. While a window edge was
+dragged (110 resize steps):
+- 24 frames calculated at the old size were shown after the swap chain had been resized;
+- 14 uploads were still reading the calculators' buffers when a resize swapped them;
+- the UI thread stalled for up to 135 ms.
+
+The first trace showed the same pattern: 41 of 116 frames, 6 uploads, and stalls of up to 195 ms.
+
+Before the fix, `FractalRenderHost.Resize` did four things in this order:
+1. resized the swap chain and presented it;
+2. cancelled the frame in flight;
+3. waited for the calc thread only;
+4. reallocated the buffers.
+
+Each window size step also posted its own `Resize` to the UI thread, so stale steps queued up
+behind a slow one. With #1768:
+- a frame job (calc thread) and its upload (thread pool) hold a shared buffer gate. `Resize`
+  cancels the frame, then takes the gate exclusively, so it waits for both before it resizes the
+  swap chain or any buffer. The calc thread waits for the upload barrier before it takes the
+  gate; otherwise it would deadlock against a waiting resize.
+- the bootstrap keeps one resize post pending at a time, and that post applies the newest size.
+
+`ResizeTearTests` resizes the real host in a burst between sizes of different aspect, with a
+vsync-blocking renderer stub. It checks:
+- every image after a swap-chain resize has the new size, apart from the one re-present that
+  bridges the resize;
+- the plain view's images are byte-equal to a fresh host's settled frames;
+- the last image is the settled frame of the last size.
+
+Before the fix, the three cases showed 47, 23 and 45 old-size images; after it, 0.
+
 ## Files
 
 - `Abstractions/Render/InteractionTrace.cs`: switch, record kinds and the ring writer.
 - `Engine/Rendering/FractalRenderHost.cs`: Trigger, calc thread, upload, Present, landed and
   dropped.
 - `Abstractions/Render/InteractiveTriggerPacer.cs`: pacer decisions.
-- `UI.Avalonia/Input/AvaloniaInputAdapter.cs`: pointer, wheel and key arrival and handler time.
+- `FracturingFog.Win/NativeMouseForwarder.cs`: mouse arrival on the Windows swap-chain HWND
+  (`GetMessageTime`) and handler time.
+- `UI.Avalonia/Input/AvaloniaInputAdapter.cs`: pointer, wheel and key arrival and handler time
+  (non-Windows surfaces, and keys).
 - `UI.Avalonia/ViewModels/MainViewModel.cs`: render hints, and it starts the lag probe.
 - `UI.Avalonia/Services/UiLagProbe.cs`: UI-thread lag probe.
 - `Tools/InteractionTrace/analyze_interaction_trace.py`: analyser; see the
   [README](../../Tools/InteractionTrace/README.md).
 - `Server.Tests/InteractionTraceTests.cs`: allocation guard, ring round-trip and lap, and the
   host-drag invariants.
+- `Server.Tests/ResizeTearTests.cs`: resize bursts against the real host (#1768).
