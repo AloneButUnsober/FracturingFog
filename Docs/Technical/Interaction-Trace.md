@@ -117,7 +117,7 @@ It then prints verdicts that tie the numbers to the epic's slices:
 | S4: Math Plane 3D | a Math Plane 3D frame's median calculation is longer than one refresh |
 | S7: post pipeline | the post pipeline is over 25% of a final frame |
 | S7: pool delay | uploads waited over 4 ms (p95) for a thread-pool thread |
-| S8 resize | the interaction had window resizes. The verdict gives the UI lag, the frames calculated at the old size and shown after the swap chain was resized, and the uploads reading buffers when a resize began. |
+| S8 resize | the interaction had window resizes. The verdict gives the UI lag, the frames calculated at the old size and shown after the swap chain was resized, and the uploads still running when the swap chain was resized. |
 
 `--selftest` checks the analysis against a small hand-built trace with known answers. CI runs it
 in the tools workflow.

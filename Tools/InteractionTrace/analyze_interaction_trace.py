@@ -283,9 +283,11 @@ def analyse_segment(win, s0, s1, types, g_cstart=None, g_ustart=None):
             if i < len(rp) and rp[i] < l.t:
                 stale += 1
         res['old_size_frames_after_resize'] = stale
+        # Uploads still running when the swap chain was resized (the resized Present). Since #1768
+        # a resize waits for them at its entry, so this counts the race, not the wait.
         res['upload_running_at_resize'] = sum(
             1 for r in by['UploadEnd'] if r.seq in gus
-            and any(gus[r.seq].t < x.t < r.t for x in rs))
+            and any(gus[r.seq].t < p < r.t for p in rp))
     res['hints'] = hints(res)
     return res
 
@@ -354,7 +356,7 @@ def hints(r):
         h.append(f"S8 resize: {r['resizes']} resize steps; UI lag up to {lag_max:.0f} ms; "
                  f"{r.get('old_size_frames_after_resize', 0)} frames calculated at the old size were shown after the "
                  f"swap chain was resized; {r.get('upload_running_at_resize', 0)} uploads were reading the buffers when "
-                 f"a resize began.")
+                 f"the swap chain was resized.")
     if not h:
         h.append('No bottleneck past the thresholds.')
     return h
@@ -398,7 +400,7 @@ def report(res):
         lines.append(f"               OS->screen {fmt(r['os_to_screen_ms'])}; not shown {r['input_not_shown']}")
         if r.get('resizes'):
             lines.append(f"  resize       {r['resizes']} steps; to swap chain {fmt(r.get('resize_to_swapchain_ms'))}")
-            lines.append(f"               old-size frames shown after resize {r['old_size_frames_after_resize']}, uploads running at resize {r['upload_running_at_resize']}")
+            lines.append(f"               old-size frames shown after resize {r['old_size_frames_after_resize']}, uploads running at the swap-chain resize {r['upload_running_at_resize']}")
         for x in r['hints']:
             lines.append(f"  > {x}")
         lines.append('')
