@@ -540,6 +540,25 @@ namespace FracturingFog.Imaging
             public float[]? Depth;
         }
 
+        /// <summary>#1735 / #1746 — ask a 3D raymarcher for its depth (the image is unchanged).</summary>
+        public static void RequestOverlayDepth(IFractalCalculator? alt)
+        {
+            if (alt is IDepthAovSource d) d.DepthRequested = true;
+        }
+
+        /// <summary>#1735 / #1746 — keep <paramref name="alt"/>'s camera and a copy of its depth.
+        /// Call after its first, unjittered Calculate. A calculator without a camera clears it.</summary>
+        public static void CaptureOverlay3D(IFractalCalculator? alt, Overlay3DCapture cap)
+        {
+            if (alt is FracturingFog.Rendering.IRaymarch3DCameraSource { LastCamera: { } cam })
+            {
+                cap.Camera = cam;
+                cap.Depth = alt is IDepthAovSource { DepthBuffer: { } d } && d.Length >= cam.Width * cam.Height
+                    ? (float[])d.Clone() : null;
+            }
+            else { cap.Camera = null; cap.Depth = null; }
+        }
+
         /// <summary>#1735 — draw <see cref="PosterRequest.MathOverlay3D"/> on <paramref name="buffer"/>
         /// with the captured camera and depth (pinned), and record the outcome.</summary>
         public static void ApplyMathOverlay3D(PosterRequest req, Overlay3DCapture? cap, uint[] buffer, int w, int h)
@@ -645,7 +664,7 @@ namespace FracturingFog.Imaging
 
             IFractalCalculator? alt = BuildCaptureCalculator(req);
             // #1735 — the 3D math overlay asks the raymarcher for its depth (image unchanged).
-            if (overlay3D != null && alt is IDepthAovSource overlayDepth) overlayDepth.DepthRequested = true;
+            if (overlay3D != null) RequestOverlayDepth(alt);
             // #1012 — True stereo on a 3D raymarcher: both eye renders; the composed
             // buffer is the side-by-side pair and the post-pipeline (grade / view
             // transform / interior composite, all per-pixel) runs on it at its size.
@@ -669,12 +688,7 @@ namespace FracturingFog.Imaging
                 token.ThrowIfCancellationRequested();
                 // #1735 — the overlay's camera and depth: this first, unjittered sample is the
                 // view's own camera (the AA samples below pan it by sub-pixel offsets).
-                if (overlay3D != null && alt is FracturingFog.Rendering.IRaymarch3DCameraSource { LastCamera: { } ocam })
-                {
-                    overlay3D.Camera = ocam;
-                    overlay3D.Depth = alt is IDepthAovSource { DepthBuffer: { } od } && od.Length >= ocam.Width * ocam.Height
-                        ? (float[])od.Clone() : null;
-                }
+                if (overlay3D != null) CaptureOverlay3D(alt, overlay3D);
                 // #1344 — the quality preset's sub-pixel AA, as the live view runs it
                 // (export and --batch used to skip it).
                 // #1381 — adaptive contrast per sample, before the average.

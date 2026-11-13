@@ -5273,7 +5273,8 @@ or a pinned point on Mandelbrot and Julia views. On 3D views
 bailout sphere and the orbit of the surface point under the
 pointer under the fractal's own step, dashed where it is behind
 the fractal. A pinned 3D point is drawn on exports, and on
---batch stills with --math-overlay-3d X,Y,Z[,STEPS].
+--batch stills and --mode video frames (each with its own
+camera) with --math-overlay-3d X,Y,Z[,STEPS].
 
 Scripts: step / with lines in the scene text make a timed sequence
 (step model after Manim, the engine behind the 3Blue1Brown videos).
@@ -5315,7 +5316,7 @@ scene with the orbit of one point under its own step:
 On a 3D fractal view itself, View -> Math overlay draws the axes,
 the bailout sphere and the orbit of the surface point under the
 pointer (O pins it); --math-overlay-3d X,Y,Z draws it on a
---batch still.
+--batch still or on every frame of a --mode video.
 
 Objects: + Point / Vector / Segment / Polyline / Curve /
 Surface (z = f(x, y)) / Implicit (F(x, y, z) = 0, marching

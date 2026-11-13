@@ -286,6 +286,28 @@ The two cameras differ, and this is the hard part of the epic:
     the live draw call applied (pixels identical);
   - with AA, the drawn overlay equals one drawn with the unjittered camera.
 
+*Follow-up (#1746), video frames:*
+- **What draws:** `--math-overlay` and `--math-overlay-3d` now take effect in `--mode video` (catalog modes
+  Image | Video).
+- **Shared helper:** `Engine/Imaging/MathOverlayFrames.cs` wraps the poster's own draw calls
+  (`PosterRenderer.ApplyMathOverlay` / `ApplyMathOverlay3D`):
+  - The video's `RenderOneFrame` calls `BeforeCalculate` / `AfterCalculate` around each frame's first,
+    unjittered Calculate. That requests depth and keeps the camera, via the poster's
+    `RequestOverlayDepth` / `CaptureOverlay3D`.
+  - The loop draws on each graded frame with that frame's view: centre and zoom (2D), or camera (3D).
+- **Special cases:**
+  - Ken-Burns draws once on the held frame, which then pans.
+  - Stereo frames are skipped.
+  - Motion blur draws at the frame's nominal view.
+  - A calculator without a camera clears the capture, so a stale camera is never used.
+  - The batch prints how many frames were drawn and why any were skipped.
+- **Refused:**
+  - with a Misiurewicz loop (2D: the frame turns in image space);
+  - in slideshow and scene modes, which show many regions while a pinned point belongs to one view. The
+    issue's slideshow and scene items were narrowed to this error.
+- **Tests:** orbit-video frames (Mandelbulb, KIFS) each equal the still of their camera, pixel for pixel,
+  through the same hooks the loop calls. 2D frames draw with their own zoom.
+
 ### 3.6 Demos and guide (B6, #1736)
 
 - **New Math Plane 3D demos:**
@@ -322,7 +344,7 @@ The two cameras differ, and this is the hard part of the epic:
 - **B1 and B2** are scene statements, so the region snapshot and `--param MathPlane3DScene=...` carry
   them. The Command builder needs nothing new; B1 and B2 each add a round-trip test.
 - **B4** was live-only until **B5** landed. That gap was reported in `DetectGaps` until B5 replaced it
-  with `--math-overlay-3d`, which is for stills only for now (#1746).
+  with `--math-overlay-3d`. Video frames draw it too, from #1746 on.
 
 ## 5. Tests (independent invariants)
 
