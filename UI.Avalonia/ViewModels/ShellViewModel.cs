@@ -151,11 +151,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
         // #1549 — Math Plane object editor: the Control Center section VM and the
         // render surface's edit handler (inactive unless the render is Math Plane).
-        MathPlane = new MathPlaneSectionViewModel(Main.ViewState, () => renderHost.Trigger(),
+        // #1757 — editor drags and orbits are pointer-driven: paced like the pan.
+        MathPlane = new MathPlaneSectionViewModel(Main.ViewState, Main.RequestInteractiveRender,
             () => Main.SelectedFractalType = FractalType.MathPlane);
         // #1716 — the Math Plane 3D section / editor; both editors share the input
         // controller's edit slot through a chain (each ignores the other's type).
-        MathPlane3D = new MathPlane3DSectionViewModel(Main.ViewState, () => renderHost.Trigger(),
+        MathPlane3D = new MathPlane3DSectionViewModel(Main.ViewState, Main.RequestInteractiveRender,
             () => Main.SelectedFractalType = FractalType.MathPlane3D);
         input.EditHandler = new FracturingFog.Input.PointerEditHandlerChain(MathPlane, MathPlane3D);
         renderHost.FrameCompleted += (_, _) => Dispatcher.UIThread.Post(() => { MathPlane.Refresh(); MathPlane3D.Refresh(); });
