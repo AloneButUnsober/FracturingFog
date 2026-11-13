@@ -42,7 +42,7 @@ the #86 trace and the newest-wins gate use. The header names the fractal types.
 
 | Kind | Where | `a` | `b` |
 |---|---|---|---|
-| `PointerMove` | render surface, UI thread | OS-to-handler delay, ms (-1 unknown) | points coalesced into the event |
+| `PointerMove` | render surface, UI thread | OS-to-handler delay, ms (-1 unknown) | points coalesced into the event (1 on the Windows native surface) |
 | `InputOther` | press / release / wheel / key | OS-to-handler delay, ms | input kind (1 press, 2 release, 3 wheel, 4 key) |
 | `InputHandled` | handler returned | handler time, µs | input kind (0 move) |
 | `RenderHint` | `MainViewModel` | 0 full, 1 fast (progressive), 2 interactive (Math Plane editor) | |
@@ -59,6 +59,12 @@ the #86 trace and the newest-wins gate use. The header names the fractal types.
 | `Dropped` | calculated but not shown | 1 cancelled, 2 final superseded, 3 preview superseded | |
 | `UiLag` | UI-thread probe | post-to-run delay, µs | |
 | `Resize` | host resize | width | height |
+
+**Where the render surface's input arrives.** On Windows the swap chain is a native child HWND
+that receives every mouse message itself, so the Avalonia `InputSponge` never sees them.
+`FracturingFog.Win/NativeMouseForwarder.cs` subclasses that HWND and forwards the messages to the
+input controller. The trace marks them there, using `GetMessageTime` for the OS stamp. On the
+other platforms `AvaloniaInputAdapter` marks them, using the Avalonia event's time stamp.
 
 **OS-to-handler delay.** Avalonia stamps a pointer event with the OS message time. On Windows
 that is `GetMessageTime`, milliseconds since boot. The trace subtracts it from
@@ -108,6 +114,7 @@ It then prints verdicts that tie the numbers to the epic's slices:
 | S4: Math Plane 3D | a Math Plane 3D frame's median calculation is longer than one refresh |
 | S7: post pipeline | the post pipeline is over 25% of a final frame |
 | S7: pool delay | uploads waited over 4 ms (p95) for a thread-pool thread |
+| S8 resize | the interaction had window resizes. The verdict gives the UI lag, the frames calculated at the old size and shown after the swap chain was resized, and the uploads reading buffers when a resize began. |
 
 `--selftest` checks the analysis against a small hand-built trace with known answers. CI runs it
 in the tools workflow.
@@ -131,13 +138,49 @@ its Present. So calculation and Present run one after the other, never at the sa
 the S2 headroom (#1758): overlapping the next calculation with the current Present. It needs a
 second upload buffer and a pacer release at upload start, not at landing.
 
+## First live reading (2026-11-13, user's machine, about 1280×744, 60 Hz)
+
+This trace was recorded before the native mouse forwarder was traced, so it has no pointer-move
+records. The input side is read from the render hints instead.
+
+| Interaction | Frames shown / s | Longest gap | Calc median | Present median | Handler to screen p50 / p95 | UI lag p95 |
+|---|---|---|---|---|---|---|
+| 2D pan | 59 | 37 ms | 14.6 ms final | 0.4 ms | 25 / 33 ms | 0.5 ms |
+| 2D wheel zoom (2 bursts) | 4–10 | **1071 ms** | 15–23 ms | 0.4 ms | 46–208 / 101–1052 ms | 0.6 ms |
+| 2D deep pan (previews) | 52 | 42 ms | 15.5 ms preview | 0.4 ms | 29 / 37 ms | 0.4 ms |
+| Mandelbulb orbit | 46–48 | 28 ms | 19 ms preview, 240 ms final | 0.5 ms | 31 / 41 ms | 0.5 ms |
+| Quaternion Julia orbit | 45–53 | 55 ms (307 once) | 19 ms preview, 63 ms final | 0.4 ms | 31 / 41 ms | 0.5 ms |
+| Math Plane 3D orbit | 62–64 | 33 ms | 2.2 ms | 12.7 ms (vsync wait) | 25 / 32 ms | 0.4 ms |
+| Math Plane 2D drag | 60–62 | 84 ms | 1.1 ms | 13.8 ms (vsync wait) | 25 / 32 ms | 0.4 ms |
+| Window resize (9 drags, 116 steps) | 0–20 | 256 ms | 13–27 ms | — | — | 35–66 ms (max 195) |
+| 2D pan, perf HUD on | 60 | 52 ms | 4.1 ms preview | 9.6 ms preview | 25 / 33 ms | 0.8 ms |
+
+What it says about the remaining slices:
+- **Drags and pans are at the display rate,** limited by the calculation or by vsync. Latency is
+  about 1.5 refreshes from handler to screen. The UI thread is idle during drags (lag p95
+  under 1 ms), so S5 (#1761) has little to win for drags.
+- **S2 (#1758):** this only gains where Present waits for vsync (Math Plane at 60–64/s) or where
+  calculation is about one refresh long. The 2D and 3D drags here are calc-bound, at 14–19 ms
+  per frame, so S2 alone won't raise them.
+- **S3 (#1759):** few 2D frames were cancelled while dragging, because the S1 pacer already keeps
+  the view still under a frame. Wheel zoom is a different story: it isn't paced, and it cancels
+  frame after frame (#1769).
+- **S4 (#1760):** Math Plane 3D already runs at the refresh rate (2.2 ms calc).
+- **S7 (#1763):** the post pipeline is 0.7–1.0 ms. That is small next to a 15 ms calculation.
+- **Resize (#1768):** blocks the UI thread up to 195 ms a step. 41 of 116 frames calculated at
+  the old size were shown after the swap chain was resized (the flashing). 6 uploads were reading
+  the calculator's buffers when a resize swapped them (the likely cause of the banding).
+
 ## Files
 
 - `Abstractions/Render/InteractionTrace.cs`: switch, record kinds and the ring writer.
 - `Engine/Rendering/FractalRenderHost.cs`: Trigger, calc thread, upload, Present, landed and
   dropped.
 - `Abstractions/Render/InteractiveTriggerPacer.cs`: pacer decisions.
-- `UI.Avalonia/Input/AvaloniaInputAdapter.cs`: pointer, wheel and key arrival and handler time.
+- `FracturingFog.Win/NativeMouseForwarder.cs`: mouse arrival on the Windows swap-chain HWND
+  (`GetMessageTime`) and handler time.
+- `UI.Avalonia/Input/AvaloniaInputAdapter.cs`: pointer, wheel and key arrival and handler time
+  (non-Windows surfaces, and keys).
 - `UI.Avalonia/ViewModels/MainViewModel.cs`: render hints, and it starts the lag probe.
 - `UI.Avalonia/Services/UiLagProbe.cs`: UI-thread lag probe.
 - `Tools/InteractionTrace/analyze_interaction_trace.py`: analyser; see the

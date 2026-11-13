@@ -25,6 +25,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
 using FracturingFog.Input;
+using FracturingFog.Render;
 
 namespace FracturingFog.Hosting
 {
@@ -135,6 +136,37 @@ namespace FracturingFog.Hosting
 
         private static IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam,
                                       UIntPtr id, UIntPtr data)
+        {
+            // #1762 — interaction trace (FF_INTERACTION_TRACE): message arrival, its wait since the
+            // OS posted it (GetMessageTime, same clock as GetTickCount) and the handler's time.
+            if (!InteractionTrace.Enabled || s_controller == null || !TraceInputKind(msg, out var kind))
+                return WndProcCore(hWnd, msg, wParam, lParam);
+            long delay = unchecked((uint)Environment.TickCount - (uint)GetMessageTime());
+            if (delay is < 0 or > 10_000) delay = -1;
+            if (kind == InputKind.Move) InteractionTrace.Mark(TraceKind.PointerMove, 0, delay, 1);
+            else InteractionTrace.Mark(TraceKind.InputOther, 0, delay, (long)kind);
+            long t0 = InteractionTrace.Now();
+            try { return WndProcCore(hWnd, msg, wParam, lParam); }
+            finally { InteractionTrace.Mark(TraceKind.InputHandled, 0, InteractionTrace.MicrosSince(t0), (long)kind); }
+        }
+
+        private static bool TraceInputKind(uint msg, out InputKind kind)
+        {
+            switch (msg)
+            {
+                case WM_MOUSEMOVE: kind = InputKind.Move; return true;
+                case WM_LBUTTONDOWN: case WM_RBUTTONDOWN: case WM_MBUTTONDOWN: case WM_LBUTTONDBLCLK:
+                    kind = InputKind.Press; return true;
+                case WM_LBUTTONUP: case WM_RBUTTONUP: case WM_MBUTTONUP: kind = InputKind.Release; return true;
+                case WM_MOUSEWHEEL: kind = InputKind.Wheel; return true;
+                default: kind = default; return false;
+            }
+        }
+
+        [DllImport("user32.dll")]
+        private static extern int GetMessageTime();
+
+        private static IntPtr WndProcCore(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
         {
             var c = s_controller;
             if (c != null)
