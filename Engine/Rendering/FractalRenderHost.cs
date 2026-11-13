@@ -67,56 +67,148 @@ namespace FracturingFog.Rendering
         // Lazily created / resized in the progressive branch; rebuilt on type change.
         private readonly IFractalCalculator?[] _altPreviewCalcs = new IFractalCalculator?[DynamicResolution.MaxLevel + 1];   // #1333: per level
         private FractalType _altPreviewType = (FractalType)(-1);
-        private EscapeTimeCalculator _escapeCalculator;
-        private IFSCalculator _ifsCalculator;
-        private LSystemCalculator _lsystemCalculator;
-        private AttractorCalculator _attractorCalculator;
-        private BuddhabrotCalculator _buddhabrotCalculator;
-        private LogisticCalculator _logisticCalculator;
-        private LyapunovCalculator _lyapunovCalculator;
-        private SlitCascadeCalculator _slitCascadeCalculator;   // #1569
-        private TalbotCarpetCalculator _talbotCarpetCalculator; // #1570
-        private TranscendentalJuliaCalculator _transcendentalCalculator;
-        private HalleyCalculator _halleyCalculator;
-        private SecantCalculator _secantCalculator;
-        private NebulabrotCalculator _nebulabrotCalculator;
-        private AntiBuddhabrotCalculator _antiBuddhabrotCalculator;
-        private AntiNebulabrotCalculator _antiNebulabrotCalculator;
-        private DualBuddhabrotCalculator _dualBuddhabrotCalculator;   // #1124
-        private NewtonCalculator _newtonCalculator;
-        private UserEquationCalculator _userEquationCalculator;
-        private MandelbulbCalculator _mandelbulbCalculator;
-        private MandelboxCalculator _mandelboxCalculator;
-        private KifsCalculator _kifsCalculator;
-        private QuatJuliaCalculator _quatJuliaCalculator;
-        private QuatMandelbrotCalculator _quatMandelbrotCalculator;
-        private PlasmaCalculator _plasmaCalculator;
-        private AcidWarpCalculator _acidWarpCalculator;
-        private ApollonianCalculator _apollonianCalculator;
-        private KleinianCalculator _kleinianCalculator;
-        private MirrorSpheresCalculator _mirrorSpheresCalculator;
-        private BicomplexMandelbrotCalculator _bicomplexCalculator;
-        private CoquaternionMandelbrotCalculator _coquaternionCalculator;
-        private DualOrbitVolumeCalculator _dualOrbitVolumeCalculator;
-        private DlaCalculator _dlaCalculator;
-        private RandomTileCalculator _randomTileCalculator;
-        private ChaoticBilliardCalculator _billiardCalculator;
-        private BilliardRaysCalculator _billiardRaysCalculator;   // #1506
-        private MathPlaneCalculator _mathPlaneCalculator;         // #1548
-        private MathPlane3DCalculator _mathPlane3DCalculator;     // #1713
-        private PrecisionFieldCalculator _precisionFieldCalculator;
-        private DualOrbitEscapeCalculator _dualOrbitCalculator;
-        private IndrasPearlsCalculator _indrasPearlsCalculator;
-        private FlameRenderer _flameCalculator;
-        private SandboxCalculator _sandboxCalculator;
-        private UserBulbCalculator _userBulbCalculator;
-        private TearDropCalculator _tearDropCalculator;
-        private FracturingFog.Calculators.Generated.MandelbrotZ2Calculator _generatedZ2Calculator;
-        private FracturingFog.Calculators.Generated.MandelbrotZ3Calculator _generatedZ3Calculator;
-        private FracturingFog.Calculators.Generated.MandelbrotZ4Calculator _generatedZ4Calculator;
-        private FracturingFog.Calculators.Generated.MandelbrotZ5Calculator _generatedZ5Calculator;
-        private FracturingFog.Calculators.Generated.TricornCalculator     _generatedTricornCalculator;
-        private FracturingFog.Calculators.Generated.BurningShipCalculator _generatedBurningShipCalculator;
+        // #1772 — the alt calculators are made on first use, at the current surface size, instead
+        // of all ~50 up front: at 1280×744 that was 634 MB allocated by the constructor and again
+        // by every Resize (21-94 ms of UI-thread time per window-resize step), though only one of
+        // them draws the view. Each property below makes its calculator the first time it is read
+        // (LazyCalc); Resize and the ColorMap broadcast reach only the ones made so far
+        // (CreatedCalcs). A calculator made later starts at the current size and colour map.
+        private readonly object _lazyCalcGate = new();
+        private readonly System.Collections.Generic.List<IFractalCalculator> _createdCalcs = new();
+        private int _lazyCalcW, _lazyCalcH;   // the size a calculator made now gets (under _lazyCalcGate)
+
+        private T LazyCalc<T>(ref T? slot, Func<int, int, T> make) where T : class, IFractalCalculator
+        {
+            var c = Volatile.Read(ref slot);
+            if (c != null) return c;
+            lock (_lazyCalcGate)
+            {
+                c = slot;
+                if (c != null) return c;
+                c = make(_lazyCalcW, _lazyCalcH);
+                c.ColorMap = _calculator.ColorMap;
+                // The 2D GPU switch and kernel the host gives the escape-time and Buddhabrot-family
+                // calculators (UseGpuCompute, SyncGpuKernelsWithDevice) reach only those made.
+                switch (c)
+                {
+                    case EscapeTimeCalculator e: e.GpuKernel = _gpuKernel; e.UseGpuCompute = _calculator.UseGpuCompute; break;
+                    case BuddhaFamilyCalculator b: b.GpuKernel = _gpuKernel; b.UseGpuCompute = _calculator.UseGpuCompute; break;
+                }
+                _createdCalcs.Add(c);
+                Volatile.Write(ref slot, c);
+                return c;
+            }
+        }
+
+        /// <summary>#1772 — the alt calculators made so far (a snapshot).</summary>
+        private IFractalCalculator[] CreatedCalcs()
+        {
+            lock (_lazyCalcGate) return _createdCalcs.ToArray();
+        }
+
+        /// <summary>#1772 — alt calculators made so far (diagnostics and tests).</summary>
+        public int CreatedAltCalculatorCount { get { lock (_lazyCalcGate) return _createdCalcs.Count; } }
+
+        private EscapeTimeCalculator? _escapeCalculatorSlot;
+        private EscapeTimeCalculator _escapeCalculator => LazyCalc(ref _escapeCalculatorSlot, static (w, h) => new EscapeTimeCalculator(w, h));
+        private IFSCalculator? _ifsCalculatorSlot;
+        private IFSCalculator _ifsCalculator => LazyCalc(ref _ifsCalculatorSlot, static (w, h) => new IFSCalculator(w, h));
+        private LSystemCalculator? _lsystemCalculatorSlot;
+        private LSystemCalculator _lsystemCalculator => LazyCalc(ref _lsystemCalculatorSlot, static (w, h) => new LSystemCalculator(w, h));
+        private AttractorCalculator? _attractorCalculatorSlot;
+        private AttractorCalculator _attractorCalculator => LazyCalc(ref _attractorCalculatorSlot, static (w, h) => new AttractorCalculator(w, h));
+        private BuddhabrotCalculator? _buddhabrotCalculatorSlot;
+        private BuddhabrotCalculator _buddhabrotCalculator => LazyCalc(ref _buddhabrotCalculatorSlot, static (w, h) => new BuddhabrotCalculator(w, h));
+        private LogisticCalculator? _logisticCalculatorSlot;
+        private LogisticCalculator _logisticCalculator => LazyCalc(ref _logisticCalculatorSlot, static (w, h) => new LogisticCalculator(w, h));
+        private LyapunovCalculator? _lyapunovCalculatorSlot;
+        private LyapunovCalculator _lyapunovCalculator => LazyCalc(ref _lyapunovCalculatorSlot, static (w, h) => new LyapunovCalculator(w, h));
+        private SlitCascadeCalculator? _slitCascadeCalculatorSlot;   // #1569
+        private SlitCascadeCalculator _slitCascadeCalculator => LazyCalc(ref _slitCascadeCalculatorSlot, static (w, h) => new SlitCascadeCalculator(w, h));
+        private TalbotCarpetCalculator? _talbotCarpetCalculatorSlot; // #1570
+        private TalbotCarpetCalculator _talbotCarpetCalculator => LazyCalc(ref _talbotCarpetCalculatorSlot, static (w, h) => new TalbotCarpetCalculator(w, h));
+        private TranscendentalJuliaCalculator? _transcendentalCalculatorSlot;
+        private TranscendentalJuliaCalculator _transcendentalCalculator => LazyCalc(ref _transcendentalCalculatorSlot, static (w, h) => new TranscendentalJuliaCalculator(w, h));
+        private HalleyCalculator? _halleyCalculatorSlot;
+        private HalleyCalculator _halleyCalculator => LazyCalc(ref _halleyCalculatorSlot, static (w, h) => new HalleyCalculator(w, h));
+        private SecantCalculator? _secantCalculatorSlot;
+        private SecantCalculator _secantCalculator => LazyCalc(ref _secantCalculatorSlot, static (w, h) => new SecantCalculator(w, h));
+        private NebulabrotCalculator? _nebulabrotCalculatorSlot;
+        private NebulabrotCalculator _nebulabrotCalculator => LazyCalc(ref _nebulabrotCalculatorSlot, static (w, h) => new NebulabrotCalculator(w, h));
+        private AntiBuddhabrotCalculator? _antiBuddhabrotCalculatorSlot;
+        private AntiBuddhabrotCalculator _antiBuddhabrotCalculator => LazyCalc(ref _antiBuddhabrotCalculatorSlot, static (w, h) => new AntiBuddhabrotCalculator(w, h));
+        private AntiNebulabrotCalculator? _antiNebulabrotCalculatorSlot;
+        private AntiNebulabrotCalculator _antiNebulabrotCalculator => LazyCalc(ref _antiNebulabrotCalculatorSlot, static (w, h) => new AntiNebulabrotCalculator(w, h));
+        private DualBuddhabrotCalculator? _dualBuddhabrotCalculatorSlot;   // #1124
+        private DualBuddhabrotCalculator _dualBuddhabrotCalculator => LazyCalc(ref _dualBuddhabrotCalculatorSlot, static (w, h) => new DualBuddhabrotCalculator(w, h));
+        private NewtonCalculator? _newtonCalculatorSlot;
+        private NewtonCalculator _newtonCalculator => LazyCalc(ref _newtonCalculatorSlot, static (w, h) => new NewtonCalculator(w, h));
+        private UserEquationCalculator? _userEquationCalculatorSlot;
+        private UserEquationCalculator _userEquationCalculator => LazyCalc(ref _userEquationCalculatorSlot, static (w, h) => new UserEquationCalculator(w, h));
+        private MandelbulbCalculator? _mandelbulbCalculatorSlot;
+        private MandelbulbCalculator _mandelbulbCalculator => LazyCalc(ref _mandelbulbCalculatorSlot, static (w, h) => new MandelbulbCalculator(w, h));
+        private MandelboxCalculator? _mandelboxCalculatorSlot;
+        private MandelboxCalculator _mandelboxCalculator => LazyCalc(ref _mandelboxCalculatorSlot, static (w, h) => new MandelboxCalculator(w, h));
+        private KifsCalculator? _kifsCalculatorSlot;
+        private KifsCalculator _kifsCalculator => LazyCalc(ref _kifsCalculatorSlot, static (w, h) => new KifsCalculator(w, h));
+        private QuatJuliaCalculator? _quatJuliaCalculatorSlot;
+        private QuatJuliaCalculator _quatJuliaCalculator => LazyCalc(ref _quatJuliaCalculatorSlot, static (w, h) => new QuatJuliaCalculator(w, h));
+        private QuatMandelbrotCalculator? _quatMandelbrotCalculatorSlot;
+        private QuatMandelbrotCalculator _quatMandelbrotCalculator => LazyCalc(ref _quatMandelbrotCalculatorSlot, static (w, h) => new QuatMandelbrotCalculator(w, h));
+        private PlasmaCalculator? _plasmaCalculatorSlot;
+        private PlasmaCalculator _plasmaCalculator => LazyCalc(ref _plasmaCalculatorSlot, static (w, h) => new PlasmaCalculator(w, h));
+        private AcidWarpCalculator? _acidWarpCalculatorSlot;
+        private AcidWarpCalculator _acidWarpCalculator => LazyCalc(ref _acidWarpCalculatorSlot, static (w, h) => new AcidWarpCalculator(w, h));
+        private ApollonianCalculator? _apollonianCalculatorSlot;
+        private ApollonianCalculator _apollonianCalculator => LazyCalc(ref _apollonianCalculatorSlot, static (w, h) => new ApollonianCalculator(w, h));
+        private KleinianCalculator? _kleinianCalculatorSlot;
+        private KleinianCalculator _kleinianCalculator => LazyCalc(ref _kleinianCalculatorSlot, static (w, h) => new KleinianCalculator(w, h));
+        private MirrorSpheresCalculator? _mirrorSpheresCalculatorSlot;
+        private MirrorSpheresCalculator _mirrorSpheresCalculator => LazyCalc(ref _mirrorSpheresCalculatorSlot, static (w, h) => new MirrorSpheresCalculator(w, h));
+        private BicomplexMandelbrotCalculator? _bicomplexCalculatorSlot;
+        private BicomplexMandelbrotCalculator _bicomplexCalculator => LazyCalc(ref _bicomplexCalculatorSlot, static (w, h) => new BicomplexMandelbrotCalculator(w, h));
+        private CoquaternionMandelbrotCalculator? _coquaternionCalculatorSlot;
+        private CoquaternionMandelbrotCalculator _coquaternionCalculator => LazyCalc(ref _coquaternionCalculatorSlot, static (w, h) => new CoquaternionMandelbrotCalculator(w, h));
+        private DualOrbitVolumeCalculator? _dualOrbitVolumeCalculatorSlot;
+        private DualOrbitVolumeCalculator _dualOrbitVolumeCalculator => LazyCalc(ref _dualOrbitVolumeCalculatorSlot, static (w, h) => new DualOrbitVolumeCalculator(w, h));
+        private DlaCalculator? _dlaCalculatorSlot;
+        private DlaCalculator _dlaCalculator => LazyCalc(ref _dlaCalculatorSlot, static (w, h) => new DlaCalculator(w, h));
+        private RandomTileCalculator? _randomTileCalculatorSlot;
+        private RandomTileCalculator _randomTileCalculator => LazyCalc(ref _randomTileCalculatorSlot, static (w, h) => new RandomTileCalculator(w, h));
+        private ChaoticBilliardCalculator? _billiardCalculatorSlot;
+        private ChaoticBilliardCalculator _billiardCalculator => LazyCalc(ref _billiardCalculatorSlot, static (w, h) => new ChaoticBilliardCalculator(w, h));
+        private BilliardRaysCalculator? _billiardRaysCalculatorSlot;   // #1506
+        private BilliardRaysCalculator _billiardRaysCalculator => LazyCalc(ref _billiardRaysCalculatorSlot, static (w, h) => new BilliardRaysCalculator(w, h));
+        private MathPlaneCalculator? _mathPlaneCalculatorSlot;         // #1548
+        private MathPlaneCalculator _mathPlaneCalculator => LazyCalc(ref _mathPlaneCalculatorSlot, static (w, h) => new MathPlaneCalculator(w, h));
+        private MathPlane3DCalculator? _mathPlane3DCalculatorSlot;     // #1713
+        private MathPlane3DCalculator _mathPlane3DCalculator => LazyCalc(ref _mathPlane3DCalculatorSlot, static (w, h) => new MathPlane3DCalculator(w, h));
+        private PrecisionFieldCalculator? _precisionFieldCalculatorSlot;
+        private PrecisionFieldCalculator _precisionFieldCalculator => LazyCalc(ref _precisionFieldCalculatorSlot, static (w, h) => new PrecisionFieldCalculator(w, h));
+        private DualOrbitEscapeCalculator? _dualOrbitCalculatorSlot;
+        private DualOrbitEscapeCalculator _dualOrbitCalculator => LazyCalc(ref _dualOrbitCalculatorSlot, static (w, h) => new DualOrbitEscapeCalculator(w, h));
+        private IndrasPearlsCalculator? _indrasPearlsCalculatorSlot;
+        private IndrasPearlsCalculator _indrasPearlsCalculator => LazyCalc(ref _indrasPearlsCalculatorSlot, static (w, h) => new IndrasPearlsCalculator(w, h));
+        private FlameRenderer? _flameCalculatorSlot;
+        private FlameRenderer _flameCalculator => LazyCalc(ref _flameCalculatorSlot, static (w, h) => new FlameRenderer(w, h));
+        private SandboxCalculator? _sandboxCalculatorSlot;
+        private SandboxCalculator _sandboxCalculator => LazyCalc(ref _sandboxCalculatorSlot, static (w, h) => new SandboxCalculator(w, h));
+        private UserBulbCalculator? _userBulbCalculatorSlot;
+        private UserBulbCalculator _userBulbCalculator => LazyCalc(ref _userBulbCalculatorSlot, static (w, h) => new UserBulbCalculator(w, h));
+        private TearDropCalculator? _tearDropCalculatorSlot;
+        private TearDropCalculator _tearDropCalculator => LazyCalc(ref _tearDropCalculatorSlot, static (w, h) => new TearDropCalculator(w, h));
+        private FracturingFog.Calculators.Generated.MandelbrotZ2Calculator? _generatedZ2CalculatorSlot;
+        private FracturingFog.Calculators.Generated.MandelbrotZ2Calculator _generatedZ2Calculator => LazyCalc(ref _generatedZ2CalculatorSlot, static (w, h) => new FracturingFog.Calculators.Generated.MandelbrotZ2Calculator(w, h));
+        private FracturingFog.Calculators.Generated.MandelbrotZ3Calculator? _generatedZ3CalculatorSlot;
+        private FracturingFog.Calculators.Generated.MandelbrotZ3Calculator _generatedZ3Calculator => LazyCalc(ref _generatedZ3CalculatorSlot, static (w, h) => new FracturingFog.Calculators.Generated.MandelbrotZ3Calculator(w, h));
+        private FracturingFog.Calculators.Generated.MandelbrotZ4Calculator? _generatedZ4CalculatorSlot;
+        private FracturingFog.Calculators.Generated.MandelbrotZ4Calculator _generatedZ4Calculator => LazyCalc(ref _generatedZ4CalculatorSlot, static (w, h) => new FracturingFog.Calculators.Generated.MandelbrotZ4Calculator(w, h));
+        private FracturingFog.Calculators.Generated.MandelbrotZ5Calculator? _generatedZ5CalculatorSlot;
+        private FracturingFog.Calculators.Generated.MandelbrotZ5Calculator _generatedZ5Calculator => LazyCalc(ref _generatedZ5CalculatorSlot, static (w, h) => new FracturingFog.Calculators.Generated.MandelbrotZ5Calculator(w, h));
+        private FracturingFog.Calculators.Generated.TricornCalculator? _generatedTricornCalculatorSlot;
+        private FracturingFog.Calculators.Generated.TricornCalculator _generatedTricornCalculator => LazyCalc(ref _generatedTricornCalculatorSlot, static (w, h) => new FracturingFog.Calculators.Generated.TricornCalculator(w, h));
+        private FracturingFog.Calculators.Generated.BurningShipCalculator? _generatedBurningShipCalculatorSlot;
+        private FracturingFog.Calculators.Generated.BurningShipCalculator _generatedBurningShipCalculator => LazyCalc(ref _generatedBurningShipCalculatorSlot, static (w, h) => new FracturingFog.Calculators.Generated.BurningShipCalculator(w, h));
         // Dynamically loaded calculator from the UserEquation "Compile &
         // Load" path. Null when no hot-loaded calc is active; non-null
         // takes priority over the FractalType-dispatched alt calculators.
@@ -532,6 +624,7 @@ namespace FracturingFog.Rendering
             FracturingFog.Rendering.Lighting.StagePerf.Publisher = _perfStats.RecordStage;
 
             _calculator = new MandelbrotCalculator(w, h);
+            _lazyCalcW = w; _lazyCalcH = h;   // #1772 — alt calculators are made on first use
             // The render target starts at the construction size (Resize updates
             // it); the #1016 Full-SBS display letterbox and the full-res snapshot
             // gate compare frames against it.
@@ -546,110 +639,10 @@ namespace FracturingFog.Rendering
                 var (pw0, ph0) = DynamicResolution.PreviewDims(w, h, level);
                 _previewCalcs[level] = new MandelbrotCalculator(pw0, ph0) { WavefrontSeedAllowed = false };   // #1386: previews are the seed
             }
-            _escapeCalculator = new EscapeTimeCalculator(w, h);
-            _ifsCalculator = new IFSCalculator(w, h);
-            _lsystemCalculator = new LSystemCalculator(w, h);
-            _attractorCalculator = new AttractorCalculator(w, h);
-            _buddhabrotCalculator = new BuddhabrotCalculator(w, h);
-            _logisticCalculator = new LogisticCalculator(w, h);
-            _lyapunovCalculator = new LyapunovCalculator(w, h);
-            _slitCascadeCalculator = new SlitCascadeCalculator(w, h);
-            _talbotCarpetCalculator = new TalbotCarpetCalculator(w, h);
-            _transcendentalCalculator = new TranscendentalJuliaCalculator(w, h);
-            _halleyCalculator = new HalleyCalculator(w, h);
-            _secantCalculator = new SecantCalculator(w, h);
-            _nebulabrotCalculator = new NebulabrotCalculator(w, h);
-            _antiBuddhabrotCalculator = new AntiBuddhabrotCalculator(w, h);
-            _antiNebulabrotCalculator = new AntiNebulabrotCalculator(w, h);
-            _dualBuddhabrotCalculator = new DualBuddhabrotCalculator(w, h);
-            _newtonCalculator = new NewtonCalculator(w, h);
-            _userEquationCalculator = new UserEquationCalculator(w, h);
-            _mandelbulbCalculator = new MandelbulbCalculator(w, h);
-            _mandelboxCalculator = new MandelboxCalculator(w, h);
-            _kifsCalculator = new KifsCalculator(w, h);
-            _quatJuliaCalculator = new QuatJuliaCalculator(w, h);
-            _quatMandelbrotCalculator = new QuatMandelbrotCalculator(w, h);
-            _plasmaCalculator = new PlasmaCalculator(w, h);
-            _acidWarpCalculator = new AcidWarpCalculator(w, h);
-            _apollonianCalculator = new ApollonianCalculator(w, h);
-            _kleinianCalculator = new KleinianCalculator(w, h);
-            _mirrorSpheresCalculator = new MirrorSpheresCalculator(w, h);
-            _bicomplexCalculator = new BicomplexMandelbrotCalculator(w, h);
-            _coquaternionCalculator = new CoquaternionMandelbrotCalculator(w, h);
-            _dualOrbitVolumeCalculator = new DualOrbitVolumeCalculator(w, h);
-            _dlaCalculator = new DlaCalculator(w, h);
-            _randomTileCalculator = new RandomTileCalculator(w, h);
-            _billiardCalculator = new ChaoticBilliardCalculator(w, h);
-            _billiardRaysCalculator = new BilliardRaysCalculator(w, h);
-            _mathPlaneCalculator = new MathPlaneCalculator(w, h);
-            _mathPlane3DCalculator = new MathPlane3DCalculator(w, h);
-            _precisionFieldCalculator = new PrecisionFieldCalculator(w, h);
-            _dualOrbitCalculator = new DualOrbitEscapeCalculator(w, h);
-            _indrasPearlsCalculator = new IndrasPearlsCalculator(w, h);
-            _flameCalculator = new FlameRenderer(w, h);
-            _sandboxCalculator = new SandboxCalculator(w, h);
-            _userBulbCalculator = new UserBulbCalculator(w, h);
-            _tearDropCalculator = new TearDropCalculator(w, h);
-            _generatedZ2Calculator = new FracturingFog.Calculators.Generated.MandelbrotZ2Calculator(w, h);
-            _generatedZ3Calculator = new FracturingFog.Calculators.Generated.MandelbrotZ3Calculator(w, h);
-            _generatedZ4Calculator = new FracturingFog.Calculators.Generated.MandelbrotZ4Calculator(w, h);
-            _generatedZ5Calculator = new FracturingFog.Calculators.Generated.MandelbrotZ5Calculator(w, h);
-            _generatedTricornCalculator     = new FracturingFog.Calculators.Generated.TricornCalculator(w, h);
-            _generatedBurningShipCalculator = new FracturingFog.Calculators.Generated.BurningShipCalculator(w, h);
 
             if (initialColorMap != null)
             {
                 _calculator.ColorMap = initialColorMap;
-                _escapeCalculator.ColorMap = initialColorMap;
-                _ifsCalculator.ColorMap = initialColorMap;
-                _lsystemCalculator.ColorMap = initialColorMap;
-                _attractorCalculator.ColorMap = initialColorMap;
-                _buddhabrotCalculator.ColorMap = initialColorMap;
-                _logisticCalculator.ColorMap = initialColorMap;
-                _lyapunovCalculator.ColorMap = initialColorMap;
-                _slitCascadeCalculator.ColorMap = initialColorMap;
-                _talbotCarpetCalculator.ColorMap = initialColorMap;
-                _transcendentalCalculator.ColorMap = initialColorMap;
-                _halleyCalculator.ColorMap = initialColorMap;
-                _secantCalculator.ColorMap = initialColorMap;
-                _nebulabrotCalculator.ColorMap = initialColorMap;
-                _antiBuddhabrotCalculator.ColorMap = initialColorMap;
-                _antiNebulabrotCalculator.ColorMap = initialColorMap;
-                _dualBuddhabrotCalculator.ColorMap = initialColorMap;
-                _newtonCalculator.ColorMap = initialColorMap;
-                _userEquationCalculator.ColorMap = initialColorMap;
-                _mandelbulbCalculator.ColorMap = initialColorMap;
-                _mandelboxCalculator.ColorMap = initialColorMap;
-                _kifsCalculator.ColorMap = initialColorMap;
-                _quatJuliaCalculator.ColorMap = initialColorMap;
-                _quatMandelbrotCalculator.ColorMap = initialColorMap;
-                _plasmaCalculator.ColorMap = initialColorMap;
-                _acidWarpCalculator.ColorMap = initialColorMap;
-                _apollonianCalculator.ColorMap = initialColorMap;
-                _kleinianCalculator.ColorMap = initialColorMap;
-                _mirrorSpheresCalculator.ColorMap = initialColorMap;
-                _bicomplexCalculator.ColorMap = initialColorMap;
-                _coquaternionCalculator.ColorMap = initialColorMap;
-                _dualOrbitVolumeCalculator.ColorMap = initialColorMap;
-                _dlaCalculator.ColorMap = initialColorMap;
-                _randomTileCalculator.ColorMap = initialColorMap;
-                _billiardCalculator.ColorMap = initialColorMap;
-                _billiardRaysCalculator.ColorMap = initialColorMap;
-                _mathPlaneCalculator.ColorMap = initialColorMap;
-                _mathPlane3DCalculator.ColorMap = initialColorMap;
-                _precisionFieldCalculator.ColorMap = initialColorMap;
-                _dualOrbitCalculator.ColorMap = initialColorMap;
-                _indrasPearlsCalculator.ColorMap = initialColorMap;
-                _flameCalculator.ColorMap = initialColorMap;
-                _sandboxCalculator.ColorMap = initialColorMap;
-                _userBulbCalculator.ColorMap = initialColorMap;
-                _tearDropCalculator.ColorMap = initialColorMap;
-                _generatedZ2Calculator.ColorMap = initialColorMap;
-                _generatedZ3Calculator.ColorMap = initialColorMap;
-                _generatedZ4Calculator.ColorMap = initialColorMap;
-                _generatedZ5Calculator.ColorMap = initialColorMap;
-                _generatedTricornCalculator.ColorMap     = initialColorMap;
-                _generatedBurningShipCalculator.ColorMap = initialColorMap;
             }
 
             _oidnAsync.Completed += OnLiveOidnDone;   // #1392
@@ -1218,11 +1211,12 @@ namespace FracturingFog.Rendering
         /// compute kernel when the 2D GPU switch is on.</summary>
         private System.Collections.Generic.IEnumerable<BuddhaFamilyCalculator> BuddhaCalculators()
         {
-            yield return _buddhabrotCalculator;
-            yield return _nebulabrotCalculator;
-            yield return _antiBuddhabrotCalculator;
-            yield return _antiNebulabrotCalculator;
-            yield return _dualBuddhabrotCalculator;
+            // #1772 — only those made so far; LazyCalc gives a new one the current GPU state.
+            if (Volatile.Read(ref _buddhabrotCalculatorSlot) is { } a) yield return a;
+            if (Volatile.Read(ref _nebulabrotCalculatorSlot) is { } b) yield return b;
+            if (Volatile.Read(ref _antiBuddhabrotCalculatorSlot) is { } c) yield return c;
+            if (Volatile.Read(ref _antiNebulabrotCalculatorSlot) is { } d) yield return d;
+            if (Volatile.Read(ref _dualBuddhabrotCalculatorSlot) is { } e) yield return e;
         }
 
         /// <summary>T3.1: toggle the SP-path GPU compute dispatch on the
@@ -1249,7 +1243,7 @@ namespace FracturingFog.Rendering
                         _gpuKernel = GpuKernelFactory(_renderer, _d3dGate);
                         if (_gpuKernel == null) return;
                         _calculator.GpuKernel = _gpuKernel;
-                        _escapeCalculator.GpuKernel = _gpuKernel;
+                        if (Volatile.Read(ref _escapeCalculatorSlot) is { } esc) esc.GpuKernel = _gpuKernel;   // #1772
                         foreach (var b in BuddhaCalculators()) b.GpuKernel = _gpuKernel;   // #838
                     }
                     catch (Exception ex)
@@ -1258,13 +1252,13 @@ namespace FracturingFog.Rendering
                             $"[FractalRenderHost] GPU compute kernel init failed: {ex.Message}");
                         _gpuKernel = null;
                         _calculator.GpuKernel = null;
-                        _escapeCalculator.GpuKernel = null;
+                        if (Volatile.Read(ref _escapeCalculatorSlot) is { } esc) esc.GpuKernel = null;   // #1772
                         foreach (var b in BuddhaCalculators()) b.GpuKernel = null;   // #838
                         return;
                     }
                 }
                 _calculator.UseGpuCompute = value;
-                _escapeCalculator.UseGpuCompute = value;
+                if (Volatile.Read(ref _escapeCalculatorSlot) is { } escOn) escOn.UseGpuCompute = value;   // #1772
                 foreach (var b in BuddhaCalculators()) b.UseGpuCompute = value;   // #838
             }
         }
@@ -1298,7 +1292,7 @@ namespace FracturingFog.Rendering
             lock (_d3dGate)
             {
                 _calculator.GpuKernel = null;
-                _escapeCalculator.GpuKernel = null;
+                if (Volatile.Read(ref _escapeCalculatorSlot) is { } esc) esc.GpuKernel = null;   // #1772
                 foreach (var b in BuddhaCalculators()) b.GpuKernel = null;
                 try { _gpuKernel?.Dispose(); } catch { /* objects of a removed device */ }
                 _gpuKernel = null;
@@ -1392,56 +1386,8 @@ namespace FracturingFog.Rendering
             set
             {
                 _calculator.ColorMap = value;
-                _escapeCalculator.ColorMap = value;
-                _ifsCalculator.ColorMap = value;
-                _lsystemCalculator.ColorMap = value;
-                _attractorCalculator.ColorMap = value;
-                _buddhabrotCalculator.ColorMap = value;
-                _logisticCalculator.ColorMap = value;
-                _lyapunovCalculator.ColorMap = value;
-                _slitCascadeCalculator.ColorMap = value;
-                _talbotCarpetCalculator.ColorMap = value;
-                _transcendentalCalculator.ColorMap = value;
-                _halleyCalculator.ColorMap = value;
-                _secantCalculator.ColorMap = value;
-                _nebulabrotCalculator.ColorMap = value;
-                _antiBuddhabrotCalculator.ColorMap = value;
-                _antiNebulabrotCalculator.ColorMap = value;
-                _dualBuddhabrotCalculator.ColorMap = value;
-                _newtonCalculator.ColorMap = value;
-                _userEquationCalculator.ColorMap = value;
-                _mandelbulbCalculator.ColorMap = value;
-                _mandelboxCalculator.ColorMap = value;
-                _kifsCalculator.ColorMap = value;
-                _quatJuliaCalculator.ColorMap = value;
-                _quatMandelbrotCalculator.ColorMap = value;
-                _plasmaCalculator.ColorMap = value;
-                _acidWarpCalculator.ColorMap = value;
-                _apollonianCalculator.ColorMap = value;
-                _kleinianCalculator.ColorMap = value;
-                _mirrorSpheresCalculator.ColorMap = value;
-                _bicomplexCalculator.ColorMap = value;
-                _coquaternionCalculator.ColorMap = value;
-                _dualOrbitVolumeCalculator.ColorMap = value;
-                _dlaCalculator.ColorMap = value;
-                _randomTileCalculator.ColorMap = value;
-                _billiardCalculator.ColorMap = value;
-                _billiardRaysCalculator.ColorMap = value;
-                _mathPlaneCalculator.ColorMap = value;
-                _mathPlane3DCalculator.ColorMap = value;
-                _precisionFieldCalculator.ColorMap = value;
-                _dualOrbitCalculator.ColorMap = value;
-                _indrasPearlsCalculator.ColorMap = value;
-                _flameCalculator.ColorMap = value;
-                _sandboxCalculator.ColorMap = value;
-                _userBulbCalculator.ColorMap = value;
-                _tearDropCalculator.ColorMap = value;
-                _generatedZ2Calculator.ColorMap = value;
-                _generatedZ3Calculator.ColorMap = value;
-                _generatedZ4Calculator.ColorMap = value;
-                _generatedZ5Calculator.ColorMap = value;
-                _generatedTricornCalculator.ColorMap     = value;
-                _generatedBurningShipCalculator.ColorMap = value;
+                // #1772 — the alt calculators made so far; one made later copies _calculator's.
+                foreach (var c in CreatedCalcs()) c.ColorMap = value;
                 ColorMapChanged?.Invoke(this, EventArgs.Empty);
             }
         }
@@ -1827,6 +1773,17 @@ namespace FracturingFog.Rendering
 
             // EscapeTime + TearDrop also need the full state; the rest pick
             // up CX/CY/Zoom/MaxIter via the explicit copy block in Trigger().
+            // #1772 — only when made, or about to draw this view (made now): touching them on every
+            // view made both at startup.
+            var applyAlt = SelectAltCalculator(ViewState.FractalType);
+            if (Volatile.Read(ref _escapeCalculatorSlot) != null || applyAlt is EscapeTimeCalculator)
+                SyncEscapeTimeState();
+            if (Volatile.Read(ref _tearDropCalculatorSlot) != null || applyAlt is TearDropCalculator)
+                SyncTearDropState();
+        }
+
+        private void SyncEscapeTimeState()
+        {
             _escapeCalculator.CenterX = ViewState.CenterX;
             _escapeCalculator.CenterY = ViewState.CenterY;
             _escapeCalculator.Zoom = ViewState.Zoom;
@@ -1838,7 +1795,10 @@ namespace FracturingFog.Rendering
             _escapeCalculator.FractalParameters = ViewState.FractalParameters!;
             _escapeCalculator.ColorMap = _calculator.ColorMap;
             _escapeCalculator.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;  // #97
+        }
 
+        private void SyncTearDropState()
+        {
             _tearDropCalculator.CenterX = ViewState.CenterX;
             _tearDropCalculator.CenterXLo = ViewState.CenterXLo;
             _tearDropCalculator.CenterX2 = ViewState.CenterX2;
@@ -1861,10 +1821,13 @@ namespace FracturingFog.Rendering
         {
             int saved = _calculator.MaxIterations;
             _calculator.MaxIterations = Math.Min(128, saved);
-            _userBulbCalculator.LowResPreview = true;
+            // #1772 — the User Bulb calculator only if it exists or draws this view (a palette
+            // rotation on another type must not make it).
+            var ub = ViewState.FractalType == FractalType.UserBulb ? _userBulbCalculator : Volatile.Read(ref _userBulbCalculatorSlot);
+            if (ub != null) ub.LowResPreview = true;
             Trigger(progressive: false);
             _calculator.MaxIterations = saved;
-            _userBulbCalculator.LowResPreview = false;
+            if (ub != null) ub.LowResPreview = false;
         }
 
         private void InvalidateAdaptiveCdf()
@@ -3685,56 +3648,10 @@ namespace FracturingFog.Rendering
                 var (pw0, ph0) = DynamicResolution.PreviewDims(w, h, level);
                 pc.Resize(pw0, ph0);
             }
-            _escapeCalculator.Resize(w, h);
-            _ifsCalculator.Resize(w, h);
-            _lsystemCalculator.Resize(w, h);
-            _attractorCalculator.Resize(w, h);
-            _buddhabrotCalculator.Resize(w, h);
-            _logisticCalculator.Resize(w, h);
-            _lyapunovCalculator.Resize(w, h);
-            _slitCascadeCalculator.Resize(w, h);
-            _talbotCarpetCalculator.Resize(w, h);
-            _transcendentalCalculator.Resize(w, h);
-            _halleyCalculator.Resize(w, h);
-            _secantCalculator.Resize(w, h);
-            _nebulabrotCalculator.Resize(w, h);
-            _antiBuddhabrotCalculator.Resize(w, h);
-            _antiNebulabrotCalculator.Resize(w, h);
-            _dualBuddhabrotCalculator.Resize(w, h);
-            _newtonCalculator.Resize(w, h);
-            _userEquationCalculator.Resize(w, h);
-            _mandelbulbCalculator.Resize(w, h);
-            _mandelboxCalculator.Resize(w, h);
-            _kifsCalculator.Resize(w, h);
-            _quatJuliaCalculator.Resize(w, h);
-            _quatMandelbrotCalculator.Resize(w, h);
-            _plasmaCalculator.Resize(w, h);
-            _acidWarpCalculator.Resize(w, h);
-            _apollonianCalculator.Resize(w, h);
-            _kleinianCalculator.Resize(w, h);
-            _mirrorSpheresCalculator.Resize(w, h);
-            _bicomplexCalculator.Resize(w, h);
-            _coquaternionCalculator.Resize(w, h);
-            _dualOrbitVolumeCalculator.Resize(w, h);
-            _dlaCalculator.Resize(w, h);
-            _randomTileCalculator.Resize(w, h);
-            _billiardCalculator.Resize(w, h);
-            _billiardRaysCalculator.Resize(w, h);
-            _mathPlaneCalculator.Resize(w, h);
-            _mathPlane3DCalculator.Resize(w, h);
-            _precisionFieldCalculator.Resize(w, h);
-            _dualOrbitCalculator.Resize(w, h);
-            _indrasPearlsCalculator.Resize(w, h);
-            _flameCalculator.Resize(w, h);
-            _sandboxCalculator.Resize(w, h);
-            _userBulbCalculator.Resize(w, h);
-            _tearDropCalculator.Resize(w, h);
-            _generatedZ2Calculator.Resize(w, h);
-            _generatedZ3Calculator.Resize(w, h);
-            _generatedZ4Calculator.Resize(w, h);
-            _generatedZ5Calculator.Resize(w, h);
-            _generatedTricornCalculator.Resize(w, h);
-            _generatedBurningShipCalculator.Resize(w, h);
+            // #1772 — only the alt calculators made so far; one made from here on starts at w×h.
+            IFractalCalculator[] made;
+            lock (_lazyCalcGate) { _lazyCalcW = w; _lazyCalcH = h; made = _createdCalcs.ToArray(); }
+            foreach (var c in made) c.Resize(w, h);
 
             ApplyView();
         }
@@ -6295,7 +6212,7 @@ namespace FracturingFog.Rendering
             try
             {
                 _calculator.GpuKernel = null;
-                _escapeCalculator.GpuKernel = null;
+                if (Volatile.Read(ref _escapeCalculatorSlot) is { } esc) esc.GpuKernel = null;   // #1772
                 foreach (var b in BuddhaCalculators()) b.GpuKernel = null;   // #838
                 _gpuKernel?.Dispose();
                 _gpuKernel = null;

@@ -78,7 +78,8 @@ public sealed class S1045DeviceLossHostTests
         ((MandelbrotCalculator)typeof(FractalRenderHost).GetField("_calculator", F)!.GetValue(h)!).GpuKernel;
 
     private static IGpuKernel? BuddhaKernel(FractalRenderHost h) =>
-        ((BuddhaFamilyCalculator)typeof(FractalRenderHost).GetField("_buddhabrotCalculator", F)!.GetValue(h)!).GpuKernel;
+        // #1772 — a lazy property now: reading it makes the calculator (with the current GPU state).
+        ((BuddhaFamilyCalculator)typeof(FractalRenderHost).GetProperty("_buddhabrotCalculator", F)!.GetValue(h)!).GpuKernel;
 
     private static IReliefRaymarchKernel? EnsureRelief(FractalRenderHost h) =>
         (IReliefRaymarchKernel?)typeof(FractalRenderHost).GetMethod("EnsureReliefKernel", F)!.Invoke(h, null);
@@ -92,6 +93,7 @@ public sealed class S1045DeviceLossHostTests
         var relief1 = EnsureRelief(host);
         Assert.Single(kernels);
         Assert.Same(kernels[0], MainKernel(host));
+        Assert.Same(kernels[0], BuddhaKernel(host));   // made now: gets the current kernel (#1772)
 
         host.SyncGpuKernelsWithDevice();   // same generation: nothing happens
         Assert.Single(kernels);
@@ -104,7 +106,7 @@ public sealed class S1045DeviceLossHostTests
         Assert.True(kernels[0].Disposed);
         Assert.Equal(2, kernels.Count);
         Assert.Same(kernels[1], MainKernel(host));
-        Assert.Same(kernels[1], BuddhaKernel(host));
+        Assert.Same(kernels[1], BuddhaKernel(host));   // the existing calculator got the rebuilt kernel
         Assert.True(host.UseGpuCompute);
         Assert.True(reliefs[0].Disposed);
         var relief2 = EnsureRelief(host);   // rebuilt on its next use

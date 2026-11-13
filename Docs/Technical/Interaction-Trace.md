@@ -207,6 +207,31 @@ vsync-blocking renderer stub. It checks:
 
 Before the fix, the three cases showed 47, 23 and 45 old-size images; after it, 0.
 
+## Third finding: every calculator allocated up front (#1772)
+
+The trace from the #1768 fix build showed that the swap-chain resize stopped racing, but each
+resize call still blocked the UI thread: p50 28.5 ms, p95 122 ms. 21 ms (p50) and 94 ms (p95) of
+that came after the swap-chain resize, where `ResizeLocked` resized all ~50 alt calculators.
+
+A probe measured the cost at 1280×744:
+- the host constructor and each `Resize` allocated **634 MB**, although only one calculator
+  draws the view;
+- working set climbed to about 1 GB over three construct-and-resize runs.
+
+Since #1772, each alt calculator is made the first time it is used (`LazyCalc`), at the current
+size, with the current colour map and 2D GPU state. Resize, the colour-map broadcast and the GPU
+switch reach only the calculators made so far.
+
+`ApplyView` used to sync the escape-time and TearDrop calculators on every view, and that alone
+made both of them at startup. It now syncs them only when they exist or are about to draw the
+view.
+
+`LazyCalculatorTests` checks four things:
+- a Mandelbrot start makes no alt calculator;
+- the constructor and a resize allocate 81 MB instead of 634 MB;
+- a type first used after a resize and a colour change renders byte-equal to a fresh host;
+- a calculator that was made, then recoloured and resized, renders byte-equal to a fresh host too.
+
 ## Files
 
 - `Abstractions/Render/InteractionTrace.cs`: switch, record kinds and the ring writer.
@@ -224,3 +249,4 @@ Before the fix, the three cases showed 47, 23 and 45 old-size images; after it, 
 - `Server.Tests/InteractionTraceTests.cs`: allocation guard, ring round-trip and lap, and the
   host-drag invariants.
 - `Server.Tests/ResizeTearTests.cs`: resize bursts against the real host (#1768).
+- `Server.Tests/LazyCalculatorTests.cs`: lazy calculator allocation (#1772).
