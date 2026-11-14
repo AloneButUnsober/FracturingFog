@@ -42,6 +42,21 @@ public static class GpuComputeSelection
     /// compute kernels — for testing only; it is slower than the CPU path.</summary>
     public const string AllowCpuEnv = "FF_VULKAN_ALLOW_CPU";
 
+    /// <summary>#1773 — as below, with the Vulkan device probe run only when the answer matters.
+    /// Creating a Vulkan instance costs ~360 ms on a cold start; a Windows start with the D3D11
+    /// hook (or any start that doesn't want Vulkan compute) never looked at the result, but the
+    /// probe ran anyway because it was evaluated as an argument.</summary>
+    public static GpuComputeDecision Decide(bool isLinux, RendererBackend preferred, bool hasD3dHook,
+        Func<IReadOnlyList<VulkanContext.DeviceInfo>?> probeDevices, Func<(bool Ok, string Detail)> probeDxc, bool allowCpu)
+    {
+        if (hasD3dHook || !WantsVulkan(isLinux, preferred))
+            return Decide(isLinux, preferred, hasD3dHook, (IReadOnlyList<VulkanContext.DeviceInfo>?)null, probeDxc, allowCpu);
+        return Decide(isLinux, preferred, hasD3dHook, probeDevices(), probeDxc, allowCpu);
+    }
+
+    private static bool WantsVulkan(bool isLinux, RendererBackend preferred)
+        => preferred == RendererBackend.Vulkan || (preferred == RendererBackend.Auto && isLinux);
+
     /// <param name="isLinux">The host OS is Linux.</param>
     /// <param name="preferred">The --renderer choice.</param>
     /// <param name="hasD3dHook">The Windows bootstrap installed its D3D11 kernel factory.</param>
@@ -52,7 +67,7 @@ public static class GpuComputeSelection
         IReadOnlyList<VulkanContext.DeviceInfo>? devices, Func<(bool Ok, string Detail)> probeDxc, bool allowCpu)
     {
         if (hasD3dHook) return new(false, null, null);
-        bool wanted = preferred == RendererBackend.Vulkan || (preferred == RendererBackend.Auto && isLinux);
+        bool wanted = WantsVulkan(isLinux, preferred);
         if (!wanted)
             return new(false, null, isLinux ? $"GPU compute off (--renderer {preferred.ToString().ToLowerInvariant()})" : null);
 

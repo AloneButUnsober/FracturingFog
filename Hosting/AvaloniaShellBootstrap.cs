@@ -381,6 +381,7 @@ namespace FracturingFog.Hosting
             {
                 s_surface = surface ?? throw new ArgumentNullException(nameof(surface));
                 s_renderer = RendererFactory.Create(surface);
+                global::FracturingFog.Render.InteractionTrace.Startup(global::FracturingFog.Render.StartupPhase.RendererCreated);   // #1773
             }
             catch (Exception ex)
             {
@@ -395,26 +396,38 @@ namespace FracturingFog.Hosting
             // (%LOCALAPPDATA%/FracturingFog/UserCalculators/*.cs) before the
             // first UserEquation editor open so Compile & Load is a cache
             // hit on the equations the user previously saved.
-            try
+            // #1773 — on a background thread. It Roslyn-compiles each saved calculator, and on the
+            // UI thread it held startup up 12.6 s for three of them (the first compile also warms
+            // Roslyn); nothing at startup needs the result, which only primes the Compile & Load
+            // cache. A Compile & Load during the warm-load may compile the same equation twice —
+            // wasted work, never corrupt state (the cache is locked, #1259).
+            var warmLoad = new System.Threading.Thread(() =>
             {
-                var persisted = FracturingFog.CalculatorGen.CalculatorGenHotLoad.LoadAllPersisted();
-                foreach (var entry in persisted)
+                try
                 {
-                    if (entry.CalculatorType != null)
-                        Console.WriteLine($"[Persist] warm-loaded {entry.ClassName} ← {entry.SourcePath}");
-                    else
-                        Console.Error.WriteLine($"[Persist] skip {entry.ClassName}: {entry.Error}");
+                    var persisted = FracturingFog.CalculatorGen.CalculatorGenHotLoad.LoadAllPersisted();
+                    foreach (var entry in persisted)
+                    {
+                        if (entry.CalculatorType != null)
+                            Console.WriteLine($"[Persist] warm-loaded {entry.ClassName} ← {entry.SourcePath}");
+                        else
+                            Console.Error.WriteLine($"[Persist] skip {entry.ClassName}: {entry.Error}");
+                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"[Persist] scan failed: {ex.Message}");
-            }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[Persist] scan failed: {ex.Message}");
+                }
+                global::FracturingFog.Render.InteractionTrace.Startup(global::FracturingFog.Render.StartupPhase.PersistedCalculatorsLoaded);   // #1773
+            })
+            { IsBackground = true, Priority = System.Threading.ThreadPriority.BelowNormal, Name = "FF saved-calculator warm-load" };
+            warmLoad.Start();
 
             // ── Engines ──────────────────────────────────────────────────
             var viewState = new FractalViewState();
             var initialMap = ColorPalette.GetPaletteByName("HSV");
             s_renderHost = new FractalRenderHost(s_renderer, viewState, w, h, initialMap);
+            global::FracturingFog.Render.InteractionTrace.Startup(global::FracturingFog.Render.StartupPhase.RenderHostCreated);   // #1773
             // Roadmap S10-LW.1 (#690): expose the live render's view parameter to the
             // palette tool now that the render host exists.
             PaletteViewParamService = new HostPaletteViewParamService(s_renderHost);
@@ -478,7 +491,7 @@ namespace FracturingFog.Hosting
             var gpuDecision = GpuComputeSelection.Decide(
                 OperatingSystem.IsLinux(), RendererFactory.PreferredBackend,
                 d3dHooked,
-                GpuComputeSelection.ProbeDevices(),
+                GpuComputeSelection.ProbeDevices,   // #1773 — called only when Vulkan compute is wanted
                 () => (DxcCompiler.Probe(out string d), d),
                 GpuComputeSelection.AllowCpuFromEnvironment());
             s_gpuCompute = gpuDecision;
@@ -653,6 +666,8 @@ namespace FracturingFog.Hosting
                 };
             }
 
+            global::FracturingFog.Render.InteractionTrace.Startup(global::FracturingFog.Render.StartupPhase.GpuSetupDone);   // #1773
+
             // ── Services ─────────────────────────────────────────────────
             // Theme service holds a reference to the render host so its
             // ApplyTheme(name) path can push a freshly-built IColorMap
@@ -687,6 +702,8 @@ namespace FracturingFog.Hosting
             // engine can cycle regions/themes per leg (legacy VideoZoom parity).
             s_renderHost.AttachThemeService(themeService);
 
+            global::FracturingFog.Render.InteractionTrace.Startup(global::FracturingFog.Render.StartupPhase.ServicesDone);   // #1773
+
             // ── Persisted libraries ──────────────────────────────────────
             // Mirror MainForm startup (MainForm.cs ~873): load user regions +
             // equation stores from disk. Without this the region combos only
@@ -718,6 +735,8 @@ namespace FracturingFog.Hosting
             // Manager's Scenes node and the Scene Editor's Load combo see the
             // built-in demos + any saved scenes on first open.
             try { SceneLibrary.Instance.Load(); }          catch { }
+
+            global::FracturingFog.Render.InteractionTrace.Startup(global::FracturingFog.Render.StartupPhase.LibrariesLoaded);   // #1773
 
             // ── View model tree ──────────────────────────────────────────
             s_shell = new ShellViewModel(s_renderHost, s_input, themeService, helpProvider, PaletteService,
@@ -1024,6 +1043,8 @@ namespace FracturingFog.Hosting
             Dispatcher.UIThread.Post(MaybeShowFfmpegStartupPrompt,
                 DispatcherPriority.Background);
 
+            global::FracturingFog.Render.InteractionTrace.Startup(global::FracturingFog.Render.StartupPhase.ViewModelsBuilt);   // #1773
+
             // ── Surface lifetime ─────────────────────────────────────────
             surface.Resized += OnSurfaceResized;
             surface.HandleLost += (_, _) => Shutdown();
@@ -1036,10 +1057,13 @@ namespace FracturingFog.Hosting
                 {
                     mw.DataContext = s_shell;
                 }
+                global::FracturingFog.Render.InteractionTrace.Startup(global::FracturingFog.Render.StartupPhase.DataContextAssigned);   // #1773
 
                 // Kick the first calculation now that the VM tree is bound.
                 s_renderHost?.Trigger();
+                global::FracturingFog.Render.InteractionTrace.Startup(global::FracturingFog.Render.StartupPhase.FirstTrigger);   // #1773
             });
+            global::FracturingFog.Render.InteractionTrace.Startup(global::FracturingFog.Render.StartupPhase.SurfaceReadyDone);   // #1773
 
             // No present loop. FractalRenderHost auto-presents after every
             // texture upload and after every resize, all under its own D3D

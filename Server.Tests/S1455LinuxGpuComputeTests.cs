@@ -97,12 +97,41 @@ public sealed class S1455LinuxGpuComputeTests
         Assert.Contains("DXC_PATH", d.Status);
     }
 
+    // #1773 — creating a Vulkan instance costs ~360 ms on a cold start. A Windows start with the
+    // D3D11 hook, or a start that doesn't want Vulkan compute, must not create one; the decision
+    // must equal the one made from an empty device probe.
+    [Fact]
+    public void Devices_Are_Only_Probed_When_Vulkan_Compute_Is_Wanted()
+    {
+        int probes = 0;
+        IReadOnlyList<VulkanContext.DeviceInfo>? Devices() { probes++; return new[] { Gt710 }; }
+        var cases = new (bool Linux, RendererBackend Backend, bool D3d, bool WantsProbe)[]
+        {
+            (false, RendererBackend.Auto, true, false),    // Windows, D3D11 hooked: the live default
+            (false, RendererBackend.Auto, false, false),   // Windows, no hook, Auto
+            (false, RendererBackend.Silk, false, false),
+            (true, RendererBackend.Silk, false, false),
+            (true, RendererBackend.Vulkan, true, false),   // a hook wins whatever was asked
+            (true, RendererBackend.Auto, false, true),     // Linux default (#1455)
+            (false, RendererBackend.Vulkan, false, true),  // --renderer vulkan
+        };
+        foreach (var c in cases)
+        {
+            probes = 0;
+            var lazy = GpuComputeSelection.Decide(c.Linux, c.Backend, c.D3d, Devices, DxcOk, false);
+            Assert.Equal(c.WantsProbe ? 1 : 0, probes);
+            var eager = GpuComputeSelection.Decide(c.Linux, c.Backend, c.D3d,
+                c.WantsProbe ? new[] { Gt710 } : null, DxcOk, false);
+            Assert.Equal(eager, lazy);
+        }
+    }
+
     [Fact]
     public void Dxc_Is_Only_Probed_When_A_Device_Qualifies()
     {
         int probes = 0;
         (bool, string) Count() { probes++; return DxcOk(); }
-        GpuComputeSelection.Decide(true, RendererBackend.Auto, false, null, Count, false);
+        GpuComputeSelection.Decide(true, RendererBackend.Auto, false, (IReadOnlyList<VulkanContext.DeviceInfo>?)null, Count, false);
         GpuComputeSelection.Decide(true, RendererBackend.Auto, false, new[] { Llvmpipe }, Count, false);
         GpuComputeSelection.Decide(true, RendererBackend.Silk, false, new[] { Gt710 }, Count, false);
         GpuComputeSelection.Decide(false, RendererBackend.Auto, true, new[] { Gt710 }, Count, false);

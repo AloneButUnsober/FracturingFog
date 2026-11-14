@@ -91,7 +91,7 @@ namespace FracturingFog.Batch
             var decision = GpuComputeSelection.Decide(
                 OperatingSystem.IsLinux(),   // Vulkan by default on Linux (#1455), as the live shell
                 RendererBackend.Auto, hasD3dHook: false,
-                GpuComputeSelection.ProbeDevices(),
+                GpuComputeSelection.ProbeDevices,   // #1773 — called only when Vulkan compute is wanted
                 () => (DxcCompiler.Probe(out string d), d),
                 GpuComputeSelection.AllowCpuFromEnvironment());
             if (!decision.UseGpu)

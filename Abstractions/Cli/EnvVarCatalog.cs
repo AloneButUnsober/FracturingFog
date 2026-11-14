@@ -219,7 +219,7 @@ namespace FracturingFog.Cli
                 "Log why each deep frame did or did not take the GPU perturbation path (%TEMP%/ff_gpu_perturb_86.log).",
                 "off", "#86", Developer: true),
             new("FF_INTERACTION_TRACE", EnvVarKind.Toggle, EnvVarGroup.Diagnostics,
-                "Trace each drag from pointer move to frame on screen (%TEMP%/ff_interaction_trace.csv; Tools/InteractionTrace analyses it).",
+                "Trace startup steps and each drag from pointer move to frame on screen (%TEMP%/ff_interaction_trace.csv; Tools/InteractionTrace analyses it).",
                 "off", "#1762", Developer: true),
             new("FF_GL_DEBUG", EnvVarKind.Toggle, EnvVarGroup.Diagnostics,
                 "Print OpenGL errors and first-frame stats (Silk renderer).", "off", Developer: true),

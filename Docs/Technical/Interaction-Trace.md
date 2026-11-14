@@ -59,6 +59,7 @@ the #86 trace and the newest-wins gate use. The header names the fractal types.
 | `Dropped` | calculated but not shown | 1 cancelled, 2 final superseded, 3 preview superseded | |
 | `UiLag` | UI-thread probe | post-to-run delay, µs | |
 | `Resize` | host resize | width | height |
+| `StartupPhase` | a startup step finished (#1773) | the step (see below) | µs since the process started |
 
 **Where the render surface's input arrives.** On Windows the swap chain is a native child HWND
 that receives every mouse message itself, so the Avalonia `InputSponge` never sees them.
@@ -206,6 +207,74 @@ vsync-blocking renderer stub. It checks:
 - the last image is the settled frame of the last size.
 
 Before the fix, the three cases showed 47, 23 and 45 old-size images; after it, 0.
+
+## Startup (#1773)
+
+With the trace on, FF also records when each startup step finishes. The time is measured from
+`Process.StartTime`, so it includes the runtime's own start and the time before the trace file
+opened. The analyser prints the steps in order, each with its time since process start and since
+the step before, and names the three longest.
+
+The steps:
+1. `Main` entered, then the shell starting (`Program.cs`).
+2. Avalonia ready, the main window created, the splash shown (`App.axaml.cs`).
+3. The main window opened, and the native render surface created (`MainWindow`).
+4. In `AvaloniaShellBootstrap.OnSurfaceReady`, the parts of the bootstrap:
+   - the renderer;
+   - the saved user calculators warm-loaded;
+   - the render host;
+   - GPU setup (the D3D11 kernels, or the Vulkan decision);
+   - services;
+   - the persisted libraries;
+   - the view-model tree.
+5. The view models bound to the window, and the first render started.
+6. The first frame completed, and the splash dismissed (`App.axaml.cs`).
+
+For a cold start (the first run after a reboot, or after a long idle), record one trace. For a
+warm start, record another straight after closing FF.
+
+One fix landed with the timeline. FF used to create a Vulkan instance and list its devices at
+every start, though a Windows start with the D3D11 hook never looks at the answer. That costs
+359 ms on a cold start (23 ms warm). `GpuComputeSelection.Decide` now takes the device probe as a
+function and calls it only when Vulkan compute is wanted: on Linux by default, or with
+`--renderer vulkan`.
+
+### First startup reading (2026-11-14, user's machine, three saved user calculators)
+
+The first frame landed 22.8 s after the process started.
+
+| Step | Duration |
+|---|---|
+| Process start to `Main` (runtime start, assembly load) | 4.0 s |
+| Avalonia ready (platform, XAML application) | 3.0 s |
+| Main window and splash | 0.6 s |
+| Renderer (D3D11 device and swap chain) | 1.0 s |
+| **Saved user calculators warm-loaded** | **12.6 s** |
+| Render host, GPU setup, services | 0.1 s |
+| Persisted libraries | 0.5 s |
+| View-model tree | 0.6 s |
+| Window bound to the first frame | 0.4 s |
+
+The warm-load Roslyn-compiled each saved calculator (`CalculatorGenHotLoad.LoadAllPersisted`) on
+the UI thread, before the window was bound. Nothing at startup uses the result: it only primes
+the Compile & Load cache. It now runs on a low-priority background thread and records
+`saved calculators loaded` when it finishes. A Compile & Load during the warm-load may compile the
+same equation twice. The cache is locked (#1259), so that is wasted work, never corrupt state.
+
+A warm start on the fixed build (same machine, a few minutes later) gave:
+
+| Step | Cold, before | Warm, after |
+|---|---|---|
+| Process start to `Main` | 4.0 s | 0.09 s |
+| Avalonia ready | 3.0 s | 0.33 s |
+| Renderer | 1.0 s | 0.04 s |
+| Saved calculators warm-loaded | 12.6 s, blocking | 4.6 s, in the background, done at 6.7 s |
+| Libraries + view models | 1.1 s | 0.84 s |
+| **First frame completed** | **22.8 s** | **2.06 s** |
+
+So most of the time before `Main` and in Avalonia start-up was a cold start (disk and first
+JIT), not FF's own work. On the warm start the largest steps left on the UI thread are the
+view-model tree (0.46 s) and the persisted libraries (0.38 s).
 
 ## Third finding: every calculator allocated up front (#1772)
 

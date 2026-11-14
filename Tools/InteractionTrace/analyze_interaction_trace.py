@@ -30,7 +30,7 @@ KINDS = {
     1: 'PointerMove', 2: 'InputHandled', 3: 'InputOther', 4: 'RenderHint', 5: 'PacerRequest',
     6: 'PacerFire', 7: 'TriggerEnter', 8: 'TriggerExit', 9: 'CalcStart', 10: 'UploadBarrier',
     11: 'CalcEnd', 12: 'UploadQueued', 13: 'UploadStart', 14: 'PostPipeline', 15: 'Present',
-    16: 'Landed', 17: 'Dropped', 18: 'UploadEnd', 19: 'UiLag', 20: 'Resize',
+    16: 'Landed', 17: 'Dropped', 18: 'UploadEnd', 19: 'UiLag', 20: 'Resize', 21: 'StartupPhase',
 }
 # What starts or extends an interaction. A bare pointer move is not one: the mouse hovering over
 # the image moves without rendering anything.
@@ -101,6 +101,29 @@ def segments(rows, gap_us):
     return segs
 
 
+# #1773 -- StartupPhase A values (Abstractions/Render/InteractionTrace.cs, append-only).
+STARTUP_PHASES = {
+    1: 'Main entered', 2: 'shell starting', 3: 'Avalonia ready', 4: 'main window created',
+    5: 'splash shown', 6: 'main window opened', 7: 'render surface created', 8: 'renderer created',
+    9: 'saved calculators loaded', 10: 'render host created', 11: 'GPU setup done',
+    12: 'services done', 13: 'libraries loaded', 14: 'view models built',
+    15: 'surface setup done', 16: 'view models bound', 17: 'first render started',
+    18: 'first frame completed', 19: 'splash dismissed',
+}
+
+
+def startup(rows):
+    """The startup steps in the order they finished: ms since process start, ms since the step
+    before, and the thread. B is us since the process started (-1 unknown)."""
+    st = sorted((r for r in rows if r.kind == 'StartupPhase' and r.b >= 0), key=lambda r: r.b)
+    out, prev = [], 0
+    for r in st:
+        out.append({'phase': STARTUP_PHASES.get(r.a, str(r.a)), 'at_ms': round(r.b / 1000, 1),
+                    'step_ms': round((r.b - prev) / 1000, 1), 'thread': r.thread})
+        prev = r.b
+    return out
+
+
 def analyse(rows, types, gap_ms=400.0, tail_ms=1500.0):
     gap_us, tail_us = gap_ms * 1000, tail_ms * 1000
     segs = segments(rows, gap_us)
@@ -119,7 +142,7 @@ def analyse(rows, types, gap_ms=400.0, tail_ms=1500.0):
         out.append(analyse_segment(win, s0, s1, types, g_cstart, g_ustart))
     # UI lag outside interactions: the idle baseline the in-drag lag is compared with.
     idle = [r.a for r in rows if r.kind == 'UiLag' and not any(a <= r.t <= b for a, b in in_any)]
-    return {'interactions': out, 'ui_lag_idle_ms': summary(idle, 1e-3)}
+    return {'startup': startup(rows), 'interactions': out, 'ui_lag_idle_ms': summary(idle, 1e-3)}
 
 
 def analyse_segment(win, s0, s1, types, g_cstart=None, g_ustart=None):
@@ -370,6 +393,13 @@ def fmt(s, unit='ms'):
 
 def report(res):
     lines = []
+    if res.get('startup'):
+        lines.append('== Startup (ms since the process started)')
+        for p in res['startup']:
+            lines.append(f"  {p['at_ms']:9.1f}  +{p['step_ms']:8.1f}  {p['phase']} (thread {p['thread']})")
+        slow = sorted(res['startup'], key=lambda p: -p['step_ms'])[:3]
+        lines.append('  > longest steps: ' + ', '.join(f"{p['phase']} {p['step_ms']:.0f} ms" for p in slow))
+        lines.append('')
     for i, r in enumerate(res['interactions'], 1):
         types = ', '.join(f'{k}x{v}' for k, v in r['fractal_types'].items()) or '-'
         lines.append(f"== Interaction {i} at {r['start_s']} s: {r['input_s']} s of input, {r['view']} ({types})")
@@ -450,6 +480,10 @@ t_us,thread,kind,seq,a,b
 5003000,9,Present,8,500,0
 5003100,9,Landed,8,0,0
 5003200,9,UploadEnd,8,0,0
+10,1,StartupPhase,0,1,120000
+20,1,StartupPhase,0,10,950500
+30,1,StartupPhase,0,19,2400000
+40,1,StartupPhase,0,7,-1
 """
 
 
@@ -470,7 +504,10 @@ def selftest():
             ok = False
             print(f'FAIL {name}: got {got!r}, want {want!r}')
 
-    check('records', len(rows), 37)   # a hover move at 50 ms is not an interaction
+    check('records', len(rows), 41)   # a hover move at 50 ms is not an interaction
+    check('startup', [(p['phase'], p['at_ms'], p['step_ms']) for p in res['startup']],
+          [('Main entered', 120.0, 120.0), ('render host created', 950.5, 830.5),
+           ('splash dismissed', 2400.0, 1449.5)])   # the -1 (unknown start) record is left out
     check('interactions', len(res['interactions']), 2)
     z = res['interactions'][1]
     check('resizes', z['resizes'], 1)
