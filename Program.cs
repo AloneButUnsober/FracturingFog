@@ -25,6 +25,7 @@ static class Program
     [STAThread]
     static int Main(string[] args)
     {
+        global::FracturingFog.Render.InteractionTrace.Startup(global::FracturingFog.Render.StartupPhase.MainEntered);   // #1773 (FF_INTERACTION_TRACE)
         if (args.Length > 0 && args[0] == "--bench")
             return BenchEntry.Run(args);
 
@@ -1946,6 +1947,7 @@ static class Program
         // Source-editor prompts (#118): the VMs raise async callbacks satisfied
         // by AvaloniaDialogs in AvaloniaShellBootstrap — no WinForms anywhere.
         FracturingFog.Win.WindowsBootstrap.Install();
+        global::FracturingFog.Render.InteractionTrace.Startup(global::FracturingFog.Render.StartupPhase.ShellStarting);   // #1773
         return FracturingFog.UI.Avalonia.AvaloniaShell.Run(
             args,
             FracturingFog.Hosting.AvaloniaShellBootstrap.OnSurfaceReady);

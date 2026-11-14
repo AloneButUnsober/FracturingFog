@@ -70,6 +70,8 @@ public sealed class InteractionTraceTests : IDisposable
         {
             long before = GC.GetAllocatedBytesForCurrentThread();
             for (int i = 0; i < 20_000; i++) InteractionTrace.Mark(TraceKind.PointerMove, i, i, i);
+            if (!InteractionTrace.Enabled)   // #1773: a startup mark is free when off too
+                for (int i = 0; i < 1000; i++) InteractionTrace.Startup(StartupPhase.MainEntered);
             return GC.GetAllocatedBytesForCurrentThread() - before;
         }
         Burst();   // JIT
@@ -127,6 +129,29 @@ public sealed class InteractionTraceTests : IDisposable
         Assert.True(dropped > 0, "the ring never lapped: the test did not exercise the drop path");
         // What was kept is in order and not duplicated.
         for (int i = 1; i < rows.Count; i++) Assert.True(rows[i].A > rows[i - 1].A);
+    }
+
+    [Fact]
+    public void AStartupMark_RecordsItsPhaseAndTheTimeSinceTheProcessStarted()
+    {
+        // #1773 — B is µs since Process.StartTime, so a startup trace counts the time before the
+        // trace began. Checked against the process's own clock, and against the gap between marks.
+        string path = Path.Combine(_dir, "s.csv");
+        var start = System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime();
+        double lo, hi;
+        using (InteractionTrace.Start(path))
+        {
+            lo = (DateTime.UtcNow - start).TotalMilliseconds;
+            InteractionTrace.Startup(StartupPhase.MainEntered);
+            Thread.Sleep(60);
+            InteractionTrace.Startup(StartupPhase.SplashDismissed);
+            hi = (DateTime.UtcNow - start).TotalMilliseconds;
+        }
+        var rows = Parse(path, out _).Where(r => r.Kind == TraceKind.StartupPhase).ToList();
+        Assert.Equal(new long[] { (long)StartupPhase.MainEntered, (long)StartupPhase.SplashDismissed }, rows.Select(r => r.A));
+        Assert.All(rows, r => Assert.InRange(r.B / 1000.0, lo - 20, hi + 20));
+        Assert.InRange((rows[1].B - rows[0].B) / 1000.0, 50, 2000);
+        Assert.InRange((rows[1].T - rows[0].T) / 1000.0, 50, 2000);   // the trace clock agrees
     }
 
     // ── Host ──

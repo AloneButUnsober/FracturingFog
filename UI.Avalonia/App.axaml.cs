@@ -23,6 +23,7 @@ public sealed class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        global::FracturingFog.Render.InteractionTrace.Startup(global::FracturingFog.Render.StartupPhase.AvaloniaReady);   // #1773
         // Drive the popup text-scale resource from the global UI scale (#812).
         // Popups render outside the per-window LayoutTransform (S2), so their
         // text is scaled via the SizeFontPopup resource instead. Seed it before
@@ -34,6 +35,7 @@ public sealed class App : Application
         {
             var main = new Views.MainWindow();
             desktop.MainWindow = main;
+            global::FracturingFog.Render.InteractionTrace.Startup(global::FracturingFog.Render.StartupPhase.MainWindowCreated);   // #1773
 
             // Startup splash. Shown before the main window's GPU surface comes
             // up and the render host / VM tree is built (that heavy work runs in
@@ -42,6 +44,7 @@ public sealed class App : Application
             // timeout fallback so a headless / surface-less run can't strand it.
             var splash = new Views.SplashWindow();
             splash.Show();
+            global::FracturingFog.Render.InteractionTrace.Startup(global::FracturingFog.Render.StartupPhase.SplashShown);   // #1773
             DismissSplashWhenReady(splash, main);
         }
 
@@ -93,12 +96,14 @@ public sealed class App : Application
             main.DataContextChanged -= OnDataContextChanged;
             main.Closed -= OnMainClosed;
             if (host != null) host.FrameCompleted -= OnFirstFrame;
+            global::FracturingFog.Render.InteractionTrace.Startup(global::FracturingFog.Render.StartupPhase.SplashDismissed);   // #1773
             splash.FadeOutAndClose();
         }
 
         void OnFirstFrame(object? sender, FracturingFog.Render.RenderFrameInfo info)
         {
             // FrameCompleted can fire on a render thread — marshal to the UI thread.
+            global::FracturingFog.Render.InteractionTrace.Startup(global::FracturingFog.Render.StartupPhase.FirstFrameCompleted);   // #1773
             Dispatcher.UIThread.Post(Dismiss);
         }
 

@@ -132,6 +132,7 @@ public sealed partial class MainWindow : Window
                 // Hand the live native surface to whoever set the bootstrap
                 // callback (the WinExe's Program.cs in --avalonia mode).
                 // The callback owns renderer construction from here.
+                global::FracturingFog.Render.InteractionTrace.Startup(global::FracturingFog.Render.StartupPhase.SurfaceCreated);   // #1773
                 AvaloniaShell.OnSurfaceReady?.Invoke(surface.Surface);
             };
         }
@@ -188,6 +189,7 @@ public sealed partial class MainWindow : Window
 
     private void OnOpened(object? sender, EventArgs e)
     {
+        global::FracturingFog.Render.InteractionTrace.Startup(global::FracturingFog.Render.StartupPhase.MainWindowOpened);   // #1773
         _sponge ??= this.FindControl<Border>("InputSponge");
         _sponge?.Focus();
         AttachStatusBarDrag();

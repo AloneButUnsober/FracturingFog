@@ -85,6 +85,35 @@ namespace FracturingFog.Render
         UiLag = 19,
         /// <summary>The render surface was resized. A = width, B = height.</summary>
         Resize = 20,
+        /// <summary>#1773 — a startup step finished. A = the step (<see cref="StartupPhase"/>),
+        /// B = µs since the process started (Process.StartTime), so the time before the trace
+        /// itself started is counted too.</summary>
+        StartupPhase = 21,
+    }
+
+    /// <summary>#1773 — <see cref="TraceKind.StartupPhase"/> A: the startup steps, in the order
+    /// they normally finish. Append new ones at the end so old logs still parse.</summary>
+    public enum StartupPhase
+    {
+        MainEntered = 1,
+        ShellStarting = 2,
+        AvaloniaReady = 3,
+        MainWindowCreated = 4,
+        SplashShown = 5,
+        MainWindowOpened = 6,
+        SurfaceCreated = 7,
+        RendererCreated = 8,
+        PersistedCalculatorsLoaded = 9,
+        RenderHostCreated = 10,
+        GpuSetupDone = 11,
+        ServicesDone = 12,
+        LibrariesLoaded = 13,
+        ViewModelsBuilt = 14,
+        SurfaceReadyDone = 15,
+        DataContextAssigned = 16,
+        FirstTrigger = 17,
+        FirstFrameCompleted = 18,
+        SplashDismissed = 19,
     }
 
     /// <summary>#1762 — <see cref="TraceKind.InputHandled"/> / <see cref="TraceKind.InputOther"/> B.</summary>
@@ -147,6 +176,28 @@ namespace FracturingFog.Render
             => (Stopwatch.GetTimestamp() - startTicks) * 1_000_000 / Stopwatch.Frequency;
 
         /// <summary>Record an event. Free when the trace is off.</summary>
+        /// <summary>#1773 — a startup step finished (free when the trace is off).</summary>
+        public static void Startup(StartupPhase phase)
+        {
+            var r = s_rec;
+            if (r is null) return;
+            r.Add(TraceKind.StartupPhase, 0, (long)phase, MicrosSinceProcessStart());
+        }
+
+        private static long s_processStartTicks;   // DateTime.UtcNow ticks at process start (0 unread)
+
+        private static long MicrosSinceProcessStart()
+        {
+            long start = Interlocked.Read(ref s_processStartTicks);
+            if (start == 0)
+            {
+                try { start = Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks; }
+                catch { start = -1; }
+                Interlocked.Exchange(ref s_processStartTicks, start);
+            }
+            return start < 0 ? -1 : (DateTime.UtcNow.Ticks - start) / 10;
+        }
+
         public static void Mark(TraceKind kind, long seq = 0, long a = 0, long b = 0)
         {
             var r = s_rec;
