@@ -14,6 +14,9 @@
 // FF_GPULA_BACKEND=d3d11|vulkan picks one backend, FF_GPULA_MODES a subset of the four
 // columns (digits 0..3, e.g. "13" = CPU LA and GPU LA only), FF_GPULA_SCENE a scene,
 // FF_GPULA_WARP=1 the software D3D11 device instead of the hardware one.
+// FF_GPULA_SKEW=1 compiles the D3D11 kernel with LaKernelSource.SkewPlainMagnitudesForTests
+// (#1661: the rounding difference that hung the GT 710, forced on any device; the
+// iteration differences must stay the same).
 // Exit 0 always.
 
 using System;
@@ -37,6 +40,7 @@ namespace FracturingFog
             if (Environment.GetEnvironmentVariable("FF_GPU_PERTURB_BUDGET_MS") == null)
                 Environment.SetEnvironmentVariable("FF_GPU_PERTURB_BUDGET_MS", "600000");
             Console.WriteLine($"gpulaprobe {w}x{h}, best of {reps}");
+            MandelbrotGpuKernel.LaSkewPlainMagnitudesForTests = Environment.GetEnvironmentVariable("FF_GPULA_SKEW") == "1";
 
             // FF_GPULA_WARP=1: the software D3D11 device (no TDR) instead of the hardware one.
             var driver = Environment.GetEnvironmentVariable("FF_GPULA_WARP") == "1" ? DriverType.Warp : DriverType.Hardware;

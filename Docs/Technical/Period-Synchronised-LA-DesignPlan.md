@@ -262,7 +262,7 @@ What S1 settled is in **bold**; the rest is still the plan.
   - Buffers: t2 the steps (`LaStageTable.GpuSteps`, 8 doubles each), t3 the integers (`GpuInts`: per stage first step and count, per step Len and Next; uints, so the shader needs no double-to-int conversion); the AT in the cbuffer.
   - The calculator takes it when the frame wants LA (`LaMode`), GPU perturbation runs, the kernel has it (`SupportsPerturbationLa`) and `UseGpuLa` (`FF_GPU_LA=0` off); forced On now runs on the GPU too where the kernel has LA. `LastFrameUsedGpuLa`; the route reads "deep-zoom perturbation + LA stages".
   - Range: the GPU deep path stops at `MaxGpuPerturbZoom` (1e50), so on the GPU LA covers 1e30..1e50; the deeper scenes stay on the CPU LA rows.
-  - **Off by default** (`UseGpuLa`, `FF_GPU_LA=1`): on the GT 710 under Vulkan it is slower than the SA / BLA kernel. D3D11 is gated off (`FF_D3D_LA=1`): the NVIDIA D3D11 driver hung on it (#1661). §4.6.
+  - **Off by default** (`UseGpuLa`, `FF_GPU_LA=1`): on the GT 710 under Vulkan it is slower than the SA / BLA kernel. D3D11 runs it since #1661 (`FF_D3D_LA=0` turns it off there); the hang found in S7 was a livelock in the kernel. §4.6.
   - Not done: the fp32 / float-exp kernels (#1331) keep their path (§4.6).
 
 ## 4. Correctness
@@ -566,9 +566,29 @@ Setup:
 
 **Decisions:**
 - **`UseGpuLa` off** (`FF_GPU_LA=1` on). GPU deep perturbation is itself opt-in (`FF_GPU_PERTURB=1`).
-- **D3D11 off:** `MandelbrotGpuKernel.SupportsPerturbationLa` is false unless `FF_D3D_LA=1`, #1661.
-  - On the GT 710 under the NVIDIA D3D11 driver the kernel hung the device (TDR after ~7 s), even on an 8×8 frame. That happened with `continue`-based and with structured control flow.
-  - The FXC-compiled kernel is correct on WARP, and the same HLSL runs on the same GPU under Vulkan.
+- **D3D11:** gated off in S7 (`FF_D3D_LA=1` to allow it), on since #1661 (`FF_D3D_LA=0` turns it off).
+  - **The symptom (S7).** On the GT 710 under the NVIDIA D3D11 driver the kernel hung the device (TDR after ~7 s), even on an 8×8 frame, with `continue`-based and with structured control flow. The FXC-compiled kernel was correct on WARP, and the same HLSL ran on the same GPU under Vulkan.
+  - **The cause (#1661): a livelock in the kernel's plain tail, not the driver.**
+    - At reference index 0, Z_0 = 0, so z = δ. The tail's rebase test |z|² < |δ|² is then false in exact arithmetic.
+    - A rebase there changes nothing, but it climbs back to the stages without taking a step. If no stage accepts the pixel, they hand it straight back to the tail at index 0.
+    - NVIDIA's D3D11 shader compiler rounded the two sums differently, so the test came out true by an ulp, and the pixel cycled stages → tail → rebase forever.
+    - The CPU evaluator has the same test, but C# doesn't contract the sums, so the two sides are bit-equal there. WARP and the GT 710 under Vulkan never hung, so evidently they round both sums alike. Another driver need not.
+  - **How it was found.** The outer loop was bounded for diagnosis, and a pixel still running at the bound wrote its state.
+    - On a 64×64 p448 frame, 1,635 of 4,096 pixels were cycling at reference index 0, within a few iterations of their final count.
+    - A side observation: on that driver, a UAV write placed directly before the `break` out of the outer loop did not land. The state had to be written on the normal completion path.
+  - **The fix.** The tail skips the magnitude test at index 0: `(j > 0 && |z|² < |δ|²) || j + 1 >= refLen`. A pixel then always takes a step within (stages + 2) trips of a rebase. The calculator also declines the LA kernel for a one-entry reference, which has no step to take.
+  - **After the fix** (`--gpulaprobe 960 540`, D3D11, GT 710, best of 2):
+
+    | view | CPU LA | GPU SA / BLA | GPU LA | GPU LA against GPU SA / BLA | pixels differing from CPU LA |
+    |---|---|---|---|---|---|
+    | p448 5.2e33 | 201 ms | 948 ms | 1,359 ms | ×0.70 | 0.02 % |
+    | path 1e33 | 210 ms | 683 ms | 1,270 ms | ×0.54 | 0.01 % |
+    | deeper 4.5e46 | 44 ms | 144 ms | 228 ms | ×0.63 | 0.00 % |
+    | e45test04 1.1e47 | 152 ms | 362 ms | 897 ms | ×0.40 | 0.00 % |
+    | 3E47 Test | 121 ms | 389 ms | 627 ms | ×0.62 | 0.00 % |
+
+    The speeds match the Vulkan table above: on this card the LA kernel stays slower than SA / BLA, so `UseGpuLa` stays off.
+  - **Tests** (`S1661LaKernelLivelockTests`): `LaKernelSource.SkewPlainMagnitudesForTests` compiles the kernel with |δ|² nudged up at index 0, which forces the rounding difference on any device. The skewed kernel must finish, and its frame must equal the unskewed one bit for bit. With the guard removed, the skewed kernel hangs on WARP (`--gpulaprobe` with `FF_GPULA_WARP=1 FF_GPULA_SKEW=1`).
 - **Forced On** (`DeepLa` On) runs on the GPU only where the kernel is enabled; otherwise on the CPU LA rows, as in S6.
 
 **Tests** (`S1630GpuLaTests`):
@@ -589,7 +609,7 @@ Not caught: removing the tail's \|z\| < \|δ\| rebase. With climbing back the ta
 
 **Found on the way, filed:**
 - **#1660:** every GPU deep kernel returns z and dz/dc as `float4`, and |dz/dc| ≈ 1/pixel overflows float past ~1e35. GPU deep frames' normals and DE are inf there: 75–100 % of escaped pixels on the test views. Where finite, GPU and CPU normals agree exactly.
-- **#1661:** the D3D11 hang above.
+- **#1661:** the D3D11 hang above. Fixed (a livelock in the kernel's tail); D3D11 runs the LA kernel.
 
 **Not done:**
 - **The fp32 / float-exp kernels (#1331)** keep their path. LA's thresholds (10⁻⁶⁸ on the bench scenes) need the float-exp type, and a fp32 port should wait for a GPU on which the fp64 LA kernel pays.
