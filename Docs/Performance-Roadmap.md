@@ -484,6 +484,9 @@ full set + plumbing.
   A scripted `--batch --headless` render → SHA256 on each of the 7
   raymarchers at default knob values, with a tolerance band for the
   GPU paths, would catch regressions early.
+  Built as `Tools/VisualRegression` (#1292, 42 cases). Since #1780 it hashes the decoded pixels
+  (`PngPixelHash`), not the PNG bytes: PR #1645's encoder change had failed every case with no
+  pixel changed. Two cases cover translucent output (`--interior-alpha` 128 and 0).
 - **Frame-time HUD.** Phase 19's debug HUD already shows light directions
   and param bars. Extend with a per-stage frame-time microbar
   (raymarch / SSAO / tonemap / bloom / DoF / lens / edge) so the
