@@ -276,7 +276,9 @@ A warm start on the fixed build (same machine, a few minutes later) gave:
 So most of the time before `Main` and in Avalonia start-up is cold-start cost (disk, first
 load and JIT), not FF's own work. The build traced is a `dotnet build` Release output, which has
 no ReadyToRun code; the Windows installer also publishes with `PublishReadyToRun=false`, so a
-shipped build JITs its whole startup path too (#1776 measures ReadyToRun). On the warm start the largest steps left on the UI thread are the
+shipped build JITs its whole startup path too (#1776). The installer now publishes with ReadyToRun composite (#1776). Measured on a warm
+start: first frame 2026 ms -> 1173 ms; saved-calculator warm-load 6.4 s -> 3.0 s; output
+byte-identical. The cost is +160 MB installed, about +66 MB compressed. On the warm start the largest steps left on the UI thread are the
 view-model tree (0.46 s) and the persisted libraries (0.38 s).
 
 ## Third finding: every calculator allocated up front (#1772)

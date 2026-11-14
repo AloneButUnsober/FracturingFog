@@ -88,8 +88,14 @@ if (-not $SkipPublish) {
     # each producing apphost.exe + deps.json + runtimeconfig.json in a
     # separate obj subtree. The gather step then trips NETSDK1152. Same
     # project, same content — last-wins copy is harmless.
+    # #1776 — ReadyToRun composite: native code for the app and its whole dependency closure,
+    # so startup doesn't JIT its path. Measured on a warm start: first frame 2026 ms -> 1173 ms,
+    # saved-calculator warm-load 6.4 s -> 3.0 s, batch renders ~40% faster; output byte-identical
+    # (Mandelbrot, Julia, Mandelbulb, Quaternion Julia, a Roslyn user equation); Roslyn hot-load
+    # and ILGPU still work. Cost: +160 MB installed, ~+66 MB compressed, publish 37 s -> 72 s.
+    # Until #1776 it was off (since the script was written; no recorded reason).
     & dotnet publish $csproj -c $Configuration -r win-x64 --self-contained true `
-        -p:PublishSingleFile=false -p:PublishReadyToRun=false `
+        -p:PublishSingleFile=false -p:PublishReadyToRun=true -p:PublishReadyToRunComposite=true `
         -p:ErrorOnDuplicatePublishOutputFiles=false -o $stageDir
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed (exit $LASTEXITCODE)" }
 
