@@ -33,11 +33,17 @@ public static class LaKernelSource
     /// <summary>Doubles per step in the step buffer (t2): Ref re/im, A re/im, B re/im, Thr, ThrC.</summary>
     public const int StepDoubles = 8;
 
+    /// <summary>Test hook (#1661): compile the kernel with the plain tail's |δ|² nudged
+    /// up at reference index 0, the rounding difference NVIDIA's D3D11 compiler produced
+    /// between |z|² and |δ|² there. The kernel's output must not change (and it must
+    /// finish). Read by <see cref="Build"/>; set it before the kernel first compiles.</summary>
+    public static bool SkewPlainMagnitudesForTests { get; set; }
+
     /// <summary>The kernel. Bindings: b0 params (144 bytes, <c>LaParams</c> on the host),
     /// t0 / t1 the reference orbit (refLen entries), t2 the steps (8 doubles each), t3 the
     /// integers (2 per stage: first step, step count without the sentinel; then 2 per
     /// step: Len, Next), t15 the #1394 mask; u0..u2 iter / smooth / finalZD, u3 gWork.</summary>
-    public static string Build() => $"#define PERTURB_CHUNK {MandelbrotKernelSource.PerturbChunk}\n" + @"
+    public static string Build() => $"#define PERTURB_CHUNK {MandelbrotKernelSource.PerturbChunk}\n" + (SkewPlainMagnitudesForTests ? "#define LA_SKEW_J0 1\n" : "") + @"
 // 12 doubles (96 bytes) then 12 ints (48 bytes). Matches the C# LaParams byte-for-byte.
 cbuffer PerturbParams : register(b0)
 {
@@ -146,8 +152,8 @@ void CSPerturbLA(uint3 tid : SV_DispatchThreadID)
             else if (phase == 1)
             {
                 // ── The stages (LaRunStages) ──
-                // Structured if / else, no continue: the NVIDIA D3D11 driver hung on the
-                // continue form (TDR on a GT 710; WARP and Vulkan ran it), see §4.6.
+                // (Structured if / else, no continue: written so while chasing #1661. The
+                // hang was the tail's rebase test at j = 0, below, not the control flow.)
                 if (stage < 0)
                 {
                     phase = 2;   // j is the reference index
@@ -208,11 +214,21 @@ void CSPerturbLA(uint3 tid : SV_DispatchThreadID)
                     zr = Zr + dr; zi = Zi + di;
                     double zmag2 = zr * zr + zi * zi;
                     double dmag2 = dr * dr + di * di;
+#ifdef LA_SKEW_J0
+                    if (j == 0) dmag2 += dmag2 * 1e-15;   // SkewPlainMagnitudesForTests
+#endif
+                    // #1661 — no magnitude rebase at j = 0. There Z_0 = 0, so z = δ and a
+                    // rebase changes nothing; but it climbs back to the stages without a
+                    // step, and they hand the pixel straight back here. |z|² < |δ|² must
+                    // be false, and is in exact arithmetic. A compiler that contracts the
+                    // two sums differently (NVIDIA's D3D11 one on a GT 710) makes it true
+                    // by an ulp, and the pixel then cycles forever: a device hang (TDR).
+                    // The CPU evaluator has the same test and no contraction.
                     if (zmag2 >= gEscapeR2)
                     {
                         done = true;
                     }
-                    else if (zmag2 < dmag2 || j + 1 >= gRefLen)
+                    else if ((j > 0 && zmag2 < dmag2) || j + 1 >= gRefLen)
                     {
                         dr = zr; di = zi;
                         phase = 1; stage = top; j = 0;

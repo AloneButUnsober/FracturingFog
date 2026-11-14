@@ -1765,11 +1765,20 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
 
     // ── #1630 (epic #1623, S7) — the LA stage perturbation kernel ─────────────────
 
-    // #1630 — OFF on D3D11 unless FF_D3D_LA=1: on a GeForce GT 710 (NVIDIA D3D11 driver)
-    // the LA kernel hung the device (TDR, even on an 8x8 frame), while the same HLSL ran
-    // correctly on WARP and on the same GPU under Vulkan (design doc §4.6).
-    private static readonly bool s_laAllowed = Environment.GetEnvironmentVariable("FF_D3D_LA") == "1";
+    // #1661 — on with fp64 (FF_D3D_LA=0 turns it off). It was gated off after #1630: on a
+    // GeForce GT 710 the kernel hung the device (TDR, even on an 8x8 frame). The cause
+    // was a livelock in the kernel's plain tail (LaKernelSource, the j > 0 test), not
+    // the driver: design doc §4.6.
+    private static readonly bool s_laAllowed = Environment.GetEnvironmentVariable("FF_D3D_LA") != "0";
     public bool SupportsPerturbationLa => SupportsPerturbation && s_laAllowed;
+
+    /// <summary>This assembly's <see cref="FracturingFog.Rendering.LaKernelSource.SkewPlainMagnitudesForTests"/>
+    /// (the Vulkan assembly links its own copy of the type), for --gpulaprobe.</summary>
+    public static bool LaSkewPlainMagnitudesForTests
+    {
+        get => FracturingFog.Rendering.LaKernelSource.SkewPlainMagnitudesForTests;
+        set => FracturingFog.Rendering.LaKernelSource.SkewPlainMagnitudesForTests = value;
+    }
 
     // 12 doubles then 12 ints: LaKernelSource's PerturbParams cbuffer, 144 bytes.
     [StructLayout(LayoutKind.Sequential, Size = 144)]

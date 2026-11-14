@@ -3153,7 +3153,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 ResetLaWork();
                 double hW = effImgW * 0.5 * scale, hH = effImgH * 0.5 * scale;
                 SelectLaAt(Math.Sqrt(hW * hW + hH * hH));
-                useLa = _laTable is { Finite: true, Stages: >= 1 };
+                // (A one-entry reference has no step for the kernel's tail to take, #1661.)
+                useLa = _laTable is { Finite: true, Stages: >= 1 } && _refOrbitLen >= 2;
             }
             if (useLa)
             {

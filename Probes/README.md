@@ -31,7 +31,7 @@ code. Probes shared with other hosts live in `Engine/Diagnostics/` instead.
 | `DynamicResolutionProbe.cs` | `--dynresprobe` | #1333 | Drag responsiveness through a real host, dynamic preview resolution off and on |
 | `GpuPrecisionProbe.cs` | `--gpuprecisionprobe` | #1611 | D3D11 fp32 shallow kernel vs the CPU: the picture's shift in pixels (from the smooth field) by pixel spacing in fp32 ulps, four views at 1080p and 4K; sets `MandelbrotCalculator.Fp32MinPixelUlps` |
 | `GpuBandProbe.cs` | `--gpubandprobe` | #1334 | Deep perturbation frames in TDR row bands (D3D11 and Vulkan) |
-| `GpuLaProbe.cs` | `--gpulaprobe [W H]` | #1630 | The LA stage kernel on the GPU (D3D11 and Vulkan) against the GPU SA / BLA kernel and the CPU BLA / LA paths, on deep views in 1e30..MaxGpuPerturbZoom: frame times and iteration agreement with the CPU LA frame (`FF_GPULA_REPS`) |
+| `GpuLaProbe.cs` | `--gpulaprobe [W H]` | #1630 | The LA stage kernel on the GPU (D3D11 and Vulkan) against the GPU SA / BLA kernel and the CPU BLA / LA paths, on deep views in 1e30..MaxGpuPerturbZoom: frame times and iteration agreement with the CPU LA frame (`FF_GPULA_REPS`). #1661: `FF_GPULA_SKEW=1` compiles the D3D11 kernel with the rounding difference that hung the GT 710 forced in (with `FF_GPULA_WARP=1`: no TDR if it hangs) |
 | `GpuDeferredReadbackProbe.cs` | `--gpudeferprobe` | #1332 | D3D11 deferred readback |
 | `GpuGroupShapeProbe.cs` | `--gpugroupshapeprobe` | #1339, #1377 | Tuned compute thread-group shapes (D3D11 and Vulkan): the 2D kernels, the relief raymarch and the froxel passes |
 | `GpuPeriodicityProbe.cs` | `--gpuperiodicityprobe` | #1342 | D3D11 half of the GPU periodicity check |

@@ -101,7 +101,8 @@ public class S1668EnvVarCatalogTests
             if (e.Group is EnvVarGroup.Probe or EnvVarGroup.Test) Assert.True(e.Developer, $"{e.Name}: probe / test switches are developer-only");
             if (e.Issue != null) Assert.Matches("^#[0-9]+$", e.Issue);
         }
-        Assert.Equal(EnvVarRisk.Danger, EnvVarCatalog.Find("FF_D3D_LA")!.Risk);
+        Assert.Equal(EnvVarRisk.Danger, EnvVarCatalog.Find("FF_ROSLYN_USERCODE")!.Risk);
+        Assert.True(EnvVarCatalog.Find("FF_D3D_LA")!.DefaultOn);   // #1661: no longer gated off
         Assert.Contains(EnvVarCatalog.UserFacing, e => e.Name == "FF_GPU_PERTURB");
         Assert.DoesNotContain(EnvVarCatalog.UserFacing, e => e.Group == EnvVarGroup.Probe);
     }
