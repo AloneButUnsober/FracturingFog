@@ -263,17 +263,20 @@ same equation twice. The cache is locked (#1259), so that is wasted work, never 
 
 A warm start on the fixed build (same machine, a few minutes later) gave:
 
-| Step | Cold, before | Warm, after |
-|---|---|---|
-| Process start to `Main` | 4.0 s | 0.09 s |
-| Avalonia ready | 3.0 s | 0.33 s |
-| Renderer | 1.0 s | 0.04 s |
-| Saved calculators warm-loaded | 12.6 s, blocking | 4.6 s, in the background, done at 6.7 s |
-| Libraries + view models | 1.1 s | 0.84 s |
-| **First frame completed** | **22.8 s** | **2.06 s** |
+| Step | Cold, before | Cold after a reboot, after | Warm, after |
+|---|---|---|---|
+| Process start to `Main` | 4.0 s | 2.8 s | 0.09 s |
+| Avalonia ready | 3.0 s | 1.6 s | 0.33 s |
+| Main window and splash | 0.6 s | 0.4 s | 0.34 s |
+| Renderer | 1.0 s | 0.66 s | 0.04 s |
+| Saved calculators warm-loaded | 12.6 s, blocking | in the background, done at 13.4 s | in the background, done at 6.7 s |
+| Libraries + view models | 1.1 s | 0.97 s | 0.84 s |
+| **First frame completed** | **22.8 s** | **6.97 s** | **2.06 s** |
 
-So most of the time before `Main` and in Avalonia start-up was a cold start (disk and first
-JIT), not FF's own work. On the warm start the largest steps left on the UI thread are the
+So most of the time before `Main` and in Avalonia start-up is cold-start cost (disk, first
+load and JIT), not FF's own work. The build traced is a `dotnet build` Release output, which has
+no ReadyToRun code; the Windows installer also publishes with `PublishReadyToRun=false`, so a
+shipped build JITs its whole startup path too (#1776 measures ReadyToRun). On the warm start the largest steps left on the UI thread are the
 view-model tree (0.46 s) and the persisted libraries (0.38 s).
 
 ## Third finding: every calculator allocated up front (#1772)
