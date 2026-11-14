@@ -21,4 +21,9 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- #1780: hash decoded pixels; dependency-free, so the tool stays engine-free. -->
+    <Compile Include="..\..\Engine\Imaging\PngPixelHash.cs" Link="Shared\PngPixelHash.cs" />
+  </ItemGroup>
+
 </Project>

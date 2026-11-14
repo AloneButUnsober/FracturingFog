@@ -673,7 +673,9 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
 - <a id="png-spec"></a>**PNG** — W3C. *Portable Network Graphics (PNG) Specification (Second Edition).* W3C
   Recommendation, 10 November 2003. <https://www.w3.org/TR/2003/REC-PNG-20031110/>. Chunk layout, IHDR colour
   types 2 / 6, filter type 2 (Up), several IDAT chunks read as one stream, and the CRC-32 (its sample code) used by
-  `Engine/Imaging/ParallelPngWriter.cs` (#1640).
+  `Engine/Imaging/ParallelPngWriter.cs` (#1640). Also the decoding side in `Engine/Imaging/PngPixelHash.cs` (#1780): colour types 0 / 2 / 4 / 6
+  (§6), the five filter types and the Paeth predictor (§9.2–9.4), and the zlib stream across IDAT chunks (§10), so
+  the visual-regression harness hashes decoded pixels instead of file bytes.
 - <a id="zlib-deflate-rfcs"></a>**zlib and deflate formats** — P. Deutsch, J-L. Gailly. *ZLIB Compressed Data Format
   Specification version 3.3.* RFC 1950, IETF, 1996. <https://www.rfc-editor.org/rfc/rfc1950>; P. Deutsch. *DEFLATE
   Compressed Data Format Specification version 1.3.* RFC 1951, IETF, 1996. <https://www.rfc-editor.org/rfc/rfc1951>.

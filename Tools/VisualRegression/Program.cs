@@ -5,8 +5,15 @@
 //
 // Visual-regression harness for Fracturing Fog. Drives the main app's
 // `--batch --mode image` path against a fixed set of fractal/region/theme
-// cases, SHA256s each output PNG, and either writes a baseline manifest
-// (`record`) or asserts against it (`verify`).
+// cases, SHA256s each output PNG's decoded pixels, and either writes a baseline
+// manifest (`record`) or asserts against it (`verify`).
+//
+// #1780 — the hash covers the pixels, not the file (PngPixelHash, linked from
+// Engine/Imaging): width, height and straight RGBA. It used to hash the file
+// bytes, so PR #1645's encoder change (#1640: Skia → ParallelPngWriter, opaque
+// frames RGB instead of RGBA) failed every case with no pixel changed, and the
+// harness caught nothing until it was re-recorded. Two cases render with a
+// translucent interior (--interior-alpha) so straight-alpha output stays covered.
 //
 // Roadmap reference: Performance-Roadmap "Visual regression harness" and
 // Lighting-FX "Bit-identity smoke test" cross-cutting items. Gating
@@ -27,7 +34,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -124,7 +130,7 @@ internal static class Program
                 continue;
             }
 
-            string sha = Sha256OfFile(pngPath);
+            string sha = FracturingFog.Imaging.PngPixelHash.OfFile(pngPath);   // #1780: pixels, not bytes
             results.Add(new CaseRecord { Name = c.Name, Sha256 = sha, Args = c.Args });
 
             if (record)
@@ -261,6 +267,28 @@ internal static class Program
                 },
             });
         }
+        // #1780 — straight-alpha output: the Mandelbrot with a half-transparent and a
+        // fully transparent interior (RGBA files; every other case is opaque, RGB).
+        foreach (int alpha in new[] { 128, 0 })
+        {
+            cases.Add(new Case
+            {
+                Name = $"mandelbrot-interior-alpha-{alpha}",
+                Args = new[]
+                {
+                    "--fractal", "Mandelbrot",
+                    "--theme", "HSV",
+                    "--x", "0",
+                    "--y", "0",
+                    "--zoom", "0.5",
+                    "--width", DefaultWidth.ToString(),
+                    "--height", DefaultHeight.ToString(),
+                    "--quality", "Standard",
+                    "--interior-alpha", alpha.ToString(),
+                    "--no-watermark",
+                },
+            });
+        }
         return cases;
     }
 
@@ -326,13 +354,9 @@ internal static class Program
 
     // ── Hash ─────────────────────────────────────────────────────────────────
 
-    private static string Sha256OfFile(string path)
-    {
-        using var sha = SHA256.Create();
-        using var fs = File.OpenRead(path);
-        var hash = sha.ComputeHash(fs);
-        return Convert.ToHexString(hash).ToLowerInvariant();
-    }
+    // #1780 — PngPixelHash.OfFile (Engine/Imaging/PngPixelHash.cs, linked in the
+    // csproj): SHA-256 of the decoded pixels, so an encoder change alone can't fail
+    // a case.
 
     // ── Repo root + baseline I/O ─────────────────────────────────────────────
 

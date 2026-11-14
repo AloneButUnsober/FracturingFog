@@ -2,7 +2,7 @@
   "Cases": [
     {
       "Name": "mandelbrot-default",
-      "Sha256": "115270f20b0e0ec72d9872452ecfdde24ae4901ca487c26ef6f1dcda634ce438",
+      "Sha256": "15a0a9879c54aee12a169553682d21a73dfff2eee0c81c197b29580517f751e6",
       "Args": [
         "--fractal",
         "Mandelbrot",
@@ -25,7 +25,7 @@
     },
     {
       "Name": "julia-default",
-      "Sha256": "e0c41a20746283050b456f39450f6e22d91e00641ab9124e90e85ff96adb4114",
+      "Sha256": "c0568b710266602c29b298e79531f6132f441cdb32dc18b74586d01edcd52d2c",
       "Args": [
         "--fractal",
         "Julia",
@@ -48,7 +48,7 @@
     },
     {
       "Name": "burningship-default",
-      "Sha256": "1aaf7da1b9e0a530a7d4f025e54daf1fb8be5968a7bd37dd69070ce9185078cc",
+      "Sha256": "4c7f86f4a198ee944a2b9351e8cf990172ca8ace487fcb53eb025d1d8b361e52",
       "Args": [
         "--fractal",
         "BurningShip",
@@ -71,7 +71,7 @@
     },
     {
       "Name": "tricorn-default",
-      "Sha256": "0e8dff95b1ca90a776066423fff32a4d74f901fcffb47217418d47d2025696ba",
+      "Sha256": "31299894b1e6c5e3a0fb2912b3f9b9608f82c096b96f75abacceda8e3d7b69c1",
       "Args": [
         "--fractal",
         "Tricorn",
@@ -94,7 +94,7 @@
     },
     {
       "Name": "multibrot-default",
-      "Sha256": "1fd3a891980e8d6cd9aa07505c815af2ebfa6fe77a28ab6b71add83668867114",
+      "Sha256": "707e20dbc3756487bc841a2eaaa3da015794f2bdd8c38c6c2578abd5cf662682",
       "Args": [
         "--fractal",
         "Multibrot",
@@ -117,7 +117,7 @@
     },
     {
       "Name": "phoenix-default",
-      "Sha256": "9e7cd6daa4bb32a3ae0cfa4750f9e6879372f4534c64147d1c78486e0e6e7845",
+      "Sha256": "2a986e3361fd79fb6a9137f429109c8855b11ea9dbe114f662d3940b227fa29c",
       "Args": [
         "--fractal",
         "Phoenix",
@@ -140,7 +140,7 @@
     },
     {
       "Name": "newton-default",
-      "Sha256": "97aa013d0ec05a6c3e20f775dfbb561ad9685ab400e9abc39e733454535f4939",
+      "Sha256": "77508d6799718d8bcc4c83cabb7020861bf7aac268bc06672205bbb25e3a5856",
       "Args": [
         "--fractal",
         "Newton",
@@ -163,7 +163,7 @@
     },
     {
       "Name": "nova-default",
-      "Sha256": "305a818af63e3e1ae24293e81c77a83ad35e05fab1511cba0495b9f34d3a254d",
+      "Sha256": "bad76bbe28824fe3e59a20ae483072dc547d3c09b02931250ccd2cc266799d7d",
       "Args": [
         "--fractal",
         "Nova",
@@ -186,7 +186,7 @@
     },
     {
       "Name": "teardrop-default",
-      "Sha256": "7e45488945bff3837d2c8bb6427462c836aa42017425b7282a19f79e406f6af8",
+      "Sha256": "eec8c722ef58fc9587e5a74c2e6a6601935d836d1d90330013ec028b734e1752",
       "Args": [
         "--fractal",
         "TearDrop",
@@ -209,7 +209,7 @@
     },
     {
       "Name": "magnet1-default",
-      "Sha256": "b56df6ab975164477f4ae52c25f7c21052f8e371945d7509447316fc0ce03495",
+      "Sha256": "c2fe05c564638339ea65d933f7800cd5c6a37d578bf4a0420d6527779ef8063d",
       "Args": [
         "--fractal",
         "Magnet1",
@@ -232,7 +232,7 @@
     },
     {
       "Name": "magnet2-default",
-      "Sha256": "112e1d0fc79845dca1e12b81aa9074100ec3062744cf5308cc0d43b0c4f916a5",
+      "Sha256": "9bd55a1f45c764fc3deace7fe4785b486f4ed7202faef02829712d0503f8b682",
       "Args": [
         "--fractal",
         "Magnet2",
@@ -255,7 +255,7 @@
     },
     {
       "Name": "halley-default",
-      "Sha256": "3b6f9589cd8e21463aa33c7335b6db339a49bbccc3e6e9d2df0de2b5aa59bbcd",
+      "Sha256": "5a0976c0d29c7904baec33ba9ac5560af7d86f4f17a19352b7d129ff01c52677",
       "Args": [
         "--fractal",
         "Halley",
@@ -278,7 +278,7 @@
     },
     {
       "Name": "secant-default",
-      "Sha256": "086023c75ec4f0c4cfda710ff9c77919b598b0c55f7b73c80c1c32630f441b47",
+      "Sha256": "67fe5c882d1077ac39df418920f2918ab351c0fb03ae579cc625687ea7cecabd",
       "Args": [
         "--fractal",
         "Secant",
@@ -301,7 +301,7 @@
     },
     {
       "Name": "glynn-default",
-      "Sha256": "4946a4735faf3cf2e2d334f12cde978e0b5eae6ee68d34cfdb6c2447b0e78e54",
+      "Sha256": "f35679a4ea5b1429fab0aa574938309fd2fe9fde5f6e44d0727d2a1efe375693",
       "Args": [
         "--fractal",
         "Glynn",
@@ -324,7 +324,7 @@
     },
     {
       "Name": "spider-default",
-      "Sha256": "c81fb24952b4ba10b7552946bd074574f02c477f69a0bb6363bd5c4ca28d14f5",
+      "Sha256": "ecc28b5384b102b9d7533856cc32010b5baaa5f3860a9ea64f08ab78000effa8",
       "Args": [
         "--fractal",
         "Spider",
@@ -347,7 +347,7 @@
     },
     {
       "Name": "buddhabrot-default",
-      "Sha256": "fa0df9e0ed76223e0847000a2b7eae7e2adf5cf7f614d186a863c11ba241dcfa",
+      "Sha256": "16efd3d43469b09f80017d935ca81f8fee74f467890269f1153bddebf0fa54f0",
       "Args": [
         "--fractal",
         "BuddhaBrot",
@@ -370,7 +370,7 @@
     },
     {
       "Name": "nebulabrot-default",
-      "Sha256": "0e734054a072ffd9c9cea61178dace669cb08387d06fba069a48b3936340751a",
+      "Sha256": "735a4c59f8194ab94e13e29d67957f3886fb16d6d9ee6926e4bca51a1cbecb48",
       "Args": [
         "--fractal",
         "Nebulabrot",
@@ -393,7 +393,7 @@
     },
     {
       "Name": "antibuddhabrot-default",
-      "Sha256": "eefb0ecfa81554a07e03343343f7375b5c635338714fa742203cf1782f3206be",
+      "Sha256": "b05c0bcbd5e03d31b6c48509e6c890c7b3cead65271f18cab4584d8671af04f4",
       "Args": [
         "--fractal",
         "AntiBuddhabrot",
@@ -416,7 +416,7 @@
     },
     {
       "Name": "antinebulabrot-default",
-      "Sha256": "6d4dd7953f0ac2addd971155bac02b1c34a0112c59846e9d392b88616af02664",
+      "Sha256": "947736b248e120e5d62876a68ec614206aa5d90deb5d7a0bbfd335df7b34e27d",
       "Args": [
         "--fractal",
         "AntiNebulabrot",
@@ -439,7 +439,7 @@
     },
     {
       "Name": "logistic-default",
-      "Sha256": "9826b8c8c488fa33f89dc4a80c865a9522f61a4827ba4aaffb9f246c4e6ec7d2",
+      "Sha256": "3dab22685fef54456fd454acfe2dd1817dd1dc82cb01733a25e9f7bcf39c3694",
       "Args": [
         "--fractal",
         "Logistic",
@@ -462,7 +462,7 @@
     },
     {
       "Name": "ifs-default",
-      "Sha256": "e5a60e6d7bd4b9ea1c8c087b6d8c677c4a54240e7c079abf95af7614edcdbdf9",
+      "Sha256": "1ff52cdedf7f6733ba3f45bd798c82959f0aa9941e9092d0922150ee6dc5ef97",
       "Args": [
         "--fractal",
         "IFS",
@@ -485,7 +485,7 @@
     },
     {
       "Name": "lsystem-default",
-      "Sha256": "c9fb7333464bb0038d56dcc57f3311128da569a8aae44f00cd090d63189e1bf8",
+      "Sha256": "531ff000a94954349538eaddee90755008a44be1e77d5866fc6e991431fe3431",
       "Args": [
         "--fractal",
         "LSystem",
@@ -508,7 +508,7 @@
     },
     {
       "Name": "strangeattractor-default",
-      "Sha256": "a7cf25c9b3f6810debb6162b680942a9d9b5496189c9cc0248d3e314aaa26422",
+      "Sha256": "8dcbf7492442317cb2d54bc8d3f1971d3c97c18fd14b0db411cee1a9173ab0cf",
       "Args": [
         "--fractal",
         "StrangeAttractor",
@@ -531,7 +531,7 @@
     },
     {
       "Name": "plasma-default",
-      "Sha256": "c3b1bb2a7217ac821e38b7f27ec4654c999af7f405799db80af1ef2d71a8b9bf",
+      "Sha256": "ee36cf7a8d1f52b40a474d68e4f423e6bb5c2ab6159c93074ea33b9d27f4bc32",
       "Args": [
         "--fractal",
         "Plasma",
@@ -554,7 +554,7 @@
     },
     {
       "Name": "apollonian-default",
-      "Sha256": "63577bd0f0afabadae5979cff286469f8e0fb6a1e620691f70ae368de72b7b0f",
+      "Sha256": "a472f836cb175b1c10e9cae6837906ee29bb72c18e15ef33fe5cefa0818ef4c1",
       "Args": [
         "--fractal",
         "Apollonian",
@@ -577,7 +577,7 @@
     },
     {
       "Name": "dla-default",
-      "Sha256": "5e226df7014e79e35853bb7380fd0b60d9aa12e35892e8094c69ea926a785423",
+      "Sha256": "d8a323bd94307523bd7fe98db08daeb3c8a53e6b79a0a7165b121ede401ea1d3",
       "Args": [
         "--fractal",
         "Dla",
@@ -600,7 +600,7 @@
     },
     {
       "Name": "flame-default",
-      "Sha256": "afdc4c71d304cc59334d5485822ae3a81588c7903f2eceee5447a4871126a211",
+      "Sha256": "18e6e488fe457bf076b65348d0e994c9d6c8c099de4e5982c806681786c5ca75",
       "Args": [
         "--fractal",
         "Flame",
@@ -623,7 +623,7 @@
     },
     {
       "Name": "mandelbulb-default",
-      "Sha256": "33a73336f91a8606c282539e3af07d590dc9a90ea8b0e0135a8c146d38e07c48",
+      "Sha256": "766fe1525fa40f64d3184b4d8a9ccf52c34ef75896431c47e16721d9bf8c7dcb",
       "Args": [
         "--fractal",
         "Mandelbulb",
@@ -646,7 +646,7 @@
     },
     {
       "Name": "mandelbox-default",
-      "Sha256": "0ca6610c4ecf7102b41a552e0355f8a48c67e4d72b36e9d419b212ccea9e4024",
+      "Sha256": "26522825775408ed3c65021093735fbc1570850e6c669b3c1c0d9ec28032e374",
       "Args": [
         "--fractal",
         "Mandelbox",
@@ -669,7 +669,7 @@
     },
     {
       "Name": "kifs-default",
-      "Sha256": "6d951c710f6ecbddbfd02afabe111a59728884512570c14ffec742072f69d790",
+      "Sha256": "50b68675673418f59d04527aa3f7cfbe58311e1726448312d92ca8db7f6ccb10",
       "Args": [
         "--fractal",
         "Kifs",
@@ -692,7 +692,7 @@
     },
     {
       "Name": "quaternionjulia-default",
-      "Sha256": "9f799c194573c1467a78107c25d71e7426f664a40b5b8f47068828bff24a882a",
+      "Sha256": "0f802721fb99a95dd052f0379096a87ee2b0c2d252ac4965e3c54f87fa8133db",
       "Args": [
         "--fractal",
         "QuaternionJulia",
@@ -715,7 +715,7 @@
     },
     {
       "Name": "quaternionmandelbrot-default",
-      "Sha256": "2ad1e436e1ffc430cb330f8c9344089f6163958d04294bf718d58116ef8aa24b",
+      "Sha256": "d3d9b01b916c903a89ce4f87122ab86754ce4385e7c6814fe64ab3f19fcbadf2",
       "Args": [
         "--fractal",
         "QuaternionMandelbrot",
@@ -738,7 +738,7 @@
     },
     {
       "Name": "bicomplexmandelbrot-default",
-      "Sha256": "e779592a3fd0a85f933a28c4cba5629bfb0ea2e75b817f3185d0c11f1ae96a0c",
+      "Sha256": "3488a9d659b42cbd25e90de9ad3a5f84e0af9527ff2433f0a77f310f34e22bfb",
       "Args": [
         "--fractal",
         "BicomplexMandelbrot",
@@ -761,7 +761,7 @@
     },
     {
       "Name": "kleinian-default",
-      "Sha256": "b0a321a05de961dc89eb510a9b8cd39d50d1387f80157794a9eded231c8d8aa2",
+      "Sha256": "81e5eedcad8b56e39927c748e2deea38e5abde1acb2db4970c1088f0b3b8ba98",
       "Args": [
         "--fractal",
         "Kleinian",
@@ -784,7 +784,7 @@
     },
     {
       "Name": "generatedmandelbrotz2-default",
-      "Sha256": "2241a9fb1f348a4a73116754ec4ade7076546f4f20a2919e9d941b240c6d0af3",
+      "Sha256": "36604c8499fb6430f75e3e4d9efaf9a78a6c1819318c1538d2a04253579125b9",
       "Args": [
         "--fractal",
         "GeneratedMandelbrotZ2",
@@ -807,7 +807,7 @@
     },
     {
       "Name": "generatedmandelbrotz3-default",
-      "Sha256": "de6416a3d3888826ee3c6f151329dd9e6283a632902dc24f4332c7a6020d6705",
+      "Sha256": "f8d4b97f38d76dea10557d7de0cabbeb559b5c58fdfef559b1914f8fc4c49adc",
       "Args": [
         "--fractal",
         "GeneratedMandelbrotZ3",
@@ -830,7 +830,7 @@
     },
     {
       "Name": "generatedmandelbrotz4-default",
-      "Sha256": "2e58dc7d7a2e7674bbf7d526eb17943d0392f83e7e2aabb0d393fe43c031f75a",
+      "Sha256": "331c3ce8fd70c3599013e67746a129c2708c371a29c76c2e3d8aedd6c1e73f5c",
       "Args": [
         "--fractal",
         "GeneratedMandelbrotZ4",
@@ -853,7 +853,7 @@
     },
     {
       "Name": "generatedmandelbrotz5-default",
-      "Sha256": "20def1f197a46bb577cd76aca911a794ab71320dd672846445d52ff71c301690",
+      "Sha256": "159948d5cc7c4d7b8cafb779aec8e836bd379e72100d0145e73cea3883421699",
       "Args": [
         "--fractal",
         "GeneratedMandelbrotZ5",
@@ -876,7 +876,7 @@
     },
     {
       "Name": "generatedtricorn-default",
-      "Sha256": "c1f2a4e30f99354abc1b23b860fa8492436934429b21f427ba4a0760bb3d0422",
+      "Sha256": "72e9d1fabc6f7f05c008d1e80c96dbf8af385a9edb27b13371ae4196def7c06e",
       "Args": [
         "--fractal",
         "GeneratedTricorn",
@@ -899,7 +899,7 @@
     },
     {
       "Name": "generatedburningship-default",
-      "Sha256": "135b4d3e470e5303bd2f69662a0d8461e6225cad1f266d35e00a0af07b8f1aba",
+      "Sha256": "8fbfea60142b2e81e1a21e146d526c85fea94e169721b7896aece8ca4845cb67",
       "Args": [
         "--fractal",
         "GeneratedBurningShip",
@@ -917,6 +917,56 @@
         "256",
         "--quality",
         "Standard",
+        "--no-watermark"
+      ]
+    },
+    {
+      "Name": "mandelbrot-interior-alpha-128",
+      "Sha256": "b46e4d22281e28a4c1e26dff65ee72935e1a777122ba9804647519feef61db63",
+      "Args": [
+        "--fractal",
+        "Mandelbrot",
+        "--theme",
+        "HSV",
+        "--x",
+        "0",
+        "--y",
+        "0",
+        "--zoom",
+        "0.5",
+        "--width",
+        "256",
+        "--height",
+        "256",
+        "--quality",
+        "Standard",
+        "--interior-alpha",
+        "128",
+        "--no-watermark"
+      ]
+    },
+    {
+      "Name": "mandelbrot-interior-alpha-0",
+      "Sha256": "004573efb8f35391751c5bbe1fca78bb4faa6b20f295b30ac5433ffa4b73c5ef",
+      "Args": [
+        "--fractal",
+        "Mandelbrot",
+        "--theme",
+        "HSV",
+        "--x",
+        "0",
+        "--y",
+        "0",
+        "--zoom",
+        "0.5",
+        "--width",
+        "256",
+        "--height",
+        "256",
+        "--quality",
+        "Standard",
+        "--interior-alpha",
+        "0",
         "--no-watermark"
       ]
     }
