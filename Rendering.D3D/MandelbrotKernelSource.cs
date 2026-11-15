@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+﻿// SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
 // MandelbrotKernelSource.cs — the HLSL *source strings* for the SP Mandelbrot
@@ -753,7 +753,7 @@ RWStructuredBuffer<float>  gSmooth  : register(u1);
 RWStructuredBuffer<float4> gFinalZD : register(u2);   // .xy = zr,zi  .zw = drv,div
 // #1340: per-band pixel counters of the wavefront schedule, zeroed by the host.
 RWStructuredBuffer<uint>   gWork    : register(u3);
-" + WaveFetch + @"
+" + WaveFetch + DzOut + @"
 // #1340 — two schedules, one compiled shader (gWave): one thread per pixel of the
 // band, or a fixed number of threads pulling the band's pixels from gWork[gBand]
 // and iterating them PERTURB_CHUNK steps at a time (HlslEntry). A pixel runs the
@@ -833,7 +833,7 @@ void CSPerturb(uint3 tid : SV_DispatchThreadID)
         }
         if (!escaped && iter < gMaxIter) continue;
 
-        gFinalZD[idx] = float4((float)zr, (float)zi, (float)drv, (float)div);
+        gFinalZD[idx] = float4((float)zr, (float)zi, (float)(drv * DzOutScale()), (float)(div * DzOutScale()));   // #1660
         if (iter >= gMaxIter)
         {
             gIter[idx]   = (uint)gMaxIter;
@@ -1022,7 +1022,7 @@ void CSPerturbFX(uint3 tid : SV_DispatchThreadID)
     }
     if (!escaped && iter < gMaxIter) continue;
 
-    float2 dzf = FxToFloat(vM, vE);
+    float2 dzf = FxToFloat(vM, vE + gScaleE);   // #1660: dz/dc . 2^gScaleE (DzOut)
     FxWrite(idx, iter, z, dzf);
     idx = -1;
     }
@@ -1108,7 +1108,7 @@ void CSPerturbF32(uint3 tid : SV_DispatchThreadID)
     }
     if (!escaped && iter < gMaxIter) continue;
 
-    FxWrite(idx, iter, z, v * invS);
+    FxWrite(idx, iter, z, v);   // #1660: v' = dz/dc . S = dz/dc . 2^gScaleE (DzOut)
     idx = -1;
     }
 }
@@ -1212,7 +1212,7 @@ RWStructuredBuffer<float4> gFinalZD : register(u2);   // .xy = zr,zi  .zw = drv,
 RWStructuredBuffer<float>  gOrbit   : register(u3);   // " + stride + @" mask'd means per pixel
 // #1384: per-band pixel counters of the wavefront schedule, zeroed by the host.
 RWStructuredBuffer<uint>   gWork    : register(u4);
-" + WaveFetch + @"
+" + WaveFetch + DzOut + @"
 // #1384 — CSPerturb's two schedules (#1340), one compiled shader: one thread per
 // pixel of the band, or persistent threads pulling the band's pixels from
 // gWork[gBand], PERTURB_CHUNK steps at a time. A new pixel starts from the same
@@ -1300,7 +1300,7 @@ void CSPerturbOrbit(uint3 tid : SV_DispatchThreadID)
         }
         if (!escaped && iter < gMaxIter) continue;
 
-    gFinalZD[idx] = float4((float)zrD, (float)ziD, (float)drv, (float)div);
+    gFinalZD[idx] = float4((float)zrD, (float)ziD, (float)(drv * DzOutScale()), (float)(div * DzOutScale()));   // #1660
     int obase = idx * " + stride + @";
     if (iter >= gMaxIter)
     {
@@ -1378,7 +1378,7 @@ RWStructuredBuffer<float>  gSmooth  : register(u1);
 RWStructuredBuffer<float4> gFinalZD : register(u2);
 // #1340: per-band pixel counters of the wavefront schedule, zeroed by the host.
 RWStructuredBuffer<uint>   gWork    : register(u3);
-" + WaveFetch + @"
+" + WaveFetch + DzOut + @"
 // #1340 — two schedules, one compiled shader (gWave): one thread per pixel of the
 // band, or a fixed number of threads pulling the band's pixels from gWork[gBand]
 // and iterating them PERTURB_CHUNK loop trips at a time (HlslEntry). A pixel runs
@@ -1558,7 +1558,7 @@ void CSPerturbSA(uint3 tid : SV_DispatchThreadID)
         }
         if (!escaped && iter < gMaxIter) continue;
 
-        gFinalZD[idx] = float4((float)zr, (float)zi, (float)drv, (float)div);
+        gFinalZD[idx] = float4((float)zr, (float)zi, (float)(drv * DzOutScale()), (float)(div * DzOutScale()));   // #1660
         if (iter >= gMaxIter)
         {
             gIter[idx]   = (uint)gMaxIter;
@@ -1695,6 +1695,23 @@ void CSPerturbSA(uint3 tid : SV_DispatchThreadID)
     public const string WorkUav = @"
 RWStructuredBuffer<uint> gWork : register(u5);
 " + WaveFetch;
+
+    /// <summary>#1660 — the deep kernels' derivative output. They write dz/dc times
+    /// 2^E, E = <c>Math.ILogB(scale)</c> (the pixel scale's binary exponent), instead
+    /// of dz/dc itself: |dz/dc| ≈ 1/pixel passes float's 3.4e38 past zoom ~1e35, so the
+    /// plain float came back as ±inf and the CPU's normals and distance estimate went
+    /// with it. Scaled, it stays near |z| ln|z| / (distance in pixels), in float range at
+    /// any depth. A power of two is exact both ways (no subnormals): where the old float
+    /// was finite the new one is the same value times 2^E, bit for bit, and the host
+    /// undoes it in double (<see cref="FracturingFog.Rendering.GpuPerturbDerivative.Unscale"/>). For the fp64 kernels (needs
+    /// gScale, a double, in the cbuffer); the float-exp kernel adds gScaleE, the same E,
+    /// to its exponent instead.</summary>
+    public const string DzOut = @"
+// #1660 — 2^E for E = the exponent of gScale: its exponent bits with mantissa and
+// sign cleared (gScale > 0, normal). Exact; no exp2 / ldexp.
+double DzOutScale() { uint lo, hi; asuint(gScale, lo, hi); return asdouble(0u, hi & 0x7FF00000u); }
+";
+
 
     /// <summary>#1340 — the pixel fetch of both schedules (HlslEntry, CSPerturb,
     /// CSPerturbSA; declared after their gWork counter buffer).

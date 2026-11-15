@@ -608,7 +608,7 @@ Setup:
 Not caught: removing the tail's \|z\| < \|δ\| rebase. With climbing back the tail is short, and none of the three views glitches without it.
 
 **Found on the way, filed:**
-- **#1660:** every GPU deep kernel returns z and dz/dc as `float4`, and |dz/dc| ≈ 1/pixel overflows float past ~1e35. GPU deep frames' normals and DE are inf there: 75–100 % of escaped pixels on the test views. Where finite, GPU and CPU normals agree exactly.
+- **#1660:** every GPU deep kernel returns z and dz/dc as `float4`, and |dz/dc| ≈ 1/pixel overflows float past ~1e35. GPU deep frames' normals and DE are inf there: 75–100 % of escaped pixels on the test views. Where finite, GPU and CPU normals agree exactly. Fixed: every deep kernel now writes dz/dc · 2^ILogB(scale), an exact power of two that keeps it in float range at any depth, and the calculator unscales it in double (`GpuPerturbDerivative`). The S1630 normals check now covers every escaped pixel, 3E47 included.
 - **#1661:** the D3D11 hang above. Fixed (a livelock in the kernel's tail); D3D11 runs the LA kernel.
 
 **Not done:**

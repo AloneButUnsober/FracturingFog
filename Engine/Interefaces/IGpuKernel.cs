@@ -226,7 +226,10 @@ namespace FracturingFog.Rendering
         /// Fills <paramref name="iterDst"/> + smooth + finalZD (zr,zi,drv,div)
         /// so the caller drives colour/dist/normal writeback itself. dc for
         /// pixel (x,y) = (offsetX0 + x, offsetY0 + y) · scale. Only valid when
-        /// <see cref="SupportsPerturbation"/> is true.</summary>
+        /// <see cref="SupportsPerturbation"/> is true.
+        /// <para>#1660 — every deep kernel (this, LA, SA, orbit, float-exp) writes the
+        /// derivative SCALED: finalDr/finalDi = dz/dc · 2^ILogB(scale). Multiply by
+        /// <see cref="GpuPerturbDerivative.Unscale"/> (in double) for dz/dc.</para></summary>
         void RunPerturb(
             int width, int height,
             double scale, int maxIter, double escapeRadius2,
@@ -321,5 +324,20 @@ namespace FracturingFog.Rendering
             float[] orbitDst)
             => throw new NotSupportedException(
                 "This GPU kernel has no orbit perturbation path (SupportsPerturbationOrbit is false).");
+    }
+
+    /// <summary>#1660 — the deep perturbation kernels' derivative output
+    /// (<see cref="IGpuKernel.RunPerturb"/> and its LA / SA / orbit / float-exp twins).
+    /// |dz/dc| ≈ 1/pixel passes float's 3.4e38 past zoom ~1e35, so a plain float
+    /// derivative came back as ±inf and the normals and distance estimate built from it
+    /// were garbage. The kernels write dz/dc · 2^E instead, E = <c>Math.ILogB(scale)</c>,
+    /// which stays near |z| ln|z| / (distance in pixels): in float range at any depth.
+    /// A power of two is exact both ways, so where the plain float was finite the
+    /// decoded value is the same, bit for bit.</summary>
+    public static class GpuPerturbDerivative
+    {
+        /// <summary>The factor that turns a kernel's derivative output back into dz/dc:
+        /// 2^-E, E = <c>Math.ILogB(scale)</c>. Apply in double.</summary>
+        public static double Unscale(double scale) => Math.ScaleB(1.0, -Math.ILogB(scale));
     }
 }

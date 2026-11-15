@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+﻿// SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 // SPDX-FileCopyrightText: Yu, Zhuoran (GitHub 5E-324), Imagina <https://github.com/5E-324/Imagina>, AGPL-3.0
 
@@ -82,7 +82,7 @@ RWStructuredBuffer<uint>   gIter    : register(u0);
 RWStructuredBuffer<float>  gSmooth  : register(u1);
 RWStructuredBuffer<float4> gFinalZD : register(u2);
 RWStructuredBuffer<uint>   gWork    : register(u3);
-" + MandelbrotKernelSource.WaveFetch + @"
+" + MandelbrotKernelSource.WaveFetch + MandelbrotKernelSource.DzOut + @"
 double ChebD(double x, double y) { return max(abs(x), abs(y)); }
 
 [numthreads(8, 8, 1)]
@@ -249,7 +249,7 @@ void CSPerturbLA(uint3 tid : SV_DispatchThreadID)
         }
         if (!done) continue;
 
-        gFinalZD[idx] = float4((float)zr, (float)zi, (float)drv, (float)div);
+        gFinalZD[idx] = float4((float)zr, (float)zi, (float)(drv * DzOutScale()), (float)(div * DzOutScale()));   // #1660
         if (n >= gMaxIter)
         {
             gIter[idx]   = (uint)gMaxIter;
