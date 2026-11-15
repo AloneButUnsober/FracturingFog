@@ -11,9 +11,11 @@
 //     from rith's FF 0.7.1 benchmark report; see the bibliography) at 1e15 .. its own
 //     5e33, which straddles the LA crossover (#1629: 1e30 here), and FF's built-in
 //     "3E47 Test" region (every deep pixel rebases there, S1274 / S1630).
-//   • Each scene: CPU LA first (the iteration reference), then every candidate, in
-//     alternating order on the second pass (as --gpulaprobe). Best of the passes; a
-//     route already 3× slower than the scene's best skips its second pass.
+//   • Each scene: an untimed CPU LA frame first (the iteration reference), then every
+//     candidate, CPU LA included, in alternating order on the second pass (as
+//     --gpulaprobe). Best of the passes; a route already 3× slower than the scene's best
+//     skips its second pass. (#1789: the reference used to be CPU LA's first timing;
+//     the first frame after a scene switch runs slow, which biased CPU LA.)
 //   • A run that fell back (the GPU too slow, the route not taken) is not eligible.
 //   • A time budget (seconds) and the cancellation token stop the pass early; the
 //     chooser then decides what the finished scenes can, the rest keeps the default.
@@ -55,7 +57,13 @@ namespace FracturingFog
 
     public static class DeepRouteCalibrator
     {
-        public const int Passes = 2;
+        /// <summary>Alternating passes per scene, best of each route; a 3x loser stops after one.
+        /// #1789: the scalar LA tail's speed depends on the JIT's dynamic-PGO profile: measured
+        /// fresh on one scene it matched the 4-lane tail (170 vs 176 ms, p448 3e33, 960x540),
+        /// after the shallower scenes it ran 15-40 % slower (220 ms) while the 4-lane tail stayed
+        /// at ~175 ms (with PGO off: 260-300 ms vs ~175). The pass, like a session zooming in,
+        /// measures the warmed process; more passes do not change that, so three suffice.</summary>
+        public const int Passes = 3;
 
         /// <summary>A route this many times slower than the scene's best after the first
         /// pass skips the second (it cannot win).</summary>
@@ -91,37 +99,49 @@ namespace FracturingFog
 
         /// <summary>Run the pass. Stores the winners unless <paramref name="store"/> is false.</summary>
         public static DeepRouteCalibrationResult Run(IDeepRouteRunner runner, IReadOnlyList<DeepRouteScene>? scenes = null,
-            TimeSpan? budget = null, bool store = true, CancellationToken ct = default, Action<string>? log = null)
+            TimeSpan? budget = null, bool store = true, CancellationToken ct = default, Action<string>? log = null,
+            bool warmUp = true)
         {
             ArgumentNullException.ThrowIfNull(runner);
             scenes ??= DefaultScenes;
             var limit = budget ?? DefaultBudget;
             var clock = Stopwatch.StartNew();
             var timings = new List<DeepRouteTiming>();
-            var routes = runner.Candidates.Where(r => r != DeepRouteCandidate.CpuLa).ToList();
+            // #1789 — CPU LA is timed in the alternation like every route. Its reference run
+            // (the first frame of a scene) is not timed: measured, the frame right after a
+            // scene switch ran up to ~25 % slow, which, when CPU LA always took that slot,
+            // made the 4-lane LA tail look 5-20 % faster than the scalar one (alternated, the
+            // two are within 4 %, as #1628 found).
+            var routes = runner.Candidates.ToList();
             bool complete = true;
             bool OutOfTime() => ct.IsCancellationRequested || clock.Elapsed > limit;
+
+            // #1789 — an untimed pass over every scene and route first: a fresh process ran
+            // its first frames of each code path up to 6x slow (CPU BLA at p448 1e22: 176 ms,
+            // then 27), so the first-in-process pass chose differently (LA from 3e33, SIMD
+            // off) from the next ones (1e27, SIMD on). Timed after it, every pass measures a
+            // warmed process, as a session that has zoomed in is.
+            if (warmUp)
+                foreach (var s in scenes.OrderBy(s => s.Zoom))
+                    foreach (var r in routes)
+                    {
+                        if (OutOfTime()) break;
+                        runner.Run(s, r, ct);
+                    }
 
             foreach (var s in scenes.OrderBy(s => s.Zoom))
             {
                 if (OutOfTime()) { complete = false; break; }
-                // The reference: CPU LA (it also counts as its own first timing).
+                // The reference: CPU LA's iterations (the run is not timed, #1789).
                 var refRun = runner.Run(s, DeepRouteCandidate.CpuLa, ct);
                 if (refRun.FellBack || refRun.Iterations == null) { log?.Invoke($"{s.Name}: CPU LA did not run; scene skipped"); continue; }
-                var best = new Dictionary<DeepRouteCandidate, double> { [DeepRouteCandidate.CpuLa] = refRun.Ms };
-                var dis = new Dictionary<DeepRouteCandidate, double> { [DeepRouteCandidate.CpuLa] = 0 };
+                var best = new Dictionary<DeepRouteCandidate, double>();
+                var dis = new Dictionary<DeepRouteCandidate, double>();
                 var failed = new HashSet<DeepRouteCandidate>();
                 bool sceneDone = true;
                 for (int pass = 0; pass < Passes && sceneDone; pass++)
                 {
                     var order = pass % 2 == 0 ? routes : Enumerable.Reverse(routes).ToList();
-                    if (pass > 0)
-                    {
-                        // CPU LA again, between the others (alternating order).
-                        if (OutOfTime()) { sceneDone = false; break; }
-                        var again = runner.Run(s, DeepRouteCandidate.CpuLa, ct);
-                        if (!again.FellBack) best[DeepRouteCandidate.CpuLa] = Math.Min(best[DeepRouteCandidate.CpuLa], again.Ms);
-                    }
                     foreach (var r in order)
                     {
                         if (failed.Contains(r)) continue;

@@ -120,6 +120,57 @@ A field stays null, so the default applies, where the runs can't decide.
 - **stderr:** the batch prints `deep route: …`, the stored rows, at setup. When the GPU opens it prints `deep zoom on the GPU / CPU (…)`, with the source: FF_GPU_PERTURB, --gpu-deep, measured on this device, or default.
 - **Logic:** lives in `DeepRouteBatchSetup` (Engine, tested by `S1788DeepRouteBatchTests`). `Batch/BatchDeepRouteSetup.cs` only hands it the batch's own-device kernel factory and stderr.
 
+## Validation (S5, #1789)
+
+### On this machine (i5-13420H, 12 threads, AVX2 + GeForce GT 710)
+
+`--deeproutecalprobe` was run at the calibration's own size and at full-size frames (`FF_DEEPCAL_SIZE`).
+
+| frames | LA crossover | LA SIMD | GPU deep / GPU LA |
+|---|---|---|---|
+| 480×270 (the pass's size), CPU / D3D11 / Vulkan | 1e27 | on | off / off |
+| 960×540, CPU | 1e27 | on | — |
+| 1920×1080, CPU | 1e27 | on (5–15 %) | — |
+
+So the pass picks the same CPU route at full size as at its own size. It keeps GPU deep off, as today's default does. It differs from two fixed defaults:
+- **LA crossover:** 1e27 instead of 1e30. From 1e27 the LA rows (4-lane tail) beat BLA by 5–15 % at every size.
+- **LA SIMD:** on instead of off.
+
+**Why LA SIMD came out on although #1628 measured no gain.** The scalar LA tail's speed depends on the JIT's dynamic-PGO profile. The 4-lane tail's does not.
+
+| p448 3e33, 960×540 | scalar LA | 4-lane LA |
+|---|---|---|
+| fresh process, this scene only | 170 ms | 176 ms |
+| after the shallower scenes in the same process | 220 ms | 175 ms |
+| `DOTNET_TieredPGO=0` | 260–300 ms | ~175 ms |
+
+#1628's single-scene measurements are the first row. A session that zooms in, and the calibration pass, are the second.
+
+**Three biases fixed in S5.**
+- **The reference frame.** It was CPU LA's first timing. The first frame after a scene switch runs up to ~25 % slow, so CPU LA always took the slow slot. It is untimed now, and CPU LA alternates like every other route.
+- **A cold process.** A fresh process ran the first frames of each code path up to 6× slow (CPU BLA at p448 1e22: 176 ms, then 27). So the first pass in a process chose differently (LA from 3e33, SIMD off) from the next ones. An untimed warm pass over every scene and route now runs first. After it, the first pass in a fresh process agrees with the others (CPU / D3D11 / Vulkan: 1e27, SIMD on, GPU off), with CPU times matching to the millisecond across passes.
+- **Garbage.** The runner collects the previous frames' garbage before each timed frame.
+
+Three timed passes instead of two (a loser still stops after one). More passes did not move the JIT-state effect above; the warm pass did.
+
+The GPU SA / BLA kernel's iteration agreement past 1e27 is #1791. The calibration excludes it there, which makes no difference on the GT 710.
+
+### On another machine
+
+The pass is per device, so the real test is a machine with a different CPU or GPU. On a Windows build, run:
+
+```
+FracturingFog.com --deeproutecalprobe
+FracturingFog.com --deeproutecalprobe     (with FF_DEEPCAL_SIZE=1920x1080 FF_DEEPCAL_BACKEND=cpu)
+```
+
+Linux works too, with `FF_DEEPCAL_BACKEND=cpu` or `vulkan`. The probe only measures; it writes nothing unless `FF_DEEPCAL_STORE=1`. Paste the output on #1789. These are the choices it might change:
+- **Modern NVIDIA / AMD GPU (fp64 at 1/32–1/64):** GPU deep on, with float-exp over fp64 (#1663's open question).
+- **AVX-512 or larger-cache CPU:** a different LA crossover.
+- **Hybrid vs non-hybrid CPU:** whether LA SIMD still wins.
+
+In the live app, Control Center → Advanced → GPU / Performance shows the stored result after the background pass.
+
 ## Related
 
 #1663 (the audit), #1339 (the store model), #1664 (a float-exp + LA GPU kernel, a future candidate), #1493 (folded into S3).
