@@ -255,6 +255,7 @@ namespace FracturingFog.Cli
             Probe("FF_DEEPCAL_BACKEND", "--deeproutecalprobe", "backend: d3d11, vulkan or cpu (default all).", "#1786"),
             Probe("FF_DEEPCAL_BUDGET_S", "--deeproutecalprobe", "calibration budget in seconds.", "#1786"),
             Probe("FF_DEEPCAL_STORE", "--deeproutecalprobe", "1 = also write the deep-route store.", "#1786"),
+            Probe("FF_DEEPCAL_SIZE", "--deeproutecalprobe", "frame size WxH (default 480x270).", "#1789"),
             Probe("FF_GPULA_REPS", "--gpulaprobe", "repetitions.", "#1630"),
             Probe("FF_GPULA_SCENE", "--gpulaprobe", "scene filter.", "#1630"),
             Probe("FF_GPULA_SKEW", "--gpulaprobe", "compile the D3D11 LA kernel with the forced rounding difference (LaKernelSource.SkewPlainMagnitudesForTests).", "#1661"),

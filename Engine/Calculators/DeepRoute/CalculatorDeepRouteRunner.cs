@@ -115,6 +115,10 @@ namespace FracturingFog
                     if (!RanRoute(w, route)) return DeepRouteRun.Fallback;
                 }
                 var c = Make(scene, route);
+                // #1789 — the previous frames' buffers (tens of MB at full size) are not
+                // this frame's cost: collect them before the clock starts.
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
                 var sw = Stopwatch.StartNew();
                 c.Calculate(ct);
                 double ms = sw.Elapsed.TotalMilliseconds;

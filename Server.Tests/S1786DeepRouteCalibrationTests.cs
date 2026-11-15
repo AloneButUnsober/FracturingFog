@@ -104,13 +104,47 @@ public sealed class S1786DeepRouteCalibrationTests : IDisposable
     public void Each_Scene_Starts_With_The_Cpu_La_Reference_And_Alternates_The_Order()
     {
         var f = new FakeRunner { Candidates = [DeepRouteCandidate.CpuLa, DeepRouteCandidate.CpuBla, DeepRouteCandidate.GpuSaFp64] };
-        var r = DeepRouteCalibrator.Run(f, [Sc("b", 1e30), Sc("a", 1e20)], store: false);
+        var r = DeepRouteCalibrator.Run(f, [Sc("b", 1e30), Sc("a", 1e20)], store: false, warmUp: false);
         Assert.True(r.Complete);
-        // Shallow first; per scene: LA, BLA, GPU, then LA, GPU, BLA.
-        string[] expect = ["a:CpuLa", "a:CpuBla", "a:GpuSaFp64", "a:CpuLa", "a:GpuSaFp64", "a:CpuBla",
-                           "b:CpuLa", "b:CpuBla", "b:GpuSaFp64", "b:CpuLa", "b:GpuSaFp64", "b:CpuBla"];
+        // Shallow first; per scene: the untimed LA reference, then LA, BLA, GPU / GPU, BLA,
+        // LA / LA, BLA, GPU (#1789: CPU LA alternates like the others; three passes).
+        Assert.Equal(3, DeepRouteCalibrator.Passes);
+        string[] one = ["CpuLa", "CpuLa", "CpuBla", "GpuSaFp64", "GpuSaFp64", "CpuBla", "CpuLa", "CpuLa", "CpuBla", "GpuSaFp64"];
+        string[] expect = [.. one.Select(r => "a:" + r), .. one.Select(r => "b:" + r)];
         Assert.Equal(expect, f.Calls.Select(c => $"{c.Scene}:{c.Route}"));
         Assert.Equal(6, r.Timings.Count);
+    }
+
+    [Fact]
+    public void A_Warm_Pass_Runs_Every_Scene_And_Route_Untimed_First()
+    {
+        // #1789 — a fresh process's first frames of each code path ran up to 6x slow.
+        int n = 0;
+        var f = new FakeRunner
+        {
+            Candidates = [DeepRouteCandidate.CpuLa, DeepRouteCandidate.CpuBla],
+            Ms = (_, _) => ++n <= 4 ? 1000 : 10,   // the warm pass is slow
+        };
+        var r = DeepRouteCalibrator.Run(f, [Sc("b", 1e30), Sc("a", 1e20)], store: false);
+        Assert.Equal(["a:CpuLa", "a:CpuBla", "b:CpuLa", "b:CpuBla"], f.Calls.Take(4).Select(c => $"{c.Scene}:{c.Route}"));
+        Assert.All(r.Timings, t => Assert.Equal(10, t.Ms));             // none of the warm frames counts
+        Assert.Equal(4 + 2 * (1 + 2 * DeepRouteCalibrator.Passes), f.Calls.Count);
+    }
+
+    [Fact]
+    public void The_Reference_Run_Is_Not_Timed()
+    {
+        // #1789 — the first frame after a scene switch runs slow (measured ~25 %); timing it
+        // biased CPU LA. Here the reference is the fastest frame: it must not count.
+        int la = 0;
+        var f = new FakeRunner
+        {
+            Candidates = [DeepRouteCandidate.CpuLa, DeepRouteCandidate.CpuBla],
+            Ms = (_, r) => r == DeepRouteCandidate.CpuLa ? (++la == 1 ? 1 : 10) : 12,
+        };
+        var r = DeepRouteCalibrator.Run(f, [Sc("a", 1e35)], store: false, warmUp: false);
+        Assert.Equal(1 + DeepRouteCalibrator.Passes, f.Calls.Count(c => c.Route == DeepRouteCandidate.CpuLa));   // reference + timed
+        Assert.Equal(10, r.Timings.Single(t => t.Route == DeepRouteCandidate.CpuLa).Ms);
     }
 
     [Fact]
@@ -122,9 +156,9 @@ public sealed class S1786DeepRouteCalibrationTests : IDisposable
             Candidates = [DeepRouteCandidate.CpuLa, DeepRouteCandidate.CpuBla, DeepRouteCandidate.GpuSaFp64],
             Ms = (_, r) => r switch { DeepRouteCandidate.GpuSaFp64 => 100, DeepRouteCandidate.CpuBla => ++n == 1 ? 20 : 15, _ => 10 },
         };
-        var r = DeepRouteCalibrator.Run(f, [Sc("a", 1e20)], store: false);
+        var r = DeepRouteCalibrator.Run(f, [Sc("a", 1e20)], store: false, warmUp: false);
         Assert.Equal(1, f.Calls.Count(c => c.Route == DeepRouteCandidate.GpuSaFp64));   // 100 > 3 x 10
-        Assert.Equal(2, f.Calls.Count(c => c.Route == DeepRouteCandidate.CpuBla));
+        Assert.Equal(DeepRouteCalibrator.Passes, f.Calls.Count(c => c.Route == DeepRouteCandidate.CpuBla));
         Assert.Equal(15, r.Timings.Single(t => t.Route == DeepRouteCandidate.CpuBla).Ms);   // the better pass
     }
 
@@ -139,7 +173,7 @@ public sealed class S1786DeepRouteCalibrationTests : IDisposable
             Ms = (_, r) => IsGpu(r) ? 1 : 10,
             FallBack = [DeepRouteCandidate.GpuFloatExp],
         };
-        var r = DeepRouteCalibrator.Run(f, [Sc("a", 1e20)], store: false);
+        var r = DeepRouteCalibrator.Run(f, [Sc("a", 1e20)], store: false, warmUp: false);
         Assert.Equal(0.10, r.Timings.Single(t => t.Route == DeepRouteCandidate.GpuSaFp64).Disagreement, 9);
         Assert.Equal(0.0, r.Timings.Single(t => t.Route == DeepRouteCandidate.CpuBla).Disagreement);
         var fx = r.Timings.Single(t => t.Route == DeepRouteCandidate.GpuFloatExp);
@@ -159,15 +193,15 @@ public sealed class S1786DeepRouteCalibrationTests : IDisposable
         using var cts = new CancellationTokenSource();
         var f = new FakeRunner { Candidates = [DeepRouteCandidate.CpuLa, DeepRouteCandidate.CpuBla] };
         f.OnRun = () => { if (f.Calls.Count == 4) cts.Cancel(); };
-        var r = DeepRouteCalibrator.Run(f, [Sc("a", 1e20), Sc("b", 1e30), Sc("c", 1e40)], ct: cts.Token);
+        var r = DeepRouteCalibrator.Run(f, [Sc("a", 1e20), Sc("b", 1e30), Sc("c", 1e40)], ct: cts.Token, warmUp: false);
         Assert.False(r.Complete);
         Assert.Equal(4, f.Calls.Count);                         // scene a finished, nothing after
         Assert.All(r.Timings, t => Assert.Equal("a", t.Scene));
 
         var slow = new FakeRunner { Candidates = [DeepRouteCandidate.CpuLa, DeepRouteCandidate.CpuBla], OnRun = () => Thread.Sleep(30) };
-        var r2 = DeepRouteCalibrator.Run(slow, [Sc("a", 1e20), Sc("b", 1e30), Sc("c", 1e40)], budget: TimeSpan.FromMilliseconds(50), store: false);
+        var r2 = DeepRouteCalibrator.Run(slow, [Sc("a", 1e20), Sc("b", 1e30), Sc("c", 1e40)], budget: TimeSpan.FromMilliseconds(50), store: false, warmUp: false);
         Assert.False(r2.Complete);
-        Assert.True(slow.Calls.Count < 12, $"{slow.Calls.Count} runs");
+        Assert.True(slow.Calls.Count < 3 * (1 + 2 * DeepRouteCalibrator.Passes), $"{slow.Calls.Count} runs");
     }
 
     [Fact]
@@ -415,7 +449,8 @@ public sealed class S1786DeepRouteCalibrationTests : IDisposable
         DeepRouteCalibration.RunnerFactory = _ =>
         {
             var r = new DisposableFakeRunner();
-            r.Inner.OnRun = () => { if (r.Inner.Calls.Count == 3) cts.Cancel(); };
+            // After the warm pass (6 scenes x 6 routes) and a few timed runs.
+            r.Inner.OnRun = () => { if (r.Inner.Calls.Count == 40) cts.Cancel(); };
             return r;
         };
         var result = DeepRouteCalibration.RunNow(ct: cts.Token);
