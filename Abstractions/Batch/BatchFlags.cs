@@ -89,6 +89,12 @@ namespace FracturingFog.Batch
         // #1611 — where the fractal is computed: auto (the GPU when there is one, as
         // the live view) / on (the GPU or an error) / off (the CPU).
         public const string Gpu            = "--gpu";
+        // #1788 (#1665 S4) — GPU deep zoom: auto (env / measured route / default, as the
+        // live view) / on / off (the Control Center's GPU deep zoom toggle).
+        public const string GpuDeep        = "--gpu-deep";
+        // #1788 — the per-device deep-route calibration: auto (use what is stored) / off
+        // (ignore it: the fixed defaults) / force (run a pass first, store it).
+        public const string DeepRouteCalibration = "--deep-route-calibration";
         // #1554 — the math overlay (axes + the orbit of a pinned point) on a 2D still.
         public const string MathOverlay    = "--math-overlay";
         // #1735 — the math overlay on a 3D still: axes, bailout sphere and the orbit of a pinned

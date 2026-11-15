@@ -27,6 +27,28 @@ namespace FracturingFog.Batch
         Off,
     }
 
+    /// <summary>#1788 — <c>--gpu-deep</c>: GPU deep zoom (perturbation).</summary>
+    public enum BatchGpuDeepMode
+    {
+        /// <summary>As the live view resolves it: FF_GPU_PERTURB, the measured route, the default.</summary>
+        Auto,
+        /// <summary>On (the Control Center toggle ticked).</summary>
+        On,
+        /// <summary>Off (the toggle unticked).</summary>
+        Off,
+    }
+
+    /// <summary>#1788 — <c>--deep-route-calibration</c>.</summary>
+    public enum BatchDeepRouteMode
+    {
+        /// <summary>Use the stored per-device calibration; never run a pass.</summary>
+        Auto,
+        /// <summary>Ignore it: the fixed defaults (FF_DEEP_ROUTE_CALIBRATION=0).</summary>
+        Off,
+        /// <summary>Run a calibration pass before rendering and store it.</summary>
+        Force,
+    }
+
     /// <summary>Per-light point / spot override parsed from the <c>--lightN-*</c>
     /// flags (roadmap S8, #404). Every field is nullable so BatchRenderer applies
     /// only what the user actually passed onto <c>fp.Lighting.LightN</c>; unset
@@ -183,6 +205,10 @@ namespace FracturingFog.Batch
         /// <summary>#1611 — <c>--gpu auto|on|off</c>. Shallow frames (and, with
         /// FF_GPU_PERTURB=1, deep ones) compute on the GPU as in the live view.</summary>
         public BatchGpuMode Gpu { get; set; } = BatchGpuMode.Auto;
+        /// <summary>#1788 — <c>--gpu-deep auto|on|off</c>.</summary>
+        public BatchGpuDeepMode GpuDeep { get; set; } = BatchGpuDeepMode.Auto;
+        /// <summary>#1788 — <c>--deep-route-calibration auto|off|force</c>.</summary>
+        public BatchDeepRouteMode DeepRoute { get; set; } = BatchDeepRouteMode.Auto;
         /// <summary>#1554 — <c>--math-overlay RE,IM[,STEPS]</c>: draw the axes and the
         /// orbit of the pinned point (Mandelbrot: c; Julia: z0) on the still, as the
         /// live view's math overlay does. Null = off.</summary>
@@ -861,6 +887,36 @@ namespace FracturingFog.Batch
                             case "off":  opts.Gpu = BatchGpuMode.Off;  break;
                             default:
                                 error = $"--gpu must be auto|on|off (got '{gv}').";
+                                return false;
+                        }
+                        break;
+                    }
+
+                    case BatchFlags.GpuDeep:   // #1788
+                    {
+                        if (!Next(args, ref i, a, out string dv, out error)) return false;
+                        switch (dv.ToLowerInvariant())
+                        {
+                            case "auto": opts.GpuDeep = BatchGpuDeepMode.Auto; break;
+                            case "on":   opts.GpuDeep = BatchGpuDeepMode.On;   break;
+                            case "off":  opts.GpuDeep = BatchGpuDeepMode.Off;  break;
+                            default:
+                                error = $"--gpu-deep must be auto|on|off (got '{dv}').";
+                                return false;
+                        }
+                        break;
+                    }
+
+                    case BatchFlags.DeepRouteCalibration:   // #1788
+                    {
+                        if (!Next(args, ref i, a, out string drv, out error)) return false;
+                        switch (drv.ToLowerInvariant())
+                        {
+                            case "auto":  opts.DeepRoute = BatchDeepRouteMode.Auto;  break;
+                            case "off":   opts.DeepRoute = BatchDeepRouteMode.Off;   break;
+                            case "force": opts.DeepRoute = BatchDeepRouteMode.Force; break;
+                            default:
+                                error = $"--deep-route-calibration must be auto|off|force (got '{drv}').";
                                 return false;
                         }
                         break;

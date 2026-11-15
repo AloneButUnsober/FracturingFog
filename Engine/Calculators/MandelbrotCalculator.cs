@@ -340,7 +340,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 return "past the FP32 GPU zoom limit (1e4); deeper zooms render on the CPU";
             // #1665: a device measured faster may take it (its key isn't known before it opens).
             return UseGpuPerturbation || (UseDeepRouteCalibration && GpuPerturbEnvSwitch != false && DeepRouteStore.AnyGpuDeepFor()) ? null
-                : "deep zoom renders on the CPU unless GPU perturbation is enabled (Control Center \u2192 Advanced \u2192 GPU deep zoom, or FF_GPU_PERTURB=1)";
+                : "deep zoom renders on the CPU unless GPU perturbation is enabled (--gpu-deep on in --batch; live: Control Center \u2192 Advanced \u2192 GPU deep zoom; or FF_GPU_PERTURB=1)";
         }
         return Fp32GpuResolvesView ? null
             : "pixels this small are below the FP32 GPU kernel's precision at this size; it renders on the CPU";

@@ -525,6 +525,18 @@ namespace FracturingFog.Batch
                     "Where the fractal is computed. auto = the GPU when there is one (shallow frames; deep zoom "
                     + "too with FF_GPU_PERTURB=1), as the live view; on = the GPU or an error exit; off = the CPU.",
                     new[] { "auto", "on", "off" }, "auto", "MODE"),
+                // #1788 (#1665 S4)
+                Pick(BatchFlags.GpuDeep, Output, BatchModes.FractalRender | BatchModes.Scene,
+                    "GPU deep zoom (perturbation, past zoom 1e4), as the live view's Control Center toggle. "
+                    + "auto = FF_GPU_PERTURB, else this device's measured deep route, else off; on / off = the toggle. "
+                    + "The fp64 kernels render the same pixels as the CPU; the fp32 ones differ on ~0.35 % near deep minibrots. "
+                    + "Needs a GPU (not with --gpu off).",
+                    new[] { "auto", "on", "off" }, "auto", "MODE"),
+                Pick(BatchFlags.DeepRouteCalibration, Output, BatchModes.FractalRender | BatchModes.Scene,
+                    "The per-device deep-zoom route calibration (#1665): auto = use what this device measured "
+                    + "(LA crossover, LA SIMD, GPU deep zoom, GPU LA, fp64 / float-exp; never runs a pass); "
+                    + "off = the fixed defaults; force = measure first (about 5-30 s) and store it.",
+                    new[] { "auto", "off", "force" }, "auto", "MODE"),
                 Sw(BatchFlags.NoTaa, Output, BatchModes.Image,
                     "Skip the quality preset's temporal anti-aliasing on a still (High / Ultra / Extreme: "
                     + "8 / 16 / 32 samples, as the live view settles): sub-pixel anti-aliasing only, faster."),

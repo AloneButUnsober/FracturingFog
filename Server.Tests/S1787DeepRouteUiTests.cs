@@ -313,11 +313,11 @@ public sealed class S1787DeepRouteUiTests : IDisposable
     }
 
     [Fact]
-    public void A_Set_Toggle_Is_A_Batch_Fidelity_Gap()
+    public void A_Set_Toggle_Is_No_Longer_A_Batch_Fidelity_Gap()
     {
         Assert.DoesNotContain(BatchCommandBuilder.DetectGaps(new BatchCommandSnapshot()), g => g.Contains("GPU deep zoom"));
-        var on = BatchCommandBuilder.DetectGaps(new BatchCommandSnapshot { GpuDeepZoomToggle = true });
-        Assert.Contains(on, g => g.Contains("GPU deep zoom is turned on") && g.Contains("#1788"));
-        Assert.Contains(BatchCommandBuilder.DetectGaps(new BatchCommandSnapshot { GpuDeepZoomToggle = false }), g => g.Contains("turned off"));
+        // #1788: --gpu-deep carries the toggle now; no gap either way (S1788 checks the flag).
+        Assert.DoesNotContain(BatchCommandBuilder.DetectGaps(new BatchCommandSnapshot { GpuDeepZoomToggle = true }), g => g.Contains("GPU deep zoom"));
+        Assert.DoesNotContain(BatchCommandBuilder.DetectGaps(new BatchCommandSnapshot { GpuDeepZoomToggle = false }), g => g.Contains("GPU deep zoom"));
     }
 }

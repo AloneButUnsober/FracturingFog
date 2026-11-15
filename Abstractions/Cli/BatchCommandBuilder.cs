@@ -80,8 +80,7 @@ namespace FracturingFog.Cli
         public bool GpuCompute { get; init; } = true;
 
         /// <summary>#1787 — the Control Center's GPU deep zoom toggle, when the user set it
-        /// this session (null = untouched). --batch has no flag for it yet (#1788): a set
-        /// toggle is a fidelity gap.</summary>
+        /// this session (null = untouched). #1788: emitted as <c>--gpu-deep on|off</c>.</summary>
         public bool? GpuDeepZoomToggle { get; init; }
 
         /// <summary>Output-stage view transform / tonemap (roadmap S2, #389).
@@ -414,6 +413,10 @@ namespace FracturingFog.Cli
             if (snap.HistogramEq != 0) { parts.Add(BatchFlags.Adaptive);   parts.Add(snap.HistogramEq.ToString(CultureInfo.InvariantCulture)); }
             if (snap.InteriorAlpha < 255) { parts.Add(BatchFlags.InteriorAlpha); parts.Add(snap.InteriorAlpha.ToString(CultureInfo.InvariantCulture)); }
             if (!snap.GpuCompute) { parts.Add(BatchFlags.Gpu); parts.Add("off"); }   // #1611
+        // #1788 — the GPU deep zoom toggle, when set. With GPU compute off the live view has
+        // no kernel, so its deep frames are on the CPU as --gpu off's are: nothing to emit.
+        if (snap.GpuDeepZoomToggle is { } deep && snap.GpuCompute)
+        { parts.Add(BatchFlags.GpuDeep); parts.Add(deep ? "on" : "off"); }
 
             // View transform / tonemap (S2, #389) — only when non-identity.
             if (snap.ViewTransform != ViewTransform.None)
@@ -786,11 +789,7 @@ namespace FracturingFog.Cli
             // #1554 — a hover-only math overlay follows the pointer; nothing to pin.
             if (snap.MathOverlayHoverOnly)
                 gaps.Add("Math overlay with no pinned point (the hover orbit is live only) — pin a point to render it with --math-overlay (2D) or --math-overlay-3d (3D)");
-            // #1787 — GPU deep zoom set in the Control Center: --batch picks the deep route
-            // from FF_GPU_PERTURB and the stored calibration (its flag is #1788).
-            if (snap.GpuDeepZoomToggle is { } deep)
-                gaps.Add($"GPU deep zoom is turned {(deep ? "on" : "off")} in the Control Center this session: --batch takes deep frames by FF_GPU_PERTURB and the measured route instead "
-                         + "(no flag yet, #1788). The fp64 kernels render the same pixels either way; the fp32 kernels differ on about 0.35 % of pixels near deep minibrots");
+            // #1787 / #1788 — the GPU deep zoom toggle is no longer a gap: --gpu-deep carries it.
             // #1380 — the quality's temporal AA is no longer a gap: a batch still runs
             // the same samples the live view settles with (--no-taa skips them).
             return gaps;
