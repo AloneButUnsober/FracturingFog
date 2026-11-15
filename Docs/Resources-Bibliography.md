@@ -494,7 +494,8 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
 - **Richard P. Brent.** *An improved Monte Carlo factorization algorithm.* BIT 20, 1980. Brent's
   cycle detection — the periodicity early-out for bounded orbits. Since #1368 also the deep-zoom
   orbit paths (`ComputePixelOrbitPerturbation`, GPU `CSPerturbOrbit`): snapshots of the perturbation
-  state (δ, m) at doubling intervals, compared bit for bit.
+  state (δ, m) at doubling intervals, compared bit for bit. #1802: the main deep path's SIMD rows
+  snapshot at doubling counts of the periodic reference's wraps (FF's adaptation, not from the paper).
 
 ### Distance estimation, normals, shading
 
