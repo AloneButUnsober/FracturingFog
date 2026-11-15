@@ -59,13 +59,17 @@ The issues are the canonical task list.
 | `LaSimd` | `LaSimdWanted` |
 | `GpuDeepPrecision.Auto` | `AutoPicksFloatExp(kernel)`. Never picks fp64 on a device without it, and never picks float-exp on a kernel without it. |
 
-**Known gap, for S2.** A Vulkan session turns GPU deep on by default. A stored "GPU slower" result does not turn it off yet, because the store can only turn GPU deep *on* where the default is off. S2 handles this case.
+**Vulkan default-on (S2, #1786).** A Vulkan session turns GPU deep on by default. The host marks that with `UseGpuPerturbationIsDefault`, so a stored "GPU slower" result turns it off. `FF_GPU_PERTURB=1`, or an explicit opt-in, still keeps it on.
 
 ## Choosing (S1, used by S2)
 
 `DeepRouteChooser.Choose(runs)` takes timed runs and returns the store rows. Each run is a route, a scene, its zoom, its time and its iteration disagreement against CPU LA.
 
-- **Eligibility.** A route that disagrees on more than 2 % of pixels on any scene is not eligible anywhere. 2 % is the S1630 GPU-vs-CPU LA bound. A fast wrong route never wins.
+- **Eligibility.**
+  - The CPU evaluators (BLA rows, LA, LA SIMD) are the shipped references, so they are always eligible.
+  - A GPU route is excluded everywhere if, on any scene, it disagrees by more than max(2 %, 1.5 × the CPU evaluators' own disagreement on that scene). 2 % is the S1630 bound. The CPU evaluators' disagreement is the noise floor: measured on p448, CPU BLA differs from CPU LA on 0.2–3.8 % of pixels.
+  - A fast wrong route never wins.
+- **Minimum gain.** A measured choice replaces today's default only when it is at least 5 % faster: LA SIMD on, GPU deep on, GPU LA on, float-exp over fp64. Noise must not flip a default.
 - **LA SIMD.** Wins when it is faster in total than the scalar LA tail, on the scenes where both ran.
 - **LA crossover.** The shallowest scene from which the chosen LA tail beats BLA on that scene *and on every deeper one*.
 - **GPU precision.** Float-exp against fp64, totalled.
@@ -73,6 +77,28 @@ The issues are the canonical task list.
 - **GPU deep.** Per scene, the GPU's best eligible route against the CPU's best, totalled over the scenes where both ran.
 
 A field stays null, so the default applies, where the runs can't decide.
+
+## The pass (S2, #1786)
+
+`DeepRouteCalibrator.Run(runner)` runs the scenes, shallow to deep.
+- **Scenes:** the bench-kit p448 deep minibrot at 1e15, 1e22, 1e27, 1e31 and 3e33, which straddle the 1e30 crossover, then FF's built-in 3E47.
+- **Order on each scene:**
+  1. CPU LA runs first; it is the iteration reference.
+  2. Every candidate runs.
+  3. A second pass runs in reverse order, with CPU LA again.
+- **Timing:** each route keeps the best of its two passes. A route already 3× slower than the scene's best skips the second pass.
+- **Fallback:** a run that fell back (GPU too slow, route not taken) is not eligible.
+- **Stopping early:** the budget (default 30 s) and the cancellation token stop the pass early. The finished scenes then decide what they can.
+
+**The real runner.** `CalculatorDeepRouteRunner` renders 480×270 frames with a fresh calculator per run. Each calculator is forced onto its route by `MandelbrotCalculator.CalibrationRoute`. That setting is per calculator: the live frames' switches are never touched. Every route warms up once, untimed. A GPU run measured too slow during calibration does not latch GPU deep off for the session.
+
+**When it runs** (`DeepRouteCalibration`):
+- **Live shell:** once per process, in the background, on the first deep frame of a device with no stored result. It runs on its own below-normal thread with its own GPU kernel.
+- **`--batch`:** never automatically; S4 adds the flag.
+- **On demand:** `RunNow`.
+- **Measuring only:** `--deeproutecalprobe` measures without storing.
+
+**Kernel choice fix.** Once the float-exp kernel is chosen (Fp32 mode, a measured Fp32, or the calibration route), it now runs instead of the fp64 SA / BLA kernel. Before, the SA / BLA kernel took precedence on fp64 devices, so Fp32 never ran there with SA or BLA on.
 
 ## Related
 

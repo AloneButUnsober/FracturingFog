@@ -58,9 +58,47 @@ namespace FracturingFog
         public static bool GpuPerturbationEnabled(FracturingFog.Rendering.IGpuKernel? kernel)
         {
             if (s_gpuPerturbDisabled != null) return false;
-            if (UseGpuPerturbation) return true;
+            if (UseGpuPerturbation)
+                // #1786 — a default-on (a Vulkan session's, not an env switch's) yields to a
+                // measured "GPU slower" on this device.
+                return !(UseGpuPerturbationIsDefault && GpuPerturbEnvSwitch == null && CalibratedGpu(kernel)?.GpuDeep == false);
             return GpuPerturbEnvSwitch != false && CalibratedGpu(kernel)?.GpuDeep == true;
         }
+
+        /// <summary>#1786 — <see cref="UseGpuPerturbation"/> was turned on as a session
+        /// default (the Vulkan backend's), not asked for: a measured "GPU slower" on the
+        /// device turns it off. Set by the host next to UseGpuPerturbation.</summary>
+        public static bool UseGpuPerturbationIsDefault { get; set; }
+
+        /// <summary>#1786 — test hook: clear the session's GPU-perturbation latch
+        /// (too slow / device lost).</summary>
+        public static void ResetGpuPerturbationLatchForTests() => s_gpuPerturbDisabled = null;
+
+        /// <summary>#1786 — the session latch is set (GPU perturbation switched off).</summary>
+        public static bool GpuPerturbationLatched => s_gpuPerturbDisabled != null;
+
+        /// <summary>#1786 — the deep-zoom calibration (DeepRouteCalibrator) forces this
+        /// calculator onto one candidate route, whatever the switches, the store and the
+        /// env say; per calculator, so a background calibration never touches the live
+        /// frames' settings. Null = the normal resolution.</summary>
+        public DeepRouteCandidate? CalibrationRoute { get; set; }
+
+        private static bool IsGpuRoute(DeepRouteCandidate r) => r is DeepRouteCandidate.GpuSaFp64 or DeepRouteCandidate.GpuFloatExp or DeepRouteCandidate.GpuLaFp64;
+
+        // #1786 — this calculator's GPU deep / GPU LA / float-exp decisions (the
+        // calibration's forced route first).
+        private bool GpuDeepHere => CalibrationRoute is { } r ? IsGpuRoute(r) && s_gpuPerturbDisabled == null : GpuPerturbationEnabled(GpuKernel);
+        private bool GpuLaHere => CalibrationRoute is { } r ? r == DeepRouteCandidate.GpuLaFp64 : GpuLaEnabled(GpuKernel);
+        private bool FloatExpHere(FracturingFog.Rendering.IGpuKernel k)
+            => CalibrationRoute is { } r ? r == DeepRouteCandidate.GpuFloatExp && k.SupportsPerturbationFloatExp : UseFloatExpKernel(k);
+
+        // #1786 — the forced route's LA mode (null = not forced).
+        private DeepLaMode? CalibrationLaMode => CalibrationRoute switch
+        {
+            null => null,
+            DeepRouteCandidate.CpuLa or DeepRouteCandidate.CpuLaSimd or DeepRouteCandidate.GpuLaFp64 => DeepLaMode.On,
+            _ => DeepLaMode.Off,
+        };
 
         /// <summary>#1665 — the GPU LA stage kernel for frames on <paramref name="kernel"/>.</summary>
         public static bool GpuLaEnabled(FracturingFog.Rendering.IGpuKernel? kernel)
@@ -80,6 +118,7 @@ namespace FracturingFog
         {
             get
             {
+                if (CalibrationRoute is { } r) return r == DeepRouteCandidate.CpuLaSimd;   // #1786
                 if (LaSimdEnvSwitch is { } env) return env;
                 if (LaSimd) return true;
                 return CalibratedCpu?.LaSimd == true;

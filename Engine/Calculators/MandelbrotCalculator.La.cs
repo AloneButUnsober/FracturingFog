@@ -70,7 +70,7 @@ public sealed partial class MandelbrotCalculator
 
     /// <summary>#1629 — the mode this calculator renders with (the environment override,
     /// else <see cref="LaMode"/>).</summary>
-    public DeepLaMode EffectiveLaMode => LaModeOverride ?? LaMode;
+    public DeepLaMode EffectiveLaMode => CalibrationLaMode ?? LaModeOverride ?? LaMode;   // #1786: a calibration route first
 
     /// <summary>#1626 — LA forced on (true) or off (false); kept for probes and tests.
     /// Since #1629 it maps to <see cref="LaMode"/> On / Off; reading it says whether the

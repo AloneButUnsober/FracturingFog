@@ -546,6 +546,9 @@ namespace FracturingFog.Hosting
                         bool fp64 = VulkanComputeKernel.ProbeSupportsFloat64();
                         bool fp32 = FracturingFog.MandelbrotCalculator.GpuDeepPrecisionMode != FracturingFog.GpuDeepPrecision.Double;
                         FracturingFog.MandelbrotCalculator.UseGpuPerturbation = fp64 || fp32;
+                        // #1786 — the Vulkan session's default (not FF_GPU_PERTURB=1): a
+                        // measured "GPU slower" on this device turns it off.
+                        FracturingFog.MandelbrotCalculator.UseGpuPerturbationIsDefault = !IsTruthyEnv("FF_GPU_PERTURB");
                         Console.Error.WriteLine(fp64
                             ? "[Vulkan] deep-zoom GPU perturbation ENABLED (shaderFloat64 present)."
                             : fp32
@@ -590,6 +593,14 @@ namespace FracturingFog.Hosting
                     "The per-frame gate checks DoublePrecisionFloatShaderOps, so deep " +
                     "zoom stays CPU if the device lacks FP64 shader ops.");
             }
+            // #1786 — the deep-zoom route calibration (#1665): a background pass on a
+            // device's first deep frame with no stored result. It measures on a kernel of
+            // its own on the live backend (never the live frames' kernel). --batch does not
+            // run it (its renders must not change under it).
+            FracturingFog.DeepRouteCalibration.AutoCalibrate = true;
+            FracturingFog.DeepRouteCalibration.GpuKernelFactory = gpuDecision.UseGpu
+                ? () => VulkanComputeKernel.TryCreateWithOwnContext()
+                : d3dHooked && BootstrapHooks.HeadlessGpuKernelFactoryHook is { } headlessD3d ? () => headlessD3d() : null;
             // Phase X.2 / Slice 2.6 — per-OS video-writer selection.
             //   * Windows: WindowsBootstrap supplies a Media Foundation Mp4Writer
             //     via BootstrapHooks.NativeVideoWriterFactoryHook. Returns null when MF init
