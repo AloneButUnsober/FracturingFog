@@ -66,6 +66,9 @@ static class Program
         if (args.Length > 0 && args[0] == "--deeproutecalprobe")
             return DeepRouteCalProbe.Run(args);
 
+        if (args.Length > 0 && args[0] == "--vkrelieftileprobe")
+            return VulkanReliefTileProbe.Run();   // #1479
+
         if (args.Length > 0 && args[0] == "--gpubandprobe")
             return args.Length > 1 && args[1] == "shallow" ? GpuShallowBandProbe.Run() : GpuBandProbe.Run();   // #1481
 

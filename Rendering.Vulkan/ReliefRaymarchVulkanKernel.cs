@@ -203,6 +203,39 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
     public void Run(in ReliefUniforms u, float[] hbuf, byte[]? keep, uint[] albedo, uint[] dst,
         float[]? aovNormalXyz = null, float[]? aovDepth = null)
     {
+        // #1479 — a lost device (a GPU watchdog reset, Windows TDR or a Linux GPU hang
+        // timeout) surfaces as the typed exception the relief render catches, as on
+        // D3D11 (#1044): it falls back to the CPU trace instead of crashing.
+        try { RunCore(in u, hbuf, keep, albedo, dst, aovNormalXyz, aovDepth); }
+        catch (Exception ex) when (IsDeviceLost(ex))
+        {
+            throw new GpuDeviceLostException("relief Vulkan dispatch: " + ex.Message, ex);
+        }
+    }
+
+    /// <summary>#1479 — whether <paramref name="ex"/> is a Vulkan call that failed with
+    /// VK_ERROR_DEVICE_LOST (what <see cref="Run"/> turns into a
+    /// <see cref="GpuDeviceLostException"/>).</summary>
+    public static bool IsDeviceLost(Exception ex) => ex is VulkanResultException { Result: Result.ErrorDeviceLost };
+
+    // #1479 — tiled dispatch (ReliefGpuTiling, #1044): the GPU's speed in ns per cost
+    // unit, learned from each frame's measured time, starting pessimistic.
+    private double _nsPerUnit = ReliefGpuTiling.InitialNsPerUnit;
+
+    /// <summary>#1479 — test hook: tile size (rows, cols) used instead of the learned
+    /// one when both are &gt; 0 (rounded to whole groups of the tuned shape).</summary>
+    [ThreadStatic] public static (int Rows, int Cols) ForceTileSize;
+
+    /// <summary>#1479 — dispatches (tiles, one submit each) the last <see cref="Run"/> used.</summary>
+    public int LastBandCount { get; private set; }
+
+    /// <summary>#1479 — queue waits of the last <see cref="Run"/> (the tiles queue back
+    /// to back: one wait per frame).</summary>
+    public int LastFrameQueueWaits { get; private set; }
+
+    private void RunCore(in ReliefUniforms u, float[] hbuf, byte[]? keep, uint[] albedo, uint[] dst,
+        float[]? aovNormalXyz, float[]? aovDepth)
+    {
         if (_disposed) throw new ObjectDisposedException(nameof(ReliefRaymarchVulkanKernel));
         int w = u.W, h = u.H, hn = u.Hw * u.Hh, n = w * h;
         if (w <= 0 || h <= 0) return;
@@ -249,7 +282,45 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         }
 
         var blob = BuildBlob(in u, keep != null, emitAov);
-        WriteBytes(_params, &blob, sizeof(ReliefParamsBlob));
+
+        // #1479 — tiles (#1044 sizing, #1377 whole groups of the tuned shape), each in
+        // its own command buffer and submit so the watchdog sees short packets, as the
+        // D3D11 kernel's Dispatch + Flush per tile. One frame-wide dispatch ran for
+        // seconds with fog on a GT 710. Every tile's params go into their own slice of
+        // the params UBO up front, bound through their own descriptor set, so the tiles
+        // queue back to back and the frame ends in one wait.
+        var shape = _shape;
+        double cost = ReliefGpuTiling.CostPerPixel(in u);
+        var (tileRows, tileCols) = ReliefGpuTiling.TileSize(w, h, cost, _nsPerUnit, shape);
+        if (ForceTileSize.Rows > 0 && ForceTileSize.Cols > 0)
+            (tileRows, tileCols) = ((ForceTileSize.Rows + shape.Y - 1) / shape.Y * shape.Y,
+                                    (ForceTileSize.Cols + shape.X - 1) / shape.X * shape.X);
+        var tiles = new System.Collections.Generic.List<(int RowBase, int ColBase, int Rows, int Cols)>();
+        for (int rowBase = 0; rowBase < h; rowBase += tileRows)
+            for (int colBase = 0; colBase < w; colBase += tileCols)
+                tiles.Add((rowBase, colBase, Math.Min(tileRows, h - rowBase), Math.Min(tileCols, w - colBase)));
+        int tileCount = tiles.Count;
+        LastBandCount = tileCount;
+        ulong align = Math.Max(1UL, _ctx.MinUniformBufferOffsetAlignment);
+        ulong stride = ((ulong)ParamBytes + align - 1) / align * align;
+        ulong uboBytes = stride * (ulong)tileCount;
+        if (_params.Size < uboBytes)
+        {
+            FreeBuffer(ref _params);
+            _params = AllocBuffer(uboBytes, BufferUsageFlags.UniformBufferBit);
+        }
+        {
+            void* mappedUbo;
+            Check(_vk.MapMemory(_device, _params.Memory, 0, uboBytes, 0, &mappedUbo), "vkMapMemory");
+            for (int t = 0; t < tileCount; t++)
+            {
+                var b = blob;
+                b.RowBase = tiles[t].RowBase;
+                b.ColBase = tiles[t].ColBase;
+                *(ReliefParamsBlob*)((byte*)mappedUbo + (ulong)t * stride) = b;
+            }
+            _vk.UnmapMemory(_device, _params.Memory);
+        }
 
         // Per-Run descriptor pool + set (a resize reallocates buffers, so a stale
         // set could dangle — build fresh each dispatch, like VulkanComputeKernel).
@@ -262,83 +333,103 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
             DescriptorType.StorageBuffer, DescriptorType.StorageBuffer, DescriptorType.StorageBuffer,
         };
 
+        srcBufs[0] = _params.Buffer;   // (re)allocated above
         DescriptorPool pool = default;
-        CommandBuffer cmd = default;
+        var cmds = new CommandBuffer[tileCount];
+        bool idle = true;   // nothing submitted since the last wait
+        long tGpu0 = 0;
+        LastFrameQueueWaits = 0;
         try
         {
             var poolSizes = stackalloc DescriptorPoolSize[2]
             {
-                new DescriptorPoolSize { Type = DescriptorType.UniformBuffer, DescriptorCount = 1 },
-                new DescriptorPoolSize { Type = DescriptorType.StorageBuffer, DescriptorCount = 8 },
+                new DescriptorPoolSize { Type = DescriptorType.UniformBuffer, DescriptorCount = (uint)tileCount },
+                new DescriptorPoolSize { Type = DescriptorType.StorageBuffer, DescriptorCount = (uint)(8 * tileCount) },
             };
             var dpci = new DescriptorPoolCreateInfo
             {
                 SType = StructureType.DescriptorPoolCreateInfo,
-                MaxSets = 1, PoolSizeCount = 2, PPoolSizes = poolSizes,
+                MaxSets = (uint)tileCount, PoolSizeCount = 2, PPoolSizes = poolSizes,
             };
             Check(_vk.CreateDescriptorPool(_device, in dpci, null, out pool), "vkCreateDescriptorPool");
 
+            var sets = new DescriptorSet[tileCount];
             var dslLocal = _dsl;
-            var dsai = new DescriptorSetAllocateInfo
-            {
-                SType = StructureType.DescriptorSetAllocateInfo,
-                DescriptorPool = pool, DescriptorSetCount = 1, PSetLayouts = &dslLocal,
-            };
-            Check(_vk.AllocateDescriptorSets(_device, in dsai, out DescriptorSet set), "vkAllocateDescriptorSets");
-
             var infos = stackalloc DescriptorBufferInfo[9];
             var writes = stackalloc WriteDescriptorSet[9];
-            for (int i = 0; i < 9; i++)
+            for (int t = 0; t < tileCount; t++)
             {
-                infos[i] = new DescriptorBufferInfo { Buffer = srcBufs[i], Offset = 0, Range = Vk.WholeSize };
-                writes[i] = new WriteDescriptorSet
+                var dsai = new DescriptorSetAllocateInfo
                 {
-                    SType = StructureType.WriteDescriptorSet,
-                    DstSet = set, DstBinding = bindNums[i], DescriptorCount = 1,
-                    DescriptorType = types[i], PBufferInfo = &infos[i],
+                    SType = StructureType.DescriptorSetAllocateInfo,
+                    DescriptorPool = pool, DescriptorSetCount = 1, PSetLayouts = &dslLocal,
                 };
+                Check(_vk.AllocateDescriptorSets(_device, in dsai, out sets[t]), "vkAllocateDescriptorSets");
+                for (int i = 0; i < 9; i++)
+                {
+                    infos[i] = i == 0
+                        ? new DescriptorBufferInfo { Buffer = srcBufs[i], Offset = (ulong)t * stride, Range = (ulong)ParamBytes }   // this tile's params
+                        : new DescriptorBufferInfo { Buffer = srcBufs[i], Offset = 0, Range = Vk.WholeSize };
+                    writes[i] = new WriteDescriptorSet
+                    {
+                        SType = StructureType.WriteDescriptorSet,
+                        DstSet = sets[t], DstBinding = bindNums[i], DescriptorCount = 1,
+                        DescriptorType = types[i], PBufferInfo = &infos[i],
+                    };
+                }
+                _vk.UpdateDescriptorSets(_device, 9, writes, 0, null);
             }
-            _vk.UpdateDescriptorSets(_device, 9, writes, 0, null);
 
             var cbai = new CommandBufferAllocateInfo
             {
                 SType = StructureType.CommandBufferAllocateInfo,
-                CommandPool = _cmdPool, Level = CommandBufferLevel.Primary, CommandBufferCount = 1,
+                CommandPool = _cmdPool, Level = CommandBufferLevel.Primary, CommandBufferCount = (uint)tileCount,
             };
-            Check(_vk.AllocateCommandBuffers(_device, in cbai, out cmd), "vkAllocateCommandBuffers");
+            fixed (CommandBuffer* pc = cmds) Check(_vk.AllocateCommandBuffers(_device, in cbai, pc), "vkAllocateCommandBuffers");
 
-            var begin = new CommandBufferBeginInfo
-            {
-                SType = StructureType.CommandBufferBeginInfo,
-                Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
-            };
             // Pick the variant: DOF averages lens taps (compiled on first use), else
             // the pinhole single-ray pipeline.
             bool dof = u.DofAperture > 0.0;
             if (dof) EnsureDofPipeline();
             else EnsurePinholePipeline();
-            Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
             _timer.BeginFrame();
-            _timer.Begin(cmd);
-            _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, dof ? _pipelineDof : _pipeline);
-            _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, _layout, 0, 1, &set, 0, null);
-            _vk.CmdDispatch(cmd, _shape.GroupsX(w), _shape.GroupsY(h), 1);   // #1377 — the tuned shape
-            _timer.Mark(cmd, GpuStage.Dispatch);
-            Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
-
-            var cmdLocal = cmd;
-            var submit = new SubmitInfo
+            tGpu0 = Stopwatch.GetTimestamp();
+            for (int t = 0; t < tileCount; t++)
             {
-                SType = StructureType.SubmitInfo,
-                CommandBufferCount = 1, PCommandBuffers = &cmdLocal,
-            };
-            Check(_vk.QueueSubmit(_ctx.ComputeQueue, 1, &submit, default), "vkQueueSubmit");
+                var cmd = cmds[t];
+                var begin = new CommandBufferBeginInfo
+                {
+                    SType = StructureType.CommandBufferBeginInfo,
+                    Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
+                };
+                Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
+                _timer.Begin(cmd);
+                _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, dof ? _pipelineDof : _pipeline);
+                var set = sets[t];
+                _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, _layout, 0, 1, &set, 0, null);
+                _vk.CmdDispatch(cmd, shape.GroupsX(tiles[t].Cols), shape.GroupsY(tiles[t].Rows), 1);   // #1377 — the tuned shape
+                _timer.Mark(cmd, GpuStage.Dispatch);
+                Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
+
+                var submit = new SubmitInfo
+                {
+                    SType = StructureType.SubmitInfo,
+                    CommandBufferCount = 1, PCommandBuffers = &cmd,
+                };
+                idle = false;
+                Check(_vk.QueueSubmit(_ctx.ComputeQueue, 1, &submit, default), "vkQueueSubmit");
+            }
             Check(_vk.QueueWaitIdle(_ctx.ComputeQueue), "vkQueueWaitIdle");
+            idle = true;
+            LastFrameQueueWaits++;
             LastGpuStageTimes = _timer.EndFrame();   // #1377
         }
         finally
         {
-            if (cmd.Handle != 0) _vk.FreeCommandBuffers(_device, _cmdPool, 1, in cmd);
+            // Never free a command buffer the GPU may still be running.
+            if (!idle) { try { _vk.QueueWaitIdle(_ctx.ComputeQueue); } catch { } }
+            if (cmds.Length > 0 && cmds[0].Handle != 0)
+                fixed (CommandBuffer* pc = cmds) _vk.FreeCommandBuffers(_device, _cmdPool, (uint)tileCount, pc);
             if (pool.Handle != 0) _vk.DestroyDescriptorPool(_device, pool, null);
         }
 
@@ -347,6 +438,15 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         if (emitAov) ReadAov(_aov, aovNormalXyz!, aovDepth!, n);
         long tEnd = Stopwatch.GetTimestamp();
         double freq = Stopwatch.Frequency;
+        // #1479 — learn the GPU's speed from this frame (dispatch -> readback), as the
+        // D3D11 kernel does (#1044): rise at once when slower, relax slowly when faster.
+        double units = cost * n;
+        if (units > 0)
+        {
+            double measured = (tEnd - tGpu0) * 1e9 / freq / units;
+            _nsPerUnit = measured > _nsPerUnit ? measured : 0.8 * _nsPerUnit + 0.2 * measured;
+            _nsPerUnit = Math.Clamp(_nsPerUnit, 0.01, 1000.0);
+        }
         LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
         LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
     }
@@ -676,7 +776,14 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
 
     private static void Check(Result r, string what)
     {
-        if (r != Result.Success) throw new InvalidOperationException($"{what} failed: {r}");
+        if (r != Result.Success) throw new VulkanResultException(r, $"{what} failed: {r}");
+    }
+
+    /// <summary>#1479 — a failed Vulkan call, with its result (so a lost device can be
+    /// told apart). Still an <see cref="InvalidOperationException"/>, as before.</summary>
+    public sealed class VulkanResultException(Result result, string message) : InvalidOperationException(message)
+    {
+        public Result Result { get; } = result;
     }
 
     public void Dispose()
