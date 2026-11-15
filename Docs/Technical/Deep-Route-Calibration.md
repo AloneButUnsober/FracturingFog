@@ -100,6 +100,15 @@ A field stays null, so the default applies, where the runs can't decide.
 
 **Kernel choice fix.** Once the float-exp kernel is chosen (Fp32 mode, a measured Fp32, or the calibration route), it now runs instead of the fp64 SA / BLA kernel. Before, the SA / BLA kernel took precedence on fp64 devices, so Fp32 never ran there with SA or BLA on.
 
+## The UI (S3, #1787; folds in #1493)
+
+- **Control Center → Advanced → GPU / Performance:**
+  - **GPU deep zoom (perturbation)**, next to GPU compute. It is the user's override: above the env switch, the Vulkan default and the store. Ticking it re-arms the session latch (too slow / device lost). It is disabled, with the reason, when the device can't do deep zoom. Per session, like GPU compute.
+  - The stored calibration for this CPU and GPU, plus **Re-run calibration** (background) and **Reset**.
+- **Perf HUD:** on deep frames, a `deep` line shows each choice and where it came from (measured / default / env / set / toggle / session off / Vulkan default). Example: `deep   LA ≥1e27 measured · SIMD on measured · GPU off default`.
+- **CPU route reasons:** a deep frame left on the CPU now says how to turn GPU deep zoom on (the toggle, `FF_GPU_PERTURB=1`), or that it was measured slower. The too-slow latch names `FF_GPU_PERTURB_BUDGET_MS` and the toggle.
+- **Batch:** the toggle is not expressible in `--batch` yet. S4 (#1788) adds the flag and the Command builder seed. On fp64 kernels the output is identical either way; the fp32 kernels differ on about 0.35 % of pixels.
+
 ## Related
 
 #1663 (the audit), #1339 (the store model), #1664 (a float-exp + LA GPU kernel, a future candidate), #1493 (folded into S3).

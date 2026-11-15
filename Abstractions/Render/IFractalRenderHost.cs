@@ -404,6 +404,33 @@ namespace FracturingFog.Render
         /// caller should re-read after setting to verify.</summary>
         bool UseGpuCompute { get; set; }
 
+        /// <summary>#1493 / #1787 — GPU deep zoom (perturbation past 1e4): get = whether
+        /// deep frames go to the GPU now (the toggle, env, backend default, calibration and
+        /// session latch resolved); set = the Control Center toggle (on re-arms the
+        /// session latch). Per session.</summary>
+        bool GpuDeepZoom { get => false; set { } }
+
+        /// <summary>#1787 — why the attached device can't run deep zoom on the GPU at all,
+        /// or null when it can.</summary>
+        string? GpuDeepZoomUnavailableReason => "not supported by this host";
+
+        /// <summary>#1787 — the toggle's value when the user set it this session, else null
+        /// (the Command builder reports it as a batch fidelity gap).</summary>
+        bool? GpuDeepZoomUserSetting => null;
+
+        /// <summary>#1787 — the stored deep-route calibration for this CPU and GPU, as text.</summary>
+        string DeepRouteSummary => "";
+
+        /// <summary>#1787 — start a background deep-route calibration now; false when one
+        /// is running or calibration is off.</summary>
+        bool RerunDeepRouteCalibration() => false;
+
+        /// <summary>#1787 — forget every stored deep-route measurement.</summary>
+        void ResetDeepRouteCalibration() { }
+
+        /// <summary>#1787 — a background calibration finished (raised off the UI thread).</summary>
+        event EventHandler? DeepRouteCalibrationCompleted { add { } remove { } }
+
         /// <summary>#1333 — choose the first interactive preview stage's resolution
         /// from the measured frame cost (on, default) or keep the fixed
         /// quarter → half → full ladder (off). The final frame is unaffected.</summary>

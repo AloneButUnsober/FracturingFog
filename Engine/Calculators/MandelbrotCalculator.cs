@@ -340,7 +340,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 return "past the FP32 GPU zoom limit (1e4); deeper zooms render on the CPU";
             // #1665: a device measured faster may take it (its key isn't known before it opens).
             return UseGpuPerturbation || (UseDeepRouteCalibration && GpuPerturbEnvSwitch != false && DeepRouteStore.AnyGpuDeepFor()) ? null
-                : "deep zoom renders on the CPU unless GPU perturbation is enabled (FF_GPU_PERTURB=1)";
+                : "deep zoom renders on the CPU unless GPU perturbation is enabled (Control Center \u2192 Advanced \u2192 GPU deep zoom, or FF_GPU_PERTURB=1)";
         }
         return Fp32GpuResolvesView ? null
             : "pixels this small are below the FP32 GPU kernel's precision at this size; it renders on the CPU";
@@ -691,7 +691,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         {
             if (s_gpuPerturbDisabled is { } off) return off;
             if (!GpuDeepHere)   // #1665 / #1786
-                return GpuRoute.Cpu("deep zoom", "deep zoom renders on the CPU unless GPU perturbation is enabled");
+                return GpuRoute.Cpu("deep zoom", DeepZoomOffDetail(kernel));   // #1493 / #1787: how to turn it on
             if (!kernel.SupportsPerturbation && !FloatExpHere(kernel))
                 return GpuRoute.Cpu("no fp64 kernel", kernel.SupportsPerturbationFloatExp
                     ? $"{label} has no fp64, and FF_GPU_PERTURB_PRECISION=double rules out the fp32 deep-zoom kernel (#1331)"
@@ -3452,7 +3452,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             // consumer card). Disable for the session so every later frame
             // goes straight to the multi-threaded CPU deep path.
             UseGpuPerturbation = false;
-            s_gpuPerturbDisabled = GpuRoute.Cpu("deep zoom too slow", "GPU deep-zoom perturbation was disabled for this session: the GPU is slower than the CPU here (weak fp64)");   // #1173-M
+            s_gpuPerturbDisabled = GpuRoute.Cpu("deep zoom too slow", "GPU deep-zoom perturbation was disabled for this session: the GPU is slower than the CPU here (weak fp64). "
+                + "FF_GPU_PERTURB_BUDGET_MS sets the abort budget; Control Center \u2192 Advanced \u2192 GPU deep zoom turns it back on.");   // #1173-M, #1493
             Console.Error.WriteLine(
                 "[GPU] deep-zoom perturbation DISABLED for this session — the GPU is slower than the " +
                 "CPU here (weak FP64). Using the CPU deep path. Tune FF_GPU_PERTURB_BUDGET_MS to change " +
@@ -3462,7 +3463,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         else if (deviceLost)
         {
             UseGpuPerturbation = false;
-            s_gpuPerturbDisabled = GpuRoute.Cpu("device lost", "GPU deep-zoom perturbation was disabled for this session: the device was lost during a dispatch (TDR)");   // #1173-M
+            s_gpuPerturbDisabled = GpuRoute.Cpu("device lost", "GPU deep-zoom perturbation was disabled for this session: the device was lost during a dispatch (TDR). "
+                + "Control Center \u2192 Advanced \u2192 GPU deep zoom turns it back on.");   // #1173-M, #1493
             Console.Error.WriteLine(
                 "[GPU] deep-zoom perturbation DISABLED for this session — the GPU device was " +
                 "lost/removed during a dispatch (TDR). Falling back to the CPU deep path. " +
