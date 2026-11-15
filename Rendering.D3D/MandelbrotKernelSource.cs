@@ -1198,7 +1198,15 @@ void CSPerturbF32(uint3 tid : SV_DispatchThreadID)
     /// <paramref name="mask"/> (non-zero). Bindings: b0 params, t0/t1 reference
     /// orbit, u0..u2 iter/smooth/finalZD (as BuildPerturb), u3 gOrbit, u4 gWork
     /// (#1384: the wavefront schedule's per-band counters).</summary>
-    public static string BuildPerturbOrbit(int mask)
+    public static string BuildPerturbOrbit(int mask) => BuildPerturbOrbit(mask, 0);
+
+    /// <summary>#1368 — <see cref="BuildPerturbOrbit(int)"/> with the periodicity
+    /// early-out compiled in (<paramref name="periodicity"/> = a GpuPeriodicity mode:
+    /// 0 off, 1 on, 2 on + diagnostic: an in-set pixel the check caught writes
+    /// smooth = −(the iteration it was caught at)). The check is the CPU deep orbit
+    /// path's: a bit-exact repeat of the loop state (δ, m), compared once per
+    /// PERTURB_CHUNK block (#1342: per-step additions cost the GT 710 15–50 %).</summary>
+    public static string BuildPerturbOrbit(int mask, int periodicity)
     {
         mask &= OrbAll;
         if (mask == 0) throw new System.ArgumentException("the deep orbit kernel needs at least one orbit input", nameof(mask));
@@ -1214,7 +1222,7 @@ void CSPerturbF32(uint3 tid : SV_DispatchThreadID)
             k++;
         }
 
-        return PerturbChunkDefine + @"
+        return (periodicity != 0 ? "#define FF_PERIODICITY " + periodicity + "\n" : "") + PerturbChunkDefine + @"
 // BuildPerturb's cbuffer with gCRe/gCIm in place of its gWave/gBandRows, and
 // #1384's gWave / gBandRows / gBand after them: 80 bytes. Matches the C#
 // PerturbOrbitParams / PerturbOrbitParamsBlob (both backends) byte-for-byte.
@@ -1267,6 +1275,11 @@ void CSPerturbOrbit(uint3 tid : SV_DispatchThreadID)
 " + (tia ? "    double pzrD = 0.0, pziD = 0.0;  // z_{n-1}, for the triangle-inequality term\n" : "")
   + OrbitDecl(mask) + @"
     int iter = 0;
+#ifdef FF_PERIODICITY
+    // #1368 — the snapshot of the loop state (δ, m); snapM = -1: none yet.
+    double snapR = 0.0, snapI = 0.0;
+    int snapM = -1, nextSnap = 0;
+#endif
     [loop] [allow_uav_condition]
     for (;;)
     {
@@ -1291,6 +1304,9 @@ void CSPerturbOrbit(uint3 tid : SV_DispatchThreadID)
             zrD = 0.0; ziD = 0.0;
 " + (tia ? "            pzrD = 0.0; pziD = 0.0;\n" : "")
   + OrbitResetOf(OrbitDecl(mask)) + @"            iter = 0;
+#ifdef FF_PERIODICITY
+            snapM = -1; nextSnap = 0;
+#endif
         }
 
         bool escaped = false;
@@ -1333,6 +1349,21 @@ void CSPerturbOrbit(uint3 tid : SV_DispatchThreadID)
         dr = ndr; di = ndi;
         m++;
         }
+#ifdef FF_PERIODICITY
+        // #1368 — between blocks: a bit-exact repeat of (δ, m) means the loop cycles
+        // for ever (its next step depends on δ, m and dc alone), so the pixel is in
+        // set, exactly as without the check. Brent-style snapshots (the gap doubles,
+        // as #1342's shallow check: a gap capped at 1024 steps caught fewer pixels on a
+        // GT 710 test frame, 4089 against 4160 of 4624, since float cycles can be long).
+        // periodicAt > 0: caught at that iteration.
+        int periodicAt = 0;
+        if (!escaped && iter < gMaxIter)
+        {
+            if (dr == snapR && di == snapI && m == snapM) periodicAt = iter;
+            else if (iter >= nextSnap) { snapR = dr; snapI = di; snapM = m; nextSnap = iter + iter; }
+        }
+        if (periodicAt > 0) iter = gMaxIter;
+#endif
         if (!escaped && iter < gMaxIter) continue;
 
     gFinalZD[idx] = float4((float)zrD, (float)ziD, (float)(drv * DzOutScale()), (float)(div * DzOutScale()));   // #1660
@@ -1340,7 +1371,11 @@ void CSPerturbOrbit(uint3 tid : SV_DispatchThreadID)
     if (iter >= gMaxIter)
     {
         gIter[idx]   = (uint)gMaxIter;
+#if defined(FF_PERIODICITY) && FF_PERIODICITY == 2
+        gSmooth[idx] = periodicAt > 0 ? -(float)periodicAt : 0.0;   // #1368 diagnostic
+#else
         gSmooth[idx] = 0.0;
+#endif
 " + zeros + @"    }
     else
     {

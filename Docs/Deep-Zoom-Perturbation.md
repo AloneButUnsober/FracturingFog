@@ -85,6 +85,34 @@ limbs per iteration (`_refZr/_refZrLo/..X7`). Each pixel iterates only its
     shares the table.
   - `BlaTable.Lookup` starts at the level the iteration is aligned to (trailing zeros),
     not at the top, with the same answers. Before, a tight ε made BLA slower than BLA off.
+- **Periodicity early-out, deep orbit paths (#1368).** The CPU deep orbit path
+  (`ComputePixelOrbitPerturbation`) and its GPU twin (`CSPerturbOrbit`) stop a pixel as in
+  set when the loop state **(δ, m)** repeats bit for bit.
+  - **Why it is exact:** the next step depends on δ, m and the pixel's dc alone (the rebase
+    test, Z[m], the δ update), so a repeat means the loop cycles for ever. Every pixel is
+    classified exactly as without the check. The orbit accumulators and dz/dc don't steer
+    the loop. This is the same standard as #1342's shallow check.
+  - **The old check was looser.** Before #1368 the CPU compared z and δ without m. A repeat
+    at another reference index only approximates periodicity; z alone had flagged whole
+    3e47 frames in set (#607).
+  - **It needs the reference index to repeat,** that is, a periodic reference (#1614): the
+    loop wraps at the period. The orbit path never set the periodic tolerance, so it always
+    built the full orbit and caught 0 of 4096 interior pixels at the period-3 nucleus at
+    1e14. It now sets the main path's tolerance.
+  - **GPU:** compared once per 32-step block (#1342: a per-step addition costs the GT 710
+    15–50 %). `FF_GPU_PERIODICITY` switches it, as for the shallow kernels; `Diagnostic`
+    writes smooth = −(the iteration a pixel was caught at). CPU test hooks:
+    `MandelbrotCalculator.DeepOrbitPeriodicity` / `…Diagnostic`.
+  - **Measured.** Nucleus3 interiors, 64×64 at 1e14 and 48×48 at 1e22: CPU 285 → 1 ms and 186 → 0 ms, every in-set pixel
+    caught; GPU catches ~90 % (edge pixels settle slowly). On a real minibrot at 5.2e33
+    (p448, 13 440 cap) it caught 3 of 317 in-set pixels: they don't reach an exact float
+    cycle within the cap. Exterior cost: none measurable on the CPU, 0–3 % (noise) on the
+    GT 710 (`--d3ddeeporbitprobe`).
+  - **No false positives:** caught pixels stay bounded for 4× the cap on their exact orbit
+    (BigInteger fixed point), in `S1368DeepOrbitPeriodicityTests`.
+  - **The main deep path has no check yet.** At 960×540 the nucleus3 interior costs 9.6 s
+    at 1e22 and 26 s at 1e28 there (`--deepcostprobe`, every pixel to the cap; BLA skips
+    nothing). Follow-up: #1800.
 - **#1275 (cluster-rebase port) closed as superseded.** With BLA off, the default path
   matched "rebase every pixel" to the chaotic floor on every view tried (1e11–4e32,
   periods 61–998), and a per-lane Pauldelbrot soft-glitch test changed nothing. The
