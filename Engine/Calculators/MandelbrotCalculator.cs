@@ -968,6 +968,22 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     private const int PeriodicitySnapshotStart = 16;
     private const int PeriodicitySnapshotMax = 1024;
 
+    /// <summary>#1368 — the deep orbit path's periodicity early-out (an exact repeat of
+    /// the perturbation state (δ, m)). On by default; off for tests that compare against
+    /// the loop without it. Process-wide (the pixels run on pool threads).</summary>
+    public static bool DeepOrbitPeriodicity = true;
+
+    /// <summary>#1368 — test hook: a pixel the deep orbit path's periodicity check caught
+    /// writes smooth = −(the iteration it was caught at), as the GPU's
+    /// GpuPeriodicity.Diagnostic does.</summary>
+    public static bool DeepOrbitPeriodicityDiagnostic;
+
+    private int _deepPeriodicPixels;
+
+    /// <summary>#1368 — pixels of the last frame the deep orbit path's periodicity
+    /// check classified in set (CPU only; reset at each Calculate).</summary>
+    public int LastDeepPeriodicPixels => Volatile.Read(ref _deepPeriodicPixels);
+
     // ── Perturbation theory reference orbit ───────────────────────────────────
 
     private double[] _refZr = Array.Empty<double>();
@@ -1306,6 +1322,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         _panFrameComplete = false;
         LastFrameComputedPixels = 0;
         LastFrameFilledPixels = 0;   // #1343
+        Volatile.Write(ref _deepPeriodicPixels, 0);   // #1368
         LastFrameSolidPasses = 0;
         LastFilledMask = null;
         PrepareMask();   // #1344
@@ -2661,6 +2678,13 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
 
         // Build the shared reference orbit at the view centre (fresh — the orbit
         // path opts out of Wave 3.5 recycle so every pixel sees an exact anchor).
+        // #1368 — with a periodic reference (#1614): this loop (CPU and GPU) rebases
+        // when the reference runs out (m + 1 >= refLen), the same exact step the main
+        // deep path's wrap at the period takes. The orbit path never set the tolerance,
+        // so it always built the full orbit, and the reference index m never repeated:
+        // the periodicity check below could not see a cycle (0 of 4096 interior pixels
+        // at the period-3 nucleus, 1e14).
+        _refPeriodTol2 = PeriodicReferenceOrbit ? scale * scale : 0;
         if (Zoom > ODZoomThreshold)
         {
             var cxOD = new OD(CenterX, CenterXLo, CenterX2, CenterX3,
@@ -2767,10 +2791,14 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         double drv = 1.0, div = 0.0;  // dz/dc derivative (IQ convention), full orbit
         int m = 0;                    // reference-orbit index (independent of iter)
         double zr = 0.0, zi = 0.0;    // reconstructed full value z = Z[m] + δ
-        // Periodicity snapshot of z AND δ — see the early-out below.
-        double zrSnap = 0, ziSnap = 0, drSnap = 0, diSnap = 0;
+        // #1368 — periodicity snapshot of the perturbation state (δ, m); see the
+        // early-out below. mSnap = -1: no snapshot yet (m is never negative).
+        double drSnap = 0, diSnap = 0;
+        int mSnap = -1;
         int snapInterval = PeriodicitySnapshotStart;
         int snapCounter = 0;
+        bool periodicity = DeepOrbitPeriodicity;
+        int caughtAt = 0;
 
         int iter;
         for (iter = 0; iter < maxIter; iter++)
@@ -2813,24 +2841,29 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             dr = newDr; di = newDi;
             m++;
 
-            // Periodicity early-out on the reconstructed z together with δ. z alone is
-            // not enough: once |δ| is below double resolution of Z[m] (zoom ~1e47),
-            // z = Z[m] + δ rounds to Z[m], so a repeating reference value flagged
-            // every pixel periodic and the whole frame rendered in-set (#607, found by
-            // the GPU parity probe at 3e47). An attracting cycle settles z and δ both
-            // onto an exact double cycle, so it is still caught; an escaping orbit's δ
-            // keeps growing and never repeats. δ = 0 is the reference pixel itself
-            // (dc = 0), whose z is the rounded reference: no evidence either way, so
-            // it is never flagged. Skip iter 0: the reconstructed z there is exactly
-            // 0, which would collide with the initial (0,0) snapshot. The direct path
-            // snapshots the POST-update z (= c ≠ 0 at iter 0); here z is the
-            // pre-update value.
-            if (iter > 0 && (dr != 0.0 || di != 0.0))
+            // #1368 — periodicity early-out on the loop's whole state, (δ, m). The next
+            // step is a function of δ, m and the pixel's constant dc alone (the rebase
+            // test, the reference value Z[m], the δ update), so a bit-exact repeat of
+            // (δ, m) means this loop would cycle through the same states for ever:
+            // it never escapes, and the pixel is classified exactly as without the
+            // check. The accumulator and the derivative don't steer the loop. Before
+            // #1368 this compared z = Z[m] + δ and δ without m: a repeat at another
+            // reference index only approximates periodicity, and z alone flagged whole
+            // frames in set at 3e47, where z rounds to Z[m] (#607). A cycle is only
+            // seen when m repeats too: with a periodic reference (#1614) the loop
+            // wraps at its period, and the Zhuoran rebases (|z| < |δ|) restart it.
+            if (periodicity)
             {
-                if (zr == zrSnap && zi == ziSnap && dr == drSnap && di == diSnap) { iter = maxIter; break; }
+                if (dr == drSnap && di == diSnap && m == mSnap)
+                {
+                    Interlocked.Increment(ref _deepPeriodicPixels);
+                    caughtAt = iter;
+                    iter = maxIter;
+                    break;
+                }
                 if (++snapCounter >= snapInterval)
                 {
-                    zrSnap = zr; ziSnap = zi; drSnap = dr; diSnap = di;
+                    drSnap = dr; diSnap = di; mSnap = m;
                     snapCounter = 0;
                     if (snapInterval < PeriodicitySnapshotMax) snapInterval <<= 1;
                 }
@@ -2838,6 +2871,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         }
 
         FinalizeOrbitPixel(idx, iter, maxIter, zr, zi, drv, div, ref acc, colorMap, wantInterior);
+        if (caughtAt > 0 && DeepOrbitPeriodicityDiagnostic) SmoothBuffer[idx] = -caughtAt;   // #1368
     }
 
     // ─────────────────────────────────────────────────────────────────────────

@@ -492,7 +492,9 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
   in-set pixel" test solid-region Auto uses to decide whether a frame is worth subdividing. The same
   article's "Rectangle checking" section describes Mariani–Silver as a variant.
 - **Richard P. Brent.** *An improved Monte Carlo factorization algorithm.* BIT 20, 1980. Brent's
-  cycle detection — the periodicity early-out for bounded orbits.
+  cycle detection — the periodicity early-out for bounded orbits. Since #1368 also the deep-zoom
+  orbit paths (`ComputePixelOrbitPerturbation`, GPU `CSPerturbOrbit`): snapshots of the perturbation
+  state (δ, m) at doubling intervals, compared bit for bit.
 
 ### Distance estimation, normals, shading
 

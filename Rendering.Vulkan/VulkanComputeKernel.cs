@@ -909,11 +909,13 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             FreeBuffer(ref _orbitOut);
             _orbitOut = AllocBuffer((ulong)(n * stride * sizeof(float)), BufferUsageFlags.StorageBufferBit, Residency.Output);
         }
-        if (!_perturbOrbit.TryGetValue(orbitMask, out var prog))
+        int per = GpuPeriodicity.Mode;   // #1368: the periodicity variant
+        int key = orbitMask | (per << 24);
+        if (!_perturbOrbit.TryGetValue(key, out var prog))
         {
-            prog = BuildBandProgram(GpuGroupShapes.SlotPerturb, MandelbrotKernelSource.BuildPerturbOrbit(orbitMask), MandelbrotKernelSource.PerturbOrbitEntryPoint,
+            prog = BuildBandProgram(GpuGroupShapes.SlotPerturb, MandelbrotKernelSource.BuildPerturbOrbit(orbitMask, per), MandelbrotKernelSource.PerturbOrbitEntryPoint,
                 0u, (uint)TShift, (uint)TShift + 1, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)UShift + 3, (uint)UShift + 4);   // u4: gWork (#1384)
-            _perturbOrbit[orbitMask] = prog;
+            _perturbOrbit[key] = prog;
         }
 
         fixed (double* pr = refZr) WriteBytes(_refZrBuf, pr, refLen * sizeof(double));

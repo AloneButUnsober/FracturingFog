@@ -1621,11 +1621,13 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             EnsurePerturbParamsBuffer();
             EnsureRefOrbitBuffers(refLen);
             EnsureOrbitOutBuffers(n * stride);
-            if (!_csPerturbOrbit.TryGetValue(orbitMask, out var cs))
+            int per = GpuPeriodicity.Mode;   // #1368: the periodicity variant
+            int key = orbitMask | (per << 24);
+            if (!_csPerturbOrbit.TryGetValue(key, out var cs))
             {
-                cs = CompileShaped(GpuGroupShapes.SlotPerturb, MandelbrotKernelSource.BuildPerturbOrbit(orbitMask), label: $"perturb-orbit-{orbitMask:X}",
+                cs = CompileShaped(GpuGroupShapes.SlotPerturb, MandelbrotKernelSource.BuildPerturbOrbit(orbitMask, per), label: $"perturb-orbit-{orbitMask:X}-p{per}",
                     entryPoint: MandelbrotKernelSource.PerturbOrbitEntryPoint);
-                _csPerturbOrbit[orbitMask] = cs;
+                _csPerturbOrbit[key] = cs;
             }
 
             UploadDoubles(_refZrBuf!, refZr, refLen);
