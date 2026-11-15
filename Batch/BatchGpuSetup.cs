@@ -70,8 +70,14 @@ namespace FracturingFog.Batch
         }
 
         private static void ReportOpened(IGpuKernel kernel, bool perturb) =>
-            Console.Error.WriteLine($"batch: {GpuComputeSelection.FromAttachedKernel(kernel).Status}; deep zoom "
-                + (perturb ? "on the GPU too (FF_GPU_PERTURB)" : "on the CPU (FF_GPU_PERTURB=1 moves it to the GPU)"));
+            Console.Error.WriteLine($"batch: {GpuComputeSelection.FromAttachedKernel(kernel).Status}; " + DeepZoomLine(kernel));
+
+        /// <summary>#1788 — where deep frames go on <paramref name="kernel"/> and why.</summary>
+        internal static string DeepZoomLine(IGpuKernel? kernel) => DeepRouteBatchSetup.DeepZoomLine(kernel);
+
+        /// <summary>#1788 — a GPU kernel on a device of its own (the --deep-route-calibration
+        /// force pass measures on it), or null.</summary>
+        internal static IGpuKernel? OpenOwnKernel() => CreateKernel().Kernel;
 
         private static (IGpuKernel? Kernel, string Why) CreateKernel()
         {

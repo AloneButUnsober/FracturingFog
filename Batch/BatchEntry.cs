@@ -153,6 +153,14 @@ namespace FracturingFog.Batch
                 Console.Error.WriteLine($"batch: {gpuError}");
                 return 2;
             }
+            // #1788 — --gpu-deep / --deep-route-calibration (after the GPU: a forced pass
+            // measures on a device of its own).
+            if (!opts.Remote && opts.Mode is not (BatchMode.Regrade or BatchMode.Relight)
+                && !BatchDeepRouteSetup.Apply(opts, out string? deepError))
+            {
+                Console.Error.WriteLine($"batch: {deepError}");
+                return 2;
+            }
             BatchTiming.Mark("gpu setup");   // #1640
 
             try

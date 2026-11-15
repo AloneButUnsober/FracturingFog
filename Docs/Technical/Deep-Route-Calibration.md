@@ -107,7 +107,18 @@ A field stays null, so the default applies, where the runs can't decide.
   - The stored calibration for this CPU and GPU, plus **Re-run calibration** (background) and **Reset**.
 - **Perf HUD:** on deep frames, a `deep` line shows each choice and where it came from (measured / default / env / set / toggle / session off / Vulkan default). Example: `deep   LA ≥1e27 measured · SIMD on measured · GPU off default`.
 - **CPU route reasons:** a deep frame left on the CPU now says how to turn GPU deep zoom on (the toggle, `FF_GPU_PERTURB=1`), or that it was measured slower. The too-slow latch names `FF_GPU_PERTURB_BUDGET_MS` and the toggle.
-- **Batch:** the toggle is not expressible in `--batch` yet. S4 (#1788) adds the flag and the Command builder seed. On fp64 kernels the output is identical either way; the fp32 kernels differ on about 0.35 % of pixels.
+- **Batch:** S4 (#1788) carries the toggle as `--gpu-deep` (see below).
+
+## Batch (S4, #1788)
+
+- **`--gpu-deep auto|on|off`:** the Control Center toggle. `on` and `off` beat `FF_GPU_PERTURB` and the measured route. `auto` (the default) keeps them. `on` with `--gpu off` is an error, exit 2.
+- **`--deep-route-calibration auto|off|force`:**
+  - `auto` (the default) uses the stored calibration and never runs a pass, so a batch's renders don't change under it;
+  - `off` uses the fixed defaults;
+  - `force` measures first (on a GPU device of its own; CPU only with `--gpu off`) and stores the result.
+- **Command builder:** emits `--gpu-deep on|off` when the user set the toggle, with GPU compute on. With GPU compute off the live view has no kernel, so its deep frames are on the CPU too. The S3 fidelity gap is gone.
+- **stderr:** the batch prints `deep route: …`, the stored rows, at setup. When the GPU opens it prints `deep zoom on the GPU / CPU (…)`, with the source: FF_GPU_PERTURB, --gpu-deep, measured on this device, or default.
+- **Logic:** lives in `DeepRouteBatchSetup` (Engine, tested by `S1788DeepRouteBatchTests`). `Batch/BatchDeepRouteSetup.cs` only hands it the batch's own-device kernel factory and stderr.
 
 ## Related
 

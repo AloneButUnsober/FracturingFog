@@ -1,4 +1,4 @@
-﻿// #1668 (epic #1667, S1) — the catalog of Fracturing Fog's FF_* environment switches.
+// #1668 (epic #1667, S1) — the catalog of Fracturing Fog's FF_* environment switches.
 //
 // One entry per switch the source reads. EnvVarCatalogTests scans every .cs file for
 // "FF_..." string literals and fails when one has no entry here, or an entry is no

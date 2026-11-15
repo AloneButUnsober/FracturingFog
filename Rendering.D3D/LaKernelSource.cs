@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 // SPDX-FileCopyrightText: Yu, Zhuoran (GitHub 5E-324), Imagina <https://github.com/5E-324/Imagina>, AGPL-3.0
 
