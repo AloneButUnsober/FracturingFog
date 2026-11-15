@@ -110,9 +110,26 @@ limbs per iteration (`_refZr/_refZrLo/..X7`). Each pixel iterates only its
     GT 710 (`--d3ddeeporbitprobe`).
   - **No false positives:** caught pixels stay bounded for 4× the cap on their exact orbit
     (BigInteger fixed point), in `S1368DeepOrbitPeriodicityTests`.
-  - **The main deep path has no check yet.** At 960×540 the nucleus3 interior costs 9.6 s
-    at 1e22 and 26 s at 1e28 there (`--deepcostprobe`, every pixel to the cap; BLA skips
-    nothing). Follow-up: #1800.
+  - **The main deep path:** #1800, in slices. S1 (#1802) is below; the rebased loops
+    (#1803), the LA rows (#1804) and the GPU kernels (#1805) are still to do.
+- **Periodicity in the SIMD rows (#1802, `MandelbrotCalculator.DeepPeriodicity`,
+  `FF_DEEP_PERIODICITY=0` turns it off).** `ComputeRowPT4` / `ComputeRowPT8` compare a batch's
+  state only at the periodic reference's wrap (m := 0), once per period. The state is every
+  lane's δ plus the escaped lanes, snapshotted at doubling wrap counts, and a bit-exact repeat
+  puts the active lanes in set.
+  - **Why only at the wrap:** every cycle passes through it. Brent snapshots at power-of-two
+    step counts never line up with, say, a period-3 cycle once m is part of the state.
+  - **Exactness:** the step is a function of that state while BLA's lookup limit
+    `min(period, m + (maxIter − iter))` is the period, so the check runs only while
+    `maxIter − iter ≥ period`. In the last period before the cap, the loop without the
+    check takes shorter BLA skips. A lane escaping there from a cycle it kept below the escape
+    radius was not seen on any test view: on == off byte for byte, PT4 and PT8, 1e14–4.5e46
+    and the whole period-3 minibrot. Mutation testing can't tell the guard from no guard on
+    those views; it is kept on that argument.
+  - **Measured** at 960×540 (`--deepcostprobe`): nucleus3 1e14 2.4 s → 95 ms, 1e22
+    9.6 s → 15 ms, 1e28 26.2 s → 17 ms. Scenes without a periodic reference never run it.
+  - **Caught pixels** stay bounded for 4× the cap on their exact orbit, edge pixels included
+    (`S1802DeepRowPeriodicityTests`).
 - **#1275 (cluster-rebase port) closed as superseded.** With BLA off, the default path
   matched "rebase every pixel" to the chaotic floor on every view tried (1e11–4e32,
   periods 61–998), and a per-lane Pauldelbrot soft-glitch test changed nothing. The

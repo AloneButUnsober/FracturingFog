@@ -973,6 +973,53 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     /// the loop without it. Process-wide (the pixels run on pool threads).</summary>
     public static bool DeepOrbitPeriodicity = true;
 
+    /// <summary>#1800 / #1802 — the main deep path's periodicity early-out
+    /// (PeriodicAtWrap). On by default (FF_DEEP_PERIODICITY=0 turns it off); off for tests
+    /// that compare against the loop without it. Process-wide (the rows run on pool threads).
+    /// <para>PeriodicAtWrap: with a periodic reference (#1614) the rows wrap at the
+    /// period, resetting the reference index m to 0, so every cycle of the loop's state
+    /// passes through a wrap. The state is compared there only: once per period, and
+    /// Brent snapshots at power-of-two step counts would never line up with, say, a
+    /// period-3 cycle once m is part of the state. Snapshots are taken at doubling wrap
+    /// counts. The next step is a function of (δ, m, the escaped lanes) while BLA's
+    /// lookup limit, min(period, m + (maxIter − iter)), is the period: the check runs
+    /// only while maxIter − iter ≥ period. In the last period before the cap the limit
+    /// shortens the skips, so the loop without the check takes slightly different
+    /// (shorter-skip) steps there; a lane escaping in that stretch from a cycle it kept
+    /// below the escape radius was not seen on any test view (on == off byte for byte,
+    /// S1802).</para></summary>
+    public static bool DeepPeriodicity = Environment.GetEnvironmentVariable("FF_DEEP_PERIODICITY") != "0";
+
+    /// <summary>#1802 — test hook: run the 8-wide PT rows (ComputeRowPT8) even without
+    /// AVX-512, where Vector512 is emulated (slow, same results), so tests cover them.</summary>
+    public static bool ForcePt8Rows;
+
+    /// <summary>#1802 — test hook: when set, the rows' periodicity check adds the index of
+    /// every pixel it catches (lanes off the frame or the row range included).</summary>
+    public static System.Collections.Concurrent.ConcurrentQueue<int>? DeepPeriodicityCaught;
+
+    /// <summary>#1802 — whether a row batch's state at a wrap repeats a snapshot bit for
+    /// bit: every lane's δ (real and imaginary; −0 ≠ +0 never matters as both come from
+    /// the same arithmetic, NaN never matches) and the same escaped lanes.</summary>
+    public static bool SameBatchState(Vector256<double> dr, Vector256<double> di, int esc,
+        Vector256<double> snapDr, Vector256<double> snapDi, int snapEsc)
+        => esc == snapEsc
+           && Vector256.EqualsAll(dr, snapDr) && Vector256.EqualsAll(di, snapDi);
+
+    /// <summary>#1802 — <see cref="SameBatchState(Vector256{double},Vector256{double},int,Vector256{double},Vector256{double},int)"/>
+    /// for the 8-wide rows.</summary>
+    public static bool SameBatchState(Vector512<double> dr, Vector512<double> di, int esc,
+        Vector512<double> snapDr, Vector512<double> snapDi, int snapEsc)
+        => esc == snapEsc
+           && Vector512.EqualsAll(dr, snapDr) && Vector512.EqualsAll(di, snapDi);
+
+    private static void LogCaught(int firstIdx, int lanes, int width)
+    {
+        var log = DeepPeriodicityCaught;
+        if (log == null) return;
+        for (int k = 0; k < width; k++) if ((lanes >> k & 1) != 0) log.Enqueue(firstIdx + k);
+    }
+
     /// <summary>#1368 — test hook: a pixel the deep orbit path's periodicity check caught
     /// writes smooth = −(the iteration it was caught at), as the GPU's
     /// GpuPeriodicity.Diagnostic does.</summary>
@@ -980,8 +1027,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
 
     private int _deepPeriodicPixels;
 
-    /// <summary>#1368 — pixels of the last frame the deep orbit path's periodicity
-    /// check classified in set (CPU only; reset at each Calculate).</summary>
+    /// <summary>#1368 — pixels of the last frame the deep periodicity checks classified
+    /// in set: the orbit path's and (#1802) the main path's rows. CPU only; reset at each
+    /// Calculate.</summary>
     public int LastDeepPeriodicPixels => Volatile.Read(ref _deepPeriodicPixels);
 
     // ── Perturbation theory reference orbit ───────────────────────────────────
@@ -3026,6 +3074,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         // through ComputePixelPTRebased (→ the DD-reference variant when enabled),
         // isolating whether DD reference cures the deep-zoom centre-dependence.
         if (ForceScalarPtPath) { useSimd512 = false; useSimd = false; }
+        if (ForcePt8Rows) useSimd512 = true;   // #1802 test hook (Vector512 runs emulated without AVX-512)
         if (!_loggedSimdPath)
         {
             Debug.WriteLine(useSimd512 ? "PT path: AVX-512 (8 lanes)"
@@ -5067,6 +5116,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         // wraps at the period (δ += Z_p, the exact rebase at Z_p ≈ 0); without one
         // m == iter, as before.
         int period = _refPeriod;
+        bool deepPeriodicity = DeepPeriodicity;   // #1802
         long rowBlaSkips = 0;
         long rowSteps = 0;   // #1614 — plain (non-BLA) vector steps
         long rowBlaIterSaved = 0;
@@ -5156,6 +5206,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             }
 
             int m = iterStart;   // #1614 — reference index (== iter without a period)
+            // #1802 — the batch's state at its last snapshot wrap (see below).
+            var snapDr = Vector256<double>.Zero; var snapDi = Vector256<double>.Zero;
+            int snapEsc = -1, wraps = 0, nextSnapWrap = 1;
             for (int iter = iterStart; iter < maxIter; iter++)
             {
                 if (m == period && period > 0)
@@ -5166,6 +5219,24 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                     dr = BlendActive(dr, dr + Vector256.Create(_refZr[period]), act);
                     di = BlendActive(di, di + Vector256.Create(_refZi[period]), act);
                     m = 0;
+                    // #1802 — periodicity at the wrap (PeriodicAtWrap). A bit-exact repeat
+                    // of the batch's state (every lane's δ, the escaped lanes) here means the
+                    // loop cycles for ever: its active lanes are in set.
+                    if (deepPeriodicity && maxIter - iter >= period)
+                    {
+                        if (SameBatchState(dr, di, escapedMask, snapDr, snapDi, snapEsc))
+                        {
+                            iterCount = BlendActive(iterCount, Vector256.Create((double)maxIter), act);
+                            Interlocked.Add(ref _deepPeriodicPixels, System.Numerics.BitOperations.PopCount((uint)act));
+                            LogCaught(rowBase + x, act, 4);
+                            break;
+                        }
+                        if (++wraps >= nextSnapWrap)
+                        {
+                            snapDr = dr; snapDi = di; snapEsc = escapedMask;
+                            nextSnapWrap = wraps * 2;
+                        }
+                    }
                 }
                 if (m > refLen) { glitched = true; break; }
 
@@ -5459,6 +5530,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         // wraps at the period (δ += Z_p, the exact rebase at Z_p ≈ 0); without one
         // m == iter, as before.
         int period = _refPeriod;
+        bool deepPeriodicity = DeepPeriodicity;   // #1802
         long rowBlaSkips = 0;
         long rowSteps = 0;   // #1614 — plain (non-BLA) vector steps
         long rowBlaIterSaved = 0;
@@ -5562,6 +5634,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             }
 
             int m = iterStart;   // #1614 — reference index (== iter without a period)
+            // #1802 — the batch's state at its last snapshot wrap (ComputeRowPT4).
+            var snapDr = Vector512<double>.Zero; var snapDi = Vector512<double>.Zero;
+            int snapEsc = -1, wraps = 0, nextSnapWrap = 1;
             for (int iter = iterStart; iter < maxIter; iter++)
             {
                 if (m == period && period > 0)
@@ -5572,6 +5647,22 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                     dr = BlendActive512(dr, dr + Vector512.Create(_refZr[period]), act);
                     di = BlendActive512(di, di + Vector512.Create(_refZi[period]), act);
                     m = 0;
+                    // #1802 — periodicity at the wrap (PeriodicAtWrap).
+                    if (deepPeriodicity && maxIter - iter >= period)
+                    {
+                        if (SameBatchState(dr, di, escapedMask, snapDr, snapDi, snapEsc))
+                        {
+                            iterCount = BlendActive512(iterCount, Vector512.Create((double)maxIter), act);
+                            Interlocked.Add(ref _deepPeriodicPixels, System.Numerics.BitOperations.PopCount((uint)act));
+                            LogCaught(rowBase + x, act, 8);
+                            break;
+                        }
+                        if (++wraps >= nextSnapWrap)
+                        {
+                            snapDr = dr; snapDi = di; snapEsc = escapedMask;
+                            nextSnapWrap = wraps * 2;
+                        }
+                    }
                 }
                 if (m > refLen) { glitched = true; break; }
 
