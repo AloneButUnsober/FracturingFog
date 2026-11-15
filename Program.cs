@@ -67,7 +67,7 @@ static class Program
             return DeepRouteCalProbe.Run(args);
 
         if (args.Length > 0 && args[0] == "--gpubandprobe")
-            return GpuBandProbe.Run();
+            return args.Length > 1 && args[1] == "shallow" ? GpuShallowBandProbe.Run() : GpuBandProbe.Run();   // #1481
 
         // #1332 — D3D11 deferred readback: lazy reads == eager bit for bit, flush, timing.
         if (args.Length > 0 && args[0] == "--gpudeferprobe")

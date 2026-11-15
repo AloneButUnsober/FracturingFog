@@ -131,7 +131,7 @@ internal static unsafe class RealKernelColorProbe
         int W = v.Width, H = v.Height, n = W * H;
 
         var blob = v.ToBlob();
-        ulong paramsSize = 80;
+        ulong paramsSize = 96;   // #1481
         ulong iterSize = (ulong)(n * sizeof(uint));
         ulong smoothSize = (ulong)(n * sizeof(float));
         ulong finalZDSize = (ulong)(n * 4 * sizeof(float));

@@ -58,7 +58,13 @@ cbuffer Params : register(b0)
     // #1340: 1 = wavefront schedule (HlslEntry): the threads pull pixels from
     // gWork[0]; 0 = one thread per pixel. Only HlslEntry reads it.
     int   gWave;
-    // 19 fields x 4 bytes = 76, padded by the host to 80 (float4 multiple).
+    // #1481: TDR row bands, as the deep kernels have (#1334). This dispatch covers
+    // rows [gRowBase, gRowBase + gBandRows); gBand is its gWork counter. A host that
+    // dispatches the whole frame passes 0 / gHeight / 0.
+    int   gRowBase;
+    int   gBandRows;
+    int   gBand;
+    // 22 fields x 4 bytes = 88, padded by the host to 96 (float4 multiple).
 }
 
 // #1227: the fractal kind the loop is specialised for. The hosts compile one
@@ -610,18 +616,43 @@ RWStructuredBuffer<float> gTrap : register(u4);
     /// one-group band runs exactly what the old under-8 bands already dispatched,
     /// so no dispatch got longer.</summary>
     public static int PerturbBandRows(int width, int height, int maxIter, int groupRows = PerturbGroupRows)
+        => BandRows(width, height, maxIter, groupRows, PerturbDispatchIterBudget, PerturbBandRowsOverride);
+
+    private static int BandRows(int width, int height, int maxIter, int groupRows, long budget, int rowsOverride)
     {
         groupRows = System.Math.Max(1, groupRows);
         int rows;
-        if (PerturbBandRowsOverride > 0) rows = PerturbBandRowsOverride;
+        if (rowsOverride > 0) rows = rowsOverride;
         else
         {
             long denom = (long)System.Math.Max(1, width) * System.Math.Max(1, maxIter);
-            rows = (int)System.Math.Min(int.MaxValue, System.Math.Max(1, PerturbDispatchIterBudget / denom));
+            rows = (int)System.Math.Min(int.MaxValue, System.Math.Max(1, budget / denom));
         }
         rows = System.Math.Max(groupRows, rows / groupRows * groupRows);
         return System.Math.Min(rows, System.Math.Max(1, height));
     }
+
+    /// <summary>#1481 — TDR budget of the shallow escape-time kernels (HlslEntry: base,
+    /// colour, orbit colour): max iter-pixels (rows·width·maxIter) per dispatch. They
+    /// dispatched the whole frame at once, and a 1080p orbit-coloured minibrot frame at
+    /// 4000 iterations ran past the ~2 s OS watchdog on a GT 710 (device removed). An
+    /// fp32 step costs far less than the deep kernels' fp64 one, so the budget is 25×
+    /// <see cref="PerturbDispatchIterBudget"/>: most frames stay one dispatch, and the
+    /// heaviest band of a GT 710 stays a fraction of the watchdog.</summary>
+    public const long ShallowDispatchIterBudget = 1_000_000_000;
+
+    /// <summary>#1481 — test / smoke hook: force a shallow band height (&gt;0). Seeded
+    /// from FF_SHALLOW_BANDROWS; 0 = auto (<see cref="ShallowDispatchIterBudget"/>).</summary>
+    public static int ShallowBandRowsOverride =
+        int.TryParse(System.Environment.GetEnvironmentVariable("FF_SHALLOW_BANDROWS"), out int sbr) && sbr > 0 ? sbr : 0;
+
+    /// <summary>#1481 — the row bands of a shallow escape-time dispatch, as (first row,
+    /// rows): <see cref="PerturbBands"/> with <see cref="ShallowDispatchIterBudget"/> and
+    /// <see cref="ShallowBandRowsOverride"/>. One band covering the frame when it fits
+    /// the budget.</summary>
+    public static (int RowBase, int Rows)[] ShallowBands(int width, int height, int maxIter,
+        int groupRows = PerturbGroupRows, uint[]? maskWords = null)
+        => Bands(width, height, maxIter, groupRows, maskWords, ShallowDispatchIterBudget, ShallowBandRowsOverride);
 
     /// <summary>#1394 — the bands of a perturbation dispatch, as (first row, rows).
     /// Without a mask: <see cref="PerturbBandRows"/> rows each (the last band shorter),
@@ -637,18 +668,22 @@ RWStructuredBuffer<float> gTrap : register(u4);
     /// <paramref name="groupRows"/> rows (but the last), at least one group each.</summary>
     public static (int RowBase, int Rows)[] PerturbBands(int width, int height, int maxIter,
         int groupRows = PerturbGroupRows, uint[]? maskWords = null)
+        => Bands(width, height, maxIter, groupRows, maskWords, PerturbDispatchIterBudget, PerturbBandRowsOverride);
+
+    private static (int RowBase, int Rows)[] Bands(int width, int height, int maxIter,
+        int groupRows, uint[]? maskWords, long iterBudget, int rowsOverride)
     {
         var bands = new System.Collections.Generic.List<(int, int)>();
-        if (maskWords == null || PerturbBandRowsOverride > 0)
+        if (maskWords == null || rowsOverride > 0)
         {
-            int rows = PerturbBandRows(width, height, maxIter, groupRows);
+            int rows = BandRows(width, height, maxIter, groupRows, iterBudget, rowsOverride);
             for (int y = 0; y < height; y += rows) bands.Add((y, System.Math.Min(rows, height - y)));
             return bands.ToArray();
         }
         groupRows = System.Math.Max(1, groupRows);
         long perPixel = System.Math.Max(1, maxIter);
-        long budget = System.Math.Max(PerturbDispatchIterBudget,
-            (long)PerturbBandRows(width, height, maxIter, groupRows) * width * perPixel);
+        long budget = System.Math.Max(iterBudget,
+            (long)BandRows(width, height, maxIter, groupRows, iterBudget, 0) * width * perPixel);
         for (int y = 0; y < height;)
         {
             int rows = 0;
@@ -1812,8 +1847,9 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
 {{
     bool taken = false;   // gWave = 0: this thread's one pixel has been taken
     int idx = -1;         // the pixel this lane is iterating, -1 = none
-    uint x = 0, y = 0;
+    uint x = 0, y = 0, ly = 0;
     int rowMaxIt = 0;
+    uint bandRows = (uint)min(gBandRows, gHeight - gRowBase);   // #1481
     float zr = 0.0, zi = 0.0, dr = 0.0, di = 0.0;
     float cIterR = 0.0, cIterI = 0.0;
     float pzr = 0.0, pzi = 0.0, pdr = 0.0, pdi = 0.0;   // Phoenix previous z, dz/dc
@@ -1827,9 +1863,10 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     {{
         if (idx < 0)
         {{
-            int got = WaveFetch(gWave, taken, tid.xy, (uint)gWidth, (uint)gHeight, 0, false, x, y);
+            int got = WaveFetch(gWave, taken, tid.xy, (uint)gWidth, bandRows, (uint)gBand, false, x, ly);
             if (got == 0) break;
             if (got == 2) continue;
+            y = (uint)gRowBase + ly;   // #1481: the band's row -> the frame's
             idx = (int)y * gWidth + (int)x;
             if (MaskSkips(idx)) {{ idx = -1; continue; }}   // #1394
 

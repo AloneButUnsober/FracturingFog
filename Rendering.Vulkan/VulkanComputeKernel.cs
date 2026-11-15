@@ -83,7 +83,8 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         public float Param0, Param1, DitherStrength;
         public float WarpStrength, WarpK, WarpHalfSpan;   // #1173-I domain warp
         public int Wave;   // #1340: 1 = wavefront schedule
-        public float _pad1; // -> 80 bytes
+        public int RowBase, BandRows, Band;   // #1481: this dispatch's TDR row band
+        public float _pad1, _pad2; // -> 96 bytes
     }
 
     // V6 perturbation params (64 bytes): 4 doubles FIRST (offsets 0/8/16/24, all
@@ -231,6 +232,9 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     /// <summary>#1340 — true when the last frame (shallow or deep) ran the wavefront
     /// schedule (<see cref="GpuWavefront"/>), false for one thread per pixel.</summary>
     public bool LastFrameWavefront { get; private set; }
+
+    /// <summary>#1481 — the TDR row bands (submits) of the last shallow frame.</summary>
+    public int LastShallowBandCount { get; private set; }
     public double LastReadbackMs { get; private set; }
 
     // #1329 — GPU timestamp queries per frame (null result when unsupported).
@@ -583,8 +587,44 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             WarpHalfSpan = warp.HalfSpan,
             Wave = wave ? 1 : 0,
         };
-        WriteBytes(_buf[0], &blob, sizeof(ParamsBlob));
-        if (wave) ZeroDevice(_buf[7]);   // #1340: gWork[0], the next pixel
+        // #1481 — TDR row bands, each its own submit (GPU packet), as the deep kernels
+        // have (DispatchBands): the whole frame in one dispatch ran past the OS watchdog
+        // on a GT 710. Every band's params go into their own slice of the params UBO up
+        // front, bound through their own descriptor set, so the bands queue back to back
+        // and the frame ends in one wait.
+        var bands = MandelbrotKernelSource.ShallowBands(width, height, maxIter, prog.Shape.Y, mask?.Words);
+        int bandCount = bands.Length;
+        LastShallowBandCount = bandCount;
+        ulong align = Math.Max(1UL, _ctx.MinUniformBufferOffsetAlignment);
+        ulong stride = ((ulong)sizeof(ParamsBlob) + align - 1) / align * align;
+        ulong uboBytes = stride * (ulong)bandCount;
+        if (_buf[0].Size < uboBytes)
+        {
+            FreeBuffer(ref _buf[0]);
+            _buf[0] = AllocBuffer(uboBytes, BufferUsageFlags.UniformBufferBit);   // host: written in place
+        }
+        {
+            void* mappedUbo;
+            Check(_vk.MapMemory(_device, _buf[0].HostMemory, 0, uboBytes, 0, &mappedUbo), "vkMapMemory");
+            for (int band = 0; band < bandCount; band++)
+            {
+                var b = blob;
+                (b.RowBase, b.BandRows, b.Band) = (bands[band].RowBase, bands[band].Rows, band);
+                *(ParamsBlob*)((byte*)mappedUbo + (ulong)band * stride) = b;
+            }
+            _vk.UnmapMemory(_device, _buf[0].HostMemory);
+        }
+        if (wave)
+        {
+            // One counter per band (gWork[gBand]), all zeroed before band 0.
+            ulong workBytes = (ulong)Math.Max(4, bandCount) * sizeof(uint);
+            if (_buf[7].Size < workBytes)
+            {
+                FreeBuffer(ref _buf[7]);
+                _buf[7] = AllocDeviceLocal(workBytes, BufferUsageFlags.StorageBufferBit);
+            }
+            ZeroDevice(_buf[7]);
+        }
 
         // Per-row caps: upload as uint[] (narrow negatives to 0 -> shader falls
         // back to gMaxIter), else zero the (still-bound) buffer.
@@ -596,90 +636,110 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         }
         else ZeroBuffer(_buf[1]);
 
-        // Per-Run descriptor pool + set bound to the active program.
+        // Per-Run descriptor pool + one set per band, bound to the active program.
         int bc = prog.BindingCount;
         DescriptorPool pool = default;
-        CommandBuffer cmd = default;
+        var cmds = new CommandBuffer[bandCount];
+        bool idle = true;   // nothing submitted since the last wait
         try
         {
             var poolSizes = stackalloc DescriptorPoolSize[2]
             {
-                new DescriptorPoolSize { Type = DescriptorType.UniformBuffer, DescriptorCount = 1 },
-                new DescriptorPoolSize { Type = DescriptorType.StorageBuffer, DescriptorCount = (uint)(bc - 1) },
+                new DescriptorPoolSize { Type = DescriptorType.UniformBuffer, DescriptorCount = (uint)bandCount },
+                new DescriptorPoolSize { Type = DescriptorType.StorageBuffer, DescriptorCount = (uint)((bc - 1) * bandCount) },
             };
             var dpci = new DescriptorPoolCreateInfo
             {
                 SType = StructureType.DescriptorPoolCreateInfo,
-                MaxSets = 1, PoolSizeCount = 2, PPoolSizes = poolSizes,
+                MaxSets = (uint)bandCount, PoolSizeCount = 2, PPoolSizes = poolSizes,
             };
             Check(_vk.CreateDescriptorPool(_device, in dpci, null, out pool), "vkCreateDescriptorPool");
 
+            var sets = new DescriptorSet[bandCount];
             var dslLocal = prog.Dsl;
-            var dsai = new DescriptorSetAllocateInfo
-            {
-                SType = StructureType.DescriptorSetAllocateInfo,
-                DescriptorPool = pool, DescriptorSetCount = 1, PSetLayouts = &dslLocal,
-            };
-            Check(_vk.AllocateDescriptorSets(_device, in dsai, out DescriptorSet set), "vkAllocateDescriptorSets");
-
             // Bindings: UBO@0, perRow@100, iter@200, smooth@201, finalZD@202, [color@203],
             // [trap@204], [work@205] — _buf[0..7] in that order (binding - UShift + 2 past t0);
-            // #1394: the mask@115.
+            // #1394: the mask@115. The UBO binding takes the band's slice.
             var infos = stackalloc DescriptorBufferInfo[9];
             var writes = stackalloc WriteDescriptorSet[9];
-            for (int i = 0; i < bc; i++)
+            for (int band = 0; band < bandCount; band++)
             {
-                uint b = prog.Bindings[i];
-                int bufIndex = b == 0 ? 0 : b == TShift ? 1 : (int)b - UShift + 2;
-                var buffer = b == MaskBinding ? MaskBuffer(mask) : _buf[bufIndex].Buffer;
-                infos[i] = new DescriptorBufferInfo { Buffer = buffer, Offset = 0, Range = Vk.WholeSize };
-                writes[i] = new WriteDescriptorSet
+                var dsai = new DescriptorSetAllocateInfo
                 {
-                    SType = StructureType.WriteDescriptorSet,
-                    DstSet = set, DstBinding = b, DescriptorCount = 1,
-                    DescriptorType = b == 0 ? DescriptorType.UniformBuffer : DescriptorType.StorageBuffer,
-                    PBufferInfo = &infos[i],
+                    SType = StructureType.DescriptorSetAllocateInfo,
+                    DescriptorPool = pool, DescriptorSetCount = 1, PSetLayouts = &dslLocal,
                 };
+                Check(_vk.AllocateDescriptorSets(_device, in dsai, out sets[band]), "vkAllocateDescriptorSets");
+                for (int i = 0; i < bc; i++)
+                {
+                    uint b = prog.Bindings[i];
+                    int bufIndex = b == 0 ? 0 : b == TShift ? 1 : (int)b - UShift + 2;
+                    var buffer = b == MaskBinding ? MaskBuffer(mask) : _buf[bufIndex].Buffer;
+                    infos[i] = b == 0
+                        ? new DescriptorBufferInfo { Buffer = buffer, Offset = (ulong)band * stride, Range = (ulong)sizeof(ParamsBlob) }
+                        : new DescriptorBufferInfo { Buffer = buffer, Offset = 0, Range = Vk.WholeSize };
+                    writes[i] = new WriteDescriptorSet
+                    {
+                        SType = StructureType.WriteDescriptorSet,
+                        DstSet = sets[band], DstBinding = b, DescriptorCount = 1,
+                        DescriptorType = b == 0 ? DescriptorType.UniformBuffer : DescriptorType.StorageBuffer,
+                        PBufferInfo = &infos[i],
+                    };
+                }
+                _vk.UpdateDescriptorSets(_device, (uint)bc, writes, 0, null);
             }
-            _vk.UpdateDescriptorSets(_device, (uint)bc, writes, 0, null);
 
             var cbai = new CommandBufferAllocateInfo
             {
                 SType = StructureType.CommandBufferAllocateInfo,
-                CommandPool = _cmdPool, Level = CommandBufferLevel.Primary, CommandBufferCount = 1,
+                CommandPool = _cmdPool, Level = CommandBufferLevel.Primary, CommandBufferCount = (uint)bandCount,
             };
-            Check(_vk.AllocateCommandBuffers(_device, in cbai, out cmd), "vkAllocateCommandBuffers");
+            fixed (CommandBuffer* pc = cmds) Check(_vk.AllocateCommandBuffers(_device, in cbai, pc), "vkAllocateCommandBuffers");
 
-            var begin = new CommandBufferBeginInfo
-            {
-                SType = StructureType.CommandBufferBeginInfo,
-                Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
-            };
-            Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
-            _timer.Begin(cmd);   // #1329
-            FlushPending(cmd);
-            _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, prog.Pipeline);
-            _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, prog.Layout, 0, 1, &set, 0, null);
-            if (wave) _vk.CmdDispatch(cmd, GpuWavefront.Groups(n, prog.Shape.Threads), 1, 1);
-            else _vk.CmdDispatch(cmd, prog.Shape.GroupsX(width), prog.Shape.GroupsY(height), 1);
-            _timer.Mark(cmd, GpuStage.Dispatch);
             bool trapOut = useColor && trapDst != null && prog.Has(TrapBinding);
-            RecordReadback(cmd, Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)),
-                useColor ? Out(_buf[5], n * sizeof(uint)) : default, trapOut ? Out(_buf[6], n * sizeof(float)) : default);
-            Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
-
-            var cmdLocal = cmd;
-            var submit = new SubmitInfo
+            bool serial = SerialBands;
+            for (int band = 0; band < bandCount; band++)
             {
-                SType = StructureType.SubmitInfo,
-                CommandBufferCount = 1, PCommandBuffers = &cmdLocal,
-            };
-            Check(_vk.QueueSubmit(_ctx.ComputeQueue, 1, &submit, default), "vkQueueSubmit");
-            WaitQueue();
+                int rows = bands[band].Rows;
+                bool last = band == bandCount - 1;
+                var cmd = cmds[band];
+                var begin = new CommandBufferBeginInfo
+                {
+                    SType = StructureType.CommandBufferBeginInfo,
+                    Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
+                };
+                Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
+                _timer.Begin(cmd);   // #1329
+                FlushPending(cmd);   // the uploads land before band 0 (nothing left after it)
+                _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, prog.Pipeline);
+                var set = sets[band];
+                _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, prog.Layout, 0, 1, &set, 0, null);
+                if (wave) _vk.CmdDispatch(cmd, GpuWavefront.Groups((long)rows * width, prog.Shape.Threads), 1, 1);
+                else _vk.CmdDispatch(cmd, prog.Shape.GroupsX(width), prog.Shape.GroupsY(rows), 1);
+                _timer.Mark(cmd, GpuStage.Dispatch);
+                if (last)
+                    RecordReadback(cmd, Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)),
+                        useColor ? Out(_buf[5], n * sizeof(uint)) : default, trapOut ? Out(_buf[6], n * sizeof(float)) : default);
+                Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
+
+                var submit = new SubmitInfo
+                {
+                    SType = StructureType.SubmitInfo,
+                    CommandBufferCount = 1, PCommandBuffers = &cmd,
+                };
+                idle = false;
+                Check(_vk.QueueSubmit(_ctx.ComputeQueue, 1, &submit, default), "vkQueueSubmit");
+                if (!last && !serial) continue;
+                WaitQueue();
+                idle = true;
+            }
         }
         finally
         {
-            if (cmd.Handle != 0) _vk.FreeCommandBuffers(_device, _cmdPool, 1, in cmd);
+            // Never free a command buffer the GPU may still be running.
+            if (!idle) _vk.QueueWaitIdle(_ctx.ComputeQueue);
+            if (cmds[0].Handle != 0)
+                fixed (CommandBuffer* pc = cmds) _vk.FreeCommandBuffers(_device, _cmdPool, (uint)bandCount, pc);
             if (pool.Handle != 0) _vk.DestroyDescriptorPool(_device, pool, null);
         }
 
@@ -1728,7 +1788,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         for (int i = 0; i < _buf.Length; i++) FreeBuffer(ref _buf[i]);
 
         int n = width * height;
-        _buf[0] = AllocBuffer(80, BufferUsageFlags.UniformBufferBit);                       // params (#1173-I: 80 B)
+        _buf[0] = AllocBuffer(96, BufferUsageFlags.UniformBufferBit);                       // params (#1481: 96 B; grown per band)
         _buf[1] = AllocBuffer((ulong)(Math.Max(height, 1) * sizeof(uint)), BufferUsageFlags.StorageBufferBit); // perRow
         _buf[2] = AllocBuffer((ulong)(n * sizeof(uint)),  BufferUsageFlags.StorageBufferBit, Residency.Output);  // iter
         _buf[3] = AllocBuffer((ulong)(n * sizeof(float)), BufferUsageFlags.StorageBufferBit, Residency.Output);  // smooth

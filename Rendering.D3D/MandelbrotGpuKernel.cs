@@ -125,6 +125,9 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         public float WarpStrength, WarpK, WarpHalfSpan;
         // #1340: the wavefront schedule (1) or one thread per pixel (0). 76 bytes.
         public int Wave;
+        // #1481: this dispatch's TDR row band (gRowBase / gBandRows / gBand). 88 bytes;
+        // the cbuffer is 96.
+        public int RowBase, BandRows, Band;
     }
 
     // V6 (#82): deep-zoom perturbation params. Mirrors the HLSL PerturbParams
@@ -534,7 +537,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     private void AllocParamsBuffer()
     {
         var desc = new BufferDescription(
-            byteWidth: 80,      // #1173-I: Params is 72 bytes (domain warp), float4-rounded
+            byteWidth: 96,      // #1481: Params is 88 bytes (row bands), float4-rounded
             bindFlags: BindFlags.ConstantBuffer,
             usage: ResourceUsage.Dynamic,
             cpuAccessFlags: CpuAccessFlags.Write);
@@ -703,6 +706,9 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     /// <summary>#1340 — true when the last frame (shallow or deep) ran the wavefront
     /// schedule (<see cref="GpuWavefront"/>), false for one thread per pixel.</summary>
     public bool LastFrameWavefront { get; private set; }
+
+    /// <summary>#1481 — the TDR row bands (dispatches) of the last shallow frame.</summary>
+    public int LastShallowBandCount { get; private set; }
 
     /// <summary>Last dispatch's CPU readback cost in ms — Map+memcpy of
     /// all three staging buffers (iter, smooth, finalZD). Useful for
@@ -1059,12 +1065,6 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
                 WarpHalfSpan = warp.HalfSpan,
                 Wave = wave ? 1 : 0,
             };
-            var mapped = _ctx.Map(_paramsBuf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
-            unsafe
-            {
-                *(Params*)mapped.DataPointer = p;
-            }
-            _ctx.Unmap(_paramsBuf, 0);
 
             // Pick the right CS variant. Color path uses the cached
             // per-palette shader; non-color path uses the base.
@@ -1084,19 +1084,37 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             if (mask != null) BindMask(mask);   // #1394
 
             var shape = Shape(GpuGroupShapes.SlotEscape);   // #1339
-            uint groupsX = shape.GroupsX(width);
-            uint groupsY = shape.GroupsY(height);
+            // #1481 — TDR row bands, each its own dispatch and GPU packet (Flush), as the
+            // deep kernels have (DispatchPerturbBands): the whole frame in one dispatch ran
+            // past the OS watchdog on a GT 710 (1080p orbit minibrot, 4000 iterations).
+            var bands = MandelbrotKernelSource.ShallowBands(width, height, maxIter, shape.Y, mask?.Words);
+            LastShallowBandCount = bands.Length;
             LastFrameWavefront = wave;
             if (wave)
             {
-                EnsureWorkBuffer();
+                // One counter per band (gWork[gBand]), all zeroed up front.
+                EnsureWorkBuffer(bands.Length);
                 _ctx.ClearUnorderedAccessView(_workUav!, new Vortice.Mathematics.Int4(0, 0, 0, 0));
                 _ctx.CSSetUnorderedAccessView(5, _workUav);
-                (groupsX, groupsY) = (GpuWavefront.Groups(width * height, shape.Threads), 1);
             }
-            _timer.Begin();
-            _ctx.Dispatch(groupsX, groupsY, 1);
-            _timer.Mark(GpuStage.Dispatch);
+            for (int band = 0; band < bands.Length; band++)
+            {
+                var (rowBase, rows) = bands[band];
+                p.RowBase = rowBase;
+                p.BandRows = rows;
+                p.Band = band;
+                var mapped = _ctx.Map(_paramsBuf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
+                unsafe
+                {
+                    *(Params*)mapped.DataPointer = p;
+                }
+                _ctx.Unmap(_paramsBuf, 0);
+                _timer.Begin();
+                if (wave) _ctx.Dispatch(GpuWavefront.Groups((long)rows * width, shape.Threads), 1, 1);
+                else _ctx.Dispatch(shape.GroupsX(width), shape.GroupsY(rows), 1);
+                _timer.Mark(GpuStage.Dispatch);
+                if (band < bands.Length - 1) _ctx.Flush();   // this band is its own GPU packet (resets the TDR clock)
+            }
 
             if (wave) _ctx.CSUnsetUnorderedAccessView(5);
             _ctx.CSUnsetUnorderedAccessView(0);
