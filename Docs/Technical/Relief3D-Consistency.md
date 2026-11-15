@@ -176,13 +176,20 @@ It is pre-existing on main. #1043 made the Real-height fog path cheaper, not dea
   - the cost per pixel comes from the uniforms (primary march, shading marches per light, the fog walk's per-step shadow marches), so switching fog on shrinks the tiles in the same frame;
   - the GPU speed (ns per cost unit) is learned from each frame, starting pessimistic;
   - row bands narrow to column tiles when even 8 rows are too slow;
-  - the HLSL takes `gRowBase` / `gColBase` in former pad slots; Vulkan keeps one dispatch (bases 0).
+  - the HLSL takes `gRowBase` / `gColBase` in former pad slots; Vulkan kept one dispatch (bases 0) until #1479, below.
 - **Device loss:**
   - the D3D relief and froxel kernels translate device-removed / hung / reset / driver-error into `GpuDeviceLostException`;
   - `HeightfieldRaymarch2D.Render` catches it, finishes the frame on the CPU trace, and never dispatches that kernel instance again (`IsGpuReliefLost`).
 - **Early exit:** a shading-probe march above the terrain box top heading up ends at once (CPU, twin, HLSL): −26% on Real height + fog.
 
 **Checked on the GT 710:** a 960×540 fog frame, about 3 s of GPU work, rendered in 23 tiles of ~125 ms. No watchdog event was logged. Without tiling that is a single ~3 s dispatch.
+
+**Vulkan (#1479).** `ReliefRaymarchVulkanKernel` tiles the same way:
+- the same `ReliefGpuTiling` sizes, in whole groups of the tuned shape (#1377), and its own learned speed;
+- each tile is its own command buffer and submit. Its params go in their own slice of the params UBO, bound through their own descriptor set, so the tiles queue back to back and the frame ends in one wait;
+- `VK_ERROR_DEVICE_LOST` becomes `GpuDeviceLostException`, so the relief render falls back to the CPU trace as on D3D11.
+
+Checked on the GT 710 (`--vkrelieftileprobe`): a 1920×1080 fog frame (64 volume steps, a shadowed light), about 6 s of GPU work, ran in 405 tiles on the first frame and 270 once the speed was learned, ~16–23 ms each, with no device loss. Output is byte-identical to the frame in 64-row bands, and in the tests (`S1479VulkanReliefTilingTests`) to the frame in one tile.
 
 **Left:** the D3D11 presenter itself has no device-lost recovery (#1045).
 
