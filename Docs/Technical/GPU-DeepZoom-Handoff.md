@@ -65,6 +65,13 @@ DISABLED.
 - `MandelbrotKernelSource.PerturbBandRows(w,h,maxIter)` — band height from a 40M iter-pixel budget.
 - Both backends dispatch the frame in **row bands**, each its own GPU packet (Vulkan: submit+`QueueWaitIdle`;
   D3D: `Flush` per band), so no single packet exceeds the ~2 s TDR budget.
+- **#1318 — D3D11 releases the shared D3D gate between bands.** The deep entry points (`RunPerturb`, `…FloatExp`, `…Orbit`, `…SA`, `…La`) used to hold `_d3dGate` for the whole frame, so a present from another thread (selection outline, overlay repaint) waited up to `PerturbBudgetMs`.
+  - `DispatchPerturbBands` now ends an event query after each band. Once enough bands are queued, it waits for the oldest one, polling the query with the gate released (`WaitBand`); the immediate context is only touched under the gate.
+  - Every band re-binds its shader, SRVs and UAVs, because a present in between may change context state.
+  - Lookahead (`MandelbrotGpuKernel.PerturbBandLookahead`, default auto): keep about `QueueTargetMs` = 32 ms of bands queued, at least 1. The wait sleeps 1 ms between polls, and a Windows sleep can last a whole ~15.6 ms tick, so with one ~9 ms band queued the GPU ran dry (+14 % wall time). Band 0 (the too-slow check) and the last band are polled with `Thread.Yield` only.
+  - A kernel disposed while the gate was released (the host rebuilds kernels under it) throws `ObjectDisposedException`, which the calculator treats as a GPU failure (CPU fallback).
+  - GT 710, 1080p deep frame at zoom 1e5, 3000 iterations, 45 bands of ~51 ms (`--gpugateprobe`): a concurrent present waited 2.3 s (the whole frame) before, now median 48–64 ms and worst ~160 ms. Frame time is unchanged (2303 ms; `--gpubandprobe` matches main within noise). Output is byte-identical with a state-clobbering presenter running.
+  - Vulkan doesn't share the gate (its kernels have their own queue submissions), so it has no equivalent stall.
 
 ### Perf auto-fallback (commit `468859c`, #87)
 - After band 0 (real GPU-synced time), extrapolate `band0 × bandCount`. If `> PerturbBudgetMs` (default 3000, env
@@ -92,6 +99,7 @@ dotnet run -c Release --project FracturingFogCLD.csproj -- --gpuperiodicityprobe
 dotnet run -c Release --project FracturingFogCLD.csproj -- --vkpipelinecacheprobe  # #1341 Vulkan pipeline cache: cold / warm / off / corrupt / foreign sessions (child processes), vkCreateComputePipelines time, same frames
 dotnet run -c Release --project FracturingFogCLD.csproj -- --gpugroupshapeprobe  # #1339 thread-group shapes (D3D11 + Vulkan): tuning timings + winner per slot, tuned vs 8x8 at full size, byte-identical
 dotnet run -c Release --project FracturingFogCLD.csproj -- --gpubandprobe  # #1334 deep perturbation bands (D3D11 + Vulkan): banded == one band bit for bit, band sizes, wall + GPU time
+dotnet run -c Release --project FracturingFogCLD.csproj -- --gpugateprobe  # #1318 D3D11 deep frame releasing the D3D gate between bands: a concurrent present's wait, held vs lookahead modes, byte-identical
 dotnet run -c Release --project FracturingFogCLD.csproj -- --gpudeferprobe  # #1332 shallow SP kernel (D3D11): deferred readback == eager bit for bit, flush, GPU escape count, timing
 ```
 

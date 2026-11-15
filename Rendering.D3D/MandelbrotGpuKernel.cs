@@ -1295,10 +1295,12 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
                 RowBase = 0, Pad0 = wave ? 1 : 0,   // gWave
             };
 
-            _ctx.CSSetShader(_csPerturb);
-            _ctx.CSSetShaderResource(0, _refZrSrv);   // t0
-            _ctx.CSSetShaderResource(1, _refZiSrv);   // t1
-            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturb), width, height, maxIter, srvCount: 2, "", (rowBase, rows, band) =>
+            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturb), width, height, maxIter, srvCount: 2, "", () =>
+            {
+                _ctx.CSSetShader(_csPerturb);
+                _ctx.CSSetShaderResource(0, _refZrSrv);   // t0
+                _ctx.CSSetShaderResource(1, _refZiSrv);   // t1
+            }, (rowBase, rows, band) =>
             {
                 p.RowBase = rowBase;
                 p.Pad1 = rows;   // gBandRows
@@ -1408,12 +1410,14 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
                 Width = width, Height = height, MaxIter = maxIter, RefLen = refLen,
                 EscapeR2 = (float)escapeRadius2,
             };
-            _ctx.CSSetShader(cs);
-            _ctx.CSSetShaderResource(0, _fxRefZSrv);   // t0
             bool wave = GpuWavefront.UsePerturb;   // #1384
             LastFrameWavefront = wave;
             p.Wave = wave ? 1 : 0;
-            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturbFp32), width, height, maxIter, srvCount: 1, f32 ? " (scaled fp32)" : " (float-exp)", (rowBase, rows, band) =>
+            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturbFp32), width, height, maxIter, srvCount: 1, f32 ? " (scaled fp32)" : " (float-exp)", () =>
+            {
+                _ctx.CSSetShader(cs);
+                _ctx.CSSetShaderResource(0, _fxRefZSrv);   // t0
+            }, (rowBase, rows, band) =>
             {
                 p.RowBase = rowBase;
                 p.BandRows = rows;
@@ -1636,11 +1640,13 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
                 RowBase = 0, CRe = (float)centerRe, CIm = (float)centerIm, Wave = wave ? 1 : 0,
             };
 
-            _ctx.CSSetShader(cs);
-            _ctx.CSSetShaderResource(0, _refZrSrv);
-            _ctx.CSSetShaderResource(1, _refZiSrv);
-            _ctx.CSSetUnorderedAccessView(3, _orbitOutUav);   // u3 (unbound by DispatchPerturbBands)
-            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturb), width, height, maxIter, srvCount: 2, " (orbit)", (rowBase, rows, band) =>
+            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturb), width, height, maxIter, srvCount: 2, " (orbit)", () =>
+            {
+                _ctx.CSSetShader(cs);
+                _ctx.CSSetShaderResource(0, _refZrSrv);
+                _ctx.CSSetShaderResource(1, _refZiSrv);
+                _ctx.CSSetUnorderedAccessView(3, _orbitOutUav);   // u3 (unbound by DispatchPerturbBands)
+            }, (rowBase, rows, band) =>
             {
                 p.RowBase = rowBase;
                 p.BandRows = rows;
@@ -1761,15 +1767,17 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
                 BlaLevels = blaLevels,
             };
 
-            _ctx.CSSetShader(_csPerturbSa);
-            _ctx.CSSetShaderResource(0, _refZrSrv);   // t0
-            _ctx.CSSetShaderResource(1, _refZiSrv);   // t1
-            for (int i = 0; i < 8; i++) _ctx.CSSetShaderResource((uint)(2 + i), _saSrvs[i]);   // t2..t9
-            _ctx.CSSetShaderResource(10, _blaSrv);                                              // t10 (BLA)
             bool wave = GpuWavefront.UsePerturb;   // #1340
             LastFrameWavefront = wave;
             p.Wave = wave ? 1 : 0;
-            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturb), width, height, maxIter, srvCount: 11, blaLevels > 0 ? " (SA+BLA)" : " (SA)", (rowBase, rows, band) =>
+            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturb), width, height, maxIter, srvCount: 11, blaLevels > 0 ? " (SA+BLA)" : " (SA)", () =>
+            {
+                _ctx.CSSetShader(_csPerturbSa);
+                _ctx.CSSetShaderResource(0, _refZrSrv);   // t0
+                _ctx.CSSetShaderResource(1, _refZiSrv);   // t1
+                for (int i = 0; i < 8; i++) _ctx.CSSetShaderResource((uint)(2 + i), _saSrvs[i]);   // t2..t9
+                _ctx.CSSetShaderResource(10, _blaSrv);                                              // t10 (BLA)
+            }, (rowBase, rows, band) =>
             {
                 p.RowBase = rowBase;
                 p.BandRows = rows;
@@ -1895,15 +1903,17 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
                 Stages = stages, AtLen = at.Len, StepsBase = 2 * stages,
             };
 
-            _ctx.CSSetShader(_csPerturbLa);
-            _ctx.CSSetShaderResource(0, _refZrSrv);   // t0
-            _ctx.CSSetShaderResource(1, _refZiSrv);   // t1
-            _ctx.CSSetShaderResource(2, _laStepSrv);  // t2
-            _ctx.CSSetShaderResource(3, _laIntSrv);   // t3
             bool wave = GpuWavefront.UsePerturb;
             LastFrameWavefront = wave;
             p.Wave = wave ? 1 : 0;
-            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturb), width, height, maxIter, srvCount: 4, " (LA)", (rowBase, rows, band) =>
+            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturb), width, height, maxIter, srvCount: 4, " (LA)", () =>
+            {
+                _ctx.CSSetShader(_csPerturbLa);
+                _ctx.CSSetShaderResource(0, _refZrSrv);   // t0
+                _ctx.CSSetShaderResource(1, _refZiSrv);   // t1
+                _ctx.CSSetShaderResource(2, _laStepSrv);  // t2
+                _ctx.CSSetShaderResource(3, _laIntSrv);   // t3
+            }, (rowBase, rows, band) =>
             {
                 p.RowBase = rowBase;
                 p.BandRows = rows;
@@ -1918,30 +1928,28 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
         }
     }
 
-    /// <summary>TDR row-band tiling for the perturbation kernels (the shader + its
-    /// SRVs are bound by the caller; <paramref name="writeParams"/> uploads the
-    /// band's cbuffer). A deep-zoom full-image dispatch runs long enough on a
+    /// <summary>TDR row-band tiling for the perturbation kernels. <paramref name="bind"/>
+    /// binds the shader and its SRVs (and any extra UAV); <paramref name="writeParams"/>
+    /// uploads the band's cbuffer. A deep-zoom full-image dispatch runs long enough on a
     /// weak-FP64 GPU to trip the OS watchdog (DXGI_ERROR_DEVICE_REMOVED), which also
     /// kills the shared present device, so each band is Flushed as its own packet.
-    /// Band 0 is synced and timed: if the extrapolated frame is too slow (weak FP64)
+    /// Band 0 is waited on and timed: if the extrapolated frame is too slow (weak FP64)
     /// it throws the too-slow marker so the caller drops to the CPU deep path.
     /// <paramref name="workSlot"/>: the UAV register of the wavefront counters (u3;
-    /// the orbit kernel's is u4, #1384).</summary>
+    /// the orbit kernel's is u4, #1384).
+    /// <para>#1318 — the shared D3D gate is released while the GPU runs a band, so a
+    /// present from another thread (the selection outline, an overlay repaint) gets in
+    /// between bands instead of waiting for the whole frame. Each band is followed by an
+    /// event query; once <see cref="PerturbBandLookahead"/> bands are queued, the next
+    /// band waits for the oldest one, polling the query with the gate released (the
+    /// immediate context is only touched under the gate). A present therefore queues
+    /// behind at most the bands already submitted. Every band re-binds its state, since
+    /// a present in between may have changed the context's.</para></summary>
     private void DispatchPerturbBands(GpuGroupShape shape, int width, int height, int maxIter, int srvCount, string label,
-        Action<int, int, int> writeParams, int uavCount = 3, bool wave = false, int workSlot = 3,
+        Action bind, Action<int, int, int> writeParams, int uavCount = 3, bool wave = false, int workSlot = 3,
         GpuPixelMask? mask = null)
     {
-        _ctx.CSSetUnorderedAccessView(0, _iterUav);
-        _ctx.CSSetUnorderedAccessView(1, _smoothUav);
-        _ctx.CSSetUnorderedAccessView(2, _finalZDUav);
-        if (mask != null) BindMask(mask);   // #1394
-
-        void Unbind()
-        {
-            for (int i = 0; i < uavCount; i++) _ctx.CSUnsetUnorderedAccessView((uint)i);   // u3: the orbit variant (#607)
-            for (int i = 0; i < srvCount; i++) _ctx.CSSetShaderResource((uint)i, null);
-            if (mask != null) _ctx.CSSetShaderResource(MaskSlot, null);
-        }
+        if (mask != null) BindMask(mask);   // #1394 — uploads it (re-bound per band below)
 
         // #1394 — with a mask, a band's budget counts only its marked pixels.
         var bands = MandelbrotKernelSource.PerturbBands(width, height, maxIter, shape.Y, mask?.Words);
@@ -1951,12 +1959,32 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             // #1340: one counter per band (gWork[band], u3 / u4), all zeroed up front.
             EnsureWorkBuffer(bandCount);
             _ctx.ClearUnorderedAccessView(_workUav!, new Vortice.Mathematics.Int4(0, 0, 0, 0));
-            _ctx.CSSetUnorderedAccessView((uint)workSlot, _workUav);
             uavCount = Math.Max(uavCount, workSlot + 1);
         }
+
+        void Bind()
+        {
+            bind();
+            _ctx.CSSetUnorderedAccessView(0, _iterUav);
+            _ctx.CSSetUnorderedAccessView(1, _smoothUav);
+            _ctx.CSSetUnorderedAccessView(2, _finalZDUav);
+            if (wave) _ctx.CSSetUnorderedAccessView((uint)workSlot, _workUav);
+            if (mask != null) _ctx.CSSetShaderResource(MaskSlot, _maskSrv);
+        }
+        void Unbind()
+        {
+            for (int i = 0; i < uavCount; i++) _ctx.CSUnsetUnorderedAccessView((uint)i);   // u3: the orbit variant (#607)
+            for (int i = 0; i < srvCount; i++) _ctx.CSSetShaderResource((uint)i, null);
+            if (mask != null) _ctx.CSSetShaderResource(MaskSlot, null);
+        }
+
+        EnsureBandEvents();
+        int lookahead = PerturbBandLookahead >= 0 ? Math.Min(PerturbBandLookahead, BandEvents - 1) : 1;
+        LastPerturbBandCount = bandCount;
         for (int bandIndex = 0; bandIndex < bandCount; bandIndex++)
         {
             var (rowBase, rows) = bands[bandIndex];
+            Bind();
             writeParams(rowBase, rows, bandIndex);
 
             long tBand = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -1964,32 +1992,91 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             if (wave) _ctx.Dispatch(GpuWavefront.PerturbGroups(rows * width, shape.Threads), 1, 1);
             else _ctx.Dispatch(shape.GroupsX(width), shape.GroupsY(rows), 1);
             _timer.Mark(GpuStage.Dispatch);
+            Unbind();   // leave the context clean for whoever gets the gate next
+            _ctx.End(_bandDone![bandIndex % BandEvents]);
+            _ctx.Flush();   // submit this band as its own GPU packet (resets the TDR clock)
 
-            // Perf-fallback: a CopyResource + Map(Read) on the iter staging blocks
-            // until band 0's dispatch finishes -> a real GPU time; the remaining
-            // bands just Flush (async).
+            // Perf-fallback: band 0 is waited on -> a real GPU time.
             if (bandIndex == 0 && bandCount > 1)
             {
-                _ctx.CopyResource(_iterStaging, _iterBuf);
-                var sync = _ctx.Map(_iterStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
-                _ctx.Unmap(_iterStaging, 0);
-                _ = sync;
+                WaitBand(_bandDone[0], spin: true);   // nothing queued behind it: don't oversleep
                 double band0Ms = (System.Diagnostics.Stopwatch.GetTimestamp() - tBand) * 1000.0
                                  / System.Diagnostics.Stopwatch.Frequency;
                 if (MandelbrotKernelSource.PerturbTooSlow(band0Ms, bandCount))
-                {
-                    Unbind();   // leave the context clean before bailing to the CPU path
                     throw new TimeoutException(
                         $"{MandelbrotKernelSource.PerturbTooSlowMarker}: band0={band0Ms:F1}ms × {bandCount} bands " +
                         $"> {MandelbrotKernelSource.PerturbBudgetMs:F0}ms budget{label}");
-                }
+                if (PerturbBandLookahead < 0) lookahead = AutoLookahead(band0Ms);
+                LastPerturbLookahead = lookahead;
             }
-            else
+            else if (lookahead == 0)
             {
-                _ctx.Flush();   // submit this band as its own GPU packet (resets the TDR clock)
+                WaitBand(_bandDone[bandIndex % BandEvents]);   // one band at a time
+            }
+            else if (bandIndex >= lookahead)
+            {
+                WaitBand(_bandDone[(bandIndex - lookahead) % BandEvents]);   // keep at most lookahead + 1 queued
             }
         }
-        Unbind();
+        WaitBand(_bandDone![(bandCount - 1) % BandEvents], spin: true);   // the readback below then finds the GPU idle
+    }
+
+    /// <summary>#1318 — bands queued ahead of the one the CPU waits for; a present waits
+    /// for at most lookahead + 1 bands. 0 = each band waited on before the next is
+    /// submitted (a bubble per band). -1 (default) = <see cref="AutoLookahead"/> from
+    /// band 0's time. Test / probe hook.</summary>
+    public static int PerturbBandLookahead = -1;
+
+    /// <summary>#1318 — the GPU work kept queued ahead of the wait (ms). The wait polls
+    /// with Sleep(1), which on Windows can take a whole ~15.6 ms timer tick: with less
+    /// queued than that the GPU ran dry between short bands (68 bands of ~9 ms on a
+    /// GT 710: +14 % wall time at one band ahead).</summary>
+    public const double QueueTargetMs = 32.0;
+
+    /// <summary>#1318 — bands to keep queued for bands of <paramref name="bandMs"/>:
+    /// enough for <see cref="QueueTargetMs"/>, at least 1.</summary>
+    public static int AutoLookahead(double bandMs)
+        => (int)Math.Clamp(Math.Ceiling(QueueTargetMs / Math.Max(bandMs, 0.1)), 1, BandEvents - 1);
+
+    /// <summary>#1318 — the lookahead the last multi-band deep frame used.</summary>
+    public int LastPerturbLookahead { get; private set; }
+
+    /// <summary>#1318 — the perturbation bands of the last deep frame.</summary>
+    public int LastPerturbBandCount { get; private set; }
+
+    private const int BandEvents = 8;   // > the largest lookahead used
+    private ID3D11Query[]? _bandDone;
+
+    private void EnsureBandEvents()
+    {
+        if (_bandDone != null) return;
+        _bandDone = new ID3D11Query[BandEvents];
+        for (int i = 0; i < BandEvents; i++) _bandDone[i] = _device.CreateQuery(new QueryDescription(QueryType.Event));
+    }
+
+    /// <summary>#1318 — wait until <paramref name="done"/> (an ended event query) is
+    /// reached, polling it under the shared gate and releasing the gate between polls,
+    /// so another thread can present meanwhile. Called with the gate held (once); it is
+    /// held again on return. A lost device ends the wait (the readback then throws);
+    /// a kernel disposed meanwhile (the host rebuilds kernels under the gate) throws.
+    /// <paramref name="spin"/>: poll with Thread.Yield only. Sleep(1) can take a whole
+    /// ~15.6 ms Windows timer tick, which idles the GPU when nothing is queued behind
+    /// the band waited for (band 0, the last band).</summary>
+    private void WaitBand(ID3D11Query done, bool spin = false)
+    {
+        for (int polls = 0; ; polls++)
+        {
+            var r = _ctx.GetData(done, IntPtr.Zero, 0, AsyncGetDataFlags.None);
+            if (r.Code == 0 || r.Failure) return;   // S_FALSE until the GPU reaches it
+            System.Threading.Monitor.Exit(_d3dGate);
+            try
+            {
+                if (spin || polls < 16) System.Threading.Thread.Yield();
+                else System.Threading.Thread.Sleep(1);
+            }
+            finally { System.Threading.Monitor.Enter(_d3dGate); }
+            if (_disposed) throw new ObjectDisposedException(nameof(MandelbrotGpuKernel), "disposed during a deep frame");
+        }
     }
 
     /// <summary>Copy the perturbation outputs (iter / smooth / finalZD) back to the
@@ -2148,6 +2235,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
         if (_disposed) return;
         _disposed = true;
         ClearDeferred();   // #1332 — a pending frame's GPU data goes with the device
+        if (_bandDone != null) foreach (var q in _bandDone) { try { q.Dispose(); } catch { } }   // #1318
         try { _csAnyEscaped?.Dispose(); } catch { }
         try { _workUav?.Dispose(); } catch { }
         try { _workBuf?.Dispose(); } catch { }
