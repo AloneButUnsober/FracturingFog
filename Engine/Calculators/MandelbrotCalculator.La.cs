@@ -86,7 +86,7 @@ public sealed partial class MandelbrotCalculator
     private bool LaWanted => EffectiveLaMode switch
     {
         DeepLaMode.On => true,
-        DeepLaMode.Auto => Zoom >= LaAutoMinZoom,
+        DeepLaMode.Auto => Zoom >= EffectiveLaAutoMinZoom,   // #1665: measured crossover
         _ => false,
     };
 

@@ -171,7 +171,7 @@ public sealed partial class MandelbrotCalculator : ISolidRegionTarget
         _maskRows = rows;
         _gpuPassMasked = false;
         var kernel = GpuKernel;
-        _gpuPassMask = mark != null && kernel is { SupportsPixelMask: true } && (UseGpuCompute || UseGpuPerturbation)
+        _gpuPassMask = mark != null && kernel is { SupportsPixelMask: true } && (UseGpuCompute || GpuPerturbationEnabled(kernel))
             ? FracturingFog.Rendering.GpuPixelMask.FromBytes(mark, Width, Height) : null;
         if (_gpuPassMask != null) kernel!.PixelMask = _gpuPassMask;
         try { CalculateInternal(ct); }
@@ -190,7 +190,7 @@ public sealed partial class MandelbrotCalculator : ISolidRegionTarget
     {
         if (GpuKernel is not { SupportsPixelMask: true } k) return SolidGpu.None;
         if (!Quality.NeedsHighPrecision(Zoom)) return UseGpuCompute && Zoom <= MaxGpuZoom ? SolidGpu.Shallow : SolidGpu.None;
-        return UseGpuPerturbation && Zoom <= MaxGpuPerturbZoom && (k.SupportsPerturbation || UseFloatExpKernel(k))
+        return GpuPerturbationEnabled(k) && Zoom <= MaxGpuPerturbZoom && (k.SupportsPerturbation || UseFloatExpKernel(k))
             ? SolidGpu.Deep : SolidGpu.None;
     }
 

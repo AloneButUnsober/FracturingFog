@@ -338,7 +338,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         {
             if (!Quality.NeedsHighPrecision(Zoom))
                 return "past the FP32 GPU zoom limit (1e4); deeper zooms render on the CPU";
-            return UseGpuPerturbation ? null
+            // #1665: a device measured faster may take it (its key isn't known before it opens).
+            return UseGpuPerturbation || (UseDeepRouteCalibration && GpuPerturbEnvSwitch != false && DeepRouteStore.AnyGpuDeepFor()) ? null
                 : "deep zoom renders on the CPU unless GPU perturbation is enabled (FF_GPU_PERTURB=1)";
         }
         return Fp32GpuResolvesView ? null
@@ -502,7 +503,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     public static bool UseFloatExpKernel(FracturingFog.Rendering.IGpuKernel k) => k.SupportsPerturbationFloatExp && GpuDeepPrecisionMode switch
     {
         GpuDeepPrecision.Fp32 => true,
-        GpuDeepPrecision.Auto => !k.SupportsPerturbation,
+        GpuDeepPrecision.Auto => AutoPicksFloatExp(k),   // #1665: the measured choice, else fp32 only without fp64
         _ => false,
     };
 
@@ -681,7 +682,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 + (LastFrameUsedGpuSeriesApproximation ? " + series approximation" : "")
                 + (LastFrameUsedGpuBla ? " + BLA" : "")
                 + (LastFrameUsedGpuWavefront ? " + wavefront" : ""));
-        if (!UseGpuCompute && !UseGpuPerturbation && s_gpuPerturbDisabled == null)
+        if (!UseGpuCompute && !GpuPerturbationEnabled(kernel) && s_gpuPerturbDisabled == null)   // #1665
             return GpuRoute.NotRequested;
         if (_gpuSkip is { } skip) return skip;
         if (kernel == null)
@@ -689,7 +690,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         if (hp)
         {
             if (s_gpuPerturbDisabled is { } off) return off;
-            if (!UseGpuPerturbation)
+            if (!GpuPerturbationEnabled(kernel))   // #1665
                 return GpuRoute.Cpu("deep zoom", "deep zoom renders on the CPU unless GPU perturbation is enabled");
             if (!kernel.SupportsPerturbation && !UseFloatExpKernel(kernel))
                 return GpuRoute.Cpu("no fp64 kernel", kernel.SupportsPerturbationFloatExp
@@ -2904,20 +2905,21 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         {
             int[]? prCap = PerRowMaxIter;
             bool tileCap = prCap != null && prCap.Length >= Height;
+            bool gpuDeep = GpuPerturbationEnabled(GpuKernel);   // #1665: explicit, or measured faster
             bool gateOk = !recycled && !LatticeAligned   // #1330: the lattice is a CPU path
-                && UseGpuPerturbation && GpuKernel != null
+                && gpuDeep && GpuKernel != null
                 && (GpuKernel.SupportsPerturbation || UseFloatExpKernel(GpuKernel))   // #1331: no fp64 needed
                 && AllowPtRebasing && !UseDdRebaseReference && !ForceScalarPtPath
                 && !tileCap && Zoom <= MaxGpuPerturbZoom && _refOrbitLen >= 1
                 // #1626 / #1629 / #1630: LA forced On runs on the GPU only where the kernel has the LA stages.
-                && (EffectiveLaMode != DeepLaMode.On || (UseGpuLa && GpuKernel.SupportsPerturbationLa));
+                && (EffectiveLaMode != DeepLaMode.On || (GpuLaEnabled(GpuKernel) && GpuKernel.SupportsPerturbationLa));
             Dbg86($"GATE zoom={Zoom:0e+0} gateOk={gateOk} recycled={recycled} " +
-                  $"useGpuPerturb={UseGpuPerturbation} kernel={(GpuKernel != null)} " +
+                  $"useGpuPerturb={gpuDeep} kernel={(GpuKernel != null)} " +
                   $"supports={(GpuKernel?.SupportsPerturbation ?? false)} allowRebase={AllowPtRebasing} " +
                   $"ddRebaseRef={UseDdRebaseReference} forceScalar={ForceScalarPtPath} tileCap={tileCap} " +
                   $"zoomOk={Zoom <= MaxGpuPerturbZoom} refLen={_refOrbitLen}");
             // #1173-M — the first failing gate condition, when GPU perturbation is on.
-            if (!gateOk && UseGpuPerturbation && GpuKernel != null && GpuKernel.SupportsPerturbation)
+            if (!gateOk && gpuDeep && GpuKernel != null && GpuKernel.SupportsPerturbation)
             {
                 _gpuSkip = recycled ? GpuRoute.Cpu("orbit recycling", "deep-zoom orbit recycling renders on the CPU only")
                     : LatticeAligned ? GpuRoute.Cpu("pan reuse", "pixel reuse while panning (#1330) renders deep frames on the CPU")
@@ -3146,7 +3148,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             // #1630 — the LA stages on the GPU, under the CPU evaluator's own conditions
             // (LaActive): the frame wants LA, acceleration and rebasing are on, the table
             // is finite; the kernel runs the evaluator with climbing back and no tail BLA.
-            if (LaWanted && UseGpuLa && kernel.SupportsPerturbationLa && !DisableAcceleration
+            if (LaWanted && GpuLaEnabled(kernel) && kernel.SupportsPerturbationLa && !DisableAcceleration
                 && LaClimbOnRebase && !LaTailBla && AllowPtRebasing && !UseDdRebaseReference)
             {
                 EnsureLaTable();
@@ -3329,7 +3331,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             || orbit.OrbitInputs == FracturingFog.Interefaces.GpuOrbitInputs.None)
             return false;
         var kernel = GpuKernel;
-        if (!UseGpuPerturbation || !UseGpuDeepOrbit || kernel == null || !kernel.SupportsPerturbationOrbit)
+        if (!GpuPerturbationEnabled(kernel) || !UseGpuDeepOrbit || kernel == null || !kernel.SupportsPerturbationOrbit)
             return false;
         // GPU in-set pixels carry no accumulator; interior-colouring themes stay on the CPU.
         if (colorMap.WantsInteriorColor) return false;

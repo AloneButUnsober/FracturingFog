@@ -287,6 +287,9 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     /// <summary>#1339 — "vulkan|adapter|vendor:device|driver", the store's device key.</summary>
     public string GroupShapeDeviceKey => VulkanGroupShapes.DeviceKey(_ctx);
 
+    /// <summary>#1665 — the deep-route calibration's device key (the group-shape key).</summary>
+    public string? DeviceKey => GroupShapeDeviceKey;
+
     /// <summary>#1339 — the candidates this device can run.</summary>
     private List<GpuGroupShape> ShapeCandidates() => VulkanGroupShapes.Candidates(_ctx);
 

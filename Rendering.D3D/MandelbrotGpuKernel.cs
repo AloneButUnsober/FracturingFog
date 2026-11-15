@@ -342,6 +342,9 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     /// <summary>#1339 — "d3d11|adapter|vendor:device:revision|driver", the store's device key.</summary>
     public string GroupShapeDeviceKey => _shapeDeviceKey ??= D3DGroupShapes.DeviceKey(_device);
 
+    /// <summary>#1665 — the deep-route calibration's device key (the group-shape key).</summary>
+    public string? DeviceKey => GroupShapeDeviceKey;
+
     private static string SlotSource(string slot) => slot switch
     {
         GpuGroupShapes.SlotEscape => BuildHlsl(null, null, emitColor: false),
