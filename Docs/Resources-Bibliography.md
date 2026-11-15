@@ -1015,6 +1015,8 @@ Programs and galleries the project measured itself against, learned from, or pay
   `suggested/62`; GitHub API, 2026-11-04) for the LA before / after table (`--deepcostprobe` with `FF_DEEPCOST_KFR`,
   `Docs/Technical/Period-Synchronised-LA-DesignPlan.md` §4.5); the files were not added to FF. Author's real name
   and the kit's first-publication date not verified here.
+  #1786 (#1665 S2): the deep-route calibration pass times its candidate routes on the kit's p448 scene
+  (`DeepRouteCalibrator.DefaultScenes`, the centre `Server.Tests/S1630GpuLaTests.cs` uses) at 1e15..3e33.
 
 <a id="rith-ff-071-benchmark"></a>
 

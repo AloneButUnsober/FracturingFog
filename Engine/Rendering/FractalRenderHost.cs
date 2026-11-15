@@ -1614,6 +1614,14 @@ namespace FracturingFog.Rendering
 
         private void CalculateMainFrame(MandelbrotCalculator calc, CancellationToken token)
         {
+            CalculateMainFrameCore(calc, token);
+            // #1786 — a device's first deep frame starts the background route calibration
+            // (once per process, only where the host enabled it; never blocks this frame).
+            if (calc.IsHighPrecisionActive) DeepRouteCalibration.RequestBackground(calc.GpuKernel?.DeviceKey);
+        }
+
+        private void CalculateMainFrameCore(MandelbrotCalculator calc, CancellationToken token)
+        {
             LastFrameReusedPanPixels = false;
             if (!PanReuseEligible(calc)) { _panAnchorValid = false; calc.Calculate(token); return; }
 

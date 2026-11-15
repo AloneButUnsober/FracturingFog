@@ -62,6 +62,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--gpulaprobe")
             return GpuLaProbe.Run(args);
 
+        // #1786 — the deep-zoom route calibration pass (#1665) on this machine.
+        if (args.Length > 0 && args[0] == "--deeproutecalprobe")
+            return DeepRouteCalProbe.Run(args);
+
         if (args.Length > 0 && args[0] == "--gpubandprobe")
             return GpuBandProbe.Run();
 

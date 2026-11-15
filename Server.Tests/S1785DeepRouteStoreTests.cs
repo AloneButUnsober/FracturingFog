@@ -361,10 +361,12 @@ public sealed class S1785DeepRouteStoreTests : IDisposable
         Assert.Equal(1e35, cpu.LaMinZoom);
         Assert.True(gpu!.GpuLa);
         Assert.True(gpu.GpuDeep);   // 30 ms on the GPU against 70 ms on the CPU
-        var bad = runs.Select(t => t.Route is DeepRouteCandidate.CpuLaSimd or DeepRouteCandidate.GpuLaFp64 ? t with { Disagreement = 0.5 } : t).ToArray();
+        // #1786: the CPU evaluators are the references (always eligible); a GPU route that
+        // disagrees is not.
+        var bad = runs.Select(t => t.Route == DeepRouteCandidate.GpuLaFp64 ? t with { Disagreement = 0.5 } : t).ToArray();
         var (cpu2, gpu2) = DeepRouteChooser.Choose(bad, "t");
-        Assert.Null(cpu2.LaSimd);     // not comparable: SIMD not eligible
+        Assert.True(cpu2.LaSimd);
         Assert.False(gpu2!.GpuLa);    // ran, not eligible
-        Assert.True(gpu2.GpuDeep);    // SA at 60 ms still beats LA's 100 ms
+        Assert.True(gpu2.GpuDeep);    // SA at 60 ms still beats the CPU's 70 ms
     }
 }

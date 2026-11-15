@@ -39,21 +39,40 @@ namespace FracturingFog
 
     public static class DeepRouteChooser
     {
-        /// <summary>The largest iteration disagreement a route may show on a scene and
-        /// stay eligible (the S1630 GPU-vs-CPU LA bound).</summary>
+        /// <summary>The iteration disagreement any route may show on a scene and stay
+        /// eligible (the S1630 GPU-vs-CPU LA bound).</summary>
         public const double MaxDisagreement = 0.02;
+
+        /// <summary>#1786 — a GPU route may also disagree up to this many times the CPU
+        /// evaluators' own disagreement on the scene (the noise floor: CPU BLA and CPU LA
+        /// differ by ~0.2-4 % of pixels on the p448 scenes, measured).</summary>
+        public const double FloorFactor = 1.5;
+
+        /// <summary>#1786 — the gain a measured choice needs to replace today's default
+        /// (LA SIMD on, GPU deep on, GPU LA on, float-exp over fp64): noise must not flip
+        /// a default (the #1339 shape tuner keeps 3 %).</summary>
+        public const double MinGain = 0.05;
 
         private static bool IsCpu(DeepRouteCandidate r) => r is DeepRouteCandidate.CpuBla or DeepRouteCandidate.CpuLa or DeepRouteCandidate.CpuLaSimd;
 
-        /// <summary>The routes that ran and stayed within <see cref="MaxDisagreement"/>
-        /// (and produced a finite time) on every scene they ran.</summary>
+        /// <summary>The routes that ran with a finite time on every scene and, for a GPU
+        /// route, within max(<see cref="MaxDisagreement"/>, <see cref="FloorFactor"/> × the
+        /// CPU evaluators' disagreement on that scene). The CPU evaluators (BLA rows, LA,
+        /// LA SIMD) are the shipped references and define that floor: they are eligible
+        /// whatever they disagree by.</summary>
         public static IReadOnlySet<DeepRouteCandidate> Eligible(IEnumerable<DeepRouteTiming> runs)
         {
             var all = runs.ToList();
-            return all.GroupBy(t => t.Route)
-                .Where(g => g.All(t => t.Disagreement <= MaxDisagreement && double.IsFinite(t.Ms) && t.Ms > 0))
-                .Select(g => g.Key).ToHashSet();
+            var floor = all.Where(t => IsCpu(t.Route) && double.IsFinite(t.Ms)).GroupBy(t => t.Scene)
+                .ToDictionary(g => g.Key, g => g.Max(t => t.Disagreement));
+            bool Ok(DeepRouteTiming t) => double.IsFinite(t.Ms) && t.Ms > 0
+                // (A CPU evaluator always passes: the floor is the largest of their own disagreements.)
+                && t.Disagreement <= Math.Max(MaxDisagreement, FloorFactor * floor.GetValueOrDefault(t.Scene));
+            return all.GroupBy(t => t.Route).Where(g => g.All(Ok)).Select(g => g.Key).ToHashSet();
         }
+
+        // a beats b by MinGain
+        private static bool Beats(double a, double b) => a < b * (1 - MinGain);
 
         /// <summary>The store rows from the runs. Fields stay null where the runs
         /// can't decide (the default then applies).</summary>
@@ -71,7 +90,7 @@ namespace FracturingFog
             {
                 var both = scenes.Where(s => Ms(DeepRouteCandidate.CpuLa, s.Scene) != null && Ms(DeepRouteCandidate.CpuLaSimd, s.Scene) != null).ToList();
                 if (both.Count > 0)
-                    laSimd = both.Sum(s => Ms(DeepRouteCandidate.CpuLaSimd, s.Scene)!.Value) < both.Sum(s => Ms(DeepRouteCandidate.CpuLa, s.Scene)!.Value);
+                    laSimd = Beats(both.Sum(s => Ms(DeepRouteCandidate.CpuLaSimd, s.Scene)!.Value), both.Sum(s => Ms(DeepRouteCandidate.CpuLa, s.Scene)!.Value));
             }
             var la = laSimd == true ? DeepRouteCandidate.CpuLaSimd : DeepRouteCandidate.CpuLa;
 
@@ -105,7 +124,7 @@ namespace FracturingFog
             if (fp64 && fx)
             {
                 var both = scenes.Where(s => Ms(DeepRouteCandidate.GpuSaFp64, s.Scene) != null && Ms(DeepRouteCandidate.GpuFloatExp, s.Scene) != null).ToList();
-                precision = Total(DeepRouteCandidate.GpuFloatExp, both) < Total(DeepRouteCandidate.GpuSaFp64, both) ? GpuDeepPrecision.Fp32 : GpuDeepPrecision.Double;
+                precision = Beats(Total(DeepRouteCandidate.GpuFloatExp, both), Total(DeepRouteCandidate.GpuSaFp64, both)) ? GpuDeepPrecision.Fp32 : GpuDeepPrecision.Double;
             }
             else if (fp64) precision = GpuDeepPrecision.Double;
             else if (fx) precision = GpuDeepPrecision.Fp32;
@@ -115,7 +134,7 @@ namespace FracturingFog
             if (ok.Contains(DeepRouteCandidate.GpuLaFp64) && ok.Contains(plain))
             {
                 var both = scenes.Where(s => Ms(DeepRouteCandidate.GpuLaFp64, s.Scene) != null && Ms(plain, s.Scene) != null).ToList();
-                if (both.Count > 0) gpuLa = Total(DeepRouteCandidate.GpuLaFp64, both) < Total(plain, both);
+                if (both.Count > 0) gpuLa = Beats(Total(DeepRouteCandidate.GpuLaFp64, both), Total(plain, both));
             }
             else if (all.Any(t => t.Route == DeepRouteCandidate.GpuLaFp64)) gpuLa = false;   // ran and not eligible
 
@@ -129,7 +148,7 @@ namespace FracturingFog
                 if (g == null || c == null) continue;
                 gpuSum += g.Value; cpuSum += c.Value; n++;
             }
-            if (n > 0) gpuDeep = gpuSum < cpuSum;
+            if (n > 0) gpuDeep = Beats(gpuSum, cpuSum);
             else if (!gpuRoutes.Any(ok.Contains)) gpuDeep = false;   // GPU routes ran, none eligible
 
             return (cpu, new DeepRouteGpuResult { GpuDeep = gpuDeep, GpuLa = gpuLa, Precision = precision, Measured = measured });
