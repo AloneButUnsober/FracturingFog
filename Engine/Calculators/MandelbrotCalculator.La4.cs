@@ -60,7 +60,7 @@ public sealed partial class MandelbrotCalculator
     // scalar loads; for measuring (design doc §4.4).
     private static readonly bool LaGather = Environment.GetEnvironmentVariable("FF_LA_GATHER") == "1";
 
-    private bool LaSimdActive => LaSimd && Avx2.IsSupported && !LaTailBla && LaClimbOnRebase;
+    private bool LaSimdActive => LaSimdWanted && Avx2.IsSupported && !LaTailBla && LaClimbOnRebase;
 
     private unsafe struct LaQuad
     {

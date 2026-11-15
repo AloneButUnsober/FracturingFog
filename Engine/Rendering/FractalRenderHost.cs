@@ -1606,7 +1606,7 @@ namespace FracturingFog.Rendering
             if (calc.PerRowMaxIter != null || calc.InteriorAlpha < 255) return false;
             if (calc.ColorMap is IOrbitAwareColorMap or IInteriorAwareColorMap or IPostProcessColorMap) return false;
             // Keep a GPU deep path when one would run: the lattice is CPU-only.
-            if (MandelbrotCalculator.UseGpuPerturbation && calc.GpuKernel is { SupportsPerturbation: true }
+            if (MandelbrotCalculator.GpuPerturbationEnabled(calc.GpuKernel) && calc.GpuKernel is { SupportsPerturbation: true }
                 && calc.Zoom <= MandelbrotCalculator.MaxGpuPerturbZoom)
                 return false;
             return true;

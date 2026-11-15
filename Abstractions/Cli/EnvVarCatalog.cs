@@ -127,7 +127,7 @@ namespace FracturingFog.Cli
 
             // ── GPU deep zoom ───────────────────────────────────────────────────
             new("FF_GPU_PERTURB", EnvVarKind.Toggle, EnvVarGroup.GpuDeepZoom,
-                "Run deep-zoom perturbation on the GPU (falls back to the CPU when the GPU is too slow).", "off", "#82",
+                "Run deep-zoom perturbation on the GPU (falls back to the CPU when the GPU is too slow). Unset = the device's measured choice (#1665), else off; 0 = off even if measured faster.", "off", "#82",
                 Risk: EnvVarRisk.Caution, Warning: "On a GPU with weak fp64 this is slower than the CPU (#1663).",
                 AffectsRender: true),
             new("FF_GPU_PERTURB_PRECISION", EnvVarKind.Choice, EnvVarGroup.GpuDeepZoom,
@@ -137,7 +137,7 @@ namespace FracturingFog.Cli
                 "Minimum fp32 ulps per pixel before the fp32 deep kernels may run; 0 turns the check off.", "8", "#1331",
                 Min: 0, AffectsRender: true),
             new("FF_GPU_LA", EnvVarKind.Toggle, EnvVarGroup.GpuDeepZoom,
-                "GPU deep frames that want LA run the LA stage kernel instead of SA / BLA.", "off", "#1630",
+                "GPU deep frames that want LA run the LA stage kernel instead of SA / BLA. Unset = the device's measured choice (#1665), else off.", "off", "#1630",
                 Risk: EnvVarRisk.Caution, Warning: "Slower than SA / BLA on the GPUs measured so far.", AffectsRender: true),
             new("FF_D3D_LA", EnvVarKind.Toggle, EnvVarGroup.GpuDeepZoom,
                 "The LA stage kernel on Direct3D 11 (used when FF_GPU_LA is on).", "on", "#1661", DefaultOn: true),
@@ -174,6 +174,9 @@ namespace FracturingFog.Cli
                 DefaultOn: true, AffectsRender: true),
 
             // ── Linear approximation (LA) ───────────────────────────────────────
+            new("FF_DEEP_ROUTE_CALIBRATION", EnvVarKind.Toggle, EnvVarGroup.GpuDeepZoom,
+                "Use the per-device measured deep-zoom route (LA crossover, GPU deep, GPU LA, LA SIMD, fp64 / float-exp) when one is stored; 0 = today's fixed defaults.", "on", "#1665",
+                DefaultOn: true, AffectsRender: true),
             new("FF_LA", EnvVarKind.Choice, EnvVarGroup.LinearApproximation,
                 "Override the Deep zoom → Evaluator setting for every calculator: unset = per-view setting, 0 = off, 1 = on.",
                 "auto", "#1629", Choices: ["auto", "0", "1"], AffectsRender: true),
@@ -192,7 +195,7 @@ namespace FracturingFog.Cli
             new("FF_LA_TAIL_BLA", EnvVarKind.Toggle, EnvVarGroup.LinearApproximation,
                 "BLA in the LA evaluator's plain tail.", "off", "#1626", Developer: true, AffectsRender: true),
             new("FF_LA_SIMD", EnvVarKind.Toggle, EnvVarGroup.LinearApproximation,
-                "4-lane AVX2 LA tail (where AVX2 is present).", "off", "#1628",
+                "4-lane AVX2 LA tail (where AVX2 is present). Unset = the CPU's measured choice (#1665), else off.", "off", "#1628",
                 Risk: EnvVarRisk.Caution, Warning: "Gained nothing on the CPU measured (#1663)."),
             new("FF_LA_GATHER", EnvVarKind.Toggle, EnvVarGroup.LinearApproximation,
                 "AVX2 gathers for the reference in the SIMD LA tail; for measuring.", "off", "#1628", Developer: true),

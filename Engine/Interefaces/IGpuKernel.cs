@@ -220,6 +220,11 @@ namespace FracturingFog.Rendering
         /// unknown.</summary>
         string? DeviceName => null;
 
+        /// <summary>#1665 — a stable key for this device (backend, adapter, ids, driver;
+        /// the #1339 group-shape store's key): the deep-route calibration store keys its
+        /// GPU rows by it. Null when unknown (no measured route applies).</summary>
+        string? DeviceKey => null;
+
         /// <summary>Run the deep-zoom perturbation kernel over a precomputed
         /// reference orbit (Hi-limb doubles, length <paramref name="refLen"/>),
         /// the GPU twin of <c>MandelbrotCalculator.ComputePixelPTRebased</c>.
