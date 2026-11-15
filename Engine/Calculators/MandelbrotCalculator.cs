@@ -3254,6 +3254,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
 
         _po.CancellationToken = ct;
         var po = _po;
+        // #1660 — the kernels write dz/dc · 2^ILogB(scale) (a plain float overflowed
+        // past ~1e35); back to dz/dc in double before the normals and distance.
+        double dzUn = FracturingFog.Rendering.GpuPerturbDerivative.Unscale(scale);
         ParallelForRows(0, Height, po, y =>
         {
             if (ct.IsCancellationRequested || !GpuRowMarked(y)) return;
@@ -3264,7 +3267,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 if (!GpuMarked(idx)) continue;   // #1394: another pass's pixel
                 FillAuxAndColorHP(idx, IterationBuffer[idx], maxIt,
                     FinalZrBuffer[idx], FinalZiBuffer[idx],
-                    FinalDrBuffer[idx], FinalDiBuffer[idx], colorMap);
+                    FinalDrBuffer[idx] * dzUn, FinalDiBuffer[idx] * dzUn, colorMap);
             }
         });
         LastFrameUsedGpuPerturbation = true;
@@ -3372,6 +3375,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
 
         _po.CancellationToken = ct;
         var po = _po;
+        double dzUn = FracturingFog.Rendering.GpuPerturbDerivative.Unscale(scale);   // #1660: scaled dz/dc
         ParallelForRows(0, Height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
@@ -3394,7 +3398,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 if ((mask & (1 << 9)) != 0) { acc.GaussianSum = means[o++]; acc.GaussianCount = 1; }
                 if ((mask & (1 << 10)) != 0) { acc.ExpSum = means[o++]; acc.ExpCount = 1; }
                 FinalizeOrbitPixel(idx, IterationBuffer[idx], maxIt,
-                    FinalZrBuffer[idx], FinalZiBuffer[idx], FinalDrBuffer[idx], FinalDiBuffer[idx],
+                    FinalZrBuffer[idx], FinalZiBuffer[idx], FinalDrBuffer[idx] * dzUn, FinalDiBuffer[idx] * dzUn,
                     ref acc, colorMap, wantInterior: false);
             }
         });

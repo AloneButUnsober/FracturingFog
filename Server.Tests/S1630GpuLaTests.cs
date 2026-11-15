@@ -18,8 +18,8 @@
 // validity check on w removed, the AT converted back without 1/A, "+ B" dropped from the
 // derivative (the normals check). Not caught — the tail's |z| < |δ| rebase removed (no
 // test view glitches without it; design doc §4.6).
-// The GPU returns z and dz/dc as floats; past ~1e35 the derivative overflows (#1660),
-// so the normals compare only where it is finite.
+// The GPU returns dz/dc scaled by 2^ILogB(scale) (#1660; a plain float overflowed past
+// ~1e35), so the normals compare on every escaped pixel, 3E47 included.
 
 using System;
 using System.Linq;
@@ -126,20 +126,18 @@ public sealed class S1630GpuLaTests : IDisposable
         Assert.Equal(0, inOut);
         // The derivative rides through the kernel's steps as through the CPU's: the
         // normals (z over dz/dc, from the GPU's float final z and derivative) agree.
-        int same = 0, nBad = 0, inf = 0;
+        int same = 0, nBad = 0;
         for (int i = 0; i < W * H; i++)
         {
             if (gpu.IterationBuffer[i] != cpu.IterationBuffer[i] || cpu.IterationBuffer[i] >= s.Iter) continue;
-            // The kernel returns z and dz/dc as floats (float4 gFinalZD, as every deep kernel):
-            // past ~1e38 the derivative does not fit, so only finite pairs compare.
-            if (!float.IsFinite(gpu.FinalDrBuffer[i]) || !float.IsFinite(gpu.FinalDiBuffer[i])) { inf++; continue; }
+            // #1660: the kernel's derivative is scaled into float range at any depth.
             same++;
             double dn = Math.Abs(Math.Atan2(gpu.NormalYBuffer[i] * cpu.NormalXBuffer[i] - gpu.NormalXBuffer[i] * cpu.NormalYBuffer[i],
                                             gpu.NormalXBuffer[i] * cpu.NormalXBuffer[i] + gpu.NormalYBuffer[i] * cpu.NormalYBuffer[i]));
             if (dn > 1e-2) nBad++;
         }
-        _out.WriteLine($"{name}: normals off by > 0.01 rad at {nBad} of {same} escaped px with a finite float derivative ({inf} not finite)");
-        if (same < W * H / 8) return;   // too deep for a float derivative: nothing to compare
+        _out.WriteLine($"{name}: normals off by > 0.01 rad at {nBad} of {same} escaped px");
+        Assert.True(same >= W * H / 8, $"{name}: precondition, escaped pixels to compare ({same})");
         Assert.True(nBad <= same / 100, $"{name}: normals off at {nBad} of {same} px");
     }
 

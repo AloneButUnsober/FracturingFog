@@ -151,6 +151,10 @@ Closed this arc: #86 (stale deep frame → was TDR device-removed, fixed by tili
 - **One HLSL source, two compilers:** `MandelbrotKernelSource` feeds FXC (`cs_5_0`, D3D) and DXC (`cs_6_0 -spirv`,
   Vulkan). No `[[vk::binding]]` — DXC shift flags map registers (`-fvk-b/t/u-shift`). Bindings: `b0`=params,
   `t0/t1`=refZr/refZi, `u0/u1/u2`=iter/smooth/finalZD.
+- **finalZD's derivative is scaled (#1660):** every deep kernel writes `.zw` = dz/dc · 2^E, E = `Math.ILogB(scale)`
+  (`MandelbrotKernelSource.DzOut`; the float-exp kernel adds `gScaleE` to its exponent). A plain float dz/dc
+  (≈ 1/pixel) overflowed past zoom ~1e35. Callers multiply by `GpuPerturbDerivative.Unscale(scale)` in double;
+  a new deep kernel or a new consumer of its finalZD must keep this contract.
 - **cbuffer layout is doubles-first, 64 bytes** — both C# blobs (`PerturbParams` D3D, `PerturbParamsBlob` Vulkan)
   must match the HLSL byte-for-byte or you get silent garbage.
 - **D3D kernel shares the renderer's device/immediate-context** (via the `GpuKernelFactoryHook` downcast). A long
