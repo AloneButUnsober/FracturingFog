@@ -1028,6 +1028,9 @@ namespace FracturingFog.Rendering
             lines.Add($"limbs  X:{lx}/8  Y:{ly}/8   px {_calculator.Width}x{_calculator.Height}");
             lines.Add($"zoom   {zoom:G4}   iter {_calculator.MaxIterations}");
             lines.Add(_lastGpuRoute.HudLine);   // #1173-M — GPU, or CPU and why
+            // #1787 — the deep route and where each choice came from (measured / default /
+            // env / toggle), on deep frames.
+            if (_calculator.IsHighPrecisionActive) lines.Add(_calculator.DescribeDeepRoute().HudLine);
 
             double maxUseful = _calculator.MaxUsefulZoomLog10;
             string orbit = _calculator.ReferenceOrbitEscaped

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+﻿// SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
 // ViewModels/FloatingMenuViewModel.cs
@@ -79,6 +79,8 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         EditSceneCommand        = MakeCmd(() => EditSceneClick?.Invoke(this, EventArgs.Empty));
         FfmpegSetupCommand      = MakeCmd(() => FfmpegSetupClick?.Invoke(this, EventArgs.Empty));
         OidnSetupCommand        = MakeCmd(() => OidnSetupClick?.Invoke(this, EventArgs.Empty));   // #1338
+        RerunDeepRouteCalibrationCommand = MakeCmd(() => RerunDeepRouteCalibrationClick?.Invoke(this, EventArgs.Empty));   // #1787
+        ResetDeepRouteCalibrationCommand = MakeCmd(() => ResetDeepRouteCalibrationClick?.Invoke(this, EventArgs.Empty));   // #1787
         AppDataLocationCommand  = MakeCmd(() => AppDataLocationClick?.Invoke(this, EventArgs.Empty));
     }
 
@@ -1167,6 +1169,63 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(DistanceFieldCache3D));
     }
 
+    // #1493 / #1787 — GPU deep zoom (perturbation) on / off, next to GPU compute.
+    // Checked = the deep-zoom frames go to the GPU. The shell applies it
+    // (MandelbrotCalculator.SetGpuPerturbationFromUser, which also re-arms the session
+    // latch) and writes the effective state back with SetGpuDeepZoomState. Disabled,
+    // with the reason as its tooltip, when the device can't do deep zoom at all.
+    private bool _useGpuDeepZoom;
+    public bool UseGpuDeepZoom
+    {
+        get => _useGpuDeepZoom;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _useGpuDeepZoom, value);
+            UseGpuDeepZoomToggled?.Invoke(this, value);
+        }
+    }
+
+    private bool _gpuDeepZoomAvailable = true;
+    /// <summary>#1787 — the device can run deep zoom on the GPU.</summary>
+    public bool GpuDeepZoomAvailable
+    {
+        get => _gpuDeepZoomAvailable;
+        private set => this.RaiseAndSetIfChanged(ref _gpuDeepZoomAvailable, value);
+    }
+
+    public const string GpuDeepZoomTip =
+        "Run deep-zoom frames (past zoom 1e4) on the GPU with the perturbation kernels. On a GPU with weak fp64 " +
+        "(e.g. GeForce GT 710) this can be several times slower than the CPU (9e24 Deep Mini, 960\u00d7540: GPU 4.5 s, CPU 0.85 s); " +
+        "the too-slow abort (FF_GPU_PERTURB_BUDGET_MS) then hands such frames back to the CPU for the rest of the session, " +
+        "and turning this on again re-arms it. Unticking it turns GPU deep zoom off for this session, even where the calibration measured the GPU faster. " +
+        "Launch default: the deep-route calibration's measurement, else FF_GPU_PERTURB=1 / --renderer vulkan. Not saved between sessions.";
+
+    private string _gpuDeepZoomTooltip = GpuDeepZoomTip;
+    /// <summary>#1787 — the tooltip: the explanation, or why the device can't.</summary>
+    public string GpuDeepZoomTooltip
+    {
+        get => _gpuDeepZoomTooltip;
+        private set => this.RaiseAndSetIfChanged(ref _gpuDeepZoomTooltip, value);
+    }
+
+    /// <summary>#1787 — load the effective state without re-firing the event.</summary>
+    public void SetGpuDeepZoomState(bool actual, string? unavailableReason)
+    {
+        GpuDeepZoomAvailable = unavailableReason == null;
+        GpuDeepZoomTooltip = unavailableReason == null ? GpuDeepZoomTip : "Unavailable: " + unavailableReason;
+        if (_useGpuDeepZoom == actual) return;
+        _useGpuDeepZoom = actual;
+        this.RaisePropertyChanged(nameof(UseGpuDeepZoom));
+    }
+
+    private string _deepRouteSummary = "";
+    /// <summary>#1787 — the stored deep-route calibration, for the Control Center.</summary>
+    public string DeepRouteSummary
+    {
+        get => _deepRouteSummary;
+        set => this.RaiseAndSetIfChanged(ref _deepRouteSummary, value);
+    }
+
     /// <summary>Push the host's actual GPU-compute state onto the checkbox
     /// without re-firing <see cref="UseGpuComputeToggled"/>. Called by the
     /// shell after a toggle (read-back), on startup (initial sync), and from
@@ -1218,6 +1277,10 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> EditSceneCommand { get; }
     public ReactiveCommand<Unit, Unit> FfmpegSetupCommand { get; }
     public ReactiveCommand<Unit, Unit> OidnSetupCommand { get; }   // #1338
+    /// <summary>#1787 — re-run the deep-zoom route calibration (background).</summary>
+    public ReactiveCommand<Unit, Unit> RerunDeepRouteCalibrationCommand { get; }
+    /// <summary>#1787 — forget the stored calibration (today's defaults apply).</summary>
+    public ReactiveCommand<Unit, Unit> ResetDeepRouteCalibrationCommand { get; }
     public ReactiveCommand<Unit, Unit> AppDataLocationCommand { get; }
 
     // ── Events ────────────────────────────────────────────────────────────
@@ -1275,6 +1338,8 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public event EventHandler? EditSceneClick;
     public event EventHandler? FfmpegSetupClick;
     public event EventHandler? OidnSetupClick;   // #1338
+    public event EventHandler? RerunDeepRouteCalibrationClick;   // #1787
+    public event EventHandler? ResetDeepRouteCalibrationClick;   // #1787
     public event EventHandler? AppDataLocationClick;
 
     public event EventHandler<string>? RegionComboChanged;
@@ -1304,6 +1369,8 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public event EventHandler<bool>? BypassDdBlaToggled;
     public event EventHandler<bool>? BypassRebasingToggled;
     public event EventHandler<bool>? UseGpuComputeToggled;
+    /// <summary>#1493 / #1787 — the GPU deep zoom checkbox was toggled by the user.</summary>
+    public event EventHandler<bool>? UseGpuDeepZoomToggled;
     public event EventHandler<bool>? DynamicPreviewResolutionToggled;   // #1333
     public event EventHandler<double>? InteractiveTargetMsChanged;      // #1333
     public event EventHandler<bool>? TemporalLighting3DToggled;         // #1337

@@ -71,6 +71,21 @@ namespace FracturingFog
             }
         }
 
+        /// <summary>#1787 — the Control Center's "Re-run calibration": start a background
+        /// pass now, whatever is stored (it replaces the rows). False when one is running
+        /// or calibration is off (FF_DEEP_ROUTE_CALIBRATION=0).</summary>
+        public static bool RequestRun()
+        {
+            if (!MandelbrotCalculator.UseDeepRouteCalibration) return false;
+            lock (s_lock)
+            {
+                if (State == DeepRouteCalibrationState.Running) return false;
+                s_requested = true;
+                StartLocked(BackgroundBudget);
+                return true;
+            }
+        }
+
         private static void StartLocked(TimeSpan budget)
         {
             s_cts = new CancellationTokenSource();

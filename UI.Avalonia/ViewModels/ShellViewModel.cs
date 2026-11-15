@@ -332,6 +332,32 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // Initial sync so the checkbox reflects the host default at startup.
         FloatingMenu.SetGpuComputeState(Main.UseGpuCompute);
 
+        // #1493 / #1787 — GPU deep zoom toggle + the deep-route calibration panel. The
+        // host applies the toggle (on re-arms the session latch) and re-renders; the box
+        // then shows the effective state (it stays off where the device can't).
+        FloatingMenu.UseGpuDeepZoomToggled += (_, v) =>
+        {
+            Main.RenderHost.GpuDeepZoom = v;
+            SyncDeepRouteUi();
+            RebuildWindowTitle();
+        };
+        FloatingMenu.RerunDeepRouteCalibrationClick += (_, _) =>
+        {
+            Main.RenderHost.RerunDeepRouteCalibration();
+            SyncDeepRouteUi();
+        };
+        FloatingMenu.ResetDeepRouteCalibrationClick += (_, _) =>
+        {
+            Main.RenderHost.ResetDeepRouteCalibration();
+            SyncDeepRouteUi();
+        };
+        Main.RenderHost.DeepRouteCalibrationCompleted += (_, _) => PostToUi(() =>
+        {
+            SyncDeepRouteUi();
+            Main.RenderHost.Trigger();   // the next frame takes the measured route
+        });
+        SyncDeepRouteUi();
+
         // #1333 — dynamic preview resolution: interaction only, so no re-render.
         FloatingMenu.DynamicPreviewResolutionToggled += (_, v) => Main.RenderHost.DynamicPreviewResolution = v;
         FloatingMenu.InteractiveTargetMsChanged += (_, v) => Main.RenderHost.InteractiveTargetMs = v;
@@ -1606,6 +1632,22 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     {
         get => _windowTitle;
         private set => this.RaiseAndSetIfChanged(ref _windowTitle, value);
+    }
+
+    /// <summary>#1787 — push the GPU deep zoom toggle's effective state and the stored
+    /// deep-route calibration onto the Control Center (also called when it opens).</summary>
+    public void SyncDeepRouteUi()
+    {
+        var host = Main.RenderHost;
+        FloatingMenu.SetGpuDeepZoomState(host.GpuDeepZoom, host.GpuDeepZoomUnavailableReason);
+        FloatingMenu.DeepRouteSummary = host.DeepRouteSummary;
+    }
+
+    // #1787 — the calibration completes on its own thread.
+    private static void PostToUi(Action a)
+    {
+        if (global::Avalonia.Threading.Dispatcher.UIThread.CheckAccess()) a();
+        else global::Avalonia.Threading.Dispatcher.UIThread.Post(a);
     }
 
     private void RebuildWindowTitle()

@@ -21,7 +21,21 @@
                 <TextBlock Classes="section" Text="GPU / Performance" />
                 <CheckBox Content="GPU compute"
                           IsChecked="{Binding Menu.UseGpuCompute, Mode=TwoWay}"
-                          ToolTip.Tip="Ctrl+G — run the shallow Mandelbrot pass on the GPU, using whichever compute backend this session attached (D3D11 on Windows, or Vulkan/SPIR-V under --renderer vulkan). Clears itself if no device can engage. Deep-zoom stays on the CPU." />
+                          ToolTip.Tip="Ctrl+G — run the shallow Mandelbrot pass on the GPU, using whichever compute backend this session attached (D3D11 on Windows, or Vulkan/SPIR-V under --renderer vulkan). Clears itself if no device can engage. Deep zoom (past 1e4) has its own switch below: GPU deep zoom." />
+                <CheckBox Content="GPU deep zoom (perturbation)"
+                          IsChecked="{Binding Menu.UseGpuDeepZoom, Mode=TwoWay}"
+                          IsEnabled="{Binding Menu.GpuDeepZoomAvailable}"
+                          ToolTip.Tip="{Binding Menu.GpuDeepZoomTooltip}"
+                          ToolTip.ShowOnDisabled="True" />
+                <TextBlock Classes="fxLabel" Text="Deep-zoom route (measured per device)" Margin="0,4,0,0" />
+                <TextBlock Text="{Binding Menu.DeepRouteSummary}" TextWrapping="Wrap" FontSize="11" Opacity="0.85"
+                           ToolTip.Tip="The deep-zoom route this device measured (LA crossover, LA SIMD, GPU deep zoom, GPU LA, fp64 or float-exp). It runs once in the background on the first deep-zoom frame; until then, and for what it couldn't decide, the fixed defaults apply. FF_DEEP_ROUTE_CALIBRATION=0 turns it off." />
+                <UniformGrid Columns="2">
+                    <Button Classes="action neutral" Content="Re-run calibration" Command="{Binding Menu.RerunDeepRouteCalibrationCommand}" HorizontalAlignment="Stretch" Margin="0,0,4,0"
+                            ToolTip.Tip="Measure the deep-zoom routes again on this device (about 5-30 s in the background; the view keeps rendering) and store the result" />
+                    <Button Classes="action neutral" Content="Reset" Command="{Binding Menu.ResetDeepRouteCalibrationCommand}" HorizontalAlignment="Stretch"
+                            ToolTip.Tip="Forget every stored deep-route measurement: the fixed defaults apply until the next calibration" />
+                </UniformGrid>
                 <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                     <CheckBox Grid.Column="0" Content="Dynamic preview resolution"
                               IsChecked="{Binding Menu.DynamicPreviewResolution, Mode=TwoWay}"

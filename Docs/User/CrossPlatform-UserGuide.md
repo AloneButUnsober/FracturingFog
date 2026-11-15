@@ -141,7 +141,11 @@ itself when all of these hold, and the window title says which way it went:
 * **Opting out.** `--renderer silk` keeps the CPU computing (OpenGL still
   presents); Ctrl+G toggles GPU compute live.
 * **Deep zoom.** As on Windows, deep-zoom GPU perturbation is opt-in:
-  `FF_GPU_PERTURB=1`, or `--renderer vulkan`.
+  `FF_GPU_PERTURB=1`, or `--renderer vulkan`. Since #1787 the Control Center has a
+  switch for it (Advanced → GPU / Performance → **GPU deep zoom (perturbation)**, per
+  session), and FF measures the deep-zoom routes once per device in the background
+  and uses the faster one (the same panel shows the result, re-runs or resets it;
+  `FF_DEEP_ROUTE_CALIBRATION=0` turns that off).
 * **Testing on a software driver.** `FF_VULKAN_ALLOW_CPU=1` lets llvmpipe run the
   compute kernels (slower; for testing only).
 * **3D fractals** (Mandelbulb, Mandelbox, …) use a separate GPU path (ILGPU) that

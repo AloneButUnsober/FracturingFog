@@ -73,6 +73,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
     {
         Shell = shell;
         Menu = shell.FloatingMenu;
+        shell.SyncDeepRouteUi();   // #1787 — the deep-zoom toggle / calibration as of now
         Nav = new ObservableCollection<ControlCenterNavItem>();
         ToggleModeCommand = ReactiveCommand.Create(ToggleMode);
         DetachSectionCommand = ReactiveCommand.Create(
@@ -414,6 +415,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
             Contrast    = vs.Contrast,
             HistogramEq = vs.HistogramEq,
             GpuCompute  = Shell.Main.RenderHost.UseGpuCompute,   // #1611 — Ctrl+G off → --gpu off
+            GpuDeepZoomToggle = Shell.Main.RenderHost.GpuDeepZoomUserSetting,   // #1787 — a gap until #1788
             InteriorAlpha = fp?.InteriorAlpha ?? 255,   // #363 — now emitted as a flag
             ViewTransform  = vs.ViewTransform,           // S2 (#389) — output tonemap
             ViewExposureEv = vs.ViewExposureEv,

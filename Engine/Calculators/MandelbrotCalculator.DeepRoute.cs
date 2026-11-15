@@ -58,6 +58,7 @@ namespace FracturingFog
         public static bool GpuPerturbationEnabled(FracturingFog.Rendering.IGpuKernel? kernel)
         {
             if (s_gpuPerturbDisabled != null) return false;
+            if (GpuPerturbUserOverride is { } user) return user;   // #1787: the Control Center toggle
             if (UseGpuPerturbation)
                 // #1786 — a default-on (a Vulkan session's, not an env switch's) yields to a
                 // measured "GPU slower" on this device.

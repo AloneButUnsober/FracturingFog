@@ -98,7 +98,8 @@ dotnet run -c Release --project FracturingFogCLD.csproj -- --gpudeferprobe  # #1
 ### Env vars
 | Var | Effect |
 |-----|--------|
-| `FF_GPU_PERTURB=1` | D3D/Windows: opt in to deep GPU perturbation (deep-only). `--batch` honours it too (#1611). |
+| `FF_GPU_PERTURB=1` | D3D/Windows: opt in to deep GPU perturbation (deep-only). `--batch` honours it too (#1611). `=0` keeps it off even where the deep-route calibration measured the GPU faster (#1665). In the app, Control Center → Advanced → **GPU deep zoom (perturbation)** overrides it for the session and re-arms the too-slow / device-lost latch (#1493, #1787). |
+| `FF_DEEP_ROUTE_CALIBRATION=0` | Ignore the per-device deep-route calibration (#1665) and skip its background pass: the fixed defaults apply. |
 | `FF_GPU_LA=1` | #1630 — GPU deep frames that want LA (`FractalParameters.DeepLa`, Auto from 1e30) run the LA stage kernel (`LaKernelSource`, fp64) instead of SA / BLA. Off by default: on the GT 710 under Vulkan it was ×0.45–0.85 the SA / BLA kernel's speed (its frames matched the CPU LA frame to 0.01 %). Design doc §4.6. |
 | `FF_D3D_LA=0` | #1661 — turn the LA kernel off on D3D11 (it is on wherever the device has fp64; used when `FF_GPU_LA=1`). It was gated off after #1630 because it hung a GT 710 (TDR, even 8×8). The cause was a livelock in the kernel's plain tail, fixed in #1661, not the driver: design doc §4.6. |
 | `FF_LA=0` / `FF_LA=1` | #1629 — the CPU deep evaluator for every calculator, overriding `FractalParameters.DeepLa`: `0` = the BLA rows (as before #1629), `1` = the LA stages at every deep zoom, also in place of GPU perturbation. Default (Auto): LA stages from zoom 1e30, BLA rows below; an enabled GPU perturbation frame still runs on the GPU (the LA stages on the GPU are #1630). Design: `Docs/Technical/Period-Synchronised-LA-DesignPlan.md`. |
