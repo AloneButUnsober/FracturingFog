@@ -31,8 +31,8 @@ internal static unsafe class RealKernelProbe
     public const int TShift = 100;
     public const int UShift = 200;
 
-    // 80-byte cbuffer Params blob (18 scalars + 8 bytes tail pad = float4
-    // multiple; #1173-I added the domain-warp scalars, 0 = off). Field order MUST match MandelbrotKernelSource.HlslBase's
+    // 96-byte cbuffer Params blob (22 scalars + 8 bytes tail pad = float4
+    // multiple; #1173-I added the domain-warp scalars, 0 = off; #1481 the row band). Field order MUST match MandelbrotKernelSource.HlslBase's
     // cbuffer and MandelbrotGpuKernel.Params. std140 packs consecutive scalars
     // at 4-byte offsets, so this maps 1:1 onto the DXC-generated UBO.
     [StructLayout(LayoutKind.Sequential)]
@@ -44,7 +44,9 @@ internal static unsafe class RealKernelProbe
         public int UsePerRow, FractalKind;
         public float Param0, Param1, DitherStrength;
         public float WarpStrength, WarpK, WarpHalfSpan;
-        public float _pad0, _pad1; // -> 80 bytes
+        public int Wave;                        // #1340: 0 = one thread per pixel
+        public int RowBase, BandRows, Band;     // #1481: one band, the whole frame
+        public float _pad0, _pad1; // -> 96 bytes
     }
 
     // Fixed shallow Mandelbrot view for the parity probe: classic ~3.5-wide
@@ -83,6 +85,7 @@ internal static unsafe class RealKernelProbe
                 Param0 = 0f,
                 Param1 = 0f,
                 DitherStrength = 0f,
+                BandRows = Height,
             };
         }
     }
@@ -177,7 +180,7 @@ internal static unsafe class RealKernelProbe
         int W = v.Width, H = v.Height, n = W * H;
 
         var blob = v.ToBlob();
-        ulong paramsSize = 80;
+        ulong paramsSize = 96;   // #1481
         ulong iterSize = (ulong)(n * sizeof(uint));
         ulong smoothSize = (ulong)(n * sizeof(float));
         ulong finalZDSize = (ulong)(n * 4 * sizeof(float));
