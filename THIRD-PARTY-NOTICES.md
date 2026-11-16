@@ -158,6 +158,8 @@ headers.
     the D3D11 and the Vulkan backends. Its AT and stage loop are the HLSL form of the
     engine's translations above (`RunLaAt`, `LaRunStages`), so they derive from
     `EvaluateAT` / `EvaluateLA` / `LAInfo::EvaluateDzdc`; the plain tail is FF's own.
+    #1664 adds `BuildFloatExp` (`CSPerturbLAFX`), the same kernel in float-exp arithmetic
+    (FF's #1331 number format), so it derives from the same functions.
   - **`LaPeriodTest.MinMagnitude`** in `Engine/Math/LaStageTable.cs` (#1626)
     translates the `PERIOD_DETECTION_METHOD2` branches of `LAInfo::Step` /
     `Composite` / `DetectPeriod` (the `MinMag` field and its 2⁻⁶ / 2⁻³ factors).

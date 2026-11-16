@@ -266,6 +266,25 @@ namespace FracturingFog.Rendering
             float[] finalDrDst, float[] finalDiDst)
             => throw new NotSupportedException("This GPU kernel has no LA perturbation path.");
 
+        /// <summary>#1664 — the float-exp LA kernel (<see cref="RunPerturbLaFloatExp"/>, no
+        /// fp64 needed) is available.</summary>
+        bool SupportsPerturbationLaFloatExp => false;
+
+        /// <summary>#1664 — <see cref="RunPerturbLa"/> in float-exp (LaKernelSource.BuildFloatExp):
+        /// <paramref name="laStepsFx"/> is <c>LaStageTable.GpuStepsFloatExp</c>, the reference
+        /// orbit goes up as float. Same outputs. Only valid when
+        /// <see cref="SupportsPerturbationLaFloatExp"/>.</summary>
+        void RunPerturbLaFloatExp(
+            int width, int height,
+            double scale, int maxIter, double escapeRadius2,
+            double offsetX0, double offsetY0,
+            double[] refZr, double[] refZi, int refLen,
+            uint[] laStepsFx, uint[] laInts, int stages, GpuLaAt at,
+            int[] iterDst, float[] smoothDst,
+            float[] finalZrDst, float[] finalZiDst,
+            float[] finalDrDst, float[] finalDiDst)
+            => throw new NotSupportedException("This GPU kernel has no float-exp LA perturbation path.");
+
         /// <summary>#88 / G4.5 — true when this backend can run the perturbation kernel
         /// with a Series-Approximation prelude (<see cref="RunPerturbSA"/>).</summary>
         bool SupportsPerturbationSA => false;

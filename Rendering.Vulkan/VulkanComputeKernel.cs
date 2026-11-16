@@ -351,6 +351,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             default:
                 if (_perturbFx != null) { DestroyProgram(_perturbFx); _perturbFx = null; }
                 if (_perturbF32 != null) { DestroyProgram(_perturbF32); _perturbF32 = null; }
+                if (_perturbLaFx != null) { DestroyProgram(_perturbLaFx); _perturbLaFx = null; }   // #1664
                 break;
         }
     }
@@ -1566,6 +1567,104 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     private Allocated _laStepBuf, _laIntBuf;
     private int _laStepAlloc, _laIntAlloc;
 
+    // ── #1664 — the LA stages on the float-exp kernel ────────────────────────────
+
+    private Program? _perturbLaFx;
+    private Allocated _laFxStepBuf;
+    private int _laFxStepAlloc;
+
+    /// <summary>#1664 — needs no shaderFloat64.</summary>
+    public bool SupportsPerturbationLaFloatExp => true;
+
+    public void RunPerturbLaFloatExp(
+        int width, int height,
+        double scale, int maxIter, double escapeRadius2,
+        double offsetX0, double offsetY0,
+        double[] refZr, double[] refZi, int refLen,
+        uint[] laStepsFx, uint[] laInts, int stages, GpuLaAt at,
+        int[] iterDst, float[] smoothDst,
+        float[] finalZrDst, float[] finalZiDst,
+        float[] finalDrDst, float[] finalDiDst)
+    {
+        using var sync = Sync();
+        if (_disposed) throw new ObjectDisposedException(nameof(VulkanComputeKernel));
+        if (width <= 0 || height <= 0) return;
+        if (refLen < 1) throw new ArgumentException("reference orbit is empty", nameof(refLen));
+        if (refZr.Length < refLen || refZi.Length < refLen)
+            throw new ArgumentException("reference-orbit arrays shorter than refLen");
+        if (stages < 1 || laInts.Length < 2 * stages || laStepsFx.Length < LaKernelSource.StepWordsFloatExp)
+            throw new ArgumentException("empty LA table");
+        var blob = GpuLaFxParams.Make(width, height, scale, maxIter, escapeRadius2, offsetX0, offsetY0, refLen, stages, at);
+
+        EnsureShape(GpuGroupShapes.SlotPerturbFp32);
+        long t0 = Stopwatch.GetTimestamp();
+        BeginFrameTiming();
+        int n = width * height;
+        EnsureBuffers(width, height, iterDst);
+        if (_fxRefZ.Buffer.Handle == 0 || _fxRefAlloc < refLen)
+        {
+            FreeBuffer(ref _fxRefZ);
+            _fxRefZ = AllocBuffer((ulong)(refLen * 2 * sizeof(float)), BufferUsageFlags.StorageBufferBit, Residency.Upload);
+            _fxRefAlloc = refLen;
+        }
+        if (_laFxStepBuf.Buffer.Handle == 0 || _laFxStepAlloc < laStepsFx.Length)
+        {
+            FreeBuffer(ref _laFxStepBuf);
+            _laFxStepBuf = AllocBuffer((ulong)(laStepsFx.Length * sizeof(uint)), BufferUsageFlags.StorageBufferBit, Residency.Upload);
+            _laFxStepAlloc = laStepsFx.Length;
+        }
+        if (_laIntBuf.Buffer.Handle == 0 || _laIntAlloc < laInts.Length)
+        {
+            FreeBuffer(ref _laIntBuf);
+            _laIntBuf = AllocBuffer((ulong)(laInts.Length * sizeof(uint)), BufferUsageFlags.StorageBufferBit, Residency.Upload);
+            _laIntAlloc = laInts.Length;
+        }
+        _perturbLaFx ??= BuildBandProgram(GpuGroupShapes.SlotPerturbFp32, LaKernelSource.BuildFloatExp(), LaKernelSource.FloatExpEntryPoint,
+            0u, (uint)TShift, (uint)TShift + 2, (uint)TShift + 3,
+            (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)UShift + 3);
+
+        var z = new float[refLen * 2];
+        for (int i = 0; i < refLen; i++) { z[2 * i] = (float)refZr[i]; z[2 * i + 1] = (float)refZi[i]; }
+        fixed (float* pz = z) WriteBytes(_fxRefZ, pz, z.Length * sizeof(float));
+        fixed (uint* p = laStepsFx) WriteBytes(_laFxStepBuf, p, laStepsFx.Length * sizeof(uint));
+        fixed (uint* p = laInts) WriteBytes(_laIntBuf, p, laInts.Length * sizeof(uint));
+
+        bool wave = GpuWavefront.UsePerturb;
+        LastFrameWavefront = wave;
+        Buffer work = BandWork(BandCount(width, height, maxIter, _perturbLaFx.Shape));
+        _dispatchMask = ActiveMask(width, height);   // #1394
+        DispatchBands(_perturbLaFx, width, height, maxIter, " (LA, float-exp)", GpuLaFxParams.Bytes,
+            (rowBase, rows, band, dst) =>
+            {
+                var b = blob;
+                b.RowBase = rowBase; b.Wave = wave ? 1 : 0; b.BandRows = rows; b.Band = band;
+                *(GpuLaFxParams*)dst = b;
+            },
+            stackalloc Buffer[]
+            {
+                _fxRefZ.Buffer, _laFxStepBuf.Buffer, _laIntBuf.Buffer,
+                _buf[2].Buffer, _buf[3].Buffer, _buf[4].Buffer, work,
+            },
+            stackalloc uint[]
+            {
+                (uint)TShift, (uint)TShift + 2, (uint)TShift + 3,
+                (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)UShift + 3,
+            },
+            wave,
+            Out(_buf[2], n * sizeof(uint)), Out(_buf[3], n * sizeof(float)), Out(_buf[4], n * 4 * sizeof(float)));
+
+        long tDispatch = Stopwatch.GetTimestamp();
+        var mask = ActiveMask(width, height);
+        ReadIter(_buf[2], iterDst, n, mask);
+        ReadFloats(_buf[3], smoothDst, n, mask);
+        ReadFinalZD(_buf[4], finalZrDst, finalZiDst, finalDrDst, finalDiDst, n, mask);
+        long tEnd = Stopwatch.GetTimestamp();
+        EndFrameTiming();
+        double freq = Stopwatch.Frequency;
+        LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
+        LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
+    }
+
     public void RunPerturbLa(
         int width, int height,
         double scale, int maxIter, double escapeRadius2,
@@ -2172,6 +2271,8 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         foreach (var p in _perturbOrbit.Values) DestroyProgram(p);   // #607
         if (_buddha != null) { DestroyProgram(_buddha); _buddha = null; }   // #838
         if (_perturbFx != null) { DestroyProgram(_perturbFx); _perturbFx = null; }   // #1331
+        if (_perturbLaFx != null) { DestroyProgram(_perturbLaFx); _perturbLaFx = null; }   // #1664
+        FreeBuffer(ref _laFxStepBuf);
         if (_perturbF32 != null) { DestroyProgram(_perturbF32); _perturbF32 = null; }
         FreeBuffer(ref _fxRefZ);
         _perturbOrbit.Clear();

@@ -408,6 +408,8 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
                 _csPerturbFx = null;
                 try { _csPerturbF32?.Dispose(); } catch { }
                 _csPerturbF32 = null;
+                try { _csPerturbLaFx?.Dispose(); } catch { }   // #1664
+                _csPerturbLaFx = null;
                 break;
         }
     }
@@ -1356,6 +1358,39 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
     /// <summary>#1331 — the fp32 kernels need no double shader ops.</summary>
     public bool SupportsPerturbationFloatExp => true;
 
+    // #1331 — the reference orbit as float2 (t0 of the float-exp kernels); #1664 shares it.
+    private void UploadFxRefOrbit(double[] refZr, double[] refZi, int refLen)
+    {
+        if (_fxRefZBuf == null || _fxRefAlloc < refLen)
+        {
+            _fxRefZSrv?.Dispose();
+            _fxRefZBuf?.Dispose();
+            _fxRefZBuf = _device.CreateBuffer(new BufferDescription
+            {
+                ByteWidth = (uint)(refLen * 2 * sizeof(float)),
+                BindFlags = BindFlags.ShaderResource,
+                Usage = ResourceUsage.Dynamic,
+                CPUAccessFlags = CpuAccessFlags.Write,
+                MiscFlags = ResourceOptionFlags.BufferStructured,
+                StructureByteStride = 2 * sizeof(float),
+            });
+            _fxRefZSrv = _device.CreateShaderResourceView(_fxRefZBuf, new ShaderResourceViewDescription
+            {
+                Format = Vortice.DXGI.Format.Unknown,
+                ViewDimension = Vortice.Direct3D.ShaderResourceViewDimension.Buffer,
+                Buffer = new BufferShaderResourceView { FirstElement = 0, NumElements = (uint)refLen },
+            });
+            _fxRefAlloc = refLen;
+        }
+        var zm = _ctx.Map(_fxRefZBuf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
+        unsafe
+        {
+            float* dst = (float*)zm.DataPointer;
+            for (int i = 0; i < refLen; i++) { dst[2 * i] = (float)refZr[i]; dst[2 * i + 1] = (float)refZi[i]; }
+        }
+        _ctx.Unmap(_fxRefZBuf, 0);
+    }
+
     /// <summary>#1331 — the last fp32 frame ran the scaled-fp32 entry (not float-exp).</summary>
     public bool LastPerturbFloatExpWasScaledF32 { get; private set; }
 
@@ -1388,34 +1423,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             _fxParamsBuf ??= _device.CreateBuffer(new BufferDescription(
                 byteWidth: 64, bindFlags: BindFlags.ConstantBuffer,   // #1384
                 usage: ResourceUsage.Dynamic, cpuAccessFlags: CpuAccessFlags.Write));
-            if (_fxRefZBuf == null || _fxRefAlloc < refLen)
-            {
-                _fxRefZSrv?.Dispose();
-                _fxRefZBuf?.Dispose();
-                _fxRefZBuf = _device.CreateBuffer(new BufferDescription
-                {
-                    ByteWidth = (uint)(refLen * 2 * sizeof(float)),
-                    BindFlags = BindFlags.ShaderResource,
-                    Usage = ResourceUsage.Dynamic,
-                    CPUAccessFlags = CpuAccessFlags.Write,
-                    MiscFlags = ResourceOptionFlags.BufferStructured,
-                    StructureByteStride = 2 * sizeof(float),
-                });
-                _fxRefZSrv = _device.CreateShaderResourceView(_fxRefZBuf, new ShaderResourceViewDescription
-                {
-                    Format = Vortice.DXGI.Format.Unknown,
-                    ViewDimension = Vortice.Direct3D.ShaderResourceViewDimension.Buffer,
-                    Buffer = new BufferShaderResourceView { FirstElement = 0, NumElements = (uint)refLen },
-                });
-                _fxRefAlloc = refLen;
-            }
-            var zm = _ctx.Map(_fxRefZBuf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
-            unsafe
-            {
-                float* dst = (float*)zm.DataPointer;
-                for (int i = 0; i < refLen; i++) { dst[2 * i] = (float)refZr[i]; dst[2 * i + 1] = (float)refZi[i]; }
-            }
-            _ctx.Unmap(_fxRefZBuf, 0);
+            UploadFxRefOrbit(refZr, refZi, refLen);
 
             int e = Math.ILogB(scale);
             float m = (float)Math.ScaleB(scale, -e);
@@ -1953,6 +1961,78 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
         }
     }
 
+    // ── #1664 — the LA stages on the float-exp kernel ───────────────────────────
+
+    private ID3D11Buffer? _laFxParamsBuf;
+    private ID3D11ComputeShader? _csPerturbLaFx;
+    private ID3D11Buffer? _laFxStepBuf;
+    private ID3D11ShaderResourceView? _laFxStepSrv;
+    private int _laFxStepAlloc;
+
+    /// <summary>#1664 — needs no double shader ops. Under the same D3D11 gate as the fp64
+    /// LA kernel (#1661).</summary>
+    public bool SupportsPerturbationLaFloatExp => s_laAllowed;
+
+    public void RunPerturbLaFloatExp(
+        int width, int height,
+        double scale, int maxIter, double escapeRadius2,
+        double offsetX0, double offsetY0,
+        double[] refZr, double[] refZi, int refLen,
+        uint[] laStepsFx, uint[] laInts, int stages, GpuLaAt at,
+        int[] iterDst, float[] smoothDst,
+        float[] finalZrDst, float[] finalZiDst,
+        float[] finalDrDst, float[] finalDiDst)
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(MandelbrotGpuKernel));
+        if (width <= 0 || height <= 0) return;
+        if (refLen < 1) throw new ArgumentException("reference orbit is empty", nameof(refLen));
+        if (refZr.Length < refLen || refZi.Length < refLen)
+            throw new ArgumentException("reference-orbit arrays shorter than refLen");
+        if (stages < 1 || laInts.Length < 2 * stages || laStepsFx.Length < FracturingFog.Rendering.LaKernelSource.StepWordsFloatExp)
+            throw new ArgumentException("empty LA table");
+        var p = GpuLaFxParams.Make(width, height, scale, maxIter, escapeRadius2, offsetX0, offsetY0, refLen, stages, at);
+
+        lock (_d3dGate)
+        {
+            EnsureShape(GpuGroupShapes.SlotPerturbFp32);
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            BeginFrameTiming();
+            EnsureOutputBuffers(width, height, iterDst);
+            UploadFxRefOrbit(refZr, refZi, refLen);
+            _laFxParamsBuf ??= _device.CreateBuffer(new BufferDescription(
+                byteWidth: GpuLaFxParams.Bytes, bindFlags: BindFlags.ConstantBuffer,
+                usage: ResourceUsage.Dynamic, cpuAccessFlags: CpuAccessFlags.Write));
+            EnsureStructured(ref _laFxStepBuf, ref _laFxStepSrv, ref _laFxStepAlloc, laStepsFx.Length, sizeof(uint));
+            EnsureStructured(ref _laIntBuf, ref _laIntSrv, ref _laIntAlloc, laInts.Length, sizeof(uint));
+            _csPerturbLaFx ??= CompileShaped(GpuGroupShapes.SlotPerturbFp32, FracturingFog.Rendering.LaKernelSource.BuildFloatExp(), label: "perturb-la-fx",
+                entryPoint: FracturingFog.Rendering.LaKernelSource.FloatExpEntryPoint);
+            UploadUInts(_laFxStepBuf!, laStepsFx);
+            UploadUInts(_laIntBuf!, laInts);
+
+            bool wave = GpuWavefront.UsePerturb;
+            LastFrameWavefront = wave;
+            p.Wave = wave ? 1 : 0;
+            DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturbFp32), width, height, maxIter, srvCount: 4, " (LA, float-exp)", () =>
+            {
+                _ctx.CSSetShader(_csPerturbLaFx);
+                _ctx.CSSetShaderResource(0, _fxRefZSrv);    // t0
+                _ctx.CSSetShaderResource(2, _laFxStepSrv);  // t2
+                _ctx.CSSetShaderResource(3, _laIntSrv);     // t3
+            }, (rowBase, rows, band) =>
+            {
+                p.RowBase = rowBase;
+                p.BandRows = rows;
+                p.Band = band;
+                var mapped = _ctx.Map(_laFxParamsBuf!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
+                unsafe { *(GpuLaFxParams*)mapped.DataPointer = p; }
+                _ctx.Unmap(_laFxParamsBuf!, 0);
+                _ctx.CSSetConstantBuffer(0, _laFxParamsBuf);
+            }, wave: wave, mask: ActiveMask(width, height));   // #1394
+            ReadPerturbOutputs(width * height, t0, iterDst, smoothDst, finalZrDst, finalZiDst, finalDrDst, finalDiDst,
+                mask: ActiveMask(width, height));
+        }
+    }
+
     /// <summary>TDR row-band tiling for the perturbation kernels. <paramref name="bind"/>
     /// binds the shader and its SRVs (and any extra UAV); <paramref name="writeParams"/>
     /// uploads the band's cbuffer. A deep-zoom full-image dispatch runs long enough on a
@@ -2286,6 +2366,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
         try { _buddhaDone?.Dispose(); } catch { }
         try { _timer.Dispose(); } catch { }   // #1329
         try { _csPerturbFx?.Dispose(); } catch { }   // #1331
+        try { _csPerturbLaFx?.Dispose(); _laFxParamsBuf?.Dispose(); _laFxStepSrv?.Dispose(); _laFxStepBuf?.Dispose(); } catch { }   // #1664
         try { _csPerturbF32?.Dispose(); } catch { }
         try { _fxRefZSrv?.Dispose(); } catch { }
         try { _fxRefZBuf?.Dispose(); } catch { }
