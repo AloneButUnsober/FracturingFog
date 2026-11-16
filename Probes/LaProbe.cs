@@ -275,7 +275,9 @@ namespace FracturingFog
                 double refMs = sw.Elapsed.TotalMilliseconds;
                 var t = new Table { Ref = refZ, R = refZ.Length - 1 };
                 sw.Restart();
-                t.L = LaStageTable.Build(refZ.Select(z => z.Real).ToArray(), refZ.Select(z => z.Imaginary).ToArray(), t.R)!;
+                // #1614: Imagina's length rule (4 stage bits), as this probe's evaluator does not climb back.
+                t.L = LaStageTable.Build(refZ.Select(z => z.Real).ToArray(), refZ.Select(z => z.Imaginary).ToArray(), t.R,
+                    stageBits: LaStageTable.ImaginaStageBits)!;
                 double radius = scale * Math.Sqrt(W * W + H * H) * 0.5;
                 BuildAt(t, radius, verbose: true);
                 double buildMs = sw.Elapsed.TotalMilliseconds;

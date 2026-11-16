@@ -101,6 +101,15 @@ namespace FracturingFog.FFMath
         /// Stage0PeriodDetectionThreshold2 / PeriodDetectionThreshold2).</summary>
         public const double MinMagDipStage0 = 1.0 / (1 << 6), MinMagDip = 1.0 / (1 << 3);
 
+        /// <summary>#1614 — Imagina's fixed-length rule, round(x^(1/round(log₁₆ x))): about 4
+        /// bits (×16) per stage. Stage 0 always uses it.</summary>
+        public const int ImaginaStageBits = 4;
+
+        /// <summary>#1614 — FF's default for stages 1 and up: round(x^(1/round(log₈ x))),
+        /// about 3 bits (×8) per fixed-length stage, so a pixel that fails a long step has a
+        /// shorter one above the stage it falls to (design doc §2.6 item 13, §4.9).</summary>
+        public const int DefaultStageBits = 3;
+
         public readonly LaStep[] Data;
         public readonly int[] StageStart;
         public readonly int[] StageCount;
@@ -110,6 +119,9 @@ namespace FracturingFog.FFMath
         public readonly double BuildMs;
         /// <summary>#1626 — the period test the stages were cut with.</summary>
         public readonly LaPeriodTest PeriodTest;
+        /// <summary>#1614 — the fixed-length rule of stages 1 and up, in bits per stage
+        /// (<see cref="DefaultStageBits"/>; <see cref="ImaginaStageBits"/> is Imagina's).</summary>
+        public readonly int StageBits;
         /// <summary>#1626 — every coefficient and threshold is a finite double, so the
         /// evaluator can use the table. False when a long step's coefficients leave double
         /// range (design doc §3, precision); the calculator then keeps the rebased loop.</summary>
@@ -199,6 +211,31 @@ namespace FracturingFog.FFMath
             return a;
         }
 
+        private int[]? _up;
+
+        /// <summary>#1614 — for each entry of <see cref="Data"/>: the index, in the stage
+        /// above, of the step that starts where this one starts, or -1 (top stage, a
+        /// sentinel, or no step above begins here). It inverts the stage-above steps'
+        /// <see cref="LaStep.Next"/>, so the evaluator can climb back a stage at the step
+        /// boundaries the two stages share. Built once per table.</summary>
+        public int[] Up => _up ??= BuildUp();
+
+        private int[] BuildUp()
+        {
+            var up = new int[Data.Length];
+            Array.Fill(up, -1);
+            for (int k = 0; k + 1 < Stages; k++)
+            {
+                int s1 = StageStart[k + 1], c0 = StageCount[k];
+                for (int i = 0; i < StageCount[k + 1]; i++)
+                {
+                    int nx = Data[s1 + i].Next;
+                    if ((uint)nx < (uint)c0) up[StageStart[k] + nx] = i;
+                }
+            }
+            return up;
+        }
+
         /// <summary>The steps of stage <paramref name="k"/>, without its sentinel.</summary>
         public ReadOnlySpan<LaStep> Stage(int k) => Data.AsSpan(StageStart[k], StageCount[k]);
 
@@ -215,10 +252,11 @@ namespace FracturingFog.FFMath
             return Math.Clamp(t, Math.Pow(2, -52), Math.Pow(2, -8));
         }
 
-        private LaStageTable(List<LaStep> data, List<int> start, List<int> count, int refLen, double tol, double ms, LaPeriodTest test)
+        private LaStageTable(List<LaStep> data, List<int> start, List<int> count, int refLen, double tol, double ms, LaPeriodTest test,
+                             int stageBits)
         {
             Data = data.ToArray(); StageStart = start.ToArray(); StageCount = count.ToArray();
-            RefLen = refLen; Tolerance = tol; BuildMs = ms; PeriodTest = test;
+            RefLen = refLen; Tolerance = tol; BuildMs = ms; PeriodTest = test; StageBits = stageBits;
             bool ok = true;
             foreach (ref readonly var d in Data.AsSpan())
                 if (!(double.IsFinite(d.RefRe) && double.IsFinite(d.RefIm) && double.IsFinite(d.ARe) && double.IsFinite(d.AIm)
@@ -228,13 +266,16 @@ namespace FracturingFog.FFMath
         }
 
         /// <summary>Builds the stages over Z_0 .. Z_R (<paramref name="refZr"/> /
-        /// <paramref name="refZi"/>, at least R + 1 entries). Null when R &lt; 2.</summary>
+        /// <paramref name="refZi"/>, at least R + 1 entries). Null when R &lt; 2.
+        /// <paramref name="stageBits"/> (#1614): the fixed-length rule of stages 1 and up,
+        /// clamped to 1..<see cref="ImaginaStageBits"/>.</summary>
         public static LaStageTable? Build(double[] refZr, double[] refZi, int refLen, double tolerance = DefaultTolerance,
-                                          LaPeriodTest periodTest = LaPeriodTest.ThresholdDip)
+                                          LaPeriodTest periodTest = LaPeriodTest.ThresholdDip, int stageBits = DefaultStageBits)
         {
             if (refLen < 2 || refZr.Length <= refLen || refZi.Length <= refLen) return null;
+            stageBits = Math.Clamp(stageBits, 1, ImaginaStageBits);
             var sw = Stopwatch.StartNew();
-            var b = new Builder(refZr, refZi, refLen, tolerance, periodTest == LaPeriodTest.MinMagnitude);
+            var b = new Builder(refZr, refZi, refLen, tolerance, periodTest == LaPeriodTest.MinMagnitude, stageBits);
             var stage = new List<La>();
             bool more = b.Stage0(stage);
             var stages = new List<List<La>> { stage };
@@ -253,7 +294,7 @@ namespace FracturingFog.FFMath
                 count.Add(st.Count - 1);
                 foreach (var la in st) data.Add(new LaStep(la.Ref, la.A, la.B, la.Thr, la.ThrC, la.Len, la.Next));
             }
-            return new LaStageTable(data, start, count, refLen, tolerance, sw.Elapsed.TotalMilliseconds, periodTest);
+            return new LaStageTable(data, start, count, refLen, tolerance, sw.Elapsed.TotalMilliseconds, periodTest, stageBits);
         }
 
         private static double Cheb(Complex z) => Math.Max(Math.Abs(z.Real), Math.Abs(z.Imaginary));
@@ -307,14 +348,15 @@ namespace FracturingFog.FFMath
                 minMag ? Cheb(z) < MinMag * MinMagDip : Cheb(z) / Cheb(A) * tol < Thr * PeriodDip;
         }
 
-        private sealed class Builder(double[] zr, double[] zi, int r, double tol, bool mm)
+        private sealed class Builder(double[] zr, double[] zi, int r, double tol, bool mm, int stageBits)
         {
             private Complex Z(int i) => new(zr[i], zi[i]);
 
             // round(x^(1/round(log16 x))): the fixed step length when the first period
-            // is too long (> 64) or missing.
-            private static int FixedLen(double ratio) =>
-                (int)Math.Round(Math.Pow(ratio, 1.0 / Math.Max(1.0, Math.Round(Math.Log2(ratio) / 4))));
+            // is too long (> 64) or missing. #1614: `bits` generalises the log16 (4 bits);
+            // stage 0 keeps Imagina's 4, the stages above use stageBits (FF).
+            private static int FixedLen(double ratio, int bits = ImaginaStageBits) =>
+                (int)Math.Round(Math.Pow(ratio, 1.0 / Math.Max(1.0, Math.Round(Math.Log2(ratio) / bits))));
 
             private La With(La la, int len, int next) { la.Len = len; la.Next = next; return la; }
 
@@ -401,13 +443,13 @@ namespace FracturingFog.FFMath
                         return false;
                     }
                     prev[0].Compose(prev[1], tol, mm, out la); i = len0 + prev[1].Len; next = 0; j = 2;
-                    period = len0 * FixedLen((double)r / len0); begin = 0;
+                    period = len0 * FixedLen((double)r / len0, stageBits); begin = 0;
                 }
                 else if (period > len0 * 64)
                 {
                     st.RemoveAt(st.Count - 1);
                     prev[0].Compose(prev[1], tol, mm, out la); i = len0 + prev[1].Len; next = 0; j = 2;
-                    period = len0 * FixedLen((double)period / len0); begin = 0;
+                    period = len0 * FixedLen((double)period / len0, stageBits); begin = 0;
                 }
                 int end = begin + period;
                 for (; j < m; j++)

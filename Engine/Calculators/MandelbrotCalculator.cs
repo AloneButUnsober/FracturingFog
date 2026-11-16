@@ -3709,8 +3709,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         int r = _refPeriod > 0 ? _refPeriod : _refOrbitLen;
         var test = LaPeriodTest;   // #1626
         if (_laTable != null && _laForRefOrbitGen == _refOrbitGen && _laTable.Tolerance == tol && _laTable.RefLen == r
-            && _laTable.PeriodTest == test) return;
-        _laTable = LaStageTable.Build(_refZr, _refZi, r, tol, test);
+            && _laTable.PeriodTest == test && _laTable.StageBits == LaStageBits) return;
+        _laTable = LaStageTable.Build(_refZr, _refZi, r, tol, test, LaStageBits);   // #1614: stage bits
         _laForRefOrbitGen = _refOrbitGen;
     }
 

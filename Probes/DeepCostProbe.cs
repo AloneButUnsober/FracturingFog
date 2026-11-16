@@ -31,6 +31,7 @@
 // Exit 0 always.
 
 using System;
+using FracturingFog.FFMath;
 using System.Diagnostics;
 using System.Linq;
 using FracturingFog.Models;
@@ -183,6 +184,43 @@ namespace FracturingFog
                                 && cs.ColorBuffer.AsSpan().SequenceEqual(cv.ColorBuffer);
                     Console.WriteLine($"  {s.Name,-14} LA scalar {bestS,7:F0} ms (pixels {pxS:F0}) | 4-lane {bestV,7:F0} ms (pixels {pxV:F0}, on {cv.LastFrameUsedLaSimd}) | " +
                                       $"pixels x{pxS / Math.Max(1e-9, pxV):F2} | bytes {(same ? "identical" : "DIFFER")}");
+                }
+                // #1614 — FF_DEEPCOST_LA_ASCEND_AB=1: the LA frame as Imagina's stages (no
+                // climb at shared boundaries, 4 stage bits), with the climb, and with the climb
+                // and FF's 3 stage bits (the default), alternating so clock drift hits all three.
+                if (Environment.GetEnvironmentVariable("FF_DEEPCOST_LA_ASCEND_AB") == "1")
+                {
+                    (bool Asc, int Bits, string Name)[] vs =
+                        [(false, LaStageTable.ImaginaStageBits, "no climb, 4 bits"), (true, LaStageTable.ImaginaStageBits, "climb, 4 bits"),
+                         (true, LaStageTable.DefaultStageBits, "climb, 3 bits")];
+                    var best = new double[vs.Length]; var cpu = new double[vs.Length];
+                    var calcs = new MandelbrotCalculator[vs.Length];
+                    Array.Fill(best, double.MaxValue);
+                    for (int k = 0; k < reps; k++)
+                        for (int v = 0; v < vs.Length; v++)
+                        {
+                            var c = Make(s, zoom, w, h);
+                            c.UseLaEvaluator = true; c.LaAscend = vs[v].Asc; c.LaStageBits = vs[v].Bits;
+                            var p0 = System.Diagnostics.Process.GetCurrentProcess().TotalProcessorTime;
+                            c.Calculate();
+                            double cp = (System.Diagnostics.Process.GetCurrentProcess().TotalProcessorTime - p0).TotalMilliseconds;
+                            if (c.LastHpStageMs.Pixels < best[v]) { best[v] = c.LastHpStageMs.Pixels; cpu[v] = cp; }
+                            calcs[v] = c;
+                        }
+                    for (int v = 0; v < vs.Length; v++)
+                    {
+                        var c = calcs[v]; var lw = c.LastLaWork; double px = Math.Max(1, lw.Pixels);
+                        var t = c.LaTable;
+                        string tops = t == null ? "-" : string.Join("/", Enumerable.Range(0, t.Stages).Select(q => t.Step(q, 0).Len));
+                        int d = 0, io = 0;
+                        for (int i = 0; i < c.IterationBuffer.Length; i++)
+                        {
+                            if (c.IterationBuffer[i] != calcs[0].IterationBuffer[i]) d++;
+                            if ((c.IterationBuffer[i] >= s.Iter) != (calcs[0].IterationBuffer[i] >= s.Iter)) io++;
+                        }
+                        Console.WriteLine($"  {s.Name,-14} {vs[v].Name,-17}: pixels {best[v],7:F0} ms (x{best[0] / Math.Max(1e-9, best[v]):F2}), CPU {cpu[v],7:F0} ms | " +
+                                          $"per px LA {lw.LaSteps / px:F0} + plain {lw.PlainSteps / px:F0} | stages {tops} | iter diff vs first {d:N0}, in/out {io:N0}");
+                    }
                 }
                 if (Environment.GetEnvironmentVariable("FF_DEEPCOST_NOREF") == "1") continue;
                 var (b, bSm, bMs, bReb, bIt) = Render(s, zoom, w, h, 1, noAccel: true);

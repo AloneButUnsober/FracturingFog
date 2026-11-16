@@ -449,6 +449,11 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
   Rebasing and bilinear approximation (BLA) — `Engine/Math/Bla.cs`, CalcGen's BLA emitter,
   `AllowPtRebasing`. Also the two combined (#1613): after a rebase, BLA skips are looked up by the
   reference index, so a pixel that rebases keeps its BLA (`MandelbrotCalculator.ResumePixelPTRebased`).
+  #1614 (2026-11-16) also applies BLA's rule, the longest valid skip at every reference index, to
+  Imagina's LA stages (#imagina below): a pixel that fell a stage climbs back at the next boundary the two
+  stages share (`MandelbrotCalculator.LaAscend`, `LaStageTable.Up`; design doc
+  `Docs/Technical/Period-Synchronised-LA-DesignPlan.md` §2.6 item 12, §4.9). FF does not claim it as new.
+  No published description of this combination was found; that search is not exhaustive.
   #1614 builds on the same rebase: a reference centred on a period-p nucleus is stopped at Z_{p+1}, and
   the loops wrap the reference index at p (δ += Z_p), which is a rebase at Z_p ≈ 0
   (`MandelbrotCalculator._refPeriod`). Whether this exact use is published is under *Citations awaiting
@@ -998,6 +1003,10 @@ Programs and galleries the project measured itself against, learned from, or pay
   - **Period test:** FF's default is Imagina's 2⁻¹⁰ threshold-dip test, the `#else` branch. Imagina's
     build defines `PERIOD_DETECTION_METHOD2`, a minimum-|Z| test (§2.6, item 7, corrected in #1625);
     #1626 adds it as `LaPeriodTest.MinMagnitude` and measures the two (design doc §4.2).
+  - **#1614 (2026-11-16):** `HInfLAEvaluator.cpp` at `cd046377`, re-read through the GitHub API,
+    confirms that `EvaluateLA` only ever lowers a pixel's stage (`CurrentLAStage--`). FF departs from it in
+    two places: climbing back at shared step boundaries, and 3 "stage bits" (round(x^(1/round(log₈ x))))
+    in place of the log₁₆ fixed-length rule above stage 0 (design doc §2.6 items 12–13, §4.9).
   - **Also:** the comparison renderer in rith's 0.7.1 benchmark.
   - **Not verified:** whether the author is the fractalforums.org Zhuoran credited above for rebasing
     and BLA, and any published description of the method (see *Citations awaiting verification*).
