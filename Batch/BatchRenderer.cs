@@ -1550,6 +1550,7 @@ namespace FracturingFog.Batch
             var ss = FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(calc, quality.AaSamples,
                 FracturingFog.Rendering.AdaptiveAa.From(fp), CancellationToken.None, adaptive);   // #1344, #1381
             FracturingFog.Rendering.Supersampling.FinishHistogramEq(calc, in ss, adaptive);
+            FracturingFog.Rendering.Lighting.ScreenSpacePost.ApplySsao2D(calc, fp);   // #1448
             var buf = CopyBuffer(calc.ColorBuffer, w, h);
             CompositeInteriorAlpha(buf, w, h, theme);
             ApplyMoire(buf, w, h, fp, cx, cy, zoom);   // #1488
@@ -1853,6 +1854,7 @@ namespace FracturingFog.Batch
             var ss = FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(calc, calc.Quality.AaSamples,
                 aa ?? FracturingFog.Rendering.AdaptiveAa.Off, CancellationToken.None, adaptive);   // #1344, #1381
             FracturingFog.Rendering.Supersampling.FinishHistogramEq(calc, in ss, adaptive);
+            FracturingFog.Rendering.Lighting.ScreenSpacePost.ApplySsao2D(calc, moireFp);   // #1448
             var buf = CopyBuffer(calc.ColorBuffer, w, h);
             CompositeInteriorAlpha(buf, w, h, theme);
             ApplyMoire(buf, w, h, moireFp, region.CenterX, region.CenterY, zoom);   // #1488
@@ -2816,6 +2818,7 @@ namespace FracturingFog.Batch
             var ss = FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(calc, quality.AaSamples,
                 aa ?? FracturingFog.Rendering.AdaptiveAa.Off, CancellationToken.None, adaptive);   // #1344, #1381
             FracturingFog.Rendering.Supersampling.FinishHistogramEq(calc, in ss, adaptive);
+            FracturingFog.Rendering.Lighting.ScreenSpacePost.ApplySsao2D(calc, moireFp);   // #1448
             var buf = CopyBuffer(calc.ColorBuffer, w, h);
             CompositeInteriorAlpha(buf, w, h, theme);
             ApplyMoire(buf, w, h, moireFp, c.Re.X0, c.Im.X0, zoom);   // #1488

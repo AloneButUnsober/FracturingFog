@@ -816,6 +816,12 @@ namespace FracturingFog.Imaging
                 // Adaptive HE — applied on the calculator so it recolours from the
                 // iteration histogram before read (unless the AA pass already did).
                 FracturingFog.Rendering.Supersampling.FinishHistogramEq(calc, in ss, req.HistogramEq);
+                // #1448 — the flat view's 2D SSAO, after the AA and adaptive contrast as
+                // live. Not on a cluster tile: the pass reads neighbours and sizes its
+                // radius from the frame, so a tile would differ from the whole image
+                // (#1815 runs it on the assembled frame).
+                if (req.ImageWidth == 0)
+                    FracturingFog.Rendering.Lighting.ScreenSpacePost.ApplySsao2D(calc, req.FractalParameters);
                 buffer = calc.ColorBuffer;
                 w = calc.Width;
                 h = calc.Height;

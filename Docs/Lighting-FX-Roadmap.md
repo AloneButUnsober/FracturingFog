@@ -23,6 +23,13 @@ Phases 1–24 + the `b` follow-up bindings landed across two batched commits:
 - **Lighting-FX deferred-wave third pass: 16b (recursive reflection
   bounces + roughness-convolved IBL) and 20b (true per-eye stereo via
   camera-offset plumbing in 8 calculators).** See entries below.
+- **#1448 — the flat Mandelbrot 2D SSAO (Phase 8b) everywhere.** It ran in the
+  live view only; export, `--batch` and scene video now call the shared
+  `ScreenSpacePost.ApplySsao2D(MandelbrotCalculator, FractalParameters)` at the
+  same point (after the AA and adaptive contrast, before relief and the
+  interior-alpha composite), and the live TAA continuation runs it on each
+  running mean (the first TAA sample used to drop it). Cluster tiles skip it
+  (#1815); live recolour paths still drop it until the next render (#1816).
 
 Status as of this doc write: working tree clean on
 `feature/cross-platform-full`.

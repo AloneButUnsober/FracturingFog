@@ -745,6 +745,7 @@ namespace FracturingFog.Export
             if (shot.Quality != null)   // #1344 — the preset's sub-pixel AA (adaptive with AdaptiveAa)
                 FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(calc, shot.Quality.AaSamples,
                     FracturingFog.Rendering.AdaptiveAa.From(p), ct);
+            FracturingFog.Rendering.Lighting.ScreenSpacePost.ApplySsao2D(calc, p);   // #1448, after the AA as live
             return CopyBuffer(calc.ColorBuffer, w, h);
         }
 
