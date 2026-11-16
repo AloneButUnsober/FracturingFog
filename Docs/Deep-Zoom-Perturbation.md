@@ -110,8 +110,8 @@ limbs per iteration (`_refZr/_refZrLo/..X7`). Each pixel iterates only its
     GT 710 (`--d3ddeeporbitprobe`).
   - **No false positives:** caught pixels stay bounded for 4× the cap on their exact orbit
     (BigInteger fixed point), in `S1368DeepOrbitPeriodicityTests`.
-  - **The main deep path:** #1800, in slices. S1 (#1802) is below; the rebased loops
-    (#1803), the LA rows (#1804) and the GPU kernels (#1805) are still to do.
+  - **The main deep path:** #1800, in slices. S1 (#1802) and S2 (#1803) are below; the
+    LA rows (#1804) and the GPU kernels (#1805) are still to do.
 - **Periodicity in the SIMD rows (#1802, `MandelbrotCalculator.DeepPeriodicity`,
   `FF_DEEP_PERIODICITY=0` turns it off).** `ComputeRowPT4` / `ComputeRowPT8` compare a batch's
   state only at the periodic reference's wrap (m := 0), once per period. The state is every
@@ -130,6 +130,27 @@ limbs per iteration (`_refZr/_refZrLo/..X7`). Each pixel iterates only its
     9.6 s → 15 ms, 1e28 26.2 s → 17 ms. Scenes without a periodic reference never run it.
   - **Caught pixels** stay bounded for 4× the cap on their exact orbit, edge pixels included
     (`S1802DeepRowPeriodicityTests`).
+- **Periodicity in the rebased loops (#1803, same switch).** `ResumePixelPTRebased` (with
+  and without BLA), its DD twin and the 4-lane rebased loop compare the state right after a
+  rebase (δ := z, m = 0), snapshotted at doubling rebase counts (per lane in the 4-lane
+  loop). A bit-exact repeat means the pixel is in set.
+  - **Why at the rebase:** with a periodic reference the wrap (m + 1 ≥ refLen) is a
+    rebase, so every cycle passes through one.
+  - **BLA guard:** with BLA the skip limit `min(refLen − 1, m + (maxIter − iter))` is fixed
+    between two rebases only while `maxIter − iter ≥ refLen`, so the check waits for that.
+    This is the same last-period argument as the rows.
+  - **Where it fires:** the scalar rows (no AVX2) run every pixel through the resumed loop
+    against a periodic reference. A nucleus3 frame there takes 35 → 0 ms, like the vector
+    rows. The vector rows' QD-band hand-overs and the 4-lane queue fire too.
+  - **The DD twin** (SM-11a, a diagnostic) runs without a periodic reference by design
+    (#1614), so it only catches cycles of the |z| < |δ| rebases. It caught none on the test
+    frames.
+  - **Cost:** none measured on a glitch-heavy 3e47 frame with LA off (511 765 pixels
+    through the 4-lane loop: 178–186 ms on or off).
+  - **Tests:** `S1803RebasedPeriodicityTests` drive each loop over whole frames
+    (`ForceRebasedLoops`, `ForceScalarPtPath`): on == off byte for byte, the interior caught,
+    and caught pixels (the whole period-3 minibrot's edge included) bounded on their exact
+    orbit.
 - **#1275 (cluster-rebase port) closed as superseded.** With BLA off, the default path
   matched "rebase every pixel" to the chaotic floor on every view tried (1e11–4e32,
   periods 61–998), and a per-lane Pauldelbrot soft-glitch test changed nothing. The

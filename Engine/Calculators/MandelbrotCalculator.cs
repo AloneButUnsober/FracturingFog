@@ -994,6 +994,12 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     /// AVX-512, where Vector512 is emulated (slow, same results), so tests cover them.</summary>
     public static bool ForcePt8Rows;
 
+    /// <summary>#1803 — test hook: the AVX2 rows (ComputeRowPT4) hand every batch to their
+    /// fallback before its first step, as a glitch would: the resumed loop (QD band, BLA on),
+    /// the 4-lane rebased loop, or the scalar rebased loop / DD twin. So tests drive those
+    /// loops over whole frames.</summary>
+    public static bool ForceRebasedLoops;
+
     /// <summary>#1802 — test hook: when set, the rows' periodicity check adds the index of
     /// every pixel it catches (lanes off the frame or the row range included).</summary>
     public static System.Collections.Concurrent.ConcurrentQueue<int>? DeepPeriodicityCaught;
@@ -1012,6 +1018,16 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         Vector512<double> snapDr, Vector512<double> snapDi, int snapEsc)
         => esc == snapEsc
            && Vector512.EqualsAll(dr, snapDr) && Vector512.EqualsAll(di, snapDi);
+
+    /// <summary>#1803 — whether the state right after a rebase (δ := z, m = 0) repeats a
+    /// snapshot bit for bit (real and imaginary δ; NaN never matches).</summary>
+    public static bool SameRebaseState(double dr, double di, double snapR, double snapI)
+        => dr == snapR && di == snapI;
+
+    /// <summary>#1803 — <see cref="SameRebaseState(double,double,double,double)"/> on the DD
+    /// twin's full double-double δ (both limbs of both parts).</summary>
+    public static bool SameRebaseState(DD dr, DD di, DD snapR, DD snapI)
+        => dr.Hi == snapR.Hi && dr.Lo == snapR.Lo && di.Hi == snapI.Hi && di.Lo == snapI.Lo;
 
     private static void LogCaught(int firstIdx, int lanes, int width)
     {
@@ -4613,6 +4629,14 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         int refLen = _refOrbitLen;
         int m = m0;                   // reference-orbit index (independent of iter)
         double zr = 0.0, zi = 0.0;    // full value z = Z[m] + δ (last is escape z)
+        // #1803 — PeriodicAtRebase: the state right after a rebase (δ := z, m = 0),
+        // snapshotted at doubling rebase counts. With BLA the skips' limit
+        // min(refLen − 1, m + (maxIter − iter)) is fixed between two rebases at
+        // maxIter − (the rebase's iteration), so the check needs maxIter − iter ≥ refLen.
+        bool periodicity = DeepPeriodicity;
+        double snapR = 0, snapI = 0;
+        bool haveSnap = false;
+        int rebases = 0, nextSnap = 1;
 
         int iter;
         for (iter = iter0; iter < maxIter; iter++)
@@ -4661,6 +4685,17 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 dr = zr; di = zi;      // δ := z, relative to the restarted Z[0]=0
                 Zr = 0.0; Zi = 0.0;
                 m = 0;
+                if (periodicity && (bla == null || maxIter - iter >= refLen))
+                {
+                    if (haveSnap && SameRebaseState(dr, di, snapR, snapI))
+                    {
+                        Interlocked.Increment(ref _deepPeriodicPixels);
+                        LogCaught(idx, 1, 1);
+                        iter = maxIter;
+                        break;
+                    }
+                    if (++rebases >= nextSnap) { snapR = dr; snapI = di; haveSnap = true; nextSnap = rebases * 2; }
+                }
             }
 
             // δ_{n+1} = (2·Z[m] + δ)·δ + dc  (Z[m]=0 right after a rebase).
@@ -4708,6 +4743,11 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         double drv = 1.0, div = 0.0;             // derivative stays double (normals)
         int m = 0;
         double zrHi = 0.0, ziHi = 0.0;           // full-value Hi (last = escape z)
+        // #1803 — PeriodicAtRebase (ResumePixelPTRebased), on the full DD δ.
+        bool periodicity = DeepPeriodicity;
+        DD snapR = default, snapI = default;
+        bool haveSnap = false;
+        int rebases = 0, nextSnap = 1;
 
         int iter;
         for (iter = 0; iter < maxIter; iter++)
@@ -4733,6 +4773,17 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 dr = zr; di = zi;               // δ := z (full DD kept)
                 Zr = new DD(0.0); Zi = new DD(0.0);
                 m = 0;
+                if (periodicity)
+                {
+                    if (haveSnap && SameRebaseState(dr, di, snapR, snapI))
+                    {
+                        Interlocked.Increment(ref _deepPeriodicPixels);
+                        LogCaught(idx, 1, 1);
+                        iter = maxIter;
+                        break;
+                    }
+                    if (++rebases >= nextSnap) { snapR = dr; snapI = di; haveSnap = true; nextSnap = rebases * 2; }
+                }
             }
 
             // δ_{n+1} = (2·Z[m] + δ)·δ + dc   (Z[m]=0 right after a rebase).
@@ -4814,6 +4865,13 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         public Vector128<int> M, It;
         public int Active;
         public fixed int Pix[4];
+        // #1803 — per lane: the PeriodicAtRebase snapshot (δ after a rebase), whether it
+        // is set, and the rebase count / next snapshot count.
+        public fixed double SnapR[4];
+        public fixed double SnapI[4];
+        public fixed int Rebases[4];
+        public fixed int NextSnap[4];
+        public int HaveSnap;
     }
 
     // Loop-invariant inputs of the vector rebased loop.
@@ -4826,10 +4884,12 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         public readonly double Scale, RecycleDx;
         public readonly Vector256<double> Er2, DcI;
         public readonly Vector128<int> RefLast2, Cap;
+        public readonly bool Periodicity;   // #1803
 
         public RebaseInputs(double* zr, double* zi, double[] cols, int[] idxs, int count, int maxIter,
-            double scale, double recycleDx, double er2, double dcI, int refLen)
+            double scale, double recycleDx, double er2, double dcI, int refLen, bool periodicity)
         {
+            Periodicity = periodicity;
             Zr = zr; Zi = zi; Cols = cols; Idxs = idxs; Count = count; MaxIter = maxIter;
             Scale = scale; RecycleDx = recycleDx;
             Er2 = Vector256.Create(er2); DcI = Vector256.Create(dcI);
@@ -4855,7 +4915,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         {
             // dc exactly as ComputePixelPTRebased forms it, per pixel.
             var inp = new RebaseInputs(pZr, pZi, cols, idxs, count, maxIter, scale, _refRecycleDx,
-                EscapeRadius2, rowOffsetY * scale + _refRecycleDy, refLen);
+                EscapeRadius2, rowOffsetY * scale + _refRecycleDy, refLen, DeepPeriodicity);
             // Two independent groups per thread: each iteration is one long
             // dependency chain, and the core overlaps the two.
             RebaseQuad qa = default, qb = default;
@@ -4892,6 +4952,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         q.Dr = q.Dr.WithElement(k, 0.0); q.Di = q.Di.WithElement(k, 0.0);
         q.Drv = q.Drv.WithElement(k, 1.0); q.Div = q.Div.WithElement(k, 0.0);
         q.M = q.M.WithElement(k, 0); q.It = q.It.WithElement(k, 0);
+        q.HaveSnap &= ~(1 << k); q.Rebases[k] = 0; q.NextSnap[k] = 1;   // #1803
     }
 
     /// <summary>One iteration of ComputePixelPTRebased on 4 lanes, operation for
@@ -4945,6 +5006,33 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             Zr = Avx.BlendVariable(Zr, Vector256<double>.Zero, mask);
             Zi = Avx.BlendVariable(Zi, Vector256<double>.Zero, mask);
             m = Sse41.BlendVariable(m, Vector128<int>.Zero, s_laneMaskI[rebase]);
+
+            // #1803 — PeriodicAtRebase per live lane (no BLA here, so no cap condition):
+            // a lane back at a snapshotted post-rebase δ cycles for ever: in set.
+            int live = rebase & q.Active & ~finished;
+            if (inp.Periodicity && live != 0)
+            {
+                for (int k = 0; k < 4; k++)
+                {
+                    if ((live >> k & 1) == 0) continue;
+                    double r = dr.GetElement(k), i = di.GetElement(k);
+                    if ((q.HaveSnap >> k & 1) != 0 && SameRebaseState(r, i, q.SnapR[k], q.SnapI[k]))
+                    {
+                        Interlocked.Increment(ref _deepPeriodicPixels);
+                        int pix = inp.Idxs[q.Pix[k]];
+                        LogCaught(pix, 1, 1);
+                        Resolve(pix, inp.MaxIter, inp.MaxIter, zr.GetElement(k), zi.GetElement(k),
+                            drv.GetElement(k), div.GetElement(k), colorMap);
+                        finished |= 1 << k;
+                        continue;
+                    }
+                    if (++q.Rebases[k] >= q.NextSnap[k])
+                    {
+                        q.SnapR[k] = r; q.SnapI[k] = i; q.HaveSnap |= 1 << k;
+                        q.NextSnap[k] = q.Rebases[k] * 2;
+                    }
+                }
+            }
         }
 
         // δ_{n+1} = (2·Z[m] + δ)·δ + dc  (Z[m] = 0 right after a rebase).
@@ -5209,6 +5297,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             // #1802 — the batch's state at its last snapshot wrap (see below).
             var snapDr = Vector256<double>.Zero; var snapDi = Vector256<double>.Zero;
             int snapEsc = -1, wraps = 0, nextSnapWrap = 1;
+            // #1803 test hook: hand the whole batch to the fallback before its first step.
+            if (ForceRebasedLoops) { glitched = true; if (resume) { glitchIter = iterStart; glitchM = m; } }
+            else
             for (int iter = iterStart; iter < maxIter; iter++)
             {
                 if (m == period && period > 0)
