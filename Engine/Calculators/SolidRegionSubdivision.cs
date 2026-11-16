@@ -23,6 +23,14 @@
 // #1394 part 1 — a target whose passes go to a masked GPU kernel (SolidFewPasses) runs
 // Auto on the whole grid in one pass and decides at its own threshold
 // (SolidAutoMinCostlyShare; AutoNever = compute the frame whole, no probe).
+//
+// #1394 part 4 — a frame that computes only some rectangles (SolidRegions: a #1330 pan's
+// exposed strips; the rest of the frame keeps valid pixels) subdivides each rectangle
+// that fits the grid on its own. The pixels outside them count as computed from the
+// start: a tile's border may lie on the kept pixels next to its rectangle (they cost
+// nothing), and fills stay inside the rectangles. A rectangle too small for the grid is
+// computed whole in the first pass. With one rectangle, the whole frame, this is the
+// subdivision as before.
 
 using System;
 using System.Collections.Generic;
@@ -75,8 +83,19 @@ internal interface ISolidRegionTarget
     /// compute (#1394: steers only how a tile splits, never what a pixel gets).</summary>
     bool SolidFreeInSet(int x, int y);
 
+    /// <summary>#1394 part 4 — the rectangles this frame computes (null: the whole frame).
+    /// Every pixel outside them already holds this frame's data.</summary>
+    IReadOnlyList<SolidRect>? SolidRegions { get; }
+
     /// <summary>The frame is over (also when cancelled or failed): clear the mask state.</summary>
     void SolidEnd(CancellationToken ct);
+}
+
+/// <summary>#1394 part 4 — a rectangle of pixels [X0, X1) × [Y0, Y1) a frame computes.</summary>
+internal readonly record struct SolidRect(int X0, int Y0, int X1, int Y1)
+{
+    public int Width => X1 - X0;
+    public int Height => Y1 - Y0;
 }
 
 /// <summary>#1394 — what a solid-region frame did.</summary>
@@ -137,6 +156,19 @@ internal static class SolidRegionSubdivision
     /// <summary>The frame is big enough for the grid to leave any interior.</summary>
     public static bool FrameFits(int width, int height) => width >= 2 * TileSize && height >= 2 * TileSize;
 
+    /// <summary>#1394 part 4 — some rectangle (null: the whole frame) is big enough for the
+    /// grid to leave any interior.</summary>
+    public static bool AnyFits(IReadOnlyList<SolidRect>? regions, int width, int height)
+    {
+        if (regions == null) return FrameFits(width, height);
+        foreach (var r in regions) if (FrameFits(r.Width, r.Height)) return true;
+        return false;
+    }
+
+    // One rectangle's grid: its lines (on the kept pixel just outside it where there is
+    // one, else its own edge pixel) and its tiles.
+    private sealed record Grid(List<int> Xs, List<int> Ys);
+
     public static void Run(ISolidRegionTarget t, bool auto, SolidRegionStats stats, CancellationToken ct)
     {
         int w = t.Width, h = t.Height, n = w * h;
@@ -144,12 +176,40 @@ internal static class SolidRegionSubdivision
         var done = new byte[n];   // #1394 — pixels some pass already computed
         var buf = new Buffers(t.SolidIterations, t.SolidColors, t.SolidAux, t.MaxIterations, w);
 
-        var xs = GridLines(w);
-        var ys = GridLines(h);
+        // #1394 part 4 — the rectangles to compute; the pixels outside them are kept.
+        var regions = t.SolidRegions;
+        var small = new List<SolidRect>();
+        var grids = new List<Grid>();
+        if (regions == null) grids.Add(new Grid(GridLines(0, w, w), GridLines(0, h, h)));
+        else
+        {
+            Array.Fill(done, (byte)1);
+            foreach (var r in regions)
+            {
+                for (int y = r.Y0; y < r.Y1; y++) done.AsSpan(y * w + r.X0, r.Width).Clear();
+                if (FrameFits(r.Width, r.Height)) grids.Add(new Grid(GridLines(r.X0, r.X1, w), GridLines(r.Y0, r.Y1, h)));
+                else small.Add(r);
+            }
+        }
         var tiles = new List<(int X0, int Y0, int X1, int Y1)>();
-        for (int j = 0; j + 1 < ys.Count; j++)
-            for (int i = 0; i + 1 < xs.Count; i++)
-                tiles.Add((xs[i], ys[j], xs[i + 1], ys[j + 1]));
+        foreach (var g in grids)
+            for (int j = 0; j + 1 < g.Ys.Count; j++)
+                for (int i = 0; i + 1 < g.Xs.Count; i++)
+                    tiles.Add((g.Xs[i], g.Ys[j], g.Xs[i + 1], g.Ys[j + 1]));
+
+        void MarkRows()
+        {
+            foreach (var g in grids)
+                foreach (int y in g.Ys) mark.AsSpan(y * w + g.Xs[0], g.Xs[^1] - g.Xs[0] + 1).Fill(1);
+            // A rectangle too small for the grid is computed whole, with the first lines.
+            foreach (var r in small)
+                for (int y = r.Y0; y < r.Y1; y++) mark.AsSpan(y * w + r.X0, r.Width).Fill(1);
+        }
+        void MarkColumns()
+        {
+            foreach (var g in grids)
+                foreach (int x in g.Xs) for (int y = g.Ys[0]; y <= g.Ys[^1]; y++) mark[y * w + x] = 1;
+        }
 
         var filledMask = stats.FilledMask;
         t.SolidBegin(done, stats.BatchCount);
@@ -175,7 +235,7 @@ internal static class SolidRegionSubdivision
             // 1. The grid lines. Auto: the rows first, full SIMD rows, which sample the
             // frame cheaply enough to decide on (#1394: with the columns, in one pass,
             // when passes are dear).
-            foreach (int y in ys) for (int x = 0; x < w; x++) mark[y * w + x] = 1;
+            MarkRows();
             if (auto && double.IsPositiveInfinity(t.SolidAutoMinCostlyShare))
             {
                 stats.Declined = true;
@@ -183,22 +243,21 @@ internal static class SolidRegionSubdivision
                 stats.Passes++;
                 return;
             }
-            if (auto && t.SolidFewPasses)
-                foreach (int x in xs) for (int y = 0; y < h; y++) mark[y * w + x] = 1;
+            if (auto && t.SolidFewPasses) MarkColumns();
             if (auto)
             {
                 if (!Pass()) return;
-                stats.CostlyShare = CostlyInSetShare(t, buf, ys);
+                stats.CostlyShare = CostlyInSetShare(t, buf, grids);
                 if (stats.CostlyShare < t.SolidAutoMinCostlyShare)
                 {
                     stats.Declined = true;
-                    Array.Fill(mark, (byte)1);
+                    Array.Fill(mark, (byte)1);   // the kept pixels are done: Pass clears them
                     Pass();
                     return;
                 }
                 Array.Clear(mark);
             }
-            foreach (int x in xs) for (int y = 0; y < h; y++) mark[y * w + x] = 1;
+            MarkColumns();
 
             while (true)
             {
@@ -262,12 +321,16 @@ internal static class SolidRegionSubdivision
 
     private readonly record struct Buffers(int[] Iter, uint[] Color, float[][] Aux, int MaxIt, int W);
 
-    // Lines every TileSize px from 0, plus the last index.
-    private static List<int> GridLines(int size)
+    // Lines every TileSize px, plus the last one, for the pixels [from, to) of a frame
+    // `size` wide: the outer lines sit on the kept pixel just outside the range where the
+    // frame has one (#1394 part 4), else on the range's edge pixel. [0, size): every
+    // TileSize px from 0, plus size − 1.
+    private static List<int> GridLines(int from, int to, int size)
     {
+        int lo = from > 0 ? from - 1 : 0, hi = to < size ? to : size - 1;
         var l = new List<int>();
-        for (int v = 0; v < size - 1; v += TileSize) l.Add(v);
-        l.Add(size - 1);
+        for (int v = lo; v < hi; v += TileSize) l.Add(v);
+        l.Add(hi);
         return l;
     }
 
@@ -309,21 +372,27 @@ internal static class SolidRegionSubdivision
     // 2·MinTile in-set, costly pixels. A shorter run (a small bulb, a filament
     // crossing the row) gives no tile a fill; counting it put views the skip slows
     // down (elephant valley 4.0 % raw) above ones it speeds up (a small minibrot 5.7 %).
-    private static double CostlyInSetShare(ISolidRegionTarget t, in Buffers b, List<int> ys)
+    // #1394 part 4 — over each grid's rows, between its outer lines.
+    private static double CostlyInSetShare(ISolidRegionTarget t, in Buffers b, List<Grid> grids)
     {
         int w = b.W, maxIt = b.MaxIt;
-        long costly = 0;
-        foreach (int y in ys)
+        long costly = 0, total = 0;
+        foreach (var g in grids)
         {
-            int run = 0;
-            for (int x = 0, rb = y * w; x <= w; x++)
+            int x0 = g.Xs[0], x1 = g.Xs[^1] + 1;
+            foreach (int y in g.Ys)
             {
-                if (x < w && b.Iter[rb + x] >= maxIt && !t.SolidFreeInSet(x, y)) { run++; continue; }
-                if (run >= 2 * MinTile) costly += run;
-                run = 0;
+                int run = 0;
+                for (int x = x0, rb = y * w; x <= x1; x++)
+                {
+                    if (x < x1 && b.Iter[rb + x] >= maxIt && !t.SolidFreeInSet(x, y)) { run++; continue; }
+                    if (run >= 2 * MinTile) costly += run;
+                    run = 0;
+                }
+                total += x1 - x0;
             }
         }
-        return costly / (double)(ys.Count * w);
+        return total == 0 ? 0 : costly / (double)total;
     }
 
     // #1394 — every already-computed interior pixel is in-set with src's data.

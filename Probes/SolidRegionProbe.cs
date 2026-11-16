@@ -13,6 +13,10 @@
 // #1394 part 1 — FF_SOLID_GPU=1: on the D3D11 GPU (default hardware adapter; the
 // shallow kernel, and the deep perturbation kernels with GPU perturbation on), best
 // of 3, with the GPU views below instead (SKIP without a device).
+// #1394 part 4 — FF_SOLID_CASES=pan (or unset): #1330 pan frames on the anchored lattice
+// (deep CPU views): the time of CalculatePanned alone after an untimed full frame, skip
+// off / Auto / forced, best of 5, and the pixels that differ from the skip-off pan. Each
+// pan lands on the centred view, so its strips are part of that view.
 // Exit 0 always (a measurement).
 
 using System;
@@ -120,8 +124,67 @@ namespace FracturingFog
                             calcs[k].LastFrameSolidPasses, calcs[k].LastFrameSolidCostlyShare, calcs[k].LastFrameSolidDeclined),
                         "SP");
                 }
+            if (cases is "" or "pan") RunPan(w, h);
             Console.WriteLine("solidregionprobe done");
             return 0;
+        }
+
+        // #1394 part 4 — pan frames: the exposed strips subdivide on their own.
+        private static void RunPan(int w, int h)
+        {
+            Console.WriteLine($"solidregionprobe pan frames {w}x{h} (anchored lattice, deep CPU)");
+            var hp = new QualityPreset { Name = "perturb", AllowHighPrecision = true, HPZoomThreshold = 1 };
+            var views = new (View V, QualityPreset Q)[]
+            {
+                (new View("deep minibrot 1e14", -1.7548776662466927, 0, 1e14, 8000), QualityPreset.Extreme),
+                (new View("period-3 minibrot at 60 (deep)", -1.7548776662466927, 0, 60, 3000), hp),
+                (new View("period-3 minibrot at 30 (deep)", -1.7548776662466927, 0, 30, 3000), hp),
+            };
+            foreach (var (v, q) in views)
+                foreach (var (dx, dy) in new[] { (-w / 3, 0), (0, h / 3), (w / 6, -h / 4) })
+                {
+                    MandelbrotCalculator Make(bool skip, bool auto) => new(w, h)
+                    {
+                        Quality = q, CenterX = v.X, CenterY = v.Y, Zoom = v.Zoom, MaxIterations = v.Iter,
+                        ColorMap = ColorPalette.BuiltIns[0], UseGpuCompute = false, SolidRegionSkip = skip, SolidRegionAuto = auto,
+                        ImageWidth = w, ImageHeight = h, LatticeAligned = true,
+                        SubRectOffsetX = -dx, SubRectOffsetY = -dy,   // the pan lands on the centred view
+                    };
+                    var cfg = new[] { (false, true), (true, true), (true, false) };
+                    var t = new double[cfg.Length];
+                    var last = new MandelbrotCalculator[cfg.Length];
+                    Array.Fill(t, double.MaxValue);
+                    for (int r = 0; r < 5; r++)
+                        for (int k = 0; k < cfg.Length; k++)
+                        {
+                            var c = Make(cfg[k].Item1, cfg[k].Item2);
+                            c.Calculate(CancellationToken.None);
+                            var sw = Stopwatch.StartNew();
+                            if (!c.CalculatePanned(dx, dy, CancellationToken.None)) Console.WriteLine("    (pan not reused)");
+                            t[k] = Math.Min(t[k], sw.Elapsed.TotalMilliseconds);
+                            last[k] = c;
+                        }
+                    long exposed = (long)w * h - (long)(w - Math.Abs(dx)) * (h - Math.Abs(dy));
+                    var off = last[0];
+                    long inSet = 0;
+                    for (int y = 0; y < h; y++)
+                        for (int x = 0; x < w; x++)
+                            if ((x + dx < 0 || x + dx >= w || y + dy < 0 || y + dy >= h) && off.IterationBuffer[y * w + x] >= v.Iter) inSet++;
+                    Console.WriteLine($"  {v.Name,-30} pan ({dx},{dy}) [{off.LastPrecisionLabel}] exposed {exposed}, in-set {inSet / (double)exposed,6:P1}: off {t[0],8:F1} ms");
+                    for (int k = 1; k < cfg.Length; k++)
+                    {
+                        var on = last[k];
+                        long diff = 0, wrong = 0;
+                        for (int i = 0; i < w * h; i++)
+                            if (off.ColorBuffer[i] != on.ColorBuffer[i])
+                            {
+                                diff++;
+                                if (on.IterationBuffer[i] >= v.Iter && off.IterationBuffer[i] < v.Iter) wrong++;
+                            }
+                        Console.WriteLine($"      {(k == 1 ? "auto  " : "forced")} {t[k],8:F1} ms ({t[0] / t[k],5:F2}x){(on.LastFrameSolidDeclined ? " declined" : "")}; " +
+                                          $"filled {on.LastFrameFilledPixels / (double)exposed,6:P1} of exposed, {on.LastFrameSolidPasses} passes; differ {diff} px ({wrong} filled but escaping)");
+                    }
+                }
         }
 
         // #1394 part 1 — the GPU views: shallow (SP kernel, periodicity on as shipped) and
