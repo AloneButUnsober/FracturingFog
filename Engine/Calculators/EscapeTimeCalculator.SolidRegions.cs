@@ -195,6 +195,8 @@ public sealed partial class EscapeTimeCalculator : ISolidRegionTarget
     // to the cap.
     bool ISolidRegionTarget.SolidFreeInSet(int x, int y) => false;
 
+    System.Collections.Generic.IReadOnlyList<SolidRect>? ISolidRegionTarget.SolidRegions => null;   // #1394 part 4: whole frames
+
     void ISolidRegionTarget.SolidEnd(CancellationToken ct)
     {
         _mask = null;

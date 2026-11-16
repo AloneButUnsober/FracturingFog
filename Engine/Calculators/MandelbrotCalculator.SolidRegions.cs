@@ -50,7 +50,7 @@
 // kernel with its periodicity check on (which settles most interiors already) Auto
 // computes the frame whole, without a probe pass. A kernel without mask support still
 // completes the frame in the first pass. These run unchanged: a frame with its own pixel mask (#1344
-// adaptive AA) or a pan (#1330 reuse); the orbit-aware themes (their path takes no
+// adaptive AA); the orbit-aware themes (their path takes no
 // mask); and the interior themes (atom domains, multiplier, …) — they colour each
 // in-set pixel by its own cycle, so no tile border is ever uniform and the passes
 // would only cost. The whole-frame passes (post-process themes, interior alpha)
@@ -59,6 +59,11 @@
 //
 // #1394 part 2 — the subdivision itself now lives in SolidRegionSubdivision.cs, shared
 // with EscapeTimeCalculator (Julia / Multibrot); this file keeps the Mandelbrot side.
+//
+// #1394 part 4 — a #1330 pan frame subdivides its exposed strips (PanExposed): each one at
+// least 2 · SolidTileSize each way gets its own grid, with the kept pixels next to it as
+// free tile borders; a narrower strip is computed whole, as before. The lattice keeps the
+// frame on the CPU, so Auto decides at the CPU threshold.
 
 using System;
 using System.Threading;
@@ -122,9 +127,30 @@ public sealed partial class MandelbrotCalculator : ISolidRegionTarget
     public const double SolidAutoMinCostlyShareGpu = SolidRegionSubdivision.AutoMinCostlyShareGpu;
 
     private bool SolidRegionsApply()
-        => SolidRegionSkip && _mask == null && _panRegion == null
+        => SolidRegionSkip && _mask == null
            && ColorMap is not IOrbitAwareColorMap && ColorMap is not IInteriorAwareColorMap
-           && SolidRegionSubdivision.FrameFits(Width, Height);
+           && SolidRegionSubdivision.AnyFits(PanExposed(), Width, Height);
+
+    // #1394 part 4 — a #1330 pan computes only its exposed strips (CalculateHighPrecision
+    // reads _panRegion: the rows with y + dy off the old frame whole, the other rows their
+    // exposed columns), so the subdivision runs on those rectangles and the kept pixels
+    // serve as tile borders. Null: a whole frame.
+    private System.Collections.Generic.IReadOnlyList<SolidRect>? PanExposed()
+    {
+        if (_panRegion is not { } p) return null;
+        int w = Width, h = Height;
+        var l = new System.Collections.Generic.List<SolidRect>(2);
+        // The rows off the old frame, whole.
+        if (p.Dy > 0) l.Add(new SolidRect(0, h - p.Dy, w, h));
+        else if (p.Dy < 0) l.Add(new SolidRect(0, 0, w, -p.Dy));
+        // The exposed columns of the other rows.
+        int y0 = p.Dy < 0 ? -p.Dy : 0, y1 = p.Dy > 0 ? h - p.Dy : h;
+        if (p.Dx > 0) l.Add(new SolidRect(w - p.Dx, y0, w, y1));
+        else if (p.Dx < 0) l.Add(new SolidRect(0, y0, -p.Dx, y1));
+        return l;
+    }
+
+    System.Collections.Generic.IReadOnlyList<SolidRect>? ISolidRegionTarget.SolidRegions => PanExposed();
 
     private void CalculateSolidRegions(CancellationToken ct)
     {
@@ -190,6 +216,7 @@ public sealed partial class MandelbrotCalculator : ISolidRegionTarget
     {
         if (GpuKernel is not { SupportsPixelMask: true } k) return SolidGpu.None;
         if (!Quality.NeedsHighPrecision(Zoom)) return UseGpuCompute && Zoom <= MaxGpuZoom ? SolidGpu.Shallow : SolidGpu.None;
+        if (LatticeAligned) return SolidGpu.None;   // #1330: the lattice keeps deep frames on the CPU
         return GpuDeepHere && Zoom <= MaxGpuPerturbZoom && (k.SupportsPerturbation || FloatExpHere(k))
             ? SolidGpu.Deep : SolidGpu.None;
     }
