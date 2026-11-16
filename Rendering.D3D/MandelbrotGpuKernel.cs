@@ -1279,7 +1279,8 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             EnsureOutputBuffers(width, height, iterDst);      // shares iter/smooth/finalZD UAVs (u0/u1/u2)
             EnsurePerturbParamsBuffer();
             EnsureRefOrbitBuffers(refLen);
-            _csPerturb ??= CompileShaped(GpuGroupShapes.SlotPerturb, MandelbrotKernelSource.BuildPerturb(), label: "perturb",
+            EnsurePerturbPeriodicity();   // #1805
+            _csPerturb ??= CompileShaped(GpuGroupShapes.SlotPerturb, MandelbrotKernelSource.BuildPerturb(_perturbPeriodicity), label: $"perturb-p{_perturbPeriodicity}",
                 entryPoint: MandelbrotKernelSource.PerturbEntryPoint);
 
             // Upload the reference orbit (Hi-limb doubles) into t0/t1.
@@ -1328,6 +1329,26 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
     }
 
     private ID3D11ComputeShader? _csPerturbFx, _csPerturbF32;
+
+    /// <summary>#1805 — test / probe hook: take the float-exp entry even where the
+    /// scaled-fp32 one applies (as VulkanComputeKernel.ForceFloatExpEntry).</summary>
+    [ThreadStatic] public static bool ForceFloatExpEntry;
+
+    // #1805 — the GpuPeriodicity mode the deep shaders (_csPerturb, _csPerturbSa,
+    // _csPerturbFx, _csPerturbF32) were compiled for; a change rebuilds them.
+    private int _perturbPeriodicity = -1;
+
+    private void EnsurePerturbPeriodicity()
+    {
+        int mode = GpuPeriodicity.Mode;
+        if (mode == _perturbPeriodicity) return;
+        try { _csPerturb?.Dispose(); } catch { }
+        try { _csPerturbSa?.Dispose(); } catch { }
+        try { _csPerturbFx?.Dispose(); } catch { }
+        try { _csPerturbF32?.Dispose(); } catch { }
+        _csPerturb = _csPerturbSa = _csPerturbFx = _csPerturbF32 = null;
+        _perturbPeriodicity = mode;
+    }
     private ID3D11Buffer? _fxParamsBuf, _fxRefZBuf;
     private ID3D11ShaderResourceView? _fxRefZSrv;
     private int _fxRefAlloc;
@@ -1360,6 +1381,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
         lock (_d3dGate)
         {
             EnsureShape(GpuGroupShapes.SlotPerturbFp32);   // #1339
+            EnsurePerturbPeriodicity();   // #1805
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             BeginFrameTiming();   // #1329
             EnsureOutputBuffers(width, height, iterDst);
@@ -1397,12 +1419,12 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
 
             int e = Math.ILogB(scale);
             float m = (float)Math.ScaleB(scale, -e);
-            bool f32 = e >= MandelbrotKernelSource.PerturbF32MinScaleExponent;
+            bool f32 = e >= MandelbrotKernelSource.PerturbF32MinScaleExponent && !ForceFloatExpEntry;
             LastPerturbFloatExpWasScaledF32 = f32;
             var cs = f32
-                ? _csPerturbF32 ??= CompileShaped(GpuGroupShapes.SlotPerturbFp32, MandelbrotKernelSource.BuildPerturbFloatExp(), label: "perturb-f32",
+                ? _csPerturbF32 ??= CompileShaped(GpuGroupShapes.SlotPerturbFp32, MandelbrotKernelSource.BuildPerturbFloatExp(_perturbPeriodicity), label: $"perturb-f32-p{_perturbPeriodicity}",
                     entryPoint: MandelbrotKernelSource.PerturbF32EntryPoint)
-                : _csPerturbFx ??= CompileShaped(GpuGroupShapes.SlotPerturbFp32, MandelbrotKernelSource.BuildPerturbFloatExp(), label: "perturb-fx",
+                : _csPerturbFx ??= CompileShaped(GpuGroupShapes.SlotPerturbFp32, MandelbrotKernelSource.BuildPerturbFloatExp(_perturbPeriodicity), label: $"perturb-fx-p{_perturbPeriodicity}",
                     entryPoint: MandelbrotKernelSource.PerturbFxEntryPoint);
             var p = new PerturbFxParams
             {
@@ -1751,7 +1773,8 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             EnsureOutputBuffers(width, height, iterDst);
             EnsureRefOrbitBuffers(refLen);
             EnsureSaBuffers(coeffLen);
-            _csPerturbSa ??= CompileShaped(GpuGroupShapes.SlotPerturb, MandelbrotKernelSource.BuildPerturbSA(), label: "perturb-sa",
+            EnsurePerturbPeriodicity();   // #1805
+            _csPerturbSa ??= CompileShaped(GpuGroupShapes.SlotPerturb, MandelbrotKernelSource.BuildPerturbSA(_perturbPeriodicity), label: $"perturb-sa-p{_perturbPeriodicity}",
                 entryPoint: MandelbrotKernelSource.PerturbSaEntryPoint);
 
             UploadDoubles(_refZrBuf!, refZr, refLen);

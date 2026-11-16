@@ -843,7 +843,8 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         int n = width * height;
         EnsureBuffers(width, height, iterDst);          // shares iter/smooth/finalZD at _buf[2..4]
         EnsurePerturbBuffers(refLen);
-        _perturb ??= BuildBandProgram(GpuGroupShapes.SlotPerturb, MandelbrotKernelSource.BuildPerturb(), MandelbrotKernelSource.PerturbEntryPoint,
+        EnsurePerturbPeriodicity();   // #1805
+        _perturb ??= BuildBandProgram(GpuGroupShapes.SlotPerturb, MandelbrotKernelSource.BuildPerturb(_perturbPeriodicity), MandelbrotKernelSource.PerturbEntryPoint,
             0u, (uint)TShift, (uint)TShift + 1, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)UShift + 3);   // u3: gWork (#1340)
 
         var blob = new PerturbParamsBlob
@@ -960,6 +961,20 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
 
     private Program? _perturbFx, _perturbF32;
 
+    // #1805 — the GpuPeriodicity mode the deep programs were built for; a change rebuilds them.
+    private int _perturbPeriodicity = -1;
+
+    private void EnsurePerturbPeriodicity()
+    {
+        int mode = GpuPeriodicity.Mode;
+        if (mode == _perturbPeriodicity) return;
+        if (_perturb != null) { DestroyProgram(_perturb); _perturb = null; }
+        if (_perturbSa != null) { DestroyProgram(_perturbSa); _perturbSa = null; }
+        if (_perturbFx != null) { DestroyProgram(_perturbFx); _perturbFx = null; }
+        if (_perturbF32 != null) { DestroyProgram(_perturbF32); _perturbF32 = null; }
+        _perturbPeriodicity = mode;
+    }
+
     /// <summary>#1331 — the last float-exp frame ran the scaled-fp32 entry (not float-exp).</summary>
     public bool LastPerturbFloatExpWasScaledF32 { get; private set; }
     private Allocated _fxRefZ;
@@ -1009,10 +1024,11 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         float m = (float)Math.ScaleB(scale, -e);
         bool f32 = e >= MandelbrotKernelSource.PerturbF32MinScaleExponent && !ForceFloatExpEntry;
         LastPerturbFloatExpWasScaledF32 = f32;
+        EnsurePerturbPeriodicity();   // #1805
         Program prog = f32
-            ? _perturbF32 ??= BuildBandProgram(GpuGroupShapes.SlotPerturbFp32, MandelbrotKernelSource.BuildPerturbFloatExp(), MandelbrotKernelSource.PerturbF32EntryPoint,
+            ? _perturbF32 ??= BuildBandProgram(GpuGroupShapes.SlotPerturbFp32, MandelbrotKernelSource.BuildPerturbFloatExp(_perturbPeriodicity), MandelbrotKernelSource.PerturbF32EntryPoint,
                 0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)UShift + 3)   // u3: gWork (#1384)
-            : _perturbFx ??= BuildBandProgram(GpuGroupShapes.SlotPerturbFp32, MandelbrotKernelSource.BuildPerturbFloatExp(), MandelbrotKernelSource.PerturbFxEntryPoint,
+            : _perturbFx ??= BuildBandProgram(GpuGroupShapes.SlotPerturbFp32, MandelbrotKernelSource.BuildPerturbFloatExp(_perturbPeriodicity), MandelbrotKernelSource.PerturbFxEntryPoint,
                 0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)UShift + 3);
 
         var z = new float[refLen * 2];
@@ -1464,7 +1480,8 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         EnsurePerturbBuffers(refLen);
         EnsurePerturbSaBuffers(coeffLen);
         EnsureBlaBuffer(blaLevels > 0 ? blaCoeffs!.Length : 5);
-        _perturbSa ??= BuildBandProgram(GpuGroupShapes.SlotPerturb, MandelbrotKernelSource.BuildPerturbSA(), MandelbrotKernelSource.PerturbSaEntryPoint,
+        EnsurePerturbPeriodicity();   // #1805
+        _perturbSa ??= BuildBandProgram(GpuGroupShapes.SlotPerturb, MandelbrotKernelSource.BuildPerturbSA(_perturbPeriodicity), MandelbrotKernelSource.PerturbSaEntryPoint,
             0u, (uint)TShift, (uint)TShift + 1,
             (uint)TShift + 2, (uint)TShift + 3, (uint)TShift + 4, (uint)TShift + 5,
             (uint)TShift + 6, (uint)TShift + 7, (uint)TShift + 8, (uint)TShift + 9,

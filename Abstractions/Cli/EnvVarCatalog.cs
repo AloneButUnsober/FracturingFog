@@ -111,7 +111,7 @@ namespace FracturingFog.Cli
             new("FF_GPU_DEFER_READBACK", EnvVarKind.Toggle, EnvVarGroup.GpuCompute,
                 "Read iteration / smooth / final-z buffers back from the GPU only when needed.", "on", "#1332", DefaultOn: true),
             new("FF_GPU_PERIODICITY", EnvVarKind.Toggle, EnvVarGroup.GpuCompute,
-                "Periodicity checking in the GPU kernels (compiled variant): the shallow kernels and the deep orbit kernel (#1368).", "on", "#1342", DefaultOn: true),
+                "Periodicity checking in the GPU kernels (compiled variant): the shallow kernels, the deep orbit kernel (#1368) and the deep kernels (#1805).", "on", "#1342", DefaultOn: true),
             new("FF_GPU_WAVEFRONT", EnvVarKind.Toggle, EnvVarGroup.GpuCompute,
                 "Wavefront (work-queue) scheduling in the GPU kernels.", "on", "#1340", DefaultOn: true),
             new("FF_GPU_WAVEFRONT_PERTURB", EnvVarKind.Choice, EnvVarGroup.GpuCompute,
