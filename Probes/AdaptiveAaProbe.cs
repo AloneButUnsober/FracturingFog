@@ -10,7 +10,9 @@
 // exactly the one-sample render and that threshold −1 / tolerance 0 (every pixel,
 // every sample) is the full image byte for byte.
 // #1382: then the same for the ten 3D raymarchers (CPU march, default lighting) at
-// their home views.
+// their home views, and (#1382, the 2D part) for the 2D alt calculators: the
+// EscapeTimeCalculator families, the root finders, the transcendental Julia sets,
+// Lyapunov and a user equation. FF_AA_CASES=2d runs that last section alone.
 // Exit 0 = the checks pass; 1 = one failed.
 
 using System;
@@ -44,7 +46,8 @@ namespace FracturingFog
             const int W = 640, H = 360;
             int failures = 0;
             Console.WriteLine($"adaptiveaaprobe {W}x{H}, CPU, threshold {thr}, tolerance {tol}");
-            foreach (int n in new[] { 4, 16 })
+            bool only2D = Environment.GetEnvironmentVariable("FF_AA_CASES") == "2d";
+            foreach (int n in only2D ? Array.Empty<int>() : new[] { 4, 16 })
             {
                 var quality = n == 4 ? QualityPreset.High : QualityPreset.Ultra;
                 foreach (var v in Views)
@@ -88,7 +91,8 @@ namespace FracturingFog
                         $"{fullMs,7:F0} -> {adMs,6:F0} ms ({fullMs / adMs:F1}x); error mean {mean:F2}, p99 {p99}, >4 levels {over4:F2}%");
                 }
             }
-            failures += Run3D(W, H, thr, tol);
+            if (!only2D) failures += Run3D(W, H, thr, tol);
+            failures += Run2D(W, H, thr, tol);
             Console.WriteLine(failures == 0 ? "adaptiveaaprobe OK" : $"adaptiveaaprobe FAIL: {failures}");
             return failures == 0 ? 0 : 1;
         }
@@ -141,6 +145,90 @@ namespace FracturingFog
                     bool unmarkedOk = Enumerable.Range(0, w * h).All(i => mask[i] != 0 || ad.ColorBuffer[i] == single[i]);
                     if (!unmarkedOk) { failures++; Console.Error.WriteLine($"  FAIL {name}: an unmarked pixel is not the one-sample colour"); }
                     Console.WriteLine($"  {n,2}x {name,-15}: marked {st.Marked * 100.0 / st.Pixels,5:F1}%, samples {st.PixelSamples * 100.0 / st.FullPixelSamples,5:F1}% of full; " +
+                        $"{fullMs,7:F0} -> {adMs,6:F0} ms ({fullMs / adMs:F1}x); error mean {err.Average():F2}, p99 {sorted[(int)(sorted.Length * 0.99)]}");
+                }
+            return failures;
+        }
+
+        // #1382 — the 2D alt calculators (escape-time families, root finders, …).
+        private static int Run2D(int w, int h, double thr, double tol)
+        {
+            int failures = 0;
+            Console.WriteLine($"  2D alt calculators {w}x{h}, CPU:");
+            var c0 = new System.Numerics.Complex(-0.123, 0.745);   // the Douady rabbit
+            var families = new (string Name, FractalType Type, double Cx, double Cy, double Zoom, int MaxIter, Action<FractalParameters>? Edit)[]
+            {
+                ("Julia", FractalType.Julia, 0, 0, 1, 1000, null),
+                ("Julia rabbit", FractalType.Julia, 0, 0, 1, 1000, p => p.JuliaC = c0),
+                ("Julia warp", FractalType.Julia, 0, 0, 1, 1000, p => { p.DomainWarpEnabled = true; p.DomainWarpStrength = 0.3; }),
+                ("Burning Ship", FractalType.BurningShip, -1.76, -0.03, 20, 1000, null),
+                ("Tricorn", FractalType.Tricorn, 0, 0, 1, 1000, null),
+                ("Multibrot 3", FractalType.Multibrot, 0, 0, 1, 1000, null),
+                ("Multibrot 7", FractalType.Multibrot, 0, 0, 1, 1000, p => p.MultibrotExponent = 7),
+                ("Phoenix", FractalType.Phoenix, 0, 0, 1, 1000, null),
+                ("Magnet 1", FractalType.Magnet1, 1, 0, 1, 500, null),
+                ("Magnet 2", FractalType.Magnet2, 1, 0, 1, 500, null),
+                ("Glynn", FractalType.Glynn, 0, 0, 1, 500, null),
+                ("Spider", FractalType.Spider, 0, 0, 1, 1000, null),
+                ("Newton", FractalType.Newton, 0, 0, 1, 64, null),
+                ("Nova", FractalType.Nova, 0, 0, 1, 200, null),
+                ("Halley", FractalType.Halley, 0, 0, 1, 64, null),
+                ("Secant", FractalType.Secant, 0, 0, 1, 64, null),
+                ("Transcendental", FractalType.TranscendentalJulia, 0, 0, 0.5, 200, null),
+                ("Lyapunov", FractalType.Lyapunov, 2.9, 3.0, 1.7, 400, null),
+                ("User equation", FractalType.UserEquation, 0, 0, 1, 500, p => p.UserEquationSource = "z*z*z + c"),
+            };
+            foreach (int n in new[] { 4, 16 })
+                foreach (var fam in families)
+                {
+                    IFractalCalculator Calc(bool adaptive, double t, double tl)
+                    {
+                        IFractalCalculator c = fam.Type switch
+                        {
+                            FractalType.Newton or FractalType.Nova => new NewtonCalculator(w, h) { FractalType = fam.Type },
+                            FractalType.Halley => new HalleyCalculator(w, h),
+                            FractalType.Secant => new SecantCalculator(w, h),
+                            FractalType.TranscendentalJulia => new TranscendentalJuliaCalculator(w, h),
+                            FractalType.Lyapunov => new LyapunovCalculator(w, h),
+                            FractalType.UserEquation => new UserEquationCalculator(w, h),
+                            _ => new EscapeTimeCalculator(w, h) { FractalType = fam.Type },
+                        };
+                        c.ColorMap = new HsvPalette();
+                        c.CenterX = fam.Cx; c.CenterY = fam.Cy; c.Zoom = fam.Zoom; c.MaxIterations = fam.MaxIter;
+                        var p = new FractalParameters { AdaptiveAa = adaptive, AdaptiveAaThreshold = t, AdaptiveAaTolerance = tl };
+                        fam.Edit?.Invoke(p);
+                        ((dynamic)c).FractalParameters = p;
+                        c.Calculate(CancellationToken.None);
+                        return c;
+                    }
+                    var one = Calc(true, thr, tol);
+                    var single = one.ColorBuffer.Take(w * h).ToArray();
+                    var mask = new byte[w * h];
+                    Supersampling.BuildMask(single, ((IAdaptiveAaCalculator)one).AdaptiveAaIterations, fam.MaxIter, w, h, thr, mask);
+                    double fullMs = double.MaxValue, adMs = double.MaxValue;
+                    IFractalCalculator full = one, ad = one;
+                    SupersampleStats st = default;
+                    for (int rep = 0; rep < 3; rep++)   // best of 3
+                    {
+                        full = Calc(false, thr, tol);
+                        long t0 = Stopwatch.GetTimestamp();
+                        Supersampling.AccumulateAlt(full, n, CancellationToken.None, histogramEq: 0);
+                        fullMs = Math.Min(fullMs, Stopwatch.GetElapsedTime(t0).TotalMilliseconds);
+                        ad = Calc(true, thr, tol);
+                        t0 = Stopwatch.GetTimestamp();
+                        st = Supersampling.AccumulateAlt(ad, n, CancellationToken.None, histogramEq: 0);
+                        adMs = Math.Min(adMs, Stopwatch.GetElapsedTime(t0).TotalMilliseconds);
+                    }
+                    var every = Calc(true, -1, 0);
+                    Supersampling.AccumulateAlt(every, n, CancellationToken.None, histogramEq: 0);
+                    var err = new int[w * h];
+                    for (int i = 0; i < err.Length; i++) err[i] = MaxDiff(ad.ColorBuffer[i], full.ColorBuffer[i]);
+                    var sorted = err.OrderBy(e => e).ToArray();
+                    bool unmarkedOk = Enumerable.Range(0, w * h).All(i => mask[i] != 0 || ad.ColorBuffer[i] == single[i]);
+                    bool everyOk = every.ColorBuffer.AsSpan(0, w * h).SequenceEqual(full.ColorBuffer.AsSpan(0, w * h));
+                    if (!unmarkedOk) { failures++; Console.Error.WriteLine($"  FAIL {fam.Name}: an unmarked pixel is not the one-sample colour"); }
+                    if (!everyOk) { failures++; Console.Error.WriteLine($"  FAIL {fam.Name}: every pixel / every sample differs from full"); }
+                    Console.WriteLine($"  {n,2}x {fam.Name,-15}: marked {st.Marked * 100.0 / st.Pixels,5:F1}%, samples {st.PixelSamples * 100.0 / st.FullPixelSamples,5:F1}% of full; " +
                         $"{fullMs,7:F0} -> {adMs,6:F0} ms ({fullMs / adMs:F1}x); error mean {err.Average():F2}, p99 {sorted[(int)(sorted.Length * 0.99)]}");
                 }
             return failures;

@@ -42,7 +42,7 @@ using FracturingFog.Models;
 
 namespace FracturingFog;
 
-public sealed class LyapunovCalculator : IFractalCalculator, IHeightFieldSource
+public sealed class LyapunovCalculator : IFractalCalculator, FracturingFog.Rendering.IAdaptiveAaCalculator, IHeightFieldSource
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -62,6 +62,14 @@ public sealed class LyapunovCalculator : IFractalCalculator, IHeightFieldSource
     public IColorMap ColorMap { get; set; } = new HsvPalette();
 
     public bool SupportsZoomPan => true;
+
+    /// <summary>#1382 — adaptive anti-aliasing (Supersampling.AccumulateAlt): with a
+    /// mask (Width × Height bytes) Calculate computes only the pixels whose byte is
+    /// non-zero; the others keep their buffer contents. Each pixel is computed from its
+    /// own coordinate alone, so a marked pixel gets exactly a full frame's bytes.</summary>
+    public byte[]? PixelMask { get; set; }
+    public FracturingFog.Rendering.AdaptiveAa AdaptiveAa => FracturingFog.Rendering.AdaptiveAa.From(FractalParameters);
+    public bool MaskExact => true;
 
     public FractalParameters FractalParameters { get; set; } = new();
 
@@ -111,6 +119,7 @@ public sealed class LyapunovCalculator : IFractalCalculator, IHeightFieldSource
         double invRange = 1.0 / (LambdaMax - LambdaMin);
 
         var po = new ParallelOptions { CancellationToken = ct };
+        byte[]? aaMask = PixelMask is { } aaPm && aaPm.Length == width * height ? aaPm : null;   // #1382
         Parallel.For(0, height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
@@ -119,6 +128,7 @@ public sealed class LyapunovCalculator : IFractalCalculator, IHeightFieldSource
             bool bValid = b > 0.0 && b <= 4.0;
             for (int x = 0; x < width; x++)
             {
+                if (aaMask != null && aaMask[rowBase + x] == 0) continue;   // #1382
                 int idx = rowBase + x;
                 double a = centerX + (x - width * 0.5) * scale;
 

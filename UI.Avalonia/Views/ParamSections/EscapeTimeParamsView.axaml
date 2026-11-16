@@ -249,8 +249,9 @@
             </StackPanel>
         </Border>
 
-        <!-- #1344 — Mandelbrot: adaptive anti-aliasing (with the quality preset's sub-pixel AA). -->
-        <Border IsVisible="{Binding IsMandelbrot}"
+        <!-- #1344 — Mandelbrot, #1382 — the other 2D escape-time / root-finding families:
+             adaptive anti-aliasing (with the quality preset's sub-pixel AA). -->
+        <Border IsVisible="{Binding IsAdaptiveAa2D}"
                 BorderBrush="#404040" BorderThickness="0,1,0,0"
                 Padding="0,8,0,0" Margin="0,4,0,0">
             <StackPanel Spacing="6">

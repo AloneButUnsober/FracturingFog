@@ -35,7 +35,7 @@ using FracturingFog.Models;
 namespace FracturingFog;
 
 public sealed class TranscendentalJuliaCalculator
-    : IFractalCalculator, IHeightFieldSource
+    : IFractalCalculator, FracturingFog.Rendering.IAdaptiveAaCalculator, IHeightFieldSource
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -50,6 +50,15 @@ public sealed class TranscendentalJuliaCalculator
     public FractalParameters FractalParameters { get; set; } = new();
 
     public bool SupportsZoomPan => true;
+
+    /// <summary>#1382 — adaptive anti-aliasing (Supersampling.AccumulateAlt): with a
+    /// mask (Width × Height bytes) Calculate computes only the pixels whose byte is
+    /// non-zero; the others keep their buffer contents. Each pixel is computed from its
+    /// own coordinate alone, so a marked pixel gets exactly a full frame's bytes.</summary>
+    public byte[]? PixelMask { get; set; }
+    public FracturingFog.Rendering.AdaptiveAa AdaptiveAa => FracturingFog.Rendering.AdaptiveAa.From(FractalParameters);
+    public bool MaskExact => true;
+    int[]? FracturingFog.Rendering.IAdaptiveAaCalculator.AdaptiveAaIterations => IterationBuffer;
 
     /// <summary>Global interior-alpha knob (#97).</summary>
     public int InteriorAlpha { get; set; } = 255;
@@ -103,6 +112,7 @@ public sealed class TranscendentalJuliaCalculator
         double bailAxis = Math.Max(4.0, FractalParameters.TranscendentalBailout);
         double logBail = Math.Log(bailAxis);
 
+        byte[]? aaMask = PixelMask is { } aaPm && aaPm.Length == width * height ? aaPm : null;   // #1382
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             if (ct.IsCancellationRequested) return;
@@ -110,6 +120,7 @@ public sealed class TranscendentalJuliaCalculator
             int rowBase = y * width;
             for (int x = 0; x < width; x++)
             {
+                if (aaMask != null && aaMask[rowBase + x] == 0) continue;   // #1382
                 int idx = rowBase + x;
                 double zr = centerX + (x - width * 0.5) * scale;
                 double zi = cy;

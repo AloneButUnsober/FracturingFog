@@ -159,7 +159,7 @@ public sealed class S1394GpuSolidRegionTests(ITestOutputHelper output)
     /// <summary>A CPU stand-in for the shallow GPU kernel: z² + c (Mandelbrot) or the
     /// Julia map in double, writing iter / smooth / final z / dz like the kernel, and,
     /// with <see cref="HonourMask"/>, only the marked pixels of a fitting mask.</summary>
-    private sealed class SoftMaskKernel : IGpuKernel
+    internal sealed class SoftMaskKernel : IGpuKernel
     {
         public bool HonourMask = true;
         public readonly List<long> MaskCounts = new();   // marked pixels of each masked dispatch

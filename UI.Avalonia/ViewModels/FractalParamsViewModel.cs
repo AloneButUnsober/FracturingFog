@@ -626,7 +626,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsLyapunov || IsTranscendentalJulia || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian || IsMirrorSpheres
-          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable
+          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable || IsAdaptiveAa2D
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -2885,6 +2885,9 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
 
     /// <summary>#1382 — a 3D raymarcher: its supersampling can be adaptive too.</summary>
     public bool IsRaymarch3DAdaptiveAa => FracturingFog.Models.AdaptiveAaCapabilities.IsRaymarch3D(FractalType);
+
+    /// <summary>#1382 — Mandelbrot or another 2D family whose supersampling can be adaptive.</summary>
+    public bool IsAdaptiveAa2D => IsMandelbrot || FracturingFog.Models.AdaptiveAaCapabilities.IsEscapeTime2D(FractalType);
 
     // #876 — Kleinian custom inversion-sphere editor.
     /// <summary>Editable rows backing <c>FractalParameters.KleinianCustomSpheres</c>.</summary>

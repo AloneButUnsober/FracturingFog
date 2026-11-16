@@ -274,6 +274,7 @@ namespace FracturingFog.Cli
             Probe("FF_OIDN_PNG", "--oidnprobe", "write PNGs.", "#1338"),
             Probe("FF_SA_TOL", "Vulkan smoke perturbation SA probe", "series-approximation tolerance."),
             Probe("FF_SOLID_CASES", "--solidregionprobe", "case filter.", "#1343"),
+            Probe("FF_AA_CASES", "--adaptiveaaprobe", "case filter (2d = the 2D alt calculators alone).", "#1382"),
             Probe("FF_SOLID_GPU", "--solidregionprobe", "1 = run the GPU variant.", "#1394"),
             Probe("FF_SOLID_VIEW", "--solidregionprobe", "substring of a view name to run alone.", "#1343"),
 
