@@ -212,6 +212,7 @@ public sealed partial class MandelbrotCalculator
         double drv = 1, div = 0;        // dz/dc, as ResumePixelPTRebased (IQ convention)
         int n = 0;                      // iteration
         int stage = top, j = 0;         // step index in `stage`; for stage -1 a reference index
+        var cyc = new LaCycle { Enabled = DeepPeriodicity, Idx = idx };   // #1804
 
         // ── 0. The AT (#1627; Imagina's AT block of Evaluate + EvaluateAT) ──
         if (atOpt is { } at && mdc <= at.ThrC)
@@ -230,7 +231,8 @@ public sealed partial class MandelbrotCalculator
         {
             // ── 1. The stages (LaRunStages; climbing back restarts them at the top) ──
             LaRunStages(t, dcR, dcI, mdc, maxIter, climb, ref dr, ref di, ref zr, ref zi, ref drv, ref div,
-                ref n, ref stage, ref j, ref laSteps, perStage);
+                ref n, ref stage, ref j, ref laSteps, perStage, ref cyc);
+            if (cyc.Caught) { Interlocked.Increment(ref _deepPeriodicPixels); break; }   // #1804: n = maxIter
 
             // ── 2. Plain perturbation from reference index j (FF's rebased loop) ──
             int m = j;
@@ -307,6 +309,11 @@ public sealed partial class MandelbrotCalculator
         double er = 0, ei = 0;      // dz'/dc'
         long k = 0;
         bool inSet = false;
+        // #1804 — Brent's check on z': the AT's step depends on z' and c' alone (dz'/dc'
+        // doesn't steer it), so a bit-exact repeat means it cycles for ever: in set.
+        bool periodicity = DeepPeriodicity;
+        double snapR = double.NaN, snapI = double.NaN;
+        long nextSnap = 16;
         while (true)
         {
             double nEr = 2.0 * (xr * er - xi * ei) + 1.0, nEi = 2.0 * (xr * ei + xi * er);
@@ -316,6 +323,11 @@ public sealed partial class MandelbrotCalculator
             k++; atSteps++;
             if (k >= atMax) { inSet = true; break; }
             if (xr * xr + xi * xi > at.Esc2) break;
+            if (periodicity)
+            {
+                if (SameRebaseState(xr, xi, snapR, snapI)) { inSet = true; Interlocked.Increment(ref s_laAtPeriodic); break; }
+                if (k >= nextSnap) { snapR = xr; snapI = xi; nextSnap = k + Math.Min(k, 1024); }
+            }
         }
         // Back: z = z'/A (relative to Z_0 = 0, so δ = z), dz/dc = (dz'/dc')·(A·B)/A.
         zr = xr * at.InvZRe - xi * at.InvZIm; zi = xr * at.InvZIm + xi * at.InvZRe;
@@ -329,14 +341,19 @@ public sealed partial class MandelbrotCalculator
     // pixel drops below stage 0 (stage = -1; j is then its reference index for the plain
     // tail). A rebase with climbing on restarts at the top stage. Shared by the scalar
     // and the 4-lane evaluators (#1628), so both run the same operations.
+    // #1804 — `cyc` carries the pixel's periodicity check across calls (LaCycleRepeats).
     private static void LaRunStages(LaStageTable t, double dcR, double dcI, double mdc, int maxIter, bool climb,
         ref double dr, ref double di, ref double zr, ref double zi, ref double drv, ref double div,
-        ref int n, ref int stage, ref int j, ref long laSteps, long[] perStage)
+        ref int n, ref int stage, ref int j, ref long laSteps, long[] perStage, ref LaCycle cyc)
     {
         var data = t.Data;
         int top = t.Stages - 1;
         while (true)
         {
+            // #1804 — (re)entry at the top with a fresh δ (a pixel's start, a climb from
+            // the stages or from the tail).
+            if (j == 0 && stage == top && LaCycleRepeats(ref cyc, t, dr, di, stage, n, maxIter))
+            { n = maxIter; stage = -1; return; }
             bool climbNow = false;
             for (; stage >= 0; stage--)
             {
@@ -374,6 +391,8 @@ public sealed partial class MandelbrotCalculator
                     {
                         j = 0; dr = zr; di = zi;   // rebase: Z_0 = 0, exact
                         if (climb && stage < top) { climbNow = true; break; }
+                        // #1804 — the pixel restarts this stage from (δ, j = 0).
+                        if (LaCycleRepeats(ref cyc, t, dr, di, stage, n, maxIter)) { n = maxIter; stage = -1; return; }
                     }
                 }
                 if (climbNow) break;
@@ -381,5 +400,49 @@ public sealed partial class MandelbrotCalculator
             if (!climbNow) return;
             stage = top; j = 0;
         }
+    }
+
+    // #1804 — the LA evaluator's periodicity check, per pixel. The stages restart from a
+    // fresh δ with j = 0 at every rebase (and every climb to the top). From such a point the
+    // evaluation is a function of (δ, stage) and the pixel's dc, except for the cap test
+    // `s.Len > maxIter − n`; a bit-exact repeat of (δ, stage) at a restart, while that test
+    // can't bind across the next cycle (maxIter − n ≥ cycle length + the longest step), means
+    // the evaluation cycles: the pixel is in set. Snapshots at doubling restart counts.
+    // Exactness near the cap is the #1802 argument (the last cycle before the cap takes
+    // shorter steps without the check).
+    internal struct LaCycle
+    {
+        public bool Enabled, Have, Caught;
+        public double R, I;
+        public int Stage, NSnap, Count, Next, Idx;
+    }
+
+    private static int s_laAtPeriodic;
+
+    /// <summary>#1804 — AT pixels the AT's periodicity check put in set since the last
+    /// call (diagnostic / tests; process-wide).</summary>
+    public static int TakeLaAtPeriodicPixels() => Interlocked.Exchange(ref s_laAtPeriodic, 0);
+
+    /// <summary>#1804 — whether an LA restart (fresh δ, j = 0) repeats a snapshot bit for
+    /// bit: both parts of δ and the stage.</summary>
+    public static bool SameLaRestart(double dr, double di, int stage, double snapR, double snapI, int snapStage)
+        => dr == snapR && di == snapI && stage == snapStage;
+
+    private static bool LaCycleRepeats(ref LaCycle c, LaStageTable t, double dr, double di, int stage, int n, int maxIter)
+    {
+        if (!c.Enabled) return false;
+        if (c.Have && SameLaRestart(dr, di, stage, c.R, c.I, c.Stage)
+            && (long)maxIter - n >= (long)(n - c.NSnap) + t.MaxLen)
+        {
+            c.Caught = true;
+            LogCaught(c.Idx, 1, 1);
+            return true;
+        }
+        if (++c.Count >= Math.Max(1, c.Next))
+        {
+            c.R = dr; c.I = di; c.Stage = stage; c.NSnap = n; c.Have = true;
+            c.Next = c.Count * 2;
+        }
+        return false;
     }
 }

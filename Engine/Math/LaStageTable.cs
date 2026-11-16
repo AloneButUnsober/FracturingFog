@@ -116,6 +116,24 @@ namespace FracturingFog.FFMath
         public readonly bool Finite;
 
         public int Stages => StageStart.Length;
+
+        private int _maxLen = -1;
+
+        /// <summary>#1804 — the longest step of any stage (iterations); the periodicity
+        /// check's cap margin.</summary>
+        public int MaxLen
+        {
+            get
+            {
+                if (_maxLen < 0)
+                {
+                    int mx = 0;
+                    foreach (var s in Data) if (s.Len > mx) mx = s.Len;
+                    _maxLen = mx;
+                }
+                return _maxLen;
+            }
+        }
         public long Bytes => (long)Data.Length * System.Runtime.CompilerServices.Unsafe.SizeOf<LaStep>();
 
         private double[]? _gpuSteps;
