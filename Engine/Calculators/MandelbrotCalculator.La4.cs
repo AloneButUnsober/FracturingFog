@@ -79,6 +79,9 @@ public sealed partial class MandelbrotCalculator
         public int Count, MaxIter, RefLen, RowBase;
         public double DcI, Scale, HalfW, OffX, RecycleDx;
         public long LaSteps, PlainSteps, AtSteps, AtPixels, Climbs;
+        public required LaCycle[] Cyc;   // #1804 — per column, kept across the pixel's climbs
+        public bool Periodicity;
+        public int Caught;
     }
 
     // A row through the 4-lane evaluator: the marked pixels of [xBegin, xEnd) are queued
@@ -100,6 +103,7 @@ public sealed partial class MandelbrotCalculator
             RefLen = _refOrbitLen, RowBase = rowBase,
             DcI = (SubRectOffsetY + y - EffectiveImageHeight * 0.5) * scale + _refRecycleDy,
             Scale = scale, HalfW = EffectiveImageWidth * 0.5, OffX = SubRectOffsetX, RecycleDx = _refRecycleDx,
+            Cyc = new LaCycle[Math.Max(1, xEnd)], Periodicity = DeepPeriodicity,
         };
         fixed (double* pZr = _refZr, pZi = _refZi)
         {
@@ -123,6 +127,7 @@ public sealed partial class MandelbrotCalculator
         Interlocked.Add(ref _laStepsTotal, row.LaSteps);
         Interlocked.Add(ref _laPlainTotal, row.PlainSteps);
         Interlocked.Add(ref _laTailClimbs, row.Climbs);
+        if (row.Caught != 0) Interlocked.Add(ref _deepPeriodicPixels, row.Caught);   // #1804
     }
 
     // The pixel at x enters (or re-enters) the stages at the top from (dr, di) at
@@ -134,8 +139,10 @@ public sealed partial class MandelbrotCalculator
         where TMap : IColorMap
     {
         int stage = row.T.Stages - 1, j = 0;
+        ref var cyc = ref row.Cyc[x];
         LaRunStages(row.T, dcR, row.DcI, mdc, row.MaxIter, true, ref dr, ref di, ref zr, ref zi, ref drv, ref div,
-            ref n, ref stage, ref j, ref row.LaSteps, row.PerStage);
+            ref n, ref stage, ref j, ref row.LaSteps, row.PerStage, ref cyc);
+        if (cyc.Caught) row.Caught++;   // #1804: n = maxIter, resolved below
         m = j;
         if (n < row.MaxIter) return true;
         // The tail's loop test fails at once: the pixel ends with the stages' last z.
@@ -154,6 +161,7 @@ public sealed partial class MandelbrotCalculator
         while (next < row.Count)
         {
             int x = row.Px[next++];
+            row.Cyc[x] = new LaCycle { Enabled = row.Periodicity, Idx = row.RowBase + x };   // #1804
             double dcR = (row.OffX + x - row.HalfW) * row.Scale + row.RecycleDx;
             double mdc = Math.Max(Math.Abs(dcR), Math.Abs(row.DcI));
             double dr = 0, di = 0, zr = 0, zi = 0, drv = 1, div = 0;

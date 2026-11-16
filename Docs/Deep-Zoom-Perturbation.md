@@ -110,8 +110,8 @@ limbs per iteration (`_refZr/_refZrLo/..X7`). Each pixel iterates only its
     GT 710 (`--d3ddeeporbitprobe`).
   - **No false positives:** caught pixels stay bounded for 4× the cap on their exact orbit
     (BigInteger fixed point), in `S1368DeepOrbitPeriodicityTests`.
-  - **The main deep path:** #1800, in slices. S1 (#1802) and S2 (#1803) are below; the
-    LA rows (#1804) and the GPU kernels (#1805) are still to do.
+  - **The main deep path:** #1800, in slices. S1 (#1802), S2 (#1803) and S3 (#1804) are
+    below; the GPU kernels (#1805) are still to do.
 - **Periodicity in the SIMD rows (#1802, `MandelbrotCalculator.DeepPeriodicity`,
   `FF_DEEP_PERIODICITY=0` turns it off).** `ComputeRowPT4` / `ComputeRowPT8` compare a batch's
   state only at the periodic reference's wrap (m := 0), once per period. The state is every
@@ -151,6 +151,24 @@ limbs per iteration (`_refZr/_refZrLo/..X7`). Each pixel iterates only its
     (`ForceRebasedLoops`, `ForceScalarPtPath`): on == off byte for byte, the interior caught,
     and caught pixels (the whole period-3 minibrot's edge included) bounded on their exact
     orbit.
+- **Periodicity in the LA evaluator (#1804, same switch).** The scalar LA rows and LA4
+  share the stages (`LaRunStages`) and the AT (`RunLaAt`), so the check lives there.
+  - **The stages** restart from a fresh δ with j = 0 at every rebase and at every
+    (re)entry at the top: a pixel's start, a climb from the stages or from the tail. A
+    bit-exact repeat of (δ, stage) at such a restart puts the pixel in set. Snapshots are
+    taken at doubling restart counts, per pixel; LA4 keeps them per column across climbs.
+  - **The guard:** the cap test `s.Len > maxIter − n` must not bind across the next cycle,
+    so the check needs `maxIter − n ≥ (n − n_snap) + MaxLen`, MaxLen being the table's
+    longest step. Near the cap the argument is the rows' (#1802).
+  - **The AT's** own iteration z' ← z'² + c' gets Brent's check on z'.
+  - **Measured.** Nucleus3 (QD Newton) interiors at 1e30 / 1e40, 64×48, 20 000 cap:
+    27 → 1 ms, every pixel caught, scalar and LA4. The p448 interior zoomed ×8 runs the
+    AT: 3069 of 3072 pixels caught there. Real minibrot scenes at 960×540 (p448, p953,
+    p15248, `FF_LA=1`) are unchanged within noise: their interiors don't reach an exact
+    cycle within the cap, or already run the AT quickly.
+  - **Tests:** `S1804LaPeriodicityTests`: on == off byte for byte, the interior caught,
+    caught pixels bounded on their exact orbit (the whole minibrot's edge included), the
+    AT check, and the restart predicate's near-misses.
 - **#1275 (cluster-rebase port) closed as superseded.** With BLA off, the default path
   matched "rebase every pixel" to the chaotic floor on every view tried (1e11–4e32,
   periods 61–998), and a per-lane Pauldelbrot soft-glitch test changed nothing. The

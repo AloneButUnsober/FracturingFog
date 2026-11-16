@@ -496,7 +496,8 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
   orbit paths (`ComputePixelOrbitPerturbation`, GPU `CSPerturbOrbit`): snapshots of the perturbation
   state (δ, m) at doubling intervals, compared bit for bit. #1802: the main deep path's SIMD rows
   snapshot at doubling counts of the periodic reference's wraps (FF's adaptation, not from the paper);
-  #1803: the rebased loops at doubling counts of their rebases.
+  #1803: the rebased loops at doubling counts of their rebases; #1804: the LA evaluator's stage
+  restarts, and plain Brent on the AT's z'.
 
 ### Distance estimation, normals, shading
 
