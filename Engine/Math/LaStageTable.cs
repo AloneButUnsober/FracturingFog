@@ -148,6 +148,35 @@ namespace FracturingFog.FFMath
         /// index, its step count without the sentinel), then 2 per step (Len, Next).</summary>
         public uint[] GpuInts => _gpuInts ??= BuildGpuInts();
 
+        private uint[]? _gpuStepsFx;
+
+        /// <summary>#1664 — the steps for the float-exp GPU LA kernel: 12 words each (Ref
+        /// re / im as float; A and B as a float-exp complex, mantissa re / im then exponent;
+        /// Thr and ThrC as float-exp reals, mantissa then exponent), in <see cref="Data"/>
+        /// order, sentinels included. Built once per table.</summary>
+        public uint[] GpuStepsFloatExp => _gpuStepsFx ??= BuildGpuStepsFloatExp();
+
+        private uint[] BuildGpuStepsFloatExp()
+        {
+            var a = new uint[Data.Length * 12];
+            static uint F(float f) => BitConverter.SingleToUInt32Bits(f);
+            for (int i = 0; i < Data.Length; i++)
+            {
+                ref readonly var d = ref Data[i];
+                int o = i * 12;
+                a[o] = F((float)d.RefRe); a[o + 1] = F((float)d.RefIm);
+                FracturingFog.Rendering.GpuFloatExp.Encode(d.ARe, d.AIm, out float ar, out float ai, out int ae);
+                a[o + 2] = F(ar); a[o + 3] = F(ai); a[o + 4] = (uint)ae;
+                FracturingFog.Rendering.GpuFloatExp.Encode(d.BRe, d.BIm, out float br, out float bi, out int be);
+                a[o + 5] = F(br); a[o + 6] = F(bi); a[o + 7] = (uint)be;
+                FracturingFog.Rendering.GpuFloatExp.Encode(d.Thr, out float tm, out int te);
+                a[o + 8] = F(tm); a[o + 9] = (uint)te;
+                FracturingFog.Rendering.GpuFloatExp.Encode(d.ThrC, out float cm, out int ce);
+                a[o + 10] = F(cm); a[o + 11] = (uint)ce;
+            }
+            return a;
+        }
+
         private double[] BuildGpuSteps()
         {
             var a = new double[Data.Length * 8];

@@ -607,6 +607,30 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     /// §4.6). FF_GPU_LA=1 turns it on.</summary>
     public static bool UseGpuLa { get; set; } = Environment.GetEnvironmentVariable("FF_GPU_LA") == "1";
 
+    /// <summary>#1664 — run the LA stages in the float-exp GPU kernel
+    /// (<see cref="IGpuKernel.RunPerturbLaFloatExp"/>) where the frame wants LA and the
+    /// float-exp kernel is this device's deep kernel (<see cref="UseFloatExpKernel"/>). Off
+    /// by default until measured on a GPU it pays on; FF_GPU_LA_FX=1 turns it on. Takes
+    /// precedence over the fp64 LA kernel when both apply.</summary>
+    public static bool UseGpuLaFloatExp { get; set; } = Environment.GetEnvironmentVariable("FF_GPU_LA_FX") == "1";
+
+    /// <summary>#1664 — true when the last GPU perturbation frame ran the float-exp LA kernel.</summary>
+    public bool LastFrameUsedGpuLaFloatExp { get; private set; }
+
+    /// <summary>#1664 — the float-exp LA route's zoom limit. Its numbers have no range
+    /// limit at depth (float-exp); the pixel offset δc is a double (pixel scale ≥ ~1e-300)
+    /// as on the CPU LA rows. Past <see cref="MaxGpuPerturbZoom"/> only this route runs on
+    /// the GPU (checked against the CPU LA frame on the bench scenes, S1664GpuLaFxTests).</summary>
+    public const double MaxGpuLaFloatExpZoom = 1e100;
+
+    // #1664 — this frame would take the float-exp LA kernel (before the table is built).
+    private bool LaFxRouteHere(FracturingFog.Rendering.IGpuKernel? k)
+        => k != null && UseGpuLaFloatExp && LaWanted && k.SupportsPerturbationLaFloatExp && FloatExpHere(k)
+           && !DisableAcceleration && LaClimbOnRebase && !LaTailBla && AllowPtRebasing && !UseDdRebaseReference;
+
+    // The deep GPU kernels' zoom limit for this frame.
+    private double GpuPerturbZoomLimit => LaFxRouteHere(GpuKernel) ? MaxGpuLaFloatExpZoom : MaxGpuPerturbZoom;
+
     /// <summary>#1166 — true when the last frame (or <see cref="BuildReferenceOrbit"/>)
     /// built its QD reference orbit on the GPU (<see cref="UseGpuReferenceOrbit"/>),
     /// false when it was built on the CPU, recycled or served from the cache.</summary>
@@ -673,6 +697,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 + (LastFrameUsedGpuWavefront ? " + wavefront" : ""));   // #1384
         if (hp && LastFrameUsedGpuPerturbation && LastFrameUsedGpuFloatExp)   // #1331
             return GpuRoute.OnGpu(label, $"{label}: deep-zoom perturbation in fp32"
+                + (LastFrameUsedGpuLaFloatExp ? " + LA stages" : "")   // #1664
                 + (LastFrameUsedGpuWavefront ? " + wavefront" : "")   // #1384
                 + " (24-bit mantissa: a few pixels near deep minibrots can differ; FF_GPU_PERTURB_PRECISION=double for the double kernel)")
                 with { Mode = "fp32" };
@@ -2958,6 +2983,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         LastFrameUsedGpuSeriesApproximation = false;
         LastFrameUsedGpuBla = false;
         LastFrameUsedGpuLa = false;   // #1630
+        LastFrameUsedGpuLaFloatExp = false;   // #1664
         _lastFrameUsedLa = false;   // #1626
         _lastFrameUsedLaSimd = false;   // #1628
 
@@ -3008,9 +3034,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 && gpuDeep && GpuKernel != null
                 && (GpuKernel.SupportsPerturbation || FloatExpHere(GpuKernel))   // #1331: no fp64 needed
                 && AllowPtRebasing && !UseDdRebaseReference && !ForceScalarPtPath
-                && !tileCap && Zoom <= MaxGpuPerturbZoom && _refOrbitLen >= 1
+                && !tileCap && Zoom <= GpuPerturbZoomLimit && _refOrbitLen >= 1   // #1664: deeper on the float-exp LA route
                 // #1626 / #1629 / #1630: LA forced On runs on the GPU only where the kernel has the LA stages.
-                && (EffectiveLaMode != DeepLaMode.On || (GpuLaHere && GpuKernel.SupportsPerturbationLa));
+                && (EffectiveLaMode != DeepLaMode.On || (GpuLaHere && GpuKernel.SupportsPerturbationLa) || LaFxRouteHere(GpuKernel));
             Dbg86($"GATE zoom={Zoom:0e+0} gateOk={gateOk} recycled={recycled} " +
                   $"useGpuPerturb={gpuDeep} kernel={(GpuKernel != null)} " +
                   $"supports={(GpuKernel?.SupportsPerturbation ?? false)} allowRebase={AllowPtRebasing} " +
@@ -3025,7 +3051,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                         ? GpuRoute.Cpu("diagnostic toggle", "a perturbation diagnostic toggle (rebasing / DD reference / scalar path) keeps deep zoom on the CPU")
                     : EffectiveLaMode == DeepLaMode.On ? GpuRoute.Cpu("LA evaluator", "the LA stage evaluator forced On (#1629) runs on the CPU: this GPU kernel has no LA stages (or FF_GPU_LA=0)")
                     : tileCap ? GpuRoute.Cpu("per-tile iter cap", "per-tile iteration caps render on the CPU only")
-                    : Zoom > MaxGpuPerturbZoom ? GpuRoute.Cpu($"zoom > {MaxGpuPerturbZoom:0e0}", $"past the GPU perturbation zoom limit ({MaxGpuPerturbZoom:0e0})")
+                    : Zoom > GpuPerturbZoomLimit ? GpuRoute.Cpu($"zoom > {GpuPerturbZoomLimit:0e0}", $"past the GPU perturbation zoom limit ({GpuPerturbZoomLimit:0e0})")
                     : GpuRoute.Cpu("no reference orbit", "the reference orbit is empty");
             }
             if (gateOk && TryRunGpuPerturbation(colorMap, scale, maxIt, effImgW, effImgH, ct))
@@ -3232,7 +3258,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     {
         var kernel = GpuKernel;
         if (kernel == null) return false;
-        bool useSa = false, useBla = false, wave = false, useLa = false;
+        bool useSa = false, useBla = false, wave = false, useLa = false, useLaFx = false;
         // #1340 — the deep kernels' schedule for this dispatch (Auto: the last frame's hint).
         // #1394 — a sparse solid-region pass takes the wavefront schedule: its threads pull
         // only marked pixels, while one thread per pixel idles a group's lanes around a 1-px
@@ -3247,17 +3273,48 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             // #1630 — the LA stages on the GPU, under the CPU evaluator's own conditions
             // (LaActive): the frame wants LA, acceleration and rebasing are on, the table
             // is finite; the kernel runs the evaluator with climbing back and no tail BLA.
-            if (LaWanted && GpuLaHere && kernel.SupportsPerturbationLa && !DisableAcceleration
-                && LaClimbOnRebase && !LaTailBla && AllowPtRebasing && !UseDdRebaseReference)
+            // #1664 — the float-exp LA kernel first, where it is the device's deep kernel.
+            bool laFx = LaFxRouteHere(kernel);
+            if (laFx || (LaWanted && GpuLaHere && kernel.SupportsPerturbationLa && !DisableAcceleration
+                && LaClimbOnRebase && !LaTailBla && AllowPtRebasing && !UseDdRebaseReference))
             {
                 EnsureLaTable();
                 ResetLaWork();
                 double hW = effImgW * 0.5 * scale, hH = effImgH * 0.5 * scale;
                 SelectLaAt(Math.Sqrt(hW * hW + hH * hH));
                 // (A one-entry reference has no step for the kernel's tail to take, #1661.)
-                useLa = _laTable is { Finite: true, Stages: >= 1 } && _refOrbitLen >= 2;
+                bool ok = _laTable is { Finite: true, Stages: >= 1 } && _refOrbitLen >= 2;
+                useLaFx = ok && laFx;
+                useLa = ok && !laFx;
             }
-            if (useLa)
+            // #1664 — past the fp64 / plain kernels' limit only the float-exp LA kernel runs.
+            if (!useLaFx && Zoom > MaxGpuPerturbZoom)
+            {
+                _gpuSkip = GpuRoute.Cpu($"zoom > {MaxGpuPerturbZoom:0e0}", $"past the GPU perturbation zoom limit ({MaxGpuPerturbZoom:0e0})");
+                return false;
+            }
+            if (useLaFx)
+            {
+                var t = _laTable!;
+                var g = _laAt is { } a
+                    ? new FracturingFog.Rendering.GpuLaAt(a.Len, a.ThrC, a.Esc2, a.RefCRe, a.RefCIm, a.CRe, a.CIm, a.InvZRe, a.InvZIm)
+                    : default;
+                SeedWavefrontIfAsked((w, h, sc, ox, oy, it, sm, zr, zi, dr, di) => kernel.RunPerturbLaFloatExp(   // #1386
+                    w, h, sc, maxIt, EscapeRadius2, ox, oy, _refZr, _refZi, _refOrbitLen,
+                    t.GpuStepsFloatExp, t.GpuInts, t.Stages, g, it, sm, zr, zi, dr, di), scale, offX0, offY0);
+                GpuWavefront.PerturbHint = Hint();
+                wave = GpuWavefront.UsePerturb;
+                kernel.RunPerturbLaFloatExp(
+                    Width, Height, scale, maxIt, EscapeRadius2,
+                    offX0, offY0,
+                    _refZr, _refZi, _refOrbitLen,
+                    t.GpuStepsFloatExp, t.GpuInts, t.Stages, g,
+                    IterationBuffer, SmoothBuffer,
+                    FinalZrBuffer, FinalZiBuffer, FinalDrBuffer, FinalDiBuffer);
+                useLa = true;   // the LA labels and work below
+                LastFrameUsedGpuFloatExp = true;
+            }
+            else if (useLa)
             {
                 var t = _laTable!;
                 var g = _laAt is { } a
@@ -3280,7 +3337,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             // applies it (coefficients valid past 16 iterations, acceleration on).
             // #1786 — the float-exp kernel chosen (Fp32 mode, a measured Fp32, the calibration's
             // route) runs as chosen: the SA / BLA kernel is fp64, so it would replace it.
-            bool fxChosen = !useLa && FloatExpHere(kernel);
+            bool fxChosen = !useLa && FloatExpHere(kernel);   // (useLa is also set by the float-exp LA kernel)
             if (!useLa && !fxChosen && UseGpuSeriesApproximation && kernel.SupportsPerturbationSA
                 && !DisableAcceleration && !DisableSeriesApproximation)
             {
@@ -3378,6 +3435,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         LastFrameUsedGpuSeriesApproximation = useSa;
         LastFrameUsedGpuBla = useBla;
         LastFrameUsedGpuLa = useLa;   // #1630
+        LastFrameUsedGpuLaFloatExp = useLaFx;   // #1664
         if (useLa) _lastFrameUsedLa = true;   // the precision label's " LA"
         LastFrameUsedGpuWavefront = wave;
         // #1394 — a solid-region pass computed only its marked pixels: no warp-waste

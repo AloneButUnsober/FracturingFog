@@ -15,7 +15,7 @@
 The issues are the canonical task list. This doc is the maths and architecture context; link both ways.
 
 **Status: S1 done (2026-11-03); S2 done (#1625); S3 done (#1626, opt-in); S4 done (#1627); S5 done (#1628, 4-lane path opt-in: no gain measured); S6 done (#1629, LA on by default from zoom 1e30); S7 done (#1630, GPU kernel, opt-in). Epic closed 2026-11-16 (§4.7 outcome); the float-exp GPU port is #1664, the remaining gap to Imagina #1614.** §2 is the method, derived and checked against Imagina's code;
-§4.1 is the proof of concept (`--laprobe`) and the decision to go on with S2; §4.2 is the engine's evaluator; §4.3 the AT; §4.4 SIMD; §4.5 the default; §4.6 the GPU kernel; §4.7 the outcome against the epic's targets. §3 is still a plan
+§4.1 is the proof of concept (`--laprobe`) and the decision to go on with S2; §4.2 is the engine's evaluator; §4.3 the AT; §4.4 SIMD; §4.5 the default; §4.6 the GPU kernel; §4.7 the outcome against the epic's targets; §4.8 the float-exp GPU kernel (#1664). §3 is still a plan
 where S1 did not settle it.
 
 ---
@@ -640,6 +640,55 @@ Not caught: removing the tail's \|z\| < \|δ\| rebase. With climbing back the ta
 - **Per-pixel CPU time:** about 68 µs of CPU per pixel on p951,094. 96 % of the LA steps there are stage-1 (period 953) steps, which AT cannot take (§4.3). This stays on #1614.
 - **The float-exp GPU LA port is #1664.** Consumer GPUs run fp64 at 1/32–1/64 rate.
 - **The GPU deep range stops at 1e50**, so the deepest bench scenes stay on the CPU.
+
+### 4.8 The float-exp GPU kernel (#1664, 2026-11-16)
+
+**Why.** Consumer GPUs run fp64 at 1/32–1/64 of fp32 (the GT 710's 1/24 is a better ratio than most), so their fast deep path is the float-exp kernel (#1331). §4.6's kernel is fp64 only.
+
+**The kernel** (`LaKernelSource.BuildFloatExp`, entry `CSPerturbLAFX`) is `CSPerturbLA` with no double:
+- **Float-exp values:** δ, δc, dz/dc, each step's A and B, both thresholds, and the AT's δc bound, C and 1/Z. Each is a float mantissa (max(|re|, |im|) in [1, 2)) with one int exponent, using the #1331 helpers, now shared as `MandelbrotKernelSource.FxHelpers`. The float-exp kernel's text is byte-identical after the move; verified by hash.
+- **Plain float:** the reference orbit, a step's reference point, z = Z + δ, and the AT's own z′ and c′. These are O(1).
+- **Threshold tests** compare float-exp numbers exactly: exponent first, then mantissa.
+- **Steps on the host:** `LaStageTable.GpuStepsFloatExp`, 12 words per step, encoded by `GpuFloatExp`.
+- **Parameters:** the cbuffer is `GpuLaFxParams`, 28 32-bit scalars, shared by both backends.
+- **Route** (`MandelbrotCalculator.UseGpuLaFloatExp`, `FF_GPU_LA_FX=1`, **off**): taken where the frame wants LA and float-exp is the device's deep kernel (`UseFloatExpKernel`: `FF_GPU_PERTURB_PRECISION`, or Auto on a device without fp64). It takes precedence over the fp64 LA kernel. Its zoom limit is 1e100 (`MaxGpuLaFloatExpZoom`) rather than 1e50: float-exp has no range limit, and δc is a double as on the CPU LA rows. Past 1e50 every other GPU deep kernel still declines.
+
+**Time** (`--gpulaprobe 960 540`, GeForce GT 710, LA forced On; ms, best of 2 on Vulkan, 1 on D3D11):
+
+| view | CPU LA | GPU float-exp | GPU float-exp LA (Vulkan) | (D3D11) | against float-exp |
+|---|---|---|---|---|---|
+| p448 5.2e33 | 177 | 1,959 | 707 | 467 | ×2.8 / ×3.9 |
+| path 1e33 | 190 | 700 | 614 | 433 | ×1.1 / ×1.5 |
+| deeper 4.5e46 | 51 | 369 | 121 | 90 | ×3.1 / ×4.0 |
+| e45test04 1.1e47 | 144 | 825 | 430 | 305 | ×1.9 / ×2.6 |
+| 3E47 Test | 116 | 1,750 | 319 | 232 | ×5.5 / ×7.1 |
+| p951,094 2.1e68 | 4,742 | (declines) | 15,688 | | |
+
+- On this card the float-exp LA kernel is 1.1–7.1× faster than the plain float-exp kernel. It is also faster than the fp64 LA kernel (599–1,259 ms on Vulkan).
+- It is still 2–4× slower than the CPU's LA rows, as every GPU deep path is here.
+- A current consumer GPU has many times the GT 710's fp32 throughput and fp64 at 1/32–1/64, which is where this kernel is meant to pay. **None was available to measure**, so the switch stays off.
+
+**Accuracy:**
+- **Iteration counts against the CPU LA frame (960×540):** pixels that differ are
+  - p448: 5.3 % (plain float-exp kernel 11.6 %);
+  - path: 6.1 % (9.4 %);
+  - e45test04: 0.36 % (0.59 %);
+  - 3E47: 0.01 % (0.07 %).
+- **Exact iteration on 24 p448 pixels:** 21 matches against 19 for the plain float-exp kernel, with total error 37 against 111. On the views where float-exp ran before, LA makes it more accurate, not less.
+- **p448 normals:** off by > 0.02 rad on 14 of 1,883 compared pixels, against 186 for the plain float-exp kernel.
+- **The high-period minibrots past 1e50 are the limit.**
+  - **p15,248:** 457 k iterations. Half the pixels' counts differ from CPU LA, by a median of 1.1e-5 (about 5 iterations).
+  - **Exact iteration on 24 pixels:** CPU LA matches 23 and CPU BLA 23; float-exp LA matches 13, with total error 28,280.
+  - **p951,094:** no pixel changes between in-set and escaping. The median relative count difference is 3.4e-5, against 4.4e-6 for the CPU's own BLA frame. At these counts the colour is chaotic anyway: CPU BLA and CPU LA differ by more than 16 levels on 450 of 576 pixels, and float-exp LA on 526.
+  - **The cause:** the 24-bit mantissa of δ and of Z, as #1331 found. The cure would be float-float δ (#1819).
+
+**Tests** (`S1664GpuLaFloatExpTests`, Vulkan; `S1664FloatExpEncodingTests`):
+- the encoding and the packed table decode to the doubles;
+- the cbuffer layout;
+- against CPU LA, no further off than the plain float-exp frame, on three views, with the normals;
+- exact iteration at least as good as the plain float-exp frame;
+- p951,094 past 1e50, on the bars above;
+- the route: the switch, the precision mode, LA Off / On, and precedence over the fp64 LA kernel.
 
 ## 5. Credit
 

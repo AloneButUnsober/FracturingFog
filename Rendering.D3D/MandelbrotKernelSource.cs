@@ -940,6 +940,46 @@ void CSPerturb(uint3 tid : SV_DispatchThreadID)
     /// takes (zoom ~1e30); deeper frames run float-exp.</summary>
     public const int PerturbF32MinScaleExponent = -100;
 
+    /// <summary>#1331 — the float-exp helpers (Pow2, FxNorm, FxToFloat, FxAdd, CMul), shared by
+    /// CSPerturbFX and #1664's LA kernel (LaKernelSource.BuildFloatExp).</summary>
+    public const string FxHelpers = @"static const int FxZeroExp = -1000000;
+
+// 2^k as a float, exact, for -126 <= k <= 127 (built from the exponent bits:
+// no exp2 / ldexp, which run on the slow special-function units).
+float Pow2(int k) { return asfloat((uint)(k + 127) << 23); }
+
+// m · 2^e with max(|m.x|,|m.y|) in [1, 2), or (0, FxZeroExp) for zero.
+void FxNorm(inout float2 m, inout int e)
+{
+    float a = max(abs(m.x), abs(m.y));
+    if (a == 0.0) { m = float2(0.0, 0.0); e = FxZeroExp; return; }
+    int k = (int)((asuint(a) >> 23) & 0xFF) - 127;   // floor(log2 a) (normal floats)
+    k = max(k, -126);
+    m *= Pow2(-k);                                    // exact · 2^-k
+    e += k;
+}
+
+// m · 2^e as a float (0 when it underflows; |m| < 2 so e <= 127 stays finite).
+float2 FxToFloat(float2 m, int e)
+{
+    if (e < -126) return float2(0.0, 0.0);
+    if (e > 127) return m * 3.4e38;
+    return m * Pow2(e);
+}
+
+// (am · 2^ae) + (bm · 2^be), normalised. Past a 40-bit gap the smaller term
+// can't reach a float mantissa.
+void FxAdd(float2 am, int ae, float2 bm, int be, out float2 rm, out int re)
+{
+    int d = ae - be;
+    if (d >= 0) { rm = d > 40 ? am : am + bm * Pow2(-d); re = ae; }
+    else        { rm = d < -40 ? bm : bm + am * Pow2(d); re = be; }
+    FxNorm(rm, re);
+}
+
+float2 CMul(float2 a, float2 b) { return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }
+";
+
     /// <summary>#1331 — compose the float-exp perturbation kernel (see above).</summary>
     public static string BuildPerturbFloatExp() => BuildPerturbFloatExp(0);
 
@@ -976,43 +1016,7 @@ RWStructuredBuffer<float4> gFinalZD : register(u2);   // .xy = zr,zi  .zw = drv,
 RWStructuredBuffer<uint>   gWork    : register(u3);
 " + WaveFetch + @"
 
-static const int FxZeroExp = -1000000;
-
-// 2^k as a float, exact, for -126 <= k <= 127 (built from the exponent bits:
-// no exp2 / ldexp, which run on the slow special-function units).
-float Pow2(int k) { return asfloat((uint)(k + 127) << 23); }
-
-// m · 2^e with max(|m.x|,|m.y|) in [1, 2), or (0, FxZeroExp) for zero.
-void FxNorm(inout float2 m, inout int e)
-{
-    float a = max(abs(m.x), abs(m.y));
-    if (a == 0.0) { m = float2(0.0, 0.0); e = FxZeroExp; return; }
-    int k = (int)((asuint(a) >> 23) & 0xFF) - 127;   // floor(log2 a) (normal floats)
-    k = max(k, -126);
-    m *= Pow2(-k);                                    // exact · 2^-k
-    e += k;
-}
-
-// m · 2^e as a float (0 when it underflows; |m| < 2 so e <= 127 stays finite).
-float2 FxToFloat(float2 m, int e)
-{
-    if (e < -126) return float2(0.0, 0.0);
-    if (e > 127) return m * 3.4e38;
-    return m * Pow2(e);
-}
-
-// (am · 2^ae) + (bm · 2^be), normalised. Past a 40-bit gap the smaller term
-// can't reach a float mantissa.
-void FxAdd(float2 am, int ae, float2 bm, int be, out float2 rm, out int re)
-{
-    int d = ae - be;
-    if (d >= 0) { rm = d > 40 ? am : am + bm * Pow2(-d); re = ae; }
-    else        { rm = d < -40 ? bm : bm + am * Pow2(d); re = be; }
-    FxNorm(rm, re);
-}
-
-float2 CMul(float2 a, float2 b) { return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }
-
+" + FxHelpers + @"
 void FxWrite(int idx, int iter, float2 z, float2 dzf);
 
 // #1384 — both entries run CSPerturb's two schedules (#1340), one compiled shader
