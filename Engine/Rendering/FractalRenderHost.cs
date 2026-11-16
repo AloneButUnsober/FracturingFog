@@ -2262,6 +2262,12 @@ namespace FracturingFog.Rendering
                 try
                 {
                     ok = RunOneTaaSample(calc, job.TaaSampleIndex, taaEq, token);
+                    // #1448 — the running mean replaced the colour buffer with an average
+                    // of SSAO-free samples (the seed is the AA frame before SSAO), so the
+                    // view lost its SSAO from the first TAA sample on. Run it on the mean,
+                    // as on the first frame; the accumulator's sums stay SSAO-free.
+                    if (ok && !token.IsCancellationRequested)
+                        FracturingFog.Rendering.Lighting.ScreenSpacePost.ApplySsao2D(calc, ViewState?.FractalParameters);
                 }
                 catch (OperationCanceledException) { ok = false; }
                 long taaCalcEnd = Stopwatch.GetTimestamp();
@@ -2464,26 +2470,10 @@ namespace FracturingFog.Rendering
             // Phase 8b — 2D SSAO on the canonical Mandelbrot path. Synthesises
             // depth from the smooth iteration count. Default SsaoSamples=0 keeps
             // pre-Phase-8b output bit-identical. 3D raymarchers run their own
-            // SSAO inside Calculate() and aren't touched here.
+            // SSAO inside Calculate() and aren't touched here. #1448 — the shared
+            // helper --batch, export and scene video call at the same point.
             if (!useAlt && !token.IsCancellationRequested)
-            {
-                var fxParams = ViewState?.FractalParameters;
-                if (fxParams != null && fxParams.Lighting.SsaoSamples > 0)
-                {
-                    try
-                    {
-                        var fxLocal = fxParams.Lighting;
-                        FracturingFog.Rendering.Lighting.ScreenSpacePost.ApplySsao2D(
-                            calc.ColorBuffer,
-                            calc.SmoothBuffer,
-                            calc.IterationBuffer,
-                            calc.MaxIterations,
-                            calc.Width, calc.Height,
-                            in fxLocal);
-                    }
-                    catch { /* SSAO best-effort — never fail the frame. */ }
-                }
-            }
+                FracturingFog.Rendering.Lighting.ScreenSpacePost.ApplySsao2D(calc, ViewState?.FractalParameters);
             if (ShowPerfHud)
             {
                 _perfStats.RecordCalc((calcEnd - calcStart) * 1000.0 / Stopwatch.Frequency);
