@@ -24,7 +24,7 @@ using FracturingFog.Models;
 
 namespace FracturingFog;
 
-public sealed class NewtonCalculator : IFractalCalculator, IHeightFieldSource, ISupportsHistogramEq
+public sealed class NewtonCalculator : IFractalCalculator, FracturingFog.Rendering.IAdaptiveAaCalculator, IHeightFieldSource, ISupportsHistogramEq
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -69,6 +69,14 @@ public sealed class NewtonCalculator : IFractalCalculator, IHeightFieldSource, I
     public IColorMap ColorMap { get; set; } = new HsvPalette();
 
     public bool SupportsZoomPan => true;
+
+    /// <summary>#1382 — adaptive anti-aliasing (Supersampling.AccumulateAlt): with a
+    /// mask (Width × Height bytes) Calculate computes only the pixels whose byte is
+    /// non-zero; the others keep their buffer contents. Each pixel is computed from its
+    /// own coordinate alone, so a marked pixel gets exactly a full frame's bytes.</summary>
+    public byte[]? PixelMask { get; set; }
+    public FracturingFog.Rendering.AdaptiveAa AdaptiveAa => FracturingFog.Rendering.AdaptiveAa.From(FractalParameters);
+    public bool MaskExact => true;
 
     public FractalParameters FractalParameters { get; set; } = new();
 
@@ -125,6 +133,7 @@ public sealed class NewtonCalculator : IFractalCalculator, IHeightFieldSource, I
         double novaZ0R = FractalParameters.NovaZ0.Real, novaZ0I = FractalParameters.NovaZ0.Imaginary;
         double novaCR = FractalParameters.NovaJuliaC.Real, novaCI = FractalParameters.NovaJuliaC.Imaginary;
 
+        byte[]? aaMask = PixelMask is { } aaPm && aaPm.Length == width * height ? aaPm : null;   // #1382
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             if (ct.IsCancellationRequested) return;
@@ -132,6 +141,7 @@ public sealed class NewtonCalculator : IFractalCalculator, IHeightFieldSource, I
             int rowBase = y * width;
             for (int x = 0; x < width; x++)
             {
+                if (aaMask != null && aaMask[rowBase + x] == 0) continue;   // #1382
                 double cx = centerX + (x - width * 0.5) * scale;
                 double zr = cx, zi = cy;
                 // #1294 — Nova's added constant (unused by Newton).

@@ -10,7 +10,8 @@
 // and export all run the same code (batch and export used to skip it, so a High /
 // Ultra / Extreme render came out un-anti-aliased headless).
 //
-// #1344 — adaptive mode (Mandelbrot): most pixels of a typical frame sit in flat
+// #1344 — adaptive mode (Mandelbrot; #1382: the 3D raymarchers and the other 2D
+// escape-time / root-finding families, through IAdaptiveAaCalculator): most pixels of a typical frame sit in flat
 // bands or in the set, where N samples average to the one already computed.
 //   1. The unjittered frame is sample 0.
 //   2. A pixel is marked when a neighbour (8-connected) is on the other side of
@@ -65,7 +66,8 @@ namespace FracturingFog.Rendering
 
     /// <summary>#1382 — a calculator whose CPU pass can compute only the marked
     /// pixels of a frame, so <see cref="Supersampling.AccumulateAlt(IFractalCalculator, int, CancellationToken, SampleEqualizer?)"/>
-    /// can take its extra samples adaptively (the 3D raymarchers).</summary>
+    /// can take its extra samples adaptively (the 3D raymarchers, and the 2D
+    /// escape-time and root-finding families).</summary>
     public interface IAdaptiveAaCalculator
     {
         /// <summary>Width × Height bytes; when set, the next Calculate computes only the
@@ -83,6 +85,12 @@ namespace FracturingFog.Rendering
         /// across frames (temporal lighting, the distance-field cache), or the depth is
         /// published for a post-frame pass. Adaptive falls back to full supersampling then.</summary>
         bool MaskExact { get; }
+
+        /// <summary>#1382 — the frame's escape counts (in-set pixels read the
+        /// calculator's MaxIterations or more), so the mask also marks the set boundary
+        /// where the colours on its two sides are close; null (the 3D raymarchers, the
+        /// root-finding families) = the colour test alone.</summary>
+        int[]? AdaptiveAaIterations => null;
     }
 
     /// <summary>What a supersample pass computed (tests, probes, HUD).</summary>
@@ -573,7 +581,9 @@ namespace FracturingFog.Rendering
             {
                 double s = (3.5 / Math.Max(calc.Width, calc.Height)) / calc.Zoom;
                 double cx0 = calc.CenterX, cy0 = calc.CenterY;
-                var st = AdaptiveCore(calc.Width, calc.Height, () => calc.ColorBuffer, null, 0, side, ad.AdaptiveAa, token,
+                int[]? iter = ad.AdaptiveAaIterations;
+                if (iter != null && iter.Length < calc.Width * calc.Height) iter = null;
+                var st = AdaptiveCore(calc.Width, calc.Height, () => calc.ColorBuffer, iter, calc.MaxIterations, side, ad.AdaptiveAa, token,
                     m => ad.PixelMask = m,
                     (jx, jy) => { calc.CenterX = cx0 + jx * s; calc.CenterY = cy0 + jy * s; return true; },
                     () => { calc.CenterX = cx0; calc.CenterY = cy0; },

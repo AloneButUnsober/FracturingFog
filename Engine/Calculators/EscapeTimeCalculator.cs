@@ -310,7 +310,8 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
         LastBatchComputeCount = null;
         LastFrameSolidCostlyShare = double.NaN;
         LastFrameSolidDeclined = false;
-        if (SolidRegionsApply()) CalculateSolidRegions(ct);   // #1394 opt-in (Julia / Multibrot)
+        if (AaMask is { } aaMask) CalculateMasked(aaMask, ct);   // #1382 adaptive AA sample
+        else if (SolidRegionsApply()) CalculateSolidRegions(ct);   // #1394 opt-in (Julia / Multibrot)
         else CalculateInternal(ct);
         ApplyOutOfBoundsSurround(ct);
         // #97 — global interior-alpha post-pass. Last, so it scales the final
@@ -1000,13 +1001,14 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
         var po = _po;
         ParallelForRows(0, height, po, y =>
         {
-            if (ct.IsCancellationRequested) return;
+            if (ct.IsCancellationRequested || !RowMarked(y)) return;   // #1382 mask
             int rowMaxIt = useTileCap ? perRow![y] : maxIt;
             if (rowMaxIt <= 0) rowMaxIt = maxIt;
             double cyRow = centerY + (y - height * 0.5) * scale;
             int rowBase = y * width;
             for (int x = 0; x < width; x++)
             {
+                if (!Marked(rowBase + x)) continue;   // #1382
                 double ox = (x - width * 0.5) * scale;
                 double cx = centerX + ox;
                 double cy = cyRow;
@@ -1114,13 +1116,14 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
         var po = _po;
         ParallelForRows(0, height, po, y =>
         {
-            if (ct.IsCancellationRequested) return;
+            if (ct.IsCancellationRequested || !RowMarked(y)) return;   // #1382 mask
             int rowMaxIt = useTileCap ? perRow![y] : maxIt;
             if (rowMaxIt <= 0) rowMaxIt = maxIt;
             double epsI = (y - height * 0.5) * scale;
             int rowBase = y * width;
             for (int x = 0; x < width; x++)
             {
+                if (!Marked(rowBase + x)) continue;   // #1382
                 double epsR = (x - width * 0.5) * scale;
                 int idx = rowBase + x;
 
@@ -1215,13 +1218,14 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
         var po = _po;
         ParallelForRows(0, height, po, y =>
         {
-            if (ct.IsCancellationRequested) return;
+            if (ct.IsCancellationRequested || !RowMarked(y)) return;   // #1382 mask
             int rowMaxIt = useTileCap ? perRow![y] : maxIt;
             if (rowMaxIt <= 0) rowMaxIt = maxIt;
             double cyRow = centerY + (y - height * 0.5) * scale;
             int rowBase = y * width;
             for (int x = 0; x < width; x++)
             {
+                if (!Marked(rowBase + x)) continue;   // #1382
                 double ox = (x - width * 0.5) * scale;
                 double cx0 = centerX + ox;
                 double cy0 = cyRow;
@@ -1306,13 +1310,14 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
         var po = _po;
         ParallelForRows(0, height, po, y =>
         {
-            if (ct.IsCancellationRequested) return;
+            if (ct.IsCancellationRequested || !RowMarked(y)) return;   // #1382 mask
             int rowMaxIt = useTileCap ? perRow![y] : maxIt;
             if (rowMaxIt <= 0) rowMaxIt = maxIt;
             double cyRow = centerY + (y - height * 0.5) * scale;
             int rowBase = y * width;
             for (int x = 0; x < width; x++)
             {
+                if (!Marked(rowBase + x)) continue;   // #1382
                 double ox = (x - width * 0.5) * scale;
                 double cx = centerX + ox;
                 double cy = cyRow;

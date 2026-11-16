@@ -266,10 +266,27 @@ namespace FracturingFog.Models
     /// (up to 45% when zoomed in), and it has its own under-relaxation knob
     /// (KleinianDeFactor).</summary>
     /// <summary>#1382 — the families whose supersampling can be adaptive: Mandelbrot
-    /// (#1344) and the ten 3D raymarchers, whose CPU march honours a pixel mask.</summary>
+    /// (#1344), the ten 3D raymarchers, whose CPU march honours a pixel mask, and the
+    /// other 2D escape-time and root-finding families.</summary>
     public static class AdaptiveAaCapabilities
     {
-        public static bool Supports(FractalType type) => type == FractalType.Mandelbrot || IsRaymarch3D(type);
+        public static bool Supports(FractalType type) => type == FractalType.Mandelbrot || RidesAlong(type);
+
+        /// <summary>The families whose region snapshot carries the settings beside their
+        /// own block (Mandelbrot's block holds them itself).</summary>
+        public static bool RidesAlong(FractalType type) => IsRaymarch3D(type) || IsEscapeTime2D(type);
+
+        /// <summary>The 2D alt calculators that implement <c>IAdaptiveAaCalculator</c>:
+        /// EscapeTimeCalculator's families, the root finders (Newton, Nova, Halley,
+        /// Secant), the transcendental Julia sets, Lyapunov and user equations. Every
+        /// one computes a pixel from its own coordinate alone.</summary>
+        public static bool IsEscapeTime2D(FractalType type) => type is
+            FractalType.Julia or FractalType.BurningShip or FractalType.Tricorn
+            or FractalType.Multibrot or FractalType.Phoenix or FractalType.Magnet1
+            or FractalType.Magnet2 or FractalType.Glynn or FractalType.Spider
+            or FractalType.Newton or FractalType.Nova or FractalType.Halley
+            or FractalType.Secant or FractalType.TranscendentalJulia
+            or FractalType.Lyapunov or FractalType.UserEquation;
 
         /// <summary>The 3D raymarchers (the alt calculators that implement
         /// <c>IAdaptiveAaCalculator</c>).</summary>

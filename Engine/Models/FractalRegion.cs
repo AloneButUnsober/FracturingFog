@@ -1694,9 +1694,10 @@ namespace FracturingFog.Models
                 rp.MarchRelaxation = p.MarchRelaxation;
             }
 
-            // #1382 — the 3D raymarchers' adaptive anti-aliasing rides along when not at
-            // its defaults (off, threshold 12, tolerance 1.5), as Mandelbrot's does.
-            if (AdaptiveAaCapabilities.IsRaymarch3D(type))
+            // #1382 — the 3D raymarchers' and the 2D alt families' adaptive anti-aliasing
+            // rides along when not at its defaults (off, threshold 12, tolerance 1.5), as
+            // Mandelbrot's does.
+            if (AdaptiveAaCapabilities.RidesAlong(type))
             {
                 bool? aa = p.AdaptiveAa != D.AdaptiveAa ? p.AdaptiveAa : null;
                 double? thr = Nd(p.AdaptiveAaThreshold, D.AdaptiveAaThreshold);
