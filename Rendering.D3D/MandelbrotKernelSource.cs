@@ -759,7 +759,11 @@ RWStructuredBuffer<float> gTrap : register(u4);
     /// <summary>Compose the double perturbation kernel. Standalone HLSL (its own
     /// cbuffer + reference-orbit SRVs + output UAVs); requires FP64 support on
     /// the device (Vulkan <c>shaderFloat64</c> / D3D double shader ops).</summary>
-    public static string BuildPerturb() => PerturbChunkDefine + @"
+    public static string BuildPerturb() => BuildPerturb(0);
+
+    /// <summary>#1805 — with the periodicity early-out compiled in (a GpuPeriodicity mode:
+    /// 0 off, 1 on, 2 on + diagnostic smooth = −(the iteration a pixel was caught at)).</summary>
+    public static string BuildPerturb(int periodicity) => (periodicity != 0 ? "#define FF_PERIODICITY " + periodicity + "\n" : "") + PerturbChunkDefine + @"
 // Layout note: doubles FIRST so every double lands 8-byte-aligned at a fixed
 // offset (0/8/16/24) with no 16-byte-row straddle, then the ints. Matches the
 // C# PerturbParams / PerturbParamsBlob (both backends) byte-for-byte. 64 bytes.
@@ -807,6 +811,10 @@ void CSPerturb(uint3 tid : SV_DispatchThreadID)
     double dcR = 0.0, dcI = 0.0;
     double dr = 0.0, di = 0.0, drv = 0.0, div = 0.0, zr = 0.0, zi = 0.0;
     int m = 0, iter = 0;
+#ifdef FF_PERIODICITY
+    double snapR = 0.0, snapI = 0.0;   // #1805: the loop state (δ, m) at the last snapshot
+    int snapM = -1, snapIter = 0, nextSnap = 0;
+#endif
     [loop] [allow_uav_condition]
     for (;;)
     {
@@ -830,6 +838,9 @@ void CSPerturb(uint3 tid : SV_DispatchThreadID)
             m = 0;                      // reference-orbit index
             zr = 0.0; zi = 0.0;         // full value z = Z[m] + δ (last = escape z)
             iter = 0;
+#ifdef FF_PERIODICITY
+            snapM = -1; nextSnap = 0;   // #1805
+#endif
         }
 
         bool escaped = false;
@@ -866,13 +877,29 @@ void CSPerturb(uint3 tid : SV_DispatchThreadID)
             dr = ndr; di = ndi;
             m++;
         }
+#ifdef FF_PERIODICITY
+        // #1805 — between blocks: a bit-exact repeat of the loop state (δ, m) means the
+        // loop cycles for ever, so the pixel is in set, exactly as without the check
+        // (#1368's orbit-kernel check). Brent snapshots, the gap doubling.
+        int periodicAt = 0;
+        if (!escaped && iter < gMaxIter)
+        {
+            if (snapM == m && dr == snapR && di == snapI) periodicAt = iter;
+            else if (iter >= nextSnap) { snapR = dr; snapI = di; snapM = m; snapIter = iter; nextSnap = iter + iter; }
+        }
+        if (periodicAt > 0) iter = gMaxIter;
+#endif
         if (!escaped && iter < gMaxIter) continue;
 
         gFinalZD[idx] = float4((float)zr, (float)zi, (float)(drv * DzOutScale()), (float)(div * DzOutScale()));   // #1660
         if (iter >= gMaxIter)
         {
             gIter[idx]   = (uint)gMaxIter;
+#if defined(FF_PERIODICITY) && FF_PERIODICITY == 2
+            gSmooth[idx] = periodicAt > 0 ? -(float)periodicAt : 0.0;   // #1805 diagnostic
+#else
             gSmooth[idx] = 0.0;
+#endif
         }
         else
         {
@@ -914,7 +941,11 @@ void CSPerturb(uint3 tid : SV_DispatchThreadID)
     public const int PerturbF32MinScaleExponent = -100;
 
     /// <summary>#1331 — compose the float-exp perturbation kernel (see above).</summary>
-    public static string BuildPerturbFloatExp() => PerturbChunkDefine + @"
+    public static string BuildPerturbFloatExp() => BuildPerturbFloatExp(0);
+
+    /// <summary>#1805 — with the periodicity early-out compiled in (a GpuPeriodicity mode:
+    /// 0 off, 1 on, 2 on + diagnostic smooth = −(the iteration a pixel was caught at)).</summary>
+    public static string BuildPerturbFloatExp(int periodicity) => (periodicity != 0 ? "#define FF_PERIODICITY " + periodicity + "\n" : "") + PerturbChunkDefine + @"
 // 64 bytes, no doubles. Matches the C# PerturbFxParams blob byte-for-byte.
 cbuffer PerturbFxParams : register(b0)
 {
@@ -988,6 +1019,11 @@ void FxWrite(int idx, int iter, float2 z, float2 dzf);
 // each: one thread per pixel of the band, or persistent threads pulling the band's
 // pixels from gWork[gBand], PERTURB_CHUNK steps at a time; bit-identical.
 [numthreads(8, 8, 1)]
+// #1805 — the float-exp kernel compares at the rebase instead of between blocks: its step is
+// cheap, and the block check cost it 8-9 % on an exterior D3D11 frame (GT 710).
+// Every cycle passes a rebase (the periodic reference's wrap is one), and right after it the
+// loop state is (δ := z, m = 0): a bit-exact repeat there (snapshots at doubling rebase
+// counts) means the loop cycles for ever: in set.
 void CSPerturbFX(uint3 tid : SV_DispatchThreadID)
 {
     uint rows = (uint)min(gBandRows, gHeight - gRowBase);
@@ -997,6 +1033,10 @@ void CSPerturbFX(uint3 tid : SV_DispatchThreadID)
     float2 dM = float2(0.0, 0.0); int dE = FxZeroExp;
     float2 vM = float2(1.0, 0.0); int vE = 0;
     int m = 0, iter = 0;
+#ifdef FF_PERIODICITY
+    float2 snapD = float2(0.0, 0.0); int snapE = 0;   // #1805: the loop state (δ, m)
+    int snapM = -1, snapIter = 0, nextSnap = 0, rebases = 0;
+#endif
     float2 z = float2(0.0, 0.0);
     [loop] [allow_uav_condition]
     for (;;)
@@ -1021,10 +1061,16 @@ void CSPerturbFX(uint3 tid : SV_DispatchThreadID)
             vM = float2(1.0, 0.0); vE = 0;           // dz/dc = 1
             m = 0;
             z = float2(0.0, 0.0);
+#ifdef FF_PERIODICITY
+            snapM = -1; nextSnap = 0; rebases = 0;   // #1805
+#endif
             iter = 0;
         }
 
     bool escaped = false;
+#ifdef FF_PERIODICITY
+    int periodicAt = 0;
+#endif
     [loop]
     for (int trip = 0; trip < PERTURB_CHUNK && iter < gMaxIter; trip++, iter++)
     {
@@ -1047,6 +1093,10 @@ void CSPerturbFX(uint3 tid : SV_DispatchThreadID)
             df = z;
             Z = float2(0.0, 0.0);
             m = 0;
+#ifdef FF_PERIODICITY
+            if (snapM == 0 && all(dM == snapD) && dE == snapE) { periodicAt = iter; iter = gMaxIter; break; }
+            if (++rebases >= nextSnap) { snapD = dM; snapE = dE; snapM = 0; nextSnap = rebases * 2; }
+#endif
         }
 
         // δ' = (2Z + δ_f)·δ + dc.
@@ -1059,6 +1109,9 @@ void CSPerturbFX(uint3 tid : SV_DispatchThreadID)
 
     float2 dzf = FxToFloat(vM, vE + gScaleE);   // #1660: dz/dc . 2^gScaleE (DzOut)
     FxWrite(idx, iter, z, dzf);
+#if defined(FF_PERIODICITY) && FF_PERIODICITY == 2
+    if (periodicAt > 0) gSmooth[idx] = -(float)periodicAt;   // #1805 diagnostic
+#endif
     idx = -1;
     }
 }
@@ -1096,6 +1149,10 @@ void CSPerturbF32(uint3 tid : SV_DispatchThreadID)
     float2 d = float2(0.0, 0.0);
     float2 v = float2(S, 0.0);
     int m = 0, iter = 0;
+#ifdef FF_PERIODICITY
+    float2 snapD = float2(0.0, 0.0);   // #1805: the loop state (δ', m)
+    int snapM = -1, snapIter = 0, nextSnap = 0;
+#endif
     float2 z = float2(0.0, 0.0);
     [loop] [allow_uav_condition]
     for (;;)
@@ -1116,6 +1173,9 @@ void CSPerturbF32(uint3 tid : SV_DispatchThreadID)
             v = float2(S, 0.0);        // v' = (dz/dc) · S, dz/dc = 1
             m = 0;
             z = float2(0.0, 0.0);
+#ifdef FF_PERIODICITY
+            snapM = -1; nextSnap = 0;   // #1805
+#endif
             iter = 0;
         }
 
@@ -1141,9 +1201,25 @@ void CSPerturbF32(uint3 tid : SV_DispatchThreadID)
         d = CMul(2.0 * Z + df, d) + dc;
         m++;
     }
+#ifdef FF_PERIODICITY
+    // #1805 — between blocks (the CSPerturb check): a bit-exact repeat of the loop state
+    // (δ', m) means the loop cycles for ever: in set. The scaled-fp32 kernel keeps the
+    // block check: compared at the rebase instead (as the float-exp kernel), FXC compiled
+    // that variant's arithmetic differently, and escaping pixels changed (GT 710).
+    int periodicAt = 0;
+    if (!escaped && iter < gMaxIter)
+    {
+        if (snapM == m && all(d == snapD)) periodicAt = iter;
+        else if (iter >= nextSnap) { snapD = d; snapM = m; snapIter = iter; nextSnap = iter + iter; }
+    }
+    if (periodicAt > 0) iter = gMaxIter;
+#endif
     if (!escaped && iter < gMaxIter) continue;
 
     FxWrite(idx, iter, z, v);   // #1660: v' = dz/dc . S = dz/dc . 2^gScaleE (DzOut)
+#if defined(FF_PERIODICITY) && FF_PERIODICITY == 2
+    if (periodicAt > 0) gSmooth[idx] = -(float)periodicAt;   // #1805 diagnostic
+#endif
     idx = -1;
     }
 }
@@ -1405,7 +1481,11 @@ void CSPerturbOrbit(uint3 tid : SV_DispatchThreadID)
     // double SSBOs (t2..t9), length gRefLen+1. Correctness is speed-independent,
     // so this validates on weak-FP64 hardware (GT710/lavapipe); the perf payoff
     // is deferred to strong-FP64 HW (see Docs/Technical/GPU-DeepZoom-Handoff.md).
-    public static string BuildPerturbSA() => PerturbChunkDefine + @"
+    public static string BuildPerturbSA() => BuildPerturbSA(0);
+
+    /// <summary>#1805 — with the periodicity early-out compiled in (a GpuPeriodicity mode:
+    /// 0 off, 1 on, 2 on + diagnostic smooth = −(the iteration a pixel was caught at)).</summary>
+    public static string BuildPerturbSA(int periodicity) => (periodicity != 0 ? "#define FF_PERIODICITY " + periodicity + "\n" : "") + PerturbChunkDefine + @"
 // cbuffer: 5 doubles FIRST (offsets 0/8/16/24/32) then 10 ints. 80 bytes.
 // Matches the C# PerturbSaParamsBlob byte-for-byte.
 cbuffer PerturbParams : register(b0)
@@ -1469,6 +1549,10 @@ void CSPerturbSA(uint3 tid : SV_DispatchThreadID)
     double dcR = 0.0, dcI = 0.0;
     double dr = 0.0, di = 0.0, drv = 0.0, div = 0.0, zr = 0.0, zi = 0.0;
     int m = 0, iter = 0;
+#ifdef FF_PERIODICITY
+    double snapR = 0.0, snapI = 0.0;   // #1805: the loop state (δ, m) at the last snapshot
+    int snapM = -1, snapIter = 0, nextSnap = 0;
+#endif
     [loop] [allow_uav_condition]
     for (;;)
     {
@@ -1553,6 +1637,9 @@ void CSPerturbSA(uint3 tid : SV_DispatchThreadID)
             }
 
             iter = iterStart;
+#ifdef FF_PERIODICITY
+            snapM = -1; nextSnap = 0;   // #1805
+#endif
         }
 
         // ── Identical rebased δ loop as BuildPerturb, resumed from iterStart/m=k ──
@@ -1626,13 +1713,31 @@ void CSPerturbSA(uint3 tid : SV_DispatchThreadID)
             dr = ndr; di = ndi;
             m++;
         }
+#ifdef FF_PERIODICITY
+        // #1805 — between blocks: a bit-exact repeat of the loop state (δ, m) means the
+        // loop cycles for ever, so the pixel is in set, exactly as without the check
+        // (#1368's orbit-kernel check). Brent snapshots, the gap doubling.
+        // With BLA a skip stops at the cap (iter + l > gMaxIter): compare only while
+        // that can't bind across the next cycle.
+        int periodicAt = 0;
+        if (!escaped && iter < gMaxIter)
+        {
+            if (snapM == m && dr == snapR && di == snapI && gMaxIter - iter >= (iter - snapIter) + gRefLen) periodicAt = iter;
+            else if (iter >= nextSnap) { snapR = dr; snapI = di; snapM = m; snapIter = iter; nextSnap = iter + iter; }
+        }
+        if (periodicAt > 0) iter = gMaxIter;
+#endif
         if (!escaped && iter < gMaxIter) continue;
 
         gFinalZD[idx] = float4((float)zr, (float)zi, (float)(drv * DzOutScale()), (float)(div * DzOutScale()));   // #1660
         if (iter >= gMaxIter)
         {
             gIter[idx]   = (uint)gMaxIter;
+#if defined(FF_PERIODICITY) && FF_PERIODICITY == 2
+            gSmooth[idx] = periodicAt > 0 ? -(float)periodicAt : 0.0;   // #1805 diagnostic
+#else
             gSmooth[idx] = 0.0;
+#endif
         }
         else
         {

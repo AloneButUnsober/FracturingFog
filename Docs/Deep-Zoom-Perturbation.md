@@ -110,8 +110,7 @@ limbs per iteration (`_refZr/_refZrLo/..X7`). Each pixel iterates only its
     GT 710 (`--d3ddeeporbitprobe`).
   - **No false positives:** caught pixels stay bounded for 4× the cap on their exact orbit
     (BigInteger fixed point), in `S1368DeepOrbitPeriodicityTests`.
-  - **The main deep path:** #1800, in slices. S1 (#1802), S2 (#1803) and S3 (#1804) are
-    below; the GPU kernels (#1805) are still to do.
+  - **The main deep path:** #1800, in slices S1–S4 (#1802–#1805), below.
 - **Periodicity in the SIMD rows (#1802, `MandelbrotCalculator.DeepPeriodicity`,
   `FF_DEEP_PERIODICITY=0` turns it off).** `ComputeRowPT4` / `ComputeRowPT8` compare a batch's
   state only at the periodic reference's wrap (m := 0), once per period. The state is every
@@ -166,9 +165,39 @@ limbs per iteration (`_refZr/_refZrLo/..X7`). Each pixel iterates only its
     AT: 3069 of 3072 pixels caught there. Real minibrot scenes at 960×540 (p448, p953,
     p15248, `FF_LA=1`) are unchanged within noise: their interiors don't reach an exact
     cycle within the cap, or already run the AT quickly.
-  - **Tests:** `S1804LaPeriodicityTests`: on == off byte for byte, the interior caught,
+  - **Tests (LA):** `S1804LaPeriodicityTests`: on == off byte for byte, the interior caught,
     caught pixels bounded on their exact orbit (the whole minibrot's edge included), the
     AT check, and the restart predicate's near-misses.
+- **Periodicity in the GPU deep kernels (#1805, `FF_GPU_PERIODICITY`).** `CSPerturb`,
+  `CSPerturbSA` (SA + BLA), `CSPerturbFX` (float-exp) and `CSPerturbF32` (scaled fp32) are
+  compiled with the check under `GpuPeriodicity.Mode`. Both backends rebuild their deep
+  shaders when the mode changes; `Diagnostic` writes smooth = −(the catch iteration).
+  - **The fp64 and scaled-fp32 kernels** compare (δ, m) between 32-step blocks, as #1368's
+    orbit kernel does.
+    - With BLA, a skip stops at the cap (`iter + l > gMaxIter`), so the SA kernel compares
+      only while `gMaxIter − iter ≥ (iter − snapIter) + gRefLen`.
+  - **The float-exp kernel** compares the state right after a rebase (δ's mantissa and
+    exponent, m = 0), at doubling rebase counts, as the CPU rebased loops do (#1803).
+    - On D3D11 the block check had cost it 8–9 % on an exterior frame; the rebase check
+      costs nothing there.
+    - The scaled-fp32 kernel stays on the block check: compiled with the rebase check, FXC
+      changed that variant's float arithmetic and escaping pixels moved.
+  - **Measured** on the GT 710 (`--gpudeepperiodprobe`): the period-3 minibrot, 480×320,
+    5 000 cap, about 90 000 in-set pixels.
+
+    | kernel | interior speed-up | exterior cost (seahorse 1e5) |
+    |---|---|---|
+    | fp64 plain | 2.55× | 0.5–2 % |
+    | fp64 SA + BLA | 2.5× | −1 to +1 % |
+    | float-exp | 3.7× (D3D11), 3.0× (Vulkan) | 0 % (D3D11), **~+10 %** (Vulkan) |
+    | scaled fp32 | 2.1–2.4× | 0–5 % |
+
+    - The Vulkan float-exp variant is slower on the exterior with either form of the check,
+      so the cost is the compiled variant's own, not the comparison.
+    - Off, on and diagnostic are byte-identical on both backends (escaping pixels' smooth
+      and final z / dz included).
+  - **Not covered:** the GPU LA kernel (#1630; opt-in `FF_GPU_LA`, off by default): #1809.
+  - **Tests:** `S1805GpuDeepPeriodicityTests` (Vulkan, all four kernels).
 - **#1275 (cluster-rebase port) closed as superseded.** With BLA off, the default path
   matched "rebase every pixel" to the chaotic floor on every view tried (1e11–4e32,
   periods 61–998), and a per-lane Pauldelbrot soft-glitch test changed nothing. The
