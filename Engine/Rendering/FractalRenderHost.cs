@@ -482,6 +482,10 @@ namespace FracturingFog.Rendering
             // a job built later (a newer trigger, or a later progressive/TAA
             // stage of the same trigger) always outranks an earlier one.
             public readonly long Seq;
+            // #1424 — the Trigger this job serves (its first job and every follow-on: preview
+            // stages, TAA samples, the temporal settle). Events for an older generation than
+            // the latest Trigger are stale: that Trigger owns the status bar.
+            public readonly long TriggerGen;
             // #1337 — the temporal-lighting settle frame: a 3D frame rendered in full
             // (no AO / shadow reuse) after an approximate interactive one.
             public readonly bool Settle;
@@ -489,10 +493,11 @@ namespace FracturingFog.Rendering
             public FrameJob(CancellationToken token, MandelbrotCalculator calc,
                 IFractalCalculator? altCalc, Stopwatch sw,
                 uint[]? staleBuf, int staleW, int staleH, int calcW, int calcH,
-                long seq,
+                long seq, long triggerGen,
                 int taaSampleIndex = 0, int progressiveStage = 0, bool settle = false)
             {
                 Settle = settle;
+                TriggerGen = triggerGen;
                 Token = token; Calc = calc; AltCalc = altCalc; Sw = sw;
                 StaleBuf = staleBuf; StaleW = staleW; StaleH = staleH;
                 CalcW = calcW; CalcH = calcH;
@@ -686,6 +691,26 @@ namespace FracturingFog.Rendering
         public event EventHandler<string>? StatusRequested;
         public event EventHandler? ColorMapChanged;
         public event EventHandler? RenderCancelled;
+
+        // #1424 — the latest Trigger's generation (Trigger increments it before raising
+        // "Calculating…"). Jobs carry the generation they serve.
+        private long _triggerGen;
+
+        /// <summary>#1424 — the generation of the latest <see cref="Trigger"/> (tests,
+        /// diagnostics).</summary>
+        internal long TriggerGeneration => Interlocked.Read(ref _triggerGen);
+
+        // #1424 — whether a job serves the latest Trigger. A superseded job's cancel or
+        // completion must not touch the status bar: the newer Trigger posted
+        // "Calculating…" and its own frame (or its own cancel) will settle it.
+        private bool IsLatestTrigger(in FrameJob job) => job.TriggerGen == Interlocked.Read(ref _triggerGen);
+
+        // #1424 — raise RenderCancelled for the latest Trigger's job only (a stale cancel
+        // replayed the previous frame's info as if the new frame were done).
+        private void RaiseRenderCancelled(in FrameJob job)
+        {
+            if (IsLatestTrigger(in job)) RenderCancelled?.Invoke(this, EventArgs.Empty);
+        }
         public event EventHandler<RefineProgressInfo>? RefineProgress;   // SM-3 (#1268)
 
         // ── Overlay state (CPU-composited into the BGRA buffer) ──────────
@@ -964,7 +989,7 @@ namespace FracturingFog.Rendering
             if (Interlocked.Read(ref _temporalSettleSeq) != job.Seq) return;
             var next = new FrameJob(job.Token, job.Calc, job.AltCalc, Stopwatch.StartNew(),
                 staleBuf: null, staleW: 0, staleH: 0, calcW: job.CalcW, calcH: job.CalcH,
-                seq: Interlocked.Increment(ref _uploadSeq), settle: true);
+                seq: Interlocked.Increment(ref _uploadSeq), triggerGen: job.TriggerGen, settle: true);
             TryEnqueueFollowOn(in next);   // #1754 — never blocks; a newer job supersedes us
         }
 
@@ -1883,6 +1908,7 @@ namespace FracturingFog.Rendering
             // after Cancel + stale-upload + ApplyView + alt-switch, so under
             // burst input the status string lagged by tens of ms at 4K, and
             // on fast frames the calc finished before status even flipped.
+            long triggerGen = Interlocked.Increment(ref _triggerGen);   // #1424: before the status it owns
             StatusRequested?.Invoke(this, "Calculating…");
 
             // Buffers are about to be overwritten by Calculate — any cached
@@ -2074,7 +2100,7 @@ namespace FracturingFog.Rendering
             long seq0 = System.Threading.Interlocked.Increment(ref _uploadSeq);
             var job = new FrameJob(token, calc, useAlt ? altCalc : null, sw,
                 staleBuf, staleW, staleH, calcW, calcH,
-                seq: seq0,
+                seq: seq0, triggerGen: triggerGen,
                 taaSampleIndex: 0, progressiveStage: progressiveStage);
             Dbg86($"TRIGGER seq={seq0} progressive={progressive} stage={progressiveStage} " +
                   $"zoom={ViewState.Zoom:0e+0} staleBuf={(staleBuf != null ? $"{staleW}x{staleH}" : "none")}");
@@ -2285,7 +2311,7 @@ namespace FracturingFog.Rendering
                     // status bar's "Calculating…" set by Trigger gets cleared
                     // instead of lingering until the next user action.
                     AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
-                    RenderCancelled?.Invoke(this, EventArgs.Empty);
+                    RaiseRenderCancelled(in job);
                     return;
                 }
 
@@ -2382,6 +2408,7 @@ namespace FracturingFog.Rendering
                     }
                     else InteractionTrace.Mark(TraceKind.Dropped, job.Seq, (long)DropReason.FinalSuperseded);
                     _lastGpuRoute = FrameGpuRoute(_calculator, altCalc, useAlt: true);   // #1173-M
+                    if (IsLatestTrigger(in job))   // #1424: a superseded frame says nothing
                     FrameCompleted?.Invoke(this, new RenderFrameInfo(
                         altCalc.CenterX, altCalc.CenterY, altCalc.Zoom, altCalc.MaxIterations,
                         job.Sw.ElapsedMilliseconds, altCalc.Width, altCalc.Height,
@@ -2392,7 +2419,7 @@ namespace FracturingFog.Rendering
                 {
                     // Cancelled (a newer frame superseded this one) — clear the
                     // status bar's "Calculating…" like the mono path does (S-X8).
-                    RenderCancelled?.Invoke(this, EventArgs.Empty);
+                    RaiseRenderCancelled(in job);
                 }
                 AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
                 return;
@@ -2638,7 +2665,7 @@ namespace FracturingFog.Rendering
                 job.Token, calc, altCalc: null, sw: Stopwatch.StartNew(),
                 staleBuf: null, staleW: 0, staleH: 0,
                 calcW: calc.Width, calcH: calc.Height,
-                seq: System.Threading.Interlocked.Increment(ref _uploadSeq),
+                seq: System.Threading.Interlocked.Increment(ref _uploadSeq), triggerGen: job.TriggerGen,
                 taaSampleIndex: _taaSampleCount);
             // #1754 — non-blocking; a full queue holds a newer user job, which supersedes us.
             return TryEnqueueFollowOn(in nextJob);
@@ -3106,7 +3133,7 @@ namespace FracturingFog.Rendering
                     // RenderCancelled so the consumer clears it now.
                     InteractionTrace.Mark(TraceKind.Dropped, job.Seq, (long)DropReason.Cancelled);   // #1762
                     AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
-                    RenderCancelled?.Invoke(this, EventArgs.Empty);
+                    RaiseRenderCancelled(in job);
                     return;
                 }
                 int level = job.ProgressiveStage;   // #1333
@@ -3287,7 +3314,7 @@ namespace FracturingFog.Rendering
                     job.Token, calc, altCalc: useAlt ? altCalc : null, sw: job.Sw,
                     staleBuf: null, staleW: 0, staleH: 0,
                     calcW: job.CalcW, calcH: job.CalcH,
-                    seq: System.Threading.Interlocked.Increment(ref _uploadSeq),
+                    seq: System.Threading.Interlocked.Increment(ref _uploadSeq), triggerGen: job.TriggerGen,
                     taaSampleIndex: 0, progressiveStage: nextStage);
                 TryEnqueueFollowOn(in nextJob);   // #1754 — never blocks; dropped if superseded
                 return;
@@ -3306,7 +3333,7 @@ namespace FracturingFog.Rendering
                     Dbg86($"FINAL-CANCELLED seq={job.Seq} (token cancelled before present)");
                     InteractionTrace.Mark(TraceKind.Dropped, job.Seq, (long)DropReason.Cancelled);   // #1762
                     AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
-                    RenderCancelled?.Invoke(this, EventArgs.Empty);
+                    RaiseRenderCancelled(in job);
                     return;
                 }
                 if (_disposed) return;
@@ -3541,7 +3568,7 @@ namespace FracturingFog.Rendering
                 // overlapping continuations cancel and restart. PerfHud +
                 // AnimationFrameUploaded still fire each sample so HUD +
                 // animation gating stay accurate.
-                if (job.TaaSampleIndex == 0)
+                if (job.TaaSampleIndex == 0 && IsLatestTrigger(in job))   // #1424: a superseded frame says nothing
                 {
                     // Detail-depth estimate is meaningful only for the canonical
                     // Mandelbrot calculator's reference orbit; alt calcs leave +∞.
