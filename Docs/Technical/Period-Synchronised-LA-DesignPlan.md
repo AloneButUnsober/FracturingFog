@@ -14,8 +14,8 @@
 
 The issues are the canonical task list. This doc is the maths and architecture context; link both ways.
 
-**Status: S1 done (2026-11-03); S2 done (#1625); S3 done (#1626, opt-in); S4 done (#1627); S5 done (#1628, 4-lane path opt-in: no gain measured); S6 done (#1629, LA on by default from zoom 1e30); S7 done (#1630, GPU kernel, opt-in).** §2 is the method, derived and checked against Imagina's code;
-§4.1 is the proof of concept (`--laprobe`) and the decision to go on with S2; §4.2 is the engine's evaluator; §4.3 the AT; §4.4 SIMD; §4.5 the default; §4.6 the GPU kernel. §3 is still a plan
+**Status: S1 done (2026-11-03); S2 done (#1625); S3 done (#1626, opt-in); S4 done (#1627); S5 done (#1628, 4-lane path opt-in: no gain measured); S6 done (#1629, LA on by default from zoom 1e30); S7 done (#1630, GPU kernel, opt-in). Epic closed 2026-11-16 (§4.7 outcome); the float-exp GPU port is #1664, the remaining gap to Imagina #1614.** §2 is the method, derived and checked against Imagina's code;
+§4.1 is the proof of concept (`--laprobe`) and the decision to go on with S2; §4.2 is the engine's evaluator; §4.3 the AT; §4.4 SIMD; §4.5 the default; §4.6 the GPU kernel; §4.7 the outcome against the epic's targets. §3 is still a plan
 where S1 did not settle it.
 
 ---
@@ -616,6 +616,30 @@ Not caught: removing the tail's \|z\| < \|δ\| rebase. With climbing back the ta
 - **The GPU deep range stops at 1e50** (`MaxGpuPerturbZoom`), so the deepest bench scenes stay on the CPU LA rows.
 
 **Epic status:** S1–S7 done. LA is on by default on the CPU from 1e30 (S6), which is where the epic's speed-up is: ×2–5.2 on the deep minibrot scenes. The GPU kernel is in place, correct, and opt-in.
+
+### 4.7 Outcome (close-out, 2026-11-16)
+
+**The bench scenes at 4K**, current main (LA by default), i5-13420H (4 P + 4 E cores, 12 threads), CPU, `--deepcostprobe 3840 2160`, idle machine:
+
+| scene | orbit | pixels | threads busy | FF 0.7.1, rith (Ryzen 9 3950X) | Imagina, rith |
+|---|---|---|---|---|---|
+| p15,248 2.1e57 | 22 ms | 3.4–3.6 s | 10.6–10.8 | 10.2 s | 1.1 s |
+| p121,984 1.7e66 | 0.2 s | 8.2–10.0 s | 8.9–10.6 | 28.0 s | 2.3 s |
+| p951,094 2.1e68 | 1.5 s | 54–65 s | 9.1–10.3 | 156.8 s | 12.1 s |
+
+- **Before / after on this machine:** at 960×540 the pixels of p951,094 went from 10.1 s (SIMD BLA) to 2.8 s with LA, and p121,984 from 2.1 s to 0.50 s (§4.2, re-measured 2026-11-16: 2.78 s and 0.50 s). The 4K frames scale with the pixel count (×16) when the machine is idle.
+- **Fixed cost:** the reference orbit and its tables now take 1.5–1.8 s on p951,094 (rith's FF 0.7.1 split put about 70 s there; #1614 part 1 cut the orbit to its period).
+- **Noise warning:** the same build gave 27 s and 148 s for p121,984 and p951,094 when the machine was busy. The process's CPU time stayed the same (~100 s and ~560–600 s) while only 4–7 threads ran. Server GC and smaller row blocks made no difference; compare runs only on an idle machine, with `threads busy` near the core count.
+
+**Against the epic's targets:**
+1. **p951,094 at 4K within about 2× of Imagina on comparable hardware: not confirmed.** Here FF takes 56–67 s against Imagina's 12.1 s on a 16-core desktop. That is 4.6–5.5× apart, on a machine with about half the multi-threaded throughput. Scaling by an estimated 1.7–2.2× puts FF at roughly 2.3–3.2× Imagina, around or a little past the target. Settling it needs a run on comparable hardware: a user re-run of the bench kit, as rith's #1613 report was.
+2. **Accuracy no worse than BLA against exact iteration: met.** p121,984: LA matches the exact count on 29 of 48 samples, against 11 for FF's BLA path (§4.2); p448 on the GPU: 16/16 against 15/16 (§4.6).
+3. **Default, batch and Command builder in step, with a toggle back to BLA: met** (§4.5: `DeepLa` Off / Auto / On in the region snapshot, `--param DeepLa=`, the builder seed, `FF_LA=0`).
+
+**What is left, and where:**
+- **Per-pixel CPU time:** about 68 µs of CPU per pixel on p951,094. 96 % of the LA steps there are stage-1 (period 953) steps, which AT cannot take (§4.3). This stays on #1614.
+- **The float-exp GPU LA port is #1664.** Consumer GPUs run fp64 at 1/32–1/64 rate.
+- **The GPU deep range stops at 1e50**, so the deepest bench scenes stay on the CPU.
 
 ## 5. Credit
 
