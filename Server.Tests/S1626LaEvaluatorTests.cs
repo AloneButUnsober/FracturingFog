@@ -71,6 +71,9 @@ public sealed class S1626LaEvaluatorTests(ITestOutputHelper output)
             Zoom = FfZoom(s), MaxIterations = s.Iter,
             ColorMap = new HsvPalette(), UseLaEvaluator = la, LaClimbOnRebase = true, LaTailBla = false,
             LaPeriodTest = LaPeriodTest.ThresholdDip,
+            // #1614: Imagina's stages, the evaluator as #1626 translated it (no climb back at
+            // shared boundaries, log16 length rule). S1614LaAscendTests covers the new default.
+            LaAscend = false, LaStageBits = LaStageTable.ImaginaStageBits,
         };
         cfg?.Invoke(c);
         c.Calculate();

@@ -166,8 +166,9 @@ headers.
   - **Changes from upstream:** the function-by-function mapping and every change
     (a different default period test, composite δc bound, per-step δc check, climbing
     back to the top stage, FF's bailout and rebase rule, double precision only, no
-    step past the iteration cap, a stricter AT precision margin) are in
-    `Docs/Technical/Period-Synchronised-LA-DesignPlan.md` §2.6–2.7.
+    step past the iteration cap, a stricter AT precision margin; #1614: climbing back a
+    stage at shared step boundaries and 3 "stage bits" in place of the log16 length rule
+    above stage 0) are in `Docs/Technical/Period-Synchronised-LA-DesignPlan.md` §2.6–2.7.
 
 ---
 

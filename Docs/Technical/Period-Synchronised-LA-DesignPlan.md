@@ -184,6 +184,8 @@ one step per L iterations. It stops when |z′|² > Esc² = |A|²·Thr, the edge
 9. **The plain tail** (#1626) is FF's rebased loop: bailout 512, rebasing at |z| < |δ| or at the end of the reference, and, from a rebase, a climb back to the stages (item 3). BLA skips in the tail are optional (`LaTailBla`, off): §4.2 measured them.
 10. **The AT's precision margin** (#1627). c′ = RefC + C·δc is rounded in double, so its absolute error is about 2⁻⁵³·|RefC|. When the view's c′ extent is much smaller than |RefC|, the AT works from a coarser c′ than perturbation's exact δc. Imagina accepts a view down to 2⁻¹⁶ of |RefC| (radius²·|C|²·2³² > |RefC|²). FF's default accepts it only when the view is at least |RefC| (`LaAtOffsetBits` = 0; 16 is Imagina's, `FF_LA_AT_OFFSET_BITS`). §4.3 shows the difference against exact iteration.
 11. **A looser AT tolerance** (#1627, `LaAtLoosen`, `FF_LA_AT_LOOSEN`): the AT's Thr and ThrC scaled by s ≥ 1, as if the AT alone were built at s·τ. Measured and rejected (§4.3); the default s = 1 is Imagina's AT.
+12. **Climbing back at shared boundaries** (#1614, `LaAscend`, `FF_LA_ASCEND=0` turns it off). After a stage-k step that ends where a stage-(k + 1) step begins, the pixel tries that step. Its own Thr / ThrC tests decide, and a failure drops back to the same index through that step's Next. `LaStageTable.Up` holds the boundaries: it inverts the stage-above steps' Next indices. In Imagina's `EvaluateLA` a pixel's stage only goes down until the reference ends or it rebases. This is BLA's rule (Zhuoran), the longest valid skip at every index, applied to the stages. §4.9 measures it.
+13. **Stage bits** (#1614, `LaStageBits`, `FF_LA_STAGE_BITS`, 1–4). Where a stage above stage 0 is cut at a fixed length (§2.3), FF uses round(x^(1/round(log₈ x))) stage-k steps, about ×8 per stage. Imagina uses log₁₆, about ×16, and stage 0 keeps Imagina's rule. The finer ladder gives a pixel that fails a long step a shorter one to climb back to (item 12). On its own it changes little (§4.9). On p951,094 it turns the 30,496 stage (953 × 32) into 9,530 and 95,300 (953 × 10, × 100). The other bench scenes build the same stages as before.
 
 ### 2.7 Function-by-function mapping
 
@@ -689,6 +691,87 @@ Not caught: removing the tail's \|z\| < \|δ\| rebase. With climbing back the ta
 - exact iteration at least as good as the plain float-exp frame;
 - p951,094 past 1e50, on the bars above;
 - the route: the switch, the precision mode, LA Off / On, and precedence over the fp64 LA kernel.
+
+### 4.9 Climbing back and stage bits (#1614, 2026-11-16)
+
+**Where p951,094's pixel time went.** Per pixel at 320×180 (counters added for the measurement, not kept):
+
+| stage (top step) | steps taken | steps refused | rebases | stage skipped (δc) |
+|---|---|---|---|---|
+| 0 (31) | 19.2 | 4.9 | 0 | 0 |
+| 1 (953) | 3,645 | 4.9 | 14.0 | 0 |
+| 2 (30,496) | 115 | 18.9 | 0.1 | 0 |
+| 3 (951,094) | 0.1 | 0 | 0.1 | 19.0 |
+
+- A pixel is refused a stage-2 step about 19 times.
+- Each time it then walks stage 1, about 190 steps on average, until it rebases (14 times) or the reference ends. It never tries stage 2 again on the way.
+- That is the 96 % of §4.3. It is not AT territory: the pixel rarely rebases, so it is not in the 953 copy's renormalised dynamics either.
+
+**Two changes:** climbing back at shared boundaries (§2.6 item 12) and 3 stage bits (item 13).
+
+**Sweep** at 320×180 (LA steps per pixel, climbing on; stage bits for stages ≥ 1 and the ×64 dip cap varied):
+
+| setting | p15,248 | p121,984 | p951,094 |
+|---|---|---|---|
+| Imagina's stages, no climb | 130 | 530 | 3,779 |
+| climb, 4 bits | 130 | 509 | 3,067 |
+| climb, 3 bits (default) | 130 | 509 | 1,985 |
+| climb, 2 bits | 116 | 587 | 1,895 |
+| climb, 1 bit | 115 | 661 | 1,811 |
+| climb, 3 bits, cap ×16 | 116 | 495 | 1,971 |
+
+- 2 or 1 bits split p121,984's 10,483 stage (953 × 11) into 2,859 or 1,906, and those pixels then take more, shorter steps.
+- 3 bits leaves p121,984's stages as they are and still splits p951,094's.
+- A ×16 dip cap adds a 186 stage on every scene, for a few per cent. It was not taken, to keep to one change from Imagina's builder.
+- Applying 2 bits to stage 0 as well (31 → 4 + 16) was worse on p121,984 (655 steps) and dropped.
+
+**Time, 960×540,** i5-13420H. `--deepcostprobe` with `FF_DEEPCOST_LA_ASCEND_AB=1` renders the three settings alternately in one process, best of 3. The machine was not idle (6–11 threads busy).
+
+| scene | Imagina's stages | climb, 4 bits | climb, 3 bits (default) | LA steps / px |
+|---|---|---|---|---|
+| p448 | 175 ms | 177 ms | 176 ms | 17 (all) |
+| path | 198 | 198 | 201 | 24 |
+| p953 | 120 | 125 | 121 | 19 |
+| p15,248 | 208 | 211 | 212 | 130 |
+| p121,984 | 508 | 527 | 514 | 530 / 509 / 509 |
+| p951,094 | 2,907 (CPU 35.7 s) | 2,453 (29.0 s) | **1,738 (20.8 s), ×1.67** | 3,780 / 3,068 / 1,986 |
+
+- Pixels on p951,094 are 1.67× faster, with 41 % less CPU.
+- The other scenes are within noise. Their stages, or the steps their pixels take, barely change; the climb test costs one table read per step.
+- **4K, p951,094,** same probe, best of 2, machine near idle (11.4 threads busy): pixels 54.1 s → 31.7 s (×1.70), CPU 607 s → 357 s. The climb alone gives 44.9 s. Against Imagina's 12.1 s on rith's 3950X (§4.7) that is about 2.6×, on a machine with roughly half the multi-threaded throughput. 93 of 8.3 M pixels (0.001 %) change between in set and escaping against Imagina's stages.
+
+**Accuracy against exact iteration** (fixed-point BigInteger, 64×36, random samples; in / out wrong on none of them, for any setting):
+
+| setting | p121,984, 48 samples | p951,094, 24 samples |
+|---|---|---|
+| BLA rows | 12 exact, total error 30,478 | 6, 19,227 |
+| Imagina's stages | 33, 1,750 | 15, 1,958 |
+| climb, 4 bits | 28, 4,985 | 13, 1,465 |
+| 3 bits, no climb | 33, 1,750 | 14, 1,783 |
+| climb, 3 bits (default) | 28, 4,985 | 11, 5,036 |
+
+- **Against BLA** (the epic's target 2, §4.7) the new default is still well ahead: 28 against 12, and 11 against 6.
+- **Against Imagina's stages** it is somewhat less exact on these two chaotic scenes.
+  - A climbing pixel takes longer steps, so fewer exact first iterations, and the chaos amplifies the small differences.
+  - The median relative error stays at 0 (p121,984) and 2·10⁻⁷ (p951,094).
+- **These counts are noisy.** One pixel can dominate the total.
+  - A τ four times tighter, for instance, gave 34 / 48 exact but a total error of 31,071 on p121,984, with Imagina's stages and with the default alike.
+  - So the difference is reported, not tuned away.
+- **Frame-wide:** the 64×36 frames agree with Imagina's stages on in / out everywhere.
+  - At 960×540, 2 (p121,984) and 3 (p951,094) of 518,400 pixels change between in set and escaping.
+  - All five escape in exact iteration, within 0.3 % of the cap. Imagina's stages get 3 of them right, the default 1.
+- Where the stages and the steps taken are the same (p953, p15,248, the shallow views), the frames are byte-identical.
+
+**The GPU LA kernels** (#1630, #1664) do not climb back yet. They read the same table, so on p951,094 they get the 3-bit stages. Follow-up: see the PR.
+
+**Tests** (`S1614LaAscendTests`):
+- **Up:** a stage-k index maps to a stage-(k + 1) step exactly when both begin at the same reference iteration (prefix sums of Len), and every step above stage 0 is mapped once.
+- **Stage tops** follow the fixed-length formula for 3 and 4 bits on the four minibrot scenes.
+- **Exact iteration:** at least as good as BLA, in / out right on every sample, and identical to Imagina's stages where the steps are the same.
+- **In / out** over the frame matches Imagina's stages on all four scenes, with each change alone and together.
+- **Work:** on p951,094 the climb alone takes under 0.9× Imagina's LA steps, and the default under 0.7×.
+- **`S1626LaEvaluatorTests` now pins Imagina's stages** (`LaAscend` off, 4 stage bits), as it already pins the other LA options. With the new default its 4-sample p121,984 check fell to 1 exact against BLA's 2, though with less total error (3 against 16): two samples are off by one iteration. The 12-sample check in `S1614LaAscendTests` and the 48-sample one above cover the default.
+- **Mutants:** caught: `Up` off by one, `Up` mapping the sentinel, the climb landing one stage low, the climb removed, stage bits ignored where no dip was found. Survived: stage bits ignored in the cut after a dip beyond ×64, which gives the same length on every bench scene (p121,984: round(128^(1/2)) = 11 either way).
 
 ## 5. Credit
 

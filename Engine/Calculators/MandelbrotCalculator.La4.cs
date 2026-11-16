@@ -140,7 +140,7 @@ public sealed partial class MandelbrotCalculator
     {
         int stage = row.T.Stages - 1, j = 0;
         ref var cyc = ref row.Cyc[x];
-        LaRunStages(row.T, dcR, row.DcI, mdc, row.MaxIter, true, ref dr, ref di, ref zr, ref zi, ref drv, ref div,
+        LaRunStages(row.T, LaAscend ? row.T.Up : null, dcR, row.DcI, mdc, row.MaxIter, true, ref dr, ref di, ref zr, ref zi, ref drv, ref div,
             ref n, ref stage, ref j, ref row.LaSteps, row.PerStage, ref cyc);
         if (cyc.Caught) row.Caught++;   // #1804: n = maxIter, resolved below
         m = j;

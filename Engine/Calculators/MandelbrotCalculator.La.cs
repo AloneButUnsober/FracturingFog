@@ -94,6 +94,19 @@ public sealed partial class MandelbrotCalculator
     /// rather than stay in the stage the pixel fell to (Imagina). FF_LA_CLIMB=0 turns it off.</summary>
     public bool LaClimbOnRebase { get; set; } = Environment.GetEnvironmentVariable("FF_LA_CLIMB") != "0";
 
+    /// <summary>#1614 — climb back one stage at a shared step boundary: after a stage-k
+    /// step that ends where a stage-(k + 1) step begins, try that step next (its own
+    /// validity test decides; a failure drops back to the same place). Without it a pixel
+    /// that fell a stage stays there until a rebase or the end of the reference (FF,
+    /// design doc §2.6 item 12). FF_LA_ASCEND=0 turns it off.</summary>
+    public bool LaAscend { get; set; } = Environment.GetEnvironmentVariable("FF_LA_ASCEND") != "0";
+
+    /// <summary>#1614 — the fixed-length rule of LA stages 1 and up, in bits per stage
+    /// (LaStageTable.DefaultStageBits = 3; 4 is Imagina's). FF_LA_STAGE_BITS sets it (1..4).</summary>
+    public int LaStageBits { get; set; } =
+        int.TryParse(Environment.GetEnvironmentVariable("FF_LA_STAGE_BITS"), out int sb) && sb is >= 1 and <= LaStageTable.ImaginaStageBits
+            ? sb : LaStageTable.DefaultStageBits;
+
     /// <summary>#1626 — BLA skips in the plain tail (design doc §3). Off by default: measured
     /// on the bench scenes they save about a fifth of the tail's steps but no time, and cost
     /// exact matches (design doc §4.2). FF_LA_TAIL_BLA=1 turns them on.</summary>
@@ -205,6 +218,7 @@ public sealed partial class MandelbrotCalculator
         int top = t.Stages - 1;
         int refLen = _refOrbitLen;
         bool climb = LaClimbOnRebase;
+        int[]? up = LaAscend ? t.Up : null;   // #1614
         double mdc = Math.Max(Math.Abs(dcR), Math.Abs(dcI));
 
         double dr = 0, di = 0;          // δ against the current reference index
@@ -230,7 +244,7 @@ public sealed partial class MandelbrotCalculator
         while (true)
         {
             // ── 1. The stages (LaRunStages; climbing back restarts them at the top) ──
-            LaRunStages(t, dcR, dcI, mdc, maxIter, climb, ref dr, ref di, ref zr, ref zi, ref drv, ref div,
+            LaRunStages(t, up, dcR, dcI, mdc, maxIter, climb, ref dr, ref di, ref zr, ref zi, ref drv, ref div,
                 ref n, ref stage, ref j, ref laSteps, perStage, ref cyc);
             if (cyc.Caught) { Interlocked.Increment(ref _deepPeriodicPixels); break; }   // #1804: n = maxIter
 
@@ -342,7 +356,7 @@ public sealed partial class MandelbrotCalculator
     // tail). A rebase with climbing on restarts at the top stage. Shared by the scalar
     // and the 4-lane evaluators (#1628), so both run the same operations.
     // #1804 — `cyc` carries the pixel's periodicity check across calls (LaCycleRepeats).
-    private static void LaRunStages(LaStageTable t, double dcR, double dcI, double mdc, int maxIter, bool climb,
+    private static void LaRunStages(LaStageTable t, int[]? up, double dcR, double dcI, double mdc, int maxIter, bool climb,
         ref double dr, ref double di, ref double zr, ref double zi, ref double drv, ref double div,
         ref int n, ref int stage, ref int j, ref long laSteps, long[] perStage, ref LaCycle cyc)
     {
@@ -394,6 +408,10 @@ public sealed partial class MandelbrotCalculator
                         // #1804 — the pixel restarts this stage from (δ, j = 0).
                         if (LaCycleRepeats(ref cyc, t, dr, di, stage, n, maxIter)) { n = maxIter; stage = -1; return; }
                     }
+                    // #1614 (FF) — a stage-(k + 1) step begins here: climb to it. The
+                    // for-loop's stage-- brings `stage` to k + 1; that stage's δc skip and
+                    // its step's own tests apply, and a failure comes back to this j.
+                    else if (up != null && up[s0 + j] >= 0) { j = up[s0 + j]; stage += 2; break; }
                 }
                 if (climbNow) break;
             }
