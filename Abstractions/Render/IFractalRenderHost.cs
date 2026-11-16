@@ -279,7 +279,9 @@ namespace FracturingFog.Render
         /// stage reaches FrameCompleted). Lets the status-bar consumer clear
         /// the lingering "Calculating…" string the matching Trigger posted.
         /// No payload — caller decides whether to restore prior frame info
-        /// or fall back to a generic idle string.</summary>
+        /// or fall back to a generic idle string. #1424: raised only for the latest
+        /// Trigger's frame. A frame superseded by a newer Trigger raises neither this nor
+        /// <see cref="FrameCompleted"/>: the newer Trigger owns the status bar.</summary>
         event EventHandler? RenderCancelled;
 
         /// <summary>SM-3 (#1268) — raised after each TAA refinement upload of the
