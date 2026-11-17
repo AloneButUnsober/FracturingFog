@@ -8,8 +8,8 @@
 //   • The wheel zooms past 1e100: from Extreme just under its cap, wheel steps promote the
 //     view to Unbounded (with the slow-render warning) and carry it on past 1e100, and past
 //     double's range (log zoom, C3) with no clamp.
-//   • The Command builder reports a view past 1e100, or with an exact centre, as a fidelity
-//     gap pointing at C10 (#1860); a shallow view reports none.
+//   • The Command builder reported a view past 1e100, or with an exact centre, as a fidelity
+//     gap pointing at C10 (#1860); since C10 batch reproduces them, so neither is a gap.
 
 using System;
 using System.Collections.Generic;
@@ -66,18 +66,19 @@ public sealed class S1861UnboundedTierTests
     }
 
     [Fact]
-    public void The_Command_Builder_Reports_Deep_Views_As_A_Gap_Until_C10()
+    public void The_Command_Builder_Reported_Deep_Views_As_A_Gap_Until_C10()
     {
+        // #1860 (C10) — batch reproduces them now: no gap for a deep zoom or an exact centre.
         var shallow = new BatchCommandSnapshot { Zoom = 1e40, QualityName = "Extreme" };
         Assert.DoesNotContain(BatchCommandBuilder.DetectGaps(shallow), g => g.Contains("#1860"));
 
         var deep = new BatchCommandSnapshot { Zoom = 1e150, QualityName = "Unbounded" };
-        Assert.Contains(BatchCommandBuilder.DetectGaps(deep), g => g.Contains("#1860") && g.Contains("1e150"));
+        Assert.DoesNotContain(BatchCommandBuilder.DetectGaps(deep), g => g.Contains("#1860") || g.Contains("1e100"));
 
         var pastDouble = new BatchCommandSnapshot { Zoom = double.MaxValue, ZoomLog10 = 500, QualityName = "Unbounded" };
-        Assert.Contains(BatchCommandBuilder.DetectGaps(pastDouble), g => g.Contains("#1860") && g.Contains("1e500"));
+        Assert.DoesNotContain(BatchCommandBuilder.DetectGaps(pastDouble), g => g.Contains("#1860") || g.Contains("1e500"));
 
-        var exact = new BatchCommandSnapshot { Zoom = 1e60, HasExactCentre = true };
-        Assert.Contains(BatchCommandBuilder.DetectGaps(exact), g => g.Contains("#1860") && g.Contains("exact centre"));
+        var exact = new BatchCommandSnapshot { Zoom = 1e60, CenterExactX = "0.1", CenterExactY = "0.2" };
+        Assert.DoesNotContain(BatchCommandBuilder.DetectGaps(exact), g => g.Contains("exact centre"));
     }
 }

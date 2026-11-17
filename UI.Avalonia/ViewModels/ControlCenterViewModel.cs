@@ -406,8 +406,9 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
             CenterXLimbs = new[] { vs.CenterXLo, vs.CenterX2, vs.CenterX3, vs.CenterX4, vs.CenterX5, vs.CenterX6, vs.CenterX7 },
             CenterYLimbs = new[] { vs.CenterYLo, vs.CenterY2, vs.CenterY3, vs.CenterY4, vs.CenterY5, vs.CenterY6, vs.CenterY7 },
             Zoom        = vs.Zoom,
-            ZoomLog10   = vs.ZoomLog10,                    // #1861: a gap past 1e100 (#1860)
-            HasExactCentre = vs.CenterExact != null,       // #1861: a gap until #1860
+            ZoomLog10   = vs.ZoomLog10,                    // #1860: --zoom past double
+            CenterExactX = vs.CenterExact is { } ex ? FracturingFog.ViewState.CoordNotation.FormatExact(ex.Re) : null,   // #1860
+            CenterExactY = vs.CenterExact is { } ey ? FracturingFog.ViewState.CoordNotation.FormatExact(ey.Im) : null,
             Iterations  = iter,
             ThemeName   = main.SelectedTheme ?? FracturingFog.Batch.BatchDefaults.ThemeName,
             QualityName = main.SelectedQuality?.Name ?? FracturingFog.Batch.BatchDefaults.QualityName,

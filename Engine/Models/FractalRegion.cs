@@ -208,6 +208,7 @@ namespace FracturingFog.Models
             c.CenterX4 = CenterX4; c.CenterX5 = CenterX5; c.CenterX6 = CenterX6; c.CenterX7 = CenterX7;
             c.CenterY = CenterY; c.CenterYLo = CenterYLo; c.CenterY2 = CenterY2; c.CenterY3 = CenterY3;
             c.CenterY4 = CenterY4; c.CenterY5 = CenterY5; c.CenterY6 = CenterY6; c.CenterY7 = CenterY7;
+            c.CenterExact = CentreExact;   // #1860: and the exact centre where the region has one
         }
 
         /// <summary>#27 Phase 0 — true when this region was loaded from an

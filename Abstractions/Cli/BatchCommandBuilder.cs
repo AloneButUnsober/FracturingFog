@@ -54,12 +54,14 @@ namespace FracturingFog.Cli
         public IReadOnlyList<double> CenterXLimbs { get; init; } = Array.Empty<double>();
         public IReadOnlyList<double> CenterYLimbs { get; init; } = Array.Empty<double>();
 
-        /// <summary>#1861 — the live view has an exact centre (#1832: digits past OD's limbs),
-        /// which --x / --y can't carry yet (#1860).</summary>
-        public bool HasExactCentre { get; init; }
+        /// <summary>#1860 (epic #1428, C10) — the live view's exact centre (#1832: digits
+        /// past OD's limbs) as plain decimal text (<c>CoordNotation.FormatExact</c>), or null
+        /// when it has none. Emitted as --x / --y in place of the limbs.</summary>
+        public string? CenterExactX { get; init; }
+        public string? CenterExactY { get; init; }
 
-        /// <summary>#1861 — log10 of the live zoom (NaN: read <see cref="Zoom"/>); past
-        /// 1e100 (the Unbounded tier) --zoom can't carry it yet (#1860).</summary>
+        /// <summary>#1861 / #1860 — log10 of the live zoom (NaN: read <see cref="Zoom"/>);
+        /// past double's range --zoom is written from it ("1.5E+500").</summary>
         public double ZoomLog10 { get; init; } = double.NaN;
 
         /// <summary>Effective iteration count in use for the current render.
@@ -384,9 +386,11 @@ namespace FracturingFog.Cli
             }
 
             // Live coordinates + iterations — always emitted for exact fidelity.
-            parts.Add(BatchFlags.X);    parts.Add(Coordinate(snap.CenterX, snap.CenterXLimbs));
-            parts.Add(BatchFlags.Y);    parts.Add(Coordinate(snap.CenterY, snap.CenterYLimbs));
-            parts.Add(BatchFlags.Zoom); parts.Add(Num(snap.Zoom));
+            // #1860 — an exact centre as its decimal digits, a zoom past double from its log.
+            bool exact = snap.CenterExactX != null && snap.CenterExactY != null;
+            parts.Add(BatchFlags.X);    parts.Add(exact ? snap.CenterExactX! : Coordinate(snap.CenterX, snap.CenterXLimbs));
+            parts.Add(BatchFlags.Y);    parts.Add(exact ? snap.CenterExactY! : Coordinate(snap.CenterY, snap.CenterYLimbs));
+            parts.Add(BatchFlags.Zoom); parts.Add(ZoomText(snap.Zoom, snap.ZoomLog10));
             if (snap.Iterations > 0)
             {
                 parts.Add(BatchFlags.Iter);
@@ -767,13 +771,8 @@ namespace FracturingFog.Cli
         public static IReadOnlyList<string> DetectGaps(BatchCommandSnapshot snap)
         {
             var gaps = new List<string>();
-            // #1861 — views past 1e100 (Unbounded) and exact centres reproduce headless only
-            // with C10 (#1860): --zoom is enforced at 1e100 and --x / --y carry OD limbs.
-            double zl = double.IsNaN(snap.ZoomLog10) ? Math.Log10(snap.Zoom) : snap.ZoomLog10;
-            if (zl > Math.Log10(QualityPreset.Extreme.ZoomMax))
-                gaps.Add($"Zoom past 1e100 (1e{zl:F0}, the Unbounded tier): batch --zoom is capped at 1e100 until #1860, so this command will be refused");
-            else if (snap.HasExactCentre)
-                gaps.Add("Centre with digits past octuple-double (an exact centre): --x / --y carry the OD limbs only until #1860, so the headless render is centred on the rounded point");
+            // #1861 reported views past 1e100 and exact centres here; since #1860 --x / --y
+            // carry the exact centre and --zoom any depth, so neither is a gap.
             if (snap.ThemeIsUnsaved)
                 gaps.Add("Custom/unsaved theme (save it first so the command can reference it by name; falls back to HSV)");
             else if (snap.ThemeColorGenUnsaved)
@@ -1057,6 +1056,13 @@ namespace FracturingFog.Cli
         /// <summary>Round-trippable invariant formatting for a double so the
         /// parsed value reproduces the live one bit-for-bit.</summary>
         private static string Num(double v) => v.ToString("R", CultureInfo.InvariantCulture);
+
+        /// <summary>#1860 — --zoom text: the round-trip double, or past double's range the
+        /// log's scientific form (16 significant digits), which <c>ZoomLog.TryParse</c> reads.</summary>
+        public static string ZoomText(double zoom, double zoomLog10)
+            => double.IsFinite(zoomLog10) && FracturingFog.ViewState.ZoomLog.BeyondDouble(zoomLog10)
+                ? FracturingFog.ViewState.ZoomLog.FormatLog10(zoomLog10, 17)
+                : Num(zoom);
 
         /// <summary>#1235 — the tokens that turn a live command into a Misiurewicz
         /// loop video: <c>--mode video --video-motion loop --loop-multiplier MAG,DEG

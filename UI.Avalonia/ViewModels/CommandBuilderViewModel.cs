@@ -584,7 +584,8 @@ public sealed class CommandFlagRowViewModel : ViewModelBase
                     return OutOfRange(iv) ? "outside " + BatchFlagCatalog.RangeText(Spec) : "";
                 case BatchFlagKind.Double when Spec.Name is BatchFlags.X or BatchFlags.Y:
                     // #1233 — a centre also takes octuple-double limbs Hi|Lo|….
-                    return BatchOptions.TryParseCoordinate(v, out _) ? "" : "expects a number or limbs Hi|Lo|…";
+                    // #1860 — or a decimal of any length (the exact centre).
+                    return BatchOptions.TryParseCoordinate(v, out _) ? "" : "expects a number, limbs Hi|Lo|… or a long decimal";
                 case BatchFlagKind.Double:
                     if (!double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out double dv)) return "expects a number";
                     return OutOfRange(dv) ? "outside " + BatchFlagCatalog.RangeText(Spec) : "";

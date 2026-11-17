@@ -55,6 +55,16 @@ namespace FracturingFog.Imaging
         public double CenterY7 { get; init; }
 
         public double Zoom { get; init; }
+
+        /// <summary>#1860 (epic #1428, C10) — log10 of the zoom past double's range, where
+        /// <see cref="Zoom"/> holds double.MaxValue (NaN: <see cref="Zoom"/> is the zoom).</summary>
+        public double ZoomLog10 { get; init; } = double.NaN;
+
+        /// <summary>#1860 — the log zoom the calculator takes: <see cref="ZoomLog10"/> while
+        /// <see cref="Zoom"/> is still its saturated value (a <c>with</c> that sets a new
+        /// zoom drops it, as the view state's stamp rule, #1836), else NaN.</summary>
+        public double DepthZoomLog10
+            => !double.IsNaN(ZoomLog10) && Zoom.Equals(FracturingFog.ViewState.ZoomLog.FromLog10(ZoomLog10)) ? ZoomLog10 : double.NaN;
         public int MaxIterations { get; init; }
 
         /// <summary>SM-1 (#1267) — when set and the Mandelbrot frame comes out
@@ -773,6 +783,7 @@ namespace FracturingFog.Imaging
                     SubRectOffsetX = req.SubRectOffsetX,
                     SubRectOffsetY = req.SubRectOffsetY,
                 };
+                calc.SetDepth(req.CenterExact, req.DepthZoomLog10);   // #1860: and the log zoom
                 FracturingFog.Rendering.HeadlessGpu.Attach(calc);   // #1611 — batch on the GPU
                 if (req.SeededOrbit != null)
                 {
@@ -1240,6 +1251,7 @@ namespace FracturingFog.Imaging
                     SolidRegionAuto = req.FractalParameters.SolidRegionAuto,   // #1394
                     LaMode = req.FractalParameters.DeepLa,                     // #1629
                 };
+                m.SetDepth(req.CenterExact, req.DepthZoomLog10);   // #1860
                 FracturingFog.Rendering.HeadlessGpu.Attach(m);   // #1611
                 m.Calculate(token);
                 return m;
