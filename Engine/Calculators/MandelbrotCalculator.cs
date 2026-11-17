@@ -1166,6 +1166,13 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     /// the sidecar preview calcs; the committed full-res calc keeps it false and
     /// renders a fresh, exact reference. See Docs/Deep-Zoom-Perturbation.md §6.</summary>
     public bool AllowRecycleThisRender { get; set; }
+
+    /// <summary>#1427 — the anti-aliasing samples (MSAA, offline and live TAA) reuse the
+    /// reference orbit of the unjittered centre: each sub-pixel jitter is a recycle shift
+    /// (Δc added to every pixel's dc, CPU and GPU) instead of a fresh orbit at the
+    /// jittered centre. Up to 15 MSAA + 31 TAA orbit builds per settled deep view were
+    /// spent on the same orbit. FF_AA_REUSE_ORBIT=0 rebuilds per sample (before #1427).</summary>
+    public static bool AaReuseReferenceOrbit { get; set; } = Environment.GetEnvironmentVariable("FF_AA_REUSE_ORBIT") != "0";
     // Per-frame centre shift from the cached reference centre, in world units,
     // rounded to double (the SIMD PT dc is double regardless of tier). Zero on
     // any non-recycled frame — `x + 0.0 == x`, so the default path is
@@ -2780,17 +2787,17 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                               CenterX4, CenterX5, CenterX6, CenterX7);
             var cyOD = new OD(CenterY, CenterYLo, CenterY2, CenterY3,
                               CenterY4, CenterY5, CenterY6, CenterY7);
-            ComputeReferenceOrbitOD(cxOD, cyOD, maxIt);
+            ComputeReferenceOrbitOD(cxOD, cyOD, maxIt, ct);
         }
         else if (Zoom > QDZoomThreshold)
         {
             var cxQD = new QD(CenterX, CenterXLo, CenterX2, CenterX3);
             var cyQD = new QD(CenterY, CenterYLo, CenterY2, CenterY3);
-            ComputeReferenceOrbitQD(cxQD, cyQD, maxIt);
+            ComputeReferenceOrbitQD(cxQD, cyQD, maxIt, ct);
         }
         else
         {
-            ComputeReferenceOrbit(new DD(CenterX, CenterXLo), new DD(CenterY, CenterYLo), maxIt);
+            ComputeReferenceOrbit(new DD(CenterX, CenterXLo), new DD(CenterY, CenterYLo), maxIt, ct);
         }
 
         // #607 / G4.6 — a GPU orbit palette accumulates on the GPU perturbation
@@ -3014,7 +3021,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         bool recycled = (AllowRefOrbitRecycle || AllowRecycleThisRender)
                         && TryRecycleReferenceOrbit(maxIt, scale);
         long tStage0 = Stopwatch.GetTimestamp();   // #1614 — LastHpStageMs
-        if (!recycled) ComputeReferenceOrbitForCenter(maxIt);
+        if (!recycled) ComputeReferenceOrbitForCenter(maxIt, ct);   // #1427: cancellable
         long tStageOrbit = Stopwatch.GetTimestamp();
         LastHpStageMs = new HpStageMs(Ms(tStage0, tStageOrbit), 0, 0, 0);
 
@@ -3030,7 +3037,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             int[]? prCap = PerRowMaxIter;
             bool tileCap = prCap != null && prCap.Length >= Height;
             bool gpuDeep = GpuDeepHere;   // #1665: explicit, or measured faster (#1786: or the calibration's route)
-            bool gateOk = !recycled && !LatticeAligned   // #1330: the lattice is a CPU path
+            bool gateOk = !LatticeAligned   // #1330: the lattice is a CPU path; #1427: a recycled orbit runs here too
                 && gpuDeep && GpuKernel != null
                 && (GpuKernel.SupportsPerturbation || FloatExpHere(GpuKernel))   // #1331: no fp64 needed
                 && AllowPtRebasing && !UseDdRebaseReference && !ForceScalarPtPath
@@ -3045,8 +3052,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             // #1173-M — the first failing gate condition, when GPU perturbation is on.
             if (!gateOk && gpuDeep && GpuKernel != null && GpuKernel.SupportsPerturbation)
             {
-                _gpuSkip = recycled ? GpuRoute.Cpu("orbit recycling", "deep-zoom orbit recycling renders on the CPU only")
-                    : LatticeAligned ? GpuRoute.Cpu("pan reuse", "pixel reuse while panning (#1330) renders deep frames on the CPU")
+                _gpuSkip = LatticeAligned ? GpuRoute.Cpu("pan reuse", "pixel reuse while panning (#1330) renders deep frames on the CPU")
                     : !AllowPtRebasing || UseDdRebaseReference || ForceScalarPtPath
                         ? GpuRoute.Cpu("diagnostic toggle", "a perturbation diagnostic toggle (rebasing / DD reference / scalar path) keeps deep zoom on the CPU")
                     : EffectiveLaMode == DeepLaMode.On ? GpuRoute.Cpu("LA evaluator", "the LA stage evaluator forced On (#1629) runs on the CPU: this GPU kernel has no LA stages (or FF_GPU_LA=0)")
@@ -3268,8 +3274,11 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         GpuWavefront.PerturbHint = Hint();
         try
         {
-            double offX0 = SubRectOffsetX - effImgW * 0.5;
-            double offY0 = SubRectOffsetY - effImgH * 0.5;
+            // #1427 — a recycled orbit (the AA samples' jitter, a preview drag) measures dc
+            // from the cached centre: the CPU rows add Δc to each pixel's dc, here it goes
+            // into the pixel offset, dc = (x + off)·scale + Δc = (x + off + Δc/scale)·scale.
+            double offX0 = SubRectOffsetX - effImgW * 0.5 + _refRecycleDx / scale;
+            double offY0 = SubRectOffsetY - effImgH * 0.5 + _refRecycleDy / scale;
             // #1630 — the LA stages on the GPU, under the CPU evaluator's own conditions
             // (LaActive): the frame wants LA, acceleration and rebasing are on, the table
             // is finite; the kernel runs the evaluator with climbing back and no tail BLA.
@@ -4142,7 +4151,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         return true;
     }
 
-    private void ComputeReferenceOrbit(DD cx, DD cy, int maxIter)
+    private void ComputeReferenceOrbit(DD cx, DD cy, int maxIter, CancellationToken ct = default)
     {
         // Cache hit: same center (all 4 QD limbs match — DD path uses limbs 2,3 = 0)
         // and either previous run already escaped (valid for any maxIter) or
@@ -4158,6 +4167,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             return;
 
         EnsureRefOrbitCapacity(maxIter);
+        InvalidateRefOrbitCache();   // #1427: a cancel mid-build leaves no stale hit
         DD zr = DD.Zero, zi = DD.Zero;
         double logDerivSum = 0.0;   // Σ log₁₀|2·Zₙ| — δ-amplification decades
         int period = 0;             // #1614
@@ -4165,6 +4175,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         int n;
         for (n = 0; n < maxIter; n++)
         {
+            if ((n & 1023) == 1023) ct.ThrowIfCancellationRequested();   // #1427
             _refZr[n] = zr.Hi;  _refZrLo[n] = zr.Lo;
             _refZi[n] = zi.Hi;  _refZiLo[n] = zi.Lo;
             _refZrX2[n] = 0;    _refZrX3[n] = 0;
@@ -4211,6 +4222,18 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     // Wave 2.11 — single allocation point. QD/OD paths share this storage
     // even when their lower limbs hold zero, so per-pixel fallback can read
     // a uniform 8-limb refZ unconditionally.
+    // #1427 — the orbit arrays are about to be overwritten: drop the cache key first, so
+    // a build cancelled part-way (ct, every 1,024 iterations) can't be taken for the
+    // cached orbit of its old centre, or recycled. The generation bump makes the BLA /
+    // LA / SA tables built on the old orbit stale too.
+    private void InvalidateRefOrbitCache()
+    {
+        _refCxHi = double.NaN; _refCyHi = double.NaN;
+        _refCachedTier = -1;
+        _refCachedEscaped = false;
+        _refOrbitGen++;
+    }
+
     private void EnsureRefOrbitCapacity(int maxIter)
     {
         if (_refZr.Length > maxIter) return;
@@ -4238,7 +4261,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     // delta loop only consumes Z_n at double precision. The QD math here just
     // ensures Z_n is *correctly rounded* to that double after thousands of
     // iterations from a 62-digit centre.
-    private void ComputeReferenceOrbitQD(QD cx, QD cy, int maxIter)
+    private void ComputeReferenceOrbitQD(QD cx, QD cy, int maxIter, CancellationToken ct = default)
     {
         bool centerSame = cx.X0 == _refCxHi && cx.X1 == _refCxLo
                        && cx.X2 == _refCx2 && cx.X3 == _refCx3
@@ -4251,6 +4274,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             return;
 
         EnsureRefOrbitCapacity(maxIter);
+        InvalidateRefOrbitCache();   // #1427: a cancel mid-build leaves no stale hit
         QD zr = QD.Zero, zi = QD.Zero;
         double logDerivSum = 0.0;   // Σ log₁₀|2·Zₙ| — δ-amplification decades
         int period = 0;             // #1614
@@ -4258,6 +4282,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         int n;
         for (n = 0; n < maxIter; n++)
         {
+            if ((n & 1023) == 1023) ct.ThrowIfCancellationRequested();   // #1427
             _refZr[n] = zr.X0;  _refZrLo[n] = zr.X1;  _refZrX2[n] = zr.X2;  _refZrX3[n] = zr.X3;
             _refZi[n] = zi.X0;  _refZiLo[n] = zi.X1;  _refZiX2[n] = zi.X2;  _refZiX3[n] = zi.X3;
             _refZrX4[n] = 0; _refZrX5[n] = 0; _refZrX6[n] = 0; _refZrX7[n] = 0;
@@ -4300,7 +4325,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     /// <summary>The reference orbit at the view centre, at the precision tier the
     /// zoom needs (DD, QD — on the GPU with <see cref="UseGpuReferenceOrbit"/> — or
     /// OD). A centre and length already cached are not recomputed.</summary>
-    private void ComputeReferenceOrbitForCenter(int maxIt)
+    private void ComputeReferenceOrbitForCenter(int maxIt, CancellationToken ct = default)
     {
         // #1614 — a reference centred on a period-p nucleus returns to |Z_p| below
         // the pixel size and repeats; building past that is wasted. The tolerance
@@ -4317,7 +4342,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                               CenterX4, CenterX5, CenterX6, CenterX7);
             var cyOD = new OD(CenterY, CenterYLo, CenterY2, CenterY3,
                               CenterY4, CenterY5, CenterY6, CenterY7);
-            ComputeReferenceOrbitOD(cxOD, cyOD, maxIt);
+            ComputeReferenceOrbitOD(cxOD, cyOD, maxIt, ct);
         }
         else if (Zoom > QDZoomThreshold)
         {
@@ -4326,11 +4351,11 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             // Wave 2.12 — opt-in GPU QD reference orbit. Falls back to CPU on
             // any GPU init / kernel / copy failure.
             if (!(UseGpuReferenceOrbit && TryComputeReferenceOrbitQDGpu(cxQD, cyQD, maxIt)))
-                ComputeReferenceOrbitQD(cxQD, cyQD, maxIt);
+                ComputeReferenceOrbitQD(cxQD, cyQD, maxIt, ct);
         }
         else
         {
-            ComputeReferenceOrbit(new DD(CenterX, CenterXLo), new DD(CenterY, CenterYLo), maxIt);
+            ComputeReferenceOrbit(new DD(CenterX, CenterXLo), new DD(CenterY, CenterYLo), maxIt, ct);
         }
     }
 
@@ -4412,7 +4437,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     // recorded so the per-pixel HP fallback can reconstruct the full
     // 124-digit ref-orbit value. The PT inner loop still pulls only the
     // Hi limb (_refZr[k] / _refZi[k]) since δ stays double.
-    private void ComputeReferenceOrbitOD(OD cx, OD cy, int maxIter)
+    private void ComputeReferenceOrbitOD(OD cx, OD cy, int maxIter, CancellationToken ct = default)
     {
         bool centerSame = cx.X0 == _refCxHi && cx.X1 == _refCxLo
                        && cx.X2 == _refCx2 && cx.X3 == _refCx3
@@ -4427,6 +4452,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             return;
 
         EnsureRefOrbitCapacity(maxIter);
+        InvalidateRefOrbitCache();   // #1427: a cancel mid-build leaves no stale hit
         OD zr = OD.Zero, zi = OD.Zero;
         double logDerivSum = 0.0;   // Σ log₁₀|2·Zₙ| — δ-amplification decades
         int period = 0;             // #1614
@@ -4434,6 +4460,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         int n;
         for (n = 0; n < maxIter; n++)
         {
+            if ((n & 1023) == 1023) ct.ThrowIfCancellationRequested();   // #1427
             _refZr[n] = zr.X0;   _refZrLo[n] = zr.X1;
             _refZrX2[n] = zr.X2; _refZrX3[n] = zr.X3;
             _refZrX4[n] = zr.X4; _refZrX5[n] = zr.X5;

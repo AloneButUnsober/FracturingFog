@@ -284,6 +284,15 @@ but not exact / jumping" is the residual below, not a navigation fault.
 - Both are cosmetic. The reference-recycle plumbing (`RecyclePreviewOrbit`,
   default OFF; `MandelbrotCalculator.AllowRecycleThisRender`) is kept but unused —
   `--panjitter` showed it changes neither pixels nor perceptible speed.
+- **#1427: the anti-aliasing samples recycle the orbit.** MSAA, the offline TAA and
+  the live TAA used to rebuild the reference at every jittered centre: up to 15 + 31
+  orbit builds per settled deep view, for the same orbit. `CentreJitter.Calculate`
+  now runs each jittered sample with `AllowRecycleThisRender`, so the jitter becomes a
+  recycle shift (Δc on every pixel's dc) against the unjittered orbit.
+  `FF_AA_REUSE_ORBIT=0` restores the rebuild.
+  - The GPU deep route now takes a recycled orbit as well: the shift goes into the pixel offset, off + Δc/scale. Recycled frames were CPU-only before.
+  - The reference orbit builds (DD / QD / OD) check the frame's token every 1,024 iterations. They drop the cache key before overwriting the arrays, so a cancelled build is never taken for a cached orbit.
+  - `S1427OrbitPileupTests` compares each recycled sample with a fresh orbit at the jittered centre: in / out identical, counts within 0.2 %, on QD and OD views and on the GPU.
 
 ## 7. Pan pixel reuse (#1330)
 

@@ -384,7 +384,7 @@ namespace FracturingFog.Rendering
                     // #1656 — jitter only while the view is still ours (see CentreJitter.TryApply).
                     if (!CentreJitter.TryApply(calc, in orig, jx, jy, scale, token, ref jittered)) break;
                     var mean = (uint[])calc.ColorBuffer.Clone();   // the mean so far
-                    try { calc.Calculate(token); }
+                    try { CentreJitter.Calculate(calc, token); }   // #1427: the unjittered orbit
                     catch (OperationCanceledException) { Array.Copy(mean, calc.ColorBuffer, pixels); break; }
                     equalizer?.Apply(calc);
                     acc.AddAndWriteMean(calc.ColorBuffer);
@@ -450,7 +450,7 @@ namespace FracturingFog.Rendering
                 {
                     // #1656 — jitter only while the view is still ours (see CentreJitter.TryApply).
                     if (!CentreJitter.TryApply(calc, in orig, jx, jy, scale, token, ref jittered)) break;
-                    try { calc.Calculate(token); }
+                    try { CentreJitter.Calculate(calc, token); }   // #1427: the unjittered orbit
                     catch (OperationCanceledException) { break; }
                     eq?.Apply(calc);   // #1381
                     Add(calc.ColorBuffer, pixels, sumR, sumG, sumB, sumA);
@@ -473,7 +473,7 @@ namespace FracturingFog.Rendering
                 m => calc.PixelMask = m,
                 (jx, jy) => CentreJitter.TryApply(calc, in orig, jx, jy, scale, token, ref jittered),
                 () => CentreJitter.RestoreIfOwned(calc, in orig, in jittered),
-                ct => { calc.Calculate(ct); eq?.Apply(calc); });   // #1381
+                ct => { CentreJitter.Calculate(calc, ct); eq?.Apply(calc); });   // #1381; #1427: the unjittered orbit
         }
 
         // #1344 / #1382 — the adaptive pass over any calculator that honours a pixel
