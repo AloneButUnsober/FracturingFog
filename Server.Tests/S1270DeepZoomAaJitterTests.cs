@@ -128,6 +128,13 @@ public sealed class S1270DeepZoomAaJitterTests
         var c = DeepCalc();
         Assert.True(CentreJitter.IsResolvable(c, Scale(c)));
         c.Zoom = 1e130;
+        // #1851 — past the AP threshold (1e110) the jitter moves every pixel's dc instead
+        // of the limbs (MandelbrotCalculator.PixelJitter), so it resolves at any depth.
+        Assert.True(c.JittersByPixel);
+        Assert.True(CentreJitter.IsResolvable(c, Scale(c)));
+        // Where the limbs carry the jitter (the AP orbit not engaged), OD's floor still applies.
+        c.ApReferenceZoomLog10 = 200;
+        Assert.False(c.JittersByPixel);
         Assert.False(CentreJitter.IsResolvable(c, Scale(c)));
     }
 }

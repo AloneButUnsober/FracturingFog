@@ -161,6 +161,18 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
 
     private bool UseApReference => ZoomLog10 > ApReferenceZoomLog10;
 
+    /// <summary>#1851 (epic #1428, C5e) — a sub-pixel AA jitter in pixels, added to every
+    /// pixel's dc by the deep paths (the recycle shift for the HP rows, pixel units in the
+    /// floatexp rows). <see cref="FracturingFog.Rendering.CentreJitter"/> sets it instead of
+    /// moving the centre limbs where <see cref="JittersByPixel"/>: there a limb write would
+    /// drop the exact centre (and its orbit), and past double the double jitter is lost.
+    /// (0, 0) = none (the default: x + 0.0, byte-identical).</summary>
+    public (double X, double Y) PixelJitter { get; set; }
+
+    /// <summary>#1851 — AA jitters by pixel (<see cref="PixelJitter"/>) rather than by the
+    /// centre limbs: past <see cref="ApReferenceZoomLog10"/>.</summary>
+    public bool JittersByPixel => UseApReference;
+
     /// <summary>#1842 (epic #1428, C5a) — log10 zoom past which each pixel's perturbation
     /// runs in FloatExp (δ, dc and the derivative): past ~1e300 they underflow double. 290 =
     /// the double path still measured exact at 1e290 (S1842, against direct BigFloat
@@ -2895,13 +2907,13 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             int rowMaxIt = useTileCap ? perRow![y] : maxIt;
             if (rowMaxIt <= 0) rowMaxIt = maxIt;
             double rowOffsetY = offY + y - halfH;
-            double dcY = rowOffsetY * scale;
+            double dcY = rowOffsetY * scale + PixelJitter.Y * scale;   // #1851 (+ 0.0 without a jitter)
             double cy = CenterY + dcY;
             int rowBase = y * Width;
             for (int x = 0; x < Width; x++)
             {
                 if (!Marked(rowBase + x)) continue;   // #1344
-                double dcX = (offX + x - halfW) * scale;
+                double dcX = (offX + x - halfW) * scale + PixelJitter.X * scale;
                 double cx = CenterX + dcX;
                 ComputePixelOrbitPerturbation(dcX, dcY, cx, cy, rowMaxIt, rowBase + x, colorMap, wantInterior);
             }
@@ -2935,13 +2947,13 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             if (ct.IsCancellationRequested) return;
             int rowMaxIt = useTileCap ? perRow![y] : maxIt;
             if (rowMaxIt <= 0) rowMaxIt = maxIt;
-            var dcI = scale * (offY + y - halfH);
+            var dcI = scale * (offY + y - halfH + PixelJitter.Y);   // #1851
             double cy = CenterY + dcI.ToDouble();
             int rowBase = y * Width;
             for (int x = 0; x < Width; x++)
             {
                 if (!Marked(rowBase + x)) continue;
-                var dcR = scale * (offX + x - halfW);
+                var dcR = scale * (offX + x - halfW + PixelJitter.X);
                 ComputePixelOrbitPerturbationFx(dcR, dcI, CenterX + dcR.ToDouble(), cy, rowMaxIt, rowBase + x, colorMap, wantInterior);
             }
             if (rowMaxIt < maxIt)
@@ -3209,6 +3221,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             _panFrameComplete = false;
             return;
         }
+        // #1851 — a pixel AA jitter is a shift of every pixel's dc: the recycle shift.
+        _refRecycleDx += PixelJitter.X * scale;
+        _refRecycleDy += PixelJitter.Y * scale;
 
         // V6 (#82) — GPU deep-zoom perturbation. With the reference orbit built,
         // dispatch the whole frame's δ-rebased loop to an FP64 GPU kernel, then
@@ -3276,6 +3291,11 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             // KEPT orbit when the drift exceeds its 5% tolerance, so every
             // recycled pixel's dc stays inside a valid linearisation.
             dcMaxAbs += Math.Sqrt(_refRecycleDx * _refRecycleDx + _refRecycleDy * _refRecycleDy);
+        }
+        else if (PixelJitter != default)
+        {
+            // #1851 — a pixel AA jitter moves dc by up to its length past the frame's corner.
+            dcMaxAbs += Math.Sqrt(PixelJitter.X * PixelJitter.X + PixelJitter.Y * PixelJitter.Y) * scale;
         }
         long tStageBla0 = Stopwatch.GetTimestamp();
         EnsureBlaTable(dcMaxAbs);
@@ -5100,7 +5120,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         double halfW = effImgW * 0.5, halfH = effImgH * 0.5;
         // #1845 — the floatexp BLA table, for the frame's largest |dc|.
         var bla = DisableAcceleration ? null
-            : EnsureBlaTableFx(scale * Math.Sqrt(halfW * halfW + halfH * halfH));
+            : EnsureBlaTableFx(scale * (Math.Sqrt(halfW * halfW + halfH * halfH)
+                + Math.Sqrt(PixelJitter.X * PixelJitter.X + PixelJitter.Y * PixelJitter.Y)));   // #1851: + the jitter
         _blaSkipsTotal = 0; _blaIterSkippedTotal = 0; _ptStepsTotal = 0;
         // #1847 — the LA stages where the double path would use them (LaWanted: Auto from
         // its crossover zoom, so past double by default), with the same gates as LaActive.
@@ -5122,7 +5143,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             int rowMaxIt = useTileCap ? perRow![y] : maxIt;
             if (rowMaxIt <= 0) rowMaxIt = maxIt;
             int rowBase = y * w;
-            var dcI = scale * (offY + y - halfH);
+            var dcI = scale * (offY + y - halfH + PixelJitter.Y);   // #1851: the pixel jitter
             long rowSkips = 0, rowSaved = 0, rowSteps = 0;
             long laSteps = 0, laPlain = 0, laBla = 0, laPx = 0;
             for (int x = 0; x < w; x++)
@@ -5131,12 +5152,12 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 if (!Marked(idx)) continue;
                 if (laFx != null)
                 {
-                    EvaluateLaFx(laFx, laTail, scale * (offX + x - halfW), dcI, rowMaxIt, idx, colorMap,
+                    EvaluateLaFx(laFx, laTail, scale * (offX + x - halfW + PixelJitter.X), dcI, rowMaxIt, idx, colorMap,
                         ref laSteps, ref laPlain, ref laBla);
                     laPx++;
                 }
                 else
-                    ComputePixelPTFx(scale * (offX + x - halfW), dcI, rowMaxIt, idx, colorMap, bla,
+                    ComputePixelPTFx(scale * (offX + x - halfW + PixelJitter.X), dcI, rowMaxIt, idx, colorMap, bla,
                         ref rowSkips, ref rowSaved, ref rowSteps);
             }
             if (laPx > 0)
