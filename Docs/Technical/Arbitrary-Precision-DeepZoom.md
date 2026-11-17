@@ -15,8 +15,9 @@ the canonical task list; this doc backs them.
 | C5b floatexp BLA | #1845 | §12 (merged, PR #1846) |
 | C5c floatexp LA stages | #1847 | §13 (merged, PR #1848) |
 | C5d orbit-aware colouring path (AP orbit, floatexp) | #1849 | §14 (merged, PR #1850) |
-| C5e AA jitter at depth by pixel + tier-3 recycle test | #1851 | §15 |
-| C5f–C11 | filed when started (see #1428) | |
+| C5e AA jitter at depth by pixel + tier-3 recycle test | #1851 | §15 (merged, PR #1853) |
+| C5f periodic-reference detection past 1e154 | #1854 | §16 |
+| C6–C11 | filed when started (see #1428) | |
 
 ## 1. Why a new number type
 
@@ -302,3 +303,21 @@ A double zoom overflows at about 1.8e308. A double log10 zoom does not, and it k
   - **Jittered samples** at 1e150 and 1e400 render the jittered pixels, and the exact centre survives the sample.
   - **A one-pixel exact pan** at 1e150 is a step the dense centre's OD limbs can't hold (the limbs are equal). It recycles the orbit (tier 3, the exact shift from C4) and renders the moved view.
   - Below the threshold the jitter still moves the limbs.
+
+## 16. Periodic-reference detection past 1e154 (C5f, #1854)
+
+- **Why not "Z_n storage near a nucleus".** Near a nucleus the stored Z_n (double OD limbs) can underflow below 1e-308. That only changes a pixel whose own |z| is that small at the same step, i.e. a pixel within about 1e-305 × (minibrot size) of the nucleus. That is far below a pixel in any real view, and inside the minibrot anyway.
+  - The |z| < |δ| rebase already handles a reference passing close to 0.
+  - The BLA / LA tables give no skip where Z_n underflows (R = 0, Thr = 0), which is safe.
+- **The real gap.** Periodic-reference detection (#1614) stops the orbit at the period once |Z_p|² < (pixel size)². That square underflows double once the pixel is below about 1e-154.
+  - Past about 1e154, a minibrot-centred view never detected its period.
+  - The BigFloat orbit then ran to maxIter: a long build, more memory (#1828), and no wrap at the period.
+- **The fix.**
+  - Where the double square underflows (pixel < 1e-150), the tolerance is a FloatExp from the log zoom (`PeriodTolFx`). Above that, the double test stands, unchanged.
+  - The AP builder compares |Z_n|² in FloatExp from its BigFloat Z_n (`BigFloat.ToFloatExp`).
+  - `PeriodicOrbitStillValid` uses the same comparison, and the orbit-aware path sets the tolerance too.
+- **Validation** (`S1854PeriodicReferenceDeepTests`).
+  - At the period-3 nucleus (Newton in BigFloat on z₃ = 0), at 1e150, 1e200 and 1e400, the reference stops at period 3 (length 4) and the frame is the interior.
+  - The next frame reuses the orbit: the generation is unchanged.
+  - 1000 pixels off the nucleus no period is detected. The attracting cycle's point near 0 stays at about |Z₃|, about 1000 pixels. A one-pixel tolerance would wrongly take period 3.
+  - `ToFloatExp` is the value to 2^-52.
