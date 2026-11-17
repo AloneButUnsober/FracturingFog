@@ -276,13 +276,13 @@ namespace FracturingFog.Rendering
                 QualityPreset natural = QualityPreset.Standard;
                 foreach (var p in QualityPreset.All)
                 {
-                    if (p.Tier == QualityTier.Extreme) continue;
+                    if (p.Tier >= QualityTier.Extreme) continue;   // #1861: and Unbounded
                     if (p.ZoomMax >= startZoom) { natural = p; break; }
                 }
                 QualityPreset authored = string.IsNullOrEmpty(request.TargetQualityPresetName)
                     ? natural
                     : QualityPreset.FromName(request.TargetQualityPresetName);
-                if (authored.Tier == QualityTier.Extreme) authored = natural;
+                if (authored.Tier >= QualityTier.Extreme) authored = natural;
                 _videoQuality = authored.Tier > natural.Tier ? authored : natural;
             }
             else if (TryResolveForwardStart(request, out startCX, out startCY, out startZoom))
@@ -330,7 +330,7 @@ namespace FracturingFog.Rendering
                 && string.IsNullOrEmpty(request.TargetQualityPresetName)
                 && _calculator?.Quality != null
                 && _calculator.Quality.Tier > _videoQuality.Tier
-                && _calculator.Quality.Tier != QualityTier.Extreme)
+                && _calculator.Quality.Tier < QualityTier.Extreme)
             {
                 _videoQuality = _calculator.Quality;
             }
@@ -575,7 +575,7 @@ namespace FracturingFog.Rendering
                 var r = FractalRegionLibrary.Instance.FindByName(n);
                 if (r == null) continue;
                 if (!FractalMotionCapabilities.SupportsVideoZoomLeg(r.FractalType)) continue;
-                if (r.QualityPreset?.Tier == QualityTier.Extreme) continue;
+                if (r.QualityPreset?.Tier >= QualityTier.Extreme) continue;
                 course.Add(r);
             }
             if (course.Count < 1)
@@ -1723,13 +1723,13 @@ namespace FracturingFog.Rendering
             QualityPreset natural = QualityPreset.Standard;
             foreach (var p in QualityPreset.All)
             {
-                if (p.Tier == QualityTier.Extreme) continue;
+                if (p.Tier >= QualityTier.Extreme) continue;   // #1861: and Unbounded
                 if (p.ZoomMax >= startZoom) { natural = p; break; }
             }
             _videoQuality = natural;
             if (_calculator?.Quality != null
                 && _calculator.Quality.Tier > _videoQuality.Tier
-                && _calculator.Quality.Tier != QualityTier.Extreme)
+                && _calculator.Quality.Tier < QualityTier.Extreme)
                 _videoQuality = _calculator.Quality;
         }
 
@@ -1743,7 +1743,7 @@ namespace FracturingFog.Rendering
             {
                 foreach (var p in QualityPreset.All)
                 {
-                    if (p.Tier == QualityTier.Extreme) continue;
+                    if (p.Tier >= QualityTier.Extreme) continue;   // #1861: and Unbounded
                     if (p.ZoomMax >= zoom) { target = p; break; }
                 }
                 if (target.Tier != _videoQuality.Tier) _videoQuality = target;
@@ -1926,7 +1926,7 @@ namespace FracturingFog.Rendering
                 bool camera3D = FractalMotionCapabilities.SupportsVideoCameraLeg(r.FractalType);
                 bool hold = FractalMotionCapabilities.SupportsVideoHoldLeg(r.FractalType);
                 if (!zoom2D && !camera3D && !hold) continue;
-                if (r.QualityPreset?.Tier == QualityTier.Extreme) continue;
+                if (r.QualityPreset?.Tier >= QualityTier.Extreme) continue;
                 // 2D legs need real plane depth to be worth a zoom; 3D camera-fly
                 // (P3) and non-spatial static-hold (P4) legs don't zoom the plane,
                 // so they skip the min-zoom floor.
@@ -2083,11 +2083,11 @@ namespace FracturingFog.Rendering
                     QualityPreset natural = QualityPreset.Standard;
                     foreach (var p in QualityPreset.All)
                     {
-                        if (p.Tier == QualityTier.Extreme) continue;
+                        if (p.Tier >= QualityTier.Extreme) continue;   // #1861: and Unbounded
                         if (p.ZoomMax >= tz) { natural = p; break; }
                     }
                     QualityPreset authored = region.QualityPreset ?? natural;
-                    if (authored.Tier == QualityTier.Extreme) authored = natural;
+                    if (authored.Tier >= QualityTier.Extreme) authored = natural;
                     _videoQuality = authored.Tier > natural.Tier ? authored : natural;
                 }
                 else if (isCameraLeg)
@@ -2105,11 +2105,11 @@ namespace FracturingFog.Rendering
                     QualityPreset natural = QualityPreset.Standard;
                     foreach (var p in QualityPreset.All)
                     {
-                        if (p.Tier == QualityTier.Extreme) continue;
+                        if (p.Tier >= QualityTier.Extreme) continue;   // #1861: and Unbounded
                         if (p.ZoomMax >= camAuthoredZoom) { natural = p; break; }
                     }
                     QualityPreset authored = region.QualityPreset ?? natural;
-                    if (authored.Tier == QualityTier.Extreme) authored = natural;
+                    if (authored.Tier >= QualityTier.Extreme) authored = natural;
                     _videoQuality = authored.Tier > natural.Tier ? authored : natural;
                 }
                 else if (reverse)
@@ -2124,11 +2124,11 @@ namespace FracturingFog.Rendering
                     QualityPreset natural = QualityPreset.Standard;
                     foreach (var p in QualityPreset.All)
                     {
-                        if (p.Tier == QualityTier.Extreme) continue;
+                        if (p.Tier >= QualityTier.Extreme) continue;   // #1861: and Unbounded
                         if (p.ZoomMax >= tz) { natural = p; break; }
                     }
                     QualityPreset authored = region.QualityPreset ?? natural;
-                    if (authored.Tier == QualityTier.Extreme) authored = natural;
+                    if (authored.Tier >= QualityTier.Extreme) authored = natural;
                     _videoQuality = authored.Tier > natural.Tier ? authored : natural;
                 }
                 else
@@ -2401,11 +2401,11 @@ namespace FracturingFog.Rendering
                 QualityPreset natural = QualityPreset.Standard;
                 foreach (var p in QualityPreset.All)
                 {
-                    if (p.Tier == QualityTier.Extreme) continue;
+                    if (p.Tier >= QualityTier.Extreme) continue;   // #1861: and Unbounded
                     if (p.ZoomMax >= tz) { natural = p; break; }
                 }
                 QualityPreset authored = region.QualityPreset ?? natural;
-                if (authored.Tier == QualityTier.Extreme) authored = natural;
+                if (authored.Tier >= QualityTier.Extreme) authored = natural;
                 _videoQuality = authored.Tier > natural.Tier ? authored : natural;
                 ViewState.Quality = _videoQuality;
 

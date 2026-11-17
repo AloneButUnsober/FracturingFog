@@ -18,8 +18,10 @@ the canonical task list; this doc backs them.
 | C5e AA jitter at depth by pixel + tier-3 recycle test | #1851 | §15 (merged, PR #1853) |
 | C5f periodic-reference detection past 1e154 | #1854 | §16 (merged, PR #1855) |
 | C8a reference-orbit arrays grow as built (#1828) | #1856 | §17 (merged, PR #1857) |
-| C8b explore iteration plan past the tier cap (#1426) | #1858 | §18 |
-| C6, C7, C9–C11 | filed when started (see #1428) | |
+| C8b explore iteration plan past the tier cap (#1426) | #1858 | §18 (merged, PR #1859) |
+| C9 Unbounded quality tier: zoom past 1e100 | #1861 | §19 |
+| C10 batch + Command builder parity past 1e100 | #1860 | filed |
+| C6, C7, C11 | filed when started (see #1428) | |
 
 ## 1. Why a new number type
 
@@ -352,3 +354,22 @@ A double zoom overflows at about 1.8e308. A double log10 zoom does not, and it k
 - **Not yet.**
   - The deep tier's own formula and cap: C9.
   - The partial-solid rescue and a higher rescue ceiling (#1426 item 2).
+
+## 19. The Unbounded tier: zoom past 1e100 (C9, #1861)
+
+- **`QualityPreset.Unbounded`** (`QualityTier.Unbounded`, last in `All`, also `QualityPreset.Deepest`).
+  - **Zoom range:** ZoomMax is +∞.
+  - **Iterations:** the formula is the Extreme tier's formula continued: 2048 + 1024 per decade, so the step from Extreme at 1e100 gives the same count. The cap is the explore ceiling (50 M). At 1e1000 that is 1,026,048 iterations.
+  - **AA:** 2×2 plus 8 TAA samples. Extreme uses 4×4 + 32, but every deep sample is a full arbitrary-precision frame.
+  - It renders through C3–C5: log zoom, the BigFloat orbit from 1e110, floatexp pixels with BLA / LA from 1e290, AA jitter by pixel, and periodic references at any depth.
+- **Input.** Wheel, box and key zoom promote to the deepest tier (`NaturalQualityForZoom`, the clamp in front of the promotion). Past 1e100 the tier-change status warns that frames are slow.
+- **The mini depth bar.** With an infinite ZoomMax its scale runs to 25 % past the current depth, at least to 1e120.
+- **Video / slideshow.** The automatic tier choice and the "all regions" filter skip Unbounded as they skip Extreme (`Tier >= Extreme`).
+- **Batch.** `--zoom` stays enforced at 1e100, and `--x` / `--y` carry OD limbs, until C10 (#1860).
+  - The Command builder reports a live view past 1e100, or with an exact centre, as a fidelity gap pointing at #1860 (`DetectGaps`, via `BatchCommandSnapshot.ZoomLog10` / `HasExactCentre`).
+  - Such a command is refused rather than rendering a wrong centre.
+- **Explore tools** (minibrot jump, finders, AutoExplorer) stay at Extreme's 1e100 until C7.
+- **Validation** (`S1861UnboundedTierTests`).
+  - The tier's place and lookups, and its formula's continuity with Extreme's.
+  - From Extreme just under 1e100, wheel steps promote to Unbounded with the warning and carry on past 1e100, then past double's range on the log, with no clamp.
+  - The batch gaps for 1e150, 1e500 and an exact centre, and none for a shallow view.

@@ -54,6 +54,14 @@ namespace FracturingFog.Cli
         public IReadOnlyList<double> CenterXLimbs { get; init; } = Array.Empty<double>();
         public IReadOnlyList<double> CenterYLimbs { get; init; } = Array.Empty<double>();
 
+        /// <summary>#1861 — the live view has an exact centre (#1832: digits past OD's limbs),
+        /// which --x / --y can't carry yet (#1860).</summary>
+        public bool HasExactCentre { get; init; }
+
+        /// <summary>#1861 — log10 of the live zoom (NaN: read <see cref="Zoom"/>); past
+        /// 1e100 (the Unbounded tier) --zoom can't carry it yet (#1860).</summary>
+        public double ZoomLog10 { get; init; } = double.NaN;
+
         /// <summary>Effective iteration count in use for the current render.
         /// Emitted as <c>--iter</c> whenever &gt; 0 so the poster does not drift
         /// with the quality preset's iteration formula.</summary>
@@ -759,6 +767,13 @@ namespace FracturingFog.Cli
         public static IReadOnlyList<string> DetectGaps(BatchCommandSnapshot snap)
         {
             var gaps = new List<string>();
+            // #1861 — views past 1e100 (Unbounded) and exact centres reproduce headless only
+            // with C10 (#1860): --zoom is enforced at 1e100 and --x / --y carry OD limbs.
+            double zl = double.IsNaN(snap.ZoomLog10) ? Math.Log10(snap.Zoom) : snap.ZoomLog10;
+            if (zl > Math.Log10(QualityPreset.Extreme.ZoomMax))
+                gaps.Add($"Zoom past 1e100 (1e{zl:F0}, the Unbounded tier): batch --zoom is capped at 1e100 until #1860, so this command will be refused");
+            else if (snap.HasExactCentre)
+                gaps.Add("Centre with digits past octuple-double (an exact centre): --x / --y carry the OD limbs only until #1860, so the headless render is centred on the rounded point");
             if (snap.ThemeIsUnsaved)
                 gaps.Add("Custom/unsaved theme (save it first so the command can reference it by name; falls back to HSV)");
             else if (snap.ThemeColorGenUnsaved)
