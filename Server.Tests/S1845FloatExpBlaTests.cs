@@ -98,6 +98,7 @@ public sealed class S1845FloatExpBlaTests
         calc.SetZoomLog10(zl);
         calc.ApReferenceZoomLog10 = 100;
         calc.DisableAcceleration = !bla;
+        calc.LaMode = DeepLaMode.Off;   // the BLA loop (LA, the Auto default past 1e30, is #1847's)
         calc.Calculate(CancellationToken.None);
         return calc;
     }
