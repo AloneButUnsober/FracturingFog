@@ -1202,10 +1202,19 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     private int _refPeriod;
     private double _refPeriodZ2;     // |Z_p|² of that orbit
     private double _refPeriodTol2;   // the tolerance the next build uses ((pixel size)²; 0 = off)
+    // #1854 (epic #1428, C5f) — the same tolerance as a FloatExp where (pixel size)²
+    // underflows double (past ~1e154): Zero = not needed (the double test stands) or off.
+    // The AP builder and PeriodicOrbitStillValid compare |Z_p|² against it in FloatExp.
+    private FloatExp _refPeriodTolFx;
+    private FloatExp _refPeriodZ2Fx;   // |Z_p|² of the cached orbit, in FloatExp
 
     /// <summary>#1614 — the reference orbit's period (0 when it is not periodic).
     /// Diagnostic / probe use.</summary>
     public int ReferencePeriod => _refPeriod;
+
+    /// <summary>#1854 — the reference orbit's generation (bumped by every build and every
+    /// invalidation): unchanged across two frames = the cached orbit was reused. Diagnostic.</summary>
+    public int ReferenceOrbitGeneration => _refOrbitGen;
 
     /// <summary>#1614 — detect a periodic reference orbit and stop it at the period
     /// (default on; FF_PERIODIC_REFERENCE=0 turns it off). Off: every reference runs to
@@ -1217,7 +1226,16 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     private bool PeriodicOrbitFits() => _refPeriod > 0;
     // ...while its |Z_p| is still below this frame's tolerance (a deeper frame has
     // smaller pixels; detection off wants the full orbit).
-    private bool PeriodicOrbitStillValid() => _refPeriod == 0 || _refPeriodZ2 < _refPeriodTol2;
+    private bool PeriodicOrbitStillValid() => _refPeriod == 0 || _refPeriodZ2 < _refPeriodTol2
+        || (!_refPeriodTolFx.IsZero && FloatExp.AbsLess(_refPeriodZ2Fx, _refPeriodTolFx));   // #1854
+
+    // #1854 — the period tolerance (pixel size)² from the log zoom, as a FloatExp, where the
+    // double square underflows (pixel < 1e-150); Zero where the double tolerance holds it.
+    private FloatExp PeriodTolFx(bool on)
+    {
+        double pxLog10 = Math.Log10(3.5 / Math.Max(EffectiveImageWidth, EffectiveImageHeight)) - ZoomLog10;
+        return on && pxLog10 < -150 ? FloatExp.FromLog10(2 * pxLog10) : FloatExp.Zero;
+    }
 
     // Wave 3.5 — reference-orbit recycling across frames. When the view centre
     // moves only slightly (pan/zoom video, interactive nudges), the cached
@@ -2853,6 +2871,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         // the periodicity check below could not see a cycle (0 of 4096 interior pixels
         // at the period-3 nucleus, 1e14).
         _refPeriodTol2 = PeriodicReferenceOrbit ? scale * scale : 0;
+        _refPeriodTolFx = PeriodTolFx(PeriodicReferenceOrbit);   // #1854
         if (UseApReference)
         {
             // #1849 — past OD's reach the BigFloat orbit at the exact centre (C4, #1840),
@@ -4550,6 +4569,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         // #1621 their SA skip stops short of the buffer's end.
         _refPeriodTol2 = PeriodicReferenceOrbit && AllowPtRebasing && !UseDdRebaseReference
             ? px * px : 0;
+        _refPeriodTolFx = PeriodTolFx(PeriodicReferenceOrbit && AllowPtRebasing && !UseDdRebaseReference);   // #1854
         if (UseApReference)
         {
             // #1840 — past OD's reach: BigFloat at the precision the zoom needs, at the
@@ -4758,6 +4778,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         double logDerivSum = 0.0;
         int period = 0;
         double periodZ2 = 0;
+        FloatExp periodZ2Fx = FloatExp.Zero;
+        bool tolFx = !_refPeriodTolFx.IsZero;   // #1854: past ~1e154 the tolerance is a FloatExp
         OD zrOd = OD.Zero, ziOd = OD.Zero;
         int n;
         for (n = 0; n < maxIter; n++)
@@ -4768,6 +4790,12 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             double zmag2 = zrOd.X0 * zrOd.X0 + ziOd.X0 * ziOd.X0;
             if (zmag2 >= EscapeRadius2) break;
             if (n > 0 && zmag2 < _refPeriodTol2) { period = n; periodZ2 = zmag2; }
+            else if (n > 0 && tolFx)
+            {
+                // #1854 — |Z_n|² in FloatExp, from the BigFloat Z_n (its double head underflows).
+                var m2 = FloatExp.Norm2(zr.ToFloatExp(), zi.ToFloatExp());
+                if (FloatExp.AbsLess(m2, _refPeriodTolFx)) { period = n; periodZ2 = zmag2; periodZ2Fx = m2; }
+            }
             if (zmag2 > 0.0 && zmag2 <= 4.0) logDerivSum += 0.5 * Math.Log10(4.0 * zmag2);
             var zr2 = BigFloat.Mul(zr, zr, prec);
             var zi2 = BigFloat.Mul(zi, zi, prec);
@@ -4791,6 +4819,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         _refCachedEscaped = n < maxIter && period == 0;
         _refPeriod = period;
         _refPeriodZ2 = periodZ2;
+        _refPeriodZ2Fx = periodZ2Fx;   // #1854
         _refExact = c;
         _refExactPrec = prec;
         _refCachedTier = 3;  // AP

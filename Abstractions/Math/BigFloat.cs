@@ -143,6 +143,17 @@ namespace FracturingFog.FFMath
         }
 
         /// <summary>The nearest double (ties to even); ±∞ past double range, 0 below it.</summary>
+        /// <summary>#1854 — the value as a <see cref="FloatExp"/> (53-bit mantissa, rounded
+        /// toward zero from the top 62 bits; any exponent).</summary>
+        public FloatExp ToFloatExp()
+        {
+            if (Mantissa.IsZero) return FloatExp.Zero;
+            long bl = (long)Mantissa.GetBitLength();
+            int drop = bl > 62 ? (int)(bl - 62) : 0;
+            var top = drop > 0 ? Mantissa >> drop : Mantissa;
+            return FloatExp.FromDouble((double)top).ScaleB(Exponent + drop);
+        }
+
         public double ToDouble()
         {
             if (IsZero) return 0;
