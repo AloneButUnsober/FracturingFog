@@ -16,8 +16,9 @@ the canonical task list; this doc backs them.
 | C5c floatexp LA stages | #1847 | §13 (merged, PR #1848) |
 | C5d orbit-aware colouring path (AP orbit, floatexp) | #1849 | §14 (merged, PR #1850) |
 | C5e AA jitter at depth by pixel + tier-3 recycle test | #1851 | §15 (merged, PR #1853) |
-| C5f periodic-reference detection past 1e154 | #1854 | §16 |
-| C6–C11 | filed when started (see #1428) | |
+| C5f periodic-reference detection past 1e154 | #1854 | §16 (merged, PR #1855) |
+| C8a reference-orbit arrays grow as built (#1828) | #1856 | §17 |
+| C6, C7, C8b–C11 | filed when started (see #1428) | |
 
 ## 1. Why a new number type
 
@@ -321,3 +322,19 @@ A double zoom overflows at about 1.8e308. A double log10 zoom does not, and it k
   - The next frame reuses the orbit: the generation is unchanged.
   - 1000 pixels off the nucleus no period is detected. The attracting cycle's point near 0 stays at about |Z₃|, about 1000 pixels. A one-pixel tolerance would wrongly take period 3.
   - `ToFloatExp` is the value to 2^-52.
+
+## 17. Orbit arrays grow as built (C8a, #1856 / #1828)
+
+- **The problem.** C8b and C9 raise iteration caps at depth, but the reference-orbit arrays (16 doubles per step) were sized to the cap rather than the orbit. At p951,094 the cap is 28.5 M, so 3.65 GB per calculator went to an orbit that stops at its period (951,095 entries). The zeroing of that allocation couldn't be cancelled either.
+- **The fix.**
+  - The CPU builders (DD / QD / OD / AP) start at min(cap + 1, 65,536) entries and double as the orbit grows, up to cap + 1.
+  - After a build, a capacity more than 4× the built length is trimmed back.
+  - Every reader indexes only up to `_refOrbitLen`; the GPU backends check `Length ≥ refLen`. Only the length matters.
+  - The GPU QD orbit and the seeded cluster orbits write `maxIter + 1` entries at once, so they keep the up-front size.
+- **Measured** on p951,094: 1,048,576 entries (134 MB) instead of 28.5 M (3.65 GB); orbit build 1.57 s.
+- **Validation** (`S1856OrbitGrowthTests`), in every CPU tier:
+  - A periodic orbit under a 10 M cap keeps the initial 65,536.
+  - c = i over 300,000 steps (Z_n exact in double) is exact at every growth boundary.
+  - A short orbit after it trims back, with the values kept.
+  - A cancelled first build allocates only the initial size.
+- **Not yet** (#1828): storing only the limbs each tier needs (DD writes zeros to six limb arrays).

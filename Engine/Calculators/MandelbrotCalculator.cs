@@ -4398,7 +4398,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             && PeriodicOrbitStillValid())
             return;
 
-        EnsureRefOrbitCapacity(maxIter);
+        BeginRefOrbit(maxIter);   // #1828: grows as built
         InvalidateRefOrbitCache();   // #1427: a cancel mid-build leaves no stale hit
         DD zr = DD.Zero, zi = DD.Zero;
         double logDerivSum = 0.0;   // Σ log₁₀|2·Zₙ| — δ-amplification decades
@@ -4408,6 +4408,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         for (n = 0; n < maxIter; n++)
         {
             if ((n & 1023) == 1023) ct.ThrowIfCancellationRequested();   // #1427
+            if (n >= _refZr.Length) GrowRefOrbit(n, maxIter);   // #1828
             _refZr[n] = zr.Hi;  _refZrLo[n] = zr.Lo;
             _refZi[n] = zi.Hi;  _refZiLo[n] = zi.Lo;
             _refZrX2[n] = 0;    _refZrX3[n] = 0;
@@ -4431,12 +4432,14 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             if (period > 0) { n++; break; }
         }
         MaxUsefulZoomLog10 = n < maxIter && period == 0 ? logDerivSum : double.PositiveInfinity;
+        if (n >= _refZr.Length) GrowRefOrbit(n, maxIter);   // #1828: the final Z_n
         _refZr[n] = zr.Hi;  _refZrLo[n] = zr.Lo;
         _refZi[n] = zi.Hi;  _refZiLo[n] = zi.Lo;
         _refZrX2[n] = 0;    _refZrX3[n] = 0;
         _refZiX2[n] = 0;    _refZiX3[n] = 0;
         _refZrX4[n] = 0;    _refZrX5[n] = 0; _refZrX6[n] = 0; _refZrX7[n] = 0;
         _refZiX4[n] = 0;    _refZiX5[n] = 0; _refZiX6[n] = 0; _refZiX7[n] = 0;
+        TrimRefOrbit(n);   // #1828
         _refOrbitLen = n;  // == maxIter when centre is interior
         _refOrbitGen++;
 
@@ -4467,6 +4470,60 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         _refOrbitGen++;
     }
 
+    // #1828 — the CPU builders grow the orbit arrays as they go, instead of sizing them to
+    // the iteration cap up front: at p951,094 the cap (28.5 M) made 16 × 228 MB = 3.65 GB per
+    // calculator for an orbit that stops at its period (951,095 entries), and zeroing the
+    // allocation could not be cancelled. Every reader indexes up to _refOrbitLen (≤ the
+    // built length + 1), so only the length matters.
+    private const int RefOrbitInitialCapacity = 1 << 16;
+
+    /// <summary>#1828 — the orbit arrays' capacity (entries). Diagnostic.</summary>
+    public int ReferenceOrbitCapacity => _refZr.Length;
+
+    // A build up to maxIter starts with min(maxIter + 1, 65,536) entries (keeping larger
+    // arrays it already has).
+    private void BeginRefOrbit(int maxIter)
+    {
+        int want = Math.Min(maxIter + 1, RefOrbitInitialCapacity);
+        if (_refZr.Length < want) ResizeRefOrbit(want, 0);
+    }
+
+    // Room for index n: double the capacity (at most maxIter + 1), keeping entries 0..n-1.
+    private void GrowRefOrbit(int n, int maxIter)
+    {
+        long next = Math.Max((long)_refZr.Length * 2, n + 1L);
+        ResizeRefOrbit((int)Math.Min(next, maxIter + 1L), n);
+    }
+
+    // After a build of length n: drop a capacity more than 4× what it holds (above the
+    // initial size), so one long orbit doesn't pin its memory for every later frame.
+    private void TrimRefOrbit(int n)
+    {
+        long need = n + 1L;
+        if (_refZr.Length > RefOrbitInitialCapacity && _refZr.Length > 4 * need)
+            ResizeRefOrbit((int)Math.Max(need, RefOrbitInitialCapacity), n + 1);
+    }
+
+    private void ResizeRefOrbit(int size, int keep)
+    {
+        static double[] R(double[] a, int size, int keep)
+        {
+            var b = new double[size];
+            Array.Copy(a, b, Math.Min(keep, Math.Min(a.Length, size)));
+            return b;
+        }
+        _refZr = R(_refZr, size, keep); _refZi = R(_refZi, size, keep);
+        _refZrLo = R(_refZrLo, size, keep); _refZiLo = R(_refZiLo, size, keep);
+        _refZrX2 = R(_refZrX2, size, keep); _refZiX2 = R(_refZiX2, size, keep);
+        _refZrX3 = R(_refZrX3, size, keep); _refZiX3 = R(_refZiX3, size, keep);
+        _refZrX4 = R(_refZrX4, size, keep); _refZiX4 = R(_refZiX4, size, keep);
+        _refZrX5 = R(_refZrX5, size, keep); _refZiX5 = R(_refZiX5, size, keep);
+        _refZrX6 = R(_refZrX6, size, keep); _refZiX6 = R(_refZiX6, size, keep);
+        _refZrX7 = R(_refZrX7, size, keep); _refZiX7 = R(_refZiX7, size, keep);
+    }
+
+    // The GPU QD orbit and the seeded (cluster) orbits write up to maxIter + 1 entries in one
+    // go, so they still size the arrays up front.
     private void EnsureRefOrbitCapacity(int maxIter)
     {
         if (_refZr.Length > maxIter) return;
@@ -4506,7 +4563,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             && PeriodicOrbitStillValid())
             return;
 
-        EnsureRefOrbitCapacity(maxIter);
+        BeginRefOrbit(maxIter);   // #1828: grows as built
         InvalidateRefOrbitCache();   // #1427: a cancel mid-build leaves no stale hit
         QD zr = QD.Zero, zi = QD.Zero;
         double logDerivSum = 0.0;   // Σ log₁₀|2·Zₙ| — δ-amplification decades
@@ -4516,6 +4573,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         for (n = 0; n < maxIter; n++)
         {
             if ((n & 1023) == 1023) ct.ThrowIfCancellationRequested();   // #1427
+            if (n >= _refZr.Length) GrowRefOrbit(n, maxIter);   // #1828
             _refZr[n] = zr.X0;  _refZrLo[n] = zr.X1;  _refZrX2[n] = zr.X2;  _refZrX3[n] = zr.X3;
             _refZi[n] = zi.X0;  _refZiLo[n] = zi.X1;  _refZiX2[n] = zi.X2;  _refZiX3[n] = zi.X3;
             _refZrX4[n] = 0; _refZrX5[n] = 0; _refZrX6[n] = 0; _refZrX7[n] = 0;
@@ -4537,10 +4595,12 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             if (period > 0) { n++; break; }
         }
         MaxUsefulZoomLog10 = n < maxIter && period == 0 ? logDerivSum : double.PositiveInfinity;
+        if (n >= _refZr.Length) GrowRefOrbit(n, maxIter);   // #1828: the final Z_n
         _refZr[n] = zr.X0;  _refZrLo[n] = zr.X1;  _refZrX2[n] = zr.X2;  _refZrX3[n] = zr.X3;
         _refZi[n] = zi.X0;  _refZiLo[n] = zi.X1;  _refZiX2[n] = zi.X2;  _refZiX3[n] = zi.X3;
         _refZrX4[n] = 0; _refZrX5[n] = 0; _refZrX6[n] = 0; _refZrX7[n] = 0;
         _refZiX4[n] = 0; _refZiX5[n] = 0; _refZiX6[n] = 0; _refZiX7[n] = 0;
+        TrimRefOrbit(n);   // #1828
         _refOrbitLen = n;
         _refOrbitGen++;
 
@@ -4662,6 +4722,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             _refZiX4[k] = 0; _refZiX5[k] = 0; _refZiX6[k] = 0; _refZiX7[k] = 0;
         }
 
+        TrimRefOrbit(n);   // #1828
         _refOrbitLen = n;
         _refOrbitGen++;
 
@@ -4696,7 +4757,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             && PeriodicOrbitStillValid())
             return;
 
-        EnsureRefOrbitCapacity(maxIter);
+        BeginRefOrbit(maxIter);   // #1828: grows as built
         InvalidateRefOrbitCache();   // #1427: a cancel mid-build leaves no stale hit
         OD zr = OD.Zero, zi = OD.Zero;
         double logDerivSum = 0.0;   // Σ log₁₀|2·Zₙ| — δ-amplification decades
@@ -4706,6 +4767,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         for (n = 0; n < maxIter; n++)
         {
             if ((n & 1023) == 1023) ct.ThrowIfCancellationRequested();   // #1427
+            if (n >= _refZr.Length) GrowRefOrbit(n, maxIter);   // #1828
             _refZr[n] = zr.X0;   _refZrLo[n] = zr.X1;
             _refZrX2[n] = zr.X2; _refZrX3[n] = zr.X3;
             _refZrX4[n] = zr.X4; _refZrX5[n] = zr.X5;
@@ -4731,6 +4793,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             if (period > 0) { n++; break; }
         }
         MaxUsefulZoomLog10 = n < maxIter && period == 0 ? logDerivSum : double.PositiveInfinity;
+        if (n >= _refZr.Length) GrowRefOrbit(n, maxIter);   // #1828: the final Z_n
         _refZr[n] = zr.X0;   _refZrLo[n] = zr.X1;
         _refZrX2[n] = zr.X2; _refZrX3[n] = zr.X3;
         _refZrX4[n] = zr.X4; _refZrX5[n] = zr.X5;
@@ -4739,6 +4802,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         _refZiX2[n] = zi.X2; _refZiX3[n] = zi.X3;
         _refZiX4[n] = zi.X4; _refZiX5[n] = zi.X5;
         _refZiX6[n] = zi.X6; _refZiX7[n] = zi.X7;
+        TrimRefOrbit(n);   // #1828
         _refOrbitLen = n;
         _refOrbitGen++;
 
@@ -4771,7 +4835,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             && PeriodicOrbitStillValid())
             return;
 
-        EnsureRefOrbitCapacity(maxIter);
+        BeginRefOrbit(maxIter);   // #1828: grows as built
         InvalidateRefOrbitCache();   // #1427: a cancel mid-build leaves no stale hit
         BigFloat cx = c.Re.WithPrecision(prec), cy = c.Im.WithPrecision(prec);
         BigFloat zr = BigFloat.Zero(prec), zi = BigFloat.Zero(prec);
@@ -4785,6 +4849,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         for (n = 0; n < maxIter; n++)
         {
             if ((n & 63) == 63) ct.ThrowIfCancellationRequested();   // #1427
+            if (n >= _refZr.Length) GrowRefOrbit(n, maxIter);   // #1828
             zrOd = zr.ToOD(); ziOd = zi.ToOD();
             StoreRefOd(n, zrOd, ziOd);
             double zmag2 = zrOd.X0 * zrOd.X0 + ziOd.X0 * ziOd.X0;
@@ -4805,8 +4870,10 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             if (period > 0) { n++; break; }
         }
         MaxUsefulZoomLog10 = n < maxIter && period == 0 ? logDerivSum : double.PositiveInfinity;
+        if (n >= _refZr.Length) GrowRefOrbit(n, maxIter);   // #1828: the final Z_n
         if (n == maxIter || period > 0) { zrOd = zr.ToOD(); ziOd = zi.ToOD(); }
         StoreRefOd(n, zrOd, ziOd);
+        TrimRefOrbit(n);   // #1828
         _refOrbitLen = n;
         _refOrbitGen++;
 
