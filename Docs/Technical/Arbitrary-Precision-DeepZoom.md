@@ -13,8 +13,9 @@ the canonical task list; this doc backs them.
 | C4 arbitrary-precision reference orbit (CPU) | #1840 | §10 (merged, PR #1841) |
 | C5a floatexp per-pixel perturbation (CPU, scalar) | #1842 | §11 (merged, PR #1844) |
 | C5b floatexp BLA | #1845 | §12 (merged, PR #1846) |
-| C5c floatexp LA stages | #1847 | §13 |
-| C5d–C11 | filed when started (see #1428) | |
+| C5c floatexp LA stages | #1847 | §13 (merged, PR #1848) |
+| C5d orbit-aware colouring path (AP orbit, floatexp) | #1849 | §14 |
+| C5e–C11 | filed when started (see #1428) | |
 
 ## 1. Why a new number type
 
@@ -267,3 +268,17 @@ A double zoom overflows at about 1.8e308. A double log10 zoom does not, and it k
   - **Not separately observed:** the rebase inside a stage (|δ| > |z| after a step). Without it, a large δ fails the next step's |w| < Thr test and drops to the tail, which rebases. No frame tried here shows the difference.
   - S1845's BLA tests now set `LaMode = Off`.
 - **Not yet.** The AT in floatexp, SIMD (LA4) and SA rescaling.
+
+## 14. The orbit-aware colouring path (C5d, #1849)
+
+- **The problem.** `CalculateOrbitAwarePerturbation` (orbit palettes: traps, stripes, curvature …) built its own reference orbit through DD / QD / OD and never reached C4's BigFloat builder.
+  - Past OD's coordinate floor its image was centred on the limbs, about 1e22 pixels from the exact centre at 1e150.
+  - Past double, dc and δ underflowed.
+- **Reference orbit.** Past `ApReferenceZoomLog10` its dispatch now takes the AP builder at the exact centre, as the main path does. Below that, its own dispatch and period tolerance are unchanged.
+- **Past `FloatExpZoomLog10`:**
+  - `CalculateOrbitAwareFloatExpRows` / `ComputePixelOrbitPerturbationFx` are C5a's loop with the palette sampling z = Z[m] + δ as a double, and the (δ, m) periodicity check on exact FloatExp repeats.
+  - The GPU orbit kernel is not tried there.
+  - The label gets ` FX`. The path also resets the LA flag, so its label no longer inherits a stale ` LA` from a previous main-path frame.
+- **Validation** (`S1849OrbitPathDeepTests`, with `CurvatureAverageMap`). The oracle iterates each sampled pixel directly in BigFloat and feeds the same palette that orbit.
+  - At 1e150 around a centre past OD, at 1e400 at c = i and at 1e60, every count is the direct count.
+  - Every colour is within 2 per channel of the direct colour.
