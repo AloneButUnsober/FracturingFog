@@ -259,6 +259,7 @@ namespace FracturingFog.Cli
             Probe("FF_DEEPCOST_KFR", "--deepcostprobe", "folder of Kalles Fraktaler .kfr locations to measure.", "#1615"),
             Probe("FF_DEEPCOST_LA_AB", "--deepcostprobe", "A/B the same frame through the LA evaluator.", "#1626"),
             Probe("FF_DEEPCOST_LA_SIMD_AB", "--deepcostprobe", "A/B the scalar against the 4-lane LA tail.", "#1628"),
+            Probe("FF_BIGFLOAT_ITERS", "--bigfloatprobe", "Orbit iterations per precision row (default 20,000).", "#1830"),
             Probe("FF_DEEPCOST_AA_REUSE_AB", "--deepcostprobe", "A/B a 16-sample MSAA pass reusing the reference orbit against rebuilding it per sample; cancel latency.", "#1427"),
             Probe("FF_DEEPCOST_LA_ASCEND_AB", "--deepcostprobe", "A/B Imagina's LA stages, the climb back, and the climb with 3 stage bits.", "#1614"),
             Probe("FF_DEEPCOST_NOREF", "--deepcostprobe", "reference-orbit option.", "#1613"),
