@@ -2682,16 +2682,15 @@ namespace FracturingFog.Rendering
         /// view it was for, the cap it started from and the cap that made pixels
         /// escape (0 = probed, nothing escapes up to the ceiling, so don't probe
         /// this view again).</summary>
-        private sealed record IterRescueMemo(
-            double Zoom, double Cx, double CxLo, double Cx2, double Cy, double CyLo, double Cy2,
-            int FromIterations, int Iterations)
+        // #1858 (#1426 item 3) — keyed on all sixteen centre limbs: three per part used to
+        // match two views past 1e50 that differ only in limbs 3..7.
+        private sealed record IterRescueMemo(double Zoom, CentreLimbs Centre, int FromIterations, int Iterations)
         {
             public static IterRescueMemo For(MandelbrotCalculator c, int from, int found)
-                => new(c.Zoom, c.CenterX, c.CenterXLo, c.CenterX2, c.CenterY, c.CenterYLo, c.CenterY2, from, found);
+                => new(c.Zoom, CentreLimbs.Capture(c), from, found);
 
             public bool Matches(MandelbrotCalculator c)
-                => c.Zoom == Zoom && c.CenterX == Cx && c.CenterXLo == CxLo && c.CenterX2 == Cx2
-                   && c.CenterY == Cy && c.CenterYLo == CyLo && c.CenterY2 == Cy2;
+                => c.Zoom == Zoom && CentreLimbs.Capture(c) == Centre;
         }
 
         // Written on the calc thread, read by ApplyView on the UI thread; a
