@@ -142,6 +142,10 @@ public static class TilePlanner
 
         double cx0 = request.CenterX!.Value;
         double cy0 = request.CenterY!.Value;
+        // #1838 — log10 zoom (past double Zoom saturates) and the exact centre, if any.
+        double zoomLog10 = request.ZoomLog10Value();
+        double pixelLog10 = Math.Log10(3.5 / maxWH) - zoomLog10;
+        var exact = request.CentreExact();
 
         var tiles = new List<TileJobDto>(cols * rows);
         int tileId = 0;
@@ -169,6 +173,16 @@ public static class TilePlanner
                 tileReq.CenterX = tileCx;
                 tileReq.CenterY = tileCy;
                 tileReq.Zoom    = tileZoom;
+                // #1838 — past double the tile zoom runs on the log.
+                if (FracturingFog.ViewState.ZoomLog.BeyondDouble(zoomLog10))
+                    tileReq.SetZoomLog10(zoomLog10 + Math.Log10(maxWH / tileMaxWH));
+                // #1838 (C2b fix) — the tile's exact centre is the image's plus the tile's
+                // offset. A copy of the image's made every tile render the image centre (the
+                // worker's load rewrites the limbs from the exact centre).
+                if (exact is { } e)
+                    tileReq.SetCentreExact(e.TranslatePixels(
+                        offX + tW * 0.5 - W * 0.5, offY + tH * 0.5 - H * 0.5,
+                        scale, pixelLog10, Math.Max(e.Precision, FracturingFog.FFMath.BigFloat.PrecisionForZoom(zoomLog10))));
                 // ReturnMode irrelevant for tile rendering — the worker
                 // never persists per-tile artifacts on disk; pin to
                 // "inline" so a stale "saved-path" doesn't make the
@@ -273,6 +287,7 @@ public static class TilePlanner
             CenterX4 = src.CenterX4, CenterX5 = src.CenterX5, CenterX6 = src.CenterX6, CenterX7 = src.CenterX7,
             CenterY4 = src.CenterY4, CenterY5 = src.CenterY5, CenterY6 = src.CenterY6, CenterY7 = src.CenterY7,
             CenterExactX = src.CenterExactX, CenterExactY = src.CenterExactY, CenterExactBits = src.CenterExactBits,   // #1833
+            ZoomLog10 = src.ZoomLog10,   // #1838
             ThemeName            = src.ThemeName,
             QualityName          = src.QualityName,
             ThemeJson            = src.ThemeJson,
@@ -351,6 +366,7 @@ public static class TilePlanner
             t.Render.CenterY7   = submitRequest.CenterY7;
             t.Render.CopyExactCentreFrom(submitRequest);   // #1833
             t.Render.Zoom       = imgZoom;
+            t.Render.ZoomLog10  = submitRequest.ZoomLog10;   // #1838
             t.Render.Width      = tW;
             t.Render.Height     = tH;
             t.Render.ImageWidth     = imgW;

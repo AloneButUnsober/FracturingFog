@@ -398,10 +398,8 @@ public sealed class FFWorkerAgent : IAsyncDisposable
 
                 double t = range.TotalFrames == 1 ? 1.0 : (double)f / (range.TotalFrames - 1);
                 double te = t * t * (3.0 - 2.0 * t);
-                double zoomF = Math.Exp(range.LogStartZoom + range.LogZoomDelta * te);
-
                 var perFrame = CloneRender(tile.Render);
-                perFrame.Zoom = zoomF;
+                perFrame.SetZoomLn(range.LogStartZoom + range.LogZoomDelta * te);   // #1838: log past double
 
                 string frameDir = Path.Combine(workDirBase, $"f{f:D6}");
                 Directory.CreateDirectory(frameDir);
@@ -494,6 +492,7 @@ public sealed class FFWorkerAgent : IAsyncDisposable
         CenterX4 = src.CenterX4, CenterX5 = src.CenterX5, CenterX6 = src.CenterX6, CenterX7 = src.CenterX7,
         CenterY4 = src.CenterY4, CenterY5 = src.CenterY5, CenterY6 = src.CenterY6, CenterY7 = src.CenterY7,
         CenterExactX = src.CenterExactX, CenterExactY = src.CenterExactY, CenterExactBits = src.CenterExactBits,   // #1833
+        ZoomLog10 = src.ZoomLog10,   // #1838
         ThemeName            = src.ThemeName,
         QualityName          = src.QualityName,
         ThemeJson            = src.ThemeJson,

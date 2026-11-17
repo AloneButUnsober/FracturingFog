@@ -8,7 +8,8 @@ the canonical task list; this doc backs them.
 | C1 BigFloat type | #1830 | §1–§5 (merged, PR #1831) |
 | C2a exact centre in view state + region JSON | #1832 | §6 (merged, PR #1834) |
 | C2b exact centre in history, location strings, video, RPC, cluster | #1833 | §7 (merged, PR #1835) |
-| C3 log zoom: view state, camera, readouts, iterations, region JSON | #1836 | §8 |
+| C3 log zoom: view state, camera, readouts, iterations, region JSON | #1836 | §8 (merged, PR #1837) |
+| C3b log zoom through history, server request, cluster planners | #1838 | §9 |
 | C4–C11 | filed when started (see #1428) | |
 
 ## 1. Why a new number type
@@ -140,6 +141,29 @@ A double zoom overflows at about 1.8e308. A double log10 zoom does not, and it k
   - On load a valid log rewrites `Zoom` (saturated). One that is not past double, or not finite, is dropped, and `Zoom` rules.
   - Apply / capture / clone go through `CopyZoomTo` / `LogFieldFor`.
 - **Not yet.**
-  - History, video keyframes, the server request and the cluster planners: C3b.
+  - History, video keyframes, the server request and the cluster planners: C3b (§9).
   - Batch `--zoom` past double: C10. Batch is clamped at Extreme's 1e100 today.
   - Rendering past 1e100: C4–C6 and the cap in C9.
+
+## 9. Log zoom carriers (C3b, #1838)
+
+- **History** (`NavSnapshot`) carries the log past double, and Back restores it.
+  - Two deep views with the same saturated `Zoom` are no longer the same snapshot.
+- **Server request.**
+  - `RenderRequestDto.zoomLog10` is written only past double.
+  - On load a valid log rewrites `zoom` (saturated); a damaged one is dropped. This is the region rule (§8).
+  - `SetZoomLog10` sets the log only past double.
+  - `SetZoomLn` sets a video frame's zoom: `Exp(ln)` while that is a double (the old expression), the log past it.
+- **Image tiles.**
+  - Past double, a tile's zoom is the image's log plus its size ratio.
+  - **Fix (from C2b):** each tile's exact centre is now the image's plus the tile's offset. The pixel-offset maths is `ExactCentre.TranslatePixels`, which the camera shares. Before, every tile of a plain (non-shared-orbit) plan carried the image's exact centre. The worker's load then rewrote the tile's limbs from it, so every tile rendered the image centre.
+  - The shared-orbit path still gives every tile the image centre and zoom (it renders subrects), now with the log.
+- **Video frames.**
+  - The frame planner's natural-log range ends at the target's log past double; reverse swaps it.
+  - The worker sets each frame through `SetZoomLn`. Before, `Exp` overflowed to infinity.
+- **Slideshow planner:** a slide takes the log together with the zoom it takes (the slide's, else the template's).
+- The worker's clone copies the log.
+- **Not changed.**
+  - **Live video keyframes:** those legs clamp to Ultra's `ZoomMax`.
+  - **The host engine:** renders with its double zoom. Rendering past 1e100 is C4–C6.
+  - **Batch:** C10.

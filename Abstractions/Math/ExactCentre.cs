@@ -77,6 +77,30 @@ namespace FracturingFog.FFMath
             return n;
         }
 
+        /// <summary>#1838 — this centre moved by (<paramref name="dxPx"/>, <paramref name="dyPx"/>)
+        /// pixels of size <paramref name="pixel"/> world units, exactly (one rounding per part,
+        /// at <paramref name="precision"/> bits). While <paramref name="pixel"/> is a normal
+        /// double the offset is <c>d·pixel</c>; past that (zoom past double) the pixel comes from
+        /// <paramref name="pixelLog10"/> as m·2^k, so it holds at any depth.</summary>
+        public ExactCentre TranslatePixels(double dxPx, double dyPx, double pixel, double pixelLog10, int precision)
+        {
+            BigFloat dx, dy;
+            if (double.IsNormal(pixel) && pixel > 1e-290)
+            {
+                dx = BigFloat.FromDouble(dxPx * pixel, precision);
+                dy = BigFloat.FromDouble(dyPx * pixel, precision);
+            }
+            else
+            {
+                double l2 = pixelLog10 * 3.3219280948873622;
+                double k = Math.Floor(l2);
+                double m = Math.Pow(2, l2 - k);   // [1, 2)
+                dx = BigFloat.FromDouble(dxPx * m, precision).ScaleB((long)k);
+                dy = BigFloat.FromDouble(dyPx * m, precision).ScaleB((long)k);
+            }
+            return new ExactCentre(BigFloat.Add(Re, dx, precision), BigFloat.Add(Im, dy, precision));
+        }
+
         /// <summary>True when the two OD centres have the same sixteen limbs.</summary>
         public static bool SameLimbs(DeepComplex a, DeepComplex b)
             => a.Re.X0 == b.Re.X0 && a.Re.X1 == b.Re.X1 && a.Re.X2 == b.Re.X2 && a.Re.X3 == b.Re.X3

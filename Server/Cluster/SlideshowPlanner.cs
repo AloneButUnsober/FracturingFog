@@ -157,6 +157,7 @@ public static class SlideshowPlanner
             CenterX              = slide.CenterX  ?? template.CenterX,
             CenterY              = slide.CenterY  ?? template.CenterY,
             Zoom                 = slide.Zoom     ?? template.Zoom,
+            ZoomLog10            = slide.Zoom != null ? slide.ZoomLog10 : template.ZoomLog10,   // #1838: paired with Zoom
             Iterations           = slide.Iterations ?? template.Iterations,
             CenterXLo            = slide.CenterXLo != 0 ? slide.CenterXLo : template.CenterXLo,
             CenterX2             = slide.CenterX2  != 0 ? slide.CenterX2  : template.CenterX2,

@@ -55,8 +55,6 @@ namespace FracturingFog.ViewState
         /// exact centre: OD's measured clean coordinate floor (~1e120, --qdfloorsweep).</summary>
         public const double ExactNavZoomLog10 = 120;
 
-        private const double Log2Of10 = 3.3219280948873622;
-
         private readonly FractalViewState _vs;
 
         public ViewCamera(FractalViewState vs)
@@ -184,23 +182,6 @@ namespace FracturingFog.ViewState
         // c + (ox, oy) pixels at the current scale, exactly (one rounding per part). The
         // pixel scale comes from the log as m·2^k so it holds past double's range.
         private ExactCentre Offset(ExactCentre c, double ox, double oy, int viewW, int viewH, int prec)
-        {
-            double s = Scale(viewW, viewH);
-            BigFloat dx, dy;
-            if (double.IsNormal(s) && s > 1e-290)
-            {
-                dx = BigFloat.FromDouble(ox * s, prec);
-                dy = BigFloat.FromDouble(oy * s, prec);
-            }
-            else
-            {
-                double l2 = ScaleLog10(viewW, viewH) * Log2Of10;
-                double k = Math.Floor(l2);
-                double m = Math.Pow(2, l2 - k);   // [1, 2)
-                dx = BigFloat.FromDouble(ox * m, prec).ScaleB((long)k);
-                dy = BigFloat.FromDouble(oy * m, prec).ScaleB((long)k);
-            }
-            return new ExactCentre(BigFloat.Add(c.Re, dx, prec), BigFloat.Add(c.Im, dy, prec));
-        }
+            => c.TranslatePixels(ox, oy, Scale(viewW, viewH), ScaleLog10(viewW, viewH), prec);   // #1838: shared
     }
 }

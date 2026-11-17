@@ -212,12 +212,26 @@ public sealed class S1833ExactCentreCarriersTests
     }
 
     [Fact]
-    public void The_Image_And_Video_Planners_Hand_It_To_Every_Tile()
+    public void The_Image_And_Video_Planners_Hand_It_To_Every_Tile_At_Its_Own_Offset()
     {
         var c = Centre();
         var image = TilePlanner.PlanImage(Request(c), 256);
         Assert.True(image.TileCount > 1);
-        Assert.All(image.Tiles, t => Assert.Equal(c, t.Render.CentreExact()));
+        // #1838 — each tile's exact centre is the image's plus the tile's own offset, in
+        // pixels (pixel = 3.5 / 1024 / 1e300, from decimal text). Before #1838 every tile
+        // carried the image's, which the worker's load turned into the image centre.
+        int p = c.Precision + 64;
+        var pixel = BigFloat.Parse("3.5e-300", p) / BigFloat.FromDouble(1024, p);
+        Assert.All(image.Tiles, t =>
+        {
+            var e = t.Render.CentreExact()!.Value;
+            double ox = t.OffsetX + t.Render.Width * 0.5 - 1024 * 0.5;
+            double oy = t.OffsetY + t.Render.Height * 0.5 - 512 * 0.5;
+            Assert.Equal(ox, BigFloat.Div(BigFloat.Sub(e.Re, c.Re, p), pixel, p).ToDouble(), 6);
+            Assert.Equal(oy, BigFloat.Div(BigFloat.Sub(e.Im, c.Im, p), pixel, p).ToDouble(), 6);
+            Assert.Equal(e.ToDeep().Re.X0, t.Render.CenterX);   // the limbs are the tile's too
+        });
+        Assert.Contains(image.Tiles, t => t.OffsetX > 0);
 
         var v = Request(c);
         v.Mode = "video"; v.VideoFps = 10; v.VideoSeconds = 1;
