@@ -32,7 +32,15 @@ namespace FracturingFog.FFMath
         public static readonly FloatExp Zero = new(0, 0);
         public static readonly FloatExp One = new(1, 0);
 
+        /// <summary>#1847 — a value above every finite operand (2^(2^60)): x / 0 in the LA
+        /// builders' min(…, x / y), where double gives +∞. Only ever compared or scaled by a
+        /// finite factor.</summary>
+        public static readonly FloatExp Huge = new(1, 1L << 60);
+
         public bool IsZero => M == 0;
+
+        /// <summary>#1847 — |this|.</summary>
+        public FloatExp Abs() => new(Math.Abs(M), E);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static FloatExp Norm(double m, long e)

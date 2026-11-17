@@ -4986,6 +4986,14 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         var bla = DisableAcceleration ? null
             : EnsureBlaTableFx(scale * Math.Sqrt(halfW * halfW + halfH * halfH));
         _blaSkipsTotal = 0; _blaIterSkippedTotal = 0; _ptStepsTotal = 0;
+        // #1847 — the LA stages where the double path would use them (LaWanted: Auto from
+        // its crossover zoom, so past double by default), with the same gates as LaActive.
+        var laFx = LaWanted && !DisableAcceleration && AllowPtRebasing && !UseDdRebaseReference
+            ? EnsureLaTableFx() : null;
+        if (laFx is { Finite: false }) laFx = null;
+        var laTail = LaTailBla ? bla : null;
+        _lastFrameUsedLa = laFx != null;
+        _laPixelsTotal = _laStepsTotal = _laPlainTotal = _laBlaTotal = 0;
         int offX = SubRectOffsetX, offY = SubRectOffsetY;
         int[]? perRow = PerRowMaxIter;
         bool useTileCap = perRow != null && perRow.Length >= Height;
@@ -5000,12 +5008,27 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             int rowBase = y * w;
             var dcI = scale * (offY + y - halfH);
             long rowSkips = 0, rowSaved = 0, rowSteps = 0;
+            long laSteps = 0, laPlain = 0, laBla = 0, laPx = 0;
             for (int x = 0; x < w; x++)
             {
                 int idx = rowBase + x;
                 if (!Marked(idx)) continue;
-                ComputePixelPTFx(scale * (offX + x - halfW), dcI, rowMaxIt, idx, colorMap, bla,
-                    ref rowSkips, ref rowSaved, ref rowSteps);
+                if (laFx != null)
+                {
+                    EvaluateLaFx(laFx, laTail, scale * (offX + x - halfW), dcI, rowMaxIt, idx, colorMap,
+                        ref laSteps, ref laPlain, ref laBla);
+                    laPx++;
+                }
+                else
+                    ComputePixelPTFx(scale * (offX + x - halfW), dcI, rowMaxIt, idx, colorMap, bla,
+                        ref rowSkips, ref rowSaved, ref rowSteps);
+            }
+            if (laPx > 0)
+            {
+                Interlocked.Add(ref _laPixelsTotal, laPx);
+                Interlocked.Add(ref _laStepsTotal, laSteps);
+                Interlocked.Add(ref _laPlainTotal, laPlain);
+                Interlocked.Add(ref _laBlaTotal, laBla);
             }
             Interlocked.Add(ref _blaSkipsTotal, rowSkips);
             Interlocked.Add(ref _blaIterSkippedTotal, rowSaved);

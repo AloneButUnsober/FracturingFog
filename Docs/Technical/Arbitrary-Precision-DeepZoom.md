@@ -12,8 +12,9 @@ the canonical task list; this doc backs them.
 | C3b log zoom through history, server request, cluster planners | #1838 | §9 (merged, PR #1839) |
 | C4 arbitrary-precision reference orbit (CPU) | #1840 | §10 (merged, PR #1841) |
 | C5a floatexp per-pixel perturbation (CPU, scalar) | #1842 | §11 (merged, PR #1844) |
-| C5b floatexp BLA | #1845 | §12 |
-| C5c–C11 | filed when started (see #1428) | |
+| C5b floatexp BLA | #1845 | §12 (merged, PR #1846) |
+| C5c floatexp LA stages | #1847 | §13 |
+| C5d–C11 | filed when started (see #1428) | |
 
 ## 1. Why a new number type
 
@@ -246,3 +247,23 @@ A double zoom overflows at about 1.8e308. A double log10 zoom does not, and it k
   - At 1e400 and 1e1000 BLA cuts the loop's work by at least 3×, and every pixel's count stays the plain loop's, which S1842 shows is the direct BigFloat count.
 - **Accuracy.** BLA is an approximation. On S1842's minibrot frame it is off on 64 of 256 pixels, close to the double path's BLA (48 of 256, #1346). That test now runs the plain loop.
 - **Not yet:** LA stages in floatexp (C5c), SA rescaling, SIMD.
+
+## 13. Floatexp LA stages (C5c, #1847)
+
+- **Why.** LA (the Imagina-style stage evaluator, #1623) is the default deep evaluator from its Auto crossover (about 1e30). Past double the double `LaStageTable` can't hold its numbers: A and B (∏2Z and the dc response over a step) overflow, and Thr / ThrC (the δ and δc validity radii) underflow.
+- **`LaStageTableFx`** (`Engine/Math/LaStageTableFx.cs`) ports `LaStageTable`'s `La` struct and `Builder` line for line.
+  - A, B, Thr and ThrC are in FloatExp (with a small `CFx` complex type); Ref stays double.
+  - The stage 0 / NextStage walk, both period tests, the fixed-length stages (`LaStageBits`) and `Up` are unchanged.
+  - Double's x / 0 = +∞ inside the builders' min(…) becomes `FloatExp.Huge`.
+- **`EvaluateLaFx`** (`MandelbrotCalculator.LaFx.cs`) is the scalar `EvaluateLa` + `LaRunStages` in FloatExp, without the AT (#1627).
+  - Kept: the stages with their δ and δc tests, climbing back on a rebase, ascending at stage boundaries (#1614), and the plain floatexp tail (BLA by reference index when `LaTailBla`).
+  - Kept: the periodicity check at restarts (#1804), as bit-exact FloatExp repeats.
+- **Dispatch.** The FX rows use it where the double path would (`LaWanted`, with `LaActive`'s gates). It is on by default past double, and the label reads `LA FX`. Otherwise they use the floatexp BLA loop (§12).
+- **Validation** (`S1847FloatExpLaTests`).
+  - **Same stages as the double table.** Where double holds every number (five reference orbits, both period tests), the floatexp table builds the double table's stages: same stage count, lengths, next indices, references and `Up`, with A, B, Thr and ThrC within 1e-12.
+  - **Past double.** At c = i over 4096 steps the double table is not finite, while the floatexp one is.
+  - **Frames.** At 1e400 and 1e1000, LA's work (LA + plain steps) is at most a third of the plain loop's, and every pixel's count is the plain loop's, which S1842 shows is the direct BigFloat count.
+  - **Same steps as the double evaluator.** On S1842's minibrot frame (where double holds), the floatexp evaluator forced on and the double one take the same steps: 85,690 LA steps each, plain steps within 0.01 %, 5 of 1024 counts different.
+  - **Not separately observed:** the rebase inside a stage (|δ| > |z| after a step). Without it, a large δ fails the next step's |w| < Thr test and drops to the tail, which rebases. No frame tried here shows the difference.
+  - S1845's BLA tests now set `LaMode = Off`.
+- **Not yet.** The AT in floatexp, SIMD (LA4) and SA rescaling.
