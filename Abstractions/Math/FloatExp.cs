@@ -96,6 +96,25 @@ namespace FracturingFog.FFMath
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static FloatExp operator -(FloatExp a, FloatExp b) => a + -b;
 
+        /// <summary>#1845 — a / b (b ≠ 0).</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static FloatExp operator /(FloatExp a, FloatExp b) => Norm(a.M / b.M, a.E - b.E);
+
+        /// <summary>#1845 — √this (this ≥ 0; 0 for 0).</summary>
+        public FloatExp Sqrt()
+        {
+            if (M <= 0) return Zero;
+            double m = M; long e = E;
+            if ((e & 1) != 0) { m *= 2; e -= 1; }   // even exponent (also for negative e)
+            return Norm(Math.Sqrt(m), e / 2);
+        }
+
+        /// <summary>#1845 — the larger of two non-negative values.</summary>
+        public static FloatExp Max(FloatExp a, FloatExp b) => AbsLess(a, b) ? b : a;
+
+        /// <summary>#1845 — the smaller of two non-negative values.</summary>
+        public static FloatExp Min(FloatExp a, FloatExp b) => AbsLess(a, b) ? a : b;
+
         /// <summary>|a| &lt; |b|.</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool AbsLess(FloatExp a, FloatExp b)

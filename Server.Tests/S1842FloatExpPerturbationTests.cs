@@ -185,6 +185,7 @@ public sealed class S1842FloatExpPerturbationTests
                 CenterY4 = d.Im.X4, CenterY5 = d.Im.X5, CenterY6 = d.Im.X6, CenterY7 = d.Im.X7,
             };
             c.FloatExpZoomLog10 = fxAt;
+            c.DisableAcceleration = true;   // the plain loop (BLA's approximation is #1845's)
             c.Calculate(CancellationToken.None);
             return c;
         }

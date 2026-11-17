@@ -4982,6 +4982,10 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         int effImgW = EffectiveImageWidth, effImgH = EffectiveImageHeight;
         var scale = FloatExp.FromLog10(Math.Log10(3.5 / Math.Max(effImgW, effImgH)) - ZoomLog10);
         double halfW = effImgW * 0.5, halfH = effImgH * 0.5;
+        // #1845 — the floatexp BLA table, for the frame's largest |dc|.
+        var bla = DisableAcceleration ? null
+            : EnsureBlaTableFx(scale * Math.Sqrt(halfW * halfW + halfH * halfH));
+        _blaSkipsTotal = 0; _blaIterSkippedTotal = 0; _ptStepsTotal = 0;
         int offX = SubRectOffsetX, offY = SubRectOffsetY;
         int[]? perRow = PerRowMaxIter;
         bool useTileCap = perRow != null && perRow.Length >= Height;
@@ -4995,12 +4999,17 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             if (rowMaxIt <= 0) rowMaxIt = maxIt;
             int rowBase = y * w;
             var dcI = scale * (offY + y - halfH);
+            long rowSkips = 0, rowSaved = 0, rowSteps = 0;
             for (int x = 0; x < w; x++)
             {
                 int idx = rowBase + x;
                 if (!Marked(idx)) continue;
-                ComputePixelPTFx(scale * (offX + x - halfW), dcI, rowMaxIt, idx, colorMap);
+                ComputePixelPTFx(scale * (offX + x - halfW), dcI, rowMaxIt, idx, colorMap, bla,
+                    ref rowSkips, ref rowSaved, ref rowSteps);
             }
+            Interlocked.Add(ref _blaSkipsTotal, rowSkips);
+            Interlocked.Add(ref _blaIterSkippedTotal, rowSaved);
+            Interlocked.Add(ref _ptStepsTotal, rowSteps);
             Interlocked.Add(ref computed, w);
             if (rowMaxIt < maxIt)
                 for (int x = 0; x < w; x++)
@@ -5009,9 +5018,27 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         LastFrameComputedPixels += computed;
     }
 
+    // #1845 — the floatexp BLA table, kept while the orbit, ε and dcMax (within 5%, as
+    // EnsureBlaTable) are the same.
+    private BlaTableFx? _blaFx;
+    private int _blaFxGen = -1;
+
+    private BlaTableFx? EnsureBlaTableFx(FloatExp dcMaxAbs)
+    {
+        if (_refOrbitLen < 4) return _blaFx = null;
+        double eps = BlaTolerance > 0 && double.IsFinite(BlaTolerance) ? BlaTolerance : BlaTable.DefaultEpsilon;
+        if (_blaFx != null && _blaFxGen == _refOrbitGen && _blaFx.RefLen == _refOrbitLen && _blaFx.Epsilon == eps
+            && Math.Abs((_blaFx.DcMaxAbs / dcMaxAbs).ToDouble() - 1) < 0.05)
+            return _blaFx;
+        _blaFx = new BlaTableFx(_refZr, _refZi, _refOrbitLen, dcMaxAbs, eps);
+        _blaFxGen = _refOrbitGen;
+        return _blaFx;
+    }
+
     /// <summary>#1842 — one pixel of the rebased perturbation loop in FloatExp (see
     /// <see cref="ResumePixelPTRebased"/> for the double form and its sources).</summary>
-    private void ComputePixelPTFx<TMap>(FloatExp dcR, FloatExp dcI, int maxIter, int idx, TMap colorMap)
+    private void ComputePixelPTFx<TMap>(FloatExp dcR, FloatExp dcI, int maxIter, int idx, TMap colorMap,
+        BlaTableFx? bla, ref long skips, ref long saved, ref long steps)
         where TMap : IColorMap
     {
         int refLen = _refOrbitLen;
@@ -5027,6 +5054,30 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         int m = 0, iter;
         for (iter = 0; iter < maxIter; iter++)
         {
+            if (bla != null)
+            {
+                // #1845 — a BLA skip by reference index (as ResumePixelPTRebased):
+                // δ' = A·δ + B·dc, the derivative d' ≈ A·d.
+                int k = bla.Lookup(m, FloatExp.Norm2(dr, di), Math.Min(refLen - 1, m + (maxIter - iter)));
+                if (k >= 0)
+                {
+                    ref readonly var e = ref bla.Data[k];
+                    if (e.L >= 2)
+                    {
+                        var nDr0 = e.ARe * dr - e.AIm * di + (e.BRe * dcR - e.BIm * dcI);
+                        var nDi0 = e.ARe * di + e.AIm * dr + (e.BRe * dcI + e.BIm * dcR);
+                        dr = nDr0; di = nDi0;
+                        var nDrv0 = e.ARe * drv - e.AIm * div;
+                        var nDiv0 = e.ARe * div + e.AIm * drv;
+                        drv = nDrv0; div = nDiv0;
+                        m += e.L;
+                        iter += e.L - 1;
+                        skips++; saved += e.L;
+                        continue;
+                    }
+                }
+            }
+            steps++;
             double Zr = _refZr[m], Zi = _refZi[m];
             FloatExp zr = dr + Zr, zi = di + Zi;                  // z = Z[m] + δ
             zrD = zr.ToDouble(); ziD = zi.ToDouble();

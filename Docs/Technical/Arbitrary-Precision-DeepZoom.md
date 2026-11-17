@@ -11,8 +11,9 @@ the canonical task list; this doc backs them.
 | C3 log zoom: view state, camera, readouts, iterations, region JSON | #1836 | §8 (merged, PR #1837) |
 | C3b log zoom through history, server request, cluster planners | #1838 | §9 (merged, PR #1839) |
 | C4 arbitrary-precision reference orbit (CPU) | #1840 | §10 (merged, PR #1841) |
-| C5a floatexp per-pixel perturbation (CPU, scalar) | #1842 | §11 |
-| C5b–C11 | filed when started (see #1428) | |
+| C5a floatexp per-pixel perturbation (CPU, scalar) | #1842 | §11 (merged, PR #1844) |
+| C5b floatexp BLA | #1845 | §12 |
+| C5c–C11 | filed when started (see #1428) | |
 
 ## 1. Why a new number type
 
@@ -227,3 +228,21 @@ A double zoom overflows at about 1.8e308. A double log10 zoom does not, and it k
   - a SIMD path, or handing over to double once δ is normal;
   - the orbit-aware colouring path, which still builds the OD orbit;
   - AA jitter of the exact centre.
+
+## 12. Floatexp BLA (C5b, #1845)
+
+- **Why a new table.** The double BLA table can't hold its own numbers past double. B, the dc response ∏2Z over a skip, overflows; dcMax underflows; and the validity radii, shrunk by |B₁|·dcMax / |A₁| at each merge, underflow.
+- **`BlaTableFx`** (`Engine/Math/BlaFx.cs`) is `BlaTable`'s single-precision form, with A, B and r in FloatExp. It is Zhuoran's BLA, credited in `Bla.cs`.
+  - **Level 0:** A = 2·Z_n, B = 1, r = ε·|Z_n|.
+  - **Merge:** A = A₂A₁, B = A₂B₁ + B₂, r = min(r₁, max(0, r₂ − |B₁|·dcMax) / |A₁|).
+  - **Lookup:** the longest aligned level with R² > 0 and |δ|² < R².
+  - FloatExp gains `Sqrt`, division, `Min` and `Max`.
+- **The FX pixel loop** looks skips up by reference index, as `ResumePixelPTRebased` does, and applies δ' = A·δ + B·dc, d' ≈ A·d.
+  - The table is cached per orbit generation, ε and dcMax (within 5%), like `EnsureBlaTable`.
+  - The frame's work is reported in `LastPtWork` (skips, iterations saved, plain steps).
+- **Validation** (`S1845FloatExpBlaTests`).
+  - Where double holds everything (c = i, 256 steps, B ≲ 1e193), every entry's A, B and R² is within 1e-12 of the double table's, and 2,000 random lookups agree.
+  - Past double (dcMax 1e-450), the table holds B past 1e308 and R² below 1e-308, all finite.
+  - At 1e400 and 1e1000 BLA cuts the loop's work by at least 3×, and every pixel's count stays the plain loop's, which S1842 shows is the direct BigFloat count.
+- **Accuracy.** BLA is an approximation. On S1842's minibrot frame it is off on 64 of 256 pixels, close to the double path's BLA (48 of 256, #1346). That test now runs the plain loop.
+- **Not yet:** LA stages in floatexp (C5c), SA rescaling, SIMD.
