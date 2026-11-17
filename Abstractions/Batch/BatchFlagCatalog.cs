@@ -483,9 +483,12 @@ namespace FracturingFog.Batch
                     with { Aliases = new[] { "-f" }, Source = BatchFlagSource.FractalType },
                 Dbl(BatchFlags.X, Source, ImgVid,
                     "Centre real coordinate (with --y and --zoom). A deep centre takes octuple-double limbs "
-                    + "Hi|Lo|... (up to 8, as the Command builder emits; quote it for the shell)."),
-                Dbl(BatchFlags.Y, Source, ImgVid, "Centre imaginary coordinate (a number or Hi|Lo|... limbs, as --x)."),
-                Dbl(BatchFlags.Zoom, Source, ImgVid, "Zoom.", max: QualityPreset.Extreme.ZoomMax, enforced: true) with { Aliases = new[] { "--z" } },
+                    + "Hi|Lo|... (up to 8; quote it for the shell), or a decimal of any length: past "
+                    + "octuple-double's digits it is the exact centre (as the Command builder emits past 1e100)."),
+                Dbl(BatchFlags.Y, Source, ImgVid, "Centre imaginary coordinate (a number, Hi|Lo|... limbs or a long decimal, as --x)."),
+                Dbl(BatchFlags.Zoom, Source, ImgVid,
+                    "Zoom. Past 1e100 the view renders in the Unbounded tier; past double's range write it as 1e500.")
+                    with { Aliases = new[] { "--z" } },
                 Int(BatchFlags.Iter, Source, ImgVid, "Override the iteration count.", min: 1)
                     with { Aliases = new[] { "--i", "--iterations" } },
                 // #1615 — Kalles Fraktaler location (format: Karl Runmo / Claude Heiland-Allen, KF 2+).
@@ -506,7 +509,7 @@ namespace FracturingFog.Batch
                 Txt(BatchFlags.Theme, Source, ImgVid, "Colour theme name: a built-in, or a saved Colour Theme Editor or ColorGen theme.", BatchFlagSource.Theme, def: BatchDefaults.ThemeName)
                     with { Aliases = new[] { "-t" } },
                 Pick(BatchFlags.Quality, Source, ImgVid, "Quality preset.",
-                    new[] { "Draft", "Standard", "High", "Ultra", "Extreme" }, BatchDefaults.QualityName)
+                    new[] { "Draft", "Standard", "High", "Ultra", "Extreme", "Unbounded" }, BatchDefaults.QualityName)
                     with { Aliases = new[] { "-q" }, Source = BatchFlagSource.Quality },
 
                 // ── Output ──
@@ -575,7 +578,7 @@ namespace FracturingFog.Batch
                 Int(BatchFlags.Fps, Video, BatchModes.Encoded, "Frames per second.", 1, 240, enforced: true, def: "30"),
                 Dbl(BatchFlags.StartZoom, Video, BatchModes.Sequence,
                     "Starting zoom (0.5 = full set; 3D dolly picks its own wide zoom when omitted).",
-                    max: QualityPreset.Extreme.ZoomMax, enforced: true, def: "0.5"),
+                    def: "0.5"),   // #1860: no ceiling (the Unbounded tier, #1861)
                 Sw(BatchFlags.Reverse, Video, BatchModes.Sequence, "Zoom out from the target back to the full view."),
                 Pick(BatchFlags.VideoMotion, Video, BatchModes.Sequence,
                     "How the video moves. auto = per family (2D plane zoom, 3D dolly, Logistic/AcidWarp sweep, else kenburns; "

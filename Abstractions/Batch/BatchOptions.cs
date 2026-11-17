@@ -112,7 +112,31 @@ namespace FracturingFog.Batch
         /// exactly as before.</summary>
         public double[]? CenterXLimbs { get; set; }
         public double[]? CenterYLimbs { get; set; }
+
+        /// <summary>#1860 (epic #1428, C10) — the --x / --y text as given, read again for
+        /// the exact centre (<see cref="CliExactCentre"/>) when it holds more than OD can.</summary>
+        public string? CenterXText { get; set; }
+        public string? CenterYText { get; set; }
         public double? Zoom { get; set; }
+
+        /// <summary>#1860 — log10 of --zoom, set only past double's range ("--zoom 1e500"),
+        /// where <see cref="Zoom"/> holds double.MaxValue.</summary>
+        public double? ZoomLog10 { get; set; }
+
+        /// <summary>#1860 — log10 of the --zoom given: <see cref="ZoomLog10"/> past double,
+        /// else log10(<see cref="Zoom"/>); NaN without --zoom.</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public double ZoomLog10Value => ZoomLog10 ?? (Zoom is double z ? Math.Log10(z) : double.NaN);
+
+        /// <summary>#1860 — the exact centre --x / --y give when either holds more digits
+        /// than octuple-double (read as the live CX / CY boxes read them, #1833), else null.
+        /// Needs both.</summary>
+        public FracturingFog.FFMath.ExactCentre? CliExactCentre()
+        {
+            if (CenterXText == null || CenterYText == null) return null;
+            var vs = new FracturingFog.ViewState.FractalViewState();
+            return FracturingFog.ViewState.ViewCentreText.Apply(vs, CenterXText, CenterYText) ? vs.CenterExact : null;
+        }
         public int? Iterations { get; set; }
         /// <summary>#1615 — a Kalles Fraktaler location (.kfr) supplying the centre,
         /// zoom and iteration count; explicit --x / --y / --zoom / --iter win.</summary>
@@ -706,6 +730,7 @@ namespace FracturingFog.Batch
                         if (!TryParseCoordinate(xs, out var xl)) { error = CoordinateError(a, xs); return false; }
                         opts.CenterX = xl[0];
                         opts.CenterXLimbs = xl.Length > 1 ? Pad8(xl) : null;
+                        opts.CenterXText = xs;   // #1860
                         break;
                     }
 
@@ -715,6 +740,7 @@ namespace FracturingFog.Batch
                         if (!TryParseCoordinate(ys, out var yl)) { error = CoordinateError(a, ys); return false; }
                         opts.CenterY = yl[0];
                         opts.CenterYLimbs = yl.Length > 1 ? Pad8(yl) : null;
+                        opts.CenterYText = ys;   // #1860
                         break;
                     }
 
@@ -725,9 +751,15 @@ namespace FracturingFog.Batch
 
                     case "--z":
                     case BatchFlags.Zoom:
-                        if (!NextDouble(args, ref i, a, out double zv, out error)) return false;
+                    {
+                        // #1860 — past double too: "1e500" (ZoomLog, #1836).
+                        if (!Next(args, ref i, a, out string zs, out error)) return false;
+                        if (!FracturingFog.ViewState.ZoomLog.TryParse(zs, out double zv, out double zl))
+                            { error = $"{a}: '{zs}' is not a zoom (a positive number; past double's range as 1e500)."; return false; }
                         opts.Zoom = zv;
+                        opts.ZoomLog10 = FracturingFog.ViewState.ZoomLog.BeyondDouble(zl) ? zl : null;
                         break;
+                    }
 
                     case "--i":
                     case BatchFlags.Iter:
@@ -2048,8 +2080,9 @@ namespace FracturingFog.Batch
 
             // #1612 — past the deepest tier's ceiling the render collapses to one
             // flat colour and used to exit 0, which a timing script can't tell from a
-            // real image. Refuse it until #1428 lifts the ceiling.
-            double zoomCeiling = QualityPreset.Extreme.ZoomMax;
+            // real image. Refuse it. #1860 — the deepest tier is Unbounded (#1861): no
+            // ceiling, a view past 1e100 renders in it.
+            double zoomCeiling = QualityPreset.Deepest.ZoomMax;
             if (opts.Zoom > zoomCeiling)
             {
                 error = $"--zoom {opts.Zoom.Value.ToString("G4", CultureInfo.InvariantCulture)} is past the deepest supported zoom "
@@ -2477,6 +2510,18 @@ namespace FracturingFog.Batch
         {
             limbs = Array.Empty<double>();
             if (string.IsNullOrWhiteSpace(s)) return false;
+            // #1860 — a decimal with more digits than a double holds fills all eight limbs
+            // (CoordNotation, as the live CX / CY boxes); past OD the exact centre carries
+            // the rest (CliExactCentre). Up to 17 digits it stays a double, as before.
+            if (!s.Contains('|') && FracturingFog.FFMath.ExactCentre.SignificantDigits(s.Trim()) > 17)
+            {
+                if (!FracturingFog.ViewState.CoordNotation.TryParse(s,
+                        out double h0, out double h1, out double h2, out double h3,
+                        out double h4, out double h5, out double h6, out double h7)
+                    || !double.IsFinite(h0)) return false;
+                limbs = new[] { h0, h1, h2, h3, h4, h5, h6, h7 };
+                return true;
+            }
             var parts = s.Split('|');
             if (parts.Length > 8) return false;
             var v = new double[parts.Length];
@@ -2511,8 +2556,8 @@ namespace FracturingFog.Batch
             if (opts.CenterY == null) { opts.CenterY = y[0]; opts.CenterYLimbs = y; }
             opts.Zoom ??= kfr.FfZoom(opts.Width, opts.Height);
             opts.Iterations ??= kfr.Iterations;
-            if (opts.Zoom > QualityPreset.Extreme.ZoomMax)
-                { error = $"{flag} '{opts.KfrPath}': zoom {opts.Zoom:G4} at {opts.Width}x{opts.Height} is past the deepest zoom ({QualityPreset.Extreme.ZoomMax:G3})."; return false; }
+            if (opts.Zoom > QualityPreset.Deepest.ZoomMax)   // #1860: none since #1861
+                { error = $"{flag} '{opts.KfrPath}': zoom {opts.Zoom:G4} at {opts.Width}x{opts.Height} is past the deepest zoom ({QualityPreset.Deepest.ZoomMax:G3})."; return false; }
             return true;
         }
 

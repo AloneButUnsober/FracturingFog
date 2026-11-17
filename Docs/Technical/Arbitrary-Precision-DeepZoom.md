@@ -19,8 +19,8 @@ the canonical task list; this doc backs them.
 | C5f periodic-reference detection past 1e154 | #1854 | §16 (merged, PR #1855) |
 | C8a reference-orbit arrays grow as built (#1828) | #1856 | §17 (merged, PR #1857) |
 | C8b explore iteration plan past the tier cap (#1426) | #1858 | §18 (merged, PR #1859) |
-| C9 Unbounded quality tier: zoom past 1e100 | #1861 | §19 |
-| C10 batch + Command builder parity past 1e100 | #1860 | filed |
+| C9 Unbounded quality tier: zoom past 1e100 | #1861 | §19 (merged, PR #1862) |
+| C10 batch + Command builder parity past 1e100 | #1860 | §20 |
 | C6, C7, C11 | filed when started (see #1428) | |
 
 ## 1. Why a new number type
@@ -153,7 +153,7 @@ A double zoom overflows at about 1.8e308. A double log10 zoom does not, and it k
   - Apply / capture / clone go through `CopyZoomTo` / `LogFieldFor`.
 - **Not yet.**
   - History, video keyframes, the server request and the cluster planners: C3b (§9).
-  - Batch `--zoom` past double: C10. Batch is clamped at Extreme's 1e100 today.
+  - Batch `--zoom` past double: C10 (§20).
   - Rendering past 1e100: C4–C6 and the cap in C9.
 
 ## 9. Log zoom carriers (C3b, #1838)
@@ -365,11 +365,36 @@ A double zoom overflows at about 1.8e308. A double log10 zoom does not, and it k
 - **Input.** Wheel, box and key zoom promote to the deepest tier (`NaturalQualityForZoom`, the clamp in front of the promotion). Past 1e100 the tier-change status warns that frames are slow.
 - **The mini depth bar.** With an infinite ZoomMax its scale runs to 25 % past the current depth, at least to 1e120.
 - **Video / slideshow.** The automatic tier choice and the "all regions" filter skip Unbounded as they skip Extreme (`Tier >= Extreme`).
-- **Batch.** `--zoom` stays enforced at 1e100, and `--x` / `--y` carry OD limbs, until C10 (#1860).
-  - The Command builder reports a live view past 1e100, or with an exact centre, as a fidelity gap pointing at #1860 (`DetectGaps`, via `BatchCommandSnapshot.ZoomLog10` / `HasExactCentre`).
-  - Such a command is refused rather than rendering a wrong centre.
+- **Batch.** Until C10 (#1860, §20) `--zoom` stayed enforced at 1e100 and `--x` / `--y` carried OD limbs only.
+  - Meanwhile the Command builder reported a live view past 1e100, or with an exact centre, as a fidelity gap pointing at #1860, and such a command was refused rather than rendering a wrong centre. C10 removed the gap.
 - **Explore tools** (minibrot jump, finders, AutoExplorer) stay at Extreme's 1e100 until C7.
 - **Validation** (`S1861UnboundedTierTests`).
   - The tier's place and lookups, and its formula's continuity with Extreme's.
   - From Extreme just under 1e100, wheel steps promote to Unbounded with the warning and carry on past 1e100, then past double's range on the log, with no clamp.
-  - The batch gaps for 1e150, 1e500 and an exact centre, and none for a shallow view.
+  - The batch gaps for 1e150, 1e500 and an exact centre, and none for a shallow view (since C10: none for any of them).
+
+## 20. Batch and the Command builder past 1e100 (C10, #1860)
+
+- **`--x` / `--y`.**
+  - A decimal with more digits than a double fills the eight OD limbs (`CoordNotation`, as the live CX / CY boxes). Up to 17 digits a decimal stays a double, as before.
+  - The text is kept (`BatchOptions.CenterXText` / `CenterYText`). `CliExactCentre()` reads it again through `ViewCentreText.Apply`, the live boxes' parse: past OD's digits it is the exact centre, and the limbs are its OD split.
+- **`--zoom`.**
+  - Read through `ZoomLog.TryParse`, so past double's range it is written `1e500`; `BatchOptions.ZoomLog10` carries the log there and `Zoom` saturates.
+  - The 1e100 ceiling (#1612) is now the deepest tier's, which is +∞; `--start-zoom` and `--kfr` follow. A non-positive zoom is refused.
+- **`--quality Unbounded`.** In the catalog's choice list. A view past 1e100 renders in Unbounded even without it (`QualityForDepth`, with a note), as the live wheel promotes it.
+- **Render path** (`BatchRenderer`).
+  - `ResolveDepth`: the exact centre from `--x` / `--y`, else the region's (when its centre is used), and the log zoom from `--zoom`, else the region's `ZoomLog10Value`.
+  - Still: `PosterRequest.CenterExact` and the new `PosterRequest.ZoomLog10`. `PosterRenderer` calls `SetDepth` on both Mandelbrot calculators it builds (the frame and the relief field). `DepthZoomLog10` hands the log on only while `Zoom` is still its saturated value, so a `with` that moves the zoom drops it, the view state's stamp rule (#1836).
+  - Video: the zoom runs on its natural log, the target's from its log10 (`LnZoom`). Each frame's zoom comes back through `ZoomFromLn`: `Math.Exp` as before within double, else `double.MaxValue` and the log. The deep Mandelbrot frame and the region frame call `SetDepth`. The progress line and the output file name show the zoom from the log. The Misiurewicz loop keeps double zooms.
+  - Slideshow: each leg's region zoom from its log, the same per-frame log, into the region frame.
+  - `FractalRegion.CopyCentreTo(MandelbrotCalculator)` now sets the region's exact centre too.
+- **Live export.** `FractalRenderHost.CreatePosterRequest` carried the exact centre (C4) but not the log zoom, so an export past double rendered at double.MaxValue. It now carries the log, with the View / Letterbox aspect factor added as `log10(factor)`.
+- **Command builder.** `BatchCommandSnapshot.CenterExactX` / `CenterExactY` (plain decimal, `CoordNotation.FormatExact`) replace `HasExactCentre` and are emitted as `--x` / `--y` in place of the limbs. `--zoom` is written by `ZoomText`: the round-trip double, or past double the log's scientific form to 16 digits. The C9 gap is gone.
+- **Validation** (`S1860BatchDeepTests`; `S1612` / `S1615` / `S1861` updated for the lifted ceiling).
+  - A deep live view (340-digit exact centre, zoom 1e500.12, Unbounded) emits a command that parses back to the same exact centre at its precision, the log within 1e-12, the tier and the iterations; no #1860 gap. A shallow zoom stays the round-trip double.
+  - `--x`: 30 digits gives eight limbs whose sum is the text to half a unit in its last place, with no exact centre; 17 digits stays one double; 340 digits gives the exact centre. `--zoom 2.5e1000` and `1e150` parse; `-1` and text are refused.
+  - At 1e320.3, two pixels off the Misiurewicz point: `PosterRenderer` with the exact centre and log equals, pixel for pixel, a calculator set up as the live host sets it (limbs, Zoom, `SetDepth`). The frame has structure (more than 8 colours), and dropping the exact centre or the log changes it, so both carriers are load-bearing. A `with { Zoom = … }` drops the stale log.
+  - `CreatePosterRequest` at 1e500: the log as is at the window's size, `500 + log10(factor)` in View mode at twice the width, none within double.
+  - A region's exact centre reaches the calculator on `CopyCentreTo`.
+- **Not unit-tested** (WinExe `BatchRenderer`): `ResolveDepth` / `QualityForDepth` wiring and the video / slideshow loops. They reuse the tested pieces: `BatchOptions`, `PosterRequest`, `SetDepth`, `ZoomLog`.
+  - Smoke-run by hand: `--batch` stills at 1e150 and 1e320 on the 340-digit Misiurewicz centre (no `--quality`: promoted to Unbounded with the note) render the point's branch structure centred, and a 3-frame `--mode video` from 1e300 to 1e320 renders three distinct frames labelled 1E+300 / 1E+310 / 1E+320. The slideshow leg was not run (it needs a saved region past double).

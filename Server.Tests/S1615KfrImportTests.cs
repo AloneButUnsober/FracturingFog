@@ -234,8 +234,8 @@ public sealed class S1615KfrImportTests
             Assert.Contains("Mandelbrot", err);
             Assert.False(Parse(out _, out err, "--kfr", p + ".missing"));
             Assert.Contains("can't read", err);
-            Assert.False(Parse(out _, out err, "--kfr", deep));
-            Assert.Contains("zoom", err, StringComparison.OrdinalIgnoreCase);
+            // #1860 — past 1e100 is the Unbounded tier (#1861), no longer refused.
+            Assert.True(Parse(out _, out err, "--kfr", deep), err);
         }
         finally { File.Delete(p); File.Delete(deep); }
     }

@@ -1528,6 +1528,17 @@ namespace FracturingFog.Rendering
                         screenW, screenH, lbInnerW, lbInnerH);
                 }
             }
+            // #1860 — past double the log carries the zoom, the aspect factor as a shift.
+            double posterZoomLog10 = double.NaN;
+            if (s.ZoomBeyondDouble)
+            {
+                double factor = posterZoom.Equals(s.Zoom) ? 1.0
+                    : aspectMode == PosterAspectMode.View
+                        ? FracturingFog.Imaging.PosterRenderer.ViewZoomFactor(_calculator.Width, _calculator.Height, width, height)
+                        : FracturingFog.Imaging.PosterRenderer.ViewZoomFactor(_calculator.Width, _calculator.Height, lbInnerW, lbInnerH);
+                posterZoomLog10 = s.ZoomLog10 + Math.Log10(factor);
+                posterZoom = FracturingFog.ViewState.ZoomLog.FromLog10(posterZoomLog10);
+            }
 
             // #508 — snapshot the interactive relief field so the offscreen poster /
             // wallpaper raymarch uses the SAME field the screen does (the dedicated
@@ -1557,6 +1568,7 @@ namespace FracturingFog.Rendering
                 CenterX4 = s.CenterX4, CenterX5 = s.CenterX5, CenterX6 = s.CenterX6, CenterX7 = s.CenterX7,
                 CenterY4 = s.CenterY4, CenterY5 = s.CenterY5, CenterY6 = s.CenterY6, CenterY7 = s.CenterY7,
                 Zoom = posterZoom,
+                ZoomLog10 = posterZoomLog10,   // #1860
                 CenterExact = s.CenterExact,   // #1840
                 MaxIterations = effIters,
                 // _calculator.ColorMap is always initialised (ctor sets it, and

@@ -442,6 +442,12 @@ namespace FracturingFog.Batch
                 Console.WriteLine("  note    : --qr-bevel-* options have no effect without --qr-style bevel");
             // The explored / --x --y limb centre in full (octuple-double) precision.
             if (explored is { } ex) req = WithCentre(req, ex);
+            // #1860 — past OD / double: the exact centre and the log zoom (an explored view moved).
+            if (opts.Explore == null)
+            {
+                var (dExact, dLog) = ResolveDepth(opts, namedRegion);
+                req = req with { CenterExact = dExact, ZoomLog10 = PastDouble(dLog) };
+            }
 
             // #1401 — fractal-native QR: move to the framing (and mask) whose own
             // pattern best matches the code. The iteration count stays the one the
@@ -471,7 +477,7 @@ namespace FracturingFog.Batch
             Console.WriteLine($"  fractal : {frType}");
             Console.WriteLine($"  region  : {regionDispName ?? "(manual)"}");
             Console.WriteLine($"  center  : x={cx:G14} y={cy:G14}");
-            Console.WriteLine($"  zoom    : {zoom:G6}    iter: {iter}");
+            Console.WriteLine($"  zoom    : {FracturingFog.ViewState.ZoomLog.Format(req.Zoom, req.DepthZoomLog10)}    iter: {iter}");   // #1860: past double from the log
             Console.WriteLine($"  theme   : {opts.ThemeName}    quality: {quality.Name}");
             Console.WriteLine($"  size    : {opts.Width}x{opts.Height}");
             if (pfBrightness != 0 || pfContrast != 0 || pfAdaptive != 0)
@@ -703,6 +709,8 @@ namespace FracturingFog.Batch
                 limbRegion = null;
                 limbSource = LimbRegion(dc, frType);
             }
+            // #1860 — past OD / double: the exact centre (Mandelbrot frames) and the target's log zoom.
+            var (deepExact, targetZoomLog10) = ResolveDepth(opts, namedRegion);
 
             // #1190 — --explore: the video zooms into the best view found. Its
             // centre is carried as a double (the explore depth stays well inside
@@ -718,6 +726,7 @@ namespace FracturingFog.Batch
                 limbRegion = null;
                 limbSource = null;
                 deepCentre = best.Value.Center;
+                (deepExact, targetZoomLog10) = (null, double.NaN);   // #1860: the explored view
             }
             // #1699 — a Math Plane scene with a script plays it: frame k at script time k / fps.
             double scriptSeconds = 0;
@@ -824,7 +833,7 @@ namespace FracturingFog.Batch
             string outPath = opts.OutputPath;
             string baseName = !string.IsNullOrEmpty(opts.OutputName)
                 ? Path.GetFileNameWithoutExtension(opts.OutputName!)
-                : BuildBaseName(regionDispName, frType, cx, cy, targetZoom, opts.ThemeName);
+                : BuildBaseName(regionDispName, frType, cx, cy, targetZoom, opts.ThemeName, PastDouble(targetZoomLog10));   // #1860
 
             // ffmpeg image2 demuxer expects %06d starting at index 1. The
             // built-in WMF Mp4Writer path uses its own indexing and gets the
@@ -966,8 +975,10 @@ namespace FracturingFog.Batch
             if (pfBrightness != 0 || pfContrast != 0 || pfAdaptive != 0)
                 Console.WriteLine($"  post-fx  : brightness {pfBrightness}  contrast {pfContrast}  adaptive {pfAdaptive}");
 
-            double logZ0 = Math.Log(startZoom);
-            double logZ1 = Math.Log(endZoom);
+            // #1860 — the target's zoom past double comes from its log (startZoom / endZoom
+            // hold double.MaxValue there); every other zoom as before.
+            double logZ0 = LnZoom(startZoom, startZoom.Equals(targetZoom) ? targetZoomLog10 : double.NaN);
+            double logZ1 = LnZoom(endZoom, endZoom.Equals(targetZoom) ? targetZoomLog10 : double.NaN);
 
             // 100-ns ticks between frames so Mp4Writer gets a monotonic clock.
             long ticksPerFrame = (long)(10_000_000L / Math.Max(opts.VideoFps, 1));
@@ -1091,7 +1102,7 @@ namespace FracturingFog.Batch
             uint[] RenderZoomFrame(double teLocal, FracturingFog.Rendering.Lighting.FroxelHistory? reliefHist, bool captureHdr)
             {
                 if (loop != null) return RenderLoopFrame(teLocal);
-                double fz = Math.Exp(logZ0 + (logZ1 - logZ0) * teLocal);
+                var (fz, fzl) = ZoomFromLn(logZ0 + (logZ1 - logZ0) * teLocal);   // #1860
                 if (reliefFp != null)
                 {
                     var rreq = new PosterRequest
@@ -1103,7 +1114,8 @@ namespace FracturingFog.Batch
                         CenterY2 = limbRegion?.CenterY2 ?? 0, CenterY3 = limbRegion?.CenterY3 ?? 0,
                         CenterX4 = limbRegion?.CenterX4 ?? 0, CenterX5 = limbRegion?.CenterX5 ?? 0, CenterX6 = limbRegion?.CenterX6 ?? 0, CenterX7 = limbRegion?.CenterX7 ?? 0,
                         CenterY4 = limbRegion?.CenterY4 ?? 0, CenterY5 = limbRegion?.CenterY5 ?? 0, CenterY6 = limbRegion?.CenterY6 ?? 0, CenterY7 = limbRegion?.CenterY7 ?? 0,
-                        Zoom = fz, MaxIterations = iter,
+                        Zoom = fz, ZoomLog10 = fzl, MaxIterations = iter,   // #1860
+                        CenterExact = deepExact ?? limbRegion?.CentreExact,
                         ColorMap = theme, Quality = quality,
                         FractalParameters = reliefFp,
                         HistogramEq = pfAdaptive,               // HE lives on the calc, inside the request
@@ -1124,10 +1136,11 @@ namespace FracturingFog.Batch
                 }
                 if (deepCentre is { } fd && frameCx == cx && frType == FractalType.Mandelbrot)
                     return RenderDeepMandelFrame(fd, outW, outH, fz, iter, theme, pfAdaptive, quality, fp.BlaTolerance,
-                        FracturingFog.Rendering.AdaptiveAa.From(fp), fp.SolidRegionSkip, fp.SolidRegionAuto, fp);
+                        FracturingFog.Rendering.AdaptiveAa.From(fp), fp.SolidRegionSkip, fp.SolidRegionAuto, fp,
+                        deepExact, fzl);   // #1860
                 return limbRegion != null && frameCx == cx
                     ? RenderRegionMandelFrame(limbRegion, outW, outH, fz, iter, theme, pfAdaptive, quality, fp.BlaTolerance,
-                        FracturingFog.Rendering.AdaptiveAa.From(fp), fp.SolidRegionSkip, fp.SolidRegionAuto, fp)
+                        FracturingFog.Rendering.AdaptiveAa.From(fp), fp.SolidRegionSkip, fp.SolidRegionAuto, fp, fzl)
                     : RenderOneFrame(frType, outW, outH, frameCx, cy, fz, iter, theme, quality, pfAdaptive,
                                      fp, limbSource, stereo, frameDepth, mathOverlay);
             }
@@ -1167,7 +1180,7 @@ namespace FracturingFog.Batch
                     double t = loop != null ? (double)f / totalFrames
                              : totalFrames == 1 ? 1.0 : (double)f / (totalFrames - 1);
                     double te = loop != null ? t : VideoMotionPlan.SmoothStep(t);
-                    double frameZoom = Math.Exp(logZ0 + (logZ1 - logZ0) * te);   // nominal (progress)
+                    var (frameZoom, frameZoomL10) = ZoomFromLn(logZ0 + (logZ1 - logZ0) * te);   // nominal (progress); #1860 log past double
                     double eHold = VideoMotionPlan.SmootherStep(t);              // sweep / orbit / Ken-Burns
 
                     uint[] buffer;
@@ -1287,7 +1300,7 @@ namespace FracturingFog.Batch
                     framesWritten++;
                     drift?.Tick(1.0 / opts.VideoFps);
                     progress.Report((double)(f + 1) / totalFrames,
-                        $"frame {f + 1}/{totalFrames}  zoom {frameZoom:G4}");
+                        $"frame {f + 1}/{totalFrames}  zoom {FracturingFog.ViewState.ZoomLog.Format(frameZoom, frameZoomL10, 4)}");
                 }
 
                 progress.Finish($"frames={framesWritten}  elapsed={sw.Elapsed.TotalSeconds:F1}s");
@@ -1829,7 +1842,7 @@ namespace FracturingFog.Batch
             FractalRegion region, int w, int h, double zoom, int iter, IColorMap theme, int adaptive,
             QualityPreset? quality = null, double blaTolerance = FracturingFog.FFMath.BlaTable.DefaultEpsilon,
             FracturingFog.Rendering.AdaptiveAa? aa = null, bool solidRegionSkip = false, bool solidRegionAuto = true,
-            FractalParameters? moireFp = null)
+            FractalParameters? moireFp = null, double zoomLog10 = double.NaN)
         {
             var calc = new MandelbrotCalculator(w, h)
             {
@@ -1848,6 +1861,7 @@ namespace FracturingFog.Batch
                 ColorMap = theme,
                 Quality = quality ?? region.QualityPreset ?? QualityPreset.Standard,
             };
+            calc.SetDepth(region.CentreExact, zoomLog10);   // #1860: past OD / double
             FracturingFog.Rendering.HeadlessGpu.Attach(calc);   // #1611 — batch on the GPU
             calc.Calculate(CancellationToken.None);
             NoteGpuRoute(calc);
@@ -1867,11 +1881,12 @@ namespace FracturingFog.Batch
         // centre limbs. centerXOverride = Logistic sweep (drops the limbs).
         private static uint[] RenderRegionFrame(
             FractalRegion region, FractalParameters fp, int w, int h, double zoom, int iter,
-            IColorMap theme, int adaptive, double? centerXOverride = null)
+            IColorMap theme, int adaptive, double? centerXOverride = null, double zoomLog10 = double.NaN)
         {
             if (region.FractalType == FractalType.Mandelbrot && centerXOverride == null)
                 return RenderRegionMandelFrame(region, w, h, zoom, iter, theme, adaptive, blaTolerance: fp.BlaTolerance,
-                    aa: FracturingFog.Rendering.AdaptiveAa.From(fp), solidRegionSkip: fp.SolidRegionSkip, solidRegionAuto: fp.SolidRegionAuto, moireFp: fp);
+                    aa: FracturingFog.Rendering.AdaptiveAa.From(fp), solidRegionSkip: fp.SolidRegionSkip, solidRegionAuto: fp.SolidRegionAuto, moireFp: fp,
+                    zoomLog10: zoomLog10);   // #1860
             return RenderOneFrame(region.FractalType, w, h,
                 centerXOverride ?? region.CenterX, region.CenterY, zoom, iter, theme,
                 region.QualityPreset ?? QualityPreset.Standard, adaptive,
@@ -2058,7 +2073,11 @@ namespace FracturingFog.Batch
                     z0 = z1;
                 }
                 if (reverse) (z0, z1) = (z1, z0);
-                double logZ0 = Math.Log(z0), logZ1 = Math.Log(z1);
+                // #1860 — a region past double: its zoom from its log.
+                double targetLog10 = region.ZoomLog10Value;
+                double logZ0 = LnZoom(z0, z0.Equals(target) ? targetLog10 : double.NaN);
+                double logZ1 = LnZoom(z1, z1.Equals(target) ? targetLog10 : double.NaN);
+                double frameZoomLog10 = PastDouble(targetLog10);
 
                 // Per-leg family state.
                 double cx0 = region.CenterX;
@@ -2086,7 +2105,7 @@ namespace FracturingFog.Batch
                     hdr = null;
                     if (relief && frameCx == null)
                         return RenderReliefRegionFrame(region, outW, outH, zoom, iter, map, pfAdaptive, fp, hist, wantHdr, out hdr);
-                    return RenderRegionFrame(region, fp, outW, outH, zoom, iter, map, pfAdaptive, frameCx);
+                    return RenderRegionFrame(region, fp, outW, outH, zoom, iter, map, pfAdaptive, frameCx, frameZoomLog10);
                 }
 
                 // Pick up to themesPerLeg distinct non-black themes for this leg,
@@ -2106,7 +2125,7 @@ namespace FracturingFog.Batch
                     var name = themePool[ti];
                     if (legThemeNames.Contains(name)) continue;
                     var map = ResolveTheme(name);
-                    var probe = RenderRegionFrame(region, fp, outW, outH, target, iter, map, pfAdaptive);
+                    var probe = RenderRegionFrame(region, fp, outW, outH, target, iter, map, pfAdaptive, zoomLog10: PastDouble(targetLog10));
                     if (IsSolidFrame(probe, n)) continue;   // #22 — any flat colour, as interactive
                     legThemeNames.Add(name);
                     legThemeMaps.Add(map);
@@ -2146,7 +2165,8 @@ namespace FracturingFog.Batch
                     double t = legFrames == 1 ? 1.0 : (double)f / (legFrames - 1);
                     double te = VideoMotionPlan.SmoothStep(t);
                     double eHold = VideoMotionPlan.SmootherStep(t);
-                    double frameZoom = Math.Exp(logZ0 + (logZ1 - logZ0) * te);
+                    double frameZoom;
+                    (frameZoom, frameZoomLog10) = ZoomFromLn(logZ0 + (logZ1 - logZ0) * te);   // #1860
                     int seg = Math.Min(legThemes - 1, f / segLen);
 
                     if (!singleRender)
@@ -2764,12 +2784,54 @@ namespace FracturingFog.Batch
         /// (Hi|Lo|…), else null (plain decimals stay doubles, as before).</summary>
         internal static FracturingFog.FFMath.DeepComplex? CliCentre(BatchOptions opts)
         {
+            if (opts.CliExactCentre() is { } exact) return exact.ToDeep();   // #1860: its OD split
             if (opts.CenterXLimbs == null && opts.CenterYLimbs == null) return null;
             if (opts.CenterX == null || opts.CenterY == null) return null;
             var x = opts.CenterXLimbs ?? new[] { opts.CenterX.Value, 0, 0, 0, 0, 0, 0, 0 };
             var y = opts.CenterYLimbs ?? new[] { opts.CenterY.Value, 0, 0, 0, 0, 0, 0, 0 };
             return FracturingFog.FFMath.DeepComplex.FromLimbs(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7],
                                                               y[0], y[1], y[2], y[3], y[4], y[5], y[6], y[7]);
+        }
+
+        // ── Depth past OD / double (#1860, epic #1428 C10) ───────────────────────
+
+        /// <summary>#1860 — the view's depth past OD: the exact centre (--x / --y text, else
+        /// the region's when its centre is used) and log10 of the zoom (--zoom, else the
+        /// region's; NaN with neither).</summary>
+        internal static (FracturingFog.FFMath.ExactCentre? Exact, double ZoomLog10) ResolveDepth(BatchOptions opts, FractalRegion? region)
+        {
+            var exact = opts.CliExactCentre()
+                ?? (opts.CenterX == null && opts.CenterY == null ? region?.CentreExact : null);
+            double zl = opts.Zoom != null ? opts.ZoomLog10Value : region?.ZoomLog10Value ?? double.NaN;
+            return (exact, zl);
+        }
+
+        /// <summary>#1860 — the log zoom a request / calculator carries: past double, else NaN
+        /// (the double zoom is the zoom, unchanged).</summary>
+        internal static double PastDouble(double zoomLog10)
+            => double.IsFinite(zoomLog10) && FracturingFog.ViewState.ZoomLog.BeyondDouble(zoomLog10) ? zoomLog10 : double.NaN;
+
+        /// <summary>#1860 — a zoom's natural log: from its log10 past double, else Math.Log.</summary>
+        internal static double LnZoom(double zoom, double zoomLog10)
+            => double.IsNaN(PastDouble(zoomLog10)) ? Math.Log(zoom) : zoomLog10 * Math.Log(10.0);
+
+        /// <summary>#1860 — a frame's zoom from its natural log: Math.Exp as before within
+        /// double, else double.MaxValue with the log10 to carry.</summary>
+        internal static (double Zoom, double Log10) ZoomFromLn(double ln)
+        {
+            double l10 = ln / Math.Log(10.0);
+            if (!double.IsNaN(PastDouble(l10))) return (double.MaxValue, l10);
+            double z = Math.Exp(ln);
+            return (double.IsFinite(z) ? z : double.MaxValue, double.NaN);
+        }
+
+        /// <summary>#1860 — a view past the Extreme tier's ceiling renders in the Unbounded
+        /// tier (#1861), as the live wheel promotes it.</summary>
+        internal static QualityPreset QualityForDepth(QualityPreset q, double zoomLog10)
+        {
+            if (!(zoomLog10 > Math.Log10(QualityPreset.Extreme.ZoomMax)) || q.Tier >= QualityTier.Unbounded) return q;
+            Console.WriteLine($"  note    : zoom 1e{zoomLog10:F0} is past the {q.Name} tier; rendering in {QualityPreset.Unbounded.Name}.");
+            return QualityPreset.Unbounded;
         }
 
         /// <summary>A poster request centred on <paramref name="c"/> (all 8 limbs).</summary>
@@ -2795,7 +2857,7 @@ namespace FracturingFog.Batch
             FracturingFog.FFMath.DeepComplex c, int w, int h, double zoom, int iter, IColorMap theme, int adaptive,
             QualityPreset quality, double blaTolerance = FracturingFog.FFMath.BlaTable.DefaultEpsilon,
             FracturingFog.Rendering.AdaptiveAa? aa = null, bool solidRegionSkip = false, bool solidRegionAuto = true,
-            FractalParameters? moireFp = null)
+            FractalParameters? moireFp = null, FracturingFog.FFMath.ExactCentre? exact = null, double zoomLog10 = double.NaN)
         {
             var calc = new MandelbrotCalculator(w, h)
             {
@@ -2812,6 +2874,7 @@ namespace FracturingFog.Batch
                 ColorMap = theme,
                 Quality = quality,
             };
+            calc.SetDepth(exact, zoomLog10);   // #1860: past OD / double
             FracturingFog.Rendering.HeadlessGpu.Attach(calc);   // #1611 — batch on the GPU
             calc.Calculate(CancellationToken.None);
             NoteGpuRoute(calc);
@@ -2960,6 +3023,7 @@ namespace FracturingFog.Batch
                 frType = opts.FractalType;
                 quality = QualityPreset.FromName(opts.QualityName);
             }
+            quality = QualityForDepth(quality, ResolveDepth(opts, region).ZoomLog10);   // #1860
 
             return (cx, cy, zoom, iter, frType, quality, region?.Name);
         }
@@ -3073,14 +3137,14 @@ namespace FracturingFog.Batch
 
         private static string BuildBaseName(
             string? regionName, FractalType frType,
-            double cx, double cy, double zoom, string theme)
+            double cx, double cy, double zoom, string theme, double zoomLog10 = double.NaN)
         {
             string safeRegion = string.IsNullOrEmpty(regionName)
                 ? "manual"
                 : SanitizeFileName(regionName!);
             string safeTheme = SanitizeFileName(theme);
             string stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            return $"FF_{frType}_{safeRegion}_{safeTheme}_z{zoom:G4}_{stamp}".Replace(' ', '_');
+            return $"FF_{frType}_{safeRegion}_{safeTheme}_z{FracturingFog.ViewState.ZoomLog.Format(zoom, zoomLog10, 4)}_{stamp}".Replace(' ', '_');
         }
 
         private static string SanitizeFileName(string s)
