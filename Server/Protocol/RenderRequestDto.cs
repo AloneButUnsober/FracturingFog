@@ -96,7 +96,53 @@ public sealed class RenderRequestDto : IJsonOnDeserialized
         else { CenterExactX = null; CenterExactY = null; CenterExactBits = 0; }
     }
 
-    void IJsonOnDeserialized.OnDeserialized() => NormaliseCentre();
+    /// <summary>#1838 — set the exact centre (text, bits and the OD limbs from it).</summary>
+    public void SetCentreExact(FracturingFog.FFMath.ExactCentre e)
+    {
+        (CenterExactX, CenterExactY) = e.ToStrings();
+        CenterExactBits = e.Precision;
+        NormaliseCentre();
+    }
+
+    // #1838 (epic #1428, C3b) — log10 zoom past double's range (~1.8e308), where Zoom
+    // holds double.MaxValue. Omitted otherwise, so requests up to there are unchanged.
+    [JsonPropertyName("zoomLog10")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? ZoomLog10 { get; set; }
+
+    private static bool ValidZoomLog(double l) => double.IsFinite(l) && FracturingFog.ViewState.ZoomLog.BeyondDouble(l);
+
+    /// <summary>#1838 — the zoom as log10 at any depth (NaN when there is no zoom).</summary>
+    public double ZoomLog10Value()
+        => ZoomLog10 is double l && ValidZoomLog(l) ? l : Zoom is double z ? System.Math.Log10(z) : double.NaN;
+
+    /// <summary>#1838 — set the zoom from its log10: past double the log and a saturated
+    /// Zoom, else the plain Zoom (no log field).</summary>
+    public void SetZoomLog10(double log10)
+    {
+        Zoom = FracturingFog.ViewState.ZoomLog.FromLog10(log10);
+        ZoomLog10 = ValidZoomLog(log10) ? log10 : null;
+    }
+
+    /// <summary>#1838 — set the zoom from its natural log (a video frame): Exp(ln) while that
+    /// is a double, as frames always were; past double the log.</summary>
+    public void SetZoomLn(double lnZoom)
+    {
+        double z = System.Math.Exp(lnZoom);
+        if (double.IsFinite(z) && z < double.MaxValue) { Zoom = z; ZoomLog10 = null; }
+        else SetZoomLog10(lnZoom / System.Math.Log(10));
+    }
+
+    /// <summary>#1838 — after a JSON load: a valid log rewrites Zoom (saturated); one that
+    /// is not past double, or not finite, is dropped and Zoom rules.</summary>
+    public void NormaliseZoom()
+    {
+        if (ZoomLog10 is not double l) return;
+        if (ValidZoomLog(l)) Zoom = FracturingFog.ViewState.ZoomLog.FromLog10(l);
+        else ZoomLog10 = null;
+    }
+
+    void IJsonOnDeserialized.OnDeserialized() { NormaliseCentre(); NormaliseZoom(); }
 
     [JsonPropertyName("themeName")]   public string ThemeName   { get; set; } = "HSV";
     [JsonPropertyName("qualityName")] public string QualityName { get; set; } = "Standard";

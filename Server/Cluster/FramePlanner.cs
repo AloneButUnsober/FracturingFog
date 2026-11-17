@@ -99,10 +99,14 @@ public static class FramePlanner
 
         double startZoom = Math.Max(request.VideoStartZoom, 1e-12);
         double endZoom   = Math.Max(request.Zoom!.Value, 1e-12);
-        if (request.VideoReverse) (startZoom, endZoom) = (endZoom, startZoom);
+        // #1838 — natural logs; the target's from its log10 past double (Zoom saturates there).
+        double lnStart = Math.Log(startZoom);
+        double lnEnd   = request.ZoomLog10 is double zl && FracturingFog.ViewState.ZoomLog.BeyondDouble(zl)
+            ? zl * Math.Log(10) : Math.Log(endZoom);
+        if (request.VideoReverse) (lnStart, lnEnd) = (lnEnd, lnStart);
 
-        double logStart = Math.Log(startZoom);
-        double logDelta = Math.Log(endZoom) - logStart;
+        double logStart = lnStart;
+        double logDelta = lnEnd - logStart;
 
         int framesPerTile = framesPerTileHint > 0
             ? Math.Clamp(framesPerTileHint, MinFramesPerTile, MaxFramesPerTile)
@@ -197,6 +201,7 @@ public static class FramePlanner
             CenterY5             = src.CenterY5,
             CenterY6             = src.CenterY6,
             CenterY7             = src.CenterY7,
+            ZoomLog10            = src.ZoomLog10,      // #1838 (overwritten per frame)
             CenterExactX         = src.CenterExactX,   // #1833
             CenterExactY         = src.CenterExactY,
             CenterExactBits      = src.CenterExactBits,

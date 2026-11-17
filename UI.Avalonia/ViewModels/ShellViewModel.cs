@@ -4035,7 +4035,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         int LockedIterations,
         string? RegionName,
         // #1833 — the exact centre (null when the view had none).
-        global::FracturingFog.FFMath.ExactCentre? Exact = null);
+        global::FracturingFog.FFMath.ExactCentre? Exact = null,
+        // #1838 — log10 zoom past double (null below): Back restores it, and two deep
+        // views with the same saturated Zoom are not the same snapshot.
+        double? ZoomLog10 = null);
 
     private const int MaxNavHistory = 10;
     private const int NavSettleDebounceMs = 700;
@@ -4055,7 +4058,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             s.Zoom, s.FractalType, s.Quality?.Name,
             s.IterLocked, s.LockedIterations,
             Main.SelectedRegion,
-            s.CenterExact);
+            s.CenterExact,
+            s.ZoomBeyondDouble ? s.ZoomLog10 : null);
     }
 
     /// <summary>Record the current view as the most-recent settled
@@ -4099,7 +4103,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             s.CenterX4 = snap.Cx4; s.CenterX5 = snap.Cx5; s.CenterX6 = snap.Cx6; s.CenterX7 = snap.Cx7;
             s.CenterY4 = snap.Cy4; s.CenterY5 = snap.Cy5; s.CenterY6 = snap.Cy6; s.CenterY7 = snap.Cy7;
             if (snap.Exact is { } exact) s.SetCenterExact(exact);   // #1833
-            s.Zoom = snap.Zoom;
+            if (snap.ZoomLog10 is double zl) s.SetZoomLog10(zl);   // #1838
+            else s.Zoom = snap.Zoom;
             // A region / minibrot jump's first-render iteration hint belongs to
             // the view being left; the restored view recomputes (or uses its lock).
             s.PreferredIterations = 0;
