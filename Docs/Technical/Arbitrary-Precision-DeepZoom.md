@@ -9,8 +9,9 @@ the canonical task list; this doc backs them.
 | C2a exact centre in view state + region JSON | #1832 | §6 (merged, PR #1834) |
 | C2b exact centre in history, location strings, video, RPC, cluster | #1833 | §7 (merged, PR #1835) |
 | C3 log zoom: view state, camera, readouts, iterations, region JSON | #1836 | §8 (merged, PR #1837) |
-| C3b log zoom through history, server request, cluster planners | #1838 | §9 |
-| C4–C11 | filed when started (see #1428) | |
+| C3b log zoom through history, server request, cluster planners | #1838 | §9 (merged, PR #1839) |
+| C4 arbitrary-precision reference orbit (CPU) | #1840 | §10 |
+| C5–C11 | filed when started (see #1428) | |
 
 ## 1. Why a new number type
 
@@ -167,3 +168,34 @@ A double zoom overflows at about 1.8e308. A double log10 zoom does not, and it k
   - **Live video keyframes:** those legs clamp to Ultra's `ZoomMax`.
   - **The host engine:** renders with its double zoom. Rendering past 1e100 is C4–C6.
   - **Batch:** C10.
+
+## 10. The arbitrary-precision reference orbit (C4, #1840)
+
+- **The builder.** `MandelbrotCalculator.ComputeReferenceOrbitAP` iterates z ← z² + c in `BigFloat`. Each step is three products and three sums, with one rounding per operation.
+  - Precision: `PrecisionForZoom(ZoomLog10)` bits, about 1,061 at 1e300.
+  - Centre: the calculator's exact centre, or its limbs exactly when it has none.
+  - **Storage.** Each Z_n goes into the existing eight-limb arrays as its greedy OD split, so every consumer (perturbation, SA seed, LA / BLA, rebasing, periodicity) reads it as it reads the OD orbit.
+    - 424 stored bits are plenty: perturbation reads Z_n at double precision.
+    - High internal precision is what matters. It keeps the orbit on the true centre's orbit while the δ-amplification ∏|2Z| grows past OD's precision.
+  - **Unchanged from the OD builder:** period detection (#1614) and the δ-amplification sum behind `MaxUsefulZoomLog10`.
+  - **Cancellation** (#1427) is checked every 64 iterations, since a step costs microseconds.
+  - **Cache key:** the exact centre plus the precision. Two exact centres with the same OD limbs are different orbits.
+  - **Tier 3** is labelled `AP-PT`.
+- **When.** Past `ApReferenceZoomLog10`, which defaults to 110.
+  - That is above today's 1e100 cap, so the live app keeps the OD orbit, byte-identical, until C9.
+  - It is also below OD's measured clean floor (about 1e120).
+- **Calculator depth.**
+  - `CenterExact` is stamped against the limbs, like the view state (§6). A jitter or pan of the limbs drops it, and its restore brings it back.
+  - `ZoomLog10` / `SetZoomLog10` and `SetDepth(exact, log)`.
+  - The live view sync and poster export pass the exact centre.
+- **Recycling (tier 3).**
+  - With a valid exact centre, the shift is the exact difference from the orbit's centre.
+  - Otherwise, after a jitter, it is the limb difference against the orbit centre's own limbs, so OD's rounding of the exact centre (about 1e-128) is never taken for a shift. A sub-pixel jitter past about 1e125 is then lost: anti-aliasing at that depth is C5.
+- **Validation** (`S1840ApReferenceOrbitTests`).
+  - The first steps match the exact orbit, computed in exact dyadic arithmetic, to 2^-400.
+  - At 1e110 the AP orbit equals the OD orbit to 1e-20 while the orbit's own amplification stays under 90 decades.
+  - **Past OD:** two exact centres 1e-250 apart, with the same OD limbs, give orbits whose difference is δc · dZ_n/dc (the derivative computed in double) to 1e-6, over the steps where that product is between 1e-40 and 1e-20. The OD orbit cannot see that difference at all.
+- **Not yet.**
+  - **C5:** floatexp storage of Z_n near a nucleus, where doubles underflow; floatexp δ / BLA / SA; the per-pixel OD glitch fallback past OD; anti-aliasing jitter of the exact centre.
+  - **C6:** GPU, and the cluster's shared-orbit blob.
+  - **C10:** batch.

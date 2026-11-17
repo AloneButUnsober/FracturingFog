@@ -47,6 +47,8 @@ namespace FracturingFog.Imaging
         public double CenterX5 { get; init; }
         public double CenterX6 { get; init; }
         public double CenterX7 { get; init; }
+        /// <summary>#1840 — the exact centre (null: none), for the AP reference orbit past OD.</summary>
+        public FracturingFog.FFMath.ExactCentre? CenterExact { get; init; }
         public double CenterY4 { get; init; }
         public double CenterY5 { get; init; }
         public double CenterY6 { get; init; }
@@ -745,6 +747,7 @@ namespace FracturingFog.Imaging
                     CenterY6 = req.CenterY6,
                     CenterY7 = req.CenterY7,
                     Zoom = req.Zoom,
+                    CenterExact = req.CenterExact,   // #1840
                     MaxIterations = req.MaxIterations,
                     ColorMap = req.ColorMap,
                     Quality = req.Quality,
@@ -1227,6 +1230,7 @@ namespace FracturingFog.Imaging
                     CenterY = req.CenterY, CenterYLo = req.CenterYLo, CenterY2 = req.CenterY2, CenterY3 = req.CenterY3,
                     CenterY4 = req.CenterY4, CenterY5 = req.CenterY5, CenterY6 = req.CenterY6, CenterY7 = req.CenterY7,
                     Zoom = req.Zoom,
+                    CenterExact = req.CenterExact,   // #1840
                     MaxIterations = req.MaxIterations,
                     ColorMap = req.ColorMap,
                     Quality = req.Quality,

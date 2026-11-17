@@ -1557,6 +1557,7 @@ namespace FracturingFog.Rendering
                 CenterX4 = s.CenterX4, CenterX5 = s.CenterX5, CenterX6 = s.CenterX6, CenterX7 = s.CenterX7,
                 CenterY4 = s.CenterY4, CenterY5 = s.CenterY5, CenterY6 = s.CenterY6, CenterY7 = s.CenterY7,
                 Zoom = posterZoom,
+                CenterExact = s.CenterExact,   // #1840
                 MaxIterations = effIters,
                 // _calculator.ColorMap is always initialised (ctor sets it, and
                 // ApplyColorMap only ever assigns non-null); the ! silences the
@@ -1755,6 +1756,7 @@ namespace FracturingFog.Rendering
             _calculator.CenterY6 = ViewState.CenterY6;
             _calculator.CenterY7 = ViewState.CenterY7;
             _calculator.Zoom = ViewState.Zoom;
+            _calculator.SetDepth(ViewState.CenterExact, ViewState.ZoomLog10);   // #1840: past OD
             _calculator.Quality = ViewState.Quality;
             // Issue #96 — global interior alpha (Mandelbrot canonical path).
             _calculator.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;
