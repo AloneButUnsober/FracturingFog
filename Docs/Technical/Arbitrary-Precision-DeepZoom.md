@@ -10,8 +10,9 @@ the canonical task list; this doc backs them.
 | C2b exact centre in history, location strings, video, RPC, cluster | #1833 | §7 (merged, PR #1835) |
 | C3 log zoom: view state, camera, readouts, iterations, region JSON | #1836 | §8 (merged, PR #1837) |
 | C3b log zoom through history, server request, cluster planners | #1838 | §9 (merged, PR #1839) |
-| C4 arbitrary-precision reference orbit (CPU) | #1840 | §10 |
-| C5–C11 | filed when started (see #1428) | |
+| C4 arbitrary-precision reference orbit (CPU) | #1840 | §10 (merged, PR #1841) |
+| C5a floatexp per-pixel perturbation (CPU, scalar) | #1842 | §11 |
+| C5b–C11 | filed when started (see #1428) | |
 
 ## 1. Why a new number type
 
@@ -199,3 +200,30 @@ A double zoom overflows at about 1.8e308. A double log10 zoom does not, and it k
   - **C5:** floatexp storage of Z_n near a nucleus, where doubles underflow; floatexp δ / BLA / SA; the per-pixel OD glitch fallback past OD; anti-aliasing jitter of the exact centre.
   - **C6:** GPU, and the cluster's shared-orbit blob.
   - **C10:** batch.
+
+## 11. Floatexp pixels past double (C5a, #1842)
+
+- **What a probe showed.** With C4's orbit, today's double-δ perturbation is already exact up to 1e290: iteration counts match direct BigFloat iteration of each pixel at c = i, and at centres needing digits past OD (1e250, 1e290).
+  - Past double's range δ, dc and the pixel scale underflow: at 1e310 52 of 64 sampled pixels were wrong, at 1e400 63 of 64.
+- **`FFMath.FloatExp`.** A double mantissa in [1, 2) with a long binary exponent. Each operation is one double operation on the mantissas plus exact exponent bookkeeping.
+  - This is Kalles Fraktaler 2+'s "floatexp" idea (bibliography `#kf-floatexp`). The layout here is FF's own.
+- **The pixel loop.** Past `FloatExpZoomLog10` (default 290), every pixel runs `ComputePixelPTFx`: Zhuoran's rebased loop as in `ResumePixelPTRebased`, with δ, dc and the full-orbit derivative in FloatExp.
+  - Z_n is read from the orbit as double, the head limb of C4's split.
+  - The pixel scale is 3.5 / max(W, H) · 10^-ZoomLog10, from the log.
+  - Not used here: BLA, SA, LA, SIMD, orbit recycling (the shift is below double) and the pan lattice.
+  - The label gains ` FX`.
+- **The derivative.** It is about 1/pixel and reaches the colouring as ±∞ past double, which gives distance 0 and normals 0.
+  - The double path already loses these well before this depth: normals past about 1e150, `FinalDr/Di` past 1e38, distance past 1e40 (#1843).
+- **Validation** (`S1842FloatExpPerturbationTests`).
+  - FloatExp arithmetic matches BigFloat to 2^-50 over ±1e5 decades.
+  - Every sampled pixel's iteration count equals direct BigFloat iteration, exactly: at 1e310, 1e400 and 1e1000 around c = i, and at 1e600 around a centre past OD.
+  - The loop forced at 1e150 is exact too. At 1e290 the double path is kept and still exact.
+  - **Rebasing:** a frame with a minibrot off-centre (found by `NucleusFinder`, the reference outside it), forced onto the loop, matches direct iteration on all but 4 of 256 pixels (chaotic boundary rounding). Without the |z| < |δ| rebase 30 of 256 are wrong.
+    - The default double path on that frame is off by ±1 to ±370 iterations on 48 of 256 pixels: that is BLA's approximation (#1346).
+- **Cost.** One floatexp step is several double steps, and every pixel iterates in full. Speed comes in later C5 parts.
+- **Later C5 parts.**
+  - floatexp storage of Z_n near a nucleus;
+  - BLA / LA in floatexp, and SA rescaling;
+  - a SIMD path, or handing over to double once δ is normal;
+  - the orbit-aware colouring path, which still builds the OD orbit;
+  - AA jitter of the exact centre.

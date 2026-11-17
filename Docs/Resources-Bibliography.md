@@ -473,6 +473,14 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
 - <a id="kalles-fraktaler"></a>**Karl Runmo.** *Kalles Fraktaler.* <http://www.chillheimer.de/kallesfraktaler/>. The reference
   deep-zoom Mandelbrot renderer; pioneered many perturbation / SA / glitch techniques this engine
   uses, and Newton-Raphson zooming (location finder reference behaviour).
+- <a id="kf-floatexp"></a>**Kalles Fraktaler 2+ "floatexp" number type** — Claude Heiland-Allen and Karl
+  Runmo, *Kalles Fraktaler 2 + Manual*, 2022-06-07, <https://mathr.co.uk/kf/manual.html> (read 2026-11-17).
+  The manual's change log shows a floatexp type from at least kf-2.12.4 ("floatexp implementation bug
+  fixes"). kf-2.15.3 adds "single precision floatexp extended floating point for arbitrarily deep zooms".
+  FF's `FFMath.FloatExp` (#1842, epic #1428 C5a) is the same idea: a float with an exponent that doesn't
+  run out, so per-pixel perturbation δ, dc and the pixel scale hold past double's ~1e308. FF's own layout
+  is a double mantissa in [1, 2) plus a long binary exponent. KF's internal layout was not checked here.
+  FF's fp32 GPU float-exp kernels (#1331) use the same concept.
 - **Botond Kósa.** *Mandel Machine.* Perturbation deep-zoom renderer — prior art for reference-orbit
   pairs (dual-orbit survey).
 - **Yozo Hida, Xiaoye S. Li, David H. Bailey.** *Algorithms for quad-double precision floating point

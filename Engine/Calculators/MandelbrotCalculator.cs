@@ -161,6 +161,15 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
 
     private bool UseApReference => ZoomLog10 > ApReferenceZoomLog10;
 
+    /// <summary>#1842 (epic #1428, C5a) — log10 zoom past which each pixel's perturbation
+    /// runs in FloatExp (δ, dc and the derivative): past ~1e300 they underflow double. 290 =
+    /// the double path still measured exact at 1e290 (S1842, against direct BigFloat
+    /// iteration), so it keeps every zoom it handles; far past today's 1e100 cap.</summary>
+    public double FloatExpZoomLog10 { get; set; } = 290;
+
+    private bool UseFloatExpPixels => ZoomLog10 > FloatExpZoomLog10;
+    private bool _lastFrameUsedFx;   // #1842: " FX" on the precision label
+
     // ── D-6b — sub-rect rendering ────────────────────────────────────────────
     //
     // When the calculator renders a sub-rect of a larger image (one tile of a
@@ -631,7 +640,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         2 => "OD-PT",
         1 => "QD-PT",
         _ => "DD-PT",
-    }) + (_lastFrameUsedLa ? " LA" : "");   // #1629: the LA stage evaluator rendered it
+    }) + (_lastFrameUsedLa ? " LA" : "") + (_lastFrameUsedFx ? " FX" : "");   // #1629 LA; #1842 floatexp pixels
 
     /// <summary>V6 (#82) — true when the last high-precision frame actually ran
     /// the GPU perturbation kernel (not a CPU fallback). Read by the render host
@@ -3069,12 +3078,21 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         // "image jumps around while dragging" the user sees at deep zoom. The
         // committed full-res frame leaves this off and computes fresh, so the
         // final image is always exact; only the transient preview reuses.
-        bool recycled = (AllowRefOrbitRecycle || AllowRecycleThisRender)
+        bool fx = UseFloatExpPixels;   // #1842: past double the scale and dc underflow
+        _lastFrameUsedFx = fx;
+        bool recycled = !fx && (AllowRefOrbitRecycle || AllowRecycleThisRender)
                         && TryRecycleReferenceOrbit(maxIt, scale);
         long tStage0 = Stopwatch.GetTimestamp();   // #1614 — LastHpStageMs
         if (!recycled) ComputeReferenceOrbitForCenter(maxIt, ct);   // #1427: cancellable
         long tStageOrbit = Stopwatch.GetTimestamp();
         LastHpStageMs = new HpStageMs(Ms(tStage0, tStageOrbit), 0, 0, 0);
+        if (fx)
+        {
+            CalculateFloatExpRows(colorMap, maxIt, ct);
+            LastHpStageMs = new HpStageMs(Ms(tStage0, tStageOrbit), 0, 0, Ms(tStageOrbit, Stopwatch.GetTimestamp()));
+            _panFrameComplete = false;
+            return;
+        }
 
         // V6 (#82) — GPU deep-zoom perturbation. With the reference orbit built,
         // dispatch the whole frame's δ-rebased loop to an FP64 GPU kernel, then
@@ -4951,6 +4969,94 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         Interlocked.Increment(ref _ptRebasedPixels);
         IterationBuffer[idx] = iter;
         FillAuxAndColorHP(idx, iter, maxIter, zr, zi, drv, div, colorMap);
+    }
+
+    // ── #1842 (epic #1428, C5a) — floatexp pixels past double's range ─────────────
+    // Each pixel runs the rebased loop (ResumePixelPTRebased, without BLA) with δ, dc and
+    // the full-orbit derivative in FloatExp; Z_n comes from the reference orbit as double
+    // (the C4 BigFloat orbit's head limb). The pixel scale is 10^-ZoomLog10 · 3.5 / max(W, H)
+    // from the log, so it holds at any depth. No BLA / SA / LA / SIMD yet (later C5 parts).
+    private void CalculateFloatExpRows<TMap>(TMap colorMap, int maxIt, CancellationToken ct)
+        where TMap : IColorMap
+    {
+        int effImgW = EffectiveImageWidth, effImgH = EffectiveImageHeight;
+        var scale = FloatExp.FromLog10(Math.Log10(3.5 / Math.Max(effImgW, effImgH)) - ZoomLog10);
+        double halfW = effImgW * 0.5, halfH = effImgH * 0.5;
+        int offX = SubRectOffsetX, offY = SubRectOffsetY;
+        int[]? perRow = PerRowMaxIter;
+        bool useTileCap = perRow != null && perRow.Length >= Height;
+        _po.CancellationToken = ct;
+        int w = Width;
+        long computed = 0;
+        ParallelForRows(0, Height, _po, y =>
+        {
+            if (ct.IsCancellationRequested || !RowMarked(y)) return;
+            int rowMaxIt = useTileCap ? perRow![y] : maxIt;
+            if (rowMaxIt <= 0) rowMaxIt = maxIt;
+            int rowBase = y * w;
+            var dcI = scale * (offY + y - halfH);
+            for (int x = 0; x < w; x++)
+            {
+                int idx = rowBase + x;
+                if (!Marked(idx)) continue;
+                ComputePixelPTFx(scale * (offX + x - halfW), dcI, rowMaxIt, idx, colorMap);
+            }
+            Interlocked.Add(ref computed, w);
+            if (rowMaxIt < maxIt)
+                for (int x = 0; x < w; x++)
+                    if (IterationBuffer[rowBase + x] >= rowMaxIt) IterationBuffer[rowBase + x] = maxIt;
+        });
+        LastFrameComputedPixels += computed;
+    }
+
+    /// <summary>#1842 — one pixel of the rebased perturbation loop in FloatExp (see
+    /// <see cref="ResumePixelPTRebased"/> for the double form and its sources).</summary>
+    private void ComputePixelPTFx<TMap>(FloatExp dcR, FloatExp dcI, int maxIter, int idx, TMap colorMap)
+        where TMap : IColorMap
+    {
+        int refLen = _refOrbitLen;
+        if (refLen < 1)
+        {
+            IterationBuffer[idx] = maxIter;
+            FillAuxAndColorHP(idx, maxIter, maxIter, 0, 0, 1, 0, colorMap);
+            return;
+        }
+        FloatExp dr = FloatExp.Zero, di = FloatExp.Zero;          // δ
+        FloatExp drv = FloatExp.One, div = FloatExp.Zero;         // dz/dc of the full orbit
+        double zrD = 0, ziD = 0;
+        int m = 0, iter;
+        for (iter = 0; iter < maxIter; iter++)
+        {
+            double Zr = _refZr[m], Zi = _refZi[m];
+            FloatExp zr = dr + Zr, zi = di + Zi;                  // z = Z[m] + δ
+            zrD = zr.ToDouble(); ziD = zi.ToDouble();
+            if (zrD * zrD + ziD * ziD >= EscapeRadius2) break;
+
+            FloatExp nDrv = (zr * drv - zi * div).ScaleB(1) + 1.0;
+            FloatExp nDiv = (zr * div + zi * drv).ScaleB(1);
+            drv = nDrv; div = nDiv;
+
+            // Rebase (Zhuoran) when |z| < |δ| or the reference is exhausted.
+            if (FloatExp.AbsLess(FloatExp.Norm2(zr, zi), FloatExp.Norm2(dr, di)) || m + 1 >= refLen)
+            {
+                dr = zr; di = zi;
+                Zr = 0; Zi = 0;
+                m = 0;
+            }
+
+            // δ' = (2·Z[m] + δ)·δ + dc
+            FloatExp a = dr + 2.0 * Zr, b = di + 2.0 * Zi;
+            FloatExp nDr = a * dr - b * di + dcR;
+            FloatExp nDi = a * di + b * dr + dcI;
+            dr = nDr; di = nDi;
+            m++;
+        }
+        Interlocked.Increment(ref _ptRebasedPixels);
+        IterationBuffer[idx] = iter;
+        // The derivative is ~1/pixel: past double it reaches the colouring as ±∞, where the
+        // distance is 0 and the normals 0, as the double path's already are well before this
+        // depth (normals past ~1e150, distance past ~1e40: #1843).
+        FillAuxAndColorHP(idx, iter, maxIter, zrD, ziD, drv.ToDouble(), div.ToDouble(), colorMap);
     }
 
     // SM-11a — DOUBLE-DOUBLE-reference variant of ComputePixelPTRebased. Same
