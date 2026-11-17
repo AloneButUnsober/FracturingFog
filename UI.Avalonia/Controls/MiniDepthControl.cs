@@ -150,6 +150,10 @@ public sealed class MiniDepthControl : Control
 
         _cachedZoomMax = Math.Max(10.0, _getZoomMax?.Invoke() ?? 1e13);
         double depthMax = Math.Log10(_cachedZoomMax);
+        // #1861 — an unbounded tier: the bar spans past the current depth (25 % headroom,
+        // at least to 1e120), so the indicator stays on it.
+        if (!double.IsFinite(depthMax))
+            depthMax = Math.Max(120.0, 1.25 * Math.Max(0.0, _getZoomLog10?.Invoke() ?? 0.0));
 
         // Bar layout — proportional to control size so per-monitor DPI works.
         double pad = 4;

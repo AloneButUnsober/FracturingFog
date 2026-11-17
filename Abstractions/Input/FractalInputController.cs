@@ -378,10 +378,10 @@ namespace FracturingFog.Input
             double targetZoom = Math.Clamp(
                 ViewState.Zoom * factor,
                 QualityPreset.Draft.ZoomMin,
-                QualityPreset.Extreme.ZoomMax);
+                QualityPreset.Deepest.ZoomMax);   // #1861
             if (AdaptQualityForWheel(ViewState.Zoom, targetZoom))
                 StatusRequested?.Invoke(this, new InputStatusMessage(
-                    $"Quality → {ViewState.Quality.Name} (zoom {targetZoom:G3}).",
+                    QualityStatus(targetZoom),
                     InputStatusKind.Info));
 
             // Box zoom uses centre-anchor: the box midpoint becomes the new
@@ -512,10 +512,10 @@ namespace FracturingFog.Input
             double targetZoom = Math.Clamp(
                 ViewState.Zoom * factor,
                 QualityPreset.Draft.ZoomMin,
-                QualityPreset.Extreme.ZoomMax);
+                QualityPreset.Deepest.ZoomMax);   // #1861
             if (AdaptQualityForWheel(ViewState.Zoom, targetZoom))
                 StatusRequested?.Invoke(this, new InputStatusMessage(
-                    $"Quality → {ViewState.Quality.Name} (zoom {targetZoom:G3}).",
+                    QualityStatus(targetZoom),
                     InputStatusKind.Info));
 
             // Zoom about the cursor, keeping the world point under it fixed. One
@@ -627,10 +627,10 @@ namespace FracturingFog.Input
             double targetZoom = Math.Clamp(
                 ViewState.Zoom * factor,
                 QualityPreset.Draft.ZoomMin,
-                QualityPreset.Extreme.ZoomMax);
+                QualityPreset.Deepest.ZoomMax);   // #1861
             if (AdaptQualityForWheel(ViewState.Zoom, targetZoom))
                 StatusRequested?.Invoke(this, new InputStatusMessage(
-                    $"Quality → {ViewState.Quality.Name} (zoom {targetZoom:G3}).",
+                    QualityStatus(targetZoom),
                     InputStatusKind.Info));
 
             _camera.ZoomBy(factor, ViewState.Quality.ZoomMin, ViewState.Quality.ZoomMax);   // #1836: log past double
@@ -864,8 +864,14 @@ namespace FracturingFog.Input
         {
             foreach (var p in QualityPreset.All)
                 if (p.ZoomMax >= z) return p;
-            return QualityPreset.Extreme;
+            return QualityPreset.Deepest;   // #1861
         }
+
+        // #1861 — the tier-change message; past Extreme it says frames get slow.
+        private string QualityStatus(double targetZoom)
+            => ViewState.Quality.Tier == QualityTier.Unbounded
+                ? $"Quality → {ViewState.Quality.Name} (zoom {targetZoom:G3}). Past 1e100 each frame builds an arbitrary-precision reference orbit: expect slow renders."
+                : $"Quality → {ViewState.Quality.Name} (zoom {targetZoom:G3}).";
 
         // FOV-scale must match MandelbulbCalculator / UserBulbCalculator: tan(π/6).
         private const double Bulb3DFovScale = 0.57735026918962576;

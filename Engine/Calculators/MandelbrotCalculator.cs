@@ -150,8 +150,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     }
 
     /// <summary>#1840 — log10 zoom past which the reference orbit is built in BigFloat
-    /// (tier 3, "AP-PT"). 110 = past today's 1e100 cap (Extreme.ZoomMax), so the live app
-    /// keeps the OD orbit (byte-identical) until C9 lifts the cap; within OD's measured
+    /// (tier 3, "AP-PT"). 110 = past Extreme's 1e100 (every view the Extreme tier reaches
+    /// keeps the OD orbit, byte-identical; the Unbounded tier, #1861, goes past it); within OD's measured
     /// clean floor (~1e120, --qdfloorsweep).</summary>
     public double ApReferenceZoomLog10 { get; set; } = 110;
 
@@ -176,7 +176,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     /// <summary>#1842 (epic #1428, C5a) — log10 zoom past which each pixel's perturbation
     /// runs in FloatExp (δ, dc and the derivative): past ~1e300 they underflow double. 290 =
     /// the double path still measured exact at 1e290 (S1842, against direct BigFloat
-    /// iteration), so it keeps every zoom it handles; far past today's 1e100 cap.</summary>
+    /// iteration), so it keeps every zoom it handles; reached in the Unbounded tier (#1861).</summary>
     public double FloatExpZoomLog10 { get; set; } = 290;
 
     private bool UseFloatExpPixels => ZoomLog10 > FloatExpZoomLog10;

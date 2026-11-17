@@ -42,6 +42,8 @@ namespace FracturingFog.Models
         Ultra = 3,
         /// <summary>Octuple-double precision — zoom up to ~1×10¹⁰⁰. Slow at extreme depth.</summary>
         Extreme = 4,
+        /// <summary>#1861 (epic #1428, C9) — arbitrary precision, no zoom limit. Very slow at depth.</summary>
+        Unbounded = 5,
     }
 
     /// <summary>
@@ -301,10 +303,38 @@ namespace FracturingFog.Models
             AaSamples = 16,            // Wave 2.6 — 4×4 MSAA
             TaaMaxSamples = 32,        // Wave 2.7
         };
+        /// <summary>
+        /// #1861 (epic #1428, C9) — past Extreme: no zoom limit. Past 1e110 the reference
+        /// orbit is built in BigFloat at the exact centre (C4), past 1e290 each pixel runs in
+        /// floatexp with floatexp BLA / LA (C5), the zoom is carried as log10 past double (C3).
+        /// The iteration formula is the Extreme tier's formula continued: 2048 + 1024 per
+        /// decade, so the step from Extreme at 1e100 changes nothing, up to the explore ceiling. AA is 2×2 + 8 TAA
+        /// samples: every sample is a full arbitrary-precision frame.
+        /// </summary>
+        public static readonly QualityPreset Unbounded = new()
+        {
+            Tier = QualityTier.Unbounded,
+            Name = "Unbounded",
+            Description = "Arbitrary precision — zoom past 1×10¹⁰⁰ with no limit (BigFloat reference orbit; floatexp pixels past 1×10²⁹⁰). 2×2 anti-aliasing + 8-sample TAA. Very slow at depth.",
+            ZoomMin = DefaultZoomMin,
+            ZoomMax = double.PositiveInfinity,
+            WheelZoomFactor = 1.06,
+            IterBase = 2048,
+            IterMax = IterationLimits.ExploreCeiling,
+            IterPerDecade = 1024,
+            AllowHighPrecision = true,
+            HPZoomThreshold = 1e12,
+            AaSamples = 4,
+            TaaMaxSamples = 8,
+        };
+
         // ── Lookup helpers ────────────────────────────────────────────────────
 
         /// <summary>All presets in tier order.</summary>
-        public static readonly QualityPreset[] All = { Draft, Standard, High, Ultra, Extreme };
+        public static readonly QualityPreset[] All = { Draft, Standard, High, Ultra, Extreme, Unbounded };
+
+        /// <summary>#1861 — the deepest tier (<see cref="Unbounded"/>).</summary>
+        public static QualityPreset Deepest => Unbounded;
 
         /// <summary>Returns the preset for the given tier.</summary>
         public static QualityPreset Get(QualityTier tier) => tier switch
@@ -314,6 +344,7 @@ namespace FracturingFog.Models
             QualityTier.High => High,
             QualityTier.Ultra => Ultra,
             QualityTier.Extreme => Extreme,
+            QualityTier.Unbounded => Unbounded,
             _ => Standard,
         };
 

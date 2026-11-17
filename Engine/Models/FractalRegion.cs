@@ -4286,7 +4286,7 @@ namespace FracturingFog.Models
 
                 foreach (var r in UserRegions)
                 {
-                    if (!IncludeExtremeInAll && QualityPreset.Extreme.Equals(r.QualityPreset))
+                    if (!IncludeExtremeInAll && r.QualityPreset?.Tier >= QualityTier.Extreme)   // #1861: and Unbounded
                         continue;
                     yield return r;
                 }
