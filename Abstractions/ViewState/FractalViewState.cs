@@ -109,6 +109,34 @@ namespace FracturingFog.ViewState
             CenterY4 = c.Im.X4; CenterY5 = c.Im.X5; CenterY6 = c.Im.X6; CenterY7 = c.Im.X7;
         }
 
+        // ── #1832 — the exact (arbitrary-precision) centre ────────────────────
+        // The 16 limbs stay the render contract up to 1e100 (byte-identical there). Past
+        // OD's precision the exact centre is the authority. It is valid only while the
+        // limbs are still the ones SetCenterExact wrote, so any limb-only writer (pan, zoom,
+        // jitter, code that predates #1832) drops it instead of leaving a stale exact
+        // centre behind moved limbs.
+        private FFMath.ExactCentre? _exact;
+        private FFMath.DeepComplex _exactStamp;
+
+        /// <summary>#1832 — set the centre at any precision: the exact pair, and its OD limbs.</summary>
+        public void SetCenterExact(FFMath.ExactCentre c)
+        {
+            var od = c.ToDeep();
+            SetCenter(od);
+            _exact = c;
+            _exactStamp = od;
+        }
+
+        /// <summary>#1832 — the exact centre, or null when none was set or the limbs have
+        /// moved since (then the limbs are the centre).</summary>
+        public FFMath.ExactCentre? CenterExact
+            => _exact is { } e && FFMath.ExactCentre.SameLimbs(_exactStamp, GetCenter()) ? e : null;
+
+        /// <summary>#1832 — the centre at <paramref name="precision"/> bits: the exact centre
+        /// when valid, otherwise the limbs (exactly).</summary>
+        public FFMath.ExactCentre GetCenterExact(int precision)
+            => CenterExact is { } e ? e.WithPrecision(precision) : FFMath.ExactCentre.FromDeep(GetCenter(), precision);
+
         // ── Fractal type + per-engine parameters ──────────────────────────────
 
         public FractalType FractalType { get; set; } = FractalType.Mandelbrot;

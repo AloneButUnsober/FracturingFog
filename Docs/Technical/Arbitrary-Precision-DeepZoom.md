@@ -5,8 +5,10 @@ the canonical task list; this doc backs them.
 
 | slice | issue | status |
 |---|---|---|
-| C1 BigFloat type | #1830 | this doc §1–§3 |
-| C2–C11 | filed when started (see #1428) | |
+| C1 BigFloat type | #1830 | §1–§5 (merged, PR #1831) |
+| C2a exact centre in view state + region JSON | #1832 | §6 |
+| C2b exact centre in history, location strings, video, RPC, cluster | #1833 | |
+| C3–C11 | filed when started (see #1428) | |
 
 ## 1. Why a new number type
 
@@ -74,3 +76,18 @@ All against independent references, none against BigFloat itself:
   - Parse is the rational rounding of the decimal's exact value;
   - ToString round-trips at every tested precision.
 - **Orbit:** a 256-bit orbit tracks a 1,024-bit fixed-point BigInteger orbit within 2^-255 over 2,000 iterations, at an attracting c (the period-3 bulb).
+
+## 6. The exact centre (C2a, #1832)
+
+- **`ExactCentre`** (`Abstractions/Math/ExactCentre.cs`) is a `BigFloat` (Re, Im) pair, with conversions to and from `DeepComplex` and a decimal-string pair.
+- **The OD limbs stay the render contract.** Every reader up to 1e100 keeps reading the sixteen limbs, byte-identical. The exact centre is the authority past OD's precision.
+- **View state.**
+  - `FractalViewState.SetCenterExact` writes the pair and its OD limbs together.
+  - `CenterExact` returns the pair only while the limbs are still the ones it wrote. A limb-only writer (a pan, a jitter, any code from before #1832) silently drops it, so a stale exact centre can never sit behind moved limbs.
+  - `GetCenterExact(P)` gives the pair, or the limbs exactly.
+- **Region JSON.**
+  - `CenterExactX` / `CenterExactY` hold decimal text with BigFloat's round-trip digits, and `CenterExactBits` holds the precision it was written at. The text round-trips only at that precision: at 1,091 bits instead of 1,078 the same digits round to a different value.
+  - All three are written only for a view that has an exact centre, so files for today's views are unchanged.
+  - **On load** (`IJsonOnDeserialized`, so the region store, imports and server requests alike), a valid pair rewrites the limbs from itself. A damaged pair, half a pair or non-decimal text is dropped, and the limbs rule.
+  - A hand-written pair without `CenterExactBits` is read at its digit count.
+  - Region apply / capture / clone (`HostColorThemeService`) and `FractalRegion.CopyCentreTo` / `CopyCentreFrom` carry the pair.

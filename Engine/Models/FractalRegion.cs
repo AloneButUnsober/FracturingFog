@@ -44,8 +44,22 @@ namespace FracturingFog.Models
     /// <summary>
     /// A named Mandelbrot coordinate bookmark.
     /// </summary>
-    public sealed class FractalRegion
+    public sealed class FractalRegion : IJsonOnDeserialized
     {
+        /// <summary>#1832 — after any JSON load (the region store, an import, a server
+        /// request): a valid exact centre rewrites the limbs from itself, so every reader of
+        /// the limbs sees the same centre; a damaged pair (not decimal text, or only one
+        /// part) is dropped and the limbs rule (tolerant load, #964 / #1212).</summary>
+        void IJsonOnDeserialized.OnDeserialized() => NormaliseCentre();
+
+        /// <summary>#1832 — see <see cref="IJsonOnDeserialized.OnDeserialized"/>.</summary>
+        public void NormaliseCentre()
+        {
+            if (CenterExactX == null && CenterExactY == null) return;
+            if (CentreExact is { } e) Centre = e.ToDeep();
+            else ClearCentreExact();
+        }
+
         /// <summary>Display name shown in the UI.</summary>
         public string Name { get; set; } = string.Empty;
 
@@ -107,6 +121,41 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
         public double CenterY7 { get; set; }
 
+        /// <summary>#1832 (epic #1428) — the exact real centre as decimal text, when the view
+        /// had a centre past OD's precision. Null (not written) otherwise, so files for
+        /// views up to 1e100 are byte-identical. Where valid it wins over the limbs.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? CenterExactX { get; set; }
+
+        /// <summary>#1832 — the exact imaginary centre as decimal text (see <see cref="CenterExactX"/>).</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? CenterExactY { get; set; }
+
+        /// <summary>#1832 — the precision (bits) <see cref="CenterExactX"/> / <see cref="CenterExactY"/>
+        /// were written at: their text round-trips at exactly that precision. 0 (not written)
+        /// for a hand-written pair, which is then read at its digit count.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public int CenterExactBits { get; set; }
+
+        /// <summary>#1832 — the exact centre from <see cref="CenterExactX"/> / <see cref="CenterExactY"/>,
+        /// or null when absent or not a decimal pair (a hand-edited or damaged file falls back
+        /// to the limbs).</summary>
+        [JsonIgnore]
+        public ExactCentre? CentreExact
+            => CenterExactBits is >= 0 and <= 4 * ExactCentre.MaxDigits
+               && ExactCentre.TryParse(CenterExactX, CenterExactY, out var c, CenterExactBits) ? c : null;
+
+        /// <summary>#1832 — store an exact centre: the decimal pair, its precision and its OD limbs.</summary>
+        public void SetCentreExact(ExactCentre c)
+        {
+            Centre = c.ToDeep();
+            (CenterExactX, CenterExactY) = c.ToStrings();
+            CenterExactBits = c.Precision;
+        }
+
+        /// <summary>#1832 — clear the exact centre (the limbs rule).</summary>
+        public void ClearCentreExact() { CenterExactX = null; CenterExactY = null; CenterExactBits = 0; }
+
         /// <summary>#1320 — the full eight-limb centre.</summary>
         [JsonIgnore]
         public DeepComplex Centre
@@ -126,6 +175,8 @@ namespace FracturingFog.Models
         /// <summary>#1320 — copy all sixteen centre limbs into a view state.</summary>
         public void CopyCentreTo(FracturingFog.ViewState.FractalViewState s)
         {
+            // #1832 — a valid exact centre wins: it sets the limbs from itself.
+            if (CentreExact is { } e) { s.SetCenterExact(e); return; }
             s.CenterX = CenterX; s.CenterXLo = CenterXLo; s.CenterX2 = CenterX2; s.CenterX3 = CenterX3;
             s.CenterX4 = CenterX4; s.CenterX5 = CenterX5; s.CenterX6 = CenterX6; s.CenterX7 = CenterX7;
             s.CenterY = CenterY; s.CenterYLo = CenterYLo; s.CenterY2 = CenterY2; s.CenterY3 = CenterY3;
@@ -139,6 +190,15 @@ namespace FracturingFog.Models
             CenterX4 = s.CenterX4; CenterX5 = s.CenterX5; CenterX6 = s.CenterX6; CenterX7 = s.CenterX7;
             CenterY = s.CenterY; CenterYLo = s.CenterYLo; CenterY2 = s.CenterY2; CenterY3 = s.CenterY3;
             CenterY4 = s.CenterY4; CenterY5 = s.CenterY5; CenterY6 = s.CenterY6; CenterY7 = s.CenterY7;
+            // #1832 — the exact centre when the view has one, else none (so the limbs rule).
+            if (s.CenterExact is { } e) SetCentreExactStrings(e);
+            else ClearCentreExact();
+        }
+
+        private void SetCentreExactStrings(ExactCentre e)
+        {
+            (CenterExactX, CenterExactY) = e.ToStrings();
+            CenterExactBits = e.Precision;
         }
 
         /// <summary>#1320 — copy all sixteen centre limbs into a Mandelbrot calculator.</summary>
