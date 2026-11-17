@@ -111,6 +111,56 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
 
     public double Zoom { get; set; } = 1.0;
 
+    // ── #1840 (epic #1428, C4) — depth past OD: exact centre + log zoom ──────
+    // The limbs and Zoom stay the render contract. Past ApReferenceZoomLog10 the
+    // reference orbit is built in BigFloat at the exact centre, when one is set and the
+    // limbs are still its OD split (a jitter / pan / old writer of the limbs drops it, as
+    // in FractalViewState, #1832), else at the limbs exactly.
+    private ExactCentre? _centerExact;
+    private DeepComplex _centerExactLimbs;
+    private double _zoomLog10 = double.NaN, _zoomLog10Stamp;
+
+    /// <summary>#1840 — the exact view centre, or null when none was set or the limbs
+    /// have moved since.</summary>
+    public ExactCentre? CenterExact
+    {
+        get => _centerExact is { } e && ExactCentre.SameLimbs(_centerExactLimbs, CurrentCentreLimbs()) ? e : null;
+        set { _centerExact = value; if (value is { } v) _centerExactLimbs = v.ToDeep(); }
+    }
+
+    /// <summary>#1840 — log10 zoom at any depth: SetZoomLog10's while Zoom is unchanged
+    /// since, else log10(Zoom).</summary>
+    public double ZoomLog10
+        => !double.IsNaN(_zoomLog10) && _zoomLog10Stamp.Equals(Zoom) ? _zoomLog10 : Math.Log10(Zoom);
+
+    /// <summary>#1840 — set the zoom from its log10 (Zoom saturates past double).</summary>
+    public void SetZoomLog10(double log10)
+    {
+        Zoom = FracturingFog.ViewState.ZoomLog.FromLog10(log10);
+        _zoomLog10 = log10;
+        _zoomLog10Stamp = Zoom;
+    }
+
+    /// <summary>#1840 — the view's depth past OD: its exact centre (null: none) and, past
+    /// double, its log zoom. Call after the limbs and Zoom are set.</summary>
+    public void SetDepth(ExactCentre? exact, double zoomLog10 = double.NaN)
+    {
+        CenterExact = exact;
+        if (double.IsFinite(zoomLog10) && FracturingFog.ViewState.ZoomLog.BeyondDouble(zoomLog10)) SetZoomLog10(zoomLog10);
+    }
+
+    /// <summary>#1840 — log10 zoom past which the reference orbit is built in BigFloat
+    /// (tier 3, "AP-PT"). 110 = past today's 1e100 cap (Extreme.ZoomMax), so the live app
+    /// keeps the OD orbit (byte-identical) until C9 lifts the cap; within OD's measured
+    /// clean floor (~1e120, --qdfloorsweep).</summary>
+    public double ApReferenceZoomLog10 { get; set; } = 110;
+
+    private DeepComplex CurrentCentreLimbs() => DeepComplex.FromLimbs(
+        CenterX, CenterXLo, CenterX2, CenterX3, CenterX4, CenterX5, CenterX6, CenterX7,
+        CenterY, CenterYLo, CenterY2, CenterY3, CenterY4, CenterY5, CenterY6, CenterY7);
+
+    private bool UseApReference => ZoomLog10 > ApReferenceZoomLog10;
+
     // ── D-6b — sub-rect rendering ────────────────────────────────────────────
     //
     // When the calculator renders a sub-rect of a larger image (one tile of a
@@ -577,6 +627,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     // #1321 — label for the reference-orbit tier just built (_refCachedTier).
     private string PerturbationLabel() => (_refCachedTier switch
     {
+        3 => "AP-PT",   // #1840
         2 => "OD-PT",
         1 => "QD-PT",
         _ => "DD-PT",
@@ -4093,7 +4144,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
 
         // Precision tier must match — a tier change alters the centre limbs and
         // the fallback precision, invalidating direct reuse.
-        int tier = Zoom > ODZoomThreshold ? 2 : (Zoom > QDZoomThreshold ? 1 : 0);
+        int tier = UseApReference ? 3 : Zoom > ODZoomThreshold ? 2 : (Zoom > QDZoomThreshold ? 1 : 0);   // #1840: 3 = AP
         if (tier != _refCachedTier) { _refRecycleMisses++; return false; }
 
         // maxIter coverage — same predicate as the exact-centre cache: a cached
@@ -4116,6 +4167,14 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                             - new QD(_refCxHi, _refCxLo, _refCx2, _refCx3));
                 dy = (double)(new QD(CenterY, CenterYLo, CenterY2, CenterY3)
                             - new QD(_refCyHi, _refCyLo, _refCy2, _refCy3));
+                break;
+            case 3 when CenterExact is { } ce && _refExact is { } re:
+                // #1840 — exact: the view's exact centre minus the orbit's. (Without a
+                // valid exact centre — a jitter moved the limbs — the limb difference
+                // below, against the orbit centre's own limbs: OD's rounding of the exact
+                // centre, ~1e-128, is then never taken for a shift.)
+                dx = BigFloat.Sub(ce.Re, re.Re, Math.Max(ce.Precision, re.Precision)).ToDouble();
+                dy = BigFloat.Sub(ce.Im, re.Im, Math.Max(ce.Precision, re.Precision)).ToDouble();
                 break;
             default:
                 dx = (double)(new OD(CenterX, CenterXLo, CenterX2, CenterX3,
@@ -4231,6 +4290,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         _refCxHi = double.NaN; _refCyHi = double.NaN;
         _refCachedTier = -1;
         _refCachedEscaped = false;
+        _refExact = null;   // #1840
         _refOrbitGen++;
     }
 
@@ -4336,7 +4396,15 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         // #1621 their SA skip stops short of the buffer's end.
         _refPeriodTol2 = PeriodicReferenceOrbit && AllowPtRebasing && !UseDdRebaseReference
             ? px * px : 0;
-        if (Zoom > ODZoomThreshold)
+        if (UseApReference)
+        {
+            // #1840 — past OD's reach: BigFloat at the precision the zoom needs, at the
+            // exact centre (or the limbs exactly).
+            int prec = BigFloat.PrecisionForZoom(ZoomLog10);
+            var c = CenterExact ?? ExactCentre.FromDeep(CurrentCentreLimbs(), prec);
+            ComputeReferenceOrbitAP(c, prec, maxIt, ct);
+        }
+        else if (Zoom > ODZoomThreshold)
         {
             var cxOD = new OD(CenterX, CenterXLo, CenterX2, CenterX3,
                               CenterX4, CenterX5, CenterX6, CenterX7);
@@ -4364,10 +4432,13 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     /// rendering; returns the orbit length. For the reference-orbit bench (the
     /// orbit is cached per centre, so a frame bench only builds it once).
     /// <see cref="LastFrameBuiltGpuReferenceOrbit"/> says where it was built.</summary>
-    public int BuildReferenceOrbit()
+    public int BuildReferenceOrbit() => BuildReferenceOrbit(CancellationToken.None);
+
+    /// <summary>#1840 — <see cref="BuildReferenceOrbit()"/>, cancellable (#1427).</summary>
+    public int BuildReferenceOrbit(CancellationToken ct)
     {
         LastFrameBuiltGpuReferenceOrbit = false;
-        ComputeReferenceOrbitForCenter(MaxIterations);
+        ComputeReferenceOrbitForCenter(MaxIterations, ct);
         return _refOrbitLen;
     }
 
@@ -4507,6 +4578,91 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         _refPeriodZ2 = periodZ2;
         _refCachedTier = 2;  // OD
     }
+
+    // #1840 — the exact centre and precision the cached tier-3 orbit was built at.
+    private ExactCentre? _refExact;
+    private int _refExactPrec;
+
+    /// <summary>#1840 (epic #1428, C4) — the reference orbit in BigFloat: z ← z² + c with
+    /// one rounding per operation at <paramref name="prec"/> bits. Each Z_n is stored as its
+    /// greedy OD split in the eight-limb arrays, so every consumer (perturbation, SA seed,
+    /// LA / BLA, rebasing, periodicity) reads it as it reads the OD orbit. Period detection
+    /// (#1614), the δ-amplification sum and the cancellation (#1427, every 64 iterations:
+    /// an iteration costs ~µs here) follow ComputeReferenceOrbitOD.</summary>
+    private void ComputeReferenceOrbitAP(ExactCentre c, int prec, int maxIter, CancellationToken ct = default)
+    {
+        bool centerSame = _refCachedTier == 3 && _refExact is { } rc
+                       && rc.Re == c.Re && rc.Im == c.Im && _refExactPrec >= prec;
+        if (centerSame && (_refCachedEscaped || PeriodicOrbitFits() || maxIter <= _refCachedMaxIter)
+            && PeriodicOrbitStillValid())
+            return;
+
+        EnsureRefOrbitCapacity(maxIter);
+        InvalidateRefOrbitCache();   // #1427: a cancel mid-build leaves no stale hit
+        BigFloat cx = c.Re.WithPrecision(prec), cy = c.Im.WithPrecision(prec);
+        BigFloat zr = BigFloat.Zero(prec), zi = BigFloat.Zero(prec);
+        double logDerivSum = 0.0;
+        int period = 0;
+        double periodZ2 = 0;
+        OD zrOd = OD.Zero, ziOd = OD.Zero;
+        int n;
+        for (n = 0; n < maxIter; n++)
+        {
+            if ((n & 63) == 63) ct.ThrowIfCancellationRequested();   // #1427
+            zrOd = zr.ToOD(); ziOd = zi.ToOD();
+            StoreRefOd(n, zrOd, ziOd);
+            double zmag2 = zrOd.X0 * zrOd.X0 + ziOd.X0 * ziOd.X0;
+            if (zmag2 >= EscapeRadius2) break;
+            if (n > 0 && zmag2 < _refPeriodTol2) { period = n; periodZ2 = zmag2; }
+            if (zmag2 > 0.0 && zmag2 <= 4.0) logDerivSum += 0.5 * Math.Log10(4.0 * zmag2);
+            var zr2 = BigFloat.Mul(zr, zr, prec);
+            var zi2 = BigFloat.Mul(zi, zi, prec);
+            var zri = BigFloat.Mul(zr, zi, prec);
+            zi = BigFloat.Add(zri.ScaleB(1), cy, prec);                      // 2·zr·zi + cy
+            zr = BigFloat.Add(BigFloat.Sub(zr2, zi2, prec), cx, prec);       // zr² − zi² + cx
+            if (period > 0) { n++; break; }
+        }
+        MaxUsefulZoomLog10 = n < maxIter && period == 0 ? logDerivSum : double.PositiveInfinity;
+        if (n == maxIter || period > 0) { zrOd = zr.ToOD(); ziOd = zi.ToOD(); }
+        StoreRefOd(n, zrOd, ziOd);
+        _refOrbitLen = n;
+        _refOrbitGen++;
+
+        var d = c.ToDeep();
+        _refCxHi = d.Re.X0; _refCxLo = d.Re.X1; _refCx2 = d.Re.X2; _refCx3 = d.Re.X3;
+        _refCx4 = d.Re.X4;  _refCx5 = d.Re.X5;  _refCx6 = d.Re.X6;  _refCx7 = d.Re.X7;
+        _refCyHi = d.Im.X0; _refCyLo = d.Im.X1; _refCy2 = d.Im.X2; _refCy3 = d.Im.X3;
+        _refCy4 = d.Im.X4;  _refCy5 = d.Im.X5;  _refCy6 = d.Im.X6;  _refCy7 = d.Im.X7;
+        _refCachedMaxIter = maxIter;
+        _refCachedEscaped = n < maxIter && period == 0;
+        _refPeriod = period;
+        _refPeriodZ2 = periodZ2;
+        _refExact = c;
+        _refExactPrec = prec;
+        _refCachedTier = 3;  // AP
+    }
+
+    private void StoreRefOd(int n, in OD zr, in OD zi)
+    {
+        _refZr[n] = zr.X0;   _refZrLo[n] = zr.X1;
+        _refZrX2[n] = zr.X2; _refZrX3[n] = zr.X3;
+        _refZrX4[n] = zr.X4; _refZrX5[n] = zr.X5;
+        _refZrX6[n] = zr.X6; _refZrX7[n] = zr.X7;
+        _refZi[n] = zi.X0;   _refZiLo[n] = zi.X1;
+        _refZiX2[n] = zi.X2; _refZiX3[n] = zi.X3;
+        _refZiX4[n] = zi.X4; _refZiX5[n] = zi.X5;
+        _refZiX6[n] = zi.X6; _refZiX7[n] = zi.X7;
+    }
+
+    /// <summary>#1840 — test / probe access: Z_n of the last reference orbit as its eight
+    /// limbs (real, imaginary), and the tier it was built at (3 = AP).</summary>
+    public (OD Re, OD Im) ReferenceOrbitPoint(int n) => (
+        new OD(_refZr[n], _refZrLo[n], _refZrX2[n], _refZrX3[n], _refZrX4[n], _refZrX5[n], _refZrX6[n], _refZrX7[n]),
+        new OD(_refZi[n], _refZiLo[n], _refZiX2[n], _refZiX3[n], _refZiX4[n], _refZiX5[n], _refZiX6[n], _refZiX7[n]));
+
+    /// <summary>#1840 — the precision tier of the cached reference orbit (0 DD, 1 QD, 2 OD,
+    /// 3 AP; -1 none).</summary>
+    public int ReferenceOrbitTier => _refCachedTier;
 
     // Full-OD per-pixel fallback (used for PT glitches at zoom > 1e50).
     // Mirrors ComputePixelQD line-by-line, but uses OD math so pixel offsets
