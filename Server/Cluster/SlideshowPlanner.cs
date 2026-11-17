@@ -173,6 +173,10 @@ public static class SlideshowPlanner
             CenterY5             = slide.CenterY5  != 0 ? slide.CenterY5  : template.CenterY5,
             CenterY6             = slide.CenterY6  != 0 ? slide.CenterY6  : template.CenterY6,
             CenterY7             = slide.CenterY7  != 0 ? slide.CenterY7  : template.CenterY7,
+            // #1833 — the exact centre, same slide-else-template rule (as a pair).
+            CenterExactX         = slide.CenterExactX ?? template.CenterExactX,
+            CenterExactY         = slide.CenterExactX != null ? slide.CenterExactY : template.CenterExactY,
+            CenterExactBits      = slide.CenterExactX != null ? slide.CenterExactBits : template.CenterExactBits,
             ThemeName            = !string.IsNullOrEmpty(slide.ThemeName)
                                      ? slide.ThemeName
                                      : template.ThemeName,

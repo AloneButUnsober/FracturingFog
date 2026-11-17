@@ -272,6 +272,7 @@ public static class TilePlanner
             CenterY3             = src.CenterY3,
             CenterX4 = src.CenterX4, CenterX5 = src.CenterX5, CenterX6 = src.CenterX6, CenterX7 = src.CenterX7,
             CenterY4 = src.CenterY4, CenterY5 = src.CenterY5, CenterY6 = src.CenterY6, CenterY7 = src.CenterY7,
+            CenterExactX = src.CenterExactX, CenterExactY = src.CenterExactY, CenterExactBits = src.CenterExactBits,   // #1833
             ThemeName            = src.ThemeName,
             QualityName          = src.QualityName,
             ThemeJson            = src.ThemeJson,
@@ -348,6 +349,7 @@ public static class TilePlanner
             t.Render.CenterY5   = submitRequest.CenterY5;
             t.Render.CenterY6   = submitRequest.CenterY6;
             t.Render.CenterY7   = submitRequest.CenterY7;
+            t.Render.CopyExactCentreFrom(submitRequest);   // #1833
             t.Render.Zoom       = imgZoom;
             t.Render.Width      = tW;
             t.Render.Height     = tH;

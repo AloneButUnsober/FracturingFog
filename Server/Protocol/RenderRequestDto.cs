@@ -10,7 +10,7 @@ using System.Text.Json.Serialization;
 
 namespace FracturingFog.Server.Protocol;
 
-public sealed class RenderRequestDto
+public sealed class RenderRequestDto : IJsonOnDeserialized
 {
     /// <summary>"image" or "video".</summary>
     [JsonPropertyName("mode")]
@@ -54,6 +54,49 @@ public sealed class RenderRequestDto
     [JsonPropertyName("centerY5")] public double CenterY5 { get; set; }
     [JsonPropertyName("centerY6")] public double CenterY6 { get; set; }
     [JsonPropertyName("centerY7")] public double CenterY7 { get; set; }
+
+    // #1833 (epic #1428) — the exact centre past OD's precision: decimal text that
+    // round-trips at CenterExactBits (FFMath.ExactCentre.ToStrings). Omitted when null, so
+    // requests up to 1e100 are unchanged. Where valid it wins over the limbs (on load the
+    // limbs are rewritten from it); damaged text is dropped.
+    [JsonPropertyName("centerExactX")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CenterExactX { get; set; }
+    [JsonPropertyName("centerExactY")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CenterExactY { get; set; }
+    [JsonPropertyName("centerExactBits")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int CenterExactBits { get; set; }
+
+    /// <summary>#1833 — the exact centre, or null when absent or damaged.</summary>
+    public FracturingFog.FFMath.ExactCentre? CentreExact()
+        => CenterExactBits is >= 0 and <= 4 * FracturingFog.FFMath.ExactCentre.MaxDigits
+           && FracturingFog.FFMath.ExactCentre.TryParse(CenterExactX, CenterExactY, out var c, CenterExactBits) ? c : null;
+
+    /// <summary>#1833 — copy the exact-centre fields from another request.</summary>
+    public void CopyExactCentreFrom(RenderRequestDto src)
+    {
+        CenterExactX = src.CenterExactX; CenterExactY = src.CenterExactY; CenterExactBits = src.CenterExactBits;
+    }
+
+    /// <summary>#1833 — after a JSON load: a valid exact centre rewrites the limbs, a
+    /// damaged one is dropped (the limbs rule).</summary>
+    public void NormaliseCentre()
+    {
+        if (CenterExactX == null && CenterExactY == null) return;
+        if (CentreExact() is { } e)
+        {
+            var d = e.ToDeep();
+            CenterX = d.Re.X0; CenterXLo = d.Re.X1; CenterX2 = d.Re.X2; CenterX3 = d.Re.X3;
+            CenterX4 = d.Re.X4; CenterX5 = d.Re.X5; CenterX6 = d.Re.X6; CenterX7 = d.Re.X7;
+            CenterY = d.Im.X0; CenterYLo = d.Im.X1; CenterY2 = d.Im.X2; CenterY3 = d.Im.X3;
+            CenterY4 = d.Im.X4; CenterY5 = d.Im.X5; CenterY6 = d.Im.X6; CenterY7 = d.Im.X7;
+        }
+        else { CenterExactX = null; CenterExactY = null; CenterExactBits = 0; }
+    }
+
+    void IJsonOnDeserialized.OnDeserialized() => NormaliseCentre();
 
     [JsonPropertyName("themeName")]   public string ThemeName   { get; set; } = "HSV";
     [JsonPropertyName("qualityName")] public string QualityName { get; set; } = "Standard";

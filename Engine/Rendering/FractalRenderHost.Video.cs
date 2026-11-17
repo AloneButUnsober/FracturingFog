@@ -2077,12 +2077,7 @@ namespace FracturingFog.Rendering
                     // #94 — static-hold leg: render at the region's authored view
                     // and hold; no zoom/pan. Quality = authored preset floored to
                     // the natural-for-authored-zoom tier (same rule as reverse).
-                    ViewState.CenterX = region.CenterX; ViewState.CenterXLo = region.CenterXLo;
-                    ViewState.CenterX2 = region.CenterX2; ViewState.CenterX3 = region.CenterX3;
-                    ViewState.CenterY = region.CenterY; ViewState.CenterYLo = region.CenterYLo;
-                    ViewState.CenterY2 = region.CenterY2; ViewState.CenterY3 = region.CenterY3;
-                    ViewState.CenterX4 = region.CenterX4; ViewState.CenterX5 = region.CenterX5; ViewState.CenterX6 = region.CenterX6; ViewState.CenterX7 = region.CenterX7;
-                    ViewState.CenterY4 = region.CenterY4; ViewState.CenterY5 = region.CenterY5; ViewState.CenterY6 = region.CenterY6; ViewState.CenterY7 = region.CenterY7;
+                    region.CopyCentreTo(ViewState);   // #1833: limbs, and the exact centre where the region has one
                     ViewState.Zoom = tz;
 
                     QualityPreset natural = QualityPreset.Standard;
@@ -2104,12 +2099,7 @@ namespace FracturingFog.Rendering
                     // 3D camera baseline (distance/theta/phi + slice) that Zoom
                     // dollies against. Quality = authored preset, floored to the
                     // natural-for-authored-zoom tier.
-                    ViewState.CenterX = region.CenterX; ViewState.CenterXLo = region.CenterXLo;
-                    ViewState.CenterX2 = region.CenterX2; ViewState.CenterX3 = region.CenterX3;
-                    ViewState.CenterY = region.CenterY; ViewState.CenterYLo = region.CenterYLo;
-                    ViewState.CenterY2 = region.CenterY2; ViewState.CenterY3 = region.CenterY3;
-                    ViewState.CenterX4 = region.CenterX4; ViewState.CenterX5 = region.CenterX5; ViewState.CenterX6 = region.CenterX6; ViewState.CenterX7 = region.CenterX7;
-                    ViewState.CenterY4 = region.CenterY4; ViewState.CenterY5 = region.CenterY5; ViewState.CenterY6 = region.CenterY6; ViewState.CenterY7 = region.CenterY7;
+                    region.CopyCentreTo(ViewState);   // #1833: limbs, and the exact centre where the region has one
                     ViewState.Zoom = reverse ? camAuthoredZoom : camWideZoom;
 
                     QualityPreset natural = QualityPreset.Standard;
@@ -2124,12 +2114,7 @@ namespace FracturingFog.Rendering
                 }
                 else if (reverse)
                 {
-                    ViewState.CenterX = region.CenterX; ViewState.CenterXLo = region.CenterXLo;
-                    ViewState.CenterX2 = region.CenterX2; ViewState.CenterX3 = region.CenterX3;
-                    ViewState.CenterY = region.CenterY; ViewState.CenterYLo = region.CenterYLo;
-                    ViewState.CenterY2 = region.CenterY2; ViewState.CenterY3 = region.CenterY3;
-                    ViewState.CenterX4 = region.CenterX4; ViewState.CenterX5 = region.CenterX5; ViewState.CenterX6 = region.CenterX6; ViewState.CenterX7 = region.CenterX7;
-                    ViewState.CenterY4 = region.CenterY4; ViewState.CenterY5 = region.CenterY5; ViewState.CenterY6 = region.CenterY6; ViewState.CenterY7 = region.CenterY7;
+                    region.CopyCentreTo(ViewState);   // #1833: limbs, and the exact centre where the region has one
                     ViewState.Zoom = tz;
 
                     // Natural-for-zoom acts as a floor; authored region preset
