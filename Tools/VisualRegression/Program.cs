@@ -289,8 +289,46 @@ internal static class Program
                 },
             });
         }
+        // #1864 (epic #1428, C11) — past 1e100: the Unbounded tier's arbitrary-precision path.
+        //   • 1e150 on the dense Misiurewicz point: past OD's dense separation floor (~1e134,
+        //     --qdfloorsweep), so the exact centre carries the view; AP reference orbit.
+        //   • 1e320 there: past double (log zoom) and floatexp pixels.
+        //   • 1e498 on the period-415 antenna minibrot next to c = -2 (S1864): a whole copy
+        //     of the set, framed through the atom-size map like the home view.
+        // 128×128 with a fixed --iter keeps them a few seconds each.
+        foreach (var (name, x, y, zoom, iter) in new[]
+        {
+            ("mandelbrot-deep-1e150-exact", MisiurewiczX, MisiurewiczY, "1e150", "3000"),
+            ("mandelbrot-deep-1e320-floatexp", MisiurewiczX, MisiurewiczY, "1e320", "5000"),
+            ("mandelbrot-deep-1e498-minibrot", AntennaX, "0", "8.656489497115256e497", "41500"),
+        })
+        {
+            cases.Add(new Case
+            {
+                Name = name,
+                Args = new[]
+                {
+                    "--fractal", "Mandelbrot",
+                    "--theme", "HSV",
+                    "--x", x,
+                    "--y", y,
+                    "--zoom", zoom,
+                    "--iter", iter,
+                    "--width", "128",
+                    "--height", "128",
+                    "--quality", "Unbounded",
+                    "--no-watermark",
+                },
+            });
+        }
         return cases;
     }
+
+    // #1864 — the Misiurewicz point near -0.1011 + 0.9563i (preperiod 4, Newton-refined) to
+    // 340 digits, and the period-415 antenna minibrot's view centre (nucleus + Size·(-0.5)).
+    private const string MisiurewiczX = "-0.1010963638456221610257854457386225654638054428262534838769311776607808407404705842748212198105167790334045319085567411939715461442609118823557039076803016157584181434354544823068106664029419378267411891607819526448995396995334466823393126699009817557150425206538866991861344333961600610562775385144259609560703568221643279956133036926714760";
+    private const string MisiurewiczY = "0.9562865108091415007710960577299774358098333365105291700343143215005246590657167325269784107873398072043444724926469284366752406567465722656200815719741551313831228054884443810571677870203738395055477279309548311953190385170024877917670113105649462054553485859930615004427397447762045980085973915977603864276670744042253335354323566859404712";
+    private const string AntennaX = "-1.99999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999793226631245706117772959322209938072785024259123114596275346071507971233254118134864020948224706163650145917528945013557159770451246161747700143805730921028107309240320585968148920040602467950515650236660564095520733516396784332166560536798188959505408304556814392339467106004147449";
 
     // ── Batch shell-out ──────────────────────────────────────────────────────
 

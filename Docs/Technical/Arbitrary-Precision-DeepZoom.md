@@ -20,8 +20,9 @@ the canonical task list; this doc backs them.
 | C8a reference-orbit arrays grow as built (#1828) | #1856 | §17 (merged, PR #1857) |
 | C8b explore iteration plan past the tier cap (#1426) | #1858 | §18 (merged, PR #1859) |
 | C9 Unbounded quality tier: zoom past 1e100 | #1861 | §19 (merged, PR #1862) |
-| C10 batch + Command builder parity past 1e100 | #1860 | §20 |
-| C6, C7, C11 | filed when started (see #1428) | |
+| C10 batch + Command builder parity past 1e100 | #1860 | §20 (merged, PR #1863) |
+| C11 validation + docs | #1864 | §21 |
+| C6, C7 | filed when started (see #1428) | |
 
 ## 1. Why a new number type
 
@@ -398,3 +399,28 @@ A double zoom overflows at about 1.8e308. A double log10 zoom does not, and it k
   - A region's exact centre reaches the calculator on `CopyCentreTo`.
 - **Not unit-tested** (WinExe `BatchRenderer`): `ResolveDepth` / `QualityForDepth` wiring and the video / slideshow loops. They reuse the tested pieces: `BatchOptions`, `PosterRequest`, `SetDepth`, `ZoomLog`.
   - Smoke-run by hand: `--batch` stills at 1e150 and 1e320 on the 340-digit Misiurewicz centre (no `--quality`: promoted to Unbounded with the note) render the point's branch structure centred, and a 3-frame `--mode video` from 1e300 to 1e320 renders three distinct frames labelled 1E+300 / 1E+310 / 1E+320. The slideshow leg was not run (it needs a saved region past double).
+
+## 21. Validation and docs (C11, #1864)
+
+- **`--qdfloorsweep` past OD** (`Probes/QdFloorSweepProbe.cs`, moved from `Program.cs`).
+  - The sweep now runs from 1e40 to 1e1000.
+  - It adds the past-OD coordinates: the exact centre in BigFloat at `PrecisionForZoom` plus offset·scale (AP), and the floatexp deltas (fx).
+  - It runs on two centres: the old sparse 3E47 centre and the dense 340-digit Misiurewicz point.
+  - Measured:
+    - QD collapses at 1e66 on both centres.
+    - On the sparse centre OD never collapses, because its limbs' independent exponents hold centre + offset exactly (the "dense digits" lesson of C5e).
+    - On the dense centre OD is clean to 1e132 and collapses at 1e134, so `ApReferenceZoomLog10 = 110` has 22 decades of margin.
+    - AP and fx stay 128 / 128 to 1e1000.
+- **Minibrot-vs-M mask** (`S1864DeepMinibrotMaskTests`).
+  - The real-axis antenna minibrots next to c = −2 (periods 125 / 250 / 415, sizes ~1e-149 / ~1e-299 / ~1e-498, Size > 0 so no rotation).
+  - The nucleus is found by Newton in BigFloat from c = −2, and the size by the atom-domain estimate (`NucleusFinder.AtomSize`'s recurrence, in BigFloat), independent of the renderer.
+  - Each is rendered as the live host sets the calculator: limbs, Zoom, `SetDepth`, the Unbounded tier, `n·100` iterations. The view is framed through c = nucleus + Size·c′ at the home framing (centre −0.5, zoom 1).
+  - Its in-set mask matches the main set's mask at 100 iterations, with IoU 0.94 at all three depths.
+  - With the centre rounded to OD the minibrot leaves the frame (IoU 0.10 at 1e299 and 1e498), so the exact centre carries those two views.
+  - Mutation checks against the renderer: an AP threshold that never engages, a floatexp threshold that never engages, a dropped exact centre and a dropped log zoom: 4 of 4 caught.
+- **Visual regression** (#1292): three cases past 1e100, 128×128 with the Unbounded tier and a fixed `--iter`.
+  - `mandelbrot-deep-1e150-exact`: the Misiurewicz point past OD's dense floor.
+  - `mandelbrot-deep-1e320-floatexp`: the same point past double, with floatexp pixels.
+  - `mandelbrot-deep-1e498-minibrot`: the period-415 antenna minibrot, a whole copy of the set.
+  - The baseline gained exactly these three entries; the 42 existing hashes are unchanged.
+- **Docs.** `Docs/Deep-Zoom-Perturbation.md` §10 summarises the path past 1e100. §1 points at it, and the tools table points at the moved probe.
