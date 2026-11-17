@@ -2602,7 +2602,7 @@ namespace FracturingFog.Rendering
             var orig = CentreLimbs.Capture(calc);
             var jittered = orig;
             if (!CentreJitter.TryApply(calc, in orig, jx, jy, scale, token, ref jittered)) return false;
-            try { calc.Calculate(token); }
+            try { CentreJitter.Calculate(calc, token); }   // #1427: the unjittered orbit
             catch (OperationCanceledException)
             {
                 CentreJitter.RestoreIfOwned(calc, in orig, in jittered);

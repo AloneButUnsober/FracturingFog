@@ -49,7 +49,7 @@ DISABLED.
 
 ### Behaviour / gating
 - `MandelbrotCalculator.UseGpuPerturbation` (static, **default OFF**) — master toggle.
-- Gate in `CalculateHighPrecision` (`Engine/Calculators/MandelbrotCalculator.cs`): `!recycled && UseGpuPerturbation
+- Gate in `CalculateHighPrecision` (`Engine/Calculators/MandelbrotCalculator.cs`; #1427 dropped `!recycled`: a recycled orbit's shift goes into the pixel offset): `UseGpuPerturbation
   && GpuKernel != null && GpuKernel.SupportsPerturbation && AllowPtRebasing && !UseDdRebaseReference &&
   !ForceScalarPtPath && !tileCap && Zoom <= MaxGpuPerturbZoom && _refOrbitLen >= 1` → `TryRunGpuPerturbation`.
 - `MaxGpuPerturbZoom = ODZoomThreshold (1e50)`, conservative. **Deep-dc recheck proved single-double `dc` is

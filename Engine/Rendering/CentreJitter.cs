@@ -92,6 +92,19 @@ namespace FracturingFog.Rendering
             }
         }
 
+        /// <summary>#1427 — render one jittered anti-aliasing sample. With
+        /// <see cref="MandelbrotCalculator.AaReuseReferenceOrbit"/> the sample reuses the
+        /// reference orbit already built at the unjittered centre (a recycle shift of the
+        /// sub-pixel jitter, far inside the recycle bound) instead of building one at the
+        /// jittered centre.</summary>
+        public static void Calculate(MandelbrotCalculator calc, System.Threading.CancellationToken token)
+        {
+            bool prev = calc.AllowRecycleThisRender;
+            calc.AllowRecycleThisRender = prev || MandelbrotCalculator.AaReuseReferenceOrbit;
+            try { calc.Calculate(token); }
+            finally { calc.AllowRecycleThisRender = prev; }
+        }
+
         /// <summary>True when a jitter of about one pixel still changes the
         /// centre: the pixel is above the OD centre's precision floor (~2⁻³⁷¹
         /// relative, eight 53-bit limbs, with headroom). Past it every jittered

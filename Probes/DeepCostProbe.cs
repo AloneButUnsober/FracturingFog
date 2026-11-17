@@ -222,6 +222,40 @@ namespace FracturingFog
                                           $"per px LA {lw.LaSteps / px:F0} + plain {lw.PlainSteps / px:F0} | stages {tops} | iter diff vs first {d:N0}, in/out {io:N0}");
                     }
                 }
+                // #1427 — FF_DEEPCOST_AA_REUSE_AB=1: a 16-sample MSAA pass with the AA samples
+                // reusing the unjittered reference orbit against rebuilding it per sample
+                // (FF_AA_REUSE_ORBIT=0), alternating; and how long a cancelled orbit build
+                // takes to stop.
+                if (Environment.GetEnvironmentVariable("FF_DEEPCOST_AA_REUSE_AB") == "1")
+                {
+                    bool saved = MandelbrotCalculator.AaReuseReferenceOrbit;
+                    double bestOn = double.MaxValue, bestOff = double.MaxValue;
+                    try
+                    {
+                        for (int k = 0; k < reps; k++)
+                            foreach (bool reuse in new[] { true, false })
+                            {
+                                MandelbrotCalculator.AaReuseReferenceOrbit = reuse;
+                                var c = Make(s, zoom, w, h);
+                                c.Calculate();
+                                var sw3 = Stopwatch.StartNew();
+                                FracturingFog.Rendering.Supersampling.AccumulateMandelbrot(c, 16,
+                                    FracturingFog.Rendering.AdaptiveAa.Off, System.Threading.CancellationToken.None, histogramEq: 0);
+                                double ms = sw3.Elapsed.TotalMilliseconds;
+                                if (reuse) bestOn = Math.Min(bestOn, ms); else bestOff = Math.Min(bestOff, ms);
+                            }
+                    }
+                    finally { MandelbrotCalculator.AaReuseReferenceOrbit = saved; }
+                    var cc = Make(s, zoom, w, h);
+                    using var cts = new System.Threading.CancellationTokenSource();
+                    cts.CancelAfter(20);
+                    var sw4 = Stopwatch.StartNew();
+                    string cancel;
+                    try { cc.Calculate(cts.Token); cancel = $"finished in {sw4.Elapsed.TotalMilliseconds:F0} ms"; }
+                    catch (OperationCanceledException) { cancel = $"stopped {sw4.Elapsed.TotalMilliseconds - 20:F0} ms after the cancel"; }
+                    Console.WriteLine($"  {s.Name,-14} AA x16 : reuse orbit {bestOn,7:F0} ms | rebuild per sample {bestOff,7:F0} ms (x{bestOff / Math.Max(1e-9, bestOn):F2}) | " +
+                                      $"orbit {st.RefOrbit:F0} ms; a cancelled frame {cancel}");
+                }
                 if (Environment.GetEnvironmentVariable("FF_DEEPCOST_NOREF") == "1") continue;
                 var (b, bSm, bMs, bReb, bIt) = Render(s, zoom, w, h, 1, noAccel: true);
                 int diff = 0, escDiff = 0, sm01 = 0, sm1 = 0;
