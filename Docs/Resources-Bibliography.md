@@ -481,6 +481,17 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
   pipeline.
 - **T. J. Dekker.** *A floating-point technique for extending the available precision.* Numerische
   Mathematik 18, 1971. The splitting constant and exact two-product behind DD / QD (`GpuQD.cs`).
+- <a id="ieee-754"></a>**IEEE.** *IEEE Standard for Floating-Point Arithmetic*, IEEE Std 754-2019. The rounding rule
+  `BigFloat` applies at P bits (round to nearest, ties to even; #1830, epic #1428).
+- <a id="knuth-taocp-2"></a>**Donald E. Knuth.** *The Art of Computer Programming, Vol. 2: Seminumerical Algorithms*, 3rd
+  edition, Addison-Wesley, 1997, §4.2 (floating-point arithmetic). Background for `BigFloat`'s
+  align-operate-round-once arithmetic and for exact radix conversion (#1830). FF does not claim the
+  method as its own.
+- <a id="mpfr"></a>**The GNU MPFR library** (multiple-precision floating-point with correct rounding),
+  <https://www.mpfr.org/>. Considered for #1428's arbitrary-precision orbit and rejected for slice C1:
+  it would add a native dependency to every platform of `FracturingFog.App`. `BigFloat` is managed
+  (`System.Numerics.BigInteger`) and contains no MPFR code; the measurement behind the choice is in
+  `Docs/Technical/Arbitrary-Precision-DeepZoom.md`.
 - **Jonathan Richard Shewchuk.** *Adaptive precision floating-point arithmetic and fast robust
   geometric predicates.* Discrete & Computational Geometry 18(3), 1997. The exact expansion sum used
   by octuple-double addition (`OctupleDouble.cs`, #1319).
