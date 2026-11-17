@@ -2841,7 +2841,14 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         // the periodicity check below could not see a cycle (0 of 4096 interior pixels
         // at the period-3 nucleus, 1e14).
         _refPeriodTol2 = PeriodicReferenceOrbit ? scale * scale : 0;
-        if (Zoom > ODZoomThreshold)
+        if (UseApReference)
+        {
+            // #1849 — past OD's reach the BigFloat orbit at the exact centre (C4, #1840),
+            // as the main path's ComputeReferenceOrbitForCenter.
+            int prec = BigFloat.PrecisionForZoom(ZoomLog10);
+            ComputeReferenceOrbitAP(CenterExact ?? ExactCentre.FromDeep(CurrentCentreLimbs(), prec), prec, maxIt, ct);
+        }
+        else if (Zoom > ODZoomThreshold)
         {
             var cxOD = new OD(CenterX, CenterXLo, CenterX2, CenterX3,
                               CenterX4, CenterX5, CenterX6, CenterX7);
@@ -2859,6 +2866,11 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         {
             ComputeReferenceOrbit(new DD(CenterX, CenterXLo), new DD(CenterY, CenterYLo), maxIt, ct);
         }
+
+        // #1849 — past double: the floatexp form of the orbit loop (dc, δ underflow).
+        _lastFrameUsedFx = UseFloatExpPixels;
+        _lastFrameUsedLa = false;
+        if (_lastFrameUsedFx) { CalculateOrbitAwareFloatExpRows(colorMap, maxIt, ct); return; }
 
         // #607 / G4.6 — a GPU orbit palette accumulates on the GPU perturbation
         // kernel (same loop + sampling convention as below); colour stays here.
@@ -2903,6 +2915,110 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 }
             }
         });
+    }
+
+    // #1849 (epic #1428, C5d) — the orbit-aware rows past double: as above, with dc from
+    // the log-zoom pixel scale in FloatExp (CalculateFloatExpRows' geometry).
+    private void CalculateOrbitAwareFloatExpRows<TMap>(TMap colorMap, int maxIt, CancellationToken ct)
+        where TMap : IOrbitAwareColorMap
+    {
+        int effImgW = EffectiveImageWidth, effImgH = EffectiveImageHeight;
+        var scale = FloatExp.FromLog10(Math.Log10(3.5 / Math.Max(effImgW, effImgH)) - ZoomLog10);
+        double halfW = effImgW * 0.5, halfH = effImgH * 0.5;
+        int offX = SubRectOffsetX, offY = SubRectOffsetY;
+        int[]? perRow = PerRowMaxIter;
+        bool useTileCap = perRow != null && perRow.Length >= Height;
+        bool wantInterior = colorMap.WantsInteriorColor;
+        _po.CancellationToken = ct;
+        ParallelForRows(0, Height, _po, y =>
+        {
+            if (ct.IsCancellationRequested) return;
+            int rowMaxIt = useTileCap ? perRow![y] : maxIt;
+            if (rowMaxIt <= 0) rowMaxIt = maxIt;
+            var dcI = scale * (offY + y - halfH);
+            double cy = CenterY + dcI.ToDouble();
+            int rowBase = y * Width;
+            for (int x = 0; x < Width; x++)
+            {
+                if (!Marked(rowBase + x)) continue;
+                var dcR = scale * (offX + x - halfW);
+                ComputePixelOrbitPerturbationFx(dcR, dcI, CenterX + dcR.ToDouble(), cy, rowMaxIt, rowBase + x, colorMap, wantInterior);
+            }
+            if (rowMaxIt < maxIt)
+                for (int x = 0; x < Width; x++)
+                    if (IterationBuffer[rowBase + x] >= rowMaxIt) IterationBuffer[rowBase + x] = maxIt;
+        });
+    }
+
+    /// <summary>#1849 — <see cref="ComputePixelOrbitPerturbation"/> in FloatExp: δ, dc and the
+    /// derivative in FloatExp; the accumulator samples z = Z[m] + δ as a double (z is of
+    /// order 1 there), and the c it is given is the double centre plus dc.</summary>
+    private void ComputePixelOrbitPerturbationFx<TMap>(
+        FloatExp dcR, FloatExp dcI, double cx, double cy,
+        int maxIter, int idx, TMap colorMap, bool wantInterior)
+        where TMap : IOrbitAwareColorMap
+    {
+        colorMap.InitOrbit(out var acc);
+        int refLen = _refOrbitLen;
+        if (refLen < 1)
+        {
+            FinalizeOrbitPixel(idx, maxIter, maxIter, 0, 0, 1, 0, ref acc, colorMap, wantInterior);
+            return;
+        }
+        FloatExp dr = FloatExp.Zero, di = FloatExp.Zero;
+        FloatExp drv = FloatExp.One, div = FloatExp.Zero;
+        double zrD = 0, ziD = 0;
+        int m = 0;
+        FloatExp drSnap = FloatExp.Zero, diSnap = FloatExp.Zero;
+        int mSnap = -1;
+        int snapInterval = PeriodicitySnapshotStart, snapCounter = 0;
+        bool periodicity = DeepOrbitPeriodicity;
+        int caughtAt = 0;
+        int iter;
+        for (iter = 0; iter < maxIter; iter++)
+        {
+            double Zr = _refZr[m], Zi = _refZi[m];
+            FloatExp zr = dr + Zr, zi = di + Zi;
+            zrD = zr.ToDouble(); ziD = zi.ToDouble();
+            if (zrD * zrD + ziD * ziD >= EscapeRadius2) break;
+            if (iter > 0) colorMap.Sample(ref acc, zrD, ziD, cx, cy, iter);
+
+            var nDrv = (zr * drv - zi * div).ScaleB(1) + 1.0;
+            var nDiv = (zr * div + zi * drv).ScaleB(1);
+            drv = nDrv; div = nDiv;
+
+            if (FloatExp.AbsLess(FloatExp.Norm2(zr, zi), FloatExp.Norm2(dr, di)) || m + 1 >= refLen)
+            {
+                dr = zr; di = zi;
+                Zr = 0; Zi = 0;
+                m = 0;
+            }
+            FloatExp a = dr + 2.0 * Zr, b = di + 2.0 * Zi;
+            var nDr = a * dr - b * di + dcR;
+            var nDi = a * di + b * dr + dcI;
+            dr = nDr; di = nDi;
+            m++;
+
+            // #1368 — the (δ, m) periodicity early-out, with exact FloatExp repeats.
+            if (periodicity)
+            {
+                if (m == mSnap && SameFx(dr, drSnap) && SameFx(di, diSnap))
+                {
+                    Interlocked.Increment(ref _deepPeriodicPixels);
+                    caughtAt = iter;
+                    iter = maxIter;
+                    break;
+                }
+                if (++snapCounter >= snapInterval)
+                {
+                    drSnap = dr; diSnap = di; mSnap = m;
+                    snapCounter = 0;
+                    if (snapInterval < PeriodicitySnapshotMax) snapInterval <<= 1;
+                }
+            }
+        }
+        FinalizeOrbitPixel(idx, iter, maxIter, zrD, ziD, drv.ToDouble(), div.ToDouble(), ref acc, colorMap, wantInterior);
+        if (caughtAt > 0 && DeepOrbitPeriodicityDiagnostic) SmoothBuffer[idx] = -caughtAt;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
