@@ -22,6 +22,7 @@ namespace FracturingFog.Rendering
 
         public void Restore(MandelbrotCalculator c)
         {
+            c.PixelJitter = default;   // #1851
             c.CenterX = X0; c.CenterXLo = X1; c.CenterX2 = X2; c.CenterX3 = X3;
             c.CenterX4 = X4; c.CenterX5 = X5; c.CenterX6 = X6; c.CenterX7 = X7;
             c.CenterY = Y0; c.CenterYLo = Y1; c.CenterY2 = Y2; c.CenterY3 = Y3;
@@ -50,6 +51,10 @@ namespace FracturingFog.Rendering
         /// The caller restores the centre with <see cref="CentreLimbs.Restore"/>.</summary>
         public static void Apply(MandelbrotCalculator calc, in CentreLimbs orig, double jx, double jy, double scale)
         {
+            // #1851 — past the AP threshold the jitter goes to every pixel's dc instead:
+            // moving the limbs would drop the exact centre (and its orbit), and past double
+            // the double jitter is lost. The limbs stay orig.
+            if (calc.JittersByPixel) { calc.PixelJitter = (jx, jy); return; }
             OD x = OD.FromCenterOffset(orig.X, jx, scale);
             OD y = OD.FromCenterOffset(orig.Y, jy, scale);
             calc.CenterX = x.X0; calc.CenterXLo = x.X1; calc.CenterX2 = x.X2; calc.CenterX3 = x.X3;
@@ -112,6 +117,7 @@ namespace FracturingFog.Rendering
         /// (the SM-8c guard, moved from the double floor to the OD floor).</summary>
         public static bool IsResolvable(MandelbrotCalculator calc, double scale)
         {
+            if (calc.JittersByPixel) return true;   // #1851: a pixel jitter always moves dc
             double mag = System.Math.Max(System.Math.Abs(calc.CenterX), System.Math.Abs(calc.CenterY));
             return scale > mag * 1e-105;
         }

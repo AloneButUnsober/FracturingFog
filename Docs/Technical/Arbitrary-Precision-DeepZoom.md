@@ -14,8 +14,9 @@ the canonical task list; this doc backs them.
 | C5a floatexp per-pixel perturbation (CPU, scalar) | #1842 | §11 (merged, PR #1844) |
 | C5b floatexp BLA | #1845 | §12 (merged, PR #1846) |
 | C5c floatexp LA stages | #1847 | §13 (merged, PR #1848) |
-| C5d orbit-aware colouring path (AP orbit, floatexp) | #1849 | §14 |
-| C5e–C11 | filed when started (see #1428) | |
+| C5d orbit-aware colouring path (AP orbit, floatexp) | #1849 | §14 (merged, PR #1850) |
+| C5e AA jitter at depth by pixel + tier-3 recycle test | #1851 | §15 |
+| C5f–C11 | filed when started (see #1428) | |
 
 ## 1. Why a new number type
 
@@ -282,3 +283,22 @@ A double zoom overflows at about 1.8e308. A double log10 zoom does not, and it k
 - **Validation** (`S1849OrbitPathDeepTests`, with `CurvatureAverageMap`). The oracle iterates each sampled pixel directly in BigFloat and feeds the same palette that orbit.
   - At 1e150 around a centre past OD, at 1e400 at c = i and at 1e60, every count is the direct count.
   - Every colour is within 2 per channel of the direct colour.
+
+## 15. AA jitter at depth, and the tier-3 recycle (C5e, #1851)
+
+- **The problem.** An AA sample (MSAA, offline or live TAA) moved the calculator's centre limbs by its sub-pixel jitter (`CentreJitter.Apply`, through OD).
+  - **Past the AP threshold:** that limb write drops the exact centre (the stamp rule, §10). The sample was then rendered at the OD-rounded centre, a different image, and averaged in.
+  - **Past double:** the double pixel scale the jitter uses underflows, so the jitter was lost.
+- **The fix: `MandelbrotCalculator.PixelJitter`** (in pixels).
+  - Where `JittersByPixel` (past `ApReferenceZoomLog10`), `CentreJitter.Apply` sets the pixel jitter instead of moving the limbs.
+  - `CentreLimbs.Restore` clears it. `IsResolvable` is true there, so TAA keeps refining.
+  - **Every deep path adds it to dc:** the HP rows (LA and LA4 included) through the recycle shift; the orbit-aware rows; the FX rows (main and orbit-aware) in pixel units.
+  - BLA's dcMax grows by the jitter.
+  - **Without a jitter** each addition is + 0.0, so output is byte-identical.
+- **A note on OD.** Its limbs carry independent exponents, so a sparse value (1 + 1e-151) fits exactly. What OD can't hold is a dense value's digits past about 2^-424 relative. Tests that need "past OD" use a dense centre.
+- **Validation** (`S1851DeepJitterRecycleTests`).
+  - **The centre:** about two pixels from the Misiurewicz point near −0.1011 + 0.9563i (preperiod 4, period 1, multiplier ≈ 1.33). It is computed to full precision by Newton in BigFloat on z₃ + z₄, so it has dense digits and structure at pixel scale.
+  - **The oracle:** direct BigFloat iteration of the true pixel positions, comparing counts and smooth values. LA / BLA are within 1e-2 (worst measured 2.6e-3); half a pixel moves smooth by about 0.1.
+  - **Jittered samples** at 1e150 and 1e400 render the jittered pixels, and the exact centre survives the sample.
+  - **A one-pixel exact pan** at 1e150 is a step the dense centre's OD limbs can't hold (the limbs are equal). It recycles the orbit (tier 3, the exact shift from C4) and renders the moved view.
+  - Below the threshold the jitter still moves the limbs.
