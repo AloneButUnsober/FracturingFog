@@ -609,10 +609,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             var s = Main.ViewState;
             bool pipe = FloatingMenu.UsePipeNotation;
             FloatingMenu.UpdateCoords(
-                CoordNotation.Format(pipe, s.CenterX, s.CenterXLo, s.CenterX2, s.CenterX3,
-                            s.CenterX4, s.CenterX5, s.CenterX6, s.CenterX7),
-                CoordNotation.Format(pipe, s.CenterY, s.CenterYLo, s.CenterY2, s.CenterY3,
-                            s.CenterY4, s.CenterY5, s.CenterY6, s.CenterY7),
+                ViewCentreText.FormatX(s, pipe),
+                ViewCentreText.FormatY(s, pipe),
                 info.Zoom.ToString("G6", CultureInfo.InvariantCulture),
                 info.Iterations.ToString(CultureInfo.InvariantCulture),
                 FloatingMenu.ActiveCoordField);
@@ -736,10 +734,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         var s = Main.ViewState;
         bool pipe = FloatingMenu.UsePipeNotation;
         FloatingMenu.UpdateCoords(
-            CoordNotation.Format(pipe, s.CenterX, s.CenterXLo, s.CenterX2, s.CenterX3,
-                        s.CenterX4, s.CenterX5, s.CenterX6, s.CenterX7),
-            CoordNotation.Format(pipe, s.CenterY, s.CenterYLo, s.CenterY2, s.CenterY3,
-                        s.CenterY4, s.CenterY5, s.CenterY6, s.CenterY7),
+            ViewCentreText.FormatX(s, pipe),
+            ViewCentreText.FormatY(s, pipe),
             FloatingMenu.Zoom, FloatingMenu.Iter, FloatingMenu.ActiveCoordField);
     }
 
@@ -752,10 +748,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // toggle to pipe, which the textbox parser accepts back verbatim.
         return string.Format(CultureInfo.InvariantCulture,
             "CX = {0}\nCY = {1}\nZoom = {2:G6}",
-            CoordNotation.Format(pipe, s.CenterX, s.CenterXLo, s.CenterX2, s.CenterX3,
-                        s.CenterX4, s.CenterX5, s.CenterX6, s.CenterX7),
-            CoordNotation.Format(pipe, s.CenterY, s.CenterYLo, s.CenterY2, s.CenterY3,
-                        s.CenterY4, s.CenterY5, s.CenterY6, s.CenterY7),
+            ViewCentreText.FormatX(s, pipe),
+            ViewCentreText.FormatY(s, pipe),
             s.Zoom);
     }
 
@@ -1209,28 +1203,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // decimal sum / split which can't reconstruct the original Lo/Lo2/Lo3
         // limbs exactly. At deep zoom that drifts the centre by a visible
         // fraction of a pixel on Go.
-        if (FloatingMenu.CX != FloatingMenu.LastPushedCX
-            && TryParseLimbs(FloatingMenu.CX,
-                out double cxHi, out double cxLo, out double cxL2, out double cxL3,
-                out double cxL4, out double cxL5, out double cxL6, out double cxL7))
-        {
-            Main.ViewState.CenterX = cxHi;
-            Main.ViewState.CenterXLo = cxLo; Main.ViewState.CenterX2 = cxL2; Main.ViewState.CenterX3 = cxL3;
-            Main.ViewState.CenterX4 = cxL4; Main.ViewState.CenterX5 = cxL5;
-            Main.ViewState.CenterX6 = cxL6; Main.ViewState.CenterX7 = cxL7;
+        // #1833 — CX / CY through ViewCentreText: the limb parse as before (a decimal past
+        // 28 digits now fills all eight limbs exactly), and the exact centre when the text
+        // holds more than OD can.
+        if (ViewCentreText.Apply(Main.ViewState,
+                FloatingMenu.CX != FloatingMenu.LastPushedCX ? FloatingMenu.CX : null,
+                FloatingMenu.CY != FloatingMenu.LastPushedCY ? FloatingMenu.CY : null))
             changed = true;
-        }
-        if (FloatingMenu.CY != FloatingMenu.LastPushedCY
-            && TryParseLimbs(FloatingMenu.CY,
-                out double cyHi, out double cyLo, out double cyL2, out double cyL3,
-                out double cyL4, out double cyL5, out double cyL6, out double cyL7))
-        {
-            Main.ViewState.CenterY = cyHi;
-            Main.ViewState.CenterYLo = cyLo; Main.ViewState.CenterY2 = cyL2; Main.ViewState.CenterY3 = cyL3;
-            Main.ViewState.CenterY4 = cyL4; Main.ViewState.CenterY5 = cyL5;
-            Main.ViewState.CenterY6 = cyL6; Main.ViewState.CenterY7 = cyL7;
-            changed = true;
-        }
         if (FloatingMenu.Zoom != FloatingMenu.LastPushedZoom
             && double.TryParse(FloatingMenu.Zoom, NumberStyles.Float, CultureInfo.InvariantCulture, out double zoom)
             && zoom > 0)
@@ -4053,7 +4032,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         string? QualityName,
         bool IterLocked,
         int LockedIterations,
-        string? RegionName);
+        string? RegionName,
+        // #1833 — the exact centre (null when the view had none).
+        global::FracturingFog.FFMath.ExactCentre? Exact = null);
 
     private const int MaxNavHistory = 10;
     private const int NavSettleDebounceMs = 700;
@@ -4072,7 +4053,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             s.CenterY4, s.CenterY5, s.CenterY6, s.CenterY7,
             s.Zoom, s.FractalType, s.Quality?.Name,
             s.IterLocked, s.LockedIterations,
-            Main.SelectedRegion);
+            Main.SelectedRegion,
+            s.CenterExact);
     }
 
     /// <summary>Record the current view as the most-recent settled
@@ -4115,6 +4097,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // carry zeros there, which also clears a deep view being left (#1186).
             s.CenterX4 = snap.Cx4; s.CenterX5 = snap.Cx5; s.CenterX6 = snap.Cx6; s.CenterX7 = snap.Cx7;
             s.CenterY4 = snap.Cy4; s.CenterY5 = snap.Cy5; s.CenterY6 = snap.Cy6; s.CenterY7 = snap.Cy7;
+            if (snap.Exact is { } exact) s.SetCenterExact(exact);   // #1833
             s.Zoom = snap.Zoom;
             // A region / minibrot jump's first-render iteration hint belongs to
             // the view being left; the restored view recomputes (or uses its lock).

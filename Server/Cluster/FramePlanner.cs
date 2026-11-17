@@ -197,6 +197,9 @@ public static class FramePlanner
             CenterY5             = src.CenterY5,
             CenterY6             = src.CenterY6,
             CenterY7             = src.CenterY7,
+            CenterExactX         = src.CenterExactX,   // #1833
+            CenterExactY         = src.CenterExactY,
+            CenterExactBits      = src.CenterExactBits,
             ThemeName            = src.ThemeName,
             QualityName          = src.QualityName,
             ThemeJson            = src.ThemeJson,

@@ -132,6 +132,16 @@ namespace FracturingFog.ViewState
             }
 
             string single = parts[0].Trim();
+            // #1833 — more digits than decimal's 28: read the text exactly (BigFloat) and split
+            // it into all eight limbs, instead of decimal silently rounding it away. Up to 28
+            // digits the decimal path below is unchanged.
+            int sig = SignificantDigits(single);
+            if (sig > 28 && FFMath.BigFloat.TryParse(single, FFMath.ExactCentre.PrecisionForDigits(sig), out var exact))
+            {
+                var od = exact.ToOD();
+                hi = od.X0; lo = od.X1; l2 = od.X2; l3 = od.X3; l4 = od.X4; l5 = od.X5; l6 = od.X6; l7 = od.X7;
+                return true;
+            }
             if (decimal.TryParse(single, NumberStyles.Float, Inv, out decimal m))
             {
                 // #1252: each limb is the double nearest the remainder, and the
@@ -152,6 +162,60 @@ namespace FracturingFog.ViewState
 
             // Outside decimal range (NaN, infinity, |x| > 7.9e28, …).
             return double.TryParse(single, NumberStyles.Float, Inv, out hi);
+        }
+
+        private static int SignificantDigits(string s) => FFMath.ExactCentre.SignificantDigits(s);   // #1833
+
+        /// <summary>#1833 — CX / CY text as an exact value: a plain or scientific decimal at
+        /// its digit count's precision, or pipe limbs summed exactly. False when nothing
+        /// numeric could be read.</summary>
+        public static bool TryParseExact(string? s, out FFMath.BigFloat value) => TryParseExact(s, 0, out value);
+
+        /// <summary>#1833 — as <see cref="TryParseExact(string?, out FFMath.BigFloat)"/>, at
+        /// <paramref name="precision"/> bits (0: the digit count's).</summary>
+        public static bool TryParseExact(string? s, int precision, out FFMath.BigFloat value)
+        {
+            value = FFMath.BigFloat.Zero(FFMath.BigFloat.MinPrecision);
+            if (string.IsNullOrWhiteSpace(s)) return false;
+            if (s.Contains('|'))
+            {
+                if (!TryParse(s, out double a, out double b, out double c, out double d,
+                        out double e, out double f, out double g, out double h)) return false;
+                value = FFMath.BigFloat.FromOD(new FFMath.OD(a, b, c, d, e, f, g, h), 8 * 53 + 64);
+                return true;
+            }
+            string t = s.Trim();
+            return FFMath.BigFloat.TryParse(t, precision > 0 ? precision : FFMath.ExactCentre.PrecisionForDigits(SignificantDigits(t)), out value);
+        }
+
+        /// <summary>#1833 — an exact value as plain decimal text (never scientific, as the
+        /// boxes show everything else), with the round-trip digits of its precision and no
+        /// trailing zeros.</summary>
+        public static string FormatExact(FFMath.BigFloat v)
+        {
+            if (v.IsZero) return "0";
+            string sci = v.ToString(FFMath.BigFloat.RoundTripDigits(v.Precision));   // "-d.ddd…e±N"
+            int ei = sci.IndexOf('e');
+            int exp = int.Parse(sci.AsSpan(ei + 1), NumberStyles.AllowLeadingSign, Inv);
+            bool neg = sci[0] == '-';
+            string digits = sci.Substring(neg ? 1 : 0, ei - (neg ? 1 : 0)).Replace(".", "");
+            digits = digits.TrimEnd('0');
+            if (digits.Length == 0) return "0";
+            var sb = new StringBuilder();
+            if (neg) sb.Append('-');
+            if (exp < 0)
+            {
+                sb.Append("0.").Append('0', -exp - 1).Append(digits);
+            }
+            else if (digits.Length <= exp + 1)
+            {
+                sb.Append(digits).Append('0', exp + 1 - digits.Length);
+            }
+            else
+            {
+                sb.Append(digits, 0, exp + 1).Append('.').Append(digits, exp + 1, digits.Length - exp - 1);
+            }
+            return sb.ToString();
         }
 
         /// <summary>#1252 — a lone double as a plain decimal: the shortest digits

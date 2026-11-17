@@ -55,19 +55,24 @@ namespace FracturingFog.FFMath
             centre = default;
             if (string.IsNullOrWhiteSpace(x) || string.IsNullOrWhiteSpace(y)) return false;
             if (x.Length > MaxDigits + 32 || y.Length > MaxDigits + 32) return false;
-            int p = precision > 0 ? precision : PrecisionForDigits(Math.Max(Digits(x), Digits(y)));
+            int p = precision > 0 ? precision : PrecisionForDigits(Math.Max(SignificantDigits(x), SignificantDigits(y)));
             if (!BigFloat.TryParse(x, p, out var re) || !BigFloat.TryParse(y, p, out var im)) return false;
             centre = new ExactCentre(re, im);
             return true;
         }
 
-        private static int Digits(string s)
+        /// <summary>#1833 — significant digits of a decimal's mantissa (leading zeros not
+        /// counted, the exponent ignored). The one count every exact-text reader uses, so
+        /// the same text always gets the same precision.</summary>
+        public static int SignificantDigits(string s)
         {
-            int n = 0;
+            int n = 0; bool started = false;
             foreach (char c in s)
             {
                 if (c == 'e' || c == 'E') break;
-                if (c >= '0' && c <= '9') n++;
+                if (c < '0' || c > '9') continue;
+                if (c != '0') started = true;
+                if (started) n++;
             }
             return n;
         }

@@ -6,8 +6,8 @@ the canonical task list; this doc backs them.
 | slice | issue | status |
 |---|---|---|
 | C1 BigFloat type | #1830 | §1–§5 (merged, PR #1831) |
-| C2a exact centre in view state + region JSON | #1832 | §6 |
-| C2b exact centre in history, location strings, video, RPC, cluster | #1833 | |
+| C2a exact centre in view state + region JSON | #1832 | §6 (merged, PR #1834) |
+| C2b exact centre in history, location strings, video, RPC, cluster | #1833 | §7 |
 | C3–C11 | filed when started (see #1428) | |
 
 ## 1. Why a new number type
@@ -91,3 +91,22 @@ All against independent references, none against BigFloat itself:
   - **On load** (`IJsonOnDeserialized`, so the region store, imports and server requests alike), a valid pair rewrites the limbs from itself. A damaged pair, half a pair or non-decimal text is dropped, and the limbs rule.
   - A hand-written pair without `CenterExactBits` is read at its digit count.
   - Region apply / capture / clone (`HostColorThemeService`) and `FractalRegion.CopyCentreTo` / `CopyCentreFrom` carry the pair.
+
+## 7. The other carriers (C2b, #1833)
+
+- **CX / CY text** (`ViewCentreText`, used by the shell's boxes, the location copy and Go).
+  - A view with an exact centre shows it as plain decimal (`CoordNotation.FormatExact`, never scientific).
+  - Otherwise the text is the limb formats, unchanged.
+  - Typed or pasted text goes through `CoordNotation.TryParse` as before.
+- **Decimals longer than 28 digits.** These used to be cut to `decimal`'s 28 digits. They are now read exactly into all eight limbs (`BigFloat` split), so even an OD-depth paste keeps its precision. Text of 28 digits or fewer takes the old path, byte-identical.
+  - Only text longer than 28 digits can become an exact centre, and only when OD can't hold it.
+  - Both edited parts are read at one precision (as `ExactCentre.TryParse` reads a pair): the larger of the texts' digit counts and the exact centre the view had.
+  - An untouched box keeps its exact part.
+- **Reading back shown text.** Text read back into another view is the text's own value at its digit count. It may differ from the shown centre past its precision (double rounding) by less than 2^-(P-2). A box nobody touched is never re-read (the shell's `LastPushed` guard).
+- **History** (`NavSnapshot`) carries the exact centre, and Back restores it.
+- **Video and slideshow keyframes** (`FractalRenderHost.Video`, three region legs) apply regions through `FractalRegion.CopyCentreTo`.
+- **Server.**
+  - `RenderRequestDto` has `centerExactX` / `centerExactY` / `centerExactBits`, omitted when null. On load (`IJsonOnDeserialized`) a valid pair rewrites the limbs and a damaged one is dropped, as for regions.
+  - The tile, frame and slideshow planners and the worker's clone copy it.
+  - The host engine takes it from a region when the request has no centre of its own.
+- **Explore** (finders, Descend, morph) stays on OD until C7.

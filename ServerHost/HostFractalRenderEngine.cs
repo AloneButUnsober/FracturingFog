@@ -116,6 +116,8 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
                 req.CenterX6 = region.CenterX6; req.CenterX7 = region.CenterX7;
                 req.CenterY4 = region.CenterY4; req.CenterY5 = region.CenterY5;
                 req.CenterY6 = region.CenterY6; req.CenterY7 = region.CenterY7;
+                // #1833 — and the region's exact centre, when it has one.
+                req.CenterExactX = region.CenterExactX; req.CenterExactY = region.CenterExactY; req.CenterExactBits = region.CenterExactBits;
             }
             iter = (req.Iterations is int ri && ri > 0)
                 ? ri
