@@ -35,7 +35,9 @@ Memory: `project_detail_depth_limit`, `project_viewcamera_input`,
   deep-precision change needs an orbit-vs-exact check (`S1319OdExactAddTests`
   measures against BigInteger rationals) and a minibrot-vs-main-set render.
 - Thresholds (`MandelbrotCalculator`): `QDZoomThreshold=1e25` (QD reference
-  orbit), `ODZoomThreshold=1e50` (OD reference orbit). One scale formula
+  orbit), `ODZoomThreshold=1e50` (OD reference orbit). Past 1e100 (the Unbounded
+  tier) the reference orbit is built in BigFloat from `ApReferenceZoomLog10 = 110`
+  and the pixels run in floatexp from `FloatExpZoomLog10 = 290`: see §10. One scale formula
   everywhere: `scale = 3.5 / (max(pxW, pxH) · zoom)`. Input and render MUST agree
   on it (`ViewCamera.PlaneExtent = 3.5`).
 
@@ -348,7 +350,7 @@ Run `dotnet FracturingFog.dll <flag>`; each writes a `.out` next to the exe.
 | `--focusprobe [dim]` | End-to-end double-click focus px error + frame richness + `MaxUsefulZoomLog10` + ref-orbit escape, over a zoom sweep. |
 | `--navrepro [file]` | Reproduce a USER view from a coordinate file (`Docs/Nav-Repro-Template.txt`): full-limb `cx/cy`, `zoom`, `dim`, `click`. Reports input-math error, rendered focus-err, SAD(0,0) vs SAD(min), rebased-pixel count, `maxUseful`. Path toggles: `norebase acceloff saoff ddref scalar`. NOTE: its focus-err centres frame B on the clicked point (reference-pixel artefact) — use `--panjitter` for an artefact-free reference-consistency check. |
 | `--panjitter [step]` | Artefact-free render-consistency test: simulate a horizontal drag at a deep centre, compare consecutive OFF-centre frames beyond the pure pan (inter-frame Δiter/px), FRESH vs RECYCLE. Low = render is stable during navigation. |
-| `--qdfloorsweep` | QD/OD coordinate-separation floor (distinct per-pixel coords vs zoom). |
+| `--qdfloorsweep` | QD/OD coordinate-separation floor (distinct per-pixel coords vs zoom). Since #1864 in `Probes/QdFloorSweepProbe.cs`, to 1e1000 with the AP and floatexp columns (§10). |
 | `--rebaseprobe` | Rebasing vs QD parity + speedup. |
 
 **To capture a repro from a user:** overlay `px WxH`, menu full-limb CX/CY,
@@ -437,3 +439,53 @@ in fp32. When an fp32 kernel ran, the status bar reads `[GPU fp32]`.
 
 `--batch` renders deep zoom on the CPU and is unaffected. The plain kernel only
 runs fp32: SA / BLA keep the double kernels.
+
+## 10. Past 1e100 — arbitrary precision (epic #1428)
+
+Design, slice by slice: `Docs/Technical/Arbitrary-Precision-DeepZoom.md` (C1–C11,
+#1830–#1864). The short form:
+
+- **Tier.** `QualityPreset.Unbounded` (#1861) has no zoom limit. Its iteration
+  formula is the Extreme tier's formula continued: 2048 + 1024 per decade, capped at
+  the 50 M explore ceiling. It has 2×2 AA and 8 TAA samples. Wheel, box and key zoom promote to it past
+  1e100, as `--batch` does.
+- **Centre.** The OD limbs stay the render contract. A centre with more digits than
+  OD holds also carries an `ExactCentre` (a BigFloat pair, #1832). It is stamped with
+  the limbs it was split into, so any writer that moves the limbs (a pan, a jitter, an
+  old code path) drops it rather than leaving it stale. It is carried by the view
+  state, regions (`CenterExactX` / `CenterExactY` / `CenterExactBits`), the CX / CY
+  boxes, export requests and `--x` / `--y` (#1833, #1860).
+- **Zoom.** Past double's range (~1.8e308) the zoom is carried as log10 with the same
+  stamp rule (`FractalViewState.SetZoomLog10`, `ZoomLog`, #1836 / #1838). Regions write
+  `ZoomLog10` only there; `--zoom` reads `1e500`.
+- **Reference orbit.** Past `ApReferenceZoomLog10 = 110` it is built in BigFloat at the
+  exact centre with `BigFloat.PrecisionForZoom` bits (log₂ zoom + 64 guard bits) and
+  stored for the pixel loop (#1840). Its arrays grow as it is built and stop at a periodic
+  reference's period (#1856); period detection works past 1e154 (#1854).
+- **Pixels.** Double perturbation turned out exact to 1e290 (#1842). Past
+  `FloatExpZoomLog10 = 290` each pixel's δ runs in floatexp (a double mantissa and a
+  64-bit exponent: the Kalles Fraktaler 2+ "floatexp" number type, see the bibliography),
+  with floatexp BLA and LA stages (#1845, #1847), the orbit-aware colouring path (#1849)
+  and the AA jitter applied by pixel past 1e110 (#1851).
+- **Separation floors** (`--qdfloorsweep`, 128 pixels):
+  - QD collapses at 1e66.
+  - On a sparse centre (4 QD limbs) OD never collapses: its limbs' independent
+    exponents hold centre + offset exactly.
+  - On a dense centre (340 digits) OD is clean to 1e132 and collapses at 1e134, so the
+    BigFloat reference at 1e110 has 22 decades of margin.
+  - The past-OD coordinates (exact centre at `PrecisionForZoom` + offset, and the
+    floatexp deltas) stay 128 / 128 to 1e1000.
+- **End-to-end check against theory** (`S1864DeepMinibrotMaskTests`, #1864).
+  - The real-axis antenna minibrots next to c = −2 (periods 125 / 250 / 415, sizes
+    ~1e-149 / ~1e-299 / ~1e-498) are found by Newton in BigFloat and sized by the
+    atom-domain estimate.
+  - Rendered through the atom-size map c = nucleus + Size·c′ with the iteration budget
+    × the period, their in-set masks match the main set's at the home framing (IoU 0.94
+    at all three depths).
+  - With the centre rounded to OD the minibrot leaves the frame (IoU 0.10), so the exact
+    centre carries the two views past OD.
+- **Visual regression** (#1292) has three cases past 1e100: the Misiurewicz point at
+  1e150 (past OD's dense floor) and 1e320 (past double, floatexp pixels), and the
+  period-415 antenna minibrot at 1e498.
+- **Not yet.** GPU kernels past their own caps (C6), and the explore tools past 1e100
+  (C7): minibrot jump, the finders and auto-explore stop at 1e100.
