@@ -2157,7 +2157,7 @@ namespace FracturingFog.Rendering
                     _calculator.MaxIterations = ViewState.LockedIterations;
                 else
                 {
-                    int it = _videoQuality.ComputeIterations(ViewState.Zoom);
+                    int it = _videoQuality.ComputeIterationsLog10(ViewState.ZoomLog10);   // #1836
                     if (reverse && region.Iterations > it) it = region.Iterations;
                     _calculator.MaxIterations = it;
                 }

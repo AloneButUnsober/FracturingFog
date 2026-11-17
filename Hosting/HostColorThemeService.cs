@@ -283,7 +283,7 @@ namespace FracturingFog.Hosting
             state.CenterX4 = region.CenterX4; state.CenterX5 = region.CenterX5; state.CenterX6 = region.CenterX6; state.CenterX7 = region.CenterX7;
             state.CenterY4 = region.CenterY4; state.CenterY5 = region.CenterY5; state.CenterY6 = region.CenterY6; state.CenterY7 = region.CenterY7;
             if (region.CentreExact is { } exact) state.SetCenterExact(exact);   // #1832: the exact centre, where the region has one
-            state.Zoom = region.Zoom > 0 ? region.Zoom : state.Zoom;
+            region.CopyZoomTo(state);   // #1836: Zoom when > 0, or the log past double
             state.FractalType = region.FractalType;
             // Source-compiled types (UserEquation / Sandbox / UserBulb) carry
             // their equation by name in the region. Pull the live source from the
@@ -758,6 +758,7 @@ namespace FracturingFog.Hosting
                 CenterExactY = state.CenterExact?.ToStrings().Y,
                 CenterExactBits = state.CenterExact?.Precision ?? 0,
                 Zoom = state.Zoom,
+                ZoomLog10 = FractalRegion.LogFieldFor(state),   // #1836: only past double
                 // Capture the live iter count so the saved region renders at
                 // the same detail it had on screen — matches legacy MainForm:2248
                 // (`Iterations = _calculator?.MaxIterations ?? 512`). Falls back
@@ -770,7 +771,7 @@ namespace FracturingFog.Hosting
                     ? state.LockedIterations
                     : state.PreferredIterations > 0
                         ? state.PreferredIterations
-                        : (state.Quality ?? QualityPreset.Standard).ComputeIterations(state.Zoom),
+                        : (state.Quality ?? QualityPreset.Standard).ComputeIterationsLog10(state.ZoomLog10),
                 FractalType = state.FractalType,
                 QualityPreset = state.Quality ?? QualityPreset.Standard,
                 RegionType = RegionType.UserDefined,
@@ -959,6 +960,7 @@ namespace FracturingFog.Hosting
             CenterY4 = src.CenterY4, CenterY5 = src.CenterY5, CenterY6 = src.CenterY6, CenterY7 = src.CenterY7,
             CenterExactX = src.CenterExactX, CenterExactY = src.CenterExactY, CenterExactBits = src.CenterExactBits,   // #1832
             Zoom = src.Zoom,
+            ZoomLog10 = src.ZoomLog10,   // #1836
             Iterations = src.Iterations,
             FractalType = src.FractalType,
             QualityPreset = src.QualityPreset,

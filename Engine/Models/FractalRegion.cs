@@ -50,7 +50,7 @@ namespace FracturingFog.Models
         /// request): a valid exact centre rewrites the limbs from itself, so every reader of
         /// the limbs sees the same centre; a damaged pair (not decimal text, or only one
         /// part) is dropped and the limbs rule (tolerant load, #964 / #1212).</summary>
-        void IJsonOnDeserialized.OnDeserialized() => NormaliseCentre();
+        void IJsonOnDeserialized.OnDeserialized() { NormaliseCentre(); NormaliseZoom(); }
 
         /// <summary>#1832 — see <see cref="IJsonOnDeserialized.OnDeserialized"/>.</summary>
         public void NormaliseCentre()
@@ -241,6 +241,48 @@ namespace FracturingFog.Models
         /// <see cref="MandelbrotCalculator.Zoom"/>.
         /// </summary>
         public double Zoom { get; set; }
+
+        /// <summary>#1836 (epic #1428) — log10 zoom, written only past double's range
+        /// (~1.8e308), where <see cref="Zoom"/> holds double.MaxValue. Omitted otherwise, so
+        /// region files up to there are unchanged.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public double? ZoomLog10 { get; set; }
+
+        /// <summary>#1836 — the region's zoom as log10 at any depth.</summary>
+        [JsonIgnore]
+        public double ZoomLog10Value => ZoomLog10 is double l && ValidLog(l) ? l : Math.Log10(Zoom);
+
+        private static bool ValidLog(double l) => double.IsFinite(l) && FracturingFog.ViewState.ZoomLog.BeyondDouble(l);
+
+        /// <summary>#1836 — after a JSON load: a valid log zoom sets <see cref="Zoom"/> from
+        /// itself (saturated); one that isn't past double (or isn't finite) is dropped and
+        /// <see cref="Zoom"/> rules.</summary>
+        public void NormaliseZoom()
+        {
+            if (ZoomLog10 is not double l) return;
+            if (ValidLog(l)) Zoom = FracturingFog.ViewState.ZoomLog.FromLog10(l);
+            else ZoomLog10 = null;
+        }
+
+        /// <summary>#1836 — the region's zoom into a view state (a non-positive
+        /// <see cref="Zoom"/> leaves the view's zoom, as region apply always did).</summary>
+        public void CopyZoomTo(FracturingFog.ViewState.FractalViewState s)
+        {
+            if (ZoomLog10 is double l && ValidLog(l)) s.SetZoomLog10(l);
+            else if (Zoom > 0) s.Zoom = Zoom;
+        }
+
+        /// <summary>#1836 — the view's zoom into this region (the log only past double).</summary>
+        public void CopyZoomFrom(FracturingFog.ViewState.FractalViewState s)
+        {
+            Zoom = s.Zoom;
+            ZoomLog10 = LogFieldFor(s);
+        }
+
+        /// <summary>#1836 — the <see cref="ZoomLog10"/> field for a view: its log past
+        /// double, else null.</summary>
+        public static double? LogFieldFor(FracturingFog.ViewState.FractalViewState s)
+            => s.ZoomBeyondDouble ? s.ZoomLog10 : null;
 
         /// <summary>Suggested maximum iteration count, or 0 to use auto.</summary>
         public int Iterations { get; set; }

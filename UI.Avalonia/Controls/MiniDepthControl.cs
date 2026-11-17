@@ -49,7 +49,7 @@ public sealed class MiniDepthControl : Control
         set => SetValue(DefaultPanelHeightProperty, value);
     }
 
-    private Func<double>? _getZoom;
+    private Func<double>? _getZoomLog10;   // #1836: log10 zoom, any depth
     private Func<double>? _getZoomMax;
     private Func<int, uint>? _sampleColor;   // smooth iter index → ARGB
     private Func<int>? _getMaxIterations;
@@ -68,19 +68,19 @@ public sealed class MiniDepthControl : Control
     /// Wire the control to host-supplied view state. All callbacks are
     /// invoked on the UI thread during Render(); they must be cheap.
     /// </summary>
-    /// <param name="getZoom">Current zoom factor (1.0 = surface).</param>
+    /// <param name="getZoomLog10">#1836 — log10 of the current zoom (0 = surface), at any depth.</param>
     /// <param name="getZoomMax">Maximum zoom the active quality preset permits.</param>
     /// <param name="getMaxIterations">Current max-iteration depth for the gradient sample.</param>
     /// <param name="sampleColor">Smooth-iteration index → packed ARGB (0xFFRRGGBB).</param>
     /// <param name="getSwatchArgb">Current theme's representative swatch colour, packed ARGB.</param>
     public void Configure(
-        Func<double> getZoom,
+        Func<double> getZoomLog10,
         Func<double> getZoomMax,
         Func<int> getMaxIterations,
         Func<int, uint> sampleColor,
         Func<uint> getSwatchArgb)
     {
-        _getZoom = getZoom;
+        _getZoomLog10 = getZoomLog10;
         _getZoomMax = getZoomMax;
         _getMaxIterations = getMaxIterations;
         _sampleColor = sampleColor;
@@ -179,11 +179,11 @@ public sealed class MiniDepthControl : Control
         DrawTicks(g, barRect, depthMax);
 
         // Indicator.
-        if (_getZoom is not null)
+        if (_getZoomLog10 is not null)
         {
-            double zoom = _getZoom();
-            double depth = Math.Max(0.0, Math.Log10(Math.Max(zoom, 1.0)));
-            DrawIndicator(g, barRect, depth, depthMax, zoom);
+            double zoomLog10 = _getZoomLog10();
+            double depth = Math.Max(0.0, zoomLog10);
+            DrawIndicator(g, barRect, depth, depthMax, zoomLog10);
         }
 
         // Outer border + title.
@@ -235,7 +235,7 @@ public sealed class MiniDepthControl : Control
         return new string(buf);
     }
 
-    private void DrawIndicator(DrawingContext g, Rect barRect, double depth, double depthMax, double zoom)
+    private void DrawIndicator(DrawingContext g, Rect barRect, double depth, double depthMax, double zoomLog10)
     {
         double t = Math.Clamp(depth / depthMax, 0.0, 1.0);
         double y = barRect.Top + t * barRect.Height;
@@ -268,7 +268,7 @@ public sealed class MiniDepthControl : Control
         g.DrawGeometry(indBrush, null, arrow);
 
         // Numeric depth readout.
-        string text = FormatZoom(zoom);
+        string text = FormatZoom(zoomLog10);
         var lblBrush = indBrush;
         var ft = new FormattedText(text, System.Globalization.CultureInfo.CurrentCulture,
             FlowDirection.LeftToRight, new Typeface(Typeface.Default.FontFamily, FontStyle.Normal, FontWeight.Bold),
@@ -286,12 +286,13 @@ public sealed class MiniDepthControl : Control
         g.DrawText(ft, new Point(lblX, lblY));
     }
 
-    private static string FormatZoom(double zoom)
+    // #1836 — from log10 zoom, so the readout holds past double's range.
+    private static string FormatZoom(double zoomLog10)
     {
-        if (zoom < 10.0)
-            return zoom.ToString("0.0×");
-        double exp = Math.Floor(Math.Log10(zoom));
-        double man = zoom / Math.Pow(10, exp);
+        if (zoomLog10 < 1.0)
+            return Math.Pow(10, zoomLog10).ToString("0.0×");
+        double exp = Math.Floor(zoomLog10);
+        double man = Math.Pow(10, zoomLog10 - exp);
         return $"{man:0.0}e{(int)exp}";
     }
 }
