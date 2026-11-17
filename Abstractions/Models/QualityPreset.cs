@@ -133,7 +133,17 @@ namespace FracturingFog.Models
         public int ComputeIterations(double zoom)
         {
             if (zoom <= 1.0) return IterBase;
-            int raw = IterBase + (int)(System.Math.Log10(zoom) * IterPerDecade);
+            return ComputeIterationsLog10(System.Math.Log10(zoom));
+        }
+
+        /// <summary>#1836 — <see cref="ComputeIterations"/> from log10 zoom, at any depth
+        /// (the same formula; past double's zoom range only the log holds the zoom).</summary>
+        public int ComputeIterationsLog10(double log10Zoom)
+        {
+            if (!(log10Zoom > 0)) return IterBase;
+            double t = log10Zoom * IterPerDecade;
+            if (t >= IterMax) return System.Math.Clamp(IterMax, IterBase, IterMax);   // no int overflow
+            int raw = IterBase + (int)t;
             return System.Math.Clamp(raw, IterBase, IterMax);
         }
 

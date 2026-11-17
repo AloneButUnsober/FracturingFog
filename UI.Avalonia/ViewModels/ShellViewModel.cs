@@ -611,7 +611,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             FloatingMenu.UpdateCoords(
                 ViewCentreText.FormatX(s, pipe),
                 ViewCentreText.FormatY(s, pipe),
-                info.Zoom.ToString("G6", CultureInfo.InvariantCulture),
+                ZoomLog.Format(info.Zoom, info.ZoomLog10),   // #1836: G6, any exponent
                 info.Iterations.ToString(CultureInfo.InvariantCulture),
                 FloatingMenu.ActiveCoordField);
 
@@ -747,10 +747,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // needs to hand off full DD/QD/OD precision (deep coord swaps) flips the
         // toggle to pipe, which the textbox parser accepts back verbatim.
         return string.Format(CultureInfo.InvariantCulture,
-            "CX = {0}\nCY = {1}\nZoom = {2:G6}",
+            "CX = {0}\nCY = {1}\nZoom = {2}",
             ViewCentreText.FormatX(s, pipe),
             ViewCentreText.FormatY(s, pipe),
-            s.Zoom);
+            ZoomLog.Format(s.Zoom, s.ZoomLog10));   // #1836: G6, any exponent
     }
 
     /// <summary>Mirror the view across the real axis: negate all four CY
@@ -1211,10 +1211,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 FloatingMenu.CY != FloatingMenu.LastPushedCY ? FloatingMenu.CY : null))
             changed = true;
         if (FloatingMenu.Zoom != FloatingMenu.LastPushedZoom
-            && double.TryParse(FloatingMenu.Zoom, NumberStyles.Float, CultureInfo.InvariantCulture, out double zoom)
-            && zoom > 0)
+            && ZoomLog.TryParse(FloatingMenu.Zoom, out double zoom, out double zoomLog))
         {
-            Main.ViewState.Zoom = zoom;
+            // #1836 — past double the log carries the zoom; up to there, as before.
+            if (ZoomLog.BeyondDouble(zoomLog)) Main.ViewState.SetZoomLog10(zoomLog);
+            else Main.ViewState.Zoom = zoom;
             changed = true;
         }
         if (FloatingMenu.Iter != FloatingMenu.LastPushedIter

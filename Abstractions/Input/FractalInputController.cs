@@ -633,8 +633,7 @@ namespace FracturingFog.Input
                     $"Quality → {ViewState.Quality.Name} (zoom {targetZoom:G3}).",
                     InputStatusKind.Info));
 
-            ViewState.Zoom = Math.Clamp(ViewState.Zoom * factor,
-                ViewState.Quality.ZoomMin, ViewState.Quality.ZoomMax);
+            _camera.ZoomBy(factor, ViewState.Quality.ZoomMin, ViewState.Quality.ZoomMax);   // #1836: log past double
             RaiseViewChanged(RenderHint.Full);
         }
 

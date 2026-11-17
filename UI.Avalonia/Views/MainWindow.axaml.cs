@@ -1059,7 +1059,7 @@ public sealed partial class MainWindow : Window
         if (_shell == null) return;
         var shell = _shell;
         win.Inner.Configure(
-            getZoom:           () => shell.Main.ViewState.Zoom,
+            getZoomLog10:      () => shell.Main.ViewState.ZoomLog10,   // #1836
             getZoomMax:        () => shell.Main.ViewState.Quality?.ZoomMax ?? 1e13,
             getMaxIterations:  () =>
             {

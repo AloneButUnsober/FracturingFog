@@ -1099,7 +1099,7 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
                 // so this branch only fires for direct programmatic toggles
                 // (e.g. coming back from a region jump with no carried iter).
                 if (value && _lockedIterations <= 0)
-                    LockedIterations = ViewState.Quality?.ComputeIterations(ViewState.Zoom) ?? 256;
+                    LockedIterations = ViewState.Quality?.ComputeIterationsLog10(ViewState.ZoomLog10) ?? 256;   // #1836
                 _renderHost.Trigger();
             }
         }
@@ -1374,7 +1374,7 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
         string typeTag = $"[{info.FractalType}]";
         string text =
             $"{typeTag}  cx={info.CenterX:G12}  cy={info.CenterY:G12}  " +
-            $"zoom={info.Zoom:G6}  iter={info.Iterations}  " +
+            $"zoom={FracturingFog.ViewState.ZoomLog.Format(info.Zoom, info.ZoomLog10)}  iter={info.Iterations}  " +   // #1836
             $"{precTag}  [{info.ElapsedMs} ms  {info.Width}×{info.Height}]" +
             // #1173-M — [GPU], or [CPU: reason] when the GPU was asked for but
             // not used. Short on purpose (the full reason is in the perf HUD):

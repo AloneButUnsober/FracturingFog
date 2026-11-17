@@ -685,6 +685,11 @@ namespace FracturingFog.Rendering
         public FractalViewState ViewState { get; }
 
         public event EventHandler<RenderFrameInfo>? FrameCompleted;
+
+        // #1836 — the frame's log10 zoom: the view's log when the frame is at the view's
+        // zoom (past double only the log holds it), else log10 of the frame's zoom.
+        private double FrameZoomLog10(double frameZoom)
+            => frameZoom.Equals(ViewState.Zoom) ? ViewState.ZoomLog10 : Math.Log10(frameZoom);
         public event EventHandler? FrameBufferChanged;
         public event EventHandler? AnimationFrameUploaded;
         public event EventHandler? FrameLanded;   // #1757
@@ -1492,7 +1497,7 @@ namespace FracturingFog.Rendering
             var s = ViewState;
             int effIters = _calculator.MaxIterations > 0
                 ? _calculator.MaxIterations
-                : s.Quality.ComputeIterations(s.Zoom);
+                : s.Quality.ComputeIterationsLog10(s.ZoomLog10);   // #1836
 
             // #610 — reconcile a cross-aspect export with the on-screen framing. The
             // calculator maps the complex plane by the longest pixel axis
@@ -1772,7 +1777,7 @@ namespace FracturingFog.Rendering
                 // present overwrites the faded-in offscreen buffer.
                 _calculator.MaxIterations = ViewState.PreferredIterations;
             else
-                _calculator.MaxIterations = ViewState.Quality.ComputeIterations(ViewState.Zoom);
+                _calculator.MaxIterations = ViewState.Quality.ComputeIterationsLog10(ViewState.ZoomLog10);   // #1836
 
             // SM-1 (#1267) — a solid frame of this exact view was rescued with a
             // higher cap on the calc thread; keep it for re-renders (theme, FX)
@@ -2413,7 +2418,7 @@ namespace FracturingFog.Rendering
                         altCalc.CenterX, altCalc.CenterY, altCalc.Zoom, altCalc.MaxIterations,
                         job.Sw.ElapsedMilliseconds, altCalc.Width, altCalc.Height,
                         false, ViewState.IterLocked, ViewState.FractalType,
-                        "3D-SBS", double.PositiveInfinity, _lastGpuRoute));
+                        "3D-SBS", double.PositiveInfinity, _lastGpuRoute, FrameZoomLog10(altCalc.Zoom)));
                 }
                 else
                 {
@@ -3577,7 +3582,8 @@ namespace FracturingFog.Rendering
                     _lastGpuRoute = FrameGpuRoute(calc, altCalc, useAlt);   // #1173-M
                     FrameCompleted?.Invoke(this, new RenderFrameInfo(
                         curCx, curCy, curZoom, curIter, ms, curW, curH,
-                        hp, ViewState.IterLocked, ViewState.FractalType, lbl, maxUseful, _lastGpuRoute));
+                        hp, ViewState.IterLocked, ViewState.FractalType, lbl, maxUseful, _lastGpuRoute,
+                        FrameZoomLog10(curZoom)));
                 }
 
                 if (ShowPerfHud) _perfStats.RecordFrame(ms);

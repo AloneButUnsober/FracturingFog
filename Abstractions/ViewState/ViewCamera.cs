@@ -20,6 +20,12 @@
 // truth. Callers pass the viewport in the SAME pixel space the frame is
 // rendered in.
 //
+// #1836 (epic #1428, C3) — past double's zoom range the zoom moves in log10
+// (FractalViewState.ZoomLog10), and when the view has an exact centre (#1832) or is
+// past OD's coordinate floor, the centre moves exactly (BigFloat) instead of through
+// the OD limbs, which would drop the exact centre or lose the move. Up to there every
+// method is the double / OD path it always was.
+//
 // DEEP-ZOOM NAVIGATION NOTE: this path is provably EXACT to 1e70 (--inputprobe,
 // and the input-math check in --navrepro: 9.5e-15 px at 4.65e64). If a user
 // reports deep-zoom "controls off / drift / jitter," it is NOT here — it is the
@@ -28,6 +34,7 @@
 // input path.
 
 using System;
+using FracturingFog.FFMath;
 
 namespace FracturingFog.ViewState
 {
@@ -44,6 +51,12 @@ namespace FracturingFog.ViewState
         /// world distance in input and render.</summary>
         public const double PlaneExtent = 3.5;
 
+        /// <summary>#1836 — log10 zoom past which the centre moves exactly even without an
+        /// exact centre: OD's measured clean coordinate floor (~1e120, --qdfloorsweep).</summary>
+        public const double ExactNavZoomLog10 = 120;
+
+        private const double Log2Of10 = 3.3219280948873622;
+
         private readonly FractalViewState _vs;
 
         public ViewCamera(FractalViewState vs)
@@ -53,6 +66,14 @@ namespace FracturingFog.ViewState
         /// is <paramref name="viewW"/> × <paramref name="viewH"/> pixels.</summary>
         public double Scale(int viewW, int viewH)
             => PlaneExtent / (Math.Max(1, Math.Max(viewW, viewH)) * _vs.Zoom);
+
+        /// <summary>#1836 — log10 of <see cref="Scale"/>, at any zoom.</summary>
+        public double ScaleLog10(int viewW, int viewH)
+            => Math.Log10(PlaneExtent / Math.Max(1, Math.Max(viewW, viewH))) - _vs.ZoomLog10;
+
+        /// <summary>#1836 — true when centre moves go through the exact centre: the view has
+        /// one, or the zoom is past <see cref="ExactNavZoomLog10"/>.</summary>
+        public bool ExactNavigation => _vs.CenterExact != null || _vs.ZoomLog10 > ExactNavZoomLog10;
 
         /// <summary>The world coordinate currently under screen pixel
         /// (<paramref name="px"/>, <paramref name="py"/>).</summary>
@@ -64,11 +85,25 @@ namespace FracturingFog.ViewState
             return _vs.GetCenter().Translate(ox * s, oy * s);
         }
 
+        /// <summary>#1836 — the world coordinate under screen pixel (<paramref name="px"/>,
+        /// <paramref name="py"/>) exactly, at the view's precision (any zoom).</summary>
+        public ExactCentre ExactWorldFromScreen(double px, double py, int viewW, int viewH)
+        {
+            int prec = NavPrecision();
+            return Offset(_vs.GetCenterExact(prec), px - viewW * 0.5, py - viewH * 0.5, viewW, viewH, prec);
+        }
+
         /// <summary>Pan by a pixel delta (drag / key pan). Positive
         /// <paramref name="dxPx"/> moves the view content right, i.e. the centre
         /// moves left — callers pass the sign they want.</summary>
         public void TranslateByPixels(double dxPx, double dyPx, int viewW, int viewH)
         {
+            if (ExactNavigation)
+            {
+                int prec = NavPrecision();
+                _vs.SetCenterExact(Offset(_vs.GetCenterExact(prec), dxPx, dyPx, viewW, viewH, prec));
+                return;
+            }
             double s = Scale(viewW, viewH);
             _vs.SetCenter(_vs.GetCenter().Translate(dxPx * s, dyPx * s));
         }
@@ -77,7 +112,10 @@ namespace FracturingFog.ViewState
         /// under (<paramref name="px"/>, <paramref name="py"/>) the new screen
         /// centre. Does not change zoom.</summary>
         public void SetCenterToScreenPoint(double px, double py, int viewW, int viewH)
-            => _vs.SetCenter(WorldFromScreen(px, py, viewW, viewH));
+        {
+            if (ExactNavigation) _vs.SetCenterExact(ExactWorldFromScreen(px, py, viewW, viewH));
+            else _vs.SetCenter(WorldFromScreen(px, py, viewW, viewH));
+        }
 
         /// <summary>Zoom by <paramref name="factor"/> while keeping the world
         /// point under (<paramref name="px"/>, <paramref name="py"/>) fixed on
@@ -88,8 +126,15 @@ namespace FracturingFog.ViewState
         {
             double ox = px - viewW * 0.5;
             double oy = py - viewH * 0.5;
+            if (ExactNavigation)
+            {
+                var anchorE = ExactWorldFromScreen(px, py, viewW, viewH);   // old zoom
+                ApplyZoomFactor(factor, zoomMin, zoomMax);
+                _vs.SetCenterExact(Offset(anchorE, -ox, -oy, viewW, viewH, NavPrecision()));
+                return;
+            }
             var anchor = WorldFromScreen(px, py, viewW, viewH);   // world under cursor, old zoom
-            _vs.Zoom = Math.Clamp(_vs.Zoom * factor, zoomMin, zoomMax);
+            ApplyZoomFactor(factor, zoomMin, zoomMax);
             double sNew = Scale(viewW, viewH);
             // Put the anchor back under the cursor: centre = anchor - offset*newScale.
             _vs.SetCenter(anchor.Translate(-ox * sNew, -oy * sNew));
@@ -101,9 +146,61 @@ namespace FracturingFog.ViewState
         public void BoxZoomToPoint(double midPx, double midPy, double factor,
                                    int viewW, int viewH, double zoomMin, double zoomMax)
         {
+            if (ExactNavigation)
+            {
+                var anchorE = ExactWorldFromScreen(midPx, midPy, viewW, viewH);
+                ApplyZoomFactor(factor, zoomMin, zoomMax);
+                _vs.SetCenterExact(anchorE);
+                return;
+            }
             var anchor = WorldFromScreen(midPx, midPy, viewW, viewH);
-            _vs.Zoom = Math.Clamp(_vs.Zoom * factor, zoomMin, zoomMax);
+            ApplyZoomFactor(factor, zoomMin, zoomMax);
             _vs.SetCenter(anchor);
+        }
+
+        /// <summary>#1836 — zoom by <paramref name="factor"/> about the screen centre (key
+        /// zoom), clamped. The centre (and an exact centre) is unchanged.</summary>
+        public void ZoomBy(double factor, double zoomMin, double zoomMax)
+            => ApplyZoomFactor(factor, zoomMin, zoomMax);
+
+        // #1836 — multiply the zoom and clamp. While the zoom and the product stay inside
+        // double this is the double expression it always was; past double it runs on the log.
+        private void ApplyZoomFactor(double factor, double zoomMin, double zoomMax)
+        {
+            double z = _vs.Zoom * factor;
+            if (!_vs.ZoomBeyondDouble && double.IsFinite(z) && z < double.MaxValue)
+            {
+                _vs.Zoom = Math.Clamp(z, zoomMin, zoomMax);
+                return;
+            }
+            double l = _vs.ZoomLog10 + Math.Log10(factor);
+            _vs.SetZoomLog10(Math.Clamp(l, Math.Log10(zoomMin), Math.Log10(zoomMax)));
+        }
+
+        // Bits for exact centre moves: the exact centre's own, or what the zoom needs.
+        private int NavPrecision()
+            => Math.Max(_vs.CenterExact?.Precision ?? 0, BigFloat.PrecisionForZoom(_vs.ZoomLog10));
+
+        // c + (ox, oy) pixels at the current scale, exactly (one rounding per part). The
+        // pixel scale comes from the log as m·2^k so it holds past double's range.
+        private ExactCentre Offset(ExactCentre c, double ox, double oy, int viewW, int viewH, int prec)
+        {
+            double s = Scale(viewW, viewH);
+            BigFloat dx, dy;
+            if (double.IsNormal(s) && s > 1e-290)
+            {
+                dx = BigFloat.FromDouble(ox * s, prec);
+                dy = BigFloat.FromDouble(oy * s, prec);
+            }
+            else
+            {
+                double l2 = ScaleLog10(viewW, viewH) * Log2Of10;
+                double k = Math.Floor(l2);
+                double m = Math.Pow(2, l2 - k);   // [1, 2)
+                dx = BigFloat.FromDouble(ox * m, prec).ScaleB((long)k);
+                dy = BigFloat.FromDouble(oy * m, prec).ScaleB((long)k);
+            }
+            return new ExactCentre(BigFloat.Add(c.Re, dx, prec), BigFloat.Add(c.Im, dy, prec));
         }
     }
 }

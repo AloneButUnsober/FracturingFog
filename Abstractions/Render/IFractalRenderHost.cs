@@ -42,7 +42,10 @@ namespace FracturingFog.Render
         double MaxUsefulZoomLog10 = double.PositiveInfinity,
         // #1173-M — which way the frame went: on the GPU, or back to the CPU and
         // why. default = the GPU was not requested.
-        GpuRoute GpuRoute = default);
+        GpuRoute GpuRoute = default,
+        // #1836 — log10 of Zoom at any depth (Zoom saturates past double's range).
+        // NaN = not given: read Zoom.
+        double ZoomLog10 = double.NaN);
 
     /// <summary>SM-3 (#1268) — progress of the anti-aliasing (TAA) refinement that
     /// keeps running after <see cref="IFractalRenderHost.FrameCompleted"/>.

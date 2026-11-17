@@ -69,6 +69,32 @@ namespace FracturingFog.ViewState
         /// <summary>Scalar zoom factor. 0.13 = default fully-zoomed-out view.</summary>
         public double Zoom { get; set; } = DefaultZoom;
 
+        // ── #1836 — log10 zoom (past double's range) ──────────────────────────
+        // `Zoom` stays the render contract (byte-identical up to 1e100). Past double's
+        // range (~1.8e308) it saturates at double.MaxValue and the log carries the zoom.
+        // Same stamp rule as the exact centre (#1832): the log is the authority only while
+        // `Zoom` still holds the value SetZoomLog10 wrote, so any plain `Zoom` write wins.
+        private double _zoomLog10 = double.NaN;
+        private double _zoomLog10Stamp;
+
+        /// <summary>#1836 — log10 of the zoom at any depth: the log SetZoomLog10 set while
+        /// <see cref="Zoom"/> is unchanged since, else log10(<see cref="Zoom"/>).</summary>
+        public double ZoomLog10
+            => !double.IsNaN(_zoomLog10) && _zoomLog10Stamp.Equals(Zoom) ? _zoomLog10 : Math.Log10(Zoom);
+
+        /// <summary>#1836 — set the zoom from its log10, at any depth (<see cref="Zoom"/>
+        /// becomes 10^log, saturated at double.MaxValue).</summary>
+        public void SetZoomLog10(double log10)
+        {
+            if (double.IsNaN(log10)) throw new ArgumentException("log10 zoom is NaN", nameof(log10));
+            Zoom = ZoomLog.FromLog10(log10);
+            _zoomLog10 = log10;
+            _zoomLog10Stamp = Zoom;
+        }
+
+        /// <summary>#1836 — true when the zoom is past what <see cref="Zoom"/> can hold.</summary>
+        public bool ZoomBeyondDouble => ZoomLog.BeyondDouble(ZoomLog10);
+
         /// <summary>Active quality preset (Draft / Standard / High / Ultra / Extreme).</summary>
         public Models.QualityPreset Quality { get; set; } = Models.QualityPreset.Standard;
 

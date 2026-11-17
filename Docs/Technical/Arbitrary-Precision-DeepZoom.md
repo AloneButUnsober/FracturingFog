@@ -7,8 +7,9 @@ the canonical task list; this doc backs them.
 |---|---|---|
 | C1 BigFloat type | #1830 | §1–§5 (merged, PR #1831) |
 | C2a exact centre in view state + region JSON | #1832 | §6 (merged, PR #1834) |
-| C2b exact centre in history, location strings, video, RPC, cluster | #1833 | §7 |
-| C3–C11 | filed when started (see #1428) | |
+| C2b exact centre in history, location strings, video, RPC, cluster | #1833 | §7 (merged, PR #1835) |
+| C3 log zoom: view state, camera, readouts, iterations, region JSON | #1836 | §8 |
+| C4–C11 | filed when started (see #1428) | |
 
 ## 1. Why a new number type
 
@@ -110,3 +111,35 @@ All against independent references, none against BigFloat itself:
   - The tile, frame and slideshow planners and the worker's clone copy it.
   - The host engine takes it from a region when the request has no centre of its own.
 - **Explore** (finders, Descend, morph) stays on OD until C7.
+
+## 8. Log zoom (C3, #1836)
+
+A double zoom overflows at about 1.8e308. A double log10 zoom does not, and it keeps about 1e-13 relative zoom accuracy even at 1e1000, far below a pixel.
+
+- **`double Zoom` stays the render contract.** It is byte-identical up to 1e100. Past double's range it saturates at `double.MaxValue`.
+- **View state.**
+  - `FractalViewState.SetZoomLog10` writes the log and `Zoom` = 10^log together.
+  - `ZoomLog10` returns that log only while `Zoom` still holds the value it wrote, else log10(`Zoom`). This is the exact centre's stamp rule (§6): any plain `Zoom` write wins.
+- **`ZoomLog` helpers** (`Abstractions/ViewState/ZoomLog.cs`).
+  - `Format` is exactly `ToString("G6")` while the double holds the zoom. Past it, the mantissa and exponent come from the log (`2.5E+1000`).
+  - `TryParse` reads what double reads unchanged, plus scientific text past double (`1e500`), which double reads as infinity.
+- **`ViewCamera`.**
+  - **Zoom.** While the zoom and the product stay inside double, a zoom step is the old `clamp(z·f)`. Past that it runs on the log, with log-domain clamp bounds. Key zoom (W / S) now goes through the camera (`ZoomBy`).
+  - **Exact moves.** When the view has an exact centre, or is past OD's coordinate floor (`ExactNavZoomLog10` = 120, the measured ~1e120 from `--qdfloorsweep`), pan, focus, wheel and box zoom move the exact centre with `BigFloat` adds. Before, any camera move dropped the exact centre (§6's stamp rule).
+  - **The pixel offset.** It is the double pixel scale while that is a normal double. Past it, the scale is m·2^k from the log, so it holds at any depth.
+  - Without an exact centre and up to 1e120, every method is the old double / OD expression.
+- **Iterations.**
+  - `QualityPreset.ComputeIterationsLog10` is the same formula on the log, guarded against int overflow.
+  - The view-state call sites use it: the render host, video legs, region capture and the iteration lock.
+- **Readouts.**
+  - `RenderFrameInfo.ZoomLog10` carries the log, so the status line, the Zoom box and the location copy show zoom past double.
+  - The mini depth bar takes log10 zoom.
+  - The Zoom box reads `1e500`.
+- **Region JSON.**
+  - `ZoomLog10` is written only past double, so region files up to there are unchanged.
+  - On load a valid log rewrites `Zoom` (saturated). One that is not past double, or not finite, is dropped, and `Zoom` rules.
+  - Apply / capture / clone go through `CopyZoomTo` / `LogFieldFor`.
+- **Not yet.**
+  - History, video keyframes, the server request and the cluster planners: C3b.
+  - Batch `--zoom` past double: C10. Batch is clamped at Extreme's 1e100 today.
+  - Rendering past 1e100: C4–C6 and the cap in C9.
