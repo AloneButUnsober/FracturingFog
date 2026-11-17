@@ -59,11 +59,38 @@ public sealed class MinibrotJumpTests
         Assert.Equal(50_000, mid.PreferredIterations);
         Assert.False(mid.IterationsShort);
 
-        // Period 50 000 wants 5 000 000: capped at the deepest tier's limit, flagged.
+        // Period 50 000 wants 5 000 000. #1858 (#1426): past every tier's cap (Extreme's is
+        // 131 072) the hint still asks for it, flagged as past the tier's cap.
         var p = MinibrotJump.Plan(Found(1e-10, 50_000), QualityPreset.Standard, false, 0)!.Value;
         Assert.Equal(5_000_000, p.WantedIterations);
-        Assert.Equal(MinibrotJump.MaxPreferredIterations, p.PreferredIterations);
-        Assert.True(p.IterationsShort);
+        Assert.Equal(5_000_000, p.PreferredIterations);
+        Assert.False(p.IterationsShort);
+        Assert.True(p.BeyondTierCap);
+
+        // Period 1 000 000 wants 100 000 000: capped at the explore ceiling (50 M), flagged short.
+        var q = MinibrotJump.Plan(Found(1e-10, 1_000_000), QualityPreset.Standard, false, 0)!.Value;
+        Assert.Equal(100_000_000, q.WantedIterations);
+        Assert.Equal(IterationLimits.ExploreCeiling, q.PreferredIterations);
+        Assert.Equal(MinibrotJump.MaxPreferredIterations, q.PreferredIterations);
+        Assert.True(q.IterationsShort);
+    }
+
+    [Fact]
+    public void Past_Extremes_Cap_The_Plan_Follows_The_Period_And_Says_So()
+    {
+        // #1858 — period 2 000 at Extreme depth wants 200 000, past its 131 072: before #1858
+        // the plan stopped at 131 072 and the render came out short (#1426).
+        var p = MinibrotJump.Plan(Found(1e-60, 2_000), QualityPreset.Extreme, false, 0)!.Value;
+        Assert.Same(QualityPreset.Extreme, p.Quality);
+        Assert.Equal(200_000, p.PreferredIterations);
+        Assert.False(p.IterationsShort);
+        Assert.True(p.BeyondTierCap);
+
+        // A low period inside the tier's formula: the zoom's own count, not flagged.
+        var low = MinibrotJump.Plan(Found(1e-60, 10), QualityPreset.Extreme, false, 0)!.Value;
+        Assert.Equal(QualityPreset.Extreme.ComputeIterations(low.Zoom), low.PreferredIterations);
+        Assert.False(low.BeyondTierCap);
+        Assert.False(low.IterationsShort);
     }
 
     [Fact]

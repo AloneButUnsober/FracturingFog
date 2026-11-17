@@ -22,12 +22,16 @@ namespace FracturingFog.Abstractions.Explore;
 /// iteration count (locked or capped) is below what the period wants.</summary>
 public readonly record struct MinibrotJumpPlan(
     DeepComplex Center, double Zoom, QualityPreset Quality,
-    int PreferredIterations, int WantedIterations, bool IterationsShort);
+    int PreferredIterations, int WantedIterations, bool IterationsShort,
+    // #1858 — the hint is past the quality tier's own cap (slower, in proportion).
+    bool BeyondTierCap = false);
 
 public static class MinibrotJump
 {
-    /// <summary>Upper bound for the iteration hint: the Extreme tier's cap.</summary>
-    public static readonly int MaxPreferredIterations = QualityPreset.Extreme.IterMax;
+    /// <summary>Upper bound for the iteration hint. #1858 (#1426): the explore ceiling
+    /// (<see cref="IterationLimits.ExploreCeiling"/>), not the Extreme tier's cap — a target of
+    /// period above ~1,310 wants more than its 131,072.</summary>
+    public static int MaxPreferredIterations => IterationLimits.ExploreCeiling;
 
     /// <summary>The tier a jump to <paramref name="zoom"/> needs: the current
     /// one, or the first deeper tier whose ZoomMax reaches it. Promotion only
@@ -66,10 +70,11 @@ public static class MinibrotJump
             return new MinibrotJumpPlan(center, zoom, quality, 0, wanted, lockedIterations < wanted);
 
         // The hint is a first-render override (like a saved region's
-        // iterations), not bound by the tier's own formula cap; the deepest
-        // tier's cap keeps it sane.
+        // iterations), not bound by the tier's own formula cap; the explore
+        // ceiling (#1858) keeps it sane.
         int byZoom = quality.ComputeIterations(zoom);
         int preferred = SMath.Max(byZoom, SMath.Min(wanted, MaxPreferredIterations));
-        return new MinibrotJumpPlan(center, zoom, quality, preferred, wanted, preferred < wanted);
+        return new MinibrotJumpPlan(center, zoom, quality, preferred, wanted, preferred < wanted,
+            BeyondTierCap: preferred > quality.IterMax);
     }
 }

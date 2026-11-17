@@ -301,9 +301,12 @@ public sealed partial class ControlCenterViewModel
         if (!vs.IterLocked) vs.PreferredIterations = p.PreferredIterations;
         main.RenderHost.Trigger();
 
-        return !p.IterationsShort ? ""
+        string beyond = p.BeyondTierCap && !vs.IterLocked
+            ? $" Using {p.PreferredIterations:N0} iterations, past {p.Quality.Name}'s {p.Quality.IterMax:N0}: slow."   // #1858
+            : "";
+        return !p.IterationsShort ? beyond
             : vs.IterLocked ? $" Iterations are locked at {vs.LockedIterations:N0}; ~{p.WantedIterations:N0} resolve it."
-            : $" ~{p.WantedIterations:N0} iterations resolve it; using {p.PreferredIterations:N0}.";
+            : $" ~{p.WantedIterations:N0} iterations resolve it; using {p.PreferredIterations:N0} (the explore ceiling).";
     }
 
     private void ArmSnapToSpiral()

@@ -17,8 +17,9 @@ the canonical task list; this doc backs them.
 | C5d orbit-aware colouring path (AP orbit, floatexp) | #1849 | §14 (merged, PR #1850) |
 | C5e AA jitter at depth by pixel + tier-3 recycle test | #1851 | §15 (merged, PR #1853) |
 | C5f periodic-reference detection past 1e154 | #1854 | §16 (merged, PR #1855) |
-| C8a reference-orbit arrays grow as built (#1828) | #1856 | §17 |
-| C6, C7, C8b–C11 | filed when started (see #1428) | |
+| C8a reference-orbit arrays grow as built (#1828) | #1856 | §17 (merged, PR #1857) |
+| C8b explore iteration plan past the tier cap (#1426) | #1858 | §18 |
+| C6, C7, C9–C11 | filed when started (see #1428) | |
 
 ## 1. Why a new number type
 
@@ -338,3 +339,16 @@ A double zoom overflows at about 1.8e308. A double log10 zoom does not, and it k
   - A short orbit after it trims back, with the values kept.
   - A cancelled first build allocates only the initial size.
 - **Not yet** (#1828): storing only the limbs each tier needs (DD writes zeros to six limb arrays).
+
+## 18. Explore iterations past the tier cap (C8b, #1858 / #1426)
+
+- **The problem.** An explore plan (minibrot jump, angle landing, Julia-morph step) asks for `SuggestedIterations(period)`, which is period × 100. It was capped at Extreme's 131,072, so a target of period above about 1,310 rendered short (#1426).
+- **The fix.**
+  - The cap is now `IterationLimits.ExploreCeiling` (50,000,000), a sanity bound.
+  - A plan past the tier's own cap is flagged `BeyondTierCap`, and the Finder status says it will be slow.
+  - Since C8a, a higher count costs time only: the orbit's memory follows the orbit, which stops at its period.
+- **Rescue memo** (#1426 item 3). The solid-frame rescue memo now keys on all sixteen centre limbs (`CentreLimbs`) plus the zoom. With only three limbs per part, two views past 1e50 that differ only in limbs 3–7 matched.
+- **Batch.** The hint becomes `PreferredIterations`, which region capture saves, and `--iterations` has no upper bound. A planned count therefore reproduces headless.
+- **Not yet.**
+  - The deep tier's own formula and cap: C9.
+  - The partial-solid rescue and a higher rescue ceiling (#1426 item 2).
