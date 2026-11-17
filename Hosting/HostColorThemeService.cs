@@ -282,6 +282,7 @@ namespace FracturingFog.Hosting
             state.CenterY2 = region.CenterY2; state.CenterY3  = region.CenterY3;
             state.CenterX4 = region.CenterX4; state.CenterX5 = region.CenterX5; state.CenterX6 = region.CenterX6; state.CenterX7 = region.CenterX7;
             state.CenterY4 = region.CenterY4; state.CenterY5 = region.CenterY5; state.CenterY6 = region.CenterY6; state.CenterY7 = region.CenterY7;
+            if (region.CentreExact is { } exact) state.SetCenterExact(exact);   // #1832: the exact centre, where the region has one
             state.Zoom = region.Zoom > 0 ? region.Zoom : state.Zoom;
             state.FractalType = region.FractalType;
             // Source-compiled types (UserEquation / Sandbox / UserBulb) carry
@@ -752,6 +753,10 @@ namespace FracturingFog.Hosting
                 CenterY2 = state.CenterY2, CenterY3  = state.CenterY3,
                 CenterX4 = state.CenterX4, CenterX5 = state.CenterX5, CenterX6 = state.CenterX6, CenterX7 = state.CenterX7,
                 CenterY4 = state.CenterY4, CenterY5 = state.CenterY5, CenterY6 = state.CenterY6, CenterY7 = state.CenterY7,
+                // #1832 — the exact centre when the view has one (null otherwise: not written).
+                CenterExactX = state.CenterExact?.ToStrings().X,
+                CenterExactY = state.CenterExact?.ToStrings().Y,
+                CenterExactBits = state.CenterExact?.Precision ?? 0,
                 Zoom = state.Zoom,
                 // Capture the live iter count so the saved region renders at
                 // the same detail it had on screen — matches legacy MainForm:2248
@@ -952,6 +957,7 @@ namespace FracturingFog.Hosting
             CenterY2 = src.CenterY2, CenterY3  = src.CenterY3,
             CenterX4 = src.CenterX4, CenterX5 = src.CenterX5, CenterX6 = src.CenterX6, CenterX7 = src.CenterX7,
             CenterY4 = src.CenterY4, CenterY5 = src.CenterY5, CenterY6 = src.CenterY6, CenterY7 = src.CenterY7,
+            CenterExactX = src.CenterExactX, CenterExactY = src.CenterExactY, CenterExactBits = src.CenterExactBits,   // #1832
             Zoom = src.Zoom,
             Iterations = src.Iterations,
             FractalType = src.FractalType,
