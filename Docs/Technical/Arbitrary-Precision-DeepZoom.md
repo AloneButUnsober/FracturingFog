@@ -21,8 +21,10 @@ the canonical task list; this doc backs them.
 | C8b explore iteration plan past the tier cap (#1426) | #1858 | §18 (merged, PR #1859) |
 | C9 Unbounded quality tier: zoom past 1e100 | #1861 | §19 (merged, PR #1862) |
 | C10 batch + Command builder parity past 1e100 | #1860 | §20 (merged, PR #1863) |
-| C11 validation + docs | #1864 | §21 |
-| C6, C7 | filed when started (see #1428) | |
+| C11 validation + docs | #1864 | §21 (merged, PR #1865) |
+| C7a period detection + zoom to minibrot past 1e100 | #1866 | §22 |
+| C7b Misiurewicz snap + external rays / angles; C7c auto-explore, Julia morph, angle landings, .kfr | filed when started | |
+| C6 | filed when started (see #1428) | |
 
 ## 1. Why a new number type
 
@@ -368,7 +370,7 @@ A double zoom overflows at about 1.8e308. A double log10 zoom does not, and it k
 - **Video / slideshow.** The automatic tier choice and the "all regions" filter skip Unbounded as they skip Extreme (`Tier >= Extreme`).
 - **Batch.** Until C10 (#1860, §20) `--zoom` stayed enforced at 1e100 and `--x` / `--y` carried OD limbs only.
   - Meanwhile the Command builder reported a live view past 1e100, or with an exact centre, as a fidelity gap pointing at #1860, and such a command was refused rather than rendering a wrong centre. C10 removed the gap.
-- **Explore tools** (minibrot jump, finders, AutoExplorer) stay at Extreme's 1e100 until C7.
+- **Explore tools** (minibrot jump, finders, AutoExplorer) stay at Extreme's 1e100 until C7 (§22 for the minibrot finder).
 - **Validation** (`S1861UnboundedTierTests`).
   - The tier's place and lookups, and its formula's continuity with Extreme's.
   - From Extreme just under 1e100, wheel steps promote to Unbounded with the warning and carry on past 1e100, then past double's range on the log, with no clamp.
@@ -424,3 +426,49 @@ A double zoom overflows at about 1.8e308. A double log10 zoom does not, and it k
   - `mandelbrot-deep-1e498-minibrot`: the period-415 antenna minibrot, a whole copy of the set.
   - The baseline gained exactly these three entries; the 42 existing hashes are unchanged.
 - **Docs.** `Docs/Deep-Zoom-Perturbation.md` §10 summarises the path past 1e100. §1 points at it, and the tools table points at the moved probe.
+
+## 22. Period detection and zoom to minibrot past 1e100 (C7a, #1866)
+
+C7 is sliced as C5 was:
+- **C7a:** the minibrot finder (this section).
+- **C7b:** Misiurewicz snap and external rays / angles.
+- **C7c:** auto-explore, Julia morph, angle landings and `.kfr`.
+
+- **`DeepNucleusFinder`** (`Abstractions/Explore`). It runs the same methods as `PeriodDetector` / `NucleusFinder`, in BigFloat and floatexp.
+  - **`Detect`:** ball arithmetic.
+    - The centre's orbit runs in BigFloat at `PrecisionFor(radius)`, which is `PrecisionForZoom` plus 4 decades.
+    - The ball radius runs in FloatExp, because a disk past 1e308 has no double radius.
+  - **`FindMinibrot`:** the periods are scanned upward from the ball's candidate.
+    - One reference orbit is built at the exact centre, in BigFloat, and stored as double.
+    - Newton is perturbed around it, with ε, δ and the derivative in `CFx`.
+    - A proposal is polished by Newton in BigFloat. Δc = fᵖ / f′ comes from the BigFloat z and the CFx derivative.
+    - After convergence the atom size is computed. If the minibrot's framing (zoom 1/|Size|) needs more bits, the precision is raised and Newton runs on. Up to four rounds are allowed.
+    - A root is accepted only inside the view disk and at its minimal period, the same invariants as `NucleusFinder`.
+  - **`Find`:** Newton from a seed.
+  - **`AtomSize`:** the orbit runs in BigFloat, with l and b in CFx.
+  - **`Frame`:** returns the exact centre nucleus + Size·(−0.5) and the log zoom log10(framing) − log10|Size|.
+- **`CFx`** moved from `Engine/Math/LaStageTableFx.cs` to `Abstractions/Math/CFx.cs`, gaining subtraction, division, reciprocal and magnitude. `BigFloat.FromFloatExp` was added.
+- **`MinibrotJump.PlanDeep`:**
+  - The plan carries `CenterExact` and `ZoomLog10` (`Center` and `Zoom` are their OD split and saturated double).
+  - The tier comes from `QualityFor`. Past every finite cap that is now the deepest tier.
+  - Iterations come from `ComputeIterationsLog10`, and are at least period × 100.
+  - `At` keeps its 1e100 refusal for the other callers: angle landings and Julia morph, until C7c.
+- **Control Center:**
+  - **Routing:** past `ZoomLog10Threshold = 100`, the view disk is built from the exact centre (or the limbs' own value) and the log radius. Detect period and Zoom to minibrot then route to the deep finder.
+  - **Applying a plan:** `ApplyPlan` sets the exact centre and, past double, the log zoom.
+  - **Handoff:** a minibrot found by the OD finder in a shallower view whose framing lies past 1e100 is no longer refused ("beyond the deepest zoom"). Its OD nucleus seeds `DeepNucleusFinder.Find`, which carries it on.
+  - **Angles:** past 1e100 they are not shown. The angle code is OD-only until C7b.
+- **Validation** (`S1866DeepNucleusFinderTests`).
+  - **Independent targets:** the real-axis antenna minibrots next to −2 (S1864), with their nucleus and size computed here independently. They are viewed 3 sizes off, in a disk of 20 sizes, at ~1e149 / ~1e299 / ~1e498.
+    - The ball candidate is ≤ n.
+    - `FindMinibrot` returns period n, the nucleus to 1e-6 of a size, and the size to 1e-6.
+    - `Frame` returns nucleus − Size/2 and −log10 Size.
+  - **A complex case:** a 64×64 view at 1e150 on the 340-digit Misiurewicz point. The minibrot found there is verified in BigFloat at +128 bits, independently of the finder:
+    - it is a root of fᵖ (the Newton step is under 1e-6 of the size);
+    - no proper divisor is a root;
+    - it is inside the view;
+    - its size matches the atom-domain estimate to 1e-6, with a nonzero imaginary part.
+  - **Agreement with `NucleusFinder`** at ~1e-70, where OD holds: the same period, the nucleus to 1e-6 of a size, and the size to 1e-9.
+  - **Refusals:** fᵖ with 2n gives LowerPeriod (n). A disk 100 sizes away gives LeftView (Newton wanders), and so does a root 3 sizes from the seed with a disk 1 size wide (within the wander limit, outside the view). A disk at −2.1 gives Escaped.
+  - **`PlanDeep`** at 1e498 gives the Unbounded tier, the framing's exact centre and log, `Zoom` = double.MaxValue, the iteration hint, and the locked case.
+  - **The OD handoff:** the period-250 nucleus rounded to OD as the seed is carried by `Find` to the true nucleus.

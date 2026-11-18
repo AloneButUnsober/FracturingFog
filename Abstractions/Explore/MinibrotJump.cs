@@ -24,7 +24,10 @@ public readonly record struct MinibrotJumpPlan(
     DeepComplex Center, double Zoom, QualityPreset Quality,
     int PreferredIterations, int WantedIterations, bool IterationsShort,
     // #1858 — the hint is past the quality tier's own cap (slower, in proportion).
-    bool BeyondTierCap = false);
+    bool BeyondTierCap = false,
+    // #1866 (C7a) — past octuple-double: the exact centre (Center is its OD split) and the
+    // log zoom (Zoom saturates past double). Null / NaN for a plan OD holds.
+    ExactCentre? CenterExact = null, double ZoomLog10 = double.NaN);
 
 public static class MinibrotJump
 {
@@ -41,7 +44,7 @@ public static class MinibrotJump
         if (zoom <= current.ZoomMax) return current;
         foreach (var p in QualityPreset.All)
             if (p.ZoomMax >= zoom) return p;
-        return QualityPreset.Extreme;
+        return QualityPreset.Deepest;   // #1866: past every finite cap
     }
 
     /// <summary>Plan the jump, or null when the minibrot is deeper than the
@@ -76,5 +79,26 @@ public static class MinibrotJump
         int preferred = SMath.Max(byZoom, SMath.Min(wanted, MaxPreferredIterations));
         return new MinibrotJumpPlan(center, zoom, quality, preferred, wanted, preferred < wanted,
             BeyondTierCap: preferred > quality.IterMax);
+    }
+
+    /// <summary>#1866 (C7a) — plan the jump to a minibrot found past octuple-double
+    /// (<see cref="DeepNucleusFinder"/>): the exact centre and log zoom of its framing, the
+    /// deepest tier it needs (Unbounded past 1e100) and the iteration hint from the log.
+    /// Never null: the Unbounded tier has no zoom limit.</summary>
+    public static MinibrotJumpPlan PlanDeep(
+        in DeepNucleusResult found, QualityPreset current, bool iterLocked, int lockedIterations,
+        double framing = 1.0)
+    {
+        var (exact, zoomLog10) = DeepNucleusFinder.Frame(found, framing);
+        double zoom = FracturingFog.ViewState.ZoomLog.FromLog10(zoomLog10);
+        var quality = QualityFor(current, zoom);
+        int wanted = NucleusFinder.SuggestedIterations(found.Period);
+        if (iterLocked)
+            return new MinibrotJumpPlan(exact.ToDeep(), zoom, quality, 0, wanted, lockedIterations < wanted,
+                CenterExact: exact, ZoomLog10: zoomLog10);
+        int byZoom = quality.ComputeIterationsLog10(zoomLog10);
+        int preferred = SMath.Max(byZoom, SMath.Min(wanted, MaxPreferredIterations));
+        return new MinibrotJumpPlan(exact.ToDeep(), zoom, quality, preferred, wanted, preferred < wanted,
+            BeyondTierCap: preferred > quality.IterMax, CenterExact: exact, ZoomLog10: zoomLog10);
     }
 }
