@@ -23,8 +23,9 @@ the canonical task list; this doc backs them.
 | C10 batch + Command builder parity past 1e100 | #1860 | §20 (merged, PR #1863) |
 | C11 validation + docs | #1864 | §21 (merged, PR #1865) |
 | C7a period detection + zoom to minibrot past 1e100 | #1866 | §22 (merged, PR #1867) |
-| C7b Snap to spiral (Misiurewicz) past 1e100 | #1868 | §23 |
-| C7c external rays / angles past 1e100; C7d auto-explore, Julia morph, .kfr | filed when started | |
+| C7b Snap to spiral (Misiurewicz) past 1e100 | #1868 | §23 (merged, PR #1869) |
+| C7c angle → landing past 1e100 (deep ray trace) | #1870 | §24 |
+| C7e location → angles past 1e100; C7d auto-explore, Julia morph, .kfr, loop video | filed when started | |
 | C6 | filed when started (see #1428) | |
 
 ## 1. Why a new number type
@@ -518,3 +519,37 @@ C7 was re-sliced once the ray and angle work was sized:
   - **Mutation checks: 6 of 7 caught.** The one that survived drops the deflation terms in the perturbed proposal step only.
     - The BigFloat polish deflates on its own, so it would still refuse a wrong root.
     - No tested click lies near an unwanted root that the proposal could slide onto.
+
+## 24. Angle → landing past 1e100 (C7c, #1870)
+
+C7 was re-sliced once more:
+- **C7c:** angle → landing (this section).
+- **C7e:** location → angles. This is `LocationAngles`' root walk and outward traces in BigFloat, verified with this slice's `Land`.
+
+- **`DeepExternalRay`** (`Abstractions/Explore`) is `ExternalRay` in BigFloat and floatexp.
+  - **`Tracer`:** each bit rebases the reference to the current ray point as an exact centre and takes its orbit in BigFloat, stored as double. The substeps solve for Δ in CFx. The reference precision follows the ray: a bit that moved it by 2^-m keeps it to m + 128 bits.
+  - **`Land`, periodic angle:** `DeepNucleusFinder.Find` runs with a growing reach. The result is accepted within RootReach (2) atom sizes of the seed.
+  - **`Land`, preperiodic angle:** `DeepMisiurewiczFinder.Refine` runs over the divisors of the period, with the reach at ×4 … ×4096 of the trace step, as ExternalRay does.
+    - **Adaptive:** once a period moves the ray by 1e-8 of its first cycle, the landing is tried. If it fails, the trace walks one more period and tries again.
+    - **Why:** a long preperiod (a point tuned deep into a minibrot) needs the seed much closer than the 1e-8 stop gives. A wider reach instead lands on neighbouring M(l+1, q) points of the wrong period, measured at n = 30.
+- **Control Center (Go):** the OD `ExternalRay.Land` runs first. The deep trace takes over when:
+  - the OD landing fails;
+  - a component landing has a framing past 1e100;
+  - or a Misiurewicz landing's context zoom is past 1e100.
+
+  It then jumps to the exact minibrot framing, or to the exact point at the log context radius.
+- **Validation** (`S1870DeepExternalRayTests`).
+  - **A periodic angle past OD:** `.(0 1¹²⁴)`. OD fails on it. The deep trace lands on the period-125 antenna nucleus, checked against the independent BigFloat nucleus to 1e-6 of a size, and the size to 1e-6 (~1e-149, 4 s).
+  - **Agreement with OD:** at n = 30 the deep and OD landings agree.
+  - **A tuned preperiodic angle:** M(4,1)'s `.001(010)`, tuned into the period-60 antenna minibrot (0 → 0 1⁵⁹, 1 → 1 0⁵⁹). This angle has preperiod 180 and period 180, and the OD trace fails on it.
+    - It lands on M(181, 60).
+    - That point is at nucleus + Size·M(4,1) to 2% of the size: the copy of M(4,1) in the minibrot, by tuning theory.
+    - Independently in BigFloat: z_{k+p} = z_k there, and no smaller preperiod or divisor period holds (~1e-70, 8 s).
+  - **Refusal:** angle 0 is refused (the cusp).
+  - **Mutation checks: 4 of 5 caught.** The survivor drops the RootReach check on a periodic landing.
+    - That check guards against Newton reaching a neighbouring period-p component, as in ExternalRay.
+    - No tested angle lands next to one.
+  - **Measured, not in the suite:**
+    - The same tuned angle at n = 125 lands M(376, 125) at ~1e-146, but takes 46 s. The repeated landing attempts dominate.
+    - A precision raise in `Refine` by log₂ max |dz/dc| was tried here and dropped: the n = 60 and n = 125 landings succeed without it.
+    - At n = 30 the OD trace fails both the tuned angle and the antenna tip angle `.1 0²⁹ (0 1²⁹)`. That tip is a real-axis point among many Misiurewicz points where Newton creeps, and the deep trace fails it too.
