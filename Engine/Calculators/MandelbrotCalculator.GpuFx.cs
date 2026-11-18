@@ -25,6 +25,10 @@ public sealed partial class MandelbrotCalculator
     /// on the GPU (the float-exp LA kernel with a float-exp pixel scale).</summary>
     public bool LastFrameUsedGpuFloatExpPixels { get; private set; }
 
+    /// <summary>#1886 — true when the last GPU float-exp LA frame ran the AT built from the
+    /// float-exp table (LaAtFx).</summary>
+    public bool LastFrameUsedGpuLaAtFx { get; private set; }
+
     // #1882 — this float-exp-pixel frame on the float-exp LA kernel. False (with the route's
     // reason) where it declines or the dispatch fails: the CPU float-exp rows run then.
     private bool TryRunGpuFloatExpPixels<TMap>(TMap colorMap, int maxIt, CancellationToken ct)
@@ -62,13 +66,17 @@ public sealed partial class MandelbrotCalculator
         double offY0 = SubRectOffsetY - effImgH * 0.5 + PixelJitter.Y;
         int scaleE = (int)scale.E;
         bool wave = FracturingFog.Rendering.GpuWavefront.UsePerturb;
+        // #1886 (C5g) — the AT over the float-exp table, as the CPU rows select it.
+        double hd = Math.Sqrt(effImgW * effImgW * 0.25 + effImgH * effImgH * 0.25);
+        SelectLaAtFx(t, scale * (hd + Math.Sqrt(PixelJitter.X * PixelJitter.X + PixelJitter.Y * PixelJitter.Y)));
+        var gat = _laAtFx is { } afx ? FracturingFog.Rendering.GpuLaAt.FromFx(afx) : default;
         try
         {
             kernel.RunPerturbLaFloatExp(
                 Width, Height, scale.M, maxIt, EscapeRadius2,
                 offX0, offY0,
                 _refZr, _refZi, _refOrbitLen,
-                t!.GpuStepsFloatExp, t.GpuInts, t.Stages, default,
+                t!.GpuStepsFloatExp, t.GpuInts, t.Stages, gat,
                 IterationBuffer, SmoothBuffer,
                 FinalZrBuffer, FinalZiBuffer, FinalDrBuffer, FinalDiBuffer,
                 scaleE);
@@ -101,6 +109,7 @@ public sealed partial class MandelbrotCalculator
         LastFrameUsedGpuLaFloatExp = true;
         LastFrameUsedGpuLaTableFx = true;
         LastFrameUsedGpuFloatExpPixels = true;
+        LastFrameUsedGpuLaAtFx = gat.Len > 0;   // #1886
         LastFrameUsedGpuWavefront = wave;
         _lastFrameUsedLa = true;   // the precision label's " LA"
         LogGpuPerturbEngaged();

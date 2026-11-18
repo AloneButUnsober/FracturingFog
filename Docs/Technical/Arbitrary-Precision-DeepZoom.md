@@ -30,7 +30,8 @@ the canonical task list; this doc backs them.
 | C7f auto-explore + loop video past 1e100 | #1878 | §27 (merged, PR #1879) |
 | C6a GPU float-exp LA kernel past 1e100 (to 1e290) | #1880 | §28 (merged, PR #1881) |
 | C6b GPU float-exp pixel scale past 1e290 | #1882 | §29 (merged, PR #1883) |
-| C6c server engine + cluster shared-orbit blob past 1e100 | #1884 | §30 |
+| C6c server engine + cluster shared-orbit blob past 1e100 | #1884 | §30 (merged, PR #1885) |
+| C5g LA approximation transform (AT) past double | #1886 | §31 |
 
 ## 1. Why a new number type
 
@@ -282,7 +283,7 @@ A double zoom overflows at about 1.8e308. A double log10 zoom does not, and it k
   - **Same steps as the double evaluator.** On S1842's minibrot frame (where double holds), the floatexp evaluator forced on and the double one take the same steps: 85,690 LA steps each, plain steps within 0.01 %, 5 of 1024 counts different.
   - **Not separately observed:** the rebase inside a stage (|δ| > |z| after a step). Without it, a large δ fails the next step's |w| < Thr test and drops to the tail, which rebases. No frame tried here shows the difference.
   - S1845's BLA tests now set `LaMode = Off`.
-- **Not yet.** The AT in floatexp, SIMD (LA4) and SA rescaling.
+- **Not yet.** The AT in floatexp, SIMD (LA4) and SA rescaling. *(The AT: C5g, §31.)*
 
 ## 14. The orbit-aware colouring path (C5d, #1849)
 
@@ -733,3 +734,31 @@ This is the last C6 slice, so the GPU and cluster parts of the epic are done.
     - It renders an exact request at 1e150 and 1e320 as the poster path does. Without the exact centre the frame differs.
     - A seeded tile request renders as an unseeded one, and a poisoned seed changes it, which shows the seed reaches the calculator.
     - A video frame at 1e320 is the direct render.
+
+## 31. The LA approximation transform past double (C5g, #1886)
+
+This is the first of the deferred C5 speed items.
+
+- **Why it fits past double.** The AT (#1627, Imagina's) iterates z′ ← z′² + c′ in renormalised coordinates, z′ = A·z and c′ = RefC + C·δc.
+  - z′ stays below Esc (≤ 2^128), and c′ is about the size of the view's extent in c′. So the AT iterates in plain double at any depth.
+  - Only the conversions need FloatExp: C·δc on the way in, and z = z′/A and dz/dc = (dz′/dc′)·C/A on the way out.
+- **`LaAtFx`** (`Engine/Math/LaAtFx.cs`) is `LaAt`'s `Create` / `Usable` / `Select` over `LaStageTableFx`.
+  - A, B, C = A·B, 1/A and ThrC are in FloatExp. RefC and Esc² must be finite doubles, or the AT is not usable.
+  - Like `LaAt.cs`, it derives from Imagina.
+- **`EvaluateLaFx`** runs the AT block first, as `EvaluateLa` does. `RunLaAt`'s iteration is now `RunLaAtCore`, shared by the double AT and the float-exp AT, including the #1804 periodicity check. The FX rows select the AT for the view's half diagonal, and the work is reported in `LastLaAtWork`.
+- **GPU.** `GpuLaAt.FromFx` carries the float-exp AT to the float-exp LA kernel: C6a's float-exp-table route and C6b's float-exp-pixel route. Neither passed an AT before.
+  - **Fixed in passing (pre-existing, #1664):** the kernel compares |z′|² in float. Esc² runs up to 2^256, and the cbuffer cast it to float as +∞, so the kernel's AT never escaped: a pixel that leaves the AT ran to the cap and read as in-set. `GpuLaFxParams.Make` now clamps it to FLT_MAX. Leaving the AT there is safe, because the stages go on from z′/A.
+  - **Not frame-tested:** the kernel renders antenna-minibrot views wrong from about 1e77, AT or not: every pixel comes back maxIter. That bug predates C6 and is #1887. The GPU part is checked at the cbuffer instead.
+- **Speed.** The CPU frame's rows, AT on against off, on S1864's antenna minibrots framed at their home view (48×36 and 320×180), at period 250 (~1e299) and 415 (~1e498):
+  - ×1.0–1.1 at 320×180 (223 ms vs 251 ms; 361 ms vs 385 ms). At 48×36 the timing is noise-level (×1.0–3.2 across runs).
+  - The top stage already steps by the period, so the AT saves no steps. It makes each in-set pixel's steps double rather than FloatExp. Most of the frame is escaping pixels' lower-stage steps.
+  - The remaining speed items, SIMD for the FX rows and SA rescaling, target those.
+- **Validation** (`S1886LaAtFloatExpTests`). Mutation checks: 9 of 10 caught.
+  - **Where double holds** (periods 40 and 80), `LaAtFx` is `LaAt`: the same stage and Len, every bound and coefficient within 1e-12, and the same cbuffer AT words. Its float Esc² is finite.
+  - **Past double** (periods 250 and 415):
+    - The AT runs on every pixel.
+    - In / out is the AT-off frame's, and so is every count.
+    - On 16 sampled pixels the counts match direct BigFloat iteration as often as AT off does (16 / 16).
+  - **The minibrot's cusp ×10⁶:** no stage's AT is usable (the view is small next to c′'s offset), so the frame is the AT-off frame.
+  - **Surviving mutant:** removing the AT's δc-bound check. On these views every pixel is inside the bound, even zoomed out ×10⁴. LaAtFx's ThrC is checked equal to LaAt's.
+- **Credits.** `LaStageTableFx.cs` and `MandelbrotCalculator.LaFx.cs` (C5c) are line-for-line ports of Imagina-derived code. They shipped without the THIRD-PARTY-NOTICES §3 entry, the bibliography mention and the upstream SPDX line; all three are added here, with `LaAtFx.cs`.

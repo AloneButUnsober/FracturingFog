@@ -316,12 +316,28 @@ public sealed partial class MandelbrotCalculator
     private static bool RunLaAt(in LaAt at, double dcR, double dcI, int maxIter,
         out double zr, out double zi, out double drv, out double div, out int n, ref long atSteps)
     {
-        long atMax = (maxIter - 1) / at.Len + 1;
         double cr = dcR * at.CRe - dcI * at.CIm + at.RefCRe;
         double ci = dcR * at.CIm + dcI * at.CRe + at.RefCIm;
-        double xr = 0, xi = 0;      // z'
-        double er = 0, ei = 0;      // dz'/dc'
-        long k = 0;
+        bool inSet = RunLaAtCore(at.Len, at.Esc2, cr, ci, maxIter, out double xr, out double xi, out double er, out double ei,
+            out long k, ref atSteps);
+        // Back: z = z'/A (relative to Z_0 = 0, so δ = z), dz/dc = (dz'/dc')·(A·B)/A.
+        zr = xr * at.InvZRe - xi * at.InvZIm; zi = xr * at.InvZIm + xi * at.InvZRe;
+        double gr = er * at.CRe - ei * at.CIm, gi = er * at.CIm + ei * at.CRe;
+        drv = gr * at.InvZRe - gi * at.InvZIm; div = gr * at.InvZIm + gi * at.InvZRe;
+        n = inSet ? maxIter : (int)(k * at.Len);
+        return inSet;
+    }
+
+    // #1886 — the AT's iteration itself, z' ← z'² + c' from z' = 0 with dz'/dc', in double:
+    // shared by the double AT (above) and the float-exp one (LaAtFx, whose c' and z' are
+    // renormalised doubles at any depth). True: the cap or a cycle (in set).
+    private static bool RunLaAtCore(int len, double esc2, double cr, double ci, int maxIter,
+        out double xr, out double xi, out double er, out double ei, out long k, ref long atSteps)
+    {
+        long atMax = (maxIter - 1) / len + 1;
+        xr = 0; xi = 0;      // z'
+        er = 0; ei = 0;      // dz'/dc'
+        k = 0;
         bool inSet = false;
         // #1804 — Brent's check on z': the AT's step depends on z' and c' alone (dz'/dc'
         // doesn't steer it), so a bit-exact repeat means it cycles for ever: in set.
@@ -336,18 +352,13 @@ public sealed partial class MandelbrotCalculator
             xr = nXr; xi = nXi;
             k++; atSteps++;
             if (k >= atMax) { inSet = true; break; }
-            if (xr * xr + xi * xi > at.Esc2) break;
+            if (xr * xr + xi * xi > esc2) break;
             if (periodicity)
             {
                 if (SameRebaseState(xr, xi, snapR, snapI)) { inSet = true; Interlocked.Increment(ref s_laAtPeriodic); break; }
                 if (k >= nextSnap) { snapR = xr; snapI = xi; nextSnap = k + Math.Min(k, 1024); }
             }
         }
-        // Back: z = z'/A (relative to Z_0 = 0, so δ = z), dz/dc = (dz'/dc')·(A·B)/A.
-        zr = xr * at.InvZRe - xi * at.InvZIm; zi = xr * at.InvZIm + xi * at.InvZRe;
-        double gr = er * at.CRe - ei * at.CIm, gi = er * at.CIm + ei * at.CRe;
-        drv = gr * at.InvZRe - gi * at.InvZIm; div = gr * at.InvZIm + gi * at.InvZRe;
-        n = inSet ? maxIter : (int)(k * at.Len);
         return inSet;
     }
 

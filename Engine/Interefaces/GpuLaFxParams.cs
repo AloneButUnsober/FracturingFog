@@ -46,10 +46,20 @@ namespace FracturingFog.Rendering
                 Width = width, Height = height, MaxIter = maxIter, RefLen = refLen,
                 Stages = stages, AtLen = at.Len, StepsBase = 2 * stages,
                 EscapeR2 = (float)escapeRadius2,
-                AtEsc2 = (float)at.Esc2,
+                // #1886 — the kernel compares |z'|² in float: an Esc² past FLT_MAX (it runs to
+                // 2^256) became +∞, so the AT never escaped and a pixel that leaves it ran to
+                // the cap (in set). Leaving the AT at FLT_MAX is safe: the stages go on from z'/A.
+                AtEsc2 = (float)Math.Min(at.Esc2, float.MaxValue),
                 AtRefCR = (float)at.RefCRe, AtRefCI = (float)at.RefCIm,
             };
-            if (at.Len > 0)
+            if (at.Len > 0 && at.CFx is { } cfx && at.InvZFx is { } izfx && at.ThrCFx is { } tfx)
+            {
+                // #1886 — the float-exp AT (past double).
+                GpuFloatExp.Encode(tfx, out p.AtThrCM, out p.AtThrCE);
+                GpuFloatExp.Encode(cfx, out p.AtCR, out p.AtCI, out p.AtCE);
+                GpuFloatExp.Encode(izfx, out p.AtInvZR, out p.AtInvZI, out p.AtInvZE);
+            }
+            else if (at.Len > 0)
             {
                 GpuFloatExp.Encode(at.ThrC, out p.AtThrCM, out p.AtThrCE);
                 GpuFloatExp.Encode(at.CRe, at.CIm, out p.AtCR, out p.AtCI, out p.AtCE);
