@@ -55,6 +55,11 @@ public static class TilePlanner
     /// just slower).</summary>
     public const double SharedRefOrbitMaxZoom = 1e115;
 
+    /// <summary>#1884 (epic #1428, C6c) — log10 zoom past which the master ships the
+    /// BigFloat (tier-3) orbit instead (format version 2): no upper limit. Mirrors
+    /// <c>MandelbrotCalculator.DefaultApReferenceZoomLog10</c>.</summary>
+    public const double SharedRefOrbitApZoomLog10 = 110;
+
     /// <summary>D-6b2 — zoom at which the planner asks for a QD-limbs
     /// orbit instead of DD. Mirrors <c>MandelbrotCalculator.QDZoomThreshold</c>.</summary>
     public const double SharedRefOrbitQDThreshold = 1e25;
@@ -387,6 +392,9 @@ public static class TilePlanner
         if (!string.Equals(submitRequest.FractalType, "Mandelbrot", StringComparison.OrdinalIgnoreCase))
             return false;
         if (submitRequest.Zoom is not double z) return false;
+        // #1884 — past 1e110 the tier-3 orbit, at any depth (the log zoom past double).
+        double zl = submitRequest.ZoomLog10Value();
+        if (zl > SharedRefOrbitApZoomLog10) return true;
         return z >= SharedRefOrbitMinZoom && z <= SharedRefOrbitMaxZoom;
     }
 

@@ -54,4 +54,12 @@
     <ProjectReference Include="..\Hosting\FracturingFog.Hosting.csproj" />
   </ItemGroup>
 
+  <!-- #1884 (epic #1428, C6c): the host-side shared AP orbit glue and the server render
+       engine (ServerHost/, compiled into the WinExe and FracturingFog.App), linked so the
+       cluster tests exercise the shipped code. -->
+  <ItemGroup>
+    <Compile Include="..\ServerHost\SharedOrbitAp.cs" Link="Linked\SharedOrbitAp.cs" />
+    <Compile Include="..\ServerHost\HostFractalRenderEngine.cs" Link="Linked\HostFractalRenderEngine.cs" />
+  </ItemGroup>
+
 </Project>

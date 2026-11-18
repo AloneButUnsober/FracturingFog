@@ -296,6 +296,7 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
         MandelbrotCalculator.OrbitDD? seededOrbit   = null;
         MandelbrotCalculator.OrbitQD? seededOrbitQD = null;
         MandelbrotCalculator.OrbitOD? seededOrbitOD = null;
+        MandelbrotCalculator.OrbitAP? seededOrbitAP = null;   // #1884
         if (!string.IsNullOrEmpty(req.RefOrbitBlobBase64) && ftype == FractalType.Mandelbrot)
         {
             try
@@ -312,7 +313,15 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
                              && decoded.CentreY   == cy
                              && decoded.CentreYLo == cyLo;
                 bool capOk = iter <= decoded.MaxIter;
-                if (centreOk && capOk)
+                if (centreOk && capOk && decoded.Ap != null)
+                {
+                    // #1884 — the tier-3 (BigFloat) orbit past 1e110; the calculator's
+                    // tier-3 cache check (exact centre, precision) decides its use.
+                    seededOrbitAP = SharedOrbitAp.ToOrbit(decoded);
+                    log.Info($"seeded AP ref orbit: refLen={decoded.RefLen} maxIter={decoded.MaxIter} prec={decoded.Ap.Precision} " +
+                             $"{(seededOrbitAP == null ? "(exact centre did not parse: per-tile compute)" : "")}");
+                }
+                else if (centreOk && capOk)
                 {
                     switch (decoded.Limbs)
                     {
@@ -409,7 +418,11 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             CenterY5 = req.CenterY5,
             CenterY6 = req.CenterY6,
             CenterY7 = req.CenterY7,
+            // #1884 (epic #1428, C6c) — the exact centre past OD and the log zoom past
+            // double (C2b / C3b carry them on the request; the engine dropped them).
+            CenterExact = req.CentreExact(),
             Zoom = zoom,
+            ZoomLog10 = req.ZoomLog10 ?? double.NaN,
             MaxIterations = iter,
             ColorMap = theme,
             Quality = quality,
@@ -436,6 +449,7 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             SeededOrbit    = seededOrbit,
             SeededOrbitQD  = seededOrbitQD,
             SeededOrbitOD  = seededOrbitOD,
+            SeededOrbitAP  = seededOrbitAP,
         };
 
         // CPU-bound rasterization runs on a thread-pool worker. The outer
@@ -533,6 +547,13 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
 
         double logZ0 = Math.Log(startZoom);
         double logZ1 = Math.Log(endZoom);
+        // #1884 — past double the frames run on the log10 zoom (the batch video's rule, C10):
+        // the target's log from the request, the start's from its double.
+        double targetLog10 = req.ZoomLog10 is double tl && double.IsFinite(tl)
+            && FracturingFog.ViewState.ZoomLog.BeyondDouble(tl) ? tl : double.NaN;
+        double lz0 = Math.Log10(Math.Max(req.VideoStartZoom, 1e-12)), lz1 = targetLog10;
+        if (req.VideoReverse) (lz0, lz1) = (lz1, lz0);
+        bool deepVideo = !double.IsNaN(targetLog10);
         long ticksPerFrame = (long)(10_000_000L / Math.Max(req.VideoFps, 1));
 
         var sw = Stopwatch.StartNew();
@@ -553,12 +574,18 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
                     double t = totalFrames == 1 ? 1.0 : (double)f / (totalFrames - 1);
                     double te = t * t * (3.0 - 2.0 * t);
                     double frameZoom = Math.Exp(logZ0 + (logZ1 - logZ0) * te);
+                    double frameLog10 = double.NaN;
+                    if (deepVideo)
+                    {
+                        frameLog10 = lz0 + (lz1 - lz0) * te;
+                        frameZoom = FracturingFog.ViewState.ZoomLog.FromLog10(frameLog10);
+                    }
 
                     uint[] buffer = RenderOneFrame(
                         ftype, outW, outH,
                         cx, cxLo, cx2, cx3,
                         cy, cyLo, cy2, cy3,
-                        frameZoom, iter, theme, quality, ct);
+                        frameZoom, iter, theme, quality, ct, req, frameLog10);
 
                     if (mp4Local != null)
                     {
@@ -586,7 +613,7 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
 
                     written++;
                     if ((f & 0x1F) == 0)
-                        log.Info($"frame {f + 1}/{totalFrames} zoom={frameZoom:G4}");
+                        log.Info($"frame {f + 1}/{totalFrames} zoom={(deepVideo ? $"1e{frameLog10:F2}" : frameZoom.ToString("G4"))}");
                 }
             }
             finally
@@ -625,12 +652,13 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
         };
     }
 
-    private static uint[] RenderOneFrame(
+    internal static uint[] RenderOneFrame(   // #1884: internal for the linked tests
         FractalType ftype, int w, int h,
         double cx, double cxLo, double cx2, double cx3,
         double cy, double cyLo, double cy2, double cy3,
         double zoom, int iter,
-        IColorMap theme, QualityPreset quality, CancellationToken ct)
+        IColorMap theme, QualityPreset quality, CancellationToken ct,
+        RenderRequestDto? req = null, double zoomLog10 = double.NaN)
     {
         IFractalCalculator? alt = PosterRenderer.BuildCaptureCalculator(new PosterRequest
         {
@@ -660,6 +688,14 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             MaxIterations = iter,
             ColorMap = theme, Quality = quality,
         };
+        if (req != null)
+        {
+            // #1884 — the OD limbs (D-6b2), the exact centre past OD and the log zoom past
+            // double: as the image path's poster request.
+            calc.CenterX4 = req.CenterX4; calc.CenterX5 = req.CenterX5; calc.CenterX6 = req.CenterX6; calc.CenterX7 = req.CenterX7;
+            calc.CenterY4 = req.CenterY4; calc.CenterY5 = req.CenterY5; calc.CenterY6 = req.CenterY6; calc.CenterY7 = req.CenterY7;
+            calc.SetDepth(req.CentreExact(), zoomLog10);
+        }
         calc.Calculate(ct);
         return CopyBuffer(calc.ColorBuffer, w, h);
     }

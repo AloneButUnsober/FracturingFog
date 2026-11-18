@@ -110,6 +110,7 @@
     <Compile Include="..\ServerHost\ServerEntry.cs" Link="ServerEntry.cs" />
     <Compile Include="..\ServerHost\HostFractalRenderEngine.cs" Link="HostFractalRenderEngine.cs" />
     <Compile Include="..\ServerHost\ClusterEntry.cs" Link="ClusterEntry.cs" />
+    <Compile Include="..\ServerHost\SharedOrbitAp.cs" Link="SharedOrbitAp.cs" />
     <Compile Include="..\ServerHost\SkiaClusterImageCodec.cs" Link="SkiaClusterImageCodec.cs" />
     <Compile Include="..\ServerHost\ClusterParitySelfTest.cs" Link="ClusterParitySelfTest.cs" />
     <Compile Include="..\ServerHost\ClusterScaleSelfTest.cs" Link="ClusterScaleSelfTest.cs" />
