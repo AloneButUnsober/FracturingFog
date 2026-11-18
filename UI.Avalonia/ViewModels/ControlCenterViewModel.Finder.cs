@@ -673,16 +673,41 @@ public sealed partial class ControlCenterViewModel
         var target = camera.WorldFromScreen(e.X, e.Y, e.ClientWidth, e.ClientHeight);
         double reach = MorphPickRadiusPx * camera.Scale(e.ClientWidth, e.ClientHeight);
         double zoom = vs.Zoom;
+        double zoomLog10 = vs.ZoomLog10;
         FinderStatus = "Julia morph: searching near the target…";
+        if (map == null && zoomLog10 > DeepNucleusFinder.ZoomLog10Threshold)
+        {
+            // #1876 (C7d) — past 1e100: the exact target and log reach, BigFloat search, and a
+            // log-scale step on the exact nucleus.
+            var exactTarget = camera.ExactWorldFromScreen(e.X, e.Y, e.ClientWidth, e.ClientHeight);
+            double reachLog10 = Math.Log10(MorphPickRadiusPx) + camera.ScaleLog10(e.ClientWidth, e.ClientHeight);
+            _ = RunFinderAsync(async ct =>
+            {
+                try
+                {
+                    var q = await Task.Run(() => DeepNucleusFinder.FindMinibrot(exactTarget, reachLog10, ct: ct), ct);
+                    if (!q.Found)
+                    {
+                        FinderStatus = $"No minibrot within {MorphPickRadiusPx} px of that point — click elsewhere in the pattern.";
+                        return;
+                    }
+                    ApplyMorphStep(JuliaMorph.PlanDeep(q, zoomLog10, vs.Quality, vs.IterLocked, vs.LockedIterations), q.Period);
+                }
+                finally { Dispatcher.UIThread.Post(RearmMorph); }
+            });
+            return true;
+        }
         _ = RunFinderAsync(async ct =>
         {
             try
             {
+                NucleusResult odFound = default;   // #1876: kept for the hand-off past 1e100
                 // The target minibrot: nucleus, period and the zoom framing it.
                 var (found, nucleus, period, minibrotZoom) = map == null
                     ? await Task.Run(() =>
                     {
                         var q = NucleusFinder.FindMinibrot(target, reach, ct: ct);
+                        odFound = q;
                         return (q.Found, q.Nucleus, q.Period, q.Found ? 1.0 / q.Size.Magnitude : 0.0);
                     }, ct)
                     : await Task.Run(() =>
@@ -698,6 +723,17 @@ public sealed partial class ControlCenterViewModel
                 double maxZoom = map == null ? QualityPreset.Extreme.ZoomMax : AutoExplorer.DoubleMaxZoom;
                 var step = JuliaMorph.Plan(nucleus, period, minibrotZoom, zoom, vs.Quality, vs.IterLocked, vs.LockedIterations,
                                            maxZoom: maxZoom);
+                if (!step.Ok && step.Refusal == JuliaMorphRefusal.TooDeep && map == null && odFound.Found)
+                {
+                    // #1876 — the step lands past 1e100: carry the minibrot on in BigFloat
+                    // (on the search disk) and take the step there.
+                    var deep = await Task.Run(() => DeepNucleusFinder.CarryOn(odFound, target, reach, ct: ct), ct);
+                    if (deep.Found)
+                    {
+                        ApplyMorphStep(JuliaMorph.PlanDeep(deep, zoomLog10, vs.Quality, vs.IterLocked, vs.LockedIterations), period);
+                        return;
+                    }
+                }
                 if (!step.Ok)
                 {
                     FinderStatus = step.Refusal == JuliaMorphRefusal.NotDeeper
@@ -705,11 +741,7 @@ public sealed partial class ControlCenterViewModel
                         : $"That step would pass the deepest zoom ({Fmt(maxZoom)}).";
                     return;
                 }
-                string note = ApplyPlan(step.Plan);
-                _morphSteps.Add(($"{_morphSteps.Count + 1}. period {period} → zoom {Fmt(step.Plan.Zoom)}", step.Plan.PreferredIterations));
-                MorphPathText = MorphPathLines();
-                this.RaisePropertyChanged(nameof(HasMorphSteps));
-                FinderStatus = $"Morph layer {_morphSteps.Count}: toward the period-{period} minibrot, zoom {Fmt(step.Plan.Zoom)} ({step.Plan.Quality.Name}). Click the next target.{note}";
+                ApplyMorphStep(step, period);
             }
             finally
             {
@@ -719,6 +751,23 @@ public sealed partial class ControlCenterViewModel
             }
         });
         return true;
+    }
+
+    // Apply a planned morph step and record it in the morph path (#1876: shared by the
+    // OD, deep and hand-off routes).
+    private void ApplyMorphStep(in JuliaMorphStep step, int period)
+    {
+        if (!step.Ok)
+        {
+            FinderStatus = $"The period-{period} minibrot there is not deeper than this view — click further out in the pattern.";
+            return;
+        }
+        string note = ApplyPlan(step.Plan);
+        string z = FracturingFog.ViewState.ZoomLog.Format(step.Plan.Zoom, step.Plan.ZoomLog10, 4);
+        _morphSteps.Add(($"{_morphSteps.Count + 1}. period {period} → zoom {z}", step.Plan.PreferredIterations));
+        MorphPathText = MorphPathLines();
+        this.RaisePropertyChanged(nameof(HasMorphSteps));
+        FinderStatus = $"Morph layer {_morphSteps.Count}: toward the period-{period} minibrot, zoom {z} ({step.Plan.Quality.Name}). Click the next target.{note}";
     }
 
     private void UndoMorphStep()

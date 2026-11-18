@@ -64,15 +64,18 @@ public sealed partial class ControlCenterViewModel
 
         var (w, h) = main.RenderHost.LastPresentedSize;
         if (w <= 0 || h <= 0) return $"{name}: no frame yet to size the zoom for.";
+        // #1876 — any depth: past 1e100 the Unbounded tier, past double the log zoom, and the
+        // exact centre when the file's digits go past OD.
         double zoom = kfr!.FfZoom(w, h);
-        if (!(zoom <= QualityPreset.Extreme.ZoomMax))
-            return $"{name}: zoom {Fmt(zoom)} is beyond the deepest zoom (1e100).";
+        double zoomLog10 = kfr.FfZoomLog10(w, h);
 
         var (x, y) = kfr.Centre();
         Shell.RecordNavChange();
-        vs.SetCenter(DeepComplex.FromLimbs(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7],
-                                           y[0], y[1], y[2], y[3], y[4], y[5], y[6], y[7]));
-        vs.Zoom = zoom;
+        if (kfr.CentreExact() is { } exact) vs.SetCenterExact(exact);
+        else vs.SetCenter(DeepComplex.FromLimbs(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7],
+                                                y[0], y[1], y[2], y[3], y[4], y[5], y[6], y[7]));
+        if (FracturingFog.ViewState.ZoomLog.BeyondDouble(zoomLog10)) vs.SetZoomLog10(zoomLog10);
+        else vs.Zoom = zoom;
         var q = MinibrotJump.QualityFor(vs.Quality, zoom);
         if (!ReferenceEquals(q, vs.Quality))
         {
@@ -88,6 +91,8 @@ public sealed partial class ControlCenterViewModel
         }
         main.RenderHost.Trigger();
         string flip = kfr.ImagPointsUp ? " (imaginary axis up: centre conjugated)" : "";
-        return $"{name}: KF zoom {Fmt(kfr.KfZoom)} → zoom {Fmt(zoom)} at {w}×{h}{flip}.{iterNote}";
+        string kz = FracturingFog.ViewState.ZoomLog.Format(kfr.KfZoom, kfr.KfZoomLog10, 4);
+        string fz = FracturingFog.ViewState.ZoomLog.Format(zoom, zoomLog10, 4);
+        return $"{name}: KF zoom {kz} → zoom {fz} at {w}×{h}{flip}.{iterNote}";
     }
 }
