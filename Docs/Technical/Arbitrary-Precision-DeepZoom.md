@@ -29,8 +29,8 @@ the canonical task list; this doc backs them.
 | C7d .kfr import + Julia morph past 1e100 | #1876 | §26 (merged, PR #1877) |
 | C7f auto-explore + loop video past 1e100 | #1878 | §27 (merged, PR #1879) |
 | C6a GPU float-exp LA kernel past 1e100 (to 1e290) | #1880 | §28 (merged, PR #1881) |
-| C6b GPU float-exp pixel scale past 1e290 | #1882 | §29 |
-| C6 rest (the cluster's shared-orbit blob) | filed when started | |
+| C6b GPU float-exp pixel scale past 1e290 | #1882 | §29 (merged, PR #1883) |
+| C6c server engine + cluster shared-orbit blob past 1e100 | #1884 | §30 |
 
 ## 1. Why a new number type
 
@@ -185,7 +185,7 @@ A double zoom overflows at about 1.8e308. A double log10 zoom does not, and it k
 - The worker's clone copies the log.
 - **Not changed.**
   - **Live video keyframes:** those legs clamp to Ultra's `ZoomMax`.
-  - **The host engine:** renders with its double zoom. Rendering past 1e100 is C4–C6.
+  - **The host engine:** renders with its double zoom. Rendering past 1e100 is C4–C6. *(C6c, §30: the engine now takes the exact centre and the log zoom.)*
   - **Batch:** C10.
 
 ## 10. The arbitrary-precision reference orbit (C4, #1840)
@@ -216,7 +216,7 @@ A double zoom overflows at about 1.8e308. A double log10 zoom does not, and it k
   - **Past OD:** two exact centres 1e-250 apart, with the same OD limbs, give orbits whose difference is δc · dZ_n/dc (the derivative computed in double) to 1e-6, over the steps where that product is between 1e-40 and 1e-20. The OD orbit cannot see that difference at all.
 - **Not yet.**
   - **C5:** floatexp storage of Z_n near a nucleus, where doubles underflow; floatexp δ / BLA / SA; the per-pixel OD glitch fallback past OD; anti-aliasing jitter of the exact centre.
-  - **C6:** GPU, and the cluster's shared-orbit blob.
+  - **C6:** GPU, and the cluster's shared-orbit blob. *(Done: §28–§30.)*
   - **C10:** batch.
 
 ## 11. Floatexp pixels past double (C5a, #1842)
@@ -706,3 +706,30 @@ Past 1e290 the pixel scale underflows double, so every frame rendered on the CPU
   - **Jitter:** a pixel jitter moves the GPU frame as it moves the CPU's (0 pixels differ; 117 of 576 differ from the unjittered frame).
   - **Fallback:** with LA off the frame stays on the CPU, with the reason.
   - **C6a's test:** `S1880`'s past-1e290 test now checks the switch: on, the kernel runs; off, the CPU rows run with the reason.
+
+## 30. The server engine and the cluster's shared orbit past 1e100 (C6c, #1884)
+
+This is the last C6 slice, so the GPU and cluster parts of the epic are done.
+
+- **The server engine dropped the depth.** `HostFractalRenderEngine`, the server's only `IFractalRenderEngine`, never passed the request's exact centre or log zoom to the poster request. C2b and C3b carry both on the DTO and through the tile planner. As a result, a server or cluster tile past OD rendered the OD-rounded centre, and past double it rendered at a saturated zoom.
+  - **Image renders** now set `CenterExact` (`req.CentreExact()`) and `ZoomLog10`. A region's exact centre already reached the request (#1833).
+  - **Video frames** take the OD limbs X4–X7 (D-6b2; the frame renderer dropped those too), the exact centre, and, past double, a log10 zoom interpolated as the batch video does (C10). Within double the frames are unchanged.
+- **The shared reference orbit past 1e110.**
+  - D-6b / D-6b2 ship DD / QD / OD orbits up to 1e115. Past `ApReferenceZoomLog10` (110) every tile built the BigFloat orbit itself (C4), O(maxIter · prec²) once per tile. Between 1e110 and 1e115 the master shipped an OD orbit the tile's tier-3 cache could not use.
+  - **Master.** `ComputeReferenceOrbitAPPublic` builds the tier-3 orbit once, as the frame of the full image would. The full image's pixel size sets the period tolerance (#1614 / #1854), and a tile's is the same.
+  - **Wire format.** `ReferenceOrbitBlobCodec` format version 2 is the OD layout plus an AP extension: the precision, the period data, the useful-zoom bound, and the exact centre as decimal text at its bits. A version-1 decoder refuses it, so an old worker builds the orbit itself.
+  - **Glue.** `ServerHost/SharedOrbitAp.cs` converts between the engine's `OrbitAP` and the blob; the Server library stays Engine-free.
+  - **Worker.** `SeedReferenceOrbitAP` seeds the tier-3 cache. The calculator's own cache check (exact centre, precision, cap, period tolerance) decides whether to use it, and a seed for another view is rebuilt, never used.
+  - **Planner.** It ships the orbit past 1e110 at any depth, on the log zoom. `MandelbrotCalculator.DefaultApReferenceZoomLog10` and `TilePlanner.SharedRefOrbitApZoomLog10` mirror each other.
+- **Validation** (`S1884SharedOrbitApTests`; the host files are linked into Server.Tests). Mutation checks: 12 of 12 caught.
+  - **The orbit:** the master's orbit is the tile's own, limb for limb, with the same period data, at 1e150 (the dense 340-digit centre) and 1e320.
+  - **The blob:** it round-trips every field, including a period FloatExp, and is refused when truncated. OD blobs still decode.
+  - **A seeded tile:** it renders byte-identically to an unseeded one without building an orbit. A seed one pixel off is rebuilt, with the same pixels.
+  - **The period** (the period-2 nucleus c = −1, where Z₂ = 0 exactly).
+    - At the nucleus the period ships and is used.
+    - Just off it, where |Z₂| lies between the image's pixel and a 1-pixel frame's, the master detects no period, as the tile doesn't.
+    - Deep minibrot nuclei don't show their period at the zoom's precision: the rounding, amplified, exceeds the pixel.
+  - **The engine:**
+    - It renders an exact request at 1e150 and 1e320 as the poster path does. Without the exact centre the frame differs.
+    - A seeded tile request renders as an unseeded one, and a poisoned seed changes it, which shows the seed reaches the calculator.
+    - A video frame at 1e320 is the direct render.

@@ -153,7 +153,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     /// (tier 3, "AP-PT"). 110 = past Extreme's 1e100 (every view the Extreme tier reaches
     /// keeps the OD orbit, byte-identical; the Unbounded tier, #1861, goes past it); within OD's measured
     /// clean floor (~1e120, --qdfloorsweep).</summary>
-    public double ApReferenceZoomLog10 { get; set; } = 110;
+    public double ApReferenceZoomLog10 { get; set; } = DefaultApReferenceZoomLog10;   // #1884: the cluster mirrors it
 
     private DeepComplex CurrentCentreLimbs() => DeepComplex.FromLimbs(
         CenterX, CenterXLo, CenterX2, CenterX3, CenterX4, CenterX5, CenterX6, CenterX7,

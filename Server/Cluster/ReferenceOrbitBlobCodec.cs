@@ -57,6 +57,23 @@
 // sees `limbs=4` and refuses with a clear error message. A QD/OD-capable
 // worker switches on `limbs` and seeds the calculator's QD / OD orbit
 // cache via SeedReferenceOrbitQD / SeedReferenceOrbitOD.
+//
+// #1884 (epic #1428, C6c) — format version 2: the BigFloat (tier-3, "AP")
+// orbit past 1e110. The OD layout (limbs = 8, header, centre limbs, 16
+// arrays) with an AP extension between the centre limbs and the arrays:
+//
+//     +0   4  precision (int32, bits the orbit was built at)
+//     +4   4  period (int32; 0 = none, #1614)
+//     +8   8  periodZ2 (double, |Z_p|²)
+//     +16  8  periodZ2Fx mantissa (double, #1854; 0 = none)
+//     +24  8  periodZ2Fx exponent (int64)
+//     +32  8  maxUsefulZoomLog10 (double, +inf = none, #1427)
+//     +40  4  exact-centre bits (int32)
+//     +44  4  byte length of the real part's decimal text (int32), then the UTF-8 text
+//     ..   4  byte length of the imaginary part's text (int32), then the UTF-8 text
+//
+// A version-1 decoder refuses it ("format version unsupported: 2"), so a
+// worker without tier-3 seeding builds the orbit itself.
 
 using System;
 using System.Buffers.Binary;
@@ -67,6 +84,10 @@ public static class ReferenceOrbitBlobCodec
 {
     public const byte MagicByte     = 0xD6;
     public const byte FormatVersion = 1;
+    /// <summary>#1884 — the AP (tier-3) blob's format version.</summary>
+    public const byte FormatVersionAp = 2;
+    /// <summary>#1884 — the longest exact-centre text accepted per part (bytes).</summary>
+    public const int MaxExactTextBytes = 1 << 20;
     public const byte LimbsDD       = 2;
     public const byte LimbsQD       = 4;
     public const byte LimbsOD       = 8;
@@ -78,8 +99,17 @@ public static class ReferenceOrbitBlobCodec
     /// when <see cref="Limbs"/> == 8 (OD). Centre fields follow the same
     /// rule. Unused arrays are <see cref="Array.Empty{T}"/>; unused
     /// centre limbs are zero.</summary>
+    /// <summary>#1884 — the AP blob's extension: what the tier-3 cache needs besides the
+    /// stored Z_n (the exact centre as decimal text at its bits, as
+    /// <c>RenderRequestDto.CenterExactX</c>).</summary>
+    public sealed record ApExtension(
+        int Precision, int Period, double PeriodZ2, double PeriodZ2FxMantissa, long PeriodZ2FxExponent,
+        double MaxUsefulZoomLog10, int ExactBits, string ExactX, string ExactY);
+
     public sealed class DecodedOrbit
     {
+        /// <summary>#1884 — the AP extension (version-2 blobs), else null.</summary>
+        public ApExtension? Ap { get; init; }
         public required byte    Limbs       { get; init; }
         public required int     RefLen      { get; init; }
         public required int     MaxIter     { get; init; }
@@ -257,6 +287,76 @@ public static class ReferenceOrbitBlobCodec
         return buf;
     }
 
+    /// <summary>#1884 — encode a tier-3 (BigFloat) orbit: <see cref="EncodeOD"/>'s layout
+    /// as format version 2, with <paramref name="ap"/> before the arrays.</summary>
+    public static byte[] EncodeAP(
+        int refLen, int maxIter, bool escaped,
+        double[] centreXLimbs, double[] centreYLimbs, double[][] arrays16, ApExtension ap)
+    {
+        if (ap == null) throw new ArgumentNullException(nameof(ap));
+        if (centreXLimbs.Length != 8 || centreYLimbs.Length != 8 || arrays16.Length != 16)
+            throw new ArgumentException("an AP blob takes 8 + 8 centre limbs and 16 arrays");
+        byte[] od = EncodeOD(refLen, maxIter, escaped,
+            centreXLimbs[0], centreXLimbs[1], centreXLimbs[2], centreXLimbs[3],
+            centreXLimbs[4], centreXLimbs[5], centreXLimbs[6], centreXLimbs[7],
+            centreYLimbs[0], centreYLimbs[1], centreYLimbs[2], centreYLimbs[3],
+            centreYLimbs[4], centreYLimbs[5], centreYLimbs[6], centreYLimbs[7],
+            arrays16[0], arrays16[1], arrays16[2], arrays16[3], arrays16[4], arrays16[5], arrays16[6], arrays16[7],
+            arrays16[8], arrays16[9], arrays16[10], arrays16[11], arrays16[12], arrays16[13], arrays16[14], arrays16[15]);
+        byte[] ext = EncodeApExtension(ap);
+        int head = HeaderBytes + 4 * 8 + 8 * 8;
+        var buf = new byte[od.Length + ext.Length];
+        Array.Copy(od, 0, buf, 0, head);
+        Array.Copy(ext, 0, buf, head, ext.Length);
+        Array.Copy(od, head, buf, head + ext.Length, od.Length - head);
+        buf[1] = FormatVersionAp;
+        return buf;
+    }
+
+    private static byte[] EncodeApExtension(ApExtension ap)
+    {
+        byte[] x = System.Text.Encoding.UTF8.GetBytes(ap.ExactX ?? "");
+        byte[] y = System.Text.Encoding.UTF8.GetBytes(ap.ExactY ?? "");
+        if (x.Length > MaxExactTextBytes || y.Length > MaxExactTextBytes)
+            throw new ArgumentException("exact-centre text too long");
+        var b = new byte[48 + x.Length + 4 + y.Length];
+        var s = b.AsSpan();
+        BinaryPrimitives.WriteInt32LittleEndian(s.Slice(0, 4), ap.Precision);
+        BinaryPrimitives.WriteInt32LittleEndian(s.Slice(4, 4), ap.Period);
+        BinaryPrimitives.WriteDoubleLittleEndian(s.Slice(8, 8), ap.PeriodZ2);
+        BinaryPrimitives.WriteDoubleLittleEndian(s.Slice(16, 8), ap.PeriodZ2FxMantissa);
+        BinaryPrimitives.WriteInt64LittleEndian(s.Slice(24, 8), ap.PeriodZ2FxExponent);
+        BinaryPrimitives.WriteDoubleLittleEndian(s.Slice(32, 8), ap.MaxUsefulZoomLog10);
+        BinaryPrimitives.WriteInt32LittleEndian(s.Slice(40, 4), ap.ExactBits);
+        BinaryPrimitives.WriteInt32LittleEndian(s.Slice(44, 4), x.Length);
+        x.CopyTo(s.Slice(48));
+        BinaryPrimitives.WriteInt32LittleEndian(s.Slice(48 + x.Length, 4), y.Length);
+        y.CopyTo(s.Slice(52 + x.Length));
+        return b;
+    }
+
+    private static ApExtension DecodeApExtension(Span<byte> s, ref int off)
+    {
+        if (s.Length < off + 48) throw new InvalidOperationException("orbit blob truncated in its AP extension");
+        int prec = BinaryPrimitives.ReadInt32LittleEndian(s.Slice(off, 4));
+        int period = BinaryPrimitives.ReadInt32LittleEndian(s.Slice(off + 4, 4));
+        double pz2 = BinaryPrimitives.ReadDoubleLittleEndian(s.Slice(off + 8, 8));
+        double pfm = BinaryPrimitives.ReadDoubleLittleEndian(s.Slice(off + 16, 8));
+        long pfe = BinaryPrimitives.ReadInt64LittleEndian(s.Slice(off + 24, 8));
+        double mu = BinaryPrimitives.ReadDoubleLittleEndian(s.Slice(off + 32, 8));
+        int bits = BinaryPrimitives.ReadInt32LittleEndian(s.Slice(off + 40, 4));
+        int xl = BinaryPrimitives.ReadInt32LittleEndian(s.Slice(off + 44, 4));
+        if (prec <= 0 || period < 0 || xl < 0 || xl > MaxExactTextBytes || s.Length < off + 52 + xl)
+            throw new InvalidOperationException("orbit blob AP extension malformed");
+        string x = System.Text.Encoding.UTF8.GetString(s.Slice(off + 48, xl));
+        int yl = BinaryPrimitives.ReadInt32LittleEndian(s.Slice(off + 48 + xl, 4));
+        if (yl < 0 || yl > MaxExactTextBytes || s.Length < off + 52 + xl + yl)
+            throw new InvalidOperationException("orbit blob AP extension malformed");
+        string y = System.Text.Encoding.UTF8.GetString(s.Slice(off + 52 + xl, yl));
+        off += 52 + xl + yl;
+        return new ApExtension(prec, period, pz2, pfm, pfe, mu, bits, x, y);
+    }
+
     public static DecodedOrbit Decode(byte[] blob)
     {
         if (blob == null) throw new ArgumentNullException(nameof(blob));
@@ -268,10 +368,13 @@ public static class ReferenceOrbitBlobCodec
         if (s[0] != MagicByte)
             throw new InvalidOperationException(
                 $"orbit blob magic mismatch: got 0x{s[0]:X2}, want 0x{MagicByte:X2}");
-        if (s[1] != FormatVersion)
+        if (s[1] != FormatVersion && s[1] != FormatVersionAp)
             throw new InvalidOperationException(
                 $"orbit blob format version unsupported: {s[1]}");
+        bool isAp = s[1] == FormatVersionAp;   // #1884
         byte limbs = s[2];
+        if (isAp && limbs != LimbsOD)
+            throw new InvalidOperationException($"AP orbit blob with limbs={limbs} (must be 8)");
         if (limbs != LimbsDD && limbs != LimbsQD && limbs != LimbsOD)
             throw new InvalidOperationException(
                 $"orbit blob limbs={limbs} not supported (must be 2 / 4 / 8)");
@@ -295,6 +398,7 @@ public static class ReferenceOrbitBlobCodec
         if (blob.Length < expectedBytes)
             throw new InvalidOperationException(
                 $"orbit blob truncated: have {blob.Length}, need {expectedBytes}");
+        ApExtension? ap = null;
 
         int off = HeaderBytes;
         double cx2 = 0, cx3 = 0, cy2 = 0, cy3 = 0;
@@ -317,6 +421,14 @@ public static class ReferenceOrbitBlobCodec
             cy5 = BinaryPrimitives.ReadDoubleLittleEndian(s.Slice(off, 8)); off += 8;
             cy6 = BinaryPrimitives.ReadDoubleLittleEndian(s.Slice(off, 8)); off += 8;
             cy7 = BinaryPrimitives.ReadDoubleLittleEndian(s.Slice(off, 8)); off += 8;
+        }
+        if (isAp)
+        {
+            // #1884 — the AP extension sits between the centre limbs and the arrays.
+            ap = DecodeApExtension(s, ref off);
+            if (blob.Length < off + arrayCount * slots * 8)
+                throw new InvalidOperationException(
+                    $"orbit blob truncated: have {blob.Length}, need {off + arrayCount * slots * 8}");
         }
 
         double[] zr   = ReadArray(s, ref off, slots);
@@ -351,6 +463,7 @@ public static class ReferenceOrbitBlobCodec
 
         return new DecodedOrbit
         {
+            Ap        = ap,
             Limbs     = limbs,
             RefLen    = refLen,
             MaxIter   = maxIter,

@@ -132,6 +132,21 @@ public static class ClusterEntry
                 try
                 {
                     double zoom = request.Zoom ?? 0.0;
+                    // #1884 (C6c) — past 1e110 the BigFloat (tier-3) orbit the workers would
+                    // each build, once, at the full image's period tolerance.
+                    double zl = request.ZoomLog10Value();
+                    if (zl > FracturingFog.MandelbrotCalculator.DefaultApReferenceZoomLog10)
+                    {
+                        var limbs = FracturingFog.FFMath.DeepComplex.FromLimbs(
+                            request.CenterX!.Value, request.CenterXLo, request.CenterX2, request.CenterX3,
+                            request.CenterX4, request.CenterX5, request.CenterX6, request.CenterX7,
+                            request.CenterY!.Value, request.CenterYLo, request.CenterY2, request.CenterY3,
+                            request.CenterY4, request.CenterY5, request.CenterY6, request.CenterY7);
+                        var ap = FracturingFog.MandelbrotCalculator.ComputeReferenceOrbitAPPublic(
+                            limbs, request.CentreExact(), zl, request.Width, request.Height, maxIter);
+                        if (ap == null) return null;
+                        return (FracturingFog.Server.Cluster.SharedOrbitAp.Encode(ap), ap.Od.MaxIter);
+                    }
                     if (zoom > FracturingFog.Server.Cluster.TilePlanner.SharedRefOrbitODThreshold)
                     {
                         var orbit = FracturingFog.MandelbrotCalculator

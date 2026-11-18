@@ -251,6 +251,11 @@ namespace FracturingFog.Imaging
         /// 1e50). Same single-active-orbit constraint as
         /// <see cref="SeededOrbitQD"/>.</summary>
         public MandelbrotCalculator.OrbitOD? SeededOrbitOD { get; init; }
+
+        /// <summary>#1884 (epic #1428, C6c) — the tier-3 (BigFloat) shared reference orbit,
+        /// past 1e110. Same single-active-orbit constraint; the calculator's tier-3 cache
+        /// check (exact centre, precision, cap) decides whether it is used.</summary>
+        public MandelbrotCalculator.OrbitAP? SeededOrbitAP { get; init; }
     }
 
     /// <summary>Outcome of a poster render — the on-disk pixel dimensions
@@ -803,6 +808,11 @@ namespace FracturingFog.Imaging
                 {
                     // D-6b2 — OD orbit path (zoom > 1e50).
                     calc.SeedReferenceOrbitOD(req.SeededOrbitOD);
+                }
+                else if (req.SeededOrbitAP != null)
+                {
+                    // #1884 — the BigFloat orbit past 1e110.
+                    calc.SeedReferenceOrbitAP(req.SeededOrbitAP);
                 }
                 calc.Calculate(token);
                 token.ThrowIfCancellationRequested();

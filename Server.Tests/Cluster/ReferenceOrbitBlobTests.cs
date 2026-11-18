@@ -112,9 +112,11 @@ public sealed class ReferenceOrbitBlobTests
         {
             FractalType = "Mandelbrot", Zoom = 1e80,
         }));
-        // Above OD ceiling — refused (calculator's own X7 noise floor
-        // takes over; cluster shipping a blob the worker can't trust).
-        Assert.False(TilePlanner.QualifiesForSharedReferenceOrbit(new RenderRequestDto
+        // Above the OD ceiling this was refused (the calculator's own X7 noise
+        // floor takes over; an OD blob the worker can't trust). #1884 (C6c):
+        // past 1e110 the master ships the BigFloat (tier-3) orbit instead —
+        // accepted (S1884SharedOrbitApTests).
+        Assert.True(TilePlanner.QualifiesForSharedReferenceOrbit(new RenderRequestDto
         {
             FractalType = "Mandelbrot", Zoom = 1e120,
         }));
