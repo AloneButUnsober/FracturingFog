@@ -24,8 +24,9 @@ the canonical task list; this doc backs them.
 | C11 validation + docs | #1864 | §21 (merged, PR #1865) |
 | C7a period detection + zoom to minibrot past 1e100 | #1866 | §22 (merged, PR #1867) |
 | C7b Snap to spiral (Misiurewicz) past 1e100 | #1868 | §23 (merged, PR #1869) |
-| C7c angle → landing past 1e100 (deep ray trace) | #1870 | §24 |
-| C7e location → angles past 1e100; C7d auto-explore, Julia morph, .kfr, loop video | filed when started | |
+| C7c angle → landing past 1e100 (deep ray trace) | #1870 | §24 (merged, PR #1871) |
+| C7e location → angles past 1e100 | #1873 | §25 |
+| C7d auto-explore, Julia morph, .kfr, loop video | filed when started | |
 | C6 | filed when started (see #1428) | |
 
 ## 1. Why a new number type
@@ -553,3 +554,35 @@ C7 was re-sliced once more:
     - The same tuned angle at n = 125 lands M(376, 125) at ~1e-146, but takes 46 s. The repeated landing attempts dominate.
     - A precision raise in `Refine` by log₂ max |dz/dc| was tried here and dropped: the n = 60 and n = 125 landings succeed without it.
     - At n = 30 the OD trace fails both the tuned angle and the antenna tip angle `.1 0²⁹ (0 1²⁹)`. That tip is a real-axis point among many Misiurewicz points where Newton creeps, and the deep trace fails it too.
+
+## 25. Location → angles past 1e100 (C7e, #1873)
+
+- **`DeepLocationAngles`** (`Abstractions/Explore`) is `LocationAngles` in BigFloat and floatexp.
+  - **`Root`:** the interior coordinate b walks 0 → 1. Newton runs on (z₀, c), perturbed about the nucleus orbit (BigFloat, stored as double), with the offsets in CFx.
+  - **Probe rings** sit around the root (component) or the point (Misiurewicz). Each probe is escape-tested in CFx about the root's own orbit, and the shallowest deep-enough probes are traced outward.
+  - **`TraceOut`** takes the probe's exact orbit in BigFloat to its escape. It then runs `DeepExternalRay.SolveDepth` on the offset in CFx, reading one digit per depth.
+  - **Verification:** each candidate is landed with `DeepExternalRay.Land`. It is kept only if it lands back within 1% of the component's size, or within 1e-6 of the scale of the point.
+- **Control Center:**
+  - After a deep Zoom to minibrot (and the OD hand-off), the angle pair and the angled internal address are shown.
+  - After a deep Snap to spiral, the point's angles are shown.
+  - The status says this can take a while.
+  - The loop video stays OD-only (C7d).
+- **Validation** (`S1873DeepLocationAnglesTests`). The expected answers come from theory, not from FF.
+  - **Antenna minibrot, period 125** (~1e-149):
+    - The angles are exactly `.(0 1¹²⁴)` and `.(1 0¹²⁴)`.
+    - The root offset is Size/4 to 5% of the size: the main cardioid's cusp, carried by the atom map.
+    - Takes 17 s.
+  - **Agreement with OD:** at period 30 the result equals `LocationAngles`.
+  - **M(4,1)'s copy in the period-10 minibrot** gets exactly its three tuned angles, ascending. Takes 10 s.
+  - **Measured, not in the suite:**
+    - The same three tuned angles come back at period 30 (~1e-34, 48 s) and period 60 (~1e-70, 145 s).
+    - Verification lands each candidate, so the time is #1872's.
+  - **Reach** (smoke test, 2026-11-18). Four saved minibrots past 1e100 (periods 7,805, 22,320, 57,563 and about 1,100) searched, then reported "could not be verified".
+    - A probe must escape no earlier than `ProbeMinDepth` (4) periods within the `RingMaxDepth` (4,000) iteration ring orbit. Past period 1,000 no probe qualifies.
+    - Verifying a candidate lands a ray of about 10 bits per period digit, at a cost that grows with its square.
+    - `LocationAngles.MaxAnglePeriod` (= 4000 / 4) and `WithinReach` now stop both the OD and the deep searches at once past it, for components (the period) and Misiurewicz points (preperiod + period).
+    - The Control Center says so instead of searching.
+    - Angles past that reach are a research item (#1875).
+  - **Mutation checks: 3 of 5 caught.** Two survived:
+    - **Preperiod split off by one:** this mutant is equivalent. `ExternalAngle.FromBits` reduces an angle to its canonical form, and the extra preperiod digit of a correct trace is the one the cycle has there.
+    - **Dropping the landing-distance check:** this is a guard. Every candidate traced in the tests is genuine.
