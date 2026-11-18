@@ -5,9 +5,11 @@
 // every anti-aliasing sample rebuilt it at its jittered centre. Checked on the bench-kit
 // scenes (fractadyne bench-kit, WindySnowOwl, from rith's FF 0.7.1 report; see the
 // bibliography; centres as S1664Scenes):
-//   • Cancellation: a p951,094 OD orbit build stops within a fraction of its own build
-//     time when the token is cancelled, and the next frame at that centre is
-//     byte-identical to a fresh calculator's (no half-built orbit is taken for the cache).
+//   • Cancellation: a p951,094 OD orbit build with a cancelled token stops at its first
+//     cancel poll, before the orbit outgrows its initial 65,536 entries (a full build
+//     needs more), and the next frame at that centre is byte-identical to a fresh
+//     calculator's (no half-built orbit is taken for the cache). #1852: counted in
+//     iterations, not wall-clock time, which a cold JIT or a loaded machine broke.
 //   • Reuse: a jittered sample recycles the unjittered orbit (one recycle hit, no new
 //     build). Independent check: it agrees with a fresh calculator rendered at the
 //     jittered centre (its own orbit, the path before #1427) on in / out everywhere and
@@ -19,7 +21,6 @@
 //     and agrees with the fresh GPU frame at the jittered centre as above.
 
 using System;
-using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using FracturingFog.Models;
@@ -71,24 +72,28 @@ public sealed class S1427OrbitPileupTests(ITestOutputHelper output) : IDisposabl
 
     // ── Cancellation ─────────────────────────────────────────────────────────────
 
+    // The orbit arrays start at this many entries and double as the build passes them
+    // (#1828; MandelbrotCalculator.RefOrbitInitialCapacity).
+    private const int InitialOrbitCapacity = 1 << 16;
+
     [Fact]
     public void A_Cancelled_Deep_Orbit_Build_Stops_And_Leaves_No_Stale_Cache()
     {
         var s = S1664Scenes.P951094;
         var fresh = New(s);
         fresh.Calculate(CancellationToken.None);
-        double orbitMs = fresh.LastHpStageMs.RefOrbit;
-        output.WriteLine($"p951,094 orbit build: {orbitMs:F0} ms");
-        Assert.True(orbitMs > 400, $"precondition: the orbit build is long enough to cancel ({orbitMs:F0} ms)");
+        output.WriteLine($"p951,094 full orbit: {fresh.ReferenceOrbitCapacity:N0} entries");
+        Assert.True(fresh.ReferenceOrbitCapacity > InitialOrbitCapacity,
+            "precondition: a full build outgrows the initial capacity");
 
+        // #1852: a token cancelled before the frame, not after a delay. The build polls it
+        // every 64 iterations (OD) and must stop there: it began (the arrays exist) and never
+        // grew them. A build that ignored the token would run all 951,094 iterations.
         var c = New(s);
-        using var cts = new CancellationTokenSource();
-        cts.CancelAfter(50);
-        var sw = Stopwatch.StartNew();
-        Assert.ThrowsAny<OperationCanceledException>(() => c.Calculate(cts.Token));
-        double ms = sw.Elapsed.TotalMilliseconds;
-        output.WriteLine($"cancelled after {ms:F0} ms");
-        Assert.True(ms < 50 + orbitMs * 0.5, $"cancel took {ms:F0} ms of a {orbitMs:F0} ms build");
+        Assert.Equal(0, c.ReferenceOrbitCapacity);
+        Assert.ThrowsAny<OperationCanceledException>(() => c.Calculate(new CancellationToken(true)));
+        output.WriteLine($"cancelled build: {c.ReferenceOrbitCapacity:N0} entries");
+        Assert.Equal(InitialOrbitCapacity, c.ReferenceOrbitCapacity);
 
         // The same centre again: a full build, the same frame as a calculator that never
         // saw the cancel (a stale cache hit would render from a half-built orbit).
@@ -117,11 +122,9 @@ public sealed class S1427OrbitPileupTests(ITestOutputHelper output) : IDisposabl
         c.CenterX = b.X[0]; c.CenterXLo = b.X[1]; c.CenterX2 = b.X[2]; c.CenterX3 = b.X[3]; c.CenterX4 = b.X[4]; c.CenterX5 = b.X[5]; c.CenterX6 = b.X[6]; c.CenterX7 = b.X[7];
         c.CenterY = b.Y[0]; c.CenterYLo = b.Y[1]; c.CenterY2 = b.Y[2]; c.CenterY3 = b.Y[3]; c.CenterY4 = b.Y[4]; c.CenterY5 = b.Y[5]; c.CenterY6 = b.Y[6]; c.CenterY7 = b.Y[7];
         c.Zoom = S1664Scenes.FfZoom(b, W, H); c.MaxIterations = b.Iter;
-        using (var cts = new CancellationTokenSource())
-        {
-            cts.CancelAfter(50);
-            Assert.ThrowsAny<OperationCanceledException>(() => c.Calculate(cts.Token));   // p951,094's build, cut short
-        }
+        // p951,094's build, cut short at its first cancel poll (#1852: no timer). It has
+        // already overwritten the first entries of p448's orbit.
+        Assert.ThrowsAny<OperationCanceledException>(() => c.Calculate(new CancellationToken(true)));
         c.CenterX = a.X[0]; c.CenterXLo = a.X[1]; c.CenterX2 = a.X[2]; c.CenterX3 = a.X[3]; c.CenterX4 = a.X[4]; c.CenterX5 = a.X[5]; c.CenterX6 = a.X[6]; c.CenterX7 = a.X[7];
         c.CenterY = a.Y[0]; c.CenterYLo = a.Y[1]; c.CenterY2 = a.Y[2]; c.CenterY3 = a.Y[3]; c.CenterY4 = a.Y[4]; c.CenterY5 = a.Y[5]; c.CenterY6 = a.Y[6]; c.CenterY7 = a.Y[7];
         c.Zoom = S1664Scenes.FfZoom(a, W, H); c.MaxIterations = a.Iter;
