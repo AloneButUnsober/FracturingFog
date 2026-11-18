@@ -296,14 +296,12 @@ public sealed partial class ControlCenterViewModel
                 return;
             }
             // #1866 — a minibrot found in a shallower view whose framing lies past 1e100:
-            // carry its nucleus on in BigFloat (OD holds it only to ~1e-110) and frame it there.
+            // carry its nucleus on in BigFloat on the same view disk (OD places it only to
+            // ~1e-125, far coarser than such a minibrot) and frame it there.
             var shallowVs = Shell.Main.ViewState;
-            if (MinibrotJump.Plan(found, shallowVs.Quality, shallowVs.IterLocked, shallowVs.LockedIterations) is null
-                && found.Size.Magnitude > 0)
+            if (MinibrotJump.Plan(found, shallowVs.Quality, shallowVs.IterLocked, shallowVs.LockedIterations) is null)
             {
-                double sizeLog10 = Math.Log10(found.Size.Magnitude);
-                var seed = FFMath.ExactCentre.FromDeep(found.Nucleus, FFMath.BigFloat.PrecisionForZoom(-sizeLog10));
-                var deep = await Task.Run(() => DeepNucleusFinder.Find(seed, found.Period, sizeLog10 + 1, ct: ct), ct);
+                var deep = await Task.Run(() => DeepNucleusFinder.CarryOn(found, v.Centre, v.Radius, ct: ct), ct);
                 if (deep.Found) { ApplyDeepMinibrotJump(deep); return; }
             }
             ApplyMinibrotJump(found);

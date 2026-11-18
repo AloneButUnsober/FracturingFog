@@ -456,7 +456,9 @@ C7 is sliced as C5 was:
 - **Control Center:**
   - **Routing:** past `ZoomLog10Threshold = 100`, the view disk is built from the exact centre (or the limbs' own value) and the log radius. Detect period and Zoom to minibrot then route to the deep finder.
   - **Applying a plan:** `ApplyPlan` sets the exact centre and, past double, the log zoom.
-  - **Handoff:** a minibrot found by the OD finder in a shallower view whose framing lies past 1e100 is no longer refused ("beyond the deepest zoom"). Its OD nucleus seeds `DeepNucleusFinder.Find`, which carries it on.
+  - **Handoff:** a minibrot found by the OD finder in a shallower view whose framing lies past 1e100 is no longer refused ("beyond the deepest zoom"). `DeepNucleusFinder.CarryOn` runs Newton in BigFloat from its OD nucleus, on the same view disk the OD search ran on.
+    - The disk must be the view's, not one sized from the minibrot. OD places the nucleus only to about \|c\|·1e-125, and such a minibrot can be far smaller.
+    - Smoke test (2026-11-17), the saved region "Mandelbrot - 1E100 Test" at zoom 1e100: the period-57,563 minibrot there has size about 1.6e-200. A disk of 10 sizes around the OD nucleus missed it, so the jump fell back to the refusal.
   - **Angles:** past 1e100 they are not shown. The angle code is OD-only until C7b.
 - **Validation** (`S1866DeepNucleusFinderTests`).
   - **Independent targets:** the real-axis antenna minibrots next to −2 (S1864), with their nucleus and size computed here independently. They are viewed 3 sizes off, in a disk of 20 sizes, at ~1e149 / ~1e299 / ~1e498.
@@ -472,3 +474,4 @@ C7 is sliced as C5 was:
   - **Refusals:** fᵖ with 2n gives LowerPeriod (n). A disk 100 sizes away gives LeftView (Newton wanders), and so does a root 3 sizes from the seed with a disk 1 size wide (within the wander limit, outside the view). A disk at −2.1 gives Escaped.
   - **`PlanDeep`** at 1e498 gives the Unbounded tier, the framing's exact centre and log, `Zoom` = double.MaxValue, the iteration hint, and the locked case.
   - **The OD handoff:** the period-250 nucleus rounded to OD as the seed is carried by `Find` to the true nucleus.
+  - **That region** (zoom 1e100, 1920×1080 view): `NucleusFinder` finds period 57,563, `Plan` refuses it, and `CarryOn` carries it on. The result has the same period, is framed past 1e100 in the Unbounded tier, and stays within OD's grain of the OD nucleus.

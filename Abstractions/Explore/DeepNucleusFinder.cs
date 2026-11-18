@@ -162,6 +162,25 @@ public static class DeepNucleusFinder
         return NewtonFrom(seed, period, seed, radiusLog10, maxSteps, ct);
     }
 
+    /// <summary>#1866 — carry on a minibrot <see cref="NucleusFinder"/> found in OD whose
+    /// framing lies past what OD can frame: its size can be far below the grain OD places
+    /// the nucleus to (~|c|·1e-124), so a disk sized from the minibrot would not even hold
+    /// the true nucleus. Newton in BigFloat from its OD nucleus, accepted on the same view disk
+    /// (<paramref name="viewCentre"/>, <paramref name="viewRadius"/>) the OD search ran on,
+    /// with the precision raised to the minibrot's own size.</summary>
+    public static DeepNucleusResult CarryOn(
+        in NucleusResult found, DeepComplex viewCentre, double viewRadius,
+        int maxSteps = NucleusFinder.DefaultMaxSteps, CancellationToken ct = default)
+    {
+        if (found.Period < 1) throw new ArgumentOutOfRangeException(nameof(found), "A nucleus with a period is needed.");
+        if (!(viewRadius > 0) || double.IsInfinity(viewRadius))
+            throw new ArgumentOutOfRangeException(nameof(viewRadius), viewRadius, "View radius must be positive and finite.");
+        double radiusLog10 = SMath.Log10(viewRadius);
+        int prec = PrecisionFor(radiusLog10);
+        return NewtonFrom(ExactCentre.FromDeep(found.Nucleus, prec), found.Period,
+            ExactCentre.FromDeep(viewCentre, prec), radiusLog10, maxSteps, ct);
+    }
+
     // Zₙ at c for n = 0..maxN in BigFloat, stored as double; stops once it escapes.
     private static Complex[] ReferenceOrbit(ExactCentre c, int maxN, int prec, CancellationToken ct)
     {

@@ -251,5 +251,39 @@ public sealed class S1866DeepNucleusFinderTests
         Assert.True(found.SizeLog10 < sizeLog10 + 0.01 && found.SizeLog10 > sizeLog10 - 0.01);
     }
 
+    [Fact]
+    public void A_Minibrot_Found_At_1e100_And_Framed_Past_It_Is_Carried_On()
+    {
+        // The user's saved region "Mandelbrot - 1E100 Test" (zoom exactly 1e100, so the OD
+        // finder runs): it finds a period-57,563 minibrot whose framing lies past 1e100, so
+        // MinibrotJump.Plan refuses it ("beyond the deepest zoom"). Smoke test, 2026-11-17:
+        // the hand-off searched a disk of 10 minibrot sizes (size ~1.6e-200) around the OD
+        // nucleus, which OD only places to ~1e-125, so Newton left that disk and the jump
+        // fell back to the refusal.
+        var centre = DeepComplex.FromLimbs(
+            0.34370735950670833, 2.282346286510163e-17, 7.932326910602696e-34, 5.440277507410099e-50,
+            2.7985445248229647e-66, -1.756305901847006e-82, -1.17803752676779e-99, -1.9164857908757306e-116,
+            -0.050349769895588446, -2.7181764697723013e-18, 1.9007460651095413e-34, -1.9862816982871027e-51,
+            1.3274836757917591e-67, -7.854059219129196e-84, -2.5601909822564924e-100, 1.5354184230474017e-116);
+        double radius = PeriodDetector.ViewDiskRadius(1e100, 1920, 1080);
+        var od = NucleusFinder.FindMinibrot(centre, radius);
+        Assert.True(od.Found, od.Status.ToString());
+        Assert.Null(MinibrotJump.Plan(od, FracturingFog.Models.QualityPreset.Extreme, false, 0));
+
+        var deep = DeepNucleusFinder.CarryOn(od, centre, radius);
+        Assert.True(deep.Found, $"{deep.Status} p={deep.Period}");
+        Assert.Equal(od.Period, deep.Period);
+        var (_, zl) = DeepNucleusFinder.Frame(deep);
+        Assert.True(zl > 100, $"framed at 1e{zl:F1}");
+        var plan = MinibrotJump.PlanDeep(deep, FracturingFog.Models.QualityPreset.Extreme, false, 0);
+        Assert.Same(FracturingFog.Models.QualityPreset.Unbounded, plan.Quality);
+
+        // The carried nucleus is where OD put it, to OD's grain (|c| · 2^-400 or so).
+        var odExact = ExactCentre.FromDeep(od.Nucleus, deep.Nucleus.Precision);
+        double moved = new CFx(BigFloat.Sub(deep.Nucleus.Re, odExact.Re, deep.Nucleus.Precision).ToFloatExp(),
+                               BigFloat.Sub(deep.Nucleus.Im, odExact.Im, deep.Nucleus.Precision).ToFloatExp()).Log2Abs();
+        Assert.True(moved < -380, $"moved 2^{moved:F1} from the OD nucleus");
+    }
+
     private static double Mag(BigFloat x, BigFloat y) => new CFx(x.ToFloatExp(), y.ToFloatExp()).Log2Abs();
 }
