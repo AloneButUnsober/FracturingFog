@@ -12,6 +12,10 @@
 // image bright) or vanish at deep zoom (whole image dark).  We divide by the
 // per-pixel complex span (MandelbrotCalculator.LastPixelScale) so that a value
 // of "1" always means "one pixel from the boundary" regardless of zoom level.
+// #1783: past zoom ~1e27 the Mandelbrot calculator gives these maps (they opt in via
+// IColorMapDistanceUnit) both the distance and the pixel scale in a power-of-two unit
+// near the pixel size (a float in complex-plane units underflowed past ~1e38); only
+// their ratio is meaningful, as used here.
 //
 // Three sample themes:
 //   • DistanceFieldChromaticMap — rainbow gradient, boundary cool → interior warm
@@ -31,8 +35,11 @@ namespace FracturingFog.Models
     /// then maps through an exponential saturation curve.  At t=0 the pixel lies
     /// on the boundary; t→1 deep in the exterior.
     /// </summary>
-    public abstract class DistanceEstimationBaseMap : GradientColorMap, IColorMapWithPixelScale
+    public abstract class DistanceEstimationBaseMap : GradientColorMap, IColorMapDistanceUnit
     {
+        // #1783 — reads only distance / pixel scale: takes the deep distance unit.
+        public bool TakesDistanceUnit => true;
+
         // Per-frame complex-plane pixel span, pushed by the calculator before
         // the render loop (IColorMapWithPixelScale). Preferred over the
         // MandelbrotCalculator static so non-Mandelbrot escape-time renders

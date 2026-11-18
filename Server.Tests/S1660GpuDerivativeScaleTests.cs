@@ -13,10 +13,11 @@
 //     LA, float-exp, scaled fp32, orbit) the GPU frame's normals and distance estimate
 //     agree with the CPU deep frame's (the derivative in double) on the escaped pixels
 //     with equal iteration counts, at 1e15 (finite before), 5e33 and 3e47 (inf before,
-//     #1660's table), and none is NaN / inf. (At 3e47 the distance, ~ the pixel size,
-//     underflows the float DistanceBuffer to 0 on both paths: there the normals carry it.)
+//     #1660's table), and none is NaN / inf. (Before #1783 the distance, ~ the pixel size,
+//     underflowed the float DistanceBuffer to 0 on both paths at 3e47; it is now stored in a
+//     power-of-two unit near the pixel size, so the distance check bites at every view.)
 //   • a zoom sweep over one octave at 5e33: the kernel's 2^E ignores the scale's mantissa.
-// (SA without BLA: the BLA skip's derivative drops + B, #1782. Distance underflow: #1783.)
+// (SA without BLA: the BLA skip's derivative drops + B, #1782. Distance underflow: #1783, fixed.)
 // Mutants (by hand): caught — DzOutScale() returning 1; the float-exp entry without
 // + gScaleE; the scaled-fp32 entry writing v · invS (the old output); the calculator
 // not unscaling on the plain path or on the orbit path; the LA kernel writing the plain
@@ -187,8 +188,8 @@ public sealed class S1660GpuDerivativeScaleTests : IDisposable
     // The kernel's 2^E must not depend on the scale's mantissa. Four zooms 2^(k/4) apart
     // span an octave, so at least one pixel scale has a mantissa >= 1.5 (log2 1.5 = 0.585:
     // the gap [0.585, 1) is wider than the 0.25 step), where a mask that kept a mantissa
-    // bit would scale by 1.5 · 2^E and throw the distance off. p448, not 3E47: past ~1e40
-    // the distance (~ the pixel size) underflows the float DistanceBuffer to 0 on both paths.
+    // bit would scale by 1.5 · 2^E and throw the distance off. p448: one view is enough (the
+    // distance at 3E47 was 0 on both paths before #1783).
     [Theory]
     [InlineData(0)]
     [InlineData(1)]
@@ -251,8 +252,8 @@ public sealed class S1660GpuDerivativeScaleTests : IDisposable
         _out.WriteLine($"{route}/{v.Name}: {same} escaped px with equal iterations; normals off > 0.01 rad at {badN}, " +
             $"distance off > 1% at {badD}; {notFinite} escaped px not finite");
         Assert.Equal(0, notFinite);
-        // The distance check bites only where the float distance is normal: below ~1e37.
-        if (v.Zoom < 1e37) Assert.True(dChecked >= same / 2, $"precondition: normal float distances ({dChecked} of {same})");
+        // #1783: the float distance is normal at every view (it was 0 past ~1e45 before).
+        Assert.True(dChecked >= same / 2, $"precondition: normal float distances ({dChecked} of {same})");
         Assert.True(same >= W * H / 8, $"precondition: escaped pixels to compare ({same})");
         int allow = same / (fp32 ? 20 : 100);
         Assert.True(badN <= allow, $"{route}/{v.Name}: normals off at {badN} of {same}");

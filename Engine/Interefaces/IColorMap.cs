@@ -286,6 +286,19 @@ namespace FracturingFog.Interefaces
         double PixelScale { set; }
     }
 
+    /// <summary>
+    /// #1783 — a colour map that reads the distance estimate only as distance / PixelScale
+    /// opts in here to receive both in the calculator's deep distance unit
+    /// (2^-DistanceUnitExp2 complex-plane units, a power of two that keeps the pixel scale
+    /// in [1, 2) past zoom ~1e27). A float distance in complex-plane units underflows
+    /// past ~1e38. Maps that don't opt in (or return false) keep complex-plane units for
+    /// both, as before: many built-in themes read the raw distance (e.g. HSV's lightness).
+    /// </summary>
+    public interface IColorMapDistanceUnit : IColorMapWithPixelScale
+    {
+        bool TakesDistanceUnit { get; }
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // In-set delegation extension
     //
