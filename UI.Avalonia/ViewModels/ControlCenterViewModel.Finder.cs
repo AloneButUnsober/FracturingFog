@@ -326,13 +326,13 @@ public sealed partial class ControlCenterViewModel
 
     // #1866 (C7a) — a minibrot found past 1e100: its framing as an exact centre and log zoom.
     // The external angles stay OD-only for now, so they are not shown.
-    private void ApplyDeepMinibrotJump(in DeepNucleusResult found)
+    private void ApplyDeepMinibrotJump(in DeepNucleusResult found, string prefix = "")
     {
         var vs = Shell.Main.ViewState;
         var plan = MinibrotJump.PlanDeep(found, vs.Quality, vs.IterLocked, vs.LockedIterations);
         string note = ApplyPlan(plan);
         string size = "1e" + found.SizeLog10.ToString("F1", CultureInfo.InvariantCulture);
-        FinderStatus = $"Period {found.Period} minibrot, size {size} → zoom "
+        FinderStatus = $"{prefix}Period {found.Period} minibrot, size {size} → zoom "
             + $"{FracturingFog.ViewState.ZoomLog.Format(plan.Zoom, plan.ZoomLog10, 4)} ({plan.Quality.Name}).{note}";
         SetLocation("External angles are not computed past 1e100 yet.");
     }
@@ -518,6 +518,35 @@ public sealed partial class ControlCenterViewModel
             }
             var landing = await Task.Run(() => ExternalRay.Land(angle!, ct: ct), ct);
             string prefix = $"Ray {angle} → ";
+            // #1870 (C7c) — past OD: the OD trace could not land the ray, or it landed
+            // somewhere only the Unbounded tier frames. Trace it again in BigFloat.
+            var gvs = Shell.Main.ViewState;
+            bool deeper = landing.Status switch
+            {
+                RayLandingStatus.Failed => true,
+                RayLandingStatus.Component => MinibrotJump.Plan(landing.Nucleus, gvs.Quality, gvs.IterLocked, gvs.LockedIterations) is null,
+                RayLandingStatus.Misiurewicz => !(MisiurewiczZoom(landing.ContextRadius) <= QualityPreset.Extreme.ZoomMax),
+                _ => false,
+            };
+            if (deeper)
+            {
+                FinderStatus = $"Tracing the ray at {angle} in arbitrary precision…";
+                var deep = await Task.Run(() => DeepExternalRay.Land(angle!, ct: ct), ct);
+                switch (deep.Status)
+                {
+                    case RayLandingStatus.Component:
+                        ApplyDeepMinibrotJump(deep.Nucleus, prefix);
+                        break;
+                    case RayLandingStatus.Misiurewicz:
+                        ApplyDeepMisiurewiczLanding(deep, prefix);
+                        break;
+                    default:
+                        FinderStatus = $"{prefix}{deep.Detail ?? landing.Detail ?? "could not land the ray."}";
+                        break;
+                }
+                if (pairNote.Length > 0 && deep.Status != RayLandingStatus.Failed) FinderStatus += pairNote;
+                return;
+            }
             switch (landing.Status)
             {
                 case RayLandingStatus.Component:
@@ -536,6 +565,40 @@ public sealed partial class ControlCenterViewModel
 
     // Centre on the Misiurewicz point, zoomed so the view radius is the ray's
     // context radius (the hub plus its first ring of structure).
+    // The zoom that makes the view radius the ray's context radius.
+    private double MisiurewiczZoom(double contextRadius)
+    {
+        var (w, h) = Shell.Main.RenderHost.LastPresentedSize;
+        return PeriodDetector.ViewDiskRadius(1.0, w, h) / contextRadius;
+    }
+
+    // #1870 (C7c) — a Misiurewicz landing past OD: the exact point, framed by the log
+    // context radius, in the tier that depth needs.
+    private void ApplyDeepMisiurewiczLanding(in DeepRayLanding landing, string prefix)
+    {
+        var main = Shell.Main;
+        var vs = main.ViewState;
+        var m = landing.Misiurewicz;
+        var (w, h) = main.RenderHost.LastPresentedSize;
+        double zoomLog10 = Math.Log10(PeriodDetector.ViewDiskRadius(1.0, w, h)) - landing.ContextRadiusLog10;
+        double zoom = FracturingFog.ViewState.ZoomLog.FromLog10(zoomLog10);
+        Shell.RecordNavChange();
+        vs.SetCenterExact(m.Point);
+        if (FracturingFog.ViewState.ZoomLog.BeyondDouble(zoomLog10)) vs.SetZoomLog10(zoomLog10);
+        else vs.Zoom = zoom;
+        var q = MinibrotJump.QualityFor(vs.Quality, zoom);
+        if (!ReferenceEquals(q, vs.Quality))
+        {
+            vs.Quality = q;
+            main.SetQualitySilent(q);
+            Menu.SetQualitySilent(q.Name);
+        }
+        main.RenderHost.Trigger();
+        double turn = m.Multiplier.Phase * 180.0 / System.Math.PI;
+        FinderStatus = $"{prefix}Misiurewicz point M({m.Preperiod},{m.Period}), zoom {FracturingFog.ViewState.ZoomLog.Format(zoom, zoomLog10, 4)}: "
+            + $"the pattern repeats every ×{Fmt(m.Multiplier.Magnitude)} zoom, turning {turn:0.#}°.";
+    }
+
     private void ApplyMisiurewiczLanding(in RayLanding landing, string prefix)
     {
         var main = Shell.Main;
