@@ -115,6 +115,46 @@ namespace FracturingFog.FFMath
             return new LaStageTableFx(data, start, count, refLen, tolerance, periodTest, stageBits);
         }
 
+        private uint[]? _gpuStepsFx, _gpuInts;
+
+        /// <summary>#1880 (epic #1428, C6a) — the steps for the float-exp GPU LA kernel, in
+        /// <see cref="LaStageTable.GpuStepsFloatExp"/>'s layout (12 words each), from the
+        /// FloatExp coefficients: past where the double table overflows.</summary>
+        public uint[] GpuStepsFloatExp => _gpuStepsFx ??= BuildGpuStepsFloatExp();
+
+        /// <summary>#1880 — as <see cref="LaStageTable.GpuInts"/>.</summary>
+        public uint[] GpuInts => _gpuInts ??= BuildGpuInts();
+
+        private uint[] BuildGpuStepsFloatExp()
+        {
+            var a = new uint[Data.Length * 12];
+            static uint F(float f) => BitConverter.SingleToUInt32Bits(f);
+            for (int i = 0; i < Data.Length; i++)
+            {
+                ref readonly var d = ref Data[i];
+                int o = i * 12;
+                a[o] = F((float)d.RefRe); a[o + 1] = F((float)d.RefIm);
+                FracturingFog.Rendering.GpuFloatExp.Encode(d.A, out float ar, out float ai, out int ae);
+                a[o + 2] = F(ar); a[o + 3] = F(ai); a[o + 4] = (uint)ae;
+                FracturingFog.Rendering.GpuFloatExp.Encode(d.B, out float br, out float bi, out int be);
+                a[o + 5] = F(br); a[o + 6] = F(bi); a[o + 7] = (uint)be;
+                FracturingFog.Rendering.GpuFloatExp.Encode(d.Thr, out float tm, out int te);
+                a[o + 8] = F(tm); a[o + 9] = (uint)te;
+                FracturingFog.Rendering.GpuFloatExp.Encode(d.ThrC, out float cm, out int ce);
+                a[o + 10] = F(cm); a[o + 11] = (uint)ce;
+            }
+            return a;
+        }
+
+        private uint[] BuildGpuInts()
+        {
+            int s = Stages;
+            var a = new uint[2 * s + 2 * Data.Length];
+            for (int k = 0; k < s; k++) { a[2 * k] = (uint)StageStart[k]; a[2 * k + 1] = (uint)StageCount[k]; }
+            for (int i = 0; i < Data.Length; i++) { a[2 * s + 2 * i] = (uint)Data[i].Len; a[2 * s + 2 * i + 1] = (uint)Data[i].Next; }
+            return a;
+        }
+
         private static readonly FloatExp PeriodDip = FloatExp.FromDouble(LaStageTable.PeriodDip);
 
         private static double Cheb(double re, double im) => Math.Max(Math.Abs(re), Math.Abs(im));

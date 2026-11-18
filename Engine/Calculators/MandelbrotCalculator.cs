@@ -689,11 +689,19 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     /// <summary>#1664 — true when the last GPU perturbation frame ran the float-exp LA kernel.</summary>
     public bool LastFrameUsedGpuLaFloatExp { get; private set; }
 
+    /// <summary>#1880 — true when that kernel ran the float-exp LA table (C5c,
+    /// <see cref="LaStageTableFx"/>) because the double table's numbers overflow.</summary>
+    public bool LastFrameUsedGpuLaTableFx { get; private set; }
+
     /// <summary>#1664 — the float-exp LA route's zoom limit. Its numbers have no range
-    /// limit at depth (float-exp); the pixel offset δc is a double (pixel scale ≥ ~1e-300)
-    /// as on the CPU LA rows. Past <see cref="MaxGpuPerturbZoom"/> only this route runs on
-    /// the GPU (checked against the CPU LA frame on the bench scenes, S1664GpuLaFxTests).</summary>
-    public const double MaxGpuLaFloatExpZoom = 1e100;
+    /// limit at depth (float-exp); the pixel scale goes up as float-exp from the double
+    /// scale, and the pixel offset δc is a double, as on the CPU LA rows. Past
+    /// <see cref="MaxGpuPerturbZoom"/> only this route runs on the GPU (checked against the
+    /// CPU LA frame on the bench scenes, S1664GpuLaFxTests). #1880 (epic #1428, C6a) — 1e100
+    /// → 1e290: the CPU keeps the double rows (and their scale) up to
+    /// <see cref="FloatExpZoomLog10"/>, and so does this route, on the AP reference orbit
+    /// past 1e110 (C4); past that the frame takes the CPU float-exp rows (S1880).</summary>
+    public const double MaxGpuLaFloatExpZoom = 1e290;
 
     // #1664 — this frame would take the float-exp LA kernel (before the table is built).
     private bool LaFxRouteHere(FracturingFog.Rendering.IGpuKernel? k)
@@ -3235,6 +3243,10 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         LastHpStageMs = new HpStageMs(Ms(tStage0, tStageOrbit), 0, 0, 0);
         if (fx)
         {
+            // #1880 — no GPU kernel takes a float-exp pixel scale yet.
+            if (GpuDeepHere && GpuKernel != null && (GpuKernel.SupportsPerturbation || FloatExpHere(GpuKernel)))
+                _gpuSkip = GpuRoute.Cpu($"zoom > 1e{FloatExpZoomLog10:0}",
+                    $"past 1e{FloatExpZoomLog10:0} the pixel scale underflows double: float-exp pixels render on the CPU");
             CalculateFloatExpRows(colorMap, maxIt, ct);
             LastHpStageMs = new HpStageMs(Ms(tStage0, tStageOrbit), 0, 0, Ms(tStageOrbit, Stopwatch.GetTimestamp()));
             _panFrameComplete = false;
@@ -3489,6 +3501,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         var kernel = GpuKernel;
         if (kernel == null) return false;
         bool useSa = false, useBla = false, wave = false, useLa = false, useLaFx = false;
+        FracturingFog.FFMath.LaStageTableFx? laTableFx = null;   // #1880
         // #1340 — the deep kernels' schedule for this dispatch (Auto: the last frame's hint).
         // #1394 — a sparse solid-region pass takes the wavefront schedule: its threads pull
         // only marked pixels, while one thread per pixel idles a group's lanes around a 1-px
@@ -3519,6 +3532,13 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 bool ok = _laTable is { Finite: true, Stages: >= 1 } && _refOrbitLen >= 2;
                 useLaFx = ok && laFx;
                 useLa = ok && !laFx;
+                // #1880 — deep, A and B (∏2Z, the dc response) overflow the double table on
+                // long orbits; the float-exp kernel takes the float-exp table (C5c) there.
+                if (laFx && !ok && _refOrbitLen >= 2 && EnsureLaTableFx() is { Finite: true, Stages: >= 1 } tfx)
+                {
+                    laTableFx = tfx;
+                    useLaFx = true;
+                }
             }
             // #1664 — past the fp64 / plain kernels' limit only the float-exp LA kernel runs.
             if (!useLaFx && Zoom > MaxGpuPerturbZoom)
@@ -3528,20 +3548,23 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             }
             if (useLaFx)
             {
-                var t = _laTable!;
-                var g = _laAt is { } a
+                // #1880 — the double table, or the float-exp one (no AT: as the CPU's FX rows).
+                uint[] steps = laTableFx?.GpuStepsFloatExp ?? _laTable!.GpuStepsFloatExp;
+                uint[] ints = laTableFx?.GpuInts ?? _laTable!.GpuInts;
+                int stages = laTableFx?.Stages ?? _laTable!.Stages;
+                var g = laTableFx == null && _laAt is { } a
                     ? new FracturingFog.Rendering.GpuLaAt(a.Len, a.ThrC, a.Esc2, a.RefCRe, a.RefCIm, a.CRe, a.CIm, a.InvZRe, a.InvZIm)
                     : default;
                 SeedWavefrontIfAsked((w, h, sc, ox, oy, it, sm, zr, zi, dr, di) => kernel.RunPerturbLaFloatExp(   // #1386
                     w, h, sc, maxIt, EscapeRadius2, ox, oy, _refZr, _refZi, _refOrbitLen,
-                    t.GpuStepsFloatExp, t.GpuInts, t.Stages, g, it, sm, zr, zi, dr, di), scale, offX0, offY0);
+                    steps, ints, stages, g, it, sm, zr, zi, dr, di), scale, offX0, offY0);
                 GpuWavefront.PerturbHint = Hint();
                 wave = GpuWavefront.UsePerturb;
                 kernel.RunPerturbLaFloatExp(
                     Width, Height, scale, maxIt, EscapeRadius2,
                     offX0, offY0,
                     _refZr, _refZi, _refOrbitLen,
-                    t.GpuStepsFloatExp, t.GpuInts, t.Stages, g,
+                    steps, ints, stages, g,
                     IterationBuffer, SmoothBuffer,
                     FinalZrBuffer, FinalZiBuffer, FinalDrBuffer, FinalDiBuffer);
                 useLa = true;   // the LA labels and work below
@@ -3669,6 +3692,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         LastFrameUsedGpuBla = useBla;
         LastFrameUsedGpuLa = useLa;   // #1630
         LastFrameUsedGpuLaFloatExp = useLaFx;   // #1664
+        LastFrameUsedGpuLaTableFx = laTableFx != null;   // #1880
         if (useLa) _lastFrameUsedLa = true;   // the precision label's " LA"
         LastFrameUsedGpuWavefront = wave;
         // #1394 — a solid-region pass computed only its marked pixels: no warp-waste

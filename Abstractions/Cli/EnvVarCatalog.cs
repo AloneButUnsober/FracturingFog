@@ -272,6 +272,7 @@ namespace FracturingFog.Cli
             Probe("FF_DYNRES_TRACE", "--dynamicresolutionprobe", "trace option.", "#1333"),
             Probe("FF_DYNRES_VIEW", "--dynamicresolutionprobe", "substring of a view name to run alone.", "#1333"),
             Probe("FF_GPULA_DEEP", "--gpulaprobe", "add the bench scenes past 1e50 (float-exp LA only).", "#1664"),
+            Probe("FF_GPULA_EXACT", "--gpulaprobe", "add an exact view past 1e100 (1e150, 1e285): CPU against the float-exp LA kernel.", "#1880"),
             Probe("FF_GPULA_BACKEND", "--gpulaprobe", "backend filter (D3D11 / Vulkan).", "#1630"),
             Probe("FF_GPULA_MODES", "--gpulaprobe", "mode filter.", "#1630"),
             Probe("FF_DEEPCAL_BACKEND", "--deeproutecalprobe", "backend: d3d11, vulkan or cpu (default all).", "#1786"),
