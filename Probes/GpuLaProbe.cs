@@ -20,11 +20,16 @@
 // #1664: two more columns, the float-exp kernels (GpuDeepPrecision Fp32): 4 = GPU float-exp
 // (LA Off), 5 = GPU float-exp LA (UseGpuLaFloatExp). FF_GPULA_DEEP=1 adds the bench scenes
 // past the GPU deep limit (p953 … p951,094), where only CPU and float-exp LA run.
+// #1880 (epic #1428, C6a): FF_GPULA_EXACT=1 adds an exact view past 1e100 (the dense
+// 340-digit centre near M(4,1), AP reference orbit) at 1e150 and 1e285: CPU (LA Auto)
+// against the float-exp LA kernel, with which LA table it ran (double, or float-exp
+// where A and B overflow the double one).
 // Exit 0 always.
 
 using System;
 using System.Diagnostics;
 using System.Linq;
+using FracturingFog.FFMath;
 using FracturingFog.Interefaces;
 using FracturingFog.Rendering;
 using FracturingFog.Rendering.Vulkan;
@@ -74,6 +79,8 @@ namespace FracturingFog
                     || (deep && s.KfZoom > 1e50))
                 .Concat(DeepCostProbe.FfViews.Where(s => s.KfZoom >= 1e30))
                 .Where(s => Environment.GetEnvironmentVariable("FF_GPULA_SCENE") is not { } f || s.Name.Contains(f, StringComparison.OrdinalIgnoreCase));
+            if (Environment.GetEnvironmentVariable("FF_GPULA_EXACT") == "1" && k.SupportsPerturbationLaFloatExp)
+                foreach (int zl in new[] { 150, 285 }) ExactDeep(k, zl, w, h, reps);
             string modes = Environment.GetEnvironmentVariable("FF_GPULA_MODES") ?? "012345";
             if (!k.SupportsPerturbationLa) modes = modes.Replace("2", "").Replace("3", "");
             if (!k.SupportsPerturbationLaFloatExp) modes = modes.Replace("5", "");
@@ -117,6 +124,59 @@ namespace FracturingFog
                                       $"GPU fx LA {T(5)}{(last[5] == null || fxLa ? "" : " (not fx LA!)")} ms | fx LA {R(4, 5)} vs fx, {R(1, 5)} vs CPU LA | " +
                                       $"iter diff vs CPU LA: fx LA {D(5)}, fx {D(4)}, GPU LA {D(3)}, GPU SA/BLA {D(2)}, CPU BLA {D(0)}");
                 }
+            }
+            finally
+            {
+                MandelbrotCalculator.UseGpuPerturbation = saved;
+                MandelbrotCalculator.UseGpuLaFloatExp = savedFx;
+                MandelbrotCalculator.UseGpuLa = savedLa;
+                MandelbrotCalculator.GpuDeepPrecisionMode = savedPrec;
+            }
+        }
+
+        // #1880 — the S1880 view (Server.Tests/S1880GpuLaFloatExpDeepTests.cs).
+        private const string ExactX = "-0.1010963638456221610257854457386225654638054428262534838769311776607808407404705842748212198105167790334045319085567411939715461442609118823557039076803016157584181434354544823068106664029419378267411891607819526448995396995334466823393126699009817557150425206538866991861344333961600610562775385144259609560703568221643279956133036926714760";
+        private const string ExactY = "0.9562865108091415007710960577299774358098333365105291700343143215005246590657167325269784107873398072043444724926469284366752406567465722656200815719741551313831228054884443810571677870203738395055477279309548311953190385170024877917670113105649462054553485859930615004427397447762045980085973915977603864276670744042253335354323566859404712";
+
+        private static void ExactDeep(IGpuKernel k, int zl, int w, int h, int reps)
+        {
+            if (!ExactCentre.TryParse(ExactX, ExactY, out var centre)) return;
+            var d = centre.ToDeep();
+            bool saved = MandelbrotCalculator.UseGpuPerturbation, savedFx = MandelbrotCalculator.UseGpuLaFloatExp, savedLa = MandelbrotCalculator.UseGpuLa;
+            var savedPrec = MandelbrotCalculator.GpuDeepPrecisionMode;
+            try
+            {
+                MandelbrotCalculator Frame(bool gpu)
+                {
+                    MandelbrotCalculator.UseGpuPerturbation = gpu;
+                    MandelbrotCalculator.GpuDeepPrecisionMode = GpuDeepPrecision.Fp32;
+                    MandelbrotCalculator.UseGpuLaFloatExp = gpu;
+                    MandelbrotCalculator.UseGpuLa = false;
+                    var c = new MandelbrotCalculator(w, h)
+                    {
+                        Quality = FracturingFog.Models.QualityPreset.Extreme, MaxIterations = 1000 + 12 * zl, ColorMap = new FracturingFog.Models.HsvPalette(),
+                        CenterX = d.Re.X0, CenterXLo = d.Re.X1, CenterX2 = d.Re.X2, CenterX3 = d.Re.X3,
+                        CenterX4 = d.Re.X4, CenterX5 = d.Re.X5, CenterX6 = d.Re.X6, CenterX7 = d.Re.X7,
+                        CenterY = d.Im.X0, CenterYLo = d.Im.X1, CenterY2 = d.Im.X2, CenterY3 = d.Im.X3,
+                        CenterY4 = d.Im.X4, CenterY5 = d.Im.X5, CenterY6 = d.Im.X6, CenterY7 = d.Im.X7,
+                    };
+                    if (gpu) c.GpuKernel = k;
+                    c.SetZoomLog10(zl);
+                    c.SetDepth(centre);
+                    return c;
+                }
+                double tCpu = double.MaxValue, tGpu = double.MaxValue;
+                MandelbrotCalculator? cpu = null, gpuC = null;
+                for (int rep = 0; rep < reps; rep++)
+                {
+                    cpu = Frame(false); var sw = Stopwatch.StartNew(); cpu.Calculate(); tCpu = Math.Min(tCpu, sw.Elapsed.TotalMilliseconds);
+                    gpuC = Frame(true); sw.Restart(); gpuC.Calculate(); tGpu = Math.Min(tGpu, sw.Elapsed.TotalMilliseconds);
+                }
+                double diff = 100.0 * gpuC!.IterationBuffer.Zip(cpu!.IterationBuffer).Count(p => p.First != p.Second) / cpu.IterationBuffer.Length;
+                string ran = gpuC.LastFrameUsedGpuLaFloatExp ? (gpuC.LastFrameUsedGpuLaTableFx ? "fx LA, float-exp table" : "fx LA, double table")
+                    : $"CPU! ({gpuC.LastGpuRoute.Reason})";
+                Console.WriteLine($"    exact M(4,1) 1e{zl,-8} | CPU [{cpu.LastPrecisionLabel}] {tCpu,7:F0} | GPU [{ran}] {tGpu,7:F0} ms | " +
+                                  $"x{tCpu / tGpu:F2} | iter diff vs CPU {diff:F2} %");
             }
             finally
             {

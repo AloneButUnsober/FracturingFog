@@ -489,3 +489,6 @@ Design, slice by slice: `Docs/Technical/Arbitrary-Precision-DeepZoom.md` (C1–C
   period-415 antenna minibrot at 1e498.
 - **Not yet.** GPU kernels past their own caps (C6), and the explore tools past 1e100
   (C7): minibrot jump, the finders and auto-explore stop at 1e100.
+  - *Since then:* the explore tools work past 1e100 (C7a–C7f, #1866–#1878). The opt-in
+    float-exp LA GPU kernel runs to 1e290 (C6a, #1880, Arbitrary-Precision-DeepZoom.md
+    §28).
