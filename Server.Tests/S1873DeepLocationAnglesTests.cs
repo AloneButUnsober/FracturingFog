@@ -84,4 +84,26 @@ public sealed class S1873DeepLocationAnglesTests
             Assert.True(an * bd < bn * ad);
         }
     }
+
+    [Fact]
+    public void Past_The_Search_Reach_It_Returns_At_Once()
+    {
+        // Smoke test, 2026-11-18: minibrots of period 7805 / 22320 / 57563 searched, then
+        // reported "could not be verified" — no probe can escape after ProbeMinDepth periods
+        // within the RingMaxDepth-iteration ring orbit past MaxAnglePeriod.
+        Assert.Equal(LocationAngles.RingMaxDepth / LocationAngles.ProbeMinDepth, LocationAngles.MaxAnglePeriod);
+        Assert.True(LocationAngles.WithinReach(0, LocationAngles.MaxAnglePeriod));
+        Assert.False(LocationAngles.WithinReach(0, LocationAngles.MaxAnglePeriod + 1));
+        Assert.False(LocationAngles.WithinReach(600, 401));
+
+        var at = new ExactCentre(BigFloat.FromDouble(-2, 256), BigFloat.Zero(256));
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var deep = new DeepNucleusResult(NucleusStatus.Found, at, 57563, CFx.Of(1e-200, 0), 0, 57563);
+        Assert.Empty(DeepLocationAngles.ComponentAngles(deep));
+        var dm = new DeepMisiurewiczResult(MisiurewiczStatus.Found, at, 700, 400, System.Numerics.Complex.One, 0);
+        Assert.Empty(DeepLocationAngles.MisiurewiczAngles(dm, -150));
+        var od = new NucleusResult(NucleusStatus.Found, at.ToDeep(), 7805, System.Numerics.Complex.One, 0, 7805);
+        Assert.Empty(LocationAngles.ComponentAngles(od));
+        Assert.True(sw.ElapsedMilliseconds < 1000, $"{sw.ElapsedMilliseconds} ms");
+    }
 }

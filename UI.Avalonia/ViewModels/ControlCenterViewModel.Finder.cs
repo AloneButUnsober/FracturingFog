@@ -804,8 +804,19 @@ public sealed partial class ControlCenterViewModel
         LocationAddress = address;
     }
 
+    // #1873 — past the angle search's reach say so at once, rather than search and fail.
+    private bool AnglesOutOfReach(int preperiod, int period)
+    {
+        if (LocationAngles.WithinReach(preperiod, period)) return false;
+        string what = preperiod > 0 ? $"M({preperiod},{period})" : $"period {period}";
+        SetLocation($"Its external angles are not searched: {what} is past the angle search's reach "
+            + $"({LocationAngles.MaxAnglePeriod} digits; each digit is a ray step, and the cost grows with its square).");
+        return true;
+    }
+
     private async Task ShowComponentAnglesAsync(NucleusResult found, CancellationToken ct)
     {
+        if (AnglesOutOfReach(0, found.Period)) return;
         SetLocation("Finding its external angles…");
         var angles = await Task.Run(() => LocationAngles.ComponentAngles(found, ct), ct);
         if (angles.Count == 0) { SetLocation("Its external angles could not be verified."); return; }
@@ -823,6 +834,7 @@ public sealed partial class ControlCenterViewModel
 
     private async Task ShowMisiurewiczAnglesAsync(MisiurewiczResult m, double scale, CancellationToken ct)
     {
+        if (AnglesOutOfReach(m.Preperiod, m.Period)) return;
         SetLocation("Finding its external angles…");
         var angles = await Task.Run(() => LocationAngles.MisiurewiczAngles(m, scale, ct), ct);
         if (angles.Count == 0) { SetLocation("Its external angles could not be verified."); return; }
@@ -835,6 +847,7 @@ public sealed partial class ControlCenterViewModel
     // landing it in arbitrary precision, which takes seconds per angle at depth.
     private async Task ShowDeepComponentAnglesAsync(DeepNucleusResult found, CancellationToken ct)
     {
+        if (AnglesOutOfReach(0, found.Period)) return;
         SetLocation("Finding its external angles (arbitrary precision: this can take a while)…");
         var angles = await Task.Run(() => DeepLocationAngles.ComponentAngles(found, ct), ct);
         if (angles.Count == 0) { SetLocation("Its external angles could not be verified."); return; }
@@ -845,6 +858,7 @@ public sealed partial class ControlCenterViewModel
     // #1873 — the angles of a Misiurewicz point snapped past 1e100.
     private async Task ShowDeepMisiurewiczAnglesAsync(DeepMisiurewiczResult m, double scaleLog10, CancellationToken ct)
     {
+        if (AnglesOutOfReach(m.Preperiod, m.Period)) return;
         SetLocation("Finding its external angles (arbitrary precision: this can take a while)…");
         var angles = await Task.Run(() => DeepLocationAngles.MisiurewiczAngles(m, scaleLog10, ct), ct);
         if (angles.Count == 0) { SetLocation("Its external angles could not be verified."); return; }

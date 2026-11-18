@@ -43,7 +43,7 @@ public static class DeepLocationAngles
     public static List<ExternalAngle> ComponentAngles(in DeepNucleusResult n, CancellationToken ct = default)
     {
         var found = new List<ExternalAngle>();
-        if (!n.Found) return found;
+        if (!n.Found || !LocationAngles.WithinReach(0, n.Period)) return found;
         if (n.Period == 1) { found.Add(ExternalAngle.FromBits("", "0")); return found; }
 
         if (!Root(n.Nucleus, n.Period, out var rootOffset, ct: ct)) return found;
@@ -88,7 +88,7 @@ public static class DeepLocationAngles
     public static List<ExternalAngle> MisiurewiczAngles(in DeepMisiurewiczResult m, double scaleLog10, CancellationToken ct = default)
     {
         var found = new List<ExternalAngle>();
-        if (!m.Found || m.Preperiod < 1 || m.Period < 1) return found;
+        if (!m.Found || m.Preperiod < 1 || m.Period < 1 || !LocationAngles.WithinReach(m.Preperiod, m.Period)) return found;
         int pre = m.Preperiod - 1;
         int prec = m.Point.Precision;
         double tolLog2 = scaleLog10 * Log2Of10 + SMath.Log2(1e-6);

@@ -577,6 +577,12 @@ C7 was re-sliced once more:
   - **Measured, not in the suite:**
     - The same three tuned angles come back at period 30 (~1e-34, 48 s) and period 60 (~1e-70, 145 s).
     - Verification lands each candidate, so the time is #1872's.
+  - **Reach** (smoke test, 2026-11-18). Four saved minibrots past 1e100 (periods 7,805, 22,320, 57,563 and about 1,100) searched, then reported "could not be verified".
+    - A probe must escape no earlier than `ProbeMinDepth` (4) periods within the `RingMaxDepth` (4,000) iteration ring orbit. Past period 1,000 no probe qualifies.
+    - Verifying a candidate lands a ray of about 10 bits per period digit, at a cost that grows with its square.
+    - `LocationAngles.MaxAnglePeriod` (= 4000 / 4) and `WithinReach` now stop both the OD and the deep searches at once past it, for components (the period) and Misiurewicz points (preperiod + period).
+    - The Control Center says so instead of searching.
+    - Angles past that reach are a research item (#1875).
   - **Mutation checks: 3 of 5 caught.** Two survived:
     - **Preperiod split off by one:** this mutant is equivalent. `ExternalAngle.FromBits` reduces an angle to its canonical form, and the extra preperiod digit of a correct trace is the one the cycle has there.
     - **Dropping the landing-distance check:** this is a guard. Every candidate traced in the tests is genuine.

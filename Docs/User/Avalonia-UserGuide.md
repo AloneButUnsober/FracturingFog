@@ -189,7 +189,7 @@ On the Mandelbrot set, **Detect period** and **Zoom to minibrot** also work past
 - The search runs in arbitrary precision on the view's exact centre.
 - The jump keeps the minibrot's exact centre and its zoom, even past 1e308.
 - A minibrot found in a shallower view whose framing lies past 1e100 is carried on in the same way, instead of being refused.
-- Past 1e100 the minibrot's external angles and address are found too (#1873), in arbitrary precision. Each candidate angle is verified by landing it, so this takes from seconds to a few minutes at depth; the jump itself does not wait for it.
+- Past 1e100 the minibrot's external angles and address are found too (#1873), in arbitrary precision. Each candidate angle is verified by landing it, so this takes from seconds to a few minutes at depth; the jump itself does not wait for it. At any depth, angles are only searched up to period 1,000 (preperiod + period for a spiral point): each angle digit is a step of ray tracing, and the cost grows with the square of the digits. Past that the location line says so at once.
 - **Snap to spiral** works past 1e100 too (#1868). It snaps to the exact point, reports its repeat factor and turn, and then finds its external angles (#1873). Past 1e100 the loop video is not offered yet.
 - **Angle** lands past 1e100 too (#1870): when the ordinary trace cannot land a ray, or lands it deeper than 1e100, it is traced again in arbitrary precision and the view jumps to its minibrot or spiral point. Long angles take a while: a period-125 minibrot near 1e-149 lands in a few seconds, a point with a preperiod of several hundred in under a minute.
 - **Julia morph** still stops at 1e100.

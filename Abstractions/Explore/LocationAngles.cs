@@ -41,12 +41,24 @@ public static class LocationAngles
     /// <summary>Candidate angles landed per search, at most.</summary>
     public const int MaxCandidates = 8;
 
+    /// <summary>#1873 — the longest period (component) or preperiod + period (Misiurewicz
+    /// point) whose angles are searched: a probe must escape no earlier than
+    /// <see cref="ProbeMinDepth"/> periods, within the <see cref="RingMaxDepth"/>-iteration
+    /// ring orbit, so past this no probe qualifies (and each candidate's verification lands a
+    /// ray of ~10 bits per period digit, at a cost that grows with its square).</summary>
+    public const int MaxAnglePeriod = RingMaxDepth / ProbeMinDepth;
+
+    /// <summary>#1873 — whether the angles of a location of this preperiod (0 for a
+    /// component) and period are within the search's reach.</summary>
+    public static bool WithinReach(int preperiod, int period) => preperiod + period <= MaxAnglePeriod;
+
     /// <summary>The verified external angles of the component (one for the
-    /// main cardioid, else two, ascending). Empty when none verify.</summary>
+    /// main cardioid, else two, ascending). Empty when none verify, or the period is past
+    /// <see cref="MaxAnglePeriod"/>.</summary>
     public static List<ExternalAngle> ComponentAngles(in NucleusResult n, CancellationToken ct = default)
     {
         var found = new List<ExternalAngle>();
-        if (!n.Found) return found;
+        if (!n.Found || !WithinReach(0, n.Period)) return found;
         if (n.Period == 1) { found.Add(ExternalAngle.FromBits("", "0")); return found; }
 
         if (!Root(n.Nucleus, n.Period, out var rootOffset)) return found;
@@ -117,7 +129,7 @@ public static class LocationAngles
     public static List<ExternalAngle> MisiurewiczAngles(in MisiurewiczResult m, double scale, CancellationToken ct = default)
     {
         var found = new List<ExternalAngle>();
-        if (!m.Found || m.Preperiod < 1 || m.Period < 1) return found;
+        if (!m.Found || m.Preperiod < 1 || m.Period < 1 || !WithinReach(m.Preperiod, m.Period)) return found;
         int pre = m.Preperiod - 1;
         double tol = 1e-6 * scale;
         var tried = new HashSet<ExternalAngle>();
