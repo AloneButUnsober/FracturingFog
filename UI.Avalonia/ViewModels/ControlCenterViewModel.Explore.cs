@@ -111,7 +111,13 @@ public sealed partial class ControlCenterViewModel
         }
         else
         {
-            start = new ExploreView(vs.GetCenter(), vs.Zoom);
+            // #1878 — past 1e100 the start is exact (the limbs' own value when the view has
+            // none) and, past double, carries the log zoom.
+            double zl = vs.ZoomLog10;
+            var exact = vs.CenterExact ?? (zl > AutoExplorer.DeepZoomLog10
+                ? FFMath.ExactCentre.FromDeep(vs.GetCenter(), FFMath.BigFloat.PrecisionForZoom(zl + 10)) : (FFMath.ExactCentre?)null);
+            start = new ExploreView(vs.GetCenter(), vs.Zoom, exact,
+                FracturingFog.ViewState.ZoomLog.BeyondDouble(zl) ? zl : double.NaN);
             opts = opts with { Seed = _descendSeed++ };
         }
         var quality = vs.Quality;
@@ -138,7 +144,7 @@ public sealed partial class ControlCenterViewModel
             {
                 var view = n.View;
                 ExploreCandidates.Add(new ExploreCandidateItem(
-                    $"#{++k}  score {n.Score.Total:F2} · zoom {Fmt(view.Zoom)}",
+                    $"#{++k}  score {n.Score.Total:F2} · zoom {FracturingFog.ViewState.ZoomLog.Format(view.Zoom, view.ZoomLog10, 4)}",
                     n.Score.ToString(),
                     ReactiveCommand.Create(() => { GoToExploreView(view, quality); })));
             }
@@ -159,6 +165,7 @@ public sealed partial class ControlCenterViewModel
     private void GoToExploreView(ExploreView v, FracturingFog.Models.QualityPreset baseQuality)
     {
         var q = MinibrotJump.QualityFor(baseQuality, v.Zoom);
-        ApplyPlan(new MinibrotJumpPlan(v.Center, v.Zoom, q, 0, 0, false));
+        ApplyPlan(new MinibrotJumpPlan(v.Center, v.Zoom, q, 0, 0, false,
+            CenterExact: v.Exact, ZoomLog10: v.ZoomLog10));   // #1878: exact / log past 1e100
     }
 }

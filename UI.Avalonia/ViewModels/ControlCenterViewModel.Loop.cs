@@ -33,6 +33,7 @@ public sealed partial class ControlCenterViewModel
 
     private MisiurewiczLoop? _loop;
     private DeepComplex _loopPoint;
+    private FFMath.ExactCentre? _loopExact;   // #1878: the snapped point past OD
     private string _loopInfo = "";
     private WriteableBitmap? _juliaPreview;
 
@@ -66,9 +67,11 @@ public sealed partial class ControlCenterViewModel
 
     /// <summary>Remember the snapped point's loop (null multiplier angle = not
     /// conformal, no loop) and show its J_c preview (z² + c only).</summary>
-    private void SetLoopTarget(DeepComplex point, double magnitude, double? angleDegrees, int period, bool juliaPreview)
+    private void SetLoopTarget(DeepComplex point, double magnitude, double? angleDegrees, int period, bool juliaPreview,
+                               FFMath.ExactCentre? exact = null)
     {
         _loopPoint = point;
+        _loopExact = exact;
         _loop = angleDegrees is double deg && magnitude > 1 ? MisiurewiczLoop.For(magnitude, deg, period) : null;
         this.RaisePropertyChanged(nameof(HasLoop));
         LoopInfo = _loop is { } l
@@ -130,10 +133,19 @@ public sealed partial class ControlCenterViewModel
             else { args.Add(flag); args.Add(value); }
         }
         var re = _loopPoint.Re; var im = _loopPoint.Im;
-        Put(FracturingFog.Batch.BatchFlags.X, FracturingFog.Cli.BatchCommandBuilder.Coordinate(
-            re.X0, new[] { re.X1, re.X2, re.X3, re.X4, re.X5, re.X6, re.X7 }));
-        Put(FracturingFog.Batch.BatchFlags.Y, FracturingFog.Cli.BatchCommandBuilder.Coordinate(
-            im.X0, new[] { im.X1, im.X2, im.X3, im.X4, im.X5, im.X6, im.X7 }));
+        if (_loopExact is { } ex)
+        {
+            // #1878 — past OD the point's exact decimal (--x / --y read it, #1860).
+            Put(FracturingFog.Batch.BatchFlags.X, FracturingFog.ViewState.CoordNotation.FormatExact(ex.Re));
+            Put(FracturingFog.Batch.BatchFlags.Y, FracturingFog.ViewState.CoordNotation.FormatExact(ex.Im));
+        }
+        else
+        {
+            Put(FracturingFog.Batch.BatchFlags.X, FracturingFog.Cli.BatchCommandBuilder.Coordinate(
+                re.X0, new[] { re.X1, re.X2, re.X3, re.X4, re.X5, re.X6, re.X7 }));
+            Put(FracturingFog.Batch.BatchFlags.Y, FracturingFog.Cli.BatchCommandBuilder.Coordinate(
+                im.X0, new[] { im.X1, im.X2, im.X3, im.X4, im.X5, im.X6, im.X7 }));
+        }
         args.AddRange(FracturingFog.Cli.BatchCommandBuilder.LoopVideoArgs(loop));
         CommandBuilder.Composer.Load(args);
         SelectedSection = ControlCenterSection.Command;
