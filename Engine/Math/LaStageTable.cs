@@ -165,26 +165,29 @@ namespace FracturingFog.FFMath
         /// <summary>#1664 — the steps for the float-exp GPU LA kernel: 12 words each (Ref
         /// re / im as float; A and B as a float-exp complex, mantissa re / im then exponent;
         /// Thr and ThrC as float-exp reals, mantissa then exponent), in <see cref="Data"/>
-        /// order, sentinels included. Built once per table.</summary>
+        /// order, sentinels included. Built once per table. #1887 — 13 words: Ref is a
+        /// float-exp complex too (mantissa re / im, exponent), then A, B, Thr, ThrC.</summary>
         public uint[] GpuStepsFloatExp => _gpuStepsFx ??= BuildGpuStepsFloatExp();
 
         private uint[] BuildGpuStepsFloatExp()
         {
-            var a = new uint[Data.Length * 12];
+            var a = new uint[Data.Length * 13];
             static uint F(float f) => BitConverter.SingleToUInt32Bits(f);
             for (int i = 0; i < Data.Length; i++)
             {
                 ref readonly var d = ref Data[i];
-                int o = i * 12;
-                a[o] = F((float)d.RefRe); a[o + 1] = F((float)d.RefIm);
+                int o = i * 13;
+                // #1887 — Ref as float-exp (a float flushed |Ref| below FLT_MIN near a nucleus).
+                FracturingFog.Rendering.GpuFloatExp.Encode(d.RefRe, d.RefIm, out float rr, out float ri, out int re);
+                a[o] = F(rr); a[o + 1] = F(ri); a[o + 2] = (uint)re;
                 FracturingFog.Rendering.GpuFloatExp.Encode(d.ARe, d.AIm, out float ar, out float ai, out int ae);
-                a[o + 2] = F(ar); a[o + 3] = F(ai); a[o + 4] = (uint)ae;
+                a[o + 3] = F(ar); a[o + 4] = F(ai); a[o + 5] = (uint)ae;
                 FracturingFog.Rendering.GpuFloatExp.Encode(d.BRe, d.BIm, out float br, out float bi, out int be);
-                a[o + 5] = F(br); a[o + 6] = F(bi); a[o + 7] = (uint)be;
+                a[o + 6] = F(br); a[o + 7] = F(bi); a[o + 8] = (uint)be;
                 FracturingFog.Rendering.GpuFloatExp.Encode(d.Thr, out float tm, out int te);
-                a[o + 8] = F(tm); a[o + 9] = (uint)te;
+                a[o + 9] = F(tm); a[o + 10] = (uint)te;
                 FracturingFog.Rendering.GpuFloatExp.Encode(d.ThrC, out float cm, out int ce);
-                a[o + 10] = F(cm); a[o + 11] = (uint)ce;
+                a[o + 11] = F(cm); a[o + 12] = (uint)ce;
             }
             return a;
         }

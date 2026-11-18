@@ -23,6 +23,10 @@ namespace FracturingFog.Rendering
 
         public const int Bytes = 112;
 
+        /// <summary>#1887 — the float-exp LA kernel runs this AT: it has one, and its escape
+        /// radius² fits the float the kernel compares |z'|² against.</summary>
+        public static bool AtUsable(in GpuLaAt at) => at.Len > 0 && at.Esc2 <= float.MaxValue;
+
         /// <summary>#1882 — the largest |binary exponent| of the pixel scale the kernel is
         /// given (zoom ~1e150,000): its float-exp exponents stay far from int overflow and
         /// from its zero exponent (<see cref="GpuFloatExp.ZeroExp"/>).</summary>
@@ -44,22 +48,25 @@ namespace FracturingFog.Rendering
                 ScaleM = (float)Math.ScaleB(scale, -Math.ILogB(scale)), ScaleE = e,
                 OffX0 = (float)offsetX0, OffY0 = (float)offsetY0,
                 Width = width, Height = height, MaxIter = maxIter, RefLen = refLen,
-                Stages = stages, AtLen = at.Len, StepsBase = 2 * stages,
+                // #1887 — no AT where its escape radius² is past float's range (it runs to
+                // 2^256): leaving the AT at FLT_MAX instead (#1886's clamp) put up to 1.3 % of a
+                // minibrot frame's pixels off by up to 95 % (S1887); the stages alone are right.
+                Stages = stages, AtLen = AtUsable(at) ? at.Len : 0, StepsBase = 2 * stages,
                 EscapeR2 = (float)escapeRadius2,
                 // #1886 — the kernel compares |z'|² in float: an Esc² past FLT_MAX (it runs to
                 // 2^256) became +∞, so the AT never escaped and a pixel that leaves it ran to
-                // the cap (in set). Leaving the AT at FLT_MAX is safe: the stages go on from z'/A.
+                // the cap (in set). #1887: such an AT is not passed at all (AtLen 0, above).
                 AtEsc2 = (float)Math.Min(at.Esc2, float.MaxValue),
                 AtRefCR = (float)at.RefCRe, AtRefCI = (float)at.RefCIm,
             };
-            if (at.Len > 0 && at.CFx is { } cfx && at.InvZFx is { } izfx && at.ThrCFx is { } tfx)
+            if (p.AtLen > 0 && at.CFx is { } cfx && at.InvZFx is { } izfx && at.ThrCFx is { } tfx)
             {
                 // #1886 — the float-exp AT (past double).
                 GpuFloatExp.Encode(tfx, out p.AtThrCM, out p.AtThrCE);
                 GpuFloatExp.Encode(cfx, out p.AtCR, out p.AtCI, out p.AtCE);
                 GpuFloatExp.Encode(izfx, out p.AtInvZR, out p.AtInvZI, out p.AtInvZE);
             }
-            else if (at.Len > 0)
+            else if (p.AtLen > 0)
             {
                 GpuFloatExp.Encode(at.ThrC, out p.AtThrCM, out p.AtThrCE);
                 GpuFloatExp.Encode(at.CRe, at.CIm, out p.AtCR, out p.AtCI, out p.AtCE);

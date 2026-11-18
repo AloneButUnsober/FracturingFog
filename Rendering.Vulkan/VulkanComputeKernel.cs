@@ -1571,6 +1571,8 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
 
     private Program? _perturbLaFx;
     private Allocated _laFxStepBuf;
+    private Allocated _laFxRef;   // #1887: the LA-fx kernel's float-exp reference
+    private int _laFxRefAlloc;
     private int _laFxStepAlloc;
 
     /// <summary>#1664 — needs no shaderFloat64.</summary>
@@ -1602,11 +1604,14 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         BeginFrameTiming();
         int n = width * height;
         EnsureBuffers(width, height, iterDst);
-        if (_fxRefZ.Buffer.Handle == 0 || _fxRefAlloc < refLen)
+        // #1887 — the reference as float-exp words (its own buffer: the plain float-exp
+        // kernel keeps the float2 one).
+        uint[] refFx = LaKernelSource.PackRefFloatExp(refZr, refZi, refLen);
+        if (_laFxRef.Buffer.Handle == 0 || _laFxRefAlloc < refFx.Length)
         {
-            FreeBuffer(ref _fxRefZ);
-            _fxRefZ = AllocBuffer((ulong)(refLen * 2 * sizeof(float)), BufferUsageFlags.StorageBufferBit, Residency.Upload);
-            _fxRefAlloc = refLen;
+            FreeBuffer(ref _laFxRef);
+            _laFxRef = AllocBuffer((ulong)(refFx.Length * sizeof(uint)), BufferUsageFlags.StorageBufferBit, Residency.Upload);
+            _laFxRefAlloc = refFx.Length;
         }
         if (_laFxStepBuf.Buffer.Handle == 0 || _laFxStepAlloc < laStepsFx.Length)
         {
@@ -1624,9 +1629,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             0u, (uint)TShift, (uint)TShift + 2, (uint)TShift + 3,
             (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)UShift + 3);
 
-        var z = new float[refLen * 2];
-        for (int i = 0; i < refLen; i++) { z[2 * i] = (float)refZr[i]; z[2 * i + 1] = (float)refZi[i]; }
-        fixed (float* pz = z) WriteBytes(_fxRefZ, pz, z.Length * sizeof(float));
+        fixed (uint* pr = refFx) WriteBytes(_laFxRef, pr, refFx.Length * sizeof(uint));
         fixed (uint* p = laStepsFx) WriteBytes(_laFxStepBuf, p, laStepsFx.Length * sizeof(uint));
         fixed (uint* p = laInts) WriteBytes(_laIntBuf, p, laInts.Length * sizeof(uint));
 
@@ -1643,7 +1646,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             },
             stackalloc Buffer[]
             {
-                _fxRefZ.Buffer, _laFxStepBuf.Buffer, _laIntBuf.Buffer,
+                _laFxRef.Buffer, _laFxStepBuf.Buffer, _laIntBuf.Buffer,
                 _buf[2].Buffer, _buf[3].Buffer, _buf[4].Buffer, work,
             },
             stackalloc uint[]
@@ -2276,6 +2279,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         FreeBuffer(ref _laFxStepBuf);
         if (_perturbF32 != null) { DestroyProgram(_perturbF32); _perturbF32 = null; }
         FreeBuffer(ref _fxRefZ);
+        FreeBuffer(ref _laFxRef);   // #1887
         _perturbOrbit.Clear();
         foreach (var p in _colorByIdKind.Values) DestroyProgram(p);
         _colorByIdKind.Clear();

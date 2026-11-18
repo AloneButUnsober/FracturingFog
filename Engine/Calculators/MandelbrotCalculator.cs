@@ -3707,7 +3707,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         LastFrameUsedGpuLa = useLa;   // #1630
         LastFrameUsedGpuLaFloatExp = useLaFx;   // #1664
         LastFrameUsedGpuLaTableFx = laTableFx != null;   // #1880
-        LastFrameUsedGpuLaAtFx = laTableFx != null && _laAtFx != null;   // #1886
+        LastFrameUsedGpuLaAtFx = laTableFx != null && _laAtFx is { } atFxUsed   // #1886; #1887: as the kernel gets it
+            && FracturingFog.Rendering.GpuLaFxParams.AtUsable(FracturingFog.Rendering.GpuLaAt.FromFx(atFxUsed));
         if (useLa) _lastFrameUsedLa = true;   // the precision label's " LA"
         LastFrameUsedGpuWavefront = wave;
         // #1394 — a solid-region pass computed only its marked pixels: no warp-waste

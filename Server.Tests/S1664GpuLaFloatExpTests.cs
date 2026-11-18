@@ -77,15 +77,15 @@ public sealed class S1664FloatExpEncodingTests
         static bool Close(double got, double want, double mag) => Math.Abs(got - want) <= Math.Max(mag, 1e-300) * 1.2e-7;
         for (int i = 0; i < d.Length / 8; i++)
         {
-            int o = i * 12, q = i * 8;
-            Assert.Equal((float)d[q], F(fx[o])); Assert.Equal((float)d[q + 1], F(fx[o + 1]));
-            foreach (var (m, w) in new[] { (2, 2), (5, 4) })
+            // #1887 — 13 words: Ref, A, B as float-exp complexes, then Thr, ThrC (was 12, Ref as float).
+            int o = i * LaKernelSource.StepWordsFloatExp, q = i * 8;
+            foreach (var (m, w) in new[] { (0, 0), (3, 2), (6, 4) })
             {
                 var (re, im) = GpuFloatExp.Decode(F(fx[o + m]), F(fx[o + m + 1]), (int)fx[o + m + 2]);
                 double mag = Math.Max(Math.Abs(d[q + w]), Math.Abs(d[q + w + 1]));
                 Assert.True(Close(re, d[q + w], mag) && Close(im, d[q + w + 1], mag), $"step {i} word {m}");
             }
-            foreach (var (m, w) in new[] { (8, 6), (10, 7) })
+            foreach (var (m, w) in new[] { (9, 6), (11, 7) })
             {
                 var (v, _) = GpuFloatExp.Decode(F(fx[o + m]), 0, (int)fx[o + m + 1]);
                 Assert.True(Close(v, d[q + w], d[q + w]), $"step {i} threshold {m}");

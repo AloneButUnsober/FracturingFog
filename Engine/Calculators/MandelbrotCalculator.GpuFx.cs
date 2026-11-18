@@ -109,7 +109,7 @@ public sealed partial class MandelbrotCalculator
         LastFrameUsedGpuLaFloatExp = true;
         LastFrameUsedGpuLaTableFx = true;
         LastFrameUsedGpuFloatExpPixels = true;
-        LastFrameUsedGpuLaAtFx = gat.Len > 0;   // #1886
+        LastFrameUsedGpuLaAtFx = FracturingFog.Rendering.GpuLaFxParams.AtUsable(gat);   // #1886; #1887: as the kernel gets it
         LastFrameUsedGpuWavefront = wave;
         _lastFrameUsedLa = true;   // the precision label's " LA"
         LogGpuPerturbEngaged();

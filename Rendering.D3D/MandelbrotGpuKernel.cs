@@ -1968,6 +1968,9 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
     private ID3D11Buffer? _laFxStepBuf;
     private ID3D11ShaderResourceView? _laFxStepSrv;
     private int _laFxStepAlloc;
+    private ID3D11Buffer? _laFxRefBuf;          // #1887
+    private ID3D11ShaderResourceView? _laFxRefSrv;
+    private int _laFxRefAlloc;
 
     /// <summary>#1664 — needs no double shader ops. Under the same D3D11 gate as the fp64
     /// LA kernel (#1661).</summary>
@@ -1999,7 +2002,11 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             BeginFrameTiming();
             EnsureOutputBuffers(width, height, iterDst);
-            UploadFxRefOrbit(refZr, refZi, refLen);
+            // #1887 — the reference as float-exp words (its own buffer: the plain float-exp
+            // kernel keeps the float2 one).
+            uint[] refFx = FracturingFog.Rendering.LaKernelSource.PackRefFloatExp(refZr, refZi, refLen);
+            EnsureStructured(ref _laFxRefBuf, ref _laFxRefSrv, ref _laFxRefAlloc, refFx.Length, sizeof(uint));
+            UploadUInts(_laFxRefBuf!, refFx);
             _laFxParamsBuf ??= _device.CreateBuffer(new BufferDescription(
                 byteWidth: GpuLaFxParams.Bytes, bindFlags: BindFlags.ConstantBuffer,
                 usage: ResourceUsage.Dynamic, cpuAccessFlags: CpuAccessFlags.Write));
@@ -2016,7 +2023,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             DispatchPerturbBands(Shape(GpuGroupShapes.SlotPerturbFp32), width, height, maxIter, srvCount: 4, " (LA, float-exp)", () =>
             {
                 _ctx.CSSetShader(_csPerturbLaFx);
-                _ctx.CSSetShaderResource(0, _fxRefZSrv);    // t0
+                _ctx.CSSetShaderResource(0, _laFxRefSrv);   // t0 (#1887: float-exp words)
                 _ctx.CSSetShaderResource(2, _laFxStepSrv);  // t2
                 _ctx.CSSetShaderResource(3, _laIntSrv);     // t3
             }, (rowBase, rows, band) =>
@@ -2368,6 +2375,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
         try { _timer.Dispose(); } catch { }   // #1329
         try { _csPerturbFx?.Dispose(); } catch { }   // #1331
         try { _csPerturbLaFx?.Dispose(); _laFxParamsBuf?.Dispose(); _laFxStepSrv?.Dispose(); _laFxStepBuf?.Dispose(); } catch { }   // #1664
+        try { _laFxRefSrv?.Dispose(); _laFxRefBuf?.Dispose(); } catch { }   // #1887
         try { _csPerturbF32?.Dispose(); } catch { }
         try { _fxRefZSrv?.Dispose(); } catch { }
         try { _fxRefZBuf?.Dispose(); } catch { }
