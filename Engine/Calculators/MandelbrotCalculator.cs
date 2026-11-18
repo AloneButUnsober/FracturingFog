@@ -5267,6 +5267,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         _lastFrameUsedLa = laFx != null;
         _laPixelsTotal = _laStepsTotal = _laPlainTotal = _laBlaTotal = 0;
         _laAtStepsTotal = _laAtPixelsTotal = 0;
+        _fxDoubleStepsTotal = 0; _fxDoubleClimbs = 0; _fxDoubleRenorms = 0;   // #1889
         // #1886 (C5g) — the AT over the float-exp table, for the view's half diagonal.
         SelectLaAtFx(laFx, scale * (Math.Sqrt(halfW * halfW + halfH * halfH)
             + Math.Sqrt(PixelJitter.X * PixelJitter.X + PixelJitter.Y * PixelJitter.Y)));
@@ -5285,7 +5286,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             int rowBase = y * w;
             var dcI = scale * (offY + y - halfH + PixelJitter.Y);   // #1851: the pixel jitter
             long rowSkips = 0, rowSaved = 0, rowSteps = 0;
-            long laSteps = 0, laPlain = 0, laBla = 0, laPx = 0, atSteps = 0, atPx = 0;
+            long laSteps = 0, laPlain = 0, laBla = 0, laPx = 0, atSteps = 0, atPx = 0, dblSteps = 0;
             for (int x = 0; x < w; x++)
             {
                 int idx = rowBase + x;
@@ -5293,7 +5294,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 if (laFx != null)
                 {
                     EvaluateLaFx(laFx, atFx, laTail, scale * (offX + x - halfW + PixelJitter.X), dcI, rowMaxIt, idx, colorMap,
-                        ref laSteps, ref laPlain, ref laBla, ref atSteps, ref atPx);
+                        ref laSteps, ref laPlain, ref laBla, ref atSteps, ref atPx, ref dblSteps);
                     laPx++;
                 }
                 else
@@ -5308,6 +5309,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 Interlocked.Add(ref _laBlaTotal, laBla);
                 Interlocked.Add(ref _laAtStepsTotal, atSteps);   // #1886
                 Interlocked.Add(ref _laAtPixelsTotal, atPx);
+                Interlocked.Add(ref _fxDoubleStepsTotal, dblSteps);   // #1889
             }
             Interlocked.Add(ref _blaSkipsTotal, rowSkips);
             Interlocked.Add(ref _blaIterSkippedTotal, rowSaved);

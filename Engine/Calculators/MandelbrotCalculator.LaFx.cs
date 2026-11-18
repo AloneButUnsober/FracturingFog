@@ -42,6 +42,19 @@ public sealed partial class MandelbrotCalculator
     /// <summary>#1847 — test / probe access: the floatexp LA table the last FX frame used.</summary>
     public LaStageTableFx? LastLaTableFx => _laFx;
 
+    // #1889 — the last FX frame's tail steps run in double (TailInDouble).
+    private long _fxDoubleStepsTotal;
+
+    /// <summary>#1889 — the last float-exp frame's plain tail steps that ran in double
+    /// (of <see cref="LastLaWork"/>'s plain steps).</summary>
+    public long LastFxDoubleSteps => _fxDoubleStepsTotal;
+
+    private long _fxDoubleClimbs, _fxDoubleRenorms;
+
+    /// <summary>#1889 — the last float-exp frame's rebases that climbed back to the stages,
+    /// and derivative renormalisations, inside the double tail (diagnostic).</summary>
+    public (long Climbs, long Renorms) LastFxDoubleTailEvents => (_fxDoubleClimbs, _fxDoubleRenorms);
+
     // #1886 (C5g) — the frame's AT over the float-exp table (LaAtFx; null: none usable, or off).
     private LaAtFx? _laAtFx;
 
@@ -54,7 +67,7 @@ public sealed partial class MandelbrotCalculator
 
     private void EvaluateLaFx<TMap>(
         LaStageTableFx t, LaAtFx? atOpt, BlaTableFx? bla, FloatExp dcR, FloatExp dcI, int maxIter, int idx, TMap colorMap,
-        ref long laSteps, ref long plainSteps, ref long blaSkips, ref long atSteps, ref long atPixels)
+        ref long laSteps, ref long plainSteps, ref long blaSkips, ref long atSteps, ref long atPixels, ref long doubleSteps)
         where TMap : IColorMap
     {
         var data = t.Data;
@@ -102,6 +115,17 @@ public sealed partial class MandelbrotCalculator
             bool back = false;
             while (n < maxIter)
             {
+                // #1889 (C5h) — the tail in double while δ is in double's range (it is |z| after
+                // a rebase): the same steps, bit for bit (see TailInDouble). Back here at the
+                // range's edge, on escape, on a rebase that climbs, or at the cap.
+                if (bla == null && FxTailInDouble)
+                {
+                    var r = TailInDouble(dcR, dcI, maxIter, refLen, climb && top >= 0, ref dr, ref di, ref zr, ref zi,
+                        ref drv, ref div, ref m, ref n, ref plainSteps, ref doubleSteps);
+                    if (r == DoubleTailExit.Escaped) break;
+                    if (r == DoubleTailExit.Climb) { back = true; break; }
+                    if (n >= maxIter) break;
+                }
                 if (bla != null)
                 {
                     int bi = bla.Lookup(m, FloatExp.Norm2(dr, di), Math.Min(refLen - 1, m + (maxIter - n)));
@@ -237,5 +261,109 @@ public sealed partial class MandelbrotCalculator
             c.Next = c.Count * 2;
         }
         return false;
+    }
+
+    // ── #1889 (epic #1428, C5h) — the float-exp tail in double ─────────────────────
+    //
+    // Measured (S1886's p250 minibrot at 1e286–1e287, 320×180): the FX rows cost ~7× the
+    // double rows for the same steps, and the plain tail is ~93 % of them. A FloatExp
+    // operation is one double operation on the mantissas plus exact power-of-two exponent
+    // bookkeeping, so where every operand and result is a normal double it rounds exactly
+    // as the double operation does. The tail's δ is |z| after a rebase (O(1)), so most
+    // steps can run in double:
+    //   • δ in double while ‖δ‖ ≥ 2^-500 (|δ|² stays normal for the rebase test) and
+    //     ≤ 2^500;
+    //   • dc in double when it is a normal double, or else while it is below δ's last bit
+    //     (2^-62·‖δ‖), where FloatExp's add drops it as double's does;
+    //   • dz/dc as dd·2^s (the exponent kept beside a double, as FloatExp; the +1 becomes
+    //     +2^-s), renormalised by powers of two outside [2^-400, 2^400].
+    // Outside those bounds the step runs in FloatExp (the caller's loop). FF's own; the
+    // idea of an exponent kept beside a double is Kalles Fraktaler 2+'s floatexp
+    // (bibliography #kf-floatexp), as FloatExp itself.
+
+    /// <summary>#1889 — run the float-exp tail in double where it is exact (on by default;
+    /// FF_FX_TAIL_DOUBLE=0 turns it off, for measuring and the identity tests).</summary>
+    public static bool FxTailInDouble { get; set; } = Environment.GetEnvironmentVariable("FF_FX_TAIL_DOUBLE") != "0";
+
+    private enum DoubleTailExit { Range, Escaped, Climb }
+
+    private const double TailLo = 3.054936363499605e-151;   // 2^-500
+    private const double TailHi = 3.273390607896142e150;    // 2^500
+    private const double DerivLo = 3.872591914849318e-121;  // 2^-400
+    private const double DerivHi = 2.5822498780869086e120;  // 2^400
+
+    private DoubleTailExit TailInDouble(FloatExp dcR, FloatExp dcI, int maxIter, int refLen, bool climb,
+        ref FloatExp dr, ref FloatExp di, ref FloatExp zr, ref FloatExp zi, ref FloatExp drv, ref FloatExp div,
+        ref int m, ref int n, ref long plainSteps, ref long doubleSteps)
+    {
+        double dR = dr.ToDouble(), dI = di.ToDouble();
+        double mag = Math.Max(Math.Abs(dR), Math.Abs(dI));
+        if (!(mag >= TailLo && mag <= TailHi)) return DoubleTailExit.Range;
+        // Each part of δ must be exactly its double (a part below double's range would
+        // lose bits FloatExp keeps).
+        if (!Exact(dr, dR) || !Exact(di, dI)) return DoubleTailExit.Range;
+        double cR = dcR.ToDouble(), cI = dcI.ToDouble();
+        bool dcExact = Exact(dcR, cR) && Exact(dcI, cI);
+        // Where dc isn't a double, it must stay below δ's last bit: ‖dc‖·2^62 < ‖δ‖.
+        double dcFloor = dcExact ? 0 : FloatExp.Max(dcR.Abs(), dcI.Abs()).ScaleB(62).ToDouble();
+        if (!dcExact) { cR = 0; cI = 0; if (!(dcFloor < mag)) return DoubleTailExit.Range; }
+        // dz/dc = (gr, gi)·2^s.
+        long s = Math.Max(drv.IsZero ? long.MinValue : drv.E, div.IsZero ? long.MinValue : div.E);
+        if (s == long.MinValue) return DoubleTailExit.Range;
+        double gR = Scaled(drv, s), gI = Scaled(div, s);
+        if (!Exact2(drv, gR, s) || !Exact2(div, gI, s)) return DoubleTailExit.Range;
+        double one = OneAt(s);
+        if (double.IsInfinity(one)) return DoubleTailExit.Range;
+        double esc2 = EscapeRadius2;
+        double zR = 0, zI = 0;
+        bool stepped = false;
+        var exit = DoubleTailExit.Range;
+        var refZr = _refZr; var refZi = _refZi;
+        while (n < maxIter)
+        {
+            double Zr = refZr[m], Zi = refZi[m];
+            zR = dR + Zr; zI = dI + Zi;
+            stepped = true;
+            if (zR * zR + zI * zI >= esc2) { exit = DoubleTailExit.Escaped; break; }
+            bool rebase = zR * zR + zI * zI < dR * dR + dI * dI || m + 1 >= refLen;
+            if (rebase && climb) { dR = zR; dI = zI; exit = DoubleTailExit.Climb; Interlocked.Increment(ref _fxDoubleClimbs); break; }
+            double nGr = 2.0 * (zR * gR - zI * gI) + one;   // (2·z·dz/dc + 1)·2^-s, as FloatExp's
+            double nGi = 2.0 * (zR * gI + zI * gR);
+            gR = nGr; gI = nGi;
+            if (rebase) { dR = zR; dI = zI; Zr = 0; Zi = 0; m = 0; }
+            double a = dR + 2.0 * Zr, b = dI + 2.0 * Zi;
+            double nDr = a * dR - b * dI + cR;
+            double nDi = a * dI + b * dR + cI;
+            dR = nDr; dI = nDi;
+            m++; n++;
+            plainSteps++; doubleSteps++;
+            // The derivative back into [2^-400, 2^400] (exact powers of two).
+            double gm = Math.Max(Math.Abs(gR), Math.Abs(gI));
+            if (gm > DerivHi || (gm < DerivLo && gm != 0))
+            {
+                Interlocked.Increment(ref _fxDoubleRenorms);
+                int k = Math.ILogB(gm);
+                gR = Math.ScaleB(gR, -k); gI = Math.ScaleB(gI, -k); s += k;
+                one = OneAt(s);
+                if (double.IsInfinity(one)) break;
+            }
+            mag = Math.Max(Math.Abs(dR), Math.Abs(dI));
+            if (!(mag >= TailLo && mag <= TailHi) || (!dcExact && !(dcFloor < mag)))
+            {
+                // Leaving the range: the step just taken may have rounded where FloatExp
+                // would not only if a result left double's normal range, which 2^±500 of
+                // headroom excludes. Hand back in FloatExp.
+                break;
+            }
+        }
+        dr = FloatExp.FromDouble(dR); di = FloatExp.FromDouble(dI);
+        if (stepped) { zr = FloatExp.FromDouble(zR); zi = FloatExp.FromDouble(zI); }
+        drv = FloatExp.FromDouble(gR).ScaleB(s); div = FloatExp.FromDouble(gI).ScaleB(s);
+        return exit;
+
+        static bool Exact(FloatExp v, double d) => v.IsZero ? d == 0 : FloatExp.FromDouble(d).E == v.E && FloatExp.FromDouble(d).M == v.M;
+        static bool Exact2(FloatExp v, double d, long sc) => v.IsZero ? d == 0 : FloatExp.FromDouble(d).ScaleB(sc) is var f && f.E == v.E && f.M == v.M;
+        static double Scaled(FloatExp v, long sc) => v.IsZero ? 0 : (v.E - sc < -1074 ? 0 : Math.ScaleB(v.M, (int)(v.E - sc)));
+        static double OneAt(long sc) => sc > 1074 ? 0 : sc < -1023 ? double.PositiveInfinity : Math.ScaleB(1.0, (int)-sc);
     }
 }
