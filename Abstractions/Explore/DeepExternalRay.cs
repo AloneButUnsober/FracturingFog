@@ -123,7 +123,7 @@ public static class DeepExternalRay
     }
 
     // Newton on Δ (c = reference + Δ) for f^{k+1}_c(0) = target, perturbed, in CFx.
-    private static bool SolveDepth(Complex[] z, ref CFx delta, int k, Complex target)
+    internal static bool SolveDepth(Complex[] z, ref CFx delta, int k, Complex target)
     {
         double last = double.PositiveInfinity;
         var t = CFx.Of(target.Real, target.Imaginary);

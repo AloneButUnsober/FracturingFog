@@ -285,6 +285,7 @@ public sealed partial class ControlCenterViewModel
                     return;
                 }
                 ApplyDeepMinibrotJump(deep);
+                await ShowDeepComponentAnglesAsync(deep, ct);   // #1873
                 return;
             }
             var found = await Task.Run(() => NucleusFinder.FindMinibrot(v.Centre, v.Radius, onPeriod: OnPeriod, ct: ct), ct);
@@ -302,7 +303,7 @@ public sealed partial class ControlCenterViewModel
             if (MinibrotJump.Plan(found, shallowVs.Quality, shallowVs.IterLocked, shallowVs.LockedIterations) is null)
             {
                 var deep = await Task.Run(() => DeepNucleusFinder.CarryOn(found, v.Centre, v.Radius, ct: ct), ct);
-                if (deep.Found) { ApplyDeepMinibrotJump(deep); return; }
+                if (deep.Found) { ApplyDeepMinibrotJump(deep); await ShowDeepComponentAnglesAsync(deep, ct); return; }
             }
             ApplyMinibrotJump(found);
             await ShowComponentAnglesAsync(found, ct);   // #1237
@@ -334,7 +335,6 @@ public sealed partial class ControlCenterViewModel
         string size = "1e" + found.SizeLog10.ToString("F1", CultureInfo.InvariantCulture);
         FinderStatus = $"{prefix}Period {found.Period} minibrot, size {size} → zoom "
             + $"{FracturingFog.ViewState.ZoomLog.Format(plan.Zoom, plan.ZoomLog10, 4)} ({plan.Quality.Name}).{note}";
-        SetLocation("External angles are not computed past 1e100 yet.");
     }
 
     // Apply a planned view change (nav history, centre, zoom, tier promotion,
@@ -430,7 +430,7 @@ public sealed partial class ControlCenterViewModel
                 // The loop video's batch path keeps double zooms, and the angles are OD-only:
                 // neither is offered past 1e100 yet. The Julia preview is.
                 SetLoopTarget(dm.Point.ToDeep(), dm.Multiplier.Magnitude, null, dm.Period, juliaPreview: true);
-                SetLocation("Past 1e100 the loop video and the external angles are not available yet.");
+                await ShowDeepMisiurewiczAnglesAsync(dm, reachLog10, ct);   // #1873 (the loop video stays OD-only)
             });
             return true;
         }
@@ -827,6 +827,27 @@ public sealed partial class ControlCenterViewModel
         var angles = await Task.Run(() => LocationAngles.MisiurewiczAngles(m, scale, ct), ct);
         if (angles.Count == 0) { SetLocation("Its external angles could not be verified."); return; }
         // A Misiurewicz point has no internal address (addresses name components).
+        SetLocation($"{(angles.Count == 1 ? "Angle" : $"{angles.Count} rays land here:")} {string.Join(", ", angles)}",
+                    angles[0].ToString());
+    }
+
+    // #1873 (C7e) — the angles of a minibrot found past 1e100. Each candidate is verified by
+    // landing it in arbitrary precision, which takes seconds per angle at depth.
+    private async Task ShowDeepComponentAnglesAsync(DeepNucleusResult found, CancellationToken ct)
+    {
+        SetLocation("Finding its external angles (arbitrary precision: this can take a while)…");
+        var angles = await Task.Run(() => DeepLocationAngles.ComponentAngles(found, ct), ct);
+        if (angles.Count == 0) { SetLocation("Its external angles could not be verified."); return; }
+        string address = await Task.Run(() => AngledAddressText(angles[0]), ct);
+        SetLocation($"Angles {string.Join(", ", angles)} · address {address}", angles[0].ToString(), address);
+    }
+
+    // #1873 — the angles of a Misiurewicz point snapped past 1e100.
+    private async Task ShowDeepMisiurewiczAnglesAsync(DeepMisiurewiczResult m, double scaleLog10, CancellationToken ct)
+    {
+        SetLocation("Finding its external angles (arbitrary precision: this can take a while)…");
+        var angles = await Task.Run(() => DeepLocationAngles.MisiurewiczAngles(m, scaleLog10, ct), ct);
+        if (angles.Count == 0) { SetLocation("Its external angles could not be verified."); return; }
         SetLocation($"{(angles.Count == 1 ? "Angle" : $"{angles.Count} rays land here:")} {string.Join(", ", angles)}",
                     angles[0].ToString());
     }
