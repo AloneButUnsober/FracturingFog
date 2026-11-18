@@ -25,6 +25,9 @@
 // against the float-exp LA kernel, with which LA table it ran (double, or float-exp
 // where A and B overflow the double one). #1882 (C6b): also 1e320 and 1e600, past
 // double's pixel scale (the kernel with a float-exp scale, "fx px").
+// #1887: FF_GPULA_MINIBROT=1 adds S1864's antenna minibrots of periods 66, 125 and 250
+// (~1e78, ~1e149, ~1e299; Newton from −2, framed through the atom size), CPU against the
+// float-exp LA kernel: before #1887 the kernel returned the cap for every pixel there.
 // Exit 0 always.
 
 using System;
@@ -82,6 +85,8 @@ namespace FracturingFog
                 .Where(s => Environment.GetEnvironmentVariable("FF_GPULA_SCENE") is not { } f || s.Name.Contains(f, StringComparison.OrdinalIgnoreCase));
             if (Environment.GetEnvironmentVariable("FF_GPULA_EXACT") == "1" && k.SupportsPerturbationLaFloatExp)
                 foreach (int zl in new[] { 150, 285, 320, 600 }) ExactDeep(k, zl, w, h, reps);   // #1882: past 1e290 too
+            if (Environment.GetEnvironmentVariable("FF_GPULA_MINIBROT") == "1" && k.SupportsPerturbationLaFloatExp)
+                foreach (int period in new[] { 66, 125, 250 }) MinibrotDeep(k, period, w, h);   // #1887
             string modes = Environment.GetEnvironmentVariable("FF_GPULA_MODES") ?? "012345";
             if (!k.SupportsPerturbationLa) modes = modes.Replace("2", "").Replace("3", "");
             if (!k.SupportsPerturbationLaFloatExp) modes = modes.Replace("5", "");
@@ -125,6 +130,75 @@ namespace FracturingFog
                                       $"GPU fx LA {T(5)}{(last[5] == null || fxLa ? "" : " (not fx LA!)")} ms | fx LA {R(4, 5)} vs fx, {R(1, 5)} vs CPU LA | " +
                                       $"iter diff vs CPU LA: fx LA {D(5)}, fx {D(4)}, GPU LA {D(3)}, GPU SA/BLA {D(2)}, CPU BLA {D(0)}");
                 }
+            }
+            finally
+            {
+                MandelbrotCalculator.UseGpuPerturbation = saved;
+                MandelbrotCalculator.UseGpuLaFloatExp = savedFx;
+                MandelbrotCalculator.UseGpuLa = savedLa;
+                MandelbrotCalculator.GpuDeepPrecisionMode = savedPrec;
+            }
+        }
+
+        // #1887 — S1864's antenna minibrot of period n: Newton on z_n(c) = 0 from c = −2, the
+        // atom size, framed as the main set's home view (c = nucleus + Size·(−0.5), zoom 1/Size).
+        private static void MinibrotDeep(IGpuKernel k, int n, int w, int h)
+        {
+            int prec = BigFloat.PrecisionForZoom(1.25 * n + 10) + 64;
+            var one = BigFloat.FromDouble(1, prec);
+            var c = BigFloat.FromDouble(-2, prec);
+            for (int step = 0; step < 40; step++)
+            {
+                BigFloat z = BigFloat.Zero(prec), dz = BigFloat.Zero(prec);
+                for (int q = 0; q < n; q++)
+                {
+                    dz = BigFloat.Add(BigFloat.Mul(z, dz, prec).ScaleB(1), one, prec);
+                    z = BigFloat.Add(BigFloat.Mul(z, z, prec), c, prec);
+                }
+                c = BigFloat.Sub(c, BigFloat.Div(z, dz, prec), prec);
+            }
+            BigFloat zz = BigFloat.Zero(prec), l = one, b = one;
+            for (int q = 1; q < n; q++)
+            {
+                zz = BigFloat.Add(BigFloat.Mul(zz, zz, prec), c, prec);
+                l = BigFloat.Mul(zz, l, prec).ScaleB(1);
+                b = BigFloat.Add(b, BigFloat.Div(one, l, prec), prec);
+            }
+            var size = BigFloat.Div(one, BigFloat.Mul(b, BigFloat.Mul(l, l, prec), prec), prec);
+            double zl = -size.ToFloatExp().Log2Abs() / Math.Log2(10);
+            var centre = new ExactCentre(BigFloat.Sub(c, size.ScaleB(-1), prec), BigFloat.Zero(prec));
+            var d = centre.ToDeep();
+            bool saved = MandelbrotCalculator.UseGpuPerturbation, savedFx = MandelbrotCalculator.UseGpuLaFloatExp, savedLa = MandelbrotCalculator.UseGpuLa;
+            var savedPrec = MandelbrotCalculator.GpuDeepPrecisionMode;
+            try
+            {
+                (MandelbrotCalculator C, double Ms) Frame(bool gpu)
+                {
+                    MandelbrotCalculator.UseGpuPerturbation = gpu;
+                    MandelbrotCalculator.GpuDeepPrecisionMode = GpuDeepPrecision.Fp32;
+                    MandelbrotCalculator.UseGpuLaFloatExp = gpu;
+                    MandelbrotCalculator.UseGpuLa = false;
+                    var m = new MandelbrotCalculator(w, h)
+                    {
+                        Quality = FracturingFog.Models.QualityPreset.Unbounded, MaxIterations = 100 * n, ColorMap = new FracturingFog.Models.HsvPalette(),
+                        CenterX = d.Re.X0, CenterXLo = d.Re.X1, CenterX2 = d.Re.X2, CenterX3 = d.Re.X3,
+                        CenterX4 = d.Re.X4, CenterX5 = d.Re.X5, CenterX6 = d.Re.X6, CenterX7 = d.Re.X7,
+                        CenterY = d.Im.X0, CenterYLo = d.Im.X1, CenterY2 = d.Im.X2, CenterY3 = d.Im.X3,
+                        CenterY4 = d.Im.X4, CenterY5 = d.Im.X5, CenterY6 = d.Im.X6, CenterY7 = d.Im.X7,
+                    };
+                    if (gpu) m.GpuKernel = k;
+                    m.SetZoomLog10(zl);
+                    m.SetDepth(centre);
+                    var sw = Stopwatch.StartNew();
+                    m.Calculate();
+                    return (m, sw.Elapsed.TotalMilliseconds);
+                }
+                var (cpu, tCpu) = Frame(false); var (gpuC, tGpu) = Frame(true);
+                int N = w * h, max = 100 * n;
+                int differ = cpu.IterationBuffer.Take(N).Zip(gpuC.IterationBuffer).Count(p => p.First != p.Second);
+                int inOut = cpu.IterationBuffer.Take(N).Zip(gpuC.IterationBuffer).Count(p => (p.First >= max) != (p.Second >= max));
+                Console.WriteLine($"    minibrot p{n,-4} 1e{zl,-7:F1} | CPU {tCpu,7:F0} | GPU [{(gpuC.LastFrameUsedGpuLaFloatExp ? "fx LA" : $"CPU! {gpuC.LastGpuRoute.Reason}")}] " +
+                                  $"{tGpu,7:F0} ms | iter diff vs CPU {100.0 * differ / N:F2} %, in/out {inOut}");
             }
             finally
             {

@@ -289,7 +289,28 @@ void CSPerturbLA(uint3 tid : SV_DispatchThreadID)
     /// <summary>#1664 — 32-bit words per step of the float-exp step buffer (t2):
     /// Ref re, im (float); A re, im (float mantissa), A exponent; B re, im, B exponent;
     /// Thr mantissa, exponent; ThrC mantissa, exponent (<c>LaStageTable.GpuStepsFloatExp</c>).</summary>
-    public const int StepWordsFloatExp = 12;
+    public const int StepWordsFloatExp = 13;   // #1887: Ref as float-exp (was 12, Ref as float)
+
+    /// <summary>#1887 — the words per reference-orbit entry of the float-exp LA kernel's
+    /// <c>gRefFx</c>: Z_n as a float-exp complex (mantissa re, im, exponent).</summary>
+    public const int RefWordsFloatExp = 3;
+
+    /// <summary>#1887 — the reference orbit for the float-exp LA kernel (<c>gRefFx</c>, t0):
+    /// each Z_n as a float-exp complex. A plain float flushed |Z_n| below FLT_MIN (1.2e-38)
+    /// — near a nucleus the reference passes that close to 0 at every period on a minibrot
+    /// view past ~1e77 — and lost the 2·Z·δ term: every pixel ran to the cap.</summary>
+    public static uint[] PackRefFloatExp(double[] refZr, double[] refZi, int refLen)
+    {
+        var a = new uint[refLen * RefWordsFloatExp];
+        for (int i = 0; i < refLen; i++)
+        {
+            GpuFloatExp.Encode(refZr[i], refZi[i], out float mr, out float mi, out int e);
+            a[3 * i] = System.BitConverter.SingleToUInt32Bits(mr);
+            a[3 * i + 1] = System.BitConverter.SingleToUInt32Bits(mi);
+            a[3 * i + 2] = (uint)e;
+        }
+        return a;
+    }
 
     /// <summary>#1664 — the float-exp LA kernel. Bindings: b0 params (112 bytes, all
     /// 32-bit: <c>LaFxParams</c> on the host), t0 the reference orbit as float2, t2 the
@@ -329,7 +350,7 @@ cbuffer PerturbLaFxParams : register(b0)
     int   gPadL0;
 }
 
-StructuredBuffer<float2> gRefZ  : register(t0);
+StructuredBuffer<uint>   gRefFx : register(t0);   // #1887: Z_n float-exp, 3 words (m.x, m.y, e)
 StructuredBuffer<uint>   gLaFx  : register(t2);
 StructuredBuffer<uint>   gLaInt : register(t3);
 
@@ -358,6 +379,18 @@ void FxReal(float a, out float m, out int e)
 }
 
 float ChebM(float2 m) { return max(abs(m.x), abs(m.y)); }
+
+// #1887 — |a|² < |b|² for normalised float-exp complexes (mantissas' larger part in [1, 2),
+// so |m|² is in [1, 8)): decided by the exponents beyond a gap of 2.
+bool FxNormLess(float2 am, int ae, float2 bm, int be)
+{
+    if (bm.x == 0.0 && bm.y == 0.0) return false;
+    if (am.x == 0.0 && am.y == 0.0) return true;
+    int d = ae - be;
+    if (d >= 2) return false;
+    if (d <= -2) return true;
+    return dot(am, am) * Pow2(2 * d) < dot(bm, bm);
+}
 
 void FxWriteLa(int idx, int n, float2 z, float2 dzf)
 {
@@ -463,23 +496,27 @@ void CSPerturbLAFX(uint3 tid : SV_DispatchThreadID)
                 {
                     uint s0 = gLaInt[2 * stage], last = gLaInt[2 * stage + 1];
                     uint ei2 = gStepsBase + 2 * (s0 + (uint)j);
-                    uint f0 = s0 * 12;
-                    if (FxGE(mdcM, mdcE, asfloat(gLaFx[f0 + 10]), asint(gLaFx[f0 + 11])))
+                    uint f0 = s0 * 13;
+                    if (FxGE(mdcM, mdcE, asfloat(gLaFx[f0 + 11]), asint(gLaFx[f0 + 12])))
                     {
                         j = (int)gLaInt[ei2 + 1]; stage--;
                     }
                     else
                     {
-                        uint e = (s0 + (uint)j) * 12;
-                        float2 sR = float2(asfloat(gLaFx[e]), asfloat(gLaFx[e + 1]));
-                        float2 sAM = float2(asfloat(gLaFx[e + 2]), asfloat(gLaFx[e + 3])); int sAE = asint(gLaFx[e + 4]);
-                        float2 sBM = float2(asfloat(gLaFx[e + 5]), asfloat(gLaFx[e + 6])); int sBE = asint(gLaFx[e + 7]);
-                        float sThrM = asfloat(gLaFx[e + 8]); int sThrE = asint(gLaFx[e + 9]);
-                        float sThrCM = asfloat(gLaFx[e + 10]); int sThrCE = asint(gLaFx[e + 11]);
+                        uint e = (s0 + (uint)j) * 13;
+                        // #1887 — Ref in float-exp (near a nucleus |Ref| falls below FLT_MIN).
+                        float2 sRM = float2(asfloat(gLaFx[e]), asfloat(gLaFx[e + 1])); int sRE = asint(gLaFx[e + 2]);
+                        float2 sAM = float2(asfloat(gLaFx[e + 3]), asfloat(gLaFx[e + 4])); int sAE = asint(gLaFx[e + 5]);
+                        float2 sBM = float2(asfloat(gLaFx[e + 6]), asfloat(gLaFx[e + 7])); int sBE = asint(gLaFx[e + 8]);
+                        float sThrM = asfloat(gLaFx[e + 9]); int sThrE = asint(gLaFx[e + 10]);
+                        float sThrCM = asfloat(gLaFx[e + 11]); int sThrCE = asint(gLaFx[e + 12]);
                         int sLen = (int)gLaInt[ei2], sNext = (int)gLaInt[ei2 + 1];
-                        float2 df = FxToFloat(dM, dE);
-                        float2 wM = CMul(dM, 2.0 * sR + df); int wE = dE;   // w = δ·(2·Ref + δ)
-                        FxNorm(wM, wE);
+                        float2 rdM; int rdE;
+                        FxAdd(sRM, sRE, dM, dE, rdM, rdE);          // Ref + δ
+                        float2 r2M; int r2E;
+                        FxAdd(sRM, sRE + 1, dM, dE, r2M, r2E);      // 2·Ref + δ
+                        float2 wM; int wE;
+                        FxMul(dM, dE, r2M, r2E, wM, wE);            // w = δ·(2·Ref + δ)
                         if (FxGE(ChebM(wM), wE, sThrM, sThrE) || FxGE(mdcM, mdcE, sThrCM, sThrCE) || sLen > gMaxIter - n)
                         {
                             j = sNext; stage--;
@@ -487,8 +524,8 @@ void CSPerturbLAFX(uint3 tid : SV_DispatchThreadID)
                         else
                         {
                             // dz/dc' = A·(2·zs·dz/dc) + B
-                            float2 tM = CMul(2.0 * (sR + df), vM); int tE = vE;
-                            FxNorm(tM, tE);
+                            float2 tM; int tE;
+                            FxMul(rdM, rdE + 1, vM, vE, tM, tE);
                             float2 atM; int atE;
                             FxMul(sAM, sAE, tM, tE, atM, atE);
                             FxAdd(atM, atE, sBM, sBE, vM, vE);
@@ -500,13 +537,14 @@ void CSPerturbLAFX(uint3 tid : SV_DispatchThreadID)
                             FxAdd(awM, awE, bcM, bcE, dM, dE);
                             n += sLen;
                             j++;
-                            uint nx = (s0 + (uint)j) * 12;
-                            z = float2(asfloat(gLaFx[nx]), asfloat(gLaFx[nx + 1])) + FxToFloat(dM, dE);
-                            float zcM; int zcE;
-                            FxReal(ChebM(z), zcM, zcE);
-                            if ((uint)j == last || (FxGE(ChebM(dM), dE, zcM, zcE) && !(dE == zcE && ChebM(dM) == zcM)))
+                            uint nx = (s0 + (uint)j) * 13;
+                            float2 zM; int zE;
+                            FxAdd(float2(asfloat(gLaFx[nx]), asfloat(gLaFx[nx + 1])), asint(gLaFx[nx + 2]), dM, dE, zM, zE);
+                            z = FxToFloat(zM, zE);
+                            float zcM = ChebM(zM);
+                            if ((uint)j == last || (FxGE(ChebM(dM), dE, zcM, zE) && !(dE == zE && ChebM(dM) == zcM)))
                             {
-                                j = 0; dM = z; dE = 0; FxNorm(dM, dE);   // rebase: Z_0 = 0; climb back to the top
+                                j = 0; dM = zM; dE = zE;   // rebase: Z_0 = 0 (δ = z, exact); climb back to the top
                                 stage = top;
                             }
                         }
@@ -522,27 +560,32 @@ void CSPerturbLAFX(uint3 tid : SV_DispatchThreadID)
                 }
                 else
                 {
-                    float2 Z = gRefZ[j];
-                    float2 df = FxToFloat(dM, dE);
-                    z = Z + df;
+                    // #1887 — Z_n and z = Z_n + δ in float-exp (|Z_n| can be below FLT_MIN).
+                    uint r = 3u * (uint)j;
+                    float2 ZM = float2(asfloat(gRefFx[r]), asfloat(gRefFx[r + 1])); int ZE = asint(gRefFx[r + 2]);
+                    float2 zM; int zE;
+                    FxAdd(ZM, ZE, dM, dE, zM, zE);
+                    z = FxToFloat(zM, zE);
                     float zmag2 = dot(z, z);
                     // #1661 — no magnitude rebase at j = 0 (see CSPerturbLA).
                     if (zmag2 >= gEscapeR2)
                     {
                         done = true;
                     }
-                    else if ((j > 0 && zmag2 < dot(df, df)) || j + 1 >= gRefLen)
+                    else if ((j > 0 && FxNormLess(zM, zE, dM, dE)) || j + 1 >= gRefLen)
                     {
-                        dM = z; dE = 0; FxNorm(dM, dE);
+                        dM = zM; dE = zE;
                         phase = 1; stage = top; j = 0;
                     }
                     else
                     {
-                        float2 nvM = CMul(2.0 * z, vM); int nvE = vE;
-                        FxNorm(nvM, nvE);
+                        float2 nvM; int nvE;
+                        FxMul(zM, zE + 1, vM, vE, nvM, nvE);        // 2·z·dz/dc
                         FxAdd(nvM, nvE, float2(1.0, 0.0), 0, vM, vE);
-                        float2 tM = CMul(2.0 * Z + df, dM); int tE = dE;
-                        FxNorm(tM, tE);
+                        float2 sM; int sE;
+                        FxAdd(ZM, ZE + 1, dM, dE, sM, sE);          // 2·Z + δ
+                        float2 tM; int tE;
+                        FxMul(sM, sE, dM, dE, tM, tE);
                         FxAdd(tM, tE, dcM, dcE, dM, dE);
                         j++; n++;
                     }

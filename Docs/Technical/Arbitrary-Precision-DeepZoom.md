@@ -32,7 +32,8 @@ the canonical task list; this doc backs them.
 | C6b GPU float-exp pixel scale past 1e290 | #1882 | §29 (merged, PR #1883) |
 | C6c server engine + cluster shared-orbit blob past 1e100 | #1884 | §30 (merged, PR #1885) |
 | C5g LA approximation transform (AT) past double | #1886 | §31 (merged, PR #1888) |
-| C5h float-exp LA tail in double where exact | #1889 | §32 |
+| C5h float-exp LA tail in double where exact | #1889 | §32 (merged, PR #1890) |
+| GPU float-exp LA kernel on minibrot views (bug) | #1887 | §33 |
 
 ## 1. Why a new number type
 
@@ -749,7 +750,7 @@ This is the first of the deferred C5 speed items.
 - **`EvaluateLaFx`** runs the AT block first, as `EvaluateLa` does. `RunLaAt`'s iteration is now `RunLaAtCore`, shared by the double AT and the float-exp AT, including the #1804 periodicity check. The FX rows select the AT for the view's half diagonal, and the work is reported in `LastLaAtWork`.
 - **GPU.** `GpuLaAt.FromFx` carries the float-exp AT to the float-exp LA kernel: C6a's float-exp-table route and C6b's float-exp-pixel route. Neither passed an AT before.
   - **Fixed in passing (pre-existing, #1664):** the kernel compares |z′|² in float. Esc² runs up to 2^256, and the cbuffer cast it to float as +∞, so the kernel's AT never escaped: a pixel that leaves the AT ran to the cap and read as in-set. `GpuLaFxParams.Make` now clamps it to FLT_MAX. Leaving the AT there is safe, because the stages go on from z′/A.
-  - **Not frame-tested:** the kernel renders antenna-minibrot views wrong from about 1e77, AT or not: every pixel comes back maxIter. That bug predates C6 and is #1887. The GPU part is checked at the cbuffer instead.
+  - **Not frame-tested:** the kernel renders antenna-minibrot views wrong from about 1e77, AT or not: every pixel comes back maxIter. That bug predates C6 and is #1887. The GPU part is checked at the cbuffer instead. *(Fixed in #1887, §33, which also replaced this clamp: an AT whose Esc² is past FLT_MAX is not passed to the kernel at all.)*
 - **Speed.** The CPU frame's rows, AT on against off, on S1864's antenna minibrots framed at their home view (48×36 and 320×180), at period 250 (~1e299) and 415 (~1e498):
   - ×1.0–1.1 at 320×180 (223 ms vs 251 ms; 361 ms vs 385 ms). At 48×36 the timing is noise-level (×1.0–3.2 across runs).
   - The top stage already steps by the period, so the AT saves no steps. It makes each in-set pixel's steps double rather than FloatExp. Most of the frame is escaping pixels' lower-stage steps.
@@ -805,3 +806,28 @@ This is the "SIMD" speed item. Measuring first changed what it does.
   - an unreported escape: the next FloatExp step finds it;
   - the 2^-500 floor lowered to 2^-1000, the per-part exactness check, and dropping dc: dc is below δ's last bit at every depth the FX rows run at;
   - no renormalisation: no stint in double moves the derivative by 2^±1023.
+
+## 33. The GPU float-exp LA kernel on minibrot views (#1887)
+
+- **Symptom.** From about 1e77, the float-exp LA kernel (#1664) returned the cap for every pixel on antenna-minibrot views, AT or not. Through 1e72.9 it was exact.
+  - The bug predates C6. The C6 tests (S1880 / S1882) used Misiurewicz views, whose reference orbit never comes near 0.
+- **How it was found.** A C# emulation of the kernel's float arithmetic (HLSL semantics: `FxNorm`'s exponent-bits normalisation, `Pow2` from the exponent field) on one pixel of the p66 view at 1e78 reproduced it: 6,600 iterations against the CPU's 524. Its step trace showed the cause.
+- **Cause.** Near a nucleus the reference orbit passes within |Z_p| below FLT_MIN (1.2e-38) of 0 at every period: Z₆₆ ≈ 5.8e-40 on that view.
+  - The kernel kept each LA step's Ref, and the tail's Z_n, as plain floats. Those were denormal, and GPUs flush denormals to 0.
+  - `FxNorm` doesn't normalise a denormal, so w = δ·(2·Ref + δ) lost its 2·Ref·δ term, as did the rebase test. The pixel never escaped.
+- **Fix.**
+  - **Ref:** a float-exp complex in each step, so `GpuStepsFloatExp` is 13 words per step (was 12) in both tables.
+  - **Tail:** reads Z_n from its own float-exp buffer (`gRefFx`, 3 words per entry, packed by `LaKernelSource.PackRefFloatExp`). The plain float-exp kernel keeps its float2 buffer.
+  - **Arithmetic:** z = Z + δ, the rebase test (`FxNormLess`, |z|² < |δ|²) and every product stay float-exp. z goes to float only for the escape test and the output.
+  - **Backends:** D3D11 and Vulkan upload the new buffer.
+- **Also: no AT past float's range.** With the views rendering, the AT frames from p90 up had about 1.3 % of pixels off by up to 95 %. There the AT's Esc² exceeds FLT_MAX, and #1886 clamped it, so the kernel left the AT earlier than the CPU does.
+  - `GpuLaFxParams.AtUsable` now passes no AT when Esc² doesn't fit a float; the stages alone are right.
+  - `LastFrameUsedGpuLaAtFx` reports what the kernel actually ran.
+- **Validation** (`S1887GpuLaFxMinibrotTests`, Vulkan). The antenna minibrots of periods 40, 66, 90, 125, 250 and 415 (~1e46 to ~1e498, AT on and off):
+  - Counts differ from the CPU frame's on at most 14 of 1,728 pixels.
+  - No count is more than 1 % off (max 2e-3).
+  - In / out is 0.
+  - The reference packing decodes to Z within a float rounding, including below FLT_MIN.
+  - S1664's packing test now uses the 13-word layout.
+  - **`--gpulaprobe`**, `FF_GPULA_MINIBROT=1`, 160×90, GT 710: D3D11 and Vulkan both 0.4–0.9 % iteration difference at p66, p125 and p250, in / out ≤ 2 of 14,400.
+- **Mutation checks:** 5 of 7 caught. The survivors are the tail's Z_n as float and the exact rebase in the tail. On these views the tail never meets a Z_n below FLT_MIN, because the LA steps carry the period; both are defensive.
