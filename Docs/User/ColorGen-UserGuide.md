@@ -138,7 +138,7 @@ operands and yield `1.0` / `0.0`.
 | Name        | Type   | Meaning                                              |
 |-------------|--------|------------------------------------------------------|
 | `smooth`    | scalar | Smooth iteration count at escape                     |
-| `dist`      | scalar | Exterior distance estimate (0 inside set)            |
+| `dist`      | scalar | Exterior distance estimate (0 inside set), in the same units as `pxScale` (see §3.6) |
 | `iter`      | scalar | Iteration count at escape (or maxIter for in-set)    |
 | `maxIter`   | scalar | Max iterations for this frame                       |
 | `t`         | scalar | `smooth / maxIter` — convenience normalised [0, 1]   |
@@ -148,7 +148,7 @@ operands and yield `1.0` / `0.0`.
 | `arg`       | scalar | `atan2(zi, zr)` (radians)                            |
 | `mag`       | scalar | `hypot(zr, zi)` = `|z|`                              |
 | `isInSet`   | scalar | `1.0` if `iter >= maxIter`, else `0.0`               |
-| `pxScale`   | scalar | Complex-plane width of one pixel (1.0 if unset)      |
+| `pxScale`   | scalar | Width of one pixel (1.0 if unset), in complex-plane units; see §3.6 for themes that read it past zoom ~1e27 |
 | `trap`      | scalar | Orbit-trap distance measured against the **shape you pick from the Trap-shape menu** (same 20 shapes as the Color Theme Editor: Point, Cross, Circle, Line, Star, Square, Ring, Hyperbola, Lemniscate, Cardioid, DiagonalCross, Triangle, Hexagon, Heart, SineWave, Concentric, Grid, Pinwheel, PolarRose, GaussianPrime — the last at the built-in Gaussian Prime Trap's settings). Point (default) ⇒ identical to `trapMin`. †‡ |
 | `trapMin`   | scalar | Orbit-trap distance: min `\|z_n\|` over the orbit (origin point-trap). †|
 | `trapCross` | scalar | Orbit-trap distance to the nearer coordinate axis: min `min(\|Re\|,\|Im\|)`. †|
@@ -357,8 +357,12 @@ let halo = rgb(0.1, 0.3, 0.9);
 return mix(halo, core, smoothstep(0.0, 1.0, d));
 ```
 
-`dist / pxScale` converts the raw complex-plane distance estimate into pixel
-units, so the halo width stays constant at every zoom level. `tanh` gives a
+`dist / pxScale` converts the raw distance estimate into pixel units, so the
+halo width stays constant at every zoom level. A theme that reads `pxScale`
+gets both `dist` and `pxScale` in a power-of-two unit near the pixel size past
+zoom ~1e27 (a float in complex-plane units would underflow to 0 past ~1e45), so
+use the ratio rather than either value on its own. A theme that doesn't read
+`pxScale` gets `dist` in complex-plane units at every depth, as before (#1783). `tanh` gives a
 smooth saturation curve — no hard edge where the glow flattens out.
 
 ### 3.7 Slope (Lambert) shading

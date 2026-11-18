@@ -885,6 +885,31 @@ The 1e100 ceiling is gone. A Mandelbrot view renders, explores, saves, batches a
 |---|---|
 | #1872 | Deep ray landing on preperiodic angles with long preperiods is slow (46 s at ~1e-146) |
 | #1875 | External angles of minibrots past period 1,000 (the method's reach at any depth) |
-| #1843 | Normals, the final derivative and the distance overflow in `FillAuxAndColorHP` past ~1e38–1e150 (the derivative is ±∞ past double) |
-| #1783 | The float distance estimate underflows past ~1e38 (CPU and GPU) |
-| #1852 | Flaky: S1427's cancelled deep-orbit build test is wall-clock timed |
+| #1843 | Normals and the final derivative overflow in `FillAuxAndColorHP` past ~1e38–1e150 (the derivative is ±∞ past double); the distance is fixed to ~1e308 by #1783 (§35) |
+| #1783 | The float distance estimate underflows past ~1e38 (CPU and GPU). *Fixed, §35.* |
+| #1852 | Flaky: S1427's cancelled deep-orbit build test is wall-clock timed. *Fixed (PR #1893): a pre-cancelled token and an orbit-capacity bound.* |
+
+## 35. The distance estimate past ~1e38 (#1783)
+
+- **Symptom.** The exterior distance estimate |z| ln|z| / |dz/dc| was stored as a float in complex-plane units, about the pixel size. It went subnormal past zoom ~1e38 and flushed to 0 past ~1e45, CPU and GPU alike. Past ~1e150 the double `dMag = √(dr² + di²)` also overflowed (|dz/dc| past ~1e154), so the estimate was 0 even where the derivative was a finite double.
+- **Who read it.**
+  - **As distance / pixel scale**, flat past ~1e45: the Distance Estimation palettes (`DistanceEstimationBaseMap`), ColorGen themes using `dist / pxScale`, and the Distance relief source (`IDistanceFieldSource.DistancePixelScale`).
+  - **As a raw value:** many built-in themes, e.g. HSV's lightness `1 − min(dist·0.08, 1)` and `exp(−in_dist·k)` in Bernstein, CopperSheen and others. At any depth past ~1e5 those see a distance of effectively 0, and that is their established look.
+- **Fix.** A per-frame power-of-two distance unit, 2^-`DistanceUnitExp2` complex-plane units (`MandelbrotCalculator.DistanceUnit`).
+  - The unit is 0 while the pixel is at least 2^-100 (zoom ~1e27), so shallow frames are unchanged bit for bit.
+  - Past that, the unit is the exponent that puts the pixel scale in [1, 2): exact from the double scale where it is normal, from log10 past ~1e308.
+  - `DistanceBuffer` and `DistancePixelScale` (relief) are in the unit. dz/dc is scaled by 2^-e before it is squared (`DeDist`).
+  - **Colour maps opt in** (`IColorMapDistanceUnit.TakesDistanceUnit`) to receive the distance and `PixelScale` in the unit.
+    - The DE palettes opt in.
+    - A ColorGen theme opts in exactly when it reads `pxScale`.
+    - Every other map still gets complex-plane units, the same values bit for bit (from the same double), so HSV and the raw-distance built-ins render as before. The first attempt gave every map the unit, and the 1e150 visual-regression case (HSV) went darker; that is how this split was found.
+  - The recolour and histogram-equalisation paths convert the buffer per map in the same way.
+  - `LastPixelScale` stays in complex-plane units.
+- **Reach.** Up to ~1e308. Past that the double derivative itself is ±∞ (the FX rows' `FloatExp.ToDouble`); that is #1843.
+- **Validation** (`S1783DeepDistanceUnitTests`).
+  - At 1e40, 1e60, 1e150 and 1e280 (QD, OD and AP tiers, LA on), z and dz/dc iterated directly in BigFloat at sampled pixels give the distance in pixels. `DistanceBuffer / DistancePixelScale` matches it to 2.7e-6 (worst), and every value is a normal float.
+  - The Distance – Glow palette at 1e150 gives each sampled pixel the colour of the direct distance: 0 of 64 differ, 30 colours. Before the fix the frame was flat.
+  - The opt-in split at 1e150: HSV and a raw-`dist` ColorGen theme get complex-plane units and match a reference fed the direct distance in those units. A `dist / pxScale` ColorGen theme gets the unit and shows 33 colours. 0 differ in each case.
+  - The visual regression is unchanged (45/45), the 1e150 HSV case included.
+  - The unit is exact, and the shallow frame keeps complex-plane units.
+  - `S1660`'s GPU-against-CPU distance check, previously limited to zooms below 1e37, now runs at 3E47 as well.

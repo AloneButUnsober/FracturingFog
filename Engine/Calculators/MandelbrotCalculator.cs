@@ -890,6 +890,70 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     /// </summary>
     public static double LastPixelScale { get; private set; } = 1.0;
 
+    /// <summary>#1783 — <see cref="DistanceBuffer"/> and <see cref="DistancePixelScale"/>
+    /// are in units of 2^-DistanceUnitExp2 complex-plane units. 0 (plain complex-plane
+    /// units) until the pixel is smaller than 2^-100 (zoom ~1e27); past that, the exponent
+    /// that puts the pixel scale in [1, 2). A float distance in complex-plane units went
+    /// subnormal past zoom ~1e38 and flushed to 0 past ~1e45, which flattened every
+    /// consumer of distance / pixel scale. The colour maps get this unit only if they opt
+    /// in (<see cref="IColorMapDistanceUnit"/>); the others, and
+    /// <see cref="LastPixelScale"/>, keep complex-plane units, bit for bit as before.</summary>
+    public int DistanceUnitExp2 => _distExp2;
+    private int _distExp2;
+    private double _distPixelScale;   // DistancePixelScale in that unit; 0 before the first frame
+    private double _worldPixelScale;  // the complex-plane pixel width of the last frame
+    private int _mapDistExp2;         // the frame's map takes buffer values · 2^-this (0: as stored)
+
+    // #1783 — the pixel scale a colour map gets, and the shift from the buffer's unit to
+    // the distance it gets: the distance unit if it opts in, complex-plane units if not.
+    private (double Scale, int Exp2) MapDistanceUnit(IColorMap map)
+    {
+        double world = _distPixelScale > 0 ? _worldPixelScale : (3.5 / Math.Max(Width, Height)) / Zoom;
+        return _distExp2 != 0 && map is IColorMapDistanceUnit u && u.TakesDistanceUnit
+            ? (_distPixelScale, 0) : (world, _distExp2);
+    }
+
+    // #1783 — a buffer distance as a map with shift <paramref name="exp2"/> takes it.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float MapDist(float bufferDist, int exp2)
+        => exp2 == 0 ? bufferDist : (float)Math.ScaleB((double)bufferDist, -exp2);
+    public const int DistanceUnitFromExp2 = -100;
+
+    /// <summary>#1783 — the pixel scale in the distance unit, and the unit's exponent.
+    /// <paramref name="pixelScale"/> is the complex-plane pixel width as a double (0 or
+    /// subnormal past zoom ~1e308); <paramref name="pxLog10"/> its log10, used there.</summary>
+    public static (double Scale, int Exp2) DistanceUnit(double pixelScale, double pxLog10)
+    {
+        if (pixelScale >= Math.ScaleB(1.0, DistanceUnitFromExp2) || double.IsNaN(pixelScale) || double.IsNaN(pxLog10))
+            return (pixelScale, 0);
+        if (double.IsNormal(pixelScale))   // exact
+        {
+            int e = -Math.ILogB(pixelScale);
+            return (Math.ScaleB(pixelScale, e), e);
+        }
+        var fx = FloatExp.FromLog10(pxLog10);
+        if (fx.IsZero || fx.E < -1_000_000_000) return (pixelScale, 0);
+        return (fx.M, (int)-fx.E);
+    }
+
+    // #1783 — the exterior distance estimate |z| ln|z| / |dz/dc| in the distance unit.
+    // dz/dc · 2^-e is O(1 / pixel) in that unit, so the quotient stays a normal float; it
+    // is scaled before it is squared, since |dz/dc|² overflowed a double past |dz/dc|
+    // ~1e154 (zoom ~1e150). At e = 0 it is the plain formula, bit for bit.
+    // <paramref name="mapDist"/>: what this frame's colour map gets (complex-plane units
+    // unless it opts in), from the same double, so it is exactly the old value.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private float DeDist(double mag, double dr, double di, out float mapDist)
+    {
+        int e = _distExp2;
+        if (e != 0) { dr = Math.ScaleB(dr, -e); di = Math.ScaleB(di, -e); }
+        double dMag = Math.Sqrt(dr * dr + di * di);
+        if (!(dMag > (e == 0 ? 1e-10 : Math.ScaleB(1e-10, -e)))) { mapDist = 0f; return 0f; }
+        double q = mag * Math.Log(mag) / dMag;
+        mapDist = _mapDistExp2 == 0 ? (float)q : (float)Math.ScaleB(q, -_mapDistExp2);
+        return (float)q;
+    }
+
     public IColorMap ColorMap { get; set; } = new HsvPalette();
 
     /// <summary>Global opacity of the in-set (interior) region, 0..255 (issue
@@ -910,7 +974,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
 
     /// <summary>#1029 — complex-plane width of one pixel (the same scale the DE
     /// themes use), for the Distance relief height source.</summary>
-    public double DistancePixelScale => (3.5 / Math.Max(Width, Height)) / Zoom;
+    public double DistancePixelScale => _distPixelScale > 0 ? _distPixelScale : (3.5 / Math.Max(Width, Height)) / Zoom;   // #1783: in the distance unit
 
     /// <summary>#1029 — the distance estimate |z|·log|z| / |dz| from the final z / dz
     /// buffers (0 for in-set pixels). The GPU-palette path colours on the GPU and skips
@@ -942,8 +1006,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 float fzr = zrB[idx], fzi = ziB[idx];
                 float fdr = drB[idx], fdi = diB[idx];
                 double mag = Math.Sqrt(fzr * fzr + fzi * fzi);
-                double dMag = Math.Sqrt(fdr * fdr + fdi * fdi);
-                dist[idx] = dMag > 1e-10 ? (float)(mag * Math.Log(mag) / dMag) : 0f;
+                dist[idx] = DeDist(mag, fdr, fdi, out _);
             }
         });
     }
@@ -1671,7 +1734,12 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         // Update pixel scale so DE-style themes can normalise raw distance
         // (complex-plane units) into pixel units for stable rendering at any zoom.
         LastPixelScale = (3.5 / Math.Max(Width, Height)) / Zoom;
-        if (ColorMap is IColorMapWithPixelScale pxs) pxs.PixelScale = LastPixelScale;
+        // #1783: the distance buffer's unit, and what this frame's map gets.
+        _worldPixelScale = LastPixelScale;
+        (_distPixelScale, _distExp2) = DistanceUnit(LastPixelScale,
+            Math.Log10(3.5 / Math.Max(Width, Height)) - ZoomLog10);
+        (double mapScale, _mapDistExp2) = MapDistanceUnit(ColorMap);
+        if (ColorMap is IColorMapWithPixelScale pxs) pxs.PixelScale = mapScale;
 
         // #1173-M — orbit-aware themes run on the scalar CPU path (only the opt-in
         // GPU orbit kernel below can take them; it sets LastFrameUsedGpuCompute).
@@ -2208,16 +2276,14 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                             float fdi = FinalDiBuffer[idx];
                             // Distance estimate: |z| * log(|z|) / |dz|
                             double mag = Math.Sqrt(fzr * fzr + fzi * fzi);
-                            double dMag = Math.Sqrt(fdr * fdr + fdi * fdi);
-                            float dist = dMag > 1e-10
-                                ? (float)(mag * Math.Log(mag) / dMag) : 0f;
+                            float dist = DeDist(mag, fdr, fdi, out float mapDist);
                             DistanceBuffer[idx] = dist;
                             // Normal via FillNormal helper (writes NormalX/Y
                             // from z + dz like the CPU path).
                             FillNormal(idx, fzr, fzi, fdr, fdi);
                             int iterArg = handlesInSet ? iters : maxIt;
                             ColorBuffer[idx] = (uint)colorMap.Map(
-                                smooth, dist, iterArg,
+                                smooth, mapDist, iterArg,
                                 NormalXBuffer[idx], NormalYBuffer[idx],
                                 fzr, fzi, fdr, fdi);
                         }
@@ -2481,9 +2547,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             smooth = (float)(iters + 1.0 - Math.Log2(Math.Log2(mag)));
             SmoothBuffer[idx] = smooth;
 
-            double dMag = Math.Sqrt(dr * dr + di * di);
-            dist = dMag > 1e-10 ? (float)(mag * Math.Log(mag) / dMag) : 0f;
-            DistanceBuffer[idx] = dist;
+            DistanceBuffer[idx] = DeDist(mag, dr, di, out dist);   // #1783: dist as the map takes it
 
             FillNormal(idx, zr, zi, dr, di);
             nx = NormalXBuffer[idx];
@@ -2569,9 +2633,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             float smooth = (float)(iters + 1.0 - Math.Log2(Math.Log2(mag)));
             SmoothBuffer[idx] = smooth;
 
-            double dMag = Math.Sqrt(dr * dr + di * di);
-            float dist = dMag > 1e-10
-                ? (float)(mag * Math.Log(mag) / dMag) : 0f;
+            float dist = DeDist(mag, dr, di, out float mapDist);
             DistanceBuffer[idx] = dist;
 
             FillNormal(idx, zr, zi, dr, di);
@@ -2589,7 +2651,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             // every other theme keeps the documented maxIter contract.
             int iterArg = colorMap is IColorMapHandlesInSet ? iters : maxIter;
             ColorBuffer[idx] = (uint)colorMap.Map(
-                smooth, dist, iterArg,
+                smooth, mapDist, iterArg,
                 NormalXBuffer[idx], NormalYBuffer[idx],
                 fzr, fzi, fdr, fdi);
         }
@@ -2792,8 +2854,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             float smooth = (float)(iter + 1.0 - Math.Log2(Math.Log2(mag)));
             SmoothBuffer[idx] = smooth;
 
-            double dMag = Math.Sqrt(dr * dr + di * di);
-            float dist = dMag > 1e-10 ? (float)(mag * Math.Log(mag) / dMag) : 0f;
+            float dist = DeDist(mag, dr, di, out float mapDist);
             DistanceBuffer[idx] = dist;
 
             FillNormal(idx, zr, zi, dr, di);
@@ -2808,7 +2869,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             FinalDiBuffer[idx] = (float)di;
 
             ColorBuffer[idx] = (uint)colorMap.MapWithOrbit(
-                smooth, dist, maxIter,
+                smooth, mapDist, maxIter,
                 NormalXBuffer[idx], NormalYBuffer[idx], in acc);
         }
         else
@@ -4096,9 +4157,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             // double in the PT path — same magnitude domain as SP, so the
             // formula transfers without precision loss. Restores 3D-theme
             // shading (Phong/PBR) at deep zoom.
-            double dMag = Math.Sqrt(drD * drD + diD * diD);
-            float dist = dMag > 1e-10
-                ? (float)(mag * Math.Log(mag) / dMag) : 0f;
+            float dist = DeDist(mag, drD, diD, out float mapDist);
             DistanceBuffer[idx] = dist;
 
             FillNormal(idx, zrD, ziD, drD, diD);
@@ -4112,7 +4171,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
 
             int iterArg = colorMap is IColorMapHandlesInSet ? iters : maxIter;
             ColorBuffer[idx] = (uint)colorMap.Map(
-                smooth, dist, iterArg,
+                smooth, mapDist, iterArg,
                 NormalXBuffer[idx], NormalYBuffer[idx],
                 fzr, fzi, fdr, fdi);
         }
@@ -6736,9 +6795,10 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     public void ApplyHistogramEqualizationWithCdf(double[] cdf, int bins, int sourceMaxIter, double strength, double ditherIterStrength, out long escapedCount, out long saturatedCount)
     {
         var st = new EscapeTimeColorState(
-            Width, Height, MaxIterations, LastPixelScale, ColorMap,
+            Width, Height, MaxIterations, MapDistanceUnit(ColorMap).Scale, ColorMap,   // #1783: the map's unit
             IterationBuffer, SmoothBuffer, DistanceBuffer, NormalXBuffer, NormalYBuffer,
-            FinalZrBuffer, FinalZiBuffer, FinalDrBuffer, FinalDiBuffer, ColorBuffer, _po);
+            FinalZrBuffer, FinalZiBuffer, FinalDrBuffer, FinalDiBuffer, ColorBuffer, _po,
+            mapDistExp2: MapDistanceUnit(ColorMap).Exp2);
         HistogramEqualizer.ApplyWithCdf(
             in st, cdf, bins, sourceMaxIter, strength, ditherIterStrength,
             out escapedCount, out saturatedCount);
@@ -6759,7 +6819,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         if (w == 0 || h == 0 || maxIter <= 0) return;
 
         ColorMap.MaxIterations = maxIter;
-        if (ColorMap is IColorMapWithPixelScale pxs0) pxs0.PixelScale = LastPixelScale;
+        var (mapScale0, mapExp0) = MapDistanceUnit(ColorMap);   // #1783
+        if (ColorMap is IColorMapWithPixelScale pxs0) pxs0.PixelScale = mapScale0;
         bool handlesInSet = ColorMap is IColorMapHandlesInSet;
         float ditherIter = (float)ditherIterStrength;
 
@@ -6789,7 +6850,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 float s = SmoothBuffer[idx] + SpatialDither(x, y) * ditherIter;
                 int iterArg = handlesInSet ? iters : maxIter;
                 ColorBuffer[idx] = (uint)ColorMap.Map(
-                    s, DistanceBuffer[idx], iterArg,
+                    s, MapDist(DistanceBuffer[idx], mapExp0), iterArg,
                     NormalXBuffer[idx], NormalYBuffer[idx],
                     FinalZrBuffer[idx], FinalZiBuffer[idx],
                     FinalDrBuffer[idx], FinalDiBuffer[idx]);
@@ -6822,7 +6883,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         int w = Width, h = Height;
         int maxIter = MaxIterations;
         ColorMap.MaxIterations = maxIter;
-        if (ColorMap is IColorMapWithPixelScale pxs) pxs.PixelScale = LastPixelScale;
+        var (mapScale, mapExp) = MapDistanceUnit(ColorMap);   // #1783
+        if (ColorMap is IColorMapWithPixelScale pxs) pxs.PixelScale = mapScale;
         bool handlesInSet = ColorMap is IColorMapHandlesInSet;
         _po.CancellationToken = CancellationToken.None;
         var po = _po;
@@ -6850,7 +6912,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 {
                     int iterArg = handlesInSet ? iters : maxIter;
                     ColorBuffer[idx] = (uint)ColorMap.Map(
-                        SmoothBuffer[idx], DistanceBuffer[idx], iterArg,
+                        SmoothBuffer[idx], MapDist(DistanceBuffer[idx], mapExp), iterArg,
                         NormalXBuffer[idx], NormalYBuffer[idx],
                         FinalZrBuffer[idx], FinalZiBuffer[idx],
                         FinalDrBuffer[idx], FinalDiBuffer[idx]);

@@ -55,6 +55,10 @@ internal readonly struct EscapeTimeColorState
 
     public readonly ParallelOptions Po;
 
+    /// <summary>#1783 — the map takes DistanceBuffer values · 2^-MapDistExp2 (0: as
+    /// stored; MandelbrotCalculator's deep distance unit for a map that doesn't opt in).</summary>
+    public readonly int MapDistExp2;
+
     public EscapeTimeColorState(
         int width, int height, int maxIterations, double lastPixelScale,
         IColorMap colorMap,
@@ -62,8 +66,9 @@ internal readonly struct EscapeTimeColorState
         float[] normalXBuffer, float[] normalYBuffer,
         float[] finalZrBuffer, float[] finalZiBuffer,
         float[] finalDrBuffer, float[] finalDiBuffer,
-        uint[] colorBuffer, ParallelOptions po)
+        uint[] colorBuffer, ParallelOptions po, int mapDistExp2 = 0)
     {
+        MapDistExp2 = mapDistExp2;
         Width = width;
         Height = height;
         MaxIterations = maxIterations;
@@ -181,6 +186,7 @@ internal static class HistogramEqualizer
         int[] iterBuf = st.IterationBuffer;
         float[] smoothBuf = st.SmoothBuffer;
         float[] distBuf = st.DistanceBuffer;
+        int mapExp = st.MapDistExp2;   // #1783
         float[] nxBuf = st.NormalXBuffer, nyBuf = st.NormalYBuffer;
         float[] zrBuf = st.FinalZrBuffer, ziBuf = st.FinalZiBuffer;
         float[] drBuf = st.FinalDrBuffer, diBuf = st.FinalDiBuffer;
@@ -238,7 +244,7 @@ internal static class HistogramEqualizer
                     smoothEq += SpatialDither(x, y) * ditherIter;
                 int iterArgEq = handlesInSet ? iters : maxIter;
                 colorBuf[idx] = (uint)colorMap.Map(
-                    smoothEq, distBuf[idx], iterArgEq,
+                    smoothEq, MandelbrotCalculator.MapDist(distBuf[idx], mapExp), iterArgEq,
                     nxBuf[idx], nyBuf[idx],
                     zrBuf[idx], ziBuf[idx],
                     drBuf[idx], diBuf[idx]);

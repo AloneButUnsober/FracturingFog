@@ -30,7 +30,7 @@ using FracturingFog.Interefaces;
 namespace FracturingFog.Models;
 
 public class InterpretedColorMap :
-    IColorMap, INamedColorMap, IColorMapWithPixelScale, IColorMapHandlesInSet, IGpuHlslPalette
+    IColorMap, INamedColorMap, IColorMapDistanceUnit, IColorMapHandlesInSet, IGpuHlslPalette
 {
     private readonly CgProgram _prog;
     private readonly Dictionary<string, int> _localSlot;
@@ -55,6 +55,7 @@ public class InterpretedColorMap :
         HlslPaletteBody = hlslBody;
         HlslPrelude = hlslPrelude;
         PaletteId = paletteId;
+        _takesDistanceUnit = ReadsBuiltIn(prog, "pxScale");   // #1783
 
         _localSlot = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var s in prog.Statements)
@@ -175,6 +176,28 @@ public class InterpretedColorMap :
     /// <summary>F15 — the set of orbit-accumulator inputs the program actually
     /// references (empty ⇒ not orbit-aware). Only these are computed per
     /// iteration by the orbit-aware map.</summary>
+    // #1783 — whether the program reads the built-in input <paramref name="name"/>.
+    private static bool ReadsBuiltIn(CgProgram prog, string name)
+    {
+        foreach (var s in prog.Statements)
+        {
+            CgNode? node = s switch { CgLet l => l.Value, CgReturn r => r.Value, _ => null };
+            if (node != null && Reads(node, name)) return true;
+        }
+        return false;
+    }
+
+    private static bool Reads(CgNode n, string name) => n switch
+    {
+        CgVar v => v.IsBuiltIn && v.Name == name,
+        CgChannel ch => Reads(ch.Target, name),
+        CgUnary u => Reads(u.Operand, name),
+        CgBinary b => Reads(b.Lhs, name) || Reads(b.Rhs, name),
+        CgTernary t => Reads(t.Cond, name) || Reads(t.IfTrue, name) || Reads(t.IfFalse, name),
+        CgCall c => c.Args.Exists(a => Reads(a, name)),
+        _ => false,
+    };
+
     private static HashSet<string> CollectOrbitInputs(CgProgram prog)
     {
         var found = new HashSet<string>(StringComparer.Ordinal);
@@ -274,6 +297,12 @@ public class InterpretedColorMap :
     // ── IColorMapWithPixelScale ─────────────────────────────────────────────
     private double _pixelScale = 1.0;
     public double PixelScale { set => _pixelScale = value; }
+
+    // #1783 — a theme that reads pxScale uses the documented dist / pxScale idiom: it
+    // takes the deep distance unit (both inputs in it). One that reads dist alone keeps
+    // complex-plane units, as before.
+    private readonly bool _takesDistanceUnit;
+    public bool TakesDistanceUnit => _takesDistanceUnit;
 
     // ── IGpuHlslPalette ─────────────────────────────────────────────────────
     public string HlslPaletteBody { get; }
