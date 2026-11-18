@@ -190,7 +190,8 @@ On the Mandelbrot set, **Detect period** and **Zoom to minibrot** also work past
 - The jump keeps the minibrot's exact centre and its zoom, even past 1e308.
 - A minibrot found in a shallower view whose framing lies past 1e100 is carried on in the same way, instead of being refused.
 - Past 1e100 the external angles of the minibrot are not shown yet.
-- **Snap to spiral**, **Angle** and **Julia morph** still stop at 1e100.
+- **Snap to spiral** works past 1e100 too (#1868). It snaps to the exact point and reports its repeat factor and turn. Past 1e100 the loop video and the external angles are not offered yet.
+- **Angle** and **Julia morph** still stop at 1e100.
 
 **Auto-explore** (every 2D type: Mandelbrot, Burning Ship, Julia, Newton, Lyapunov, User Equation, …) needs no theory about the fractal. It renders many small test views, scores each one for detail (how much boundary it shows, how many colour bands, how fractal the edges are, and not mostly flat or inside the set), and keeps descending into the best ones:
 

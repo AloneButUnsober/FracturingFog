@@ -408,6 +408,32 @@ public sealed partial class ControlCenterViewModel
             GeneralSnap(map, ToV2(click), reach);
             return true;
         }
+        if (vs.ZoomLog10 > DeepNucleusFinder.ZoomLog10Threshold)
+        {
+            // #1868 (C7b) — past 1e100: the exact click point and the log reach, BigFloat search.
+            var exactClick = camera.ExactWorldFromScreen(e.X, e.Y, e.ClientWidth, e.ClientHeight);
+            double reachLog10 = Math.Log10(SnapPickRadiusPx) + camera.ScaleLog10(e.ClientWidth, e.ClientHeight);
+            FinderStatus = "Searching for a spiral / branch point…";
+            _ = RunFinderAsync(async ct =>
+            {
+                var dm = await Task.Run(() => DeepMisiurewiczFinder.FindNear(exactClick, reachLog10, ct: ct), ct);
+                if (!dm.Found)
+                {
+                    FinderStatus = $"No spiral / branch point within {SnapPickRadiusPx} px of the click. Click nearer its centre, or zoom in.";
+                    return;
+                }
+                Shell.RecordNavChange();
+                vs.SetCenterExact(dm.Point);
+                Shell.Main.RenderHost.Trigger();
+                double dTurn = dm.Multiplier.Phase * 180.0 / System.Math.PI;
+                FinderStatus = $"Misiurewicz point M({dm.Preperiod},{dm.Period}): the pattern repeats every ×{Fmt(dm.Multiplier.Magnitude)} zoom, turning {dTurn:0.#}°.";
+                // The loop video's batch path keeps double zooms, and the angles are OD-only:
+                // neither is offered past 1e100 yet. The Julia preview is.
+                SetLoopTarget(dm.Point.ToDeep(), dm.Multiplier.Magnitude, null, dm.Period, juliaPreview: true);
+                SetLocation("Past 1e100 the loop video and the external angles are not available yet.");
+            });
+            return true;
+        }
         FinderStatus = "Searching for a spiral / branch point…";
         _ = RunFinderAsync(async ct =>
         {
