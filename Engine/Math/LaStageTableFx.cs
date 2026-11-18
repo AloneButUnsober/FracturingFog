@@ -18,21 +18,7 @@ using System.Collections.Generic;
 
 namespace FracturingFog.FFMath
 {
-    /// <summary>#1847 — a complex number in FloatExp.</summary>
-    public readonly struct CFx
-    {
-        public readonly FloatExp Re, Im;
-        public CFx(FloatExp re, FloatExp im) { Re = re; Im = im; }
-        public static CFx Of(double re, double im) => new(FloatExp.FromDouble(re), FloatExp.FromDouble(im));
-        public static readonly CFx One = new(FloatExp.One, FloatExp.Zero);
-        public static CFx operator *(CFx a, CFx b) => new(a.Re * b.Re - a.Im * b.Im, a.Re * b.Im + a.Im * b.Re);
-        public static CFx operator +(CFx a, CFx b) => new(a.Re + b.Re, a.Im + b.Im);
-        public CFx Twice() => new(Re.ScaleB(1), Im.ScaleB(1));
-        public CFx PlusOne() => new(Re + 1.0, Im);
-        /// <summary>max(|re|, |im|) — LaStageTable's Cheb.</summary>
-        public FloatExp Cheb() => FloatExp.Max(Re.Abs(), Im.Abs());
-        public bool IsFinite => double.IsFinite(Re.M) && double.IsFinite(Im.M);
-    }
+    // CFx (complex FloatExp) lives in Abstractions/Math/CFx.cs since #1866.
 
     /// <summary>#1847 — one LA step (as <see cref="LaStep"/>) with FloatExp coefficients.</summary>
     public readonly struct LaStepFx

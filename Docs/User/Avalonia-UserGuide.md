@@ -185,6 +185,13 @@ The **Find** group locates miniature copies of the set ("minibrots") and the exa
 
 Works at any depth up to the Extreme tier's 1e100 limit. A search runs in the background (usually well under a second; a few seconds on very busy views) and can be cancelled.
 
+On the Mandelbrot set, **Detect period** and **Zoom to minibrot** also work past 1e100, in the Unbounded tier (#1866):
+- The search runs in arbitrary precision on the view's exact centre.
+- The jump keeps the minibrot's exact centre and its zoom, even past 1e308.
+- A minibrot found in a shallower view whose framing lies past 1e100 is carried on in the same way, instead of being refused.
+- Past 1e100 the external angles of the minibrot are not shown yet.
+- **Snap to spiral**, **Angle** and **Julia morph** still stop at 1e100.
+
 **Auto-explore** (every 2D type: Mandelbrot, Burning Ship, Julia, Newton, Lyapunov, User Equation, …) needs no theory about the fractal. It renders many small test views, scores each one for detail (how much boundary it shows, how many colour bands, how fractal the edges are, and not mostly flat or inside the set), and keeps descending into the best ones:
 
 - **Surprise me** starts from the type's home view with a fresh random seed, so every click goes somewhere new.

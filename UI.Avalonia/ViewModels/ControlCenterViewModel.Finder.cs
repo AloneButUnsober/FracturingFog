@@ -177,7 +177,15 @@ public sealed partial class ControlCenterViewModel
     }
 
     // Snapshot of the live view taken on the UI thread; finders run off it.
-    private readonly record struct FinderView(FFMath.DeepComplex Centre, double Zoom, double Radius);
+    // #1866 (C7a) — past 1e100 (Deep) the view also carries its exact centre and the log10
+    // of its zoom and disk radius: DeepNucleusFinder runs on those.
+    private readonly record struct FinderView(FFMath.DeepComplex Centre, double Zoom, double Radius,
+        bool Deep = false, FFMath.ExactCentre Exact = default, double ZoomLog10 = double.NaN, double RadiusLog10 = double.NaN)
+    {
+        public string ZoomText => Deep
+            ? FracturingFog.ViewState.ZoomLog.Format(Zoom, ZoomLog10, 4)
+            : Zoom.ToString("G4", CultureInfo.InvariantCulture);
+    }
 
     private bool TryFinderView(out FinderView view)
     {
@@ -189,6 +197,16 @@ public sealed partial class ControlCenterViewModel
             return false;
         }
         var (w, h) = Shell.Main.RenderHost.LastPresentedSize;
+        double zl = vs.ZoomLog10;
+        if (zl > DeepNucleusFinder.ZoomLog10Threshold)
+        {
+            // #1866 — past the Extreme tier: the BigFloat finder on the exact centre (the
+            // limbs' own value when the view has none).
+            var exact = vs.CenterExact ?? FFMath.ExactCentre.FromDeep(vs.GetCenter(), FFMath.BigFloat.PrecisionForZoom(zl));
+            double rl = DeepNucleusFinder.ViewDiskRadiusLog10(zl, w, h);
+            view = new FinderView(vs.GetCenter(), vs.Zoom, Math.Pow(10, rl), true, exact, zl, rl);
+            return true;
+        }
         view = new FinderView(vs.GetCenter(), vs.Zoom, PeriodDetector.ViewDiskRadius(vs.Zoom, w, h));
         return true;
     }
@@ -225,8 +243,10 @@ public sealed partial class ControlCenterViewModel
         FinderStatus = "Scanning…";
         return RunFinderAsync(async ct =>
         {
-            var d = await Task.Run(() => PeriodDetector.Detect(v.Centre, v.Radius, ct: ct), ct);
-            string z = Fmt(v.Zoom);
+            var d = await Task.Run(() => v.Deep
+                ? DeepNucleusFinder.Detect(v.Exact, v.RadiusLog10, ct: ct)   // #1866
+                : PeriodDetector.Detect(v.Centre, v.Radius, ct: ct), ct);
+            string z = v.ZoomText;
             FinderStatus = d.Stop switch
             {
                 PeriodStop.Found        => $"Lowest period candidate in view: {d.Period} (zoom {z}). Zoom to minibrot finds the real one.",
@@ -255,6 +275,18 @@ public sealed partial class ControlCenterViewModel
                 Dispatcher.UIThread.Post(() => { if (IsFinderBusy) FinderStatus = $"Searching… trying period {p}"; });
             }
 
+            if (v.Deep)
+            {
+                // #1866 — past 1e100: BigFloat / floatexp search, exact centre + log zoom.
+                var deep = await Task.Run(() => DeepNucleusFinder.FindMinibrot(v.Exact, v.RadiusLog10, onPeriod: OnPeriod, ct: ct), ct);
+                if (!deep.Found)
+                {
+                    FinderStatus = $"No minibrot found in view (zoom {v.ZoomText}). Pan or zoom out and retry.";
+                    return;
+                }
+                ApplyDeepMinibrotJump(deep);
+                return;
+            }
             var found = await Task.Run(() => NucleusFinder.FindMinibrot(v.Centre, v.Radius, onPeriod: OnPeriod, ct: ct), ct);
             if (!found.Found)
             {
@@ -262,6 +294,15 @@ public sealed partial class ControlCenterViewModel
                     ? "Too deep: beyond octuple-double precision."
                     : $"No minibrot found in view (zoom {Fmt(v.Zoom)}). Pan or zoom out and retry.";
                 return;
+            }
+            // #1866 — a minibrot found in a shallower view whose framing lies past 1e100:
+            // carry its nucleus on in BigFloat on the same view disk (OD places it only to
+            // ~1e-125, far coarser than such a minibrot) and frame it there.
+            var shallowVs = Shell.Main.ViewState;
+            if (MinibrotJump.Plan(found, shallowVs.Quality, shallowVs.IterLocked, shallowVs.LockedIterations) is null)
+            {
+                var deep = await Task.Run(() => DeepNucleusFinder.CarryOn(found, v.Centre, v.Radius, ct: ct), ct);
+                if (deep.Found) { ApplyDeepMinibrotJump(deep); return; }
             }
             ApplyMinibrotJump(found);
             await ShowComponentAnglesAsync(found, ct);   // #1237
@@ -283,6 +324,19 @@ public sealed partial class ControlCenterViewModel
         FinderStatus = $"{prefix}Period {found.Period} minibrot, size {found.Size.Magnitude:G3} → zoom {Fmt(p.Zoom)} ({p.Quality.Name}).{note}";
     }
 
+    // #1866 (C7a) — a minibrot found past 1e100: its framing as an exact centre and log zoom.
+    // The external angles stay OD-only for now, so they are not shown.
+    private void ApplyDeepMinibrotJump(in DeepNucleusResult found)
+    {
+        var vs = Shell.Main.ViewState;
+        var plan = MinibrotJump.PlanDeep(found, vs.Quality, vs.IterLocked, vs.LockedIterations);
+        string note = ApplyPlan(plan);
+        string size = "1e" + found.SizeLog10.ToString("F1", CultureInfo.InvariantCulture);
+        FinderStatus = $"Period {found.Period} minibrot, size {size} → zoom "
+            + $"{FracturingFog.ViewState.ZoomLog.Format(plan.Zoom, plan.ZoomLog10, 4)} ({plan.Quality.Name}).{note}";
+        SetLocation("External angles are not computed past 1e100 yet.");
+    }
+
     // Apply a planned view change (nav history, centre, zoom, tier promotion,
     // first-render iteration hint) and return an iterations note, if any.
     private string ApplyPlan(in MinibrotJumpPlan p)
@@ -290,8 +344,11 @@ public sealed partial class ControlCenterViewModel
         var main = Shell.Main;
         var vs = main.ViewState;
         Shell.RecordNavChange();
-        vs.SetCenter(p.Center);
-        vs.Zoom = p.Zoom;
+        // #1866 — a deep plan carries the exact centre and, past double, the log zoom.
+        if (p.CenterExact is { } exact) vs.SetCenterExact(exact);
+        else vs.SetCenter(p.Center);
+        if (FracturingFog.ViewState.ZoomLog.BeyondDouble(p.ZoomLog10)) vs.SetZoomLog10(p.ZoomLog10);
+        else vs.Zoom = p.Zoom;
         if (!ReferenceEquals(p.Quality, vs.Quality))
         {
             vs.Quality = p.Quality;

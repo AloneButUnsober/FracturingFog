@@ -154,6 +154,11 @@ namespace FracturingFog.FFMath
             return FloatExp.FromDouble((double)top).ScaleB(Exponent + drop);
         }
 
+        /// <summary>#1866 — a FloatExp at <paramref name="precision"/> bits (exact: its
+        /// 53-bit mantissa fits).</summary>
+        public static BigFloat FromFloatExp(FloatExp v, int precision)
+            => v.IsZero ? Zero(precision) : FromDouble(v.M, precision).ScaleB(v.E);
+
         public double ToDouble()
         {
             if (IsZero) return 0;
