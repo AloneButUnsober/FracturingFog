@@ -1015,7 +1015,10 @@ Programs and galleries the project measured itself against, learned from, or pay
     (#1626 / #1627, the engine's evaluator and AT), `Rendering.D3D/LaKernelSource.cs` (#1630, the
     same evaluator as a GPU kernel; #1664, its float-exp form) and
     `Probes/LaProbe.cs` (`--laprobe`, the probe's evaluator and AT) contain C# translations of its
-    functions.
+    functions. So do `Engine/Math/LaStageTableFx.cs` and `Engine/Calculators/MandelbrotCalculator.LaFx.cs`
+    (#1847, FloatExp ports of the stages and the evaluator; listed in #1886, which found them missing
+    from this entry and from `THIRD-PARTY-NOTICES.md`), and `Engine/Math/LaAtFx.cs` (#1886, the AT over
+    the float-exp table, with the AT block in `EvaluateLaFx`).
     - Both carry an SPDX copyright line for the upstream author.
     - `THIRD-PARTY-NOTICES.md` §3 lists them as derived code.
     - The design doc §2.7 maps each function to its Imagina counterpart; §2.6 lists the changes.

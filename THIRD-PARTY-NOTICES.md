@@ -160,6 +160,17 @@ headers.
     `EvaluateAT` / `EvaluateLA` / `LAInfo::EvaluateDzdc`; the plain tail is FF's own.
     #1664 adds `BuildFloatExp` (`CSPerturbLAFX`), the same kernel in float-exp arithmetic
     (FF's #1331 number format), so it derives from the same functions.
+  - **`Engine/Math/LaStageTableFx.cs`** (#1847) and **`Engine/Calculators/MandelbrotCalculator.LaFx.cs`**
+    (#1847): line-for-line FloatExp ports of `LaStageTable.cs`'s builders and of the engine's
+    evaluator (`EvaluateLa` / `LaRunStages`), so they derive from `CreateLAFromOrbit` /
+    `CreateNewLAStage` / `LAInfo::Step` / `Composite` / `DetectPeriod` and `EvaluateLA` /
+    `LAInfo::EvaluateDzdc` as those do. *(Listed here in #1886: #1847 shipped them without
+    this entry or the upstream SPDX line, both added then.)* #1886 adds the AT block to
+    `EvaluateLaFx`, from the AT part of `HInfLAEvaluationTask::Evaluate` and `EvaluateAT` as
+    in `MandelbrotCalculator.La.cs`.
+  - **`Engine/Math/LaAtFx.cs`** (#1886): `LaAt.cs`'s `Create` / `Usable` / `Select` over the
+    float-exp table, so it derives from `LAInfo::CreateAT`, `ATInfo::Usable` and
+    `CreateATFromLA`.
   - **`LaPeriodTest.MinMagnitude`** in `Engine/Math/LaStageTable.cs` (#1626)
     translates the `PERIOD_DETECTION_METHOD2` branches of `LAInfo::Step` /
     `Composite` / `DetectPeriod` (the `MinMag` field and its 2⁻⁶ / 2⁻³ factors).

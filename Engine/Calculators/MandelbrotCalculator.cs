@@ -3208,6 +3208,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         LastFrameUsedGpuLaFloatExp = false;   // #1664
         LastFrameUsedGpuLaTableFx = false;   // #1880
         LastFrameUsedGpuFloatExpPixels = false;   // #1882
+        LastFrameUsedGpuLaAtFx = false;   // #1886
         _lastFrameUsedLa = false;   // #1626
         _lastFrameUsedLaSimd = false;   // #1628
 
@@ -3561,6 +3562,13 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 var g = laTableFx == null && _laAt is { } a
                     ? new FracturingFog.Rendering.GpuLaAt(a.Len, a.ThrC, a.Esc2, a.RefCRe, a.RefCIm, a.CRe, a.CIm, a.InvZRe, a.InvZIm)
                     : default;
+                if (laTableFx != null)
+                {
+                    // #1886 — the float-exp table's AT (the double one isn't there).
+                    double hWx = effImgW * 0.5 * scale, hHx = effImgH * 0.5 * scale;
+                    SelectLaAtFx(laTableFx, FracturingFog.FFMath.FloatExp.FromDouble(Math.Sqrt(hWx * hWx + hHx * hHx)));
+                    if (_laAtFx is { } afx) g = FracturingFog.Rendering.GpuLaAt.FromFx(afx);
+                }
                 SeedWavefrontIfAsked((w, h, sc, ox, oy, it, sm, zr, zi, dr, di) => kernel.RunPerturbLaFloatExp(   // #1386
                     w, h, sc, maxIt, EscapeRadius2, ox, oy, _refZr, _refZi, _refOrbitLen,
                     steps, ints, stages, g, it, sm, zr, zi, dr, di), scale, offX0, offY0);
@@ -3699,6 +3707,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         LastFrameUsedGpuLa = useLa;   // #1630
         LastFrameUsedGpuLaFloatExp = useLaFx;   // #1664
         LastFrameUsedGpuLaTableFx = laTableFx != null;   // #1880
+        LastFrameUsedGpuLaAtFx = laTableFx != null && _laAtFx != null;   // #1886
         if (useLa) _lastFrameUsedLa = true;   // the precision label's " LA"
         LastFrameUsedGpuWavefront = wave;
         // #1394 — a solid-region pass computed only its marked pixels: no warp-waste
@@ -5257,6 +5266,11 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         var laTail = LaTailBla ? bla : null;
         _lastFrameUsedLa = laFx != null;
         _laPixelsTotal = _laStepsTotal = _laPlainTotal = _laBlaTotal = 0;
+        _laAtStepsTotal = _laAtPixelsTotal = 0;
+        // #1886 (C5g) — the AT over the float-exp table, for the view's half diagonal.
+        SelectLaAtFx(laFx, scale * (Math.Sqrt(halfW * halfW + halfH * halfH)
+            + Math.Sqrt(PixelJitter.X * PixelJitter.X + PixelJitter.Y * PixelJitter.Y)));
+        var atFx = _laAtFx;
         int offX = SubRectOffsetX, offY = SubRectOffsetY;
         int[]? perRow = PerRowMaxIter;
         bool useTileCap = perRow != null && perRow.Length >= Height;
@@ -5271,15 +5285,15 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             int rowBase = y * w;
             var dcI = scale * (offY + y - halfH + PixelJitter.Y);   // #1851: the pixel jitter
             long rowSkips = 0, rowSaved = 0, rowSteps = 0;
-            long laSteps = 0, laPlain = 0, laBla = 0, laPx = 0;
+            long laSteps = 0, laPlain = 0, laBla = 0, laPx = 0, atSteps = 0, atPx = 0;
             for (int x = 0; x < w; x++)
             {
                 int idx = rowBase + x;
                 if (!Marked(idx)) continue;
                 if (laFx != null)
                 {
-                    EvaluateLaFx(laFx, laTail, scale * (offX + x - halfW + PixelJitter.X), dcI, rowMaxIt, idx, colorMap,
-                        ref laSteps, ref laPlain, ref laBla);
+                    EvaluateLaFx(laFx, atFx, laTail, scale * (offX + x - halfW + PixelJitter.X), dcI, rowMaxIt, idx, colorMap,
+                        ref laSteps, ref laPlain, ref laBla, ref atSteps, ref atPx);
                     laPx++;
                 }
                 else
@@ -5292,6 +5306,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 Interlocked.Add(ref _laStepsTotal, laSteps);
                 Interlocked.Add(ref _laPlainTotal, laPlain);
                 Interlocked.Add(ref _laBlaTotal, laBla);
+                Interlocked.Add(ref _laAtStepsTotal, atSteps);   // #1886
+                Interlocked.Add(ref _laAtPixelsTotal, atPx);
             }
             Interlocked.Add(ref _blaSkipsTotal, rowSkips);
             Interlocked.Add(ref _blaIterSkippedTotal, rowSaved);

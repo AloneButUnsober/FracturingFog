@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Bradley Brown
+// SPDX-FileCopyrightText: Yu, Zhuoran (GitHub 5E-324), Imagina <https://github.com/5E-324/Imagina>, AGPL-3.0
 
 // Calculators/MandelbrotCalculator.LaFx.cs
 //
@@ -41,9 +42,19 @@ public sealed partial class MandelbrotCalculator
     /// <summary>#1847 — test / probe access: the floatexp LA table the last FX frame used.</summary>
     public LaStageTableFx? LastLaTableFx => _laFx;
 
+    // #1886 (C5g) — the frame's AT over the float-exp table (LaAtFx; null: none usable, or off).
+    private LaAtFx? _laAtFx;
+
+    /// <summary>#1886 — test / probe access: the AT the last FX frame used (null: none).</summary>
+    public LaAtFx? LastLaAtFx => _laAtFx;
+
+    // #1886 — pick the frame's AT (as SelectLaAt: the view's half diagonal in δc).
+    private void SelectLaAtFx(LaStageTableFx? t, FloatExp dcMaxAbs)
+        => _laAtFx = UseLaAt && t != null ? LaAtFx.Select(t, dcMaxAbs, LaAtLoosen, LaAtOffsetBits) : null;
+
     private void EvaluateLaFx<TMap>(
-        LaStageTableFx t, BlaTableFx? bla, FloatExp dcR, FloatExp dcI, int maxIter, int idx, TMap colorMap,
-        ref long laSteps, ref long plainSteps, ref long blaSkips)
+        LaStageTableFx t, LaAtFx? atOpt, BlaTableFx? bla, FloatExp dcR, FloatExp dcI, int maxIter, int idx, TMap colorMap,
+        ref long laSteps, ref long plainSteps, ref long blaSkips, ref long atSteps, ref long atPixels)
         where TMap : IColorMap
     {
         var data = t.Data;
@@ -58,6 +69,28 @@ public sealed partial class MandelbrotCalculator
         FloatExp drv = FloatExp.One, div = FloatExp.Zero;
         int n = 0, stage = top, j = 0;
         var cyc = new LaCycleFx { Enabled = DeepPeriodicity, Idx = idx };
+
+        // ── 0. The AT (#1886; EvaluateLa's AT block): c' = RefC + C·δc and z' in double,
+        // the conversion back z = z'/A, dz/dc = (dz'/dc')·C/A in FloatExp.
+        if (atOpt is { } at && !FloatExp.AbsLess(at.ThrC, mdc))
+        {
+            atPixels++;
+            var cp = new CFx(dcR, dcI) * at.C;
+            double cr = cp.Re.ToDouble() + at.RefCRe, ci = cp.Im.ToDouble() + at.RefCIm;
+            bool inSet = RunLaAtCore(at.Len, at.Esc2, cr, ci, maxIter, out double xr, out double xi,
+                out double er, out double ei, out long k, ref atSteps);
+            var z = CFx.Of(xr, xi) * at.InvZ;
+            var g = CFx.Of(er, ei) * at.C * at.InvZ;
+            zr = z.Re; zi = z.Im; drv = g.Re; div = g.Im;
+            if (inSet)
+            {
+                IterationBuffer[idx] = maxIter;
+                FillAuxAndColorHP(idx, maxIter, maxIter, zr.ToDouble(), zi.ToDouble(), drv.ToDouble(), div.ToDouble(), colorMap);
+                return;
+            }
+            n = (int)(k * at.Len);
+            dr = zr; di = zi;
+        }
 
         while (true)
         {
