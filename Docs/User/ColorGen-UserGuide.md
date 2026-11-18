@@ -144,7 +144,7 @@ operands and yield `1.0` / `0.0`.
 | `t`         | scalar | `smooth / maxIter` — convenience normalised [0, 1]   |
 | `nx, ny`    | scalar | Surface-normal components in `[-1, 1]`               |
 | `zr, zi`    | scalar | Final `z` at escape                                  |
-| `dzr, dzi`  | scalar | Final `dz/dc` at escape                              |
+| `dzr, dzi`  | scalar | Final `dz/dc` at escape (complex-plane units; for a theme that reads `pxScale`, in the same deep unit as `dist`, see §3.6) |
 | `arg`       | scalar | `atan2(zi, zr)` (radians)                            |
 | `mag`       | scalar | `hypot(zr, zi)` = `|z|`                              |
 | `isInSet`   | scalar | `1.0` if `iter >= maxIter`, else `0.0`               |

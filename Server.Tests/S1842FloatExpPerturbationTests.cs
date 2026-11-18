@@ -143,7 +143,7 @@ public sealed class S1842FloatExpPerturbationTests
         var calc = Render(zl, tail).Calc;
         Assert.EndsWith(" FX", calc.LastPrecisionLabel);
         // Escaped pixels reach the colouring with a finite smooth value n + 1 − log2(log2|z|), |z| in [512, 512²): within [n − 3.17, n − 2.17].
-        // (Normals and FinalDr/Di overflow at this depth on the double path too: #1843.)
+        // (Normals and FinalDr/Di at this depth: #1843, checked in S1843DeepNormalsTests.)
         for (int i = 0; i < 24 * 24; i++)
         {
             int n = calc.IterationBuffer[i];

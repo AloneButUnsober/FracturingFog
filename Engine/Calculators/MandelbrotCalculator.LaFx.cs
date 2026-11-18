@@ -98,7 +98,7 @@ public sealed partial class MandelbrotCalculator
             if (inSet)
             {
                 IterationBuffer[idx] = maxIter;
-                FillAuxAndColorHP(idx, maxIter, maxIter, zr.ToDouble(), zi.ToDouble(), drv.ToDouble(), div.ToDouble(), colorMap);
+                FillAuxAndColorHP(idx, maxIter, maxIter, zr.ToDouble(), zi.ToDouble(), drv, div, colorMap);   // #1843
                 return;
             }
             n = (int)(k * at.Len);
@@ -176,7 +176,7 @@ public sealed partial class MandelbrotCalculator
         }
 
         IterationBuffer[idx] = n;
-        FillAuxAndColorHP(idx, n, maxIter, zr.ToDouble(), zi.ToDouble(), drv.ToDouble(), div.ToDouble(), colorMap);
+        FillAuxAndColorHP(idx, n, maxIter, zr.ToDouble(), zi.ToDouble(), drv, div, colorMap);   // #1843: FloatExp derivative
     }
 
     private static FloatExp Cheb(FloatExp re, FloatExp im) => FloatExp.Max(re.Abs(), im.Abs());

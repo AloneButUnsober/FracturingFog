@@ -72,11 +72,11 @@ public sealed class S1783DeepDistanceUnitTests(ITestOutputHelper output)
 
     // ── Against direct iteration ─────────────────────────────────────────────
 
-    private const int W = 24, H = 24;
+    internal const int W = 24, H = 24;
 
     // c = centre + (ox, oy)·pixel iterated in BigFloat with dz/dc (bailout 512, the
     // calculator's): the distance estimate in pixels, or NaN if it did not escape.
-    private static double DirectDistancePixels(ExactCentre centre, double ox, double oy, BigFloat pixel, int prec, int maxIter)
+    internal static double DirectDistancePixels(ExactCentre centre, double ox, double oy, BigFloat pixel, int prec, int maxIter)
     {
         var cr = BigFloat.Add(centre.Re, BigFloat.Mul(pixel, BigFloat.FromDouble(ox, prec), prec), prec);
         var ci = BigFloat.Add(centre.Im, BigFloat.Mul(pixel, BigFloat.FromDouble(oy, prec), prec), prec);
@@ -105,7 +105,7 @@ public sealed class S1783DeepDistanceUnitTests(ITestOutputHelper output)
     }
 
     // As S1842's Render: c = i plus a small offset (structure at every depth).
-    private static (MandelbrotCalculator Calc, ExactCentre Centre, int Prec) Render(int zl)
+    internal static (MandelbrotCalculator Calc, ExactCentre Centre, int Prec) Render(int zl)
     {
         int prec = BigFloat.PrecisionForZoom(zl);
         var centre = new ExactCentre(BigFloat.Parse("3.1415926535e-" + (zl + 1), prec),
