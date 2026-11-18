@@ -37,11 +37,20 @@ namespace FracturingFog.Explore
             int w = req.Width, h = req.Height;
             int side = SquareSide(w, h);
             double shift = loop.IterationShiftAt(t);
+            // #1878 — past double the zoom is carried as its log (×|λ|^(cycles·t), × the
+            // square's factor as a shift); in double's range exactly as before.
+            double depthLog = req.DepthZoomLog10;
+            double logAt = (double.IsNaN(depthLog) ? Math.Log10(req.Zoom) : depthLog)
+                           + Math.Log10(loop.ZoomAt(1.0, t)) + Math.Log10((double)Math.Max(w, h) / side);
+            // Within double's range (start and frame) the old double product, byte-identical.
+            double sqLog = double.IsNaN(depthLog) && !FracturingFog.ViewState.ZoomLog.BeyondDouble(logAt) ? double.NaN : logAt;
             var sq = req with
             {
                 Width = side, Height = side,
                 // Same pixel scale as the frame: the plane spans the longest axis.
-                Zoom = loop.ZoomAt(req.Zoom, t) * Math.Max(w, h) / side,
+                Zoom = double.IsNaN(sqLog) ? loop.ZoomAt(req.Zoom, t) * Math.Max(w, h) / side
+                                           : FracturingFog.ViewState.ZoomLog.FromLog10(sqLog),
+                ZoomLog10 = double.IsNaN(sqLog) || !FracturingFog.ViewState.ZoomLog.BeyondDouble(sqLog) ? double.NaN : sqLog,
                 MaxIterations = req.MaxIterations + (int)Math.Ceiling(shift),
                 ColorMap = shift != 0 ? new ShiftedColorMap(req.ColorMap, (float)shift) : req.ColorMap,
             };

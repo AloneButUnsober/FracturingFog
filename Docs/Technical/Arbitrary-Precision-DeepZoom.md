@@ -26,8 +26,8 @@ the canonical task list; this doc backs them.
 | C7b Snap to spiral (Misiurewicz) past 1e100 | #1868 | §23 (merged, PR #1869) |
 | C7c angle → landing past 1e100 (deep ray trace) | #1870 | §24 (merged, PR #1871) |
 | C7e location → angles past 1e100 | #1873 | §25 (merged, PR #1874) |
-| C7d .kfr import + Julia morph past 1e100 | #1876 | §26 |
-| C7f auto-explore + loop video past 1e100 | filed when started | |
+| C7d .kfr import + Julia morph past 1e100 | #1876 | §26 (merged, PR #1877) |
+| C7f auto-explore + loop video past 1e100 | #1878 | §27 |
 | C6 | filed when started (see #1428) | |
 
 ## 1. Why a new number type
@@ -615,3 +615,36 @@ Auto-explore and the loop video are render-path work, so they moved to C7f.
     - it lands at the log midpoint on the exact nucleus, in the Unbounded tier, with the iteration hint;
     - with α = 1 it lands at the minibrot's own zoom;
     - from a view deeper than the minibrot it reports NotDeeper.
+
+## 27. Auto-explore and the Misiurewicz loop past 1e100 (C7f, #1878)
+
+This is the last explore slice. Every explore tool now works past 1e100. The remaining limits are angle search past period 1,000 (#1875) and slow deep preperiodic landings (#1872).
+
+- **`ExploreView`** carries `Exact` and `ZoomLog10` (`ZoomLog10Value` gives the log at any depth).
+- **`AutoExplorer.Children`:**
+  - Past `DeepZoomLog10 = 100`, each child's exact centre is the parent's plus the grid or jitter offset. The offset is the fraction × the extent (computed from the log, in floatexp) and is added in BigFloat at `PrecisionForZoom(child + 10)`.
+  - The RNG draws come in the same order, so a seed reproduces.
+  - Shallower children are unchanged.
+- **`AutoExplorer` level stop and `Select`:**
+  - The level stop compares log zooms past 1e100.
+  - `Select` measures separation exactly between exact views.
+- **`MaxZoomFor(Mandelbrot)`** is the deepest tier, which has no limit.
+- **`ExploreProbe`** gives the request `CenterExact` and `ZoomLog10`, takes iterations from the log, and calls `SetDepth` on its calculator.
+- **Control Center explore:**
+  - Past 1e100 it starts from the exact view.
+  - Going to a candidate applies its exact centre and log zoom.
+  - Candidate labels show the log zoom.
+- **`--batch --explore`** starts from the exact `--x` / `--y` and log `--zoom` (`ResolveDepth`), for stills and video alike.
+  - It renders the explored view exactly. The explored view feeds `deepExact` and `targetZoomLog10` in video.
+  - It prints log zooms.
+  - `--explore-regions` writes the exact centre (`SetCentreExact`) and `ZoomLog10`.
+- **`MisiurewiczLoopRenderer.RenderFrame`:**
+  - Past double the square's zoom is log + log10(|λ|^(cycles·t)) + log10(max(W,H) / side). This also covers a loop that starts in double's range and passes 1e308 mid-loop.
+  - In double's range it is the old product, byte-identical.
+- **Batch loop frames** carry the exact point and the start's log zoom.
+- **Control Center loop:** a deep Snap to spiral now offers the loop video. Loop video seeds `--x` / `--y` with the exact decimal.
+- **Validation** (`S1878DeepExploreLoopTests`). Mutation checks: 5 of 5 caught.
+  - **Children:** the children of an exact view at 1e150 (the 340-digit point) are at the grid offsets, computed independently in BigFloat, to 2⁻⁴⁰ of a pixel. Shallow children are unchanged.
+  - **Probe:** the probe's smooth field at 1e150 equals a live-style calculator's (limbs, Zoom, `SetDepth`). It differs without the exact centre.
+  - **Real run:** a 2-level run from 1e150 ends at 1e151.2 with exact views, reproduces for its seed, and keeps a beam of 2.
+  - **Loop:** a loop frame at 1e320.25, t = ½, equals a direct render at the expected log zoom, turned and cropped.

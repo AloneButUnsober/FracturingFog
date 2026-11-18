@@ -28,8 +28,15 @@ using SMath = System.Math;
 namespace FracturingFog.Abstractions.Explore;
 
 /// <summary>A square view: centre and zoom (plane extent
-/// <see cref="AutoExplorer.PlaneExtent"/>/zoom across).</summary>
-public readonly record struct ExploreView(DeepComplex Center, double Zoom);
+/// <see cref="AutoExplorer.PlaneExtent"/>/zoom across). #1878 (epic #1428, C7f) — past
+/// 1e100 also its exact centre (<see cref="Center"/> is its OD split) and, past double, its
+/// log10 zoom (<see cref="Zoom"/> saturates).</summary>
+public readonly record struct ExploreView(DeepComplex Center, double Zoom,
+    ExactCentre? Exact = null, double ZoomLog10 = double.NaN)
+{
+    /// <summary>log10 of the zoom at any depth.</summary>
+    public double ZoomLog10Value => double.IsNaN(ZoomLog10) ? SMath.Log10(Zoom) : ZoomLog10;
+}
 
 /// <summary>Search settings. Every field is tunable.</summary>
 public sealed record AutoExploreOptions
@@ -123,7 +130,7 @@ public static class AutoExplorer
     /// carries the octuple-double centre (to the Extreme tier's 1e100); every
     /// other family's probe centre is a double.</summary>
     public static double MaxZoomFor(FractalType t)
-        => t == FractalType.Mandelbrot ? QualityPreset.Extreme.ZoomMax : DoubleMaxZoom;
+        => t == FractalType.Mandelbrot ? QualityPreset.Deepest.ZoomMax : DoubleMaxZoom;   // #1878: no limit
 
     public static AutoExploreResult Run(
         ExploreView start, AutoExploreOptions o,
@@ -148,7 +155,10 @@ public static class AutoExplorer
         {
             ct.ThrowIfCancellationRequested();
             double childZoom = beam[0].View.Zoom * o.ZoomStep;
-            if (childZoom > o.MaxZoom) { stop = ExploreStop.PrecisionLimit; break; }
+            double childZoomLog10 = beam[0].View.ZoomLog10Value + SMath.Log10(o.ZoomStep);
+            // #1878 — past 1e100 compare the logs (the double zoom saturates past 1e308).
+            bool past = childZoomLog10 > DeepZoomLog10 ? childZoomLog10 > SMath.Log10(o.MaxZoom) : childZoom > o.MaxZoom;
+            if (past) { stop = ExploreStop.PrecisionLimit; break; }
 
             var pool = new List<ExploreNode>();
             int jitter = level == 1 ? SMath.Max(o.Jitter, o.FirstLevelJitter) : o.Jitter;
@@ -180,6 +190,12 @@ public static class AutoExplorer
     /// uniformly random centres inside it, all at ZoomStep× the zoom.</summary>
     public static IEnumerable<ExploreView> Children(ExploreView v, AutoExploreOptions o, int jitter, Random rng)
     {
+        double childZoomLog10 = v.ZoomLog10Value + SMath.Log10(o.ZoomStep);
+        if (childZoomLog10 > DeepZoomLog10)
+        {
+            foreach (var c in DeepChildren(v, o, jitter, rng, childZoomLog10)) yield return c;
+            yield break;
+        }
         double extent = PlaneExtent / v.Zoom;
         double zoom = v.Zoom * o.ZoomStep;
         int g = SMath.Max(1, o.Grid);
@@ -195,6 +211,39 @@ public static class AutoExplorer
         }
     }
 
+    /// <summary>#1878 — children past this log10 zoom carry an exact centre (the Extreme
+    /// tier's cap: OD keeps ~30 decades of headroom there).</summary>
+    public const double DeepZoomLog10 = 100;
+
+    // #1878 — as Children past 1e100: the same grid and jitter (the RNG drawn in the same
+    // order), each centre the parent's exact centre plus the offset, computed in floatexp
+    // from the log extent and added in BigFloat at the child's precision.
+    private static IEnumerable<ExploreView> DeepChildren(ExploreView v, AutoExploreOptions o, int jitter, Random rng, double childZoomLog10)
+    {
+        int prec = BigFloat.PrecisionForZoom(childZoomLog10 + 10);
+        var parent = (v.Exact ?? ExactCentre.FromDeep(v.Center, prec)).WithPrecision(prec);
+        var extent = FloatExp.FromLog10(SMath.Log10(PlaneExtent) - v.ZoomLog10Value);
+        double childZoom = FracturingFog.ViewState.ZoomLog.FromLog10(childZoomLog10);
+        double log = FracturingFog.ViewState.ZoomLog.BeyondDouble(childZoomLog10) ? childZoomLog10 : double.NaN;
+        ExploreView At(double fx, double fy)
+        {
+            var c = new ExactCentre(
+                BigFloat.Add(parent.Re, BigFloat.FromFloatExp(extent * fx, prec), prec),
+                BigFloat.Add(parent.Im, BigFloat.FromFloatExp(extent * fy, prec), prec));
+            return new ExploreView(c.ToDeep(), childZoom, c, log);
+        }
+        int g = SMath.Max(1, o.Grid);
+        for (int j = 0; j < g; j++)
+            for (int i = 0; i < g; i++)
+                yield return At((i - (g - 1) / 2.0) / g, (j - (g - 1) / 2.0) / g);
+        for (int k = 0; k < jitter; k++)
+        {
+            double fx = rng.NextDouble() - 0.5;
+            double fy = rng.NextDouble() - 0.5;
+            yield return At(fx, fy);
+        }
+    }
+
     // Best first, then the earlier-generated child (stable, so deterministic).
     private static int ByScore(ExploreNode a, ExploreNode b) => b.Score.Total.CompareTo(a.Score.Total);
 
@@ -207,11 +256,28 @@ public static class AutoExplorer
         foreach (var n in sorted)
         {
             if (kept.Count >= SMath.Max(1, o.Beam)) break;
-            double minDist = o.MinSeparation * PlaneExtent / n.View.Zoom;
-            bool tooClose = kept.Any(k => Distance(k.View.Center, n.View.Center) < minDist);
+            bool tooClose;
+            if (n.View.Exact is { } ne)
+            {
+                // #1878 — exact separation past 1e100 (log2 of distances).
+                double minLog2 = SMath.Log2(o.MinSeparation * PlaneExtent) - n.View.ZoomLog10Value * 3.3219280948873622;
+                tooClose = kept.Any(k => k.View.Exact is { } ke && DistanceLog2(ke, ne) < minLog2);
+            }
+            else
+            {
+                double minDist = o.MinSeparation * PlaneExtent / n.View.Zoom;
+                tooClose = kept.Any(k => Distance(k.View.Center, n.View.Center) < minDist);
+            }
             if (!tooClose) kept.Add(n);
         }
         return kept;
+    }
+
+    private static double DistanceLog2(ExactCentre a, ExactCentre b)
+    {
+        int prec = SMath.Max(a.Precision, b.Precision);
+        return new CFx(BigFloat.Sub(a.Re.WithPrecision(prec), b.Re.WithPrecision(prec), prec).ToFloatExp(),
+                       BigFloat.Sub(a.Im.WithPrecision(prec), b.Im.WithPrecision(prec), prec).ToFloatExp()).Log2Abs();
     }
 
     private static double Distance(DeepComplex a, DeepComplex b)

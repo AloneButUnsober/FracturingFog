@@ -427,10 +427,9 @@ public sealed partial class ControlCenterViewModel
                 Shell.Main.RenderHost.Trigger();
                 double dTurn = dm.Multiplier.Phase * 180.0 / System.Math.PI;
                 FinderStatus = $"Misiurewicz point M({dm.Preperiod},{dm.Period}): the pattern repeats every ×{Fmt(dm.Multiplier.Magnitude)} zoom, turning {dTurn:0.#}°.";
-                // The loop video's batch path keeps double zooms, and the angles are OD-only:
-                // neither is offered past 1e100 yet. The Julia preview is.
-                SetLoopTarget(dm.Point.ToDeep(), dm.Multiplier.Magnitude, null, dm.Period, juliaPreview: true);
-                await ShowDeepMisiurewiczAnglesAsync(dm, reachLog10, ct);   // #1873 (the loop video stays OD-only)
+                // #1878 — the loop video past 1e100 too (exact centre, log zoom in the batch loop).
+                SetLoopTarget(dm.Point.ToDeep(), dm.Multiplier.Magnitude, dTurn, dm.Period, juliaPreview: true, exact: dm.Point);
+                await ShowDeepMisiurewiczAnglesAsync(dm, reachLog10, ct);   // #1873
             });
             return true;
         }

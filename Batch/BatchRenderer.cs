@@ -334,15 +334,18 @@ namespace FracturingFog.Batch
             // #1233 — a --x/--y limb centre is carried in full (all 8 limbs);
             // #1190 — --explore replaces the target with the best view found.
             FracturingFog.FFMath.DeepComplex? explored = CliCentre(opts);
+            FracturingFog.Abstractions.Explore.ExploreView? exploredView = null;
             if (opts.Explore != null)
             {
                 var start = explored ?? StartCenter(cx, cy, opts.CenterX == null && opts.CenterY == null ? namedRegion : null);
-                var best = RunExplore(opts, frType, quality, theme, fp, start, zoom, namedRegion);
+                var (sx, sl) = ResolveDepth(opts, namedRegion);   // #1878: an exact / log start
+                var best = RunExplore(opts, frType, quality, theme, fp, start, zoom, namedRegion, sx, PastDouble(sl));
                 if (best == null) return 2;
+                exploredView = best;
                 explored = best.Value.Center;
                 (cx, cy, zoom) = (explored.Value.Re.X0, explored.Value.Im.X0, best.Value.Zoom);
                 quality = FracturingFog.Abstractions.Explore.MinibrotJump.QualityFor(quality, zoom);
-                iter = opts.Iterations ?? quality.ComputeIterations(zoom);
+                iter = opts.Iterations ?? quality.ComputeIterationsLog10(best.Value.ZoomLog10Value);
             }
 
             // #1012 — the poster renders every stereo mode from fp; only say when it can't.
@@ -448,6 +451,8 @@ namespace FracturingFog.Batch
                 var (dExact, dLog) = ResolveDepth(opts, namedRegion);
                 req = req with { CenterExact = dExact, ZoomLog10 = PastDouble(dLog) };
             }
+            else if (exploredView is { } ev)
+                req = req with { CenterExact = ev.Exact, ZoomLog10 = PastDouble(ev.ZoomLog10Value) };   // #1878
 
             // #1401 — fractal-native QR: move to the framing (and mask) whose own
             // pattern best matches the code. The iteration count stays the one the
@@ -718,15 +723,16 @@ namespace FracturingFog.Batch
             if (opts.Explore != null)
             {
                 var best = RunExplore(opts, frType, quality, theme, BuildFractalParameters(opts, namedRegion),
-                                      StartCenter(cx, cy, limbSource), targetZoom, namedRegion);
+                                      deepCentre ?? StartCenter(cx, cy, limbSource), targetZoom, namedRegion,
+                                      deepExact, PastDouble(targetZoomLog10));   // #1878: an exact / log start
                 if (best == null) return 2;
                 (cx, cy, targetZoom) = (best.Value.Center.Re.X0, best.Value.Center.Im.X0, best.Value.Zoom);
                 quality = FracturingFog.Abstractions.Explore.MinibrotJump.QualityFor(quality, targetZoom);
-                iter = opts.Iterations ?? quality.ComputeIterations(targetZoom);
+                iter = opts.Iterations ?? quality.ComputeIterationsLog10(best.Value.ZoomLog10Value);
                 limbRegion = null;
                 limbSource = null;
                 deepCentre = best.Value.Center;
-                (deepExact, targetZoomLog10) = (null, double.NaN);   // #1860: the explored view
+                (deepExact, targetZoomLog10) = (best.Value.Exact, best.Value.ZoomLog10Value);   // #1878: the explored view
             }
             // #1699 — a Math Plane scene with a script plays it: frame k at script time k / fps.
             double scriptSeconds = 0;
@@ -1164,6 +1170,12 @@ namespace FracturingFog.Batch
                     Path = string.Empty, Format = ImageFileFormat.Png,
                 };
                 if (deepCentre is { } ld) lreq = WithCentre(lreq, ld);
+                // #1878 — past OD / double: the exact point and the start's log zoom.
+                lreq = lreq with
+                {
+                    CenterExact = deepExact,
+                    ZoomLog10 = startZoom.Equals(targetZoom) ? PastDouble(targetZoomLog10) : double.NaN,
+                };
                 return FracturingFog.Explore.MisiurewiczLoopRenderer.RenderFrame(lreq, loop!, teLocal, CancellationToken.None);
             }
 
@@ -2904,7 +2916,8 @@ namespace FracturingFog.Batch
         /// the family cannot be explored or the start view cannot be probed.</summary>
         internal static FracturingFog.Abstractions.Explore.ExploreView? RunExplore(
             BatchOptions opts, FractalType frType, QualityPreset quality, IColorMap theme,
-            FractalParameters fp, FracturingFog.FFMath.DeepComplex start, double zoom, FractalRegion? sourceRegion)
+            FractalParameters fp, FracturingFog.FFMath.DeepComplex start, double zoom, FractalRegion? sourceRegion,
+            FracturingFog.FFMath.ExactCentre? startExact = null, double startZoomLog10 = double.NaN)
         {
             if (!FracturingFog.Abstractions.Explore.AutoExplorer.Supports(frType))
             {
@@ -2920,7 +2933,7 @@ namespace FracturingFog.Batch
             Console.WriteLine($"Auto-explore  {FracturingFog.Abstractions.Explore.AutoExplorer.FormatSpec(o)}");
             var sw = Stopwatch.StartNew();
             var result = FracturingFog.Abstractions.Explore.AutoExplorer.Run(
-                new FracturingFog.Abstractions.Explore.ExploreView(start, zoom), o,
+                new FracturingFog.Abstractions.Explore.ExploreView(start, zoom, startExact, startZoomLog10), o,
                 FracturingFog.Explore.ExploreProbe.For(template, o.ProbeSize));
             if (result.Best == null)
             {
@@ -2931,7 +2944,7 @@ namespace FracturingFog.Batch
             var inv = System.Globalization.CultureInfo.InvariantCulture;
             foreach (var n in result.Best.Path())
                 Console.WriteLine($"  L{n.Level}  x={n.View.Center.Re.X0.ToString("G17", inv)} y={n.View.Center.Im.X0.ToString("G17", inv)} "
-                                + $"zoom={n.View.Zoom.ToString("G6", inv)}  score {n.Score.Total.ToString("F3", inv)}");
+                                + $"zoom={FracturingFog.ViewState.ZoomLog.Format(n.View.Zoom, n.View.ZoomLog10)}  score {n.Score.Total.ToString("F3", inv)}");
             Console.WriteLine($"  best: {result.Best.Score}");
 
             if (!string.IsNullOrWhiteSpace(opts.ExploreRegionsPath))
@@ -2966,11 +2979,13 @@ namespace FracturingFog.Batch
                     CenterY = c.Im.X0, CenterYLo = c.Im.X1, CenterY2 = c.Im.X2, CenterY3 = c.Im.X3,
                     CenterY4 = c.Im.X4, CenterY5 = c.Im.X5, CenterY6 = c.Im.X6, CenterY7 = c.Im.X7,
                     Zoom = n.View.Zoom,
-                    Iterations = q.ComputeIterations(n.View.Zoom),
+                    ZoomLog10 = PastDouble(n.View.ZoomLog10Value) is var zl && !double.IsNaN(zl) ? zl : null,   // #1878
+                    Iterations = q.ComputeIterationsLog10(n.View.ZoomLog10Value),
                     QualityPreset = q,
                     // The start region's per-family snapshot (Julia constant, ...).
                     Params = sourceRegion?.Params,
                 });
+                if (n.View.Exact is { } ex) regions[^1].SetCentreExact(ex);   // #1878
             }
             return regions;
         }

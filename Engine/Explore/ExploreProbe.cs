@@ -36,6 +36,7 @@ namespace FracturingFog.Explore
         {
             var quality = MinibrotJump.QualityFor(template.Quality, view.Zoom);
             var re = view.Center.Re; var im = view.Center.Im;
+            double zl = view.ZoomLog10Value;   // #1878: past 1e100 the iterations follow the log
             var req = template with
             {
                 Width = size, Height = size,
@@ -45,7 +46,9 @@ namespace FracturingFog.Explore
                 CenterY4 = im.X4, CenterY5 = im.X5, CenterY6 = im.X6, CenterY7 = im.X7,
                 Zoom = view.Zoom,
                 Quality = quality,
-                MaxIterations = quality.ComputeIterations(view.Zoom),
+                MaxIterations = view.Exact != null ? quality.ComputeIterationsLog10(zl) : quality.ComputeIterations(view.Zoom),
+                CenterExact = view.Exact,   // #1878
+                ZoomLog10 = view.ZoomLog10,
             };
 
             uint[] colors; float[]? smooth; int w, h;
@@ -71,6 +74,7 @@ namespace FracturingFog.Explore
                     ColorMap = req.ColorMap,
                     Quality = req.Quality,
                 };
+                calc.SetDepth(req.CenterExact, req.DepthZoomLog10);   // #1878: past OD / double
                 calc.Calculate(ct);
                 ct.ThrowIfCancellationRequested();
                 (colors, w, h) = (calc.ColorBuffer, calc.Width, calc.Height);
