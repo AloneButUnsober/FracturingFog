@@ -192,7 +192,8 @@ On the Mandelbrot set, **Detect period** and **Zoom to minibrot** also work past
 - Past 1e100 the minibrot's external angles and address are found too (#1873), in arbitrary precision. Each candidate angle is verified by landing it, so this takes from seconds to a few minutes at depth; the jump itself does not wait for it. At any depth, angles are only searched up to period 1,000 (preperiod + period for a spiral point): each angle digit is a step of ray tracing, and the cost grows with the square of the digits. Past that the location line says so at once.
 - **Snap to spiral** works past 1e100 too (#1868). It snaps to the exact point, reports its repeat factor and turn, and then finds its external angles (#1873). Past 1e100 the loop video is not offered yet.
 - **Angle** lands past 1e100 too (#1870): when the ordinary trace cannot land a ray, or lands it deeper than 1e100, it is traced again in arbitrary precision and the view jumps to its minibrot or spiral point. Long angles take a while: a period-125 minibrot near 1e-149 lands in a few seconds, a point with a preperiod of several hundred in under a minute.
-- **Julia morph** still stops at 1e100.
+- **Julia morph** works past 1e100 too (#1876): the step is taken on the minibrot's exact centre, at any depth; a step from a shallower view that would pass 1e100 carries on instead of being refused.
+- **Import .kfr** accepts locations past 1e100 and past 1e308 (#1876), with the file's full centre digits; `--batch --kfr` does the same.
 
 **Auto-explore** (every 2D type: Mandelbrot, Burning Ship, Julia, Newton, Lyapunov, User Equation, …) needs no theory about the fractal. It renders many small test views, scores each one for detail (how much boundary it shows, how many colour bands, how fractal the edges are, and not mostly flat or inside the set), and keeps descending into the best ones:
 

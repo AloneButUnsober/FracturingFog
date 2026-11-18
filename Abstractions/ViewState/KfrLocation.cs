@@ -32,14 +32,43 @@ using System.Numerics;
 
 namespace FracturingFog.ViewState
 {
-    public sealed record KfrLocation(string Re, string Im, double KfZoom, int? Iterations, bool ImagPointsUp)
+    // #1876 (epic #1428, C7d) — KfZoomLog10: log10 of the file's zoom, the zoom itself past
+    // double's range ("Zoom: 2.4E1000"), where KfZoom holds double.MaxValue (ZoomLog).
+    public sealed record KfrLocation(string Re, string Im, double KfZoom, int? Iterations, bool ImagPointsUp,
+                                     double KfZoomLog10 = double.NaN)
     {
         /// <summary>Limbs per coordinate: octuple-double, as the batch / view state carry.</summary>
         public const int Limbs = 8;
 
-        /// <summary>FF's zoom for a W×H frame (Mandelbrot: 3.5 / zoom over max(W, H)).</summary>
+        /// <summary>FF's zoom for a W×H frame (Mandelbrot: 3.5 / zoom over max(W, H)); past
+        /// double's range, saturated (read <see cref="FfZoomLog10"/>).</summary>
         public double FfZoom(int width, int height)
-            => KfZoom * 3.5 * height / (4.0 * Math.Max(width, height));
+            => PastDouble
+                ? ZoomLog.FromLog10(FfZoomLog10(width, height))
+                : KfZoom * 3.5 * height / (4.0 * Math.Max(width, height));
+
+        /// <summary>#1876 — log10 of <see cref="FfZoom"/>, at any depth.</summary>
+        public double FfZoomLog10(int width, int height)
+            => (PastDouble ? KfZoomLog10 : Math.Log10(KfZoom)) + Math.Log10(3.5 * height / (4.0 * Math.Max(width, height)));
+
+        private bool PastDouble => double.IsFinite(KfZoomLog10) && ZoomLog.BeyondDouble(KfZoomLog10);
+
+        /// <summary>#1876 — the exact centre when Re / Im hold more digits than octuple-double
+        /// can (conjugated for ImagPointsUp, as <see cref="Centre"/>), else null.</summary>
+        public FFMath.ExactCentre? CentreExact()
+        {
+            string im = ImagPointsUp ? Negate(Im) : Im;
+            if (!FFMath.ExactCentre.TryParse(Re, im, out var c)) return null;
+            var od = c.ToDeep();
+            bool beyond = FFMath.BigFloat.FromOD(od.Re, c.Precision) != c.Re || FFMath.BigFloat.FromOD(od.Im, c.Precision) != c.Im;
+            return beyond ? c : null;
+        }
+
+        private static string Negate(string s)
+        {
+            s = s.Trim();
+            return s.StartsWith('-') ? s[1..] : s.StartsWith('+') ? "-" + s[1..] : "-" + s;
+        }
 
         /// <summary>FF's centre as octuple-double limbs, each the nearest double to
         /// what the decimal still has left, so their sum is the .kfr decimal to
@@ -68,8 +97,8 @@ namespace FracturingFog.ViewState
                 { error = "not a Kalles Fraktaler location: it needs Re, Im and Zoom lines."; return false; }
             if (!IsDecimal(re)) { error = $"Re '{re}' is not a decimal number."; return false; }
             if (!IsDecimal(im)) { error = $"Im '{im}' is not a decimal number."; return false; }
-            if (!double.TryParse(zs, NumberStyles.Float, CultureInfo.InvariantCulture, out double zoom)
-                || !double.IsFinite(zoom) || zoom <= 0)
+            // #1876 — past double's range too ("2.4E1000"), as the Zoom box reads it.
+            if (!ZoomLog.TryParse(zs, out double zoom, out double zoomLog10))
                 { error = $"Zoom '{zs}' is not a positive number."; return false; }
 
             int? iter = null;
@@ -89,7 +118,7 @@ namespace FracturingFog.ViewState
 
             bool up = kv.TryGetValue("ImagPointsUp", out string? ups)
                       && int.TryParse(ups, NumberStyles.Integer, CultureInfo.InvariantCulture, out int u) && u != 0;
-            location = new KfrLocation(re, im, zoom, iter, up);
+            location = new KfrLocation(re, im, zoom, iter, up, zoomLog10);
             error = null;
             return true;
         }

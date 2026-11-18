@@ -2552,9 +2552,18 @@ namespace FracturingFog.Batch
             if (!FracturingFog.ViewState.KfrLocation.TryParse(text, out var kfr, out string? why))
                 { error = $"{flag} '{opts.KfrPath}': {why}"; return false; }
             var (x, y) = kfr!.Centre();
+            // #1876 — the file's centre text too, so CliExactCentre reads its digits past OD
+            // (the conjugate when ImagPointsUp, as Centre()).
+            if (opts.CenterX == null && opts.CenterY == null && kfr.CentreExact() is { } kx)
+                (opts.CenterXText, opts.CenterYText) = kx.ToStrings();
             if (opts.CenterX == null) { opts.CenterX = x[0]; opts.CenterXLimbs = x; }
             if (opts.CenterY == null) { opts.CenterY = y[0]; opts.CenterYLimbs = y; }
-            opts.Zoom ??= kfr.FfZoom(opts.Width, opts.Height);
+            if (opts.Zoom == null)
+            {
+                double zl = kfr.FfZoomLog10(opts.Width, opts.Height);
+                opts.Zoom = kfr.FfZoom(opts.Width, opts.Height);
+                opts.ZoomLog10 = FracturingFog.ViewState.ZoomLog.BeyondDouble(zl) ? zl : null;   // #1876
+            }
             opts.Iterations ??= kfr.Iterations;
             if (opts.Zoom > QualityPreset.Deepest.ZoomMax)   // #1860: none since #1861
                 { error = $"{flag} '{opts.KfrPath}': zoom {opts.Zoom:G4} at {opts.Width}x{opts.Height} is past the deepest zoom ({QualityPreset.Deepest.ZoomMax:G3})."; return false; }

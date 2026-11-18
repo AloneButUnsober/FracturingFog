@@ -95,4 +95,26 @@ public static class JuliaMorph
             ? new JuliaMorphStep(p, period, minibrotZoom)
             : new JuliaMorphStep(default, period, minibrotZoom, JuliaMorphRefusal.TooDeep);
     }
+
+    /// <summary>#1876 (epic #1428, C7d) — a morph step toward a minibrot found past
+    /// octuple-double (<see cref="DeepNucleusFinder"/>), from the current log10 zoom: the
+    /// new log zoom is (1−α)·log z₀ + α·log z_Q (z_Q = 1/|Size|), centred on the exact
+    /// nucleus. No depth limit (the Unbounded tier).</summary>
+    public static JuliaMorphStep PlanDeep(
+        in DeepNucleusResult target, double currentZoomLog10, QualityPreset currentQuality,
+        bool iterLocked, int lockedIterations, double depth = DefaultDepth)
+    {
+        if (!target.Found) throw new ArgumentException("The morph target must be a found minibrot.", nameof(target));
+        if (!double.IsFinite(currentZoomLog10)) throw new ArgumentOutOfRangeException(nameof(currentZoomLog10));
+        if (!(depth > 0 && depth <= 1)) throw new ArgumentOutOfRangeException(nameof(depth), depth, "Depth α must be in (0, 1].");
+
+        double minibrotZoomLog10 = -target.SizeLog10;
+        double minibrotZoom = FracturingFog.ViewState.ZoomLog.FromLog10(minibrotZoomLog10);
+        if (!(minibrotZoomLog10 > currentZoomLog10))
+            return new JuliaMorphStep(default, target.Period, minibrotZoom, JuliaMorphRefusal.NotDeeper);
+
+        double zoomLog10 = (1 - depth) * currentZoomLog10 + depth * minibrotZoomLog10;
+        var plan = MinibrotJump.AtDeep(target.Nucleus, zoomLog10, target.Period, currentQuality, iterLocked, lockedIterations);
+        return new JuliaMorphStep(plan, target.Period, minibrotZoom);
+    }
 }

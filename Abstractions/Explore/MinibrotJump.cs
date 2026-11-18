@@ -90,15 +90,24 @@ public static class MinibrotJump
         double framing = 1.0)
     {
         var (exact, zoomLog10) = DeepNucleusFinder.Frame(found, framing);
+        return AtDeep(exact, zoomLog10, found.Period, current, iterLocked, lockedIterations);
+    }
+
+    /// <summary>#1876 (C7d) — as <see cref="At"/> past octuple-double: a view change to the
+    /// exact centre <paramref name="center"/> at log10 zoom <paramref name="zoomLog10"/>
+    /// whose subject is a period-<paramref name="period"/> minibrot. Never null.</summary>
+    public static MinibrotJumpPlan AtDeep(
+        ExactCentre center, double zoomLog10, int period, QualityPreset current, bool iterLocked, int lockedIterations)
+    {
         double zoom = FracturingFog.ViewState.ZoomLog.FromLog10(zoomLog10);
         var quality = QualityFor(current, zoom);
-        int wanted = NucleusFinder.SuggestedIterations(found.Period);
+        int wanted = NucleusFinder.SuggestedIterations(period);
         if (iterLocked)
-            return new MinibrotJumpPlan(exact.ToDeep(), zoom, quality, 0, wanted, lockedIterations < wanted,
-                CenterExact: exact, ZoomLog10: zoomLog10);
+            return new MinibrotJumpPlan(center.ToDeep(), zoom, quality, 0, wanted, lockedIterations < wanted,
+                CenterExact: center, ZoomLog10: zoomLog10);
         int byZoom = quality.ComputeIterationsLog10(zoomLog10);
         int preferred = SMath.Max(byZoom, SMath.Min(wanted, MaxPreferredIterations));
-        return new MinibrotJumpPlan(exact.ToDeep(), zoom, quality, preferred, wanted, preferred < wanted,
-            BeyondTierCap: preferred > quality.IterMax, CenterExact: exact, ZoomLog10: zoomLog10);
+        return new MinibrotJumpPlan(center.ToDeep(), zoom, quality, preferred, wanted, preferred < wanted,
+            BeyondTierCap: preferred > quality.IterMax, CenterExact: center, ZoomLog10: zoomLog10);
     }
 }

@@ -25,8 +25,9 @@ the canonical task list; this doc backs them.
 | C7a period detection + zoom to minibrot past 1e100 | #1866 | §22 (merged, PR #1867) |
 | C7b Snap to spiral (Misiurewicz) past 1e100 | #1868 | §23 (merged, PR #1869) |
 | C7c angle → landing past 1e100 (deep ray trace) | #1870 | §24 (merged, PR #1871) |
-| C7e location → angles past 1e100 | #1873 | §25 |
-| C7d auto-explore, Julia morph, .kfr, loop video | filed when started | |
+| C7e location → angles past 1e100 | #1873 | §25 (merged, PR #1874) |
+| C7d .kfr import + Julia morph past 1e100 | #1876 | §26 |
+| C7f auto-explore + loop video past 1e100 | filed when started | |
 | C6 | filed when started (see #1428) | |
 
 ## 1. Why a new number type
@@ -586,3 +587,31 @@ C7 was re-sliced once more:
   - **Mutation checks: 3 of 5 caught.** Two survived:
     - **Preperiod split off by one:** this mutant is equivalent. `ExternalAngle.FromBits` reduces an angle to its canonical form, and the extra preperiod digit of a correct trace is the one the cycle has there.
     - **Dropping the landing-distance check:** this is a guard. Every candidate traced in the tests is genuine.
+
+## 26. .kfr import and Julia morph past 1e100 (C7d, #1876)
+
+Auto-explore and the loop video are render-path work, so they moved to C7f.
+
+- **`KfrLocation`:**
+  - Zoom is read through `ZoomLog.TryParse` (`KfZoomLog10`; `KfZoom` saturates past double).
+  - `FfZoomLog10(w, h)` is the log of #1615's conversion. `FfZoom` is unchanged in double's range and saturated past it.
+  - `CentreExact()` returns the exact centre from Re / Im when they hold more digits than OD can. It is conjugated for `ImagPointsUp: 1`, as `Centre()` is.
+- **Control Center import:** the 1e100 refusal is gone. The import sets the exact centre, the log zoom past double, and the tier `QualityFor` gives (Unbounded past 1e100).
+- **`--batch --kfr` (`ResolveKfr`):** when neither --x nor --y is given, the file's exact centre becomes `CenterXText` / `CenterYText`, so `CliExactCentre` reads it. The log zoom becomes `ZoomLog10`.
+- **`MinibrotJump.AtDeep`** plans a view change to an exact centre at a log zoom. `PlanDeep` is now built on it.
+- **`JuliaMorph.PlanDeep`** takes a step toward a `DeepNucleusResult`.
+  - The new log zoom is (1−α)·log z₀ + α·log z_Q, centred on the exact nucleus.
+  - It has no depth limit. NotDeeper is reported as before.
+- **Control Center morph:**
+  - Past 1e100 a click maps to the exact target with a log reach. `DeepNucleusFinder.FindMinibrot` searches there, and `PlanDeep` takes the step.
+  - Below 1e100, a step that would pass 1e100 (TooDeep) carries its minibrot on with `CarryOn` on the search disk and takes the deep step, instead of refusing.
+- **Validation** (`S1876KfrAndMorphDeepTests`). Mutation checks: 6 of 6 caught.
+  - **`.kfr` at 1.5E150 with a 340-digit centre:** the log zoom and FF's log zoom are right, `FfZoom` matches the #1615 formula in double's range, and the exact centre is read.
+  - **`.kfr` at 2.4E1000:** both zooms saturate and the logs are right.
+  - **`ImagPointsUp: 1`:** gives the conjugate.
+  - **A short centre** gives no exact centre.
+  - **`--batch --kfr` at 3E500:** `CliExactCentre` is the file's centre, and `ZoomLog10` is FF's log zoom for the batch frame.
+  - **Deep morph step:** from a 1e120 view toward the period-250 antenna minibrot (~1e-299, found by `DeepNucleusFinder`):
+    - it lands at the log midpoint on the exact nucleus, in the Unbounded tier, with the iteration hint;
+    - with α = 1 it lands at the minibrot's own zoom;
+    - from a view deeper than the minibrot it reports NotDeeper.
