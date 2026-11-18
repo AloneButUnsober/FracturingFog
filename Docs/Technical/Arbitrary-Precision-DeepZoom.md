@@ -31,7 +31,8 @@ the canonical task list; this doc backs them.
 | C6a GPU float-exp LA kernel past 1e100 (to 1e290) | #1880 | §28 (merged, PR #1881) |
 | C6b GPU float-exp pixel scale past 1e290 | #1882 | §29 (merged, PR #1883) |
 | C6c server engine + cluster shared-orbit blob past 1e100 | #1884 | §30 (merged, PR #1885) |
-| C5g LA approximation transform (AT) past double | #1886 | §31 |
+| C5g LA approximation transform (AT) past double | #1886 | §31 (merged, PR #1888) |
+| C5h float-exp LA tail in double where exact | #1889 | §32 |
 
 ## 1. Why a new number type
 
@@ -762,3 +763,45 @@ This is the first of the deferred C5 speed items.
   - **The minibrot's cusp ×10⁶:** no stage's AT is usable (the view is small next to c′'s offset), so the frame is the AT-off frame.
   - **Surviving mutant:** removing the AT's δc-bound check. On these views every pixel is inside the bound, even zoomed out ×10⁴. LaAtFx's ThrC is checked equal to LaAt's.
 - **Credits.** `LaStageTableFx.cs` and `MandelbrotCalculator.LaFx.cs` (C5c) are line-for-line ports of Imagina-derived code. They shipped without the THIRD-PARTY-NOTICES §3 entry, the bibliography mention and the upstream SPDX line; all three are added here, with `LaAtFx.cs`.
+
+## 32. The float-exp tail in double (C5h, #1889)
+
+This is the "SIMD" speed item. Measuring first changed what it does.
+
+- **Measured.** S1886's p250 minibrot at 1e286–1e287 (320×180), rendered on the double rows and then forced onto the FX rows (`FloatExpZoomLog10 = 200`):
+  - The FX rows took 648–700 ms against 93–102 ms for the same steps, about 7×.
+  - The plain tail was 93 % of the steps (8.9M plain against 0.6M LA).
+  - SIMD on the double rows had already measured no gain (#1628). The lever was the FloatExp tail itself.
+- **Why double can be exact.** A FloatExp `+` or `*` is one correctly rounded double operation on the mantissas, with exact power-of-two exponent bookkeeping. `+` returns the larger term when the gap passes 60 bits, as double's rounding does. So where every operand and result is a normal double, a FloatExp step and a double step give the same bits.
+- **`TailInDouble`** (`MandelbrotCalculator.LaFx.cs`) runs the float-exp LA evaluator's plain tail in double under three conditions:
+  - ‖δ‖ ∈ [2^-500, 2^500], which keeps |δ|² normal for the rebase test. After a rebase δ is |z|, so it is O(1).
+  - Each part of δ is exactly its double.
+  - dc is a normal double, or else stays below δ's last bit (‖dc‖·2^62 < ‖δ‖). Past about 1e170 this always holds once ‖δ‖ ≥ 2^-500.
+- **The derivative** runs as dd·2^s, where the +1 becomes +2^-s; it is renormalised by powers of two outside [2^-400, 2^400].
+- **Leaving the double tail.** It hands back in FloatExp at the range's edge, on escape, on a rebase that climbs back, or at the cap.
+- **Credit.** The method is FF's own. The idea of keeping an exponent beside a double is Kalles Fraktaler 2+'s floatexp (`#kf-floatexp`), as FloatExp itself is.
+- **Switch.** On by default; `FF_FX_TAIL_DOUBLE=0` turns it off. `LastFxDoubleSteps` and `LastFxDoubleTailEvents` (climbs, renormalisations) report its work.
+- **Not covered:** the LA-off FX loop (`ComputePixelPTFx`, which looks up BLA every step), the orbit-aware FX path (C5d), and the LA stage steps themselves.
+- **Speed** (the rows, best of 2, 320×180):
+
+  | View | FX tail | Double tail | Speed-up |
+  |---|---|---|---|
+  | p415, 1e498 | 365–374 ms | 118 ms | ×3.1 |
+  | p250, 1e299 | 226–232 ms | 77–78 ms | ×2.9 |
+  | p250 zoomed out, 1e286 | 676–700 ms | 223–232 ms | ×3.0 |
+  | the cusp ×10⁶ (LA steps only) | | | none |
+
+  The remaining FX cost is the LA stage steps, still in FloatExp.
+- **Validation** (`S1889FxTailInDoubleTests`). Frames are byte-identical with the double tail on and off: iteration, smooth, colour, distance and both normal buffers. Twelve scenes:
+  - the p250 / p415 minibrots, p250 zoomed out 10^13;
+  - c = i at 1e400 and 1e1000;
+  - the OD-tail centre at 1e600;
+  - a pixel jitter and a sub-rect tile;
+  - the dense M(4,1) centre at 1e320 and 1e600;
+  - p250 and M(4,1) with climbing off, which rebase in place and renormalise the derivative (1,238 times on p250).
+  - Wherever there are plain steps, at least 90 % run in double (100.0 % on all but c = i).
+- **Mutation checks:** 3 of 9 caught: the +1 left unscaled, a rebase keeping Z, and the write-back without the scale. The other 6 are equivalent on every reachable view (checked, argued):
+  - climbing back from a rebase: the rebased δ = z is far above every stage's bound, so the stages hand straight back to the tail at index 0, which is what the non-climb branch does;
+  - an unreported escape: the next FloatExp step finds it;
+  - the 2^-500 floor lowered to 2^-1000, the per-part exactness check, and dropping dc: dc is below δ's last bit at every depth the FX rows run at;
+  - no renormalisation: no stint in double moves the derivative by 2^±1023.
