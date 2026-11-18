@@ -22,8 +22,9 @@ the canonical task list; this doc backs them.
 | C9 Unbounded quality tier: zoom past 1e100 | #1861 | §19 (merged, PR #1862) |
 | C10 batch + Command builder parity past 1e100 | #1860 | §20 (merged, PR #1863) |
 | C11 validation + docs | #1864 | §21 (merged, PR #1865) |
-| C7a period detection + zoom to minibrot past 1e100 | #1866 | §22 |
-| C7b Misiurewicz snap + external rays / angles; C7c auto-explore, Julia morph, angle landings, .kfr | filed when started | |
+| C7a period detection + zoom to minibrot past 1e100 | #1866 | §22 (merged, PR #1867) |
+| C7b Snap to spiral (Misiurewicz) past 1e100 | #1868 | §23 |
+| C7c external rays / angles past 1e100; C7d auto-explore, Julia morph, .kfr | filed when started | |
 | C6 | filed when started (see #1428) | |
 
 ## 1. Why a new number type
@@ -475,3 +476,45 @@ C7 is sliced as C5 was:
   - **`PlanDeep`** at 1e498 gives the Unbounded tier, the framing's exact centre and log, `Zoom` = double.MaxValue, the iteration hint, and the locked case.
   - **The OD handoff:** the period-250 nucleus rounded to OD as the seed is carried by `Find` to the true nucleus.
   - **That region** (zoom 1e100, 1920×1080 view): `NucleusFinder` finds period 57,563, `Plan` refuses it, and `CarryOn` carries it on. The result has the same period, is framed past 1e100 in the Unbounded tier, and stays within OD's grain of the OD nucleus.
+
+## 23. Snap to spiral past 1e100 (C7b, #1868)
+
+C7 was re-sliced once the ray and angle work was sized:
+- **C7b:** Snap to spiral (this section).
+- **C7c:** external rays and angles. `ExternalRay.Land`, `LocationAngles` and the angle landings trace rays at every bit of depth.
+- **C7d:** auto-explore, Julia morph and `.kfr`.
+
+- **`DeepMisiurewiczFinder`** (`Abstractions/Explore`) is `MisiurewiczFinder` in BigFloat and floatexp.
+  - **Reference orbit** at the exact click point.
+    - The orbit is kept in BigFloat, because the differences Z_a − Z_b cancel to almost 0 near the point and must be exact.
+    - Double copies of it are kept as well.
+    - dZ/dc is in CFx.
+  - **Candidates:** each (k, p) gets the first-order distance |Z_{k+p} − Z_k| / |dZ_{k+p} − dZ_k|.
+    - A double difference whose lower bound already rules a pair out skips the exact BigFloat difference.
+    - Only the smallest k per p is kept, and the simplest pairs are tried first.
+  - **Newton:**
+    - Deflated Newton runs perturbed in CFx. Each difference is the exact one plus (ε_a − ε_b).
+    - It is then polished in BigFloat, with Δc = 1 / (G′/G) computed in CFx.
+    - The precision is `PrecisionForZoom(reach + 30 decades)`, so the snapped point still holds while the view zooms on into it.
+  - **Acceptance:** within the accept radius of the click, and (k, p) minimal there: no smaller preperiod and no divisor period is also a root.
+  - **The multiplier** λ = Π 2zᵢ is in CFx.
+- **Control Center:** past 1e100 the click becomes an exact world point (`ViewCamera.ExactWorldFromScreen`), with the reach as the log of 10 pixels. The view snaps to the exact point.
+  - The repeat factor, turn and Julia preview are shown as before.
+  - The loop video is not offered past 1e100 (C7d), because its batch path keeps double zooms and the OD centre. The angles are not shown either (C7c).
+- **Validation** (`S1868DeepMisiurewiczFinderTests`).
+  - **M(4,1) near −0.1011 + 0.9563i**, refined independently in BigFloat at 1600 bits. Clicks 3.6 px off it at 1e150 and 1e320 snap to M(4,1).
+    - The point matches to 2⁻⁶⁶ of the reach, far past OD's grain.
+    - λ = 2·z₄ to 1e-12.
+  - **The tip of the period-125 antenna minibrot** (~1e-149), clicked 1% of a size inside it, snaps to a point with k + p > 125.
+    - Independently, in BigFloat: z_{k+p} = z_k there.
+    - No smaller preperiod or divisor period holds.
+    - It is within reach of the click.
+  - **Agreement with `MisiurewiczFinder`** at 1e60, where OD holds: the same (k, p), the same point and the same λ.
+  - **Refusals:**
+    - M(4,1) refined as M(5,1) reports LowerPreperiod 4.
+    - M(4,1) refined as M(4,2) reports LowerPeriod 1.
+    - Refining towards an anchor 5 reaches away fails (an anchor 0.5 reach away succeeds).
+    - A click 1000 reaches away finds nothing.
+  - **Mutation checks: 6 of 7 caught.** The one that survived drops the deflation terms in the perturbed proposal step only.
+    - The BigFloat polish deflates on its own, so it would still refuse a wrong root.
+    - No tested click lies near an unwanted root that the proposal could slide onto.
