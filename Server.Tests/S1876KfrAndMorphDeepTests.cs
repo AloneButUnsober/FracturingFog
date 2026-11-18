@@ -31,14 +31,14 @@ public sealed class S1876KfrAndMorphDeepTests
     private static string Kfr(string zoom, string re = Mx, string im = My, bool up = false)
         => $"Re: {re}\r\nIm: {im}\r\nZoom: {zoom}\r\nIterations: 5000\r\n" + (up ? "ImagPointsUp: 1\r\n" : "");
 
-    private static double Conv(int w, int h) => Math.Log10(3.5 * h / (4.0 * Math.Max(w, h)));
+    private static double FrameLog10(int w, int h) => Math.Log10(3.5 * h / (4.0 * Math.Max(w, h)));
 
     [Fact]
     public void A_Deep_Kfr_Reads_The_Log_Zoom_And_Exact_Centre()
     {
         Assert.True(KfrLocation.TryParse(Kfr("1.5E150"), out var a, out var err), err);
         Assert.Equal(Math.Log10(1.5) + 150, a!.KfZoomLog10, 10);
-        Assert.Equal(Math.Log10(1.5) + 150 + Conv(1920, 1080), a.FfZoomLog10(1920, 1080), 10);
+        Assert.Equal(Math.Log10(1.5) + 150 + FrameLog10(1920, 1080), a.FfZoomLog10(1920, 1080), 10);
         Assert.Equal(1.5e150 * 3.5 * 1080 / (4.0 * 1920), a.FfZoom(1920, 1080));   // in double: the #1615 formula
         Assert.True(ExactCentre.TryParse(Mx, My, out var exact));
         Assert.Equal(exact, a.CentreExact());
@@ -47,7 +47,7 @@ public sealed class S1876KfrAndMorphDeepTests
         Assert.True(KfrLocation.TryParse(Kfr("2.4E1000"), out var b, out err), err);
         Assert.Equal(double.MaxValue, b!.KfZoom);
         Assert.Equal(Math.Log10(2.4) + 1000, b.KfZoomLog10, 9);
-        Assert.Equal(Math.Log10(2.4) + 1000 + Conv(3840, 2160), b.FfZoomLog10(3840, 2160), 9);
+        Assert.Equal(Math.Log10(2.4) + 1000 + FrameLog10(3840, 2160), b.FfZoomLog10(3840, 2160), 9);
         Assert.Equal(double.MaxValue, b.FfZoom(3840, 2160));
 
         // ImagPointsUp: the conjugate, as Centre() does with the limbs.
@@ -75,7 +75,7 @@ public sealed class S1876KfrAndMorphDeepTests
             Assert.NotNull(got);
             Assert.Equal(exact.Re, got!.Value.Re.WithPrecision(exact.Re.Precision));
             Assert.Equal(exact.Im, got.Value.Im.WithPrecision(exact.Im.Precision));
-            Assert.Equal(Math.Log10(3) + 500 + Conv(800, 600), opts.ZoomLog10!.Value, 9);
+            Assert.Equal(Math.Log10(3) + 500 + FrameLog10(800, 600), opts.ZoomLog10!.Value, 9);
             Assert.Equal(double.MaxValue, opts.Zoom);
         }
         finally { File.Delete(path); }
