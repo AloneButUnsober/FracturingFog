@@ -28,8 +28,9 @@ the canonical task list; this doc backs them.
 | C7e location → angles past 1e100 | #1873 | §25 (merged, PR #1874) |
 | C7d .kfr import + Julia morph past 1e100 | #1876 | §26 (merged, PR #1877) |
 | C7f auto-explore + loop video past 1e100 | #1878 | §27 (merged, PR #1879) |
-| C6a GPU float-exp LA kernel past 1e100 (to 1e290) | #1880 | §28 |
-| C6 rest (float-exp pixel scale past 1e290, the cluster blob) | filed when started | |
+| C6a GPU float-exp LA kernel past 1e100 (to 1e290) | #1880 | §28 (merged, PR #1881) |
+| C6b GPU float-exp pixel scale past 1e290 | #1882 | §29 |
+| C6 rest (the cluster's shared-orbit blob) | filed when started | |
 
 ## 1. Why a new number type
 
@@ -655,7 +656,7 @@ This is the last explore slice. Every explore tool now works past 1e100. The rem
 The first GPU slice. Before it, every frame past 1e100 rendered on the CPU.
 
 - **What held the route at 1e100.** Only the constant did (`MaxGpuLaFloatExpZoom`). The float-exp LA kernel (#1664, opt-in `FF_GPU_LA_FX=1`) has float-exp numbers, the pixel scale goes up as float-exp (`GpuLaFxParams.Make` splits the double scale), and the reference orbit is O(1) (the AP orbit past 1e110, C4). The CPU keeps the double-δc rows up to `FloatExpZoomLog10` (1e290, C5a).
-- **The limit is now 1e290.** Past it the CPU float-exp rows run (the double scale underflows). The route says so: `zoom > 1e290`. A float-exp scale for the kernel is a later slice.
+- **The limit is now 1e290.** Past it the CPU float-exp rows run (the double scale underflows). The route says so: `zoom > 1e290`. A float-exp scale for the kernel is a later slice. *(C6b, §29: it now runs there too.)*
 - **The float-exp LA table on the GPU.** Deep, on long orbits, A and B (∏2Z, the dc response) overflow the double LA table. The CPU frame then drops LA (it renders `AP-PT`), and so would the GPU route. The kernel now takes the float-exp table (`LaStageTableFx`, C5c) there, without the AT, as the CPU float-exp rows do.
   - `LaStageTableFx.GpuStepsFloatExp` / `GpuInts` use the double table's layout.
   - `GpuFloatExp.Encode(CFx)` gives one shared exponent. It writes the same words as the double encoder wherever double holds the value, and `FloatExp.Huge` (the builders' x / 0) becomes +∞ as the double would.
@@ -671,3 +672,37 @@ The first GPU slice. Before it, every frame past 1e100 rendered on the CPU.
   - **Against the CPU frame:** 0.46 % / 0.08 % of the pixels' counts differ, with no in/out flips.
   - **Past 1e290:** the frame stays on the CPU (`FX`), with the route's reason.
   - **Encoding:** a FloatExp encodes as its double does, bit for bit. Past double it keeps its exponent, and Huge encodes as +∞.
+
+## 29. The GPU past 1e290: a float-exp pixel scale (C6b, #1882)
+
+Past 1e290 the pixel scale underflows double, so every frame rendered on the CPU float-exp rows (C5a). The float-exp LA kernel already holds the scale as a float mantissa and an int exponent (`gScaleM` · 2^`gScaleE`), and its δ, dc and LA coefficients are float-exp. Only its host API took a double scale.
+
+- **`IGpuKernel.RunPerturbLaFloatExp`** gains `scaleExp2`: the scale is `scale` · 2^`scaleExp2`.
+  - `GpuLaFxParams.Make` packs `ScaleE` = ILogB(scale) + scaleExp2. It writes the same words as the double scale wherever double holds it.
+  - It refuses past `MaxScaleExponent` (2^±500,000, zoom ~1e150,000). That keeps the exponent far from int overflow and from the kernels' zero exponent.
+  - D3D11 and Vulkan pass it through.
+- **`TryRunGpuFloatExpPixels`** (`MandelbrotCalculator.GpuFx.cs`) runs before the CPU float-exp rows.
+  - **Route:** the C6a float-exp LA route (`FF_GPU_LA_FX=1`, float-exp the device's deep kernel, LA wanted), on the float-exp LA table without the AT, as the CPU rows run it.
+  - **Offsets:** dc = (x + offset) · scale, with the AA pixel jitter (#1851) in the offset, in pixels.
+  - **Derivative:** the kernel writes dz/dc · 2^gScaleE (#1660). The host turns it back into double by 2^-gScaleE. Past double's range that gives ±∞, as the CPU rows' `FloatExp.ToDouble` does (#1843).
+  - **Fallback:** where it declines (switch off, LA off, pan reuse, a tile cap, a table that isn't finite) the CPU rows run, and the route says why. A dispatch failure takes the usual GPU-failure path.
+  - **Labels:** `LastFrameUsedGpuFloatExpPixels`. The precision label reads `… LA FX`.
+- **Fixed in passing:** `LastFrameUsedGpuLaTableFx` (C6a) was never cleared between frames. The "deep-zoom perturbation engaged" log printed 2e+308 past double; it now prints the log zoom.
+- **Speed** (`--gpulaprobe`, `FF_GPULA_EXACT=1`, 480×270, the 340-digit view):
+
+  | Zoom | GT 710, Vulkan | Intel UHD, D3D11 |
+  |---|---|---|
+  | 1e320 | 84 ms vs 770 ms (×9.1) | 75 ms vs 343 ms (×4.6) |
+  | 1e600 | ×1.45 | ×0.90 |
+
+  Iteration counts differ from the CPU's on 0.32–0.33 % of pixels at 1e320 and 0 % at 1e600. At 1e600 the view is near-uniform, so the timing there is mostly fixed cost.
+- **Validation** (`S1882GpuFloatExpPixelsTests`, Vulkan; skipped without a device). Mutation checks: 7 of 7 caught.
+  - **Cbuffer:** a split scale packs as its double, keeps its exponent past double, and is refused past the range.
+  - **Views:** S1842's views: c = i at 1e320, 1e600 and 1e1000, and the centre whose offsets OD can't hold, at 1e600.
+    - The frame runs on the kernel.
+    - Against direct BigFloat iteration, the GPU is exact on every sampled pixel (64 / 64 / 36 / 64). The CPU float-exp frame is exact on them too, which checks the oracle.
+    - Against the CPU frame, no pixel's count differs.
+    - Smooth values sit in [n − 3.17, n − 2.17].
+  - **Jitter:** a pixel jitter moves the GPU frame as it moves the CPU's (0 pixels differ; 117 of 576 differ from the unjittered frame).
+  - **Fallback:** with LA off the frame stays on the CPU, with the reason.
+  - **C6a's test:** `S1880`'s past-1e290 test now checks the switch: on, the kernel runs; off, the CPU rows run with the reason.

@@ -13,7 +13,9 @@
 //     oracle's own check);
 //   • against the CPU frame on every pixel: within the #1664 budget (S1664: the
 //     float-exp LA frame at most 1 % + the plain float-exp kernel's, ~0.35 %);
-//   • past 1e290 the frame stays on the CPU float-exp rows, and the route says why;
+//   • past 1e290 the frame took the CPU float-exp rows, the route saying why; since #1882
+//     (C6b) the kernel runs there too (S1882), so this checks the route's switch: off, the
+//     frame stays on the CPU rows with the reason;
 //   • a FloatExp encodes for the kernel as its double does wherever double holds it,
 //     and FloatExp.Huge as +∞ (the double table's x / 0).
 
@@ -165,11 +167,14 @@ public sealed class S1880GpuLaFloatExpDeepTests : IDisposable
     }
 
     [Fact]
-    public void Past_1e290_The_Frame_Stays_On_The_Cpu_Float_Exp_Rows()
+    public void Past_1e290_Without_The_Switch_The_Frame_Stays_On_The_Cpu_Float_Exp_Rows()
     {
         if (MandelbrotCalculator.LaModeOverride != null) Assert.Skip("FF_LA set");
         using var k = Device();
         var (_, gpu) = Frames(295, k);
+        Assert.True(gpu.LastFrameUsedGpuFloatExpPixels, "#1882: with the switch the kernel runs past 1e290");
+        MandelbrotCalculator.UseGpuLaFloatExp = false;
+        gpu = Render(295, k);
         Assert.False(gpu.LastFrameUsedGpuPerturbation);
         Assert.EndsWith(" FX", gpu.LastPrecisionLabel);
         Assert.Contains("zoom > 1e290", gpu.LastGpuRoute.Reason ?? "");

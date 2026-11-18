@@ -1584,7 +1584,8 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         uint[] laStepsFx, uint[] laInts, int stages, GpuLaAt at,
         int[] iterDst, float[] smoothDst,
         float[] finalZrDst, float[] finalZiDst,
-        float[] finalDrDst, float[] finalDiDst)
+        float[] finalDrDst, float[] finalDiDst,
+        int scaleExp2 = 0)   // #1882: scale · 2^scaleExp2
     {
         using var sync = Sync();
         if (_disposed) throw new ObjectDisposedException(nameof(VulkanComputeKernel));
@@ -1594,7 +1595,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             throw new ArgumentException("reference-orbit arrays shorter than refLen");
         if (stages < 1 || laInts.Length < 2 * stages || laStepsFx.Length < LaKernelSource.StepWordsFloatExp)
             throw new ArgumentException("empty LA table");
-        var blob = GpuLaFxParams.Make(width, height, scale, maxIter, escapeRadius2, offsetX0, offsetY0, refLen, stages, at);
+        var blob = GpuLaFxParams.Make(width, height, scale, maxIter, escapeRadius2, offsetX0, offsetY0, refLen, stages, at, scaleExp2);
 
         EnsureShape(GpuGroupShapes.SlotPerturbFp32);
         long t0 = Stopwatch.GetTimestamp();

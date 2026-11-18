@@ -273,7 +273,9 @@ namespace FracturingFog.Rendering
         /// <summary>#1664 — <see cref="RunPerturbLa"/> in float-exp (LaKernelSource.BuildFloatExp):
         /// <paramref name="laStepsFx"/> is <c>LaStageTable.GpuStepsFloatExp</c>, the reference
         /// orbit goes up as float. Same outputs. Only valid when
-        /// <see cref="SupportsPerturbationLaFloatExp"/>.</summary>
+        /// <see cref="SupportsPerturbationLaFloatExp"/>. #1882 — the pixel scale is
+        /// <paramref name="scale"/> · 2^<paramref name="scaleExp2"/> (past double's range), and
+        /// the derivative outputs are dz/dc · 2^E with E = ILogB(scale) + scaleExp2.</summary>
         void RunPerturbLaFloatExp(
             int width, int height,
             double scale, int maxIter, double escapeRadius2,
@@ -282,7 +284,8 @@ namespace FracturingFog.Rendering
             uint[] laStepsFx, uint[] laInts, int stages, GpuLaAt at,
             int[] iterDst, float[] smoothDst,
             float[] finalZrDst, float[] finalZiDst,
-            float[] finalDrDst, float[] finalDiDst)
+            float[] finalDrDst, float[] finalDiDst,
+            int scaleExp2 = 0)
             => throw new NotSupportedException("This GPU kernel has no float-exp LA perturbation path.");
 
         /// <summary>#88 / G4.5 — true when this backend can run the perturbation kernel
