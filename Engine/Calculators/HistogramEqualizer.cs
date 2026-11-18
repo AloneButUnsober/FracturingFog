@@ -247,7 +247,7 @@ internal static class HistogramEqualizer
                     smoothEq, MandelbrotCalculator.MapDist(distBuf[idx], mapExp), iterArgEq,
                     nxBuf[idx], nyBuf[idx],
                     zrBuf[idx], ziBuf[idx],
-                    drBuf[idx], diBuf[idx]);
+                    MandelbrotCalculator.MapDz(drBuf[idx], mapExp), MandelbrotCalculator.MapDz(diBuf[idx], mapExp));   // #1843
             }
             rowEscaped[y] = esc;
             rowSaturated[y] = sat;

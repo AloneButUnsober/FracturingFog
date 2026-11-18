@@ -87,9 +87,10 @@ public sealed partial class MandelbrotCalculator
             return false;
         }
 
-        // The kernel writes dz/dc · 2^scaleE (#1660): back to dz/dc in double, ±∞ past its
-        // range as the CPU rows' FloatExp.ToDouble gives (#1843), before the normals.
+        // The kernel writes dz/dc · 2^scaleE (#1660). #1843: straight into the distance
+        // unit (· 2^-scaleE-DistanceUnitExp2), finite past double's range.
         _po.CancellationToken = ct;
+        int unitE = DistanceUnitExp2;
         ParallelForRows(0, Height, _po, y =>
         {
             if (ct.IsCancellationRequested || !GpuRowMarked(y)) return;
@@ -98,9 +99,9 @@ public sealed partial class MandelbrotCalculator
             {
                 int idx = rb + x;
                 if (!GpuMarked(idx)) continue;
-                FillAuxAndColorHP(idx, IterationBuffer[idx], maxIt,
+                FillAuxAndColorHPUnit(idx, IterationBuffer[idx], maxIt,
                     FinalZrBuffer[idx], FinalZiBuffer[idx],
-                    Math.ScaleB((double)FinalDrBuffer[idx], -scaleE), Math.ScaleB((double)FinalDiBuffer[idx], -scaleE), colorMap);
+                    Math.ScaleB((double)FinalDrBuffer[idx], -scaleE - unitE), Math.ScaleB((double)FinalDiBuffer[idx], -scaleE - unitE), colorMap);
             }
         });
         LastFrameUsedGpuPerturbation = true;

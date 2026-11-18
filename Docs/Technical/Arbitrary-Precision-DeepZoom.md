@@ -885,7 +885,7 @@ The 1e100 ceiling is gone. A Mandelbrot view renders, explores, saves, batches a
 |---|---|
 | #1872 | Deep ray landing on preperiodic angles with long preperiods is slow (46 s at ~1e-146) |
 | #1875 | External angles of minibrots past period 1,000 (the method's reach at any depth) |
-| #1843 | Normals and the final derivative overflow in `FillAuxAndColorHP` past ~1e38–1e150 (the derivative is ±∞ past double); the distance is fixed to ~1e308 by #1783 (§35) |
+| #1843 | Normals and the final derivative overflow in `FillAuxAndColorHP` past ~1e38–1e150 (the derivative is ±∞ past double); the distance is fixed to ~1e308 by #1783 (§35). *Fixed at any depth, §36.* |
 | #1783 | The float distance estimate underflows past ~1e38 (CPU and GPU). *Fixed, §35.* |
 | #1852 | Flaky: S1427's cancelled deep-orbit build test is wall-clock timed. *Fixed (PR #1893): a pre-cancelled token and an orbit-capacity bound.* |
 
@@ -913,3 +913,24 @@ The 1e100 ceiling is gone. A Mandelbrot view renders, explores, saves, batches a
   - The visual regression is unchanged (45/45), the 1e150 HSV case included.
   - The unit is exact, and the shallow frame keeps complex-plane units.
   - `S1660`'s GPU-against-CPU distance check, previously limited to zooms below 1e37, now runs at 3E47 as well.
+
+## 36. Normals and the final derivative at depth (#1843)
+
+- **Symptom.** `FillAuxAndColorHP` took dz/dc in complex-plane units, ~1/pixel:
+  - `FillNormal` squared Re(z·conj(dz/dc)), which went to ∞ past ~1e150, so the normals were 0 and Phong / PBR shading went flat;
+  - the float `FinalDr` / `FinalDi` buffers overflowed past ~1e38;
+  - past ~1e308 the double derivative itself was ±∞ (`FloatExp.ToDouble` on the float-exp rows, and the GPU float-exp kernel's write-back), so the normals and the distance (§35) were lost there too.
+- **Fix.** dz/dc enters the per-pixel fill in the distance unit of §35: dz/dc · 2^-`DistanceUnitExp2`, O(1 / pixel) there.
+  - **Plain double paths:** `ToDistanceUnit` before `FillAuxAndColorHPUnit` / `FinalizeOrbitPixelUnit`.
+  - **Float-exp rows:** a FloatExp overload scales before the double conversion (`DistanceUnitOf`).
+  - **GPU float-exp kernel:** its 2^scaleE output goes straight into the unit (· 2^-scaleE-e).
+  - **Normals:** a power-of-two scale of dz/dc leaves their direction unchanged. Where the old products were finite they are the same bits.
+  - **Buffers:** `FinalDr` / `FinalDi` hold dz/dc in the unit, finite at any depth.
+  - **Colour maps** get dz/dc as they get the distance: in the unit if they opt in (`IColorMapDistanceUnit`), else in complex-plane units, bit for bit as before (±∞ past ~1e38). The recolour and histogram paths convert per map (`MapDz`).
+- **Validation** (`S1843DeepNormalsTests`).
+  - **Against direct iteration:** z and dz/dc iterated directly in BigFloat at 1e150 and 1e280 (double δ) and 1e320 and 1e600 (float-exp rows).
+    - The normals agree within 1e-4 rad (worst 1e-6).
+    - FinalDr/Di equal dz/dc · 2^-e, finite, within 1e-4 (LA's derivative: 2e-5 worst at 1e150, ≤ 3e-7 elsewhere).
+    - The distance in pixels agrees within 1e-4, past 1e308 included.
+  - **GPU float-exp kernel** (Vulkan) at 1e320 and 1e600: normals and distance match the CPU frame on 575 pixels, and every value is finite. Before, they were ∞ / 0.
+  - **Units per map:** a ColorGen theme that doesn't read `pxScale` still sees |dz/dc| as a float ∞ at 1e150; one that does sees the unit.

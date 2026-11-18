@@ -913,6 +913,28 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             ? (_distPixelScale, 0) : (world, _distExp2);
     }
 
+    // #1843 — dz/dc into the distance unit: · 2^-DistanceUnitExp2 (a length's unit is
+    // 2^-e complex-plane units, so a derivative's is 2^e). O(1 / pixel) there, so |dz/dc|²
+    // (the normals, the distance) and the float FinalDr/Di buffers stay finite at any depth.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ToDistanceUnit(ref double dr, ref double di)
+    {
+        int e = _distExp2;
+        if (e != 0) { dr = Math.ScaleB(dr, -e); di = Math.ScaleB(di, -e); }
+    }
+
+    // #1843 — the same from a FloatExp derivative, finite past double's range (~1e308),
+    // where FloatExp.ToDouble of the plain derivative gives ±∞.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private (double Dr, double Di) DistanceUnitOf(FloatExp dr, FloatExp di)
+        => (dr.ScaleB(-_distExp2).ToDouble(), di.ScaleB(-_distExp2).ToDouble());
+
+    // #1843 — a buffer dz/dc (distance unit) as a map with shift <paramref name="exp2"/>
+    // takes it: complex-plane units (· 2^exp2) unless it opts in (exp2 = 0).
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float MapDz(double unitDz, int exp2)
+        => exp2 == 0 ? (float)unitDz : (float)Math.ScaleB(unitDz, exp2);
+
     // #1783 — a buffer distance as a map with shift <paramref name="exp2"/> takes it.
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static float MapDist(float bufferDist, int exp2)
@@ -945,8 +967,15 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private float DeDist(double mag, double dr, double di, out float mapDist)
     {
+        ToDistanceUnit(ref dr, ref di);
+        return DeDistUnit(mag, dr, di, out mapDist);
+    }
+
+    // #1843 — DeDist for a dz/dc already in the distance unit (dz/dc · 2^-e).
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private float DeDistUnit(double mag, double dr, double di, out float mapDist)
+    {
         int e = _distExp2;
-        if (e != 0) { dr = Math.ScaleB(dr, -e); di = Math.ScaleB(di, -e); }
         double dMag = Math.Sqrt(dr * dr + di * di);
         if (!(dMag > (e == 0 ? 1e-10 : Math.ScaleB(1e-10, -e)))) { mapDist = 0f; return 0f; }
         double q = mag * Math.Log(mag) / dMag;
@@ -2846,6 +2875,18 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         ref OrbitAccumulator acc, TMap colorMap, bool wantInterior)
         where TMap : IOrbitAwareColorMap
     {
+        ToDistanceUnit(ref dr, ref di);   // #1843
+        FinalizeOrbitPixelUnit(idx, iter, maxIter, zr, zi, dr, di, ref acc, colorMap, wantInterior);
+    }
+
+    // #1843 — dr / di in the distance unit (see FillAuxAndColorHPUnit).
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void FinalizeOrbitPixelUnit<TMap>(
+        int idx, int iter, int maxIter,
+        double zr, double zi, double dr, double di,
+        ref OrbitAccumulator acc, TMap colorMap, bool wantInterior)
+        where TMap : IOrbitAwareColorMap
+    {
         IterationBuffer[idx] = iter;
 
         if (iter < maxIter)
@@ -2854,7 +2895,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             float smooth = (float)(iter + 1.0 - Math.Log2(Math.Log2(mag)));
             SmoothBuffer[idx] = smooth;
 
-            float dist = DeDist(mag, dr, di, out float mapDist);
+            float dist = DeDistUnit(mag, dr, di, out float mapDist);
             DistanceBuffer[idx] = dist;
 
             FillNormal(idx, zr, zi, dr, di);
@@ -3117,7 +3158,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 }
             }
         }
-        FinalizeOrbitPixel(idx, iter, maxIter, zrD, ziD, drv.ToDouble(), div.ToDouble(), ref acc, colorMap, wantInterior);
+        var (udr, udi) = DistanceUnitOf(drv, div);   // #1843: finite past ~1e308
+        FinalizeOrbitPixelUnit(idx, iter, maxIter, zrD, ziD, udr, udi, ref acc, colorMap, wantInterior);
         if (caughtAt > 0 && DeepOrbitPeriodicityDiagnostic) SmoothBuffer[idx] = -caughtAt;
     }
 
@@ -4147,6 +4189,33 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         TMap colorMap)
         where TMap : IColorMap
     {
+        ToDistanceUnit(ref drD, ref diD);   // #1843
+        FillAuxAndColorHPUnit(idx, iters, maxIter, zrD, ziD, drD, diD, colorMap);
+    }
+
+    // #1843 — from a FloatExp derivative (the float-exp rows, past ~1e290): scaled into
+    // the distance unit before it becomes a double, so it stays finite past ~1e308.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void FillAuxAndColorHP<TMap>(
+        int idx, int iters, int maxIter,
+        double zrD, double ziD, FloatExp drv, FloatExp div,
+        TMap colorMap)
+        where TMap : IColorMap
+    {
+        var (ur, ui) = DistanceUnitOf(drv, div);
+        FillAuxAndColorHPUnit(idx, iters, maxIter, zrD, ziD, ur, ui, colorMap);
+    }
+
+    // #1843 — <paramref name="drD"/>, <paramref name="diD"/>: dz/dc in the distance unit
+    // (ToDistanceUnit). The normals are exact (only the derivative's length was scaled);
+    // FinalDr/Di hold this unit too; the map gets complex-plane units unless it opts in.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void FillAuxAndColorHPUnit<TMap>(
+        int idx, int iters, int maxIter,
+        double zrD, double ziD, double drD, double diD,
+        TMap colorMap)
+        where TMap : IColorMap
+    {
         if (iters < maxIter)
         {
             double mag = Math.Sqrt(zrD * zrD + ziD * ziD);
@@ -4157,7 +4226,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             // double in the PT path — same magnitude domain as SP, so the
             // formula transfers without precision loss. Restores 3D-theme
             // shading (Phong/PBR) at deep zoom.
-            float dist = DeDist(mag, drD, diD, out float mapDist);
+            float dist = DeDistUnit(mag, drD, diD, out float mapDist);
             DistanceBuffer[idx] = dist;
 
             FillNormal(idx, zrD, ziD, drD, diD);
@@ -4173,7 +4242,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             ColorBuffer[idx] = (uint)colorMap.Map(
                 smooth, mapDist, iterArg,
                 NormalXBuffer[idx], NormalYBuffer[idx],
-                fzr, fzi, fdr, fdi);
+                fzr, fzi, MapDz(drD, _mapDistExp2), MapDz(diD, _mapDistExp2));   // #1843
         }
         else
         {
@@ -5471,7 +5540,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         // The derivative is ~1/pixel: past double it reaches the colouring as ±∞, where the
         // distance is 0 and the normals 0, as the double path's already are well before this
         // depth (normals past ~1e150, distance past ~1e40: #1843).
-        FillAuxAndColorHP(idx, iter, maxIter, zrD, ziD, drv.ToDouble(), div.ToDouble(), colorMap);
+        FillAuxAndColorHP(idx, iter, maxIter, zrD, ziD, drv, div, colorMap);   // #1843: FloatExp derivative
     }
 
     // SM-11a — DOUBLE-DOUBLE-reference variant of ComputePixelPTRebased. Same
@@ -6853,7 +6922,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                     s, MapDist(DistanceBuffer[idx], mapExp0), iterArg,
                     NormalXBuffer[idx], NormalYBuffer[idx],
                     FinalZrBuffer[idx], FinalZiBuffer[idx],
-                    FinalDrBuffer[idx], FinalDiBuffer[idx]);
+                    MapDz(FinalDrBuffer[idx], mapExp0), MapDz(FinalDiBuffer[idx], mapExp0));   // #1843
             }
         });
 
@@ -6915,7 +6984,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                         SmoothBuffer[idx], MapDist(DistanceBuffer[idx], mapExp), iterArg,
                         NormalXBuffer[idx], NormalYBuffer[idx],
                         FinalZrBuffer[idx], FinalZiBuffer[idx],
-                        FinalDrBuffer[idx], FinalDiBuffer[idx]);
+                        MapDz(FinalDrBuffer[idx], mapExp), MapDz(FinalDiBuffer[idx], mapExp));   // #1843
                 }
             }
         });
