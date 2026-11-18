@@ -3,6 +3,9 @@
 Epic #1428: lift the 1e100 zoom cap (option C, arbitrary precision). The slice issues are
 the canonical task list; this doc backs them.
 
+**Status: complete (2026-11-18). All slices are merged; the close-out is §34, and the open
+follow-ups are listed there.**
+
 | slice | issue | status |
 |---|---|---|
 | C1 BigFloat type | #1830 | §1–§5 (merged, PR #1831) |
@@ -33,7 +36,10 @@ the canonical task list; this doc backs them.
 | C6c server engine + cluster shared-orbit blob past 1e100 | #1884 | §30 (merged, PR #1885) |
 | C5g LA approximation transform (AT) past double | #1886 | §31 (merged, PR #1888) |
 | C5h float-exp LA tail in double where exact | #1889 | §32 (merged, PR #1890) |
-| GPU float-exp LA kernel on minibrot views (bug) | #1887 | §33 |
+| GPU float-exp LA kernel on minibrot views (bug) | #1887 | §33 (merged, PR #1891) |
+| C5i LA stages in double | (no issue) | tried, not shipped: no gain (§34) |
+| SA rescaling | (no issue) | measured, not built (§34) |
+| Close-out | #1428 | §34 |
 
 ## 1. Why a new number type
 
@@ -831,3 +837,54 @@ This is the "SIMD" speed item. Measuring first changed what it does.
   - S1664's packing test now uses the 13-word layout.
   - **`--gpulaprobe`**, `FF_GPULA_MINIBROT=1`, 160×90, GT 710: D3D11 and Vulkan both 0.4–0.9 % iteration difference at p66, p125 and p250, in / out ≤ 2 of 14,400.
 - **Mutation checks:** 5 of 7 caught. The survivors are the tail's Z_n as float and the exact rebase in the tail. On these views the tail never meets a Z_n below FLT_MIN, because the LA steps carry the period; both are defensive.
+
+## 34. Close-out (2026-11-18)
+
+### What the epic delivers
+
+The 1e100 ceiling is gone. A Mandelbrot view renders, explores, saves, batches and clusters at any depth. The tested depths reach 1e1000, and float-exp exponents allow zooms up to about 2^±500,000. A view carries:
+- **Exact centre:** `ExactCentre` / `BigFloat`, at `PrecisionForZoom` bits (C1, C2a, C2b).
+- **Zoom:** as its log10 past double (C3, C3b).
+
+| Area | What works past 1e100 | Slices |
+|---|---|---|
+| Reference orbit | BigFloat (tier 3, "AP-PT") from 1e110, at the exact centre; periodic detection past 1e154; arrays grow as built | C4, C5f, C8a |
+| CPU pixels | Double δ to 1e290 (exact against BigFloat iteration). Float-exp pixels beyond, with BLA, LA stages, the AT and the plain tail in double where exact. Orbit-aware palettes. AA jitter by pixel | C5a–C5e, C5g, C5h |
+| GPU | Opt-in float-exp LA kernel (`FF_GPU_LA_FX=1`) to any depth (float-exp pixel scale), D3D11 and Vulkan; correct on minibrot views (#1887) | C6a, C6b, #1887 |
+| Server / cluster | The engine takes the exact centre and log zoom (images and video); the master ships the BigFloat orbit once per job | C6c |
+| Quality / batch | Unbounded tier; `--batch` and the Command builder carry the exact centre and log zoom (stills, video, slideshow, loop, explore) | C9, C10, C8b |
+| Explore tools | Period detection and zoom to minibrot, Snap to spiral, angle → landing and location → angles, .kfr import, Julia morph, auto-explore, the Misiurewicz loop video | C7a–C7f |
+| Validation | Deep visual-regression cases (1e150, 1e320, 1e498); exact-iteration oracles in every slice's tests | C11 and each slice |
+
+### What was measured and not shipped
+
+- **C5i, the LA stages in double.** Tried twice: as in C5h, then with cheaper checks. Frames were byte-identical, but the rows ran ~5 % *slower* at 320×180 (6 interleaved runs each). The profile shows why:
+  - after C5h the FX tail runs at parity with the double rows' SIMD tail;
+  - all of the remaining float-exp gap (~4.9× in the stages) is the stage tries;
+  - running the tries in double costs at least as much in guards and conversions.
+
+  A different design (per-table doubles and a per-pixel range certificate) is not attempted. Notes are on #1428.
+- **SA rescaling.** SA runs only with LA off (Auto turns LA on from 1e30), and BLA covers the same stretch. Raising SA's 1e100 coefficient cap (a proxy for rescaling) gained ~2 ms on a ~13 ms LA-off spiral frame and nothing on minibrots. Not built.
+- **SIMD for the FX rows.** Superseded by C5h. Profiling showed the FloatExp cost, not vectorisation, was the lever, and the existing double-row SIMD (#1628) already measured no gain.
+
+### Speed at depth (CPU, i5-13420H)
+
+- **Past 1e290:** the float-exp rows cost ~1.4–2.3× the double rows on the same steps, down from ~7× before C5h.
+- **Where it went:** C5h gave ×2.9–3.1 on minibrot frames, C5g ×1.0–1.1.
+- **GPU (GT 710):** about the CPU's speed on these views, and ×9.1 on Misiurewicz views past 1e290 (C6b). It stays opt-in.
+
+### Lessons recorded
+
+- **Test deep GPU paths on minibrot views as well as Misiurewicz views.** #1887 hid behind spiral-only tests: near a nucleus the reference passes below FLT_MIN.
+- **Measure speed at 320×180 or more,** with on/off runs interleaved (≥ 6 each) and the minimum taken. Smaller frames and sequential runs gave a false ×1.1, and the machine drifts ~20 % over a session.
+- **Profile without new downloads:** EventPipe's sample profiler through environment variables, analysed with the TraceEvent package already in the NuGet cache (§32–§34 notes on #1428).
+
+### Open follow-ups, carried forward
+
+| Issue | Topic |
+|---|---|
+| #1872 | Deep ray landing on preperiodic angles with long preperiods is slow (46 s at ~1e-146) |
+| #1875 | External angles of minibrots past period 1,000 (the method's reach at any depth) |
+| #1843 | Normals, the final derivative and the distance overflow in `FillAuxAndColorHP` past ~1e38–1e150 (the derivative is ±∞ past double) |
+| #1783 | The float distance estimate underflows past ~1e38 (CPU and GPU) |
+| #1852 | Flaky: S1427's cancelled deep-orbit build test is wall-clock timed |

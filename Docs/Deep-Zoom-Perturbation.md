@@ -442,6 +442,9 @@ runs fp32: SA / BLA keep the double kernels.
 
 ## 10. Past 1e100 — arbitrary precision (epic #1428)
 
+*The epic is complete (2026-11-18). The close-out, with what was measured and not shipped and
+the open follow-ups, is Technical/Arbitrary-Precision-DeepZoom.md §34.*
+
 Design, slice by slice: `Docs/Technical/Arbitrary-Precision-DeepZoom.md` (C1–C11,
 #1830–#1864). The short form:
 
