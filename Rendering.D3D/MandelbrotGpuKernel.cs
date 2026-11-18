@@ -1981,7 +1981,8 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
         uint[] laStepsFx, uint[] laInts, int stages, GpuLaAt at,
         int[] iterDst, float[] smoothDst,
         float[] finalZrDst, float[] finalZiDst,
-        float[] finalDrDst, float[] finalDiDst)
+        float[] finalDrDst, float[] finalDiDst,
+        int scaleExp2 = 0)   // #1882: scale · 2^scaleExp2
     {
         if (_disposed) throw new ObjectDisposedException(nameof(MandelbrotGpuKernel));
         if (width <= 0 || height <= 0) return;
@@ -1990,7 +1991,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             throw new ArgumentException("reference-orbit arrays shorter than refLen");
         if (stages < 1 || laInts.Length < 2 * stages || laStepsFx.Length < FracturingFog.Rendering.LaKernelSource.StepWordsFloatExp)
             throw new ArgumentException("empty LA table");
-        var p = GpuLaFxParams.Make(width, height, scale, maxIter, escapeRadius2, offsetX0, offsetY0, refLen, stages, at);
+        var p = GpuLaFxParams.Make(width, height, scale, maxIter, escapeRadius2, offsetX0, offsetY0, refLen, stages, at, scaleExp2);
 
         lock (_d3dGate)
         {

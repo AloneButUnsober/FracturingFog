@@ -23,7 +23,8 @@
 // #1880 (epic #1428, C6a): FF_GPULA_EXACT=1 adds an exact view past 1e100 (the dense
 // 340-digit centre near M(4,1), AP reference orbit) at 1e150 and 1e285: CPU (LA Auto)
 // against the float-exp LA kernel, with which LA table it ran (double, or float-exp
-// where A and B overflow the double one).
+// where A and B overflow the double one). #1882 (C6b): also 1e320 and 1e600, past
+// double's pixel scale (the kernel with a float-exp scale, "fx px").
 // Exit 0 always.
 
 using System;
@@ -80,7 +81,7 @@ namespace FracturingFog
                 .Concat(DeepCostProbe.FfViews.Where(s => s.KfZoom >= 1e30))
                 .Where(s => Environment.GetEnvironmentVariable("FF_GPULA_SCENE") is not { } f || s.Name.Contains(f, StringComparison.OrdinalIgnoreCase));
             if (Environment.GetEnvironmentVariable("FF_GPULA_EXACT") == "1" && k.SupportsPerturbationLaFloatExp)
-                foreach (int zl in new[] { 150, 285 }) ExactDeep(k, zl, w, h, reps);
+                foreach (int zl in new[] { 150, 285, 320, 600 }) ExactDeep(k, zl, w, h, reps);   // #1882: past 1e290 too
             string modes = Environment.GetEnvironmentVariable("FF_GPULA_MODES") ?? "012345";
             if (!k.SupportsPerturbationLa) modes = modes.Replace("2", "").Replace("3", "");
             if (!k.SupportsPerturbationLaFloatExp) modes = modes.Replace("5", "");
@@ -173,7 +174,8 @@ namespace FracturingFog
                     gpuC = Frame(true); sw.Restart(); gpuC.Calculate(); tGpu = Math.Min(tGpu, sw.Elapsed.TotalMilliseconds);
                 }
                 double diff = 100.0 * gpuC!.IterationBuffer.Zip(cpu!.IterationBuffer).Count(p => p.First != p.Second) / cpu.IterationBuffer.Length;
-                string ran = gpuC.LastFrameUsedGpuLaFloatExp ? (gpuC.LastFrameUsedGpuLaTableFx ? "fx LA, float-exp table" : "fx LA, double table")
+                string ran = gpuC.LastFrameUsedGpuFloatExpPixels ? "fx LA, float-exp table, fx px"
+                    : gpuC.LastFrameUsedGpuLaFloatExp ? (gpuC.LastFrameUsedGpuLaTableFx ? "fx LA, float-exp table" : "fx LA, double table")
                     : $"CPU! ({gpuC.LastGpuRoute.Reason})";
                 Console.WriteLine($"    exact M(4,1) 1e{zl,-8} | CPU [{cpu.LastPrecisionLabel}] {tCpu,7:F0} | GPU [{ran}] {tGpu,7:F0} ms | " +
                                   $"x{tCpu / tGpu:F2} | iter diff vs CPU {diff:F2} %");

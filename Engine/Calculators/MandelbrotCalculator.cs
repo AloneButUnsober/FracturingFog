@@ -3206,6 +3206,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         LastFrameUsedGpuBla = false;
         LastFrameUsedGpuLa = false;   // #1630
         LastFrameUsedGpuLaFloatExp = false;   // #1664
+        LastFrameUsedGpuLaTableFx = false;   // #1880
+        LastFrameUsedGpuFloatExpPixels = false;   // #1882
         _lastFrameUsedLa = false;   // #1626
         _lastFrameUsedLaSimd = false;   // #1628
 
@@ -3243,10 +3245,14 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         LastHpStageMs = new HpStageMs(Ms(tStage0, tStageOrbit), 0, 0, 0);
         if (fx)
         {
-            // #1880 — no GPU kernel takes a float-exp pixel scale yet.
-            if (GpuDeepHere && GpuKernel != null && (GpuKernel.SupportsPerturbation || FloatExpHere(GpuKernel)))
-                _gpuSkip = GpuRoute.Cpu($"zoom > 1e{FloatExpZoomLog10:0}",
-                    $"past 1e{FloatExpZoomLog10:0} the pixel scale underflows double: float-exp pixels render on the CPU");
+            // #1882 (C6b) — the float-exp LA kernel with a float-exp pixel scale, where its
+            // route holds; otherwise (and on a GPU failure) the CPU float-exp rows.
+            if (TryRunGpuFloatExpPixels(colorMap, maxIt, ct))
+            {
+                LastHpStageMs = new HpStageMs(Ms(tStage0, tStageOrbit), 0, 0, Ms(tStageOrbit, Stopwatch.GetTimestamp()));
+                _panFrameComplete = false;
+                return;
+            }
             CalculateFloatExpRows(colorMap, maxIt, ct);
             LastHpStageMs = new HpStageMs(Ms(tStage0, tStageOrbit), 0, 0, Ms(tStageOrbit, Stopwatch.GetTimestamp()));
             _panFrameComplete = false;
@@ -3722,7 +3728,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             _loggedGpuPerturbEngaged = true;
             Console.Error.WriteLine(
                 $"[GPU] deep-zoom perturbation engaged — {GpuKernel?.GetType().Name ?? "GPU"} " +
-                $"(first frame at zoom {Zoom:0e+0}).");
+                $"(first frame at zoom {(ZoomLog10 > 300 ? $"1e{ZoomLog10:0}" : Zoom.ToString("0e+0"))}).");   // #1882: log zoom past double
         }
     }
 

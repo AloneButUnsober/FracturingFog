@@ -23,15 +23,25 @@ namespace FracturingFog.Rendering
 
         public const int Bytes = 112;
 
-        /// <summary>The frame's parameters (RowBase / Wave / BandRows / Band are set per band).</summary>
+        /// <summary>#1882 — the largest |binary exponent| of the pixel scale the kernel is
+        /// given (zoom ~1e150,000): its float-exp exponents stay far from int overflow and
+        /// from its zero exponent (<see cref="GpuFloatExp.ZeroExp"/>).</summary>
+        public const int MaxScaleExponent = 500_000;
+
+        /// <summary>The frame's parameters (RowBase / Wave / BandRows / Band are set per band).
+        /// #1882 (epic #1428, C6b) — the pixel scale is <paramref name="scale"/> ·
+        /// 2^<paramref name="scaleExp2"/>: past double's range (zoom past ~1e300) the host
+        /// passes a FloatExp's mantissa and exponent.</summary>
         public static GpuLaFxParams Make(int width, int height, double scale, int maxIter, double escapeRadius2,
-            double offsetX0, double offsetY0, int refLen, int stages, GpuLaAt at)
+            double offsetX0, double offsetY0, int refLen, int stages, GpuLaAt at, int scaleExp2 = 0)
         {
             if (!(scale > 0) || !double.IsFinite(scale)) throw new ArgumentOutOfRangeException(nameof(scale));
-            int e = Math.ILogB(scale);
+            long el = (long)Math.ILogB(scale) + scaleExp2;
+            if (el > MaxScaleExponent || el < -MaxScaleExponent) throw new ArgumentOutOfRangeException(nameof(scaleExp2));
+            int e = (int)el;
             var p = new GpuLaFxParams
             {
-                ScaleM = (float)Math.ScaleB(scale, -e), ScaleE = e,
+                ScaleM = (float)Math.ScaleB(scale, -Math.ILogB(scale)), ScaleE = e,
                 OffX0 = (float)offsetX0, OffY0 = (float)offsetY0,
                 Width = width, Height = height, MaxIter = maxIter, RefLen = refLen,
                 Stages = stages, AtLen = at.Len, StepsBase = 2 * stages,
