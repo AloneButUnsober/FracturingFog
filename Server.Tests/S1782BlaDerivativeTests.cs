@@ -12,8 +12,8 @@
 //   • the float-exp rows' BLA (#1845) and the float-exp LA tail (LaTailBla), at 1e320;
 //   • the GPU SA / BLA kernel (Vulkan; skipped without a device), at p448.
 // Normals within 1e-2 rad and the distance within 1 % on ≥ 99 % of those pixels. Before
-// the fix the rows were off on about half. The GPU kernel: ≥ 94 % (230 of 5,535 off, from
-// 2,882): the rest is its BLA skips differing from the CPU's on the same table, #1791.
+// the fix the rows were off on about half, the GPU kernel on 2,882 of 5,535. (After the
+// + B it stayed off on 230 until #1791 gave its table the CPU rows' QD-band ε: now 11.)
 // Mutants (scripted, one site each without its + B): caught — the scalar row, the FX row,
 // the AVX2 rows, the 8-lane rows, the GPU kernel. Survive — the LA tail's and the FX LA
 // tail's BLA, though the tails take 18k–157k skips here: |B| / |A·d| is about 1 / |dz/dc|
@@ -196,10 +196,8 @@ public sealed class S1782BlaDerivativeTests(ITestOutputHelper output) : IDisposa
         MandelbrotCalculator.GpuDeepPrecisionMode = GpuDeepPrecision.Double;
         var got = Frame(P448, c => c.LaMode = DeepLaMode.Off, k);
         Assert.True(got.LastFrameUsedGpuBla, $"precondition: the GPU BLA kernel ran ({got.LastGpuRoute.Detail})");
-        // 230 of 5,535 pixels stay off (4 %): the GPU kernel takes other BLA skips than the
-        // CPU rows on the same table (it is the same 230 against the CPU SA + BLA frame, its
-        // SA alone is off on 4, a tighter tolerance leaves 35). That is #1791. Without the
-        // + B it was 2,882 (52 %).
-        Compare("GPU SA+BLA/p448", want, got, P448.MaxIter, minShare: 0.94);
+        // Without the + B 2,882 of 5,535 were off (52 %); with it 230 stayed off until #1791
+        // tightened the GPU table's ε in the QD band as the CPU rows' (now 11 of 5,702).
+        Compare("GPU SA+BLA/p448", want, got, P448.MaxIter);
     }
 }

@@ -1459,13 +1459,21 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     /// accurate as no BLA. Resuming with BLA at the default 1e-6 left ~2.5 % of a
     /// period-448 minibrot's pixels a few iterations off no-BLA rebasing (which matched
     /// exact iteration on every sampled pixel); 1e-10 leaves ~0.2 %, at 4.5x the speed
-    /// of no BLA. A tighter BlaTolerance still wins; the GPU kernels are not affected.</summary>
+    /// of no BLA. A tighter BlaTolerance still wins. #1791: the GPU SA / BLA kernel
+    /// rebases with BLA too, so it takes the same ceiling in the same band (it kept 1e-6
+    /// before and was off ~10x as often as the CPU rows past 1e27).</summary>
     public const double QdBandBlaTolerance = 1e-10;
 
     // #1613 — the QD-band rows use the rebase test and resume (ComputeRowPT4 / PT8).
     private bool ResumesInQdBand =>
-        ResumeRebased && AllowPtRebasing && !UseDdRebaseReference
-        && Zoom > QDZoomThreshold && Zoom <= ODZoomThreshold;
+        ResumeRebased && AllowPtRebasing && !UseDdRebaseReference && InQdBand;
+
+    // #1791 — the GPU SA / BLA kernel (CSPerturbSA) always rebases with BLA.
+    private bool InQdBand => Zoom > QDZoomThreshold && Zoom <= ODZoomThreshold;
+
+    /// <summary>#1791 — ε of the BLA table the last deep frame built or kept (0 when
+    /// none). Diagnostic / test use.</summary>
+    public double LastBlaEpsilon => _blaTable?.Epsilon ?? 0;
 
     /// <summary>#1614 — wall time of the last CPU deep (perturbation) frame's stages:
     /// the reference orbit, the BLA table, the series approximation and the pixel
@@ -4034,8 +4042,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     /// reference orbit changes (maxIter, length) or when dcMaxAbs has drifted
     /// far enough that previously-merged validity radii are stale.
     /// </summary>
-    // cpuRows: the table is for the CPU PT rows, which tighten ε in the QD band (#1613);
-    // the GPU kernels keep BlaTolerance as is.
+    // cpuRows: the table is for the CPU PT rows, which tighten ε in the QD band when they
+    // resume rebased pixels (#1613); otherwise for the GPU SA / BLA kernel, which always
+    // rebases with BLA, so it tightens in the same band (#1791).
     private void EnsureBlaTable(double dcMaxAbs, bool cpuRows = true)
     {
         bool refChanged = _blaForRefMaxIter != _refCachedMaxIter
@@ -4046,7 +4055,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         double dcDrift = _blaDcMaxAbs <= 0 ? double.PositiveInfinity
                                            : Math.Abs(dcMaxAbs - _blaDcMaxAbs) / _blaDcMaxAbs;
         double eps = BlaTolerance > 0 && double.IsFinite(BlaTolerance) ? BlaTolerance : BlaTable.DefaultEpsilon;
-        if (cpuRows && ResumesInQdBand) eps = Math.Min(eps, QdBandBlaTolerance);   // #1613
+        if (cpuRows ? ResumesInQdBand : InQdBand) eps = Math.Min(eps, QdBandBlaTolerance);   // #1613, #1791
         if (!refChanged && _blaTable != null && dcDrift < 0.05 && _blaTable.Epsilon == eps) return;
 
         if (_refOrbitLen < 4) { _blaTable = null; return; }

@@ -85,6 +85,8 @@ limbs per iteration (`_refZr/_refZrLo/..X7`). Each pixel iterates only its
   - Views ≤ ~6 000 iterations are identical at any ε.
   - Carried by the Mandelbrot region snapshot (batch `--param`); the GPU SA / BLA kernel
     shares the table.
+  - In the QD band (1e25–1e50) the rebasing CPU rows cap ε at 1e-10 (#1613), and so
+    does the GPU SA / BLA kernel, which rebases too (#1791).
   - `BlaTable.Lookup` starts at the level the iteration is aligned to (trailing zeros),
     not at the top, with the same answers. Before, a tight ε made BLA slower than BLA off.
 - **Periodicity early-out, deep orbit paths (#1368).** The CPU deep orbit path
