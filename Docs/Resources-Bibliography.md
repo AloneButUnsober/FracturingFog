@@ -509,6 +509,8 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
     - `Engine/Perturbation/Bla2.cs` (#1909) is the 2×2 matrix BLA: merge and radius with operator
       norms, for Tricorn and conj / re / im formulas.
     - Rebasing is used only where ∂f/∂z vanishes at z = 0.
+    - #1910 bounds the BLA radius by half the distance to each `abs` fold's sign change. For
+      Burning Ship that is the post's min(|X|, |Y|) / 2.
 - <a id="ultra-fractal-perturbation"></a>**Frederik Slijkerman / Ultra Fractal.** *Perturbation equations*, Ultra Fractal formula
   documentation, <https://www.ultrafractal.com/help/writing/formulas/perturbationequations.html> (read
   2026-11-19; the page states no version).
@@ -1205,6 +1207,8 @@ entry above completed or corrected.
     [mathr 2021](#mathr-deep-zoom-2021).
   - The post itself was not read; its year and the author's name are not confirmed.
   - **FF use:** design plan §4.3 (epic #1253).
+    - `Engine/Perturbation/R2Plan.cs` (#1910) uses the case analysis, as given by mathr 2021, for
+      Burning Ship and user `abs` folds.
 - **Claude Heiland-Allen**, *At the helm of the burning ship*, Proceedings of EVA London 2019,
   <http://dx.doi.org/10.14236/ewic/EVA2019.74>. As cited by the Fractalshades documentation
   ([gbillotey](#fractalshades-math)), for generalising minibrot finding to the Burning Ship. Not yet

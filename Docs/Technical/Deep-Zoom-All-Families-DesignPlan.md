@@ -139,6 +139,7 @@ FF claims no novelty for perturbation, rebasing, BLA or automatic δ derivation.
 - **Rebasing.** Valid (critical point 0).
 - **Unsolved case.** mathr 2021 notes that "deep needle" locations are hard to detect automatically in
   KF. FF should expect the same.
+- **As built (#1910):** see D5 in §9. The rescaled limit is not needed for the double-δ tier.
 
 ### 4.4 Rational maps: Magnet 1 / 2, Nova / Newton-type, Halley, Secant, `/` in user formulas
 
@@ -432,6 +433,41 @@ Each slice is checked against an **independent** oracle:
     - the rebase test removed.
   - **Survives:** the glitch test, as in D2 / D3. At these views its regions are sub-pixel, and the
     pixels where the reference runs out still go to secondary references.
+
+**D5 as built (#1910).**
+- **Abs folds in `R2Plan`.** `abs` of a real value and `Folded` ((|re|, |im|)) are supported.
+  - **δ:** laser blaster's `diffabs` cases (as given by mathr 2021), exact and with no
+    large-minus-large.
+  - **Derivatives** take the kink's side (≥ 0 counts as +, as the kernels do).
+  - **`abs` of a complex value** is the modulus, a square root, not a fold. It stays outside the
+    plan with the reason "abs of a complex value (its modulus)".
+- **BLA radius.** The radius also stays inside half the δ that moves any fold's argument U to 0:
+  (|U| − ‖∇_c U‖·|ε|max) / ‖∇_z U‖.
+  - A `Limit` jet carries the four first derivatives and a running minimum.
+  - For Burning Ship this is mathr 2022's min(|X|, |Y|) / 2, and the test checks it against that
+    rule.
+  - `Level0R2` takes |ε|max for the c term.
+- **Wiring.**
+  - Burning Ship renders on the engine from 1e11, and `FamilyDepth` puts it at 1e290.
+  - Celtic, Perpendicular Burning Ship and other abs variants are user formulas: FF has no such
+    `FractalType`.
+- **Deferred.**
+  - Generated Burning Ship waits for D12 (#1917).
+  - mathr's rescaled limit sign(X)·sign(Y)·(X·y + x·Y) is for a rescaled (float-exp) δ. The
+    double-δ tier does not need it; it comes with the float-exp tier.
+- **Found:**
+  1. **Chaotic views.** A Burning Ship Misiurewicz view (−0.3637 − 1.0501i) is at the chaotic floor:
+     32 / 176 direct counts change under a 1e-12-pixel shift. Oracle views now require every sampled
+     count to be stable.
+  2. **BLA tolerance at a near-floor view.** At −0.2282 − 1.1151i (1e30), BLA off reaches the floor
+     (174 / 176). BLA at ε = 1e-10 lost 6 more pixels, and ε = 1e-14 is back to 174. This is the
+     #1613 / #1275 tolerance trade, not the folds: a 10× tighter fold limit changed nothing.
+- **Mutants:**
+  - **Caught:**
+    - each of the four `diffabs` cases;
+    - the derivative's kink sign;
+    - the fold limit removed. Only the radius test catches this: on these views the second-order
+      radius binds first.
 
 **Order of value:** D1 → D2 → D3 gives deep zoom to Multibrot, Julia, Generated Z2–Z5 and every
 polynomial user equation. D4 / D5 add Tricorn and Burning Ship, which is the original #1253. D6–D10

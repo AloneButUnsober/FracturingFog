@@ -41,7 +41,7 @@ namespace FracturingFog.Server.Tests;
 
 public sealed class S1909ConjR2Tests(ITestOutputHelper output)
 {
-    private const int W = 48, H = 32;
+    internal const int W = 48, H = 32;
 
     // ── the matrix algebra ──
 
@@ -94,9 +94,9 @@ public sealed class S1909ConjR2Tests(ITestOutputHelper output)
 
     // ── engine helpers ──
 
-    private sealed record Result(int[] Iter, double[] Dr, double[] Di, PerturbationStats Stats);
+    internal sealed record Result(int[] Iter, double[] Dr, double[] Di, PerturbationStats Stats);
 
-    private static Result Engine(IPerturbationPlan plan, ExactCentre centre, double scale, int maxIter, bool useBla = true)
+    internal static Result Engine(IPerturbationPlan plan, ExactCentre centre, double scale, int maxIter, bool useBla = true)
     {
         var it = new int[W * H]; var dr = new double[W * H]; var di = new double[W * H];
         var st = PerturbationEngine.Render(plan, centre, scale, W, H, maxIter,
@@ -113,9 +113,9 @@ public sealed class S1909ConjR2Tests(ITestOutputHelper output)
 
     // ── the oracle: each formula written out in BigFloat ──
 
-    private delegate (BigFloat, BigFloat) Step(BigFloat zr, BigFloat zi, BigFloat cr, BigFloat ci, int p);
+    internal delegate (BigFloat, BigFloat) Step(BigFloat zr, BigFloat zi, BigFloat cr, BigFloat ci, int p);
 
-    private static BigFloat Sq(BigFloat a, int p) => BigFloat.Mul(a, a, p);
+    internal static BigFloat Sq(BigFloat a, int p) => BigFloat.Mul(a, a, p);
 
     private static readonly Step TricornStep = (a, b, cr, ci, p) =>
         (BigFloat.Add(BigFloat.Sub(Sq(a, p), Sq(b, p), p), cr, p),
@@ -140,7 +140,7 @@ public sealed class S1909ConjR2Tests(ITestOutputHelper output)
     };
 
     // Iterations to |z|² ≥ bailout2 (maxIter: none), and z at that iteration.
-    private static (int N, BigFloat Zr, BigFloat Zi) Orbit(Step f, BigFloat cr, BigFloat ci, int p, int maxIter, double bailout2, int stopAt = -1)
+    internal static (int N, BigFloat Zr, BigFloat Zi) Orbit(Step f, BigFloat cr, BigFloat ci, int p, int maxIter, double bailout2, int stopAt = -1)
     {
         BigFloat zr = BigFloat.Zero(p), zi = BigFloat.Zero(p);
         for (int n = 0; n < maxIter; n++)
@@ -154,6 +154,9 @@ public sealed class S1909ConjR2Tests(ITestOutputHelper output)
     }
 
     private void Check(string name, Result got, Step f, double bailout2, ExactCentre centre, double scale, int maxIter, bool derivative = true)
+        => Check(output, name, got, f, bailout2, centre, scale, maxIter, derivative);
+
+    internal static void Check(ITestOutputHelper output, string name, Result got, Step f, double bailout2, ExactCentre centre, double scale, int maxIter, bool derivative = true)
     {
         int p = centre.Precision, total = 0, eq = 0, dvBad = 0, dvChecked = 0;
         var seen = new System.Collections.Generic.HashSet<int>();
@@ -203,7 +206,7 @@ public sealed class S1909ConjR2Tests(ITestOutputHelper output)
     // view has structure at every depth and pixels escape early (not the chaotic floor of a level-set
     // boundary). Newton in R² from a double guess (found by a grid search in double); the Jacobian is a
     // finite difference in BigFloat, solved in double: each step gains ~16 digits.
-    private static ExactCentre Misiurewicz(Step f, double gr, double gi, int zl)
+    internal static ExactCentre Misiurewicz(Step f, double gr, double gi, int zl)
     {
         int p = BigFloat.PrecisionForZoom(zl) + 32;
         (BigFloat, BigFloat) G(BigFloat cr, BigFloat ci)
@@ -235,7 +238,7 @@ public sealed class S1909ConjR2Tests(ITestOutputHelper output)
     }
 
     // The Misiurewicz point, a third and a fifth of a pixel off.
-    private static ExactCentre Off(ExactCentre m, double scale, int zl)
+    internal static ExactCentre Off(ExactCentre m, double scale, int zl)
     {
         int p = BigFloat.PrecisionForZoom(zl);
         return new ExactCentre(BigFloat.Add(m.Re.WithPrecision(p), BigFloat.FromDouble(0.37 * scale, p), p),

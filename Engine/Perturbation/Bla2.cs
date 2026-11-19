@@ -118,8 +118,9 @@ public sealed class Bla2Table
 public interface IRealPerturbationPlan : IPerturbationPlan
 {
     /// <summary>The one-step matrix BLA at Z: A = ∂f/∂(z_re, z_im), B = ∂f/∂(c_re, c_im), and the radius
-    /// in which the dropped second-order terms stay below ε of the linear one.</summary>
-    Bla2 Level0R2(double zr, double zi, double cr, double ci, double epsilon);
+    /// in which the dropped second-order terms stay below ε of the linear one (and, #1910, no abs fold
+    /// changes sign for any pixel offset up to <paramref name="dcMax"/>).</summary>
+    Bla2 Level0R2(double zr, double zi, double cr, double ci, double epsilon, double dcMax);
 
     /// <summary>The Jacobian of the full orbit with respect to the pixel, J ← (∂f/∂z)·J + ∂f/∂c (the
     /// last term in the parameter plane only). Column 1 is ∂z/∂Re(pixel), what the sink receives.</summary>

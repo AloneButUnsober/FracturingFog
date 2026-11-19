@@ -18,6 +18,16 @@
 //     first column, ∂z/∂Re(c) (User Equation's numeric Jacobian is the same column).
 // The compiled functions are System.Linq.Expressions delegates, as AstPlan's (#1908). Design:
 // Docs/Technical/Deep-Zoom-All-Families-DesignPlan.md §4.2.
+//
+// #1910 (D5) adds abs folds: abs of a real value and Folded ((|re|, |im|)), which give Burning Ship,
+// its Perpendicular / Celtic variants and user abs. Their difference is laser blaster's diffabs case
+// analysis, as given by mathr 2021 (Docs/Resources-Bibliography.md, #mathr-deep-zoom-2021):
+//     diffabs(X, x) = |X + x| − |X| = X ≥ 0 ? (X + x ≥ 0 ? x : −(2X + x)) : (X + x > 0 ? 2X + x : −x),
+// exact, with no large-minus-large. A fold is linear only while its argument keeps its sign, so the
+// BLA radius also stays inside the distance to each fold's sign change: |U| / ‖∇_z U‖ (less the
+// pixel's ε through ∇_c U), halved — mathr 2022's min(|X|, |Y|) / 2 for Burning Ship
+// (#mathr-deep-zoom-2022), generalised to a fold of any real sub-expression. abs of a complex value
+// is its modulus (a square root), not a fold, and stays outside this plan.
 
 using System;
 using System.Collections.Generic;
@@ -37,6 +47,7 @@ public sealed class R2Plan : IRealPerturbationPlan
     private readonly F8 _delta;   // (Z, C, δ, ε) → the new δ
     private readonly F8 _tan;     // (z, c, t_z, t_c) → the derivative of f along (t_z, t_c)
     private readonly F8 _sec;     // (z, c, t, _) → the second derivative of f along z + s·t
+    private readonly F8? _limit;  // (z, c, |ε|max, _) → the δ that reaches the nearest fold's sign change (#1910)
 
     private R2Plan(AstNode step, double bailout2, (double, double) initialDerivative)
     {
@@ -46,6 +57,7 @@ public sealed class R2Plan : IRealPerturbationPlan
         _delta = Compile(step, Mode.Delta);
         _tan = Compile(step, Mode.Tangent);
         _sec = Compile(step, Mode.Second);
+        _limit = HasFold(step) ? Compile(step, Mode.Limit) : null;
         // Rebasing restarts at Z₀ = 0: valid as a reference only when 0 is a critical point for
         // every c, i.e. ∂f/∂z = 0 at z = 0. Checked at three generic c: a polynomial Jacobian that
         // is not identically zero is not exactly 0.0 at all of them.
@@ -72,9 +84,43 @@ public sealed class R2Plan : IRealPerturbationPlan
     public static R2Plan Tricorn()
         => new(new Add(new Pow(new Conj(new ZRef()), 2), new CRef()), 512.0 * 512.0, (1.0, 0.0));
 
+    /// <summary>Burning Ship, (|Re z| + i·|Im z|)² + c, with BurningShipKernel's bailout (512²) and its dz₀ = 1.</summary>
+    public static R2Plan BurningShip()
+        => new(new Add(new Pow(new Add(new AbsOp(new ReOp(new ZRef())), new Mul(new ImagUnit(), new AbsOp(new ImOp(new ZRef())))), 2),
+                       new CRef()), 512.0 * 512.0, (1.0, 0.0));
+
+    // True when n's value is real for every z, c (its imaginary part is the constant 0).
+    internal static bool IsReal(AstNode n) => n switch
+    {
+        RealConst or ReOp or ImOp or AbsOp => true,
+        Neg u => IsReal(u.Operand),
+        Conj u => IsReal(u.Operand),
+        Add a => IsReal(a.Left) && IsReal(a.Right),
+        Sub s => IsReal(s.Left) && IsReal(s.Right),
+        Mul m => IsReal(m.Left) && IsReal(m.Right),
+        Pow p => IsReal(p.Base),
+        _ => false,
+    };
+
+    private static bool HasFold(AstNode n) => n switch
+    {
+        AbsOp or Folded => true,
+        Neg u => HasFold(u.Operand),
+        Conj u => HasFold(u.Operand),
+        ReOp u => HasFold(u.Operand),
+        ImOp u => HasFold(u.Operand),
+        Add a => HasFold(a.Left) || HasFold(a.Right),
+        Sub s => HasFold(s.Left) || HasFold(s.Right),
+        Mul m => HasFold(m.Left) || HasFold(m.Right),
+        Pow p => HasFold(p.Base),
+        _ => false,
+    };
+
     internal static string? Unsupported(AstNode n) => n switch
     {
         ZRef or CRef or RealConst or ImagUnit => null,
+        AbsOp u => IsReal(u.Operand) ? Unsupported(u.Operand) : "abs of a complex value (its modulus)",
+        Folded u => Unsupported(u.Operand),
         Neg u => Unsupported(u.Operand),
         Conj u => Unsupported(u.Operand),
         ReOp u => Unsupported(u.Operand),
@@ -118,7 +164,7 @@ public sealed class R2Plan : IRealPerturbationPlan
         return F2(DzJacobian(zr, zi, cr, ci)) < tau2 * F2(DzJacobian(Zr, Zi, cr, ci));
     }
 
-    public Bla2 Level0R2(double zr, double zi, double cr, double ci, double epsilon)
+    public Bla2 Level0R2(double zr, double zi, double cr, double ci, double epsilon, double dcMax)
     {
         var a = DzJacobian(zr, zi, cr, ci);
         var (b11, b21) = _tan(zr, zi, cr, ci, 0, 0, 1, 0);
@@ -135,6 +181,8 @@ public sealed class R2Plan : IRealPerturbationPlan
         double h = Math.Sqrt(0.25 * ((xr + yr) * (xr + yr) + (xi + yi) * (xi + yi)))
                  + new RealMat2(0.5 * (xr - yr), hxyR, 0.5 * (xi - yi), hxyI).Norm;
         double r = h > 0 ? epsilon * a.MinGain / h : double.MaxValue;
+        // #1910 — and inside half the distance to the nearest fold's sign change.
+        if (_limit != null) r = Math.Min(r, 0.5 * _limit(zr, zi, cr, ci, dcMax, 0, 0, 0).Re);
         return new Bla2(a, new RealMat2(b11, b12, b21, b22), r == double.MaxValue ? double.MaxValue : r * r, 1);
     }
 
@@ -155,7 +203,9 @@ public sealed class R2Plan : IRealPerturbationPlan
 
     // ── Compilation: a jet per node, emitted in SSA form (every value bound once) ──
 
-    private enum Mode { Delta, Tangent, Second }
+    // Limit (#1910): jets of four first derivatives (along Re z, Im z, Re c, Im c) and a running
+    // minimum, over the folds, of the δ that reaches the fold's sign change.
+    private enum Mode { Delta, Tangent, Second, Limit }
 
     private readonly record struct Cx(Expression Re, Expression Im);
 
@@ -166,12 +216,20 @@ public sealed class R2Plan : IRealPerturbationPlan
         public readonly ParameterExpression[] P;
         public readonly Mode Mode;
 
+        public readonly ParameterExpression? MinLimit;   // Mode.Limit
+
         public Emitter(Mode mode)
         {
             Mode = mode;
             string[] names = ["zr", "zi", "cr", "ci", "a", "b", "c", "d"];
             P = new ParameterExpression[8];
             for (int i = 0; i < 8; i++) P[i] = Expression.Parameter(typeof(double), names[i]);
+            if (mode == Mode.Limit)
+            {
+                MinLimit = Expression.Variable(typeof(double), "limit");
+                Vars.Add(MinLimit);
+                Body.Add(Expression.Assign(MinLimit, Expression.Constant(double.MaxValue)));
+            }
         }
 
         private Expression Let(Expression e)
@@ -201,6 +259,63 @@ public sealed class R2Plan : IRealPerturbationPlan
         // Second: [1] the first and [2] the second derivative along the direction.
         private Cx[] Leaf(Cx v, Cx first) => Mode == Mode.Second ? [v, first, K(0, 0)] : [v, first];
 
+        // Mode.Limit leaves: z moves along Re z / Im z, c along Re c / Im c.
+        private static Cx[] ZLimit(Cx z) => [z, K(1, 0), K(0, 1), K(0, 0), K(0, 0)];
+        private static Cx[] CLimit(Cx c) => [c, K(0, 0), K(0, 0), K(1, 0), K(0, 1)];
+
+        private static Expression Ge0(Expression x) => Expression.GreaterThanOrEqual(x, Zero);
+
+        // |X + x| − |X| by cases (diffabs): every branch is of the size of x or of X + x.
+        private Expression DiffAbs(Expression X, Expression x)
+        {
+            var s = Let(Expression.Add(X, x));
+            var two = Expression.Constant(2.0);
+            return Let(Expression.Condition(Ge0(X),
+                Expression.Condition(Ge0(s), x, Expression.Negate(Expression.Add(Expression.Multiply(two, X), x))),
+                Expression.Condition(Expression.GreaterThan(s, Zero), Expression.Add(Expression.Multiply(two, X), x), Expression.Negate(x))));
+        }
+
+        // Fold the real component (im = false) or the imaginary one of a jet; the other component is
+        // left as is (for abs of a real value it is the constant 0).
+        private Expression[] FoldPart(Cx[] x, bool im)
+        {
+            Expression V(int i) => im ? x[i].Im : x[i].Re;
+            var r = new Expression[x.Length];
+            r[0] = Let(Expression.Call(typeof(Math).GetMethod(nameof(Math.Abs), [typeof(double)])!, V(0)));
+            if (Mode == Mode.Delta) { r[1] = DiffAbs(V(0), V(1)); return r; }
+            // Derivatives: the side of the kink the value is on (≥ 0 as the kernels' sign).
+            var sgn = Let(Expression.Condition(Ge0(V(0)), Expression.Constant(1.0), Expression.Constant(-1.0)));
+            for (int i = 1; i < x.Length; i++) r[i] = Let(Expression.Multiply(sgn, V(i)));
+            if (Mode == Mode.Limit)
+            {
+                // The δ that moves this fold's argument U to 0: (|U| − ‖∇_c U‖·|ε|max) / ‖∇_z U‖.
+                Expression Sq(Expression e) => Expression.Multiply(e, e);
+                var gz = Let(Expression.Call(typeof(Math).GetMethod(nameof(Math.Sqrt))!, Expression.Add(Sq(V(1)), Sq(V(2)))));
+                var gc = Let(Expression.Call(typeof(Math).GetMethod(nameof(Math.Sqrt))!, Expression.Add(Sq(V(3)), Sq(V(4)))));
+                var room = Let(Expression.Subtract(r[0], Expression.Multiply(gc, P[4])));
+                var cand = Expression.Condition(Expression.LessThanOrEqual(room, Zero), Zero,
+                    Expression.Condition(Expression.GreaterThan(gz, Zero), Expression.Divide(room, gz), Expression.Constant(double.MaxValue)));
+                Body.Add(Expression.Assign(MinLimit!, Expression.Call(typeof(Math).GetMethod(nameof(Math.Min), [typeof(double), typeof(double)])!, MinLimit!, cand)));
+            }
+            return r;
+        }
+
+        private Cx[] AbsReal(Cx[] x)
+        {
+            var f = FoldPart(x, im: false);
+            var r = new Cx[x.Length];
+            for (int i = 0; i < x.Length; i++) r[i] = new Cx(f[i], Zero);
+            return r;
+        }
+
+        private Cx[] Fold(Cx[] x)
+        {
+            var a = FoldPart(x, im: false); var b = FoldPart(x, im: true);
+            var r = new Cx[x.Length];
+            for (int i = 0; i < x.Length; i++) r[i] = new Cx(a[i], b[i]);
+            return r;
+        }
+
         private Cx[] Map(Cx[] x, Func<Cx, Cx> f)
         {
             var r = new Cx[x.Length];
@@ -223,19 +338,29 @@ public sealed class R2Plan : IRealPerturbationPlan
                 // (V₁ + D₁)(V₂ + D₂) − V₁V₂ = V₁·D₂ + D₁·(V₂ + D₂)
                 Mode.Delta => [v, Add(Mul(x[0], y[1]), Mul(x[1], Add(y[0], y[1])))],
                 Mode.Tangent => [v, Add(Mul(x[0], y[1]), Mul(x[1], y[0]))],
+                Mode.Limit => [v, Add(Mul(x[0], y[1]), Mul(x[1], y[0])), Add(Mul(x[0], y[2]), Mul(x[2], y[0])),
+                               Add(Mul(x[0], y[3]), Mul(x[3], y[0])), Add(Mul(x[0], y[4]), Mul(x[4], y[0]))],
                 _ => [v, Add(Mul(x[0], y[1]), Mul(x[1], y[0])),
                       Add(Add(Mul(x[2], y[0]), Scale(2.0, Mul(x[1], y[1]))), Mul(x[0], y[2]))],
             };
         }
 
-        private Cx[] Const(double re, double im) => Mode == Mode.Second ? [K(re, im), K(0, 0), K(0, 0)] : [K(re, im), K(0, 0)];
+        private Cx[] Const(double re, double im) => Mode switch
+        {
+            Mode.Second => [K(re, im), K(0, 0), K(0, 0)],
+            Mode.Limit => [K(re, im), K(0, 0), K(0, 0), K(0, 0), K(0, 0)],
+            _ => [K(re, im), K(0, 0)],
+        };
 
         public Cx[] Emit(AstNode n)
         {
             switch (n)
             {
-                case ZRef: return Leaf(new Cx(P[0], P[1]), new Cx(P[4], P[5]));
-                case CRef: return Leaf(new Cx(P[2], P[3]), Mode == Mode.Second ? K(0, 0) : new Cx(P[6], P[7]));
+                case ZRef: return Mode == Mode.Limit ? ZLimit(new Cx(P[0], P[1])) : Leaf(new Cx(P[0], P[1]), new Cx(P[4], P[5]));
+                case CRef: return Mode == Mode.Limit ? CLimit(new Cx(P[2], P[3]))
+                    : Leaf(new Cx(P[2], P[3]), Mode == Mode.Second ? K(0, 0) : new Cx(P[6], P[7]));
+                case AbsOp u: return AbsReal(Emit(u.Operand));   // a real operand (Unsupported checks)
+                case Folded u: return Fold(Emit(u.Operand));
                 case RealConst k: return Const(k.Value, 0);
                 case ImagUnit: return Const(0, 1);
                 case Neg u: return Map(Emit(u.Operand), Neg);
@@ -264,7 +389,9 @@ public sealed class R2Plan : IRealPerturbationPlan
         var jet = em.Emit(step);
         var outv = mode == Mode.Second ? jet[2] : jet[1];
         var ctor = typeof(ValueTuple<double, double>).GetConstructor([typeof(double), typeof(double)])!;
-        em.Body.Add(Expression.New(ctor, outv.Re, outv.Im));
+        em.Body.Add(mode == Mode.Limit
+            ? Expression.New(ctor, em.MinLimit!, Expression.Constant(0.0))
+            : Expression.New(ctor, outv.Re, outv.Im));
         return Expression.Lambda<F8>(Expression.Block(em.Vars, em.Body), em.P).Compile();
     }
 }
