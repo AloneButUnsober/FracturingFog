@@ -33,6 +33,7 @@ namespace FracturingFog.Server.Tests.Cluster;
 /// already represents faithfully (the existing
 /// <see cref="ClusterEndToEndImageTests"/> exercise the same call shape).
 /// </summary>
+[Collection(SerialLoadSensitiveCollection.Name)]   // #1793: not in the parallel phase
 public sealed class StressTests : IDisposable
 {
     private readonly string _root;
