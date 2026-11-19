@@ -340,6 +340,21 @@ Each slice is checked against an **independent** oracle:
 | D13 | #1918 | TearDrop on the engine (past its QD ceiling) | D6 |
 | — | — | Parked: GPU deep kernels for plans; LA / AT for non-Mandelbrot plans; Bicomplex / Coquaternion / Julibrot; Lyapunov | — |
 
+**D2 as built (#1907).**
+- `Engine/Perturbation/`: `PerturbationEngine`, `IPerturbationPlan`, `PowerPlan` (z^d + c). Julia and
+  Multibrot render on it from 1e11 in `EscapeTimeCalculator`.
+- **Tiers:** a BigFloat reference stored as doubles, with a double δ, to ~1e290. Float-exp δ, a log
+  zoom, and the derivative's distance unit (dz/dc overflows past ~1e308) are #1921 (D2b).
+- **Measured findings:**
+  1. **The reference ends before its escaped point.** A pixel that stepped onto it carried |δ| ≈ 512
+     while its own z was small, and was 20 % off direct iteration in a view with the minibrot
+     off-centre. Mandelbrot's reference ends the same way. A Julia pixel may still take the one step
+     onto it when that step escapes.
+  2. **BLA ε defaults to 1e-10** (`PerturbationEngine.DefaultBlaEpsilon`, as #1613 / #1791). At 1e-6,
+     z² + c was 2.8 % off MandelbrotCalculator, and Julia's derivative was off on ~10 % of pixels.
+  3. **Secondary references (Julia)** take the glitched pixel that lasted longest, ties by index, so a
+     frame is deterministic.
+
 **Order of value:** D1 → D2 → D3 gives deep zoom to Multibrot, Julia, Generated Z2–Z5 and every
 polynomial user equation. D4 / D5 add Tricorn and Burning Ship, which is the original #1253. D6–D10
 widen the user equation language.

@@ -435,6 +435,9 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
         // out-of-bounds post-pass paints the disk at the matching radius.
         _lastBailout2 = CurrentEscapeRadius2();
 
+        // #1907 — Julia / Multibrot past DeepZoomThreshold: the perturbation engine.
+        if (TryCalculateDeep(ct)) return;
+
         switch (FractalType)
         {
             // SIMD-capable kernels (pure polynomial in zr/zi). Forced scalar
