@@ -15,6 +15,7 @@
 // and status text. The render itself is synchronous and cancellable, so callers
 // wrap it in Task.Run with their own CancellationToken.
 
+using FracturingFog.FFMath;
 using System;
 using System.Drawing;
 using System.Threading;
@@ -1501,6 +1502,13 @@ namespace FracturingFog.Imaging
 
             c.CenterX = req.CenterX;
             c.CenterY = req.CenterY;
+            // #1906 — the full centre (16 limbs, the exact centre) to every calculator that
+            // takes it, instead of per-type limb copies (User Equation got none here).
+            if (c is IDeepCentre deep)
+                deep.SetDeepCentre(new DeepComplex(
+                    new OD(req.CenterX, req.CenterXLo, req.CenterX2, req.CenterX3, req.CenterX4, req.CenterX5, req.CenterX6, req.CenterX7),
+                    new OD(req.CenterY, req.CenterYLo, req.CenterY2, req.CenterY3, req.CenterY4, req.CenterY5, req.CenterY6, req.CenterY7)),
+                    req.CenterExact);
             c.Zoom = req.Zoom;
             c.MaxIterations = req.MaxIterations;
             c.Quality = req.Quality;
@@ -1572,47 +1580,33 @@ namespace FracturingFog.Imaging
                 case TearDropCalculator td:
                     td.FractalParameters = req.FractalParameters;
                     td.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;
-                    td.CenterXLo = req.CenterXLo; td.CenterX2 = req.CenterX2; td.CenterX3 = req.CenterX3;
-                    td.CenterYLo = req.CenterYLo; td.CenterY2 = req.CenterY2; td.CenterY3 = req.CenterY3;
                     break;
-                // CalcGen family (CalculatorGen template — no shared interface,
-                // no FractalParameters): interior alpha + QD centre limbs, and
+                // CalcGen family (CalculatorGen template — no FractalParameters): interior
+                // alpha (the centre comes through IDeepCentre above, #1906), and
                 // the deep-zoom flags the interactive host sets (Z2–Z5 run
                 // perturbation + BLA; the non-analytic Tricorn / BurningShip
                 // do not).
                 case FracturingFog.Calculators.Generated.MandelbrotZ2Calculator g:
                     g.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;
-                    g.CenterXLo = req.CenterXLo; g.CenterX2 = req.CenterX2; g.CenterX3 = req.CenterX3;
-                    g.CenterYLo = req.CenterYLo; g.CenterY2 = req.CenterY2; g.CenterY3 = req.CenterY3;
                     g.UsePerturbation = true; g.UseBla = true;
                     break;
                 case FracturingFog.Calculators.Generated.MandelbrotZ3Calculator g:
                     g.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;
-                    g.CenterXLo = req.CenterXLo; g.CenterX2 = req.CenterX2; g.CenterX3 = req.CenterX3;
-                    g.CenterYLo = req.CenterYLo; g.CenterY2 = req.CenterY2; g.CenterY3 = req.CenterY3;
                     g.UsePerturbation = true; g.UseBla = true;
                     break;
                 case FracturingFog.Calculators.Generated.MandelbrotZ4Calculator g:
                     g.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;
-                    g.CenterXLo = req.CenterXLo; g.CenterX2 = req.CenterX2; g.CenterX3 = req.CenterX3;
-                    g.CenterYLo = req.CenterYLo; g.CenterY2 = req.CenterY2; g.CenterY3 = req.CenterY3;
                     g.UsePerturbation = true; g.UseBla = true;
                     break;
                 case FracturingFog.Calculators.Generated.MandelbrotZ5Calculator g:
                     g.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;
-                    g.CenterXLo = req.CenterXLo; g.CenterX2 = req.CenterX2; g.CenterX3 = req.CenterX3;
-                    g.CenterYLo = req.CenterYLo; g.CenterY2 = req.CenterY2; g.CenterY3 = req.CenterY3;
                     g.UsePerturbation = true; g.UseBla = true;
                     break;
                 case FracturingFog.Calculators.Generated.TricornCalculator g:
                     g.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;
-                    g.CenterXLo = req.CenterXLo; g.CenterX2 = req.CenterX2; g.CenterX3 = req.CenterX3;
-                    g.CenterYLo = req.CenterYLo; g.CenterY2 = req.CenterY2; g.CenterY3 = req.CenterY3;
                     break;
                 case FracturingFog.Calculators.Generated.BurningShipCalculator g:
                     g.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;
-                    g.CenterXLo = req.CenterXLo; g.CenterX2 = req.CenterX2; g.CenterX3 = req.CenterX3;
-                    g.CenterYLo = req.CenterYLo; g.CenterY2 = req.CenterY2; g.CenterY3 = req.CenterY3;
                     break;
             }
             FracturingFog.Rendering.HeadlessGpu.Attach(c);   // #1611 — batch on the GPU
