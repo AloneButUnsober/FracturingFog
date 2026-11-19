@@ -32,8 +32,9 @@ Phases 1–24 + the `b` follow-up bindings landed across two batched commits:
   too since #1815: it renders grown by the pass's reach (`ScreenSpacePost.SsaoReach`,
   the sample disk plus the blur), runs it in the whole frame's geometry (its origin
   in the per-pixel hash, the frame's smaller side for the radius) and crops, so the
-  assembled tiles equal the whole image byte for byte. Live recolour paths still
-  drop it until the next render (#1816).
+  assembled tiles equal the whole image byte for byte. The live view's cheap
+  recolours (adaptive-contrast slider, theme change, slideshow fade target) run it
+  after the recolour since #1816; they dropped it until the next full render.
 
 Status as of this doc write: working tree clean on
 `feature/cross-platform-full`.

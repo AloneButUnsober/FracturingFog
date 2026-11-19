@@ -16,6 +16,8 @@
 //   • cluster tiles assembled equal the whole image with it on, byte for byte (#1815:
 //     a tile renders grown by the pass's reach and runs it in the frame's geometry), and
 //     with it off; without the halo the tiles' borders would differ;
+//   • a live recolour (adaptive contrast, theme) keeps it: the recoloured frame equals the
+//     export at the new setting (#1816);
 //   • the Command builder carries the settings through --lighting-preset and reports
 //     them as a gap without one.
 
@@ -262,5 +264,54 @@ public sealed class S1448LiveEqualsExportTests
         var without = S1448View.Export(S1448View.Req(false, q, calc.MaxIterations, calc.ColorMap!, heq));
         Assert.True(S1448View.AssertDarkened(without, with) > W * H / 20, "precondition: SSAO changes the still");
         Assert.Equal(with, live);
+    }
+
+    // #1816 — the live view's cheap recolours (the adaptive-contrast slider, a theme
+    // change) rewrite the colour from the cached buffers; they dropped the SSAO until the
+    // next full render, which at Standard quality the slider never arms. At Standard (one
+    // sample, so the recolour is the whole frame) the recoloured frame must equal the export
+    // at the new setting. Read straight after the call, before the theme's settle render.
+    // Mutants (by hand): no SSAO after the slider's recolour — caught; none after the theme
+    // recolour — caught.
+    [Theory]
+    [InlineData("adaptive")]
+    [InlineData("theme")]
+    public void A_Live_Recolour_Keeps_The_Ssao(string what)
+    {
+        var q = QualityPreset.Standard;
+        var state = new FractalViewState
+        {
+            FractalType = FractalType.Mandelbrot, Zoom = S1448View.Zoom, Quality = q, PreferredIterations = 3000,
+            CenterX = S1448View.Cx.X0, CenterXLo = S1448View.Cx.X1, CenterY = S1448View.Cy.X0, CenterYLo = S1448View.Cy.X1,
+        };
+        state.FractalParameters.Lighting = S1448View.Params(true).Lighting;
+        using var host = new FractalRenderHost(new NullRenderer(), state, W, H, ColorPalette.BuiltIns[0]);
+        var done = new ManualResetEventSlim(false);   // not disposed: a late event may still Set it
+        host.FrameCompleted += (_, _) => done.Set();
+        host.Trigger(progressive: false);
+        Assert.True(done.Wait(TimeSpan.FromSeconds(120)), "the frame never settled");
+        Thread.Sleep(200);
+        var calc = host.Mandelbrot;
+
+        int heq = 0;
+        var theme = calc.ColorMap!;
+        if (what == "adaptive")
+        {
+            heq = 100;
+            host.ViewState.HistogramEq = heq;
+            host.RepaintWithAdaptive();
+        }
+        else
+        {
+            theme = ColorPalette.BuiltIns[1];
+            host.ApplyColorMap(theme);
+        }
+        var live = calc.ColorBuffer.Take(W * H).ToArray();
+
+        var with = S1448View.Export(S1448View.Req(true, q, calc.MaxIterations, theme, heq));
+        var without = S1448View.Export(S1448View.Req(false, q, calc.MaxIterations, theme, heq));
+        Assert.True(S1448View.AssertDarkened(without, with) > W * H / 20, "precondition: SSAO changes the still");
+        Assert.True(live.SequenceEqual(with), $"{what}: the recoloured frame differs from the export"
+            + (live.SequenceEqual(without) ? " (it is the frame without SSAO)" : ""));
     }
 }

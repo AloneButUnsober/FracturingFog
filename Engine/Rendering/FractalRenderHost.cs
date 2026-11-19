@@ -4017,8 +4017,17 @@ namespace FracturingFog.Rendering
             {
                 _calculator.ApplyBandDitherRecolor(0.0);
             }
+            RecolorSsao2D();   // #1816
             UploadProcessedBuffer(_calculator.ColorBuffer, _calculator.Width, _calculator.Height);
         }
+
+        // #1816 — the flat view's 2D SSAO on the canonical Mandelbrot buffer after a cheap
+        // recolour (adaptive contrast, a theme change, the slideshow fade target). A full
+        // frame runs it after the AA and adaptive contrast; a recolour rewrites the colour
+        // from the cached buffers, which dropped it until the next full render (for good at
+        // Standard quality, which arms no settle render).
+        private void RecolorSsao2D()
+            => FracturingFog.Rendering.Lighting.ScreenSpacePost.ApplySsao2D(_calculator, ViewState?.FractalParameters);
 
         /// <summary>
         /// Replace the active colour map and re-colourise the CURRENT frame so the
@@ -4066,6 +4075,7 @@ namespace FracturingFog.Rendering
                 // when edits stop, ColorSettleTick fires a full Trigger() so the
                 // final frame matches post-navigate quality (#96 follow-up).
                 _calculator.ApplyBandDitherRecolor(0.0);
+                RecolorSsao2D();   // #1816
                 UploadProcessedBuffer(_calculator.ColorBuffer, _calculator.Width, _calculator.Height);
                 ArmColorSettle();
             }
@@ -4255,6 +4265,7 @@ namespace FracturingFog.Rendering
                 _calculator.ApplyHistogramEqualizationWithCdf(
                     cdf!, bins, srcMaxIter, ViewState.HistogramEq / 100.0);
             }
+            RecolorSsao2D();   // #1816 — the fade target as the committed frame shows it
 
             var src = _calculator.ColorBuffer;
             int mn = w * h;
