@@ -13,7 +13,8 @@
 // Convergence). The kernels clamp |den|² at 1e-12 by a pole; the deep path divides exactly. #1912 (D7)
 // adds Phoenix and Spider on TwoStatePlan (a δ for z and one for z_{n−1} / the evolving c); Phoenix's
 // old scalar "PT" tier (D-3.16, from 1e10) retires — it rebuilt z in double from a double reference,
-// so it resolved no deeper than the SP path.
+// so it resolved no deeper than the SP path. #1913 (D8) adds Glynn (z^1.5 + c, the dynamic plane) on an
+// R2Plan with the elementary-function differences and BigFloatMath's reference.
 
 using System;
 using System.Threading;
@@ -80,8 +81,19 @@ public sealed partial class EscapeTimeCalculator : IDeepCentre
             FractalType.BurningShip => BurningShipPlan.Value,   // #1910: the diffabs folds
             FractalType.Magnet1 => Magnet1Plan.Value,           // #1911: the quotient difference
             FractalType.Magnet2 => Magnet2Plan.Value,
+            FractalType.Glynn => GlynnPlan(FractalParameters.GlynnC.Real, FractalParameters.GlynnC.Imaginary),   // #1913
             _ => null,
         };
+    }
+
+    // #1913 — Glynn's plan, per c (its delegates compile once per c).
+    private (double Cr, double Ci, R2Plan Plan)? _glynn;
+    private R2Plan GlynnPlan(double cr, double ci)
+    {
+        if (_glynn is { } g && g.Cr == cr && g.Ci == ci) return g.Plan;
+        var plan = R2Plan.Glynn(cr, ci);
+        _glynn = (cr, ci, plan);
+        return plan;
     }
 
     // #1912 — Phoenix and Spider carry a second state (z_{n−1}; the evolving c).
@@ -138,7 +150,7 @@ public sealed partial class EscapeTimeCalculator : IDeepCentre
         }
 
         // Spider tracks no dz/dc (CalculateSpider passes 0); Phoenix's is D-3.16's, the tangent here.
-        bool flatDerivative = magnet || FractalType == FractalType.Spider;
+        bool flatDerivative = magnet || FractalType is FractalType.Spider or FractalType.Glynn;   // GlynnKernel tracks none
         PerturbationEngine.PixelSink sink = (idx, iter, zr, zi, dvr, dvi) =>
         {
             if (_batchCount is { } bcs) bcs[idx]++;

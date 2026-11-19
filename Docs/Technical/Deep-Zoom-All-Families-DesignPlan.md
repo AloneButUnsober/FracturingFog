@@ -185,6 +185,8 @@ reference's cut is a glitch → direct evaluation.
 - **Source:** the slice that writes them picks and verifies its source (MPFR's documentation is the
   likely reference; MPFR itself stays out, §10).
 - **Until then:** transcendental formulas stop at OD (~1e110, as Mandelbrot's OD tier).
+  - **As built:** D9 (#1914) landed with D8 (#1913). The reference is BigFloat from the start, so
+    there is no OD stage; see §9.
 
 **BLA.** Applies (A = f′(Z) analytic). The radius needs the second derivative's size, which the
 `AstDifferentiator` can give symbolically.
@@ -544,6 +546,60 @@ Each slice is checked against an **independent** oracle:
 - **Mutants:**
   - **Caught:** the cross-state term (the `prev` δ reading δz), Spider's δw₀, the tangent's start.
   - **Survives:** the glitch test, as in D2–D6.
+
+**D9 as built (#1914), landed with D8.** `BigFloatMath` (`Abstractions/Math/BigFloatMath.cs`)
+provides the BigFloat functions D8's reference orbits need. D8 depends on them, so they landed first,
+in the same PR.
+- **Functions:** √, π, ln 2, exp, ln, sin / cos, atan / atan2, and complex exp / log / sin / cos / pow.
+- **Method:** argument reduction plus series, with guard bits.
+  - The sources are Wikipedia pages (bibliography `#wikipedia-elementary-series`).
+  - MPFR's algorithms PDF could not be read here, so it is not the source.
+  - The functions make no claim of correct rounding.
+- **Checks** (`S1914BigFloatMathTests`):
+  - sin² + cos² = 1, exp(log x) = x and exp(a + b) = exp(a)·exp(b) hold to 1–2 bits at 200, 600
+    and 2,000 bits.
+  - Machin's π matches 4·atan 1 (the half-angle route) and sin(π/6) = ½.
+  - Rounded to double, the functions match `System.Math`.
+  - The complex identities hold.
+- **Mutants caught:** one squaring dropped from exp, one ln 2 dropped from log, the wrong cos
+  double-angle, one atan halving dropped. Machin's ×16 / ×4 slip was a real bug, caught on the first
+  run.
+
+**D8 as built (#1913).**
+- **`PerturbFunctions`** (`Engine/Perturbation/PerturbFunctions.cs`) supplies the cancellation-free
+  differences: e^V·expm1(D); log1p(D/V) + 2πik; V^p·expm1(p·L); sum-to-product for sin and cos. Complex
+  expm1 and log1p are built from accurate real ones.
+- **The R2Plan emitter** gains exp, log, sin, cos, sqrt and pow with a constant exponent in every
+  jet mode.
+  - log, sqrt and pow have a branch cut. **Limit** keeps the BLA radius off the cut and off 0;
+    **Pole** flags a pixel whose argument cancels the reference's at 0.
+  - The reference evaluates in BigFloat.
+- **R2Plan on the dynamic plane** (z₀ = the pixel, c a constant in the AST) is used for Glynn,
+  z^1.5 + c.
+- **Wiring:**
+  - Glynn renders on the engine from 1e11, and `FamilyDepth` puts it at 1e290.
+  - User Equation transcendentals reach the engine through `TryCreateAny`.
+- **Branch cuts are kept exact, not treated as glitches.** The principal log difference is
+  log1p(D/V) + 2πik.
+  - k comes from arg(V) + arg(1 + D/V). Within 1e-9 of ±π, where double rounds V a hair off the
+    axis onto π, the sides of the cut decide instead.
+  - The seeded branch-cut view (Glynn at e^{2πi/3}, z₁ = −1.2 on the cut) caught the arg-only test:
+    87 / 176 pixels went to the wrong branch.
+  - A signs-only rule then broke the fixed-point view (155 / 176). There |δ| ~ |Z|, and the shift
+    can be needed with V + D in the right half-plane.
+- **Deferred:** TranscendentalJulia (axis bailout, no `IDeepCentre`; #1940); tan, the hyperbolic
+  functions and the inverse trig functions; pow with a non-constant exponent. These stay on the
+  interpreter, which reports the reason.
+- **Results** (`S1913TranscendentalTests`):
+  - each difference matches BigFloat to 1.5e-15 for |D| from 1e-14 to 1e-1 of |V|, with 150 cut
+    crossings per function;
+  - `exp(z) + c` and `sin(z) + z² + c` at Misiurewicz points, 1e40 and 1e100, BLA on and off: 176/176,
+    derivative exact;
+  - Glynn at its repelling fixed point, 1e40 and 1e100: 176/176;
+  - the branch-cut view: 176/176 escaped values;
+  - at 1e11: Glynn 1,498 and `exp(z) + c` 1,535 of 1,536 against the double paths.
+- **Mutants caught:** naive exp and sin differences, the cos sign, the 2πk shift removed, the
+  cut / zero limit removed, the tangent using f instead of f′.
 
 **Order of value:** D1 → D2 → D3 gives deep zoom to Multibrot, Julia, Generated Z2–Z5 and every
 polynomial user equation. D4 / D5 add Tricorn and Burning Ship, which is the original #1253. D6–D10

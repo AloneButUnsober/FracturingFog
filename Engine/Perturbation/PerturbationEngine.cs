@@ -305,14 +305,15 @@ public static partial class PerturbationEngine
     }
 
     // #1909 — Pixel for a real (non-conformal) plan: δ, ε as R² columns, the matrix BLA, and the
-    // orbit's 2×2 Jacobian (the sink gets its first column, ∂z/∂Re(pixel)). The parameter plane only
-    // (R2Plan's), with the same rebase / glitch / escape-step rules as Pixel.
+    // orbit's 2×2 Jacobian (the sink gets its first column, ∂z/∂Re(pixel)), with the same rebase /
+    // glitch / escape-step rules as Pixel. #1913: the dynamic plane too (δ₀ = the offset, ε = 0).
     private static int PixelR2(IRealPerturbationPlan plan, Reference r, double ox, double oy, int maxIter, int idx,
                                PixelSink sink, Convergence? converge, ref long rebases, ref long skips, ref long poleFlags)
     {
         bool poles = plan.HasPoles;   // #1911
         double dPrev = double.NaN, cEps2 = converge != null ? converge.Eps * converge.Eps : 0;
         double er = ox - r.OffX, ei = oy - r.OffY, dr = 0, di = 0;
+        if (!plan.ParameterPlane) { dr = er; di = ei; er = 0; ei = 0; }   // #1913 — the pixel is z₀ (Glynn)
         var (ivr, ivi) = plan.InitialDerivative;
         var jac = RealMat2.OfComplex(ivr, ivi);
         bool rebase = plan.CanRebase;
