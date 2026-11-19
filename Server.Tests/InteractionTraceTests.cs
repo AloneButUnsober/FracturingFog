@@ -209,11 +209,21 @@ public sealed class InteractionTraceTests : IDisposable
                     long next = start + i * tick;
                     while (Stopwatch.GetTimestamp() < next) Thread.SpinWait(50);
                 }
-                // The last move lands and its chain settles.
+                // The last move lands and its chain settles. #1823: wait for the pipeline itself to
+                // drain (nothing queued, calculating or uploading, seen three times 50 ms apart with
+                // no frame landing meanwhile). "No frame landed for 400 ms" let a progressive
+                // stage slower than that under load still be in flight, so its Present / Landed
+                // records missed the counts read here.
                 Assert.True(SpinWait.SpinUntil(() =>
                 {
-                    int l = Volatile.Read(ref landed); Thread.Sleep(400); return l == Volatile.Read(ref landed);
-                }, 20000));
+                    int l = Volatile.Read(ref landed);
+                    for (int k = 0; k < 3; k++)
+                    {
+                        if (!host.IsQuiescent) return false;
+                        Thread.Sleep(50);
+                    }
+                    return host.IsQuiescent && l == Volatile.Read(ref landed);
+                }, 30000), "the drag's frames never drained");
                 renders = Volatile.Read(ref r.Renders) - renders0;
                 InteractionTrace.Flush();
                 // Counts read while the trace still runs, so a late record can't slip in between.
@@ -223,18 +233,21 @@ public sealed class InteractionTraceTests : IDisposable
         }
 
         var rows = Parse(path, out long dropped);
-        Assert.Equal(0, dropped);
+        Assert.True(dropped == 0, $"{c}: the ring dropped {dropped} records");
 
-        // Counts against sources outside the trace.
-        Assert.Equal(Moves, rows.Count(x => x.Kind == TraceKind.PacerRequest));
-        Assert.Equal(renders, rows.Count(x => x.Kind == TraceKind.Present));
-        int landedRecs = rows.Count(x => x.Kind == TraceKind.Landed);
-        Assert.Equal(landed, landedRecs);
+        // Counts against sources outside the trace. (#1823: each says which count differed.)
+        int presents = rows.Count(x => x.Kind == TraceKind.Present), landedRecs = rows.Count(x => x.Kind == TraceKind.Landed);
+        int requests = rows.Count(x => x.Kind == TraceKind.PacerRequest), exits = rows.Count(x => x.Kind == TraceKind.TriggerExit);
         int pacerStarts = rows.Count(x => x.Kind == TraceKind.PacerRequest && x.A != 2) + rows.Count(x => x.Kind == TraceKind.PacerFire);
-        Assert.Equal(fired, pacerStarts);
+        string counts = $"{c}: requests {requests}/{Moves}, presents {presents} vs renders {renders}, landed records {landedRecs} vs events {landed}, "
+                      + $"pacer starts {pacerStarts} vs fired {fired}, trigger exits {exits}";
+        Assert.True(requests == Moves, counts);
+        Assert.True(presents == renders, counts);
+        Assert.True(landedRecs == landed, counts);
+        Assert.True(pacerStarts == fired, counts);
         // Every paced Trigger is traced; a progressive chain's later stages are follow-on jobs, not Triggers.
-        Assert.Equal(fired, rows.Count(x => x.Kind == TraceKind.TriggerExit));
-        Assert.Equal(rows.Count(x => x.Kind == TraceKind.TriggerEnter), rows.Count(x => x.Kind == TraceKind.TriggerExit));
+        Assert.True(exits == fired, counts);
+        Assert.Equal(rows.Count(x => x.Kind == TraceKind.TriggerEnter), exits);
         Assert.True(landed >= 10, $"only {landed} frames landed: the drag did not exercise the pipeline");
 
         // Each landed frame's records, in causal order.

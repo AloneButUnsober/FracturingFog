@@ -225,6 +225,11 @@ namespace FracturingFog.Rendering
         // out of range. Only the single dedicated calc thread touches it.
         private readonly ManualResetEventSlim _calcIdle = new(initialState: true);
 
+        /// <summary>#1823 — no frame queued, calculating or uploading (its Present and
+        /// FrameLanded included). Test / diagnostic use: a caller that needs the pipeline
+        /// drained polls it, rather than waiting a fixed time after the last frame.</summary>
+        public bool IsQuiescent => _calcQueue.Count == 0 && _calcIdle.IsSet && _uploadIdle.IsSet;
+
         // Serialises every call into the D3D11 ImmediateContext. The
         // immediate context is NOT thread-safe; before this lock landed,
         // resize on the UI thread could overlap with UpdateTexture from a
