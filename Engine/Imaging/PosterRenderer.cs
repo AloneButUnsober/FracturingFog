@@ -234,6 +234,11 @@ namespace FracturingFog.Imaging
         public int SubRectOffsetX { get; init; }
         public int SubRectOffsetY { get; init; }
 
+        /// <summary>#1815 — this cluster tile was grown by the 2D SSAO's reach (a halo the
+        /// caller crops), so the pass runs on it in the whole frame's geometry. Set by
+        /// <see cref="PosterRenderer"/> itself; a tile without it skips the pass.</summary>
+        public bool SsaoTileHalo { get; init; }
+
         /// <summary>D-6b — master-computed DD reference orbit. When non-null
         /// (and the centre + maxIter match), the calculator's
         /// ComputeReferenceOrbit step short-circuits and the per-tile
@@ -378,6 +383,24 @@ namespace FracturingFog.Imaging
         private static uint[] RenderDisplayBuffer(PosterRequest req, CancellationToken token,
             out int w, out int h, out long elapsedMs)
         {
+            // #1815 — a Mandelbrot cluster tile with the flat 2D SSAO on: render the tile grown
+            // by the pass's reach (clamped to the frame), run everything on that, and crop. The
+            // pass reads neighbours, so this is what makes the tile's pixels the whole frame's.
+            if (TileSsaoHalo(req, out int ex0, out int ey0, out int ew, out int eh))
+            {
+                var grown = req with
+                {
+                    Width = ew, Height = eh, SubRectOffsetX = ex0, SubRectOffsetY = ey0, SsaoTileHalo = true,
+                };
+                uint[] big = RenderDisplayBuffer(grown, token, out int bw, out _, out elapsedMs);
+                int dx = req.SubRectOffsetX - ex0, dy = req.SubRectOffsetY - ey0;
+                var crop = new uint[req.Width * req.Height];
+                for (int y = 0; y < req.Height; y++)
+                    Array.Copy(big, (y + dy) * bw + dx, crop, y * req.Width, req.Width);
+                w = req.Width; h = req.Height;
+                return crop;
+            }
+
             var sw = System.Diagnostics.Stopwatch.StartNew();
 
             // S2 (#396) — CORE true-linear intermediate producer wiring. When a view
@@ -841,10 +864,10 @@ namespace FracturingFog.Imaging
                 // iteration histogram before read (unless the AA pass already did).
                 FracturingFog.Rendering.Supersampling.FinishHistogramEq(calc, in ss, req.HistogramEq);
                 // #1448 — the flat view's 2D SSAO, after the AA and adaptive contrast as
-                // live. Not on a cluster tile: the pass reads neighbours and sizes its
-                // radius from the frame, so a tile would differ from the whole image
-                // (#1815 runs it on the assembled frame).
-                if (req.ImageWidth == 0)
+                // live. The pass reads neighbours and sizes its radius from the frame, so
+                // a cluster tile runs it only grown by its reach (#1815, TileSsaoHalo), in
+                // the whole frame's geometry, which makes its pixels the whole frame's.
+                if (req.ImageWidth == 0 || req.SsaoTileHalo)
                     FracturingFog.Rendering.Lighting.ScreenSpacePost.ApplySsao2D(calc, req.FractalParameters);
                 buffer = calc.ColorBuffer;
                 w = calc.Width;
@@ -873,6 +896,25 @@ namespace FracturingFog.Imaging
             }
 
             return buffer;
+        }
+
+        // #1815 — the grown rect of a Mandelbrot tile whose flat 2D SSAO is on: the tile plus
+        // ScreenSpacePost.SsaoReach on every side, clamped to the frame.
+        private static bool TileSsaoHalo(PosterRequest req, out int x0, out int y0, out int w, out int h)
+        {
+            x0 = y0 = w = h = 0;
+            if (req.SsaoTileHalo || req.ImageWidth <= 0 || req.ImageHeight <= 0
+                || req.FractalType != FractalType.Mandelbrot || req.FractalParameters is not { } fp)
+                return false;
+            var fx = fp.Lighting;
+            int m = FracturingFog.Rendering.Lighting.ScreenSpacePost.SsaoReach(in fx, Math.Min(req.ImageWidth, req.ImageHeight));
+            if (m <= 0) return false;
+            x0 = Math.Max(0, req.SubRectOffsetX - m);
+            y0 = Math.Max(0, req.SubRectOffsetY - m);
+            int x1 = Math.Min(req.ImageWidth, req.SubRectOffsetX + req.Width + m);
+            int y1 = Math.Min(req.ImageHeight, req.SubRectOffsetY + req.Height + m);
+            w = x1 - x0; h = y1 - y0;
+            return true;
         }
 
         /// <summary>#1401 — the final display buffer (render + grade + tonemap +

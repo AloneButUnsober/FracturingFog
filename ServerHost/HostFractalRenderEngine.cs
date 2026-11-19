@@ -426,7 +426,7 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             MaxIterations = iter,
             ColorMap = theme,
             Quality = quality,
-            FractalParameters = new FractalParameters(),
+            FractalParameters = RegionParameters(region),   // #1347
             Rotate = posterMode && req.PosterPortrait,
             Path = outPath,
             Format = FracturingFog.Imaging.ImageFileFormat.Png,
@@ -482,6 +482,7 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
     {
         int totalFrames = (int)Math.Round(req.VideoSeconds * req.VideoFps);
         if (totalFrames < 2) totalFrames = 2;
+        var videoFp = RegionParameters(region);   // #1347
 
         double startZoom = Math.Max(req.VideoStartZoom, 1e-12);
         double endZoom   = Math.Max(targetZoom, 1e-12);
@@ -585,7 +586,7 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
                         ftype, outW, outH,
                         cx, cxLo, cx2, cx3,
                         cy, cyLo, cy2, cy3,
-                        frameZoom, iter, theme, quality, ct, req, frameLog10);
+                        frameZoom, iter, theme, quality, ct, req, frameLog10, videoFp);
 
                     if (mp4Local != null)
                     {
@@ -652,14 +653,33 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
         };
     }
 
+    /// <summary>#1347 — the render's FractalParameters from its region, as region recall,
+    /// <c>--batch</c> and the video slideshow build them: the region's lighting (authoritative
+    /// when it says so), its Relief 3D snapshot and its per-family parameters (Julia constant,
+    /// 3D camera, BLA tolerance, …), over stock defaults. The server and cluster tiles used
+    /// stock defaults for all of them. Unlike <c>ApplyHeadlessParams</c> this loads no
+    /// user-authored code (equation / bulb / sandbox source): the server refuses those types.
+    /// No region: stock defaults, as before.</summary>
+    internal static FractalParameters RegionParameters(FractalRegion? region)
+    {
+        var fp = new FractalParameters();
+        if (region == null) return fp;
+        if (region.LightingIsAuthoritative) region.ApplyLightingAuthoritative(fp);
+        else region.ApplyLightingTo(fp);
+        region.ApplyRelief3DTo(fp);
+        region.ApplyFamilyParams(fp);
+        return fp;
+    }
+
     internal static uint[] RenderOneFrame(   // #1884: internal for the linked tests
         FractalType ftype, int w, int h,
         double cx, double cxLo, double cx2, double cx3,
         double cy, double cyLo, double cy2, double cy3,
         double zoom, int iter,
         IColorMap theme, QualityPreset quality, CancellationToken ct,
-        RenderRequestDto? req = null, double zoomLog10 = double.NaN)
+        RenderRequestDto? req = null, double zoomLog10 = double.NaN, FractalParameters? fp = null)
     {
+        fp ??= new FractalParameters();   // #1347: the region's, from the video path
         IFractalCalculator? alt = PosterRenderer.BuildCaptureCalculator(new PosterRequest
         {
             FractalType = ftype,
@@ -668,7 +688,7 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             MaxIterations = iter,
             Quality = quality,
             ColorMap = theme,
-            FractalParameters = new FractalParameters(),
+            FractalParameters = fp,
         });
 
         if (alt != null)
@@ -687,6 +707,9 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             Zoom = zoom,
             MaxIterations = iter,
             ColorMap = theme, Quality = quality,
+            // #1347 — the deep-path settings, as batch's frame (BatchRenderer.RenderOneFrame).
+            BlaTolerance = fp.BlaTolerance, SolidRegionSkip = fp.SolidRegionSkip,
+            SolidRegionAuto = fp.SolidRegionAuto, LaMode = fp.DeepLa,
         };
         if (req != null)
         {

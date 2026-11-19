@@ -13,8 +13,11 @@
 //     and differs from the still without it (the TAA drop is gone);
 //   • SSAO off: the export is the AA pass exactly, as before;
 //   • a scene video frame equals the export of the same view (no TAA) with SSAO on;
-//   • a cluster tile skips it (a neighbour pass on a tile would differ from the
-//     whole image; #1815);
+//   • cluster tiles assembled equal the whole image with it on, byte for byte (#1815:
+//     a tile renders grown by the pass's reach and runs it in the frame's geometry), and
+//     with it off; without the halo the tiles' borders would differ;
+//   • a live recolour (adaptive contrast, theme) keeps it: the recoloured frame equals the
+//     export at the new setting (#1816);
 //   • the Command builder carries the settings through --lighting-preset and reports
 //     them as a gap without one.
 
@@ -120,14 +123,38 @@ public sealed class S1448Ssao2DParityTests
         Assert.False(ScreenSpacePost.ApplySsao2D(c, null));
     }
 
-    [Fact]
-    public void A_Cluster_Tile_Skips_It()
+    // #1815 — the cluster path: the image cut into tiles (sub-rects of the whole frame, as
+    // TilePlanner sends them), each rendered alone, then assembled. Uneven tiles so the seams
+    // fall inside the pass's reach of the frame's middle. Mutants (by hand): no halo (the
+    // tile renders bare) — caught, at the seams; the hash in tile coordinates — caught;
+    // the radius from the tile's size — caught.
+    [Theory]
+    [InlineData(true, "Standard")]
+    [InlineData(true, "High")]
+    [InlineData(false, "Standard")]
+    public void Cluster_Tiles_Assemble_To_The_Whole_Image(bool ssao, string quality)
     {
-        var whole = S1448View.Req(true, QualityPreset.Standard, Iter, Theme);
-        var tile = whole with { Width = 48, Height = 32, ImageWidth = W, ImageHeight = H, SubRectOffsetX = 24, SubRectOffsetY = 16 };
-        var tileOff = tile with { FractalParameters = S1448View.Params(false) };
-        Assert.Equal(PosterRenderer.RenderToPixels(tileOff, CancellationToken.None, out _, out _),
-                     PosterRenderer.RenderToPixels(tile, CancellationToken.None, out _, out _));
+        var q = QualityPreset.FromName(quality);
+        var whole = S1448View.Req(ssao, q, Iter, Theme);
+        var want = PosterRenderer.RenderDisplayPixels(whole, CancellationToken.None, out _, out _);
+        int[] xs = [0, 37, W], ys = [0, 21, H];
+        var got = new uint[W * H];
+        for (int ty = 0; ty < 2; ty++)
+            for (int tx = 0; tx < 2; tx++)
+            {
+                int x0 = xs[tx], y0 = ys[ty], tw = xs[tx + 1] - x0, th = ys[ty + 1] - y0;
+                var tile = whole with { Width = tw, Height = th, ImageWidth = W, ImageHeight = H, SubRectOffsetX = x0, SubRectOffsetY = y0 };
+                var px = PosterRenderer.RenderDisplayPixels(tile, CancellationToken.None, out int rw, out int rh);
+                Assert.Equal((tw, th), (rw, rh));
+                for (int y = 0; y < th; y++) Array.Copy(px, y * tw, got, (y0 + y) * W + x0, tw);
+            }
+        if (ssao)   // precondition: the pass changes the frame
+        {
+            var off = PosterRenderer.RenderDisplayPixels(S1448View.Req(false, q, Iter, Theme), CancellationToken.None, out _, out _);
+            Assert.True(S1448View.AssertDarkened(off, want) > W * H / 20, "precondition: SSAO darkens the whole frame");
+        }
+        int differ = Enumerable.Range(0, W * H).Count(i => got[i] != want[i]);
+        Assert.True(differ == 0, $"{differ} pixels of the assembled tiles differ from the whole image");
     }
 
     // ── scene video ──────────────────────────────────────────────────────────
@@ -237,5 +264,54 @@ public sealed class S1448LiveEqualsExportTests
         var without = S1448View.Export(S1448View.Req(false, q, calc.MaxIterations, calc.ColorMap!, heq));
         Assert.True(S1448View.AssertDarkened(without, with) > W * H / 20, "precondition: SSAO changes the still");
         Assert.Equal(with, live);
+    }
+
+    // #1816 — the live view's cheap recolours (the adaptive-contrast slider, a theme
+    // change) rewrite the colour from the cached buffers; they dropped the SSAO until the
+    // next full render, which at Standard quality the slider never arms. At Standard (one
+    // sample, so the recolour is the whole frame) the recoloured frame must equal the export
+    // at the new setting. Read straight after the call, before the theme's settle render.
+    // Mutants (by hand): no SSAO after the slider's recolour — caught; none after the theme
+    // recolour — caught.
+    [Theory]
+    [InlineData("adaptive")]
+    [InlineData("theme")]
+    public void A_Live_Recolour_Keeps_The_Ssao(string what)
+    {
+        var q = QualityPreset.Standard;
+        var state = new FractalViewState
+        {
+            FractalType = FractalType.Mandelbrot, Zoom = S1448View.Zoom, Quality = q, PreferredIterations = 3000,
+            CenterX = S1448View.Cx.X0, CenterXLo = S1448View.Cx.X1, CenterY = S1448View.Cy.X0, CenterYLo = S1448View.Cy.X1,
+        };
+        state.FractalParameters.Lighting = S1448View.Params(true).Lighting;
+        using var host = new FractalRenderHost(new NullRenderer(), state, W, H, ColorPalette.BuiltIns[0]);
+        var done = new ManualResetEventSlim(false);   // not disposed: a late event may still Set it
+        host.FrameCompleted += (_, _) => done.Set();
+        host.Trigger(progressive: false);
+        Assert.True(done.Wait(TimeSpan.FromSeconds(120)), "the frame never settled");
+        Thread.Sleep(200);
+        var calc = host.Mandelbrot;
+
+        int heq = 0;
+        var theme = calc.ColorMap!;
+        if (what == "adaptive")
+        {
+            heq = 100;
+            host.ViewState.HistogramEq = heq;
+            host.RepaintWithAdaptive();
+        }
+        else
+        {
+            theme = ColorPalette.BuiltIns[1];
+            host.ApplyColorMap(theme);
+        }
+        var live = calc.ColorBuffer.Take(W * H).ToArray();
+
+        var with = S1448View.Export(S1448View.Req(true, q, calc.MaxIterations, theme, heq));
+        var without = S1448View.Export(S1448View.Req(false, q, calc.MaxIterations, theme, heq));
+        Assert.True(S1448View.AssertDarkened(without, with) > W * H / 20, "precondition: SSAO changes the still");
+        Assert.True(live.SequenceEqual(with), $"{what}: the recoloured frame differs from the export"
+            + (live.SequenceEqual(without) ? " (it is the frame without SSAO)" : ""));
     }
 }
