@@ -1187,6 +1187,11 @@ namespace FracturingFog.Rendering
                 _calculator.ApplyBandDitherRecolor(ditherIter);
             }
 
+            // #1902 — the flat view's 2D SSAO, after the adaptive contrast / band dither as
+            // in batch and scene video (#1448). Before the temporal blend, so each frame
+            // blends with the previous frame as it was shown (with its SSAO).
+            FracturingFog.Rendering.Lighting.ScreenSpacePost.ApplySsao2D(_calculator, ViewState?.FractalParameters);
+
             // Temporal reprojection blend (skipped on frame 0 of a leg).
             // Also skipped for animated legs: reprojection maps by complex
             // coordinate and assumes only pan/zoom moved, so animating a

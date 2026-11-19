@@ -35,6 +35,9 @@ Phases 1–24 + the `b` follow-up bindings landed across two batched commits:
   assembled tiles equal the whole image byte for byte. The live view's cheap
   recolours (adaptive-contrast slider, theme change, slideshow fade target) run it
   after the recolour since #1816; they dropped it until the next full render.
+  The live video engine (video zoom, video slideshow, travel) runs it on every
+  Mandelbrot frame since #1902, after the adaptive contrast and before the
+  temporal blend, as batch and scene video do.
 
 Status as of this doc write: working tree clean on
 `feature/cross-platform-full`.
