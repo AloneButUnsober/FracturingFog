@@ -218,7 +218,7 @@ public sealed class InteractiveTriggerPacerTests
             using var pacer = new InteractiveTriggerPacer(p => { Interlocked.Increment(ref triggers); host.Trigger(p); });
             host.FrameLanded += (_, _) => pacer.FrameDone();
 
-            long caller = 0;
+            var caller = new long[Moves];
             long start = Stopwatch.GetTimestamp(), tick = Stopwatch.Frequency * MoveMs / 1000;
             for (int i = 1; i <= Moves; i++)
             {
@@ -226,7 +226,7 @@ public sealed class InteractiveTriggerPacerTests
                 long t0 = Stopwatch.GetTimestamp();
                 if (paced) pacer.Request(Progressive(c));
                 else { Interlocked.Increment(ref triggers); host.Trigger(Progressive(c)); }
-                caller += Stopwatch.GetTimestamp() - t0;
+                caller[i - 1] = Stopwatch.GetTimestamp() - t0;
                 long next = start + i * tick;
                 while (Stopwatch.GetTimestamp() < next) Thread.SpinWait(50);
             }
@@ -245,7 +245,10 @@ public sealed class InteractiveTriggerPacerTests
             var times = new[] { start }.Concat(fresh).Append(end).ToList();
             double maxGap = times.Zip(times.Skip(1), (a, b) => (b - a) * 1000.0 / Stopwatch.Frequency).Max();
             var all = r.Shown.Select(s => s.Frame).ToList();
-            return new DragStats(triggers, caller * 1000.0 / Stopwatch.Frequency / Moves, fresh.Count,
+            // #1793 — the median call, not the mean: a call takes a few µs, so under load one
+            // preempted call moved the mean past the other run's (paced 0.007 vs 0.005 ms/move).
+            Array.Sort(caller);
+            return new DragStats(triggers, caller[Moves / 2] * 1000.0 / Stopwatch.Frequency, fresh.Count,
                                  fresh.Count * 1000.0 / dragMs, maxGap, Key(all[^1]), all);
         }
     }
@@ -331,23 +334,38 @@ public sealed class InteractiveTriggerPacerTests
         // Previews are low-res stand-ins, not settled frames: that case checks pacing only.
         string lastSettled = "";
         var settled = Progressive(c) ? new HashSet<string>() : Settled(c, out lastSettled);
-        var free = Drag(c, paced: false);
-        var paced = Drag(c, paced: true);
-        _out.WriteLine($"{c} unpaced: {free.Triggers} triggers, {free.CallerMsPerMove:0.000} ms/move, {free.Images} images ({free.Fps:0}/s), max gap {free.MaxGapMs:0} ms");
-        _out.WriteLine($"{c} paced:   {paced.Triggers} triggers, {paced.CallerMsPerMove:0.000} ms/move, {paced.Images} images ({paced.Fps:0}/s), max gap {paced.MaxGapMs:0} ms");
 
-        // Renders started: about one per frame shown, not one per move.
-        Assert.True(paced.Triggers <= paced.Images * 2 + 5, $"{paced.Triggers} Triggers for {paced.Images} images");
-        Assert.True(paced.Triggers * 3 < free.Triggers, $"paced {paced.Triggers} vs unpaced {free.Triggers} Triggers");
-        // The caller (the UI thread) spends less per move.
-        Assert.True(paced.CallerMsPerMove < free.CallerMsPerMove, $"paced {paced.CallerMsPerMove:0.000} vs {free.CallerMsPerMove:0.000} ms/move");
-        // No worse on screen.
-        Assert.True(paced.Fps >= free.Fps * 0.85, $"paced {paced.Fps:0}/s vs unpaced {free.Fps:0}/s");
-        Assert.True(paced.MaxGapMs <= free.MaxGapMs + 25, $"paced gap {paced.MaxGapMs:0} vs {free.MaxGapMs:0} ms");
-        // The last move is the image left on screen, and no image is torn.
-        if (Progressive(c)) return;
-        Assert.Equal(lastSettled, paced.LastShown);
-        foreach (var f in paced.AllShown)
-            Assert.True(settled.Contains(Key(f)), $"{c}: a shown image is not the settled frame of any dragged view");
+        // #1793 — the timing comparisons (caller time, frame rate, longest gap) set two runs
+        // made at different moments against each other, so a load spike during one decides
+        // them on a busy machine (the full suite, an RDP session). They are judged on the best
+        // of up to three paced / unpaced pairs; every pair must pass the structural checks.
+        string? timing = null;
+        for (int attempt = 1; attempt <= 3; attempt++)
+        {
+            var free = Drag(c, paced: false);
+            var paced = Drag(c, paced: true);
+            _out.WriteLine($"{c} #{attempt} unpaced: {free.Triggers} triggers, {free.CallerMsPerMove:0.0000} ms/move (median), {free.Images} images ({free.Fps:0}/s), max gap {free.MaxGapMs:0} ms");
+            _out.WriteLine($"{c} #{attempt} paced:   {paced.Triggers} triggers, {paced.CallerMsPerMove:0.0000} ms/move (median), {paced.Images} images ({paced.Fps:0}/s), max gap {paced.MaxGapMs:0} ms");
+
+            // Renders started: about one per frame shown, not one per move.
+            Assert.True(paced.Triggers <= paced.Images * 2 + 5, $"{paced.Triggers} Triggers for {paced.Images} images");
+            Assert.True(paced.Triggers * 3 < free.Triggers, $"paced {paced.Triggers} vs unpaced {free.Triggers} Triggers");
+            // The last move is the image left on screen, and no image is torn.
+            if (!Progressive(c))
+            {
+                Assert.Equal(lastSettled, paced.LastShown);
+                foreach (var f in paced.AllShown)
+                    Assert.True(settled.Contains(Key(f)), $"{c}: a shown image is not the settled frame of any dragged view");
+            }
+
+            // The caller (the UI thread) spends less per move, and the screen is no worse.
+            timing = !(paced.CallerMsPerMove < free.CallerMsPerMove) ? $"paced {paced.CallerMsPerMove:0.0000} vs {free.CallerMsPerMove:0.0000} ms/move"
+                   : !(paced.Fps >= free.Fps * 0.85) ? $"paced {paced.Fps:0}/s vs unpaced {free.Fps:0}/s"
+                   : !(paced.MaxGapMs <= free.MaxGapMs + 25) ? $"paced gap {paced.MaxGapMs:0} vs {free.MaxGapMs:0} ms"
+                   : null;
+            if (timing == null) return;
+            _out.WriteLine($"{c} #{attempt}: timing check failed ({timing}), measuring again");
+        }
+        Assert.Fail($"{c}: in all three pairs: {timing}");
     }
 }
