@@ -297,6 +297,12 @@ but not exact / jumping" is the residual below, not a navigation fault.
   - The GPU deep route now takes a recycled orbit as well: the shift goes into the pixel offset, off + Δc/scale. Recycled frames were CPU-only before.
   - The reference orbit builds (DD / QD / OD) check the frame's token every 1,024 iterations. They drop the cache key before overwriting the arrays, so a cancelled build is never taken for a cached orbit.
   - `S1427OrbitPileupTests` compares each recycled sample with a fresh orbit at the jittered centre: in / out identical, counts within 0.2 %, on QD and OD views and on the GPU.
+- **#1425: no blur at deep morph views.** The report was "fuzzy at OD depth (Julia morph / Descend)". `S1425DeepMorphAaTests` checks the Extreme tier's MSAA + TAA at a three-step Julia-morph view (8e70, OD + LA) against the same view rendered at 4× and box-filtered:
+  - the AA result is half as far from that truth as one sample;
+  - its sharpness (mean neighbour difference) is within 5 % of the truth's;
+  - the result is the same with or without the orbit reuse.
+
+  A morph view's exterior counts change faster than a pixel, so a fast-cycling palette averages to a soft haze around the layers. The truth shows the same haze. The other suspect, the status bar reporting a preview stage as done, was #1424.
 
 ## 7. Pan pixel reuse (#1330)
 
