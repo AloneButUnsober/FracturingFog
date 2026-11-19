@@ -11,6 +11,7 @@
 //     QD-PT; the CalcGen template's QD-PT, whose comment gives its ceiling as ~1e50). They take
 //     the full centre on every path since #1906 (IDeepCentre); the probe (the poster path)
 //     already gave them QD limbs.
+//   • Julia and Multibrot — the generic perturbation engine past 1e11 (#1907), double δ to ~1e290.
 //   • Everything else renders in double: 1e13 (AutoExplorer.DoubleMaxZoom). Generated Tricorn /
 //     Burning Ship have QD-direct paths but no perturbation (CalcGen turns it off for Conj /
 //     Folded), too slow to explore; they stay at double until D4 / D5.
@@ -24,6 +25,10 @@ public static class FamilyDepth
     /// <summary>The QD perturbation tiers' ceiling (TearDrop, the CalcGen template).</summary>
     public const double QdPerturbationMaxZoom = 1e50;
 
+    /// <summary>#1907 — the generic perturbation engine's double-δ tier: a BigFloat reference and a
+    /// per-pixel δ in double, which holds to a pixel scale of ~1e-300.</summary>
+    public const double EngineDoubleDeltaMaxZoom = 1e290;
+
     /// <summary>The deepest zoom at which <paramref name="t"/>'s renderer resolves a pixel.</summary>
     public static double MaxZoomFor(FractalType t) => t switch
     {
@@ -31,6 +36,7 @@ public static class FamilyDepth
         FractalType.TearDrop
             or FractalType.GeneratedMandelbrotZ2 or FractalType.GeneratedMandelbrotZ3
             or FractalType.GeneratedMandelbrotZ4 or FractalType.GeneratedMandelbrotZ5 => QdPerturbationMaxZoom,
+        FractalType.Julia or FractalType.Multibrot => EngineDoubleDeltaMaxZoom,   // #1907
         _ => AutoExplorer.DoubleMaxZoom,
     };
 }

@@ -203,6 +203,13 @@ namespace FracturingFog.FFMath
         {
         }
 
+        /// <summary>#1907 — as above, at linearisation tolerance <paramref name="epsilon"/>
+        /// (the generic perturbation engine's plans; FractalParameters.BlaTolerance).</summary>
+        public BlaTable(Bla[] level0, int refLen, double dcMaxAbs, double epsilon)
+            : this(level0, refLen, dcMaxAbs, ddPrecision: false, epsilon)
+        {
+        }
+
         private BlaTable(Bla[] level0, int refLen, double dcMaxAbs, bool ddPrecision, double epsilon)
         {
             RefLen = refLen;

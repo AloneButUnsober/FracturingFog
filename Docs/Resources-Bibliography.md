@@ -443,7 +443,9 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
   The original published perturbation + series approximation algorithm now widely re-implemented
   (including in this project).
 - **Pauldelbrot.** *Glitch detection in perturbation Mandelbrot* (fractalforums.com thread), 2014. The
-  original glitch-detection criterion.
+  original glitch-detection criterion. Since #1907 also the generic perturbation engine's test for
+  dynamic-plane (Julia) pixels, which cannot rebase (`Engine/Perturbation/PerturbationEngine.cs`); its
+  rebasing for parameter-plane plans is Zhuoran's (below).
 - **Zhuoran.** *Another solution to perturbation glitches*, fractalforums.org, 2021.
   <https://fractalforums.org/fractal-mathematics-and-new-theories/28/another-solution-to-perturbation-glitches/4360>.
   Rebasing and bilinear approximation (BLA) — `Engine/Math/Bla.cs`, CalcGen's BLA emitter,
