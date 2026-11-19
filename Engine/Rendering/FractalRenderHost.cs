@@ -18,6 +18,7 @@
 // them via Avalonia.Media when step F lands. Histogram-equalization stays
 // here because it lives on MandelbrotCalculator itself.
 
+using FracturingFog.FFMath;
 using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
@@ -2010,16 +2011,11 @@ namespace FracturingFog.Rendering
                 switch (altCalc)
                 {
                     case FracturingFog.Calculators.Generated.MandelbrotZ2Calculator gz2:
-                        // Big+ deep zoom: plumb the full DD/QD centre limbs +
-                        // opt into the perturbation + BLA paths so the
-                        // generated calc tracks the legacy MandelbrotCalculator
-                        // through QD-precision zooms (~1e50 ceiling).
-                        gz2.CenterXLo = ViewState.CenterXLo;
-                        gz2.CenterX2  = ViewState.CenterX2;
-                        gz2.CenterX3  = ViewState.CenterX3;
-                        gz2.CenterYLo = ViewState.CenterYLo;
-                        gz2.CenterY2  = ViewState.CenterY2;
-                        gz2.CenterY3  = ViewState.CenterY3;
+                        // Big+ deep zoom: opt into the perturbation + BLA paths so
+                        // the generated calc tracks the legacy MandelbrotCalculator
+                        // through QD-precision zooms (~1e50 ceiling). The centre
+                        // limbs come through IDeepCentre in SyncAltStateFromMandel
+                        // (#1906; they were copied here per type).
                         // Task #14 fixed: AVX-512 perturbation lane now
                         // promotes |z|² to DD (using refZrLo/refZiLo) and
                         // calls ColorForDd — matches scalar tail precision.
@@ -2031,32 +2027,14 @@ namespace FracturingFog.Rendering
                         gz2.UseSa           = true;
                         break;
                     case FracturingFog.Calculators.Generated.MandelbrotZ3Calculator gz3:
-                        gz3.CenterXLo = ViewState.CenterXLo;
-                        gz3.CenterX2  = ViewState.CenterX2;
-                        gz3.CenterX3  = ViewState.CenterX3;
-                        gz3.CenterYLo = ViewState.CenterYLo;
-                        gz3.CenterY2  = ViewState.CenterY2;
-                        gz3.CenterY3  = ViewState.CenterY3;
                         gz3.UsePerturbation = true;
                         gz3.UseBla          = true;
                         break;
                     case FracturingFog.Calculators.Generated.MandelbrotZ4Calculator gz4:
-                        gz4.CenterXLo = ViewState.CenterXLo;
-                        gz4.CenterX2  = ViewState.CenterX2;
-                        gz4.CenterX3  = ViewState.CenterX3;
-                        gz4.CenterYLo = ViewState.CenterYLo;
-                        gz4.CenterY2  = ViewState.CenterY2;
-                        gz4.CenterY3  = ViewState.CenterY3;
                         gz4.UsePerturbation = true;
                         gz4.UseBla          = true;
                         break;
                     case FracturingFog.Calculators.Generated.MandelbrotZ5Calculator gz5:
-                        gz5.CenterXLo = ViewState.CenterXLo;
-                        gz5.CenterX2  = ViewState.CenterX2;
-                        gz5.CenterX3  = ViewState.CenterX3;
-                        gz5.CenterYLo = ViewState.CenterYLo;
-                        gz5.CenterY2  = ViewState.CenterY2;
-                        gz5.CenterY3  = ViewState.CenterY3;
                         gz5.UsePerturbation = true;
                         gz5.UseBla          = true;
                         break;
@@ -4389,11 +4367,17 @@ namespace FracturingFog.Rendering
         // off ViewState onto the given alt. Used by the main render path and by
         // RecolorActiveToBuffer (slideshow theme cross-fade). Generated calc
         // tail (CenterXLo, UsePerturbation, UseBla, etc.) is set by the caller.
+        // #1906 — the Mandelbrot calculator's sixteen centre limbs, which carry the view.
+        private static DeepComplex DeepCentreOf(MandelbrotCalculator c) => new(
+            new OD(c.CenterX, c.CenterXLo, c.CenterX2, c.CenterX3, c.CenterX4, c.CenterX5, c.CenterX6, c.CenterX7),
+            new OD(c.CenterY, c.CenterYLo, c.CenterY2, c.CenterY3, c.CenterY4, c.CenterY5, c.CenterY6, c.CenterY7));
+
         private void SyncAltStateFromMandel(IFractalCalculator alt)
         {
             var calc = _calculator;
             alt.CenterX       = calc.CenterX;
             alt.CenterY       = calc.CenterY;
+            if (alt is IDeepCentre deep) deep.SetDeepCentre(DeepCentreOf(calc), calc.CenterExact);   // #1906
             alt.Zoom          = calc.Zoom;
             alt.MaxIterations = calc.MaxIterations;
             alt.Quality       = calc.Quality;
@@ -4423,17 +4407,7 @@ namespace FracturingFog.Rendering
                     // #382: global interior alpha (parity with the Mandelbrot
                     // canonical path at line ~1056).
                     u.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;
-                    // Plumb the centre's low limbs so deep-zoom pan / box /
-                    // double-click recenter anchors to the right pixel. The
-                    // base sync above only copies the Hi limb; at zoom >
-                    // ~1e15 one Hi ULP is ~100 pixels so the rendered view
-                    // disagrees with where the input controller anchored.
-                    u.CenterXLo = calc.CenterXLo;
-                    u.CenterX2  = calc.CenterX2;
-                    u.CenterX3  = calc.CenterX3;
-                    u.CenterYLo = calc.CenterYLo;
-                    u.CenterY2  = calc.CenterY2;
-                    u.CenterY3  = calc.CenterY3;
+                    // (Its centre limbs come through IDeepCentre above, #1906.)
                     break;
                 case MandelbulbCalculator m: m.FractalParameters = ViewState.FractalParameters; break;
                 case MandelboxCalculator mb: mb.FractalParameters = ViewState.FractalParameters; break;

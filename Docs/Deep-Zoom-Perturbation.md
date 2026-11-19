@@ -21,6 +21,8 @@ Memory: `project_detail_depth_limit`, `project_viewcamera_input`,
   Until #1320 regions kept only the QD four, so a saved view past ~1e50 came
   back up to a view-width off. Copy through `FractalRegion.Centre` /
   `CopyCentreTo` / `CopyCentreFrom` rather than listing limbs by hand.
+  Non-Mandelbrot calculators take the full centre through `IDeepCentre` (#1906): the host's sync,
+  the video engine and the poster / batch / cluster / explore-probe path set it with one call.
   Since #1323 the video engine's camera centre (`OdCoord`) carries all eight limbs too, and its lerp hits both ends exactly. Before, each frame wrote four limbs and left the earlier view's OD tail in place. Video zooms clamp to Ultra (5e27), so only the view left after the run showed it.
 - Precision types: `DD` (Hi/Lo, ~31 digits), `QD` (X0..X3, ~62), `OD` (X0..X7,
   ~124), all in `Abstractions/Math`. `FromCenterOffset(centre, pixelOffset,

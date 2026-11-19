@@ -292,6 +292,12 @@ high-precision path, as today, so nothing regresses.
 
 1. **`IDeepCentre`** (capability interface): the 16 limbs, `CenterExact`, `SetDepth`. Implemented by
    every engine-backed calculator.
+   - **Done in D1 (#1906):** `Engine/Interefaces/IDeepCentre.cs`, implemented by TearDrop, User
+     Equation and the CalcGen template (built-ins and Compile & Load). The host's shared sync, the
+     video engine and the poster path now use it instead of per-type limb copies. Before, only the
+     main live frame and the poster copied QD limbs. The preview sidecars, slideshow cross-fade,
+     video, Generated Tricorn / Burning Ship and Compile & Load got the Hi limb only. Explorer
+     caps come from `FamilyDepth.MaxZoomFor`.
    - `FractalRenderHost.SyncAltStateFromMandel` and the alt preview sidecars copy all of it.
    - Input (`ViewCamera`) is already exact.
 2. **Batch.** `BuildFractalParameters` / `PosterRenderer.BuildCaptureCalculator` pass the limbs and

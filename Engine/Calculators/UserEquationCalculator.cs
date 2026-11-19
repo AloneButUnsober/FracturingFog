@@ -26,7 +26,7 @@ using FracturingFog.Models;
 
 namespace FracturingFog;
 
-public sealed class UserEquationCalculator : IFractalCalculator, FracturingFog.Rendering.IAdaptiveAaCalculator, IHeightFieldSource, ITrapFieldSource, ISupportsHistogramEq
+public sealed class UserEquationCalculator : IFractalCalculator, IDeepCentre, FracturingFog.Rendering.IAdaptiveAaCalculator, IHeightFieldSource, ITrapFieldSource, ISupportsHistogramEq
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -114,6 +114,32 @@ public sealed class UserEquationCalculator : IFractalCalculator, FracturingFog.R
     public double CenterYLo { get; set; }
     public double CenterY2 { get; set; }
     public double CenterY3 { get; set; }
+
+    // #1906 (epic #1253, D1) — IDeepCentre: the full centre. This calculator's tiers use the
+    // limbs above (Hi, Lo, X2, X3); the OD tail and the exact centre are kept so the centre
+    // reads back as set.
+    private double _deepX4, _deepX5, _deepX6, _deepX7, _deepY4, _deepY5, _deepY6, _deepY7;
+    private ExactCentre? _deepExact;
+    private DeepComplex _deepExactStamp;
+
+    public void SetDeepCentre(DeepComplex centre, ExactCentre? exact)
+    {
+        OD re = centre.Re, im = centre.Im;
+        CenterX = re.X0; CenterXLo = re.X1; CenterX2 = re.X2; CenterX3 = re.X3;
+        CenterY = im.X0; CenterYLo = im.X1; CenterY2 = im.X2; CenterY3 = im.X3;
+        _deepX4 = re.X4; _deepX5 = re.X5; _deepX6 = re.X6; _deepX7 = re.X7;
+        _deepY4 = im.X4; _deepY5 = im.X5; _deepY6 = im.X6; _deepY7 = im.X7;
+        _deepExact = exact;
+        _deepExactStamp = centre;
+    }
+
+    public DeepComplex GetDeepCentre() => new(
+        new OD(CenterX, CenterXLo, CenterX2, CenterX3, _deepX4, _deepX5, _deepX6, _deepX7),
+        new OD(CenterY, CenterYLo, CenterY2, CenterY3, _deepY4, _deepY5, _deepY6, _deepY7));
+
+    public ExactCentre? CenterExact
+        => _deepExact is { } e && ExactCentre.SameLimbs(_deepExactStamp, GetDeepCentre()) ? e : null;
+
 
     public QualityPreset Quality { get; set; } = QualityPreset.Standard;
     public IColorMap ColorMap { get; set; } = new HsvPalette();

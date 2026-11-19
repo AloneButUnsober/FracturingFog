@@ -1836,6 +1836,7 @@ namespace FracturingFog.Rendering
         {
             alt.CenterX = _calculator.CenterX;
             alt.CenterY = _calculator.CenterY;
+            if (alt is IDeepCentre deep) deep.SetDeepCentre(DeepCentreOf(_calculator), _calculator.CenterExact);   // #1906
             alt.Zoom = _calculator.Zoom;
             alt.MaxIterations = _calculator.MaxIterations;
             alt.Quality = _calculator.Quality;
@@ -1862,43 +1863,21 @@ namespace FracturingFog.Rendering
                 case MandelbulbCalculator m: m.FractalParameters = ViewState.FractalParameters; break;
                 case SandboxCalculator sb: sb.FractalParameters = ViewState.FractalParameters; break;
                 case UserBulbCalculator ub: ub.FractalParameters = ViewState.FractalParameters; break;
+                // (The generated families' QD limbs were copied here per type; TearDrop's were
+                // not copied at all. All come through IDeepCentre above since #1906.)
                 case FracturingFog.Calculators.Generated.MandelbrotZ2Calculator gz2:
-                    gz2.CenterXLo = _calculator.CenterXLo;
-                    gz2.CenterX2  = _calculator.CenterX2;
-                    gz2.CenterX3  = _calculator.CenterX3;
-                    gz2.CenterYLo = _calculator.CenterYLo;
-                    gz2.CenterY2  = _calculator.CenterY2;
-                    gz2.CenterY3  = _calculator.CenterY3;
                     gz2.UsePerturbation = true;
                     gz2.UseBla          = true;
                     break;
                 case FracturingFog.Calculators.Generated.MandelbrotZ3Calculator gz3:
-                    gz3.CenterXLo = _calculator.CenterXLo;
-                    gz3.CenterX2  = _calculator.CenterX2;
-                    gz3.CenterX3  = _calculator.CenterX3;
-                    gz3.CenterYLo = _calculator.CenterYLo;
-                    gz3.CenterY2  = _calculator.CenterY2;
-                    gz3.CenterY3  = _calculator.CenterY3;
                     gz3.UsePerturbation = true;
                     gz3.UseBla          = true;
                     break;
                 case FracturingFog.Calculators.Generated.MandelbrotZ4Calculator gz4:
-                    gz4.CenterXLo = _calculator.CenterXLo;
-                    gz4.CenterX2  = _calculator.CenterX2;
-                    gz4.CenterX3  = _calculator.CenterX3;
-                    gz4.CenterYLo = _calculator.CenterYLo;
-                    gz4.CenterY2  = _calculator.CenterY2;
-                    gz4.CenterY3  = _calculator.CenterY3;
                     gz4.UsePerturbation = true;
                     gz4.UseBla          = true;
                     break;
                 case FracturingFog.Calculators.Generated.MandelbrotZ5Calculator gz5:
-                    gz5.CenterXLo = _calculator.CenterXLo;
-                    gz5.CenterX2  = _calculator.CenterX2;
-                    gz5.CenterX3  = _calculator.CenterX3;
-                    gz5.CenterYLo = _calculator.CenterYLo;
-                    gz5.CenterY2  = _calculator.CenterY2;
-                    gz5.CenterY3  = _calculator.CenterY3;
                     gz5.UsePerturbation = true;
                     gz5.UseBla          = true;
                     break;

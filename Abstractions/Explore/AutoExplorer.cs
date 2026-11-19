@@ -126,11 +126,10 @@ public static class AutoExplorer
             _ => true,
         };
 
-    /// <summary>The deepest zoom the probe resolves for a family: Mandelbrot
-    /// carries the octuple-double centre (to the Extreme tier's 1e100); every
-    /// other family's probe centre is a double.</summary>
-    public static double MaxZoomFor(FractalType t)
-        => t == FractalType.Mandelbrot ? QualityPreset.Deepest.ZoomMax : DoubleMaxZoom;   // #1878: no limit
+    /// <summary>The deepest zoom the probe resolves for a family: its renderer's precision
+    /// ceiling (<see cref="FamilyDepth"/>, #1906). The probe hands every family the full
+    /// centre (PosterRenderer.BuildCaptureCalculator, IDeepCentre).</summary>
+    public static double MaxZoomFor(FractalType t) => FamilyDepth.MaxZoomFor(t);   // #1878: Mandelbrot no limit
 
     public static AutoExploreResult Run(
         ExploreView start, AutoExploreOptions o,
