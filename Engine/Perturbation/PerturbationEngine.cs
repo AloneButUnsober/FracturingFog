@@ -30,7 +30,7 @@ public readonly record struct PerturbationStats(
     int ReferenceLength, int References, long Rebases, long BlaSkips, int GlitchedPixels, int DirectPixels,
     long PoleGlitches = 0);   // #1911 — pixel steps flagged by the quotient's pole test
 
-public static class PerturbationEngine
+public static partial class PerturbationEngine
 {
     /// <summary>Pauldelbrot's glitch tolerance τ on |z|² / |Z|² (dynamic plane).</summary>
     public const double GlitchTolerance2 = 1e-6;

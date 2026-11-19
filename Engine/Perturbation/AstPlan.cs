@@ -125,23 +125,28 @@ public sealed class AstPlan : IPerturbationPlan
 
     // Shared with R2Plan (#1909, #1910), which adds conj / re / im and the abs folds.
     internal static (BigFloat, BigFloat) Eval(AstNode n, BigFloat zr, BigFloat zi, BigFloat cr, BigFloat ci, int p)
+        => Eval(n, zr, zi, BigFloat.Zero(p), BigFloat.Zero(p), cr, ci, p);
+
+    // #1912 — with the second state w (prev, read by PrevRef).
+    internal static (BigFloat, BigFloat) Eval(AstNode n, BigFloat zr, BigFloat zi, BigFloat wr, BigFloat wi, BigFloat cr, BigFloat ci, int p)
     {
         switch (n)
         {
             case ZRef: return (zr, zi);
             case CRef: return (cr, ci);
+            case PrevRef: return (wr, wi);
             case RealConst k: return (BigFloat.FromDouble(k.Value, p), BigFloat.Zero(p));
             case ImagUnit: return (BigFloat.Zero(p), BigFloat.FromDouble(1, p));
-            case Neg u: { var (a, b) = Eval(u.Operand, zr, zi, cr, ci, p); return (-a, -b); }
-            case Conj u: { var (a, b) = Eval(u.Operand, zr, zi, cr, ci, p); return (a, -b); }
-            case ReOp u: { var (a, _) = Eval(u.Operand, zr, zi, cr, ci, p); return (a, BigFloat.Zero(p)); }
-            case ImOp u: { var (_, b) = Eval(u.Operand, zr, zi, cr, ci, p); return (b, BigFloat.Zero(p)); }
+            case Neg u: { var (a, b) = Eval(u.Operand, zr, zi, wr, wi, cr, ci, p); return (-a, -b); }
+            case Conj u: { var (a, b) = Eval(u.Operand, zr, zi, wr, wi, cr, ci, p); return (a, -b); }
+            case ReOp u: { var (a, _) = Eval(u.Operand, zr, zi, wr, wi, cr, ci, p); return (a, BigFloat.Zero(p)); }
+            case ImOp u: { var (_, b) = Eval(u.Operand, zr, zi, wr, wi, cr, ci, p); return (b, BigFloat.Zero(p)); }
             // #1910 — abs of a real value (R2Plan admits no other), and Folded.
-            case AbsOp u: { var (a, _) = Eval(u.Operand, zr, zi, cr, ci, p); return (a.Abs(), BigFloat.Zero(p)); }
-            case Folded u: { var (a, b) = Eval(u.Operand, zr, zi, cr, ci, p); return (a.Abs(), b.Abs()); }
+            case AbsOp u: { var (a, _) = Eval(u.Operand, zr, zi, wr, wi, cr, ci, p); return (a.Abs(), BigFloat.Zero(p)); }
+            case Folded u: { var (a, b) = Eval(u.Operand, zr, zi, wr, wi, cr, ci, p); return (a.Abs(), b.Abs()); }
             case Div d:   // #1911 — x·conj(y) / |y|²; an exact pole gives a value past any bailout
             {
-                var (a, b) = Eval(d.Left, zr, zi, cr, ci, p); var (c, e) = Eval(d.Right, zr, zi, cr, ci, p);
+                var (a, b) = Eval(d.Left, zr, zi, wr, wi, cr, ci, p); var (c, e) = Eval(d.Right, zr, zi, wr, wi, cr, ci, p);
                 var den = BigFloat.Add(BigFloat.Mul(c, c, p), BigFloat.Mul(e, e, p), p);
                 if (den.Sign == 0) return (BigFloat.FromDouble(1e300, p), BigFloat.Zero(p));
                 return (BigFloat.Div(BigFloat.Add(BigFloat.Mul(a, c, p), BigFloat.Mul(b, e, p), p), den, p),
@@ -149,22 +154,22 @@ public sealed class AstPlan : IPerturbationPlan
             }
             case Add s:
             {
-                var (a, b) = Eval(s.Left, zr, zi, cr, ci, p); var (c, d) = Eval(s.Right, zr, zi, cr, ci, p);
+                var (a, b) = Eval(s.Left, zr, zi, wr, wi, cr, ci, p); var (c, d) = Eval(s.Right, zr, zi, wr, wi, cr, ci, p);
                 return (BigFloat.Add(a, c, p), BigFloat.Add(b, d, p));
             }
             case Sub s:
             {
-                var (a, b) = Eval(s.Left, zr, zi, cr, ci, p); var (c, d) = Eval(s.Right, zr, zi, cr, ci, p);
+                var (a, b) = Eval(s.Left, zr, zi, wr, wi, cr, ci, p); var (c, d) = Eval(s.Right, zr, zi, wr, wi, cr, ci, p);
                 return (BigFloat.Sub(a, c, p), BigFloat.Sub(b, d, p));
             }
             case Mul m:
             {
-                var (a, b) = Eval(m.Left, zr, zi, cr, ci, p); var (c, d) = Eval(m.Right, zr, zi, cr, ci, p);
+                var (a, b) = Eval(m.Left, zr, zi, wr, wi, cr, ci, p); var (c, d) = Eval(m.Right, zr, zi, wr, wi, cr, ci, p);
                 return MulB(a, b, c, d, p);
             }
             case Pow w:
             {
-                var (a, b) = Eval(w.Base, zr, zi, cr, ci, p);
+                var (a, b) = Eval(w.Base, zr, zi, wr, wi, cr, ci, p);
                 (BigFloat, BigFloat) acc = (BigFloat.FromDouble(1, p), BigFloat.Zero(p));
                 for (int k = 0; k < w.Exponent; k++) acc = MulB(acc.Item1, acc.Item2, a, b, p);
                 return acc;

@@ -157,6 +157,8 @@ FF claims no novelty for perturbation, rebasing, BLA or automatic δ derivation.
   - **Measured in #1911: not so.** A tighter tolerance only shifts counts (Newton +1 everywhere);
     see D6 in §9.
 - **Phoenix-type `prev`.** Carry δ for z_{n−1} as a second state (the scalar Phoenix tier already does).
+  - **As built (#1912):** `TwoStatePlan`; see D7 in §9. The scalar tier was not a deep tier: it
+    rebuilt z in double.
 
 ### 4.5 Transcendental formulas: TranscendentalJulia, Glynn (z^1.5), `sin` / `exp` / `log` / `pow` in user formulas
 
@@ -513,6 +515,35 @@ Each slice is checked against an **independent** oracle:
     - the near-target BLA cutoff. For Magnet, A → 0 at the superattracting z = 1, so the
       second-order radius already collapses there. The cutoff is kept as a guard for targets that
       are not superattracting.
+
+**D7 as built (#1912).**
+- **`TwoStatePlan`** (`Engine/Perturbation/TwoStatePlan.cs`) handles z′ = f(z, w, c), w′ = g(z, w, c),
+  with z₀ = 0 and w₀ = 0 or the pixel.
+  - **Families:** Phoenix (w = z_{n−1}), Spider (w = the evolving c, w₀ = c, so the pixel enters as
+    δw₀ = ε) and User Equation formulas that read `prev`.
+  - **δ:** R2Plan's emitter, now shared through a parameter list and a leaf resolver. Each state's δ
+    is its exact difference.
+  - **Derivative:** a forward-mode tangent of both states along Re c, which is what the sink
+    receives. No 2×2 matrix is needed without BLA.
+- **`PerturbationEngine.RenderTwoState`** keeps a BigFloat reference of both states, the generalised
+  glitch and pole tests, secondary references and direct BigFloat. There is no BLA (#1938) and no
+  rebase.
+- **Retired:** the scalar Phoenix "PT" tier (D-3.16, from 1e10). It rebuilt z in double from a
+  double reference, so it resolved no deeper than SP. Phoenix runs SP up to 1e11, then the engine.
+- **Views.** A two-state map has no usable Misiurewicz points: Phoenix's map is invertible, so an
+  orbit cannot land on a fixed state it did not start at.
+  - The test views land on a saddle's stable manifold instead (one complex condition on c): Newton on
+    ℓ_u·(S_{K+1} − S_K) = 0, continued in K so the linearisation error falls below the view's scale.
+  - Orbits there approach the saddle, then leave along its unstable direction, which gives structure
+    at any depth.
+- **Results** (`S1912TwoStateTests`):
+  - Phoenix and Spider at 1e30 / 1e80 and a User Equation `prev` formula match direct BigFloat on
+    176/176. The derivative is within 1 % of a finite difference on every escaped pixel.
+  - One δ step is exact to 4e-16 for both states.
+  - At the 1e11 switch, 1,536 / 1,529 of 1,536 agree with SP.
+- **Mutants:**
+  - **Caught:** the cross-state term (the `prev` δ reading δz), Spider's δw₀, the tangent's start.
+  - **Survives:** the glitch test, as in D2–D6.
 
 **Order of value:** D1 → D2 → D3 gives deep zoom to Multibrot, Julia, Generated Z2–Z5 and every
 polynomial user equation. D4 / D5 add Tricorn and Burning Ship, which is the original #1253. D6–D10
