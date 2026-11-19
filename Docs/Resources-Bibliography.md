@@ -331,6 +331,142 @@ finite-size-Lyapunov literature, which these entries anchor.
   radius $r_i = r_{\max}/(i+1)^{1/\alpha}$ dropped at random positions and rejected on overlap until
   the plane fills. See [RandomTile dev plan](Technical/RandomTile-Plan.md).
 
+<a id="gravitational-scattering"></a>
+
+#### Gravitational & relativistic scattering
+
+Sources for [Theoretical-Fractal-RnD.md §2.6](Technical/Theoretical-Fractal-RnD.md) (black hole shadows
+#1922 and #1942–#1948). Checked 2026-11-19 against arXiv / DOI / INSPIRE / ADS / publisher records unless
+the entry says otherwise. Nothing is implemented yet; each implementing PR adds point-of-use comments.
+
+<a id="shipley-dolan-2016"></a>
+
+- **Jake O. Shipley, Sam R. Dolan.** *Binary black hole shadows, chaotic scattering and the Cantor set.*
+  Classical and Quantum Gravity 33(17), 175001, 2016. DOI 10.1088/0264-9381/33/17/175001,
+  <https://arxiv.org/abs/1603.04469>. Shadows of two extremally charged black holes in the
+  Majumdar–Papapetrou spacetime; Cantor-like and self-similar shadow structure. Basis of
+  `BlackHoleShadow` (#1922): spacetime choice and validation figures.
+
+<a id="majumdar-1947"></a>
+
+- **S. D. Majumdar.** *A class of exact solutions of Einstein's field equations.* Physical Review 72,
+  390–398, 1947. <https://inspirehep.net/literature/42698>. The static multi-black-hole
+  (Majumdar–Papapetrou) metric used by #1922.
+
+<a id="papapetrou-1947"></a>
+
+- **A. Papapetrou.** Proceedings of the Royal Irish Academy A 51, 191, 1947. Independent discovery of the
+  same class of solutions. **Title not verified** (listed under *Citations awaiting verification*).
+
+<a id="aguirre-vallejo-sanjuan-2001"></a>
+
+- **Jacobo Aguirre, Juan C. Vallejo, Miguel A. F. Sanjuán.** *Wada basins and chaotic invariant sets in
+  the Hénon-Heiles system.* Physical Review E 64, 066208, 2001. Preprint mp_arc 01-452
+  (<https://web.ma.utexas.edu/mp_arc-bin/mpa?yn=01-452>). Shows the three exit basins of the open
+  Hénon–Heiles Hamiltonian are fractal and Wada. Basis of #1942.
+
+<a id="nagler-2004"></a>
+
+- **Jan Nagler.** *Crash test for the Copenhagen problem.* Physical Review E 69, 066218, 2004.
+  Escape / crash / bounded fates in the equal-mass restricted three-body problem. Basis of #1943.
+  Checked via secondary citation (a library catalogue record and a 2015 Zotos paper's reference list);
+  APS page not opened.
+
+<a id="nagler-2005"></a>
+
+- **Jan Nagler.** *Crash test for the restricted three-body problem.* Physical Review E 71, 026227, 2005.
+  The same analysis for general mass ratio. Basis of #1943. Checked via secondary citation, as above.
+
+<a id="zotos-2016"></a>
+
+- **E. E. Zotos.** *Fractal basins of attraction in the planar circular restricted three-body
+  problem with oblateness and radiation pressure.* Astrophysics and Space Science, 2016.
+  <https://arxiv.org/abs/1608.08610>. Newton–Raphson basins of the equilibrium points. Basis of #1943's
+  NR view. **Volume / article number not verified.**
+
+<a id="wald-1974"></a>
+
+- **R. M. Wald.** *Black hole in a uniform magnetic field.* Physical Review D 10, 1680–1685, 1974.
+  DOI 10.1103/PhysRevD.10.1680. The test-field solution (Killing vector as vector potential) used by
+  #1944.
+
+<a id="kopacek-2010"></a>
+
+- **O. Kopáček, V. Karas, J. Kovář, Z. Stuchlík.** *Transition from regular to chaotic
+  circulation in magnetized coronae near compact objects.* The Astrophysical Journal 722, 1240–1259,
+  2010. <https://arxiv.org/abs/1008.4650>. Charged-particle chaos near magnetised compact objects
+  (recurrence analysis). Context and validation for #1944.
+
+<a id="levin-2000"></a>
+
+- **Janna Levin.** *Gravity waves, chaos, and spinning compact binaries.* Physical Review Letters 84,
+  3515, 2000. DOI 10.1103/PhysRevLett.84.3515, <https://arxiv.org/abs/gr-qc/9910040>. Chaos and fractal
+  basin boundaries in post-Newtonian spinning binaries. Basis of #1945.
+
+<a id="levin-2000-comments"></a>
+
+- **Comments on Levin 2000** — S. A. Hughes and N. J. Cornish, arXiv:gr-qc/0101024 and
+  arXiv:gr-qc/0101041. One argues matched filtering is less affected than claimed; the other that with
+  dissipation the basin boundaries are not truly fractal. Why #1945 labels its structure honestly.
+  **Which arXiv number is whose, and the journal references, are not verified.**
+
+<a id="cornish-levin-1997"></a>
+
+- **N. J. Cornish, J. J. Levin.** *The mixmaster universe is chaotic.* Physical Review Letters 78,
+  998–1001, 1997. DOI 10.1103/PhysRevLett.78.998, <https://arxiv.org/abs/gr-qc/9605029>.
+  Coordinate-independent fractal methods for Bianchi IX chaos. Basis of #1946.
+
+<a id="cornish-levin-farey-1997"></a>
+
+- **N. J. Cornish, J. J. Levin.** *The mixmaster universe: A chaotic Farey tale.* Physical Review D
+  55, 7489–7510, 1997. Companion paper (journal page not opened). Basis of #1946.
+
+<a id="mixmaster-chaos-2000"></a>
+
+- ***Mixmaster chaos.*** <https://arxiv.org/abs/gr-qc/0011001>, 2000. Revisits Cornish & Levin 1997,
+  calls it inconclusive on method, reaches the same conclusion. Context for #1946. **Authors and journal
+  not verified.**
+
+<a id="semerak-sukova-2010"></a>
+
+- **O. Semerák, P. Suková.** *Free motion around black holes with discs or rings: between
+  integrability and chaos – I.* Monthly Notices of the Royal Astronomical Society, 2010. Schwarzschild +
+  thin disc / ring (Weyl superposition), geodesic chaos. Basis of #1947. **Volume / pages not verified.**
+
+<a id="semerak-sukova-2012"></a>
+
+- **O. Semerák, P. Suková.** *Free motion around black holes with discs or rings: between
+  integrability and chaos – II.* MNRAS 425, 2455–2476, 2012. <https://arxiv.org/abs/1211.4107>.
+  Recurrence methods, sticky orbits. Basis of #1947. Later parts: III (Suková & Semerák, MNRAS 436,
+  978–996, 2013), IV (Witzany, Semerák & Suková), V (Polcar, Suková & Semerák, ApJ 2019) — cite as used.
+
+<a id="kayser-refsdal-stabell-1986"></a>
+
+- **R. Kayser, S. Refsdal, R. Stabell.** Astronomy & Astrophysics 166, 36–52, 1986 (ADS
+  1986A&A...166...36K). Introduces inverse ray shooting for microlensing magnification maps. Basis of
+  #1948. **Title not verified.**
+
+<a id="cunha-2015"></a>
+
+- **P. V. P. Cunha, C. A. R. Herdeiro, E. Radu, H. F. Rúnarsson.** *Shadows of Kerr black
+  holes with scalar hair.* Physical Review Letters 115, 211102, 2015. <https://arxiv.org/abs/1509.00021>.
+  Backwards ray tracing of hairy-black-hole shadows. Future R&D (§2.6.9).
+
+<a id="cunha-chaotic-lensing-2016"></a>
+
+- **P. V. P. Cunha, J. Grover, C. A. R. Herdeiro, E. Radu, H. F. Rúnarsson, A. Wittig.** *Chaotic lensing
+  around boson stars and Kerr black holes with scalar hair.* 2016. <https://arxiv.org/abs/1609.01340>.
+  Chaotic lensing and multiple shadows tied to several light rings. Future R&D (§2.6.9). **Journal
+  reference not verified.**
+
+<a id="bohn-2015"></a>
+
+- **Andy Bohn, William Throwe, François Hébert, Katherine Henriksson, Darius Bunandar, et al.** *What
+  does a binary black hole merger look like?* Classical and Quantum Gravity 32, 065002, 2015.
+  <https://arxiv.org/abs/1410.7775>. Strong-field lensing through a time-dependent binary spacetime.
+  Future R&D (§2.6.9). **Full author list not verified** (records differ; some add Mark A. Scheel and
+  Nicholas W. Taylor).
+
 <a id="double-slit-fractals"></a>
 
 ### Double-slit fractals: interference, fractal optics, multifractal measures
@@ -1222,6 +1358,19 @@ These sources are cited in the code or docs, but their publication details aren'
 They stay listed (the contract never drops a credit). Each needs its primary source traced and its
 entry above completed or corrected.
 
+- **Papapetrou 1947** — Proc. R. Irish Acad. A 51, 191 (Majumdar–Papapetrou solutions, #1922): title
+  not identified.
+- **Hénon & Heiles 1964** — the original paper defining the Hénon–Heiles potential (#1942): full
+  reference not yet checked.
+- **Zotos 2016** — Astrophysics and Space Science volume / article number for arXiv:1608.08610 (#1943).
+- **Comments on Levin 2000** — which of arXiv:gr-qc/0101024 / gr-qc/0101041 is Hughes's and which is
+  Cornish's, and their journal references (#1945).
+- ***Mixmaster chaos*** — arXiv:gr-qc/0011001 (#1946): authors and journal.
+- **Semerák & Suková 2010** — MNRAS volume / pages of part I (#1947).
+- **Kayser, Refsdal & Stabell 1986** — title of A&A 166, 36 (#1948).
+- **Cunha et al. 2016** — journal reference of *Chaotic lensing around boson stars and Kerr black holes
+  with scalar hair*, arXiv:1609.01340 (§2.6.9).
+- **Bohn et al. 2015** — full author list of CQG 32, 065002 (§2.6.9).
 - **Botsch 2013** — "series approximation for `z² + c`", cited in
   `Docs/Technical/FractalEquation-DesignGuide.md` §15 as the basis for CalcGen's SA emitter. No
   matching publication found; series approximation for deep zoom is usually credited to K. I. Martin

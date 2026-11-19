@@ -19,6 +19,10 @@ status. Link both ways.
 - Epic (best-bets slice): **#850**. Children: Lyapunov **#851**, Magnet convergence colour **#852**,
   split-complex/coquaternion **#853**, transcendental Julia **#854**, Kleinian generalization design
   doc **#855**.
+- Gravitational & relativistic scattering (§2.6): black hole shadows epic **#1922** (S1 **#1923** builds
+  the shared integrator), Hénon–Heiles **#1942**, restricted three-body **#1943**, magnetised black
+  hole **#1944**, spinning binaries **#1945**, Mixmaster **#1946**, black hole + ring **#1947**,
+  microlensing **#1948**.
 - Kleinian generalization **requires its own design doc + tracking issue (#855)** before any code
   (see §5.4).
 
@@ -306,6 +310,141 @@ claim of originality: FF calls them visualisation choices built on the work abov
 redone with a fuller literature search.
 
 **Status:** S1–S5 shipped (#1440–#1444); epic #1439 complete.
+
+---
+
+### 2.6 Gravitational & relativistic scattering — **#1922 epic + #1942–#1948 filed**
+
+Light rays or test particles moving through a gravitational field, launched from a grid of initial
+conditions and coloured by their fate (captured by body *i*, escaped through channel *k*, still bound).
+Where a small change in launch condition flips the fate, the boundaries are fractal, often Wada. This is
+the same per-pixel *launch → trace → colour by exit* pattern as the chaotic billiard (#626) and the Wada
+mirror spheres (§2.5), with one engineering difference: trajectories bend continuously, so each pixel
+integrates an ODE instead of stepping exact reflections.
+
+**Shared core (decided 2026-11-19).** Black hole shadows S1 (#1923) builds the integrator as shared
+infrastructure: adaptive Runge–Kutta, conserved-quantity bookkeeping, exit rules ("captured by *i*",
+"escaped", "undecided at max time"), per-ray channels (time to exit, winding, closest approach) and a
+low-res drag preview. Every ODE entry below then adds only equations of motion and exit tests.
+Microlensing (§2.6.8) is algebraic and stands apart.
+
+**Toolchain reach (shared).** *DSL*: none of these is an `f(z, c)` iteration, so plain User Equation
+can't reach them. A **"User Potential"** mode could reach the Newtonian ones (§2.6.2, §2.6.3): the user
+writes `V(x, y)`, FF derives forces by symbolic differentiation on the AST from the deep-zoom epic
+(#1253), and the shared integrator runs it. Relativistic metrics need a "User Metric" (Christoffel
+symbols from the AST); much heavier, and not proposed yet. *ColorGen / Theme*: fates are categorical, so
+they go through `IBilliardColorMap` (gate = fate) and every billiard / Categorical theme works unchanged;
+the channels feed `SmoothBuffer` and `IHeightFieldSource`.
+
+**Validation pattern.** Every entry checks conserved quantities from stored trajectory states (not from
+the integrator's own error estimate), an analytic limit (zero perturbation → integrable or closed form),
+and an exact symmetry that permutes fate labels.
+
+#### 2.6.1 Binary black hole shadows — **#1922 (S1–S6 #1923–#1928)**
+
+Two extremally charged black holes in static balance (the Majumdar–Papapetrou spacetime
+[(Majumdar 1947)](../Resources-Bibliography.md#majumdar-1947) [(Papapetrou 1947)](../Resources-Bibliography.md#papapetrou-1947)).
+Null geodesics from a pinhole camera fall into one hole or the other, or escape; the shadow edges hold
+self-similar "eyebrow" copies of the pair, with Cantor-set structure [(Shipley & Dolan 2016)](../Resources-Bibliography.md#shipley-dolan-2016).
+Channels: winding, capture time, closest approach, deflection; lensed sky for escaped rays; GPU kernel;
+deep zoom limited by integration error (not perturbation; separate from #1253).
+Validation: null Hamiltonian and energy conserved; one hole = extremal Reissner–Nordström with an
+analytic shadow radius; equal-mass mirror symmetry; forward-back reversibility.
+
+#### 2.6.2 Hénon–Heiles exit basins — **#1942**
+
+The Hénon–Heiles potential `V = (x² + y²)/2 + x²y − y³/3` has three exit channels above `E = 1/6`; its
+exit basins are fractal and Wada [(Aguirre, Vallejo & Sanjuán 2001)](../Resources-Bibliography.md#aguirre-vallejo-sanjuan-2001).
+The cheapest entry (smooth polynomial potential) and the natural first "User Potential" preset.
+Validation: energy conservation, C3v symmetry permutes exits, Wada window check (as §2.5), nothing escapes
+below `E = 1/6`.
+
+#### 2.6.3 Restricted three-body basins — **#1943**
+
+Planar circular restricted three-body problem in the rotating frame. Two views: escape / crash / bounded
+fates, mapped for the equal-mass Copenhagen problem and the general case
+[(Nagler 2004)](../Resources-Bibliography.md#nagler-2004) [(Nagler 2005)](../Resources-Bibliography.md#nagler-2005);
+and Newton–Raphson basins of L1–L5 [(Zotos 2016)](../Resources-Bibliography.md#zotos-2016), which is
+root-finder colouring FF already does. The NR view is in CalcGen / User Equation reach if the root-finder
+path takes a real 2D system; recording that gap is part of #1943.
+Validation: Jacobi constant conserved; Copenhagen reflection symmetries; L-points satisfy `∇Ω = 0` and
+match an independent 1D collinear solve; no orbit enters the zero-velocity forbidden region.
+
+#### 2.6.4 Charged particles around a magnetised black hole — **#1944**
+
+Schwarzschild (later Kerr) in an asymptotically uniform magnetic field, Wald's test-field solution
+[(Wald 1974)](../Resources-Bibliography.md#wald-1974). Fates: captured by the horizon, escaped along the
+field axis, trapped. The trapped motion changes from regular to chaotic with the parameters
+[(Kopáček, Karas, Kovář & Stuchlík 2010)](../Resources-Bibliography.md#kopacek-2010); that paper uses
+recurrence analysis, so the *fate-basin map* is FF's view of the system, and a prior-art search for
+published basin images is part of #1944. Real GR but cheap (analytic metric and field).
+Validation: H, E, L conserved; B = 0 → Schwarzschild (ISCO 6M); q = 0 decouples; equatorial mirror.
+
+#### 2.6.5 Spinning compact binaries — **#1945**
+
+Post-Newtonian binaries with spin-orbit and spin-spin coupling; initial spin angles → outcome (merger
+time, orbits before plunge). Levin reported chaos and fractal basin boundaries
+[(Levin 2000)](../Resources-Bibliography.md#levin-2000). **Disputed:** published comments argue that with
+radiation damping the boundaries are not truly fractal and the dynamics not formally chaotic
+[(comments on Levin 2000)](../Resources-Bibliography.md#levin-2000-comments). FF renders honestly: damping
+is a toggle, and the help text labels the structure "fractal-looking at finite resolution". Equations
+taken from Levin 2000, not reconstructed.
+Validation: conservative PN energy / angular momentum and spin magnitudes conserved; zero spin →
+integrable (smooth map); damped circular merger time vs the quadrupole formula (source cited at
+implementation).
+
+#### 2.6.6 Mixmaster (Bianchi IX) universe — **#1946**
+
+Anisotropic cosmology bouncing chaotically between Kasner epochs in a triangular potential. Cornish &
+Levin used coordinate-independent fractal methods to show it is chaotic
+[(Cornish & Levin 1997a)](../Resources-Bibliography.md#cornish-levin-1997)
+[(Cornish & Levin 1997b)](../Resources-Bibliography.md#cornish-levin-farey-1997); a later paper reaches
+the same conclusion while criticising that method ([*Mixmaster chaos*](../Resources-Bibliography.md#mixmaster-chaos-2000), authors
+not yet verified). Two levels: the cheap discrete epoch map (a 1D real map, possibly User Equation
+reach) and the full ODE on the shared core. The outcome definition is taken from the papers.
+Validation: Hamiltonian constraint; triangular symmetry permutes corner labels; topological entropy of
+the discrete map → ln 2, as the 1997 letter reports.
+
+#### 2.6.7 Black hole + ring (Weyl superposition) — **#1947**
+
+Schwarzschild plus a thin ring or annular disc, an exact static axisymmetric superposition; the matter
+breaks integrability [(Semerák & Suková 2010)](../Resources-Bibliography.md#semerak-sukova-2010)
+[(Semerák & Suková 2012)](../Resources-Bibliography.md#semerak-sukova-2012). Primary view is a Poincaré
+section accumulated as a density render (Buddhabrot path, #1218), secondary is fate basins. Heaviest
+metric of the ODE set (Bach–Weyl ring needs elliptic integrals and a line-integrated λ); measure early.
+Validation: E, L, mass shell conserved; ring mass 0 → Schwarzschild, whose section has only closed
+curves; equatorial mirror.
+
+#### 2.6.8 Microlensing magnification maps — **#1948** (not fractal)
+
+Many point lenses in the thin-lens approximation plus smooth convergence and shear; inverse ray shooting
+[(Kayser, Refsdal & Stabell 1986)](../Resources-Bibliography.md#kayser-refsdal-stabell-1986) gives
+networks of bright caustics. **Not a fractal in the strict sense**: caustics are piecewise-smooth curves
+with cusps, no self-similarity. Included because it fits FF's accumulation renderer (Buddhabrot / Billiard
+Rays) and the lensing theme of §2.6.1. Algebraic map, so independent of the shared ODE core.
+Validation: single-lens analytic magnification curve; mean magnification vs `1/((1−κ)² − γ²)` (source
+cited at implementation); ray conservation; seed determinism.
+
+#### 2.6.9 Future R&D (not filed)
+
+Both need numerical spacetime data FF does not have, so they wait until the analytic entries above have
+shipped and the shared core has been measured.
+
+- **Kerr black holes with scalar hair; boson stars.** Backwards ray tracing shows shadows unlike Kerr's,
+  with novel shapes, multiple shadows of one hole and chaotic lensing, tied to the presence of several
+  light rings [(Cunha, Herdeiro, Radu & Rúnarsson 2015)](../Resources-Bibliography.md#cunha-2015)
+  [(Cunha et al. 2016)](../Resources-Bibliography.md#cunha-chaotic-lensing-2016). The metrics exist only
+  as numerical solutions, so FF would have to ship or import metric grids and interpolate them (with
+  derivatives) inside the integrator. Open questions: data source and licence, grid format, interpolation
+  error vs fractal-boundary error.
+- **Dynamic binary-merger lensing.** Strong-field lensing through a fully time-dependent binary spacetime;
+  zooming in reveals more self-similar "pancake" shadows of the holes
+  [(Bohn et al. 2015)](../Resources-Bibliography.md#bohn-2015). Needs numerical-relativity simulation
+  output and 4D (time-varying) metric interpolation along each ray. Far future; the static
+  Majumdar–Papapetrou case (§2.6.1) is FF's tractable stand-in.
+
+**Sources:** §7 (gravitational & relativistic scattering block).
+**Status:** filed 2026-11-19; nothing implemented. #1923 first (shared core), then any order.
 
 ---
 
@@ -737,6 +876,13 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
 - **Schlick 1994** — Christophe Schlick. *An inexpensive BRDF model for physically-based rendering.*
   Computer Graphics Forum 13(3). Fresnel term of the photo mode (§2.5).
 
+- **Gravitational & relativistic scattering (§2.6)** — Shipley & Dolan 2016; Majumdar 1947; Papapetrou
+  1947 (title unverified); Aguirre, Vallejo & Sanjuán 2001; Nagler 2004, 2005; Zotos 2016; Wald 1974;
+  Kopáček, Karas, Kovář & Stuchlík 2010; Levin 2000 + comments; Cornish & Levin 1997 (two papers);
+  *Mixmaster chaos* 2000; Semerák & Suková 2010, 2012; Kayser, Refsdal & Stabell 1986; Cunha et al.
+  2015, 2016; Bohn et al. 2015. Full entries under *Gravitational & relativistic scattering* in the
+  bibliography; unverified details listed under *Citations awaiting verification*.
+
 ---
 
 ## 8. Change log
@@ -903,3 +1049,8 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
 - **2026-10-28** — §2.5: Billiard Rays S7 #1512, presets, user guide, prior-art check (epic #1505 complete).
 - **2026-10-29** — §2.5: `Polygon` billiard geometry (#1538, corners then evenly along the edges; one disk per corner = the ring); 10-decimal angle fields (#1540).
 - **2026-10-29** — §2.5: `SquareLattice` / `HexLattice` billiard geometries (#1539, n sites nearest the origin, the periodic Lorentz gas of Sinai 1970 / Bunimovich & Sinai 1981) and the filled `Polygon` (grid at the edge spacing); disk cap 64 → 256.
+- **2026-11-19** — Added §2.6 gravitational & relativistic scattering: black hole shadows (#1922,
+  S1–S6 #1923–#1928; S1 builds the shared ODE / geodesic core), Hénon–Heiles #1942, restricted
+  three-body #1943, magnetised black hole #1944, spinning binaries #1945 (fractality disputed), Mixmaster
+  #1946, black hole + ring #1947, microlensing #1948 (not fractal); hairy black holes / boson stars and
+  dynamic merger lensing recorded as future R&D (§2.6.9). Bibliography (§7): gravitational block.
