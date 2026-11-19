@@ -355,6 +355,33 @@ Each slice is checked against an **independent** oracle:
   3. **Secondary references (Julia)** take the glitched pixel that lasted longest, ties by index, so a
      frame is deterministic.
 
+**D3 as built (#1908).**
+- **`AstPlan`** (`Engine/Perturbation/AstPlan.cs`) builds a plan from the equation's CalcGen AST
+  (`CalcGenLowering.Lower` of the interpreter's parsed `SandboxExpression`). CalcGen's
+  `AstPerturbation` / `AstDifferentiator` derive δ, the derivative, A, B and ½f″ for the BLA radius.
+  The derived ASTs compile to delegates through `System.Linq.Expressions` (no Roslyn). The reference
+  evaluates the step AST in BigFloat.
+- **Scope:** the polynomial subset (`+ − ×`, integer powers, real / `i` constants).
+- **Rebasing and glitches.**
+  - Rebasing is used only when ∂f/∂z at z = 0 simplifies to 0 for every c.
+  - Otherwise glitches use Pauldelbrot's test generalised to |f′(z)|² < τ·|f′(Z)|², with secondary
+    references. z² + z + c (critical point −½) is the test case.
+- **The plan interface gained** `CanRebase`, `IsGlitch`, `InitialDerivative`, and the reference's c in
+  the δ / derivative / BLA calls.
+- **User Equation** renders a polynomial on the engine from 1e11. A seed, a bailout condition or an
+  orbit-aware theme keeps the double interpreter; `DeepRefusal` gives the reason.
+- **Not in D3:**
+  - `AstPerturbation` stays in CalculatorGen.Lib, which Engine already references; moving it buys
+    nothing yet.
+  - Compile & Load keeps its own QD-PT tier (with the full centre since D1) until D12 puts CalcGen's
+    deep tier on the engine.
+  - `FamilyDepth` keeps User Equation's explorer limit at 1e13, because it depends on the equation.
+- **Found:**
+  1. **Bailout radius.** User Equation's default bailout (|z|² ≥ 1024) gives different counts from
+     MandelbrotCalculator's 512². The plan takes the calculator's radius.
+  2. **Masking.** With BLA on, a missing ∂f/∂c in the plan's derivative step is masked, because the
+     skip adds its own `+ B`. The tests also run BLA off.
+
 **Order of value:** D1 → D2 → D3 gives deep zoom to Multibrot, Julia, Generated Z2–Z5 and every
 polynomial user equation. D4 / D5 add Tricorn and Burning Ship, which is the original #1253. D6–D10
 widen the user equation language.
