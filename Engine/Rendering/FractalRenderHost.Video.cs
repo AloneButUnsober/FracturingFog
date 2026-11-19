@@ -40,6 +40,7 @@ using System.Threading.Tasks;
 using FracturingFog.Abstractions.Animation;
 using FracturingFog.Calculators;
 using FracturingFog.Interefaces;
+using FracturingFog.FFMath;
 using FracturingFog.Models;
 using FracturingFog.Render;
 using FracturingFog.ViewState;
@@ -223,7 +224,18 @@ namespace FracturingFog.Rendering
         /// <c>FloatingMenu.Adaptive</c>.</summary>
         public Action<int>? VideoAdaptiveValueSink { get; set; }
 
-        private readonly record struct QDCoord(double Hi, double Lo, double X2, double X3);
+        // #1323 — one axis of the camera centre, all eight OD limbs. The interpolation
+        // was QD (four limbs), so each frame left CenterX4..7 / CenterY4..7 at whatever
+        // the view state held: an earlier region's OD tail on an interpolated centre.
+        private readonly record struct OdCoord(double Hi, double Lo, double X2, double X3,
+            double X4 = 0, double X5 = 0, double X6 = 0, double X7 = 0)
+        {
+            public static OdCoord RegionX(FractalRegion r) => new(r.CenterX, r.CenterXLo, r.CenterX2, r.CenterX3, r.CenterX4, r.CenterX5, r.CenterX6, r.CenterX7);
+            public static OdCoord RegionY(FractalRegion r) => new(r.CenterY, r.CenterYLo, r.CenterY2, r.CenterY3, r.CenterY4, r.CenterY5, r.CenterY6, r.CenterY7);
+            public static OdCoord ViewX(FractalViewState v) => new(v.CenterX, v.CenterXLo, v.CenterX2, v.CenterX3, v.CenterX4, v.CenterX5, v.CenterX6, v.CenterX7);
+            public static OdCoord ViewY(FractalViewState v) => new(v.CenterY, v.CenterYLo, v.CenterY2, v.CenterY3, v.CenterY4, v.CenterY5, v.CenterY6, v.CenterY7);
+            public OD ToOD() => new(Hi, Lo, X2, X3, X4, X5, X6, X7);
+        }
 
         // ──────────────────────────────────────────────────────────────────
         // IVideoZoomController surface
@@ -254,10 +266,10 @@ namespace FracturingFog.Rendering
             if (tz > ultraMax) tz = ultraMax;
             if (tz < draftMin) tz = draftMin;
 
-            var tCX = new QDCoord(request.TargetCXHi, request.TargetCXLo, request.TargetCX2, request.TargetCX3);
-            var tCY = new QDCoord(request.TargetCYHi, request.TargetCYLo, request.TargetCY2, request.TargetCY3);
+            var tCX = new OdCoord(request.TargetCXHi, request.TargetCXLo, request.TargetCX2, request.TargetCX3);
+            var tCY = new OdCoord(request.TargetCYHi, request.TargetCYLo, request.TargetCY2, request.TargetCY3);
 
-            QDCoord startCX, startCY, targetCX, targetCY;
+            OdCoord startCX, startCY, targetCX, targetCY;
             double startZoom, targetZoom;
             bool customStart = false;   // #788 start view chosen — the 3D dolly keeps it
 
@@ -265,8 +277,8 @@ namespace FracturingFog.Rendering
             {
                 // Begin AT the target/zoom, animate back to the classic view.
                 startCX = tCX; startCY = tCY; startZoom = tz;
-                targetCX = new QDCoord(FractalViewState.DefaultCenterX, 0.0, 0.0, 0.0);
-                targetCY = new QDCoord(FractalViewState.DefaultCenterY, 0.0, 0.0, 0.0);
+                targetCX = new OdCoord(FractalViewState.DefaultCenterX, 0.0, 0.0, 0.0);
+                targetCY = new OdCoord(FractalViewState.DefaultCenterY, 0.0, 0.0, 0.0);
                 targetZoom = FractalViewState.DefaultZoom;
 
                 // Natural-for-zoom is a floor; authored region preset wins
@@ -297,8 +309,8 @@ namespace FracturingFog.Rendering
             {
                 // Forward: classic → target. ApplyVideoFrameState promotes the
                 // tier upward as the zoom phase crosses each ZoomMax.
-                startCX = new QDCoord(FractalViewState.DefaultCenterX, 0.0, 0.0, 0.0);
-                startCY = new QDCoord(FractalViewState.DefaultCenterY, 0.0, 0.0, 0.0);
+                startCX = new OdCoord(FractalViewState.DefaultCenterX, 0.0, 0.0, 0.0);
+                startCY = new OdCoord(FractalViewState.DefaultCenterY, 0.0, 0.0, 0.0);
                 startZoom = FractalViewState.DefaultZoom;
                 targetCX = tCX; targetCY = tCY; targetZoom = tz;
                 _videoQuality = QualityPreset.Standard;
@@ -464,7 +476,7 @@ namespace FracturingFog.Rendering
         // legs. The held buffer is the calculator's raw colour buffer (not the
         // overlaid present), so Ken-Burns pans the fractal, not the watermark.
         private void RunSingleShotHold(VideoMotionKind motion, FractalType type,
-                                       QDCoord cx, QDCoord cy, double zoom,
+                                       OdCoord cx, OdCoord cy, double zoom,
                                        double seconds, CancellationToken ct)
         {
             lock (_calcLock) _calcCts?.Cancel();
@@ -700,8 +712,8 @@ namespace FracturingFog.Rendering
         // ──────────────────────────────────────────────────────────────────
 
         private void VideoLoop(
-            QDCoord cx0, QDCoord cy0, double z0,
-            QDCoord cx1, QDCoord cy1, double z1,
+            OdCoord cx0, OdCoord cy0, double z0,
+            OdCoord cx1, OdCoord cy1, double z1,
             double seconds, CancellationToken ct, bool reverse)
         {
             // Cancel any in-flight ordinary calculation so it can't race our
@@ -725,7 +737,7 @@ namespace FracturingFog.Rendering
             double logZ0 = Math.Log(Math.Max(z0, 1e-12));
             double logZ1 = Math.Log(Math.Max(z1, 1e-12));
 
-            bool centerMoves = !QDEqual(cx0, cx1) || !QDEqual(cy0, cy1);
+            bool centerMoves = !OdEqual(cx0, cx1) || !OdEqual(cy0, cy1);
             bool zoomChanges = z0 != z1;
 
             double panSecs = centerMoves && zoomChanges ? seconds * VideoPanFraction
@@ -761,8 +773,8 @@ namespace FracturingFog.Rendering
                         bool last = t >= 1.0;
                         if (last) t = 1.0;
                         double te = t * t * (3.0 - 2.0 * t);
-                        QDCoord cx = QDLerp(cx0, cx1, te);
-                        QDCoord cy = QDLerp(cy0, cy1, te);
+                        OdCoord cx = OdLerp(cx0, cx1, te);
+                        OdCoord cy = OdLerp(cy0, cy1, te);
                         TryRunScheduledThemeFade(seconds, ct);
                         if (ct.IsCancellationRequested) break;
                         RenderVideoFrame(cx, cy, z1, ct);
@@ -800,8 +812,8 @@ namespace FracturingFog.Rendering
                         bool last = t >= 1.0;
                         if (last) t = 1.0;
                         double te = t * t * (3.0 - 2.0 * t);
-                        QDCoord cx = QDLerp(cx0, cx1, te);
-                        QDCoord cy = QDLerp(cy0, cy1, te);
+                        OdCoord cx = OdLerp(cx0, cx1, te);
+                        OdCoord cy = OdLerp(cy0, cy1, te);
                         TryRunScheduledThemeFade(seconds, ct);
                         if (ct.IsCancellationRequested) break;
                         RenderVideoFrame(cx, cy, z0, ct);
@@ -833,8 +845,8 @@ namespace FracturingFog.Rendering
         // when the endpoints already fit within ~one view width at the shallower
         // end — which is always true for a classic (shallow) start.
         private static bool TryPlanDolly(
-            QDCoord cx0, QDCoord cy0, double z0,
-            QDCoord cx1, QDCoord cy1, double z1, out double zBridge)
+            OdCoord cx0, OdCoord cy0, double z0,
+            OdCoord cx1, OdCoord cy1, double z1, out double zBridge)
         {
             zBridge = 0.0;
             // Planar separation; the Hi limb suffices for a coarse bridge level.
@@ -860,7 +872,7 @@ namespace FracturingFog.Rendering
         // Eased zoom phase (zFrom → zTo) at a fixed centre, mirroring VideoLoop's
         // inline zoom loop. Used by the slice-C dolly.
         private void RunZoomPhaseFrames(
-            QDCoord cx, QDCoord cy, double zFrom, double zTo,
+            OdCoord cx, OdCoord cy, double zFrom, double zTo,
             double phaseSecs, double legSeconds, CancellationToken ct)
         {
             if (phaseSecs <= 0.0 || ct.IsCancellationRequested) return;
@@ -883,7 +895,7 @@ namespace FracturingFog.Rendering
 
         // Eased pan phase at a fixed zoom, mirroring VideoLoop's inline pan loop.
         private void RunPanPhaseFrames(
-            QDCoord cxFrom, QDCoord cyFrom, QDCoord cxTo, QDCoord cyTo,
+            OdCoord cxFrom, OdCoord cyFrom, OdCoord cxTo, OdCoord cyTo,
             double zoom, double phaseSecs, double legSeconds, CancellationToken ct)
         {
             if (phaseSecs <= 0.0 || ct.IsCancellationRequested) return;
@@ -894,8 +906,8 @@ namespace FracturingFog.Rendering
                 bool last = t >= 1.0;
                 if (last) t = 1.0;
                 double te = t * t * (3.0 - 2.0 * t);
-                QDCoord cx = QDLerp(cxFrom, cxTo, te);
-                QDCoord cy = QDLerp(cyFrom, cyTo, te);
+                OdCoord cx = OdLerp(cxFrom, cxTo, te);
+                OdCoord cy = OdLerp(cyFrom, cyTo, te);
                 TryRunScheduledThemeFade(legSeconds, ct);
                 if (ct.IsCancellationRequested) break;
                 RenderVideoFrame(cx, cy, zoom, ct);
@@ -980,7 +992,7 @@ namespace FracturingFog.Rendering
             _videoActiveFade.T = t;
         }
 
-        private void RenderVideoFrame(QDCoord cx, QDCoord cy, double zoom, CancellationToken ct)
+        private void RenderVideoFrame(OdCoord cx, OdCoord cy, double zoom, CancellationToken ct)
         {
             if (ct.IsCancellationRequested) return;
 
@@ -1456,15 +1468,29 @@ namespace FracturingFog.Rendering
             _videoPrevHasFrame = true;
         }
 
-        // Per-limb lerp — sum(lerp(a_i,b_i,t)) == lerp(sum a, sum b, t).
-        private static QDCoord QDLerp(QDCoord a, QDCoord b, double t) => new(
+        // Per-limb lerp — sum(lerp(a_i,b_i,t)) == lerp(sum a, sum b, t). #1323: all
+        // eight limbs, and the ends exact: a_i + (b_i − a_i)·1 rounds when the limbs'
+        // magnitudes differ, so the last frame missed the target's low limbs.
+        private static OdCoord OdLerp(OdCoord a, OdCoord b, double t) => t <= 0 ? a : t >= 1 ? b : new(
             a.Hi + (b.Hi - a.Hi) * t,
             a.Lo + (b.Lo - a.Lo) * t,
             a.X2 + (b.X2 - a.X2) * t,
-            a.X3 + (b.X3 - a.X3) * t);
+            a.X3 + (b.X3 - a.X3) * t,
+            a.X4 + (b.X4 - a.X4) * t,
+            a.X5 + (b.X5 - a.X5) * t,
+            a.X6 + (b.X6 - a.X6) * t,
+            a.X7 + (b.X7 - a.X7) * t);
 
-        private static bool QDEqual(QDCoord a, QDCoord b)
-            => a.Hi == b.Hi && a.Lo == b.Lo && a.X2 == b.X2 && a.X3 == b.X3;
+        private static bool OdEqual(OdCoord a, OdCoord b) => a == b;
+
+        // #1323 — all sixteen centre limbs into the calculator.
+        private static void WriteCentre(MandelbrotCalculator c, OdCoord cx, OdCoord cy)
+        {
+            c.CenterX = cx.Hi; c.CenterXLo = cx.Lo; c.CenterX2 = cx.X2; c.CenterX3 = cx.X3;
+            c.CenterX4 = cx.X4; c.CenterX5 = cx.X5; c.CenterX6 = cx.X6; c.CenterX7 = cx.X7;
+            c.CenterY = cy.Hi; c.CenterYLo = cy.Lo; c.CenterY2 = cy.X2; c.CenterY3 = cy.X3;
+            c.CenterY4 = cy.X4; c.CenterY5 = cy.X5; c.CenterY6 = cy.X6; c.CenterY7 = cy.X7;
+        }
 
         // Pushes view state for one video frame into ViewState + the calculator
         // and auto-promotes the quality preset (upward only) as the zoom crosses
@@ -1666,7 +1692,7 @@ namespace FracturingFog.Rendering
         // Runs on the UI thread inside StartVideo, before LoadTargetRegionForVideo
         // mutates ViewState, so the current-view capture is the live framing.
         private bool TryResolveForwardStart(
-            VideoZoomRequest request, out QDCoord startCX, out QDCoord startCY, out double startZoom)
+            VideoZoomRequest request, out OdCoord startCX, out OdCoord startCY, out double startZoom)
         {
             startCX = default; startCY = default; startZoom = 0.0;
 
@@ -1686,16 +1712,16 @@ namespace FracturingFog.Rendering
                     RaiseStatus($"Start region '{region.Name}' is {region.FractalType}, target is {targetType} — starting from the classic view.");
                     return false;
                 }
-                startCX = new QDCoord(region.CenterX, region.CenterXLo, region.CenterX2, region.CenterX3);
-                startCY = new QDCoord(region.CenterY, region.CenterYLo, region.CenterY2, region.CenterY3);
+                startCX = OdCoord.RegionX(region);
+                startCY = OdCoord.RegionY(region);
                 startZoom = region.Zoom > 0 ? region.Zoom : FractalViewState.DefaultZoom;
                 return true;
             }
 
             if (request.StartFromCurrentView)
             {
-                startCX = new QDCoord(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3);
-                startCY = new QDCoord(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3);
+                startCX = OdCoord.ViewX(ViewState);
+                startCY = OdCoord.ViewY(ViewState);
                 startZoom = ViewState.Zoom;
                 return true;
             }
@@ -1733,7 +1759,7 @@ namespace FracturingFog.Rendering
                 _videoQuality = _calculator.Quality;
         }
 
-        private void ApplyVideoFrameState(QDCoord cx, QDCoord cy, double zoom)
+        private void ApplyVideoFrameState(OdCoord cx, OdCoord cy, double zoom)
         {
             QualityPreset target = _videoQuality;
             double cap = QualityPreset.Ultra.ZoomMax;
@@ -1752,13 +1778,11 @@ namespace FracturingFog.Rendering
             double clampedZoom = Math.Clamp(zoom, _videoQuality.ZoomMin, _videoQuality.ZoomMax);
 
             var s = ViewState;
-            s.CenterX = cx.Hi; s.CenterXLo = cx.Lo; s.CenterX2 = cx.X2; s.CenterX3 = cx.X3;
-            s.CenterY = cy.Hi; s.CenterYLo = cy.Lo; s.CenterY2 = cy.X2; s.CenterY3 = cy.X3;
+            s.SetCenter(new DeepComplex(cx.ToOD(), cy.ToOD()));   // #1323: all sixteen limbs
             s.Zoom = clampedZoom;
             s.Quality = _videoQuality;
 
-            _calculator.CenterX = cx.Hi; _calculator.CenterXLo = cx.Lo; _calculator.CenterX2 = cx.X2; _calculator.CenterX3 = cx.X3;
-            _calculator.CenterY = cy.Hi; _calculator.CenterYLo = cy.Lo; _calculator.CenterY2 = cy.X2; _calculator.CenterY3 = cy.X3;
+            WriteCentre(_calculator, cx, cy);
             _calculator.Zoom = clampedZoom;
             _calculator.Quality = _videoQuality;
 
@@ -2133,8 +2157,7 @@ namespace FracturingFog.Rendering
                 }
                 else
                 {
-                    ViewState.CenterX = FractalViewState.DefaultCenterX; ViewState.CenterXLo = 0.0; ViewState.CenterX2 = 0.0; ViewState.CenterX3 = 0.0;
-                    ViewState.CenterY = FractalViewState.DefaultCenterY; ViewState.CenterYLo = 0.0; ViewState.CenterY2 = 0.0; ViewState.CenterY3 = 0.0;
+                    ViewState.SetCenter(new DeepComplex(new OD(FractalViewState.DefaultCenterX), new OD(FractalViewState.DefaultCenterY)));   // #1323: all sixteen limbs
                     ViewState.Zoom = defZoom;
                     _videoQuality = QualityPreset.Standard;
                 }
@@ -2312,15 +2335,15 @@ namespace FracturingFog.Rendering
                 }
                 else
                 {
-                    QDCoord legStartCX, legStartCY, legTargetCX, legTargetCY;
+                    OdCoord legStartCX, legStartCY, legTargetCX, legTargetCY;
                     double legStartZoom, legTargetZoom;
                     if (isCameraLeg)
                     {
                         // #93 — pure camera dolly: plane center pinned to the region's,
                         // Zoom lerps wide↔authored (VideoLoop log-lerps it, easing the
                         // dolly in log-distance). No pan.
-                        var camCX = new QDCoord(region.CenterX, region.CenterXLo, region.CenterX2, region.CenterX3);
-                        var camCY = new QDCoord(region.CenterY, region.CenterYLo, region.CenterY2, region.CenterY3);
+                        var camCX = OdCoord.RegionX(region);
+                        var camCY = OdCoord.RegionY(region);
                         legStartCX = legTargetCX = camCX;
                         legStartCY = legTargetCY = camCY;
                         legStartZoom = reverse ? camAuthoredZoom : camWideZoom;
@@ -2328,20 +2351,20 @@ namespace FracturingFog.Rendering
                     }
                     else if (reverse)
                     {
-                        legStartCX = new QDCoord(region.CenterX, region.CenterXLo, region.CenterX2, region.CenterX3);
-                        legStartCY = new QDCoord(region.CenterY, region.CenterYLo, region.CenterY2, region.CenterY3);
+                        legStartCX = OdCoord.RegionX(region);
+                        legStartCY = OdCoord.RegionY(region);
                         legStartZoom = tz;
-                        legTargetCX = new QDCoord(FractalViewState.DefaultCenterX, 0.0, 0.0, 0.0);
-                        legTargetCY = new QDCoord(FractalViewState.DefaultCenterY, 0.0, 0.0, 0.0);
+                        legTargetCX = new OdCoord(FractalViewState.DefaultCenterX, 0.0, 0.0, 0.0);
+                        legTargetCY = new OdCoord(FractalViewState.DefaultCenterY, 0.0, 0.0, 0.0);
                         legTargetZoom = defZoom;
                     }
                     else
                     {
-                        legStartCX = new QDCoord(FractalViewState.DefaultCenterX, 0.0, 0.0, 0.0);
-                        legStartCY = new QDCoord(FractalViewState.DefaultCenterY, 0.0, 0.0, 0.0);
+                        legStartCX = new OdCoord(FractalViewState.DefaultCenterX, 0.0, 0.0, 0.0);
+                        legStartCY = new OdCoord(FractalViewState.DefaultCenterY, 0.0, 0.0, 0.0);
                         legStartZoom = defZoom;
-                        legTargetCX = new QDCoord(region.CenterX, region.CenterXLo, region.CenterX2, region.CenterX3);
-                        legTargetCY = new QDCoord(region.CenterY, region.CenterYLo, region.CenterY2, region.CenterY3);
+                        legTargetCX = OdCoord.RegionX(region);
+                        legTargetCY = OdCoord.RegionY(region);
                         legTargetZoom = tz;
                     }
 
@@ -2382,8 +2405,8 @@ namespace FracturingFog.Rendering
             double defZoom = FractalViewState.DefaultZoom;
 
             // Previous leg's endpoint (classic view before the first leg).
-            var prevCX = new QDCoord(FractalViewState.DefaultCenterX, 0.0, 0.0, 0.0);
-            var prevCY = new QDCoord(FractalViewState.DefaultCenterY, 0.0, 0.0, 0.0);
+            var prevCX = new OdCoord(FractalViewState.DefaultCenterX, 0.0, 0.0, 0.0);
+            var prevCY = new OdCoord(FractalViewState.DefaultCenterY, 0.0, 0.0, 0.0);
             double prevZoom = defZoom;
 
             for (int i = 0; i < course.Count; i++)
@@ -2419,22 +2442,16 @@ namespace FracturingFog.Rendering
                 var legStartCX = prevCX;
                 var legStartCY = prevCY;
                 double legStartZoom = prevZoom;
-                var legTargetCX = new QDCoord(region.CenterX, region.CenterXLo, region.CenterX2, region.CenterX3);
-                var legTargetCY = new QDCoord(region.CenterY, region.CenterYLo, region.CenterY2, region.CenterY3);
+                var legTargetCX = OdCoord.RegionX(region);
+                var legTargetCY = OdCoord.RegionY(region);
                 double legTargetZoom = tz;
 
                 // Push the leg's START view into ViewState + calculator, then
                 // pre-render the start frame so we can cross-fade into it.
-                ViewState.CenterX = legStartCX.Hi; ViewState.CenterXLo = legStartCX.Lo;
-                ViewState.CenterX2 = legStartCX.X2; ViewState.CenterX3 = legStartCX.X3;
-                ViewState.CenterY = legStartCY.Hi; ViewState.CenterYLo = legStartCY.Lo;
-                ViewState.CenterY2 = legStartCY.X2; ViewState.CenterY3 = legStartCY.X3;
+                ViewState.SetCenter(new DeepComplex(legStartCX.ToOD(), legStartCY.ToOD()));   // #1323: all sixteen limbs
                 ViewState.Zoom = legStartZoom;
 
-                _calculator.CenterX = ViewState.CenterX; _calculator.CenterXLo = ViewState.CenterXLo;
-                _calculator.CenterX2 = ViewState.CenterX2; _calculator.CenterX3 = ViewState.CenterX3;
-                _calculator.CenterY = ViewState.CenterY; _calculator.CenterYLo = ViewState.CenterYLo;
-                _calculator.CenterY2 = ViewState.CenterY2; _calculator.CenterY3 = ViewState.CenterY3;
+                WriteCentre(_calculator, legStartCX, legStartCY);
                 _calculator.Zoom = legStartZoom;
                 _calculator.Quality = _videoQuality;
                 _calculator.MaxIterations = ViewState.IterLocked
