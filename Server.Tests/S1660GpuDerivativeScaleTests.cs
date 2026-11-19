@@ -17,7 +17,8 @@
 //     underflowed the float DistanceBuffer to 0 on both paths at 3e47; it is now stored in a
 //     power-of-two unit near the pixel size, so the distance check bites at every view.)
 //   • a zoom sweep over one octave at 5e33: the kernel's 2^E ignores the scale's mantissa.
-// (SA without BLA: the BLA skip's derivative drops + B, #1782. Distance underflow: #1783, fixed.)
+// (SA without BLA: with BLA the GPU kernel's skips differ from the CPU's, #1791; its + B is fixed
+// and checked in S1782BlaDerivativeTests (#1782). Distance underflow: #1783, fixed.)
 // Mutants (by hand): caught — DzOutScale() returning 1; the float-exp entry without
 // + gScaleE; the scaled-fp32 entry writing v · invS (the old output); the calculator
 // not unscaling on the plain path or on the orbit path; the LA kernel writing the plain
@@ -135,9 +136,9 @@ public sealed class S1660GpuDerivativeScaleTests : IDisposable
         [-1.9918151296901943, -7.8219844803880472E-17, 1.660139930392911E-34, 8.217274172159319E-51],
         [-5.5240415753972429E-06, -2.8659813126937928E-22, 6.6910924119662832E-39, 6.2394735914401016E-55], 20000);
 
-    // SA without BLA: the BLA skip carries dz' = A dz and drops + B (the CPU's BLA too),
-    // so its normals miss the CPU's on half of p448's pixels whatever the encoding;
-    // that is #1782.
+    // SA without BLA: the BLA skip dropped + B, missing the CPU's normals on half of p448's
+    // pixels (#1782, fixed and checked in S1782BlaDerivativeTests). With the + B the GPU BLA
+    // kernel is still off on ~4 %: its skips differ from the CPU's (#1791).
     public enum Route { Double, Sa, La, FloatExp, ScaledF32, Orbit }
 
     public static TheoryData<Route, string> Cases => new()
