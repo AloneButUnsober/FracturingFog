@@ -1150,6 +1150,11 @@ entry above completed or corrected.
 - **Mariani–Silver** — primary description (Rico Mariani's algorithm; Robert Silver's formulation)
   isn't identified; it's commonly documented through Fractint-era material and Wikibooks *Fractals*.
 - **Earl F. Glynn** — the original publication of the fractional-power Julia set.
+- **Aitken's Δ² process** (A. C. Aitken) — sequence acceleration, c∞ ≈ c₂ + d₂·r/(1 − r). It was
+  tried as a seed for the deep ray landing and not shipped (no gain; measured in
+  `Docs/Technical/Arbitrary-Precision-DeepZoom.md` §37, #1872). It is usually cited as Aitken's 1926
+  paper on Bernoulli's method for algebraic equations, in the *Proceedings of the Royal Society of
+  Edinburgh*; the volume, pages and exact title aren't confirmed here.
 - **Wolfgang Straßer 1974** — PhD thesis, TU Berlin, 1974, said to describe the z-buffer independently
   of Catmull (see [Catmull](#catmull-zbuffer)). Source: the TU Wien obituary
   (<https://www.cg.tuwien.ac.at/sites/default/files/lost-colleague/Wolfgang%20Strasser/WolfgangStrasser-Obituary.pdf>).

@@ -883,7 +883,7 @@ The 1e100 ceiling is gone. A Mandelbrot view renders, explores, saves, batches a
 
 | Issue | Topic |
 |---|---|
-| #1872 | Deep ray landing on preperiodic angles with long preperiods is slow (46 s at ~1e-146) |
+| #1872 | Deep ray landing on preperiodic angles with long preperiods is slow (46 s at ~1e-146). *×2.8–3 (16 s), §37.* |
 | #1875 | External angles of minibrots past period 1,000 (the method's reach at any depth) |
 | #1843 | Normals and the final derivative overflow in `FillAuxAndColorHP` past ~1e38–1e150 (the derivative is ±∞ past double); the distance is fixed to ~1e308 by #1783 (§35). *Fixed at any depth, §36.* |
 | #1783 | The float distance estimate underflows past ~1e38 (CPU and GPU). *Fixed, §35.* |
@@ -934,3 +934,28 @@ The 1e100 ceiling is gone. A Mandelbrot view renders, explores, saves, batches a
     - The distance in pixels agrees within 1e-4, past 1e308 included.
   - **GPU float-exp kernel** (Vulkan) at 1e320 and 1e600: normals and distance match the CPU frame on 575 pixels, and every value is finite. Before, they were ∞ / 0.
   - **Units per map:** a ColorGen theme that doesn't read `pxScale` still sees |dz/dc| as a float ∞ at 1e150; one that does sees the unit.
+
+## 37. Deep ray landing speed (#1872)
+
+- **Measured** with `DeepExternalRay.Land` on S1870's angle: M(4,1)'s .001(010) tuned into the period-n antenna minibrot.
+  - **n = 60** (M(181, 60), ~1e-70): 8.0 s. The trace was 72 % (its BigFloat reference orbit 30 %, its CFx Newton substeps 27 %) and `Refine` 28 %.
+  - **n = 125** (M(376, 125), ~1e-146): 46 s, with the reference orbit at 42 %.
+- **Shipped** (`DeepRayTuning`, all on by default):
+  - **The substeps in double** where every value is a normal double (|Δ| and |dz/dc| within 2^±900); CFx past that. It mirrors CFx's operations, a product as (ac − bd, ad + bc) and a quotient as a product with the reciprocal, with 1/dc scaled by a power of two first.
+  - **BigFloat rounding without temporaries.** `Round` decides ties-to-even from the guard bit and the trailing-zero count instead of building the discarded field; `ToDouble` rounds from the top 64 bits and a sticky flag. Both are exact rewrites, checked field for field and bit for bit against the old algorithms in `S1872BigFloatRoundingTests`, ties and subnormals included. This speeds every BigFloat path, not only the rays.
+  - **Skip exhausted divisors.** In `TryMisiurewicz`, a divisor whose Newton ran out of steps without leaving its reach is skipped in the wider reach windows (`Refine`'s `ranOutOfSteps`). It would only creep the same way again.
+- **Result:**
+
+  | Case | Before | After | Speed-up |
+  |---|---|---|---|
+  | n = 60 | 8.0 s | 2.7 s | ×2.95 |
+  | n = 125 | 46 s | 16.3 s | ×2.8 |
+  | n = 40 (S1872) | 3.8 s (plain) | 1.1 s | ×3.5 |
+
+  The landing points are identical to the plain path's, bit for bit (`S1872DeepRayLandingSpeedTests`, preperiodic and periodic).
+- **Why it is still O(bits²).** The landing is tried once per period after the ray converges, and at n = 125 it takes 8 tries (bits 1,125 … 3,750). On the tuned views the right (k, p) Newton creeps. Its step stays ~1/270 of the distance to the root (a tight cluster of roots around a tuned copy), and only a seed that the trace has brought into the quadratic region lands. Each failed try costs another period of trace.
+- **Measured and not shipped:**
+  - **Rebasing every few bits.** An older ray point's orbit escapes far faster (|Z| about squares per extra iteration), so perturbing a later bit from it loses all precision. Every 8 bits broke the n = 60 landing.
+  - **A tapered orbit precision.** Each step can be given only the bits its error needs after the Π|2Z| amplification. No gain: the tuned orbit passes near 0 every n iterations, and those small |Z_m| need nearly full precision for every earlier step.
+  - **Jumping when Newton creeps**, extrapolating 2×, 4×, … along the step. Neither the deflated residual |G / Π f| (it falls all the way to the reach edge) nor the plain |G| (it rises: the seed sits beside lower-preperiod roots) guides it to the root.
+  - **Aitken-extrapolated seeds** from the ray's last three period points. They landed no earlier.

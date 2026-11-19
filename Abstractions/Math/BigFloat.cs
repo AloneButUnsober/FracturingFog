@@ -79,19 +79,26 @@ namespace FracturingFog.FFMath
         {
             if (mag.IsZero) return new BigFloat(BigInteger.Zero, 0, prec);
             long bits = (long)mag.GetBitLength();
+            int tz = TrailingZeros(mag);
             if (bits > prec)
             {
                 int shift = (int)(bits - prec);
-                BigInteger q = mag >> shift;
-                BigInteger rem = mag - (q << shift);
-                BigInteger half = BigInteger.One << (shift - 1);
-                int c = rem.CompareTo(half);
-                bool up = c > 0 || (c == 0 && (sticky || !q.IsEven));
-                if (up) q += 1;
-                mag = q; exp += shift;
-                // q + 1 can carry to prec + 1 bits (a power of two): normalised below.
+                // #1872 — the discarded field from its guard bit and trailing zeros, without
+                // building it: below half (guard 0), exactly half (guard 1, nothing below),
+                // or above half (guard 1, a set bit below). Ties to even, as before.
+                if (tz >= shift) { mag >>= shift; exp += shift; tz -= shift; }   // exact
+                else
+                {
+                    BigInteger g = mag >> (shift - 1);
+                    bool guard = !g.IsEven;
+                    BigInteger q = g >> 1;
+                    bool up = guard && (tz < shift - 1 || sticky || !q.IsEven);
+                    if (up) q += 1;
+                    // q + 1 can carry to prec + 1 bits (a power of two): normalised below.
+                    mag = q; exp += shift;
+                    tz = TrailingZeros(mag);
+                }
             }
-            int tz = TrailingZeros(mag);
             if (tz > 0) { mag >>= tz; exp += tz; }
             return new BigFloat(sign < 0 ? -mag : mag, exp, prec);
         }
@@ -162,9 +169,34 @@ namespace FracturingFog.FFMath
         public double ToDouble()
         {
             if (IsZero) return 0;
-            var r = Round(Mantissa.Sign, BigInteger.Abs(Mantissa), Exponent, false, 53);
-            double m = (double)r.Mantissa;   // ≤ 53 bits: exact
-            long e = r.Exponent;
+            // #1872 — the 53-bit rounding of Round(…, 53), from the top 64 bits and a sticky
+            // flag (no BigInteger temporaries), then the same range checks and ScaleB.
+            var mag = BigInteger.Abs(Mantissa);
+            long bl = (long)mag.GetBitLength();
+            ulong top; long e; bool below;
+            if (bl <= 64) { top = (ulong)mag; e = Exponent; below = false; }
+            else
+            {
+                int drop = (int)(bl - 64);
+                top = (ulong)(mag >> drop);
+                e = Exponent + drop;
+                below = TrailingZeros(mag) < drop;
+            }
+            int tb = 64 - System.Numerics.BitOperations.LeadingZeroCount(top);
+            if (tb > 53)
+            {
+                int sh = tb - 53;
+                ulong q = top >> sh, rem = top & ((1UL << sh) - 1), half = 1UL << (sh - 1);
+                bool up = rem > half || (rem == half && (below || (q & 1) != 0));
+                if (up) q++;
+                top = q; e += sh;
+            }
+            if (top != 0)
+            {
+                int tz = System.Numerics.BitOperations.TrailingZeroCount(top);
+                top >>= tz; e += tz;   // the normalised exponent, as Round's
+            }
+            double m = (double)top * Mantissa.Sign;   // ≤ 53 bits: exact
             if (e > 2000) return m > 0 ? double.PositiveInfinity : double.NegativeInfinity;
             if (e < -2200) return 0.0 * Math.Sign(m);
             return Math.ScaleB(m, (int)e);
