@@ -546,6 +546,41 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
   it would add a native dependency to every platform of `FracturingFog.App`. `BigFloat` is managed
   (`System.Numerics.BigInteger`) and contains no MPFR code; the measurement behind the choice is in
   `Docs/Technical/Arbitrary-Precision-DeepZoom.md`.
+  - **#1914 (epic #1253, D9):** `BigFloatMath`'s elementary functions do not use MPFR either. Its
+    documentation (*The MPFR Library: Algorithms and Proofs*, <https://www.mpfr.org/algorithms.pdf>)
+    was the planned method source. The PDF could not be read here (no text extraction), so the
+    methods come from the Wikipedia pages below instead. FF claims none of MPFR's error bounds.
+- <a id="wikipedia-elementary-series"></a>**Wikipedia contributors.** The series and identities behind `BigFloatMath`
+  (#1914) and the perturbed elementary functions (`PerturbFunctions`, #1913). All read 2026-11-19;
+  the pages carry no single author or version.
+  - *Exponential function*, <https://en.wikipedia.org/wiki/Exponential_function>:
+    - the power series Σ xⁿ/n!;
+    - the note that e^x − 1 near 0 needs a dedicated `expm1`, which the page credits to a proposal
+      by William Kahan.
+    - The argument reductions FF uses (x = k·ln 2 + r, then r/2^s squared back) are the exponent
+      law, not taken from the page.
+  - *Natural logarithm*, <https://en.wikipedia.org/wiki/Natural_logarithm>:
+    - the area-hyperbolic-tangent series ln x = 2·Σ y^{2k+1}/(2k+1), y = (x − 1)/(x + 1), which
+      the page calls the fastest-converging series it lists;
+    - FF also uses it for ln 2 and for the real `log1p`.
+    - The page's Halley iteration and AGM method were read but are not used.
+  - *Sine and cosine*, <https://en.wikipedia.org/wiki/Sine_and_cosine>: the Taylor series of sin and
+    cos, and the double-angle formulas sin 2θ = 2 sin θ cos θ and cos 2θ = 1 − 2 sin² θ.
+  - *List of trigonometric identities*, <https://en.wikipedia.org/wiki/List_of_trigonometric_identities>:
+    the sum-to-product identities sin θ − sin φ = 2 cos((θ+φ)/2) sin((θ−φ)/2) and
+    cos θ − cos φ = −2 sin((θ+φ)/2) sin((θ−φ)/2). These give the perturbed sin / cos with θ = V + D
+    and φ = V.
+  - *Inverse trigonometric functions*, <https://en.wikipedia.org/wiki/Inverse_trigonometric_functions>:
+    - Gregory's series for arctan, convergent for |z| ≤ 1 except ±i;
+    - arctan x = 2·arctan(x/(1 + √(1 + x²))), used to halve the argument.
+  - *Machin-like formula*, <https://en.wikipedia.org/wiki/Machin-like_formula>: Machin's
+    π/4 = 4·arctan(1/5) − arctan(1/239) (the page dates it 1706), evaluated with Gregory's series.
+  - **FF use:**
+    - `Abstractions/Math/BigFloatMath.cs` (#1914) and `Engine/Perturbation/PerturbFunctions.cs`
+      (#1913);
+    - design plan §4.5.
+    - FF found no prior use of these perturbed differences in a fractal renderer. The search was
+      not exhaustive (design plan §10).
 - **Jonathan Richard Shewchuk.** *Adaptive precision floating-point arithmetic and fast robust
   geometric predicates.* Discrete & Computational Geometry 18(3), 1997. The exact expansion sum used
   by octuple-double addition (`OctupleDouble.cs`, #1319).
