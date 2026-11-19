@@ -28,6 +28,14 @@
 // pixel's ε through ∇_c U), halved — mathr 2022's min(|X|, |Y|) / 2 for Burning Ship
 // (#mathr-deep-zoom-2022), generalised to a fold of any real sub-expression. abs of a complex value
 // is its modulus (a square root), not a fold, and stays outside this plan.
+//
+// #1911 (D6) adds division, for Magnet 1 / 2 and user "/". The quotient's difference is taken
+// without cancellation:
+//     (P + ΔP)/(Q + ΔQ) − P/Q = (ΔP·Q − P·ΔQ) / (Q·(Q + ΔQ)),
+// a rearrangement over a common denominator (FF claims no novelty; the design plan §4.4 states it).
+// A pixel whose Q + ΔQ cancels most of Q (by a pole the reference is not by) is flagged
+// (PoleRatio2) and goes to another reference or to direct iteration. Derivatives use the quotient
+// rule; the second-order radius grows the closer Q is to 0, so the BLA shrinks by poles.
 
 using System;
 using System.Collections.Generic;
@@ -48,6 +56,7 @@ public sealed class R2Plan : IRealPerturbationPlan
     private readonly F8 _tan;     // (z, c, t_z, t_c) → the derivative of f along (t_z, t_c)
     private readonly F8 _sec;     // (z, c, t, _) → the second derivative of f along z + s·t
     private readonly F8? _limit;  // (z, c, |ε|max, _) → the δ that reaches the nearest fold's sign change (#1910)
+    private readonly F8? _pole;   // (Z, C, δ, ε) → min |Q + ΔQ|² / |Q|² over the divisions (#1911)
 
     private R2Plan(AstNode step, double bailout2, (double, double) initialDerivative)
     {
@@ -58,6 +67,7 @@ public sealed class R2Plan : IRealPerturbationPlan
         _tan = Compile(step, Mode.Tangent);
         _sec = Compile(step, Mode.Second);
         _limit = HasFold(step) ? Compile(step, Mode.Limit) : null;
+        _pole = HasDiv(step) ? Compile(step, Mode.Pole) : null;
         // Rebasing restarts at Z₀ = 0: valid as a reference only when 0 is a critical point for
         // every c, i.e. ∂f/∂z = 0 at z = 0. Checked at three generic c: a polynomial Jacobian that
         // is not identically zero is not exactly 0.0 at all of them.
@@ -89,6 +99,38 @@ public sealed class R2Plan : IRealPerturbationPlan
         => new(new Add(new Pow(new Add(new AbsOp(new ReOp(new ZRef())), new Mul(new ImagUnit(), new AbsOp(new ImOp(new ZRef())))), 2),
                        new CRef()), 512.0 * 512.0, (1.0, 0.0));
 
+    /// <summary>Magnet type I, ((z² + c − 1) / (2z + c − 2))², with MagnetOneKernel's bailout (|z|² ≥ 100).</summary>
+    public static R2Plan Magnet1()
+    {
+        AstNode z = new ZRef(), c = new CRef(), one = new RealConst(1), two = new RealConst(2);
+        var num = new Sub(new Add(new Pow(z, 2), c), one);
+        var den = new Sub(new Add(new Mul(two, z), c), two);
+        return new(new Pow(new Div(num, den), 2), 100.0, (0.0, 0.0));
+    }
+
+    /// <summary>Magnet type II, ((z³ + 3(c − 1)z + (c − 1)(c − 2)) / (3z² + 3(c − 2)z + (c − 1)(c − 2) + 1))²,
+    /// with MagnetTwoKernel's bailout (|z|² ≥ 100). (c² − 3c + 3 = (c − 1)(c − 2) + 1.)</summary>
+    public static R2Plan Magnet2()
+    {
+        AstNode z = new ZRef(), c = new CRef(), one = new RealConst(1), two = new RealConst(2), three = new RealConst(3);
+        AstNode a = new Sub(c, one), b = new Sub(c, two), ab = new Mul(a, b);
+        var num = new Add(new Add(new Pow(z, 3), new Mul(three, new Mul(a, z))), ab);
+        var den = new Add(new Add(new Mul(three, new Pow(z, 2)), new Mul(three, new Mul(b, z))), new Add(ab, one));
+        return new(new Pow(new Div(num, den), 2), 100.0, (0.0, 0.0));
+    }
+
+    private static bool HasDiv(AstNode n) => n switch
+    {
+        Div => true,
+        Neg u => HasDiv(u.Operand), Conj u => HasDiv(u.Operand), ReOp u => HasDiv(u.Operand),
+        ImOp u => HasDiv(u.Operand), AbsOp u => HasDiv(u.Operand), Folded u => HasDiv(u.Operand),
+        Add a => HasDiv(a.Left) || HasDiv(a.Right),
+        Sub s => HasDiv(s.Left) || HasDiv(s.Right),
+        Mul m => HasDiv(m.Left) || HasDiv(m.Right),
+        Pow p => HasDiv(p.Base),
+        _ => false,
+    };
+
     // True when n's value is real for every z, c (its imaginary part is the constant 0).
     internal static bool IsReal(AstNode n) => n switch
     {
@@ -98,6 +140,7 @@ public sealed class R2Plan : IRealPerturbationPlan
         Add a => IsReal(a.Left) && IsReal(a.Right),
         Sub s => IsReal(s.Left) && IsReal(s.Right),
         Mul m => IsReal(m.Left) && IsReal(m.Right),
+        Div d => IsReal(d.Left) && IsReal(d.Right),
         Pow p => IsReal(p.Base),
         _ => false,
     };
@@ -112,6 +155,7 @@ public sealed class R2Plan : IRealPerturbationPlan
         Add a => HasFold(a.Left) || HasFold(a.Right),
         Sub s => HasFold(s.Left) || HasFold(s.Right),
         Mul m => HasFold(m.Left) || HasFold(m.Right),
+        Div d => HasFold(d.Left) || HasFold(d.Right),
         Pow p => HasFold(p.Base),
         _ => false,
     };
@@ -128,11 +172,18 @@ public sealed class R2Plan : IRealPerturbationPlan
         Add a => Unsupported(a.Left) ?? Unsupported(a.Right),
         Sub s => Unsupported(s.Left) ?? Unsupported(s.Right),
         Mul m => Unsupported(m.Left) ?? Unsupported(m.Right),
+        Div d => Unsupported(d.Left) ?? Unsupported(d.Right),   // #1911
         Pow p => p.Exponent < 0 ? "a negative power" : Unsupported(p.Base),
         _ => n.GetType().Name,
     };
 
     public bool ParameterPlane => true;
+
+    /// <summary>#1911 — the step divides.</summary>
+    public bool HasPoles => _pole != null;
+
+    public double PoleRatio2(double zr, double zi, double cr, double ci, double dr, double di, double er, double ei)
+        => _pole != null ? _pole(zr, zi, cr, ci, dr, di, er, ei).Re : double.MaxValue;
     public bool CanRebase { get; }
     public double Bailout2 { get; }
     public (double Re, double Im) InitialDerivative { get; }
@@ -205,7 +256,8 @@ public sealed class R2Plan : IRealPerturbationPlan
 
     // Limit (#1910): jets of four first derivatives (along Re z, Im z, Re c, Im c) and a running
     // minimum, over the folds, of the δ that reaches the fold's sign change.
-    private enum Mode { Delta, Tangent, Second, Limit }
+    // Pole (#1911): Delta's jets, and a running minimum of |Q + ΔQ|² / |Q|² over the divisions.
+    private enum Mode { Delta, Tangent, Second, Limit, Pole }
 
     private readonly record struct Cx(Expression Re, Expression Im);
 
@@ -224,7 +276,7 @@ public sealed class R2Plan : IRealPerturbationPlan
             string[] names = ["zr", "zi", "cr", "ci", "a", "b", "c", "d"];
             P = new ParameterExpression[8];
             for (int i = 0; i < 8; i++) P[i] = Expression.Parameter(typeof(double), names[i]);
-            if (mode == Mode.Limit)
+            if (mode is Mode.Limit or Mode.Pole)
             {
                 MinLimit = Expression.Variable(typeof(double), "limit");
                 Vars.Add(MinLimit);
@@ -251,6 +303,14 @@ public sealed class R2Plan : IRealPerturbationPlan
         private static Cx Im(Cx x) => new(x.Im, Zero);
         private Cx Scale(double k, Cx x) => new(Let(Expression.Multiply(Expression.Constant(k), x.Re)),
                                                 Let(Expression.Multiply(Expression.Constant(k), x.Im)));
+        // x / y (complex), as x·conj(y) / |y|².
+        private Cx CDiv(Cx x, Cx y)
+        {
+            var den = Let(Expression.Add(Expression.Multiply(y.Re, y.Re), Expression.Multiply(y.Im, y.Im)));
+            return new(Let(Expression.Divide(Expression.Add(Expression.Multiply(x.Re, y.Re), Expression.Multiply(x.Im, y.Im)), den)),
+                       Let(Expression.Divide(Expression.Subtract(Expression.Multiply(x.Im, y.Re), Expression.Multiply(x.Re, y.Im)), den)));
+        }
+
         private Cx Mul(Cx x, Cx y) => new(
             Let(Expression.Subtract(Expression.Multiply(x.Re, y.Re), Expression.Multiply(x.Im, y.Im))),
             Let(Expression.Add(Expression.Multiply(x.Re, y.Im), Expression.Multiply(x.Im, y.Re))));
@@ -282,7 +342,7 @@ public sealed class R2Plan : IRealPerturbationPlan
             Expression V(int i) => im ? x[i].Im : x[i].Re;
             var r = new Expression[x.Length];
             r[0] = Let(Expression.Call(typeof(Math).GetMethod(nameof(Math.Abs), [typeof(double)])!, V(0)));
-            if (Mode == Mode.Delta) { r[1] = DiffAbs(V(0), V(1)); return r; }
+            if (Mode is Mode.Delta or Mode.Pole) { r[1] = DiffAbs(V(0), V(1)); return r; }
             // Derivatives: the side of the kink the value is on (≥ 0 as the kernels' sign).
             var sgn = Let(Expression.Condition(Ge0(V(0)), Expression.Constant(1.0), Expression.Constant(-1.0)));
             for (int i = 1; i < x.Length; i++) r[i] = Let(Expression.Multiply(sgn, V(i)));
@@ -336,13 +396,47 @@ public sealed class R2Plan : IRealPerturbationPlan
             return Mode switch
             {
                 // (V₁ + D₁)(V₂ + D₂) − V₁V₂ = V₁·D₂ + D₁·(V₂ + D₂)
-                Mode.Delta => [v, Add(Mul(x[0], y[1]), Mul(x[1], Add(y[0], y[1])))],
+                Mode.Delta or Mode.Pole => [v, Add(Mul(x[0], y[1]), Mul(x[1], Add(y[0], y[1])))],
                 Mode.Tangent => [v, Add(Mul(x[0], y[1]), Mul(x[1], y[0]))],
                 Mode.Limit => [v, Add(Mul(x[0], y[1]), Mul(x[1], y[0])), Add(Mul(x[0], y[2]), Mul(x[2], y[0])),
                                Add(Mul(x[0], y[3]), Mul(x[3], y[0])), Add(Mul(x[0], y[4]), Mul(x[4], y[0]))],
                 _ => [v, Add(Mul(x[0], y[1]), Mul(x[1], y[0])),
                       Add(Add(Mul(x[2], y[0]), Scale(2.0, Mul(x[1], y[1]))), Mul(x[0], y[2]))],
             };
+        }
+
+        // #1911 — a quotient's jet.
+        private Cx[] DivJ(Cx[] x, Cx[] y)
+        {
+            var q = CDiv(x[0], y[0]);
+            switch (Mode)
+            {
+                case Mode.Delta:
+                    // (ΔP·Q − P·ΔQ) / (Q·(Q + ΔQ)): no difference of two nearly equal quotients.
+                    return [q, CDiv(Sub(Mul(x[1], y[0]), Mul(x[0], y[1])), Mul(y[0], Add(y[0], y[1])))];
+                case Mode.Pole:
+                {
+                    var qd = Add(y[0], y[1]);
+                    Expression M2(Cx v) => Expression.Add(Expression.Multiply(v.Re, v.Re), Expression.Multiply(v.Im, v.Im));
+                    var ratio = Let(Expression.Divide(M2(qd), M2(y[0])));
+                    Body.Add(Expression.Assign(MinLimit!, Expression.Call(typeof(Math).GetMethod(nameof(Math.Min), [typeof(double), typeof(double)])!, MinLimit!, ratio)));
+                    return [q, CDiv(Sub(Mul(x[1], y[0]), Mul(x[0], y[1])), Mul(y[0], qd))];
+                }
+                case Mode.Second:
+                {
+                    // q′ = (P′ − q·Q′)/Q, q″ = (P″ − 2·q′·Q′ − q·Q″)/Q
+                    var t = CDiv(Sub(x[1], Mul(q, y[1])), y[0]);
+                    var u = CDiv(Sub(Sub(x[2], Scale(2.0, Mul(t, y[1]))), Mul(q, y[2])), y[0]);
+                    return [q, t, u];
+                }
+                default:
+                {
+                    var r = new Cx[x.Length];
+                    r[0] = q;
+                    for (int k = 1; k < x.Length; k++) r[k] = CDiv(Sub(x[k], Mul(q, y[k])), y[0]);
+                    return r;
+                }
+            }
         }
 
         private Cx[] Const(double re, double im) => Mode switch
@@ -370,6 +464,7 @@ public sealed class R2Plan : IRealPerturbationPlan
                 case Add s: return Zip(Emit(s.Left), Emit(s.Right), Add);
                 case Sub s: return Zip(Emit(s.Left), Emit(s.Right), Sub);
                 case Mul m: return MulJ(Emit(m.Left), Emit(m.Right));
+                case Div d: return DivJ(Emit(d.Left), Emit(d.Right));   // #1911
                 case Pow w:
                 {
                     if (w.Exponent == 0) return Const(1, 0);
@@ -389,7 +484,7 @@ public sealed class R2Plan : IRealPerturbationPlan
         var jet = em.Emit(step);
         var outv = mode == Mode.Second ? jet[2] : jet[1];
         var ctor = typeof(ValueTuple<double, double>).GetConstructor([typeof(double), typeof(double)])!;
-        em.Body.Add(mode == Mode.Limit
+        em.Body.Add(mode is Mode.Limit or Mode.Pole
             ? Expression.New(ctor, em.MinLimit!, Expression.Constant(0.0))
             : Expression.New(ctor, outv.Re, outv.Im));
         return Expression.Lambda<F8>(Expression.Block(em.Vars, em.Body), em.P).Compile();

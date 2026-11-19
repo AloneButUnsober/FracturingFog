@@ -125,4 +125,12 @@ public interface IRealPerturbationPlan : IPerturbationPlan
     /// <summary>The Jacobian of the full orbit with respect to the pixel, J ← (∂f/∂z)·J + ∂f/∂c (the
     /// last term in the parameter plane only). Column 1 is ∂z/∂Re(pixel), what the sink receives.</summary>
     void JacobianStep(double zr, double zi, double cr, double ci, ref RealMat2 j);
+
+    /// <summary>#1911 — true when the step divides (then <see cref="PoleRatio2"/> is meaningful).</summary>
+    bool HasPoles { get; }
+
+    /// <summary>#1911 — min over the step's divisions of |Q + ΔQ|² / |Q|²: how much of the reference's
+    /// denominator Q the pixel's cancels. Small means Q + ΔQ lost its digits (a pixel by a pole the
+    /// reference is not by).</summary>
+    double PoleRatio2(double zr, double zi, double cr, double ci, double dr, double di, double er, double ei);
 }

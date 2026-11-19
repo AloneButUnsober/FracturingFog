@@ -8,7 +8,9 @@
 // R2Plan (conj(z)² + c as a real map, with the 2×2 matrix BLA): its deep derivative is the true
 // ∂z/∂Re(c), where TricornKernel's shallow one tracks z² + c's ("as if Mandelbrot"). #1910 (D5) adds
 // Burning Ship on the same plan type, with the diffabs folds; BurningShipKernel's shallow derivative
-// is its own sign-weighted form, the deep one the true Jacobian column.
+// is its own sign-weighted form, the deep one the true Jacobian column. #1911 (D6) adds Magnet 1 / 2
+// (division: the quotient difference; MagnetConvergence's stop at z = 1 through the engine's
+// Convergence). The kernels clamp |den|² at 1e-12 by a pole; the deep path divides exactly.
 
 using System;
 using System.Threading;
@@ -59,6 +61,8 @@ public sealed partial class EscapeTimeCalculator : IDeepCentre
     // Tricorn's plan compiles its delegates once (R2Plan is immutable and thread-safe).
     private static readonly Lazy<R2Plan> TricornPlan = new(R2Plan.Tricorn);
     private static readonly Lazy<R2Plan> BurningShipPlan = new(R2Plan.BurningShip);   // #1910
+    private static readonly Lazy<R2Plan> Magnet1Plan = new(R2Plan.Magnet1);           // #1911
+    private static readonly Lazy<R2Plan> Magnet2Plan = new(R2Plan.Magnet2);
 
     // The plan for the deep path, or null when this family / zoom stays on the SP core.
     private IPerturbationPlan? DeepPlan()
@@ -71,6 +75,8 @@ public sealed partial class EscapeTimeCalculator : IDeepCentre
             FractalType.Multibrot => new PowerPlan(Math.Max(2, FractalParameters.MultibrotExponent), parameterPlane: true),
             FractalType.Tricorn => TricornPlan.Value,   // #1909
             FractalType.BurningShip => BurningShipPlan.Value,   // #1910: the diffabs folds
+            FractalType.Magnet1 => Magnet1Plan.Value,           // #1911: the quotient difference
+            FractalType.Magnet2 => Magnet2Plan.Value,
             _ => null,
         };
     }
@@ -93,17 +99,33 @@ public sealed partial class EscapeTimeCalculator : IDeepCentre
         double eps = FractalParameters.BlaTolerance > 0 && double.IsFinite(FractalParameters.BlaTolerance)
             ? Math.Min(FractalParameters.BlaTolerance, PerturbationEngine.DefaultBlaEpsilon) : PerturbationEngine.DefaultBlaEpsilon;
 
+        // #1911 — Magnet: no dz/dc (the kernels leave it 0; normals flat), and with MagnetConvergence
+        // a second stop at z = 1 coloured as CalculateMagnet colours it.
+        bool magnet = FractalType is FractalType.Magnet1 or FractalType.Magnet2;
+        PerturbationEngine.Convergence? converge = null;
+        if (magnet && FractalParameters.MagnetConvergence)
+        {
+            double convEps = Math.Max(1e-12, FractalParameters.MagnetConvergenceEpsilon), logEps = Math.Log(convEps);
+            converge = new PerturbationEngine.Convergence(1.0, 0.0, convEps, (idx, iter, zr, zi, dPrev) =>
+            {
+                if (_batchCount is { } bcc) bcc[idx]++;
+                double dCur = Math.Sqrt((zr - 1.0) * (zr - 1.0) + zi * zi);
+                FillMagnetConverged(idx, iter, zr, zi, dPrev, dCur, convEps, logEps, maxIt, map);
+            });
+        }
+
         LastPerturbationStats = PerturbationEngine.Render(plan, centre, scale, Width, Height, maxIt,
             (idx, iter, zr, zi, dvr, dvi) =>
             {
                 if (_batchCount is { } bcs) bcs[idx]++;
+                if (magnet) { dvr = 0; dvi = 0; }
                 IterationBuffer[idx] = iter;
                 FillAuxAndColor(idx, iter, maxIt, zr, zi, dvr, dvi, map);
                 // Phase 2.1 (the video per-row cap): a pixel that ran to its row's cap is in set.
                 if (perRow != null && iter >= perRow[idx / width] && perRow[idx / width] < maxIt)
                     IterationBuffer[idx] = maxIt;
             },
-            ct, perRow, _mask != null ? Marked : null, useBla: true, blaEpsilon: eps);
+            ct, perRow, _mask != null ? Marked : null, useBla: true, blaEpsilon: eps, converge: converge);
         LastPrecisionLabel = "PT";
         return true;
     }

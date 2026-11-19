@@ -206,14 +206,16 @@ public sealed class S1909ConjR2Tests(ITestOutputHelper output)
     // view has structure at every depth and pixels escape early (not the chaotic floor of a level-set
     // boundary). Newton in R² from a double guess (found by a grid search in double); the Jacobian is a
     // finite difference in BigFloat, solved in double: each step gains ~16 digits.
-    internal static ExactCentre Misiurewicz(Step f, double gr, double gi, int zl)
+    internal static ExactCentre Misiurewicz(Step f, double gr, double gi, int zl, int pre = 3, int period = 1)
     {
         int p = BigFloat.PrecisionForZoom(zl) + 32;
         (BigFloat, BigFloat) G(BigFloat cr, BigFloat ci)
         {
+            // z_{pre + period} − z_pre (#1911: a repelling cycle of any period; z₄ − z₃ by default).
             BigFloat zr = BigFloat.Zero(p), zi = BigFloat.Zero(p);
-            for (int k = 0; k < 3; k++) (zr, zi) = f(zr, zi, cr, ci, p);
-            var (nr, ni) = f(zr, zi, cr, ci, p);
+            for (int k = 0; k < pre; k++) (zr, zi) = f(zr, zi, cr, ci, p);
+            BigFloat nr = zr, ni = zi;
+            for (int k = 0; k < period; k++) (nr, ni) = f(nr, ni, cr, ci, p);
             return (BigFloat.Sub(nr, zr, p), BigFloat.Sub(ni, zi, p));
         }
         BigFloat r = BigFloat.FromDouble(gr, p), i = BigFloat.FromDouble(gi, p);
