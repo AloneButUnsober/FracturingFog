@@ -21,21 +21,39 @@ public interface IPerturbationPlan
     /// pixel is z₀ (Julia type): δ₀ = the pixel offset, ε = 0, and there is no rebase.</summary>
     bool ParameterPlane { get; }
 
+    /// <summary>True when Zhuoran's rebase applies: the parameter plane with z₀ = 0 a critical point
+    /// of f (∂f/∂z = 0 there for every c), so restarting the reference index at Z₀ = 0 also restarts
+    /// next to the critical point. Otherwise glitches go through <see cref="IsGlitch"/> and secondary
+    /// references (#1908).</summary>
+    bool CanRebase { get; }
+
     /// <summary>Escape radius squared.</summary>
     double Bailout2 { get; }
+
+    /// <summary>dz/d(pixel) at n = 0: 1 by EscapeTimeCalculator's kernels' convention (Multibrot,
+    /// Julia); 0 for z₀ = 0 when the derivative is the true dz/dc (User Equation).</summary>
+    (double Re, double Im) InitialDerivative { get; }
+
+    /// <summary>Precision lost (when no rebase applies): the pixel's z sits by a critical point the
+    /// reference Z does not. Pauldelbrot's test generalised as |f′(z)|² &lt; τ·|f′(Z)|² (for z² it
+    /// is his |z|² &lt; τ·|Z|²). <paramref name="cr"/>, <paramref name="ci"/>: the reference's c.</summary>
+    bool IsGlitch(double zr, double zi, double Zr, double Zi, double cr, double ci, double tau2);
 
     /// <summary>One step of the reference orbit at <paramref name="prec"/> bits.</summary>
     void RefStep(ref BigFloat zr, ref BigFloat zi, BigFloat cr, BigFloat ci, int prec);
 
-    /// <summary>δ ← f(Z + δ, C + ε) − f(Z, C), in double, with every term of order δ or ε.</summary>
-    void DeltaStep(double zr, double zi, ref double dr, ref double di, double er, double ei);
+    /// <summary>δ ← f(Z + δ, C + ε) − f(Z, C), in double, with every term of order δ or ε.
+    /// <paramref name="cr"/>, <paramref name="ci"/>: the reference's c (a coefficient here, so double
+    /// is enough).</summary>
+    void DeltaStep(double zr, double zi, double cr, double ci, ref double dr, ref double di, double er, double ei);
 
-    /// <summary>The derivative of the full orbit: d ← f′(z)·d (+ 1 in the parameter plane).</summary>
-    void DerivStep(double zr, double zi, ref double dvr, ref double dvi);
+    /// <summary>The derivative of the full orbit at z (c the pixel's, to double): d ← f′(z)·d (+ ∂f/∂c
+    /// in the parameter plane).</summary>
+    void DerivStep(double zr, double zi, double cr, double ci, ref double dvr, ref double dvi);
 
     /// <summary>The one-step bilinear approximation at Z: A = ∂f/∂z, B = ∂f/∂c (0 in the dynamic
     /// plane), and the radius in which the dropped terms stay below ε of the linear one.</summary>
-    Bla Level0(double zr, double zi, double epsilon);
+    Bla Level0(double zr, double zi, double cr, double ci, double epsilon);
 }
 
 /// <summary>f(z) = z^d + c, integer d ≥ 2.</summary>
@@ -64,7 +82,12 @@ public sealed class PowerPlan : IPerturbationPlan
 
     public int Degree => _d;
     public bool ParameterPlane { get; }
+    public bool CanRebase => ParameterPlane;   // z^d's critical point is 0 = z₀
     public double Bailout2 { get; }
+    public (double Re, double Im) InitialDerivative => (1, 0);
+
+    public bool IsGlitch(double zr, double zi, double Zr, double Zi, double cr, double ci, double tau2)
+        => zr * zr + zi * zi < tau2 * (Zr * Zr + Zi * Zi);   // Pauldelbrot
 
     /// <summary>Julia's c as BigFloat at <paramref name="prec"/> bits (the reference's c).</summary>
     public (BigFloat Re, BigFloat Im) JuliaC(int prec) => (BigFloat.FromDouble(_jcr, prec), BigFloat.FromDouble(_jci, prec));
@@ -83,7 +106,7 @@ public sealed class PowerPlan : IPerturbationPlan
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void DeltaStep(double zr, double zi, ref double dr, ref double di, double er, double ei)
+    public void DeltaStep(double zr, double zi, double cr, double ci, ref double dr, ref double di, double er, double ei)
     {
         // (Z+δ)^d − Z^d = δ · Σ_{k=1..d} C(d,k) Z^{d−k} δ^{k−1}, by Horner in δ from k = d down.
         // Z^{d−k} from the bottom up as k falls: start at Z^0 for k = d.
@@ -103,7 +126,7 @@ public sealed class PowerPlan : IPerturbationPlan
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void DerivStep(double zr, double zi, ref double dvr, ref double dvi)
+    public void DerivStep(double zr, double zi, double cr, double ci, ref double dvr, ref double dvi)
     {
         PowM1(zr, zi, out double ar, out double ai);   // z^{d−1}
         ar *= _d; ai *= _d;
@@ -112,7 +135,7 @@ public sealed class PowerPlan : IPerturbationPlan
         dvr = nr; dvi = ni;
     }
 
-    public Bla Level0(double zr, double zi, double epsilon)
+    public Bla Level0(double zr, double zi, double cr, double ci, double epsilon)
     {
         PowM1(zr, zi, out double ar, out double ai);
         // The dropped terms start with C(d,2)·Z^{d−2}·δ²; keeping it below ε·|d·Z^{d−1}·δ| needs

@@ -26,7 +26,7 @@ using FracturingFog.Models;
 
 namespace FracturingFog;
 
-public sealed class UserEquationCalculator : IFractalCalculator, IDeepCentre, FracturingFog.Rendering.IAdaptiveAaCalculator, IHeightFieldSource, ITrapFieldSource, ISupportsHistogramEq
+public sealed partial class UserEquationCalculator : IFractalCalculator, IDeepCentre, FracturingFog.Rendering.IAdaptiveAaCalculator, IHeightFieldSource, ITrapFieldSource, ISupportsHistogramEq
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -367,6 +367,9 @@ public sealed class UserEquationCalculator : IFractalCalculator, IDeepCentre, Fr
             }
         }
         var cond = _condSbx;
+
+        // #1908 — a polynomial equation past double: the perturbation engine.
+        if (TryCalculateDeep(sbx, seed, cond, ct)) return;
 
         ColorMap.MaxIterations = MaxIterations;
         double scale = (3.5 / Math.Max(Width, Height)) / Zoom;

@@ -6,8 +6,9 @@
 // in double, the plan's bilinear approximation, and the glitch handling the plan allows:
 //   • parameter plane (critical point z₀ = 0): Zhuoran's rebase — when |Z_m + δ| < |δ| or the
 //     reference runs out, δ ← Z_m + δ and m ← 0;
-//   • dynamic plane (Julia: z₀ is the pixel, no rebase): Pauldelbrot's test |Z_m + δ|² < τ·|Z_m|²
-//     (and the reference running out) marks the pixel glitched; up to MaxReferences secondary
+//   • otherwise (Julia: z₀ is the pixel; or a formula whose critical point is not z₀ = 0, #1908):
+//     the plan's glitch test (Pauldelbrot's |Z_m + δ|² < τ·|Z_m|², generalised to |f′(z)|² <
+//     τ·|f′(Z)|²) and the reference running out mark the pixel glitched; up to MaxReferences secondary
 //     references, each at the glitched pixel that lasted longest, re-render the glitched pixels; any
 //     left are iterated directly in BigFloat.
 // Sources (Docs/Resources-Bibliography.md): K. I. Martin (perturbation), Pauldelbrot (glitch test),
@@ -52,6 +53,7 @@ public static class PerturbationEngine
         public int Len;           // valid Z_0 .. Z_{Len−1}
         public bool HasEsc;       // the reference escaped: EscR / EscI is Z_{Len} (outside the bailout)
         public double EscR, EscI;
+        public double Cr, Ci;     // the reference's c, rounded to double (a coefficient in the δ step)
         public BlaTable? Bla;
         public double OffX, OffY; // the reference's offset from the view centre, in complex units
     }
@@ -75,10 +77,11 @@ public static class PerturbationEngine
             var ci = BigFloat.Add(centre.Im, BigFloat.FromDouble(offY, prec), prec);
             var r = BuildReference(plan, cr, ci, jcr, jci, prec, maxIter, ct);
             r.OffX = offX; r.OffY = offY;
+            (r.Cr, r.Ci) = plan.ParameterPlane ? (cr.ToDouble(), ci.ToDouble()) : (jcr.ToDouble(), jci.ToDouble());
             if (useBla && r.Len > 2)
             {
                 var level0 = new Bla[r.Len];
-                for (int n = 0; n < r.Len; n++) level0[n] = plan.Level0(r.Zr[n], r.Zi[n], blaEpsilon);
+                for (int n = 0; n < r.Len; n++) level0[n] = plan.Level0(r.Zr[n], r.Zi[n], r.Cr, r.Ci, blaEpsilon);
                 r.Bla = new BlaTable(level0, r.Len, dcMax, blaEpsilon);
             }
             return r;
@@ -191,7 +194,9 @@ public static class PerturbationEngine
         double er, ei, dr, di;
         if (pp) { er = ox - r.OffX; ei = oy - r.OffY; dr = 0; di = 0; }
         else { er = 0; ei = 0; dr = ox - r.OffX; di = oy - r.OffY; }
-        double dvr = 1, dvi = 0;   // the derivative of the full orbit (EscapeTimeCalculator's kernels start at 1)
+        var (dvr, dvi) = plan.InitialDerivative;   // the derivative of the full orbit
+        bool rebase = pp && plan.CanRebase;
+        double pcr = pp ? r.Cr + er : r.Cr, pci = pp ? r.Ci + ei : r.Ci;   // the pixel's c, to double
         double zr = 0, zi = 0;
         double bail = plan.Bailout2;
         var bla = r.Bla;
@@ -224,9 +229,9 @@ public static class PerturbationEngine
             zr = Zr + dr; zi = Zi + di;
             double z2 = zr * zr + zi * zi;
             if (z2 >= bail) break;
-            plan.DerivStep(zr, zi, ref dvr, ref dvi);
+            plan.DerivStep(zr, zi, pcr, pci, ref dvr, ref dvi);
 
-            if (pp)
+            if (rebase)
             {
                 if (z2 < dr * dr + di * di || m + 1 >= r.Len)
                 {
@@ -234,14 +239,14 @@ public static class PerturbationEngine
                     rebases++;
                 }
             }
-            else if (m + 1 >= r.Len || z2 < GlitchTolerance2 * (Zr * Zr + Zi * Zi))
+            else if (m + 1 >= r.Len || plan.IsGlitch(zr, zi, Zr, Zi, r.Cr, r.Ci, GlitchTolerance2))
             {
                 // The reference ends here. A pixel near it escapes with it: one δ step onto the
                 // escaped point, kept only when it escapes (then |δ| ≪ |Z| and nothing cancelled).
-                if (m + 1 >= r.Len && r.HasEsc && iter + 1 < maxIter && !(z2 < GlitchTolerance2 * (Zr * Zr + Zi * Zi)))
+                if (m + 1 >= r.Len && r.HasEsc && iter + 1 < maxIter && !plan.IsGlitch(zr, zi, Zr, Zi, r.Cr, r.Ci, GlitchTolerance2))
                 {
                     double tr = dr, ti = di;
-                    plan.DeltaStep(Zr, Zi, ref tr, ref ti, er, ei);
+                    plan.DeltaStep(Zr, Zi, r.Cr, r.Ci, ref tr, ref ti, er, ei);
                     double ezr = r.EscR + tr, ezi = r.EscI + ti;
                     if (ezr * ezr + ezi * ezi >= bail)
                     {
@@ -251,7 +256,7 @@ public static class PerturbationEngine
                 }
                 return iter;   // glitched: another reference, or direct iteration, takes it
             }
-            plan.DeltaStep(Zr, Zi, ref dr, ref di, er, ei);
+            plan.DeltaStep(Zr, Zi, r.Cr, r.Ci, ref dr, ref di, er, ei);
             m++;
         }
         // In set: z after the last step, as the direct loop leaves it.
@@ -270,14 +275,15 @@ public static class PerturbationEngine
         BigFloat zr, zi, kr, ki;
         if (plan.ParameterPlane) { zr = BigFloat.Zero(prec); zi = BigFloat.Zero(prec); kr = pr; ki = pi; }
         else { zr = pr; zi = pi; kr = jcr; ki = jci; }
-        double dvr = 1, dvi = 0, a = 0, b = 0;
+        var (dvr, dvi) = plan.InitialDerivative;
+        double a = 0, b = 0, pcr = kr.ToDouble(), pci = ki.ToDouble();
         int iter = 0;
         for (; iter < maxIter; iter++)
         {
             if ((iter & 1023) == 0) ct.ThrowIfCancellationRequested();
             a = zr.ToDouble(); b = zi.ToDouble();
             if (a * a + b * b >= plan.Bailout2) break;
-            plan.DerivStep(a, b, ref dvr, ref dvi);
+            plan.DerivStep(a, b, pcr, pci, ref dvr, ref dvi);
             plan.RefStep(ref zr, ref zi, kr, ki, prec);
         }
         if (iter >= maxIter) { a = zr.ToDouble(); b = zi.ToDouble(); }
