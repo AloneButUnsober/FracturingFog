@@ -36,6 +36,13 @@
 // A pixel whose Q + ΔQ cancels most of Q (by a pole the reference is not by) is flagged
 // (PoleRatio2) and goes to another reference or to direct iteration. Derivatives use the quotient
 // rule; the second-order radius grows the closer Q is to 0, so the BLA shrinks by poles.
+//
+// #1913 (D8) adds sin, cos, exp, log, sqrt and pow with a constant exponent: their differences come
+// from PerturbFunctions (e^V·expm1(D), log1p(D/V), V^p·expm1(p·L), sum-to-product), with the principal
+// branch kept exactly (log's 2πk). log and pow are not analytic on their cut or at 0: the BLA radius
+// stays inside the distance to the cut (Limit), and a pixel whose argument cancels the reference's by
+// 0 is flagged (Pole). The reference evaluates them in BigFloat (BigFloatMath, #1914). A plan can also
+// be on the dynamic plane (z₀ = the pixel, c a constant in the AST): Glynn.
 
 using System;
 using System.Collections.Generic;
@@ -58,16 +65,17 @@ public sealed class R2Plan : IRealPerturbationPlan
     private readonly F8? _limit;  // (z, c, |ε|max, _) → the δ that reaches the nearest fold's sign change (#1910)
     private readonly F8? _pole;   // (Z, C, δ, ε) → min |Q + ΔQ|² / |Q|² over the divisions (#1911)
 
-    private R2Plan(AstNode step, double bailout2, (double, double) initialDerivative)
+    private R2Plan(AstNode step, double bailout2, (double, double) initialDerivative, bool parameterPlane = true)
     {
         _step = step;
+        ParameterPlane = parameterPlane;
         Bailout2 = bailout2;
         InitialDerivative = initialDerivative;
         _delta = Compile(step, Mode.Delta);
         _tan = Compile(step, Mode.Tangent);
         _sec = Compile(step, Mode.Second);
-        _limit = HasFold(step) ? Compile(step, Mode.Limit) : null;
-        _pole = HasDiv(step) ? Compile(step, Mode.Pole) : null;
+        _limit = HasFold(step) || HasCut(step) ? Compile(step, Mode.Limit) : null;
+        _pole = HasDiv(step) || HasCut(step) ? Compile(step, Mode.Pole) : null;
         // Rebasing restarts at Z₀ = 0: valid as a reference only when 0 is a critical point for
         // every c, i.e. ∂f/∂z = 0 at z = 0. Checked at three generic c: a polynomial Jacobian that
         // is not identically zero is not exactly 0.0 at all of them.
@@ -77,7 +85,7 @@ public sealed class R2Plan : IRealPerturbationPlan
             var j = DzJacobian(0, 0, cr, ci);
             zero &= j.M11 == 0 && j.M12 == 0 && j.M21 == 0 && j.M22 == 0;
         }
-        CanRebase = zero;
+        CanRebase = zero && parameterPlane;
     }
 
     /// <summary>The plan for z_{n+1} = <paramref name="step"/>(z, c), z₀ = 0, the pixel c; null with
@@ -118,6 +126,54 @@ public sealed class R2Plan : IRealPerturbationPlan
         var den = new Add(new Add(new Mul(three, new Pow(z, 2)), new Mul(three, new Mul(b, z))), new Add(ab, one));
         return new(new Pow(new Div(num, den), 2), 100.0, (0.0, 0.0));
     }
+
+    /// <summary>#1913 — Glynn, z^1.5 + c on the dynamic plane (z₀ = the pixel), GlynnKernel's bailout (|z|² ≥ 4).
+    /// The kernel reseeds an orbit that lands exactly on 0; that measure-zero case is not reproduced.</summary>
+    public static R2Plan Glynn(double cr, double ci)
+        => new(new Add(new PowC(new ZRef(), new RealConst(1.5)),
+                       ci == 0 ? new RealConst(cr) : new Add(new RealConst(cr), new Mul(new RealConst(ci), new ImagUnit()))),
+               4.0, (1.0, 0.0), parameterPlane: false);
+
+    // #1913 — a node whose function has a branch cut / a singular point at 0 (log, sqrt, pow).
+    private static bool HasCut(AstNode n) => n switch
+    {
+        Log or Sqrt or PowC => true,
+        Sin u => HasCut(u.Operand), Cos u => HasCut(u.Operand), Exp u => HasCut(u.Operand),
+        Neg u => HasCut(u.Operand), Conj u => HasCut(u.Operand), ReOp u => HasCut(u.Operand),
+        ImOp u => HasCut(u.Operand), AbsOp u => HasCut(u.Operand), Folded u => HasCut(u.Operand),
+        Add a => HasCut(a.Left) || HasCut(a.Right),
+        Sub s => HasCut(s.Left) || HasCut(s.Right),
+        Mul m => HasCut(m.Left) || HasCut(m.Right),
+        Div d => HasCut(d.Left) || HasCut(d.Right),
+        Pow p => HasCut(p.Base),
+        _ => false,
+    };
+
+    // A sub-expression with no z, c or prev: a constant (pow's exponent).
+    private static bool IsConstant(AstNode n) => n switch
+    {
+        RealConst or ImagUnit => true,
+        Neg u => IsConstant(u.Operand),
+        Add a => IsConstant(a.Left) && IsConstant(a.Right),
+        Sub s => IsConstant(s.Left) && IsConstant(s.Right),
+        Mul m => IsConstant(m.Left) && IsConstant(m.Right),
+        Div d => IsConstant(d.Left) && IsConstant(d.Right),
+        Pow p => IsConstant(p.Base),
+        _ => false,
+    };
+
+    internal static System.Numerics.Complex ConstValue(AstNode n) => n switch
+    {
+        RealConst k => k.Value,
+        ImagUnit => System.Numerics.Complex.ImaginaryOne,
+        Neg u => -ConstValue(u.Operand),
+        Add a => ConstValue(a.Left) + ConstValue(a.Right),
+        Sub s => ConstValue(s.Left) - ConstValue(s.Right),
+        Mul m => ConstValue(m.Left) * ConstValue(m.Right),
+        Div d => ConstValue(d.Left) / ConstValue(d.Right),
+        Pow p => System.Numerics.Complex.Pow(ConstValue(p.Base), p.Exponent),
+        _ => throw new NotSupportedException(n.GetType().Name),
+    };
 
     private static bool HasDiv(AstNode n) => n switch
     {
@@ -173,11 +229,14 @@ public sealed class R2Plan : IRealPerturbationPlan
         Sub s => Unsupported(s.Left) ?? Unsupported(s.Right),
         Mul m => Unsupported(m.Left) ?? Unsupported(m.Right),
         Div d => Unsupported(d.Left) ?? Unsupported(d.Right),   // #1911
+        Sin u => Unsupported(u.Operand), Cos u => Unsupported(u.Operand), Exp u => Unsupported(u.Operand),   // #1913
+        Log u => Unsupported(u.Operand), Sqrt u => Unsupported(u.Operand),
+        PowC w => IsConstant(w.Exp) ? Unsupported(w.Base) : "pow with a non-constant exponent",
         Pow p => p.Exponent < 0 ? "a negative power" : Unsupported(p.Base),
         _ => n.GetType().Name,
     };
 
-    public bool ParameterPlane => true;
+    public bool ParameterPlane { get; }
 
     /// <summary>#1911 — the step divides.</summary>
     public bool HasPoles => _pole != null;
@@ -444,6 +503,59 @@ public sealed class R2Plan : IRealPerturbationPlan
             }
         }
 
+        // #1913 — an elementary function's jet. kind: 0 exp, 1 log, 2 sin, 3 cos, 4 pow p (sqrt = pow ½).
+        private Cx[] FuncJ(int kind, Cx[] x, System.Numerics.Complex p)
+        {
+            var PF = typeof(PerturbFunctions);
+            Expression Pr = Expression.Constant(p.Real), Pi = Expression.Constant(p.Imaginary), Kd = Expression.Constant(kind);
+            Cx Field(ParameterExpression q, string a, string b) => new(Expression.Property(q, a), Expression.Property(q, b));
+            ParameterExpression LetQ(Expression call)
+            {
+                var v = Expression.Variable(typeof(Q4));
+                Vars.Add(v); Body.Add(Expression.Assign(v, call));
+                return v;
+            }
+            Expression M2(Cx v) => Expression.Add(Expression.Multiply(v.Re, v.Re), Expression.Multiply(v.Im, v.Im));
+            Expression MinInto(Expression cand)
+                => Expression.Assign(MinLimit!, Expression.Call(typeof(Math).GetMethod(nameof(Math.Min), [typeof(double), typeof(double)])!, MinLimit!, cand));
+            bool cut = kind is 1 or 4;
+            if (Mode is Mode.Delta or Mode.Pole)
+            {
+                var name = kind switch { 0 => nameof(PerturbFunctions.ExpD), 1 => nameof(PerturbFunctions.LogD), 2 => nameof(PerturbFunctions.SinD), 3 => nameof(PerturbFunctions.CosD), _ => nameof(PerturbFunctions.PowD) };
+                var m = PF.GetMethod(name)!;
+                var q = LetQ(kind == 4 ? Expression.Call(m, x[0].Re, x[0].Im, x[1].Re, x[1].Im, Pr, Pi)
+                                       : Expression.Call(m, x[0].Re, x[0].Im, x[1].Re, x[1].Im));
+                if (Mode == Mode.Pole && cut)
+                {
+                    // |V + D|² / |V|²: the pixel's argument by 0 where the reference's is not.
+                    var sum = new Cx(Let(Expression.Add(x[0].Re, x[1].Re)), Let(Expression.Add(x[0].Im, x[1].Im)));
+                    Body.Add(MinInto(Expression.Divide(M2(sum), M2(x[0]))));
+                }
+                return [Field(q, "A", "B"), Field(q, "C", "D")];
+            }
+            var d1 = LetQ(Expression.Call(PF.GetMethod(nameof(PerturbFunctions.Deriv1))!, Kd, x[0].Re, x[0].Im, Pr, Pi));
+            Cx f = Field(d1, "A", "B"), fp = Field(d1, "C", "D");
+            var r = new Cx[x.Length];
+            r[0] = f;
+            for (int k = 1; k < x.Length; k++) r[k] = Mul(fp, x[k]);
+            if (Mode == Mode.Second)
+            {
+                var d2 = LetQ(Expression.Call(PF.GetMethod(nameof(PerturbFunctions.Deriv2))!, Kd, x[0].Re, x[0].Im, Pr, Pi));
+                r[2] = Add(Mul(Field(d2, "A", "B"), Mul(x[1], x[1])), Mul(fp, x[2]));
+            }
+            if (Mode == Mode.Limit && cut)
+            {
+                // Stay off the cut: (distance − ‖∇_c V‖·|ε|max) / ‖∇_z V‖ (Frobenius norms, an upper bound).
+                var gz = Let(Expression.Call(typeof(Math).GetMethod(nameof(Math.Sqrt))!, Expression.Add(M2(x[1]), M2(x[2]))));
+                var gc = Let(Expression.Call(typeof(Math).GetMethod(nameof(Math.Sqrt))!, Expression.Add(M2(x[3]), M2(x[4]))));
+                var dist = Let(Expression.Call(PF.GetMethod(nameof(PerturbFunctions.CutDistance))!, x[0].Re, x[0].Im));
+                var room = Let(Expression.Subtract(dist, Expression.Multiply(gc, P[4])));
+                Body.Add(MinInto(Expression.Condition(Expression.LessThanOrEqual(room, Zero), Zero,
+                    Expression.Condition(Expression.GreaterThan(gz, Zero), Expression.Divide(room, gz), Expression.Constant(double.MaxValue)))));
+            }
+            return r;
+        }
+
         private Cx[] Const(double re, double im) => Mode switch
         {
             Mode.Second => [K(re, im), K(0, 0), K(0, 0)],
@@ -471,6 +583,12 @@ public sealed class R2Plan : IRealPerturbationPlan
                 case Sub s: return Zip(Emit(s.Left), Emit(s.Right), Sub);
                 case Mul m: return MulJ(Emit(m.Left), Emit(m.Right));
                 case Div d: return DivJ(Emit(d.Left), Emit(d.Right));   // #1911
+                case Exp u: return FuncJ(0, Emit(u.Operand), 0);           // #1913
+                case Log u: return FuncJ(1, Emit(u.Operand), 0);
+                case Sin u: return FuncJ(2, Emit(u.Operand), 0);
+                case Cos u: return FuncJ(3, Emit(u.Operand), 0);
+                case Sqrt u: return FuncJ(4, Emit(u.Operand), 0.5);
+                case PowC w: return FuncJ(4, Emit(w.Base), ConstValue(w.Exp));
                 case Pow w:
                 {
                     if (w.Exponent == 0) return Const(1, 0);

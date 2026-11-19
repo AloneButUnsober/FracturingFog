@@ -232,7 +232,7 @@ public sealed class S1908UserEquationDeepTests(ITestOutputHelper output)
     }
 
     [Theory]
-    [InlineData("sin(z) + c", null, null, "Sin")]
+    [InlineData("atan(z) + c", null, null, "Atan")]   // #1913: sin, cos, exp, log, pow now go deep; inverse trig does not
     [InlineData("z^2 + c", "c", null, "seed")]
     [InlineData("z^2 + c", null, "abs(z) < 1e-8", "condition")]
     public void Outside_The_Slice_The_Interpreter_Keeps_The_Frame(string eq, string? seed, string? cond, string reason)

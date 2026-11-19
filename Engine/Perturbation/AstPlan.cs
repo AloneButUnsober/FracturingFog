@@ -144,6 +144,22 @@ public sealed class AstPlan : IPerturbationPlan
             // #1910 — abs of a real value (R2Plan admits no other), and Folded.
             case AbsOp u: { var (a, _) = Eval(u.Operand, zr, zi, wr, wi, cr, ci, p); return (a.Abs(), BigFloat.Zero(p)); }
             case Folded u: { var (a, b) = Eval(u.Operand, zr, zi, wr, wi, cr, ci, p); return (a.Abs(), b.Abs()); }
+            // #1913 / #1914 — the elementary functions on BigFloatMath. log of 0 gives a value past any
+            // bailout (the orbit is at a pole); pow's exponent is a constant sub-expression.
+            case Exp u: { var (a, b) = Eval(u.Operand, zr, zi, wr, wi, cr, ci, p); return BigFloatMath.CExp(a, b, p); }
+            case Sin u: { var (a, b) = Eval(u.Operand, zr, zi, wr, wi, cr, ci, p); return BigFloatMath.CSin(a, b, p); }
+            case Cos u: { var (a, b) = Eval(u.Operand, zr, zi, wr, wi, cr, ci, p); return BigFloatMath.CCos(a, b, p); }
+            case Log u:
+            {
+                var (a, b) = Eval(u.Operand, zr, zi, wr, wi, cr, ci, p);
+                return a.IsZero && b.IsZero ? (BigFloat.FromDouble(-1e300, p), BigFloat.Zero(p)) : BigFloatMath.CLog(a, b, p);
+            }
+            case Sqrt u: { var (a, b) = Eval(u.Operand, zr, zi, wr, wi, cr, ci, p); return BigFloatMath.CPow(a, b, BigFloat.FromDouble(0.5, p), BigFloat.Zero(p), p); }
+            case PowC w:
+            {
+                var (a, b) = Eval(w.Base, zr, zi, wr, wi, cr, ci, p); var (e, f) = Eval(w.Exp, zr, zi, wr, wi, cr, ci, p);
+                return BigFloatMath.CPow(a, b, e, f, p);
+            }
             case Div d:   // #1911 — x·conj(y) / |y|²; an exact pole gives a value past any bailout
             {
                 var (a, b) = Eval(d.Left, zr, zi, wr, wi, cr, ci, p); var (c, e) = Eval(d.Right, zr, zi, wr, wi, cr, ci, p);
