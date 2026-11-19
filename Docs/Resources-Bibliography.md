@@ -493,6 +493,9 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
     complex multiplier), with code generation.
   - **FF use:** `Docs/Technical/Deep-Zoom-All-Families-DesignPlan.md` §4.3, §5.2 (epic #1253). FF
     claims no novelty for automatic derivation over that operator set.
+    - `Engine/Perturbation/R2Plan.cs` (#1909) perturbs Tricorn and user formulas with conj / re /
+      im operator by operator.
+    - A product's exact difference is V₁·D₂ + D₁·(V₂ + D₂).
 - <a id="mathr-deep-zoom-2022"></a>**mathr.** *Deep zoom theory and practice (again)*, 2022-02-21,
   <https://mathr.co.uk/blog/2022-02-21_deep_zoom_theory_and_practice_again.html> (read 2026-11-19).
   - **Bilinear Approximation:** expands on Zhuoran's BLA.
@@ -503,6 +506,9 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
   - **Rebasing:** implemented only for formulas with a single critical point at 0; hybrids need one
     reference per phase.
   - **FF use:** the same design plan, §3, §4.2–4.3.
+    - `Engine/Perturbation/Bla2.cs` (#1909) is the 2×2 matrix BLA: merge and radius with operator
+      norms, for Tricorn and conj / re / im formulas.
+    - Rebasing is used only where ∂f/∂z vanishes at z = 0.
 - <a id="ultra-fractal-perturbation"></a>**Frederik Slijkerman / Ultra Fractal.** *Perturbation equations*, Ultra Fractal formula
   documentation, <https://www.ultrafractal.com/help/writing/formulas/perturbationequations.html> (read
   2026-11-19; the page states no version).

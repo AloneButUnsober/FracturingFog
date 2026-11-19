@@ -55,6 +55,7 @@ public static class PerturbationEngine
         public double EscR, EscI;
         public double Cr, Ci;     // the reference's c, rounded to double (a coefficient in the δ step)
         public BlaTable? Bla;
+        public Bla2Table? Bla2;   // #1909 — a real (non-conformal) plan's matrix BLA
         public double OffX, OffY; // the reference's offset from the view centre, in complex units
     }
 
@@ -78,7 +79,13 @@ public static class PerturbationEngine
             var r = BuildReference(plan, cr, ci, jcr, jci, prec, maxIter, ct);
             r.OffX = offX; r.OffY = offY;
             (r.Cr, r.Ci) = plan.ParameterPlane ? (cr.ToDouble(), ci.ToDouble()) : (jcr.ToDouble(), jci.ToDouble());
-            if (useBla && r.Len > 2)
+            if (useBla && r.Len > 2 && plan is IRealPerturbationPlan rp)
+            {
+                var level0 = new Bla2[r.Len];
+                for (int n = 0; n < r.Len; n++) level0[n] = rp.Level0R2(r.Zr[n], r.Zi[n], r.Cr, r.Ci, blaEpsilon);
+                r.Bla2 = new Bla2Table(level0, r.Len, dcMax);
+            }
+            else if (useBla && r.Len > 2)
             {
                 var level0 = new Bla[r.Len];
                 for (int n = 0; n < r.Len; n++) level0[n] = plan.Level0(r.Zr[n], r.Zi[n], r.Cr, r.Ci, blaEpsilon);
@@ -108,7 +115,7 @@ public static class PerturbationEngine
                 int idx = y * width + x;
                 if (marked != null && !marked(idx)) continue;
                 var (ox, oy) = Offset(x, y);
-                int g = Pixel(plan, main, ox, oy, rowMax, idx, sink, ref rb, ref sk);
+                int g = PixelAny(plan, main, ox, oy, rowMax, idx, sink, ref rb, ref sk);
                 if (g >= 0) glitched.Add((idx, g));
             }
             Interlocked.Add(ref rebases, rb);
@@ -135,7 +142,7 @@ public static class PerturbationEngine
                 int rowMax = rowMaxIter != null && y < rowMaxIter.Length && rowMaxIter[y] > 0 ? rowMaxIter[y] : maxIter;
                 var (ox, oy) = Offset(p.Idx % width, y);
                 long rb = 0, sk = 0;
-                int g = Pixel(plan, reference, ox, oy, rowMax, p.Idx, sink, ref rb, ref sk);
+                int g = PixelAny(plan, reference, ox, oy, rowMax, p.Idx, sink, ref rb, ref sk);
                 Interlocked.Add(ref rebases, rb);
                 Interlocked.Add(ref skips, sk);
                 if (g >= 0) next.Add((p.Idx, g));
@@ -184,6 +191,12 @@ public static class PerturbationEngine
         r.Len = n;
         return r;
     }
+
+    private static int PixelAny(IPerturbationPlan plan, Reference r, double ox, double oy, int maxIter, int idx,
+                                PixelSink sink, ref long rebases, ref long skips)
+        => plan is IRealPerturbationPlan rp
+            ? PixelR2(rp, r, ox, oy, maxIter, idx, sink, ref rebases, ref skips)
+            : Pixel(plan, r, ox, oy, maxIter, idx, sink, ref rebases, ref skips);
 
     // One pixel against a reference. Returns −1 when the pixel finished (sink called), else the
     // iteration it glitched at (dynamic plane only).
@@ -265,6 +278,81 @@ public static class PerturbationEngine
         return -1;
     }
 
+    // #1909 — Pixel for a real (non-conformal) plan: δ, ε as R² columns, the matrix BLA, and the
+    // orbit's 2×2 Jacobian (the sink gets its first column, ∂z/∂Re(pixel)). The parameter plane only
+    // (R2Plan's), with the same rebase / glitch / escape-step rules as Pixel.
+    private static int PixelR2(IRealPerturbationPlan plan, Reference r, double ox, double oy, int maxIter, int idx,
+                               PixelSink sink, ref long rebases, ref long skips)
+    {
+        double er = ox - r.OffX, ei = oy - r.OffY, dr = 0, di = 0;
+        var (ivr, ivi) = plan.InitialDerivative;
+        var jac = RealMat2.OfComplex(ivr, ivi);
+        bool rebase = plan.CanRebase;
+        double pcr = r.Cr + er, pci = r.Ci + ei;
+        double zr = 0, zi = 0;
+        double bail = plan.Bailout2;
+        var bla = r.Bla2;
+        int m = 0, iter = 0;
+        for (; iter < maxIter; iter++)
+        {
+            if (bla != null)
+            {
+                int bi = bla.Lookup(m, dr * dr + di * di, Math.Min(r.Len - 1, m + (maxIter - iter)));
+                if (bi >= 0)
+                {
+                    ref readonly var e = ref bla.Data[bi];
+                    if (e.L >= 2)
+                    {
+                        var A = e.A; var B = e.B;
+                        double ndr = A.M11 * dr + A.M12 * di + (B.M11 * er + B.M12 * ei);
+                        double ndi = A.M21 * dr + A.M22 * di + (B.M21 * er + B.M22 * ei);
+                        jac = A * jac + B;   // J′ = A·J + B
+                        dr = ndr; di = ndi;
+                        m += e.L;
+                        iter += e.L - 1;
+                        skips++;
+                        continue;
+                    }
+                }
+            }
+
+            double Zr = r.Zr[m], Zi = r.Zi[m];
+            zr = Zr + dr; zi = Zi + di;
+            double z2 = zr * zr + zi * zi;
+            if (z2 >= bail) break;
+            plan.JacobianStep(zr, zi, pcr, pci, ref jac);
+
+            if (rebase)
+            {
+                if (z2 < dr * dr + di * di || m + 1 >= r.Len)
+                {
+                    dr = zr; di = zi; Zr = 0; Zi = 0; m = 0;
+                    rebases++;
+                }
+            }
+            else if (m + 1 >= r.Len || plan.IsGlitch(zr, zi, Zr, Zi, r.Cr, r.Ci, GlitchTolerance2))
+            {
+                if (m + 1 >= r.Len && r.HasEsc && iter + 1 < maxIter && !plan.IsGlitch(zr, zi, Zr, Zi, r.Cr, r.Ci, GlitchTolerance2))
+                {
+                    double tr = dr, ti = di;
+                    plan.DeltaStep(Zr, Zi, r.Cr, r.Ci, ref tr, ref ti, er, ei);
+                    double ezr = r.EscR + tr, ezi = r.EscI + ti;
+                    if (ezr * ezr + ezi * ezi >= bail)
+                    {
+                        sink(idx, iter + 1, ezr, ezi, jac.M11, jac.M21);
+                        return -1;
+                    }
+                }
+                return iter;
+            }
+            plan.DeltaStep(Zr, Zi, r.Cr, r.Ci, ref dr, ref di, er, ei);
+            m++;
+        }
+        if (iter >= maxIter && m < r.Len) { zr = r.Zr[m] + dr; zi = r.Zi[m] + di; }
+        sink(idx, iter, zr, zi, jac.M11, jac.M21);
+        return -1;
+    }
+
     // Direct iteration in BigFloat (the last resort for glitched pixels). The derivative runs in
     // double on the rounded z, as the perturbed path's does.
     private static void Direct(IPerturbationPlan plan, ExactCentre centre, BigFloat jcr, BigFloat jci, int prec,
@@ -276,6 +364,8 @@ public static class PerturbationEngine
         if (plan.ParameterPlane) { zr = BigFloat.Zero(prec); zi = BigFloat.Zero(prec); kr = pr; ki = pi; }
         else { zr = pr; zi = pi; kr = jcr; ki = jci; }
         var (dvr, dvi) = plan.InitialDerivative;
+        var rp = plan as IRealPerturbationPlan;
+        var jac = RealMat2.OfComplex(dvr, dvi);   // #1909 — a real plan's 2×2 Jacobian
         double a = 0, b = 0, pcr = kr.ToDouble(), pci = ki.ToDouble();
         int iter = 0;
         for (; iter < maxIter; iter++)
@@ -283,10 +373,12 @@ public static class PerturbationEngine
             if ((iter & 1023) == 0) ct.ThrowIfCancellationRequested();
             a = zr.ToDouble(); b = zi.ToDouble();
             if (a * a + b * b >= plan.Bailout2) break;
-            plan.DerivStep(a, b, pcr, pci, ref dvr, ref dvi);
+            if (rp != null) rp.JacobianStep(a, b, pcr, pci, ref jac);
+            else plan.DerivStep(a, b, pcr, pci, ref dvr, ref dvi);
             plan.RefStep(ref zr, ref zi, kr, ki, prec);
         }
         if (iter >= maxIter) { a = zr.ToDouble(); b = zi.ToDouble(); }
+        if (rp != null) { dvr = jac.M11; dvi = jac.M21; }
         sink(idx, iter, a, b, dvr, dvi);
     }
 }

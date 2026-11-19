@@ -36,7 +36,7 @@ public sealed partial class UserEquationCalculator
 
     private SandboxExpression? _planFor;
     private double _planBailout2;
-    private AstPlan? _plan;
+    private IPerturbationPlan? _plan;
     private string? _planWhy;
 
     private bool TryCalculateDeep(SandboxExpression sbx, SandboxExpression? seed, SandboxExpression? cond, CancellationToken ct)
@@ -53,11 +53,11 @@ public sealed partial class UserEquationCalculator
         if (!ReferenceEquals(_planFor, sbx) || _planBailout2 != bailout2)
         {
             var lowered = CalcGenLowering.Lower(sbx);
-            _plan = lowered.Ok ? AstPlan.TryCreate(lowered.Ast!, bailout2, out _planWhy) : null;
+            _plan = lowered.Ok ? AstPlan.TryCreateAny(lowered.Ast!, bailout2, out _planWhy) : null;   // #1909: conj / re / im too
             if (!lowered.Ok) _planWhy = lowered.Refusal;
             _planFor = sbx; _planBailout2 = bailout2;
         }
-        if (_plan == null) { DeepRefusal = _planWhy ?? "not a polynomial in z and c"; return false; }
+        if (_plan == null) { DeepRefusal = _planWhy ?? "not a polynomial in z, c, conj, re and im"; return false; }
 
         ColorMap.MaxIterations = MaxIterations;
         int prec = BigFloat.PrecisionForZoom(Math.Log10(Zoom));

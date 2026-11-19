@@ -12,9 +12,11 @@
 //     the full centre on every path since #1906 (IDeepCentre); the probe (the poster path)
 //     already gave them QD limbs.
 //   • Julia and Multibrot — the generic perturbation engine past 1e11 (#1907), double δ to ~1e290.
+//     Tricorn too since #1909 (an R2Plan with the 2×2 matrix BLA).
 //   • Everything else renders in double: 1e13 (AutoExplorer.DoubleMaxZoom). Generated Tricorn /
 //     Burning Ship have QD-direct paths but no perturbation (CalcGen turns it off for Conj /
-//     Folded), too slow to explore; they stay at double until D4 / D5.
+//     Folded), too slow to explore; Generated Tricorn stays at double until D12 (#1917) puts
+//     CalcGen's deep tier on the engine, Generated Burning Ship until D5 / D12.
 
 using FracturingFog.Models;
 
@@ -37,6 +39,7 @@ public static class FamilyDepth
             or FractalType.GeneratedMandelbrotZ2 or FractalType.GeneratedMandelbrotZ3
             or FractalType.GeneratedMandelbrotZ4 or FractalType.GeneratedMandelbrotZ5 => QdPerturbationMaxZoom,
         FractalType.Julia or FractalType.Multibrot => EngineDoubleDeltaMaxZoom,   // #1907
+        FractalType.Tricorn => EngineDoubleDeltaMaxZoom,                          // #1909
         _ => AutoExplorer.DoubleMaxZoom,
     };
 }
