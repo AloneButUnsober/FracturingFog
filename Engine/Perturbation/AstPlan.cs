@@ -59,7 +59,7 @@ public sealed class AstPlan : IPerturbationPlan
     }
 
     /// <summary>#1909 — the plan for <paramref name="step"/>: an <see cref="AstPlan"/> for a polynomial
-    /// in z and c, an <see cref="R2Plan"/> when it also uses conj / re / im; null with
+    /// in z and c, an <see cref="R2Plan"/> when it also uses conj / re / im / abs of a real value; null with
     /// <paramref name="why"/> otherwise.</summary>
     public static IPerturbationPlan? TryCreateAny(AstNode step, double bailout2, out string? why)
     {
@@ -123,7 +123,7 @@ public sealed class AstPlan : IPerturbationPlan
 
     // ── BigFloat evaluation of the step (the reference orbit) ──
 
-    // Shared with R2Plan (#1909), which adds conj / re / im.
+    // Shared with R2Plan (#1909, #1910), which adds conj / re / im and the abs folds.
     internal static (BigFloat, BigFloat) Eval(AstNode n, BigFloat zr, BigFloat zi, BigFloat cr, BigFloat ci, int p)
     {
         switch (n)
@@ -136,6 +136,9 @@ public sealed class AstPlan : IPerturbationPlan
             case Conj u: { var (a, b) = Eval(u.Operand, zr, zi, cr, ci, p); return (a, -b); }
             case ReOp u: { var (a, _) = Eval(u.Operand, zr, zi, cr, ci, p); return (a, BigFloat.Zero(p)); }
             case ImOp u: { var (_, b) = Eval(u.Operand, zr, zi, cr, ci, p); return (b, BigFloat.Zero(p)); }
+            // #1910 — abs of a real value (R2Plan admits no other), and Folded.
+            case AbsOp u: { var (a, _) = Eval(u.Operand, zr, zi, cr, ci, p); return (a.Abs(), BigFloat.Zero(p)); }
+            case Folded u: { var (a, b) = Eval(u.Operand, zr, zi, cr, ci, p); return (a.Abs(), b.Abs()); }
             case Add s:
             {
                 var (a, b) = Eval(s.Left, zr, zi, cr, ci, p); var (c, d) = Eval(s.Right, zr, zi, cr, ci, p);

@@ -82,7 +82,7 @@ public static class PerturbationEngine
             if (useBla && r.Len > 2 && plan is IRealPerturbationPlan rp)
             {
                 var level0 = new Bla2[r.Len];
-                for (int n = 0; n < r.Len; n++) level0[n] = rp.Level0R2(r.Zr[n], r.Zi[n], r.Cr, r.Ci, blaEpsilon);
+                for (int n = 0; n < r.Len; n++) level0[n] = rp.Level0R2(r.Zr[n], r.Zi[n], r.Cr, r.Ci, blaEpsilon, dcMax);
                 r.Bla2 = new Bla2Table(level0, r.Len, dcMax);
             }
             else if (useBla && r.Len > 2)

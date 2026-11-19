@@ -6,7 +6,9 @@
 // hands over (IDeepCentre, #1906). Below the threshold the SP / SIMD cores run as before. Design:
 // Docs/Technical/Deep-Zoom-All-Families-DesignPlan.md §4.1, §9 (D2). #1909 (D4) adds Tricorn, on an
 // R2Plan (conj(z)² + c as a real map, with the 2×2 matrix BLA): its deep derivative is the true
-// ∂z/∂Re(c), where TricornKernel's shallow one tracks z² + c's ("as if Mandelbrot").
+// ∂z/∂Re(c), where TricornKernel's shallow one tracks z² + c's ("as if Mandelbrot"). #1910 (D5) adds
+// Burning Ship on the same plan type, with the diffabs folds; BurningShipKernel's shallow derivative
+// is its own sign-weighted form, the deep one the true Jacobian column.
 
 using System;
 using System.Threading;
@@ -56,6 +58,7 @@ public sealed partial class EscapeTimeCalculator : IDeepCentre
 
     // Tricorn's plan compiles its delegates once (R2Plan is immutable and thread-safe).
     private static readonly Lazy<R2Plan> TricornPlan = new(R2Plan.Tricorn);
+    private static readonly Lazy<R2Plan> BurningShipPlan = new(R2Plan.BurningShip);   // #1910
 
     // The plan for the deep path, or null when this family / zoom stays on the SP core.
     private IPerturbationPlan? DeepPlan()
@@ -67,6 +70,7 @@ public sealed partial class EscapeTimeCalculator : IDeepCentre
                 FractalParameters.EffectiveJuliaC.Real, FractalParameters.EffectiveJuliaC.Imaginary),
             FractalType.Multibrot => new PowerPlan(Math.Max(2, FractalParameters.MultibrotExponent), parameterPlane: true),
             FractalType.Tricorn => TricornPlan.Value,   // #1909
+            FractalType.BurningShip => BurningShipPlan.Value,   // #1910: the diffabs folds
             _ => null,
         };
     }

@@ -181,9 +181,9 @@ public sealed class S1906DeepCentreTests(ITestOutputHelper output)
         Assert.Equal(QualityPreset.Deepest.ZoomMax, AutoExplorer.MaxZoomFor(FractalType.Mandelbrot));
         foreach (var t in new[] { FractalType.TearDrop, FractalType.GeneratedMandelbrotZ2, FractalType.GeneratedMandelbrotZ5 })
             Assert.Equal(FamilyDepth.QdPerturbationMaxZoom, AutoExplorer.MaxZoomFor(t));
-        foreach (var t in new[] { FractalType.Julia, FractalType.Multibrot, FractalType.Tricorn })   // #1907, #1909
+        foreach (var t in new[] { FractalType.Julia, FractalType.Multibrot, FractalType.Tricorn, FractalType.BurningShip })   // #1907, #1909, #1910
             Assert.Equal(FamilyDepth.EngineDoubleDeltaMaxZoom, AutoExplorer.MaxZoomFor(t));
-        foreach (var t in new[] { FractalType.BurningShip, FractalType.GeneratedTricorn, FractalType.GeneratedBurningShip, FractalType.UserEquation })
+        foreach (var t in new[] { FractalType.GeneratedTricorn, FractalType.GeneratedBurningShip, FractalType.UserEquation })
             Assert.Equal(AutoExplorer.DoubleMaxZoom, AutoExplorer.MaxZoomFor(t));
     }
 }
