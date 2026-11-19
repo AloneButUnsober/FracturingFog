@@ -1654,7 +1654,7 @@ void CSPerturbSA(uint3 tid : SV_DispatchThreadID)
         {
             // #88 / G4.5b: BLA skip, BlaTable.Lookup on the reference index m: the
             // longest aligned step (L >= 2) whose validity radius holds |delta|, then
-            // delta' = A delta + B dc and dz' = A dz (the CPU drops B there too).
+            // delta' = A delta + B dc and dz' = A dz + B (#1782: B was dropped before).
             // m + L stays below gRefLen so the next reference read is in range.
             if (gBlaLevels > 1)
             {
@@ -1681,8 +1681,8 @@ void CSPerturbSA(uint3 tid : SV_DispatchThreadID)
                     double bbR = gBla[found + 2], bbI = gBla[found + 3];
                     double ndr = baR * dr - baI * di + (bbR * dcR - bbI * dcI);
                     double ndi = baR * di + baI * dr + (bbR * dcI + bbI * dcR);
-                    double nvr = baR * drv - baI * div;
-                    double nvi = baR * div + baI * drv;
+                    double nvr = baR * drv - baI * div + bbR;
+                    double nvi = baR * div + baI * drv + bbI;
                     dr = ndr; di = ndi; drv = nvr; div = nvi;
                     m += foundL;
                     iter += foundL - 1;   // the loop's ++ makes it +L

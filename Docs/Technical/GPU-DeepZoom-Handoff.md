@@ -218,7 +218,7 @@ Closed this arc: #86 (stale deep frame → was TDR device-removed, fixed by tili
 > **BLA WIRED IN (2026-10-07, G4.5b).** (c) is done: the CPU `BlaTable` is flattened
 > (`BlaTable.GpuCoefficients`) into the SA kernel's t10 and applied per pixel at the
 > top of each rebased iteration (lookup on the reference index m; δ' = Aδ + B·dc,
-> dz' = A·dz). `gBlaLevels` replaced `gPad0`. GT 710 at 128²: GPU SA+BLA beats the
+> dz' = A·dz; + B since #1782). `gBlaLevels` replaced `gPad0`. GT 710 at 128²: GPU SA+BLA beats the
 > CPU on every `--d3dpturbcalc` view (3e47: 34 ms vs CPU 99, plain GPU 212). Only
 > (b), the strong-FP64 perf sign-off, remains.
 

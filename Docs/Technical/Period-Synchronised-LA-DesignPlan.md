@@ -242,7 +242,7 @@ What S1 settled is in **bold**; the rest is still the plan.
   - **SIMD** (#1628, `MandelbrotCalculator.La4.cs`, `LaSimd`, `FF_LA_SIMD=1`, off): the plain tail on 4 AVX2 lanes, the AT and the stages in scalar per lane (the same `RunLaAt` / `LaRunStages` code), byte-identical to the scalar evaluator. It measured no faster than scalar on the bench CPU (§4.4), so it is off; it stays for measuring on other CPUs (S6).
   - `UseLaEvaluator` (`FF_LA=1`, off by default) sends the whole frame through `ComputeRowLa` → `EvaluateLa` instead of the PT4 / PT8 rows. It implies building the table. It is inactive with acceleration off, rebasing off, the DD rebase reference, or a table with a non-finite coefficient (`LaStageTable.Finite`); those frames are today's. GPU perturbation is skipped while it is on (the GPU is S7).
   - Scalar double, per pixel, so the #1330 lattice and #1344 mask contracts hold as in `ComputeRowPeriodic`. No SA: the stages start at n = 0.
-  - **The derivative rides through each step exactly,** d ← A·2z_s·d + B, so normals and distance estimates agree with plain rebasing (§4.2). The BLA rows' d ← A·d drops B.
+  - **The derivative rides through each step exactly,** d ← A·2z_s·d + B, so normals and distance estimates agree with plain rebasing (§4.2). The BLA rows' d ← A·d dropped B until #1782 (now d ← A·d + B).
   - **Climb back to the top stage after a rebase** (`LaClimbOnRebase`, `FF_LA_CLIMB=0` off): −39 % steps on p951,094, −29 % on p121,984 (§4.1).
   - **The plain tail** (about 250–550 steps per pixel on every scene): BLA skips there (`LaTailBla`, `FF_LA_TAIL_BLA=1`) cut it by about a fifth but cost exact matches and no time (§4.2), so they are off.
   - **Diagnostics:** `LastFrameUsedLa`, `LastLaWork` (pixels, LA steps, plain steps, BLA skips); `--laprobe` scores the engine's frame ("eng") against exact iteration, `--deepcostprobe` with `FF_DEEPCOST_LA_AB=1` times it.
@@ -348,7 +348,7 @@ The engine's frame reproduces the S1 probe's numbers on every sample (the probe 
 - **Exact iteration:** on p953 (16 samples), p15,248 (8) and p121,984 (4), LA matches exact iteration at least as often as BLA, with no larger total error, and in / out matches on every sample. Measured: 16/16, 8/8, 4/4 for LA; 16/16, 8/8, 2/4 for BLA.
 - **Smooth value and normals** against the acceleration-off frame (plain rebasing, exact derivative), where counts agree. The normal is the direction of z / (dz/dc); the float distance buffer underflows at these zooms.
   - Smooth off by > 10⁻³: LA 65 and 97 pixels on p953 and p15,248, BLA 112 and 181.
-  - Normal off by > 10⁻³ rad: LA 51 and 103 of about 2,100 pixels, BLA almost all of them (its d ← A·d drops B).
+  - Normal off by > 10⁻³ rad: LA 51 and 103 of about 2,100 pixels, BLA almost all of them (its d ← A·d dropped B; fixed in #1782).
 - **Mutants:**
 
   | mutant | failing tests |

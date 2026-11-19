@@ -264,8 +264,8 @@ public sealed partial class MandelbrotCalculator
                             double nDr = e.ARe * dr - e.AIm * di + (e.BRe * dcR - e.BIm * dcI);
                             double nDi = e.ARe * di + e.AIm * dr + (e.BRe * dcI + e.BIm * dcR);
                             dr = nDr; di = nDi;
-                            double nDrv = e.ARe * drv - e.AIm * div;   // d' ≈ A·d, as the BLA rows do
-                            double nDiv = e.ARe * div + e.AIm * drv;
+                            double nDrv = e.ARe * drv - e.AIm * div + e.BRe;   // d' = A·d + B (#1782)
+                            double nDiv = e.ARe * div + e.AIm * drv + e.BIm;
                             drv = nDrv; div = nDiv;
                             m += e.L; n += e.L;
                             blaSkips++;

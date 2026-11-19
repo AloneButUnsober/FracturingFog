@@ -5309,12 +5309,13 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                     if (e.L >= 2)
                     {
                         double aRe = e.ARe, aIm = e.AIm, bRe = e.BRe, bIm = e.BIm;
-                        // δ' = A·δ + B·dc; derivative d' ≈ A·d, as the PT4 rows do.
+                        // δ' = A·δ + B·dc, so the derivative d' = A·d + B (#1782: A and B
+                        // don't depend on dc; B was dropped before, as in the PT4 rows).
                         double nDr = aRe * dr - aIm * di + (bRe * dcR - bIm * dcI);
                         double nDi = aRe * di + aIm * dr + (bRe * dcI + bIm * dcR);
                         dr = nDr; di = nDi;
-                        double nDrv = aRe * drv - aIm * div;
-                        double nDiv = aRe * div + aIm * drv;
+                        double nDrv = aRe * drv - aIm * div + bRe;
+                        double nDiv = aRe * div + aIm * drv + bIm;
                         drv = nDrv; div = nDiv;
                         m += e.L;
                         iter += e.L - 1;   // the loop's ++ makes it +L
@@ -5490,7 +5491,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             if (bla != null)
             {
                 // #1845 — a BLA skip by reference index (as ResumePixelPTRebased):
-                // δ' = A·δ + B·dc, the derivative d' ≈ A·d.
+                // δ' = A·δ + B·dc, the derivative d' = A·d + B (#1782).
                 int k = bla.Lookup(m, FloatExp.Norm2(dr, di), Math.Min(refLen - 1, m + (maxIter - iter)));
                 if (k >= 0)
                 {
@@ -5500,8 +5501,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                         var nDr0 = e.ARe * dr - e.AIm * di + (e.BRe * dcR - e.BIm * dcI);
                         var nDi0 = e.ARe * di + e.AIm * dr + (e.BRe * dcI + e.BIm * dcR);
                         dr = nDr0; di = nDi0;
-                        var nDrv0 = e.ARe * drv - e.AIm * div;
-                        var nDiv0 = e.ARe * div + e.AIm * drv;
+                        var nDrv0 = e.ARe * drv - e.AIm * div + e.BRe;
+                        var nDiv0 = e.ARe * div + e.AIm * drv + e.BIm;
                         drv = nDrv0; div = nDiv0;
                         m += e.L;
                         iter += e.L - 1;
@@ -6196,12 +6197,11 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                                 dr = BlendActive(dr, newDrBla, activeBla);
                                 di = BlendActive(di, newDiBla, activeBla);
 
-                                // Derivative: linearised d_{n+L} ≈ A·d_n
-                                // (drops the +1 constants over L steps —
-                                // tiny relative error vs |A|·|d_n| at deep
-                                // zoom; affects distance estimate by < 1 px).
-                                var aDrv = Avx.Subtract(Avx.Multiply(aRev, drv), Avx.Multiply(aImv, div));
-                                var aDiv = Avx.Add(Avx.Multiply(aRev, div), Avx.Multiply(aImv, drv));
+                                // Derivative: d_{n+L} = A·d_n + B (#1782: B carries
+                                // the +1 constants over the L steps; dropping it put
+                                // normals / DE off on about half the pixels).
+                                var aDrv = Avx.Add(Avx.Subtract(Avx.Multiply(aRev, drv), Avx.Multiply(aImv, div)), bRev);
+                                var aDiv = Avx.Add(Avx.Add(Avx.Multiply(aRev, div), Avx.Multiply(aImv, drv)), bImv);
                                 drv = BlendActive(drv, aDrv, activeBla);
                                 div = BlendActive(div, aDiv, activeBla);
 
@@ -6615,8 +6615,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                                 dr = BlendActive512(dr, aDr + bDcR, activeBla);
                                 di = BlendActive512(di, aDi + bDcI, activeBla);
 
-                                var aDrv = aRev * drv - aImv * div;
-                                var aDiv = aRev * div + aImv * drv;
+                                var aDrv = aRev * drv - aImv * div + bRev;   // d' = A·d + B (#1782)
+                                var aDiv = aRev * div + aImv * drv + bImv;
                                 drv = BlendActive512(drv, aDrv, activeBla);
                                 div = BlendActive512(div, aDiv, activeBla);
 

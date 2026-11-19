@@ -263,7 +263,7 @@ A double zoom overflows at about 1.8e308. A double log10 zoom does not, and it k
   - **Merge:** A = A₂A₁, B = A₂B₁ + B₂, r = min(r₁, max(0, r₂ − |B₁|·dcMax) / |A₁|).
   - **Lookup:** the longest aligned level with R² > 0 and |δ|² < R².
   - FloatExp gains `Sqrt`, division, `Min` and `Max`.
-- **The FX pixel loop** looks skips up by reference index, as `ResumePixelPTRebased` does, and applies δ' = A·δ + B·dc, d' ≈ A·d.
+- **The FX pixel loop** looks skips up by reference index, as `ResumePixelPTRebased` does, and applies δ' = A·δ + B·dc, d' = A·d + B (the + B since #1782; it was dropped before).
   - The table is cached per orbit generation, ε and dcMax (within 5%), like `EnsureBlaTable`.
   - The frame's work is reported in `LastPtWork` (skips, iterations saved, plain steps).
 - **Validation** (`S1845FloatExpBlaTests`).

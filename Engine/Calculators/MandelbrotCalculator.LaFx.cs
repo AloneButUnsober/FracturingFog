@@ -137,8 +137,8 @@ public sealed partial class MandelbrotCalculator
                             var nDr = e.ARe * dr - e.AIm * di + (e.BRe * dcR - e.BIm * dcI);
                             var nDi = e.ARe * di + e.AIm * dr + (e.BRe * dcI + e.BIm * dcR);
                             dr = nDr; di = nDi;
-                            var nDrv = e.ARe * drv - e.AIm * div;
-                            var nDiv = e.ARe * div + e.AIm * drv;
+                            var nDrv = e.ARe * drv - e.AIm * div + e.BRe;   // d' = A·d + B (#1782)
+                            var nDiv = e.ARe * div + e.AIm * drv + e.BIm;
                             drv = nDrv; div = nDiv;
                             m += e.L; n += e.L;
                             blaSkips++;
