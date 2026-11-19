@@ -31,6 +31,11 @@ using Xunit;
 
 namespace FracturingFog.Server.Tests;
 
+// #1898 — the deep CPU frames here take their route from process statics other test classes
+// write while they run (MandelbrotCalculator.ForceScalarPtPath / ForcePt8Rows in S1782, the
+// UseGpu* switches): run outside the parallel phase. The zl 60 case failed once in a full
+// suite and passed alone and alongside the classes it shares no collection with.
+[Collection(MandelbrotGpuStaticsCollection.Name)]
 public sealed class S1783DeepDistanceUnitTests(ITestOutputHelper output)
 {
     // ── The unit ─────────────────────────────────────────────────────────────
