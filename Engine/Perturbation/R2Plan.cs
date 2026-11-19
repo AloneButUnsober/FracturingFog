@@ -257,11 +257,13 @@ public sealed class R2Plan : IRealPerturbationPlan
     // Limit (#1910): jets of four first derivatives (along Re z, Im z, Re c, Im c) and a running
     // minimum, over the folds, of the δ that reaches the fold's sign change.
     // Pole (#1911): Delta's jets, and a running minimum of |Q + ΔQ|² / |Q|² over the divisions.
-    private enum Mode { Delta, Tangent, Second, Limit, Pole }
+    internal enum Mode { Delta, Tangent, Second, Limit, Pole }
 
-    private readonly record struct Cx(Expression Re, Expression Im);
+    internal readonly record struct Cx(Expression Re, Expression Im);
 
-    private sealed class Emitter
+    // #1912 — shared with TwoStatePlan, which names its own parameters and resolves its own leaves
+    // (z, prev / the second state, c) before the defaults below.
+    internal sealed class Emitter
     {
         public readonly List<ParameterExpression> Vars = new();
         public readonly List<Expression> Body = new();
@@ -270,12 +272,15 @@ public sealed class R2Plan : IRealPerturbationPlan
 
         public readonly ParameterExpression? MinLimit;   // Mode.Limit
 
-        public Emitter(Mode mode)
+        private readonly Func<AstNode, Emitter, Cx[]?>? _leaves;
+
+        public Emitter(Mode mode, string[]? names = null, Func<AstNode, Emitter, Cx[]?>? leaves = null)
         {
             Mode = mode;
-            string[] names = ["zr", "zi", "cr", "ci", "a", "b", "c", "d"];
-            P = new ParameterExpression[8];
-            for (int i = 0; i < 8; i++) P[i] = Expression.Parameter(typeof(double), names[i]);
+            names ??= ["zr", "zi", "cr", "ci", "a", "b", "c", "d"];
+            _leaves = leaves;
+            P = new ParameterExpression[names.Length];
+            for (int i = 0; i < names.Length; i++) P[i] = Expression.Parameter(typeof(double), names[i]);
             if (mode is Mode.Limit or Mode.Pole)
             {
                 MinLimit = Expression.Variable(typeof(double), "limit");
@@ -317,7 +322,7 @@ public sealed class R2Plan : IRealPerturbationPlan
 
         // A jet: [0] the value; Delta: [1] the exact difference; Tangent: [1] the first derivative;
         // Second: [1] the first and [2] the second derivative along the direction.
-        private Cx[] Leaf(Cx v, Cx first) => Mode == Mode.Second ? [v, first, K(0, 0)] : [v, first];
+        internal Cx[] Leaf(Cx v, Cx first) => Mode == Mode.Second ? [v, first, K(0, 0)] : [v, first];
 
         // Mode.Limit leaves: z moves along Re z / Im z, c along Re c / Im c.
         private static Cx[] ZLimit(Cx z) => [z, K(1, 0), K(0, 1), K(0, 0), K(0, 0)];
@@ -448,6 +453,7 @@ public sealed class R2Plan : IRealPerturbationPlan
 
         public Cx[] Emit(AstNode n)
         {
+            if (_leaves != null && _leaves(n, this) is { } leaf) return leaf;
             switch (n)
             {
                 case ZRef: return Mode == Mode.Limit ? ZLimit(new Cx(P[0], P[1])) : Leaf(new Cx(P[0], P[1]), new Cx(P[4], P[5]));
@@ -478,15 +484,19 @@ public sealed class R2Plan : IRealPerturbationPlan
         }
     }
 
-    private static F8 Compile(AstNode step, Mode mode)
+    private static F8 Compile(AstNode step, Mode mode) => CompileAs<F8>(step, mode, null, null);
+
+    // #1912 — any delegate shape: the parameters are the emitter's (names), in order.
+    internal static TDel CompileAs<TDel>(AstNode step, Mode mode, string[]? names, Func<AstNode, Emitter, Cx[]?>? leaves)
+        where TDel : Delegate
     {
-        var em = new Emitter(mode);
+        var em = new Emitter(mode, names, leaves);
         var jet = em.Emit(step);
         var outv = mode == Mode.Second ? jet[2] : jet[1];
         var ctor = typeof(ValueTuple<double, double>).GetConstructor([typeof(double), typeof(double)])!;
         em.Body.Add(mode is Mode.Limit or Mode.Pole
             ? Expression.New(ctor, em.MinLimit!, Expression.Constant(0.0))
             : Expression.New(ctor, outv.Re, outv.Im));
-        return Expression.Lambda<F8>(Expression.Block(em.Vars, em.Body), em.P).Compile();
+        return Expression.Lambda<TDel>(Expression.Block(em.Vars, em.Body), em.P).Compile();
     }
 }

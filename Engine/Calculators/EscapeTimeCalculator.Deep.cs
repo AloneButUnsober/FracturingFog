@@ -10,7 +10,10 @@
 // Burning Ship on the same plan type, with the diffabs folds; BurningShipKernel's shallow derivative
 // is its own sign-weighted form, the deep one the true Jacobian column. #1911 (D6) adds Magnet 1 / 2
 // (division: the quotient difference; MagnetConvergence's stop at z = 1 through the engine's
-// Convergence). The kernels clamp |den|² at 1e-12 by a pole; the deep path divides exactly.
+// Convergence). The kernels clamp |den|² at 1e-12 by a pole; the deep path divides exactly. #1912 (D7)
+// adds Phoenix and Spider on TwoStatePlan (a δ for z and one for z_{n−1} / the evolving c); Phoenix's
+// old scalar "PT" tier (D-3.16, from 1e10) retires — it rebuilt z in double from a double reference,
+// so it resolved no deeper than the SP path.
 
 using System;
 using System.Threading;
@@ -81,12 +84,32 @@ public sealed partial class EscapeTimeCalculator : IDeepCentre
         };
     }
 
+    // #1912 — Phoenix and Spider carry a second state (z_{n−1}; the evolving c).
+    private (double P0, double P1, double D, TwoStatePlan Plan)? _twoState;
+
+    private TwoStatePlan? DeepTwoStatePlan()
+    {
+        if (!AllowPerturbation || Zoom < DeepZoomThreshold) return null;
+        double a, b = 0, d = 0;
+        switch (FractalType)
+        {
+            case FractalType.Phoenix: a = FractalParameters.PhoenixP.Real; b = FractalParameters.PhoenixP.Imaginary; break;
+            case FractalType.Spider: a = double.NaN; d = FractalParameters.SpiderCDecay; break;
+            default: return null;
+        }
+        if (_twoState is { } t && t.P0.Equals(a) && t.P1 == b && t.D == d) return t.Plan;
+        var plan = FractalType == FractalType.Phoenix ? TwoStatePlan.Phoenix(a, b) : TwoStatePlan.Spider(d);
+        _twoState = (a, b, d, plan);
+        return plan;
+    }
+
     // Render the frame on the engine when DeepPlan applies; false leaves it to the SP cores.
     private bool TryCalculateDeep(CancellationToken ct)
     {
         LastPrecisionLabel = "SP";
         var plan = DeepPlan();
-        if (plan == null) return false;
+        var two = plan == null ? DeepTwoStatePlan() : null;
+        if (plan == null && two == null) return false;
 
         int prec = BigFloat.PrecisionForZoom(Math.Log10(Zoom));
         var centre = CenterExact is { } e ? e.WithPrecision(prec) : ExactCentre.FromDeep(GetDeepCentre(), prec);
@@ -114,18 +137,22 @@ public sealed partial class EscapeTimeCalculator : IDeepCentre
             });
         }
 
-        LastPerturbationStats = PerturbationEngine.Render(plan, centre, scale, Width, Height, maxIt,
-            (idx, iter, zr, zi, dvr, dvi) =>
-            {
-                if (_batchCount is { } bcs) bcs[idx]++;
-                if (magnet) { dvr = 0; dvi = 0; }
-                IterationBuffer[idx] = iter;
-                FillAuxAndColor(idx, iter, maxIt, zr, zi, dvr, dvi, map);
-                // Phase 2.1 (the video per-row cap): a pixel that ran to its row's cap is in set.
-                if (perRow != null && iter >= perRow[idx / width] && perRow[idx / width] < maxIt)
-                    IterationBuffer[idx] = maxIt;
-            },
-            ct, perRow, _mask != null ? Marked : null, useBla: true, blaEpsilon: eps, converge: converge);
+        // Spider tracks no dz/dc (CalculateSpider passes 0); Phoenix's is D-3.16's, the tangent here.
+        bool flatDerivative = magnet || FractalType == FractalType.Spider;
+        PerturbationEngine.PixelSink sink = (idx, iter, zr, zi, dvr, dvi) =>
+        {
+            if (_batchCount is { } bcs) bcs[idx]++;
+            if (flatDerivative) { dvr = 0; dvi = 0; }
+            IterationBuffer[idx] = iter;
+            FillAuxAndColor(idx, iter, maxIt, zr, zi, dvr, dvi, map);
+            // Phase 2.1 (the video per-row cap): a pixel that ran to its row's cap is in set.
+            if (perRow != null && iter >= perRow[idx / width] && perRow[idx / width] < maxIt)
+                IterationBuffer[idx] = maxIt;
+        };
+        LastPerturbationStats = two != null
+            ? PerturbationEngine.RenderTwoState(two, centre, scale, Width, Height, maxIt, sink, ct, perRow, _mask != null ? Marked : null)
+            : PerturbationEngine.Render(plan!, centre, scale, Width, Height, maxIt, sink,
+                ct, perRow, _mask != null ? Marked : null, useBla: true, blaEpsilon: eps, converge: converge);
         LastPrecisionLabel = "PT";
         return true;
     }

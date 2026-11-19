@@ -37,6 +37,7 @@ public sealed partial class UserEquationCalculator
     private SandboxExpression? _planFor;
     private double _planBailout2;
     private IPerturbationPlan? _plan;
+    private TwoStatePlan? _plan2;   // #1912 — an equation that reads prev
     private string? _planWhy;
 
     private bool TryCalculateDeep(SandboxExpression sbx, SandboxExpression? seed, SandboxExpression? cond, CancellationToken ct)
@@ -53,11 +54,13 @@ public sealed partial class UserEquationCalculator
         if (!ReferenceEquals(_planFor, sbx) || _planBailout2 != bailout2)
         {
             var lowered = CalcGenLowering.Lower(sbx);
-            _plan = lowered.Ok ? AstPlan.TryCreateAny(lowered.Ast!, bailout2, out _planWhy) : null;   // #1909: conj / re / im too
+            _plan = null; _plan2 = null;
+            if (lowered.Ok && TwoStatePlan.UsesPrev(lowered.Ast!)) _plan2 = TwoStatePlan.TryCreatePrev(lowered.Ast!, bailout2, out _planWhy);
+            else _plan = lowered.Ok ? AstPlan.TryCreateAny(lowered.Ast!, bailout2, out _planWhy) : null;   // #1909: conj / re / im too
             if (!lowered.Ok) _planWhy = lowered.Refusal;
             _planFor = sbx; _planBailout2 = bailout2;
         }
-        if (_plan == null) { DeepRefusal = _planWhy ?? "not a polynomial in z, c, conj, re and im"; return false; }
+        if (_plan == null && _plan2 == null) { DeepRefusal = _planWhy ?? "not a polynomial in z, c, conj, re and im"; return false; }
 
         ColorMap.MaxIterations = MaxIterations;
         int prec = BigFloat.PrecisionForZoom(Math.Log10(Zoom));
@@ -81,8 +84,7 @@ public sealed partial class UserEquationCalculator
             ? Math.Min(FractalParameters.BlaTolerance, PerturbationEngine.DefaultBlaEpsilon) : PerturbationEngine.DefaultBlaEpsilon;
         double cx0 = CenterX, cy0 = CenterY;
 
-        LastPerturbationStats = PerturbationEngine.Render(_plan, centre, scale, width, Height, maxIt,
-            (idx, iter, zr, zi, dzr, dzi) =>
+        PerturbationEngine.PixelSink sink = (idx, iter, zr, zi, dzr, dzi) =>
             {
                 if (iter >= maxIt)
                 {
@@ -119,10 +121,13 @@ public sealed partial class UserEquationCalculator
                         NormalXBuffer[idx] = 0f; NormalYBuffer[idx] = 0f; SmoothBuffer[idx] = 0f;
                     }
                 }
-            },
-            ct, rowMaxIter: null, marked: aaMask != null ? i => aaMask[i] != 0 : null,
-            useBla: true, blaEpsilon: eps,
-            warp: rot != 0 ? (dx, dy) => (dx * cosA - dy * sinA, dx * sinA + dy * cosA) : null);
+            };
+        Func<int, bool>? marked = aaMask != null ? i => aaMask[i] != 0 : null;
+        Func<double, double, (double, double)>? warp = rot != 0 ? (dx, dy) => (dx * cosA - dy * sinA, dx * sinA + dy * cosA) : null;
+        LastPerturbationStats = _plan2 != null
+            ? PerturbationEngine.RenderTwoState(_plan2, centre, scale, width, Height, maxIt, sink, ct, rowMaxIter: null, marked: marked, warp: warp)
+            : PerturbationEngine.Render(_plan!, centre, scale, width, Height, maxIt, sink,
+                ct, rowMaxIter: null, marked: marked, useBla: true, blaEpsilon: eps, warp: warp);
         LastPrecisionLabel = "PT";
         return true;
     }
