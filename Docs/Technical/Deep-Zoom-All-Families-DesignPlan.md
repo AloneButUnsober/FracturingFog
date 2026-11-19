@@ -124,6 +124,7 @@ FF claims no novelty for perturbation, rebasing, BLA or automatic δ derivation.
 - **Rebasing.** Valid (critical point 0).
 - **CalcGen work.** The perturbation builder needs an R² mode: lower `conj` and `re` / `im` to real
   components before differentiating.
+- **As built (#1909):** difference arithmetic rather than a symbolic expansion; see D4 in §9.
 
 ### 4.3 Abs folds: Burning Ship, Perpendicular / Celtic variants, `abs` in user formulas
 
@@ -381,6 +382,56 @@ Each slice is checked against an **independent** oracle:
      MandelbrotCalculator's 512². The plan takes the calculator's radius.
   2. **Masking.** With BLA on, a missing ∂f/∂c in the plan's derivative step is masked, because the
      skip adds its own `+ B`. The tests also run BLA off.
+
+**D4 as built (#1909).**
+- **`R2Plan`** (`Engine/Perturbation/R2Plan.cs`) covers steps polynomial in z, c, `conj`, `re` and `im`,
+  treated as real maps of R².
+  - **δ by difference arithmetic.** Each node carries its value V at the reference and its exact
+    difference D. Sums, `conj`, `re` and `im` are linear, so D maps as V does. A product has
+    D = V₁·D₂ + D₁·(V₂ + D₂). Every term is of order δ or ε, and for a polynomial the result is exact.
+    This is mathr 2021's operator-by-operator perturbation; it needs no symbolic expansion, so
+    CalcGen's `AstPerturbation` is not used here.
+  - **Jacobians by forward-mode tangents.** A = ∂f/∂z and B = ∂f/∂c are 2×2 matrices. The orbit's
+    derivative is the 2×2 Jacobian with respect to the pixel; the sink gets column 1, ∂z/∂Re(c),
+    which is User Equation's numeric-Jacobian column.
+  - **BLA radius.** A second-order tangent bounds the dropped term: |H(u)| ≤ |P| + ‖[Q R]‖ for
+    H(u) = P + Q cos 2θ + R sin 2θ. This is tight for z² and conj(z)². It reduces to `AstPlan`'s
+    radius for a complex-analytic step.
+  - **Rebasing** applies when ∂f/∂z vanishes at z = 0, checked numerically at three generic c.
+  - All of these compile to `System.Linq.Expressions` delegates in SSA form (each value bound once).
+- **The engine.**
+  - `IRealPerturbationPlan` routes a plan to an R² pixel loop with `Bla2Table`. That table is
+    `BlaTable`'s layout and merge with operator norms (mathr 2022).
+  - The glitch test uses the Jacobian's Frobenius size in place of |f′|.
+- **Wiring.**
+  - Tricorn renders on the engine from 1e11 (`EscapeTimeCalculator`), and `FamilyDepth` puts it at 1e290.
+  - `AstPlan.TryCreateAny` picks `AstPlan` for analytic formulas and `R2Plan` for conj / re / im.
+  - User Equation uses `TryCreateAny`.
+- **Deferred.**
+  - Generated Tricorn waits for D12 (#1917), which puts CalcGen's deep tier on the engine.
+  - `abs` waits for D5 (#1910).
+- **Differs from the shallow path.**
+  - Tricorn's deep derivative is the true ∂z/∂Re(c). `TricornKernel` tracks z² + c's ("as if
+    Mandelbrot").
+  - Shading from normals can therefore change at the 1e11 switch. Iteration counts agree there
+    (1,536 / 1,536 in the test).
+- **Found:**
+  1. **Interpreter derivative at depth.** User Equation's numeric Jacobian steps c by an absolute
+     1e-6, which is ~1e5 pixels at 1e11, so its dz/dc is noise at depth (#1931). The engine's agrees
+     with a BigFloat finite difference.
+  2. **Bad oracle view.** A level-set boundary found by bisection is a bad oracle view: pixels escape
+     near maxIter, at the chaotic floor (90 / 176 equal). Misiurewicz points (z₄ = z₃, by Newton in
+     BigFloat) give early escapes with structure at every depth.
+- **Mutants** (`S1909ConjR2Tests`):
+  - **Caught:**
+    - a product's D₁·D₂ term dropped (the issue's cross-term mutant);
+    - the BLA radius ×1e6;
+    - the merge's `+ B` dropped, and the merge's A in the wrong order;
+    - the skip's Jacobian `+ B` dropped;
+    - the Jacobian step's ∂f/∂c dropped;
+    - the rebase test removed.
+  - **Survives:** the glitch test, as in D2 / D3. At these views its regions are sub-pixel, and the
+    pixels where the reference runs out still go to secondary references.
 
 **Order of value:** D1 → D2 → D3 gives deep zoom to Multibrot, Julia, Generated Z2–Z5 and every
 polynomial user equation. D4 / D5 add Tricorn and Burning Ship, which is the original #1253. D6–D10

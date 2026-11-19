@@ -58,6 +58,15 @@ public sealed class AstPlan : IPerturbationPlan
         return new AstPlan(step, bailout2, canRebase);
     }
 
+    /// <summary>#1909 — the plan for <paramref name="step"/>: an <see cref="AstPlan"/> for a polynomial
+    /// in z and c, an <see cref="R2Plan"/> when it also uses conj / re / im; null with
+    /// <paramref name="why"/> otherwise.</summary>
+    public static IPerturbationPlan? TryCreateAny(AstNode step, double bailout2, out string? why)
+    {
+        if (Unsupported(step) == null) return TryCreate(step, bailout2, out why);
+        return R2Plan.TryCreate(step, bailout2, out why);
+    }
+
     // The first node outside the polynomial subset, or null.
     private static string? Unsupported(AstNode n) => n switch
     {
@@ -114,7 +123,8 @@ public sealed class AstPlan : IPerturbationPlan
 
     // ── BigFloat evaluation of the step (the reference orbit) ──
 
-    private static (BigFloat, BigFloat) Eval(AstNode n, BigFloat zr, BigFloat zi, BigFloat cr, BigFloat ci, int p)
+    // Shared with R2Plan (#1909), which adds conj / re / im.
+    internal static (BigFloat, BigFloat) Eval(AstNode n, BigFloat zr, BigFloat zi, BigFloat cr, BigFloat ci, int p)
     {
         switch (n)
         {
@@ -123,6 +133,9 @@ public sealed class AstPlan : IPerturbationPlan
             case RealConst k: return (BigFloat.FromDouble(k.Value, p), BigFloat.Zero(p));
             case ImagUnit: return (BigFloat.Zero(p), BigFloat.FromDouble(1, p));
             case Neg u: { var (a, b) = Eval(u.Operand, zr, zi, cr, ci, p); return (-a, -b); }
+            case Conj u: { var (a, b) = Eval(u.Operand, zr, zi, cr, ci, p); return (a, -b); }
+            case ReOp u: { var (a, _) = Eval(u.Operand, zr, zi, cr, ci, p); return (a, BigFloat.Zero(p)); }
+            case ImOp u: { var (_, b) = Eval(u.Operand, zr, zi, cr, ci, p); return (b, BigFloat.Zero(p)); }
             case Add s:
             {
                 var (a, b) = Eval(s.Left, zr, zi, cr, ci, p); var (c, d) = Eval(s.Right, zr, zi, cr, ci, p);
