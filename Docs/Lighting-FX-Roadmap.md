@@ -28,8 +28,12 @@ Phases 1–24 + the `b` follow-up bindings landed across two batched commits:
   `ScreenSpacePost.ApplySsao2D(MandelbrotCalculator, FractalParameters)` at the
   same point (after the AA and adaptive contrast, before relief and the
   interior-alpha composite), and the live TAA continuation runs it on each
-  running mean (the first TAA sample used to drop it). Cluster tiles skip it
-  (#1815); live recolour paths still drop it until the next render (#1816).
+  running mean (the first TAA sample used to drop it). A cluster tile runs it
+  too since #1815: it renders grown by the pass's reach (`ScreenSpacePost.SsaoReach`,
+  the sample disk plus the blur), runs it in the whole frame's geometry (its origin
+  in the per-pixel hash, the frame's smaller side for the radius) and crops, so the
+  assembled tiles equal the whole image byte for byte. Live recolour paths still
+  drop it until the next render (#1816).
 
 Status as of this doc write: working tree clean on
 `feature/cross-platform-full`.

@@ -51,7 +51,8 @@ public static partial class ScreenSpacePost
         int[] iterBuffer,
         int maxIt,
         int width, int height,
-        in LightingFxData fx)
+        in LightingFxData fx,
+        int originX = 0, int originY = 0, int frameMinDim = 0)
     {
         if (fx.SsaoSamples <= 0) return;
         int n = width * height;
@@ -78,8 +79,15 @@ public static partial class ScreenSpacePost
             double t = Math.Clamp(smoothBuffer[i] * invMaxIt, 0.0, 1.0);
             depthBuf[i] = (float)t;
         }
-        ApplySsao(colorBuffer, depthBuf, normalBuf, width, height, in fx);
+        ApplySsao(colorBuffer, depthBuf, normalBuf, width, height, in fx, originX, originY, frameMinDim);
     }
+
+    /// <summary>#1815 — how far the 2D SSAO reads from a pixel, in pixels, for a frame whose
+    /// smaller side is <paramref name="frameMinDim"/>: the sample disk (truncated to whole
+    /// pixels) plus the 3×3 blur. A cluster tile grown by this halo computes its own pixels
+    /// exactly as the whole frame does.</summary>
+    public static int SsaoReach(in LightingFxData fx, int frameMinDim)
+        => fx.SsaoSamples <= 0 ? 0 : (int)Math.Ceiling(fx.SsaoRadius * frameMinDim) + 2;
 
     /// <summary>
     /// Apply screen-space AO over the G-buffer. Modulates ColorBuffer in
@@ -93,12 +101,18 @@ public static partial class ScreenSpacePost
     /// <param name="width">Image width.</param>
     /// <param name="height">Image height.</param>
     /// <param name="fx">Active LightingFxData. SsaoSamples=0 = no-op.</param>
+    /// <param name="originX">#1815 — the buffer's position in a larger frame (a cluster
+    /// tile's sub-rect offset): the per-pixel rotation hashes frame coordinates.</param>
+    /// <param name="originY">See <paramref name="originX"/>.</param>
+    /// <param name="frameMinDim">#1815 — the larger frame's smaller side, which sizes the
+    /// sample radius (0 = this buffer's).</param>
     public static void ApplySsao(
         uint[] colorBuffer,
         float[] depthBuffer,
         float[] normalBuffer,
         int width, int height,
-        in LightingFxData fx)
+        in LightingFxData fx,
+        int originX = 0, int originY = 0, int frameMinDim = 0)
     {
         if (fx.SsaoSamples <= 0) return;
         if (colorBuffer.Length < width * height) return;
@@ -106,7 +120,8 @@ public static partial class ScreenSpacePost
         using var __stage = StagePerf.Begin(PostStage.Ssao);
 
         int samples = Math.Min(fx.SsaoSamples, 64);
-        double radiusPixels = fx.SsaoRadius * Math.Min(width, height);
+        double radiusPixels = fx.SsaoRadius * (frameMinDim > 0 ? frameMinDim : Math.Min(width, height));
+        bool offset = originX != 0 || originY != 0;
         double strength = fx.SsaoStrength;
         // Copy `in` fields to locals so lambdas can capture them. C# disallows
         // closures capturing `in` parameter scopes.
@@ -115,7 +130,9 @@ public static partial class ScreenSpacePost
         // Phase 12 — GPU dispatcher. Single fused kernel (sample + composite,
         // no blur — adequate quality at the higher sample counts a GPU run
         // is happy with). Falls back to CPU below on any failure.
-        if (fx.UseGpuPost)
+        // (#1815: not for a buffer inside a larger frame — the kernel hashes its own
+        // coordinates — so a tile runs the CPU pass, as the whole frame's would compute.)
+        if (fx.UseGpuPost && !offset)
         {
             if (GpuPostKernels.TryApplySsao(
                     colorBuffer, depthBuffer, width, height,
@@ -161,7 +178,8 @@ public static partial class ScreenSpacePost
 
                 // Per-pixel rotation: interleaved-gradient hash (Jorge Jimenez).
                 // Cheap, decorrelates adjacent samples.
-                double rot = (52.9829189 * ((0.06711056 * x + 0.00583715 * y) % 1.0)) % 1.0;
+                // #1815: in frame coordinates (a tile's origin added).
+                double rot = (52.9829189 * ((0.06711056 * (x + originX) + 0.00583715 * (y + originY)) % 1.0)) % 1.0;
                 double cosR = Math.Cos(rot * Math.PI * 2.0);
                 double sinR = Math.Sin(rot * Math.PI * 2.0);
 

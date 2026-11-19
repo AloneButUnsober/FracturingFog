@@ -17,6 +17,7 @@
 // shared Supersampling code leaves them identical), so the result is byte-identical
 // across live, batch and export.
 
+using System;
 using FracturingFog.Models;
 
 namespace FracturingFog.Rendering.Lighting;
@@ -33,8 +34,11 @@ public static partial class ScreenSpacePost
         try
         {
             var fx = fp.Lighting;
+            // #1815 — a cluster tile computes in the whole frame's geometry (its origin and
+            // smaller side); a plain frame passes zeros (unchanged).
+            int frameMin = calc.ImageWidth > 0 && calc.ImageHeight > 0 ? Math.Min(calc.ImageWidth, calc.ImageHeight) : 0;
             ApplySsao2D(calc.ColorBuffer, calc.SmoothBuffer, calc.IterationBuffer, calc.MaxIterations,
-                calc.Width, calc.Height, in fx);
+                calc.Width, calc.Height, in fx, calc.SubRectOffsetX, calc.SubRectOffsetY, frameMin);
             return true;
         }
         catch { return false; }   // SSAO is best-effort — never fail the frame
