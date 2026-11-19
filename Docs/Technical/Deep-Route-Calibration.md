@@ -153,7 +153,7 @@ So the pass picks the same CPU route at full size as at its own size. It keeps G
 
 Three timed passes instead of two (a loser still stops after one). More passes did not move the JIT-state effect above; the warm pass did.
 
-The GPU SA / BLA kernel's iteration agreement past 1e27 is #1791. The calibration excludes it there, which makes no difference on the GT 710.
+The GPU SA / BLA kernel's iteration agreement past 1e27 was #1791. Its BLA table kept ε = 1e-6 in the QD band, where the CPU rows use 1e-10 (#1613), so it was off about 10× as often and the calibration excluded it. It now uses the same ε as the CPU rows and agrees as well as they do (S1791GpuBlaEpsilonTests).
 
 ### On another machine
 
