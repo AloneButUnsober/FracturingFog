@@ -481,6 +481,42 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
   run out, so per-pixel perturbation δ, dc and the pixel scale hold past double's ~1e308. FF's own layout
   is a double mantissa in [1, 2) plus a long binary exponent. KF's internal layout was not checked here.
   FF's fp32 GPU float-exp kernels (#1331) use the same concept.
+- <a id="mathr-deep-zoom-2021"></a>**mathr** (the site of Claude Heiland-Allen, as attributed elsewhere in this file; the
+  page itself names no author). *Deep zoom theory and practice*, 2021-05-14,
+  <https://mathr.co.uk/blog/2021-05-14_deep_zoom_theory_and_practice.html> (read 2026-11-19).
+  - **Abs Variations:** perturbing `abs` naively gives 0 by catastrophic absorption and cancellation.
+    The `diffabs(c, d)` case analysis (credited there to laser blaster, below) gives |c + d| − |c|
+    exactly. The rescaled limit is sign(X)·sign(Y)·(X·y + x·Y).
+  - **Hybrid Fractals:** hybrids are perturbed operator by operator (abs, negation, integer power,
+    complex multiplier), with code generation.
+  - **FF use:** `Docs/Technical/Deep-Zoom-All-Families-DesignPlan.md` §4.3, §5.2 (epic #1253). FF
+    claims no novelty for automatic derivation over that operator set.
+- <a id="mathr-deep-zoom-2022"></a>**mathr.** *Deep zoom theory and practice (again)*, 2022-02-21,
+  <https://mathr.co.uk/blog/2022-02-21_deep_zoom_theory_and_practice_again.html> (read 2026-11-19).
+  - **Bilinear Approximation:** expands on Zhuoran's BLA.
+    - For non-complex-analytic formulas the radius uses the operator norm of the 2×2 Jacobian (a
+      `mat2`).
+    - For Burning Ship |Z| is replaced by min(|X|, |Y|), halved for safety.
+    - It applies to Burning Ship and hybrids.
+  - **Rebasing:** implemented only for formulas with a single critical point at 0; hybrids need one
+    reference per phase.
+  - **FF use:** the same design plan, §3, §4.2–4.3.
+- <a id="ultra-fractal-perturbation"></a>**Frederik Slijkerman / Ultra Fractal.** *Perturbation equations*, Ultra Fractal formula
+  documentation, <https://www.ultrafractal.com/help/writing/formulas/perturbationequations.html> (read
+  2026-11-19; the page states no version).
+  - Formula authors add `perturbinit` / `perturbloop` sections (`#dz`, `#dpixel`) and derive the δ
+    formula by hand.
+  - Every term must reduce to the order of dz or dc; powers such as 2.5 or complex powers do not.
+  - **FF use:** prior art for user-written perturbation, and the cancellation rule in the design plan
+    §3. FF derives δ automatically (CalcGen's `AstPerturbation`), also not new (mathr 2021, above).
+  - The author's name is from Wikipedia, *Ultra Fractal* (<https://en.wikipedia.org/wiki/Ultra_Fractal>,
+    read 2026-11-19: original author and developer). The documentation page itself names no author.
+- <a id="fraktaler-3"></a>**Claude Heiland-Allen.** *Fraktaler 3*, as described by Wikibooks *Fractals/fraktaler-3*,
+  <https://en.wikibooks.org/wiki/Fractals/fraktaler-3> (read 2026-11-19):
+  - a cross-platform program for fast deep zooming of hybrid escape-time 2D fractals;
+  - the successor line of Kalles Fraktaler 2+.
+  - **FF use:** prior art for deep zoom across formula families (epic #1253). The primary project page
+    is not yet read.
 - **Botond Kósa.** *Mandel Machine.* Perturbation deep-zoom renderer — prior art for reference-orbit
   pairs (dual-orbit survey).
 - **Yozo Hida, Xiaoye S. Li, David H. Bailey.** *Algorithms for quad-double precision floating point
@@ -1155,6 +1191,16 @@ entry above completed or corrected.
   `Docs/Technical/Arbitrary-Precision-DeepZoom.md` §37, #1872). It is usually cited as Aitken's 1926
   paper on Bernoulli's method for algebraic equations, in the *Proceedings of the Royal Society of
   Edinburgh*; the volume, pages and exact title aren't confirmed here.
+- **laser blaster** (Fractal Forums handle). *Perturbation Formula for Burning Ship (hopefully correct :p)*,
+  <http://www.fractalforums.com/new-theories-and-research/perturbation-formula-for-burning-ship-(hopefully-correct-p)/msg74090/#msg74090>.
+  - The `diffabs` case analysis for perturbing `abs`, as credited and quoted by
+    [mathr 2021](#mathr-deep-zoom-2021).
+  - The post itself was not read; its year and the author's name are not confirmed.
+  - **FF use:** design plan §4.3 (epic #1253).
+- **Claude Heiland-Allen**, *At the helm of the burning ship*, Proceedings of EVA London 2019,
+  <http://dx.doi.org/10.14236/ewic/EVA2019.74>. As cited by the Fractalshades documentation
+  ([gbillotey](#fractalshades-math)), for generalising minibrot finding to the Burning Ship. Not yet
+  read. **FF use:** design plan §6 (Burning Ship finders, epic #1253).
 - **Wolfgang Straßer 1974** — PhD thesis, TU Berlin, 1974, said to describe the z-buffer independently
   of Catmull (see [Catmull](#catmull-zbuffer)). Source: the TU Wien obituary
   (<https://www.cg.tuwien.ac.at/sites/default/files/lost-colleague/Wolfgang%20Strasser/WolfgangStrasser-Obituary.pdf>).
