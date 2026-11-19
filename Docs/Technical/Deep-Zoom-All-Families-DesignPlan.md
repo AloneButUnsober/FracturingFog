@@ -154,6 +154,8 @@ FF claims no novelty for perturbation, rebasing, BLA or automatic δ derivation.
 - **Root-finding families (Newton / Nova / Halley / Secant).** The convergence test |z_{n+1} − z_n| < tol
   must scale with the pixel size. At depth the basin boundary is what is drawn, and the absolute
   tolerance saturates.
+  - **Measured in #1911: not so.** A tighter tolerance only shifts counts (Newton +1 everywhere);
+    see D6 in §9.
 - **Phoenix-type `prev`.** Carry δ for z_{n−1} as a second state (the scalar Phoenix tier already does).
 
 ### 4.5 Transcendental formulas: TranscendentalJulia, Glynn (z^1.5), `sin` / `exp` / `log` / `pow` in user formulas
@@ -468,6 +470,49 @@ Each slice is checked against an **independent** oracle:
     - the derivative's kink sign;
     - the fold limit removed. Only the radius test catches this: on these views the second-order
       radius binds first.
+
+**D6 as built (#1911).**
+- **Division in `R2Plan`.** The δ is (ΔP·Q − P·ΔQ) / (Q·(Q + ΔQ)). The quotient rule gives the
+  tangents, the second-order jet and the fold-limit jet.
+  - Against BigFloat the worst relative error is 6e-16 for |δ| from 1e-14 to 1e-2 of |Z|.
+  - The naive (P + ΔP)/(Q + ΔQ) − P/Q fails that test and every Magnet view.
+- **Poles.** `PoleRatio2` (min |Q + ΔQ|² / |Q|²) flags a pixel whose denominator cancels the
+  reference's. Below Pauldelbrot's τ the pixel goes to another reference or to direct iteration,
+  counted in `PerturbationStats.PoleGlitches`.
+- **Convergence.** The engine has a second stop, `Convergence(target, ε)`, which Magnet's
+  `MagnetConvergence` uses for z = 1.
+  - The converged sink colours a pixel as `CalculateMagnet` does, through a shared
+    `FillMagnetConverged`.
+  - BLA radii are zero where the reference is within 4ε of the target, so a skip cannot step over a
+    pixel's convergence.
+- **Wiring.**
+  - Magnet 1 / 2 render on the engine from 1e11, and `FamilyDepth` puts them at 1e290.
+  - User `/` formulas use `R2Plan` through `AstPlan.TryCreateAny`.
+  - Magnet's dz/dc stays 0 (the kernels track none).
+  - The kernels clamp |den|² at 1e-12; the deep path divides exactly.
+- **Root-finding tolerance (§4.4) — measured and not changed.**
+  - Newton z³ − 1 with the tolerance tightened from |Δ|² < 1e-12 to 1e-24 shifts every pixel's
+    count by exactly +1, and basins and neighbour order are unchanged (6,144 / 6,144).
+    Convergence to a simple root is quadratic, so this holds at any depth.
+  - Nova adds ~29 steps (linear convergence), varying smoothly with c; basins are unchanged.
+  - The test is in z-space, against O(1) roots, so the pixel size does not enter it. The
+    saturation claim in §4.4 is not supported. What limits deep root finders is precision (they are
+    double-only to 1e13), not the tolerance.
+- **Limits.**
+  - A reference within double rounding of a pole computes Q = Z − (pole) as noise. For Magnet that
+    step escapes (bailout 100), so it does not matter. A user formula with a removable
+    singularity (numerator and denominator both 0) is not handled.
+  - Magnet 1's z = 1 is superattracting (f′(1) = 0), so the generalised Pauldelbrot test fires near
+    convergence. Results are exact through secondary references and direct BigFloat, but costly in
+    escape-only mode (#1936).
+- **Mutants:**
+  - **Caught:** the naive difference, the quotient tangent, the convergence stop.
+  - **Survive:**
+    - the pole check. No render view triggers it, and views near a pole escape on the next step, so
+      only its unit test covers it;
+    - the near-target BLA cutoff. For Magnet, A → 0 at the superattracting z = 1, so the
+      second-order radius already collapses there. The cutoff is kept as a guard for targets that
+      are not superattracting.
 
 **Order of value:** D1 → D2 → D3 gives deep zoom to Multibrot, Julia, Generated Z2–Z5 and every
 polynomial user equation. D4 / D5 add Tricorn and Burning Ship, which is the original #1253. D6–D10

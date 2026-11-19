@@ -13,7 +13,7 @@
 //     already gave them QD limbs.
 //   • Julia and Multibrot — the generic perturbation engine past 1e11 (#1907), double δ to ~1e290.
 //     Tricorn too since #1909 (an R2Plan with the 2×2 matrix BLA), Burning Ship since #1910
-//     (diffabs folds).
+//     (diffabs folds), Magnet 1 / 2 since #1911 (the quotient difference).
 //   • Everything else renders in double: 1e13 (AutoExplorer.DoubleMaxZoom). Generated Tricorn /
 //     Burning Ship have QD-direct paths but no perturbation (CalcGen turns it off for Conj /
 //     Folded), too slow to explore; Generated Tricorn stays at double until D12 (#1917) puts
@@ -42,6 +42,7 @@ public static class FamilyDepth
         FractalType.Julia or FractalType.Multibrot => EngineDoubleDeltaMaxZoom,   // #1907
         FractalType.Tricorn => EngineDoubleDeltaMaxZoom,                          // #1909
         FractalType.BurningShip => EngineDoubleDeltaMaxZoom,                      // #1910
+        FractalType.Magnet1 or FractalType.Magnet2 => EngineDoubleDeltaMaxZoom,   // #1911
         _ => AutoExplorer.DoubleMaxZoom,
     };
 }

@@ -139,6 +139,14 @@ public sealed class AstPlan : IPerturbationPlan
             // #1910 — abs of a real value (R2Plan admits no other), and Folded.
             case AbsOp u: { var (a, _) = Eval(u.Operand, zr, zi, cr, ci, p); return (a.Abs(), BigFloat.Zero(p)); }
             case Folded u: { var (a, b) = Eval(u.Operand, zr, zi, cr, ci, p); return (a.Abs(), b.Abs()); }
+            case Div d:   // #1911 — x·conj(y) / |y|²; an exact pole gives a value past any bailout
+            {
+                var (a, b) = Eval(d.Left, zr, zi, cr, ci, p); var (c, e) = Eval(d.Right, zr, zi, cr, ci, p);
+                var den = BigFloat.Add(BigFloat.Mul(c, c, p), BigFloat.Mul(e, e, p), p);
+                if (den.Sign == 0) return (BigFloat.FromDouble(1e300, p), BigFloat.Zero(p));
+                return (BigFloat.Div(BigFloat.Add(BigFloat.Mul(a, c, p), BigFloat.Mul(b, e, p), p), den, p),
+                        BigFloat.Div(BigFloat.Sub(BigFloat.Mul(b, c, p), BigFloat.Mul(a, e, p), p), den, p));
+            }
             case Add s:
             {
                 var (a, b) = Eval(s.Left, zr, zi, cr, ci, p); var (c, d) = Eval(s.Right, zr, zi, cr, ci, p);

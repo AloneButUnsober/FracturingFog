@@ -1292,6 +1292,43 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
     // z = 1 so the same target works for both. No closed-form dz/dc is tracked
     // (the kernels leave dr/di at 0), so distance/normal are flat — matching
     // the pre-#852 Magnet behaviour.
+    // A pixel that converged to z = 1 at iteration iter (dPrev = |z − 1| one step before, dCur at iter).
+    // #1911 — shared with the deep path (EscapeTimeCalculator.Deep.cs), which passes NaN for dPrev
+    // after a BLA skip (the count without interpolation).
+    private void FillMagnetConverged<TMap>(int idx, int iter, double zr, double zi, double dPrev, double dCur,
+                                           double convEps, double logEps, int maxIt, TMap colorMap)
+        where TMap : IColorMap
+    {
+        // Smooth convergence count: log-interpolate where the orbit
+        // crossed ε between step iter−1 (dPrev > ε) and iter (dCur ≤ ε).
+        float smooth = iter;
+        if (iter > 0 && dPrev > convEps)
+        {
+            double logPrev = Math.Log(dPrev);
+            double logCur = Math.Log(Math.Max(dCur, 1e-300));
+            double denom = logPrev - logCur;
+            double frac = denom > 1e-12 ? (logPrev - logEps) / denom : 0.0;
+            if (frac < 0.0) frac = 0.0; else if (frac > 1.0) frac = 1.0;
+            smooth = (float)((iter - 1) + frac);
+        }
+        IterationBuffer[idx] = iter;
+        SmoothBuffer[idx] = smooth;
+        DistanceBuffer[idx] = 0f;
+        NormalXBuffer[idx] = 0f;
+        NormalYBuffer[idx] = 0f;
+        float fzr = (float)zr, fzi = (float)zi;
+        FinalZrBuffer[idx] = fzr;
+        FinalZiBuffer[idx] = fzi;
+        FinalDrBuffer[idx] = 0f;
+        FinalDiBuffer[idx] = 0f;
+        if (GradientColorMap.DitherEnabled)
+        {
+            int dy = idx / Width;
+            GradientColorMap.SetDitherForPixel(idx - dy * Width, dy);
+        }
+        ColorBuffer[idx] = (uint)colorMap.Map(smooth, 0f, maxIt, 0f, 0f, fzr, fzi, 0f, 0f);
+    }
+
     private void CalculateMagnet<TKernel, TMap>(TKernel kernel, TMap colorMap, CancellationToken ct)
         where TKernel : struct, IFractalKernel
         where TMap : IColorMap
@@ -1350,36 +1387,7 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
                 }
 
                 if (converged)
-                {
-                    // Smooth convergence count: log-interpolate where the orbit
-                    // crossed ε between step iter−1 (dPrev > ε) and iter (dCur ≤ ε).
-                    float smooth = iter;
-                    if (iter > 0 && dPrev > convEps)
-                    {
-                        double logPrev = Math.Log(dPrev);
-                        double logCur = Math.Log(Math.Max(dCur, 1e-300));
-                        double denom = logPrev - logCur;
-                        double frac = denom > 1e-12 ? (logPrev - logEps) / denom : 0.0;
-                        if (frac < 0.0) frac = 0.0; else if (frac > 1.0) frac = 1.0;
-                        smooth = (float)((iter - 1) + frac);
-                    }
-                    IterationBuffer[idx] = iter;
-                    SmoothBuffer[idx] = smooth;
-                    DistanceBuffer[idx] = 0f;
-                    NormalXBuffer[idx] = 0f;
-                    NormalYBuffer[idx] = 0f;
-                    float fzr = (float)zr, fzi = (float)zi;
-                    FinalZrBuffer[idx] = fzr;
-                    FinalZiBuffer[idx] = fzi;
-                    FinalDrBuffer[idx] = 0f;
-                    FinalDiBuffer[idx] = 0f;
-                    if (GradientColorMap.DitherEnabled)
-                    {
-                        int dy = idx / Width;
-                        GradientColorMap.SetDitherForPixel(idx - dy * Width, dy);
-                    }
-                    ColorBuffer[idx] = (uint)colorMap.Map(smooth, 0f, maxIt, 0f, 0f, fzr, fzi, 0f, 0f);
-                }
+                    FillMagnetConverged(idx, iter, zr, zi, dPrev, dCur, convEps, logEps, maxIt, colorMap);
                 else
                 {
                     // Escaped (iter < maxIt) or true in-set (iter == maxIt) —
