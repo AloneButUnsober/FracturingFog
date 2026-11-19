@@ -14,6 +14,10 @@
 //     Δ is one bit's movement, which falls below double's range long before the ray
 //     reaches a landing point past 1e308. The reference's precision follows the ray: a
 //     bit that moved it by 2^-m is kept to m + 128 bits.
+//   • #1872 — the substeps run in double while every value is a normal double, in CFx
+//     past that. (The reference is still rebased every bit: an older ray point's orbit
+//     escapes far faster — |Z| about squares per extra iteration — so perturbing a later
+//     bit from it loses all precision; measured, it broke the n = 60 tuned landing.)
 //   • Landing as ExternalRay.Land: a periodic angle's trace seeds Newton for the period-p
 //     nucleus (DeepNucleusFinder.Find, growing reach), accepted when the root it came from
 //     lies within RootReach atom sizes of it; a preperiodic one seeds the Misiurewicz
@@ -33,11 +37,23 @@ namespace FracturingFog.Abstractions.Explore;
 /// <summary>#1870 — <see cref="RayLanding"/> past OD. <see cref="Nucleus"/> is set for
 /// Component, <see cref="Misiurewicz"/> for Misiurewicz. <see cref="ScaleLog10"/> is log10
 /// of the trace's last per-period step; <see cref="ContextRadiusLog10"/> (Misiurewicz
-/// only) log10 of a view radius that shows the hub with its first ring of structure.</summary>
+/// only) log10 of a view radius that shows the hub with its first ring of structure.
+/// #1872: <see cref="Substeps"/> / <see cref="DoubleSubsteps"/>, the trace's Newton
+/// substeps and how many of them ran in double.</summary>
 public readonly record struct DeepRayLanding(
     RayLandingStatus Status, ExternalAngle Angle, ExactCentre RayEnd, double ScaleLog10,
     DeepNucleusResult Nucleus, DeepMisiurewiczResult Misiurewicz, string? Detail = null,
-    double ContextRadiusLog10 = double.NaN);
+    double ContextRadiusLog10 = double.NaN, int Substeps = 0, int DoubleSubsteps = 0);
+
+/// <summary>#1872 — the landing's speed-ups, each switchable so tests can check them
+/// against the plain path: the trace's substeps in double where every value is a normal
+/// double; skipping, in the wider reach windows, a divisor whose Newton ran out of steps.</summary>
+public readonly record struct DeepRayTuning(bool DoubleSubsteps = true, bool SkipExhaustedWindows = true)
+{
+    public static DeepRayTuning Default => new(true, true);
+    /// <summary>As before #1872 (the BigFloat rounding rewrite aside, which is exact).</summary>
+    public static DeepRayTuning Plain => new(false, false);
+}
 
 /// <summary>#1870 — parameter-ray tracing for z² + c past octuple-double. See the file header.</summary>
 public static class DeepExternalRay
@@ -63,8 +79,17 @@ public static class DeepExternalRay
 
         public int Bits { get; private set; }
 
+        /// <summary>#1872 — Newton substeps so far, and those solved in double.</summary>
+        public int Substeps { get; private set; }
+        public int DoubleSubsteps { get; private set; }
+
         /// <summary>The current point on the ray, exact.</summary>
         public ExactCentre Point => Add(_ref, _delta, _prec);
+
+        private readonly bool _inDouble = true;   // #1872
+
+        internal Tracer(ExternalAngle angle, DeepRayTuning tuning, int sharpness = ExternalRay.DefaultSharpness)
+            : this(angle, sharpness) => _inDouble = tuning.DoubleSubsteps;
 
         public Tracer(ExternalAngle angle, int sharpness = ExternalRay.DefaultSharpness)
         {
@@ -94,11 +119,13 @@ public static class DeepExternalRay
             for (int j = 0; j < _sharpness; j++)
             {
                 double r = SMath.Pow(ExternalRay.StartRadius, SMath.Pow(0.5, (j + 0.5) / _sharpness));
-                if (!SolveDepth(_z, ref _delta, k, Complex.FromPolarCoordinates(r, phase)))
+                Substeps++;
+                if (!SolveDepth(_z, ref _delta, k, Complex.FromPolarCoordinates(r, phase), _inDouble, out bool usedDouble))
                 {
                     (_ref, _delta, _prec) = (keepRef, keepDelta, keepPrec);
                     return false;
                 }
+                if (usedDouble) DoubleSubsteps++;
             }
             Bits = k + 1;
             return true;
@@ -122,9 +149,16 @@ public static class DeepExternalRay
         return z;
     }
 
-    // Newton on Δ (c = reference + Δ) for f^{k+1}_c(0) = target, perturbed, in CFx.
-    internal static bool SolveDepth(Complex[] z, ref CFx delta, int k, Complex target)
+    // Newton on Δ (c = reference + Δ) for f^{k+1}_c(0) = target, perturbed. #1872: in
+    // double while every value is a normal double, else in CFx.
+    internal static bool SolveDepth(Complex[] z, ref CFx delta, int k, Complex target, bool inDouble = true)
+        => SolveDepth(z, ref delta, k, target, inDouble, out _);
+
+    internal static bool SolveDepth(Complex[] z, ref CFx delta, int k, Complex target, bool inDouble, out bool usedDouble)
     {
+        bool ok = false;
+        usedDouble = inDouble && SolveDepthDouble(z, ref delta, k, target, out ok);
+        if (usedDouble) return ok;
         double last = double.PositiveInfinity;
         var t = CFx.Of(target.Real, target.Imaginary);
         for (int i = 0; i < NewtonSteps; i++)
@@ -148,16 +182,80 @@ public static class DeepExternalRay
         return last <= delta.Log2Abs() - 26.6;                     // 1e-8
     }
 
+    // #1872 — the same Newton in double, mirroring CFx's operations (a product as
+    // (ac − bd, ad + bc), a quotient as a product with the reciprocal). Returns false (and
+    // leaves Δ) when a value leaves the normal-double range, so CFx redoes the bit.
+    private static readonly double NormalLo = SMath.ScaleB(1.0, -900), NormalHi = SMath.ScaleB(1.0, 900);
+    private static bool SolveDepthDouble(Complex[] z, ref CFx delta, int k, Complex target, out bool ok)
+    {
+        ok = false;
+        double dr = delta.Re.ToDouble(), di = delta.Im.ToDouble();
+        if (!InRange(dr, di)) return false;
+        double last = double.PositiveInfinity;
+        for (int i = 0; i < NewtonSteps; i++)
+        {
+            double er = 0, ei = 0, cr = 0, ci = 0;
+            for (int n = 0; n <= k; n++)
+            {
+                double zr = z[n].Real, zi = z[n].Imaginary;
+                double ar = zr + er, ai = zi + ei;                       // (zn + e) · dc, ·2, + 1
+                double pr = ar * cr - ai * ci, pi = ar * ci + ai * cr;
+                cr = pr * 2 + 1.0; ci = pi * 2;
+                double br = zr * 2 + er, bi = zi * 2 + ei;               // (2zn + e) · e + Δ
+                double qr = br * er - bi * ei, qi = br * ei + bi * er;
+                er = qr + dr; ei = qi + di;
+            }
+            if (!(SMath.Abs(cr) <= NormalHi && SMath.Abs(ci) <= NormalHi && SMath.Abs(er) <= NormalHi && SMath.Abs(ei) <= NormalHi))
+                return false;
+            double nr = z[k + 1].Real + er - target.Real, ni = z[k + 1].Imaginary + ei - target.Imaginary;
+            // 1 / dc, scaled by a power of two first so |dc|² stays in range.
+            int sc = SMath.ILogB(SMath.Max(SMath.Abs(cr), SMath.Abs(ci)));
+            double ar2 = SMath.ScaleB(cr, -sc), ai2 = SMath.ScaleB(ci, -sc), n2 = ar2 * ar2 + ai2 * ai2;
+            double rr = SMath.ScaleB(ar2 / n2, -sc), ri = SMath.ScaleB(-ai2 / n2, -sc);
+            double sr = nr * rr - ni * ri, si = nr * ri + ni * rr;
+            if (!double.IsFinite(sr) || !double.IsFinite(si)) return false;
+            dr -= sr; di -= si;
+            if (!InRange(dr, di) || !InRange(sr, si)) return false;
+            double m = Log2Abs(sr, si), d = Log2Abs(dr, di);
+            if (m <= d - 46.5) { delta = CFx.Of(dr, di); ok = true; return true; }
+            if (m <= d - 29.9 && m >= last) { delta = CFx.Of(dr, di); ok = true; return true; }
+            last = m;
+        }
+        delta = CFx.Of(dr, di);
+        ok = last <= Log2Abs(dr, di) - 26.6;
+        return true;
+    }
+
+    // Both parts zero or within the normal range away from under/overflow.
+    private static bool InRange(double re, double im)
+    {
+        double m = SMath.Max(SMath.Abs(re), SMath.Abs(im));
+        return m == 0 || (m >= NormalLo && m <= NormalHi);
+    }
+
+    private static double Log2Abs(double re, double im) => SMath.Log2(SMath.Sqrt(re * re + im * im));
+
     /// <summary>As <see cref="ExternalRay.Land"/>: trace R_θ to where it lands and verify
     /// the landing point in BigFloat.</summary>
     public static DeepRayLanding Land(ExternalAngle angle, int maxBits = DefaultMaxBits, CancellationToken ct = default)
+        => Land(angle, DeepRayTuning.Default, maxBits, ct);
+
+    /// <summary>#1872 — <see cref="Land(ExternalAngle, int, CancellationToken)"/> with the
+    /// speed-ups chosen (tests compare <see cref="DeepRayTuning.Plain"/>).</summary>
+    public static DeepRayLanding Land(ExternalAngle angle, DeepRayTuning tuning, int maxBits = DefaultMaxBits, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(angle);
+        var t = new Tracer(angle, tuning);
+        var r = LandCore(angle, t, tuning, maxBits, ct);
+        return r with { Substeps = t.Substeps, DoubleSubsteps = t.DoubleSubsteps };
+    }
+
+    private static DeepRayLanding LandCore(ExternalAngle angle, Tracer t, DeepRayTuning tuning, int maxBits, CancellationToken ct)
+    {
         if (angle.Pre.Length == 0 && angle.Per == "0")
             return Fail(angle, default, double.NaN, "Angle 0 lands on the cusp c = 1/4 (the main cardioid's root); go there with Reset.");
 
         int p = angle.Period, l = angle.Preperiod;
-        var t = new Tracer(angle);
         var history = new List<ExactCentre> { t.Point };
         bool precisionStop = false;
         int periodicBits = SMath.Min(maxBits, SMath.Max(ExternalRay.PeriodicMinBits, ExternalRay.PeriodicBitsPerPeriod * p));
@@ -177,7 +275,7 @@ public static class DeepExternalRay
                 // minibrot), walk one period more and try again.
                 if (move <= first + stopLog2)
                 {
-                    landed = TryMisiurewicz(angle, t.Point, history, ct);
+                    landed = TryMisiurewicz(angle, t.Point, history, tuning, ct);
                     if (landed != null) return landed.Value;
                 }
             }
@@ -204,7 +302,7 @@ public static class DeepExternalRay
             return Fail(angle, seed, scaleLog10, $"No period-{p} nucleus found near the ray's landing point{limit}.");
         }
 
-        landed = TryMisiurewicz(angle, seed, history, ct);
+        landed = TryMisiurewicz(angle, seed, history, tuning, ct);
         return landed ?? Fail(angle, seed, scaleLog10, $"No Misiurewicz point M({l + 1},{p}) found near the ray's landing point{limit}.");
     }
 
@@ -217,20 +315,25 @@ public static class DeepExternalRay
 
     // A preperiodic landing from `seed`: M(l+1, q) over the divisors q of the angle's
     // period, the reach 4..4096 trace steps (as ExternalRay.Land); null when none verifies.
-    private static DeepRayLanding? TryMisiurewicz(ExternalAngle angle, ExactCentre seed, List<ExactCentre> history, CancellationToken ct)
+    // #1872: a divisor whose Newton ran out of steps without leaving its reach (it creeps,
+    // next to a cluster of roots) does the same in the wider windows, so they skip it.
+    private static DeepRayLanding? TryMisiurewicz(ExternalAngle angle, ExactCentre seed, List<ExactCentre> history,
+        DeepRayTuning tuning, CancellationToken ct)
     {
         int p = angle.Period, l = angle.Preperiod;
         double scaleLog2 = ScaleLog2(history, p, seed);
+        var exhausted = new HashSet<int>();
         for (double reachLog2 = scaleLog2 + 2; reachLog2 <= scaleLog2 + 12; reachLog2 += 3)
             for (int q = 1; q <= p; q++)
             {
-                if (p % q != 0) continue;
+                if (p % q != 0 || exhausted.Contains(q)) continue;
                 int k = l + 1, qq = q;
                 var at = seed;
                 for (int fix = 0; fix < 4; fix++)
                 {
                     ct.ThrowIfCancellationRequested();
-                    var m = DeepMisiurewiczFinder.Refine(at, k, qq, seed, reachLog2 / Log2Of10, ct);
+                    var m = DeepMisiurewiczFinder.Refine(at, k, qq, seed, reachLog2 / Log2Of10, out bool ranOut, ct);
+                    if (tuning.SkipExhaustedWindows && fix == 0 && ranOut) exhausted.Add(q);
                     if (m.Found)
                     {
                         double context = DistLog2(history[SMath.Min(l + p + 1, history.Count - 1)], m.Point);

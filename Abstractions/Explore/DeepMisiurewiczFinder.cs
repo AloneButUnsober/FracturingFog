@@ -108,7 +108,15 @@ public static class DeepMisiurewiczFinder
     public static DeepMisiurewiczResult Refine(
         ExactCentre seed, int preperiod, int period, ExactCentre anchor, double acceptRadiusLog10,
         CancellationToken ct = default)
+        => Refine(seed, preperiod, period, anchor, acceptRadiusLog10, out _, ct);
+
+    /// <summary>#1872 — <paramref name="ranOutOfSteps"/>: Newton took all its steps without
+    /// converging or leaving 8 accept radii of the anchor (it creeps).</summary>
+    internal static DeepMisiurewiczResult Refine(
+        ExactCentre seed, int preperiod, int period, ExactCentre anchor, double acceptRadiusLog10,
+        out bool ranOutOfSteps, CancellationToken ct = default)
     {
+        ranOutOfSteps = false;
         if (preperiod < 1) throw new ArgumentOutOfRangeException(nameof(preperiod));
         if (period < 1) throw new ArgumentOutOfRangeException(nameof(period));
         int k = preperiod, p = period;
@@ -118,7 +126,8 @@ public static class DeepMisiurewiczFinder
         var ax = anchor.Re.WithPrecision(prec); var ay = anchor.Im.WithPrecision(prec);
         double lastLog2 = double.PositiveInfinity;
         bool converged = false;
-        for (int s = 0; s < MaxSteps; s++)
+        int steps = 0;
+        for (int s = 0; s < MaxSteps; s++, steps++)
         {
             ct.ThrowIfCancellationRequested();
             var o = Orbit(cx, cy, k + p, prec, ct);
@@ -139,6 +148,7 @@ public static class DeepMisiurewiczFinder
             lastLog2 = ms;
         }
         var point = new ExactCentre(cx, cy);
+        ranOutOfSteps = !converged && steps == MaxSteps;
         if (!converged || DistLog2(cx, cy, ax, ay, prec) > acceptLog2)
             return new DeepMisiurewiczResult(MisiurewiczStatus.NotFound, point, k, p, Complex.Zero, 0);
 
