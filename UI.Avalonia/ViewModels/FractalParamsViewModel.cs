@@ -244,6 +244,17 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _raysSeed = _p.BilliardRaysSeed;
         _raysMinBounces = _p.BilliardRaysMinBounces;
         _raysShowDisks = _p.BilliardRaysShowDisks;
+        _bhLayout = _p.BlackHoleLayout;
+        _bhMass1 = _p.BlackHoleMass1;
+        _bhMass2 = _p.BlackHoleMass2;
+        _bhSeparation = _p.BlackHoleSeparation;
+        _bhCustom = _p.BlackHoleCustom;
+        _bhDistance = _p.BlackHoleCameraDistance;
+        _bhInclination = _p.BlackHoleInclination;
+        _bhAzimuth = _p.BlackHoleAzimuth;
+        _bhCapture = _p.BlackHoleCaptureFraction;
+        _bhTolerance = _p.BlackHoleTolerance;
+        _bhMaxSteps = _p.BlackHoleMaxSteps;
         _mathPlaneScene = _p.MathPlaneScene ?? string.Empty;
         UpdateMathPlaneSceneError();
         _raysColorSource = _p.BilliardRaysColorSource;
@@ -461,6 +472,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsChaoticBilliard => FractalType == FractalType.ChaoticBilliard;
     /// <summary>#1506 — Billiard Rays (ray-density render of the same scene).</summary>
     public bool IsBilliardRays => FractalType == FractalType.BilliardRays;
+    /// <summary>#1923 — black hole shadows (Majumdar-Papapetrou ray trace).</summary>
+    public bool IsBlackHoleShadow => FractalType == FractalType.BlackHoleShadow;
     /// <summary>Either billiard type: the shared scene controls (geometry, disks, bounces).</summary>
     public bool IsBilliardScene => IsChaoticBilliard || IsBilliardRays;
     /// <summary>#1548 — Math Plane (Cartesian plotter).</summary>
@@ -604,6 +617,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         || IsChaoticBilliard
         // Billiard rays — log ray-density height field (#1506).
         || IsBilliardRays
+        // Black hole shadows — log escape delay height field (#1923).
+        || IsBlackHoleShadow
         // Precision field — divergence-scalar height field (#628).
         || IsPrecisionField
         // Dual-orbit escape-geometry (#864) — the derived scalar rides the
@@ -626,7 +641,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsLyapunov || IsTranscendentalJulia || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian || IsMirrorSpheres
-          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable || IsAdaptiveAa2D
+          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsBlackHoleShadow || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable || IsAdaptiveAa2D
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -2182,6 +2197,42 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
 
     private bool _raysShowDisks;
     public bool BilliardRaysShowDisks { get => _raysShowDisks; set { Set(ref _raysShowDisks, value); _p.BilliardRaysShowDisks = value; Fire(); } }
+
+    // ── Black hole shadows (#1923) ──
+    private BlackHoleLayout _bhLayout;
+    public BlackHoleLayout BlackHoleLayout { get => _bhLayout; set { Set(ref _bhLayout, value); _p.BlackHoleLayout = value; BhLayoutChanged(); Fire(); } }
+    public System.Array BlackHoleLayouts => s_BlackHoleLayouts;
+    private static readonly System.Array s_BlackHoleLayouts = System.Enum.GetValues(typeof(BlackHoleLayout));
+    /// <summary>Which layout controls apply (the panel hides the rest).</summary>
+    public bool BhUsesMass2 => _bhLayout == BlackHoleLayout.Binary;
+    public bool BhUsesSeparation => _bhLayout is BlackHoleLayout.Binary or BlackHoleLayout.Triangle or BlackHoleLayout.Square;
+    public bool BhUsesMass1 => _bhLayout != BlackHoleLayout.Custom;
+    public bool BhIsCustom => _bhLayout == BlackHoleLayout.Custom;
+    private void BhLayoutChanged()
+    {
+        foreach (var n in new[] { nameof(BhUsesMass2), nameof(BhUsesSeparation), nameof(BhUsesMass1), nameof(BhIsCustom) })
+            this.RaisePropertyChanged(n);
+    }
+    private double _bhMass1;
+    public double BlackHoleMass1 { get => _bhMass1; set { Set(ref _bhMass1, Clamp(value, 0.001, 100.0)); _p.BlackHoleMass1 = _bhMass1; Fire(); } }
+    private double _bhMass2;
+    public double BlackHoleMass2 { get => _bhMass2; set { Set(ref _bhMass2, Clamp(value, 0.0, 100.0)); _p.BlackHoleMass2 = _bhMass2; Fire(); } }
+    private double _bhSeparation;
+    public double BlackHoleSeparation { get => _bhSeparation; set { Set(ref _bhSeparation, Clamp(value, 0.0, 1000.0)); _p.BlackHoleSeparation = _bhSeparation; Fire(); } }
+    private string _bhCustom = string.Empty;
+    public string BlackHoleCustom { get => _bhCustom; set { Set(ref _bhCustom, value ?? string.Empty); _p.BlackHoleCustom = _bhCustom; Fire(); } }
+    private double _bhDistance;
+    public double BlackHoleCameraDistance { get => _bhDistance; set { Set(ref _bhDistance, Clamp(value, 10.0, 100000.0)); _p.BlackHoleCameraDistance = _bhDistance; Fire(); } }
+    private double _bhInclination;
+    public double BlackHoleInclination { get => _bhInclination; set { Set(ref _bhInclination, Clamp(value, 0.0, 180.0)); _p.BlackHoleInclination = _bhInclination; Fire(); } }
+    private double _bhAzimuth;
+    public double BlackHoleAzimuth { get => _bhAzimuth; set { Set(ref _bhAzimuth, Clamp(value, -360.0, 360.0)); _p.BlackHoleAzimuth = _bhAzimuth; Fire(); } }
+    private double _bhCapture;
+    public double BlackHoleCaptureFraction { get => _bhCapture; set { Set(ref _bhCapture, Clamp(value, 0.00001, 0.5)); _p.BlackHoleCaptureFraction = _bhCapture; Fire(); } }
+    private double _bhTolerance;
+    public double BlackHoleTolerance { get => _bhTolerance; set { Set(ref _bhTolerance, Clamp(value, 1e-13, 1e-4)); _p.BlackHoleTolerance = _bhTolerance; Fire(); } }
+    private int _bhMaxSteps;
+    public int BlackHoleMaxSteps { get => _bhMaxSteps; set { Set(ref _bhMaxSteps, (int)Clamp(value, 100, 1_000_000)); _p.BlackHoleMaxSteps = _bhMaxSteps; Fire(); } }
     // #1507 — what sets the hue.
     private BilliardRayColorSource _raysColorSource;
     public BilliardRayColorSource BilliardRaysColorSource { get => _raysColorSource; set { Set(ref _raysColorSource, value); _p.BilliardRaysColorSource = value; Fire(); } }

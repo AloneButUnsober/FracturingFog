@@ -1472,6 +1472,7 @@ namespace FracturingFog.Imaging
                 FractalType.IndrasPearls     => new IndrasPearlsCalculator(w, h),
                 FractalType.ChaoticBilliard  => new ChaoticBilliardCalculator(w, h),
                 FractalType.BilliardRays     => new BilliardRaysCalculator(w, h),
+                FractalType.BlackHoleShadow  => new BlackHoleShadowCalculator(w, h),   // #1923
                 FractalType.MathPlane        => new MathPlaneCalculator(w, h),
                 FractalType.MathPlane3D      => new MathPlane3DCalculator(w, h),   // #1713
                 FractalType.PrecisionField   => new PrecisionFieldCalculator(w, h),
@@ -1561,6 +1562,7 @@ namespace FracturingFog.Imaging
                 case DlaCalculator dl:         dl.FractalParameters = req.FractalParameters; break;
                 case ChaoticBilliardCalculator cb: cb.FractalParameters = req.FractalParameters; break;
                 case BilliardRaysCalculator br: br.FractalParameters = req.FractalParameters; break;
+                case BlackHoleShadowCalculator bh: bh.FractalParameters = req.FractalParameters; break;   // #1923
                 case MathPlaneCalculator mp: mp.FractalParameters = req.FractalParameters; break;
                 case MathPlane3DCalculator mp3: mp3.FractalParameters = req.FractalParameters; break;   // #1713
                 case PrecisionFieldCalculator pf: pf.FractalParameters = req.FractalParameters; break;

@@ -1431,5 +1431,68 @@
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
         </Grid>
 
+        <!-- #1923 — black hole shadows (Majumdar-Papapetrou). -->
+        <Grid IsVisible="{Binding IsBlackHoleShadow}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Layout:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="0" Grid.Column="1"
+                      ItemsSource="{Binding BlackHoleLayouts}"
+                      SelectedItem="{Binding BlackHoleLayout, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Binary: two holes on the z axis. Single: one hole (extremal Reissner-Nordström, shadow radius 4M). Triangle / Square: equal masses on a polygon. Custom: your own holes." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Mass 1:" VerticalAlignment="Center" IsVisible="{Binding BhUsesMass1}" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1" IsVisible="{Binding BhUsesMass1}"
+                           Minimum="0.001" Maximum="100" Increment="0.1" FormatString="0.##########"
+                           Value="{Binding BlackHoleMass1, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Mass of hole 1 (every hole for Single / Triangle / Square), geometric units G = c = 1." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Mass 2:" VerticalAlignment="Center" IsVisible="{Binding BhUsesMass2}" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1" IsVisible="{Binding BhUsesMass2}"
+                           Minimum="0" Maximum="100" Increment="0.1" FormatString="0.##########"
+                           Value="{Binding BlackHoleMass2, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Mass of hole 2. Unequal masses break the mirror symmetry." />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Separation:" VerticalAlignment="Center" IsVisible="{Binding BhUsesSeparation}" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1" IsVisible="{Binding BhUsesSeparation}"
+                           Minimum="0" Maximum="1000" Increment="0.1" FormatString="0.##########"
+                           Value="{Binding BlackHoleSeparation, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Coordinate distance between the holes (polygon side for Triangle / Square). Closer holes grow bigger eyebrows." />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Holes:" VerticalAlignment="Center" IsVisible="{Binding BhIsCustom}" />
+            <TextBox Grid.Row="4" Grid.Column="1" IsVisible="{Binding BhIsCustom}" Margin="0,2"
+                     Text="{Binding BlackHoleCustom, Mode=TwoWay}" Watermark="x,y,z,m; x,y,z,m"
+                     ToolTip.Tip="Up to four holes as x,y,z,mass separated by semicolons. The camera looks at the origin." />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Inclination (deg):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1"
+                           Minimum="0" Maximum="180" Increment="5" FormatString="0.##########"
+                           Value="{Binding BlackHoleInclination, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Camera angle from the -z axis: 90 views a z-axis binary side-on, 0 looks along the axis." />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Azimuth (deg):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="6" Grid.Column="1"
+                           Minimum="-360" Maximum="360" Increment="5" FormatString="0.##########"
+                           Value="{Binding BlackHoleAzimuth, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Camera angle about the z axis." />
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Camera distance:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="7" Grid.Column="1"
+                           Minimum="10" Maximum="100000" Increment="10" FormatString="0.##########"
+                           Value="{Binding BlackHoleCameraDistance, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Distance of the launch plane. Rays start parallel there, so the view is the impact-parameter plane; farther is closer to a true distant observer (and slower)." />
+            <TextBlock Grid.Row="8" Grid.Column="0" Text="Capture radius (x m):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="8" Grid.Column="1"
+                           Minimum="0.00001" Maximum="0.5" Increment="0.01" FormatString="0.##########"
+                           Value="{Binding BlackHoleCaptureFraction, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="A ray counts as fallen in once it is this close to a hole (times the hole's mass, isotropic coordinates). Well inside the photon sphere (1 x m)." />
+            <TextBlock Grid.Row="9" Grid.Column="0" Text="Tolerance:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="9" Grid.Column="1"
+                           Minimum="0.0000000000001" Maximum="0.0001" Increment="0.000000001" FormatString="0.###E+0"
+                           Value="{Binding BlackHoleTolerance, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Integrator relative tolerance per step. Smaller is more accurate near the fractal edges and slower." />
+            <TextBlock Grid.Row="10" Grid.Column="0" Text="Max steps:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="10" Grid.Column="1"
+                           Minimum="100" Maximum="1000000" Increment="1000" FormatString="0"
+                           Value="{Binding BlackHoleMaxSteps, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Steps before a ray is called undecided (interior colour). Rays near the eyebrows orbit many times." />
+            <TextBlock Grid.Row="11" Grid.Column="1"
+                       Text="Each hole's shadow is its own colour; eyebrows are rays caught by one hole after swinging round another. Escaped rays are coloured by their time delay. A Billiard theme colours the fates directly."
+                       TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
+        </Grid>
+
     </StackPanel>
 </UserControl>

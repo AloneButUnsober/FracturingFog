@@ -754,6 +754,18 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysSeed { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysMinBounces { get; set; }
         [JsonIgnore(Condition = OmitNull)] public bool? BilliardRaysShowDisks { get; set; }
+        // #1923 — black hole shadows (BlackHoleLayout = int cast of FracturingFog.BlackHoleLayout).
+        [JsonIgnore(Condition = OmitNull)] public int? BlackHoleLayout { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BlackHoleMass1 { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BlackHoleMass2 { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BlackHoleSeparation { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public string? BlackHoleCustom { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BlackHoleCameraDistance { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BlackHoleInclination { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BlackHoleAzimuth { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BlackHoleCaptureFraction { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BlackHoleTolerance { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? BlackHoleMaxSteps { get; set; }
         // #1507 — int cast of BilliardRayColorSource.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysColorSource { get; set; }
         // #1508 — crossings (int casts of BilliardRayMode / BilliardCrossingValue).
@@ -1267,6 +1279,22 @@ namespace FracturingFog.Models
                 },
                 // #1506 — the shared billiard scene (no launch / gate / mute: those
                 // colour ChaoticBilliard only) plus the sweep.
+                // #1923 — black hole shadows: every setting (Custom holes only when used).
+                FractalType.BlackHoleShadow => new RegionFractalParams
+                {
+                    BlackHoleLayout = (int)p.BlackHoleLayout,
+                    BlackHoleMass1 = p.BlackHoleMass1,
+                    BlackHoleMass2 = p.BlackHoleMass2,
+                    BlackHoleSeparation = p.BlackHoleSeparation,
+                    BlackHoleCustom = p.BlackHoleLayout == FracturingFog.BlackHoleLayout.Custom
+                                      && !string.IsNullOrWhiteSpace(p.BlackHoleCustom) ? p.BlackHoleCustom : null,
+                    BlackHoleCameraDistance = p.BlackHoleCameraDistance,
+                    BlackHoleInclination = p.BlackHoleInclination,
+                    BlackHoleAzimuth = p.BlackHoleAzimuth,
+                    BlackHoleCaptureFraction = p.BlackHoleCaptureFraction,
+                    BlackHoleTolerance = p.BlackHoleTolerance,
+                    BlackHoleMaxSteps = p.BlackHoleMaxSteps,
+                },
                 FractalType.BilliardRays => new RegionFractalParams
                 {
                     BilliardGeometry = (int)p.BilliardGeometry,
@@ -2251,6 +2279,17 @@ namespace FracturingFog.Models
             if (BilliardRaysSeed.HasValue)       p.BilliardRaysSeed = BilliardRaysSeed.Value;
             if (BilliardRaysMinBounces.HasValue) p.BilliardRaysMinBounces = BilliardRaysMinBounces.Value;
             if (BilliardRaysShowDisks.HasValue)  p.BilliardRaysShowDisks = BilliardRaysShowDisks.Value;
+            if (BlackHoleLayout.HasValue)         p.BlackHoleLayout = (FracturingFog.BlackHoleLayout)BlackHoleLayout.Value;
+            if (BlackHoleMass1.HasValue)          p.BlackHoleMass1 = BlackHoleMass1.Value;
+            if (BlackHoleMass2.HasValue)          p.BlackHoleMass2 = BlackHoleMass2.Value;
+            if (BlackHoleSeparation.HasValue)     p.BlackHoleSeparation = BlackHoleSeparation.Value;
+            if (BlackHoleCustom != null)          p.BlackHoleCustom = BlackHoleCustom;
+            if (BlackHoleCameraDistance.HasValue) p.BlackHoleCameraDistance = BlackHoleCameraDistance.Value;
+            if (BlackHoleInclination.HasValue)    p.BlackHoleInclination = BlackHoleInclination.Value;
+            if (BlackHoleAzimuth.HasValue)        p.BlackHoleAzimuth = BlackHoleAzimuth.Value;
+            if (BlackHoleCaptureFraction.HasValue) p.BlackHoleCaptureFraction = BlackHoleCaptureFraction.Value;
+            if (BlackHoleTolerance.HasValue)      p.BlackHoleTolerance = BlackHoleTolerance.Value;
+            if (BlackHoleMaxSteps.HasValue)       p.BlackHoleMaxSteps = BlackHoleMaxSteps.Value;
             if (BilliardRaysColorSource.HasValue) p.BilliardRaysColorSource = (FracturingFog.BilliardRayColorSource)BilliardRaysColorSource.Value;
             if (BilliardRaysMode.HasValue)       p.BilliardRaysMode = (FracturingFog.BilliardRayMode)BilliardRaysMode.Value;
             if (BilliardRaysCrossingWindow.HasValue) p.BilliardRaysCrossingWindow = BilliardRaysCrossingWindow.Value;

@@ -1232,7 +1232,26 @@ namespace FracturingFog
         /// renderer under an orbit camera. Scene text <c>MathPlane3DScene</c>; camera
         /// <c>MathPlane3DCamera*</c>. Design: Docs/Technical/MathPlane3D-DesignPlan.md.</summary>
         MathPlane3D,
+        /// <summary>#1923 (epic #1922) — shadows of extremally charged black holes in static
+        /// balance (Majumdar-Papapetrou spacetime). Each pixel is an image-plane point of a
+        /// distant camera; its null ray is traced (shared scattering integrator,
+        /// <c>Engine/Scattering</c>) until it falls into a hole or escapes, and the fate map
+        /// is the image: per-hole shadows plus the nested "eyebrows" along the axis.
+        /// <c>BlackHoleShadowCalculator</c>. Tunables: <c>BlackHoleLayout</c>,
+        /// <c>BlackHoleMass1/2</c>, <c>BlackHoleSeparation</c>, <c>BlackHoleCustom</c>,
+        /// <c>BlackHoleCameraDistance</c>, <c>BlackHoleInclination</c>,
+        /// <c>BlackHoleAzimuth</c>, <c>BlackHoleCaptureFraction</c>,
+        /// <c>BlackHoleTolerance</c>, <c>BlackHoleMaxSteps</c>.</summary>
+        BlackHoleShadow,
     }
+
+    /// <summary>Hole layout of <see cref="FractalType.BlackHoleShadow"/> (#1923).
+    /// <see cref="Binary"/> (default): masses M1, M2 on the z axis at coordinate separation a,
+    /// centre of mass at the origin (Shipley &amp; Dolan 2016). <see cref="Single"/>: one hole of
+    /// mass M1 (extremal Reissner-Nordström). <see cref="Triangle"/> / <see cref="Square"/>:
+    /// equal masses M1 at the corners of a regular polygon of side a in the x-z plane.
+    /// <see cref="Custom"/>: <c>BlackHoleCustom</c> = "x,y,z,m;..." (up to four holes).</summary>
+    public enum BlackHoleLayout { Binary, Single, Triangle, Square, Custom }
 
     public enum RenderProfile { Preview, Final }
 
@@ -1371,6 +1390,10 @@ namespace FracturingFog
             // Wada mirror spheres (#1440) — categorical exit opening through
             // IBilliardColorMap only; no normals / DE / orbit data for themes.
             FractalType.MirrorSpheres => FractalCapabilities.None,
+
+            // #1923 — black hole shadows: categorical fate through IBilliardColorMap, or the
+            // 3-param Map on the escaped rays' delay; no normals / DE / orbit data.
+            FractalType.BlackHoleShadow => FractalCapabilities.None,
 
             // #1713 — Math Plane 3D draws its own colours (a diagram, no per-pixel data).
             FractalType.MathPlane3D => FractalCapabilities.None,

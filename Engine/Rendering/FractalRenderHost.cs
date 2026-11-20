@@ -184,6 +184,8 @@ namespace FracturingFog.Rendering
         private MathPlaneCalculator _mathPlaneCalculator => LazyCalc(ref _mathPlaneCalculatorSlot, static (w, h) => new MathPlaneCalculator(w, h));
         private MathPlane3DCalculator? _mathPlane3DCalculatorSlot;     // #1713
         private MathPlane3DCalculator _mathPlane3DCalculator => LazyCalc(ref _mathPlane3DCalculatorSlot, static (w, h) => new MathPlane3DCalculator(w, h));
+        private BlackHoleShadowCalculator? _blackHoleShadowCalculatorSlot;   // #1923
+        private BlackHoleShadowCalculator _blackHoleShadowCalculator => LazyCalc(ref _blackHoleShadowCalculatorSlot, static (w, h) => new BlackHoleShadowCalculator(w, h));
         private PrecisionFieldCalculator? _precisionFieldCalculatorSlot;
         private PrecisionFieldCalculator _precisionFieldCalculator => LazyCalc(ref _precisionFieldCalculatorSlot, static (w, h) => new PrecisionFieldCalculator(w, h));
         private DualOrbitEscapeCalculator? _dualOrbitCalculatorSlot;
@@ -2853,6 +2855,7 @@ namespace FracturingFog.Rendering
             FractalType.RandomTile => new RandomTileCalculator(w, h),
             FractalType.ChaoticBilliard => new ChaoticBilliardCalculator(w, h),
             FractalType.BilliardRays => new BilliardRaysCalculator(w, h),
+            FractalType.BlackHoleShadow => new BlackHoleShadowCalculator(w, h),   // #1923
             FractalType.SlitCascade => new SlitCascadeCalculator(w, h),   // #1569
             FractalType.TalbotCarpet => new TalbotCarpetCalculator(w, h), // #1570
             FractalType.PrecisionField => new PrecisionFieldCalculator(w, h),
@@ -4428,6 +4431,7 @@ namespace FracturingFog.Rendering
                 case RandomTileCalculator rt: rt.FractalParameters = ViewState.FractalParameters; break;
                 case ChaoticBilliardCalculator cb: cb.FractalParameters = ViewState.FractalParameters; break;
                 case BilliardRaysCalculator br: br.FractalParameters = ViewState.FractalParameters; break;
+                case BlackHoleShadowCalculator bh: bh.FractalParameters = ViewState.FractalParameters; break;   // #1923
                 case MathPlaneCalculator mp: mp.FractalParameters = ViewState.FractalParameters; break;
                 case MathPlane3DCalculator mp3: mp3.FractalParameters = ViewState.FractalParameters; break;   // #1713
                 case PrecisionFieldCalculator pf: pf.FractalParameters = ViewState.FractalParameters; break;
@@ -4645,6 +4649,7 @@ namespace FracturingFog.Rendering
             FractalType.BilliardRays => _billiardRaysCalculator,
             FractalType.MathPlane => _mathPlaneCalculator,
             FractalType.MathPlane3D => _mathPlane3DCalculator,
+            FractalType.BlackHoleShadow => _blackHoleShadowCalculator,   // #1923
             FractalType.PrecisionField => _precisionFieldCalculator,
             FractalType.JulibrotPair => _dualOrbitCalculator,
             FractalType.IndrasPearls => _indrasPearlsCalculator,
