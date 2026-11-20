@@ -13,7 +13,14 @@
 // Sugiyama 2012 for the eyebrows and the deformed main shadows).
 //
 // The view is the impact-parameter plane, mapped through the standard 2D pan / zoom
-// (pitch (4 / width) / zoom), in units of the hole masses (G = c = 1).
+// (the camera's pitch, PixelPitch), in units of the hole masses (G = c = 1).
+//
+// #1969 — anti-aliasing: the quality preset's sub-pixel samples (Supersampling.AccumulateAlt)
+// jitter the centre and re-trace; with Adaptive anti-aliasing on, only pixels that differ from
+// a neighbour (shadow and eyebrow edges, the lensed sky) take the extra samples, through
+// PixelMask. A marked pixel is traced from its own coordinate alone, so it gets exactly a full
+// frame's colour, except where a pass reads neighbours (solid blocks, the double-double edge
+// fix-up): MaskExact is false there and AA falls back to the full grid.
 //
 // Colouring: categorical, like the chaotic billiard. Gate i = captured by hole i,
 // gate N = escaped, -1 = undecided at the step cap. A billiard theme (IBilliardColorMap)
@@ -33,8 +40,29 @@ using FracturingFog.Scattering;
 
 namespace FracturingFog;
 
-public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightFieldSource, FracturingFog.Rendering.ILowResPreviewCalculator, FracturingFog.Render.IGpuRouteSource
+public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightFieldSource, FracturingFog.Rendering.ILowResPreviewCalculator, FracturingFog.Render.IGpuRouteSource,
+    FracturingFog.Rendering.IAdaptiveAaCalculator
 {
+    /// <summary>#1969 — adaptive anti-aliasing: with a mask (Width x Height bytes) the CPU trace
+    /// computes only the marked pixels; the others keep their buffer contents. The GPU route and
+    /// solid blocks compute every pixel (still exact).</summary>
+    public byte[]? PixelMask { get; set; }
+    public FracturingFog.Rendering.AdaptiveAa AdaptiveAa => FracturingFog.Rendering.AdaptiveAa.From(FractalParameters);
+
+    /// <summary>#1969 — false while a pass reads neighbouring pixels: solid blocks (a block's fill
+    /// depends on its ring) and the double-double edge fix-up past double precision (it retraces
+    /// the fate edges of the whole frame).</summary>
+    public bool MaskExact
+    {
+        get
+        {
+            var p = FractalParameters;
+            bool fate = p.BlackHoleChannel == BlackHoleChannel.Fate;
+            if (p.BlackHoleSolidBlocks && fate) return false;
+            return !(p.BlackHoleDdEdges && fate && Scene.PastDoublePrecision(PixelPitch(Width, Height, Zoom)));
+        }
+    }
+
     public int Width { get; private set; }
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
@@ -638,11 +666,17 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
             return;
         }
 
+        byte[]? aaMask = PixelMask is { } pm && pm.Length == width * height ? pm : null;   // #1969
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             if (ct.IsCancellationRequested) return;
             Span<double> s = stackalloc double[6];
-            for (int x = 0; x < width; x++) Pixel(x, y, s);
+            int row = y * width;
+            for (int x = 0; x < width; x++)
+            {
+                if (aaMask != null && aaMask[row + x] == 0) continue;
+                Pixel(x, y, s);
+            }
         });
         LastSolidFilled = 0;
     }
