@@ -101,8 +101,26 @@ public interface IOrbitMap
 }
 
 /// <summary>z^d + c, z₀ = 0 (Multibrot; d = 2 is the Mandelbrot set).</summary>
-public sealed class MultibrotMap : IOrbitMap
+public sealed class MultibrotMap : IDeepOrbitMap
 {
+    // #1916 — the BigFloat step (DeepGeneralFinder): z^d + c by repeated multiplication.
+    public int CriticalDegree => Degree;
+    public bool DeepNuclei => true;
+
+    public void StepBig(ref FracturingFog.FFMath.BigFloat zr, ref FracturingFog.FFMath.BigFloat zi,
+                        FracturingFog.FFMath.BigFloat cr, FracturingFog.FFMath.BigFloat ci, int prec)
+    {
+        var ar = zr; var ai = zi;
+        for (int k = 1; k < Degree; k++)
+        {
+            var nr = FracturingFog.FFMath.BigFloat.Sub(FracturingFog.FFMath.BigFloat.Mul(ar, zr, prec), FracturingFog.FFMath.BigFloat.Mul(ai, zi, prec), prec);
+            var ni = FracturingFog.FFMath.BigFloat.Add(FracturingFog.FFMath.BigFloat.Mul(ar, zi, prec), FracturingFog.FFMath.BigFloat.Mul(ai, zr, prec), prec);
+            ar = nr; ai = ni;
+        }
+        zr = FracturingFog.FFMath.BigFloat.Add(ar, cr, prec);
+        zi = FracturingFog.FFMath.BigFloat.Add(ai, ci, prec);
+    }
+
     public MultibrotMap(int d) { Degree = SMath.Max(2, d); }
     public int Degree { get; }
     public string Name => $"z^{Degree} + c";
@@ -125,8 +143,21 @@ public sealed class MultibrotMap : IOrbitMap
 }
 
 /// <summary>Tricorn / Mandelbar: z' = conj(z)² + c, z₀ = 0 (anti-holomorphic).</summary>
-public sealed class TricornMap : IOrbitMap
+public sealed class TricornMap : IDeepOrbitMap
 {
+    // #1916 — conj(z)² + c in BigFloat.
+    public int CriticalDegree => 2;
+    public bool DeepNuclei => true;
+
+    public void StepBig(ref FracturingFog.FFMath.BigFloat zr, ref FracturingFog.FFMath.BigFloat zi,
+                        FracturingFog.FFMath.BigFloat cr, FracturingFog.FFMath.BigFloat ci, int prec)
+    {
+        var nr = FracturingFog.FFMath.BigFloat.Sub(FracturingFog.FFMath.BigFloat.Mul(zr, zr, prec), FracturingFog.FFMath.BigFloat.Mul(zi, zi, prec), prec);
+        var ni = -FracturingFog.FFMath.BigFloat.Mul(zr, zi, prec).ScaleB(1);
+        zr = FracturingFog.FFMath.BigFloat.Add(nr, cr, prec);
+        zi = FracturingFog.FFMath.BigFloat.Add(ni, ci, prec);
+    }
+
     public string Name => "conj(z)^2 + c";
     public double EscapeRadius => 512;
     public void Start(V2 c, out V2 z0, out M2 dz0dc) { z0 = default; dz0dc = M2.Zero; }
@@ -145,8 +176,22 @@ public sealed class TricornMap : IOrbitMap
 /// <summary>Burning Ship: z' = (x² − y² + cx, 2|x||y| + cy), z₀ = 0. The
 /// abs folds make it piecewise polynomial; the Jacobian is the one of the
 /// active piece (constant sign pattern inside a Newton basin).</summary>
-public sealed class BurningShipMap : IOrbitMap
+public sealed class BurningShipMap : IDeepOrbitMap
 {
+    // #1916 — (x² − y² + cx, 2|x||y| + cy) in BigFloat. Deep minibrots not trusted (DeepGeneralFinder's header).
+    public int CriticalDegree => 2;
+    public bool DeepNuclei => false;
+
+    public void StepBig(ref FracturingFog.FFMath.BigFloat zr, ref FracturingFog.FFMath.BigFloat zi,
+                        FracturingFog.FFMath.BigFloat cr, FracturingFog.FFMath.BigFloat ci, int prec)
+    {
+        var ax = zr.Abs(); var ay = zi.Abs();
+        var nr = FracturingFog.FFMath.BigFloat.Sub(FracturingFog.FFMath.BigFloat.Mul(ax, ax, prec), FracturingFog.FFMath.BigFloat.Mul(ay, ay, prec), prec);
+        var ni = FracturingFog.FFMath.BigFloat.Mul(ax, ay, prec).ScaleB(1);
+        zr = FracturingFog.FFMath.BigFloat.Add(nr, cr, prec);
+        zi = FracturingFog.FFMath.BigFloat.Add(ni, ci, prec);
+    }
+
     public string Name => "Burning Ship";
     public double EscapeRadius => 512;
     public void Start(V2 c, out V2 z0, out M2 dz0dc) { z0 = default; dz0dc = M2.Zero; }

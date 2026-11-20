@@ -637,6 +637,46 @@ in the same PR.
   - the jump limit removed. Only a radius test catches this one, because the views' BLA radii never
     span a jump.
 
+**D11 as built (#1916).**
+- **`DeepGeneralFinder`** (`Abstractions/Explore/DeepGeneralFinder.cs`) is `GeneralFinder` past double,
+  for maps with a BigFloat step (`IDeepOrbitMap`: z^d + c, Tricorn, Burning Ship).
+  - **Newton in R².** The orbit runs in BigFloat. The 2×2 Jacobian is carried in double from the map's
+    own `Step`, renormalised by powers of two, and the step J⁻¹·G is applied in BigFloat. This is not
+    the perturbed Newton the plan named: BigFloat orbits are fast enough at these periods, and simpler.
+  - **Periods.** A first-order ball test gives a lower bound, and periods are scanned up from it within
+    a work budget. For z² + c the bound is the period; for Burning Ship it falls short (171 against
+    205).
+  - **Acceptance:** the invariants of `GeneralFinder` — inside the view, minimal period, an attracting
+    (nucleus) or repelling (Misiurewicz) cycle.
+  - **Polish.** The nucleus is polished at the minibrot's own precision. Without this, the Tricorn
+    nucleus at 1e30 was 2^-176 off with a 1e-60 minibrot, and the calculator rendered beside it.
+  - **Size, for framing:** 1/(‖∂z_p/∂c‖·‖Λ‖^{1/(d−1)}), which generalises the atom-domain size.
+    It is exact for z² + c, and it matches the measured body for Tricorn.
+  - **Snap:** `FindNearMisiurewicz` is ported too.
+- **UI.** Past 1e13, Zoom to minibrot and Snap to spiral run the deep finder (exact centre, log zoom,
+  `MinibrotJump.AtDeep`), within the family's `FamilyDepth`. A double-precision find whose framing
+  needs more than 1e13 is polished in BigFloat and taken.
+- **Burning Ship minibrots are refused** (`DeepNuclei = false`, #1951). The folds break the ball bound
+  and the size estimate: double finds 79, the deep scan 241 with no size. The EVA 2019 paper could not
+  be read (403). Its deep Misiurewicz snap works.
+- **Not covered** (#1952): User Equation (no BigFloat evaluator for the DSL in Abstractions), a
+  perturbed `MultibrotRay`, and Julia morph for the general families past 1e13.
+- **Results** (`S1916DeepGeneralFinderTests`):
+  - z² + c against the deep z² + c finder: the same period and nucleus, and the size equal to 3
+    decimals (10^-46.392, 10^-94.557).
+  - Tricorn at 1e30 / 1e80 (p 134 / 357) and z³ + c at 1e30 (p 44) are roots by an independent BigFloat
+    finite-difference Newton step (2^-238 to 2^-617).
+  - At the framing zoom the engine renders the nucleus in-set, with escaping pixels around it.
+  - Shallow, Tricorn agrees with `GeneralFinder` (p 28, zoom 10^12.48 each).
+  - Misiurewicz points are refound at 1e40 for Tricorn and Burning Ship.
+- **Mutants:** all five caught:
+  - the polish skipped;
+  - the Jacobian's ∂f/∂c term dropped;
+  - Λ dropped from the size;
+  - the step's scale with the wrong sign;
+  - the minimal-period test removed. Only a direct test catches this one, because the scan tries the
+    lower period first.
+
 **Order of value:** D1 → D2 → D3 gives deep zoom to Multibrot, Julia, Generated Z2–Z5 and every
 polynomial user equation. D4 / D5 add Tricorn and Burning Ship, which is the original #1253. D6–D10
 widen the user equation language.

@@ -1397,6 +1397,9 @@ entry above completed or corrected.
   <http://dx.doi.org/10.14236/ewic/EVA2019.74>. As cited by the Fractalshades documentation
   ([gbillotey](#fractalshades-math)), for generalising minibrot finding to the Burning Ship. Not yet
   read. **FF use:** design plan §6 (Burning Ship finders, epic #1253).
+  - **#1916 (2026-11-19):** a read was attempted and failed. The DOI redirects to ScienceOpen, which
+    returned 403, and no copy was found on the author's site. The deep finder therefore does not use
+    it, and Burning Ship's deep minibrot search is refused until it is read (#1951).
 - **Wolfgang Straßer 1974** — PhD thesis, TU Berlin, 1974, said to describe the z-buffer independently
   of Catmull (see [Catmull](#catmull-zbuffer)). Source: the TU Wien obituary
   (<https://www.cg.tuwien.ac.at/sites/default/files/lost-colleague/Wolfgang%20Strasser/WolfgangStrasser-Obituary.pdf>).
