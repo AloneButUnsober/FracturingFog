@@ -52,9 +52,20 @@ public sealed class S1906DeepCentreTests(ITestOutputHelper output)
     private static readonly OD Re = new(-0.7145519151951202, -2.0790192891565988e-17, 1.1753166641509792e-33, -8.102457136962753e-50, 0, 0, 0, 0);
     private static readonly OD Im = new(-0.35402073332318235, 2.5477179573089096e-17, -6.072997541261718e-34, -1.8911088656798612e-50, 0, 0, 0, 0);
 
+    // #1960 — Ultra with one AA sample: the alt calculators' AA now really moves its sub-samples at
+    // 1e30 (it rounded them away before), and a supersampled frame's IterationBuffer holds the last
+    // jittered sample (Supersampling's #1381 note). This test is about the centre handoff, not AA.
+    private static readonly QualityPreset UltraOneSample = new()
+    {
+        Tier = QualityPreset.Ultra.Tier, Name = "Ultra1", ZoomMin = QualityPreset.Ultra.ZoomMin, ZoomMax = QualityPreset.Ultra.ZoomMax,
+        WheelZoomFactor = QualityPreset.Ultra.WheelZoomFactor, IterBase = QualityPreset.Ultra.IterBase, IterMax = QualityPreset.Ultra.IterMax,
+        IterPerDecade = QualityPreset.Ultra.IterPerDecade, AllowHighPrecision = QualityPreset.Ultra.AllowHighPrecision,
+        HPZoomThreshold = QualityPreset.Ultra.HPZoomThreshold, AaSamples = 1, TaaMaxSamples = 1,
+    };
+
     private static FractalViewState State(FractalType t, double zoom) => new()
     {
-        FractalType = t, Quality = QualityPreset.Ultra, Zoom = zoom, PreferredIterations = Iter, IterLocked = true, LockedIterations = Iter,
+        FractalType = t, Quality = UltraOneSample, Zoom = zoom, PreferredIterations = Iter, IterLocked = true, LockedIterations = Iter,
         CenterX = Re.X0, CenterXLo = Re.X1, CenterX2 = Re.X2, CenterX3 = Re.X3,
         CenterY = Im.X0, CenterYLo = Im.X1, CenterY2 = Im.X2, CenterY3 = Im.X3,
     };
