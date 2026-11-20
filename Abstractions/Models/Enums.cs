@@ -1253,6 +1253,15 @@ namespace FracturingFog
     /// <see cref="Custom"/>: <c>BlackHoleCustom</c> = "x,y,z,m;..." (up to four holes).</summary>
     public enum BlackHoleLayout { Binary, Single, Triangle, Square, Custom }
 
+    /// <summary>What colours a <see cref="FractalType.BlackHoleShadow"/> pixel (#1924).
+    /// <see cref="Fate"/> (default): which hole caught the ray, escaped rays by time delay.
+    /// <see cref="Winding"/>: turns swept round the capturing hole (else the hole passed
+    /// closest), stripes at the nested eyebrow levels. <see cref="Delay"/>: log coordinate-time
+    /// delay. <see cref="Steps"/>: log integrator steps. <see cref="ClosestApproach"/>:
+    /// log(1 + m / r_min) over the holes (orbit-trap-like). <see cref="Deflection"/>: angle
+    /// between launch and final direction (escaped rays).</summary>
+    public enum BlackHoleChannel { Fate, Winding, Delay, Steps, ClosestApproach, Deflection }
+
     public enum RenderProfile { Preview, Final }
 
     /// <summary>

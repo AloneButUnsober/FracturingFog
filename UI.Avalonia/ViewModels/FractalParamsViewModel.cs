@@ -255,6 +255,9 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _bhCapture = _p.BlackHoleCaptureFraction;
         _bhTolerance = _p.BlackHoleTolerance;
         _bhMaxSteps = _p.BlackHoleMaxSteps;
+        _bhChannel = _p.BlackHoleChannel;
+        _bhShadeFates = _p.BlackHoleShadeFates;
+        _bhChannelScale = _p.BlackHoleChannelScale;
         _mathPlaneScene = _p.MathPlaneScene ?? string.Empty;
         UpdateMathPlaneSceneError();
         _raysColorSource = _p.BilliardRaysColorSource;
@@ -2233,6 +2236,17 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double BlackHoleTolerance { get => _bhTolerance; set { Set(ref _bhTolerance, Clamp(value, 1e-13, 1e-4)); _p.BlackHoleTolerance = _bhTolerance; Fire(); } }
     private int _bhMaxSteps;
     public int BlackHoleMaxSteps { get => _bhMaxSteps; set { Set(ref _bhMaxSteps, (int)Clamp(value, 100, 1_000_000)); _p.BlackHoleMaxSteps = _bhMaxSteps; Fire(); } }
+    // #1924 — colouring channel.
+    private BlackHoleChannel _bhChannel;
+    public BlackHoleChannel BlackHoleChannel { get => _bhChannel; set { Set(ref _bhChannel, value); _p.BlackHoleChannel = value; this.RaisePropertyChanged(nameof(BhUsesChannel)); Fire(); } }
+    public System.Array BlackHoleChannels => s_BlackHoleChannels;
+    private static readonly System.Array s_BlackHoleChannels = System.Enum.GetValues(typeof(BlackHoleChannel));
+    /// <summary>Shade-fates and scale apply to every channel except Fate.</summary>
+    public bool BhUsesChannel => _bhChannel != BlackHoleChannel.Fate;
+    private bool _bhShadeFates;
+    public bool BlackHoleShadeFates { get => _bhShadeFates; set { Set(ref _bhShadeFates, value); _p.BlackHoleShadeFates = value; Fire(); } }
+    private double _bhChannelScale;
+    public double BlackHoleChannelScale { get => _bhChannelScale; set { Set(ref _bhChannelScale, Clamp(value, 0.01, 100.0)); _p.BlackHoleChannelScale = _bhChannelScale; Fire(); } }
     // #1507 — what sets the hue.
     private BilliardRayColorSource _raysColorSource;
     public BilliardRayColorSource BilliardRaysColorSource { get => _raysColorSource; set { Set(ref _raysColorSource, value); _p.BilliardRaysColorSource = value; Fire(); } }

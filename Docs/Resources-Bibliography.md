@@ -365,7 +365,9 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   the PDF on 2026-11-20). Analytic estimates in the Majumdar–Papapetrou spacetime: the extreme
   Reissner–Nordström shadow radius 4M (§II.A), the eyebrow width (Eqs. 15–16) and the first-order
   shifted, elliptic main shadow of a hole with a distant companion (Eqs. 34 and 40). #1923 tests the
-  shadow radius and Eq. 40 against the traced rays (`S1923BlackHoleShadowTests`). **Journal reference
+  shadow radius and Eq. 40 against the traced rays (`S1923BlackHoleShadowTests`); #1924 integrates its
+  orbit equation (Eqs. 3–4, areal R = r + M, periastron root of the quadratic) by quadrature as the
+  reference for the winding, deflection and closest-approach channels (`S1924BlackHoleChannelTests`). **Journal reference
   not verified.**
 
 <a id="nitta-chiba-sugiyama-2011"></a>
