@@ -77,7 +77,25 @@ public static partial class PerturbationEngine
     /// <summary>#1911 — a second stop: |z − (Re, Im)| ≤ Eps (Magnet's attracting fixed point z = 1).
     /// Real plans only. The BLA does not skip where the reference is within 4·Eps of the target, so a
     /// pixel cannot step over its own convergence there.</summary>
-    public sealed record Convergence(double Re, double Im, double Eps, ConvergedSink Sink);
+    public sealed record Convergence(double Re, double Im, double Eps, ConvergedSink Sink)
+    {
+        /// <summary>#1959 — the step stop instead (Nova's): |z_{n+1} − z_n|² &lt; Eps² stops at n, with
+        /// z_{n+1}; the target (Re, Im) is unused. The BLA does not skip where the reference's own step is
+        /// under <see cref="StepBlaGuard"/>.</summary>
+        public StepConvergedSink? StepSink { get; init; }
+
+        /// <summary>#1959 — a step stop at |step|² &lt; <paramref name="eps2"/>.</summary>
+        public static Convergence OnStep(double eps2, StepConvergedSink sink)
+            => new(0, 0, Math.Sqrt(eps2), static (_, _, _, _, _) => { }) { StepSink = sink };
+    }
+
+    /// <summary>#1959 — receives a pixel whose step converged at iteration n: z_{n+1}, the step² one before
+    /// (NaN when unknown: a BLA skip came just before, or n = 0) and this step².</summary>
+    public delegate void StepConvergedSink(int idx, int iter, double zr, double zi, double prevStep2, double step2);
+
+    /// <summary>#1959 — no BLA skip where the reference's step is shorter than this: a pixel converging
+    /// there could take its own sub-tolerance step inside the skip.</summary>
+    public const double StepBlaGuard = 1e-2;
 
     private sealed class Reference
     {
@@ -138,7 +156,17 @@ public static partial class PerturbationEngine
             {
                 var level0 = new Bla2[r.Len];
                 for (int n = 0; n < r.Len; n++) level0[n] = rp.Level0R2(r.Zr[n], r.Zi[n], r.Cr, r.Ci, blaEpsilon, dcMax);
-                if (converge != null)
+                if (converge?.StepSink != null)
+                {
+                    // #1959 — no skip where the reference's step is short (the pixels converge there).
+                    for (int n = 0; n + 1 < r.Len; n++)
+                    {
+                        double ar = r.Zr[n + 1] - r.Zr[n], ai = r.Zi[n + 1] - r.Zi[n];
+                        if (ar * ar + ai * ai < StepBlaGuard * StepBlaGuard) level0[n] = level0[n] with { R2 = 0 };
+                    }
+                    level0[r.Len - 1] = level0[r.Len - 1] with { R2 = 0 };
+                }
+                else if (converge != null)
                 {
                     // #1911 — no skip where the reference is near the target (a zero radius poisons
                     // every merged skip that covers the step).
@@ -243,7 +271,11 @@ public static partial class PerturbationEngine
     {
         // Parameter plane: z₀ = 0, c = the reference point. Dynamic plane: z₀ = the reference point, c = Julia's.
         BigFloat zr, zi, kr, ki;
-        if (plan.ParameterPlane) { zr = BigFloat.Zero(prec); zi = BigFloat.Zero(prec); kr = cr; ki = ci; }
+        if (plan.ParameterPlane)
+        {
+            var (z0r, z0i) = plan.InitialZ;   // #1959: Nova starts at z₀ ≠ 0
+            zr = BigFloat.FromDouble(z0r, prec); zi = BigFloat.FromDouble(z0i, prec); kr = cr; ki = ci;
+        }
         else { zr = cr; zi = ci; kr = jcr; ki = jci; }
         // Z_0 .. Z_{Len−1}, all inside the bailout. The escaped point is not kept: a pixel that
         // stepped onto it would carry |δ| ≈ |Z| ≥ the bailout while its own z may be small — the
@@ -414,7 +446,7 @@ public static partial class PerturbationEngine
 
             // z = Z + δ: ≈ Z unless Z is as small as δ (then exactly, scaled).
             double zr = Zr + Math.ScaleB(dr, s), zi = Zi + Math.ScaleB(di, s);
-            if (converge != null)
+            if (converge != null && converge.StepSink == null)
             {
                 double ur = zr - converge.Re, ui = zi - converge.Im, d2 = ur * ur + ui * ui;
                 if (d2 <= cEps2)
@@ -444,9 +476,22 @@ public static partial class PerturbationEngine
                 }
             }
 
+            double odr = dr, odi = di;
             ScaledDelta(plan, Zr, Zi, r.Cr, r.Ci, ref dr, ref di, er, ei, s0, s);
             m++;
             c.Scaled++;
+            if (converge?.StepSink is { } ss && m < r.Len)
+            {
+                // #1959 — the pixel's step (Z_{m} − Z_{m−1}) + (δ′ − δ), the reference's step exact in double.
+                double sr = (r.Zr[m] - Zr) + Math.ScaleB(dr - odr, s), si = (r.Zi[m] - Zi) + Math.ScaleB(di - odi, s);
+                double step2 = sr * sr + si * si;
+                if (step2 < cEps2)
+                {
+                    ss(idx, iter, r.Zr[m] + Math.ScaleB(dr, s), r.Zi[m] + Math.ScaleB(di, s), dPrev, step2);
+                    st = default; return -1;
+                }
+                dPrev = step2;
+            }
         }
         if (iter >= maxIter)
         {
@@ -642,7 +687,7 @@ public static partial class PerturbationEngine
             zr = Zr + dr; zi = Zi + di;
             double z2 = zr * zr + zi * zi;
             if (z2 >= bail) break;
-            if (converge != null)
+            if (converge != null && converge.StepSink == null)
             {
                 double ur = zr - converge.Re, ui = zi - converge.Im, d2 = ur * ur + ui * ui;
                 if (d2 <= cEps2) { converge.Sink(idx, iter, zr, zi, dPrev); return -1; }
@@ -684,6 +729,14 @@ public static partial class PerturbationEngine
             }
             plan.DeltaStep(Zr, Zi, r.Cr, r.Ci, ref dr, ref di, er, ei);
             m++;
+            if (converge?.StepSink is { } ss && m < r.Len)
+            {
+                // #1959 — the step to z_{n+1} = Z_{m} + δ′, against z_n (both double: the tolerance is far
+                // above their rounding).
+                double nzr = r.Zr[m] + dr, nzi = r.Zi[m] + di, sr = nzr - zr, si = nzi - zi, step2 = sr * sr + si * si;
+                if (step2 < cEps2) { ss(idx, iter, nzr, nzi, dPrev, step2); return -1; }
+                dPrev = step2;
+            }
         }
         if (iter >= maxIter && m < r.Len) { zr = r.Zr[m] + dr; zi = r.Zi[m] + di; }
         var (vr, vi) = Deliver(jac.M11, jac.M21, t, f);
@@ -699,7 +752,11 @@ public static partial class PerturbationEngine
         var pr = BigFloat.Add(centre.Re, BigFloat.FromDouble(ox, prec).ScaleB(f.S0), prec);
         var pi = BigFloat.Add(centre.Im, BigFloat.FromDouble(oy, prec).ScaleB(f.S0), prec);
         BigFloat zr, zi, kr, ki;
-        if (plan.ParameterPlane) { zr = BigFloat.Zero(prec); zi = BigFloat.Zero(prec); kr = pr; ki = pi; }
+        if (plan.ParameterPlane)
+        {
+            var (z0r, z0i) = plan.InitialZ;   // #1959
+            zr = BigFloat.FromDouble(z0r, prec); zi = BigFloat.FromDouble(z0i, prec); kr = pr; ki = pi;
+        }
         else { zr = pr; zi = pi; kr = jcr; ki = jci; }
         var (dvr, dvi) = plan.InitialDerivative;
         var rp = plan as IRealPerturbationPlan;
@@ -713,7 +770,7 @@ public static partial class PerturbationEngine
             if ((iter & 1023) == 0) ct.ThrowIfCancellationRequested();
             a = zr.ToDouble(); b = zi.ToDouble();
             if (a * a + b * b >= plan.Bailout2) break;
-            if (converge != null)
+            if (converge != null && converge.StepSink == null)
             {
                 double ur = a - converge.Re, ui = b - converge.Im, d2 = ur * ur + ui * ui;
                 if (d2 <= converge.Eps * converge.Eps) { converge.Sink(idx, iter, a, b, dPrev); return; }
@@ -722,6 +779,12 @@ public static partial class PerturbationEngine
             if (rp != null) { JacAny(rp, a, b, pcr, pci, ref jac, t); Renorm(ref jac, ref t); }
             else { DerivAny(plan, a, b, pcr, pci, ref dvr, ref dvi, t); Renorm(ref dvr, ref dvi, ref t); }
             plan.RefStep(ref zr, ref zi, kr, ki, prec);
+            if (converge?.StepSink is { } ss)
+            {
+                double na = zr.ToDouble(), nb = zi.ToDouble(), sr = na - a, si = nb - b, step2 = sr * sr + si * si;   // #1959
+                if (step2 < converge.Eps * converge.Eps) { ss(idx, iter, na, nb, dPrev, step2); return; }
+                dPrev = step2;
+            }
         }
         if (iter >= maxIter) { a = zr.ToDouble(); b = zi.ToDouble(); }
         if (rp != null) { dvr = jac.M11; dvi = jac.M21; }

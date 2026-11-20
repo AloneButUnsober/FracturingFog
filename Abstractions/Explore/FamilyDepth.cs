@@ -20,7 +20,7 @@
 //     EscapeTimeCalculator takes a log zoom (IDeepZoom), so Julia, Multibrot, Tricorn, Burning Ship,
 //     Magnet 1 / 2 and Glynn have no limit (Mandelbrot's). #1957 did the same for the two-state engine
 //     (Phoenix, Spider) and the other engine users (User Equation, the CalcGen template, TearDrop):
-//     no limit for any engine family now.
+//     no limit for any engine family now. Nova joined them in #1959 (plain Newton stays double).
 //   • Everything else renders in double: 1e13 (AutoExplorer.DoubleMaxZoom).
 
 using FracturingFog.Models;
@@ -50,6 +50,7 @@ public static class FamilyDepth
         FractalType.Julia or FractalType.Multibrot or FractalType.Tricorn or FractalType.BurningShip
             or FractalType.Magnet1 or FractalType.Magnet2 or FractalType.Glynn => QualityPreset.Deepest.ZoomMax,
         FractalType.Phoenix or FractalType.Spider => QualityPreset.Deepest.ZoomMax,   // #1912; unlimited since #1957
+        FractalType.Nova => QualityPreset.Deepest.ZoomMax,   // #1959: the engine (R2Plan.Nova, the step stop)
         _ => AutoExplorer.DoubleMaxZoom,
     };
 }

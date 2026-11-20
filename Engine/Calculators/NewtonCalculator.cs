@@ -24,7 +24,7 @@ using FracturingFog.Models;
 
 namespace FracturingFog;
 
-public sealed class NewtonCalculator : IFractalCalculator, FracturingFog.Rendering.IAdaptiveAaCalculator, IHeightFieldSource, ISupportsHistogramEq
+public sealed partial class NewtonCalculator : IFractalCalculator, FracturingFog.Rendering.IAdaptiveAaCalculator, IHeightFieldSource, ISupportsHistogramEq
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -128,6 +128,10 @@ public sealed class NewtonCalculator : IFractalCalculator, FracturingFog.Renderi
         var newtonMap = ColorMap as INewtonColorMap;
         ColorMap.MaxIterations = maxIter;
 
+        // #1959 — Nova past DeepZoomThreshold: the perturbation engine (NewtonCalculator.Deep.cs).
+        if (FractalType == FractalType.Nova && TryCalculateDeep(d, R, maxIter, newtonMap, ct)) return;
+        LastPrecisionLabel = "SP";
+
         bool nova = FractalType == FractalType.Nova;
         bool novaJulia = nova && FractalParameters.NovaJuliaMode;
         double novaZ0R = FractalParameters.NovaZ0.Real, novaZ0I = FractalParameters.NovaZ0.Imaginary;
@@ -224,42 +228,65 @@ public sealed class NewtonCalculator : IFractalCalculator, FracturingFog.Renderi
                     }
                 }
             converged:
-                int idx = rowBase + x;
-                // Relief height / HE scalar = iterations to convergence.
-                SmoothBuffer[idx] = nova && basin >= 0 ? smooth : iter;
-                BasinBuffer[idx] = basin;               // #146 — HE + recolor source
-                FinalZrBuffer[idx] = (float)zr;
-                FinalZiBuffer[idx] = (float)zi;
-                if (basin >= 0 && nova)
-                {
-                    GradientColorMap.SetDitherForPixel(x, y);
-                    ColorBuffer[idx] = NewtonBasinColoring.NovaConvergedColor(
-                        newtonMap, ColorMap, basin, d, smooth, maxIter, zr, zi);
-                }
-                else if (basin >= 0)
-                {
-                    // Converged: shared dispatch (MapNewton theme or HSV fallback).
-                    ColorBuffer[idx] = NewtonBasinColoring.ConvergedColor(
-                        newtonMap, basin, d, iter, maxIter, zr, zi);
-                }
-                else if (newtonMap != null)
-                {
-                    // #830 — non-converged (in-set) pixels scale by the knob.
-                    uint c = unchecked((uint)newtonMap.MapNewton(basin, d, iter, maxIter, zr, zi));
-                    ColorBuffer[idx] = InteriorAlphaStamp.ScaleArgbAlpha(c, InteriorAlpha);
-                }
-                else
-                {
-                    ColorBuffer[idx] = InteriorAlphaStamp.ScaleArgbAlpha(ColorMap.InSetColor, InteriorAlpha);  // #830
-                }
+                FinishPixel(rowBase + x, x, y, basin, iter, smooth, zr, zi, d, maxIter, nova, newtonMap);
             }
         });
+    }
+
+    // One finished pixel's buffers and colour (shared by the double loop and, #1959, the deep path).
+    private void FinishPixel(int idx, int x, int y, int basin, int iter, float smooth, double zr, double zi,
+                             int d, int maxIter, bool nova, INewtonColorMap? newtonMap)
+    {
+        // Relief height / HE scalar = iterations to convergence.
+        SmoothBuffer[idx] = nova && basin >= 0 ? smooth : iter;
+        BasinBuffer[idx] = basin;               // #146 — HE + recolor source
+        FinalZrBuffer[idx] = (float)zr;
+        FinalZiBuffer[idx] = (float)zi;
+        if (basin >= 0 && nova)
+        {
+            GradientColorMap.SetDitherForPixel(x, y);
+            ColorBuffer[idx] = NewtonBasinColoring.NovaConvergedColor(
+                newtonMap, ColorMap, basin, d, smooth, maxIter, zr, zi);
+        }
+        else if (basin >= 0)
+        {
+            // Converged: shared dispatch (MapNewton theme or HSV fallback).
+            ColorBuffer[idx] = NewtonBasinColoring.ConvergedColor(
+                newtonMap, basin, d, iter, maxIter, zr, zi);
+        }
+        else if (newtonMap != null)
+        {
+            // #830 — non-converged (in-set) pixels scale by the knob.
+            uint c = unchecked((uint)newtonMap.MapNewton(basin, d, iter, maxIter, zr, zi));
+            ColorBuffer[idx] = InteriorAlphaStamp.ScaleArgbAlpha(c, InteriorAlpha);
+        }
+        else
+        {
+            ColorBuffer[idx] = InteriorAlphaStamp.ScaleArgbAlpha(ColorMap.InSetColor, InteriorAlpha);  // #830
+        }
+    }
+
+    // #1294 / #1959 — Nova's smooth convergence count: log-interpolated where the step size crossed the
+    // tolerance between the step before (stepPrev²) and this one (as the Magnet path does).
+    public static float NovaSmooth(int iter, double stepPrev2, double step2, double eps2)
+    {
+        float smooth = iter;
+        if (iter > 0 && stepPrev2 < double.MaxValue)
+        {
+            double logEps = 0.5 * Math.Log(eps2);
+            double logPrev = 0.5 * Math.Log(stepPrev2);
+            double logCur = 0.5 * Math.Log(Math.Max(step2, 1e-300));
+            double span = logPrev - logCur;
+            double frac = span > 1e-12 ? (logPrev - logEps) / span : 0.0;
+            smooth = (float)(iter - 1 + Math.Clamp(frac, 0.0, 1.0));
+        }
+        return smooth;
     }
 
     /// <summary>#1294 — index k of the root e^(2πik/d) whose angular sector holds
     /// z, i.e. the nearest root direction. For a z on a root it is that root's
     /// index, matching Newton's basin numbering.</summary>
-    internal static int RootSector(double zr, double zi, int d)
+    public static int RootSector(double zr, double zi, int d)
     {
         int k = (int)Math.Round(Math.Atan2(zi, zr) * d / (2 * Math.PI));
         return ((k % d) + d) % d;
