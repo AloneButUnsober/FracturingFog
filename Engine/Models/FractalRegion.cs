@@ -776,6 +776,7 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? BlackHoleSkyDivisions { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? BlackHoleSkySeed { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? BlackHoleSkyRotation { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? BlackHoleSolidBlocks { get; set; }   // #1970
         // #1507 — int cast of BilliardRayColorSource.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysColorSource { get; set; }
         // #1508 — crossings (int casts of BilliardRayMode / BilliardCrossingValue).
@@ -1312,6 +1313,7 @@ namespace FracturingFog.Models
                     BlackHoleSkyDivisions = p.BlackHoleSkyDivisions,
                     BlackHoleSkySeed = p.BlackHoleSkySeed,
                     BlackHoleSkyRotation = p.BlackHoleSkyRotation,
+                    BlackHoleSolidBlocks = p.BlackHoleSolidBlocks,
                 },
                 FractalType.BilliardRays => new RegionFractalParams
                 {
@@ -2316,6 +2318,7 @@ namespace FracturingFog.Models
             if (BlackHoleSkyDivisions.HasValue)   p.BlackHoleSkyDivisions = BlackHoleSkyDivisions.Value;
             if (BlackHoleSkySeed.HasValue)        p.BlackHoleSkySeed = BlackHoleSkySeed.Value;
             if (BlackHoleSkyRotation.HasValue)    p.BlackHoleSkyRotation = BlackHoleSkyRotation.Value;
+            if (BlackHoleSolidBlocks.HasValue)    p.BlackHoleSolidBlocks = BlackHoleSolidBlocks.Value;
             if (BilliardRaysColorSource.HasValue) p.BilliardRaysColorSource = (FracturingFog.BilliardRayColorSource)BilliardRaysColorSource.Value;
             if (BilliardRaysMode.HasValue)       p.BilliardRaysMode = (FracturingFog.BilliardRayMode)BilliardRaysMode.Value;
             if (BilliardRaysCrossingWindow.HasValue) p.BilliardRaysCrossingWindow = BilliardRaysCrossingWindow.Value;

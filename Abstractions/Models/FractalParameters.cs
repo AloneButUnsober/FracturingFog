@@ -1391,10 +1391,13 @@ namespace FracturingFog.Models
         public double BlackHoleInclination { get; set; } = 90.0;
         /// <summary>Camera azimuth about z in degrees. Default 0.</summary>
         public double BlackHoleAzimuth { get; set; } = 0.0;
-        /// <summary>A ray is captured inside CaptureFraction x the hole's mass (isotropic coordinate radius). Default 0.02.</summary>
-        public double BlackHoleCaptureFraction { get; set; } = 0.02;
-        /// <summary>Integrator relative tolerance per step. Default 1e-9.</summary>
-        public double BlackHoleTolerance { get; set; } = 1e-9;
+        /// <summary>A ray is captured inside CaptureFraction x the hole's mass (isotropic coordinate radius).
+        /// Default 0.25 (#1970; was 0.02): still well inside the single-hole photon sphere (r = m), and no
+        /// fate changed at the default view, while captured rays stop sooner.</summary>
+        public double BlackHoleCaptureFraction { get; set; } = 0.25;
+        /// <summary>Integrator relative tolerance per step at the default zoom; tightened in proportion as
+        /// the view zooms in (#1970). Default 1e-7 (was 1e-9: 2.4x slower with no fate changed).</summary>
+        public double BlackHoleTolerance { get; set; } = 1e-7;
         /// <summary>Accepted-step cap; past it a ray is undecided. Default 20 000.</summary>
         public int BlackHoleMaxSteps { get; set; } = 20_000;
         /// <summary>#1924 — colouring channel (see <see cref="FracturingFog.BlackHoleChannel"/>). Default Fate.</summary>
@@ -1413,6 +1416,10 @@ namespace FracturingFog.Models
         public int BlackHoleSkySeed { get; set; } = 1;
         /// <summary>#1925 — sky rotation about the vertical (y) axis, degrees. Default 0.</summary>
         public double BlackHoleSkyRotation { get; set; } = 0.0;
+        /// <summary>#1970 — solid blocks (Fate colouring): a 16 px block whose outer ring is all one
+        /// hole's shadow is filled without tracing its inside. Faster in shadow-heavy views; can miss
+        /// an island of another fate wholly inside a block. Default false.</summary>
+        public bool BlackHoleSolidBlocks { get; set; }
 
         // ── Slit cascade (#1569, double-slit epic #1565) ──────────────────
         /// <summary>Slit cascade: children per slit, N (2..16). N ≥ 3 for the fringe
@@ -2507,6 +2514,7 @@ namespace FracturingFog.Models
                 BlackHoleSkyDivisions = BlackHoleSkyDivisions,
                 BlackHoleSkySeed = BlackHoleSkySeed,
                 BlackHoleSkyRotation = BlackHoleSkyRotation,
+                BlackHoleSolidBlocks = BlackHoleSolidBlocks,
                 SlitCascadeChildren = SlitCascadeChildren,
                 SlitCascadeRatio = SlitCascadeRatio,
                 SlitCascadeDepth = SlitCascadeDepth,

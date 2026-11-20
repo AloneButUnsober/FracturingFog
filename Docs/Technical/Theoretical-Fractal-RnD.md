@@ -386,7 +386,18 @@ only a pinhole shows a sky with parallax and lensing (Einstein rings squeeze the
 shadow). Validation: with every mass zero the pinhole image equals the straight projection of the sky,
 computed from the camera geometry alone; the parallel image is one colour; the pinhole shadow edge sits
 where the launch ray's L/E = 4m. Not done: anti-aliasing of the lensed sky near the shadow edges (the
-issue's optional ray-differential footprint) — the checker aliases into moiré there.
+issue's optional ray-differential footprint) — the checker aliases into moiré there (#1969).
+
+**CPU speed (#1970).** Profiled (Release, 12 threads): the default view traced in about 1 s at 480x270
+(about 17 s at 1080p), about 230 integrator steps per ray at about 225 ns each; each step evaluates the
+field seven times, so a pixel costs about 100–200x a Mandelbrot pixel. Measured fixes, each checked
+against a 1e-11 reference with no fate pixel changed: tolerance default 1e-7, tightened by the cube root
+of the zoom past the default (a fixed 3e-8 already changed nothing at eyebrow zooms x6–x600); capture
+radius 0.25 m (inside the single-hole photon sphere); no channel bookkeeping in Fate mode; opt-in solid
+blocks (a 16 px block whose ring is one hole's shadow is filled). Speed-ups: 2.8x at the default view
+(3.3x with solid blocks), 1.9–2.3x at eyebrow zooms (3.6–8.5x with solid blocks, where shadows fill the
+frame). The escape radius barely matters (outbound steps are long). The GPU (#1926) remains the larger
+lever; on fp64-weak cards an fp32 kernel with measured routing is the plan.
 
 #### 2.6.2 Hénon–Heiles exit basins — **#1942**
 
@@ -1095,3 +1106,4 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
 - **2026-11-20** — §2.6.1: black hole shadows S1 #1923 (type, shared ODE core, MP trace, Yumoto et al. Eq. 40 check). Bibliography (§7): Yumoto et al. 2012, Nitta, Chiba & Sugiyama 2011, Dormand & Prince 1980, Hairer, Nørsett & Wanner 1993.
 - **2026-11-20** — §2.6.1: black hole shadows S2 #1924 (winding, delay, steps, closest approach, deflection channels; shaded fates; palette cap fix).
 - **2026-11-20** — §2.6.1: black hole shadows S3 #1925 (Lighting & FX / procedural skies for escaped rays, pinhole projection, HDRI gap).
+- **2026-11-20** — §2.6.1: black hole shadows CPU speed #1970 (tolerance 1e-7 + cube-root zoom tie, capture 0.25 m, Fate-mode bookkeeping skip, opt-in solid blocks; 1.9–8.5x, no fate change vs a 1e-11 reference).
