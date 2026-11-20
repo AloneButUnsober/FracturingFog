@@ -341,7 +341,7 @@ namespace FracturingFog.ViewState
                 FractalType.Apollonian            => ( 0.0,  0.0, 2.0),
                 FractalType.ChaoticBilliard       => ( 0.0,  0.0, 1.0),
                 FractalType.BilliardRays          => ( 0.0,  0.0, 0.6),   // the play circle (r 3) fits
-                FractalType.BlackHoleShadow       => ( 0.0,  0.0, 0.16),  // #1923 the default binary + eyebrows fit
+                FractalType.BlackHoleShadow       => ( 0.0,  0.0, 0.14),  // #1923 the default binary + eyebrows fit (#1927 camera pitch)
                 FractalType.SlitCascade           => ( 0.0,  0.0, 0.25),  // #1569 — u ∈ ±8: the first fringes and the level-1 envelope
                 FractalType.TalbotCarpet          => ( 0.0,  0.5, 1.9),   // #1570 — one Talbot distance tall, about two periods wide (16:9)
                 FractalType.MathPlane             => ( 0.0,  0.0, 0.5),   // x in [-4, 4]

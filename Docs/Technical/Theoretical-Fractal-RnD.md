@@ -411,6 +411,17 @@ the CPU at the default view and 3.1x at an x375 eyebrow zoom, with 0.003–0.007
 moved (edge pixels only). Auto measures per device and precision (the Buddhabrot #1220 pattern);
 `FF_GPU_BLACK_HOLE` forces either path.
 
+**Navigation + S5 part 1 (#1927).** Box zoom near the shadow edges landed in solid regions: the render
+used the billiard's 4 / (width · zoom) pixel pitch while every input path goes through `ViewCamera`'s
+3.5 / (max(w, h) · zoom), so targets landed at 3.5/4 of their distance from the centre. The black hole
+calculator (CPU and GPU) now uses the camera's scale (default zoom 0.16 → 0.14 keeps the landscape
+framing); ten other 2D families share the mismatch (#1974). Deep zoom: calibrated at three bisected
+boundary points on the eyebrow chain (120x68, x10–x10^9 past the default, against a 1e-13 reference),
+the loosest tolerance that moved no fate pixel tracks the pixel pitch, so the tolerance is now also
+capped at 0.003 x pitch; the views match the reference exactly to x10^9. Double precision runs out
+near x10^10–x10^11 (there the 1e-12 and 1e-13 references disagree); the status bar says so ("past
+fp64: edges approximate"). Double-double integration for boundary pixels past that is part 2.
+
 #### 2.6.2 Hénon–Heiles exit basins — **#1942**
 
 The Hénon–Heiles potential `V = (x² + y²)/2 + x²y − y³/3` has three exit channels above `E = 1/6`; its
@@ -1120,3 +1131,4 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
 - **2026-11-20** — §2.6.1: black hole shadows S3 #1925 (Lighting & FX / procedural skies for escaped rays, pinhole projection, HDRI gap).
 - **2026-11-20** — §2.6.1: black hole shadows CPU speed #1970 (tolerance 1e-7 + cube-root zoom tie, capture 0.25 m, Fate-mode bookkeeping skip, opt-in solid blocks; 1.9–8.5x, no fate change vs a 1e-11 reference).
 - **2026-11-20** — §2.6.1: black hole shadows S4 #1926 (ILGPU double + single kernels, measured Auto routing; D3D11 + Vulkan follow-up #1972).
+- **2026-11-21** — §2.6.1: black hole box-zoom fix (camera pixel scale) + S5 part 1 #1927 (pitch-calibrated tolerance exact to x10^9; fp64 limit flagged); cross-family pitch issue #1974.

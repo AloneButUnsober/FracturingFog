@@ -52,6 +52,10 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
     public bool SupportsZoomPan => true;
     public FractalParameters FractalParameters { get; set; } = new();
 
+    /// <summary>#1927 — status-bar note: the tolerance in use, or that the view is past what
+    /// double precision can resolve.</summary>
+    public string? LastPrecisionLabel { get; private set; }
+
     public bool LowResPreview { get; set; }
     public double? LowResPreviewScaleOverride { get; set; }
 
@@ -119,9 +123,10 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
 
     private BlackHoleShadowCalculator? _preview;
 
-    /// <summary>Default zoom: the frame is 4 / 0.16 = 25 mass units wide, which fits the
-    /// default binary (unit masses, separation 2) with its eyebrows.</summary>
-    public const double DefaultZoom = 0.16;
+    /// <summary>Default zoom: the frame's longer side is 3.5 / 0.14 = 25 mass units, which fits
+    /// the default binary (unit masses, separation 2) with its eyebrows. (#1927: was 0.16 with the
+    /// old 4 / width pitch, the same framing on a landscape view.)</summary>
+    public const double DefaultZoom = 0.14;
 
     /// <summary>Palette scale of log(1 + delay) for escaped rays.</summary>
     public const float DelayPaletteScale = 24f;
@@ -226,16 +231,35 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
         /// the default zoom or wider, tightened by the cube root of the zoom past it. Measured on the
         /// default binary against a 1e-11 reference (480x270): a fixed 3e-8 changed no fate pixel at
         /// eyebrow zooms x6 to x600 while 1e-7 changed 2-4, so the cube root (3e-8 at x6, 6.4e-9 at
-        /// x600) stays tighter than needed there without the cost of a proportional tie. S5 #1927
-        /// calibrates it for deeper views.</summary>
-        public static double EffectiveTolerance(double tolerance, double zoom)
+        /// x600) stays tighter than needed there without the cost of a proportional tie.
+        /// #1927 (S5) — and never looser than <see cref="PitchToleranceFactor"/> x the pixel pitch
+        /// (<paramref name="pixelPitch"/>, plane units per pixel; NaN = not known). Calibrated at
+        /// three bisected boundary points on the eyebrow chain, 120x68, zoom x10 to x10^9 past the
+        /// default, against a 1e-13 reference: the loosest tolerance that moved no fate pixel tracked
+        /// the pitch (x10^6: 1e-8, x10^7: 1e-10, x10^9: 1e-12 at pitch 2e-10). 0.005 x pitch just
+        /// covered every case (x10^9 sat on the edge), so the factor is 0.003 for margin. Floored at
+        /// <see cref="MinTolerance"/>, below which double cannot step: past about x10^10 the 1e-12
+        /// and 1e-13 references themselves disagree.</summary>
+        public static double EffectiveTolerance(double tolerance, double zoom, double pixelPitch = double.NaN)
         {
-            double t = Math.Clamp(double.IsFinite(tolerance) ? tolerance : 1e-7, 1e-13, 1e-4);
+            double t = Math.Clamp(double.IsFinite(tolerance) ? tolerance : 1e-7, MinTolerance, 1e-4);
             if (double.IsFinite(zoom) && zoom > DefaultZoom) t *= Math.Cbrt(DefaultZoom / zoom);
-            return Math.Max(t, 1e-13);
+            if (double.IsFinite(pixelPitch) && pixelPitch > 0) t = Math.Min(t, PitchToleranceFactor * pixelPitch);
+            return Math.Max(t, MinTolerance);
         }
 
-        public static Scene Build(FractalParameters p, double zoom = DefaultZoom)
+        /// <summary>#1927 — tolerance per plane unit of pixel pitch (see <see cref="EffectiveTolerance"/>).</summary>
+        public const double PitchToleranceFactor = 0.003;
+        /// <summary>#1927 — the tightest tolerance double precision can integrate to.</summary>
+        public const double MinTolerance = 1e-13;
+
+        /// <summary>#1927 — true when the view needs a tighter tolerance than double can give
+        /// (<see cref="PitchToleranceFactor"/> x pitch below <see cref="MinTolerance"/>): fate edges
+        /// are then approximate (about x10^10 past the default zoom at 120 px wide).</summary>
+        public static bool PastDoublePrecision(double pixelPitch)
+            => double.IsFinite(pixelPitch) && pixelPitch > 0 && PitchToleranceFactor * pixelPitch < MinTolerance;
+
+        public static Scene Build(FractalParameters p, double zoom = DefaultZoom, double pixelPitch = double.NaN)
         {
             var holes = BlackHoleLayouts.Build(p);
             double extent = 0.0;
@@ -243,7 +267,7 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
                 extent = Math.Max(extent, Math.Sqrt(h.X * h.X + h.Y * h.Y + h.Z * h.Z) + 4.0 * h.M);
             double d = Math.Max(Math.Max(10.0, 4.0 * extent), double.IsFinite(p.BlackHoleCameraDistance) ? p.BlackHoleCameraDistance : 50.0);
             var cam = new MpCamera(d, p.BlackHoleInclination, p.BlackHoleAzimuth, p.BlackHoleProjection == BlackHoleProjection.Pinhole);
-            double tol = EffectiveTolerance(p.BlackHoleTolerance, zoom);
+            double tol = EffectiveTolerance(p.BlackHoleTolerance, zoom, pixelPitch);
             return new Scene
             {
                 Holes = holes,
@@ -269,12 +293,20 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
         }
     }
 
-    /// <summary>Image-plane point of pixel (x, y): the standard 2D mapping, with v up.</summary>
+    /// <summary>#1927 — plane units per pixel: <see cref="FracturingFog.ViewState.ViewCamera"/>'s scale,
+    /// PlaneExtent / (max(width, height) · zoom), so box zoom, wheel zoom and pan land where the
+    /// render put the pixels. (S1 used the billiard's 4 / (width · zoom), which put every zoom
+    /// target at 3.5/4 of its distance from the centre: right near the middle, an eyebrow-width
+    /// or more off at the shadow edges.)</summary>
+    public static double PixelPitch(double width, double height, double zoom)
+        => FracturingFog.ViewState.ViewCamera.PlaneExtent / (Math.Max(1.0, Math.Max(width, height)) * Math.Max(1e-12, zoom));
+
+    /// <summary>Image-plane point of pixel (x, y): the camera's screen-to-world mapping, with v up.</summary>
     public static (double U, double V) PlaneAt(double x, double y, double width, double height,
                                                double centerX, double centerY, double zoom)
     {
-        var (px, py) = ChaoticBilliardCalculator.PlaneAt(x, y, width, height, centerX, centerY, zoom);
-        return (px, -py);
+        double pitch = PixelPitch(width, height, zoom);
+        return (centerX + (x - width * 0.5) * pitch, -(centerY + (y - height * 0.5) * pitch));
     }
 
     public void Calculate(CancellationToken ct = default)
@@ -282,7 +314,11 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
         if (LowResPreview && RenderPreview(ct)) return;
 
         var p = FractalParameters;
-        var scene = Scene.Build(p, Zoom);
+        double framePitch = PixelPitch(Width, Height, Zoom);
+        var scene = Scene.Build(p, Zoom, framePitch);
+        LastPrecisionLabel = Scene.PastDoublePrecision(framePitch)
+            ? "past fp64: edges approximate"
+            : $"fp64 tol {scene.Settings.RelTol:0.#E+0}";
         int n = scene.Holes.Length, escapedGate = scene.EscapedGate, gateCount = n + 1;
         var billiardMap = ColorMap as IBilliardColorMap;
         ColorMap.MaxIterations = MaxIterations;

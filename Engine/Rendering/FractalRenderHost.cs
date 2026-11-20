@@ -3547,6 +3547,7 @@ namespace FracturingFog.Rendering
                         FracturingFog.Calculators.Generated.TricornCalculator     tc => tc.LastPrecisionLabel,
                         FracturingFog.Calculators.Generated.BurningShipCalculator bs => bs.LastPrecisionLabel,
                         BilliardRaysCalculator br => br.LastPrecisionLabel,   // #1510 escaped / crossing / trapped counts
+                        BlackHoleShadowCalculator bh => bh.LastPrecisionLabel, // #1927 tolerance / past fp64
                         MathPlaneCalculator mp => mp.LastPrecisionLabel,      // #1548 scene parse error
                         MathPlane3DCalculator mp3 => mp3.LastPrecisionLabel,  // #1713
                         SlitCascadeCalculator sc => sc.LastPrecisionLabel,    // #1571 D0 / D1 / D2 / Dq
