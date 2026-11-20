@@ -51,9 +51,6 @@ public struct MpNullSystem : IScatteringSystem
     private readonly double _x3, _y3, _z3, _m3, _c3;
     private readonly double _escape2;
 
-    /// <summary>Closest approach to each hole so far (coordinate distance), for S2 channels.</summary>
-    public double Min0, Min1, Min2, Min3;
-
     /// <summary>∫ (U² - 1) dλ: coordinate-time delay over flat space (t grows as U² per λ).</summary>
     public double Delay;
 
@@ -77,7 +74,7 @@ public struct MpNullSystem : IScatteringSystem
             }
         }
         _escape2 = escapeRadius * escapeRadius;
-        Min0 = Min1 = Min2 = Min3 = double.PositiveInfinity;
+        for (int i = 0; i < MaxHoles; i++) { Min[i] = double.PositiveInfinity; Wind[i] = 0.0; }
         Delay = 0.0;
     }
 
@@ -171,15 +168,99 @@ public struct MpNullSystem : IScatteringSystem
         return Math.Max(1e-9, Math.Min(0.25 * r + 1e-6, 4.0 + 0.05 * r));
     }
 
+    // ── Per-ray channels (#1924) ─────────────────────────────────────────────
+    // Previous accepted state: position and coordinate velocity dx/dλ = p / U².
+    private double _qx, _qy, _qz, _vx, _vy, _vz;
+    private bool _begun;
+
+    /// <summary>Closest approach to each hole (coordinate distance). Refined inside each step:
+    /// when the radial velocity changes sign across a step, the minimum of the cubic Hermite
+    /// interpolant of that step is searched, so a periastron between steps is not missed.</summary>
+    public Quad Min;
+
+    /// <summary>Total angle (radians) swept around each hole: the sum over steps of the angle
+    /// between the hole-to-ray directions at the step ends. One full turn is 2π.</summary>
+    public Quad Wind;
+
+    [InlineArray(MaxHoles)]
+    public struct Quad { private double _e; }
+
+    /// <summary>Hole i's mass.</summary>
+    public readonly double Mass(int i) => i switch { 0 => _m0, 1 => _m1, 2 => _m2, _ => _m3 };
+
+    private readonly (double X, double Y, double Z) Centre(int i) => i switch
+    {
+        0 => (_x0, _y0, _z0), 1 => (_x1, _y1, _z1), 2 => (_x2, _y2, _z2), _ => (_x3, _y3, _z3),
+    };
+
+    /// <summary>Start the channels at the launch state (called once, before the trace).</summary>
+    public void Begin(ReadOnlySpan<double> s)
+    {
+        double x = s[0], y = s[1], z = s[2];
+        double u = U(x, y, z), iu2 = 1.0 / (u * u);
+        _qx = x; _qy = y; _qz = z;
+        _vx = s[3] * iu2; _vy = s[4] * iu2; _vz = s[5] * iu2;
+        for (int i = 0; i < MaxHoles; i++) { Min[i] = i < _n ? Math.Sqrt(Dist2(i, x, y, z)) : double.PositiveInfinity; Wind[i] = 0.0; }
+        Delay = 0.0;
+        _begun = true;
+    }
+
     public void Observe(ReadOnlySpan<double> s, double h)
     {
         double x = s[0], y = s[1], z = s[2];
-        double d0 = Math.Sqrt(Dist2(0, x, y, z)); if (d0 < Min0) Min0 = d0;
-        if (_n > 1) { double d = Math.Sqrt(Dist2(1, x, y, z)); if (d < Min1) Min1 = d; }
-        if (_n > 2) { double d = Math.Sqrt(Dist2(2, x, y, z)); if (d < Min2) Min2 = d; }
-        if (_n > 3) { double d = Math.Sqrt(Dist2(3, x, y, z)); if (d < Min3) Min3 = d; }
-        double u = U(x, y, z);
+        double u = U(x, y, z), iu2 = 1.0 / (u * u);
+        double vx = s[3] * iu2, vy = s[4] * iu2, vz = s[5] * iu2;
         Delay += (u * u - 1.0) * h;   // end-point rule; a colouring channel, not physics output
+        if (!_begun)
+        {
+            // Trace without Begin: endpoint minima only, no winding.
+            for (int i = 0; i < _n; i++) { double d = Math.Sqrt(Dist2(i, x, y, z)); if (!(Min[i] <= d)) Min[i] = d; }
+            return;
+        }
+        for (int i = 0; i < _n; i++)
+        {
+            var (cx, cy, cz) = Centre(i);
+            double ax = _qx - cx, ay = _qy - cy, az = _qz - cz;   // step start, relative
+            double bx = x - cx, by = y - cy, bz = z - cz;         // step end, relative
+            // Winding: angle between the two directions (atan2 of |a×b| and a·b, robust).
+            double crx = ay * bz - az * by, cry = az * bx - ax * bz, crz = ax * by - ay * bx;
+            Wind[i] += Math.Atan2(Math.Sqrt(crx * crx + cry * cry + crz * crz), ax * bx + ay * by + az * bz);
+
+            double dEnd = Math.Sqrt(bx * bx + by * by + bz * bz);
+            double m = Math.Min(Min[i], dEnd);
+            // Radial velocity in at the start and out at the end: periastron inside the step.
+            if (ax * _vx + ay * _vy + az * _vz < 0.0 && bx * vx + by * vy + bz * vz > 0.0)
+                m = Math.Min(m, HermiteMin(ax, ay, az, _vx * h, _vy * h, _vz * h, bx, by, bz, vx * h, vy * h, vz * h));
+            Min[i] = m;
+        }
+        _qx = x; _qy = y; _qz = z; _vx = vx; _vy = vy; _vz = vz;
+    }
+
+    // Minimum distance to the origin along the cubic Hermite segment from a (tangent ta) to
+    // b (tangent tb), by golden-section search on t in [0, 1] (the distance is unimodal there
+    // when the radial velocity changes sign once).
+    private static double HermiteMin(double ax, double ay, double az, double tax, double tay, double taz,
+                                     double bx, double by, double bz, double tbx, double tby, double tbz)
+    {
+        double D2(double t)
+        {
+            double t2 = t * t, t3 = t2 * t;
+            double h00 = 2 * t3 - 3 * t2 + 1, h10 = t3 - 2 * t2 + t, h01 = -2 * t3 + 3 * t2, h11 = t3 - t2;
+            double px = h00 * ax + h10 * tax + h01 * bx + h11 * tbx;
+            double py = h00 * ay + h10 * tay + h01 * by + h11 * tby;
+            double pz = h00 * az + h10 * taz + h01 * bz + h11 * tbz;
+            return px * px + py * py + pz * pz;
+        }
+        const double g = 0.6180339887498949;
+        double lo = 0.0, hi = 1.0;
+        double c = hi - g * (hi - lo), d = lo + g * (hi - lo);
+        double fc = D2(c), fd = D2(d);
+        for (int k = 0; k < 48; k++)
+        {
+            if (fc < fd) { hi = d; d = c; fd = fc; c = hi - g * (hi - lo); fc = D2(c); }
+            else { lo = c; c = d; fc = fd; d = lo + g * (hi - lo); fd = D2(d); }
+        }
+        return Math.Sqrt(Math.Min(fc, fd));
     }
 }
 

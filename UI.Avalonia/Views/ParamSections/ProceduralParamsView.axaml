@@ -1434,7 +1434,7 @@
         <!-- #1923 — black hole shadows (Majumdar-Papapetrou). -->
         <Grid IsVisible="{Binding IsBlackHoleShadow}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Layout:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding BlackHoleLayouts}"
@@ -1489,6 +1489,21 @@
                            Minimum="100" Maximum="1000000" Increment="1000" FormatString="0"
                            Value="{Binding BlackHoleMaxSteps, Mode=TwoWay}" Margin="0,2"
                            ToolTip.Tip="Steps before a ray is called undecided (interior colour). Rays near the eyebrows orbit many times." />
+            <!-- #1924 colouring channel -->
+            <TextBlock Grid.Row="12" Grid.Column="0" Text="Colour by:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="12" Grid.Column="1"
+                      ItemsSource="{Binding BlackHoleChannels}"
+                      SelectedItem="{Binding BlackHoleChannel, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Fate: which hole caught each ray. Winding: turns round the hole (stripes at each eyebrow level). Delay: time delay. Steps: integrator effort. ClosestApproach: how near the ray came to a hole. Deflection: how far an escaped ray was bent." />
+            <CheckBox Grid.Row="13" Grid.Column="1" Content="Keep fate colours (channel as stripes)"
+                      IsVisible="{Binding BhUsesChannel}"
+                      IsChecked="{Binding BlackHoleShadeFates, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Hue stays the hole that caught the ray (or escaped); brightness follows the channel." />
+            <TextBlock Grid.Row="14" Grid.Column="0" Text="Channel scale:" VerticalAlignment="Center" IsVisible="{Binding BhUsesChannel}" />
+            <NumericUpDown Grid.Row="14" Grid.Column="1" IsVisible="{Binding BhUsesChannel}"
+                           Minimum="0.01" Maximum="100" Increment="0.1" FormatString="0.##########"
+                           Value="{Binding BlackHoleChannelScale, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Palette density: higher packs more colour bands (stripes) per unit of the channel." />
             <TextBlock Grid.Row="11" Grid.Column="1"
                        Text="Each hole's shadow is its own colour; eyebrows are rays caught by one hole after swinging round another. Escaped rays are coloured by their time delay. A Billiard theme colours the fates directly."
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />

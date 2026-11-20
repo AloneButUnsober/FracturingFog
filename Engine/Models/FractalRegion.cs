@@ -766,6 +766,10 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? BlackHoleCaptureFraction { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? BlackHoleTolerance { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? BlackHoleMaxSteps { get; set; }
+        // #1924 — colouring channel (int cast of FracturingFog.BlackHoleChannel).
+        [JsonIgnore(Condition = OmitNull)] public int? BlackHoleChannel { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? BlackHoleShadeFates { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BlackHoleChannelScale { get; set; }
         // #1507 — int cast of BilliardRayColorSource.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysColorSource { get; set; }
         // #1508 — crossings (int casts of BilliardRayMode / BilliardCrossingValue).
@@ -1294,6 +1298,9 @@ namespace FracturingFog.Models
                     BlackHoleCaptureFraction = p.BlackHoleCaptureFraction,
                     BlackHoleTolerance = p.BlackHoleTolerance,
                     BlackHoleMaxSteps = p.BlackHoleMaxSteps,
+                    BlackHoleChannel = (int)p.BlackHoleChannel,
+                    BlackHoleShadeFates = p.BlackHoleShadeFates,
+                    BlackHoleChannelScale = p.BlackHoleChannelScale,
                 },
                 FractalType.BilliardRays => new RegionFractalParams
                 {
@@ -2290,6 +2297,9 @@ namespace FracturingFog.Models
             if (BlackHoleCaptureFraction.HasValue) p.BlackHoleCaptureFraction = BlackHoleCaptureFraction.Value;
             if (BlackHoleTolerance.HasValue)      p.BlackHoleTolerance = BlackHoleTolerance.Value;
             if (BlackHoleMaxSteps.HasValue)       p.BlackHoleMaxSteps = BlackHoleMaxSteps.Value;
+            if (BlackHoleChannel.HasValue)        p.BlackHoleChannel = (FracturingFog.BlackHoleChannel)BlackHoleChannel.Value;
+            if (BlackHoleShadeFates.HasValue)     p.BlackHoleShadeFates = BlackHoleShadeFates.Value;
+            if (BlackHoleChannelScale.HasValue)   p.BlackHoleChannelScale = BlackHoleChannelScale.Value;
             if (BilliardRaysColorSource.HasValue) p.BilliardRaysColorSource = (FracturingFog.BilliardRayColorSource)BilliardRaysColorSource.Value;
             if (BilliardRaysMode.HasValue)       p.BilliardRaysMode = (FracturingFog.BilliardRayMode)BilliardRaysMode.Value;
             if (BilliardRaysCrossingWindow.HasValue) p.BilliardRaysCrossingWindow = BilliardRaysCrossingWindow.Value;

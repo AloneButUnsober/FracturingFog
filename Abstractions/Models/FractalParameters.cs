@@ -1397,6 +1397,12 @@ namespace FracturingFog.Models
         public double BlackHoleTolerance { get; set; } = 1e-9;
         /// <summary>Accepted-step cap; past it a ray is undecided. Default 20 000.</summary>
         public int BlackHoleMaxSteps { get; set; } = 20_000;
+        /// <summary>#1924 — colouring channel (see <see cref="FracturingFog.BlackHoleChannel"/>). Default Fate.</summary>
+        public BlackHoleChannel BlackHoleChannel { get; set; } = BlackHoleChannel.Fate;
+        /// <summary>#1924 — keep each fate's colour and use the channel as brightness stripes. Default false.</summary>
+        public bool BlackHoleShadeFates { get; set; }
+        /// <summary>#1924 — palette density of the channel (1 = 24 palette units per unit of the channel). Default 1.</summary>
+        public double BlackHoleChannelScale { get; set; } = 1.0;
 
         // ── Slit cascade (#1569, double-slit epic #1565) ──────────────────
         /// <summary>Slit cascade: children per slit, N (2..16). N ≥ 3 for the fringe
@@ -2483,6 +2489,9 @@ namespace FracturingFog.Models
                 BlackHoleCaptureFraction = BlackHoleCaptureFraction,
                 BlackHoleTolerance = BlackHoleTolerance,
                 BlackHoleMaxSteps = BlackHoleMaxSteps,
+                BlackHoleChannel = BlackHoleChannel,
+                BlackHoleShadeFates = BlackHoleShadeFates,
+                BlackHoleChannelScale = BlackHoleChannelScale,
                 SlitCascadeChildren = SlitCascadeChildren,
                 SlitCascadeRatio = SlitCascadeRatio,
                 SlitCascadeDepth = SlitCascadeDepth,

@@ -364,6 +364,17 @@ traced main-shadow edges (1.763, −5.893, half-width 4.182) sit within 0.025 of
 The pinhole camera named in the issue was left out: the paper's parallel congruence gives the
 impact-parameter plane directly, and that is what the validation formulas use.
 
+**S2 shipped (#1924).** Per-ray channels recorded during the trace (`MpNullSystem.Begin` /
+`Observe`): winding (angle swept round the capturing hole, else the hole passed closest), coordinate-
+time delay, integrator steps, closest approach (refined inside each step on the cubic Hermite segment
+when the radial velocity changes sign) and deflection. `BlackHoleChannel` picks one for the palette and
+the relief height; `BlackHoleShadeFates` keeps the fate hue with the channel as brightness stripes (a
+billiard theme gets the half-turns as its bounce count). Validated against an independent quadrature of
+the extreme Reissner–Nordström orbit equation [(Yumoto, Nitta, Chiba & Sugiyama 2012, Eqs. 3–4)](../Resources-Bibliography.md#yumoto-2012):
+swept angle, deflection and periastron of single-hole rays; a far-away binary deflects like its total
+mass. Fix: S1 passed the palette value as `Map`'s iteration cap, so escape-time palettes drew every
+escaped ray in the interior colour (the black sky of the S1 batch renders).
+
 #### 2.6.2 Hénon–Heiles exit basins — **#1942**
 
 The Hénon–Heiles potential `V = (x² + y²)/2 + x²y − y³/3` has three exit channels above `E = 1/6`; its
@@ -1069,3 +1080,4 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   #1946, black hole + ring #1947, microlensing #1948 (not fractal); hairy black holes / boson stars and
   dynamic merger lensing recorded as future R&D (§2.6.9). Bibliography (§7): gravitational block.
 - **2026-11-20** — §2.6.1: black hole shadows S1 #1923 (type, shared ODE core, MP trace, Yumoto et al. Eq. 40 check). Bibliography (§7): Yumoto et al. 2012, Nitta, Chiba & Sugiyama 2011, Dormand & Prince 1980, Hairer, Nørsett & Wanner 1993.
+- **2026-11-20** — §2.6.1: black hole shadows S2 #1924 (winding, delay, steps, closest approach, deflection channels; shaded fates; palette cap fix).
