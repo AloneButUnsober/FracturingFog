@@ -33,7 +33,7 @@ using FracturingFog.Scattering;
 
 namespace FracturingFog;
 
-public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightFieldSource, FracturingFog.Rendering.ILowResPreviewCalculator
+public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightFieldSource, FracturingFog.Rendering.ILowResPreviewCalculator, FracturingFog.Render.IGpuRouteSource
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -54,6 +54,69 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
 
     public bool LowResPreview { get; set; }
     public double? LowResPreviewScaleOverride { get; set; }
+
+    // ── GPU (#1926) ──────────────────────────────────────────────────────────
+    /// <summary>#1926 — how the last frame was traced (GPU, or CPU and why).</summary>
+    public FracturingFog.Render.GpuRoute LastGpuRoute { get; private set; }
+
+    /// <summary>#1926 — where the trace runs when GPU render is on (Lighting &amp; FX).</summary>
+    public enum GpuBlackHoleMode
+    {
+        /// <summary>Measure on the first GPU frame (per device), keep the faster, re-measure
+        /// when the pixel count moves by more than <see cref="RemeasureFactor"/>.</summary>
+        Auto,
+        /// <summary>Always the GPU (<c>FF_GPU_BLACK_HOLE=1</c>).</summary>
+        Gpu,
+        /// <summary>Always the CPU (<c>FF_GPU_BLACK_HOLE=0</c>).</summary>
+        Cpu,
+    }
+
+    /// <summary>#1926 — the GPU and CPU traces are the same arithmetic, so the path is a speed
+    /// choice and the answer depends on the hardware (the Buddhabrot #1220 / mirror spheres
+    /// #1443 pattern). Auto (default) measures; FF_GPU_BLACK_HOLE forces either path. Setting
+    /// it overrides for the calling thread only (tests).</summary>
+    public static GpuBlackHoleMode GpuSelection
+    {
+        get => t_gpuSelection ?? s_gpuSelectionEnv;
+        set => t_gpuSelection = value;
+    }
+    private static readonly GpuBlackHoleMode s_gpuSelectionEnv =
+        BuddhaFamilyCalculator.ParseGpuBuddhaMode(Environment.GetEnvironmentVariable("FF_GPU_BLACK_HOLE")) switch
+        {
+            BuddhaFamilyCalculator.GpuBuddhaMode.Gpu => GpuBlackHoleMode.Gpu,
+            BuddhaFamilyCalculator.GpuBuddhaMode.Cpu => GpuBlackHoleMode.Cpu,
+            _ => GpuBlackHoleMode.Auto,
+        };
+    [ThreadStatic] private static GpuBlackHoleMode? t_gpuSelection;
+
+    /// <summary>#1926 — Auto re-measures when the pixel count differs from the measured frame by more than this factor.</summary>
+    public const double RemeasureFactor = 4.0;
+    /// <summary>#1926 — Auto times the CPU on every this-many-th row of the first GPU frame.</summary>
+    public const int MeasureRowStride = 8;
+
+    /// <summary>#1926 — one measured comparison: trace cost per pixel on each path.</summary>
+    public sealed record GpuMeasurement(double CpuNsPerPixel, double GpuNsPerPixel, int Pixels)
+    {
+        public bool GpuFaster => GpuNsPerPixel < CpuNsPerPixel;
+        public bool Covers(int pixels) => pixels <= Pixels * RemeasureFactor && Pixels <= pixels * RemeasureFactor;
+        public string Summary => $"measured CPU {CpuNsPerPixel:0.#} vs GPU {GpuNsPerPixel:0.#} ns/pixel";
+    }
+    // Auto decisions per accelerator (freed with it), keyed by single precision.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, System.Collections.Generic.Dictionary<bool, GpuMeasurement>> s_gpuDecisions = new();
+    /// <summary>#1926 — the measurement behind the last frame's path (Auto), or null.</summary>
+    public GpuMeasurement? LastGpuMeasurement { get; private set; }
+    private FracturingFog.Calculators.Gpu.BlackHoleShadowGpuCalculator? _gpu;
+    private bool _isPreviewChild;   // the drag preview's smaller sibling stays on the CPU
+
+    /// <summary>#1926 — why a frame with GPU render on still traces on the CPU (null = it may use the GPU).</summary>
+    public static string? CpuOnlyReason(FractalParameters p)
+    {
+        if (p.BlackHoleShadeFates && p.BlackHoleChannel != BlackHoleChannel.Fate) return "shaded fates need the CPU channels";
+        return p.BlackHoleChannel is BlackHoleChannel.Winding or BlackHoleChannel.ClosestApproach
+            ? $"{p.BlackHoleChannel} needs per-step bookkeeping (CPU only)"
+            : null;
+    }
+
     private BlackHoleShadowCalculator? _preview;
 
     /// <summary>Default zoom: the frame is 4 / 0.16 = 25 mass units wide, which fits the
@@ -234,6 +297,121 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
         double cx = CenterX, cy = CenterY, zoom = Zoom;
         var colorMap = ColorMap;
 
+        // #1926 — the GPU traces every ray (fate, steps, delay, final momentum) when GPU render is
+        // on and the colouring needs nothing else; the colour pass below reads its outcomes.
+        FracturingFog.Calculators.Gpu.BlackHoleShadowGpuCalculator.Outcomes? gpuOut = null;
+        LastGpuMeasurement = null;
+        var fx = p.Lighting;
+        string? family = _isPreviewChild ? "preview frame" : CpuOnlyReason(p);
+        var gpuGate = FracturingFog.Calculators.Gpu.Gpu3DRoute.Gate(in fx, lowRes: false, family,
+            family == null ? null : _isPreviewChild ? "drag-preview frames trace on the CPU" : family);
+        LastGpuRoute = gpuGate ?? default;
+        bool measureCpu = false, measureSingle = false;
+        double gpuMs = 0;
+        object? device = null;
+        if (gpuGate is null)
+        {
+            var mode = GpuSelection;
+            if (FracturingFog.Calculators.Gpu.GpuAcceleratorHost.TryAcquire(out var acc)) device = acc;
+            bool single = p.BlackHoleGpuPrecision == BlackHoleGpuPrecision.Single;
+            GpuMeasurement? known = null;
+            if (mode == GpuBlackHoleMode.Auto && device != null && s_gpuDecisions.TryGetValue(device, out var kd))
+                lock (kd) { if (kd.TryGetValue(single, out var k) && k.Covers(width * height)) known = k; }
+            if (mode == GpuBlackHoleMode.Cpu)
+            {
+                LastGpuRoute = FracturingFog.Render.GpuRoute.Cpu("CPU forced", "FF_GPU_BLACK_HOLE selects the CPU trace");
+            }
+            else if (known is { GpuFaster: false })
+            {
+                LastGpuMeasurement = known;
+                LastGpuRoute = FracturingFog.Render.GpuRoute.Cpu("CPU faster", known.Summary);
+            }
+            else
+            {
+                _gpu ??= new FracturingFog.Calculators.Gpu.BlackHoleShadowGpuCalculator();
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                gpuOut = _gpu.Render(FracturingFog.Calculators.Gpu.BlackHoleShadowGpuCalculator.ParamsFor(scene, width, height, cx, cy, zoom), ct, single);
+                gpuMs = sw.Elapsed.TotalMilliseconds;
+                LastGpuRoute = FracturingFog.Calculators.Gpu.Gpu3DRoute.AfterRender(gpuOut != null, _gpu.LastError);
+                if (ct.IsCancellationRequested) return;
+                measureCpu = gpuOut != null && mode == GpuBlackHoleMode.Auto && known == null && device != null;
+                measureSingle = single;
+                if (known != null) LastGpuMeasurement = known;
+            }
+        }
+
+        // #1926 — one pixel from the GPU outcomes: the same colours the CPU path makes.
+        void GpuPixel(int x, int y)
+        {
+            int idx = y * width + x;
+            var g = gpuOut!;
+            int gate = g.Gate(idx);
+            FateBuffer[idx] = (sbyte)gate;
+            double delay = g.Delay(idx);
+            Span<double> fin = stackalloc double[6];
+            fin[3] = g.Px(idx); fin[4] = g.Py(idx); fin[5] = g.Pz(idx);
+            if (channel == BlackHoleChannel.Fate)
+            {
+                float smooth = gate == escapedGate ? (float)Math.Log(1.0 + Math.Max(0.0, delay)) : 0f;
+                SmoothBuffer[idx] = smooth;
+                ColorBuffer[idx] = sky && gate == escapedGate
+                    ? scene.SkyColour(fin) | 0xFF000000u
+                    : Colour(gate, escapedGate, gateCount, smooth, billiardMap, colorMap, undecided);
+                return;
+            }
+            double value = channel switch
+            {
+                BlackHoleChannel.Delay => Math.Log(1.0 + Math.Max(0.0, delay)),
+                BlackHoleChannel.Steps => Math.Log(1.0 + g.Steps(idx)),
+                BlackHoleChannel.Deflection => gate == escapedGate ? DeflectionFrom(scene, x, y, fin) : double.NaN,
+                _ => double.NaN,
+            };
+            SmoothBuffer[idx] = double.IsFinite(value) ? (float)value : 0f;
+            ColorBuffer[idx] = ChannelColour(gate, value * scale, colorMap, undecided);
+        }
+        double DeflectionFrom(Scene sc, int x, int y, ReadOnlySpan<double> fin)
+        {
+            var (u, v) = PlaneAt(x + 0.5, y + 0.5, width, height, cx, cy, zoom);
+            var (lx, ly, lz) = sc.Camera.Direction(u, v);
+            double pm = Math.Sqrt(fin[3] * fin[3] + fin[4] * fin[4] + fin[5] * fin[5]);
+            if (!(pm > 0)) return double.NaN;
+            return Math.Acos(Math.Clamp((fin[3] * lx + fin[4] * ly + fin[5] * lz) / pm, -1.0, 1.0));
+        }
+
+        if (gpuOut != null)
+        {
+            Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
+            {
+                if (ct.IsCancellationRequested) return;
+                for (int x = 0; x < width; x++) GpuPixel(x, y);
+            });
+            LastSolidFilled = 0;
+            if (measureCpu)
+            {
+                // Auto's first GPU frame: time the CPU trace of every 8th row of the same frame,
+                // per pixel, against the GPU frame (trace + readback).
+                int rows = 0;
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                Parallel.For(0, (height + MeasureRowStride - 1) / MeasureRowStride, new ParallelOptions { CancellationToken = ct }, rr =>
+                {
+                    Span<double> s = stackalloc double[6];
+                    int y = rr * MeasureRowStride;
+                    for (int x = 0; x < width; x++)
+                    {
+                        var (u, v) = PlaneAt(x + 0.5, y + 0.5, width, height, cx, cy, zoom);
+                        scene.Trace(u, v, s, needChannels);
+                    }
+                    Interlocked.Increment(ref rows);
+                });
+                double cpuNs = sw.Elapsed.TotalMilliseconds * 1e6 / Math.Max(1, rows * width);
+                var m = new GpuMeasurement(cpuNs, gpuMs * 1e6 / Math.Max(1, width * height), width * height);
+                var dict = s_gpuDecisions.GetOrCreateValue(device!);
+                lock (dict) dict[measureSingle] = m;
+                LastGpuMeasurement = m;
+            }
+            return;
+        }
+
         // One pixel: trace, record the fate, colour it.
         void Pixel(int x, int y, Span<double> s)
         {
@@ -396,7 +574,7 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
         if (sc >= 1.0) return false;
         var dims = FracturingFog.Rendering.LowResPreview.ComputeDims(Width, Height, sc);
         if (_preview == null || _preview.Width != dims.Width || _preview.Height != dims.Height)
-            _preview = new BlackHoleShadowCalculator(dims.Width, dims.Height);
+            _preview = new BlackHoleShadowCalculator(dims.Width, dims.Height) { _isPreviewChild = true };
         _preview.FractalParameters = FractalParameters;
         _preview.CenterX = CenterX; _preview.CenterY = CenterY; _preview.Zoom = Zoom;
         _preview.MaxIterations = MaxIterations; _preview.ColorMap = ColorMap; _preview.Quality = Quality;

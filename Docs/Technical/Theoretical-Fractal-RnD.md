@@ -399,6 +399,18 @@ blocks (a 16 px block whose ring is one hole's shadow is filled). Speed-ups: 2.8
 frame). The escape radius barely matters (outbound steps are long). The GPU (#1926) remains the larger
 lever; on fp64-weak cards an fp32 kernel with measured routing is the plan.
 
+**S4 shipped (#1926).** ILGPU trace (CUDA / OpenCL, the mirror spheres' path; a D3D11 + Vulkan twin
+is #1972): `BlackHoleShadowGpuCalculator` mirrors the CPU integrator term for term and returns fate,
+steps, delay and final momentum; the CPU colour pass is unchanged, so themes, skies and the Fate /
+Delay / Steps / Deflection channels work on either path (Winding / ClosestApproach / shaded fates stay
+on the CPU). On the ILGPU CPU accelerator the double kernel matches the CPU exactly (every pixel's
+fate, steps, delay, momentum; 11 scene variants). Measured on the GT 710 against the 12-thread CPU:
+double precision 55x slower (fp64 at 1/24 rate, divergent rays), so a generated single-precision
+kernel (`BlackHoleGpuPrecision.Single`, tolerance floored at 2e-5) was added: 1.7–1.8x faster than
+the CPU at the default view and 3.1x at an x375 eyebrow zoom, with 0.003–0.007 % / 0.16 % of fates
+moved (edge pixels only). Auto measures per device and precision (the Buddhabrot #1220 pattern);
+`FF_GPU_BLACK_HOLE` forces either path.
+
 #### 2.6.2 Hénon–Heiles exit basins — **#1942**
 
 The Hénon–Heiles potential `V = (x² + y²)/2 + x²y − y³/3` has three exit channels above `E = 1/6`; its
@@ -1107,3 +1119,4 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
 - **2026-11-20** — §2.6.1: black hole shadows S2 #1924 (winding, delay, steps, closest approach, deflection channels; shaded fates; palette cap fix).
 - **2026-11-20** — §2.6.1: black hole shadows S3 #1925 (Lighting & FX / procedural skies for escaped rays, pinhole projection, HDRI gap).
 - **2026-11-20** — §2.6.1: black hole shadows CPU speed #1970 (tolerance 1e-7 + cube-root zoom tie, capture 0.25 m, Fate-mode bookkeeping skip, opt-in solid blocks; 1.9–8.5x, no fate change vs a 1e-11 reference).
+- **2026-11-20** — §2.6.1: black hole shadows S4 #1926 (ILGPU double + single kernels, measured Auto routing; D3D11 + Vulkan follow-up #1972).

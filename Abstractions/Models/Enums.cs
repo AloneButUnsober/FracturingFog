@@ -1277,6 +1277,12 @@ namespace FracturingFog
     /// Pinhole projection to see the sky lensed.</summary>
     public enum BlackHoleSky { Off, Environment, Checker, Grid, Stars }
 
+    /// <summary>Arithmetic of the black hole GPU trace (#1926). <see cref="Double"/> (default) is
+    /// the CPU's arithmetic, the same image either way. <see cref="Single"/> is much faster on
+    /// GPUs with slow fp64 (most consumer cards) but floors the tolerance and can move pixels
+    /// on the fractal edges; the CPU path always traces in double.</summary>
+    public enum BlackHoleGpuPrecision { Double, Single }
+
     public enum RenderProfile { Preview, Final }
 
     /// <summary>

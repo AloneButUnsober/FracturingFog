@@ -105,6 +105,8 @@ namespace FracturingFog.Cli
                 "Where Buddhabrot-family sampling runs.", "auto", Choices: AutoGpuCpu, AffectsRender: true),
             new("FF_GPU_MIRROR_SPHERES", EnvVarKind.Choice, EnvVarGroup.GpuCompute,
                 "Where the Wada mirror-spheres tracer runs.", "auto", "#1439", Choices: AutoGpuCpu, AffectsRender: true),
+            new("FF_GPU_BLACK_HOLE", EnvVarKind.Choice, EnvVarGroup.GpuCompute,
+                "Where the black hole shadow tracer runs.", "auto", "#1926", Choices: AutoGpuCpu, AffectsRender: true),
             new("FF_BUDDHA_DISPATCH_BUDGET", EnvVarKind.Number, EnvVarGroup.GpuCompute,
                 "Orbit iterations in the first Buddhabrot GPU dispatch; later dispatches are sized from measured time.",
                 "400000000", Min: 1, Developer: true),

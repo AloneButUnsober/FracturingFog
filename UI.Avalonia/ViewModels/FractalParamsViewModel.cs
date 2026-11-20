@@ -264,6 +264,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _bhSkySeed = _p.BlackHoleSkySeed;
         _bhSkyRotation = _p.BlackHoleSkyRotation;
         _bhSolidBlocks = _p.BlackHoleSolidBlocks;
+        _bhGpuPrecision = _p.BlackHoleGpuPrecision;
         _mathPlaneScene = _p.MathPlaneScene ?? string.Empty;
         UpdateMathPlaneSceneError();
         _raysColorSource = _p.BilliardRaysColorSource;
@@ -2280,6 +2281,11 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     // #1970 — solid blocks (opt-in).
     private bool _bhSolidBlocks;
     public bool BlackHoleSolidBlocks { get => _bhSolidBlocks; set { Set(ref _bhSolidBlocks, value); _p.BlackHoleSolidBlocks = value; Fire(); } }
+    // #1926 — GPU precision.
+    private BlackHoleGpuPrecision _bhGpuPrecision;
+    public BlackHoleGpuPrecision BlackHoleGpuPrecision { get => _bhGpuPrecision; set { Set(ref _bhGpuPrecision, value); _p.BlackHoleGpuPrecision = value; Fire(); } }
+    public System.Array BlackHoleGpuPrecisions => s_BlackHoleGpuPrecisions;
+    private static readonly System.Array s_BlackHoleGpuPrecisions = System.Enum.GetValues(typeof(BlackHoleGpuPrecision));
     // #1507 — what sets the hue.
     private BilliardRayColorSource _raysColorSource;
     public BilliardRayColorSource BilliardRaysColorSource { get => _raysColorSource; set { Set(ref _raysColorSource, value); _p.BilliardRaysColorSource = value; Fire(); } }
