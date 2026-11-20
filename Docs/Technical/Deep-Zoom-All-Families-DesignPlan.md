@@ -691,6 +691,38 @@ in the same PR.
     - The determinant size reverted to the norm form. They agree on every oracle view: the maps
       there are conformal, or diagonal on the ship's real axis.
 
+**D12 as built (#1917).**
+- **The template's deep tier is the engine.** From `EngineZoomThreshold` (1e12, the template's own
+  `PerturbZoomThreshold`) a generated calculator renders on `PerturbationEngine`. Below it the
+  emitted SP / AVX2 / GPU code runs unchanged.
+  - The plan comes from the calculator's own equation. `EquationSource` (a new `{{EQUATION_LITERAL}}`
+    substitution) is parsed at runtime with `CalculatorGenApi.ParseEquation`, so Compile & Load and the
+    built-ins share one path.
+  - `TwoStatePlan.TryCreatePrev` handles prev; `AstPlan.TryCreateAny` handles the rest (polynomials,
+    conj / fold / re / im / abs, quotients, the elementary and piecewise functions: D3–D10).
+  - The plan is built once per class. The sink is the template's `ColorFor`, so smooth count, DE and
+    the theme see the same inputs as before.
+  - The centre is the exact centre when the caller gave one (`IDeepCentre`), else the 16 limbs.
+- **Every built-in equation gets a plan**, including the `if` form and prev. The template's
+  PT / QD-PT / SA / HP-direct code is kept, but only as the fallback for an equation no plan
+  covers (`EngineRefusal` gives the reason). It was not deleted: a Compile & Load equation outside
+  the operator set (for example `atan`) still needs it.
+- **Explorer limit:** Generated Z2–Z5, Tricorn and Burning Ship go to `EngineDoubleDeltaMaxZoom`
+  (1e290). Before this they stopped at 1e50 (Z2–Z5) or 1e13.
+- **Batch / Command builder:** no new render setting, so no gap. The generated types render through
+  the same calculator headless.
+- **Results** (`S1917CalcGenDeepTests`):
+  - Every built-in generated equation renders deep on the engine, with no refusal.
+  - Below the threshold (1e8 to 0.999e12) the colour buffer is byte-identical with the engine off.
+  - At Misiurewicz views, the counts match direct BigFloat iteration (S1909's oracle):
+    - Z2, Z3, Z5 at 1e40 and 1e120 (past the old QD ceiling);
+    - Z4, Tricorn and Burning Ship at 1e40.
+- **Mutants**, all caught:
+  - the threshold dropped (the engine below 1e12): the byte-identity test;
+  - the engine never used: the refusal test and the 1e120 views;
+  - the plan's bailout² as 4: the oracle views;
+  - the centre's Hi limb only: the oracle views.
+
 **Order of value:** D1 → D2 → D3 gives deep zoom to Multibrot, Julia, Generated Z2–Z5 and every
 polynomial user equation. D4 / D5 add Tricorn and Burning Ship, which is the original #1253. D6–D10
 widen the user equation language.

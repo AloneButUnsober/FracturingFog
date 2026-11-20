@@ -7,18 +7,16 @@
 //
 // The numbers are the calculators' own precision ceilings, not measured limits:
 //   • Mandelbrot — every tier up to the exact centre (#1428): no limit.
-//   • TearDrop and Generated Z2–Z5 — a QD reference orbit with double δ (TearDropCalculator's
-//     QD-PT; the CalcGen template's QD-PT, whose comment gives its ceiling as ~1e50). They take
-//     the full centre on every path since #1906 (IDeepCentre); the probe (the poster path)
-//     already gave them QD limbs.
+//   • TearDrop — a QD reference orbit with double δ (TearDropCalculator's QD-PT, ~1e50). It takes
+//     the full centre on every path since #1906 (IDeepCentre).
+//   • Generated Z2–Z5, Tricorn and Burning Ship — the CalcGen template's deep tier is the engine
+//     since #1917 (its own QD-PT, ~1e50, and QD-direct paths stay only for equations no plan
+//     covers).
 //   • Julia and Multibrot — the generic perturbation engine past 1e11 (#1907), double δ to ~1e290.
 //     Tricorn too since #1909 (an R2Plan with the 2×2 matrix BLA), Burning Ship since #1910
 //     (diffabs folds), Magnet 1 / 2 since #1911 (the quotient difference), Phoenix and Spider since
 //     #1912 (a δ per state), Glynn since #1913 (elementary-function differences, BigFloatMath).
-//   • Everything else renders in double: 1e13 (AutoExplorer.DoubleMaxZoom). Generated Tricorn /
-//     Burning Ship have QD-direct paths but no perturbation (CalcGen turns it off for Conj /
-//     Folded), too slow to explore; Generated Tricorn stays at double until D12 (#1917) puts
-//     CalcGen's deep tier on the engine; Generated Burning Ship too (#1910 gave the plain one).
+//   • Everything else renders in double: 1e13 (AutoExplorer.DoubleMaxZoom).
 
 using FracturingFog.Models;
 
@@ -37,9 +35,10 @@ public static class FamilyDepth
     public static double MaxZoomFor(FractalType t) => t switch
     {
         FractalType.Mandelbrot => QualityPreset.Deepest.ZoomMax,
-        FractalType.TearDrop
-            or FractalType.GeneratedMandelbrotZ2 or FractalType.GeneratedMandelbrotZ3
-            or FractalType.GeneratedMandelbrotZ4 or FractalType.GeneratedMandelbrotZ5 => QdPerturbationMaxZoom,
+        FractalType.TearDrop => QdPerturbationMaxZoom,
+        FractalType.GeneratedMandelbrotZ2 or FractalType.GeneratedMandelbrotZ3
+            or FractalType.GeneratedMandelbrotZ4 or FractalType.GeneratedMandelbrotZ5
+            or FractalType.GeneratedTricorn or FractalType.GeneratedBurningShip => EngineDoubleDeltaMaxZoom,   // #1917
         FractalType.Julia or FractalType.Multibrot => EngineDoubleDeltaMaxZoom,   // #1907
         FractalType.Tricorn => EngineDoubleDeltaMaxZoom,                          // #1909
         FractalType.BurningShip => EngineDoubleDeltaMaxZoom,                      // #1910

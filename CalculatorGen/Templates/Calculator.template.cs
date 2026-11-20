@@ -453,6 +453,12 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IDeepCentre, IHeightFie
         // the reference orbit itself escapes (centre is outside the set
         // at deep zoom) TryRenderPerturbation returns false and the
         // whole-frame HP-direct fallback below takes over.
+        // #1917 (epic #1253, D12) — the deep tier on the generic perturbation engine, for every equation
+        // its plans cover; the template's own PT / QD-PT / HP-direct below stay as the fallback for the
+        // rest (TryRenderEngine sets EngineRefusal with the reason).
+        if (TryRenderEngine(scale, ct))
+            return;
+
         if (SupportsPerturbation && UsePerturbation && Zoom >= PerturbZoomThreshold && TryRenderPerturbation(scale, ct))
             return;
 
@@ -764,6 +770,74 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IDeepCentre, IHeightFie
     // doubles. Falls back to the AVX2 path (returns false) when the
     // reference orbit escapes before maxIter (rare; happens when the
     // view centre itself lies outside the set).
+
+    // ── #1917 (epic #1253, D12) — the deep tier on the perturbation engine ──────────────────────
+    //
+    // From EngineZoomThreshold (the template's PerturbZoomThreshold, so everything shallower is the
+    // emitted SP / AVX2 / GPU code unchanged) the frame renders on FracturingFog.Perturbation's engine
+    // with the plan for this equation: AstPlan for a polynomial, R2Plan for conj / fold / re / im / abs,
+    // quotients, the elementary functions and the piecewise functions, TwoStatePlan for prev (D3–D10).
+    // The equation is the generated source's own (EquationSource), parsed at runtime the way Compile &
+    // Load parses it. An equation outside the plans' operator set keeps the template's deep paths.
+    // Design: Docs/Technical/Deep-Zoom-All-Families-DesignPlan.md §5.1.
+
+    /// <summary>The equation this calculator was generated from.</summary>
+    public const string EquationSource = {{EQUATION_LITERAL}};
+
+    /// <summary>#1917 — false keeps the template's own deep paths (tests compare them).</summary>
+    public bool UseEngine { get; set; } = true;
+
+    /// <summary>#1917 — the engine's tier starts here.</summary>
+    public double EngineZoomThreshold { get; set; } = 1.0e12;
+
+    /// <summary>#1917 — why the last deep frame did not use the engine (null when it did, or was shallow).</summary>
+    public string? EngineRefusal { get; private set; }
+
+    /// <summary>#1917 — the engine's diagnostics for the last deep frame.</summary>
+    public FracturingFog.Perturbation.PerturbationStats LastPerturbationStats { get; private set; }
+
+    private static readonly object s_engineLock = new();
+    private static bool s_engineTried;
+    private static FracturingFog.Perturbation.IPerturbationPlan? s_enginePlan;
+    private static FracturingFog.Perturbation.TwoStatePlan? s_enginePlan2;
+    private static string? s_engineWhy;
+
+    private static void BuildEnginePlan()
+    {
+        lock (s_engineLock)
+        {
+            if (s_engineTried) return;
+            try
+            {
+                var ast = FracturingFog.CalculatorGen.CalculatorGenApi.ParseEquation(EquationSource);
+                if (FracturingFog.Perturbation.TwoStatePlan.UsesPrev(ast))
+                    s_enginePlan2 = FracturingFog.Perturbation.TwoStatePlan.TryCreatePrev(ast, Bailout2, out s_engineWhy);
+                else
+                    s_enginePlan = FracturingFog.Perturbation.AstPlan.TryCreateAny(ast, Bailout2, out s_engineWhy);
+            }
+            catch (Exception ex) { s_engineWhy = ex.Message; }
+            s_engineTried = true;
+        }
+    }
+
+    private bool TryRenderEngine(double scale, CancellationToken ct)
+    {
+        EngineRefusal = null;
+        if (!UseEngine || Zoom < EngineZoomThreshold) return false;
+        BuildEnginePlan();
+        if (s_enginePlan == null && s_enginePlan2 == null) { EngineRefusal = s_engineWhy ?? "no plan for this equation"; return false; }
+
+        int prec = BigFloat.PrecisionForZoom(Math.Log10(Zoom));
+        var centre = CenterExact is { } e ? e.WithPrecision(prec) : ExactCentre.FromDeep(GetDeepCentre(), prec);
+        int maxIt = MaxIterations;
+        FracturingFog.Perturbation.PerturbationEngine.PixelSink sink = (idx, iter, zr, zi, dvr, dvi)
+            => ColorBuffer[idx] = ColorFor(iter, zr, zi, dvr, dvi, maxIt, idx);
+        LastPerturbationStats = s_enginePlan2 != null
+            ? FracturingFog.Perturbation.PerturbationEngine.RenderTwoState(s_enginePlan2, centre, scale, Width, Height, maxIt, sink, ct)
+            : FracturingFog.Perturbation.PerturbationEngine.Render(s_enginePlan!, centre, scale, Width, Height, maxIt, sink, ct);
+        LastPrecisionLabel = "PT";
+        return true;
+    }
 
     private bool TryRenderPerturbation(double scale, CancellationToken ct)
     {
