@@ -117,6 +117,14 @@ public sealed class R2Plan : IRealPerturbationPlan
         => new(new Add(new Pow(new Add(new AbsOp(new ReOp(new ZRef())), new Mul(new ImagUnit(), new AbsOp(new ImOp(new ZRef())))), 2),
                        new CRef()), 512.0 * 512.0, (1.0, 0.0));
 
+    /// <summary>#1918 — Tear Drop, (z³ / c³)·(−i) + c, z₀ = 0 and dz₀/dc = 0, with TearDropCalculator's
+    /// bailout (|z|² ≥ 1024). Rational in c: the quotient difference (#1911) handles 1 / c³.</summary>
+    public static R2Plan TearDrop()
+    {
+        AstNode z = new ZRef(), c = new CRef();
+        return new(new Add(new Mul(new Div(new Pow(z, 3), new Pow(c, 3)), new Neg(new ImagUnit())), c), 1024.0, (0.0, 0.0));
+    }
+
     /// <summary>Magnet type I, ((z² + c − 1) / (2z + c − 2))², with MagnetOneKernel's bailout (|z|² ≥ 100).</summary>
     public static R2Plan Magnet1()
     {

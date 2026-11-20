@@ -723,7 +723,37 @@ in the same PR.
   - the plan's bailout² as 4: the oracle views;
   - the centre's Hi limb only: the oracle views.
 
-**Order of value:** D1 → D2 → D3 gives deep zoom to Multibrot, Julia, Generated Z2–Z5 and every
+**D13 as built (#1918).**
+- **`R2Plan.TearDrop()`** is (z³ / c³)·(−i) + c, with z₀ = 0, dz₀/dc = 0 and |z|² ≥ 1024: the
+  calculator's own formula and bailout.
+  - It is rational in c, so the quotient difference from D6 takes 1 / c³.
+  - 0 is a critical point, so rebasing applies.
+- **`TearDropCalculator`**: past the HP threshold it renders on `PerturbationEngine` with that plan.
+  - The sink is the calculator's `FinaliseDouble`, so smooth count, DE, normals and final z / dz are
+    filled as before.
+  - The centre is the exact centre when given, else the 16 limbs.
+  - `UseEngine = false` keeps the hand-written DD-PT / QD-PT tiers. `DisableAcceleration` still
+    selects full DD / QD.
+  - `LastPrecisionLabel` is new: SP, PT, DD-PT, QD-PT, DD or QD.
+- **Explorer limit:** 1e290, up from 1e50.
+- **Batch / Command builder:** no new render setting, so no gap.
+- **Results** (`S1918TearDropDeepTests`), at two Misiurewicz views (preperiod 3, period 1):
+  - **The plan against direct BigFloat iteration**, at 1e40 and 1e120: 176/176 counts equal, and
+    dz/dc within 1 % of a finite difference on every pixel.
+  - **The calculator against the same oracle:** 176/176 at 1e40, and at 1e120 (past the old QD
+    ceiling).
+  - **Parity with the old PT below its ceiling:**
+    - DD-PT at 1e20: 1536/1536 counts equal on both views;
+    - QD-PT at 1e40: 1536/1536 and 1535/1536;
+    - dz/dc (the old closed form against the engine's tangent): within 0.1 % at 1e20. At 1e40 the
+      float buffers overflow, so only the plan test checks dz/dc there.
+  - **Below the HP threshold:** byte-identical with the engine off.
+- **Mutants**, all caught:
+  - the sink's dz/dc zeroed (the dz/dc parity);
+  - the centre's Hi limb only;
+  - the engine never used;
+  - the plan's bailout² as 4;
+  - the plan's −i as +i. to Multibrot, Julia, Generated Z2–Z5 and every
 polynomial user equation. D4 / D5 add Tricorn and Burning Ship, which is the original #1253. D6–D10
 widen the user equation language.
 

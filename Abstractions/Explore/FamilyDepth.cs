@@ -7,8 +7,8 @@
 //
 // The numbers are the calculators' own precision ceilings, not measured limits:
 //   • Mandelbrot — every tier up to the exact centre (#1428): no limit.
-//   • TearDrop — a QD reference orbit with double δ (TearDropCalculator's QD-PT, ~1e50). It takes
-//     the full centre on every path since #1906 (IDeepCentre).
+//   • TearDrop — the engine since #1918 (R2Plan.TearDrop); its own QD-PT (~1e50) stays behind
+//     UseEngine = false. It takes the full centre on every path since #1906 (IDeepCentre).
 //   • Generated Z2–Z5, Tricorn and Burning Ship — the CalcGen template's deep tier is the engine
 //     since #1917 (its own QD-PT, ~1e50, and QD-direct paths stay only for equations no plan
 //     covers).
@@ -24,7 +24,8 @@ namespace FracturingFog.Abstractions.Explore;
 
 public static class FamilyDepth
 {
-    /// <summary>The QD perturbation tiers' ceiling (TearDrop, the CalcGen template).</summary>
+    /// <summary>The QD perturbation tiers' ceiling (TearDrop's and the CalcGen template's own QD-PT, now
+    /// fallbacks behind the engine: #1917, #1918).</summary>
     public const double QdPerturbationMaxZoom = 1e50;
 
     /// <summary>#1907 — the generic perturbation engine's double-δ tier: a BigFloat reference and a
@@ -35,7 +36,7 @@ public static class FamilyDepth
     public static double MaxZoomFor(FractalType t) => t switch
     {
         FractalType.Mandelbrot => QualityPreset.Deepest.ZoomMax,
-        FractalType.TearDrop => QdPerturbationMaxZoom,
+        FractalType.TearDrop => EngineDoubleDeltaMaxZoom,                         // #1918
         FractalType.GeneratedMandelbrotZ2 or FractalType.GeneratedMandelbrotZ3
             or FractalType.GeneratedMandelbrotZ4 or FractalType.GeneratedMandelbrotZ5
             or FractalType.GeneratedTricorn or FractalType.GeneratedBurningShip => EngineDoubleDeltaMaxZoom,   // #1917
