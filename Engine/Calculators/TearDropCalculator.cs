@@ -13,6 +13,9 @@
 //
 // Precision dispatch:
 //   • SP  (double)             — zoom ≲ 1e12
+//   • the engine (#1918, epic #1253 D13) — past the HP threshold: PerturbationEngine with
+//     R2Plan.TearDrop (BigFloat reference, double δ, the 2×2 BLA, rebasing, the quotient
+//     difference for 1 / c³), to ~1e290. UseEngine = false keeps the paths below.
 //   • DD-PT  (DD ref / double δ) — zoom ≤ 1e25
 //   • QD-PT  (QD ref / double δ) — zoom ≤ ~5e58
 //   • DD/QD-FULL                 — DisableAcceleration=true, or PT-glitched pixels
@@ -40,6 +43,7 @@ using System.Threading.Tasks;
 using FracturingFog.FFMath;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
+using FracturingFog.Perturbation;
 
 namespace FracturingFog;
 
@@ -105,6 +109,17 @@ public sealed class TearDropCalculator : IFractalCalculator, IDeepCentre
     public static bool SimdSupported => Avx2.IsSupported && Fma.IsSupported;
 
     public const double QDZoomThreshold = 1e25;
+
+    /// <summary>#1918 — false keeps the hand-written DD / QD PT tiers (tests compare them).</summary>
+    public bool UseEngine { get; set; } = true;
+
+    /// <summary>#1918 — "SP", "PT" (the engine), "DD-PT", "QD-PT", "DD" or "QD": the tier the last frame used.</summary>
+    public string LastPrecisionLabel { get; private set; } = "SP";
+
+    /// <summary>#1918 — the engine's diagnostics for the last deep frame.</summary>
+    public PerturbationStats LastPerturbationStats { get; private set; }
+
+    private static readonly Lazy<R2Plan> EnginePlan = new(R2Plan.TearDrop);
 
     // R = 32 → cubic growth overshoots small bailouts in one step; larger R
     // smooths the colour gradient when smooth-iter takes log·log of |z|.
@@ -189,19 +204,42 @@ public sealed class TearDropCalculator : IFractalCalculator, IDeepCentre
 
         if (!needsHp)
         {
+            LastPrecisionLabel = "SP";
             CalculateSP(ct);
             return;
         }
 
         if (DisableAcceleration)
         {
+            LastPrecisionLabel = useQd ? "QD" : "DD";
             if (useQd) CalculateQDFull(ct);
             else       CalculateDDFull(ct);
             return;
         }
 
+        if (UseEngine)
+        {
+            CalculateEngine(ct);
+            return;
+        }
+
+        LastPrecisionLabel = useQd ? "QD-PT" : "DD-PT";
         if (useQd) CalculatePT_QDRef(ct);
         else       CalculatePT_DDRef(ct);
+    }
+
+    // #1918 — the deep tier on PerturbationEngine. The sink is FinaliseDouble, so smooth count,
+    // DE, normals and final z / dz see what the hand-written PT paths gave them.
+    private void CalculateEngine(CancellationToken ct)
+    {
+        int prec = BigFloat.PrecisionForZoom(Math.Log10(Zoom));
+        var centre = CenterExact is { } e ? e.WithPrecision(prec) : ExactCentre.FromDeep(GetDeepCentre(), prec);
+        double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
+        int maxIt = MaxIterations;
+        var map = ColorMap;
+        LastPerturbationStats = PerturbationEngine.Render(EnginePlan.Value, centre, scale, Width, Height, maxIt,
+            (idx, iter, zr, zi, dvr, dvi) => FinaliseDouble(idx, iter, maxIt, zr, zi, dvr, dvi, map), ct);
+        LastPrecisionLabel = "PT";
     }
 
     // ── SP path with DE / normals ────────────────────────────────────────────
