@@ -37,15 +37,15 @@ namespace FracturingFog.Server.Tests;
 
 public sealed class S1912TwoStateTests(ITestOutputHelper output)
 {
-    private const double PhoenixP = 0.56667, SpiderD = 0.5;   // FractalParameters' defaults
+    internal const double PhoenixP = 0.56667, SpiderD = 0.5;   // FractalParameters' defaults
 
-    private delegate void Step2(ref BigFloat zr, ref BigFloat zi, ref BigFloat wr, ref BigFloat wi, BigFloat cr, BigFloat ci, int p);
+    internal delegate void Step2(ref BigFloat zr, ref BigFloat zi, ref BigFloat wr, ref BigFloat wi, BigFloat cr, BigFloat ci, int p);
 
-    private static (BigFloat, BigFloat) M(BigFloat a, BigFloat b, BigFloat c, BigFloat d, int p)
+    internal static (BigFloat, BigFloat) M(BigFloat a, BigFloat b, BigFloat c, BigFloat d, int p)
         => (BigFloat.Sub(BigFloat.Mul(a, c, p), BigFloat.Mul(b, d, p), p), BigFloat.Add(BigFloat.Mul(a, d, p), BigFloat.Mul(b, c, p), p));
 
     // Phoenix: z′ = z² + c + p·w, w′ = z
-    private static void PhoenixStep(ref BigFloat zr, ref BigFloat zi, ref BigFloat wr, ref BigFloat wi, BigFloat cr, BigFloat ci, int p)
+    internal static void PhoenixStep(ref BigFloat zr, ref BigFloat zi, ref BigFloat wr, ref BigFloat wi, BigFloat cr, BigFloat ci, int p)
     {
         var (sr, si) = M(zr, zi, zr, zi, p);
         var k = BigFloat.FromDouble(PhoenixP, p);
@@ -55,7 +55,7 @@ public sealed class S1912TwoStateTests(ITestOutputHelper output)
     }
 
     // Spider: z′ = z² + w, w′ = d·w + z′ (w₀ = c)
-    private static void SpiderStep(ref BigFloat zr, ref BigFloat zi, ref BigFloat wr, ref BigFloat wi, BigFloat cr, BigFloat ci, int p)
+    internal static void SpiderStep(ref BigFloat zr, ref BigFloat zi, ref BigFloat wr, ref BigFloat wi, BigFloat cr, BigFloat ci, int p)
     {
         var (sr, si) = M(zr, zi, zr, zi, p);
         var nr = BigFloat.Add(sr, wr, p); var ni = BigFloat.Add(si, wi, p);
@@ -64,7 +64,7 @@ public sealed class S1912TwoStateTests(ITestOutputHelper output)
         zr = nr; zi = ni;
     }
 
-    private static (BigFloat, BigFloat, BigFloat, BigFloat) Init(bool spider, BigFloat cr, BigFloat ci, int p)
+    internal static (BigFloat, BigFloat, BigFloat, BigFloat) Init(bool spider, BigFloat cr, BigFloat ci, int p)
         => spider ? (BigFloat.Zero(p), BigFloat.Zero(p), cr, ci) : (BigFloat.Zero(p), BigFloat.Zero(p), BigFloat.Zero(p), BigFloat.Zero(p));
 
     private static int Count(Step2 f, bool spider, BigFloat cr, BigFloat ci, int p, int maxIter)
@@ -124,7 +124,7 @@ public sealed class S1912TwoStateTests(ITestOutputHelper output)
     }
 
     // ℓ_u for Phoenix's saddle (z*, z*), z* the root of z² + (p − 1)z + c = 0 with the larger |λ_u|.
-    private static (Complex, Complex) PhoenixL(Complex c)
+    internal static (Complex, Complex) PhoenixL(Complex c)
     {
         var r = Complex.Sqrt((PhoenixP - 1) * (PhoenixP - 1) - 4 * c);
         (Complex, Complex) best = default; double bestU = 0;
@@ -291,6 +291,6 @@ public sealed class S1912TwoStateTests(ITestOutputHelper output)
         Assert.True(distinct >= 5, $"precondition: structure ({distinct})");
         Assert.True(eq >= W * H * 0.9, $"{eq}/{W * H} equal at the switch");
         Assert.True(col >= W * H * 0.85, $"{col}/{W * H} colours equal at the switch");
-        Assert.Equal(FamilyDepth.EngineDoubleDeltaMaxZoom, FamilyDepth.MaxZoomFor(t));
+        Assert.Equal(QualityPreset.Deepest.ZoomMax, FamilyDepth.MaxZoomFor(t));   // #1957: unlimited
     }
 }

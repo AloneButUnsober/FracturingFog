@@ -836,6 +836,51 @@ in the same PR.
 - **Not covered** (follow-up #1957): Phoenix / Spider (the two-state engine's δ is double), and
   User Equation, the CalcGen template and TearDrop (they take a double zoom).
 
+**#1957 as built (after D2b).**
+- **The two-state engine** (`RenderTwoState`: Phoenix, Spider, User Equation prev) now has the same
+  past-double support as `Render` (#1921):
+  - a FloatExp pixel scale;
+  - the scaled-δ prelude, with one scale s for both δs;
+  - the escape step at the reference's end;
+  - the tangent held as t·2^k (`TwoStatePlan.TangentStepScaled`);
+  - the sink's distance unit.
+  It still has no BLA and no rebase, as before.
+- **User Equation, the CalcGen template and TearDrop**:
+  - take a log zoom (`IDeepZoom`) and pass the FloatExp scale and the distance unit to the engine;
+  - compute DE and normals from dz/dc in that unit;
+  - keep their buffers and colour maps in complex-plane units as before (`MandelbrotCalculator.MapDz`,
+    now public for Compile & Load). Past ~1e38 those float dz buffers are still ±∞, as they always
+    were.
+  - At unit 0 (below ~1e27) every path is unchanged bit for bit.
+- **User Equation's rotation** is a linear warp, so the engine applies it to the 2^s0-unit offsets
+  (`linearWarp`). A non-linear warp past 1e286 is still refused.
+- **The AA jitter** (#1960) moves the exact centre by the log zoom's pixel (`IDeepZoom`).
+- **FamilyDepth:** every engine family is unlimited: Phoenix, Spider, TearDrop, and Generated Z2–Z5,
+  Tricorn and Burning Ship. User Equation keeps its explorer limit (1e13): its deep finders are #1952.
+- **Results** (`S1957DeepFxRestTests`). Counts are against direct BigFloat iteration:
+  - Phoenix and Spider on the engine at 1e320, at views on a saddle's stable manifold (S1912's
+    construction, its Newton rescaled past double): 176/176. dz/dc is within 1 % of a finite
+    difference (0 off).
+  - The two-state prelude forced at 1e40 matches the double loop on 1536/1536.
+  - Through `SetZoomLog10`:
+    - TearDrop, Generated z³ / Tricorn and User Equation z² + c at 1e320: 176/176;
+    - Phoenix through `EscapeTimeCalculator` at 1e320: 176/176.
+  - User Equation rotated 90° at 1e320 is the unrotated frame turned a quarter: 992/992.
+  - The poster path hands the log zoom to all four.
+  - The AA jitter moves the exact centre by j pixels at 1e400.
+- **Mutants:**
+  - **Caught:**
+    - the two-state step not rescaled;
+    - the two-state tangent delivered without the unit;
+    - Phoenix through the calculator without the FloatExp scale (at 1e320; at 1e300 the 48 px pixel is
+      still a normal double);
+    - TearDrop, User Equation and the template without the FloatExp scale;
+    - the AA jitter ignoring the log zoom;
+    - User Equation's warp not declared linear.
+  - **Survives, with reason:** the two-state prelude's escape step. No test view keeps a pixel's δ
+    below 2^−900 until Phoenix's reference ends. The same step in the one-state prelude is what kept
+    Glynn off direct iteration in D2b.
+
 **Order of value:** D1 → D2 → D3 gives deep zoom to Multibrot, Julia, Generated Z2–Z5 and every
 polynomial user equation. D4 / D5 add Tricorn and Burning Ship, which is the original #1253. D6–D10
 widen the user equation language.

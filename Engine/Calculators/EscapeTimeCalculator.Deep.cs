@@ -199,7 +199,6 @@ public sealed partial class EscapeTimeCalculator : IDeepCentre, IDeepZoom
         {
             if (_batchCount is { } bcs) bcs[idx]++;
             if (flatDerivative) { dvr = 0; dvi = 0; }
-            else if (two != null && unitE != 0) { dvr = Math.ScaleB(dvr, -unitE); dvi = Math.ScaleB(dvi, -unitE); }   // #1921: the unit (two-state: in double)
             IterationBuffer[idx] = iter;
             FillAuxAndColor(idx, iter, maxIt, zr, zi, dvr, dvi, map);
             // Phase 2.1 (the video per-row cap): a pixel that ran to its row's cap is in set.
@@ -207,7 +206,8 @@ public sealed partial class EscapeTimeCalculator : IDeepCentre, IDeepZoom
                 IterationBuffer[idx] = maxIt;
         };
         LastPerturbationStats = two != null
-            ? PerturbationEngine.RenderTwoState(two, centre, scale, Width, Height, maxIt, sink, ct, perRow, _mask != null ? Marked : null)
+            ? PerturbationEngine.RenderTwoState(two, centre, scale, Width, Height, maxIt, sink, ct, perRow, _mask != null ? Marked : null,
+                pixelScale: pixelFx, derivExp2: unitE)   // #1957
             : PerturbationEngine.Render(plan!, centre, scale, Width, Height, maxIt, sink,
                 ct, perRow, _mask != null ? Marked : null, useBla: true, blaEpsilon: eps, converge: converge,
                 pixelScale: pixelFx, derivExp2: unitE);

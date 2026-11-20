@@ -43,7 +43,7 @@ public sealed class S1921DeepFxTests(ITestOutputHelper output)
 {
     private const double Bail = 512.0 * 512.0;
 
-    private static Step Power(int d) => (a, b, cr, ci, p) =>
+    internal static Step Power(int d) => (a, b, cr, ci, p) =>
     {
         BigFloat r = a, i = b;
         for (int k = 1; k < d; k++)
@@ -52,11 +52,11 @@ public sealed class S1921DeepFxTests(ITestOutputHelper output)
         return (BigFloat.Add(r, cr, p), BigFloat.Add(i, ci, p));
     };
 
-    private static long Log2(BigFloat x) => x.IsZero ? long.MinValue / 4 : x.Exponent + (long)BigInteger.Abs(x.Mantissa).GetBitLength();
+    internal static long Log2(BigFloat x) => x.IsZero ? long.MinValue / 4 : x.Exponent + (long)BigInteger.Abs(x.Mantissa).GetBitLength();
 
     // Newton in R² on G (BigFloat in, BigFloat out), from a double guess, to |G| < 2^-(bits): the residual
     // and the step are rescaled before they meet a double, so it works past 1e308 (S1909's stops there).
-    private static (BigFloat, BigFloat) Newton(Func<BigFloat, BigFloat, (BigFloat, BigFloat)> g, double gr, double gi, int p, long bits)
+    internal static (BigFloat, BigFloat) Newton(Func<BigFloat, BigFloat, (BigFloat, BigFloat)> g, double gr, double gi, int p, long bits)
     {
         BigFloat r = BigFloat.FromDouble(gr, p), i = BigFloat.FromDouble(gi, p);
         int hb = p / 2;
@@ -80,7 +80,7 @@ public sealed class S1921DeepFxTests(ITestOutputHelper output)
     }
 
     // A Misiurewicz point (z₄ = z₃) of the parameter plane.
-    private static ExactCentre Misiurewicz(Step f, double gr, double gi, int zl)
+    internal static ExactCentre Misiurewicz(Step f, double gr, double gi, int zl)
     {
         int p = BigFloat.PrecisionForZoom(zl) + 64;
         var (r, i) = Newton((cr, ci) =>
@@ -93,14 +93,14 @@ public sealed class S1921DeepFxTests(ITestOutputHelper output)
         return new ExactCentre(r, i);
     }
 
-    private readonly record struct View(ExactCentre Centre, double Sm, int S0, int Zl)
+    internal readonly record struct View(ExactCentre Centre, double Sm, int S0, int Zl)
     {
         public FloatExp Scale => FloatExp.FromDouble(Sm).ScaleB(S0);
         public BigFloat Off(int x, int w, BigFloat c, int p) => BigFloat.Add(c.WithPrecision(p), BigFloat.FromDouble((x - w * 0.5) * Sm, p).ScaleB(S0), p);
     }
 
     // The view: 3.5 / W wide at 10^-zl, centred a third and a fifth of a pixel off the point.
-    private static View ViewAt(ExactCentre m, int zl)
+    internal static View ViewAt(ExactCentre m, int zl)
     {
         var fx = FloatExp.FromLog10(Math.Log10(3.5 / W) - zl);
         int p = BigFloat.PrecisionForZoom(zl);
@@ -109,7 +109,7 @@ public sealed class S1921DeepFxTests(ITestOutputHelper output)
         return new View(c, fx.M, (int)fx.E, zl);
     }
 
-    private sealed record Got(int[] Iter, double[] Dr, double[] Di, PerturbationStats Stats);
+    internal sealed record Got(int[] Iter, double[] Dr, double[] Di, PerturbationStats Stats);
 
     private static Got Run(IPerturbationPlan plan, View v, int maxIter, int unitE, int fxBelow = PerturbationEngine.FxScaleLog2, double convEps = 0)
     {
@@ -124,7 +124,7 @@ public sealed class S1921DeepFxTests(ITestOutputHelper output)
 
     // Counts against direct iteration; the derivative (· 2^-unitE) against a forward difference of
     // 1e-9 pixel along Re(pixel). dynamicC: the dynamic plane (z₀ = the pixel, c fixed).
-    private void Check(string name, Got got, Step f, View v, int maxIter, int unitE, (double, double)? dynamicC = null, bool derivative = true,
+    internal void Check(string name, Got got, Step f, View v, int maxIter, int unitE, (double, double)? dynamicC = null, bool derivative = true,
                        double bail = Bail, double convEps = 0)
     {
         int pf = BigFloat.PrecisionForZoom(v.Zl) + 96;
@@ -187,7 +187,7 @@ public sealed class S1921DeepFxTests(ITestOutputHelper output)
         }
     }
 
-    private static readonly Step TricornF = (a, b, cr, ci, p) =>
+    internal static readonly Step TricornF = (a, b, cr, ci, p) =>
         (BigFloat.Add(BigFloat.Sub(Sq(a, p), Sq(b, p), p), cr, p), BigFloat.Add(-BigFloat.Mul(a, b, p).ScaleB(1), ci, p));
 
     private void Param(string name, IPerturbationPlan plan, Step f, double gr, double gi, int zl, int maxIter, double bail = Bail, double convEps = 0)
@@ -362,9 +362,8 @@ public sealed class S1921DeepFxTests(ITestOutputHelper output)
     public void The_Covered_Families_Have_No_Limit()
     {
         foreach (var t in new[] { FractalType.Julia, FractalType.Multibrot, FractalType.Tricorn, FractalType.BurningShip,
-                                  FractalType.Magnet1, FractalType.Magnet2, FractalType.Glynn })
+                                  FractalType.Magnet1, FractalType.Magnet2, FractalType.Glynn,
+                                  FractalType.Phoenix, FractalType.Spider })   // #1957
             Assert.Equal(QualityPreset.Deepest.ZoomMax, FamilyDepth.MaxZoomFor(t));
-        foreach (var t in new[] { FractalType.Phoenix, FractalType.Spider })
-            Assert.Equal(FamilyDepth.EngineDoubleDeltaMaxZoom, FamilyDepth.MaxZoomFor(t));
     }
 }

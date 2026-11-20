@@ -162,6 +162,6 @@ public sealed class S1917CalcGenDeepTests(ITestOutputHelper output)
                      FractalType.GeneratedMandelbrotZ2, FractalType.GeneratedMandelbrotZ3, FractalType.GeneratedMandelbrotZ4,
                      FractalType.GeneratedMandelbrotZ5, FractalType.GeneratedTricorn, FractalType.GeneratedBurningShip,
                  })
-            Assert.Equal(FamilyDepth.EngineDoubleDeltaMaxZoom, FamilyDepth.MaxZoomFor(t));
+            Assert.Equal(QualityPreset.Deepest.ZoomMax, FamilyDepth.MaxZoomFor(t));   // #1957: unlimited
     }
 }

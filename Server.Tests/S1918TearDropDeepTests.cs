@@ -147,5 +147,5 @@ public sealed class S1918TearDropDeepTests(ITestOutputHelper output)
 
     [Fact]
     public void The_Explorer_Limit_Is_The_Engines()
-        => Assert.Equal(FamilyDepth.EngineDoubleDeltaMaxZoom, FamilyDepth.MaxZoomFor(FractalType.TearDrop));
+        => Assert.Equal(QualityPreset.Deepest.ZoomMax, FamilyDepth.MaxZoomFor(FractalType.TearDrop));   // #1957: unlimited
 }

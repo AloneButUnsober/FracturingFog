@@ -47,8 +47,23 @@ using FracturingFog.Perturbation;
 
 namespace FracturingFog;
 
-public sealed class TearDropCalculator : IFractalCalculator, IDeepCentre
+public sealed class TearDropCalculator : IFractalCalculator, IDeepCentre, IDeepZoom
 {
+    // #1957 — the zoom past double (IDeepZoom, as EscapeTimeCalculator's #1921).
+    private double _zoomLog10 = double.NaN, _zoomLog10Stamp;
+
+    /// <inheritdoc/>
+    public double ZoomLog10
+        => !double.IsNaN(_zoomLog10) && _zoomLog10Stamp.Equals(Zoom) ? _zoomLog10 : Math.Log10(Zoom);
+
+    /// <inheritdoc/>
+    public void SetZoomLog10(double log10)
+    {
+        Zoom = FracturingFog.ViewState.ZoomLog.FromLog10(log10);
+        _zoomLog10 = log10;
+        _zoomLog10Stamp = Zoom;
+    }
+
     public bool SupportsZoomPan => true;
 
     // ── Public surface ────────────────────────────────────────────────────────
@@ -232,13 +247,21 @@ public sealed class TearDropCalculator : IFractalCalculator, IDeepCentre
     // DE, normals and final z / dz see what the hand-written PT paths gave them.
     private void CalculateEngine(CancellationToken ct)
     {
-        int prec = BigFloat.PrecisionForZoom(Math.Log10(Zoom));
+        double zl = ZoomLog10;   // #1957: past double, the log zoom
+        int prec = BigFloat.PrecisionForZoom(zl);
         var centre = CenterExact is { } e ? e.WithPrecision(prec) : ExactCentre.FromDeep(GetDeepCentre(), prec);
         double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
         int maxIt = MaxIterations;
         var map = ColorMap;
+        // #1957 — the pixel as a FloatExp past the double-δ tier; dz/dc in the distance unit (2^ue,
+        // MandelbrotCalculator's #1783; 0 below ~1e27), which FinaliseDouble turns back into
+        // complex-plane units for the buffers and the map.
+        double pxLog10 = Math.Log10(3.5 / Math.Max(Width, Height)) - zl;
+        FloatExp? pixelFx = pxLog10 < -280 ? FloatExp.FromLog10(pxLog10) : null;
+        int ue = MandelbrotCalculator.DistanceUnit(scale, pxLog10).Exp2;
         LastPerturbationStats = PerturbationEngine.Render(EnginePlan.Value, centre, scale, Width, Height, maxIt,
-            (idx, iter, zr, zi, dvr, dvi) => FinaliseDouble(idx, iter, maxIt, zr, zi, dvr, dvi, map), ct);
+            (idx, iter, zr, zi, dvr, dvi) => FinaliseDouble(idx, iter, maxIt, zr, zi, dvr, dvi, map, ue), ct,
+            pixelScale: pixelFx, derivExp2: ue);
         LastPrecisionLabel = "PT";
     }
 
@@ -1265,10 +1288,12 @@ public sealed class TearDropCalculator : IFractalCalculator, IDeepCentre
 
     // ── Buffer / colour write helpers ────────────────────────────────────────
 
+    // #1957 — ue: dr, di are in the distance unit (2^ue); the thresholds scale with it, and the
+    // buffers and the map get complex-plane units. ue = 0: as before, bit for bit.
     private void FinaliseDouble(
         int idx, int iter, int maxIt,
         double zr, double zi, double dr, double di,
-        IColorMap map)
+        IColorMap map, int ue = 0)
     {
         IterationBuffer[idx] = iter;
         if (iter >= maxIt)
@@ -1295,10 +1320,12 @@ public sealed class TearDropCalculator : IFractalCalculator, IDeepCentre
         SmoothBuffer[idx] = smooth;
 
         double dMag = Math.Sqrt(dr * dr + di * di);
+        double floor = ue == 0 ? 1e-30 : Math.ScaleB(1e-30, -ue);
         // Distance estimate: |z|·log|z| / |d| (Milnor formula, generic for any
         // analytic escape-time iteration with closed-form derivative).
-        float dist = dMag > 1e-30
-            ? (float)(mag * Math.Log(Math.Max(mag, 1.0 + 1e-12)) / dMag)
+        float dist = dMag > floor
+            ? (float)(ue == 0 ? mag * Math.Log(Math.Max(mag, 1.0 + 1e-12)) / dMag
+                              : Math.ScaleB(mag * Math.Log(Math.Max(mag, 1.0 + 1e-12)) / dMag, -ue))
             : 0f;
         DistanceBuffer[idx] = dist;
 
@@ -1307,13 +1334,13 @@ public sealed class TearDropCalculator : IFractalCalculator, IDeepCentre
         double v = zi * dr - zr * di;
         double m = Math.Sqrt(u * u + v * v);
         float nx, ny;
-        if (m > 1e-30) { nx = (float)(u / m); ny = (float)(v / m); }
+        if (m > floor) { nx = (float)(u / m); ny = (float)(v / m); }
         else            { nx = 0; ny = 0; }
         NormalXBuffer[idx] = nx;
         NormalYBuffer[idx] = ny;
 
         float fzr = (float)zr, fzi = (float)zi;
-        float fdr = (float)dr, fdi = (float)di;
+        float fdr = MandelbrotCalculator.MapDz(dr, ue), fdi = MandelbrotCalculator.MapDz(di, ue);
         FinalZrBuffer[idx] = fzr;
         FinalZiBuffer[idx] = fzi;
         FinalDrBuffer[idx] = fdr;

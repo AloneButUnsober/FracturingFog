@@ -106,7 +106,7 @@ public static partial class PerturbationEngine
         bool useBla = true, double blaEpsilon = DefaultBlaEpsilon,
         Func<double, double, (double X, double Y)>? warp = null,
         Convergence? converge = null,
-        FloatExp? pixelScale = null, int derivExp2 = 0, int fxBelowLog2 = FxScaleLog2)
+        FloatExp? pixelScale = null, int derivExp2 = 0, int fxBelowLog2 = FxScaleLog2, bool linearWarp = false)
     {
         int prec = centre.Precision;
         if (converge != null && plan is not IRealPerturbationPlan)
@@ -118,7 +118,8 @@ public static partial class PerturbationEngine
             if (ps.Log2Abs() >= fxBelowLog2) scale = ps.ToDouble();   // fxBelowLog2: a test hook (the prelude at a double depth)
             else
             {
-                if (warp != null) throw new ArgumentException("A warp needs a double pixel scale.", nameof(warp));
+                // #1957 — a linear warp (a rotation) acts on the 2^s0-unit offsets as on complex ones.
+                if (warp != null && !linearWarp) throw new ArgumentException("A non-linear warp needs a double pixel scale.", nameof(warp));
                 s0 = (int)ps.E; scale = ps.M;
             }
         }

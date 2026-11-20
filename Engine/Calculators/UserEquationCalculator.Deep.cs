@@ -19,8 +19,23 @@ using FracturingFog.Perturbation;
 
 namespace FracturingFog;
 
-public sealed partial class UserEquationCalculator
+public sealed partial class UserEquationCalculator : IDeepZoom
 {
+    // #1957 — the zoom past double (IDeepZoom, as EscapeTimeCalculator's #1921).
+    private double _zoomLog10 = double.NaN, _zoomLog10Stamp;
+
+    /// <inheritdoc/>
+    public double ZoomLog10
+        => !double.IsNaN(_zoomLog10) && _zoomLog10Stamp.Equals(Zoom) ? _zoomLog10 : Math.Log10(Zoom);
+
+    /// <inheritdoc/>
+    public void SetZoomLog10(double log10)
+    {
+        Zoom = FracturingFog.ViewState.ZoomLog.FromLog10(log10);
+        _zoomLog10 = log10;
+        _zoomLog10Stamp = Zoom;
+    }
+
     /// <summary>"SP", or "PT" when the last frame ran on the perturbation engine.</summary>
     public string LastPrecisionLabel { get; private set; } = "SP";
 
@@ -63,9 +78,17 @@ public sealed partial class UserEquationCalculator
         if (_plan == null && _plan2 == null) { DeepRefusal = _planWhy ?? "not a polynomial in z, c, conj, re and im"; return false; }
 
         ColorMap.MaxIterations = MaxIterations;
-        int prec = BigFloat.PrecisionForZoom(Math.Log10(Zoom));
+        double zl = ZoomLog10;   // #1957: past double, the log zoom
+        int prec = BigFloat.PrecisionForZoom(zl);
         var centre = CenterExact is { } e ? e.WithPrecision(prec) : ExactCentre.FromDeep(GetDeepCentre(), prec);
         double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
+        // #1957 — the pixel as a FloatExp past the double-δ tier; dz/dc from the engine in the distance
+        // unit (2^ue: MandelbrotCalculator's #1783, 0 below ~1e27), turned back into complex-plane units
+        // for the buffers and the map, as before.
+        double pxLog10 = Math.Log10(3.5 / Math.Max(Width, Height)) - zl;
+        FloatExp? pixelFx = pxLog10 < -280 ? FloatExp.FromLog10(pxLog10) : null;
+        int ue = MandelbrotCalculator.DistanceUnit(scale, pxLog10).Exp2;
+        double normalFloor = ue == 0 ? 1e-12 : Math.ScaleB(1e-12, -ue);
         int maxIt = MaxIterations, width = Width;
         double rot = FractalParameters.UserEquationRotationDegrees * Math.PI / 180.0;
         double cosA = Math.Cos(rot), sinA = Math.Sin(rot);
@@ -102,15 +125,16 @@ public sealed partial class UserEquationCalculator
                 {
                     double u = zr * dzr + zi * dzi, v = -(zr * dzi - zi * dzr);   // Re / −Im (z̄ · dz/dc)
                     double m = Math.Sqrt(u * u + v * v);
-                    if (m > 1e-12 && double.IsFinite(m)) { nx = (float)(u / m); ny = (float)(v / m); }
+                    if (m > normalFloor && double.IsFinite(m)) { nx = (float)(u / m); ny = (float)(v / m); }
                 }
                 NormalXBuffer[idx] = nx; NormalYBuffer[idx] = ny;
                 SmoothBuffer[idx] = smooth;
                 IterationBuffer[idx] = iter;
                 FinalZrBuffer[idx] = (float)zr; FinalZiBuffer[idx] = (float)zi;
-                FinalDrBuffer[idx] = (float)dR; FinalDiBuffer[idx] = (float)dI;
+                float fdr = MandelbrotCalculator.MapDz(dR, ue), fdi = MandelbrotCalculator.MapDz(dI, ue);   // #1957: complex-plane units
+                FinalDrBuffer[idx] = fdr; FinalDiBuffer[idx] = fdi;
                 TrapBuffer[idx] = 0f;
-                ColorBuffer[idx] = (uint)ColorMap.Map(smooth, 0f, maxIt, nx, ny, (float)zr, (float)zi, (float)dR, (float)dI);
+                ColorBuffer[idx] = (uint)ColorMap.Map(smooth, 0f, maxIt, nx, ny, (float)zr, (float)zi, fdr, fdi);
                 if (oobColor is uint oob)
                 {
                     int x = idx % width, y = idx / width;
@@ -125,9 +149,11 @@ public sealed partial class UserEquationCalculator
         Func<int, bool>? marked = aaMask != null ? i => aaMask[i] != 0 : null;
         Func<double, double, (double, double)>? warp = rot != 0 ? (dx, dy) => (dx * cosA - dy * sinA, dx * sinA + dy * cosA) : null;
         LastPerturbationStats = _plan2 != null
-            ? PerturbationEngine.RenderTwoState(_plan2, centre, scale, width, Height, maxIt, sink, ct, rowMaxIter: null, marked: marked, warp: warp)
+            ? PerturbationEngine.RenderTwoState(_plan2, centre, scale, width, Height, maxIt, sink, ct, rowMaxIter: null, marked: marked, warp: warp,
+                pixelScale: pixelFx, derivExp2: ue, linearWarp: true)
             : PerturbationEngine.Render(_plan!, centre, scale, width, Height, maxIt, sink,
-                ct, rowMaxIter: null, marked: marked, useBla: true, blaEpsilon: eps, warp: warp);
+                ct, rowMaxIter: null, marked: marked, useBla: true, blaEpsilon: eps, warp: warp,
+                pixelScale: pixelFx, derivExp2: ue, linearWarp: true);
         LastPrecisionLabel = "PT";
         return true;
     }

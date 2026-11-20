@@ -154,6 +154,16 @@ public sealed class TwoStatePlan
         tzr = a; tzi = b; twr = c; twi = d;
     }
 
+    /// <summary>#1957 — <see cref="TangentStep"/> for a tangent held as t·2^k: the pixel direction
+    /// weighted by <paramref name="cWeight"/> = 2^−k.</summary>
+    public void TangentStepScaled(double zr, double zi, double wr, double wi, double cr, double ci,
+                                  ref double tzr, ref double tzi, ref double twr, ref double twi, double cWeight)
+    {
+        var (a, b) = _tf(zr, zi, wr, wi, cr, ci, tzr, tzi, twr, twi, cWeight, 0);
+        var (c, d) = _tg(zr, zi, wr, wi, cr, ci, tzr, tzi, twr, twi, cWeight, 0);
+        tzr = a; tzi = b; twr = c; twi = d;
+    }
+
     // ∂f/∂z as its squared Frobenius size (both real directions of z).
     private double Dz2(double zr, double zi, double wr, double wi, double cr, double ci)
     {
