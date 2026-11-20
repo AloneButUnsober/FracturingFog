@@ -215,6 +215,39 @@ namespace FracturingFog.FFMath
             return (y.Sign > 0 ? BigFloat.Add(t, Pi(wp), wp) : BigFloat.Sub(t, Pi(wp), wp)).WithPrecision(p);
         }
 
+        // ── #1915 — exact integer parts (the reference's piecewise functions) ──
+
+        private static BigFloat FromInteger(BigInteger q, int p)
+            => BigInteger.Abs(q) < (BigInteger.One << 53) ? BigFloat.FromDouble((double)q, p) : BigFloat.Parse(q.ToString(), p);
+
+        /// <summary>⌊x⌋, exactly (BigInteger's shift rounds toward −∞).</summary>
+        public static BigFloat Floor(BigFloat x, int p)
+        {
+            if (x.IsZero || x.Exponent >= 0) return x.WithPrecision(p);
+            long sh = -x.Exponent;
+            if (sh > x.Mantissa.GetBitLength() + 1) return x.Sign < 0 ? BigFloat.FromDouble(-1, p) : BigFloat.Zero(p);
+            return FromInteger(x.Mantissa >> (int)sh, p);
+        }
+
+        public static BigFloat Ceil(BigFloat x, int p) => -Floor(-x, p);
+
+        public static BigFloat Trunc(BigFloat x, int p) => x.Sign < 0 ? -Floor(-x, p) : Floor(x, p);
+
+        /// <summary>Round half to even, as Math.Round.</summary>
+        public static BigFloat Round(BigFloat x, int p)
+        {
+            int wp = Math.Max(p, x.Precision) + 8;
+            var f = Floor(x, wp);
+            var r = BigFloat.Sub(x.WithPrecision(wp), f, wp);       // in [0, 1), exact
+            int c = r.CompareTo(BigFloat.FromDouble(0.5, wp));
+            if (c < 0) return f.WithPrecision(p);
+            var up = BigFloat.Add(f, BigFloat.FromDouble(1, wp), wp);
+            if (c > 0) return up.WithPrecision(p);
+            // A tie: the even one.
+            bool fEven = Floor(f.ScaleB(-1), wp).ScaleB(1).CompareTo(f) == 0;
+            return (fEven ? f : up).WithPrecision(p);
+        }
+
         // ── complex, as (re, im) pairs ──
 
         /// <summary>e^z.</summary>

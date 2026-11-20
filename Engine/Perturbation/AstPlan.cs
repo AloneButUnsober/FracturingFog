@@ -160,6 +160,40 @@ public sealed class AstPlan : IPerturbationPlan
                 var (a, b) = Eval(w.Base, zr, zi, wr, wi, cr, ci, p); var (e, f) = Eval(w.Exp, zr, zi, wr, wi, cr, ci, p);
                 return BigFloatMath.CPow(a, b, e, f, p);
             }
+            // #1915 — the piecewise functions, exactly (BigFloatMath's integer parts), and `if`.
+            case Floor u: { var (a, b) = Eval(u.Operand, zr, zi, wr, wi, cr, ci, p); return (BigFloatMath.Floor(a, p), BigFloatMath.Floor(b, p)); }
+            case Ceil u: { var (a, b) = Eval(u.Operand, zr, zi, wr, wi, cr, ci, p); return (BigFloatMath.Ceil(a, p), BigFloatMath.Ceil(b, p)); }
+            case Trunc u: { var (a, b) = Eval(u.Operand, zr, zi, wr, wi, cr, ci, p); return (BigFloatMath.Trunc(a, p), BigFloatMath.Trunc(b, p)); }
+            case Round u: { var (a, b) = Eval(u.Operand, zr, zi, wr, wi, cr, ci, p); return (BigFloatMath.Round(a, p), BigFloatMath.Round(b, p)); }
+            case Fract u:
+            {
+                var (a, b) = Eval(u.Operand, zr, zi, wr, wi, cr, ci, p);
+                return (BigFloat.Sub(a, BigFloatMath.Floor(a, p), p), BigFloat.Sub(b, BigFloatMath.Floor(b, p), p));
+            }
+            case Sign u:
+            {
+                var (a, b) = Eval(u.Operand, zr, zi, wr, wi, cr, ci, p);
+                return (BigFloat.FromDouble(a.Sign, p), BigFloat.FromDouble(b.Sign, p));
+            }
+            case Min m:
+            {
+                var (a, _) = Eval(m.Left, zr, zi, wr, wi, cr, ci, p); var (b, _) = Eval(m.Right, zr, zi, wr, wi, cr, ci, p);
+                return (a < b ? a : b, BigFloat.Zero(p));
+            }
+            case Max m:
+            {
+                var (a, _) = Eval(m.Left, zr, zi, wr, wi, cr, ci, p); var (b, _) = Eval(m.Right, zr, zi, wr, wi, cr, ci, p);
+                return (a < b ? b : a, BigFloat.Zero(p));
+            }
+            case Clamp k:
+            {
+                var (x, _) = Eval(k.X, zr, zi, wr, wi, cr, ci, p); var (lo, _) = Eval(k.Lo, zr, zi, wr, wi, cr, ci, p);
+                var (hi, _) = Eval(k.Hi, zr, zi, wr, wi, cr, ci, p);
+                return (x < lo ? lo : x > hi ? hi : x, BigFloat.Zero(p));
+            }
+            case If f:
+                return CondB(f.Cond, zr, zi, wr, wi, cr, ci, p)
+                    ? Eval(f.Then, zr, zi, wr, wi, cr, ci, p) : Eval(f.Else, zr, zi, wr, wi, cr, ci, p);
             case Div d:   // #1911 — x·conj(y) / |y|²; an exact pole gives a value past any bailout
             {
                 var (a, b) = Eval(d.Left, zr, zi, wr, wi, cr, ci, p); var (c, e) = Eval(d.Right, zr, zi, wr, wi, cr, ci, p);
@@ -191,6 +225,36 @@ public sealed class AstPlan : IPerturbationPlan
                 return acc;
             }
             default: throw new NotSupportedException(n.GetType().Name);
+        }
+    }
+
+    // #1915 — a condition in BigFloat (Math.Atan2's convention for arg, as the interpreter).
+    private static bool CondB(CondNode c, BigFloat zr, BigFloat zi, BigFloat wr, BigFloat wi, BigFloat cr, BigFloat ci, int p)
+    {
+        BigFloat T(CondTerm t)
+        {
+            if (t is CondConst k) return BigFloat.FromDouble(k.Value, p);
+            AstNode of = t switch { CondRe tr => tr.Of, CondIm ti => ti.Of, CondAbs2 ta => ta.Of, CondArg tg => tg.Of, _ => throw new NotSupportedException(t.GetType().Name) };
+            var (a, b) = Eval(of, zr, zi, wr, wi, cr, ci, p);
+            return t switch
+            {
+                CondRe => a,
+                CondIm => b,
+                CondAbs2 => BigFloat.Add(BigFloat.Mul(a, a, p), BigFloat.Mul(b, b, p), p),
+                _ => BigFloatMath.Atan2(b, a, p),
+            };
+        }
+        switch (c)
+        {
+            case Cmp k:
+            {
+                int s = T(k.Left).CompareTo(T(k.Right));
+                return k.Op switch { CmpOp.Gt => s > 0, CmpOp.Lt => s < 0, CmpOp.Ge => s >= 0, CmpOp.Le => s <= 0, CmpOp.Eq => s == 0, _ => s != 0 };
+            }
+            case CondAnd a: return CondB(a.Left, zr, zi, wr, wi, cr, ci, p) & CondB(a.Right, zr, zi, wr, wi, cr, ci, p);
+            case CondOr o: return CondB(o.Left, zr, zi, wr, wi, cr, ci, p) | CondB(o.Right, zr, zi, wr, wi, cr, ci, p);
+            case CondNot n: return !CondB(n.Operand, zr, zi, wr, wi, cr, ci, p);
+            default: throw new NotSupportedException(c.GetType().Name);
         }
     }
 
