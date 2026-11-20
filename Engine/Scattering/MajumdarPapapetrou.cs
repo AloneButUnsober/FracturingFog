@@ -172,6 +172,7 @@ public struct MpNullSystem : IScatteringSystem
     // Previous accepted state: position and coordinate velocity dx/dλ = p / U².
     private double _qx, _qy, _qz, _vx, _vy, _vz;
     private bool _begun;
+    private bool _channels;
 
     /// <summary>Closest approach to each hole (coordinate distance). Refined inside each step:
     /// when the radial velocity changes sign across a step, the minimum of the cubic Hermite
@@ -197,9 +198,12 @@ public struct MpNullSystem : IScatteringSystem
         0 => (_x0, _y0, _z0), 1 => (_x1, _y1, _z1), 2 => (_x2, _y2, _z2), _ => (_x3, _y3, _z3),
     };
 
-    /// <summary>Start the channels at the launch state (called once, before the trace).</summary>
-    public void Begin(ReadOnlySpan<double> s)
+    /// <summary>Start the channels at the launch state (called once, before the trace).
+    /// <paramref name="channels"/> false (#1970, Fate colouring) keeps only the delay and the
+    /// launch direction: no winding, closest approach or Hermite refinement per step.</summary>
+    public void Begin(ReadOnlySpan<double> s, bool channels = true)
     {
+        _channels = channels;
         double x = s[0], y = s[1], z = s[2];
         double u = U(x, y, z), iu2 = 1.0 / (u * u);
         _qx = x; _qy = y; _qz = z;
@@ -217,6 +221,7 @@ public struct MpNullSystem : IScatteringSystem
         double u = U(x, y, z), iu2 = 1.0 / (u * u);
         double vx = s[3] * iu2, vy = s[4] * iu2, vz = s[5] * iu2;
         Delay += (u * u - 1.0) * h;   // end-point rule; a colouring channel, not physics output
+        if (_begun && !_channels) return;   // #1970 — Fate colouring needs only the delay
         if (!_begun)
         {
             // Trace without Begin: endpoint minima only, no winding.

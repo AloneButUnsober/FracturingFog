@@ -90,12 +90,12 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
 
         /// <summary>Trace the ray through image-plane point (u, v); the final state is written
         /// to <paramref name="state"/> (length ≥ 6) when given.</summary>
-        public (ScatterOutcome Outcome, MpNullSystem System) Trace(double u, double v, Span<double> state = default)
+        public (ScatterOutcome Outcome, MpNullSystem System) Trace(double u, double v, Span<double> state = default, bool channels = true)
         {
             var sys = NewSystem();
             Span<double> s = state.Length >= 6 ? state : stackalloc double[6];
             Camera.Launch(sys, u, v, s);
-            sys.Begin(s);
+            sys.Begin(s, channels);
             var o = ScatteringIntegrator.Trace(ref sys, s, Settings);
             return (o, sys);
         }
@@ -159,7 +159,20 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
             }
         }
 
-        public static Scene Build(FractalParameters p)
+        /// <summary>#1970 — the tolerance actually used at <paramref name="zoom"/>: the parameter at
+        /// the default zoom or wider, tightened by the cube root of the zoom past it. Measured on the
+        /// default binary against a 1e-11 reference (480x270): a fixed 3e-8 changed no fate pixel at
+        /// eyebrow zooms x6 to x600 while 1e-7 changed 2-4, so the cube root (3e-8 at x6, 6.4e-9 at
+        /// x600) stays tighter than needed there without the cost of a proportional tie. S5 #1927
+        /// calibrates it for deeper views.</summary>
+        public static double EffectiveTolerance(double tolerance, double zoom)
+        {
+            double t = Math.Clamp(double.IsFinite(tolerance) ? tolerance : 1e-7, 1e-13, 1e-4);
+            if (double.IsFinite(zoom) && zoom > DefaultZoom) t *= Math.Cbrt(DefaultZoom / zoom);
+            return Math.Max(t, 1e-13);
+        }
+
+        public static Scene Build(FractalParameters p, double zoom = DefaultZoom)
         {
             var holes = BlackHoleLayouts.Build(p);
             double extent = 0.0;
@@ -167,7 +180,7 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
                 extent = Math.Max(extent, Math.Sqrt(h.X * h.X + h.Y * h.Y + h.Z * h.Z) + 4.0 * h.M);
             double d = Math.Max(Math.Max(10.0, 4.0 * extent), double.IsFinite(p.BlackHoleCameraDistance) ? p.BlackHoleCameraDistance : 50.0);
             var cam = new MpCamera(d, p.BlackHoleInclination, p.BlackHoleAzimuth, p.BlackHoleProjection == BlackHoleProjection.Pinhole);
-            double tol = Math.Clamp(double.IsFinite(p.BlackHoleTolerance) ? p.BlackHoleTolerance : 1e-9, 1e-13, 1e-4);
+            double tol = EffectiveTolerance(p.BlackHoleTolerance, zoom);
             return new Scene
             {
                 Holes = holes,
@@ -180,7 +193,7 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
                     RotationRad = (double.IsFinite(p.BlackHoleSkyRotation) ? p.BlackHoleSkyRotation : 0.0) * Math.PI / 180.0,
                     Lighting = p.Lighting,
                 },
-                CaptureFraction = Math.Clamp(double.IsFinite(p.BlackHoleCaptureFraction) ? p.BlackHoleCaptureFraction : 0.02, 1e-5, 0.5),
+                CaptureFraction = Math.Clamp(double.IsFinite(p.BlackHoleCaptureFraction) ? p.BlackHoleCaptureFraction : 0.25, 1e-5, 0.5),
                 EscapeRadius = d,
                 Settings = new ScatterSettings
                 {
@@ -206,7 +219,7 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
         if (LowResPreview && RenderPreview(ct)) return;
 
         var p = FractalParameters;
-        var scene = Scene.Build(p);
+        var scene = Scene.Build(p, Zoom);
         int n = scene.Holes.Length, escapedGate = scene.EscapedGate, gateCount = n + 1;
         var billiardMap = ColorMap as IBilliardColorMap;
         ColorMap.MaxIterations = MaxIterations;
@@ -214,47 +227,107 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
         var channel = p.BlackHoleChannel;
         bool shadeFates = p.BlackHoleShadeFates && channel != BlackHoleChannel.Fate;
         bool sky = p.BlackHoleSky != BlackHoleSky.Off;
+        bool needChannels = channel != BlackHoleChannel.Fate;   // #1970 — Fate reads only the delay
         double scale = ChannelPaletteScale * (double.IsFinite(p.BlackHoleChannelScale) ? Math.Clamp(p.BlackHoleChannelScale, 0.01, 100.0) : 1.0);
 
         int width = Width, height = Height;
         double cx = CenterX, cy = CenterY, zoom = Zoom;
+        var colorMap = ColorMap;
+
+        // One pixel: trace, record the fate, colour it.
+        void Pixel(int x, int y, Span<double> s)
+        {
+            var (u, v) = PlaneAt(x + 0.5, y + 0.5, width, height, cx, cy, zoom);
+            var (o, sys) = scene.Trace(u, v, s, needChannels);
+            int idx = y * width + x;
+            int gate = o.Fate switch
+            {
+                ScatterFate.Captured => o.Body,
+                ScatterFate.Escaped => escapedGate,
+                _ => -1,
+            };
+            FateBuffer[idx] = (sbyte)gate;
+            if (channel == BlackHoleChannel.Fate)
+            {
+                float smooth = o.Fate == ScatterFate.Escaped ? (float)Math.Log(1.0 + Math.Max(0.0, sys.Delay)) : 0f;
+                SmoothBuffer[idx] = smooth;
+                // #1925 — a sky replaces the palette on escaped rays (the theme still colours
+                // the shadows, or the fates when it is a billiard theme).
+                ColorBuffer[idx] = sky && gate == escapedGate
+                    ? scene.SkyColour(s) | 0xFF000000u
+                    : Colour(gate, escapedGate, gateCount, smooth, billiardMap, colorMap, undecided);
+                return;
+            }
+            double value = scene.ChannelValue(channel, o, sys, s);
+            SmoothBuffer[idx] = double.IsFinite(value) ? (float)value : 0f;
+            ColorBuffer[idx] = shadeFates
+                ? ShadedFate(gate, gateCount, value * scale, sys.Wind[scene.ReferenceHole(o, sys)], billiardMap, undecided)
+                : ChannelColour(gate, value * scale, colorMap, undecided);
+        }
+
+        // #1970 — solid blocks (opt-in, Fate colouring only): a block whose outer ring is all
+        // captured by one hole is filled with that hole's colour without tracing its inside. A
+        // captured pixel's Fate colour is constant (smooth 0), so a correct fill is exact; the
+        // risk is an island of another fate wholly inside the block, which the ring cannot see.
+        if (p.BlackHoleSolidBlocks && channel == BlackHoleChannel.Fate)
+        {
+            int bw = (width + SolidBlock - 1) / SolidBlock, bh = (height + SolidBlock - 1) / SolidBlock;
+            Parallel.For(0, bw * bh, new ParallelOptions { CancellationToken = ct }, b =>
+            {
+                if (ct.IsCancellationRequested) return;
+                Span<double> s = stackalloc double[6];
+                int x0 = (b % bw) * SolidBlock, y0 = (b / bw) * SolidBlock;
+                int x1 = Math.Min(width, x0 + SolidBlock), y1 = Math.Min(height, y0 + SolidBlock);
+                if (x1 - x0 < 3 || y1 - y0 < 3)
+                {
+                    for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) Pixel(x, y, s);
+                    return;
+                }
+                for (int x = x0; x < x1; x++) { Pixel(x, y0, s); Pixel(x, y1 - 1, s); }
+                for (int y = y0 + 1; y < y1 - 1; y++) { Pixel(x0, y, s); Pixel(x1 - 1, y, s); }
+                int g0 = FateBuffer[y0 * width + x0];
+                bool uniform = g0 >= 0 && g0 < escapedGate;
+                for (int x = x0; x < x1 && uniform; x++)
+                    uniform = FateBuffer[y0 * width + x] == g0 && FateBuffer[(y1 - 1) * width + x] == g0;
+                for (int y = y0 + 1; y < y1 - 1 && uniform; y++)
+                    uniform = FateBuffer[y * width + x0] == g0 && FateBuffer[y * width + x1 - 1] == g0;
+                if (uniform)
+                {
+                    uint col = ColorBuffer[y0 * width + x0];
+                    for (int y = y0 + 1; y < y1 - 1; y++)
+                    {
+                        int row = y * width;
+                        for (int x = x0 + 1; x < x1 - 1; x++)
+                        {
+                            FateBuffer[row + x] = (sbyte)g0; SmoothBuffer[row + x] = 0f; ColorBuffer[row + x] = col;
+                        }
+                    }
+                    Interlocked.Add(ref _solidFilled, (long)(x1 - x0 - 2) * (y1 - y0 - 2));
+                }
+                else
+                {
+                    for (int y = y0 + 1; y < y1 - 1; y++) for (int x = x0 + 1; x < x1 - 1; x++) Pixel(x, y, s);
+                }
+            });
+            LastSolidFilled = _solidFilled;
+            _solidFilled = 0;
+            return;
+        }
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             if (ct.IsCancellationRequested) return;
             Span<double> s = stackalloc double[6];
-            int row = y * width;
-            for (int x = 0; x < width; x++)
-            {
-                var (u, v) = PlaneAt(x + 0.5, y + 0.5, width, height, cx, cy, zoom);
-                var (o, sys) = scene.Trace(u, v, s);
-                int idx = row + x;
-                int gate = o.Fate switch
-                {
-                    ScatterFate.Captured => o.Body,
-                    ScatterFate.Escaped => escapedGate,
-                    _ => -1,
-                };
-                FateBuffer[idx] = (sbyte)gate;
-                if (channel == BlackHoleChannel.Fate)
-                {
-                    float smooth = o.Fate == ScatterFate.Escaped ? (float)Math.Log(1.0 + Math.Max(0.0, sys.Delay)) : 0f;
-                    SmoothBuffer[idx] = smooth;
-                    // #1925 — a sky replaces the palette on escaped rays (the theme still colours
-                    // the shadows, or the fates when it is a billiard theme).
-                    ColorBuffer[idx] = sky && gate == escapedGate
-                        ? scene.SkyColour(s) | 0xFF000000u
-                        : Colour(gate, escapedGate, gateCount, smooth, billiardMap, ColorMap, undecided);
-                    continue;
-                }
-                double value = scene.ChannelValue(channel, o, sys, s);
-                SmoothBuffer[idx] = double.IsFinite(value) ? (float)value : 0f;
-                ColorBuffer[idx] = shadeFates
-                    ? ShadedFate(gate, gateCount, value * scale, sys.Wind[scene.ReferenceHole(o, sys)], billiardMap, undecided)
-                    : ChannelColour(gate, value * scale, ColorMap, undecided);
-            }
+            for (int x = 0; x < width; x++) Pixel(x, y, s);
         });
+        LastSolidFilled = 0;
     }
+
+    /// <summary>#1970 — solid-block size in pixels (the ring is traced, the inside filled).</summary>
+    public const int SolidBlock = 16;
+    private long _solidFilled;
+    /// <summary>#1970 — pixels the last frame filled from solid blocks instead of tracing.</summary>
+    public long LastSolidFilled { get; private set; }
 
     /// <summary>#1924 — palette units per unit of a channel's raw value (times BlackHoleChannelScale).</summary>
     public const double ChannelPaletteScale = 24.0;

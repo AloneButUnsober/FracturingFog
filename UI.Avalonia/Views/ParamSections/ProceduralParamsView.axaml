@@ -1434,7 +1434,7 @@
         <!-- #1923 — black hole shadows (Majumdar-Papapetrou). -->
         <Grid IsVisible="{Binding IsBlackHoleShadow}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Layout:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding BlackHoleLayouts}"
@@ -1483,7 +1483,7 @@
             <NumericUpDown Grid.Row="9" Grid.Column="1"
                            Minimum="0.0000000000001" Maximum="0.0001" Increment="0.000000001" FormatString="0.###E+0"
                            Value="{Binding BlackHoleTolerance, Mode=TwoWay}" Margin="0,2"
-                           ToolTip.Tip="Integrator relative tolerance per step. Smaller is more accurate near the fractal edges and slower." />
+                           ToolTip.Tip="Integrator relative tolerance per step at the default zoom; it tightens automatically as you zoom in. Smaller is more accurate near the fractal edges and slower." />
             <TextBlock Grid.Row="10" Grid.Column="0" Text="Max steps:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="10" Grid.Column="1"
                            Minimum="100" Maximum="1000000" Increment="1000" FormatString="0"
@@ -1530,6 +1530,10 @@
                            Minimum="-360" Maximum="360" Increment="5" FormatString="0.##########"
                            Value="{Binding BlackHoleSkyRotation, Mode=TwoWay}" Margin="0,2"
                            ToolTip.Tip="Turns the sky about the vertical axis; animate it to watch the lensed copies slide." />
+            <!-- #1970 solid blocks -->
+            <CheckBox Grid.Row="20" Grid.Column="1" Content="Solid blocks (faster shadows)"
+                      IsChecked="{Binding BlackHoleSolidBlocks, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Colour by Fate only: a 16-pixel block whose edge is all one hole's shadow is filled without tracing its inside. Much faster when zoomed into shadows and eyebrows; can miss a tiny island of another fate wholly inside a block." />
             <TextBlock Grid.Row="11" Grid.Column="1"
                        Text="Each hole's shadow is its own colour; eyebrows are rays caught by one hole after swinging round another. Escaped rays are coloured by their time delay. A Billiard theme colours the fates directly."
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
