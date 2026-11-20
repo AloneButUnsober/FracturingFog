@@ -422,6 +422,17 @@ capped at 0.003 x pitch; the views match the reference exactly to x10^9. Double 
 near x10^10–x10^11 (there the 1e-12 and 1e-13 references disagree); the status bar says so ("past
 fp64: edges approximate"). Double-double integration for boundary pixels past that is part 2.
 
+**S5 part 2 (#1927).** `MajumdarPapapetrouDD` traces in double-double (Hida, Li & Bailey's DD, ~31
+digits; a DD square root by one Newton step from the double one, FF's own): state and field in DD, step control in
+double, the same Dormand–Prince stages, exits and camera. Past double precision (Fate colouring, on by
+default as `BlackHoleDdEdges`), the calculator keeps its double / GPU pass and retraces only the pixels
+along fate edges in DD at 0.003 x pitch, following any edge the DD trace moves (rounds until no fate
+changes). Validation: DD equals double where double is accurate; DD resolves the single-hole shadow edge
+(L/E = 4m) to ±2e-16, below double's spacing near 4 (the double trace already misplaces b* + 1e-14);
+at x10^11 and x10^12 all-DD frames at two DD tolerances agree, and the fix-up frame equals the all-DD
+frame pixel for pixel while retracing ~25% of a 48x27 view. Cost is the price of depth: a DD ray at
+1e-20 takes ~3-4e5 steps (DP5's tol^(-1/5)); a higher-order integrator would cut that (not done).
+
 #### 2.6.2 Hénon–Heiles exit basins — **#1942**
 
 The Hénon–Heiles potential `V = (x² + y²)/2 + x²y − y³/3` has three exit channels above `E = 1/6`; its
@@ -1132,3 +1143,4 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
 - **2026-11-20** — §2.6.1: black hole shadows CPU speed #1970 (tolerance 1e-7 + cube-root zoom tie, capture 0.25 m, Fate-mode bookkeeping skip, opt-in solid blocks; 1.9–8.5x, no fate change vs a 1e-11 reference).
 - **2026-11-20** — §2.6.1: black hole shadows S4 #1926 (ILGPU double + single kernels, measured Auto routing; D3D11 + Vulkan follow-up #1972).
 - **2026-11-21** — §2.6.1: black hole box-zoom fix (camera pixel scale) + S5 part 1 #1927 (pitch-calibrated tolerance exact to x10^9; fp64 limit flagged); cross-family pitch issue #1974.
+- **2026-11-21** — §2.6.1: black hole shadows S5 part 2 #1927 (double-double edge fix-up past fp64; exact against converged all-DD frames at x10^11-10^12).

@@ -742,7 +742,9 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
 - **Yozo Hida, Xiaoye S. Li, David H. Bailey.** *Algorithms for quad-double precision floating point
   arithmetic.* Proc. 15th IEEE Symposium on Computer Arithmetic (ARITH-15), 2001 (LBNL report, 2000),
   and the *QD library* (<https://www.davidhbailey.com/dhbsoftware/>). Foundation for the DD / QD
-  pipeline.
+  pipeline. Also the double-double black hole trace (`Engine/Scattering/MajumdarPapapetrouDD.cs`,
+  #1927), which adds a DD square root (one Newton step from the double root; FF's own, not
+  taken from the QD library).
 - **T. J. Dekker.** *A floating-point technique for extending the available precision.* Numerische
   Mathematik 18, 1971. The splitting constant and exact two-product behind DD / QD (`GpuQD.cs`).
 - <a id="ieee-754"></a>**IEEE.** *IEEE Standard for Floating-Point Arithmetic*, IEEE Std 754-2019. The rounding rule
