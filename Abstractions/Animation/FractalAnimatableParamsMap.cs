@@ -655,6 +655,8 @@ public static class FractalAnimatableParamsMap
         new("BlackHoleAzimuth", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 360.0, Notes: "Camera azimuth about z in degrees."),
         new("BlackHoleChannelScale", AnimatableParamKind.ScalarDouble, Min: 0.05, Max: 10.0,
             Notes: "#1924 — palette density of the colouring channel (stripes per unit)."),
+        new("BlackHoleSkyRotation", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 360.0,
+            Notes: "#1925 — turns the sky behind the holes (watch the lensed copies move)."),
     };
 
     // #1713 — Math Plane 3D: the orbit camera.

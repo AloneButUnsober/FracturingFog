@@ -356,7 +356,8 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   binary placement z± = ±a M∓/(M₊+M₋), the planar launch congruence at r_max (default 50M) with θ
   measured from the −z axis (§III.2), and the default a = 2, unit masses. Read via ar5iv on 2026-11-20.
   The paper states no numerical capture rule; FF's (capture inside a fraction of the mass, well inside
-  the photon sphere) is its own choice.
+  the photon sphere) is its own choice. #1925 keeps the planar congruence as the default
+  `Parallel` projection and adds a `Pinhole` one for lensed skies (FF's addition, not the paper's).
 
 <a id="yumoto-2012"></a>
 
@@ -597,7 +598,8 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
   generators.* Proceedings of the 2014 ACM International Conference on Object Oriented Programming
   Systems Languages & Applications (OOPSLA 2014), 453–472. <https://doi.org/10.1145/2660193.2660195>
   (details confirmed against Crossref, 2026-11-09). SplitMix64, the per-chunk random streams of the
-  detection build-up (#1599).
+  detection build-up (#1599). Its finaliser (the two multiply-xorshift rounds) also hashes the star-field
+  cells of the black hole skies, `Engine/Scattering/BlackHoleSkies.cs` (#1925).
 
 <a id="deep-zoom-acceleration"></a>
 

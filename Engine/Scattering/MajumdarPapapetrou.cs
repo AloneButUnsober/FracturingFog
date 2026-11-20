@@ -185,6 +185,10 @@ public struct MpNullSystem : IScatteringSystem
     [InlineArray(MaxHoles)]
     public struct Quad { private double _e; }
 
+    /// <summary>#1925 — unit launch direction (set by <see cref="Begin"/>): the reference for the
+    /// deflection channel, per pixel under the pinhole projection.</summary>
+    public double LaunchX, LaunchY, LaunchZ;
+
     /// <summary>Hole i's mass.</summary>
     public readonly double Mass(int i) => i switch { 0 => _m0, 1 => _m1, 2 => _m2, _ => _m3 };
 
@@ -200,6 +204,8 @@ public struct MpNullSystem : IScatteringSystem
         double u = U(x, y, z), iu2 = 1.0 / (u * u);
         _qx = x; _qy = y; _qz = z;
         _vx = s[3] * iu2; _vy = s[4] * iu2; _vz = s[5] * iu2;
+        double pl = Math.Sqrt(s[3] * s[3] + s[4] * s[4] + s[5] * s[5]);
+        LaunchX = s[3] / pl; LaunchY = s[4] / pl; LaunchZ = s[5] / pl;
         for (int i = 0; i < MaxHoles; i++) { Min[i] = i < _n ? Math.Sqrt(Dist2(i, x, y, z)) : double.PositiveInfinity; Wind[i] = 0.0; }
         Delay = 0.0;
         _begun = true;
@@ -344,10 +350,16 @@ public readonly struct MpCamera
     public readonly double Rx, Ry, Rz;          // image-plane u axis
     public readonly double Ux, Uy, Uz;          // image-plane v axis
     public readonly double Distance;
+    /// <summary>#1925 — pinhole projection: every ray leaves the camera point, aimed through
+    /// image-plane point (u, v) placed at the origin (so near the holes u, v are still ≈ the
+    /// impact parameter). Parallel (false, the default) is Shipley &amp; Dolan's planar congruence;
+    /// it sends every unlensed ray the same way, so only the pinhole shows a sky with parallax.</summary>
+    public readonly bool Pinhole;
 
-    public MpCamera(double distance, double inclinationDeg, double azimuthDeg)
+    public MpCamera(double distance, double inclinationDeg, double azimuthDeg, bool pinhole = false)
     {
         Distance = distance;
+        Pinhole = pinhole;
         double th = inclinationDeg * Math.PI / 180.0, ph = azimuthDeg * Math.PI / 180.0;
         Cx = distance * Math.Sin(th) * Math.Cos(ph);
         Cy = distance * Math.Sin(th) * Math.Sin(ph);
@@ -371,10 +383,25 @@ public readonly struct MpCamera
     /// view direction with |p| = U² (null, p_t = -1).</summary>
     public void Launch(in MpNullSystem sys, double u, double v, Span<double> s)
     {
-        double x = Cx + u * Rx + v * Ux, y = Cy + u * Ry + v * Uy, z = Cz + u * Rz + v * Uz;
+        var (x, y, z) = Origin(u, v);
+        var (dx, dy, dz) = Direction(u, v);
         double uu = sys.U(x, y, z);
         double pm = uu * uu;
         s[0] = x; s[1] = y; s[2] = z;
-        s[3] = pm * Fx; s[4] = pm * Fy; s[5] = pm * Fz;
+        s[3] = pm * dx; s[4] = pm * dy; s[5] = pm * dz;
+    }
+
+    /// <summary>Where the ray for image-plane point (u, v) starts.</summary>
+    public (double X, double Y, double Z) Origin(double u, double v)
+        => Pinhole ? (Cx, Cy, Cz) : (Cx + u * Rx + v * Ux, Cy + u * Ry + v * Uy, Cz + u * Rz + v * Uz);
+
+    /// <summary>Unit launch direction for image-plane point (u, v) (the view direction for the
+    /// parallel projection; through (u, v) at the origin for the pinhole).</summary>
+    public (double X, double Y, double Z) Direction(double u, double v)
+    {
+        if (!Pinhole) return (Fx, Fy, Fz);
+        double dx = Distance * Fx + u * Rx + v * Ux, dy = Distance * Fy + u * Ry + v * Uy, dz = Distance * Fz + u * Rz + v * Uz;
+        double l = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+        return (dx / l, dy / l, dz / l);
     }
 }

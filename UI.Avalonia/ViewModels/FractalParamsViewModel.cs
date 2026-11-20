@@ -258,6 +258,11 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _bhChannel = _p.BlackHoleChannel;
         _bhShadeFates = _p.BlackHoleShadeFates;
         _bhChannelScale = _p.BlackHoleChannelScale;
+        _bhProjection = _p.BlackHoleProjection;
+        _bhSky = _p.BlackHoleSky;
+        _bhSkyDivisions = _p.BlackHoleSkyDivisions;
+        _bhSkySeed = _p.BlackHoleSkySeed;
+        _bhSkyRotation = _p.BlackHoleSkyRotation;
         _mathPlaneScene = _p.MathPlaneScene ?? string.Empty;
         UpdateMathPlaneSceneError();
         _raysColorSource = _p.BilliardRaysColorSource;
@@ -2247,6 +2252,30 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool BlackHoleShadeFates { get => _bhShadeFates; set { Set(ref _bhShadeFates, value); _p.BlackHoleShadeFates = value; Fire(); } }
     private double _bhChannelScale;
     public double BlackHoleChannelScale { get => _bhChannelScale; set { Set(ref _bhChannelScale, Clamp(value, 0.01, 100.0)); _p.BlackHoleChannelScale = _bhChannelScale; Fire(); } }
+    // #1925 — projection and sky.
+    private BlackHoleProjection _bhProjection;
+    public BlackHoleProjection BlackHoleProjection { get => _bhProjection; set { Set(ref _bhProjection, value); _p.BlackHoleProjection = value; Fire(); } }
+    public System.Array BlackHoleProjections => s_BlackHoleProjections;
+    private static readonly System.Array s_BlackHoleProjections = System.Enum.GetValues(typeof(BlackHoleProjection));
+    private BlackHoleSky _bhSky;
+    public BlackHoleSky BlackHoleSky { get => _bhSky; set { Set(ref _bhSky, value); _p.BlackHoleSky = value; BhSkyChanged(); Fire(); } }
+    public System.Array BlackHoleSkies => s_BlackHoleSkies;
+    private static readonly System.Array s_BlackHoleSkies = System.Enum.GetValues(typeof(BlackHoleSky));
+    /// <summary>Divisions apply to the procedural skies; the seed to the stars; rotation to any sky.</summary>
+    public bool BhSkyProcedural => _bhSky is BlackHoleSky.Checker or BlackHoleSky.Grid or BlackHoleSky.Stars;
+    public bool BhSkyStars => _bhSky == BlackHoleSky.Stars;
+    public bool BhSkyOn => _bhSky != BlackHoleSky.Off;
+    private void BhSkyChanged()
+    {
+        foreach (var n in new[] { nameof(BhSkyProcedural), nameof(BhSkyStars), nameof(BhSkyOn) })
+            this.RaisePropertyChanged(n);
+    }
+    private int _bhSkyDivisions;
+    public int BlackHoleSkyDivisions { get => _bhSkyDivisions; set { Set(ref _bhSkyDivisions, (int)Clamp(value, 1, 512)); _p.BlackHoleSkyDivisions = _bhSkyDivisions; Fire(); } }
+    private int _bhSkySeed;
+    public int BlackHoleSkySeed { get => _bhSkySeed; set { Set(ref _bhSkySeed, value); _p.BlackHoleSkySeed = value; Fire(); } }
+    private double _bhSkyRotation;
+    public double BlackHoleSkyRotation { get => _bhSkyRotation; set { Set(ref _bhSkyRotation, Clamp(value, -360.0, 360.0)); _p.BlackHoleSkyRotation = _bhSkyRotation; Fire(); } }
     // #1507 — what sets the hue.
     private BilliardRayColorSource _raysColorSource;
     public BilliardRayColorSource BilliardRaysColorSource { get => _raysColorSource; set { Set(ref _raysColorSource, value); _p.BilliardRaysColorSource = value; Fire(); } }

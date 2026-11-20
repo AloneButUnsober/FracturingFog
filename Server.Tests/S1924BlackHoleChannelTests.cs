@@ -103,12 +103,12 @@ public class S1924BlackHoleChannelTests
         var scene = Single(D);
         double uD = scene.NewSystem().U(D, 0, 0);
         Span<double> s = stackalloc double[6];
-        var (o, _) = scene.Trace(bTrue / (uD * uD), 0.0, s);
+        var (o, sysD) = scene.Trace(bTrue / (uD * uD), 0.0, s);
         Assert.Equal(ScatterFate.Escaped, o.Fate);
         double theta = TotalSweep(bTrue, 1.0) - Math.PI;
         // Deflection is reported as an angle in [0, π]; past π (a full loop) it folds back.
         double folded = Math.Abs(Math.IEEERemainder(theta, 2 * Math.PI));
-        Assert.InRange(scene.Deflection(s), folded - 2e-5, folded + 2e-5);
+        Assert.InRange(scene.Deflection(s, sysD), folded - 2e-5, folded + 2e-5);
     }
 
     [Fact]
@@ -124,12 +124,12 @@ public class S1924BlackHoleChannelTests
         foreach (double b in new[] { 100.0, 400.0 })
         {
             Span<double> s = stackalloc double[6];
-            var (o, _) = scene.Trace(0.0, b / (uD * uD), s);   // v: across the binary axis
+            var (o, sysD) = scene.Trace(0.0, b / (uD * uD), s);   // v: across the binary axis
             Assert.Equal(ScatterFate.Escaped, o.Fate);
             double monopole = TotalSweep(b, 2.0) - Math.PI;
-            Assert.InRange(scene.Deflection(s) / monopole, 0.995, 1.005);
+            Assert.InRange(scene.Deflection(s, sysD) / monopole, 0.995, 1.005);
             // → 4M/b to leading order; the next order is a few % at M/b = 0.02, so check far out.
-            if (b >= 400.0) Assert.InRange(scene.Deflection(s) * b / (4.0 * 2.0), 0.98, 1.03);
+            if (b >= 400.0) Assert.InRange(scene.Deflection(s, sysD) * b / (4.0 * 2.0), 0.98, 1.03);
         }
     }
 

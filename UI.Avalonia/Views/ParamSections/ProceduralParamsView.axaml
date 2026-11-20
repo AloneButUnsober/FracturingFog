@@ -1434,7 +1434,7 @@
         <!-- #1923 — black hole shadows (Majumdar-Papapetrou). -->
         <Grid IsVisible="{Binding IsBlackHoleShadow}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Layout:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding BlackHoleLayouts}"
@@ -1504,6 +1504,32 @@
                            Minimum="0.01" Maximum="100" Increment="0.1" FormatString="0.##########"
                            Value="{Binding BlackHoleChannelScale, Mode=TwoWay}" Margin="0,2"
                            ToolTip.Tip="Palette density: higher packs more colour bands (stripes) per unit of the channel." />
+            <!-- #1925 projection and sky -->
+            <TextBlock Grid.Row="15" Grid.Column="0" Text="Projection:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="15" Grid.Column="1"
+                      ItemsSource="{Binding BlackHoleProjections}"
+                      SelectedItem="{Binding BlackHoleProjection, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Parallel: the papers' distant camera (exact impact-parameter plane). Pinhole: rays fan out from the camera, so a sky behind the holes shows lensing." />
+            <TextBlock Grid.Row="16" Grid.Column="0" Text="Sky:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="16" Grid.Column="1"
+                      ItemsSource="{Binding BlackHoleSkies}"
+                      SelectedItem="{Binding BlackHoleSky, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="What escaped rays see (Colour by: Fate). Environment: the Lighting &amp; FX sky or HDRI. Checker / Grid / Stars: built-in skies. Use the Pinhole projection to see them lensed." />
+            <TextBlock Grid.Row="17" Grid.Column="0" Text="Sky divisions:" VerticalAlignment="Center" IsVisible="{Binding BhSkyProcedural}" />
+            <NumericUpDown Grid.Row="17" Grid.Column="1" IsVisible="{Binding BhSkyProcedural}"
+                           Minimum="1" Maximum="512" Increment="1" FormatString="0"
+                           Value="{Binding BlackHoleSkyDivisions, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Checker / grid cells per half turn (the star field is 16 times finer)." />
+            <TextBlock Grid.Row="18" Grid.Column="0" Text="Star seed:" VerticalAlignment="Center" IsVisible="{Binding BhSkyStars}" />
+            <NumericUpDown Grid.Row="18" Grid.Column="1" IsVisible="{Binding BhSkyStars}"
+                           Minimum="-2147483648" Maximum="2147483647" Increment="1" FormatString="0"
+                           Value="{Binding BlackHoleSkySeed, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Another seed, another star field (the same seed always gives the same stars)." />
+            <TextBlock Grid.Row="19" Grid.Column="0" Text="Sky rotation (deg):" VerticalAlignment="Center" IsVisible="{Binding BhSkyOn}" />
+            <NumericUpDown Grid.Row="19" Grid.Column="1" IsVisible="{Binding BhSkyOn}"
+                           Minimum="-360" Maximum="360" Increment="5" FormatString="0.##########"
+                           Value="{Binding BlackHoleSkyRotation, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Turns the sky about the vertical axis; animate it to watch the lensed copies slide." />
             <TextBlock Grid.Row="11" Grid.Column="1"
                        Text="Each hole's shadow is its own colour; eyebrows are rays caught by one hole after swinging round another. Escaped rays are coloured by their time delay. A Billiard theme colours the fates directly."
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />

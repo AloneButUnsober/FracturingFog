@@ -770,6 +770,12 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? BlackHoleChannel { get; set; }
         [JsonIgnore(Condition = OmitNull)] public bool? BlackHoleShadeFates { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? BlackHoleChannelScale { get; set; }
+        // #1925 — projection and sky (int casts of BlackHoleProjection / BlackHoleSky).
+        [JsonIgnore(Condition = OmitNull)] public int? BlackHoleProjection { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? BlackHoleSky { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? BlackHoleSkyDivisions { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? BlackHoleSkySeed { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BlackHoleSkyRotation { get; set; }
         // #1507 — int cast of BilliardRayColorSource.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysColorSource { get; set; }
         // #1508 — crossings (int casts of BilliardRayMode / BilliardCrossingValue).
@@ -1301,6 +1307,11 @@ namespace FracturingFog.Models
                     BlackHoleChannel = (int)p.BlackHoleChannel,
                     BlackHoleShadeFates = p.BlackHoleShadeFates,
                     BlackHoleChannelScale = p.BlackHoleChannelScale,
+                    BlackHoleProjection = (int)p.BlackHoleProjection,
+                    BlackHoleSky = (int)p.BlackHoleSky,
+                    BlackHoleSkyDivisions = p.BlackHoleSkyDivisions,
+                    BlackHoleSkySeed = p.BlackHoleSkySeed,
+                    BlackHoleSkyRotation = p.BlackHoleSkyRotation,
                 },
                 FractalType.BilliardRays => new RegionFractalParams
                 {
@@ -2300,6 +2311,11 @@ namespace FracturingFog.Models
             if (BlackHoleChannel.HasValue)        p.BlackHoleChannel = (FracturingFog.BlackHoleChannel)BlackHoleChannel.Value;
             if (BlackHoleShadeFates.HasValue)     p.BlackHoleShadeFates = BlackHoleShadeFates.Value;
             if (BlackHoleChannelScale.HasValue)   p.BlackHoleChannelScale = BlackHoleChannelScale.Value;
+            if (BlackHoleProjection.HasValue)     p.BlackHoleProjection = (FracturingFog.BlackHoleProjection)BlackHoleProjection.Value;
+            if (BlackHoleSky.HasValue)            p.BlackHoleSky = (FracturingFog.BlackHoleSky)BlackHoleSky.Value;
+            if (BlackHoleSkyDivisions.HasValue)   p.BlackHoleSkyDivisions = BlackHoleSkyDivisions.Value;
+            if (BlackHoleSkySeed.HasValue)        p.BlackHoleSkySeed = BlackHoleSkySeed.Value;
+            if (BlackHoleSkyRotation.HasValue)    p.BlackHoleSkyRotation = BlackHoleSkyRotation.Value;
             if (BilliardRaysColorSource.HasValue) p.BilliardRaysColorSource = (FracturingFog.BilliardRayColorSource)BilliardRaysColorSource.Value;
             if (BilliardRaysMode.HasValue)       p.BilliardRaysMode = (FracturingFog.BilliardRayMode)BilliardRaysMode.Value;
             if (BilliardRaysCrossingWindow.HasValue) p.BilliardRaysCrossingWindow = BilliardRaysCrossingWindow.Value;
