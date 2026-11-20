@@ -4,38 +4,33 @@
 // Abstractions/Explore/DeepGeneralFinder.cs
 //
 // #1916 (epic #1253, D11) — GeneralFinder (S7, #1191) past double, for the families that now render
-// to 1e290 on the perturbation engine (Multibrot, Tricorn, Burning Ship). The same method and the same
-// acceptance invariants, with the orbit in BigFloat:
-//   • Newton in R² on G(c) = z_{k+p}(c) − z_k(c) (k = 0: a nucleus). The orbit runs in BigFloat at the
-//     view's precision (IDeepOrbitMap.StepBig); the 2×2 Jacobian ∂z/∂c is carried in double from the
-//     map's own Step at the rounded orbit points, renormalised by powers of two so long orbits do not
-//     overflow. The Newton step J⁻¹·G is applied in BigFloat, so each step gains ~16 digits (a Newton
-//     with a double-precision Jacobian), as many steps as the depth needs.
-//   • Periods: a first-order ball test along the centre's orbit — the disk of radius R around the
-//     centre maps to a disk of radius ≈ ‖∂z_n/∂c‖·R around z_n, and the first n at which that disk holds
-//     0 (z₀ = 0 for these maps) is a lower bound for the period. This is the linear form of the ball
-//     method (Munafo's box period, Heiland-Allen's ball period; Docs/Resources-Bibliography.md) that
-//     PeriodDetector uses for z² + c. For z² + c it lands on the period; for the non-conformal maps it
-//     can fall short (Burning Ship at 1e-30: the ball says 171, the nucleus is 205), so periods are
-//     scanned upward from it, lowest first, within a work budget, as DeepNucleusFinder scans.
-//   • Precision: a nucleus is found at the view's precision, then polished at the precision of the
-//     minibrot's own size (its framing zooms far past the view), as DeepNucleusFinder polishes.
-//   • Acceptance: inside the view disk, the minimal period (no proper divisor q is also a root, by the
-//     length of q's Newton step), an attracting cycle for a nucleus (a repelling one for a Misiurewicz
-//     point), as GeneralFinder.
-//   • Size, for framing: the atom-domain size of z² + c, 1/(b·l²) = 1/((∂z_p/∂c)·Λ), Λ = ∏_{k=1}^{p−1} f′(z_k)
-//     (NucleusFinder.AtomSize; credited to Heiland-Allen in the bibliography), generalised as
-//     1/(‖∂z_p/∂c‖·‖Λ‖^{1/(d−1)}) for a critical point of degree d, with operator-norm-like sizes for
-//     the non-conformal maps. That generalisation is FF's heuristic, used only to choose a zoom; the
-//     calculator renders whatever is there.
-// Not covered:
-//   • User Equation: its DSL has no BigFloat evaluator in Abstractions (#1952, with a perturbed
-//     MultibrotRay and the general Julia morph);
-//   • Burning Ship's minibrots: its folds break both the linear ball bound and the size estimate. At
-//     1e-5 around a Misiurewicz point the double finder finds period 79, the deep scan period 241 with
-//     no size. IDeepOrbitMap.DeepNuclei is false for it and FindMinibrot refuses (#1951; the
-//     published generalisation, Heiland-Allen's EVA 2019 paper, could not be read for this slice).
-//     Its Misiurewicz points are found deep as for the others.
+// to 1e290 on the perturbation engine (Multibrot, Tricorn, Burning Ship). The method follows Claude
+// Heiland-Allen, "At the Helm of the Burning Ship", 2019, DOI: 10.14236/ewic/EVA2019.74 (EVA London
+// 2019; Docs/Resources-Bibliography.md, #heiland-allen-eva-2019): the Jacobian for periods, multi-
+// dimensional Newton for nuclei and Misiurewicz points, Hunt & Ott's size estimate with Jacobians. The
+// paper's formulas could not be extracted from its PDF; the forms below are FF's reading of its prose,
+// checked against the deep z² + c finder, the ship's real axis and the engine.
+//   • Newton in R² on G(c) = z_{k+p}(c) − z_k(c) (k = 0: a nucleus). The orbit runs in BigFloat
+//     (IDeepOrbitMap.StepBig); the 2×2 Jacobian ∂z/∂c is carried in double from the map's own Step at the
+//     rounded orbit points, renormalised by powers of two; the step J⁻¹·G is applied in BigFloat. The
+//     working precision rises to log2‖J‖ + 128 bits: by a Misiurewicz point |J| ~ λ^p is huge, and a
+//     root is only resolved that finely. A root is accepted at the precision floor AND with a tiny
+//     residual |G| — a tiny step J⁻¹·G alone is not enough when J is huge (an early version took a
+//     non-root of period 241 for a nucleus; the double GeneralFinder has that flaw, #1954).
+//   • Periods: the centre's orbit with its Jacobian; the view disk of radius R maps to the ellipse
+//     z_n + J_n·u, |u| ≤ R, and n is a candidate when it holds 0, |J_n⁻¹·z_n| ≤ R. The paper describes
+//     this as iterating an implicitly defined ellipse (a technique it credits to "knighty", 2017); for
+//     z² + c it is the ball method PeriodDetector uses (Munafo, Heiland-Allen). Periods are scanned
+//     upward from the first candidate, lowest first, within a work budget, as DeepNucleusFinder scans.
+//   • Acceptance, as GeneralFinder: inside the view disk, the minimal period (no proper divisor q is also
+//     a root, by the length of q's Newton step), an attracting cycle for a nucleus, a repelling one for
+//     a Misiurewicz point. A nucleus is then polished at the precision of its own size.
+//   • Size, for framing: Hunt & Ott's estimate as the paper adapts it, read here as the area scale
+//     (|det ∂z_p/∂c|·|det Λ|^{1/(d−1)})^{−1/2}, Λ = ∏_{k=1}^{p−1} ∂f/∂z(z_k), d the critical point's
+//     degree. For a conformal map |det| = |·|² and it is NucleusFinder.AtomSize's 1/(b·l²) (credited to
+//     Heiland-Allen in the bibliography); it frames as the double finder's measured body does.
+// Not covered: User Equation (its DSL has no BigFloat evaluator in Abstractions), a perturbed
+// MultibrotRay and the general Julia morph (#1952).
 
 using System;
 using System.Collections.Generic;
@@ -57,8 +52,8 @@ public interface IDeepOrbitMap : IOrbitMap
     /// <summary>The local degree of the critical point z₀ = 0 (2 for Tricorn / Burning Ship, d for z^d + c).</summary>
     int CriticalDegree { get; }
 
-    /// <summary>False when the deep minibrot search is not trusted for this map (Burning Ship; see the
-    /// file header). Misiurewicz points are found regardless.</summary>
+    /// <summary>False when the deep minibrot search is not trusted for a map (FindMinibrot then
+    /// refuses; Misiurewicz points are found regardless). True for the three built-in maps.</summary>
     bool DeepNuclei { get; }
 }
 
@@ -118,6 +113,8 @@ public static class DeepGeneralFinder
         public double Log2Norm => M.Norm > 0 ? SMath.Log2(M.Norm / SMath.Sqrt(2)) + E : double.NegativeInfinity;
     }
 
+    private static double Log2Det(Scaled m) => m.M.Det is var det && det != 0 ? SMath.Log2(SMath.Abs(det)) + 2 * m.E : double.NegativeInfinity;
+
     // The orbit to step n in BigFloat with ∂z/∂c (scaled); zs / js receive every step when given.
     private static bool Orbit(IDeepOrbitMap map, BigFloat cr, BigFloat ci, int n, int prec,
                               out BigFloat zr, out BigFloat zi, out Scaled j,
@@ -176,14 +173,29 @@ public static class DeepGeneralFinder
         return true;
     }
 
-    private static bool Newton(IDeepOrbitMap map, ref BigFloat cr, ref BigFloat ci, int k, int p, int prec,
+    /// <summary>log2 |G| accepted as a root: z is O(1) on these orbits, so a root leaves G tiny in
+    /// absolute terms (the step length alone is not enough: see Newton).</summary>
+    public const double ResidualLog2 = -32;
+
+    // Newton on G = z_{k+p} − z_k. The working precision rises with ‖J‖: by a Misiurewicz point
+    // |J| ~ λ^p is huge, and a root is only resolved with log2‖J‖ + 64 bits (#1916: at 94 bits a "root"
+    // of period 227 left z_p = (0.08, 0.54)). Converged at the precision floor, and only accepted when
+    // the residual |G| itself is tiny — a tiny step J⁻¹·G is not enough when J is huge.
+    private static bool Newton(IDeepOrbitMap map, ref BigFloat cr, ref BigFloat ci, int k, int p, ref int prec,
                                BigFloat anchorR, BigFloat anchorI, double reachLog2, CancellationToken ct, Work? work = null)
     {
-        double last = double.PositiveInfinity;
         for (int it = 0; it < MaxNewtonSteps; it++)
         {
             ct.ThrowIfCancellationRequested();
             if (!Residual(map, cr, ci, k, p, prec, out var gr, out var gi, out var jg, ct, work)) return false;
+            double jl = jg.Log2Norm;
+            if (double.IsFinite(jl) && jl + 64 > prec)
+            {
+                prec = (int)SMath.Min(1 << 20, jl + 128);
+                cr = cr.WithPrecision(prec); ci = ci.WithPrecision(prec);
+                anchorR = anchorR.WithPrecision(prec); anchorI = anchorI.WithPrecision(prec);
+                continue;
+            }
             if (!NewtonStep(gr, gi, jg, prec, out var dr, out var di)) return false;
             double step = Log2Abs(dr, di);
             if (step > reachLog2)   // clamp a wild step to the reach
@@ -194,11 +206,10 @@ public static class DeepGeneralFinder
             cr = BigFloat.Sub(cr, dr, prec); ci = BigFloat.Sub(ci, di, prec);
             if (Log2Abs(BigFloat.Sub(cr, anchorR, prec), BigFloat.Sub(ci, anchorI, prec)) > reachLog2 + 2) return false;
             double cMag = SMath.Max(0, Log2Abs(cr, ci));
-            if (step <= cMag - prec + 8) return true;                      // the precision floor
-            if (step <= reachLog2 - 64 && step >= last - 1) return true;   // tiny (64 bits under the reach) and no longer shrinking
-            last = step;
+            if (step <= cMag - prec + 16)   // the precision floor: accept only a true residual
+                return Residual(map, cr, ci, k, p, prec, out var fr, out var fi, out _, ct, work) && Log2Abs(fr, fi) <= ResidualLog2;
         }
-        return last <= reachLog2 - 64;
+        return false;
     }
 
     // log2 of the length of (k, p)'s Newton step at c: how far c is from being such a root.
@@ -244,8 +255,10 @@ public static class DeepGeneralFinder
             lam.M = a * lam.M;
             lam.Normalise();
         }
+        // The size as an area scale: (|det ∂z_p/∂c|·|det Λ|^{1/(d−1)})^{−1/2} (for a conformal map,
+        // |det| = |·|², which is the complex formula).
         double d = SMath.Max(2, map.CriticalDegree);
-        double log2 = -(jc.Log2Norm + lam.Log2Norm / (d - 1));
+        double log2 = -0.5 * (Log2Det(jc) + Log2Det(lam) / (d - 1));
         return log2 / 3.3219280948873622;
     }
 
@@ -272,7 +285,8 @@ public static class DeepGeneralFinder
             map.StepBig(ref zr, ref zi, cr, ci, prec);
             double zx = zr.ToDouble(), zy = zi.ToDouble();
             if (!(zx * zx + zy * zy <= esc2)) break;
-            if (Log2Abs(zr, zi) <= j.Log2Norm + rLog2) found.Add(n);
+            // The view disk's image is the ellipse z_n + J_n·u, |u| ≤ R: it holds 0 when |J_n⁻¹·z_n| ≤ R.
+            if (NewtonStep(zr, zi, j, prec, out var er, out var ei) && Log2Abs(er, ei) <= rLog2) found.Add(n);
         }
         return found;
     }
@@ -313,7 +327,7 @@ public static class DeepGeneralFinder
         var ar = seed.Re.WithPrecision(prec); var ai = seed.Im.WithPrecision(prec);
         BigFloat cr = ar, ci = ai;
         var none = new DeepGeneralNucleus(GeneralStatus.NotFound, seed, period, double.NaN, 1);
-        if (!Newton(map, ref cr, ref ci, 0, period, prec, ar, ai, reachLog2, ct, work)) return none;
+        if (!Newton(map, ref cr, ref ci, 0, period, ref prec, ar, ai, reachLog2, ct, work)) return none;
         if (Log2Abs(BigFloat.Sub(cr, ar, prec), BigFloat.Sub(ci, ai, prec)) > reachLog2) return none;
         double same = SameRootLog2(reachLog2);
         for (int q = 1; q < period; q++)
@@ -325,7 +339,7 @@ public static class DeepGeneralFinder
         if (need > prec)
         {
             BigFloat pr = cr.WithPrecision(need), pi = ci.WithPrecision(need);
-            if (Newton(map, ref pr, ref pi, 0, period, need, pr, pi, reachLog2, ct, work))
+            if (Newton(map, ref pr, ref pi, 0, period, ref need, pr, pi, reachLog2, ct, work))
             {
                 cr = pr; ci = pi;
                 size = SizeLog10(map, new ExactCentre(cr, ci), period, ct);
@@ -384,7 +398,7 @@ public static class DeepGeneralFinder
         var ar = seed.Re.WithPrecision(prec); var ai = seed.Im.WithPrecision(prec);
         BigFloat cr = ar, ci = ai;
         var none = new DeepGeneralMisiurewicz(GeneralStatus.NotFound, seed, preperiod, period, double.NaN, 1);
-        if (!Newton(map, ref cr, ref ci, preperiod, period, prec, ar, ai, reachLog2, ct)) return none;
+        if (!Newton(map, ref cr, ref ci, preperiod, period, ref prec, ar, ai, reachLog2, ct)) return none;
         if (Log2Abs(BigFloat.Sub(cr, ar, prec), BigFloat.Sub(ci, ai, prec)) > reachLog2) return none;
         double same = SameRootLog2(reachLog2);
         int p = period;

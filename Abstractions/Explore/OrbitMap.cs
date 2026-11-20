@@ -178,9 +178,9 @@ public sealed class TricornMap : IDeepOrbitMap
 /// active piece (constant sign pattern inside a Newton basin).</summary>
 public sealed class BurningShipMap : IDeepOrbitMap
 {
-    // #1916 — (x² − y² + cx, 2|x||y| + cy) in BigFloat. Deep minibrots not trusted (DeepGeneralFinder's header).
+    // #1916 — (x² − y² + cx, 2|x||y| + cy) in BigFloat (DeepGeneralFinder; Heiland-Allen 2019's method).
     public int CriticalDegree => 2;
-    public bool DeepNuclei => false;
+    public bool DeepNuclei => true;
 
     public void StepBig(ref FracturingFog.FFMath.BigFloat zr, ref FracturingFog.FFMath.BigFloat zi,
                         FracturingFog.FFMath.BigFloat cr, FracturingFog.FFMath.BigFloat ci, int prec)

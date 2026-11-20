@@ -64,6 +64,11 @@ on record — see [Corrected attributions](#corrected-attributions).
   memory recurrence used by the Phoenix family.
 - **Michael Michelitsch, Otto E. Rössler.** *A New Feature in the Mandelbrot Set.* Computers & Graphics,
   1992. Defines the Burning Ship.
+  - [Heiland-Allen 2019](#heiland-allen-eva-2019) cites the Burning Ship's definition as Michelitsch
+    & Rössler, *The "Burning Ship" and its Quasi-Julia sets*, Comput. & Graphics 16(4), 1992,
+    pp. 435–438.
+  - The two titles disagree, and neither has been checked against the journal (added 2026-11-20,
+    #1916; see *Citations awaiting verification*).
 - **W. D. Crowe, R. Hasson, P. J. Rippon, P. E. D. Strain-Clark.** *On the structure of the Mandelbar
   set.* Nonlinearity 2(4), 1989. The Tricorn / Mandelbar (`conj(z)² + c`).
 - **Daniel White.** *Triplex algebra and the Mandelbulb.*
@@ -632,6 +637,30 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
     - `Engine/Perturbation/R2Plan.cs` (#1909) perturbs Tricorn and user formulas with conj / re /
       im operator by operator.
     - A product's exact difference is V₁·D₂ + D₁·(V₂ + D₂).
+- <a id="heiland-allen-eva-2019"></a>**Claude Heiland-Allen.** *At the Helm of the Burning Ship.*
+  - **Venue:** Proceedings of EVA London 2019, Electronic Workshops in Computing, BCS Learning &
+    Development, July 2019, pp. 402–408. <http://dx.doi.org/10.14236/ewic/EVA2019.74>.
+  - **Licence:** CC BY 4.0, as the JATS source states.
+  - **Citation requested by the source site:** "Claude Heiland-Allen. At the Helm of the Burning
+    Ship. 2019. DOI: 10.14236/ewic/EVA2019.74". FF uses this form at the point of use.
+  - **Read 2026-11-20 (#1916)** from the PDF and JATS source the user supplied
+    (<https://www.scienceopen.com/hosted-document?doi=10.14236/ewic/EVA2019.74>). The prose was
+    extracted; the formulas are in a font without a Unicode map and could not be read.
+  - **What FF takes from the prose:**
+    - **Periods:** iterate the region's centre with its Jacobian with respect to c, and detect the
+      first period at which the region's image (an implicitly defined ellipse) holds 0. The
+      technique is credited there to [knighty 2017](#knighty-ball-2017).
+    - **Nuclei and Misiurewicz points:** found by multidimensional Newton.
+    - **Size:** Hunt & Ott's Mandelbrot size estimate, adapted with Jacobian matrices with respect
+      to z.
+    - **Generalisation:** the techniques extend to Celtic, Buffalo and Mandelbar.
+    - **Perturbation:** the paper also covers perturbation, with laser blaster's case analysis and
+      Pauldelbrot's glitch criterion.
+  - **FF use:** `Abstractions/Explore/DeepGeneralFinder.cs` (#1916).
+    - The ellipse test, written |J_n⁻¹·z_n| ≤ R.
+    - A size of (|det ∂z_p/∂c|·|det Λ|^{1/(d−1)})^{−1/2}.
+    - **These exact formulas are FF's reading of the prose,** checked against the deep z² + c
+      finder, the real-axis ship and the engine. They are not transcribed from the paper.
 - <a id="mathr-deep-zoom-2022"></a>**mathr.** *Deep zoom theory and practice (again)*, 2022-02-21,
   <https://mathr.co.uk/blog/2022-02-21_deep_zoom_theory_and_practice_again.html> (read 2026-11-19).
   - **Bilinear Approximation:** expands on Zhuoran's BLA.
@@ -1390,16 +1419,37 @@ entry above completed or corrected.
   - The `diffabs` case analysis for perturbing `abs`, as credited and quoted by
     [mathr 2021](#mathr-deep-zoom-2021).
   - The post itself was not read; its year and the author's name are not confirmed.
+  - [Heiland-Allen 2019](#heiland-allen-eva-2019) cites it as "laser blaster" (2014), *Perturbation
+    Formula for Burning Ship*,
+    <http://www.fractalforums.com/index.php?topic=19165.msg74089#msg74089> (msg 74089; the link
+    above has 74090). This is still secondary.
   - **FF use:** design plan §4.3 (epic #1253).
     - `Engine/Perturbation/R2Plan.cs` (#1910) uses the case analysis, as given by mathr 2021, for
       Burning Ship and user `abs` folds.
-- **Claude Heiland-Allen**, *At the helm of the burning ship*, Proceedings of EVA London 2019,
-  <http://dx.doi.org/10.14236/ewic/EVA2019.74>. As cited by the Fractalshades documentation
-  ([gbillotey](#fractalshades-math)), for generalising minibrot finding to the Burning Ship. Not yet
-  read. **FF use:** design plan §6 (Burning Ship finders, epic #1253).
-  - **#1916 (2026-11-19):** a read was attempted and failed. The DOI redirects to ScienceOpen, which
-    returned 403, and no copy was found on the author's site. The deep finder therefore does not use
-    it, and Burning Ship's deep minibrot search is refused until it is read (#1951).
+- **Claude Heiland-Allen**, *At the helm of the burning ship* (EVA London 2019). **Read and moved**
+  (2026-11-20, #1916) to [Heiland-Allen 2019](#heiland-allen-eva-2019) under *Deep zoom*.
+  - **History:** first listed here as cited by the Fractalshades documentation
+    ([gbillotey](#fractalshades-math)).
+  - **2026-11-19:** a read failed, because the DOI's ScienceOpen page returned 403.
+  - **2026-11-20:** the user supplied the PDF and the JATS source.
+- **B. R. Hunt, E. Ott** (1997). *Structure in the Parameter Dependence of Order and Chaos for the
+  Quadratic Map.* J. Phys. A 30, pp. 7067–7076.
+  - Cited by [Heiland-Allen 2019](#heiland-allen-eva-2019), who adapts its Mandelbrot size estimate to
+    the Burning Ship with Jacobian matrices. The details above are as listed in that paper's
+    references (JATS source).
+  - **Not read.** Whether FF's determinant form matches the original is not confirmed.
+  - **FF use:** `DeepGeneralFinder.SizeLog10` (#1916).
+- **Michelitsch & Rössler 1992, title.** *A New Feature in the Mandelbrot Set* (this file) or *The
+  "Burning Ship" and its Quasi-Julia sets*, Comput. & Graphics 16(4), pp. 435–438 (as cited by
+  [Heiland-Allen 2019](#heiland-allen-eva-2019)). It may be two papers or one. Not checked against
+  the journal.
+- <a id="knighty-ball-2017"></a>**"knighty"** (Fractal Forums handle, 2017). *A little note about Ball arithmetic.*
+  <https://fractalforums.org/f/28/t/481/msg2800#msg2800>.
+  - Credited by [Heiland-Allen 2019](#heiland-allen-eva-2019) for the period-detection technique:
+    iterate the region's centre with its Jacobian, which amounts to iterating an implicitly defined
+    ellipse.
+  - **Not read.**
+  - **FF use:** `DeepGeneralFinder.CandidatePeriods` (#1916).
 - **Wolfgang Straßer 1974** — PhD thesis, TU Berlin, 1974, said to describe the z-buffer independently
   of Catmull (see [Catmull](#catmull-zbuffer)). Source: the TU Wien obituary
   (<https://www.cg.tuwien.ac.at/sites/default/files/lost-colleague/Wolfgang%20Strasser/WolfgangStrasser-Obituary.pdf>).

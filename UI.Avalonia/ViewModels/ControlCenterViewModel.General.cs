@@ -17,10 +17,9 @@
 // reaches the batch through the region snapshot (--param UserEquationSeed=…).
 //
 // #1916 (epic #1253, D11) — past zoom 1e13 (these families render to 1e290 on the perturbation
-// engine) Zoom to minibrot and Snap to spiral run DeepGeneralFinder: BigFloat orbits, the exact centre,
-// the log zoom. Multibrot and Tricorn get both; Burning Ship gets the snap (its deep minibrot search is
-// refused, DeepGeneralFinder's header); User Equation still stops at 1e13 (no BigFloat evaluator for
-// the DSL yet). The jump is MinibrotJump.AtDeep, as the deep z² + c finder's.
+// engine) Zoom to minibrot and Snap to spiral run DeepGeneralFinder (BigFloat orbits, the exact centre,
+// the log zoom) for Multibrot, Tricorn and Burning Ship; User Equation still stops at 1e13 (no BigFloat
+// evaluator for the DSL yet, #1952). The jump is MinibrotJump.AtDeep, as the deep z² + c finder's.
 
 using System;
 using System.Collections.Generic;
@@ -160,7 +159,7 @@ public sealed partial class ControlCenterViewModel
         var vs = Shell.Main.ViewState;
         if (!map.DeepNuclei)
         {
-            FinderStatus = $"{map.Name}: the minibrot search past zoom 1e13 is not available for this family yet (#1951); Snap to spiral works.";
+            FinderStatus = $"{map.Name}: the minibrot search past zoom 1e13 is not available for this family yet; Snap to spiral works.";
             return Task.CompletedTask;
         }
         var (w, h) = Shell.Main.RenderHost.LastPresentedSize;

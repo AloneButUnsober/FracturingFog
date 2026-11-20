@@ -2,7 +2,8 @@
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
 // #1916 (epic #1253, D11) — DeepGeneralFinder: GeneralFinder's minibrot and Misiurewicz finders past
-// double, with the orbit in BigFloat. Checks against oracles outside the finder:
+// double, with the orbit in BigFloat, after Claude Heiland-Allen, "At the Helm of the Burning Ship", 2019,
+// DOI: 10.14236/ewic/EVA2019.74. Checks against oracles outside the finder:
 //   • on z² + c (MultibrotMap(2)), the deep z² + c finder (DeepNucleusFinder, #1866) as the oracle: the
 //     same period and nucleus, and a size within a few percent (the generalised atom size reduces to
 //     1/(b·l²) there);
@@ -13,15 +14,25 @@
 //     engine), with escaping pixels around it;
 //   • where double holds, GeneralFinder (body radius measured by escape) agrees on period, nucleus and
 //     framing;
-//   • a Misiurewicz point re-found at 1e40 from a seed a fifth of a view off (Burning Ship too; its deep
-//     minibrot search refuses — see DeepGeneralFinder's header).
-// Mutants (by hand), all caught:
-//   • the polish at the minibrot's precision skipped;
-//   • the Jacobian's ∂f/∂c term dropped;
-//   • Λ dropped from the size;
-//   • the Newton step's scale with the wrong sign;
-//   • the minimal-period test removed (only the direct test catches it: the scan tries the lower period
-//     first).
+//   • Burning Ship on its real axis, where its orbit is z² + c's: the deep z² + c finder's nucleus, and
+//     the engine renders it in set at the framing zoom;
+//   • a spurious root the double finder accepts by a Misiurewicz point (|z_79| ≈ 33) is rejected;
+//   • a Misiurewicz point re-found at 1e40 from a seed a fifth of a view off (Tricorn, Burning Ship).
+// Mutants (by hand):
+//   • caught:
+//     – the polish at the minibrot's precision skipped;
+//     – the Jacobian's ∂f/∂c term dropped;
+//     – Λ dropped from the size;
+//     – the Newton step's scale with the wrong sign;
+//     – the minimal-period test removed (only the direct test catches it: the scan tries the lower
+//       period first);
+//     – the residual check and the precision raise removed together;
+//   • survive:
+//     – each of those two alone (a backstop for the other);
+//     – the ellipse period test as the norm ball (the scan still reaches the period);
+//     – the determinant size as the norm form (equal on these views: conformal, or diagonal on the
+//       ship's axis).
+// The spurious-root test's precondition (the double finder's p 79) holds until #1954 is fixed.
 
 using System;
 using System.Linq;
@@ -143,6 +154,40 @@ public sealed class S1916DeepGeneralFinderTests(ITestOutputHelper output)
         Assert.True(Math.Abs(got.SizeLog10 - expect.SizeLog10) < 0.05, $"size 10^{got.SizeLog10:F3} vs 10^{expect.SizeLog10:F3}");
     }
 
+    [Theory]
+    [InlineData(40)]
+    [InlineData(80)]
+    public void On_The_Real_Axis_Burning_Ship_Finds_The_Mandelbrot_Nucleus(int n)
+    {
+        // For real c the ship's orbit stays real and is z² + c's (|x|² = x², y = 0), so its real-axis
+        // mini-ships have z² + c's nuclei: the deep z² + c finder is the oracle for period and nucleus.
+        int prec = BigFloat.PrecisionForZoom(1.25 * n + 20) + 64;
+        var c = AntennaNucleus(n, prec);
+        var probe = DeepNucleusFinder.FindMinibrot(new ExactCentre(c, BigFloat.Zero(prec)), -0.6 * n);
+        Assert.True(probe.Found, $"precondition: the deep z² + c finder ({probe.Status})");
+        var view = new ExactCentre(BigFloat.Add(c, BigFloat.FromDouble(3 * Math.Pow(10, probe.SizeLog10), prec), prec), BigFloat.Zero(prec));
+        double radiusLog10 = probe.SizeLog10 + Math.Log10(20);
+        var expect = DeepNucleusFinder.FindMinibrot(view, radiusLog10);
+        var got = DeepGeneralFinder.FindMinibrot(new BurningShipMap(), view, radiusLog10, maxPeriod: 4 * n);
+        output.WriteLine($"ship on the axis n {n}: z²+c p {expect.Period}; ship p {got.Period} size 10^{got.SizeLog10:F2} zoom 10^{got.ZoomLog10:F2}, {got.Attempts} attempts");
+        Assert.True(expect.Found && got.Found, $"{expect.Status} / {got.Status}");
+        Assert.Equal(expect.Period, got.Period);
+        double err = Log2Of(BigFloat.Sub(got.Point.Re, expect.Nucleus.Re, prec), BigFloat.Sub(got.Point.Im, expect.Nucleus.Im, prec), prec);
+        Assert.True(err < expect.SizeLog10 * L2_10 - 19, $"nucleus off by 2^{err:F1}");
+        // The engine renders the nucleus in set at the framing zoom.
+        var calc = new EscapeTimeCalculator(32, 32)
+        {
+            FractalType = FractalType.BurningShip, Zoom = Math.Pow(10, got.ZoomLog10), MaxIterations = Math.Max(2000, 40 * got.Period),
+            ColorMap = ColorPalette.BuiltIns[0], FractalParameters = new FractalParameters(),
+        };
+        calc.SetDeepCentre(got.Point.ToDeep(), got.Point);
+        calc.Calculate(CancellationToken.None);
+        int inSet = calc.IterationBuffer.Take(32 * 32).Count(v => v >= calc.MaxIterations);
+        output.WriteLine($"  calculator: centre {calc.IterationBuffer[16 * 32 + 16]} / {calc.MaxIterations}, {inSet}/1024 in set ({calc.LastPrecisionLabel})");
+        Assert.True(calc.IterationBuffer[16 * 32 + 16] >= calc.MaxIterations, "the nucleus pixel escapes");
+        Assert.True(inSet < 1024, "precondition: escaping pixels around");
+    }
+
     [Fact]
     public void A_Multiple_Of_The_Period_Is_Not_A_Nucleus()
     {
@@ -220,25 +265,43 @@ public sealed class S1916DeepGeneralFinderTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void Burning_Ship_Refuses_Deep_Minibrots_But_Not_Misiurewicz_Points()
+    public void A_Spurious_Root_By_A_Misiurewicz_Point_Is_Rejected()
     {
-        // The ship's folds break the ball bound and the size estimate (DeepGeneralFinder's header), so
-        // its deep minibrot search refuses rather than report a wrong period or size.
+        // By the ship's Misiurewicz point the double finder reports a period-79 "nucleus" at 1e-5 whose
+        // orbit is at |z| ≈ 33 at step 79: λ^79 amplifies double's rounding, and a tiny Newton step was
+        // taken for a root. The deep finder must not accept it (the residual |z_p| is checked, and the
+        // precision rises with ‖J‖).
         var map = new BurningShipMap();
-        Assert.False(map.DeepNuclei);
-        var view = Exact(Ship, 0.3014809547257814, 0.4519892606922896, 30);
-        Assert.False(DeepGeneralFinder.FindMinibrot(map, view, -30).Found);
+        var g = GeneralFinder.FindMinibrot(map, new V2(0.3014809547257814, 0.4519892606922896), 1e-5);
+        Assert.Equal(79, g.Period);   // the double finder's claim (a precondition: the trap exists)
+        var seed = new ExactCentre(BigFloat.FromDouble(g.Point.X, 200), BigFloat.FromDouble(g.Point.Y, 200));
+        var (zr, zi) = Iter(Ship, seed.Re, seed.Im, 79, 200);
+        Assert.True(Log2Of(zr, zi, 200) > 3, "precondition: z_79 at the double point is far from 0");
+        Assert.False(DeepGeneralFinder.FindNucleus(map, seed, 79, -5).Found);
+        // The scan over the same view (the case that once accepted a period-227 "nucleus" with
+        // z_p = (0.08, 0.54)): whatever it reports must be a true root, |z_p| tiny when iterated here
+        // at 256 bits more than the finder used.
+        var view = new ExactCentre(BigFloat.FromDouble(0.3014809547257814, 200), BigFloat.FromDouble(0.4519892606922896, 200));
+        var scan = DeepGeneralFinder.FindMinibrot(map, view, -5, maxPeriod: 400);
+        output.WriteLine($"scan at 1e-5: {scan.Status} p {scan.Period}");
+        if (scan.Found)
+        {
+            int q = scan.Point.Precision + 256;
+            var (pr, pi) = Iter(Ship, scan.Point.Re.WithPrecision(q), scan.Point.Im.WithPrecision(q), scan.Period, q);
+            Assert.True(Log2Of(pr, pi, q) < -32, $"p {scan.Period}: |z_p| = 2^{Log2Of(pr, pi, q):F1}, not a root");
+        }
     }
 
     [Theory]
-    [InlineData("tricorn", 0.7718445063460382, 1.336873900534257, 28)]
-    public void Shallow_It_Agrees_With_The_Double_Finder(string fam, double gr, double gi, int period)
+    [InlineData("tricorn", 0.7718445063460382, 1.336873900534257, 28, -6)]
+    [InlineData("ship", -1.7548, 0.0, 3, -3)]   // the airship mini-ship
+    public void Shallow_It_Agrees_With_The_Double_Finder(string fam, double gr, double gi, int period, int radiusLog10)
     {
-        // Where double holds, GeneralFinder (Newton in double, the body radius measured by escape) is
-        // the oracle for the period, the nucleus and the framing.
+        // Where double holds (low periods, so no λ^p amplification), GeneralFinder (Newton in double, the
+        // body radius measured by escape) is the oracle for the period, the nucleus and the framing.
         var (map, _, _) = Of(fam);
-        var g = GeneralFinder.FindMinibrot(map, new V2(gr, gi), 1e-6);
-        var d = DeepGeneralFinder.FindMinibrot(map, new ExactCentre(BigFloat.FromDouble(gr, 200), BigFloat.FromDouble(gi, 200)), -6);
+        var g = GeneralFinder.FindMinibrot(map, new V2(gr, gi), Math.Pow(10, radiusLog10));
+        var d = DeepGeneralFinder.FindMinibrot(map, new ExactCentre(BigFloat.FromDouble(gr, 200), BigFloat.FromDouble(gi, 200)), radiusLog10);
         output.WriteLine($"{fam}: double p {g.Period} zoom 10^{Math.Log10(g.Zoom):F2}; deep p {d.Period} zoom 10^{d.ZoomLog10:F2}");
         Assert.True(g.Found && d.Found);
         Assert.Equal(period, g.Period);
