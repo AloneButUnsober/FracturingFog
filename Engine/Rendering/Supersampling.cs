@@ -46,6 +46,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using FracturingFog.FFMath;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 
@@ -579,14 +580,13 @@ namespace FracturingFog.Rendering
             // exactly; otherwise (or off) the full grid below.
             if (calc is IAdaptiveAaCalculator ad && ad.AdaptiveAa.Enabled && ad.MaskExact)
             {
-                double s = (3.5 / Math.Max(calc.Width, calc.Height)) / calc.Zoom;
-                double cx0 = calc.CenterX, cy0 = calc.CenterY;
+                var jit = new AltJitter(calc);   // #1960
                 int[]? iter = ad.AdaptiveAaIterations;
                 if (iter != null && iter.Length < calc.Width * calc.Height) iter = null;
                 var st = AdaptiveCore(calc.Width, calc.Height, () => calc.ColorBuffer, iter, calc.MaxIterations, side, ad.AdaptiveAa, token,
                     m => ad.PixelMask = m,
-                    (jx, jy) => { calc.CenterX = cx0 + jx * s; calc.CenterY = cy0 + jy * s; return true; },
-                    () => { calc.CenterX = cx0; calc.CenterY = cy0; },
+                    (jx, jy) => { jit.Apply(jx, jy); return true; },
+                    jit.Restore,
                     ct => { calc.Calculate(ct); eq?.Apply(calc); });   // #1381
                 return st with { Equalizer = eq };
             }
@@ -599,17 +599,14 @@ namespace FracturingFog.Rendering
             var sumA = new int[pixels];
             Add(color, pixels, sumR, sumG, sumB, sumA);
 
-            double scale = (3.5 / Math.Max(calc.Width, calc.Height)) / calc.Zoom;
-            double origCx = calc.CenterX;
-            double origCy = calc.CenterY;
+            var jitter = new AltJitter(calc);   // #1960
             int count = 1;
             try
             {
                 foreach (var (jx, jy) in GridOffsets(side))
                 {
                     if (token.IsCancellationRequested) break;
-                    calc.CenterX = origCx + jx * scale;
-                    calc.CenterY = origCy + jy * scale;
+                    jitter.Apply(jx, jy);
                     try { calc.Calculate(token); }
                     catch (OperationCanceledException) { break; }
                     eq?.Apply(calc);   // #1381
@@ -619,11 +616,51 @@ namespace FracturingFog.Rendering
             }
             finally
             {
-                calc.CenterX = origCx;
-                calc.CenterY = origCy;
+                jitter.Restore();
             }
             WriteMeans(calc.ColorBuffer, pixels, sumR, sumG, sumB, sumA, count);
             return new SupersampleStats(pixels, side * side, pixels, (long)pixels * count) { Equalizer = eq };
+        }
+
+        /// <summary>#1960 — an alt calculator's sub-pixel AA jitter. The alt path used to add j·scale to
+        /// the double CenterX / CenterY only: once the pixel neared ulp(CenterX) (zoom ~1e13–1e14, earlier
+        /// for larger coordinates) the offset rounded to a whole ulp or to 0, so the samples landed up to
+        /// a few pixels off or were all the same image (no AA: fine filaments aliased, "grainy"), and the
+        /// write dropped an <see cref="IDeepCentre"/> calculator's exact centre. For such a calculator the
+        /// offset now goes through the full centre, as <see cref="CentreJitter"/> does for Mandelbrot:
+        /// the limbs by <see cref="OD.FromCenterOffset"/> (at its true magnitude, to OD's reach) and the
+        /// exact centre by <see cref="ExactCentre.TranslatePixels"/>. Any other calculator renders in
+        /// double, where CenterX / CenterY are its whole centre; it keeps the old jitter.</summary>
+        public sealed class AltJitter
+        {
+            private readonly IFractalCalculator _calc;
+            private readonly double _scale, _pxLog10, _cx0, _cy0;
+            private readonly IDeepCentre? _deep;
+            private readonly DeepComplex _c0;
+            private readonly ExactCentre? _e0;
+
+            public AltJitter(IFractalCalculator calc)
+            {
+                _calc = calc;
+                _scale = (3.5 / Math.Max(calc.Width, calc.Height)) / calc.Zoom;
+                _pxLog10 = Math.Log10(3.5 / Math.Max(calc.Width, calc.Height)) - Math.Log10(calc.Zoom);
+                _cx0 = calc.CenterX; _cy0 = calc.CenterY;
+                if (calc is IDeepCentre d) { _deep = d; _c0 = d.GetDeepCentre(); _e0 = d.CenterExact; }
+            }
+
+            public void Apply(double jx, double jy)
+            {
+                if (_deep == null) { _calc.CenterX = _cx0 + jx * _scale; _calc.CenterY = _cy0 + jy * _scale; return; }
+                var c = new DeepComplex(OD.FromCenterOffset(_c0.Re, jx, _scale), OD.FromCenterOffset(_c0.Im, jy, _scale));
+                ExactCentre? e = _e0 is { } x ? x.TranslatePixels(jx, jy, _scale, _pxLog10, x.Precision) : null;
+                _deep.SetDeepCentre(c, e);
+            }
+
+            public void Restore()
+            {
+                if (_deep == null) { _calc.CenterX = _cx0; _calc.CenterY = _cy0; return; }
+                _deep.SetDeepCentre(_c0, _e0);
+            }
         }
 
         // Format: ColorBuffer is uint with packed BGRA (matches IColorMap.Map's
