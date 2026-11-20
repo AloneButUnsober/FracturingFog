@@ -179,11 +179,11 @@ public sealed class S1906DeepCentreTests(ITestOutputHelper output)
     public void The_Explorer_Limit_Follows_The_Calculators_Tiers()
     {
         Assert.Equal(QualityPreset.Deepest.ZoomMax, AutoExplorer.MaxZoomFor(FractalType.Mandelbrot));
-        foreach (var t in new[] { FractalType.TearDrop, FractalType.GeneratedMandelbrotZ2, FractalType.GeneratedMandelbrotZ5 })
-            Assert.Equal(FamilyDepth.QdPerturbationMaxZoom, AutoExplorer.MaxZoomFor(t));
-        foreach (var t in new[] { FractalType.Julia, FractalType.Multibrot, FractalType.Tricorn, FractalType.BurningShip, FractalType.Magnet1, FractalType.Magnet2, FractalType.Phoenix, FractalType.Spider, FractalType.Glynn })   // #1907, #1909-#1913
+        Assert.Equal(FamilyDepth.QdPerturbationMaxZoom, AutoExplorer.MaxZoomFor(FractalType.TearDrop));
+        foreach (var t in new[] { FractalType.Julia, FractalType.Multibrot, FractalType.Tricorn, FractalType.BurningShip, FractalType.Magnet1, FractalType.Magnet2, FractalType.Phoenix, FractalType.Spider, FractalType.Glynn,   // #1907, #1909-#1913
+                                  FractalType.GeneratedMandelbrotZ2, FractalType.GeneratedMandelbrotZ5, FractalType.GeneratedTricorn, FractalType.GeneratedBurningShip })   // #1917
             Assert.Equal(FamilyDepth.EngineDoubleDeltaMaxZoom, AutoExplorer.MaxZoomFor(t));
-        foreach (var t in new[] { FractalType.GeneratedTricorn, FractalType.GeneratedBurningShip, FractalType.UserEquation })
+        foreach (var t in new[] { FractalType.UserEquation })
             Assert.Equal(AutoExplorer.DoubleMaxZoom, AutoExplorer.MaxZoomFor(t));
     }
 }

@@ -91,7 +91,8 @@ public sealed class TwoStatePlan
         _ => R2Plan.Unsupported(n),
     };
 
-    internal static bool UsesPrev(AstNode n) => n switch
+    /// <summary>True when the step reads prev (z_{n−1}).</summary>
+    public static bool UsesPrev(AstNode n) => n switch
     {
         PrevRef => true,
         Neg u => UsesPrev(u.Operand), Conj u => UsesPrev(u.Operand), ReOp u => UsesPrev(u.Operand),

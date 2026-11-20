@@ -117,7 +117,7 @@ public sealed class S1909ConjR2Tests(ITestOutputHelper output)
 
     internal static BigFloat Sq(BigFloat a, int p) => BigFloat.Mul(a, a, p);
 
-    private static readonly Step TricornStep = (a, b, cr, ci, p) =>
+    internal static readonly Step TricornStep = (a, b, cr, ci, p) =>
         (BigFloat.Add(BigFloat.Sub(Sq(a, p), Sq(b, p), p), cr, p),
          BigFloat.Add(-BigFloat.Mul(a, b, p).ScaleB(1), ci, p));
 

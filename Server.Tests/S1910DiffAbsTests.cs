@@ -33,10 +33,10 @@ namespace FracturingFog.Server.Tests;
 
 public sealed class S1910DiffAbsTests(ITestOutputHelper output)
 {
-    private static BigFloat Abs(BigFloat a) => a.Sign < 0 ? -a : a;
+    internal static BigFloat Abs(BigFloat a) => a.Sign < 0 ? -a : a;
 
     // (|x| + i|y|)² + c
-    private static readonly Step Ship = (a, b, cr, ci, p) =>
+    internal static readonly Step Ship = (a, b, cr, ci, p) =>
     {
         var x = Abs(a); var y = Abs(b);
         return (BigFloat.Add(BigFloat.Sub(Sq(x, p), Sq(y, p), p), cr, p), BigFloat.Add(BigFloat.Mul(x, y, p).ScaleB(1), ci, p));

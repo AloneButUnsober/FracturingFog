@@ -370,6 +370,7 @@ public static class CalculatorGenApi
             // multi-line equation must be collapsed to one line or its 2nd+ lines
             // escape the comment and become code (CS1002 / CS1529). #27 Phase 5a.
             .Replace("{{EQUATION_SOURCE}}", OneLine(equation))
+            .Replace("{{EQUATION_LITERAL}}", "@\"" + equation.Replace("\"", "\"\"") + "\"")   // #1917
             .Replace("{{DPDZ_TEXT}}",       AstPrinter.Print(dpdz))
             .Replace("{{DPDC_TEXT}}",       AstPrinter.Print(dpdc))
             .Replace("{{DERIV_TEXT}}",      AstPrinter.Print(derivUpdate))
