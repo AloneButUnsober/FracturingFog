@@ -375,6 +375,19 @@ swept angle, deflection and periastron of single-hole rays; a far-away binary de
 mass. Fix: S1 passed the palette value as `Map`'s iteration cap, so escape-time palettes drew every
 escaped ray in the interior colour (the black sky of the S1 batch renders).
 
+**S3 shipped (#1925).** Escaped rays can look up a sky along their final direction
+(`Engine/Scattering/BlackHoleSkies.cs`): `Environment` is the Lighting & FX sky, sampled exactly as the
+Wada mirror spheres' photo mode does (HDRI by name or .hdr / .exr path, else the background gradient),
+so a user image needs no new loader and the batch carries it through `--lighting-preset`; a missing HDRI
+file is reported as a batch fidelity gap. `Checker`, `Grid` and `Stars` are analytic and seeded (star
+cells hashed with the SplitMix64 finaliser [(Steele, Lea & Flood 2014)](../Resources-Bibliography.md#splitmix64)).
+A `Pinhole` projection was added: the parallel congruence sends every unlensed ray the same way, so
+only a pinhole shows a sky with parallax and lensing (Einstein rings squeeze the checker towards each
+shadow). Validation: with every mass zero the pinhole image equals the straight projection of the sky,
+computed from the camera geometry alone; the parallel image is one colour; the pinhole shadow edge sits
+where the launch ray's L/E = 4m. Not done: anti-aliasing of the lensed sky near the shadow edges (the
+issue's optional ray-differential footprint) — the checker aliases into moiré there.
+
 #### 2.6.2 Hénon–Heiles exit basins — **#1942**
 
 The Hénon–Heiles potential `V = (x² + y²)/2 + x²y − y³/3` has three exit channels above `E = 1/6`; its
@@ -1081,3 +1094,4 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   dynamic merger lensing recorded as future R&D (§2.6.9). Bibliography (§7): gravitational block.
 - **2026-11-20** — §2.6.1: black hole shadows S1 #1923 (type, shared ODE core, MP trace, Yumoto et al. Eq. 40 check). Bibliography (§7): Yumoto et al. 2012, Nitta, Chiba & Sugiyama 2011, Dormand & Prince 1980, Hairer, Nørsett & Wanner 1993.
 - **2026-11-20** — §2.6.1: black hole shadows S2 #1924 (winding, delay, steps, closest approach, deflection channels; shaded fates; palette cap fix).
+- **2026-11-20** — §2.6.1: black hole shadows S3 #1925 (Lighting & FX / procedural skies for escaped rays, pinhole projection, HDRI gap).

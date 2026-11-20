@@ -1262,6 +1262,21 @@ namespace FracturingFog
     /// between launch and final direction (escaped rays).</summary>
     public enum BlackHoleChannel { Fate, Winding, Delay, Steps, ClosestApproach, Deflection }
 
+    /// <summary>Camera projection of <see cref="FractalType.BlackHoleShadow"/> (#1925).
+    /// <see cref="Parallel"/> (default): Shipley &amp; Dolan's planar congruence, parallel rays from a
+    /// plane at the camera distance, so the view is exactly the impact-parameter plane.
+    /// <see cref="Pinhole"/>: every ray leaves the camera point through the image point placed at
+    /// the origin; unlensed rays fan out, so a sky shows parallax and lensing.</summary>
+    public enum BlackHoleProjection { Parallel, Pinhole }
+
+    /// <summary>What an escaped ray of <see cref="FractalType.BlackHoleShadow"/> sees (#1925, Fate
+    /// channel). <see cref="Off"/> (default): the palette on the time delay.
+    /// <see cref="Environment"/>: the Lighting &amp; FX sky (HDRI by name or .hdr / .exr path, else the
+    /// background gradient). <see cref="Checker"/> / <see cref="Grid"/> / <see cref="Stars"/>:
+    /// seeded procedural skies (<c>BlackHoleSkyDivisions</c>, <c>BlackHoleSkySeed</c>). Use the
+    /// Pinhole projection to see the sky lensed.</summary>
+    public enum BlackHoleSky { Off, Environment, Checker, Grid, Stars }
+
     public enum RenderProfile { Preview, Final }
 
     /// <summary>

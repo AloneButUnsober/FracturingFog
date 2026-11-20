@@ -800,6 +800,14 @@ namespace FracturingFog.Cli
                 gaps.Add("Audio-driven parameters (" + string.Join(", ", audio) + ") follow the live audio input: "
                          + (snap.AudioBindings is { Count: > 0 } ? "the command carries their --audio-bind; " : "")
                          + "render a video with --mode video --audio FILE to drive them (a still renders their current values) (#1432)");
+            // #1925 — a black hole sky from the Lighting & FX environment whose HDRI file is
+            // missing renders the background gradient instead (in batch and live alike).
+            if (snap.Fractal == FractalType.BlackHoleShadow && snap.Parameters is { } bp
+                && bp.BlackHoleSky == BlackHoleSky.Environment
+                && bp.Lighting.SkyMode == FracturingFog.Rendering.Lighting.SkyMode.Hdri
+                && bp.Lighting.EnvironmentName is { Length: > 0 } env
+                && System.IO.Path.IsPathRooted(env) && !System.IO.File.Exists(env))
+                gaps.Add($"Black hole sky HDRI '{env}' not found (the sky falls back to the background gradient) (#1925)");
             // #1554 — a hover-only math overlay follows the pointer; nothing to pin.
             if (snap.MathOverlayHoverOnly)
                 gaps.Add("Math overlay with no pinned point (the hover orbit is live only) — pin a point to render it with --math-overlay (2D) or --math-overlay-3d (3D)");

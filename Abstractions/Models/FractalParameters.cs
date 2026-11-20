@@ -1403,6 +1403,16 @@ namespace FracturingFog.Models
         public bool BlackHoleShadeFates { get; set; }
         /// <summary>#1924 — palette density of the channel (1 = 24 palette units per unit of the channel). Default 1.</summary>
         public double BlackHoleChannelScale { get; set; } = 1.0;
+        /// <summary>#1925 — camera projection (see <see cref="FracturingFog.BlackHoleProjection"/>). Default Parallel.</summary>
+        public BlackHoleProjection BlackHoleProjection { get; set; } = BlackHoleProjection.Parallel;
+        /// <summary>#1925 — background for escaped rays (see <see cref="FracturingFog.BlackHoleSky"/>). Default Off.</summary>
+        public BlackHoleSky BlackHoleSky { get; set; } = BlackHoleSky.Off;
+        /// <summary>#1925 — procedural sky divisions per half turn (checker / grid cells; stars 16x finer). Default 12.</summary>
+        public int BlackHoleSkyDivisions { get; set; } = 12;
+        /// <summary>#1925 — star-field seed. Default 1.</summary>
+        public int BlackHoleSkySeed { get; set; } = 1;
+        /// <summary>#1925 — sky rotation about the vertical (y) axis, degrees. Default 0.</summary>
+        public double BlackHoleSkyRotation { get; set; } = 0.0;
 
         // ── Slit cascade (#1569, double-slit epic #1565) ──────────────────
         /// <summary>Slit cascade: children per slit, N (2..16). N ≥ 3 for the fringe
@@ -2492,6 +2502,11 @@ namespace FracturingFog.Models
                 BlackHoleChannel = BlackHoleChannel,
                 BlackHoleShadeFates = BlackHoleShadeFates,
                 BlackHoleChannelScale = BlackHoleChannelScale,
+                BlackHoleProjection = BlackHoleProjection,
+                BlackHoleSky = BlackHoleSky,
+                BlackHoleSkyDivisions = BlackHoleSkyDivisions,
+                BlackHoleSkySeed = BlackHoleSkySeed,
+                BlackHoleSkyRotation = BlackHoleSkyRotation,
                 SlitCascadeChildren = SlitCascadeChildren,
                 SlitCascadeRatio = SlitCascadeRatio,
                 SlitCascadeDepth = SlitCascadeDepth,

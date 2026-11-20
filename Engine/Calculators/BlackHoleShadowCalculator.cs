@@ -119,13 +119,20 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
         /// <summary>#1924 — deflection angle (radians) of a ray whose final state is
         /// <paramref name="s"/>: the angle between the camera's view direction (the launch
         /// direction) and the final momentum. Meaningful for escaped rays.</summary>
-        public double Deflection(ReadOnlySpan<double> s)
+        public double Deflection(ReadOnlySpan<double> s, in MpNullSystem sys)
         {
             double pm = Math.Sqrt(s[3] * s[3] + s[4] * s[4] + s[5] * s[5]);
             if (!(pm > 0)) return double.NaN;
-            double c = (s[3] * Camera.Fx + s[4] * Camera.Fy + s[5] * Camera.Fz) / pm;
+            // #1925 — against this ray's own launch direction (varies per pixel for the pinhole).
+            double c = (s[3] * sys.LaunchX + s[4] * sys.LaunchY + s[5] * sys.LaunchZ) / pm;
             return Math.Acos(Math.Clamp(c, -1.0, 1.0));
         }
+
+        /// <summary>#1925 — the frame's sky (Off: escaped rays use the palette).</summary>
+        public BlackHoleSkies.Settings Sky { get; init; }
+
+        /// <summary>#1925 — sky colour seen by an escaped ray with final state <paramref name="s"/>.</summary>
+        public uint SkyColour(ReadOnlySpan<double> s) => BlackHoleSkies.Sample(Sky, s[3], s[4], s[5]);
 
         /// <summary>#1924 — the raw value of <paramref name="channel"/> for one traced ray
         /// (NaN where the channel has no value: deflection of a captured ray).</summary>
@@ -146,7 +153,7 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
                     return Math.Log(1.0 + 1.0 / Math.Max(1e-9, q));
                 }
                 case BlackHoleChannel.Deflection:
-                    return o.Fate == ScatterFate.Escaped ? Deflection(s) : double.NaN;
+                    return o.Fate == ScatterFate.Escaped ? Deflection(s, sys) : double.NaN;
                 default:
                     return o.Fate == ScatterFate.Escaped ? Math.Log(1.0 + Math.Max(0.0, sys.Delay)) : 0.0;
             }
@@ -159,12 +166,20 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
             foreach (var h in holes)
                 extent = Math.Max(extent, Math.Sqrt(h.X * h.X + h.Y * h.Y + h.Z * h.Z) + 4.0 * h.M);
             double d = Math.Max(Math.Max(10.0, 4.0 * extent), double.IsFinite(p.BlackHoleCameraDistance) ? p.BlackHoleCameraDistance : 50.0);
-            var cam = new MpCamera(d, p.BlackHoleInclination, p.BlackHoleAzimuth);
+            var cam = new MpCamera(d, p.BlackHoleInclination, p.BlackHoleAzimuth, p.BlackHoleProjection == BlackHoleProjection.Pinhole);
             double tol = Math.Clamp(double.IsFinite(p.BlackHoleTolerance) ? p.BlackHoleTolerance : 1e-9, 1e-13, 1e-4);
             return new Scene
             {
                 Holes = holes,
                 Camera = cam,
+                Sky = new BlackHoleSkies.Settings
+                {
+                    Kind = p.BlackHoleSky,
+                    Divisions = Math.Clamp(p.BlackHoleSkyDivisions, 1, 512),
+                    Seed = p.BlackHoleSkySeed,
+                    RotationRad = (double.IsFinite(p.BlackHoleSkyRotation) ? p.BlackHoleSkyRotation : 0.0) * Math.PI / 180.0,
+                    Lighting = p.Lighting,
+                },
                 CaptureFraction = Math.Clamp(double.IsFinite(p.BlackHoleCaptureFraction) ? p.BlackHoleCaptureFraction : 0.02, 1e-5, 0.5),
                 EscapeRadius = d,
                 Settings = new ScatterSettings
@@ -198,6 +213,7 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
         uint undecided = ColorMap.InSetColor;
         var channel = p.BlackHoleChannel;
         bool shadeFates = p.BlackHoleShadeFates && channel != BlackHoleChannel.Fate;
+        bool sky = p.BlackHoleSky != BlackHoleSky.Off;
         double scale = ChannelPaletteScale * (double.IsFinite(p.BlackHoleChannelScale) ? Math.Clamp(p.BlackHoleChannelScale, 0.01, 100.0) : 1.0);
 
         int width = Width, height = Height;
@@ -224,7 +240,11 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
                 {
                     float smooth = o.Fate == ScatterFate.Escaped ? (float)Math.Log(1.0 + Math.Max(0.0, sys.Delay)) : 0f;
                     SmoothBuffer[idx] = smooth;
-                    ColorBuffer[idx] = Colour(gate, escapedGate, gateCount, smooth, billiardMap, ColorMap, undecided);
+                    // #1925 — a sky replaces the palette on escaped rays (the theme still colours
+                    // the shadows, or the fates when it is a billiard theme).
+                    ColorBuffer[idx] = sky && gate == escapedGate
+                        ? scene.SkyColour(s) | 0xFF000000u
+                        : Colour(gate, escapedGate, gateCount, smooth, billiardMap, ColorMap, undecided);
                     continue;
                 }
                 double value = scene.ChannelValue(channel, o, sys, s);
