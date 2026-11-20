@@ -82,7 +82,7 @@ public sealed class BlackHoleShadowGpuCalculator
         var p = new BlackHoleGpuParams
         {
             Width = width, Height = height, CenterX = centerX, CenterY = centerY,
-            Pitch = (4.0 / Math.Max(1.0, width)) / Math.Max(1e-12, zoom),
+            Pitch = BlackHoleShadowCalculator.PixelPitch(width, height, zoom),   // #1927: the camera's scale
             HoleCount = Math.Clamp(h.Length, 1, MpNullSystem.MaxHoles),
             Escape2 = scene.EscapeRadius * scene.EscapeRadius,
             CamX = cam.Cx, CamY = cam.Cy, CamZ = cam.Cz, Fx = cam.Fx, Fy = cam.Fy, Fz = cam.Fz,

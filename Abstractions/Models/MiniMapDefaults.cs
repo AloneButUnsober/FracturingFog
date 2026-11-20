@@ -91,7 +91,7 @@ public static class MiniMapDefaults
         FractalType.Apollonian       => new( 0.0,  0.0, 2.0),
         FractalType.ChaoticBilliard  => new( 0.0,  0.0, 1.0),
         FractalType.BilliardRays     => new( 0.0,  0.0, 0.6),
-        FractalType.BlackHoleShadow  => new( 0.0,  0.0, 0.16),  // #1923
+        FractalType.BlackHoleShadow  => new( 0.0,  0.0, 0.14),  // #1923 (#1927: camera-scale pitch)
         FractalType.SlitCascade      => new( 0.0,  0.0, 0.25),
         FractalType.TalbotCarpet     => new( 0.0,  0.5, 1.9),
         FractalType.MathPlane        => new( 0.0,  0.0, 0.5),
