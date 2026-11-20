@@ -51,6 +51,18 @@ public interface IPerturbationPlan
     /// in the parameter plane).</summary>
     void DerivStep(double zr, double zi, double cr, double ci, ref double dvr, ref double dvi);
 
+    /// <summary>#1921 — <see cref="DerivStep"/> for a derivative held as d·2^t (t &gt; 0, past double's
+    /// range): d ← f′(z)·d + <paramref name="cWeight"/>·∂f/∂c, cWeight = 2^−t. The default takes
+    /// f′(z)·d as DerivStep(d) − DerivStep(0); the plans override it with the exact form.</summary>
+    void DerivStepScaled(double zr, double zi, double cr, double ci, ref double dvr, ref double dvi, double cWeight)
+    {
+        double r0 = 0, i0 = 0;
+        DerivStep(zr, zi, cr, ci, ref r0, ref i0);
+        double r1 = dvr, i1 = dvi;
+        DerivStep(zr, zi, cr, ci, ref r1, ref i1);
+        dvr = r1 - r0 + cWeight * r0; dvi = i1 - i0 + cWeight * i0;
+    }
+
     /// <summary>The one-step bilinear approximation at Z: A = ∂f/∂z, B = ∂f/∂c (0 in the dynamic
     /// plane), and the radius in which the dropped terms stay below ε of the linear one.</summary>
     Bla Level0(double zr, double zi, double cr, double ci, double epsilon);
@@ -132,6 +144,15 @@ public sealed class PowerPlan : IPerturbationPlan
         ar *= _d; ai *= _d;
         double nr = ar * dvr - ai * dvi, ni = ar * dvi + ai * dvr;
         if (ParameterPlane) nr += 1.0;
+        dvr = nr; dvi = ni;
+    }
+
+    public void DerivStepScaled(double zr, double zi, double cr, double ci, ref double dvr, ref double dvi, double cWeight)
+    {
+        PowM1(zr, zi, out double ar, out double ai);   // #1921: as DerivStep, ∂f/∂c weighted
+        ar *= _d; ai *= _d;
+        double nr = ar * dvr - ai * dvi, ni = ar * dvi + ai * dvr;
+        if (ParameterPlane) nr += cWeight;
         dvr = nr; dvi = ni;
     }
 

@@ -126,6 +126,19 @@ public interface IRealPerturbationPlan : IPerturbationPlan
     /// last term in the parameter plane only). Column 1 is ∂z/∂Re(pixel), what the sink receives.</summary>
     void JacobianStep(double zr, double zi, double cr, double ci, ref RealMat2 j);
 
+    /// <summary>#1921 — <see cref="JacobianStep"/> for a Jacobian held as J·2^t (t &gt; 0):
+    /// J ← (∂f/∂z)·J + <paramref name="cWeight"/>·∂f/∂c, cWeight = 2^−t. The default takes (∂f/∂z)·J as
+    /// JacobianStep(J) − JacobianStep(0); R2Plan overrides it with the exact form.</summary>
+    void JacobianStepScaled(double zr, double zi, double cr, double ci, ref RealMat2 j, double cWeight)
+    {
+        var j0 = RealMat2.Zero;
+        JacobianStep(zr, zi, cr, ci, ref j0);
+        var j1 = j;
+        JacobianStep(zr, zi, cr, ci, ref j1);
+        j = new RealMat2(j1.M11 - j0.M11 + cWeight * j0.M11, j1.M12 - j0.M12 + cWeight * j0.M12,
+                         j1.M21 - j0.M21 + cWeight * j0.M21, j1.M22 - j0.M22 + cWeight * j0.M22);
+    }
+
     /// <summary>#1911 — true when the step divides (then <see cref="PoleRatio2"/> is meaningful).</summary>
     bool HasPoles { get; }
 

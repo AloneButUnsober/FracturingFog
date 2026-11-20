@@ -220,7 +220,7 @@ public sealed class S1910DiffAbsTests(ITestOutputHelper output)
         output.WriteLine($"Burning Ship at 1e11: engine vs SP {eq}/{W * H} equal, {distinct} distinct; {pt.LastPerturbationStats}");
         Assert.True(distinct >= 5, $"precondition: structure ({distinct})");
         Assert.True(eq >= W * H * 0.9, $"{eq}/{W * H} equal at the switch");
-        Assert.Equal(FamilyDepth.EngineDoubleDeltaMaxZoom, FamilyDepth.MaxZoomFor(FractalType.BurningShip));
+        Assert.Equal(QualityPreset.Deepest.ZoomMax, FamilyDepth.MaxZoomFor(FractalType.BurningShip));   // #1921: unlimited
     }
 
     [Fact]

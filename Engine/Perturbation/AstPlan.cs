@@ -102,6 +102,15 @@ public sealed class AstPlan : IPerturbationPlan
         dvr = r; dvi = i;
     }
 
+    // #1921 — ∂f/∂z·d + cWeight·∂f/∂c, from the two partials.
+    public void DerivStepScaled(double zr, double zi, double cr, double ci, ref double dvr, ref double dvi, double cWeight)
+    {
+        var (ar, ai) = _a(zr, zi, cr, ci, 0, 0, 0, 0, 0, 0);
+        var (br, bi) = _b(zr, zi, cr, ci, 0, 0, 0, 0, 0, 0);
+        double nr = ar * dvr - ai * dvi + cWeight * br, ni = ar * dvi + ai * dvr + cWeight * bi;
+        dvr = nr; dvi = ni;
+    }
+
     public bool IsGlitch(double zr, double zi, double Zr, double Zi, double cr, double ci, double tau2)
     {
         var (pr, pi) = _a(zr, zi, cr, ci, 0, 0, 0, 0, 0, 0);

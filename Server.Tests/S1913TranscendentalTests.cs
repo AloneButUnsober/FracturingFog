@@ -321,7 +321,7 @@ public sealed class S1913TranscendentalTests(ITestOutputHelper output)
         output.WriteLine($"Glynn at 1e11: engine vs SP {eq}/{W * H}, {distinct} distinct; {pt.LastPerturbationStats}");
         Assert.True(distinct >= 5, $"precondition: structure ({distinct})");
         Assert.True(eq >= W * H * 0.9, $"{eq}/{W * H} equal at the switch");
-        Assert.Equal(FamilyDepth.EngineDoubleDeltaMaxZoom, FamilyDepth.MaxZoomFor(FractalType.Glynn));
+        Assert.Equal(QualityPreset.Deepest.ZoomMax, FamilyDepth.MaxZoomFor(FractalType.Glynn));   // #1921: unlimited
     }
 
     [Fact]

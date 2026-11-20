@@ -24,8 +24,46 @@ using FracturingFog.Perturbation;
 
 namespace FracturingFog;
 
-public sealed partial class EscapeTimeCalculator : IDeepCentre
+public sealed partial class EscapeTimeCalculator : IDeepCentre, IDeepZoom
 {
+    // ── #1921 (D2b): the zoom past double, and the derivative's distance unit ──
+
+    private double _zoomLog10 = double.NaN, _zoomLog10Stamp;
+
+    /// <inheritdoc/>
+    public double ZoomLog10
+        => !double.IsNaN(_zoomLog10) && _zoomLog10Stamp.Equals(Zoom) ? _zoomLog10 : Math.Log10(Zoom);
+
+    /// <inheritdoc/>
+    public void SetZoomLog10(double log10)
+    {
+        Zoom = FracturingFog.ViewState.ZoomLog.FromLog10(log10);
+        _zoomLog10 = log10;
+        _zoomLog10Stamp = Zoom;
+    }
+
+    // MandelbrotCalculator's #1783 / #1843 distance unit, on the deep path only (the SP cores'
+    // frames keep complex-plane units: _distExp2 = 0). DistanceBuffer, FinalDr / Di and
+    // DistancePixelScale are in units of 2^−DistanceUnitExp2 complex-plane units (a derivative's
+    // unit is 2^e); a colour map gets that unit only if it opts in (IColorMapDistanceUnit), else
+    // complex-plane units, bit for bit as before.
+    private int _distExp2, _mapDistExp2;
+    private double _distPixelScale;
+
+    /// <summary>#1921 — the distance unit's exponent for the last frame (0: complex-plane units).</summary>
+    public int DistanceUnitExp2 => _distExp2;
+
+    private void ResetDistanceUnit() { _distExp2 = 0; _mapDistExp2 = 0; _distPixelScale = 0; }
+
+    // The deep frame's unit, and the pixel scale its map gets.
+    private void SetDistanceUnit(double pxLog10)
+    {
+        (_distPixelScale, _distExp2) = MandelbrotCalculator.DistanceUnit(LastPixelScale, pxLog10);
+        bool optIn = _distExp2 != 0 && ColorMap is IColorMapDistanceUnit u && u.TakesDistanceUnit;
+        _mapDistExp2 = optIn ? 0 : _distExp2;
+        if (_distExp2 != 0 && ColorMap is IColorMapWithPixelScale pxs) pxs.PixelScale = optIn ? _distPixelScale : LastPixelScale;
+    }
+
     /// <summary>#1907 — Julia and Multibrot switch to the perturbation engine at this zoom. The SP
     /// core still resolves pixels here (~3e-13 apart, ~1e3 ulps), so the two agree at the switch.</summary>
     public const double DeepZoomThreshold = 1e11;
@@ -123,9 +161,15 @@ public sealed partial class EscapeTimeCalculator : IDeepCentre
         var two = plan == null ? DeepTwoStatePlan() : null;
         if (plan == null && two == null) return false;
 
-        int prec = BigFloat.PrecisionForZoom(Math.Log10(Zoom));
+        double zl = ZoomLog10;   // #1921: past double, the log zoom
+        int prec = BigFloat.PrecisionForZoom(zl);
         var centre = CenterExact is { } e ? e.WithPrecision(prec) : ExactCentre.FromDeep(GetDeepCentre(), prec);
         double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
+        // #1921 — the pixel scale as a FloatExp past the double-δ tier, and the distance unit.
+        double pxLog10 = Math.Log10(3.5 / Math.Max(Width, Height)) - zl;
+        FloatExp? pixelFx = pxLog10 < -280 ? FloatExp.FromLog10(pxLog10) : null;
+        SetDistanceUnit(pxLog10);
+        int unitE = _distExp2;
         int maxIt = MaxIterations;
         int[]? perRow = PerRowMaxIter is { } pr && pr.Length >= Height ? pr : null;
         var map = ColorMap;
@@ -155,6 +199,7 @@ public sealed partial class EscapeTimeCalculator : IDeepCentre
         {
             if (_batchCount is { } bcs) bcs[idx]++;
             if (flatDerivative) { dvr = 0; dvi = 0; }
+            else if (two != null && unitE != 0) { dvr = Math.ScaleB(dvr, -unitE); dvi = Math.ScaleB(dvi, -unitE); }   // #1921: the unit (two-state: in double)
             IterationBuffer[idx] = iter;
             FillAuxAndColor(idx, iter, maxIt, zr, zi, dvr, dvi, map);
             // Phase 2.1 (the video per-row cap): a pixel that ran to its row's cap is in set.
@@ -164,7 +209,8 @@ public sealed partial class EscapeTimeCalculator : IDeepCentre
         LastPerturbationStats = two != null
             ? PerturbationEngine.RenderTwoState(two, centre, scale, Width, Height, maxIt, sink, ct, perRow, _mask != null ? Marked : null)
             : PerturbationEngine.Render(plan!, centre, scale, Width, Height, maxIt, sink,
-                ct, perRow, _mask != null ? Marked : null, useBla: true, blaEpsilon: eps, converge: converge);
+                ct, perRow, _mask != null ? Marked : null, useBla: true, blaEpsilon: eps, converge: converge,
+                pixelScale: pixelFx, derivExp2: unitE);
         LastPrecisionLabel = "PT";
         return true;
     }

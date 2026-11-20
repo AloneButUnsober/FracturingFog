@@ -1838,6 +1838,7 @@ namespace FracturingFog.Rendering
             alt.CenterY = _calculator.CenterY;
             if (alt is IDeepCentre deep) deep.SetDeepCentre(DeepCentreOf(_calculator), _calculator.CenterExact);   // #1906
             alt.Zoom = _calculator.Zoom;
+            if (alt is IDeepZoom dz && FracturingFog.ViewState.ZoomLog.BeyondDouble(_calculator.ZoomLog10)) dz.SetZoomLog10(_calculator.ZoomLog10);   // #1921
             alt.MaxIterations = _calculator.MaxIterations;
             alt.Quality = _calculator.Quality;
             alt.ColorMap = _calculator.ColorMap;

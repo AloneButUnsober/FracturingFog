@@ -753,7 +753,90 @@ in the same PR.
   - the centre's Hi limb only;
   - the engine never used;
   - the plan's bailout² as 4;
-  - the plan's −i as +i. to Multibrot, Julia, Generated Z2–Z5 and every
+  - the plan's −i as +i.
+
+**D2b as built (#1921).**
+- **Prior art.** This is the rescaling that mathr's *Deep zoom theory and practice* (2021) describes;
+  bibliography `#mathr-deep-zoom-2021`, with `#kf-floatexp` for the float-exp type. FF claims no
+  novelty for it.
+- **The pixel scale past double.** `PerturbationEngine.Render` takes an optional `FloatExp pixelScale`.
+  - Below 2^−950 (zoom ~1e286), pixel offsets are doubles in units of 2^s0, the scale's exponent.
+  - References and direct pixels are built in BigFloat from those offsets.
+  - The BLA tables take dcMax as 0 there. This is a negligible change to a radius above 2^−1000.
+- **The scaled-δ prelude.** While |δ| < 2^−900, δ is held as d·2^s.
+  - **The BLA** applies to d: A·d + B·e·2^(s0−s). Its radius test sees |δ|² underflow to 0. That
+    result is correct, since every positive radius² is ≥ 2^−1074 and so above it.
+  - **A single step** runs the plan's own `DeltaStep` on δ and ε rescaled to ~2^−500, then scales the
+    result back by the same power of two.
+    - This is exact to ~2^−500 relative wherever the step is positively homogeneous of degree 1 at
+      small δ: differentiable steps, or abs folds.
+    - So one rule covers PowerPlan, AstPlan and R2Plan, with no float-exp operator set.
+  - **Rebasing and the end of the reference.** Where Z is as small as δ, z = Z + δ is formed in the
+    scaled unit. Otherwise z = Z: δ is under 2^−900 of it.
+  - **The end of the reference in the dynamic plane:** the escape step onto the escaped point, as
+    Pixel does it. Without it every pixel glitched there: Glynn at 1e300 sent 497 of 1536 pixels to
+    direct BigFloat iteration (5 min); with it, 1 pixel (15 s).
+  - **Not done in the prelude:** the dynamic plane's glitch test. Its z ≈ Z there, so the test cannot
+    fire.
+  - Once |δ| ≥ 2^−900 the double loop takes over. ε, below 2^−1000 there, then contributes under
+    2^−100 of δ.
+- **The derivative** is held as d·2^t once |d| passes 2^600. The scaled step is
+  f′(z)·d + 2^−t·∂f/∂c (`DerivStepScaled` / `JacobianStepScaled`), and it is used in the double loop
+  and the direct path too.
+  - The sink gets d·2^(t − derivExp2): MandelbrotCalculator's distance unit (#1783 / #1843).
+  - With t = 0 and derivExp2 = 0 nothing changes, bit for bit. This is true of every frame that
+    passes no pixelScale and no unit, and of every double-depth frame whose derivative stays below
+    2^600.
+- **EscapeTimeCalculator.**
+  - `IDeepZoom` (`ZoomLog10`, `SetZoomLog10`) is new; the host, the video engine and the poster path
+    hand the log zoom over past double.
+  - The deep path renders with the FloatExp scale past 1e280 and takes the distance unit
+    (`DistanceUnitExp2`). `DistanceBuffer`, `FinalDr` / `Di` and `DistancePixelScale` are in that
+    unit.
+  - A colour map gets complex-plane units unless it opts in (`IColorMapDistanceUnit`). Those units
+    are bit for bit as before, since the scaling is by a power of two.
+  - The two-state families (Phoenix, Spider) only scale their delivered derivative into the unit.
+- **FamilyDepth.**
+  - Julia, Multibrot, Tricorn, Burning Ship, Magnet 1 / 2 and Glynn: unlimited (Mandelbrot's).
+  - Phoenix and Spider stay at 1e290: the two-state engine's δ is double.
+  - User Equation, the CalcGen template and TearDrop also stay at 1e290: they pass a double zoom.
+- **Batch / Command builder:** no new setting. `--zoom` past double already reaches the poster path's
+  `ZoomLog10`, which now reaches these calculators.
+- **Results** (`S1921DeepFxTests`; counts against direct BigFloat iteration, and the derivative in the
+  distance unit within 1 % of a BigFloat finite difference):
+  - z² + c at 1e320 and 1e600: 176/176 counts, derivative 0 off;
+  - z³ + c at 1e320: 176/176, derivative 0 off;
+  - Tricorn at 1e320 and 1e600: 176/176, derivative 0 off;
+  - Burning Ship at 1e320 (its fold through the rescaled step): 176/176, derivative 0 off;
+  - Julia c = i at 1e320 (the dynamic plane, secondary references): 176/176, derivative 0 off;
+  - Magnet 1 at 1e320, escape only and with its convergence stop: 176/176, derivative 0 off;
+  - Glynn at 1e300 (dynamic, z^1.5): 176/176, derivative 0 off.
+  - **The prelude forced at 1e60** against the double loop: 1536/1536 counts, and the derivative
+    within 1e-6, for z², Tricorn and Burning Ship.
+  - **EscapeTimeCalculator** (Multibrot d = 3) at 1e200 and 1e400 through `SetZoomLog10`:
+    176/176 counts. `FinalDr` / `Di` are finite and within 1 % of the finite difference. Before, at
+    1e200 the derivative overflowed to ∞ (S1907 measured it).
+  - The poster path hands the log zoom over.
+- **Mutants:**
+  - **Caught:**
+    - the scaled step not rescaled;
+    - the prelude BLA's ε factor dropped;
+    - the derivative delivered without the unit;
+    - the calculator never passing the FloatExp scale;
+    - the poster dropping the log zoom;
+    - the prelude's escape step, by Glynn's direct-pixel bound.
+  - **Survive, with reason:**
+    - The scaled ∂f/∂c weight replaced by 1 (PowerPlan, R2Plan, the double loop's BLA). Once the
+      derivative is scaled, t ≥ 100, so that term is ≤ 2^−100 against f′·d ~ 2^500. It is below
+      rounding unless |f′| < 2^−450.
+    - The prelude's scaled rebase. It needs |Z| < 8·|δ| < 2^−897, which no test view reaches (and,
+      but for Z₀ = 0, practically none would).
+  - **Not tested:** the live host's and the video engine's `IDeepZoom` sync (one line each, as the
+    poster's).
+- **Not covered** (follow-up #1957): Phoenix / Spider (the two-state engine's δ is double), and
+  User Equation, the CalcGen template and TearDrop (they take a double zoom).
+
+**Order of value:** D1 → D2 → D3 gives deep zoom to Multibrot, Julia, Generated Z2–Z5 and every
 polynomial user equation. D4 / D5 add Tricorn and Burning Ship, which is the original #1253. D6–D10
 widen the user equation language.
 
