@@ -387,8 +387,36 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
 
 <a id="papapetrou-1947"></a>
 
-- **A. Papapetrou.** Proceedings of the Royal Irish Academy A 51, 191, 1947. Independent discovery of the
-  same class of solutions. **Title not verified** (listed under *Citations awaiting verification*).
+- **A. Papapetrou.** *A static solution of the equations of the gravitational field for an arbitrary
+  charge-distribution.* Proceedings of the Royal Irish Academy, Section A 51, 191–204, 1947.
+  <https://inspirehep.net/literature/4126> (MathSciNet MR0026458). Independent discovery of the same class
+  of solutions. Title verified 2026-11-20 (#1928) against the INSPIRE record and the MathSciNet
+  listing; previously listed under *Citations awaiting verification* with volume and page only.
+
+<a id="alonso-ruiz-sanchez-2007"></a>
+
+- **Daniel Alonso, Antonia Ruiz, Manuel Sánchez-Hernández.** *Escape of photons from two fixed extreme
+  Reissner-Nordström black holes.* 2007 (v2 2008). <https://arxiv.org/abs/gr-qc/0701052>. Photon escape
+  and chaotic scattering for the same two-hole spacetime. Prior art named in the `BlackHoleShadow` help
+  page (#1928); FF uses nothing from it. **Journal reference not verified.**
+
+<a id="kluitenberg-roest-seri-2022"></a>
+
+- **Martijn Kluitenberg, Diederik Roest, Marcello Seri.** *Chaotic light scattering around extremal black
+  holes.* 2022. <https://arxiv.org/abs/2211.06880>. A mathematical proof that light scattering around
+  several extremal (Majumdar–Papapetrou) holes is chaotic, for three or more holes in a plane. Prior art
+  named in the `BlackHoleShadow` help page (#1928); FF uses nothing from it. Trettel 2025 cites it as
+  published in Bollettino dell'Unione Matematica Italiana, 2023. **Journal reference not verified.**
+
+<a id="trettel-2025"></a>
+
+- **Steve Trettel.** *Classical Optics for Charged Black Holes.* Proceedings of Bridges 2025:
+  Mathematics and the Arts, 475–478, 2025 (Tessellations Publishing). <https://arxiv.org/abs/2505.04633>,
+  <http://archive.bridgesmathart.org/2025/bridges2025-475.html>. Renders several extremally charged
+  (Majumdar–Papapetrou) black holes, their shadows included, in real time by treating their light as rays
+  in flat space with refractive index n = U². The closest prior art to `BlackHoleShadow` found by the
+  #1928 search: FF does not use the optical analogy (it integrates the Hamiltonian of Shipley & Dolan
+  directly). Named in the help page.
 
 <a id="aguirre-vallejo-sanjuan-2001"></a>
 
@@ -1442,8 +1470,9 @@ These sources are cited in the code or docs, but their publication details aren'
 They stay listed (the contract never drops a credit). Each needs its primary source traced and its
 entry above completed or corrected.
 
-- **Papapetrou 1947** — Proc. R. Irish Acad. A 51, 191 (Majumdar–Papapetrou solutions, #1922): title
-  not identified (Yumoto et al. 2012's reference list gives volume and page but no title).
+- **Alonso, Ruiz & Sánchez-Hernández 2007** — journal reference of arXiv:gr-qc/0701052 (#1928).
+- **Kluitenberg, Roest & Seri 2022** — journal reference of arXiv:2211.06880 (#1928; cited elsewhere as
+  Bollettino dell'Unione Matematica Italiana, 2023).
 - **Yumoto, Nitta, Chiba & Sugiyama 2012** — journal reference of arXiv:1208.0635 (#1923).
 - **Hénon & Heiles 1964** — the original paper defining the Hénon–Heiles potential (#1942): full
   reference not yet checked.
@@ -1574,6 +1603,10 @@ page. The convention:
 
 Corrections so far:
 
+- 2026-11-20 (#1928). **Papapetrou 1947** — was listed under awaiting verification as *Proc. R. Irish
+  Acad. A 51, 191 (Majumdar–Papapetrou solutions, #1922): title not identified*; now the full entry
+  `#papapetrou-1947`, *A static solution of the equations of the gravitational field for an arbitrary
+  charge-distribution*, 51, 191–204, checked against INSPIRE and MathSciNet (MR0026458).
 - 2026-10-25 (#1450). **Kevin I. Martin** — was *"Superfractalthing: Mandelbrot Set Calculation in
   High Precision", Bulletin of the Mandel-machine project, 2014*; now *SuperFractalThing* /
   *Superfractalthing Maths*, 2013, with the fractalforums.com announcement. No "Mandel-machine

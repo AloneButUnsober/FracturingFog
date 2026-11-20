@@ -3595,6 +3595,124 @@ namespace FracturingFog.Models
                     BilliardRaysMode = (int)FracturingFog.BilliardRayMode.Paths,
                 },
             },
+            // #1928 — black hole shadow presets (epic #1922). The first is the setup of Shipley &
+            // Dolan 2016 Fig. 19 (equal masses, separation a = 2 M, viewed side on from 50 M); the
+            // close-up is the upper neck of their a = 1 panel. The rest show unequal masses, three
+            // holes, an inclined camera and the lensed sky.
+            new()
+            {
+                Name          = "Black Hole Shadow - Equal-Mass Pair",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.14,
+                Iterations    =  256,
+                Description   = "Two equal, extremally charged black holes a = 2 apart, seen side on from 50 M: the setup of Shipley & Dolan's binary shadow figure. Besides the two main shadows there are thin 'eyebrow' shadows, each holding smaller copies of the pair. The bound 'Black hole: closing pair' animation moves the holes between 0.5 and 3 apart.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.BlackHoleShadow,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Black hole: closing pair",
+                Params        = new RegionFractalParams
+                {
+                    BlackHoleLayout = (int)FracturingFog.BlackHoleLayout.Binary,
+                    BlackHoleMass1 = 1.0, BlackHoleMass2 = 1.0, BlackHoleSeparation = 2.0,
+                    BlackHoleCameraDistance = 50.0, BlackHoleInclination = 90.0, BlackHoleAzimuth = 0.0,
+                },
+            },
+            new()
+            {
+                Name          = "Black Hole Shadow - Eyebrow Hierarchy",
+                CenterX       =  0.0,
+                CenterY       = -7.0,
+                Zoom          =  2.2,
+                Iterations    =  256,
+                Description   = "Close-up of the neck above the gap between two equal holes a = 1 apart. Eyebrows sit inside eyebrows, alternating between the two holes, down to the pixel size: light that circles one hole, then the other, many times before falling in. Zoom on any eyebrow edge for more.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.BlackHoleShadow,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    BlackHoleLayout = (int)FracturingFog.BlackHoleLayout.Binary,
+                    BlackHoleMass1 = 1.0, BlackHoleMass2 = 1.0, BlackHoleSeparation = 1.0,
+                    BlackHoleCameraDistance = 50.0, BlackHoleInclination = 90.0, BlackHoleAzimuth = 0.0,
+                },
+            },
+            new()
+            {
+                Name          = "Black Hole Shadow - Unequal Masses",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.14,
+                Iterations    =  256,
+                Description   = "A heavy hole and one of 0.4 its mass, 2 apart. The small hole's shadow sits inside a crescent of the big one's, and the eyebrows on the two sides no longer match.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.BlackHoleShadow,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    BlackHoleLayout = (int)FracturingFog.BlackHoleLayout.Binary,
+                    BlackHoleMass1 = 1.0, BlackHoleMass2 = 0.4, BlackHoleSeparation = 2.0,
+                    BlackHoleCameraDistance = 50.0, BlackHoleInclination = 90.0, BlackHoleAzimuth = 0.0,
+                },
+            },
+            new()
+            {
+                Name          = "Black Hole Shadow - Triangle of Three",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.1,
+                Iterations    =  256,
+                Description   = "Three equal holes at the corners of a triangle of side 2, seen face on. Light that weaves between them before falling in draws eyebrows of all three holes, nested inside one another.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.BlackHoleShadow,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    BlackHoleLayout = (int)FracturingFog.BlackHoleLayout.Triangle,
+                    BlackHoleMass1 = 1.0, BlackHoleSeparation = 2.0,
+                    BlackHoleCameraDistance = 50.0, BlackHoleInclination = 90.0, BlackHoleAzimuth = 90.0,
+                },
+            },
+            new()
+            {
+                Name          = "Black Hole Shadow - Inclined Camera",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.14,
+                Iterations    =  256,
+                Description   = "Two equal holes 1.5 apart, seen 60 degrees from their axis: the near hole's shadow sits inside the far one's and the eyebrows become rings. The bound 'Black hole: camera swing' animation swings the camera from nearly end-on to the other end.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.BlackHoleShadow,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Black hole: camera swing",
+                Params        = new RegionFractalParams
+                {
+                    BlackHoleLayout = (int)FracturingFog.BlackHoleLayout.Binary,
+                    BlackHoleMass1 = 1.0, BlackHoleMass2 = 1.0, BlackHoleSeparation = 1.5,
+                    BlackHoleCameraDistance = 50.0, BlackHoleInclination = 60.0, BlackHoleAzimuth = 0.0,
+                },
+            },
+            new()
+            {
+                Name          = "Black Hole Shadow - Lensed Starfield",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.11,
+                Iterations    =  256,
+                Description   = "The equal pair in front of a star field, through a pinhole camera 30 M away. Stars near the shadows are stretched into arcs and repeated. The bound 'Black hole: turning sky' animation turns the sky, so the lensed copies stream round the holes.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.BlackHoleShadow,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Black hole: turning sky",
+                Params        = new RegionFractalParams
+                {
+                    BlackHoleLayout = (int)FracturingFog.BlackHoleLayout.Binary,
+                    BlackHoleMass1 = 1.0, BlackHoleMass2 = 1.0, BlackHoleSeparation = 2.0,
+                    BlackHoleCameraDistance = 30.0, BlackHoleInclination = 90.0, BlackHoleAzimuth = 0.0,
+                    BlackHoleProjection = (int)FracturingFog.BlackHoleProjection.Pinhole,
+                    BlackHoleSky = (int)FracturingFog.BlackHoleSky.Stars,
+                    BlackHoleSkySeed = 1, BlackHoleSkyRotation = 0.0,
+                },
+            },
             new()
             {
                 Name        = "Apollonian - L/R Kissing Cusp",

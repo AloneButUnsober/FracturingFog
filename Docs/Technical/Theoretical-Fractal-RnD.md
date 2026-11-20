@@ -433,6 +433,20 @@ at x10^11 and x10^12 all-DD frames at two DD tolerances agree, and the fix-up fr
 frame pixel for pixel while retracing ~25% of a 48x27 view. Cost is the price of depth: a DD ray at
 1e-20 takes ~3-4e5 steps (DP5's tol^(-1/5)); a higher-order integrator would cut that (not done).
 
+**S6 (#1928) — presets, animation, help, prior art.** Six built-in regions: *Equal-Mass Pair* (the setup
+of Shipley & Dolan's side-on figure: unit masses, a = 2, r_max = 50 M, θ = 90°), *Eyebrow Hierarchy*
+(the neck above the gap at a = 1), *Unequal Masses*, *Triangle of Three*, *Inclined Camera* and *Lensed
+Starfield* (pinhole, seeded stars). Three bound animations: closing pair (separation 0.5–3), camera swing
+(inclination 20°–160°) and turning sky; camera distance became animatable. Batch video applies the
+animation per frame (`--animation`); the tests check each animated frame equals the still rendered with
+that frame's value through `--param`, and each preset renders the same live, via `--param` and through
+the poster path. Help page *Black Hole Shadows* (Math → Scattering). Prior-art search: the closest work
+is [Trettel 2025](../Resources-Bibliography.md#trettel-2025) (real-time multi-hole Majumdar–Papapetrou
+rendering through a refractive-index analogy); the physics literature also has
+[Alonso, Ruiz & Sánchez-Hernández 2007](../Resources-Bibliography.md#alonso-ruiz-sanchez-2007) and
+[Kluitenberg, Roest & Seri 2022](../Resources-Bibliography.md#kluitenberg-roest-seri-2022). FF builds on
+Shipley & Dolan and claims no new physics. Papapetrou 1947's title is now verified.
+
 #### 2.6.2 Hénon–Heiles exit basins — **#1942**
 
 The Hénon–Heiles potential `V = (x² + y²)/2 + x²y − y³/3` has three exit channels above `E = 1/6`; its
@@ -1144,3 +1158,4 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
 - **2026-11-20** — §2.6.1: black hole shadows S4 #1926 (ILGPU double + single kernels, measured Auto routing; D3D11 + Vulkan follow-up #1972).
 - **2026-11-21** — §2.6.1: black hole box-zoom fix (camera pixel scale) + S5 part 1 #1927 (pitch-calibrated tolerance exact to x10^9; fp64 limit flagged); cross-family pitch issue #1974.
 - **2026-11-21** — §2.6.1: black hole shadows S5 part 2 #1927 (double-double edge fix-up past fp64; exact against converged all-DD frames at x10^11-10^12).
+- **2026-11-21** — §2.6.1: black hole shadows S6 #1928 (presets, bound animations, help page, prior art; Papapetrou 1947 title verified). Epic #1922 complete.

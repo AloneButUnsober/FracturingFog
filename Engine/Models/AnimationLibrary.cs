@@ -312,6 +312,48 @@ namespace FracturingFog.Models
                 Tags = new List<string> { "2D", "double-slit" },
             };
 
+            // #1928 — black hole shadows (epic #1922): one bound animation per preset that moves.
+            // Every frame re-traces every ray.
+            yield return new AnimationData
+            {
+                Name = "Black hole: closing pair",
+                Category = "Built-in",
+                Description = "Moves the two holes between 0.5 and 3 apart and back: the eyebrows grow as the "
+                            + "holes close in and shrink as they part.",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.BlackHoleShadow },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "BlackHoleSeparation", Mode = AnimationMode.Sine, Min = 0.5, Max = 3.0, FrequencyHz = 0.05, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "black-hole" },
+            };
+            yield return new AnimationData
+            {
+                Name = "Black hole: camera swing",
+                Category = "Built-in",
+                Description = "Swings the camera between 20 and 160 degrees from the holes' axis: from nearly end-on "
+                            + "(nested rings) through side on (the eyebrows) to the other end.",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.BlackHoleShadow },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "BlackHoleInclination", Mode = AnimationMode.Sine, Min = 20.0, Max = 160.0, FrequencyHz = 0.04, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "black-hole" },
+            };
+            yield return new AnimationData
+            {
+                Name = "Black hole: turning sky",
+                Category = "Built-in",
+                Description = "Turns the sky once round every 30 seconds: the lensed copies of each star stream "
+                            + "round the shadows. Needs a sky (the Lensed Starfield preset sets one).",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.BlackHoleShadow },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "BlackHoleSkyRotation", Mode = AnimationMode.Linear, Min = 0.0, Max = 360.0, FrequencyHz = 1.0 / 30.0, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "black-hole" },
+            };
+
             // #632 (Renderer C2) — precision-sweep convergence. Ramps the low
             // tier up the ladder Float→QuadDouble while a Hold track pins the
             // reference tier at QuadDouble, so the divergence field dims toward
