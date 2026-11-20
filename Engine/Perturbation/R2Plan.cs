@@ -43,9 +43,19 @@
 // stays inside the distance to the cut (Limit), and a pixel whose argument cancels the reference's by
 // 0 is flagged (Pole). The reference evaluates them in BigFloat (BigFloatMath, #1914). A plan can also
 // be on the dynamic plane (z₀ = the pixel, c a constant in the AST): Glynn.
+//
+// #1915 (D10) adds the piecewise functions: floor, round, ceil, trunc, fract, sign, min, max, clamp and
+// `if` (`mod` lowers to floor). The design plan (§4.6) proposed branch agreement; as built, a pixel on
+// another piece than the reference switches exactly. δ′ takes the jump: an integer difference for
+// floor and its kin; for if / min / max / clamp, (pixel branch − reference branch) at the reference's
+// values plus the pixel branch's δ. Only a close call (an argument within a margin of the jump, at
+// the pixel or the reference) is flagged by the Pole jet and goes to another reference or to direct
+// BigFloat. The Limit jet keeps the BLA inside the distance to the nearest jump (a switch is not
+// linear).
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Linq.Expressions;
 using FracturingFog.CalculatorGen.Parser;
 using FracturingFog.FFMath;
@@ -74,8 +84,8 @@ public sealed class R2Plan : IRealPerturbationPlan
         _delta = Compile(step, Mode.Delta);
         _tan = Compile(step, Mode.Tangent);
         _sec = Compile(step, Mode.Second);
-        _limit = HasFold(step) || HasCut(step) ? Compile(step, Mode.Limit) : null;
-        _pole = HasDiv(step) || HasCut(step) ? Compile(step, Mode.Pole) : null;
+        _limit = HasFold(step) || HasCut(step) || HasPiecewise(step) ? Compile(step, Mode.Limit) : null;
+        _pole = HasDiv(step) || HasCut(step) || HasPiecewise(step) ? Compile(step, Mode.Pole) : null;
         // Rebasing restarts at Z₀ = 0: valid as a reference only when 0 is a critical point for
         // every c, i.e. ∂f/∂z = 0 at z = 0. Checked at three generic c: a polynomial Jacobian that
         // is not identically zero is not exactly 0.0 at all of them.
@@ -135,19 +145,65 @@ public sealed class R2Plan : IRealPerturbationPlan
                4.0, (1.0, 0.0), parameterPlane: false);
 
     // #1913 — a node whose function has a branch cut / a singular point at 0 (log, sqrt, pow).
-    private static bool HasCut(AstNode n) => n switch
+    private static bool HasCut(AstNode n)
+        => n is Log or Sqrt or PowC || System.Linq.Enumerable.Any(Children(n), HasCut);
+
+    // #1915 — the AST's children (for the walks below), conditions' terms included.
+    internal static System.Collections.Generic.IEnumerable<AstNode> Children(AstNode n)
     {
-        Log or Sqrt or PowC => true,
-        Sin u => HasCut(u.Operand), Cos u => HasCut(u.Operand), Exp u => HasCut(u.Operand),
-        Neg u => HasCut(u.Operand), Conj u => HasCut(u.Operand), ReOp u => HasCut(u.Operand),
-        ImOp u => HasCut(u.Operand), AbsOp u => HasCut(u.Operand), Folded u => HasCut(u.Operand),
-        Add a => HasCut(a.Left) || HasCut(a.Right),
-        Sub s => HasCut(s.Left) || HasCut(s.Right),
-        Mul m => HasCut(m.Left) || HasCut(m.Right),
-        Div d => HasCut(d.Left) || HasCut(d.Right),
-        Pow p => HasCut(p.Base),
-        _ => false,
+        switch (n)
+        {
+            case Neg u: yield return u.Operand; break;
+            case Conj u: yield return u.Operand; break;
+            case ReOp u: yield return u.Operand; break;
+            case ImOp u: yield return u.Operand; break;
+            case AbsOp u: yield return u.Operand; break;
+            case Folded u: yield return u.Operand; break;
+            case Exp u: yield return u.Operand; break;
+            case Log u: yield return u.Operand; break;
+            case Sin u: yield return u.Operand; break;
+            case Cos u: yield return u.Operand; break;
+            case Sqrt u: yield return u.Operand; break;
+            case Floor u: yield return u.Operand; break;
+            case Round u: yield return u.Operand; break;
+            case Ceil u: yield return u.Operand; break;
+            case Trunc u: yield return u.Operand; break;
+            case Fract u: yield return u.Operand; break;
+            case Sign u: yield return u.Operand; break;
+            case Add a: yield return a.Left; yield return a.Right; break;
+            case Sub a: yield return a.Left; yield return a.Right; break;
+            case Mul a: yield return a.Left; yield return a.Right; break;
+            case Div a: yield return a.Left; yield return a.Right; break;
+            case Min a: yield return a.Left; yield return a.Right; break;
+            case Max a: yield return a.Left; yield return a.Right; break;
+            case Clamp c: yield return c.X; yield return c.Lo; yield return c.Hi; break;
+            case Pow p: yield return p.Base; break;
+            case PowC p: yield return p.Base; yield return p.Exp; break;
+            case If f:
+                foreach (var t in CondTerms(f.Cond)) yield return t;
+                yield return f.Then; yield return f.Else; break;
+        }
+    }
+
+    internal static System.Collections.Generic.IEnumerable<AstNode> CondTerms(CondNode c)
+    {
+        switch (c)
+        {
+            case Cmp k: foreach (var t in new[] { k.Left, k.Right }) if (TermOf(t) is { } a) yield return a; break;
+            case CondAnd a: foreach (var t in CondTerms(a.Left)) yield return t; foreach (var t in CondTerms(a.Right)) yield return t; break;
+            case CondOr o: foreach (var t in CondTerms(o.Left)) yield return t; foreach (var t in CondTerms(o.Right)) yield return t; break;
+            case CondNot n: foreach (var t in CondTerms(n.Operand)) yield return t; break;
+        }
+    }
+
+    private static AstNode? TermOf(CondTerm t) => t switch
+    {
+        CondRe r => r.Of, CondIm i => i.Of, CondAbs2 a => a.Of, CondArg g => g.Of, _ => null,
     };
+
+    private static bool HasPiecewise(AstNode n)
+        => n is Floor or Round or Ceil or Trunc or Fract or Sign or Min or Max or Clamp or If
+           || System.Linq.Enumerable.Any(Children(n), HasPiecewise);
 
     // A sub-expression with no z, c or prev: a constant (pow's exponent).
     private static bool IsConstant(AstNode n) => n switch
@@ -175,17 +231,8 @@ public sealed class R2Plan : IRealPerturbationPlan
         _ => throw new NotSupportedException(n.GetType().Name),
     };
 
-    private static bool HasDiv(AstNode n) => n switch
-    {
-        Div => true,
-        Neg u => HasDiv(u.Operand), Conj u => HasDiv(u.Operand), ReOp u => HasDiv(u.Operand),
-        ImOp u => HasDiv(u.Operand), AbsOp u => HasDiv(u.Operand), Folded u => HasDiv(u.Operand),
-        Add a => HasDiv(a.Left) || HasDiv(a.Right),
-        Sub s => HasDiv(s.Left) || HasDiv(s.Right),
-        Mul m => HasDiv(m.Left) || HasDiv(m.Right),
-        Pow p => HasDiv(p.Base),
-        _ => false,
-    };
+    private static bool HasDiv(AstNode n)
+        => n is Div || System.Linq.Enumerable.Any(Children(n), HasDiv);
 
     // True when n's value is real for every z, c (its imaginary part is the constant 0).
     internal static bool IsReal(AstNode n) => n switch
@@ -198,23 +245,15 @@ public sealed class R2Plan : IRealPerturbationPlan
         Mul m => IsReal(m.Left) && IsReal(m.Right),
         Div d => IsReal(d.Left) && IsReal(d.Right),
         Pow p => IsReal(p.Base),
+        Min or Max or Clamp => true,                                        // #1915: lifted reals
+        Floor u => IsReal(u.Operand), Round u => IsReal(u.Operand), Ceil u => IsReal(u.Operand),
+        Trunc u => IsReal(u.Operand), Fract u => IsReal(u.Operand), Sign u => IsReal(u.Operand),
+        If f => IsReal(f.Then) && IsReal(f.Else),
         _ => false,
     };
 
-    private static bool HasFold(AstNode n) => n switch
-    {
-        AbsOp or Folded => true,
-        Neg u => HasFold(u.Operand),
-        Conj u => HasFold(u.Operand),
-        ReOp u => HasFold(u.Operand),
-        ImOp u => HasFold(u.Operand),
-        Add a => HasFold(a.Left) || HasFold(a.Right),
-        Sub s => HasFold(s.Left) || HasFold(s.Right),
-        Mul m => HasFold(m.Left) || HasFold(m.Right),
-        Div d => HasFold(d.Left) || HasFold(d.Right),
-        Pow p => HasFold(p.Base),
-        _ => false,
-    };
+    private static bool HasFold(AstNode n)
+        => n is AbsOp or Folded || System.Linq.Enumerable.Any(Children(n), HasFold);
 
     internal static string? Unsupported(AstNode n) => n switch
     {
@@ -232,8 +271,32 @@ public sealed class R2Plan : IRealPerturbationPlan
         Sin u => Unsupported(u.Operand), Cos u => Unsupported(u.Operand), Exp u => Unsupported(u.Operand),   // #1913
         Log u => Unsupported(u.Operand), Sqrt u => Unsupported(u.Operand),
         PowC w => IsConstant(w.Exp) ? Unsupported(w.Base) : "pow with a non-constant exponent",
+        Floor or Round or Ceil or Trunc or Fract or Sign or Min or Max or Clamp => FirstUnsupported(n),   // #1915
+        If f => UnsupportedCond(f.Cond) ?? Unsupported(f.Then) ?? Unsupported(f.Else),
         Pow p => p.Exponent < 0 ? "a negative power" : Unsupported(p.Base),
         _ => n.GetType().Name,
+    };
+
+    private static string? FirstUnsupported(AstNode n)
+    {
+        foreach (var c in Children(n)) if (Unsupported(c) is { } why) return why;
+        return null;
+    }
+
+    private static string? UnsupportedCond(CondNode c) => c switch
+    {
+        Cmp k => UnsupportedTerm(k.Left) ?? UnsupportedTerm(k.Right),
+        CondAnd a => UnsupportedCond(a.Left) ?? UnsupportedCond(a.Right),
+        CondOr o => UnsupportedCond(o.Left) ?? UnsupportedCond(o.Right),
+        CondNot n => UnsupportedCond(n.Operand),
+        _ => c.GetType().Name,
+    };
+
+    private static string? UnsupportedTerm(CondTerm t) => t switch
+    {
+        CondConst => null,
+        CondRe or CondIm or CondAbs2 or CondArg => Unsupported(TermOf(t)!),
+        _ => t.GetType().Name,
     };
 
     public bool ParameterPlane { get; }
@@ -556,6 +619,178 @@ public sealed class R2Plan : IRealPerturbationPlan
             return r;
         }
 
+        // ── #1915 — piecewise functions by branch agreement ──
+
+        private Expression MinIntoP(Expression cand)
+            => Expression.Assign(MinLimit!, Expression.Call(typeof(Math).GetMethod(nameof(Math.Min), [typeof(double), typeof(double)])!, MinLimit!, cand));
+
+        private static Expression Sqrt(Expression e) => Expression.Call(typeof(Math).GetMethod(nameof(Math.Sqrt))!, e);
+        private static Expression AbsE(Expression e) => Expression.Call(typeof(Math).GetMethod(nameof(Math.Abs), [typeof(double)])!, e);
+
+        // The Limit candidate for a jump at margin m (≥ 0) in a real quantity with derivatives g[1..4]
+        // (Re z, Im z, Re c, Im c): (m − ‖∇_c‖·|ε|max) / ‖∇_z‖.
+        private void LimitAt(Expression m, Expression[] g)
+        {
+            var gz = Let(Sqrt(Expression.Add(Expression.Multiply(g[1], g[1]), Expression.Multiply(g[2], g[2]))));
+            var gc = Let(Sqrt(Expression.Add(Expression.Multiply(g[3], g[3]), Expression.Multiply(g[4], g[4]))));
+            var room = Let(Expression.Subtract(m, Expression.Multiply(gc, P[4])));
+            Body.Add(MinIntoP(Expression.Condition(Expression.LessThanOrEqual(room, Zero), Zero,
+                Expression.Condition(Expression.GreaterThan(gz, Zero), Expression.Divide(room, gz), Expression.Constant(double.MaxValue)))));
+        }
+
+        // floor / round / ceil / trunc / fract / sign on one real component (its value and jet parts).
+        private Expression[] PwPart(int kind, Expression[] x)
+        {
+            var PF = typeof(PerturbFunctions);
+            var k = Expression.Constant(kind);
+            var r = new Expression[x.Length];
+            r[0] = Let(Expression.Call(PF.GetMethod(nameof(PerturbFunctions.PwValue))!, k, x[0]));
+            double slope = PerturbFunctions.PwSlope(kind);
+            if (Mode is Mode.Delta or Mode.Pole)
+                r[1] = Let(Expression.Call(PF.GetMethod(nameof(PerturbFunctions.PwDiff))!, k, x[0], x[1]));   // the exact jump
+            else
+                for (int i = 1; i < x.Length; i++) r[i] = slope == 0 ? Zero : x[i];   // within a piece
+            if (Mode == Mode.Pole) Body.Add(MinIntoP(Expression.Call(PF.GetMethod(nameof(PerturbFunctions.PwOk))!, k, x[0], x[1])));
+            if (Mode == Mode.Limit) LimitAt(Let(Expression.Call(PF.GetMethod(nameof(PerturbFunctions.PwMargin))!, k, x[0])), x);
+            return r;
+        }
+
+        private Cx[] Pw(int kind, Cx[] x, bool real)
+        {
+            var re = PwPart(kind, x.Select(c => c.Re).ToArray());
+            var im = real ? x.Select(_ => Zero).ToArray() : PwPart(kind, x.Select(c => c.Im).ToArray());
+            var r = new Cx[x.Length];
+            for (int i = 0; i < x.Length; i++) r[i] = new Cx(re[i], im[i]);
+            return r;
+        }
+
+        // A condition term as a real jet: [the value, then the jet parts — Delta/Pole: the exact
+        // difference at the pixel; otherwise the derivatives].
+        private Expression[] Term(CondTerm t)
+        {
+            if (t is CondConst k) { var r0 = new Expression[Width]; r0[0] = Expression.Constant(k.Value); for (int i = 1; i < Width; i++) r0[i] = Zero; return r0; }
+            var x = Emit(TermOf(t)!);
+            var r = new Expression[x.Length];
+            switch (t)
+            {
+                case CondRe: for (int i = 0; i < x.Length; i++) r[i] = x[i].Re; break;
+                case CondIm: for (int i = 0; i < x.Length; i++) r[i] = x[i].Im; break;
+                case CondAbs2:
+                {
+                    Expression Dot(Cx a, Cx b) => Expression.Add(Expression.Multiply(a.Re, b.Re), Expression.Multiply(a.Im, b.Im));
+                    r[0] = Let(Dot(x[0], x[0]));
+                    if (Mode is Mode.Delta or Mode.Pole)
+                        r[1] = Let(Expression.Add(Expression.Multiply(Expression.Constant(2.0), Dot(x[0], x[1])), Dot(x[1], x[1])));   // |V+D|² − |V|²
+                    else
+                        for (int i = 1; i < x.Length; i++) r[i] = Let(Expression.Multiply(Expression.Constant(2.0), Dot(x[0], x[i])));
+                    break;
+                }
+                default:   // CondArg
+                {
+                    var PF = typeof(PerturbFunctions);
+                    r[0] = Let(Expression.Call(typeof(Math).GetMethod(nameof(Math.Atan2))!, x[0].Im, x[0].Re));
+                    if (Mode is Mode.Delta or Mode.Pole)
+                    {
+                        r[1] = Let(Expression.Call(PF.GetMethod(nameof(PerturbFunctions.ArgDiff))!, x[0].Re, x[0].Im, x[1].Re, x[1].Im));
+                        if (Mode == Mode.Pole) Body.Add(MinIntoP(Expression.Call(PF.GetMethod(nameof(PerturbFunctions.ArgOk))!, x[0].Re, x[0].Im, x[1].Re, x[1].Im)));
+                    }
+                    else
+                    {
+                        // d arg = Im(T / V)
+                        var den = Let(Expression.Add(Expression.Multiply(x[0].Re, x[0].Re), Expression.Multiply(x[0].Im, x[0].Im)));
+                        for (int i = 1; i < x.Length; i++)
+                            r[i] = Let(Expression.Divide(Expression.Subtract(Expression.Multiply(x[i].Im, x[0].Re), Expression.Multiply(x[i].Re, x[0].Im)), den));
+                    }
+                    break;
+                }
+            }
+            if (r.Length > 1 && r[1] == null) for (int i = 1; i < r.Length; i++) r[i] ??= Zero;
+            return r;
+        }
+
+        private int Width => Mode switch { Mode.Second => 3, Mode.Limit => 5, _ => 2 };
+
+        // A comparison l ⋚ r: the outcome at the reference and (Delta / Pole) at the pixel, whose
+        // difference is (l − r) + (dl − dr); and the close-call / limit bookkeeping.
+        private (Expression Ref, Expression Pix) Compare(CmpOp op, Expression[] l, Expression[] r)
+        {
+            if (Mode == Mode.Pole)
+                Body.Add(MinIntoP(Expression.Call(typeof(PerturbFunctions).GetMethod(nameof(PerturbFunctions.CmpOk))!, l[0], r[0], l[1], r[1])));
+            if (Mode == Mode.Limit)
+            {
+                var g = new Expression[5];
+                for (int i = 1; i < 5; i++) g[i] = Let(Expression.Subtract(l[i], r[i]));
+                LimitAt(Let(AbsE(Expression.Subtract(l[0], r[0]))), g);
+            }
+            Expression Test(Expression d) => op switch
+            {
+                CmpOp.Gt => Expression.GreaterThan(d, Zero),
+                CmpOp.Lt => Expression.LessThan(d, Zero),
+                CmpOp.Ge => Expression.GreaterThanOrEqual(d, Zero),
+                CmpOp.Le => Expression.LessThanOrEqual(d, Zero),
+                CmpOp.Eq => Expression.Equal(d, Zero),
+                _ => Expression.NotEqual(d, Zero),
+            };
+            var refDiff = Let(Expression.Subtract(l[0], r[0]));
+            var tr = Test(refDiff);
+            if (Mode is not (Mode.Delta or Mode.Pole)) return (tr, tr);
+            var pixDiff = Let(Expression.Add(refDiff, Expression.Subtract(l[1], r[1])));
+            return (tr, Test(pixDiff));
+        }
+
+        private (Expression Ref, Expression Pix) Cond(CondNode c)
+        {
+            switch (c)
+            {
+                case Cmp k: return Compare(k.Op, Term(k.Left), Term(k.Right));
+                // Both sides are evaluated (their close-call checks all count), then combined.
+                case CondAnd a: { var (l, lp) = Cond(a.Left); var (r, rp) = Cond(a.Right); return (Expression.And(l, r), Expression.And(lp, rp)); }
+                case CondOr o: { var (l, lp) = Cond(o.Left); var (r, rp) = Cond(o.Right); return (Expression.Or(l, r), Expression.Or(lp, rp)); }
+                case CondNot n: { var (t, tp) = Cond(n.Operand); return (Expression.Not(t), Expression.Not(tp)); }
+                default: throw new NotSupportedException(c.GetType().Name);
+            }
+        }
+
+        // The branch the reference takes (a when the test holds), with δ′ switched for a pixel that takes
+        // the other: (its branch − the reference's) at the reference's values, plus its branch's δ.
+        private Cx[] Choose((Expression Ref, Expression Pix) truth, Cx[] a, Cx[] b)
+        {
+            var t = Expression.Variable(typeof(bool)); var tp = Expression.Variable(typeof(bool));
+            Vars.Add(t); Vars.Add(tp);
+            Body.Add(Expression.Assign(t, truth.Ref)); Body.Add(Expression.Assign(tp, truth.Pix));
+            var r = new Cx[a.Length];
+            r[0] = new Cx(Let(Expression.Condition(t, a[0].Re, b[0].Re)), Let(Expression.Condition(t, a[0].Im, b[0].Im)));
+            if (Mode is Mode.Delta or Mode.Pole)
+            {
+                Expression D(Expression aV, Expression bV, Expression aD, Expression bD)
+                    => Expression.Condition(t,
+                        Expression.Condition(tp, aD, Expression.Add(Expression.Subtract(bV, aV), bD)),
+                        Expression.Condition(tp, Expression.Add(Expression.Subtract(aV, bV), aD), bD));
+                r[1] = new Cx(Let(D(a[0].Re, b[0].Re, a[1].Re, b[1].Re)), Let(D(a[0].Im, b[0].Im, a[1].Im, b[1].Im)));
+                return r;
+            }
+            for (int i = 1; i < a.Length; i++)
+                r[i] = new Cx(Let(Expression.Condition(t, a[i].Re, b[i].Re)), Let(Expression.Condition(t, a[i].Im, b[i].Im)));
+            return r;
+        }
+
+        private static Cx[] RealOf(Cx[] x) => x.Select(c => new Cx(c.Re, Zero)).ToArray();
+
+        private Cx[] MinMax(bool isMin, Cx[] a, Cx[] b)
+        {
+            var ra = RealOf(a); var rb = RealOf(b);
+            var lt = Compare(CmpOp.Lt, ra.Select(c => c.Re).ToArray(), rb.Select(c => c.Re).ToArray());
+            return isMin ? Choose(lt, ra, rb) : Choose(lt, rb, ra);
+        }
+
+        private Cx[] ClampJ(Cx[] x, Cx[] lo, Cx[] hi)
+        {
+            var rx = RealOf(x); var rl = RealOf(lo); var rh = RealOf(hi);
+            var below = Compare(CmpOp.Lt, rx.Select(c => c.Re).ToArray(), rl.Select(c => c.Re).ToArray());
+            var above = Compare(CmpOp.Gt, rx.Select(c => c.Re).ToArray(), rh.Select(c => c.Re).ToArray());
+            return Choose(below, rl, Choose(above, rh, rx));
+        }
+
         private Cx[] Const(double re, double im) => Mode switch
         {
             Mode.Second => [K(re, im), K(0, 0), K(0, 0)],
@@ -589,6 +824,16 @@ public sealed class R2Plan : IRealPerturbationPlan
                 case Cos u: return FuncJ(3, Emit(u.Operand), 0);
                 case Sqrt u: return FuncJ(4, Emit(u.Operand), 0.5);
                 case PowC w: return FuncJ(4, Emit(w.Base), ConstValue(w.Exp));
+                case Floor u: return Pw(0, Emit(u.Operand), IsReal(u.Operand));   // #1915
+                case Round u: return Pw(1, Emit(u.Operand), IsReal(u.Operand));
+                case Ceil u: return Pw(2, Emit(u.Operand), IsReal(u.Operand));
+                case Trunc u: return Pw(3, Emit(u.Operand), IsReal(u.Operand));
+                case Fract u: return Pw(4, Emit(u.Operand), IsReal(u.Operand));
+                case Sign u: return Pw(5, Emit(u.Operand), IsReal(u.Operand));
+                case Min m: return MinMax(true, Emit(m.Left), Emit(m.Right));
+                case Max m: return MinMax(false, Emit(m.Left), Emit(m.Right));
+                case Clamp c: return ClampJ(Emit(c.X), Emit(c.Lo), Emit(c.Hi));
+                case If f: { var t = Cond(f.Cond); return Choose(t, Emit(f.Then), Emit(f.Else)); }
                 case Pow w:
                 {
                     if (w.Exponent == 0) return Const(1, 0);

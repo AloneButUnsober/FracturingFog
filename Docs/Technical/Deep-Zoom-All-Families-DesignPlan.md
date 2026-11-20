@@ -200,6 +200,8 @@ reference's cut is a glitch → direct evaluation.
 - **Effort.** Worth one slice once the engine exists, since it is just the glitch path. Until then
   these formulas zoom deep via direct per-pixel DD / QD / OD only (CalcGen already has DD / QD direct)
   and carry a slow-render warning.
+- **As built (#1915): better than agreement.** A pixel on another piece switches exactly, and only
+  close calls fall back; see D10 in §9.
 
 ### 4.7 Other 2D / 4D iterations: Bicomplex, Coquaternion, Julibrot / JulibrotPair, Lyapunov, Logistic
 
@@ -600,6 +602,40 @@ in the same PR.
   - at 1e11: Glynn 1,498 and `exp(z) + c` 1,535 of 1,536 against the double paths.
 - **Mutants caught:** naive exp and sin differences, the cos sign, the 2πk shift removed, the
   cut / zero limit removed, the tangent using f instead of f′.
+
+**D10 as built (#1915).**
+- **Scope:** `R2Plan` takes floor, round, ceil, trunc, fract, sign, min, max, clamp and `if`; `mod`
+  lowers to floor.
+- **Branch switching, not branch agreement.** The plan above proposed branch agreement: flag every
+  pixel that leaves the reference's piece. As built, such a pixel switches exactly.
+  - **Floor and its kin:** δ′ is the jump f(V + D) − f(V), an exact integer difference. Fract's
+    jump is D minus floor's.
+  - **if / min / max / clamp:** δ′ = (pixel branch − reference branch) at the reference's values,
+    plus the pixel branch's δ.
+  - The pixel's comparison is decided on (l − r) + (dl − dr), so there is no cancellation.
+- **Close calls fall back.** Only an argument within 1e-12 (relative) of a jump, at the pixel or at
+  the reference, goes to another reference or to direct BigFloat (`PoleGlitches`). Two exceptions:
+  - an argument exactly equal to the reference's is accepted (step 0);
+  - a reference argument of exactly 0 is trusted, since z₀ = 0 and the rebase target Z₀ = 0 are
+    exact zeros. Without that waiver every rebased pixel of `re z > 0` or `floor(re z)` was a close
+    call, and those views ran entirely on direct BigFloat.
+- **BLA:** the Limit jet keeps it inside the distance to the nearest jump.
+- **Reference:** `BigFloatMath` gains exact Floor / Ceil / Trunc / Round (half to even).
+- **Results** (`S1915BranchAgreementTests`): every view matches direct BigFloat at 1e40 and 1e100,
+  176/176.
+  - **Inside one piece:** `clamp(re z, −100, 100)` flags nothing.
+  - **Across pieces:** `clamp(re z, −0.3, 0.3)`, `if re z > 0 then z² + c else z² − c` and
+    `0.05·floor(2·re z)`. 114–176 of the 176 sampled pixels leave the reference's piece, yet the
+    views use one reference, flag no close calls and need no direct pixels.
+  - **Seeded close call:** re c = ½, so pixels straddle floor's jump below double's resolution. The
+    fallback takes them.
+- **Mutants:** all six caught:
+  - no switch for floor;
+  - the if switch without the branches' difference;
+  - the pixel's outcome taken as the reference's;
+  - each close-call test disabled;
+  - the jump limit removed. Only a radius test catches this one, because the views' BLA radii never
+    span a jump.
 
 **Order of value:** D1 → D2 → D3 gives deep zoom to Multibrot, Julia, Generated Z2–Z5 and every
 polynomial user equation. D4 / D5 add Tricorn and Burning Ship, which is the original #1253. D6–D10
