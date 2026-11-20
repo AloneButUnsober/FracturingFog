@@ -74,8 +74,23 @@ using FracturingFog.Models;
 
 namespace FracturingFog.Calculators.Generated;
 
-public sealed class {{CLASS_NAME}} : IFractalCalculator, IDeepCentre, IHeightFieldSource, IDisposable
+public sealed class {{CLASS_NAME}} : IFractalCalculator, IDeepCentre, IDeepZoom, IHeightFieldSource, IDisposable
 {
+    // #1957 — the zoom past double (IDeepZoom, as EscapeTimeCalculator's #1921).
+    private double _zoomLog10 = double.NaN, _zoomLog10Stamp;
+
+    /// <inheritdoc/>
+    public double ZoomLog10
+        => !double.IsNaN(_zoomLog10) && _zoomLog10Stamp.Equals(Zoom) ? _zoomLog10 : Math.Log10(Zoom);
+
+    /// <inheritdoc/>
+    public void SetZoomLog10(double log10)
+    {
+        Zoom = FracturingFog.ViewState.ZoomLog.FromLog10(log10);
+        _zoomLog10 = log10;
+        _zoomLog10Stamp = Zoom;
+    }
+
     public int Width  { get; private set; }
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
@@ -827,14 +842,23 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IDeepCentre, IHeightFie
         BuildEnginePlan();
         if (s_enginePlan == null && s_enginePlan2 == null) { EngineRefusal = s_engineWhy ?? "no plan for this equation"; return false; }
 
-        int prec = BigFloat.PrecisionForZoom(Math.Log10(Zoom));
+        double zl = ZoomLog10;   // #1957: past double, the log zoom
+        int prec = BigFloat.PrecisionForZoom(zl);
         var centre = CenterExact is { } e ? e.WithPrecision(prec) : ExactCentre.FromDeep(GetDeepCentre(), prec);
         int maxIt = MaxIterations;
+        // #1957 — the pixel as a FloatExp past the double-δ tier; dz/dc in the distance unit (2^ue,
+        // MandelbrotCalculator's #1783; 0 below ~1e27), which ColorFor turns back into complex-plane
+        // units for the map.
+        double pxLog10 = Math.Log10(3.5 / Math.Max(Width, Height)) - zl;
+        FloatExp? pixelFx = pxLog10 < -280 ? FloatExp.FromLog10(pxLog10) : null;
+        int ue = MandelbrotCalculator.DistanceUnit(scale, pxLog10).Exp2;
         FracturingFog.Perturbation.PerturbationEngine.PixelSink sink = (idx, iter, zr, zi, dvr, dvi)
-            => ColorBuffer[idx] = ColorFor(iter, zr, zi, dvr, dvi, maxIt, idx);
+            => ColorBuffer[idx] = ColorFor(iter, zr, zi, dvr, dvi, maxIt, idx, ue);
         LastPerturbationStats = s_enginePlan2 != null
-            ? FracturingFog.Perturbation.PerturbationEngine.RenderTwoState(s_enginePlan2, centre, scale, Width, Height, maxIt, sink, ct)
-            : FracturingFog.Perturbation.PerturbationEngine.Render(s_enginePlan!, centre, scale, Width, Height, maxIt, sink, ct);
+            ? FracturingFog.Perturbation.PerturbationEngine.RenderTwoState(s_enginePlan2, centre, scale, Width, Height, maxIt, sink, ct,
+                pixelScale: pixelFx, derivExp2: ue)
+            : FracturingFog.Perturbation.PerturbationEngine.Render(s_enginePlan!, centre, scale, Width, Height, maxIt, sink, ct,
+                pixelScale: pixelFx, derivExp2: ue);
         LastPrecisionLabel = "PT";
         return true;
     }
@@ -3088,7 +3112,9 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IDeepCentre, IHeightFie
     // Themes that ignore these inherit the default 3-arg fallback via the
     // interface's default implementations.
 
-    private uint ColorFor(int it, double zr, double zi, double dr, double di, int maxIt, int bufIdx = -1)
+    // #1957 — ue: dr, di are in the distance unit (2^ue); the thresholds scale with it, and the map
+    // gets complex-plane units. ue = 0: as before, bit for bit.
+    private uint ColorFor(int it, double zr, double zi, double dr, double di, int maxIt, int bufIdx = -1, int ue = 0)
     {
         if (it >= maxIt)
         {
@@ -3131,16 +3157,18 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IDeepCentre, IHeightFie
             double u = zr * dr + zi * di;
             double v = zi * dr - zr * di;
             double m = Math.Sqrt(u * u + v * v);
-            if (m > 1e-30) { nx = (float)(u / m); ny = (float)(v / m); }
+            double floor = ue == 0 ? 1e-30 : Math.ScaleB(1e-30, -ue);
+            if (m > floor) { nx = (float)(u / m); ny = (float)(v / m); }
 
-            if (dMag > 1e-30 && zMag > 1.0)
-                distance = (float)(0.5 * zMag * Math.Log(zMag) / dMag);
+            if (dMag > floor && zMag > 1.0)
+                distance = (float)(ue == 0 ? 0.5 * zMag * Math.Log(zMag) / dMag
+                                           : Math.ScaleB(0.5 * zMag * Math.Log(zMag) / dMag, -ue));
         }
 #pragma warning restore CS0162
 
         return (uint)ColorMap.Map(
             smooth, distance, maxIt, nx, ny,
-            (float)zr, (float)zi, (float)dr, (float)di);
+            (float)zr, (float)zi, MandelbrotCalculator.MapDz(dr, ue), MandelbrotCalculator.MapDz(di, ue));
     }
 
     // Deep-zoom variant: |z|² already computed in DoubleDouble by the

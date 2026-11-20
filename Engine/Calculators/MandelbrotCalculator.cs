@@ -932,7 +932,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     // #1843 — a buffer dz/dc (distance unit) as a map with shift <paramref name="exp2"/>
     // takes it: complex-plane units (· 2^exp2) unless it opts in (exp2 = 0).
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static float MapDz(double unitDz, int exp2)
+    public static float MapDz(double unitDz, int exp2)
         => exp2 == 0 ? (float)unitDz : (float)Math.ScaleB(unitDz, exp2);
 
     // #1783 — a buffer distance as a map with shift <paramref name="exp2"/> takes it.

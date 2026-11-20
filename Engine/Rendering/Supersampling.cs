@@ -643,7 +643,9 @@ namespace FracturingFog.Rendering
             {
                 _calc = calc;
                 _scale = (3.5 / Math.Max(calc.Width, calc.Height)) / calc.Zoom;
-                _pxLog10 = Math.Log10(3.5 / Math.Max(calc.Width, calc.Height)) - Math.Log10(calc.Zoom);
+                // Past double the exact centre moves by the log zoom's pixel (#1921 / #1957: IDeepZoom).
+                _pxLog10 = Math.Log10(3.5 / Math.Max(calc.Width, calc.Height))
+                         - (calc is IDeepZoom dz ? dz.ZoomLog10 : Math.Log10(calc.Zoom));
                 _cx0 = calc.CenterX; _cy0 = calc.CenterY;
                 if (calc is IDeepCentre d) { _deep = d; _c0 = d.GetDeepCentre(); _e0 = d.CenterExact; }
             }

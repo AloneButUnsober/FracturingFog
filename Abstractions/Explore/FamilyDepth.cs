@@ -18,9 +18,9 @@
 //     #1912 (a δ per state), Glynn since #1913 (elementary-function differences, BigFloatMath).
 //   • #1921 (D2b): past ~1e286 the engine holds δ scaled (d·2^s) and the derivative as d·2^t, and
 //     EscapeTimeCalculator takes a log zoom (IDeepZoom), so Julia, Multibrot, Tricorn, Burning Ship,
-//     Magnet 1 / 2 and Glynn have no limit (Mandelbrot's). Phoenix and Spider (the two-state engine)
-//     stay at 1e290: their δ is double. So does every other engine user (User Equation, the CalcGen
-//     template, TearDrop): they pass a double zoom (#1957).
+//     Magnet 1 / 2 and Glynn have no limit (Mandelbrot's). #1957 did the same for the two-state engine
+//     (Phoenix, Spider) and the other engine users (User Equation, the CalcGen template, TearDrop):
+//     no limit for any engine family now.
 //   • Everything else renders in double: 1e13 (AutoExplorer.DoubleMaxZoom).
 
 using FracturingFog.Models;
@@ -41,14 +41,15 @@ public static class FamilyDepth
     public static double MaxZoomFor(FractalType t) => t switch
     {
         FractalType.Mandelbrot => QualityPreset.Deepest.ZoomMax,
-        FractalType.TearDrop => EngineDoubleDeltaMaxZoom,                         // #1918
-        FractalType.GeneratedMandelbrotZ2 or FractalType.GeneratedMandelbrotZ3
+        // #1917 / #1918 on the engine; unlimited since #1957 (the log zoom, the scaled δ and derivative).
+        FractalType.TearDrop
+            or FractalType.GeneratedMandelbrotZ2 or FractalType.GeneratedMandelbrotZ3
             or FractalType.GeneratedMandelbrotZ4 or FractalType.GeneratedMandelbrotZ5
-            or FractalType.GeneratedTricorn or FractalType.GeneratedBurningShip => EngineDoubleDeltaMaxZoom,   // #1917
+            or FractalType.GeneratedTricorn or FractalType.GeneratedBurningShip => QualityPreset.Deepest.ZoomMax,
         // #1907, #1909-#1911, #1913; unlimited since #1921 (the scaled δ and derivative, the log zoom).
         FractalType.Julia or FractalType.Multibrot or FractalType.Tricorn or FractalType.BurningShip
             or FractalType.Magnet1 or FractalType.Magnet2 or FractalType.Glynn => QualityPreset.Deepest.ZoomMax,
-        FractalType.Phoenix or FractalType.Spider => EngineDoubleDeltaMaxZoom,    // #1912
+        FractalType.Phoenix or FractalType.Spider => QualityPreset.Deepest.ZoomMax,   // #1912; unlimited since #1957
         _ => AutoExplorer.DoubleMaxZoom,
     };
 }

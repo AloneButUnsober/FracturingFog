@@ -652,6 +652,8 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
         result back;
       - where the reference is as small as δ, z = Z + δ is formed in the scaled unit;
       - the derivative is held as d·2^t once it passes 2^600.
+      - #1957 extends the same to the two-state engine (Phoenix, Spider, User Equation prev), with
+        one scale for both states.
 - <a id="heiland-allen-eva-2019"></a>**Claude Heiland-Allen.** *At the Helm of the Burning Ship.*
   - **Venue:** Proceedings of EVA London 2019, Electronic Workshops in Computing, BCS Learning &
     Development, July 2019, pp. 402–408. <http://dx.doi.org/10.14236/ewic/EVA2019.74>.
