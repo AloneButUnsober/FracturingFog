@@ -1420,6 +1420,8 @@ namespace FracturingFog.Models
         /// hole's shadow is filled without tracing its inside. Faster in shadow-heavy views; can miss
         /// an island of another fate wholly inside a block. Default false.</summary>
         public bool BlackHoleSolidBlocks { get; set; }
+        /// <summary>#1926 — GPU trace arithmetic (see <see cref="FracturingFog.BlackHoleGpuPrecision"/>). Default Double.</summary>
+        public BlackHoleGpuPrecision BlackHoleGpuPrecision { get; set; } = BlackHoleGpuPrecision.Double;
 
         // ── Slit cascade (#1569, double-slit epic #1565) ──────────────────
         /// <summary>Slit cascade: children per slit, N (2..16). N ≥ 3 for the fringe
@@ -2515,6 +2517,7 @@ namespace FracturingFog.Models
                 BlackHoleSkySeed = BlackHoleSkySeed,
                 BlackHoleSkyRotation = BlackHoleSkyRotation,
                 BlackHoleSolidBlocks = BlackHoleSolidBlocks,
+                BlackHoleGpuPrecision = BlackHoleGpuPrecision,
                 SlitCascadeChildren = SlitCascadeChildren,
                 SlitCascadeRatio = SlitCascadeRatio,
                 SlitCascadeDepth = SlitCascadeDepth,

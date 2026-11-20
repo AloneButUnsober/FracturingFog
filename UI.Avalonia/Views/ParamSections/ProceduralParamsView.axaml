@@ -1434,7 +1434,7 @@
         <!-- #1923 — black hole shadows (Majumdar-Papapetrou). -->
         <Grid IsVisible="{Binding IsBlackHoleShadow}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Layout:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding BlackHoleLayouts}"
@@ -1530,6 +1530,12 @@
                            Minimum="-360" Maximum="360" Increment="5" FormatString="0.##########"
                            Value="{Binding BlackHoleSkyRotation, Mode=TwoWay}" Margin="0,2"
                            ToolTip.Tip="Turns the sky about the vertical axis; animate it to watch the lensed copies slide." />
+            <!-- #1926 GPU precision -->
+            <TextBlock Grid.Row="21" Grid.Column="0" Text="GPU precision:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="21" Grid.Column="1"
+                      ItemsSource="{Binding BlackHoleGpuPrecisions}"
+                      SelectedItem="{Binding BlackHoleGpuPrecision, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="With GPU render on (Lighting &amp; FX). Double: the CPU's arithmetic, the same image. Single: about 100x faster than Double on most consumer GPUs (their double precision is slow), but a few pixels on the fractal edges can move (about 0.005 % at the default view, more when zoomed deep). Auto still keeps the CPU when it is faster." />
             <!-- #1970 solid blocks -->
             <CheckBox Grid.Row="20" Grid.Column="1" Content="Solid blocks (faster shadows)"
                       IsChecked="{Binding BlackHoleSolidBlocks, Mode=TwoWay}" Margin="0,2"

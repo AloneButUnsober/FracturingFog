@@ -101,7 +101,8 @@ public static class ScatteringIntegrator
     private const double A61 = 9017.0 / 3168.0, A62 = -355.0 / 33.0, A63 = 46732.0 / 5247.0, A64 = 49.0 / 176.0, A65 = -5103.0 / 18656.0;
     private const double B1 = 35.0 / 384.0, B3 = 500.0 / 1113.0, B4 = 125.0 / 192.0, B5 = -2187.0 / 6784.0, B6 = 11.0 / 84.0;
     // Error coefficients: 5th-order weights minus the embedded 4th-order ones.
-    private const double E1 = 71.0 / 57600.0, E3 = -71.0 / 16695.0, E4 = 71.0 / 1920.0,
+    // internal: the GPU twin (BlackHoleShadowGpuCalculator, #1926) reuses the exact constants.
+    internal const double E1 = 71.0 / 57600.0, E3 = -71.0 / 16695.0, E4 = 71.0 / 1920.0,
                          E5 = -17253.0 / 339200.0, E6 = 22.0 / 525.0, E7 = -1.0 / 40.0;
 
     private const double Safety = 0.9, MinFactor = 0.2, MaxFactor = 5.0;
