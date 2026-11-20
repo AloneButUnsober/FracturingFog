@@ -653,6 +653,8 @@ public static class FractalAnimatableParamsMap
         new("BlackHoleInclination", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 180.0,
             Notes: "Camera inclination from the -z axis in degrees (90 = side-on)."),
         new("BlackHoleAzimuth", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 360.0, Notes: "Camera azimuth about z in degrees."),
+        new("BlackHoleCameraDistance", AnimatableParamKind.ScalarDouble, Min: 5.0, Max: 200.0,
+            Notes: "#1928 — camera distance (pinhole: the holes grow as it closes in; parallel: little change)."),
         new("BlackHoleChannelScale", AnimatableParamKind.ScalarDouble, Min: 0.05, Max: 10.0,
             Notes: "#1924 — palette density of the colouring channel (stripes per unit)."),
         new("BlackHoleSkyRotation", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 360.0,

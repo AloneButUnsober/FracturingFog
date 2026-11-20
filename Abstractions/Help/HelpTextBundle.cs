@@ -5442,6 +5442,117 @@ and the camera is Cam3DFamily=MirrorSpheres with Cam3DDistance /
 Cam3DTheta / Cam3DPhi.
 ";
 
+        public const string MathBlackHoleShadowText =
+@"=== Black Hole Shadows ===
+
+Two or more black holes held still, side by side, and the shadow
+they cast on the sky behind them. Each hole is extremally charged
+(its charge balances its mass), so their pull and push cancel and
+the holes can stand still. This is the Majumdar-Papapetrou
+spacetime (Majumdar 1947, Papapetrou 1947). It is static, so
+there are no orbits, mergers or gravitational waves, only light.
+
+A single hole casts a round shadow. A pair casts two main shadows
+plus thin 'eyebrows' beside them. Each eyebrow holds smaller copies
+of the pair, and those hold smaller ones: a Cantor-set structure
+(Shipley & Dolan 2016; eyebrows first reported by Nitta, Chiba &
+Sugiyama 2011).
+
+=== What a pixel shows ===
+
+Each pixel follows one ray of light backwards from the camera
+until it falls into a hole or escapes to the distant sky.
+
+  Fall in   The pixel takes that hole's colour.
+  Escape    The pixel is coloured by the palette (how long the
+            light was delayed), or by the sky behind.
+  Cap       Rays still going at the step cap take the
+            theme's in-set colour.
+
+A ray that grazes the gap between the holes can circle one, then
+the other, many times before it decides, and a tiny change of aim
+changes where it ends. That is chaotic scattering, and it is why
+the shadow edges are fractal.
+
+=== Camera ===
+
+  Projection  Parallel (default, as in Shipley & Dolan): every
+              ray starts on a flat plane far away, so the view
+              is the plane of impact parameters. Pinhole: rays
+              leave one point, like a real camera.
+  Distance    How far away the camera is (in units of mass).
+  Inclination Angle from the holes' axis. 90 = side on (the
+              eyebrows); near 0 or 180 = end on (nested rings).
+  Azimuth     Turns the camera round the axis.
+
+=== Layouts ===
+
+  Binary    Two holes on the axis, masses M1 and M2, a apart.
+  Single    One hole (a round shadow, edge at 4 M).
+  Triangle  Three equal holes, side a.
+  Square    Four equal holes, side a.
+  Custom    Up to four holes as x,y,z,m;x,y,z,m;...
+
+=== Colouring ===
+
+  Fate              Hole colours plus the escape palette.
+  Winding           Turns round the holes (stripes at the nested
+                    eyebrow levels).
+  Delay             How long the light took.
+  Steps             Integrator effort (where the work goes).
+  Closest approach  How near the ray came to a hole.
+  Deflection        How far the light was bent.
+  Sky               Off, Environment (the Lighting & FX sky or
+                    HDRI), Checker, Grid or Stars, seen bent
+                    round the holes. Use Pinhole for true parallax.
+
+=== Cost ===
+
+There is no formula for a pixel: each ray is integrated step by
+step (Dormand-Prince 5(4), adaptive), a few hundred steps per ray,
+more near the edges. Expect seconds per frame, not milliseconds.
+Solid blocks skips the inside of big shadows. The GPU (ILGPU) can
+trace in double or in single precision (much faster on most
+cards, slightly moves pixels on the edges).
+
+Deep zoom: past about 10^10 beyond the default view, double
+precision cannot place the edges any more. Exact edges past double
+(on by default, Fate colouring) retraces just the edge pixels in
+double-double; the status bar shows how many. Those rays are slow.
+
+=== Presets ===
+
+  Black Hole Shadow - Equal-Mass Pair      Shipley & Dolan's setup.
+  Black Hole Shadow - Eyebrow Hierarchy    Nested eyebrows, a = 1.
+  Black Hole Shadow - Unequal Masses
+  Black Hole Shadow - Triangle of Three
+  Black Hole Shadow - Inclined Camera
+  Black Hole Shadow - Lensed Starfield     Pinhole camera, stars.
+
+Bound animations:
+  'Black hole: closing pair'   separation
+  'Black hole: camera swing'   inclination
+  'Black hole: turning sky'    sky rotation
+
+=== Batch ===
+
+Every setting is a --param key, e.g.
+  --fractal BlackHoleShadow --x 0 --y 0 --zoom 0.14
+  --param BlackHoleSeparation=1 --param BlackHoleInclination=60
+and --animation ""Black hole: closing pair"" animates a video.
+
+=== Sources and prior art ===
+
+FF follows Shipley & Dolan (2016) for the physics, the camera and
+the pictures. Other work on the same light: Alonso, Ruiz &
+Sanchez-Hernandez (2007) on photon escape from two such holes;
+Yumoto et al. (2012) on multi-hole shadows (FF's checks use their
+results); Kluitenberg, Roest & Seri (2022) on proving the chaos;
+and Trettel (Bridges 2025), who renders several charged holes
+in real time by treating space as a glass of varying refractive
+index. Full references: Docs/Resources-Bibliography.md.
+";
+
         public const string MathBicomplexText =
 @"=== Bicomplex (Tessarine) Mandelbrot ===
 

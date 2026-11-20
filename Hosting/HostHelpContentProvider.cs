@@ -117,6 +117,7 @@ namespace FracturingFog.Hosting
             new("Apollonian",    HelpTextBundle.MathApollonianText),
             new("Kleinian",      HelpTextBundle.MathKleinianText),
             new("Wada Mirror Spheres", HelpTextBundle.MathMirrorSpheresText),   // #1442
+            new("Black Hole Shadows", HelpTextBundle.MathBlackHoleShadowText),   // #1928
             new("Math Plane",    HelpTextBundle.MathPlaneText),             // #1555
             new("Math Plane 3D", HelpTextBundle.MathPlane3DText),           // #1719
             new("Double Slit",   HelpTextBundle.MathDoubleSlitText),        // #1573
@@ -174,6 +175,10 @@ namespace FracturingFog.Hosting
                 new("Bicomplex Mandelbrot", HelpTextBundle.MathBicomplexText),
                 new("Kleinian",      HelpTextBundle.MathKleinianText),
                 new("Wada Mirror Spheres", HelpTextBundle.MathMirrorSpheresText),   // #1442
+            }),
+            new("Scattering", new HelpSubTab[]   // #1928
+            {
+                new("Black Hole Shadows", HelpTextBundle.MathBlackHoleShadowText),
             }),
             new("Math Plane", new HelpSubTab[]   // #1555
             {
