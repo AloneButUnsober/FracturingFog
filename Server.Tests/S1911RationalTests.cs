@@ -53,7 +53,7 @@ public sealed class S1911RationalTests(ITestOutputHelper output)
     private static BigFloat K(double v, int p) => BigFloat.FromDouble(v, p);
 
     // ((z² + c − 1) / (2z + c − 2))²
-    private static readonly Step Magnet1 = (zr, zi, cr, ci, p) =>
+    internal static readonly Step Magnet1 = (zr, zi, cr, ci, p) =>
     {
         var (sr, si) = M(zr, zi, zr, zi, p);
         var nr = BigFloat.Sub(BigFloat.Add(sr, cr, p), K(1, p), p); var ni = BigFloat.Add(si, ci, p);
@@ -252,6 +252,6 @@ public sealed class S1911RationalTests(ITestOutputHelper output)
         Assert.True(distinct >= 5, $"precondition: structure ({distinct})");
         Assert.True(eq >= W * H * 0.9, $"{eq}/{W * H} equal at the switch");
         Assert.True(col >= W * H * 0.9, $"{col}/{W * H} colours equal at the switch");
-        Assert.Equal(FamilyDepth.EngineDoubleDeltaMaxZoom, FamilyDepth.MaxZoomFor(t));
+        Assert.Equal(QualityPreset.Deepest.ZoomMax, FamilyDepth.MaxZoomFor(t));   // #1921: unlimited
     }
 }

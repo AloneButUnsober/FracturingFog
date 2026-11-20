@@ -359,7 +359,7 @@ public sealed class S1909ConjR2Tests(ITestOutputHelper output)
         output.WriteLine($"Tricorn at 1e11: engine vs SP {eq}/{W * H} equal, {distinct} distinct; {pt.LastPerturbationStats}");
         Assert.True(distinct >= 5, $"precondition: structure ({distinct})");
         Assert.True(eq >= W * H * 0.9, $"{eq}/{W * H} equal at the switch");
-        Assert.Equal(FamilyDepth.EngineDoubleDeltaMaxZoom, FamilyDepth.MaxZoomFor(FractalType.Tricorn));
+        Assert.Equal(QualityPreset.Deepest.ZoomMax, FamilyDepth.MaxZoomFor(FractalType.Tricorn));   // #1921: unlimited
     }
 
     [Fact]

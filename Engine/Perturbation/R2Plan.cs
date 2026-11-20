@@ -375,6 +375,14 @@ public sealed class R2Plan : IRealPerturbationPlan
         j = new RealMat2(a, c, b, d);
     }
 
+    // #1921 — the same with the pixel direction weighted (a Jacobian held as J·2^t).
+    public void JacobianStepScaled(double zr, double zi, double cr, double ci, ref RealMat2 j, double cWeight)
+    {
+        var (a, b) = _tan(zr, zi, cr, ci, j.M11, j.M21, cWeight, 0);
+        var (c, d) = _tan(zr, zi, cr, ci, j.M12, j.M22, 0, cWeight);
+        j = new RealMat2(a, c, b, d);
+    }
+
     // The conformal members are not used for a real plan (IRealPerturbationPlan).
     public Bla Level0(double zr, double zi, double cr, double ci, double epsilon)
         => throw new NotSupportedException("R2Plan skips with Bla2 (Level0R2).");

@@ -93,7 +93,7 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
 
     /// <summary>#1029 — complex-plane width of one pixel, for the Distance relief
     /// height source.</summary>
-    public double DistancePixelScale => (3.5 / Math.Max(Width, Height)) / Zoom;
+    public double DistancePixelScale => _distExp2 != 0 ? _distPixelScale : (3.5 / Math.Max(Width, Height)) / Zoom;   // #1921: in the distance unit
 
     /// <summary>#1029 — the distance estimate |z|·log|z| / |dz| from the final z / dz
     /// buffers (0 for in-set pixels). The GPU-palette path colours on the GPU and skips
@@ -393,6 +393,7 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
     {
         ColorMap.MaxIterations = MaxIterations;
         LastPixelScale = (3.5 / Math.Max(Width, Height)) / Zoom;
+        ResetDistanceUnit();   // #1921: the deep path sets its own
         // Push the per-frame pixel span to distance-estimation themes so they
         // normalise by *this* fractal's scale, not a stale MandelbrotCalculator
         // static (matches MandelbrotCalculator.Calculate).
@@ -1276,17 +1277,22 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
             float smooth = (float)(iters + 1.0 - Math.Log2(Math.Log2(mag)));
             SmoothBuffer[idx] = smooth;
 
+            // #1921 — dr, di are in the distance unit (2^e) on a deep frame: the thresholds scale
+            // with it, and the map gets complex-plane units unless it opts in. e = 0: as before.
+            int ue = _distExp2;
             double dMag = Math.Sqrt(dr * dr + di * di);
-            float dist = dMag > 1e-10
-                ? (float)(mag * Math.Log(mag) / dMag) : 0f;
+            double q = mag * Math.Log(mag) / dMag;
+            bool hasDist = dMag > (ue == 0 ? 1e-10 : Math.ScaleB(1e-10, -ue));
+            float dist = hasDist ? (float)q : 0f;
             DistanceBuffer[idx] = dist;
+            float mapDist = !hasDist || _mapDistExp2 == 0 ? dist : (float)Math.ScaleB(q, -_mapDistExp2);
 
             // Normal estimation — same formula as MandelbrotCalculator.FillNormal
             double u = zr * dr + zi * di;
             double v = zi * dr - zr * di;
             double m = Math.Sqrt(u * u + v * v);
             float nx, ny;
-            if (m > 1e-10)
+            if (m > (ue == 0 ? 1e-10 : Math.ScaleB(1e-10, -ue)))
             {
                 nx = (float)(u / m);
                 ny = (float)(v / m);
@@ -1310,9 +1316,9 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
             // `iter`, Prime Escape); every other theme keeps the maxIter contract.
             int iterArg = colorMap is IColorMapHandlesInSet ? iters : maxIter;
             ColorBuffer[idx] = (uint)colorMap.Map(
-                smooth, dist, iterArg,
+                smooth, mapDist, iterArg,
                 nx, ny,
-                fzr, fzi, fdr, fdi);
+                fzr, fzi, MandelbrotCalculator.MapDz(dr, _mapDistExp2), MandelbrotCalculator.MapDz(di, _mapDistExp2));
         }
         else
         {
@@ -1338,9 +1344,10 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
     // Tricorn, Multibrot, Phoenix, Magnet1/2, Glynn, Spider.
 
     private EscapeTimeColorState ColorState() => new(
-        Width, Height, MaxIterations, LastPixelScale, ColorMap,
+        Width, Height, MaxIterations, _distExp2 != 0 && _mapDistExp2 == 0 ? _distPixelScale : LastPixelScale, ColorMap,   // #1921: the map's unit
         IterationBuffer, SmoothBuffer, DistanceBuffer, NormalXBuffer, NormalYBuffer,
-        FinalZrBuffer, FinalZiBuffer, FinalDrBuffer, FinalDiBuffer, ColorBuffer, _po);
+        FinalZrBuffer, FinalZiBuffer, FinalDrBuffer, FinalDiBuffer, ColorBuffer, _po,
+        mapDistExp2: _mapDistExp2);
 
     /// <inheritdoc/>
     public bool BuildHistogramCdf(out double[]? cdf, out int bins, out int sourceMaxIter)

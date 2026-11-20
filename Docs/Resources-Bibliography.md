@@ -637,6 +637,21 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
     - `Engine/Perturbation/R2Plan.cs` (#1909) perturbs Tricorn and user formulas with conj / re /
       im operator by operator.
     - A product's exact difference is V₁·D₂ + D₁·(V₂ + D₂).
+  - **Rescaling** (read again 2026-11-20 for #1921):
+    - The perturbed δ and the pixel offset are written as a common scale factor times values near 1,
+      so ordinary doubles hold past the exponent range. The scale is recomputed every few hundred
+      iterations.
+    - Where the reference gets very small, a full-range floatexp iteration is used instead (the page
+      credits that full-range step to Pauldelbrot), then the values are rescaled again.
+    - The dual-number derivative uses the same scale factor, which avoids its overflow.
+    - The page names no originator for rescaling itself.
+    - **FF use:** the engine's scaled-δ prelude and its scaled derivative (`Engine/Perturbation/
+      PerturbationEngine.cs`, #1921, epic #1253 D2b) are this technique. They are not new. FF's form:
+      - δ = d·2^s while |δ| < 2^−900;
+      - a single step runs the plan's own `DeltaStep` on δ and ε rescaled to ~2^−500, then scales the
+        result back;
+      - where the reference is as small as δ, z = Z + δ is formed in the scaled unit;
+      - the derivative is held as d·2^t once it passes 2^600.
 - <a id="heiland-allen-eva-2019"></a>**Claude Heiland-Allen.** *At the Helm of the Burning Ship.*
   - **Venue:** Proceedings of EVA London 2019, Electronic Workshops in Computing, BCS Learning &
     Development, July 2019, pp. 402–408. <http://dx.doi.org/10.14236/ewic/EVA2019.74>.

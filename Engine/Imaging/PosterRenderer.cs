@@ -1510,6 +1510,8 @@ namespace FracturingFog.Imaging
                     new OD(req.CenterY, req.CenterYLo, req.CenterY2, req.CenterY3, req.CenterY4, req.CenterY5, req.CenterY6, req.CenterY7)),
                     req.CenterExact);
             c.Zoom = req.Zoom;
+            // #1921 — past double, the log zoom (Zoom saturates there).
+            if (c is IDeepZoom dz && FracturingFog.ViewState.ZoomLog.BeyondDouble(req.DepthZoomLog10)) dz.SetZoomLog10(req.DepthZoomLog10);
             c.MaxIterations = req.MaxIterations;
             c.Quality = req.Quality;
             c.ColorMap = req.ColorMap;

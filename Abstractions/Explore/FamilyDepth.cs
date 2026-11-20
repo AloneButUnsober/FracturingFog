@@ -16,6 +16,11 @@
 //     Tricorn too since #1909 (an R2Plan with the 2×2 matrix BLA), Burning Ship since #1910
 //     (diffabs folds), Magnet 1 / 2 since #1911 (the quotient difference), Phoenix and Spider since
 //     #1912 (a δ per state), Glynn since #1913 (elementary-function differences, BigFloatMath).
+//   • #1921 (D2b): past ~1e286 the engine holds δ scaled (d·2^s) and the derivative as d·2^t, and
+//     EscapeTimeCalculator takes a log zoom (IDeepZoom), so Julia, Multibrot, Tricorn, Burning Ship,
+//     Magnet 1 / 2 and Glynn have no limit (Mandelbrot's). Phoenix and Spider (the two-state engine)
+//     stay at 1e290: their δ is double. So does every other engine user (User Equation, the CalcGen
+//     template, TearDrop): they pass a double zoom (#1957).
 //   • Everything else renders in double: 1e13 (AutoExplorer.DoubleMaxZoom).
 
 using FracturingFog.Models;
@@ -40,12 +45,10 @@ public static class FamilyDepth
         FractalType.GeneratedMandelbrotZ2 or FractalType.GeneratedMandelbrotZ3
             or FractalType.GeneratedMandelbrotZ4 or FractalType.GeneratedMandelbrotZ5
             or FractalType.GeneratedTricorn or FractalType.GeneratedBurningShip => EngineDoubleDeltaMaxZoom,   // #1917
-        FractalType.Julia or FractalType.Multibrot => EngineDoubleDeltaMaxZoom,   // #1907
-        FractalType.Tricorn => EngineDoubleDeltaMaxZoom,                          // #1909
-        FractalType.BurningShip => EngineDoubleDeltaMaxZoom,                      // #1910
-        FractalType.Magnet1 or FractalType.Magnet2 => EngineDoubleDeltaMaxZoom,   // #1911
+        // #1907, #1909-#1911, #1913; unlimited since #1921 (the scaled δ and derivative, the log zoom).
+        FractalType.Julia or FractalType.Multibrot or FractalType.Tricorn or FractalType.BurningShip
+            or FractalType.Magnet1 or FractalType.Magnet2 or FractalType.Glynn => QualityPreset.Deepest.ZoomMax,
         FractalType.Phoenix or FractalType.Spider => EngineDoubleDeltaMaxZoom,    // #1912
-        FractalType.Glynn => EngineDoubleDeltaMaxZoom,                            // #1913
         _ => AutoExplorer.DoubleMaxZoom,
     };
 }
