@@ -75,10 +75,12 @@ public sealed class R2Plan : IRealPerturbationPlan
     private readonly F8? _limit;  // (z, c, |ε|max, _) → the δ that reaches the nearest fold's sign change (#1910)
     private readonly F8? _pole;   // (Z, C, δ, ε) → min |Q + ΔQ|² / |Q|² over the divisions (#1911)
 
-    private R2Plan(AstNode step, double bailout2, (double, double) initialDerivative, bool parameterPlane = true)
+    private R2Plan(AstNode step, double bailout2, (double, double) initialDerivative, bool parameterPlane = true,
+                   (double, double) initialZ = default)
     {
         _step = step;
         ParameterPlane = parameterPlane;
+        InitialZ = initialZ;
         Bailout2 = bailout2;
         InitialDerivative = initialDerivative;
         _delta = Compile(step, Mode.Delta);
@@ -95,7 +97,7 @@ public sealed class R2Plan : IRealPerturbationPlan
             var j = DzJacobian(0, 0, cr, ci);
             zero &= j.M11 == 0 && j.M12 == 0 && j.M21 == 0 && j.M22 == 0;
         }
-        CanRebase = zero && parameterPlane;
+        CanRebase = zero && parameterPlane && initialZ == default;   // #1959: a rebase restarts at Z₀ = 0
     }
 
     /// <summary>The plan for z_{n+1} = <paramref name="step"/>(z, c), z₀ = 0, the pixel c; null with
@@ -106,6 +108,24 @@ public sealed class R2Plan : IRealPerturbationPlan
     {
         why = Unsupported(step);
         return why == null ? new R2Plan(step, bailout2, initialDerivative) : null;
+    }
+
+    /// <summary>#1959 — Nova, z − R·(z^d − 1)/(d·z^(d−1)) + c (NewtonCalculator's, #1294). Parameter plane:
+    /// c is the pixel and z₀ = <paramref name="z0"/>; Julia mode (<paramref name="juliaC"/> given): z₀ is the
+    /// pixel and c is fixed. No escape: the bailout is 1e300 (the double path has none). dz₀/dc = 0 (z₀
+    /// fixed) in the parameter plane, 1 in the Julia plane. Rebasing is off: ∂f/∂z has a pole at 0.</summary>
+    public static R2Plan Nova(int d, double relax, (double Re, double Im) z0, (double Re, double Im)? juliaC = null)
+    {
+        AstNode z = new ZRef();
+        AstNode c = juliaC is { } jc
+            ? (jc.Im == 0 ? new RealConst(jc.Re) : new Add(new RealConst(jc.Re), new Mul(new RealConst(jc.Im), new ImagUnit())))
+            : new CRef();
+        AstNode num = new Sub(new Pow(z, d), new RealConst(1));
+        AstNode den = new Mul(new RealConst(d), d - 1 == 1 ? z : new Pow(z, d - 1));
+        AstNode step = new Add(new Sub(z, new Mul(new RealConst(relax), new Div(num, den))), c);
+        return juliaC != null
+            ? new R2Plan(step, 1e300, (1.0, 0.0), parameterPlane: false)
+            : new R2Plan(step, 1e300, (0.0, 0.0), parameterPlane: true, initialZ: z0);
     }
 
     /// <summary>Tricorn, conj(z)² + c, with TricornKernel's bailout (512²) and its dz₀ = 1.</summary>
@@ -308,6 +328,9 @@ public sealed class R2Plan : IRealPerturbationPlan
     };
 
     public bool ParameterPlane { get; }
+
+    /// <summary>#1959 — z₀ in the parameter plane (Nova's; 0 otherwise).</summary>
+    public (double Re, double Im) InitialZ { get; }
 
     /// <summary>#1911 — the step divides.</summary>
     public bool HasPoles => _pole != null;

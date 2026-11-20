@@ -34,6 +34,10 @@ public interface IPerturbationPlan
     /// Julia); 0 for z₀ = 0 when the derivative is the true dz/dc (User Equation).</summary>
     (double Re, double Im) InitialDerivative { get; }
 
+    /// <summary>#1959 — z₀ in the parameter plane (0 for the Mandelbrot type; Nova starts at 1). The
+    /// reference and direct iteration start there; the pixel's δ₀ is 0 (z₀ does not depend on c).</summary>
+    (double Re, double Im) InitialZ => (0, 0);
+
     /// <summary>Precision lost (when no rebase applies): the pixel's z sits by a critical point the
     /// reference Z does not. Pauldelbrot's test generalised as |f′(z)|² &lt; τ·|f′(Z)|² (for z² it
     /// is his |z|² &lt; τ·|Z|²). <paramref name="cr"/>, <paramref name="ci"/>: the reference's c.</summary>

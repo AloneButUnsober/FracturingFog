@@ -881,6 +881,56 @@ in the same PR.
     below 2^−900 until Phoenix's reference ends. The same step in the one-state prelude is what kept
     Glynn off direct iteration in D2b.
 
+**D14 as built (#1959): Nova.**
+- **`R2Plan.Nova(d, R, z₀ | Julia c)`** is z − R·(z^d − 1)/(d·z^(d−1)) + c, `NewtonCalculator`'s formula
+  (#1294; Paul Derbyshire's Nova, in the bibliography).
+  - The division uses the quotient difference (D6).
+  - **Parameter plane:** z₀ = `NovaZ0` (default 1, the critical point at R = 1). The engine's new
+    `IPerturbationPlan.InitialZ` starts the reference and direct iteration there; the pixel's δ₀ is 0.
+  - **No rebasing:** a rebase restarts at Z₀ = 0, and ∂f/∂z has a pole there. Glitches go through
+    the plan's test and secondary references.
+  - **Julia mode** is the dynamic plane.
+  - The bailout is 1e300; the double loop has none.
+- **The step stop.** `Convergence.OnStep` stops at |z_{n+1} − z_n|² < 1e-12, the double loop's test.
+  - It runs in the double loop, the scaled-δ prelude and direct iteration.
+  - The step is formed from z = Z + δ in double. The tolerance (1e-6) is ten orders above that rounding.
+  - The BLA does not skip where the reference's own step is under 1e-2 (`StepBlaGuard`), so a skip
+    cannot jump over a pixel's convergence.
+- **`NewtonCalculator`** (Nova only; plain Newton has no c and stays double):
+  - takes the full centre (`IDeepCentre`) and the log zoom (`IDeepZoom`);
+  - from 1e11 renders on the engine;
+  - colours through the double loop's own `FinishPixel`: the basin is the root sector of the converged
+    z, and the smooth count is the same log interpolation (`NovaSmooth`).
+  - Below 1e11 it is byte-identical.
+- **FamilyDepth:** Nova is unlimited.
+- **Batch / Command builder:** no new setting. The poster path hands over the centre and log zoom.
+- **Views at depth.** A period-1 Misiurewicz landing is no view for Nova. Its step stop fires at a
+  repelling fixed point too (the step is ~0 there), so every pixel stops at once. The test views
+  land on repelling 2-cycles (multipliers ~7–11), where steps stay ~1 while neighbours separate.
+- **Results** (`S1959NovaDeepTests`; basin and smooth count against direct BigFloat iteration of Nova
+  written out by hand; every view above the chaotic floor):
+  - parameter plane at 1e20, 1e40 (two views), 1e100 and 1e320: 176/176 each;
+  - Julia mode at 1e40 and 1e320: 176/176;
+  - at the switch (1e11) the engine matches the oracle on 176/176;
+  - a basin interior (c = 0.1 + 0.1i) at 1e40 and 1e320: every sampled pixel stops as direct
+    iteration does (35/35). At 1e320 they stop inside the prelude.
+  - At 1e11 the double loop agrees with the engine on only 1464/1536. Near a repelling cycle its
+    polar-form rounding grows as fast as the pixels separate, so the double loop is already drifting
+    at the switch. Lowering the switch is a possible follow-up.
+- **Mutants:**
+  - **Caught:**
+    - the step stop in the double loop;
+    - the step stop in the prelude, and the BLA step guard (both by a basin-interior view at 1e320,
+      where every pixel converges while its δ is still in the prelude);
+    - the reference ignoring z₀;
+    - the smooth count without the step before;
+    - the wrong root sector;
+    - Julia mode's c dropped;
+    - the deep threshold ignored.
+  - **Survives, with reason:** the step stop in direct BigFloat iteration. No test view sends a pixel
+    to direct iteration (it takes 8 failed references). The code has the same shape as the two caught
+    stops.
+
 **Order of value:** D1 → D2 → D3 gives deep zoom to Multibrot, Julia, Generated Z2–Z5 and every
 polynomial user equation. D4 / D5 add Tricorn and Burning Ship, which is the original #1253. D6–D10
 widen the user equation language.
