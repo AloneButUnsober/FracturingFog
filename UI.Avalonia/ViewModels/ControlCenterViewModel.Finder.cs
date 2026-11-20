@@ -405,6 +405,12 @@ public sealed partial class ControlCenterViewModel
         {
             var map = BuildOrbitMap(out string why);
             if (map == null) { FinderStatus = why; return true; }
+            if (vs.Zoom > AutoExplorer.DoubleMaxZoom && map is IDeepOrbitMap deepMap)   // #1916
+            {
+                GeneralSnapDeep(deepMap, camera.ExactWorldFromScreen(e.X, e.Y, e.ClientWidth, e.ClientHeight),
+                                Math.Log10(SnapPickRadiusPx) + camera.ScaleLog10(e.ClientWidth, e.ClientHeight));
+                return true;
+            }
             GeneralSnap(map, ToV2(click), reach);
             return true;
         }

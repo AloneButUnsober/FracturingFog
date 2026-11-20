@@ -637,6 +637,60 @@ in the same PR.
   - the jump limit removed. Only a radius test catches this one, because the views' BLA radii never
     span a jump.
 
+**D11 as built (#1916).**
+- **`DeepGeneralFinder`** (`Abstractions/Explore/DeepGeneralFinder.cs`) is `GeneralFinder` past double,
+  for maps with a BigFloat step (`IDeepOrbitMap`: z^d + c, Tricorn, Burning Ship).
+  - **Source.** It follows Claude Heiland-Allen, "At the Helm of the Burning Ship", 2019, DOI:
+    10.14236/ewic/EVA2019.74 (bibliography `#heiland-allen-eva-2019`).
+    - The paper's formulas could not be extracted from the PDF.
+    - The forms below are FF's reading of its prose, checked against independent oracles.
+  - **Newton in R².** The orbit runs in BigFloat, the 2×2 Jacobian in double (renormalised), and the
+    step is applied in BigFloat.
+    - The precision rises to log₂‖J‖ + 128 bits.
+    - A root is accepted at the precision floor **and** with a tiny residual |G|.
+    - A tiny step alone is not enough near a Misiurewicz point, where |J| ~ λ^p. An early version
+      took a period-241 non-root for a nucleus. The double `GeneralFinder` has that flaw (#1954): it
+      reports a period-79 "nucleus" whose |z_79| ≈ 33.
+  - **Periods.** The view disk's image ellipse z_n + J_n·u, |u| ≤ R, is tested for 0:
+    |J_n⁻¹·z_n| ≤ R.
+    - The paper describes this as iterating an implicitly defined ellipse, and credits it to
+      "knighty" (2017).
+    - Periods are then scanned up from the first candidate within a work budget.
+  - **Acceptance:** `GeneralFinder`'s invariants, then a polish at the minibrot's own precision.
+  - **Size:** Hunt & Ott's estimate with Jacobians, read as
+    (|det ∂z_p/∂c|·|det Λ|^{1/(d−1)})^{−1/2}. For a conformal map it is the atom-domain size.
+  - **Snap:** `FindNearMisiurewicz` is ported too.
+- **UI.** Past 1e13, Zoom to minibrot and Snap to spiral run the deep finder (exact centre, log zoom,
+  `MinibrotJump.AtDeep`), within `FamilyDepth`. A double find whose framing needs more than 1e13 is
+  polished in BigFloat and taken.
+- **Not covered** (#1952): User Equation (no BigFloat evaluator for the DSL in Abstractions), a
+  perturbed `MultibrotRay`, and Julia morph for the general families past 1e13.
+- **Results** (`S1916DeepGeneralFinderTests`):
+  - **z² + c:** matches the deep z² + c finder (period, nucleus, and size to 3 decimals).
+  - **Burning Ship on its real axis** (where its orbit is z² + c's): finds the same nuclei at
+    n = 40 / 80.
+  - **Tricorn** at 1e30 / 1e80 and **z³ + c** at 1e30: roots by an independent BigFloat
+    finite-difference Newton step.
+  - **Engine check:** at the framing zoom, the nucleus renders in set with escaping pixels around.
+  - **Shallow:** Tricorn (p 28) and Burning Ship (p 3) agree with `GeneralFinder`.
+  - **Rejected:** the spurious p 79, and a period-40 nucleus searched at period 80.
+  - **Misiurewicz points:** refound at 1e40.
+  - **Open:** by the ship's off-axis Misiurewicz point 0.3015 + 0.4520i, no nucleus is found within
+    the work budget.
+- **Mutants:**
+  - **Caught:**
+    - the polish skipped;
+    - the Jacobian's ∂f/∂c dropped;
+    - the step's scale sign;
+    - the minimal-period test removed (by a direct test);
+    - the residual check and the precision raise removed together.
+  - **Survive, with reason:**
+    - Each of the residual check and the precision raise, alone. Each is a backstop for the other.
+    - The ellipse period test reverted to the norm ball. The upward scan still reaches the period,
+      so the ellipse only saves periods scanned.
+    - The determinant size reverted to the norm form. They agree on every oracle view: the maps
+      there are conformal, or diagonal on the ship's real axis.
+
 **Order of value:** D1 → D2 → D3 gives deep zoom to Multibrot, Julia, Generated Z2–Z5 and every
 polynomial user equation. D4 / D5 add Tricorn and Burning Ship, which is the original #1253. D6–D10
 widen the user equation language.

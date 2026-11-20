@@ -15,6 +15,11 @@
 // MultibrotRay), and the critical points of a User Equation, one of which can
 // be applied as the z₀ seed (CriticalPoints). The seed changes the render; it
 // reaches the batch through the region snapshot (--param UserEquationSeed=…).
+//
+// #1916 (epic #1253, D11) — past zoom 1e13 (these families render to 1e290 on the perturbation
+// engine) Zoom to minibrot and Snap to spiral run DeepGeneralFinder (BigFloat orbits, the exact centre,
+// the log zoom) for Multibrot, Tricorn and Burning Ship; User Equation still stops at 1e13 (no BigFloat
+// evaluator for the DSL yet, #1952). The jump is MinibrotJump.AtDeep, as the deep z² + c finder's.
 
 using System;
 using System.Collections.Generic;
@@ -42,12 +47,17 @@ public sealed partial class ControlCenterViewModel
     {
         var vs = Shell.Main.ViewState;
         why = "";
+        var fp = vs.FractalParameters;
         if (vs.Zoom > AutoExplorer.DoubleMaxZoom)
         {
-            why = $"{vs.FractalType} renders in double precision; the finders stop at zoom 1e13.";
+            // #1916 — the deep finders take the families with a BigFloat orbit.
+            if (vs.FractalType != FractalType.UserEquation && OrbitMaps.For(vs.FractalType, fp) is IDeepOrbitMap deep)
+                return deep;
+            why = vs.FractalType == FractalType.UserEquation
+                ? "The User Equation finders stop at zoom 1e13 (no BigFloat evaluator for the equation yet)."
+                : $"{vs.FractalType}'s finders stop at zoom 1e13.";
             return null;
         }
-        var fp = vs.FractalParameters;
         if (vs.FractalType != FractalType.UserEquation)
         {
             var map = OrbitMaps.For(vs.FractalType, fp);
@@ -103,6 +113,7 @@ public sealed partial class ControlCenterViewModel
         var map = BuildOrbitMap(out string why);
         if (map == null) { FinderStatus = why; return Task.CompletedTask; }
         var vs = Shell.Main.ViewState;
+        if (vs.Zoom > AutoExplorer.DoubleMaxZoom && map is IDeepOrbitMap deepMap) return GeneralZoomToMinibrotDeepAsync(deepMap);   // #1916
         var (w, h) = Shell.Main.RenderHost.LastPresentedSize;
         var centre = ToV2(vs.GetCenter());
         double radius = PeriodDetector.ViewDiskRadius(vs.Zoom, w, h);
@@ -124,6 +135,14 @@ public sealed partial class ControlCenterViewModel
             }
             if (g.Zoom > AutoExplorer.DoubleMaxZoom)
             {
+                // #1916 — polish the nucleus in BigFloat and jump past double, where the family renders there.
+                if (map is IDeepOrbitMap dm && dm.DeepNuclei)
+                {
+                    double rl = Math.Log10(radius);
+                    var seed = FFMath.ExactCentre.FromDeep(ToDeep(g.Point), DeepGeneralFinder.PrecisionFor(rl));
+                    var deep = await Task.Run(() => DeepGeneralFinder.FindNucleus(dm, seed, g.Period, rl, ct), ct);
+                    if (deep.Found) { ApplyDeepGeneral(deep, map); return; }
+                }
                 FinderStatus = $"Found a period-{g.Period} minibrot, but framing it needs zoom {Fmt(g.Zoom)} — past double precision (1e13).";
                 return;
             }
@@ -131,6 +150,70 @@ public sealed partial class ControlCenterViewModel
             if (plan is not MinibrotJumpPlan p) return;
             string note = ApplyPlan(p);
             FinderStatus = $"Period {g.Period} minibrot ({map.Name}) → zoom {Fmt(p.Zoom)}.{note}";
+        });
+    }
+
+    // #1916 — S2 past double: DeepGeneralFinder on the exact centre and the log view radius.
+    private Task GeneralZoomToMinibrotDeepAsync(IDeepOrbitMap map)
+    {
+        var vs = Shell.Main.ViewState;
+        if (!map.DeepNuclei)
+        {
+            FinderStatus = $"{map.Name}: the minibrot search past zoom 1e13 is not available for this family yet; Snap to spiral works.";
+            return Task.CompletedTask;
+        }
+        var (w, h) = Shell.Main.RenderHost.LastPresentedSize;
+        double zl = vs.ZoomLog10;
+        var exact = vs.CenterExact ?? FFMath.ExactCentre.FromDeep(vs.GetCenter(), FFMath.BigFloat.PrecisionForZoom(zl));
+        double rl = DeepNucleusFinder.ViewDiskRadiusLog10(zl, w, h);
+        FinderStatus = $"Searching for a minibrot ({map.Name}, past double)…";
+        return RunFinderAsync(async ct =>
+        {
+            void OnPeriod(int p) => global::Avalonia.Threading.Dispatcher.UIThread.Post(() => { if (IsFinderBusy) FinderStatus = $"Searching… trying period {p}"; });
+            var g = await Task.Run(() => DeepGeneralFinder.FindMinibrot(map, exact, rl, onPeriod: OnPeriod, ct: ct), ct);
+            if (!g.Found)
+            {
+                FinderStatus = $"No minibrot found in view (zoom {Fmt(vs.Zoom)}). Pan or zoom out and retry.";
+                return;
+            }
+            ApplyDeepGeneral(g, map);
+        });
+    }
+
+    // Jump to a deep minibrot, within the family's render limit (FamilyDepth).
+    private void ApplyDeepGeneral(in DeepGeneralNucleus g, IOrbitMap map)
+    {
+        var vs = Shell.Main.ViewState;
+        double maxLog = Math.Log10(FamilyDepth.MaxZoomFor(vs.FractalType));
+        if (!(g.ZoomLog10 <= maxLog))
+        {
+            FinderStatus = $"Found a period-{g.Period} minibrot, but framing it needs zoom 1e{g.ZoomLog10:F0} — past {vs.FractalType}'s limit (1e{maxLog:F0}).";
+            return;
+        }
+        var plan = MinibrotJump.AtDeep(g.Point, g.ZoomLog10, g.Period, vs.Quality, vs.IterLocked, vs.LockedIterations);
+        string note = ApplyPlan(plan);
+        FinderStatus = $"Period {g.Period} minibrot ({map.Name}) → zoom {FracturingFog.ViewState.ZoomLog.Format(plan.Zoom, plan.ZoomLog10, 4)}.{note}";
+    }
+
+    // #1916 — S3 past double: the exact click point and the log reach.
+    private void GeneralSnapDeep(IDeepOrbitMap map, FFMath.ExactCentre click, double reachLog10)
+    {
+        var vs = Shell.Main.ViewState;
+        FinderStatus = $"Searching for a spiral / branch point ({map.Name}, past double)…";
+        _ = RunFinderAsync(async ct =>
+        {
+            var m = await Task.Run(() => DeepGeneralFinder.FindNearMisiurewicz(map, click, reachLog10, ct: ct), ct);
+            if (!m.Found)
+            {
+                FinderStatus = $"No spiral / branch point within {SnapPickRadiusPx} px of the click. Click nearer its centre, or zoom in.";
+                return;
+            }
+            Shell.RecordNavChange();
+            vs.SetCenterExact(m.Point);
+            Shell.Main.RenderHost.Trigger();
+            double mult = Math.Pow(2, m.MultiplierLog2);
+            FinderStatus = $"Misiurewicz point M({m.Preperiod},{m.Period}): the pattern repeats every ×{Fmt(mult)} zoom.";
+            SetLoopTarget(m.Point.ToDeep(), mult, null, m.Period, juliaPreview: false, exact: m.Point);
         });
     }
 
