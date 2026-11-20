@@ -312,7 +312,117 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
     public void Calculate(CancellationToken ct = default)
     {
         if (LowResPreview && RenderPreview(ct)) return;
+        LastDdPixels = 0;
+        CalculateMain(ct);
+        if (ct.IsCancellationRequested) return;
+        // #1927 part 2 — past double precision, retrace the fate edges in double-double.
+        var p = FractalParameters;
+        double pitch = PixelPitch(Width, Height, Zoom);
+        if (!_isPreviewChild && p.BlackHoleDdEdges && p.BlackHoleChannel == BlackHoleChannel.Fate && Scene.PastDoublePrecision(pitch))
+        {
+            DdEdgeFixup(Scene.Build(p, Zoom, pitch), pitch, ct);
+            LastPrecisionLabel = $"DD edges: {LastDdPixels} px";
+        }
+    }
 
+    // ── Double-double edge fix-up (#1927 part 2) ─────────────────────────────
+
+    /// <summary>#1927 — pixels the last frame retraced in double-double (0 when not past fp64).</summary>
+    public long LastDdPixels { get; private set; }
+
+    /// <summary>#1927 — the DD trace's tolerance at pixel pitch <paramref name="pixelPitch"/>: the
+    /// calibrated <see cref="Scene.PitchToleranceFactor"/> x pitch, without double's 1e-13 floor
+    /// (floored at <see cref="DdMinTolerance"/>, near DD's own resolution).</summary>
+    public static double DdTolerance(double pixelPitch)
+        => Math.Max(Scene.PitchToleranceFactor * pixelPitch, DdMinTolerance);
+    public const double DdMinTolerance = 1e-28;
+
+    /// <summary>#1927 — fix-up rounds cap (each round follows changed fates one pixel further).</summary>
+    public const int DdMaxRounds = 256;
+
+    private void DdEdgeFixup(Scene scene, double pitch, CancellationToken ct)
+    {
+        int w = Width, h = Height, total = w * h;
+        if (total == 0) return;
+        var fate = FateBuffer;
+        int escapedGate = scene.EscapedGate, gateCount = scene.Holes.Length + 1;
+        var billiardMap = ColorMap as IBilliardColorMap;
+        uint undecided = ColorMap.InSetColor;
+        bool sky = FractalParameters.BlackHoleSky != BlackHoleSky.Off;
+        double tol = DdTolerance(pitch);
+        int maxSteps = Math.Max(scene.Settings.MaxSteps, 1000);
+        double cx = CenterX, cy = CenterY;
+
+        bool Edge(int i)
+        {
+            int x = i % w, y = i / w; sbyte f = fate[i];
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    int nx = x + dx, ny = y + dy;
+                    if ((dx | dy) == 0 || nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                    if (fate[ny * w + nx] != f) return true;
+                }
+            return false;
+        }
+        var done = new bool[total];
+        var queue = new System.Collections.Generic.List<int>();
+        var mark = new bool[total];
+        void Push(int i) { if (!mark[i] && !done[i]) { mark[i] = true; queue.Add(i); } }
+        void PushNeighbours(int i)
+        {
+            int x = i % w, y = i / w;
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    int nx = x + dx, ny = y + dy;
+                    if (nx >= 0 && ny >= 0 && nx < w && ny < h) Push(ny * w + nx);
+                }
+        }
+        for (int i = 0; i < total; i++) if (Edge(i)) PushNeighbours(i);   // the edge band, one pixel of margin
+
+        long traced = 0;
+        for (int round = 0; round < DdMaxRounds && queue.Count > 0 && !ct.IsCancellationRequested; round++)
+        {
+            var batch = queue.ToArray();
+            queue.Clear();
+            var newFate = new sbyte[batch.Length];
+            var outs = new MpDdOutcome[batch.Length];
+            System.Threading.Tasks.Parallel.For(0, batch.Length, new System.Threading.Tasks.ParallelOptions { CancellationToken = ct }, k =>
+            {
+                int i = batch[k];
+                int x = i % w, y = i / w;
+                double pitchV = PixelPitch(w, h, Zoom);
+                var u = FracturingFog.FFMath.DD.FromCenterOffset(cx, x + 0.5 - w * 0.5, pitchV);
+                var v = -FracturingFog.FFMath.DD.FromCenterOffset(cy, y + 0.5 - h * 0.5, pitchV);
+                var o = MajumdarPapapetrouDD.Trace(scene, u, v, tol, maxSteps);
+                outs[k] = o;
+                newFate[k] = (sbyte)(o.Fate == ScatterFate.Captured ? o.Body : o.Fate == ScatterFate.Escaped ? escapedGate : -1);
+            });
+            traced += batch.Length;
+            Span<double> fin = stackalloc double[6];
+            for (int k = 0; k < batch.Length; k++)
+            {
+                int i = batch[k];
+                done[i] = true; mark[i] = false;
+                bool changed = newFate[k] != fate[i];
+                fate[i] = newFate[k];
+                int gate = newFate[k];
+                var o = outs[k];
+                float smooth = gate == escapedGate ? (float)Math.Log(1.0 + Math.Max(0.0, o.Delay)) : 0f;
+                SmoothBuffer[i] = smooth;
+                fin[3] = o.Px; fin[4] = o.Py; fin[5] = o.Pz;
+                ColorBuffer[i] = sky && gate == escapedGate
+                    ? scene.SkyColour(fin) | 0xFF000000u
+                    : Colour(gate, escapedGate, gateCount, smooth, billiardMap, ColorMap, undecided);
+                if (changed) PushNeighbours(i);   // the edge moved: follow it
+            }
+        }
+        LastDdPixels = traced;
+    }
+
+    private void CalculateMain(CancellationToken ct)
+    {
         var p = FractalParameters;
         double framePitch = PixelPitch(Width, Height, Zoom);
         var scene = Scene.Build(p, Zoom, framePitch);

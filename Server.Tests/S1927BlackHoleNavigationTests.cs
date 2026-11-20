@@ -123,8 +123,11 @@ public class S1927BlackHoleNavigationTests
         Assert.StartsWith("fp64 tol", c.LastPrecisionLabel);
         c.CenterX = -7.806216050537152;
         c.Zoom = BlackHoleShadowCalculator.DefaultZoom * 1e13;
-        c.FractalParameters = new FractalParameters { BlackHoleMaxSteps = 2000 };
+        c.FractalParameters = new FractalParameters { BlackHoleMaxSteps = 2000, BlackHoleDdEdges = false };
         c.Calculate(TestContext.Current.CancellationToken);
         Assert.Equal("past fp64: edges approximate", c.LastPrecisionLabel);
+        c.FractalParameters = new FractalParameters { BlackHoleMaxSteps = 2000 };   // part 2: DD edges on by default
+        c.Calculate(TestContext.Current.CancellationToken);
+        Assert.StartsWith("DD edges:", c.LastPrecisionLabel);
     }
 }

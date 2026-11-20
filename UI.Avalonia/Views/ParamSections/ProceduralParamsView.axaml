@@ -1434,7 +1434,7 @@
         <!-- #1923 — black hole shadows (Majumdar-Papapetrou). -->
         <Grid IsVisible="{Binding IsBlackHoleShadow}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Layout:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding BlackHoleLayouts}"
@@ -1536,6 +1536,10 @@
                       ItemsSource="{Binding BlackHoleGpuPrecisions}"
                       SelectedItem="{Binding BlackHoleGpuPrecision, Mode=TwoWay}" Margin="0,2"
                       ToolTip.Tip="With GPU render on (Lighting &amp; FX). Double: the CPU's arithmetic, the same image. Single: about 100x faster than Double on most consumer GPUs (their double precision is slow), but a few pixels on the fractal edges can move (about 0.005 % at the default view, more when zoomed deep). Auto still keeps the CPU when it is faster." />
+            <!-- #1927 double-double edges -->
+            <CheckBox Grid.Row="22" Grid.Column="1" Content="Exact edges past double (slower)"
+                      IsChecked="{Binding BlackHoleDdEdges, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Colour by Fate, zoomed past about 10^10: double precision cannot place the fate edges any more, so the pixels along them are retraced in double-double (about 31 digits). The status bar shows how many." />
             <!-- #1970 solid blocks -->
             <CheckBox Grid.Row="20" Grid.Column="1" Content="Solid blocks (faster shadows)"
                       IsChecked="{Binding BlackHoleSolidBlocks, Mode=TwoWay}" Margin="0,2"

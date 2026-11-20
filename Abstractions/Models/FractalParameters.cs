@@ -1422,6 +1422,9 @@ namespace FracturingFog.Models
         public bool BlackHoleSolidBlocks { get; set; }
         /// <summary>#1926 — GPU trace arithmetic (see <see cref="FracturingFog.BlackHoleGpuPrecision"/>). Default Double.</summary>
         public BlackHoleGpuPrecision BlackHoleGpuPrecision { get; set; } = BlackHoleGpuPrecision.Double;
+        /// <summary>#1927 — past double precision (about x10^10), retrace the fate edges in double-double
+        /// (Fate colouring). Exact edges, slower deep frames. Default true.</summary>
+        public bool BlackHoleDdEdges { get; set; } = true;
 
         // ── Slit cascade (#1569, double-slit epic #1565) ──────────────────
         /// <summary>Slit cascade: children per slit, N (2..16). N ≥ 3 for the fringe
@@ -2518,6 +2521,7 @@ namespace FracturingFog.Models
                 BlackHoleSkyRotation = BlackHoleSkyRotation,
                 BlackHoleSolidBlocks = BlackHoleSolidBlocks,
                 BlackHoleGpuPrecision = BlackHoleGpuPrecision,
+                BlackHoleDdEdges = BlackHoleDdEdges,
                 SlitCascadeChildren = SlitCascadeChildren,
                 SlitCascadeRatio = SlitCascadeRatio,
                 SlitCascadeDepth = SlitCascadeDepth,
