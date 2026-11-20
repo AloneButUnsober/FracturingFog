@@ -1373,6 +1373,31 @@ namespace FracturingFog.Models
         /// <summary>#1715 — how <see cref="MathPlane3DT"/> interpolates the map (polar: Higham + slerp).</summary>
         public MathPlaneInterpolation MathPlane3DInterpolation { get; set; } = MathPlaneInterpolation.Linear;
 
+        // ── Black hole shadows (#1923, epic #1922) — Majumdar-Papapetrou null geodesics ──
+        /// <summary>Hole layout (see <see cref="FracturingFog.BlackHoleLayout"/>). Default Binary.</summary>
+        public BlackHoleLayout BlackHoleLayout { get; set; } = BlackHoleLayout.Binary;
+        /// <summary>Mass of hole 1 (Binary) / every hole (Single, Triangle, Square), geometric units. Default 1.</summary>
+        public double BlackHoleMass1 { get; set; } = 1.0;
+        /// <summary>Mass of hole 2 (Binary). Default 1.</summary>
+        public double BlackHoleMass2 { get; set; } = 1.0;
+        /// <summary>Coordinate separation a (Binary) / polygon side (Triangle, Square). Default 2 (Shipley &amp; Dolan's default).</summary>
+        public double BlackHoleSeparation { get; set; } = 2.0;
+        /// <summary>Custom holes "x,y,z,m;..." (up to four), used by the Custom layout.</summary>
+        public string BlackHoleCustom { get; set; } = string.Empty;
+        /// <summary>Distance of the launch plane (distant camera) from the origin. Default 50 (Shipley &amp; Dolan's r_max).
+        /// Raised to at least 10 and 4x the hole extent.</summary>
+        public double BlackHoleCameraDistance { get; set; } = 50.0;
+        /// <summary>Camera inclination in degrees from the -z axis (90 = side-on to a z-axis binary). Default 90.</summary>
+        public double BlackHoleInclination { get; set; } = 90.0;
+        /// <summary>Camera azimuth about z in degrees. Default 0.</summary>
+        public double BlackHoleAzimuth { get; set; } = 0.0;
+        /// <summary>A ray is captured inside CaptureFraction x the hole's mass (isotropic coordinate radius). Default 0.02.</summary>
+        public double BlackHoleCaptureFraction { get; set; } = 0.02;
+        /// <summary>Integrator relative tolerance per step. Default 1e-9.</summary>
+        public double BlackHoleTolerance { get; set; } = 1e-9;
+        /// <summary>Accepted-step cap; past it a ray is undecided. Default 20 000.</summary>
+        public int BlackHoleMaxSteps { get; set; } = 20_000;
+
         // ── Slit cascade (#1569, double-slit epic #1565) ──────────────────
         /// <summary>Slit cascade: children per slit, N (2..16). N ≥ 3 for the fringe
         /// weights to differ (a symmetric pair is a plain Cantor set).</summary>
@@ -2447,6 +2472,17 @@ namespace FracturingFog.Models
                 MathPlane3DM33 = MathPlane3DM33,
                 MathPlane3DT = MathPlane3DT,
                 MathPlane3DInterpolation = MathPlane3DInterpolation,
+                BlackHoleLayout = BlackHoleLayout,
+                BlackHoleMass1 = BlackHoleMass1,
+                BlackHoleMass2 = BlackHoleMass2,
+                BlackHoleSeparation = BlackHoleSeparation,
+                BlackHoleCustom = BlackHoleCustom,
+                BlackHoleCameraDistance = BlackHoleCameraDistance,
+                BlackHoleInclination = BlackHoleInclination,
+                BlackHoleAzimuth = BlackHoleAzimuth,
+                BlackHoleCaptureFraction = BlackHoleCaptureFraction,
+                BlackHoleTolerance = BlackHoleTolerance,
+                BlackHoleMaxSteps = BlackHoleMaxSteps,
                 SlitCascadeChildren = SlitCascadeChildren,
                 SlitCascadeRatio = SlitCascadeRatio,
                 SlitCascadeDepth = SlitCascadeDepth,

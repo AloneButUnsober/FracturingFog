@@ -351,6 +351,19 @@ deep zoom limited by integration error (not perturbation; separate from #1253).
 Validation: null Hamiltonian and energy conserved; one hole = extremal Reissner–Nordström with an
 analytic shadow radius; equal-mass mirror symmetry; forward-back reversibility.
 
+**S1 shipped (#1923).** `FractalType.BlackHoleShadow` + `BlackHoleShadowCalculator` on the shared
+core `Engine/Scattering/ScatteringIntegrator.cs` (Dormand–Prince 5(4) [(Dormand & Prince 1980)](../Resources-Bibliography.md#dormand-prince-1980),
+generic over an `IScatteringSystem` struct) and `MajumdarPapapetrou.cs` (null system, layouts, camera).
+The camera is Shipley & Dolan's distant one: parallel rays from a plane at distance D, so the view is
+the impact-parameter plane. Layouts Binary / Single / Triangle / Square / Custom (≤ 4 holes). Fate →
+categorical colour (`IBilliardColorMap`, else Okabe-Ito per hole); escaped rays coloured by the
+coordinate-time delay ∫(U² − 1)dλ, which also feeds `SmoothBuffer`. Validation added from
+[(Yumoto, Nitta, Chiba & Sugiyama 2012)](../Resources-Bibliography.md#yumoto-2012): with ℓ = 20, κ = 1 the
+traced main-shadow edges (1.763, −5.893, half-width 4.182) sit within 0.025 of their first-order Eq. 40
+(1.788, −5.872, 4.195), against ~0.2 for the zeroth-order circle. Single-hole edge at L/E = 4m to 2e-4.
+The pinhole camera named in the issue was left out: the paper's parallel congruence gives the
+impact-parameter plane directly, and that is what the validation formulas use.
+
 #### 2.6.2 Hénon–Heiles exit basins — **#1942**
 
 The Hénon–Heiles potential `V = (x² + y²)/2 + x²y − y³/3` has three exit channels above `E = 1/6`; its
@@ -880,7 +893,8 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   1947 (title unverified); Aguirre, Vallejo & Sanjuán 2001; Nagler 2004, 2005; Zotos 2016; Wald 1974;
   Kopáček, Karas, Kovář & Stuchlík 2010; Levin 2000 + comments; Cornish & Levin 1997 (two papers);
   *Mixmaster chaos* 2000; Semerák & Suková 2010, 2012; Kayser, Refsdal & Stabell 1986; Cunha et al.
-  2015, 2016; Bohn et al. 2015. Full entries under *Gravitational & relativistic scattering* in the
+  2015, 2016; Bohn et al. 2015; #1923 adds Yumoto, Nitta, Chiba & Sugiyama 2012, Nitta, Chiba & Sugiyama
+  2011, Dormand & Prince 1980 and Hairer, Nørsett & Wanner 1993. Full entries under *Gravitational & relativistic scattering* in the
   bibliography; unverified details listed under *Citations awaiting verification*.
 
 ---
@@ -1054,3 +1068,4 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   three-body #1943, magnetised black hole #1944, spinning binaries #1945 (fractality disputed), Mixmaster
   #1946, black hole + ring #1947, microlensing #1948 (not fractal); hairy black holes / boson stars and
   dynamic merger lensing recorded as future R&D (§2.6.9). Bibliography (§7): gravitational block.
+- **2026-11-20** — §2.6.1: black hole shadows S1 #1923 (type, shared ODE core, MP trace, Yumoto et al. Eq. 40 check). Bibliography (§7): Yumoto et al. 2012, Nitta, Chiba & Sugiyama 2011, Dormand & Prince 1980, Hairer, Nørsett & Wanner 1993.

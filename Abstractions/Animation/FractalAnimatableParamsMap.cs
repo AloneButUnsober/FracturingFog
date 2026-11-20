@@ -153,6 +153,9 @@ public static class FractalAnimatableParamsMap
         FractalType.MathPlane3D
             => _mathPlane3DList,
 
+        FractalType.BlackHoleShadow
+            => _blackHoleShadowList,
+
         FractalType.BicomplexMandelbrot
             => _bicomplexList,
 
@@ -639,6 +642,19 @@ public static class FractalAnimatableParamsMap
 
     // Wada mirror spheres (#1440): shrinking the balls opens the gaps and the
     // basins simplify; reflectance fades the deep-scattered boundary.
+    // #1923 — black hole shadows: separation and masses (the eyebrows grow as the holes
+    // close in) and the camera angles. Every change re-traces every ray.
+    private static readonly AnimatableParamDescriptor[] _blackHoleShadowList =
+    {
+        new("BlackHoleSeparation", AnimatableParamKind.ScalarDouble, Min: 0.2, Max: 20.0,
+            Notes: "Coordinate separation of the holes: closer holes grow bigger eyebrows."),
+        new("BlackHoleMass1", AnimatableParamKind.ScalarDouble, Min: 0.05, Max: 4.0, Notes: "Mass of hole 1."),
+        new("BlackHoleMass2", AnimatableParamKind.ScalarDouble, Min: 0.05, Max: 4.0, Notes: "Mass of hole 2 (Binary)."),
+        new("BlackHoleInclination", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 180.0,
+            Notes: "Camera inclination from the -z axis in degrees (90 = side-on)."),
+        new("BlackHoleAzimuth", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 360.0, Notes: "Camera azimuth about z in degrees."),
+    };
+
     // #1713 — Math Plane 3D: the orbit camera.
     private static readonly AnimatableParamDescriptor[] _mathPlane3DList =
     {

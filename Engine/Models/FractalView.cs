@@ -148,6 +148,7 @@ namespace FracturingFog.Models
             {FractalType.Apollonian, "Apollonian" },
             {FractalType.ChaoticBilliard, "Chaotic Billiard" },
             {FractalType.BilliardRays, "Billiard Rays" },
+            {FractalType.BlackHoleShadow, "Black Hole Shadow" },
             {FractalType.SlitCascade, "Slit Cascade" },
             {FractalType.TalbotCarpet, "Talbot Carpet" },
             {FractalType.MathPlane, "Math Plane" },

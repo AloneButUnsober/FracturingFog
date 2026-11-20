@@ -79,6 +79,7 @@ namespace FracturingFog.Models
             FractalType.Apollonian => FractalMotionClass.Zoomable2D,
             FractalType.ChaoticBilliard => FractalMotionClass.Zoomable2D,
             FractalType.BilliardRays => FractalMotionClass.Zoomable2D,
+            FractalType.BlackHoleShadow => FractalMotionClass.Zoomable2D,   // #1923 impact-parameter plane
             FractalType.SlitCascade => FractalMotionClass.Zoomable2D,   // #1569
             FractalType.TalbotCarpet => FractalMotionClass.Zoomable2D,  // #1570
             FractalType.MathPlane => FractalMotionClass.Zoomable2D,

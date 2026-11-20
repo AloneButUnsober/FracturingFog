@@ -350,13 +350,37 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   Classical and Quantum Gravity 33(17), 175001, 2016. DOI 10.1088/0264-9381/33/17/175001,
   <https://arxiv.org/abs/1603.04469>. Shadows of two extremally charged black holes in the
   Majumdar–Papapetrou spacetime; Cantor-like and self-similar shadow structure. Basis of
-  `BlackHoleShadow` (#1922): spacetime choice and validation figures.
+  `BlackHoleShadow` (#1922): spacetime choice and validation figures. Implemented in #1923
+  (`Engine/Scattering/MajumdarPapapetrou.cs`, `Engine/Calculators/BlackHoleShadowCalculator.cs`):
+  the metric and U (Eqs. 1, 3), the Hamiltonian of §II.1 and its equations of motion (Eq. 6), the
+  binary placement z± = ±a M∓/(M₊+M₋), the planar launch congruence at r_max (default 50M) with θ
+  measured from the −z axis (§III.2), and the default a = 2, unit masses. Read via ar5iv on 2026-11-20.
+  The paper states no numerical capture rule; FF's (capture inside a fraction of the mass, well inside
+  the photon sphere) is its own choice.
+
+<a id="yumoto-2012"></a>
+
+- **Akifumi Yumoto, Daisuke Nitta, Takeshi Chiba, Naoshi Sugiyama.** *Shadows of Multi-Black Holes:
+  Analytic Exploration.* 2012. <https://arxiv.org/abs/1208.0635> (v2, read from the user's copy of
+  the PDF on 2026-11-20). Analytic estimates in the Majumdar–Papapetrou spacetime: the extreme
+  Reissner–Nordström shadow radius 4M (§II.A), the eyebrow width (Eqs. 15–16) and the first-order
+  shifted, elliptic main shadow of a hole with a distant companion (Eqs. 34 and 40). #1923 tests the
+  shadow radius and Eq. 40 against the traced rays (`S1923BlackHoleShadowTests`). **Journal reference
+  not verified.**
+
+<a id="nitta-chiba-sugiyama-2011"></a>
+
+- **Daisuke Nitta, Takeshi Chiba, Naoshi Sugiyama.** *Shadows of Colliding Black Holes.* Physical
+  Review D 84, 063008, 2011. <https://arxiv.org/abs/1106.2425>. Shadows in the Kastor–Traschen
+  solution, where the eyebrows were first reported; the work Yumoto et al. 2012 builds on. Citation
+  checked via Yumoto et al.'s reference list and the arXiv listing, not the journal page.
 
 <a id="majumdar-1947"></a>
 
 - **S. D. Majumdar.** *A class of exact solutions of Einstein's field equations.* Physical Review 72,
   390–398, 1947. <https://inspirehep.net/literature/42698>. The static multi-black-hole
-  (Majumdar–Papapetrou) metric used by #1922.
+  (Majumdar–Papapetrou) metric used by #1922. (Yumoto et al. 2012's reference list prints the pages
+  as 930; INSPIRE and Shipley & Dolan give 390.)
 
 <a id="papapetrou-1947"></a>
 
@@ -962,6 +986,14 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
 
 ### Algorithm references implemented in code
 
+- <a id="dormand-prince-1980"></a>**J. R. Dormand, P. J. Prince.** *A family of embedded Runge-Kutta
+  formulae.* Journal of Computational and Applied Mathematics 6(1), 19–26, 1980. DOI
+  10.1016/0771-050X(80)90013-3. The RK5(4) pair (tableau and embedded error estimate) of the shared
+  scattering integrator, `Engine/Scattering/ScatteringIntegrator.cs` (#1923).
+- <a id="hairer-norsett-wanner-1993"></a>**Ernst Hairer, Syvert P. Nørsett, Gerhard Wanner.** *Solving
+  Ordinary Differential Equations I: Nonstiff Problems.* 2nd revised ed., Springer Series in
+  Computational Mathematics 8, 1993. DOI 10.1007/978-3-540-78862-1. Error-per-step step-size control
+  (factor 0.9·err^(−1/5), clamped) used by the same integrator (#1923).
 - <a id="png-spec"></a>**PNG** — W3C. *Portable Network Graphics (PNG) Specification (Second Edition).* W3C
   Recommendation, 10 November 2003. <https://www.w3.org/TR/2003/REC-PNG-20031110/>. Chunk layout, IHDR colour
   types 2 / 6, filter type 2 (Up), several IDAT chunks read as one stream, and the CRC-32 (its sample code) used by
@@ -1405,7 +1437,8 @@ They stay listed (the contract never drops a credit). Each needs its primary sou
 entry above completed or corrected.
 
 - **Papapetrou 1947** — Proc. R. Irish Acad. A 51, 191 (Majumdar–Papapetrou solutions, #1922): title
-  not identified.
+  not identified (Yumoto et al. 2012's reference list gives volume and page but no title).
+- **Yumoto, Nitta, Chiba & Sugiyama 2012** — journal reference of arXiv:1208.0635 (#1923).
 - **Hénon & Heiles 1964** — the original paper defining the Hénon–Heiles potential (#1942): full
   reference not yet checked.
 - **Zotos 2016** — Astrophysics and Space Science volume / article number for arXiv:1608.08610 (#1943).
