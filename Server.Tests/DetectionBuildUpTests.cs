@@ -77,7 +77,7 @@ public sealed class DetectionBuildUpTests
         var p = SlitP(n);
         var calc = Slit(p, w, h);
         var c = SlitCascadeCalculator.Build(p);
-        double pitch = 4.0 / w;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(w, h, 1.0);
         var wts = new double[w * h];
         for (int i = 0; i < wts.Length; i++)
         {
@@ -97,7 +97,7 @@ public sealed class DetectionBuildUpTests
         var p = new FractalParameters { TalbotView = TalbotView.Detections, TalbotModes = 16, DetectionCount = n };
         var calc = Talbot(p, w, h);
         var cf = TalbotCarpetCalculator.Coefficients(p);
-        double pitch = 4.0 / w / 1.9;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(w, h, 1.9);
         var wts = new double[w * h];
         for (int i = 0; i < wts.Length; i++)
         {

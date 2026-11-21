@@ -56,7 +56,7 @@ public class BilliardRaysProgressTests
 
         var scene = BilliardScene.Build(p);
         var sweep = BilliardRaysCalculator.BuildSweep(p, scene);
-        double pitch = 4.0 / W / 0.6;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(W, H, 0.6);
         double x0 = -(W / 2.0 + 0.5) * pitch, x1 = (W / 2.0 - 0.5) * pitch;
         double y0 = -((H / 2.0 - 0.5) * pitch), y1 = (H / 2.0 + 0.5) * pitch;
         double expect = 0;

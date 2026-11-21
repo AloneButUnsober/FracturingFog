@@ -166,7 +166,7 @@ public sealed class TalbotCarpetCalculator : IFractalCalculator, IHeightFieldSou
         bool domain = fp.TalbotView == TalbotView.Domain;   // #1592
         double decades = Math.Clamp(double.IsFinite(fp.TalbotDynamicRange) ? fp.TalbotDynamicRange : 2.0, 0.25, 30.0);
 
-        double pitch = (4.0 / Math.Max(1, width)) / Math.Max(1e-300, Zoom);
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(width, height, Zoom);   // #1974: the camera's scale
         double cx = CenterX, cy = CenterY;
         int maxIt = Math.Max(16, MaxIterations);
         var cm = ColorMap;

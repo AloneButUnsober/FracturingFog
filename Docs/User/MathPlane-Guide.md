@@ -256,7 +256,7 @@ Each setting is a `--param`. Put the scene in a file, so that cmd and Windows Po
 quotes:
 
 ```bash
-FracturingFog --batch --fractal MathPlane --x -0.5 --y 0 --zoom 0.6 --param MathPlaneScene=@scene.txt --param MathPlaneBackdrop=1 --param MathPlaneCRe=-1 --param MathPlaneCIm=0 --out orbit.png
+FracturingFog --batch --fractal MathPlane --x -0.5 --y 0 --zoom 0.525 --param MathPlaneScene=@scene.txt --param MathPlaneBackdrop=1 --param MathPlaneCRe=-1 --param MathPlaneCIm=0 --out orbit.png
 ```
 
 | Key | Meaning |
@@ -279,7 +279,7 @@ FracturingFog --batch --fractal MathPlane --x -0.5 --y 0 --zoom 0.6 --param Math
 **Script video:** a scene with `step` lines renders as a video of its script.
 
 ```bash
-FracturingFog --batch --mode video --fractal MathPlane --x 0 --y 0 --zoom 0.35 --param MathPlaneScene=@scene.txt --video-motion script --fps 30 --out script.mp4
+FracturingFog --batch --mode video --fractal MathPlane --x 0 --y 0 --zoom 0.30625 --param MathPlaneScene=@scene.txt --video-motion script --fps 30 --out script.mp4
 ```
 
 - **Timing:** frame k shows the script at k / fps, and the last frame is the script's end. Leave out

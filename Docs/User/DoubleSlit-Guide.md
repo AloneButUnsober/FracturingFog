@@ -385,7 +385,7 @@ Any setting can be given with `--param Key=Value` (names as in the tables, e.g. 
 Intensity 0, Phase 1, Aperture 2, HolderAlpha 3, Spectrum 4:
 
 ```bash
-FracturingFog --batch --fractal SlitCascade --x 0 --y 0 --zoom 1.6 --param SlitCascadeView=4 --out spectrum.png
+FracturingFog --batch --fractal SlitCascade --x 0 --y 0 --zoom 1.4 --param SlitCascadeView=4 --out spectrum.png
 ```
 
 Brightness and phase in one image (the *Domain* view; views are numbered in list order, Domain = 5):

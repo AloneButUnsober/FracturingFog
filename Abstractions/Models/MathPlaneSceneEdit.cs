@@ -33,15 +33,15 @@ namespace FracturingFog.Models
 
         // ── View mapping (the MathPlaneCalculator mapping, in client pixels) ──
 
-        /// <summary>World units per client pixel: the plane pitch 4 / width / zoom.</summary>
-        public static double Pitch(int clientWidth, double zoom)
-            => (4.0 / Math.Max(1, clientWidth)) / Math.Max(1e-300, zoom);
+        /// <summary>World units per client pixel: the camera's pitch (#1974).</summary>
+        public static double Pitch(int clientWidth, int clientHeight, double zoom)
+            => FracturingFog.ViewState.ViewCamera.PixelPitch(clientWidth, clientHeight, zoom);
 
         /// <summary>Client pixel → world (y-up: world y = -plane y).</summary>
         public static (double X, double Y) ClientToWorld(double x, double y, int clientWidth, int clientHeight,
                                                          double centerX, double centerY, double zoom)
         {
-            double pitch = Pitch(clientWidth, zoom);
+            double pitch = Pitch(clientWidth, clientHeight, zoom);
             return (centerX + (x - clientWidth * 0.5) * pitch, -(centerY + (y - clientHeight * 0.5) * pitch));
         }
 
@@ -49,7 +49,7 @@ namespace FracturingFog.Models
         public static (double X, double Y) WorldToClient(double wx, double wy, int clientWidth, int clientHeight,
                                                          double centerX, double centerY, double zoom)
         {
-            double pitch = Pitch(clientWidth, zoom);
+            double pitch = Pitch(clientWidth, clientHeight, zoom);
             return ((wx - centerX) / pitch + clientWidth * 0.5, (-wy - centerY) / pitch + clientHeight * 0.5);
         }
 

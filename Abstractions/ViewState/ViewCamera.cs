@@ -51,6 +51,26 @@ namespace FracturingFog.ViewState
         /// world distance in input and render.</summary>
         public const double PlaneExtent = 3.5;
 
+        /// <summary>#1974 — world units per pixel of a <paramref name="width"/> x
+        /// <paramref name="height"/> frame at <paramref name="zoom"/>: the camera's scale
+        /// (<see cref="Scale"/>) without a view state, for renderers. Every 2D calculator maps
+        /// pixels with this, so input and render agree.</summary>
+        public static double PixelPitch(double width, double height, double zoom)
+            => PlaneExtent / (Math.Max(1.0, Math.Max(width, height)) * Math.Max(1e-300, zoom));
+
+        /// <summary>#1974 — the families that rendered with pitch (4 / width) / zoom before #1974
+        /// (input landed at 3.5/4 of the distance from the centre). A zoom saved for them in the
+        /// old convention frames the same landscape view at <see cref="LegacyZoomFactor"/> x the
+        /// zoom; saved regions convert once on load (FractalRegion.ZoomConvention).</summary>
+        public static bool UsedLegacyPitch(FractalType type) => type is
+            FractalType.Apollonian or FractalType.BilliardRays or FractalType.ChaoticBilliard
+            or FractalType.JulibrotPair or FractalType.IndrasPearls or FractalType.MathPlane
+            or FractalType.PrecisionField or FractalType.RandomTile or FractalType.SlitCascade
+            or FractalType.TalbotCarpet;
+
+        /// <summary>#1974 — old zoom x this = new zoom with the same landscape framing (3.5 / 4).</summary>
+        public const double LegacyZoomFactor = PlaneExtent / 4.0;
+
         /// <summary>#1836 — log10 zoom past which the centre moves exactly even without an
         /// exact centre: OD's measured clean coordinate floor (~1e120, --qdfloorsweep).</summary>
         public const double ExactNavZoomLog10 = 120;

@@ -345,7 +345,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         bool domain = key.Domain;
         bool fieldOff = layers || domain;   // no field scalar is computed
 
-        double pixelPitch = (4.0 / Math.Max(1, Width)) / Math.Max(1e-12, Zoom);
+        double pixelPitch = FracturingFog.ViewState.ViewCamera.PixelPitch(Width, Height, Zoom);   // #1974: the camera's scale
         int width = Width, height = Height;
         double centerX = CenterX, centerY = CenterY;
         bool quat = map == DualOrbitMap.Quaternion;
@@ -690,7 +690,7 @@ public sealed partial class DualOrbitEscapeCalculator : IFractalCalculator, IHei
         // #1118 — dual outline (colour-only: width / colours).
         bool dualOutline = !layers && field == DualOrbitField.DualOutline && key.Map == DualOrbitMap.ComplexPlane
             && _deZ.Length == width * height;
-        double pitch = (4.0 / Math.Max(1, Width)) / Math.Max(1e-12, Zoom);
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(Width, Height, Zoom);
         double outlineWidth = Math.Max(1e-3, FractalParameters.DualOrbitOutlineWidth);
         uint outlineZ = FractalParameters.DualOrbitOutlineColorZ, outlineC = FractalParameters.DualOrbitOutlineColorC;
         // #1117 — orbit-theme colours computed during Iterate.

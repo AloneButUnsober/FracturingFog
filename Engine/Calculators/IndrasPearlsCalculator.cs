@@ -92,9 +92,9 @@ public sealed class IndrasPearlsCalculator : IFractalCalculator
 
         IndrasGroup group = BuildGroup();
 
-        // World → screen: same convention as ApollonianCalculator — pixel pitch
-        // (4/Width)/Zoom, fractal origin at (CenterX, CenterY), +imag downward.
-        double pixelPitch = (4.0 / Math.Max(1, Width)) / Math.Max(1e-12, Zoom);
+        // World → screen: the camera's pitch (#1974, ViewCamera.PixelPitch), fractal
+        // origin at (CenterX, CenterY), +imag downward.
+        double pixelPitch = FracturingFog.ViewState.ViewCamera.PixelPitch(Width, Height, Zoom);
         double invPitch = 1.0 / pixelPitch;
         double halfW = Width * 0.5;
         double halfH = Height * 0.5;

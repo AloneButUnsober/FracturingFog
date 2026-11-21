@@ -453,7 +453,7 @@ public sealed class SlitCascadeCalculator : IFractalCalculator, IHeightFieldSour
         double alphaMin = Math.Log(pMaxAll) / Math.Log(cascade.Ratio), alphaMax = Math.Log(pMinAll) / Math.Log(cascade.Ratio);
         double alphaSpan = alphaMax - alphaMin;
 
-        double pitch = (4.0 / Math.Max(1, width)) / Math.Max(1e-300, Zoom);
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(width, height, Zoom);   // #1974: the camera's scale
         double cx = CenterX, cy = CenterY;
         int maxIt = Math.Max(16, MaxIterations);
         var cm = ColorMap;

@@ -163,7 +163,7 @@ public class BilliardWadaModesTests
     private static double DeepScatter(Action<FractalParameters>? tweak, int w = 256, int h = 144)
     {
         var s = Scene(tweak);
-        double pitch = 4.0 / w;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(w, h, 1.0);
         int deep = 0, launched = 0;
         for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++)
@@ -203,8 +203,8 @@ public class BilliardWadaModesTests
     public void PhaseSpace_PaintsOutsideTheSection_AndScattersDeeperThanFarField()
     {
         var ps = Render(p => p.BilliardLaunchMode = BilliardLaunchMode.PhaseSpace, 128, 128);
-        int w = 128, outside = 0;
-        double pitch = 4.0 / w;
+        int w = 128, h = 128, outside = 0;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(w, h, 1.0);
         for (int y = 0; y < 128; y++)
         {
             bool expectOutside = Math.Abs((y - 64) * pitch) >= 1.0;

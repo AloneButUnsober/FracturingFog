@@ -14,8 +14,8 @@
 // that does not parse renders the empty plane plus the error in yellow; batch
 // refuses it up front (BatchRenderer), so a bad --param never writes a file.
 //
-// View: the standard 2D plane mapping (ChaoticBilliardCalculator.PlaneAt: pitch
-// 4 / width / zoom), with world y = -plane y so the picture is y-up while pans
+// View: the standard 2D plane mapping (ChaoticBilliardCalculator.PlaneAt: the
+// camera's pitch, ViewCamera.PixelPitch, #1974), with world y = -plane y so the picture is y-up while pans
 // still follow the pointer (the Billiard Rays convention). One world unit is one
 // coordinate unit, so (1, 0) is i-hat.
 //
@@ -142,15 +142,15 @@ public sealed class MathPlaneCalculator : IFractalCalculator
     }
 
     /// <summary>Plane units per pixel for a view (ChaoticBilliardCalculator.PlaneAt's pitch).</summary>
-    public static double Pitch(int width, double zoom)
-        => (4.0 / Math.Max(1.0, width)) / Math.Max(1e-300, zoom);
+    public static double Pitch(int width, int height, double zoom)
+        => FracturingFog.ViewState.ViewCamera.PixelPitch(width, height, zoom);
 
     /// <summary>World point → pixel (y-up world, pixel centres at +0.5 not applied:
     /// pixel x spans [x, x + 1)).</summary>
     public static (double X, double Y) ToPixel(double wx, double wy, int width, int height,
                                                double centerX, double centerY, double zoom)
     {
-        double pitch = Pitch(width, zoom);
+        double pitch = Pitch(width, height, zoom);
         return ((wx - centerX) / pitch + width * 0.5, height * 0.5 - (wy + centerY) / pitch);
     }
 
@@ -240,7 +240,7 @@ public sealed class MathPlaneCalculator : IFractalCalculator
     {
         // Sizes follow the output so a 4K batch still reads like the live view.
         float ui = (float)Math.Clamp(Math.Min(w, h) / 720.0, 1.0, 4.0);
-        double pitch = Pitch(w, Zoom);
+        double pitch = Pitch(w, h, Zoom);
         double wcx = CenterX, wcy = -CenterY;          // world centre (y-up)
         double halfW = w * 0.5 * pitch, halfH = h * 0.5 * pitch;
 
@@ -650,7 +650,7 @@ public sealed class MathPlaneCalculator : IFractalCalculator
     /// that is f'(z) as a rotate-and-scale; for a matrix it is the matrix itself.</summary>
     private void DrawProbe(SKCanvas canvas, int w, int h, (double X, double Y) z, Mat2 map, MathPlaneComplexMap? cmap, float ui)
     {
-        double pitch = Pitch(w, Zoom), half = ProbeSquarePixels * 0.5 * pitch;
+        double pitch = Pitch(w, h, Zoom), half = ProbeSquarePixels * 0.5 * pitch;
         Func<double, double, (double X, double Y)> apply = cmap != null ? cmap.Apply : map.Apply;
         SKPoint Pix(double x, double y)
         {
@@ -734,8 +734,8 @@ public sealed class MathPlaneCalculator : IFractalCalculator
     /// on its y-down, corner-sampled grid (see file header). Rows come out flipped.</summary>
     public static (double CenterX, double CenterY, double Zoom) BackdropView(int w, int h, double centerX, double centerY, double zoom)
     {
-        double pitch = Pitch(w, zoom);
-        return (centerX + 0.5 * pitch, -centerY + 0.5 * pitch, 3.5 * w * zoom / (4.0 * Math.Max(w, h)));
+        double pitch = Pitch(w, h, zoom);
+        return (centerX + 0.5 * pitch, -centerY + 0.5 * pitch, zoom);   // #1974: one scale, same zoom
     }
 
     private void DrawBackdrop(int w, int h, CancellationToken ct)
@@ -828,7 +828,7 @@ public sealed class MathPlaneCalculator : IFractalCalculator
         var c = PlaneC;
         var f = MathPlaneDynamics.OrbitMap(scene.MapSource, c);
         var orbit = MathPlaneDynamics.Orbit(f, scene.OrbitSteps);
-        double pitch = Pitch(w, Zoom);
+        double pitch = Pitch(w, h, Zoom);
 
         using var dash = SKPathEffect.CreateDash(new[] { 6f * ui, 5f * ui }, 0);
         using var circle = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 1.2f * ui, Color = new SKColor(EscapeCircleColor), PathEffect = dash };
@@ -1156,7 +1156,7 @@ public sealed class MathPlaneCalculator : IFractalCalculator
     /// <summary>#1550 — the visible world rectangle of the current view (y-up).</summary>
     public MathPlaneViewBox ViewBox(int w, int h)
     {
-        double pitch = Pitch(w, Zoom);
+        double pitch = Pitch(w, h, Zoom);
         double wcy = -CenterY;
         return new MathPlaneViewBox(CenterX - w * 0.5 * pitch, CenterX + w * 0.5 * pitch,
                                     wcy - h * 0.5 * pitch, wcy + h * 0.5 * pitch, pitch);

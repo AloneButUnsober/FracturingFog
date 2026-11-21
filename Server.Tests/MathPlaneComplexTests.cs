@@ -299,7 +299,7 @@ public sealed class MathPlaneComplexTests
             MathPlaneMapMode = mode is null ? MathPlaneMapMode.None : MathPlaneMapMode.Complex,
             MathPlaneT = mode ?? 1, MathPlaneCRe = C0.Real, MathPlaneCIm = C0.Imaginary,
         };
-        var calc = new MathPlaneCalculator(W, H) { Zoom = 0.5, FractalParameters = p };
+        var calc = new MathPlaneCalculator(W, H) { Zoom = 0.4375,   /* x in [-4, 4] (#1974) */ FractalParameters = p };
         calc.Calculate(CancellationToken.None);
         return calc;
     }

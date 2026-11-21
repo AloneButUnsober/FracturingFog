@@ -281,7 +281,7 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
         int minBounces = Math.Max(0, p.BilliardRaysMinBounces);
 
         int w = Width, h = Height;
-        double pitch = (4.0 / Math.Max(1.0, w)) / Math.Max(1e-12, Zoom);
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(w, h, Zoom);   // #1974: the camera's scale
         double cx = CenterX, cy = CenterY;
         var density = Density;
         Array.Clear(density);
@@ -899,7 +899,7 @@ public sealed class BilliardRaysCalculator : IFractalCalculator, IHeightFieldSou
             for (int y = ya; y <= yb; y++)
                 for (int x = xa; x <= xb; x++)
                 {
-                    var (wx, wy) = WorldAt(x, y, w, h, cx, cy, 4.0 / Math.Max(1.0, w) / pitch);
+                    var (wx, wy) = WorldAt(x, y, w, h, cx, cy, Zoom);
                     double dist = Math.Sqrt((wx - dxw) * (wx - dxw) + (wy - dyw) * (wy - dyw));
                     if (dist <= rr - pitch) ColorBuffer[y * w + x] = DiskFillColor;
                     else if (dist <= rr) ColorBuffer[y * w + x] = DiskEdgeColor;

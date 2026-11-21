@@ -101,7 +101,7 @@ public class BilliardRaysDivergenceTests
         var c = Render(p);
         var scene = BilliardScene.Build(p);
         var launches = BilliardRaysCalculator.BuildSweep(p, scene);
-        double pitch = 4.0 / W / Zoom;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(W, H, Zoom);
         double x0 = -(W / 2.0 + 0.5) * pitch, x1 = (W / 2.0 - 0.5) * pitch;
         double y0 = -((H / 2.0 - 0.5) * pitch), y1 = (H / 2.0 + 0.5) * pitch;
         double expect = 0;

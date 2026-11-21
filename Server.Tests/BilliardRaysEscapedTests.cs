@@ -107,7 +107,7 @@ public class BilliardRaysEscapedTests
         var p = Params();
         var c = Render(p);
         var rays = DrawnRays(p);
-        double pitch = 4.0 / W / 0.6;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(W, H, 0.6);
         double x0 = -(W / 2.0 + 0.5) * pitch, x1 = (W / 2.0 - 0.5) * pitch;
         double y0 = -((H / 2.0 - 0.5) * pitch), y1 = (H / 2.0 + 0.5) * pitch;
         double expect = 0;

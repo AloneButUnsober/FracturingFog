@@ -187,7 +187,7 @@ public sealed class DualOrbitFtleLicTests
         const int w = 96, h = 96;
         var c = new DualOrbitEscapeCalculator(w, h) { CenterX = 0, CenterY = 0, Zoom = 0.15, MaxIterations = 300, FractalParameters = p, ColorMap = new RampMap() };
         c.Calculate();
-        double pitch = 4.0 / w / 0.15; int n = 0;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(w, h, 0.15); int n = 0;
         for (int y = 1; y < h - 1; y++)
             for (int x = 1; x < w - 1; x++)
             {

@@ -112,7 +112,7 @@ public sealed class WaveColorGenTests
         var calc = Talbot(Wave("return rgb(waveIntensity, wavePhase, 0.0);"), TalbotView.Intensity, w, h, cx, cy, zoom);
         var c = TalbotCarpetCalculator.Coefficients(new FractalParameters());
         double bound = Math.Pow(c.Sum(v => v.Magnitude), 2);
-        double pitch = 4.0 / w / zoom;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(w, h, zoom);
         int checkedPhase = 0;
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++)
@@ -151,7 +151,7 @@ public sealed class WaveColorGenTests
     {
         const int w = 80, h = 60; const double cx = 0.3, cy = 0.37, zoom = 1.3;
         var calc = Talbot(Wave("return rgb(fract(waveXi), fract(waveZeta), 0.0);"), TalbotView.Intensity, w, h, cx, cy, zoom);
-        double pitch = 4.0 / w / zoom;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(w, h, zoom);
         foreach (var (x, y) in new[] { (0, 0), (17, 41), (79, 59), (40, 30) })
         {
             double xi = cx + (x - w * 0.5) * pitch, zeta = cy + (y - h * 0.5) * pitch;

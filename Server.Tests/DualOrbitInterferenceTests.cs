@@ -333,7 +333,7 @@ public sealed class DualOrbitInterferenceTests
         var p = P(q => { q.DualOrbitField = field; q.DualOrbitInterferenceK = kappa; q.DualOrbitInterferenceGamma = gamma; q.DualOrbitAngularMomentum = ell; q.DualOrbitWindingMode = mode; });
         var calc = Calc(p);
         var refs = Reference(p);
-        double pitch = 4.0 / W;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(W, H, 1.0);
         double sgnC = mode == DualOrbitWindingMode.Opposite ? -1 : 1;
         int checkedPx = 0;
         for (int i = 0; i < refs.Length; i += 3)

@@ -55,7 +55,7 @@ public sealed class VortexWellPresetTests
     // one cell, walked on a fine loop so no step exceeds half a turn.
     private static double Winding(in SlitCascadeCalculator.Cascade c, FractalRegion r, int x, int y)
     {
-        double pitch = 4.0 / W / r.Zoom;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(W, H, r.Zoom);
         double x0 = r.CenterX + (x + 0.37 - W * 0.5) * pitch, y0 = r.CenterY + (y + 0.37 - H * 0.5) * pitch;
         const int per = 16;
         var pts = new List<(double, double)>();
@@ -168,7 +168,7 @@ public sealed class VortexWellPresetTests
         Assert.NotEqual(inten.ColorBuffer, domain.ColorBuffer);     // coloured by phase
         // The self-image at ζ = 1 is a ridge line: the bright bars there stand above the
         // mean height of the carpet.
-        double pitch = 4.0 / W / region.Zoom;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(W, H, region.Zoom);
         int row = (int)Math.Round((1.0 - region.CenterY) / pitch + H * 0.5);
         Assert.InRange(row, 0, H - 1);
         float rowMax = Enumerable.Range(0, W).Max(x => domain.SmoothBuffer[row * W + x]);
