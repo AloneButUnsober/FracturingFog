@@ -171,6 +171,9 @@ public static class FractalAnimatableParamsMap
         FractalType.MixmasterBasins
             => _mixmasterList,
 
+        FractalType.BlackHoleRingOrbits
+            => _bhRingList,
+
         FractalType.BicomplexMandelbrot
             => _bicomplexList,
 
@@ -730,6 +733,15 @@ public static class FractalAnimatableParamsMap
         new("MixUExit", AnimatableParamKind.ScalarDouble, Min: 3.0, Max: 16.0, Notes: "Exit once a Kasner epoch has u above this."),
         new("MixAlphaDot", AnimatableParamKind.ScalarDouble, Min: 1.0, Max: 20.0, Notes: "(ln a)' of the Anisotropy launch."),
         new("MixOmega", AnimatableParamKind.ScalarDouble, Min: -3.0, Max: 0.0, Notes: "Volume variable Omega of the Anisotropy launch."),
+    };
+
+    // #1947 — black hole + ring: the ring mass (the regular -> chaotic transition), its radius and
+    // the orbits' energy. Every frame re-integrates every orbit.
+    private static readonly AnimatableParamDescriptor[] _bhRingList =
+    {
+        new("BhRingMass", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 2.0, Notes: "Ring mass / black hole mass: 0 is plain Schwarzschild (integrable)."),
+        new("BhRingRadius", AnimatableParamKind.ScalarDouble, Min: 6.0, Max: 40.0, Notes: "Ring radius in units of M."),
+        new("BhRingEnergy", AnimatableParamKind.ScalarDouble, Min: 0.9, Max: 1.0, Notes: "Specific energy of the orbits."),
     };
 
     // #1713 — Math Plane 3D: the orbit camera.

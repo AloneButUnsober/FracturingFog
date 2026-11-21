@@ -301,6 +301,9 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _sbSeparate = _p.SpinBinSeparateRadius; _sbOrbits = _p.SpinBinMaxOrbits; _sbTol = _p.SpinBinTolerance;
         _mxView = _p.MixView; _mxUExit = _p.MixUExit; _mxOmegaDot = _p.MixOmegaDot; _mxOmega = _p.MixOmega;
         _mxAlphaDot = _p.MixAlphaDot; _mxBetaDot = _p.MixBetaDot; _mxMaxTime = _p.MixMaxTime; _mxTol = _p.MixTolerance;
+        _brView = _p.BhRingView; _brMass = _p.BhRingMass; _brRadius = _p.BhRingRadius; _brE = _p.BhRingEnergy;
+        _brL = _p.BhRingAngularMomentum; _brVs = _p.BhRingVelocityScale; _brOrbits = _p.BhRingOrbits;
+        _brOrbitTime = _p.BhRingOrbitTime; _brFateTime = _p.BhRingFateTime; _brColour = _p.BhRingColour; _brTol = _p.BhRingTolerance;
         _mathPlaneScene = _p.MathPlaneScene ?? string.Empty;
         UpdateMathPlaneSceneError();
         _raysColorSource = _p.BilliardRaysColorSource;
@@ -529,6 +532,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsMagnetisedBlackHole => FractalType == FractalType.MagnetisedBlackHole;   // #1944
     public bool IsSpinningBinaryBasins => FractalType == FractalType.SpinningBinaryBasins;   // #1945
     public bool IsMixmasterBasins => FractalType == FractalType.MixmasterBasins;   // #1946
+    public bool IsBlackHoleRingOrbits => FractalType == FractalType.BlackHoleRingOrbits;   // #1947
     /// <summary>Either billiard type: the shared scene controls (geometry, disks, bounces).</summary>
     public bool IsBilliardScene => IsChaoticBilliard || IsBilliardRays;
     /// <summary>#1548 — Math Plane (Cartesian plotter).</summary>
@@ -706,7 +710,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsLyapunov || IsTranscendentalJulia || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian || IsMirrorSpheres
-          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsBlackHoleShadow || IsHenonHeilesBasins || IsThreeBodyBasins || IsMagnetisedBlackHole || IsSpinningBinaryBasins || IsMixmasterBasins || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable || IsAdaptiveAa2D
+          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsBlackHoleShadow || IsHenonHeilesBasins || IsThreeBodyBasins || IsMagnetisedBlackHole || IsSpinningBinaryBasins || IsMixmasterBasins || IsBlackHoleRingOrbits || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable || IsAdaptiveAa2D
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -2511,6 +2515,29 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double MixBetaDot { get => _mxBetaDot; set { Set(ref _mxBetaDot, Clamp(value, -1000.0, 1000.0)); _p.MixBetaDot = _mxBetaDot; Fire(); } }
     public double MixMaxTime { get => _mxMaxTime; set { Set(ref _mxMaxTime, Clamp(value, 1.0, 1e300)); _p.MixMaxTime = _mxMaxTime; Fire(); } }
     public double MixTolerance { get => _mxTol; set { Set(ref _mxTol, Clamp(value, 1e-13, 1e-3)); _p.MixTolerance = _mxTol; Fire(); } }
+
+    // ── #1947 — black hole + ring ────────────────────────────────────────────
+    private BlackHoleRingView _brView;
+    private BlackHoleRingColour _brColour;
+    private double _brMass, _brRadius, _brE, _brL, _brVs, _brOrbitTime, _brFateTime, _brTol;
+    private int _brOrbits;
+    public BlackHoleRingView BhRingView { get => _brView; set { Set(ref _brView, value); _p.BhRingView = value; this.RaisePropertyChanged(nameof(BhRingIsSection)); this.RaisePropertyChanged(nameof(BhRingIsFates)); Fire(); } }
+    public System.Array BhRingViews => s_BhRingViews;
+    private static readonly System.Array s_BhRingViews = System.Enum.GetValues(typeof(BlackHoleRingView));
+    public bool BhRingIsSection => _brView == BlackHoleRingView.Section;
+    public bool BhRingIsFates => _brView == BlackHoleRingView.Fates;
+    public BlackHoleRingColour BhRingColour { get => _brColour; set { Set(ref _brColour, value); _p.BhRingColour = value; Fire(); } }
+    public System.Array BhRingColours => s_BhRingColours;
+    private static readonly System.Array s_BhRingColours = System.Enum.GetValues(typeof(BlackHoleRingColour));
+    public double BhRingMass { get => _brMass; set { Set(ref _brMass, Clamp(value, 0.0, 10.0)); _p.BhRingMass = _brMass; Fire(); } }
+    public double BhRingRadius { get => _brRadius; set { Set(ref _brRadius, Clamp(value, 3.0, 1000.0)); _p.BhRingRadius = _brRadius; Fire(); } }
+    public double BhRingEnergy { get => _brE; set { Set(ref _brE, Clamp(value, 0.0, 10.0)); _p.BhRingEnergy = _brE; Fire(); } }
+    public double BhRingAngularMomentum { get => _brL; set { Set(ref _brL, Clamp(value, -100.0, 100.0)); _p.BhRingAngularMomentum = _brL; Fire(); } }
+    public double BhRingVelocityScale { get => _brVs; set { Set(ref _brVs, Clamp(value, 1.0, 10000.0)); _p.BhRingVelocityScale = _brVs; Fire(); } }
+    public int BhRingOrbits { get => _brOrbits; set { Set(ref _brOrbits, (int)Clamp(value, 1, 10000)); _p.BhRingOrbits = _brOrbits; Fire(); } }
+    public double BhRingOrbitTime { get => _brOrbitTime; set { Set(ref _brOrbitTime, Clamp(value, 100.0, 1e8)); _p.BhRingOrbitTime = _brOrbitTime; Fire(); } }
+    public double BhRingFateTime { get => _brFateTime; set { Set(ref _brFateTime, Clamp(value, 10.0, 1e7)); _p.BhRingFateTime = _brFateTime; Fire(); } }
+    public double BhRingTolerance { get => _brTol; set { Set(ref _brTol, Clamp(value, 1e-13, 1e-4)); _p.BhRingTolerance = _brTol; Fire(); } }
     // #1507 — what sets the hue.
     private BilliardRayColorSource _raysColorSource;
     public BilliardRayColorSource BilliardRaysColorSource { get => _raysColorSource; set { Set(ref _raysColorSource, value); _p.BilliardRaysColorSource = value; Fire(); } }

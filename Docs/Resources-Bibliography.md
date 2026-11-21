@@ -571,6 +571,14 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
 
 <a id="levin-2000-comments"></a>
 
+<a id="dlmf-elliptic"></a>
+
+- **NIST Digital Library of Mathematical Functions**, chapter 19 (Elliptic Integrals), Version 1.2.8, release
+  2026-09-15: <https://dlmf.nist.gov/19.2> (definitions, eq. 19.2.8), <https://dlmf.nist.gov/19.4>
+  (derivatives, eq. 19.4.1), <https://dlmf.nist.gov/19.8> (Gauss's arithmetic-geometric mean, eqs. 19.8.1,
+  19.8.2, 19.8.5, 19.8.6). `BlackHoleRingOrbits` (#1947) computes the complete elliptic integrals K and E of
+  the Bach–Weyl ring by the AGM and dK/dk from 19.4.1 (`Engine/Scattering/BlackHoleRing.cs`).
+
 - **Comments on Levin 2000** — S. A. Hughes and N. J. Cornish, arXiv:gr-qc/0101024 and
   arXiv:gr-qc/0101041. One argues matched filtering is less affected than claimed; the other that with
   dissipation the basin boundaries are not truly fractal. Why #1945 labels its structure honestly.
@@ -612,12 +620,23 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
 
 - **O. Semerák, P. Suková.** *Free motion around black holes with discs or rings: between
   integrability and chaos – I.* Monthly Notices of the Royal Astronomical Society, 2010. Schwarzschild +
-  thin disc / ring (Weyl superposition), geodesic chaos. Basis of #1947. **Volume / pages not verified.**
+  thin disc / ring (Weyl superposition), geodesic chaos. Basis of #1947. Volume / pages now from the arXiv
+  record (2026-11-21): MNRAS 404, 545–574, 2010, DOI 10.1111/j.1365-2966.2009.16003.x, preprint
+  <https://arxiv.org/abs/1211.4106> (read via its ar5iv rendering). `BlackHoleRingOrbits` takes from it the
+  Weyl metric (eq. 1), λ's gradient (2), ν_Schw and λ_Schw (3, 4), the Bach–Weyl ring ν (6), the
+  constants E, ℓ and geodesic equations (14–17) with the normalisation, the equatorial section (crossings
+  both ways, plotted in r and u^r) and the preset values (ring at 20M, ℓ = 3.75M, ℰ = 0.977 / 0.94, ring mass
+  varied). Not in the paper: the r_ring → Weyl b relation, the capture radius 2.05M and the ring-hit
+  distance (FF's settings), and carrying λ along the orbit. The ring's closed-form λ (eq. 7), as transcribed
+  from the ar5iv rendering, did not reproduce its own gradient (eq. 2) away from the ring (≈ 2e-6 against
+  2e-7 at ρ = 5, z = 0) though it did near it; FF integrates that part instead and has not resolved whether
+  the difference is a transcription or rendering loss.
 
 <a id="semerak-sukova-2012"></a>
 
 - **O. Semerák, P. Suková.** *Free motion around black holes with discs or rings: between
-  integrability and chaos – II.* MNRAS 425, 2455–2476, 2012. <https://arxiv.org/abs/1211.4107>.
+  integrability and chaos – II.* MNRAS 425, 2455–2476, 2012. <https://arxiv.org/abs/1211.4107>. DOI
+  10.1111/j.1365-2966.2012.21630.x (arXiv record). Part III: arXiv:1308.4306, DOI 10.1093/mnras/stt1587.
   Recurrence methods, sticky orbits. Basis of #1947. Later parts: III (Suková & Semerák, MNRAS 436,
   978–996, 2013), IV (Witzany, Semerák & Suková), V (Polcar, Suková & Semerák, ApJ 2019) — cite as used.
 
@@ -1650,7 +1669,6 @@ entry above completed or corrected.
 - **Schnittman & Rasio 2001, Cornish & Levin 2002, Hartl & Buonanno 2005** — journal volumes and article
   numbers as given by search-result listings of the arXiv / journal records (#1945); the journal pages were
   not opened.
-- **Semerák & Suková 2010** — MNRAS volume / pages of part I (#1947).
 - **Kayser, Refsdal & Stabell 1986** — title of A&A 166, 36 (#1948).
 - **Cunha et al. 2016** — journal reference of *Chaotic lensing around boson stars and Kerr black holes
   with scalar hair*, arXiv:1609.01340 (§2.6.9).
@@ -1773,6 +1791,9 @@ page. The convention:
 
 Corrections so far:
 
+- 2026-11-21 (#1947). Semerák & Suková 2010 (part I): volume and pages now from the arXiv record (MNRAS 404,
+  545–574). Old form in the entry: **Volume / pages not verified.** Old form under awaiting verification:
+  **Semerák & Suková 2010** — MNRAS volume / pages of part I (#1947).
 - 2026-11-21 (#1946). *Mixmaster chaos* (arXiv:gr-qc/0011001): authors and journal now known (Motter &
   Letelier, Phys. Lett. A 285, 127). Old form in the entry: **Authors and journal
   not verified.** Old form under awaiting verification: ***Mixmaster chaos*** — arXiv:gr-qc/0011001 (#1946): authors and journal.

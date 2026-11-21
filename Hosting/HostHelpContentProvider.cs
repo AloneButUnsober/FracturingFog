@@ -123,6 +123,7 @@ namespace FracturingFog.Hosting
             new("Magnetised Black Hole", HelpTextBundle.MathMagnetisedBlackHoleText),   // #1944
             new("Spinning Binaries", HelpTextBundle.MathSpinningBinaryText),     // #1945
             new("Mixmaster Universe", HelpTextBundle.MathMixmasterText),         // #1946
+            new("Black Hole + Ring", HelpTextBundle.MathBlackHoleRingText),      // #1947
             new("Math Plane",    HelpTextBundle.MathPlaneText),             // #1555
             new("Math Plane 3D", HelpTextBundle.MathPlane3DText),           // #1719
             new("Double Slit",   HelpTextBundle.MathDoubleSlitText),        // #1573
@@ -189,6 +190,7 @@ namespace FracturingFog.Hosting
                 new("Magnetised Black Hole", HelpTextBundle.MathMagnetisedBlackHoleText),   // #1944
                 new("Spinning Binaries", HelpTextBundle.MathSpinningBinaryText),   // #1945
                 new("Mixmaster Universe", HelpTextBundle.MathMixmasterText),   // #1946
+                new("Black Hole + Ring", HelpTextBundle.MathBlackHoleRingText),   // #1947
             }),
             new("Math Plane", new HelpSubTab[]   // #1555
             {

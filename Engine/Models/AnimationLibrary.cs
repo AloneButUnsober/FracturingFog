@@ -489,6 +489,32 @@ namespace FracturingFog.Models
                 Tags = new List<string> { "2D", "cosmology" },
             };
 
+            // #1947 — black hole + ring. Every frame re-integrates every orbit.
+            yield return new AnimationData
+            {
+                Name = "Black hole + ring: ring mass",
+                Category = "Built-in",
+                Description = "Grows the ring from nothing to the black hole's mass and back: closed curves break into islands and chaos.",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.BlackHoleRingOrbits },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "BhRingMass", Mode = AnimationMode.Sine, Min = 0.0, Max = 1.0, FrequencyHz = 0.04, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "black-hole" },
+            };
+            yield return new AnimationData
+            {
+                Name = "Black hole + ring: energy",
+                Category = "Built-in",
+                Description = "Sweeps the particles' energy between 0.94 and 0.98 and back.",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.BlackHoleRingOrbits },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "BhRingEnergy", Mode = AnimationMode.Sine, Min = 0.94, Max = 0.98, FrequencyHz = 0.04, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "black-hole" },
+            };
+
             // #632 (Renderer C2) — precision-sweep convergence. Ramps the low
             // tier up the ladder Float→QuadDouble while a Hold track pins the
             // reference tier at QuadDouble, so the divergence field dims toward

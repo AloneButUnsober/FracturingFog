@@ -1289,6 +1289,15 @@ namespace FracturingFog
         /// <c>MixView</c>, <c>MixUExit</c>, <c>MixOmegaDot</c>, <c>MixOmega</c>, <c>MixAlphaDot</c>,
         /// <c>MixBetaDot</c>, <c>MixMaxTime</c>, <c>MixTolerance</c>.</summary>
         MixmasterBasins,
+        /// <summary>#1947 (§2.6) — free test particles around a Schwarzschild black hole with a thin
+        /// Bach-Weyl ring, an exact static axisymmetric (Weyl) superposition (Semerák &amp; Suková,
+        /// MNRAS 404, 545, 2010). Section view: their Poincaré section (r, u^r) of the equatorial plane,
+        /// accumulated from a row of orbits; Fates view: each section point launched and coloured by
+        /// captured / hit the ring / escaped / bound. <c>BlackHoleRingCalculator</c>. Tunables:
+        /// <c>BhRingView</c>, <c>BhRingMass</c>, <c>BhRingRadius</c>, <c>BhRingEnergy</c>,
+        /// <c>BhRingAngularMomentum</c>, <c>BhRingVelocityScale</c>, <c>BhRingOrbits</c>,
+        /// <c>BhRingOrbitTime</c>, <c>BhRingFateTime</c>, <c>BhRingColour</c>, <c>BhRingTolerance</c>.</summary>
+        BlackHoleRingOrbits,
     }
 
     /// <summary>Hole layout of <see cref="FractalType.BlackHoleShadow"/> (#1923).
@@ -1387,6 +1396,15 @@ namespace FracturingFog
     /// (their Fig. 19): the pixel is (β+, β−) at Ω = <c>MixOmega</c>, (ln a)′ = <c>MixAlphaDot</c>,
     /// (ln b)′ = <c>MixBetaDot</c>, (ln c)′ from the constraint.</summary>
     public enum MixmasterView { KasnerUV, Anisotropy }
+
+    /// <summary>What <see cref="FractalType.BlackHoleRingOrbits"/> shows (#1947). <see cref="Section"/>
+    /// (default): the Poincaré section of a row of orbits. <see cref="Fates"/>: each section point launched,
+    /// coloured by its fate.</summary>
+    public enum BlackHoleRingView { Section, Fates }
+
+    /// <summary>Section colouring (#1947): <see cref="Density"/> (crossings per pixel through the palette)
+    /// or <see cref="ByOrbit"/> (each orbit its own Okabe-Ito colour, so islands separate).</summary>
+    public enum BlackHoleRingColour { Density, ByOrbit }
 
     public enum RenderProfile { Preview, Final }
 
@@ -1549,6 +1567,9 @@ namespace FracturingFog
             // #1946 — Mixmaster: categorical collapsing axis through IBilliardColorMap; no
             // normals / DE / orbit data.
             FractalType.MixmasterBasins => FractalCapabilities.None,
+
+            // #1947 — black hole + ring: section density / categorical fates; no normals / DE / orbit data.
+            FractalType.BlackHoleRingOrbits => FractalCapabilities.None,
 
             // #1713 — Math Plane 3D draws its own colours (a diagram, no per-pixel data).
             FractalType.MathPlane3D => FractalCapabilities.None,
