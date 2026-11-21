@@ -300,6 +300,17 @@ namespace FracturingFog.Cli
             Probe("FF_AA_CASES", "--adaptiveaaprobe", "case filter (2d = the 2D alt calculators alone).", "#1382"),
             Probe("FF_SOLID_GPU", "--solidregionprobe", "1 = run the GPU variant.", "#1394"),
             Probe("FF_SOLID_VIEW", "--solidregionprobe", "substring of a view name to run alone.", "#1343"),
+            Probe("FF_NOVA_REPS", "--novaearlyoutprobe", "timed runs per configuration (default 5; the median).", "#1979"),
+            Probe("FF_NOVA_CAPS", "--novaearlyoutprobe", "comma-separated iteration caps (default 1500,6000).", "#1979"),
+            Probe("FF_NOVA_VIEWS", "--novaearlyoutprobe", "substring of a view name to run alone.", "#1979"),
+            Probe("FF_NOVA_OUT", "--novaearlyoutprobe", "directory for off / both / difference PNGs.", "#1979"),
+            Probe("FF_NOVA_SCAN", "--novaearlyoutprobe", "1 = map one plane's non-converged share instead.", "#1979"),
+            Probe("FF_NOVA_X", "--novaearlyoutprobe", "scan centre, real part.", "#1979"),
+            Probe("FF_NOVA_Y", "--novaearlyoutprobe", "scan centre, imaginary part.", "#1979"),
+            Probe("FF_NOVA_ZOOM", "--novaearlyoutprobe", "scan zoom.", "#1979"),
+            Probe("FF_NOVA_JULIA", "--novaearlyoutprobe", "1 = scan the Julia plane.", "#1979"),
+            Probe("FF_NOVA_JC", "--novaearlyoutprobe", "scan Julia c, real (default -0.45).", "#1979"),
+            Probe("FF_NOVA_CAP", "--novaearlyoutprobe", "scan iteration cap (default 1500).", "#1979"),
 
             // ── Tests ───────────────────────────────────────────────────────────
             new("FF_OIDN_ZIP", EnvVarKind.Text, EnvVarGroup.Test,
