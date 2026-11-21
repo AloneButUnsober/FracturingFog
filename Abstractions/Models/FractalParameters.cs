@@ -462,6 +462,34 @@ namespace FracturingFog.Models
         /// <summary>#1980 — the early-out's threshold, log10 of the multiplier (default 200).</summary>
         public double ChaosEarlyOutLog10 { get; set; } = 200;
 
+        /// <summary>#1981 — opt-in rotation-domain colouring for non-converged pixels (Julia, Phoenix,
+        /// Magnet 1 / 2, Newton, Nova). Each is classified by its orbit's Lyapunov exponent λ: a rotation
+        /// domain (|λ| below max(<see cref="RotationDomainEpsilon"/>, <see cref="RotationDomainBound"/> / N);
+        /// Siegel disks, Herman rings) shades from <see cref="RotationDomainEdgeColor"/> at its boundary
+        /// to <see cref="RotationDomainColor"/> by the |f′| / |f″| distance estimate; a chaotic orbit
+        /// (λ above it) paints <see cref="RotationDomainChaosColor"/>; an attracting one keeps its colour.
+        /// Double tier only. Off by default (frames unchanged). Idea: pauldelbrot, fractalforums.org topic 5693.</summary>
+        public bool RotationDomainColoring { get; set; } = false;
+
+        /// <summary>#1981 — the Lyapunov threshold ε (nats per step; default 1e-5, the post's).</summary>
+        public double RotationDomainEpsilon { get; set; } = 1e-5;
+
+        /// <summary>#1981 — the bound K on |log|Π f′|| in nats: a finite-N orbit in a rotation domain has
+        /// |λ| ≈ K / N, so the threshold is max(ε, K / N) (default 16).</summary>
+        public double RotationDomainBound { get; set; } = 16;
+
+        /// <summary>#1981 — pixels of distance over which a rotation domain shades from edge to centre colour.</summary>
+        public double RotationDomainShadeWidth { get; set; } = 24;
+
+        /// <summary>#1981 — a rotation domain's colour away from its boundary (ARGB).</summary>
+        public uint RotationDomainColor { get; set; } = 0xFF4FB3FFu;
+
+        /// <summary>#1981 — a rotation domain's colour at its boundary (ARGB).</summary>
+        public uint RotationDomainEdgeColor { get; set; } = 0xFF0A1C40u;
+
+        /// <summary>#1981 — the colour of a chaotic non-converged orbit (ARGB; yellow, not red).</summary>
+        public uint RotationDomainChaosColor { get; set; } = 0xFFFFCC00u;
+
         /// <summary>Initial prev-z offset for the Secant basin renderer.
         /// Secant's two-point recurrence is undefined when prev = z, so
         /// the first prev is set to (pixel + offset). Default (0.5, 0)
@@ -2291,6 +2319,13 @@ namespace FracturingFog.Models
                 NovaJuliaC = NovaJuliaC,
                 ChaosEarlyOut = ChaosEarlyOut,             // #1980
                 ChaosEarlyOutLog10 = ChaosEarlyOutLog10,
+                RotationDomainColoring = RotationDomainColoring,   // #1981
+                RotationDomainEpsilon = RotationDomainEpsilon,
+                RotationDomainBound = RotationDomainBound,
+                RotationDomainShadeWidth = RotationDomainShadeWidth,
+                RotationDomainColor = RotationDomainColor,
+                RotationDomainEdgeColor = RotationDomainEdgeColor,
+                RotationDomainChaosColor = RotationDomainChaosColor,
                 SecantInitialOffset = SecantInitialOffset,
                 SpiderCDecay = SpiderCDecay,
                 MagnetConvergence = MagnetConvergence,

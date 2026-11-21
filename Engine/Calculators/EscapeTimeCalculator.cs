@@ -313,6 +313,7 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
         if (AaMask is { } aaMask) CalculateMasked(aaMask, ct);   // #1382 adaptive AA sample
         else if (SolidRegionsApply()) CalculateSolidRegions(ct);   // #1394 opt-in (Julia / Multibrot)
         else CalculateInternal(ct);
+        ApplyRotationDomain(ct);   // #1981 opt-in (Julia / Phoenix / Magnet)
         ApplyOutOfBoundsSurround(ct);
         // #97 — global interior-alpha post-pass. Last, so it scales the final
         // in-set colour (after the surround pass). No fast-recolor path exists
@@ -1381,5 +1382,6 @@ public sealed partial class EscapeTimeCalculator : Interefaces.IFractalCalculato
         HistogramEqualizer.ApplyWithCdf(
             in st, cdf, bins, sourceMaxIter, strength, ditherIterStrength,
             out escapedCount, out saturatedCount);
+        RestampRotationDomain();   // #1981
     }
 }
