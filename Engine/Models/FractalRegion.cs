@@ -845,6 +845,20 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? MagBhEscapeHeight { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? MagBhMaxTime { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? MagBhTolerance { get; set; }
+        // #1945 — spinning compact binaries (enum as int cast).
+        [JsonIgnore(Condition = OmitNull)] public double? SpinBinMassRatio { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? SpinBinChi1 { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? SpinBinChi2 { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? SpinBinPhi1 { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? SpinBinPhi2 { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? SpinBinSeparation { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? SpinBinVelocity { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? SpinBinRadiationReaction { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? SpinBinOutcome { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? SpinBinMergeRadius { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? SpinBinSeparateRadius { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? SpinBinMaxOrbits { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? SpinBinTolerance { get; set; }
         // #1507 — int cast of BilliardRayColorSource.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysColorSource { get; set; }
         // #1508 — crossings (int casts of BilliardRayMode / BilliardCrossingValue).
@@ -1442,6 +1456,23 @@ namespace FracturingFog.Models
                     MagBhEscapeHeight = p.MagBhEscapeHeight,
                     MagBhMaxTime = p.MagBhMaxTime,
                     MagBhTolerance = p.MagBhTolerance,
+                },
+                // #1945 — spinning compact binaries: every setting.
+                FractalType.SpinningBinaryBasins => new RegionFractalParams
+                {
+                    SpinBinMassRatio = p.SpinBinMassRatio,
+                    SpinBinChi1 = p.SpinBinChi1,
+                    SpinBinChi2 = p.SpinBinChi2,
+                    SpinBinPhi1 = p.SpinBinPhi1,
+                    SpinBinPhi2 = p.SpinBinPhi2,
+                    SpinBinSeparation = p.SpinBinSeparation,
+                    SpinBinVelocity = p.SpinBinVelocity,
+                    SpinBinRadiationReaction = p.SpinBinRadiationReaction,
+                    SpinBinOutcome = (int)p.SpinBinOutcome,
+                    SpinBinMergeRadius = p.SpinBinMergeRadius,
+                    SpinBinSeparateRadius = p.SpinBinSeparateRadius,
+                    SpinBinMaxOrbits = p.SpinBinMaxOrbits,
+                    SpinBinTolerance = p.SpinBinTolerance,
                 },
                 FractalType.BilliardRays => new RegionFractalParams
                 {
@@ -2523,6 +2554,19 @@ namespace FracturingFog.Models
             if (MagBhEscapeHeight.HasValue)       p.MagBhEscapeHeight = MagBhEscapeHeight.Value;
             if (MagBhMaxTime.HasValue)            p.MagBhMaxTime = MagBhMaxTime.Value;
             if (MagBhTolerance.HasValue)          p.MagBhTolerance = MagBhTolerance.Value;
+            if (SpinBinMassRatio.HasValue)        p.SpinBinMassRatio = SpinBinMassRatio.Value;   // #1945
+            if (SpinBinChi1.HasValue)             p.SpinBinChi1 = SpinBinChi1.Value;
+            if (SpinBinChi2.HasValue)             p.SpinBinChi2 = SpinBinChi2.Value;
+            if (SpinBinPhi1.HasValue)             p.SpinBinPhi1 = SpinBinPhi1.Value;
+            if (SpinBinPhi2.HasValue)             p.SpinBinPhi2 = SpinBinPhi2.Value;
+            if (SpinBinSeparation.HasValue)       p.SpinBinSeparation = SpinBinSeparation.Value;
+            if (SpinBinVelocity.HasValue)         p.SpinBinVelocity = SpinBinVelocity.Value;
+            if (SpinBinRadiationReaction.HasValue) p.SpinBinRadiationReaction = SpinBinRadiationReaction.Value;
+            if (SpinBinOutcome is { } sbo && Enum.IsDefined(typeof(FracturingFog.SpinningBinaryOutcomeMode), sbo)) p.SpinBinOutcome = (FracturingFog.SpinningBinaryOutcomeMode)sbo;
+            if (SpinBinMergeRadius.HasValue)      p.SpinBinMergeRadius = SpinBinMergeRadius.Value;
+            if (SpinBinSeparateRadius.HasValue)   p.SpinBinSeparateRadius = SpinBinSeparateRadius.Value;
+            if (SpinBinMaxOrbits.HasValue)        p.SpinBinMaxOrbits = SpinBinMaxOrbits.Value;
+            if (SpinBinTolerance.HasValue)        p.SpinBinTolerance = SpinBinTolerance.Value;
             if (BilliardRaysColorSource.HasValue) p.BilliardRaysColorSource = (FracturingFog.BilliardRayColorSource)BilliardRaysColorSource.Value;
             if (BilliardRaysMode.HasValue)       p.BilliardRaysMode = (FracturingFog.BilliardRayMode)BilliardRaysMode.Value;
             if (BilliardRaysCrossingWindow.HasValue) p.BilliardRaysCrossingWindow = BilliardRaysCrossingWindow.Value;
@@ -4218,6 +4262,94 @@ namespace FracturingFog.Models
                 Params        = new RegionFractalParams
                 {
                     MagBhView = (int)FracturingFog.MagnetisedBhView.Meridional, MagBhField = 0.3, MagBhEnergy = 2.0, MagBhAngularMomentum = 3.0, MagBhLaunchAngle = 0.0,
+                },
+            },
+            // #1945 — spinning compact binaries (Kidder 1995 equations; Levin 2000 set-ups; fractality disputed).
+            new()
+            {
+                Name          = "Spinning Binary - Levin Conservative",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.557,
+                Iterations    =  256,
+                Description   = "Levin's conservative set-up: mass ratio 1/3, both spins 0.6, separation 5 (total masses), speed 0.45, no radiation reaction. Across and up: the two initial spin angles (radians from the orbital axis). Each binary merges, flies apart (past 1000) or is still orbiting after 50 orbits. Levin reported fractal boundaries here; later papers dispute chaos in this system, so read the edges as fractal-looking at finite resolution. The bound 'Spinning binary: spin-up' animation varies spin 1.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.SpinningBinaryBasins,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Spinning binary: spin-up",
+                Params        = new RegionFractalParams
+                {
+                    SpinBinMassRatio = 1.0 / 3.0, SpinBinChi1 = 0.6, SpinBinChi2 = 0.6, SpinBinSeparation = 5.0, SpinBinVelocity = 0.45,
+                    SpinBinMaxOrbits = 50.0, SpinBinSeparateRadius = 1000.0, SpinBinRadiationReaction = false, SpinBinOutcome = (int)FracturingFog.SpinningBinaryOutcomeMode.Fates,
+                },
+            },
+            new()
+            {
+                Name          = "Spinning Binary - Conservative Close-Up",
+                CenterX       =  -1.18,
+                CenterY       =  -1.11,
+                Zoom          =  4.0,
+                Iterations    =  256,
+                Description   = "A close-up of thin tongues of separating binaries reaching into the still-orbiting region of Levin's conservative set-up. At this zoom the edges look smooth: zoom further to see whether new structure keeps appearing at your resolution, which is the question the published dispute turns on. The bound 'Spinning binary: speed sweep' animation varies the initial speed.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.SpinningBinaryBasins,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Spinning binary: speed sweep",
+                Params        = new RegionFractalParams
+                {
+                    SpinBinMassRatio = 1.0 / 3.0, SpinBinChi1 = 0.6, SpinBinChi2 = 0.6, SpinBinSeparation = 5.0, SpinBinVelocity = 0.45,
+                    SpinBinMaxOrbits = 50.0, SpinBinSeparateRadius = 1000.0, SpinBinRadiationReaction = false, SpinBinOutcome = (int)FracturingFog.SpinningBinaryOutcomeMode.Fates,
+                },
+            },
+            new()
+            {
+                Name          = "Spinning Binary - Radiation Reaction On",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.557,
+                Iterations    =  256,
+                Description   = "The same binaries with 2.5PN radiation reaction switched on: from this close they all merge, and the merge / separate / orbit structure of the conservative map is gone. This dissipative term is at the heart of the published dispute.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.SpinningBinaryBasins,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    SpinBinMassRatio = 1.0 / 3.0, SpinBinChi1 = 0.6, SpinBinChi2 = 0.6, SpinBinSeparation = 5.0, SpinBinVelocity = 0.45,
+                    SpinBinMaxOrbits = 50.0, SpinBinSeparateRadius = 1000.0, SpinBinRadiationReaction = true, SpinBinOutcome = (int)FracturingFog.SpinningBinaryOutcomeMode.Fates,
+                },
+            },
+            new()
+            {
+                Name          = "Spinning Binary - Merger Side (Dissipative)",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.557,
+                Iterations    =  256,
+                Description   = "After Levin's dissipative figure: a maximally spinning black hole with a neutron star (mass ratio 1.4/10, spins 1 and 0.7), separation 26, speed 0.15, radiation reaction on. Every pair merges; the colour is whether the separation vector points above or below the initial orbital plane at merger.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.SpinningBinaryBasins,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    SpinBinMassRatio = 0.14, SpinBinChi1 = 1.0, SpinBinChi2 = 0.7, SpinBinSeparation = 26.0, SpinBinVelocity = 0.15,
+                    SpinBinMaxOrbits = 200.0, SpinBinRadiationReaction = true, SpinBinOutcome = (int)FracturingFog.SpinningBinaryOutcomeMode.MergerSide,
+                },
+            },
+            new()
+            {
+                Name          = "Spinning Binary - No Spins",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.557,
+                Iterations    =  256,
+                Description   = "Levin's conservative set-up with both spins zero. Without spins the post-Newtonian two-body motion stays in one plane and is integrable, so the spin angles change nothing and the map is a single colour: the control for the other presets.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.SpinningBinaryBasins,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    SpinBinMassRatio = 1.0 / 3.0, SpinBinChi1 = 0.0, SpinBinChi2 = 0.0, SpinBinSeparation = 5.0, SpinBinVelocity = 0.45,
+                    SpinBinMaxOrbits = 50.0, SpinBinRadiationReaction = false, SpinBinOutcome = (int)FracturingFog.SpinningBinaryOutcomeMode.Fates,
                 },
             },
             new()

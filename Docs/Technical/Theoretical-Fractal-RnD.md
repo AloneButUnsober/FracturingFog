@@ -553,6 +553,28 @@ Validation: conservative PN energy / angular momentum and spin magnitudes conser
 integrable (smooth map); damped circular merger time vs the quadrupole formula (source cited at
 implementation).
 
+**Shipped (#1945).** `FractalType.SpinningBinaryBasins` (`SpinningBinaryCalculator`, physics in
+`Engine/Scattering/SpinningBinary.cs` on the shared `ScatteringIntegrator`). Levin's letter does not print
+its equations; they come from [Kidder 1995](../Resources-Bibliography.md#kidder-1995) (Eqs. 3, 4a–4f, 6a–6b),
+which the letter cites. Pixel = initial spin polar angles (θ1, θ2) from the initial orbital axis; start
+x = r0 x̂, v = v0 ŷ; outcomes merged (r < merge radius, FF's setting: Levin gives none) / separated
+(r > 1000) / still orbiting (50 orbits), or merger side. Radiation reaction is a switch. Presets reproduce
+Levin's conservative and dissipative set-ups.
+
+How the transcription was validated: each piece against Kidder's own conserved quantities. N + spin-spin
+conserves E_N + E_SS to 1e-14 (exactly Hamiltonian); 1PN, 1PN + 2PN, spin-orbit and the full conservative
+system conserve their energies and J only to the next order, so the tests require the drift ratio (with the
+piece's term / without) to be small and to shrink with r. Probing showed Kidder's E_SO beats sign-flipped and
+re-weighted variants by a growing margin, and the combined system's J residual falls like r^-1.8 (the 2.5PN
+cross order Kidder's "to 2PN" statement excludes). Newtonian dynamics + Kidder's a_RR reproduces the
+circular coalescence time of Peters (1964) to 0.1 % (r0 = 20, 40).
+
+The dispute: [Hughes and Cornish](../Resources-Bibliography.md#levin-2000-comments) (PRL 85, 2000),
+[Schnittman & Rasio 2001](../Resources-Bibliography.md#schnittman-rasio-2001),
+[Cornish & Levin 2002](../Resources-Bibliography.md#cornish-levin-2002),
+[Hartl & Buonanno 2005](../Resources-Bibliography.md#hartl-buonanno-2005). FF does not settle it; the help
+says "fractal-looking at finite resolution".
+
 #### 2.6.6 Mixmaster (Bianchi IX) universe — **#1946**
 
 Anisotropic cosmology bouncing chaotically between Kasner epochs in a triangular potential. Cornish &

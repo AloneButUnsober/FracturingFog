@@ -437,6 +437,32 @@ namespace FracturingFog.Models
                 Tags = new List<string> { "2D", "black-hole", "magnetic" },
             };
 
+            // #1945 — spinning binaries. Every frame re-integrates every binary (slow).
+            yield return new AnimationData
+            {
+                Name = "Spinning binary: spin-up",
+                Category = "Built-in",
+                Description = "Moves the spin of body 1 between 0.2 and 1 and back.",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.SpinningBinaryBasins },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "SpinBinChi1", Mode = AnimationMode.Sine, Min = 0.2, Max = 1.0, FrequencyHz = 0.04, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "binary", "post-newtonian" },
+            };
+            yield return new AnimationData
+            {
+                Name = "Spinning binary: speed sweep",
+                Category = "Built-in",
+                Description = "Moves the initial relative speed between 0.43 and 0.47 and back.",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.SpinningBinaryBasins },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "SpinBinVelocity", Mode = AnimationMode.Sine, Min = 0.43, Max = 0.47, FrequencyHz = 0.04, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "binary", "post-newtonian" },
+            };
+
             // #632 (Renderer C2) — precision-sweep convergence. Ramps the low
             // tier up the ladder Float→QuadDouble while a Hold track pins the
             // reference tier at QuadDouble, so the divergence field dims toward

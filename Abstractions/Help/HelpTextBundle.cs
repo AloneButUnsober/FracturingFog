@@ -5575,6 +5575,115 @@ and the camera is Cam3DFamily=MirrorSpheres with Cam3DDistance /
 Cam3DTheta / Cam3DPhi.
 ";
 
+        /// <summary>#1945 — spinning compact binaries (Math → Scattering).</summary>
+        public const string MathSpinningBinaryText =
+@"=== Spinning Binaries ===
+
+Two spinning compact bodies (black holes or neutron stars) in
+orbit, evolved with post-Newtonian equations of motion: Newton,
+1PN and 2PN corrections, spin-orbit and spin-spin coupling, the
+precession of both spins, and optionally 2.5PN radiation
+reaction (gravitational-wave losses). The equations are Kidder's
+(1995), the ones Levin (2000) used. Units: total mass m = 1,
+G = c = 1.
+
+Each pixel is one binary. Across: the initial polar angle of
+spin 1; up: that of spin 2 (radians from the initial orbital
+axis; 'Spin azimuth 1 / 2' set the other two angles). The pair
+starts at separation r0 with speed v0 at right angles to it.
+
+--- The dispute: read this first ---
+
+Levin (2000) reported that these binaries are chaotic and that
+the boundaries between outcomes are fractal. That claim is
+disputed in print. Comments by Hughes and by Cornish (2000)
+argue that radiation reaction removes the chaos or that it does
+not matter for detection; Schnittman & Rasio (2001) found no
+chaos with Lyapunov exponents, Cornish & Levin (2002) replied,
+and Hartl & Buonanno (2005) found none for realistic spins on
+quasi-circular orbits. Fracturing Fog does not settle it. The
+edges you see are fractal-looking at finite
+resolution: zoom in and judge for yourself, and use the
+'Radiation reaction' switch to compare the two cases.
+Post-Newtonian equations are also only approximations, poorest
+at the small separations where the structure appears.
+
+--- Outcomes ---
+
+Fates (default), Levin's conservative criteria:
+  merged         (separation below the merge radius, default 2),
+  separated      (past the separation radius, default 1000),
+  still orbiting after the orbit cap (default 50 orbits).
+Merger side, after Levin's dissipative figure: merged with the
+separation vector above the initial orbital plane, merged below
+it, separated, or still orbiting (interior colour).
+Each outcome has its own Okabe-Ito colour (colour-blind safe),
+darker for more orbits. A Billiard theme colours them directly.
+Relief 3D uses the orbit count as height.
+
+The merge radius is Fracturing Fog's choice: Levin's text gives
+no number for it.
+
+--- Settings ---
+
+Mass ratio m2/m1, spins chi1 = S1/m1^2 and chi2, spin azimuths,
+initial separation r0 and speed v0, radiation reaction on/off,
+outcome mode, merge radius, separation radius, orbit cap,
+integrator tolerance.
+
+--- Presets ---
+
+Spinning Binary - Levin Conservative
+Spinning Binary - Conservative Close-Up
+Spinning Binary - Radiation Reaction On
+Spinning Binary - Merger Side (Dissipative)
+Spinning Binary - No Spins
+
+Bound animations:
+Spinning binary: spin-up
+Spinning binary: speed sweep
+
+--- Checks built into the tests ---
+
+Each transcribed term is checked against Kidder's own conserved
+energy and angular momentum; spin lengths stay fixed; without
+spins the orbit stays in its plane and the map is one colour;
+with radiation reaction a circular binary merges in about the
+time the formula of Peters (1964) gives.
+
+--- Cost ---
+
+Slow: every pixel integrates a 13-variable system for up to
+the orbit cap (seconds for a small frame, minutes for a large
+one). Use the drag preview and small frames to explore.
+
+--- Batch ---
+
+Every setting is a --param key:
+  --fractal SpinningBinaryBasins --x 0 --y 0 --zoom 0.557
+  --param SpinBinRadiationReaction=true
+Keys: SpinBinMassRatio, SpinBinChi1, SpinBinChi2, SpinBinPhi1,
+SpinBinPhi2, SpinBinSeparation, SpinBinVelocity,
+SpinBinRadiationReaction, SpinBinOutcome, SpinBinMergeRadius,
+SpinBinSeparateRadius, SpinBinMaxOrbits, SpinBinTolerance.
+Built-in presets render headless with --region ""name"".
+
+--- Sources ---
+
+J. Levin, 'Gravity waves, chaos, and spinning compact
+binaries', Physical Review Letters 84, 3515 (2000).
+L. E. Kidder, Physical Review D 52, 821 (1995): the equations.
+S. A. Hughes, PRL 85, 5480 (2000) and N. J. Cornish, PRL 85,
+3980 (2000): comments on Levin.
+J. D. Schnittman & F. A. Rasio, PRL 87, 121101 (2001);
+N. J. Cornish & J. Levin, PRL 89, 179001 (2002);
+M. D. Hartl & A. Buonanno, PRD 71, 024027 (2005).
+P. C. Peters, Physical Review 136, B1224 (1964): the
+coalescence time used in the tests.
+Levin's figures show this kind of map; Fracturing Fog adds an
+interactive and batch explorer.
+Full entries: Docs/Resources-Bibliography.md.";
+
         /// <summary>#1944 — magnetised black hole (Math → Scattering).</summary>
         public const string MathMagnetisedBlackHoleText =
 @"=== Magnetised Black Hole ===

@@ -9,7 +9,7 @@
 // plug into (Theoretical-Fractal-RnD.md §2.6): each family supplies only its equations
 // of motion and exit tests through IScatteringSystem. Black hole shadows (#1922) is
 // the first user, Hénon-Heiles (#1942) the second, the restricted three-body problem (#1943)
-// the third, the magnetised black hole (#1944) the fourth; spinning binaries (#1945), Mixmaster (#1946) and
+// the third, the magnetised black hole (#1944) the fourth, spinning binaries (#1945) the fifth; Mixmaster (#1946) and
 // black hole + ring (#1947) are planned on it.
 //
 // Integrator: the explicit Runge-Kutta 5(4) pair of Dormand & Prince (1980, J. Comput.
