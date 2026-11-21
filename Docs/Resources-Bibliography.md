@@ -43,7 +43,10 @@ on record — see [Corrected attributions](#corrected-attributions).
   (Siegel disks, Herman rings), the golden-mean Siegel disk of z² + c, whose boundary FF measures as the
   closure of the critical orbit, and the Koebe distortion bound behind the |f′| / |f″| distance estimate
   (`Engine/Calculators/RotationDomainColoring.cs`). The chapters and theorem numbers for those facts are
-  not verified (see *Citations awaiting verification*).
+  not verified (see *Citations awaiting verification*). #1984 tests a Herman ring on the map
+  e^{2πit} z²(z − 4)/(1 − 4z), recalled as Milnor's example (form from memory, not checked against the
+  book); `Server.Tests/S1984UserEquationRotationTests.cs` finds t itself by bisection on the circle
+  map's rotation number (golden mean: t ≈ 0.6151729518), so the test does not depend on a quoted value.
 - **John W. Milnor.** *Cubic polynomial maps with periodic critical orbit.* arXiv:0910.1866, 2009.
   Escape regions of the two-critical-point family (dual-orbit research).
 - **Robert L. Devaney.** *An Introduction to Chaotic Dynamical Systems.* Addison-Wesley (2nd ed.
@@ -1484,7 +1487,8 @@ Programs and galleries the project measured itself against, learned from, or pay
   Part 2 of #1981 follows the same post's distance-estimate anti-aliasing idea: skip the sub-samples of a
   pixel whose distance estimate exceeds about 0.708 px (`FractalParameters.AdaptiveAaDistanceSkip`,
   `Engine/Rendering/AdaptiveAaDistance.cs`). FF's lower-bound form (the Koebe factor on the exterior
-  estimate, a quarter of the rotation-domain one) is FF's.
+  estimate, a quarter of the rotation-domain one) is FF's. #1984 extends the colouring to holomorphic User
+  Equations (`Engine/Calculators/UserEquationCalculator.RotationDomain.cs`).
 
 ## Sites, communities, and other long-form references
 
@@ -1517,6 +1521,8 @@ entry above completed or corrected.
   content from a user paste, the page not opened).
 - **Exterior distance bound (`distance-bound-koebe`)** — the primary source and statement of
   sinh G / (2 e^G |G′|) < dist(c, M) < 2 sinh G / |G′| (#1981 part 2).
+- **Milnor, *Dynamics in One Complex Variable*** — the Herman-ring example map e^{2πit} z²(z − 4)/(1 − 4z)
+  (#1984; form recalled, the book's statement and figure not checked).
 - **Milnor, *Dynamics in One Complex Variable*** — the chapters / theorems for the facts #1981's tests use
   (Siegel disk boundary in the closure of the critical orbit for the golden-mean quadratic; the Koebe
   distortion theorem, Koebe 1907 / Bieberbach 1916 from memory, original papers not checked).

@@ -1174,7 +1174,7 @@ namespace FracturingFog.Models
         /// NewtonCalculator's passes).</summary>
         internal static bool RotationDomainCapable(FractalType t) =>
             t is FractalType.Julia or FractalType.Phoenix or FractalType.Magnet1 or FractalType.Magnet2
-              or FractalType.Newton or FractalType.Nova;
+              or FractalType.Newton or FractalType.Nova or FractalType.UserEquation;   // #1984
 
         /// <summary>#1981 part 2 — the families whose adaptive AA mask can use a distance estimate:
         /// the exterior DE (Mandelbrot, Julia, Multibrot) or the rotation-domain distance.</summary>

@@ -474,7 +474,7 @@ namespace FracturingFog.Models
         public double ChaosEarlyOutLog10 { get; set; } = 200;
 
         /// <summary>#1981 — opt-in rotation-domain colouring for non-converged pixels (Julia, Phoenix,
-        /// Magnet 1 / 2, Newton, Nova). Each is classified by its orbit's Lyapunov exponent λ: a rotation
+        /// Magnet 1 / 2, Newton, Nova; #1984 holomorphic User Equations). Each is classified by its orbit's Lyapunov exponent λ: a rotation
         /// domain (|λ| below max(<see cref="RotationDomainEpsilon"/>, <see cref="RotationDomainBound"/> / N);
         /// Siegel disks, Herman rings) shades from <see cref="RotationDomainEdgeColor"/> at its boundary
         /// to <see cref="RotationDomainColor"/> by the |f′| / |f″| distance estimate; a chaotic orbit

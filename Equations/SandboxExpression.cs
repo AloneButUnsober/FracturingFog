@@ -552,6 +552,21 @@ namespace FracturingFog.Models
             return (r.V, r.D);
         }
 
+        /// <summary>#1984 — the step's directional derivative at fixed c along the tangent
+        /// (<paramref name="dz"/>, <paramref name="dprev"/>) of (z, prev): ∂f/∂z·dz + ∂f/∂prev·dprev
+        /// (c, n constant). Only valid when <see cref="IsHolomorphic"/>.</summary>
+        public (Complex f, Complex df) EvalStepTangent(Complex z, Complex dz, Complex c, int n, CxDual[] denv,
+                                                       Complex prev, Complex dprev)
+        {
+            denv[SlotZ] = new CxDual(z, dz);
+            denv[SlotC] = CxDual.Const(c);
+            denv[SlotN] = CxDual.Const(n);
+            denv[SlotPrev] = new CxDual(prev, dprev);
+            denv[SlotIter] = CxDual.Const(n);
+            var r = Root.EvalD(denv);
+            return (r.V, r.D);
+        }
+
         // ── Parser ────────────────────────────────────────────────────────────
         // #1101 — the syntax lives in EquationFrontEnd (shared with the User Bulb
         // 3D language); this builder supplies the 2D language: complex values,
