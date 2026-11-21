@@ -1252,6 +1252,16 @@ namespace FracturingFog
         /// <c>HenonHeilesLaunch</c>, <c>HenonHeilesLaunchAngle</c>, <c>HenonHeilesChannel</c>,
         /// <c>HenonHeilesChannelScale</c>, <c>HenonHeilesMaxTime</c>, <c>HenonHeilesTolerance</c>.</summary>
         HenonHeilesBasins,
+        /// <summary>#1943 (§2.6) — the planar circular restricted three-body problem in the rotating
+        /// frame. Fates view: each pixel is a launch at a fixed Jacobi constant, traced (shared
+        /// scattering integrator) until it crashes into a primary, escapes or stays bounded (Nagler
+        /// 2004 / 2005 "crash test"). Lagrange view: Newton-Raphson on the gradient of the effective
+        /// potential, coloured by which of L1-L5 each start reaches (Zotos 2016).
+        /// <c>ThreeBodyCalculator</c>. Tunables: <c>ThreeBodyView</c>, <c>ThreeBodyMassRatio</c>,
+        /// <c>ThreeBodyJacobi</c>, <c>ThreeBodyLaunch</c>, <c>ThreeBodyLaunchAngle</c>,
+        /// <c>ThreeBodyCrashRadius</c>, <c>ThreeBodyEscapeRadius</c>, <c>ThreeBodyMaxTime</c>,
+        /// <c>ThreeBodyTolerance</c>, <c>ThreeBodyNewtonIterations</c>.</summary>
+        ThreeBodyBasins,
     }
 
     /// <summary>Hole layout of <see cref="FractalType.BlackHoleShadow"/> (#1923).
@@ -1310,6 +1320,20 @@ namespace FracturingFog
     /// <see cref="EscapeTime"/>: log(1 + time to leave). <see cref="TurningPoints"/>: sign changes
     /// of the radial velocity. <see cref="SaddleDistance"/>: −log of the closest pass to a saddle.</summary>
     public enum HenonHeilesChannel { Exit, EscapeTime, TurningPoints, SaddleDistance }
+
+    /// <summary>What <see cref="FractalType.ThreeBodyBasins"/> shows (#1943).
+    /// <see cref="Fates"/> (default): each pixel is a launch position at the Jacobi constant,
+    /// coloured by crash into primary 1 / primary 2, escape, or bounded at the time limit.
+    /// <see cref="LagrangeBasins"/>: each pixel starts Newton-Raphson on ∇Ω = 0, coloured by
+    /// which equilibrium L1-L5 it reaches.</summary>
+    public enum ThreeBodyView { Fates, LagrangeBasins }
+
+    /// <summary>Launch direction of the <see cref="ThreeBodyView.Fates"/> view (#1943), about the
+    /// centre of mass. <see cref="Prograde"/> (default): perpendicular to the position, in the
+    /// primaries' sense of rotation (anticlockwise). <see cref="Retrograde"/>: the other way.
+    /// <see cref="Radial"/>: straight out. <see cref="FixedAngle"/>: <c>ThreeBodyLaunchAngle</c>
+    /// degrees from +x everywhere.</summary>
+    public enum ThreeBodyLaunch { Prograde, Retrograde, Radial, FixedAngle }
 
     public enum RenderProfile { Preview, Final }
 
@@ -1456,6 +1480,10 @@ namespace FracturingFog
             // #1942 — Hénon-Heiles exit basins: categorical exit through IBilliardColorMap, or
             // the 3-param Map on a channel; no normals / DE / orbit data.
             FractalType.HenonHeilesBasins => FractalCapabilities.None,
+
+            // #1943 — restricted three-body: categorical fate / Lagrange basin through
+            // IBilliardColorMap (or INewtonColorMap for the Lagrange view); no normals / DE / orbit data.
+            FractalType.ThreeBodyBasins => FractalCapabilities.None,
 
             // #1713 — Math Plane 3D draws its own colours (a diagram, no per-pixel data).
             FractalType.MathPlane3D => FractalCapabilities.None,

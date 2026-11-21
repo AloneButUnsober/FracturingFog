@@ -5575,6 +5575,124 @@ and the camera is Cam3DFamily=MirrorSpheres with Cam3DDistance /
 Cam3DTheta / Cam3DPhi.
 ";
 
+        /// <summary>#1943 — restricted three-body basins (Math → Scattering).</summary>
+        public const string MathThreeBodyText =
+@"=== Three-Body Basins ===
+
+Two heavy bodies (the primaries) circle each other; a third,
+light enough not to disturb them, moves in their field. This is
+the planar circular restricted three-body problem. Everything is
+drawn in the frame that turns with the primaries, so they stand
+still: the heavier one (mass 1 - mu) at x = -mu, the lighter one
+(mass mu) at x = 1 - mu, one unit apart, the centre of mass at
+the origin. With mu = 1/2 (two equal masses) it is the Copenhagen
+problem.
+
+In this frame the particle feels gravity, the centrifugal push
+and the Coriolis force. They combine into the effective potential
+
+    Omega = (x^2 + y^2)/2 + (1 - mu)/r1 + mu/r2
+
+and the Jacobi constant C = 2 Omega - v^2 stays fixed along every
+path. A particle can only go where 2 Omega >= C: the boundary is
+the zero-velocity curve, and the region beyond it (grey) is
+forbidden. Omega has five equilibria, the Lagrange points: L1
+between the primaries, L2 and L3 outside them on the axis, L4 and
+L5 at the tips of the equilateral triangles.
+
+--- Fates view (default) ---
+
+Each pixel is a launch position. The speed comes from C, the
+direction from 'Launch direction' (about the centre of mass):
+Prograde (the way the primaries turn), Retrograde, Radial or
+FixedAngle. The path is followed until the particle
+  crashes into the heavier primary   (comes within the crash
+                                      radius of it),
+  crashes into the lighter primary,
+  escapes                            (passes the escape radius),
+or is still bounded at the time limit (the theme's interior
+colour). Nagler called this the crash test and mapped these
+fates for the Copenhagen problem (2004) and for any mass ratio
+(2005). Where the fates meet, they mix at every scale.
+
+The Jacobi constant is the main dial. Lower C means more energy.
+For two equal masses: above C = 4 (the value at L1) each primary
+has its own closed region; between 4 and about 3.457 (L2 / L3)
+the neck between the primaries opens but nothing can get out;
+below 3.457 the way out opens past L2 and L3; below 2.75 (L4 /
+L5) nothing is forbidden.
+
+--- Lagrange basins view ---
+
+Each pixel starts Newton-Raphson on grad Omega = 0 (the same
+method as the Newton fractals, on a real 2D system) and is
+coloured by which of L1-L5 it reaches. Zotos (2016) mapped these
+basins, with an oblate, radiating primary added (Fracturing Fog
+has neither term). Starts that do not converge within 'Newton
+iterations' take the interior colour. This view is fast.
+
+--- Colouring ---
+
+Each fate or Lagrange point gets its own Okabe-Ito colour
+(colour-blind safe), darker for longer times / more iterations.
+A Billiard theme colours them directly; in the Lagrange view a
+Newton theme works as it does for the Newton fractal. Relief 3D
+uses log time (Fates) or the iteration count (Lagrange).
+
+--- Settings ---
+
+Mass ratio mu (0 < mu <= 0.5), Jacobi constant, launch direction
+and angle, crash radius, escape radius, time limit (one turn of
+the primaries is 2 pi), integrator tolerance (close passes need
+it small), Newton iterations.
+
+--- Presets ---
+
+Three-Body - Copenhagen Fates
+Three-Body - Copenhagen Trapped Zone
+Three-Body - Retrograde Launch
+Three-Body - Unequal Masses
+Three-Body - Lagrange Basins
+Three-Body - Lagrange Basins, Unequal
+
+Bound animations:
+Three-body: falling Jacobi
+Three-body: mass ratio sweep
+
+--- Cost and anti-aliasing ---
+
+The Fates view integrates one path per pixel with the
+Dormand-Prince integrator shared with Black Hole Shadows; paths
+that pass close to a primary take small steps, so it is the
+slowest view (seconds for a small frame). With a High / Ultra /
+Extreme quality preset, 'Adaptive anti-aliasing' re-traces only
+the boundary pixels.
+
+--- Batch ---
+
+Every setting is a --param key:
+  --fractal ThreeBodyBasins --x 0 --y 0 --zoom 1
+  --param ThreeBodyJacobi=3.2 --param ThreeBodyMassRatio=0.1
+  --param ThreeBodyView=LagrangeBasins
+Keys: ThreeBodyView, ThreeBodyMassRatio, ThreeBodyJacobi,
+ThreeBodyLaunch, ThreeBodyLaunchAngle, ThreeBodyCrashRadius,
+ThreeBodyEscapeRadius, ThreeBodyMaxTime, ThreeBodyTolerance,
+ThreeBodyNewtonIterations.
+Built-in presets render headless with --region ""name"".
+
+--- Sources and prior art ---
+
+J. Nagler, 'Crash test for the Copenhagen problem', Physical
+Review E 69, 066218 (2004).
+J. Nagler, 'Crash test for the restricted three-body problem',
+Physical Review E 71, 026227 (2005).
+E. E. Zotos, 'Fractal basins of attraction in the planar circular
+restricted three-body problem with oblateness and radiation
+pressure', Astrophysics and Space Science 361, 181 (2016).
+Both views are well studied; Fracturing Fog adds an interactive
+and batch explorer, not the phenomena.
+Full entries: Docs/Resources-Bibliography.md.";
+
         /// <summary>#1942 — Hénon-Heiles exit basins (Math → Scattering).</summary>
         public const string MathHenonHeilesText =
 @"=== Henon-Heiles Basins ===

@@ -1494,6 +1494,28 @@ namespace FracturingFog.Models
         /// <summary>#1942 — integrator relative tolerance per step. Default 1e-8.</summary>
         public double HenonHeilesTolerance { get; set; } = 1e-8;
 
+        // ── Restricted three-body basins (#1943) ─────────────────────────
+        /// <summary>#1943 — Fates or Lagrange basins (see <see cref="FracturingFog.ThreeBodyView"/>). Default Fates.</summary>
+        public ThreeBodyView ThreeBodyView { get; set; } = ThreeBodyView.Fates;
+        /// <summary>#1943 — mass ratio μ of the smaller primary (0 &lt; μ ≤ 1/2). 1/2 is the Copenhagen problem. Default 0.5.</summary>
+        public double ThreeBodyMassRatio { get; set; } = 0.5;
+        /// <summary>#1943 — Jacobi constant C = 2Ω − v² of every launch (Fates view). Lower C = more energy. Default 3.</summary>
+        public double ThreeBodyJacobi { get; set; } = 3.0;
+        /// <summary>#1943 — launch direction (see <see cref="FracturingFog.ThreeBodyLaunch"/>). Default Prograde.</summary>
+        public ThreeBodyLaunch ThreeBodyLaunch { get; set; } = ThreeBodyLaunch.Prograde;
+        /// <summary>#1943 — FixedAngle launch direction, degrees from +x. Default 0.</summary>
+        public double ThreeBodyLaunchAngle { get; set; } = 0.0;
+        /// <summary>#1943 — a particle this close to a primary has crashed into it. Default 0.01.</summary>
+        public double ThreeBodyCrashRadius { get; set; } = 0.01;
+        /// <summary>#1943 — a particle this far from the centre of mass has escaped. Default 10.</summary>
+        public double ThreeBodyEscapeRadius { get; set; } = 10.0;
+        /// <summary>#1943 — time limit; a particle with no fate by then is bounded. Default 100.</summary>
+        public double ThreeBodyMaxTime { get; set; } = 100.0;
+        /// <summary>#1943 — integrator relative tolerance per step. Default 1e-9.</summary>
+        public double ThreeBodyTolerance { get; set; } = 1e-9;
+        /// <summary>#1943 — Newton-Raphson iteration cap (Lagrange view). Default 60.</summary>
+        public int ThreeBodyNewtonIterations { get; set; } = 60;
+
         // ── Slit cascade (#1569, double-slit epic #1565) ──────────────────
         /// <summary>Slit cascade: children per slit, N (2..16). N ≥ 3 for the fringe
         /// weights to differ (a symmetric pair is a plain Cantor set).</summary>
@@ -2609,6 +2631,16 @@ namespace FracturingFog.Models
                 HenonHeilesChannelScale = HenonHeilesChannelScale,
                 HenonHeilesMaxTime = HenonHeilesMaxTime,
                 HenonHeilesTolerance = HenonHeilesTolerance,
+                ThreeBodyView = ThreeBodyView,
+                ThreeBodyMassRatio = ThreeBodyMassRatio,
+                ThreeBodyJacobi = ThreeBodyJacobi,
+                ThreeBodyLaunch = ThreeBodyLaunch,
+                ThreeBodyLaunchAngle = ThreeBodyLaunchAngle,
+                ThreeBodyCrashRadius = ThreeBodyCrashRadius,
+                ThreeBodyEscapeRadius = ThreeBodyEscapeRadius,
+                ThreeBodyMaxTime = ThreeBodyMaxTime,
+                ThreeBodyTolerance = ThreeBodyTolerance,
+                ThreeBodyNewtonIterations = ThreeBodyNewtonIterations,
                 SlitCascadeChildren = SlitCascadeChildren,
                 SlitCascadeRatio = SlitCascadeRatio,
                 SlitCascadeDepth = SlitCascadeDepth,

@@ -382,6 +382,34 @@ namespace FracturingFog.Models
                 Tags = new List<string> { "2D", "henon-heiles" },
             };
 
+            // #1943 — restricted three-body basins. Every frame re-traces every pixel.
+            yield return new AnimationData
+            {
+                Name = "Three-body: falling Jacobi",
+                Category = "Built-in",
+                Description = "Sweeps the Jacobi constant between 2.8 and 3.6 and back: the forbidden regions "
+                            + "grow and close the escape necks, then open again.",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.ThreeBodyBasins },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "ThreeBodyJacobi", Mode = AnimationMode.Sine, Min = 2.8, Max = 3.6, FrequencyHz = 0.04, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "three-body" },
+            };
+            yield return new AnimationData
+            {
+                Name = "Three-body: mass ratio sweep",
+                Category = "Built-in",
+                Description = "Moves the mass ratio between 0.05 and 0.5 and back: the Lagrange points slide "
+                            + "towards the lighter primary and the basins reshape round them.",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.ThreeBodyBasins },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "ThreeBodyMassRatio", Mode = AnimationMode.Sine, Min = 0.05, Max = 0.5, FrequencyHz = 0.04, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "three-body" },
+            };
+
             // #632 (Renderer C2) — precision-sweep convergence. Ramps the low
             // tier up the ladder Float→QuadDouble while a Hold track pins the
             // reference tier at QuadDouble, so the divergence field dims toward

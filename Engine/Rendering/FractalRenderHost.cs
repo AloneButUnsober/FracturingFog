@@ -188,6 +188,8 @@ namespace FracturingFog.Rendering
         private BlackHoleShadowCalculator _blackHoleShadowCalculator => LazyCalc(ref _blackHoleShadowCalculatorSlot, static (w, h) => new BlackHoleShadowCalculator(w, h));
         private HenonHeilesCalculator? _henonHeilesCalculatorSlot;   // #1942
         private HenonHeilesCalculator _henonHeilesCalculator => LazyCalc(ref _henonHeilesCalculatorSlot, static (w, h) => new HenonHeilesCalculator(w, h));
+        private ThreeBodyCalculator? _threeBodyCalculatorSlot;   // #1943
+        private ThreeBodyCalculator _threeBodyCalculator => LazyCalc(ref _threeBodyCalculatorSlot, static (w, h) => new ThreeBodyCalculator(w, h));
         private PrecisionFieldCalculator? _precisionFieldCalculatorSlot;
         private PrecisionFieldCalculator _precisionFieldCalculator => LazyCalc(ref _precisionFieldCalculatorSlot, static (w, h) => new PrecisionFieldCalculator(w, h));
         private DualOrbitEscapeCalculator? _dualOrbitCalculatorSlot;
@@ -2859,6 +2861,7 @@ namespace FracturingFog.Rendering
             FractalType.BilliardRays => new BilliardRaysCalculator(w, h),
             FractalType.BlackHoleShadow => new BlackHoleShadowCalculator(w, h),   // #1923
             FractalType.HenonHeilesBasins => new HenonHeilesCalculator(w, h),   // #1942
+            FractalType.ThreeBodyBasins => new ThreeBodyCalculator(w, h),   // #1943
             FractalType.SlitCascade => new SlitCascadeCalculator(w, h),   // #1569
             FractalType.TalbotCarpet => new TalbotCarpetCalculator(w, h), // #1570
             FractalType.PrecisionField => new PrecisionFieldCalculator(w, h),
@@ -4437,6 +4440,7 @@ namespace FracturingFog.Rendering
                 case BilliardRaysCalculator br: br.FractalParameters = ViewState.FractalParameters; break;
                 case BlackHoleShadowCalculator bh: bh.FractalParameters = ViewState.FractalParameters; break;   // #1923
                 case HenonHeilesCalculator hh: hh.FractalParameters = ViewState.FractalParameters; break;   // #1942
+                case ThreeBodyCalculator tb: tb.FractalParameters = ViewState.FractalParameters; break;   // #1943
                 case MathPlaneCalculator mp: mp.FractalParameters = ViewState.FractalParameters; break;
                 case MathPlane3DCalculator mp3: mp3.FractalParameters = ViewState.FractalParameters; break;   // #1713
                 case PrecisionFieldCalculator pf: pf.FractalParameters = ViewState.FractalParameters; break;
@@ -4656,6 +4660,7 @@ namespace FracturingFog.Rendering
             FractalType.MathPlane3D => _mathPlane3DCalculator,
             FractalType.BlackHoleShadow => _blackHoleShadowCalculator,   // #1923
             FractalType.HenonHeilesBasins => _henonHeilesCalculator,   // #1942
+            FractalType.ThreeBodyBasins => _threeBodyCalculator,   // #1943
             FractalType.PrecisionField => _precisionFieldCalculator,
             FractalType.JulibrotPair => _dualOrbitCalculator,
             FractalType.IndrasPearls => _indrasPearlsCalculator,

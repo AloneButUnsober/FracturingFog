@@ -451,20 +451,29 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
 
 - **Jan Nagler.** *Crash test for the Copenhagen problem.* Physical Review E 69, 066218, 2004.
   Escape / crash / bounded fates in the equal-mass restricted three-body problem. Basis of #1943.
-  Checked via secondary citation (a library catalogue record and a 2015 Zotos paper's reference list);
-  APS page not opened.
+  DOI [10.1103/PhysRevE.69.066218](https://doi.org/10.1103/PhysRevE.69.066218) (issue 6), checked against
+  the Crossref record 2026-11-21 (first checked via secondary citation: a library catalogue record and a
+  2015 Zotos paper's reference list). `ThreeBodyBasins` (Fates view) renders these fates for μ = 1/2;
+  the crash radius, escape radius and time limit are FF's own settings, not values taken from the paper.
 
 <a id="nagler-2005"></a>
 
 - **Jan Nagler.** *Crash test for the restricted three-body problem.* Physical Review E 71, 026227, 2005.
-  The same analysis for general mass ratio. Basis of #1943. Checked via secondary citation, as above.
+  The same analysis for general mass ratio. Basis of #1943. DOI
+  [10.1103/PhysRevE.71.026227](https://doi.org/10.1103/PhysRevE.71.026227) (issue 2), checked against the
+  Crossref record 2026-11-21 (first checked via secondary citation, as above). `ThreeBodyBasins` takes any
+  mass ratio 0 < μ ≤ 1/2.
 
 <a id="zotos-2016"></a>
 
 - **E. E. Zotos.** *Fractal basins of attraction in the planar circular restricted three-body
-  problem with oblateness and radiation pressure.* Astrophysics and Space Science, 2016.
-  <https://arxiv.org/abs/1608.08610>. Newton–Raphson basins of the equilibrium points. Basis of #1943's
-  NR view. **Volume / article number not verified.**
+  problem with oblateness and radiation pressure.* Astrophysics and Space Science 361 (6), 181, 2016.
+  DOI [10.1007/s10509-016-2769-1](https://doi.org/10.1007/s10509-016-2769-1); preprint
+  <https://arxiv.org/abs/1608.08610>. Volume, issue and article number checked against the Crossref record
+  2026-11-21. Newton–Raphson basins of the equilibrium points on the configuration plane. Basis of #1943's
+  Lagrange view, which uses the same multivariate Newton–Raphson map on ∇Ω without the oblateness and
+  radiation-pressure terms. Prior art: both #1943 views are well studied (Nagler, Zotos); FF adds the
+  interactive / batch explorer.
 
 <a id="wald-1974"></a>
 
@@ -1543,7 +1552,6 @@ entry above completed or corrected.
 - **Kluitenberg, Roest & Seri 2022** — journal reference of arXiv:2211.06880 (#1928; cited elsewhere as
   Bollettino dell'Unione Matematica Italiana, 2023).
 - **Yumoto, Nitta, Chiba & Sugiyama 2012** — journal reference of arXiv:1208.0635 (#1923).
-- **Zotos 2016** — Astrophysics and Space Science volume / article number for arXiv:1608.08610 (#1943).
 - **Comments on Levin 2000** — which of arXiv:gr-qc/0101024 / gr-qc/0101041 is Hughes's and which is
   Cornish's, and their journal references (#1945).
 - ***Mixmaster chaos*** — arXiv:gr-qc/0011001 (#1946): authors and journal.
@@ -1670,6 +1678,9 @@ page. The convention:
 
 Corrections so far:
 
+- 2026-11-21 (#1943). Zotos 2016 now has its volume, issue and article number (361 (6), 181) and DOI, checked
+  against Crossref. Old form in the entry: **Volume / article number not verified.** Old form under
+  awaiting verification: **Zotos 2016** — Astrophysics and Space Science volume / article number for arXiv:1608.08610 (#1943).
 - 2026-11-21 (#1942). Now the full entry `#henon-heiles-1964`, Astron. J. 69, 73, DOI 10.1086/109234,
   checked against NASA ADS. Old form under awaiting verification: **Hénon & Heiles 1964** — the original paper defining the Hénon–Heiles potential (#1942): full
   reference not yet checked.

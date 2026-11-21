@@ -119,6 +119,7 @@ namespace FracturingFog.Hosting
             new("Wada Mirror Spheres", HelpTextBundle.MathMirrorSpheresText),   // #1442
             new("Black Hole Shadows", HelpTextBundle.MathBlackHoleShadowText),   // #1928
             new("Henon-Heiles Basins", HelpTextBundle.MathHenonHeilesText),      // #1942
+            new("Three-Body Basins", HelpTextBundle.MathThreeBodyText),          // #1943
             new("Math Plane",    HelpTextBundle.MathPlaneText),             // #1555
             new("Math Plane 3D", HelpTextBundle.MathPlane3DText),           // #1719
             new("Double Slit",   HelpTextBundle.MathDoubleSlitText),        // #1573
@@ -181,6 +182,7 @@ namespace FracturingFog.Hosting
             {
                 new("Black Hole Shadows", HelpTextBundle.MathBlackHoleShadowText),
                 new("Henon-Heiles Basins", HelpTextBundle.MathHenonHeilesText),   // #1942
+                new("Three-Body Basins", HelpTextBundle.MathThreeBodyText),   // #1943
             }),
             new("Math Plane", new HelpSubTab[]   // #1555
             {
