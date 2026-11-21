@@ -165,6 +165,9 @@ public static class FractalAnimatableParamsMap
         FractalType.MagnetisedBlackHole
             => _magBhList,
 
+        FractalType.SpinningBinaryBasins
+            => _spinBinList,
+
         FractalType.BicomplexMandelbrot
             => _bicomplexList,
 
@@ -706,6 +709,16 @@ public static class FractalAnimatableParamsMap
             Notes: "Axial angular momentum of every launch (Meridional view)."),
         new("MagBhLaunchAngle", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 360.0,
             Notes: "Meridional launch direction in degrees."),
+    };
+
+    // #1945 — spinning binaries: spin magnitudes, spin azimuths and the initial speed. Every
+    // change re-integrates every binary (slow).
+    private static readonly AnimatableParamDescriptor[] _spinBinList =
+    {
+        new("SpinBinChi1", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 1.0, Notes: "Spin of body 1 (S1/m1²)."),
+        new("SpinBinChi2", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 1.0, Notes: "Spin of body 2 (S2/m2²)."),
+        new("SpinBinPhi1", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 360.0, Notes: "Azimuth of spin 1 in degrees."),
+        new("SpinBinVelocity", AnimatableParamKind.ScalarDouble, Min: 0.1, Max: 0.7, Notes: "Initial relative speed."),
     };
 
     // #1713 — Math Plane 3D: the orbit camera.

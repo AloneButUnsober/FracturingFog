@@ -295,6 +295,10 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _mbEscape = _p.MagBhEscapeHeight;
         _mbMaxTime = _p.MagBhMaxTime;
         _mbTolerance = _p.MagBhTolerance;
+        _sbQ = _p.SpinBinMassRatio; _sbChi1 = _p.SpinBinChi1; _sbChi2 = _p.SpinBinChi2;
+        _sbPhi1 = _p.SpinBinPhi1; _sbPhi2 = _p.SpinBinPhi2; _sbR0 = _p.SpinBinSeparation; _sbV0 = _p.SpinBinVelocity;
+        _sbRr = _p.SpinBinRadiationReaction; _sbOutcome = _p.SpinBinOutcome; _sbMerge = _p.SpinBinMergeRadius;
+        _sbSeparate = _p.SpinBinSeparateRadius; _sbOrbits = _p.SpinBinMaxOrbits; _sbTol = _p.SpinBinTolerance;
         _mathPlaneScene = _p.MathPlaneScene ?? string.Empty;
         UpdateMathPlaneSceneError();
         _raysColorSource = _p.BilliardRaysColorSource;
@@ -521,6 +525,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsHenonHeilesBasins => FractalType == FractalType.HenonHeilesBasins;   // #1942
     public bool IsThreeBodyBasins => FractalType == FractalType.ThreeBodyBasins;   // #1943
     public bool IsMagnetisedBlackHole => FractalType == FractalType.MagnetisedBlackHole;   // #1944
+    public bool IsSpinningBinaryBasins => FractalType == FractalType.SpinningBinaryBasins;   // #1945
     /// <summary>Either billiard type: the shared scene controls (geometry, disks, bounces).</summary>
     public bool IsBilliardScene => IsChaoticBilliard || IsBilliardRays;
     /// <summary>#1548 — Math Plane (Cartesian plotter).</summary>
@@ -672,6 +677,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         || IsThreeBodyBasins
         // Magnetised black hole — log proper time height field (#1944).
         || IsMagnetisedBlackHole
+        // Spinning binaries — orbit count height field (#1945).
+        || IsSpinningBinaryBasins
         // Precision field — divergence-scalar height field (#628).
         || IsPrecisionField
         // Dual-orbit escape-geometry (#864) — the derived scalar rides the
@@ -694,7 +701,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsLyapunov || IsTranscendentalJulia || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian || IsMirrorSpheres
-          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsBlackHoleShadow || IsHenonHeilesBasins || IsThreeBodyBasins || IsMagnetisedBlackHole || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable || IsAdaptiveAa2D
+          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsBlackHoleShadow || IsHenonHeilesBasins || IsThreeBodyBasins || IsMagnetisedBlackHole || IsSpinningBinaryBasins || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable || IsAdaptiveAa2D
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -2463,6 +2470,26 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double MagBhMaxTime { get => _mbMaxTime; set { Set(ref _mbMaxTime, Clamp(value, 1.0, 1e6)); _p.MagBhMaxTime = _mbMaxTime; Fire(); } }
     private double _mbTolerance;
     public double MagBhTolerance { get => _mbTolerance; set { Set(ref _mbTolerance, Clamp(value, 1e-13, 1e-3)); _p.MagBhTolerance = _mbTolerance; Fire(); } }
+
+    // ── #1945 — spinning compact binaries ────────────────────────────────────
+    private double _sbQ, _sbChi1, _sbChi2, _sbPhi1, _sbPhi2, _sbR0, _sbV0, _sbMerge, _sbSeparate, _sbOrbits, _sbTol;
+    private bool _sbRr;
+    private SpinningBinaryOutcomeMode _sbOutcome;
+    public double SpinBinMassRatio { get => _sbQ; set { Set(ref _sbQ, Clamp(value, 0.01, 1.0)); _p.SpinBinMassRatio = _sbQ; Fire(); } }
+    public double SpinBinChi1 { get => _sbChi1; set { Set(ref _sbChi1, Clamp(value, 0.0, 1.0)); _p.SpinBinChi1 = _sbChi1; Fire(); } }
+    public double SpinBinChi2 { get => _sbChi2; set { Set(ref _sbChi2, Clamp(value, 0.0, 1.0)); _p.SpinBinChi2 = _sbChi2; Fire(); } }
+    public double SpinBinPhi1 { get => _sbPhi1; set { Set(ref _sbPhi1, Clamp(value, -360.0, 360.0)); _p.SpinBinPhi1 = _sbPhi1; Fire(); } }
+    public double SpinBinPhi2 { get => _sbPhi2; set { Set(ref _sbPhi2, Clamp(value, -360.0, 360.0)); _p.SpinBinPhi2 = _sbPhi2; Fire(); } }
+    public double SpinBinSeparation { get => _sbR0; set { Set(ref _sbR0, Clamp(value, 2.0, 10000.0)); _p.SpinBinSeparation = _sbR0; Fire(); } }
+    public double SpinBinVelocity { get => _sbV0; set { Set(ref _sbV0, Clamp(value, 0.0, 0.99)); _p.SpinBinVelocity = _sbV0; Fire(); } }
+    public bool SpinBinRadiationReaction { get => _sbRr; set { Set(ref _sbRr, value); _p.SpinBinRadiationReaction = value; Fire(); } }
+    public SpinningBinaryOutcomeMode SpinBinOutcome { get => _sbOutcome; set { Set(ref _sbOutcome, value); _p.SpinBinOutcome = value; Fire(); } }
+    public System.Array SpinBinOutcomes => s_SpinBinOutcomes;
+    private static readonly System.Array s_SpinBinOutcomes = System.Enum.GetValues(typeof(SpinningBinaryOutcomeMode));
+    public double SpinBinMergeRadius { get => _sbMerge; set { Set(ref _sbMerge, Clamp(value, 0.1, 1000.0)); _p.SpinBinMergeRadius = _sbMerge; Fire(); } }
+    public double SpinBinSeparateRadius { get => _sbSeparate; set { Set(ref _sbSeparate, Clamp(value, 3.0, 1e6)); _p.SpinBinSeparateRadius = _sbSeparate; Fire(); } }
+    public double SpinBinMaxOrbits { get => _sbOrbits; set { Set(ref _sbOrbits, Clamp(value, 1.0, 100000.0)); _p.SpinBinMaxOrbits = _sbOrbits; Fire(); } }
+    public double SpinBinTolerance { get => _sbTol; set { Set(ref _sbTol, Clamp(value, 1e-13, 1e-3)); _p.SpinBinTolerance = _sbTol; Fire(); } }
     // #1507 — what sets the hue.
     private BilliardRayColorSource _raysColorSource;
     public BilliardRayColorSource BilliardRaysColorSource { get => _raysColorSource; set { Set(ref _raysColorSource, value); _p.BilliardRaysColorSource = value; Fire(); } }

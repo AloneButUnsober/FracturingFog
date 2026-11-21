@@ -83,6 +83,7 @@ namespace FracturingFog.Models
             FractalType.HenonHeilesBasins => FractalMotionClass.Zoomable2D, // #1942 launch plane / section
             FractalType.ThreeBodyBasins => FractalMotionClass.Zoomable2D,   // #1943 rotating-frame plane
             FractalType.MagnetisedBlackHole => FractalMotionClass.Zoomable2D, // #1944 (ρ0, ℰ) / meridional plane
+            FractalType.SpinningBinaryBasins => FractalMotionClass.Zoomable2D, // #1945 (θ1, θ2) spin-angle plane
             FractalType.SlitCascade => FractalMotionClass.Zoomable2D,   // #1569
             FractalType.TalbotCarpet => FractalMotionClass.Zoomable2D,  // #1570
             FractalType.MathPlane => FractalMotionClass.Zoomable2D,
@@ -283,7 +284,7 @@ namespace FracturingFog.Models
         /// <summary>#1969 — the 2D ray tracers that implement <c>IAdaptiveAaCalculator</c>: the black
         /// hole shadows (each pixel one traced ray; the lensed sky aliases without AA).</summary>
         public static bool IsRayTraced2D(FractalType type) => type is FractalType.BlackHoleShadow or FractalType.HenonHeilesBasins or FractalType.ThreeBodyBasins
-            or FractalType.MagnetisedBlackHole;   // #1942 #1943 #1944
+            or FractalType.MagnetisedBlackHole or FractalType.SpinningBinaryBasins;   // #1942 #1943 #1944 #1945
 
         /// <summary>The 2D alt calculators that implement <c>IAdaptiveAaCalculator</c>:
         /// EscapeTimeCalculator's families, the root finders (Newton, Nova, Halley,

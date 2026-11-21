@@ -1272,6 +1272,16 @@ namespace FracturingFog
         /// <c>MagBhLaunchAngle</c>, <c>MagBhEscapeHeight</c>, <c>MagBhMaxTime</c>,
         /// <c>MagBhTolerance</c>.</summary>
         MagnetisedBlackHole,
+        /// <summary>#1945 (§2.6) — two spinning compact bodies under post-Newtonian equations of
+        /// motion (2PN with spin-orbit and spin-spin coupling, optional 2.5PN radiation reaction;
+        /// Kidder 1995, as used by Levin 2000). Each pixel is a pair of initial spin angles; the
+        /// colour is the outcome (merge / separate / still orbiting, or which side they merge on).
+        /// Levin's fractal basins are disputed in print: the help says so.
+        /// <c>SpinningBinaryCalculator</c>. Tunables: <c>SpinBinMassRatio</c>, <c>SpinBinChi1/2</c>,
+        /// <c>SpinBinPhi1/2</c>, <c>SpinBinSeparation</c>, <c>SpinBinVelocity</c>,
+        /// <c>SpinBinRadiationReaction</c>, <c>SpinBinOutcome</c>, <c>SpinBinMergeRadius</c>,
+        /// <c>SpinBinSeparateRadius</c>, <c>SpinBinMaxOrbits</c>, <c>SpinBinTolerance</c>.</summary>
+        SpinningBinaryBasins,
     }
 
     /// <summary>Hole layout of <see cref="FractalType.BlackHoleShadow"/> (#1923).
@@ -1356,6 +1366,13 @@ namespace FracturingFog
     /// <summary>Which circular orbit the <see cref="MagnetisedBhView.Kick"/> view starts from: the ℓ+
     /// or ℓ− root of the circular-orbit condition (Bautista &amp; Vega eq. 4.2).</summary>
     public enum MagnetisedBhBranch { Plus, Minus }
+
+    /// <summary>What colours a <see cref="FractalType.SpinningBinaryBasins"/> pixel (#1945).
+    /// <see cref="Fates"/> (default): merged / separated past the separation radius / still orbiting after
+    /// the orbit cap (Levin 2000's conservative criteria). <see cref="MergerSide"/>: merged with the relative
+    /// position above (z &gt; 0) or below the initial orbital plane, separated, or still orbiting (after
+    /// Levin's dissipative figure).</summary>
+    public enum SpinningBinaryOutcomeMode { Fates, MergerSide }
 
     public enum RenderProfile { Preview, Final }
 
@@ -1510,6 +1527,10 @@ namespace FracturingFog
             // #1944 — magnetised black hole: categorical fate through IBilliardColorMap; no
             // normals / DE / orbit data.
             FractalType.MagnetisedBlackHole => FractalCapabilities.None,
+
+            // #1945 — spinning binaries: categorical outcome through IBilliardColorMap; no
+            // normals / DE / orbit data.
+            FractalType.SpinningBinaryBasins => FractalCapabilities.None,
 
             // #1713 — Math Plane 3D draws its own colours (a diagram, no per-pixel data).
             FractalType.MathPlane3D => FractalCapabilities.None,

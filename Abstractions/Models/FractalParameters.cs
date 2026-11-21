@@ -1537,6 +1537,34 @@ namespace FracturingFog.Models
         /// <summary>#1944 — integrator relative tolerance per step. Default 1e-9.</summary>
         public double MagBhTolerance { get; set; } = 1e-9;
 
+        // ── Spinning compact binaries (#1945) ────────────────────────────
+        /// <summary>#1945 — mass ratio m2/m1 (≤ 1). Default 1/3 (Levin 2000's conservative basin figure).</summary>
+        public double SpinBinMassRatio { get; set; } = 1.0 / 3.0;
+        /// <summary>#1945 — spin of body 1, S1/m1² (0..1). Default 0.6.</summary>
+        public double SpinBinChi1 { get; set; } = 0.6;
+        /// <summary>#1945 — spin of body 2, S2/m2² (0..1). Default 0.6.</summary>
+        public double SpinBinChi2 { get; set; } = 0.6;
+        /// <summary>#1945 — azimuth of spin 1 about +z, degrees (the pixel sets the polar angles). Default 0.</summary>
+        public double SpinBinPhi1 { get; set; } = 0.0;
+        /// <summary>#1945 — azimuth of spin 2 about +z, degrees. Default 0.</summary>
+        public double SpinBinPhi2 { get; set; } = 0.0;
+        /// <summary>#1945 — initial separation in units of the total mass. Default 5.</summary>
+        public double SpinBinSeparation { get; set; } = 5.0;
+        /// <summary>#1945 — initial relative speed (perpendicular to the separation). Default 0.45.</summary>
+        public double SpinBinVelocity { get; set; } = 0.45;
+        /// <summary>#1945 — include 2.5PN radiation reaction (the dissipative term the dispute is about). Default false.</summary>
+        public bool SpinBinRadiationReaction { get; set; }
+        /// <summary>#1945 — outcome colouring (see <see cref="FracturingFog.SpinningBinaryOutcomeMode"/>). Default Fates.</summary>
+        public SpinningBinaryOutcomeMode SpinBinOutcome { get; set; } = SpinningBinaryOutcomeMode.Fates;
+        /// <summary>#1945 — merged once the separation falls below this (total-mass units). Default 2.</summary>
+        public double SpinBinMergeRadius { get; set; } = 2.0;
+        /// <summary>#1945 — separated once the separation passes this. Default 1000 (Levin's r/m &gt; 1000).</summary>
+        public double SpinBinSeparateRadius { get; set; } = 1000.0;
+        /// <summary>#1945 — orbits after which a binary counts as still orbiting. Default 50 (Levin's).</summary>
+        public double SpinBinMaxOrbits { get; set; } = 50.0;
+        /// <summary>#1945 — integrator relative tolerance per step. Default 1e-9.</summary>
+        public double SpinBinTolerance { get; set; } = 1e-9;
+
         // ── Slit cascade (#1569, double-slit epic #1565) ──────────────────
         /// <summary>Slit cascade: children per slit, N (2..16). N ≥ 3 for the fringe
         /// weights to differ (a symmetric pair is a plain Cantor set).</summary>
@@ -2671,6 +2699,19 @@ namespace FracturingFog.Models
                 MagBhEscapeHeight = MagBhEscapeHeight,
                 MagBhMaxTime = MagBhMaxTime,
                 MagBhTolerance = MagBhTolerance,
+                SpinBinMassRatio = SpinBinMassRatio,
+                SpinBinChi1 = SpinBinChi1,
+                SpinBinChi2 = SpinBinChi2,
+                SpinBinPhi1 = SpinBinPhi1,
+                SpinBinPhi2 = SpinBinPhi2,
+                SpinBinSeparation = SpinBinSeparation,
+                SpinBinVelocity = SpinBinVelocity,
+                SpinBinRadiationReaction = SpinBinRadiationReaction,
+                SpinBinOutcome = SpinBinOutcome,
+                SpinBinMergeRadius = SpinBinMergeRadius,
+                SpinBinSeparateRadius = SpinBinSeparateRadius,
+                SpinBinMaxOrbits = SpinBinMaxOrbits,
+                SpinBinTolerance = SpinBinTolerance,
                 SlitCascadeChildren = SlitCascadeChildren,
                 SlitCascadeRatio = SlitCascadeRatio,
                 SlitCascadeDepth = SlitCascadeDepth,

@@ -1724,5 +1724,57 @@
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
         </Grid>
 
+        <!-- #1945 — spinning compact binaries (post-Newtonian; fractality disputed). -->
+        <Grid IsVisible="{Binding IsSpinningBinaryBasins}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Mass ratio m2/m1:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="0.01" Maximum="1" Increment="0.05" FormatString="0.##########"
+                           Value="{Binding SpinBinMassRatio, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Lighter body's mass over the heavier one's." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Spin 1 (chi1):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="1" Increment="0.05" FormatString="0.##########"
+                           Value="{Binding SpinBinChi1, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="S1 / m1^2: 0 = not spinning, 1 = maximal." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Spin 2 (chi2):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="1" Increment="0.05" FormatString="0.##########"
+                           Value="{Binding SpinBinChi2, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="S2 / m2^2." />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Spin azimuth 1 (deg):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1" Minimum="-360" Maximum="360" Increment="5" FormatString="0.##########"
+                           Value="{Binding SpinBinPhi1, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Azimuth of spin 1 about the orbital axis (the pixel sets the polar angles)." />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Spin azimuth 2 (deg):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1" Minimum="-360" Maximum="360" Increment="5" FormatString="0.##########"
+                           Value="{Binding SpinBinPhi2, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Azimuth of spin 2 about the orbital axis." />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Separation r0:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1" Minimum="2" Maximum="10000" Increment="1" FormatString="0.##########"
+                           Value="{Binding SpinBinSeparation, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Initial separation in units of the total mass." />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Speed v0:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="6" Grid.Column="1" Minimum="0" Maximum="0.99" Increment="0.01" FormatString="0.##########"
+                           Value="{Binding SpinBinVelocity, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Initial relative speed, at right angles to the separation (c = 1)." />
+            <CheckBox Grid.Row="7" Grid.Column="1" Content="Radiation reaction (2.5PN)"
+                      IsChecked="{Binding SpinBinRadiationReaction, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Gravitational-wave losses. Off: Levin's conservative system. Whether the chaos survives with it on is the published dispute (see Help)." />
+            <TextBlock Grid.Row="8" Grid.Column="0" Text="Outcome:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="8" Grid.Column="1" ItemsSource="{Binding SpinBinOutcomes}"
+                      SelectedItem="{Binding SpinBinOutcome, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Fates: merged / separated / still orbiting. MergerSide: merged above or below the initial orbital plane." />
+            <TextBlock Grid.Row="9" Grid.Column="0" Text="Merge radius:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="9" Grid.Column="1" Minimum="0.1" Maximum="1000" Increment="0.5" FormatString="0.##########"
+                           Value="{Binding SpinBinMergeRadius, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Merged once the separation falls below this (total masses). Fracturing Fog's choice; Levin gives no number." />
+            <TextBlock Grid.Row="10" Grid.Column="0" Text="Separation radius:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="10" Grid.Column="1" Minimum="3" Maximum="1000000" Increment="100" FormatString="0.##########"
+                           Value="{Binding SpinBinSeparateRadius, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Separated once the separation passes this (Levin: 1000)." />
+            <TextBlock Grid.Row="11" Grid.Column="0" Text="Orbit cap:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="11" Grid.Column="1" Minimum="1" Maximum="100000" Increment="10" FormatString="0.##########"
+                           Value="{Binding SpinBinMaxOrbits, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Still orbiting after this many orbits (Levin: 50)." />
+            <TextBlock Grid.Row="12" Grid.Column="0" Text="Tolerance:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="12" Grid.Column="1" Minimum="0.0000000000001" Maximum="0.001" Increment="0.000000001" FormatString="0.#############"
+                           Value="{Binding SpinBinTolerance, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Integrator relative tolerance per step." />
+            <CheckBox Grid.Row="13" Grid.Column="1" Content="Adaptive anti-aliasing"
+                      IsChecked="{Binding AdaptiveAa, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="With the High / Ultra / Extreme quality presets, re-integrate only the pixels that differ from a neighbour. Also used by export and --batch." />
+            <TextBlock Grid.Row="14" Grid.Column="1"
+                       Text="Across: spin 1's angle; up: spin 2's (radians). Slow: each pixel integrates a whole binary. Levin's fractal boundaries are disputed in print; the edges here are fractal-looking at finite resolution (see Help)."
+                       TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
+        </Grid>
+
     </StackPanel>
 </UserControl>

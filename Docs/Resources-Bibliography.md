@@ -521,14 +521,64 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
 
 - **Janna Levin.** *Gravity waves, chaos, and spinning compact binaries.* Physical Review Letters 84,
   3515, 2000. DOI 10.1103/PhysRevLett.84.3515, <https://arxiv.org/abs/gr-qc/9910040>. Chaos and fractal
-  basin boundaries in post-Newtonian spinning binaries. Basis of #1945.
+  basin boundaries in post-Newtonian spinning binaries. Basis of #1945. Read 2026-11-21 (ar5iv rendering of
+  the arXiv text): the letter prints only the structure of its equations, x¨ = a_PN + a_SO + a_SS + a_RR and
+  dS_A/dt = Ω_A × S_A, and takes the explicit forms from [Kidder 1995](#kidder-1995).
+  `SpinningBinaryBasins` reproduces its two basin set-ups as presets: the conservative map over the spin
+  angles (θ1, θ2) at m2/m1 = 1/3, S_A/m_A² = 0.6, x_i = 5m, ẏ_i = 0.45 with Levin's criteria (separation
+  r/m > 1000, more than 50 orbits), and the dissipative merger-side map at m2/m1 = 1.4/10, S1 = m1²,
+  S2 = 0.7 m2², x_i = 26m, ẏ_i = 0.15. The letter gives no merge radius or spin azimuths; FF's are its own
+  settings. Prior art: Levin's figures are this map; FF adds the explorer.
+
+<a id="kidder-1995"></a>
+
+- **Lawrence E. Kidder.** *Coalescing binary systems of compact objects to (post)^{5/2}-Newtonian order.
+  V. Spin effects.* Physical Review D 52, 821–847, 1995. DOI
+  [10.1103/PhysRevD.52.821](https://doi.org/10.1103/PhysRevD.52.821); preprint
+  <https://arxiv.org/abs/gr-qc/9506022> (journal reference as given by the arXiv record). The equations
+  `SpinningBinaryBasins` (#1945) integrates, transcribed from its Sec. II: relative acceleration Eqs. (3),
+  (4a)–(4f) (Newtonian, 1PN, spin-orbit, 2PN, spin-spin, 2.5PN radiation reaction; harmonic coordinates,
+  covariant spin supplementary condition), spin precession Eqs. (6a)–(6b), and the conserved energy
+  Eqs. (8), (9a)–(9e) and angular momentum Eqs. (10), (11a)–(11d) used by the tests
+  (`Engine/Scattering/SpinningBinary.cs`).
+
+<a id="peters-1964"></a>
+
+- **P. C. Peters.** *Gravitational radiation and the motion of two point masses.* Physical Review 136,
+  B1224–B1232, 1964. DOI [10.1103/PhysRev.136.B1224](https://doi.org/10.1103/PhysRev.136.B1224) (volume,
+  pages and DOI from the APS listing and a Scilit record found 2026-11-21; the APS page itself not opened).
+  The circular-orbit coalescence time a⁴/(4β), β = (64/5) m1 m2 (m1 + m2), that the #1945 tests compare
+  Kidder's radiation-reaction term against.
+
+<a id="schnittman-rasio-2001"></a>
+
+- **J. D. Schnittman, F. A. Rasio.** *Ruling out chaos in compact binary systems.* Physical Review Letters
+  87, 121101, 2001. <https://arxiv.org/abs/gr-qc/0107082>. Lyapunov exponents of 2PN spinning binaries:
+  no chaos found. Part of the #1945 dispute, named in the help page.
+
+<a id="cornish-levin-2002"></a>
+
+- **N. J. Cornish, J. Levin.** Comment on "Ruling out chaos in compact binary systems". Physical Review
+  Letters 89, 179001, 2002. <https://arxiv.org/abs/gr-qc/0207020>. Replies that positive Lyapunov
+  exponents confirm the chaos. Part of the #1945 dispute, named in the help page.
+
+<a id="hartl-buonanno-2005"></a>
+
+- **M. D. Hartl, A. Buonanno.** *The dynamics of precessing binary black holes using the post-Newtonian
+  approximation.* Physical Review D 71, 024027, 2005. <https://arxiv.org/abs/gr-qc/0407091>. Finds no chaos
+  for quasi-circular orbits of 10–40 solar-mass binaries with realistic spins. Part of the #1945 dispute,
+  named in the help page.
 
 <a id="levin-2000-comments"></a>
 
 - **Comments on Levin 2000** — S. A. Hughes and N. J. Cornish, arXiv:gr-qc/0101024 and
   arXiv:gr-qc/0101041. One argues matched filtering is less affected than claimed; the other that with
   dissipation the basin boundaries are not truly fractal. Why #1945 labels its structure honestly.
-  **Which arXiv number is whose, and the journal references, are not verified.**
+  Checked against the arXiv records 2026-11-21: **Scott A. Hughes**, *Comment on "Gravity Waves, Chaos, and
+  Spinning Compact Binaries"*, arXiv:gr-qc/0101024, Physical Review Letters 85, 5480, 2000, DOI
+  10.1103/PhysRevLett.85.5480 (chaos will not strongly affect detection); **Neil J. Cornish**, same title,
+  arXiv:gr-qc/0101041, Physical Review Letters 85, 3980, 2000, DOI 10.1103/PhysRevLett.85.3980 (higher-order
+  dissipation removes the chaos, though the evolution may stay unpredictable in practice).
 
 <a id="cornish-levin-1997"></a>
 
@@ -1586,8 +1636,9 @@ entry above completed or corrected.
   journal record was not opened (Crossref rate-limited 2026-11-21).
 - **Stuchlík & Kološ** — journal reference of arXiv:1511.02936 (#1944): the arXiv page lists the related
   DOI 10.1140/epjc/s10052-015-3862-2 (Eur. Phys. J. C); volume, article number and year not checked.
-- **Comments on Levin 2000** — which of arXiv:gr-qc/0101024 / gr-qc/0101041 is Hughes's and which is
-  Cornish's, and their journal references (#1945).
+- **Schnittman & Rasio 2001, Cornish & Levin 2002, Hartl & Buonanno 2005** — journal volumes and article
+  numbers as given by search-result listings of the arXiv / journal records (#1945); the journal pages were
+  not opened.
 - ***Mixmaster chaos*** — arXiv:gr-qc/0011001 (#1946): authors and journal.
 - **Semerák & Suková 2010** — MNRAS volume / pages of part I (#1947).
 - **Kayser, Refsdal & Stabell 1986** — title of A&A 166, 36 (#1948).
@@ -1712,6 +1763,11 @@ page. The convention:
 
 Corrections so far:
 
+- 2026-11-21 (#1945). Comments on Levin 2000: the two comments are now identified from their arXiv records
+  (Hughes: gr-qc/0101024, PRL 85, 5480; Cornish: gr-qc/0101041, PRL 85, 3980). Old form in the entry:
+  **Which arXiv number is whose, and the journal references, are not verified.** Old form under awaiting
+  verification: **Comments on Levin 2000** — which of arXiv:gr-qc/0101024 / gr-qc/0101041 is Hughes's and which is
+  Cornish's, and their journal references (#1945).
 - 2026-11-21 (#1943). Zotos 2016 now has its volume, issue and article number (361 (6), 181) and DOI, checked
   against Crossref. Old form in the entry: **Volume / article number not verified.** Old form under
   awaiting verification: **Zotos 2016** — Astrophysics and Space Science volume / article number for arXiv:1608.08610 (#1943).
