@@ -176,6 +176,7 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
                     _ => nums.Length == 0 || (nums.Length == 2 && nums[1] > nums[0]),
                 },
                 MathPlaneObjectKind.Region => nums.Length == 0,
+                MathPlaneObjectKind.Trajectory => nums.Length == 2,   // #1993 — the launch point
                 _ => nums.Length >= 4 && nums.Length % 2 == 0,
             };
             if (!ok) { EditError = o.Kind is MathPlaneObjectKind.Curve or MathPlaneObjectKind.Region ? DomainHint(o) : CoordsHint(o.Kind); return; }
@@ -637,6 +638,8 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
             case MathPlaneObjectKind.Curve:
             case MathPlaneObjectKind.Region:
                 return $"{o.Name}: {CurveFormula(o)}";
+            case MathPlaneObjectKind.Trajectory:
+                return $"{o.Name}: {MathPlaneTrajectory.Token(MathPlaneTrajectory.FamilyOf(o))} from ({Num(o.Coords[0])}, {Num(o.Coords[1])})";
             default:
                 return $"{o.Name}: {o.PointCount} points";
         }
@@ -653,6 +656,7 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
             MathPlaneObjectKind.Segment => $"segment {o.Name} ({Num(o.Coords[0])}, {Num(o.Coords[1])}) to ({Num(o.Coords[2])}, {Num(o.Coords[3])})",
             MathPlaneObjectKind.Curve => $"curve {o.Name}: {CurveFormula(o)}",
             MathPlaneObjectKind.Region => $"region {o.Name}: {CurveFormula(o)}",
+            MathPlaneObjectKind.Trajectory => $"trajectory {o.Name}: {MathPlaneTrajectory.BodyText(o)}",
             _ => $"polyline {o.Name} ({o.PointCount} points)",
         };
         return o.Visible ? body : body + "  [hidden]";
@@ -685,6 +689,7 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
         MathPlaneObjectKind.Point => "A point takes x y.",
         MathPlaneObjectKind.Vector => "A vector takes dx dy, or dx dy x0 y0 (drawn from x0, y0).",
         MathPlaneObjectKind.Segment => "A segment takes x1 y1 x2 y2.",
+        MathPlaneObjectKind.Trajectory => "A trajectory takes its launch point: two numbers.",
         _ => "A polyline takes two or more x y points.",
     };
 

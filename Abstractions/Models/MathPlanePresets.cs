@@ -20,6 +20,14 @@
 // quadratic family's orbits and cobwebs, 2x2 linear maps, the derivative as the
 // local linear map); sources FF builds on are in Docs/Resources-Bibliography.md
 // (#sanderson-linear-transformations, #cobweb-plot, #wegert-visual-complex-functions).
+//
+// #1993 — the "Path:" demos draw one launch of a scattering family (trajectory
+// statement) with the curves the fractal's physics gives: the Hénon–Heiles energy
+// levels V = E and V = 1/6 with the three saddles (Hénon & Heiles 1964), the
+// three-body zero-velocity curve 2 Omega = C with the primaries and L1-L5 (Nagler
+// 2004, the Copenhagen problem), and the magnetised hole's horizon (Bautista & Vega
+// 2021). Same sources as the families (#henon-heiles-1964, #nagler-2004,
+// #bautista-vega-2021).
 
 using System;
 using System.Collections.Generic;
@@ -87,6 +95,9 @@ namespace FracturingFog.Models
     {
         private const string Basis = "vector i 1 0 #E69F00; vector j 0 1 #56B4E9";
         private const double RabbitRe = -0.12256116687665361, RabbitIm = 0.74486176661974423;
+
+        /// <summary>#1993 — the Henon-Heiles potential V(x, y) in the plot language.</summary>
+        private const string HenonHeilesV = "0.5*(x^2 + y^2) + x^2*y - y^3/3";
 
         /// <summary>The built-in demos, in teaching order.</summary>
         public static IReadOnlyList<MathPlanePreset> All { get; } = new MathPlanePreset[]
@@ -208,6 +219,47 @@ namespace FracturingFog.Models
                 + "step 3 camera -0.12 0.35 2.5; with caption \"Period 3\"; "
                 + "step 1 wait; step 2 camera 0 0; with caption \"\"",
                 Zoom: 0.4375, CRe: RabbitRe, CIm: RabbitIm, Backdrop: MathPlaneBackdrop.Julia),
+            new("Path: Henon-Heiles escape",
+                "One launch in the Henon-Heiles potential at E = 0.25, traced by the exit-basin fractal's own "
+                + "code. The outer curve is V = E, where the particle would stop; the inner triangle V = 1/6 "
+                + "runs through the three saddles. Above 1/6 the triangle opens and the path leaves through one "
+                + "of the three channels.",
+                "curve level implicit \"" + HenonHeilesV + " - 0.25\" #56B4E9 nolabel; "
+                + "curve escape implicit \"" + HenonHeilesV + " - 1/6\" #009E73 nolabel; "
+                + "point S1 0 1 #F0E442; point S2 -0.8660254037844386 -0.5 #F0E442; point S3 0.8660254037844386 -0.5 #F0E442; "
+                + "trajectory path henonheiles 0.2 0.1 tangential E=0.25 #E69F00",
+                ViewWorldY: 0.3, Zoom: 0.6),
+            new("Path: Copenhagen problem",
+                "The restricted three-body problem with equal primaries (mu = 1/2) at Jacobi constant C = 3, in "
+                + "the rotating frame. The zero-velocity curve 2 Omega = C bounds where a particle can go; one "
+                + "launch stays bound round m2, another escapes. The points are the primaries and L1-L5.",
+                "curve zv implicit \"x^2 + y^2 + 1/sqrt((x + 0.5)^2 + y^2) + 1/sqrt((x - 0.5)^2 + y^2) - 3\" #56B4E9 nolabel; "
+                + "point m1 -0.5 0 #FFFFFF; point m2 0.5 0 #FFFFFF; "
+                + "point L1 0 0 #CC79A7; point L2 1.1984061445549203 0 #CC79A7; point L3 -1.1984061445549203 0 #CC79A7; "
+                + "point L4 0 0.8660254037844386 #CC79A7; point L5 0 -0.8660254037844386 #CC79A7; "
+                + "trajectory bound threebody 0.9 0.2 retrograde mu=0.5 C=3 tmax=25 #009E73; "
+                + "trajectory out threebody 0.2 0.3 prograde mu=0.5 C=3 #E69F00",
+                Zoom: 0.8),
+            new("Path: charged particle near a black hole",
+                "A charged particle near a Schwarzschild black hole in a uniform magnetic field (b = 0.3), drawn "
+                + "in the meridional (R, z) plane with the horizon at radius 1. Launched at the same energy and "
+                + "angular momentum, one path winds in and is captured, one escapes up the field and one down.",
+                "curve horizon implicit \"x^2 + y^2 - 1\" #FFFFFF nolabel; "
+                + "trajectory fall magbh 3 1 135 b=0.3 E=1.5 l=1 #D55E00; "
+                + "trajectory up magbh 2 1 45 b=0.3 E=1.5 l=1 #56B4E9; "
+                + "trajectory down magbh 2 1 135 b=0.3 E=1.5 l=1 #F0E442",
+                ViewWorldX: 2, ViewWorldY: 0.5, Zoom: 0.5),
+            new("Script: a Henon-Heiles escape",
+                "A script: the particle's path is drawn as it moves, bouncing round the well until it finds one "
+                + "of the three exits past the saddles.",
+                "curve level implicit \"" + HenonHeilesV + " - 0.25\" #56B4E9 nolabel; "
+                + "curve escape implicit \"" + HenonHeilesV + " - 1/6\" #009E73 nolabel; "
+                + "point S1 0 1 #F0E442; point S2 -0.8660254037844386 -0.5 #F0E442; point S3 0.8660254037844386 -0.5 #F0E442; "
+                + "trajectory path henonheiles 0.2 0.1 tangential E=0.25 #E69F00 hidden; "
+                + "step 1 caption \"Henon-Heiles at E = 0.25\"; "
+                + "step 6 ease none draw path; with caption \"Round the well, then out through a channel\"; "
+                + "step 1.5 wait; step 1 caption \"\"",
+                ViewWorldY: 0.3, Zoom: 0.6),
         };
     }
 }

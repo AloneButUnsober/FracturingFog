@@ -445,7 +445,9 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   gives the start page). DOI [10.1086/109234](https://doi.org/10.1086/109234), ADS 1964AJ.....69...73H
   (<https://ui.adsabs.harvard.edu/abs/1964AJ.....69...73H/abstract>), checked 2026-11-21. Defines the
   potential V = (x² + y²)/2 + x²y − y³/3 that `HenonHeilesBasins` (#1942) integrates
-  (`Engine/Scattering/HenonHeiles.cs`).
+  (`Engine/Scattering/HenonHeiles.cs`). Also used by the Math Plane `trajectory henonheiles` statement
+  (#1993, the same scene code with the path recorded) and its "Path: Henon-Heiles escape" demos, which draw
+  the levels V = E and V = 1/6 and the three saddles.
 
 <a id="nagler-2004"></a>
 
@@ -455,6 +457,9 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   the Crossref record 2026-11-21 (first checked via secondary citation: a library catalogue record and a
   2015 Zotos paper's reference list). `ThreeBodyBasins` (Fates view) renders these fates for μ = 1/2;
   the crash radius, escape radius and time limit are FF's own settings, not values taken from the paper.
+  Also used by the Math Plane `trajectory threebody` statement (#1993, the same scene code with the path
+  recorded) and its "Path: Copenhagen problem" demo (zero-velocity curve 2Ω = C, the primaries and L1–L5;
+  FF's Ω, without the constant some authors add).
 
 <a id="nagler-2005"></a>
 
@@ -495,6 +500,8 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   effective potential (their eq. 3.7), the circular-orbit angular momentum ℓ± (eq. 4.2), the vertical-kick
   launch over (ρ0, ℰ) (the Kick view) and the three exit categories; the escape height is theirs as a
   setting (FF default 100, theirs 1000). FF adds the interactive / batch explorer and the Meridional view.
+  Also used by the Math Plane `trajectory magbh` statement (#1993, the same scene code with the path
+  recorded, drawn in the meridional (R, z) plane) and its "Path: charged particle near a black hole" demo.
 
 <a id="al-zahrani-2014"></a>
 

@@ -66,6 +66,13 @@
 //     and coloured by step, with the escape circle |z| = 2, c as a handle, and a
 //     read-out (escape step, or the period it settles to).
 //   Cobweb: y = f(x), y = x and the staircase (MathPlaneDynamics.Cobweb).
+//
+// #1993 — trajectories: the path of one launch of a scattering family (Hénon–Heiles,
+// restricted three-body, magnetised black hole), traced by the family's own scene code
+// (ScatterPathTracer: the fractal's LaunchState + ScatteringIntegrator.Trace, with a
+// recorder) and stroked as a polyline with a ring at the launch, a dot at the end and
+// the fate as its label. A path does not depend on the view, so each one is traced once
+// and cached by its object (a pan or zoom redraws without tracing again).
 
 using System;
 using System.Numerics;
@@ -131,6 +138,22 @@ public sealed class MathPlaneCalculator : IFractalCalculator
 
     /// <summary>#1695 — the script's duration in seconds (0 without steps) at the last render.</summary>
     public double LastScriptDuration { get; private set; }
+
+    /// <summary>#1993 — traced trajectories by object (the trace is view-independent).</summary>
+    private readonly System.Collections.Generic.Dictionary<MathPlaneObject, FracturingFog.Scattering.ScatterPath> _paths = new();
+
+    /// <summary>#1993 — the traced path of trajectory object <paramref name="o"/> (cached).</summary>
+    public FracturingFog.Scattering.ScatterPath PathOf(MathPlaneObject o)
+    {
+        lock (_paths)
+        {
+            if (_paths.TryGetValue(o, out var p)) return p;
+            p = FracturingFog.Scattering.ScatterPathTracer.Trace(o);
+            if (_paths.Count >= 64) _paths.Clear();
+            _paths[o] = p;
+            return p;
+        }
+    }
 
     public MathPlaneCalculator(int width, int height) => Resize(width, height);
 
@@ -533,6 +556,56 @@ public sealed class MathPlaneCalculator : IFractalCalculator
                     {
                         float lx = Math.Min(la.X, w - 30f * ui), ly = Math.Max(la.Y, 24f * ui);
                         Label(o, new SKPoint(lx, ly));
+                    }
+                    break;
+                }
+                case MathPlaneObjectKind.Trajectory:
+                {
+                    // #1993 — the traced path, mapped point by point under a map.
+                    var path = PathOf(o);
+                    stroke.StrokeWidth = 2f * ui;
+                    var pts = new System.Collections.Generic.List<(double X, double Y)>(path.Points);
+                    var lines = new System.Collections.Generic.List<System.Collections.Generic.List<(double X, double Y)>> { pts };
+                    if (drawn < 1) lines = TruncateLines(lines, drawn);
+                    SKPoint? end = null, lastOnScreen = null;
+                    foreach (var poly in lines)
+                    {
+                        if (poly.Count == 0) continue;
+                        using var sk = new SKPath();
+                        sk.MoveTo(P(poly[0].X, poly[0].Y));
+                        for (int i = 1; i < poly.Count; i++) sk.LineTo(P(poly[i].X, poly[i].Y));
+                        canvas.DrawPath(sk, stroke);
+                        end = P(poly[^1].X, poly[^1].Y);
+                        // The label goes at the last vertex in view (the end, unless the path leaves).
+                        for (int i = poly.Count - 1; i >= 0; i--)
+                        {
+                            var q = P(poly[i].X, poly[i].Y);
+                            if (q.X >= 0 && q.X < w && q.Y >= 0 && q.Y < h) { lastOnScreen = q; break; }
+                        }
+                    }
+                    // Launch ring (at the launch point itself when the path never started).
+                    SKPoint? start = pts.Count > 0 ? P(pts[0].X, pts[0].Y)
+                        : MathPlaneTrajectory.LaunchIsPosition(o) ? P(o.Coords[0], o.Coords[1]) : null;
+                    if (start is { } st)
+                    {
+                        var ring = new SKPaint { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeWidth = 2f * ui, Color = c };
+                        canvas.DrawCircle(st, 5f * ui, outline);
+                        canvas.DrawCircle(st, 5f * ui, ring);
+                        ring.Dispose();
+                    }
+                    if (drawn >= 1 && end is { } en && pts.Count > 1)
+                    {
+                        canvas.DrawCircle(en, 4f * ui, fill);
+                        canvas.DrawCircle(en, 4f * ui, outline);
+                    }
+                    if (o.ShowLabel && (lastOnScreen ?? start) is { } at)
+                    {
+                        string text = o.Name + ": " + path.Fate;
+                        float width = font.MeasureText(text) + 14f * ui;
+                        float lx = Math.Clamp(at.X, 0f, Math.Max(0f, w - width)), ly = Math.Clamp(at.Y, 24f * ui, Math.Max(24f * ui, h - 4f * ui));
+                        float x = lx + 7f * ui, baseline = ly - 7f * ui;
+                        canvas.DrawText(text, x + ui, baseline + ui, font, halo);
+                        canvas.DrawText(text, x, baseline, font, fill);
                     }
                     break;
                 }

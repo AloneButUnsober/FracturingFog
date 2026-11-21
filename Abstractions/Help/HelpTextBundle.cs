@@ -5399,6 +5399,25 @@ Fractal bridge: a backdrop (Mandelbrot, Julia of c, Burning Ship
 ...), the orbit of 0 under z^2 + c with the escape circle and a
 draggable c, and the cobweb of x -> f(x) (default x^2 + c).
 
+Trajectories (scene text): the path of one launch of a scattering
+family, traced by that fractal's own code, so it ends where the
+fractal's colour says (ring = launch, dot = end, label = fate).
+  trajectory NAME henonheiles A B [tangential|radial|section|ANGLE]
+                              [E= tmax= tol=]
+  trajectory NAME threebody X Y [prograde|retrograde|radial|ANGLE]
+                              [mu= C= crash= escape= tmax= tol=]
+  trajectory NAME magbh A B [ANGLE|kick]
+                              [b= E= l= branch=1|-1 escape= tmax= tol=]
+A B are the family's launch coordinates: Henon-Heiles (x, y), or
+(y, py) on x = 0 with section; three-body (x, y) in the rotating
+frame; magnetised black hole (R, z) in the meridional plane, or
+(rho0, E) with kick. ANGLE is degrees. Keys left out take the
+family's defaults. The path is drawn in the physical plane: (x, y),
+or (R, z) for the black hole. A position launch can be dragged and
+moved by a script; draw NAME reveals the path as the particle moves.
+Try the Path: demos (with the energy level V = E, the zero-velocity
+curve 2 Omega = C, the saddles and L1-L5 as curves and points).
+
 View -> Math overlay draws the axes and the orbit of the pointer
 (press O in the render window to pin the point under the pointer)
 or a pinned point on Mandelbrot and Julia views. On 3D views
