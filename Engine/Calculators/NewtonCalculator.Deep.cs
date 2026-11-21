@@ -22,8 +22,15 @@ namespace FracturingFog;
 
 public sealed partial class NewtonCalculator : IDeepCentre, IDeepZoom
 {
-    /// <summary>#1959 — Nova renders on the engine from here (as EscapeTimeCalculator's families).</summary>
-    public const double DeepZoomThreshold = 1e11;
+    /// <summary>#1959 / #1964 — Nova renders on the engine from here. Measured (#1964, S1964NovaSwitchTests):
+    /// against direct BigFloat iteration the double loop matched every sampled pixel up to 1e6 and ≥ 99 % at
+    /// 1e7, but only 85–97 % at 1e11 (its polar-form step's rounding grows as fast as neighbours separate
+    /// near repelling cycles); the engine matched every pixel at every zoom, at ~5–7× the double loop's cost.</summary>
+    public const double DeepZoomThreshold = 1e7;
+
+    /// <summary>#1964 — the zoom this calculator switches at (<see cref="DeepZoomThreshold"/>; tests and
+    /// probes move it to measure the engine against the double loop).</summary>
+    public double DeepZoomFrom { get; set; } = DeepZoomThreshold;
 
     /// <summary>#1959 — false keeps Nova on the double loop at any zoom (tests compare them).</summary>
     public bool AllowPerturbation { get; set; } = true;
@@ -81,7 +88,7 @@ public sealed partial class NewtonCalculator : IDeepCentre, IDeepZoom
 
     private bool TryCalculateDeep(int d, double relax, int maxIter, INewtonColorMap? newtonMap, System.Threading.CancellationToken ct)
     {
-        if (!AllowPerturbation || Zoom < DeepZoomThreshold) return false;
+        if (!AllowPerturbation || Zoom < DeepZoomFrom) return false;
         var plan = NovaPlan(d, relax);
         double zl = ZoomLog10;
         int prec = BigFloat.PrecisionForZoom(zl);

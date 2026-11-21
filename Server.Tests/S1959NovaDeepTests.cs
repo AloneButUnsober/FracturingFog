@@ -9,8 +9,8 @@
 //     critical orbit from z₀ = 1 landing on a repelling 2-cycle) 1e20 / 1e40 / 1e100 / 1e320 (the
 //     last through SetZoomLog10 and the scaled-δ prelude), and in Julia mode on its repelling 2-cycle;
 //     precondition: the view is above the chaotic floor (counts unchanged under a 1e-12-pixel shift);
-//   • at 1e11 (the switch) the engine matches the oracle (the double loop is measured there); below
-//     DeepZoomThreshold the frame is byte-identical;
+//   • at 1e11 (the switch until #1964 moved it to 1e7, S1964NovaSwitchTests) the engine matches the
+//     oracle (the double loop is measured there); below DeepZoomThreshold the frame is byte-identical;
 //   • the poster path hands over the full centre and the log zoom; FamilyDepth has no limit for Nova.
 //   • in a basin interior (1e40, 1e320) every pixel stops as direct iteration does — at 1e320 inside the
 //     scaled-δ prelude.
@@ -39,11 +39,11 @@ namespace FracturingFog.Server.Tests;
 
 public sealed class S1959NovaDeepTests(ITestOutputHelper output)
 {
-    private const int D = 3, MaxIt = 1500;
+    internal const int D = 3, MaxIt = 1500;
     private const double Relax = 1.0, Eps2 = 1e-12;
 
     // z − R·(z^d − 1)/(d·z^(d−1)) + c
-    private static (BigFloat, BigFloat) NovaStep(BigFloat zr, BigFloat zi, BigFloat cr, BigFloat ci, int p)
+    internal static (BigFloat, BigFloat) NovaStep(BigFloat zr, BigFloat zi, BigFloat cr, BigFloat ci, int p)
     {
         BigFloat pr = zr, pi = zi;   // z^(d−1)
         for (int k = 1; k < D - 1; k++)
@@ -59,7 +59,7 @@ public sealed class S1959NovaDeepTests(ITestOutputHelper output)
     }
 
     // The direct orbit: (basin, smooth count) by the double loop's rule.
-    private static (int Basin, float Smooth) Orbit(BigFloat z0r, BigFloat z0i, BigFloat cr, BigFloat ci, int p)
+    internal static (int Basin, float Smooth) Orbit(BigFloat z0r, BigFloat z0i, BigFloat cr, BigFloat ci, int p)
     {
         BigFloat zr = z0r, zi = z0i;
         double prev2 = double.MaxValue;
@@ -77,10 +77,10 @@ public sealed class S1959NovaDeepTests(ITestOutputHelper output)
 
     // Preperiod 3, period 2 (multipliers ~7 and ~11). A period-1 landing is no view for Nova: its step stop
     // fires at a repelling fixed point too (the step is ~0 there), so every pixel stops at once, one colour.
-    private static readonly (double Re, double Im)[] ParamViews = [(-0.2848472433159221, 0.510804036200044), (-0.6718142473539443, 0.10584589661496834)];
+    internal static readonly (double Re, double Im)[] ParamViews = [(-0.2848472433159221, 0.510804036200044), (-0.6718142473539443, 0.10584589661496834)];
 
     // A Misiurewicz point: from z₀ = 1, z₃ lies on a 2-cycle (f(f(z₃)) = z₃), by Newton rescaled past double.
-    private static ExactCentre Misiurewicz(double gr, double gi, int zl)
+    internal static ExactCentre Misiurewicz(double gr, double gi, int zl)
     {
         int p = BigFloat.PrecisionForZoom(zl) + 64;
         var (r, i) = Newton((cr, ci) =>
@@ -94,13 +94,25 @@ public sealed class S1959NovaDeepTests(ITestOutputHelper output)
         return new ExactCentre(r, i);
     }
 
-    private static NewtonCalculator Nova(int w, int h, bool julia = false) => new(w, h)
+    internal static NewtonCalculator Nova(int w, int h, bool julia = false) => new(w, h)
     {
         FractalType = FractalType.Nova, MaxIterations = MaxIt, ColorMap = ColorPalette.BuiltIns[0], Quality = QualityPreset.Ultra,
         FractalParameters = new FractalParameters { NewtonExponent = D, NewtonRelaxation = Relax, NovaJuliaMode = julia },
     };
 
     private void CheckFrame(string name, NewtonCalculator calc, View v, bool julia)
+    {
+        var (eq, total, seen, stable, ex) = Agreement(calc, v, julia);
+        output.WriteLine($"{name}: {eq}/{total} basin + smooth equal, {seen} distinct, {stable} stable; [{calc.LastPrecisionLabel}] {calc.LastPerturbationStats}");
+        Assert.True(seen >= 5, $"{name}: precondition, structure ({seen})");
+        Assert.True(stable >= total * 0.95, $"{name}: precondition, above the chaotic floor ({stable}/{total})");
+        Assert.True(eq >= total * 0.97, $"{name}: {eq}/{total}. {ex}");
+    }
+
+    // #1964 — the frame's basin and smooth count against direct BigFloat iteration on every third pixel:
+    // the pixels equal, the distinct (basin, floor(smooth)) classes, and the pixels whose class a 1e-12
+    // pixel shift keeps (the chaotic floor).
+    internal static (int Eq, int Total, int Seen, int Stable, string Ex) Agreement(NewtonCalculator calc, View v, bool julia)
     {
         int pf = BigFloat.PrecisionForZoom(v.Zl) + 96;
         var jc = (BigFloat.FromDouble(-0.5, pf), BigFloat.Zero(pf));   // NovaJuliaC's default
@@ -130,10 +142,7 @@ public sealed class S1959NovaDeepTests(ITestOutputHelper output)
                 else if (ex.Length < 200) ex += $"({x},{y}) b{calc.BasinBuffer[idx]} s{calc.SmoothBuffer[idx]:F3} vs b{b} s{s:F3}; ";
             }
         });
-        output.WriteLine($"{name}: {eq}/{total} basin + smooth equal, {seen.Count} distinct, {stable} stable; [{calc.LastPrecisionLabel}] {calc.LastPerturbationStats}");
-        Assert.True(seen.Count >= 5, $"{name}: precondition, structure ({seen.Count})");
-        Assert.True(stable >= total * 0.95, $"{name}: precondition, above the chaotic floor ({stable}/{total})");
-        Assert.True(eq >= total * 0.97, $"{name}: {eq}/{total}. {ex}");
+        return (eq, total, seen.Count, stable, ex);
     }
 
     private void Param(int view, int zl)
@@ -181,7 +190,7 @@ public sealed class S1959NovaDeepTests(ITestOutputHelper output)
     [Fact]
     public void At_1e11_The_Engine_Matches_Direct_Iteration_And_The_Double_Loop_Is_Measured()
     {
-        // At the switch the engine must match the oracle. The double loop is measured, not required: near a
+        // At 1e11 (the switch before #1964) the engine must match the oracle. The double loop is measured, not required: near a
         // repelling 2-cycle (multiplier ~11) its polar-form rounding grows as fast as the pixels separate.
         var v = ViewAt(Misiurewicz(ParamViews[0].Re, ParamViews[0].Im, 11), 11);
         NewtonCalculator Run(bool engine)
@@ -239,7 +248,7 @@ public sealed class S1959NovaDeepTests(ITestOutputHelper output)
             var c = Nova(W, H);
             c.AllowPerturbation = engine;
             c.SetDeepCentre(m.ToDeep(), m);
-            c.Zoom = 1e10;
+            c.Zoom = 1e6;   // #1964: below the switch (1e7)
             c.Calculate(CancellationToken.None);
             return c;
         }
