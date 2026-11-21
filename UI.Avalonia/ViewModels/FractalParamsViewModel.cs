@@ -456,7 +456,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsNova => FractalType == FractalType.Nova;   // #1294
     public bool IsChaosEarlyOutFamily => FractalType is FractalType.Newton or FractalType.Nova;   // #1980
     public bool IsRotationDomainFamily => FractalType is FractalType.Julia or FractalType.Phoenix   // #1981
-        or FractalType.Magnet1 or FractalType.Magnet2 or FractalType.Newton or FractalType.Nova;
+        or FractalType.Magnet1 or FractalType.Magnet2 or FractalType.Newton or FractalType.Nova
+        or FractalType.UserEquation;   // #1984
     public bool IsSpider => FractalType == FractalType.Spider;
     public bool IsIFS => FractalType == FractalType.IFS;
     public bool IsLSystem => FractalType == FractalType.LSystem;
@@ -776,7 +777,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     /// <summary>#1981 part 2 — the families with a distance source for it.</summary>
     public bool IsAdaptiveAaDistanceFamily => FractalType is FractalType.Mandelbrot or FractalType.Julia
         or FractalType.Multibrot or FractalType.Phoenix or FractalType.Magnet1 or FractalType.Magnet2
-        or FractalType.Newton or FractalType.Nova;
+        or FractalType.Newton or FractalType.Nova or FractalType.UserEquation;   // #1984
 
     public double AdaptiveAaTolerance
     {

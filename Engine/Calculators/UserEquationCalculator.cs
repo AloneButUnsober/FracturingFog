@@ -303,6 +303,7 @@ public sealed partial class UserEquationCalculator : IFractalCalculator, IDeepCe
 
     public void Calculate(CancellationToken ct = default)
     {
+        ResetRotationDomain();   // #1984
         // Lazily (re)compile from FractalParameters.UserEquationSource whenever it
         // differs from what is currently compiled — NOT only when nothing is compiled
         // yet. #726 / #327: the relief-field twin (_reliefFieldAltCalc) and preview
@@ -705,6 +706,7 @@ public sealed partial class UserEquationCalculator : IFractalCalculator, IDeepCe
                 }
             }
         });
+        ApplyRotationDomain(sbx, seed, cond, effBailout2, replacesModulus, scale, cosA, sinA, aaMask, ct);   // #1984 opt-in
     }
 
     // ── #845 histogram equalization (DSL escape-time) ─────────────────────────

@@ -1046,7 +1046,9 @@ the boundary of a bulb.
   RotationDomainChaosColor : ARGB colours.
 
   Families: Julia, Phoenix (largest exponent; flat shade),
-  Magnet 1 / 2, Newton and Nova, in the double tier only.
+  Magnet 1 / 2, Newton, Nova and holomorphic User Equations
+  (f′ exact, f″ by difference; an equation reading prev
+  uses its largest exponent, flat shade), in the double tier only.
   Batch: --param RotationDomainColoring=true (and the fields above).
   Idea: pauldelbrot on fractalforums.org.
 ";
@@ -1123,7 +1125,9 @@ Default polynomial:  f(z) = z^d − 1     (roots = d-th roots of 1)
   RotationDomainChaosColor : ARGB colours.
 
   Families: Julia, Phoenix (largest exponent; flat shade),
-  Magnet 1 / 2, Newton and Nova, in the double tier only.
+  Magnet 1 / 2, Newton, Nova and holomorphic User Equations
+  (f′ exact, f″ by difference; an equation reading prev
+  uses its largest exponent, flat shade), in the double tier only.
   Batch: --param RotationDomainColoring=true (and the fields above).
   Idea: pauldelbrot on fractalforums.org.
 ";
@@ -1482,7 +1486,9 @@ Setting c = 0 collapses Nova back to the pure Newton fractal.
   RotationDomainChaosColor : ARGB colours.
 
   Families: Julia, Phoenix (largest exponent; flat shade),
-  Magnet 1 / 2, Newton and Nova, in the double tier only.
+  Magnet 1 / 2, Newton, Nova and holomorphic User Equations
+  (f′ exact, f″ by difference; an equation reading prev
+  uses its largest exponent, flat shade), in the double tier only.
   Batch: --param RotationDomainColoring=true (and the fields above).
   Idea: pauldelbrot on fractalforums.org.
 

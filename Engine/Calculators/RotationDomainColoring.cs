@@ -231,7 +231,7 @@ public static class RotationDomainColoring
         return Verdict(lambda, n, double.PositiveInfinity, s);
     }
 
-    private static Result Verdict(double lambda, int n, double dist, in Settings s)
+    internal static Result Verdict(double lambda, int n, double dist, in Settings s)
     {
         double t = s.Threshold(n);
         var cls = Math.Abs(lambda) < t ? OrbitClass.Rotation : lambda > 0 ? OrbitClass.Chaotic : OrbitClass.Attracting;
