@@ -859,6 +859,15 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? SpinBinSeparateRadius { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? SpinBinMaxOrbits { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? SpinBinTolerance { get; set; }
+        // #1946 — Mixmaster (enum as int cast).
+        [JsonIgnore(Condition = OmitNull)] public int? MixView { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MixUExit { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MixOmegaDot { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MixOmega { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MixAlphaDot { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MixBetaDot { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MixMaxTime { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MixTolerance { get; set; }
         // #1507 — int cast of BilliardRayColorSource.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysColorSource { get; set; }
         // #1508 — crossings (int casts of BilliardRayMode / BilliardCrossingValue).
@@ -1473,6 +1482,18 @@ namespace FracturingFog.Models
                     SpinBinSeparateRadius = p.SpinBinSeparateRadius,
                     SpinBinMaxOrbits = p.SpinBinMaxOrbits,
                     SpinBinTolerance = p.SpinBinTolerance,
+                },
+                // #1946 — Mixmaster: every setting.
+                FractalType.MixmasterBasins => new RegionFractalParams
+                {
+                    MixView = (int)p.MixView,
+                    MixUExit = p.MixUExit,
+                    MixOmegaDot = p.MixOmegaDot,
+                    MixOmega = p.MixOmega,
+                    MixAlphaDot = p.MixAlphaDot,
+                    MixBetaDot = p.MixBetaDot,
+                    MixMaxTime = p.MixMaxTime,
+                    MixTolerance = p.MixTolerance,
                 },
                 FractalType.BilliardRays => new RegionFractalParams
                 {
@@ -2567,6 +2588,14 @@ namespace FracturingFog.Models
             if (SpinBinSeparateRadius.HasValue)   p.SpinBinSeparateRadius = SpinBinSeparateRadius.Value;
             if (SpinBinMaxOrbits.HasValue)        p.SpinBinMaxOrbits = SpinBinMaxOrbits.Value;
             if (SpinBinTolerance.HasValue)        p.SpinBinTolerance = SpinBinTolerance.Value;
+            if (MixView is { } mxv && Enum.IsDefined(typeof(FracturingFog.MixmasterView), mxv)) p.MixView = (FracturingFog.MixmasterView)mxv;   // #1946
+            if (MixUExit.HasValue)                p.MixUExit = MixUExit.Value;
+            if (MixOmegaDot.HasValue)             p.MixOmegaDot = MixOmegaDot.Value;
+            if (MixOmega.HasValue)                p.MixOmega = MixOmega.Value;
+            if (MixAlphaDot.HasValue)             p.MixAlphaDot = MixAlphaDot.Value;
+            if (MixBetaDot.HasValue)              p.MixBetaDot = MixBetaDot.Value;
+            if (MixMaxTime.HasValue)              p.MixMaxTime = MixMaxTime.Value;
+            if (MixTolerance.HasValue)            p.MixTolerance = MixTolerance.Value;
             if (BilliardRaysColorSource.HasValue) p.BilliardRaysColorSource = (FracturingFog.BilliardRayColorSource)BilliardRaysColorSource.Value;
             if (BilliardRaysMode.HasValue)       p.BilliardRaysMode = (FracturingFog.BilliardRayMode)BilliardRaysMode.Value;
             if (BilliardRaysCrossingWindow.HasValue) p.BilliardRaysCrossingWindow = BilliardRaysCrossingWindow.Value;
@@ -4350,6 +4379,73 @@ namespace FracturingFog.Models
                 {
                     SpinBinMassRatio = 1.0 / 3.0, SpinBinChi1 = 0.0, SpinBinChi2 = 0.0, SpinBinSeparation = 5.0, SpinBinVelocity = 0.45,
                     SpinBinMaxOrbits = 50.0, SpinBinRadiationReaction = false, SpinBinOutcome = (int)FracturingFog.SpinningBinaryOutcomeMode.Fates,
+                },
+            },
+            // #1946 — Mixmaster (Bianchi IX) universe, Cornish & Levin 1997 launches and outcome.
+            new()
+            {
+                Name          = "Mixmaster - Kasner Basins",
+                CenterX       =  1.5,
+                CenterY       =  -0.5,
+                Zoom          =  3.5,
+                Iterations    =  256,
+                Description   = "Cornish and Levin's picture of Mixmaster chaos: each pixel starts the universe in a Kasner epoch with parameters u (across, 1 to 2) and v (up), runs it towards the big bang through its bounces, and stops once an epoch has u above 8. The colour is the axis collapsing fastest then. The three basins interleave in nested bands. The bound 'Mixmaster: exit threshold' animation moves u_exit between 4 and 16.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.MixmasterBasins,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Mixmaster: exit threshold",
+                Params        = new RegionFractalParams
+                {
+                    MixView = (int)FracturingFog.MixmasterView.KasnerUV, MixOmegaDot = 1.0 / 3.0, MixUExit = 8.0,
+                },
+            },
+            new()
+            {
+                Name          = "Mixmaster - Kasner Close-Up",
+                CenterX       =  1.75,
+                CenterY       =  -0.55,
+                Zoom          =  175,
+                Iterations    =  256,
+                Description   = "The Kasner basins magnified 50 times (as in Cornish and Levin's own close-up): the interleaved bands keep appearing inside each band.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.MixmasterBasins,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    MixView = (int)FracturingFog.MixmasterView.KasnerUV, MixOmegaDot = 1.0 / 3.0, MixUExit = 8.0,
+                },
+            },
+            new()
+            {
+                Name          = "Mixmaster - Late Exit",
+                CenterX       =  1.5,
+                CenterY       =  -0.5,
+                Zoom          =  3.5,
+                Iterations    =  256,
+                Description   = "The Kasner basins with the exit at u above 16 instead of 8: each universe bounces longer before it is classified, and the basins mix more finely.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.MixmasterBasins,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    MixView = (int)FracturingFog.MixmasterView.KasnerUV, MixOmegaDot = 1.0 / 3.0, MixUExit = 16.0,
+                },
+            },
+            new()
+            {
+                Name          = "Mixmaster - Anisotropy Plane",
+                CenterX       =  -2.6,
+                CenterY       =  0.0,
+                Zoom          =  1.5,
+                Iterations    =  256,
+                Description   = "Cornish and Levin's other launch: the universe starts at volume variable -1 with the expansion rates of axes a and b both 10 (c from the constraint), and the pixel is the shape of the anisotropy (beta+ across, beta- up). In this window the outcome depends mostly on beta+, in fine stripes. The bound 'Mixmaster: volume sweep' animation moves the starting volume.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.MixmasterBasins,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Mixmaster: volume sweep",
+                Params        = new RegionFractalParams
+                {
+                    MixView = (int)FracturingFog.MixmasterView.Anisotropy, MixOmega = -1.0, MixAlphaDot = 10.0, MixBetaDot = 10.0, MixUExit = 8.0,
                 },
             },
             new()

@@ -587,6 +587,22 @@ reach) and the full ODE on the shared core. The outcome definition is taken from
 Validation: Hamiltonian constraint; triangular symmetry permutes corner labels; topological entropy of
 the discrete map → ln 2, as the 1997 letter reports.
 
+**Shipped (#1946).** `FractalType.MixmasterBasins` (`MixmasterCalculator`, physics in
+`Engine/Scattering/Mixmaster.cs` on the shared `ScatteringIntegrator`). Equations, launches (Kasner (u, v),
+their Fig. 16; anisotropy (β+, β−), their Fig. 19), exit (u > u_exit = 8) and outcome (axis collapsing most
+quickly) from Cornish & Levin. Corrections to this section's earlier text: the 1997 letter's entropy is
+2 ln 2 for the 2-D Farey map; ln 2 is the 1-D u-map's (PRD eq. 32, credited to Rugh), which is what the test
+checks. The two papers print opposite constraint signs; FF uses the one the equations conserve (tested).
+
+FF's own numerical choices (none stated in the parts of the papers read): run towards the singularity
+(time-reversed for the papers' ω > 0); arc-length time dλ = |x′| dτ, because ω falls at every bounce and the
+epochs lengthen geometrically, so τ would need astronomical values; constraint restored every 32 steps by the
+smallest equal shift of the three rates (its tiny absolute error otherwise doubles relative to the kinetic
+term at each bounce and acts like spurious matter); relative-only error control; "in a Kasner epoch" when
+every |(ln x)″| < 10⁻³ Σ(ln x)′². Arc-length limit 1e30 leaves no undecided pixel in a 200-sample probe
+(~1,400 steps per pixel). Discrete-map view not shipped as an image (the 2-D Farey map's u does not depend on
+v, so a (u, v) picture is stripes); the u-map is used by the tests.
+
 #### 2.6.7 Black hole + ring (Weyl superposition) — **#1947**
 
 Schwarzschild plus a thin ring or annular disc, an exact static axisymmetric superposition; the matter

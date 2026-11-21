@@ -168,6 +168,9 @@ public static class FractalAnimatableParamsMap
         FractalType.SpinningBinaryBasins
             => _spinBinList,
 
+        FractalType.MixmasterBasins
+            => _mixmasterList,
+
         FractalType.BicomplexMandelbrot
             => _bicomplexList,
 
@@ -719,6 +722,14 @@ public static class FractalAnimatableParamsMap
         new("SpinBinChi2", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 1.0, Notes: "Spin of body 2 (S2/m2²)."),
         new("SpinBinPhi1", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 360.0, Notes: "Azimuth of spin 1 in degrees."),
         new("SpinBinVelocity", AnimatableParamKind.ScalarDouble, Min: 0.1, Max: 0.7, Notes: "Initial relative speed."),
+    };
+
+    // #1946 — Mixmaster: the exit threshold and the Anisotropy launch rates.
+    private static readonly AnimatableParamDescriptor[] _mixmasterList =
+    {
+        new("MixUExit", AnimatableParamKind.ScalarDouble, Min: 3.0, Max: 16.0, Notes: "Exit once a Kasner epoch has u above this."),
+        new("MixAlphaDot", AnimatableParamKind.ScalarDouble, Min: 1.0, Max: 20.0, Notes: "(ln a)' of the Anisotropy launch."),
+        new("MixOmega", AnimatableParamKind.ScalarDouble, Min: -3.0, Max: 0.0, Notes: "Volume variable Omega of the Anisotropy launch."),
     };
 
     // #1713 — Math Plane 3D: the orbit camera.

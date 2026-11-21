@@ -153,6 +153,7 @@ namespace FracturingFog.Models
             {FractalType.ThreeBodyBasins, "Three-Body Basins" },
             {FractalType.MagnetisedBlackHole, "Magnetised Black Hole" },
             {FractalType.SpinningBinaryBasins, "Spinning Binary Basins" },
+            {FractalType.MixmasterBasins, "Mixmaster Basins" },
             {FractalType.SlitCascade, "Slit Cascade" },
             {FractalType.TalbotCarpet, "Talbot Carpet" },
             {FractalType.MathPlane, "Math Plane" },
