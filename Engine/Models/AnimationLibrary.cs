@@ -354,6 +354,34 @@ namespace FracturingFog.Models
                 Tags = new List<string> { "2D", "black-hole" },
             };
 
+            // #1942 — Hénon-Heiles exit basins. Every frame re-traces every launch.
+            yield return new AnimationData
+            {
+                Name = "Henon-Heiles: rising energy",
+                Category = "Built-in",
+                Description = "Sweeps the launch energy between 0.17 (just above escape) and 0.5 and back: the "
+                            + "basins break into fine grain near escape and thin to ribbons as the channels widen.",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.HenonHeilesBasins },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "HenonHeilesEnergy", Mode = AnimationMode.Sine, Min = 0.17, Max = 0.5, FrequencyHz = 0.04, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "henon-heiles" },
+            };
+            yield return new AnimationData
+            {
+                Name = "Henon-Heiles: turning launch",
+                Category = "Built-in",
+                Description = "Turns the fixed launch direction once round in 30 seconds (FixedAngle launch): "
+                            + "the basins rotate and re-fold as the direction passes each channel.",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.HenonHeilesBasins },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "HenonHeilesLaunchAngle", Mode = AnimationMode.Linear, Min = 0.0, Max = 360.0, FrequencyHz = 1.0 / 30.0, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "henon-heiles" },
+            };
+
             // #632 (Renderer C2) — precision-sweep convergence. Ramps the low
             // tier up the ladder Float→QuadDouble while a Hold track pins the
             // reference tier at QuadDouble, so the divergence field dims toward

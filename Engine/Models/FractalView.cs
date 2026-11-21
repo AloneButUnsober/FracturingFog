@@ -149,6 +149,7 @@ namespace FracturingFog.Models
             {FractalType.ChaoticBilliard, "Chaotic Billiard" },
             {FractalType.BilliardRays, "Billiard Rays" },
             {FractalType.BlackHoleShadow, "Black Hole Shadow" },
+            {FractalType.HenonHeilesBasins, "Henon-Heiles Basins" },
             {FractalType.SlitCascade, "Slit Cascade" },
             {FractalType.TalbotCarpet, "Talbot Carpet" },
             {FractalType.MathPlane, "Math Plane" },

@@ -92,6 +92,7 @@ public static class MiniMapDefaults
         FractalType.ChaoticBilliard  => new( 0.0,  0.0, 0.875),
         FractalType.BilliardRays     => new( 0.0,  0.0, 0.525),
         FractalType.BlackHoleShadow  => new( 0.0,  0.0, 0.14),  // #1923 (#1927: camera-scale pitch)
+        FractalType.HenonHeilesBasins => new( 0.0, -0.25, 0.85), // #1942 the well and its three saddles
         FractalType.SlitCascade      => new( 0.0,  0.0, 0.21875),
         FractalType.TalbotCarpet     => new( 0.0,  0.5, 1.6625),
         FractalType.MathPlane        => new( 0.0,  0.0, 0.4375),

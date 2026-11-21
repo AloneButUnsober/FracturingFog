@@ -815,6 +815,15 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public bool? BlackHoleSolidBlocks { get; set; }   // #1970
         [JsonIgnore(Condition = OmitNull)] public int? BlackHoleGpuPrecision { get; set; }   // #1926
         [JsonIgnore(Condition = OmitNull)] public bool? BlackHoleDdEdges { get; set; }   // #1927
+        // #1942 — Hénon-Heiles exit basins (enums as int casts).
+        [JsonIgnore(Condition = OmitNull)] public double? HenonHeilesEnergy { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? HenonHeilesView { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? HenonHeilesLaunch { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? HenonHeilesLaunchAngle { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? HenonHeilesChannel { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? HenonHeilesChannelScale { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? HenonHeilesMaxTime { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? HenonHeilesTolerance { get; set; }
         // #1507 — int cast of BilliardRayColorSource.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysColorSource { get; set; }
         // #1508 — crossings (int casts of BilliardRayMode / BilliardCrossingValue).
@@ -1373,6 +1382,18 @@ namespace FracturingFog.Models
                     BlackHoleSolidBlocks = p.BlackHoleSolidBlocks,
                     BlackHoleGpuPrecision = (int)p.BlackHoleGpuPrecision,
                     BlackHoleDdEdges = p.BlackHoleDdEdges,
+                },
+                // #1942 — Hénon-Heiles exit basins: every setting.
+                FractalType.HenonHeilesBasins => new RegionFractalParams
+                {
+                    HenonHeilesEnergy = p.HenonHeilesEnergy,
+                    HenonHeilesView = (int)p.HenonHeilesView,
+                    HenonHeilesLaunch = (int)p.HenonHeilesLaunch,
+                    HenonHeilesLaunchAngle = p.HenonHeilesLaunchAngle,
+                    HenonHeilesChannel = (int)p.HenonHeilesChannel,
+                    HenonHeilesChannelScale = p.HenonHeilesChannelScale,
+                    HenonHeilesMaxTime = p.HenonHeilesMaxTime,
+                    HenonHeilesTolerance = p.HenonHeilesTolerance,
                 },
                 FractalType.BilliardRays => new RegionFractalParams
                 {
@@ -2427,6 +2448,14 @@ namespace FracturingFog.Models
             if (BlackHoleSolidBlocks.HasValue)    p.BlackHoleSolidBlocks = BlackHoleSolidBlocks.Value;
             if (BlackHoleGpuPrecision.HasValue)   p.BlackHoleGpuPrecision = (FracturingFog.BlackHoleGpuPrecision)BlackHoleGpuPrecision.Value;
             if (BlackHoleDdEdges.HasValue)        p.BlackHoleDdEdges = BlackHoleDdEdges.Value;
+            if (HenonHeilesEnergy.HasValue)       p.HenonHeilesEnergy = HenonHeilesEnergy.Value;   // #1942
+            if (HenonHeilesView is { } hhv && Enum.IsDefined(typeof(FracturingFog.HenonHeilesView), hhv)) p.HenonHeilesView = (FracturingFog.HenonHeilesView)hhv;
+            if (HenonHeilesLaunch is { } hhl && Enum.IsDefined(typeof(FracturingFog.HenonHeilesLaunch), hhl)) p.HenonHeilesLaunch = (FracturingFog.HenonHeilesLaunch)hhl;
+            if (HenonHeilesLaunchAngle.HasValue)  p.HenonHeilesLaunchAngle = HenonHeilesLaunchAngle.Value;
+            if (HenonHeilesChannel is { } hhc && Enum.IsDefined(typeof(FracturingFog.HenonHeilesChannel), hhc)) p.HenonHeilesChannel = (FracturingFog.HenonHeilesChannel)hhc;
+            if (HenonHeilesChannelScale.HasValue) p.HenonHeilesChannelScale = HenonHeilesChannelScale.Value;
+            if (HenonHeilesMaxTime.HasValue)      p.HenonHeilesMaxTime = HenonHeilesMaxTime.Value;
+            if (HenonHeilesTolerance.HasValue)    p.HenonHeilesTolerance = HenonHeilesTolerance.Value;
             if (BilliardRaysColorSource.HasValue) p.BilliardRaysColorSource = (FracturingFog.BilliardRayColorSource)BilliardRaysColorSource.Value;
             if (BilliardRaysMode.HasValue)       p.BilliardRaysMode = (FracturingFog.BilliardRayMode)BilliardRaysMode.Value;
             if (BilliardRaysCrossingWindow.HasValue) p.BilliardRaysCrossingWindow = BilliardRaysCrossingWindow.Value;
@@ -3815,6 +3844,111 @@ namespace FracturingFog.Models
                     BlackHoleProjection = (int)FracturingFog.BlackHoleProjection.Pinhole,
                     BlackHoleSky = (int)FracturingFog.BlackHoleSky.Stars,
                     BlackHoleSkySeed = 1, BlackHoleSkyRotation = 0.0,
+                },
+            },
+            // #1942 — Hénon-Heiles exit basins (Aguirre, Vallejo & Sanjuán 2001).
+            new()
+            {
+                Name          = "Henon-Heiles - Exit Basins",
+                CenterX       =  0.0,
+                CenterY       =  -0.25,
+                Zoom          =  0.85,
+                Iterations    =  256,
+                Description   = "Launches across the Henon-Heiles well at energy 0.25, each moving anticlockwise. The colour is the channel the particle leaves through. The three basins wind into each other, and every boundary touches all three (Wada basins). The bound 'Henon-Heiles: rising energy' animation sweeps the energy from just above escape to 0.5.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.HenonHeilesBasins,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Henon-Heiles: rising energy",
+                Params        = new RegionFractalParams
+                {
+                    HenonHeilesEnergy = 0.25, HenonHeilesView = (int)FracturingFog.HenonHeilesView.Plane,
+                    HenonHeilesLaunch = (int)FracturingFog.HenonHeilesLaunch.Tangential,
+                },
+            },
+            new()
+            {
+                Name          = "Henon-Heiles - Poincare Section",
+                CenterX       =  0.2,
+                CenterY       =  0.0,
+                Zoom          =  1.6,
+                Iterations    =  256,
+                Description   = "Launches on the line x = 0 at energy 0.25: horizontal is y, vertical is the momentum py, px from the energy. This is the section in which Aguirre, Vallejo and Sanjuan showed the exit basins are Wada. The bands fold into each other towards the bottom-right boundary.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.HenonHeilesBasins,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    HenonHeilesEnergy = 0.25, HenonHeilesView = (int)FracturingFog.HenonHeilesView.Section,
+                },
+            },
+            new()
+            {
+                Name          = "Henon-Heiles - Near Escape Energy",
+                CenterX       =  0.0,
+                CenterY       =  -0.25,
+                Zoom          =  0.85,
+                Iterations    =  256,
+                Description   = "Energy 0.18, just above the escape energy 1/6: the exits are narrow and most launches wander for a long time before finding one, so the basins break into fine grain. The dark islands are regular orbits that never escape (undecided at the time limit 1000).",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.HenonHeilesBasins,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    HenonHeilesEnergy = 0.18, HenonHeilesView = (int)FracturingFog.HenonHeilesView.Plane,
+                    HenonHeilesLaunch = (int)FracturingFog.HenonHeilesLaunch.Tangential, HenonHeilesMaxTime = 1000.0,
+                },
+            },
+            new()
+            {
+                Name          = "Henon-Heiles - High Energy",
+                CenterX       =  0.0,
+                CenterY       =  -0.25,
+                Zoom          =  0.85,
+                Iterations    =  256,
+                Description   = "Energy 0.5: the channels are wide, most launches leave quickly, and the fractal boundaries thin to narrow ribbons between large smooth basins.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.HenonHeilesBasins,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    HenonHeilesEnergy = 0.5, HenonHeilesView = (int)FracturingFog.HenonHeilesView.Plane,
+                    HenonHeilesLaunch = (int)FracturingFog.HenonHeilesLaunch.Tangential,
+                },
+            },
+            new()
+            {
+                Name          = "Henon-Heiles - Escape Time",
+                CenterX       =  0.0,
+                CenterY       =  -0.25,
+                Zoom          =  0.85,
+                Iterations    =  256,
+                Description   = "The exit basins at energy 0.25 coloured by how long each particle stays in the well (log escape time through the palette). The long stays line the basin boundaries.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.HenonHeilesBasins,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    HenonHeilesEnergy = 0.25, HenonHeilesView = (int)FracturingFog.HenonHeilesView.Plane,
+                    HenonHeilesLaunch = (int)FracturingFog.HenonHeilesLaunch.Tangential,
+                    HenonHeilesChannel = (int)FracturingFog.HenonHeilesChannel.EscapeTime,
+                },
+            },
+            new()
+            {
+                Name          = "Henon-Heiles - Parallel Launch",
+                CenterX       =  0.0,
+                CenterY       =  -0.25,
+                Zoom          =  0.85,
+                Iterations    =  256,
+                Description   = "Every particle starts moving straight up (fixed launch angle 90 degrees) at energy 0.25. The basins keep the mirror symmetry about the vertical axis but lose the threefold one. The bound 'Henon-Heiles: turning launch' animation turns the launch direction once round.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.HenonHeilesBasins,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Henon-Heiles: turning launch",
+                Params        = new RegionFractalParams
+                {
+                    HenonHeilesEnergy = 0.25, HenonHeilesView = (int)FracturingFog.HenonHeilesView.Plane,
+                    HenonHeilesLaunch = (int)FracturingFog.HenonHeilesLaunch.FixedAngle, HenonHeilesLaunchAngle = 90.0,
                 },
             },
             new()

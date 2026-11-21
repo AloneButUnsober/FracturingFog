@@ -80,6 +80,7 @@ namespace FracturingFog.Models
             FractalType.ChaoticBilliard => FractalMotionClass.Zoomable2D,
             FractalType.BilliardRays => FractalMotionClass.Zoomable2D,
             FractalType.BlackHoleShadow => FractalMotionClass.Zoomable2D,   // #1923 impact-parameter plane
+            FractalType.HenonHeilesBasins => FractalMotionClass.Zoomable2D, // #1942 launch plane / section
             FractalType.SlitCascade => FractalMotionClass.Zoomable2D,   // #1569
             FractalType.TalbotCarpet => FractalMotionClass.Zoomable2D,  // #1570
             FractalType.MathPlane => FractalMotionClass.Zoomable2D,
@@ -279,7 +280,7 @@ namespace FracturingFog.Models
 
         /// <summary>#1969 — the 2D ray tracers that implement <c>IAdaptiveAaCalculator</c>: the black
         /// hole shadows (each pixel one traced ray; the lensed sky aliases without AA).</summary>
-        public static bool IsRayTraced2D(FractalType type) => type is FractalType.BlackHoleShadow;
+        public static bool IsRayTraced2D(FractalType type) => type is FractalType.BlackHoleShadow or FractalType.HenonHeilesBasins;   // #1942
 
         /// <summary>The 2D alt calculators that implement <c>IAdaptiveAaCalculator</c>:
         /// EscapeTimeCalculator's families, the root finders (Newton, Nova, Halley,

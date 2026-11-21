@@ -1243,6 +1243,15 @@ namespace FracturingFog
         /// <c>BlackHoleAzimuth</c>, <c>BlackHoleCaptureFraction</c>,
         /// <c>BlackHoleTolerance</c>, <c>BlackHoleMaxSteps</c>.</summary>
         BlackHoleShadow,
+        /// <summary>#1942 (§2.6) — exit basins of the Hénon-Heiles potential, an open Hamiltonian
+        /// from galactic dynamics. Each pixel is a launch condition at fixed energy; the motion is
+        /// traced (shared scattering integrator, <c>Engine/Scattering</c>) until the particle
+        /// leaves through one of the three channels, and the exit is the colour. Above the
+        /// escape energy 1/6 the basins are fractal and Wada (Aguirre, Vallejo &amp; Sanjuán 2001).
+        /// <c>HenonHeilesCalculator</c>. Tunables: <c>HenonHeilesEnergy</c>, <c>HenonHeilesView</c>,
+        /// <c>HenonHeilesLaunch</c>, <c>HenonHeilesLaunchAngle</c>, <c>HenonHeilesChannel</c>,
+        /// <c>HenonHeilesChannelScale</c>, <c>HenonHeilesMaxTime</c>, <c>HenonHeilesTolerance</c>.</summary>
+        HenonHeilesBasins,
     }
 
     /// <summary>Hole layout of <see cref="FractalType.BlackHoleShadow"/> (#1923).
@@ -1282,6 +1291,25 @@ namespace FracturingFog
     /// GPUs with slow fp64 (most consumer cards) but floors the tolerance and can move pixels
     /// on the fractal edges; the CPU path always traces in double.</summary>
     public enum BlackHoleGpuPrecision { Double, Single }
+
+    /// <summary>Launch space of <see cref="FractalType.HenonHeilesBasins"/> (#1942).
+    /// <see cref="Plane"/> (default): the pixel is the start position (x, y), y up; speed from
+    /// the energy, direction from <see cref="HenonHeilesLaunch"/>. <see cref="Section"/>: the pixel
+    /// is (y, py) on the line x = 0 with px ≥ 0 from the energy (the Poincaré-section launch).</summary>
+    public enum HenonHeilesView { Plane, Section }
+
+    /// <summary>Launch direction of the <see cref="HenonHeilesView.Plane"/> view (#1942).
+    /// <see cref="Tangential"/> (default): perpendicular to the position, anticlockwise.
+    /// <see cref="Radial"/>: straight out from the origin. <see cref="FixedAngle"/>: the same
+    /// direction everywhere (<c>HenonHeilesLaunchAngle</c>, degrees from +x). The first two are
+    /// rotation-symmetric, so the basin map has the potential's threefold symmetry.</summary>
+    public enum HenonHeilesLaunch { Tangential, Radial, FixedAngle }
+
+    /// <summary>What colours a <see cref="FractalType.HenonHeilesBasins"/> pixel (#1942).
+    /// <see cref="Exit"/> (default): which channel the particle leaves through.
+    /// <see cref="EscapeTime"/>: log(1 + time to leave). <see cref="TurningPoints"/>: sign changes
+    /// of the radial velocity. <see cref="SaddleDistance"/>: −log of the closest pass to a saddle.</summary>
+    public enum HenonHeilesChannel { Exit, EscapeTime, TurningPoints, SaddleDistance }
 
     public enum RenderProfile { Preview, Final }
 
@@ -1424,6 +1452,10 @@ namespace FracturingFog
             // #1923 — black hole shadows: categorical fate through IBilliardColorMap, or the
             // 3-param Map on the escaped rays' delay; no normals / DE / orbit data.
             FractalType.BlackHoleShadow => FractalCapabilities.None,
+
+            // #1942 — Hénon-Heiles exit basins: categorical exit through IBilliardColorMap, or
+            // the 3-param Map on a channel; no normals / DE / orbit data.
+            FractalType.HenonHeilesBasins => FractalCapabilities.None,
 
             // #1713 — Math Plane 3D draws its own colours (a diagram, no per-pixel data).
             FractalType.MathPlane3D => FractalCapabilities.None,

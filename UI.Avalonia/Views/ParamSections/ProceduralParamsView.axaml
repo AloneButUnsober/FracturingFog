@@ -1553,5 +1553,57 @@
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
         </Grid>
 
+        <!-- #1942 — Hénon-Heiles exit basins. -->
+        <Grid IsVisible="{Binding IsHenonHeilesBasins}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Energy:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1"
+                           Minimum="0" Maximum="10" Increment="0.01" FormatString="0.##########"
+                           Value="{Binding HenonHeilesEnergy, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Energy of every launch. Below 1/6 (0.1667) nothing launched inside the well escapes; just above it the transients are long; higher energies thin the basin boundaries." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="View:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="1" Grid.Column="1"
+                      ItemsSource="{Binding HenonHeilesViews}"
+                      SelectedItem="{Binding HenonHeilesView, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Plane: the pixel is the start position (x, y). Section: the pixel is (y, py) on the line x = 0, moving right (the Poincaré-section launch)." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Launch direction:" VerticalAlignment="Center" IsVisible="{Binding HhIsPlane}" />
+            <ComboBox Grid.Row="2" Grid.Column="1" IsVisible="{Binding HhIsPlane}"
+                      ItemsSource="{Binding HenonHeilesLaunches}"
+                      SelectedItem="{Binding HenonHeilesLaunch, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Tangential: perpendicular to the position, anticlockwise. Radial: straight out. FixedAngle: the same direction everywhere. Tangential and Radial keep the threefold symmetry." />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Launch angle (deg):" VerticalAlignment="Center" IsVisible="{Binding HhIsFixedAngle}" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1" IsVisible="{Binding HhIsFixedAngle}"
+                           Minimum="-360" Maximum="360" Increment="5" FormatString="0.##########"
+                           Value="{Binding HenonHeilesLaunchAngle, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Launch direction, degrees anticlockwise from +x." />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Colour by:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="4" Grid.Column="1"
+                      ItemsSource="{Binding HenonHeilesChannels}"
+                      SelectedItem="{Binding HenonHeilesChannel, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Exit: which channel the particle leaves through. EscapeTime: how long it stays. TurningPoints: how often it turns back. SaddleDistance: how close it passes a saddle." />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Channel scale:" VerticalAlignment="Center" IsVisible="{Binding HhUsesChannel}" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1" IsVisible="{Binding HhUsesChannel}"
+                           Minimum="0.01" Maximum="100" Increment="0.1" FormatString="0.##########"
+                           Value="{Binding HenonHeilesChannelScale, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Palette density of the channel colouring." />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Time limit:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="6" Grid.Column="1"
+                           Minimum="1" Maximum="100000" Increment="50" FormatString="0.##########"
+                           Value="{Binding HenonHeilesMaxTime, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="A particle still inside the well after this time is undecided (the theme's interior colour). Raise it near the escape energy." />
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Tolerance:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="7" Grid.Column="1"
+                           Minimum="0.0000000000001" Maximum="0.001" Increment="0.000000001" FormatString="0.#############"
+                           Value="{Binding HenonHeilesTolerance, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Integrator relative tolerance per step. Smaller is slower and places the boundaries more exactly." />
+            <CheckBox Grid.Row="8" Grid.Column="1" Content="Adaptive anti-aliasing"
+                      IsChecked="{Binding AdaptiveAa, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="With the High / Ultra / Extreme quality presets, re-trace only the pixels that differ from a neighbour (the basin boundaries). Also used by export and --batch." />
+            <TextBlock Grid.Row="9" Grid.Column="1"
+                       Text="Each exit channel is its own colour (up, lower left, lower right); dark grey is the potential wall where no launch has this energy. A Billiard theme colours the exits directly."
+                       TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
+        </Grid>
+
     </StackPanel>
 </UserControl>

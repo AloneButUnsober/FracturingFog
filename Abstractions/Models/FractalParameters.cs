@@ -1474,6 +1474,26 @@ namespace FracturingFog.Models
         /// (Fate colouring). Exact edges, slower deep frames. Default true.</summary>
         public bool BlackHoleDdEdges { get; set; } = true;
 
+        // ── Hénon-Heiles exit basins (#1942) ─────────────────────────────
+        /// <summary>#1942 — energy E of every launch. Above the escape energy 1/6 the three
+        /// channels open; just above it transients are long, at large E the boundaries thin.
+        /// Default 0.25.</summary>
+        public double HenonHeilesEnergy { get; set; } = 0.25;
+        /// <summary>#1942 — launch space (see <see cref="FracturingFog.HenonHeilesView"/>). Default Plane.</summary>
+        public HenonHeilesView HenonHeilesView { get; set; } = HenonHeilesView.Plane;
+        /// <summary>#1942 — launch direction in the Plane view (see <see cref="FracturingFog.HenonHeilesLaunch"/>). Default Tangential.</summary>
+        public HenonHeilesLaunch HenonHeilesLaunch { get; set; } = HenonHeilesLaunch.Tangential;
+        /// <summary>#1942 — FixedAngle launch direction, degrees from +x. Default 0.</summary>
+        public double HenonHeilesLaunchAngle { get; set; } = 0.0;
+        /// <summary>#1942 — colouring channel (see <see cref="FracturingFog.HenonHeilesChannel"/>). Default Exit.</summary>
+        public HenonHeilesChannel HenonHeilesChannel { get; set; } = HenonHeilesChannel.Exit;
+        /// <summary>#1942 — palette units per unit of the channel value (non-Exit channels). Default 1.</summary>
+        public double HenonHeilesChannelScale { get; set; } = 1.0;
+        /// <summary>#1942 — time limit; a particle still inside then is undecided. Default 200.</summary>
+        public double HenonHeilesMaxTime { get; set; } = 200.0;
+        /// <summary>#1942 — integrator relative tolerance per step. Default 1e-8.</summary>
+        public double HenonHeilesTolerance { get; set; } = 1e-8;
+
         // ── Slit cascade (#1569, double-slit epic #1565) ──────────────────
         /// <summary>Slit cascade: children per slit, N (2..16). N ≥ 3 for the fringe
         /// weights to differ (a symmetric pair is a plain Cantor set).</summary>
@@ -2581,6 +2601,14 @@ namespace FracturingFog.Models
                 BlackHoleSolidBlocks = BlackHoleSolidBlocks,
                 BlackHoleGpuPrecision = BlackHoleGpuPrecision,
                 BlackHoleDdEdges = BlackHoleDdEdges,
+                HenonHeilesEnergy = HenonHeilesEnergy,
+                HenonHeilesView = HenonHeilesView,
+                HenonHeilesLaunch = HenonHeilesLaunch,
+                HenonHeilesLaunchAngle = HenonHeilesLaunchAngle,
+                HenonHeilesChannel = HenonHeilesChannel,
+                HenonHeilesChannelScale = HenonHeilesChannelScale,
+                HenonHeilesMaxTime = HenonHeilesMaxTime,
+                HenonHeilesTolerance = HenonHeilesTolerance,
                 SlitCascadeChildren = SlitCascadeChildren,
                 SlitCascadeRatio = SlitCascadeRatio,
                 SlitCascadeDepth = SlitCascadeDepth,

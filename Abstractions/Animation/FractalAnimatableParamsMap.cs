@@ -156,6 +156,9 @@ public static class FractalAnimatableParamsMap
         FractalType.BlackHoleShadow
             => _blackHoleShadowList,
 
+        FractalType.HenonHeilesBasins
+            => _henonHeilesList,
+
         FractalType.BicomplexMandelbrot
             => _bicomplexList,
 
@@ -659,6 +662,18 @@ public static class FractalAnimatableParamsMap
             Notes: "#1924 — palette density of the colouring channel (stripes per unit)."),
         new("BlackHoleSkyRotation", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 360.0,
             Notes: "#1925 — turns the sky behind the holes (watch the lensed copies move)."),
+    };
+
+    // #1942 — Hénon-Heiles exit basins: the energy (the main dial: the boundaries thin as it
+    // rises) and the fixed launch angle. Every change re-traces every launch.
+    private static readonly AnimatableParamDescriptor[] _henonHeilesList =
+    {
+        new("HenonHeilesEnergy", AnimatableParamKind.ScalarDouble, Min: 0.17, Max: 1.0,
+            Notes: "Launch energy: just above 1/6 the transients are long, higher energies thin the boundaries."),
+        new("HenonHeilesLaunchAngle", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 360.0,
+            Notes: "FixedAngle launch direction in degrees."),
+        new("HenonHeilesChannelScale", AnimatableParamKind.ScalarDouble, Min: 0.05, Max: 10.0,
+            Notes: "Palette density of the colouring channel."),
     };
 
     // #1713 — Math Plane 3D: the orbit camera.
