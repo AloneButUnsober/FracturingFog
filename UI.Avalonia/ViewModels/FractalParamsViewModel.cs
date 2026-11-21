@@ -304,6 +304,11 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _brView = _p.BhRingView; _brMass = _p.BhRingMass; _brRadius = _p.BhRingRadius; _brE = _p.BhRingEnergy;
         _brL = _p.BhRingAngularMomentum; _brVs = _p.BhRingVelocityScale; _brOrbits = _p.BhRingOrbits;
         _brOrbitTime = _p.BhRingOrbitTime; _brFateTime = _p.BhRingFateTime; _brColour = _p.BhRingColour; _brTol = _p.BhRingTolerance;
+        _upSource = _p.UserPotentialSource ?? ""; _upE = _p.UserPotentialEnergy; _upView = _p.UserPotentialView;
+        _upLaunch = _p.UserPotentialLaunch; _upAngle = _p.UserPotentialLaunchAngle; _upRadius = _p.UserPotentialExitRadius;
+        _upSectors = _p.UserPotentialSectors; _upOffset = _p.UserPotentialSectorOffset; _upExitIf = _p.UserPotentialExitIf ?? "";
+        _upRotating = _p.UserPotentialRotating; _upMaxTime = _p.UserPotentialMaxTime; _upTol = _p.UserPotentialTolerance;
+        _upMaxStep = _p.UserPotentialMaxStep;
         _mathPlaneScene = _p.MathPlaneScene ?? string.Empty;
         UpdateMathPlaneSceneError();
         _raysColorSource = _p.BilliardRaysColorSource;
@@ -533,6 +538,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsSpinningBinaryBasins => FractalType == FractalType.SpinningBinaryBasins;   // #1945
     public bool IsMixmasterBasins => FractalType == FractalType.MixmasterBasins;   // #1946
     public bool IsBlackHoleRingOrbits => FractalType == FractalType.BlackHoleRingOrbits;   // #1947
+    public bool IsUserPotentialBasins => FractalType == FractalType.UserPotentialBasins;   // #1994
     /// <summary>Either billiard type: the shared scene controls (geometry, disks, bounces).</summary>
     public bool IsBilliardScene => IsChaoticBilliard || IsBilliardRays;
     /// <summary>#1548 — Math Plane (Cartesian plotter).</summary>
@@ -687,7 +693,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         // Spinning binaries — orbit count height field (#1945).
         || IsSpinningBinaryBasins
         // Mixmaster — log arc length height field (#1946).
-        || IsMixmasterBasins
+        || IsMixmasterBasins || IsUserPotentialBasins
         // Precision field — divergence-scalar height field (#628).
         || IsPrecisionField
         // Dual-orbit escape-geometry (#864) — the derived scalar rides the
@@ -710,7 +716,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsLyapunov || IsTranscendentalJulia || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian || IsMirrorSpheres
-          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsBlackHoleShadow || IsHenonHeilesBasins || IsThreeBodyBasins || IsMagnetisedBlackHole || IsSpinningBinaryBasins || IsMixmasterBasins || IsBlackHoleRingOrbits || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable || IsAdaptiveAa2D
+          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsBlackHoleShadow || IsHenonHeilesBasins || IsThreeBodyBasins || IsMagnetisedBlackHole || IsSpinningBinaryBasins || IsMixmasterBasins || IsBlackHoleRingOrbits || IsUserPotentialBasins || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable || IsAdaptiveAa2D
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -2515,6 +2521,49 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double MixBetaDot { get => _mxBetaDot; set { Set(ref _mxBetaDot, Clamp(value, -1000.0, 1000.0)); _p.MixBetaDot = _mxBetaDot; Fire(); } }
     public double MixMaxTime { get => _mxMaxTime; set { Set(ref _mxMaxTime, Clamp(value, 1.0, 1e300)); _p.MixMaxTime = _mxMaxTime; Fire(); } }
     public double MixTolerance { get => _mxTol; set { Set(ref _mxTol, Clamp(value, 1e-13, 1e-3)); _p.MixTolerance = _mxTol; Fire(); } }
+
+    // ── #1994 — User Potential ───────────────────────────────────────────────
+    private string _upSource = "", _upExitIf = "";
+    private double _upE, _upAngle, _upRadius, _upOffset, _upMaxTime, _upTol, _upMaxStep;
+    private UserPotentialView _upView;
+    private HenonHeilesLaunch _upLaunch;
+    private int _upSectors;
+    private bool _upRotating;
+    public string UserPotentialSource
+    {
+        get => _upSource;
+        set { Set(ref _upSource, value ?? ""); _p.UserPotentialSource = _upSource; this.RaisePropertyChanged(nameof(UserPotentialError)); Fire(); }
+    }
+    public string UserPotentialExitIf
+    {
+        get => _upExitIf;
+        set { Set(ref _upExitIf, value ?? ""); _p.UserPotentialExitIf = _upExitIf; this.RaisePropertyChanged(nameof(UserPotentialError)); Fire(); }
+    }
+    /// <summary>The parse error of V or the exit rule (yellow in the panel), or empty.</summary>
+    public string UserPotentialError
+    {
+        get
+        {
+            if (!FracturingFog.Models.RealExpression.TryParse(_upSource, new[] { "x", "y" }, out _, out var e)) return "V: " + e;
+            if (!string.IsNullOrWhiteSpace(_upExitIf)
+                && !FracturingFog.Models.RealExpression.TryParse(_upExitIf, new[] { "x", "y", "vx", "vy", "t" }, out _, out e)) return "Exit if: " + e;
+            return "";
+        }
+    }
+    public double UserPotentialEnergy { get => _upE; set { Set(ref _upE, Clamp(value, -1e6, 1e6)); _p.UserPotentialEnergy = _upE; Fire(); } }
+    public UserPotentialView UserPotentialView { get => _upView; set { Set(ref _upView, value); _p.UserPotentialView = value; this.RaisePropertyChanged(nameof(UserPotentialIsPlane)); Fire(); } }
+    public System.Array UserPotentialViews => s_UserPotentialViews;
+    private static readonly System.Array s_UserPotentialViews = System.Enum.GetValues(typeof(UserPotentialView));
+    public bool UserPotentialIsPlane => _upView == UserPotentialView.Plane;
+    public HenonHeilesLaunch UserPotentialLaunch { get => _upLaunch; set { Set(ref _upLaunch, value); _p.UserPotentialLaunch = value; Fire(); } }
+    public double UserPotentialLaunchAngle { get => _upAngle; set { Set(ref _upAngle, Clamp(value, -360.0, 360.0)); _p.UserPotentialLaunchAngle = _upAngle; Fire(); } }
+    public double UserPotentialExitRadius { get => _upRadius; set { Set(ref _upRadius, Clamp(value, 0.001, 1e6)); _p.UserPotentialExitRadius = _upRadius; Fire(); } }
+    public int UserPotentialSectors { get => _upSectors; set { Set(ref _upSectors, Math.Clamp(value, 1, 16)); _p.UserPotentialSectors = _upSectors; Fire(); } }
+    public double UserPotentialSectorOffset { get => _upOffset; set { Set(ref _upOffset, Clamp(value, -360.0, 360.0)); _p.UserPotentialSectorOffset = _upOffset; Fire(); } }
+    public bool UserPotentialRotating { get => _upRotating; set { Set(ref _upRotating, value); _p.UserPotentialRotating = value; Fire(); } }
+    public double UserPotentialMaxTime { get => _upMaxTime; set { Set(ref _upMaxTime, Clamp(value, 1.0, 100000.0)); _p.UserPotentialMaxTime = _upMaxTime; Fire(); } }
+    public double UserPotentialTolerance { get => _upTol; set { Set(ref _upTol, Clamp(value, 1e-13, 1e-3)); _p.UserPotentialTolerance = _upTol; Fire(); } }
+    public double UserPotentialMaxStep { get => _upMaxStep; set { Set(ref _upMaxStep, Clamp(value, 1e-4, 10.0)); _p.UserPotentialMaxStep = _upMaxStep; Fire(); } }
 
     // ── #1947 — black hole + ring ────────────────────────────────────────────
     private BlackHoleRingView _brView;

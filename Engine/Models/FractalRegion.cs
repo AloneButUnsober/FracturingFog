@@ -880,6 +880,20 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? BhRingFateTime { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? BhRingColour { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? BhRingTolerance { get; set; }
+        // #1994 — User Potential.
+        [JsonIgnore(Condition = OmitNull)] public string? UserPotentialSource { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? UserPotentialEnergy { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? UserPotentialView { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? UserPotentialLaunch { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? UserPotentialLaunchAngle { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? UserPotentialExitRadius { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? UserPotentialSectors { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? UserPotentialSectorOffset { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public string? UserPotentialExitIf { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? UserPotentialRotating { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? UserPotentialMaxTime { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? UserPotentialTolerance { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? UserPotentialMaxStep { get; set; }
         // #1507 — int cast of BilliardRayColorSource.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysColorSource { get; set; }
         // #1508 — crossings (int casts of BilliardRayMode / BilliardCrossingValue).
@@ -1522,6 +1536,23 @@ namespace FracturingFog.Models
                     BhRingColour = (int)p.BhRingColour,
                     BhRingTolerance = p.BhRingTolerance,
                 },
+                // #1994 — User Potential: every setting, the texts included.
+                FractalType.UserPotentialBasins => new RegionFractalParams
+                {
+                    UserPotentialSource = p.UserPotentialSource ?? "",
+                    UserPotentialEnergy = p.UserPotentialEnergy,
+                    UserPotentialView = (int)p.UserPotentialView,
+                    UserPotentialLaunch = (int)p.UserPotentialLaunch,
+                    UserPotentialLaunchAngle = p.UserPotentialLaunchAngle,
+                    UserPotentialExitRadius = p.UserPotentialExitRadius,
+                    UserPotentialSectors = p.UserPotentialSectors,
+                    UserPotentialSectorOffset = p.UserPotentialSectorOffset,
+                    UserPotentialExitIf = p.UserPotentialExitIf ?? "",
+                    UserPotentialRotating = p.UserPotentialRotating,
+                    UserPotentialMaxTime = p.UserPotentialMaxTime,
+                    UserPotentialTolerance = p.UserPotentialTolerance,
+                    UserPotentialMaxStep = p.UserPotentialMaxStep,
+                },
                 FractalType.BilliardRays => new RegionFractalParams
                 {
                     BilliardGeometry = (int)p.BilliardGeometry,
@@ -2119,6 +2150,11 @@ namespace FracturingFog.Models
             return rp;
         }
 
+        /// <summary>#1994 — the "exit if" rule of the Copenhagen preset: gate 0 / 1 for a crash into the
+        /// mass at (-1/2, 0) / (1/2, 0) (radius 0.01, as ThreeBodySystem's default), gate 2 past r = 10.</summary>
+        public const string UserPotentialCopenhagenExit =
+            "sqrt((x + 0.5)^2 + y^2) < 0.01 ? 0 : (sqrt((x - 0.5)^2 + y^2) < 0.01 ? 1 : (x^2 + y^2 > 100 ? 2 : -1))";
+
         /// <summary>#1554 — the family a Math Plane backdrop draws, or null (escape-time families;
         /// #2000 adds the scattering families with a physical plane).</summary>
         public static FractalType? MathPlaneBackdropFamily(MathPlaneBackdrop b) => b switch
@@ -2639,6 +2675,19 @@ namespace FracturingFog.Models
             if (BhRingFateTime.HasValue)          p.BhRingFateTime = BhRingFateTime.Value;
             if (BhRingColour is { } brc && Enum.IsDefined(typeof(FracturingFog.BlackHoleRingColour), brc)) p.BhRingColour = (FracturingFog.BlackHoleRingColour)brc;
             if (BhRingTolerance.HasValue)         p.BhRingTolerance = BhRingTolerance.Value;
+            if (UserPotentialSource != null)      p.UserPotentialSource = UserPotentialSource;   // #1994
+            if (UserPotentialEnergy.HasValue)     p.UserPotentialEnergy = UserPotentialEnergy.Value;
+            if (UserPotentialView is { } upv && Enum.IsDefined(typeof(FracturingFog.UserPotentialView), upv)) p.UserPotentialView = (FracturingFog.UserPotentialView)upv;
+            if (UserPotentialLaunch is { } upl && Enum.IsDefined(typeof(FracturingFog.HenonHeilesLaunch), upl)) p.UserPotentialLaunch = (FracturingFog.HenonHeilesLaunch)upl;
+            if (UserPotentialLaunchAngle.HasValue) p.UserPotentialLaunchAngle = UserPotentialLaunchAngle.Value;
+            if (UserPotentialExitRadius.HasValue) p.UserPotentialExitRadius = UserPotentialExitRadius.Value;
+            if (UserPotentialSectors.HasValue)    p.UserPotentialSectors = UserPotentialSectors.Value;
+            if (UserPotentialSectorOffset.HasValue) p.UserPotentialSectorOffset = UserPotentialSectorOffset.Value;
+            if (UserPotentialExitIf != null)      p.UserPotentialExitIf = UserPotentialExitIf;
+            if (UserPotentialRotating.HasValue)   p.UserPotentialRotating = UserPotentialRotating.Value;
+            if (UserPotentialMaxTime.HasValue)    p.UserPotentialMaxTime = UserPotentialMaxTime.Value;
+            if (UserPotentialTolerance.HasValue)  p.UserPotentialTolerance = UserPotentialTolerance.Value;
+            if (UserPotentialMaxStep.HasValue)    p.UserPotentialMaxStep = UserPotentialMaxStep.Value;
             if (BilliardRaysColorSource.HasValue) p.BilliardRaysColorSource = (FracturingFog.BilliardRayColorSource)BilliardRaysColorSource.Value;
             if (BilliardRaysMode.HasValue)       p.BilliardRaysMode = (FracturingFog.BilliardRayMode)BilliardRaysMode.Value;
             if (BilliardRaysCrossingWindow.HasValue) p.BilliardRaysCrossingWindow = BilliardRaysCrossingWindow.Value;
@@ -4489,6 +4538,62 @@ namespace FracturingFog.Models
                 Params        = new RegionFractalParams
                 {
                     MixView = (int)FracturingFog.MixmasterView.Anisotropy, MixOmega = -1.0, MixAlphaDot = 10.0, MixBetaDot = 10.0, MixUExit = 8.0,
+                },
+            },
+            // #1994 — User Potential: Hénon–Heiles written as V (parity), FF's own four-exit
+            // potential, and the Copenhagen problem in the rotating frame.
+            new()
+            {
+                Name          = "User Potential - Henon-Heiles",
+                CenterX       =  0.0,
+                CenterY       = -0.25,
+                Zoom          =  0.85,
+                Iterations    =  256,
+                Description   = "The Henon-Heiles potential written as a user formula, V = (x^2 + y^2)/2 + x^2*y - y^3/3, with three exit sectors at E = 0.25. FF works out the forces from the formula and traces each launch exactly as the built-in Henon-Heiles family does, so the picture is the same. Edit V to explore other potentials. The bound 'User potential: energy' animation sweeps E.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.UserPotentialBasins,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "User potential: energy",
+                Params        = new RegionFractalParams
+                {
+                    UserPotentialSource = FractalParameters.UserPotentialDefaultSource, UserPotentialEnergy = 0.25,
+                    UserPotentialSectors = 3, UserPotentialSectorOffset = 90.0, UserPotentialExitRadius = 2.0,
+                },
+            },
+            new()
+            {
+                Name          = "User Potential - Four Exits",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.85,
+                Iterations    =  256,
+                Description   = "A four-fold well, V = (x^2 + y^2)/2 - (x^4 + y^4)/4, with saddles at distance 1 along the axes (height 1/4). Above that energy a particle leaves through one of four channels; the basins interleave like the three of Henon-Heiles. The potential is FF's own example, not taken from a paper.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.UserPotentialBasins,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    UserPotentialSource = "(x^2 + y^2)/2 - (x^4 + y^4)/4", UserPotentialEnergy = 0.3,
+                    UserPotentialSectors = 4, UserPotentialSectorOffset = 0.0, UserPotentialExitRadius = 2.0,
+                },
+            },
+            new()
+            {
+                Name          = "User Potential - Copenhagen Problem",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.7,
+                Iterations    =  256,
+                Description   = "The restricted three-body problem with two equal masses, written as a user potential: V = -Omega in the rotating frame (Coriolis on), E = -C/2 with C = 3, and an 'exit if' rule for crashing into either mass or escaping. It reproduces the built-in Three-Body Fates view up to the step control near the masses.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.UserPotentialBasins,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    UserPotentialSource = "-(x^2 + y^2)/2 - 0.5/sqrt((x + 0.5)^2 + y^2) - 0.5/sqrt((x - 0.5)^2 + y^2)",
+                    UserPotentialEnergy = -1.5, UserPotentialRotating = true, UserPotentialExitRadius = 1000.0,
+                    UserPotentialExitIf = RegionFractalParams.UserPotentialCopenhagenExit, UserPotentialMaxTime = 100.0,
+                    UserPotentialTolerance = 1e-9, UserPotentialMaxStep = 0.1,
                 },
             },
             // #1947 — black hole + Bach-Weyl ring (Semerák & Suková 2010 set-ups).

@@ -1607,6 +1607,37 @@ namespace FracturingFog.Models
         /// <summary>#1947 — integrator relative tolerance per step. Default 1e-11.</summary>
         public double BhRingTolerance { get; set; } = 1e-11;
 
+        // ── User Potential (#1994) ────────────────────────────────────────
+        /// <summary>#1994 — the potential V(x, y) in the equation language. Default: Hénon–Heiles.</summary>
+        public string UserPotentialSource { get; set; } = UserPotentialDefaultSource;
+        /// <summary>#1994 — the default potential: Hénon–Heiles (#1942), so the default frame is that family's basins.</summary>
+        public const string UserPotentialDefaultSource = "(x^2 + y^2)/2 + x^2*y - y^3/3";
+        /// <summary>#1994 — energy E of every launch. Default 0.25.</summary>
+        public double UserPotentialEnergy { get; set; } = 0.25;
+        /// <summary>#1994 — launch space (see <see cref="FracturingFog.UserPotentialView"/>). Default Plane.</summary>
+        public UserPotentialView UserPotentialView { get; set; } = UserPotentialView.Plane;
+        /// <summary>#1994 — launch direction in the Plane view. Default Tangential.</summary>
+        public HenonHeilesLaunch UserPotentialLaunch { get; set; } = HenonHeilesLaunch.Tangential;
+        /// <summary>#1994 — FixedAngle launch direction, degrees from +x. Default 0.</summary>
+        public double UserPotentialLaunchAngle { get; set; } = 0.0;
+        /// <summary>#1994 — exit radius: past it the particle leaves through a sector. Default 2.</summary>
+        public double UserPotentialExitRadius { get; set; } = 2.0;
+        /// <summary>#1994 — number of equal exit sectors (1-16). Default 3.</summary>
+        public int UserPotentialSectors { get; set; } = 3;
+        /// <summary>#1994 — angle of sector 0's centre, degrees from +x. Default 90 (Hénon–Heiles numbering).</summary>
+        public double UserPotentialSectorOffset { get; set; } = 90.0;
+        /// <summary>#1994 — optional "exit if" expression in x, y, vx, vy, t: a value &gt;= 0 stops the
+        /// trace with that gate; negative keeps going. Empty = sectors only.</summary>
+        public string UserPotentialExitIf { get; set; } = "";
+        /// <summary>#1994 — rotating frame (adds the Coriolis force 2(vy, -vx)). Default off.</summary>
+        public bool UserPotentialRotating { get; set; }
+        /// <summary>#1994 — time limit: a particle still inside is undecided. Default 200.</summary>
+        public double UserPotentialMaxTime { get; set; } = 200.0;
+        /// <summary>#1994 — integrator relative tolerance per step. Default 1e-8.</summary>
+        public double UserPotentialTolerance { get; set; } = 1e-8;
+        /// <summary>#1994 — largest integrator step (time units). Default 0.25.</summary>
+        public double UserPotentialMaxStep { get; set; } = 0.25;
+
         // ── Slit cascade (#1569, double-slit epic #1565) ──────────────────
         /// <summary>Slit cascade: children per slit, N (2..16). N ≥ 3 for the fringe
         /// weights to differ (a symmetric pair is a plain Cantor set).</summary>
@@ -2773,6 +2804,19 @@ namespace FracturingFog.Models
                 BhRingFateTime = BhRingFateTime,
                 BhRingColour = BhRingColour,
                 BhRingTolerance = BhRingTolerance,
+                UserPotentialSource = UserPotentialSource,
+                UserPotentialEnergy = UserPotentialEnergy,
+                UserPotentialView = UserPotentialView,
+                UserPotentialLaunch = UserPotentialLaunch,
+                UserPotentialLaunchAngle = UserPotentialLaunchAngle,
+                UserPotentialExitRadius = UserPotentialExitRadius,
+                UserPotentialSectors = UserPotentialSectors,
+                UserPotentialSectorOffset = UserPotentialSectorOffset,
+                UserPotentialExitIf = UserPotentialExitIf,
+                UserPotentialRotating = UserPotentialRotating,
+                UserPotentialMaxTime = UserPotentialMaxTime,
+                UserPotentialTolerance = UserPotentialTolerance,
+                UserPotentialMaxStep = UserPotentialMaxStep,
                 SlitCascadeChildren = SlitCascadeChildren,
                 SlitCascadeRatio = SlitCascadeRatio,
                 SlitCascadeDepth = SlitCascadeDepth,

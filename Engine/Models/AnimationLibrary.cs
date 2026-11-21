@@ -489,6 +489,20 @@ namespace FracturingFog.Models
                 Tags = new List<string> { "2D", "cosmology" },
             };
 
+            // #1994 — User Potential.
+            yield return new AnimationData
+            {
+                Name = "User potential: energy",
+                Category = "Built-in",
+                Description = "Sweeps the energy from just above the Henon-Heiles escape energy (1/6) to 0.35 and back: the exits open and the basins spread.",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.UserPotentialBasins },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "UserPotentialEnergy", Mode = AnimationMode.Sine, Min = 0.17, Max = 0.35, FrequencyHz = 0.04, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "scattering" },
+            };
+
             // #1947 — black hole + ring. Every frame re-integrates every orbit.
             yield return new AnimationData
             {

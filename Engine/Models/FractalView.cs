@@ -155,6 +155,7 @@ namespace FracturingFog.Models
             {FractalType.SpinningBinaryBasins, "Spinning Binary Basins" },
             {FractalType.MixmasterBasins, "Mixmaster Basins" },
             {FractalType.BlackHoleRingOrbits, "Black Hole + Ring Orbits" },
+            {FractalType.UserPotentialBasins, "User Potential" },
             {FractalType.SlitCascade, "Slit Cascade" },
             {FractalType.TalbotCarpet, "Talbot Carpet" },
             {FractalType.MathPlane, "Math Plane" },

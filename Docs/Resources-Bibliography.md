@@ -447,7 +447,9 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   potential V = (x² + y²)/2 + x²y − y³/3 that `HenonHeilesBasins` (#1942) integrates
   (`Engine/Scattering/HenonHeiles.cs`). Also used by the Math Plane `trajectory henonheiles` statement
   (#1993, the same scene code with the path recorded) and its "Path: Henon-Heiles escape" demos, which draw
-  the levels V = E and V = 1/6 and the three saddles.
+  the levels V = E and V = 1/6 and the three saddles. Also the default potential of the User Potential
+  family (#1994, `Engine/Scattering/UserPotential.cs`), whose "User Potential - Henon-Heiles" preset
+  reproduces the built-in basin map from the formula.
 
 <a id="nagler-2004"></a>
 
@@ -459,7 +461,8 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   the crash radius, escape radius and time limit are FF's own settings, not values taken from the paper.
   Also used by the Math Plane `trajectory threebody` statement (#1993, the same scene code with the path
   recorded) and its "Path: Copenhagen problem" demo (zero-velocity curve 2Ω = C, the primaries and L1–L5;
-  FF's Ω, without the constant some authors add).
+  FF's Ω, without the constant some authors add). Also the "User Potential - Copenhagen Problem" preset
+  (#1994): V = −Ω in the rotating frame with E = −C/2, which reproduces most of the Fates view.
 
 <a id="nagler-2005"></a>
 

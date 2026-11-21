@@ -1813,6 +1813,60 @@
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
         </Grid>
 
+        <!-- #1994 — User Potential. -->
+        <Grid IsVisible="{Binding IsUserPotentialBasins}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="V(x, y):" VerticalAlignment="Center" />
+            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding UserPotentialSource, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                     FontFamily="Consolas,Menlo,monospace" Margin="0,2"
+                     ToolTip.Tip="The potential in the equation language (reads x and y). Forces are its exact derivatives. Press Tab or click away to apply." />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding UserPotentialError}" Foreground="#FFCC00" TextWrapping="Wrap"
+                       IsVisible="{Binding UserPotentialError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" Margin="0,2" />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Energy E:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1" Minimum="-1000000" Maximum="1000000" Increment="0.01" FormatString="0.##########"
+                           Value="{Binding UserPotentialEnergy, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Energy of every launch: the speed is sqrt(2 (E - V))." />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Launch space:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding UserPotentialViews}"
+                      SelectedItem="{Binding UserPotentialView, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Plane: the pixel is the start position. Section: the pixel is (y, vy) on x = 0." />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Launch direction:" VerticalAlignment="Center" IsVisible="{Binding UserPotentialIsPlane}" />
+            <ComboBox Grid.Row="4" Grid.Column="1" ItemsSource="{Binding HenonHeilesLaunches}" IsVisible="{Binding UserPotentialIsPlane}"
+                      SelectedItem="{Binding UserPotentialLaunch, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Tangential (anticlockwise), Radial (outward) or a fixed angle." />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Launch angle:" VerticalAlignment="Center" IsVisible="{Binding UserPotentialIsPlane}" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1" IsVisible="{Binding UserPotentialIsPlane}" Minimum="-360" Maximum="360" Increment="5" FormatString="0.##########"
+                           Value="{Binding UserPotentialLaunchAngle, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="FixedAngle direction, degrees from +x." />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Exit radius:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="6" Grid.Column="1" Minimum="0.001" Maximum="1000000" Increment="0.5" FormatString="0.##########"
+                           Value="{Binding UserPotentialExitRadius, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Past this distance from the origin the particle has left through a sector." />
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Exit sectors:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="7" Grid.Column="1" Minimum="1" Maximum="16" Increment="1" FormatString="0"
+                           Value="{Binding UserPotentialSectors, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Equal angular sectors, numbered anticlockwise from the offset." />
+            <TextBlock Grid.Row="8" Grid.Column="0" Text="Sector offset:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="8" Grid.Column="1" Minimum="-360" Maximum="360" Increment="5" FormatString="0.##########"
+                           Value="{Binding UserPotentialSectorOffset, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Centre of sector 0, degrees from +x (90 with 3 sectors is the Henon-Heiles numbering)." />
+            <TextBlock Grid.Row="9" Grid.Column="0" Text="Exit if:" VerticalAlignment="Center" />
+            <TextBox Grid.Row="9" Grid.Column="1" Text="{Binding UserPotentialExitIf, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                     FontFamily="Consolas,Menlo,monospace" Margin="0,2" Watermark="(optional) gate >= 0 to stop, e.g. x^2 + y^2 &lt; 0.01 ? 3 : -1"
+                     ToolTip.Tip="Optional formula in x, y, vx, vy, t: a value of 0 or more stops the trace with that gate; negative keeps going." />
+            <TextBlock Grid.Row="10" Grid.Column="0" Text="Rotating frame:" VerticalAlignment="Center" />
+            <CheckBox Grid.Row="10" Grid.Column="1" IsChecked="{Binding UserPotentialRotating, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Adds the Coriolis force 2 (vy, -vx): the restricted three-body problem is V = -Omega, E = -C/2." />
+            <TextBlock Grid.Row="11" Grid.Column="0" Text="Time limit:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="11" Grid.Column="1" Minimum="1" Maximum="100000" Increment="50" FormatString="0.##########"
+                           Value="{Binding UserPotentialMaxTime, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="A particle still inside at this time is undecided (interior colour)." />
+            <TextBlock Grid.Row="12" Grid.Column="0" Text="Max step:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="12" Grid.Column="1" Minimum="0.0001" Maximum="10" Increment="0.05" FormatString="0.##########"
+                           Value="{Binding UserPotentialMaxStep, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Largest integrator step; lower it for sharp features (close approaches)." />
+            <TextBlock Grid.Row="13" Grid.Column="0" Text="Tolerance:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="13" Grid.Column="1" Minimum="0.0000000000001" Maximum="0.001" Increment="0.000000001" FormatString="0.#############"
+                           Value="{Binding UserPotentialTolerance, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Integrator relative tolerance per step." />
+            <TextBlock Grid.Row="14" Grid.Column="1"
+                       Text="The default V is Henon-Heiles: the same picture as that family. Dark: V > E (not reachable). Yellow frame: the formula did not parse."
+                       TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
+        </Grid>
+
         <!-- #1947 — black hole + Bach-Weyl ring. -->
         <Grid IsVisible="{Binding IsBlackHoleRingOrbits}"
               ColumnDefinitions="160,*"

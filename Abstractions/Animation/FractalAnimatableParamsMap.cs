@@ -174,6 +174,9 @@ public static class FractalAnimatableParamsMap
         FractalType.BlackHoleRingOrbits
             => _bhRingList,
 
+        FractalType.UserPotentialBasins
+            => _userPotentialList,
+
         FractalType.BicomplexMandelbrot
             => _bicomplexList,
 
@@ -742,6 +745,14 @@ public static class FractalAnimatableParamsMap
         new("BhRingMass", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 2.0, Notes: "Ring mass / black hole mass: 0 is plain Schwarzschild (integrable)."),
         new("BhRingRadius", AnimatableParamKind.ScalarDouble, Min: 6.0, Max: 40.0, Notes: "Ring radius in units of M."),
         new("BhRingEnergy", AnimatableParamKind.ScalarDouble, Min: 0.9, Max: 1.0, Notes: "Specific energy of the orbits."),
+    };
+
+    // #1994 — User Potential: the energy, the launch angle and the sector offset.
+    private static readonly AnimatableParamDescriptor[] _userPotentialList =
+    {
+        new("UserPotentialEnergy", AnimatableParamKind.ScalarDouble, Min: -10.0, Max: 10.0, Notes: "Energy E of every launch."),
+        new("UserPotentialLaunchAngle", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 360.0, Notes: "FixedAngle launch direction, degrees."),
+        new("UserPotentialSectorOffset", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 360.0, Notes: "Angle of exit sector 0's centre, degrees."),
     };
 
     // #1713 — Math Plane 3D: the orbit camera.

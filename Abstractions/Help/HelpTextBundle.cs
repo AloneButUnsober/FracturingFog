@@ -5604,6 +5604,58 @@ and the camera is Cam3DFamily=MirrorSpheres with Cam3DDistance /
 Cam3DTheta / Cam3DPhi.
 ";
 
+        /// <summary>#1994 — User Potential (Math → Scattering).</summary>
+        public const string MathUserPotentialText =
+@"=== User Potential ===
+
+Write a potential V(x, y) and see where particles leave it. Each
+pixel is one launch at energy E; FF works out the forces
+-dV/dx, -dV/dy from your formula (exact symbolic derivatives, not
+finite differences) and traces the motion with the same integrator
+as the Henon-Heiles family, until the particle leaves.
+
+V is written in the equation language (as User Equations): + - * /
+^, sin cos tan exp log sqrt abs atan2 min max ..., let names, and
+if / ?: conditions. It reads x and y. A formula that does not parse
+turns the frame yellow and the status bar says why.
+
+Launch (as Henon-Heiles):
+  Plane    the pixel is the start (x, y); speed from E - V; direction
+           Tangential (anticlockwise), Radial or a fixed angle.
+  Section  the pixel is (y, vy) on the line x = 0, vx >= 0.
+  Points where V > E are not reachable (dark).
+
+Exits:
+  Exit radius + sectors: past the radius the particle leaves through
+  one of N equal angular sectors; sector 0 is centred on the offset
+  angle and they count anticlockwise (N = 3 at 90 degrees is the
+  Henon-Heiles numbering).
+  Exit if: an optional formula in x, y, vx, vy, t. A value >= 0 stops
+  the trace with that gate number; negative keeps going. Use it for
+  crashes, e.g. sqrt((x - 0.5)^2 + y^2) < 0.01 ? 1 : -1.
+  Time limit: still inside = undecided (interior colour).
+
+Rotating frame adds the Coriolis force 2 (vy, -vx) (unit angular
+velocity), so the restricted three-body problem is V = -Omega with
+E = -C/2; see the Copenhagen preset.
+
+Colours: one colour per gate (Okabe-Ito, or a billiard theme),
+darker for late exits.
+
+Presets:
+  User Potential - Henon-Heiles        the default V: the same
+                                       picture as the built-in family
+  User Potential - Four Exits          FF's own four-fold well
+  User Potential - Copenhagen Problem  rotating frame, three-body
+Animation: User potential: energy (sweeps E).
+
+Batch: every setting is a --param key, e.g.
+  --param ""UserPotentialSource=(x^2 + y^2)/2 - (x^4 + y^4)/4""
+  --param UserPotentialSectors=4 --param UserPotentialEnergy=0.3
+Sources: Henon & Heiles 1964 (the default V); see
+Docs/Resources-Bibliography.md.
+";
+
         /// <summary>#1947 — black hole + ring (Math → Scattering).</summary>
         public const string MathBlackHoleRingText =
 @"=== Black Hole + Ring ===
