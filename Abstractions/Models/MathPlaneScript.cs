@@ -218,8 +218,11 @@ namespace FracturingFog.Models
                     if (!byName.TryGetValue(n, out var o)) return (i, $"no object called '{n}'");
                     if (s.Action == MathPlaneStepAction.Move && o.Kind is MathPlaneObjectKind.Curve or MathPlaneObjectKind.Region)
                         return (i, $"'move' takes a point, vector, segment or polyline; '{n}' is a {o.Kind.ToString().ToLowerInvariant()}");
+                    // #1993 — moving a trajectory moves its launch point (the path is traced again).
+                    if (s.Action == MathPlaneStepAction.Move && o.Kind == MathPlaneObjectKind.Trajectory && !MathPlaneTrajectory.LaunchIsPosition(o))
+                        return (i, $"'move' moves a trajectory's launch position; '{n}' launches from a section or kick point, not a position");
                     if (s.Action == MathPlaneStepAction.Draw && !CanDraw(o))
-                        return (i, $"'draw' reveals a curve, segment, polyline or vector along its length; use 'show' for '{n}'");
+                        return (i, $"'draw' reveals a curve, segment, polyline, vector or trajectory along its length; use 'show' for '{n}'");
                 }
             }
             if (FindOverlap(steps) is { } ov)
@@ -233,6 +236,7 @@ namespace FracturingFog.Models
         {
             MathPlaneObjectKind.Curve => o.CurveKind != MathPlaneCurveKind.Implicit,
             MathPlaneObjectKind.Segment or MathPlaneObjectKind.Polyline or MathPlaneObjectKind.Vector => true,
+            MathPlaneObjectKind.Trajectory => true,   // #1993 — revealed along the path, as the particle moves
             _ => false,
         };
 

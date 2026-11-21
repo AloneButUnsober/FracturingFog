@@ -30,6 +30,9 @@
 //   curve NAME polar      "r(theta)"        [thetamin thetamax]  [options]
 //   curve NAME implicit   "F(x, y)"                              [options]  (#1551: F = 0)
 //   region NAME "condition(x, y)"                                [options]  (#1551: shaded where true)
+//   trajectory NAME FAMILY A B [LAUNCH] [KEY=VALUE ...]          [options]  (#1993: the path of one
+//                                        launch of henonheiles, threebody or magbh, traced by the
+//                                        family's own code; see MathPlaneTrajectory.cs)
 //   options: #RRGGBB (colour)  hidden  nolabel
 //   map "f(z)"                          #1553: the complex map (reads z and c); it applies
 //                                        when MathPlaneMapMode is Complex
@@ -68,8 +71,9 @@ using FracturingFog.ViewState;
 namespace FracturingFog.Models
 {
     /// <summary>Object kinds. <see cref="Region"/> (#1551) shades where its condition
-    /// holds (non-zero), e.g. <c>"x^2 + y^2 &lt; 4"</c>.</summary>
-    public enum MathPlaneObjectKind { Point, Vector, Segment, Polyline, Curve, Region, Surface }
+    /// holds (non-zero), e.g. <c>"x^2 + y^2 &lt; 4"</c>. <see cref="Trajectory"/> (#1993) is the
+    /// path of one launch of a scattering family (<see cref="MathPlaneTrajectory"/>).</summary>
+    public enum MathPlaneObjectKind { Point, Vector, Segment, Polyline, Curve, Region, Surface, Trajectory }
 
     /// <summary>#1550 — how a <see cref="MathPlaneObjectKind.Curve"/> is given.
     /// <see cref="Implicit"/> (#1551) is the zero set of F(x, y).
@@ -227,6 +231,12 @@ namespace FracturingFog.Models
             if (o.Kind == MathPlaneObjectKind.Region)
             {
                 sb.Append("region ").Append(o.Name).Append(" \"").Append(o.Expressions.Count > 0 ? o.Expressions[0] : "").Append('"');
+                AppendOptions(sb, o);
+                return sb.ToString();
+            }
+            if (o.Kind == MathPlaneObjectKind.Trajectory)
+            {
+                sb.Append("trajectory ").Append(o.Name).Append(' ').Append(MathPlaneTrajectory.BodyText(o));
                 AppendOptions(sb, o);
                 return sb.ToString();
             }
@@ -425,9 +435,11 @@ namespace FracturingFog.Models
                     case "polyline":
                     case "curve":
                     case "region":
+                    case "trajectory":
                     {
                         bool ok = head == "curve" ? TryCurve(toks, objects.Count, out var obj, out int badTok, out string msg)
                                 : head == "region" ? TryRegion(toks, objects.Count, out obj, out badTok, out msg)
+                                : head == "trajectory" ? TryTrajectory(toks, objects.Count, out obj, out badTok, out msg)
                                 : TryObject(head, toks, objects.Count, out obj, out badTok, out msg);
                         if (!ok)
                         { error = Err(badTok, msg); return false; }
@@ -437,7 +449,7 @@ namespace FracturingFog.Models
                         break;
                     }
                     default:
-                        error = Err(0, $"unknown statement '{toks[0].Text}' (expected point, vector, segment, polyline, curve, region, axes, grid, ticks, labels, det, eigen, lengths, map, phase, probe, orbit, cobweb, step or with)");
+                        error = Err(0, $"unknown statement '{toks[0].Text}' (expected point, vector, segment, polyline, curve, region, trajectory, axes, grid, ticks, labels, det, eigen, lengths, map, phase, probe, orbit, cobweb, step or with)");
                         return false;
                 }
             }
@@ -609,6 +621,22 @@ namespace FracturingFog.Models
                 return false;
             obj = new MathPlaneObject(MathPlaneObjectKind.Curve, toks[1].Text, domain, color, visible, showLabel,
                                       CurveKind: kind, Sources: sources);
+            return true;
+        }
+
+        /// <summary>#1993 — <c>trajectory NAME FAMILY A B [LAUNCH] [KEY=VALUE ...] [options]</c>.</summary>
+        private static bool TryTrajectory(List<(string Text, int Col)> toks, int index,
+                                          out MathPlaneObject? obj, out int badTok, out string msg)
+        {
+            obj = null; badTok = 0; msg = "";
+            if (toks.Count < 2 || !IsName(toks[1].Text))
+            { badTok = 1; msg = "'trajectory' needs a name (letters, digits, '_', optional trailing ')"; return false; }
+            if (!MathPlaneTrajectory.TryParseBody(toks, 2, out var coords, out var sources, out int i, out badTok, out msg))
+                return false;
+            if (!TryOptions(toks, i, index, out uint color, out bool visible, out bool showLabel, out badTok, out msg))
+                return false;
+            obj = new MathPlaneObject(MathPlaneObjectKind.Trajectory, toks[1].Text, coords, color, visible, showLabel,
+                                      Sources: sources);
             return true;
         }
 

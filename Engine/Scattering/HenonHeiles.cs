@@ -214,7 +214,16 @@ public sealed class HenonHeilesScene
     /// <summary>Trace view point (a, b). <paramref name="s"/> (length ≥ 4) ends as the final state.</summary>
     public HenonHeilesOutcome Trace(double a, double b, Span<double> s)
     {
+        var none = default(NoPathRecorder);
+        return Trace(a, b, s, ref none);
+    }
+
+    /// <summary>#1993 — <see cref="Trace(double, double, Span{double})"/> with every state recorded
+    /// (the launch, then each accepted step) for the Math Plane trajectory statement.</summary>
+    public HenonHeilesOutcome Trace<TRec>(double a, double b, Span<double> s, ref TRec rec) where TRec : IPathRecorder
+    {
         if (!LaunchState(a, b, s)) return new HenonHeilesOutcome { Valid = false, Exit = -1 };
+        rec.Record(s);
         var sys = HenonHeilesSystem.Begin(s, TimeCap);
         int exit;
         int steps = 0;
@@ -225,7 +234,9 @@ public sealed class HenonHeilesScene
         else
         {
             var settings = Settings;
-            var o = ScatteringIntegrator.Trace(ref sys, s, in settings);
+            var wrapped = new RecordingSystem<HenonHeilesSystem, TRec>(sys, rec);
+            var o = ScatteringIntegrator.Trace(ref wrapped, s, in settings);
+            sys = wrapped.Inner; rec = wrapped.Recorder;
             steps = o.Steps;
             exit = o.Fate == ScatterFate.Escaped ? HenonHeilesSystem.ExitOf(s[0], s[1]) : -1;
         }

@@ -77,6 +77,8 @@ namespace FracturingFog.Models
             MathPlaneObjectKind.Segment => 2,
             MathPlaneObjectKind.Curve => 0,   // a curve is edited by its expression
             MathPlaneObjectKind.Region => 0,
+            // #1993 — the launch point, when it is a position in the plane.
+            MathPlaneObjectKind.Trajectory => MathPlaneTrajectory.LaunchIsPosition(o) ? 1 : 0,
             _ => o.PointCount,
         };
 
@@ -244,6 +246,7 @@ namespace FracturingFog.Models
                 MathPlaneObjectKind.Segment => Numbered("s"),
                 MathPlaneObjectKind.Curve => Letters("fghkqr"),
                 MathPlaneObjectKind.Region => Letters("RSTUW"),
+                MathPlaneObjectKind.Trajectory => Numbered("path"),
                 _ => Numbered("p"),
             };
             return candidates.First(n => !used.Contains(n));

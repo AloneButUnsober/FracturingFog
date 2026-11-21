@@ -228,7 +228,17 @@ public sealed class ThreeBodyScene
 
     private ThreeBodyOutcome Fate(double x, double y, Span<double> s)
     {
+        var none = default(NoPathRecorder);
+        return Trace(x, y, s, ref none);
+    }
+
+    /// <summary>#1993 — the Fates trace from (x, y) with every state recorded (the launch, then
+    /// each accepted step) for the Math Plane trajectory statement. Always the motion, whatever
+    /// <see cref="View"/> is.</summary>
+    public ThreeBodyOutcome Trace<TRec>(double x, double y, Span<double> s, ref TRec rec) where TRec : IPathRecorder
+    {
         if (!LaunchState(x, y, s)) return new ThreeBodyOutcome { Valid = false, Gate = -1 };
+        rec.Record(s);
         var sys = new ThreeBodySystem
         {
             Mu = Mu, CrashRadius = CrashRadius, EscapeRadius = EscapeRadius, TimeCap = TimeCap, Gate = -1,
@@ -236,7 +246,9 @@ public sealed class ThreeBodyScene
         if (x * x + y * y > EscapeRadius * EscapeRadius)
             return new ThreeBodyOutcome { Valid = true, Gate = ThreeBodySystem.EscapeGate };
         var settings = Settings;
-        var o = ScatteringIntegrator.Trace(ref sys, s, in settings);
+        var wrapped = new RecordingSystem<ThreeBodySystem, TRec>(sys, rec);
+        var o = ScatteringIntegrator.Trace(ref wrapped, s, in settings);
+        sys = wrapped.Inner; rec = wrapped.Recorder;
         int gate = o.Fate is ScatterFate.Captured or ScatterFate.Escaped ? sys.Gate : -1;
         return new ThreeBodyOutcome { Valid = true, Gate = gate, Time = sys.Time, Steps = o.Steps };
     }

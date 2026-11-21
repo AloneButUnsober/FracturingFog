@@ -214,6 +214,14 @@ public sealed class MagnetisedBhScene
     /// <summary>Trace view point (a, c). <paramref name="s"/> (length ≥ 4) ends as the final state.</summary>
     public MagnetisedBhOutcome Trace(double a, double c, Span<double> s)
     {
+        var none = default(NoPathRecorder);
+        return Trace(a, c, s, ref none);
+    }
+
+    /// <summary>#1993 — <see cref="Trace(double, double, Span{double})"/> with every state recorded
+    /// (the launch, then each accepted step) for the Math Plane trajectory statement.</summary>
+    public MagnetisedBhOutcome Trace<TRec>(double a, double c, Span<double> s, ref TRec rec) where TRec : IPathRecorder
+    {
         if (!LaunchState(a, c, s, out double e, out double l))
         {
             double r = View == MagnetisedBhView.Kick ? a : Math.Sqrt(a * a + c * c);
@@ -223,8 +231,11 @@ public sealed class MagnetisedBhScene
         {
             Energy = e, AngularMomentum = l, Field = Field, EscapeHeight = EscapeHeight, TimeCap = TimeCap, Gate = -1,
         };
+        rec.Record(s);
         var settings = Settings;
-        var o = ScatteringIntegrator.Trace(ref sys, s, in settings);
+        var wrapped = new RecordingSystem<MagnetisedBhSystem, TRec>(sys, rec);
+        var o = ScatteringIntegrator.Trace(ref wrapped, s, in settings);
+        sys = wrapped.Inner; rec = wrapped.Recorder;
         int gate = o.Fate is ScatterFate.Captured or ScatterFate.Escaped ? sys.Gate : -1;
         return new MagnetisedBhOutcome { Valid = true, Gate = gate, Time = sys.Time, Steps = o.Steps };
     }

@@ -35,6 +35,10 @@ demos never change: to keep an edited demo, save it to **My scenes**.
 | Script: period doubling | A script: the cobweb builds up, then c slides from −0.5 to −1.9 through a 2-cycle and a 4-cycle to chaos. |
 | Script: c leaves the set | A script: the orbit of 0 stays bounded for c inside M, then escapes as c moves out past the edge. |
 | Script: the rabbit orbit | A script: the rabbit's orbit is revealed step by step, then the camera moves in on its 3-cycle. |
+| Path: Henon-Heiles escape | One launch in the Hénon–Heiles potential at E = 0.25, with the energy level V = E, the triangle V = 1/6 and its three saddles. The path leaves through one of the three channels. |
+| Path: Copenhagen problem | The restricted three-body problem with equal primaries at C = 3: the zero-velocity curve, the primaries, L1–L5, one bound path and one that escapes. |
+| Path: charged particle near a black hole | Three launches round a magnetised black hole in the (R, z) plane: one is captured, one escapes up the field and one down. |
+| Script: a Henon-Heiles escape | A script: the Hénon–Heiles path is drawn as the particle moves, until it leaves through a channel. |
 
 The **Script:** demos are timed sequences: load one, then press **Play** in the Script group (see
 [Scripts](#scripts)).
@@ -116,6 +120,25 @@ The **Complex map** group applies f(z) to the plane: z → (1 − t)·z + t·f(z
 
 These stay in the plain plane: a map does not move them.
 
+### Trajectories (#1993)
+
+A `trajectory` draws the path of **one launch** of a gravitational-scattering family. The path is traced by
+that fractal's own code, so it ends where the fractal's colour says it should: a ring marks the launch, a dot
+marks the end, and the label gives the fate.
+
+| Family | Launch point A B | Launch rule | Keys | Drawn in |
+|---|---|---|---|---|
+| `henonheiles` (Hénon–Heiles) | (x, y); with `section`, (y, py) on x = 0 | `tangential` (default), `radial`, `section` or an angle in degrees | `E` `tmax` `tol` | (x, y) |
+| `threebody` (restricted three-body, rotating frame) | (x, y) | `prograde` (default), `retrograde`, `radial` or an angle | `mu` `C` `crash` `escape` `tmax` `tol` | (x, y) |
+| `magbh` (magnetised black hole) | (R, z), with R < 0 for the mirrored half; with `kick`, (ρ0, E) | an angle from +R towards +z (default 0) or `kick` | `b` `E` `l` `branch` (1 or −1) `escape` `tmax` `tol` | (R, z) |
+
+Keys you leave out take the family's defaults (the values its fractal starts with). A launch from a position
+can be dragged on the canvas and moved by a script's `move`. `draw NAME` reveals the path as the particle
+moves. A launch that is not allowed (the energy is too low there, or the point is inside a body) draws only
+the ring and says why. The curves the physics gives can be drawn as `curve ... implicit`, for example the
+Hénon–Heiles level `0.5*(x^2 + y^2) + x^2*y - y^3/3 - 0.25` or the three-body zero-velocity curve. Try the
+**Path:** demos.
+
 ## 6. Math overlay on other views
 
 Use **Control Center → View → Math overlay** on a normal Mandelbrot or Julia view. It draws the axes and the
@@ -183,6 +206,7 @@ curve NAME parametric "x(t)" "y(t)" tmin tmax
 curve NAME polar "r(theta)" [thetamin thetamax]
 curve NAME implicit "F(x, y)"
 region NAME "condition(x, y)"
+trajectory NAME henonheiles|threebody|magbh A B [LAUNCH] [KEY=VALUE ...]
 map "f(z)"   phase off|on|contours   probe x y
 orbit N      cobweb x0 [N] ["f(x)"]
 step DURATION [ease none|in|out|inout] ACTION ...    with [DURATION] [ease ...] ACTION ...
@@ -213,8 +237,8 @@ with [DURATION] [ease ...] ACTION ...                runs alongside the step bef
 |---|---|
 | `wait` | Nothing: a pause. |
 | `show NAME...` / `hide NAME...` | Fades objects in or out. Mark an object `hidden` to start it invisible. |
-| `move NAME X Y` | Moves a point (or a vector's tip, keeping its tail; or a whole segment or polyline) to (X, Y). |
-| `draw NAME` | Draws a curve, segment, polyline or vector along its length. Meant for objects marked `hidden`. |
+| `move NAME X Y` | Moves a point (or a vector's tip, keeping its tail; or a whole segment or polyline; or a trajectory's launch position, tracing it again) to (X, Y). |
+| `draw NAME` | Draws a curve, segment, polyline, vector or trajectory along its length. Meant for objects marked `hidden`. |
 | `t V` | Moves the map's progress t to V. |
 | `matrix A B C D` | Moves the matrix to [[A, B], [C, D]]. It shows only when the map mode is Matrix. |
 | `c RE IM` | Moves c, which also moves the orbit, the Julia backdrop and `z^2 + c`. |
