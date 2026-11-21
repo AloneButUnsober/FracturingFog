@@ -591,6 +591,7 @@ public sealed partial class MainWindow : Window
             //   G  = Grid           K  = Watermark    H = Perf HUD (Shift+H = reset)
             //   P  = Params dialog  F1 = Help window  X = Post-FX HUD overlay
             //   O  = pin the math overlay's point under the pointer (#1748)
+            //   J  = send the launch under the pointer to Math Plane (#2000; scattering views)
             switch (e.Key)
             {
                 case Key.G:
@@ -615,6 +616,9 @@ public sealed partial class MainWindow : Window
                     return;
                 case Key.O:   // #1748 — no-op (unhandled) while the math overlay is off
                     if (_shell.Main.PinMathOverlayAtPointer()) e.Handled = true;
+                    return;
+                case Key.J:   // #2000 — no-op (unhandled) outside the scattering trajectory families
+                    if (_shell.SendPathToMathPlane()) e.Handled = true;
                     return;
                 case Key.F1:
                     _shell.ShowHelpCommand.Execute().Subscribe();

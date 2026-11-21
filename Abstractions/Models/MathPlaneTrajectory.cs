@@ -323,5 +323,88 @@ namespace FracturingFog.Models
             }
             return new MathPlaneObject(MathPlaneObjectKind.Trajectory, name, new[] { a, b }, color, Sources: src);
         }
+
+        // ── #2000: send a pixel's path to Math Plane ──
+
+        /// <summary>#2000 — the Math Plane backdrop that draws <paramref name="type"/>'s basins, or
+        /// <see cref="MathPlaneBackdrop.None"/> for a type the trajectory statement does not draw.</summary>
+        public static MathPlaneBackdrop BackdropOf(FractalType type) => type switch
+        {
+            FractalType.HenonHeilesBasins => MathPlaneBackdrop.HenonHeiles,
+            FractalType.ThreeBodyBasins => MathPlaneBackdrop.ThreeBody,
+            FractalType.MagnetisedBlackHole => MathPlaneBackdrop.MagnetisedBlackHole,
+            _ => MathPlaneBackdrop.None,
+        };
+
+        /// <summary>#2000 — the launch coordinates under a point of a scattering family's view: the
+        /// same mapping as the families' calculators (HenonHeilesCalculator.PlaneAt and its siblings),
+        /// pixel pitch from <see cref="FracturingFog.ViewState.ViewCamera.PixelPitch"/>, b up. Pass
+        /// the pointer position for <paramref name="x"/>, <paramref name="y"/> (a pixel's centre is
+        /// its index + 0.5).</summary>
+        public static (double A, double B) PlaneAt(double x, double y, double width, double height,
+                                                   double centerX, double centerY, double zoom)
+        {
+            double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(width, height, zoom);
+            return (centerX + (x - width * 0.5) * pitch, -(centerY + (y - height * 0.5) * pitch));
+        }
+
+        /// <summary>#2000 — the trajectory for launch (<paramref name="a"/>, <paramref name="b"/>) of
+        /// the family <paramref name="type"/> (params <paramref name="p"/>, viewed at
+        /// <paramref name="viewCenterX"/>, <paramref name="viewCenterY"/>, <paramref name="viewZoom"/>),
+        /// as a Math Plane scene with the family's basins as the backdrop. When the plane already has
+        /// that family's backdrop and a valid scene, the path is added to it (so several sends build
+        /// up paths over one basin map); otherwise it starts a new scene. A launch from a position
+        /// keeps the family's camera (the two views share one mapping, so the path starts under the
+        /// pointer); a section or kick launch frames the physical plane instead. Null when the type
+        /// has no trajectory (see <see cref="FromFamily"/>).</summary>
+        public static MathPlaneSend? Send(FractalType type, FractalParameters p, double a, double b,
+                                          double viewCenterX, double viewCenterY, double viewZoom)
+        {
+            var backdrop = BackdropOf(type);
+            if (backdrop == MathPlaneBackdrop.None) return null;
+            var scene = new MathPlaneScene();
+            bool append = false;
+            if (p.MathPlaneBackdrop == backdrop && MathPlaneScene.TryParse(p.MathPlaneScene, out var existing, out _)
+                && existing.Objects.Count < 200)
+            {
+                scene = existing;
+                append = true;
+            }
+            string name = MathPlaneSceneEdit.FreshName(scene, MathPlaneObjectKind.Trajectory);
+            int count = scene.Objects.Count(o => o.Kind == MathPlaneObjectKind.Trajectory);
+            uint color = MathPlaneScene.DefaultPalette[count % MathPlaneScene.DefaultPalette.Length];
+            if (FromFamily(type, p, a, b, name, color) is not { } obj) return null;
+            scene = scene with { Objects = scene.Objects.Append(obj).ToList() };
+
+            double cx = viewCenterX, cy = viewCenterY, zoom = viewZoom;
+            if (!LaunchIsPosition(obj))
+            {
+                // Frame the physical plane: the Hénon–Heiles well (|x|, |y| up to about 2), or the
+                // magnetised hole out past the kick orbit's radius rho0 = a.
+                double worldX, half;
+                if (type == FractalType.HenonHeilesBasins) { worldX = 0; half = 2.5; }
+                else { worldX = Math.Max(1.5, a); half = Math.Max(3.0, 2.0 * a); }
+                cx = worldX; cy = 0;   // world y = 0 (the view's CenterY is minus world y)
+                zoom = FracturingFog.ViewState.ViewCamera.PlaneExtent / (2.0 * half);
+            }
+            return new MathPlaneSend(scene.Serialize(), backdrop, name, append, cx, cy, zoom);
+        }
+    }
+
+    /// <summary>#2000 — the result of <see cref="MathPlaneTrajectory.Send"/>: the scene text, the
+    /// backdrop, the new path's name, whether it was added to the existing scene, and the Math Plane
+    /// view (<see cref="CenterY"/> in the view-state convention: minus world y).</summary>
+    public sealed record MathPlaneSend(string Scene, MathPlaneBackdrop Backdrop, string Name, bool Appended,
+                                       double CenterX, double CenterY, double Zoom)
+    {
+        /// <summary>Write the scene and backdrop into <paramref name="p"/>. A new scene also turns any
+        /// map off (a mapped plane would not line up with the backdrop) and rewinds the script.</summary>
+        public void Apply(FractalParameters p)
+        {
+            p.MathPlaneScene = Scene;
+            p.MathPlaneBackdrop = Backdrop;
+            p.MathPlaneScriptTime = 0;
+            if (!Appended) p.MathPlaneMapMode = MathPlaneMapMode.None;
+        }
     }
 }

@@ -1263,6 +1263,31 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>#1549 — the Math Plane section / canvas editor.</summary>
     public MathPlaneSectionViewModel MathPlane { get; }
 
+    /// <summary>#2000 — the J key: send the launch under the pointer on a Hénon–Heiles, three-body or
+    /// magnetised-black-hole view to Math Plane as a trajectory over that family's basins. Returns
+    /// false (key not used) on other views.</summary>
+    public bool SendPathToMathPlane()
+    {
+        if (!Main.TryScatterLaunchAtPointer(out var type, out double a, out double b))
+        {
+            if (FracturingFog.Models.MathPlaneTrajectory.BackdropOf(Main.SelectedFractalType) == MathPlaneBackdrop.None) return false;
+            Main.SetStatus("Point at the view first, then press J to send that launch's path to Math Plane.");
+            return true;
+        }
+        var vs = Main.ViewState;
+        var send = FracturingFog.Models.MathPlaneTrajectory.Send(type, vs.FractalParameters, a, b, vs.CenterX, vs.CenterY, vs.Zoom);
+        if (send == null)
+        {
+            Main.SetStatus("The Lagrange view is Newton's method, not motion: switch to Fates to send a path.");
+            return true;
+        }
+        MathPlane.ApplySend(send);
+        Main.SetStatus(send.Appended
+            ? $"Added {send.Name} to the Math Plane scene."
+            : $"Math Plane: {send.Name} over the {Main.SelectedFractalType} backdrop (J on the family adds more).");
+        return true;
+    }
+
     /// <summary>#1716 — the Math Plane 3D section / canvas editor.</summary>
     public MathPlane3DSectionViewModel MathPlane3D { get; }
 

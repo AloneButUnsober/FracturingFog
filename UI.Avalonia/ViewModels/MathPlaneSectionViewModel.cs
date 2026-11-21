@@ -39,6 +39,27 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
     private string? _lastText;
     private MathPlaneScene _scene = new();
     private bool _sceneValid = true;
+    private readonly Action _switchToMathPlane;
+
+    /// <summary>#2000 — show a sent trajectory: write its scene and backdrop, switch the render to
+    /// Math Plane and set the view the send chose (the family's own camera for a position launch).</summary>
+    public void ApplySend(MathPlaneSend s)
+    {
+        StopPlay();
+        PauseScript();
+        s.Apply(_view.FractalParameters);
+        _switchToMathPlane();   // resets the view to the type's default ...
+        _view.CenterX = s.CenterX; _view.CenterXLo = 0; _view.CenterX2 = 0; _view.CenterX3 = 0;   // ... so set it after
+        _view.CenterX4 = 0; _view.CenterX5 = 0; _view.CenterX6 = 0; _view.CenterX7 = 0;
+        _view.CenterY = s.CenterY; _view.CenterYLo = 0; _view.CenterY2 = 0; _view.CenterY3 = 0;
+        _view.CenterY4 = 0; _view.CenterY5 = 0; _view.CenterY6 = 0; _view.CenterY7 = 0;
+        _view.Zoom = s.Zoom;
+        _complexDraft = null; _cobwebDraft = null; ComplexError = null;
+        Refresh();
+        RaiseMapProperties();
+        RaiseBridgeProperties();
+        _trigger();
+    }
     private MathPlaneHandle? _drag;
     private bool _loadingSelection;
 
@@ -52,6 +73,7 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
         _sceneStore = sceneStore;
         _view = view ?? throw new ArgumentNullException(nameof(view));
         _trigger = trigger ?? throw new ArgumentNullException(nameof(trigger));
+        _switchToMathPlane = switchToMathPlane;
         SwitchToMathPlaneCommand = ReactiveCommand.Create(() => { switchToMathPlane(); Refresh(); });
         AddPointCommand = ReactiveCommand.Create(() => AddAtCentre(MathPlaneObjectKind.Point));
         AddVectorCommand = ReactiveCommand.Create(() => AddAtCentre(MathPlaneObjectKind.Vector));

@@ -5398,6 +5398,16 @@ its image, f'(z) as scale |f'| and turn arg f'.
 Fractal bridge: a backdrop (Mandelbrot, Julia of c, Burning Ship
 ...), the orbit of 0 under z^2 + c with the escape circle and a
 draggable c, and the cobweb of x -> f(x) (default x^2 + c).
+Scattering backdrops (HenonHeiles, ThreeBody, MagnetisedBlackHole)
+draw that family's basin map with its own settings, always in its
+physical plane (Henon-Heiles Plane view, magnetised hole Meridional
+view), so trajectories lie on the basins they belong to.
+
+From a Henon-Heiles, three-body (Fates) or magnetised black hole
+view, point at a launch and press J: Math Plane opens with that
+launch's trajectory over the family's backdrop, in the same camera
+(a section or kick launch frames the physical plane instead).
+Press J again on the family to add more paths to the same scene.
 
 Trajectories (scene text): the path of one launch of a scattering
 family, traced by that fractal's own code, so it ends where the

@@ -87,6 +87,7 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
         _input = input ?? throw new ArgumentNullException(nameof(input));
         ViewState = renderHost.ViewState;
         InitMathOverlay();   // #1554
+        InitScatterPath();   // #2000
 
         QualityPresets = new ObservableCollection<QualityPreset>(QualityPreset.All);
         FractalTypes = new ObservableCollection<FractalType>(
