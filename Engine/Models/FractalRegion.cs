@@ -1097,6 +1097,10 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? DeepLa { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? AdaptiveAaThreshold { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? AdaptiveAaTolerance { get; set; }
+        // #1981 part 2 — the distance-estimate refinement of the adaptive AA mask (families with a
+        // distance source, AdaptiveAaDistanceCapable), carried when not at its defaults.
+        [JsonIgnore(Condition = OmitNull)] public bool? AdaptiveAaDistanceSkip { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? AdaptiveAaDistanceMinPx { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? IFSIterations { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? LSystemDepth { get; set; }
         [JsonIgnore(Condition = OmitNull)] public string? AttractorPresetName { get; set; }
@@ -1171,6 +1175,11 @@ namespace FracturingFog.Models
         internal static bool RotationDomainCapable(FractalType t) =>
             t is FractalType.Julia or FractalType.Phoenix or FractalType.Magnet1 or FractalType.Magnet2
               or FractalType.Newton or FractalType.Nova;
+
+        /// <summary>#1981 part 2 — the families whose adaptive AA mask can use a distance estimate:
+        /// the exterior DE (Mandelbrot, Julia, Multibrot) or the rotation-domain distance.</summary>
+        internal static bool AdaptiveAaDistanceCapable(FractalType t) =>
+            t is FractalType.Mandelbrot or FractalType.Multibrot || RotationDomainCapable(t);
 
         /// <summary>#1738 — the family's current orbit camera (distance, theta, phi), the values a
         /// partial Cam3D* set keeps for its missing keys. Null for a type without one; the switch
@@ -1909,6 +1918,19 @@ namespace FracturingFog.Models
                     rp.AdaptiveAa = aa;
                     rp.AdaptiveAaThreshold = thr;
                     rp.AdaptiveAaTolerance = tol;
+                }
+            }
+
+            // #1981 part 2 — the AA mask's distance skip rides along for the families with a distance source.
+            if (AdaptiveAaDistanceCapable(type))
+            {
+                bool? skip = p.AdaptiveAaDistanceSkip != D.AdaptiveAaDistanceSkip ? p.AdaptiveAaDistanceSkip : null;
+                double? minPx = Nd(p.AdaptiveAaDistanceMinPx, D.AdaptiveAaDistanceMinPx);
+                if (skip != null || minPx != null)
+                {
+                    rp ??= new RegionFractalParams();
+                    rp.AdaptiveAaDistanceSkip = skip;
+                    rp.AdaptiveAaDistanceMinPx = minPx;
                 }
             }
 
@@ -2699,6 +2721,8 @@ namespace FracturingFog.Models
             if (DeepLa is >= (int)DeepLaMode.Off and <= (int)DeepLaMode.On) p.DeepLa = (DeepLaMode)DeepLa.Value;   // #1629
             if (AdaptiveAaThreshold.HasValue) p.AdaptiveAaThreshold = AdaptiveAaThreshold.Value;
             if (AdaptiveAaTolerance.HasValue) p.AdaptiveAaTolerance = AdaptiveAaTolerance.Value;
+            if (AdaptiveAaDistanceSkip.HasValue) p.AdaptiveAaDistanceSkip = AdaptiveAaDistanceSkip.Value;   // #1981 part 2
+            if (AdaptiveAaDistanceMinPx.HasValue) p.AdaptiveAaDistanceMinPx = AdaptiveAaDistanceMinPx.Value;
             if (IFSIterations.HasValue) p.IFSIterations = IFSIterations.Value;
             if (LSystemDepth.HasValue) p.LSystemDepth = LSystemDepth.Value;
             if (!string.IsNullOrEmpty(AttractorPresetName)) p.AttractorPresetName = AttractorPresetName;

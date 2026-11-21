@@ -82,6 +82,17 @@ namespace FracturingFog.Models
         /// after at least 4 samples. 0 = every marked pixel takes every sample.</summary>
         public double AdaptiveAaTolerance { get; set; } = 1.5;
 
+        /// <summary>#1981 part 2 — with <see cref="AdaptiveAa"/>: a pixel the neighbour test marks
+        /// takes no extra samples when a distance estimate puts every boundary further than
+        /// <see cref="AdaptiveAaDistanceMinPx"/> pixels from its centre (exterior DE for Mandelbrot,
+        /// Julia, Multibrot; the rotation-domain distance when that colouring is on). Off by default
+        /// (the mask unchanged). Idea: pauldelbrot, fractalforums.org topic 5693.</summary>
+        public bool AdaptiveAaDistanceSkip { get; set; }
+
+        /// <summary>#1981 part 2 — the distance (pixels) beyond which a pixel holds no boundary:
+        /// centre to corner, √2 / 2 (default).</summary>
+        public double AdaptiveAaDistanceMinPx { get; set; } = 0.70710678118654752;
+
         // ── #920 faithful parabolic implosion (user-picked p/q) ───────────────
         /// <summary>When true, the Julia parameter is driven from the parabolic
         /// root <c>p/q</c> instead of <see cref="JuliaC"/>: the render uses
@@ -2254,6 +2265,8 @@ namespace FracturingFog.Models
                 DeepLa = DeepLa,                                 // #1629
                 AdaptiveAaThreshold = AdaptiveAaThreshold,
                 AdaptiveAaTolerance = AdaptiveAaTolerance,
+                AdaptiveAaDistanceSkip = AdaptiveAaDistanceSkip,     // #1981 part 2
+                AdaptiveAaDistanceMinPx = AdaptiveAaDistanceMinPx,
                 FaithfulImplosion = FaithfulImplosion,
                 FaithfulImplosionP = FaithfulImplosionP,
                 FaithfulImplosionQ = FaithfulImplosionQ,

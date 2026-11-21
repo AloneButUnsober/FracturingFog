@@ -145,6 +145,7 @@ public sealed partial class NewtonCalculator : IFractalCalculator, FracturingFog
         ColorMap.MaxIterations = maxIter;
 
         _statCycles = _statChaos = _statStopIter = _statSaved = 0;   // #1979 / #1980
+        _rotationRan = false; LastRotationDomainStats = default;    // #1981 — the deep path does not run it
 
         // #1959 — Nova past DeepZoomThreshold: the perturbation engine (NewtonCalculator.Deep.cs).
         if (FractalType == FractalType.Nova && TryCalculateDeep(d, R, maxIter, newtonMap, ct)) return;

@@ -755,6 +755,29 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         }
     }
 
+    /// <summary>#1981 part 2 — the distance-estimate refinement of the adaptive AA mask.</summary>
+    public bool AdaptiveAaDistanceSkip
+    {
+        get => _p.AdaptiveAaDistanceSkip;
+        set { if (_p.AdaptiveAaDistanceSkip == value) return; _p.AdaptiveAaDistanceSkip = value; this.RaisePropertyChanged(); Fire(); }
+    }
+
+    public double AdaptiveAaDistanceMinPx
+    {
+        get => _p.AdaptiveAaDistanceMinPx;
+        set
+        {
+            value = System.Math.Clamp(value, 0.1, 16);
+            if (_p.AdaptiveAaDistanceMinPx == value) return;
+            _p.AdaptiveAaDistanceMinPx = value; this.RaisePropertyChanged(); Fire();
+        }
+    }
+
+    /// <summary>#1981 part 2 — the families with a distance source for it.</summary>
+    public bool IsAdaptiveAaDistanceFamily => FractalType is FractalType.Mandelbrot or FractalType.Julia
+        or FractalType.Multibrot or FractalType.Phoenix or FractalType.Magnet1 or FractalType.Magnet2
+        or FractalType.Newton or FractalType.Nova;
+
     public double AdaptiveAaTolerance
     {
         get => _p.AdaptiveAaTolerance;

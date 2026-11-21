@@ -855,6 +855,15 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
 
 ### Distance estimation, normals, shading
 
+<a id="distance-bound-koebe"></a>
+- **Exterior distance bounds for the Mandelbrot set** (the distance estimator's two-sided bound,
+  sinh G / (2 e^G |G′|) < dist(c, M) < 2 sinh G / |G′|, from the Koebe quarter theorem applied to the
+  exterior conformal map). FF knows it from the fractal-rendering literature on the distance
+  estimator (commonly traced to *The Science of Fractal Images*, H.-O. Peitgen & D. Saupe (eds.),
+  Springer, 1988, and to J. Milnor's work on the Mandelbrot set); which text states it, and where, is
+  not verified (see *Citations awaiting verification*). FF uses the lower bound in #1981 part 2
+  (`Engine/Rendering/AdaptiveAaDistance.cs`): an adaptive-AA pixel whose bound exceeds √2/2 px holds no
+  boundary and takes no extra samples.
 - **John Hart.** *Sphere tracing: A geometric method for the antialiased ray tracing of implicit
   surfaces.* The Visual Computer, 1996. The original distance-estimation raymarcher.
 - **Benjamin Keinert, Henry Schäfer, Johann Korndörfer, Urs Ganse, Marc Stamminger.** *Enhanced
@@ -1472,6 +1481,10 @@ Programs and galleries the project measured itself against, learned from, or pay
   (`Engine/Calculators/RotationDomainColoring.cs`). FF's choices (the threshold max(ε, K / N), since a
   finite orbit's exponent in a rotation domain is O(1/N); the minimum of the ratio over the orbit; the
   largest exponent for Phoenix; the colours) are FF's, not the post's.
+  Part 2 of #1981 follows the same post's distance-estimate anti-aliasing idea: skip the sub-samples of a
+  pixel whose distance estimate exceeds about 0.708 px (`FractalParameters.AdaptiveAaDistanceSkip`,
+  `Engine/Rendering/AdaptiveAaDistance.cs`). FF's lower-bound form (the Koebe factor on the exterior
+  estimate, a quarter of the rotation-domain one) is FF's.
 
 ## Sites, communities, and other long-form references
 
@@ -1502,6 +1515,8 @@ entry above completed or corrected.
 
 - **pauldelbrot, fractalforums.org topic 5693** — thread title and post date (#1979 / #1980 / #1981;
   content from a user paste, the page not opened).
+- **Exterior distance bound (`distance-bound-koebe`)** — the primary source and statement of
+  sinh G / (2 e^G |G′|) < dist(c, M) < 2 sinh G / |G′| (#1981 part 2).
 - **Milnor, *Dynamics in One Complex Variable*** — the chapters / theorems for the facts #1981's tests use
   (Siegel disk boundary in the closure of the critical orbit for the golden-mean quadratic; the Koebe
   distortion theorem, Koebe 1907 / Bieberbach 1916 from memory, original papers not checked).

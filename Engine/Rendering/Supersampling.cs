@@ -53,16 +53,20 @@ using FracturingFog.Models;
 namespace FracturingFog.Rendering
 {
     /// <summary>#1344 — the adaptive anti-aliasing settings (see the file header).</summary>
-    public readonly record struct AdaptiveAa(bool Enabled, double Threshold, double Tolerance)
+    public readonly record struct AdaptiveAa(bool Enabled, double Threshold, double Tolerance,
+                                             bool DistanceSkip = false, double DistanceMinPx = AdaptiveAa.DefaultDistanceMinPx)
     {
         public const double DefaultThreshold = 12.0;
         public const double DefaultTolerance = 1.5;
+        /// <summary>#1981 part 2 — centre to corner of a pixel, √2 / 2.</summary>
+        public const double DefaultDistanceMinPx = 0.70710678118654752;
 
         /// <summary>Full supersampling (adaptive off).</summary>
         public static readonly AdaptiveAa Off = new(false, DefaultThreshold, DefaultTolerance);
 
         public static AdaptiveAa From(FractalParameters? p) => p == null ? Off
-            : new(p.AdaptiveAa, p.AdaptiveAaThreshold, p.AdaptiveAaTolerance);
+            : new(p.AdaptiveAa, p.AdaptiveAaThreshold, p.AdaptiveAaTolerance,
+                  p.AdaptiveAaDistanceSkip, p.AdaptiveAaDistanceMinPx);   // #1981 part 2
     }
 
     /// <summary>#1382 — a calculator whose CPU pass can compute only the marked
@@ -92,6 +96,13 @@ namespace FracturingFog.Rendering
         /// where the colours on its two sides are close; null (the 3D raymarchers, the
         /// root-finding families) = the colour test alone.</summary>
         int[]? AdaptiveAaIterations => null;
+
+        /// <summary>#1981 part 2 — for the frame just computed (sample 0), a lower bound on
+        /// each pixel's distance from its centre to the nearest boundary, in pixels (0 =
+        /// unknown), from a distance estimate (<see cref="AdaptiveAaDistance"/>); null = none.
+        /// With <see cref="AdaptiveAa.DistanceSkip"/>, a marked pixel whose bound exceeds
+        /// <see cref="AdaptiveAa.DistanceMinPx"/> takes no extra samples.</summary>
+        float[]? AdaptiveAaBoundaryDistancePx() => null;
     }
 
     /// <summary>What a supersample pass computed (tests, probes, HUD).</summary>
@@ -110,6 +121,10 @@ namespace FracturingFog.Rendering
         /// <summary>#1380 — the temporal samples accumulated on top (incl. the seed);
         /// 0 when no TAA ran.</summary>
         public int TemporalSamples { get; init; }
+
+        /// <summary>#1981 part 2 — pixels the neighbour test marked that the distance
+        /// estimate cleared (no boundary within the pixel); 0 when off.</summary>
+        public int DistanceSkipped { get; init; }
     }
 
     /// <summary>#1380 — the live view's TAA running mean: a per-channel sum seeded
@@ -469,8 +484,10 @@ namespace FracturingFog.Rendering
             var orig = CentreLimbs.Capture(calc);
             CentreLimbs jittered = orig;
             // #1656 — jitter / restore only while the view is still ours (CentreJitter.TryApply).
+            float[]? bound = a.DistanceSkip ? AdaptiveAaDistance.Exterior(calc.IterationBuffer, calc.MaxIterations,
+                calc.DistanceBuffer, calc.DistancePixelScale, calc.FinalZrBuffer, calc.FinalZiBuffer, 2) : null;   // #1981 part 2
             return AdaptiveCore(calc.Width, calc.Height, () => calc.ColorBuffer, calc.IterationBuffer, calc.MaxIterations,
-                side, a, token,
+                side, a, token, bound,
                 m => calc.PixelMask = m,
                 (jx, jy) => CentreJitter.TryApply(calc, in orig, jx, jy, scale, token, ref jittered),
                 () => CentreJitter.RestoreIfOwned(calc, in orig, in jittered),
@@ -482,15 +499,17 @@ namespace FracturingFog.Rendering
         // jitter moves the view by a pixel fraction, restore puts it back, sample
         // renders (and equalises) one jittered frame.
         private static SupersampleStats AdaptiveCore(int w, int h, Func<uint[]> color, int[]? iter, int maxIter,
-            int side, AdaptiveAa a, CancellationToken token, Action<byte[]?> setMask,
+            int side, AdaptiveAa a, CancellationToken token, float[]? boundPx, Action<byte[]?> setMask,
             Func<double, double, bool> jitter, Action restore, Action<CancellationToken> sample)
         {
             int pixels = w * h;
             var color0 = (uint[])color().Clone();
             var mask = new byte[pixels];
             int marked = BuildMask(color0, iter, maxIter, w, h, a.Threshold, mask);
+            int skipped = boundPx != null ? ClearDistant(mask, boundPx, a.DistanceMinPx) : 0;   // #1981 part 2
+            marked -= skipped;
             long pixelSamples = pixels;
-            if (marked == 0) return new SupersampleStats(pixels, side * side, 0, pixelSamples);
+            if (marked == 0) return new SupersampleStats(pixels, side * side, 0, pixelSamples) { DistanceSkipped = skipped };
 
             var sumR = new int[pixels]; var sumG = new int[pixels]; var sumB = new int[pixels]; var sumA = new int[pixels];
             bool early = a.Tolerance > 0;
@@ -547,7 +566,18 @@ namespace FracturingFog.Rendering
             Array.Copy(color0, outBuf, pixels);
             for (int i = 0; i < pixels; i++)
                 if (mask[i] != 0) outBuf[i] = Mean(sumR[i], sumG[i], sumB[i], sumA[i], n[i]);
-            return new SupersampleStats(pixels, side * side, marked, pixelSamples);
+            return new SupersampleStats(pixels, side * side, marked, pixelSamples) { DistanceSkipped = skipped };
+        }
+
+        // #1981 part 2 — clear the marked pixels whose boundary distance bound exceeds minPx:
+        // the pixel (centre to corner √2/2 px) holds no boundary, so its samples all lie on one
+        // side of it. Returns the count cleared.
+        internal static int ClearDistant(byte[] mask, float[] boundPx, double minPx)
+        {
+            int n = 0;
+            for (int i = 0; i < mask.Length; i++)
+                if (mask[i] != 0 && boundPx[i] > minPx) { mask[i] = 0; n++; }
+            return n;
         }
 
         // Standard error of the mean of k samples (sum, sum of squares) within tol.
@@ -583,7 +613,9 @@ namespace FracturingFog.Rendering
                 var jit = new AltJitter(calc);   // #1960
                 int[]? iter = ad.AdaptiveAaIterations;
                 if (iter != null && iter.Length < calc.Width * calc.Height) iter = null;
-                var st = AdaptiveCore(calc.Width, calc.Height, () => calc.ColorBuffer, iter, calc.MaxIterations, side, ad.AdaptiveAa, token,
+                float[]? bound = ad.AdaptiveAa.DistanceSkip ? ad.AdaptiveAaBoundaryDistancePx() : null;   // #1981 part 2
+                if (bound != null && bound.Length < calc.Width * calc.Height) bound = null;
+                var st = AdaptiveCore(calc.Width, calc.Height, () => calc.ColorBuffer, iter, calc.MaxIterations, side, ad.AdaptiveAa, token, bound,
                     m => ad.PixelMask = m,
                     (jx, jy) => { jit.Apply(jx, jy); return true; },
                     jit.Restore,
