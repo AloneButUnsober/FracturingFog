@@ -492,6 +492,27 @@ path takes a real 2D system; recording that gap is part of #1943.
 Validation: Jacobi constant conserved; Copenhagen reflection symmetries; L-points satisfy `∇Ω = 0` and
 match an independent 1D collinear solve; no orbit enters the zero-velocity forbidden region.
 
+**Shipped (#1943).** `FractalType.ThreeBodyBasins` (`ThreeBodyCalculator`, physics in
+`Engine/Scattering/ThreeBody.cs`; the Fates view on the shared `ScatteringIntegrator`). Units: unit
+separation, unit angular velocity, primaries 1 − μ at (−μ, 0) and μ at (1 − μ, 0); Ω without the constant
+μ(1 − μ)/2, so C = 2Ω − v². Fates view: pixel = launch position, speed √(2Ω − C), direction Prograde /
+Retrograde / Radial / FixedAngle about the centre of mass; fates crash 1 / crash 2 (within the crash radius)
+/ escape (past the escape radius) / bounded at the time limit; the step is capped at 0.1 × the distance to
+the nearer primary. Lagrange view: Newton–Raphson with the analytic Hessian; converged end points matched to
+L1–L5 found independently (bisection on the axis, equilateral points). Adaptive AA (exact mask), drag
+preview, every setting → `--param`. Six presets ("Three-Body - ..."), two bound animations (falling Jacobi,
+mass ratio sweep).
+
+Symmetry used by the tests: for μ = 1/2 the equations are invariant under the half turn (x, y, vx, vy) →
+(−x, −y, −vx, −vy), which swaps the primaries and maps a prograde / retrograde / radial launch to the same
+rule, so the fate map is point-symmetric with the crash labels swapped. The two mirror reflections need
+time reversal and do not map forward fates to forward fates, so they are not tested on the map.
+
+**Toolchain gap (recorded, not closed).** A User Equation can write one real 2D Newton step by hand through
+`re(z)` / `im(z)` and an explicit Hessian (non-holomorphic, so interpreter only, no perturbation / DE), and
+*Converge-if* stops it; but there is no built-in real-2D Newton / Jacobian helper and no "which root"
+labelling for more than the final-z colouring, so the Lagrange view is a built-in calculator.
+
 #### 2.6.4 Charged particles around a magnetised black hole — **#1944**
 
 Schwarzschild (later Kerr) in an asymptotically uniform magnetic field, Wald's test-field solution

@@ -276,6 +276,16 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _hhChannelScale = _p.HenonHeilesChannelScale;
         _hhMaxTime = _p.HenonHeilesMaxTime;
         _hhTolerance = _p.HenonHeilesTolerance;
+        _tbView = _p.ThreeBodyView;
+        _tbMu = _p.ThreeBodyMassRatio;
+        _tbJacobi = _p.ThreeBodyJacobi;
+        _tbLaunch = _p.ThreeBodyLaunch;
+        _tbLaunchAngle = _p.ThreeBodyLaunchAngle;
+        _tbCrash = _p.ThreeBodyCrashRadius;
+        _tbEscape = _p.ThreeBodyEscapeRadius;
+        _tbMaxTime = _p.ThreeBodyMaxTime;
+        _tbTolerance = _p.ThreeBodyTolerance;
+        _tbNewton = _p.ThreeBodyNewtonIterations;
         _mathPlaneScene = _p.MathPlaneScene ?? string.Empty;
         UpdateMathPlaneSceneError();
         _raysColorSource = _p.BilliardRaysColorSource;
@@ -500,6 +510,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     /// <summary>#1923 — black hole shadows (Majumdar-Papapetrou ray trace).</summary>
     public bool IsBlackHoleShadow => FractalType == FractalType.BlackHoleShadow;
     public bool IsHenonHeilesBasins => FractalType == FractalType.HenonHeilesBasins;   // #1942
+    public bool IsThreeBodyBasins => FractalType == FractalType.ThreeBodyBasins;   // #1943
     /// <summary>Either billiard type: the shared scene controls (geometry, disks, bounces).</summary>
     public bool IsBilliardScene => IsChaoticBilliard || IsBilliardRays;
     /// <summary>#1548 — Math Plane (Cartesian plotter).</summary>
@@ -647,6 +658,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         || IsBlackHoleShadow
         // Hénon-Heiles basins — log escape time height field (#1942).
         || IsHenonHeilesBasins
+        // Three-body basins — log fate time / Newton iterations height field (#1943).
+        || IsThreeBodyBasins
         // Precision field — divergence-scalar height field (#628).
         || IsPrecisionField
         // Dual-orbit escape-geometry (#864) — the derived scalar rides the
@@ -669,7 +682,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsLyapunov || IsTranscendentalJulia || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian || IsMirrorSpheres
-          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsBlackHoleShadow || IsHenonHeilesBasins || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable || IsAdaptiveAa2D
+          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsBlackHoleShadow || IsHenonHeilesBasins || IsThreeBodyBasins || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable || IsAdaptiveAa2D
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -2378,6 +2391,40 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double HenonHeilesMaxTime { get => _hhMaxTime; set { Set(ref _hhMaxTime, Clamp(value, 1.0, 100000.0)); _p.HenonHeilesMaxTime = _hhMaxTime; Fire(); } }
     private double _hhTolerance;
     public double HenonHeilesTolerance { get => _hhTolerance; set { Set(ref _hhTolerance, Clamp(value, 1e-13, 1e-3)); _p.HenonHeilesTolerance = _hhTolerance; Fire(); } }
+
+    // ── #1943 — restricted three-body basins ─────────────────────────────────
+    private ThreeBodyView _tbView;
+    public ThreeBodyView ThreeBodyView { get => _tbView; set { Set(ref _tbView, value); _p.ThreeBodyView = value; TbVisibilityChanged(); Fire(); } }
+    public System.Array ThreeBodyViews => s_ThreeBodyViews;
+    private static readonly System.Array s_ThreeBodyViews = System.Enum.GetValues(typeof(ThreeBodyView));
+    private ThreeBodyLaunch _tbLaunch;
+    public ThreeBodyLaunch ThreeBodyLaunch { get => _tbLaunch; set { Set(ref _tbLaunch, value); _p.ThreeBodyLaunch = value; TbVisibilityChanged(); Fire(); } }
+    public System.Array ThreeBodyLaunches => s_ThreeBodyLaunches;
+    private static readonly System.Array s_ThreeBodyLaunches = System.Enum.GetValues(typeof(ThreeBodyLaunch));
+    public bool TbIsFates => _tbView == ThreeBodyView.Fates;
+    public bool TbIsLagrange => _tbView == ThreeBodyView.LagrangeBasins;
+    public bool TbIsFixedAngle => TbIsFates && _tbLaunch == ThreeBodyLaunch.FixedAngle;
+    private void TbVisibilityChanged()
+    {
+        foreach (var n in new[] { nameof(TbIsFates), nameof(TbIsLagrange), nameof(TbIsFixedAngle) })
+            this.RaisePropertyChanged(n);
+    }
+    private double _tbMu;
+    public double ThreeBodyMassRatio { get => _tbMu; set { Set(ref _tbMu, Clamp(value, 1e-6, 0.5)); _p.ThreeBodyMassRatio = _tbMu; Fire(); } }
+    private double _tbJacobi;
+    public double ThreeBodyJacobi { get => _tbJacobi; set { Set(ref _tbJacobi, Clamp(value, -10.0, 10.0)); _p.ThreeBodyJacobi = _tbJacobi; Fire(); } }
+    private double _tbLaunchAngle;
+    public double ThreeBodyLaunchAngle { get => _tbLaunchAngle; set { Set(ref _tbLaunchAngle, Clamp(value, -360.0, 360.0)); _p.ThreeBodyLaunchAngle = _tbLaunchAngle; Fire(); } }
+    private double _tbCrash;
+    public double ThreeBodyCrashRadius { get => _tbCrash; set { Set(ref _tbCrash, Clamp(value, 1e-6, 0.4)); _p.ThreeBodyCrashRadius = _tbCrash; Fire(); } }
+    private double _tbEscape;
+    public double ThreeBodyEscapeRadius { get => _tbEscape; set { Set(ref _tbEscape, Clamp(value, 2.0, 1000.0)); _p.ThreeBodyEscapeRadius = _tbEscape; Fire(); } }
+    private double _tbMaxTime;
+    public double ThreeBodyMaxTime { get => _tbMaxTime; set { Set(ref _tbMaxTime, Clamp(value, 1.0, 100000.0)); _p.ThreeBodyMaxTime = _tbMaxTime; Fire(); } }
+    private double _tbTolerance;
+    public double ThreeBodyTolerance { get => _tbTolerance; set { Set(ref _tbTolerance, Clamp(value, 1e-13, 1e-3)); _p.ThreeBodyTolerance = _tbTolerance; Fire(); } }
+    private int _tbNewton;
+    public int ThreeBodyNewtonIterations { get => _tbNewton; set { Set(ref _tbNewton, (int)Clamp(value, 1, 10000)); _p.ThreeBodyNewtonIterations = _tbNewton; Fire(); } }
     // #1507 — what sets the hue.
     private BilliardRayColorSource _raysColorSource;
     public BilliardRayColorSource BilliardRaysColorSource { get => _raysColorSource; set { Set(ref _raysColorSource, value); _p.BilliardRaysColorSource = value; Fire(); } }

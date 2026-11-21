@@ -159,6 +159,9 @@ public static class FractalAnimatableParamsMap
         FractalType.HenonHeilesBasins
             => _henonHeilesList,
 
+        FractalType.ThreeBodyBasins
+            => _threeBodyList,
+
         FractalType.BicomplexMandelbrot
             => _bicomplexList,
 
@@ -674,6 +677,18 @@ public static class FractalAnimatableParamsMap
             Notes: "FixedAngle launch direction in degrees."),
         new("HenonHeilesChannelScale", AnimatableParamKind.ScalarDouble, Min: 0.05, Max: 10.0,
             Notes: "Palette density of the colouring channel."),
+    };
+
+    // #1943 — restricted three-body: the mass ratio (both views) and the Jacobi constant
+    // (Fates: lower C opens the necks round L1-L3). Every change re-traces every pixel.
+    private static readonly AnimatableParamDescriptor[] _threeBodyList =
+    {
+        new("ThreeBodyMassRatio", AnimatableParamKind.ScalarDouble, Min: 0.001, Max: 0.5,
+            Notes: "Mass ratio of the smaller primary (0.5 = Copenhagen)."),
+        new("ThreeBodyJacobi", AnimatableParamKind.ScalarDouble, Min: 2.0, Max: 4.5,
+            Notes: "Jacobi constant of every launch: lower values carry more energy and open the escape necks."),
+        new("ThreeBodyLaunchAngle", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 360.0,
+            Notes: "FixedAngle launch direction in degrees."),
     };
 
     // #1713 — Math Plane 3D: the orbit camera.

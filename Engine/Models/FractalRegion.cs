@@ -824,6 +824,17 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? HenonHeilesChannelScale { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? HenonHeilesMaxTime { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? HenonHeilesTolerance { get; set; }
+        // #1943 — restricted three-body basins (enums as int casts).
+        [JsonIgnore(Condition = OmitNull)] public int? ThreeBodyView { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? ThreeBodyMassRatio { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? ThreeBodyJacobi { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? ThreeBodyLaunch { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? ThreeBodyLaunchAngle { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? ThreeBodyCrashRadius { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? ThreeBodyEscapeRadius { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? ThreeBodyMaxTime { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? ThreeBodyTolerance { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? ThreeBodyNewtonIterations { get; set; }
         // #1507 — int cast of BilliardRayColorSource.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysColorSource { get; set; }
         // #1508 — crossings (int casts of BilliardRayMode / BilliardCrossingValue).
@@ -1394,6 +1405,20 @@ namespace FracturingFog.Models
                     HenonHeilesChannelScale = p.HenonHeilesChannelScale,
                     HenonHeilesMaxTime = p.HenonHeilesMaxTime,
                     HenonHeilesTolerance = p.HenonHeilesTolerance,
+                },
+                // #1943 — restricted three-body basins: every setting.
+                FractalType.ThreeBodyBasins => new RegionFractalParams
+                {
+                    ThreeBodyView = (int)p.ThreeBodyView,
+                    ThreeBodyMassRatio = p.ThreeBodyMassRatio,
+                    ThreeBodyJacobi = p.ThreeBodyJacobi,
+                    ThreeBodyLaunch = (int)p.ThreeBodyLaunch,
+                    ThreeBodyLaunchAngle = p.ThreeBodyLaunchAngle,
+                    ThreeBodyCrashRadius = p.ThreeBodyCrashRadius,
+                    ThreeBodyEscapeRadius = p.ThreeBodyEscapeRadius,
+                    ThreeBodyMaxTime = p.ThreeBodyMaxTime,
+                    ThreeBodyTolerance = p.ThreeBodyTolerance,
+                    ThreeBodyNewtonIterations = p.ThreeBodyNewtonIterations,
                 },
                 FractalType.BilliardRays => new RegionFractalParams
                 {
@@ -2456,6 +2481,16 @@ namespace FracturingFog.Models
             if (HenonHeilesChannelScale.HasValue) p.HenonHeilesChannelScale = HenonHeilesChannelScale.Value;
             if (HenonHeilesMaxTime.HasValue)      p.HenonHeilesMaxTime = HenonHeilesMaxTime.Value;
             if (HenonHeilesTolerance.HasValue)    p.HenonHeilesTolerance = HenonHeilesTolerance.Value;
+            if (ThreeBodyView is { } tbv && Enum.IsDefined(typeof(FracturingFog.ThreeBodyView), tbv)) p.ThreeBodyView = (FracturingFog.ThreeBodyView)tbv;   // #1943
+            if (ThreeBodyMassRatio.HasValue)      p.ThreeBodyMassRatio = ThreeBodyMassRatio.Value;
+            if (ThreeBodyJacobi.HasValue)         p.ThreeBodyJacobi = ThreeBodyJacobi.Value;
+            if (ThreeBodyLaunch is { } tbl && Enum.IsDefined(typeof(FracturingFog.ThreeBodyLaunch), tbl)) p.ThreeBodyLaunch = (FracturingFog.ThreeBodyLaunch)tbl;
+            if (ThreeBodyLaunchAngle.HasValue)    p.ThreeBodyLaunchAngle = ThreeBodyLaunchAngle.Value;
+            if (ThreeBodyCrashRadius.HasValue)    p.ThreeBodyCrashRadius = ThreeBodyCrashRadius.Value;
+            if (ThreeBodyEscapeRadius.HasValue)   p.ThreeBodyEscapeRadius = ThreeBodyEscapeRadius.Value;
+            if (ThreeBodyMaxTime.HasValue)        p.ThreeBodyMaxTime = ThreeBodyMaxTime.Value;
+            if (ThreeBodyTolerance.HasValue)      p.ThreeBodyTolerance = ThreeBodyTolerance.Value;
+            if (ThreeBodyNewtonIterations.HasValue) p.ThreeBodyNewtonIterations = ThreeBodyNewtonIterations.Value;
             if (BilliardRaysColorSource.HasValue) p.BilliardRaysColorSource = (FracturingFog.BilliardRayColorSource)BilliardRaysColorSource.Value;
             if (BilliardRaysMode.HasValue)       p.BilliardRaysMode = (FracturingFog.BilliardRayMode)BilliardRaysMode.Value;
             if (BilliardRaysCrossingWindow.HasValue) p.BilliardRaysCrossingWindow = BilliardRaysCrossingWindow.Value;
@@ -3949,6 +3984,109 @@ namespace FracturingFog.Models
                 {
                     HenonHeilesEnergy = 0.25, HenonHeilesView = (int)FracturingFog.HenonHeilesView.Plane,
                     HenonHeilesLaunch = (int)FracturingFog.HenonHeilesLaunch.FixedAngle, HenonHeilesLaunchAngle = 90.0,
+                },
+            },
+            // #1943 — restricted three-body basins (Nagler 2004 / 2005 fates; Zotos 2016 Newton-Raphson basins).
+            new()
+            {
+                Name          = "Three-Body - Copenhagen Fates",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  1.0,
+                Iterations    =  256,
+                Description   = "Two equal masses (the Copenhagen problem) in the rotating frame. Every launch has Jacobi constant 3, moving prograde: it crashes into the left or right primary, escapes, or is still bounded (black) after 100 time units. Grey is forbidden at this energy. The bound 'Three-body: falling Jacobi' animation sweeps C between 2.8 and 3.6.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.ThreeBodyBasins,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Three-body: falling Jacobi",
+                Params        = new RegionFractalParams
+                {
+                    ThreeBodyView = (int)FracturingFog.ThreeBodyView.Fates, ThreeBodyMassRatio = 0.5, ThreeBodyJacobi = 3.0,
+                    ThreeBodyLaunch = (int)FracturingFog.ThreeBodyLaunch.Prograde,
+                },
+            },
+            new()
+            {
+                Name          = "Three-Body - Copenhagen Trapped Zone",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  1.0,
+                Iterations    =  256,
+                Description   = "Jacobi constant 3.6: above the value at L2 and L3 (about 3.457) but below L1's (4). The neck between the primaries is open, the way out is not, so launches near the primaries only crash or stay bounded, and launches outside only escape.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.ThreeBodyBasins,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    ThreeBodyView = (int)FracturingFog.ThreeBodyView.Fates, ThreeBodyMassRatio = 0.5, ThreeBodyJacobi = 3.6,
+                    ThreeBodyLaunch = (int)FracturingFog.ThreeBodyLaunch.Prograde,
+                },
+            },
+            new()
+            {
+                Name          = "Three-Body - Retrograde Launch",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  1.0,
+                Iterations    =  256,
+                Description   = "The Copenhagen fates at Jacobi constant 3 with every launch moving against the primaries' rotation. Large black regions are bounded retrograde orbits round each primary; the fractal mixing of the fates sits between them.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.ThreeBodyBasins,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    ThreeBodyView = (int)FracturingFog.ThreeBodyView.Fates, ThreeBodyMassRatio = 0.5, ThreeBodyJacobi = 3.0,
+                    ThreeBodyLaunch = (int)FracturingFog.ThreeBodyLaunch.Retrograde,
+                },
+            },
+            new()
+            {
+                Name          = "Three-Body - Unequal Masses",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  1.0,
+                Iterations    =  256,
+                Description   = "Mass ratio 0.1: the heavy primary sits near the centre of mass, the light one at x = 0.9. At Jacobi constant 3.2 the exit past L2 (beside the light primary) is open, the one past L3 is not, so a particle from round the primaries can only get out past the light one.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.ThreeBodyBasins,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    ThreeBodyView = (int)FracturingFog.ThreeBodyView.Fates, ThreeBodyMassRatio = 0.1, ThreeBodyJacobi = 3.2,
+                    ThreeBodyLaunch = (int)FracturingFog.ThreeBodyLaunch.Prograde,
+                },
+            },
+            new()
+            {
+                Name          = "Three-Body - Lagrange Basins",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  1.0,
+                Iterations    =  256,
+                Description   = "Newton-Raphson on the gradient of the effective potential for two equal masses, each start coloured by which equilibrium it reaches: L1 between the primaries, L2 and L3 outside them, L4 and L5 above and below. The basin boundaries are fractal. The bound 'Three-body: mass ratio sweep' animation moves the mass ratio between 0.05 and 0.5.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.ThreeBodyBasins,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Three-body: mass ratio sweep",
+                Params        = new RegionFractalParams
+                {
+                    ThreeBodyView = (int)FracturingFog.ThreeBodyView.LagrangeBasins, ThreeBodyMassRatio = 0.5, ThreeBodyNewtonIterations = 60,
+                },
+            },
+            new()
+            {
+                Name          = "Three-Body - Lagrange Basins, Unequal",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  1.0,
+                Iterations    =  256,
+                Description   = "The Newton-Raphson basins of L1-L5 for mass ratio 0.1. L1 and L2 crowd towards the light primary at x = 0.9 and the symmetry about the vertical axis is gone.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.ThreeBodyBasins,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    ThreeBodyView = (int)FracturingFog.ThreeBodyView.LagrangeBasins, ThreeBodyMassRatio = 0.1, ThreeBodyNewtonIterations = 60,
                 },
             },
             new()

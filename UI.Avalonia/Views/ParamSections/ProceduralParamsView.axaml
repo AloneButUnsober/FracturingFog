@@ -1605,5 +1605,67 @@
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
         </Grid>
 
+        <!-- #1943 — restricted three-body basins. -->
+        <Grid IsVisible="{Binding IsThreeBodyBasins}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="View:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="0" Grid.Column="1"
+                      ItemsSource="{Binding ThreeBodyViews}"
+                      SelectedItem="{Binding ThreeBodyView, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Fates: each pixel is a launch, coloured by crash into either primary, escape, or still bounded at the time limit. LagrangeBasins: each pixel starts Newton-Raphson on the effective potential, coloured by which of L1-L5 it reaches." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Mass ratio:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="0.000001" Maximum="0.5" Increment="0.01" FormatString="0.##########"
+                           Value="{Binding ThreeBodyMassRatio, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Mass of the smaller primary as a fraction of the total (0.5 = two equal masses, the Copenhagen problem; Earth-Moon is about 0.012)." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Jacobi constant:" VerticalAlignment="Center" IsVisible="{Binding TbIsFates}" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1" IsVisible="{Binding TbIsFates}"
+                           Minimum="-10" Maximum="10" Increment="0.05" FormatString="0.##########"
+                           Value="{Binding ThreeBodyJacobi, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="C = 2 Omega - v^2 of every launch. Lower C means more energy: the forbidden regions (grey) shrink and the necks round L1, L2 and L3 open." />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Launch direction:" VerticalAlignment="Center" IsVisible="{Binding TbIsFates}" />
+            <ComboBox Grid.Row="3" Grid.Column="1" IsVisible="{Binding TbIsFates}"
+                      ItemsSource="{Binding ThreeBodyLaunches}"
+                      SelectedItem="{Binding ThreeBodyLaunch, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Prograde: perpendicular to the position, the way the primaries turn. Retrograde: the other way. Radial: straight out. FixedAngle: one direction everywhere." />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Launch angle (deg):" VerticalAlignment="Center" IsVisible="{Binding TbIsFixedAngle}" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1" IsVisible="{Binding TbIsFixedAngle}"
+                           Minimum="-360" Maximum="360" Increment="5" FormatString="0.##########"
+                           Value="{Binding ThreeBodyLaunchAngle, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Launch direction, degrees anticlockwise from +x." />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Crash radius:" VerticalAlignment="Center" IsVisible="{Binding TbIsFates}" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1" IsVisible="{Binding TbIsFates}"
+                           Minimum="0.000001" Maximum="0.4" Increment="0.005" FormatString="0.##########"
+                           Value="{Binding ThreeBodyCrashRadius, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="A particle this close to a primary has crashed into it (the size of the primaries)." />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Escape radius:" VerticalAlignment="Center" IsVisible="{Binding TbIsFates}" />
+            <NumericUpDown Grid.Row="6" Grid.Column="1" IsVisible="{Binding TbIsFates}"
+                           Minimum="2" Maximum="1000" Increment="1" FormatString="0.##########"
+                           Value="{Binding ThreeBodyEscapeRadius, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="A particle this far from the centre of mass has escaped." />
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Time limit:" VerticalAlignment="Center" IsVisible="{Binding TbIsFates}" />
+            <NumericUpDown Grid.Row="7" Grid.Column="1" IsVisible="{Binding TbIsFates}"
+                           Minimum="1" Maximum="100000" Increment="50" FormatString="0.##########"
+                           Value="{Binding ThreeBodyMaxTime, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="A particle with no fate by then counts as bounded (the theme's interior colour). One primary orbit is 2 pi." />
+            <TextBlock Grid.Row="8" Grid.Column="0" Text="Tolerance:" VerticalAlignment="Center" IsVisible="{Binding TbIsFates}" />
+            <NumericUpDown Grid.Row="8" Grid.Column="1" IsVisible="{Binding TbIsFates}"
+                           Minimum="0.0000000000001" Maximum="0.001" Increment="0.000000001" FormatString="0.#############"
+                           Value="{Binding ThreeBodyTolerance, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Integrator relative tolerance per step. Close passes by a primary need it small." />
+            <TextBlock Grid.Row="9" Grid.Column="0" Text="Newton iterations:" VerticalAlignment="Center" IsVisible="{Binding TbIsLagrange}" />
+            <NumericUpDown Grid.Row="9" Grid.Column="1" IsVisible="{Binding TbIsLagrange}"
+                           Minimum="1" Maximum="10000" Increment="10" FormatString="0"
+                           Value="{Binding ThreeBodyNewtonIterations, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Newton-Raphson iteration cap; starts that have not reached an equilibrium by then take the interior colour." />
+            <CheckBox Grid.Row="10" Grid.Column="1" Content="Adaptive anti-aliasing"
+                      IsChecked="{Binding AdaptiveAa, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="With the High / Ultra / Extreme quality presets, re-trace only the pixels that differ from a neighbour (the basin boundaries). Also used by export and --batch." />
+            <TextBlock Grid.Row="11" Grid.Column="1"
+                       Text="Fates: crash into the left (heavier) primary, crash into the right one, and escape each have their own colour; bounded orbits take the interior colour; grey is forbidden (not reachable at this Jacobi constant). Lagrange: one colour per equilibrium L1-L5."
+                       TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
+        </Grid>
+
     </StackPanel>
 </UserControl>
