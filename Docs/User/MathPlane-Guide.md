@@ -120,6 +120,11 @@ The **Complex map** group applies f(z) to the plane: z → (1 − t)·z + t·f(z
 
 These stay in the plain plane: a map does not move them.
 
+The scattering backdrops (#2000) — **HenonHeiles**, **ThreeBody** and **MagnetisedBlackHole** — draw that family's
+basin map with its own settings, always in its physical plane (the Hénon–Heiles Plane view, the magnetised
+hole's Meridional view; the three-body view as set), so a trajectory lies on the basin it belongs to. They are
+slower than the escape-time backdrops; the frame is kept while only the scene's objects change.
+
 ### Trajectories (#1993)
 
 A `trajectory` draws the path of **one launch** of a gravitational-scattering family. The path is traced by
@@ -131,6 +136,12 @@ marks the end, and the label gives the fate.
 | `henonheiles` (Hénon–Heiles) | (x, y); with `section`, (y, py) on x = 0 | `tangential` (default), `radial`, `section` or an angle in degrees | `E` `tmax` `tol` | (x, y) |
 | `threebody` (restricted three-body, rotating frame) | (x, y) | `prograde` (default), `retrograde`, `radial` or an angle | `mu` `C` `crash` `escape` `tmax` `tol` | (x, y) |
 | `magbh` (magnetised black hole) | (R, z), with R < 0 for the mirrored half; with `kick`, (ρ0, E) | an angle from +R towards +z (default 0) or `kick` | `b` `E` `l` `branch` (1 or −1) `escape` `tmax` `tol` | (R, z) |
+
+**Send a path from the fractal (#2000):** on a Hénon–Heiles, three-body (Fates) or magnetised-black-hole view,
+point at a launch and press **J**. Math Plane opens with that launch's trajectory, every key written out from
+the family's settings, over the family's backdrop in the same camera, so the ring sits on the pixel you
+pointed at. A section or kick launch frames the physical plane instead. Go back to the family and press **J**
+again to add more paths to the same scene (a scene without that backdrop is replaced).
 
 Keys you leave out take the family's defaults (the values its fractal starts with). A launch from a position
 can be dragged on the canvas and moved by a script's `move`. `draw NAME` reveals the path as the particle
@@ -291,7 +302,7 @@ FracturingFog --batch --fractal MathPlane --x -0.5 --y 0 --zoom 0.525 --param Ma
 | `MathPlaneT` | map progress, 0 to 1 |
 | `MathPlaneInterpolation` | 0 linear, 1 polar |
 | `MathPlaneCRe`, `MathPlaneCIm` | c |
-| `MathPlaneBackdrop` | 0 none, 1 Mandelbrot, 2 Julia, 3 Burning Ship, 4 Tricorn, 5 Multibrot, 6 Phoenix, 7 Magnet 1, 8 Magnet 2, 9 Glynn, 10 Spider |
+| `MathPlaneBackdrop` | 0 none, 1 Mandelbrot, 2 Julia, 3 Burning Ship, 4 Tricorn, 5 Multibrot, 6 Phoenix, 7 Magnet 1, 8 Magnet 2, 9 Glynn, 10 Spider, 11 Hénon–Heiles, 12 three-body, 13 magnetised black hole (#2000; the family's own keys, e.g. `HenonHeilesEnergy`, ride along) |
 | `MathPlaneScriptTime` | the moment of the scene's script drawn, in seconds (0 = the scene as written) |
 
 **Math overlay:** for the overlay on a 2D view, add `--math-overlay RE,IM[,STEPS]`.

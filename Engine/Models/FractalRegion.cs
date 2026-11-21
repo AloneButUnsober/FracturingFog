@@ -2119,7 +2119,8 @@ namespace FracturingFog.Models
             return rp;
         }
 
-        /// <summary>#1554 — the escape-time family a Math Plane backdrop draws, or null.</summary>
+        /// <summary>#1554 — the family a Math Plane backdrop draws, or null (escape-time families;
+        /// #2000 adds the scattering families with a physical plane).</summary>
         public static FractalType? MathPlaneBackdropFamily(MathPlaneBackdrop b) => b switch
         {
             FracturingFog.MathPlaneBackdrop.Mandelbrot => FractalType.Mandelbrot,
@@ -2132,6 +2133,10 @@ namespace FracturingFog.Models
             FracturingFog.MathPlaneBackdrop.Magnet2 => FractalType.Magnet2,
             FracturingFog.MathPlaneBackdrop.Glynn => FractalType.Glynn,
             FracturingFog.MathPlaneBackdrop.Spider => FractalType.Spider,
+            // #2000 — scattering families (drawn by their own calculators, physical views).
+            FracturingFog.MathPlaneBackdrop.HenonHeiles => FractalType.HenonHeilesBasins,
+            FracturingFog.MathPlaneBackdrop.ThreeBody => FractalType.ThreeBodyBasins,
+            FracturingFog.MathPlaneBackdrop.MagnetisedBlackHole => FractalType.MagnetisedBlackHole,
             _ => null,
         };
 

@@ -150,8 +150,13 @@ namespace FracturingFog
     /// <summary>#1554 — a 2D escape-time family drawn under a Math Plane scene (the
     /// fractal backdrop), in the plain plane at the scene's view. Julia draws the
     /// Julia set of the plane's c (MathPlaneCRe / MathPlaneCIm), so dragging c moves
-    /// both the orbit and the set; the others use their own params.</summary>
-    public enum MathPlaneBackdrop { None, Mandelbrot, Julia, BurningShip, Tricorn, Multibrot, Phoenix, Magnet1, Magnet2, Glynn, Spider }
+    /// both the orbit and the set; the others use their own params.
+    /// #2000 — <see cref="HenonHeiles"/>, <see cref="ThreeBody"/> and <see cref="MagnetisedBlackHole"/>
+    /// draw a scattering family's basin map, always in its physical plane (Hénon–Heiles Plane view,
+    /// the three-body view as set, the magnetised hole's Meridional view), so trajectory paths
+    /// (#1993) sit on the basins they belong to.</summary>
+    public enum MathPlaneBackdrop { None, Mandelbrot, Julia, BurningShip, Tricorn, Multibrot, Phoenix, Magnet1, Magnet2, Glynn, Spider,
+                                    HenonHeiles, ThreeBody, MagnetisedBlackHole }
 
     /// <summary>#1552 — how <c>MathPlaneT</c> runs the map from the identity (t = 0) to
     /// the matrix (t = 1). <see cref="Linear"/>: (1 - t) I + t M, the usual grid morph.

@@ -66,6 +66,13 @@
 //     and coloured by step, with the escape circle |z| = 2, c as a handle, and a
 //     read-out (escape step, or the period it settles to).
 //   Cobweb: y = f(x), y = x and the staircase (MathPlaneDynamics.Cobweb).
+//   #2000 — scattering backdrops (Hénon–Heiles, three-body, magnetised black hole) are
+//     drawn by the family's own calculator. Those calculators already use this plane's
+//     mapping (ViewCamera.PixelPitch, y-up, pixel centres), so they take the same centre
+//     and zoom and their rows are not flipped. They are forced to the physical plane
+//     (Hénon–Heiles Plane view, magnetised hole Meridional view) so a trajectory (#1993)
+//     lies on its own basin. Their render is slow, so the dimmed frame is cached on
+//     (family, params, view, size, theme) for every redraw, not only scripts.
 //
 // #1993 — trajectories: the path of one launch of a scattering family (Hénon–Heiles,
 // restricted three-body, magnetised black hole), traced by the family's own scene code
@@ -826,6 +833,11 @@ public sealed class MathPlaneCalculator : IFractalCalculator
             Array.Copy(_backdropCache, ColorBuffer, ColorBuffer.Length);
             return;
         }
+        if (ScatterBackdrop(type, w, h) is { } scatter)
+        {
+            DrawScatterBackdrop(scatter, type, p, w, h, ct);
+            return;
+        }
         if (_backdrop == null || _backdrop.Width != w || _backdrop.Height != h) _backdrop = new EscapeTimeCalculator(w, h);
         var bp = p;
         if (type == FractalType.Julia)
@@ -882,6 +894,101 @@ public sealed class MathPlaneCalculator : IFractalCalculator
           .Append('|').Append(p.MathPlaneCRe.ToString("R", inv)).Append(',').Append(p.MathPlaneCIm.ToString("R", inv));
         sb.Append('|').Append(System.Text.Json.JsonSerializer.Serialize(norm, BackdropKeyJson));
         return sb.ToString();
+    }
+
+    private IFractalCalculator? _scatterBackdrop;
+    private uint[]? _scatterCache;
+    private string? _scatterKey;
+
+    /// <summary>#2000 — the scattering family's own calculator for <paramref name="type"/>, or null.</summary>
+    private IFractalCalculator? ScatterBackdrop(FractalType type, int w, int h)
+    {
+        if (type is not (FractalType.HenonHeilesBasins or FractalType.ThreeBodyBasins or FractalType.MagnetisedBlackHole)) return null;
+        if (_scatterBackdrop is { } c && c.Width == w && c.Height == h && BackdropTypeOf(c) == type) return c;
+        _scatterBackdrop = type switch
+        {
+            FractalType.HenonHeilesBasins => new HenonHeilesCalculator(w, h),
+            FractalType.ThreeBodyBasins => new ThreeBodyCalculator(w, h),
+            _ => new MagnetisedBlackHoleCalculator(w, h),
+        };
+        return _scatterBackdrop;
+    }
+
+    private static FractalType? BackdropTypeOf(IFractalCalculator c) => c switch
+    {
+        HenonHeilesCalculator => FractalType.HenonHeilesBasins,
+        ThreeBodyCalculator => FractalType.ThreeBodyBasins,
+        MagnetisedBlackHoleCalculator => FractalType.MagnetisedBlackHole,
+        _ => null,
+    };
+
+    /// <summary>#2000 — <paramref name="p"/> as the scattering backdrop draws it: the family's own
+    /// params in its physical plane (Hénon–Heiles Plane view, magnetised hole Meridional view).</summary>
+    public static FractalParameters ScatterBackdropParams(FractalType type, FractalParameters p)
+    {
+        var bp = p.Clone();
+        if (type == FractalType.HenonHeilesBasins) bp.HenonHeilesView = HenonHeilesView.Plane;
+        else if (type == FractalType.MagnetisedBlackHole) bp.MagBhView = MagnetisedBhView.Meridional;
+        return bp;
+    }
+
+    private void DrawScatterBackdrop(IFractalCalculator calc, FractalType type, FractalParameters p, int w, int h, CancellationToken ct)
+    {
+        var bp = ScatterBackdropParams(type, p);
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        string? key;
+        try
+        {
+            key = BackdropKey(type, bp, w, h) + "|" + CenterX.ToString("R", inv) + "|" + CenterY.ToString("R", inv)
+                + "|" + Zoom.ToString("R", inv) + "|" + MaxIterations.ToString(inv) + "|" + Quality
+                + "|" + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(ColorMap).ToString(inv);
+            // A theme edited in place keeps its instance: sample its gate colours too.
+            if (ColorMap is IBilliardColorMap bm)
+                for (int g = -1; g < 4; g++)
+                    for (int n = 0; n < 64; n += 21)
+                        key += "|" + bm.MapBilliard(g, 3, n, 64, n).ToString(inv);
+        }
+        catch (Exception) { key = null; }   // a param that won't serialise: no cache, still correct
+        if (key != null && key == _scatterKey && _scatterCache != null && _scatterCache.Length == ColorBuffer.Length)
+        {
+            Array.Copy(_scatterCache, ColorBuffer, ColorBuffer.Length);
+            return;
+        }
+        switch (calc)
+        {
+            case HenonHeilesCalculator hh: hh.FractalParameters = bp; break;
+            case ThreeBodyCalculator tb: tb.FractalParameters = bp; break;
+            case MagnetisedBlackHoleCalculator mb: mb.FractalParameters = bp; break;
+        }
+        calc.ColorMap = ColorMap;
+        calc.MaxIterations = MaxIterations;
+        calc.Quality = Quality;
+        calc.CenterX = CenterX;
+        calc.CenterY = CenterY;
+        calc.Zoom = Zoom;
+        calc.Calculate(ct);
+        DimInto(calc.ColorBuffer, ColorBuffer, w, h, flipRows: false);
+        if (key == null) { _scatterKey = null; return; }
+        if (_scatterCache == null || _scatterCache.Length != ColorBuffer.Length) _scatterCache = new uint[ColorBuffer.Length];
+        Array.Copy(ColorBuffer, _scatterCache, ColorBuffer.Length);
+        _scatterKey = key;
+    }
+
+    /// <summary>#2000 — copy <paramref name="src"/> into <paramref name="dst"/> dimmed to
+    /// <see cref="BackdropBrightness"/>, optionally flipping rows (the escape-time grid is y-down).</summary>
+    public static void DimInto(uint[] src, uint[] dst, int w, int h, bool flipRows)
+    {
+        int k = (int)Math.Round(BackdropBrightness * 256);
+        for (int y = 0; y < h; y++)
+        {
+            int from = (flipRows ? h - 1 - y : y) * w, to = y * w;
+            for (int x = 0; x < w; x++)
+            {
+                uint c = src[from + x];
+                uint r = ((c >> 16) & 0xFF) * (uint)k >> 8, g = ((c >> 8) & 0xFF) * (uint)k >> 8, b = (c & 0xFF) * (uint)k >> 8;
+                dst[to + x] = 0xFF000000u | (r << 16) | (g << 8) | b;
+            }
+        }
     }
 
     private static FractalType? FractalRegionBackdrop(MathPlaneBackdrop b) => FracturingFog.Models.RegionFractalParams.MathPlaneBackdropFamily(b);
