@@ -5575,6 +5575,106 @@ and the camera is Cam3DFamily=MirrorSpheres with Cam3DDistance /
 Cam3DTheta / Cam3DPhi.
 ";
 
+        /// <summary>#1947 — black hole + ring (Math → Scattering).</summary>
+        public const string MathBlackHoleRingText =
+@"=== Black Hole + Ring ===
+
+A non-spinning black hole with a thin ring of matter around it,
+in exact general relativity: the Weyl superposition of a
+Schwarzschild black hole and a Bach-Weyl ring, as in the series
+by Semerak & Sukova ('Free motion around black holes with discs
+or rings: between integrability and chaos', from 2010). Around a
+bare black hole a free particle's motion is integrable (regular);
+the ring's extra pull breaks that, and orbits become chaotic.
+
+Units: the black hole mass M = 1. Every particle has the same
+energy E and angular momentum l about the axis.
+
+--- Poincare section (default) ---
+
+A row of orbits starts on the equatorial plane across the visible
+radii, at rest radially and moving up. Each is followed for a long
+time and every crossing of the equatorial plane (either way) is
+plotted: across, the radius r; up, the radial velocity u^r (times
+'Velocity scale', because the two differ by a factor of about a
+hundred). A regular orbit's crossings line up on a closed curve;
+a chaotic orbit's scatter over a region. Without the ring every
+orbit is a closed curve; with it, islands, island chains and a
+chaotic sea appear.
+Colour by orbit (default): each orbit its own Okabe-Ito colour
+(colour-blind safe). Density: crossings per pixel through the
+palette. Dark grey: the accessible region; near black: outside it; a
+darker band left of r = 2.05M: the black hole itself; a thin
+line at the ring's radius: the ring (no launch that close to it).
+
+--- Fates ---
+
+Each section point is launched upward and coloured by whether the
+particle falls into the black hole, hits the ring, escapes, or is
+still bound at the time limit (interior colour). Slow: every bound
+orbit runs to the limit.
+
+--- How it is computed ---
+
+The metric, potentials (Schwarzschild and Bach-Weyl, with complete
+elliptic integrals) and geodesic equations are Semerak & Sukova's.
+The metric function lambda has no closed form for the
+superposition; Fracturing Fog carries it along each orbit (its
+rate of change is local) and integrates it once from the axis at
+launch, using the paper's closed form for the black hole alone
+plus an integral for the ring and the cross term. (The paper's
+closed form for the ring alone, as transcribed, did not match its
+own gradient far from the ring, so it is not used.) The elliptic integrals use Gauss's
+arithmetic-geometric mean (NIST DLMF 19.8). Fracturing Fog's own
+choices: the ring radius r_ring is turned into the Weyl radius by
+the equatorial relation the paper uses for the black hole; a
+particle is captured below r = 2.05M (integration is inaccurate
+near the horizon, as the paper notes) and stopped within 0.01M of
+the ring.
+
+--- Settings ---
+
+Ring mass (in units of M), ring radius, energy, angular momentum,
+velocity scale, number of orbits, proper time per orbit (the
+paper used 150000-250000M), time limit for fates, colouring,
+integrator tolerance.
+
+--- Presets ---
+
+Black Hole + Ring - Poincare Section
+Black Hole + Ring - Without the Ring
+Black Hole + Ring - Heavy Ring
+Black Hole + Ring - Chaotic Sea
+Black Hole + Ring - Section Density
+Black Hole + Ring - Fates
+
+Bound animations:
+Black hole + ring: ring mass
+Black hole + ring: energy
+
+--- Batch ---
+
+Every setting is a --param key:
+  --fractal BlackHoleRingOrbits --x 16 --y 0 --zoom 0.12
+  --param BhRingMass=1 --param BhRingView=Fates
+Keys: BhRingView, BhRingMass, BhRingRadius, BhRingEnergy,
+BhRingAngularMomentum, BhRingVelocityScale, BhRingOrbits,
+BhRingOrbitTime, BhRingFateTime, BhRingColour, BhRingTolerance.
+Built-in presets render headless with --region ""name"".
+
+--- Sources ---
+
+O. Semerak & P. Sukova, 'Free motion around black holes with
+discs or rings: between integrability and chaos - I', Monthly
+Notices of the Royal Astronomical Society 404, 545 (2010):
+the metric, potentials, equations and the parameter values of the
+presets. Parts II (2012) and III (2013) continue the study.
+NIST Digital Library of Mathematical Functions, chapter 19: the
+elliptic integrals.
+Their sections show these pictures; Fracturing Fog adds an
+interactive and batch explorer and the fates view.
+Full entries: Docs/Resources-Bibliography.md.";
+
         /// <summary>#1946 — Mixmaster (Bianchi IX) universe (Math → Scattering).</summary>
         public const string MathMixmasterText =
 @"=== Mixmaster Universe ===

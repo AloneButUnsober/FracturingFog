@@ -1583,6 +1583,30 @@ namespace FracturingFog.Models
         /// <summary>#1946 — integrator relative tolerance per step. Default 1e-9.</summary>
         public double MixTolerance { get; set; } = 1e-9;
 
+        // ── Black hole + Bach-Weyl ring (#1947) ──────────────────────────
+        /// <summary>#1947 — Section or Fates (see <see cref="FracturingFog.BlackHoleRingView"/>). Default Section.</summary>
+        public BlackHoleRingView BhRingView { get; set; } = BlackHoleRingView.Section;
+        /// <summary>#1947 — ring mass in units of the black hole mass. Default 0.5.</summary>
+        public double BhRingMass { get; set; } = 0.5;
+        /// <summary>#1947 — ring radius r_ring (Schwarzschild-like, units of M; Weyl b = √(r(r − 2M))). Default 20.</summary>
+        public double BhRingRadius { get; set; } = 20.0;
+        /// <summary>#1947 — specific energy ℰ of every orbit. Default 0.977 (Semerák &amp; Suková Fig. 10).</summary>
+        public double BhRingEnergy { get; set; } = 0.977;
+        /// <summary>#1947 — specific angular momentum ℓ (units of M). Default 3.75 (theirs).</summary>
+        public double BhRingAngularMomentum { get; set; } = 3.75;
+        /// <summary>#1947 — vertical axis = u^r × this. Default 60.</summary>
+        public double BhRingVelocityScale { get; set; } = 60.0;
+        /// <summary>#1947 — orbits in the Section row. Default 48.</summary>
+        public int BhRingOrbits { get; set; } = 48;
+        /// <summary>#1947 — proper time each Section orbit is followed (units of M). Default 200000 (Semerák &amp; Suková ran 150000-250000).</summary>
+        public double BhRingOrbitTime { get; set; } = 200000.0;
+        /// <summary>#1947 — proper-time limit of a Fates launch; bound past it. Default 5000.</summary>
+        public double BhRingFateTime { get; set; } = 5000.0;
+        /// <summary>#1947 — Section colouring (see <see cref="FracturingFog.BlackHoleRingColour"/>). Default ByOrbit.</summary>
+        public BlackHoleRingColour BhRingColour { get; set; } = BlackHoleRingColour.ByOrbit;
+        /// <summary>#1947 — integrator relative tolerance per step. Default 1e-11.</summary>
+        public double BhRingTolerance { get; set; } = 1e-11;
+
         // ── Slit cascade (#1569, double-slit epic #1565) ──────────────────
         /// <summary>Slit cascade: children per slit, N (2..16). N ≥ 3 for the fringe
         /// weights to differ (a symmetric pair is a plain Cantor set).</summary>
@@ -2738,6 +2762,17 @@ namespace FracturingFog.Models
                 MixBetaDot = MixBetaDot,
                 MixMaxTime = MixMaxTime,
                 MixTolerance = MixTolerance,
+                BhRingView = BhRingView,
+                BhRingMass = BhRingMass,
+                BhRingRadius = BhRingRadius,
+                BhRingEnergy = BhRingEnergy,
+                BhRingAngularMomentum = BhRingAngularMomentum,
+                BhRingVelocityScale = BhRingVelocityScale,
+                BhRingOrbits = BhRingOrbits,
+                BhRingOrbitTime = BhRingOrbitTime,
+                BhRingFateTime = BhRingFateTime,
+                BhRingColour = BhRingColour,
+                BhRingTolerance = BhRingTolerance,
                 SlitCascadeChildren = SlitCascadeChildren,
                 SlitCascadeRatio = SlitCascadeRatio,
                 SlitCascadeDepth = SlitCascadeDepth,

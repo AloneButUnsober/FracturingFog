@@ -93,6 +93,7 @@ public static class MiniMapDefaults
         FractalType.BilliardRays     => new( 0.0,  0.0, 0.525),
         FractalType.BlackHoleShadow  => new( 0.0,  0.0, 0.14),  // #1923 (#1927: camera-scale pitch)
         FractalType.HenonHeilesBasins => new( 0.0, -0.25, 0.85), // #1942 the well and its three saddles
+        FractalType.BlackHoleRingOrbits => new(16.0,  0.0, 0.12), // #1947 r from ~1.5 to ~30 M (BlackHoleRingCalculator.Default*)
         FractalType.MixmasterBasins  => new( 1.5, -0.5, 3.5),   // #1946 u from 1 to 2, v from 0 to 1 (MixmasterCalculator.Default*)
         FractalType.SpinningBinaryBasins => new( 0.0,  0.0, 0.557), // #1945 θ1 from −π to π
         FractalType.MagnetisedBlackHole => new( 3.2, -1.5, 0.7), // #1944 Kick view: ρ0 to ~5.7, ℰ to ~2.9

@@ -868,6 +868,18 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? MixBetaDot { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? MixMaxTime { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? MixTolerance { get; set; }
+        // #1947 — black hole + ring (enums as int casts).
+        [JsonIgnore(Condition = OmitNull)] public int? BhRingView { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BhRingMass { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BhRingRadius { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BhRingEnergy { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BhRingAngularMomentum { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BhRingVelocityScale { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? BhRingOrbits { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BhRingOrbitTime { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BhRingFateTime { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? BhRingColour { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BhRingTolerance { get; set; }
         // #1507 — int cast of BilliardRayColorSource.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysColorSource { get; set; }
         // #1508 — crossings (int casts of BilliardRayMode / BilliardCrossingValue).
@@ -1494,6 +1506,21 @@ namespace FracturingFog.Models
                     MixBetaDot = p.MixBetaDot,
                     MixMaxTime = p.MixMaxTime,
                     MixTolerance = p.MixTolerance,
+                },
+                // #1947 — black hole + ring: every setting.
+                FractalType.BlackHoleRingOrbits => new RegionFractalParams
+                {
+                    BhRingView = (int)p.BhRingView,
+                    BhRingMass = p.BhRingMass,
+                    BhRingRadius = p.BhRingRadius,
+                    BhRingEnergy = p.BhRingEnergy,
+                    BhRingAngularMomentum = p.BhRingAngularMomentum,
+                    BhRingVelocityScale = p.BhRingVelocityScale,
+                    BhRingOrbits = p.BhRingOrbits,
+                    BhRingOrbitTime = p.BhRingOrbitTime,
+                    BhRingFateTime = p.BhRingFateTime,
+                    BhRingColour = (int)p.BhRingColour,
+                    BhRingTolerance = p.BhRingTolerance,
                 },
                 FractalType.BilliardRays => new RegionFractalParams
                 {
@@ -2596,6 +2623,17 @@ namespace FracturingFog.Models
             if (MixBetaDot.HasValue)              p.MixBetaDot = MixBetaDot.Value;
             if (MixMaxTime.HasValue)              p.MixMaxTime = MixMaxTime.Value;
             if (MixTolerance.HasValue)            p.MixTolerance = MixTolerance.Value;
+            if (BhRingView is { } brv && Enum.IsDefined(typeof(FracturingFog.BlackHoleRingView), brv)) p.BhRingView = (FracturingFog.BlackHoleRingView)brv;   // #1947
+            if (BhRingMass.HasValue)              p.BhRingMass = BhRingMass.Value;
+            if (BhRingRadius.HasValue)            p.BhRingRadius = BhRingRadius.Value;
+            if (BhRingEnergy.HasValue)            p.BhRingEnergy = BhRingEnergy.Value;
+            if (BhRingAngularMomentum.HasValue)   p.BhRingAngularMomentum = BhRingAngularMomentum.Value;
+            if (BhRingVelocityScale.HasValue)     p.BhRingVelocityScale = BhRingVelocityScale.Value;
+            if (BhRingOrbits.HasValue)            p.BhRingOrbits = BhRingOrbits.Value;
+            if (BhRingOrbitTime.HasValue)         p.BhRingOrbitTime = BhRingOrbitTime.Value;
+            if (BhRingFateTime.HasValue)          p.BhRingFateTime = BhRingFateTime.Value;
+            if (BhRingColour is { } brc && Enum.IsDefined(typeof(FracturingFog.BlackHoleRingColour), brc)) p.BhRingColour = (FracturingFog.BlackHoleRingColour)brc;
+            if (BhRingTolerance.HasValue)         p.BhRingTolerance = BhRingTolerance.Value;
             if (BilliardRaysColorSource.HasValue) p.BilliardRaysColorSource = (FracturingFog.BilliardRayColorSource)BilliardRaysColorSource.Value;
             if (BilliardRaysMode.HasValue)       p.BilliardRaysMode = (FracturingFog.BilliardRayMode)BilliardRaysMode.Value;
             if (BilliardRaysCrossingWindow.HasValue) p.BilliardRaysCrossingWindow = BilliardRaysCrossingWindow.Value;
@@ -4446,6 +4484,111 @@ namespace FracturingFog.Models
                 Params        = new RegionFractalParams
                 {
                     MixView = (int)FracturingFog.MixmasterView.Anisotropy, MixOmega = -1.0, MixAlphaDot = 10.0, MixBetaDot = 10.0, MixUExit = 8.0,
+                },
+            },
+            // #1947 — black hole + Bach-Weyl ring (Semerák & Suková 2010 set-ups).
+            new()
+            {
+                Name          = "Black Hole + Ring - Poincare Section",
+                CenterX       =  16.0,
+                CenterY       =  0.0,
+                Zoom          =  0.12,
+                Iterations    =  256,
+                Description   = "A Schwarzschild black hole with a ring of half its mass at radius 20M; free particles with energy 0.977 and angular momentum 3.75M, as in Semerak and Sukova's ring figures. Each colour is one orbit, dotted where it crosses the equatorial plane (r across, radial velocity up). Closed curves are regular orbits, the scatter between them is chaos the ring creates. The bound 'Black hole + ring: ring mass' animation grows the ring from 0 to the black hole's mass.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.BlackHoleRingOrbits,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Black hole + ring: ring mass",
+                Params        = new RegionFractalParams
+                {
+                    BhRingView = (int)FracturingFog.BlackHoleRingView.Section, BhRingMass = 0.5, BhRingRadius = 20.0,
+                    BhRingEnergy = 0.977, BhRingAngularMomentum = 3.75, BhRingColour = (int)FracturingFog.BlackHoleRingColour.ByOrbit,
+                },
+            },
+            new()
+            {
+                Name          = "Black Hole + Ring - Without the Ring",
+                CenterX       =  16.0,
+                CenterY       =  0.0,
+                Zoom          =  0.12,
+                Iterations    =  256,
+                Description   = "The same particles around the bare black hole (ring mass 0): Schwarzschild motion is integrable, so every orbit draws a closed curve and there is no scatter.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.BlackHoleRingOrbits,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    BhRingView = (int)FracturingFog.BlackHoleRingView.Section, BhRingMass = 0.0, BhRingRadius = 20.0,
+                    BhRingEnergy = 0.977, BhRingAngularMomentum = 3.75, BhRingColour = (int)FracturingFog.BlackHoleRingColour.ByOrbit,
+                },
+            },
+            new()
+            {
+                Name          = "Black Hole + Ring - Heavy Ring",
+                CenterX       =  16.0,
+                CenterY       =  0.0,
+                Zoom          =  0.12,
+                Iterations    =  256,
+                Description   = "A ring as heavy as the black hole: the central island shrinks to a diamond with an island chain round it, and a chaotic sea fills much of the section.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.BlackHoleRingOrbits,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    BhRingView = (int)FracturingFog.BlackHoleRingView.Section, BhRingMass = 1.0, BhRingRadius = 20.0,
+                    BhRingEnergy = 0.977, BhRingAngularMomentum = 3.75, BhRingColour = (int)FracturingFog.BlackHoleRingColour.ByOrbit,
+                },
+            },
+            new()
+            {
+                Name          = "Black Hole + Ring - Chaotic Sea",
+                CenterX       =  14.5,
+                CenterY       =  0.0,
+                Zoom          =  0.2,
+                Iterations    =  256,
+                Description   = "Lower energy (0.94) with the half-mass ring: a regular island ringed by a chain of small islands, inside a wide chaotic sea. The bound 'Black hole + ring: energy' animation sweeps the energy between 0.94 and 0.98.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.BlackHoleRingOrbits,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Black hole + ring: energy",
+                Params        = new RegionFractalParams
+                {
+                    BhRingView = (int)FracturingFog.BlackHoleRingView.Section, BhRingMass = 0.5, BhRingRadius = 20.0,
+                    BhRingEnergy = 0.94, BhRingAngularMomentum = 3.75, BhRingColour = (int)FracturingFog.BlackHoleRingColour.ByOrbit,
+                },
+            },
+            new()
+            {
+                Name          = "Black Hole + Ring - Section Density",
+                CenterX       =  16.0,
+                CenterY       =  0.0,
+                Zoom          =  0.12,
+                Iterations    =  256,
+                Description   = "The default section coloured by how many crossings land in each pixel (through the palette) instead of by orbit.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.BlackHoleRingOrbits,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    BhRingView = (int)FracturingFog.BlackHoleRingView.Section, BhRingMass = 0.5, BhRingRadius = 20.0,
+                    BhRingEnergy = 0.977, BhRingAngularMomentum = 3.75, BhRingColour = (int)FracturingFog.BlackHoleRingColour.Density,
+                },
+            },
+            new()
+            {
+                Name          = "Black Hole + Ring - Fates",
+                CenterX       =  16.0,
+                CenterY       =  0.0,
+                Zoom          =  0.12,
+                Iterations    =  256,
+                Description   = "Every section point launched upward: captured by the black hole, hit the ring, or still bound after 5000M of proper time (the theme's interior colour). Slow: every bound orbit runs to the limit.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.BlackHoleRingOrbits,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    BhRingView = (int)FracturingFog.BlackHoleRingView.Fates, BhRingMass = 0.5, BhRingRadius = 20.0,
+                    BhRingEnergy = 0.977, BhRingAngularMomentum = 3.75, BhRingColour = (int)FracturingFog.BlackHoleRingColour.ByOrbit,
                 },
             },
             new()

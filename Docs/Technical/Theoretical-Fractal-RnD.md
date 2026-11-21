@@ -613,6 +613,18 @@ metric of the ODE set (Bach–Weyl ring needs elliptic integrals and a line-inte
 Validation: E, L, mass shell conserved; ring mass 0 → Schwarzschild, whose section has only closed
 curves; equatorial mirror.
 
+**Shipped (#1947).** `FractalType.BlackHoleRingOrbits` (`BlackHoleRingCalculator`, physics in
+`Engine/Scattering/BlackHoleRing.cs` on the shared `ScatteringIntegrator`), Bach–Weyl ring only (the
+Morgan–Morgan and power-law discs of the paper are not implemented). Formulas from Semerák & Suková part I
+(eqs. 1–6, 14–17). λ: carried along each orbit (dλ/dτ is local in ν), set at launch from the paper's closed
+form for Schwarzschild (4) plus an integral of the rest of the gradient (ring and cross term); tests check the
+carried λ against a fresh line integral and (4) against the integral of its gradient. The ring's closed form
+(7), as transcribed, did not match its own gradient far from the ring, so it is not used (open question:
+transcription / rendering loss). The cost worry above did not materialise: the
+default section (48 orbits × 200000M) renders in about a second at 480×270; the Fates view is the slow one
+(bound orbits run to the limit). Section uses a separate scale for u^r (one camera pitch). Discs, the
+density accumulation across many seeds per pixel, and recurrence diagnostics (part II) remain future work.
+
 #### 2.6.8 Microlensing magnification maps — **#1948** (not fractal)
 
 Many point lenses in the thin-lens approximation plus smooth convergence and shear; inverse ray shooting

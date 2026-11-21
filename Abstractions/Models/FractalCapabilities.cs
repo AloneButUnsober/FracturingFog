@@ -85,6 +85,7 @@ namespace FracturingFog.Models
             FractalType.MagnetisedBlackHole => FractalMotionClass.Zoomable2D, // #1944 (ρ0, ℰ) / meridional plane
             FractalType.SpinningBinaryBasins => FractalMotionClass.Zoomable2D, // #1945 (θ1, θ2) spin-angle plane
             FractalType.MixmasterBasins => FractalMotionClass.Zoomable2D,   // #1946 (u, v) / (β+, β−) plane
+            FractalType.BlackHoleRingOrbits => FractalMotionClass.Zoomable2D, // #1947 equatorial section (r, u^r)
             FractalType.SlitCascade => FractalMotionClass.Zoomable2D,   // #1569
             FractalType.TalbotCarpet => FractalMotionClass.Zoomable2D,  // #1570
             FractalType.MathPlane => FractalMotionClass.Zoomable2D,

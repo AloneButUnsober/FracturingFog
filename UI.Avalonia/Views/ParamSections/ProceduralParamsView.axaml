@@ -1813,5 +1813,48 @@
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
         </Grid>
 
+        <!-- #1947 — black hole + Bach-Weyl ring. -->
+        <Grid IsVisible="{Binding IsBlackHoleRingOrbits}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="View:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding BhRingViews}"
+                      SelectedItem="{Binding BhRingView, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Section: Poincare section of a row of orbits (r across, radial velocity up). Fates: each section point launched and coloured by its fate." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Ring mass:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="10" Increment="0.1" FormatString="0.##########"
+                           Value="{Binding BhRingMass, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Ring mass in units of the black hole mass. 0: the bare black hole (integrable)." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Ring radius:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1" Minimum="3" Maximum="1000" Increment="1" FormatString="0.##########"
+                           Value="{Binding BhRingRadius, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Ring radius in units of M." />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Energy:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1" Minimum="0" Maximum="10" Increment="0.005" FormatString="0.##########"
+                           Value="{Binding BhRingEnergy, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Specific energy of every particle (1 = at rest at infinity)." />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Angular momentum:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1" Minimum="-100" Maximum="100" Increment="0.05" FormatString="0.##########"
+                           Value="{Binding BhRingAngularMomentum, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Specific angular momentum about the axis (units of M)." />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Velocity scale:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1" Minimum="1" Maximum="10000" Increment="5" FormatString="0.##########"
+                           Value="{Binding BhRingVelocityScale, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="The vertical axis is the radial velocity times this." />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Orbits:" VerticalAlignment="Center" IsVisible="{Binding BhRingIsSection}" />
+            <NumericUpDown Grid.Row="6" Grid.Column="1" IsVisible="{Binding BhRingIsSection}" Minimum="1" Maximum="10000" Increment="4" FormatString="0"
+                           Value="{Binding BhRingOrbits, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="How many orbits start across the visible radii." />
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Orbit time:" VerticalAlignment="Center" IsVisible="{Binding BhRingIsSection}" />
+            <NumericUpDown Grid.Row="7" Grid.Column="1" IsVisible="{Binding BhRingIsSection}" Minimum="100" Maximum="100000000" Increment="10000" FormatString="0.##########"
+                           Value="{Binding BhRingOrbitTime, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Proper time each orbit is followed (units of M); longer gives more crossings." />
+            <TextBlock Grid.Row="8" Grid.Column="0" Text="Colour:" VerticalAlignment="Center" IsVisible="{Binding BhRingIsSection}" />
+            <ComboBox Grid.Row="8" Grid.Column="1" IsVisible="{Binding BhRingIsSection}" ItemsSource="{Binding BhRingColours}"
+                      SelectedItem="{Binding BhRingColour, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="ByOrbit: one colour per orbit. Density: crossings per pixel through the palette." />
+            <TextBlock Grid.Row="9" Grid.Column="0" Text="Fate time limit:" VerticalAlignment="Center" IsVisible="{Binding BhRingIsFates}" />
+            <NumericUpDown Grid.Row="9" Grid.Column="1" IsVisible="{Binding BhRingIsFates}" Minimum="10" Maximum="10000000" Increment="500" FormatString="0.##########"
+                           Value="{Binding BhRingFateTime, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="A launch still bound after this proper time takes the interior colour." />
+            <TextBlock Grid.Row="10" Grid.Column="0" Text="Tolerance:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="10" Grid.Column="1" Minimum="0.0000000000001" Maximum="0.0001" Increment="0.000000000001" FormatString="0.#############"
+                           Value="{Binding BhRingTolerance, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Integrator relative tolerance per step." />
+            <TextBlock Grid.Row="11" Grid.Column="1"
+                       Text="Closed curves: regular orbits. Scattered dots: chaos the ring creates. Without the ring every orbit is a closed curve."
+                       TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
+        </Grid>
+
     </StackPanel>
 </UserControl>
