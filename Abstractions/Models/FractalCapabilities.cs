@@ -275,7 +275,11 @@ namespace FracturingFog.Models
 
         /// <summary>The families whose region snapshot carries the settings beside their
         /// own block (Mandelbrot's block holds them itself).</summary>
-        public static bool RidesAlong(FractalType type) => IsRaymarch3D(type) || IsEscapeTime2D(type);
+        public static bool RidesAlong(FractalType type) => IsRaymarch3D(type) || IsEscapeTime2D(type) || IsRayTraced2D(type);
+
+        /// <summary>#1969 — the 2D ray tracers that implement <c>IAdaptiveAaCalculator</c>: the black
+        /// hole shadows (each pixel one traced ray; the lensed sky aliases without AA).</summary>
+        public static bool IsRayTraced2D(FractalType type) => type is FractalType.BlackHoleShadow;
 
         /// <summary>The 2D alt calculators that implement <c>IAdaptiveAaCalculator</c>:
         /// EscapeTimeCalculator's families, the root finders (Newton, Nova, Halley,

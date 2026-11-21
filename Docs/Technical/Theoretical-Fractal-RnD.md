@@ -447,6 +447,20 @@ rendering through a refractive-index analogy); the physics literature also has
 [Kluitenberg, Roest & Seri 2022](../Resources-Bibliography.md#kluitenberg-roest-seri-2022). FF builds on
 Shipley & Dolan and claims no new physics. Papapetrou 1947's title is now verified.
 
+**Sky anti-aliasing (#1969).** One ray per pixel aliases the lensed sky: near a shadow edge a pixel's
+neighbours end up many sky cells apart. Of the issue's two options FF took FF's adaptive AA (#1344 /
+#1382): `BlackHoleShadowCalculator` implements `IAdaptiveAaCalculator`, the quality preset's 2x2 / 4x4
+jittered samples re-trace only pixels that differ from a neighbour, and a masked frame traces only the
+marked pixels on the CPU (the GPU route traces all; `MaskExact` is false with solid blocks or the DD edge
+fix-up, which read neighbours, so those fall back to the full grid). The ray-differential footprint filter
+was not built: it costs ~3x on every pixel, and next to the shadow the map from pixel to sky is too
+non-linear for a linear footprint to hold. Measured (CPU, 640x360, pinhole D = 30, Release): stars, full 4x4
+9.2 s vs adaptive 1.2 s (10 % of the pixel-samples, mean error 0.43 levels against full); checker, 9.0 s vs
+3.6 s (28 %, 0.87). Tests: massless holes + pinhole (straight rays) against the box-filtered sky computed
+from the camera alone (one sample 24.2 levels mean error, 4x4 3.4, adaptive 3.7); the lensed band against
+an 8x8 supersample (60.1 to 9.5 full, 14.9 adaptive); masked frames are exact at marked pixels and
+untouched elsewhere.
+
 #### 2.6.2 Hénon–Heiles exit basins — **#1942**
 
 The Hénon–Heiles potential `V = (x² + y²)/2 + x²y − y³/3` has three exit channels above `E = 1/6`; its
@@ -1159,3 +1173,4 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
 - **2026-11-21** — §2.6.1: black hole box-zoom fix (camera pixel scale) + S5 part 1 #1927 (pitch-calibrated tolerance exact to x10^9; fp64 limit flagged); cross-family pitch issue #1974.
 - **2026-11-21** — §2.6.1: black hole shadows S5 part 2 #1927 (double-double edge fix-up past fp64; exact against converged all-DD frames at x10^11-10^12).
 - **2026-11-21** — §2.6.1: black hole shadows S6 #1928 (presets, bound animations, help page, prior art; Papapetrou 1947 title verified). Epic #1922 complete.
+- **2026-11-21** — §2.6.1: black hole sky anti-aliasing #1969 (adaptive AA via IAdaptiveAaCalculator; 7.5x / 2.5x cheaper than full 4x4 on stars / checker).

@@ -1544,6 +1544,10 @@
             <CheckBox Grid.Row="20" Grid.Column="1" Content="Solid blocks (faster shadows)"
                       IsChecked="{Binding BlackHoleSolidBlocks, Mode=TwoWay}" Margin="0,2"
                       ToolTip.Tip="Colour by Fate only: a 16-pixel block whose edge is all one hole's shadow is filled without tracing its inside. Much faster when zoomed into shadows and eyebrows; can miss a tiny island of another fate wholly inside a block." />
+            <!-- #1969 adaptive anti-aliasing (with the quality preset's sub-pixel samples) -->
+            <CheckBox Grid.Row="23" Grid.Column="1" Content="Adaptive anti-aliasing"
+                      IsChecked="{Binding AdaptiveAa, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="With the High / Ultra / Extreme quality presets (2x2 or 4x4 sub-pixel samples), re-trace only the pixels that differ from a neighbour: the shadow and eyebrow edges and the lensed sky, where a checker, grid or stars alias into moire. Flat sky and the inside of shadows keep one ray. Much faster than tracing every pixel N times; also used by export and --batch. Solid blocks and exact edges past double fall back to every pixel." />
             <TextBlock Grid.Row="11" Grid.Column="1"
                        Text="Each hole's shadow is its own colour; eyebrows are rays caught by one hole after swinging round another. Escaped rays are coloured by their time delay. A Billiard theme colours the fates directly."
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />

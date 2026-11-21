@@ -5515,6 +5515,13 @@ Solid blocks skips the inside of big shadows. The GPU (ILGPU) can
 trace in double or in single precision (much faster on most
 cards, slightly moves pixels on the edges).
 
+Anti-aliasing: one ray per pixel aliases the lensed sky into
+moire near the shadows. The High / Ultra / Extreme quality presets
+trace 2x2 or 4x4 rays per pixel. Tick Adaptive anti-aliasing to
+re-trace only pixels that differ from a neighbour (edges and the
+lensed sky): about 7x faster than every pixel on a starfield,
+2.5x on a checker sky, at 640x360.
+
 Deep zoom: past about 10^10 beyond the default view, double
 precision cannot place the edges any more. Exact edges past double
 (on by default, Fate colouring) retraces just the edge pixels in
