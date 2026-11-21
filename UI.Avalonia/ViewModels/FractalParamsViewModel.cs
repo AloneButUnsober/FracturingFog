@@ -268,6 +268,14 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _bhSolidBlocks = _p.BlackHoleSolidBlocks;
         _bhGpuPrecision = _p.BlackHoleGpuPrecision;
         _bhDdEdges = _p.BlackHoleDdEdges;
+        _hhEnergy = _p.HenonHeilesEnergy;
+        _hhView = _p.HenonHeilesView;
+        _hhLaunch = _p.HenonHeilesLaunch;
+        _hhLaunchAngle = _p.HenonHeilesLaunchAngle;
+        _hhChannel = _p.HenonHeilesChannel;
+        _hhChannelScale = _p.HenonHeilesChannelScale;
+        _hhMaxTime = _p.HenonHeilesMaxTime;
+        _hhTolerance = _p.HenonHeilesTolerance;
         _mathPlaneScene = _p.MathPlaneScene ?? string.Empty;
         UpdateMathPlaneSceneError();
         _raysColorSource = _p.BilliardRaysColorSource;
@@ -491,6 +499,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsBilliardRays => FractalType == FractalType.BilliardRays;
     /// <summary>#1923 — black hole shadows (Majumdar-Papapetrou ray trace).</summary>
     public bool IsBlackHoleShadow => FractalType == FractalType.BlackHoleShadow;
+    public bool IsHenonHeilesBasins => FractalType == FractalType.HenonHeilesBasins;   // #1942
     /// <summary>Either billiard type: the shared scene controls (geometry, disks, bounces).</summary>
     public bool IsBilliardScene => IsChaoticBilliard || IsBilliardRays;
     /// <summary>#1548 — Math Plane (Cartesian plotter).</summary>
@@ -636,6 +645,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         || IsBilliardRays
         // Black hole shadows — log escape delay height field (#1923).
         || IsBlackHoleShadow
+        // Hénon-Heiles basins — log escape time height field (#1942).
+        || IsHenonHeilesBasins
         // Precision field — divergence-scalar height field (#628).
         || IsPrecisionField
         // Dual-orbit escape-geometry (#864) — the derived scalar rides the
@@ -658,7 +669,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsLyapunov || IsTranscendentalJulia || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian || IsMirrorSpheres
-          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsBlackHoleShadow || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable || IsAdaptiveAa2D
+          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsBlackHoleShadow || IsHenonHeilesBasins || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable || IsAdaptiveAa2D
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -2334,6 +2345,39 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     private bool _bhDdEdges;
     public bool BlackHoleDdEdges { get => _bhDdEdges; set { Set(ref _bhDdEdges, value); _p.BlackHoleDdEdges = value; Fire(); } }
     private static readonly System.Array s_BlackHoleGpuPrecisions = System.Enum.GetValues(typeof(BlackHoleGpuPrecision));
+
+    // ── #1942 — Hénon-Heiles exit basins ─────────────────────────────────────
+    private double _hhEnergy;
+    public double HenonHeilesEnergy { get => _hhEnergy; set { Set(ref _hhEnergy, Clamp(value, 0.0, 10.0)); _p.HenonHeilesEnergy = _hhEnergy; Fire(); } }
+    private HenonHeilesView _hhView;
+    public HenonHeilesView HenonHeilesView { get => _hhView; set { Set(ref _hhView, value); _p.HenonHeilesView = value; HhLaunchChanged(); Fire(); } }
+    public System.Array HenonHeilesViews => s_HenonHeilesViews;
+    private static readonly System.Array s_HenonHeilesViews = System.Enum.GetValues(typeof(HenonHeilesView));
+    private HenonHeilesLaunch _hhLaunch;
+    public HenonHeilesLaunch HenonHeilesLaunch { get => _hhLaunch; set { Set(ref _hhLaunch, value); _p.HenonHeilesLaunch = value; HhLaunchChanged(); Fire(); } }
+    public System.Array HenonHeilesLaunches => s_HenonHeilesLaunches;
+    private static readonly System.Array s_HenonHeilesLaunches = System.Enum.GetValues(typeof(HenonHeilesLaunch));
+    /// <summary>The launch rule applies to the Plane view; the angle to FixedAngle.</summary>
+    public bool HhIsPlane => _hhView == HenonHeilesView.Plane;
+    public bool HhIsFixedAngle => HhIsPlane && _hhLaunch == HenonHeilesLaunch.FixedAngle;
+    private void HhLaunchChanged()
+    {
+        this.RaisePropertyChanged(nameof(HhIsPlane));
+        this.RaisePropertyChanged(nameof(HhIsFixedAngle));
+    }
+    private double _hhLaunchAngle;
+    public double HenonHeilesLaunchAngle { get => _hhLaunchAngle; set { Set(ref _hhLaunchAngle, Clamp(value, -360.0, 360.0)); _p.HenonHeilesLaunchAngle = _hhLaunchAngle; Fire(); } }
+    private HenonHeilesChannel _hhChannel;
+    public HenonHeilesChannel HenonHeilesChannel { get => _hhChannel; set { Set(ref _hhChannel, value); _p.HenonHeilesChannel = value; this.RaisePropertyChanged(nameof(HhUsesChannel)); Fire(); } }
+    public System.Array HenonHeilesChannels => s_HenonHeilesChannels;
+    private static readonly System.Array s_HenonHeilesChannels = System.Enum.GetValues(typeof(HenonHeilesChannel));
+    public bool HhUsesChannel => _hhChannel != HenonHeilesChannel.Exit;
+    private double _hhChannelScale;
+    public double HenonHeilesChannelScale { get => _hhChannelScale; set { Set(ref _hhChannelScale, Clamp(value, 0.01, 100.0)); _p.HenonHeilesChannelScale = _hhChannelScale; Fire(); } }
+    private double _hhMaxTime;
+    public double HenonHeilesMaxTime { get => _hhMaxTime; set { Set(ref _hhMaxTime, Clamp(value, 1.0, 100000.0)); _p.HenonHeilesMaxTime = _hhMaxTime; Fire(); } }
+    private double _hhTolerance;
+    public double HenonHeilesTolerance { get => _hhTolerance; set { Set(ref _hhTolerance, Clamp(value, 1e-13, 1e-3)); _p.HenonHeilesTolerance = _hhTolerance; Fire(); } }
     // #1507 — what sets the hue.
     private BilliardRayColorSource _raysColorSource;
     public BilliardRayColorSource BilliardRaysColorSource { get => _raysColorSource; set { Set(ref _raysColorSource, value); _p.BilliardRaysColorSource = value; Fire(); } }

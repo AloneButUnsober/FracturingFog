@@ -432,7 +432,20 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
 - **Jacobo Aguirre, Juan C. Vallejo, Miguel A. F. Sanjuán.** *Wada basins and chaotic invariant sets in
   the Hénon-Heiles system.* Physical Review E 64, 066208, 2001. Preprint mp_arc 01-452
   (<https://web.ma.utexas.edu/mp_arc-bin/mpa?yn=01-452>). Shows the three exit basins of the open
-  Hénon–Heiles Hamiltonian are fractal and Wada. Basis of #1942.
+  Hénon–Heiles Hamiltonian are fractal and Wada. Basis of #1942: `HenonHeilesBasins` renders these exit
+  basins in both launch spaces the paper's figures use (the (x, y) plane and the (y, py) section on
+  x = 0) and its tests repeat the Wada check in a small window. The calculator and help page cite it.
+  Prior art: exit-basin pictures of this system are standard in the chaotic-scattering literature; a
+  2026-11-21 search found no dedicated interactive explorer, which is all FF adds.
+
+<a id="henon-heiles-1964"></a>
+
+- **Michel Hénon, Carl Heiles.** *The applicability of the third integral of motion: Some numerical
+  experiments.* The Astronomical Journal 69, 73, 1964 (pages 73–79 per secondary sources; the ADS record
+  gives the start page). DOI [10.1086/109234](https://doi.org/10.1086/109234), ADS 1964AJ.....69...73H
+  (<https://ui.adsabs.harvard.edu/abs/1964AJ.....69...73H/abstract>), checked 2026-11-21. Defines the
+  potential V = (x² + y²)/2 + x²y − y³/3 that `HenonHeilesBasins` (#1942) integrates
+  (`Engine/Scattering/HenonHeiles.cs`).
 
 <a id="nagler-2004"></a>
 
@@ -1530,8 +1543,6 @@ entry above completed or corrected.
 - **Kluitenberg, Roest & Seri 2022** — journal reference of arXiv:2211.06880 (#1928; cited elsewhere as
   Bollettino dell'Unione Matematica Italiana, 2023).
 - **Yumoto, Nitta, Chiba & Sugiyama 2012** — journal reference of arXiv:1208.0635 (#1923).
-- **Hénon & Heiles 1964** — the original paper defining the Hénon–Heiles potential (#1942): full
-  reference not yet checked.
 - **Zotos 2016** — Astrophysics and Space Science volume / article number for arXiv:1608.08610 (#1943).
 - **Comments on Levin 2000** — which of arXiv:gr-qc/0101024 / gr-qc/0101041 is Hughes's and which is
   Cornish's, and their journal references (#1945).
@@ -1659,6 +1670,9 @@ page. The convention:
 
 Corrections so far:
 
+- 2026-11-21 (#1942). Now the full entry `#henon-heiles-1964`, Astron. J. 69, 73, DOI 10.1086/109234,
+  checked against NASA ADS. Old form under awaiting verification: **Hénon & Heiles 1964** — the original paper defining the Hénon–Heiles potential (#1942): full
+  reference not yet checked.
 - 2026-11-20 (#1928). **Papapetrou 1947** — was listed under awaiting verification as *Proc. R. Irish
   Acad. A 51, 191 (Majumdar–Papapetrou solutions, #1922): title not identified*; now the full entry
   `#papapetrou-1947`, *A static solution of the equations of the gravitational field for an arbitrary

@@ -5575,6 +5575,121 @@ and the camera is Cam3DFamily=MirrorSpheres with Cam3DDistance /
 Cam3DTheta / Cam3DPhi.
 ";
 
+        /// <summary>#1942 — Hénon-Heiles exit basins (Math → Scattering).</summary>
+        public const string MathHenonHeilesText =
+@"=== Henon-Heiles Basins ===
+
+A particle sliding in a smooth, triangular well with three low
+passes. The well is the Henon-Heiles potential
+
+    V(x, y) = (x^2 + y^2)/2 + x^2 y - y^3/3
+
+from galactic dynamics (Henon & Heiles 1964). Its three saddle
+points sit one unit from the centre, 120 degrees apart, all at
+height 1/6. With more energy than that (the escape energy) a
+particle can leave through any of the three passes.
+
+Each pixel is one launch. The colour is the pass the particle
+leaves by: up, lower left or lower right. The three basins wind
+into each other at every scale, and every boundary point touches
+all three basins at once: they are Wada basins, as Aguirre,
+Vallejo & Sanjuan showed numerically in 2001.
+
+--- Views ---
+
+Plane (default): the pixel is the start position (x, y), y up.
+The speed comes from the energy; the direction from 'Launch
+direction':
+  Tangential - perpendicular to the position, anticlockwise.
+  Radial     - straight out from the centre.
+  FixedAngle - the same direction everywhere ('Launch angle',
+               degrees from +x).
+Tangential and Radial keep the well's threefold symmetry.
+Dark grey is the potential wall: no launch has that much energy
+there.
+
+Section: the pixel is (y, py) on the line x = 0, horizontal y,
+vertical py, with px >= 0 from the energy. This is the launch
+space of the 2001 paper.
+
+--- Settings ---
+
+Energy: the main dial. Below 1/6 the passes are closed: nothing
+launched inside the well escapes (it is undecided); only launches
+already down a channel, past a saddle, roll away. Just above it, near 0.17-0.2, the passes are
+narrow, particles wander for a long time and the basins break
+into fine grain, with dark islands of regular orbits that never
+leave. At higher energies the passes widen, most particles leave
+quickly and the boundaries thin to ribbons.
+
+Time limit: a particle still in the well then is undecided
+(the theme's interior colour). Raise it near the escape energy.
+Tolerance: integrator accuracy per step (smaller = slower, more
+exact boundaries).
+
+A particle has left once it is two units from the centre, past
+the saddles, where the pass is a narrow wedge and the potential
+falls away outward.
+
+--- Colouring ---
+
+Exit (default): each pass its own colour (Okabe-Ito, colour-blind
+safe), darker for particles that stayed longer. A Billiard theme
+colours the passes directly (turning points as its bounce count).
+EscapeTime: log of the time spent in the well, through the
+palette. The long stays line the boundaries.
+TurningPoints: how often the particle turned back (radial
+velocity changed sign).
+SaddleDistance: how close it came to a saddle point.
+'Channel scale' sets the palette density of the last three.
+Relief 3D uses the log escape time as height.
+
+--- Presets ---
+
+Henon-Heiles - Exit Basins
+Henon-Heiles - Poincare Section
+Henon-Heiles - Near Escape Energy
+Henon-Heiles - High Energy
+Henon-Heiles - Escape Time
+Henon-Heiles - Parallel Launch
+
+Bound animations:
+Henon-Heiles: rising energy
+Henon-Heiles: turning launch
+
+--- Cost and anti-aliasing ---
+
+Every pixel integrates one trajectory (Dormand-Prince 5(4),
+the same integrator as Black Hole Shadows). The default view
+renders 640x360 in well under a second on a desktop CPU; near
+the escape energy, with a long time limit, it is much slower.
+With a High / Ultra / Extreme quality preset, 'Adaptive
+anti-aliasing' re-traces only the boundary pixels.
+
+--- Batch ---
+
+Every setting is a --param key:
+  --fractal HenonHeilesBasins --x 0 --y -0.25 --zoom 0.85
+  --param HenonHeilesEnergy=0.25 --param HenonHeilesView=Section
+Keys: HenonHeilesEnergy, HenonHeilesView, HenonHeilesLaunch,
+HenonHeilesLaunchAngle, HenonHeilesChannel,
+HenonHeilesChannelScale, HenonHeilesMaxTime, HenonHeilesTolerance.
+Built-in presets render headless with --region ""name"".
+
+--- Sources and prior art ---
+
+M. Henon & C. Heiles, 'The applicability of the third integral
+of motion: some numerical experiments', Astronomical Journal 69,
+73 (1964): the potential.
+J. Aguirre, J. C. Vallejo & M. A. F. Sanjuan, 'Wada basins and
+chaotic invariant sets in the Henon-Heiles system', Physical
+Review E 64, 066208 (2001): the exit basins and their Wada
+property.
+Exit-basin pictures of this system are standard in the
+chaotic-scattering literature; Fracturing Fog adds an
+interactive and batch explorer, not the phenomenon.
+Full entries: Docs/Resources-Bibliography.md.";
+
         public const string MathBlackHoleShadowText =
 @"=== Black Hole Shadows ===
 

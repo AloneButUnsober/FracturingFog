@@ -469,6 +469,18 @@ The cheapest entry (smooth polynomial potential) and the natural first "User Pot
 Validation: energy conservation, C3v symmetry permutes exits, Wada window check (as §2.5), nothing escapes
 below `E = 1/6`.
 
+**Shipped (#1942).** `FractalType.HenonHeilesBasins` (`HenonHeilesCalculator`, physics in
+`Engine/Scattering/HenonHeiles.cs` on the shared `ScatteringIntegrator`). Potential from
+[Hénon & Heiles 1964](../Resources-Bibliography.md#henon-heiles-1964). Two launch spaces: Plane (pixel =
+start position, speed from the energy, direction Tangential / Radial / FixedAngle) and Section (pixel =
+(y, py) on x = 0, px ≥ 0). Exit = leaving the circle r = 2 (past the saddles at r = 1), labelled by the
+nearest channel axis; undecided at the time limit. Channels: Exit (default), EscapeTime, TurningPoints,
+SaddleDistance. Adaptive AA (mask always exact), drag preview, every setting in the region snapshot →
+`--param`. Six presets ("Henon-Heiles - ...") and two bound animations (rising energy, turning launch).
+Tests check the invariants above on the render path; "nothing escapes below 1/6" holds for launches
+inside the well (r < 1): launches already down a channel past a saddle still roll away. The "User
+Potential" DSL mode stays a follow-up.
+
 #### 2.6.3 Restricted three-body basins — **#1943**
 
 Planar circular restricted three-body problem in the rotating frame. Two views: escape / crash / bounded

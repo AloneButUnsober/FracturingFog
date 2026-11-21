@@ -263,6 +263,7 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
         (FractalType.ChaoticBilliard,       "Chaotic Billiard (Scatter)"),
         (FractalType.BilliardRays,          "Billiard Rays (Ray Density)"),   // #1506
         (FractalType.BlackHoleShadow,       "Black Hole Shadows (Binary)"),   // #1923
+        (FractalType.HenonHeilesBasins,     "Henon-Heiles Basins (Wada)"),    // #1942
         (FractalType.SlitCascade,           "Slit Cascade (Double-Slit Diffraction)"),   // #1569
         (FractalType.TalbotCarpet,          "Talbot Carpet (Quantum Carpet)"),           // #1570
         (FractalType.MathPlane,             "Math Plane (Cartesian)"),        // #1548

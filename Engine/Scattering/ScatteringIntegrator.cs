@@ -8,7 +8,7 @@
 // This is the shared engine the gravitational / relativistic scattering families
 // plug into (Theoretical-Fractal-RnD.md §2.6): each family supplies only its equations
 // of motion and exit tests through IScatteringSystem. Black hole shadows (#1922) is
-// the first user; Hénon-Heiles (#1942), the restricted three-body problem (#1943),
+// the first user and Hénon-Heiles (#1942) the second; the restricted three-body problem (#1943),
 // the magnetised black hole (#1944), spinning binaries (#1945), Mixmaster (#1946) and
 // black hole + ring (#1947) are planned on it.
 //
