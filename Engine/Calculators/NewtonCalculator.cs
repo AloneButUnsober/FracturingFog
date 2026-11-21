@@ -85,6 +85,19 @@ public sealed partial class NewtonCalculator : IFractalCalculator, FracturingFog
     /// paths alongside <see cref="FractalParameters"/>.</summary>
     public FractalType FractalType { get; set; } = FractalType.Newton;
 
+    /// <summary>#1979 — Brent's periodicity check (Brent 1980; pauldelbrot, fractalforums.org topic 5693):
+    /// an orbit that repeats a snapshot of z bit for bit cycles for good, so the pixel stops there and
+    /// colours exactly as at the cap. On by default (frames are byte-identical); off for tests.</summary>
+    public bool Periodicity { get; set; } = true;
+
+    /// <summary>#1979 / #1980 — what the early-outs did in the last frame.</summary>
+    public readonly record struct EarlyOutStats(long Cycles, long ChaosStops, long StopIterSum, long IterationsSaved);
+
+    /// <summary>#1979 / #1980 — the last frame's early-outs (double loop and engine).</summary>
+    public EarlyOutStats LastEarlyOuts => new(_statCycles, _statChaos, _statStopIter, _statSaved);
+
+    private long _statCycles, _statChaos, _statStopIter, _statSaved;
+
     public NewtonCalculator(int width, int height) => Resize(width, height);
 
     public void Resize(int width, int height)
@@ -128,11 +141,14 @@ public sealed partial class NewtonCalculator : IFractalCalculator, FracturingFog
         var newtonMap = ColorMap as INewtonColorMap;
         ColorMap.MaxIterations = maxIter;
 
+        _statCycles = _statChaos = _statStopIter = _statSaved = 0;   // #1979 / #1980
+
         // #1959 — Nova past DeepZoomThreshold: the perturbation engine (NewtonCalculator.Deep.cs).
         if (FractalType == FractalType.Nova && TryCalculateDeep(d, R, maxIter, newtonMap, ct)) return;
         LastPrecisionLabel = "SP";
 
         bool nova = FractalType == FractalType.Nova;
+        bool periodicity = Periodicity;                       // #1979
         bool novaJulia = nova && FractalParameters.NovaJuliaMode;
         double novaZ0R = FractalParameters.NovaZ0.Real, novaZ0I = FractalParameters.NovaZ0.Imaginary;
         double novaCR = FractalParameters.NovaJuliaC.Real, novaCI = FractalParameters.NovaJuliaC.Imaginary;
@@ -159,7 +175,11 @@ public sealed partial class NewtonCalculator : IFractalCalculator, FracturingFog
                 int basin = -1;
                 float smooth = 0f;              // #1294 — Nova smooth convergence count
                 double stepPrev = double.MaxValue;
-                for (iter = 0; iter < maxIter; iter++)
+                // #1979 — Brent: z snapshotted at doubling step counts, compared bit for bit.
+                int cap = maxIter, lam = 0, pow = 1;
+                double snapR = double.NaN, snapI = double.NaN;
+                bool brent = periodicity;
+                for (iter = 0; iter < cap; iter++)
                 {
                     // f(z) = z^d - 1, f'(z) = d·z^(d-1)
                     // Compute z^(d-1) via polar to avoid repeated multiplication.
@@ -211,22 +231,41 @@ public sealed partial class NewtonCalculator : IFractalCalculator, FracturingFog
                             goto converged;
                         }
                         stepPrev = step2;
-                        continue;
                     }
-
-                    // z := z - R · quot
-                    zr -= R * quotR;
-                    zi -= R * quotI;
-
-                    // Check convergence to any root.
-                    for (int k = 0; k < d; k++)
+                    else
                     {
-                        double dx = zr - rootsR[k];
-                        double dy = zi - rootsI[k];
-                        if (dx * dx + dy * dy < eps2) { basin = k; goto converged;
+                        // z := z - R · quot
+                        zr -= R * quotR;
+                        zi -= R * quotI;
+
+                        // Check convergence to any root.
+                        for (int k = 0; k < d; k++)
+                        {
+                            double dx = zr - rootsR[k];
+                            double dy = zi - rootsI[k];
+                            if (dx * dx + dy * dy < eps2) { basin = k; goto converged;
+                            }
                         }
                     }
+
+                    if (brent)
+                    {
+                        // #1979 — z_{iter+1} repeats a snapshot bit for bit: the step is a function of z alone, so
+                        // the orbit cycles from here with period lam and never stops. Run on to the cap's phase
+                        // (fewer than lam steps), so z, the buffers and the colour equal a run to the cap.
+                        lam++;
+                        if (zr == snapR && zi == snapI)
+                        {
+                            cap = iter + 1 + (maxIter - (iter + 1)) % lam;
+                            brent = false;
+                            Interlocked.Increment(ref _statCycles);
+                            Interlocked.Add(ref _statStopIter, iter + 1);
+                            Interlocked.Add(ref _statSaved, maxIter - cap);
+                        }
+                        else if (lam == pow) { snapR = zr; snapI = zi; pow <<= 1; lam = 0; }
+                    }
                 }
+                if (iter == cap && cap < maxIter) iter = maxIter;   // #1979 — as at the cap
             converged:
                 FinishPixel(rowBase + x, x, y, basin, iter, smooth, zr, zi, d, maxIter, nova, newtonMap);
             }
