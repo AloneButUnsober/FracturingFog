@@ -835,6 +835,16 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? ThreeBodyMaxTime { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? ThreeBodyTolerance { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? ThreeBodyNewtonIterations { get; set; }
+        // #1944 — magnetised black hole (enums as int casts).
+        [JsonIgnore(Condition = OmitNull)] public int? MagBhView { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MagBhField { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? MagBhBranch { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MagBhEnergy { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MagBhAngularMomentum { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MagBhLaunchAngle { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MagBhEscapeHeight { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MagBhMaxTime { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MagBhTolerance { get; set; }
         // #1507 — int cast of BilliardRayColorSource.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysColorSource { get; set; }
         // #1508 — crossings (int casts of BilliardRayMode / BilliardCrossingValue).
@@ -1419,6 +1429,19 @@ namespace FracturingFog.Models
                     ThreeBodyMaxTime = p.ThreeBodyMaxTime,
                     ThreeBodyTolerance = p.ThreeBodyTolerance,
                     ThreeBodyNewtonIterations = p.ThreeBodyNewtonIterations,
+                },
+                // #1944 — magnetised black hole: every setting.
+                FractalType.MagnetisedBlackHole => new RegionFractalParams
+                {
+                    MagBhView = (int)p.MagBhView,
+                    MagBhField = p.MagBhField,
+                    MagBhBranch = (int)p.MagBhBranch,
+                    MagBhEnergy = p.MagBhEnergy,
+                    MagBhAngularMomentum = p.MagBhAngularMomentum,
+                    MagBhLaunchAngle = p.MagBhLaunchAngle,
+                    MagBhEscapeHeight = p.MagBhEscapeHeight,
+                    MagBhMaxTime = p.MagBhMaxTime,
+                    MagBhTolerance = p.MagBhTolerance,
                 },
                 FractalType.BilliardRays => new RegionFractalParams
                 {
@@ -2491,6 +2514,15 @@ namespace FracturingFog.Models
             if (ThreeBodyMaxTime.HasValue)        p.ThreeBodyMaxTime = ThreeBodyMaxTime.Value;
             if (ThreeBodyTolerance.HasValue)      p.ThreeBodyTolerance = ThreeBodyTolerance.Value;
             if (ThreeBodyNewtonIterations.HasValue) p.ThreeBodyNewtonIterations = ThreeBodyNewtonIterations.Value;
+            if (MagBhView is { } mbv && Enum.IsDefined(typeof(FracturingFog.MagnetisedBhView), mbv)) p.MagBhView = (FracturingFog.MagnetisedBhView)mbv;   // #1944
+            if (MagBhField.HasValue)              p.MagBhField = MagBhField.Value;
+            if (MagBhBranch is { } mbb && Enum.IsDefined(typeof(FracturingFog.MagnetisedBhBranch), mbb)) p.MagBhBranch = (FracturingFog.MagnetisedBhBranch)mbb;
+            if (MagBhEnergy.HasValue)             p.MagBhEnergy = MagBhEnergy.Value;
+            if (MagBhAngularMomentum.HasValue)    p.MagBhAngularMomentum = MagBhAngularMomentum.Value;
+            if (MagBhLaunchAngle.HasValue)        p.MagBhLaunchAngle = MagBhLaunchAngle.Value;
+            if (MagBhEscapeHeight.HasValue)       p.MagBhEscapeHeight = MagBhEscapeHeight.Value;
+            if (MagBhMaxTime.HasValue)            p.MagBhMaxTime = MagBhMaxTime.Value;
+            if (MagBhTolerance.HasValue)          p.MagBhTolerance = MagBhTolerance.Value;
             if (BilliardRaysColorSource.HasValue) p.BilliardRaysColorSource = (FracturingFog.BilliardRayColorSource)BilliardRaysColorSource.Value;
             if (BilliardRaysMode.HasValue)       p.BilliardRaysMode = (FracturingFog.BilliardRayMode)BilliardRaysMode.Value;
             if (BilliardRaysCrossingWindow.HasValue) p.BilliardRaysCrossingWindow = BilliardRaysCrossingWindow.Value;
@@ -4087,6 +4119,105 @@ namespace FracturingFog.Models
                 Params        = new RegionFractalParams
                 {
                     ThreeBodyView = (int)FracturingFog.ThreeBodyView.LagrangeBasins, ThreeBodyMassRatio = 0.1, ThreeBodyNewtonIterations = 60,
+                },
+            },
+            // #1944 — magnetised black hole (Wald field; Kick view after Bautista & Vega 2021).
+            new()
+            {
+                Name          = "Magnetised Black Hole - Kick Basins",
+                CenterX       =  3.2,
+                CenterY       =  -1.5,
+                Zoom          =  0.7,
+                Iterations    =  256,
+                Description   = "Charged particles on circular orbits round a black hole in a uniform magnetic field (interaction strength b = 0.3), each kicked straight up the field. Across: the orbit radius (horizon radii); up: the energy after the kick. Below energy 1 nothing escapes; above it particles escape up the field, fall in, or after a chaotic dance escape down it. The bound 'Magnetised black hole: field sweep' animation moves b between 0.1 and 0.6.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.MagnetisedBlackHole,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Magnetised black hole: field sweep",
+                Params        = new RegionFractalParams
+                {
+                    MagBhView = (int)FracturingFog.MagnetisedBhView.Kick, MagBhField = 0.3, MagBhBranch = (int)FracturingFog.MagnetisedBhBranch.Plus,
+                },
+            },
+            new()
+            {
+                Name          = "Magnetised Black Hole - Kick Close-Up",
+                CenterX       =  2.0,
+                CenterY       =  -1.45,
+                Zoom          =  2.9,
+                Iterations    =  256,
+                Description   = "The inner orbits of the kick basins at b = 0.3: orbit radius 1.4 to 2.6, energy 0.9 to 2. Capture, upstream and downstream escape interleave in ever finer bands.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.MagnetisedBlackHole,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    MagBhView = (int)FracturingFog.MagnetisedBhView.Kick, MagBhField = 0.3, MagBhBranch = (int)FracturingFog.MagnetisedBhBranch.Plus,
+                },
+            },
+            new()
+            {
+                Name          = "Magnetised Black Hole - Minus Branch",
+                CenterX       =  3.3,
+                CenterY       =  -3.5,
+                Zoom          =  0.55,
+                Iterations    =  256,
+                Description   = "The kick basins from the other family of circular orbits (the minus root of the circular-orbit condition, negative angular momentum at b = 0.3). Escape needs more energy here, so the frame reaches energy 5.5.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.MagnetisedBlackHole,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    MagBhView = (int)FracturingFog.MagnetisedBhView.Kick, MagBhField = 0.3, MagBhBranch = (int)FracturingFog.MagnetisedBhBranch.Minus,
+                },
+            },
+            new()
+            {
+                Name          = "Magnetised Black Hole - Strong Field",
+                CenterX       =  3.2,
+                CenterY       =  -1.5,
+                Zoom          =  0.7,
+                Iterations    =  256,
+                Description   = "The kick basins at interaction strength b = 0.5: the circular orbits and the bands where the three fates interleave shift with the stronger field.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.MagnetisedBlackHole,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    MagBhView = (int)FracturingFog.MagnetisedBhView.Kick, MagBhField = 0.5, MagBhBranch = (int)FracturingFog.MagnetisedBhBranch.Plus,
+                },
+            },
+            new()
+            {
+                Name          = "Magnetised Black Hole - Meridional Upward Launch",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.3,
+                Iterations    =  256,
+                Description   = "Every point of a plane through the field axis is a launch at energy 1.5 and angular momentum 1, moving straight up the field (b = 0.3); the plane is drawn mirrored about the axis. Grey: no launch at this energy. The bound 'Magnetised black hole: turning launch' animation turns the launch direction once round.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.MagnetisedBlackHole,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Magnetised black hole: turning launch",
+                Params        = new RegionFractalParams
+                {
+                    MagBhView = (int)FracturingFog.MagnetisedBhView.Meridional, MagBhField = 0.3, MagBhEnergy = 1.5, MagBhAngularMomentum = 1.0, MagBhLaunchAngle = 90.0,
+                },
+            },
+            new()
+            {
+                Name          = "Magnetised Black Hole - Meridional, High Angular Momentum",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.3,
+                Iterations    =  256,
+                Description   = "Launches across the plane through the axis at energy 2 and angular momentum 3, moving outward across the field (b = 0.3). Horizontal launches give a map symmetric about the equator with the two escape directions swapped.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.MagnetisedBlackHole,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    MagBhView = (int)FracturingFog.MagnetisedBhView.Meridional, MagBhField = 0.3, MagBhEnergy = 2.0, MagBhAngularMomentum = 3.0, MagBhLaunchAngle = 0.0,
                 },
             },
             new()

@@ -286,6 +286,15 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _tbMaxTime = _p.ThreeBodyMaxTime;
         _tbTolerance = _p.ThreeBodyTolerance;
         _tbNewton = _p.ThreeBodyNewtonIterations;
+        _mbView = _p.MagBhView;
+        _mbField = _p.MagBhField;
+        _mbBranch = _p.MagBhBranch;
+        _mbEnergy = _p.MagBhEnergy;
+        _mbL = _p.MagBhAngularMomentum;
+        _mbAngle = _p.MagBhLaunchAngle;
+        _mbEscape = _p.MagBhEscapeHeight;
+        _mbMaxTime = _p.MagBhMaxTime;
+        _mbTolerance = _p.MagBhTolerance;
         _mathPlaneScene = _p.MathPlaneScene ?? string.Empty;
         UpdateMathPlaneSceneError();
         _raysColorSource = _p.BilliardRaysColorSource;
@@ -511,6 +520,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsBlackHoleShadow => FractalType == FractalType.BlackHoleShadow;
     public bool IsHenonHeilesBasins => FractalType == FractalType.HenonHeilesBasins;   // #1942
     public bool IsThreeBodyBasins => FractalType == FractalType.ThreeBodyBasins;   // #1943
+    public bool IsMagnetisedBlackHole => FractalType == FractalType.MagnetisedBlackHole;   // #1944
     /// <summary>Either billiard type: the shared scene controls (geometry, disks, bounces).</summary>
     public bool IsBilliardScene => IsChaoticBilliard || IsBilliardRays;
     /// <summary>#1548 — Math Plane (Cartesian plotter).</summary>
@@ -660,6 +670,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         || IsHenonHeilesBasins
         // Three-body basins — log fate time / Newton iterations height field (#1943).
         || IsThreeBodyBasins
+        // Magnetised black hole — log proper time height field (#1944).
+        || IsMagnetisedBlackHole
         // Precision field — divergence-scalar height field (#628).
         || IsPrecisionField
         // Dual-orbit escape-geometry (#864) — the derived scalar rides the
@@ -682,7 +694,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsLyapunov || IsTranscendentalJulia || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian || IsMirrorSpheres
-          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsBlackHoleShadow || IsHenonHeilesBasins || IsThreeBodyBasins || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable || IsAdaptiveAa2D
+          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsBlackHoleShadow || IsHenonHeilesBasins || IsThreeBodyBasins || IsMagnetisedBlackHole || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable || IsAdaptiveAa2D
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -2425,6 +2437,32 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double ThreeBodyTolerance { get => _tbTolerance; set { Set(ref _tbTolerance, Clamp(value, 1e-13, 1e-3)); _p.ThreeBodyTolerance = _tbTolerance; Fire(); } }
     private int _tbNewton;
     public int ThreeBodyNewtonIterations { get => _tbNewton; set { Set(ref _tbNewton, (int)Clamp(value, 1, 10000)); _p.ThreeBodyNewtonIterations = _tbNewton; Fire(); } }
+
+    // ── #1944 — magnetised black hole ────────────────────────────────────────
+    private MagnetisedBhView _mbView;
+    public MagnetisedBhView MagBhView { get => _mbView; set { Set(ref _mbView, value); _p.MagBhView = value; this.RaisePropertyChanged(nameof(MbIsKick)); this.RaisePropertyChanged(nameof(MbIsMeridional)); Fire(); } }
+    public System.Array MagBhViews => s_MagBhViews;
+    private static readonly System.Array s_MagBhViews = System.Enum.GetValues(typeof(MagnetisedBhView));
+    public bool MbIsKick => _mbView == MagnetisedBhView.Kick;
+    public bool MbIsMeridional => _mbView == MagnetisedBhView.Meridional;
+    private MagnetisedBhBranch _mbBranch;
+    public MagnetisedBhBranch MagBhBranch { get => _mbBranch; set { Set(ref _mbBranch, value); _p.MagBhBranch = value; Fire(); } }
+    public System.Array MagBhBranches => s_MagBhBranches;
+    private static readonly System.Array s_MagBhBranches = System.Enum.GetValues(typeof(MagnetisedBhBranch));
+    private double _mbField;
+    public double MagBhField { get => _mbField; set { Set(ref _mbField, Clamp(value, -10.0, 10.0)); _p.MagBhField = _mbField; Fire(); } }
+    private double _mbEnergy;
+    public double MagBhEnergy { get => _mbEnergy; set { Set(ref _mbEnergy, Clamp(value, 0.0, 100.0)); _p.MagBhEnergy = _mbEnergy; Fire(); } }
+    private double _mbL;
+    public double MagBhAngularMomentum { get => _mbL; set { Set(ref _mbL, Clamp(value, -100.0, 100.0)); _p.MagBhAngularMomentum = _mbL; Fire(); } }
+    private double _mbAngle;
+    public double MagBhLaunchAngle { get => _mbAngle; set { Set(ref _mbAngle, Clamp(value, -360.0, 360.0)); _p.MagBhLaunchAngle = _mbAngle; Fire(); } }
+    private double _mbEscape;
+    public double MagBhEscapeHeight { get => _mbEscape; set { Set(ref _mbEscape, Clamp(value, 5.0, 100000.0)); _p.MagBhEscapeHeight = _mbEscape; Fire(); } }
+    private double _mbMaxTime;
+    public double MagBhMaxTime { get => _mbMaxTime; set { Set(ref _mbMaxTime, Clamp(value, 1.0, 1e6)); _p.MagBhMaxTime = _mbMaxTime; Fire(); } }
+    private double _mbTolerance;
+    public double MagBhTolerance { get => _mbTolerance; set { Set(ref _mbTolerance, Clamp(value, 1e-13, 1e-3)); _p.MagBhTolerance = _mbTolerance; Fire(); } }
     // #1507 — what sets the hue.
     private BilliardRayColorSource _raysColorSource;
     public BilliardRayColorSource BilliardRaysColorSource { get => _raysColorSource; set { Set(ref _raysColorSource, value); _p.BilliardRaysColorSource = value; Fire(); } }

@@ -1516,6 +1516,27 @@ namespace FracturingFog.Models
         /// <summary>#1943 — Newton-Raphson iteration cap (Lagrange view). Default 60.</summary>
         public int ThreeBodyNewtonIterations { get; set; } = 60;
 
+        // ── Magnetised black hole (#1944) ────────────────────────────────
+        /// <summary>#1944 — launch space (see <see cref="FracturingFog.MagnetisedBhView"/>). Default Kick.</summary>
+        public MagnetisedBhView MagBhView { get; set; } = MagnetisedBhView.Kick;
+        /// <summary>#1944 — interaction strength b = qB r_g / (2m) (units of the horizon radius
+        /// r_g = 2M; charge and field enter only as this product). Default 0.3.</summary>
+        public double MagBhField { get; set; } = 0.3;
+        /// <summary>#1944 — circular-orbit branch ℓ± of the Kick view. Default Plus.</summary>
+        public MagnetisedBhBranch MagBhBranch { get; set; } = MagnetisedBhBranch.Plus;
+        /// <summary>#1944 — specific energy ℰ of every launch (Meridional view). Default 1.5.</summary>
+        public double MagBhEnergy { get; set; } = 1.5;
+        /// <summary>#1944 — specific canonical axial angular momentum ℓ (Meridional view). Default 1.</summary>
+        public double MagBhAngularMomentum { get; set; } = 1.0;
+        /// <summary>#1944 — Meridional launch direction, degrees from +R towards +z. Default 0.</summary>
+        public double MagBhLaunchAngle { get; set; } = 0.0;
+        /// <summary>#1944 — escaped once |z| passes this (units of r_g). Default 100 (Bautista &amp; Vega used 1000).</summary>
+        public double MagBhEscapeHeight { get; set; } = 100.0;
+        /// <summary>#1944 — proper-time limit (units of r_g); undecided past it. Default 1000.</summary>
+        public double MagBhMaxTime { get; set; } = 1000.0;
+        /// <summary>#1944 — integrator relative tolerance per step. Default 1e-9.</summary>
+        public double MagBhTolerance { get; set; } = 1e-9;
+
         // ── Slit cascade (#1569, double-slit epic #1565) ──────────────────
         /// <summary>Slit cascade: children per slit, N (2..16). N ≥ 3 for the fringe
         /// weights to differ (a symmetric pair is a plain Cantor set).</summary>
@@ -2641,6 +2662,15 @@ namespace FracturingFog.Models
                 ThreeBodyMaxTime = ThreeBodyMaxTime,
                 ThreeBodyTolerance = ThreeBodyTolerance,
                 ThreeBodyNewtonIterations = ThreeBodyNewtonIterations,
+                MagBhView = MagBhView,
+                MagBhField = MagBhField,
+                MagBhBranch = MagBhBranch,
+                MagBhEnergy = MagBhEnergy,
+                MagBhAngularMomentum = MagBhAngularMomentum,
+                MagBhLaunchAngle = MagBhLaunchAngle,
+                MagBhEscapeHeight = MagBhEscapeHeight,
+                MagBhMaxTime = MagBhMaxTime,
+                MagBhTolerance = MagBhTolerance,
                 SlitCascadeChildren = SlitCascadeChildren,
                 SlitCascadeRatio = SlitCascadeRatio,
                 SlitCascadeDepth = SlitCascadeDepth,

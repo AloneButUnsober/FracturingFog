@@ -1667,5 +1667,62 @@
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
         </Grid>
 
+        <!-- #1944 — magnetised black hole (Wald field). -->
+        <Grid IsVisible="{Binding IsMagnetisedBlackHole}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="View:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="0" Grid.Column="1"
+                      ItemsSource="{Binding MagBhViews}"
+                      SelectedItem="{Binding MagBhView, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Kick: across = circular-orbit radius, up = energy after a vertical kick (Bautista and Vega's launch). Meridional: every point of a plane through the field axis is a launch at fixed energy and angular momentum." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Field strength b:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="-10" Maximum="10" Increment="0.05" FormatString="0.##########"
+                           Value="{Binding MagBhField, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Interaction strength b = qB r_g / 2m (charge times field; lengths in horizon radii r_g = 2M). 0 = an uncharged particle, plain Schwarzschild." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Orbit branch:" VerticalAlignment="Center" IsVisible="{Binding MbIsKick}" />
+            <ComboBox Grid.Row="2" Grid.Column="1" IsVisible="{Binding MbIsKick}"
+                      ItemsSource="{Binding MagBhBranches}"
+                      SelectedItem="{Binding MagBhBranch, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Which family of circular orbits the kick starts from: the plus or minus root of the circular-orbit condition." />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Energy:" VerticalAlignment="Center" IsVisible="{Binding MbIsMeridional}" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1" IsVisible="{Binding MbIsMeridional}"
+                           Minimum="0" Maximum="100" Increment="0.05" FormatString="0.##########"
+                           Value="{Binding MagBhEnergy, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Specific energy of every launch (1 = rest at infinity)." />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Angular momentum:" VerticalAlignment="Center" IsVisible="{Binding MbIsMeridional}" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1" IsVisible="{Binding MbIsMeridional}"
+                           Minimum="-100" Maximum="100" Increment="0.1" FormatString="0.##########"
+                           Value="{Binding MagBhAngularMomentum, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Specific canonical angular momentum about the field axis." />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Launch angle (deg):" VerticalAlignment="Center" IsVisible="{Binding MbIsMeridional}" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1" IsVisible="{Binding MbIsMeridional}"
+                           Minimum="-360" Maximum="360" Increment="5" FormatString="0.##########"
+                           Value="{Binding MagBhLaunchAngle, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Launch direction in the plane: 0 = outward across the field, 90 = up the field." />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Escape height:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="6" Grid.Column="1"
+                           Minimum="5" Maximum="100000" Increment="50" FormatString="0.##########"
+                           Value="{Binding MagBhEscapeHeight, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="A particle this far up or down the field (horizon radii) has escaped. Bautista and Vega used 1000; raise the time limit with it." />
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Time limit:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="7" Grid.Column="1"
+                           Minimum="1" Maximum="1000000" Increment="100" FormatString="0.##########"
+                           Value="{Binding MagBhMaxTime, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Proper-time limit; a particle with no fate by then is undecided (the theme's interior colour)." />
+            <TextBlock Grid.Row="8" Grid.Column="0" Text="Tolerance:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="8" Grid.Column="1"
+                           Minimum="0.0000000000001" Maximum="0.001" Increment="0.000000001" FormatString="0.#############"
+                           Value="{Binding MagBhTolerance, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Integrator relative tolerance per step." />
+            <CheckBox Grid.Row="9" Grid.Column="1" Content="Adaptive anti-aliasing"
+                      IsChecked="{Binding AdaptiveAa, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="With the High / Ultra / Extreme quality presets, re-trace only the pixels that differ from a neighbour (the basin boundaries). Also used by export and --batch." />
+            <TextBlock Grid.Row="10" Grid.Column="1"
+                       Text="Captured, escaped up the field and escaped down it each have their own colour; undecided particles take the interior colour; grey means no launch exists there; near-black is the hole itself."
+                       TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
+        </Grid>
+
     </StackPanel>
 </UserControl>

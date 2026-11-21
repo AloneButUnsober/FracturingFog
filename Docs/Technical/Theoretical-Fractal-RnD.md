@@ -523,6 +523,23 @@ recurrence analysis, so the *fate-basin map* is FF's view of the system, and a p
 published basin images is part of #1944. Real GR but cheap (analytic metric and field).
 Validation: H, E, L conserved; B = 0 → Schwarzschild (ISCO 6M); q = 0 decouples; equatorial mirror.
 
+**Prior-art search result (#1944): the fate-basin map is published.** Bautista & Vega
+[(2021)](../Resources-Bibliography.md#bautista-vega-2021) map capture / upstream / downstream basins for
+particles kicked vertically from circular orbits in exactly this system and find them Wada; related escape
+and chaotic-scattering work: [Al Zahrani 2014](../Resources-Bibliography.md#al-zahrani-2014),
+[Stuchlík & Kološ](../Resources-Bibliography.md#stuchlik-kolos-2016). The earlier sentence calling the map
+"FF's view" is superseded: FF reproduces their setup and adds an explorer plus a Meridional view.
+
+**Shipped (#1944).** `FractalType.MagnetisedBlackHole` (`MagnetisedBlackHoleCalculator`, physics in
+`Engine/Scattering/MagnetisedBlackHole.cs` on the shared `ScatteringIntegrator`). Units and notation of
+Bautista & Vega: r_g = 2M = 1, b = qB r_g / 2m (q and B only as this product, so the issue's separate
+"q = 0" and "B = 0" limits are one limit), U = f[1 + (ℓ/(ρ sinθ) − bρ sinθ)²]. Hamiltonian in
+(ρ, θ, p_ρ, p_θ), H = −½, field term written through w = ℓ/(ρ sinθ) − bρ sinθ (finite on the axis for
+ℓ = 0). Kick view: their launch over (ρ0, ℰ), branch ℓ±. Meridional view: (R, z) launches at fixed ℰ, ℓ and
+direction. Captured at ρ < 1.01, escaped at |z| > escape height (default 100; theirs 1000), undecided at the
+proper-time limit (default 1000). Six presets, two bound animations, every setting → `--param`.
+Not done: Kerr (spin), the Poincaré-section density view.
+
 #### 2.6.5 Spinning compact binaries — **#1945**
 
 Post-Newtonian binaries with spin-orbit and spin-spin coupling; initial spin angles → outcome (merger
