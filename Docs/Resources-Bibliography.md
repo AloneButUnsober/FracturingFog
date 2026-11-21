@@ -36,8 +36,14 @@ on record — see [Corrected attributions](#corrected-attributions).
 - **Heinz-Otto Peitgen, Hartmut Jürgens, Dietmar Saupe.** *Chaos and Fractals: New Frontiers of
   Science.* Springer, 1992 (and their 1980s Newton-basin imagery). Cited by the Newton help text for
   the first drawings of the Newton-basin boundary.
+<a id="milnor-dynamics-one-variable"></a>
 - **John W. Milnor.** *Dynamics in One Complex Variable.* Princeton University Press, 3rd ed., 2006.
-  The modern standard reference for iterating rational maps on the Riemann sphere.
+  The modern standard reference for iterating rational maps on the Riemann sphere. #1981 leans on its
+  background for the rotation-domain tests (`Server.Tests/S1981RotationDomainTests.cs`): rotation domains
+  (Siegel disks, Herman rings), the golden-mean Siegel disk of z² + c, whose boundary FF measures as the
+  closure of the critical orbit, and the Koebe distortion bound behind the |f′| / |f″| distance estimate
+  (`Engine/Calculators/RotationDomainColoring.cs`). The chapters and theorem numbers for those facts are
+  not verified (see *Citations awaiting verification*).
 - **John W. Milnor.** *Cubic polynomial maps with periodic critical orbit.* arXiv:0910.1866, 2009.
   Escape regions of the two-critical-point family (dual-orbit research).
 - **Robert L. Devaney.** *An Introduction to Chaotic Dynamical Systems.* Addison-Wesley (2nd ed.
@@ -1460,7 +1466,12 @@ Programs and galleries the project measured itself against, learned from, or pay
   the BLA's A across skips); measured with `--novaearlyoutprobe` (`Probes/NovaEarlyOutProbe.cs`). FF's
   choices (the multiplier rather than dz/dc, leaving out the critical start point, bit-exact repeats and
   the cap-phase run-on) are FF's, not the post's. Issue #1981 (rotation-domain colouring) comes from the
-  same post.
+  same post: a non-converging orbit's Lyapunov exponent from the running derivative, within about 1e-5 of 0
+  for a rotation domain, and |f′| / |f″| from the first and second running derivatives as a distance
+  estimate to the domain's border. FF uses it for the opt-in `FractalParameters.RotationDomainColoring`
+  (`Engine/Calculators/RotationDomainColoring.cs`). FF's choices (the threshold max(ε, K / N), since a
+  finite orbit's exponent in a rotation domain is O(1/N); the minimum of the ratio over the orbit; the
+  largest exponent for Phoenix; the colours) are FF's, not the post's.
 
 ## Sites, communities, and other long-form references
 
@@ -1489,8 +1500,11 @@ These sources are cited in the code or docs, but their publication details aren'
 They stay listed (the contract never drops a credit). Each needs its primary source traced and its
 entry above completed or corrected.
 
-- **pauldelbrot, fractalforums.org topic 5693** — thread title and post date (#1979 / #1980; content
-  from a user paste, the page not opened).
+- **pauldelbrot, fractalforums.org topic 5693** — thread title and post date (#1979 / #1980 / #1981;
+  content from a user paste, the page not opened).
+- **Milnor, *Dynamics in One Complex Variable*** — the chapters / theorems for the facts #1981's tests use
+  (Siegel disk boundary in the closure of the critical orbit for the golden-mean quadratic; the Koebe
+  distortion theorem, Koebe 1907 / Bieberbach 1916 from memory, original papers not checked).
 - **Alonso, Ruiz & Sánchez-Hernández 2007** — journal reference of arXiv:gr-qc/0701052 (#1928).
 - **Kluitenberg, Roest & Seri 2022** — journal reference of arXiv:2211.06880 (#1928; cited elsewhere as
   Bollettino dell'Unione Matematica Italiana, 2023).

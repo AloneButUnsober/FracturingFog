@@ -298,6 +298,7 @@ public sealed partial class NewtonCalculator : IFractalCalculator, FracturingFog
                 FinishPixel(rowBase + x, x, y, basin, iter, smooth, zr, zi, d, maxIter, nova, newtonMap);
             }
         });
+        ApplyRotationDomain(d, R, maxIter, aaMask, ct);   // #1981 opt-in
     }
 
     // One finished pixel's buffers and colour (shared by the double loop and, #1959, the deep path).

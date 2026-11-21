@@ -401,6 +401,42 @@
                            ToolTip.Tip="The multiplier at which a pixel stops, as a power of ten (default 200)." />
         </Grid>
 
+        <!-- #1981: opt-in rotation-domain colouring (Julia, Phoenix, Magnet, Newton, Nova): non-converged
+             pixels classified by their orbit's Lyapunov exponent; idea: pauldelbrot, fractalforums.org topic 5693. -->
+        <Grid IsVisible="{Binding IsRotationDomainFamily}"
+              ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <CheckBox Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Content="Rotation-domain colouring"
+                      IsChecked="{Binding RotationDomainColoring, Mode=TwoWay}"
+                      ToolTip.Tip="Colours pixels that neither escape nor converge by their orbit's Lyapunov exponent: rotation domains (Siegel disks, Herman rings; exponent near 0) shade from the edge colour at their boundary to the centre colour, chaotic orbits get the chaos colour, attracting cycles keep their colour. Re-iterates those pixels, so in-set-heavy views take longer. Off = unchanged frames." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Epsilon:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1" IsEnabled="{Binding RotationDomainColoring}"
+                           Minimum="0" Maximum="1" Increment="0.00001" FormatString="G4"
+                           Value="{Binding RotationDomainEpsilon, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Lyapunov threshold (per step): an orbit with |exponent| below the larger of this and Bound / iterations is a rotation domain (default 1e-5)." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Bound (nats):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1" IsEnabled="{Binding RotationDomainColoring}"
+                           Minimum="0" Maximum="1000" Increment="1" FormatString="F1"
+                           Value="{Binding RotationDomainBound, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="In a rotation domain the log of the derivative product stays bounded, so a finite orbit's exponent is about Bound / iterations rather than 0 (default 16). Larger = more pixels count as rotation." />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Shade width (px):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1" IsEnabled="{Binding RotationDomainColoring}"
+                           Minimum="0.5" Maximum="1000" Increment="1" FormatString="F1"
+                           Value="{Binding RotationDomainShadeWidth, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Distance to the domain's boundary, in pixels, over which the shade goes from the edge colour to the centre colour (default 24)." />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Centre colour:" VerticalAlignment="Center" />
+            <TextBox Grid.Row="4" Grid.Column="1" IsEnabled="{Binding RotationDomainColoring}"
+                     Text="{Binding RotationDomainColorHex, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Margin="0,2"
+                     ToolTip.Tip="Rotation-domain colour away from the boundary, AARRGGBB hex." />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Edge colour:" VerticalAlignment="Center" />
+            <TextBox Grid.Row="5" Grid.Column="1" IsEnabled="{Binding RotationDomainColoring}"
+                     Text="{Binding RotationDomainEdgeColorHex, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Margin="0,2"
+                     ToolTip.Tip="Rotation-domain colour at the boundary, AARRGGBB hex." />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Chaos colour:" VerticalAlignment="Center" />
+            <TextBox Grid.Row="6" Grid.Column="1" IsEnabled="{Binding RotationDomainColoring}"
+                     Text="{Binding RotationDomainChaosColorHex, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Margin="0,2"
+                     ToolTip.Tip="Colour of chaotic non-converged orbits, AARRGGBB hex (default yellow)." />
+        </Grid>
+
         <!-- Secant initial-offset add-on -->
         <Grid IsVisible="{Binding IsSecant}"
               ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">

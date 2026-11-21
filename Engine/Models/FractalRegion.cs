@@ -697,6 +697,16 @@ namespace FracturingFog.Models
         // #1980 — the opt-in chaos early-out (Nova, Newton); only when on / off its default threshold.
         [JsonIgnore(Condition = OmitNull)] public bool? ChaosEarlyOut { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? ChaosEarlyOutLog10 { get; set; }
+
+        // #1981 — rotation-domain colouring rides along (Julia, Phoenix, Magnet 1 / 2, Newton, Nova)
+        // when a field differs from its default; ApplyTo sets only the carried ones.
+        [JsonIgnore(Condition = OmitNull)] public bool? RotationDomainColoring { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? RotationDomainEpsilon { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? RotationDomainBound { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? RotationDomainShadeWidth { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public uint? RotationDomainColor { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public uint? RotationDomainEdgeColor { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public uint? RotationDomainChaosColor { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? SecantOffsetRe { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? SecantOffsetIm { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? ApollonianDepth { get; set; }
@@ -1155,6 +1165,12 @@ namespace FracturingFog.Models
             t is FractalType.Julia or FractalType.BurningShip or FractalType.Tricorn
               or FractalType.Multibrot or FractalType.Magnet1 or FractalType.Magnet2
               or FractalType.Glynn or FractalType.Phoenix or FractalType.Spider;
+
+        /// <summary>#1981 — the families with rotation-domain colouring (EscapeTimeCalculator's and
+        /// NewtonCalculator's passes).</summary>
+        internal static bool RotationDomainCapable(FractalType t) =>
+            t is FractalType.Julia or FractalType.Phoenix or FractalType.Magnet1 or FractalType.Magnet2
+              or FractalType.Newton or FractalType.Nova;
 
         /// <summary>#1738 — the family's current orbit camera (distance, theta, phi), the values a
         /// partial Cam3D* set keeps for its missing keys. Null for a type without one; the switch
@@ -1896,6 +1912,29 @@ namespace FracturingFog.Models
                 }
             }
 
+            // #1981 — rotation-domain colouring rides along for its families when not at its defaults.
+            if (RotationDomainCapable(type))
+            {
+                bool? on = p.RotationDomainColoring != D.RotationDomainColoring ? p.RotationDomainColoring : null;
+                double? eps = Nd(p.RotationDomainEpsilon, D.RotationDomainEpsilon);
+                double? bound = Nd(p.RotationDomainBound, D.RotationDomainBound);
+                double? width = Nd(p.RotationDomainShadeWidth, D.RotationDomainShadeWidth);
+                uint? col = p.RotationDomainColor != D.RotationDomainColor ? p.RotationDomainColor : null;
+                uint? edge = p.RotationDomainEdgeColor != D.RotationDomainEdgeColor ? p.RotationDomainEdgeColor : null;
+                uint? chaos = p.RotationDomainChaosColor != D.RotationDomainChaosColor ? p.RotationDomainChaosColor : null;
+                if (on != null || eps != null || bound != null || width != null || col != null || edge != null || chaos != null)
+                {
+                    rp ??= new RegionFractalParams();
+                    rp.RotationDomainColoring = on;
+                    rp.RotationDomainEpsilon = eps;
+                    rp.RotationDomainBound = bound;
+                    rp.RotationDomainShadeWidth = width;
+                    rp.RotationDomainColor = col;
+                    rp.RotationDomainEdgeColor = edge;
+                    rp.RotationDomainChaosColor = chaos;
+                }
+            }
+
             // #1554 — a Math Plane backdrop's own family params (Multibrot exponent,
             // Phoenix p, a domain warp ...) ride in the MathPlane block, so a region or
             // --param reproduces the backdrop. Julia's c is the plane's c, not JuliaC.
@@ -2262,6 +2301,13 @@ namespace FracturingFog.Models
                 p.ChaosEarlyOut = ChaosEarlyOut.Value;
             if (ChaosEarlyOutLog10.HasValue)
                 p.ChaosEarlyOutLog10 = ChaosEarlyOutLog10.Value;
+            if (RotationDomainColoring.HasValue) p.RotationDomainColoring = RotationDomainColoring.Value;   // #1981
+            if (RotationDomainEpsilon.HasValue) p.RotationDomainEpsilon = RotationDomainEpsilon.Value;
+            if (RotationDomainBound.HasValue) p.RotationDomainBound = RotationDomainBound.Value;
+            if (RotationDomainShadeWidth.HasValue) p.RotationDomainShadeWidth = RotationDomainShadeWidth.Value;
+            if (RotationDomainColor.HasValue) p.RotationDomainColor = RotationDomainColor.Value;
+            if (RotationDomainEdgeColor.HasValue) p.RotationDomainEdgeColor = RotationDomainEdgeColor.Value;
+            if (RotationDomainChaosColor.HasValue) p.RotationDomainChaosColor = RotationDomainChaosColor.Value;
             if (SecantOffsetRe.HasValue && SecantOffsetIm.HasValue)
                 p.SecantInitialOffset = new Complex(SecantOffsetRe.Value, SecantOffsetIm.Value);
             if (ApollonianDepth.HasValue)

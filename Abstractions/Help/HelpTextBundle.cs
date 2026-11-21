@@ -997,6 +997,35 @@ the dialog-supplied constant.
 J(c) is symmetric under z → −z (rotation by π). Many Julia sets
 exhibit additional discrete rotational symmetries when c lies on
 the boundary of a bulb.
+
+=== Rotation-domain colouring ===
+
+  RotationDomainColoring : bool   Off (default).  On: every pixel
+                              that neither escapes nor converges
+                              is re-iterated with its derivatives
+                              and classified by its orbit's
+                              Lyapunov exponent λ = ln|Π f′(z)| / N:
+                              • |λ| below max(ε, K / N): a rotation
+                                domain (Siegel disk, Herman ring),
+                                shaded from the edge colour at its
+                                boundary to the centre colour by
+                                the distance estimate |f′| / |f″|;
+                              • λ above it: chaotic, chaos colour;
+                              • below: an attracting cycle, which
+                                keeps its colour.
+  RotationDomainEpsilon  : ε, default 1e-5.
+  RotationDomainBound    : K in nats, default 16.  In a rotation
+                              domain ln|Π f′| stays bounded, so a
+                              finite orbit has |λ| ≈ K / N, not 0.
+  RotationDomainShadeWidth : pixels of distance from edge to
+                              centre colour, default 24.
+  RotationDomainColor / RotationDomainEdgeColor /
+  RotationDomainChaosColor : ARGB colours.
+
+  Families: Julia, Phoenix (largest exponent; flat shade),
+  Magnet 1 / 2, Newton and Nova, in the double tier only.
+  Batch: --param RotationDomainColoring=true (and the fields above).
+  Idea: pauldelbrot on fractalforums.org.
 ";
 
         public const string MathNewtonText =
@@ -1045,6 +1074,35 @@ Default polynomial:  f(z) = z^d − 1     (roots = d-th roots of 1)
                                  by the default kernel; reserved
                                  for future custom-polynomial
                                  path).
+
+=== Rotation-domain colouring ===
+
+  RotationDomainColoring : bool   Off (default).  On: every pixel
+                              that neither escapes nor converges
+                              is re-iterated with its derivatives
+                              and classified by its orbit's
+                              Lyapunov exponent λ = ln|Π f′(z)| / N:
+                              • |λ| below max(ε, K / N): a rotation
+                                domain (Siegel disk, Herman ring),
+                                shaded from the edge colour at its
+                                boundary to the centre colour by
+                                the distance estimate |f′| / |f″|;
+                              • λ above it: chaotic, chaos colour;
+                              • below: an attracting cycle, which
+                                keeps its colour.
+  RotationDomainEpsilon  : ε, default 1e-5.
+  RotationDomainBound    : K in nats, default 16.  In a rotation
+                              domain ln|Π f′| stays bounded, so a
+                              finite orbit has |λ| ≈ K / N, not 0.
+  RotationDomainShadeWidth : pixels of distance from edge to
+                              centre colour, default 24.
+  RotationDomainColor / RotationDomainEdgeColor /
+  RotationDomainChaosColor : ARGB colours.
+
+  Families: Julia, Phoenix (largest exponent; flat shade),
+  Magnet 1 / 2, Newton and Nova, in the double tier only.
+  Batch: --param RotationDomainColoring=true (and the fields above).
+  Idea: pauldelbrot on fractalforums.org.
 ";
 
         public const string MathMandelbulbText =
@@ -1375,6 +1433,35 @@ Setting c = 0 collapses Nova back to the pure Newton fractal.
   stops the pixel early, with the same colour as running to the
   iteration cap (always on; the frame does not change).  Both
   early-outs follow ideas posted by pauldelbrot on fractalforums.org.
+
+=== Rotation-domain colouring ===
+
+  RotationDomainColoring : bool   Off (default).  On: every pixel
+                              that neither escapes nor converges
+                              is re-iterated with its derivatives
+                              and classified by its orbit's
+                              Lyapunov exponent λ = ln|Π f′(z)| / N:
+                              • |λ| below max(ε, K / N): a rotation
+                                domain (Siegel disk, Herman ring),
+                                shaded from the edge colour at its
+                                boundary to the centre colour by
+                                the distance estimate |f′| / |f″|;
+                              • λ above it: chaotic, chaos colour;
+                              • below: an attracting cycle, which
+                                keeps its colour.
+  RotationDomainEpsilon  : ε, default 1e-5.
+  RotationDomainBound    : K in nats, default 16.  In a rotation
+                              domain ln|Π f′| stays bounded, so a
+                              finite orbit has |λ| ≈ K / N, not 0.
+  RotationDomainShadeWidth : pixels of distance from edge to
+                              centre colour, default 24.
+  RotationDomainColor / RotationDomainEdgeColor /
+  RotationDomainChaosColor : ARGB colours.
+
+  Families: Julia, Phoenix (largest exponent; flat shade),
+  Magnet 1 / 2, Newton and Nova, in the double tier only.
+  Batch: --param RotationDomainColoring=true (and the fields above).
+  Idea: pauldelbrot on fractalforums.org.
 
 === Colouring ===
 

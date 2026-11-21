@@ -455,6 +455,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsSecant => FractalType == FractalType.Secant;
     public bool IsNova => FractalType == FractalType.Nova;   // #1294
     public bool IsChaosEarlyOutFamily => FractalType is FractalType.Newton or FractalType.Nova;   // #1980
+    public bool IsRotationDomainFamily => FractalType is FractalType.Julia or FractalType.Phoenix   // #1981
+        or FractalType.Magnet1 or FractalType.Magnet2 or FractalType.Newton or FractalType.Nova;
     public bool IsSpider => FractalType == FractalType.Spider;
     public bool IsIFS => FractalType == FractalType.IFS;
     public bool IsLSystem => FractalType == FractalType.LSystem;
@@ -1651,6 +1653,15 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool ChaosEarlyOut { get => _chaosEarlyOut; set { Set(ref _chaosEarlyOut, value); _p.ChaosEarlyOut = value; Fire(); } }
     private double _chaosEarlyOutLog10;
     public double ChaosEarlyOutLog10 { get => _chaosEarlyOutLog10; set { Set(ref _chaosEarlyOutLog10, Clamp(value, 10, 300)); _p.ChaosEarlyOutLog10 = _chaosEarlyOutLog10; Fire(); } }
+
+    // #1981 — opt-in rotation-domain colouring (Julia, Phoenix, Magnet, Newton, Nova).
+    public bool RotationDomainColoring { get => _p.RotationDomainColoring; set { if (value == _p.RotationDomainColoring) return; _p.RotationDomainColoring = value; this.RaisePropertyChanged(); Fire(); } }
+    public double RotationDomainEpsilon { get => _p.RotationDomainEpsilon; set { double v = Clamp(value, 0, 1); if (v == _p.RotationDomainEpsilon) return; _p.RotationDomainEpsilon = v; this.RaisePropertyChanged(); Fire(); } }
+    public double RotationDomainBound { get => _p.RotationDomainBound; set { double v = Clamp(value, 0, 1000); if (v == _p.RotationDomainBound) return; _p.RotationDomainBound = v; this.RaisePropertyChanged(); Fire(); } }
+    public double RotationDomainShadeWidth { get => _p.RotationDomainShadeWidth; set { double v = Clamp(value, 0.5, 1000); if (v == _p.RotationDomainShadeWidth) return; _p.RotationDomainShadeWidth = v; this.RaisePropertyChanged(); Fire(); } }
+    public string RotationDomainColorHex { get => Hex(_p.RotationDomainColor); set { if (TryParseHexColor(value, out uint u) && u != _p.RotationDomainColor) { _p.RotationDomainColor = u; this.RaisePropertyChanged(); Fire(); } } }
+    public string RotationDomainEdgeColorHex { get => Hex(_p.RotationDomainEdgeColor); set { if (TryParseHexColor(value, out uint u) && u != _p.RotationDomainEdgeColor) { _p.RotationDomainEdgeColor = u; this.RaisePropertyChanged(); Fire(); } } }
+    public string RotationDomainChaosColorHex { get => Hex(_p.RotationDomainChaosColor); set { if (TryParseHexColor(value, out uint u) && u != _p.RotationDomainChaosColor) { _p.RotationDomainChaosColor = u; this.RaisePropertyChanged(); Fire(); } } }
 
     // ── IFS ──
     private string _ifsPresetName = string.Empty;
