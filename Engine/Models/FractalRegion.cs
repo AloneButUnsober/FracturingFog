@@ -694,6 +694,9 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? NovaZ0Im { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? NovaJuliaCRe { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? NovaJuliaCIm { get; set; }
+        // #1980 — the opt-in chaos early-out (Nova, Newton); only when on / off its default threshold.
+        [JsonIgnore(Condition = OmitNull)] public bool? ChaosEarlyOut { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? ChaosEarlyOutLog10 { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? SecantOffsetRe { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? SecantOffsetIm { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? ApollonianDepth { get; set; }
@@ -1250,6 +1253,8 @@ namespace FracturingFog.Models
                 {
                     NewtonExponent = p.NewtonExponent,
                     NewtonRelaxation = p.NewtonRelaxation,
+                    ChaosEarlyOut = type == FractalType.Newton && p.ChaosEarlyOut ? true : null,   // #1980
+                    ChaosEarlyOutLog10 = type == FractalType.Newton && p.ChaosEarlyOutLog10 != 200 ? p.ChaosEarlyOutLog10 : null,
                 },
                 // #1294 — Nova adds the +c term: its plane switch, z0 and Julia c.
                 FractalType.Nova => new RegionFractalParams
@@ -1261,6 +1266,8 @@ namespace FracturingFog.Models
                     NovaZ0Im = p.NovaZ0.Imaginary,
                     NovaJuliaCRe = p.NovaJuliaC.Real,
                     NovaJuliaCIm = p.NovaJuliaC.Imaginary,
+                    ChaosEarlyOut = p.ChaosEarlyOut ? true : null,                                 // #1980
+                    ChaosEarlyOutLog10 = p.ChaosEarlyOutLog10 != 200 ? p.ChaosEarlyOutLog10 : null,
                 },
                 FractalType.Secant => new RegionFractalParams
                 {
@@ -2251,6 +2258,10 @@ namespace FracturingFog.Models
                 p.NovaZ0 = new Complex(NovaZ0Re ?? p.NovaZ0.Real, NovaZ0Im ?? p.NovaZ0.Imaginary);
             if (NovaJuliaCRe.HasValue || NovaJuliaCIm.HasValue)
                 p.NovaJuliaC = new Complex(NovaJuliaCRe ?? p.NovaJuliaC.Real, NovaJuliaCIm ?? p.NovaJuliaC.Imaginary);
+            if (ChaosEarlyOut.HasValue)                                   // #1980
+                p.ChaosEarlyOut = ChaosEarlyOut.Value;
+            if (ChaosEarlyOutLog10.HasValue)
+                p.ChaosEarlyOutLog10 = ChaosEarlyOutLog10.Value;
             if (SecantOffsetRe.HasValue && SecantOffsetIm.HasValue)
                 p.SecantInitialOffset = new Complex(SecantOffsetRe.Value, SecantOffsetIm.Value);
             if (ApollonianDepth.HasValue)

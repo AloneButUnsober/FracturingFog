@@ -842,7 +842,10 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
   state (δ, m) at doubling intervals, compared bit for bit. #1802: the main deep path's SIMD rows
   snapshot at doubling counts of the periodic reference's wraps (FF's adaptation, not from the paper);
   #1803: the rebased loops at doubling counts of their rebases; #1804: the LA evaluator's stage
-  restarts, and plain Brent on the AT's z'.
+  restarts, and plain Brent on the AT's z'. #1979: Nova / Newton's double loop
+  (`NewtonCalculator`), snapshots of z compared bit for bit (the map's state is z alone), then run on to the
+  cap's phase of the cycle so every buffer equals a run to the cap; not in the perturbation engine, whose
+  state is (m, δ). Suggested for Nova by pauldelbrot (below).
 
 ### Distance estimation, normals, shading
 
@@ -1443,6 +1446,22 @@ Programs and galleries the project measured itself against, learned from, or pay
 
 ---
 
+<a id="pauldelbrot-early-outs-5693"></a>
+
+- **pauldelbrot** (fractalforums.org user). Forum post on fractalforums.org, topic 5693:
+  <https://fractalforums.org/index.php?topic=5693.msg0;topicseen#new>. The content came from a user
+  paste (2026-11-20); FF did not open the page, so the thread title and post date are not verified. It
+  points to an earlier post by the same author on Brent's periodicity detection for orbits that settle
+  on attracting cycles (cycles not known in advance), and proposes, for maps where infinity does not
+  attract but the derivative does, stopping once the running derivative passes about 10^200, as a user
+  toggle (with a running Jacobian for maps of several variables). FF uses it for #1979 (Brent's check in
+  Nova / Newton's double loop, on by default, frames unchanged) and #1980 (the opt-in chaos early-out,
+  `FractalParameters.ChaosEarlyOut`: the orbit's multiplier |Π f′(z_n)| from the first iterate on, det of
+  the BLA's A across skips); measured with `--novaearlyoutprobe` (`Probes/NovaEarlyOutProbe.cs`). FF's
+  choices (the multiplier rather than dz/dc, leaving out the critical start point, bit-exact repeats and
+  the cap-phase run-on) are FF's, not the post's. Issue #1981 (rotation-domain colouring) comes from the
+  same post.
+
 ## Sites, communities, and other long-form references
 
 - **fractalforums.com** — long-running fractal-rendering community (now an archive). Many of the
@@ -1470,6 +1489,8 @@ These sources are cited in the code or docs, but their publication details aren'
 They stay listed (the contract never drops a credit). Each needs its primary source traced and its
 entry above completed or corrected.
 
+- **pauldelbrot, fractalforums.org topic 5693** — thread title and post date (#1979 / #1980; content
+  from a user paste, the page not opened).
 - **Alonso, Ruiz & Sánchez-Hernández 2007** — journal reference of arXiv:gr-qc/0701052 (#1928).
 - **Kluitenberg, Roest & Seri 2022** — journal reference of arXiv:2211.06880 (#1928; cited elsewhere as
   Bollettino dell'Unione Matematica Italiana, 2023).

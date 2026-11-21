@@ -931,6 +931,55 @@ in the same PR.
     to direct iteration (it takes 8 failed references). The code has the same shape as the two caught
     stops.
 
+**Nova follow-ups as built (#1964, #1979, #1980).** The early-out ideas are pauldelbrot's
+(fractalforums.org topic 5693, in the bibliography; thread title and date unverified). Measured with
+`--novaearlyoutprobe` (`Probes/NovaEarlyOutProbe.cs`).
+- **#1964, the switch moves to 1e7.** Against direct BigFloat iteration (48×32, every third pixel, the
+  two D14 parameter views and the Julia view), the double loop matched 176/176 at 1e3–1e6, ≥ 175/176 at
+  1e7, and only 152 / 170 / 150 at 1e11. The engine matched 176/176 at every zoom, at ~5–7× the double
+  loop's time. `DeepZoomThreshold` = 1e7; `DeepZoomFrom` moves it per instance (tests, probes).
+- **#1979, Brent's periodicity check, double loop only** (Brent 1980). z is snapshotted at doubling step
+  counts and compared bit for bit.
+  - The step is a function of z alone, so a repeat means the orbit cycles for good and never stops.
+  - The pixel runs on to the cap's phase of the cycle: cap = n + 1 + (max − n − 1) mod period, fewer
+    steps than the period. So every buffer (colour, basin, smooth, final z) equals a run to the cap.
+  - On by default (`NewtonCalculator.Periodicity`); plain Newton gets it too.
+  - **Not in the engine.** A pixel's state there is (m, δ), not z. Near a repelling cycle z = Z + δ
+    rounds to the reference's periodic Z, so a repeat of z would stop pixels that later converge. No
+    engine view showed a bit-exact repeat either.
+- **#1980, the opt-in chaos early-out** (`FractalParameters.ChaosEarlyOut`, `ChaosEarlyOutLog10` =
+  200; region snapshot / `--param` / Command builder for Nova and Newton; a Control Center checkbox).
+  - A non-converged pixel stops once the orbit's multiplier |Π f′(z_n)| passes 10^threshold, and colours
+    as at the cap. The step stop is tested first.
+  - The product runs **from the first iterate**. Nova's parameter plane starts at z₀ = 1, a critical
+    point (N′(1) = 0), so from z₀ the product is identically 0 and the test never fires.
+  - Double loop: N′ = 1 − R·(1 + (d−1)·z^−d)/d. Engine: |det ∂f/∂z| per single step (the plan's exact
+    `JacobianStepScaled` with weight 0), |det A| across a BLA skip. Mantissa · 2^e, renormalised by exact
+    powers of two.
+  - Not in the scaled-δ prelude: past ~1e286 the product starts where the pixel leaves it.
+  - **Finding:** on Nova (d = 3, R = 1) almost nothing stops at 10^200. The roots are superattracting
+    (N′ = 0 there), and the non-converged area is attracting cycles, whose multiplier decays; chaotic
+    orbits only lie on boundaries. Measured: 16–479 stops per 640×360 frame, ≤ 2.2 % of the iterations,
+    0.92–1.04× in the double loop and ~0.8× in the engine (two Jacobian steps per step). It stays off by
+    default.
+- **Timings** (640×360, 12 threads, median of 5 warm runs; "before" is main built with the same probe):
+
+  | view | cap | before | off | cycle | both | cycle stops | iterations saved |
+  |---|---|---|---|---|---|---|---|
+  | parameter plane (0.6) | 6000 | 95 ms | 98 ms | 76 ms (1.29×) | 78 ms | 406 | 18.6 % |
+  | minibrot (−0.45, ×12) | 1500 | 1018 ms | 958 ms | 465 ms (2.06×) | 564 ms | 76,940 | 54.4 % |
+  | minibrot | 6000 | 3559 ms | 3966 ms | 812 ms (4.89×) | 806 ms | 86,267 | 81.3 % |
+  | filaments (−0.6, ×30) | 6000 | 979 ms | 1004 ms | 593 ms (1.69×) | 599 ms | 7,113 | 35.1 % |
+  | Julia c = −0.45 (×1.5) | 1500 | 1042 ms | 1074 ms | 843 ms (1.27×) | 954 ms | 69,560 | 29.8 % |
+  | Julia c = −0.45 | 6000 | 3142 ms | 3470 ms | 894 ms (3.88×) | 947 ms | 69,560 | 81.4 % |
+  | deep minibrot edge (1e12, engine) | 1500 | 7663 ms | 8361 ms | — | 9866 ms | 0 | 0 % |
+
+  Every "cycle" frame is byte-identical to "off" (colour, basin, smooth, final z). The chaos stops changed
+  no colour or basin, only the final z of the stopped pixels. Run-to-run noise is ~±10 %.
+- **Mutants:** caught 5 (the cap-phase run-on, the re-snapshot, the step-0 factor, the engine's skip and
+  single-step factors). Survived: a guard against a BLA skip over step 0, redundant at z₀ = 1 (A = 0 gives
+  a zero radius) and removed, as it changed the dynamic plane's BLA table.
+
 **Order of value:** D1 → D2 → D3 gives deep zoom to Multibrot, Julia, Generated Z2–Z5 and every
 polynomial user equation. D4 / D5 add Tricorn and Burning Ship, which is the original #1253. D6–D10
 widen the user equation language.

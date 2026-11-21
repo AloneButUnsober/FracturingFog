@@ -40,7 +40,9 @@ namespace FracturingFog.Perturbation;
 public readonly record struct PerturbationStats(
     int ReferenceLength, int References, long Rebases, long BlaSkips, int GlitchedPixels, int DirectPixels,
     long PoleGlitches = 0,   // #1911 — pixel steps flagged by the quotient's pole test
-    long ScaledSteps = 0);   // #1921 — pixel steps (single or skipped) taken in the scaled-δ prelude
+    long ScaledSteps = 0,    // #1921 — pixel steps (single or skipped) taken in the scaled-δ prelude
+    long ChaosStops = 0,     // #1980 — pixels the chaos early-out stopped
+    long IterationsSaved = 0);   // #1980 — iterations those pixels did not run
 
 public static partial class PerturbationEngine
 {
@@ -87,6 +89,16 @@ public static partial class PerturbationEngine
         /// <summary>#1959 — a step stop at |step|² &lt; <paramref name="eps2"/>.</summary>
         public static Convergence OnStep(double eps2, StepConvergedSink sink)
             => new(0, 0, Math.Sqrt(eps2), static (_, _, _, _, _) => { }) { StepSink = sink };
+
+        /// <summary>#1980 — when &gt; 0, the chaos early-out (with <see cref="StepSink"/>): a pixel stops
+        /// in the double loop once log2 |det Π ∂f/∂z| over its steps from the first iterate on (for a
+        /// conformal map log2 |Π f′|²; exact across BLA skips, whose A is that product) passes this, and
+        /// reaches the pixel sink with the cap. A single step 0 is left out (z₀ may be a critical point, as
+        /// Nova's parameter plane's z₀ = 1, which would pin the product to 0). No skip starts there in that
+        /// case (A = 0 gives a zero radius); in the dynamic plane a skip from step 0 keeps that step's finite
+        /// factor, so the BLA table is the one the frame uses without the early-out. Not in the scaled-δ
+        /// prelude (past ~1e286): there the product starts where the pixel leaves it.</summary>
+        public double ChaosLog2 { get; init; }
     }
 
     /// <summary>#1959 — receives a pixel whose step converged at iteration n: z_{n+1}, the step² one before
@@ -194,7 +206,7 @@ public static partial class PerturbationEngine
             return warp != null ? warp(ox, oy) : (ox, oy);
         }
 
-        long rebases = 0, skips = 0, poleFlags = 0, scaled = 0;
+        long rebases = 0, skips = 0, poleFlags = 0, scaled = 0, chaosStops = 0, saved = 0;
         // Glitched pixels (dynamic plane): index → the iteration it glitched at.
         var glitched = new ConcurrentBag<(int Idx, int Iter)>();
 
@@ -216,6 +228,7 @@ public static partial class PerturbationEngine
             Interlocked.Add(ref skips, st.Skips);
             Interlocked.Add(ref poleFlags, st.PoleFlags);
             Interlocked.Add(ref scaled, st.Scaled);
+            Interlocked.Add(ref chaosStops, st.Chaos); Interlocked.Add(ref saved, st.Saved);
         });
 
         int glitchedCount = glitched.Count, refs = 1, direct = 0;
@@ -243,6 +256,7 @@ public static partial class PerturbationEngine
                 Interlocked.Add(ref skips, st.Skips);
                 Interlocked.Add(ref poleFlags, st.PoleFlags);
                 Interlocked.Add(ref scaled, st.Scaled);
+                Interlocked.Add(ref chaosStops, st.Chaos); Interlocked.Add(ref saved, st.Saved);
                 if (g >= 0) next.Add((p.Idx, g));
             });
             pending = new List<(int Idx, int Iter)>(next);
@@ -261,10 +275,11 @@ public static partial class PerturbationEngine
             direct = pending.Count;
         }
         return new PerturbationStats(main.Len, refs, rebases, skips, glitchedCount, direct, Interlocked.Read(ref poleFlags),
-                                     Interlocked.Read(ref scaled));
+                                     Interlocked.Read(ref scaled), Interlocked.Read(ref chaosStops),
+                                     Interlocked.Read(ref saved));
     }
 
-    private struct Counters { public long Rebases, Skips, PoleFlags, Scaled; }
+    private struct Counters { public long Rebases, Skips, PoleFlags, Scaled, Chaos, Saved; }
 
     private static Reference BuildReference(IPerturbationPlan plan, BigFloat cr, BigFloat ci, BigFloat jcr, BigFloat jci,
                                             int prec, int maxIter, CancellationToken ct)
@@ -658,6 +673,12 @@ public static partial class PerturbationEngine
         double bail = plan.Bailout2;
         var bla = r.Bla2;
         int m = st.M, iter = st.Iter;
+        // #1980 — |det Π ∂f/∂z| as mul · 2^mulE. (No periodicity check here, #1979: the pixel's state is
+        // (m, δ), not z, and near a repelling cycle z = Z + δ rounds to the reference's periodic Z, so a
+        // repeat of z would stop pixels that later converge.)
+        double chaosT = converge?.StepSink != null ? converge.ChaosLog2 : 0;
+        double mul = 1; long mulE = 0;
+        bool chaos = false;
         for (; iter < maxIter; iter++)
         {
             if (bla != null)
@@ -678,6 +699,11 @@ public static partial class PerturbationEngine
                         iter += e.L - 1;
                         c.Skips++;
                         dPrev = double.NaN;
+                        if (chaosT > 0)
+                        {
+                            MulIn(ref mul, ref mulE, Math.Abs(A.M11 * A.M22 - A.M12 * A.M21));   // A = Π ∂f/∂z over the skip
+                            if (Chaotic(mul, mulE, chaosT)) { chaos = true; break; }
+                        }
                         continue;
                     }
                 }
@@ -695,6 +721,12 @@ public static partial class PerturbationEngine
             }
             JacAny(plan, zr, zi, pcr, pci, ref jac, t);
             Renorm(ref jac, ref t);
+            if (chaosT > 0 && iter > 0)   // from the first iterate on (z₀ may be critical: ∂f/∂z = 0)
+            {
+                var jz = new RealMat2(1, 0, 0, 1);
+                plan.JacobianStepScaled(zr, zi, pcr, pci, ref jz, 0);   // ∂f/∂z at z
+                MulIn(ref mul, ref mulE, Math.Abs(jz.M11 * jz.M22 - jz.M12 * jz.M21));
+            }
 
             if (rebase)
             {
@@ -737,12 +769,37 @@ public static partial class PerturbationEngine
                 if (step2 < cEps2) { ss(idx, iter, nzr, nzi, dPrev, step2); return -1; }
                 dPrev = step2;
             }
+            // #1980 — not converged and the multiplier is past the threshold: stop as at the cap.
+            if (chaosT > 0 && Chaotic(mul, mulE, chaosT)) { chaos = true; break; }
+        }
+        if (chaos)
+        {
+            c.Chaos++; c.Saved += maxIter - (iter + 1);
+            if (m < r.Len) { zr = r.Zr[m] + dr; zi = r.Zi[m] + di; }
+            var (cvr, cvi) = Deliver(jac.M11, jac.M21, t, f);
+            sink(idx, maxIter, zr, zi, cvr, cvi);
+            return -1;
         }
         if (iter >= maxIter && m < r.Len) { zr = r.Zr[m] + dr; zi = r.Zi[m] + di; }
         var (vr, vi) = Deliver(jac.M11, jac.M21, t, f);
         sink(idx, iter, zr, zi, vr, vi);
         return -1;
     }
+
+    // #1980 — multiply a factor into mul · 2^e, renormalised by exact powers of two.
+    internal static void MulIn(ref double mul, ref long e, double factor)
+    {
+        mul *= factor;
+        if (mul > 18446744073709551616.0 || mul < 1.0 / 18446744073709551616.0)   // 2^±64
+        {
+            if (mul == 0) { e = long.MinValue / 2; return; }
+            if (!double.IsFinite(mul)) return;
+            int k = Math.ILogB(mul); mul = Math.ScaleB(mul, -k); e += k;
+        }
+    }
+
+    // #1980 — log2(mul · 2^e) > t (the log only near the threshold).
+    internal static bool Chaotic(double mul, long e, double t) => e > t - 64 && e + Math.Log2(mul) > t;
 
     // Direct iteration in BigFloat (the last resort for glitched pixels). The derivative runs in
     // double on the rounded z, as the perturbed path's does (scaled past 2^DerivRenormLog2, #1921).

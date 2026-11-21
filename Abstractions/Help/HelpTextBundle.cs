@@ -1355,9 +1355,26 @@ Setting c = 0 collapses Nova back to the pure Newton fractal.
   NovaZ0           : Complex  Parameter-plane start.  Default 1
                               (the canonical Nova).
   NovaJuliaC       : Complex  Julia-plane constant.  Default −0.5.
+  ChaosEarlyOut    : bool     Off (default).  On: a pixel that has
+                              not converged stops once its orbit's
+                              multiplier |Π f′(z)| passes
+                              10^ChaosEarlyOutLog10, and colours as
+                              not converged.  Faster only where
+                              orbits are chaotic; a pixel that would
+                              converge after a chaotic stretch is
+                              stopped too.  Also plain Newton.
+  ChaosEarlyOutLog10 : double The threshold's power of ten.  Default
+                              200.
 
   Batch: --param NovaJuliaMode=true, NovaZ0Re / NovaZ0Im,
-  NovaJuliaCRe / NovaJuliaCIm.
+  NovaJuliaCRe / NovaJuliaCIm, ChaosEarlyOut=true,
+  ChaosEarlyOutLog10.
+
+  Periodicity: an orbit caught in an attracting cycle never
+  converges.  Brent's check notices when z repeats exactly and
+  stops the pixel early, with the same colour as running to the
+  iteration cap (always on; the frame does not change).  Both
+  early-outs follow ideas posted by pauldelbrot on fractalforums.org.
 
 === Colouring ===
 
