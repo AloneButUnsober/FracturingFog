@@ -2513,7 +2513,15 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double MixOmega { get => _mxOmega; set { Set(ref _mxOmega, Clamp(value, -100.0, 100.0)); _p.MixOmega = _mxOmega; Fire(); } }
     public double MixAlphaDot { get => _mxAlphaDot; set { Set(ref _mxAlphaDot, Clamp(value, -1000.0, 1000.0)); _p.MixAlphaDot = _mxAlphaDot; Fire(); } }
     public double MixBetaDot { get => _mxBetaDot; set { Set(ref _mxBetaDot, Clamp(value, -1000.0, 1000.0)); _p.MixBetaDot = _mxBetaDot; Fire(); } }
-    public double MixMaxTime { get => _mxMaxTime; set { Set(ref _mxMaxTime, Clamp(value, 1.0, 1e300)); _p.MixMaxTime = _mxMaxTime; Fire(); } }
+    public double MixMaxTime { get => _mxMaxTime; set { Set(ref _mxMaxTime, Clamp(value, 1.0, 1e300)); _p.MixMaxTime = _mxMaxTime; this.RaisePropertyChanged(nameof(MixMaxTimeExponent)); Fire(); } }
+    /// <summary>The arc-length limit as a power of ten (0 to 300), for the panel: Avalonia's
+    /// NumericUpDown is decimal-backed (at most about 7.9e28), and the limit's default is 1e30, so the
+    /// box edits the exponent instead (an e-notation Maximum crashed the Params view).</summary>
+    public double MixMaxTimeExponent
+    {
+        get => Math.Log10(_mxMaxTime);
+        set { if (double.IsFinite(value)) MixMaxTime = Math.Pow(10.0, Clamp(value, 0.0, 300.0)); }
+    }
     public double MixTolerance { get => _mxTol; set { Set(ref _mxTol, Clamp(value, 1e-13, 1e-3)); _p.MixTolerance = _mxTol; Fire(); } }
 
     // ── #1947 — black hole + ring ────────────────────────────────────────────

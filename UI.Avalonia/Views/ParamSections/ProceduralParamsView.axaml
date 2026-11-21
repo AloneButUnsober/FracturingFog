@@ -1799,9 +1799,9 @@
             <TextBlock Grid.Row="5" Grid.Column="0" Text="(ln b)' :" VerticalAlignment="Center" IsVisible="{Binding MixIsAnisotropy}" />
             <NumericUpDown Grid.Row="5" Grid.Column="1" IsVisible="{Binding MixIsAnisotropy}" Minimum="-1000" Maximum="1000" Increment="1" FormatString="0.##########"
                            Value="{Binding MixBetaDot, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Expansion rate of b at the start (theirs: 10); c's comes from the constraint." />
-            <TextBlock Grid.Row="6" Grid.Column="0" Text="Arc-length limit:" VerticalAlignment="Center" />
-            <NumericUpDown Grid.Row="6" Grid.Column="1" Minimum="1" Maximum="1E+300" Increment="1000" FormatString="0.###E+0"
-                           Value="{Binding MixMaxTime, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="A universe still running after this arc length is undecided (interior colour). The epochs lengthen geometrically, so it is large." />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Arc-length limit (10^):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="6" Grid.Column="1" Minimum="0" Maximum="300" Increment="1" FormatString="0.###"
+                           Value="{Binding MixMaxTimeExponent, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="The arc-length limit as a power of ten (30 means 1e30). A universe still running after this arc length is undecided (interior colour). The epochs lengthen geometrically, so it is large." />
             <TextBlock Grid.Row="7" Grid.Column="0" Text="Tolerance:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="7" Grid.Column="1" Minimum="0.0000000000001" Maximum="0.001" Increment="0.000000001" FormatString="0.#############"
                            Value="{Binding MixTolerance, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Integrator relative tolerance per step." />
