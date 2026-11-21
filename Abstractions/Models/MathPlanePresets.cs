@@ -35,7 +35,7 @@ namespace FracturingFog.Models
         string Scene,
         double ViewWorldX = 0,
         double ViewWorldY = 0,
-        double Zoom = 0.5,
+        double Zoom = 0.4375,   // #1974: the camera's pitch (was 0.5 at 4 / width)
         MathPlaneMapMode MapMode = MathPlaneMapMode.None,
         double M11 = 1, double M12 = 1, double M21 = 0, double M22 = 1,
         double T = 1,
@@ -111,46 +111,46 @@ namespace FracturingFog.Models
                 "Near z the map z^2 is multiplication by f'(z) = 2z: the small square turns by arg z and scales by 2|z|. "
                 + "A holomorphic map is a rotate-and-scale at every point, a different one at each.",
                 "map \"z^2\"; probe 1 0.5",
-                ViewWorldX: 0.5, ViewWorldY: 0.8, Zoom: 0.9, MapMode: MathPlaneMapMode.Complex),
+                ViewWorldX: 0.5, ViewWorldY: 0.8, Zoom: 0.7875, MapMode: MathPlaneMapMode.Complex),
 
             // ── Orbits: the Mandelbrot set ──
             new("Orbit of c inside M",
                 "For c inside the main cardioid the orbit of 0 under z^2 + c spirals into a fixed point: it never "
                 + "leaves |z| <= 2, so c is in the Mandelbrot set.",
                 "orbit 60",
-                ViewWorldX: -0.5, Zoom: 0.6, CRe: -0.2, CIm: 0.3, Backdrop: MathPlaneBackdrop.Mandelbrot),
+                ViewWorldX: -0.5, Zoom: 0.525, CRe: -0.2, CIm: 0.3, Backdrop: MathPlaneBackdrop.Mandelbrot),
             new("Orbit of c outside M",
                 "For c = 0.5 + 0.5i the orbit leaves the escape circle |z| = 2 after a few steps, so c is not in the "
                 + "Mandelbrot set. Drag c to find the boundary.",
                 "orbit 60",
-                ViewWorldX: -0.5, Zoom: 0.6, CRe: 0.5, CIm: 0.5, Backdrop: MathPlaneBackdrop.Mandelbrot),
+                ViewWorldX: -0.5, Zoom: 0.525, CRe: 0.5, CIm: 0.5, Backdrop: MathPlaneBackdrop.Mandelbrot),
             new("Period 2: c = -1",
                 "At c = -1 the orbit of 0 goes 0, -1, 0, -1 ...: a 2-cycle. c sits at the centre of the disk left of "
                 + "the cardioid, the period-2 bulb.",
                 "orbit 40",
-                ViewWorldX: -0.5, Zoom: 0.6, CRe: -1, CIm: 0, Backdrop: MathPlaneBackdrop.Mandelbrot),
+                ViewWorldX: -0.5, Zoom: 0.525, CRe: -1, CIm: 0, Backdrop: MathPlaneBackdrop.Mandelbrot),
             new("Period 3: the rabbit",
                 "At the centre of the period-3 bulb, c^3 + 2c^2 + c + 1 = 0, the orbit of 0 closes a triangle. The "
                 + "backdrop is the Julia set of this c (the Douady rabbit); the triangle visits its three ears' centres.",
                 "orbit 40",
-                Zoom: 0.5, CRe: RabbitRe, CIm: RabbitIm, Backdrop: MathPlaneBackdrop.Julia),
+                Zoom: 0.4375, CRe: RabbitRe, CIm: RabbitIm, Backdrop: MathPlaneBackdrop.Julia),
 
             // ── The real axis: period doubling ──
             new("Cobweb: fixed point (c = -0.5)",
                 "On the real axis, x -> x^2 + c. Each step goes up to the curve and across to y = x. At c = -0.5 the "
                 + "staircase closes in on the crossing: an attracting fixed point.",
-                "cobweb 0.9 30", Zoom: 0.8, CRe: -0.5, CIm: 0),
+                "cobweb 0.9 30", Zoom: 0.7, CRe: -0.5, CIm: 0),
             new("Cobweb: period 2 (c = -1)",
                 "Past c = -0.75 the fixed point repels and the cobweb settles on a square: a 2-cycle.",
-                "cobweb 0.1 40", Zoom: 0.8, CRe: -1, CIm: 0),
+                "cobweb 0.1 40", Zoom: 0.7, CRe: -1, CIm: 0),
             new("Cobweb: period 4 (c = -1.3)",
                 "Past c = -1.25 the 2-cycle splits into a 4-cycle: two nested squares. The splits come faster and "
                 + "faster (period doubling) along the real axis of the Mandelbrot set.",
-                "cobweb 0.1 60", Zoom: 0.8, CRe: -1.3, CIm: 0),
+                "cobweb 0.1 60", Zoom: 0.7, CRe: -1.3, CIm: 0),
             new("Cobweb: chaos (c = -1.9)",
                 "Near c = -2 the orbit never settles: the staircase wanders over the whole interval. This is the "
                 + "chaotic end of the cascade.",
-                "cobweb 0.1 80", Zoom: 0.8, CRe: -1.9, CIm: 0),
+                "cobweb 0.1 80", Zoom: 0.7, CRe: -1.9, CIm: 0),
 
             // ── Linear maps ──
             new("Shear",
@@ -189,7 +189,7 @@ namespace FracturingFog.Models
                 + "step 2 c -1 0; with caption \"c = -1: a 2-cycle\"; step 1 wait; "
                 + "step 2 c -1.3 0; with caption \"c = -1.3: a 4-cycle\"; step 1 wait; "
                 + "step 2 c -1.9 0; with caption \"c = -1.9: chaos\"; step 1.5 wait; step 1 caption \"\"",
-                Zoom: 0.8, CRe: -0.5, CIm: 0),
+                Zoom: 0.7, CRe: -0.5, CIm: 0),
             new("Script: c leaves the set",
                 "A script: the orbit of 0 for c inside the Mandelbrot set stays bounded; drag c out past the edge "
                 + "and the same orbit escapes the circle |z| = 2.",
@@ -198,7 +198,7 @@ namespace FracturingFog.Models
                 + "step 3 ease none orbit 40; with caption \"The orbit of 0 stays bounded\"; "
                 + "step 4 c 0.5 0.5; with caption \"Move c out past the edge\"; "
                 + "step 2 wait; with caption \"c outside M: the orbit escapes\"; step 1 caption \"\"",
-                ViewWorldX: -0.5, Zoom: 0.6, CRe: -0.2, CIm: 0.3, Backdrop: MathPlaneBackdrop.Mandelbrot),
+                ViewWorldX: -0.5, Zoom: 0.525, CRe: -0.2, CIm: 0.3, Backdrop: MathPlaneBackdrop.Mandelbrot),
             new("Script: the rabbit orbit",
                 "A script: over the Douady rabbit (the Julia set of the period-3 centre c), the orbit of 0 is "
                 + "revealed step by step, then the camera moves in on its three-point cycle.",
@@ -207,7 +207,7 @@ namespace FracturingFog.Models
                 + "step 3 ease none orbit 30; with caption \"The orbit of 0 visits its three ears\"; "
                 + "step 3 camera -0.12 0.35 2.5; with caption \"Period 3\"; "
                 + "step 1 wait; step 2 camera 0 0; with caption \"\"",
-                Zoom: 0.5, CRe: RabbitRe, CIm: RabbitIm, Backdrop: MathPlaneBackdrop.Julia),
+                Zoom: 0.4375, CRe: RabbitRe, CIm: RabbitIm, Backdrop: MathPlaneBackdrop.Julia),
         };
     }
 }

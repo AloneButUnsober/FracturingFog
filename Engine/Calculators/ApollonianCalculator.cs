@@ -94,10 +94,9 @@ public sealed class ApollonianCalculator : IFractalCalculator, IHeightFieldSourc
         int maxDepth = Math.Max(0, FractalParameters.ApollonianDepth);
         double minPx  = Math.Max(0.25, FractalParameters.ApollonianMinPixelRadius);
 
-        // World→screen scale matches the standard 2D fractal convention used
-        // elsewhere in the engine: pixel pitch = (4 / Width) / Zoom, fractal
+        // World→screen scale: the camera's (#1974, ViewCamera.PixelPitch), fractal
         // origin at (CenterX, CenterY).
-        double pixelPitch = (4.0 / Math.Max(1, Width)) / Math.Max(1e-12, Zoom);
+        double pixelPitch = FracturingFog.ViewState.ViewCamera.PixelPitch(Width, Height, Zoom);
         double minWorldR  = minPx * pixelPitch;
 
         ColorMap.MaxIterations = Math.Max(8, maxDepth + 4);
@@ -192,7 +191,7 @@ public sealed class ApollonianCalculator : IFractalCalculator, IHeightFieldSourc
 
     private void PaintDisk(Circle c)
     {
-        double pixelPitch = (4.0 / Math.Max(1, Width)) / Math.Max(1e-12, Zoom);
+        double pixelPitch = FracturingFog.ViewState.ViewCamera.PixelPitch(Width, Height, Zoom);
         if (pixelPitch <= 0.0) return;
         double invPitch = 1.0 / pixelPitch;
 

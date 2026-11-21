@@ -70,7 +70,7 @@ public sealed class WhiteLightTests
         var s = new SlitCascadeCalculator(w, h) { Zoom = 0.5, MaxIterations = maxIt, ColorMap = new HsvPalette(), FractalParameters = p };
         s.Calculate(CancellationToken.None);
         var c0 = SlitCascadeCalculator.Build(p);
-        double logI0 = 2 * c0.Depth * Math.Log10(c0.P.Sum(Math.Sqrt)), pitch = 4.0 / w / 0.5;
+        double logI0 = 2 * c0.Depth * Math.Log10(c0.P.Sum(Math.Sqrt)), pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(w, h, 0.5);
         var cs = nm.Select(n => { var q = p.Clone(); q.SlitCascadeWavelength = p.SlitCascadeWavelength * n / 550.0; return SlitCascadeCalculator.Build(q); }).ToArray();
         for (int i = 0; i < w * h; i += 5)
         {
@@ -89,7 +89,7 @@ public sealed class WhiteLightTests
         var tc = Talbot(tp, w, h, 0.1, 0.43, 1.9, maxIt);
         var cf = TalbotCarpetCalculator.Coefficients(tp);
         double mean = cf.Sum(v => v.Real * v.Real + v.Imaginary * v.Imaginary), top = 2 * Math.Log10(cf.Sum(v => v.Magnitude)) - Math.Log10(mean);
-        double tpitch = 4.0 / w / 1.9;
+        double tpitch = FracturingFog.ViewState.ViewCamera.PixelPitch(w, h, 1.9);
         for (int i = 0; i < w * h; i += 5)
         {
             double xi = 0.1 + (i % w - w * 0.5) * tpitch, zeta = 0.43 + (i / w - h * 0.5) * tpitch, ie = 0;
@@ -110,8 +110,8 @@ public sealed class WhiteLightTests
     {
         const int w = 64, h = 6, maxIt = 1_000_000;
         var p = new FractalParameters { TalbotModes = 8, TalbotWhiteLight = WhiteLightMode.TrueSpectrum, WhiteLightSamples = 24, TalbotDynamicRange = 30 };
-        // 64 pixels span exactly one period ξ ∈ [0, 1): pitch = 4 / w / zoom = 1/64.
-        var calc = Talbot(p, w, h, 0.5, 0.31, 4.0, maxIt);
+        // 64 pixels span exactly one period ξ ∈ [0, 1): pitch = 3.5 / (max(w, h) zoom) = 1/64 (#1974).
+        var calc = Talbot(p, w, h, 0.5, 0.31, 3.5, maxIt);
         var cf = TalbotCarpetCalculator.Coefficients(p);
         double mean = cf.Sum(v => v.Real * v.Real + v.Imaginary * v.Imaginary), sumAbs = cf.Sum(v => v.Magnitude);
         double logMean = Math.Log10(mean), top = 2 * Math.Log10(sumAbs) - logMean, dec = 30;
@@ -138,7 +138,7 @@ public sealed class WhiteLightTests
     {
         const int w = 96, h = 64;
         var p = new FractalParameters { TalbotModes = 16, TalbotWhiteLight = mode };
-        var calc = Talbot(p, w, h, 0.0, 0.0, 1.9);   // row h/2 sits exactly on ζ = 0
+        var calc = Talbot(p, w, h, 0.0, 0.0, 1.6625);   // row h/2 sits exactly on ζ = 0 (the old zoom-1.9 framing, #1974)
         int row = h / 2, grey = 0;
         for (int x = 0; x < w; x++)
         {

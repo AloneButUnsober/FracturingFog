@@ -101,19 +101,19 @@ FracturingFog.exe --batch --region "Billiard Rays - Three-Disk Gate Flow" --widt
 Any setting, through `--param` (the same names the regions store):
 
 ```bash
-FracturingFog.exe --batch --fractal BilliardRays --x 0 --y 0 --zoom 0.6 --width 1920 --height 1080 --param BilliardRaysCount=200000 --param BilliardRaysAngleCount=3 --param BilliardRaysAngle=90 --param BilliardRaysColorSource=1 --out three-beams.png
+FracturingFog.exe --batch --fractal BilliardRays --x 0 --y 0 --zoom 0.525 --width 1920 --height 1080 --param BilliardRaysCount=200000 --param BilliardRaysAngleCount=3 --param BilliardRaysAngle=90 --param BilliardRaysColorSource=1 --out three-beams.png
 ```
 
 A custom layout (`x,y,r` per disk, separated by `;`):
 
 ```bash
-FracturingFog.exe --batch --fractal BilliardRays --x 0 --y 0 --zoom 0.6 --width 1600 --height 1200 --param BilliardGeometry=3 --param "BilliardCustomDisks=0,1.1,0.55;1.05,0.2,0.5;0.55,-1,0.6;-0.75,-0.85,0.45;-1.1,0.35,0.5" --param BilliardRaysMode=4 --param BilliardRaysDivergenceValue=1 --out custom.png
+FracturingFog.exe --batch --fractal BilliardRays --x 0 --y 0 --zoom 0.525 --width 1600 --height 1200 --param BilliardGeometry=3 --param "BilliardCustomDisks=0,1.1,0.55;1.05,0.2,0.5;0.55,-1,0.6;-0.75,-0.85,0.45;-1.1,0.35,0.5" --param BilliardRaysMode=4 --param BilliardRaysDivergenceValue=1 --out custom.png
 ```
 
 A filled hexagon (`BilliardGeometry` 4 = Polygon, 5 = SquareLattice, 6 = HexLattice):
 
 ```bash
-FracturingFog.exe --batch --fractal BilliardRays --x 0 --y 0 --zoom 0.35 --width 1600 --height 1200 --param BilliardGeometry=4 --param BilliardPolygonSides=6 --param BilliardDiskCount=24 --param BilliardDiskRadius=0.15 --param BilliardSeparation=2 --param BilliardPolygonFill=true --out filled-hexagon.png
+FracturingFog.exe --batch --fractal BilliardRays --x 0 --y 0 --zoom 0.30625 --width 1600 --height 1200 --param BilliardGeometry=4 --param BilliardPolygonSides=6 --param BilliardDiskCount=24 --param BilliardDiskRadius=0.15 --param BilliardSeparation=2 --param BilliardPolygonFill=true --out filled-hexagon.png
 ```
 
 Enum settings take their number in the order the panel lists them, for example `BilliardRaysMode` 0 = Paths,

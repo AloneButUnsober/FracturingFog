@@ -33,7 +33,7 @@ public class BilliardRaysColourTests
 
     private static double ClippedPathLength(IReadOnlyList<BilliardPoint> path)
     {
-        double pitch = 4.0 / W / Zoom;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(W, H, Zoom);
         double x0 = Cx - (W / 2.0 + 0.5) * pitch, x1 = Cx + (W / 2.0 - 0.5) * pitch;
         double y0 = -(Cy + (H / 2.0 - 0.5) * pitch), y1 = -(Cy - (H / 2.0 + 0.5) * pitch);
         double sum = 0;

@@ -62,7 +62,7 @@ public class BilliardRaysTests
 
         // View rectangle in world space: pixel i spans plane [(i - 0.5 - W/2), (i + 0.5 - W/2)] pitch
         // about the centre; world y is minus plane y.
-        double pitch = 4.0 / W / zoom;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(W, H, zoom);
         double x0 = cx - (W / 2.0 + 0.5) * pitch, x1 = cx + (W / 2.0 - 0.5) * pitch;
         double py0 = cy - (H / 2.0 + 0.5) * pitch, py1 = cy + (H / 2.0 - 0.5) * pitch;
         double y0 = -py1, y1 = -py0;
@@ -86,7 +86,7 @@ public class BilliardRaysTests
         var p = new FractalParameters { BilliardRaysCount = 20000, BilliardRaysMinBounces = 0, BilliardRaysAngleCount = 5 };
         var c = Render(p);
         var scene = BilliardScene.Build(p);
-        double pitch = 4.0 / W / 0.6;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(W, H, 0.6);
         int inside = 0;
         for (int y = 0; y < H; y++)
             for (int x = 0; x < W; x++)
@@ -110,7 +110,7 @@ public class BilliardRaysTests
     {
         // ThreeDisk disk 0 sits at the top (0, sep); the mirror point (0, -sep) is a gap.
         var c = Render(new FractalParameters { BilliardRaysCount = 10 });
-        double pitch = 4.0 / W / 0.6;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(W, H, 0.6);
         int Px(double wx) => (int)Math.Round(wx / pitch + W / 2.0);
         int Py(double wy) => (int)Math.Round(-wy / pitch + H / 2.0);
         Assert.Equal(BilliardRaysCalculator.DiskFillColor, c.ColorBuffer[Py(1.0) * W + Px(0)]);

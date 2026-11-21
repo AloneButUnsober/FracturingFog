@@ -132,7 +132,7 @@ public sealed class TalbotCarpetTests
         var c = TalbotCarpetCalculator.Coefficients(p);
         double mean = c.Sum(v => v.Real * v.Real + v.Imaginary * v.Imaginary), sumAbs = c.Sum(v => v.Magnitude);
         double decades = p.TalbotDynamicRange, top = 2 * Math.Log10(sumAbs) - Math.Log10(mean);
-        double pitch = 4.0 / w / zoom;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(w, h, zoom);
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++)
             {

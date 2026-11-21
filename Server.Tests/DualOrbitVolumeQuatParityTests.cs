@@ -60,7 +60,7 @@ public sealed class DualOrbitVolumeQuatParityTests
         var p = new FractalParameters { DualOrbitField = f, DualOrbitSliceAxes = DualOrbitSliceAxes.CxCy, DualOrbitSX = sx, DualOrbitSY = sy };
         var calc = new DualOrbitEscapeCalculator(24, 18) { CenterX = 0, CenterY = 0, Zoom = 1.3, MaxIterations = 300, FractalParameters = p, ColorMap = new RampMap() };
         calc.Calculate();
-        double pitch = 4.0 / 24 / 1.3;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(24, 18, 1.3);
         int live = 0;
         for (int y = 0; y < 18; y++)
             for (int x = 0; x < 24; x++)

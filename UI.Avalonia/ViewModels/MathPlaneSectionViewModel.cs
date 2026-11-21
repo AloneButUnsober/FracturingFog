@@ -458,7 +458,7 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
     /// <summary>A new object's size: about an eighth of the view width, on the grid.</summary>
     private double NiceSize()
     {
-        double width = 4.0 / Math.Max(1e-300, _view.Zoom);
+        double width = FracturingFog.ViewState.ViewCamera.PlaneExtent / Math.Max(1e-300, _view.Zoom);   // #1974: landscape view width
         double step = MathPlaneSceneEdit.MinorStep(width);
         return Math.Max(step, MathPlaneSceneEdit.Snap(width / 8, step));
     }
@@ -488,7 +488,7 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
         => MathPlaneSceneEdit.ClientToWorld(e.X + 0.5, e.Y + 0.5, e.ClientWidth, e.ClientHeight,
                                             _view.CenterX + cam.Dx, _view.CenterY - cam.Dy, _view.Zoom * cam.Zoom);
 
-    private double PixelPitch(PointerInput e) => MathPlaneSceneEdit.Pitch(e.ClientWidth, _view.Zoom * DrawnCamera.Zoom);
+    private double PixelPitch(PointerInput e) => MathPlaneSceneEdit.Pitch(e.ClientWidth, e.ClientHeight, _view.Zoom * DrawnCamera.Zoom);
 
     /// <summary>#1552 — the map the view draws with (identity when off).</summary>
     private Mat2 CurrentMap => MathPlaneMap.Current(_view.FractalParameters);
@@ -604,7 +604,7 @@ public sealed partial class MathPlaneSectionViewModel : ViewModelBase, IPointerE
             PointerReadout += "    " + DerivativeReadout(cmap, new Complex(wx, wy));
         HoverReadout = "";
         if (!_sceneValid) return;
-        double tol = MathPlaneSceneEdit.HitRadiusPixels * MathPlaneSceneEdit.Pitch(e.ClientWidth, _view.Zoom * cam.Zoom);
+        double tol = MathPlaneSceneEdit.HitRadiusPixels * MathPlaneSceneEdit.Pitch(e.ClientWidth, e.ClientHeight, _view.Zoom * cam.Zoom);
         var dc = MathPlaneComplexMap.Current(drawn.Params, drawn.Scene);
         var dm = MathPlaneMap.Current(drawn.Params);
         var hit = dc != null ? MathPlaneSceneEdit.HitTest(drawn.Scene, wx, wy, tol, dc.Apply)

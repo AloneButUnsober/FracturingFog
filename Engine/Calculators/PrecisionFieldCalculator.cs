@@ -91,7 +91,7 @@ public sealed class PrecisionFieldCalculator : IFractalCalculator, IHeightFieldS
 
         ColorMap.MaxIterations = maxIter;
 
-        double pixelPitch = (4.0 / Math.Max(1, Width)) / Math.Max(1e-12, Zoom);
+        double pixelPitch = FracturingFog.ViewState.ViewCamera.PixelPitch(Width, Height, Zoom);   // #1974: the camera's scale
         int width = Width, height = Height;
         double centerX = CenterX, centerY = CenterY;
 

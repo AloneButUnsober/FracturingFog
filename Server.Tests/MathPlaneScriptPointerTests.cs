@@ -69,7 +69,7 @@ public sealed class MathPlaneScriptPointerTests
         Assert.StartsWith("A", vm.HoverReadout);
         var (rx, ry) = ReadPointer(vm.PointerReadout);
         // Within a couple of pixels of the drawn centre (whole-pixel pointer, disc centroid).
-        double tol = 3 * MathPlaneSceneEdit.Pitch(W, view.Zoom * (s >= 1 ? 2 : Math.Sqrt(2)));
+        double tol = 3 * MathPlaneSceneEdit.Pitch(W, H, view.Zoom * (s >= 1 ? 2 : Math.Sqrt(2)));
         Assert.InRange(rx - wantX, -tol, tol);
         Assert.InRange(ry - wantY, -tol, tol);
     }
@@ -88,7 +88,7 @@ public sealed class MathPlaneScriptPointerTests
         vm.OnHover(new PointerInput(x, y, W, H, PointerButton.None, InputModifiers.None));
         Assert.StartsWith("A", vm.HoverReadout);
         var (rx, ry) = ReadPointer(vm.PointerReadout);
-        double tol = 3 * MathPlaneSceneEdit.Pitch(W, view.Zoom);
+        double tol = 3 * MathPlaneSceneEdit.Pitch(W, H, view.Zoom);
         Assert.InRange(rx - 1, -tol, tol);
         Assert.InRange(ry - 1, -tol, tol);
     }
@@ -101,7 +101,7 @@ public sealed class MathPlaneScriptPointerTests
         vm.OnHover(new PointerInput(x, y, W, H, PointerButton.None, InputModifiers.None));
         Assert.StartsWith("A", vm.HoverReadout);
         var (rx, ry) = ReadPointer(vm.PointerReadout);
-        double tol = 3 * MathPlaneSceneEdit.Pitch(W, view.Zoom);
+        double tol = 3 * MathPlaneSceneEdit.Pitch(W, H, view.Zoom);
         Assert.InRange(rx - 0.5, -tol, tol);
         Assert.InRange(ry + 0.25, -tol, tol);
     }

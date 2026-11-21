@@ -96,7 +96,7 @@ public sealed class DualOrbitEnsembleTests
         const int n = 24; const double rho = 0.03, sx = -1, sy = 0;
         var p = Julia(DualOrbitField.BasinEntropy, sx, sy, q => { q.DualOrbitEnsembleN = n; q.DualOrbitEnsembleRadius = rho; });
         var calc = Render(p, 40, 30, 0.2, 0.0, 1.2);
-        double pitch = 4.0 / 40 / 1.2;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(40, 30, 1.2);
         int boundary = 0;
         for (int y = 0; y < 30; y++)
             for (int x = 0; x < 40; x++)

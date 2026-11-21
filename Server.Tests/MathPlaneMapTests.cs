@@ -157,7 +157,7 @@ public sealed class MathPlaneMapTests
     {
         var p = new FractalParameters { MathPlaneScene = scene, MathPlaneMapMode = MathPlaneMapMode.Matrix };
         map(p);
-        var calc = new MathPlaneCalculator(W, H) { Zoom = 0.5, FractalParameters = p };
+        var calc = new MathPlaneCalculator(W, H) { Zoom = 0.4375,   /* x in [-4, 4] (#1974) */ FractalParameters = p };
         calc.Calculate(CancellationToken.None);
         return calc;
     }
@@ -174,7 +174,7 @@ public sealed class MathPlaneMapTests
             if (calc.ColorBuffer[i] == c) { sx += i % W + 0.5; sy += i / W + 0.5; n++; }
         Assert.True(n > 10);
         // A (1, 0.5) = (2 - 0.5, 0.5 + 0.75) = (1.5, 1.25)
-        var (ex, ey) = MathPlaneCalculator.ToPixel(1.5, 1.25, W, H, 0, 0, 0.5);
+        var (ex, ey) = MathPlaneCalculator.ToPixel(1.5, 1.25, W, H, 0, 0, 0.4375);
         Assert.InRange(sx / n - ex, -0.5, 0.5);
         Assert.InRange(sy / n - ey, -0.5, 0.5);
     }

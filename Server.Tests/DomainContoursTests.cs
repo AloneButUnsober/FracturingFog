@@ -111,7 +111,7 @@ public sealed class DomainContoursTests
         var on = RenderSlit(p, w, h);
 
         var c = SlitCascadeCalculator.Build(p);
-        double sumSqrt = c.P.Sum(Math.Sqrt), logI0 = 2 * c.Depth * Math.Log10(sumSqrt), pitch = 4.0 / w;
+        double sumSqrt = c.P.Sum(Math.Sqrt), logI0 = 2 * c.Depth * Math.Log10(sumSqrt), pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(w, h, 1.0);
         var phaseBand = new int?[w * h]; var modBand = new int?[w * h]; var k = new double[w * h];
         for (int i = 0; i < w * h; i++)
         {
@@ -145,7 +145,7 @@ public sealed class DomainContoursTests
         // Keep pixel rows off ζ = 0 and ½ exactly: there the field is real, Im ψ is
         // rounding noise, and the phase flips between 0 and ½ at random (in the oracle
         // as much as in the render).
-        double pitch = 4.0 / w / 1.9, cy = 0.5 + 0.37 * pitch;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(w, h, 1.9), cy = 0.5 + 0.37 * pitch;
         var off = RenderTalbot(new FractalParameters { TalbotView = TalbotView.Domain, TalbotModes = 24 }, w, h, cy);
         var on = RenderTalbot(p, w, h, cy);
 
@@ -202,7 +202,7 @@ public sealed class DomainContoursTests
 
         var c = SlitCascadeCalculator.Build(p);
         Assert.All(c.P.Where(v => v > 0), v => Assert.Equal(c.P.Max(), v, 9));   // equal shares
-        double pitch = 4.0 / w / zoom;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(w, h, zoom);
         int cx = w / 2, cy = h / 2;
         // x index i ↔ u = (i − w/2)·pitch, so the core u = 0 sits at pixel w/2 (= 64.5 → between 64 and 65).
         foreach (int r in new[] { 10, 16, 22 })

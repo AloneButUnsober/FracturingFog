@@ -268,7 +268,7 @@ public sealed class MathPlaneBridgeTests
         // CenterX + (x + 0.5 - w/2) * 4 / w / Zoom. They must agree in every column.
         const int w = 300, h = 200; const double zoom = 0.8, centerX = -0.3, centerY = 0.2;
         var (bx, by, bz) = MathPlaneCalculator.BackdropView(w, h, centerX, centerY, zoom);
-        double s = 3.5 / Math.Max(w, h) / bz, pitch = 4.0 / w / zoom;
+        double s = 3.5 / Math.Max(w, h) / bz, pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(w, h, zoom);
         Assert.Equal(pitch, s, 15);
         for (int x = 0; x < w; x += 37)
             Assert.Equal(centerX + (x + 0.5 - w / 2.0) * pitch, bx + (x - w / 2.0) * s, 12);

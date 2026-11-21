@@ -88,15 +88,15 @@ public static class MiniMapDefaults
         FractalType.Plasma           => new( 0.0,  0.0, 1.0),
         FractalType.AcidWarp         => new( 0.0,  0.0, 1.0),
         FractalType.Flame            => new( 0.0,  0.0, 1.0),
-        FractalType.Apollonian       => new( 0.0,  0.0, 2.0),
-        FractalType.ChaoticBilliard  => new( 0.0,  0.0, 1.0),
-        FractalType.BilliardRays     => new( 0.0,  0.0, 0.6),
+        FractalType.Apollonian       => new( 0.0,  0.0, 1.75),
+        FractalType.ChaoticBilliard  => new( 0.0,  0.0, 0.875),
+        FractalType.BilliardRays     => new( 0.0,  0.0, 0.525),
         FractalType.BlackHoleShadow  => new( 0.0,  0.0, 0.14),  // #1923 (#1927: camera-scale pitch)
-        FractalType.SlitCascade      => new( 0.0,  0.0, 0.25),
-        FractalType.TalbotCarpet     => new( 0.0,  0.5, 1.9),
-        FractalType.MathPlane        => new( 0.0,  0.0, 0.5),
-        FractalType.PrecisionField   => new(-0.5,  0.0, 1.0),
-        FractalType.JulibrotPair  => new(-0.5,  0.0, 1.0),
+        FractalType.SlitCascade      => new( 0.0,  0.0, 0.21875),
+        FractalType.TalbotCarpet     => new( 0.0,  0.5, 1.6625),
+        FractalType.MathPlane        => new( 0.0,  0.0, 0.4375),
+        FractalType.PrecisionField   => new(-0.5,  0.0, 0.875),
+        FractalType.JulibrotPair  => new(-0.5,  0.0, 0.875),
         FractalType.Kleinian         => new( 0.0,  0.0, 1.0),
         FractalType.MirrorSpheres    => new( 0.0,  0.0, 1.0),
         FractalType.MathPlane3D      => new( 0.0,  0.0, 1.0),   // #1713
@@ -106,7 +106,8 @@ public static class MiniMapDefaults
         FractalType.Dla              => new( 0.0,  0.0, 1.0),
         // Indra's Pearls (#892) — Maskit μ = 2i limit set sits above the real
         // axis (period-2 in x); frame it centred at (0, 1) with a wide zoom.
-        FractalType.IndrasPearls     => new( 0.0,  1.0, 0.6),
+        FractalType.RandomTile       => new( 0.0,  0.0, 0.875),   // #1974 (was the fallback zoom 1)
+        FractalType.IndrasPearls     => new( 0.0,  1.0, 0.525),
         _                            => new( 0.0,  0.0, 1.0)
     };
 

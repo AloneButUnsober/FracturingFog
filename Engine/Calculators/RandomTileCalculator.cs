@@ -130,9 +130,9 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
         RandomTileShape shape = FractalParameters.RandomTileShape;
         _relief = Math.Clamp(FractalParameters.RandomTileRelief, 0.0, 4.0);
 
-        // World→screen scale matches the standard 2D convention: pixel pitch =
-        // (4 / Width) / Zoom, fractal origin at (CenterX, CenterY).
-        double pixelPitch = (4.0 / Math.Max(1, Width)) / Math.Max(1e-12, Zoom);
+        // World→screen scale: the camera's (#1974, ViewCamera.PixelPitch), fractal
+        // origin at (CenterX, CenterY).
+        double pixelPitch = FracturingFog.ViewState.ViewCamera.PixelPitch(Width, Height, Zoom);
         double minWorldR = minPx * pixelPitch;
 
         // Visible world half-extents (the domain we fill).
@@ -389,7 +389,7 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
 
     private void PaintDisk(in Tile t)
     {
-        double pixelPitch = (4.0 / Math.Max(1, Width)) / Math.Max(1e-12, Zoom);
+        double pixelPitch = FracturingFog.ViewState.ViewCamera.PixelPitch(Width, Height, Zoom);
         if (pixelPitch <= 0.0) return;
         double invPitch = 1.0 / pixelPitch;
 

@@ -55,7 +55,7 @@ public class BilliardRaysCrossingTests
 
     private static (double X0, double X1, double Y0, double Y1) View()
     {
-        double pitch = 4.0 / W / Zoom;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(W, H, Zoom);
         return (Cx - (W / 2.0 + 0.5) * pitch, Cx + (W / 2.0 - 0.5) * pitch,
                 -(Cy + (H / 2.0 - 0.5) * pitch), -(Cy - (H / 2.0 + 0.5) * pitch));
     }

@@ -141,13 +141,13 @@ public sealed class ChaoticBilliardCalculator : IFractalCalculator, IHeightField
 
     /// <summary>The plane point (the launch initial condition) at pixel (<paramref name="x"/>,
     /// <paramref name="y"/>) of a <paramref name="width"/> x <paramref name="height"/> frame:
-    /// the standard 2D mapping, pitch (4 / width) / zoom about the centre. Scale-free, so a
+    /// the standard 2D mapping, the camera's pitch (#1974, ViewCamera.PixelPitch) about the centre. Scale-free, so a
     /// pointer position in any client size that shows the same frame maps to the same
     /// point (#1447 — the inset traces exactly the launch the render used).</summary>
     public static (double X, double Y) PlaneAt(double x, double y, double width, double height,
                                                double centerX, double centerY, double zoom)
     {
-        double pitch = (4.0 / Math.Max(1.0, width)) / Math.Max(1e-12, zoom);
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(width, height, zoom);
         return (centerX + (x - width * 0.5) * pitch, centerY + (y - height * 0.5) * pitch);
     }
 

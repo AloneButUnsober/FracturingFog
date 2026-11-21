@@ -58,7 +58,7 @@ public sealed class TalbotSliceTests
     {
         int w = 96, h = 64;
         var r = Render(new FractalParameters { TalbotModes = 24, TalbotDuty = Duty, TalbotSliceOverlay = true, TalbotSliceZeta = zeta }, w, h, cy: zeta + 0.05);
-        double pitch = (4.0 / w) / 1.9;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(w, h, 1.9);
         double peak = 0;
         for (int j = 0; j < 512; j++) peak = Math.Max(peak, OwnIntensity(24, j / 512.0, zeta));
         Assert.True(Math.Abs(r.SliceMax - peak) <= 1e-9 * peak, $"peak {r.SliceMax} vs {peak}");

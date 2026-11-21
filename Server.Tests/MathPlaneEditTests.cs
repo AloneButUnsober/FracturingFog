@@ -172,7 +172,7 @@ public sealed class MathPlaneEditTests
         Assert.Equal(0.0, r.View.CenterY);
         var a = r.Scene.Objects[0];
         // Within one pixel of the target (the pointer is whole pixels).
-        double pitch = MathPlaneSceneEdit.Pitch(W, r.View.Zoom);
+        double pitch = MathPlaneSceneEdit.Pitch(W, H, r.View.Zoom);
         Assert.InRange(a.Coords[0] - 2, -pitch, pitch);
         Assert.InRange(a.Coords[1] + 1, -pitch, pitch);
         Assert.Equal(0, r.Vm.SelectedIndex);
@@ -186,7 +186,7 @@ public sealed class MathPlaneEditTests
         r.Input.OnPointerDown(r.At(1, 1));
         r.Input.OnPointerMove(r.At(1.53, 0.71, m: InputModifiers.Shift));
         var c = r.Scene.Objects[0].Coords;
-        double step = MathPlaneSceneEdit.MinorStep(4.0 / r.View.Zoom);   // 8 wide -> 0.2
+        double step = MathPlaneSceneEdit.MinorStep(FracturingFog.ViewState.ViewCamera.PixelPitch(W, H, r.View.Zoom) * W);   // the view's width (#1974)
         Assert.Equal(0.2, step, 12);
         Assert.Equal(1.6, c[0], 9);
         Assert.Equal(0.8, c[1], 9);
@@ -212,7 +212,7 @@ public sealed class MathPlaneEditTests
         Assert.Equal(2, s.Objects.Count);
         var b = s.Objects[1];
         Assert.Equal(MathPlaneObjectKind.Point, b.Kind);
-        double pitch = MathPlaneSceneEdit.Pitch(W, r.View.Zoom);
+        double pitch = MathPlaneSceneEdit.Pitch(W, H, r.View.Zoom);
         Assert.InRange(b.Coords[0] + 1.5, -pitch, pitch);
         Assert.InRange(b.Coords[1] - 2.5, -pitch, pitch);
         Assert.Equal(1, r.Vm.SelectedIndex);

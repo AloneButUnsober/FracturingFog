@@ -338,15 +338,15 @@ namespace FracturingFog.ViewState
                 FractalType.Plasma                => ( 0.0,  0.0, 1.0),
                 FractalType.AcidWarp              => ( 0.0,  0.0, 1.0),
                 FractalType.Flame                 => ( 0.0,  0.0, 1.0),
-                FractalType.Apollonian            => ( 0.0,  0.0, 2.0),
-                FractalType.ChaoticBilliard       => ( 0.0,  0.0, 1.0),
-                FractalType.BilliardRays          => ( 0.0,  0.0, 0.6),   // the play circle (r 3) fits
+                FractalType.Apollonian            => ( 0.0,  0.0, 1.75),
+                FractalType.ChaoticBilliard       => ( 0.0,  0.0, 0.875),
+                FractalType.BilliardRays          => ( 0.0,  0.0, 0.525),   // the play circle (r 3) fits
                 FractalType.BlackHoleShadow       => ( 0.0,  0.0, 0.14),  // #1923 the default binary + eyebrows fit (#1927 camera pitch)
-                FractalType.SlitCascade           => ( 0.0,  0.0, 0.25),  // #1569 — u ∈ ±8: the first fringes and the level-1 envelope
-                FractalType.TalbotCarpet          => ( 0.0,  0.5, 1.9),   // #1570 — one Talbot distance tall, about two periods wide (16:9)
-                FractalType.MathPlane             => ( 0.0,  0.0, 0.5),   // x in [-4, 4]
-                FractalType.PrecisionField        => (-0.5,  0.0, 1.0),
-                FractalType.JulibrotPair       => (-0.5,  0.0, 1.0),
+                FractalType.SlitCascade           => ( 0.0,  0.0, 0.21875),  // #1569 — u ∈ ±8: the first fringes and the level-1 envelope
+                FractalType.TalbotCarpet          => ( 0.0,  0.5, 1.6625),   // #1570 — one Talbot distance tall, about two periods wide (16:9)
+                FractalType.MathPlane             => ( 0.0,  0.0, 0.4375),   // x in [-4, 4]
+                FractalType.PrecisionField        => (-0.5,  0.0, 0.875),
+                FractalType.JulibrotPair       => (-0.5,  0.0, 0.875),
                 FractalType.Kleinian              => ( 0.0,  0.0, 1.0),
                 FractalType.MirrorSpheres         => ( 0.0,  0.0, 1.0),
                 FractalType.MathPlane3D           => ( 0.0,  0.0, 1.0),   // #1713
@@ -356,7 +356,8 @@ namespace FracturingFog.ViewState
                 FractalType.Dla                   => ( 0.0,  0.0, 1.0),
                 // Indra's Pearls (#892) — Maskit μ = 2i limit set above the real
                 // axis; centre (0, 1), wide zoom (matches MiniMapDefaults).
-                FractalType.IndrasPearls          => ( 0.0,  1.0, 0.6),
+                FractalType.RandomTile            => (-0.5,  0.0, 0.875),  // #1974 (was the fallback zoom 1)
+                FractalType.IndrasPearls          => ( 0.0,  1.0, 0.525),
                 _                            => (-0.5,  0.0, 1.0),
             };
             CenterXLo = CenterX2 = CenterX3 = 0;

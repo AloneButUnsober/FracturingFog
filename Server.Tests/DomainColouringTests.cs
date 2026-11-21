@@ -65,10 +65,10 @@ public sealed class DomainColouringTests
     {
         const int w = 96, h = 64, it = 400;
         var p = Vortex(SlitCascadeView.Domain);
-        var calc = new SlitCascadeCalculator(w, h) { Zoom = 1.0, MaxIterations = it, ColorMap = new RampMap(), FractalParameters = p };
+        var calc = new SlitCascadeCalculator(w, h) { Zoom = 0.875, MaxIterations = it, ColorMap = new RampMap(), FractalParameters = p };   // the old zoom-1 framing (#1974)
         calc.Calculate(CancellationToken.None);
         var c = SlitCascadeCalculator.Build(p);
-        double sumSqrt = c.P.Sum(Math.Sqrt), logI0 = 2 * c.Depth * Math.Log10(sumSqrt), pitch = 4.0 / w;
+        double sumSqrt = c.P.Sum(Math.Sqrt), logI0 = 2 * c.Depth * Math.Log10(sumSqrt), pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(w, h, 0.875);
         AssertHueIsPhase(calc.ColorBuffer, i =>
         {
             var a = SlitCascadeCalculator.Amplitude(c, (i % w - w * 0.5) * pitch, (i / w - h * 0.5) * pitch);
@@ -89,7 +89,7 @@ public sealed class DomainColouringTests
         calc.Calculate(CancellationToken.None);
         var cf = TalbotCarpetCalculator.Coefficients(p);
         double mean = cf.Sum(v => v.Real * v.Real + v.Imaginary * v.Imaginary), sumAbs = cf.Sum(v => v.Magnitude);
-        double top = 2 * Math.Log10(sumAbs) - Math.Log10(mean), pitch = 4.0 / w / 1.9;
+        double top = 2 * Math.Log10(sumAbs) - Math.Log10(mean), pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(w, h, 1.9);
         AssertHueIsPhase(calc.ColorBuffer, i =>
         {
             var f = TalbotCarpetCalculator.Field(cf, (i % w - w * 0.5) * pitch, 0.5 + (i / w - h * 0.5) * pitch);

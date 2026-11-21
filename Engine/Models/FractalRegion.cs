@@ -44,13 +44,36 @@ namespace FracturingFog.Models
     /// <summary>
     /// A named Mandelbrot coordinate bookmark.
     /// </summary>
-    public sealed class FractalRegion : IJsonOnDeserialized
+    public sealed class FractalRegion : IJsonOnDeserialized, IJsonOnDeserializing
     {
         /// <summary>#1832 — after any JSON load (the region store, an import, a server
         /// request): a valid exact centre rewrites the limbs from itself, so every reader of
         /// the limbs sees the same centre; a damaged pair (not decimal text, or only one
-        /// part) is dropped and the limbs rule (tolerant load, #964 / #1212).</summary>
-        void IJsonOnDeserialized.OnDeserialized() { NormaliseCentre(); NormaliseZoom(); }
+        /// part) is dropped and the limbs rule (tolerant load, #964 / #1212).
+        /// #1974 — then a zoom saved in the old pixel-pitch convention converts once.</summary>
+        void IJsonOnDeserialized.OnDeserialized() { NormaliseCentre(); NormaliseZoom(); MigrateZoomConvention(); }
+
+        /// <summary>#1974 — JSON without <see cref="ZoomConvention"/> was written before it
+        /// existed (the legacy convention); one that has it overwrites this.</summary>
+        void IJsonOnDeserializing.OnDeserializing() => ZoomConvention = 0;
+
+        /// <summary>#1974 — the pixel-pitch convention <see cref="Zoom"/> was saved in. 0: before
+        /// #1974, when <see cref="FracturingFog.ViewState.ViewCamera.UsedLegacyPitch"/> families
+        /// rendered with pitch (4 / width) / zoom; 1 (current): the camera's
+        /// 3.5 / (max(width, height) x zoom). Written on every save.</summary>
+        public int ZoomConvention { get; set; } = CurrentZoomConvention;
+        public const int CurrentZoomConvention = 1;
+
+        /// <summary>#1974 — a legacy-convention zoom of an affected family becomes the zoom that
+        /// frames the same landscape view (x 3.5/4); then the region is current, so a load,
+        /// save and load converts once.</summary>
+        public void MigrateZoomConvention()
+        {
+            if (ZoomConvention >= CurrentZoomConvention) return;
+            if (FracturingFog.ViewState.ViewCamera.UsedLegacyPitch(FractalType) && Zoom > 0 && ZoomLog10 == null)
+                Zoom *= FracturingFog.ViewState.ViewCamera.LegacyZoomFactor;
+            ZoomConvention = CurrentZoomConvention;
+        }
 
         /// <summary>#1832 — see <see cref="IJsonOnDeserialized.OnDeserialized"/>.</summary>
         public void NormaliseCentre()
@@ -3401,7 +3424,7 @@ namespace FracturingFog.Models
                 Name        = "Apollonian - (-1, 2, 2, 3) Gasket",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
-                Zoom        =  2.0,
+                Zoom        =  1.75,
                 Iterations  = 12,
                 Description = "Integral Apollonian packing built from the seed curvature quadruple (−1, 2, 2, 3). Outer unit disk, two half-radius circles on the diameter, third-radius circles above and below. Recurse via Vieta jumping until sub-pixel.",
                 RegionType  = RegionType.BuiltIn,
@@ -3425,7 +3448,7 @@ namespace FracturingFog.Models
                 Name        = "Random Tiling - Bourke Fill",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
-                Zoom        =  1.0,
+                Zoom        =  0.875,
                 Iterations  = 1,
                 Description = "Paul Bourke's random space filling of the plane: shapes of power-law-decreasing size dropped at random, non-overlapping positions until the plane fills. Seed-deterministic; each shape domes for Relief3D / volumetric. Tune RandomTileCount / RandomTileSizeExponent / RandomTileSeed.",
                 RegionType  = RegionType.BuiltIn,
@@ -3505,7 +3528,7 @@ namespace FracturingFog.Models
                 Name        = "Billiard Rays - Three-Disk Gate Flow",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
-                Zoom        =  0.6,
+                Zoom        =  0.525,
                 Iterations  = 256,
                 Description = "The classic three-disk scatterer seen from above, lit by three parallel beams. Each ray is drawn in the colour of the gap it finally leaves through, so the flow into each exit basin shows in its own colour, the incoming beams included.",
                 RegionType  = RegionType.BuiltIn,
@@ -3528,7 +3551,7 @@ namespace FracturingFog.Models
                 Name        = "Billiard Rays - Ring Crossings",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
-                Zoom        =  0.6,
+                Zoom        =  0.525,
                 Iterations  = 256,
                 Description = "Six mirrors on a ring, rays fired inward from all round it. Only the points where a ray crosses one fired just before it are drawn, coloured by the difference in their bounce counts there, with relief turning that difference into height.",
                 RegionType  = RegionType.BuiltIn,
@@ -3553,7 +3576,7 @@ namespace FracturingFog.Models
                 Name        = "Billiard Rays - Custom Five-Disk Divergence",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
-                Zoom        =  0.6,
+                Zoom        =  0.525,
                 Iterations  = 256,
                 Description = "An irregular five-mirror layout (edit it by dragging disks in Ray paths). Each line is where a ray parts from the ray launched next to it; the ones that then leave through a different gap trace the boundary between the exit basins, drawn over the faint ray paths.",
                 RegionType  = RegionType.BuiltIn,
@@ -3578,7 +3601,7 @@ namespace FracturingFog.Models
                 Name        = "Billiard Rays - Hexagonal Lorentz Gas",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
-                Zoom        =  0.25,
+                Zoom        =  0.21875,
                 Iterations  = 256,
                 Description = "Sixty-one mirrors on a hexagonal grid, a patch of the periodic Lorentz gas, lit by one parallel beam from the left. Each ray is coloured by how many times it bounced, so the colour shifts from the side the beam comes in on, where rays leave after a few bounces, to the middle of the patch, where they bounce many times.",
                 RegionType  = RegionType.BuiltIn,
@@ -3718,7 +3741,7 @@ namespace FracturingFog.Models
                 Name        = "Apollonian - L/R Kissing Cusp",
                 CenterX     =  0.0,
                 CenterY     =  0.4,
-                Zoom        =  6.0,
+                Zoom        =  5.25,
                 Iterations  = 14,
                 Description = "Off-axis zoom into the curvilinear triangle bounded by L, R, T. The self-similar Vieta-jump chain produces tight clusters of progressively smaller circles approaching each tangency point.",
                 RegionType  = RegionType.BuiltIn,
@@ -3868,7 +3891,7 @@ namespace FracturingFog.Models
                 Name          = "Double Slit - Which-Path Collapse",
                 CenterX       = -0.6,
                 CenterY       =  0.05,
-                Zoom          =  1.0,
+                Zoom          =  0.875,
                 Iterations    =  400,
                 Description   = "Two orbits as the two slits: each escaping orbit is a path with a phase, and the paths interfere. Enable the bound 'Double slit: which-path collapse' animation to switch the which-path detector on and off: the fringes fade to a flat field and come back.",
                 RegionType    = RegionType.BuiltIn,
@@ -3886,7 +3909,7 @@ namespace FracturingFog.Models
                 Name          = "Double Slit - Angular Momentum Spirals",
                 CenterX       = -0.6,
                 CenterY       =  0.0,
-                Zoom          =  0.6,
+                Zoom          =  0.525,
                 Iterations    =  400,
                 Description   = "The interference phase with an orbital-angular-momentum twist of 3: the rings round the set become three-armed spirals. The bound 'Double slit: angular momentum sweep' animation steps the twist from -4 to 4, so the arms change count and handedness.",
                 RegionType    = RegionType.BuiltIn,
@@ -3905,7 +3928,7 @@ namespace FracturingFog.Models
                 Name          = "Double Slit - Opposite Winding Rays",
                 CenterX       = -0.6,
                 CenterY       =  0.0,
-                Zoom          =  0.6,
+                Zoom          =  0.525,
                 Iterations    =  400,
                 Description   = "The two paths twist in opposite directions, so the intensity fringes follow the sum of their external angles and fan out from the set as radial rays.",
                 RegionType    = RegionType.BuiltIn,
@@ -3924,7 +3947,7 @@ namespace FracturingFog.Models
                 Name          = "Double Slit - Beat Collapse",
                 CenterX       = -0.6,
                 CenterY       =  0.05,
-                Zoom          =  1.0,
+                Zoom          =  0.875,
                 Iterations    =  400,
                 Description   = "Which-Path Collapse played by the music: every beat switches the which-path detector on, so the fringes flash flat on the beat and come back between beats. Needs audio input (Audio Settings); without it the fringes stay.",
                 RegionType    = RegionType.BuiltIn,
@@ -3944,7 +3967,7 @@ namespace FracturingFog.Models
                 Name          = "Double Slit - Spiral Beat",
                 CenterX       = -0.6,
                 CenterY       =  0.0,
-                Zoom          =  0.6,
+                Zoom          =  0.525,
                 Iterations    =  400,
                 Description   = "Angular Momentum Spirals played by the music: the beat pulse sets the twist, so the phase rings jump from two to five spiral arms on every beat and fall back in steps as the pulse decays. Needs audio input (Audio Settings); without it the spirals keep three arms.",
                 RegionType    = RegionType.BuiltIn,
@@ -3964,7 +3987,7 @@ namespace FracturingFog.Models
                 Name          = "Double Slit - Orbit Grating",
                 CenterX       = -0.6,
                 CenterY       =  0.05,
-                Zoom          =  1.0,
+                Zoom          =  0.875,
                 Iterations    =  400,
                 Description   = "Six paths instead of two, like a grating with six slits: the bright fringes stay where the two-path fringes peak but get about three times thinner, with faint fringes between. The bound 'Double slit: more slits' animation steps the number of paths from 2 to 12 and back.",
                 RegionType    = RegionType.BuiltIn,
@@ -3983,7 +4006,7 @@ namespace FracturingFog.Models
                 Name          = "Slit Cascade - Ring Diffraction",
                 CenterX       =  0.0,
                 CenterY       =  0.0,
-                Zoom          =  0.25,
+                Zoom          =  0.21875,
                 Iterations    =  400,
                 Description   = "Six slits on a ring, each replaced by six smaller ones, four levels deep; each slit lets through the share of light the two-slit fringes put at its place. This is the far-field diffraction pattern. The bound 'Slit cascade: wavelength breathing' animation slides the fringes, so slits move on and off dark fringes.",
                 RegionType    = RegionType.BuiltIn,
@@ -4003,7 +4026,7 @@ namespace FracturingFog.Models
                 Name          = "Slit Cascade - Probability Sets Dimension",
                 CenterX       =  0.0,
                 CenterY       =  0.0,
-                Zoom          =  1.6,
+                Zoom          =  1.4,
                 Iterations    =  40,    // HSV turns every 50: the 5 α classes land on 5 distinct hues (400 put them all on red)
                 Description   = "The cascade's slits coloured by the Hölder exponent: how concentrated the light is at each point. The status bar shows the fractal dimensions D0, D1, D2, Dq; change the wavelength and watch them move. The probabilities set the dimension.",
                 RegionType    = RegionType.BuiltIn,
@@ -4022,7 +4045,7 @@ namespace FracturingFog.Models
                 Name          = "Slit Cascade - Vortex Core",
                 CenterX       =  0.0,
                 CenterY       =  0.0,
-                Zoom          =  1.0,
+                Zoom          =  0.875,
                 Iterations    =  400,
                 Description   = "Five slits on a ring, three levels, each slit twisted by its angle (charge 1). With equal light through every slit the three levels' vortices stack into one dark core of charge 3 at the centre. Lower the wavelength and they drift apart into a constellation.",
                 RegionType    = RegionType.BuiltIn,
@@ -4043,7 +4066,7 @@ namespace FracturingFog.Models
                 Name          = "Slit Cascade - Music Breathing",
                 CenterX       =  0.0,
                 CenterY       =  0.0,
-                Zoom          =  0.25,
+                Zoom          =  0.21875,
                 Iterations    =  400,
                 Description   = "Ring Diffraction played by the music: the bass sets the wavelength between 0.4 and 1.4, so on every kick the fringes swell outward and slits move on and off dark fringes, and the dimension in the status bar moves with them. Smoothed so it breathes rather than flickers. Needs audio input (Audio Settings).",
                 RegionType    = RegionType.BuiltIn,
@@ -4065,7 +4088,7 @@ namespace FracturingFog.Models
                 Name          = "Slit Cascade - Vortex Wells",
                 CenterX       =  0.0,
                 CenterY       =  0.0,
-                Zoom          =  1.5,
+                Zoom          =  1.3125,
                 Iterations    =  400,
                 Description   = "The Vortex Core in 3D: height is the brightness, so the dark charge-3 vortex at the centre is a deep pit, and the colour wheel (blue and amber, readable with red/green colour blindness) turns three times round its walls. Domain colouring with Relief 3D.",
                 RegionType    = RegionType.BuiltIn,
@@ -4087,7 +4110,7 @@ namespace FracturingFog.Models
                 Name          = "Slit Cascade - Vortex Constellation",
                 CenterX       =  0.0,
                 CenterY       =  0.0,
-                Zoom          =  1.0,
+                Zoom          =  0.875,
                 Iterations    =  400,
                 Description   = "Vortex Wells with real slits (width 0.2, wavelength 0.6), so the slits pass unequal shares of light: the charge-3 core breaks up into separate charge-1 vortices, each its own pit with the colour wheel turning once round it. Domain colouring with Relief 3D.",
                 RegionType    = RegionType.BuiltIn,
@@ -4109,7 +4132,7 @@ namespace FracturingFog.Models
                 Name          = "Slit Cascade - Particle Build-Up",
                 CenterX       =  0.0,
                 CenterY       =  0.0,
-                Zoom          =  0.25,
+                Zoom          =  0.21875,
                 Iterations    =  400,
                 Description   = "The Ring Diffraction pattern recorded one particle at a time: each dot lands where the light is bright with the matching probability. A few hundred dots look random; tens of thousands draw the fringes. The bound 'Slit cascade: particle build-up' animation raises the count from 0, so the pattern builds up out of single dots.",
                 RegionType    = RegionType.BuiltIn,
@@ -4130,7 +4153,7 @@ namespace FracturingFog.Models
                 Name          = "Talbot Carpet - Ronchi Grating",
                 CenterX       =  0.0,
                 CenterY       =  0.5,
-                Zoom          =  1.9,
+                Zoom          =  1.6625,
                 Iterations    =  16,
                 Description   = "The near field of a bar grating, one Talbot distance tall. The grating images itself at the top and bottom and shifted by half a period across the middle; in between the light weaves a quantum carpet. Looks best with a plain theme such as Greyscale.",
                 RegionType    = RegionType.BuiltIn,
@@ -4148,7 +4171,7 @@ namespace FracturingFog.Models
                 Name          = "Talbot Carpet - Relief",
                 CenterX       =  0.0,
                 CenterY       =  0.5,
-                Zoom          =  1.9,
+                Zoom          =  1.6625,
                 Iterations    =  16,
                 Description   = "The Ronchi carpet as a landscape: height is the brightness, so the self-images at the top, middle and bottom are ridges and the dark gaps between the woven threads are valleys, coloured by the phase on the blue-amber wheel. Domain colouring with Relief 3D.",
                 RegionType    = RegionType.BuiltIn,
@@ -4170,7 +4193,7 @@ namespace FracturingFog.Models
                 Name          = "Talbot Carpet - Profile Walk",
                 CenterX       =  0.0,
                 CenterY       =  0.5,
-                Zoom          =  1.9,
+                Zoom          =  1.6625,
                 Iterations    =  16,
                 Description   = "The Ronchi carpet with the brightness across the grating drawn as a white curve at one distance, starting at the golden distance where the profile is a fractal (the status bar shows its dimension). The bound 'Talbot carpet: profile walk' animation moves the curve down one Talbot distance: the grating's own steps at the top, middle and bottom, a few shifted copies at simple fractions, jagged in between.",
                 RegionType    = RegionType.BuiltIn,
@@ -4189,7 +4212,7 @@ namespace FracturingFog.Models
                 Name          = "Talbot Carpet - Fractal Comb",
                 CenterX       =  0.0,
                 CenterY       =  0.5,
-                Zoom          =  1.9,
+                Zoom          =  1.6625,
                 Iterations    =  16,
                 Description   = "Infinitely thin slits: the sharpest carpet, a lattice of straight light paths. At irrational distances the pattern is a fractal; zoom in on any row away from the simple fractions to see it.",
                 RegionType    = RegionType.BuiltIn,
@@ -4206,7 +4229,7 @@ namespace FracturingFog.Models
                 Name          = "Talbot Carpet - Cascade Grating",
                 CenterX       =  0.0,
                 CenterY       =  0.5,
-                Zoom          =  1.9,
+                Zoom          =  1.6625,
                 Iterations    =  16,
                 Description   = "A grating whose every period is the slit cascade (the row of slits from the Slit Cascade type). Its carpet carries the cascade's self-similar structure into the near field.",
                 RegionType    = RegionType.BuiltIn,

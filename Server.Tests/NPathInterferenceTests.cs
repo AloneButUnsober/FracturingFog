@@ -173,7 +173,7 @@ public sealed class NPathInterferenceTests
     {
         const double kappa = 20.0;
         var r = Calc(P(p => { p.DualOrbitInterferencePaths = n; p.DualOrbitPathLayout = layout; })).SmoothBuffer;
-        double pitch = 4.0 / W / Zoom, bail = new FractalParameters().DualOrbitBailout;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(W, H, Zoom), bail = new FractalParameters().DualOrbitBailout;
         var seeds = new List<double> { 0.0, 1.0 };
         for (int k = 2; k < n; k++) seeds.Add(layout == DualOrbitPathLayout.Ray ? k : (k - 1.0) / (n - 1));
         int checkedPx = 0, blockedPx = 0;
@@ -216,7 +216,7 @@ public sealed class NPathInterferenceTests
         }
         var inten = Calc(P(Set)).SmoothBuffer;
         var phase = Calc(P(p => { Set(p); p.DualOrbitField = DualOrbitField.PathInterferencePhase; })).SmoothBuffer;
-        double pitch = 4.0 / W / Zoom, bail = new FractalParameters().DualOrbitBailout;
+        double pitch = FracturingFog.ViewState.ViewCamera.PixelPitch(W, H, Zoom), bail = new FractalParameters().DualOrbitBailout;
         int checkedPx = 0;
         for (int y = 0; y < H; y += 3)
             for (int x = 0; x < W; x += 3)
