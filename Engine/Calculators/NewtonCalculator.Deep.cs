@@ -105,9 +105,15 @@ public sealed partial class NewtonCalculator : IDeepCentre, IDeepZoom
             FinishPixel(idx, idx % width, idx / width, -1, iter, 0f, zr, zi, d, maxIter, true, newtonMap);
         var converge = PerturbationEngine.Convergence.OnStep(eps2, (idx, iter, zr, zi, prev2, step2) =>
             FinishPixel(idx, idx % width, idx / width, RootSector(zr, zi, d), iter,
-                        NovaSmooth(iter, double.IsNaN(prev2) ? double.MaxValue : prev2, step2, eps2), zr, zi, d, maxIter, true, newtonMap));
-        LastPerturbationStats = PerturbationEngine.Render(plan, centre, scale, width, Height, maxIter, sink, ct,
+                        NovaSmooth(iter, double.IsNaN(prev2) ? double.MaxValue : prev2, step2, eps2), zr, zi, d, maxIter, true, newtonMap))
+            with
+            {
+                ChaosLog2 = FractalParameters.ChaosEarlyOut ? ChaosLog2Squared(FractalParameters.ChaosEarlyOutLog10) : 0,   // #1980
+            };
+        var stats = PerturbationEngine.Render(plan, centre, scale, width, Height, maxIter, sink, ct,
             marked: aaMask != null ? i => aaMask[i] != 0 : null, converge: converge, pixelScale: pixelFx);
+        LastPerturbationStats = stats;
+        _statChaos = stats.ChaosStops; _statSaved = stats.IterationsSaved;
         LastPrecisionLabel = "PT";
         return true;
     }

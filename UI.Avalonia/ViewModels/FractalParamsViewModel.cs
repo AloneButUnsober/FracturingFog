@@ -135,6 +135,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _novaZ0I = _p.NovaZ0.Imaginary;
         _novaCR = _p.NovaJuliaC.Real;
         _novaCI = _p.NovaJuliaC.Imaginary;
+        _chaosEarlyOut = _p.ChaosEarlyOut;          // #1980
+        _chaosEarlyOutLog10 = _p.ChaosEarlyOutLog10;
         _ifsPresetName = _p.IFSPresetName;
         _ifsIterations = _p.IFSIterations;
         _lsystemPresetName = _p.LSystemPresetName;
@@ -452,6 +454,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsNewtonOrNova => FractalType is FractalType.Newton or FractalType.Nova or FractalType.Halley or FractalType.Secant;
     public bool IsSecant => FractalType == FractalType.Secant;
     public bool IsNova => FractalType == FractalType.Nova;   // #1294
+    public bool IsChaosEarlyOutFamily => FractalType is FractalType.Newton or FractalType.Nova;   // #1980
     public bool IsSpider => FractalType == FractalType.Spider;
     public bool IsIFS => FractalType == FractalType.IFS;
     public bool IsLSystem => FractalType == FractalType.LSystem;
@@ -1642,6 +1645,12 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double NovaJuliaCR { get => _novaCR; set { Set(ref _novaCR, Clamp(value, -4, 4)); _p.NovaJuliaC = new Complex(_novaCR, _novaCI); Fire(); } }
     private double _novaCI;
     public double NovaJuliaCI { get => _novaCI; set { Set(ref _novaCI, Clamp(value, -4, 4)); _p.NovaJuliaC = new Complex(_novaCR, _novaCI); Fire(); } }
+
+    // #1980 — the opt-in chaos early-out (Newton, Nova).
+    private bool _chaosEarlyOut;
+    public bool ChaosEarlyOut { get => _chaosEarlyOut; set { Set(ref _chaosEarlyOut, value); _p.ChaosEarlyOut = value; Fire(); } }
+    private double _chaosEarlyOutLog10;
+    public double ChaosEarlyOutLog10 { get => _chaosEarlyOutLog10; set { Set(ref _chaosEarlyOutLog10, Clamp(value, 10, 300)); _p.ChaosEarlyOutLog10 = _chaosEarlyOutLog10; Fire(); } }
 
     // ── IFS ──
     private string _ifsPresetName = string.Empty;

@@ -98,6 +98,9 @@ public sealed partial class NewtonCalculator : IFractalCalculator, FracturingFog
 
     private long _statCycles, _statChaos, _statStopIter, _statSaved;
 
+    // #1980 — the threshold on log2 |Π f′|² for a threshold of 10^log10 on |Π f′|.
+    internal static double ChaosLog2Squared(double log10) => 2 * log10 * Math.Log2(10);
+
     public NewtonCalculator(int width, int height) => Resize(width, height);
 
     public void Resize(int width, int height)
@@ -149,6 +152,8 @@ public sealed partial class NewtonCalculator : IFractalCalculator, FracturingFog
 
         bool nova = FractalType == FractalType.Nova;
         bool periodicity = Periodicity;                       // #1979
+        bool chaosOut = FractalParameters.ChaosEarlyOut;      // #1980
+        double chaosLog2Sq = ChaosLog2Squared(FractalParameters.ChaosEarlyOutLog10);
         bool novaJulia = nova && FractalParameters.NovaJuliaMode;
         double novaZ0R = FractalParameters.NovaZ0.Real, novaZ0I = FractalParameters.NovaZ0.Imaginary;
         double novaCR = FractalParameters.NovaJuliaC.Real, novaCI = FractalParameters.NovaJuliaC.Imaginary;
@@ -179,6 +184,9 @@ public sealed partial class NewtonCalculator : IFractalCalculator, FracturingFog
                 int cap = maxIter, lam = 0, pow = 1;
                 double snapR = double.NaN, snapI = double.NaN;
                 bool brent = periodicity;
+                // #1980 — the orbit's multiplier |Π N′(z_n)|², as mantissa · 2^mulE.
+                double mul = 1; long mulE = 0;
+                bool chaos = false;
                 for (iter = 0; iter < cap; iter++)
                 {
                     // f(z) = z^d - 1, f'(z) = d·z^(d-1)
@@ -248,6 +256,26 @@ public sealed partial class NewtonCalculator : IFractalCalculator, FracturingFog
                         }
                     }
 
+                    if (chaosOut && iter > 0)
+                    {
+                        // #1980 — N′(z) = 1 − R·(1 + (d−1)·z^−d)/d at the z this step started from
+                        // (z^−d = conj(z^d)/|z^d|²), multiplied in; power-of-two renormalisation is exact.
+                        // From the first iterate on: Nova's parameter plane starts at the critical point
+                        // z₀ = 1 (N′(z₀) = 0), which would pin the product to 0.
+                        double zd2 = zdR * zdR + zdI * zdI;
+                        double wR = (d - 1) * zdR / zd2, wI = -(d - 1) * zdI / zd2;
+                        double mR = 1 - R * (1 + wR) / d, mI = -R * wI / d;
+                        FracturingFog.Perturbation.PerturbationEngine.MulIn(ref mul, ref mulE, mR * mR + mI * mI);
+                        if (FracturingFog.Perturbation.PerturbationEngine.Chaotic(mul, mulE, chaosLog2Sq))
+                        {
+                            chaos = true;
+                            Interlocked.Increment(ref _statChaos);
+                            Interlocked.Add(ref _statStopIter, iter + 1);
+                            Interlocked.Add(ref _statSaved, maxIter - (iter + 1));
+                            break;
+                        }
+                    }
+
                     if (brent)
                     {
                         // #1979 — z_{iter+1} repeats a snapshot bit for bit: the step is a function of z alone, so
@@ -265,7 +293,7 @@ public sealed partial class NewtonCalculator : IFractalCalculator, FracturingFog
                         else if (lam == pow) { snapR = zr; snapI = zi; pow <<= 1; lam = 0; }
                     }
                 }
-                if (iter == cap && cap < maxIter) iter = maxIter;   // #1979 — as at the cap
+                if (iter == cap && cap < maxIter || chaos) iter = maxIter;   // #1979 / #1980 — as at the cap
             converged:
                 FinishPixel(rowBase + x, x, y, basin, iter, smooth, zr, zi, d, maxIter, nova, newtonMap);
             }

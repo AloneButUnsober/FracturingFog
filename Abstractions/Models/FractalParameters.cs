@@ -453,6 +453,15 @@ namespace FracturingFog.Models
         /// <summary>#1294 — the fixed c added each step in Nova Julia mode.</summary>
         public Complex NovaJuliaC { get; set; } = new Complex(-0.5, 0.0);
 
+        /// <summary>#1980 — opt-in chaos early-out for maps where nothing escapes (Nova, Newton): a pixel
+        /// that has not converged stops once its orbit's multiplier |Π f′(z_n)| passes
+        /// 10^<see cref="ChaosEarlyOutLog10"/>, and colours as non-converged (as at the iteration cap).
+        /// Off by default (frames unchanged). Idea: pauldelbrot, fractalforums.org topic 5693.</summary>
+        public bool ChaosEarlyOut { get; set; } = false;
+
+        /// <summary>#1980 — the early-out's threshold, log10 of the multiplier (default 200).</summary>
+        public double ChaosEarlyOutLog10 { get; set; } = 200;
+
         /// <summary>Initial prev-z offset for the Secant basin renderer.
         /// Secant's two-point recurrence is undefined when prev = z, so
         /// the first prev is set to (pixel + offset). Default (0.5, 0)
@@ -2280,6 +2289,8 @@ namespace FracturingFog.Models
                 NovaJuliaMode = NovaJuliaMode,
                 NovaZ0 = NovaZ0,
                 NovaJuliaC = NovaJuliaC,
+                ChaosEarlyOut = ChaosEarlyOut,             // #1980
+                ChaosEarlyOutLog10 = ChaosEarlyOutLog10,
                 SecantInitialOffset = SecantInitialOffset,
                 SpiderCDecay = SpiderCDecay,
                 MagnetConvergence = MagnetConvergence,

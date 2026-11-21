@@ -386,6 +386,21 @@
             </Grid>
         </StackPanel>
 
+        <!-- #1980: opt-in chaos early-out (Newton, Nova): stop a non-converged pixel once its orbit's
+             multiplier |Π f'(z)| passes 10^threshold. -->
+        <Grid IsVisible="{Binding IsChaosEarlyOutFamily}"
+              ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
+            <CheckBox Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Content="Chaos early-out"
+                      IsChecked="{Binding ChaosEarlyOut, Mode=TwoWay}"
+                      ToolTip.Tip="Stops a pixel that has not converged once its orbit's multiplier |product of f'(z)| passes 10^threshold, and colours it as not converged. Faster only where orbits are chaotic; can stop a pixel that would have converged later. Off = unchanged frames." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Threshold (log10):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           IsEnabled="{Binding ChaosEarlyOut}"
+                           Minimum="10" Maximum="300" Increment="10" FormatString="F0"
+                           Value="{Binding ChaosEarlyOutLog10, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="The multiplier at which a pixel stops, as a power of ten (default 200)." />
+        </Grid>
+
         <!-- Secant initial-offset add-on -->
         <Grid IsVisible="{Binding IsSecant}"
               ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
