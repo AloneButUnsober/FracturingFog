@@ -463,6 +463,32 @@ namespace FracturingFog.Models
                 Tags = new List<string> { "2D", "binary", "post-newtonian" },
             };
 
+            // #1946 — Mixmaster. Every frame re-integrates every universe.
+            yield return new AnimationData
+            {
+                Name = "Mixmaster: exit threshold",
+                Category = "Built-in",
+                Description = "Moves the exit threshold u_exit between 4 and 16 and back: the basins coarsen and refine.",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.MixmasterBasins },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "MixUExit", Mode = AnimationMode.Sine, Min = 4.0, Max = 16.0, FrequencyHz = 0.04, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "cosmology" },
+            };
+            yield return new AnimationData
+            {
+                Name = "Mixmaster: volume sweep",
+                Category = "Built-in",
+                Description = "Moves the starting volume variable of the anisotropy launch between -2 and -0.5 and back.",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.MixmasterBasins },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "MixOmega", Mode = AnimationMode.Sine, Min = -2.0, Max = -0.5, FrequencyHz = 0.04, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "cosmology" },
+            };
+
             // #632 (Renderer C2) — precision-sweep convergence. Ramps the low
             // tier up the ladder Float→QuadDouble while a Hold track pins the
             // reference tier at QuadDouble, so the divergence field dims toward

@@ -299,6 +299,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _sbPhi1 = _p.SpinBinPhi1; _sbPhi2 = _p.SpinBinPhi2; _sbR0 = _p.SpinBinSeparation; _sbV0 = _p.SpinBinVelocity;
         _sbRr = _p.SpinBinRadiationReaction; _sbOutcome = _p.SpinBinOutcome; _sbMerge = _p.SpinBinMergeRadius;
         _sbSeparate = _p.SpinBinSeparateRadius; _sbOrbits = _p.SpinBinMaxOrbits; _sbTol = _p.SpinBinTolerance;
+        _mxView = _p.MixView; _mxUExit = _p.MixUExit; _mxOmegaDot = _p.MixOmegaDot; _mxOmega = _p.MixOmega;
+        _mxAlphaDot = _p.MixAlphaDot; _mxBetaDot = _p.MixBetaDot; _mxMaxTime = _p.MixMaxTime; _mxTol = _p.MixTolerance;
         _mathPlaneScene = _p.MathPlaneScene ?? string.Empty;
         UpdateMathPlaneSceneError();
         _raysColorSource = _p.BilliardRaysColorSource;
@@ -526,6 +528,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsThreeBodyBasins => FractalType == FractalType.ThreeBodyBasins;   // #1943
     public bool IsMagnetisedBlackHole => FractalType == FractalType.MagnetisedBlackHole;   // #1944
     public bool IsSpinningBinaryBasins => FractalType == FractalType.SpinningBinaryBasins;   // #1945
+    public bool IsMixmasterBasins => FractalType == FractalType.MixmasterBasins;   // #1946
     /// <summary>Either billiard type: the shared scene controls (geometry, disks, bounces).</summary>
     public bool IsBilliardScene => IsChaoticBilliard || IsBilliardRays;
     /// <summary>#1548 — Math Plane (Cartesian plotter).</summary>
@@ -679,6 +682,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         || IsMagnetisedBlackHole
         // Spinning binaries — orbit count height field (#1945).
         || IsSpinningBinaryBasins
+        // Mixmaster — log arc length height field (#1946).
+        || IsMixmasterBasins
         // Precision field — divergence-scalar height field (#628).
         || IsPrecisionField
         // Dual-orbit escape-geometry (#864) — the derived scalar rides the
@@ -701,7 +706,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsLyapunov || IsTranscendentalJulia || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian || IsMirrorSpheres
-          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsBlackHoleShadow || IsHenonHeilesBasins || IsThreeBodyBasins || IsMagnetisedBlackHole || IsSpinningBinaryBasins || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable || IsAdaptiveAa2D
+          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsBlackHoleShadow || IsHenonHeilesBasins || IsThreeBodyBasins || IsMagnetisedBlackHole || IsSpinningBinaryBasins || IsMixmasterBasins || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable || IsAdaptiveAa2D
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -2490,6 +2495,22 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double SpinBinSeparateRadius { get => _sbSeparate; set { Set(ref _sbSeparate, Clamp(value, 3.0, 1e6)); _p.SpinBinSeparateRadius = _sbSeparate; Fire(); } }
     public double SpinBinMaxOrbits { get => _sbOrbits; set { Set(ref _sbOrbits, Clamp(value, 1.0, 100000.0)); _p.SpinBinMaxOrbits = _sbOrbits; Fire(); } }
     public double SpinBinTolerance { get => _sbTol; set { Set(ref _sbTol, Clamp(value, 1e-13, 1e-3)); _p.SpinBinTolerance = _sbTol; Fire(); } }
+
+    // ── #1946 — Mixmaster ────────────────────────────────────────────────────
+    private MixmasterView _mxView;
+    private double _mxUExit, _mxOmegaDot, _mxOmega, _mxAlphaDot, _mxBetaDot, _mxMaxTime, _mxTol;
+    public MixmasterView MixView { get => _mxView; set { Set(ref _mxView, value); _p.MixView = value; this.RaisePropertyChanged(nameof(MixIsKasner)); this.RaisePropertyChanged(nameof(MixIsAnisotropy)); Fire(); } }
+    public System.Array MixViews => s_MixViews;
+    private static readonly System.Array s_MixViews = System.Enum.GetValues(typeof(MixmasterView));
+    public bool MixIsKasner => _mxView == MixmasterView.KasnerUV;
+    public bool MixIsAnisotropy => _mxView == MixmasterView.Anisotropy;
+    public double MixUExit { get => _mxUExit; set { Set(ref _mxUExit, Clamp(value, 2.0, 1000.0)); _p.MixUExit = _mxUExit; Fire(); } }
+    public double MixOmegaDot { get => _mxOmegaDot; set { Set(ref _mxOmegaDot, Clamp(value, -100.0, 100.0)); _p.MixOmegaDot = _mxOmegaDot; Fire(); } }
+    public double MixOmega { get => _mxOmega; set { Set(ref _mxOmega, Clamp(value, -100.0, 100.0)); _p.MixOmega = _mxOmega; Fire(); } }
+    public double MixAlphaDot { get => _mxAlphaDot; set { Set(ref _mxAlphaDot, Clamp(value, -1000.0, 1000.0)); _p.MixAlphaDot = _mxAlphaDot; Fire(); } }
+    public double MixBetaDot { get => _mxBetaDot; set { Set(ref _mxBetaDot, Clamp(value, -1000.0, 1000.0)); _p.MixBetaDot = _mxBetaDot; Fire(); } }
+    public double MixMaxTime { get => _mxMaxTime; set { Set(ref _mxMaxTime, Clamp(value, 1.0, 1e300)); _p.MixMaxTime = _mxMaxTime; Fire(); } }
+    public double MixTolerance { get => _mxTol; set { Set(ref _mxTol, Clamp(value, 1e-13, 1e-3)); _p.MixTolerance = _mxTol; Fire(); } }
     // #1507 — what sets the hue.
     private BilliardRayColorSource _raysColorSource;
     public BilliardRayColorSource BilliardRaysColorSource { get => _raysColorSource; set { Set(ref _raysColorSource, value); _p.BilliardRaysColorSource = value; Fire(); } }

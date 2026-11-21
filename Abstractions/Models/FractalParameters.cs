@@ -1565,6 +1565,24 @@ namespace FracturingFog.Models
         /// <summary>#1945 — integrator relative tolerance per step. Default 1e-9.</summary>
         public double SpinBinTolerance { get; set; } = 1e-9;
 
+        // ── Mixmaster (Bianchi IX) universe (#1946) ─────────────────────
+        /// <summary>#1946 — launch space (see <see cref="FracturingFog.MixmasterView"/>). Default KasnerUV.</summary>
+        public MixmasterView MixView { get; set; } = MixmasterView.KasnerUV;
+        /// <summary>#1946 — exit once a Kasner epoch has u above this. Default 8 (Cornish &amp; Levin's basins).</summary>
+        public double MixUExit { get; set; } = 8.0;
+        /// <summary>#1946 — ω = Ω′ of the KasnerUV launch. Default 1/3 (theirs).</summary>
+        public double MixOmegaDot { get; set; } = 1.0 / 3.0;
+        /// <summary>#1946 — Ω of the Anisotropy launch. Default −1 (theirs).</summary>
+        public double MixOmega { get; set; } = -1.0;
+        /// <summary>#1946 — (ln a)′ of the Anisotropy launch. Default 10 (theirs).</summary>
+        public double MixAlphaDot { get; set; } = 10.0;
+        /// <summary>#1946 — (ln b)′ of the Anisotropy launch. Default 10 (theirs).</summary>
+        public double MixBetaDot { get; set; } = 10.0;
+        /// <summary>#1946 — arc-length limit λ in (ln a, ln b, ln c) space; undecided past it (the epochs lengthen geometrically, so it is large). Default 1e30.</summary>
+        public double MixMaxTime { get; set; } = 1e30;
+        /// <summary>#1946 — integrator relative tolerance per step. Default 1e-9.</summary>
+        public double MixTolerance { get; set; } = 1e-9;
+
         // ── Slit cascade (#1569, double-slit epic #1565) ──────────────────
         /// <summary>Slit cascade: children per slit, N (2..16). N ≥ 3 for the fringe
         /// weights to differ (a symmetric pair is a plain Cantor set).</summary>
@@ -2712,6 +2730,14 @@ namespace FracturingFog.Models
                 SpinBinSeparateRadius = SpinBinSeparateRadius,
                 SpinBinMaxOrbits = SpinBinMaxOrbits,
                 SpinBinTolerance = SpinBinTolerance,
+                MixView = MixView,
+                MixUExit = MixUExit,
+                MixOmegaDot = MixOmegaDot,
+                MixOmega = MixOmega,
+                MixAlphaDot = MixAlphaDot,
+                MixBetaDot = MixBetaDot,
+                MixMaxTime = MixMaxTime,
+                MixTolerance = MixTolerance,
                 SlitCascadeChildren = SlitCascadeChildren,
                 SlitCascadeRatio = SlitCascadeRatio,
                 SlitCascadeDepth = SlitCascadeDepth,

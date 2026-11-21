@@ -1776,5 +1776,42 @@
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
         </Grid>
 
+        <!-- #1946 — Mixmaster (Bianchi IX) universe. -->
+        <Grid IsVisible="{Binding IsMixmasterBasins}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="View:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding MixViews}"
+                      SelectedItem="{Binding MixView, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="KasnerUV: the pixel is the starting Kasner epoch (u across, v up). Anisotropy: the pixel is the starting shape (beta+, beta-) at fixed volume and rates." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="u exit:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="2" Maximum="1000" Increment="1" FormatString="0.##########"
+                           Value="{Binding MixUExit, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Stop once an epoch has u above this (Cornish and Levin: 8)." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Omega':" VerticalAlignment="Center" IsVisible="{Binding MixIsKasner}" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1" IsVisible="{Binding MixIsKasner}" Minimum="-100" Maximum="100" Increment="0.05" FormatString="0.##########"
+                           Value="{Binding MixOmegaDot, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Rate of the volume variable at the start (theirs: 1/3)." />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Omega:" VerticalAlignment="Center" IsVisible="{Binding MixIsAnisotropy}" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1" IsVisible="{Binding MixIsAnisotropy}" Minimum="-100" Maximum="100" Increment="0.1" FormatString="0.##########"
+                           Value="{Binding MixOmega, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Volume variable Omega = ln(abc)/3 at the start (theirs: -1)." />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="(ln a)' :" VerticalAlignment="Center" IsVisible="{Binding MixIsAnisotropy}" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1" IsVisible="{Binding MixIsAnisotropy}" Minimum="-1000" Maximum="1000" Increment="1" FormatString="0.##########"
+                           Value="{Binding MixAlphaDot, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Expansion rate of a at the start (theirs: 10)." />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="(ln b)' :" VerticalAlignment="Center" IsVisible="{Binding MixIsAnisotropy}" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1" IsVisible="{Binding MixIsAnisotropy}" Minimum="-1000" Maximum="1000" Increment="1" FormatString="0.##########"
+                           Value="{Binding MixBetaDot, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Expansion rate of b at the start (theirs: 10); c's comes from the constraint." />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Arc-length limit:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="6" Grid.Column="1" Minimum="1" Maximum="1E+300" Increment="1000" FormatString="0.###E+0"
+                           Value="{Binding MixMaxTime, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="A universe still running after this arc length is undecided (interior colour). The epochs lengthen geometrically, so it is large." />
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Tolerance:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="7" Grid.Column="1" Minimum="0.0000000000001" Maximum="0.001" Increment="0.000000001" FormatString="0.#############"
+                           Value="{Binding MixTolerance, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Integrator relative tolerance per step." />
+            <CheckBox Grid.Row="8" Grid.Column="1" Content="Adaptive anti-aliasing"
+                      IsChecked="{Binding AdaptiveAa, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="With the High / Ultra / Extreme quality presets, re-run only the pixels that differ from a neighbour. Also used by export and --batch." />
+            <TextBlock Grid.Row="9" Grid.Column="1"
+                       Text="Colour: the direction (a, b or c) collapsing fastest when the universe settles into an epoch with u above u exit, on its way back to the big bang (Cornish and Levin's outcome)."
+                       TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
+        </Grid>
+
     </StackPanel>
 </UserControl>

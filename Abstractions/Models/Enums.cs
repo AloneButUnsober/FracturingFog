@@ -1282,6 +1282,13 @@ namespace FracturingFog
         /// <c>SpinBinRadiationReaction</c>, <c>SpinBinOutcome</c>, <c>SpinBinMergeRadius</c>,
         /// <c>SpinBinSeparateRadius</c>, <c>SpinBinMaxOrbits</c>, <c>SpinBinTolerance</c>.</summary>
         SpinningBinaryBasins,
+        /// <summary>#1946 (§2.6) — the vacuum Bianchi IX ("Mixmaster") cosmology, in Cornish &amp; Levin's
+        /// variables (PRL 78, 998 and PRD 55, 7489, 1997). Each pixel is an initial condition, traced
+        /// (shared scattering integrator) until it settles in a Kasner epoch with u above u_exit; the colour
+        /// is the axis collapsing most quickly then (their outcome). <c>MixmasterCalculator</c>. Tunables:
+        /// <c>MixView</c>, <c>MixUExit</c>, <c>MixOmegaDot</c>, <c>MixOmega</c>, <c>MixAlphaDot</c>,
+        /// <c>MixBetaDot</c>, <c>MixMaxTime</c>, <c>MixTolerance</c>.</summary>
+        MixmasterBasins,
     }
 
     /// <summary>Hole layout of <see cref="FractalType.BlackHoleShadow"/> (#1923).
@@ -1373,6 +1380,13 @@ namespace FracturingFog
     /// position above (z &gt; 0) or below the initial orbital plane, separated, or still orbiting (after
     /// Levin's dissipative figure).</summary>
     public enum SpinningBinaryOutcomeMode { Fates, MergerSide }
+
+    /// <summary>Launch space of <see cref="FractalType.MixmasterBasins"/> (#1946), both from Cornish &amp;
+    /// Levin's PRD 55, 7489. <see cref="KasnerUV"/> (default, their Fig. 16): the pixel is (u, v) of the
+    /// initial Kasner epoch, ω = <c>MixOmegaDot</c>, Ω from the constraint. <see cref="Anisotropy"/>
+    /// (their Fig. 19): the pixel is (β+, β−) at Ω = <c>MixOmega</c>, (ln a)′ = <c>MixAlphaDot</c>,
+    /// (ln b)′ = <c>MixBetaDot</c>, (ln c)′ from the constraint.</summary>
+    public enum MixmasterView { KasnerUV, Anisotropy }
 
     public enum RenderProfile { Preview, Final }
 
@@ -1531,6 +1545,10 @@ namespace FracturingFog
             // #1945 — spinning binaries: categorical outcome through IBilliardColorMap; no
             // normals / DE / orbit data.
             FractalType.SpinningBinaryBasins => FractalCapabilities.None,
+
+            // #1946 — Mixmaster: categorical collapsing axis through IBilliardColorMap; no
+            // normals / DE / orbit data.
+            FractalType.MixmasterBasins => FractalCapabilities.None,
 
             // #1713 — Math Plane 3D draws its own colours (a diagram, no per-pixel data).
             FractalType.MathPlane3D => FractalCapabilities.None,

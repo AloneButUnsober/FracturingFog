@@ -584,18 +584,29 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
 
 - **N. J. Cornish, J. J. Levin.** *The mixmaster universe is chaotic.* Physical Review Letters 78,
   998–1001, 1997. DOI 10.1103/PhysRevLett.78.998, <https://arxiv.org/abs/gr-qc/9605029>.
-  Coordinate-independent fractal methods for Bianchi IX chaos. Basis of #1946.
+  Coordinate-independent fractal methods for Bianchi IX chaos. Basis of #1946. Read 2026-11-21 (ar5iv
+  rendering): `MixmasterBasins` uses its equation of motion and constraint (eq. 2, minus sign before the
+  ¼ term), Kasner indices and the outcome (exit at u > u_max, colour by the axis collapsing most quickly).
 
 <a id="cornish-levin-farey-1997"></a>
 
 - **N. J. Cornish, J. J. Levin.** *The mixmaster universe: A chaotic Farey tale.* Physical Review D
-  55, 7489–7510, 1997. Companion paper (journal page not opened). Basis of #1946.
+  55, 7489–7510, 1997. Companion paper (journal page not opened). Basis of #1946. arXiv
+  <https://arxiv.org/abs/gr-qc/9612066>, DOI 10.1103/PhysRevD.55.7489 (as given by the arXiv record), read
+  2026-11-21 (ar5iv rendering). `MixmasterBasins` takes from it the equations of motion (eq. 2), the
+  Kasner-(u, v) launch (eq. 3, Kasner indices eq. 5, ω_o = 1/3, Ω_o from the constraint; their Fig. 16),
+  the anisotropy launch (Ω = −1, α̇ = β̇ = 10, γ̇ from the constraint; their Fig. 19) with the variables of
+  eqs. 70–72, the exit at u_exit = 8 and the outcome colouring, and the u-map (eq. 10) whose topological
+  entropy ln 2 (eq. 32, credited there to Rugh) the tests check. The paper's eq. 1 prints the opposite sign
+  before ¼ in the constraint from the PRL's eq. 2; FF uses the sign its equations of motion conserve.
+  Not stated in the parts read: the integration direction and the Kasner-detection threshold (FF's own).
 
 <a id="mixmaster-chaos-2000"></a>
 
 - ***Mixmaster chaos.*** <https://arxiv.org/abs/gr-qc/0011001>, 2000. Revisits Cornish & Levin 1997,
-  calls it inconclusive on method, reaches the same conclusion. Context for #1946. **Authors and journal
-  not verified.**
+  calls it inconclusive on method, reaches the same conclusion. Context for #1946. Checked against the arXiv
+  record 2026-11-21: **A. E. Motter, P. S. Letelier**, Physics Letters A 285, 127–131, 2001, DOI
+  10.1016/S0375-9601(01)00349-8 (journal reference as given by the arXiv record). Named in the help page.
 
 <a id="semerak-sukova-2010"></a>
 
@@ -1639,7 +1650,6 @@ entry above completed or corrected.
 - **Schnittman & Rasio 2001, Cornish & Levin 2002, Hartl & Buonanno 2005** — journal volumes and article
   numbers as given by search-result listings of the arXiv / journal records (#1945); the journal pages were
   not opened.
-- ***Mixmaster chaos*** — arXiv:gr-qc/0011001 (#1946): authors and journal.
 - **Semerák & Suková 2010** — MNRAS volume / pages of part I (#1947).
 - **Kayser, Refsdal & Stabell 1986** — title of A&A 166, 36 (#1948).
 - **Cunha et al. 2016** — journal reference of *Chaotic lensing around boson stars and Kerr black holes
@@ -1763,6 +1773,9 @@ page. The convention:
 
 Corrections so far:
 
+- 2026-11-21 (#1946). *Mixmaster chaos* (arXiv:gr-qc/0011001): authors and journal now known (Motter &
+  Letelier, Phys. Lett. A 285, 127). Old form in the entry: **Authors and journal
+  not verified.** Old form under awaiting verification: ***Mixmaster chaos*** — arXiv:gr-qc/0011001 (#1946): authors and journal.
 - 2026-11-21 (#1945). Comments on Levin 2000: the two comments are now identified from their arXiv records
   (Hughes: gr-qc/0101024, PRL 85, 5480; Cornish: gr-qc/0101041, PRL 85, 3980). Old form in the entry:
   **Which arXiv number is whose, and the journal references, are not verified.** Old form under awaiting

@@ -5575,6 +5575,100 @@ and the camera is Cam3DFamily=MirrorSpheres with Cam3DDistance /
 Cam3DTheta / Cam3DPhi.
 ";
 
+        /// <summary>#1946 — Mixmaster (Bianchi IX) universe (Math → Scattering).</summary>
+        public const string MathMixmasterText =
+@"=== Mixmaster Universe ===
+
+A universe that is the same everywhere but stretches at
+different rates in three directions (scale factors a, b, c):
+the Bianchi IX or Mixmaster cosmology, without matter. Run back
+towards the big bang it does not shrink smoothly. It passes
+through Kasner epochs, in which two directions shrink and one
+grows, and between them it bounces off curvature walls, which
+reshuffles the three rates. Each epoch is labelled by a number
+u (1 or more): large u means one direction shrinking much
+faster than the others.
+
+Cornish & Levin (1997) showed this is chaotic with
+coordinate-independent fractal methods: start many universes,
+follow each until it enters an epoch with u above a threshold
+(u_exit), and colour it by which direction is collapsing
+fastest then. The three outcome basins interleave on every
+scale. Fracturing Fog draws that map.
+
+--- Views ---
+
+Kasner (u, v) (default): Cornish & Levin's launch. The universe
+starts in a Kasner epoch with parameters u (across) and v (up);
+the volume is set so the Einstein constraint holds. Grey: no
+launch (u below 1 or v not positive).
+Anisotropy: their second launch. Fixed volume variable (Omega)
+and expansion rates of a and b; the rate of c comes from the
+constraint; the pixel is the shape (beta+ across, beta- up).
+
+--- Settings ---
+
+u_exit (8 as in their basin pictures; 16 refines), Omega' of
+the Kasner launch (1/3, theirs), Omega and the a and b rates of
+the anisotropy launch (-1, 10 and 10, theirs), the arc-length
+limit, integrator tolerance.
+
+--- How Fracturing Fog computes it ---
+
+The equations are theirs ((ln a)'' = [(b^2 - c^2)^2 - a^4]/2 and
+cyclically, with the constraint). The two papers print opposite
+signs in the constraint; only the minus sign is kept by the
+equations, and the tests check this. The run goes towards the
+big bang. Three numerical choices are Fracturing Fog's own:
+time is measured by arc length (the bounces slow the universe
+down so much that ordinary time would need astronomical
+values); the constraint is restored every few steps (its tiny
+error would otherwise grow at each bounce); and 'in a Kasner
+epoch' means every acceleration is below a thousandth of the
+speed squared.
+
+--- Colouring ---
+
+Each collapsing direction (a, b, c) has its own Okabe-Ito colour
+(colour-blind safe), darker for longer runs. A Billiard theme
+colours them directly. Relief 3D uses log arc length.
+
+--- Presets ---
+
+Mixmaster - Kasner Basins
+Mixmaster - Kasner Close-Up
+Mixmaster - Late Exit
+Mixmaster - Anisotropy Plane
+
+Bound animations:
+Mixmaster: exit threshold
+Mixmaster: volume sweep
+
+--- Batch ---
+
+Every setting is a --param key:
+  --fractal MixmasterBasins --x 1.5 --y -0.5 --zoom 3.5
+  --param MixUExit=16 --param MixView=Anisotropy
+Keys: MixView, MixUExit, MixOmegaDot, MixOmega, MixAlphaDot,
+MixBetaDot, MixMaxTime, MixTolerance.
+Built-in presets render headless with --region ""name"".
+
+--- Sources ---
+
+N. J. Cornish & J. J. Levin, 'The mixmaster universe is
+chaotic', Physical Review Letters 78, 998 (1997), and 'The
+mixmaster universe: A chaotic Farey tale', Physical Review D 55,
+7489 (1997): the equations, launches, outcome and u-map.
+A. E. Motter & P. S. Letelier, 'Mixmaster chaos', Physics
+Letters A 285, 127 (2001): finds oversights that leave the
+Cornish-Levin method inconclusive, corrects them and confirms
+the conclusion.
+The u-map's topological entropy ln 2 is due to Rugh (as cited
+by Cornish & Levin).
+Cornish & Levin's figures show this map; Fracturing Fog adds an
+interactive and batch explorer.
+Full entries: Docs/Resources-Bibliography.md.";
+
         /// <summary>#1945 — spinning compact binaries (Math → Scattering).</summary>
         public const string MathSpinningBinaryText =
 @"=== Spinning Binaries ===
