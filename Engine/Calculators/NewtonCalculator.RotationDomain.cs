@@ -19,6 +19,8 @@ namespace FracturingFog;
 public sealed partial class NewtonCalculator
 {
     private uint[]? _rotationStamp;
+    private float[]? _rotationDistPx;   // #1981 part 2
+    private bool _rotationRan;
 
     /// <summary>#1981 — per-class pixel counts of the last frame's pass (all 0 when off).</summary>
     public RotationDomainColoring.Stats LastRotationDomainStats { get; private set; }
@@ -26,10 +28,12 @@ public sealed partial class NewtonCalculator
     private void ApplyRotationDomain(int d, double R, int maxIter, byte[]? mask, CancellationToken ct)
     {
         LastRotationDomainStats = default;
+        _rotationRan = false;
         if (!FractalParameters.RotationDomainColoring) return;
         int w = Width, h = Height, n = w * h;
         if (n <= 0 || ColorBuffer.Length < n) return;
         if (_rotationStamp?.Length != n) _rotationStamp = new uint[n];
+        if (_rotationDistPx?.Length != n) _rotationDistPx = new float[n];
 
         var s = RotationDomainColoring.Settings.From(FractalParameters);
         double scale = (3.5 / Math.Max(w, h)) / Zoom;
@@ -49,7 +53,18 @@ public sealed partial class NewtonCalculator
         }
 
         LastRotationDomainStats = RotationDomainColoring.Fill(_rotationStamp, w, h, mask,
-            idx => basins[idx] < 0, Classify, scale, s, ct);
+            idx => basins[idx] < 0, Classify, scale, s, ct, _rotationDistPx);
+        _rotationRan = true;
         RotationDomainColoring.Stamp(_rotationStamp, ColorBuffer, mask, InteriorAlpha);   // as FinishPixel scales in-set
+    }
+
+    /// <summary>#1981 part 2 — the rotation-domain distances (pixels) for the adaptive AA mask,
+    /// when that colouring ran; Newton / Nova basins have no distance estimate here.</summary>
+    public float[]? AdaptiveAaBoundaryDistancePx()
+    {
+        if (!_rotationRan || _rotationDistPx is not { } r || r.Length != Width * Height) return null;
+        var b = new float[r.Length];
+        FracturingFog.Rendering.AdaptiveAaDistance.MergeRotation(b, r);
+        return b;
     }
 }

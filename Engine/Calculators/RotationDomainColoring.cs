@@ -264,7 +264,8 @@ public static class RotationDomainColoring
     /// <summary>Run the pass: for each candidate pixel (masked, when a mask is given) classify it and
     /// write its colour into <paramref name="stamp"/> (0 = keep). Returns per-class counts.</summary>
     public static Stats Fill(uint[] stamp, int w, int h, byte[]? mask, Func<int, bool> candidate,
-                             Func<int, int, Result> classify, double pixelScale, Settings s, CancellationToken ct)
+                             Func<int, int, Result> classify, double pixelScale, Settings s, CancellationToken ct,
+                             float[]? distPx = null)
     {
         long rot = 0, cha = 0, att = 0;
         Parallel.For(0, h, new ParallelOptions { CancellationToken = ct }, y =>
@@ -275,10 +276,14 @@ public static class RotationDomainColoring
             {
                 int idx = rb + x;
                 stamp[idx] = 0;
+                if (distPx != null) distPx[idx] = 0;
                 if (mask != null && mask[idx] == 0) continue;
                 if (!candidate(idx)) continue;
                 var r = classify(x, y);
                 stamp[idx] = ColorFor(r, pixelScale, s);
+                // #1981 part 2 — the rotation distance in pixels, for the adaptive AA mask.
+                if (distPx != null && r.Class == OrbitClass.Rotation && double.IsFinite(r.Distance) && pixelScale > 0)
+                    distPx[idx] = (float)(r.Distance / pixelScale);
                 if (r.Class == OrbitClass.Rotation) lr++; else if (r.Class == OrbitClass.Chaotic) lc++; else la++;
             }
             Interlocked.Add(ref rot, lr); Interlocked.Add(ref cha, lc); Interlocked.Add(ref att, la);

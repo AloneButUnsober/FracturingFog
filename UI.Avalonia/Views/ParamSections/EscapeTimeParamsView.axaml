@@ -271,6 +271,18 @@
                                    Minimum="0" Maximum="64" Increment="0.5" FormatString="F1"
                                    Value="{Binding AdaptiveAaTolerance, Mode=TwoWay}" Margin="0,2" />
                 </Grid>
+                <!-- #1981 part 2: skip pixels a distance estimate shows hold no boundary. -->
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto" IsEnabled="{Binding AdaptiveAa}"
+                      IsVisible="{Binding IsAdaptiveAaDistanceFamily}">
+                    <CheckBox Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Content="Skip by distance estimate"
+                              IsChecked="{Binding AdaptiveAaDistanceSkip, Mode=TwoWay}"
+                              ToolTip.Tip="Also skip the extra samples where the distance estimate shows no set boundary within the pixel (Mandelbrot, Julia, Multibrot outside the set; rotation domains when rotation-domain colouring is on). Fewer samples on steep colour bands; those bands are then not smoothed. Off = the neighbour test alone." />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Min distance (px):" VerticalAlignment="Center"
+                               ToolTip.Tip="A pixel is skipped when the guaranteed distance to the boundary exceeds this (default 0.707, centre to corner)." />
+                    <NumericUpDown Grid.Row="1" Grid.Column="1" IsEnabled="{Binding AdaptiveAaDistanceSkip}"
+                                   Minimum="0.1" Maximum="16" Increment="0.1" FormatString="F3"
+                                   Value="{Binding AdaptiveAaDistanceMinPx, Mode=TwoWay}" Margin="0,2" />
+                </Grid>
             </StackPanel>
         </Border>
 

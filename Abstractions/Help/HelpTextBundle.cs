@@ -949,6 +949,29 @@ artifacts appear. Solutions:
 
 Fracturing Fog uses double / DD / QD auto-promotion combined with
 perturbation + SA + BLA for zooms past 1e45.
+
+=== Adaptive anti-aliasing: skip by distance estimate ===
+
+  AdaptiveAaDistanceSkip : bool   Off (default).  With Adaptive
+                              anti-aliasing on: a pixel the
+                              neighbour test marks takes no extra
+                              samples when the distance estimate
+                              guarantees no set boundary within it.
+                              Outside the set the guarantee is the
+                              lower bound D·(1 − e^(−2G))/(4G) ≈ D/2
+                              on the true distance (D = the usual
+                              |z| ln|z| / |dz/dc|).  Also Julia and
+                              Multibrot; rotation domains use a
+                              quarter of their estimate when
+                              rotation-domain colouring is on.
+  AdaptiveAaDistanceMinPx : double  The distance in pixels beyond
+                              which a pixel is skipped.  Default
+                              0.707 (centre to corner).
+
+  At 4x4 it took 12-34% fewer samples on the test views; colour
+  bands far from the set are then not smoothed.
+  Batch: --param AdaptiveAaDistanceSkip=true.
+  Idea: pauldelbrot on fractalforums.org.
 ";
 
         public const string MathJuliaText =

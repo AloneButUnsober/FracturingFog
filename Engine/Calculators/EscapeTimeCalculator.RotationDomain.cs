@@ -20,6 +20,7 @@ namespace FracturingFog;
 public sealed partial class EscapeTimeCalculator
 {
     private uint[]? _rotationStamp;
+    private float[]? _rotationDistPx;   // #1981 part 2 — for the adaptive AA mask
     private bool _rotationStamped;
 
     /// <summary>#1981 — per-class pixel counts of the last frame's pass (all 0 when off).</summary>
@@ -38,6 +39,7 @@ public sealed partial class EscapeTimeCalculator
         int w = Width, h = Height, n = w * h;
         if (n <= 0 || ColorBuffer.Length < n) return;
         if (_rotationStamp?.Length != n) _rotationStamp = new uint[n];
+        if (_rotationDistPx?.Length != n) _rotationDistPx = new float[n];
 
         var s = RotationDomainColoring.Settings.From(FractalParameters);
         int maxIt = MaxIterations;
@@ -76,9 +78,33 @@ public sealed partial class EscapeTimeCalculator
 
         byte[]? mask = AaMask;
         LastRotationDomainStats = RotationDomainColoring.Fill(_rotationStamp, w, h, mask,
-            idx => iters[idx] >= maxIt, Classify, scale, s, ct);
+            idx => iters[idx] >= maxIt, Classify, scale, s, ct, _rotationDistPx);
         RotationDomainColoring.Stamp(_rotationStamp, ColorBuffer, mask, 255);   // interior alpha follows in Calculate
         _rotationStamped = true;
+    }
+
+    /// <summary>#1981 part 2 — lower bounds on the boundary distance (pixels) for the adaptive AA
+    /// mask: the exterior distance estimate for Julia (d = 2) and Multibrot (d), and the
+    /// rotation-domain distance when that colouring ran. Null for the other families.</summary>
+    public float[]? AdaptiveAaBoundaryDistancePx()
+    {
+        int n = Width * Height;
+        double deg = FractalType switch
+        {
+            FractalType.Julia => 2,
+            FractalType.Multibrot => new FracturingFog.Models.FractalKernels.MultibrotKernel(FractalParameters.MultibrotExponent).Exponent,
+            _ => 0,
+        };
+        float[]? b = deg >= 2
+            ? FracturingFog.Rendering.AdaptiveAaDistance.Exterior(IterationBuffer, MaxIterations, DistanceBuffer,
+                DistancePixelScale, FinalZrBuffer, FinalZiBuffer, deg)
+            : null;
+        if (_rotationStamped && _rotationDistPx is { } r && r.Length == n)
+        {
+            b ??= new float[n];
+            FracturingFog.Rendering.AdaptiveAaDistance.MergeRotation(b, r);
+        }
+        return b;
     }
 
     // #1981 — after a histogram-equalization repaint of the in-set pixels.
