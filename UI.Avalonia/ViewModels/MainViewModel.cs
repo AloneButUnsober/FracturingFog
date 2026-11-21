@@ -265,6 +265,7 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
         (FractalType.BlackHoleShadow,       "Black Hole Shadows (Binary)"),   // #1923
         (FractalType.HenonHeilesBasins,     "Henon-Heiles Basins (Wada)"),    // #1942
         (FractalType.ThreeBodyBasins,       "Three-Body Basins (Copenhagen)"),// #1943
+        (FractalType.MagnetisedBlackHole,   "Magnetised Black Hole (Wald)"),  // #1944
         (FractalType.SlitCascade,           "Slit Cascade (Double-Slit Diffraction)"),   // #1569
         (FractalType.TalbotCarpet,          "Talbot Carpet (Quantum Carpet)"),           // #1570
         (FractalType.MathPlane,             "Math Plane (Cartesian)"),        // #1548

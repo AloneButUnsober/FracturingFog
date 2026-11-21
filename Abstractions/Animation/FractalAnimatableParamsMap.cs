@@ -162,6 +162,9 @@ public static class FractalAnimatableParamsMap
         FractalType.ThreeBodyBasins
             => _threeBodyList,
 
+        FractalType.MagnetisedBlackHole
+            => _magBhList,
+
         FractalType.BicomplexMandelbrot
             => _bicomplexList,
 
@@ -689,6 +692,20 @@ public static class FractalAnimatableParamsMap
             Notes: "Jacobi constant of every launch: lower values carry more energy and open the escape necks."),
         new("ThreeBodyLaunchAngle", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 360.0,
             Notes: "FixedAngle launch direction in degrees."),
+    };
+
+    // #1944 — magnetised black hole: the interaction strength (both views), and the
+    // Meridional energy / angular momentum / launch angle. Every change re-traces every pixel.
+    private static readonly AnimatableParamDescriptor[] _magBhList =
+    {
+        new("MagBhField", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 1.0,
+            Notes: "Interaction strength b = qB r_g / 2m: stronger fields mix the exits more."),
+        new("MagBhEnergy", AnimatableParamKind.ScalarDouble, Min: 1.0, Max: 4.0,
+            Notes: "Energy of every launch (Meridional view)."),
+        new("MagBhAngularMomentum", AnimatableParamKind.ScalarDouble, Min: -5.0, Max: 5.0,
+            Notes: "Axial angular momentum of every launch (Meridional view)."),
+        new("MagBhLaunchAngle", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 360.0,
+            Notes: "Meridional launch direction in degrees."),
     };
 
     // #1713 — Math Plane 3D: the orbit camera.

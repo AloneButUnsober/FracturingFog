@@ -410,6 +410,33 @@ namespace FracturingFog.Models
                 Tags = new List<string> { "2D", "three-body" },
             };
 
+            // #1944 — magnetised black hole. Every frame re-traces every pixel.
+            yield return new AnimationData
+            {
+                Name = "Magnetised black hole: field sweep",
+                Category = "Built-in",
+                Description = "Moves the interaction strength b between 0.1 and 0.6 and back: the bands where capture "
+                            + "and the two escapes interleave shift and reshape with the field.",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.MagnetisedBlackHole },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "MagBhField", Mode = AnimationMode.Sine, Min = 0.1, Max = 0.6, FrequencyHz = 0.04, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "black-hole", "magnetic" },
+            };
+            yield return new AnimationData
+            {
+                Name = "Magnetised black hole: turning launch",
+                Category = "Built-in",
+                Description = "Turns the Meridional launch direction once round in 30 seconds.",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.MagnetisedBlackHole },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "MagBhLaunchAngle", Mode = AnimationMode.Linear, Min = 0.0, Max = 360.0, FrequencyHz = 1.0 / 30.0, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "black-hole", "magnetic" },
+            };
+
             // #632 (Renderer C2) — precision-sweep convergence. Ramps the low
             // tier up the ladder Float→QuadDouble while a Hold track pins the
             // reference tier at QuadDouble, so the divergence field dims toward

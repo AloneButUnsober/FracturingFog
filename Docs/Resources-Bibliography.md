@@ -479,14 +479,43 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
 
 - **R. M. Wald.** *Black hole in a uniform magnetic field.* Physical Review D 10, 1680–1685, 1974.
   DOI 10.1103/PhysRevD.10.1680. The test-field solution (Killing vector as vector potential) used by
-  #1944.
+  #1944. Issue 6 and pages checked against the Crossref record 2026-11-21. `MagnetisedBlackHole` uses it
+  in Schwarzschild, A = (B/2) ξ_(φ) (`Engine/Scattering/MagnetisedBlackHole.cs`).
+
+<a id="bautista-vega-2021"></a>
+
+- **Joshua Bautista, Ian Vega.** *Chaotic exits from a weakly magnetized Schwarzschild black hole.*
+  Classical and Quantum Gravity 38 (15), 155016, 2021. DOI
+  [10.1088/1361-6382/ac0e19](https://doi.org/10.1088/1361-6382/ac0e19); preprint
+  <https://arxiv.org/abs/2011.13402>. Journal details checked against the Crossref record 2026-11-21.
+  Maps the capture / upstream / downstream exit basins of charged particles kicked vertically from
+  circular orbits round a Schwarzschild black hole in Wald's field, finds them Wada, and measures basin
+  entropy. **Prior art for #1944**: found by the #1944 prior-art search, it already publishes the fate-basin
+  map the issue proposed. `MagnetisedBlackHole` takes from it the units (r_g = 2M, b = qB r_g / 2m), the
+  effective potential (their eq. 3.7), the circular-orbit angular momentum ℓ± (eq. 4.2), the vertical-kick
+  launch over (ρ0, ℰ) (the Kick view) and the three exit categories; the escape height is theirs as a
+  setting (FF default 100, theirs 1000). FF adds the interactive / batch explorer and the Meridional view.
+
+<a id="al-zahrani-2014"></a>
+
+- **A. M. Al Zahrani.** *Escape of charged particles moving around a weakly magnetized Kerr black hole.*
+  arXiv:1407.7069, 2014 (<https://arxiv.org/abs/1407.7069>). Escape conditions for charged particles kicked
+  from orbits round a magnetised Kerr hole. Related prior art for #1944, named in the help page.
+
+<a id="stuchlik-kolos-2016"></a>
+
+- **Zdeněk Stuchlík, Martin Kološ.** *Acceleration of the charged particles due to chaotic scattering in
+  the combined black hole gravitational field and asymptotically uniform magnetic field.* arXiv:1511.02936,
+  2015 (<https://arxiv.org/abs/1511.02936>). Chaotic scattering of charged particles in the Wald field,
+  Schwarzschild included. Related prior art for #1944, named in the help page.
 
 <a id="kopacek-2010"></a>
 
 - **O. Kopáček, V. Karas, J. Kovář, Z. Stuchlík.** *Transition from regular to chaotic
   circulation in magnetized coronae near compact objects.* The Astrophysical Journal 722, 1240–1259,
   2010. <https://arxiv.org/abs/1008.4650>. Charged-particle chaos near magnetised compact objects
-  (recurrence analysis). Context and validation for #1944.
+  (recurrence analysis). Context and validation for #1944. Issue 2 and the DOI
+  10.1088/0004-637X/722/2/1240 as given by the arXiv record (journal reference field), 2026-11-21.
 
 <a id="levin-2000"></a>
 
@@ -1552,6 +1581,11 @@ entry above completed or corrected.
 - **Kluitenberg, Roest & Seri 2022** — journal reference of arXiv:2211.06880 (#1928; cited elsewhere as
   Bollettino dell'Unione Matematica Italiana, 2023).
 - **Yumoto, Nitta, Chiba & Sugiyama 2012** — journal reference of arXiv:1208.0635 (#1923).
+- **Al Zahrani 2014** — journal reference of arXiv:1407.7069 (#1944): the arXiv page says a modified
+  version was accepted by Physical Review D and lists the related DOI 10.1103/PhysRevD.90.044012; the
+  journal record was not opened (Crossref rate-limited 2026-11-21).
+- **Stuchlík & Kološ** — journal reference of arXiv:1511.02936 (#1944): the arXiv page lists the related
+  DOI 10.1140/epjc/s10052-015-3862-2 (Eur. Phys. J. C); volume, article number and year not checked.
 - **Comments on Levin 2000** — which of arXiv:gr-qc/0101024 / gr-qc/0101041 is Hughes's and which is
   Cornish's, and their journal references (#1945).
 - ***Mixmaster chaos*** — arXiv:gr-qc/0011001 (#1946): authors and journal.

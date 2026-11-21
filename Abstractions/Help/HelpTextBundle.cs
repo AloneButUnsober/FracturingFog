@@ -5575,6 +5575,113 @@ and the camera is Cam3DFamily=MirrorSpheres with Cam3DDistance /
 Cam3DTheta / Cam3DPhi.
 ";
 
+        /// <summary>#1944 — magnetised black hole (Math → Scattering).</summary>
+        public const string MathMagnetisedBlackHoleText =
+@"=== Magnetised Black Hole ===
+
+A charged particle near a black hole that sits in a uniform
+magnetic field. The hole is Schwarzschild (not spinning, not
+charged) and the field is Wald's exact test-field solution
+(Wald 1974): far away it is uniform along the z axis. Gravity
+pulls the particle in; the field makes it gyrate round the field
+lines and lets it slide along them. Each particle ends one of
+three ways:
+  captured by the black hole,
+  escaped upstream   (up the field, z -> +infinity),
+  escaped downstream (down the field, z -> -infinity),
+or is still undecided at the time limit (the theme's interior
+colour). Bautista & Vega (2021) mapped these exit basins and
+found them Wada: every boundary point touches all three.
+
+Units follow their paper: lengths and proper time in horizon
+radii r_g = 2M (the horizon is at 1), specific energy E,
+specific canonical angular momentum l about the axis, and one
+interaction strength b = qB r_g / 2m. The charge and the field
+only ever appear as this product, so b = 0 is both 'no field'
+and 'no charge': plain Schwarzschild motion.
+
+--- Kick view (default) ---
+
+Bautista & Vega's launch. The particle starts on a circular
+orbit in the equatorial plane and is kicked straight up the
+field to energy E. Across: the orbit radius rho0; up: E. Grey
+where no circular orbit exists or E is below the orbit's own
+energy; near-black left of rho0 = 1.01, which is inside the hole. 'Orbit branch' picks the plus or minus family of
+circular orbits. With the plus branch nothing escapes below
+E = 1: far from the hole the potential is at least 1.
+
+--- Meridional view ---
+
+Every point of a plane through the field axis is a launch at
+the same E and l, in the direction 'Launch angle' (0 = outward
+across the field, 90 = up it). The plane is drawn mirrored about
+the axis. Grey: no launch has that energy there; the near-black
+disc is the hole itself. Horizontal
+launches give a map symmetric about the equator with the two
+escapes swapped.
+
+--- Settings ---
+
+Field strength b, orbit branch (Kick), energy, angular momentum
+and launch angle (Meridional), escape height (|z| that counts
+as escaped; Bautista & Vega used 1000, Fracturing Fog defaults
+to 100 so frames stay quick: raise it with the time limit for
+the closest match), time limit, integrator tolerance.
+A particle counts as captured at 1.01 horizon radii.
+
+--- Colouring ---
+
+Each fate its own Okabe-Ito colour (colour-blind safe), darker
+for longer times. A Billiard theme colours the fates directly.
+Relief 3D uses log proper time as height.
+
+--- Presets ---
+
+Magnetised Black Hole - Kick Basins
+Magnetised Black Hole - Kick Close-Up
+Magnetised Black Hole - Minus Branch
+Magnetised Black Hole - Strong Field
+Magnetised Black Hole - Meridional Upward Launch
+Magnetised Black Hole - Meridional, High Angular Momentum
+
+Bound animations:
+Magnetised black hole: field sweep
+Magnetised black hole: turning launch
+
+--- Cost and anti-aliasing ---
+
+One path per pixel with the Dormand-Prince integrator shared
+with Black Hole Shadows; undecided particles run to the time
+limit, so bound regions are the slow part. With a High / Ultra
+/ Extreme quality preset, 'Adaptive anti-aliasing' re-traces
+only the boundary pixels.
+
+--- Batch ---
+
+Every setting is a --param key:
+  --fractal MagnetisedBlackHole --x 3.2 --y -1.5 --zoom 0.7
+  --param MagBhField=0.5 --param MagBhView=Meridional
+Keys: MagBhView, MagBhField, MagBhBranch, MagBhEnergy,
+MagBhAngularMomentum, MagBhLaunchAngle, MagBhEscapeHeight,
+MagBhMaxTime, MagBhTolerance.
+Built-in presets render headless with --region ""name"".
+
+--- Sources and prior art ---
+
+R. M. Wald, 'Black hole in a uniform magnetic field', Physical
+Review D 10, 1680 (1974): the field.
+J. Bautista & I. Vega, 'Chaotic exits from a weakly magnetized
+Schwarzschild black hole', Classical and Quantum Gravity 38,
+155016 (2021): the exit basins, their Wada property, the units,
+the effective potential and the Kick launch used here.
+O. Kopacek, V. Karas, J. Kovar & Z. Stuchlik (2010) studied how
+the trapped motion turns chaotic; Z. Stuchlik & M. Kolos and
+A. M. Al Zahrani studied chaotic scattering and escape of
+charged particles from magnetised black holes.
+These basins are published (Bautista & Vega); Fracturing Fog
+adds an interactive and batch explorer and the Meridional view.
+Full entries: Docs/Resources-Bibliography.md.";
+
         /// <summary>#1943 — restricted three-body basins (Math → Scattering).</summary>
         public const string MathThreeBodyText =
 @"=== Three-Body Basins ===

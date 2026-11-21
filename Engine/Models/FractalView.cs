@@ -151,6 +151,7 @@ namespace FracturingFog.Models
             {FractalType.BlackHoleShadow, "Black Hole Shadow" },
             {FractalType.HenonHeilesBasins, "Henon-Heiles Basins" },
             {FractalType.ThreeBodyBasins, "Three-Body Basins" },
+            {FractalType.MagnetisedBlackHole, "Magnetised Black Hole" },
             {FractalType.SlitCascade, "Slit Cascade" },
             {FractalType.TalbotCarpet, "Talbot Carpet" },
             {FractalType.MathPlane, "Math Plane" },

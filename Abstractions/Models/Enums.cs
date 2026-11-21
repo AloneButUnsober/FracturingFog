@@ -1262,6 +1262,16 @@ namespace FracturingFog
         /// <c>ThreeBodyCrashRadius</c>, <c>ThreeBodyEscapeRadius</c>, <c>ThreeBodyMaxTime</c>,
         /// <c>ThreeBodyTolerance</c>, <c>ThreeBodyNewtonIterations</c>.</summary>
         ThreeBodyBasins,
+        /// <summary>#1944 (§2.6) — a charged test particle near a Schwarzschild black hole in an
+        /// asymptotically uniform magnetic field (Wald's test-field solution), traced (shared
+        /// scattering integrator) until it is captured or escapes up or down the field. Kick view:
+        /// Bautista &amp; Vega's launch, a vertical kick from a circular orbit, over (orbit radius,
+        /// energy). Meridional view: launch position in the (R, z) plane at fixed energy and
+        /// angular momentum. <c>MagnetisedBlackHoleCalculator</c>. Tunables: <c>MagBhView</c>,
+        /// <c>MagBhField</c>, <c>MagBhBranch</c>, <c>MagBhEnergy</c>, <c>MagBhAngularMomentum</c>,
+        /// <c>MagBhLaunchAngle</c>, <c>MagBhEscapeHeight</c>, <c>MagBhMaxTime</c>,
+        /// <c>MagBhTolerance</c>.</summary>
+        MagnetisedBlackHole,
     }
 
     /// <summary>Hole layout of <see cref="FractalType.BlackHoleShadow"/> (#1923).
@@ -1334,6 +1344,18 @@ namespace FracturingFog
     /// <see cref="Radial"/>: straight out. <see cref="FixedAngle"/>: <c>ThreeBodyLaunchAngle</c>
     /// degrees from +x everywhere.</summary>
     public enum ThreeBodyLaunch { Prograde, Retrograde, Radial, FixedAngle }
+
+    /// <summary>Launch space of <see cref="FractalType.MagnetisedBlackHole"/> (#1944).
+    /// <see cref="Kick"/> (default): the pixel is (orbit radius ρ0, energy ℰ); the particle starts on
+    /// the circular equatorial orbit at ρ0 and is kicked straight up the field to energy ℰ (the
+    /// launch of Bautista &amp; Vega 2021). <see cref="Meridional"/>: the pixel is the start position
+    /// (R, z), drawn mirrored about the field axis, at fixed ℰ and ℓ, launched at
+    /// <c>MagBhLaunchAngle</c>.</summary>
+    public enum MagnetisedBhView { Kick, Meridional }
+
+    /// <summary>Which circular orbit the <see cref="MagnetisedBhView.Kick"/> view starts from: the ℓ+
+    /// or ℓ− root of the circular-orbit condition (Bautista &amp; Vega eq. 4.2).</summary>
+    public enum MagnetisedBhBranch { Plus, Minus }
 
     public enum RenderProfile { Preview, Final }
 
@@ -1484,6 +1506,10 @@ namespace FracturingFog
             // #1943 — restricted three-body: categorical fate / Lagrange basin through
             // IBilliardColorMap (or INewtonColorMap for the Lagrange view); no normals / DE / orbit data.
             FractalType.ThreeBodyBasins => FractalCapabilities.None,
+
+            // #1944 — magnetised black hole: categorical fate through IBilliardColorMap; no
+            // normals / DE / orbit data.
+            FractalType.MagnetisedBlackHole => FractalCapabilities.None,
 
             // #1713 — Math Plane 3D draws its own colours (a diagram, no per-pixel data).
             FractalType.MathPlane3D => FractalCapabilities.None,
