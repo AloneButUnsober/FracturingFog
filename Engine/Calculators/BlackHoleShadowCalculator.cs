@@ -424,6 +424,9 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
         for (int i = 0; i < total; i++) if (Edge(i)) PushNeighbours(i);   // the edge band, one pixel of margin
 
         long traced = 0;
+        // One final-state scratch for every round: a stackalloc inside the round loop would grow the
+        // stack by 48 bytes per round until the method returns.
+        Span<double> fin = stackalloc double[6];
         for (int round = 0; round < DdMaxRounds && queue.Count > 0 && !ct.IsCancellationRequested; round++)
         {
             var batch = queue.ToArray();
@@ -442,7 +445,6 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
                 newFate[k] = (sbyte)(o.Fate == ScatterFate.Captured ? o.Body : o.Fate == ScatterFate.Escaped ? escapedGate : -1);
             });
             traced += batch.Length;
-            Span<double> fin = stackalloc double[6];
             for (int k = 0; k < batch.Length; k++)
             {
                 int i = batch[k];
