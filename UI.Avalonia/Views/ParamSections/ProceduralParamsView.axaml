@@ -1831,7 +1831,7 @@
 
         <!-- #1948 — microlensing magnification maps. -->
         <Grid IsVisible="{Binding IsMicrolensingMap}" ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Layout:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding MicroLayouts}" SelectedItem="{Binding MicroLayout, Mode=TwoWay}" Margin="0,2"
                       ToolTip.Tip="Field: a disc of stars. Single: one unit-mass lens at the centre (the analytic check case)." />
@@ -1865,7 +1865,19 @@
             <TextBlock Grid.Row="10" Grid.Column="0" Text="Colour scale:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="10" Grid.Column="1" Minimum="0.01" Maximum="100" Increment="0.1" FormatString="0.##########"
                            Value="{Binding MicroColourScale, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Palette spread per factor of 10 in magnification." />
-            <TextBlock Grid.Row="11" Grid.Column="1"
+            <TextBlock Grid.Row="11" Grid.Column="0" Text="Light curve:" VerticalAlignment="Center" />
+            <CheckBox Grid.Row="11" Grid.Column="1" IsChecked="{Binding MicroLightCurve, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Draw a source track over the map and the magnification along it in a panel at the bottom." />
+            <TextBlock Grid.Row="12" Grid.Column="0" Text="Track point x:" VerticalAlignment="Center" IsVisible="{Binding MicroLightCurve}" />
+            <NumericUpDown Grid.Row="12" Grid.Column="1" IsVisible="{Binding MicroLightCurve}" Minimum="-1000000" Maximum="1000000" Increment="0.05" FormatString="0.##########"
+                           Value="{Binding MicroTrackX, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="A point the track passes through (source plane, Einstein radii)." />
+            <TextBlock Grid.Row="13" Grid.Column="0" Text="Track point y:" VerticalAlignment="Center" IsVisible="{Binding MicroLightCurve}" />
+            <NumericUpDown Grid.Row="13" Grid.Column="1" IsVisible="{Binding MicroLightCurve}" Minimum="-1000000" Maximum="1000000" Increment="0.05" FormatString="0.##########"
+                           Value="{Binding MicroTrackY, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="14" Grid.Column="0" Text="Track angle:" VerticalAlignment="Center" IsVisible="{Binding MicroLightCurve}" />
+            <NumericUpDown Grid.Row="14" Grid.Column="1" IsVisible="{Binding MicroLightCurve}" Minimum="-360" Maximum="360" Increment="5" FormatString="0.##########"
+                           Value="{Binding MicroTrackAngle, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Direction of the track, degrees from +x." />
+            <TextBlock Grid.Row="15" Grid.Column="1"
                        Text="Not a fractal: caustics are smooth curves with cusps. The status bar compares the mean magnification with theory."
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
         </Grid>

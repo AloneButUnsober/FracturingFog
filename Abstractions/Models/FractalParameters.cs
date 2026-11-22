@@ -1706,6 +1706,16 @@ namespace FracturingFog.Models
         public double MicroPad { get; set; } = 4.0;
         /// <summary>#1948 — palette spread per decade of magnification. Default 1.</summary>
         public double MicroColourScale { get; set; } = 1.0;
+        /// <summary>#2007 — draw the light-curve inset: a source track over the map and the magnification
+        /// along it in a panel at the bottom of the frame. Default off.</summary>
+        public bool MicroLightCurve { get; set; }
+        /// <summary>#2007 — a point on the source track (source-plane x, Einstein radii). Default 0.</summary>
+        public double MicroTrackX { get; set; } = 0.0;
+        /// <summary>#2007 — a point on the source track (source-plane y). Default 0.3 (a single lens's impact
+        /// parameter for a horizontal track).</summary>
+        public double MicroTrackY { get; set; } = 0.3;
+        /// <summary>#2007 — the track's direction, degrees from +x. Default 0.</summary>
+        public double MicroTrackAngle { get; set; } = 0.0;
 
         // ── Slit cascade (#1569, double-slit epic #1565) ──────────────────
         /// <summary>Slit cascade: children per slit, N (2..16). N ≥ 3 for the fringe
@@ -2915,6 +2925,10 @@ namespace FracturingFog.Models
                 MicroRaysPerPixel = MicroRaysPerPixel,
                 MicroPad = MicroPad,
                 MicroColourScale = MicroColourScale,
+                MicroLightCurve = MicroLightCurve,
+                MicroTrackX = MicroTrackX,
+                MicroTrackY = MicroTrackY,
+                MicroTrackAngle = MicroTrackAngle,
                 SlitCascadeChildren = SlitCascadeChildren,
                 SlitCascadeRatio = SlitCascadeRatio,
                 SlitCascadeDepth = SlitCascadeDepth,

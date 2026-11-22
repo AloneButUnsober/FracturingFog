@@ -926,6 +926,11 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? MicroRaysPerPixel { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? MicroPad { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? MicroColourScale { get; set; }
+        // #2007 — light-curve inset.
+        [JsonIgnore(Condition = OmitNull)] public bool? MicroLightCurve { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MicroTrackX { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MicroTrackY { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MicroTrackAngle { get; set; }
         // #1507 — int cast of BilliardRayColorSource.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysColorSource { get; set; }
         // #1508 — crossings (int casts of BilliardRayMode / BilliardCrossingValue).
@@ -1621,6 +1626,10 @@ namespace FracturingFog.Models
                     MicroRaysPerPixel = p.MicroRaysPerPixel,
                     MicroPad = p.MicroPad,
                     MicroColourScale = p.MicroColourScale,
+                    MicroLightCurve = p.MicroLightCurve,
+                    MicroTrackX = p.MicroTrackX,
+                    MicroTrackY = p.MicroTrackY,
+                    MicroTrackAngle = p.MicroTrackAngle,
                 },
                 FractalType.BilliardRays => new RegionFractalParams
                 {
@@ -2786,6 +2795,10 @@ namespace FracturingFog.Models
             if (MicroRaysPerPixel.HasValue) p.MicroRaysPerPixel = MicroRaysPerPixel.Value;
             if (MicroPad.HasValue) p.MicroPad = MicroPad.Value;
             if (MicroColourScale.HasValue) p.MicroColourScale = MicroColourScale.Value;
+            if (MicroLightCurve.HasValue) p.MicroLightCurve = MicroLightCurve.Value;   // #2007
+            if (MicroTrackX.HasValue) p.MicroTrackX = MicroTrackX.Value;
+            if (MicroTrackY.HasValue) p.MicroTrackY = MicroTrackY.Value;
+            if (MicroTrackAngle.HasValue) p.MicroTrackAngle = MicroTrackAngle.Value;
             if (BilliardRaysColorSource.HasValue) p.BilliardRaysColorSource = (FracturingFog.BilliardRayColorSource)BilliardRaysColorSource.Value;
             if (BilliardRaysMode.HasValue)       p.BilliardRaysMode = (FracturingFog.BilliardRayMode)BilliardRaysMode.Value;
             if (BilliardRaysCrossingWindow.HasValue) p.BilliardRaysCrossingWindow = BilliardRaysCrossingWindow.Value;
@@ -4761,6 +4774,39 @@ namespace FracturingFog.Models
                 Params        = new RegionFractalParams
                 {
                     MicroLayout = (int)FracturingFog.MicrolensLayout.Field, MicroKappaStars = 0.6, MicroShear = 0.0, MicroFieldRadius = 14.0, MicroMassFunction = (int)FracturingFog.MicrolensMassFunction.UniformRange, MicroMassMin = 0.1, MicroSeed = 3, MicroRaysPerPixel = 4.0,
+                },
+            },
+            // #2007 — light-curve inset presets.
+            new()
+            {
+                Name          = "Microlensing - Single Lens Light Curve",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.875,
+                Iterations    =  256,
+                Description   = "One point lens with a source passing 0.3 Einstein radii from it: the orange curve is the magnification counted along the track, the dashed blue one Paczynski's formula for the same pass. They lie on top of each other: the classic symmetric microlensing bump.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.MicrolensingMap,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    MicroLayout = (int)FracturingFog.MicrolensLayout.Single, MicroKappaSmooth = 0.0, MicroShear = 0.0, MicroRaysPerPixel = 16.0, MicroLightCurve = true, MicroTrackX = 0.0, MicroTrackY = 0.3, MicroTrackAngle = 0.0,
+                },
+            },
+            new()
+            {
+                Name          = "Microlensing - Caustic Crossing",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.875,
+                Iterations    =  256,
+                Description   = "The caustic network with a source track across it: each time the track crosses a caustic the light curve jumps sharply and then falls away again: the spikes of a source passing behind a field of stars.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.MicrolensingMap,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    MicroLayout = (int)FracturingFog.MicrolensLayout.Field, MicroKappaStars = 0.4, MicroKappaSmooth = 0.0, MicroShear = 0.3, MicroFieldRadius = 14.0, MicroSeed = 1, MicroRaysPerPixel = 4.0, MicroLightCurve = true, MicroTrackX = 0.0, MicroTrackY = 0.2, MicroTrackAngle = 20.0,
                 },
             },
             // #1997 — User Hamiltonian: the Hénon–Heiles section (parity with that view), FF's own
