@@ -15,6 +15,9 @@
 //
 // The status bar reports the stars, the rays and the measured mean magnification over the frame
 // against the theoretical 1 / ((1 - kappa)^2 - gamma^2).
+//
+// #2007 — an optional light-curve inset (MicrolensingCalculator.LightCurve.cs) is drawn over the
+// map: a source track and the magnification along it in a panel at the bottom.
 
 using System;
 using System.Threading;
@@ -25,7 +28,7 @@ using FracturingFog.Models;
 
 namespace FracturingFog;
 
-public sealed class MicrolensingCalculator : IFractalCalculator, IHeightFieldSource, FracturingFog.Rendering.ILowResPreviewCalculator
+public sealed partial class MicrolensingCalculator : IFractalCalculator, IHeightFieldSource, FracturingFog.Rendering.ILowResPreviewCalculator
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -90,6 +93,7 @@ public sealed class MicrolensingCalculator : IFractalCalculator, IHeightFieldSou
             ColorBuffer[i] = BlackHoleShadowCalculator.PaletteColour(ColorMap, (lg + 1.0) * scale);
         }
         double mean = shot.Counts.Length > 0 ? sum / shot.Counts.Length : 0;
+        DrawLightCurve(p, field);   // #2007
         LastPrecisionLabel = $"{field.Count} stars, {shot.RaysShot / 1e6:0.#}M rays, mean mag {mean:0.###} (theory {field.MeanMagnification:0.###})"
             + (shot.OutsideField ? "; view reaches past the star field: raise Field radius" : "");
     }

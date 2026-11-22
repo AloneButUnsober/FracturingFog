@@ -316,6 +316,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _mlLayout = _p.MicroLayout; _mlKs = _p.MicroKappaStars; _mlKc = _p.MicroKappaSmooth; _mlG = _p.MicroShear;
         _mlR = _p.MicroFieldRadius; _mlSeed = _p.MicroSeed; _mlMass = _p.MicroMassFunction; _mlMin = _p.MicroMassMin;
         _mlRpp = _p.MicroRaysPerPixel; _mlPad = _p.MicroPad; _mlScale = _p.MicroColourScale;
+        _mlCurve = _p.MicroLightCurve; _mlTx = _p.MicroTrackX; _mlTy = _p.MicroTrackY; _mlTa = _p.MicroTrackAngle;
         _uhMaxTime = _p.UserHamMaxTime; _uhTol = _p.UserHamTolerance; _uhMaxStep = _p.UserHamMaxStep; _uhProject = _p.UserHamProjectEvery;
         _mathPlaneScene = _p.MathPlaneScene ?? string.Empty;
         UpdateMathPlaneSceneError();
@@ -2602,6 +2603,13 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double MicroRaysPerPixel { get => _mlRpp; set { Set(ref _mlRpp, Clamp(value, 0.01, 10000.0)); _p.MicroRaysPerPixel = _mlRpp; Fire(); } }
     public double MicroPad { get => _mlPad; set { Set(ref _mlPad, Clamp(value, 0.0, 100.0)); _p.MicroPad = _mlPad; Fire(); } }
     public double MicroColourScale { get => _mlScale; set { Set(ref _mlScale, Clamp(value, 0.01, 100.0)); _p.MicroColourScale = _mlScale; Fire(); } }
+    // #2007 — light-curve inset.
+    private bool _mlCurve;
+    private double _mlTx, _mlTy, _mlTa;
+    public bool MicroLightCurve { get => _mlCurve; set { Set(ref _mlCurve, value); _p.MicroLightCurve = value; Fire(); } }
+    public double MicroTrackX { get => _mlTx; set { Set(ref _mlTx, Clamp(value, -1e6, 1e6)); _p.MicroTrackX = _mlTx; Fire(); } }
+    public double MicroTrackY { get => _mlTy; set { Set(ref _mlTy, Clamp(value, -1e6, 1e6)); _p.MicroTrackY = _mlTy; Fire(); } }
+    public double MicroTrackAngle { get => _mlTa; set { Set(ref _mlTa, Clamp(value, -360.0, 360.0)); _p.MicroTrackAngle = _mlTa; Fire(); } }
 
     // ── #1997 — User Hamiltonian ─────────────────────────────────────────────
     private string _uhSource = "", _uhA = "", _uhB = "", _uhFixed = "", _uhSolve = "", _uhExitIf = "";

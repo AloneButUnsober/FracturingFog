@@ -5654,6 +5654,14 @@ Settings (lengths in Einstein radii of a unit-mass star):
                   stars scatter in from beyond it are lost, so the map
                   reads a little low (about 13% at pad 2, 4% at 6)
 
+Light curve (tick Light curve): a straight source track (a point
+and an angle, in the source plane) is drawn over the map, and a
+panel at the bottom plots the magnification met along it: what a
+telescope sees as the source moves behind the lenses. It is read
+from the frame's own ray counts (a 3-pixel strip). For a Single
+lens without shear the dashed curve is Paczynski's formula for the
+same pass, as a check. Caustic crossings show as sharp spikes.
+
 Checks the status bar shows: the frame's mean magnification against
 the theory 1 / ((1 - kappa)^2 - shear^2) (Schneider, Ehlers & Falco
 1992), kappa = kappa stars + kappa smooth; they agree over a large
@@ -5665,6 +5673,8 @@ Presets:
   Microlensing - Single Lens              one point mass
   Microlensing - Single Lens with Shear   a four-cusped caustic
   Microlensing - Mixed Masses             masses 0.1 to 1
+  Microlensing - Single Lens Light Curve  the symmetric bump
+  Microlensing - Caustic Crossing         spikes at caustics
 Animation: Microlensing: shear.
 
 Batch: every setting is a --param Micro* key, e.g.
