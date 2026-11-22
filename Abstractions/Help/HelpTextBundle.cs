@@ -6506,9 +6506,12 @@ formula and says which.
 There is no formula for a pixel: each ray is integrated step by
 step (Dormand-Prince 5(4), adaptive), a few hundred steps per ray,
 more near the edges. Expect seconds per frame, not milliseconds.
-Solid blocks skips the inside of big shadows. The GPU (ILGPU) can
-trace in double or in single precision (much faster on most
-cards, slightly moves pixels on the edges).
+Solid blocks skips the inside of big shadows. The GPU can trace
+in double or in single precision (much faster on most cards,
+slightly moves pixels on the edges), on ILGPU (CUDA / OpenCL)
+when a device is there, else on D3D11, else on Vulkan (the Linux
+path). FF_GPU_BLACK_HOLE_BACKEND=ilgpu / d3d11 / vulkan picks one;
+the status bar names the backend that traced the frame.
 
 Anti-aliasing: one ray per pixel aliases the lensed sky into
 moire near the shadows. The High / Ultra / Extreme quality presets

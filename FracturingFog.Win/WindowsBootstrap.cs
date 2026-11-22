@@ -111,6 +111,10 @@ public static class WindowsBootstrap
             return null;
         };
 
+        // #1972: the black hole trace's D3D11 backend, on a device of its own (created on first use,
+        // only when ILGPU is unavailable or FF_GPU_BLACK_HOLE_BACKEND=d3d11). Live and batch alike.
+        FracturingFog.Calculators.Gpu.BlackHoleTraceBackends.D3D11Factory = () => BlackHoleD3D11Kernel.TryCreateWithOwnDevice();
+
         // S6 (#408): froxel-volume kernel over the SAME D3D11 device/context the
         // relief kernel uses (shared gate serialises the froxel + relief dispatches).
         BootstrapHooks.FroxelKernelFactoryHook = (renderer, gate) =>

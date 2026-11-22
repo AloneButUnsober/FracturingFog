@@ -119,6 +119,8 @@ namespace FracturingFog.Batch
         // relief frame asks (Relief2DGpuRaymarch), never for a flat render.
         private static void InstallRaymarchKernels()
         {
+            // #1972: the black hole trace's Vulkan backend (the D3D11 one is set by the Windows bootstrap).
+            FracturingFog.Calculators.Gpu.BlackHoleTraceBackends.VulkanFactory ??= () => FracturingFog.Rendering.Vulkan.BlackHoleVulkanKernel.TryCreateWithOwnContext();
             var d3dRelief = BootstrapHooks.HeadlessReliefKernelFactoryHook;
             var d3dFroxel = BootstrapHooks.HeadlessFroxelKernelFactoryHook;
             bool d3d = BootstrapHooks.HeadlessGpuKernelFactoryHook != null;

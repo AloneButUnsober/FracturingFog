@@ -476,6 +476,10 @@ namespace FracturingFog.Hosting
             if (BootstrapHooks.FroxelKernelFactoryHook != null)
                 s_renderHost.FroxelKernelFactory = BootstrapHooks.FroxelKernelFactoryHook;
 
+            // #1972: the black hole trace's Vulkan backend (own context, created on first use: after
+            // ILGPU and D3D11 in auto, or forced by FF_GPU_BLACK_HOLE_BACKEND=vulkan).
+            FracturingFog.Calculators.Gpu.BlackHoleTraceBackends.VulkanFactory ??= () => BlackHoleVulkanKernel.TryCreateWithOwnContext();
+
             // V3-GUI (#57): --renderer vulkan attaches the cross-platform Vulkan
             // compute kernel. It is independent of the present renderer (the Silk
             // GL blit) — the kernel owns its own VulkanContext — so we install it

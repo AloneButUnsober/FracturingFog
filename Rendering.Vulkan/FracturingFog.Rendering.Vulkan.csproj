@@ -50,6 +50,8 @@
     <!-- S6 (#408): the same dependency-free froxel kernel source FXC compiles on
          D3D (FroxelGpuKernel), compiled here by DXC → SPIR-V. -->
     <Compile Include="..\Rendering.D3D\FroxelKernelSource.cs" Link="Shared\FroxelKernelSource.cs" />
+    <!-- #1972: the black hole trace, shared with D3D11 (FXC). -->
+    <Compile Include="..\Rendering.D3D\BlackHoleKernelSource.cs" Link="Shared\BlackHoleKernelSource.cs" />
   </ItemGroup>
 
 </Project>

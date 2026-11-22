@@ -37,6 +37,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--d3dpturbcalc")
             return D3DPerturbProbe.Run();
 
+        // #1972 — every black hole trace backend (ILGPU, D3D11, Vulkan) against the CPU trace.
+        if (args.Length > 0 && args[0] == "--bhgpuprobe")
+            return BlackHoleGpuProbe.Run(args);
+
         // #1329 — D3D11 GPU timestamp queries: stage times, linearity, packets.
         if (args.Length > 0 && args[0] == "--gputimestampprobe")
             return GpuTimestampProbe.Run();
