@@ -88,6 +88,7 @@ namespace FracturingFog.Models
             FractalType.BlackHoleRingOrbits => FractalMotionClass.Zoomable2D, // #1947 equatorial section (r, u^r)
             FractalType.UserPotentialBasins => FractalMotionClass.Zoomable2D, // #1994 launch plane / section
             FractalType.UserHamiltonianBasins => FractalMotionClass.Zoomable2D, // #1997 two launch variables
+            FractalType.MicrolensingMap => FractalMotionClass.Zoomable2D, // #1948 the source plane
             FractalType.SlitCascade => FractalMotionClass.Zoomable2D,   // #1569
             FractalType.TalbotCarpet => FractalMotionClass.Zoomable2D,  // #1570
             FractalType.MathPlane => FractalMotionClass.Zoomable2D,

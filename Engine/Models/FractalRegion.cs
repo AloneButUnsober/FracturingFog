@@ -914,6 +914,18 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? UserHamTolerance { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? UserHamMaxStep { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? UserHamProjectEvery { get; set; }
+        // #1948 — microlensing.
+        [JsonIgnore(Condition = OmitNull)] public int? MicroLayout { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MicroKappaStars { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MicroKappaSmooth { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MicroShear { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MicroFieldRadius { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? MicroSeed { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? MicroMassFunction { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MicroMassMin { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MicroRaysPerPixel { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MicroPad { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MicroColourScale { get; set; }
         // #1507 — int cast of BilliardRayColorSource.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysColorSource { get; set; }
         // #1508 — crossings (int casts of BilliardRayMode / BilliardCrossingValue).
@@ -1594,6 +1606,21 @@ namespace FracturingFog.Models
                     UserHamTolerance = p.UserHamTolerance,
                     UserHamMaxStep = p.UserHamMaxStep,
                     UserHamProjectEvery = p.UserHamProjectEvery,
+                },
+                // #1948 — microlensing: every setting.
+                FractalType.MicrolensingMap => new RegionFractalParams
+                {
+                    MicroLayout = (int)p.MicroLayout,
+                    MicroKappaStars = p.MicroKappaStars,
+                    MicroKappaSmooth = p.MicroKappaSmooth,
+                    MicroShear = p.MicroShear,
+                    MicroFieldRadius = p.MicroFieldRadius,
+                    MicroSeed = p.MicroSeed,
+                    MicroMassFunction = (int)p.MicroMassFunction,
+                    MicroMassMin = p.MicroMassMin,
+                    MicroRaysPerPixel = p.MicroRaysPerPixel,
+                    MicroPad = p.MicroPad,
+                    MicroColourScale = p.MicroColourScale,
                 },
                 FractalType.BilliardRays => new RegionFractalParams
                 {
@@ -2748,6 +2775,17 @@ namespace FracturingFog.Models
             if (UserHamTolerance.HasValue) p.UserHamTolerance = UserHamTolerance.Value;
             if (UserHamMaxStep.HasValue) p.UserHamMaxStep = UserHamMaxStep.Value;
             if (UserHamProjectEvery.HasValue) p.UserHamProjectEvery = UserHamProjectEvery.Value;
+            if (MicroLayout is { } vMicroLayout && Enum.IsDefined(typeof(FracturingFog.MicrolensLayout), vMicroLayout)) p.MicroLayout = (FracturingFog.MicrolensLayout)vMicroLayout;
+            if (MicroKappaStars.HasValue) p.MicroKappaStars = MicroKappaStars.Value;
+            if (MicroKappaSmooth.HasValue) p.MicroKappaSmooth = MicroKappaSmooth.Value;
+            if (MicroShear.HasValue) p.MicroShear = MicroShear.Value;
+            if (MicroFieldRadius.HasValue) p.MicroFieldRadius = MicroFieldRadius.Value;
+            if (MicroSeed.HasValue) p.MicroSeed = MicroSeed.Value;
+            if (MicroMassFunction is { } vMicroMassFunction && Enum.IsDefined(typeof(FracturingFog.MicrolensMassFunction), vMicroMassFunction)) p.MicroMassFunction = (FracturingFog.MicrolensMassFunction)vMicroMassFunction;
+            if (MicroMassMin.HasValue) p.MicroMassMin = MicroMassMin.Value;
+            if (MicroRaysPerPixel.HasValue) p.MicroRaysPerPixel = MicroRaysPerPixel.Value;
+            if (MicroPad.HasValue) p.MicroPad = MicroPad.Value;
+            if (MicroColourScale.HasValue) p.MicroColourScale = MicroColourScale.Value;
             if (BilliardRaysColorSource.HasValue) p.BilliardRaysColorSource = (FracturingFog.BilliardRayColorSource)BilliardRaysColorSource.Value;
             if (BilliardRaysMode.HasValue)       p.BilliardRaysMode = (FracturingFog.BilliardRayMode)BilliardRaysMode.Value;
             if (BilliardRaysCrossingWindow.HasValue) p.BilliardRaysCrossingWindow = BilliardRaysCrossingWindow.Value;
@@ -4657,6 +4695,72 @@ namespace FracturingFog.Models
                 Params        = new RegionFractalParams
                 {
                     MixView = (int)FracturingFog.MixmasterView.Anisotropy, MixOmega = -1.0, MixAlphaDot = 10.0, MixBetaDot = 10.0, MixUExit = 8.0,
+                },
+            },
+            // #1948 — microlensing magnification maps (inverse ray shooting, Kayser, Refsdal & Stabell 1986).
+            new()
+            {
+                Name          = "Microlensing - Caustic Network",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.875,
+                Iterations    =  256,
+                Description   = "A field of equal stars (convergence 0.4 in stars) with an external shear of 0.3, the kind of magnification map a quasar image lensed by a galaxy's stars sees. Each pixel is a source position; bright curves are caustics, where the lens map folds and the magnification jumps. Not a fractal: the curves are smooth between their cusps. The bound 'Microlensing: shear' animation turns the shear.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.MicrolensingMap,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Microlensing: shear",
+                Params        = new RegionFractalParams
+                {
+                    MicroLayout = (int)FracturingFog.MicrolensLayout.Field, MicroKappaStars = 0.4, MicroKappaSmooth = 0.0, MicroShear = 0.3, MicroFieldRadius = 14.0, MicroSeed = 1, MicroRaysPerPixel = 4.0,
+                },
+            },
+            new()
+            {
+                Name          = "Microlensing - Single Lens",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.875,
+                Iterations    =  256,
+                Description   = "One point-mass lens: the magnification falls off with distance u from the centre as Paczynski's A(u) = (u^2 + 2) / (u sqrt(u^2 + 4)), the curve of every microlensing light curve. The centre is a single caustic point.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.MicrolensingMap,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    MicroLayout = (int)FracturingFog.MicrolensLayout.Single, MicroKappaSmooth = 0.0, MicroShear = 0.0, MicroRaysPerPixel = 16.0,
+                },
+            },
+            new()
+            {
+                Name          = "Microlensing - Single Lens with Shear",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  2.0,
+                Iterations    =  256,
+                Description   = "One point mass with an external shear of 0.2: the caustic point opens into a four-cusped curve.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.MicrolensingMap,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    MicroLayout = (int)FracturingFog.MicrolensLayout.Single, MicroKappaSmooth = 0.0, MicroShear = 0.2, MicroRaysPerPixel = 16.0,
+                },
+            },
+            new()
+            {
+                Name          = "Microlensing - Mixed Masses",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.875,
+                Iterations    =  256,
+                Description   = "Stars with masses spread evenly between 0.1 and 1 at convergence 0.6 and no shear: caustics of many sizes overlap into a dense web.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.MicrolensingMap,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    MicroLayout = (int)FracturingFog.MicrolensLayout.Field, MicroKappaStars = 0.6, MicroShear = 0.0, MicroFieldRadius = 14.0, MicroMassFunction = (int)FracturingFog.MicrolensMassFunction.UniformRange, MicroMassMin = 0.1, MicroSeed = 3, MicroRaysPerPixel = 4.0,
                 },
             },
             // #1997 — User Hamiltonian: the Hénon–Heiles section (parity with that view), FF's own

@@ -1829,6 +1829,47 @@
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
         </Grid>
 
+        <!-- #1948 — microlensing magnification maps. -->
+        <Grid IsVisible="{Binding IsMicrolensingMap}" ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Layout:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding MicroLayouts}" SelectedItem="{Binding MicroLayout, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Field: a disc of stars. Single: one unit-mass lens at the centre (the analytic check case)." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Kappa stars:" VerticalAlignment="Center" IsVisible="{Binding MicroIsField}" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1" IsVisible="{Binding MicroIsField}" Minimum="0" Maximum="5" Increment="0.05" FormatString="0.##########"
+                           Value="{Binding MicroKappaStars, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Convergence in stars: how densely they cover the sky." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Kappa smooth:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1" Minimum="-5" Maximum="5" Increment="0.05" FormatString="0.##########"
+                           Value="{Binding MicroKappaSmooth, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Smooth convergence (dark matter, gas)." />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Shear:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1" Minimum="-5" Maximum="5" Increment="0.05" FormatString="0.##########"
+                           Value="{Binding MicroShear, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="External shear along the axes." />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Field radius:" VerticalAlignment="Center" IsVisible="{Binding MicroIsField}" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1" IsVisible="{Binding MicroIsField}" Minimum="1" Maximum="200" Increment="1" FormatString="0.##########"
+                           Value="{Binding MicroFieldRadius, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Radius of the star disc in Einstein radii; keep it beyond the view's preimage." />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Masses:" VerticalAlignment="Center" IsVisible="{Binding MicroIsField}" />
+            <ComboBox Grid.Row="5" Grid.Column="1" IsVisible="{Binding MicroIsField}" ItemsSource="{Binding MicroMassFunctions}"
+                      SelectedItem="{Binding MicroMassFunction, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Equal masses, or spread evenly between Min mass and 1." />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Min mass:" VerticalAlignment="Center" IsVisible="{Binding MicroIsField}" />
+            <NumericUpDown Grid.Row="6" Grid.Column="1" IsVisible="{Binding MicroIsField}" Minimum="0.001" Maximum="1" Increment="0.05" FormatString="0.##########"
+                           Value="{Binding MicroMassMin, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Seed:" VerticalAlignment="Center" IsVisible="{Binding MicroIsField}" />
+            <NumericUpDown Grid.Row="7" Grid.Column="1" IsVisible="{Binding MicroIsField}" Minimum="-2147483648" Maximum="2147483647" Increment="1" FormatString="0"
+                           Value="{Binding MicroSeed, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Star positions (and the ray jitter)." />
+            <TextBlock Grid.Row="8" Grid.Column="0" Text="Rays per pixel:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="8" Grid.Column="1" Minimum="0.01" Maximum="10000" Increment="2" FormatString="0.##########"
+                           Value="{Binding MicroRaysPerPixel, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Rays an unlensed pixel gets: more is smoother and slower." />
+            <TextBlock Grid.Row="9" Grid.Column="0" Text="Pad:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="9" Grid.Column="1" Minimum="0" Maximum="100" Increment="0.5" FormatString="0.##########"
+                           Value="{Binding MicroPad, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Extra lens-plane margin shot round the view, Einstein radii." />
+            <TextBlock Grid.Row="10" Grid.Column="0" Text="Colour scale:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="10" Grid.Column="1" Minimum="0.01" Maximum="100" Increment="0.1" FormatString="0.##########"
+                           Value="{Binding MicroColourScale, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Palette spread per factor of 10 in magnification." />
+            <TextBlock Grid.Row="11" Grid.Column="1"
+                       Text="Not a fractal: caustics are smooth curves with cusps. The status bar compares the mean magnification with theory."
+                       TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
+        </Grid>
+
         <!-- #1997 — User Hamiltonian. -->
         <Grid IsVisible="{Binding IsUserHamiltonianBasins}" ColumnDefinitions="160,*"
               RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
