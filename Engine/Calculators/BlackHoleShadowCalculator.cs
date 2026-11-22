@@ -59,7 +59,8 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
             var p = FractalParameters;
             bool fate = p.BlackHoleChannel == BlackHoleChannel.Fate;
             if (p.BlackHoleSolidBlocks && fate) return false;
-            return !(p.BlackHoleDdEdges && fate && Scene.PastDoublePrecision(PixelPitch(Width, Height, Zoom)));
+            return !(p.BlackHoleDdEdges && fate && p.BlackHoleLayout != BlackHoleLayout.UserLens
+                     && Scene.PastDoublePrecision(PixelPitch(Width, Height, Zoom)));
         }
     }
 
@@ -143,6 +144,7 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
     /// <summary>#1926 — why a frame with GPU render on still traces on the CPU (null = it may use the GPU).</summary>
     public static string? CpuOnlyReason(FractalParameters p)
     {
+        if (p.BlackHoleLayout == BlackHoleLayout.UserLens) return "a user lens (#1995) runs on the CPU";
         if (p.BlackHoleShadeFates && p.BlackHoleChannel != BlackHoleChannel.Fate) return "shaded fates need the CPU channels";
         return p.BlackHoleChannel is BlackHoleChannel.Winding or BlackHoleChannel.ClosestApproach
             ? $"{p.BlackHoleChannel} needs per-step bookkeeping (CPU only)"
@@ -161,6 +163,9 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
 
     /// <summary>Shadow brightness of a hole's Okabe-Ito colour (the built-in colouring).</summary>
     public const float ShadowShade = 0.55f;
+
+    /// <summary>#1995 — the frame colour when the user lens does not parse (yellow, colour-blind safe).</summary>
+    public const uint LensErrorColor = 0xFFFFCC00;
 
     public BlackHoleShadowCalculator(int width, int height) => Resize(width, height);
 
@@ -182,7 +187,11 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
         public required double CaptureFraction { get; init; }
         public required double EscapeRadius { get; init; }
         public int EscapedGate => Holes.Length;
-        public MpNullSystem NewSystem() => new(Holes, CaptureFraction, EscapeRadius);
+        /// <summary>#1995 — the user lens (layout UserLens), else null.</summary>
+        public UserLensModel? Lens { get; init; }
+        /// <summary>#1995 — the lens's capture threshold on U (0: off).</summary>
+        public double LensCapture { get; init; }
+        public MpNullSystem NewSystem() => new(Holes, CaptureFraction, EscapeRadius, Lens, LensCapture);
 
         /// <summary>Trace the ray through image-plane point (u, v); the final state is written
         /// to <paramref name="state"/> (length ≥ 6) when given.</summary>
@@ -290,7 +299,8 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
         public static Scene Build(FractalParameters p, double zoom = DefaultZoom, double pixelPitch = double.NaN)
         {
             var holes = BlackHoleLayouts.Build(p);
-            double extent = 0.0;
+            var lens = p.BlackHoleLayout == BlackHoleLayout.UserLens ? UserLensModel.For(p.BlackHoleLensSource) : null;
+            double extent = lens != null ? 2.0 : 0.0;   // a lens with no listed holes still gets a 10+ camera
             foreach (var h in holes)
                 extent = Math.Max(extent, Math.Sqrt(h.X * h.X + h.Y * h.Y + h.Z * h.Z) + 4.0 * h.M);
             double d = Math.Max(Math.Max(10.0, 4.0 * extent), double.IsFinite(p.BlackHoleCameraDistance) ? p.BlackHoleCameraDistance : 50.0);
@@ -299,6 +309,8 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
             return new Scene
             {
                 Holes = holes,
+                Lens = lens,
+                LensCapture = p.BlackHoleLensCapture,
                 Camera = cam,
                 Sky = new BlackHoleSkies.Settings
                 {
@@ -346,7 +358,9 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
         // #1927 part 2 — past double precision, retrace the fate edges in double-double.
         var p = FractalParameters;
         double pitch = PixelPitch(Width, Height, Zoom);
-        if (!_isPreviewChild && p.BlackHoleDdEdges && p.BlackHoleChannel == BlackHoleChannel.Fate && Scene.PastDoublePrecision(pitch))
+        // (Not for a user lens: the double-double trace is the hole sum's.)
+        if (!_isPreviewChild && p.BlackHoleDdEdges && p.BlackHoleChannel == BlackHoleChannel.Fate
+            && p.BlackHoleLayout != BlackHoleLayout.UserLens && Scene.PastDoublePrecision(pitch))
         {
             DdEdgeFixup(Scene.Build(p, Zoom, pitch), pitch, ct);
             LastPrecisionLabel = $"DD edges: {LastDdPixels} px";
@@ -410,6 +424,9 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
         for (int i = 0; i < total; i++) if (Edge(i)) PushNeighbours(i);   // the edge band, one pixel of margin
 
         long traced = 0;
+        // One final-state scratch for every round: a stackalloc inside the round loop would grow the
+        // stack by 48 bytes per round until the method returns.
+        Span<double> fin = stackalloc double[6];
         for (int round = 0; round < DdMaxRounds && queue.Count > 0 && !ct.IsCancellationRequested; round++)
         {
             var batch = queue.ToArray();
@@ -428,7 +445,6 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
                 newFate[k] = (sbyte)(o.Fate == ScatterFate.Captured ? o.Body : o.Fate == ScatterFate.Escaped ? escapedGate : -1);
             });
             traced += batch.Length;
-            Span<double> fin = stackalloc double[6];
             for (int k = 0; k < batch.Length; k++)
             {
                 int i = batch[k];
@@ -457,6 +473,15 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
         LastPrecisionLabel = Scene.PastDoublePrecision(framePitch)
             ? "past fp64: edges approximate"
             : $"fp64 tol {scene.Settings.RelTol:0.#E+0}";
+        if (scene.Lens?.Error is { } lensError)
+        {
+            // #1995 — a U that does not parse: the frame in the error colour, the message in the status bar.
+            LastPrecisionLabel = lensError;
+            Array.Fill(ColorBuffer, LensErrorColor);
+            Array.Fill(SmoothBuffer, 0f);
+            Array.Fill(FateBuffer, (sbyte)-1);
+            return;
+        }
         int n = scene.Holes.Length, escapedGate = scene.EscapedGate, gateCount = n + 1;
         var billiardMap = ColorMap as IBilliardColorMap;
         ColorMap.MaxIterations = MaxIterations;

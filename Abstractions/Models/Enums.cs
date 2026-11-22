@@ -1303,6 +1303,15 @@ namespace FracturingFog
         /// <c>BhRingAngularMomentum</c>, <c>BhRingVelocityScale</c>, <c>BhRingOrbits</c>,
         /// <c>BhRingOrbitTime</c>, <c>BhRingFateTime</c>, <c>BhRingColour</c>, <c>BhRingTolerance</c>.</summary>
         BlackHoleRingOrbits,
+        /// <summary>#1994 — User Potential: exit basins of a user-written 2D potential V(x, y) (equation
+        /// language), forces from its symbolic gradient, traced on the shared scattering integrator
+        /// as Hénon–Heiles (#1942) is; optional rotating frame (Coriolis) for three-body-type problems.
+        /// <c>UserPotentialCalculator</c>. Tunables: <c>UserPotentialSource</c>, <c>UserPotentialEnergy</c>,
+        /// <c>UserPotentialView</c>, <c>UserPotentialLaunch</c>, <c>UserPotentialLaunchAngle</c>,
+        /// <c>UserPotentialExitRadius</c>, <c>UserPotentialSectors</c>, <c>UserPotentialSectorOffset</c>,
+        /// <c>UserPotentialExitIf</c>, <c>UserPotentialRotating</c>, <c>UserPotentialMaxTime</c>,
+        /// <c>UserPotentialTolerance</c>, <c>UserPotentialMaxStep</c>.</summary>
+        UserPotentialBasins,
     }
 
     /// <summary>Hole layout of <see cref="FractalType.BlackHoleShadow"/> (#1923).
@@ -1311,7 +1320,7 @@ namespace FracturingFog
     /// mass M1 (extremal Reissner-Nordström). <see cref="Triangle"/> / <see cref="Square"/>:
     /// equal masses M1 at the corners of a regular polygon of side a in the x-z plane.
     /// <see cref="Custom"/>: <c>BlackHoleCustom</c> = "x,y,z,m;..." (up to four holes).</summary>
-    public enum BlackHoleLayout { Binary, Single, Triangle, Square, Custom }
+    public enum BlackHoleLayout { Binary, Single, Triangle, Square, Custom, UserLens }
 
     /// <summary>What colours a <see cref="FractalType.BlackHoleShadow"/> pixel (#1924).
     /// <see cref="Fate"/> (default): which hole caught the ray, escaped rays by time delay.
@@ -1410,6 +1419,10 @@ namespace FracturingFog
     /// <summary>Section colouring (#1947): <see cref="Density"/> (crossings per pixel through the palette)
     /// or <see cref="ByOrbit"/> (each orbit its own Okabe-Ito colour, so islands separate).</summary>
     public enum BlackHoleRingColour { Density, ByOrbit }
+
+    /// <summary>Launch space of <see cref="FractalType.UserPotentialBasins"/> (#1994), as
+    /// <see cref="HenonHeilesView"/>: Plane (pixel = position) or Section (pixel = (y, vy) on x = 0).</summary>
+    public enum UserPotentialView { Plane, Section }
 
     public enum RenderProfile { Preview, Final }
 
@@ -1575,6 +1588,7 @@ namespace FracturingFog
 
             // #1947 — black hole + ring: section density / categorical fates; no normals / DE / orbit data.
             FractalType.BlackHoleRingOrbits => FractalCapabilities.None,
+            FractalType.UserPotentialBasins => FractalCapabilities.None,
 
             // #1713 — Math Plane 3D draws its own colours (a diagram, no per-pixel data).
             FractalType.MathPlane3D => FractalCapabilities.None,

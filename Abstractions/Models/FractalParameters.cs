@@ -1430,8 +1430,17 @@ namespace FracturingFog.Models
         public double BlackHoleMass2 { get; set; } = 1.0;
         /// <summary>Coordinate separation a (Binary) / polygon side (Triangle, Square). Default 2 (Shipley &amp; Dolan's default).</summary>
         public double BlackHoleSeparation { get; set; } = 2.0;
-        /// <summary>Custom holes "x,y,z,m;..." (up to four), used by the Custom layout.</summary>
+        /// <summary>Custom holes "x,y,z,m;..." (up to four), used by the Custom layout, and by the UserLens
+        /// layout (#1995) as its capture spheres.</summary>
         public string BlackHoleCustom { get; set; } = string.Empty;
+        /// <summary>#1995 — the UserLens layout's field U(x, y, z) (equation language). Default: the default
+        /// binary's U, 1 + 1/|x - (0,0,1)| + 1/|x - (0,0,-1)|.</summary>
+        public string BlackHoleLensSource { get; set; } = BlackHoleLensDefaultSource;
+        /// <summary>#1995 — the default lens: the default binary written as U.</summary>
+        public const string BlackHoleLensDefaultSource = "1 + 1/sqrt(x^2 + y^2 + (z - 1)^2) + 1/sqrt(x^2 + y^2 + (z + 1)^2)";
+        /// <summary>#1995 — UserLens capture threshold: a ray is captured where U exceeds it (0 = off, capture only
+        /// by the listed holes). Default 0.</summary>
+        public double BlackHoleLensCapture { get; set; }
         /// <summary>Distance of the launch plane (distant camera) from the origin. Default 50 (Shipley &amp; Dolan's r_max).
         /// Raised to at least 10 and 4x the hole extent.</summary>
         public double BlackHoleCameraDistance { get; set; } = 50.0;
@@ -1606,6 +1615,37 @@ namespace FracturingFog.Models
         public BlackHoleRingColour BhRingColour { get; set; } = BlackHoleRingColour.ByOrbit;
         /// <summary>#1947 — integrator relative tolerance per step. Default 1e-11.</summary>
         public double BhRingTolerance { get; set; } = 1e-11;
+
+        // ── User Potential (#1994) ────────────────────────────────────────
+        /// <summary>#1994 — the potential V(x, y) in the equation language. Default: Hénon–Heiles.</summary>
+        public string UserPotentialSource { get; set; } = UserPotentialDefaultSource;
+        /// <summary>#1994 — the default potential: Hénon–Heiles (#1942), so the default frame is that family's basins.</summary>
+        public const string UserPotentialDefaultSource = "(x^2 + y^2)/2 + x^2*y - y^3/3";
+        /// <summary>#1994 — energy E of every launch. Default 0.25.</summary>
+        public double UserPotentialEnergy { get; set; } = 0.25;
+        /// <summary>#1994 — launch space (see <see cref="FracturingFog.UserPotentialView"/>). Default Plane.</summary>
+        public UserPotentialView UserPotentialView { get; set; } = UserPotentialView.Plane;
+        /// <summary>#1994 — launch direction in the Plane view. Default Tangential.</summary>
+        public HenonHeilesLaunch UserPotentialLaunch { get; set; } = HenonHeilesLaunch.Tangential;
+        /// <summary>#1994 — FixedAngle launch direction, degrees from +x. Default 0.</summary>
+        public double UserPotentialLaunchAngle { get; set; } = 0.0;
+        /// <summary>#1994 — exit radius: past it the particle leaves through a sector. Default 2.</summary>
+        public double UserPotentialExitRadius { get; set; } = 2.0;
+        /// <summary>#1994 — number of equal exit sectors (1-16). Default 3.</summary>
+        public int UserPotentialSectors { get; set; } = 3;
+        /// <summary>#1994 — angle of sector 0's centre, degrees from +x. Default 90 (Hénon–Heiles numbering).</summary>
+        public double UserPotentialSectorOffset { get; set; } = 90.0;
+        /// <summary>#1994 — optional "exit if" expression in x, y, vx, vy, t: a value &gt;= 0 stops the
+        /// trace with that gate; negative keeps going. Empty = sectors only.</summary>
+        public string UserPotentialExitIf { get; set; } = "";
+        /// <summary>#1994 — rotating frame (adds the Coriolis force 2(vy, -vx)). Default off.</summary>
+        public bool UserPotentialRotating { get; set; }
+        /// <summary>#1994 — time limit: a particle still inside is undecided. Default 200.</summary>
+        public double UserPotentialMaxTime { get; set; } = 200.0;
+        /// <summary>#1994 — integrator relative tolerance per step. Default 1e-8.</summary>
+        public double UserPotentialTolerance { get; set; } = 1e-8;
+        /// <summary>#1994 — largest integrator step (time units). Default 0.25.</summary>
+        public double UserPotentialMaxStep { get; set; } = 0.25;
 
         // ── Slit cascade (#1569, double-slit epic #1565) ──────────────────
         /// <summary>Slit cascade: children per slit, N (2..16). N ≥ 3 for the fringe
@@ -2697,6 +2737,8 @@ namespace FracturingFog.Models
                 BlackHoleMass2 = BlackHoleMass2,
                 BlackHoleSeparation = BlackHoleSeparation,
                 BlackHoleCustom = BlackHoleCustom,
+                BlackHoleLensSource = BlackHoleLensSource,
+                BlackHoleLensCapture = BlackHoleLensCapture,
                 BlackHoleCameraDistance = BlackHoleCameraDistance,
                 BlackHoleInclination = BlackHoleInclination,
                 BlackHoleAzimuth = BlackHoleAzimuth,
@@ -2773,6 +2815,19 @@ namespace FracturingFog.Models
                 BhRingFateTime = BhRingFateTime,
                 BhRingColour = BhRingColour,
                 BhRingTolerance = BhRingTolerance,
+                UserPotentialSource = UserPotentialSource,
+                UserPotentialEnergy = UserPotentialEnergy,
+                UserPotentialView = UserPotentialView,
+                UserPotentialLaunch = UserPotentialLaunch,
+                UserPotentialLaunchAngle = UserPotentialLaunchAngle,
+                UserPotentialExitRadius = UserPotentialExitRadius,
+                UserPotentialSectors = UserPotentialSectors,
+                UserPotentialSectorOffset = UserPotentialSectorOffset,
+                UserPotentialExitIf = UserPotentialExitIf,
+                UserPotentialRotating = UserPotentialRotating,
+                UserPotentialMaxTime = UserPotentialMaxTime,
+                UserPotentialTolerance = UserPotentialTolerance,
+                UserPotentialMaxStep = UserPotentialMaxStep,
                 SlitCascadeChildren = SlitCascadeChildren,
                 SlitCascadeRatio = SlitCascadeRatio,
                 SlitCascadeDepth = SlitCascadeDepth,

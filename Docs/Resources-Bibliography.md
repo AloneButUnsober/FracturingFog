@@ -367,6 +367,8 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   The paper states no numerical capture rule; FF's (capture inside a fraction of the mass, well inside
   the photon sphere) is its own choice. #1925 keeps the planar congruence as the default
   `Parallel` projection and adds a `Pinhole` one for lensed skies (FF's addition, not the paper's).
+  #1995 (User Lens) runs the same Hamiltonian (their Eq. 6 form) with a user-written U and its symbolic
+  gradient (`Engine/Scattering/UserLens.cs`).
 
 <a id="yumoto-2012"></a>
 
@@ -425,7 +427,8 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   (Majumdar–Papapetrou) black holes, their shadows included, in real time by treating their light as rays
   in flat space with refractive index n = U². The closest prior art to `BlackHoleShadow` found by the
   #1928 search: FF does not use the optical analogy (it integrates the Hamiltonian of Shipley & Dolan
-  directly). Named in the help page.
+  directly). Named in the help page. #1995 (User Lens) cites the n = U² picture in its help and panel to
+  explain what a non-harmonic user U is: an optical medium for the rays, not a spacetime.
 
 <a id="aguirre-vallejo-sanjuan-2001"></a>
 
@@ -447,7 +450,9 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   potential V = (x² + y²)/2 + x²y − y³/3 that `HenonHeilesBasins` (#1942) integrates
   (`Engine/Scattering/HenonHeiles.cs`). Also used by the Math Plane `trajectory henonheiles` statement
   (#1993, the same scene code with the path recorded) and its "Path: Henon-Heiles escape" demos, which draw
-  the levels V = E and V = 1/6 and the three saddles.
+  the levels V = E and V = 1/6 and the three saddles. Also the default potential of the User Potential
+  family (#1994, `Engine/Scattering/UserPotential.cs`), whose "User Potential - Henon-Heiles" preset
+  reproduces the built-in basin map from the formula.
 
 <a id="nagler-2004"></a>
 
@@ -459,7 +464,8 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   the crash radius, escape radius and time limit are FF's own settings, not values taken from the paper.
   Also used by the Math Plane `trajectory threebody` statement (#1993, the same scene code with the path
   recorded) and its "Path: Copenhagen problem" demo (zero-velocity curve 2Ω = C, the primaries and L1–L5;
-  FF's Ω, without the constant some authors add).
+  FF's Ω, without the constant some authors add). Also the "User Potential - Copenhagen Problem" preset
+  (#1994): V = −Ω in the rotating frame with E = −C/2, which reproduces most of the Fates view.
 
 <a id="nagler-2005"></a>
 
