@@ -81,6 +81,16 @@ public sealed partial class UserEquationCalculator : IFractalCalculator, IDeepCe
     public float[] FinalZrBuffer { get; private set; } = Array.Empty<float>();
     public float[] FinalZiBuffer { get; private set; } = Array.Empty<float>();
     public float[] FinalDrBuffer { get; private set; } = Array.Empty<float>();
+
+    /// <summary>#1931 — the finite-difference step of the numeric Jacobian for pixel pitch
+    /// <paramref name="pixelScale"/> at c = (<paramref name="cx"/>, <paramref name="cy"/>):
+    /// min(1e-6, pitch / 1000), floored at 1e-13 max(1, |c|).</summary>
+    public static double JacobianStep(double pixelScale, double cx, double cy)
+    {
+        double h = Math.Min(1e-6, Math.Abs(pixelScale) * 1e-3);
+        double floor = 1e-13 * Math.Max(1.0, Math.Max(Math.Abs(cx), Math.Abs(cy)));
+        return double.IsFinite(h) ? Math.Max(h, floor) : 1e-6;
+    }
     public float[] FinalDiBuffer { get; private set; } = Array.Empty<float>();
 
     public double CenterX { get; set; } = 0.0;
@@ -511,7 +521,12 @@ public sealed partial class UserEquationCalculator : IFractalCalculator, IDeepCe
                     cy = centerY + dx * sinA + dyCos;
                 }
                 var c = new Complex(cx, cy);
-                const double h = 1e-6;
+                // #1931 — the numeric Jacobian's step follows the pixel: a thousandth of a pixel, but
+                // never above the old absolute 1e-6 (so shallow frames, where 1e-6 was already
+                // sub-pixel, are unchanged) and never below 1e-13 |c| (so c + h stays a distinct
+                // double with ~3 significant digits of step). The absolute 1e-6 was ~1e5 pixels at
+                // 1e11 and differenced unrelated orbits.
+                double h = JacobianStep(scale, cx, cy);
                 var cP = new Complex(cx + h, cy);
                 // #542 — seed z0 (default 0). zP seeds at the perturbed cP so the
                 // numerical Jacobian stays consistent with the seeded trajectory.
