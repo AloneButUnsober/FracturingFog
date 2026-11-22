@@ -125,6 +125,7 @@ namespace FracturingFog.Hosting
             new("Mixmaster Universe", HelpTextBundle.MathMixmasterText),         // #1946
             new("Black Hole + Ring", HelpTextBundle.MathBlackHoleRingText),      // #1947
             new("User Potential", HelpTextBundle.MathUserPotentialText),        // #1994
+            new("User Hamiltonian", HelpTextBundle.MathUserHamiltonianText),    // #1997
             new("Math Plane",    HelpTextBundle.MathPlaneText),             // #1555
             new("Math Plane 3D", HelpTextBundle.MathPlane3DText),           // #1719
             new("Double Slit",   HelpTextBundle.MathDoubleSlitText),        // #1573
@@ -193,6 +194,7 @@ namespace FracturingFog.Hosting
                 new("Mixmaster Universe", HelpTextBundle.MathMixmasterText),   // #1946
                 new("Black Hole + Ring", HelpTextBundle.MathBlackHoleRingText),   // #1947
                 new("User Potential", HelpTextBundle.MathUserPotentialText),     // #1994
+                new("User Hamiltonian", HelpTextBundle.MathUserHamiltonianText), // #1997
             }),
             new("Math Plane", new HelpSubTab[]   // #1555
             {

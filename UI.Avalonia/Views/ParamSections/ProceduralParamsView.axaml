@@ -1829,6 +1829,63 @@
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
         </Grid>
 
+        <!-- #1997 — User Hamiltonian. -->
+        <Grid IsVisible="{Binding IsUserHamiltonianBasins}" ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Degrees of freedom:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="1" Maximum="4" Increment="1" FormatString="0"
+                           Value="{Binding UserHamDimension, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="N: coordinates x, y, z, w and momenta px, py, pz, pw (the first N)." />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding UserHamVariables}" FontSize="11" Opacity="0.7" Margin="0,2" />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="H(q, p):" VerticalAlignment="Center" />
+            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding UserHamSource, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" TextWrapping="Wrap"
+                     FontFamily="Consolas,Menlo,monospace" Margin="0,2" ToolTip.Tip="The Hamiltonian in the equation language. Hamilton's equations come from its exact derivatives. Press Tab or click away to apply." />
+            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding UserHamError}" Foreground="#FFCC00" TextWrapping="Wrap"
+                       IsVisible="{Binding UserHamError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" Margin="0,2" />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Axis A (across):" VerticalAlignment="Center" />
+            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding UserHamAxisA, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Margin="0,2" ToolTip.Tip="The variable the pixel's horizontal position sets." />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Axis B (up):" VerticalAlignment="Center" />
+            <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding UserHamAxisB, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Margin="0,2" ToolTip.Tip="The variable the pixel's vertical position sets." />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Fixed:" VerticalAlignment="Center" />
+            <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding UserHamFixed, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" FontFamily="Consolas,Menlo,monospace" Margin="0,2"
+                     Watermark="name=expression; ... e.g. x=0; px=-y" ToolTip.Tip="Other launch values, set in order; each may read the axes and earlier values. Unset variables are 0." />
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Solve for:" VerticalAlignment="Center" />
+            <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding UserHamSolveFor, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Margin="0,2"
+                     ToolTip.Tip="One variable found from H = Energy (empty: none)." />
+            <TextBlock Grid.Row="8" Grid.Column="0" Text="Root direction:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="8" Grid.Column="1" Minimum="-1" Maximum="1" Increment="2" FormatString="0"
+                           Value="{Binding UserHamSolveSign, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="+1: the first root above 0; -1: the first below." />
+            <TextBlock Grid.Row="9" Grid.Column="0" Text="Energy h0:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="9" Grid.Column="1" Minimum="-1000000" Maximum="1000000" Increment="0.01" FormatString="0.##########"
+                           Value="{Binding UserHamEnergy, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="The value of H every launch has." />
+            <TextBlock Grid.Row="10" Grid.Column="0" Text="Exit radius:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="10" Grid.Column="1" Minimum="0.001" Maximum="1000000" Increment="0.5" FormatString="0.##########"
+                           Value="{Binding UserHamExitRadius, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Past this distance (over the coordinates) the particle has left through a sector of (x, y)." />
+            <TextBlock Grid.Row="11" Grid.Column="0" Text="Exit sectors:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="11" Grid.Column="1" Minimum="1" Maximum="16" Increment="1" FormatString="0"
+                           Value="{Binding UserHamSectors, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="12" Grid.Column="0" Text="Sector offset:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="12" Grid.Column="1" Minimum="-360" Maximum="360" Increment="5" FormatString="0.##########"
+                           Value="{Binding UserHamSectorOffset, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="13" Grid.Column="0" Text="Exit if:" VerticalAlignment="Center" />
+            <TextBox Grid.Row="13" Grid.Column="1" Text="{Binding UserHamExitIf, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" FontFamily="Consolas,Menlo,monospace" Margin="0,2"
+                     ToolTip.Tip="Optional formula in the variables and t: 0 or more stops with that gate; negative keeps going." />
+            <TextBlock Grid.Row="14" Grid.Column="0" Text="Project every:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="14" Grid.Column="1" Minimum="0" Maximum="100000" Increment="8" FormatString="0"
+                           Value="{Binding UserHamProjectEvery, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Every K steps nudge the solved variable back to H = h0 (0 = off)." />
+            <TextBlock Grid.Row="15" Grid.Column="0" Text="Time limit:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="15" Grid.Column="1" Minimum="1" Maximum="100000" Increment="50" FormatString="0.##########"
+                           Value="{Binding UserHamMaxTime, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="16" Grid.Column="0" Text="Max step:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="16" Grid.Column="1" Minimum="0.0001" Maximum="10" Increment="0.05" FormatString="0.##########"
+                           Value="{Binding UserHamMaxStep, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="17" Grid.Column="0" Text="Tolerance:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="17" Grid.Column="1" Minimum="0.0000000000001" Maximum="0.001" Increment="0.000000001" FormatString="0.#############"
+                           Value="{Binding UserHamTolerance, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="18" Grid.Column="1"
+                       Text="The default H is Henon-Heiles launched on x = 0: the same picture as that family's Section view. Dark: no launch (no root of H = h0). Yellow frame: a text did not parse."
+                       TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
+        </Grid>
+
         <!-- #1994 — User Potential. -->
         <Grid IsVisible="{Binding IsUserPotentialBasins}"
               ColumnDefinitions="160,*"

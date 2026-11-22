@@ -453,7 +453,9 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   (#1993, the same scene code with the path recorded) and its "Path: Henon-Heiles escape" demos, which draw
   the levels V = E and V = 1/6 and the three saddles. Also the default potential of the User Potential
   family (#1994, `Engine/Scattering/UserPotential.cs`), whose "User Potential - Henon-Heiles" preset
-  reproduces the built-in basin map from the formula.
+  reproduces the built-in basin map from the formula. And the default Hamiltonian of the User Hamiltonian
+  family (#1997, `Engine/Scattering/UserHamiltonian.cs`), whose "User Hamiltonian - Henon-Heiles Section"
+  preset reproduces the built-in Section view from H written out.
 
 <a id="nagler-2004"></a>
 

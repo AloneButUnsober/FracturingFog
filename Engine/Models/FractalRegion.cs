@@ -897,6 +897,23 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? UserPotentialMaxTime { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? UserPotentialTolerance { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? UserPotentialMaxStep { get; set; }
+        // #1997 — User Hamiltonian.
+        [JsonIgnore(Condition = OmitNull)] public string? UserHamSource { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? UserHamDimension { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public string? UserHamAxisA { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public string? UserHamAxisB { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public string? UserHamFixed { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public string? UserHamSolveFor { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? UserHamSolveSign { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? UserHamEnergy { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? UserHamExitRadius { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? UserHamSectors { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? UserHamSectorOffset { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public string? UserHamExitIf { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? UserHamMaxTime { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? UserHamTolerance { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? UserHamMaxStep { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? UserHamProjectEvery { get; set; }
         // #1507 — int cast of BilliardRayColorSource.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysColorSource { get; set; }
         // #1508 — crossings (int casts of BilliardRayMode / BilliardCrossingValue).
@@ -1557,6 +1574,26 @@ namespace FracturingFog.Models
                     UserPotentialMaxTime = p.UserPotentialMaxTime,
                     UserPotentialTolerance = p.UserPotentialTolerance,
                     UserPotentialMaxStep = p.UserPotentialMaxStep,
+                },
+                // #1997 — User Hamiltonian: every setting, the texts included.
+                FractalType.UserHamiltonianBasins => new RegionFractalParams
+                {
+                    UserHamSource = p.UserHamSource ?? "",
+                    UserHamDimension = p.UserHamDimension,
+                    UserHamAxisA = p.UserHamAxisA ?? "",
+                    UserHamAxisB = p.UserHamAxisB ?? "",
+                    UserHamFixed = p.UserHamFixed ?? "",
+                    UserHamSolveFor = p.UserHamSolveFor ?? "",
+                    UserHamSolveSign = p.UserHamSolveSign,
+                    UserHamEnergy = p.UserHamEnergy,
+                    UserHamExitRadius = p.UserHamExitRadius,
+                    UserHamSectors = p.UserHamSectors,
+                    UserHamSectorOffset = p.UserHamSectorOffset,
+                    UserHamExitIf = p.UserHamExitIf ?? "",
+                    UserHamMaxTime = p.UserHamMaxTime,
+                    UserHamTolerance = p.UserHamTolerance,
+                    UserHamMaxStep = p.UserHamMaxStep,
+                    UserHamProjectEvery = p.UserHamProjectEvery,
                 },
                 FractalType.BilliardRays => new RegionFractalParams
                 {
@@ -2695,6 +2732,22 @@ namespace FracturingFog.Models
             if (UserPotentialMaxTime.HasValue)    p.UserPotentialMaxTime = UserPotentialMaxTime.Value;
             if (UserPotentialTolerance.HasValue)  p.UserPotentialTolerance = UserPotentialTolerance.Value;
             if (UserPotentialMaxStep.HasValue)    p.UserPotentialMaxStep = UserPotentialMaxStep.Value;
+            if (UserHamSource != null) p.UserHamSource = UserHamSource;
+            if (UserHamDimension.HasValue) p.UserHamDimension = UserHamDimension.Value;
+            if (UserHamAxisA != null) p.UserHamAxisA = UserHamAxisA;
+            if (UserHamAxisB != null) p.UserHamAxisB = UserHamAxisB;
+            if (UserHamFixed != null) p.UserHamFixed = UserHamFixed;
+            if (UserHamSolveFor != null) p.UserHamSolveFor = UserHamSolveFor;
+            if (UserHamSolveSign.HasValue) p.UserHamSolveSign = UserHamSolveSign.Value;
+            if (UserHamEnergy.HasValue) p.UserHamEnergy = UserHamEnergy.Value;
+            if (UserHamExitRadius.HasValue) p.UserHamExitRadius = UserHamExitRadius.Value;
+            if (UserHamSectors.HasValue) p.UserHamSectors = UserHamSectors.Value;
+            if (UserHamSectorOffset.HasValue) p.UserHamSectorOffset = UserHamSectorOffset.Value;
+            if (UserHamExitIf != null) p.UserHamExitIf = UserHamExitIf;
+            if (UserHamMaxTime.HasValue) p.UserHamMaxTime = UserHamMaxTime.Value;
+            if (UserHamTolerance.HasValue) p.UserHamTolerance = UserHamTolerance.Value;
+            if (UserHamMaxStep.HasValue) p.UserHamMaxStep = UserHamMaxStep.Value;
+            if (UserHamProjectEvery.HasValue) p.UserHamProjectEvery = UserHamProjectEvery.Value;
             if (BilliardRaysColorSource.HasValue) p.BilliardRaysColorSource = (FracturingFog.BilliardRayColorSource)BilliardRaysColorSource.Value;
             if (BilliardRaysMode.HasValue)       p.BilliardRaysMode = (FracturingFog.BilliardRayMode)BilliardRaysMode.Value;
             if (BilliardRaysCrossingWindow.HasValue) p.BilliardRaysCrossingWindow = BilliardRaysCrossingWindow.Value;
@@ -4604,6 +4657,65 @@ namespace FracturingFog.Models
                 Params        = new RegionFractalParams
                 {
                     MixView = (int)FracturingFog.MixmasterView.Anisotropy, MixOmega = -1.0, MixAlphaDot = 10.0, MixBetaDot = 10.0, MixUExit = 8.0,
+                },
+            },
+            // #1997 — User Hamiltonian: the Hénon–Heiles section (parity with that view), FF's own
+            // three-degree-of-freedom extension, and the Copenhagen problem in canonical variables.
+            new()
+            {
+                Name          = "User Hamiltonian - Henon-Heiles Section",
+                CenterX       =  0.2,
+                CenterY       =  0.0,
+                Zoom          =  1.6,
+                Iterations    =  256,
+                Description   = "The Henon-Heiles Hamiltonian written out, H = (px^2 + py^2)/2 + V(x, y), launched on the line x = 0 with the pixel as (y, py) and px solved from H = 0.25. FF derives Hamilton's equations from the formula, so this is the built-in Henon-Heiles Section view. The bound 'User Hamiltonian: energy' animation sweeps the energy.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.UserHamiltonianBasins,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "User Hamiltonian: energy",
+                Params        = new RegionFractalParams
+                {
+                    UserHamSource = FractalParameters.UserHamDefaultSource, UserHamDimension = 2,
+                    UserHamAxisA = "y", UserHamAxisB = "py", UserHamFixed = "x=0", UserHamSolveFor = "px", UserHamSolveSign = 1,
+                    UserHamEnergy = 0.25, UserHamExitRadius = 2.0, UserHamSectors = 3, UserHamSectorOffset = 90.0,
+                },
+            },
+            new()
+            {
+                Name          = "User Hamiltonian - Three Degrees of Freedom",
+                CenterX       =  0.2,
+                CenterY       =  0.0,
+                Zoom          =  1.6,
+                Iterations    =  256,
+                Description   = "Henon-Heiles with a third coordinate z coupled in, H = (px^2 + py^2 + pz^2)/2 + (x^2 + y^2 + z^2)/2 + x^2*y - y^3/3 + 0.5*x*z^2, launched from z = 0.15 at rest in z. The extra motion in z blurs and shifts the three exit basins of the section. The coupling is FF's own example, not taken from a paper.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.UserHamiltonianBasins,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    UserHamSource = "(px^2 + py^2 + pz^2)/2 + (x^2 + y^2 + z^2)/2 + x^2*y - y^3/3 + 0.5*x*z^2", UserHamDimension = 3,
+                    UserHamAxisA = "y", UserHamAxisB = "py", UserHamFixed = "x=0; z=0.15; pz=0", UserHamSolveFor = "px", UserHamSolveSign = 1,
+                    UserHamEnergy = 0.25, UserHamExitRadius = 2.0, UserHamSectors = 3, UserHamSectorOffset = 90.0,
+                },
+            },
+            new()
+            {
+                Name          = "User Hamiltonian - Copenhagen Canonical",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.7,
+                Iterations    =  256,
+                Description   = "The restricted three-body problem with two equal masses in canonical rotating-frame variables, H = (px^2 + py^2)/2 + y px - x py - Omega-terms, at H = -1.5 (Jacobi constant 3). Each pixel is a position (x, y) launched with no x-velocity (px = -y) and py solved from H; an 'exit if' rule catches crashes into either mass and escapes. The launch rule is FF's own.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.UserHamiltonianBasins,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    UserHamSource = "(px^2 + py^2)/2 + y*px - x*py - 0.5/sqrt((x + 0.5)^2 + y^2) - 0.5/sqrt((x - 0.5)^2 + y^2)",
+                    UserHamDimension = 2, UserHamAxisA = "x", UserHamAxisB = "y", UserHamFixed = "px=-y", UserHamSolveFor = "py",
+                    UserHamSolveSign = 1, UserHamEnergy = -1.5, UserHamExitRadius = 1000.0,
+                    UserHamExitIf = RegionFractalParams.UserPotentialCopenhagenExit, UserHamMaxTime = 100.0,
+                    UserHamTolerance = 1e-9, UserHamMaxStep = 0.1,
                 },
             },
             // #1994 — User Potential: Hénon–Heiles written as V (parity), FF's own four-exit
