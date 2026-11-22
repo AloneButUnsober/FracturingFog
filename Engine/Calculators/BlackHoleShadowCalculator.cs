@@ -89,6 +89,10 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
     public double? LowResPreviewScaleOverride { get; set; }
 
     // ── GPU (#1926) ──────────────────────────────────────────────────────────
+    /// <summary>#1972 — the GPU backend that traced the last frame ("ILGPU", "D3D11 (device)",
+    /// "Vulkan (device)"), or null when it was traced on the CPU.</summary>
+    public string? LastGpuBackend { get; private set; }
+
     /// <summary>#1926 — how the last frame was traced (GPU, or CPU and why).</summary>
     public FracturingFog.Render.GpuRoute LastGpuRoute { get; private set; }
 
@@ -516,6 +520,7 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
         // on and the colouring needs nothing else; the colour pass below reads its outcomes.
         FracturingFog.Calculators.Gpu.BlackHoleShadowGpuCalculator.Outcomes? gpuOut = null;
         LastGpuMeasurement = null;
+        LastGpuBackend = null;   // #1972
         var fx = p.Lighting;
         string? family = _isPreviewChild ? "preview frame" : CpuOnlyReason(p);
         var gpuGate = FracturingFog.Calculators.Gpu.Gpu3DRoute.Gate(in fx, lowRes: false, family,
@@ -527,7 +532,14 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
         if (gpuGate is null)
         {
             var mode = GpuSelection;
-            if (FracturingFog.Calculators.Gpu.GpuAcceleratorHost.TryAcquire(out var acc)) device = acc;
+            // #1972 — the backend: ILGPU when it is there (auto) or chosen; else the D3D11 / Vulkan twin
+            // (FF_GPU_BLACK_HOLE_BACKEND). Each backend is its own "device" for Auto's measurement.
+            var choice = FracturingFog.Calculators.Gpu.BlackHoleTraceBackends.Selection;
+            bool ilgpu = choice is FracturingFog.Calculators.Gpu.BlackHoleTraceBackends.Choice.Auto
+                                or FracturingFog.Calculators.Gpu.BlackHoleTraceBackends.Choice.Ilgpu
+                         && FracturingFog.Calculators.Gpu.GpuAcceleratorHost.TryAcquire(out var acc0) && (device = acc0) != null;
+            var alt = ilgpu ? null : FracturingFog.Calculators.Gpu.BlackHoleTraceBackends.KernelFor(choice, ilgpuAvailable: false);
+            if (alt != null) device = alt;
             bool single = p.BlackHoleGpuPrecision == BlackHoleGpuPrecision.Single;
             GpuMeasurement? known = null;
             if (mode == GpuBlackHoleMode.Auto && device != null && s_gpuDecisions.TryGetValue(device, out var kd))
@@ -543,11 +555,24 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
             }
             else
             {
-                _gpu ??= new FracturingFog.Calculators.Gpu.BlackHoleShadowGpuCalculator();
                 var sw = System.Diagnostics.Stopwatch.StartNew();
-                gpuOut = _gpu.Render(FracturingFog.Calculators.Gpu.BlackHoleShadowGpuCalculator.ParamsFor(scene, width, height, cx, cy, zoom), ct, single);
-                gpuMs = sw.Elapsed.TotalMilliseconds;
-                LastGpuRoute = FracturingFog.Calculators.Gpu.Gpu3DRoute.AfterRender(gpuOut != null, _gpu.LastError);
+                var gp = FracturingFog.Calculators.Gpu.BlackHoleShadowGpuCalculator.ParamsFor(scene, width, height, cx, cy, zoom);
+                if (alt != null)
+                {
+                    gpuOut = alt.Trace(gp, single, ct);   // #1972 — D3D11 / Vulkan
+                    gpuMs = sw.Elapsed.TotalMilliseconds;
+                    LastGpuRoute = FracturingFog.Calculators.Gpu.Gpu3DRoute.AfterRender(gpuOut != null, alt.LastError);
+                    LastGpuBackend = gpuOut != null ? $"{alt.Backend} ({alt.DeviceName})" : null;
+                }
+                else
+                {
+                    _gpu ??= new FracturingFog.Calculators.Gpu.BlackHoleShadowGpuCalculator();
+                    gpuOut = _gpu.Render(gp, ct, single);
+                    gpuMs = sw.Elapsed.TotalMilliseconds;
+                    LastGpuRoute = FracturingFog.Calculators.Gpu.Gpu3DRoute.AfterRender(gpuOut != null, _gpu.LastError);
+                    LastGpuBackend = gpuOut != null ? "ILGPU" : null;
+                }
+                if (LastGpuBackend != null) LastPrecisionLabel += ", GPU: " + LastGpuBackend;   // #1972
                 if (ct.IsCancellationRequested) return;
                 measureCpu = gpuOut != null && mode == GpuBlackHoleMode.Auto && known == null && device != null;
                 measureSingle = single;
