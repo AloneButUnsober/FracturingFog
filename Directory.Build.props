@@ -15,7 +15,8 @@
     	BAB (2026-10-04) — Bump to 0.7.0rc4.
     	BAB (2026-10-25) — First official release: 0.7.0 (no suffix).
     	BAB (2026-10-25) — Bump to 0.7.1.
+    	BAB (2026-11-22) — Bump to 0.7.2.
     -->
-    <VersionPrefix>0.7.1</VersionPrefix>
+    <VersionPrefix>0.7.2</VersionPrefix>
   </PropertyGroup>
 </Project>

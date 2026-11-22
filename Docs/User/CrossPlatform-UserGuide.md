@@ -158,18 +158,26 @@ itself when all of these hold, and the window title says which way it went:
 
 | Source            | Windows | Linux | macOS |
 |-------------------|:-------:|:-----:|:-----:|
-| System loopback   | ✓       | —     | —     |
-| Microphone        | ✓       | —     | —     |
+| System loopback   | ✓       | ✓ ¹   | —     |
+| Microphone        | ✓       | ✓     | ✓     |
 | File playback     | ✓       | ✓     | ✓     |
 | Synthesised beat  | ✓       | ✓     | ✓     |
 
-System loopback + microphone capture rely on WASAPI and currently land
-only on Windows via the `FracturingFog.Audio.Win` backend. On Linux and
-macOS the audio settings dialog greys those rows with a yellow banner
-(`#FFCC00`) and the audio-reactive slideshow falls back to the file or
-synth source. Source selection persists across hosts so a setting saved
-on Windows still loads on Linux and vice versa — the dialog just dims
-the unsupported options.
+¹ Needs a PulseAudio / PipeWire monitor source (`<sink>.monitor`), which
+PulseAudio and PipeWire-Pulse provide by default.
+
+On Windows, loopback and microphone capture use WASAPI through the
+`FracturingFog.Audio.Win` (NAudio) backend. On Linux and macOS, live
+capture goes through OpenAL: the OpenAL Soft runtime ships with the app
+(`Silk.NET.OpenAL.Soft.Native`), and FF opens the default sink's
+`.monitor` device for system loopback on Linux. macOS has no native
+monitor source, so system loopback needs a virtual audio device and is
+not offered. If OpenAL cannot load, or no monitor device exists at
+start, the audio settings dialog greys the unavailable rows with a
+yellow banner (`#FFCC00`) and the audio-reactive slideshow falls back to
+the file or synth source. Source selection persists across hosts, so a
+setting saved on Windows still loads on Linux and vice versa — the
+dialog just dims the unsupported options.
 
 ---
 
@@ -212,10 +220,10 @@ install is not desirable.
   headless) legs so regressions in the Wayland adapter surface before
   release.
 * **Touch / Mobile.** No iOS / Android / browser host today.
-* **OpenAL system-audio capture.** Linux + macOS WASAPI-loopback
-  equivalents (OpenAL loopback, PulseAudio monitor sources, CoreAudio
-  Aggregate devices) are out of scope for the first cross-platform cut;
-  see the audio-capability matrix above.
+* **macOS system-audio loopback.** macOS has no native monitor source;
+  capturing system output needs a virtual device (for example a CoreAudio
+  aggregate device), which FF does not set up. Microphone, file and synth
+  sources work.
 
 ---
 
