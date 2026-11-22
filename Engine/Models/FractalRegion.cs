@@ -1236,6 +1236,9 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public string? UserEquationBailoutCondition { get; set; }
         [JsonIgnore(Condition = OmitNull)] public bool? UserEquationBailoutReplacesModulus { get; set; }
         [JsonIgnore(Condition = OmitNull)] public bool? UserEquationColorInterior { get; set; }
+        /// <summary>#1989 — the real-Newton potential and its root list (null when off / discovered).</summary>
+        [JsonIgnore(Condition = OmitNull)] public string? UserEquationPotential { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public string? UserEquationNewtonRoots { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? BulbPower { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? BulbIterations { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? UserBulbIterations { get; set; }
@@ -2108,6 +2111,8 @@ namespace FracturingFog.Models
                     UserEquationBailoutCondition = string.IsNullOrWhiteSpace(p.UserEquationBailoutCondition) ? null : p.UserEquationBailoutCondition.Trim(),
                     UserEquationBailoutReplacesModulus = p.UserEquationBailoutReplacesModulus ? true : null,
                     UserEquationColorInterior = p.UserEquationColorInterior ? true : null,
+                    UserEquationPotential = string.IsNullOrWhiteSpace(p.UserEquationPotential) ? null : p.UserEquationPotential.Trim(),
+                    UserEquationNewtonRoots = string.IsNullOrWhiteSpace(p.UserEquationNewtonRoots) ? null : p.UserEquationNewtonRoots.Trim(),
                 },
                 // #1249 — Sandbox shares the escape radius and bailout knobs.
                 FractalType.Sandbox => new RegionFractalParams
@@ -3108,6 +3113,8 @@ namespace FracturingFog.Models
             if (!string.IsNullOrWhiteSpace(UserEquationBailoutCondition)) p.UserEquationBailoutCondition = UserEquationBailoutCondition;
             if (UserEquationBailoutReplacesModulus.HasValue) p.UserEquationBailoutReplacesModulus = UserEquationBailoutReplacesModulus.Value;
             if (UserEquationColorInterior.HasValue) p.UserEquationColorInterior = UserEquationColorInterior.Value;
+            if (!string.IsNullOrWhiteSpace(UserEquationPotential)) p.UserEquationPotential = UserEquationPotential;   // #1989
+            if (!string.IsNullOrWhiteSpace(UserEquationNewtonRoots)) p.UserEquationNewtonRoots = UserEquationNewtonRoots;
             if (BulbPower.HasValue) p.BulbPower = BulbPower.Value;
             if (BulbIterations.HasValue) p.BulbIterations = BulbIterations.Value;
             if (UserBulbIterations.HasValue) p.UserBulbIterations = UserBulbIterations.Value;
@@ -3521,6 +3528,13 @@ namespace FracturingFog.Models
             Enabled = true, Raymarch = true, CameraElevationDeg = 50.0,
             LightElevationDeg = 55.0, ShadowStrength = 0.3, CameraExposureEv = 3.0,
         };
+
+        /// <summary>#1989 — the rotating-frame effective potential Ω (ThreeBodySystem.Omega) for equal
+        /// masses, and its equilibria L1..L5 in ThreeBodyScene's gate order (L2 by bisection of ∂Ω/∂x).</summary>
+        internal const string LagrangeBasinsPotential =
+            "let mu = 0.5 in 0.5*(x^2 + y^2) + (1 - mu)/sqrt((x + mu)^2 + y^2) + mu/sqrt((x - 1 + mu)^2 + y^2)";
+        internal const string LagrangeBasinsRoots =
+            "0, 0; 1.19840614455492, 0; -1.19840614455492, 0; 0, 0.8660254037844386; 0, -0.8660254037844386";
 
         private static readonly FractalRegion[] _builtIns =
         [
@@ -4454,6 +4468,24 @@ namespace FracturingFog.Models
                 Params        = new RegionFractalParams
                 {
                     ThreeBodyView = (int)FracturingFog.ThreeBodyView.LagrangeBasins, ThreeBodyMassRatio = 0.1, ThreeBodyNewtonIterations = 60,
+                },
+            },
+            // #1989 — the equal-mass Lagrange basins rebuilt as a User Equation (real 2D Newton).
+            new()
+            {
+                Name          = "User Equation - Lagrange Basins (Newton on a potential)",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  1.0,
+                Iterations    =  60,
+                Description   = "The Three-Body Lagrange Basins written as a User Equation: the Newton field is the rotating-frame potential for two equal masses, and the five roots are L1, L2, L3, L4 and L5 in the Three-Body order, so the basin map and colours match that preset. Edit the potential to explore other fields.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.UserEquation,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    UserEquationPotential = LagrangeBasinsPotential,
+                    UserEquationNewtonRoots = LagrangeBasinsRoots,
                 },
             },
             // #1944 — magnetised black hole (Wald field; Kick view after Bautista & Vega 2021).

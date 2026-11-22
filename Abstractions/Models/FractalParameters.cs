@@ -264,6 +264,15 @@ namespace FracturingFog.Models
         /// </summary>
         public bool UserEquationSkipJacobian { get; set; } = false;
 
+        /// <summary>#1989 — when set, the User Equation draws real 2D Newton basins instead of an
+        /// escape-time map: this is a scalar potential Φ(x, y) and each pixel runs Newton-Raphson on
+        /// ∇Φ = 0 (symbolic gradient and Hessian), coloured by the root it reaches. Null/empty = off.</summary>
+        public string? UserEquationPotential { get; set; }
+
+        /// <summary>#1989 — the roots the real-Newton mode colours by, "x, y; x, y; ...". Null/empty =
+        /// discovered from the frame.</summary>
+        public string? UserEquationNewtonRoots { get; set; }
+
         /// <summary>#542 — optional seed for the iteration start value z0, as a
         /// bare CalcGen-DSL expression over <c>c</c> (the pixel) and constants.
         /// Null/empty ⇒ z0 = 0 (Mandelbrot orbit; legacy, byte-identical).
@@ -2536,6 +2545,8 @@ namespace FracturingFog.Models
                 UserEquationRotationDegrees = UserEquationRotationDegrees,
                 UserEquationUseCalcGen = UserEquationUseCalcGen,
                 UserEquationSkipJacobian = UserEquationSkipJacobian,
+                UserEquationPotential = UserEquationPotential,
+                UserEquationNewtonRoots = UserEquationNewtonRoots,
                 UserEquationSeed = UserEquationSeed,
                 UserEquationBailoutCondition = UserEquationBailoutCondition,
                 UserEquationBailoutReplacesModulus = UserEquationBailoutReplacesModulus,

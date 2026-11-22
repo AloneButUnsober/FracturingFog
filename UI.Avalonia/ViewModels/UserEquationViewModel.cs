@@ -357,6 +357,53 @@ public sealed class UserEquationViewModel : ViewModelBase
         }
     }
 
+    // ── Real 2D Newton basins (#1989) ──
+    // A potential Φ(x, y) switches the render to Newton on ∇Φ = 0, coloured by root.
+    public string? RealNewtonPotential
+    {
+        get => _params.UserEquationPotential;
+        set
+        {
+            string? next = string.IsNullOrWhiteSpace(value) ? null : value;
+            if (_params.UserEquationPotential == next) return;
+            _params.UserEquationPotential = next;
+            this.RaisePropertyChanged();
+            this.RaisePropertyChanged(nameof(IsRealNewton));
+            this.RaisePropertyChanged(nameof(RealNewtonStatus));
+            RenderRequested?.Invoke();
+        }
+    }
+
+    public bool IsRealNewton => !string.IsNullOrWhiteSpace(_params.UserEquationPotential);
+
+    public string? RealNewtonRoots
+    {
+        get => _params.UserEquationNewtonRoots;
+        set
+        {
+            string? next = string.IsNullOrWhiteSpace(value) ? null : value;
+            if (_params.UserEquationNewtonRoots == next) return;
+            _params.UserEquationNewtonRoots = next;
+            this.RaisePropertyChanged();
+            this.RaisePropertyChanged(nameof(RealNewtonStatus));
+            RenderRequested?.Invoke();
+        }
+    }
+
+    /// <summary>Parse feedback for the potential / root list (the render shows the interior colour on an error).</summary>
+    public string RealNewtonStatus
+    {
+        get
+        {
+            var src = _params.UserEquationPotential?.Trim();
+            if (string.IsNullOrEmpty(src)) return string.Empty;
+            var model = FracturingFog.Models.RealNewtonModel.For(src);
+            if (model.Error != null) return model.Error;
+            if (!FracturingFog.Models.RealNewtonModel.TryParseRoots(_params.UserEquationNewtonRoots, out var roots, out var err)) return err ?? "roots";
+            return roots.Length == 0 ? "Roots: discovered from the frame." : $"Roots: {roots.Length} listed.";
+        }
+    }
+
     // ── Bailout replaces modulus (#859) ──
     // When on (and a bailout condition is set), the condition is the SOLE escape
     // test — the modulus |z|² bailout is disabled. Enables non-modulus /
@@ -883,6 +930,10 @@ public sealed class UserEquationViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(BailoutCondition));
         this.RaisePropertyChanged(nameof(BailoutReplacesModulus));
         this.RaisePropertyChanged(nameof(ColorInterior));
+        this.RaisePropertyChanged(nameof(RealNewtonPotential));   // #1989
+        this.RaisePropertyChanged(nameof(RealNewtonRoots));
+        this.RaisePropertyChanged(nameof(IsRealNewton));
+        this.RaisePropertyChanged(nameof(RealNewtonStatus));
     }
 
     private async Task OnSaveAsync()

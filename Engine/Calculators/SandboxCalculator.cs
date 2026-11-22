@@ -189,7 +189,7 @@ public sealed class SandboxCalculator : IFractalCalculator, ISupportsHistogramEq
                 {
                     double cx = centerX + (x - width * 0.5) * scale;
                     var c = new Complex(cx, cy);
-                    const double h = 1e-6;
+                    double h = UserEquationCalculator.JacobianStep(scale, cx, cy);   // #1931 — pixel-scaled step
                     var cP = new Complex(cx + h, cy);
                     var z = Complex.Zero;
                     var zP = Complex.Zero;

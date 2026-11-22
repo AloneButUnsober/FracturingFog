@@ -143,7 +143,7 @@
             <!-- Convergence bailout: stop early when a boolean DSL condition fires
                  (Newton / Magnet / Nova). Blank = escape-radius test only. -->
             <Grid Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="8"
-                  ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" Margin="23,6,18,0">
+                  ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="23,6,18,0">
                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Bail if:" VerticalAlignment="Center" 
                            Margin="0,0,9,0" />
                 <TextBox Grid.Row="0" Grid.Column="1" Width="700" HorizontalAlignment="Left"
@@ -155,6 +155,22 @@
                           IsChecked="{Binding BailoutReplacesModulus, Mode=TwoWay}"
                           Margin="0,4,0,0"
                           ToolTip.Tip="#859 — when on (and a condition is set) the condition is the SOLE escape test: the |z| modulus bailout is disabled. Author entire transcendental maps like sin(z)+c with 'Bail if: abs(im(z)) > 50', or exp(z)+c with 're(z) > 50', without cranking the escape radius. The condition-trigger is coloured through the full smooth+normal+3D theme path." />
+                <!-- #1989 — real 2D Newton basins on a potential Φ(x, y). -->
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Newton Φ:" VerticalAlignment="Center" Margin="0,6,9,0" />
+                <TextBox Grid.Row="2" Grid.Column="1" Width="700" HorizontalAlignment="Left" Margin="0,6,0,0"
+                         Text="{Binding RealNewtonPotential, Mode=TwoWay}"
+                         PlaceholderText="blank = escape time;  a real potential in x, y, e.g. (x^2 - 1)^2 + y^2 (Newton on its gradient)"
+                         ToolTip.Tip="When set, the equation above is not used: each pixel (x, y up) runs Newton-Raphson on grad Phi = 0 with the symbolic Hessian and is coloured by the root it reaches, as the Three-Body Lagrange view does. Iterations cap the Newton steps. Real functions: sqrt, exp, log, sin, cos, pow, abs, ...; 'let a = ... in ...' works." />
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Roots:" VerticalAlignment="Center" Margin="0,4,9,0"
+                           IsVisible="{Binding IsRealNewton}" />
+                <StackPanel Grid.Row="3" Grid.Column="1" Margin="0,4,0,0" IsVisible="{Binding IsRealNewton}">
+                    <TextBox Width="700" HorizontalAlignment="Left"
+                             Text="{Binding RealNewtonRoots, Mode=TwoWay}"
+                             PlaceholderText="blank = discovered from the frame;  x, y; x, y; ..."
+                             ToolTip.Tip="The roots to colour by, in order (index 0 takes the first colour). Listed roots keep their colours while you pan; blank finds them from a coarse pass over the frame, sorted by x then y. A start must end within 1e-6 of a root to count." />
+                    <TextBlock Text="{Binding RealNewtonStatus}" FontSize="11" Opacity="0.75" TextWrapping="Wrap" Width="700"
+                               HorizontalAlignment="Left" Margin="0,2,0,0" />
+                </StackPanel>
             </Grid>
         </Grid>
 

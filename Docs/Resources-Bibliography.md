@@ -487,7 +487,9 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   2026-11-21. Newton–Raphson basins of the equilibrium points on the configuration plane. Basis of #1943's
   Lagrange view, which uses the same multivariate Newton–Raphson map on ∇Ω without the oblateness and
   radiation-pressure terms. Prior art: both #1943 views are well studied (Nagler, Zotos); FF adds the
-  interactive / batch explorer.
+  interactive / batch explorer. #1989 generalises the same Newton–Raphson basin map to any user-written
+  potential Φ(x, y) (User Equation *Newton Φ*, symbolic gradient and Hessian); the map itself is Zotos's,
+  the equation-language front end is FF's.
 
 <a id="wald-1974"></a>
 

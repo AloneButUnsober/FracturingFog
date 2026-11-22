@@ -1839,6 +1839,43 @@ translated; Ctrl+. converts it to the equation language.
   Bail if    stop early when true, e.g. abs(z - prev) < 0.0001
              (converge: Newton / Magnet / Nova)
 
+=== Real 2D Newton basins (Newton Φ) ===
+
+Fill 'Newton Φ' with a real potential Φ(x, y) and the User Equation
+stops being an escape-time map. The equation box is then ignored.
+Each pixel (x across, y up) runs multivariate Newton-Raphson on
+∇Φ = 0:
+
+  (x, y) ← (x, y) − H⁻¹ ∇Φ        H = the Hessian of Φ
+
+FF works out ∇Φ and H symbolically from what you type. You never
+write a derivative. A start converges when a step is shorter than
+1e-12. It is coloured by the root it ends within 1e-6 of. Starts that
+never converge take the interior colour. Iterations cap the Newton
+steps. Newton and billiard themes colour the roots themselves. Any
+other theme uses the Okabe-Ito root colours, darkened by the steps
+taken. This is the same colouring as the Three-Body Lagrange view.
+
+  Roots   'x, y; x, y; ...', in colour order. Listed roots keep
+          their colours while you pan. Leave it blank and FF finds
+          the roots from a coarse 48 x 27 pass over the frame,
+          sorted by x then y. Those colours can change as the frame
+          moves.
+
+The language is the real one used by User Potential: x, y,
+numbers, + - * / ^, sqrt, exp, log, sin, cos, tan, the hyperbolic
+and inverse functions, pow, abs, min, max and 'let a = ... in ...'.
+Double precision only. Both fields reach the batch as --param
+UserEquationPotential=... and --param UserEquationNewtonRoots=....
+
+The preset 'User Equation - Lagrange Basins (Newton on a
+potential)' rebuilds 'Three-Body - Lagrange Basins'. Its Φ is the
+equal-mass rotating-frame potential, and its roots are L1-L5 in
+Three-Body order. Two simpler fields to try:
+
+  (x^2 - 1)^2 + y^2               two minima and a saddle
+  x^3 - 3*x*y^2 - 0.5*x           a monkey-saddle family
+
 === Examples — Drop-in Snippets ===
 
 Each block below is a complete equation — paste it into the editor.
