@@ -251,6 +251,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _bhMass2 = _p.BlackHoleMass2;
         _bhSeparation = _p.BlackHoleSeparation;
         _bhCustom = _p.BlackHoleCustom;
+        _bhLens = _p.BlackHoleLensSource ?? ""; _bhLensCapture = _p.BlackHoleLensCapture;
         _bhDistance = _p.BlackHoleCameraDistance;
         _bhInclination = _p.BlackHoleInclination;
         _bhAzimuth = _p.BlackHoleAzimuth;
@@ -2319,12 +2320,53 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     /// <summary>Which layout controls apply (the panel hides the rest).</summary>
     public bool BhUsesMass2 => _bhLayout == BlackHoleLayout.Binary;
     public bool BhUsesSeparation => _bhLayout is BlackHoleLayout.Binary or BlackHoleLayout.Triangle or BlackHoleLayout.Square;
-    public bool BhUsesMass1 => _bhLayout != BlackHoleLayout.Custom;
-    public bool BhIsCustom => _bhLayout == BlackHoleLayout.Custom;
+    public bool BhUsesMass1 => _bhLayout is not (BlackHoleLayout.Custom or BlackHoleLayout.UserLens);
+    /// <summary>The holes text box: Custom, and UserLens (#1995: its capture spheres).</summary>
+    public bool BhIsCustom => _bhLayout is BlackHoleLayout.Custom or BlackHoleLayout.UserLens;
+    /// <summary>#1995 — the User Lens controls.</summary>
+    public bool BhIsUserLens => IsBlackHoleShadow && _bhLayout == BlackHoleLayout.UserLens;
     private void BhLayoutChanged()
     {
-        foreach (var n in new[] { nameof(BhUsesMass2), nameof(BhUsesSeparation), nameof(BhUsesMass1), nameof(BhIsCustom) })
+        foreach (var n in new[] { nameof(BhUsesMass2), nameof(BhUsesSeparation), nameof(BhUsesMass1), nameof(BhIsCustom), nameof(BhIsUserLens), nameof(BhLensStatus) })
             this.RaisePropertyChanged(n);
+    }
+
+    // ── #1995 — User Lens ──
+    private string _bhLens = "";
+    private double _bhLensCapture;
+    public string BlackHoleLensSource
+    {
+        get => _bhLens;
+        set { Set(ref _bhLens, value ?? ""); _p.BlackHoleLensSource = _bhLens; this.RaisePropertyChanged(nameof(BhLensStatus)); Fire(); }
+    }
+    public double BlackHoleLensCapture { get => _bhLensCapture; set { Set(ref _bhLensCapture, Clamp(value, 0.0, 1e6)); _p.BlackHoleLensCapture = _bhLensCapture; Fire(); } }
+    /// <summary>#1995 — the lens's parse error, or whether it is harmonic (a vacuum Majumdar-Papapetrou
+    /// spacetime) or only an optical medium: ∇²U from its symbolic second derivatives, sampled on a
+    /// grid of points away from the listed holes.</summary>
+    public string BhLensStatus
+    {
+        get
+        {
+            if (!FracturingFog.Models.RealExpression.TryParse(_bhLens, new[] { "x", "y", "z" }, out var u, out var err)) return "U: " + err;
+            var lap = u!.Laplacian().Compile();
+            double worst = 0;
+            int n = 0;
+            var v = new double[3];
+            for (double x = -3.3; x <= 3.3; x += 1.1)
+                for (double y = -3.3; y <= 3.3; y += 1.1)
+                    for (double z = -3.3; z <= 3.3; z += 1.1)
+                    {
+                        v[0] = x + 0.137; v[1] = y + 0.071; v[2] = z + 0.093;   // off the axes and the usual hole sites
+                        double l = lap(v), uu = u.Eval(v);
+                        if (!double.IsFinite(l) || !double.IsFinite(uu)) continue;
+                        worst = Math.Max(worst, Math.Abs(l) / Math.Max(1.0, Math.Abs(uu)));
+                        n++;
+                    }
+            if (n == 0) return "";
+            return worst < 1e-8
+                ? "Harmonic (lap U = 0 at the sample points): a vacuum Majumdar-Papapetrou spacetime."
+                : $"Not harmonic (|lap U| up to {worst:0.###E+0}): an optical medium for the rays, not a solution of Einstein's equations.";
+        }
     }
     private double _bhMass1;
     public double BlackHoleMass1 { get => _bhMass1; set { Set(ref _bhMass1, Clamp(value, 0.001, 100.0)); _p.BlackHoleMass1 = _bhMass1; Fire(); } }

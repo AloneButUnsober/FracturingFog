@@ -6349,6 +6349,26 @@ the shadow edges are fractal.
   Triangle  Three equal holes, side a.
   Square    Four equal holes, side a.
   Custom    Up to four holes as x,y,z,m;x,y,z,m;...
+  UserLens  Your own field U(x, y, z) (below).
+
+=== User Lens ===
+
+Write U(x, y, z) in the equation language (as User Equations). The
+rays follow U and its exact gradient (derived from the formula),
+so everything above works: fates, colourings, skies, cameras, AA.
+The Holes box lists capture spheres (x,y,z,m: a ray is caught
+inside capture fraction x m); they also set the step size and the
+winding / closest-approach channels. 'Capture when U >' also
+catches rays where U passes a value (0 = off). A user lens traces
+on the CPU, without the double-double edge pass.
+
+Honesty: only a HARMONIC U (lap U = 0 away from its sources, with
+U -> 1 far away), such as 1 + a sum of m / distance, is a
+Majumdar-Papapetrou black hole spacetime. Any other U is still a
+well-defined lens for the rays (an optical medium with refractive
+index U squared, the picture Trettel 2025 uses), but it is not a
+solution of Einstein's equations. The panel checks lap U from the
+formula and says which.
 
 === Colouring ===
 
@@ -6392,6 +6412,9 @@ double-double; the status bar shows how many. Those rays are slow.
   Black Hole Shadow - Triangle of Three
   Black Hole Shadow - Inclined Camera
   Black Hole Shadow - Lensed Starfield     Pinhole camera, stars.
+  Black Hole Shadow - User Lens Pair       The pair written as U.
+  Black Hole Shadow - User Lens Ring       Eight holes on a circle.
+  Black Hole Shadow - Smooth Lens          No horizon: caustics only.
 
 Bound animations:
   'Black hole: closing pair'   separation

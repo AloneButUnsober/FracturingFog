@@ -501,6 +501,17 @@ namespace FracturingFog.Models
             throw new ArgumentException("Unknown variable " + variable);
         }
 
+        /// <summary>#1995 — the sum of this and <paramref name="other"/> (same variables).</summary>
+        public RealExpression Plus(RealExpression other) => new(Source + " + " + other.Source, Variables, R.Add(Root, other.Root));
+
+        /// <summary>#1995 — the symbolic Laplacian: the sum of the second partials over every variable.</summary>
+        public RealExpression Laplacian()
+        {
+            RNode sum = R.Zero;
+            for (int k = 0; k < Variables.Count; k++) sum = R.Add(sum, Root.D(k).D(k));
+            return new RealExpression("lap(" + Source + ")", Variables, sum);
+        }
+
         /// <summary>Interpreted value at <paramref name="values"/> (variables in order).</summary>
         public double Eval(ReadOnlySpan<double> values) => Root.Eval(values);
 

@@ -367,6 +367,8 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   The paper states no numerical capture rule; FF's (capture inside a fraction of the mass, well inside
   the photon sphere) is its own choice. #1925 keeps the planar congruence as the default
   `Parallel` projection and adds a `Pinhole` one for lensed skies (FF's addition, not the paper's).
+  #1995 (User Lens) runs the same Hamiltonian (their Eq. 6 form) with a user-written U and its symbolic
+  gradient (`Engine/Scattering/UserLens.cs`).
 
 <a id="yumoto-2012"></a>
 
@@ -425,7 +427,8 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   (Majumdar–Papapetrou) black holes, their shadows included, in real time by treating their light as rays
   in flat space with refractive index n = U². The closest prior art to `BlackHoleShadow` found by the
   #1928 search: FF does not use the optical analogy (it integrates the Hamiltonian of Shipley & Dolan
-  directly). Named in the help page.
+  directly). Named in the help page. #1995 (User Lens) cites the n = U² picture in its help and panel to
+  explain what a non-harmonic user U is: an optical medium for the rays, not a spacetime.
 
 <a id="aguirre-vallejo-sanjuan-2001"></a>
 

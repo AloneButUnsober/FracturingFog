@@ -1430,8 +1430,17 @@ namespace FracturingFog.Models
         public double BlackHoleMass2 { get; set; } = 1.0;
         /// <summary>Coordinate separation a (Binary) / polygon side (Triangle, Square). Default 2 (Shipley &amp; Dolan's default).</summary>
         public double BlackHoleSeparation { get; set; } = 2.0;
-        /// <summary>Custom holes "x,y,z,m;..." (up to four), used by the Custom layout.</summary>
+        /// <summary>Custom holes "x,y,z,m;..." (up to four), used by the Custom layout, and by the UserLens
+        /// layout (#1995) as its capture spheres.</summary>
         public string BlackHoleCustom { get; set; } = string.Empty;
+        /// <summary>#1995 — the UserLens layout's field U(x, y, z) (equation language). Default: the default
+        /// binary's U, 1 + 1/|x - (0,0,1)| + 1/|x - (0,0,-1)|.</summary>
+        public string BlackHoleLensSource { get; set; } = BlackHoleLensDefaultSource;
+        /// <summary>#1995 — the default lens: the default binary written as U.</summary>
+        public const string BlackHoleLensDefaultSource = "1 + 1/sqrt(x^2 + y^2 + (z - 1)^2) + 1/sqrt(x^2 + y^2 + (z + 1)^2)";
+        /// <summary>#1995 — UserLens capture threshold: a ray is captured where U exceeds it (0 = off, capture only
+        /// by the listed holes). Default 0.</summary>
+        public double BlackHoleLensCapture { get; set; }
         /// <summary>Distance of the launch plane (distant camera) from the origin. Default 50 (Shipley &amp; Dolan's r_max).
         /// Raised to at least 10 and 4x the hole extent.</summary>
         public double BlackHoleCameraDistance { get; set; } = 50.0;
@@ -2728,6 +2737,8 @@ namespace FracturingFog.Models
                 BlackHoleMass2 = BlackHoleMass2,
                 BlackHoleSeparation = BlackHoleSeparation,
                 BlackHoleCustom = BlackHoleCustom,
+                BlackHoleLensSource = BlackHoleLensSource,
+                BlackHoleLensCapture = BlackHoleLensCapture,
                 BlackHoleCameraDistance = BlackHoleCameraDistance,
                 BlackHoleInclination = BlackHoleInclination,
                 BlackHoleAzimuth = BlackHoleAzimuth,

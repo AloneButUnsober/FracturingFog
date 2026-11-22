@@ -796,6 +796,9 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? BlackHoleMass2 { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? BlackHoleSeparation { get; set; }
         [JsonIgnore(Condition = OmitNull)] public string? BlackHoleCustom { get; set; }
+        // #1995 — User Lens (only with the UserLens layout).
+        [JsonIgnore(Condition = OmitNull)] public string? BlackHoleLensSource { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BlackHoleLensCapture { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? BlackHoleCameraDistance { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? BlackHoleInclination { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? BlackHoleAzimuth { get; set; }
@@ -1433,8 +1436,10 @@ namespace FracturingFog.Models
                     BlackHoleMass1 = p.BlackHoleMass1,
                     BlackHoleMass2 = p.BlackHoleMass2,
                     BlackHoleSeparation = p.BlackHoleSeparation,
-                    BlackHoleCustom = p.BlackHoleLayout == FracturingFog.BlackHoleLayout.Custom
+                    BlackHoleCustom = p.BlackHoleLayout is FracturingFog.BlackHoleLayout.Custom or FracturingFog.BlackHoleLayout.UserLens
                                       && !string.IsNullOrWhiteSpace(p.BlackHoleCustom) ? p.BlackHoleCustom : null,
+                    BlackHoleLensSource = p.BlackHoleLayout == FracturingFog.BlackHoleLayout.UserLens ? p.BlackHoleLensSource ?? "" : null,
+                    BlackHoleLensCapture = p.BlackHoleLayout == FracturingFog.BlackHoleLayout.UserLens ? p.BlackHoleLensCapture : null,
                     BlackHoleCameraDistance = p.BlackHoleCameraDistance,
                     BlackHoleInclination = p.BlackHoleInclination,
                     BlackHoleAzimuth = p.BlackHoleAzimuth,
@@ -2599,6 +2604,8 @@ namespace FracturingFog.Models
             if (BlackHoleMass2.HasValue)          p.BlackHoleMass2 = BlackHoleMass2.Value;
             if (BlackHoleSeparation.HasValue)     p.BlackHoleSeparation = BlackHoleSeparation.Value;
             if (BlackHoleCustom != null)          p.BlackHoleCustom = BlackHoleCustom;
+            if (BlackHoleLensSource != null)      p.BlackHoleLensSource = BlackHoleLensSource;   // #1995
+            if (BlackHoleLensCapture.HasValue)    p.BlackHoleLensCapture = BlackHoleLensCapture.Value;
             if (BlackHoleCameraDistance.HasValue) p.BlackHoleCameraDistance = BlackHoleCameraDistance.Value;
             if (BlackHoleInclination.HasValue)    p.BlackHoleInclination = BlackHoleInclination.Value;
             if (BlackHoleAzimuth.HasValue)        p.BlackHoleAzimuth = BlackHoleAzimuth.Value;
@@ -4076,6 +4083,65 @@ namespace FracturingFog.Models
                     BlackHoleProjection = (int)FracturingFog.BlackHoleProjection.Pinhole,
                     BlackHoleSky = (int)FracturingFog.BlackHoleSky.Stars,
                     BlackHoleSkySeed = 1, BlackHoleSkyRotation = 0.0,
+                },
+            },
+            // #1995 — User Lens: the built-in pair written as U (parity), a ring of eight holes, and a
+            // smooth (non-harmonic) lens.
+            new()
+            {
+                Name          = "Black Hole Shadow - User Lens Pair",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.14,
+                Iterations    =  256,
+                Description   = "The equal-mass pair written as a user lens, U = 1 + 1/|x - (0,0,1)| + 1/|x - (0,0,-1)|, with the two holes listed as capture spheres. FF traces the rays with this U and its exact gradient, so the picture is the built-in Equal-Mass Pair. Edit U to make your own spacetime or lens.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.BlackHoleShadow,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    BlackHoleLayout = (int)FracturingFog.BlackHoleLayout.UserLens,
+                    BlackHoleLensSource = FractalParameters.BlackHoleLensDefaultSource, BlackHoleLensCapture = 0.0,
+                    BlackHoleCustom = "0,0,1,1;0,0,-1,1",
+                    BlackHoleCameraDistance = 50.0, BlackHoleInclination = 90.0, BlackHoleAzimuth = 0.0,
+                },
+            },
+            new()
+            {
+                Name          = "Black Hole Shadow - User Lens Ring",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.14,
+                Iterations    =  256,
+                Description   = "Eight small extremal holes (mass 0.25 each) evenly spaced on a circle of radius 2, written as one U (a sum of point sources, so still a vacuum Majumdar-Papapetrou spacetime), seen 60 degrees from the axis. Rays are captured where U passes 6. A discrete stand-in for a ring of mass; compare the Black Hole + Ring family.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.BlackHoleShadow,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    BlackHoleLayout = (int)FracturingFog.BlackHoleLayout.UserLens,
+                    BlackHoleLensSource = "1 + 0.25*(1/sqrt((x - 2.0)^2 + y^2 + z^2) + 1/sqrt((x - 1.414213562373)^2 + (y - 1.414213562373)^2 + z^2) + 1/sqrt(x^2 + (y - 2.0)^2 + z^2) + 1/sqrt((x + 1.414213562373)^2 + (y - 1.414213562373)^2 + z^2) + 1/sqrt((x + 2.0)^2 + y^2 + z^2) + 1/sqrt((x + 1.414213562373)^2 + (y + 1.414213562373)^2 + z^2) + 1/sqrt(x^2 + (y + 2.0)^2 + z^2) + 1/sqrt((x - 1.414213562373)^2 + (y + 1.414213562373)^2 + z^2))", BlackHoleLensCapture = 6.0,
+                    BlackHoleCameraDistance = 50.0, BlackHoleInclination = 60.0, BlackHoleAzimuth = 0.0,
+                },
+            },
+            new()
+            {
+                Name          = "Black Hole Shadow - Smooth Lens",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.3,
+                Iterations    =  256,
+                Description   = "A smooth bump, U = 1 + 1.5 exp(-|x|^2 / 2), in front of a checker sky. It has no horizon, so nothing is captured: there is no shadow, only lensing, with the sky folded over itself along caustics. This U is not harmonic, so it is an optical medium for the rays, not a black hole spacetime.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.BlackHoleShadow,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    BlackHoleLayout = (int)FracturingFog.BlackHoleLayout.UserLens,
+                    BlackHoleLensSource = "1 + 1.5*exp(-(x^2 + y^2 + z^2)/2)", BlackHoleLensCapture = 0.0,
+                    BlackHoleCameraDistance = 30.0, BlackHoleInclination = 90.0, BlackHoleAzimuth = 0.0,
+                    BlackHoleProjection = (int)FracturingFog.BlackHoleProjection.Pinhole,
+                    BlackHoleSky = (int)FracturingFog.BlackHoleSky.Checker, BlackHoleSkyDivisions = 16,
                 },
             },
             // #1942 — Hénon-Heiles exit basins (Aguirre, Vallejo & Sanjuán 2001).

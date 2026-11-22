@@ -1320,7 +1320,7 @@ namespace FracturingFog
     /// mass M1 (extremal Reissner-Nordström). <see cref="Triangle"/> / <see cref="Square"/>:
     /// equal masses M1 at the corners of a regular polygon of side a in the x-z plane.
     /// <see cref="Custom"/>: <c>BlackHoleCustom</c> = "x,y,z,m;..." (up to four holes).</summary>
-    public enum BlackHoleLayout { Binary, Single, Triangle, Square, Custom }
+    public enum BlackHoleLayout { Binary, Single, Triangle, Square, Custom, UserLens }
 
     /// <summary>What colours a <see cref="FractalType.BlackHoleShadow"/> pixel (#1924).
     /// <see cref="Fate"/> (default): which hole caught the ray, escaped rays by time delay.

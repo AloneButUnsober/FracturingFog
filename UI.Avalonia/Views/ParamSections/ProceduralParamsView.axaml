@@ -1432,6 +1432,22 @@
         </Grid>
 
         <!-- #1923 — black hole shadows (Majumdar-Papapetrou). -->
+        <!-- #1995 — User Lens (black hole shadows, layout UserLens). -->
+        <Grid IsVisible="{Binding BhIsUserLens}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="U(x, y, z):" VerticalAlignment="Center" />
+            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding BlackHoleLensSource, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                     FontFamily="Consolas,Menlo,monospace" Margin="0,2" TextWrapping="Wrap"
+                     ToolTip.Tip="The lens field U in the equation language (reads x, y, z). The rays use U and its exact gradient. Press Tab or click away to apply." />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding BhLensStatus}" TextWrapping="Wrap" FontSize="11" Margin="0,2"
+                       ToolTip.Tip="Only a harmonic U (lap U = 0 away from its sources) is a Majumdar-Papapetrou black hole spacetime; any other U is an optical medium (refractive index U squared)." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Capture when U >" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="1000000" Increment="1" FormatString="0.##########"
+                           Value="{Binding BlackHoleLensCapture, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="0: capture only inside the listed holes (Holes box below). Above 0: a ray is also captured where U exceeds this." />
+            <TextBlock Grid.Row="3" Grid.Column="1"
+                       Text="The Holes box lists capture spheres (x,y,z,m: capture inside the capture fraction times m); they also set the step size and the winding / closest-approach channels."
+                       TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,2" />
+        </Grid>
         <Grid IsVisible="{Binding IsBlackHoleShadow}"
               ColumnDefinitions="160,*"
               RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">

@@ -26,6 +26,11 @@
 // ray's impact parameter (Shipley & Dolan §III.2: a planar null congruence through a
 // surface centred at distance r_max, typically 50M; θ measured from the -z axis). The
 // celestial coordinates of Yumoto et al. (Eq. 12) are the D → ∞ limit of (u, v).
+//
+// #1995 — User Lens: with a UserLensModel, U and ∇U come from the user's formula (symbolic
+// gradient, UserLens.cs) instead of the hole sum; the listed holes still give the capture
+// spheres, the step cap and the channels, and an optional U threshold captures rays where
+// U exceeds it (body = the nearest hole).
 
 using System;
 using System.Runtime.CompilerServices;
@@ -50,12 +55,18 @@ public struct MpNullSystem : IScatteringSystem
     private readonly double _x2, _y2, _z2, _m2, _c2;
     private readonly double _x3, _y3, _z3, _m3, _c3;
     private readonly double _escape2;
+    // #1995 — a user lens (null: the hole sum) and its capture threshold on U (0: off).
+    private readonly UserLensModel? _lens;
+    private readonly double _lensCapture;
 
     /// <summary>∫ (U² - 1) dλ: coordinate-time delay over flat space (t grows as U² per λ).</summary>
     public double Delay;
 
-    public MpNullSystem(ReadOnlySpan<MpHole> holes, double captureFraction, double escapeRadius)
+    public MpNullSystem(ReadOnlySpan<MpHole> holes, double captureFraction, double escapeRadius,
+                        UserLensModel? lens = null, double lensCapture = 0.0)
     {
+        _lens = lens is { Error: null } ? lens : null;
+        _lensCapture = double.IsFinite(lensCapture) && lensCapture > 0 ? lensCapture : 0.0;
         _n = Math.Clamp(holes.Length, 1, MaxHoles);
         double cf = Math.Max(1e-6, captureFraction);
         _x0 = _y0 = _z0 = _m0 = _c0 = 0; _x1 = _y1 = _z1 = _m1 = _c1 = 0;
@@ -85,6 +96,7 @@ public struct MpNullSystem : IScatteringSystem
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly double Potential(double x, double y, double z, out double gx, out double gy, out double gz)
     {
+        if (_lens != null) return _lens.Eval(x, y, z, out gx, out gy, out gz);   // #1995
         double u = 1.0; gx = gy = gz = 0.0;
         Add(x - _x0, y - _y0, z - _z0, _m0, ref u, ref gx, ref gy, ref gz);
         if (_n > 1) Add(x - _x1, y - _y1, z - _z1, _m1, ref u, ref gx, ref gy, ref gz);
@@ -152,6 +164,14 @@ public struct MpNullSystem : IScatteringSystem
             if (Dist2(i, x, y, z) < Cap2(i)) { body = i; return ScatterFate.Captured; }
         }
         body = -1;
+        // #1995 — a user lens may capture where U passes its threshold (body: the nearest hole).
+        if (_lensCapture > 0 && !(U(x, y, z) < _lensCapture))
+        {
+            body = 0;
+            double best = Dist2(0, x, y, z);
+            for (int i = 1; i < _n; i++) { double d = Dist2(i, x, y, z); if (d < best) { best = d; body = i; } }
+            return ScatterFate.Captured;
+        }
         double r2 = x * x + y * y + z * z;
         if (r2 > _escape2 && x * s[3] + y * s[4] + z * s[5] > 0.0) return ScatterFate.Escaped;
         return ScatterFate.Running;
@@ -300,6 +320,13 @@ public static class BlackHoleLayouts
                 var c = ParseCustom(p.BlackHoleCustom);
                 if (c.Length > 0) return c;
                 goto default;
+            }
+            case BlackHoleLayout.UserLens:
+            {
+                // #1995 — the listed holes (capture spheres, step cap, channels); none: one
+                // massless marker at the origin (no capture sphere).
+                var c = ParseCustom(p.BlackHoleCustom);
+                return c.Length > 0 ? c : new[] { new MpHole(0, 0, 0, 0) };
             }
             default:
             {
