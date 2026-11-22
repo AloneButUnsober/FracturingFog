@@ -314,6 +314,7 @@ public sealed partial class UserEquationCalculator : IFractalCalculator, IDeepCe
     public void Calculate(CancellationToken ct = default)
     {
         ResetRotationDomain();   // #1984
+        if (TryCalculateRealNewton(ct)) return;   // #1989 — a real potential: Newton basins, not escape time
         // Lazily (re)compile from FractalParameters.UserEquationSource whenever it
         // differs from what is currently compiled — NOT only when nothing is compiled
         // yet. #726 / #327: the relief-field twin (_reliefFieldAltCalc) and preview

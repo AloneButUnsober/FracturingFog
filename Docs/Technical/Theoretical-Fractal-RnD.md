@@ -508,10 +508,15 @@ Symmetry used by the tests: for μ = 1/2 the equations are invariant under the h
 rule, so the fate map is point-symmetric with the crash labels swapped. The two mirror reflections need
 time reversal and do not map forward fates to forward fates, so they are not tested on the map.
 
-**Toolchain gap (recorded, not closed).** A User Equation can write one real 2D Newton step by hand through
-`re(z)` / `im(z)` and an explicit Hessian (non-holomorphic, so interpreter only, no perturbation / DE), and
-*Converge-if* stops it; but there is no built-in real-2D Newton / Jacobian helper and no "which root"
-labelling for more than the final-z colouring, so the Lagrange view is a built-in calculator.
+**Toolchain gap (recorded by #1943, closed by #1989).** A User Equation could write one real 2D Newton step by
+hand through `re(z)` / `im(z)` and an explicit Hessian (non-holomorphic, so interpreter only, no perturbation /
+DE), and *Converge-if* stopped it; but there was no built-in real-2D Newton / Jacobian helper and no "which
+root" labelling for more than the final-z colouring, so the Lagrange view is a built-in calculator.
+#1989 adds the helper: the User Equation **Newton Φ** field takes a real potential Φ(x, y), FF derives ∇Φ and
+the Hessian symbolically (`RealExpression`, as the #1994 User Potential does), runs the same Newton step,
+tolerance and 1e-6 root match as `ThreeBodyScene.Newton`, and colours by index in a root list (listed, or
+discovered from the frame). The preset *User Equation - Lagrange Basins (Newton on a potential)* reproduces
+*Three-Body - Lagrange Basins* pixel for pixel at 192 × 108 (`S1989UserEquationRealNewtonTests`).
 
 #### 2.6.4 Charged particles around a magnetised black hole — **#1944**
 
