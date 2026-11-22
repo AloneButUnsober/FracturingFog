@@ -1263,6 +1263,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>#1549 — the Math Plane section / canvas editor.</summary>
     public MathPlaneSectionViewModel MathPlane { get; }
 
+    /// <summary>#1996 — the family's --param pairs (its region snapshot), set by the host (the
+    /// UI does not reference the Engine's RegionFractalParams).</summary>
+    public Func<FractalType, FracturingFog.Models.FractalParameters, IReadOnlyList<KeyValuePair<string, string>>>? FamilyParamsSerializer { get; set; }
+
     /// <summary>#2000 — the J key: send the launch under the pointer on a Hénon–Heiles, three-body or
     /// magnetised-black-hole view to Math Plane as a trajectory over that family's basins. Returns
     /// false (key not used) on other views.</summary>
@@ -1270,11 +1274,23 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     {
         if (!Main.TryScatterLaunchAtPointer(out var type, out double a, out double b))
         {
-            if (FracturingFog.Models.MathPlaneTrajectory.BackdropOf(Main.SelectedFractalType) == MathPlaneBackdrop.None) return false;
+            if (!MainViewModel.IsPathFamily(Main.SelectedFractalType)) return false;
             Main.SetStatus("Point at the view first, then press J to send that launch's path to Math Plane.");
             return true;
         }
         var vs = Main.ViewState;
+        // #1996 — the 3D families' paths go to Math Plane 3D.
+        if (System.Linq.Enumerable.Contains(FracturingFog.Models.MathPlane3DScene.PathTypes, type))
+        {
+            var keys = FamilyParamsSerializer?.Invoke(type, vs.FractalParameters)
+                       ?? (IReadOnlyList<KeyValuePair<string, string>>)Array.Empty<KeyValuePair<string, string>>();
+            var sent = FracturingFog.Models.MathPlane3DScene.SendPath(type, keys, a, b, vs.FractalParameters.MathPlane3DScene);
+            if (sent is not { } s3) return false;
+            MathPlane3D.ApplySendPath(s3.Scene);
+            Main.SetStatus($"Math Plane 3D: {s3.Name}"
+                + (s3.Dropped.Count > 0 ? $" (not carried: {string.Join(", ", s3.Dropped)})" : "") + ".");
+            return true;
+        }
         var send = FracturingFog.Models.MathPlaneTrajectory.Send(type, vs.FractalParameters, a, b, vs.CenterX, vs.CenterY, vs.Zoom);
         if (send == null)
         {

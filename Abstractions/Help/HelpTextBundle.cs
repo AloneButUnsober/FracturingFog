@@ -5505,6 +5505,22 @@ wheel to zoom, Reset view for the default orbit.
 Export: Export mesh... saves the visible surfaces, as the view
 shows them, as .glb / .gltf (colours) or .stl (for printing).
 
+Scattering paths (#1996): whole 3D paths, traced by the family's
+own code, so each ends in the fate its fractal shows there:
+  geodesic NAME A B [KEY=VALUE ...]           a light ray round the
+      black holes (Black Hole Shadow, image-plane point (A, B)); the
+      holes are drawn as wire spheres of radius m
+  orbit3 NAME spinbinary A B [KEY=VALUE ...]  the binary's relative
+      orbit for spin angles (A, B), its plane precessing
+  orbit3 NAME mixmaster A B [KEY=VALUE ...]   the universe point in
+      (beta+, beta-, Omega), bouncing between the potential walls
+KEY=VALUE are that family's --param keys (e.g. BlackHoleSeparation=1).
+From a Black Hole Shadow, Spinning Binary or Mixmaster view, point
+at a pixel and press J: Math Plane 3D opens with that pixel's path
+(press J again on the family to add more). Settings a statement
+cannot carry (a custom hole list, a user lens) are left out and the
+status bar names them.
+
 Batch: every setting is a --param (MathPlane3DScene=@file keeps
 the quotes from cmd / PowerShell); --math-plane-3d-mesh PATH
 also writes the mesh. Sources: Docs/Resources-Bibliography.md.
