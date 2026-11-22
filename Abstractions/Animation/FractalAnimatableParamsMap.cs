@@ -180,6 +180,9 @@ public static class FractalAnimatableParamsMap
         FractalType.UserHamiltonianBasins
             => _userHamiltonianList,
 
+        FractalType.MicrolensingMap
+            => _microlensingList,
+
         FractalType.BicomplexMandelbrot
             => _bicomplexList,
 
@@ -748,6 +751,14 @@ public static class FractalAnimatableParamsMap
         new("BhRingMass", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 2.0, Notes: "Ring mass / black hole mass: 0 is plain Schwarzschild (integrable)."),
         new("BhRingRadius", AnimatableParamKind.ScalarDouble, Min: 6.0, Max: 40.0, Notes: "Ring radius in units of M."),
         new("BhRingEnergy", AnimatableParamKind.ScalarDouble, Min: 0.9, Max: 1.0, Notes: "Specific energy of the orbits."),
+    };
+
+    // #1948 — microlensing: convergence and shear.
+    private static readonly AnimatableParamDescriptor[] _microlensingList =
+    {
+        new("MicroKappaStars", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 2.0, Notes: "Convergence in stars."),
+        new("MicroKappaSmooth", AnimatableParamKind.ScalarDouble, Min: -1.0, Max: 2.0, Notes: "Smooth convergence."),
+        new("MicroShear", AnimatableParamKind.ScalarDouble, Min: -1.5, Max: 1.5, Notes: "External shear."),
     };
 
     // #1997 — User Hamiltonian: the constraint value and the sector offset.

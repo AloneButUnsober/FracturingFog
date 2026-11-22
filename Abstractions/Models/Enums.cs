@@ -1317,6 +1317,11 @@ namespace FracturingFog
         /// fixed values, one variable solved from H = h0), exits as <see cref="UserPotentialBasins"/>, and an
         /// optional constraint projection. <c>UserHamiltonianCalculator</c>. Tunables: the <c>UserHam*</c> keys.</summary>
         UserHamiltonianBasins,
+        /// <summary>#1948 — gravitational microlensing magnification maps by inverse ray shooting (Kayser,
+        /// Refsdal &amp; Stabell 1986): a field of point-mass lenses with smooth convergence and shear; rays shot
+        /// through the lens plane are counted per source-plane pixel. NOT a fractal (caustic networks).
+        /// <c>MicrolensingCalculator</c>. Tunables: the <c>Micro*</c> keys.</summary>
+        MicrolensingMap,
     }
 
     /// <summary>Hole layout of <see cref="FractalType.BlackHoleShadow"/> (#1923).
@@ -1428,6 +1433,13 @@ namespace FracturingFog
     /// <summary>Launch space of <see cref="FractalType.UserPotentialBasins"/> (#1994), as
     /// <see cref="HenonHeilesView"/>: Plane (pixel = position) or Section (pixel = (y, vy) on x = 0).</summary>
     public enum UserPotentialView { Plane, Section }
+
+    /// <summary>#1948 — the lens of <see cref="FractalType.MicrolensingMap"/>: a star field, or one
+    /// unit-mass lens at the origin (the analytic check case).</summary>
+    public enum MicrolensLayout { Field, Single }
+
+    /// <summary>#1948 — star masses: all 1, or uniform in [MicroMassMin, 1].</summary>
+    public enum MicrolensMassFunction { Equal, UniformRange }
 
     public enum RenderProfile { Preview, Final }
 
@@ -1595,6 +1607,7 @@ namespace FracturingFog
             FractalType.BlackHoleRingOrbits => FractalCapabilities.None,
             FractalType.UserPotentialBasins => FractalCapabilities.None,
             FractalType.UserHamiltonianBasins => FractalCapabilities.None,
+            FractalType.MicrolensingMap => FractalCapabilities.None,
 
             // #1713 — Math Plane 3D draws its own colours (a diagram, no per-pixel data).
             FractalType.MathPlane3D => FractalCapabilities.None,

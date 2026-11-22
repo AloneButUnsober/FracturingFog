@@ -313,6 +313,9 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _uhSource = _p.UserHamSource ?? ""; _uhN = _p.UserHamDimension; _uhA = _p.UserHamAxisA ?? ""; _uhB = _p.UserHamAxisB ?? "";
         _uhFixed = _p.UserHamFixed ?? ""; _uhSolve = _p.UserHamSolveFor ?? ""; _uhSign = _p.UserHamSolveSign; _uhE = _p.UserHamEnergy;
         _uhRadius = _p.UserHamExitRadius; _uhSectors = _p.UserHamSectors; _uhOffset = _p.UserHamSectorOffset; _uhExitIf = _p.UserHamExitIf ?? "";
+        _mlLayout = _p.MicroLayout; _mlKs = _p.MicroKappaStars; _mlKc = _p.MicroKappaSmooth; _mlG = _p.MicroShear;
+        _mlR = _p.MicroFieldRadius; _mlSeed = _p.MicroSeed; _mlMass = _p.MicroMassFunction; _mlMin = _p.MicroMassMin;
+        _mlRpp = _p.MicroRaysPerPixel; _mlPad = _p.MicroPad; _mlScale = _p.MicroColourScale;
         _uhMaxTime = _p.UserHamMaxTime; _uhTol = _p.UserHamTolerance; _uhMaxStep = _p.UserHamMaxStep; _uhProject = _p.UserHamProjectEvery;
         _mathPlaneScene = _p.MathPlaneScene ?? string.Empty;
         UpdateMathPlaneSceneError();
@@ -545,6 +548,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsBlackHoleRingOrbits => FractalType == FractalType.BlackHoleRingOrbits;   // #1947
     public bool IsUserPotentialBasins => FractalType == FractalType.UserPotentialBasins;   // #1994
     public bool IsUserHamiltonianBasins => FractalType == FractalType.UserHamiltonianBasins;   // #1997
+    public bool IsMicrolensingMap => FractalType == FractalType.MicrolensingMap;   // #1948
     /// <summary>Either billiard type: the shared scene controls (geometry, disks, bounces).</summary>
     public bool IsBilliardScene => IsChaoticBilliard || IsBilliardRays;
     /// <summary>#1548 — Math Plane (Cartesian plotter).</summary>
@@ -699,7 +703,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         // Spinning binaries — orbit count height field (#1945).
         || IsSpinningBinaryBasins
         // Mixmaster — log arc length height field (#1946).
-        || IsMixmasterBasins || IsUserPotentialBasins || IsUserHamiltonianBasins
+        || IsMixmasterBasins || IsUserPotentialBasins || IsUserHamiltonianBasins || IsMicrolensingMap
         // Precision field — divergence-scalar height field (#628).
         || IsPrecisionField
         // Dual-orbit escape-geometry (#864) — the derived scalar rides the
@@ -722,7 +726,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsLyapunov || IsTranscendentalJulia || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian || IsMirrorSpheres
-          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsBlackHoleShadow || IsHenonHeilesBasins || IsThreeBodyBasins || IsMagnetisedBlackHole || IsSpinningBinaryBasins || IsMixmasterBasins || IsBlackHoleRingOrbits || IsUserPotentialBasins || IsUserHamiltonianBasins || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable || IsAdaptiveAa2D
+          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsBlackHoleShadow || IsHenonHeilesBasins || IsThreeBodyBasins || IsMagnetisedBlackHole || IsSpinningBinaryBasins || IsMixmasterBasins || IsBlackHoleRingOrbits || IsUserPotentialBasins || IsUserHamiltonianBasins || IsMicrolensingMap || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable || IsAdaptiveAa2D
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -2576,6 +2580,28 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         set { if (double.IsFinite(value)) MixMaxTime = Math.Pow(10.0, Clamp(value, 0.0, 300.0)); }
     }
     public double MixTolerance { get => _mxTol; set { Set(ref _mxTol, Clamp(value, 1e-13, 1e-3)); _p.MixTolerance = _mxTol; Fire(); } }
+
+    // ── #1948 — microlensing ─────────────────────────────────────────────────
+    private MicrolensLayout _mlLayout;
+    private MicrolensMassFunction _mlMass;
+    private double _mlKs, _mlKc, _mlG, _mlR, _mlMin, _mlRpp, _mlPad, _mlScale;
+    private int _mlSeed;
+    public MicrolensLayout MicroLayout { get => _mlLayout; set { Set(ref _mlLayout, value); _p.MicroLayout = value; this.RaisePropertyChanged(nameof(MicroIsField)); Fire(); } }
+    public System.Array MicroLayouts => s_MicroLayouts;
+    private static readonly System.Array s_MicroLayouts = System.Enum.GetValues(typeof(MicrolensLayout));
+    public bool MicroIsField => _mlLayout == MicrolensLayout.Field;
+    public MicrolensMassFunction MicroMassFunction { get => _mlMass; set { Set(ref _mlMass, value); _p.MicroMassFunction = value; Fire(); } }
+    public System.Array MicroMassFunctions => s_MicroMassFunctions;
+    private static readonly System.Array s_MicroMassFunctions = System.Enum.GetValues(typeof(MicrolensMassFunction));
+    public double MicroKappaStars { get => _mlKs; set { Set(ref _mlKs, Clamp(value, 0.0, 5.0)); _p.MicroKappaStars = _mlKs; Fire(); } }
+    public double MicroKappaSmooth { get => _mlKc; set { Set(ref _mlKc, Clamp(value, -5.0, 5.0)); _p.MicroKappaSmooth = _mlKc; Fire(); } }
+    public double MicroShear { get => _mlG; set { Set(ref _mlG, Clamp(value, -5.0, 5.0)); _p.MicroShear = _mlG; Fire(); } }
+    public double MicroFieldRadius { get => _mlR; set { Set(ref _mlR, Clamp(value, 1.0, 200.0)); _p.MicroFieldRadius = _mlR; Fire(); } }
+    public int MicroSeed { get => _mlSeed; set { Set(ref _mlSeed, value); _p.MicroSeed = value; Fire(); } }
+    public double MicroMassMin { get => _mlMin; set { Set(ref _mlMin, Clamp(value, 0.001, 1.0)); _p.MicroMassMin = _mlMin; Fire(); } }
+    public double MicroRaysPerPixel { get => _mlRpp; set { Set(ref _mlRpp, Clamp(value, 0.01, 10000.0)); _p.MicroRaysPerPixel = _mlRpp; Fire(); } }
+    public double MicroPad { get => _mlPad; set { Set(ref _mlPad, Clamp(value, 0.0, 100.0)); _p.MicroPad = _mlPad; Fire(); } }
+    public double MicroColourScale { get => _mlScale; set { Set(ref _mlScale, Clamp(value, 0.01, 100.0)); _p.MicroColourScale = _mlScale; Fire(); } }
 
     // ── #1997 — User Hamiltonian ─────────────────────────────────────────────
     private string _uhSource = "", _uhA = "", _uhB = "", _uhFixed = "", _uhSolve = "", _uhExitIf = "";

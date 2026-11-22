@@ -5620,6 +5620,58 @@ and the camera is Cam3DFamily=MirrorSpheres with Cam3DDistance /
 Cam3DTheta / Cam3DPhi.
 ";
 
+        /// <summary>#1948 — microlensing magnification maps (Math → Scattering).</summary>
+        public const string MathMicrolensingText =
+@"=== Microlensing Map ===
+
+What a distant source looks like through a galaxy's stars. Light
+from a quasar passing a lensing galaxy is bent by thousands of
+stars; as the source moves behind them its brightness flickers.
+This map shows the magnification for every source position.
+
+It is NOT a fractal. The bright curves (caustics, where the lens
+folds the sky) are smooth between their sharp cusps, without the
+self-similar detail of the other families here. It sits with them
+because it is the same kind of picture: light, lenses, and many
+rays counted per pixel.
+
+How it is made (inverse ray shooting, Kayser, Refsdal & Stabell
+1986): a dense grid of rays is shot through the lens plane, each
+ray is bent by every star, and the rays landing in each pixel of
+the source plane are counted. More rays than an unlensed pixel
+would get = brighter. The view is the source plane; panning or
+zooming shoots again.
+
+Settings (lengths in Einstein radii of a unit-mass star):
+  Layout          Field (a disc of stars) or Single (one lens)
+  Kappa stars     how densely the stars cover the sky
+  Kappa smooth    smooth matter (dark matter, gas)
+  Shear           the galaxy's tidal stretch, along the axes
+  Field radius    size of the star disc (keep it beyond the view)
+  Masses          equal, or spread between Min mass and 1
+  Rays per pixel  accuracy vs time (noise falls as 1/sqrt)
+  Pad             extra lens-plane margin shot round the view; rays
+                  stars scatter in from beyond it are lost, so the map
+                  reads a little low (about 13% at pad 2, 4% at 6)
+
+Checks the status bar shows: the frame's mean magnification against
+the theory 1 / ((1 - kappa)^2 - shear^2) (Schneider, Ehlers & Falco
+1992), kappa = kappa stars + kappa smooth; they agree over a large
+view inside the star field. A Single lens follows Paczynski's
+A(u) = (u^2 + 2) / (u sqrt(u^2 + 4)) (1986).
+
+Presets:
+  Microlensing - Caustic Network          stars + shear
+  Microlensing - Single Lens              one point mass
+  Microlensing - Single Lens with Shear   a four-cusped caustic
+  Microlensing - Mixed Masses             masses 0.1 to 1
+Animation: Microlensing: shear.
+
+Batch: every setting is a --param Micro* key, e.g.
+  --param MicroKappaStars=0.5 --param MicroShear=0.2
+Sources: Docs/Resources-Bibliography.md.
+";
+
         /// <summary>#1997 — General User Hamiltonian (Math → Scattering).</summary>
         public const string MathUserHamiltonianText =
 @"=== User Hamiltonian ===

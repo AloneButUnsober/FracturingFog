@@ -157,6 +157,7 @@ namespace FracturingFog.Models
             {FractalType.BlackHoleRingOrbits, "Black Hole + Ring Orbits" },
             {FractalType.UserPotentialBasins, "User Potential" },
             {FractalType.UserHamiltonianBasins, "User Hamiltonian" },
+            {FractalType.MicrolensingMap, "Microlensing Map" },
             {FractalType.SlitCascade, "Slit Cascade" },
             {FractalType.TalbotCarpet, "Talbot Carpet" },
             {FractalType.MathPlane, "Math Plane" },

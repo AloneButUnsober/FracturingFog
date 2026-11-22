@@ -489,6 +489,20 @@ namespace FracturingFog.Models
                 Tags = new List<string> { "2D", "cosmology" },
             };
 
+            // #1948 — microlensing. Every frame shoots its rays again.
+            yield return new AnimationData
+            {
+                Name = "Microlensing: shear",
+                Category = "Built-in",
+                Description = "Swings the external shear between -0.3 and 0.3: the caustic network stretches one way, relaxes and stretches the other.",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.MicrolensingMap },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "MicroShear", Mode = AnimationMode.Sine, Min = -0.3, Max = 0.3, FrequencyHz = 0.04, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "lensing" },
+            };
+
             // #1997 — User Hamiltonian.
             yield return new AnimationData
             {

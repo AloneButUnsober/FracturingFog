@@ -96,6 +96,7 @@ public static class MiniMapDefaults
         FractalType.BlackHoleRingOrbits => new(16.0,  0.0, 0.12), // #1947 r from ~1.5 to ~30 M (BlackHoleRingCalculator.Default*)
         FractalType.UserPotentialBasins => new( 0.0, -0.25, 0.85), // #1994 as Hénon–Heiles (its default V)
         FractalType.UserHamiltonianBasins => new( 0.2,  0.0, 1.6), // #1997 as the Hénon–Heiles section (its default H)
+        FractalType.MicrolensingMap => new( 0.0,  0.0, 0.875), // #1948 about 4 Einstein radii of the source plane
         FractalType.MixmasterBasins  => new( 1.5, -0.5, 3.5),   // #1946 u from 1 to 2, v from 0 to 1 (MixmasterCalculator.Default*)
         FractalType.SpinningBinaryBasins => new( 0.0,  0.0, 0.557), // #1945 θ1 from −π to π
         FractalType.MagnetisedBlackHole => new( 3.2, -1.5, 0.7), // #1944 Kick view: ρ0 to ~5.7, ℰ to ~2.9

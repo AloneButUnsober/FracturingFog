@@ -1683,6 +1683,30 @@ namespace FracturingFog.Models
         /// <summary>#1997 — constraint projection every K steps (0 = off). Default 0.</summary>
         public int UserHamProjectEvery { get; set; } = 0;
 
+        // ── Microlensing (#1948) ─────────────────────────────────────────
+        /// <summary>#1948 — Field (a star field) or Single (one unit-mass lens, the check case). Default Field.</summary>
+        public MicrolensLayout MicroLayout { get; set; } = MicrolensLayout.Field;
+        /// <summary>#1948 — convergence in stars kappa_*. Default 0.4.</summary>
+        public double MicroKappaStars { get; set; } = 0.4;
+        /// <summary>#1948 — smooth convergence kappa_c. Default 0.</summary>
+        public double MicroKappaSmooth { get; set; } = 0.0;
+        /// <summary>#1948 — external shear gamma (along the axes). Default 0.3.</summary>
+        public double MicroShear { get; set; } = 0.3;
+        /// <summary>#1948 — radius of the star disc, Einstein radii. Default 12.</summary>
+        public double MicroFieldRadius { get; set; } = 12.0;
+        /// <summary>#1948 — star positions (and ray jitter) seed. Default 1.</summary>
+        public int MicroSeed { get; set; } = 1;
+        /// <summary>#1948 — Equal masses or uniform in [MicroMassMin, 1]. Default Equal.</summary>
+        public MicrolensMassFunction MicroMassFunction { get; set; } = MicrolensMassFunction.Equal;
+        /// <summary>#1948 — smallest mass of the UniformRange mass function. Default 0.1.</summary>
+        public double MicroMassMin { get; set; } = 0.1;
+        /// <summary>#1948 — rays an unlensed source pixel receives (accuracy vs time). Default 4.</summary>
+        public double MicroRaysPerPixel { get; set; } = 4.0;
+        /// <summary>#1948 — padding of the shooting region around the view's preimage, Einstein radii. Rays scattered in from beyond it are lost (the missing share falls roughly as 1 / pad: about 13% at 2, 4% at 6 for kappa 0.4). Default 4.</summary>
+        public double MicroPad { get; set; } = 4.0;
+        /// <summary>#1948 — palette spread per decade of magnification. Default 1.</summary>
+        public double MicroColourScale { get; set; } = 1.0;
+
         // ── Slit cascade (#1569, double-slit epic #1565) ──────────────────
         /// <summary>Slit cascade: children per slit, N (2..16). N ≥ 3 for the fringe
         /// weights to differ (a symmetric pair is a plain Cantor set).</summary>
@@ -2880,6 +2904,17 @@ namespace FracturingFog.Models
                 UserHamTolerance = UserHamTolerance,
                 UserHamMaxStep = UserHamMaxStep,
                 UserHamProjectEvery = UserHamProjectEvery,
+                MicroLayout = MicroLayout,
+                MicroKappaStars = MicroKappaStars,
+                MicroKappaSmooth = MicroKappaSmooth,
+                MicroShear = MicroShear,
+                MicroFieldRadius = MicroFieldRadius,
+                MicroSeed = MicroSeed,
+                MicroMassFunction = MicroMassFunction,
+                MicroMassMin = MicroMassMin,
+                MicroRaysPerPixel = MicroRaysPerPixel,
+                MicroPad = MicroPad,
+                MicroColourScale = MicroColourScale,
                 SlitCascadeChildren = SlitCascadeChildren,
                 SlitCascadeRatio = SlitCascadeRatio,
                 SlitCascadeDepth = SlitCascadeDepth,

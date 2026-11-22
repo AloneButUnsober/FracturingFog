@@ -663,7 +663,25 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
 
 - **R. Kayser, S. Refsdal, R. Stabell.** Astronomy & Astrophysics 166, 36–52, 1986 (ADS
   1986A&A...166...36K). Introduces inverse ray shooting for microlensing magnification maps. Basis of
-  #1948. **Title not verified.**
+  #1948. **Title not verified.** `MicrolensingMap` (#1948, `Engine/Lensing/Microlensing.cs`) uses the
+  method: rays on a jittered uniform lens-plane grid, mapped by the lens equation, counted per
+  source-plane pixel. The shooting region, star-field set-up and jitter are FF's own choices.
+
+<a id="paczynski-1986"></a>
+
+- **B. Paczyński.** *Gravitational microlensing by the galactic halo.* The Astrophysical Journal 304, 1,
+  1986. DOI [10.1086/164140](https://doi.org/10.1086/164140) (checked against the Crossref record
+  2026-11-22). The point-lens magnification A(u) = (u² + 2) / (u √(u² + 4)) that #1948's Single layout
+  is tested against (`S1948MicrolensingTests`) and that the help and preset name.
+
+<a id="schneider-ehlers-falco-1992"></a>
+
+- **P. Schneider, J. Ehlers, E. E. Falco.** *Gravitational Lenses.* Astronomy and Astrophysics Library,
+  Springer, 1992. DOI [10.1007/978-3-662-03758-4](https://doi.org/10.1007/978-3-662-03758-4) (checked
+  against the Crossref book record 2026-11-22). The
+  dimensionless lens equation of point masses with smooth convergence and external shear, and the mean
+  magnification 1 / ((1 − κ)² − γ²), that #1948 implements and tests; the chapter and equation numbers
+  were not checked.
 
 <a id="cunha-2015"></a>
 
