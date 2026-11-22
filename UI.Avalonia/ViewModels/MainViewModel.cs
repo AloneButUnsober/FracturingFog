@@ -271,6 +271,7 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
         (FractalType.MixmasterBasins,       "Mixmaster Universe (Bianchi IX)"),// #1946
         (FractalType.BlackHoleRingOrbits,   "Black Hole + Ring (Weyl)"),       // #1947
         (FractalType.UserPotentialBasins,   "User Potential (V(x, y))"),       // #1994
+        (FractalType.UserHamiltonianBasins, "User Hamiltonian (H(q, p))"),     // #1997
         (FractalType.SlitCascade,           "Slit Cascade (Double-Slit Diffraction)"),   // #1569
         (FractalType.TalbotCarpet,          "Talbot Carpet (Quantum Carpet)"),           // #1570
         (FractalType.MathPlane,             "Math Plane (Cartesian)"),        // #1548

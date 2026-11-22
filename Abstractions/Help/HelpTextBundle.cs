@@ -5505,6 +5505,22 @@ wheel to zoom, Reset view for the default orbit.
 Export: Export mesh... saves the visible surfaces, as the view
 shows them, as .glb / .gltf (colours) or .stl (for printing).
 
+Scattering paths (#1996): whole 3D paths, traced by the family's
+own code, so each ends in the fate its fractal shows there:
+  geodesic NAME A B [KEY=VALUE ...]           a light ray round the
+      black holes (Black Hole Shadow, image-plane point (A, B)); the
+      holes are drawn as wire spheres of radius m
+  orbit3 NAME spinbinary A B [KEY=VALUE ...]  the binary's relative
+      orbit for spin angles (A, B), its plane precessing
+  orbit3 NAME mixmaster A B [KEY=VALUE ...]   the universe point in
+      (beta+, beta-, Omega), bouncing between the potential walls
+KEY=VALUE are that family's --param keys (e.g. BlackHoleSeparation=1).
+From a Black Hole Shadow, Spinning Binary or Mixmaster view, point
+at a pixel and press J: Math Plane 3D opens with that pixel's path
+(press J again on the family to add more). Settings a statement
+cannot carry (a custom hole list, a user lens) are left out and the
+status bar names them.
+
 Batch: every setting is a --param (MathPlane3DScene=@file keeps
 the quotes from cmd / PowerShell); --math-plane-3d-mesh PATH
 also writes the mesh. Sources: Docs/Resources-Bibliography.md.
@@ -5602,6 +5618,56 @@ On the command line every setting is a --param key, e.g.
   --param ""MirrorSpheresOpeningColors=#D55E00,env,#F2F2F2,#000000""
 and the camera is Cam3DFamily=MirrorSpheres with Cam3DDistance /
 Cam3DTheta / Cam3DPhi.
+";
+
+        /// <summary>#1997 — General User Hamiltonian (Math → Scattering).</summary>
+        public const string MathUserHamiltonianText =
+@"=== User Hamiltonian ===
+
+Write a Hamiltonian H(q, p) and see where its motion goes. FF
+derives Hamilton's equations from your formula (exact symbolic
+derivatives): dq/dt = dH/dp, dp/dt = -dH/dq, and traces each
+pixel's launch with the same integrator as the scattering families.
+
+Variables: N = 1 to 4 degrees of freedom; coordinates x, y, z, w
+and momenta px, py, pz, pw (the first N of each). H is written in
+the equation language (as User Equations).
+
+Launch (each pixel is one launch):
+  Axis A / Axis B   the variables across and up the view
+  Fixed             others, as name=expression; ... set in order,
+                    reading the pixel values and earlier ones, e.g.
+                    x=0; px=-y. Unset variables are 0.
+  Solve for         one variable found from H = h0 (Energy): the
+                    first root searched from 0 upward (sign +1) or
+                    downward (-1). No root: not a launch (dark).
+For H = p^2/2 + V this is the usual 'speed from the energy'.
+
+Exits (as User Potential): past the exit radius on the coordinates
+the particle leaves through one of N angular sectors of (x, y);
+'Exit if' (a formula in the variables and t, >= 0 = that gate)
+catches crashes and custom exits; the time limit leaves the rest
+undecided.
+
+Constraint projection: every K steps (0 = off) the solved variable
+is nudged so H returns to h0, the method the Mixmaster family uses
+for its constraint. Useful when H must stay exactly on a value
+(null rays, H = 0 constraints).
+
+Presets:
+  User Hamiltonian - Henon-Heiles Section   the default H: the same
+                                            picture as the built-in
+                                            Henon-Heiles Section view
+  User Hamiltonian - Three Degrees of Freedom   FF's own z coupling
+  User Hamiltonian - Copenhagen Canonical   rotating-frame canonical
+                                            variables, FF's launch
+Animation: User Hamiltonian: energy.
+
+Batch: every setting is a --param UserHam* key, e.g.
+  --param ""UserHamSource=(px^2 + py^2)/2 + (x^2 + y^2)/2""
+  --param ""UserHamFixed=x=0"" --param UserHamSolveFor=px
+Sources: Henon & Heiles 1964 (the default H); see
+Docs/Resources-Bibliography.md.
 ";
 
         /// <summary>#1994 — User Potential (Math → Scattering).</summary>

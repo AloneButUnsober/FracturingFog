@@ -489,6 +489,20 @@ namespace FracturingFog.Models
                 Tags = new List<string> { "2D", "cosmology" },
             };
 
+            // #1997 — User Hamiltonian.
+            yield return new AnimationData
+            {
+                Name = "User Hamiltonian: energy",
+                Category = "Built-in",
+                Description = "Sweeps the constraint value h0 between 0.17 and 0.35 and back: the section's exits open and the basins spread.",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.UserHamiltonianBasins },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "UserHamEnergy", Mode = AnimationMode.Sine, Min = 0.17, Max = 0.35, FrequencyHz = 0.04, Enabled = true },
+                },
+                Tags = new List<string> { "2D", "scattering" },
+            };
+
             // #1994 — User Potential.
             yield return new AnimationData
             {

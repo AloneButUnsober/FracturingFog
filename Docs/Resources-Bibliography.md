@@ -380,7 +380,8 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   shadow radius and Eq. 40 against the traced rays (`S1923BlackHoleShadowTests`); #1924 integrates its
   orbit equation (Eqs. 3–4, areal R = r + M, periastron root of the quadratic) by quadrature as the
   reference for the winding, deflection and closest-approach channels (`S1924BlackHoleChannelTests`). **Journal reference
-  not verified.**
+  not verified.** #1996 draws each hole of a Math Plane 3D `geodesic` as a wire sphere of radius m, the
+  isotropic radius of a single hole's photon sphere (§II.A).
 
 <a id="nitta-chiba-sugiyama-2011"></a>
 
@@ -452,7 +453,9 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   (#1993, the same scene code with the path recorded) and its "Path: Henon-Heiles escape" demos, which draw
   the levels V = E and V = 1/6 and the three saddles. Also the default potential of the User Potential
   family (#1994, `Engine/Scattering/UserPotential.cs`), whose "User Potential - Henon-Heiles" preset
-  reproduces the built-in basin map from the formula.
+  reproduces the built-in basin map from the formula. And the default Hamiltonian of the User Hamiltonian
+  family (#1997, `Engine/Scattering/UserHamiltonian.cs`), whose "User Hamiltonian - Henon-Heiles Section"
+  preset reproduces the built-in Section view from H written out.
 
 <a id="nagler-2004"></a>
 
@@ -553,7 +556,8 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   (4a)–(4f) (Newtonian, 1PN, spin-orbit, 2PN, spin-spin, 2.5PN radiation reaction; harmonic coordinates,
   covariant spin supplementary condition), spin precession Eqs. (6a)–(6b), and the conserved energy
   Eqs. (8), (9a)–(9e) and angular momentum Eqs. (10), (11a)–(11d) used by the tests
-  (`Engine/Scattering/SpinningBinary.cs`).
+  (`Engine/Scattering/SpinningBinary.cs`). #1996 draws its relative coordinate x = x1 − x2 as a 3D path in
+  Math Plane 3D (`orbit3 ... spinbinary`).
 
 <a id="peters-1964"></a>
 
@@ -620,6 +624,8 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   eqs. 70–72, the exit at u_exit = 8 and the outcome colouring, and the u-map (eq. 10) whose topological
   entropy ln 2 (eq. 32, credited there to Rugh) the tests check. The paper's eq. 1 prints the opposite sign
   before ¼ in the constraint from the PRL's eq. 2; FF uses the sign its equations of motion conserve.
+  #1996 draws Mixmaster paths in Math Plane 3D (`orbit3 ... mixmaster`) in the same eqs. 70–72 variables,
+  (β+, β−, Ω) (`Engine/Scattering/ScatterPath3D.cs`).
   Not stated in the parts read: the integration direction and the Kasner-detection threshold (FF's own).
 
 <a id="mixmaster-chaos-2000"></a>

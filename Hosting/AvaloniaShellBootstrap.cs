@@ -3074,6 +3074,7 @@ namespace FracturingFog.Hosting
                 cc.FamilyParamsSerializer = (type, fp) =>
                     global::FracturingFog.Models.RegionFractalParams.Snapshot(type, fp)?.ToKeyValues()
                     ?? (IReadOnlyList<KeyValuePair<string, string>>)Array.Empty<KeyValuePair<string, string>>();
+                shell.FamilyParamsSerializer = cc.FamilyParamsSerializer;   // #1996 — send a pixel's path to Math Plane 3D
                 // #1305 — fractal QR code export (Capture > QR Code).
                 cc.QrCode.Preflight = global::FracturingFog.Imaging.Qr.QrExport.Preflight;
                 cc.QrCode.ExportRequested = (opt, size) => ExportQrCodeAsync(shell, opt, size);

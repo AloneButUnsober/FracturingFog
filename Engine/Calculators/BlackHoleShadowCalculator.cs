@@ -195,6 +195,22 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
 
         /// <summary>Trace the ray through image-plane point (u, v); the final state is written
         /// to <paramref name="state"/> (length ≥ 6) when given.</summary>
+        /// <summary>#1996 — the ray through (u, v) with every state recorded (the launch, then each
+        /// accepted step), channels on, for the Math Plane 3D geodesic statement.</summary>
+        public (ScatterOutcome Outcome, MpNullSystem System) Trace<TRec>(double u, double v, ref TRec rec)
+            where TRec : FracturingFog.Scattering.IPathRecorder
+        {
+            var sys = NewSystem();
+            Span<double> s = stackalloc double[6];
+            Camera.Launch(sys, u, v, s);
+            sys.Begin(s, true);
+            rec.Record(s);
+            var wrapped = new FracturingFog.Scattering.RecordingSystem<MpNullSystem, TRec>(sys, rec);
+            var o = ScatteringIntegrator.Trace(ref wrapped, s, Settings);
+            rec = wrapped.Recorder;
+            return (o, wrapped.Inner);
+        }
+
         public (ScatterOutcome Outcome, MpNullSystem System) Trace(double u, double v, Span<double> state = default, bool channels = true)
         {
             var sys = NewSystem();

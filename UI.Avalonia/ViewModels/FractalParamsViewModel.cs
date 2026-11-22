@@ -310,6 +310,10 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _upSectors = _p.UserPotentialSectors; _upOffset = _p.UserPotentialSectorOffset; _upExitIf = _p.UserPotentialExitIf ?? "";
         _upRotating = _p.UserPotentialRotating; _upMaxTime = _p.UserPotentialMaxTime; _upTol = _p.UserPotentialTolerance;
         _upMaxStep = _p.UserPotentialMaxStep;
+        _uhSource = _p.UserHamSource ?? ""; _uhN = _p.UserHamDimension; _uhA = _p.UserHamAxisA ?? ""; _uhB = _p.UserHamAxisB ?? "";
+        _uhFixed = _p.UserHamFixed ?? ""; _uhSolve = _p.UserHamSolveFor ?? ""; _uhSign = _p.UserHamSolveSign; _uhE = _p.UserHamEnergy;
+        _uhRadius = _p.UserHamExitRadius; _uhSectors = _p.UserHamSectors; _uhOffset = _p.UserHamSectorOffset; _uhExitIf = _p.UserHamExitIf ?? "";
+        _uhMaxTime = _p.UserHamMaxTime; _uhTol = _p.UserHamTolerance; _uhMaxStep = _p.UserHamMaxStep; _uhProject = _p.UserHamProjectEvery;
         _mathPlaneScene = _p.MathPlaneScene ?? string.Empty;
         UpdateMathPlaneSceneError();
         _raysColorSource = _p.BilliardRaysColorSource;
@@ -540,6 +544,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsMixmasterBasins => FractalType == FractalType.MixmasterBasins;   // #1946
     public bool IsBlackHoleRingOrbits => FractalType == FractalType.BlackHoleRingOrbits;   // #1947
     public bool IsUserPotentialBasins => FractalType == FractalType.UserPotentialBasins;   // #1994
+    public bool IsUserHamiltonianBasins => FractalType == FractalType.UserHamiltonianBasins;   // #1997
     /// <summary>Either billiard type: the shared scene controls (geometry, disks, bounces).</summary>
     public bool IsBilliardScene => IsChaoticBilliard || IsBilliardRays;
     /// <summary>#1548 — Math Plane (Cartesian plotter).</summary>
@@ -694,7 +699,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         // Spinning binaries — orbit count height field (#1945).
         || IsSpinningBinaryBasins
         // Mixmaster — log arc length height field (#1946).
-        || IsMixmasterBasins || IsUserPotentialBasins
+        || IsMixmasterBasins || IsUserPotentialBasins || IsUserHamiltonianBasins
         // Precision field — divergence-scalar height field (#628).
         || IsPrecisionField
         // Dual-orbit escape-geometry (#864) — the derived scalar rides the
@@ -717,7 +722,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsLyapunov || IsTranscendentalJulia || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian || IsMirrorSpheres
-          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsBlackHoleShadow || IsHenonHeilesBasins || IsThreeBodyBasins || IsMagnetisedBlackHole || IsSpinningBinaryBasins || IsMixmasterBasins || IsBlackHoleRingOrbits || IsUserPotentialBasins || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable || IsAdaptiveAa2D
+          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsBlackHoleShadow || IsHenonHeilesBasins || IsThreeBodyBasins || IsMagnetisedBlackHole || IsSpinningBinaryBasins || IsMixmasterBasins || IsBlackHoleRingOrbits || IsUserPotentialBasins || IsUserHamiltonianBasins || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable || IsAdaptiveAa2D
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -2571,6 +2576,65 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         set { if (double.IsFinite(value)) MixMaxTime = Math.Pow(10.0, Clamp(value, 0.0, 300.0)); }
     }
     public double MixTolerance { get => _mxTol; set { Set(ref _mxTol, Clamp(value, 1e-13, 1e-3)); _p.MixTolerance = _mxTol; Fire(); } }
+
+    // ── #1997 — User Hamiltonian ─────────────────────────────────────────────
+    private string _uhSource = "", _uhA = "", _uhB = "", _uhFixed = "", _uhSolve = "", _uhExitIf = "";
+    private int _uhN, _uhSign, _uhSectors, _uhProject;
+    private double _uhE, _uhRadius, _uhOffset, _uhMaxTime, _uhTol, _uhMaxStep;
+    private void UhText(ref string field, string? value, Action<string> store)
+    {
+        Set(ref field, value ?? "");
+        store(field);
+        this.RaisePropertyChanged(nameof(UserHamError));
+        Fire();
+    }
+    public string UserHamSource { get => _uhSource; set => UhText(ref _uhSource, value, v => _p.UserHamSource = v); }
+    public string UserHamAxisA { get => _uhA; set => UhText(ref _uhA, value, v => _p.UserHamAxisA = v); }
+    public string UserHamAxisB { get => _uhB; set => UhText(ref _uhB, value, v => _p.UserHamAxisB = v); }
+    public string UserHamFixed { get => _uhFixed; set => UhText(ref _uhFixed, value, v => _p.UserHamFixed = v); }
+    public string UserHamSolveFor { get => _uhSolve; set => UhText(ref _uhSolve, value, v => _p.UserHamSolveFor = v); }
+    public string UserHamExitIf { get => _uhExitIf; set => UhText(ref _uhExitIf, value, v => _p.UserHamExitIf = v); }
+    public int UserHamDimension
+    {
+        get => _uhN;
+        set { Set(ref _uhN, Math.Clamp(value, 1, 4)); _p.UserHamDimension = _uhN; this.RaisePropertyChanged(nameof(UserHamError)); this.RaisePropertyChanged(nameof(UserHamVariables)); Fire(); }
+    }
+    /// <summary>The variable names for this N (shown under the formula).</summary>
+    public string UserHamVariables
+    {
+        get
+        {
+            var q = new[] { "x", "y", "z", "w" }.Take(Math.Clamp(_uhN, 1, 4));
+            var p = new[] { "px", "py", "pz", "pw" }.Take(Math.Clamp(_uhN, 1, 4));
+            return "Variables: " + string.Join(", ", q.Concat(p));
+        }
+    }
+    /// <summary>The first problem with H or the launch / exit texts (yellow in the panel), or empty.
+    /// The calculator checks the same rules (UserHamiltonianModel); this is the panel's early warning.</summary>
+    public string UserHamError
+    {
+        get
+        {
+            int n = Math.Clamp(_uhN, 1, 4);
+            var vars = new[] { "x", "y", "z", "w" }.Take(n).Concat(new[] { "px", "py", "pz", "pw" }.Take(n)).ToArray();
+            if (!FracturingFog.Models.RealExpression.TryParse(_uhSource, vars, out _, out var e)) return "H: " + e;
+            if (!vars.Contains(_uhA.Trim())) return $"Axis A: '{_uhA}' is not one of {string.Join(", ", vars)}";
+            if (!vars.Contains(_uhB.Trim())) return $"Axis B: '{_uhB}' is not one of {string.Join(", ", vars)}";
+            if (_uhSolve.Trim().Length > 0 && !vars.Contains(_uhSolve.Trim())) return $"Solve for: '{_uhSolve}' is not one of {string.Join(", ", vars)}";
+            if (!string.IsNullOrWhiteSpace(_uhExitIf)
+                && !FracturingFog.Models.RealExpression.TryParse(_uhExitIf, vars.Append("t").ToArray(), out _, out e)) return "Exit if: " + e;
+            return "";
+        }
+    }
+    public int UserHamSolveSign { get => _uhSign; set { Set(ref _uhSign, value < 0 ? -1 : 1); _p.UserHamSolveSign = _uhSign; Fire(); } }
+    public double UserHamEnergy { get => _uhE; set { Set(ref _uhE, Clamp(value, -1e6, 1e6)); _p.UserHamEnergy = _uhE; Fire(); } }
+    public double UserHamExitRadius { get => _uhRadius; set { Set(ref _uhRadius, Clamp(value, 0.001, 1e6)); _p.UserHamExitRadius = _uhRadius; Fire(); } }
+    public int UserHamSectors { get => _uhSectors; set { Set(ref _uhSectors, Math.Clamp(value, 1, 16)); _p.UserHamSectors = _uhSectors; Fire(); } }
+    public double UserHamSectorOffset { get => _uhOffset; set { Set(ref _uhOffset, Clamp(value, -360.0, 360.0)); _p.UserHamSectorOffset = _uhOffset; Fire(); } }
+    public double UserHamMaxTime { get => _uhMaxTime; set { Set(ref _uhMaxTime, Clamp(value, 1.0, 100000.0)); _p.UserHamMaxTime = _uhMaxTime; Fire(); } }
+    public double UserHamTolerance { get => _uhTol; set { Set(ref _uhTol, Clamp(value, 1e-13, 1e-3)); _p.UserHamTolerance = _uhTol; Fire(); } }
+    public double UserHamMaxStep { get => _uhMaxStep; set { Set(ref _uhMaxStep, Clamp(value, 1e-4, 10.0)); _p.UserHamMaxStep = _uhMaxStep; Fire(); } }
+    public int UserHamProjectEvery { get => _uhProject; set { Set(ref _uhProject, Math.Clamp(value, 0, 100000)); _p.UserHamProjectEvery = _uhProject; Fire(); } }
 
     // ── #1994 — User Potential ───────────────────────────────────────────────
     private string _upSource = "", _upExitIf = "";

@@ -107,6 +107,9 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
 
     /// <summary>The scene parse error of the last render, or null.</summary>
     public MathPlaneSceneError? LastSceneError { get; private set; }
+
+    /// <summary>#1996 — the traced scattering paths of the last scene, by object.</summary>
+    public System.Collections.Generic.Dictionary<MathPlaneObject, FracturingFog.Scattering.ScatterPath3D> Paths3D { get; } = new();
     public string? LastPrecisionLabel => LastSceneError is { } e ? "Scene error: " + e : null;
 
     /// <summary>The z-buffer (1/z in view space; 0 = nothing drawn) of the last render.</summary>
@@ -195,6 +198,7 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
         if (text != _parsedText)
         {
             LastSceneError = MathPlane3DScene.TryParse(text, out var parsed, out var err) ? null : err;
+            Paths3D.Clear();   // #1996
             var meshes = new Dictionary<MathPlaneObject, MathPlane3DSurfaceMesh>(ReferenceEqualityComparer.Instance);
             var curves = new Dictionary<MathPlaneObject, List<List<(double X, double Y, double Z)>>>(ReferenceEqualityComparer.Instance);
             var orbits = new Dictionary<MathPlaneObject, MathPlane3DOrbitPath>(ReferenceEqualityComparer.Instance);
@@ -230,6 +234,16 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
                     // #1732 — the orbit of a point under a fractal's own step; bad settings are a scene error.
                     if (MathPlane3DOrbit.Build(o, out string? oerr) is { } path) { orbits[o] = path; curves[o] = path.Pieces; }
                     else fractalError ??= oerr;
+                }
+                else if (o.Kind == MathPlaneObjectKind.Trajectory)
+                {
+                    // #1996 — a scattering family's path, traced by its own scene; bad keys are a scene error.
+                    if (FracturingFog.Scattering.ScatterPath3DTracer.Trace(o, out string? perr) is { } sp)
+                    {
+                        curves[o] = sp.Pieces;
+                        Paths3D[o] = sp;
+                    }
+                    else fractalError ??= perr;
                 }
                 else if (o.Kind == MathPlaneObjectKind.Curve) curves[o] = SampleCurve(o);
             }
@@ -361,7 +375,8 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
         double m = 2;
         foreach (var o in scene.Objects)
         {
-            if (o.Kind is MathPlaneObjectKind.Curve or MathPlaneObjectKind.Surface) continue;
+            // #1996 — a path's coords are its launch parameters, not a position: its points count via Bounds.
+            if (o.Kind is MathPlaneObjectKind.Curve or MathPlaneObjectKind.Surface or MathPlaneObjectKind.Trajectory) continue;
             for (int i = 0; i < o.Coords.Count; i++) m = Math.Max(m, Math.Abs(o.Coords[i]) * 1.2);
         }
         if (extra != null)
@@ -903,6 +918,19 @@ public sealed class MathPlane3DCalculator : IFractalCalculator, IStereoEyeCamera
                     int n = o.Coords.Count / 3;
                     if (labels) { if (o.ShowLabel) Text(canvas, cam, X(MathPlane3DScene.Point(o, n - 1)), o.Name, font, halo, ink, ui); break; }
                     for (int i = 1; i < n; i++) DrawLine3D(canvas, ctx, X(MathPlane3DScene.Point(o, i - 1)), X(MathPlane3DScene.Point(o, i)), line);
+                    break;
+                }
+                case MathPlaneObjectKind.Trajectory when _curves.TryGetValue(o, out var tpieces):
+                {
+                    // #1996 — a scattering path (and a geodesic's hole spheres), labelled at its end with its fate.
+                    if (labels)
+                    {
+                        if (o.ShowLabel && Paths3D.TryGetValue(o, out var sp) && tpieces.Count > 0 && tpieces[0].Count > 0)
+                            Text(canvas, cam, X(tpieces[0][^1]), o.Name + ": " + sp.Fate, font, halo, ink, ui);
+                        break;
+                    }
+                    foreach (var piece in tpieces)
+                        for (int i = 1; i < piece.Count; i++) DrawLine3D(canvas, ctx, X(piece[i - 1]), X(piece[i]), line);
                     break;
                 }
                 case MathPlaneObjectKind.Curve when _curves.TryGetValue(o, out var pieces):

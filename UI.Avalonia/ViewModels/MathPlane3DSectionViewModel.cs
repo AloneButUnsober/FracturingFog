@@ -52,10 +52,22 @@ public sealed class MathPlane3DSectionViewModel : ViewModelBase, IPointerEditHan
     /// <param name="view">The live view state (params, zoom, type).</param>
     /// <param name="trigger">Re-render after an edit.</param>
     /// <param name="switchTo">Switch the render to Math Plane 3D (the shell's type setter).</param>
+    private readonly Action _switchTo;
+
+    /// <summary>#1996 — show a sent path: write the scene, switch the render to Math Plane 3D.</summary>
+    public void ApplySendPath(string sceneText)
+    {
+        _view.FractalParameters.MathPlane3DScene = sceneText;
+        _switchTo();
+        Refresh();
+        _trigger();
+    }
+
     public MathPlane3DSectionViewModel(FractalViewState view, Action trigger, Action switchTo)
     {
         _view = view ?? throw new ArgumentNullException(nameof(view));
         _trigger = trigger ?? throw new ArgumentNullException(nameof(trigger));
+        _switchTo = switchTo;
         SwitchCommand = ReactiveCommand.Create(() => { switchTo(); Refresh(); });
         AddPointCommand = ReactiveCommand.Create(() => Add(MathPlane3DSceneEdit.AddKind.Point));
         AddVectorCommand = ReactiveCommand.Create(() => Add(MathPlane3DSceneEdit.AddKind.Vector));

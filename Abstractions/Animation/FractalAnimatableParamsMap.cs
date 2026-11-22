@@ -177,6 +177,9 @@ public static class FractalAnimatableParamsMap
         FractalType.UserPotentialBasins
             => _userPotentialList,
 
+        FractalType.UserHamiltonianBasins
+            => _userHamiltonianList,
+
         FractalType.BicomplexMandelbrot
             => _bicomplexList,
 
@@ -745,6 +748,13 @@ public static class FractalAnimatableParamsMap
         new("BhRingMass", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 2.0, Notes: "Ring mass / black hole mass: 0 is plain Schwarzschild (integrable)."),
         new("BhRingRadius", AnimatableParamKind.ScalarDouble, Min: 6.0, Max: 40.0, Notes: "Ring radius in units of M."),
         new("BhRingEnergy", AnimatableParamKind.ScalarDouble, Min: 0.9, Max: 1.0, Notes: "Specific energy of the orbits."),
+    };
+
+    // #1997 — User Hamiltonian: the constraint value and the sector offset.
+    private static readonly AnimatableParamDescriptor[] _userHamiltonianList =
+    {
+        new("UserHamEnergy", AnimatableParamKind.ScalarDouble, Min: -10.0, Max: 10.0, Notes: "The constraint value h0 of H."),
+        new("UserHamSectorOffset", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 360.0, Notes: "Angle of exit sector 0's centre, degrees."),
     };
 
     // #1994 — User Potential: the energy, the launch angle and the sector offset.

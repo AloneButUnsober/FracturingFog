@@ -276,14 +276,25 @@ public sealed class MixmasterScene
     /// 3δ² + 2δΣ(ln x)′ + H = 0).</summary>
     public MixmasterOutcome Trace(double x, double y, Span<double> s)
     {
+        var none = default(NoPathRecorder);
+        return Trace(x, y, s, ref none);
+    }
+
+    /// <summary>#1996 — <see cref="Trace(double, double, Span{double})"/> with every state recorded
+    /// (the launch, then each accepted step; the constraint projection between segments is applied
+    /// to the state, not recorded as a step) for the Math Plane 3D orbit3 statement.</summary>
+    public MixmasterOutcome Trace<TRec>(double x, double y, Span<double> s, ref TRec rec) where TRec : IPathRecorder
+    {
         if (!LaunchState(x, y, s)) return new MixmasterOutcome { Valid = false, Gate = -1 };
-        var sys = System();
+        rec.Record(s);
+        var wrapped = new RecordingSystem<MixmasterSystem, TRec>(System(), rec);
         var settings = Settings with { MaxSteps = SegmentSteps };
         int total = 0;
         ScatterFate fate;
         while (true)
         {
-            var o = ScatteringIntegrator.Trace(ref sys, s, in settings);
+            var o = ScatteringIntegrator.Trace(ref wrapped, s, in settings);
+            var sys = wrapped.Inner;
             total += o.Steps;
             fate = o.Fate;
             if (fate != ScatterFate.Undecided || sys.Time >= TimeCap || o.Steps == 0 || total >= Settings.MaxSteps)
@@ -291,8 +302,10 @@ public sealed class MixmasterScene
             Project(s);
             settings = settings with { InitialStep = Math.Max(1e-12, o.Lambda / Math.Max(1, o.Steps)) };
         }
-        int gate = fate == ScatterFate.Escaped ? sys.Gate : -1;
-        return new MixmasterOutcome { Valid = true, Gate = gate, Time = sys.Time, Steps = total };
+        rec = wrapped.Recorder;
+        var end = wrapped.Inner;
+        int gate = fate == ScatterFate.Escaped ? end.Gate : -1;
+        return new MixmasterOutcome { Valid = true, Gate = gate, Time = end.Time, Steps = total };
     }
 
     /// <summary>Restore H = 0 by the smallest equal shift δ of the three (ln x)′.</summary>

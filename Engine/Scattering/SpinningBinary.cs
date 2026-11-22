@@ -316,10 +316,20 @@ public sealed class SpinningBinaryScene
     /// the final state.</summary>
     public SpinningBinaryOutcome Trace(double theta1, double theta2, Span<double> s)
     {
+        var none = default(NoPathRecorder);
+        return Trace(theta1, theta2, s, ref none);
+    }
+
+    /// <summary>#1996 — <see cref="Trace(double, double, Span{double})"/> with every state recorded
+    /// (the launch, then each accepted step) for the Math Plane 3D orbit3 statement.</summary>
+    public SpinningBinaryOutcome Trace<TRec>(double theta1, double theta2, Span<double> s, ref TRec rec) where TRec : IPathRecorder
+    {
         LaunchState(theta1, theta2, s);
-        var sys = System();
+        rec.Record(s);
+        var wrapped = new RecordingSystem<SpinningBinarySystem, TRec>(System(), rec);
         var settings = Settings;
-        var o = ScatteringIntegrator.Trace(ref sys, s, in settings);
+        var o = ScatteringIntegrator.Trace(ref wrapped, s, in settings);
+        var sys = wrapped.Inner; rec = wrapped.Recorder;
         int gate = sys.End;
         if (Mode == SpinningBinaryOutcomeMode.MergerSide)
             gate = sys.End switch { 0 => s[2] >= 0 ? 0 : 1, 1 => 2, _ => -1 };

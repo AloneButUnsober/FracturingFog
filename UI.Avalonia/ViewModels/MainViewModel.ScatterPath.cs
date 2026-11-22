@@ -9,6 +9,7 @@
 // hands it to the Math Plane section (ShellViewModel.SendPathToMathPlane). The pointer
 // is tracked through the input controller's hover hook, like the math overlay (#1554).
 
+using System.Linq;
 using FracturingFog.Input;
 using FracturingFog.Models;
 
@@ -21,9 +22,14 @@ public sealed partial class MainViewModel
 
     private void InitScatterPath() => _input.HoverObserver += OnScatterHover;
 
+    /// <summary>Families whose launch under the pointer can be sent to Math Plane (2D, #2000) or
+    /// Math Plane 3D (#1996).</summary>
+    public static bool IsPathFamily(FractalType t)
+        => MathPlaneTrajectory.BackdropOf(t) != MathPlaneBackdrop.None || MathPlane3DScene.PathTypes.Contains(t);
+
     private void OnScatterHover(PointerInput e)
     {
-        if (MathPlaneTrajectory.BackdropOf(SelectedFractalType) == MathPlaneBackdrop.None) { _scatterHover = null; return; }
+        if (!IsPathFamily(SelectedFractalType)) { _scatterHover = null; return; }
         _scatterHover = (e.X, e.Y, e.ClientWidth, e.ClientHeight, SelectedFractalType);
     }
 
@@ -32,7 +38,7 @@ public sealed partial class MainViewModel
     public bool TryScatterLaunchAtPointer(out FractalType type, out double a, out double b)
     {
         type = SelectedFractalType; a = b = 0;
-        if (MathPlaneTrajectory.BackdropOf(type) == MathPlaneBackdrop.None) return false;
+        if (!IsPathFamily(type)) return false;
         if (_scatterHover is not { } h || h.Type != type || h.W <= 0 || h.H <= 0) return false;
         (a, b) = MathPlaneTrajectory.PlaneAt(h.X, h.Y, h.W, h.H, ViewState.CenterX, ViewState.CenterY, ViewState.Zoom);
         return true;

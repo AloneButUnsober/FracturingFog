@@ -1647,6 +1647,42 @@ namespace FracturingFog.Models
         /// <summary>#1994 — largest integrator step (time units). Default 0.25.</summary>
         public double UserPotentialMaxStep { get; set; } = 0.25;
 
+        // ── User Hamiltonian (#1997) ──────────────────────────────────────
+        /// <summary>#1997 — the default H: Hénon–Heiles, H = (px^2 + py^2)/2 + V(x, y), so the default frame (section x = 0, solve px) is that family's Section view.</summary>
+        public const string UserHamDefaultSource = "(px^2 + py^2)/2 + (x^2 + y^2)/2 + x^2*y - y^3/3";
+        /// <summary>#1997 — the Hamiltonian H(q, p) in the equation language. Default: Hénon–Heiles.</summary>
+        public string UserHamSource { get; set; } = UserHamDefaultSource;
+        /// <summary>#1997 — degrees of freedom N (1-4): coordinates x, y, z, w and momenta px, py, pz, pw. Default 2.</summary>
+        public int UserHamDimension { get; set; } = 2;
+        /// <summary>#1997 — the variable across the view (pixel axis A). Default y.</summary>
+        public string UserHamAxisA { get; set; } = "y";
+        /// <summary>#1997 — the variable up the view (pixel axis B). Default py.</summary>
+        public string UserHamAxisB { get; set; } = "py";
+        /// <summary>#1997 — fixed values, name=expression; ... (in order; unset variables are 0). Default x=0.</summary>
+        public string UserHamFixed { get; set; } = "x=0";
+        /// <summary>#1997 — the variable solved from H = h0 (empty: none). Default px.</summary>
+        public string UserHamSolveFor { get; set; } = "px";
+        /// <summary>#1997 — which root of H = h0: +1 searches upward from 0, -1 downward. Default +1.</summary>
+        public int UserHamSolveSign { get; set; } = 1;
+        /// <summary>#1997 — the constraint value h0 of H. Default 0.25.</summary>
+        public double UserHamEnergy { get; set; } = 0.25;
+        /// <summary>#1997 — exit radius on the coordinates. Default 2.</summary>
+        public double UserHamExitRadius { get; set; } = 2.0;
+        /// <summary>#1997 — exit sectors on (x, y) (1-16). Default 3.</summary>
+        public int UserHamSectors { get; set; } = 3;
+        /// <summary>#1997 — centre of sector 0, degrees from +x. Default 90.</summary>
+        public double UserHamSectorOffset { get; set; } = 90.0;
+        /// <summary>#1997 — optional exit rule in the variables and t: >= 0 stops with that gate. Default empty.</summary>
+        public string UserHamExitIf { get; set; } = "";
+        /// <summary>#1997 — time limit (undecided after it). Default 200.</summary>
+        public double UserHamMaxTime { get; set; } = 200.0;
+        /// <summary>#1997 — integrator relative tolerance. Default 1e-8.</summary>
+        public double UserHamTolerance { get; set; } = 1e-8;
+        /// <summary>#1997 — largest integrator step. Default 0.25.</summary>
+        public double UserHamMaxStep { get; set; } = 0.25;
+        /// <summary>#1997 — constraint projection every K steps (0 = off). Default 0.</summary>
+        public int UserHamProjectEvery { get; set; } = 0;
+
         // ── Slit cascade (#1569, double-slit epic #1565) ──────────────────
         /// <summary>Slit cascade: children per slit, N (2..16). N ≥ 3 for the fringe
         /// weights to differ (a symmetric pair is a plain Cantor set).</summary>
@@ -2828,6 +2864,22 @@ namespace FracturingFog.Models
                 UserPotentialMaxTime = UserPotentialMaxTime,
                 UserPotentialTolerance = UserPotentialTolerance,
                 UserPotentialMaxStep = UserPotentialMaxStep,
+                UserHamSource = UserHamSource,
+                UserHamDimension = UserHamDimension,
+                UserHamAxisA = UserHamAxisA,
+                UserHamAxisB = UserHamAxisB,
+                UserHamFixed = UserHamFixed,
+                UserHamSolveFor = UserHamSolveFor,
+                UserHamSolveSign = UserHamSolveSign,
+                UserHamEnergy = UserHamEnergy,
+                UserHamExitRadius = UserHamExitRadius,
+                UserHamSectors = UserHamSectors,
+                UserHamSectorOffset = UserHamSectorOffset,
+                UserHamExitIf = UserHamExitIf,
+                UserHamMaxTime = UserHamMaxTime,
+                UserHamTolerance = UserHamTolerance,
+                UserHamMaxStep = UserHamMaxStep,
+                UserHamProjectEvery = UserHamProjectEvery,
                 SlitCascadeChildren = SlitCascadeChildren,
                 SlitCascadeRatio = SlitCascadeRatio,
                 SlitCascadeDepth = SlitCascadeDepth,

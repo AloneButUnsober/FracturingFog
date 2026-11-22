@@ -200,6 +200,8 @@ namespace FracturingFog.Rendering
         private BlackHoleRingCalculator _bhRingCalculator => LazyCalc(ref _bhRingCalculatorSlot, static (w, h) => new BlackHoleRingCalculator(w, h));
         private UserPotentialCalculator? _userPotentialCalculatorSlot;   // #1994
         private UserPotentialCalculator _userPotentialCalculator => LazyCalc(ref _userPotentialCalculatorSlot, static (w, h) => new UserPotentialCalculator(w, h));
+        private UserHamiltonianCalculator? _userHamiltonianCalculatorSlot;   // #1997
+        private UserHamiltonianCalculator _userHamiltonianCalculator => LazyCalc(ref _userHamiltonianCalculatorSlot, static (w, h) => new UserHamiltonianCalculator(w, h));
         private PrecisionFieldCalculator? _precisionFieldCalculatorSlot;
         private PrecisionFieldCalculator _precisionFieldCalculator => LazyCalc(ref _precisionFieldCalculatorSlot, static (w, h) => new PrecisionFieldCalculator(w, h));
         private DualOrbitEscapeCalculator? _dualOrbitCalculatorSlot;
@@ -2877,6 +2879,7 @@ namespace FracturingFog.Rendering
             FractalType.MixmasterBasins => new MixmasterCalculator(w, h),   // #1946
             FractalType.BlackHoleRingOrbits => new BlackHoleRingCalculator(w, h),   // #1947
             FractalType.UserPotentialBasins => new UserPotentialCalculator(w, h),   // #1994
+            FractalType.UserHamiltonianBasins => new UserHamiltonianCalculator(w, h),   // #1997
             FractalType.SlitCascade => new SlitCascadeCalculator(w, h),   // #1569
             FractalType.TalbotCarpet => new TalbotCarpetCalculator(w, h), // #1570
             FractalType.PrecisionField => new PrecisionFieldCalculator(w, h),
@@ -4461,6 +4464,7 @@ namespace FracturingFog.Rendering
                 case MixmasterCalculator mx: mx.FractalParameters = ViewState.FractalParameters; break;   // #1946
                 case BlackHoleRingCalculator br: br.FractalParameters = ViewState.FractalParameters; break;   // #1947
                 case UserPotentialCalculator up: up.FractalParameters = ViewState.FractalParameters; break;   // #1994
+                case UserHamiltonianCalculator uh: uh.FractalParameters = ViewState.FractalParameters; break;   // #1997
                 case MathPlaneCalculator mp: mp.FractalParameters = ViewState.FractalParameters; break;
                 case MathPlane3DCalculator mp3: mp3.FractalParameters = ViewState.FractalParameters; break;   // #1713
                 case PrecisionFieldCalculator pf: pf.FractalParameters = ViewState.FractalParameters; break;
@@ -4686,6 +4690,7 @@ namespace FracturingFog.Rendering
             FractalType.MixmasterBasins => _mixmasterCalculator,   // #1946
             FractalType.BlackHoleRingOrbits => _bhRingCalculator,   // #1947
             FractalType.UserPotentialBasins => _userPotentialCalculator,   // #1994
+            FractalType.UserHamiltonianBasins => _userHamiltonianCalculator,   // #1997
             FractalType.PrecisionField => _precisionFieldCalculator,
             FractalType.JulibrotPair => _dualOrbitCalculator,
             FractalType.IndrasPearls => _indrasPearlsCalculator,

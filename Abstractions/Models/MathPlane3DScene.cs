@@ -45,6 +45,17 @@
 // TYPE is one of OrbitTypes; (x, y, z) is the point in scene axes; steps N (1-1000) caps the
 // orbit (default: the fractal's own iteration count). Stored as a Curve with CurveKind.Fractal:
 // Sources = type then KEY=VALUE, Coords = x y z, Mesh = steps (0 = default). Design §3.2.
+//
+// #1996 adds whole 3D paths from the gravitational-scattering families, traced by the families'
+// own code (Engine/Scattering/ScatterPath3D.cs):
+//   geodesic NAME A B [KEY=VALUE ...] [options]                 black hole shadows (#1922): the null
+//                                                               ray through image-plane point (A, B)
+//   orbit3   NAME spinbinary A B [KEY=VALUE ...] [options]      spinning binaries (#1945): the relative
+//                                                               orbit for spin angles (A, B), as the view reads them
+//   orbit3   NAME mixmaster A B [KEY=VALUE ...] [options]       Mixmaster (#1946): the universe point in
+//                                                               (beta+, beta-, Omega) for view point (A, B)
+// KEY=VALUE are the family's own --param keys (as `fractal` / `orbit`), checked by the Engine.
+// Stored as kind Trajectory: Sources = the FractalType name, then KEY=VALUE; Coords = A B.
 
 using System;
 using System.Collections.Generic;
@@ -161,6 +172,7 @@ namespace FracturingFog.Models
             if (o.Kind == MathPlaneObjectKind.Surface && o.CurveKind == MathPlaneCurveKind.Fractal)
                 return SerializeFractal(o);
             if (IsOrbit(o)) return SerializeOrbit(o);
+            if (o.Kind == MathPlaneObjectKind.Trajectory) return SerializePath3D(o);
             var sb = new StringBuilder(o.Kind.ToString().ToLowerInvariant()).Append(' ').Append(o.Name);
             if (o.Kind == MathPlaneObjectKind.Surface)
                 sb.Append(' ').Append(o.CurveKind switch
@@ -218,6 +230,100 @@ namespace FracturingFog.Models
         public const int MaxOrbitSteps = 1000;
 
         /// <summary>#1732 — <c>orbit NAME TYPE x y z [steps N] KEY=VALUE ... options</c>.</summary>
+        /// <summary>#1996 — the 3D scattering families a path statement draws, with their keywords.</summary>
+        public static readonly IReadOnlyList<FractalType> PathTypes = new[]
+        {
+            FractalType.BlackHoleShadow, FractalType.SpinningBinaryBasins, FractalType.MixmasterBasins,
+        };
+
+        /// <summary>#1996 — the orbit3 family token of <paramref name="t"/> ("spinbinary" / "mixmaster").</summary>
+        public static string PathToken(FractalType t) => t == FractalType.SpinningBinaryBasins ? "spinbinary" : "mixmaster";
+
+        /// <summary>#1996 — the type a path object draws (Sources[0]).</summary>
+        public static FractalType PathTypeOf(MathPlaneObject o)
+            => o.Expressions.Count > 0 && Enum.TryParse<FractalType>(o.Expressions[0], out var t) ? t : FractalType.BlackHoleShadow;
+
+        /// <summary>#1996 — "send this pixel's path to Math Plane 3D": the path of launch (a, b) of
+        /// <paramref name="type"/> with <paramref name="familyKeys"/> (the family's --param pairs, its
+        /// region snapshot), added to <paramref name="currentScene"/> when that already holds a path of
+        /// the same family, else as a new scene. Keys whose values a statement cannot carry (spaces,
+        /// quotes, ';': a custom hole list, a user-lens formula) are left out and named in
+        /// <c>Dropped</c>. Null when <paramref name="type"/> is not a 3D path family.</summary>
+        public static (string Scene, string Name, IReadOnlyList<string> Dropped)? SendPath(
+            FractalType type, IReadOnlyList<KeyValuePair<string, string>> familyKeys, double a, double b, string? currentScene)
+        {
+            if (!PathTypes.Contains(type)) return null;
+            var scene = new MathPlane3DScene();
+            if (TryParse(currentScene, out var cur, out _)
+                && cur.Objects.Any(o => o.Kind == MathPlaneObjectKind.Trajectory && PathTypeOf(o) == type))
+                scene = cur;
+            var sources = new List<string> { type.ToString() };
+            var dropped = new List<string>();
+            foreach (var kv in familyKeys)
+            {
+                string tok = kv.Key + "=" + kv.Value;
+                if (kv.Key.StartsWith("Cam3D", StringComparison.OrdinalIgnoreCase) || kv.Key.StartsWith("MathPlane", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (IsFractalKeyToken(tok)) sources.Add(tok); else dropped.Add(kv.Key);
+            }
+            var used = new HashSet<string>(scene.Objects.Select(o => o.Name), StringComparer.Ordinal);
+            string name = Enumerable.Range(1, 10000).Select(i => "path" + i).First(n => !used.Contains(n));
+            int count = scene.Objects.Count(o => o.Kind == MathPlaneObjectKind.Trajectory);
+            uint color = MathPlaneScene.DefaultPalette[count % MathPlaneScene.DefaultPalette.Length];
+            var obj = new MathPlaneObject(MathPlaneObjectKind.Trajectory, name, new[] { a, b }, color, Sources: sources);
+            scene = scene with { Objects = scene.Objects.Append(obj).ToList() };
+            return (scene.Serialize(), name, dropped);
+        }
+
+        private static string SerializePath3D(MathPlaneObject o)
+        {
+            var type = PathTypeOf(o);
+            var sb = type == FractalType.BlackHoleShadow
+                ? new StringBuilder("geodesic ").Append(o.Name)
+                : new StringBuilder("orbit3 ").Append(o.Name).Append(' ').Append(PathToken(type));
+            for (int i = 0; i < 2 && i < o.Coords.Count; i++) sb.Append(' ').Append(MathPlaneScene.Num(o.Coords[i]));
+            for (int k = 1; k < o.Expressions.Count; k++) sb.Append(' ').Append(o.Expressions[k]);
+            uint a = o.Color >> 24;
+            sb.Append(" #").Append((o.Color & 0xFFFFFF).ToString("X6", Inv));
+            if (a != 0xFF) sb.Append(a.ToString("X2", Inv));
+            if (!o.Visible) sb.Append(" hidden");
+            if (!o.ShowLabel) sb.Append(" nolabel");
+            return sb.ToString();
+        }
+
+        /// <summary>#1996 — <c>geodesic NAME A B [KEY=VALUE ...]</c> and
+        /// <c>orbit3 NAME spinbinary|mixmaster A B [KEY=VALUE ...]</c>.</summary>
+        private static bool TryPath3D(string head, List<(string Text, int Col)> toks, int index,
+                                      out MathPlaneObject? obj, out int badTok, out string msg)
+        {
+            obj = null; badTok = 0; msg = "";
+            if (toks.Count < 2 || !MathPlaneScene.IsName(toks[1].Text))
+            { badTok = 1; msg = $"'{head}' needs a name (letters, digits, '_', optional trailing ')"; return false; }
+            int i = 2;
+            FractalType type = FractalType.BlackHoleShadow;
+            if (head == "orbit3")
+            {
+                string fam = i < toks.Count ? toks[i].Text.ToLowerInvariant() : "";
+                if (fam == "spinbinary") type = FractalType.SpinningBinaryBasins;
+                else if (fam == "mixmaster") type = FractalType.MixmasterBasins;
+                else { badTok = Math.Min(i, toks.Count - 1); msg = "'orbit3' needs a family: spinbinary or mixmaster"; return false; }
+                i++;
+            }
+            var coords = new List<double>();
+            for (int k = 0; k < 2; k++, i++)
+            {
+                if (i >= toks.Count || !MathPlaneScene.TryNum(toks[i].Text, out double v))
+                { badTok = Math.Min(i, toks.Count - 1); msg = $"'{head}' needs the launch point: two numbers (the family view's coordinates)"; return false; }
+                coords.Add(v);
+            }
+            var sources = new List<string> { type.ToString() };
+            if (!TryFractalKeys(toks, ref i, sources, out badTok, out msg)) return false;
+            if (!TryOptions(toks, i, index, allowMesh: false, out uint color, out bool visible, out bool label, out _, out badTok, out msg))
+                return false;
+            obj = new MathPlaneObject(MathPlaneObjectKind.Trajectory, toks[1].Text, coords, color, visible, label, Sources: sources);
+            return true;
+        }
+
         private static string SerializeOrbit(MathPlaneObject o)
         {
             var sb = new StringBuilder("orbit ").Append(o.Name);
@@ -405,9 +511,12 @@ namespace FracturingFog.Models
                     case "surface":
                     case "fractal":
                     case "orbit":
+                    case "geodesic":
+                    case "orbit3":
                     {
                         MathPlaneObject? obj; int badTok; string msg;
-                        bool ok = head == "curve" ? TryCurve(toks, objects.Count, out obj, out badTok, out msg)
+                        bool ok = head is "geodesic" or "orbit3" ? TryPath3D(head, toks, objects.Count, out obj, out badTok, out msg)
+                                : head == "curve" ? TryCurve(toks, objects.Count, out obj, out badTok, out msg)
                                 : head == "surface" ? TrySurface(toks, objects.Count, out obj, out badTok, out msg)
                                 : head == "fractal" ? TryFractal(toks, objects.Count, out obj, out badTok, out msg)
                                 : head == "orbit" ? TryOrbit(toks, objects.Count, out obj, out badTok, out msg)
@@ -418,7 +527,7 @@ namespace FracturingFog.Models
                         break;
                     }
                     default:
-                        error = Err(0, $"unknown statement '{toks[0].Text}' (expected point, vector, segment, polyline, curve, surface, fractal, orbit, axes, grid, fill, shading, ticks, labels, det, eigen or lengths)");
+                        error = Err(0, $"unknown statement '{toks[0].Text}' (expected point, vector, segment, polyline, curve, surface, fractal, orbit, geodesic, orbit3, axes, grid, fill, shading, ticks, labels, det, eigen or lengths)");
                         return false;
                 }
             }

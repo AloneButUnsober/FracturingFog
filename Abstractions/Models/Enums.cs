@@ -1312,6 +1312,11 @@ namespace FracturingFog
         /// <c>UserPotentialExitIf</c>, <c>UserPotentialRotating</c>, <c>UserPotentialMaxTime</c>,
         /// <c>UserPotentialTolerance</c>, <c>UserPotentialMaxStep</c>.</summary>
         UserPotentialBasins,
+        /// <summary>#1997 — General User Hamiltonian: basins of a user-written H(q, p) with 1-4 degrees of
+        /// freedom; Hamilton's equations from its symbolic partials, a declarative launch (two pixel axes,
+        /// fixed values, one variable solved from H = h0), exits as <see cref="UserPotentialBasins"/>, and an
+        /// optional constraint projection. <c>UserHamiltonianCalculator</c>. Tunables: the <c>UserHam*</c> keys.</summary>
+        UserHamiltonianBasins,
     }
 
     /// <summary>Hole layout of <see cref="FractalType.BlackHoleShadow"/> (#1923).
@@ -1589,6 +1594,7 @@ namespace FracturingFog
             // #1947 — black hole + ring: section density / categorical fates; no normals / DE / orbit data.
             FractalType.BlackHoleRingOrbits => FractalCapabilities.None,
             FractalType.UserPotentialBasins => FractalCapabilities.None,
+            FractalType.UserHamiltonianBasins => FractalCapabilities.None,
 
             // #1713 — Math Plane 3D draws its own colours (a diagram, no per-pixel data).
             FractalType.MathPlane3D => FractalCapabilities.None,

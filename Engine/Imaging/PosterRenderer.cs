@@ -1480,6 +1480,7 @@ namespace FracturingFog.Imaging
                 FractalType.MixmasterBasins => new MixmasterCalculator(w, h),   // #1946
                 FractalType.BlackHoleRingOrbits => new BlackHoleRingCalculator(w, h),   // #1947
                 FractalType.UserPotentialBasins => new UserPotentialCalculator(w, h),   // #1994
+                FractalType.UserHamiltonianBasins => new UserHamiltonianCalculator(w, h),   // #1997
                 FractalType.MathPlane        => new MathPlaneCalculator(w, h),
                 FractalType.MathPlane3D      => new MathPlane3DCalculator(w, h),   // #1713
                 FractalType.PrecisionField   => new PrecisionFieldCalculator(w, h),
@@ -1577,6 +1578,7 @@ namespace FracturingFog.Imaging
                 case MixmasterCalculator mx: mx.FractalParameters = req.FractalParameters; break;   // #1946
                 case BlackHoleRingCalculator br: br.FractalParameters = req.FractalParameters; break;   // #1947
                 case UserPotentialCalculator up: up.FractalParameters = req.FractalParameters; break;   // #1994
+                case UserHamiltonianCalculator uh: uh.FractalParameters = req.FractalParameters; break;   // #1997
                 case MathPlaneCalculator mp: mp.FractalParameters = req.FractalParameters; break;
                 case MathPlane3DCalculator mp3: mp3.FractalParameters = req.FractalParameters; break;   // #1713
                 case PrecisionFieldCalculator pf: pf.FractalParameters = req.FractalParameters; break;
