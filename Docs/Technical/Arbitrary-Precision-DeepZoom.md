@@ -986,3 +986,29 @@ The 1e100 ceiling is gone. A Mandelbrot view renders, explores, saves, batches a
   - Each iteration is three `BigFloat.Mul` on immutable `BigInteger`, plus adds, rounding and the OD store.
   - Candidates, to be measured: a 2-multiply step, allocation-free limbs, more threads.
 
+## 39. The period of an attracting-cycle minibrot centre (#2032)
+
+**The problem (§38):** the AP reference orbit stopped at the period only when |Z_n|² < pixel² (#1614 / #1854). The bench-kit minibrot centres sit in the attracting cycle: |Z_p|² ≈ 2^-3451 at p14,416 @ 1e1000, against pixel² ≈ 2^-6659. So the orbit ran to the cap, 30 periods.
+
+**The new rule:** `ComputeReferenceOrbitAP` tracks dZ_n/dc in FloatExp (Z'_{n+1} = 2·Z_n·Z'_n + 1, cheap next to the BigFloat step). It also stops at n when both of these hold:
+- **The Newton distance |Z_n / Z'_n| is below the pixel size.** A period-n nucleus is then within a pixel of the reference. The wrap at n is the usual exact rebase (δ := Z_n + δ, back to Z_0), and it keeps each pixel's offset, because the nearest pixels' |δ_n| ≈ |dc|·|Z'_n| is at least about |Z_n|.
+- **|Z_n|⁴ < pixel².** Late in an escaping orbit |Z'_n| is huge, so the Newton distance drops below a pixel with |Z_n| near 1. Without this guard the kit's spirals at 1e300..1e3000 reported "periods" just before escaping.
+
+The cached orbit's validity check compares the stored |Z_p / Z'_p|² against the next frame's pixel², as before.
+
+**Measured** with `--apcostprobe 320 180`, `FF_APCOST_EXACT=1` (i5-13420H):
+
+| scene | frame before | frame after | orbit length | pixels whose iteration differs from the full-length orbit |
+|---|---|---|---|---|
+| minibrot p14,416 @ 1e1000 | 10.8 s | 0.89 s | 432,480 → 14,417 | 3 / 57,600 (in / out 0) |
+| minibrot p41,722 @ 1e3000 | 112 s | 3.9 s | 1,251,660 → 41,723 | 0 |
+| spirals 1e100 / 1e300 / 1e1000 / 1e3000 | — | unchanged | unchanged (period 0) | 0 |
+
+The 3 moved pixels are within #1614's bound (≤ 3 %, in / out identical). The cost per iteration (§38, #2033) is unchanged.
+
+**Tests (`S2032ApPeriodTests`):** they embed two kit locations, Apache-2.0 (THIRD-PARTY-NOTICES §6):
+- the minibrot stops at p = 14,416 (orbit length p + 1) and stays within #1614's bound against the full orbit;
+- an escaping spiral keeps its full orbit and renders byte-identically.
+
+Mutants: dropping the Newton test fails the first test, and dropping the |Z|⁴ guard fails the second.
+

@@ -283,6 +283,7 @@ namespace FracturingFog.Cli
             Probe("FF_GPULA_MINIBROT", "--gpulaprobe", "add the antenna minibrots of periods 66, 125, 250 (~1e78 … 1e299): CPU against the float-exp LA kernel.", "#1887"),
             Probe("FF_GPULA_EXACT", "--gpulaprobe", "add an exact view past 1e100 (1e150, 1e285; #1882: 1e320, 1e600): CPU against the float-exp LA kernel.", "#1880"),
             Probe("FF_APCOST_KFR", "--apcostprobe", "directory of .kfr scenes past 1e100 to split frame time on.", "#2015"),
+            Probe("FF_APCOST_EXACT", "--apcostprobe", "1 = also render with the full-length orbit and count the pixels whose iteration differs.", "#2032"),
             Probe("FF_APCOST_REPS", "--apcostprobe", "repetitions per scene (default 1).", "#2015"),
             Probe("FF_FP32_KFR", "--fp32parityprobe", "directory of .kfr scenes to compare the GPU deep routes with the CPU on.", "#2017"),
             Probe("FF_FP32_WARP", "--fp32parityprobe", "1 = the software D3D11 device (WARP).", "#2017"),

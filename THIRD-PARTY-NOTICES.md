@@ -218,6 +218,14 @@ headers.
 
 - **Inter** (bundled via `Avalonia.Fonts.Inter`) — SIL Open Font License 1.1.
 
+## 6. Test data
+
+- **fractadyne bench-kit locations** (WindySnowOwl, <https://github.com/WindySnowOwl/fractadyne/tree/main/bench-kit>):
+  the repository is licensed under the **Apache License 2.0**, which permits redistribution with
+  attribution. `Server.Tests/S2032ApPeriodTests.cs` embeds the centre and zoom of two of its ladder scenes:
+  `44-mini-p14416-1e1001.kfr` and `52-path-1e1000.kfr`. Each test uses a shorter iteration cap than the
+  scene file. Nothing of the kit is compiled into Fracturing Fog. Bibliography: `#fractadyne-bench-kit`.
+
 ---
 
 *Maintainers: when adding or removing a dependency, update this file. When
