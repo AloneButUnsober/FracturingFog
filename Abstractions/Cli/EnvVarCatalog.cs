@@ -285,6 +285,8 @@ namespace FracturingFog.Cli
             Probe("FF_APCOST_KFR", "--apcostprobe", "directory of .kfr scenes past 1e100 to split frame time on.", "#2015"),
             Probe("FF_APCOST_EXACT", "--apcostprobe", "1 = also render with the full-length orbit and count the pixels whose iteration differs.", "#2032"),
             Probe("FF_APCOST_REPS", "--apcostprobe", "repetitions per scene (default 1).", "#2015"),
+            Probe("FF_PGODEP_REPS", "--pgodependenceprobe", "rounds of the three runtime settings (default 3).", "#2038"),
+            Probe("FF_PGODEP_SCENE", "--pgodependenceprobe", "DeepCostProbe scene name (default \"path 1e33\").", "#2038"),
             Probe("FF_FP32_KFR", "--fp32parityprobe", "directory of .kfr scenes to compare the GPU deep routes with the CPU on.", "#2017"),
             Probe("FF_FP32_WARP", "--fp32parityprobe", "1 = the software D3D11 device (WARP).", "#2017"),
             Probe("FF_GPULA_BACKEND", "--gpulaprobe", "backend filter (D3D11 / Vulkan).", "#1630"),

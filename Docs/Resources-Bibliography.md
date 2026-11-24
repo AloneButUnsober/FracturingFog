@@ -1649,6 +1649,8 @@ Programs and galleries the project measured itself against, learned from, or pay
   and the kit's first-publication date not verified here.
   #1786 (#1665 S2): the deep-route calibration pass times its candidate routes on the kit's p448 scene
   (`DeepRouteCalibrator.DefaultScenes`, the centre `Server.Tests/S1630GpuLaTests.cs` uses) at 1e15..3e33.
+  #2038: `Probes/PgoDependenceProbe.cs` renders `DeepCostProbe`'s "path 1e33" scene (the kit's
+  `48-path-1e33.kfr`), and the #2038 bisect timed that file at 3840x2160.
 
 <a id="rith-ff-071-benchmark"></a>
 
@@ -1662,6 +1664,18 @@ Programs and galleries the project measured itself against, learned from, or pay
   5950X + RTX 3080 against 0.7.1, plus per-scene GPU double / fp32 runs and the kit's scenes past 1e100
   (as .kfr), timed against Fractadyne. Its findings became #2012 (the GPU too-slow guard judged by band 0
   alone: a first-run driver compile and one noisy band), #2013-#2017, and a data point on #1494.
+  Follow-up runs for #2014, the same day (a direct message): the 1.0e33 spiral path with `FF_LA=0`,
+  `FF_LA_SIMD=1`, `--deep-route-calibration force`, and the .NET runtime switches `DOTNET_TieredPGO=0`,
+  `DOTNET_ReadyToRun=0` and `DOTNET_TieredCompilation=0` against 0.7.1. They showed 0.7.2's deep path
+  needing dynamic PGO (x1.37 slower with it off) and became #2038.
+
+<a id="dotnet-runtime-compilation-config"></a>
+
+- **Microsoft.** *Compilation config settings*, .NET documentation, Microsoft Learn (page dated
+  2026-09-25, read 2026-11-24). <https://learn.microsoft.com/en-us/dotnet/core/runtime-config/compilation>.
+  Documents the runtime switches `DOTNET_TieredCompilation`, `DOTNET_TieredPGO` (dynamic, tiered PGO,
+  .NET 6 and later) and `DOTNET_ReadyToRun`, which #2038's `Probes/PgoDependenceProbe.cs` sets to time
+  the CPU deep path with and without dynamic PGO.
 
 <a id="rith-benchmark-thread"></a>
 

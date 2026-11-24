@@ -391,6 +391,17 @@ glance (a truncation bug would drop `n`).
    `RebaseStep` (#1274) in sync. `S1274SimdRebasingTests` fails on any drift between
    the scalar and vector loops.
 5. Don't put long/variable status text on the status bar (panel resize bounce).
+6. Don't step a per-pixel loop through `ref` parameters or through locals that are also
+   passed by `ref` to a method the JIT may not inline (#2038). Such locals are
+   address-exposed: every step loads and stores them in memory. Dynamic PGO can hide this
+   by inlining the hot call, but only after its warm-up. A fresh process (batch, bench,
+   the first frame) pays the full cost, and fully optimised code without PGO always does.
+   0.7.2's LA evaluator did this (`EvaluateLa` → `LaRunStages`): x1.37 slower with
+   `DOTNET_TieredPGO=0` on rith's 5950X at 1e33. Copy the state into locals, loop, and
+   write it back once (`LaPlainTail`, `LaRunStages`). Check with `--pgodependenceprobe`
+   (PGO off / default should stay near x1.0), or with `DOTNET_JitDisasm` on the method.
+   Runtime switches: Microsoft, *Compilation config settings*
+   (Resources-Bibliography.md `#dotnet-runtime-compilation-config`).
 
 ## 8. fp32 GPU deep-zoom kernels (#1331)
 
