@@ -2218,7 +2218,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         Check(_vk.MapMemory(_device, a.HostMemory, 0, (ulong)(n * sizeof(uint)), 0, &mapped), "vkMapMemory");
         var src = (uint*)mapped;
         if (mask != null) mask.CopyMarked((int*)src, dst, n);
-        else for (int i = 0; i < n; i++) dst[i] = (int)src[i];
+        else fixed (int* d = dst) System.Buffer.MemoryCopy(src, d, (long)n * sizeof(int), (long)n * sizeof(int));   // #2013: same bits
         _vk.UnmapMemory(_device, a.HostMemory);
     }
 
@@ -2247,11 +2247,8 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         var src = (float*)mapped;
         if (mask != null) mask.ScatterMarkedFinalZD(src, zr, zi, dr, di, n);
         else
-            for (int i = 0; i < n; i++)
-            {
-                int b = i * 4;
-                zr[i] = src[b + 0]; zi[i] = src[b + 1]; dr[i] = src[b + 2]; di[i] = src[b + 3];
-            }
+            fixed (float* pr = zr) fixed (float* pi = zi) fixed (float* pd = dr) fixed (float* pe = di)
+                GpuReadback.ScatterFinalZD(src, pr, pi, pd, pe, n);   // #2013: in parallel
         _vk.UnmapMemory(_device, a.HostMemory);
     }
 
