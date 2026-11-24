@@ -714,15 +714,18 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
 
 <a id="zeldovich-1970"></a>
 
-- **Ya. B. Zel'dovich (Zeldovich).** *Gravitational instability: an approximate theory for large density
-  perturbations.* Astronomy and Astrophysics 5, 84, 1970. **Only the journal, volume, first page and
-  year are confirmed**, from the reference list of a Crossref record that cites it (Matsubara,
-  Yoshisato & Morikawa, ApJ 504, 7, 1998, DOI 10.1086/306085), checked 2026-11-24; Crossref holds no
-  record of the paper itself and ADS returned nothing. The title and the page range are as the paper is
-  usually cited (see *Citations awaiting verification*); the paper's text has not been read. The
-  Zel'dovich approximation, x = q + D s(q) with div s = -delta, is the second Cosmic Web generator
-  (#2022, `Engine/CosmicWeb/Zeldovich.cs`); the relations FF uses are tested directly (div s = -delta in
-  Fourier space, the particle density D delta at small D).
+- **Ya. B. Zeldovich.** *Gravitational Instability: An Approximate Theory for Large Density
+  Perturbations.* Astronomy and Astrophysics 5, 84-89, 1970 (received 19 September 1969; Institute of
+  Applied Mathematics, Moscow). Title, author, journal, volume, pages and date from the first page of
+  the scanned original (the user's OCR text of the ADS scan, 2026-11-24); the volume, first page and
+  year agree with the reference list of a citing Crossref record (Matsubara, Yoshisato & Morikawa, ApJ
+  504, 7, 1998, DOI 10.1086/306085). No DOI; Crossref holds no record of the paper itself. Only page 84
+  was read. The second Cosmic Web generator (#2022, `Engine/CosmicWeb/Zeldovich.cs`) is his Eq. 1,
+  r = a(t) q + b(t) p(q), divided by a(t): x = q + D s(q) with D = b/a and s = p. Linearising his Eq. 2,
+  rho (a - alpha b)(a - beta b)(a - gamma b) = rho_mean a^3, gives delta = -(b/a) div p, i.e. FF's
+  div s = -delta; both are tested directly (in Fourier space, and the particle density D delta at small
+  D). His result that infinite density first appears on disc-like surfaces is the sheets ("pancakes")
+  the generator shows past D ~ 1.
 
 <a id="bertschinger-2001"></a>
 
@@ -1764,10 +1767,6 @@ entry above completed or corrected.
   Web Depth colouring (#2021) use. Only secondary sources were read (Wikipedia, "Fractal flame",
   reference 4, pointing at <https://flam3.com/flame_draves.pdf>); the PDF (22.5 MB) was not opened, so
   the authors as printed, date and any venue are unconfirmed.
-- **Zel'dovich 1970, A&A 5, 84** — the title ("Gravitational instability: an approximate theory for
-  large density perturbations") and last page (89) as usually cited; Crossref has no record and ADS
-  returned nothing (#2022). The paper's text has not been read: its statement of the approximation is
-  to be checked against FF's x = q + D s(q).
 - **pauldelbrot, fractalforums.org topic 5693** — thread title and post date (#1979 / #1980 / #1981;
   content from a user paste, the page not opened).
 - **Exterior distance bound (`distance-bound-koebe`)** — the primary source and statement of

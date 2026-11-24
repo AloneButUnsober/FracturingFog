@@ -3,14 +3,15 @@
 
 // Engine/CosmicWeb/Zeldovich.cs (#2022, Cosmic Web epic #2020)
 //
-// The Zel'dovich approximation (Ya. B. Zel'dovich, A&A 5, 84, 1970) in a periodic box: particles start
+// The Zel'dovich approximation (Ya. B. Zeldovich, A&A 5, 84-89, 1970) in a periodic box: particles start
 // on a uniform grid at Lagrangian positions q and move along straight lines,
 //   x(q) = q + D s(q),   with  div s = -delta_L,  s = -grad phi,  laplacian phi = delta_L,
 // where delta_L is the linear density contrast and D the growth factor. In Fourier space
 // s_k = i k delta_k / k^2. Where the map q -> x folds over, sheets ("pancakes") and then filaments form.
-// The original paper has not been read yet (Docs/Resources-Bibliography.md, Citations awaiting
-// verification); the relations above are the standard ones and are checked by the tests
-// (div s = -delta exactly in Fourier space; the particle density contrast = D delta_L at small D).
+// This is his Eq. 1, r = a(t) q + b(t) p(q), in comoving units (divided by a): D = b/a, s = p. His Eq. 2,
+// rho (a - alpha b)(a - beta b)(a - gamma b) = rho_mean a^3 (alpha, beta, gamma the eigenvalues of the
+// deformation), linearised gives delta = -D div s. Checked by the tests: div s = -delta exactly in
+// Fourier space, and the particle density contrast = D delta_L at small D. Read from page 84 of the paper.
 //
 // The linear field (after E. Bertschinger, "Multiscale Gaussian random fields for cosmological
 // simulations", ApJS 137, 1, 2001, Sec. II.1, Eqs. 7-9): Gaussian white noise on the grid, Fourier
