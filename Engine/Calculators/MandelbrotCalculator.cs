@@ -1328,6 +1328,11 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     /// <summary>#1614 — detect a periodic reference orbit and stop it at the period
     /// (default on; FF_PERIODIC_REFERENCE=0 turns it off). Off: every reference runs to
     /// the iteration cap, as before.</summary>
+    /// <summary>#2033 — run the BigFloat reference orbit's step on three threads
+    /// (BigFloatStepWorkers) from BigFloatStepWorkers.MinBits. Bit-identical either way;
+    /// off = the serial step (tests compare the two).</summary>
+    public static bool ParallelApOrbit { get; set; } = true;
+
     public static bool PeriodicReferenceOrbit { get; set; } =
         Environment.GetEnvironmentVariable("FF_PERIODIC_REFERENCE") != "0";
 
@@ -5055,12 +5060,17 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         FloatExp pix2Fx = tolFx ? _refPeriodTolFx : _refPeriodTol2 > 0 ? FloatExp.FromDouble(_refPeriodTol2) : FloatExp.Zero;
         FloatExp dzr = FloatExp.Zero, dzi = FloatExp.Zero;   // #2032: dZ_n/dc
         OD zrOd = OD.Zero, ziOd = OD.Zero;
+        // #2033 — the step's three multiplies and two OD splits on three threads (bit-identical:
+        // the same operations on the same operands); the serial step below that precision.
+        using var workers = prec >= BigFloatStepWorkers.MinBits && ParallelApOrbit ? new BigFloatStepWorkers() : null;
+        BigFloat zr2 = default, zi2 = default, zri = default;
         int n;
         for (n = 0; n < maxIter; n++)
         {
             if ((n & 63) == 63) ct.ThrowIfCancellationRequested();   // #1427
             if (n >= _refZr.Length) GrowRefOrbit(n, maxIter);   // #1828
-            zrOd = zr.ToOD(); ziOd = zi.ToOD();
+            if (workers != null) workers.Step(zr, zi, prec, out zr2, out zi2, out zri, out zrOd, out ziOd);
+            else { zrOd = zr.ToOD(); ziOd = zi.ToOD(); }
             StoreRefOd(n, zrOd, ziOd);
             double zmag2 = zrOd.X0 * zrOd.X0 + ziOd.X0 * ziOd.X0;
             if (zmag2 >= EscapeRadius2) break;
@@ -5102,9 +5112,12 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
                 dzr = nr; dzi = ni;
             }
             if (zmag2 > 0.0 && zmag2 <= 4.0) logDerivSum += 0.5 * Math.Log10(4.0 * zmag2);
-            var zr2 = BigFloat.Mul(zr, zr, prec);
-            var zi2 = BigFloat.Mul(zi, zi, prec);
-            var zri = BigFloat.Mul(zr, zi, prec);
+            if (workers == null)
+            {
+                zr2 = BigFloat.Mul(zr, zr, prec);
+                zi2 = BigFloat.Mul(zi, zi, prec);
+                zri = BigFloat.Mul(zr, zi, prec);
+            }
             zi = BigFloat.Add(zri.ScaleB(1), cy, prec);                      // 2·zr·zi + cy
             zr = BigFloat.Add(BigFloat.Sub(zr2, zi2, prec), cx, prec);       // zr² − zi² + cx
             if (period > 0) { n++; break; }

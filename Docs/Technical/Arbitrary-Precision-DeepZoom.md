@@ -1012,3 +1012,47 @@ The 3 moved pixels are within #1614's bound (≤ 3 %, in / out identical). The c
 
 Mutants: dropping the Newton test fails the first test, and dropping the |Z|⁴ guard fails the second.
 
+## 40. The BigFloat step on three threads (#2033)
+
+**Measured** with `--bigfloatopsprobe`: the cost of each operation of one reference-orbit step, in µs, on full-precision random operands, i5-13420H.
+
+| bits (zoom) | Mul | square | Add | ToOD | step, serial | step, parallel |
+|---|---|---|---|---|---|---|
+| 1,100 (~1e300) | 3.5 | 1.0 | 2.4 | — | 6.9 | 4.0 (×1.75) |
+| 3,400 (~1e1000) | 6.5 | 4.5 | 0.9 | 3.4 | 22.5 | 12.4 (×1.82) |
+| 10,000 (~1e3000) | 37 | 28 | 1.9 | 6.1 | 86 | 40.5 (×2.13) |
+| 33,300 (~1e10000) | 193 | 128 | 5.5 | 15.4 | 504 | 222 (×2.27) |
+
+- **The multiplies dominate:** two squares and one multiply are 70–95 % of a serial step. The two OD splits come to ~30 % at 3.4k bits and ~6 % at 33k.
+- **The ToOD figure at 1,100 bits wasn't reproducible** (15–22 µs, more than at 3,400). Probably JIT tiering in the probe's first size.
+
+**Change:** `BigFloatStepWorkers` (Abstractions/Math) runs the step's independent work on three threads:
+- the calling thread: zr², then zi's OD split;
+- helper 1: zi², then zr's OD split;
+- helper 2: zr·zi.
+
+These are the same operations on the same operands, so the orbit is **bit-identical** to the serial step.
+
+The helpers spin on a generation counter, because a step (4–220 µs) is far shorter than a thread-pool wake-up. They block on an event after 1 ms idle, and are created per orbit build and joined at its end. `ComputeReferenceOrbitAP` uses them from `BigFloatStepWorkers.MinBits` = 1,024 bits. `MandelbrotCalculator.ParallelApOrbit = false` gives the serial step; it's a test hook.
+
+**Orbit cost** (`--apcostprobe 320 180`, µs per iteration, before → after):
+
+| scene | per iteration | frame |
+|---|---|---|
+| spiral 1e1000 | 22.6 → 12.2 | 0.75 → 0.45 s |
+| spiral 1e3000 | 88 → 40.4 | 7.4 → 3.5 s |
+| minibrot p41,722 @ 1e3000 | 94 → 44 | 4.4 → 2.2 s |
+| minibrot p14,416 @ 1e1000 | 46 → 38 | 0.91 → 0.79 s |
+
+- **Near-zero Z costs extra:** the minibrots cost more per iteration than the spirals at the same depth. Their Z_n passes near 0, so `Add(Z², c)` aligns across the exponent gap (about 1,700 bits at p14,416) before rounding.
+- **Not done:**
+  - the 2-multiply form (it rounds differently, so it isn't bit-identical; ~14 % at 33k bits);
+  - allocation-free limb arithmetic;
+  - a comparison against a reference big-number library.
+
+**Tests (`S2033ParallelApOrbitTests`):**
+- every stored orbit point (bit for bit) and every output buffer match with `ParallelApOrbit` on and off, on the S2032 bench-kit minibrot and spiral;
+- the workers' products and OD splits equal the serial calls at 1.1k / 3.4k / 10k bits.
+
+Mutant: the helper squaring zr instead of zi fails all five.
+
