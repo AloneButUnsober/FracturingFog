@@ -1563,7 +1563,7 @@ Programs and galleries the project measured itself against, learned from, or pay
 
 - **WindySnowOwl.** *bench-kit* — deep-zoom benchmark scenes and harness in the *fractadyne*
   repository, GitHub, accessed 2026-11-01. <https://github.com/WindySnowOwl/fractadyne/tree/main/bench-kit>.
-  Its scenes (Kalles Fraktaler `.kfr` locations, fetched 2026-11-24 for #2017's `Probes/Fp32ParityProbe.cs` and #2015's `Probes/ApCostProbe.cs`) are the measurement set for #1613
+  Its scenes (Kalles Fraktaler `.kfr` locations, fetched 2026-11-24 for #2017's `Probes/Fp32ParityProbe.cs`, #2015's `Probes/ApCostProbe.cs` and #2032's `Server.Tests/S2032ApPeriodTests.cs`, which embeds two of them; Apache-2.0, see THIRD-PARTY-NOTICES.md section 6) are the measurement set for #1613
   (`Probes/DeepCostProbe.cs`, `Server.Tests/S1613RebaseResumeTests.cs`) and #1614. Its README's *Fracturing Fog* section
   states the FF-side conventions #1615 checks (FF's zoom fixes the longer side at 3.5 / zoom; its imaginary axis
   points down the image); `40-mini-p128-1e13.kfr` is the sample in `Server.Tests/S1615KfrImportTests.cs`. #1629 read the kit's 17
@@ -1783,6 +1783,10 @@ entry above completed or corrected.
   Fraktaler 2+, Fraktaler 3) or in the fractalforums.org rebasing threads, but no source stating it was
   found on 2026-11-01. FF does not claim it as new; it builds on Zhuoran's rebase (above). Trace the
   primary source and credit it.
+  **#2032 (2026-11-24) widens the stop test past 1e100:** it also stops when the Newton distance
+  |Z_n / Z'_n| (the Newton step to a period-n nucleus, as in Heiland-Allen's nucleus finding and Munafo's
+  Mu-Ency, above) is below the pixel size and |Z_n|^4 < pixel^2. It is the same rebase. Whether a renderer
+  uses this stop rule is likewise untraced, and FF does not claim it as new.
 - **rith, FF 0.7.1 benchmark report** — the DM itself has no URL (settled 2026-11-01, PR #1618). rith
   later posted the benchmark publicly: [above](#rith-benchmark-thread), topic 5686, URL from #1638.
   That post's exact title and date are not verified, because FF did not open the page. Confirm them

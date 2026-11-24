@@ -5051,6 +5051,9 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         double periodZ2 = 0;
         FloatExp periodZ2Fx = FloatExp.Zero;
         bool tolFx = !_refPeriodTolFx.IsZero;   // #1854: past ~1e154 the tolerance is a FloatExp
+        // #2032 — the pixel size² the Newton-distance test compares against (Zero = off).
+        FloatExp pix2Fx = tolFx ? _refPeriodTolFx : _refPeriodTol2 > 0 ? FloatExp.FromDouble(_refPeriodTol2) : FloatExp.Zero;
+        FloatExp dzr = FloatExp.Zero, dzi = FloatExp.Zero;   // #2032: dZ_n/dc
         OD zrOd = OD.Zero, ziOd = OD.Zero;
         int n;
         for (n = 0; n < maxIter; n++)
@@ -5061,12 +5064,42 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             StoreRefOd(n, zrOd, ziOd);
             double zmag2 = zrOd.X0 * zrOd.X0 + ziOd.X0 * ziOd.X0;
             if (zmag2 >= EscapeRadius2) break;
+            FloatExp zrFx = zr.ToFloatExp(), ziFx = zi.ToFloatExp();
             if (n > 0 && zmag2 < _refPeriodTol2) { period = n; periodZ2 = zmag2; }
             else if (n > 0 && tolFx)
             {
                 // #1854 — |Z_n|² in FloatExp, from the BigFloat Z_n (its double head underflows).
-                var m2 = FloatExp.Norm2(zr.ToFloatExp(), zi.ToFloatExp());
+                var m2 = FloatExp.Norm2(zrFx, ziFx);
                 if (FloatExp.AbsLess(m2, _refPeriodTolFx)) { period = n; periodZ2 = zmag2; periodZ2Fx = m2; }
+            }
+            if (period == 0 && n > 0 && !pix2Fx.IsZero)
+            {
+                // #2032 — the reference sits within a pixel of a period-n nucleus: the Newton
+                // distance |Z_n / Z'_n| is below the pixel size. A centre inside a minibrot's
+                // attracting cycle keeps |Z_n| far above the pixel (2^-1725 at p14,416 @ 1e1000,
+                // pixel 2^-3330) while the distance is far below it, so the |Z_n| test above
+                // never fired and the orbit ran to the cap. The wrap at n is the same exact
+                // rebase (δ := Z_n + δ, back to Z_0); it keeps each pixel's offset because the
+                // nearest pixels' |δ_n| ≈ |dc|·|Z'_n| is at least about |Z_n| then.
+                var m2 = FloatExp.Norm2(zrFx, ziFx);
+                var d2 = FloatExp.Norm2(dzr, dzi);
+                // Z_n must also have fallen at least half-way to the pixel scale (|Z_n|⁴ < pixel²):
+                // late in an escaping orbit |Z'_n| is huge, so |Z_n / Z'_n| drops below a pixel
+                // with |Z_n| near 1 (the bench-kit spirals at 1e300..1e3000), which is no return
+                // to 0 (the wrap there would still be an exact rebase, but _refPeriod's readers
+                // take it as a cycle).
+                if (!d2.IsZero && FloatExp.AbsLess(m2, pix2Fx * d2) && FloatExp.AbsLess(m2 * m2, pix2Fx))
+                {
+                    var newton2 = m2 * FloatExp.FromDouble(1.0 / d2.M).ScaleB(-d2.E);   // |Z_n|² / |Z'_n|², exponent-safe
+                    period = n; periodZ2 = newton2.ToDouble(); periodZ2Fx = newton2;
+                }
+            }
+            if (period == 0)
+            {
+                // #2032 — dZ_{n+1}/dc = 2·Z_n·dZ_n/dc + 1.
+                var nr = (zrFx * dzr - ziFx * dzi).ScaleB(1) + FloatExp.One;
+                var ni = (zrFx * dzi + ziFx * dzr).ScaleB(1);
+                dzr = nr; dzi = ni;
             }
             if (zmag2 > 0.0 && zmag2 <= 4.0) logDerivSum += 0.5 * Math.Log10(4.0 * zmag2);
             var zr2 = BigFloat.Mul(zr, zr, prec);

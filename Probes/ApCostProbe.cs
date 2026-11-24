@@ -9,6 +9,8 @@
 // BLA / SA tables and the pixels (incl. the LA stages past ~1e290, where the float-exp
 // rows build them), the frame, and how many threads the frame kept busy (CPU time /
 // wall). FF_APCOST_REPS (default 1) repeats each scene; the best frame counts.
+// FF_APCOST_EXACT=1 (#2032) also renders each frame with the full-length orbit
+// (periodic reference off) and counts the pixels whose iteration count differs.
 // Exit 0 always.
 
 using System;
@@ -62,8 +64,38 @@ namespace FracturingFog
                 var s = kept!.LastHpStageMs;
                 int len = kept.ReferenceOrbitLength;
                 string P(double v) => v.ToString("N0", CultureInfo.InvariantCulture);
+                string exact = "";
+                if (Environment.GetEnvironmentVariable("FF_APCOST_EXACT") == "1")
+                {
+                    // #2032 — the same frame with the full-length orbit (periodic reference off):
+                    // pixels whose iteration count differs.
+                    bool saved = MandelbrotCalculator.PeriodicReferenceOrbit;
+                    MandelbrotCalculator.PeriodicReferenceOrbit = false;
+                    try
+                    {
+                        var full = new MandelbrotCalculator(w, h)
+                        {
+                            Quality = FracturingFog.Models.QualityPreset.Unbounded,
+                            CenterX = X[0], CenterXLo = X[1], CenterX2 = X[2], CenterX3 = X[3],
+                            CenterX4 = X[4], CenterX5 = X[5], CenterX6 = X[6], CenterX7 = X[7],
+                            CenterY = Y[0], CenterYLo = Y[1], CenterY2 = Y[2], CenterY3 = Y[3],
+                            CenterY4 = Y[4], CenterY5 = Y[5], CenterY6 = Y[6], CenterY7 = Y[7],
+                            Zoom = Math.Pow(10, Math.Min(zl, 300)), MaxIterations = iter,
+                        };
+                        full.SetDepth(loc.CentreExact(), zl);
+                        full.Calculate();
+                        int d = 0, io = 0;
+                        for (int i = 0; i < full.IterationBuffer.Length; i++)
+                        {
+                            if (full.IterationBuffer[i] != kept.IterationBuffer[i]) d++;
+                            if ((full.IterationBuffer[i] >= iter) != (kept.IterationBuffer[i] >= iter)) io++;
+                        }
+                        exact = $" vs full orbit: iter diff {d}, in/out {io} |";
+                    }
+                    finally { MandelbrotCalculator.PeriodicReferenceOrbit = saved; }
+                }
                 Console.WriteLine($"| {Path.GetFileNameWithoutExtension(f)} | 1e{zl:F0} | {P(iter)} | {P(best)} | {P(s.RefOrbit)} ({P(len)}, {1000.0 * s.RefOrbit / Math.Max(1, len):F1}, {kept.ReferencePeriod}) | " +
-                                  $"{P(s.Bla + s.Sa)} | {P(s.Pixels)} | {cpu / Math.Max(1e-9, best):F1} |");
+                                  $"{P(s.Bla + s.Sa)} | {P(s.Pixels)} | {cpu / Math.Max(1e-9, best):F1} |" + exact);
             }
             Console.WriteLine("apcostprobe done");
             return 0;
