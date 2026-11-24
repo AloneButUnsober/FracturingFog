@@ -96,6 +96,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--gpuprecisionprobe")
             return GpuPrecisionProbe.Run(args);
 
+        // #2033 — the cost of each BigFloat operation of one AP reference-orbit step.
+        if (args.Length > 0 && args[0] == "--bigfloatopsprobe")
+            return BigFloatOpsProbe.Run(args);
+
         // #2015 — where a frame's time goes past 1e100 (AP reference orbit / tables / pixels) on .kfr scenes.
         if (args.Length > 0 && args[0] == "--apcostprobe")
             return ApCostProbe.Run(args);
