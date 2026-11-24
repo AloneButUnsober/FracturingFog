@@ -2039,71 +2039,84 @@
         <!-- #2021 - Cosmic Web (Soneira &amp; Peebles 1978 hierarchical clustering). -->
         <Grid IsVisible="{Binding IsCosmicWeb}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Generator:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding CosmicWebGenerators}"
                       SelectedItem="{Binding CosmicWebGenerator, Mode=TwoWay}" Margin="0,2"
-                      ToolTip.Tip="SoneiraPeebles: the hierarchical clustering model of Soneira and Peebles (Astron. J. 83, 845, 1978)." />
-            <TextBlock Grid.Row="1" Grid.Column="0" Text="Placement:" VerticalAlignment="Center" />
-            <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding CosmicWebPlacements}"
+                      ToolTip.Tip="SoneiraPeebles: the hierarchical clustering model of Soneira and Peebles (Astron. J. 83, 845, 1978). Zeldovich: particles on a grid moved by a Gaussian random field (the Zeldovich approximation, 1970)." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Particles per side:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsZeldovich}" />
+            <ComboBox Grid.Row="1" Grid.Column="1" IsVisible="{Binding CosmicWebIsZeldovich}" ItemsSource="{Binding CosmicWebGrids}"
+                      SelectedItem="{Binding CosmicWebGrid, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Zeldovich grid N: N^3 particles (128: 2.1 million, 256: 16.8 million and about 2 GB while the field is built)." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Spectral index n:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsZeldovich}" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1" IsVisible="{Binding CosmicWebIsZeldovich}" Minimum="-3" Maximum="4" Increment="0.1" FormatString="0.##"
+                           Value="{Binding CosmicWebSpectralIndex, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Power spectrum P(k) ~ k^n of the linear field. Lower n puts more power on large scales: bigger voids and longer filaments." />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Smoothing (cells):" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsZeldovich}" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1" IsVisible="{Binding CosmicWebIsZeldovich}" Minimum="0" Maximum="32" Increment="0.25" FormatString="0.##"
+                           Value="{Binding CosmicWebSmoothing, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Gaussian smoothing length of the field in grid cells: removes the smallest waves." />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Growth D:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsZeldovich}" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1" IsVisible="{Binding CosmicWebIsZeldovich}" Minimum="0" Maximum="100" Increment="0.05" FormatString="0.###"
+                           Value="{Binding CosmicWebGrowth, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Growth factor: 0 is the uniform grid; 1 is when the rms linear density contrast reaches 1 and sheets start to form. Animate it to watch the web form." />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Placement:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsSoneiraPeebles}" />
+            <ComboBox Grid.Row="5" Grid.Column="1" IsVisible="{Binding CosmicWebIsSoneiraPeebles}" ItemsSource="{Binding CosmicWebPlacements}"
                       SelectedItem="{Binding CosmicWebPlacement, Mode=TwoWay}" Margin="0,2"
                       ToolTip.Tip="Dumbbell: their final model, two sub-clumps at a fixed separation in a random direction. UniformSphere: their earlier model, eta sub-clumps uniformly at random inside the sphere." />
-            <TextBlock Grid.Row="2" Grid.Column="0" Text="Sub-clumps (eta):" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsSphere}" />
-            <NumericUpDown Grid.Row="2" Grid.Column="1" IsVisible="{Binding CosmicWebIsSphere}" Minimum="2" Maximum="64" Increment="1" FormatString="0"
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Sub-clumps (eta):" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsSphere}" />
+            <NumericUpDown Grid.Row="6" Grid.Column="1" IsVisible="{Binding CosmicWebIsSphere}" Minimum="2" Maximum="64" Increment="1" FormatString="0"
                            Value="{Binding CosmicWebEta, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Sub-clumps placed in each sphere (Dumbbell always uses 2)." />
-            <TextBlock Grid.Row="3" Grid.Column="0" Text="Size ratio (lambda):" VerticalAlignment="Center" />
-            <NumericUpDown Grid.Row="3" Grid.Column="1" Minimum="1.01" Maximum="100" Increment="0.01" FormatString="0.##########"
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Size ratio (lambda):" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsSoneiraPeebles}" />
+            <NumericUpDown Grid.Row="7" Grid.Column="1" IsVisible="{Binding CosmicWebIsSoneiraPeebles}" Minimum="1.01" Maximum="100" Increment="0.01" FormatString="0.##########"
                            Value="{Binding CosmicWebLambda, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Each level is this many times smaller than the one above (after the first step). Their final model: 1.76." />
-            <TextBlock Grid.Row="4" Grid.Column="0" Text="First ratio:" VerticalAlignment="Center" />
-            <NumericUpDown Grid.Row="4" Grid.Column="1" Minimum="0.5" Maximum="100" Increment="0.01" FormatString="0.##########"
+            <TextBlock Grid.Row="8" Grid.Column="0" Text="First ratio:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsSoneiraPeebles}" />
+            <NumericUpDown Grid.Row="8" Grid.Column="1" IsVisible="{Binding CosmicWebIsSoneiraPeebles}" Minimum="0.5" Maximum="100" Increment="0.01" FormatString="0.##########"
                            Value="{Binding CosmicWebFirstRatio, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Size ratio of the first two levels, d1/d2. Their final model: 1.10 (it sharpens the roll-off of the correlation function near 10 Mpc/h). Set it equal to lambda for a plain hierarchy." />
-            <TextBlock Grid.Row="5" Grid.Column="0" Text="Top size (Mpc/h):" VerticalAlignment="Center" />
-            <NumericUpDown Grid.Row="5" Grid.Column="1" Minimum="0.001" Maximum="100000" Increment="0.5" FormatString="0.##########"
+            <TextBlock Grid.Row="9" Grid.Column="0" Text="Top size (Mpc/h):" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsSoneiraPeebles}" />
+            <NumericUpDown Grid.Row="9" Grid.Column="1" IsVisible="{Binding CosmicWebIsSoneiraPeebles}" Minimum="0.001" Maximum="100000" Increment="0.5" FormatString="0.##########"
                            Value="{Binding CosmicWebTopSize, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Dumbbell: the separation of the top pair, d1 (theirs: 11.35). UniformSphere: the clump radius R." />
-            <TextBlock Grid.Row="6" Grid.Column="0" Text="Levels:" VerticalAlignment="Center" />
-            <ComboBox Grid.Row="6" Grid.Column="1" ItemsSource="{Binding CosmicWebLevelModes}"
+            <TextBlock Grid.Row="10" Grid.Column="0" Text="Levels:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsSoneiraPeebles}" />
+            <ComboBox Grid.Row="10" Grid.Column="1" IsVisible="{Binding CosmicWebIsSoneiraPeebles}" ItemsSource="{Binding CosmicWebLevelModes}"
                       SelectedItem="{Binding CosmicWebLevelMode, Mode=TwoWay}" Margin="0,2"
                       ToolTip.Tip="TableI: each clump draws its number of levels (7 to 12) from their Table I, so a few clumps are very rich. Fixed: every clump has the same number." />
-            <TextBlock Grid.Row="7" Grid.Column="0" Text="Levels per clump:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsFixedLevels}" />
-            <NumericUpDown Grid.Row="7" Grid.Column="1" IsVisible="{Binding CosmicWebIsFixedLevels}" Minimum="1" Maximum="24" Increment="1" FormatString="0"
+            <TextBlock Grid.Row="11" Grid.Column="0" Text="Levels per clump:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsFixedLevels}" />
+            <NumericUpDown Grid.Row="11" Grid.Column="1" IsVisible="{Binding CosmicWebIsFixedLevels}" Minimum="1" Maximum="24" Increment="1" FormatString="0"
                            Value="{Binding CosmicWebLevels, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Each clump has eta^levels galaxies." />
-            <TextBlock Grid.Row="8" Grid.Column="0" Text="Clumps:" VerticalAlignment="Center" />
-            <NumericUpDown Grid.Row="8" Grid.Column="1" Minimum="1" Maximum="10000000" Increment="10" FormatString="0"
+            <TextBlock Grid.Row="12" Grid.Column="0" Text="Clumps:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsSoneiraPeebles}" />
+            <NumericUpDown Grid.Row="12" Grid.Column="1" IsVisible="{Binding CosmicWebIsSoneiraPeebles}" Minimum="1" Maximum="10000000" Increment="10" FormatString="0"
                            Value="{Binding CosmicWebClumps, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Clumps placed uniformly at random in the box. Their clump density, 3.1e-4 per (Mpc/h)^3, is 310 in a 100 Mpc/h box." />
-            <TextBlock Grid.Row="9" Grid.Column="0" Text="Box size (Mpc/h):" VerticalAlignment="Center" />
-            <NumericUpDown Grid.Row="9" Grid.Column="1" Minimum="1" Maximum="100000" Increment="10" FormatString="0.##########"
+            <TextBlock Grid.Row="13" Grid.Column="0" Text="Box size (Mpc/h):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="13" Grid.Column="1" Minimum="1" Maximum="100000" Increment="10" FormatString="0.##########"
                            Value="{Binding CosmicWebBoxSize, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Side of the periodic box; galaxies past a face wrap round to the opposite one." />
-            <TextBlock Grid.Row="10" Grid.Column="0" Text="Seed:" VerticalAlignment="Center" />
-            <NumericUpDown Grid.Row="10" Grid.Column="1" Minimum="-2147483648" Maximum="2147483647" Increment="1" FormatString="0"
+            <TextBlock Grid.Row="14" Grid.Column="0" Text="Seed:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="14" Grid.Column="1" Minimum="-2147483648" Maximum="2147483647" Increment="1" FormatString="0"
                            Value="{Binding CosmicWebSeed, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Random seed: the same seed and settings always give the same galaxies." />
-            <TextBlock Grid.Row="11" Grid.Column="0" Text="Point cap:" VerticalAlignment="Center" />
-            <NumericUpDown Grid.Row="11" Grid.Column="1" Minimum="1" Maximum="16000000" Increment="100000" FormatString="0"
+            <TextBlock Grid.Row="15" Grid.Column="0" Text="Point cap:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsSoneiraPeebles}" />
+            <NumericUpDown Grid.Row="15" Grid.Column="1" IsVisible="{Binding CosmicWebIsSoneiraPeebles}" Minimum="1" Maximum="16000000" Increment="100000" FormatString="0"
                            Value="{Binding CosmicWebPointCap, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Most galaxies generated (up to 16,000,000). Whole clumps past the cap are dropped; the status bar says when that happens." />
-            <TextBlock Grid.Row="12" Grid.Column="0" Text="Point size (px):" VerticalAlignment="Center" />
-            <NumericUpDown Grid.Row="12" Grid.Column="1" Minimum="0" Maximum="8" Increment="0.25" FormatString="0.##"
+            <TextBlock Grid.Row="16" Grid.Column="0" Text="Point size (px):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="16" Grid.Column="1" Minimum="0" Maximum="8" Increment="0.25" FormatString="0.##"
                            Value="{Binding CosmicWebPointSize, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Splat radius in pixels; below 0.75 each galaxy lands on one pixel." />
-            <TextBlock Grid.Row="13" Grid.Column="0" Text="Depth fade:" VerticalAlignment="Center" />
-            <NumericUpDown Grid.Row="13" Grid.Column="1" Minimum="0" Maximum="1" Increment="0.05" FormatString="0.##"
+            <TextBlock Grid.Row="17" Grid.Column="0" Text="Depth fade:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="17" Grid.Column="1" Minimum="0" Maximum="1" Increment="0.05" FormatString="0.##"
                            Value="{Binding CosmicWebDepthFade, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="How much a galaxy at the back of the box is dimmed (0: not at all, 1: to nothing)." />
-            <TextBlock Grid.Row="14" Grid.Column="0" Text="Colour:" VerticalAlignment="Center" />
-            <ComboBox Grid.Row="14" Grid.Column="1" ItemsSource="{Binding CosmicWebColours}"
+            <TextBlock Grid.Row="18" Grid.Column="0" Text="Colour:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="18" Grid.Column="1" ItemsSource="{Binding CosmicWebColours}"
                       SelectedItem="{Binding CosmicWebColour, Mode=TwoWay}" Margin="0,2"
                       ToolTip.Tip="Depth: the theme runs front to back of the box, brightness shows how many galaxies line up (log density with gamma, as fractal flames are drawn). Density: the theme shows the log density." />
-            <TextBlock Grid.Row="15" Grid.Column="0" Text="Gamma:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsDepthColour}" />
-            <NumericUpDown Grid.Row="15" Grid.Column="1" IsVisible="{Binding CosmicWebIsDepthColour}" Minimum="0.1" Maximum="10" Increment="0.1" FormatString="0.##"
+            <TextBlock Grid.Row="19" Grid.Column="0" Text="Gamma:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsDepthColour}" />
+            <NumericUpDown Grid.Row="19" Grid.Column="1" IsVisible="{Binding CosmicWebIsDepthColour}" Minimum="0.1" Maximum="10" Increment="0.1" FormatString="0.##"
                            Value="{Binding CosmicWebGamma, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Brightness = log density ^ (1 / gamma) in Depth colouring: higher lifts faint regions." />
-            <TextBlock Grid.Row="16" Grid.Column="0" Text="Camera distance:" VerticalAlignment="Center" />
-            <NumericUpDown Grid.Row="16" Grid.Column="1" Minimum="0.3" Maximum="50" Increment="0.1" FormatString="0.##########"
+            <TextBlock Grid.Row="20" Grid.Column="0" Text="Camera distance:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="20" Grid.Column="1" Minimum="0.3" Maximum="50" Increment="0.1" FormatString="0.##########"
                            Value="{Binding CosmicWebCameraDistance, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Distance from the box centre, in box sides. Right-drag orbits; the wheel zooms." />
-            <TextBlock Grid.Row="17" Grid.Column="0" Text="Camera azimuth:" VerticalAlignment="Center" />
-            <NumericUpDown Grid.Row="17" Grid.Column="1" Minimum="-3.141592653589793" Maximum="3.141592653589793" Increment="0.05" FormatString="0.##########"
+            <TextBlock Grid.Row="21" Grid.Column="0" Text="Camera azimuth:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="21" Grid.Column="1" Minimum="-3.141592653589793" Maximum="3.141592653589793" Increment="0.05" FormatString="0.##########"
                            Value="{Binding CosmicWebCameraTheta, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Azimuth about the z axis (radians)." />
-            <TextBlock Grid.Row="18" Grid.Column="0" Text="Camera polar angle:" VerticalAlignment="Center" />
-            <NumericUpDown Grid.Row="18" Grid.Column="1" Minimum="0.01" Maximum="3.13" Increment="0.05" FormatString="0.##########"
+            <TextBlock Grid.Row="22" Grid.Column="0" Text="Camera polar angle:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="22" Grid.Column="1" Minimum="0.01" Maximum="3.13" Increment="0.05" FormatString="0.##########"
                            Value="{Binding CosmicWebCameraPhi, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Angle from the +z axis (radians)." />
-            <TextBlock Grid.Row="19" Grid.Column="1" Text="{Binding CosmicWebModelDimension}"
+            <TextBlock Grid.Row="23" Grid.Column="1" Text="{Binding CosmicWebModelDimension}"
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
-            <TextBlock Grid.Row="20" Grid.Column="1"
+            <TextBlock Grid.Row="24" Grid.Column="1"
                        Text="A model, not the sky: Soneira and Peebles built it to match the galaxy correlation functions of the 1970s Lick survey. The real cosmic web is not one fractal of a single dimension (Einasto 2026)."
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
         </Grid>

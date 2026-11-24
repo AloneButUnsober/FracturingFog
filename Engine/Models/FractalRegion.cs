@@ -948,6 +948,10 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? CosmicWebDepthFade { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? CosmicWebColour { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? CosmicWebGamma { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? CosmicWebGrid { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? CosmicWebSpectralIndex { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? CosmicWebSmoothing { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? CosmicWebGrowth { get; set; }
         // #1507 — int cast of BilliardRayColorSource.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysColorSource { get; set; }
         // #1508 — crossings (int casts of BilliardRayMode / BilliardCrossingValue).
@@ -1656,6 +1660,10 @@ namespace FracturingFog.Models
                     CosmicWebDepthFade = p.CosmicWebDepthFade,
                     CosmicWebColour = (int)p.CosmicWebColour,
                     CosmicWebGamma = p.CosmicWebGamma,
+                    CosmicWebGrid = p.CosmicWebGrid,
+                    CosmicWebSpectralIndex = p.CosmicWebSpectralIndex,
+                    CosmicWebSmoothing = p.CosmicWebSmoothing,
+                    CosmicWebGrowth = p.CosmicWebGrowth,
                 },
                 // #1948 — microlensing: every setting.
                 FractalType.MicrolensingMap => new RegionFractalParams
@@ -2862,6 +2870,10 @@ namespace FracturingFog.Models
             if (CosmicWebDepthFade.HasValue)  p.CosmicWebDepthFade = CosmicWebDepthFade.Value;
             if (CosmicWebColour is { } cwc && Enum.IsDefined(typeof(FracturingFog.CosmicWebColour), cwc)) p.CosmicWebColour = (FracturingFog.CosmicWebColour)cwc;
             if (CosmicWebGamma.HasValue)      p.CosmicWebGamma = CosmicWebGamma.Value;
+            if (CosmicWebGrid.HasValue)       p.CosmicWebGrid = CosmicWebGrid.Value;   // #2022
+            if (CosmicWebSpectralIndex.HasValue) p.CosmicWebSpectralIndex = CosmicWebSpectralIndex.Value;
+            if (CosmicWebSmoothing.HasValue)  p.CosmicWebSmoothing = CosmicWebSmoothing.Value;
+            if (CosmicWebGrowth.HasValue)     p.CosmicWebGrowth = CosmicWebGrowth.Value;
             if (BilliardRaysColorSource.HasValue) p.BilliardRaysColorSource = (FracturingFog.BilliardRayColorSource)BilliardRaysColorSource.Value;
             if (BilliardRaysMode.HasValue)       p.BilliardRaysMode = (FracturingFog.BilliardRayMode)BilliardRaysMode.Value;
             if (BilliardRaysCrossingWindow.HasValue) p.BilliardRaysCrossingWindow = BilliardRaysCrossingWindow.Value;
@@ -4958,6 +4970,46 @@ namespace FracturingFog.Models
                     CosmicWebPlacement = (int)FracturingFog.CosmicWebPlacement.UniformSphere, CosmicWebEta = 4, CosmicWebLevelMode = (int)FracturingFog.CosmicWebLevelMode.Fixed, CosmicWebLevels = 7,
                     CosmicWebBoxSize = 200.0, CosmicWebClumps = 120, CosmicWebTopSize = 15.0, CosmicWebFirstRatio = 2.0, CosmicWebLambda = 2.0,
                     CosmicWebSeed = 1977, CosmicWebPointSize = 1.0, CosmicWebDepthFade = 0.5,
+                },
+            },
+            // #2022 — Cosmic Web: the Zel'dovich approximation on a power-law Gaussian random field.
+            new()
+            {
+                Name          = "Cosmic Web - Zeldovich Web Forming",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  1.0,
+                Iterations    =  256,
+                Description   = "128^3 particles start on a grid and move in straight lines set by a Gaussian random density field (P(k) ~ 1/k^2, smoothed over two grid cells): the Zel'dovich approximation. At this growth (D = 1, the rms linear density contrast) sheets are folding and the first filaments join them. The bound 'Cosmic web: forming' animation runs D from 0 (the bare grid) to 2.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.CosmicWeb,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Cosmic web: forming",
+                Params        = new RegionFractalParams
+                {
+                    Cam3DFamily = (int)FractalType.CosmicWeb, Cam3DDistance = 2.2, Cam3DTheta = 0.6, Cam3DPhi = 1.1,
+                    CosmicWebGenerator = (int)FracturingFog.CosmicWebGenerator.Zeldovich, CosmicWebGrid = 128,
+                    CosmicWebSpectralIndex = -2.0, CosmicWebSmoothing = 2.0, CosmicWebGrowth = 1.0,
+                    CosmicWebBoxSize = 100.0, CosmicWebSeed = 1970, CosmicWebPointSize = 0.0, CosmicWebDepthFade = 0.5, CosmicWebGamma = 0.6,
+                },
+            },
+            new()
+            {
+                Name          = "Cosmic Web - Zeldovich Mature Web",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  1.0,
+                Iterations    =  256,
+                Description   = "The same approximation well past shell crossing (D = 2): particles stream through each other, so walls and filaments thicken and the voids between them empty. The Zel'dovich approximation does not hold particles in the structures they reach, so they would keep streaming apart as D grows.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.CosmicWeb,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    Cam3DFamily = (int)FractalType.CosmicWeb, Cam3DDistance = 2.2, Cam3DTheta = 0.9, Cam3DPhi = 1.2,
+                    CosmicWebGenerator = (int)FracturingFog.CosmicWebGenerator.Zeldovich, CosmicWebGrid = 128,
+                    CosmicWebSpectralIndex = -2.0, CosmicWebSmoothing = 2.0, CosmicWebGrowth = 2.0,
+                    CosmicWebBoxSize = 100.0, CosmicWebSeed = 70, CosmicWebPointSize = 0.0, CosmicWebDepthFade = 0.5, CosmicWebGamma = 0.6,
                 },
             },
             // #1997 — User Hamiltonian: the Hénon–Heiles section (parity with that view), FF's own

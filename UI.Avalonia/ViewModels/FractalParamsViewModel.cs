@@ -322,6 +322,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _cwTop = _p.CosmicWebTopSize; _cwLevelMode = _p.CosmicWebLevelMode; _cwLevels = _p.CosmicWebLevels; _cwCap = _p.CosmicWebPointCap;
         _cwSize = _p.CosmicWebPointSize; _cwFade = _p.CosmicWebDepthFade;
         _cwColour = _p.CosmicWebColour; _cwGamma = _p.CosmicWebGamma;
+        _cwGrid = _p.CosmicWebGrid; _cwIndex = _p.CosmicWebSpectralIndex; _cwSmooth = _p.CosmicWebSmoothing; _cwGrowth = _p.CosmicWebGrowth;
         _cwDist = _p.CosmicWebCameraDistance; _cwTheta = _p.CosmicWebCameraTheta; _cwPhi = _p.CosmicWebCameraPhi;
         _uhMaxTime = _p.UserHamMaxTime; _uhTol = _p.UserHamTolerance; _uhMaxStep = _p.UserHamMaxStep; _uhProject = _p.UserHamProjectEvery;
         _mathPlaneScene = _p.MathPlaneScene ?? string.Empty;
@@ -2631,7 +2632,20 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     private static readonly System.Array s_CosmicWebColours = System.Enum.GetValues(typeof(CosmicWebColour));
     public bool CosmicWebIsDepthColour => _cwColour == CosmicWebColour.Depth;
     public double CosmicWebGamma { get => _cwGamma; set { Set(ref _cwGamma, Clamp(value, 0.1, 10.0)); _p.CosmicWebGamma = _cwGamma; Fire(); } }
-    public CosmicWebGenerator CosmicWebGenerator { get => _cwGen; set { Set(ref _cwGen, value); _p.CosmicWebGenerator = value; Fire(); } }
+    public CosmicWebGenerator CosmicWebGenerator
+    {
+        get => _cwGen;
+        set { Set(ref _cwGen, value); _p.CosmicWebGenerator = value; this.RaisePropertyChanged(nameof(CosmicWebIsSoneiraPeebles)); this.RaisePropertyChanged(nameof(CosmicWebIsZeldovich)); this.RaisePropertyChanged(nameof(CosmicWebModelDimension)); Fire(); }
+    }
+    public bool CosmicWebIsSoneiraPeebles => _cwGen == CosmicWebGenerator.SoneiraPeebles;
+    public bool CosmicWebIsZeldovich => _cwGen == CosmicWebGenerator.Zeldovich;
+    private int _cwGrid;
+    private double _cwIndex, _cwSmooth, _cwGrowth;
+    public int CosmicWebGrid { get => _cwGrid; set { Set(ref _cwGrid, (int)Clamp(value, 16, 256)); _p.CosmicWebGrid = _cwGrid; Fire(); } }
+    public System.Collections.Generic.IReadOnlyList<int> CosmicWebGrids { get; } = new[] { 16, 32, 64, 128, 256 };
+    public double CosmicWebSpectralIndex { get => _cwIndex; set { Set(ref _cwIndex, Clamp(value, -3.0, 4.0)); _p.CosmicWebSpectralIndex = _cwIndex; Fire(); } }
+    public double CosmicWebSmoothing { get => _cwSmooth; set { Set(ref _cwSmooth, Clamp(value, 0.0, 32.0)); _p.CosmicWebSmoothing = _cwSmooth; Fire(); } }
+    public double CosmicWebGrowth { get => _cwGrowth; set { Set(ref _cwGrowth, Clamp(value, 0.0, 100.0)); _p.CosmicWebGrowth = _cwGrowth; Fire(); } }
     public System.Array CosmicWebGenerators => s_CosmicWebGenerators;
     private static readonly System.Array s_CosmicWebGenerators = System.Enum.GetValues(typeof(CosmicWebGenerator));
     public CosmicWebPlacement CosmicWebPlacement
@@ -2669,6 +2683,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     {
         get
         {
+            if (_cwGen == CosmicWebGenerator.Zeldovich)
+                return "Zel'dovich: N^3 particles on a grid, moved along straight lines by the linear field. D is the rms linear density contrast; sheets and filaments form once D passes about 1.";
             int eta = _cwPlace == CosmicWebPlacement.Dumbbell ? 2 : System.Math.Max(2, _cwEta);
             double d = System.Math.Log(eta) / System.Math.Log(System.Math.Max(1.01, _cwLambda));
             return $"Model D = log {eta} / log {_cwLambda:0.###} = {d:0.###} (between the smallest and largest clump sizes)";

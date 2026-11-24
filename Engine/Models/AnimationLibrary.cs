@@ -557,6 +557,20 @@ namespace FracturingFog.Models
                 Tags = new List<string> { "2D", "black-hole" },
             };
 
+            // #2022 — Cosmic Web: the Zel'dovich growth factor. Only re-displaces (the field is cached).
+            yield return new AnimationData
+            {
+                Name = "Cosmic web: forming",
+                Category = "Built-in",
+                Description = "Runs the Zel'dovich growth factor from the uniform grid (D = 0) to well past shell crossing (D = 2) and back: sheets fold, then filaments and knots.",
+                TargetFractalTypes = new List<FracturingFog.FractalType> { FracturingFog.FractalType.CosmicWeb },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack { ParamName = "CosmicWebGrowth", Mode = AnimationMode.Sine, Min = 0.0, Max = 2.0, FrequencyHz = 0.04, Enabled = true },
+                },
+                Tags = new List<string> { "3D", "cosmology" },
+            };
+
             // #632 (Renderer C2) — precision-sweep convergence. Ramps the low
             // tier up the ladder Float→QuadDouble while a Hold track pins the
             // reference tier at QuadDouble, so the divergence field dims toward
