@@ -181,8 +181,23 @@ public sealed partial class MandelbrotCalculator
 
     private static FloatExp Cheb(FloatExp re, FloatExp im) => FloatExp.Max(re.Abs(), im.Abs());
 
-    // As LaRunStages, in FloatExp.
+    // As LaRunStages, in FloatExp; #2038: on locals copied in and written back once, as there.
     private static void LaRunStagesFx(LaStageTableFx t, int[]? up, FloatExp dcR, FloatExp dcI, FloatExp mdc, int maxIter, bool climb,
+        ref FloatExp drRef, ref FloatExp diRef, ref FloatExp zrRef, ref FloatExp ziRef, ref FloatExp drvRef, ref FloatExp divRef,
+        ref int nRef, ref int stageRef, ref int jRef, ref long laSteps, ref LaCycleFx cyc)
+    {
+        FloatExp dr = drRef, di = diRef, zr = zrRef, zi = ziRef, drv = drvRef, div = divRef;
+        int n = nRef, stage = stageRef, j = jRef;
+        long steps = 0;
+        LaRunStagesFxCore(t, up, dcR, dcI, mdc, maxIter, climb, ref dr, ref di, ref zr, ref zi, ref drv, ref div,
+            ref n, ref stage, ref j, ref steps, ref cyc);
+        drRef = dr; diRef = di; zrRef = zr; ziRef = zi; drvRef = drv; divRef = div;
+        nRef = n; stageRef = stage; jRef = j;
+        laSteps += steps;
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    private static void LaRunStagesFxCore(LaStageTableFx t, int[]? up, FloatExp dcR, FloatExp dcI, FloatExp mdc, int maxIter, bool climb,
         ref FloatExp dr, ref FloatExp di, ref FloatExp zr, ref FloatExp zi, ref FloatExp drv, ref FloatExp div,
         ref int n, ref int stage, ref int j, ref long laSteps, ref LaCycleFx cyc)
     {

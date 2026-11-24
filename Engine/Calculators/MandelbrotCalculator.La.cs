@@ -42,6 +42,7 @@
 
 using System;
 using System.Threading;
+using System.Runtime.CompilerServices;
 using FracturingFog.FFMath;
 using FracturingFog.Interefaces;
 
@@ -249,64 +250,88 @@ public sealed partial class MandelbrotCalculator
             if (cyc.Caught) { Interlocked.Increment(ref _deepPeriodicPixels); break; }   // #1804: n = maxIter
 
             // ── 2. Plain perturbation from reference index j (FF's rebased loop) ──
-            int m = j;
-            bool back = false;
-            while (n < maxIter)
-            {
-                if (bla != null)
-                {
-                    int bi = bla.Lookup(m, dr * dr + di * di, Math.Min(refLen - 1, m + (maxIter - n)));
-                    if (bi >= 0)
-                    {
-                        ref readonly var e = ref bla.Data[bi];
-                        if (e.L >= 2)
-                        {
-                            double nDr = e.ARe * dr - e.AIm * di + (e.BRe * dcR - e.BIm * dcI);
-                            double nDi = e.ARe * di + e.AIm * dr + (e.BRe * dcI + e.BIm * dcR);
-                            dr = nDr; di = nDi;
-                            double nDrv = e.ARe * drv - e.AIm * div + e.BRe;   // d' = A·d + B (#1782)
-                            double nDiv = e.ARe * div + e.AIm * drv + e.BIm;
-                            drv = nDrv; div = nDiv;
-                            m += e.L; n += e.L;
-                            blaSkips++;
-                            continue;
-                        }
-                    }
-                }
-
-                double Zr = _refZr[m], Zi = _refZi[m];
-                zr = Zr + dr; zi = Zi + di;
-                double zmag2 = zr * zr + zi * zi;
-                if (zmag2 >= EscapeRadius2) break;
-
-                double dmag2 = dr * dr + di * di;
-                bool rebase = zmag2 < dmag2 || m + 1 >= refLen;
-                if (rebase && climb && top >= 0)
-                {
-                    // FF: rebase and climb back to the stages at z_n (their step from Z_0
-                    // makes this iteration's update, derivative included).
-                    dr = zr; di = zi;
-                    back = true;
-                    break;
-                }
-
-                double nDrv2 = 2.0 * (zr * drv - zi * div) + 1.0;
-                double nDiv2 = 2.0 * (zr * div + zi * drv);
-                drv = nDrv2; div = nDiv2;
-                if (rebase) { dr = zr; di = zi; Zr = 0; Zi = 0; m = 0; }
-                double a = 2.0 * Zr + dr, b = 2.0 * Zi + di;
-                double nDr2 = a * dr - b * di + dcR;
-                double nDi2 = a * di + b * dr + dcI;
-                dr = nDr2; di = nDi2;
-                m++; n++;
-                plainSteps++;
-            }
+            bool back = LaPlainTail(_refZr, _refZi, refLen, bla, climb && top >= 0, dcR, dcI, maxIter, j,
+                ref dr, ref di, ref zr, ref zi, ref drv, ref div, ref n, ref plainSteps, ref blaSkips);
             if (back) { stage = top; j = 0; continue; }
             break;
         }
 
         IterationBuffer[idx] = n;
         FillAuxAndColorHP(idx, n, maxIter, zr, zi, drv, div, colorMap);
+    }
+
+    // #2038 — the LA evaluator's plain tail (FF's rebased loop, from reference index m0) on
+    // locals of its own. EvaluateLa passes its pixel state by ref to LaRunStages, which makes
+    // that state address-exposed: unless the JIT inlines LaRunStages (dynamic PGO did, a
+    // fresh process only after its warm-up; fully optimised code without PGO never did), every
+    // step of this loop loaded and stored δ, z, dz/dc and n through memory, and a plain step
+    // cost ~2.5x one of the unaccelerated loop (0.7.2 at 1e33, rith's report). Here the state
+    // is copied in once, the loop runs in registers, and it is written back once: the same
+    // operations in the same order, so the frame is bit-identical. True: the pixel rebased
+    // with climbing on (δ = z), so the stages restart at the top.
+    private static bool LaPlainTail(double[] refZr, double[] refZi, int refLen, BlaTable? bla, bool climbBack,
+        double dcR, double dcI, int maxIter, int m0,
+        ref double drRef, ref double diRef, ref double zrRef, ref double ziRef, ref double drvRef, ref double divRef,
+        ref int nRef, ref long plainSteps, ref long blaSkips)
+    {
+        double dr = drRef, di = diRef, zr = zrRef, zi = ziRef, drv = drvRef, div = divRef;
+        int n = nRef, m = m0;
+        long plain = 0, skips = 0;
+        bool back = false;
+        while (n < maxIter)
+        {
+            if (bla != null)
+            {
+                int bi = bla.Lookup(m, dr * dr + di * di, Math.Min(refLen - 1, m + (maxIter - n)));
+                if (bi >= 0)
+                {
+                    ref readonly var e = ref bla.Data[bi];
+                    if (e.L >= 2)
+                    {
+                        double nDr = e.ARe * dr - e.AIm * di + (e.BRe * dcR - e.BIm * dcI);
+                        double nDi = e.ARe * di + e.AIm * dr + (e.BRe * dcI + e.BIm * dcR);
+                        dr = nDr; di = nDi;
+                        double nDrv = e.ARe * drv - e.AIm * div + e.BRe;   // d' = A·d + B (#1782)
+                        double nDiv = e.ARe * div + e.AIm * drv + e.BIm;
+                        drv = nDrv; div = nDiv;
+                        m += e.L; n += e.L;
+                        skips++;
+                        continue;
+                    }
+                }
+            }
+
+            double Zr = refZr[m], Zi = refZi[m];
+            zr = Zr + dr; zi = Zi + di;
+            double zmag2 = zr * zr + zi * zi;
+            if (zmag2 >= EscapeRadius2) break;
+
+            double dmag2 = dr * dr + di * di;
+            bool rebase = zmag2 < dmag2 || m + 1 >= refLen;
+            if (rebase && climbBack)
+            {
+                // FF: rebase and climb back to the stages at z_n (their step from Z_0
+                // makes this iteration's update, derivative included).
+                dr = zr; di = zi;
+                back = true;
+                break;
+            }
+
+            double nDrv2 = 2.0 * (zr * drv - zi * div) + 1.0;
+            double nDiv2 = 2.0 * (zr * div + zi * drv);
+            drv = nDrv2; div = nDiv2;
+            if (rebase) { dr = zr; di = zi; Zr = 0; Zi = 0; m = 0; }
+            double a = 2.0 * Zr + dr, b = 2.0 * Zi + di;
+            double nDr2 = a * dr - b * di + dcR;
+            double nDi2 = a * di + b * dr + dcI;
+            dr = nDr2; di = nDi2;
+            m++; n++;
+            plain++;
+        }
+        drRef = dr; diRef = di; zrRef = zr; ziRef = zi; drvRef = drv; divRef = div;
+        nRef = n;
+        plainSteps += plain; blaSkips += skips;
+        return back;
     }
 
     // #1627 — the AT for one pixel: z' ← z'² + c' from z' = 0 until |z'|² > Esc² (false:
@@ -367,7 +392,25 @@ public sealed partial class MandelbrotCalculator
     // tail). A rebase with climbing on restarts at the top stage. Shared by the scalar
     // and the 4-lane evaluators (#1628), so both run the same operations.
     // #1804 — `cyc` carries the pixel's periodicity check across calls (LaCycleRepeats).
+    // #2038 — the state is copied into locals on entry and written back once on exit
+    // (LaPlainTail's note): stepping through the ref parameters kept it in memory unless the
+    // JIT inlined this method, which only dynamic PGO did.
     private static void LaRunStages(LaStageTable t, int[]? up, double dcR, double dcI, double mdc, int maxIter, bool climb,
+        ref double drRef, ref double diRef, ref double zrRef, ref double ziRef, ref double drvRef, ref double divRef,
+        ref int nRef, ref int stageRef, ref int jRef, ref long laSteps, long[] perStage, ref LaCycle cyc)
+    {
+        double dr = drRef, di = diRef, zr = zrRef, zi = ziRef, drv = drvRef, div = divRef;
+        int n = nRef, stage = stageRef, j = jRef;
+        long steps = 0;
+        LaRunStagesCore(t, up, dcR, dcI, mdc, maxIter, climb, ref dr, ref di, ref zr, ref zi, ref drv, ref div,
+            ref n, ref stage, ref j, ref steps, perStage, ref cyc);
+        drRef = dr; diRef = di; zrRef = zr; ziRef = zi; drvRef = drv; divRef = div;
+        nRef = n; stageRef = stage; jRef = j;
+        laSteps += steps;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void LaRunStagesCore(LaStageTable t, int[]? up, double dcR, double dcI, double mdc, int maxIter, bool climb,
         ref double dr, ref double di, ref double zr, ref double zi, ref double drv, ref double div,
         ref int n, ref int stage, ref int j, ref long laSteps, long[] perStage, ref LaCycle cyc)
     {

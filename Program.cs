@@ -104,6 +104,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--apcostprobe")
             return ApCostProbe.Run(args);
 
+        // #2038 — whether the CPU deep path needs dynamic PGO: fresh processes, default / PGO off / fully optimised.
+        if (args.Length > 0 && args[0] == "--pgodependenceprobe")
+            return PgoDependenceProbe.Run(args);
+
         // #2017 — GPU deep routes vs the CPU on .kfr scenes: bit-identical colour and same iteration.
         if (args.Length > 0 && args[0] == "--fp32parityprobe")
             return Fp32ParityProbe.Run(args);
