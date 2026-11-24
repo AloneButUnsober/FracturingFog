@@ -5755,15 +5755,23 @@ noise, filtered in Fourier space to a power spectrum P(k) ~ k^n
 potential (div s = -delta), so particles leave the underdense regions
 and pile up where the field is high. Where neighbouring particles
 cross, sheets ('pancakes') form, then filaments and knots between
-them, the cosmic web. D grows with time: it is the rms linear
-density contrast, so sheets start to form near D = 1. Animate D to
+them, the cosmic web. Zeldovich showed the first infinite density
+forms on flat discs: collapse along one axis, almost never along
+two or three at once. For a Gaussian field a point is being squeezed
+along all three axes only 8% of the time (Doroshkevich, quoted in
+his paper; FF's field reproduces it). D grows with time (in a flat,
+matter-only universe in step with the scale factor, his Eq. A.5): it
+is the rms linear density contrast, so sheets start to form near
+D = 1. Animate D to
 watch the web form; only the displacement is redone, not the field.
 Settings: Particles per side (16 to 256; 256 is 16.8 million points
 and needs about 2 GB while the field is built), Spectral index n
 (lower = more large-scale power, bigger voids), Smoothing (cells),
 Growth D. The approximation ignores gravity after the start: past
 shell crossing the particles stream on through the structures
-instead of staying in them, so the web blurs as D keeps growing.
+instead of staying in them (Zeldovich notes his density formula no
+longer applies there; real matter stays in the discs and shocks), so
+the web blurs as D keeps growing.
 
 Dimension
 Inside a clump the density falls off as a power of size, so between

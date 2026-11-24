@@ -719,13 +719,19 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   Applied Mathematics, Moscow). Title, author, journal, volume, pages and date from the first page of
   the scanned original (the user's OCR text of the ADS scan, 2026-11-24); the volume, first page and
   year agree with the reference list of a citing Crossref record (Matsubara, Yoshisato & Morikawa, ApJ
-  504, 7, 1998, DOI 10.1086/306085). No DOI; Crossref holds no record of the paper itself. Only page 84
-  was read. The second Cosmic Web generator (#2022, `Engine/CosmicWeb/Zeldovich.cs`) is his Eq. 1,
+  504, 7, 1998, DOI 10.1086/306085). No DOI; Crossref holds no record of the paper itself. All six
+  pages read (the user's OCR text). The second Cosmic Web generator (#2022, `Engine/CosmicWeb/Zeldovich.cs`) is his Eq. 1,
   r = a(t) q + b(t) p(q), divided by a(t): x = q + D s(q) with D = b/a and s = p. Linearising his Eq. 2,
   rho (a - alpha b)(a - beta b)(a - gamma b) = rho_mean a^3, gives delta = -(b/a) div p, i.e. FF's
   div s = -delta; both are tested directly (in Fourier space, and the particle density D delta at small
   D). His result that infinite density first appears on disc-like surfaces is the sheets ("pancakes")
-  the generator shows past D ~ 1.
+  the generator shows past D ~ 1. Also used: his Eq. 5 (the linear density), p = grad Phi (Eqs.
+  A.11-A.12: FF's s = -grad phi is the same with phi = -Phi), b/a growing as a for a flat universe (Eq.
+  A.5, in the help), his remark (p. 85) that Eq. 2 no longer applies to matter that has passed infinite
+  density (why FF's particles stream on through), and the sign distribution of the deformation
+  eigenvalues for a Gaussian field (Eq. A.13 and the text after it: all of one sign 8% each way, 2:1 42%
+  each way), which he attributes to Doroshkevich and which `S2022ZeldovichTests` checks (measured 8.0 /
+  42.9 / 41.3 / 7.7%).
 
 <a id="bertschinger-2001"></a>
 
@@ -1767,6 +1773,12 @@ entry above completed or corrected.
   Web Depth colouring (#2021) use. Only secondary sources were read (Wikipedia, "Fractal flame",
   reference 4, pointing at <https://flam3.com/flame_draves.pdf>); the PDF (22.5 MB) was not opened, so
   the authors as printed, date and any venue are unconfirmed.
+- **Doroshkevich, deformation eigenvalue distribution** — Zeldovich 1970 (p. 89, Eq. A.13) gives the
+  joint distribution of the three deformation eigenvalues of a Gaussian field and its sign probabilities
+  "as found by Doroshkevich", without a reference (his reference list has Doroshkevich & Zeldovich 1963,
+  Astr. Zhurn. 40, 807, for the growing mode, and Doroshkevich, Zeldovich & Novikov 1967, not this
+  result). The original publication has not been identified; FF's test uses the numbers as Zeldovich
+  quotes them (#2022).
 - **pauldelbrot, fractalforums.org topic 5693** — thread title and post date (#1979 / #1980 / #1981;
   content from a user paste, the page not opened).
 - **Exterior distance bound (`distance-bound-koebe`)** — the primary source and statement of

@@ -6,6 +6,8 @@
 //   • the FFT inverts itself and matches a direct DFT on a small grid;
 //   • (a) the generated field's binned power |delta_k|^2 follows k^n (log-log slope) for several n;
 //   • the displacement satisfies div s = -delta exactly in Fourier space (i k . s_k = -delta_k);
+//   • its derivative matrix is symmetric (s is a gradient) and the eigenvalue signs follow the
+//     8% / 42% / 42% / 8% split Zeldovich (1970, p. 89, Eq. A.13) quotes from Doroshkevich;
 //   • (b) linear regime: at small D the particle density contrast (a cloud-in-cell count written here)
 //     equals D delta_L, to first order;
 //   • (c) shell crossing: the fraction of particles in cells at 4x the mean density rises with D;
@@ -144,6 +146,69 @@ public sealed class S2022ZeldovichTests
                 }
         TestContext.Current.TestOutputHelper?.WriteLine($"div s + delta relative error {Math.Sqrt(err / norm):E2}");
         Assert.True(Math.Sqrt(err / norm) < 1e-4, $"relative error {Math.Sqrt(err / norm):E2}");
+    }
+
+    /// <summary>d s_i / d q_j by spectral differentiation (i k_j in Fourier space, 0 on the Nyquist plane).</summary>
+    private static double[] Derivative(float[] si, int axis, int n)
+    {
+        var (re, im) = Spectrum(si, n);
+        for (int z = 0; z < n; z++)
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    int idx = axis == 0 ? x : axis == 1 ? y : z;
+                    int i = (z * n + y) * n + x;
+                    double kj = idx == n / 2 ? 0 : Fft3D.Freq(idx, n) * 2 * Math.PI / n;
+                    (re[i], im[i]) = (-im[i] * kj, re[i] * kj);
+                }
+        Fft3D.Inverse(re, im, n);
+        return re;
+    }
+
+    [Fact]
+    public void Deformation_Eigenvalue_Signs_Follow_Doroshkevich()
+    {
+        // Zeldovich 1970, p. 89 (Eq. A.13 and the text after it): for a Gaussian field the three
+        // deformation eigenvalues are all of one sign 8% of the time each way, and split 2:1 42% each way.
+        // Positive roots of a symmetric matrix's characteristic polynomial lambda^3 - I1 lambda^2 + I2 lambda - I3
+        // are counted by the sign changes of its coefficients (exact, since every root is real).
+        const int n = 64;
+        var f = Zeldovich.Build(new ZeldovichFieldSettings(2022, n, -2.0, 1.0));
+        var s = new[] { f.Sx, f.Sy, f.Sz };
+        var d = new double[3, 3][];
+        for (int i = 0; i < 3; i++)
+            for (int j = 0; j < 3; j++)
+                d[i, j] = Derivative(s[i], j, n);
+        var counts = new int[4];
+        double asym = 0, scale = 0;
+        for (int p = 0; p < n * n * n; p++)
+        {
+            double a = d[0, 0][p], b = d[1, 1][p], c = d[2, 2][p];
+            double xy = 0.5 * (d[0, 1][p] + d[1, 0][p]), xz = 0.5 * (d[0, 2][p] + d[2, 0][p]), yz = 0.5 * (d[1, 2][p] + d[2, 1][p]);
+            asym += Sq(d[0, 1][p] - d[1, 0][p]) + Sq(d[0, 2][p] - d[2, 0][p]) + Sq(d[1, 2][p] - d[2, 1][p]);
+            scale += Sq(xy) + Sq(xz) + Sq(yz);
+            double i1 = a + b + c;
+            double i2 = a * b + a * c + b * c - xy * xy - xz * xz - yz * yz;
+            double i3 = a * (b * c - yz * yz) - xy * (xy * c - yz * xz) + xz * (xy * yz - b * xz);
+            double[] coef = { 1, -i1, i2, -i3 };
+            int changes = 0;
+            double prev = coef[0];
+            for (int k = 1; k < 4; k++)
+            {
+                if (coef[k] == 0) continue;
+                if (Math.Sign(coef[k]) != Math.Sign(prev)) changes++;
+                prev = coef[k];
+            }
+            counts[changes]++;
+        }
+        // s is a gradient (his p = grad Phi, Eqs. A.11-A.12), so its derivative matrix is symmetric.
+        Assert.True(Math.Sqrt(asym / scale) < 1e-4, $"asymmetry {Math.Sqrt(asym / scale):E2}");
+        var frac = counts.Select(c => c / (double)(n * n * n)).ToArray();
+        TestContext.Current.TestOutputHelper?.WriteLine("positive eigenvalues 0/1/2/3: " + string.Join(", ", frac.Select(v => v.ToString("0.####"))));
+        Assert.InRange(frac[0], 0.065, 0.095);
+        Assert.InRange(frac[3], 0.065, 0.095);
+        Assert.InRange(frac[1], 0.40, 0.44);
+        Assert.InRange(frac[2], 0.40, 0.44);
     }
 
     // ── Particles ──

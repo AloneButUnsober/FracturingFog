@@ -11,7 +11,10 @@
 // This is his Eq. 1, r = a(t) q + b(t) p(q), in comoving units (divided by a): D = b/a, s = p. His Eq. 2,
 // rho (a - alpha b)(a - beta b)(a - gamma b) = rho_mean a^3 (alpha, beta, gamma the eigenvalues of the
 // deformation), linearised gives delta = -D div s. Checked by the tests: div s = -delta exactly in
-// Fourier space, and the particle density contrast = D delta_L at small D. Read from page 84 of the paper.
+// Fourier space, and the particle density contrast = D delta_L at small D. His p = grad Phi (Eqs. A.11-A.12)
+// is s = -grad phi with phi = -Phi. Past the first infinite density his Eq. 2 no longer applies to the
+// matter that went through it (p. 85); FF keeps moving every particle on its line, so they stream through.
+// His Eq. A.13 (Doroshkevich's sign distribution of the deformation eigenvalues) is a test target.
 //
 // The linear field (after E. Bertschinger, "Multiscale Gaussian random fields for cosmological
 // simulations", ApJS 137, 1, 2001, Sec. II.1, Eqs. 7-9): Gaussian white noise on the grid, Fourier
