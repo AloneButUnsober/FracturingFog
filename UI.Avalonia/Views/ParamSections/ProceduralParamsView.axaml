@@ -2039,7 +2039,7 @@
         <!-- #2021 - Cosmic Web (Soneira &amp; Peebles 1978 hierarchical clustering). -->
         <Grid IsVisible="{Binding IsCosmicWeb}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Generator:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding CosmicWebGenerators}"
                       SelectedItem="{Binding CosmicWebGenerator, Mode=TwoWay}" Margin="0,2"
@@ -2119,6 +2119,13 @@
             <TextBlock Grid.Row="24" Grid.Column="1"
                        Text="A model, not the sky: Soneira and Peebles built it to match the galaxy correlation functions of the 1970s Lick survey. The real cosmic web is not one fractal of a single dimension (Einasto 2026)."
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
+            <CheckBox Grid.Row="25" Grid.Column="1" Content="Measure D(r)" IsChecked="{Binding CosmicWebMeasure, Mode=TwoWay}" Margin="0,4,0,2"
+                      ToolTip.Tip="Measure the fractal dimension function D(r) = 3 + d log(1 + xi) / d log r of the points (Einasto 2026, Eqs. 2-4) and show it in the status bar at 0.3, 1, 3 and 10 Mpc/h (per 100 Mpc/h of box). Cached per point set: camera moves do not repeat it." />
+            <TextBlock Grid.Row="26" Grid.Column="0" Text="D(r) sample (points):" VerticalAlignment="Center" IsVisible="{Binding CosmicWebMeasure}" />
+            <NumericUpDown Grid.Row="26" Grid.Column="1" IsVisible="{Binding CosmicWebMeasure}" Minimum="1000" Maximum="100000" Increment="5000" FormatString="0"
+                           Value="{Binding CosmicWebMeasureSample, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Points sampled at random for the pair counts. More points: less noise at small r, and the time grows as the square." />
+            <CheckBox Grid.Row="27" Grid.Column="1" Content="Draw D(r) inset" IsVisible="{Binding CosmicWebMeasure}" IsChecked="{Binding CosmicWebDimensionOverlay, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Plot D(r) against r along the bottom of the frame (also in batch and poster exports). Orange: measured. Dashed sky blue: D = 3, homogeneous. Dashed green: the Soneira-Peebles model D." />
         </Grid>
 
     </StackPanel>

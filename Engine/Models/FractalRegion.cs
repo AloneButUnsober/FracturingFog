@@ -952,6 +952,10 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? CosmicWebSpectralIndex { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? CosmicWebSmoothing { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? CosmicWebGrowth { get; set; }
+        // #2023 — D(r) measurement.
+        [JsonIgnore(Condition = OmitNull)] public bool? CosmicWebMeasure { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? CosmicWebMeasureSample { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? CosmicWebDimensionOverlay { get; set; }
         // #1507 — int cast of BilliardRayColorSource.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysColorSource { get; set; }
         // #1508 — crossings (int casts of BilliardRayMode / BilliardCrossingValue).
@@ -1664,6 +1668,9 @@ namespace FracturingFog.Models
                     CosmicWebSpectralIndex = p.CosmicWebSpectralIndex,
                     CosmicWebSmoothing = p.CosmicWebSmoothing,
                     CosmicWebGrowth = p.CosmicWebGrowth,
+                    CosmicWebMeasure = p.CosmicWebMeasure,
+                    CosmicWebMeasureSample = p.CosmicWebMeasureSample,
+                    CosmicWebDimensionOverlay = p.CosmicWebDimensionOverlay,
                 },
                 // #1948 — microlensing: every setting.
                 FractalType.MicrolensingMap => new RegionFractalParams
@@ -2874,6 +2881,9 @@ namespace FracturingFog.Models
             if (CosmicWebSpectralIndex.HasValue) p.CosmicWebSpectralIndex = CosmicWebSpectralIndex.Value;
             if (CosmicWebSmoothing.HasValue)  p.CosmicWebSmoothing = CosmicWebSmoothing.Value;
             if (CosmicWebGrowth.HasValue)     p.CosmicWebGrowth = CosmicWebGrowth.Value;
+            if (CosmicWebMeasure.HasValue)    p.CosmicWebMeasure = CosmicWebMeasure.Value;   // #2023
+            if (CosmicWebMeasureSample.HasValue) p.CosmicWebMeasureSample = CosmicWebMeasureSample.Value;
+            if (CosmicWebDimensionOverlay.HasValue) p.CosmicWebDimensionOverlay = CosmicWebDimensionOverlay.Value;
             if (BilliardRaysColorSource.HasValue) p.BilliardRaysColorSource = (FracturingFog.BilliardRayColorSource)BilliardRaysColorSource.Value;
             if (BilliardRaysMode.HasValue)       p.BilliardRaysMode = (FracturingFog.BilliardRayMode)BilliardRaysMode.Value;
             if (BilliardRaysCrossingWindow.HasValue) p.BilliardRaysCrossingWindow = BilliardRaysCrossingWindow.Value;
@@ -5010,6 +5020,27 @@ namespace FracturingFog.Models
                     CosmicWebGenerator = (int)FracturingFog.CosmicWebGenerator.Zeldovich, CosmicWebGrid = 128,
                     CosmicWebSpectralIndex = -2.0, CosmicWebSmoothing = 2.0, CosmicWebGrowth = 2.0,
                     CosmicWebBoxSize = 100.0, CosmicWebSeed = 70, CosmicWebPointSize = 0.0, CosmicWebDepthFade = 0.5, CosmicWebGamma = 0.6,
+                },
+            },
+            // #2023 — the D(r) measurement (Einasto 2026, Eqs. 2-4) on the Soneira-Peebles final model.
+            new()
+            {
+                Name          = "Cosmic Web - Measured D(r)",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  1.0,
+                Iterations    =  256,
+                Description   = "The Soneira-Peebles final model with its fractal dimension function measured from the points: D(r) = 3 + d log(1 + xi) / d log r, plotted along the bottom (orange), from every point. It scatters about the model's D = 1.23 (dashed green) on the smallest scales, where the pairs inside clumps dominate, and climbs towards the homogeneous 3 (dashed sky blue) as the uncorrelated pairs between clumps take over. The status bar gives D at 0.3, 1, 3 and 10 Mpc/h.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.CosmicWeb,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    Cam3DFamily = (int)FractalType.CosmicWeb, Cam3DDistance = 2.2, Cam3DTheta = 0.6, Cam3DPhi = 1.1,
+                    CosmicWebPlacement = (int)FracturingFog.CosmicWebPlacement.Dumbbell, CosmicWebLevelMode = (int)FracturingFog.CosmicWebLevelMode.TableI,
+                    CosmicWebBoxSize = 100.0, CosmicWebClumps = 310, CosmicWebTopSize = 11.35, CosmicWebFirstRatio = 1.10, CosmicWebLambda = 1.76,
+                    CosmicWebSeed = 1978, CosmicWebPointSize = 1.0, CosmicWebDepthFade = 0.5,
+                    CosmicWebMeasure = true, CosmicWebMeasureSample = 100000, CosmicWebDimensionOverlay = true,
                 },
             },
             // #1997 — User Hamiltonian: the Hénon–Heiles section (parity with that view), FF's own

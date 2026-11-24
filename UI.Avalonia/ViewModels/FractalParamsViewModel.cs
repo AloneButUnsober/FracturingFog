@@ -323,6 +323,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _cwSize = _p.CosmicWebPointSize; _cwFade = _p.CosmicWebDepthFade;
         _cwColour = _p.CosmicWebColour; _cwGamma = _p.CosmicWebGamma;
         _cwGrid = _p.CosmicWebGrid; _cwIndex = _p.CosmicWebSpectralIndex; _cwSmooth = _p.CosmicWebSmoothing; _cwGrowth = _p.CosmicWebGrowth;
+        _cwMeasure = _p.CosmicWebMeasure; _cwSample = _p.CosmicWebMeasureSample; _cwDOverlay = _p.CosmicWebDimensionOverlay;
         _cwDist = _p.CosmicWebCameraDistance; _cwTheta = _p.CosmicWebCameraTheta; _cwPhi = _p.CosmicWebCameraPhi;
         _uhMaxTime = _p.UserHamMaxTime; _uhTol = _p.UserHamTolerance; _uhMaxStep = _p.UserHamMaxStep; _uhProject = _p.UserHamProjectEvery;
         _mathPlaneScene = _p.MathPlaneScene ?? string.Empty;
@@ -2646,6 +2647,12 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double CosmicWebSpectralIndex { get => _cwIndex; set { Set(ref _cwIndex, Clamp(value, -3.0, 4.0)); _p.CosmicWebSpectralIndex = _cwIndex; Fire(); } }
     public double CosmicWebSmoothing { get => _cwSmooth; set { Set(ref _cwSmooth, Clamp(value, 0.0, 32.0)); _p.CosmicWebSmoothing = _cwSmooth; Fire(); } }
     public double CosmicWebGrowth { get => _cwGrowth; set { Set(ref _cwGrowth, Clamp(value, 0.0, 100.0)); _p.CosmicWebGrowth = _cwGrowth; Fire(); } }
+    // #2023 — D(r) measurement.
+    private bool _cwMeasure, _cwDOverlay;
+    private int _cwSample;
+    public bool CosmicWebMeasure { get => _cwMeasure; set { Set(ref _cwMeasure, value); _p.CosmicWebMeasure = value; Fire(); } }
+    public int CosmicWebMeasureSample { get => _cwSample; set { Set(ref _cwSample, (int)Clamp(value, 1000, 100000)); _p.CosmicWebMeasureSample = _cwSample; Fire(); } }
+    public bool CosmicWebDimensionOverlay { get => _cwDOverlay; set { Set(ref _cwDOverlay, value); _p.CosmicWebDimensionOverlay = value; Fire(); } }
     public System.Array CosmicWebGenerators => s_CosmicWebGenerators;
     private static readonly System.Array s_CosmicWebGenerators = System.Enum.GetValues(typeof(CosmicWebGenerator));
     public CosmicWebPlacement CosmicWebPlacement

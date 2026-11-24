@@ -43,7 +43,7 @@ public sealed class UserEquationDslMigrationTests
         // test's own pre-migration snapshot (the temp data root is shared).
         string dir = Path.GetDirectoryName(EquationsFile)!;
         Directory.CreateDirectory(dir);
-        foreach (var f in Directory.GetFiles(dir, "userequations.json.*.dslmigration.bak")) File.Delete(f);
+        foreach (var f in Directory.GetFiles(dir, "userequations.json.*dslmigration*.bak")) File.Delete(f);   // incl. same-second .1/.2 siblings
 
         // A translatable C# body (Complex.* + a member access) and one with no
         // DSL form (an unsupported member the preprocessor can't take).
@@ -116,7 +116,7 @@ public sealed class UserEquationDslMigrationTests
         Directory.CreateDirectory(dir);
         string powMarker = AppDataPaths.Combine(".userequations-powfix");
         if (File.Exists(powMarker)) File.Delete(powMarker);
-        foreach (var f in Directory.GetFiles(dir, "userequations.json.*.dslmigration.bak")) File.Delete(f);
+        foreach (var f in Directory.GetFiles(dir, "userequations.json.*dslmigration*.bak")) File.Delete(f);   // incl. same-second .1/.2 siblings
 
         // Pre-migration backup holds the ORIGINAL C# (negative power of z).
         string backup = Path.Combine(dir, "userequations.json.20260101-000000.dslmigration.bak");

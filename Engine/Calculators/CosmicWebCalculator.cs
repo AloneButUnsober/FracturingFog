@@ -23,6 +23,9 @@
 // batch and poster export), so camera moves only re-splat. The Zel'dovich linear field and its
 // displacement are cached apart from the growth factor D, so changing only D re-displaces the particles
 // without running the FFTs again.
+//
+// #2023 — an optional D(r) measurement of the points (CosmicWebCalculator.Dimension.cs): a status-bar
+// readout and an inset plot drawn into the frame.
 
 using System;
 using System.Threading;
@@ -35,7 +38,7 @@ using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
 
-public sealed class CosmicWebCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource
+public sealed partial class CosmicWebCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -185,12 +188,14 @@ public sealed class CosmicWebCalculator : IFractalCalculator, IStereoEyeCamera, 
         {
             var z = ZeldovichSettingsOf(p);
             LastPrecisionLabel = $"Zel'dovich: {z.Grid}^3 = {pts.Count:N0} particles, P(k) ~ k^{z.Index:0.##}, smoothing {z.Smoothing:0.##} cells, D = {p.CosmicWebGrowth:0.###} (rms linear density contrast)";
+            MeasureDimension(p, pts, null, ct);   // #2023
             return;
         }
         var s = SettingsOf(p);
         LastPrecisionLabel = $"Soneira-Peebles: {pts.Count:N0} points in {pts.ClumpsUsed:N0} clumps"
             + (pts.Capped ? $" (point cap {s.PointCap:N0} reached: {pts.ClumpsRequested - pts.ClumpsUsed:N0} clumps dropped)" : "")
             + $", model D = log {s.Eta} / log {s.Lambda:0.###} = {SoneiraPeebles.AnalyticDimension(s.Eta, s.Lambda):0.###}";
+        MeasureDimension(p, pts, SoneiraPeebles.AnalyticDimension(s.Eta, s.Lambda), ct);   // #2023
     }
 
     /// <summary>Adds every point's weight into <paramref name="density"/> (fixed point, atomic, order-free).</summary>
