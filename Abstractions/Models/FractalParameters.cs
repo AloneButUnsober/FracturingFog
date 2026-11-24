@@ -1632,7 +1632,7 @@ namespace FracturingFog.Models
         public int CosmicWebSeed { get; set; } = 1978;
         /// <summary>#2021 — side of the periodic box, h^-1 Mpc. Default 100.</summary>
         public double CosmicWebBoxSize { get; set; } = 100.0;
-        /// <summary>#2021 — number of top-level clumps in the box. Default 310: Soneira &amp; Peebles' clump density,
+        /// <summary>#2021 — number of top-level clumps in the box. Default 310: the clump density of Soneira &amp; Peebles,
         /// 3.1e-4 h^3 Mpc^-3 (AJ 83, 845, 1978, Sec. IVc iii), times 100^3.</summary>
         public int CosmicWebClumps { get; set; } = 310;
         /// <summary>#2021 — Dumbbell (their final model) or UniformSphere (their earlier one). Default Dumbbell.</summary>
