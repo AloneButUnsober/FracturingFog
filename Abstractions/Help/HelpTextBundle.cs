@@ -5789,11 +5789,46 @@ changes near 3 Mpc/h (inside halos and clusters versus their
 arrangement along filaments) and rises to 3 by about 100 Mpc/h,
 where the universe becomes homogeneous (Einasto 2026, a review).
 
+Measuring D(r)
+Tick Measure D(r) and FF measures the fractal dimension function of
+the points with the chain Einasto (2026) reviews:
+  xi(r)    = DD(r) / RR(r) - 1     (the natural estimator, Eq. 2)
+  g(r)     = 1 + xi(r)             (the structure function)
+  gamma(r) = d log g / d log r     (Eq. 3)
+  D(r) = 3 + gamma(r)              (Eq. 4)
+DD counts the pairs of points (a random sample of them; the sample
+size is shown) in logarithmic bins of separation r, from 1/1000 to 1/4
+of the box side. RR is the count a uniform random set would give,
+known exactly for a periodic box. gamma is the slope of log g against
+log r over five neighbouring bins; a bin with too few pairs is left
+out.
+
+How to read it: D(r) is the dimension of the set as seen at scale r.
+D = 3 means uniform at that scale (no clustering); a line of points
+gives 1, a sheet 2. A single fractal gives a flat D(r). Inside the
+Soneira-Peebles clumps, where xi is much larger than 1, D(r) sits near
+the model's log eta / log lambda (dashed green in the inset); where xi
+falls towards 1 the uncorrelated pairs between clumps take over and
+D(r) climbs towards 3 (D(r) uses 1 + xi, not xi). For the real web Einasto (2026) describes two regimes with a
+change near 3 Mpc/h: below it D(r) is set by the inside of halos and
+clusters, above it by how the halos are strung along filaments, and
+D reaches 3 near 100 Mpc/h. The Zel'dovich web is smoothed at the grid
+scale, so its D(r) means little below a couple of cells; with n = -2
+much of its power is on the largest scales, and a 100 Mpc/h box stays
+below 3 out to a quarter of the box.
+
+The status bar adds D at 0.3, 1, 3 and 10 Mpc/h (scaled with the box:
+these are for 100 Mpc/h). Draw D(r) inset plots it along the bottom
+of the frame (orange; dashed sky blue is D = 3), and batch and poster
+exports carry it. The measurement is cached per point set, so camera
+moves do not repeat it; more sample points mean less noise at small r
+and time growing as the square (20,000 points: well under a second).
+
 Settings: Generator, Placement, eta (UniformSphere), lambda, First
 ratio (d1/d2), Top size (d1 or the sphere radius, Mpc/h), Levels,
 Clumps, Box size (periodic, Mpc/h), Seed, Point cap (whole clumps past
 it are dropped; the status bar says so), Point size, Depth fade, Colour,
-Gamma, and
+Gamma, Measure D(r), D(r) sample, Draw D(r) inset, and
 the camera (distance in box sides, azimuth, polar angle).
 
 The status bar shows the galaxy and clump counts and the model's D
@@ -5805,6 +5840,7 @@ Presets:
   Cosmic Web - Uniform Sphere Clumps (D = 2)      the earlier placement
   Cosmic Web - Zeldovich Web Forming              D = 1, animated
   Cosmic Web - Zeldovich Mature Web               past shell crossing
+  Cosmic Web - Measured D(r)                      the D(r) inset
 
 Batch: every setting is a --param CosmicWeb* key, the camera is
 Cam3DFamily=CosmicWeb with Cam3DDistance / Cam3DTheta / Cam3DPhi, e.g.

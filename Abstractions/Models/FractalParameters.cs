@@ -1667,6 +1667,12 @@ namespace FracturingFog.Models
         public double CosmicWebSmoothing { get; set; } = 2.0;
         /// <summary>#2022 — Zel'dovich: growth factor D, in units of the rms linear density contrast (shell crossing near 1). Default 1.</summary>
         public double CosmicWebGrowth { get; set; } = 1.0;
+        /// <summary>#2023 — measure the fractal dimension function D(r) of the points (status bar). Default off.</summary>
+        public bool CosmicWebMeasure { get; set; }
+        /// <summary>#2023 — points sampled for the D(r) pair counts (1,000..100,000). Default 20,000.</summary>
+        public int CosmicWebMeasureSample { get; set; } = 20_000;
+        /// <summary>#2023 — draw the D(r) inset into the frame while measuring. Default on.</summary>
+        public bool CosmicWebDimensionOverlay { get; set; } = true;
         /// <summary>#2021 — orbit camera distance from the box centre, in box sides. Default 2.2.</summary>
         public double CosmicWebCameraDistance { get; set; } = 2.2;
         /// <summary>#2021 — orbit camera azimuth (radians). Default 0.6.</summary>
@@ -3009,6 +3015,9 @@ namespace FracturingFog.Models
                 CosmicWebSpectralIndex = CosmicWebSpectralIndex,
                 CosmicWebSmoothing = CosmicWebSmoothing,
                 CosmicWebGrowth = CosmicWebGrowth,
+                CosmicWebMeasure = CosmicWebMeasure,
+                CosmicWebMeasureSample = CosmicWebMeasureSample,
+                CosmicWebDimensionOverlay = CosmicWebDimensionOverlay,
                 CosmicWebCameraDistance = CosmicWebCameraDistance,
                 CosmicWebCameraTheta = CosmicWebCameraTheta,
                 CosmicWebCameraPhi = CosmicWebCameraPhi,

@@ -710,7 +710,14 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   A review: the fractal function D(r) = 3 + gamma(r), gamma = d log g / d log r, g = 1 + xi (Eqs. 2-4;
   g is not numbered), its change of regime near 3 h^-1 Mpc and D -> 3 at about 100 h^-1 Mpc. Cited by
   the Cosmic Web help and settings panel for the caveat that the real web is not a single-dimension
-  fractal (#2021); the measurement chain is planned for #2023. Pointer that started the epic #2020.
+  fractal (#2021). The measurement chain is implemented in #2023 (`Engine/CosmicWeb/FractalDimension.cs`,
+  read 2026-11-24 from the arXiv HTML): Eq. 2, the natural estimator xi = DD/RR - 1 (Sec. III, the
+  paper's words "the natural estimator", DD and RR normalised pair counts); g = 1 + xi (unnumbered,
+  Sec. III/IV); Eq. 3, gamma = d log g / d log r; Eq. 4, D = 3 + gamma (Sec. IV). The paper writes the
+  derivative exactly and gives no binning or smoothing; FF's choices (log bins, analytic periodic RR, a
+  seeded subsample, a 5-bin least-squares slope) are its own. The help's two-regime description (a
+  change near 3 h^-1 Mpc, D(100) = 3.0) is from Sec. IV; the paper's summary puts the small-scale
+  regime at r <= 4 h^-1 Mpc, which the help does not quote. Pointer that started the epic #2020.
 
 <a id="zeldovich-1970"></a>
 
@@ -1391,7 +1398,9 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
   (`BilliardRaysCalculator`, #1507; credit added with the Math Plane plan, which also defaults its object
   colours to it, MathPlane-DesignPlan.md §4). #1553: the Math Plane phase-portrait colour wheel blends six
   of these colours in a cycle (`MathPlaneComplexMap.PhaseStops`). The wheel is FF's own construction from
-  the palette; it is not a cyclic map published by Okabe and Ito.
+  the palette; it is not a cyclic map published by Okabe and Ito. #2023: the Cosmic Web D(r) inset
+  draws its measured curve in orange, the D = 3 line in sky blue and the model D in bluish green
+  (`CosmicWebCalculator.Dimension.cs`).
 
 <a id="lorensen-cline-marching-cubes"></a>
 
@@ -1781,6 +1790,16 @@ Programs and galleries the project measured itself against, learned from, or pay
 These sources are cited in the code or docs, but their publication details aren't confirmed yet.
 They stay listed (the contract never drops a credit). Each needs its primary source traced and its
 entry above completed or corrected.
+
+- **Fisher-Yates shuffle (Durstenfeld's in-place form)** — the partial in-place random permutation
+  `FractalDimension.SampleIndices` uses to draw the D(r) subsample (#2023). Credited from general
+  knowledge only: R. A. Fisher and F. Yates (*Statistical Tables*, 1938) and R. Durstenfeld (Algorithm
+  235, "Random permutation", Communications of the ACM, 1964) are the usual attributions; neither was
+  opened, so the details are unconfirmed. Not FF's method.
+- **Linked-cell (cell list) neighbour search** — binning points into cells at least the cut-off apart
+  so only neighbouring cells are searched, standard in particle simulation; `FractalDimension.CountPairs`
+  uses it for the D(r) pair counts (#2023). No primary source has been traced (Hockney & Eastwood,
+  *Computer Simulation Using Particles*, is the reference usually given, not opened). Not FF's method.
 
 - **Scott Draves (and Erik Reckase?), *The Fractal Flame Algorithm*** — the log-density display with
   gamma (alpha = log hits / log max hits, colour x alpha^(1/gamma)) that `FlameRenderer` and the Cosmic
