@@ -317,6 +317,12 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _mlR = _p.MicroFieldRadius; _mlSeed = _p.MicroSeed; _mlMass = _p.MicroMassFunction; _mlMin = _p.MicroMassMin;
         _mlRpp = _p.MicroRaysPerPixel; _mlPad = _p.MicroPad; _mlScale = _p.MicroColourScale;
         _mlCurve = _p.MicroLightCurve; _mlTx = _p.MicroTrackX; _mlTy = _p.MicroTrackY; _mlTa = _p.MicroTrackAngle;
+        _cwGen = _p.CosmicWebGenerator; _cwSeed = _p.CosmicWebSeed; _cwBox = _p.CosmicWebBoxSize; _cwClumps = _p.CosmicWebClumps;
+        _cwPlace = _p.CosmicWebPlacement; _cwEta = _p.CosmicWebEta; _cwLambda = _p.CosmicWebLambda; _cwFirst = _p.CosmicWebFirstRatio;
+        _cwTop = _p.CosmicWebTopSize; _cwLevelMode = _p.CosmicWebLevelMode; _cwLevels = _p.CosmicWebLevels; _cwCap = _p.CosmicWebPointCap;
+        _cwSize = _p.CosmicWebPointSize; _cwFade = _p.CosmicWebDepthFade;
+        _cwColour = _p.CosmicWebColour; _cwGamma = _p.CosmicWebGamma;
+        _cwDist = _p.CosmicWebCameraDistance; _cwTheta = _p.CosmicWebCameraTheta; _cwPhi = _p.CosmicWebCameraPhi;
         _uhMaxTime = _p.UserHamMaxTime; _uhTol = _p.UserHamTolerance; _uhMaxStep = _p.UserHamMaxStep; _uhProject = _p.UserHamProjectEvery;
         _mathPlaneScene = _p.MathPlaneScene ?? string.Empty;
         UpdateMathPlaneSceneError();
@@ -550,6 +556,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsUserPotentialBasins => FractalType == FractalType.UserPotentialBasins;   // #1994
     public bool IsUserHamiltonianBasins => FractalType == FractalType.UserHamiltonianBasins;   // #1997
     public bool IsMicrolensingMap => FractalType == FractalType.MicrolensingMap;   // #1948
+    public bool IsCosmicWeb => FractalType == FractalType.CosmicWeb;   // #2021
     /// <summary>Either billiard type: the shared scene controls (geometry, disks, bounces).</summary>
     public bool IsBilliardScene => IsChaoticBilliard || IsBilliardRays;
     /// <summary>#1548 — Math Plane (Cartesian plotter).</summary>
@@ -728,6 +735,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian || IsMirrorSpheres
           || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsBilliardRays || IsBlackHoleShadow || IsHenonHeilesBasins || IsThreeBodyBasins || IsMagnetisedBlackHole || IsSpinningBinaryBasins || IsMixmasterBasins || IsBlackHoleRingOrbits || IsUserPotentialBasins || IsUserHamiltonianBasins || IsMicrolensingMap || IsMathPlane || IsSlitCascade || IsTalbotCarpet || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable || IsAdaptiveAa2D
+          || IsCosmicWeb
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -2609,6 +2617,63 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool MicroLightCurve { get => _mlCurve; set { Set(ref _mlCurve, value); _p.MicroLightCurve = value; Fire(); } }
     public double MicroTrackX { get => _mlTx; set { Set(ref _mlTx, Clamp(value, -1e6, 1e6)); _p.MicroTrackX = _mlTx; Fire(); } }
     public double MicroTrackY { get => _mlTy; set { Set(ref _mlTy, Clamp(value, -1e6, 1e6)); _p.MicroTrackY = _mlTy; Fire(); } }
+
+    // ── #2021 — Cosmic Web ───────────────────────────────────────────────────
+    private CosmicWebGenerator _cwGen;
+    private CosmicWebPlacement _cwPlace;
+    private CosmicWebLevelMode _cwLevelMode;
+    private int _cwSeed, _cwClumps, _cwEta, _cwLevels, _cwCap;
+    private double _cwBox, _cwLambda, _cwFirst, _cwTop, _cwSize, _cwFade, _cwDist, _cwTheta, _cwPhi;
+    private CosmicWebColour _cwColour;
+    private double _cwGamma;
+    public CosmicWebColour CosmicWebColour { get => _cwColour; set { Set(ref _cwColour, value); _p.CosmicWebColour = value; this.RaisePropertyChanged(nameof(CosmicWebIsDepthColour)); Fire(); } }
+    public System.Array CosmicWebColours => s_CosmicWebColours;
+    private static readonly System.Array s_CosmicWebColours = System.Enum.GetValues(typeof(CosmicWebColour));
+    public bool CosmicWebIsDepthColour => _cwColour == CosmicWebColour.Depth;
+    public double CosmicWebGamma { get => _cwGamma; set { Set(ref _cwGamma, Clamp(value, 0.1, 10.0)); _p.CosmicWebGamma = _cwGamma; Fire(); } }
+    public CosmicWebGenerator CosmicWebGenerator { get => _cwGen; set { Set(ref _cwGen, value); _p.CosmicWebGenerator = value; Fire(); } }
+    public System.Array CosmicWebGenerators => s_CosmicWebGenerators;
+    private static readonly System.Array s_CosmicWebGenerators = System.Enum.GetValues(typeof(CosmicWebGenerator));
+    public CosmicWebPlacement CosmicWebPlacement
+    {
+        get => _cwPlace;
+        set { Set(ref _cwPlace, value); _p.CosmicWebPlacement = value; this.RaisePropertyChanged(nameof(CosmicWebIsSphere)); this.RaisePropertyChanged(nameof(CosmicWebModelDimension)); Fire(); }
+    }
+    public System.Array CosmicWebPlacements => s_CosmicWebPlacements;
+    private static readonly System.Array s_CosmicWebPlacements = System.Enum.GetValues(typeof(CosmicWebPlacement));
+    public bool CosmicWebIsSphere => _cwPlace == CosmicWebPlacement.UniformSphere;
+    public CosmicWebLevelMode CosmicWebLevelMode
+    {
+        get => _cwLevelMode;
+        set { Set(ref _cwLevelMode, value); _p.CosmicWebLevelMode = value; this.RaisePropertyChanged(nameof(CosmicWebIsFixedLevels)); Fire(); }
+    }
+    public System.Array CosmicWebLevelModes => s_CosmicWebLevelModes;
+    private static readonly System.Array s_CosmicWebLevelModes = System.Enum.GetValues(typeof(CosmicWebLevelMode));
+    public bool CosmicWebIsFixedLevels => _cwLevelMode == CosmicWebLevelMode.Fixed;
+    public int CosmicWebSeed { get => _cwSeed; set { Set(ref _cwSeed, value); _p.CosmicWebSeed = _cwSeed; Fire(); } }
+    public double CosmicWebBoxSize { get => _cwBox; set { Set(ref _cwBox, Clamp(value, 1.0, 100000.0)); _p.CosmicWebBoxSize = _cwBox; Fire(); } }
+    public int CosmicWebClumps { get => _cwClumps; set { Set(ref _cwClumps, (int)Clamp(value, 1, 10_000_000)); _p.CosmicWebClumps = _cwClumps; Fire(); } }
+    public int CosmicWebEta { get => _cwEta; set { Set(ref _cwEta, (int)Clamp(value, 2, 64)); _p.CosmicWebEta = _cwEta; this.RaisePropertyChanged(nameof(CosmicWebModelDimension)); Fire(); } }
+    public double CosmicWebLambda { get => _cwLambda; set { Set(ref _cwLambda, Clamp(value, 1.01, 100.0)); _p.CosmicWebLambda = _cwLambda; this.RaisePropertyChanged(nameof(CosmicWebModelDimension)); Fire(); } }
+    public double CosmicWebFirstRatio { get => _cwFirst; set { Set(ref _cwFirst, Clamp(value, 0.5, 100.0)); _p.CosmicWebFirstRatio = _cwFirst; Fire(); } }
+    public double CosmicWebTopSize { get => _cwTop; set { Set(ref _cwTop, Clamp(value, 0.001, 100000.0)); _p.CosmicWebTopSize = _cwTop; Fire(); } }
+    public int CosmicWebLevels { get => _cwLevels; set { Set(ref _cwLevels, (int)Clamp(value, 1, 24)); _p.CosmicWebLevels = _cwLevels; Fire(); } }
+    public int CosmicWebPointCap { get => _cwCap; set { Set(ref _cwCap, (int)Clamp(value, 1, 16_000_000)); _p.CosmicWebPointCap = _cwCap; Fire(); } }
+    public double CosmicWebPointSize { get => _cwSize; set { Set(ref _cwSize, Clamp(value, 0.0, 8.0)); _p.CosmicWebPointSize = _cwSize; Fire(); } }
+    public double CosmicWebDepthFade { get => _cwFade; set { Set(ref _cwFade, Clamp(value, 0.0, 1.0)); _p.CosmicWebDepthFade = _cwFade; Fire(); } }
+    public double CosmicWebCameraDistance { get => _cwDist; set { Set(ref _cwDist, Clamp(value, 0.3, 50.0)); _p.CosmicWebCameraDistance = _cwDist; Fire(); } }
+    public double CosmicWebCameraTheta { get => _cwTheta; set { Set(ref _cwTheta, Clamp(value, -System.Math.PI, System.Math.PI)); _p.CosmicWebCameraTheta = _cwTheta; Fire(); } }
+    public double CosmicWebCameraPhi { get => _cwPhi; set { Set(ref _cwPhi, Clamp(value, 0.01, System.Math.PI - 0.01)); _p.CosmicWebCameraPhi = _cwPhi; Fire(); } }
+    /// <summary>The model's analytic dimension, D = log eta / log lambda (Soneira &amp; Peebles 1978, Eq. 4).</summary>
+    public string CosmicWebModelDimension
+    {
+        get
+        {
+            int eta = _cwPlace == CosmicWebPlacement.Dumbbell ? 2 : System.Math.Max(2, _cwEta);
+            double d = System.Math.Log(eta) / System.Math.Log(System.Math.Max(1.01, _cwLambda));
+            return $"Model D = log {eta} / log {_cwLambda:0.###} = {d:0.###} (between the smallest and largest clump sizes)";
+        }
+    }
     public double MicroTrackAngle { get => _mlTa; set { Set(ref _mlTa, Clamp(value, -360.0, 360.0)); _p.MicroTrackAngle = _mlTa; Fire(); } }
 
     // ── #1997 — User Hamiltonian ─────────────────────────────────────────────

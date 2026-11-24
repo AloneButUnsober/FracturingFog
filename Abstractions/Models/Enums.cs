@@ -1322,6 +1322,12 @@ namespace FracturingFog
         /// through the lens plane are counted per source-plane pixel. NOT a fractal (caustic networks).
         /// <c>MicrolensingCalculator</c>. Tunables: the <c>Micro*</c> keys.</summary>
         MicrolensingMap,
+        /// <summary>#2021 (Cosmic Web epic #2020) — a 3D point set of "galaxies" in a periodic box, laid down
+        /// by a clustering model and shown through an orbit camera as a log-density point splat. S1: the
+        /// hierarchical clustering model of Soneira &amp; Peebles (AJ 83, 845, 1978). NOT a single-D fractal of
+        /// the real universe (Einasto 2026): the model is self-similar only between its smallest and largest
+        /// clump sizes. <c>CosmicWebCalculator</c>. Tunables: the <c>CosmicWeb*</c> keys.</summary>
+        CosmicWeb,
     }
 
     /// <summary>Hole layout of <see cref="FractalType.BlackHoleShadow"/> (#1923).
@@ -1429,6 +1435,25 @@ namespace FracturingFog
     /// <summary>Section colouring (#1947): <see cref="Density"/> (crossings per pixel through the palette)
     /// or <see cref="ByOrbit"/> (each orbit its own Okabe-Ito colour, so islands separate).</summary>
     public enum BlackHoleRingColour { Density, ByOrbit }
+
+    /// <summary>Which generator lays down the <see cref="FractalType.CosmicWeb"/> points (#2021). S1 ships
+    /// Soneira &amp; Peebles 1978 hierarchical clustering; later slices add more.</summary>
+    public enum CosmicWebGenerator { SoneiraPeebles }
+
+    /// <summary>How a Soneira-Peebles clump places its sub-centres (#2021). <see cref="Dumbbell"/>: their final
+    /// model (AJ 83, 845, 1978, Sec. IVc i), two sub-centres at a fixed separation in a random orientation.
+    /// <see cref="UniformSphere"/>: their earlier model (Secs. IIa, IVa), eta sub-centres uniformly at random
+    /// in the sphere.</summary>
+    public enum CosmicWebPlacement { Dumbbell, UniformSphere }
+
+    /// <summary>How many levels each Soneira-Peebles clump has (#2021): <see cref="TableI"/> draws L per clump
+    /// from the paper's Table I (L = 7..12); <see cref="Fixed"/> uses <c>CosmicWebLevels</c> for every clump.</summary>
+    public enum CosmicWebLevelMode { TableI, Fixed }
+
+    /// <summary>How <see cref="FractalType.CosmicWeb"/> colours its splat (#2021). <see cref="Depth"/>: the theme
+    /// at each pixel's mean depth, brightness from log density with gamma (the fractal-flame log-density
+    /// display). <see cref="Density"/>: the theme at the log density (as the strange attractors).</summary>
+    public enum CosmicWebColour { Depth, Density }
 
     /// <summary>Launch space of <see cref="FractalType.UserPotentialBasins"/> (#1994), as
     /// <see cref="HenonHeilesView"/>: Plane (pixel = position) or Section (pixel = (y, vy) on x = 0).</summary>
@@ -1608,6 +1633,8 @@ namespace FracturingFog
             FractalType.UserPotentialBasins => FractalCapabilities.None,
             FractalType.UserHamiltonianBasins => FractalCapabilities.None,
             FractalType.MicrolensingMap => FractalCapabilities.None,
+            // #2021 — Cosmic Web: a log-density point splat; no normals / DE / orbit data.
+            FractalType.CosmicWeb => FractalCapabilities.None,
 
             // #1713 — Math Plane 3D draws its own colours (a diagram, no per-pixel data).
             FractalType.MathPlane3D => FractalCapabilities.None,

@@ -1625,6 +1625,47 @@ namespace FracturingFog.Models
         /// <summary>#1947 — integrator relative tolerance per step. Default 1e-11.</summary>
         public double BhRingTolerance { get; set; } = 1e-11;
 
+        // ── Cosmic Web (#2021, epic #2020) ────────────────────────────────
+        /// <summary>#2021 — which generator lays the points down. Default SoneiraPeebles.</summary>
+        public CosmicWebGenerator CosmicWebGenerator { get; set; } = CosmicWebGenerator.SoneiraPeebles;
+        /// <summary>#2021 — random seed of the point set.</summary>
+        public int CosmicWebSeed { get; set; } = 1978;
+        /// <summary>#2021 — side of the periodic box, h^-1 Mpc. Default 100.</summary>
+        public double CosmicWebBoxSize { get; set; } = 100.0;
+        /// <summary>#2021 — number of top-level clumps in the box. Default 310: the clump density of Soneira &amp; Peebles,
+        /// 3.1e-4 h^3 Mpc^-3 (AJ 83, 845, 1978, Sec. IVc iii), times 100^3.</summary>
+        public int CosmicWebClumps { get; set; } = 310;
+        /// <summary>#2021 — Dumbbell (their final model) or UniformSphere (their earlier one). Default Dumbbell.</summary>
+        public CosmicWebPlacement CosmicWebPlacement { get; set; } = CosmicWebPlacement.Dumbbell;
+        /// <summary>#2021 — eta, sub-clumps per clump (UniformSphere; Dumbbell is always 2). Default 2.</summary>
+        public int CosmicWebEta { get; set; } = 2;
+        /// <summary>#2021 — lambda, size ratio of successive levels after the first (Eq. 19). Default 1.76.</summary>
+        public double CosmicWebLambda { get; set; } = 1.76;
+        /// <summary>#2021 — size ratio of the first two levels, d1/d2 (Eq. 18). Default 1.10.</summary>
+        public double CosmicWebFirstRatio { get; set; } = 1.10;
+        /// <summary>#2021 — top-level size, h^-1 Mpc: the dumbbell separation d1 (Eq. 17) or the sphere radius R. Default 11.35.</summary>
+        public double CosmicWebTopSize { get; set; } = 11.35;
+        /// <summary>#2021 — levels per clump from the paper's Table I, or fixed. Default TableI.</summary>
+        public CosmicWebLevelMode CosmicWebLevelMode { get; set; } = CosmicWebLevelMode.TableI;
+        /// <summary>#2021 — levels per clump when the level mode is Fixed. Default 9.</summary>
+        public int CosmicWebLevels { get; set; } = 9;
+        /// <summary>#2021 — most points generated; whole clumps past it are dropped. Default 4,000,000.</summary>
+        public int CosmicWebPointCap { get; set; } = 4_000_000;
+        /// <summary>#2021 — splat radius in pixels (below 0.75: one pixel). Default 1.</summary>
+        public double CosmicWebPointSize { get; set; } = 1.0;
+        /// <summary>#2021 — 0..1: how much a point at the back of the box is dimmed. Default 0.5.</summary>
+        public double CosmicWebDepthFade { get; set; } = 0.5;
+        /// <summary>#2021 — Depth (hue by depth, brightness by density) or Density (theme by density). Default Depth.</summary>
+        public CosmicWebColour CosmicWebColour { get; set; } = CosmicWebColour.Depth;
+        /// <summary>#2021 — gamma of the Depth colouring's brightness, log density^(1/gamma). Default 2.2.</summary>
+        public double CosmicWebGamma { get; set; } = 2.2;
+        /// <summary>#2021 — orbit camera distance from the box centre, in box sides. Default 2.2.</summary>
+        public double CosmicWebCameraDistance { get; set; } = 2.2;
+        /// <summary>#2021 — orbit camera azimuth (radians). Default 0.6.</summary>
+        public double CosmicWebCameraTheta { get; set; } = 0.6;
+        /// <summary>#2021 — orbit camera polar angle from +z (radians). Default 1.1.</summary>
+        public double CosmicWebCameraPhi { get; set; } = 1.1;
+
         // ── User Potential (#1994) ────────────────────────────────────────
         /// <summary>#1994 — the potential V(x, y) in the equation language. Default: Hénon–Heiles.</summary>
         public string UserPotentialSource { get; set; } = UserPotentialDefaultSource;
@@ -2940,6 +2981,25 @@ namespace FracturingFog.Models
                 MicroTrackX = MicroTrackX,
                 MicroTrackY = MicroTrackY,
                 MicroTrackAngle = MicroTrackAngle,
+                CosmicWebGenerator = CosmicWebGenerator,
+                CosmicWebSeed = CosmicWebSeed,
+                CosmicWebBoxSize = CosmicWebBoxSize,
+                CosmicWebClumps = CosmicWebClumps,
+                CosmicWebPlacement = CosmicWebPlacement,
+                CosmicWebEta = CosmicWebEta,
+                CosmicWebLambda = CosmicWebLambda,
+                CosmicWebFirstRatio = CosmicWebFirstRatio,
+                CosmicWebTopSize = CosmicWebTopSize,
+                CosmicWebLevelMode = CosmicWebLevelMode,
+                CosmicWebLevels = CosmicWebLevels,
+                CosmicWebPointCap = CosmicWebPointCap,
+                CosmicWebPointSize = CosmicWebPointSize,
+                CosmicWebDepthFade = CosmicWebDepthFade,
+                CosmicWebColour = CosmicWebColour,
+                CosmicWebGamma = CosmicWebGamma,
+                CosmicWebCameraDistance = CosmicWebCameraDistance,
+                CosmicWebCameraTheta = CosmicWebCameraTheta,
+                CosmicWebCameraPhi = CosmicWebCameraPhi,
                 SlitCascadeChildren = SlitCascadeChildren,
                 SlitCascadeRatio = SlitCascadeRatio,
                 SlitCascadeDepth = SlitCascadeDepth,

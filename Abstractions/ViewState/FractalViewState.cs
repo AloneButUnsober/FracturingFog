@@ -359,6 +359,7 @@ namespace FracturingFog.ViewState
                 FractalType.Kleinian              => ( 0.0,  0.0, 1.0),
                 FractalType.MirrorSpheres         => ( 0.0,  0.0, 1.0),
                 FractalType.MathPlane3D           => ( 0.0,  0.0, 1.0),   // #1713
+                FractalType.CosmicWeb             => ( 0.0,  0.0, 1.0),   // #2021 orbit camera; zoom divides its distance
                 FractalType.BicomplexMandelbrot   => ( 0.0,  0.0, 1.0),
                 FractalType.Coquaternion          => ( 0.0,  0.0, 1.0),
                 FractalType.Julibrot       => ( 0.0,  0.0, 1.0),
@@ -407,6 +408,7 @@ namespace FracturingFog.ViewState
             || t == FractalType.Kleinian
             || t == FractalType.MirrorSpheres
             || t == FractalType.MathPlane3D        // #1713
+            || t == FractalType.CosmicWeb          // #2021
             || t == FractalType.BicomplexMandelbrot
             || t == FractalType.Coquaternion
             || t == FractalType.Julibrot

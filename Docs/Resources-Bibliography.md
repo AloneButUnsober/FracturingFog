@@ -685,6 +685,33 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   magnification 1 / ((1 − κ)² − γ²), that #1948 implements and tests; the chapter and equation numbers
   were not checked.
 
+<a id="soneira-peebles-1978"></a>
+
+- **R. M. Soneira, P. J. E. Peebles.** *A computer model universe - Simulation of the nature of the
+  galaxy distribution in the Lick catalog.* The Astronomical Journal 83, 845-860, 1978. DOI
+  [10.1086/112268](https://doi.org/10.1086/112268) (title, authors, volume, first page and DOI checked
+  against the Crossref record 2026-11-24; the last page, 860, from the scanned original). Read from the
+  scan (the user's copy of the ADS PDF, pp. 845-848, 853-856 and 859-860, pasted as OCR text). The
+  hierarchical clustering model of the Cosmic Web family (#2021, `Engine/CosmicWeb/SoneiraPeebles.cs`):
+  the clump construction (Eq. 1), the scaling D = 3 - gamma = log eta / log lambda (Eq. 4), the dumbbell
+  placement of the final model with d1 = 11.35 h^-1 Mpc, d1/d2 = 1.10 and lambda = 1.76 (Eqs. 17-19),
+  the level distribution P_L of Table I (L = 7..12; its column 3 is a test target), the uniform-in-sphere
+  placement of their earlier model (Secs. IIa, IVa) and the clump density 3.1e-4 h^3 Mpc^-3 (Sec. IVc
+  iii). The earlier model itself (Soneira & Peebles 1977, the paper's ref. "SP") is used only as this
+  paper describes it; its random-eta distribution (Eq. 16) is not used. FF's own choices: a periodic box,
+  fixed eta, the first-ratio generalisation, the point cap, the renderer. Cosmic Web epic #2020.
+
+<a id="einasto-2026"></a>
+
+- **Jaan Einasto.** *Fractal properties of the cosmic web.* arXiv:2608.04694 (v1, 5 August 2026),
+  <https://arxiv.org/abs/2608.04694>, DOI 10.48550/arXiv.2608.04694 (arXiv-issued). Paper presented at
+  the Sixth Zeldovich meeting (Pescara, July 2026); the arXiv record says "Submitted to Astronomy
+  Reports" and gives no journal reference (checked 2026-11-24), so the volume and number are not known.
+  A review: the fractal function D(r) = 3 + gamma(r), gamma = d log g / d log r, g = 1 + xi (Eqs. 2-4;
+  g is not numbered), its change of regime near 3 h^-1 Mpc and D -> 3 at about 100 h^-1 Mpc. Cited by
+  the Cosmic Web help and settings panel for the caveat that the real web is not a single-dimension
+  fractal (#2021); the measurement chain is planned for #2023. Pointer that started the epic #2020.
+
 <a id="cunha-2015"></a>
 
 - **P. V. P. Cunha, C. A. R. Herdeiro, E. Radu, H. F. Rúnarsson.** *Shadows of Kerr black
@@ -807,6 +834,7 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
   (details confirmed against Crossref, 2026-11-09). SplitMix64, the per-chunk random streams of the
   detection build-up (#1599). Its finaliser (the two multiply-xorshift rounds) also hashes the star-field
   cells of the black hole skies, `Engine/Scattering/BlackHoleSkies.cs` (#1925).
+  The per-clump streams of the Cosmic Web generator, `Engine/CosmicWeb/SoneiraPeebles.cs` (#2021).
 
 <a id="deep-zoom-acceleration"></a>
 
@@ -1692,6 +1720,11 @@ These sources are cited in the code or docs, but their publication details aren'
 They stay listed (the contract never drops a credit). Each needs its primary source traced and its
 entry above completed or corrected.
 
+- **Scott Draves (and Erik Reckase?), *The Fractal Flame Algorithm*** — the log-density display with
+  gamma (alpha = log hits / log max hits, colour x alpha^(1/gamma)) that `FlameRenderer` and the Cosmic
+  Web Depth colouring (#2021) use. Only secondary sources were read (Wikipedia, "Fractal flame",
+  reference 4, pointing at <https://flam3.com/flame_draves.pdf>); the PDF (22.5 MB) was not opened, so
+  the authors as printed, date and any venue are unconfirmed.
 - **pauldelbrot, fractalforums.org topic 5693** — thread title and post date (#1979 / #1980 / #1981;
   content from a user paste, the page not opened).
 - **Exterior distance bound (`distance-bound-koebe`)** — the primary source and statement of

@@ -125,6 +125,7 @@ namespace FracturingFog.Models
             FractalType.MirrorSpheres => FractalMotionClass.Raymarch3D,
             // #1713 — a mesh renderer, but the same orbit camera contract: zoom is a dolly.
             FractalType.MathPlane3D => FractalMotionClass.Raymarch3D,
+            FractalType.CosmicWeb => FractalMotionClass.Raymarch3D,   // #2021 orbit camera, CPU point splat
             FractalType.BicomplexMandelbrot => FractalMotionClass.Raymarch3D,
             FractalType.Coquaternion => FractalMotionClass.Raymarch3D,
             FractalType.Julibrot => FractalMotionClass.Raymarch3D,

@@ -23,6 +23,7 @@ public sealed class Cam3DPartialKeysTests
     {
         FractalType.Mandelbulb, FractalType.Mandelbox, FractalType.Kifs, FractalType.QuaternionJulia,
         FractalType.QuaternionMandelbrot, FractalType.Kleinian, FractalType.MirrorSpheres, FractalType.MathPlane3D,
+        FractalType.CosmicWeb,   // #2021
         FractalType.BicomplexMandelbrot, FractalType.Coquaternion, FractalType.Julibrot,
     }.Select(t => new object[] { t });
 

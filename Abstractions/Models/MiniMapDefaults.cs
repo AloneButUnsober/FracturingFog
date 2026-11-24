@@ -34,6 +34,7 @@ public static class MiniMapDefaults
         FractalType.Kleinian   => false,
         FractalType.MirrorSpheres => false,
         FractalType.MathPlane3D => false,   // #1713
+        FractalType.CosmicWeb => false,   // #2021 a 3D point set, no 2D plane
         FractalType.BicomplexMandelbrot => false,
         FractalType.Coquaternion => false,
         FractalType.Julibrot => false,
@@ -109,6 +110,7 @@ public static class MiniMapDefaults
         FractalType.Kleinian         => new( 0.0,  0.0, 1.0),
         FractalType.MirrorSpheres    => new( 0.0,  0.0, 1.0),
         FractalType.MathPlane3D      => new( 0.0,  0.0, 1.0),   // #1713
+        FractalType.CosmicWeb        => new( 0.0,  0.0, 1.0),   // #2021 (camera, not plane)
         FractalType.BicomplexMandelbrot => new( 0.0,  0.0, 1.0),
         FractalType.Coquaternion => new( 0.0,  0.0, 1.0),
         FractalType.Julibrot => new( 0.0,  0.0, 1.0),

@@ -36,6 +36,7 @@ public sealed class MeshExportCapabilityTests
             .Where(t => t != FractalType.UserBulb)   // compiled-kernel DE, exports via its editor
             .Where(t => t != FractalType.MirrorSpheres)   // #1440: no DE, no surface to mesh — the image is the reflections
             .Where(t => t != FractalType.MathPlane3D)     // #1713: a mesh diagram, not a DE raymarcher; its surfaces export through T6 (#1718)
+            .Where(t => t != FractalType.CosmicWeb)       // #2021: a point splat, no surface to mesh
             .ToArray();
         Assert.NotEmpty(raymarch);
         foreach (var t in raymarch)

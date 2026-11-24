@@ -273,6 +273,7 @@ public sealed partial class MainViewModel : ViewModelBase, IDisposable
         (FractalType.UserPotentialBasins,   "User Potential (V(x, y))"),       // #1994
         (FractalType.UserHamiltonianBasins, "User Hamiltonian (H(q, p))"),     // #1997
         (FractalType.MicrolensingMap,       "Microlensing Map (caustics)"),    // #1948
+        (FractalType.CosmicWeb,             "Cosmic Web (Soneira-Peebles)"),   // #2021
         (FractalType.SlitCascade,           "Slit Cascade (Double-Slit Diffraction)"),   // #1569
         (FractalType.TalbotCarpet,          "Talbot Carpet (Quantum Carpet)"),           // #1570
         (FractalType.MathPlane,             "Math Plane (Cartesian)"),        // #1548
