@@ -894,7 +894,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
                 fixed (int* dst = iterDst)
                 {
                     if (mask != null) mask.CopyMarked((int*)src, dst, n);   // #1394
-                    else for (int i = 0; i < n; i++) dst[i] = (int)src[i];
+                    else Buffer.MemoryCopy(src, dst, (long)n * sizeof(int), (long)n * sizeof(int));   // #2013: same bits
                 }
             }
             finally { _ctx.Unmap(_iterStaging, 0); }
@@ -909,7 +909,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
                 fixed (float* dst = smoothDst)
                 {
                     if (mask != null) mask.CopyMarked(src, dst, n);   // #1394
-                    else for (int i = 0; i < n; i++) dst[i] = src[i];
+                    else Buffer.MemoryCopy(src, dst, (long)n * sizeof(float), (long)n * sizeof(float));   // #2013
                 }
             }
             finally { _ctx.Unmap(_smoothStaging, 0); }
@@ -931,12 +931,7 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
                 fixed (float* dr = finalDrDst)
                 fixed (float* di = finalDiDst)
                 {
-                    for (int i = 0; i < n; i++)
-                    {
-                        int b = i * 4;
-                        zr[i] = src[b + 0]; zi[i] = src[b + 1];
-                        dr[i] = src[b + 2]; di[i] = src[b + 3];
-                    }
+                    GpuReadback.ScatterFinalZD(src, zr, zi, dr, di, n);   // #2013: in parallel
                 }
             }
             finally { _ctx.Unmap(_finalZDStaging, 0); }

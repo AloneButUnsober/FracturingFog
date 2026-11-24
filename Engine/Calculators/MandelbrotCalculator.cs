@@ -3312,6 +3312,10 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     private void CalculateHighPrecision<TMap>(TMap colorMap, CancellationToken ct)
         where TMap : IColorMap
     {
+        // #2013 — a deferred readback still pending from an earlier shallow GPU frame (#1332)
+        // lands now, once: the per-pixel writers below (FillAuxAndColorHPUnit) write the
+        // backing arrays, not the getters that would land it on their first write.
+        _gpuAux.Need(GpuDeferredAux.Iterations | GpuDeferredAux.Smooth | GpuDeferredAux.FinalZ | GpuDeferredAux.Distance);
         // D-6b — sub-rect mode derives per-pixel world geometry from the
         // FULL image's centre + dims, so all tiles of one image share a
         // single reference orbit. When inactive (Image* / SubRect* zero)
@@ -3808,17 +3812,20 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         // #1660 — the kernels write dz/dc · 2^ILogB(scale) (a plain float overflowed
         // past ~1e35); back to dz/dc in double before the normals and distance.
         double dzUn = FracturingFog.Rendering.GpuPerturbDerivative.Unscale(scale);
+        // #2013 — the buffers once (their getters check the deferred readback, #1332).
+        int[] itB = IterationBuffer; float[] zrB = FinalZrBuffer, ziB = FinalZiBuffer, drB = FinalDrBuffer, diB = FinalDiBuffer;
+        int w = Width;
         ParallelForRows(0, Height, po, y =>
         {
             if (ct.IsCancellationRequested || !GpuRowMarked(y)) return;
-            int rb = y * Width;
-            for (int x = 0; x < Width; x++)
+            int rb = y * w;
+            for (int x = 0; x < w; x++)
             {
                 int idx = rb + x;
                 if (!GpuMarked(idx)) continue;   // #1394: another pass's pixel
-                FillAuxAndColorHP(idx, IterationBuffer[idx], maxIt,
-                    FinalZrBuffer[idx], FinalZiBuffer[idx],
-                    FinalDrBuffer[idx] * dzUn, FinalDiBuffer[idx] * dzUn, colorMap);
+                FillAuxAndColorHP(idx, itB[idx], maxIt,
+                    zrB[idx], ziB[idx],
+                    drB[idx] * dzUn, diB[idx] * dzUn, colorMap);
             }
         });
         LastFrameUsedGpuPerturbation = true;
@@ -4240,6 +4247,8 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     // (ToDistanceUnit). The normals are exact (only the derivative's length was scaled);
     // FinalDr/Di hold this unit too; the map gets complex-plane units unless it opts in.
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    // #2013 — writes the backing arrays (not the deferred-readback getters, a volatile
+    // check per write); CalculateHighPrecision lands any pending readback first.
     private void FillAuxAndColorHPUnit<TMap>(
         int idx, int iters, int maxIter,
         double zrD, double ziD, double drD, double diD,
@@ -4250,23 +4259,23 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         {
             double mag = Math.Sqrt(zrD * zrD + ziD * ziD);
             float smooth = (float)(iters + 1.0 - Math.Log2(Math.Log2(mag)));
-            SmoothBuffer[idx] = smooth;
+            _smoothBuffer[idx] = smooth;
 
             // Distance estimate: mag·ln(mag)/|d|. Derivative tracked as plain
             // double in the PT path — same magnitude domain as SP, so the
             // formula transfers without precision loss. Restores 3D-theme
             // shading (Phong/PBR) at deep zoom.
             float dist = DeDistUnit(mag, drD, diD, out float mapDist);
-            DistanceBuffer[idx] = dist;
+            _distanceBuffer[idx] = dist;
 
             FillNormal(idx, zrD, ziD, drD, diD);
 
             float fzr = (float)zrD, fzi = (float)ziD;
             float fdr = (float)drD, fdi = (float)diD;
-            FinalZrBuffer[idx] = fzr;
-            FinalZiBuffer[idx] = fzi;
-            FinalDrBuffer[idx] = fdr;
-            FinalDiBuffer[idx] = fdi;
+            _finalZrBuffer[idx] = fzr;
+            _finalZiBuffer[idx] = fzi;
+            _finalDrBuffer[idx] = fdr;
+            _finalDiBuffer[idx] = fdi;
 
             int iterArg = colorMap is IColorMapHandlesInSet ? iters : maxIter;
             ColorBuffer[idx] = (uint)colorMap.Map(
@@ -4276,14 +4285,14 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
         }
         else
         {
-            SmoothBuffer[idx] = 0f;
-            DistanceBuffer[idx] = 0f;
+            _smoothBuffer[idx] = 0f;
+            _distanceBuffer[idx] = 0f;
             NormalXBuffer[idx] = 0f;
             NormalYBuffer[idx] = 0f;
-            FinalZrBuffer[idx] = 0f;
-            FinalZiBuffer[idx] = 0f;
-            FinalDrBuffer[idx] = 0f;
-            FinalDiBuffer[idx] = 0f;
+            _finalZrBuffer[idx] = 0f;
+            _finalZiBuffer[idx] = 0f;
+            _finalDrBuffer[idx] = 0f;
+            _finalDiBuffer[idx] = 0f;
             if (colorMap is IColorMapHandlesInSet)
             {
                 ColorBuffer[idx] = (uint)colorMap.Map(
