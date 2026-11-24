@@ -532,7 +532,8 @@ namespace FracturingFog.Batch
                 Pick(BatchFlags.GpuDeep, Output, BatchModes.FractalRender | BatchModes.Scene,
                     "GPU deep zoom (perturbation, past zoom 1e4), as the live view's Control Center toggle. "
                     + "auto = FF_GPU_PERTURB, else this device's measured deep route, else off; on / off = the toggle. "
-                    + "The fp64 kernels render the same pixels as the CPU; the fp32 ones differ on ~0.35 % near deep minibrots. "
+                    + "The fp64 kernels render the same pixels as the CPU. The fp32 ones (FF_GPU_PERTURB_PRECISION=fp32) keep in / out, but on minibrot and "
+                    + "spiral views up to ~12 % of pixels take another iteration count (#2017). "
                     + "Needs a GPU (not with --gpu off).",
                     new[] { "auto", "on", "off" }, "auto", "MODE"),
                 Pick(BatchFlags.DeepRouteCalibration, Output, BatchModes.FractalRender | BatchModes.Scene,
