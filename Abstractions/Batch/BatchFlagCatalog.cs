@@ -540,6 +540,11 @@ namespace FracturingFog.Batch
                     + "(LA crossover, LA SIMD, GPU deep zoom, GPU LA, fp64 / float-exp; never runs a pass); "
                     + "off = the fixed defaults; force = measure first (about 5-30 s) and store it.",
                     new[] { "auto", "off", "force" }, "auto", "MODE"),
+                Pick(BatchFlags.AaSamples, Output, BatchModes.Image,
+                    "Supersamples per pixel in place of the quality preset's (#2016): 1 = one sample per pixel "
+                    + "(also no temporal AA), 4 / 9 / 16 = a 2x2 / 3x3 / 4x4 grid. Applies at any depth: past 1e100 "
+                    + "batch renders in the Unbounded tier, whose default is 2x2. For comparing renderers at 1 spp.",
+                    new[] { "1", "4", "9", "16" }, null, "N"),
                 Sw(BatchFlags.NoTaa, Output, BatchModes.Image,
                     "Skip the quality preset's temporal anti-aliasing on a still (High / Ultra / Extreme: "
                     + "8 / 16 / 32 samples, as the live view settles): sub-pixel anti-aliasing only, faster."),

@@ -86,6 +86,7 @@ namespace FracturingFog.Batch
         public const string NoWatermark    = "--no-watermark";
         // #1380 — skip the quality preset's temporal AA on a still (MSAA only).
         public const string NoTaa          = "--no-taa";
+        public const string AaSamples      = "--aa-samples";   // #2016
         // #1611 — where the fractal is computed: auto (the GPU when there is one, as
         // the live view) / on (the GPU or an error) / off (the CPU).
         public const string Gpu            = "--gpu";
