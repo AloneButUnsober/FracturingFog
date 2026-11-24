@@ -788,7 +788,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             return GpuRoute.OnGpu(label, $"{label}: deep-zoom perturbation in fp32"
                 + (LastFrameUsedGpuLaFloatExp ? " + LA stages" : "")   // #1664
                 + (LastFrameUsedGpuWavefront ? " + wavefront" : "")   // #1384
-                + " (24-bit mantissa: a few pixels near deep minibrots can differ; FF_GPU_PERTURB_PRECISION=double for the double kernel)")
+                + " (24-bit mantissa: on minibrot and spiral views up to ~12 % of pixels near the set take another iteration count, #2017; FF_GPU_PERTURB_PRECISION=double for the double kernel)")
                 with { Mode = "fp32" };
         if (hp && LastFrameUsedGpuPerturbation)
             return GpuRoute.OnGpu(label, $"{label}: deep-zoom perturbation"

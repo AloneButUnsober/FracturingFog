@@ -96,6 +96,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--gpuprecisionprobe")
             return GpuPrecisionProbe.Run(args);
 
+        // #2017 — GPU deep routes vs the CPU on .kfr scenes: bit-identical colour and same iteration.
+        if (args.Length > 0 && args[0] == "--fp32parityprobe")
+            return Fp32ParityProbe.Run(args);
+
         // #1613 — CPU deep-zoom per-pixel cost on bench-kit scenes, default vs acceleration off.
         if (args.Length > 0 && args[0] == "--deepcostprobe")
             return DeepCostProbe.Run(args);

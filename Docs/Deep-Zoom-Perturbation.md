@@ -429,6 +429,33 @@ few pixels go wrong:
 An exact 600-bit fixed-point orbit sides with the CPU (and the double kernel) on
 every one of those pixels.
 
+**#2017: on minibrot and spiral views the error is far larger than that table.**
+- **Where it was found:** rith's 0.7.2 bench (RTX 3080, 4K) found fp32 frames bit-identical to the CPU frame on only
+  71–87 % of pixels. Bibliography `#rith-ff-071-benchmark`.
+- **How it was measured:** `--fp32parityprobe` on the same fractadyne bench-kit scenes (`#fractadyne-bench-kit`), on
+  a GT 710 under D3D11. It counts two things against the CPU route: pixels with bit-identical colour, and pixels with
+  the same iteration count.
+
+| View | Same colour | Same iteration | Iteration off by > 1 / > 10 | Same in / out |
+|---|---|---|---|---|
+| Misiurewicz spar, nuclei p145 / p148 (~5e27–2e28) | 99.4–99.5 % | 99.94 % | 0.02 % / 0 % | 100 % |
+| minibrot p128 (1.3e13) | 76.5 % | 91.0 % | 5.8 % / 3.2 % | 100 % |
+| spiral path 1e13 | 82.7 % | 93.4 % | 4.3 % / 2.6 % | 100 % |
+| spiral path 1e33 | 75.2 % | 90.6 % | 6.2 % / 3.7 % | 100 % |
+| minibrot p448 (5.2e33) | 70.4 % | 88.5 % | 7.5 % / 4.1 % | 100 % |
+
+- **Measured at 3840×2160 and 960×540.** The rows match within 0.1 %, so the error depends on the view, not the
+  resolution. The colour column matches rith's to within 1 %.
+- **The double kernel** agrees with the CPU on 99.3–100 % of iterations.
+- **The scaled-fp32 and float-exp entries give the same numbers** on every view
+  (`MandelbrotGpuKernel.ForceFloatExpEntry`). So the error is the 24-bit mantissa of δ and Z, as above, not one entry
+  point.
+- **Effect on the image:** no pixel crosses between inside and outside the set. The wrong counts sit in the
+  pixel-scale detail near the set, where rith saw no difference to the eye. On high-iteration minibrot and spiral
+  views, though, a tenth of the pixels take a different count, some by tens of iterations.
+- **The fix** is float-float δ and Z for the fp32 SA / BLA / plain kernels, as #1819 does for the float-exp LA
+  kernel: #2030.
+
 The error comes from both halves. On the disagreeing pixels:
 - a double Z with a float δ is right on only 30 / 80;
 - a float Z with a double δ is right on 11 / 80.
@@ -448,8 +475,7 @@ speed.
 A Vulkan session on a device with no `shaderFloat64` now enables GPU deep zoom
 in fp32. When an fp32 kernel ran, the status bar reads `[GPU fp32]`.
 
-`--batch` renders deep zoom on the CPU and is unaffected. The plain kernel only
-runs fp32: SA / BLA keep the double kernels.
+`--batch` takes the same route since #1611 / #1788 (`--gpu-deep`, `FF_GPU_PERTURB_PRECISION`).
 
 ## 10. Past 1e100 — arbitrary precision (epic #1428)
 
