@@ -961,3 +961,28 @@ The 1e100 ceiling is gone. A Mandelbrot view renders, explores, saves, batches a
   - **A tapered orbit precision.** Each step can be given only the bits its error needs after the Π|2Z| amplification. No gain: the tuned orbit passes near 0 every n iterations, and those small |Z_m| need nearly full precision for every earlier step.
   - **Jumping when Newton creeps**, extrapolating 2×, 4×, … along the step. Neither the deflated residual |G / Π f| (it falls all the way to the reach edge) nor the plain |G| (it rises: the seed sits beside lower-preperiod roots) guides it to the root.
   - **Aitken-extrapolated seeds** from the ray's last three period points. They landed no earlier.
+
+## 38. Where the time goes past 1e100 (#2015)
+
+**Measured:** `--apcostprobe 320 180` (`FF_APCOST_KFR=<dir>`) on the fractadyne bench-kit's ladder scenes (`#fractadyne-bench-kit`). CPU, one sample per pixel, i5-13420H. It followed rith's 0.7.2 report (`#rith-ff-071-benchmark`), where FF was 3–550× slower than Fractadyne past 1e100.
+
+| scene | iter cap | frame | reference orbit (length, µs / iter) | tables | pixels | threads busy |
+|---|---|---|---|---|---|---|
+| spiral path 1e100 | 10,293 | 127 ms | 65 ms (4,355, 15.0) | 14 ms | 47 ms | 3.3 |
+| spiral path 1e300 | 26,673 | 161 ms | 60 ms (9,476, 6.4) | 0 | 101 ms | 6.9 |
+| spiral path 1e1000 | 84,003 | 0.84 s | 0.64 s (28,590, 22.4) | 0 | 0.20 s | 3.3 |
+| spiral path 1e3000 | 247,803 | 7.4 s | 7.3 s (83,295, 87.8) | 0 | 95 ms | 1.1 |
+| spiral path 1e10000 (cap 20,000) | 20,000 | 10.5 s | 10.4 s (20,000, 521.7) | 0 | 82 ms | 1.0 |
+| minibrot p14,416 @ 1e1000 | 432,480 | 10.8 s | 10.4 s (432,480, 24.0) | 0 | 0.47 s | 1.1 |
+| minibrot p41,722 @ 1e3000 | 1,251,660 | 112 s | 112 s (1,251,660, 89.4) | 0 | 0.48 s | 1.0 |
+
+**From about 1e1000 the reference orbit is 76–99 % of the frame**, and it runs on one thread. Two separate causes:
+
+- **#2032, the period:** on the minibrots the orbit runs to the full cap (30 periods) with period 0.
+  - The centres lie in the minibrot's attracting cycle: |Z_p|² ≈ 2^-3451 at p, 2p, 3p, 4p.
+  - The stop test needs |Z_p|² < pixel² ≈ 2^-6659, so it never fires.
+  - Stopping at the period would cut the orbit about 30×.
+- **#2033, the cost per iteration:** it grows about n^1.35 with precision, from 22 µs at ~3.4k bits to 522 µs at ~33k bits.
+  - Each iteration is three `BigFloat.Mul` on immutable `BigInteger`, plus adds, rounding and the OD store.
+  - Candidates, to be measured: a 2-multiply step, allocation-free limbs, more threads.
+

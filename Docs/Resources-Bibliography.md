@@ -1563,7 +1563,7 @@ Programs and galleries the project measured itself against, learned from, or pay
 
 - **WindySnowOwl.** *bench-kit* — deep-zoom benchmark scenes and harness in the *fractadyne*
   repository, GitHub, accessed 2026-11-01. <https://github.com/WindySnowOwl/fractadyne/tree/main/bench-kit>.
-  Its scenes (Kalles Fraktaler `.kfr` locations, fetched 2026-11-24 for #2017's `Probes/Fp32ParityProbe.cs`) are the measurement set for #1613
+  Its scenes (Kalles Fraktaler `.kfr` locations, fetched 2026-11-24 for #2017's `Probes/Fp32ParityProbe.cs` and #2015's `Probes/ApCostProbe.cs`) are the measurement set for #1613
   (`Probes/DeepCostProbe.cs`, `Server.Tests/S1613RebaseResumeTests.cs`) and #1614. Its README's *Fracturing Fog* section
   states the FF-side conventions #1615 checks (FF's zoom fixes the longer side at 3.5 / zoom; its imaginary axis
   points down the image); `40-mini-p128-1e13.kfr` is the sample in `Server.Tests/S1615KfrImportTests.cs`. #1629 read the kit's 17
