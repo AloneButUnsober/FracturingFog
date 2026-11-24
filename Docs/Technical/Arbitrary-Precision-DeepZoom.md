@@ -417,6 +417,8 @@ A double zoom overflows at about 1.8e308. A double log10 zoom does not, and it k
 - **Not unit-tested** (WinExe `BatchRenderer`): `ResolveDepth` / `QualityForDepth` wiring and the video / slideshow loops. They reuse the tested pieces: `BatchOptions`, `PosterRequest`, `SetDepth`, `ZoomLog`.
   - Smoke-run by hand: `--batch` stills at 1e150 and 1e320 on the 340-digit Misiurewicz centre (no `--quality`: promoted to Unbounded with the note) render the point's branch structure centred, and a 3-frame `--mode video` from 1e300 to 1e320 renders three distinct frames labelled 1E+300 / 1E+310 / 1E+320. The slideshow leg was not run (it needs a saved region past double).
 
+- **`--aa-samples 1|4|9|16` (#2016).** Past 1e100 a still renders in Unbounded: 2×2 supersampling plus 8 TAA samples. The flag replaces the preset's supersample count at any depth, and `1` also skips temporal AA (one sample per pixel). Benchmark kits that compare renderers at one sample per pixel asked for it (rith's 0.7.2 bench, bibliography `#rith-ff-071-benchmark`). At 320×180, 1e120, 2,000 iterations: 3.8 s → 0.65 s wall.
+
 ## 21. Validation and docs (C11, #1864)
 
 - **`--qdfloorsweep` past OD** (`Probes/QdFloorSweepProbe.cs`, moved from `Program.cs`).

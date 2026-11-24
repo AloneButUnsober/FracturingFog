@@ -370,12 +370,18 @@ namespace FracturingFog.Batch
                 return 2;
             }
             var overlay3DReport = opts.MathOverlay3D != null ? new MathOverlay3DReport() : null;
+            if (opts.AaSamples is int aaN)   // #2016
+            {
+                quality = quality.WithAaSamples(aaN);
+                Console.WriteLine($"  note    : {aaN} sample(s) per pixel ({BatchFlags.AaSamples})"
+                                  + (aaN == 1 && opts.TemporalAa ? "; temporal AA off." : "."));
+            }
             var req = new PosterRequest
             {
                 FractalType = frType,
                 Width = opts.Width,
                 Height = opts.Height,
-                TemporalAa = opts.TemporalAa,   // #1380 — a still settles like the live view
+                TemporalAa = opts.TemporalAa && opts.AaSamples != 1,   // #1380 — a still settles like the live view; #2016: 1 spp skips it
                 CenterX = cx,
                 CenterXLo = limbRegion?.CenterXLo ?? 0,
                 CenterX2 = limbRegion?.CenterX2 ?? 0,

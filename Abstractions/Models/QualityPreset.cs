@@ -166,7 +166,22 @@ namespace FracturingFog.Models
         // are decomposed to RGBA, averaged, and repacked. Cost is
         // roughly linear in AaSamples on the CPU paths; GPU paths
         // currently ignore this and render single-sample.
-        public int AaSamples { get; init; } = 1;
+        public int AaSamples { get => _aaSamples; init => _aaSamples = value; }
+        private int _aaSamples = 1;
+
+        /// <summary>#2016 — this preset with <paramref name="samples"/> supersamples per pixel
+        /// (a square: 1, 4, 9, 16), everything else unchanged. <c>--aa-samples</c> uses it,
+        /// so a benchmark can render one sample per pixel at any depth, Unbounded included.</summary>
+        public QualityPreset WithAaSamples(int samples)
+        {
+            int side = (int)Math.Round(Math.Sqrt(samples));
+            if (samples < 1 || side * side != samples)
+                throw new ArgumentOutOfRangeException(nameof(samples), samples, "AA samples must be a square: 1, 4, 9, 16.");
+            if (samples == _aaSamples) return this;
+            var copy = (QualityPreset)MemberwiseClone();
+            copy._aaSamples = samples;
+            return copy;
+        }
 
         // ── Temporal accumulation (Wave 2.7 / D-5.21) ────────────────────────
         //

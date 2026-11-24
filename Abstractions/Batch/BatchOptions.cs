@@ -226,6 +226,15 @@ namespace FracturingFog.Batch
         /// view adds while it is still, so the file equals the settled live frame.
         /// <c>--no-taa</c> renders the sub-pixel (MSAA) pass only, for speed.</summary>
         public bool TemporalAa { get; set; } = true;
+
+        /// <summary>#2016 — <c>--aa-samples N</c>: supersamples per pixel (1, 4, 9, 16) in
+        /// place of the quality preset's, at any depth (past 1e100 batch renders in the
+        /// Unbounded tier, 2×2). 1 also skips temporal AA: one sample per pixel. Null = the
+        /// preset's.</summary>
+        public int? AaSamples { get; set; }
+
+        /// <summary>#2016 — the values <c>--aa-samples</c> accepts.</summary>
+        public static readonly int[] AaSampleChoices = [1, 4, 9, 16];
         /// <summary>#1611 — <c>--gpu auto|on|off</c>. Shallow frames (and, with
         /// FF_GPU_PERTURB=1, deep ones) compute on the GPU as in the live view.</summary>
         public BatchGpuMode Gpu { get; set; } = BatchGpuMode.Auto;
@@ -907,6 +916,16 @@ namespace FracturingFog.Batch
 
                     case BatchFlags.NoTaa:   // #1380
                         opts.TemporalAa = false;
+                        break;
+
+                    case BatchFlags.AaSamples:   // #2016
+                        if (!NextInt(args, ref i, a, out int aav, out error)) return false;
+                        if (Array.IndexOf(AaSampleChoices, aav) < 0)
+                        {
+                            error = $"{BatchFlags.AaSamples} must be 1, 4, 9 or 16 (got {aav}).";
+                            return false;
+                        }
+                        opts.AaSamples = aav;
                         break;
 
                     case BatchFlags.Gpu:   // #1611
