@@ -2094,6 +2094,11 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
         EnsureBandEvents();
         int lookahead = PerturbBandLookahead >= 0 ? Math.Min(PerturbBandLookahead, BandEvents - 1) : 1;
         LastPerturbBandCount = bandCount;
+        // #2012 — band 0 is always waited on (lookahead); band 1 too while the too-slow
+        // guard is on, so the estimate isn't band 0's alone.
+        int timed = MandelbrotKernelSource.PerturbBudgetMs > 0 ? MandelbrotKernelSource.PerturbTimedBands(bandCount) : Math.Min(bandCount - 1, 1);
+        long tStart = 0;
+        double band0Ms = 0, band1Ms = 0;
         for (int bandIndex = 0; bandIndex < bandCount; bandIndex++)
         {
             var (rowBase, rows) = bands[bandIndex];
@@ -2109,17 +2114,18 @@ void CSAnyEscaped(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
             _ctx.End(_bandDone![bandIndex % BandEvents]);
             _ctx.Flush();   // submit this band as its own GPU packet (resets the TDR clock)
 
-            // Perf-fallback: band 0 is waited on -> a real GPU time.
-            if (bandIndex == 0 && bandCount > 1)
+            // Perf-fallback: the timed bands are waited on -> real GPU times (#2012: bands 0 and 1).
+            if (bandIndex == 0) tStart = tBand;
+            if (bandIndex < timed)
             {
-                WaitBand(_bandDone[0], spin: true);   // nothing queued behind it: don't oversleep
-                double band0Ms = (System.Diagnostics.Stopwatch.GetTimestamp() - tBand) * 1000.0
-                                 / System.Diagnostics.Stopwatch.Frequency;
-                if (MandelbrotKernelSource.PerturbTooSlow(band0Ms, bandCount))
-                    throw new TimeoutException(
-                        $"{MandelbrotKernelSource.PerturbTooSlowMarker}: band0={band0Ms:F1}ms × {bandCount} bands " +
-                        $"> {MandelbrotKernelSource.PerturbBudgetMs:F0}ms budget{label}");
-                if (PerturbBandLookahead < 0) lookahead = AutoLookahead(band0Ms);
+                WaitBand(_bandDone[bandIndex % BandEvents], spin: true);   // nothing queued behind it: don't oversleep
+                long now = System.Diagnostics.Stopwatch.GetTimestamp();
+                double ms = (now - tBand) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                double elapsed = (now - tStart) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                if (bandIndex == 0) band0Ms = ms; else band1Ms = ms;
+                if (MandelbrotKernelSource.PerturbTooSlowAfter(bandIndex, band0Ms, band1Ms, elapsed, bandCount))
+                    throw new TimeoutException(MandelbrotKernelSource.PerturbTooSlowMessage(band0Ms, band1Ms, timed, bandCount, label));
+                if (PerturbBandLookahead < 0) lookahead = AutoLookahead(bandIndex == 0 ? band0Ms : Math.Min(band0Ms, band1Ms));
                 LastPerturbLookahead = lookahead;
             }
             else if (lookahead == 0)

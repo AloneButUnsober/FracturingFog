@@ -1198,6 +1198,10 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             fixed (CommandBuffer* pc = cmds) Check(_vk.AllocateCommandBuffers(_device, in cbai, pc), "vkAllocateCommandBuffers");
 
             bool guard = bandCount > 1 && MandelbrotKernelSource.PerturbBudgetMs > 0;
+            // #2012 — the guard times bands 0 and 1 (where one follows), not band 0 alone.
+            int timed = guard ? MandelbrotKernelSource.PerturbTimedBands(bandCount) : 0;
+            long tStart = 0;
+            double band0Ms = 0, band1Ms = 0;
             bool serial = SerialBands;
             for (int band = 0; band < bandCount; band++)
             {
@@ -1223,17 +1227,19 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
                 long tBand = Stopwatch.GetTimestamp();
                 idle = false;
                 Check(_vk.QueueSubmit(_ctx.ComputeQueue, 1, &submit, default), "vkQueueSubmit");
-                bool first = band == 0 && guard;
+                if (band == 0) tStart = tBand;
+                bool first = band < timed;
                 if (!last && !first && !serial) continue;
                 WaitQueue();
                 idle = true;
                 if (first)
                 {
-                    double band0Ms = (Stopwatch.GetTimestamp() - tBand) * 1000.0 / Stopwatch.Frequency;
-                    if (MandelbrotKernelSource.PerturbTooSlow(band0Ms, bandCount))
-                        throw new TimeoutException(
-                            $"{MandelbrotKernelSource.PerturbTooSlowMarker}: band0={band0Ms:F1}ms × {bandCount} bands " +
-                            $"> {MandelbrotKernelSource.PerturbBudgetMs:F0}ms budget{label}");
+                    long now = Stopwatch.GetTimestamp();
+                    double ms = (now - tBand) * 1000.0 / Stopwatch.Frequency;
+                    double elapsed = (now - tStart) * 1000.0 / Stopwatch.Frequency;
+                    if (band == 0) band0Ms = ms; else band1Ms = ms;
+                    if (MandelbrotKernelSource.PerturbTooSlowAfter(band, band0Ms, band1Ms, elapsed, bandCount))
+                        throw new TimeoutException(MandelbrotKernelSource.PerturbTooSlowMessage(band0Ms, band1Ms, timed, bandCount, label));
                 }
             }
         }

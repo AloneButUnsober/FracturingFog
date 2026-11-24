@@ -74,10 +74,17 @@ DISABLED.
   - Vulkan doesn't share the gate (its kernels have their own queue submissions), so it has no equivalent stall.
 
 ### Perf auto-fallback (commit `468859c`, #87)
-- After band 0 (real GPU-synced time), extrapolate `band0 × bandCount`. If `> PerturbBudgetMs` (default 3000, env
-  `FF_GPU_PERTURB_BUDGET_MS`) → throw `GPU-PERTURB-TOO-SLOW`.
-- Calculator catch treats that (and any device-lost) as **disable `UseGpuPerturbation` for the session** + CPU deep
-  path. This is why weak GPUs "fall off and never re-engage" — by design.
+- **#2012: bands 0 and 1 are both waited on and timed** (band 0 alone where only two bands exist). The frame aborts
+  with `GPU-PERTURB-TOO-SLOW` when:
+  - the time spent already passes `PerturbBudgetMs` (default 3000, env `FF_GPU_PERTURB_BUDGET_MS`);
+  - or, after band 1, the time spent plus the faster of the two bands for each band left passes it.
+
+  Before #2012 the rule was `band0 × bandCount`. Band 0 pays a new pipeline's driver compile and cold caches: on an
+  RTX 3080 (rith's 0.7.2 bench) the first run aborted at 73.5 ms × 270 bands and every later run used the GPU, and a
+  warm 25.6 ms band 0 overstated a ~1.4 s frame. `MandelbrotKernelSource.PerturbTooSlowAfter`.
+- Calculator catch: **one too-slow abort falls back to the CPU for that frame only**. `TooSlowStrikesToLatch` (2)
+  consecutive aborts disable `UseGpuPerturbation` for the session, and a GPU deep frame that finishes resets the
+  count. A device lost still disables at once. Weak GPUs still "fall off and never re-engage", one frame later.
 
 ### Files
 - `Rendering.D3D/MandelbrotKernelSource.cs` — shared HLSL + band/budget helpers (compile-linked into Vulkan).

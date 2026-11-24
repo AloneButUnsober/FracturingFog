@@ -752,6 +752,40 @@ RWStructuredBuffer<float> gTrap : register(u4);
     public static bool PerturbTooSlow(double band0Ms, int bandCount, double budgetMs)
         => budgetMs > 0 && band0Ms * bandCount > budgetMs;
 
+    /// <summary>#2012 — the leading bands the too-slow guard waits on and times: band 0,
+    /// and band 1 when a band follows it. Band 0 alone overstated whole frames (it pays a
+    /// new pipeline's driver compile and cold caches: 73.5 ms × 270 bands on an RTX 3080's
+    /// first run, then GPU every run after; one warm band 5× the frame's mean: rith's 0.7.2
+    /// bench, bibliography #rith-ff-071-benchmark), so the
+    /// estimate waits for band 1 where there is one.</summary>
+    public static int PerturbTimedBands(int bandCount) => bandCount <= 1 ? 0 : bandCount == 2 ? 1 : 2;
+
+    /// <summary>#2012 — the too-slow verdict after timed band <paramref name="bandIndex"/>
+    /// (0 or 1, see <see cref="PerturbTimedBands"/>). Aborts when the time already spent
+    /// passes the budget; after band 0, only when no second band will be timed (then the
+    /// old band0 × bandCount rule); after band 1, when the time spent plus the faster of
+    /// the two bands for each band left passes the budget. A budget of 0 or less never
+    /// aborts.</summary>
+    public static bool PerturbTooSlowAfter(int bandIndex, double band0Ms, double band1Ms, double elapsedMs,
+        int bandCount, double budgetMs)
+    {
+        if (budgetMs <= 0) return false;
+        if (elapsedMs > budgetMs) return true;
+        if (bandIndex == 0) return PerturbTimedBands(bandCount) == 1 && band0Ms * bandCount > budgetMs;
+        return elapsedMs + System.Math.Min(band0Ms, band1Ms) * (bandCount - 2) > budgetMs;
+    }
+
+    /// <summary><see cref="PerturbTooSlowAfter(int, double, double, double, int, double)"/>
+    /// against <see cref="PerturbBudgetMs"/>.</summary>
+    public static bool PerturbTooSlowAfter(int bandIndex, double band0Ms, double band1Ms, double elapsedMs, int bandCount)
+        => PerturbTooSlowAfter(bandIndex, band0Ms, band1Ms, elapsedMs, bandCount, PerturbBudgetMs);
+
+    /// <summary>#2012 — the too-slow exception's message (carries <see cref="PerturbTooSlowMarker"/>).</summary>
+    public static string PerturbTooSlowMessage(double band0Ms, double band1Ms, int timed, int bandCount, string label)
+        => $"{PerturbTooSlowMarker}: band0={band0Ms:F1}ms"
+           + (timed > 1 ? $" band1={band1Ms:F1}ms" : "")
+           + $" × {bandCount} bands > {PerturbBudgetMs:F0}ms budget{label}";
+
     /// <summary>Marker message for the perf-abort exception so the calculator can
     /// tell "GPU too slow" apart from a genuine device-lost error.</summary>
     public const string PerturbTooSlowMarker = "GPU-PERTURB-TOO-SLOW";

@@ -89,6 +89,7 @@ namespace FracturingFog
             if (on)
             {
                 s_gpuPerturbDisabled = null;
+                s_gpuTooSlowStrikes = 0;   // #2012
                 UseGpuPerturbation = true;
             }
             GpuPerturbUserOverride = on;

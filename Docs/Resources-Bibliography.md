@@ -1581,6 +1581,11 @@ Programs and galleries the project measured itself against, learned from, or pay
   benchmark of FF: 17 deep-zoom scenes at 3840x2160 timed against Imagina and checked against
   Fractadyne, run with the bench-kit above. Its findings became #1611 (batch on the GPU), #1612 (zoom
   ceiling, PR #1616), #1613 (QD-band per-pixel cost, PR #1618) and #1614/#1615.
+- **rith** (fractalforums.org user). *Fracturing Fog 0.7.2 performance benchmark report*, a private
+  direct message to the FF author on fractalforums.org, received 2026-11-24. The same kit on a Ryzen 9
+  5950X + RTX 3080 against 0.7.1, plus per-scene GPU double / fp32 runs and the kit's scenes past 1e100
+  (as .kfr), timed against Fractadyne. Its findings became #2012 (the GPU too-slow guard judged by band 0
+  alone: a first-run driver compile and one noisy band), #2013-#2017, and a data point on #1494.
 
 <a id="rith-benchmark-thread"></a>
 

@@ -73,7 +73,7 @@ namespace FracturingFog
 
         /// <summary>#1786 — test hook: clear the session's GPU-perturbation latch
         /// (too slow / device lost).</summary>
-        public static void ResetGpuPerturbationLatchForTests() => s_gpuPerturbDisabled = null;
+        public static void ResetGpuPerturbationLatchForTests() { s_gpuPerturbDisabled = null; s_gpuTooSlowStrikes = 0; }   // #2012
 
         /// <summary>#1786 — the session latch is set (GPU perturbation switched off).</summary>
         public static bool GpuPerturbationLatched => s_gpuPerturbDisabled != null;
