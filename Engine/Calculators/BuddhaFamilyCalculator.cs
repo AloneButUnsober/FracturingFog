@@ -957,7 +957,8 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
         }
     }
 
-    /// <summary>Standard-normal sample via Box-Muller. One transcendental
+    /// <summary>Standard-normal sample via Box-Muller (Box &amp; Muller, Ann. Math. Statist. 29, 610,
+    /// 1958; see Docs/Resources-Bibliography.md). One transcendental
     /// per call — fine for the once-per-MH-step rate; not hot enough to
     /// warrant Marsaglia polar.</summary>
     protected static double Gaussian(Random rng)

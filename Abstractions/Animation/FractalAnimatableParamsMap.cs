@@ -765,6 +765,7 @@ public static class FractalAnimatableParamsMap
         new("CosmicWebCameraPhi", AnimatableParamKind.ScalarDouble, Min: 0.05, Max: System.Math.PI - 0.05, Notes: "Camera polar angle from +z."),
         new("CosmicWebLambda", AnimatableParamKind.ScalarDouble, Min: 1.2, Max: 3.0, Notes: "Size ratio of successive levels: D = log eta / log lambda. Regenerates the points every frame."),
         new("CosmicWebDepthFade", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 1.0, Notes: "How much the back of the box is dimmed."),
+        new("CosmicWebGrowth", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 3.0, Notes: "Zel'dovich growth factor D: 0 is the uniform grid, about 1 shell crossing. Re-displaces only (the field is cached)."),
     };
 
     private static readonly AnimatableParamDescriptor[] _microlensingList =

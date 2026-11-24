@@ -1659,6 +1659,14 @@ namespace FracturingFog.Models
         public CosmicWebColour CosmicWebColour { get; set; } = CosmicWebColour.Depth;
         /// <summary>#2021 — gamma of the Depth colouring's brightness, log density^(1/gamma). Default 2.2.</summary>
         public double CosmicWebGamma { get; set; } = 2.2;
+        /// <summary>#2022 — Zel'dovich: particles per side (a power of two, 16..256; N^3 particles). Default 128.</summary>
+        public int CosmicWebGrid { get; set; } = 128;
+        /// <summary>#2022 — Zel'dovich: spectral index n of the linear power spectrum P(k) ~ k^n. Default -2.</summary>
+        public double CosmicWebSpectralIndex { get; set; } = -2.0;
+        /// <summary>#2022 — Zel'dovich: Gaussian smoothing length of the field, in grid cells. Default 2.</summary>
+        public double CosmicWebSmoothing { get; set; } = 2.0;
+        /// <summary>#2022 — Zel'dovich: growth factor D, in units of the rms linear density contrast (shell crossing near 1). Default 1.</summary>
+        public double CosmicWebGrowth { get; set; } = 1.0;
         /// <summary>#2021 — orbit camera distance from the box centre, in box sides. Default 2.2.</summary>
         public double CosmicWebCameraDistance { get; set; } = 2.2;
         /// <summary>#2021 — orbit camera azimuth (radians). Default 0.6.</summary>
@@ -2997,6 +3005,10 @@ namespace FracturingFog.Models
                 CosmicWebDepthFade = CosmicWebDepthFade,
                 CosmicWebColour = CosmicWebColour,
                 CosmicWebGamma = CosmicWebGamma,
+                CosmicWebGrid = CosmicWebGrid,
+                CosmicWebSpectralIndex = CosmicWebSpectralIndex,
+                CosmicWebSmoothing = CosmicWebSmoothing,
+                CosmicWebGrowth = CosmicWebGrowth,
                 CosmicWebCameraDistance = CosmicWebCameraDistance,
                 CosmicWebCameraTheta = CosmicWebCameraTheta,
                 CosmicWebCameraPhi = CosmicWebCameraPhi,

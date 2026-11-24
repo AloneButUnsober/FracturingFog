@@ -5747,6 +5747,24 @@ Table I (7 to 12 levels, 128 to 4096 galaxies); a few very rich
 clumps among many poor ones gave them the right three- and
 four-point correlations. Fixed gives every clump the same number.
 
+Generator: Zel'dovich approximation (1970)
+Particles start on a uniform N^3 grid and move in straight lines,
+x = q + D s(q), pushed by a Gaussian random density field: white
+noise, filtered in Fourier space to a power spectrum P(k) ~ k^n
+(Bertschinger's method). The push s is the gradient of the field's
+potential (div s = -delta), so particles leave the underdense regions
+and pile up where the field is high. Where neighbouring particles
+cross, sheets ('pancakes') form, then filaments and knots between
+them, the cosmic web. D grows with time: it is the rms linear
+density contrast, so sheets start to form near D = 1. Animate D to
+watch the web form; only the displacement is redone, not the field.
+Settings: Particles per side (16 to 256; 256 is 16.8 million points
+and needs about 2 GB while the field is built), Spectral index n
+(lower = more large-scale power, bigger voids), Smoothing (cells),
+Growth D. The approximation ignores gravity after the start: past
+shell crossing the particles stream on through the structures
+instead of staying in them, so the web blurs as D keeps growing.
+
 Dimension
 Inside a clump the density falls off as a power of size, so between
 the smallest and largest clump sizes the galaxies form a fractal of
@@ -5770,12 +5788,15 @@ it are dropped; the status bar says so), Point size, Depth fade, Colour,
 Gamma, and
 the camera (distance in box sides, azimuth, polar angle).
 
-The status bar shows the galaxy and clump counts and the model's D.
+The status bar shows the galaxy and clump counts and the model's D
+(Soneira-Peebles), or the grid, spectrum and D (Zel'dovich).
 
 Presets:
   Cosmic Web - Soneira-Peebles Final Model        their final model
   Cosmic Web - Rich Clumps                        forty 12-level clumps
   Cosmic Web - Uniform Sphere Clumps (D = 2)      the earlier placement
+  Cosmic Web - Zeldovich Web Forming              D = 1, animated
+  Cosmic Web - Zeldovich Mature Web               past shell crossing
 
 Batch: every setting is a --param CosmicWeb* key, the camera is
 Cam3DFamily=CosmicWeb with Cam3DDistance / Cam3DTheta / Cam3DPhi, e.g.

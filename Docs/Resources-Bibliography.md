@@ -712,6 +712,45 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   the Cosmic Web help and settings panel for the caveat that the real web is not a single-dimension
   fractal (#2021); the measurement chain is planned for #2023. Pointer that started the epic #2020.
 
+<a id="zeldovich-1970"></a>
+
+- **Ya. B. Zel'dovich (Zeldovich).** *Gravitational instability: an approximate theory for large density
+  perturbations.* Astronomy and Astrophysics 5, 84, 1970. **Only the journal, volume, first page and
+  year are confirmed**, from the reference list of a Crossref record that cites it (Matsubara,
+  Yoshisato & Morikawa, ApJ 504, 7, 1998, DOI 10.1086/306085), checked 2026-11-24; Crossref holds no
+  record of the paper itself and ADS returned nothing. The title and the page range are as the paper is
+  usually cited (see *Citations awaiting verification*); the paper's text has not been read. The
+  Zel'dovich approximation, x = q + D s(q) with div s = -delta, is the second Cosmic Web generator
+  (#2022, `Engine/CosmicWeb/Zeldovich.cs`); the relations FF uses are tested directly (div s = -delta in
+  Fourier space, the particle density D delta at small D).
+
+<a id="bertschinger-2001"></a>
+
+- **Edmund Bertschinger.** *Multiscale Gaussian Random Fields for Cosmological Simulations.* The
+  Astrophysical Journal Supplement Series 137, 1, 2001. arXiv:astro-ph/0103301; DOI 10.1086/322526
+  (both from the arXiv record, checked 2026-11-24). Sec. II.1, Eqs. 7-9: a Gaussian random field on a
+  periodic grid from real-space white noise, Fourier transformed, multiplied by T(k) = sqrt(P(k)) and
+  transformed back; the reality condition xi(-k) = xi*(k). The linear field of the Zel'dovich
+  generator (#2022). FF uses a power law times a Gaussian smoothing and normalises the field to rms 1
+  (its own choices); Bertschinger's multiscale refinement is not used.
+
+<a id="cooley-tukey-1965"></a>
+
+- **James W. Cooley, John W. Tukey.** *An algorithm for the machine calculation of complex Fourier
+  series.* Mathematics of Computation 19 (90), 297-301, 1965. DOI
+  [10.1090/S0025-5718-1965-0178586-1](https://doi.org/10.1090/S0025-5718-1965-0178586-1) (checked
+  against the Crossref record 2026-11-24). The radix-2 fast Fourier transform of `Engine/CosmicWeb/Fft3D.cs`
+  (#2022), applied along each axis of the N^3 grid; FF's iterative bit-reversal form is the textbook
+  arrangement, not transcribed from the paper.
+
+<a id="box-muller-1958"></a>
+
+- **G. E. P. Box, Mervin E. Muller.** *A Note on the Generation of Random Normal Deviates.* The Annals of
+  Mathematical Statistics 29 (2), 610-611, 1958. DOI
+  [10.1214/aoms/1177706645](https://doi.org/10.1214/aoms/1177706645) (checked against the Crossref
+  record 2026-11-24). Two independent unit normals from two uniforms: the white noise of the Zel'dovich
+  generator (#2022). Also used, uncredited until now, by `BuddhaFamilyCalculator`'s standard-normal sampler.
+
 <a id="cunha-2015"></a>
 
 - **P. V. P. Cunha, C. A. R. Herdeiro, E. Radu, H. F. Rúnarsson.** *Shadows of Kerr black
@@ -1725,6 +1764,10 @@ entry above completed or corrected.
   Web Depth colouring (#2021) use. Only secondary sources were read (Wikipedia, "Fractal flame",
   reference 4, pointing at <https://flam3.com/flame_draves.pdf>); the PDF (22.5 MB) was not opened, so
   the authors as printed, date and any venue are unconfirmed.
+- **Zel'dovich 1970, A&A 5, 84** — the title ("Gravitational instability: an approximate theory for
+  large density perturbations") and last page (89) as usually cited; Crossref has no record and ADS
+  returned nothing (#2022). The paper's text has not been read: its statement of the approximation is
+  to be checked against FF's x = q + D s(q).
 - **pauldelbrot, fractalforums.org topic 5693** — thread title and post date (#1979 / #1980 / #1981;
   content from a user paste, the page not opened).
 - **Exterior distance bound (`distance-bound-koebe`)** — the primary source and statement of
