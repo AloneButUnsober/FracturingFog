@@ -162,6 +162,7 @@ namespace FracturingFog.Models
             {FractalType.TalbotCarpet, "Talbot Carpet" },
             {FractalType.MathPlane, "Math Plane" },
             {FractalType.MathPlane3D, "Math Plane 3D" },
+            {FractalType.CosmicWeb, "Cosmic Web" },   // #2021
             {FractalType.PrecisionField, "Precision Field" },
             {FractalType.Kleinian, "Kleinian" },
             {FractalType.MirrorSpheres, "MirrorSpheres" },

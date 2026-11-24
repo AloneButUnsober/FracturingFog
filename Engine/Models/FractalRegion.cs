@@ -931,6 +931,23 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? MicroTrackX { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? MicroTrackY { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? MicroTrackAngle { get; set; }
+        // #2021 — Cosmic Web (enums as int casts; the camera rides the generic Cam3D block).
+        [JsonIgnore(Condition = OmitNull)] public int? CosmicWebGenerator { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? CosmicWebSeed { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? CosmicWebBoxSize { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? CosmicWebClumps { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? CosmicWebPlacement { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? CosmicWebEta { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? CosmicWebLambda { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? CosmicWebFirstRatio { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? CosmicWebTopSize { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? CosmicWebLevelMode { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? CosmicWebLevels { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? CosmicWebPointCap { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? CosmicWebPointSize { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? CosmicWebDepthFade { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? CosmicWebColour { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? CosmicWebGamma { get; set; }
         // #1507 — int cast of BilliardRayColorSource.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysColorSource { get; set; }
         // #1508 — crossings (int casts of BilliardRayMode / BilliardCrossingValue).
@@ -1313,6 +1330,7 @@ namespace FracturingFog.Models
             FractalType.Kleinian => (p.KleinianCameraDistance, p.KleinianCameraTheta, p.KleinianCameraPhi),
             FractalType.MirrorSpheres => (p.MirrorSpheresCameraDistance, p.MirrorSpheresCameraTheta, p.MirrorSpheresCameraPhi),
             FractalType.MathPlane3D => (p.MathPlane3DCameraDistance, p.MathPlane3DCameraTheta, p.MathPlane3DCameraPhi),
+            FractalType.CosmicWeb => (p.CosmicWebCameraDistance, p.CosmicWebCameraTheta, p.CosmicWebCameraPhi),   // #2021
             FractalType.BicomplexMandelbrot => (p.BicomplexCameraDistance, p.BicomplexCameraTheta, p.BicomplexCameraPhi),
             FractalType.Coquaternion => (p.CoquaternionCameraDistance, p.CoquaternionCameraTheta, p.CoquaternionCameraPhi),
             FractalType.Julibrot => (p.DualOrbitVolumeCameraDistance, p.DualOrbitVolumeCameraTheta, p.DualOrbitVolumeCameraPhi),
@@ -1614,6 +1632,30 @@ namespace FracturingFog.Models
                     UserHamTolerance = p.UserHamTolerance,
                     UserHamMaxStep = p.UserHamMaxStep,
                     UserHamProjectEvery = p.UserHamProjectEvery,
+                },
+                // #2021 — Cosmic Web: every setting; the orbit camera in the generic Cam3D block.
+                FractalType.CosmicWeb => new RegionFractalParams
+                {
+                    Cam3DFamily = (int)type,
+                    Cam3DDistance = p.CosmicWebCameraDistance,
+                    Cam3DTheta = p.CosmicWebCameraTheta,
+                    Cam3DPhi = p.CosmicWebCameraPhi,
+                    CosmicWebGenerator = (int)p.CosmicWebGenerator,
+                    CosmicWebSeed = p.CosmicWebSeed,
+                    CosmicWebBoxSize = p.CosmicWebBoxSize,
+                    CosmicWebClumps = p.CosmicWebClumps,
+                    CosmicWebPlacement = (int)p.CosmicWebPlacement,
+                    CosmicWebEta = p.CosmicWebEta,
+                    CosmicWebLambda = p.CosmicWebLambda,
+                    CosmicWebFirstRatio = p.CosmicWebFirstRatio,
+                    CosmicWebTopSize = p.CosmicWebTopSize,
+                    CosmicWebLevelMode = (int)p.CosmicWebLevelMode,
+                    CosmicWebLevels = p.CosmicWebLevels,
+                    CosmicWebPointCap = p.CosmicWebPointCap,
+                    CosmicWebPointSize = p.CosmicWebPointSize,
+                    CosmicWebDepthFade = p.CosmicWebDepthFade,
+                    CosmicWebColour = (int)p.CosmicWebColour,
+                    CosmicWebGamma = p.CosmicWebGamma,
                 },
                 // #1948 — microlensing: every setting.
                 FractalType.MicrolensingMap => new RegionFractalParams
@@ -2804,6 +2846,22 @@ namespace FracturingFog.Models
             if (MicroTrackX.HasValue) p.MicroTrackX = MicroTrackX.Value;
             if (MicroTrackY.HasValue) p.MicroTrackY = MicroTrackY.Value;
             if (MicroTrackAngle.HasValue) p.MicroTrackAngle = MicroTrackAngle.Value;
+            if (CosmicWebGenerator is { } cwg && Enum.IsDefined(typeof(FracturingFog.CosmicWebGenerator), cwg)) p.CosmicWebGenerator = (FracturingFog.CosmicWebGenerator)cwg;   // #2021
+            if (CosmicWebSeed.HasValue)       p.CosmicWebSeed = CosmicWebSeed.Value;
+            if (CosmicWebBoxSize.HasValue)    p.CosmicWebBoxSize = CosmicWebBoxSize.Value;
+            if (CosmicWebClumps.HasValue)     p.CosmicWebClumps = CosmicWebClumps.Value;
+            if (CosmicWebPlacement is { } cwp && Enum.IsDefined(typeof(FracturingFog.CosmicWebPlacement), cwp)) p.CosmicWebPlacement = (FracturingFog.CosmicWebPlacement)cwp;
+            if (CosmicWebEta.HasValue)        p.CosmicWebEta = CosmicWebEta.Value;
+            if (CosmicWebLambda.HasValue)     p.CosmicWebLambda = CosmicWebLambda.Value;
+            if (CosmicWebFirstRatio.HasValue) p.CosmicWebFirstRatio = CosmicWebFirstRatio.Value;
+            if (CosmicWebTopSize.HasValue)    p.CosmicWebTopSize = CosmicWebTopSize.Value;
+            if (CosmicWebLevelMode is { } cwl && Enum.IsDefined(typeof(FracturingFog.CosmicWebLevelMode), cwl)) p.CosmicWebLevelMode = (FracturingFog.CosmicWebLevelMode)cwl;
+            if (CosmicWebLevels.HasValue)     p.CosmicWebLevels = CosmicWebLevels.Value;
+            if (CosmicWebPointCap.HasValue)   p.CosmicWebPointCap = CosmicWebPointCap.Value;
+            if (CosmicWebPointSize.HasValue)  p.CosmicWebPointSize = CosmicWebPointSize.Value;
+            if (CosmicWebDepthFade.HasValue)  p.CosmicWebDepthFade = CosmicWebDepthFade.Value;
+            if (CosmicWebColour is { } cwc && Enum.IsDefined(typeof(FracturingFog.CosmicWebColour), cwc)) p.CosmicWebColour = (FracturingFog.CosmicWebColour)cwc;
+            if (CosmicWebGamma.HasValue)      p.CosmicWebGamma = CosmicWebGamma.Value;
             if (BilliardRaysColorSource.HasValue) p.BilliardRaysColorSource = (FracturingFog.BilliardRayColorSource)BilliardRaysColorSource.Value;
             if (BilliardRaysMode.HasValue)       p.BilliardRaysMode = (FracturingFog.BilliardRayMode)BilliardRaysMode.Value;
             if (BilliardRaysCrossingWindow.HasValue) p.BilliardRaysCrossingWindow = BilliardRaysCrossingWindow.Value;
@@ -2882,6 +2940,9 @@ namespace FracturingFog.Models
                         break;
                     case FractalType.MathPlane3D:   // #1713
                         p.MathPlane3DCameraDistance = d; p.MathPlane3DCameraTheta = th; p.MathPlane3DCameraPhi = ph;
+                        break;
+                    case FractalType.CosmicWeb:   // #2021
+                        p.CosmicWebCameraDistance = d; p.CosmicWebCameraTheta = th; p.CosmicWebCameraPhi = ph;
                         break;
                     case FractalType.BicomplexMandelbrot:
                         p.BicomplexCameraDistance = d; p.BicomplexCameraTheta = th; p.BicomplexCameraPhi = ph;
@@ -4839,6 +4900,64 @@ namespace FracturingFog.Models
                 Params        = new RegionFractalParams
                 {
                     MicroLayout = (int)FracturingFog.MicrolensLayout.Field, MicroKappaStars = 0.4, MicroKappaSmooth = 0.0, MicroShear = 0.3, MicroFieldRadius = 14.0, MicroSeed = 1, MicroRaysPerPixel = 4.0, MicroLightCurve = true, MicroTrackX = 0.0, MicroTrackY = 0.2, MicroTrackAngle = 20.0,
+                },
+            },
+            // #2021 — Cosmic Web: Soneira & Peebles (AJ 83, 845, 1978) hierarchical clustering.
+            new()
+            {
+                Name          = "Cosmic Web - Soneira-Peebles Final Model",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  1.0,
+                Iterations    =  256,
+                Description   = "Soneira and Peebles' 1978 computer model universe in a 100 Mpc/h periodic box: clumps of galaxies at their clump density, each built by splitting into two sub-clumps at a fixed separation in a random direction (11.35 Mpc/h, then 1.10 and 1.76 times smaller per level), with the number of levels drawn from their Table I. The clustering is self-similar with D = log 2 / log 1.76 = 1.23 between the smallest and largest clump sizes. Right-drag to orbit.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.CosmicWeb,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    Cam3DFamily = (int)FractalType.CosmicWeb, Cam3DDistance = 2.2, Cam3DTheta = 0.6, Cam3DPhi = 1.1,
+                    CosmicWebPlacement = (int)FracturingFog.CosmicWebPlacement.Dumbbell, CosmicWebLevelMode = (int)FracturingFog.CosmicWebLevelMode.TableI,
+                    CosmicWebBoxSize = 100.0, CosmicWebClumps = 310, CosmicWebTopSize = 11.35, CosmicWebFirstRatio = 1.10, CosmicWebLambda = 1.76,
+                    CosmicWebSeed = 1978, CosmicWebPointSize = 1.0, CosmicWebDepthFade = 0.5,
+                },
+            },
+            new()
+            {
+                Name          = "Cosmic Web - Rich Clumps",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  1.0,
+                Iterations    =  256,
+                Description   = "Forty of Soneira and Peebles' richest clumps (12 levels, 4096 galaxies each) in a 100 Mpc/h box: the dumbbell hierarchy is easy to follow from the 11 Mpc/h pairs down to 37 kpc/h, and the random orientations make chains and filaments the model never built in.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.CosmicWeb,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    Cam3DFamily = (int)FractalType.CosmicWeb, Cam3DDistance = 2.0, Cam3DTheta = 0.9, Cam3DPhi = 1.2,
+                    CosmicWebPlacement = (int)FracturingFog.CosmicWebPlacement.Dumbbell, CosmicWebLevelMode = (int)FracturingFog.CosmicWebLevelMode.Fixed, CosmicWebLevels = 12,
+                    CosmicWebBoxSize = 100.0, CosmicWebClumps = 40, CosmicWebTopSize = 11.35, CosmicWebFirstRatio = 1.10, CosmicWebLambda = 1.76,
+                    CosmicWebSeed = 7, CosmicWebPointSize = 1.0, CosmicWebDepthFade = 0.6,
+                },
+            },
+            new()
+            {
+                Name          = "Cosmic Web - Uniform Sphere Clumps (D = 2)",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  1.0,
+                Iterations    =  256,
+                Description   = "Soneira and Peebles' earlier placement: four sub-clumps uniformly at random inside each sphere, each half its radius, seven levels. With eta = 4 and lambda = 2 the hierarchy has D = log 4 / log 2 = 2, so the clumps read as crumpled sheets rather than chains.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.CosmicWeb,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    Cam3DFamily = (int)FractalType.CosmicWeb, Cam3DDistance = 2.2, Cam3DTheta = 0.6, Cam3DPhi = 1.1,
+                    CosmicWebPlacement = (int)FracturingFog.CosmicWebPlacement.UniformSphere, CosmicWebEta = 4, CosmicWebLevelMode = (int)FracturingFog.CosmicWebLevelMode.Fixed, CosmicWebLevels = 7,
+                    CosmicWebBoxSize = 200.0, CosmicWebClumps = 120, CosmicWebTopSize = 15.0, CosmicWebFirstRatio = 2.0, CosmicWebLambda = 2.0,
+                    CosmicWebSeed = 1977, CosmicWebPointSize = 1.0, CosmicWebDepthFade = 0.5,
                 },
             },
             // #1997 — User Hamiltonian: the Hénon–Heiles section (parity with that view), FF's own

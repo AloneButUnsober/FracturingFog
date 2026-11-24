@@ -5719,6 +5719,70 @@ Batch: every setting is a --param Micro* key, e.g.
 Sources: Docs/Resources-Bibliography.md.
 ";
 
+        /// <summary>#2021 — Cosmic Web (Math → Cosmology).</summary>
+        public const string MathCosmicWebText =
+@"=== Cosmic Web ===
+
+A box of model galaxies, seen in 3D. Right-drag to orbit, the wheel
+to move in and out. Galaxies are drawn as points. Colour Depth (the
+default): the theme runs from the front of the box to the back, and
+a pixel is brighter where more galaxies line up along the view (log
+density raised to 1/gamma: the log-density display of fractal flames,
+Draves). Colour Density: the theme shows the log density itself.
+Depth fade dims the back of the box.
+
+Generator: Soneira & Peebles (1978)
+Their 'computer model universe' (Astron. J. 83, 845) was built to
+match the clustering of the Lick galaxy catalogue. Galaxies come in
+clumps placed at random in space. Each clump is a hierarchy:
+  Dumbbell (their final model): a pair of sub-clumps at a fixed
+    separation (11.35 Mpc/h) in a random direction; each of those
+    splits into a pair 1.10 times closer, then 1.76 times closer at
+    every further level. A galaxy sits at each end of the last pair,
+    so a clump of L levels has 2^L galaxies.
+  UniformSphere (their earlier model): eta sub-clumps placed at
+    random inside a sphere, each lambda times smaller, and so on.
+Levels: TableI draws the number of levels of each clump from their
+Table I (7 to 12 levels, 128 to 4096 galaxies); a few very rich
+clumps among many poor ones gave them the right three- and
+four-point correlations. Fixed gives every clump the same number.
+
+Dimension
+Inside a clump the density falls off as a power of size, so between
+the smallest and largest clump sizes the galaxies form a fractal of
+dimension D = log eta / log lambda (their Eq. 4): 1.23 for the final
+model (eta 2, lambda 1.76), 2 for eta 4, lambda 2. Above the clump
+size the galaxies are uncorrelated and the box looks uniform (D = 3);
+below the last pair there is nothing.
+
+Not the real universe
+This is a statistical model, not a simulation of gravity. The real
+cosmic web is not one fractal of a single dimension either: from
+galaxy surveys the dimension measured from the correlation function
+changes near 3 Mpc/h (inside halos and clusters versus their
+arrangement along filaments) and rises to 3 by about 100 Mpc/h,
+where the universe becomes homogeneous (Einasto 2026, a review).
+
+Settings: Generator, Placement, eta (UniformSphere), lambda, First
+ratio (d1/d2), Top size (d1 or the sphere radius, Mpc/h), Levels,
+Clumps, Box size (periodic, Mpc/h), Seed, Point cap (whole clumps past
+it are dropped; the status bar says so), Point size, Depth fade, Colour,
+Gamma, and
+the camera (distance in box sides, azimuth, polar angle).
+
+The status bar shows the galaxy and clump counts and the model's D.
+
+Presets:
+  Cosmic Web - Soneira-Peebles Final Model        their final model
+  Cosmic Web - Rich Clumps                        forty 12-level clumps
+  Cosmic Web - Uniform Sphere Clumps (D = 2)      the earlier placement
+
+Batch: every setting is a --param CosmicWeb* key, the camera is
+Cam3DFamily=CosmicWeb with Cam3DDistance / Cam3DTheta / Cam3DPhi, e.g.
+  --param CosmicWebLambda=2 --param Cam3DTheta=1.2
+Sources: Docs/Resources-Bibliography.md.
+";
+
         /// <summary>#1997 — General User Hamiltonian (Math → Scattering).</summary>
         public const string MathUserHamiltonianText =
 @"=== User Hamiltonian ===

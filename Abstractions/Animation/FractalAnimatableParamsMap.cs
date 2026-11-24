@@ -183,6 +183,9 @@ public static class FractalAnimatableParamsMap
         FractalType.MicrolensingMap
             => _microlensingList,
 
+        FractalType.CosmicWeb
+            => _cosmicWebList,
+
         FractalType.BicomplexMandelbrot
             => _bicomplexList,
 
@@ -754,6 +757,16 @@ public static class FractalAnimatableParamsMap
     };
 
     // #1948 — microlensing: convergence and shear.
+    // #2021 — Cosmic Web: the orbit camera (re-splats only) and the hierarchy's size ratio (regenerates).
+    private static readonly AnimatableParamDescriptor[] _cosmicWebList =
+    {
+        new("CosmicWebCameraDistance", AnimatableParamKind.ScalarDouble, Min: 0.3, Max: 20.0, Notes: "Camera distance from the box centre, in box sides."),
+        new("CosmicWebCameraTheta", AnimatableParamKind.ScalarDouble, Min: -System.Math.PI, Max: System.Math.PI, Notes: "Camera azimuth about the z axis."),
+        new("CosmicWebCameraPhi", AnimatableParamKind.ScalarDouble, Min: 0.05, Max: System.Math.PI - 0.05, Notes: "Camera polar angle from +z."),
+        new("CosmicWebLambda", AnimatableParamKind.ScalarDouble, Min: 1.2, Max: 3.0, Notes: "Size ratio of successive levels: D = log eta / log lambda. Regenerates the points every frame."),
+        new("CosmicWebDepthFade", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 1.0, Notes: "How much the back of the box is dimmed."),
+    };
+
     private static readonly AnimatableParamDescriptor[] _microlensingList =
     {
         new("MicroKappaStars", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 2.0, Notes: "Convergence in stars."),

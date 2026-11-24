@@ -33,10 +33,15 @@ public readonly record struct MathPlane3DCamera(
     /// <summary>The camera for <paramref name="p"/> at view <paramref name="zoom"/>, for a
     /// <paramref name="w"/> × <paramref name="h"/> image.</summary>
     public static MathPlane3DCamera For(FractalParameters p, double zoom, int w, int h)
+        => For(p.MathPlane3DCameraDistance, p.MathPlane3DCameraTheta, p.MathPlane3DCameraPhi,
+               (p.MathPlane3DTargetX, p.MathPlane3DTargetY, p.MathPlane3DTargetZ), zoom, w, h);
+
+    /// <summary>#2021 — the same orbit camera from explicit values (the Cosmic Web family reuses it).</summary>
+    public static MathPlane3DCamera For(double distance, double theta, double phi,
+        (double X, double Y, double Z) target, double zoom, int w, int h)
     {
-        double dist = System.Math.Max(1e-6, p.MathPlane3DCameraDistance) / System.Math.Max(1e-9, zoom);
-        double th = p.MathPlane3DCameraTheta, ph = System.Math.Clamp(p.MathPlane3DCameraPhi, 1e-4, System.Math.PI - 1e-4);
-        var target = (X: p.MathPlane3DTargetX, Y: p.MathPlane3DTargetY, Z: p.MathPlane3DTargetZ);
+        double dist = System.Math.Max(1e-6, distance) / System.Math.Max(1e-9, zoom);
+        double th = theta, ph = System.Math.Clamp(phi, 1e-4, System.Math.PI - 1e-4);
         var eye = (X: target.X + dist * System.Math.Sin(ph) * System.Math.Cos(th),
                    Y: target.Y + dist * System.Math.Sin(ph) * System.Math.Sin(th),
                    Z: target.Z + dist * System.Math.Cos(ph));

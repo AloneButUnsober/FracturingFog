@@ -154,6 +154,7 @@ public sealed class Raymarch3DCameraTests
         Assert.Contains(FractalType.UserBulb, with);
         // Not raymarchers of this kind: Math Plane 3D has its own camera; Mirror Spheres is ray traced.
         Assert.DoesNotContain(FractalType.MathPlane3D, with);
+        Assert.DoesNotContain(FractalType.CosmicWeb, with);   // #2021 point splat on the Math Plane 3D camera
     }
 
     [Fact]

@@ -204,6 +204,8 @@ namespace FracturingFog.Rendering
         private UserHamiltonianCalculator _userHamiltonianCalculator => LazyCalc(ref _userHamiltonianCalculatorSlot, static (w, h) => new UserHamiltonianCalculator(w, h));
         private MicrolensingCalculator? _microlensingCalculatorSlot;   // #1948
         private MicrolensingCalculator _microlensingCalculator => LazyCalc(ref _microlensingCalculatorSlot, static (w, h) => new MicrolensingCalculator(w, h));
+        private CosmicWebCalculator? _cosmicWebCalculatorSlot;   // #2021
+        private CosmicWebCalculator _cosmicWebCalculator => LazyCalc(ref _cosmicWebCalculatorSlot, static (w, h) => new CosmicWebCalculator(w, h));
         private PrecisionFieldCalculator? _precisionFieldCalculatorSlot;
         private PrecisionFieldCalculator _precisionFieldCalculator => LazyCalc(ref _precisionFieldCalculatorSlot, static (w, h) => new PrecisionFieldCalculator(w, h));
         private DualOrbitEscapeCalculator? _dualOrbitCalculatorSlot;
@@ -2883,6 +2885,7 @@ namespace FracturingFog.Rendering
             FractalType.UserPotentialBasins => new UserPotentialCalculator(w, h),   // #1994
             FractalType.UserHamiltonianBasins => new UserHamiltonianCalculator(w, h),   // #1997
             FractalType.MicrolensingMap => new MicrolensingCalculator(w, h),   // #1948
+            FractalType.CosmicWeb => new CosmicWebCalculator(w, h),   // #2021
             FractalType.SlitCascade => new SlitCascadeCalculator(w, h),   // #1569
             FractalType.TalbotCarpet => new TalbotCarpetCalculator(w, h), // #1570
             FractalType.PrecisionField => new PrecisionFieldCalculator(w, h),
@@ -3577,6 +3580,7 @@ namespace FracturingFog.Rendering
                         BlackHoleShadowCalculator bh => bh.LastPrecisionLabel, // #1927 tolerance / past fp64
                         MathPlaneCalculator mp => mp.LastPrecisionLabel,      // #1548 scene parse error
                         MathPlane3DCalculator mp3 => mp3.LastPrecisionLabel,  // #1713
+                        CosmicWebCalculator cw => cw.LastPrecisionLabel,      // #2021 points / clumps / cap / model D
                         SlitCascadeCalculator sc => sc.LastPrecisionLabel,    // #1571 D0 / D1 / D2 / Dq
                         TalbotCarpetCalculator tc2 => tc2.LastPrecisionLabel, // #1601 slice graph dimension
                         _ => null
@@ -4469,6 +4473,7 @@ namespace FracturingFog.Rendering
                 case UserPotentialCalculator up: up.FractalParameters = ViewState.FractalParameters; break;   // #1994
                 case UserHamiltonianCalculator uh: uh.FractalParameters = ViewState.FractalParameters; break;   // #1997
                 case MicrolensingCalculator ml: ml.FractalParameters = ViewState.FractalParameters; break;   // #1948
+                case CosmicWebCalculator cw: cw.FractalParameters = ViewState.FractalParameters; break;   // #2021
                 case MathPlaneCalculator mp: mp.FractalParameters = ViewState.FractalParameters; break;
                 case MathPlane3DCalculator mp3: mp3.FractalParameters = ViewState.FractalParameters; break;   // #1713
                 case PrecisionFieldCalculator pf: pf.FractalParameters = ViewState.FractalParameters; break;
@@ -4696,6 +4701,7 @@ namespace FracturingFog.Rendering
             FractalType.UserPotentialBasins => _userPotentialCalculator,   // #1994
             FractalType.UserHamiltonianBasins => _userHamiltonianCalculator,   // #1997
             FractalType.MicrolensingMap => _microlensingCalculator,   // #1948
+            FractalType.CosmicWeb => _cosmicWebCalculator,   // #2021
             FractalType.PrecisionField => _precisionFieldCalculator,
             FractalType.JulibrotPair => _dualOrbitCalculator,
             FractalType.IndrasPearls => _indrasPearlsCalculator,

@@ -1482,6 +1482,7 @@ namespace FracturingFog.Imaging
                 FractalType.UserPotentialBasins => new UserPotentialCalculator(w, h),   // #1994
                 FractalType.UserHamiltonianBasins => new UserHamiltonianCalculator(w, h),   // #1997
                 FractalType.MicrolensingMap => new MicrolensingCalculator(w, h),   // #1948
+                FractalType.CosmicWeb => new CosmicWebCalculator(w, h),   // #2021
                 FractalType.MathPlane        => new MathPlaneCalculator(w, h),
                 FractalType.MathPlane3D      => new MathPlane3DCalculator(w, h),   // #1713
                 FractalType.PrecisionField   => new PrecisionFieldCalculator(w, h),
@@ -1581,6 +1582,7 @@ namespace FracturingFog.Imaging
                 case UserPotentialCalculator up: up.FractalParameters = req.FractalParameters; break;   // #1994
                 case UserHamiltonianCalculator uh: uh.FractalParameters = req.FractalParameters; break;   // #1997
                 case MicrolensingCalculator ml: ml.FractalParameters = req.FractalParameters; break;   // #1948
+                case CosmicWebCalculator cw: cw.FractalParameters = req.FractalParameters; break;   // #2021
                 case MathPlaneCalculator mp: mp.FractalParameters = req.FractalParameters; break;
                 case MathPlane3DCalculator mp3: mp3.FractalParameters = req.FractalParameters; break;   // #1713
                 case PrecisionFieldCalculator pf: pf.FractalParameters = req.FractalParameters; break;
