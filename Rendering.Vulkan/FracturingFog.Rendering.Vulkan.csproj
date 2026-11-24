@@ -52,6 +52,8 @@
     <Compile Include="..\Rendering.D3D\FroxelKernelSource.cs" Link="Shared\FroxelKernelSource.cs" />
     <!-- #1972: the black hole trace, shared with D3D11 (FXC). -->
     <Compile Include="..\Rendering.D3D\BlackHoleKernelSource.cs" Link="Shared\BlackHoleKernelSource.cs" />
+    <!-- #2024: the Cosmic Web volume raymarch, shared with D3D11 (FXC). -->
+    <Compile Include="..\Rendering.D3D\CosmicWebVolumeKernelSource.cs" Link="Shared\CosmicWebVolumeKernelSource.cs" />
   </ItemGroup>
 
 </Project>

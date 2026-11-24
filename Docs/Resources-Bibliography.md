@@ -767,6 +767,31 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   record 2026-11-24). Two independent unit normals from two uniforms: the white noise of the Zel'dovich
   generator (#2022). Also used, uncredited until now, by `BuddhaFamilyCalculator`'s standard-normal sampler.
 
+<a id="birdsall-fuss-1969"></a>
+
+- **Charles K. Birdsall, Dieter Fuss.** *Clouds-in-clouds, clouds-in-cells physics for many-body plasma
+  simulation.* Journal of Computational Physics 3 (4), 494-511, April 1969. DOI
+  [10.1016/0021-9991(69)90058-8](https://doi.org/10.1016/0021-9991(69)90058-8) (authors, title, venue,
+  volume, issue, pages and date from the Crossref record, checked 2026-11-24; the paper itself was not
+  read, so what it adds beyond the clouds-in-cells name is not quoted). Credited for cloud-in-cell (CIC)
+  assignment as particle codes use it: each particle a uniform cube one cell wide, its mass shared among
+  the 8 nearest cell centres by trilinear weights. Used by the Cosmic Web volume renderer's density grid
+  (#2024, `Engine/CosmicWeb/DensityGrid.cs`; FF's own: exact fixed-point weights, so the grid total is
+  exactly the particle count) and, uncredited until now, by the CIC density count in the Zel'dovich
+  tests (#2022, `Server.Tests/S2022ZeldovichTests.cs`). Not FF's method.
+
+<a id="drebin-carpenter-hanrahan-1988"></a>
+
+- **Robert A. Drebin, Loren Carpenter, Pat Hanrahan.** *Volume rendering.* ACM SIGGRAPH Computer
+  Graphics 22 (4), 65-74, 1988 (SIGGRAPH '88). DOI
+  [10.1145/378456.378484](https://doi.org/10.1145/378456.378484); the proceedings record is DOI
+  10.1145/54852.378484 (both from Crossref, checked 2026-11-24; the paper was not read). Credited as a
+  founding paper of direct volume rendering: colour emitted by, and absorbed in, a sampled volume,
+  composited along each ray. The Cosmic Web volume raymarch (#2024, `Engine/CosmicWeb/VolumeRaymarch.cs`
+  and its HLSL twin) uses that standard emission-absorption model; FF's choices (fixed world steps,
+  extinction and emission tied to the mapped log density with separate gains, the early stop, the
+  depth at half transmittance) are its own, and no detail of the paper is claimed.
+
 <a id="cunha-2015"></a>
 
 - **P. V. P. Cunha, C. A. R. Herdeiro, E. Radu, H. F. Rúnarsson.** *Shadows of Kerr black

@@ -41,6 +41,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--bhgpuprobe")
             return BlackHoleGpuProbe.Run(args);
 
+        // #2024 — the Cosmic Web volume raymarch on every backend against the CPU reference.
+        if (args.Length > 0 && args[0] == "--cwvolprobe")
+            return CosmicWebVolumeProbe.Run(args);
+
         // #1329 — D3D11 GPU timestamp queries: stage times, linearity, packets.
         if (args.Length > 0 && args[0] == "--gputimestampprobe")
             return GpuTimestampProbe.Run();

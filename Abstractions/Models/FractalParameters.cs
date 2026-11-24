@@ -1673,6 +1673,18 @@ namespace FracturingFog.Models
         public int CosmicWebMeasureSample { get; set; } = 20_000;
         /// <summary>#2023 — draw the D(r) inset into the frame while measuring. Default on.</summary>
         public bool CosmicWebDimensionOverlay { get; set; } = true;
+        /// <summary>#2024 — Splat (points) or Volume (raymarched CIC density grid). Default Splat.</summary>
+        public CosmicWebRender CosmicWebRender { get; set; } = CosmicWebRender.Splat;
+        /// <summary>#2024 — volume: density grid cells per side (a power of two, 32..256). Default 128.</summary>
+        public int CosmicWebVolumeGrid { get; set; } = 128;
+        /// <summary>#2024 — volume: Gaussian smoothing of the deposited density, in cells. Default 0.75.</summary>
+        public double CosmicWebVolumeSmoothing { get; set; } = 0.75;
+        /// <summary>#2024 — volume: extinction per box side at the densest cell. Default 12.</summary>
+        public double CosmicWebVolumeOpacity { get; set; } = 12.0;
+        /// <summary>#2024 — volume: raymarch steps across the box diagonal (8..4096). Default 384.</summary>
+        public int CosmicWebVolumeSteps { get; set; } = 384;
+        /// <summary>#2024 — volume: emission gain (glow without extra opacity). Default 4.</summary>
+        public double CosmicWebVolumeBrightness { get; set; } = 4.0;
         /// <summary>#2021 — orbit camera distance from the box centre, in box sides. Default 2.2.</summary>
         public double CosmicWebCameraDistance { get; set; } = 2.2;
         /// <summary>#2021 — orbit camera azimuth (radians). Default 0.6.</summary>
@@ -3018,6 +3030,12 @@ namespace FracturingFog.Models
                 CosmicWebMeasure = CosmicWebMeasure,
                 CosmicWebMeasureSample = CosmicWebMeasureSample,
                 CosmicWebDimensionOverlay = CosmicWebDimensionOverlay,
+                CosmicWebRender = CosmicWebRender,
+                CosmicWebVolumeGrid = CosmicWebVolumeGrid,
+                CosmicWebVolumeSmoothing = CosmicWebVolumeSmoothing,
+                CosmicWebVolumeOpacity = CosmicWebVolumeOpacity,
+                CosmicWebVolumeSteps = CosmicWebVolumeSteps,
+                CosmicWebVolumeBrightness = CosmicWebVolumeBrightness,
                 CosmicWebCameraDistance = CosmicWebCameraDistance,
                 CosmicWebCameraTheta = CosmicWebCameraTheta,
                 CosmicWebCameraPhi = CosmicWebCameraPhi,

@@ -8,7 +8,8 @@
 //   • the displacement satisfies div s = -delta exactly in Fourier space (i k . s_k = -delta_k);
 //   • its derivative matrix is symmetric (s is a gradient) and the eigenvalue signs follow the
 //     8% / 42% / 42% / 8% split Zeldovich (1970, p. 89, Eq. A.13) quotes from Doroshkevich;
-//   • (b) linear regime: at small D the particle density contrast (a cloud-in-cell count written here)
+//   • (b) linear regime: at small D the particle density contrast (a cloud-in-cell count written here;
+//     CIC after Birdsall & Fuss 1969)
 //     equals D delta_L, to first order;
 //   • (c) shell crossing: the fraction of particles in cells at 4x the mean density rises with D;
 //   • determinism by seed; changing D only reuses the cached field;
