@@ -128,7 +128,9 @@ public sealed class S1787DeepRouteUiTests : IDisposable
         var k = new FakeKernel(Dev, throwMessage: "GPU-PERTURB-TOO-SLOW: band0=99ms");
         var c = Deep(k);
         c.Calculate(CancellationToken.None);
-        Assert.True(MandelbrotCalculator.GpuPerturbationLatched);         // precondition: the live too-slow latched
+        Assert.False(MandelbrotCalculator.GpuPerturbationLatched);        // #2012: one too-slow frame only falls back
+        c.Calculate(CancellationToken.None);
+        Assert.True(MandelbrotCalculator.GpuPerturbationLatched);         // precondition: two in a row latched
         Assert.False(MandelbrotCalculator.GpuPerturbationEnabled(k));
         // The latching frame reports the GPU error; from the next frame on, the latch.
         var next = Deep(k);

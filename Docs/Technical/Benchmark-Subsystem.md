@@ -321,9 +321,9 @@ The coordinates match `MandelbrotBench`, so a GPU row can be read against its CP
     same shader dispatches ~25% faster under Vulkan on this card.
   - **D3D11's staging copy is a real cost:** 5.7 ms of a 50 ms 512² frame.
 - **`NA` on perturbation rows can be by design.** `TryRunGpuPerturbation` estimates the frame
-  (first band's time x band count). If that exceeds its 3 s budget, it throws
-  `GPU-PERTURB-TOO-SLOW` and **switches `UseGpuPerturbation` off for the session**, so the app
-  renders that view on the CPU too. The bench detects the flipped static and says so in the failure
+  from the first two bands (#2012: time spent + the faster band × the bands left). If that exceeds
+  its 3 s budget, it throws `GPU-PERTURB-TOO-SLOW`. That frame renders on the CPU, and **two in a row
+  switch `UseGpuPerturbation` off for the session**, so the app renders that view on the CPU too. The bench detects the flipped static and says so in the failure
   message. Set `FF_GPU_PERTURB_DEBUG=1` to get every gate input and failure in
   `%TEMP%\ff_gpu_perturb_86.log`.
 

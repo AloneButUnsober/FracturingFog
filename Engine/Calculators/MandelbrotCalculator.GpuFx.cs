@@ -105,6 +105,7 @@ public sealed partial class MandelbrotCalculator
             }
         });
         LastFrameUsedGpuPerturbation = true;
+        s_gpuTooSlowStrikes = 0;   // #2012
         LastFrameUsedGpuFloatExp = true;
         LastFrameUsedGpuLa = true;
         LastFrameUsedGpuLaFloatExp = true;

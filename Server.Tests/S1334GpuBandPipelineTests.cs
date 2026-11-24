@@ -248,9 +248,11 @@ public sealed class S1334GpuBandPipelineTests : IDisposable
         RenderInBands(k, Path.Plain, 1e6, GroupRows);
         Assert.Equal(1, k.LastFrameQueueWaits);
 
-        MandelbrotKernelSource.PerturbBudgetMs = 1e9;        // abort armed: band 0, then the end
+        MandelbrotKernelSource.PerturbBudgetMs = 1e9;        // abort armed: bands 0 and 1 (#2012), then the end
         Frame armed = RenderInBands(k, Path.Plain, 1e6, GroupRows);
-        Assert.Equal(2, k.LastFrameQueueWaits);
+        Assert.True(bands > 2);
+        Assert.Equal(1 + MandelbrotKernelSource.PerturbTimedBands(bands), k.LastFrameQueueWaits);
+        Assert.Equal(3, k.LastFrameQueueWaits);
         Assert.Null(FirstDifference(reference, armed));
 
         VulkanComputeKernel.ForceSerialBands = true;         // the pre-#1334 shape: every band

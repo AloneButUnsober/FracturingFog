@@ -360,8 +360,12 @@ public sealed class S1786DeepRouteCalibrationTests : IDisposable
         Assert.False(MandelbrotCalculator.GpuPerturbationLatched);
         Assert.True(MandelbrotCalculator.GpuPerturbationEnabled(k));
 
-        // Control: the same failure on a live frame latches GPU deep off.
+        // Control: the same failure on live frames latches GPU deep off. #2012: one abort
+        // falls back for that frame only; the second in a row latches.
         var live = Deep(k, null);
+        live.Calculate(CancellationToken.None);
+        Assert.False(MandelbrotCalculator.GpuPerturbationLatched);
+        Assert.True(MandelbrotCalculator.GpuPerturbationEnabled(k));
         live.Calculate(CancellationToken.None);
         Assert.True(MandelbrotCalculator.GpuPerturbationLatched);
         MandelbrotCalculator.ResetGpuPerturbationLatchForTests();

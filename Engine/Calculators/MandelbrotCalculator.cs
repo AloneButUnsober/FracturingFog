@@ -766,6 +766,15 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
     // TOO-SLOW / device-lost latches clear the static UseGpuPerturbation).
     private static GpuRoute? s_gpuPerturbDisabled;
 
+    /// <summary>#2012 — consecutive live deep frames the GPU aborted as too slow. One abort
+    /// falls back to the CPU for that frame only; <see cref="TooSlowStrikesToLatch"/> in a
+    /// row latch GPU deep off for the session (a GPU that really is too slow pays one more
+    /// two-band attempt). A GPU deep frame that finishes resets it.</summary>
+    private static int s_gpuTooSlowStrikes;
+
+    /// <summary>#2012 — see <see cref="s_gpuTooSlowStrikes"/>.</summary>
+    public const int TooSlowStrikesToLatch = 2;
+
     private GpuRoute ResolveGpuRoute()
     {
         var kernel = GpuKernel;
@@ -3813,6 +3822,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             }
         });
         LastFrameUsedGpuPerturbation = true;
+        s_gpuTooSlowStrikes = 0;   // #2012
         LastFrameUsedGpuSeriesApproximation = useSa;
         LastFrameUsedGpuBla = useBla;
         LastFrameUsedGpuLa = useLa;   // #1630
@@ -3949,6 +3959,7 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             }
         });
         LastFrameUsedGpuPerturbation = true;
+        s_gpuTooSlowStrikes = 0;   // #2012
         LastFrameUsedGpuOrbitPerturbation = true;
         LastFrameUsedGpuWavefront = wave;   // #1384
         MeasureWavefrontHint();
@@ -3987,11 +3998,21 @@ public sealed partial class MandelbrotCalculator : Interefaces.IHeightFieldSourc
             // route fell back, so it is not eligible); the session keeps its GPU route.
             Dbg86($"TOO-SLOW during calibration ({CalibrationRoute}): not latched");
         }
+        else if (tooSlow && ++s_gpuTooSlowStrikes < TooSlowStrikesToLatch)
+        {
+            // #2012 — one abort can be a first-run driver compile or a noisy band: this
+            // frame falls back (_gpuSkip above), the next one tries the GPU again.
+            Console.Error.WriteLine(
+                $"[GPU] deep-zoom frame fell back to the CPU as too slow ({ex.Message}); " +
+                $"the next frame tries the GPU again ({s_gpuTooSlowStrikes}/{TooSlowStrikesToLatch} before it is switched off).");
+            Dbg86($"TOO-SLOW strike {s_gpuTooSlowStrikes}/{TooSlowStrikesToLatch}: this frame only ({ex.Message})");
+        }
         else if (tooSlow)
         {
             // The GPU's FP64 is too slow at this depth to beat the CPU (weak
-            // consumer card). Disable for the session so every later frame
-            // goes straight to the multi-threaded CPU deep path.
+            // consumer card), #2012: on consecutive frames. Disable for the session
+            // so every later frame goes straight to the multi-threaded CPU deep path.
+            s_gpuTooSlowStrikes = 0;
             UseGpuPerturbation = false;
             s_gpuPerturbDisabled = GpuRoute.Cpu("deep zoom too slow", "GPU deep-zoom perturbation was disabled for this session: the GPU is slower than the CPU here (weak fp64). "
                 + "FF_GPU_PERTURB_BUDGET_MS sets the abort budget; Control Center \u2192 Advanced \u2192 GPU deep zoom turns it back on.");   // #1173-M, #1493
