@@ -216,6 +216,35 @@ public sealed class S1332DeferredReadbackTests(ITestOutputHelper output) : IDisp
         Assert.Equal(0, lazy.GpuAuxPending);
     }
 
+    // #2013 — the deep (high-precision) pixel writers write the backing arrays, not the
+    // getters: CalculateHighPrecision must land a frame still pending from a shallow GPU
+    // frame first, or a later read would land the stale shallow values over the deep ones.
+    [Fact]
+    public void A_Deep_Frame_After_A_Deferred_One_Holds_The_Deep_Values()
+    {
+        var k = new FakeKernel();
+        var lazy = FakeCalc(k, cx: -0.7436438870371587);
+        lazy.Calculate();                                   // shallow, deferred
+        Assert.NotEqual(0, lazy.GpuAuxPending);
+        lazy.UseGpuCompute = false;
+        lazy.CenterY = 0.13182590420531198;
+        lazy.Zoom = 1e14;                                   // past HPZoomThreshold: the deep CPU path
+        lazy.Calculate();
+        Assert.Equal(0, lazy.GpuAuxPending);
+        var deep = new MandelbrotCalculator(40, 30)
+        {
+            CenterX = -0.7436438870371587, CenterY = 0.13182590420531198, Zoom = 1e14, MaxIterations = 200,
+            ColorMap = GpuPalette(),
+        };
+        deep.Calculate();
+        Assert.True(Same(deep.IterationBuffer, lazy.IterationBuffer));
+        Assert.True(Same(deep.SmoothBuffer, lazy.SmoothBuffer));
+        Assert.True(Same(deep.DistanceBuffer, lazy.DistanceBuffer));
+        Assert.True(Same(deep.FinalZrBuffer, lazy.FinalZrBuffer));
+        Assert.True(Same(deep.FinalDiBuffer, lazy.FinalDiBuffer));
+        Assert.True(Same(deep.ColorBuffer, lazy.ColorBuffer));
+    }
+
     [Fact]
     public void A_Frame_Pending_Across_Another_Calculators_Dispatch_Keeps_Its_Values()
     {
