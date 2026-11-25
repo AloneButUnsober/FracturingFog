@@ -1683,6 +1683,20 @@ namespace FracturingFog.Models
         public double CosmicWebVolumeOpacity { get; set; } = 12.0;
         /// <summary>#2024 — volume: raymarch steps across the box diagonal (8..4096). Default 384.</summary>
         public int CosmicWebVolumeSteps { get; set; } = 384;
+        /// <summary>#2025 — Voronoi: number of nuclei (cells) in the box (2..4096). Default 64.</summary>
+        public int CosmicWebVoronoiNuclei { get; set; } = 64;
+        /// <summary>#2025 — Voronoi: number of galaxies (1..8,000,000). Default 400,000.</summary>
+        public int CosmicWebVoronoiPoints { get; set; } = 400_000;
+        /// <summary>#2025 — Voronoi: weight of field galaxies (left where they start). Default 0.1.</summary>
+        public double CosmicWebVoronoiField { get; set; } = 0.1;
+        /// <summary>#2025 — Voronoi: weight of wall galaxies. Default 0.35.</summary>
+        public double CosmicWebVoronoiWalls { get; set; } = 0.35;
+        /// <summary>#2025 — Voronoi: weight of filament (edge) galaxies. Default 0.35.</summary>
+        public double CosmicWebVoronoiFilaments { get; set; } = 0.35;
+        /// <summary>#2025 — Voronoi: weight of cluster (vertex) galaxies. Default 0.2.</summary>
+        public double CosmicWebVoronoiClusters { get; set; } = 0.2;
+        /// <summary>#2025 — Voronoi: Gaussian width of walls, filaments and clusters, Mpc/h. Default 0.5.</summary>
+        public double CosmicWebVoronoiThickness { get; set; } = 0.5;
         /// <summary>#2024 — volume: emission gain (glow without extra opacity). Default 4.</summary>
         public double CosmicWebVolumeBrightness { get; set; } = 4.0;
         /// <summary>#2021 — orbit camera distance from the box centre, in box sides. Default 2.2.</summary>
@@ -3035,6 +3049,13 @@ namespace FracturingFog.Models
                 CosmicWebVolumeSmoothing = CosmicWebVolumeSmoothing,
                 CosmicWebVolumeOpacity = CosmicWebVolumeOpacity,
                 CosmicWebVolumeSteps = CosmicWebVolumeSteps,
+                CosmicWebVoronoiNuclei = CosmicWebVoronoiNuclei,
+                CosmicWebVoronoiPoints = CosmicWebVoronoiPoints,
+                CosmicWebVoronoiField = CosmicWebVoronoiField,
+                CosmicWebVoronoiWalls = CosmicWebVoronoiWalls,
+                CosmicWebVoronoiFilaments = CosmicWebVoronoiFilaments,
+                CosmicWebVoronoiClusters = CosmicWebVoronoiClusters,
+                CosmicWebVoronoiThickness = CosmicWebVoronoiThickness,
                 CosmicWebVolumeBrightness = CosmicWebVolumeBrightness,
                 CosmicWebCameraDistance = CosmicWebCameraDistance,
                 CosmicWebCameraTheta = CosmicWebCameraTheta,

@@ -23,6 +23,7 @@ status. Link both ways.
   the shared integrator), Hénon–Heiles **#1942**, restricted three-body **#1943**, magnetised black
   hole **#1944**, spinning binaries **#1945**, Mixmaster **#1946**, black hole + ring **#1947**,
   microlensing **#1948**.
+- Cosmic Web (§2.7): epic **#2020**, slices **#2021**-**#2025**, all complete.
 - Kleinian generalization **requires its own design doc + tracking issue (#855)** before any code
   (see §5.4).
 
@@ -661,6 +662,45 @@ shipped and the shared core has been measured.
 **Sources:** §7 (gravitational & relativistic scattering block).
 **Status:** filed 2026-11-19; nothing implemented. #1923 first (shared core), then any order.
 
+### 2.7 Cosmic Web — synthetic galaxy distributions with a measured D(r) — **#2020 epic, complete**
+
+Prompted by Einasto's review of the fractal properties of the cosmic web
+[(Einasto 2026)](../Resources-Bibliography.md#einasto-2026), which gives the measurement chain (natural
+estimator, structure function g = 1 + xi, gamma = d log g / d log r, D(r) = 3 + gamma; Eqs. 2-4) and the
+caveat that the real web is not one fractal: D(r) changes regime near 3 h^-1 Mpc and reaches 3 near
+100 h^-1 Mpc. The review supplies no generator, so the generators come from the older literature.
+
+- **S1 #2021 (PR #2037)** — family scaffolding, point splat through the orbit camera, the hierarchical
+  clustering model of [Soneira & Peebles 1978](../Resources-Bibliography.md#soneira-peebles-1978) (dumbbell placement,
+  Table I levels, D = log eta / log lambda).
+- **S2 #2022 (PR #2039)** — the [Zel'dovich approximation](../Resources-Bibliography.md#zeldovich-1970)
+  on a power-law Gaussian random field ([Bertschinger 2001](../Resources-Bibliography.md#bertschinger-2001)),
+  own radix-2 3D FFT; checks: P(k) slope, div s = -delta, Doroshkevich's 8/42/42/8% eigenvalue split.
+- **S3 #2023 (PR #2043)** — D(r) measurement (cell-list pair counts, analytic periodic RR), status bar and
+  inset; checks: Poisson D = 3 within the counting noise, Soneira-Peebles D where xi >> 1, brute-force
+  pair counts.
+- **S4 #2024 (PR #2044)** — volume render: CIC density grid ([Birdsall & Fuss 1969](../Resources-Bibliography.md#birdsall-fuss-1969))
+  raymarched with emission and absorption ([Drebin, Carpenter & Hanrahan 1988](../Resources-Bibliography.md#drebin-carpenter-hanrahan-1988))
+  on D3D11 / Vulkan with a CPU reference; exact mass; parity within 3 units per channel.
+- **S5 #2025** — the Voronoi clustering model
+  [(van de Weygaert 2007)](../Resources-Bibliography.md#van-de-weygaert-2007), the compared preset set
+  (262,144 galaxies per generator, D(r) measured) and a two-regime D(r) preset; checks: exact
+  wall / edge / vertex geometry by brute force over periodic images, walls-only D(r) ~ 2 and
+  filaments-only ~ 1 where xi >> 1.
+
+**Prior art:** synthetic galaxy distributions are standard in cosmology (initial-condition generators,
+N-body codes, the Voronoi models themselves). FF's contribution is an interactive / batch explorer of
+these models with a built-in D(r) readout, not a new model.
+
+**Toolchain reach (Rule A):** none of these is an iteration f(z, c): the generators are point processes
+and the measurement is a pair statistic, so the CalcGen / DSL and the User Bulb language cannot express
+them. Reach would need a "point set" user type (a script that emits points, then the shared splat /
+volume / D(r) pipeline), which is not planned.
+
+**Open ideas (not filed):** a two-regime model nearer the sky (Soneira-Peebles clumps placed on the
+Voronoi skeleton, so halo interiors and filaments set the two regimes); D(r) of a loaded galaxy catalogue
+(needs a survey file format and licence check); the Landy-Szalay estimator for non-periodic boxes.
+
 ---
 
 ## 3. Bucket II — Theoretical (thin reference imagery, validation is the risk)
@@ -1279,3 +1319,4 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
 - **2026-11-21** — §2.6.1: black hole shadows S5 part 2 #1927 (double-double edge fix-up past fp64; exact against converged all-DD frames at x10^11-10^12).
 - **2026-11-21** — §2.6.1: black hole shadows S6 #1928 (presets, bound animations, help page, prior art; Papapetrou 1947 title verified). Epic #1922 complete.
 - **2026-11-21** — §2.6.1: black hole sky anti-aliasing #1969 (adaptive AA via IAdaptiveAaCalculator; 7.5x / 2.5x cheaper than full 4x4 on stars / checker).
+- **2026-11-24** — §2.7: Cosmic Web epic #2020 complete (S1-S5: Soneira-Peebles, Zel'dovich, D(r), GPU volume, Voronoi + compared presets).

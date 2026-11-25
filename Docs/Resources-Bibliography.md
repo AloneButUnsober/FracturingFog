@@ -765,7 +765,26 @@ the entry says otherwise. Nothing is implemented yet; each implementing PR adds 
   Mathematical Statistics 29 (2), 610-611, 1958. DOI
   [10.1214/aoms/1177706645](https://doi.org/10.1214/aoms/1177706645) (checked against the Crossref
   record 2026-11-24). Two independent unit normals from two uniforms: the white noise of the Zel'dovich
-  generator (#2022). Also used, uncredited until now, by `BuddhaFamilyCalculator`'s standard-normal sampler.
+  generator (#2022) and the Gaussian widths of the Voronoi generator's walls, filaments and clusters
+  (#2025). Also used, uncredited until now, by `BuddhaFamilyCalculator`'s standard-normal sampler.
+
+<a id="van-de-weygaert-2007"></a>
+
+- **Rien van de Weygaert.** *Voronoi Tessellations and the Cosmic Web: Spatial Patterns and Clustering
+  across the Universe.* arXiv:0707.2877 (submitted 19 July 2007), <https://arxiv.org/abs/0707.2877>;
+  the arXiv comment says it was accepted for the proceedings of the Fourth International Symposium on
+  Voronoi Diagrams in Science and Engineering (ISVD 2007, ed. C. Gold, IEEE Computer Society); the
+  proceedings pages and DOI were not checked. The HTML body names van de Weygaert (Kapteyn Institute,
+  Groningen) as author; the arXiv listing hints at further co-authors that the text read did not name,
+  so the author list may be incomplete. Read 2026-11-24 (arXiv HTML, sections 1-4 verbatim). Source of
+  the third Cosmic Web generator (#2025, `Engine/CosmicWeb/VoronoiElement.cs`): the Voronoi clustering
+  model of Sec. 4.1 (nuclei as cell centres; galaxies moving radially out from their nucleus to a wall,
+  then within the wall to an edge, then along the edge to a vertex; Gaussian widths R_W, R_F, R_V).
+  FF's own: the exact ray / bisector geometry of each move, one width for all three structures, the
+  component weights as settings, the periodic neighbour lists. The paper's vertex correlation result
+  (gamma = 1.95, r_0 ~ 0.3 lambda_c, its Eq. 1) is not used or tested by FF. Its references to the
+  earlier papers are listed under *Citations awaiting verification* (Icke & van de Weygaert 1987, van
+  de Weygaert & Icke 1989).
 
 <a id="birdsall-fuss-1969"></a>
 
@@ -914,7 +933,8 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
   (details confirmed against Crossref, 2026-11-09). SplitMix64, the per-chunk random streams of the
   detection build-up (#1599). Its finaliser (the two multiply-xorshift rounds) also hashes the star-field
   cells of the black hole skies, `Engine/Scattering/BlackHoleSkies.cs` (#1925).
-  The per-clump streams of the Cosmic Web generator, `Engine/CosmicWeb/SoneiraPeebles.cs` (#2021).
+  The per-clump streams of the Cosmic Web generator, `Engine/CosmicWeb/SoneiraPeebles.cs` (#2021), and
+  the per-galaxy streams of the Voronoi generator, `Engine/CosmicWeb/VoronoiElement.cs` (#2025).
 
 <a id="deep-zoom-acceleration"></a>
 
@@ -1816,6 +1836,13 @@ These sources are cited in the code or docs, but their publication details aren'
 They stay listed (the contract never drops a credit). Each needs its primary source traced and its
 entry above completed or corrected.
 
+- **Icke & van de Weygaert 1987; van de Weygaert & Icke 1989 ("Fragmenting the universe" I and II)** —
+  the original Voronoi models of the large-scale structure, which van de Weygaert 2007 (above) cites
+  and which the Cosmic Web help names through it (#2025). The details known (Astron. Astrophys. 184,
+  16, 1987; Astron. Astrophys. 213, 1, 1989, "Voronoi vertices as Abell clusters") come only from a
+  machine summary of that paper's reference list; the ADS records could not be opened (2026-11-24), so
+  titles, page ranges and authors are unconfirmed and neither paper was read. FF's generator follows
+  the 2007 description, not these.
 - **Fisher-Yates shuffle (Durstenfeld's in-place form)** — the partial in-place random permutation
   `FractalDimension.SampleIndices` uses to draw the D(r) subsample (#2023). Credited from general
   knowledge only: R. A. Fisher and F. Yates (*Statistical Tables*, 1938) and R. Durstenfeld (Algorithm

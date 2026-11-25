@@ -1439,7 +1439,7 @@ namespace FracturingFog
     /// <summary>Which generator lays down the <see cref="FractalType.CosmicWeb"/> points: Soneira &amp; Peebles
     /// 1978 hierarchical clustering (#2021), or the Zel'dovich approximation on a Gaussian random field
     /// (#2022). Values are stored as ints: append only.</summary>
-    public enum CosmicWebGenerator { SoneiraPeebles, Zeldovich }
+    public enum CosmicWebGenerator { SoneiraPeebles, Zeldovich, Voronoi }
 
     /// <summary>How a Soneira-Peebles clump places its sub-centres (#2021). <see cref="Dumbbell"/>: their final
     /// model (AJ 83, 845, 1978, Sec. IVc i), two sub-centres at a fixed separation in a random orientation.
