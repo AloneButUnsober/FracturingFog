@@ -1134,7 +1134,9 @@ The physics is established; FF builds on it (see that doc's §9 novelty table).
 - **Mariani–Silver subdivision** (Rico Mariani, Robert Silver). Rectangle subdivision that fills a
   box whose border is uniformly in-set — solid-region skipping (#1343; since #1394 part 2 also the
   Julia and Multibrot families, `SolidRegionSubdivision.cs`; since #1394 part 1 on the GPU kernels too,
-  as masked dispatches, `GpuPixelMask`). See
+  as masked dispatches, `GpuPixelMask`). The same idea at one tile size fills the uniform 16 x 16 tiles
+  of the basin families' solid blocks (`SolidBlockFill.cs`: black hole shadows #1970, Hénon-Heiles
+  #2049). See
   [Citations awaiting verification](#citations-awaiting-verification) for the primary source.
 - **Wikipedia contributors.** *Plotting algorithms for the Mandelbrot set*, section "Cardioid / bulb
   checking". <https://en.wikipedia.org/wiki/Plotting_algorithms_for_the_Mandelbrot_set> (accessed
@@ -1342,11 +1344,12 @@ Backs the fractal QR epic (#1305, `Docs/Technical/Fractal-QR-Codes.md`).
 - <a id="dormand-prince-1980"></a>**J. R. Dormand, P. J. Prince.** *A family of embedded Runge-Kutta
   formulae.* Journal of Computational and Applied Mathematics 6(1), 19–26, 1980. DOI
   10.1016/0771-050X(80)90013-3. The RK5(4) pair (tableau and embedded error estimate) of the shared
-  scattering integrator, `Engine/Scattering/ScatteringIntegrator.cs` (#1923).
+  scattering integrator, `Engine/Scattering/ScatteringIntegrator.cs` (#1923), and of its GPU twin for
+  the ODE families, `Rendering.D3D/OdeKernelSource.cs` (#2049, D3D11 / Vulkan; Hénon-Heiles first).
 - <a id="hairer-norsett-wanner-1993"></a>**Ernst Hairer, Syvert P. Nørsett, Gerhard Wanner.** *Solving
   Ordinary Differential Equations I: Nonstiff Problems.* 2nd revised ed., Springer Series in
   Computational Mathematics 8, 1993. DOI 10.1007/978-3-540-78862-1. Error-per-step step-size control
-  (factor 0.9·err^(−1/5), clamped) used by the same integrator (#1923).
+  (factor 0.9·err^(−1/5), clamped) used by the same integrator (#1923) and its GPU twin (#2049).
 - <a id="png-spec"></a>**PNG** — W3C. *Portable Network Graphics (PNG) Specification (Second Edition).* W3C
   Recommendation, 10 November 2003. <https://www.w3.org/TR/2003/REC-PNG-20031110/>. Chunk layout, IHDR colour
   types 2 / 6, filter type 2 (Up), several IDAT chunks read as one stream, and the CRC-32 (its sample code) used by
