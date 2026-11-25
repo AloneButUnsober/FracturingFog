@@ -288,6 +288,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _tbMaxTime = _p.ThreeBodyMaxTime;
         _tbTolerance = _p.ThreeBodyTolerance;
         _tbNewton = _p.ThreeBodyNewtonIterations;
+        _tbGpuPrecision = _p.ThreeBodyGpuPrecision;
         _mbView = _p.MagBhView;
         _mbField = _p.MagBhField;
         _mbBranch = _p.MagBhBranch;
@@ -2532,6 +2533,9 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double ThreeBodyTolerance { get => _tbTolerance; set { Set(ref _tbTolerance, Clamp(value, 1e-13, 1e-3)); _p.ThreeBodyTolerance = _tbTolerance; Fire(); } }
     private int _tbNewton;
     public int ThreeBodyNewtonIterations { get => _tbNewton; set { Set(ref _tbNewton, (int)Clamp(value, 1, 10000)); _p.ThreeBodyNewtonIterations = _tbNewton; Fire(); } }
+    // #2049 — GPU precision.
+    private BlackHoleGpuPrecision _tbGpuPrecision = BlackHoleGpuPrecision.Double;
+    public BlackHoleGpuPrecision ThreeBodyGpuPrecision { get => _tbGpuPrecision; set { Set(ref _tbGpuPrecision, value); _p.ThreeBodyGpuPrecision = value; Fire(); } }
 
     // ── #1944 — magnetised black hole ────────────────────────────────────────
     private MagnetisedBhView _mbView;

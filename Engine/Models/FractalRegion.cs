@@ -841,6 +841,7 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? ThreeBodyMaxTime { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? ThreeBodyTolerance { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? ThreeBodyNewtonIterations { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? ThreeBodyGpuPrecision { get; set; }   // #2049
         // #1944 — magnetised black hole (enums as int casts).
         [JsonIgnore(Condition = OmitNull)] public int? MagBhView { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? MagBhField { get; set; }
@@ -1567,6 +1568,7 @@ namespace FracturingFog.Models
                     ThreeBodyMaxTime = p.ThreeBodyMaxTime,
                     ThreeBodyTolerance = p.ThreeBodyTolerance,
                     ThreeBodyNewtonIterations = p.ThreeBodyNewtonIterations,
+                    ThreeBodyGpuPrecision = (int)p.ThreeBodyGpuPrecision,
                 },
                 // #1944 — magnetised black hole: every setting.
                 FractalType.MagnetisedBlackHole => new RegionFractalParams
@@ -2813,6 +2815,7 @@ namespace FracturingFog.Models
             if (ThreeBodyMaxTime.HasValue)        p.ThreeBodyMaxTime = ThreeBodyMaxTime.Value;
             if (ThreeBodyTolerance.HasValue)      p.ThreeBodyTolerance = ThreeBodyTolerance.Value;
             if (ThreeBodyNewtonIterations.HasValue) p.ThreeBodyNewtonIterations = ThreeBodyNewtonIterations.Value;
+            if (ThreeBodyGpuPrecision is { } tgp && Enum.IsDefined(typeof(FracturingFog.BlackHoleGpuPrecision), tgp)) p.ThreeBodyGpuPrecision = (FracturingFog.BlackHoleGpuPrecision)tgp;   // #2049
             if (MagBhView is { } mbv && Enum.IsDefined(typeof(FracturingFog.MagnetisedBhView), mbv)) p.MagBhView = (FracturingFog.MagnetisedBhView)mbv;   // #1944
             if (MagBhField.HasValue)              p.MagBhField = MagBhField.Value;
             if (MagBhBranch is { } mbb && Enum.IsDefined(typeof(FracturingFog.MagnetisedBhBranch), mbb)) p.MagBhBranch = (FracturingFog.MagnetisedBhBranch)mbb;

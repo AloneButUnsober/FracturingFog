@@ -6505,6 +6505,16 @@ slowest view (seconds for a small frame). With a High / Ultra /
 Extreme quality preset, 'Adaptive anti-aliasing' re-traces only
 the boundary pixels.
 
+With GPU render on (Lighting & FX) the Fates view runs on the GPU
+(D3D11, else Vulkan) with the same integrator, step for step, and
+the same colouring; the Lagrange view stays on the CPU. Double
+precision gives every pixel inside a basin the CPU's fate (a few
+boundary pixels can differ, as the CPU's own do when its tolerance
+moves by an ulp); Single precision, with its tolerance floored at
+2e-5, is several times faster than the CPU on most cards and moves
+more boundary pixels. FF_GPU_ODE picks gpu / cpu / auto (auto
+measures the first GPU frame and keeps the faster).
+
 --- Batch ---
 
 Every setting is a --param key:
