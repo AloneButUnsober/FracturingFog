@@ -38,6 +38,8 @@ namespace FracturingFog
                 && (names.Length == 0 || names.Contains(r.Name))).ToArray();
             int failures = 0;
             Console.WriteLine($"odegpuprobe {w}x{h}");
+            // Launch-state scratch, one buffer for every preset (a stackalloc inside the loop would grow the frame per preset).
+            Span<double> ls = stackalloc double[4];
             foreach (var region in regions)
             {
                 var p = new FractalParameters();
@@ -48,7 +50,6 @@ namespace FracturingFog
                 // CPU reference: exits per pixel (-2 = not traced: forbidden / launched outside).
                 var cpu = new int[w * h];
                 var items = new System.Collections.Generic.List<int>();
-                Span<double> ls = stackalloc double[4];
                 for (int i = 0; i < w * h; i++)
                 {
                     var (a, b) = View(i);
