@@ -24,6 +24,11 @@
 // each gate gets its Okabe-Ito colour, shaded by time / iterations. SmoothBuffer carries
 // log(1 + time) (Fates) or the iteration count (Lagrange), so relief and palettes work.
 // Adaptive AA: every pixel is computed from its own coordinate, so the mask is exact.
+//
+// #2049 part 2 — GPU: with GPU render on (Lighting & FX), the Fates view's trajectories run on
+// the GPU ODE template (Scattering/ThreeBodyGpu.cs; D3D11 or Vulkan) through the shared
+// OdeGpuFrame, and the colour pass below reads the outcomes. FF_GPU_ODE forces GPU / CPU; Auto
+// measures. The Lagrange view (a Newton map) stays on the CPU.
 
 using System;
 using System.Threading;
@@ -36,8 +41,17 @@ using FracturingFog.Scattering;
 namespace FracturingFog;
 
 public sealed class ThreeBodyCalculator : IFractalCalculator, IHeightFieldSource,
-    FracturingFog.Rendering.ILowResPreviewCalculator, FracturingFog.Rendering.IAdaptiveAaCalculator
+    FracturingFog.Rendering.ILowResPreviewCalculator, FracturingFog.Rendering.IAdaptiveAaCalculator,
+    FracturingFog.Render.IGpuRouteSource
 {
+    /// <summary>#2049 — where the last frame ran.</summary>
+    public FracturingFog.Render.GpuRoute LastGpuRoute { get; private set; }
+    /// <summary>#2049 — the GPU backend of the last frame, or null for the CPU.</summary>
+    public string? LastGpuBackend { get; private set; }
+    /// <summary>#2049 — the Auto measurement behind the last frame's path, or null.</summary>
+    public FracturingFog.Calculators.Gpu.OdeGpuRoute.Measurement? LastGpuMeasurement { get; private set; }
+    private bool _isPreviewChild;
+
     public byte[]? PixelMask { get; set; }
     public FracturingFog.Rendering.AdaptiveAa AdaptiveAa => FracturingFog.Rendering.AdaptiveAa.From(FractalParameters);
     /// <summary>Always true: no pass reads neighbouring pixels.</summary>
@@ -112,6 +126,64 @@ public sealed class ThreeBodyCalculator : IFractalCalculator, IHeightFieldSource
         double cx = CenterX, cy = CenterY, zoom = Zoom;
         var mask = PixelMask is { } m && m.Length >= width * height ? m : null;
 
+        void Store(int idx, double px, double py, in ThreeBodyOutcome o)
+        {
+            if (!o.Valid)
+            {
+                GateBuffer[idx] = ForbiddenGate;
+                SmoothBuffer[idx] = 0f;
+                ColorBuffer[idx] = ForbiddenColor;
+                return;
+            }
+            GateBuffer[idx] = (sbyte)o.Gate;
+            double v = lagrange ? o.Time : Math.Log(1.0 + o.Time);
+            SmoothBuffer[idx] = (float)v;
+            double t = Math.Clamp(v / Math.Max(1e-9, shadeRef), 0.0, 1.0);
+            uint col;
+            if (newtonMap != null)
+                col = o.Gate < 0 ? bounded
+                    : unchecked((uint)newtonMap.MapNewton(o.Gate, gateCount, (int)o.Time, scene.NewtonIterations, px, py)) | 0xFF000000u;
+            else if (billiardMap != null)
+                col = unchecked((uint)billiardMap.MapBilliard(o.Gate, gateCount, (int)Math.Round(t * ShadeCap), ShadeCap, (float)t)) | 0xFF000000u;
+            else if (o.Gate < 0)
+                col = bounded;
+            else
+                col = unchecked((uint)BilliardColorHelper.Shade(BilliardColorHelper.GateColor(o.Gate), (float)(1.0 - 0.75 * t))) | 0xFF000000u;
+            ColorBuffer[idx] = col;
+        }
+        void Pixel(int idx, Span<double> s)
+        {
+            var (px, py) = PlaneAt(idx % width + 0.5, idx / width + 0.5, width, height, cx, cy, zoom);
+            Store(idx, px, py, scene.Trace(px, py, s));
+        }
+
+        // #2049 part 2 — the Fates view on the GPU (shared ODE frame).
+        LastGpuBackend = null; LastGpuMeasurement = null;
+        LastGpuRoute = default;
+        if (!lagrange)
+        {
+            double esc2 = scene.EscapeRadius * scene.EscapeRadius;
+            var gpu = FracturingFog.Calculators.Gpu.OdeGpuFrame.TryRun(FractalParameters.Lighting, _isPreviewChild,
+                FracturingFog.Calculators.Gpu.OdeGpuRoute.Shared, "FF_GPU_ODE",
+                ThreeBodyGpu.Job(scene, FractalParameters.ThreeBodyGpuPrecision == BlackHoleGpuPrecision.Single),
+                width, height, mask,
+                (idx, st) =>
+                {
+                    var (px, py) = PlaneAt(idx % width + 0.5, idx / width + 0.5, width, height, cx, cy, zoom);
+                    return scene.LaunchState(px, py, st) && px * px + py * py <= esc2;
+                },
+                (idx, res, i) =>
+                {
+                    var (px, py) = PlaneAt(idx % width + 0.5, idx / width + 0.5, width, height, cx, cy, zoom);
+                    Store(idx, px, py, ThreeBodyGpu.OutcomeOf(res, i));
+                },
+                idx => { Span<double> s = stackalloc double[4]; Pixel(idx, s); },
+                ct);
+            LastGpuRoute = gpu.Route; LastGpuBackend = gpu.Backend; LastGpuMeasurement = gpu.Measurement;
+            if (gpu.OnGpu || ct.IsCancellationRequested) return;
+        }
+        else LastGpuRoute = FracturingFog.Render.GpuRoute.Cpu("Lagrange view", "the Newton map runs on the CPU");
+
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             if (ct.IsCancellationRequested) return;
@@ -121,30 +193,7 @@ public sealed class ThreeBodyCalculator : IFractalCalculator, IHeightFieldSource
             {
                 int idx = row + x;
                 if (mask != null && mask[idx] == 0) continue;
-                var (px, py) = PlaneAt(x + 0.5, y + 0.5, width, height, cx, cy, zoom);
-                var o = scene.Trace(px, py, s);
-                if (!o.Valid)
-                {
-                    GateBuffer[idx] = ForbiddenGate;
-                    SmoothBuffer[idx] = 0f;
-                    ColorBuffer[idx] = ForbiddenColor;
-                    continue;
-                }
-                GateBuffer[idx] = (sbyte)o.Gate;
-                double v = lagrange ? o.Time : Math.Log(1.0 + o.Time);
-                SmoothBuffer[idx] = (float)v;
-                double t = Math.Clamp(v / Math.Max(1e-9, shadeRef), 0.0, 1.0);
-                uint col;
-                if (newtonMap != null)
-                    col = o.Gate < 0 ? bounded
-                        : unchecked((uint)newtonMap.MapNewton(o.Gate, gateCount, (int)o.Time, scene.NewtonIterations, px, py)) | 0xFF000000u;
-                else if (billiardMap != null)
-                    col = unchecked((uint)billiardMap.MapBilliard(o.Gate, gateCount, (int)Math.Round(t * ShadeCap), ShadeCap, (float)t)) | 0xFF000000u;
-                else if (o.Gate < 0)
-                    col = bounded;
-                else
-                    col = unchecked((uint)BilliardColorHelper.Shade(BilliardColorHelper.GateColor(o.Gate), (float)(1.0 - 0.75 * t))) | 0xFF000000u;
-                ColorBuffer[idx] = col;
+                Pixel(idx, s);
             }
         });
     }
@@ -157,7 +206,7 @@ public sealed class ThreeBodyCalculator : IFractalCalculator, IHeightFieldSource
         if (sc >= 1.0) return false;
         var dims = FracturingFog.Rendering.LowResPreview.ComputeDims(Width, Height, sc);
         if (_preview == null || _preview.Width != dims.Width || _preview.Height != dims.Height)
-            _preview = new ThreeBodyCalculator(dims.Width, dims.Height);
+            _preview = new ThreeBodyCalculator(dims.Width, dims.Height) { _isPreviewChild = true };
         _preview.FractalParameters = FractalParameters;
         _preview.CenterX = CenterX; _preview.CenterY = CenterY; _preview.Zoom = Zoom;
         _preview.MaxIterations = MaxIterations; _preview.ColorMap = ColorMap; _preview.Quality = Quality;

@@ -163,11 +163,19 @@ public static class OdeTraceBackends
         }
     }
 
+    /// <summary>Single precision floors the tolerances (a float step cannot meet an error target below
+    /// float epsilon, ~6e-8, so the controller would reject until the attempt cap): the relative one
+    /// as the black hole single kernel does (BlackHoleShadowGpuCalculator.SingleMinRelTol, #1926),
+    /// the absolute one for components near zero.</summary>
+    public const double SingleMinRelTol = 2e-5, SingleMinAbsTol = 2e-8;
+
     /// <summary>The t1 parameter buffer: rtol, atol, initial step, then the family's.</summary>
     public static double[] Params(OdeJob job)
     {
         var p = new double[3 + Math.Max(1, job.FamilyParams.Length)];
-        p[0] = job.RelTol; p[1] = job.AbsTol; p[2] = job.InitialStep;
+        p[0] = job.Single ? Math.Max(job.RelTol, SingleMinRelTol) : job.RelTol;
+        p[1] = job.Single ? Math.Max(job.AbsTol, SingleMinAbsTol) : job.AbsTol;
+        p[2] = job.InitialStep;
         Array.Copy(job.FamilyParams, 0, p, 3, job.FamilyParams.Length);
         return p;
     }

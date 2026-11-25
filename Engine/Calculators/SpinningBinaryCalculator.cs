@@ -30,8 +30,16 @@ using FracturingFog.Scattering;
 namespace FracturingFog;
 
 public sealed class SpinningBinaryCalculator : IFractalCalculator, IHeightFieldSource,
-    FracturingFog.Rendering.ILowResPreviewCalculator, FracturingFog.Rendering.IAdaptiveAaCalculator
+    FracturingFog.Rendering.ILowResPreviewCalculator, FracturingFog.Rendering.IAdaptiveAaCalculator,
+    FracturingFog.Render.IGpuRouteSource
 {
+    // #2049 part 2 — GPU: with GPU render on, the binaries run on the GPU ODE template
+    // (Scattering/SpinningBinaryGpu.cs) through the shared OdeGpuFrame; FF_GPU_ODE forces GPU / CPU.
+    public FracturingFog.Render.GpuRoute LastGpuRoute { get; private set; }
+    public string? LastGpuBackend { get; private set; }
+    public FracturingFog.Calculators.Gpu.OdeGpuRoute.Measurement? LastGpuMeasurement { get; private set; }
+    private bool _isPreviewChild;
+
     public byte[]? PixelMask { get; set; }
     public FracturingFog.Rendering.AdaptiveAa AdaptiveAa => FracturingFog.Rendering.AdaptiveAa.From(FractalParameters);
     /// <summary>Always true: no pass reads neighbouring pixels.</summary>
@@ -93,6 +101,43 @@ public sealed class SpinningBinaryCalculator : IFractalCalculator, IHeightFieldS
         double cx = CenterX, cy = CenterY, zoom = Zoom;
         var mask = PixelMask is { } m && m.Length >= width * height ? m : null;
 
+        void Store(int idx, in SpinningBinaryOutcome o)
+        {
+            GateBuffer[idx] = (sbyte)o.Gate;
+            SmoothBuffer[idx] = (float)o.Orbits;
+            double t = Math.Clamp(o.Orbits / Math.Max(1.0, maxOrbits), 0.0, 1.0);
+            uint col;
+            if (billiardMap != null)
+                col = unchecked((uint)billiardMap.MapBilliard(o.Gate, SpinningBinaryScene.GateCount, (int)Math.Round(t * ShadeCap), ShadeCap, (float)t)) | 0xFF000000u;
+            else if (o.Gate < 0)
+                col = none;
+            else
+                col = unchecked((uint)BilliardColorHelper.Shade(BilliardColorHelper.GateColor(o.Gate), (float)(1.0 - 0.6 * t))) | 0xFF000000u;
+            ColorBuffer[idx] = col;
+        }
+        void Pixel(int idx, Span<double> s)
+        {
+            var (t1, t2) = PlaneAt(idx % width + 0.5, idx / width + 0.5, width, height, cx, cy, zoom);
+            Store(idx, scene.Trace(t1, t2, s));
+        }
+
+        // #2049 part 2 — the GPU route (shared ODE frame).
+        var gpu = FracturingFog.Calculators.Gpu.OdeGpuFrame.TryRun(FractalParameters.Lighting, _isPreviewChild,
+            FracturingFog.Calculators.Gpu.OdeGpuRoute.Shared, "FF_GPU_ODE",
+            SpinningBinaryGpu.Job(scene, FractalParameters.SpinBinGpuPrecision == BlackHoleGpuPrecision.Single),
+            width, height, mask,
+            (idx, st) =>
+            {
+                var (t1, t2) = PlaneAt(idx % width + 0.5, idx / width + 0.5, width, height, cx, cy, zoom);
+                scene.LaunchState(t1, t2, st);
+                return true;
+            },
+            (idx, res, i) => Store(idx, SpinningBinaryGpu.OutcomeOf(scene, res, i)),
+            idx => { Span<double> s = stackalloc double[SpinningBinarySystem.StateSize]; Pixel(idx, s); },
+            ct);
+        LastGpuRoute = gpu.Route; LastGpuBackend = gpu.Backend; LastGpuMeasurement = gpu.Measurement;
+        if (gpu.OnGpu || ct.IsCancellationRequested) return;
+
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             if (ct.IsCancellationRequested) return;
@@ -103,19 +148,7 @@ public sealed class SpinningBinaryCalculator : IFractalCalculator, IHeightFieldS
                 int idx = row + x;
                 if (mask != null && mask[idx] == 0) continue;
                 if (ct.IsCancellationRequested) return;
-                var (t1, t2) = PlaneAt(x + 0.5, y + 0.5, width, height, cx, cy, zoom);
-                var o = scene.Trace(t1, t2, s);
-                GateBuffer[idx] = (sbyte)o.Gate;
-                SmoothBuffer[idx] = (float)o.Orbits;
-                double t = Math.Clamp(o.Orbits / Math.Max(1.0, maxOrbits), 0.0, 1.0);
-                uint col;
-                if (billiardMap != null)
-                    col = unchecked((uint)billiardMap.MapBilliard(o.Gate, SpinningBinaryScene.GateCount, (int)Math.Round(t * ShadeCap), ShadeCap, (float)t)) | 0xFF000000u;
-                else if (o.Gate < 0)
-                    col = none;
-                else
-                    col = unchecked((uint)BilliardColorHelper.Shade(BilliardColorHelper.GateColor(o.Gate), (float)(1.0 - 0.6 * t))) | 0xFF000000u;
-                ColorBuffer[idx] = col;
+                Pixel(idx, s);
             }
         });
     }
@@ -128,7 +161,7 @@ public sealed class SpinningBinaryCalculator : IFractalCalculator, IHeightFieldS
         if (sc >= 1.0) return false;
         var dims = FracturingFog.Rendering.LowResPreview.ComputeDims(Width, Height, sc);
         if (_preview == null || _preview.Width != dims.Width || _preview.Height != dims.Height)
-            _preview = new SpinningBinaryCalculator(dims.Width, dims.Height);
+            _preview = new SpinningBinaryCalculator(dims.Width, dims.Height) { _isPreviewChild = true };
         _preview.FractalParameters = FractalParameters;
         _preview.CenterX = CenterX; _preview.CenterY = CenterY; _preview.Zoom = Zoom;
         _preview.MaxIterations = MaxIterations; _preview.ColorMap = ColorMap; _preview.Quality = Quality;

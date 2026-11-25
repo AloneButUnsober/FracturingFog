@@ -16,12 +16,23 @@
 //   void FamInit(REAL y[DIM], inout REAL ch[NCH]);                   channels at launch
 //   void FamObserve(REAL y[DIM], REAL h, inout REAL ch[NCH]);        after each accepted step
 //   int  FamClassify(REAL y[DIM], REAL t, REAL ch[NCH], out int body);  0 running, 1 captured,
-//                                                                    2 escaped, 3 undecided
+//                                                                    2 escaped, 3 undecided;
+//                                                                    body = the captor, or any
+//                                                                    family label (-1 = none)
 // and reads its constants through FP(i). The host computes the launch states (exactly as the
 // CPU does) and the outcome from the final state, so the kernel holds no family-specific
 // launch or exit-labelling code. One dependency-free source, two compilers: FXC (cs_5_0,
 // D3D11, OdeD3D11Kernel) and DXC (cs_6_0 -> SPIR-V, Vulkan, OdeVulkanKernel; this file is
 // linked into Rendering.Vulkan as the black hole source is).
+//
+// Resumable (#2049 part 2, TDR safety): a dispatch integrates each item for at most StepBudget
+// attempts, then saves its trajectory (y, h, t, steps, attempts, channels) to the State buffer
+// and counts itself in Running; the host dispatches again until Running stays zero. A banded
+// dispatch alone bounds how many threads run, not how long one thread runs, and a single long
+// trajectory in fp64 on a GPU with slow doubles outran the Windows GPU timeout (device lost,
+// process crash). The FSAL derivative k1 is recomputed from y on resume — the same value the
+// uninterrupted loop carries (k7 = f(yn) and y = yn) — so a resumed trajectory is bit-identical
+// to one traced in a single dispatch.
 //
 // Shader-model limits (as BlackHoleKernelSource, #1972): cs_5_0 doubles have add / mul /
 // compare but no divide, sqrt or pow, so RCP and SQRT refine a float seed by Newton's method
@@ -30,10 +41,12 @@
 // unit or two, so trajectories match the CPU except where chaos amplifies an ulp (basin
 // boundaries), which the tests and the probe bound.
 //
-// Buffers: b0 = integers (item count, the band [BandStart, BandEnd) of items this dispatch
-// traces, the step cap), t0 = launch states (REAL, DIM per item, chunk-local), t1 = parameters
-// (REAL: rtol, atol, initial step, then the family's FP(0..)), u0 = outcomes (uint words per
-// item: fate | (body + 1) << 4, steps, then REALs t, y[DIM], ch[NCH], two words per double).
+// Buffers: b0 = integers (item count, first pass, step budget, the step cap, strides),
+// t0 = launch states (REAL, DIM per item, chunk-local), t1 = parameters (REAL: rtol, atol,
+// initial step, then the family's FP(0..)), u0 = outcomes (uint words per item: fate |
+// (body + 1) << 4, steps, then REALs t, y[DIM], ch[NCH]; two words per double), u1 = the
+// resumable state (uint words per item: status, steps, attempts, then REALs h, t, y[DIM],
+// ch[NCH]), u2 = the Running counter (one uint).
 
 using System.Globalization;
 
@@ -50,6 +63,9 @@ public static class OdeKernelSource
 
     /// <summary>Output words per item.</summary>
     public static int Stride(int dim, int channels, bool dbl) => 2 + (1 + dim + System.Math.Max(1, channels)) * (dbl ? 2 : 1);
+
+    /// <summary>Resumable-state words per item.</summary>
+    public static int StateStride(int dim, int channels, bool dbl) => 3 + (2 + dim + System.Math.Max(1, channels)) * (dbl ? 2 : 1);
 
     /// <summary>A REAL literal (double with the L suffix, or float).</summary>
     public static string Lit(double v, bool dbl)
@@ -75,16 +91,19 @@ public static class OdeKernelSource
 #define DBL {{(dbl ? 1 : 0)}}
 #define DIM {{dim}}
 #define NCH {{nch}}
+#define RW {{(dbl ? 2 : 1)}}
 
 cbuffer OdeInts : register(b0)
 {
-    uint Count; uint BandStart; uint BandEnd; uint MaxSteps;
-    uint Stride; uint Pad0; uint Pad1; uint Pad2;
+    uint Count; uint FirstPass; uint StepBudget; uint MaxSteps;
+    uint Stride; uint StateStride; uint Pad0; uint Pad1;
 };
 
 StructuredBuffer<REAL> Launch : register(t0);
 StructuredBuffer<REAL> P : register(t1);
 RWStructuredBuffer<uint> Out : register(u0);
+RWStructuredBuffer<uint> State : register(u1);
+RWStructuredBuffer<uint> Running : register(u2);
 
 #define FP(i) P[{{HeadParams}} + (i)]
 // A REAL literal at full precision: RL(0.1) is 0.1L in double (a bare 0.1 is a float literal).
@@ -122,23 +141,32 @@ bool Finite(REAL v) { return v - v == {{c(0)}}; }
 
 {{familyHlsl}}
 
-void Store(uint o, REAL v)
+void Put(RWStructuredBuffer<uint> buf, uint o, REAL v)
 {
 #if DBL
     uint lo, hi;
     asuint(v, lo, hi);
-    Out[o] = lo;
-    Out[o + 1] = hi;
+    buf[o] = lo;
+    buf[o + 1] = hi;
 #else
-    Out[o] = asuint(v);
+    buf[o] = asuint(v);
+#endif
+}
+
+REAL Get(RWStructuredBuffer<uint> buf, uint o)
+{
+#if DBL
+    return asdouble(buf[o], buf[o + 1]);
+#else
+    return asfloat(buf[o]);
 #endif
 }
 
 [numthreads({{GroupSize}}, 1, 1)]
 void {{Entry}}(uint3 dt : SV_DispatchThreadID)
 {
-    uint item = BandStart + dt.x;
-    if (item >= BandEnd || item >= Count) return;
+    uint item = dt.x;
+    if (item >= Count) return;
 
     const REAL A21 = {{c(1.0 / 5.0)}};
     const REAL A31 = {{c(3.0 / 40.0)}}, A32 = {{c(9.0 / 40.0)}};
@@ -151,21 +179,40 @@ void {{Entry}}(uint3 dt : SV_DispatchThreadID)
 
     REAL y[DIM], k1[DIM], k2[DIM], k3[DIM], k4[DIM], k5[DIM], k6[DIM], k7[DIM], tmp[DIM], yn[DIM];
     REAL ch[NCH];
-    [unroll] for (int i = 0; i < DIM; i++) y[i] = Launch[item * DIM + i];
-    [unroll] for (int j = 0; j < NCH; j++) ch[j] = {{c(0)}};
-    FamInit(y, ch);
-
     REAL rtol = P[0] > {{c(0)}} ? P[0] : {{c(1e-9)}};
     REAL atol = P[1] > {{c(0)}} ? P[1] : {{c(1e-12)}};
     int maxSteps = max(1, (int)MaxSteps);
-    REAL h = min(P[2] > {{c(0)}} ? P[2] : {{c(0.1)}}, FamMaxStep(y));
-    REAL t = {{c(0)}};
-    int steps = 0, attempts = 0, attemptCap = maxSteps * 8;
+    int attemptCap = maxSteps * 8;
+    uint so = item * StateStride;
+    REAL h, t;
+    int steps, attempts;
+    if (FirstPass != 0)
+    {
+        [unroll] for (int i = 0; i < DIM; i++) y[i] = Launch[item * DIM + i];
+        [unroll] for (int j = 0; j < NCH; j++) ch[j] = {{c(0)}};
+        FamInit(y, ch);
+        h = min(P[2] > {{c(0)}} ? P[2] : {{c(0.1)}}, FamMaxStep(y));
+        t = {{c(0)}};
+        steps = 0; attempts = 0;
+    }
+    else
+    {
+        if (State[so] != 0) return;   // finished in an earlier pass
+        steps = (int)State[so + 1]; attempts = (int)State[so + 2];
+        h = Get(State, so + 3);
+        t = Get(State, so + 3 + RW);
+        [unroll] for (int i = 0; i < DIM; i++) y[i] = Get(State, so + 3 + RW * (2 + i));
+        [unroll] for (int j = 0; j < NCH; j++) ch[j] = Get(State, so + 3 + RW * (2 + DIM + j));
+    }
     int fate = 3, body = -1;
+    bool done = true;
+    uint budget = max(1u, StepBudget);
 
     FamDeriv(y, k1);
     [loop] while (steps < maxSteps && attempts < attemptCap)
     {
+        if (budget == 0) { done = false; break; }   // resume in the next pass
+        budget--;
         attempts++;
         REAL hMax = FamMaxStep(y);
         if (h > hMax) h = hMax;
@@ -203,7 +250,7 @@ void {{Entry}}(uint3 dt : SV_DispatchThreadID)
             FamObserve(y, h, ch);
             int b;
             int cl = FamClassify(y, t, ch, b);
-            if (cl != 0) { fate = cl; body = cl == 1 ? b : -1; break; }
+            if (cl != 0) { fate = cl; body = b; break; }   // body: the captor, or a family's own label
             REAL f = err == {{c(0)}} ? {{c(5)}} : min({{c(5)}}, max({{c(0.2)}}, {{c(0.9)}} * PowM02(err)));
             h *= f;
         }
@@ -215,13 +262,24 @@ void {{Entry}}(uint3 dt : SV_DispatchThreadID)
         }
     }
 
+    if (!done)
+    {
+        State[so] = 0;
+        State[so + 1] = (uint)steps; State[so + 2] = (uint)attempts;
+        Put(State, so + 3, h);
+        Put(State, so + 3 + RW, t);
+        [unroll] for (int i = 0; i < DIM; i++) Put(State, so + 3 + RW * (2 + i), y[i]);
+        [unroll] for (int j = 0; j < NCH; j++) Put(State, so + 3 + RW * (2 + DIM + j), ch[j]);
+        InterlockedAdd(Running[0], 1u);
+        return;
+    }
+    State[so] = 1;
     uint o = item * Stride;
     Out[o] = (uint)fate | ((uint)(body + 1) << 4);
     Out[o + 1] = (uint)steps;
-    uint w = {{(dbl ? 2 : 1)}};
-    Store(o + 2, t);
-    [unroll] for (int i = 0; i < DIM; i++) Store(o + 2 + w * (1 + i), y[i]);
-    [unroll] for (int j = 0; j < NCH; j++) Store(o + 2 + w * (1 + DIM + j), ch[j]);
+    Put(Out, o + 2, t);
+    [unroll] for (int i = 0; i < DIM; i++) Put(Out, o + 2 + RW * (1 + i), y[i]);
+    [unroll] for (int j = 0; j < NCH; j++) Put(Out, o + 2 + RW * (1 + DIM + j), ch[j]);
 }
 """;
     }

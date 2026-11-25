@@ -25,6 +25,16 @@ public static class OdeGpuRoute
     /// <summary>Auto times the CPU on every this-many-th row of the first GPU frame.</summary>
     public const int MeasureRowStride = 8;
 
+    /// <summary>The shared GPU / CPU / Auto switch of the ODE families (FF_GPU_ODE); a family's own
+    /// variable, where it has one, overrides it. A set value overrides for the calling thread only (tests).</summary>
+    public static Mode Shared
+    {
+        get => t_shared ?? s_shared;
+        set => t_shared = value;
+    }
+    private static readonly Mode s_shared = Parse(Environment.GetEnvironmentVariable("FF_GPU_ODE"));
+    [ThreadStatic] private static Mode? t_shared;
+
     public static Mode Parse(string? value) => value?.Trim().ToLowerInvariant() switch
     {
         "1" or "true" or "on" or "yes" or "gpu" => Mode.Gpu,

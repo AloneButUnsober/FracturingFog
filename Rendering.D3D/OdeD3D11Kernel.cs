@@ -8,10 +8,13 @@
 // with the renderer's device. The double kernel needs D3D11 fp64 shader ops
 // (FeatureDataDoubles); without them only the single-precision kernel runs.
 //
-// The job is traced in chunks of OdeTraceBackends.ChunkItems items (launch and outcome buffers
-// sized to a chunk); each chunk in bands, each band its own Dispatch followed by an event query
-// the host waits on, the band size steered toward ~100 ms (the #1318 / #1481 / #1972 TDR
-// pattern) and capped at 65,535 groups (#2045).
+// The job is traced in chunks of OdeTraceBackends.ChunkItems items (launch, outcome and state
+// buffers sized to a chunk). The kernel is resumable (OdeKernelSource): each pass integrates every
+// unfinished item of the chunk for at most a step budget and the host waits on an event query,
+// then reads the count of items still running and passes again until it is zero. The budget is
+// steered toward ~100 ms per pass, so no dispatch runs long enough to trip the Windows GPU
+// timeout however long one trajectory is (the #1318 / #1481 / #1972 TDR pattern, by time per
+// thread rather than by band of threads). A chunk is at most 2^18 items = 4,096 groups (#2045).
 
 using System;
 using System.Collections.Generic;
@@ -29,7 +32,7 @@ namespace FracturingFog.Rendering;
 public sealed class OdeD3D11Kernel : IOdeTraceKernel
 {
     [StructLayout(LayoutKind.Sequential)]
-    private struct Ints { public uint Count, BandStart, BandEnd, MaxSteps, Stride, Pad0, Pad1, Pad2; }
+    private struct Ints { public uint Count, FirstPass, StepBudget, MaxSteps, Stride, StateStride, Pad0, Pad1; }
 
     private readonly ID3D11Device _device;
     private readonly ID3D11DeviceContext _ctx;
@@ -39,7 +42,12 @@ public sealed class OdeD3D11Kernel : IOdeTraceKernel
     private readonly ID3D11Buffer _intsBuf;
     private readonly ID3D11Query _done;
     private readonly bool _doubles;
-    private int _bandItems = 4096;
+    private int _stepBudget = 256;
+    /// <summary>Most attempts per item per pass (the budget the steering may reach).</summary>
+    public const int MaxStepBudget = 1 << 20;
+    /// <summary>A pass count no finite job reaches (every pass advances each running item by at least
+    /// 16 attempts): past it the counter is not draining and the trace fails instead of hanging.</summary>
+    public const long MaxPasses = 10_000_000;
 
     public string Backend => "D3D11";
     public string DeviceName { get; }
@@ -113,7 +121,7 @@ public sealed class OdeD3D11Kernel : IOdeTraceKernel
                     if (ct.IsCancellationRequested) return null;
                     int n = Math.Min(chunk, job.Count - first);
                     job.Launches(first, n, launch);
-                    if (!RunChunk(cs, pSrv, launch, n, dim, stride, dbl, job.MaxSteps, words, ct)) return null;
+                    if (!RunChunk(cs, pSrv, launch, n, dim, stride, OdeKernelSource.StateStride(dim, fam.Channels, dbl), dbl, job.MaxSteps, words, ct)) return null;
                     OdeTraceBackends.Decode(words, first, n, fam, !dbl, result);
                 }
                 LastError = "";
@@ -129,44 +137,42 @@ public sealed class OdeD3D11Kernel : IOdeTraceKernel
     }
 
     private bool RunChunk(ID3D11ComputeShader cs, ID3D11ShaderResourceView pSrv, double[] launch, int n, int dim, int stride,
-        bool dbl, int maxSteps, uint[] words, CancellationToken ct)
+        int stateStride, bool dbl, int maxSteps, uint[] words, CancellationToken ct)
     {
-        ID3D11Buffer? lBuf = null, oBuf = null, stage = null;
+        ID3D11Buffer? lBuf = null, oBuf = null, sBuf = null, cBuf = null, stage = null, cStage = null, zero = null;
         ID3D11ShaderResourceView? lSrv = null;
-        ID3D11UnorderedAccessView? oUav = null;
+        ID3D11UnorderedAccessView? oUav = null, sUav = null, cUav = null;
         try
         {
             if (dbl) lBuf = Structured(launch.AsSpan(0, n * dim).ToArray(), sizeof(double));
             else lBuf = Structured(ToFloat(launch.AsSpan(0, n * dim)), sizeof(float));
             lSrv = Srv(lBuf, n * dim);
             int uints = n * stride;
-            oBuf = _device.CreateBuffer(new BufferDescription
-            {
-                ByteWidth = (uint)(uints * sizeof(uint)), BindFlags = BindFlags.UnorderedAccess, Usage = ResourceUsage.Default,
-                MiscFlags = ResourceOptionFlags.BufferStructured, StructureByteStride = sizeof(uint),
-            });
-            oUav = _device.CreateUnorderedAccessView(oBuf, new UnorderedAccessViewDescription
-            {
-                Format = Vortice.DXGI.Format.Unknown, ViewDimension = UnorderedAccessViewDimension.Buffer,
-                Buffer = new BufferUnorderedAccessView { FirstElement = 0, NumElements = (uint)uints },
-            });
-            stage = _device.CreateBuffer(new BufferDescription
-            {
-                ByteWidth = (uint)(uints * sizeof(uint)), Usage = ResourceUsage.Staging, CPUAccessFlags = CpuAccessFlags.Read, BindFlags = BindFlags.None,
-            });
+            (oBuf, oUav) = Uav(uints);
+            (sBuf, sUav) = Uav(n * stateStride);
+            (cBuf, cUav) = Uav(1);
+            stage = Staging(uints);
+            cStage = Staging(1);
+            zero = Structured(new uint[] { 0 }, sizeof(uint));   // the Running counter is reset by a copy from this
             _ctx.CSSetShader(cs);
             _ctx.CSSetShaderResource(0, lSrv);
             _ctx.CSSetShaderResource(1, pSrv);
             _ctx.CSSetUnorderedAccessView(0, oUav);
+            _ctx.CSSetUnorderedAccessView(1, sUav);
+            _ctx.CSSetUnorderedAccessView(2, cUav);
             _ctx.CSSetConstantBuffer(0, _intsBuf);
-            int start = 0;
-            while (start < n)
+            uint groups = (uint)((n + OdeKernelSource.GroupSize - 1) / OdeKernelSource.GroupSize);
+            bool first = true;
+            long passes = 0;
+            while (true)
             {
                 if (ct.IsCancellationRequested) break;
-                int end = Math.Min(n, start + _bandItems);
-                WriteInts((uint)n, (uint)start, (uint)end, (uint)Math.Max(1, maxSteps), (uint)stride);
+                if (++passes > MaxPasses) throw new InvalidOperationException($"ODE kernel still running after {MaxPasses} passes");
+                _ctx.CopyResource(cBuf, zero);
+                WriteInts((uint)n, first ? 1u : 0u, (uint)_stepBudget, (uint)Math.Max(1, maxSteps), (uint)stride, (uint)stateStride);
                 long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
-                _ctx.Dispatch((uint)((end - start + OdeKernelSource.GroupSize - 1) / OdeKernelSource.GroupSize), 1, 1);
+                _ctx.Dispatch(groups, 1, 1);
+                _ctx.CopyResource(cStage, cBuf);
                 _ctx.End(_done);
                 _ctx.Flush();
                 while (_ctx.GetData(_done, IntPtr.Zero, 0, AsyncGetDataFlags.None).Code != 0)
@@ -175,11 +181,18 @@ public sealed class OdeD3D11Kernel : IOdeTraceKernel
                     Thread.Yield();
                 }
                 double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                first = false;
+                uint running;
+                var cm = _ctx.Map(cStage, 0, MapMode.Read, MapFlags.None);
+                unsafe { running = *(uint*)cm.DataPointer; }
+                _ctx.Unmap(cStage, 0);
+                if (running == 0) break;
                 double scale = ms > 0.01 ? Math.Clamp(BandTargetMs / ms, 0.25, 4.0) : 4.0;
-                _bandItems = (int)Math.Clamp(_bandItems * scale, 256, OdeKernelSource.MaxBandPixels);
-                start = end;
+                _stepBudget = (int)Math.Clamp(_stepBudget * scale, 16, MaxStepBudget);
             }
             _ctx.CSSetUnorderedAccessView(0, null);
+            _ctx.CSSetUnorderedAccessView(1, null);
+            _ctx.CSSetUnorderedAccessView(2, null);
             _ctx.CSSetShaderResource(0, null);
             _ctx.CSSetShaderResource(1, null);
             if (ct.IsCancellationRequested) return false;
@@ -194,9 +207,30 @@ public sealed class OdeD3D11Kernel : IOdeTraceKernel
         }
         finally
         {
-            lSrv?.Dispose(); oUav?.Dispose(); lBuf?.Dispose(); oBuf?.Dispose(); stage?.Dispose();
+            lSrv?.Dispose(); oUav?.Dispose(); sUav?.Dispose(); cUav?.Dispose();
+            lBuf?.Dispose(); oBuf?.Dispose(); sBuf?.Dispose(); cBuf?.Dispose(); stage?.Dispose(); cStage?.Dispose(); zero?.Dispose();
         }
     }
+
+    private (ID3D11Buffer, ID3D11UnorderedAccessView) Uav(int uints)
+    {
+        var buf = _device.CreateBuffer(new BufferDescription
+        {
+            ByteWidth = (uint)(Math.Max(1, uints) * sizeof(uint)), BindFlags = BindFlags.UnorderedAccess, Usage = ResourceUsage.Default,
+            MiscFlags = ResourceOptionFlags.BufferStructured, StructureByteStride = sizeof(uint),
+        });
+        var u = _device.CreateUnorderedAccessView(buf, new UnorderedAccessViewDescription
+        {
+            Format = Vortice.DXGI.Format.Unknown, ViewDimension = UnorderedAccessViewDimension.Buffer,
+            Buffer = new BufferUnorderedAccessView { FirstElement = 0, NumElements = (uint)Math.Max(1, uints) },
+        });
+        return (buf, u);
+    }
+
+    private ID3D11Buffer Staging(int uints) => _device.CreateBuffer(new BufferDescription
+    {
+        ByteWidth = (uint)(Math.Max(1, uints) * sizeof(uint)), Usage = ResourceUsage.Staging, CPUAccessFlags = CpuAccessFlags.Read, BindFlags = BindFlags.None,
+    });
 
     private static float[] ToFloat(ReadOnlySpan<double> d)
     {
@@ -205,9 +239,9 @@ public sealed class OdeD3D11Kernel : IOdeTraceKernel
         return f;
     }
 
-    private unsafe void WriteInts(uint count, uint start, uint end, uint maxSteps, uint stride)
+    private unsafe void WriteInts(uint count, uint firstPass, uint budget, uint maxSteps, uint stride, uint stateStride)
     {
-        var v = new Ints { Count = count, BandStart = start, BandEnd = end, MaxSteps = maxSteps, Stride = stride };
+        var v = new Ints { Count = count, FirstPass = firstPass, StepBudget = budget, MaxSteps = maxSteps, Stride = stride, StateStride = stateStride };
         var m = _ctx.Map(_intsBuf, 0, MapMode.WriteDiscard, MapFlags.None);
         *(Ints*)m.DataPointer = v;
         _ctx.Unmap(_intsBuf, 0);

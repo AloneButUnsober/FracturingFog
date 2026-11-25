@@ -109,19 +109,23 @@ int FamClassify(REAL y[DIM], REAL t, REAL ch[NCH], out int body)
         var r = kernel.Trace(job, ct);
         if (r == null) return null;
         var outc = new HenonHeilesOutcome[items.Count];
-        for (int i = 0; i < outc.Length; i++)
-        {
-            double fx = r.Final[i * 4], fy = r.Final[i * 4 + 1];
-            outc[i] = new HenonHeilesOutcome
-            {
-                Valid = true,
-                Exit = r.Fate[i] == (int)ScatterFate.Escaped ? HenonHeilesSystem.ExitOf(fx, fy) : -1,
-                Time = r.T[i],
-                Turns = (int)r.Channels[i * Channels],
-                MinSaddleDistance = Math.Sqrt(Math.Max(0.0, r.Channels[i * Channels + 1])),
-                Steps = r.Steps[i],
-            };
-        }
+        for (int i = 0; i < outc.Length; i++) outc[i] = OutcomeOf(r, i);
         return outc;
+    }
+
+    /// <summary>Item <paramref name="i"/> of a GPU result as the CPU's outcome: the exit labelled from the
+    /// final state exactly as HenonHeilesScene.Trace does.</summary>
+    public static HenonHeilesOutcome OutcomeOf(OdeResult r, int i)
+    {
+        double fx = r.Final[i * 4], fy = r.Final[i * 4 + 1];
+        return new HenonHeilesOutcome
+        {
+            Valid = true,
+            Exit = r.Fate[i] == (int)ScatterFate.Escaped ? HenonHeilesSystem.ExitOf(fx, fy) : -1,
+            Time = r.T[i],
+            Turns = (int)r.Channels[i * Channels],
+            MinSaddleDistance = Math.Sqrt(Math.Max(0.0, r.Channels[i * Channels + 1])),
+            Steps = r.Steps[i],
+        };
     }
 }

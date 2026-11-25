@@ -1634,7 +1634,7 @@
         <!-- #1943 — restricted three-body basins. -->
         <Grid IsVisible="{Binding IsThreeBodyBasins}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="View:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding ThreeBodyViews}"
@@ -1688,7 +1688,11 @@
             <CheckBox Grid.Row="10" Grid.Column="1" Content="Adaptive anti-aliasing"
                       IsChecked="{Binding AdaptiveAa, Mode=TwoWay}" Margin="0,2"
                       ToolTip.Tip="With the High / Ultra / Extreme quality presets, re-trace only the pixels that differ from a neighbour (the basin boundaries). Also used by export and --batch." />
-            <TextBlock Grid.Row="11" Grid.Column="1"
+            <TextBlock Grid.Row="11" Grid.Column="0" Text="GPU precision:" VerticalAlignment="Center" IsVisible="{Binding TbIsFates}" />
+            <ComboBox Grid.Row="11" Grid.Column="1" IsVisible="{Binding TbIsFates}" ItemsSource="{Binding BlackHoleGpuPrecisions}"
+                      SelectedItem="{Binding ThreeBodyGpuPrecision, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="With GPU render on (Lighting &amp; FX): Double matches the CPU except at chaotic boundary pixels; Single is faster on GPUs with slow doubles and moves more boundary pixels." />
+            <TextBlock Grid.Row="12" Grid.Column="1"
                        Text="Fates: crash into the left (heavier) primary, crash into the right one, and escape each have their own colour; bounded orbits take the interior colour; grey is forbidden (not reachable at this Jacobi constant). Lagrange: one colour per equilibrium L1-L5."
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
         </Grid>
@@ -1753,7 +1757,7 @@
         <!-- #1945 — spinning compact binaries (post-Newtonian; fractality disputed). -->
         <Grid IsVisible="{Binding IsSpinningBinaryBasins}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Mass ratio m2/m1:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="0.01" Maximum="1" Increment="0.05" FormatString="0.##########"
                            Value="{Binding SpinBinMassRatio, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Lighter body's mass over the heavier one's." />
@@ -1797,7 +1801,11 @@
             <CheckBox Grid.Row="13" Grid.Column="1" Content="Adaptive anti-aliasing"
                       IsChecked="{Binding AdaptiveAa, Mode=TwoWay}" Margin="0,2"
                       ToolTip.Tip="With the High / Ultra / Extreme quality presets, re-integrate only the pixels that differ from a neighbour. Also used by export and --batch." />
-            <TextBlock Grid.Row="14" Grid.Column="1"
+            <TextBlock Grid.Row="14" Grid.Column="0" Text="GPU precision:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="14" Grid.Column="1" ItemsSource="{Binding BlackHoleGpuPrecisions}"
+                      SelectedItem="{Binding SpinBinGpuPrecision, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="With GPU render on (Lighting &amp; FX): Double matches the CPU except at chaotic boundary pixels; Single is faster on GPUs with slow doubles and moves more boundary pixels." />
+            <TextBlock Grid.Row="15" Grid.Column="1"
                        Text="Across: spin 1's angle; up: spin 2's (radians). Slow: each pixel integrates a whole binary. Levin's fractal boundaries are disputed in print; the edges here are fractal-looking at finite resolution (see Help)."
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
         </Grid>
