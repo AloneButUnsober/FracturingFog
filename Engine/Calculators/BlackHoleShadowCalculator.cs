@@ -689,46 +689,13 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
         // risk is an island of another fate wholly inside the block, which the ring cannot see.
         if (p.BlackHoleSolidBlocks && channel == BlackHoleChannel.Fate)
         {
-            int bw = (width + SolidBlock - 1) / SolidBlock, bh = (height + SolidBlock - 1) / SolidBlock;
-            Parallel.For(0, bw * bh, new ParallelOptions { CancellationToken = ct }, b =>
-            {
-                if (ct.IsCancellationRequested) return;
-                Span<double> s = stackalloc double[6];
-                int x0 = (b % bw) * SolidBlock, y0 = (b / bw) * SolidBlock;
-                int x1 = Math.Min(width, x0 + SolidBlock), y1 = Math.Min(height, y0 + SolidBlock);
-                if (x1 - x0 < 3 || y1 - y0 < 3)
-                {
-                    for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) Pixel(x, y, s);
-                    return;
-                }
-                for (int x = x0; x < x1; x++) { Pixel(x, y0, s); Pixel(x, y1 - 1, s); }
-                for (int y = y0 + 1; y < y1 - 1; y++) { Pixel(x0, y, s); Pixel(x1 - 1, y, s); }
-                int g0 = FateBuffer[y0 * width + x0];
-                bool uniform = g0 >= 0 && g0 < escapedGate;
-                for (int x = x0; x < x1 && uniform; x++)
-                    uniform = FateBuffer[y0 * width + x] == g0 && FateBuffer[(y1 - 1) * width + x] == g0;
-                for (int y = y0 + 1; y < y1 - 1 && uniform; y++)
-                    uniform = FateBuffer[y * width + x0] == g0 && FateBuffer[y * width + x1 - 1] == g0;
-                if (uniform)
-                {
-                    uint col = ColorBuffer[y0 * width + x0];
-                    for (int y = y0 + 1; y < y1 - 1; y++)
-                    {
-                        int row = y * width;
-                        for (int x = x0 + 1; x < x1 - 1; x++)
-                        {
-                            FateBuffer[row + x] = (sbyte)g0; SmoothBuffer[row + x] = 0f; ColorBuffer[row + x] = col;
-                        }
-                    }
-                    Interlocked.Add(ref _solidFilled, (long)(x1 - x0 - 2) * (y1 - y0 - 2));
-                }
-                else
-                {
-                    for (int y = y0 + 1; y < y1 - 1; y++) for (int x = x0 + 1; x < x1 - 1; x++) Pixel(x, y, s);
-                }
-            });
-            LastSolidFilled = _solidFilled;
-            _solidFilled = 0;
+            // The #1970 fill, shared with the other basin families since #2049 (SolidBlockFill).
+            LastSolidFilled = SolidBlockFill.Run(width, height,
+                (x, y) => { Span<double> s = stackalloc double[6]; Pixel(x, y, s); },
+                idx => FateBuffer[idx],
+                g => g >= 0 && g < escapedGate,
+                (from, to) => { FateBuffer[to] = FateBuffer[from]; SmoothBuffer[to] = 0f; ColorBuffer[to] = ColorBuffer[from]; },
+                ct);
             return;
         }
 
@@ -748,8 +715,7 @@ public sealed class BlackHoleShadowCalculator : IFractalCalculator, IHeightField
     }
 
     /// <summary>#1970 — solid-block size in pixels (the ring is traced, the inside filled).</summary>
-    public const int SolidBlock = 16;
-    private long _solidFilled;
+    public const int SolidBlock = SolidBlockFill.Block;
     /// <summary>#1970 — pixels the last frame filled from solid blocks instead of tracing.</summary>
     public long LastSolidFilled { get; private set; }
 

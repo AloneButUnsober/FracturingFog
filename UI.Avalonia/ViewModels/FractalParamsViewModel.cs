@@ -277,6 +277,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _hhChannelScale = _p.HenonHeilesChannelScale;
         _hhMaxTime = _p.HenonHeilesMaxTime;
         _hhTolerance = _p.HenonHeilesTolerance;
+        _hhGpuPrecision = _p.HenonHeilesGpuPrecision; _hhShadeExits = _p.HenonHeilesShadeExits; _hhSolidBlocks = _p.HenonHeilesSolidBlocks;
         _tbView = _p.ThreeBodyView;
         _tbMu = _p.ThreeBodyMassRatio;
         _tbJacobi = _p.ThreeBodyJacobi;
@@ -2491,6 +2492,12 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double HenonHeilesMaxTime { get => _hhMaxTime; set { Set(ref _hhMaxTime, Clamp(value, 1.0, 100000.0)); _p.HenonHeilesMaxTime = _hhMaxTime; Fire(); } }
     private double _hhTolerance;
     public double HenonHeilesTolerance { get => _hhTolerance; set { Set(ref _hhTolerance, Clamp(value, 1e-13, 1e-3)); _p.HenonHeilesTolerance = _hhTolerance; Fire(); } }
+    // #2049 — GPU precision, flat exit colours, solid blocks.
+    private BlackHoleGpuPrecision _hhGpuPrecision;
+    private bool _hhShadeExits, _hhSolidBlocks;
+    public BlackHoleGpuPrecision HenonHeilesGpuPrecision { get => _hhGpuPrecision; set { Set(ref _hhGpuPrecision, value); _p.HenonHeilesGpuPrecision = value; Fire(); } }
+    public bool HenonHeilesShadeExits { get => _hhShadeExits; set { Set(ref _hhShadeExits, value); _p.HenonHeilesShadeExits = value; Fire(); } }
+    public bool HenonHeilesSolidBlocks { get => _hhSolidBlocks; set { Set(ref _hhSolidBlocks, value); _p.HenonHeilesSolidBlocks = value; Fire(); } }
 
     // ── #1943 — restricted three-body basins ─────────────────────────────────
     private ThreeBodyView _tbView;

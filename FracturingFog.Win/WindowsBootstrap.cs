@@ -116,6 +116,8 @@ public static class WindowsBootstrap
         FracturingFog.Calculators.Gpu.BlackHoleTraceBackends.D3D11Factory = () => BlackHoleD3D11Kernel.TryCreateWithOwnDevice();
         // #2024: the Cosmic Web volume raymarch's D3D11 backend (own device, created on first volume frame).
         FracturingFog.Calculators.Gpu.CosmicWebVolumeBackends.D3D11Factory = () => CosmicWebVolumeD3D11Kernel.TryCreateWithOwnDevice();
+        // #2049: the ODE families' D3D11 backend (own device, created on first GPU frame).
+        FracturingFog.Calculators.Gpu.OdeTraceBackends.D3D11Factory = () => OdeD3D11Kernel.TryCreateWithOwnDevice();
 
         // S6 (#408): froxel-volume kernel over the SAME D3D11 device/context the
         // relief kernel uses (shared gate serialises the froxel + relief dispatches).

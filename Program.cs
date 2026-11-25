@@ -45,6 +45,10 @@ static class Program
         if (args.Length > 0 && args[0] == "--cwvolprobe")
             return CosmicWebVolumeProbe.Run(args);
 
+        // #2049 — the GPU ODE template (Henon-Heiles) on every backend against the CPU trace.
+        if (args.Length > 0 && args[0] == "--odegpuprobe")
+            return OdeGpuProbe.Run(args);
+
         // #1329 — D3D11 GPU timestamp queries: stage times, linearity, packets.
         if (args.Length > 0 && args[0] == "--gputimestampprobe")
             return GpuTimestampProbe.Run();

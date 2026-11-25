@@ -481,6 +481,8 @@ namespace FracturingFog.Hosting
             FracturingFog.Calculators.Gpu.BlackHoleTraceBackends.VulkanFactory ??= () => BlackHoleVulkanKernel.TryCreateWithOwnContext();
             // #2024: the Cosmic Web volume raymarch's Vulkan backend (after D3D11 in auto).
             FracturingFog.Calculators.Gpu.CosmicWebVolumeBackends.VulkanFactory ??= () => CosmicWebVolumeVulkanKernel.TryCreateWithOwnContext();
+            // #2049: the ODE families' Vulkan backend (after D3D11 in auto).
+            FracturingFog.Calculators.Gpu.OdeTraceBackends.VulkanFactory ??= () => OdeVulkanKernel.TryCreateWithOwnContext();
 
             // V3-GUI (#57): --renderer vulkan attaches the cross-platform Vulkan
             // compute kernel. It is independent of the present renderer (the Silk
