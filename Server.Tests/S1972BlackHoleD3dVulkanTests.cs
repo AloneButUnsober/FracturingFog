@@ -144,4 +144,18 @@ public sealed class S1972BlackHoleD3dVulkanTests
         Assert.Equal(BlackHoleTraceBackends.Choice.Auto, BlackHoleTraceBackends.Parse(null));
         Assert.Null(BlackHoleTraceBackends.KernelFor(BlackHoleTraceBackends.Choice.Ilgpu, ilgpuAvailable: false));
     }
+
+    [Fact]
+    public void Bands_Never_Ask_For_More_Than_65535_Thread_Groups()   // #2045
+    {
+        // D3D11_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION and Vulkan's guaranteed maxComputeWorkGroupCount[0].
+        const int maxGroups = 65535;
+        Assert.True((FracturingFog.Rendering.BlackHoleKernelSource.MaxBandPixels + FracturingFog.Rendering.BlackHoleKernelSource.GroupSize - 1)
+                    / FracturingFog.Rendering.BlackHoleKernelSource.GroupSize <= maxGroups);
+        Assert.True((FracturingFog.Rendering.CosmicWebVolumeKernelSource.MaxBandPixels + FracturingFog.Rendering.CosmicWebVolumeKernelSource.GroupSize - 1)
+                    / FracturingFog.Rendering.CosmicWebVolumeKernelSource.GroupSize <= maxGroups);
+        // The HLSL group width is the GroupSize the hosts divide by.
+        Assert.Contains($"[numthreads({FracturingFog.Rendering.CosmicWebVolumeKernelSource.GroupSize}, 1, 1)]", FracturingFog.Rendering.CosmicWebVolumeKernelSource.Source);
+    }
+
 }

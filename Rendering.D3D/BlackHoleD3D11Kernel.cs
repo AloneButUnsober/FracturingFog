@@ -145,7 +145,7 @@ public sealed class BlackHoleD3D11Kernel : IBlackHoleTraceKernel
                     double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
                     // Steer the next band toward the target time (bounded growth / shrink).
                     double scale = ms > 0.01 ? Math.Clamp(BandTargetMs / ms, 0.25, 4.0) : 4.0;
-                    _bandPixels = (int)Math.Clamp(_bandPixels * scale, 256, 1 << 22);
+                    _bandPixels = (int)Math.Clamp(_bandPixels * scale, 256, BlackHoleKernelSource.MaxBandPixels);   // #2045
                     start = end;
                 }
                 _ctx.CSSetUnorderedAccessView(0, null);
