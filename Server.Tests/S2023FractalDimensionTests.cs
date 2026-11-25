@@ -183,7 +183,10 @@ public sealed class S2023FractalDimensionTests
         p.CosmicWebDimensionOverlay = true;
         var inset = Render(p);
         Assert.False(off.ColorBuffer.SequenceEqual(inset.ColorBuffer), "no inset drawn");
-        Assert.Same(bare.LastDimension, inset.LastDimension);   // cached per point set
+        // Cached per point set (#2025: by value, since a test running in parallel may evict the shared one-entry
+        // point cache and regenerate an equal point set).
+        if (ReferenceEquals(bare.LastPoints, inset.LastPoints)) Assert.Same(bare.LastDimension, inset.LastDimension);
+        Assert.Equal(bare.LastDimension!.D, inset.LastDimension!.D);
         Assert.Contains(inset.ColorBuffer, c => (c & 0xFFFFFF) == (CosmicWebCalculator.DimensionCurveColor & 0xFFFFFF));
     }
 

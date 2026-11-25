@@ -106,6 +106,7 @@ public sealed partial class CosmicWebCalculator : IFractalCalculator, IStereoEye
     public static CosmicWebPoints PointsFor(FractalParameters p, CancellationToken ct = default)
     {
         if (p.CosmicWebGenerator == CosmicWebGenerator.Zeldovich) return ZeldovichPointsFor(p, ct);
+        if (p.CosmicWebGenerator == CosmicWebGenerator.Voronoi) return VoronoiPointsFor(p, ct);   // #2025
         var key = SettingsOf(p);
         lock (s_cacheLock)
         {
@@ -146,6 +147,27 @@ public sealed partial class CosmicWebCalculator : IFractalCalculator, IStereoEye
         var f = ZeldovichFieldFor(p, ct);
         var pts = Zeldovich.Displace(f, p.CosmicWebGrowth, box, ct);
         lock (s_zCacheLock) { s_zPointsKey = key; s_zPoints = pts; }
+        return pts;
+    }
+
+    /// <summary>#2025 — the Voronoi model settings of <paramref name="p"/>, sanitised.</summary>
+    public static VoronoiSettings VoronoiSettingsOf(FractalParameters p) => VoronoiElement.Sanitise(new VoronoiSettings(
+        p.CosmicWebSeed, p.CosmicWebBoxSize, p.CosmicWebVoronoiNuclei, p.CosmicWebVoronoiPoints,
+        p.CosmicWebVoronoiField, p.CosmicWebVoronoiWalls, p.CosmicWebVoronoiFilaments, p.CosmicWebVoronoiClusters,
+        p.CosmicWebVoronoiThickness));
+
+    private static readonly object s_vorLock = new();
+    private static VoronoiSettings? s_vorKey;
+    private static CosmicWebPoints? s_vorPoints;
+
+    private static CosmicWebPoints VoronoiPointsFor(FractalParameters p, CancellationToken ct)
+    {
+        var key = VoronoiSettingsOf(p);
+        lock (s_vorLock)
+            if (s_vorPoints != null && key.Equals(s_vorKey)) return s_vorPoints;
+        var pts = VoronoiElement.Generate(key, ct);
+        if (ct.IsCancellationRequested) return pts;
+        lock (s_vorLock) { s_vorKey = key; s_vorPoints = pts; }
         return pts;
     }
 
@@ -198,6 +220,15 @@ public sealed partial class CosmicWebCalculator : IFractalCalculator, IStereoEye
             var z = ZeldovichSettingsOf(p);
             LastPrecisionLabel = $"Zel'dovich: {z.Grid}^3 = {pts.Count:N0} particles, P(k) ~ k^{z.Index:0.##}, smoothing {z.Smoothing:0.##} cells, D = {p.CosmicWebGrowth:0.###} (rms linear density contrast)" + volumeNote;
             MeasureDimension(p, pts, null, ct);   // #2023
+            return;
+        }
+        if (p.CosmicWebGenerator == CosmicWebGenerator.Voronoi)
+        {
+            var v = VoronoiSettingsOf(p);
+            double cell = v.BoxSize / Math.Cbrt(v.Nuclei);
+            LastPrecisionLabel = $"Voronoi: {pts.Count:N0} galaxies on the tessellation of {v.Nuclei:N0} nuclei (mean spacing {cell:0.#} Mpc/h), "
+                + $"field / walls / filaments / clusters {v.Field:0.##} / {v.Walls:0.##} / {v.Filaments:0.##} / {v.Clusters:0.##}, width {v.Thickness:0.##} Mpc/h" + volumeNote;
+            MeasureDimension(p, pts, null, ct);
             return;
         }
         var s = SettingsOf(p);

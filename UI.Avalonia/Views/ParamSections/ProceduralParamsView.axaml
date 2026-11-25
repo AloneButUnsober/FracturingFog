@@ -2039,11 +2039,11 @@
         <!-- #2021 - Cosmic Web (Soneira &amp; Peebles 1978 hierarchical clustering). -->
         <Grid IsVisible="{Binding IsCosmicWeb}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Generator:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding CosmicWebGenerators}"
                       SelectedItem="{Binding CosmicWebGenerator, Mode=TwoWay}" Margin="0,2"
-                      ToolTip.Tip="SoneiraPeebles: the hierarchical clustering model of Soneira and Peebles (Astron. J. 83, 845, 1978). Zeldovich: particles on a grid moved by a Gaussian random field (the Zeldovich approximation, 1970)." />
+                      ToolTip.Tip="SoneiraPeebles: the hierarchical clustering model of Soneira and Peebles (Astron. J. 83, 845, 1978). Zeldovich: particles on a grid moved by a Gaussian random field (the Zeldovich approximation, 1970). Voronoi: galaxies on the walls, edges and vertices of a Voronoi tessellation (van de Weygaert)." />
             <TextBlock Grid.Row="1" Grid.Column="0" Text="Particles per side:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsZeldovich}" />
             <ComboBox Grid.Row="1" Grid.Column="1" IsVisible="{Binding CosmicWebIsZeldovich}" ItemsSource="{Binding CosmicWebGrids}"
                       SelectedItem="{Binding CosmicWebGrid, Mode=TwoWay}" Margin="0,2"
@@ -2144,6 +2144,27 @@
             <TextBlock Grid.Row="33" Grid.Column="0" Text="Volume steps:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsVolume}" />
             <NumericUpDown Grid.Row="33" Grid.Column="1" IsVisible="{Binding CosmicWebIsVolume}" Minimum="8" Maximum="4096" Increment="32" FormatString="0"
                            Value="{Binding CosmicWebVolumeSteps, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Samples along a ray across the box diagonal. About 1.5 to 3 per grid cell is enough." />
+            <TextBlock Grid.Row="34" Grid.Column="0" Text="Nuclei (cells):" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsVoronoi}" />
+            <NumericUpDown Grid.Row="34" Grid.Column="1" IsVisible="{Binding CosmicWebIsVoronoi}" Minimum="2" Maximum="4096" Increment="8" FormatString="0"
+                           Value="{Binding CosmicWebVoronoiNuclei, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Random nuclei in the box; each owns a Voronoi cell. Mean cell spacing = box / cube root of this (64 in 100 Mpc/h: 25 Mpc/h)." />
+            <TextBlock Grid.Row="35" Grid.Column="0" Text="Galaxies:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsVoronoi}" />
+            <NumericUpDown Grid.Row="35" Grid.Column="1" IsVisible="{Binding CosmicWebIsVoronoi}" Minimum="1" Maximum="8000000" Increment="50000" FormatString="0"
+                           Value="{Binding CosmicWebVoronoiPoints, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Number of galaxies placed." />
+            <TextBlock Grid.Row="36" Grid.Column="0" Text="Field weight:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsVoronoi}" />
+            <NumericUpDown Grid.Row="36" Grid.Column="1" IsVisible="{Binding CosmicWebIsVoronoi}" Minimum="0" Maximum="1" Increment="0.05" FormatString="0.##"
+                           Value="{Binding CosmicWebVoronoiField, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Share of galaxies left where they start, inside the cells." />
+            <TextBlock Grid.Row="37" Grid.Column="0" Text="Wall weight:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsVoronoi}" />
+            <NumericUpDown Grid.Row="37" Grid.Column="1" IsVisible="{Binding CosmicWebIsVoronoi}" Minimum="0" Maximum="1" Increment="0.05" FormatString="0.##"
+                           Value="{Binding CosmicWebVoronoiWalls, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Share moved out from their nucleus onto the nearest cell wall." />
+            <TextBlock Grid.Row="38" Grid.Column="0" Text="Filament weight:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsVoronoi}" />
+            <NumericUpDown Grid.Row="38" Grid.Column="1" IsVisible="{Binding CosmicWebIsVoronoi}" Minimum="0" Maximum="1" Increment="0.05" FormatString="0.##"
+                           Value="{Binding CosmicWebVoronoiFilaments, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Share moved on within the wall to a cell edge (a filament)." />
+            <TextBlock Grid.Row="39" Grid.Column="0" Text="Cluster weight:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsVoronoi}" />
+            <NumericUpDown Grid.Row="39" Grid.Column="1" IsVisible="{Binding CosmicWebIsVoronoi}" Minimum="0" Maximum="1" Increment="0.05" FormatString="0.##"
+                           Value="{Binding CosmicWebVoronoiClusters, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Share moved on along the edge to a cell vertex (a cluster)." />
+            <TextBlock Grid.Row="40" Grid.Column="0" Text="Width (Mpc/h):" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsVoronoi}" />
+            <NumericUpDown Grid.Row="40" Grid.Column="1" IsVisible="{Binding CosmicWebIsVoronoi}" Minimum="0" Maximum="10000" Increment="0.1" FormatString="0.##"
+                           Value="{Binding CosmicWebVoronoiThickness, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Gaussian width of walls, filaments and clusters." />
         </Grid>
 
     </StackPanel>

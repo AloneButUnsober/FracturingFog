@@ -962,6 +962,14 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? CosmicWebVolumeSmoothing { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? CosmicWebVolumeOpacity { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? CosmicWebVolumeSteps { get; set; }
+        // #2025 — Voronoi model.
+        [JsonIgnore(Condition = OmitNull)] public int? CosmicWebVoronoiNuclei { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? CosmicWebVoronoiPoints { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? CosmicWebVoronoiField { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? CosmicWebVoronoiWalls { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? CosmicWebVoronoiFilaments { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? CosmicWebVoronoiClusters { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? CosmicWebVoronoiThickness { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? CosmicWebVolumeBrightness { get; set; }
         // #1507 — int cast of BilliardRayColorSource.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysColorSource { get; set; }
@@ -1683,6 +1691,13 @@ namespace FracturingFog.Models
                     CosmicWebVolumeSmoothing = p.CosmicWebVolumeSmoothing,
                     CosmicWebVolumeOpacity = p.CosmicWebVolumeOpacity,
                     CosmicWebVolumeSteps = p.CosmicWebVolumeSteps,
+                    CosmicWebVoronoiNuclei = p.CosmicWebVoronoiNuclei,
+                    CosmicWebVoronoiPoints = p.CosmicWebVoronoiPoints,
+                    CosmicWebVoronoiField = p.CosmicWebVoronoiField,
+                    CosmicWebVoronoiWalls = p.CosmicWebVoronoiWalls,
+                    CosmicWebVoronoiFilaments = p.CosmicWebVoronoiFilaments,
+                    CosmicWebVoronoiClusters = p.CosmicWebVoronoiClusters,
+                    CosmicWebVoronoiThickness = p.CosmicWebVoronoiThickness,
                     CosmicWebVolumeBrightness = p.CosmicWebVolumeBrightness,
                 },
                 // #1948 — microlensing: every setting.
@@ -2902,6 +2917,13 @@ namespace FracturingFog.Models
             if (CosmicWebVolumeSmoothing.HasValue) p.CosmicWebVolumeSmoothing = CosmicWebVolumeSmoothing.Value;
             if (CosmicWebVolumeOpacity.HasValue) p.CosmicWebVolumeOpacity = CosmicWebVolumeOpacity.Value;
             if (CosmicWebVolumeSteps.HasValue) p.CosmicWebVolumeSteps = CosmicWebVolumeSteps.Value;
+            if (CosmicWebVoronoiNuclei.HasValue) p.CosmicWebVoronoiNuclei = CosmicWebVoronoiNuclei.Value;   // #2025
+            if (CosmicWebVoronoiPoints.HasValue) p.CosmicWebVoronoiPoints = CosmicWebVoronoiPoints.Value;   // #2025
+            if (CosmicWebVoronoiField.HasValue) p.CosmicWebVoronoiField = CosmicWebVoronoiField.Value;   // #2025
+            if (CosmicWebVoronoiWalls.HasValue) p.CosmicWebVoronoiWalls = CosmicWebVoronoiWalls.Value;   // #2025
+            if (CosmicWebVoronoiFilaments.HasValue) p.CosmicWebVoronoiFilaments = CosmicWebVoronoiFilaments.Value;   // #2025
+            if (CosmicWebVoronoiClusters.HasValue) p.CosmicWebVoronoiClusters = CosmicWebVoronoiClusters.Value;   // #2025
+            if (CosmicWebVoronoiThickness.HasValue) p.CosmicWebVoronoiThickness = CosmicWebVoronoiThickness.Value;   // #2025
             if (CosmicWebVolumeBrightness.HasValue) p.CosmicWebVolumeBrightness = CosmicWebVolumeBrightness.Value;
             if (BilliardRaysColorSource.HasValue) p.BilliardRaysColorSource = (FracturingFog.BilliardRayColorSource)BilliardRaysColorSource.Value;
             if (BilliardRaysMode.HasValue)       p.BilliardRaysMode = (FracturingFog.BilliardRayMode)BilliardRaysMode.Value;
@@ -5082,6 +5104,89 @@ namespace FracturingFog.Models
                     CosmicWebBoxSize = 100.0, CosmicWebSeed = 1970, CosmicWebGamma = 0.4,
                     CosmicWebRender = (int)FracturingFog.CosmicWebRender.Volume, CosmicWebVolumeGrid = 128, CosmicWebVolumeSmoothing = 0.75,
                     CosmicWebVolumeOpacity = 12.0, CosmicWebVolumeBrightness = 40.0, CosmicWebVolumeSteps = 384,
+                },
+            },
+            // #2025 — the compared set: one per generator at 262,144 points each, with D(r) measured.
+            new()
+            {
+                Name          = "Cosmic Web - Compare: Soneira-Peebles",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  1.0,
+                Iterations    =  256,
+                Description   = "The compared set (1 of 3), 262,144 galaxies each, D(r) measured. the dumbbell hierarchy of Soneira and Peebles with 64 clumps of 12 fixed levels (pairs down to 0.04 Mpc/h): D(r) near the model's 1.23 while the pairs inside clumps dominate, rising towards 3 as the uncorrelated pairs between clumps take over.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.CosmicWeb,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    Cam3DFamily = (int)FractalType.CosmicWeb, Cam3DDistance = 2.2, Cam3DTheta = 0.6, Cam3DPhi = 1.1,
+                    CosmicWebGenerator = (int)FracturingFog.CosmicWebGenerator.SoneiraPeebles,
+                    CosmicWebPlacement = (int)FracturingFog.CosmicWebPlacement.Dumbbell, CosmicWebLevelMode = (int)FracturingFog.CosmicWebLevelMode.Fixed, CosmicWebLevels = 12,
+                    CosmicWebBoxSize = 100.0, CosmicWebClumps = 64, CosmicWebTopSize = 11.35, CosmicWebFirstRatio = 1.10, CosmicWebLambda = 1.76,
+                    CosmicWebPointCap = 262144, CosmicWebSeed = 1978, CosmicWebPointSize = 1.0, CosmicWebDepthFade = 0.5,
+                    CosmicWebMeasure = true, CosmicWebMeasureSample = 100000, CosmicWebDimensionOverlay = true,
+                },
+            },
+            new()
+            {
+                Name          = "Cosmic Web - Compare: Zeldovich",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  1.0,
+                Iterations    =  256,
+                Description   = "The compared set (2 of 3), 262,144 galaxies each, D(r) measured. The Zel'dovich approximation on a 64^3 particle grid at D = 1: below 3 at a few Mpc/h, where sheets and filaments have formed, and climbing slowly on large scales.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.CosmicWeb,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    Cam3DFamily = (int)FractalType.CosmicWeb, Cam3DDistance = 2.2, Cam3DTheta = 0.6, Cam3DPhi = 1.1,
+                    CosmicWebGenerator = (int)FracturingFog.CosmicWebGenerator.Zeldovich, CosmicWebGrid = 64,
+                    CosmicWebSpectralIndex = -2.0, CosmicWebSmoothing = 1.0, CosmicWebGrowth = 1.0,
+                    CosmicWebBoxSize = 100.0, CosmicWebSeed = 1970, CosmicWebPointSize = 1.0, CosmicWebDepthFade = 0.5, CosmicWebGamma = 0.6,
+                    CosmicWebMeasure = true, CosmicWebMeasureSample = 100000, CosmicWebDimensionOverlay = true,
+                },
+            },
+            new()
+            {
+                Name          = "Cosmic Web - Compare: Voronoi",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  1.0,
+                Iterations    =  256,
+                Description   = "The compared set (3 of 3), 262,144 galaxies each, D(r) measured. Van de Weygaert's Voronoi clustering model: galaxies on the walls, edges and vertices of the tessellation of 64 random nuclei, 0.5 Mpc/h wide. D(r) is near 3 inside the width, drops towards 1 where filaments and clusters dominate, and climbs back to 3 at the cell size.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.CosmicWeb,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    Cam3DFamily = (int)FractalType.CosmicWeb, Cam3DDistance = 2.2, Cam3DTheta = 0.6, Cam3DPhi = 1.1,
+                    CosmicWebGenerator = (int)FracturingFog.CosmicWebGenerator.Voronoi, CosmicWebVoronoiNuclei = 64, CosmicWebVoronoiPoints = 262144,
+                    CosmicWebVoronoiField = 0.1, CosmicWebVoronoiWalls = 0.35, CosmicWebVoronoiFilaments = 0.35, CosmicWebVoronoiClusters = 0.2, CosmicWebVoronoiThickness = 0.5,
+                    CosmicWebBoxSize = 100.0, CosmicWebSeed = 2007, CosmicWebPointSize = 1.0, CosmicWebDepthFade = 0.5,
+                    CosmicWebMeasure = true, CosmicWebMeasureSample = 100000, CosmicWebDimensionOverlay = true,
+                },
+            },
+            // #2025 — a D(r) curve with two regimes and a break (cf. Einasto 2026).
+            new()
+            {
+                Name          = "Cosmic Web - Voronoi Two Regimes",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  1.0,
+                Iterations    =  256,
+                Description   = "A Voronoi web whose D(r) has two regimes with a break between them, as Einasto (2026) describes for the real web (there near 3 Mpc/h): inside the 0.5 Mpc/h width of the walls, filaments and clusters the galaxies fill space (D near 3); above it the filaments and clusters set it (D falls towards 1 near 2 Mpc/h); past the 25 Mpc/h cells D climbs back to 3. A model with a chosen width, not a fit to the sky.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.CosmicWeb,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    Cam3DFamily = (int)FractalType.CosmicWeb, Cam3DDistance = 2.2, Cam3DTheta = 0.9, Cam3DPhi = 1.2,
+                    CosmicWebGenerator = (int)FracturingFog.CosmicWebGenerator.Voronoi, CosmicWebVoronoiNuclei = 64, CosmicWebVoronoiPoints = 400000,
+                    CosmicWebVoronoiField = 0.1, CosmicWebVoronoiWalls = 0.35, CosmicWebVoronoiFilaments = 0.35, CosmicWebVoronoiClusters = 0.2, CosmicWebVoronoiThickness = 0.5,
+                    CosmicWebBoxSize = 100.0, CosmicWebSeed = 11, CosmicWebPointSize = 1.0, CosmicWebDepthFade = 0.5,
+                    CosmicWebMeasure = true, CosmicWebMeasureSample = 60000, CosmicWebDimensionOverlay = true,
                 },
             },
             // #1997 — User Hamiltonian: the Hénon–Heiles section (parity with that view), FF's own

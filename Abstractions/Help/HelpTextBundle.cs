@@ -5773,6 +5773,32 @@ instead of staying in them (Zeldovich notes his density formula no
 longer applies there; real matter stays in the discs and shocks), so
 the web blurs as D keeps growing.
 
+Generator: Voronoi clustering model (van de Weygaert)
+Random nuclei split the box into Voronoi cells (every place belongs to
+its nearest nucleus); the cells are the voids, their walls are walls
+of galaxies, their edges filaments and their corners (vertices) rich
+clusters. As van de Weygaert describes it (arXiv:0707.2877, 2007), a
+galaxy starts at a random place in a cell and moves straight out from
+the nucleus until it meets a wall; a filament galaxy then slides along
+the wall to an edge, and a cluster galaxy along the edge to a vertex.
+Field galaxies stay where they start. Each structure is given a
+Gaussian width. FF finds each wall, edge and vertex exactly from the
+nuclei without building the tessellation (the box is periodic).
+Settings: Nuclei (64 in a 100 Mpc/h box: cells about 25 Mpc/h apart),
+Galaxies, the Field / Wall / Filament / Cluster weights, Width.
+Measured: a walls-only sample has D(r) near 2 and a filaments-only one
+near 1, between the width and the cell size.
+
+Comparing the generators
+The Compare presets give each generator 262,144 galaxies and measure
+D(r): Soneira-Peebles is self-similar (a flat D(r) at the model's
+1.23 while the clump pairs dominate); Zel'dovich sits a little below 3
+on scales of a few Mpc/h; Voronoi swings from 3 inside its width down
+towards 1 (filaments and clusters) and back to 3 at the cell size.
+None of them is the real web, which Einasto (2026) describes with two
+regimes and a break near 3 Mpc/h; the Voronoi Two Regimes preset shows
+how a model with a chosen structure width makes such a break.
+
 Dimension
 Inside a clump the density falls off as a power of size, so between
 the smallest and largest clump sizes the galaxies form a fractal of
@@ -5847,11 +5873,13 @@ ratio (d1/d2), Top size (d1 or the sphere radius, Mpc/h), Levels,
 Clumps, Box size (periodic, Mpc/h), Seed, Point cap (whole clumps past
 it are dropped; the status bar says so), Point size, Depth fade, Colour,
 Gamma, Measure D(r), D(r) sample, Draw D(r) inset, Render, Volume
-grid, smoothing, opacity, brightness and steps, and
+grid, smoothing, opacity, brightness and steps, the Voronoi settings
+(Nuclei, Galaxies, weights, Width), and
 the camera (distance in box sides, azimuth, polar angle).
 
 The status bar shows the galaxy and clump counts and the model's D
-(Soneira-Peebles), or the grid, spectrum and D (Zel'dovich).
+(Soneira-Peebles), the grid, spectrum and D (Zel'dovich), or the
+nuclei, cell spacing, weights and width (Voronoi).
 
 Presets:
   Cosmic Web - Soneira-Peebles Final Model        their final model
@@ -5861,6 +5889,10 @@ Presets:
   Cosmic Web - Zeldovich Mature Web               past shell crossing
   Cosmic Web - Measured D(r)                      the D(r) inset
   Cosmic Web - Zeldovich Volume                   the web as gas
+  Cosmic Web - Compare: Soneira-Peebles           262,144 galaxies, D(r)
+  Cosmic Web - Compare: Zeldovich                 262,144 galaxies, D(r)
+  Cosmic Web - Compare: Voronoi                   262,144 galaxies, D(r)
+  Cosmic Web - Voronoi Two Regimes                a D(r) break
 
 Batch: every setting is a --param CosmicWeb* key, the camera is
 Cam3DFamily=CosmicWeb with Cam3DDistance / Cam3DTheta / Cam3DPhi, e.g.

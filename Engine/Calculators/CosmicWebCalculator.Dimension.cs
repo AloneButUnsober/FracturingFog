@@ -37,8 +37,10 @@ public sealed partial class CosmicWebCalculator
     public CosmicWebDimension? LastDimension { get; private set; }
 
     private static readonly object s_dLock = new();
-    private static (CosmicWebPoints Points, CosmicWebDimensionSettings Settings)? s_dKey;
-    private static CosmicWebDimension? s_dResult;
+    // A few recent measurements (#2025: one entry was evicted by a second view or render in parallel),
+    // most recent first; weak on the point set so a dropped set is not pinned.
+    private const int DimensionCacheSize = 4;
+    private static readonly System.Collections.Generic.List<(WeakReference<CosmicWebPoints> Points, CosmicWebDimensionSettings Settings, CosmicWebDimension Result)> s_dCache = new();
 
     public static CosmicWebDimensionSettings DimensionSettingsOf(FractalParameters p)
         => CosmicWebDimensionSettings.Default(Math.Clamp(p.CosmicWebMeasureSample, FractalDimension.MinSample, FractalDimension.MaxSample));
@@ -48,9 +50,20 @@ public sealed partial class CosmicWebCalculator
     {
         var s = DimensionSettingsOf(p);
         lock (s_dLock)
-            if (s_dKey is { } k && ReferenceEquals(k.Points, pts) && k.Settings == s && s_dResult != null) return s_dResult;
+            for (int i = 0; i < s_dCache.Count; i++)
+                if (s_dCache[i].Points.TryGetTarget(out var held) && ReferenceEquals(held, pts) && s_dCache[i].Settings == s)
+                {
+                    var hit = s_dCache[i];
+                    s_dCache.RemoveAt(i);
+                    s_dCache.Insert(0, hit);
+                    return hit.Result;
+                }
         var d = FractalDimension.Measure(pts, s, ct);
-        lock (s_dLock) { s_dKey = (pts, s); s_dResult = d; }
+        lock (s_dLock)
+        {
+            s_dCache.Insert(0, (new WeakReference<CosmicWebPoints>(pts), s, d));
+            if (s_dCache.Count > DimensionCacheSize) s_dCache.RemoveAt(s_dCache.Count - 1);
+        }
         return d;
     }
 

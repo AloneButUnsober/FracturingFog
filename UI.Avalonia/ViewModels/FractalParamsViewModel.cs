@@ -324,6 +324,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _cwColour = _p.CosmicWebColour; _cwGamma = _p.CosmicWebGamma;
         _cwGrid = _p.CosmicWebGrid; _cwIndex = _p.CosmicWebSpectralIndex; _cwSmooth = _p.CosmicWebSmoothing; _cwGrowth = _p.CosmicWebGrowth;
         _cwMeasure = _p.CosmicWebMeasure; _cwSample = _p.CosmicWebMeasureSample; _cwDOverlay = _p.CosmicWebDimensionOverlay;
+        _cwVorNuclei = _p.CosmicWebVoronoiNuclei; _cwVorPoints = _p.CosmicWebVoronoiPoints; _cwVorField = _p.CosmicWebVoronoiField;
+        _cwVorWalls = _p.CosmicWebVoronoiWalls; _cwVorFil = _p.CosmicWebVoronoiFilaments; _cwVorClus = _p.CosmicWebVoronoiClusters; _cwVorThick = _p.CosmicWebVoronoiThickness;
         _cwRender = _p.CosmicWebRender; _cwVGrid = _p.CosmicWebVolumeGrid; _cwVSmooth = _p.CosmicWebVolumeSmoothing;
         _cwVOpacity = _p.CosmicWebVolumeOpacity; _cwVSteps = _p.CosmicWebVolumeSteps; _cwVBright = _p.CosmicWebVolumeBrightness;
         _cwDist = _p.CosmicWebCameraDistance; _cwTheta = _p.CosmicWebCameraTheta; _cwPhi = _p.CosmicWebCameraPhi;
@@ -2638,10 +2640,21 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public CosmicWebGenerator CosmicWebGenerator
     {
         get => _cwGen;
-        set { Set(ref _cwGen, value); _p.CosmicWebGenerator = value; this.RaisePropertyChanged(nameof(CosmicWebIsSoneiraPeebles)); this.RaisePropertyChanged(nameof(CosmicWebIsZeldovich)); this.RaisePropertyChanged(nameof(CosmicWebModelDimension)); Fire(); }
+        set { Set(ref _cwGen, value); _p.CosmicWebGenerator = value; this.RaisePropertyChanged(nameof(CosmicWebIsSoneiraPeebles)); this.RaisePropertyChanged(nameof(CosmicWebIsZeldovich)); this.RaisePropertyChanged(nameof(CosmicWebIsVoronoi)); this.RaisePropertyChanged(nameof(CosmicWebModelDimension)); Fire(); }
     }
     public bool CosmicWebIsSoneiraPeebles => _cwGen == CosmicWebGenerator.SoneiraPeebles;
     public bool CosmicWebIsZeldovich => _cwGen == CosmicWebGenerator.Zeldovich;
+    public bool CosmicWebIsVoronoi => _cwGen == CosmicWebGenerator.Voronoi;
+    // #2025 — Voronoi model.
+    private int _cwVorNuclei, _cwVorPoints;
+    private double _cwVorField, _cwVorWalls, _cwVorFil, _cwVorClus, _cwVorThick;
+    public int CosmicWebVoronoiNuclei { get => _cwVorNuclei; set { Set(ref _cwVorNuclei, (int)Clamp(value, 2, 4096)); _p.CosmicWebVoronoiNuclei = _cwVorNuclei; Fire(); } }
+    public int CosmicWebVoronoiPoints { get => _cwVorPoints; set { Set(ref _cwVorPoints, (int)Clamp(value, 1, 8_000_000)); _p.CosmicWebVoronoiPoints = _cwVorPoints; Fire(); } }
+    public double CosmicWebVoronoiField { get => _cwVorField; set { Set(ref _cwVorField, Clamp(value, 0.0, 1.0)); _p.CosmicWebVoronoiField = _cwVorField; Fire(); } }
+    public double CosmicWebVoronoiWalls { get => _cwVorWalls; set { Set(ref _cwVorWalls, Clamp(value, 0.0, 1.0)); _p.CosmicWebVoronoiWalls = _cwVorWalls; Fire(); } }
+    public double CosmicWebVoronoiFilaments { get => _cwVorFil; set { Set(ref _cwVorFil, Clamp(value, 0.0, 1.0)); _p.CosmicWebVoronoiFilaments = _cwVorFil; Fire(); } }
+    public double CosmicWebVoronoiClusters { get => _cwVorClus; set { Set(ref _cwVorClus, Clamp(value, 0.0, 1.0)); _p.CosmicWebVoronoiClusters = _cwVorClus; Fire(); } }
+    public double CosmicWebVoronoiThickness { get => _cwVorThick; set { Set(ref _cwVorThick, Clamp(value, 0.0, 10000.0)); _p.CosmicWebVoronoiThickness = _cwVorThick; Fire(); } }
     private int _cwGrid;
     private double _cwIndex, _cwSmooth, _cwGrowth;
     public int CosmicWebGrid { get => _cwGrid; set { Set(ref _cwGrid, (int)Clamp(value, 16, 256)); _p.CosmicWebGrid = _cwGrid; Fire(); } }
