@@ -25,6 +25,8 @@ using Xunit;
 
 namespace FracturingFog.Server.Tests;
 
+// Shares the static OdeTraceBackends kernels (ResetForTests disposes them): one serial collection.
+[Collection(OdeGpuBackendsCollection.Name)]
 public sealed class S2049OdeGpuFamiliesTests
 {
     private readonly ITestOutputHelper _out;
@@ -188,4 +190,99 @@ public sealed class S2049OdeGpuFamiliesTests
         Assert.Equal(BlackHoleGpuPrecision.Single, q.ThreeBodyGpuPrecision);
         Assert.Contains(EnvVarCatalog.All, e => e.Name == "FF_GPU_ODE");
     }
+    [Fact]
+    public void SpinningBinary_Vulkan_Matches_The_Cpu_Within_The_Floor_When_Present()
+    {
+        using var k = FracturingFog.Rendering.Vulkan.OdeVulkanKernel.TryCreateWithOwnContext();
+        if (k == null || !k.SupportsDouble) return;   // no Vulkan fp64 device
+        const int w = 24, h = 16;
+        foreach (var name in new[] { "Spinning Binary - Levin Conservative", "Spinning Binary - Merger Side (Dissipative)" })
+        {
+            var region = Preset(name);
+            var p = new FractalParameters();
+            region.Params!.ApplyTo(p);
+            var scene = SpinningBinaryScene.Build(p);
+            var p2 = new FractalParameters();
+            region.Params!.ApplyTo(p2);
+            p2.SpinBinTolerance *= 1.0 + 1e-12;
+            var scene2 = SpinningBinaryScene.Build(p2);
+            (double, double) View(int i) => SpinningBinaryCalculator.PlaneAt(i % w + 0.5, i / w + 0.5, w, h, region.CenterX, region.CenterY, region.Zoom);
+            var cpu = new int[w * h];
+            var cpu2 = new int[w * h];
+            System.Threading.Tasks.Parallel.For(0, w * h, i =>
+            {
+                Span<double> st = stackalloc double[SpinningBinarySystem.StateSize];
+                var (a, b) = View(i);
+                cpu[i] = scene.Trace(a, b, st).Gate;
+                cpu2[i] = scene2.Trace(a, b, st).Gate;
+            });
+            var t = SpinningBinaryGpu.Job(scene, single: false);
+            var r = k.Trace(new OdeJob
+            {
+                Family = t.Family, FamilyParams = t.FamilyParams, RelTol = t.RelTol, AbsTol = t.AbsTol,
+                InitialStep = t.InitialStep, MaxSteps = t.MaxSteps, Count = w * h,
+                Launches = (first, n, dst) =>
+                {
+                    var st = new double[SpinningBinarySystem.StateSize];
+                    for (int i = 0; i < n; i++) { var (a, b) = View(first + i); scene.LaunchState(a, b, st); Array.Copy(st, 0, dst, i * st.Length, st.Length); }
+                },
+            }, TestContext.Current.CancellationToken);
+            Assert.NotNull(r);
+            int differ = 0, floor = 0;
+            for (int i = 0; i < w * h; i++)
+            {
+                if (SpinningBinaryGpu.OutcomeOf(scene, r!, i).Gate != cpu[i]) differ++;
+                if (cpu2[i] != cpu[i]) floor++;
+            }
+            _out.WriteLine($"{name}: GPU differs {differ} of {w * h}, CPU floor {floor}");
+            Assert.True(differ <= Math.Max(1, 2 * floor), $"{name}: {differ} pixels differ (CPU floor {floor})");
+        }
+    }
+
+    [Fact]
+    public void SpinningBinary_Routes_To_The_Gpu_And_Its_Precision_Survives_The_Command_Line()
+    {
+        using (var probe = FracturingFog.Rendering.Vulkan.OdeVulkanKernel.TryCreateWithOwnContext())
+        {
+            if (probe != null)
+            {
+                var beforeFactory = OdeTraceBackends.VulkanFactory;
+                try
+                {
+                    OdeTraceBackends.ResetForTests();
+                    OdeTraceBackends.VulkanFactory = () => FracturingFog.Rendering.Vulkan.OdeVulkanKernel.TryCreateWithOwnContext();
+                    OdeTraceBackends.Selection = OdeTraceBackends.Choice.Vulkan;
+                    OdeGpuRoute.Shared = OdeGpuRoute.Mode.Gpu;
+                    var region = Preset("Spinning Binary - Levin Conservative");
+                    var p = new FractalParameters();
+                    region.Params!.ApplyTo(p);
+                    var fx = p.Lighting; fx.UseGpuRender = true; p.Lighting = fx;
+                    p.SpinBinGpuPrecision = BlackHoleGpuPrecision.Single;   // quick on any device
+                    var c = new SpinningBinaryCalculator(16, 10) { CenterX = region.CenterX, CenterY = region.CenterY, Zoom = region.Zoom, ColorMap = new HsvPalette(), FractalParameters = p };
+                    c.Calculate(TestContext.Current.CancellationToken);
+                    Assert.StartsWith("Vulkan", c.LastGpuBackend);
+                    Assert.Contains(c.GateBuffer, g => g >= 0);
+                }
+                finally
+                {
+                    OdeGpuRoute.Shared = OdeGpuRoute.Mode.Auto;
+                    OdeTraceBackends.Selection = OdeTraceBackends.Choice.Auto;
+                    OdeTraceBackends.ResetForTests();
+                    OdeTraceBackends.VulkanFactory = beforeFactory;
+                }
+            }
+        }
+        var q0 = new FractalParameters { SpinBinGpuPrecision = BlackHoleGpuPrecision.Single };
+        var snap = RegionFractalParams.Snapshot(FractalType.SpinningBinaryBasins, q0)!;
+        var report = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot
+        {
+            Fractal = FractalType.SpinningBinaryBasins, Parameters = q0, FamilyParams = snap.ToKeyValues(),
+        });
+        Assert.True(BatchOptions.TryParse(report.Args.ToArray(), 0, out var o, out var err), err);
+        var q = new FractalParameters();
+        RegionFractalParams.FromKeyValues(o.Params, FractalType.SpinningBinaryBasins, out var perr)!.ApplyTo(q);
+        Assert.Null(perr);
+        Assert.Equal(BlackHoleGpuPrecision.Single, q.SpinBinGpuPrecision);
+    }
+
 }

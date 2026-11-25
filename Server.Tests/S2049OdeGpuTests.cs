@@ -27,6 +27,8 @@ using Xunit;
 
 namespace FracturingFog.Server.Tests;
 
+// Shares the static OdeTraceBackends kernels (ResetForTests disposes them): one serial collection.
+[Collection(OdeGpuBackendsCollection.Name)]
 public sealed class S2049OdeGpuTests
 {
     private readonly ITestOutputHelper _out;
@@ -261,4 +263,13 @@ public sealed class S2049OdeGpuTests
         Assert.Contains(EnvVarCatalog.All, e => e.Name == "FF_GPU_ODE_BACKEND");
         Assert.True((FracturingFog.Rendering.OdeKernelSource.MaxBandPixels + 63) / FracturingFog.Rendering.OdeKernelSource.GroupSize <= 65535);
     }
+}
+
+/// <summary>#2049 — the ODE GPU test classes share OdeTraceBackends' static kernels; one test's
+/// ResetForTests disposed a Vulkan device another class's frame was using (a native use-after-free that
+/// crashed the test process). They run serially in this collection.</summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class OdeGpuBackendsCollection
+{
+    public const string Name = "OdeGpuBackends";
 }

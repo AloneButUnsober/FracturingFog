@@ -302,6 +302,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _sbPhi1 = _p.SpinBinPhi1; _sbPhi2 = _p.SpinBinPhi2; _sbR0 = _p.SpinBinSeparation; _sbV0 = _p.SpinBinVelocity;
         _sbRr = _p.SpinBinRadiationReaction; _sbOutcome = _p.SpinBinOutcome; _sbMerge = _p.SpinBinMergeRadius;
         _sbSeparate = _p.SpinBinSeparateRadius; _sbOrbits = _p.SpinBinMaxOrbits; _sbTol = _p.SpinBinTolerance;
+        _sbGpuPrecision = _p.SpinBinGpuPrecision;
         _mxView = _p.MixView; _mxUExit = _p.MixUExit; _mxOmegaDot = _p.MixOmegaDot; _mxOmega = _p.MixOmega;
         _mxAlphaDot = _p.MixAlphaDot; _mxBetaDot = _p.MixBetaDot; _mxMaxTime = _p.MixMaxTime; _mxTol = _p.MixTolerance;
         _brView = _p.BhRingView; _brMass = _p.BhRingMass; _brRadius = _p.BhRingRadius; _brE = _p.BhRingEnergy;
@@ -2582,6 +2583,9 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double SpinBinSeparateRadius { get => _sbSeparate; set { Set(ref _sbSeparate, Clamp(value, 3.0, 1e6)); _p.SpinBinSeparateRadius = _sbSeparate; Fire(); } }
     public double SpinBinMaxOrbits { get => _sbOrbits; set { Set(ref _sbOrbits, Clamp(value, 1.0, 100000.0)); _p.SpinBinMaxOrbits = _sbOrbits; Fire(); } }
     public double SpinBinTolerance { get => _sbTol; set { Set(ref _sbTol, Clamp(value, 1e-13, 1e-3)); _p.SpinBinTolerance = _sbTol; Fire(); } }
+    // #2049 — GPU precision.
+    private BlackHoleGpuPrecision _sbGpuPrecision = BlackHoleGpuPrecision.Double;
+    public BlackHoleGpuPrecision SpinBinGpuPrecision { get => _sbGpuPrecision; set { Set(ref _sbGpuPrecision, value); _p.SpinBinGpuPrecision = value; Fire(); } }
 
     // ── #1946 — Mixmaster ────────────────────────────────────────────────────
     private MixmasterView _mxView;

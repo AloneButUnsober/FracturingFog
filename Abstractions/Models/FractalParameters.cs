@@ -1590,6 +1590,8 @@ namespace FracturingFog.Models
         public double SpinBinMaxOrbits { get; set; } = 50.0;
         /// <summary>#1945 — integrator relative tolerance per step. Default 1e-9.</summary>
         public double SpinBinTolerance { get; set; } = 1e-9;
+        /// <summary>#2049 — GPU trace precision (with GPU render on). Default Double.</summary>
+        public BlackHoleGpuPrecision SpinBinGpuPrecision { get; set; } = BlackHoleGpuPrecision.Double;
 
         // ── Mixmaster (Bianchi IX) universe (#1946) ─────────────────────
         /// <summary>#1946 — launch space (see <see cref="FracturingFog.MixmasterView"/>). Default KasnerUV.</summary>
@@ -2970,6 +2972,7 @@ namespace FracturingFog.Models
                 SpinBinSeparateRadius = SpinBinSeparateRadius,
                 SpinBinMaxOrbits = SpinBinMaxOrbits,
                 SpinBinTolerance = SpinBinTolerance,
+                SpinBinGpuPrecision = SpinBinGpuPrecision,
                 MixView = MixView,
                 MixUExit = MixUExit,
                 MixOmegaDot = MixOmegaDot,

@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
 // #2049: --odegpuprobe [W H] [family] [preset...]. The GPU ODE template on each ported family
-// (henonheiles, threebody; default: all) against the CPU trace, on each named preset (default:
+// (henonheiles, threebody, spinningbinary; default: all) against the CPU trace, on each named preset (default:
 // every built-in preset of the family that integrates an ODE): D3D11 on the hardware device and
 // on WARP, and Vulkan, in double and single precision. Prints the time per frame and the pixels
 // whose outcome differs from the CPU, split into interior pixels (all 8 CPU neighbours share the
@@ -83,6 +83,21 @@ namespace FracturingFog
                         PlaneAt = (x, y, cx, cy, z) => ThreeBodyCalculator.PlaneAt(x + 0.5, y + 0.5, s_w, s_h, cx, cy, z),
                     };
                 }
+                case FractalType.SpinningBinaryBasins:
+                {
+                    var scene = SpinningBinaryScene.Build(p);
+                    p2.SpinBinTolerance *= 1.0 + 1e-12;
+                    var scene2 = SpinningBinaryScene.Build(p2);
+                    return new Adapter
+                    {
+                        Launch = (a, b, s) => { scene.LaunchState(a, b, s); return true; },
+                        CpuGate = (a, b) => { Span<double> s = stackalloc double[SpinningBinarySystem.StateSize]; return scene.Trace(a, b, s).Gate; },
+                        CpuGatePerturbed = (a, b) => { Span<double> s = stackalloc double[SpinningBinarySystem.StateSize]; return scene2.Trace(a, b, s).Gate; },
+                        Job = single => SpinningBinaryGpu.Job(scene, single),
+                        GpuGate = (r, i) => SpinningBinaryGpu.OutcomeOf(scene, r, i).Gate,
+                        PlaneAt = (x, y, cx, cy, z) => SpinningBinaryCalculator.PlaneAt(x + 0.5, y + 0.5, s_w, s_h, cx, cy, z),
+                    };
+                }
                 default:
                     return null;
             }
@@ -97,6 +112,7 @@ namespace FracturingFog
             var families = new Dictionary<string, FractalType>
             {
                 ["henonheiles"] = FractalType.HenonHeilesBasins, ["threebody"] = FractalType.ThreeBodyBasins,
+                ["spinningbinary"] = FractalType.SpinningBinaryBasins,
             };
             var wantTypes = words.Where(families.ContainsKey).Select(x => families[x]).ToHashSet();
             var names = words.Where(x => !families.ContainsKey(x)).ToArray();

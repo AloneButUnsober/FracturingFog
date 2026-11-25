@@ -866,6 +866,7 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? SpinBinSeparateRadius { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? SpinBinMaxOrbits { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? SpinBinTolerance { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? SpinBinGpuPrecision { get; set; }   // #2049
         // #1946 — Mixmaster (enum as int cast).
         [JsonIgnore(Condition = OmitNull)] public int? MixView { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? MixUExit { get; set; }
@@ -1599,6 +1600,7 @@ namespace FracturingFog.Models
                     SpinBinSeparateRadius = p.SpinBinSeparateRadius,
                     SpinBinMaxOrbits = p.SpinBinMaxOrbits,
                     SpinBinTolerance = p.SpinBinTolerance,
+                    SpinBinGpuPrecision = (int)p.SpinBinGpuPrecision,
                 },
                 // #1946 — Mixmaster: every setting.
                 FractalType.MixmasterBasins => new RegionFractalParams
@@ -2838,6 +2840,7 @@ namespace FracturingFog.Models
             if (SpinBinSeparateRadius.HasValue)   p.SpinBinSeparateRadius = SpinBinSeparateRadius.Value;
             if (SpinBinMaxOrbits.HasValue)        p.SpinBinMaxOrbits = SpinBinMaxOrbits.Value;
             if (SpinBinTolerance.HasValue)        p.SpinBinTolerance = SpinBinTolerance.Value;
+            if (SpinBinGpuPrecision is { } sgp && Enum.IsDefined(typeof(FracturingFog.BlackHoleGpuPrecision), sgp)) p.SpinBinGpuPrecision = (FracturingFog.BlackHoleGpuPrecision)sgp;   // #2049
             if (MixView is { } mxv && Enum.IsDefined(typeof(FracturingFog.MixmasterView), mxv)) p.MixView = (FracturingFog.MixmasterView)mxv;   // #1946
             if (MixUExit.HasValue)                p.MixUExit = MixUExit.Value;
             if (MixOmegaDot.HasValue)             p.MixOmegaDot = MixOmegaDot.Value;

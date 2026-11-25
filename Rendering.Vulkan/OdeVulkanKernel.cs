@@ -9,9 +9,11 @@
 // shaderFloat64 (VulkanContext.SupportsFloat64).
 //
 // Bindings (DXC shifts as the other Vulkan kernels): b0 -> 0 (integer UBO), t0 -> 100 (launch
-// states), t1 -> 101 (parameters), u0 -> 200 (outcomes). Chunks of OdeTraceBackends.ChunkItems
-// items; in each chunk, bands with one submit and wait per band, steered toward ~100 ms
-// (watchdog safety, as #1972) and capped at 65,535 groups (#2045).
+// states), t1 -> 101 (parameters), u0 -> 200 (outcomes), u1 -> 201 (resumable state), u2 -> 202
+// (running counter). Chunks of OdeTraceBackends.ChunkItems items (at most 4,096 groups, #2045);
+// in each chunk, resumable passes (OdeKernelSource), one submit and wait per pass, until no item
+// is still running, the step budget steered toward ~100 ms per pass (watchdog safety, as #1972,
+// by time per thread).
 
 using System;
 using System.Collections.Generic;
@@ -28,11 +30,11 @@ namespace FracturingFog.Rendering.Vulkan;
 public sealed unsafe class OdeVulkanKernel : IOdeTraceKernel
 {
     private const int TShift = 100, UShift = 200;
-    private const int Bindings = 4;
-    private static readonly uint[] s_binds = { 0, TShift, TShift + 1, UShift };
+    private const int Bindings = 6;
+    private static readonly uint[] s_binds = { 0, TShift, TShift + 1, UShift, UShift + 1, UShift + 2 };
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct Ints { public uint Count, BandStart, BandEnd, MaxSteps, Stride, Pad0, Pad1, Pad2; }
+    private struct Ints { public uint Count, FirstPass, StepBudget, MaxSteps, Stride, StateStride, Pad0, Pad1; }
 
     private struct Allocated { public Buffer Buffer; public DeviceMemory Memory; public ulong Size; }
 
@@ -46,7 +48,10 @@ public sealed unsafe class OdeVulkanKernel : IOdeTraceKernel
     private PipelineLayout _layout;
     private readonly Dictionary<(string, bool), (ShaderModule Mod, Pipeline Pipe)> _pipes = new();
     private Allocated _ints;
-    private int _bandItems = 4096;
+    private int _stepBudget = 256;
+    public const int MaxStepBudget = 1 << 20;
+    /// <summary>A pass count no finite job reaches; past it the trace fails instead of hanging.</summary>
+    public const long MaxPasses = 10_000_000;
     private bool _disposed;
 
     public string Backend => "Vulkan";
@@ -137,7 +142,7 @@ public sealed unsafe class OdeVulkanKernel : IOdeTraceKernel
         if (job.Count == 0) return result;
         lock (_gate)
         {
-            Allocated par = default, lbuf = default, obuf = default;
+            Allocated par = default, lbuf = default, obuf = default, sbuf = default, cbuf = default;
             DescriptorPool pool = default;
             try
             {
@@ -149,6 +154,9 @@ public sealed unsafe class OdeVulkanKernel : IOdeTraceKernel
                 int chunk = Math.Min(OdeTraceBackends.ChunkItems, job.Count);
                 lbuf = Alloc((ulong)(chunk * dim * es), BufferUsageFlags.StorageBufferBit);
                 obuf = Alloc((ulong)chunk * (ulong)stride * sizeof(uint), BufferUsageFlags.StorageBufferBit, readback: true);
+                int stateStride = OdeKernelSource.StateStride(dim, fam.Channels, dbl);
+                sbuf = Alloc((ulong)chunk * (ulong)stateStride * sizeof(uint), BufferUsageFlags.StorageBufferBit);
+                cbuf = Alloc(sizeof(uint), BufferUsageFlags.StorageBufferBit, readback: true);
 
                 var poolSizes = stackalloc DescriptorPoolSize[2]
                 {
@@ -161,7 +169,7 @@ public sealed unsafe class OdeVulkanKernel : IOdeTraceKernel
                 var dsai = new DescriptorSetAllocateInfo { SType = StructureType.DescriptorSetAllocateInfo, DescriptorPool = pool, DescriptorSetCount = 1, PSetLayouts = &dsl };
                 DescriptorSet set;
                 Check(_vk.AllocateDescriptorSets(_device, in dsai, &set), "vkAllocateDescriptorSets");
-                Buffer* bufs = stackalloc Buffer[Bindings] { _ints.Buffer, lbuf.Buffer, par.Buffer, obuf.Buffer };
+                Buffer* bufs = stackalloc Buffer[Bindings] { _ints.Buffer, lbuf.Buffer, par.Buffer, obuf.Buffer, sbuf.Buffer, cbuf.Buffer };
                 var infos = stackalloc DescriptorBufferInfo[Bindings];
                 var writes = stackalloc WriteDescriptorSet[Bindings];
                 for (int i = 0; i < Bindings; i++)
@@ -183,19 +191,30 @@ public sealed unsafe class OdeVulkanKernel : IOdeTraceKernel
                     int n = Math.Min(chunk, job.Count - first);
                     job.Launches(first, n, launch);
                     WriteReals(lbuf, launch.AsSpan(0, n * dim), dbl);
-                    int start = 0;
-                    while (start < n)
+                    uint groups = (uint)((n + OdeKernelSource.GroupSize - 1) / OdeKernelSource.GroupSize);
+                    bool firstPass = true;
+                    long passes = 0;
+                    while (true)
                     {
                         if (ct.IsCancellationRequested) return null;
-                        int end = Math.Min(n, start + _bandItems);
-                        var ints = new Ints { Count = (uint)n, BandStart = (uint)start, BandEnd = (uint)end, MaxSteps = (uint)Math.Max(1, job.MaxSteps), Stride = (uint)stride };
+                        if (++passes > MaxPasses) throw new InvalidOperationException($"ODE kernel still running after {MaxPasses} passes");
+                        uint zero = 0;
+                        Write(cbuf, &zero, sizeof(uint));
+                        var ints = new Ints
+                        {
+                            Count = (uint)n, FirstPass = firstPass ? 1u : 0u, StepBudget = (uint)_stepBudget,
+                            MaxSteps = (uint)Math.Max(1, job.MaxSteps), Stride = (uint)stride, StateStride = (uint)stateStride,
+                        };
                         Write(_ints, &ints, sizeof(Ints));
                         long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
-                        Submit(pipe, set, (uint)((end - start + OdeKernelSource.GroupSize - 1) / OdeKernelSource.GroupSize));
+                        Submit(pipe, set, groups);
                         double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                        firstPass = false;
+                        uint running = 0;
+                        Read(cbuf, new Span<byte>(&running, sizeof(uint)));
+                        if (running == 0) break;
                         double scale = ms > 0.01 ? Math.Clamp(BandTargetMs / ms, 0.25, 4.0) : 4.0;
-                        _bandItems = (int)Math.Clamp(_bandItems * scale, 256, OdeKernelSource.MaxBandPixels);
-                        start = end;
+                        _stepBudget = (int)Math.Clamp(_stepBudget * scale, 16, MaxStepBudget);
                     }
                     Read(obuf, MemoryMarshal.AsBytes(words.AsSpan(0, n * stride)));
                     OdeTraceBackends.Decode(words, first, n, fam, !dbl, result);
@@ -211,7 +230,7 @@ public sealed unsafe class OdeVulkanKernel : IOdeTraceKernel
             finally
             {
                 if (pool.Handle != 0) _vk.DestroyDescriptorPool(_device, pool, null);
-                Free(ref par); Free(ref lbuf); Free(ref obuf);
+                Free(ref par); Free(ref lbuf); Free(ref obuf); Free(ref sbuf); Free(ref cbuf);
             }
         }
     }

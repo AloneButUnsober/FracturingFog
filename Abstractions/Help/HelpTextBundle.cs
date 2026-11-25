@@ -6278,6 +6278,15 @@ Slow: every pixel integrates a 13-variable system for up to
 the orbit cap (seconds for a small frame, minutes for a large
 one). Use the drag preview and small frames to explore.
 
+With GPU render on (Lighting & FX) the binaries run on the GPU
+(D3D11, else Vulkan) with the same equations and integrator, step
+for step. Double precision gives the CPU's outcome on every pixel
+tested, but on most consumer cards doubles are slow (the GT 710
+runs them at a tenth of the CPU's speed); Single precision, its
+tolerance floored at 2e-5, is a few times faster than the CPU and
+moves a few boundary pixels. FF_GPU_ODE picks gpu / cpu / auto
+(auto measures the first GPU frame and keeps the faster).
+
 --- Batch ---
 
 Every setting is a --param key:
