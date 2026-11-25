@@ -54,6 +54,8 @@
     <Compile Include="..\Rendering.D3D\BlackHoleKernelSource.cs" Link="Shared\BlackHoleKernelSource.cs" />
     <!-- #2024: the Cosmic Web volume raymarch, shared with D3D11 (FXC). -->
     <Compile Include="..\Rendering.D3D\CosmicWebVolumeKernelSource.cs" Link="Shared\CosmicWebVolumeKernelSource.cs" />
+    <!-- #2049: the GPU ODE template (scattering families), shared with D3D11 (FXC). -->
+    <Compile Include="..\Rendering.D3D\OdeKernelSource.cs" Link="Shared\OdeKernelSource.cs" />
   </ItemGroup>
 
 </Project>

@@ -1511,6 +1511,12 @@ namespace FracturingFog.Models
         public double HenonHeilesMaxTime { get; set; } = 200.0;
         /// <summary>#1942 — integrator relative tolerance per step. Default 1e-8.</summary>
         public double HenonHeilesTolerance { get; set; } = 1e-8;
+        /// <summary>#2049 — GPU trace precision (with GPU render on). Default Double.</summary>
+        public BlackHoleGpuPrecision HenonHeilesGpuPrecision { get; set; } = BlackHoleGpuPrecision.Double;
+        /// <summary>#2049 — shade each exit colour by escape time (Exit channel, no billiard theme). Default true.</summary>
+        public bool HenonHeilesShadeExits { get; set; } = true;
+        /// <summary>#2049 — solid blocks: fill uniform 16 x 16 tiles from their traced ring (only with flat exit colours). Default off.</summary>
+        public bool HenonHeilesSolidBlocks { get; set; }
 
         // ── Restricted three-body basins (#1943) ─────────────────────────
         /// <summary>#1943 — Fates or Lagrange basins (see <see cref="FracturingFog.ThreeBodyView"/>). Default Fates.</summary>
@@ -2926,6 +2932,9 @@ namespace FracturingFog.Models
                 HenonHeilesChannelScale = HenonHeilesChannelScale,
                 HenonHeilesMaxTime = HenonHeilesMaxTime,
                 HenonHeilesTolerance = HenonHeilesTolerance,
+                HenonHeilesGpuPrecision = HenonHeilesGpuPrecision,
+                HenonHeilesShadeExits = HenonHeilesShadeExits,
+                HenonHeilesSolidBlocks = HenonHeilesSolidBlocks,
                 ThreeBodyView = ThreeBodyView,
                 ThreeBodyMassRatio = ThreeBodyMassRatio,
                 ThreeBodyJacobi = ThreeBodyJacobi,

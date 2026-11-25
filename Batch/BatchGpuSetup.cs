@@ -123,6 +123,8 @@ namespace FracturingFog.Batch
             FracturingFog.Calculators.Gpu.BlackHoleTraceBackends.VulkanFactory ??= () => FracturingFog.Rendering.Vulkan.BlackHoleVulkanKernel.TryCreateWithOwnContext();
             // #2024: the Cosmic Web volume raymarch's Vulkan backend.
             FracturingFog.Calculators.Gpu.CosmicWebVolumeBackends.VulkanFactory ??= () => FracturingFog.Rendering.Vulkan.CosmicWebVolumeVulkanKernel.TryCreateWithOwnContext();
+            // #2049: the ODE families' Vulkan backend.
+            FracturingFog.Calculators.Gpu.OdeTraceBackends.VulkanFactory ??= () => FracturingFog.Rendering.Vulkan.OdeVulkanKernel.TryCreateWithOwnContext();
             var d3dRelief = BootstrapHooks.HeadlessReliefKernelFactoryHook;
             var d3dFroxel = BootstrapHooks.HeadlessFroxelKernelFactoryHook;
             bool d3d = BootstrapHooks.HeadlessGpuKernelFactoryHook != null;

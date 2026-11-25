@@ -1572,7 +1572,7 @@
         <!-- #1942 — Hénon-Heiles exit basins. -->
         <Grid IsVisible="{Binding IsHenonHeilesBasins}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Energy:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="0" Grid.Column="1"
                            Minimum="0" Maximum="10" Increment="0.01" FormatString="0.##########"
@@ -1616,7 +1616,17 @@
             <CheckBox Grid.Row="8" Grid.Column="1" Content="Adaptive anti-aliasing"
                       IsChecked="{Binding AdaptiveAa, Mode=TwoWay}" Margin="0,2"
                       ToolTip.Tip="With the High / Ultra / Extreme quality presets, re-trace only the pixels that differ from a neighbour (the basin boundaries). Also used by export and --batch." />
-            <TextBlock Grid.Row="9" Grid.Column="1"
+            <CheckBox Grid.Row="9" Grid.Column="1" Content="Shade exits by escape time"
+                      IsChecked="{Binding HenonHeilesShadeExits, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Darken each exit colour the longer the particle stays inside. Off: one flat colour per exit (needed for solid blocks)." />
+            <CheckBox Grid.Row="10" Grid.Column="1" Content="Solid blocks (flat colours)"
+                      IsChecked="{Binding HenonHeilesSolidBlocks, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="With flat exit colours, trace only the ring of each 16 x 16 tile and fill tiles whose ring has one outcome. Faster; can miss an island of another exit smaller than a tile. CPU path." />
+            <TextBlock Grid.Row="11" Grid.Column="0" Text="GPU precision:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="11" Grid.Column="1" ItemsSource="{Binding BlackHoleGpuPrecisions}"
+                      SelectedItem="{Binding HenonHeilesGpuPrecision, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="With GPU render on (Lighting &amp; FX): Double matches the CPU except at chaotic boundary pixels; Single is faster on GPUs with slow doubles and moves more boundary pixels." />
+            <TextBlock Grid.Row="12" Grid.Column="1"
                        Text="Each exit channel is its own colour (up, lower left, lower right); dark grey is the potential wall where no launch has this energy. A Billiard theme colours the exits directly."
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
         </Grid>

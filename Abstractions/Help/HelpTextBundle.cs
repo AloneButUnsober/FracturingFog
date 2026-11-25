@@ -6599,6 +6599,24 @@ SaddleDistance: how close it came to a saddle point.
 'Channel scale' sets the palette density of the last three.
 Relief 3D uses the log escape time as height.
 
+Shade exits by escape time: on by default; off gives one flat colour
+per exit, which allows Solid blocks: each 16 x 16 tile's ring is
+traced and a tile whose ring has a single outcome is filled
+(about 2.6x faster on the Exit Basins view, the same picture there;
+an island of another exit smaller than a tile could be missed).
+
+--- GPU ---
+
+With GPU render on (Lighting & FX) the trajectories run on the GPU
+(D3D11, else Vulkan; FF_GPU_ODE_BACKEND picks one) with the same
+integrator, step for step, and the same colouring. Double precision
+gives every pixel inside a basin the CPU's exit; a few boundary
+pixels, where the motion is chaotic, can differ. Single precision is
+much faster on GPUs with slow doubles (most consumer cards) and moves
+more boundary pixels. Auto (FF_GPU_HENON_HEILES unset) measures the
+first GPU frame against the CPU and keeps the faster; set it to gpu
+or cpu to force one.
+
 --- Presets ---
 
 Henon-Heiles - Exit Basins

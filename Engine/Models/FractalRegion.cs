@@ -827,6 +827,9 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? HenonHeilesChannelScale { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? HenonHeilesMaxTime { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? HenonHeilesTolerance { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? HenonHeilesGpuPrecision { get; set; }   // #2049
+        [JsonIgnore(Condition = OmitNull)] public bool? HenonHeilesShadeExits { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? HenonHeilesSolidBlocks { get; set; }
         // #1943 — restricted three-body basins (enums as int casts).
         [JsonIgnore(Condition = OmitNull)] public int? ThreeBodyView { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? ThreeBodyMassRatio { get; set; }
@@ -1547,6 +1550,9 @@ namespace FracturingFog.Models
                     HenonHeilesChannelScale = p.HenonHeilesChannelScale,
                     HenonHeilesMaxTime = p.HenonHeilesMaxTime,
                     HenonHeilesTolerance = p.HenonHeilesTolerance,
+                    HenonHeilesGpuPrecision = (int)p.HenonHeilesGpuPrecision,
+                    HenonHeilesShadeExits = p.HenonHeilesShadeExits,
+                    HenonHeilesSolidBlocks = p.HenonHeilesSolidBlocks,
                 },
                 // #1943 — restricted three-body basins: every setting.
                 FractalType.ThreeBodyBasins => new RegionFractalParams
@@ -2794,6 +2800,9 @@ namespace FracturingFog.Models
             if (HenonHeilesChannelScale.HasValue) p.HenonHeilesChannelScale = HenonHeilesChannelScale.Value;
             if (HenonHeilesMaxTime.HasValue)      p.HenonHeilesMaxTime = HenonHeilesMaxTime.Value;
             if (HenonHeilesTolerance.HasValue)    p.HenonHeilesTolerance = HenonHeilesTolerance.Value;
+            if (HenonHeilesGpuPrecision is { } hgp && Enum.IsDefined(typeof(FracturingFog.BlackHoleGpuPrecision), hgp)) p.HenonHeilesGpuPrecision = (FracturingFog.BlackHoleGpuPrecision)hgp;   // #2049
+            if (HenonHeilesShadeExits.HasValue)   p.HenonHeilesShadeExits = HenonHeilesShadeExits.Value;
+            if (HenonHeilesSolidBlocks.HasValue)  p.HenonHeilesSolidBlocks = HenonHeilesSolidBlocks.Value;
             if (ThreeBodyView is { } tbv && Enum.IsDefined(typeof(FracturingFog.ThreeBodyView), tbv)) p.ThreeBodyView = (FracturingFog.ThreeBodyView)tbv;   // #1943
             if (ThreeBodyMassRatio.HasValue)      p.ThreeBodyMassRatio = ThreeBodyMassRatio.Value;
             if (ThreeBodyJacobi.HasValue)         p.ThreeBodyJacobi = ThreeBodyJacobi.Value;
