@@ -138,7 +138,7 @@ public sealed class CosmicWebVolumeD3D11Kernel : ICosmicWebVolumeKernel
                     }
                     double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
                     double scale = ms > 0.01 ? Math.Clamp(BandTargetMs / ms, 0.25, 4.0) : 4.0;
-                    _bandPixels = (int)Math.Clamp(_bandPixels * scale, 256, 1 << 21);   // <= 32768 groups (D3D11 caps a dimension at 65535)
+                    _bandPixels = (int)Math.Clamp(_bandPixels * scale, 256, CosmicWebVolumeKernelSource.MaxBandPixels);   // #2045
                     start = end;
                 }
                 _ctx.CSSetUnorderedAccessView(0, null);

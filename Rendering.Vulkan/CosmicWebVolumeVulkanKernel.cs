@@ -198,7 +198,7 @@ public sealed unsafe class CosmicWebVolumeVulkanKernel : ICosmicWebVolumeKernel
                     Submit(pipe, set, (uint)((end - start + CosmicWebVolumeKernelSource.GroupSize - 1) / CosmicWebVolumeKernelSource.GroupSize));
                     double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
                     double scale = ms > 0.01 ? Math.Clamp(BandTargetMs / ms, 0.25, 4.0) : 4.0;
-                    _bandPixels = (int)Math.Clamp(_bandPixels * scale, 256, 1 << 21);
+                    _bandPixels = (int)Math.Clamp(_bandPixels * scale, 256, CosmicWebVolumeKernelSource.MaxBandPixels);   // #2045
                     start = end;
                 }
 

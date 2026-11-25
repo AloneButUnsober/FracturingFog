@@ -37,6 +37,9 @@ public static class BlackHoleKernelSource
 {
     public const string Entry = "BhTrace";
     public const int GroupSize = 64;
+    /// <summary>#2045 — the largest band one dispatch may trace: 65,535 groups (D3D11's per-dimension
+    /// limit and Vulkan's guaranteed minimum maxComputeWorkGroupCount[0]) of GroupSize pixels.</summary>
+    public const int MaxBandPixels = 65535 * GroupSize;
 
     /// <summary>Index of each parameter in the t0 buffer.</summary>
     public const int PCenterX = 0, PCenterY = 1, PPitch = 2, PHoles = 3 /* 5 per hole: x y z m cap² */,

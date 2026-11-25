@@ -23,6 +23,9 @@ public static class CosmicWebVolumeKernelSource
 {
     public const string Entry = "CwVolume";
     public const int GroupSize = 64;
+    /// <summary>#2045 — the largest band one dispatch may march: 65,535 groups (D3D11's per-dimension limit
+    /// and Vulkan's guaranteed minimum maxComputeWorkGroupCount[0]) of GroupSize pixels.</summary>
+    public const int MaxBandPixels = 65535 * GroupSize;
 
     public const string Source = """
 cbuffer CwInts : register(b0)

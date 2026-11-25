@@ -197,7 +197,7 @@ public sealed unsafe class BlackHoleVulkanKernel : IBlackHoleTraceKernel
                     Submit(pipe, set, (uint)((end - start + BlackHoleKernelSource.GroupSize - 1) / BlackHoleKernelSource.GroupSize));
                     double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
                     double scale = ms > 0.01 ? Math.Clamp(BandTargetMs / ms, 0.25, 4.0) : 4.0;
-                    _bandPixels = (int)Math.Clamp(_bandPixels * scale, 256, 1 << 22);
+                    _bandPixels = (int)Math.Clamp(_bandPixels * scale, 256, BlackHoleKernelSource.MaxBandPixels);   // #2045
                     start = end;
                 }
 
