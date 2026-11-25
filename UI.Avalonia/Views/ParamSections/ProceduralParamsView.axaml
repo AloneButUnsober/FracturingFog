@@ -2039,7 +2039,7 @@
         <!-- #2021 - Cosmic Web (Soneira &amp; Peebles 1978 hierarchical clustering). -->
         <Grid IsVisible="{Binding IsCosmicWeb}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Generator:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding CosmicWebGenerators}"
                       SelectedItem="{Binding CosmicWebGenerator, Mode=TwoWay}" Margin="0,2"
@@ -2092,11 +2092,11 @@
             <TextBlock Grid.Row="15" Grid.Column="0" Text="Point cap:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsSoneiraPeebles}" />
             <NumericUpDown Grid.Row="15" Grid.Column="1" IsVisible="{Binding CosmicWebIsSoneiraPeebles}" Minimum="1" Maximum="16000000" Increment="100000" FormatString="0"
                            Value="{Binding CosmicWebPointCap, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Most galaxies generated (up to 16,000,000). Whole clumps past the cap are dropped; the status bar says when that happens." />
-            <TextBlock Grid.Row="16" Grid.Column="0" Text="Point size (px):" VerticalAlignment="Center" />
-            <NumericUpDown Grid.Row="16" Grid.Column="1" Minimum="0" Maximum="8" Increment="0.25" FormatString="0.##"
+            <TextBlock Grid.Row="16" Grid.Column="0" Text="Point size (px):" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsSplat}" />
+            <NumericUpDown Grid.Row="16" Grid.Column="1" IsVisible="{Binding CosmicWebIsSplat}" Minimum="0" Maximum="8" Increment="0.25" FormatString="0.##"
                            Value="{Binding CosmicWebPointSize, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Splat radius in pixels; below 0.75 each galaxy lands on one pixel." />
-            <TextBlock Grid.Row="17" Grid.Column="0" Text="Depth fade:" VerticalAlignment="Center" />
-            <NumericUpDown Grid.Row="17" Grid.Column="1" Minimum="0" Maximum="1" Increment="0.05" FormatString="0.##"
+            <TextBlock Grid.Row="17" Grid.Column="0" Text="Depth fade:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsSplat}" />
+            <NumericUpDown Grid.Row="17" Grid.Column="1" IsVisible="{Binding CosmicWebIsSplat}" Minimum="0" Maximum="1" Increment="0.05" FormatString="0.##"
                            Value="{Binding CosmicWebDepthFade, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="How much a galaxy at the back of the box is dimmed (0: not at all, 1: to nothing)." />
             <TextBlock Grid.Row="18" Grid.Column="0" Text="Colour:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="18" Grid.Column="1" ItemsSource="{Binding CosmicWebColours}"
@@ -2126,6 +2126,24 @@
                            Value="{Binding CosmicWebMeasureSample, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Points sampled at random for the pair counts. More points: less noise at small r, and the time grows as the square." />
             <CheckBox Grid.Row="27" Grid.Column="1" Content="Draw D(r) inset" IsVisible="{Binding CosmicWebMeasure}" IsChecked="{Binding CosmicWebDimensionOverlay, Mode=TwoWay}" Margin="0,2"
                       ToolTip.Tip="Plot D(r) against r along the bottom of the frame (also in batch and poster exports). Orange: measured. Dashed sky blue: D = 3, homogeneous. Dashed green: the Soneira-Peebles model D." />
+            <TextBlock Grid.Row="28" Grid.Column="0" Text="Render:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="28" Grid.Column="1" ItemsSource="{Binding CosmicWebRenders}" SelectedItem="{Binding CosmicWebRender, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Splat: every point drawn as a dot. Volume: the points deposited on a density grid (cloud-in-cell) and raymarched as glowing, absorbing gas, on the GPU (D3D11 or Vulkan) when there is one." />
+            <TextBlock Grid.Row="29" Grid.Column="0" Text="Volume grid:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsVolume}" />
+            <ComboBox Grid.Row="29" Grid.Column="1" IsVisible="{Binding CosmicWebIsVolume}" ItemsSource="{Binding CosmicWebVolumeGrids}" SelectedItem="{Binding CosmicWebVolumeGrid, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Density cells per side. 256 is sharper and takes 64 MB on the GPU." />
+            <TextBlock Grid.Row="30" Grid.Column="0" Text="Volume smoothing:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsVolume}" />
+            <NumericUpDown Grid.Row="30" Grid.Column="1" IsVisible="{Binding CosmicWebIsVolume}" Minimum="0" Maximum="8" Increment="0.25" FormatString="0.##"
+                           Value="{Binding CosmicWebVolumeSmoothing, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Gaussian smoothing of the density in cells: hides the grain of sparse points." />
+            <TextBlock Grid.Row="31" Grid.Column="0" Text="Volume opacity:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsVolume}" />
+            <NumericUpDown Grid.Row="31" Grid.Column="1" IsVisible="{Binding CosmicWebIsVolume}" Minimum="0" Maximum="1000" Increment="1" FormatString="0.##"
+                           Value="{Binding CosmicWebVolumeOpacity, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="How strongly dense gas blocks what is behind it (per box side at the densest cell). Low: see through the whole box." />
+            <TextBlock Grid.Row="32" Grid.Column="0" Text="Volume brightness:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsVolume}" />
+            <NumericUpDown Grid.Row="32" Grid.Column="1" IsVisible="{Binding CosmicWebIsVolume}" Minimum="0" Maximum="1000" Increment="1" FormatString="0.##"
+                           Value="{Binding CosmicWebVolumeBrightness, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="How brightly the gas glows, apart from how much it blocks. With a low gamma, raise this." />
+            <TextBlock Grid.Row="33" Grid.Column="0" Text="Volume steps:" VerticalAlignment="Center" IsVisible="{Binding CosmicWebIsVolume}" />
+            <NumericUpDown Grid.Row="33" Grid.Column="1" IsVisible="{Binding CosmicWebIsVolume}" Minimum="8" Maximum="4096" Increment="32" FormatString="0"
+                           Value="{Binding CosmicWebVolumeSteps, Mode=TwoWay}" Margin="0,2" ToolTip.Tip="Samples along a ray across the box diagonal. About 1.5 to 3 per grid cell is enough." />
         </Grid>
 
     </StackPanel>

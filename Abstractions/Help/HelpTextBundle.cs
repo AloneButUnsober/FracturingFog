@@ -5824,11 +5824,30 @@ exports carry it. The measurement is cached per point set, so camera
 moves do not repeat it; more sample points mean less noise at small r
 and time growing as the square (20,000 points: well under a second).
 
+Volume render
+Render = Volume draws the points as glowing gas instead of dots. The
+particles are deposited on a density grid of 32 to 256 cells per side
+by cloud-in-cell assignment (each particle shares its mass among the 8
+nearest cells; Birdsall and Fuss 1969), optionally smoothed, mapped to
+log density, and raymarched: each step along a ray absorbs light in
+proportion to the density (Volume opacity) and adds the theme colour,
+brightened by Volume brightness and density^(1/gamma) (the standard
+emission-absorption model of volume rendering). Colour Depth colours by
+depth across the box, Density by density.
+It runs on the GPU when there is one (D3D11, else Vulkan; the
+FF_GPU_COSMIC_WEB variable picks auto, cpu, d3d11 or vulkan) and on the
+CPU otherwise, with the same result to a unit or so per colour channel.
+The grid is kept between frames, so orbiting only re-marches. The
+status bar shows the grid, its peak density, the steps, the backend
+and the time. Sparse point sets (Soneira-Peebles) look grainy as a
+volume; the Zel'dovich particles suit it. Splat stays the default.
+
 Settings: Generator, Placement, eta (UniformSphere), lambda, First
 ratio (d1/d2), Top size (d1 or the sphere radius, Mpc/h), Levels,
 Clumps, Box size (periodic, Mpc/h), Seed, Point cap (whole clumps past
 it are dropped; the status bar says so), Point size, Depth fade, Colour,
-Gamma, Measure D(r), D(r) sample, Draw D(r) inset, and
+Gamma, Measure D(r), D(r) sample, Draw D(r) inset, Render, Volume
+grid, smoothing, opacity, brightness and steps, and
 the camera (distance in box sides, azimuth, polar angle).
 
 The status bar shows the galaxy and clump counts and the model's D
@@ -5841,6 +5860,7 @@ Presets:
   Cosmic Web - Zeldovich Web Forming              D = 1, animated
   Cosmic Web - Zeldovich Mature Web               past shell crossing
   Cosmic Web - Measured D(r)                      the D(r) inset
+  Cosmic Web - Zeldovich Volume                   the web as gas
 
 Batch: every setting is a --param CosmicWeb* key, the camera is
 Cam3DFamily=CosmicWeb with Cam3DDistance / Cam3DTheta / Cam3DPhi, e.g.

@@ -324,6 +324,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _cwColour = _p.CosmicWebColour; _cwGamma = _p.CosmicWebGamma;
         _cwGrid = _p.CosmicWebGrid; _cwIndex = _p.CosmicWebSpectralIndex; _cwSmooth = _p.CosmicWebSmoothing; _cwGrowth = _p.CosmicWebGrowth;
         _cwMeasure = _p.CosmicWebMeasure; _cwSample = _p.CosmicWebMeasureSample; _cwDOverlay = _p.CosmicWebDimensionOverlay;
+        _cwRender = _p.CosmicWebRender; _cwVGrid = _p.CosmicWebVolumeGrid; _cwVSmooth = _p.CosmicWebVolumeSmoothing;
+        _cwVOpacity = _p.CosmicWebVolumeOpacity; _cwVSteps = _p.CosmicWebVolumeSteps; _cwVBright = _p.CosmicWebVolumeBrightness;
         _cwDist = _p.CosmicWebCameraDistance; _cwTheta = _p.CosmicWebCameraTheta; _cwPhi = _p.CosmicWebCameraPhi;
         _uhMaxTime = _p.UserHamMaxTime; _uhTol = _p.UserHamTolerance; _uhMaxStep = _p.UserHamMaxStep; _uhProject = _p.UserHamProjectEvery;
         _mathPlaneScene = _p.MathPlaneScene ?? string.Empty;
@@ -2653,6 +2655,25 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool CosmicWebMeasure { get => _cwMeasure; set { Set(ref _cwMeasure, value); _p.CosmicWebMeasure = value; Fire(); } }
     public int CosmicWebMeasureSample { get => _cwSample; set { Set(ref _cwSample, (int)Clamp(value, 1000, 100000)); _p.CosmicWebMeasureSample = _cwSample; Fire(); } }
     public bool CosmicWebDimensionOverlay { get => _cwDOverlay; set { Set(ref _cwDOverlay, value); _p.CosmicWebDimensionOverlay = value; Fire(); } }
+    // #2024 — volume render.
+    private CosmicWebRender _cwRender;
+    private int _cwVGrid, _cwVSteps;
+    private double _cwVSmooth, _cwVOpacity, _cwVBright;
+    public double CosmicWebVolumeBrightness { get => _cwVBright; set { Set(ref _cwVBright, Clamp(value, 0.0, 1000.0)); _p.CosmicWebVolumeBrightness = _cwVBright; Fire(); } }
+    public CosmicWebRender CosmicWebRender
+    {
+        get => _cwRender;
+        set { Set(ref _cwRender, value); _p.CosmicWebRender = value; this.RaisePropertyChanged(nameof(CosmicWebIsVolume)); this.RaisePropertyChanged(nameof(CosmicWebIsSplat)); Fire(); }
+    }
+    public System.Array CosmicWebRenders => s_CosmicWebRenders;
+    private static readonly System.Array s_CosmicWebRenders = System.Enum.GetValues(typeof(CosmicWebRender));
+    public bool CosmicWebIsVolume => _cwRender == CosmicWebRender.Volume;
+    public bool CosmicWebIsSplat => _cwRender == CosmicWebRender.Splat;
+    public int CosmicWebVolumeGrid { get => _cwVGrid; set { Set(ref _cwVGrid, (int)Clamp(value, 32, 256)); _p.CosmicWebVolumeGrid = _cwVGrid; Fire(); } }
+    public System.Collections.Generic.IReadOnlyList<int> CosmicWebVolumeGrids { get; } = new[] { 32, 64, 128, 256 };
+    public double CosmicWebVolumeSmoothing { get => _cwVSmooth; set { Set(ref _cwVSmooth, Clamp(value, 0.0, 8.0)); _p.CosmicWebVolumeSmoothing = _cwVSmooth; Fire(); } }
+    public double CosmicWebVolumeOpacity { get => _cwVOpacity; set { Set(ref _cwVOpacity, Clamp(value, 0.0, 1000.0)); _p.CosmicWebVolumeOpacity = _cwVOpacity; Fire(); } }
+    public int CosmicWebVolumeSteps { get => _cwVSteps; set { Set(ref _cwVSteps, (int)Clamp(value, 8, 4096)); _p.CosmicWebVolumeSteps = _cwVSteps; Fire(); } }
     public System.Array CosmicWebGenerators => s_CosmicWebGenerators;
     private static readonly System.Array s_CosmicWebGenerators = System.Enum.GetValues(typeof(CosmicWebGenerator));
     public CosmicWebPlacement CosmicWebPlacement

@@ -121,6 +121,8 @@ namespace FracturingFog.Batch
         {
             // #1972: the black hole trace's Vulkan backend (the D3D11 one is set by the Windows bootstrap).
             FracturingFog.Calculators.Gpu.BlackHoleTraceBackends.VulkanFactory ??= () => FracturingFog.Rendering.Vulkan.BlackHoleVulkanKernel.TryCreateWithOwnContext();
+            // #2024: the Cosmic Web volume raymarch's Vulkan backend.
+            FracturingFog.Calculators.Gpu.CosmicWebVolumeBackends.VulkanFactory ??= () => FracturingFog.Rendering.Vulkan.CosmicWebVolumeVulkanKernel.TryCreateWithOwnContext();
             var d3dRelief = BootstrapHooks.HeadlessReliefKernelFactoryHook;
             var d3dFroxel = BootstrapHooks.HeadlessFroxelKernelFactoryHook;
             bool d3d = BootstrapHooks.HeadlessGpuKernelFactoryHook != null;

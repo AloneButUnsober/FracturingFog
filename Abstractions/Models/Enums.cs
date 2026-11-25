@@ -1456,6 +1456,9 @@ namespace FracturingFog
     /// display). <see cref="Density"/>: the theme at the log density (as the strange attractors).</summary>
     public enum CosmicWebColour { Depth, Density }
 
+    /// <summary>#2024 — how the Cosmic Web points are drawn: a point splat, or a raymarched CIC density volume.</summary>
+    public enum CosmicWebRender { Splat, Volume }
+
     /// <summary>Launch space of <see cref="FractalType.UserPotentialBasins"/> (#1994), as
     /// <see cref="HenonHeilesView"/>: Plane (pixel = position) or Section (pixel = (y, vy) on x = 0).</summary>
     public enum UserPotentialView { Plane, Section }

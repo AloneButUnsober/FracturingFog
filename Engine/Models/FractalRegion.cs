@@ -956,6 +956,13 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public bool? CosmicWebMeasure { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? CosmicWebMeasureSample { get; set; }
         [JsonIgnore(Condition = OmitNull)] public bool? CosmicWebDimensionOverlay { get; set; }
+        // #2024 — volume render.
+        [JsonIgnore(Condition = OmitNull)] public int? CosmicWebRender { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? CosmicWebVolumeGrid { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? CosmicWebVolumeSmoothing { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? CosmicWebVolumeOpacity { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? CosmicWebVolumeSteps { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? CosmicWebVolumeBrightness { get; set; }
         // #1507 — int cast of BilliardRayColorSource.
         [JsonIgnore(Condition = OmitNull)] public int? BilliardRaysColorSource { get; set; }
         // #1508 — crossings (int casts of BilliardRayMode / BilliardCrossingValue).
@@ -1671,6 +1678,12 @@ namespace FracturingFog.Models
                     CosmicWebMeasure = p.CosmicWebMeasure,
                     CosmicWebMeasureSample = p.CosmicWebMeasureSample,
                     CosmicWebDimensionOverlay = p.CosmicWebDimensionOverlay,
+                    CosmicWebRender = (int)p.CosmicWebRender,
+                    CosmicWebVolumeGrid = p.CosmicWebVolumeGrid,
+                    CosmicWebVolumeSmoothing = p.CosmicWebVolumeSmoothing,
+                    CosmicWebVolumeOpacity = p.CosmicWebVolumeOpacity,
+                    CosmicWebVolumeSteps = p.CosmicWebVolumeSteps,
+                    CosmicWebVolumeBrightness = p.CosmicWebVolumeBrightness,
                 },
                 // #1948 — microlensing: every setting.
                 FractalType.MicrolensingMap => new RegionFractalParams
@@ -2884,6 +2897,12 @@ namespace FracturingFog.Models
             if (CosmicWebMeasure.HasValue)    p.CosmicWebMeasure = CosmicWebMeasure.Value;   // #2023
             if (CosmicWebMeasureSample.HasValue) p.CosmicWebMeasureSample = CosmicWebMeasureSample.Value;
             if (CosmicWebDimensionOverlay.HasValue) p.CosmicWebDimensionOverlay = CosmicWebDimensionOverlay.Value;
+            if (CosmicWebRender is { } cwr && Enum.IsDefined(typeof(FracturingFog.CosmicWebRender), cwr)) p.CosmicWebRender = (FracturingFog.CosmicWebRender)cwr;   // #2024
+            if (CosmicWebVolumeGrid.HasValue) p.CosmicWebVolumeGrid = CosmicWebVolumeGrid.Value;
+            if (CosmicWebVolumeSmoothing.HasValue) p.CosmicWebVolumeSmoothing = CosmicWebVolumeSmoothing.Value;
+            if (CosmicWebVolumeOpacity.HasValue) p.CosmicWebVolumeOpacity = CosmicWebVolumeOpacity.Value;
+            if (CosmicWebVolumeSteps.HasValue) p.CosmicWebVolumeSteps = CosmicWebVolumeSteps.Value;
+            if (CosmicWebVolumeBrightness.HasValue) p.CosmicWebVolumeBrightness = CosmicWebVolumeBrightness.Value;
             if (BilliardRaysColorSource.HasValue) p.BilliardRaysColorSource = (FracturingFog.BilliardRayColorSource)BilliardRaysColorSource.Value;
             if (BilliardRaysMode.HasValue)       p.BilliardRaysMode = (FracturingFog.BilliardRayMode)BilliardRaysMode.Value;
             if (BilliardRaysCrossingWindow.HasValue) p.BilliardRaysCrossingWindow = BilliardRaysCrossingWindow.Value;
@@ -5041,6 +5060,28 @@ namespace FracturingFog.Models
                     CosmicWebBoxSize = 100.0, CosmicWebClumps = 310, CosmicWebTopSize = 11.35, CosmicWebFirstRatio = 1.10, CosmicWebLambda = 1.76,
                     CosmicWebSeed = 1978, CosmicWebPointSize = 1.0, CosmicWebDepthFade = 0.5,
                     CosmicWebMeasure = true, CosmicWebMeasureSample = 100000, CosmicWebDimensionOverlay = true,
+                },
+            },
+            // #2024 — the Zel'dovich web as a raymarched CIC density volume.
+            new()
+            {
+                Name          = "Cosmic Web - Zeldovich Volume",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  1.0,
+                Iterations    =  256,
+                Description   = "The forming Zel'dovich web (D = 1) as glowing gas: 2.1 million particles deposited on a 128^3 density grid by cloud-in-cell assignment and raymarched with emission and absorption, coloured by depth. Runs on the GPU (D3D11 or Vulkan) when there is one. Right-drag to orbit.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.CosmicWeb,
+                QualityPreset = QualityPreset.Standard,
+                Params        = new RegionFractalParams
+                {
+                    Cam3DFamily = (int)FractalType.CosmicWeb, Cam3DDistance = 2.2, Cam3DTheta = 0.6, Cam3DPhi = 1.1,
+                    CosmicWebGenerator = (int)FracturingFog.CosmicWebGenerator.Zeldovich, CosmicWebGrid = 128,
+                    CosmicWebSpectralIndex = -2.0, CosmicWebSmoothing = 2.0, CosmicWebGrowth = 1.0,
+                    CosmicWebBoxSize = 100.0, CosmicWebSeed = 1970, CosmicWebGamma = 0.4,
+                    CosmicWebRender = (int)FracturingFog.CosmicWebRender.Volume, CosmicWebVolumeGrid = 128, CosmicWebVolumeSmoothing = 0.75,
+                    CosmicWebVolumeOpacity = 12.0, CosmicWebVolumeBrightness = 40.0, CosmicWebVolumeSteps = 384,
                 },
             },
             // #1997 — User Hamiltonian: the Hénon–Heiles section (parity with that view), FF's own

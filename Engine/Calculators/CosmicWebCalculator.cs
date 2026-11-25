@@ -172,29 +172,38 @@ public sealed partial class CosmicWebCalculator : IFractalCalculator, IStereoEye
         }
         var fx = p.Lighting;
         if (DepthRequested) fx.OverlayDepth = true;
-        int[]? nearest = null;
-        if (ScreenSpacePost.WantsDepthOutput(in fx)) { nearest = new int[w * h]; Array.Fill(nearest, int.MaxValue); }
-        Splat(pts, cam, p.CosmicWebPointSize, p.CosmicWebDepthFade, DensityBuffer, w, h, ct, DepthSumBuffer, nearest);
-        if (ct.IsCancellationRequested) return;
-        if (nearest != null)
+        string volumeNote = "";
+        if (p.CosmicWebRender == CosmicWebRender.Volume)
         {
-            var d = new float[w * h];
-            for (int i = 0; i < d.Length; i++)
-                d[i] = nearest[i] == int.MaxValue ? ScreenSpacePost.DepthMiss : BitConverter.Int32BitsToSingle(nearest[i]);
-            DepthBuffer = d;
+            // #2024 — raymarched CIC density volume (CosmicWebCalculator.Volume.cs).
+            if (!RenderVolume(p, pts, cam, ScreenSpacePost.WantsDepthOutput(in fx), ct, out volumeNote)) return;
         }
-        ToneMap(p.CosmicWebColour, p.CosmicWebGamma);
+        else
+        {
+            int[]? nearest = null;
+            if (ScreenSpacePost.WantsDepthOutput(in fx)) { nearest = new int[w * h]; Array.Fill(nearest, int.MaxValue); }
+            Splat(pts, cam, p.CosmicWebPointSize, p.CosmicWebDepthFade, DensityBuffer, w, h, ct, DepthSumBuffer, nearest);
+            if (ct.IsCancellationRequested) return;
+            if (nearest != null)
+            {
+                var d = new float[w * h];
+                for (int i = 0; i < d.Length; i++)
+                    d[i] = nearest[i] == int.MaxValue ? ScreenSpacePost.DepthMiss : BitConverter.Int32BitsToSingle(nearest[i]);
+                DepthBuffer = d;
+            }
+            ToneMap(p.CosmicWebColour, p.CosmicWebGamma);
+        }
         if (p.CosmicWebGenerator == CosmicWebGenerator.Zeldovich)
         {
             var z = ZeldovichSettingsOf(p);
-            LastPrecisionLabel = $"Zel'dovich: {z.Grid}^3 = {pts.Count:N0} particles, P(k) ~ k^{z.Index:0.##}, smoothing {z.Smoothing:0.##} cells, D = {p.CosmicWebGrowth:0.###} (rms linear density contrast)";
+            LastPrecisionLabel = $"Zel'dovich: {z.Grid}^3 = {pts.Count:N0} particles, P(k) ~ k^{z.Index:0.##}, smoothing {z.Smoothing:0.##} cells, D = {p.CosmicWebGrowth:0.###} (rms linear density contrast)" + volumeNote;
             MeasureDimension(p, pts, null, ct);   // #2023
             return;
         }
         var s = SettingsOf(p);
         LastPrecisionLabel = $"Soneira-Peebles: {pts.Count:N0} points in {pts.ClumpsUsed:N0} clumps"
             + (pts.Capped ? $" (point cap {s.PointCap:N0} reached: {pts.ClumpsRequested - pts.ClumpsUsed:N0} clumps dropped)" : "")
-            + $", model D = log {s.Eta} / log {s.Lambda:0.###} = {SoneiraPeebles.AnalyticDimension(s.Eta, s.Lambda):0.###}";
+            + $", model D = log {s.Eta} / log {s.Lambda:0.###} = {SoneiraPeebles.AnalyticDimension(s.Eta, s.Lambda):0.###}" + volumeNote;
         MeasureDimension(p, pts, SoneiraPeebles.AnalyticDimension(s.Eta, s.Lambda), ct);   // #2023
     }
 
